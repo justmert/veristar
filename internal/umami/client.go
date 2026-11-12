@@ -45,6 +45,10 @@ type User struct {
 	// PasswordChangeRequired is true while the seeded admin still has the
 	// seeded password hash (src/lib/password.ts hasDefaultPassword).
 	PasswordChangeRequired bool `json:"passwordChangeRequired"`
+	// Teams lists the user's teams in the login and verify answers
+	// (src/app/api/auth/login/route.ts getAllUserTeams); other routes leave
+	// it empty.
+	Teams []Team `json:"teams"`
 }
 
 // Session is the result of a successful login.

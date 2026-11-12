@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "check": "tsc -p tsconfig.json",
-    "test": "playwright test"
+    "test:live": "playwright test"
   },
   "devDependencies": {
     "@playwright/test": "catalog:",

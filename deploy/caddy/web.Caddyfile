@@ -150,8 +150,28 @@ web.{$BASE_DOMAIN} {
 		}
 		respond @sso_refused "forbidden" 403
 
+		# db-ip's country lite licence asks for a link back on every page
+		# that shows results from the database, and umami's pages show
+		# countries (the design, the reference docs section 5). umami runs
+		# unmodified, so the link is added to its html on the way out, just
+		# before </body>: react 19 leaves unknown nodes outside its root
+		# alone, and umami navigates client-side, so the link stays on every
+		# page of the session. only get answers with an html content type are
+		# buffered and rewritten; json, scripts and refusals pass untouched.
+		# the plugin cannot read compressed bodies, hence Accept-Encoding
+		# identity towards umami below.
+		@page method GET
+		replace @page {
+			match {
+				header Content-Type text/html*
+			}
+			</body> `<a href="https://db-ip.com" style="position:fixed;right:8px;bottom:4px;z-index:2147483647;font:11px/1.4 system-ui,sans-serif;color:#555;background:rgba(255,255,255,.85);padding:1px 4px;border-radius:3px;text-decoration:none">IP Geolocation by DB-IP</a></body>`
+		}
+
 		reverse_proxy {
 			to {$UMAMI_UPSTREAM}
+			# the attribution rewrite above needs an uncompressed body
+			header_up Accept-Encoding identity
 			# umami needs no client address for the ui and must never get
 			# one; the edge headers it trusts on /api/send are dropped too,
 			# as is the header behind next's middleware bypass (cve-2025-29927)

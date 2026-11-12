@@ -26,13 +26,18 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/justmert/stellar-analytics/internal/config"
+	"github.com/justmert/stellar-analytics/internal/controlplane/provision"
 	pdb "github.com/justmert/stellar-analytics/internal/db"
 	"github.com/justmert/stellar-analytics/internal/jobs/edgestats"
+	"github.com/justmert/stellar-analytics/internal/jobs/reconcile"
 	"github.com/justmert/stellar-analytics/internal/jobs/scheduler"
+	"github.com/justmert/stellar-analytics/internal/jobs/sessionprune"
 	"github.com/justmert/stellar-analytics/internal/jobs/statsdedup"
+	"github.com/justmert/stellar-analytics/internal/jobs/umamirotate"
 	"github.com/justmert/stellar-analytics/internal/natsx"
 	"github.com/justmert/stellar-analytics/internal/obs"
 	"github.com/justmert/stellar-analytics/internal/registry"
+	"github.com/justmert/stellar-analytics/internal/umami"
 )
 
 // version is set at build time with -ldflags "-X main.version=...".
@@ -43,12 +48,15 @@ const usage = `usage: jobs <command>
 commands:
   daemon            run every task while holding the jobs lock; serves /healthz,
                     /readyz and /metrics on JOBS_OPS_ADDR
-  run <task>        run one task once under the jobs lock (tasks: ` + edgestats.TaskName + `, ` + statsdedup.TaskName + `)
+  run <task>        run one task once under the jobs lock (tasks: ` + edgestats.TaskName + `, ` + statsdedup.TaskName + `,
+                    ` + reconcile.TaskName + `, ` + umamirotate.TaskName + `, ` + sessionprune.TaskName + `)
   version           print the build version
 
 environment: NATS_URL, NATS_REPLICAS, NATS_USER and NATS_PASSWORD (when the
 server requires auth), PLATFORM_DB_HOST, PLATFORM_DB_PORT, PLATFORM_DB_NAME,
-PLATFORM_DB_SSLMODE, PLATFORM_DB_JOBS_PASSWORD, and JOBS_OPS_ADDR for daemon.
+PLATFORM_DB_SSLMODE, PLATFORM_DB_JOBS_PASSWORD, PLATFORM_DB_CP_SYSTEM_PASSWORD
+(reconcile and umami-rotate run control plane logic as cp_system), UMAMI_URL,
+UMAMI_ADMIN_PASSWORD, UMAMI_USER_PASSWORD_KEY, and JOBS_OPS_ADDR for daemon.
 `
 
 func main() {
@@ -99,12 +107,13 @@ func buildVersion() string {
 
 // deps are the connections both commands need.
 type deps struct {
-	nc    *nats.Conn
-	db    *pdb.DB
-	sites *registry.Watcher[registry.Site]
-	sched *scheduler.Scheduler
-	reg   *prometheus.Registry
-	stop  func()
+	nc      *nats.Conn
+	buckets *natsx.BucketKeeper
+	db      *pdb.DB
+	sites   *registry.Watcher[registry.Site]
+	sched   *scheduler.Scheduler
+	reg     *prometheus.Registry
+	stop    func()
 }
 
 // retryEvery is how often a follower tries to take the jobs lock. a third of
@@ -117,13 +126,28 @@ const connectTimeout = 30 * time.Second
 
 func open(ctx context.Context, env *config.Env, log *slog.Logger, opsAddr bool) (*deps, string, error) {
 	natsCfg, natsErr := config.LoadNATS(env)
-	dbCfg, dbErr := pdb.LoadPoolConfig(env, pdb.RoleJobs)
+	// cp_system for the tasks that run control plane logic
+	dbCfg, dbErr := pdb.LoadPoolConfig(env, pdb.RoleJobs, pdb.RoleCPSystem)
+	umamiCfg, umamiErr := config.LoadUmamiAdmin(env)
+	pwKey := env.UmamiUserPasswordKey()
 	var addr string
 	if opsAddr {
 		addr = env.String("JOBS_OPS_ADDR")
 	}
 	// one error naming every missing key, as config promises
-	if err := errors.Join(natsErr, dbErr, env.Err()); err != nil {
+	if err := errors.Join(natsErr, dbErr, umamiErr, env.Err()); err != nil {
+		return nil, "", err
+	}
+	key, err := umami.NewPasswordKey(pwKey.Reveal())
+	if err != nil {
+		return nil, "", err
+	}
+	umamiClient, err := umami.New(umamiCfg.URL, nil)
+	if err != nil {
+		return nil, "", err
+	}
+	admin, err := umami.NewAdmin(umamiClient, umami.SeededUsername, umamiCfg.Password.Reveal())
+	if err != nil {
 		return nil, "", err
 	}
 	holder, err := holderID()
@@ -145,6 +169,17 @@ func open(ctx context.Context, env *config.Env, log *slog.Logger, opsAddr bool) 
 	closeAll := func() { nc.Close(); d.Close() }
 	js, err := jetstream.New(nc)
 	if err != nil {
+		closeAll()
+		return nil, "", err
+	}
+	// locks is memory-backed and gone after a restart of a single server;
+	// jobs recreates it itself, so it recovers without an operator
+	buckets, err := natsx.NewBucketKeeper(js, natsCfg.Replicas, log, natsx.BucketLocks)
+	if err != nil {
+		closeAll()
+		return nil, "", err
+	}
+	if err := buckets.Ensure(cctx); err != nil {
 		closeAll()
 		return nil, "", err
 	}
@@ -181,6 +216,32 @@ func open(ctx context.Context, env *config.Env, log *slog.Logger, opsAddr bool) 
 		closeAll()
 		return nil, "", err
 	}
+	publisher, err := registry.NewSitePublisher(cctx, js)
+	if err != nil {
+		closeAll()
+		return nil, "", err
+	}
+	reconciler, err := reconcile.New(provision.Reconciler{
+		Admin: admin, Registry: publisher, Key: key, Now: time.Now, Log: log,
+	}, log)
+	if err != nil {
+		closeAll()
+		return nil, "", err
+	}
+	sessionPruner, err := sessionprune.New(time.Now, log, reg)
+	if err != nil {
+		closeAll()
+		return nil, "", err
+	}
+	pruneSessions := func(ctx context.Context, l *scheduler.Leader) error {
+		_, err := sessionPruner.Prune(ctx, l.SystemTx)
+		return err
+	}
+	rotator := &umamirotate.Rotator{Admin: admin, Key: key, Now: time.Now, Log: log}
+	rotate := func(ctx context.Context, l *scheduler.Leader) error {
+		_, err := rotator.Rotate(ctx, l.SystemTx)
+		return err
+	}
 	prune := func(ctx context.Context, l *scheduler.Leader) error {
 		_, err := pruner.Prune(ctx, l.Tx)
 		return err
@@ -200,14 +261,31 @@ func open(ctx context.Context, env *config.Env, log *slog.Logger, opsAddr bool) 
 		Every: statsdedup.Every,
 		Run:   prune,
 		Once:  prune,
+	}, {
+		Name:  reconcile.TaskName,
+		Every: reconcile.Every,
+		Run:   reconciler.Run,
+		Once:  reconciler.Run,
+	}, {
+		Name:  umamirotate.TaskName,
+		Every: umamirotate.Every,
+		Run:   rotate,
+		Once:  rotate,
+	}, {
+		Name:  sessionprune.TaskName,
+		Every: sessionprune.Every,
+		Run:   pruneSessions,
+		Once:  pruneSessions,
 	}}
 	return &deps{
-		nc:    nc,
-		db:    d,
-		sites: sites,
-		reg:   reg,
+		nc:      nc,
+		buckets: buckets,
+		db:      d,
+		sites:   sites,
+		reg:     reg,
 		sched: &scheduler.Scheduler{
 			Lock: lock, DB: d, Tasks: tasks, Log: log, Metrics: sm, RetryEvery: retryEvery,
+			Buckets: buckets,
 		},
 		stop: closeAll,
 	}, addr, nil
@@ -258,12 +336,14 @@ func daemon(ctx context.Context, env *config.Env, log *slog.Logger) error {
 			}
 			return nil
 		}},
+		obs.Check{Name: "buckets", Fn: dp.buckets.Ready},
 	)
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	var wg sync.WaitGroup
 	errs := make(chan error, 3)
+	wg.Go(func() { dp.buckets.Run(ctx) })
 	wg.Go(func() { errs <- dp.sites.Run(ctx) })
 	wg.Go(func() { errs <- obs.ServeListener(ctx, obs.NewServer(addr, ops), ln, log) })
 	wg.Go(func() { errs <- dp.sched.Run(ctx) })

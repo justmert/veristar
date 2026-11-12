@@ -57,6 +57,23 @@ func (l *Leader) Tx(ctx context.Context, fn func(pgx.Tx) error) error {
 	})
 }
 
+// SystemTx is Tx for the tasks that run control plane logic (reconcile,
+// umami-rotate): a cp_system transaction that first advances the
+// same jobs fence, so those writes are fenced exactly like the data tasks'.
+// the jobs daemon must have opened a cp_system pool.
+func (l *Leader) SystemTx(ctx context.Context, fn func(pgx.Tx) error) error {
+	f := l.lock.Fence()
+	if f.Revision == 0 {
+		return fmt.Errorf("%w: no fencing token, the jobs lock is not held", natsx.ErrLockLost)
+	}
+	return l.db.WithSystem(ctx, func(tx pgx.Tx) error {
+		if err := natsx.CheckFence(ctx, tx, natsx.LockJobs, f); err != nil {
+			return err
+		}
+		return fn(tx)
+	})
+}
+
 // Task is one unit of work of the jobs daemon.
 type Task struct {
 	Name string
@@ -110,6 +127,9 @@ type Scheduler struct {
 	Metrics *Metrics
 	// RetryEvery is how often a follower tries to take the lock.
 	RetryEvery time.Duration
+	// Buckets, when set, keeps the locks bucket in existence; the elector
+	// asks it for a check at once when the lock cannot be taken or renewed.
+	Buckets *natsx.BucketKeeper
 }
 
 func (s *Scheduler) check() error {
@@ -139,7 +159,7 @@ func (s *Scheduler) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	e := &natsx.Elector{Lock: s.Lock, RenewEvery: natsx.LockRenewEvery, RetryEvery: s.RetryEvery, Log: s.Log}
+	e := &natsx.Elector{Lock: s.Lock, RenewEvery: natsx.LockRenewEvery, RetryEvery: s.RetryEvery, Log: s.Log, Buckets: s.Buckets}
 	return e.Run(ctx, func(lctx context.Context) error {
 		s.Metrics.leading.Set(1)
 		defer s.Metrics.leading.Set(0)

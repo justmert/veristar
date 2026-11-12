@@ -25,7 +25,7 @@ var wantGrants = map[string]map[pdb.Role]string{
 	"cp.sessions": {pdb.RoleCPSystem: "rawd"},
 	"cp.tenants": {
 		pdb.RoleCPSystem:   "rawd",
-		pdb.RoleCPTenant:   "r w(description,name,updated_at)",
+		pdb.RoleCPTenant:   "r w(accepted_terms_version,description,name,updated_at)",
 		pdb.RoleCPOperator: "r",
 	},
 	"cp.tenant_members": {pdb.RoleCPSystem: "rawd", pdb.RoleCPTenant: "rawd"},
@@ -42,7 +42,7 @@ var wantGrants = map[string]map[pdb.Role]string{
 	},
 	"cp.api_key_usage_hourly": {pdb.RoleCPSystem: "rawd", pdb.RoleCPOperator: "raw"},
 	"cp.settings":             {pdb.RoleCPSystem: "rawd", pdb.RoleCPOperator: "r"},
-	"cp.audit_log":            {pdb.RoleCPSystem: "ra"},
+	"cp.audit_log":            {pdb.RoleCPSystem: "ra", pdb.RoleCPTenant: "a"},
 	"cp.erasure_requests":     {pdb.RoleCPSystem: "rawd", pdb.RoleCPTenant: "ra"},
 	"cp.web_ingest_hourly": {
 		pdb.RoleCPSystem:   "rawd",

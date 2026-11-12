@@ -265,7 +265,7 @@ func testRunOnce(t *testing.T, url string, d *pdb.DB) {
 	kv := lockKV(t, url)
 	require.Eventually(t, func() bool {
 		e, err := kv.Get(ctx, natsx.LockJobs)
-		return err == nil && string(e.Value()) == "daemon"
+		return err == nil && natsx.LockHolder(e.Value()) == "daemon"
 	}, 10*time.Second, 50*time.Millisecond)
 	before := ran.Load()
 	require.ErrorIs(t, newSched("once-4", once).RunOnce(ctx, "t"), natsx.ErrLockHeld)

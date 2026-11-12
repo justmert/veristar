@@ -233,6 +233,14 @@ func kvWrite(bucket string) []string {
 	return append(kvWatch(bucket), "$KV."+bucket+".>")
 }
 
+// kvRecreate lets a service recreate one of its memory buckets after a
+// restart lost it (EnsureBuckets). it names the bucket's own stream only, so
+// the service cannot create any other stream; stream info, which the
+// existence check needs, is already in kvRead.
+func kvRecreate(bucket string) []string {
+	return []string{jsAPI + ".STREAM.CREATE.KV_" + bucket}
+}
+
 // consume covers binding one durable pull consumer, fetching and acking.
 func consume(stream, consumer string) []string {
 	return []string{
@@ -287,6 +295,7 @@ func Users() []User {
 			subjects(SubjectWebEvents+".*", SubjectEdgeStats+".*", SubjectIPCluster),
 			kvWatch(BucketRegistrySites),
 			kvWrite(BucketEdgeSecrets),
+			kvRecreate(BucketEdgeSecrets),
 		),
 		user(ServiceCollector, false, nil,
 			subjects(SubjectAPIMetrics+".*"),
@@ -297,6 +306,8 @@ func Users() []User {
 			subjects(SubjectWebDLQ+".*", SubjectEdgeStats+".*"),
 			kvWrite(BucketVisitState),
 			kvWrite(BucketLocks),
+			kvRecreate(BucketVisitState),
+			kvRecreate(BucketLocks),
 		),
 		user(ServiceMetricsWriter, false, nil,
 			consume(StreamAPIMetrics, ConsumerMetricsWriter),
@@ -306,6 +317,7 @@ func Users() []User {
 		user(ServiceJobs, false, nil,
 			consume(StreamEdgeStats, ConsumerJobs),
 			kvWrite(BucketLocks),
+			kvRecreate(BucketLocks),
 			// reconcile writes the registry, erasure follow-up reads visit
 			// state and cleans the web dlq
 			kvWrite(BucketRegistrySites),

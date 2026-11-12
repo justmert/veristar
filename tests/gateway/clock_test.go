@@ -71,7 +71,7 @@ func startInProcess(t testing.TB, s *Stack, node string, now func() time.Time) *
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	log := obs.NewLogger(os.Stderr, slog.LevelWarn)
-	n, err := gateway.NewNode(ctx, gateway.NodeConfig{Gateway: cfg, NC: nc, Log: log, Registry: obs.NewRegistry(), Now: now})
+	n, err := gateway.NewNode(ctx, gateway.NodeConfig{Gateway: cfg, NC: nc, Replicas: 1, Log: log, Registry: obs.NewRegistry(), Now: now})
 	if err != nil {
 		t.Fatal(err)
 	}

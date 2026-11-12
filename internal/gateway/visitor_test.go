@@ -81,6 +81,9 @@ func TestEdgeSecretsCluster(t *testing.T) {
 	t.Run("visitor token is stable within a utc day and rotates at midnight", func(t *testing.T) {
 		testVisitorRotation(t, cluster)
 	})
+	t.Run("a survivor adopts the secrets of a bucket emptied by a restart", func(t *testing.T) {
+		testVisitorVerify(t, cluster)
+	})
 	t.Run("visitor-token requests are answered from today's secret", func(t *testing.T) {
 		testVisitorTokenRequests(t, cluster)
 	})
@@ -367,4 +370,50 @@ func TestGatewayEdgePermissions(t *testing.T) {
 	mu.Lock()
 	defer mu.Unlock()
 	require.Empty(t, violations)
+}
+
+// testVisitorVerify empties edge_secrets the way a full cluster restart does
+// while a gateway keeps running. a gateway that starts afterwards creates new
+// secrets, and the survivor must switch to them instead of keeping its copy.
+func testVisitorVerify(t *testing.T, cluster *natsctr.Cluster) {
+	ctx := t.Context()
+	clock := newVisTestClock(time.Date(2031, 5, 4, 12, 0, 0, 0, time.UTC))
+	_, js1 := visTestConnect(t, cluster.Servers[0].URL)
+	_, js2 := visTestConnect(t, cluster.Servers[2].URL)
+	kv := visTestSecrets(t, js1)
+	survivor, err := NewVisitor(kv, clock.Now)
+	require.NoError(t, err)
+	site := "5c1f0d8e-2b1a-4d5e-9f1e-7a1b2c3d4e5f"
+	ua := "Mozilla/5.0 (X11; Linux x86_64; rv:140.0) Gecko/20100101 Firefox/140.0"
+	ip, err := ParseClientIP("198.51.100.42")
+	require.NoError(t, err)
+
+	before, err := survivor.Token(ctx, site, ip, ua)
+	require.NoError(t, err)
+	replaced, err := survivor.Verify(ctx)
+	require.NoError(t, err)
+	require.False(t, replaced, "the bucket still holds the loaded secrets")
+
+	// the restart empties the bucket; the survivor's copy is all that is left
+	for _, kind := range []string{secretKindVisitor, secretKindIPCluster} {
+		require.NoError(t, kv.Purge(ctx, SecretKey(kind, clock.Now())))
+	}
+	fresh, err := NewVisitor(visTestSecrets(t, js2), clock.Now)
+	require.NoError(t, err)
+	after, err := fresh.Token(ctx, site, ip, ua)
+	require.NoError(t, err)
+	require.NotEqual(t, before, after, "the new gateway created new secrets")
+	still, err := survivor.Token(ctx, site, ip, ua)
+	require.NoError(t, err)
+	require.Equal(t, before, still, "without a check the survivor keeps its copy")
+
+	replaced, err = survivor.Verify(ctx)
+	require.NoError(t, err)
+	require.True(t, replaced)
+	got, err := survivor.Token(ctx, site, ip, ua)
+	require.NoError(t, err)
+	require.Equal(t, after, got, "the survivor must use the bucket's secrets")
+	replaced, err = survivor.Verify(ctx)
+	require.NoError(t, err)
+	require.False(t, replaced)
 }

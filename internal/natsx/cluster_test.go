@@ -60,7 +60,18 @@ func TestCluster(t *testing.T) {
 	t.Run("leader election and takeover", func(t *testing.T) {
 		testElection(t, cluster.URLs())
 	})
-	// these two reset the locks bucket, so they run last
+	t.Run("a single node restart keeps the R3 memory buckets", func(t *testing.T) {
+		testNodeRestartKeepsMemoryBuckets(t, cluster, js)
+	})
+	// these reset the locks bucket, so they run last
+	t.Run("locks bucket recreated by its service keeps the fence", func(t *testing.T) {
+		testFenceAfterReset(t, cluster.URLs(), fdb, natsx.LockJobs, func() {
+			require.NoError(t, js.DeleteKeyValue(t.Context(), natsx.BucketLocks))
+			created, err := natsx.EnsureBuckets(t.Context(), js, 3, natsx.BucketLocks)
+			require.NoError(t, err)
+			require.Equal(t, []string{natsx.BucketLocks}, created)
+		})
+	})
 	t.Run("recreated locks bucket lets a new leader in", func(t *testing.T) {
 		testFenceAfterReset(t, cluster.URLs(), fdb, natsx.LockJobs, func() {
 			require.NoError(t, js.DeleteKeyValue(t.Context(), natsx.BucketLocks))
@@ -400,10 +411,11 @@ func testLockCAS(t *testing.T, urls string, fdb *pdb.DB) {
 	fenceB1 := b.Fence()
 	require.Greater(t, fenceB1.Epoch, fenceA.Epoch, "a later hold has a later epoch")
 
-	// the resumed former holder fails its compare-and-set renewal
+	// the resumed former holder fails its renewal: its revision expired, so
+	// the read of it before the compare-and-set finds nothing
 	_, err = a.Renew(ctx)
 	require.ErrorIs(t, err, natsx.ErrLockLost)
-	require.ErrorIs(t, err, jetstream.ErrKeyRevisionMismatch)
+	require.ErrorIs(t, err, jetstream.ErrKeyNotFound)
 	require.Zero(t, a.Revision())
 	_, err = a.Confirm(ctx)
 	require.ErrorIs(t, err, natsx.ErrLockLost)
@@ -578,4 +590,172 @@ func testFenceAfterReset(t *testing.T, urls string, fdb *pdb.DB, name string, re
 	_, err = old.Renew(ctx)
 	require.ErrorIs(t, err, natsx.ErrLockLost)
 	require.NoError(t, next.Release(ctx))
+}
+
+// testNodeRestartKeepsMemoryBuckets restarts the server that leads
+// edge_secrets. the other two replicas keep every memory bucket, so nothing
+// is lost and no service has anything to recreate.
+func testNodeRestartKeepsMemoryBuckets(t *testing.T, cluster *natsctr.Cluster, js jetstream.JetStream) {
+	ctx := t.Context()
+	memory := []string{natsx.BucketEdgeSecrets, natsx.BucketVisitState, natsx.BucketLocks}
+	created := map[string]time.Time{}
+	key := fmt.Sprintf("restart-%d", time.Now().UnixNano())
+	for _, b := range memory {
+		kv, err := js.KeyValue(ctx, b)
+		require.NoError(t, err)
+		_, err = kv.Put(ctx, key, []byte(b))
+		require.NoError(t, err)
+		st, err := kv.Status(ctx)
+		require.NoError(t, err)
+		info, ok := st.(*jetstream.KeyValueBucketStatus)
+		require.True(t, ok)
+		created[b] = info.StreamInfo().Created
+	}
+	s, err := js.Stream(ctx, "KV_"+natsx.BucketEdgeSecrets)
+	require.NoError(t, err)
+	leader := s.CachedInfo().Cluster.Leader
+	var node *natsctr.Server
+	for _, srv := range cluster.Servers {
+		if srv.Name == leader {
+			node = srv
+		}
+	}
+	require.NotNil(t, node, "leader %q is not a cluster node", leader)
+
+	node.Stop(t)
+	// the keys stay readable from the two remaining replicas while it is down
+	for _, b := range memory {
+		kv, err := js.KeyValue(ctx, b)
+		require.NoError(t, err)
+		require.Eventually(t, func() bool {
+			e, err := kv.Get(ctx, key)
+			return err == nil && string(e.Value()) == b
+		}, 30*time.Second, 200*time.Millisecond, "%s lost its key while %s was down", b, leader)
+	}
+	node.Start(t)
+	natsctr.WaitHealthy(t, node.MonitorURL, "", 2*time.Minute)
+
+	for _, b := range memory {
+		kv, err := js.KeyValue(ctx, b)
+		require.NoError(t, err)
+		e, err := kv.Get(ctx, key)
+		require.NoError(t, err, b)
+		require.Equal(t, b, string(e.Value()))
+		st, err := kv.Status(ctx)
+		require.NoError(t, err)
+		info, ok := st.(*jetstream.KeyValueBucketStatus)
+		require.True(t, ok)
+		require.Equal(t, created[b], info.StreamInfo().Created, "%s was recreated", b)
+		require.Equal(t, 3, info.StreamInfo().Config.Replicas)
+		require.NoError(t, kv.Delete(ctx, key))
+	}
+	got, err := natsx.EnsureBuckets(ctx, js, 3, memory...)
+	require.NoError(t, err)
+	require.Empty(t, got, "a single node restart must leave nothing to recreate")
+}
+
+// TestFenceAfterServerRestart restarts a single server, which really loses
+// the memory-backed locks bucket. the service recreates it from the topology
+// and the epoch keeps the holder from before the restart fenced off.
+func TestFenceAfterServerRestart(t *testing.T) {
+	srv := natsctr.StartSingle(t)
+	_, js := connect(t, srv.URL)
+	spec, err := natsx.Topology(1)
+	require.NoError(t, err)
+	_, err = natsx.Apply(t.Context(), js, spec)
+	require.NoError(t, err)
+	fdb := fenceDB(t)
+	testFenceAfterReset(t, srv.URL, fdb, natsx.LockJobs, func() {
+		srv.Stop(t)
+		srv.Start(t)
+		require.Eventually(t, func() bool {
+			_, err := js.KeyValue(t.Context(), natsx.BucketLocks)
+			return errors.Is(err, jetstream.ErrBucketNotFound)
+		}, 30*time.Second, 200*time.Millisecond, "the restart did not lose the memory bucket, so this test proves nothing")
+		_, err := js.KeyValue(t.Context(), natsx.BucketRegistrySites)
+		require.NoError(t, err, "file buckets survive a restart")
+		created, err := natsx.EnsureBuckets(t.Context(), js, 1, natsx.BucketLocks)
+		require.NoError(t, err)
+		require.Equal(t, []string{natsx.BucketLocks}, created)
+	})
+}
+
+// TestLockRevisionRepeatsAfterRecreate covers the window that revisions
+// alone leave open: after the locks bucket is recreated its revisions start
+// again, so a successor's revision can equal the one a paused holder last
+// saw. both use the same holder id here, so only the per-acquire nonce tells
+// the holds apart. the paused holder's renewal and confirmation must fail
+// without touching the successor's hold, and its fencing token stays
+// refused by postgres.
+func TestLockRevisionRepeatsAfterRecreate(t *testing.T) {
+	srv := natsctr.StartSingle(t)
+	_, js := connect(t, srv.URL)
+	spec, err := natsx.Topology(1)
+	require.NoError(t, err)
+	_, err = natsx.Apply(t.Context(), js, spec)
+	require.NoError(t, err)
+	fdb := fenceDB(t)
+	ctx := t.Context()
+	check := func(f natsx.Fence) error {
+		return withTx(ctx, fdb, func(tx txT) error { return natsx.CheckFence(ctx, tx, natsx.LockJobs, f) })
+	}
+
+	// paused holds the lock at a revision the successor then reaches again;
+	// the probe runs once against Renew and once against Confirm, because
+	// either failure ends the hold
+	for _, probe := range []string{"renew", "confirm"} {
+		t.Run(probe, func(t *testing.T) {
+			kv, err := js.KeyValue(ctx, natsx.BucketLocks)
+			require.NoError(t, err)
+			paused, err := natsx.NewLock(kv, natsx.LockJobs, "node-a")
+			require.NoError(t, err)
+			_, err = paused.Acquire(ctx)
+			require.NoError(t, err)
+			for range 3 {
+				_, err = paused.Renew(ctx)
+				require.NoError(t, err)
+			}
+			old := paused.Fence()
+			require.NoError(t, check(old))
+
+			require.NoError(t, js.DeleteKeyValue(ctx, natsx.BucketLocks))
+			created, err := natsx.EnsureBuckets(ctx, js, 1, natsx.BucketLocks)
+			require.NoError(t, err)
+			require.Equal(t, []string{natsx.BucketLocks}, created)
+
+			kv2, err := js.KeyValue(ctx, natsx.BucketLocks)
+			require.NoError(t, err)
+			next, err := natsx.NewLock(kv2, natsx.LockJobs, "node-a")
+			require.NoError(t, err)
+			rev, err := next.Acquire(ctx)
+			require.NoError(t, err)
+			for rev < old.Revision {
+				rev, err = next.Renew(ctx)
+				require.NoError(t, err)
+			}
+			require.Equal(t, old.Revision, rev, "the successor must sit at the paused holder's revision, or this test proves nothing")
+			require.NoError(t, check(next.Fence()))
+
+			switch probe {
+			case "renew":
+				_, err = paused.Renew(ctx)
+			case "confirm":
+				_, err = paused.Confirm(ctx)
+			}
+			require.ErrorIs(t, err, natsx.ErrLockLost)
+			require.Zero(t, paused.Revision())
+			_, err = paused.Renew(ctx)
+			require.ErrorIs(t, err, natsx.ErrLockLost)
+
+			// the successor's hold is untouched and it keeps writing
+			got, err := next.Confirm(ctx)
+			require.NoError(t, err)
+			require.Equal(t, rev, got)
+			_, err = next.Renew(ctx)
+			require.NoError(t, err)
+			require.NoError(t, check(next.Fence()))
+			require.ErrorIs(t, check(old), natsx.ErrFenced, "the paused holder's write must be refused")
+			require.NoError(t, next.Release(ctx))
+		})
+	}
 }

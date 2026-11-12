@@ -1,0 +1,150 @@
+# core tier caddy for app.<BASE_DOMAIN>: the console single-page app as
+# static files, and the control plane api under /api (the design,
+# this stage; docs/reference/control-plane-api.md section 1).
+#
+# environment, all required; each one is used where caddy refuses an empty
+# value, so a missing variable fails `caddy validate` and startup:
+#   BASE_DOMAIN            registered domain, an operator input; the site is app.<BASE_DOMAIN>
+#   CONTROLPLANE_UPSTREAM  host:port of the control plane api listener on the
+#                          private network (CONTROLPLANE_ADDR), for example
+#                          controlplane:8085
+#   CONSOLE_ROOT           directory holding the console build (apps/console/dist)
+#   APP_TLS                first argument of the tls directive: the acme account
+#                          email in production, "internal" for the local ca in tests
+#
+# the console and the api share one origin on purpose: the session cookie is
+# host-only and the control plane checks Origin on every state change, so no
+# cors header is ever needed or sent.
+
+(app_log_fields) {
+	request>remote_ip delete
+	request>remote_port delete
+	request>client_ip delete
+	request>headers delete
+	request>uri regexp \?.*$ ""
+	resp_headers delete
+}
+
+{
+	# a request for a host this file does not serve is logged by caddy's
+	# default logger, not by the site log below. it gets the same filter, so
+	# no request leaves an address or user agent in any log.
+	log default {
+		output stdout
+		format filter {
+			wrap json
+			fields {
+				import app_log_fields
+			}
+		}
+	}
+}
+
+(app_log) {
+	# access logs keep no client identifier, no credential and no query
+	# string (contract section 1, the design step 7): the remote and client
+	# address are deleted, and so are all request headers, because they carry
+	# the session cookie and the user agent besides any forwarding header.
+	# the query is cut from the uri. response headers go too: Set-Cookie
+	# carries the session, and the sso redirect's Location carries the umami
+	# token (contract 4.4.1).
+	log {
+		output stdout
+		format filter {
+			wrap json
+			fields {
+				import app_log_fields
+			}
+		}
+	}
+}
+
+(app_security_headers) {
+	# deferred, so they also cover the control plane's answers. the csp
+	# allows same-origin files only: the build has no inline script or style
+	# element (vite emits files, assetsInlineLimit is 0), and
+	# react applies style props through the cssom, which style-src does not
+	# govern. no frames, no plugins, no foreign connections; links to github
+	# and db-ip are plain navigations, which the csp does not restrict.
+	# referrer-policy is a default only: the sso redirect carries a token in
+	# its Location and sets no-referrer itself, which must win.
+	header {
+		Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+		Strict-Transport-Security "max-age=63072000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		?Referrer-Policy same-origin
+		Cross-Origin-Opener-Policy same-origin
+		Cross-Origin-Resource-Policy same-origin
+		Permissions-Policy "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=(), browsing-topics=()"
+		-Server
+		defer
+	}
+}
+
+app.{$BASE_DOMAIN} {
+	# caddy replaces an unset variable with nothing. this line needs a value,
+	# so a missing BASE_DOMAIN stops caddy instead of serving the bare "app."
+	vars base_domain {$BASE_DOMAIN}
+	tls {$APP_TLS}
+	import app_log
+
+	encode zstd gzip
+
+	import app_security_headers
+
+	# the control plane sets these on every /api answer (contract section 1
+	# and 4.4.1); repeating them here also covers caddy's own 502 when the
+	# control plane is down
+	header /api/* {
+		Cache-Control no-store
+		defer
+	}
+
+	handle /api/* {
+		reverse_proxy {
+			to {$CONTROLPLANE_UPSTREAM}
+			# the control plane needs no client address (its limits are per
+			# session and per route) and must never log one, so none is sent
+			header_up -X-Forwarded-For
+			header_up -X-Real-Ip
+			header_up -Forwarded
+			# the header behind next's middleware bypass means nothing to the
+			# control plane; dropped so no client header reaches it unchecked
+			header_up -X-Middleware-Subrequest
+		}
+	}
+
+	handle {
+		# a single argument is the path, so an empty CONSOLE_ROOT leaves root
+		# without one and fails validation
+		root {$CONSOLE_ROOT}
+
+		# hashed build assets never change under the same name
+		@assets path /assets/*
+		header @assets Cache-Control "public, max-age=31536000, immutable"
+
+		# client-side routes (/projects/..., /sign-in, /terms) are served the
+		# app shell, which must always be revalidated so a new build is picked
+		# up at once. paths under /assets/ are never rewritten: a missing asset
+		# is a real 404, so a broken deploy does not answer html for a script.
+		@spa {
+			not path /assets/*
+			not file
+		}
+		rewrite @spa /index.html
+		@shell not path /assets/*
+		header @shell Cache-Control "no-cache"
+
+		file_server
+	}
+
+	# caddy's own errors (the control plane unreachable, a file it cannot
+	# read) bypass deferred headers, so they get the same ones here. the
+	# console reports a proxy error without an envelope by its status.
+	handle_errors {
+		import app_security_headers
+		header Cache-Control no-store
+		respond "{err.status_code} {err.status_text}" {err.status_code}
+	}
+}

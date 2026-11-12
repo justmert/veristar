@@ -537,7 +537,7 @@ func webDashboardInBrowser(t *testing.T, l *liveWeb) {
 	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, pnpm, "--filter", "@stellar-analytics/caddy-web", "test")
+	cmd := exec.CommandContext(ctx, pnpm, "--filter", "@stellar-analytics/caddy-web", "test:live")
 	cmd.Dir = root
 	cmd.Env = append(os.Environ(),
 		"WEB_PORT="+port,

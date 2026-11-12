@@ -289,6 +289,87 @@ func TestPermissions(t *testing.T) {
 			}
 		}
 	})
+
+	// these delete buckets, so they run last
+	t.Run("services recreate only their own memory buckets", func(t *testing.T) {
+		for _, b := range []string{natsx.BucketEdgeSecrets, natsx.BucketVisitState, natsx.BucketLocks} {
+			require.NoError(t, admin.js.DeleteKeyValue(ctx, b))
+		}
+		// denied: a jetstream api request that the server drops never gets
+		// an answer, so each attempt ends with its own short timeout
+		refused := func(s *svcConn, stream string, try func(context.Context) error) {
+			t.Helper()
+			dctx, dcancel := context.WithTimeout(ctx, 2*time.Second)
+			defer dcancel()
+			require.Error(t, try(dctx), "%s created %s", s.nc.Opts.Name, stream)
+			s.denied(t, "publish", "$JS.API.STREAM.CREATE."+stream)
+		}
+		// the create itself, with the topology config; EnsureBuckets would
+		// stop earlier at the stream info a service may lack
+		ensure := func(s *svcConn, name string) func(context.Context) error {
+			return func(c context.Context) error {
+				cfg, err := natsx.MemoryBucket(1, name)
+				require.NoError(t, err)
+				_, err = s.js.CreateKeyValue(c, cfg)
+				return err
+			}
+		}
+		createStream := func(s *svcConn, name string) func(context.Context) error {
+			return func(c context.Context) error {
+				_, err := s.js.CreateStream(c, jetstream.StreamConfig{Name: name, Subjects: []string{"evil." + name}, Storage: jetstream.MemoryStorage})
+				return err
+			}
+		}
+
+		// each service may not create a bucket of another service, any
+		// other stream, or a file bucket it writes to
+		refused(gateway, "KV_"+natsx.BucketLocks, ensure(gateway, natsx.BucketLocks))
+		refused(gateway, "KV_"+natsx.BucketVisitState, ensure(gateway, natsx.BucketVisitState))
+		refused(gateway, "EVIL", createStream(gateway, "EVIL"))
+		refused(gateway, natsx.StreamWebEvents, createStream(gateway, natsx.StreamWebEvents))
+		refused(jobs, "KV_"+natsx.BucketVisitState, ensure(jobs, natsx.BucketVisitState))
+		refused(jobs, "KV_"+natsx.BucketEdgeSecrets, ensure(jobs, natsx.BucketEdgeSecrets))
+		refused(jobs, "EVIL", createStream(jobs, "EVIL"))
+		refused(jobs, "KV_"+natsx.BucketRegistrySites, func(c context.Context) error {
+			_, err := jobs.js.CreateKeyValue(c, jetstream.KeyValueConfig{Bucket: natsx.BucketRegistrySites})
+			return err
+		})
+		refused(replayer, "KV_"+natsx.BucketEdgeSecrets, ensure(replayer, natsx.BucketEdgeSecrets))
+		refused(replayer, "EVIL", createStream(replayer, "EVIL"))
+		for _, s := range []*svcConn{collector, metricswriter, controlplane} {
+			refused(s, "KV_"+natsx.BucketLocks, ensure(s, natsx.BucketLocks))
+			refused(s, "EVIL", createStream(s, "EVIL"))
+		}
+		// a file bucket is never recreated by a service, whatever its rights
+		_, err := natsx.EnsureBuckets(ctx, admin.js, 1, natsx.BucketRegistrySites)
+		require.ErrorContains(t, err, "file-backed")
+
+		// each service recreates its own buckets with exactly the topology
+		// config; a second service finding one already there is a no-op
+		seen := map[*svcConn]string{}
+		for _, s := range []*svcConn{gateway, replayer, jobs} {
+			seen[s] = s.violations()
+		}
+		created, err := natsx.EnsureBuckets(ctx, gateway.js, 1, natsx.BucketEdgeSecrets)
+		require.NoError(t, err)
+		require.Equal(t, []string{natsx.BucketEdgeSecrets}, created)
+		created, err = natsx.EnsureBuckets(ctx, jobs.js, 1, natsx.BucketLocks)
+		require.NoError(t, err)
+		require.Equal(t, []string{natsx.BucketLocks}, created)
+		created, err = natsx.EnsureBuckets(ctx, replayer.js, 1, natsx.BucketVisitState, natsx.BucketLocks)
+		require.NoError(t, err)
+		require.Equal(t, []string{natsx.BucketVisitState}, created)
+		changes, err := natsx.Diff(ctx, admin.js, spec)
+		require.NoError(t, err)
+		for _, c := range changes {
+			require.Equal(t, natsx.ActionUnchanged, c.Action, c.String())
+		}
+		for s, before := range seen {
+			require.Equal(t, before, s.violations(), "%s was refused part of recreating its own buckets", s.nc.Opts.Name)
+		}
+		_, err = gateway.js.KeyValue(ctx, natsx.BucketEdgeSecrets)
+		require.NoError(t, err)
+	})
 }
 
 func TestRenderAuthorizationRequiresEveryCredential(t *testing.T) {

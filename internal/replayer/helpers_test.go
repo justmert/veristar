@@ -206,7 +206,7 @@ func startReplayer(t *testing.T, natsURL string, umamiURL *url.URL, node string)
 	log := obs.NewLogger(testWriter{t}, slog.LevelInfo).With("node", node)
 	ops := freeAddr(t)
 	set := replayer.Settings{NodeID: node, OpsAddr: ops, UmamiURL: umamiURL, Workers: 16, MaxInFlight: 512}
-	r, err := replayer.New(context.Background(), replayer.Config{Settings: set, NC: nc, Umami: uc, Log: log, Registry: reg})
+	r, err := replayer.New(context.Background(), replayer.Config{Settings: set, NC: nc, Replicas: 1, Umami: uc, Log: log, Registry: reg})
 	if err != nil {
 		t.Fatal(err)
 	}

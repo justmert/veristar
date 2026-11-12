@@ -94,7 +94,7 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 	defer nc.Close()
 
 	reg := obs.NewRegistry()
-	node, err := gateway.NewNode(ctx, gateway.NodeConfig{Gateway: gwCfg, NC: nc, Log: log, Registry: reg})
+	node, err := gateway.NewNode(ctx, gateway.NodeConfig{Gateway: gwCfg, NC: nc, Replicas: natsCfg.Replicas, Log: log, Registry: reg})
 	if err != nil {
 		return err
 	}

@@ -205,15 +205,101 @@ func (v *Visitor) Rotate(ctx context.Context) error {
 	return v.Ensure(ctx)
 }
 
+// VerifyEvery is how often the loaded secrets are compared with the bucket.
+// it matches DefaultKeyRefresh of the proof keys, so after a restart that
+// emptied edge_secrets every gateway agrees on the new secrets again within
+// it.
+const VerifyEvery = DefaultKeyRefresh
+
+// Verify reads the current day's secrets from the bucket and replaces the
+// loaded ones when they differ or are gone. edge_secrets is memory-backed,
+// so a nats restart can empty it while this process keeps its copy; another
+// gateway then creates new secrets, and without this check the two would
+// compute different tokens for the same visitor until midnight. a key that
+// is gone is created again (or another gateway's new one adopted) with
+// EnsureDailySecret. replaced reports a swap. a read error keeps the loaded
+// secrets, because they are still the day's secrets as far as anyone knows.
+func (v *Visitor) Verify(ctx context.Context) (replaced bool, err error) {
+	now := v.now()
+	day := secretDay(now)
+	v.mu.Lock()
+	loaded := v.day.Equal(day)
+	v.mu.Unlock()
+	if !loaded {
+		// nothing loaded for today; Rotate loads it from the bucket
+		return false, nil
+	}
+	same := func(kind string, have func() []byte) (bool, error) {
+		e, err := v.kv.Get(ctx, SecretKey(kind, now))
+		switch {
+		case errors.Is(err, jetstream.ErrKeyNotFound) || errors.Is(err, jetstream.ErrKeyDeleted):
+			return false, nil
+		case err != nil:
+			return false, fmt.Errorf("gateway: verify edge secret %s: %w", SecretKey(kind, now), err)
+		}
+		v.mu.Lock()
+		defer v.mu.Unlock()
+		return hmac.Equal(e.Value(), have()), nil
+	}
+	vOK, err := same(secretKindVisitor, func() []byte { return v.visitor })
+	if err != nil {
+		return false, err
+	}
+	cOK, err := same(secretKindIPCluster, func() []byte { return v.ipcluster })
+	if err != nil {
+		return false, err
+	}
+	if vOK && cOK {
+		return false, nil
+	}
+	ttl := UntilMidnight(now)
+	vs, err := EnsureDailySecret(ctx, v.kv, SecretKey(secretKindVisitor, now), ttl)
+	if err != nil {
+		return false, err
+	}
+	cs, err := EnsureDailySecret(ctx, v.kv, SecretKey(secretKindIPCluster, now), ttl)
+	if err != nil {
+		clear(vs)
+		return false, err
+	}
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	if !v.day.Equal(day) || (hmac.Equal(vs, v.visitor) && hmac.Equal(cs, v.ipcluster)) {
+		// the day changed meanwhile and Rotate loaded the new one, or the
+		// read above reached a replica that had not applied the keys yet and
+		// the create-if-absent found them in place
+		clear(vs)
+		clear(cs)
+		return false, nil
+	}
+	clear(v.visitor)
+	clear(v.ipcluster)
+	v.visitor, v.ipcluster = vs, cs
+	return true, nil
+}
+
 // Run rotates once a second until ctx ends, so the old secret is zeroed at
-// midnight even when no request arrives. load failures are logged and
+// midnight even when no request arrives, and verifies the loaded secrets
+// against the bucket every VerifyEvery. load failures are logged and
 // retried on the next tick; requests fail until a load succeeds.
 func (v *Visitor) Run(ctx context.Context, log *slog.Logger) {
 	t := time.NewTicker(time.Second)
 	defer t.Stop()
-	for {
+	verifyEvery := int(VerifyEvery / time.Second)
+	for tick := 1; ; tick++ {
 		if err := v.Rotate(ctx); err != nil && ctx.Err() == nil {
 			log.Error("daily edge secrets unavailable", "error", err.Error())
+		}
+		if tick%verifyEvery == 0 {
+			replaced, err := v.Verify(ctx)
+			switch {
+			case err != nil && ctx.Err() == nil:
+				log.Warn("daily edge secrets not verified, the loaded ones stay in use", "error", err.Error())
+			case replaced:
+				// the documented trade-off of a memory bucket: visitors seen
+				// before the loss are counted once more today
+				log.Warn("daily edge secrets were lost from the bucket and replaced")
+			}
 		}
 		select {
 		case <-ctx.Done():

@@ -94,7 +94,7 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 	defer nc.Close()
 
 	reg := obs.NewRegistry()
-	rp, err := replayer.New(ctx, replayer.Config{Settings: set, NC: nc, Umami: uc, Log: log, Registry: reg})
+	rp, err := replayer.New(ctx, replayer.Config{Settings: set, NC: nc, Replicas: natsCfg.Replicas, Umami: uc, Log: log, Registry: reg})
 	if err != nil {
 		return err
 	}

@@ -85,7 +85,9 @@ test("tenant dashboard through the web caddy", async ({ page, context }) => {
     const u = new URL(r.url());
     if (u.hostname !== `web.${domain}`) return;
     const key = `${r.request().method()} ${u.pathname.replace(/[0-9a-f]{8}-[0-9a-f-]{27}/g, "{id}")}`;
-    (statuses[key] ??= []).push(r.status());
+    const seen = statuses[key] ?? [];
+    seen.push(r.status());
+    statuses[key] = seen;
     if (r.status() === 403) refused.push(key);
     else if (r.status() >= 400) failed.push(`${key} ${r.status()}`);
   });

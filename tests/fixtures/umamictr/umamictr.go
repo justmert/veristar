@@ -16,10 +16,12 @@ import (
 	"net/netip"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -201,9 +203,46 @@ func Start(t testing.TB) *Stack {
 	return &Stack{Network: nw, URL: u, Client: c, Admin: a, AdminPassword: pw, Umami: um}
 }
 
-// CaddyImage is caddy 2.11.9 by the digest pinned in the design the
-// deploy/caddy tests check that it equals the image they validate with.
+// CaddyImage is caddy 2.11.9 by the digest pinned in the design: the
+// final stage of deploy/images/caddy.Dockerfile. the deploy/caddy tests check
+// that the dockerfile builds on it.
 const CaddyImage = "caddy:2.11.9@sha256:e40b94d0a43b5ff69cb20568d73f10c70703df7b0ffc2298eb3d723cdc9d0bd1"
+
+// WebCaddyTag names the image built from deploy/images/caddy.Dockerfile: caddy
+// with the replace-response plugin, which web.Caddyfile needs for the db-ip
+// attribution. stock caddy refuses that file.
+const WebCaddyTag = "stellar-analytics/caddy:2.11.9-test"
+
+var (
+	webImageOnce sync.Once
+	webImageErr  error
+	webImageOut  string
+)
+
+// WebCaddyImage builds deploy/images/caddy.Dockerfile once per test process
+// and returns its tag. docker's layer cache makes later builds take seconds;
+// the first one compiles caddy.
+func WebCaddyImage(t testing.TB) string {
+	t.Helper()
+	root := repoRoot(t)
+	webImageOnce.Do(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
+		defer cancel()
+		//nolint:gosec // fixed arguments: the repository's own dockerfile and tag
+		cmd := exec.CommandContext(ctx, "docker", "build", "--quiet",
+			"-f", filepath.Join(root, "deploy", "images", "caddy.Dockerfile"),
+			"-t", WebCaddyTag, filepath.Join(root, "deploy", "images"))
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			webImageErr = err
+			webImageOut = string(out)
+		}
+	})
+	if webImageErr != nil {
+		t.Fatalf("umamictr: build %s: %v\n%s", WebCaddyTag, webImageErr, webImageOut)
+	}
+	return WebCaddyTag
+}
 
 // WebDomain is BASE_DOMAIN for the web caddy; the site is web.WebDomain.
 const WebDomain = "umami.test"
@@ -223,7 +262,7 @@ type Web struct {
 func StartWeb(t testing.TB, s *Stack) *Web {
 	t.Helper()
 	ctx := context.Background()
-	c, err := testcontainers.Run(ctx, CaddyImage,
+	c, err := testcontainers.Run(ctx, WebCaddyImage(t),
 		testcontainers.WithEnv(map[string]string{
 			"BASE_DOMAIN":    WebDomain,
 			"UMAMI_UPSTREAM": UpstreamAddr,

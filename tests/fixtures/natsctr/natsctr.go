@@ -190,9 +190,14 @@ func (c *Cluster) URLs() string {
 }
 
 // StartCluster starts three routed servers and waits until jetstream has a
-// meta leader on every node.
-func StartCluster(t testing.TB) *Cluster {
+// meta leader on every node. opts apply to every node, so WithConfig gives
+// the whole cluster the same authorization.
+func StartCluster(t testing.TB, opts ...Option) *Cluster {
 	t.Helper()
+	var base options
+	for _, f := range opts {
+		f(&base)
+	}
 	ctx := context.Background()
 	nw, err := tcnetwork.New(ctx)
 	if err != nil {
@@ -217,6 +222,7 @@ func StartCluster(t testing.TB) *Cluster {
 		go func() {
 			s, err := start(t, n, options{
 				image:   image,
+				config:  base.config,
 				network: nw,
 				alias:   n,
 				args: []string{

@@ -10,6 +10,16 @@ import (
 	"github.com/google/uuid"
 )
 
+type CpInvite struct {
+	ID          uuid.UUID
+	TenantID    uuid.UUID
+	GithubLogin string
+	Role        string
+	CreatedBy   uuid.UUID
+	CreatedAt   time.Time
+	ExpiresAt   time.Time
+}
+
 type CpSite struct {
 	ID                   uuid.UUID
 	TenantID             uuid.UUID

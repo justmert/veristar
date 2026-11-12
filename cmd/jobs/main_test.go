@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"io"
 	"log/slog"
@@ -26,6 +27,7 @@ import (
 	"github.com/justmert/stellar-analytics/internal/natsx"
 	"github.com/justmert/stellar-analytics/internal/registry"
 	"github.com/justmert/stellar-analytics/tests/fixtures/natsctr"
+	"github.com/justmert/stellar-analytics/tests/fixtures/umamictr"
 )
 
 // syncBuf is a log sink the daemon goroutine and the test share.
@@ -57,7 +59,10 @@ func TestUsage(t *testing.T) {
 func TestMissingConfigNamesEveryKey(t *testing.T) {
 	var out, errOut bytes.Buffer
 	require.Equal(t, 1, run(t.Context(), []string{"daemon"}, config.FromMap(map[string]string{}), &out, &errOut))
-	for _, k := range []string{"NATS_URL", "NATS_REPLICAS", "PLATFORM_DB_HOST", "PLATFORM_DB_JOBS_PASSWORD", "JOBS_OPS_ADDR"} {
+	for _, k := range []string{
+		"NATS_URL", "NATS_REPLICAS", "PLATFORM_DB_HOST", "PLATFORM_DB_JOBS_PASSWORD", "PLATFORM_DB_CP_SYSTEM_PASSWORD",
+		"UMAMI_URL", "UMAMI_ADMIN_PASSWORD", "UMAMI_USER_PASSWORD_KEY", "JOBS_OPS_ADDR",
+	} {
 		require.Contains(t, errOut.String(), k)
 	}
 }
@@ -139,6 +144,14 @@ func TestDaemonAndRun(t *testing.T) {
 	envMap["NATS_PASSWORD"] = creds[natsx.ServiceJobs]
 	ops := freeAddr(t)
 	envMap["JOBS_OPS_ADDR"] = ops
+	// reconcile and umami-rotate run against a private umami
+	um := umamictr.Start(t)
+	envMap["UMAMI_URL"] = um.URL.String()
+	envMap["UMAMI_ADMIN_PASSWORD"] = um.AdminPassword
+	pwKey := make([]byte, 32)
+	_, err = rand.Read(pwKey)
+	require.NoError(t, err)
+	envMap["UMAMI_USER_PASSWORD_KEY"] = base64.StdEncoding.EncodeToString(pwKey)
 	key := site.String() + "/"
 
 	// the daemon leads, serves its ops endpoints and drains as stats arrive
@@ -202,10 +215,22 @@ func TestDaemonAndRun(t *testing.T) {
 	require.Contains(t, pruneLog.String(), `"deleted":0`, "fresh ids are kept")
 	require.Len(t, jobstest.DedupIDs(t, jobsDB), 2)
 
+	// the control plane tasks run once too: no tenants, no platform users
+	var reconcileLog syncBuf
+	require.Equal(t, 0, run(t.Context(), []string{"run", "reconcile"}, config.FromMap(envMap), io.Discard, &reconcileLog), reconcileLog.String())
+	var rotateLog syncBuf
+	require.Equal(t, 0, run(t.Context(), []string{"run", "umami-rotate"}, config.FromMap(envMap), io.Discard, &rotateLog), rotateLog.String())
+
+	var sessionLog syncBuf
+	require.Equal(t, 0, run(t.Context(), []string{"run", "session-prune"}, config.FromMap(envMap), io.Discard, &sessionLog), sessionLog.String())
+	require.Contains(t, sessionLog.String(), "expired sessions pruned")
+
 	var unknown syncBuf
 	require.Equal(t, 1, run(t.Context(), []string{"run", "nope"}, config.FromMap(envMap), io.Discard, &unknown))
 	require.Contains(t, unknown.String(), "unknown task")
-	require.NotContains(t, logs.String()+runLog.String(), creds[natsx.ServiceJobs], "no secret in the logs")
+	all := logs.String() + runLog.String() + reconcileLog.String() + rotateLog.String()
+	require.NotContains(t, all, creds[natsx.ServiceJobs], "no secret in the logs")
+	require.NotContains(t, all, um.AdminPassword, "no secret in the logs")
 }
 
 func quiet() *slog.Logger { return slog.New(slog.DiscardHandler) }

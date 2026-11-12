@@ -3,6 +3,8 @@ module github.com/justmert/stellar-analytics
 go 1.27.4
 
 require (
+	github.com/alexedwards/scs/v2 v2.9.0
+	github.com/go-chi/chi/v5 v5.5.0
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.12.0
 	github.com/moby/moby/api v1.56.1
@@ -13,6 +15,7 @@ require (
 	github.com/stellar/go-stellar-sdk v0.8.0
 	github.com/stretchr/testify v1.12.1
 	github.com/testcontainers/testcontainers-go v0.45.0
+	golang.org/x/oauth2 v0.38.0
 )
 
 require (

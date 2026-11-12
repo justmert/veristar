@@ -3,6 +3,8 @@ package natsx
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -50,6 +52,12 @@ type Lock struct {
 	mu    sync.Mutex
 	rev   uint64
 	epoch int64
+	// value is what this hold stores: holder, a slash and a random nonce
+	// drawn at acquire. revisions repeat after the memory bucket is
+	// recreated, so a paused former holder could find its old revision
+	// current again; the nonce makes its hold distinguishable from any
+	// later one, even one of the same holder id.
+	value []byte
 }
 
 // NewLock returns the lock name for one holder. holder must be unique per
@@ -59,7 +67,18 @@ func NewLock(kv jetstream.KeyValue, name, holder string) (*Lock, error) {
 	if name == "" || holder == "" {
 		return nil, errors.New("natsx: lock needs a name and a holder")
 	}
+	if bytes.IndexByte([]byte(holder), '/') >= 0 {
+		// the slash separates the holder from the nonce in the stored value
+		return nil, fmt.Errorf("natsx: lock holder %q contains a slash", holder)
+	}
 	return &Lock{kv: kv, name: name, holder: []byte(holder)}, nil
+}
+
+// LockHolder returns the holder id stored in a lock value, without the
+// per-acquire nonce, for operators and tests that read the locks bucket.
+func LockHolder(value []byte) string {
+	h, _, _ := bytes.Cut(value, []byte{'/'})
+	return string(h)
 }
 
 // Name returns the lock name.
@@ -89,8 +108,13 @@ func (l *Lock) Fence() Fence {
 func (l *Lock) Acquire(ctx context.Context) (uint64, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	l.rev, l.epoch = 0, 0
-	rev, err := l.kv.Create(ctx, l.name, l.holder)
+	l.rev, l.epoch, l.value = 0, 0, nil
+	nonce := make([]byte, 16)
+	if _, err := rand.Read(nonce); err != nil {
+		return 0, fmt.Errorf("natsx: lock nonce: %w", err)
+	}
+	value := append(append(append([]byte(nil), l.holder...), '/'), hex.EncodeToString(nonce)...)
+	rev, err := l.kv.Create(ctx, l.name, value)
 	if err != nil {
 		if errors.Is(err, jetstream.ErrKeyExists) {
 			return 0, ErrLockHeld
@@ -105,7 +129,11 @@ func (l *Lock) Acquire(ctx context.Context) (uint64, error) {
 		_ = l.kv.Delete(ctx, l.name, jetstream.LastRevision(rev))
 		return 0, fmt.Errorf("natsx: read epoch of lock %s: %w", l.name, err)
 	}
-	l.rev, l.epoch = rev, e.Created().UnixNano()
+	if !bytes.Equal(e.Value(), value) {
+		_ = l.kv.Delete(ctx, l.name, jetstream.LastRevision(rev))
+		return 0, fmt.Errorf("natsx: lock %s revision %d does not hold the value just created", l.name, rev)
+	}
+	l.rev, l.epoch, l.value = rev, e.Created().UnixNano(), value
 	return rev, nil
 }
 
@@ -131,13 +159,32 @@ func (l *Lock) readRevision(ctx context.Context, rev uint64) (jetstream.KeyValue
 // Renew extends the hold with a compare-and-set against the last revision
 // this holder saw. any failure means the lock is lost: either someone else
 // took it after it expired, or this holder cannot prove it still has it.
+//
+// before the update it reads that revision and requires this hold's value
+// there. after the locks bucket was recreated, its revisions start again,
+// and the key's current revision can equal the one a paused former holder
+// last saw while it holds a successor's value; the compare-and-set alone
+// would let that holder overwrite its successor. read and update together
+// are safe: the update only succeeds while the key is still at the revision
+// that was read, which then holds this hold's value.
 func (l *Lock) Renew(ctx context.Context) (uint64, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.rev == 0 {
 		return 0, ErrLockLost
 	}
-	rev, err := l.kv.Update(ctx, l.name, l.holder, l.rev)
+	e, err := l.readRevision(ctx, l.rev)
+	if err != nil {
+		held := l.rev
+		l.rev = 0
+		return 0, fmt.Errorf("%w: renew %s: read revision %d: %w", ErrLockLost, l.name, held, err)
+	}
+	if !bytes.Equal(e.Value(), l.value) {
+		held := l.rev
+		l.rev = 0
+		return 0, fmt.Errorf("%w: %s revision %d holds another hold's value", ErrLockLost, l.name, held)
+	}
+	rev, err := l.kv.Update(ctx, l.name, l.value, l.rev)
 	if err != nil {
 		l.rev = 0
 		return 0, fmt.Errorf("%w: renew %s: %w", ErrLockLost, l.name, err)
@@ -165,7 +212,7 @@ func (l *Lock) Confirm(ctx context.Context) (uint64, error) {
 		// but the lock is kept for the next renewal to settle
 		return 0, fmt.Errorf("%w: confirm %s: %w", ErrLockLost, l.name, err)
 	}
-	if e.Revision() != l.rev || !bytes.Equal(e.Value(), l.holder) {
+	if e.Revision() != l.rev || !bytes.Equal(e.Value(), l.value) {
 		held := l.rev
 		l.rev = 0
 		return 0, fmt.Errorf("%w: %s is at revision %d, held at %d", ErrLockLost, l.name, e.Revision(), held)
@@ -198,6 +245,16 @@ type Elector struct {
 	// RetryEvery is how often a follower tries to acquire.
 	RetryEvery time.Duration
 	Log        *slog.Logger
+	// Buckets, when set, is asked to check the locks bucket at once after an
+	// acquire or a renewal failed, so a bucket lost in a restart is back
+	// before the next KeeperEvery tick.
+	Buckets *BucketKeeper
+}
+
+func (e *Elector) kick(err error) {
+	if e.Buckets != nil {
+		e.Buckets.Kick(err)
+	}
 }
 
 // Run contends for the lock until ctx ends. while it holds the lock it runs
@@ -213,6 +270,7 @@ func (e *Elector) Run(ctx context.Context, lead func(ctx context.Context) error)
 		if err != nil {
 			if !errors.Is(err, ErrLockHeld) && ctx.Err() == nil {
 				e.Log.Warn("lock acquire failed", "lock", e.Lock.Name(), "error", err.Error())
+				e.kick(err)
 			}
 			if !sleep(ctx, e.RetryEvery) {
 				return ctx.Err()
@@ -265,6 +323,7 @@ func (e *Elector) lead(ctx context.Context, fn func(context.Context) error) (los
 				rcancel()
 				if rerr != nil {
 					e.Log.Warn("lock renewal failed", "lock", e.Lock.Name(), "error", rerr.Error())
+					e.kick(rerr)
 					cancel(ErrLockLost)
 					return
 				}

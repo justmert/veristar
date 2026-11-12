@@ -51,17 +51,38 @@ and `Cache-Control: public, max-age=31536000, immutable`; there is no `latest` a
 
 ## Readiness
 
-`/readyz` checks, in this order: a JetStream acknowledgement within 7 s, the registry
-snapshot, today's proof key, today's daily secrets. The canary is a create of a
+`/readyz` checks, in this order: a JetStream acknowledgement within 7 s, that
+`edge_secrets` is not known to be missing, the registry snapshot, today's proof key,
+today's daily secrets. The canary is a create of a
 short lived key (`canary.<node>.<ns>`, ttl 30 s) in `edge_secrets`, not a message on
 `WEB_EVENTS`: a work-queue message would reach the replayer as an event. An outage of
 `WEB_EVENTS` alone therefore does not show in `/readyz`; event publishes then answer
 503 directly.
 
 A restart of a single NATS server loses the memory buckets (`edge_secrets`,
-`visit_state`, `locks`) entirely, not just their keys. The gateway stays not ready
-until `platformctl nats apply` recreates them, then recovers within a second
-(measured: 202 ms).
+`visit_state`, `locks`) entirely, not just their keys; a full restart of the 3-node
+cluster keeps their definitions but empties them. Each service recreates the buckets it
+uses itself, with exactly the topology config from `internal/natsx`: the gateway
+`edge_secrets`, the replayer `visit_state` and `locks`, jobs `locks`. They check at
+startup, every second, and at once when a bucket operation fails as a missing stream
+would. Their NATS users may create exactly those `KV_<bucket>` streams and nothing
+else. No operator step is needed (`tests/recovery`, build tag `recoveryit`).
+
+An emptied `edge_secrets` is the accepted trade-off: the day's secrets and proof key are
+new, so visitors seen earlier that day are counted again and challenges issued before
+the restart stop verifying once the 10 s key refresh ran. Every gateway compares its
+loaded daily secrets with the bucket every 10 s and switches to the stored ones, so a
+gateway that kept running agrees with one started after the restart. Secrets are never
+persisted.
+
+Measured 2026-11-12 (`tests/recovery`), times after NATS was healthy again:
+
+| | single server | 3-node cluster |
+|---|---|---|
+| gateway accepts an event | 0.2 s | 0.0 s |
+| replayer delivers it to Umami | 2.2 s | 3.3 s |
+| jobs writes its outcome counter | 2.3 s | 7.4 s |
+| all gateways on the same daily secret | 7.7 s | 7.5 s |
 
 ## Throughput
 

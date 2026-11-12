@@ -91,10 +91,18 @@ const (
 	acquireRetry = time.Second
 )
 
+// errNotReady ends a hold because jetstream could not serve the consumer
+// yet, as while a cluster recovers from a restart. Run contends again
+// instead of stopping the process.
+var errNotReady = errors.New("replayer: jetstream not ready")
+
 // Config wires a Replayer.
 type Config struct {
 	Settings Settings
 	NC       *nats.Conn
+	// Replicas is NATS_REPLICAS, the replica count visit_state and locks are
+	// recreated with when a restart lost them.
+	Replicas int
 	Umami    *umami.Client
 	Log      *slog.Logger
 	Registry *prometheus.Registry
@@ -102,23 +110,25 @@ type Config struct {
 
 // Replayer is one replayer instance.
 type Replayer struct {
-	set    Settings
-	nc     *nats.Conn
-	js     jetstream.JetStream
-	umami  *umami.Client
-	log    *slog.Logger
-	reg    *prometheus.Registry
-	store  visitStore
-	lock   *natsx.Lock
-	stats  *stats
-	m      *metrics
-	maxAge time.Duration
+	set     Settings
+	nc      *nats.Conn
+	js      jetstream.JetStream
+	umami   *umami.Client
+	log     *slog.Logger
+	reg     *prometheus.Registry
+	store   visitStore
+	lock    *natsx.Lock
+	buckets *natsx.BucketKeeper
+	stats   *stats
+	m       *metrics
+	maxAge  time.Duration
 
 	// current is the lead in progress, nil on a standby
 	current atomic.Pointer[leadRun]
 }
 
-// New binds the buckets and registers the metrics. it does not take the lock.
+// New recreates the memory buckets when a restart lost them, binds them and
+// registers the metrics. it does not take the lock.
 func New(ctx context.Context, cfg Config) (*Replayer, error) {
 	if cfg.NC == nil || cfg.Umami == nil || cfg.Log == nil || cfg.Registry == nil {
 		return nil, errors.New("replayer: Config needs NC, Umami, Log and Registry")
@@ -129,6 +139,15 @@ func New(ctx context.Context, cfg Config) (*Replayer, error) {
 	js, err := jetstream.New(cfg.NC)
 	if err != nil {
 		return nil, fmt.Errorf("replayer: jetstream: %w", err)
+	}
+	// both buckets are memory-backed; the replayer recreates them itself, so
+	// it recovers from a nats restart without an operator
+	buckets, err := natsx.NewBucketKeeper(js, cfg.Replicas, cfg.Log, natsx.BucketVisitState, natsx.BucketLocks)
+	if err != nil {
+		return nil, err
+	}
+	if err := buckets.Ensure(ctx); err != nil {
+		return nil, fmt.Errorf("replayer: %w", err)
 	}
 	visitKV, err := js.KeyValue(ctx, natsx.BucketVisitState)
 	if err != nil {
@@ -151,15 +170,16 @@ func New(ctx context.Context, cfg Config) (*Replayer, error) {
 		return nil, err
 	}
 	r := &Replayer{
-		set:    cfg.Settings,
-		nc:     cfg.NC,
-		js:     js,
-		umami:  cfg.Umami,
-		log:    cfg.Log,
-		reg:    cfg.Registry,
-		store:  visitStore{kv: visitKV},
-		lock:   lock,
-		maxAge: maxAge,
+		set:     cfg.Settings,
+		nc:      cfg.NC,
+		js:      js,
+		umami:   cfg.Umami,
+		log:     cfg.Log,
+		reg:     cfg.Registry,
+		store:   visitStore{kv: visitKV},
+		lock:    lock,
+		buckets: buckets,
+		maxAge:  maxAge,
 	}
 	r.m, err = newMetrics(cfg.Registry, r.inFlight, r.oldestAge)
 	if err != nil {
@@ -198,14 +218,15 @@ func webEventsMaxAge() (time.Duration, error) {
 	return 0, errors.New("replayer: topology declares no max age for WEB_EVENTS")
 }
 
-// Ops serves /healthz, /readyz (nats connected) and /metrics.
+// Ops serves /healthz, /readyz (nats connected, no bucket known missing)
+// and /metrics.
 func (r *Replayer) Ops() http.Handler {
 	return obs.NewOpsHandler(r.reg, r.log, obs.Check{Name: "nats", Fn: func(context.Context) error {
 		if s := r.nc.Status(); s != nats.CONNECTED {
 			return fmt.Errorf("nats connection is %s", s)
 		}
 		return nil
-	}})
+	}}, obs.Check{Name: "buckets", Fn: r.buckets.Ready})
 }
 
 // Run contends for the lock and consumes while it holds it, until ctx ends.
@@ -216,12 +237,13 @@ func (r *Replayer) Run(ctx context.Context) error {
 	bg, stopBg := context.WithCancel(context.WithoutCancel(ctx))
 	wg.Go(func() { r.stats.run(bg) })
 	wg.Go(func() { r.sampleLag(bg) })
+	wg.Go(func() { r.buckets.Run(bg) })
 	defer func() {
 		stopBg()
 		wg.Wait()
 	}()
 
-	el := &natsx.Elector{Lock: r.lock, RenewEvery: natsx.LockRenewEvery, RetryEvery: acquireRetry, Log: r.log}
+	el := &natsx.Elector{Lock: r.lock, RenewEvery: natsx.LockRenewEvery, RetryEvery: acquireRetry, Log: r.log, Buckets: r.buckets}
 	for {
 		err := el.Run(ctx, r.lead)
 		if ctx.Err() != nil {
@@ -230,6 +252,13 @@ func (r *Replayer) Run(ctx context.Context) error {
 		if errors.Is(err, natsx.ErrLockLost) {
 			// a lane or the fetch loop could not confirm the hold; contend again
 			r.log.Warn("stopped consuming, lock not confirmed", "error", err.Error())
+			continue
+		}
+		if errors.Is(err, errNotReady) {
+			r.log.Warn("stopped consuming, jetstream not ready", "error", err.Error())
+			if !sleepCtx(ctx, acquireRetry) {
+				return nil
+			}
 			continue
 		}
 		return err
@@ -291,11 +320,18 @@ func (r *Replayer) sampleLag(ctx context.Context) {
 // natsx.ErrLockLost when a confirmation failed.
 func (r *Replayer) lead(parent context.Context) error {
 	cons, err := r.js.Consumer(parent, natsx.StreamWebEvents, natsx.ConsumerReplayer)
-	if err != nil {
-		if parent.Err() != nil {
-			return nil
-		}
+	switch {
+	case err == nil:
+	case parent.Err() != nil:
+		return nil
+	case errors.Is(err, jetstream.ErrConsumerNotFound) || errors.Is(err, jetstream.ErrStreamNotFound):
+		// both are file-backed and survive restarts; missing means the
+		// topology was never applied, which only an operator can fix
 		return fmt.Errorf("replayer: bind consumer %s on %s (run platformctl nats apply): %w", natsx.ConsumerReplayer, natsx.StreamWebEvents, err)
+	default:
+		// a timeout or a leaderless consumer while a cluster recovers from a
+		// restart: give the lock back and contend again
+		return fmt.Errorf("%w: bind consumer %s on %s: %w", errNotReady, natsx.ConsumerReplayer, natsx.StreamWebEvents, err)
 	}
 	if err := r.awaitPredecessor(parent, cons); err != nil {
 		return nil //nolint:nilerr // only a cancelled context ends the wait, which is a normal end of the hold
@@ -723,5 +759,17 @@ func (lr *leadRun) release() {
 	}
 	if len(hs) > 0 {
 		lr.r.log.Info("handed back held messages", "count", len(hs))
+	}
+}
+
+// sleepCtx waits d and reports false when ctx ended first.
+func sleepCtx(ctx context.Context, d time.Duration) bool {
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-t.C:
+		return true
 	}
 }

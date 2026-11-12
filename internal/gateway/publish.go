@@ -108,12 +108,17 @@ func (p *Publisher) Ready(context.Context) error {
 // by the bucket's stream leader after storing, on the same nats cluster, and
 // the key removes itself after canaryTTL. an outage of the WEB_EVENTS stream
 // alone does not show here; event publishes then fail with 503 directly.
-func (p *Publisher) RunCanary(ctx context.Context, kv jetstream.KeyValue, node string, log *slog.Logger) {
+// every failure is passed to onErr, which lets the bucket keeper recreate
+// edge_secrets at once when a restart lost it.
+func (p *Publisher) RunCanary(ctx context.Context, kv jetstream.KeyValue, node string, log *slog.Logger, onErr func(error)) {
 	t := time.NewTicker(CanaryEvery)
 	defer t.Stop()
 	var failing bool
 	for {
 		err := p.canary(ctx, kv, node)
+		if err != nil && ctx.Err() == nil {
+			onErr(err)
+		}
 		switch {
 		case err != nil && ctx.Err() == nil && !failing:
 			failing = true

@@ -151,6 +151,58 @@ services:
     ports:
       - "127.0.0.1:9091:9090"
 
+  # control plane api (this stage). in the "core" profile: it needs the platform
+  # database migrated with role passwords (make db-migrate db-roles). port
+  # 8085 is the dev oauth callback of an operator input (8080 is the dev gateway). the
+  # api is reached directly at http://localhost:8085/api, which is also the
+  # console origin, so the host-only session cookie and the csrf origin check
+  # see one origin. ops port on loopback only. GITHUB_CLIENT_ID,
+  # GITHUB_CLIENT_SECRET an operator input and OPERATOR_GITHUB_IDS an operator input are added
+  # to .env.dev by hand; they default to empty here so the other services still
+  # start, and the control plane then refuses to start and names each key.
+  controlplane:
+    profiles: ["core"]
+    build:
+      context: ../..
+      dockerfile: deploy/images/controlplane.Dockerfile
+    image: stellar-analytics/controlplane:dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      umami:
+        condition: service_healthy
+    environment:
+      CONTROLPLANE_ADDR: 0.0.0.0:8085
+      CONTROLPLANE_OPS_ADDR: 0.0.0.0:9090
+      CONSOLE_ORIGIN: http://localhost:8085
+      INGEST_ORIGIN: http://localhost:8080
+      WEB_ORIGIN: http://localhost:3000
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+      GITHUB_REDIRECT_URL: http://localhost:8085/api/auth/github/callback
+      OAUTH_STATE_KEY: ${OAUTH_STATE_KEY:?run make dev-env}
+      OPERATOR_GITHUB_IDS: ${OPERATOR_GITHUB_IDS:-}
+      UMAMI_URL: http://umami:3000
+      UMAMI_ADMIN_PASSWORD: ${UMAMI_ADMIN_PASSWORD:?run make dev-env}
+      UMAMI_USER_PASSWORD_KEY: ${UMAMI_USER_PASSWORD_KEY:?run make dev-env}
+      TRACKER_RELEASE_DIR: /releases
+      NATS_URL: nats://nats:4222
+      NATS_REPLICAS: "1"
+      PLATFORM_DB_HOST: postgres
+      PLATFORM_DB_PORT: "5432"
+      PLATFORM_DB_NAME: platform
+      PLATFORM_DB_SSLMODE: disable
+      PLATFORM_DB_CP_SYSTEM_PASSWORD: ${PLATFORM_DB_CP_SYSTEM_PASSWORD:?run make dev-env}
+      PLATFORM_DB_CP_TENANT_PASSWORD: ${PLATFORM_DB_CP_TENANT_PASSWORD:?run make dev-env}
+      TZ: UTC
+    volumes:
+      - ../../packages/tracker/releases:/releases:ro
+    ports:
+      - "127.0.0.1:8085:8085"
+      - "127.0.0.1:9095:9090"
+
 volumes:
   pgdata:
   natsdata:

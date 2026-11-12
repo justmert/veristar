@@ -84,7 +84,7 @@ umami-compat:
 	@set -a && . ./$(DEV_ENV) && set +a && UMAMI_IT_URL=$$UMAMI_URL \
 		$(GO) test -race -count=1 -tags umamicompat -v ./tests/umami-compat/
 	@set -a && . ./$(DEV_ENV) && set +a && UMAMI_IT_URL=$$UMAMI_URL \
-		pnpm --filter @stellar-analytics/umami-compat test
+		pnpm --filter @stellar-analytics/umami-compat test:live
 
 vet:
 	$(GO) vet ./...
@@ -140,8 +140,9 @@ gateway-it:
 # web.<BASE_DOMAIN> caddy: caddy validate with the pinned
 # image, then real requests through caddy in front of a private umami and
 # postgres started from the dev.yml digests (build tag caddyweb), including the
-# tenant dashboard in chromium (tests/caddy-web; needs pnpm with the
-# playwright browsers). screenshots land in .scratch/scratch/caddy-web.
+# tenant dashboard in chromium (tests/caddy-web script test:live, which the go
+# test runs; needs pnpm with the playwright browsers). screenshots land in
+# .scratch/scratch/caddy-web.
 .PHONY: test-caddy-web isolation-umami
 test-caddy-web:
 	$(GO) test -race -count=1 -run 'TestWebCaddyfileValidates' ./deploy/caddy/
@@ -152,3 +153,27 @@ test-caddy-web:
 # (build tag isolation). starts its own umami and postgres.
 isolation-umami:
 	$(GO) test -tags isolation -race -count=1 -timeout 20m -v ./tests/isolation/umami/
+
+# this stage end-to-end web path (tests/webpath, build tag webpath): real
+# browsers on the example sites through the edge caddy, gateway, nats,
+# replayer and umami, all in containers the test owns (images from the
+# dev.yml digests), so umami, postgresql and replayers can be stopped and
+# killed without touching the dev stack. needs docker, node 26 with pnpm and
+# the playwright browsers, and the e2e fixture ports free. takes about an
+# hour: the second visit of the visit check waits out a 31 minute gap.
+.PHONY: webpath
+webpath:
+	DBIP_MONTH=$(DBIP_MONTH) $(GO) test -tags webpath -count=1 -timeout 120m -v ./tests/webpath/
+
+# this stage browser flows (tests/e2e-console, build tag consolee2e): sign-in
+# through the TEST-ONLY github oauth fixture, enrollment, sites, snippet,
+# traffic through the real gateway, umami through sso, isolation, sso
+# hardening and session security. the control plane is built with the
+# oauthfixture tag; postgresql, nats, umami, the replayer, the gateway image
+# and the edge, web and app caddies run in containers the test owns. needs
+# docker, node 26 with pnpm and the playwright browsers. screenshots and, on
+# failure, container logs land in .scratch/scratch/console-e2e.
+# CONSOLE_E2E_ARGS passes extra playwright arguments (for example --grep).
+.PHONY: console-e2e
+console-e2e:
+	DBIP_MONTH=$(DBIP_MONTH) $(GO) test -tags consolee2e -count=1 -timeout 60m -v ./tests/e2e-console/

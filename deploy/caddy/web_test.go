@@ -41,7 +41,7 @@ func webEnv() map[string]string {
 func webCaddyRun(t *testing.T, env map[string]string, cmd ...string) (int, string) {
 	t.Helper()
 	ctx := context.Background()
-	c, err := testcontainers.Run(ctx, caddyImage,
+	c, err := testcontainers.Run(ctx, umamictr.WebCaddyImage(t),
 		testcontainers.WithEnv(env),
 		testcontainers.WithFiles(testcontainers.ContainerFile{
 			HostFilePath: webCaddyfile(t), ContainerFilePath: "/etc/caddy/Caddyfile", FileMode: 0o644,
@@ -61,8 +61,13 @@ func webCaddyRun(t *testing.T, env map[string]string, cmd ...string) (int, strin
 }
 
 func TestWebCaddyfileValidates(t *testing.T) {
-	// the live tests start caddy through umamictr; both must run the pinned build
+	// the live tests start caddy through umamictr; both must run caddy built
+	// on the pinned image, with the replace-response plugin the db-ip
+	// attribution needs
 	require.Equal(t, caddyImage, umamictr.CaddyImage)
+	dockerfile, err := os.ReadFile(filepath.Join(filepath.Dir(webCaddyfile(t)), "..", "images", "caddy.Dockerfile"))
+	require.NoError(t, err)
+	require.Contains(t, string(dockerfile), "\nFROM "+caddyImage+"\n", "the web caddy image must end on the pinned caddy")
 
 	code, out := webCaddyRun(t, webEnv(), "caddy", "validate", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile")
 	require.Equal(t, 0, code, out)
@@ -91,6 +96,13 @@ func TestWebCaddyfileValidates(t *testing.T) {
 		`"Location":["https://app.web.test/"]`,
 		`"Referrer-Policy":["no-referrer"]`,
 		`"Cache-Control":["no-store"]`,
+		// db-ip attribution on umami's html, from an uncompressed upstream body
+		`"handler":"replace_response"`,
+		`"match":{"headers":{"Content-Type":["text/html*"]}}`,
+		`"search":"\u003c/body\u003e"`,
+		`"replace":"\u003ca href=\"https://db-ip.com\"`,
+		`IP Geolocation by DB-IP\u003c/a\u003e\u003c/body\u003e`,
+		`"Accept-Encoding":["identity"]`,
 	} {
 		require.Contains(t, adapted, want)
 	}

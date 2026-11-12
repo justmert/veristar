@@ -30,8 +30,11 @@ const (
 // from the environment; integration tests fill it the same way with an
 // injected clock.
 type NodeConfig struct {
-	Gateway  config.Gateway
-	NC       *nats.Conn
+	Gateway config.Gateway
+	NC      *nats.Conn
+	// Replicas is NATS_REPLICAS, the replica count edge_secrets is
+	// recreated with when a restart lost it.
+	Replicas int
 	Log      *slog.Logger
 	Registry *prometheus.Registry
 	// Now is the clock of every component. nil means time.Now.
@@ -44,6 +47,7 @@ type Node struct {
 	cfg      NodeConfig
 	js       jetstream.JetStream
 	secrets  jetstream.KeyValue
+	buckets  *natsx.BucketKeeper
 	sites    *registry.Watcher[registry.Site]
 	keys     *KeyStore
 	visitor  *Visitor
@@ -57,8 +61,8 @@ type Node struct {
 }
 
 // NewNode builds every component and checks the configuration. it reads the
-// release directory and the geo file, and binds the edge_secrets bucket, so
-// a wrong path or a missing topology fails here.
+// release directory and the geo file, recreates edge_secrets when a restart
+// lost it and binds it, so a wrong path or a missing topology fails here.
 func NewNode(ctx context.Context, c NodeConfig) (*Node, error) {
 	if c.NC == nil || c.Log == nil || c.Registry == nil {
 		return nil, errors.New("gateway: NodeConfig needs a connection, a logger and a registry")
@@ -77,6 +81,15 @@ func NewNode(ctx context.Context, c NodeConfig) (*Node, error) {
 	}
 	if n.geo, err = OpenGeo(g.DBIPPath); err != nil {
 		return nil, err
+	}
+	// edge_secrets is memory-backed and gone after a restart of a single
+	// server; the gateway recreates it itself so it never waits for an
+	// operator
+	if n.buckets, err = natsx.NewBucketKeeper(js, c.Replicas, c.Log, natsx.BucketEdgeSecrets); err != nil {
+		return nil, err
+	}
+	if err := n.buckets.Ensure(ctx); err != nil {
+		return nil, fmt.Errorf("gateway: %w", err)
 	}
 	if n.secrets, err = js.KeyValue(ctx, natsx.BucketEdgeSecrets); err != nil {
 		return nil, fmt.Errorf("gateway: bind %s: %w", natsx.BucketEdgeSecrets, err)
@@ -137,7 +150,7 @@ func NewNode(ctx context.Context, c NodeConfig) (*Node, error) {
 	if err != nil {
 		return nil, err
 	}
-	n.ops = obs.NewOpsHandler(c.Registry, c.Log, ReadinessChecks(n.sites, n.keys, n.visitor, n.pub)...)
+	n.ops = obs.NewOpsHandler(c.Registry, c.Log, ReadinessChecks(n.sites, n.keys, n.visitor, n.pub, n.buckets)...)
 	return n, nil
 }
 
@@ -179,7 +192,8 @@ func (n *Node) Run(ctx context.Context) error {
 	wg.Go(func() { _ = n.sites.Run(ctx) })
 	wg.Go(func() { n.visitor.Run(ctx, log) })
 	wg.Go(func() { _ = n.stats.Run(ctx) })
-	wg.Go(func() { n.pub.RunCanary(ctx, n.secrets, n.cfg.Gateway.NodeID, log) })
+	wg.Go(func() { n.buckets.Run(ctx) })
+	wg.Go(func() { n.pub.RunCanary(ctx, n.secrets, n.cfg.Gateway.NodeID, log, n.buckets.Kick) })
 	<-ctx.Done()
 	_ = tokens.Unsubscribe()
 	wg.Wait()
