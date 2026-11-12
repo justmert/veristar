@@ -71,6 +71,35 @@ per tenant.
 The 24-month floor of `API_HOURLY_RETENTION_MONTHS` would hold 35.1 million
 hourly rows, 17.2 GiB at the same rate.
 
+## Volume run (2026-11-12, PostgreSQL 18.6)
+
+`make api-volume` (`tests/apivolume`, build tag `apivolume`): 1,000,000
+requests across 10 tenants and 30 services (3 per tenant, 20 routes and 4
+status codes each, 2,400 series), recorded by the pinned Go SDK over 20
+minutes, exported every 10 s (half delta, half cumulative, HTTP and gRPC)
+through the built `scf-otelcol`, stored by the built `metricswriter` (batch
+256), rolled up with `jobs run api-rollup`, then vacuumed and measured with
+`jobs capacity`. The host is shared: its load average was 19.3 at the start,
+up to 23.8 during the run and 6.1 at the end, on 10 CPUs.
+
+| Result | Value |
+|---|---|
+| Stored `sum(count)` | 1,000,000, equal to requests sent, per tenant and in total |
+| `API_METRICS` messages | 3,615 applied, 0 duplicates, 0 dead-lettered, 0 refused; 123 batches, none failed |
+| Writer lag | at most 30 messages; zero 3 s after the last export |
+| Rollup | 2,400 hourly rows, equal to the minute rows in every dimension and bucket; 435 ms |
+| `metrics_minute` | 50,397 rows, 23,560,192 bytes, **467.5 bytes per row** |
+| `metrics_hourly`, `metrics_daily` | 2,400 rows each, 375.5 bytes per row (few rows, so page rounding dominates) |
+| Writer state | `series_state` 1,200 rows 2.6 MiB, `ingest_dedup` 3,615 rows 0.97 MiB, `resource_seen` 15 rows, `route_registry` 600 rows |
+| Database growth | 29,474,816 bytes (10.5 MB to 40.0 MB) |
+
+Each minute row was updated about six times (one export every 10 s), so the
+figure includes what the upserts leave behind after `vacuum`; it is below the
+506.9 bytes of the synthetic measurement above. At 467.5 bytes per row, the
+30 days of minute rows for 2,000 series in the extrapolation come to 37.6 GiB
+instead of 40.8 GiB. The table above keeps the higher figure as the planning
+bound.
+
 ## Re-measuring
 
 Re-run the measurement after any change to the metric table shapes, and after

@@ -313,6 +313,7 @@ func Users() []User {
 			consume(StreamAPIMetrics, ConsumerMetricsWriter),
 			subjects(SubjectAPIDLQ+".*"),
 			kvWrite(BucketLocks),
+			kvRecreate(BucketLocks),
 		),
 		user(ServiceJobs, false, nil,
 			consume(StreamEdgeStats, ConsumerJobs),

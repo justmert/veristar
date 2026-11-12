@@ -1,11 +1,13 @@
 //go:build recoveryit
 
-// Package recoveryit checks that the gateway, the replayer and jobs recover
+// Package recoveryit checks that the gateway, the replayer, jobs and the
+// metrics writer recover
 // from a full nats restart without anyone running platformctl: the memory
 // buckets (edge_secrets, visit_state, locks) are recreated by the services
 // from the topology in internal/natsx, readiness comes back, and events flow
 // from a gateway through the replayer into umami and as outcome counters
-// through jobs into postgres again. it runs against real nats (one server,
+// through jobs into postgres again, and api metrics flow through the metrics
+// writer into postgres again. it runs against real nats (one server,
 // then a 3-node cluster) with the production per-service authorization, a
 // real postgres with the platform migrations, the shared dev umami and the
 // jobs binary built from cmd/jobs.
@@ -41,12 +43,15 @@ import (
 	"github.com/google/uuid"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/collector/pdata/pcommon"
+	"go.opentelemetry.io/collector/pdata/pmetric"
 
 	"github.com/justmert/stellar-analytics/internal/config"
 	pdb "github.com/justmert/stellar-analytics/internal/db"
 	"github.com/justmert/stellar-analytics/internal/db/dbtest"
 	"github.com/justmert/stellar-analytics/internal/gateway"
 	"github.com/justmert/stellar-analytics/internal/jobs/jobstest"
+	"github.com/justmert/stellar-analytics/internal/metricswriter"
 	"github.com/justmert/stellar-analytics/internal/natsx"
 	"github.com/justmert/stellar-analytics/internal/obs"
 	"github.com/justmert/stellar-analytics/internal/registry"
@@ -493,7 +498,11 @@ func testRecovery(t *testing.T, sh *shared, creds map[string]string, urls string
 	gw2 := startGateway(t, sh, urls, replicas, creds, "edge-2")
 	replayerOps := startReplayer(t, sh, urls, replicas, creds)
 	jobsOps, jobsOut := startJobs(t, sh, urls, replicas, creds)
-	for _, u := range []string{gw1.ops, gw2.ops, replayerOps, jobsOps} {
+	writerOps := startWriter(t, sh, urls, replicas, creds)
+	_, collectorJS, closeCollector := connect(t, urls, replicas, natsx.ServiceCollector, creds)
+	defer closeCollector()
+	api := newAPITenant(t, sh)
+	for _, u := range []string{gw1.ops, gw2.ops, replayerOps, jobsOps, writerOps} {
 		within(t, time.Now(), u+" ready before the restart", ready(u))
 	}
 
@@ -505,6 +514,8 @@ func testRecovery(t *testing.T, sh *shared, creds map[string]string, urls string
 	within(t, time.Now(), "the outcome counter in postgres before the restart", func() bool {
 		return jobstest.Totals(t, sh.jobsDB)[key+"accepted"] == 1
 	})
+	publishMetric(t, collectorJS, api)
+	within(t, time.Now(), "the api metric in postgres before the restart", func() bool { return apiCount(t, sh, api) == 1 })
 	before := map[string]time.Time{}
 	for _, b := range memoryBuckets {
 		before[b] = created(t, admin, b)
@@ -517,6 +528,7 @@ func testRecovery(t *testing.T, sh *shared, creds map[string]string, urls string
 	// was ready at some point afterwards
 	probes := map[string]string{
 		"gateway edge-1": gw1.ops, "gateway edge-2": gw2.ops, "replayer": replayerOps, "jobs": jobsOps,
+		"metricswriter": writerOps,
 	}
 	sampler := newSampler(probes)
 	defer sampler.stop()
@@ -539,6 +551,16 @@ func testRecovery(t *testing.T, sh *shared, creds map[string]string, urls string
 	require.NoError(t, gw1.node.Stats().Flush(t.Context()))
 	times["jobs writes"] = within(t, back, "the outcome counter in postgres after the restart", func() bool {
 		return jobstest.Totals(t, sh.jobsDB)[key+"accepted"] == 2
+	})
+	// the writer takes its lock again (after recreating locks when it was
+	// lost) and stores a metric published after the restart
+	times["writer stores"] = within(t, back, "the api metric in postgres after the restart", func() bool {
+		if api.sent < 2 {
+			if err := tryPublishMetric(collectorJS, api); err != nil {
+				return false
+			}
+		}
+		return apiCount(t, sh, api) >= 2
 	})
 
 	recreated := 0
@@ -575,12 +597,12 @@ func testRecovery(t *testing.T, sh *shared, creds map[string]string, urls string
 	})
 
 	sampler.stop()
-	for _, name := range []string{"gateway edge-1", "gateway edge-2", "replayer", "jobs"} {
+	for _, name := range []string{"gateway edge-1", "gateway edge-2", "replayer", "jobs", "metricswriter"} {
 		t.Logf("%-16s not ready for %s in total during and after the restart", name, sampler.notReady(name).Round(10*time.Millisecond))
 	}
 	for _, k := range []string{
 		"gateway edge-1 ready", "gateway edge-2 ready", "replayer ready", "jobs ready",
-		"edge-1 accepts", "replayer delivers", "jobs writes",
+		"metricswriter ready", "edge-1 accepts", "replayer delivers", "jobs writes", "writer stores",
 		"edge-3 ready", "secrets agree", "cross-gateway event",
 	} {
 		t.Logf("after nats was healthy: %-22s %s", k, times[k].Round(10*time.Millisecond))
@@ -631,4 +653,126 @@ func (s *sampler) notReady(name string) time.Duration {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.down[name]
+}
+
+// apiTenant is a tenant with an active otlp token in the platform database,
+// so the metrics writer accepts its messages.
+type apiTenant struct {
+	tenant, token uuid.UUID
+	sent          int
+}
+
+func newAPITenant(t *testing.T, sh *shared) *apiTenant {
+	t.Helper()
+	ctx := context.Background()
+	c, err := sh.pg.Superuser(ctx, "platform")
+	require.NoError(t, err)
+	defer func() { _ = c.Close(ctx) }()
+	var user uuid.UUID
+	require.NoError(t, c.QueryRow(ctx, `insert into cp.users (github_id, github_login) values ($1, 'rc') returning id`,
+		time.Now().UnixNano()%1_000_000_000+1).Scan(&user))
+	a := &apiTenant{}
+	slug := "rc-" + randHex(t, 6)
+	require.NoError(t, c.QueryRow(ctx, `insert into cp.tenants (slug, name, status, created_by) values ($1, $1, 'active', $2) returning id`,
+		slug, user).Scan(&a.tenant))
+	hash := make([]byte, 32)
+	_, err = rand.Read(hash)
+	require.NoError(t, err)
+	require.NoError(t, c.QueryRow(ctx, `insert into cp.otlp_tokens (tenant_id, name, prefix, hash, created_by) values ($1, 'rc', 'sa_otlp_rc', $2, $3) returning id`,
+		a.tenant, hash, user).Scan(&a.token))
+	return a
+}
+
+// tryPublishMetric publishes one delta request on API_METRICS as the
+// collector does after its own checks.
+func tryPublishMetric(js jetstream.JetStream, a *apiTenant) error {
+	md := pmetric.NewMetrics()
+	rm := md.ResourceMetrics().AppendEmpty()
+	ra := rm.Resource().Attributes()
+	ra.PutStr("service.name", "rc")
+	ra.PutStr("scf.tenant.id", a.tenant.String())
+	ra.PutStr("scf.token.id", a.token.String())
+	ra.PutStr("scf.resource.hash", strings.Repeat("ab", 32))
+	m := rm.ScopeMetrics().AppendEmpty().Metrics().AppendEmpty()
+	m.SetName("http.server.request.duration")
+	m.SetUnit("s")
+	h := m.SetEmptyHistogram()
+	h.SetAggregationTemporality(pmetric.AggregationTemporalityDelta)
+	dp := h.DataPoints().AppendEmpty()
+	now := time.Now()
+	dp.SetStartTimestamp(pcommon.NewTimestampFromTime(now.Add(-time.Second)))
+	dp.SetTimestamp(pcommon.NewTimestampFromTime(now))
+	dp.ExplicitBounds().FromRaw([]float64{0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1, 2.5, 5, 7.5, 10})
+	counts := make([]uint64, 15)
+	counts[2] = 1
+	dp.BucketCounts().FromRaw(counts)
+	dp.SetCount(1)
+	dp.SetSum(0.02)
+	dp.Attributes().PutStr("http.route", "/rc")
+	body, err := (&pmetric.ProtoMarshaler{}).MarshalMetrics(md)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, err = natsx.PublishDedup(ctx, js, natsx.StreamAPIMetrics, natsx.Subject(natsx.SubjectAPIMetrics, a.tenant.String()), uuid.NewString(), body, nil)
+	if err == nil {
+		a.sent++
+	}
+	return err
+}
+
+func publishMetric(t *testing.T, js jetstream.JetStream, a *apiTenant) {
+	t.Helper()
+	require.NoError(t, tryPublishMetric(js, a))
+}
+
+// apiCount is the tenant's stored request count.
+func apiCount(t *testing.T, sh *shared, a *apiTenant) int64 {
+	t.Helper()
+	ctx := context.Background()
+	c, err := sh.pg.Superuser(ctx, "platform")
+	require.NoError(t, err)
+	defer func() { _ = c.Close(ctx) }()
+	var n int64
+	require.NoError(t, c.QueryRow(ctx, `select coalesce(sum(count), 0)::bigint from api.metrics_minute where tenant_id = $1`, a.tenant).Scan(&n))
+	return n
+}
+
+// startWriter runs an in-process metrics writer, built as cmd/metricswriter
+// builds it, and returns its ops url.
+func startWriter(t *testing.T, sh *shared, urls string, replicas int, creds map[string]string) string {
+	t.Helper()
+	log := testLog(t, "metricswriter")
+	cfg, err := config.LoadNATS(config.FromMap(natsEnv(urls, replicas, natsx.ServiceMetricsWriter, creds)))
+	require.NoError(t, err)
+	nc, err := natsx.Connect(cfg, natsx.ServiceMetricsWriter, log)
+	require.NoError(t, err)
+	pcfg, err := pdb.LoadPoolConfig(sh.pg.Config("platform"), pdb.RoleMetricsWriter)
+	require.NoError(t, err)
+	d, err := pdb.Open(context.Background(), pcfg, natsx.ServiceMetricsWriter)
+	require.NoError(t, err)
+	set := metricswriter.Settings{NodeID: "writer-rc", OpsAddr: "127.0.0.1:0", Batch: 64,
+		FirstPointThreshold: metricswriter.DefaultFirstPointThreshold, RouteCap: 300, ServiceCap: 50}
+	w, err := metricswriter.New(metricswriter.Config{Settings: set, NC: nc, Replicas: cfg.Replicas, DB: d, Log: log, Registry: obs.NewRegistry()})
+	require.NoError(t, err)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- w.Run(ctx) }()
+	ops := httptest.NewServer(w.Ops())
+	t.Cleanup(func() {
+		ops.Close()
+		cancel()
+		select {
+		case err := <-done:
+			if err != nil {
+				t.Errorf("metricswriter: %v", err)
+			}
+		case <-time.After(30 * time.Second):
+			t.Error("metricswriter did not stop within 30 s")
+		}
+		nc.Close()
+		d.Close()
+	})
+	return ops.URL
 }

@@ -336,7 +336,10 @@ func TestPermissions(t *testing.T) {
 		})
 		refused(replayer, "KV_"+natsx.BucketEdgeSecrets, ensure(replayer, natsx.BucketEdgeSecrets))
 		refused(replayer, "EVIL", createStream(replayer, "EVIL"))
-		for _, s := range []*svcConn{collector, metricswriter, controlplane} {
+		refused(metricswriter, "KV_"+natsx.BucketVisitState, ensure(metricswriter, natsx.BucketVisitState))
+		refused(metricswriter, "KV_"+natsx.BucketEdgeSecrets, ensure(metricswriter, natsx.BucketEdgeSecrets))
+		refused(metricswriter, "EVIL", createStream(metricswriter, "EVIL"))
+		for _, s := range []*svcConn{collector, controlplane} {
 			refused(s, "KV_"+natsx.BucketLocks, ensure(s, natsx.BucketLocks))
 			refused(s, "EVIL", createStream(s, "EVIL"))
 		}
@@ -347,15 +350,20 @@ func TestPermissions(t *testing.T) {
 		// each service recreates its own buckets with exactly the topology
 		// config; a second service finding one already there is a no-op
 		seen := map[*svcConn]string{}
-		for _, s := range []*svcConn{gateway, replayer, jobs} {
+		for _, s := range []*svcConn{gateway, replayer, jobs, metricswriter} {
 			seen[s] = s.violations()
 		}
 		created, err := natsx.EnsureBuckets(ctx, gateway.js, 1, natsx.BucketEdgeSecrets)
 		require.NoError(t, err)
 		require.Equal(t, []string{natsx.BucketEdgeSecrets}, created)
-		created, err = natsx.EnsureBuckets(ctx, jobs.js, 1, natsx.BucketLocks)
+		// the metricswriter recreates locks like jobs and the replayer; the
+		// next one finds it there
+		created, err = natsx.EnsureBuckets(ctx, metricswriter.js, 1, natsx.BucketLocks)
 		require.NoError(t, err)
 		require.Equal(t, []string{natsx.BucketLocks}, created)
+		created, err = natsx.EnsureBuckets(ctx, jobs.js, 1, natsx.BucketLocks)
+		require.NoError(t, err)
+		require.Empty(t, created)
 		created, err = natsx.EnsureBuckets(ctx, replayer.js, 1, natsx.BucketVisitState, natsx.BucketLocks)
 		require.NoError(t, err)
 		require.Equal(t, []string{natsx.BucketVisitState}, created)
