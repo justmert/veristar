@@ -1,0 +1,55 @@
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  default: standard
+  enable:
+    - bodyclose
+    - contextcheck
+    - copyloopvar
+    - errorlint
+    - gosec
+    - misspell
+    - noctx
+    - nolintlint
+    - revive
+    - sloglint
+    - unconvert
+    - usestdlibvars
+  settings:
+    errcheck:
+      check-type-assertions: true
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+    sloglint:
+      # key-value pairs only, snake_case keys, so the log guard sees every key
+      kv-only: true
+      key-naming-case: snake
+    revive:
+      rules:
+        - name: exported
+          disabled: true
+        - name: package-comments
+  exclusions:
+    presets:
+      - std-error-handling
+    rules:
+      # tests make plain requests to local listeners and read fixed test values
+      - path: _test\.go
+        linters:
+          - noctx
+          - gosec
+          - errcheck
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/justmert/stellar-analytics

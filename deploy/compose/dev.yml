@@ -1,0 +1,86 @@
+# local development stack: postgresql, nats with jetstream, umami.
+# start it with `make dev-up`, which creates .env.dev with random secrets first.
+# images are pinned by tag and index digest (resolved 2026-11-12 with
+# `docker buildx imagetools inspect`).
+name: stellar-analytics-dev
+
+services:
+  postgres:
+    image: postgres:18.6-trixie@sha256:e3d24f6906d0760bf4da0dae872415391ededefad23fd471c47dc53b0ddf3c42
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?run make dev-up, which creates deploy/compose/.env.dev}
+      UMAMI_DB_PASSWORD: ${UMAMI_DB_PASSWORD:?run make dev-up, which creates deploy/compose/.env.dev}
+      TZ: UTC
+    volumes:
+      # postgres 18 images keep PGDATA under /var/lib/postgresql/18/docker, so
+      # the volume mounts the parent to survive a later major upgrade
+      - pgdata:/var/lib/postgresql
+      - ./postgres-init.sh:/docker-entrypoint-initdb.d/10-init.sh:ro
+    ports:
+      - "127.0.0.1:55432:5432"
+    healthcheck:
+      # -h forces tcp, so the temporary socket-only server the entrypoint runs
+      # during init does not count as healthy; the query proves init finished
+      test:
+        - CMD-SHELL
+        - >-
+          pg_isready -h 127.0.0.1 -U postgres -d postgres &&
+          [ "$$(psql -h 127.0.0.1 -U postgres -d postgres -tAc
+          "select count(*) from pg_database where datname in ('umami','platform')")" = 2 ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  nats:
+    image: nats:2.15.3-alpine@sha256:558394a23dd3c36f2d3a64b51865fd09908010e80a542cea5e75c2af543ed62a
+    command: ["--name", "dev-1", "--jetstream", "--store_dir", "/data", "--http_port", "8222"]
+    volumes:
+      - natsdata:/data
+    ports:
+      - "127.0.0.1:4222:4222"
+      - "127.0.0.1:8222:8222"
+    healthcheck:
+      # js-enabled-only fails until jetstream is up, not just the core server
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8222/healthz?js-enabled-only=true"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+
+  umami:
+    image: ghcr.io/umami-software/umami:3.5.0@sha256:b64f40400d77bcadd39cf5c62a1e368c99524ca442024f96e1133355a19a5dbc
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # environment follows the design REDIS_URL, CLICKHOUSE_URL,
+    # KAFKA_URL, CLOUD_MODE, MCP_ENABLED, DISABLE_BOT_CHECK and
+    # SKIP_LOCATION_HEADERS stay unset on purpose.
+    environment:
+      DATABASE_URL: postgresql://umami_app:${UMAMI_DB_PASSWORD}@postgres:5432/umami
+      APP_SECRET: ${UMAMI_APP_SECRET:?run make dev-up, which creates deploy/compose/.env.dev}
+      CLIENT_IP_HEADER: x-edge-client-ip
+      ENABLE_CLIENT_SALT: "1"
+      SALT_ROTATION: daily
+      PRIVATE_MODE: "1"
+      DISABLE_TELEMETRY: "1"
+      DISABLE_UPDATES: "1"
+      # blocks only the /login page; /api/auth/login stays reachable for
+      # platformctl and the control plane (docker/proxy.ts)
+      DISABLE_LOGIN: "1"
+      TZ: UTC
+    ports:
+      # all interfaces so the ui can be opened from another machine on the lan
+      - "0.0.0.0:3000:3000"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/api/heartbeat"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      # first boot runs every prisma migration before the server listens
+      start_period: 120s
+
+volumes:
+  pgdata:
+  natsdata:
