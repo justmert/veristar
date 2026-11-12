@@ -1,0 +1,39 @@
+# internal notes, plan and scratch files
+.scratch/
+
+# javascript
+node_modules/
+dist/
+build/
+coverage/
+.pnpm-store/
+*.tsbuildinfo
+
+# test output
+playwright-report/
+test-results/
+
+# go build output
+/bin/
+
+# environment files (the example file is meant to be committed)
+.env
+.env.*
+!.env.example
+
+# opentofu state and working directories
+*.tfstate
+*.tfstate.*
+.terraform/
+crash.log
+crash.*.log
+
+# age private keys
+*.agekey
+keys.txt
+
+# logs
+*.log
+
+# os and editor files
+.DS_Store

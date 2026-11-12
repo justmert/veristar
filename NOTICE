@@ -1,0 +1,14 @@
+Stellar Analytics
+Copyright 2026 The Stellar Analytics contributors
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE),
+except where a directory carries its own licence file.
+
+packages/tracker is licensed under the MIT License. Its source is derived from
+the Umami tracker (https://github.com/umami-software/umami), which carries the
+following notice:
+
+  Copyright (c) 2022 Umami Software, Inc. <hello@umami.is>
+
+The platform runs the unmodified official Umami container image as a separate
+service. Umami is licensed under the MIT License.
