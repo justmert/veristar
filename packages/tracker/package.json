@@ -1,0 +1,37 @@
+{
+  "name": "tracker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "browser tracker for stellar analytics, derived from the umami tracker",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./snippet": "./src/snippet.ts",
+    "./wire": "./src/wire.ts",
+    "./proof": "./src/proof.ts",
+    "./releases/manifest.json": "./releases/manifest.json",
+    "./releases/revoked.json": "./releases/revoked.json"
+  },
+  "files": [
+    "src",
+    "releases",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "node build.mjs",
+    "release": "node scripts/release.mjs",
+    "verify-releases": "node scripts/verify-releases.mjs",
+    "bench:proof": "node bench/proof-cost.mjs",
+    "check": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@playwright/test": "catalog:",
+    "@types/node": "catalog:",
+    "esbuild": "catalog:",
+    "jsdom": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

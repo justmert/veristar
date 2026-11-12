@@ -1,0 +1,14 @@
+{
+  "versions": [
+    {
+      "version": "1.0.0",
+      "file": "1.0.0/sdk.js",
+      "bytes": 6734,
+      "gzipBytes": 3273,
+      "sha384": "1bb8c0947b29ff41e1ade1de20a15922bd547726fc9577d324f3d970b0bc61c542010f4caff392dc938c5b89f8393ea3",
+      "integrity": "sha384-G7jAlHsp/0HhreHeIKFZIr1Udyb8lXfTJPPZcLC8YcVCAQ9Mr/OS3JOMW4n4OT6j",
+      "esbuild": "0.28.2",
+      "released": "2026-11-12"
+    }
+  ]
+}

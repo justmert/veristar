@@ -1,0 +1,53 @@
+{
+  "description": "wire v1 proof vectors. tag = hex(hmac-sha256(proof key, tagInput)). nonce is the smallest nonce whose sha-256(proofInput) has at least bits leading zero bits.",
+  "vectors": [
+    {
+      "proofKeyHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+      "w": "8f6b1c3e-2a4d-4e5f-9a7b-0c1d2e3f4a5b",
+      "iat": 1794528000,
+      "salt": "00112233445566778899aabbccddeeff",
+      "bits": 0,
+      "tagInput": "8f6b1c3e-2a4d-4e5f-9a7b-0c1d2e3f4a5b|1794528000|00112233445566778899aabbccddeeff|0",
+      "tag": "e9c7c549746ff074016e192d68da7b7e47dc5006a2f7ec26ee846b3681b1c008",
+      "nonce": 0,
+      "proofInput": "8f6b1c3e-2a4d-4e5f-9a7b-0c1d2e3f4a5b|1794528000|00112233445566778899aabbccddeeff|0",
+      "digest": "d87d63405f88bf7f52b812e94fdf7211c1f8ad131221016ddcefedd8df54fa79"
+    },
+    {
+      "proofKeyHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+      "w": "8f6b1c3e-2a4d-4e5f-9a7b-0c1d2e3f4a5b",
+      "iat": 1794528000,
+      "salt": "00112233445566778899aabbccddeeff",
+      "bits": 8,
+      "tagInput": "8f6b1c3e-2a4d-4e5f-9a7b-0c1d2e3f4a5b|1794528000|00112233445566778899aabbccddeeff|8",
+      "tag": "e185d2d34887372c239850c61a0e21c6ce857c7d40e47842c9d0a865a8404b30",
+      "nonce": 87,
+      "proofInput": "8f6b1c3e-2a4d-4e5f-9a7b-0c1d2e3f4a5b|1794528000|00112233445566778899aabbccddeeff|87",
+      "digest": "00b7bae3d5a924b58a2a8e35b0b52c0ce26df2ed696675250e55fcfe4f210b87"
+    },
+    {
+      "proofKeyHex": "1f1e1d1c1b1a191817161514131211100f0e0d0c0b0a09080706050403020100",
+      "w": "0d4e2f6a-9b3c-4d1e-8f7a-6b5c4d3e2f1a",
+      "iat": 1794550000,
+      "salt": "a3f1c2d4e5b6978877665544332211ff",
+      "bits": 12,
+      "tagInput": "0d4e2f6a-9b3c-4d1e-8f7a-6b5c4d3e2f1a|1794550000|a3f1c2d4e5b6978877665544332211ff|12",
+      "tag": "9e9de75ea9bd37ad18b9cb0447bd9cc8d76a679725328e4e6a1e3284583f8676",
+      "nonce": 5803,
+      "proofInput": "0d4e2f6a-9b3c-4d1e-8f7a-6b5c4d3e2f1a|1794550000|a3f1c2d4e5b6978877665544332211ff|5803",
+      "digest": "000405ed03a465ff4f10ffdbbab9cb9f4a5fcd0d37c922a87fb9623ea89501ec"
+    },
+    {
+      "proofKeyHex": "1f1e1d1c1b1a191817161514131211100f0e0d0c0b0a09080706050403020100",
+      "w": "0d4e2f6a-9b3c-4d1e-8f7a-6b5c4d3e2f1a",
+      "iat": 1794550123,
+      "salt": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+      "bits": 16,
+      "tagInput": "0d4e2f6a-9b3c-4d1e-8f7a-6b5c4d3e2f1a|1794550123|5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e|16",
+      "tag": "e24a16d4c4bd127477102734b25358de847ff7bdcbe0f642bc2c27433d771e9f",
+      "nonce": 48482,
+      "proofInput": "0d4e2f6a-9b3c-4d1e-8f7a-6b5c4d3e2f1a|1794550123|5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e|48482",
+      "digest": "00004a6cd6b45790b2c35ffddbe3beed3ff7bce3cb26e3794f0b472ef0a64496"
+    }
+  ]
+}

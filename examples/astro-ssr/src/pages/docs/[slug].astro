@@ -1,0 +1,9 @@
+---
+import Base from "../../layouts/Base.astro";
+
+const { slug } = Astro.params;
+---
+
+<Base title={`Astro example: ${slug}`}>
+  <h1>Docs: {slug}</h1>
+</Base>

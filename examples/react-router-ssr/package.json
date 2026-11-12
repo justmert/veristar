@@ -1,0 +1,28 @@
+{
+  "name": "@stellar-analytics/example-react-router-ssr",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "react-router build",
+    "start": "react-router-serve ./build/server/index.js",
+    "check": "react-router typegen && tsc -p tsconfig.json",
+    "test": "node --test 'test/*.test.ts'"
+  },
+  "dependencies": {
+    "@react-router/node": "catalog:",
+    "@react-router/serve": "catalog:",
+    "isbot": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "react-router": "catalog:",
+    "tracker": "workspace:*"
+  },
+  "devDependencies": {
+    "@react-router/dev": "catalog:",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:"
+  }
+}

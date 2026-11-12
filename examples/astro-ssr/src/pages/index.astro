@@ -1,0 +1,18 @@
+---
+import Base from "../layouts/Base.astro";
+---
+
+<Base title="Astro example: home">
+  <h1>Astro example</h1>
+  <p>Server rendered per request. Each page load is one pageview.</p>
+  <button type="button" id="signup" data-umami-event="signup-click" data-umami-event-plan="free">
+    Sign up
+  </button>
+  <button type="button" id="manual">Track by call</button>
+  <script is:inline>
+    // umami.track() from page code; the tracker may be blocked, so check first
+    document.getElementById("manual").addEventListener("click", () => {
+      if (window.umami) window.umami.track("manual-call", { source: "astro-ssr" });
+    });
+  </script>
+</Base>

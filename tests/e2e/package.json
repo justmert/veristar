@@ -1,0 +1,15 @@
+{
+  "name": "@stellar-analytics/e2e",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "tsc -p tsconfig.json",
+    "test": "playwright test",
+    "fixture": "node fixture/main.ts"
+  },
+  "devDependencies": {
+    "@playwright/test": "catalog:",
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
+  }
+}

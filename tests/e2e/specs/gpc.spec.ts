@@ -1,0 +1,37 @@
+// with global privacy control on (firefox preference), the tracker loads but
+// sends nothing: no challenge request and no event
+import { expect, test } from "@playwright/test";
+import { SDK_PATH, SITES } from "../sites.ts";
+import { recorded, resetFixture, SETTLE_MS } from "./helpers.ts";
+
+test.beforeEach(async () => {
+  await resetFixture();
+});
+
+for (const site of SITES) {
+  test(`${site.key}: gpc sends nothing`, async ({ page }) => {
+    await page.goto(`${site.origin}/`);
+    expect(await page.evaluate(() => navigator.globalPrivacyControl)).toBe(true);
+    // the tracker did load and run; only sending is off
+    await page.waitForFunction(() => typeof window.umami?.track === "function");
+
+    // a navigation, then both kinds of custom event
+    await page.click(site.navSelector);
+    await page.waitForLoadState("load");
+    await page.goto(`${site.origin}/`);
+    await page.waitForFunction(() => typeof window.umami?.track === "function");
+    await page.click("#signup");
+    await page.click("#manual");
+    await new Promise((r) => setTimeout(r, SETTLE_MS));
+
+    const all = await recorded();
+    expect(all.filter((r) => r.path === SDK_PATH).length).toBeGreaterThan(0);
+    expect(all.filter((r) => r.path === "/v1/c" || r.path === "/v1/e")).toEqual([]);
+  });
+}
+
+declare global {
+  interface Navigator {
+    globalPrivacyControl?: boolean;
+  }
+}

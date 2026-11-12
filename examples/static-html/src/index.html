@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Static example: home</title>
+    <link rel="stylesheet" href="/site.css" />
+    <!-- tracker -->
+  </head>
+  <body>
+    <nav><a href="/">Home</a> <a href="/about.html" id="to-about">About</a></nav>
+    <main>
+      <h1>Static example</h1>
+      <p>A hand-written page with the tracker snippet pasted into its head.</p>
+      <button type="button" id="signup" data-umami-event="signup-click" data-umami-event-plan="free">
+        Sign up
+      </button>
+      <button type="button" id="manual">Track by call</button>
+      <p><a href="#details" id="jump">Jump to details</a></p>
+      <h2 id="details">Details</h2>
+      <p>An in-page anchor jump is not a pageview.</p>
+    </main>
+    <script>
+      // umami.track() from page code; the tracker may be blocked, so check first
+      document.getElementById("manual").addEventListener("click", () => {
+        if (window.umami) window.umami.track("manual-call", { source: "static-html" });
+      });
+    </script>
+  </body>
+</html>

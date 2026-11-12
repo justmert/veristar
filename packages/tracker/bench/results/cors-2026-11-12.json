@@ -1,0 +1,77 @@
+{
+  "chromium": {
+    "version": "156.0.8078.4",
+    "requests": [
+      {
+        "method": "GET",
+        "path": "/v1/c",
+        "origin": "http://127.0.0.1:41501",
+        "contentType": null,
+        "site": "cross-site",
+        "mode": "cors",
+        "dest": "empty",
+        "cookie": null
+      },
+      {
+        "method": "POST",
+        "path": "/v1/e",
+        "origin": "http://127.0.0.1:41501",
+        "contentType": "text/plain;charset=UTF-8",
+        "site": "cross-site",
+        "mode": "cors",
+        "dest": "empty",
+        "cookie": null
+      }
+    ]
+  },
+  "firefox": {
+    "version": "157.0",
+    "requests": [
+      {
+        "method": "GET",
+        "path": "/v1/c",
+        "origin": "http://127.0.0.1:41501",
+        "contentType": null,
+        "site": "cross-site",
+        "mode": "cors",
+        "dest": "empty",
+        "cookie": null
+      },
+      {
+        "method": "POST",
+        "path": "/v1/e",
+        "origin": "http://127.0.0.1:41501",
+        "contentType": "text/plain;charset=UTF-8",
+        "site": "cross-site",
+        "mode": "cors",
+        "dest": "empty",
+        "cookie": null
+      }
+    ]
+  },
+  "webkit": {
+    "version": "27.2",
+    "requests": [
+      {
+        "method": "GET",
+        "path": "/v1/c",
+        "origin": "http://127.0.0.1:41501",
+        "contentType": null,
+        "site": "cross-site",
+        "mode": "cors",
+        "dest": "empty",
+        "cookie": null
+      },
+      {
+        "method": "POST",
+        "path": "/v1/e",
+        "origin": "http://127.0.0.1:41501",
+        "contentType": "text/plain;charset=UTF-8",
+        "site": "cross-site",
+        "mode": "cors",
+        "dest": "empty",
+        "cookie": null
+      }
+    ]
+  }
+}

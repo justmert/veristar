@@ -1,0 +1,28 @@
+---
+import { trackerTag } from "../tracker.ts";
+
+interface Props {
+  title: string;
+}
+const { title } = Astro.props;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <Fragment set:html={trackerTag()} />
+  </head>
+  <body>
+    <nav>
+      <a href="/" id="nav-home">Home</a>
+      <a href="/about" id="nav-about">About</a>
+      <a href="/docs/getting-started" id="nav-docs">Docs</a>
+    </nav>
+    <main>
+      <slot />
+    </main>
+  </body>
+</html>
