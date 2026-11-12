@@ -196,12 +196,47 @@ services:
       PLATFORM_DB_SSLMODE: disable
       PLATFORM_DB_CP_SYSTEM_PASSWORD: ${PLATFORM_DB_CP_SYSTEM_PASSWORD:?run make dev-env}
       PLATFORM_DB_CP_TENANT_PASSWORD: ${PLATFORM_DB_CP_TENANT_PASSWORD:?run make dev-env}
+      PLATFORM_DB_CP_OPERATOR_PASSWORD: ${PLATFORM_DB_CP_OPERATOR_PASSWORD:?run make dev-env}
       TZ: UTC
     volumes:
       - ../../packages/tracker/releases:/releases:ro
     ports:
       - "127.0.0.1:8085:8085"
       - "127.0.0.1:9095:9090"
+
+  # otlp collector (this stage). in the "edge" profile, because it needs the
+  # nats topology from `platformctl nats apply`. ports bind to loopback only:
+  # in production only the local caddy reaches them. the dev nats server has
+  # no auth, so NATS_USER and NATS_PASSWORD are empty. the image has no
+  # shell; readiness is the health check endpoint on 127.0.0.1:13133.
+  # limits follow docs/reference/collector.md.
+  collector:
+    profiles: ["edge"]
+    build:
+      context: ../..
+      dockerfile: deploy/images/collector.Dockerfile
+    image: stellar-analytics/collector:dev
+    depends_on:
+      nats:
+        condition: service_healthy
+    environment:
+      NATS_URL: nats://nats:4222
+      NATS_USER: ""
+      NATS_PASSWORD: ""
+      COLLECTOR_GRPC_ADDR: 0.0.0.0:4317
+      COLLECTOR_HTTP_ADDR: 0.0.0.0:4318
+      COLLECTOR_HEALTH_ADDR: 0.0.0.0:13133
+      COLLECTOR_MEMORY_LIMIT_MIB: "512"
+      COLLECTOR_MEMORY_SPIKE_MIB: "128"
+      COLLECTOR_RATE_REQUESTS_PER_SECOND: "50"
+      COLLECTOR_RATE_REQUESTS_BURST: "100"
+      COLLECTOR_RATE_ITEMS_PER_SECOND: "50000"
+      COLLECTOR_RATE_ITEMS_BURST: "200000"
+      TZ: UTC
+    ports:
+      - "127.0.0.1:4317:4317"
+      - "127.0.0.1:4318:4318"
+      - "127.0.0.1:13133:13133"
 
 volumes:
   pgdata:

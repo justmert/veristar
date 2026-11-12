@@ -20,7 +20,7 @@ var cpRelations = []string{
 	"cp.users", "cp.sessions", "cp.tenants", "cp.tenant_members", "cp.invites", "cp.sites",
 	"cp.otlp_tokens", "cp.operator_api_keys", "cp.api_key_usage_hourly", "cp.settings",
 	"cp.audit_log", "cp.erasure_requests", "cp.web_ingest_hourly", "cp.stats_dedup",
-	"cp.leader_fence", "cp.operator_sites",
+	"cp.leader_fence", "cp.operator_sites", "cp.tenant_removals",
 }
 
 func TestOperatorBoundaries(t *testing.T) {
@@ -28,6 +28,7 @@ func TestOperatorBoundaries(t *testing.T) {
 	readable := map[string]bool{
 		"cp.tenants": true, "cp.operator_sites": true, "cp.web_ingest_hourly": true,
 		"cp.settings": true, "cp.operator_api_keys": true, "cp.api_key_usage_hourly": true,
+		"cp.tenant_removals": true,
 	}
 	for _, rel := range cpRelations {
 		_, err := count(t, pdb.RoleCPOperator, nil, `select count(*) from (select * from `+rel+`) x`)

@@ -59,3 +59,14 @@ delete from cp.sessions where token_hash = @token_hash;
 -- run by the jobs task session-prune; @cutoff is the task's clock, so tests
 -- can move it
 delete from cp.sessions where expiry <= @cutoff;
+
+-- name: ListUserRemovedTenants :many
+-- removed projects of the user for /api/me removed_tenants (contract 5.10),
+-- newest removal first; member rows stay on removal so former members learn
+-- why the project is gone
+select t.id, t.name, t.status_reason, t.status_changed_at
+from cp.tenant_members m
+join cp.tenants t on t.id = m.tenant_id
+where m.user_id = @user_id and t.status = 'removed'
+order by t.status_changed_at desc, t.id
+limit 20;

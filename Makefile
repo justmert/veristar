@@ -177,3 +177,19 @@ webpath:
 .PHONY: console-e2e
 console-e2e:
 	DBIP_MONTH=$(DBIP_MONTH) $(GO) test -tags consolee2e -count=1 -timeout 60m -v ./tests/e2e-console/
+
+# this stage otlp collector. collector-build generates and compiles the
+# scf-otelcol distribution with the pinned ocb 0.165.0 and strict version
+# checking (dist/scf-otelcol/scf-otelcol); collector-it runs the binary
+# against a real nats server with the production user permissions, driven
+# by the pinned go otlp exporters (tests/collector, build tag collectorit).
+.PHONY: collector-build collector-it
+OCB_VERSION := v0.165.0
+collector-build:
+	@mkdir -p dist
+	$(GO) run go.opentelemetry.io/collector/cmd/builder@$(OCB_VERSION) \
+		--config collector/builder-config.yaml --skip-strict-versioning=false
+	./dist/scf-otelcol/scf-otelcol components >/dev/null
+
+collector-it: collector-build
+	$(GO) test -tags collectorit -race -count=1 -p 2 -timeout 20m -v ./tests/collector/

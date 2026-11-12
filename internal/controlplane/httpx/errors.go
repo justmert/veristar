@@ -26,6 +26,7 @@ const (
 	CodeOriginMismatch       = "origin_mismatch"
 	CodeOwnerRequired        = "owner_required"
 	CodeTermsNotAccepted     = "terms_not_accepted"
+	CodeOperatorRequired     = "operator_required"
 	CodeNotFound             = "not_found"
 	CodeMethodNotAllowed     = "method_not_allowed"
 	CodeSlugTaken            = "slug_taken"
@@ -42,6 +43,8 @@ const (
 	CodeInternal             = "internal"
 	CodeUnavailable          = "unavailable"
 	CodeProvisioningPending  = "provisioning_pending"
+	CodeTenantSuspended      = "tenant_suspended"
+	CodeInvalidTransition    = "invalid_transition"
 )
 
 // defaultUnavailableRetryIn is the Retry-After of a 503 when the caller does
@@ -64,6 +67,8 @@ const (
 	FieldInvalidRole           = "invalid_role"
 	FieldDuplicate             = "duplicate"
 	FieldUnknownTrackerVersion = "unknown_tracker_version"
+	// this stage: a value outside an enumerated set, such as the enrollment mode
+	FieldInvalidValue = "invalid_value"
 )
 
 // Error is an api error with a documented status and code. Message is for

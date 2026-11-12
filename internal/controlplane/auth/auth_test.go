@@ -590,7 +590,11 @@ func TestSignInResolvesInvites(t *testing.T) {
 	// removed tenants are not listed
 	_, err = c.Exec(ctx, `update cp.tenants set status = 'removed' where id = $1`, tenantID)
 	require.NoError(t, err)
-	require.Empty(t, decode[auth.Me](t, b.get(e.origin+"/api/me")).Tenants)
+	gone := decode[auth.Me](t, b.get(e.origin+"/api/me"))
+	require.Empty(t, gone.Tenants)
+	// a former member is told the project is gone (contract 5.10)
+	require.Len(t, gone.RemovedTenants, 1)
+	require.Equal(t, tenantID, gone.RemovedTenants[0].ID)
 }
 
 func TestCSRFOnLogout(t *testing.T) {

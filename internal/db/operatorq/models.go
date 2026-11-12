@@ -11,19 +11,49 @@ import (
 )
 
 type CpOperatorSite struct {
+	ID                      uuid.UUID
+	TenantID                uuid.UUID
+	Name                    string
+	Domain                  string
+	Origins                 []string
+	QuarantineWebsiteID     uuid.NullUUID
+	Status                  string
+	VerifyMethod            *string
+	VerifiedAt              *time.Time
+	LastVerifyAt            *time.Time
+	LastVerifyError         *string
+	StellarToml             []byte
+	StellarTomlCheckedAt    *time.Time
+	CreatedAt               time.Time
+	UpdatedAt               time.Time
+	StatusReason            *string
+	DomainPreviouslyRemoved bool
+}
+
+type CpTenant struct {
 	ID                   uuid.UUID
-	TenantID             uuid.UUID
+	Slug                 string
 	Name                 string
-	Domain               string
-	Origins              []string
-	QuarantineWebsiteID  uuid.NullUUID
+	Description          string
 	Status               string
-	VerifyMethod         *string
-	VerifiedAt           *time.Time
-	LastVerifyAt         *time.Time
-	LastVerifyError      *string
-	StellarToml          []byte
-	StellarTomlCheckedAt *time.Time
+	IsInternal           bool
+	EnrollmentAnswers    []byte
+	AcceptedTermsVersion *string
+	UmamiTeamID          uuid.NullUUID
+	CreatedBy            uuid.NullUUID
+	ApprovedBy           uuid.NullUUID
+	StatusReason         *string
 	CreatedAt            time.Time
 	UpdatedAt            time.Time
+	StatusChangedAt      time.Time
+}
+
+type CpTenantRemoval struct {
+	TenantID       uuid.UUID
+	RequestedAt    time.Time
+	RequestedBy    uuid.NullUUID
+	Reason         string
+	KeepAggregates bool
+	Steps          []byte
+	CompletedAt    *time.Time
 }

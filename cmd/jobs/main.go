@@ -26,6 +26,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/justmert/stellar-analytics/internal/config"
+	"github.com/justmert/stellar-analytics/internal/controlplane/domaincheck"
 	"github.com/justmert/stellar-analytics/internal/controlplane/provision"
 	pdb "github.com/justmert/stellar-analytics/internal/db"
 	"github.com/justmert/stellar-analytics/internal/jobs/edgestats"
@@ -34,7 +35,9 @@ import (
 	"github.com/justmert/stellar-analytics/internal/jobs/sessionprune"
 	"github.com/justmert/stellar-analytics/internal/jobs/statsdedup"
 	"github.com/justmert/stellar-analytics/internal/jobs/umamirotate"
+	"github.com/justmert/stellar-analytics/internal/jobs/verifydomains"
 	"github.com/justmert/stellar-analytics/internal/natsx"
+	"github.com/justmert/stellar-analytics/internal/netguard"
 	"github.com/justmert/stellar-analytics/internal/obs"
 	"github.com/justmert/stellar-analytics/internal/registry"
 	"github.com/justmert/stellar-analytics/internal/umami"
@@ -49,7 +52,8 @@ commands:
   daemon            run every task while holding the jobs lock; serves /healthz,
                     /readyz and /metrics on JOBS_OPS_ADDR
   run <task>        run one task once under the jobs lock (tasks: ` + edgestats.TaskName + `, ` + statsdedup.TaskName + `,
-                    ` + reconcile.TaskName + `, ` + umamirotate.TaskName + `, ` + sessionprune.TaskName + `)
+                    ` + reconcile.TaskName + `, ` + umamirotate.TaskName + `, ` + sessionprune.TaskName + `,
+                    ` + verifydomains.TaskName + `)
   version           print the build version
 
 environment: NATS_URL, NATS_REPLICAS, NATS_USER and NATS_PASSWORD (when the
@@ -237,6 +241,22 @@ func open(ctx context.Context, env *config.Env, log *slog.Logger, opsAddr bool) 
 		_, err := sessionPruner.Prune(ctx, l.SystemTx)
 		return err
 	}
+	// tenant domains resolve through the system resolver; the guard refuses
+	// private and loopback answers and has no setting to allow them
+	ng, err := netguard.New(net.DefaultResolver)
+	if err != nil {
+		closeAll()
+		return nil, "", err
+	}
+	verifier, err := verifydomains.New(&domaincheck.Checker{Guard: ng, Resolver: net.DefaultResolver}, time.Now, log, reg)
+	if err != nil {
+		closeAll()
+		return nil, "", err
+	}
+	verify := func(ctx context.Context, l *scheduler.Leader) error {
+		_, err := verifier.Run(ctx, l.SystemTx)
+		return err
+	}
 	rotator := &umamirotate.Rotator{Admin: admin, Key: key, Now: time.Now, Log: log}
 	rotate := func(ctx context.Context, l *scheduler.Leader) error {
 		_, err := rotator.Rotate(ctx, l.SystemTx)
@@ -276,6 +296,11 @@ func open(ctx context.Context, env *config.Env, log *slog.Logger, opsAddr bool) 
 		Every: sessionprune.Every,
 		Run:   pruneSessions,
 		Once:  pruneSessions,
+	}, {
+		Name:  verifydomains.TaskName,
+		Every: verifydomains.Every,
+		Run:   verify,
+		Once:  verify,
 	}}
 	return &deps{
 		nc:      nc,

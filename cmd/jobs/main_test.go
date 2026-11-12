@@ -225,6 +225,10 @@ func TestDaemonAndRun(t *testing.T) {
 	require.Equal(t, 0, run(t.Context(), []string{"run", "session-prune"}, config.FromMap(envMap), io.Discard, &sessionLog), sessionLog.String())
 	require.Contains(t, sessionLog.String(), "expired sessions pruned")
 
+	// no sites yet: the run checks nothing and succeeds
+	var verifyLog syncBuf
+	require.Equal(t, 0, run(t.Context(), []string{"run", "verify-domains"}, config.FromMap(envMap), io.Discard, &verifyLog), verifyLog.String())
+
 	var unknown syncBuf
 	require.Equal(t, 1, run(t.Context(), []string{"run", "nope"}, config.FromMap(envMap), io.Discard, &unknown))
 	require.Contains(t, unknown.String(), "unknown task")

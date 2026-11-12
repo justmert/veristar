@@ -75,6 +75,50 @@ func (q *Queries) GetUser(ctx context.Context, id uuid.UUID) (CpUser, error) {
 	return i, err
 }
 
+const listUserRemovedTenants = `-- name: ListUserRemovedTenants :many
+select t.id, t.name, t.status_reason, t.status_changed_at
+from cp.tenant_members m
+join cp.tenants t on t.id = m.tenant_id
+where m.user_id = $1 and t.status = 'removed'
+order by t.status_changed_at desc, t.id
+limit 20
+`
+
+type ListUserRemovedTenantsRow struct {
+	ID              uuid.UUID
+	Name            string
+	StatusReason    *string
+	StatusChangedAt time.Time
+}
+
+// removed projects of the user for /api/me removed_tenants (contract 5.10),
+// newest removal first; member rows stay on removal so former members learn
+// why the project is gone
+func (q *Queries) ListUserRemovedTenants(ctx context.Context, userID uuid.UUID) ([]ListUserRemovedTenantsRow, error) {
+	rows, err := q.db.Query(ctx, listUserRemovedTenants, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListUserRemovedTenantsRow{}
+	for rows.Next() {
+		var i ListUserRemovedTenantsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.StatusReason,
+			&i.StatusChangedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUserTenants = `-- name: ListUserTenants :many
 select t.id, t.slug, t.name, t.status, t.accepted_terms_version, m.role
 from cp.tenant_members m

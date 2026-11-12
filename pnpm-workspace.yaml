@@ -2,6 +2,9 @@ packages:
   - apps/*
   - packages/*
   - examples/*
+  # the otel example apps are standalone projects a tenant can copy, each with
+  # its own lockfile, so they stay out of the workspace
+  - "!examples/otel-*"
   - tests/*
 
 # pins from the design, referenced as "catalog:" so the workspace cannot drift to two versions

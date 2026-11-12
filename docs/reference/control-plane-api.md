@@ -144,6 +144,7 @@ List routes answer:
 | 403 | `origin_mismatch` | see 1.2 |
 | 403 | `owner_required` | the action needs role `owner` |
 | 403 | `terms_not_accepted` | the tenant has not accepted the current terms version (4.2.6) |
+| 403 | `operator_required` | an `/api/operator` route without operator rights (5.1) |
 | 404 | `not_found` | unknown id, malformed id, or not a member |
 | 405 | `method_not_allowed` | method not defined for the path |
 | 409 | `slug_taken` | `cp.tenants.slug` already exists |
@@ -152,6 +153,8 @@ List routes answer:
 | 409 | `last_owner` | removing or demoting the last owner |
 | 409 | `site_removed` | change to a site with `status = 'removed'` |
 | 409 | `terms_version_mismatch` | accepted version is not the current one |
+| 409 | `invalid_transition` | lifecycle action not allowed from the current status (5.5) |
+| 409 | `tenant_suspended` | site create or update while the tenant is `suspended` (5.11) |
 | 410 | `tracker_version_revoked` | snippet for a revoked tracker version |
 | 413 | `body_too_large` | body over 64 KiB |
 | 415 | `unsupported_media_type` | see section 1 |
@@ -166,6 +169,8 @@ List routes answer:
 `required`, `too_long`, `too_short`, `too_many`, `invalid_format`, `not_https_url`,
 `not_bare_origin`, `origin_outside_domain`, `invalid_domain`, `invalid_strkey`,
 `invalid_github_login`, `invalid_role`, `duplicate`, `unknown_tracker_version`.
+this stage adds `invalid_value` (a value outside an enumerated set, such as
+`mode`).
 
 ---
 
@@ -287,6 +292,16 @@ this stage actions: `user.sign_in`, `user.sign_out`, `tenant.create`, `tenant.up
 `provision.registry_put`, `provision.registry_delete`.
 `umami-rotate` writes one `umami.password_rotate` row per run (actor
 `system:umami-rotate`, `target` empty, detail: day and user count), not one per user.
+
+this stage actions (section 5): `user.operator_sync`, `settings.enrollment_mode`,
+`settings.removal_keep_aggregates`, `tenant.approve`, `tenant.reject`,
+`tenant.resubmit`, `tenant.suspend`, `tenant.resume`, `tenant.remove`,
+`site.review_queue`, `site.approve`, `site.reject`, `purge.step`,
+`purge.complete`, `site.verify`, `site.stellar_toml`. Actors added:
+`system:startup` (operator sync), `system:verify-domains`, `system:purge`.
+Every this stage operator action carries `reason` in `detail` when one was given,
+and every row about one tenant carries `detail.tenant_id`, which the audit
+filter of 5.9 uses.
 
 ---
 
@@ -638,9 +653,450 @@ the key.
 | `TRACKER_NPM_PACKAGE` | no | must stay unset until this stage defines the npm snippet (4.3.6); absent means `npm: null` |
 | `NATS_URL`, `NATS_REPLICAS` | yes | existing keys |
 | `NATS_USER`, `NATS_PASSWORD` | when the server requires auth | existing keys |
-| database keys | yes | as `internal/db` `PoolConfig` for `cp_system` and `cp_tenant` |
+| database keys | yes | as `internal/db` `PoolConfig` for `cp_system`, `cp_tenant` and, from this stage, `cp_operator` |
 
 In builds with tag `oauthfixture` only: `OAUTH_FIXTURE_URL` replaces the three
 GitHub URLs. Production builds have no such key.
 
 <!-- this stage appends "## 5. this stage: operator governance" below this line -->
+
+## 5. this stage: operator governance
+
+the design. Research and decisions: `docs/reference/the reference docs`.
+New tables and columns (`cp.tenant_removals`, `cp.sites.status_reason`) come from
+the this stage migrations listed in that file, section 6.
+
+### 5.1 Operator identity
+
+- `cp.users.is_operator` is set from `OPERATOR_GITHUB_IDS` at every sign-in
+  (4.1.2, unchanged) and once at control plane start: one statement under
+  `cp_system` sets it to true for listed `github_id` values and false for every
+  other row. Each changed user gets one audit row `user.operator_sync` (actor
+  `system:startup`, target `user:<id>`, detail `{"is_operator": {"old", "new"}}`).
+- Every route under `/api/operator/` is **session** and **operator**: the session
+  user must have `cp.users.is_operator = true` (read per request) and a
+  `github_id` in the loaded `OPERATOR_GITHUB_IDS`. Otherwise **403
+  `operator_required`**, for every method and for unknown ids alike. Removing an id
+  takes effect at that person's next sign-in or the next control plane start,
+  whichever comes first.
+- CSRF rules (1.2) apply unchanged. The tenant-scoping rules of 1.3 do not apply
+  to operator routes: an operator sees every tenant except `is_internal` ones,
+  which answer 404 on operator routes.
+- Database roles: reads of `cp.tenants`, `cp.operator_sites`,
+  `cp.web_ingest_hourly`, `cp.settings` and `cp.tenant_removals` run as
+  `cp_operator`; actions, setting changes, the member list of 5.4 and the audit
+  list of 5.9 run as `cp_system`.
+- Operators are not made members of tenants and get no Umami access.
+
+### 5.2 Operator objects
+
+**Reason** (request field of 5.5 and 5.6): `reason`, 1 to 1,000 characters after
+trimming, text rules of 3.2. Required where marked, otherwise optional (an
+approval or resume note). Stored in `cp.tenants.status_reason` (or
+`cp.sites.status_reason`) and in the audit `detail.reason`. The tenant sees it.
+
+**OperatorTenantSummary** (list item, 5.3):
+
+```json
+{
+  "id": "uuid",
+  "slug": "stellar-dex",
+  "name": "Stellar DEX",
+  "status": "pending",
+  "status_reason": null,
+  "website": "https://example.org",
+  "created_at": "...",
+  "status_changed_at": "...",
+  "site_count": 2,
+  "sites_in_review": 0,
+  "sites_verified": 1,
+  "sites_with_stellar_toml": 1
+}
+```
+
+- `website` is `enrollment_answers.website`.
+- `site_count` counts sites with `status <> 'removed'`. `sites_in_review` counts
+  `pending` sites of an `active` tenant (5.6). `sites_verified` uses the rule of
+  5.8. `sites_with_stellar_toml` counts sites whose `stellar_toml.status` is
+  `found`.
+
+**OperatorSite** (`cp.operator_sites`; never `verify_token`):
+
+```json
+{
+  "id": "uuid",
+  "name": "Marketing site",
+  "domain": "example.org",
+  "origins": ["https://example.org"],
+  "status": "active",
+  "status_reason": null,
+  "in_review": false,
+  "domain_previously_removed": false,
+  "verification": "verified",
+  "verify_method": "dns",
+  "verified_at": "...",
+  "last_verify_at": "...",
+  "last_verify_error": null,
+  "stellar_toml": { "...": "StellarToml of 5.12" },
+  "stellar_toml_checked_at": "...",
+  "created_at": "...",
+  "updated_at": "..."
+}
+```
+
+- `in_review`: `status = 'pending'` and the tenant is `active`.
+- `domain_previously_removed`: the domain equals, is a subdomain of, or is a
+  parent of the domain of a site whose tenant is `removed` (5.6).
+- `verification`: `verified`, `unverified` or `unchecked` (5.8).
+
+### 5.3 `GET /api/operator/tenants`
+
+Operator. List envelope (2.3) of OperatorTenantSummary.
+
+Query:
+
+| Parameter | Values | Default |
+|---|---|---|
+| `status` | comma-separated subset of `pending`, `active`, `rejected`, `suspended`, `removed` | all statuses |
+| `review` | `true`: only tenants that need an operator, that is `status = 'pending'` or `sites_in_review > 0` | absent |
+| `q` | 1 to 100 characters; case-insensitive substring of `name`, `slug`, `enrollment_answers.website` or any site `domain` | absent |
+| `sort` | `created_at`, `status_changed_at`, `name` | `created_at` |
+| `order` | `asc`, `desc` | `desc` |
+| `limit`, `cursor` | as 2.3 | |
+
+- Keyset over `(<sort column>, id)` in the requested order; the cursor encodes
+  the sort and order, and a cursor used with another sort or order is 400
+  `invalid_cursor`. `name` sorts by `lower(name)`.
+- Tenants with `is_internal = true` are never listed.
+- One query serves every sort: the keyset runs over `(sort key, id)`, where the
+  sort key of a timestamp is its UTC ISO form with microseconds and the key of
+  `name` is `lower(name)`.
+- 400 `invalid_query` for an unknown status, sort or order, or `q` out of range.
+
+### 5.4 `GET /api/operator/tenants/{tenant_id}`
+
+Operator. **200**:
+
+```json
+{
+  "tenant": {
+    "id": "uuid", "slug": "...", "name": "...", "description": "...",
+    "status": "pending", "status_reason": null,
+    "enrollment_answers": { "website": "...", "stellar_usage": "...", "stellar_ids": ["G..."], "scf_round_url": null },
+    "accepted_terms_version": "...",
+    "provisioning": "pending",
+    "created_by": { "id": "uuid", "github_id": 1, "github_login": "octocat" },
+    "approved_by": null,
+    "created_at": "...", "updated_at": "...", "status_changed_at": "..."
+  },
+  "stellar_ids": [ { "id": "G...", "type": "account", "valid": true } ],
+  "members": [ { "github_id": 1, "github_login": "octocat", "role": "owner", "created_at": "..." } ],
+  "sites": [ "OperatorSite", "..." ],
+  "ingest": {
+    "last_24h": { "accepted": 2810, "quarantined": 41, "rejected_origin": 17 },
+    "last_30d": { "accepted": 90210 }
+  },
+  "removal": null,
+  "recent_audit": [ "AuditEntry of 5.9, newest 20 with detail.tenant_id = this tenant" ],
+  "allowed_actions": ["approve", "reject", "remove"]
+}
+```
+
+- `stellar_ids`: the enrollment ids re-checked with `strkey` (`type` is
+  `account`, `muxed_account` or `contract`).
+- `members` excludes nothing; operators see logins to contact a project. Read
+  under `cp_system`.
+- `ingest` sums `cp.web_ingest_hourly` over all the tenant's sites for the last 24
+  full hours and 30 full days (UTC), non-zero outcomes only.
+- `removal`: `null`, or for a removed tenant
+  `{"requested_at", "requested_by", "keep_aggregates", "completed_at", "steps": {"registry": {"done_at": "..."}, ...}}`
+  from `cp.tenant_removals`.
+- `allowed_actions`: the actions of 5.5 valid from the current status, so the
+  console shows only those buttons.
+- 404 `not_found` for unknown, malformed or internal ids.
+
+### 5.5 Tenant lifecycle actions
+
+All are `POST`, operator, body `{"reason": "..."}` (5.2), run under `cp_system`
+in one transaction with the tenant row locked (`for update`), write one audit
+row (actor `user:<operator id>`, target `tenant:<id>`, detail
+`{"tenant_id", "status": {"old", "new"}, "reason"}`), set `status_changed_at =
+now()` and `updated_at = now()`, and then trigger `Reconcile(tenant_id)`
+asynchronously. **200** OperatorTenantSummary in the new state.
+
+| Route | From | To | `reason` | Also |
+|---|---|---|---|---|
+| `.../tenants/{tenant_id}/approve` | `pending` | `active` | optional | `approved_by` = operator; every `pending` site of the tenant becomes `active`; `status_reason` cleared |
+| `.../tenants/{tenant_id}/reject` | `pending` | `rejected` | required | nothing was provisioned (5.7) |
+| `.../tenants/{tenant_id}/suspend` | `active` | `suspended` | required | registry entries switch to `suspended`; Umami dashboards stay readable |
+| `.../tenants/{tenant_id}/resume` | `suspended` | `active` | optional | registry entries switch back to `active`; `status_reason` cleared |
+| `.../tenants/{tenant_id}/remove` | any except `removed` | `removed` | required | see below |
+
+(`...` is `/api/operator`.) Any other combination: **409 `invalid_transition`**
+with the current status in `message`. Repeating an action on a tenant already in
+the target state is also 409, so a double click never writes two audit rows.
+
+**Remove**, in the same transaction:
+
+1. `cp.tenants.status = 'removed'`, `status_reason` = the reason.
+2. Every site of the tenant: `status = 'removed'`, `updated_at = now()`. Domains
+   stay on the rows, which drives the review rule of 5.6.
+3. Open `cp.invites` of the tenant are deleted, so none resolves later.
+4. Insert `cp.tenant_removals (tenant_id, requested_at, requested_by, reason,
+   keep_aggregates, completed_at = null, steps = '{}')`, `keep_aggregates` copied
+   from `cp.settings.removal_keep_aggregates` at this moment.
+
+Then the purge runs in the reconciler, store by store, in this order: `registry`
+(site keys; OTLP keys from this stage), `otlp_tokens` (this stage), `umami` (both
+websites of every site with their data, the team, then Umami users whose console
+user has no membership in any non-removed tenant), `web_ingest`
+(`cp.web_ingest_hourly` rows; skipped when `keep_aggregates`), `api` (this stage),
+`agg` (this stage; skipped when `keep_aggregates`). Each finished store writes
+`steps.<name>` and an audit row `purge.step` (actor `system:purge`); the last one
+sets `completed_at` and writes `purge.complete`. A failed store is retried on the
+next reconcile. The tenant row, its member rows and all audit rows remain.
+Console sessions of former members are kept too: removal ends their access to
+the tenant (every tenant route answers 404), not their sign-in, and the member
+rows let `/api/me` list the project under `removed_tenants` (5.10).
+After removal every tenant route answers 404 to former members (1.3).
+
+### 5.6 Sites in review
+
+A site enters review when, at creation, its `domain` equals, is a subdomain of,
+or is a parent of the domain of any site whose tenant has `status = 'removed'`.
+Such a site is created with `status = 'pending'` even in an `active` tenant and in
+`open` mode, and the creation writes `site.review_queue` (detail: `domain`,
+`matched_domain`, `matched_tenant_id`). `cp_tenant` cannot see other tenants'
+sites, so the match runs under `cp_system` just before the insert, with the same
+predicate as `cp.operator_sites.domain_previously_removed`, which then shows the
+same result to operators. A site deleted by its own owner (tenant not removed)
+never triggers review. The reconciler treats a `pending` site like a pending
+tenant: nothing in Umami, nothing in the registry.
+
+`POST /api/operator/sites/{site_id}/approve`: operator, body `{"reason"?}`. From
+`pending` in an `active` tenant to `active`. Audit `site.approve`. Reconcile.
+**200** OperatorSite.
+
+`POST /api/operator/sites/{site_id}/reject`: operator, body `{"reason"}`
+(required). From `pending` in an `active` tenant to `removed`, with
+`status_reason`. Audit `site.reject`. **200** OperatorSite.
+
+Any other state: 409 `invalid_transition`. Sites of a `pending` tenant are
+approved with the tenant (5.5), not one by one.
+
+### 5.7 Enrollment mode and pending tenants
+
+`GET /api/operator/settings/enrollment-mode`: operator. **200**
+`{"mode": "open"}` from `cp.settings` key `enrollment_mode`.
+
+`PUT /api/operator/settings/enrollment-mode`: operator. Body
+`{"mode": "open" | "approval"}`; anything else is 422 `invalid_value` on `mode`.
+Writes the setting under `cp_system`, audit `settings.enrollment_mode` (target
+`setting:enrollment_mode`, detail `{"mode": {"old", "new"}}`). **200**
+`{"mode": "..."}`. Setting the current value: 200, no audit row.
+
+- The mode is read at each enrollment (4.2.1), so a switch takes effect for the
+  next enrollment without a restart and never changes existing tenants.
+- `pending` and `rejected` tenants: the reconciler creates nothing in Umami and
+  publishes nothing to `registry_sites`, so the gateway answers
+  `rejected_unknown_site` for their sites. SSO answers `provisioning_pending`.
+  Owners can still add, edit and delete sites and manage members while
+  `pending` or `rejected`.
+
+**Resubmission.** `PUT /api/tenants/{tenant_id}/enrollment`: session, owner,
+tenant `rejected` (else 409 `invalid_transition`). Body: `enrollment` (required,
+rules of 3.2), `name` and `description` (optional). Runs under `cp_system` after
+the operator check (cp_tenant has no right on `status` or `enrollment_answers`, on
+purpose), with `where status = 'rejected'` in the update. Sets
+`enrollment_answers`, the optional fields, `status = 'pending'`,
+`status_reason = null`, `status_changed_at = now()`. Audit `tenant.resubmit`
+(detail: changed fields old and new). Terms rule of 4.2.6 applies. **200**
+Tenant. The tenant appears in the review queue (5.3 `review=true`).
+
+### 5.8 Site domain verification
+
+Proves control of `cp.sites.domain`. Beyond-RFP; never gates ingestion.
+
+`GET /api/sites/{site_id}/verification`: session, member of the site's tenant.
+
+```json
+{
+  "site_id": "uuid",
+  "domain": "example.org",
+  "verify_token": "43 characters base64url",
+  "dns": {
+    "name": "_stellar-analytics.example.org",
+    "type": "TXT",
+    "value": "stellar-analytics-verify=<verify_token>"
+  },
+  "file": {
+    "url": "https://example.org/.well-known/stellar-analytics.txt",
+    "body": "<verify_token>"
+  },
+  "verification": "unverified",
+  "verify_method": null,
+  "verified_at": null,
+  "last_verify_at": "...",
+  "last_verify_error": "dns_no_record"
+}
+```
+
+This is the only route that returns `verify_token`.
+
+`POST /api/sites/{site_id}/verify`: session, member. Body `{}` or
+`{"method": "dns" | "file"}` (absent: DNS first, then the file; first success
+wins). Runs the check synchronously (at most about 15 seconds: 5 for DNS, 10 for
+the file), writes the result under `cp_tenant`, audit `site.verify` (detail:
+method tried, result code). **200** the object above. 409 `site_removed`. 429
+`rate_limited` above 6 checks per site per hour (`Retry-After` set). The limit
+counts the site's `site.verify` audit rows of the last hour, so it holds across
+all control plane instances without shared memory.
+
+- DNS check: a TXT record at `dns.name` whose value (strings of one record
+  joined) equals `dns.value` exactly.
+- File check: `GET file.url` through the request-forgery guard
+  (the reference docs section 3), status 200, body at most 1,024 bytes, equal to the
+  token after trimming trailing whitespace.
+- On success: `verify_method`, `verified_at = now()`, `last_verify_at = now()`,
+  `last_verify_error = null`. On failure: `last_verify_at = now()`,
+  `last_verify_error = <code>`; `verified_at` and `verify_method` keep the last
+  success.
+- `verification`: `verified` when `verified_at` is not null and
+  `last_verify_error` is null; `unchecked` when `last_verify_at` is null;
+  `unverified` otherwise.
+- `last_verify_error` codes: `dns_no_record`, `dns_mismatch`, `dns_error`,
+  `file_not_found` (any status other than 200), `file_mismatch`,
+  `file_too_large`, `refused_address`, `redirect_refused`, `tls_error`,
+  `timeout`, `fetch_error`. When both methods were tried, the file method's code
+  is stored and the DNS code is in the audit detail.
+- The `jobs` task `verify-domains` (actor `system:verify-domains`) re-runs both
+  checks for every non-removed site of a non-removed tenant whose
+  `last_verify_at` is older than 24 hours, plus the stellar.toml fetch (5.12). Its
+  `site.verify` audit row is written only when the result changes (verification
+  value or error code), so the daily run does not add one row per site per day;
+  `POST .../verify` always writes one.
+
+### 5.9 `GET /api/operator/audit`
+
+Operator. List envelope of AuditEntry, ordered by `(at desc, id desc)`, under
+`cp_system`.
+
+```json
+{ "id": 1234, "at": "...", "actor": "user:uuid", "actor_login": "octocat",
+  "action": "tenant.suspend", "target": "tenant:uuid",
+  "detail": { "tenant_id": "uuid", "status": { "old": "active", "new": "suspended" }, "reason": "..." } }
+```
+
+- `id` is the `cp.audit_log` identity (a number). `actor_login` is the
+  `github_login` for `user:` actors, else `null`.
+- Query filters, all optional and combined with AND: `tenant_id` (rows whose
+  `target` is `tenant:<id>` or whose `detail.tenant_id` is `<id>`), `target`
+  (exact), `action` (exact, or a prefix ending in `.`, such as `tenant.`),
+  `actor` (exact), `from` and `to` (RFC 3339, `from < to`, at most 400 days
+  apart), `limit`, `cursor`.
+- 400 `invalid_query` for a malformed value.
+
+### 5.10 Tenant-visible status and reason
+
+- Tenant (3.1) already carries `status`, `status_reason` and
+  `status_changed_at`. The console shows a banner on every project page for
+  `pending` ("waiting for review"), `rejected` (reason plus the resubmit form of
+  5.7), `suspended` (reason; data stays readable, new events are refused). No
+  banner for `active`.
+- `GET /api/me` (4.1.4) gains `removed_tenants`: projects the user is a member of
+  whose status is `removed`, each
+  `{"id", "name", "status_reason", "status_changed_at"}`, newest first, at most
+  20. Every other route still answers 404 for them (1.3). The console shows each
+  once as a notice with the reason.
+- Site (3.1) gains `status_reason`, `in_review`, `verification`,
+  `last_verify_at`, `last_verify_error`, `stellar_toml` and
+  `stellar_toml_checked_at`. `verify_token` stays out of Site (5.8 only).
+
+### 5.11 Effects of status on tenant routes
+
+| Tenant status | Tenant routes | Sites | Umami and registry |
+|---|---|---|---|
+| `pending` | all (reads and owner actions) | create allowed, created `pending` | nothing created, nothing published |
+| `rejected` | all, plus resubmit | create allowed, created `pending` | nothing |
+| `active` | all | created `active`, or `pending` in review (5.6) | provisioned, registry `active` |
+| `suspended` | reads, members, terms; site create and update answer 409 `tenant_suspended`; site delete allowed | unchanged | kept, registry `suspended` |
+| `removed` | 404 (1.3) | all `removed` | purged (5.5) |
+
+### 5.12 stellar.toml signal
+
+Fetched for the site's `domain` at site creation (asynchronously, after the
+response) and by `verify-domains` daily, from
+`https://<domain>/.well-known/stellar.toml` through the request-forgery guard,
+body at most 102,400 bytes. Stored in `cp.sites.stellar_toml` with
+`stellar_toml_checked_at`. Beyond-RFP evidence for operators; it decides
+nothing.
+
+**StellarToml**:
+
+```json
+{
+  "status": "found",
+  "error": null,
+  "http_status": 200,
+  "bytes": 2048,
+  "version": "2.7.0",
+  "network_passphrase": "Public Global Stellar Network ; September 2015",
+  "network": "public",
+  "accounts_count": 3,
+  "accounts_valid": 3,
+  "signing_key_present": true,
+  "signing_key_valid": true,
+  "org_url": "https://example.org",
+  "org_url_same_domain": true,
+  "currencies": [
+    { "code": "USDX", "issuer": "G...", "contract": null, "valid": true },
+    { "code": "TKN", "issuer": null, "contract": "C...", "valid": true }
+  ],
+  "currencies_total": 2
+}
+```
+
+- `status`: `found` (parsed), `not_found` (any status other than 200),
+  `invalid` (not TOML, or wrong type for a read field), `too_large`, `refused`
+  (address or redirect refused by the guard), `error` (timeout, TLS, network).
+  Every field except `status`, `error` and `http_status` is `null` (or 0, false,
+  empty list) unless `status` is `found`.
+- `error`: the guard or parser code for non-`found` statuses
+  (`refused_address`, `redirect_refused`, `tls_error`, `timeout`, `fetch_error`,
+  `toml_syntax`, `toml_type`), else `null`.
+- `network`: `public`, `testnet`, `futurenet` (the SDK `network` constants),
+  `other` for any other passphrase, `null` when absent.
+- `org_url` is `[DOCUMENTATION].ORG_URL`; `org_url_same_domain` compares its host
+  with `domain` (SEP-1: the file "must be hosted on the same domain").
+- `currencies`: at most 50 entries kept, `currencies_total` is the full count.
+  `valid` is true when exactly one of `issuer` (valid G strkey) or `contract`
+  (valid C strkey) is set. `code` is cut to 12 characters. No other text from the
+  file is stored, so tenant-controlled prose never reaches the console.
+- Tenants see the same object on their Site; operators on OperatorSite.
+- Audit `site.stellar_toml` only when `status` or `network` changes from the
+  previous value, so the daily run does not write one row per site per day.
+
+### 5.13 `removal_keep_aggregates`
+
+`GET /api/operator/settings/removal-keep-aggregates`: operator. **200**
+`{"keep": false}` from `cp.settings` key `removal_keep_aggregates` (seeded
+`false` by `00004_seed.sql`).
+
+`PUT /api/operator/settings/removal-keep-aggregates`: operator. Body
+`{"keep": true | false}`. Audit `settings.removal_keep_aggregates` (detail old
+and new). **200** `{"keep": ...}`.
+
+- The value is copied into `cp.tenant_removals.keep_aggregates` when a tenant is
+  removed (5.5), so changing it later never changes a removal in progress.
+- `true` keeps `cp.web_ingest_hourly` rows and, from this stage, `agg` rows of the
+  removed tenant. Umami websites, their raw data and `api` minute rows are always
+  deleted. The open SCF question behind the default is recorded in
+  `docs/runbooks/tenant-removal.md`.
+
+### 5.14 Configuration keys (this stage)
+
+One new required key: `PLATFORM_DB_CP_OPERATOR_PASSWORD`, because operator reads run
+as `cp_operator` (5.1). `OPERATOR_GITHUB_IDS` (4.5) now also drives the startup
+sync of 5.1. The `jobs` binary gains the task `verify-domains` with no new key;
+the request-forgery guard has no configuration key that could allow private
+addresses (tests use a `_test.go` hook only).

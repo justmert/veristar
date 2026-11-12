@@ -76,6 +76,7 @@ func (h *Routes) Routes(r chi.Router) {
 	r.Method(http.MethodGet, "/tenants/{tenant_id}", httpx.HandlerFunc(h.get))
 	r.Method(http.MethodPatch, "/tenants/{tenant_id}", httpx.HandlerFunc(h.patch))
 	r.Method(http.MethodPost, "/tenants/{tenant_id}/terms", httpx.HandlerFunc(h.acceptTerms))
+	r.Method(http.MethodPut, "/tenants/{tenant_id}/enrollment", httpx.HandlerFunc(h.resubmit))
 }
 
 // enrollment is the enrollment object, stored as enrollment_answers. the
@@ -92,6 +93,36 @@ type storedEnrollment struct {
 	StellarUsage string   `json:"stellar_usage"`
 	StellarIDs   []string `json:"stellar_ids"`
 	SCFRoundURL  *string  `json:"scf_round_url"`
+}
+
+// checkEnrollment validates the enrollment object (contract 3.2) for
+// enrollment and resubmission alike, and returns what is stored.
+func checkEnrollment(f *Fields, e *enrollment) storedEnrollment {
+	stored := storedEnrollment{StellarIDs: []string{}}
+	if e == nil {
+		f.Add("enrollment", httpx.FieldRequired)
+		return stored
+	}
+	if e.Website == nil {
+		f.Add("enrollment.website", httpx.FieldRequired)
+	} else {
+		stored.Website = *e.Website
+		HTTPSURL(f, "enrollment.website", stored.Website)
+	}
+	if e.StellarUsage == nil {
+		f.Add("enrollment.stellar_usage", httpx.FieldRequired)
+	} else {
+		stored.StellarUsage = Text(f, "enrollment.stellar_usage", *e.StellarUsage, 1, 2000)
+	}
+	if e.StellarIDs != nil {
+		StellarIDs(f, "enrollment.stellar_ids", e.StellarIDs)
+		stored.StellarIDs = e.StellarIDs
+	}
+	if e.SCFRoundURL != nil {
+		HTTPSURL(f, "enrollment.scf_round_url", *e.SCFRoundURL)
+		stored.SCFRoundURL = e.SCFRoundURL
+	}
+	return stored
 }
 
 type createBody struct {
@@ -133,30 +164,7 @@ func (h *Routes) create(w http.ResponseWriter, r *http.Request) error {
 			f.Add("slug", httpx.FieldRequired)
 		}
 	}
-	stored := storedEnrollment{StellarIDs: []string{}}
-	if e := b.Enrollment; e == nil {
-		f.Add("enrollment", httpx.FieldRequired)
-	} else {
-		if e.Website == nil {
-			f.Add("enrollment.website", httpx.FieldRequired)
-		} else {
-			stored.Website = *e.Website
-			HTTPSURL(&f, "enrollment.website", stored.Website)
-		}
-		if e.StellarUsage == nil {
-			f.Add("enrollment.stellar_usage", httpx.FieldRequired)
-		} else {
-			stored.StellarUsage = Text(&f, "enrollment.stellar_usage", *e.StellarUsage, 1, 2000)
-		}
-		if e.StellarIDs != nil {
-			StellarIDs(&f, "enrollment.stellar_ids", e.StellarIDs)
-			stored.StellarIDs = e.StellarIDs
-		}
-		if e.SCFRoundURL != nil {
-			HTTPSURL(&f, "enrollment.scf_round_url", *e.SCFRoundURL)
-			stored.SCFRoundURL = e.SCFRoundURL
-		}
-	}
+	stored := checkEnrollment(&f, b.Enrollment)
 	if b.AcceptedTermsVersion == nil {
 		f.Add("accepted_terms_version", httpx.FieldRequired)
 	}
@@ -222,24 +230,42 @@ func (h *Routes) create(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-// enrollStatus maps the enrollment_mode setting to a new tenant's status.
-// a mode this phase does not know stops enrollment rather than guessing.
+// enrollment modes of cp.settings key enrollment_mode (contract 5.7)
+const (
+	ModeOpen     = "open"
+	ModeApproval = "approval"
+)
+
+// ParseEnrollmentMode decodes the stored enrollment_mode value. a value that
+// is not a json string or not a known mode is an error, never read as one of
+// the modes, so a broken setting stops enrollment instead of guessing.
+func ParseEnrollmentMode(raw []byte) (string, error) {
+	var mode string
+	if err := json.Unmarshal(raw, &mode); err != nil {
+		return "", fmt.Errorf("tenants: enrollment_mode is not a json string: %w", err)
+	}
+	if mode != ModeOpen && mode != ModeApproval {
+		return "", fmt.Errorf("tenants: unknown enrollment_mode %q", mode)
+	}
+	return mode, nil
+}
+
+// enrollStatus maps the enrollment_mode setting to a new tenant's status. the
+// setting is read in the enrollment transaction, so a switch applies to the
+// next enrollment without a restart and never touches existing tenants.
 func enrollStatus(ctx context.Context, q *systemq.Queries) (string, error) {
 	raw, err := q.GetSetting(ctx, "enrollment_mode")
 	if err != nil {
 		return "", fmt.Errorf("tenants: read enrollment_mode: %w", err)
 	}
-	var mode string
-	if err := json.Unmarshal(raw, &mode); err != nil {
-		return "", fmt.Errorf("tenants: enrollment_mode is not a json string: %w", err)
+	mode, err := ParseEnrollmentMode(raw)
+	if err != nil {
+		return "", err
 	}
-	switch mode {
-	case "open":
-		return "active", nil
-	case "approval":
+	if mode == ModeApproval {
 		return "pending", nil
 	}
-	return "", fmt.Errorf("tenants: unknown enrollment_mode %q", mode)
+	return "active", nil
 }
 
 func isUnique(err error, constraint string) bool {

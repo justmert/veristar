@@ -139,6 +139,8 @@ func seedRows(tx pgx.Tx) error {
 			  values ($1, $2, 'session', $3)`, []any{p.tenant, p.site, p.user}},
 			{`insert into cp.web_ingest_hourly (site_id, tenant_id, hour, outcome, count)
 			  values ($1, $2, date_trunc('hour', now()), 'accepted', 5)`, []any{p.site, p.tenant}},
+			{`insert into cp.tenant_removals (tenant_id, requested_by, reason, keep_aggregates)
+			  values ($1, $2, 'isolation seed', false)`, []any{p.tenant, p.user}},
 			{`insert into cp.sessions (token_hash, user_id, data, expiry)
 			  values (sha256($1::bytea), $2, '\x00', now() + interval '1 day')`, []any{[]byte(fmt.Sprintf("session-%d", p.n)), p.user}},
 		}

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -25,8 +26,11 @@ import (
 	"github.com/justmert/stellar-analytics/internal/config"
 	"github.com/justmert/stellar-analytics/internal/controlplane"
 	"github.com/justmert/stellar-analytics/internal/controlplane/auth"
+	"github.com/justmert/stellar-analytics/internal/controlplane/domaincheck"
 	"github.com/justmert/stellar-analytics/internal/controlplane/ingest"
+	"github.com/justmert/stellar-analytics/internal/controlplane/lifecycle"
 	"github.com/justmert/stellar-analytics/internal/controlplane/members"
+	"github.com/justmert/stellar-analytics/internal/controlplane/operator"
 	"github.com/justmert/stellar-analytics/internal/controlplane/provision"
 	"github.com/justmert/stellar-analytics/internal/controlplane/session"
 	"github.com/justmert/stellar-analytics/internal/controlplane/sites"
@@ -35,6 +39,7 @@ import (
 	"github.com/justmert/stellar-analytics/internal/controlplane/terms"
 	"github.com/justmert/stellar-analytics/internal/db"
 	"github.com/justmert/stellar-analytics/internal/natsx"
+	"github.com/justmert/stellar-analytics/internal/netguard"
 	"github.com/justmert/stellar-analytics/internal/obs"
 	"github.com/justmert/stellar-analytics/internal/registry"
 	"github.com/justmert/stellar-analytics/internal/umami"
@@ -55,7 +60,7 @@ UMAMI_USER_PASSWORD_KEY, TRACKER_RELEASE_DIR, TRACKER_NPM_PACKAGE (optional),
 NATS_URL, NATS_REPLICAS, NATS_USER and NATS_PASSWORD (when the server
 requires auth), PLATFORM_DB_HOST, PLATFORM_DB_PORT, PLATFORM_DB_NAME,
 PLATFORM_DB_SSLMODE, PLATFORM_DB_CP_SYSTEM_PASSWORD,
-PLATFORM_DB_CP_TENANT_PASSWORD.
+PLATFORM_DB_CP_TENANT_PASSWORD, PLATFORM_DB_CP_OPERATOR_PASSWORD.
 `
 
 func main() {
@@ -103,7 +108,7 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 	// names every missing or invalid key at once
 	endpoints := auth.LoadEndpoints(env)
 	natsCfg, _ := config.LoadNATS(env)
-	poolCfg, _ := db.LoadPoolConfig(env, db.RoleCPSystem, db.RoleCPTenant)
+	poolCfg, _ := db.LoadPoolConfig(env, db.RoleCPSystem, db.RoleCPTenant, db.RoleCPOperator)
 	cfg, err := config.LoadControlPlane(env)
 	if err != nil {
 		return err
@@ -154,6 +159,13 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 		return err
 	}
 
+	// operator flags follow OPERATOR_GITHUB_IDS from this start on (5.1)
+	changed, err := operator.SyncFlags(ctx, d, cfg.OperatorGitHubIDs)
+	if err != nil {
+		return err
+	}
+	log.Info("operator flags synced", "changed", changed)
+
 	rec := &provision.Reconciler{
 		Admin: admin, Registry: publisher, Key: pwKey, Tx: d.WithSystem, Now: time.Now, Log: log,
 	}
@@ -177,6 +189,43 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	guard, err := operator.NewGuard(cfg.OperatorGitHubIDs)
+	if err != nil {
+		return err
+	}
+	// domain checks resolve through the system resolver; the guard refuses
+	// private and loopback answers, so no setting can open them
+	ng, err := netguard.New(net.DefaultResolver)
+	if err != nil {
+		return err
+	}
+	checks, err := domaincheck.NewRoutes(scope, &domaincheck.Checker{Guard: ng, Resolver: net.DefaultResolver}, time.Now, log)
+	if err != nil {
+		return err
+	}
+	// background stellar.toml fetches finish before the pools close
+	defer checks.Wait()
+	modeRoutes, err := operator.NewEnrollmentMode(d)
+	if err != nil {
+		return err
+	}
+	auditRoutes, err := operator.NewAuditLog(d)
+	if err != nil {
+		return err
+	}
+	keepRoutes, err := operator.NewRemovalKeepAggregates(d)
+	if err != nil {
+		return err
+	}
+	actions, err := lifecycle.NewActions(d, scope.Reconcile)
+	if err != nil {
+		return err
+	}
+	review, err := operator.NewTenants(d)
+	if err != nil {
+		return err
+	}
+
 	snippets, err := controlplane.NewSnippetRoutes(scope, tracker, cfg.TrackerNPMPackage)
 	if err != nil {
 		return err
@@ -209,12 +258,15 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 			controlplane.RoutesFunc(authH.Private),
 			tenants.NewRoutes(scope),
 			members.NewRoutes(scope),
-			sites.NewRoutes(scope),
+			sites.NewRoutes(scope).OnCreate(checks),
+			checks,
 			ingest.NewRoutes(scope),
 			snippets,
 			// behind RequireUser like every private group; sso answers its own
 			// failures with a redirect, but an anonymous request gets 401
 			controlplane.RoutesFunc(func(r chi.Router) { r.Method(http.MethodGet, ssoPath, ssoH) }),
+			// /api/operator: 403 operator_required for everyone else (5.1)
+			controlplane.RoutesFunc(guard.Mount(modeRoutes, keepRoutes, auditRoutes, actions, review)),
 		},
 	})
 
@@ -246,8 +298,8 @@ func apiServer(addr string, h http.Handler) *http.Server {
 
 // readiness checks both database pools and the nats connection.
 func readiness(d *db.DB, nc *nats.Conn) []obs.Check {
-	checks := make([]obs.Check, 0, 3)
-	for _, r := range []db.Role{db.RoleCPSystem, db.RoleCPTenant} {
+	checks := make([]obs.Check, 0, 4)
+	for _, r := range []db.Role{db.RoleCPSystem, db.RoleCPTenant, db.RoleCPOperator} {
 		checks = append(checks, obs.Check{Name: "db " + string(r), Fn: func(ctx context.Context) error {
 			p, err := d.Pool(r)
 			if err != nil {

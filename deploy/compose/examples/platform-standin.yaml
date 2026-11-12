@@ -1,0 +1,43 @@
+# stock upstream collector standing in for the stellar analytics otlp
+# endpoint when the scf-otelcol build is not part of the run. it only checks
+# that the bearer token the apps send matches PLATFORM_OTLP_TOKEN and records
+# the raw payloads. it does none of the platform's filtering; point the apps'
+# PLATFORM_OTLP_ENDPOINT at the real collector to exercise that.
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+        auth:
+          authenticator: bearertokenauth
+      http:
+        endpoint: 0.0.0.0:4318
+        auth:
+          authenticator: bearertokenauth
+
+extensions:
+  bearertokenauth:
+    scheme: Bearer
+    token: ${env:PLATFORM_OTLP_TOKEN}
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+exporters:
+  file/metrics:
+    path: /out/platform/metrics.jsonl
+    create_directory: true
+    flush_interval: 500ms
+  file/traces:
+    path: /out/platform/traces.jsonl
+    create_directory: true
+    flush_interval: 500ms
+
+service:
+  extensions: [bearertokenauth, health_check]
+  pipelines:
+    metrics:
+      receivers: [otlp]
+      exporters: [file/metrics]
+    traces:
+      receivers: [otlp]
+      exporters: [file/traces]

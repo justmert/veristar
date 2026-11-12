@@ -13,7 +13,7 @@ import (
 )
 
 const listOperatorSites = `-- name: ListOperatorSites :many
-select id, tenant_id, name, domain, origins, quarantine_website_id, status, verify_method, verified_at, last_verify_at, last_verify_error, stellar_toml, stellar_toml_checked_at, created_at, updated_at from cp.operator_sites order by created_at, id
+select id, tenant_id, name, domain, origins, quarantine_website_id, status, verify_method, verified_at, last_verify_at, last_verify_error, stellar_toml, stellar_toml_checked_at, created_at, updated_at, status_reason, domain_previously_removed from cp.operator_sites order by created_at, id
 `
 
 func (q *Queries) ListOperatorSites(ctx context.Context) ([]CpOperatorSite, error) {
@@ -41,6 +41,8 @@ func (q *Queries) ListOperatorSites(ctx context.Context) ([]CpOperatorSite, erro
 			&i.StellarTomlCheckedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.StatusReason,
+			&i.DomainPreviouslyRemoved,
 		); err != nil {
 			return nil, err
 		}

@@ -26,6 +26,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/justmert/stellar-analytics/internal/controlplane/lifecycle"
 	"github.com/justmert/stellar-analytics/internal/db/systemq"
 	"github.com/justmert/stellar-analytics/internal/registry"
 	"github.com/justmert/stellar-analytics/internal/umami"
@@ -51,8 +52,10 @@ const Actor = "system:reconcile"
 
 // tenant and site statuses of the cp tables
 const (
-	statusActive  = "active"
-	statusRemoved = "removed"
+	statusActive   = "active"
+	statusPending  = "pending"
+	statusRejected = "rejected"
+	statusRemoved  = "removed"
 )
 
 // TxFunc runs fn in one cp_system transaction. the control plane passes
@@ -108,6 +111,7 @@ func websiteName(name string, quarantine bool) string {
 type run struct {
 	r       *Reconciler
 	q       *systemq.Queries
+	tx      pgx.Tx
 	tenant  systemq.ProvisionLockTenantRow
 	adminID string
 	changes []Change
@@ -157,7 +161,7 @@ func (r *Reconciler) Changes(ctx context.Context, tenantID uuid.UUID) ([]Change,
 	var changes []Change
 	var runErr error
 	err = r.Tx(ctx, func(tx pgx.Tx) error {
-		s := &run{r: r, q: systemq.New(tx), adminID: self.ID}
+		s := &run{r: r, q: systemq.New(tx), tx: tx, adminID: self.ID}
 		t, err := s.q.ProvisionLockTenant(ctx, tenantID)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return fmt.Errorf("%w: %s", ErrTenantNotFound, tenantID)
@@ -205,7 +209,10 @@ func (s *run) reconcile(ctx context.Context) error {
 	}
 
 	if s.tenant.Status == statusRemoved {
-		return s.removedTenant(ctx, sites)
+		return s.removedTenant(ctx)
+	}
+	if s.tenant.Status == statusPending || s.tenant.Status == statusRejected {
+		return s.unapprovedTenant(ctx, sites)
 	}
 
 	teamID, err := s.team(ctx)
@@ -226,28 +233,37 @@ func (s *run) reconcile(ctx context.Context) error {
 	return nil
 }
 
-// removedTenant ends access and ingestion for a removed tenant: its members
-// leave the team and its sites leave the registry. what happens to the
-// websites and their data is the removal decision of the design
-// (removal_keep_aggregates), so they are left as they are here.
-func (s *run) removedTenant(ctx context.Context, sites []systemq.ProvisionSitesRow) error {
-	if s.tenant.UmamiTeamID.Valid {
-		teamID := s.tenant.UmamiTeamID.UUID.String()
-		team, ok, err := s.r.Admin.GetTeam(ctx, teamID)
-		if err != nil {
-			return err
-		}
-		if ok {
-			for _, m := range team.Members {
-				if m.UserID == s.adminID {
-					continue
-				}
-				if err := s.removeMember(ctx, teamID, m, "tenant removed"); err != nil {
-					return err
-				}
-			}
-		}
+// removedTenant runs the removal purge (the design, contract 5.5) in
+// the run's transaction, which holds the tenant row lock: the registry keys,
+// the umami websites, team and orphaned users, and the ingest aggregates,
+// store by store. a store that fails is retried on the next run; stores
+// already done are skipped.
+func (s *run) removedTenant(ctx context.Context) error {
+	purgers, err := lifecycle.Purgers(s.r.Registry, s.r.Admin)
+	if err != nil {
+		return err
 	}
+	runner, err := lifecycle.NewRunner(purgers...)
+	if err != nil {
+		return err
+	}
+	err = runner.Run(ctx, s.tx, s.tenant.ID, s.tenant.UmamiTeamID)
+	var rec *lifecycle.RecordError
+	if errors.As(err, &rec) {
+		// the transaction is unusable; nothing of this run may commit
+		return &auditError{err: err}
+	}
+	return err
+}
+
+// unapprovedTenant handles a pending or rejected tenant (contract 5.7): no
+// operator has approved it, so nothing is created in umami (no team, users,
+// memberships or websites) and nothing is published to the registry, and the
+// gateway answers rejected_unknown_site for its sites. a registry key that
+// exists anyway is deleted, so an unapproved tenant never takes traffic.
+// umami objects that exist are left alone: approval reconciles the tenant
+// again and adopts them.
+func (s *run) unapprovedTenant(ctx context.Context, sites []systemq.ProvisionSitesRow) error {
 	for _, site := range sites {
 		if err := s.registryDelete(ctx, site.ID); err != nil {
 			return err
@@ -430,6 +446,11 @@ func (s *run) site(ctx context.Context, teamID string, site systemq.ProvisionSit
 		}
 		return nil
 	}
+	if site.Status == statusPending {
+		// a site in review (contract 5.6) is treated like a pending tenant:
+		// no websites, no registry entry until an operator approves it
+		return s.registryDelete(ctx, site.ID)
+	}
 
 	for _, w := range ids {
 		if err := s.website(ctx, teamID, site, w.id, websiteName(site.Name, w.quarantine)); err != nil {
@@ -489,7 +510,8 @@ func (s *run) websiteDelete(ctx context.Context, teamID string, siteID uuid.UUID
 
 // registryStatus is the status the gateway sees. a site only takes traffic
 // while both it and its tenant are active; otherwise the tenant's status
-// (pending, rejected, suspended) is published, which the gateway refuses.
+// (suspended) is published, which the gateway refuses. pending and rejected
+// tenants never reach this point, they publish nothing (unapprovedTenant).
 func (s *run) registryStatus(site systemq.ProvisionSitesRow) string {
 	if s.tenant.Status != statusActive {
 		return s.tenant.Status

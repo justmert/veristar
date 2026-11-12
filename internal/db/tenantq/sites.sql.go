@@ -24,7 +24,7 @@ func (q *Queries) CountLiveSites(ctx context.Context) (int64, error) {
 }
 
 const getSite = `-- name: GetSite :one
-select id, tenant_id, name, domain, origins, quarantine_website_id, status, verify_token, verify_method, verified_at, last_verify_at, last_verify_error, stellar_toml, stellar_toml_checked_at, created_at, updated_at from cp.sites where id = $1
+select id, tenant_id, name, domain, origins, quarantine_website_id, status, verify_token, verify_method, verified_at, last_verify_at, last_verify_error, stellar_toml, stellar_toml_checked_at, created_at, updated_at, status_reason from cp.sites where id = $1
 `
 
 func (q *Queries) GetSite(ctx context.Context, id uuid.UUID) (CpSite, error) {
@@ -47,6 +47,7 @@ func (q *Queries) GetSite(ctx context.Context, id uuid.UUID) (CpSite, error) {
 		&i.StellarTomlCheckedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.StatusReason,
 	)
 	return i, err
 }
@@ -55,7 +56,7 @@ const insertSite = `-- name: InsertSite :one
 
 insert into cp.sites (id, tenant_id, name, domain, origins, quarantine_website_id, status, verify_token)
 values ($1, cp.current_tenant_id(), $2, $3, $4, $5, $6, $7)
-returning id, tenant_id, name, domain, origins, quarantine_website_id, status, verify_token, verify_method, verified_at, last_verify_at, last_verify_error, stellar_toml, stellar_toml_checked_at, created_at, updated_at
+returning id, tenant_id, name, domain, origins, quarantine_website_id, status, verify_token, verify_method, verified_at, last_verify_at, last_verify_error, stellar_toml, stellar_toml_checked_at, created_at, updated_at, status_reason
 `
 
 type InsertSiteParams struct {
@@ -97,12 +98,13 @@ func (q *Queries) InsertSite(ctx context.Context, arg InsertSiteParams) (CpSite,
 		&i.StellarTomlCheckedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.StatusReason,
 	)
 	return i, err
 }
 
 const listSitesPage = `-- name: ListSitesPage :many
-select id, tenant_id, name, domain, origins, quarantine_website_id, status, verify_token, verify_method, verified_at, last_verify_at, last_verify_error, stellar_toml, stellar_toml_checked_at, created_at, updated_at from cp.sites
+select id, tenant_id, name, domain, origins, quarantine_website_id, status, verify_token, verify_method, verified_at, last_verify_at, last_verify_error, stellar_toml, stellar_toml_checked_at, created_at, updated_at, status_reason from cp.sites
 where ($1::boolean or status <> 'removed')
   and ($2::timestamptz is null
        or (created_at, id) > ($2::timestamptz, $3::uuid))
@@ -148,6 +150,7 @@ func (q *Queries) ListSitesPage(ctx context.Context, arg ListSitesPageParams) ([
 			&i.StellarTomlCheckedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.StatusReason,
 		); err != nil {
 			return nil, err
 		}
@@ -162,7 +165,7 @@ func (q *Queries) ListSitesPage(ctx context.Context, arg ListSitesPageParams) ([
 const removeSite = `-- name: RemoveSite :one
 update cp.sites set status = 'removed', updated_at = now()
 where id = $1
-returning id, tenant_id, name, domain, origins, quarantine_website_id, status, verify_token, verify_method, verified_at, last_verify_at, last_verify_error, stellar_toml, stellar_toml_checked_at, created_at, updated_at
+returning id, tenant_id, name, domain, origins, quarantine_website_id, status, verify_token, verify_method, verified_at, last_verify_at, last_verify_error, stellar_toml, stellar_toml_checked_at, created_at, updated_at, status_reason
 `
 
 func (q *Queries) RemoveSite(ctx context.Context, id uuid.UUID) (CpSite, error) {
@@ -185,6 +188,7 @@ func (q *Queries) RemoveSite(ctx context.Context, id uuid.UUID) (CpSite, error) 
 		&i.StellarTomlCheckedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.StatusReason,
 	)
 	return i, err
 }
@@ -195,7 +199,7 @@ set name = coalesce($1::text, name),
     origins = coalesce($2::text[], origins),
     updated_at = now()
 where id = $3
-returning id, tenant_id, name, domain, origins, quarantine_website_id, status, verify_token, verify_method, verified_at, last_verify_at, last_verify_error, stellar_toml, stellar_toml_checked_at, created_at, updated_at
+returning id, tenant_id, name, domain, origins, quarantine_website_id, status, verify_token, verify_method, verified_at, last_verify_at, last_verify_error, stellar_toml, stellar_toml_checked_at, created_at, updated_at, status_reason
 `
 
 type UpdateSiteParams struct {
@@ -224,6 +228,7 @@ func (q *Queries) UpdateSite(ctx context.Context, arg UpdateSiteParams) (CpSite,
 		&i.StellarTomlCheckedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.StatusReason,
 	)
 	return i, err
 }

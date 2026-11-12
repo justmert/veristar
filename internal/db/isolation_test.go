@@ -18,6 +18,9 @@ type tenantTable struct {
 	// insert writes one valid row for tenant; only row-level security or a
 	// missing grant can refuse it. empty when cp_tenant has no insert right.
 	insert func(tenant, user, site uuid.UUID) (string, []any)
+	// denied: cp_tenant has no right on the table at all; row-level
+	// security is still forced, so a later grant cannot leak other rows
+	denied bool
 }
 
 var tenantTables = []tenantTable{
@@ -47,6 +50,7 @@ var tenantTables = []tenantTable{
 		        values ($1, $2, 'site_reset', $3)`, []any{tenant, site, user}
 	}},
 	{name: "cp.web_ingest_hourly", key: "tenant_id"},
+	{name: "cp.tenant_removals", key: "tenant_id", denied: true},
 }
 
 // the isolation tests only mean something if they cover every tenant table
@@ -94,6 +98,13 @@ func TestTenantIsolation(t *testing.T) {
 				require.Positive(t, own, "seed must give every tenant table rows for each tenant")
 				require.Greater(t, all, own, "seed must hold rows of the other tenant too")
 
+				if tt.denied {
+					_, err := count(t, pdb.RoleCPTenant, &self.tenant, `select count(*) from `+tt.name)
+					requireDenied(t, err, "cp_tenant reading "+tt.name)
+					_, err = attempt(t, pdb.RoleCPTenant, &self.tenant, `delete from `+tt.name)
+					requireDenied(t, err, "cp_tenant deleting from "+tt.name)
+					return
+				}
 				seen, err := count(t, pdb.RoleCPTenant, &self.tenant, `select count(*) from `+tt.name)
 				require.NoError(t, err)
 				require.Equal(t, own, seen, "cp_tenant sees exactly its own rows")
@@ -158,7 +169,9 @@ func TestNoTenantSetSeesNothing(t *testing.T) {
 
 	tables := []string{"cp.users"}
 	for _, tt := range tenantTables {
-		tables = append(tables, tt.name)
+		if !tt.denied {
+			tables = append(tables, tt.name)
+		}
 	}
 	for _, name := range tables {
 		n, err := count(t, pdb.RoleCPTenant, nil, `select count(*) from `+name)

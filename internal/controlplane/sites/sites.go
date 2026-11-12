@@ -4,11 +4,14 @@
 package sites
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"slices"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -17,6 +20,7 @@ import (
 	"github.com/justmert/stellar-analytics/internal/controlplane/audit"
 	"github.com/justmert/stellar-analytics/internal/controlplane/httpx"
 	"github.com/justmert/stellar-analytics/internal/controlplane/tenants"
+	"github.com/justmert/stellar-analytics/internal/db/systemq"
 	"github.com/justmert/stellar-analytics/internal/db/tenantq"
 )
 
@@ -29,24 +33,62 @@ const (
 
 const maxSites = 50
 
-// Site is the site object of contract 3.1. verify_token and the this stage
-// verification columns are not part of it.
-type Site struct {
-	ID                  uuid.UUID        `json:"id"`
-	TenantID            uuid.UUID        `json:"tenant_id"`
-	Name                string           `json:"name"`
-	Domain              string           `json:"domain"`
-	Origins             []string         `json:"origins"`
-	QuarantineWebsiteID *uuid.UUID       `json:"quarantine_website_id"`
-	Status              string           `json:"status"`
-	VerifyMethod        *string          `json:"verify_method"`
-	VerifiedAt          *httpx.Timestamp `json:"verified_at"`
-	CreatedAt           httpx.Timestamp  `json:"created_at"`
-	UpdatedAt           httpx.Timestamp  `json:"updated_at"`
+// tenant statuses the site routes branch on
+const (
+	tenantActive    = "active"
+	tenantSuspended = "suspended"
+)
+
+// ActionReviewQueue is the audit action of a site created into review.
+const ActionReviewQueue = "site.review_queue"
+
+// refuseSuspended answers 409 tenant_suspended for site create and update
+// (contract 5.11); delete stays allowed.
+func refuseSuspended(a tenants.Access) error {
+	if a.TenantStatus == tenantSuspended {
+		return httpx.Conflict(httpx.CodeTenantSuspended, "the project is suspended")
+	}
+	return nil
 }
 
-// ToSite converts a cp.sites row.
-func ToSite(s tenantq.CpSite) Site {
+// Site is the site object of contract 3.1 with the this stage fields of 5.10.
+// verify_token is never part of it (5.8 only).
+type Site struct {
+	ID                   uuid.UUID        `json:"id"`
+	TenantID             uuid.UUID        `json:"tenant_id"`
+	Name                 string           `json:"name"`
+	Domain               string           `json:"domain"`
+	Origins              []string         `json:"origins"`
+	QuarantineWebsiteID  *uuid.UUID       `json:"quarantine_website_id"`
+	Status               string           `json:"status"`
+	StatusReason         *string          `json:"status_reason"`
+	InReview             bool             `json:"in_review"`
+	Verification         string           `json:"verification"`
+	VerifyMethod         *string          `json:"verify_method"`
+	VerifiedAt           *httpx.Timestamp `json:"verified_at"`
+	LastVerifyAt         *httpx.Timestamp `json:"last_verify_at"`
+	LastVerifyError      *string          `json:"last_verify_error"`
+	StellarToml          json.RawMessage  `json:"stellar_toml"`
+	StellarTomlCheckedAt *httpx.Timestamp `json:"stellar_toml_checked_at"`
+	CreatedAt            httpx.Timestamp  `json:"created_at"`
+	UpdatedAt            httpx.Timestamp  `json:"updated_at"`
+}
+
+// verification is the value of contract 5.8, as lifecycle.Verification.
+func verification(verifiedAt, lastVerifyAt *time.Time, lastVerifyError *string) string {
+	switch {
+	case lastVerifyAt == nil:
+		return "unchecked"
+	case verifiedAt != nil && lastVerifyError == nil:
+		return "verified"
+	default:
+		return "unverified"
+	}
+}
+
+// ToSite converts a cp.sites row; tenantStatus decides in_review (a pending
+// site of an active tenant, contract 5.6).
+func ToSite(s tenantq.CpSite, tenantStatus string) Site {
 	var q *uuid.UUID
 	if s.QuarantineWebsiteID.Valid {
 		id := s.QuarantineWebsiteID.UUID
@@ -56,19 +98,43 @@ func ToSite(s tenantq.CpSite) Site {
 	if origins == nil {
 		origins = []string{}
 	}
+	toml := json.RawMessage("null")
+	if len(s.StellarToml) > 0 {
+		toml = json.RawMessage(s.StellarToml)
+	}
 	return Site{
 		ID: s.ID, TenantID: s.TenantID, Name: s.Name, Domain: s.Domain, Origins: origins,
-		QuarantineWebsiteID: q, Status: s.Status, VerifyMethod: s.VerifyMethod,
-		VerifiedAt: httpx.TimestampPtr(s.VerifiedAt),
-		CreatedAt:  httpx.Timestamp(s.CreatedAt), UpdatedAt: httpx.Timestamp(s.UpdatedAt),
+		QuarantineWebsiteID: q, Status: s.Status, StatusReason: s.StatusReason,
+		InReview:     s.Status == StatusPending && tenantStatus == tenantActive,
+		Verification: verification(s.VerifiedAt, s.LastVerifyAt, s.LastVerifyError),
+		VerifyMethod: s.VerifyMethod, VerifiedAt: httpx.TimestampPtr(s.VerifiedAt),
+		LastVerifyAt: httpx.TimestampPtr(s.LastVerifyAt), LastVerifyError: s.LastVerifyError,
+		StellarToml: toml, StellarTomlCheckedAt: httpx.TimestampPtr(s.StellarTomlCheckedAt),
+		CreatedAt: httpx.Timestamp(s.CreatedAt), UpdatedAt: httpx.Timestamp(s.UpdatedAt),
 	}
 }
 
+// AfterCreate is told about every created site, after its transaction
+// committed (domaincheck.Routes fetches the domain's stellar.toml, contract
+// 5.12). it must not block: it returns at once and works in the background.
+type AfterCreate interface {
+	AfterSiteCreate(ctx context.Context, tenantID, siteID uuid.UUID, domain, actor string)
+}
+
 // Routes are the site routes.
-type Routes struct{ s *tenants.Scope }
+type Routes struct {
+	s           *tenants.Scope
+	afterCreate []AfterCreate
+}
 
 // NewRoutes returns the routes over a scope.
 func NewRoutes(s *tenants.Scope) *Routes { return &Routes{s: s} }
+
+// OnCreate adds hooks that run after each site creation.
+func (h *Routes) OnCreate(hooks ...AfterCreate) *Routes {
+	h.afterCreate = append(h.afterCreate, hooks...)
+	return h
+}
 
 // Routes registers the paths under a router mounted at /api.
 func (h *Routes) Routes(r chi.Router) {
@@ -100,6 +166,9 @@ func (h *Routes) create(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	if err := a.RequireTerms(); err != nil {
+		return err
+	}
+	if err := refuseSuspended(a); err != nil {
 		return err
 	}
 	var b createBody
@@ -139,8 +208,31 @@ func (h *Routes) create(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	status := StatusPending
-	if a.TenantStatus == "active" {
+	if a.TenantStatus == tenantActive {
 		status = StatusActive
+	}
+	// a domain of a removed project always goes to an operator (contract
+	// 5.6), in either enrollment mode. cp_tenant cannot see other tenants'
+	// sites, so the match runs under cp_system before the insert.
+	var match *systemq.ReviewMatchRemovedDomainRow
+	err = h.s.DB().WithSystem(ctx, func(tx pgx.Tx) error {
+		m, err := systemq.New(tx).ReviewMatchRemovedDomain(ctx, systemq.ReviewMatchRemovedDomainParams{
+			TenantID: a.TenantID, Domain: domain,
+		})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		match = &m
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	if match != nil {
+		status = StatusPending
 	}
 	var site tenantq.CpSite
 	err = h.s.InTenant(ctx, a, func(tx pgx.Tx) error {
@@ -162,17 +254,30 @@ func (h *Routes) create(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
-		return audit.InTenant(ctx, tx, audit.Entry{
+		if err := audit.InTenant(ctx, tx, audit.Entry{
 			Actor: audit.User(a.User.ID), Action: audit.SiteCreate, Target: audit.SiteTarget(id),
 			Detail: map[string]any{"tenant_id": a.TenantID, "name": name, "domain": domain,
 				"origins": b.Origins, "status": status, "quarantine_website_id": qid},
+		}); err != nil {
+			return err
+		}
+		if match == nil {
+			return nil
+		}
+		return audit.InTenant(ctx, tx, audit.Entry{
+			Actor: audit.User(a.User.ID), Action: ActionReviewQueue, Target: audit.SiteTarget(id),
+			Detail: map[string]any{"tenant_id": a.TenantID, "domain": domain,
+				"matched_domain": match.Domain, "matched_tenant_id": match.TenantID},
 		})
 	})
 	if err != nil {
 		return err
 	}
 	h.s.Reconcile(ctx, a.TenantID)
-	httpx.Created(w, "/api/tenants/"+a.TenantID.String()+"/sites/"+id.String(), ToSite(site))
+	for _, hook := range h.afterCreate {
+		hook.AfterSiteCreate(ctx, a.TenantID, id, domain, audit.User(a.User.ID))
+	}
+	httpx.Created(w, "/api/tenants/"+a.TenantID.String()+"/sites/"+id.String(), ToSite(site, a.TenantStatus))
 	return nil
 }
 
@@ -217,7 +322,7 @@ func (h *Routes) list(w http.ResponseWriter, r *http.Request) error {
 			out.NextCursor = httpx.NextCursor(listRoute, httpx.Cursor{At: last.CreatedAt, ID: last.ID})
 			break
 		}
-		out.Items = append(out.Items, ToSite(s))
+		out.Items = append(out.Items, ToSite(s, a.TenantStatus))
 	}
 	httpx.WriteJSON(w, http.StatusOK, out)
 	return nil
@@ -258,7 +363,7 @@ func (h *Routes) get(w http.ResponseWriter, r *http.Request) error {
 	}); err != nil {
 		return err
 	}
-	httpx.WriteJSON(w, http.StatusOK, ToSite(s))
+	httpx.WriteJSON(w, http.StatusOK, ToSite(s, a.TenantStatus))
 	return nil
 }
 
@@ -277,6 +382,9 @@ func (h *Routes) patch(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	if err := a.RequireTerms(); err != nil {
+		return err
+	}
+	if err := refuseSuspended(a); err != nil {
 		return err
 	}
 	var b patchBody
@@ -335,7 +443,7 @@ func (h *Routes) patch(w http.ResponseWriter, r *http.Request) error {
 	if changed {
 		h.s.Reconcile(ctx, a.TenantID)
 	}
-	httpx.WriteJSON(w, http.StatusOK, ToSite(out))
+	httpx.WriteJSON(w, http.StatusOK, ToSite(out, a.TenantStatus))
 	return nil
 }
 
@@ -379,6 +487,6 @@ func (h *Routes) remove(w http.ResponseWriter, r *http.Request) error {
 	if changed {
 		h.s.Reconcile(ctx, a.TenantID)
 	}
-	httpx.WriteJSON(w, http.StatusAccepted, ToSite(out))
+	httpx.WriteJSON(w, http.StatusAccepted, ToSite(out, a.TenantStatus))
 	return nil
 }

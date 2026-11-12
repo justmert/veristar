@@ -119,6 +119,21 @@ func (t Timestamp) MarshalJSON() ([]byte, error) {
 	return json.Marshal(Time(time.Time(t)))
 }
 
+// UnmarshalJSON reads the contract time format back, so api types can be
+// decoded by tests and go clients.
+func (t *Timestamp) UnmarshalJSON(b []byte) error {
+	var s string
+	if err := json.Unmarshal(b, &s); err != nil {
+		return err
+	}
+	v, err := time.Parse(time.RFC3339Nano, s)
+	if err != nil {
+		return err
+	}
+	*t = Timestamp(v.UTC())
+	return nil
+}
+
 // TimestampPtr converts a nullable column value.
 func TimestampPtr(t *time.Time) *Timestamp {
 	if t == nil {

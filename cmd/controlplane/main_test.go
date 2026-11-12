@@ -38,7 +38,7 @@ func TestServeNamesEveryMissingKey(t *testing.T) {
 		"GITHUB_CLIENT_ID", "GITHUB_CLIENT_SECRET", "GITHUB_REDIRECT_URL", "OAUTH_STATE_KEY",
 		"OPERATOR_GITHUB_IDS", "UMAMI_URL", "UMAMI_ADMIN_PASSWORD", "UMAMI_USER_PASSWORD_KEY",
 		"TRACKER_RELEASE_DIR", "NATS_URL", "PLATFORM_DB_HOST", "PLATFORM_DB_CP_SYSTEM_PASSWORD",
-		"PLATFORM_DB_CP_TENANT_PASSWORD",
+		"PLATFORM_DB_CP_TENANT_PASSWORD", "PLATFORM_DB_CP_OPERATOR_PASSWORD",
 	} {
 		require.Contains(t, stderr.String(), k)
 	}
@@ -154,7 +154,7 @@ func TestServeStartsAndStops(t *testing.T) {
 
 	// every tenant-scoped route is mounted and needs a session
 	for _, p := range []string{"/api/me", "/api/tenants", "/api/sites/" + "00000000-0000-7000-8000-000000000001" + "/snippet",
-		"/api/sso/umami?site=x"} {
+		"/api/sso/umami?site=x", "/api/operator/tenants", "/api/sites/00000000-0000-7000-8000-000000000001/verification"} {
 		res, err := get("http://" + addr + p)
 		require.NoError(t, err)
 		_ = res.Body.Close()

@@ -37,6 +37,7 @@ type CpSite struct {
 	StellarTomlCheckedAt *time.Time
 	CreatedAt            time.Time
 	UpdatedAt            time.Time
+	StatusReason         *string
 }
 
 type CpTenant struct {

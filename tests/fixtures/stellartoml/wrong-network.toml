@@ -1,0 +1,5 @@
+# a passphrase that is none of the sdk's named networks; ORG_URL at the top
+# level is not where sep-1 puts it, so it is not read
+NETWORK_PASSPHRASE = "Private Test Network ; 2026"
+ORG_URL = "https://stellar-verify.test"
+SIGNING_KEY = "SBADSEEDNOTAPUBLICKEY"

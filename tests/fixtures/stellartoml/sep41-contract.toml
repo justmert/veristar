@@ -1,0 +1,19 @@
+# a soroban-only project: one sep-41 token, an invalid entry with both
+# issuer and contract, and an entry with a contract that is not a c strkey
+NETWORK_PASSPHRASE = "Test SDF Network ; September 2015"
+
+[DOCUMENTATION]
+ORG_URL = "https://www.stellar-verify.test"
+
+[[CURRENCIES]]
+code = "SOROBANTOKEN-LONG-CODE"
+contract = "CDGIGIOWG5OESTIEH7OQEYHSDPAOYUO2ZSPWVO37SCONZUYEDN4L7FVM"
+
+[[CURRENCIES]]
+code = "BOTH"
+issuer = "GBJVY34OWUI7LWLGUGYHEXPZF27SOUKPVOUULS55NGHCHLDSYQLVODR6"
+contract = "CDGIGIOWG5OESTIEH7OQEYHSDPAOYUO2ZSPWVO37SCONZUYEDN4L7FVM"
+
+[[CURRENCIES]]
+code = "BAD"
+contract = "GBJVY34OWUI7LWLGUGYHEXPZF27SOUKPVOUULS55NGHCHLDSYQLVODR6"

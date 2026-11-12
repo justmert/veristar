@@ -401,11 +401,20 @@ type MeTerms struct {
 	URL            string `json:"url"`
 }
 
+// MeRemovedTenant is one entry of /api/me removed_tenants (contract 5.10).
+type MeRemovedTenant struct {
+	ID              uuid.UUID       `json:"id"`
+	Name            string          `json:"name"`
+	StatusReason    *string         `json:"status_reason"`
+	StatusChangedAt httpx.Timestamp `json:"status_changed_at"`
+}
+
 // Me is the answer of GET /api/me.
 type Me struct {
-	User    MeUser     `json:"user"`
-	Tenants []MeTenant `json:"tenants"`
-	Terms   MeTerms    `json:"terms"`
+	User           MeUser            `json:"user"`
+	Tenants        []MeTenant        `json:"tenants"`
+	RemovedTenants []MeRemovedTenant `json:"removed_tenants"`
+	Terms          MeTerms           `json:"terms"`
 }
 
 func (h *Handler) me(w http.ResponseWriter, r *http.Request) error {
@@ -419,24 +428,35 @@ func (h *Handler) me(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	var rows []systemq.ListUserTenantsRow
+	var removed []systemq.ListUserRemovedTenantsRow
 	err = h.db.WithSystem(ctx, func(tx pgx.Tx) error {
+		q := systemq.New(tx)
 		var qerr error
-		rows, qerr = systemq.New(tx).ListUserTenants(ctx, u.ID)
+		if rows, qerr = q.ListUserTenants(ctx, u.ID); qerr != nil {
+			return qerr
+		}
+		removed, qerr = q.ListUserRemovedTenants(ctx, u.ID)
 		return qerr
 	})
 	if err != nil {
 		return err
 	}
 	out := Me{
-		User:    MeUser{ID: u.ID, GitHubID: u.GitHubID, GitHubLogin: u.GitHubLogin, IsOperator: u.IsOperator},
-		Tenants: make([]MeTenant, 0, len(rows)),
-		Terms:   MeTerms{CurrentVersion: t.Version, Status: t.Status, URL: terms.URL},
+		User:           MeUser{ID: u.ID, GitHubID: u.GitHubID, GitHubLogin: u.GitHubLogin, IsOperator: u.IsOperator},
+		Tenants:        make([]MeTenant, 0, len(rows)),
+		RemovedTenants: make([]MeRemovedTenant, 0, len(removed)),
+		Terms:          MeTerms{CurrentVersion: t.Version, Status: t.Status, URL: terms.URL},
 	}
 	for _, row := range rows {
 		out.Tenants = append(out.Tenants, MeTenant{
 			ID: row.ID, Slug: row.Slug, Name: row.Name, Status: row.Status, Role: row.Role,
 			AcceptedTermsVersion: row.AcceptedTermsVersion,
 			TermsCurrent:         row.AcceptedTermsVersion != nil && *row.AcceptedTermsVersion == t.Version,
+		})
+	}
+	for _, rt := range removed {
+		out.RemovedTenants = append(out.RemovedTenants, MeRemovedTenant{
+			ID: rt.ID, Name: rt.Name, StatusReason: rt.StatusReason, StatusChangedAt: httpx.Timestamp(rt.StatusChangedAt),
 		})
 	}
 	httpx.WriteJSON(w, http.StatusOK, out)

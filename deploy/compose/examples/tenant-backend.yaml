@@ -1,0 +1,34 @@
+# stock upstream collector standing in for a tenant's own observability
+# backend. it accepts otlp without auth and writes everything it receives,
+# unfiltered, to files so tests can compare it with what the apps emitted.
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+exporters:
+  file/metrics:
+    path: /out/tenant/metrics.jsonl
+    create_directory: true
+    flush_interval: 500ms
+  file/traces:
+    path: /out/tenant/traces.jsonl
+    create_directory: true
+    flush_interval: 500ms
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+service:
+  extensions: [health_check]
+  pipelines:
+    metrics:
+      receivers: [otlp]
+      exporters: [file/metrics]
+    traces:
+      receivers: [otlp]
+      exporters: [file/traces]
