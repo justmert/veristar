@@ -1,0 +1,72 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GOLANGCI_LINT_VERSION: v2.15.0
+
+jobs:
+  go:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      # installed from the release tarball with its checksum so the linter version is pinned
+      - name: install golangci-lint
+        run: |
+          v="${GOLANGCI_LINT_VERSION#v}"
+          base="https://github.com/golangci/golangci-lint/releases/download/${GOLANGCI_LINT_VERSION}"
+          curl -fsSLO "${base}/golangci-lint-${v}-linux-amd64.tar.gz"
+          curl -fsSLO "${base}/golangci-lint-${v}-checksums.txt"
+          grep " golangci-lint-${v}-linux-amd64.tar.gz\$" "golangci-lint-${v}-checksums.txt" | sha256sum -c -
+          tar -xzf "golangci-lint-${v}-linux-amd64.tar.gz"
+          sudo install "golangci-lint-${v}-linux-amd64/golangci-lint" /usr/local/bin/
+      - run: make vet
+      - run: make lint
+      - run: make test
+
+  js:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26.13.1
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm test
+
+  integration:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - run: make dev-up
+      - run: make umami-bootstrap
+      # a second run must be a no-op, the bootstrap is idempotent
+      - run: make umami-bootstrap
+      - run: make test-integration
+      - if: failure()
+        run: docker compose --env-file deploy/compose/.env.dev -f deploy/compose/dev.yml logs --tail 200
+
+  image:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: make image CMD=platformctl
