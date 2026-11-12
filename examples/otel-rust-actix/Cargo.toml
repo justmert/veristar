@@ -1,0 +1,23 @@
+[package]
+name = "otel-rust-actix"
+version = "1.0.0"
+edition = "2024"
+rust-version = "1.99.1"
+publish = false
+
+[dependencies]
+actix-web = { version = "=4.18.2", default-features = false, features = ["macros"] }
+opentelemetry = { version = "=0.33.1", features = ["trace", "metrics"] }
+# views are needed to switch histograms to base2 exponential aggregation
+opentelemetry_sdk = { version = "=0.33.1", features = ["trace", "metrics", "spec_unstable_metrics_views"] }
+# http/protobuf with the blocking reqwest client, which the sdk's batch span
+# processor and periodic reader drive from their own background threads, and
+# rustls so https platform endpoints work without a system openssl
+opentelemetry-otlp = { version = "=0.33.1", default-features = false, features = ["http-proto", "reqwest-blocking-client", "reqwest-rustls", "trace", "metrics"] }
+opentelemetry-instrumentation-actix-web = { version = "=0.25.0", features = ["metrics"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "=1.54.1", features = ["macros", "rt-multi-thread", "signal"] }
+
+[profile.release]
+strip = true

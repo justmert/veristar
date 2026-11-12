@@ -1,0 +1,98 @@
+# this stage example apps with a stock upstream collector as the tenant's own
+# backend and a second stock collector standing in for the platform endpoint.
+#
+#   OTELAPPS_OUT=$PWD/.scratch/scratch/otelapps-out PLATFORM_OTLP_TOKEN=sa_otlp_example \
+#     docker compose -f deploy/compose/examples.yml -p sa-otelapps up -d --build
+#
+# OTELAPPS_OUT must be a directory the collector user (uid 10001) can write;
+# the collectors write tenant/{metrics,traces}.jsonl and
+# platform/{metrics,traces}.jsonl there. tests/otelapps drives this file.
+#
+# switches, passed through to every app (see each example's README.md):
+#   EXPORT_SIGNALS              metrics,traces (default) or traces
+#   METRICS_TEMPORALITY         cumulative (default) or delta
+#   METRICS_HISTOGRAM           explicit (default) or exponential
+#   METRICS_EXPORT_INTERVAL_MS  default 10000
+#   OTEL_SEMCONV_STABILITY_OPT_IN  python only; http (default) or empty for legacy names
+#
+# to send the platform copy to the real collector instead of the stand-in,
+# set PLATFORM_OTLP_ENDPOINT (and a real PLATFORM_OTLP_TOKEN).
+
+x-collector: &collector
+  # contrib v0.165.1 exists only as go modules; 0.165.0 is the newest image of
+  # the line matching collector core v0.165.0
+  image: otel/opentelemetry-collector-contrib:0.165.0@sha256:e40d61f10c9a617cca1ffd1be4d7e2b3a4b0f0001798ff07e58cabe82e618cea
+  volumes:
+    - ${OTELAPPS_OUT:?set OTELAPPS_OUT to a writable output directory}:/out
+
+x-app-env: &app-env
+  TENANT_OTLP_ENDPOINT: http://tenant-backend:4318
+  PLATFORM_OTLP_ENDPOINT: ${PLATFORM_OTLP_ENDPOINT:-http://platform-standin:4318}
+  PLATFORM_OTLP_TOKEN: ${PLATFORM_OTLP_TOKEN:?set PLATFORM_OTLP_TOKEN}
+  EXPORT_SIGNALS: ${EXPORT_SIGNALS:-metrics,traces}
+  METRICS_TEMPORALITY: ${METRICS_TEMPORALITY:-cumulative}
+  METRICS_HISTOGRAM: ${METRICS_HISTOGRAM:-explicit}
+  METRICS_EXPORT_INTERVAL_MS: ${METRICS_EXPORT_INTERVAL_MS:-10000}
+  PORT: "8080"
+
+services:
+  tenant-backend:
+    <<: *collector
+    command: ["--config=/etc/otelcol/tenant-backend.yaml"]
+    configs:
+      - source: tenant-backend
+        target: /etc/otelcol/tenant-backend.yaml
+
+  platform-standin:
+    <<: *collector
+    command: ["--config=/etc/otelcol/platform-standin.yaml"]
+    environment:
+      PLATFORM_OTLP_TOKEN: ${PLATFORM_OTLP_TOKEN:?set PLATFORM_OTLP_TOKEN}
+    # published so tests can prove a request without the token is refused
+    ports: ["127.0.0.1:47210:4318"]
+    configs:
+      - source: platform-standin
+        target: /etc/otelcol/platform-standin.yaml
+
+  otel-node-express:
+    build: ../../examples/otel-node-express
+    image: sa-otelapps/otel-node-express:dev
+    environment:
+      <<: *app-env
+      OTEL_SERVICE_NAME: otel-node-express
+    ports: ["127.0.0.1:47201:8080"]
+    depends_on: [tenant-backend, platform-standin]
+
+  otel-go-nethttp:
+    build: ../../examples/otel-go-nethttp
+    image: sa-otelapps/otel-go-nethttp:dev
+    environment:
+      <<: *app-env
+      OTEL_SERVICE_NAME: otel-go-nethttp
+    ports: ["127.0.0.1:47202:8080"]
+    depends_on: [tenant-backend, platform-standin]
+
+  otel-python-fastapi:
+    build: ../../examples/otel-python-fastapi
+    image: sa-otelapps/otel-python-fastapi:dev
+    environment:
+      <<: *app-env
+      OTEL_SERVICE_NAME: otel-python-fastapi
+      OTEL_SEMCONV_STABILITY_OPT_IN: ${OTEL_SEMCONV_STABILITY_OPT_IN-http}
+    ports: ["127.0.0.1:47203:8080"]
+    depends_on: [tenant-backend, platform-standin]
+
+  otel-rust-actix:
+    build: ../../examples/otel-rust-actix
+    image: sa-otelapps/otel-rust-actix:dev
+    environment:
+      <<: *app-env
+      OTEL_SERVICE_NAME: otel-rust-actix
+    ports: ["127.0.0.1:47204:8080"]
+    depends_on: [tenant-backend, platform-standin]
+
+configs:
+  tenant-backend:
+    file: ./examples/tenant-backend.yaml
+  platform-standin:
+    file: ./examples/platform-standin.yaml
