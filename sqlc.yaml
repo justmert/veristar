@@ -1,0 +1,65 @@
+# query code for internal/db. one package per database role, so a handler can
+# only call queries written for the role its transaction runs as.
+# regenerate with `make sqlc` after changing db/migrations or db/queries.
+version: "2"
+overrides:
+  go:
+    overrides:
+      - db_type: uuid
+        go_type: github.com/google/uuid.UUID
+      - db_type: uuid
+        nullable: true
+        go_type: github.com/google/uuid.NullUUID
+      - db_type: timestamptz
+        go_type: time.Time
+      - db_type: timestamptz
+        nullable: true
+        go_type:
+          type: time.Time
+          pointer: true
+sql:
+  - engine: postgresql
+    schema: db/migrations
+    queries: db/queries/system
+    gen:
+      # the options of this entry are shared by the others through the anchor
+      go: &go
+        sql_package: pgx/v5
+        emit_pointers_for_null_types: true
+        emit_empty_slices: true
+        omit_unused_structs: true
+        query_parameter_limit: 1
+        package: systemq
+        out: internal/db/systemq
+  - engine: postgresql
+    schema: db/migrations
+    queries: db/queries/tenant
+    gen:
+      go:
+        <<: *go
+        package: tenantq
+        out: internal/db/tenantq
+  - engine: postgresql
+    schema: db/migrations
+    queries: db/queries/operator
+    gen:
+      go:
+        <<: *go
+        package: operatorq
+        out: internal/db/operatorq
+  - engine: postgresql
+    schema: db/migrations
+    queries: db/queries/writer
+    gen:
+      go:
+        <<: *go
+        package: writerq
+        out: internal/db/writerq
+  - engine: postgresql
+    schema: db/migrations
+    queries: db/queries/fence
+    gen:
+      go:
+        <<: *go
+        package: fenceq
+        out: internal/db/fenceq

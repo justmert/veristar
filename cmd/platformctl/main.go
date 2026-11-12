@@ -25,7 +25,7 @@ const usage = `usage: platformctl <command>
 
 commands:
   umami bootstrap   replace the seeded umami admin password with UMAMI_ADMIN_PASSWORD
-  version           print the build version
+` + dbUsage + natsUsage + `  version           print the build version
 `
 
 func main() {
@@ -44,6 +44,18 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	case len(args) == 2 && args[0] == "umami" && args[1] == "bootstrap":
 		if err := umamiBootstrap(ctx, log); err != nil {
 			log.Error("umami bootstrap failed", "error", err.Error())
+			return 1
+		}
+		return 0
+	case len(args) >= 1 && args[0] == "db":
+		if err := runDB(ctx, args[1:]); err != nil {
+			log.Error("db command failed", "error", err.Error())
+			return 1
+		}
+		return 0
+	case len(args) >= 1 && args[0] == "nats":
+		if err := runNATS(ctx, args[1:]); err != nil {
+			log.Error("nats command failed", "error", err.Error())
 			return 1
 		}
 		return 0

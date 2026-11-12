@@ -11,7 +11,8 @@ VERSION       ?= $(shell git describe --tags --always --dirty 2>/dev/null || ech
 BIN_DIR       := dist/bin
 
 .PHONY: help dev-env dev-up dev-down dev-reset dev-ps dev-logs umami-bootstrap \
-        build test test-integration vet lint fmt tidy image
+        build test test-integration vet lint fmt tidy image \
+        db-migrate db-roles db-it sqlc
 
 help:
 	@echo "dev-up dev-down dev-reset dev-ps dev-logs umami-bootstrap"
@@ -42,6 +43,23 @@ dev-logs:
 # loads the dev secrets into the environment of this one command only
 umami-bootstrap: build
 	@set -a && . ./$(DEV_ENV) && set +a && $(BIN_DIR)/platformctl umami bootstrap
+
+# platform database. migrate first: it creates the roles that db-roles gives
+# passwords. both read the PLATFORM_DB_* keys from .env.dev.
+db-migrate: build
+	@set -a && . ./$(DEV_ENV) && set +a && $(BIN_DIR)/platformctl db migrate
+
+db-roles: build
+	@set -a && . ./$(DEV_ENV) && set +a && $(BIN_DIR)/platformctl db roles
+
+# runs platformctl's db commands against the dev stack from a test
+db-it: dev-env
+	@set -a && . ./$(DEV_ENV) && set +a && PLATFORM_DB_IT=1 $(GO) test -race -count=1 -run TestDBDevStack -v ./cmd/platformctl/
+
+# regenerates internal/db/*q from db/migrations and db/queries, with the
+# pinned sqlc version
+sqlc:
+	$(GO) run github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1 generate
 
 build:
 	@mkdir -p $(BIN_DIR)
