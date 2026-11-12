@@ -1,0 +1,77 @@
+# edge tier caddy (the design, this stage).
+#
+# environment, all required; each one is used where caddy refuses an empty
+# value, so a missing variable fails `caddy validate` and startup:
+#   BASE_DOMAIN        registered domain, an operator input; the site is in.<BASE_DOMAIN>
+#   GATEWAY_UPSTREAM   host:port of the local gateway on the private side
+#   EDGE_TLS           first argument of the tls directive: the acme account
+#                      email in production, "internal" for the local ca in tests.
+#                      this stage replaces it with dns-01 through caddy-dns/bunny,
+#                      which needs the custom caddy build.
+#
+# otlp.<BASE_DOMAIN> to the collector is added by this stage, with the same log
+# filter.
+
+(edge_log_fields) {
+	request>remote_ip delete
+	request>remote_port delete
+	request>client_ip delete
+	request>headers>User-Agent delete
+	request>headers>X-Forwarded-For delete
+	request>headers>X-Real-Ip delete
+	request>headers>Forwarded delete
+}
+
+{
+	# a request for a host this file does not serve is logged by caddy's
+	# default logger, not by the site log below, and was written unfiltered.
+	# it gets the same filter, so no request leaves an address or user agent
+	# in any log.
+	log default {
+		output stdout
+		format filter {
+			wrap json
+			fields {
+				import edge_log_fields
+			}
+		}
+	}
+}
+
+(edge_log) {
+	# access logs keep no client identifier: the remote address, the address
+	# caddy derives from it, the user agent and the forwarded-for header are
+	# deleted before the entry is written. x-real-ip and
+	# forwarded go too, because a proxy on the visitor's side can put the
+	# visitor's real address in either.
+	log {
+		output stdout
+		format filter {
+			wrap json
+			fields {
+				import edge_log_fields
+			}
+		}
+	}
+}
+
+in.{$BASE_DOMAIN} {
+	# caddy replaces an unset variable with nothing. this line needs a value,
+	# so a missing BASE_DOMAIN stops caddy instead of serving the bare "in."
+	vars base_domain {$BASE_DOMAIN}
+	tls {$EDGE_TLS}
+	import edge_log
+
+	reverse_proxy {
+		to {$GATEWAY_UPSTREAM}
+		# the gateway reads the client address from this one header only.
+		# set replaces whatever a client sent under the same name, and caddy
+		# trusts no proxy in front of it, so client_ip is the tcp peer.
+		header_up X-Edge-Client-Ip {client_ip}
+		# the gateway refuses the common proxy headers as address sources;
+		# not sending them keeps the address in exactly one place
+		header_up -X-Forwarded-For
+		header_up -X-Real-Ip
+		header_up -Forwarded
+	}
+}

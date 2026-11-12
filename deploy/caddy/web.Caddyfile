@@ -1,0 +1,166 @@
+# core tier caddy for web.<BASE_DOMAIN>: umami's ui and read api for tenant
+# web dashboards (the design, this stage).
+#
+# environment, all required; each one is used where caddy refuses an empty
+# value, so a missing variable fails `caddy validate` and startup:
+#   BASE_DOMAIN      registered domain, an operator input; the site is web.<BASE_DOMAIN>
+#                    and /login sends the browser to app.<BASE_DOMAIN>
+#   UMAMI_UPSTREAM   host:port of umami on the private network
+#   WEB_TLS          first argument of the tls directive: the acme account
+#                    email in production, "internal" for the local ca in tests
+#
+# umami's write routes and its collection routes stay reachable only on the
+# private network, for the replayer and the control plane.
+#
+# every path rule below is written against the path with any number of
+# leading /teams/<id> segments removed, because umami's next.config.ts
+# rewrites /teams/:teamId/:path* to /:path*. without that, /teams/x/api/send
+# or /teams/x/sso would reach the denied route under another name.
+
+(web_log_fields) {
+	request>remote_ip delete
+	request>remote_port delete
+	request>client_ip delete
+	request>headers delete
+	request>uri regexp \?.*$ ""
+	resp_headers delete
+}
+
+{
+	# a request for a host this file does not serve is logged by caddy's
+	# default logger, not by the site log below. it gets the same filter, so
+	# no request leaves an address or user agent in any log.
+	log default {
+		output stdout
+		format filter {
+			wrap json
+			fields {
+				import web_log_fields
+			}
+		}
+	}
+}
+
+(web_log) {
+	# access logs keep no client identifier and no query string (the design
+	# step 7 and 4.9): the remote and client address are deleted, and so are
+	# all request headers, because besides the user agent and the forwarding
+	# headers any header can carry an address (x-edge-client-ip, a proxy's
+	# own) and referer carries a full url. the query is cut from the uri,
+	# because /sso carries the umami token there. response headers go too:
+	# next's trailing-slash redirect repeats the whole url, query included,
+	# in Location and Refresh.
+	log {
+		output stdout
+		format filter {
+			wrap json
+			fields {
+				import web_log_fields
+			}
+		}
+	}
+}
+
+web.{$BASE_DOMAIN} {
+	# caddy replaces an unset variable with nothing. this line needs a value,
+	# so a missing BASE_DOMAIN stops caddy instead of serving the bare "web."
+	vars base_domain {$BASE_DOMAIN}
+	tls {$WEB_TLS}
+	import web_log
+
+	# deferred, so it replaces whatever umami sets and also covers caddy's
+	# own refusals and redirects
+	header {
+		Referrer-Policy no-referrer
+		defer
+	}
+
+	# the sso page receives the umami token in its query: never cache it
+	@sso path_regexp (?i)^/sso(?:/.*)?$
+	header @sso {
+		Cache-Control no-store
+		defer
+	}
+
+	route {
+		# dot segments, empty segments and backslashes are refused outright,
+		# so caddy and umami cannot disagree about which route a path names
+		@unclean path_regexp (?:^|/)\.\.?(?:/|$)|//|\\
+		respond @unclean "forbidden" 403
+
+		# deny list of the design, for every method, plus
+		# /api/auth/subscription, which waits forever for redis when redis is
+		# not configured (REDIS_URL stays unset). /compat/* holds
+		# umami's legacy report routes (next.config.ts), which take POST
+		# outside /api/*; tenants do not need them
+		# (docs/reference/umami-contract.md finding 3).
+		@denied path_regexp (?i)^(?:/teams/[^/]+)*/(?:api/(?:send|batch|record|auth/login|auth/sso|auth/subscription|me/password|teams/join|scripts/telemetry)(?:/.*)?|api/(?:admin|me/api-keys|share|links|pixels|boards).*|(?:telemetry\.js|openapi\.json|script\.js|recorder\.js|share|q|p|compat)(?:/.*)?|mcp.*)$
+		respond @denied "forbidden" 403
+
+		# /api/users* is denied except two reads the dashboard makes for its
+		# team and website switchers; umami checks that the caller asks
+		# about itself (src/app/api/users/[userId]/teams and websites)
+		@users {
+			path_regexp (?i)^(?:/teams/[^/]+)*/api/users.*$
+			not {
+				method GET HEAD
+				path_regexp (?i)^(?:/teams/[^/]+)*/api/users/[^/]+/(?:teams|websites)/?$
+			}
+		}
+		respond @users "forbidden" 403
+
+		# /api/2fa* is denied except a read of /api/2fa/status: a tenant who
+		# enabled 2fa on its umami user would break control-plane sso
+		@twofa {
+			path_regexp (?i)^(?:/teams/[^/]+)*/api/2fa.*$
+			not {
+				method GET HEAD
+				path_regexp (?i)^(?:/teams/[^/]+)*/api/2fa/status/?$
+			}
+		}
+		respond @twofa "forbidden" 403
+
+		# from outside, /api/* is read-only, plus token verification and
+		# logout that the ui needs
+		@api_write {
+			path_regexp (?i)^(?:/teams/[^/]+)*/api(?:/.*)?$
+			not method GET HEAD OPTIONS
+			not {
+				method POST
+				path_regexp (?i)^(?:/teams/[^/]+)*/api/auth/(?:verify|logout)/?$
+			}
+		}
+		respond @api_write "forbidden" 403
+
+		# sso and login exist only at their plain paths
+		@team_entry path_regexp (?i)^(?:/teams/[^/]+)+/(?:sso|login)(?:/.*)?$
+		respond @team_entry "forbidden" 403
+
+		# a user whose umami token expired comes back through the console
+		@login path_regexp (?i)^/login(?:/.*)?$
+		redir @login https://app.{$BASE_DOMAIN}/ 302
+
+		# the design: /sso only from a same-site page (the console redirect),
+		# which blocks login cross-site request forgery, and only towards a
+		# website page. the target pattern also rules out dot segments,
+		# a second slash and a query, so the ui cannot be steered elsewhere.
+		@sso_refused {
+			path_regexp (?i)^/sso(?:/.*)?$
+			not expression `{method} in ["GET", "HEAD"] && {http.request.header.Sec-Fetch-Site} in ["same-site", "same-origin"] && {http.request.uri.query.url}.matches("^/websites/[A-Za-z0-9-]+(/[A-Za-z0-9_-]+)*$")`
+		}
+		respond @sso_refused "forbidden" 403
+
+		reverse_proxy {
+			to {$UMAMI_UPSTREAM}
+			# umami needs no client address for the ui and must never get
+			# one; the edge headers it trusts on /api/send are dropped too,
+			# as is the header behind next's middleware bypass (cve-2025-29927)
+			header_up -X-Forwarded-For
+			header_up -X-Real-Ip
+			header_up -Forwarded
+			header_up -X-Edge-Client-Ip
+			header_up -Cf-Ipcountry
+			header_up -X-Middleware-Subrequest
+		}
+	}
+}
