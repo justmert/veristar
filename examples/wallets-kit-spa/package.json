@@ -1,0 +1,26 @@
+{
+  "name": "@stellar-analytics/example-wallets-kit-spa",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "build:test": "vite build --mode wallettest",
+    "start": "vite preview --strictPort",
+    "check": "tsc -p tsconfig.json",
+    "test": "node --test 'test/*.test.ts'"
+  },
+  "dependencies": {
+    "@creit.tech/stellar-wallets-kit": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "tracker": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@vitejs/plugin-react": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:"
+  }
+}

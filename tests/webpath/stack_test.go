@@ -426,6 +426,11 @@ func (s *Stack) StartEdge(t testing.TB) {
 		"--network-alias", gatewayHost,
 		"-v", filepath.Join(repoRoot(), "deploy", "caddy", "edge.Caddyfile") + ":/etc/caddy/Caddyfile:ro",
 		"-e", "BASE_DOMAIN=" + edgeDomain, "-e", "GATEWAY_UPSTREAM=edge-1:8080", "-e", "EDGE_TLS=internal",
+		// the this stage otlp site of edge.Caddyfile needs its upstreams set or
+		// caddy refuses the config. the web path has no collector, so they
+		// name a host that does not exist; nothing here calls otlp.<domain>.
+		"-e", "COLLECTOR_GRPC_UPSTREAM=no-collector:4317", "-e", "COLLECTOR_HTTP_UPSTREAM=no-collector:4318",
+		"-e", "COLLECTOR_HEALTH_UPSTREAM=no-collector:13133",
 	}, caddyImage)
 }
 

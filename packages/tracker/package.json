@@ -1,6 +1,6 @@
 {
   "name": "tracker",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "description": "browser tracker for stellar analytics, derived from the umami tracker",
   "license": "MIT",
@@ -9,6 +9,7 @@
     ".": "./src/index.ts",
     "./snippet": "./src/snippet.ts",
     "./wire": "./src/wire.ts",
+    "./wallets-kit": "./src/wallets-kit.ts",
     "./proof": "./src/proof.ts",
     "./releases/manifest.json": "./releases/manifest.json",
     "./releases/revoked.json": "./releases/revoked.json"
@@ -31,6 +32,8 @@
     "@types/node": "catalog:",
     "esbuild": "catalog:",
     "jsdom": "catalog:",
+    "swk-2.7.1": "npm:@creit.tech/stellar-wallets-kit@2.7.1",
+    "swk-2.8.0": "npm:@creit.tech/stellar-wallets-kit@2.8.0",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

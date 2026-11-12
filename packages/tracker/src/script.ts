@@ -35,5 +35,6 @@ import { type BeforeSend, createTracker, type Payload } from "./index.ts";
     excludeHash: attr("exclude-hash") === "true",
     domains: (attr("domains") || "").split(","),
     beforeSend,
+    walletsKit: attr("wallets-kit") === "true",
   });
 })(window);

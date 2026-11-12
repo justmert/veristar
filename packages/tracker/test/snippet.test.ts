@@ -29,6 +29,20 @@ describe("snippet", () => {
     expect(() => snippet({ ...ok, version: "9.9.9" })).toThrow(/manifest/);
   });
 
+  it("adds the wallets kit opt-in only when asked, and only from 1.1.0", () => {
+    const v11 = manifest.versions.find((v) => v.version === "1.1.0");
+    expect(v11).toBeDefined();
+    const ok = { siteId: SITE, version: "1.1.0", origin: "https://in.sa-test.example" };
+    expect(snippet(ok)).toBe(
+      `<script defer src="https://in.sa-test.example/v/1.1.0/sdk.js" integrity="${v11?.integrity}" crossorigin="anonymous" data-website-id="${SITE}"></script>`,
+    );
+    expect(snippet({ ...ok, walletsKit: true })).toBe(
+      `<script defer src="https://in.sa-test.example/v/1.1.0/sdk.js" integrity="${v11?.integrity}" crossorigin="anonymous" data-website-id="${SITE}" data-wallets-kit="true"></script>`,
+    );
+    // 1.0.0 would ignore the attribute without a word
+    expect(() => snippet({ ...ok, version: "1.0.0", walletsKit: true })).toThrow(/1\.1\.0/);
+  });
+
   it("1.0.0 is not revoked", () => {
     expect(isRevoked("1.0.0")).toBe(false);
   });

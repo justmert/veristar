@@ -9,6 +9,16 @@
       "integrity": "sha384-G7jAlHsp/0HhreHeIKFZIr1Udyb8lXfTJPPZcLC8YcVCAQ9Mr/OS3JOMW4n4OT6j",
       "esbuild": "0.28.2",
       "released": "2026-11-12"
+    },
+    {
+      "version": "1.1.0",
+      "file": "1.1.0/sdk.js",
+      "bytes": 7688,
+      "gzipBytes": 3636,
+      "sha384": "971962b4bb48300793fcade279ebfe31e306c597bba1c7ae58b3b2f066408caed330a4b6521f543e67c62c173350fb2a",
+      "integrity": "sha384-lxlitLtIMAeT/K3ieev+MeMGxZe7oceuWLOy8GZAjK7TMKS2Uh9UPmfGLBczUPsq",
+      "esbuild": "0.28.2",
+      "released": "2026-11-12"
     }
   ]
 }

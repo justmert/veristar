@@ -46,14 +46,32 @@ type Browsers struct {
 	runs     int
 }
 
+// siteRun is one example server: the site, the tracker release its page
+// loads and the package script that builds it.
+type siteRun struct {
+	Site    exampleSite
+	Version string
+	Build   string
+}
+
 func startBrowsers(t testing.TB, upstream string) *Browsers {
+	t.Helper()
+	runs := make([]siteRun, 0, len(allSites))
+	for _, s := range allSites {
+		runs = append(runs, siteRun{Site: s, Version: "1.0.0", Build: "build"})
+	}
+	return startBrowsersWith(t, upstream, runs)
+}
+
+// startBrowsersWith starts the fixture and the given example servers.
+func startBrowsersWith(t testing.TB, upstream string, runs []siteRun) *Browsers {
 	t.Helper()
 	if out, err := exec.Command("node", "--version").Output(); err != nil || !strings.HasPrefix(string(out), "v26.") {
 		t.Fatalf("node 26 is required on PATH (source ~/.nvm/nvm.sh && nvm use 26.13.1): %q %v", out, err)
 	}
 	ports := append([]int{}, fixturePorts...)
-	for _, s := range allSites {
-		ports = append(ports, s.Port)
+	for _, r := range runs {
+		ports = append(ports, r.Site.Port)
 	}
 	for _, p := range ports {
 		if c, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", p), 200*time.Millisecond); err == nil {
@@ -70,13 +88,14 @@ func startBrowsers(t testing.TB, upstream string) *Browsers {
 	b.spawn(t, "fixture", filepath.Join(repoRoot(), "tests", "e2e"), []string{"node", "fixture/main.ts"},
 		"SA_E2E_GATEWAY_UPSTREAM="+upstream, "SA_E2E_EVENT_LOG="+b.EventLog)
 	waitHTTP(t, "http://127.0.0.1:47090/health", 30*time.Second)
-	for _, s := range allSites {
-		b.spawn(t, s.Key, repoRoot(), []string{"sh", "-c", "pnpm --filter " + s.Pkg + " build && pnpm --filter " + s.Pkg + " start"},
-			"SA_SITE_ID="+s.ID, "SA_TRACKER_VERSION=1.0.0", "SA_GATEWAY_ORIGIN=https://"+gatewayHost,
+	for _, r := range runs {
+		s := r.Site
+		b.spawn(t, s.Key, repoRoot(), []string{"sh", "-c", "pnpm --filter " + s.Pkg + " " + r.Build + " && pnpm --filter " + s.Pkg + " start"},
+			"SA_SITE_ID="+s.ID, "SA_TRACKER_VERSION="+r.Version, "SA_GATEWAY_ORIGIN=https://"+gatewayHost,
 			"SA_PUBLIC_HOST="+s.Host, fmt.Sprintf("PORT=%d", s.Port), "HOST=127.0.0.1")
 	}
-	for _, s := range allSites {
-		waitHTTP(t, fmt.Sprintf("http://127.0.0.1:%d/", s.Port), 4*time.Minute)
+	for _, r := range runs {
+		waitHTTP(t, fmt.Sprintf("http://127.0.0.1:%d/", r.Site.Port), 4*time.Minute)
 	}
 	return b
 }

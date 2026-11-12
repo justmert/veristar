@@ -13,6 +13,7 @@
 // tracking can be started later (after consent) with start().
 
 import { solve } from "./proof.ts";
+import { watchWalletsKitStorage } from "./wallets-kit.ts";
 import {
   byteLength,
   CHALLENGE_PATH,
@@ -34,6 +35,13 @@ import {
 } from "./wire.ts";
 
 export { leadingZeroBits, solve, verifyNonce } from "./proof.ts";
+export {
+  type AttachOptions,
+  attachWalletsKit,
+  networkName,
+  type WalletNetwork,
+  type WalletsKitLike,
+} from "./wallets-kit.ts";
 export * from "./wire.ts";
 
 declare const __SDK_VERSION__: string;
@@ -86,6 +94,9 @@ export type TrackerOptions = {
   excludeHash?: boolean;
   domains?: string[];
   beforeSend?: BeforeSend;
+  // watch the stellar wallets kit's localStorage keys and send wallet events
+  // (data-wallets-kit="true"). bundler users call attachWalletsKit instead.
+  walletsKit?: boolean;
 };
 
 type TrackerWindow = Window &
@@ -346,6 +357,9 @@ export function createTracker(window: Window, options: TrackerOptions): Tracker 
     void track().catch(() => undefined);
     hookHistory();
     handleClicks();
+    // started with tracking, so a consent-gated site does not have the kit's
+    // storage read before start() and a visitor with gpc never has it read
+    if (options.walletsKit === true) watchWalletsKitStorage(win, track);
   };
 
   if (autoTrack && !trackingDisabled()) {
