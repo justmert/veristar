@@ -20,6 +20,10 @@ test("static-html: each full page load is one pageview", async ({ page }) => {
   await page.click("#to-about");
   await page.waitForURL(`${site.origin}/about.html`);
   await trackerReady(page);
+  // the pageview waits for the page's challenge; leaving before it returns
+  // cancels it (seen against the real gateway, where the round trip goes
+  // through caddy), so the test waits for the about pageview first
+  await expectPageviews(site, 2);
   await page.click("#to-home");
   await page.waitForURL(`${site.origin}/`);
   const pvs = await expectPageviews(site, 3);

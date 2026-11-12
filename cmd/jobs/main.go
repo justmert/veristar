@@ -1,0 +1,318 @@
+// Command jobs runs the platform's background tasks. `jobs daemon` is the
+// long-running process: it runs on both core nodes, and only the one holding
+// the jobs leader lock runs the tasks. `jobs run <name>` runs one task once,
+// for operators and tests, under the same lock.
+package main
+
+import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"errors"
+	"fmt"
+	"io"
+	"log/slog"
+	"net"
+	"os"
+	"os/signal"
+	"runtime/debug"
+	"strings"
+	"sync"
+	"syscall"
+	"time"
+
+	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/jetstream"
+	"github.com/prometheus/client_golang/prometheus"
+
+	"github.com/justmert/stellar-analytics/internal/config"
+	pdb "github.com/justmert/stellar-analytics/internal/db"
+	"github.com/justmert/stellar-analytics/internal/jobs/edgestats"
+	"github.com/justmert/stellar-analytics/internal/jobs/scheduler"
+	"github.com/justmert/stellar-analytics/internal/jobs/statsdedup"
+	"github.com/justmert/stellar-analytics/internal/natsx"
+	"github.com/justmert/stellar-analytics/internal/obs"
+	"github.com/justmert/stellar-analytics/internal/registry"
+)
+
+// version is set at build time with -ldflags "-X main.version=...".
+var version = "dev"
+
+const usage = `usage: jobs <command>
+
+commands:
+  daemon            run every task while holding the jobs lock; serves /healthz,
+                    /readyz and /metrics on JOBS_OPS_ADDR
+  run <task>        run one task once under the jobs lock (tasks: ` + edgestats.TaskName + `, ` + statsdedup.TaskName + `)
+  version           print the build version
+
+environment: NATS_URL, NATS_REPLICAS, NATS_USER and NATS_PASSWORD (when the
+server requires auth), PLATFORM_DB_HOST, PLATFORM_DB_PORT, PLATFORM_DB_NAME,
+PLATFORM_DB_SSLMODE, PLATFORM_DB_JOBS_PASSWORD, and JOBS_OPS_ADDR for daemon.
+`
+
+func main() {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	code := run(ctx, os.Args[1:], config.FromEnviron(), os.Stdout, os.Stderr)
+	stop()
+	os.Exit(code)
+}
+
+func run(ctx context.Context, args []string, env *config.Env, stdout, stderr io.Writer) int {
+	log := obs.NewLogger(stderr, slog.LevelInfo)
+	switch {
+	case len(args) == 1 && args[0] == "version":
+		_, _ = fmt.Fprintln(stdout, buildVersion())
+		return 0
+	case len(args) == 1 && (args[0] == "help" || args[0] == "-h" || args[0] == "--help"):
+		_, _ = fmt.Fprint(stdout, usage)
+		return 0
+	case len(args) == 1 && args[0] == "daemon":
+		if err := daemon(ctx, env, log); err != nil && !errors.Is(err, context.Canceled) {
+			log.Error("jobs daemon failed", "error", err.Error())
+			return 1
+		}
+		return 0
+	case len(args) == 2 && args[0] == "run":
+		if err := runOnce(ctx, env, log, args[1]); err != nil {
+			log.Error("jobs run failed", "task", args[1], "error", err.Error())
+			return 1
+		}
+		return 0
+	default:
+		_, _ = fmt.Fprint(stderr, usage)
+		return 2
+	}
+}
+
+func buildVersion() string {
+	v := version
+	if bi, ok := debug.ReadBuildInfo(); ok {
+		for _, s := range bi.Settings {
+			if s.Key == "vcs.revision" && s.Value != "" {
+				v += " " + s.Value
+			}
+		}
+	}
+	return v
+}
+
+// deps are the connections both commands need.
+type deps struct {
+	nc    *nats.Conn
+	db    *pdb.DB
+	sites *registry.Watcher[registry.Site]
+	sched *scheduler.Scheduler
+	reg   *prometheus.Registry
+	stop  func()
+}
+
+// retryEvery is how often a follower tries to take the jobs lock. a third of
+// a second keeps takeover close to the lock ttl.
+const retryEvery = 300 * time.Millisecond
+
+// connectTimeout bounds the startup connections, so a wrong address fails
+// the process instead of hanging it.
+const connectTimeout = 30 * time.Second
+
+func open(ctx context.Context, env *config.Env, log *slog.Logger, opsAddr bool) (*deps, string, error) {
+	natsCfg, natsErr := config.LoadNATS(env)
+	dbCfg, dbErr := pdb.LoadPoolConfig(env, pdb.RoleJobs)
+	var addr string
+	if opsAddr {
+		addr = env.String("JOBS_OPS_ADDR")
+	}
+	// one error naming every missing key, as config promises
+	if err := errors.Join(natsErr, dbErr, env.Err()); err != nil {
+		return nil, "", err
+	}
+	holder, err := holderID()
+	if err != nil {
+		return nil, "", err
+	}
+
+	cctx, cancel := context.WithTimeout(ctx, connectTimeout)
+	defer cancel()
+	d, err := pdb.Open(cctx, dbCfg, natsx.ServiceJobs)
+	if err != nil {
+		return nil, "", err
+	}
+	nc, err := natsx.Connect(natsCfg, natsx.ServiceJobs, log)
+	if err != nil {
+		d.Close()
+		return nil, "", err
+	}
+	closeAll := func() { nc.Close(); d.Close() }
+	js, err := jetstream.New(nc)
+	if err != nil {
+		closeAll()
+		return nil, "", err
+	}
+	locks, err := js.KeyValue(cctx, natsx.BucketLocks)
+	if err != nil {
+		closeAll()
+		return nil, "", fmt.Errorf("bind %s (run platformctl nats apply): %w", natsx.BucketLocks, err)
+	}
+	lock, err := natsx.NewLock(locks, natsx.LockJobs, holder)
+	if err != nil {
+		closeAll()
+		return nil, "", err
+	}
+
+	reg := obs.NewRegistry()
+	sm, err := scheduler.NewMetrics(reg)
+	if err != nil {
+		closeAll()
+		return nil, "", err
+	}
+	em, err := edgestats.NewMetrics(reg)
+	if err != nil {
+		closeAll()
+		return nil, "", err
+	}
+	sites := registry.NewSiteWatcher(js, log)
+	drainer, err := edgestats.New(js, sites, log, em)
+	if err != nil {
+		closeAll()
+		return nil, "", err
+	}
+	pruner, err := statsdedup.New(time.Now, log, reg)
+	if err != nil {
+		closeAll()
+		return nil, "", err
+	}
+	prune := func(ctx context.Context, l *scheduler.Leader) error {
+		_, err := pruner.Prune(ctx, l.Tx)
+		return err
+	}
+	tasks := []scheduler.Task{{
+		Name: edgestats.TaskName,
+		Run: func(ctx context.Context, l *scheduler.Leader) error {
+			return drainer.Run(ctx, l.Tx)
+		},
+		Once: func(ctx context.Context, l *scheduler.Leader) error {
+			n, err := drainer.Drain(ctx, l.Tx)
+			log.Info("edge stats drained", "messages", n)
+			return err
+		},
+	}, {
+		Name:  statsdedup.TaskName,
+		Every: statsdedup.Every,
+		Run:   prune,
+		Once:  prune,
+	}}
+	return &deps{
+		nc:    nc,
+		db:    d,
+		sites: sites,
+		reg:   reg,
+		sched: &scheduler.Scheduler{
+			Lock: lock, DB: d, Tasks: tasks, Log: log, Metrics: sm, RetryEvery: retryEvery,
+		},
+		stop: closeAll,
+	}, addr, nil
+}
+
+// holderID names this process in the lock. it must be unique per process,
+// so a restarted daemon on the same host is a different holder.
+func holderID() (string, error) {
+	host, err := os.Hostname()
+	if err != nil {
+		return "", fmt.Errorf("hostname: %w", err)
+	}
+	b := make([]byte, 6)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return strings.ReplaceAll(host, ".", "-") + "-" + hex.EncodeToString(b), nil
+}
+
+func daemon(ctx context.Context, env *config.Env, log *slog.Logger) error {
+	dp, addr, err := open(ctx, env, log, true)
+	if err != nil {
+		return err
+	}
+	defer dp.stop()
+	var lc net.ListenConfig
+	ln, err := lc.Listen(ctx, "tcp", addr)
+	if err != nil {
+		return fmt.Errorf("listen %s: %w", addr, err)
+	}
+	pool, err := dp.db.Pool(pdb.RoleJobs)
+	if err != nil {
+		return err
+	}
+	// ready means able to lead: a follower is ready too, so both core nodes
+	// stay in rotation and either can take over
+	ops := obs.NewOpsHandler(dp.reg, log,
+		obs.Check{Name: "postgres", Fn: pool.Ping},
+		obs.Check{Name: "nats", Fn: func(context.Context) error {
+			if s := dp.nc.Status(); s != nats.CONNECTED {
+				return fmt.Errorf("nats connection is %s", s)
+			}
+			return nil
+		}},
+		obs.Check{Name: "registry", Fn: func(context.Context) error {
+			if !dp.sites.Loaded() {
+				return errors.New("site registry snapshot not loaded")
+			}
+			return nil
+		}},
+	)
+
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	var wg sync.WaitGroup
+	errs := make(chan error, 3)
+	wg.Go(func() { errs <- dp.sites.Run(ctx) })
+	wg.Go(func() { errs <- obs.ServeListener(ctx, obs.NewServer(addr, ops), ln, log) })
+	wg.Go(func() { errs <- dp.sched.Run(ctx) })
+	// the first to return ends the daemon: a scheduler that cannot run, or an
+	// ops server that died, must not leave a half-working process behind
+	err = <-errs
+	cancel()
+	wg.Wait()
+	if err != nil && !errors.Is(err, context.Canceled) {
+		return err
+	}
+	return ctx.Err()
+}
+
+func runOnce(ctx context.Context, env *config.Env, log *slog.Logger, name string) error {
+	dp, _, err := open(ctx, env, log, false)
+	if err != nil {
+		return err
+	}
+	defer dp.stop()
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	var wg sync.WaitGroup
+	wg.Go(func() { _ = dp.sites.Run(ctx) })
+	// a one-off run must not wait forever on a registry that never loads
+	if err := waitLoaded(ctx, dp.sites, connectTimeout); err != nil {
+		cancel()
+		wg.Wait()
+		return err
+	}
+	err = dp.sched.RunOnce(ctx, name)
+	cancel()
+	wg.Wait()
+	return err
+}
+
+func waitLoaded(ctx context.Context, sites *registry.Watcher[registry.Site], within time.Duration) error {
+	deadline := time.Now().Add(within)
+	for !sites.Loaded() {
+		if time.Now().After(deadline) {
+			return fmt.Errorf("site registry snapshot not loaded within %s (run platformctl nats apply)", within)
+		}
+		t := time.NewTimer(100 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			t.Stop()
+			return ctx.Err()
+		case <-t.C:
+		}
+	}
+	return nil
+}

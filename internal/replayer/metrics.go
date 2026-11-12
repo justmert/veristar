@@ -1,0 +1,115 @@
+package replayer
+
+import (
+	"fmt"
+
+	"github.com/prometheus/client_golang/prometheus"
+)
+
+// outcome labels of replayer_outcomes_total
+const (
+	outcomeDelivered = "delivered"
+	outcomeBot       = "bot"
+	outcomeDLQ       = "dlq"
+	outcomeDuplicate = "duplicate_skipped"
+)
+
+// result labels of replayer_send_duration_seconds
+const (
+	sendOK          = "ok"
+	sendBot         = "bot"
+	sendClientError = "client_error"
+	sendServerError = "server_error"
+	sendNetwork     = "network"
+)
+
+type metrics struct {
+	leader       prometheus.Gauge
+	pending      prometheus.Gauge
+	ackPending   prometheus.Gauge
+	lagSampled   prometheus.Gauge
+	send         *prometheus.HistogramVec
+	outcomes     *prometheus.CounterVec
+	retries      prometheus.Counter
+	undecodable  prometheus.Counter
+	bookkeeping  prometheus.Counter
+	inFlight     prometheus.GaugeFunc
+	oldestHeld   prometheus.GaugeFunc
+	ackFailures  prometheus.Counter
+	lockConfirms *prometheus.CounterVec
+}
+
+func newMetrics(reg prometheus.Registerer, inFlight, oldestAge func() float64) (*metrics, error) {
+	m := &metrics{
+		leader: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "replayer_leader",
+			Help: "1 while this instance holds the replayer lock and consumes, else 0.",
+		}),
+		pending: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "replayer_consumer_pending_messages",
+			Help: "consumer lag: WEB_EVENTS messages not yet delivered to the replayer consumer.",
+		}),
+		ackPending: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "replayer_consumer_ack_pending_messages",
+			Help: "WEB_EVENTS messages delivered to the replayer consumer and not yet acknowledged.",
+		}),
+		lagSampled: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "replayer_consumer_info_timestamp_seconds",
+			Help: "unix time of the last successful consumer info read behind the lag gauges.",
+		}),
+		send: prometheus.NewHistogramVec(prometheus.HistogramOpts{
+			Name:    "replayer_send_duration_seconds",
+			Help:    "latency of umami /api/send calls by result (ok, bot, client_error, server_error, network).",
+			Buckets: []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 15},
+		}, []string{"result"}),
+		outcomes: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "replayer_outcomes_total",
+			Help: "final outcome per WEB_EVENTS message (delivered, bot, dlq, duplicate_skipped).",
+		}, []string{"outcome"}),
+		retries: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "replayer_retries_total",
+			Help: "transient failures retried in place (umami 5xx, 408, 429, network, nats).",
+		}),
+		undecodable: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "replayer_undecodable_total",
+			Help: "messages moved to WEB_DLQ because they are not a valid web event.",
+		}),
+		bookkeeping: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "replayer_bookkeeping_retries_total",
+			Help: "retries of the visit state and duplicate guard writes after umami already stored the event.",
+		}),
+		ackFailures: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "replayer_ack_failures_total",
+			Help: "acks the server did not confirm; the message comes back and the duplicate guard skips it.",
+		}),
+		lockConfirms: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "replayer_lock_confirms_total",
+			Help: "lock confirmations before sends by result (ok, lost).",
+		}, []string{"result"}),
+		inFlight: prometheus.NewGaugeFunc(prometheus.GaugeOpts{
+			Name: "replayer_in_flight_messages",
+			Help: "messages held between fetch and ack by this instance.",
+		}, inFlight),
+		oldestHeld: prometheus.NewGaugeFunc(prometheus.GaugeOpts{
+			Name: "replayer_oldest_pending_age_seconds",
+			Help: "age, from its stream publish time, of the oldest message this leader holds unacknowledged. 0 on a standby or when nothing is held.",
+		}, oldestAge),
+	}
+	for _, c := range []prometheus.Collector{m.leader, m.pending, m.ackPending, m.lagSampled, m.send, m.outcomes,
+		m.retries, m.undecodable, m.bookkeeping, m.ackFailures, m.lockConfirms, m.inFlight, m.oldestHeld} {
+		if err := reg.Register(c); err != nil {
+			return nil, fmt.Errorf("replayer: register metrics: %w", err)
+		}
+	}
+	// create every labelled series at 0, so alerts and rates work before the
+	// first event of each kind
+	for _, o := range []string{outcomeDelivered, outcomeBot, outcomeDLQ, outcomeDuplicate} {
+		m.outcomes.WithLabelValues(o)
+	}
+	for _, r := range []string{sendOK, sendBot, sendClientError, sendServerError, sendNetwork} {
+		m.send.WithLabelValues(r)
+	}
+	m.lockConfirms.WithLabelValues("ok")
+	m.lockConfirms.WithLabelValues("lost")
+	return m, nil
+}

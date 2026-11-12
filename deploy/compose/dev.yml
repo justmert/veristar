@@ -81,6 +81,76 @@ services:
       # first boot runs every prisma migration before the server listens
       start_period: 120s
 
+  # collect gateway (this stage). in the "edge" profile, because it needs the
+  # nats topology that `platformctl nats apply` creates after dev-up; start
+  # it with `make gateway-up`. ports bind to loopback only: in production
+  # only the local caddy reaches the public port, and here a client that
+  # talks to it directly has to set X-Edge-Client-Ip itself.
+  gateway:
+    profiles: ["edge"]
+    build:
+      context: ../..
+      dockerfile: deploy/images/gateway.Dockerfile
+      args:
+        # the makefile passes the current utc month; empty fails the build
+        DBIP_MONTH: ${DBIP_MONTH:-}
+    image: stellar-analytics/gateway:dev
+    depends_on:
+      nats:
+        condition: service_healthy
+    # starting values from docs/reference/gateway-limits.md
+    environment:
+      NATS_URL: nats://nats:4222
+      NATS_REPLICAS: "1"
+      GATEWAY_NODE_ID: dev-1
+      GATEWAY_ADDR: 0.0.0.0:8080
+      GATEWAY_OPS_ADDR: 0.0.0.0:9090
+      PROOF_BITS: "12"
+      PROOF_REPLAY_LIMIT: "50"
+      IPCLUSTER_THRESHOLD: "20"
+      RATE_SITE_PER_SECOND: "200"
+      RATE_SITE_BURST: "400"
+      RATE_PREFIX_PER_SECOND: "20"
+      RATE_PREFIX_BURST: "60"
+      GATEWAY_MAX_BODY: "8192"
+      CLIENT_IP_HEADER: X-Edge-Client-Ip
+      # no tls in front in dev, so browsers send no fetch metadata
+      GATEWAY_SECURE_TRANSPORT: "false"
+      TZ: UTC
+    ports:
+      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:9090:9090"
+
+  # replayer (this stage): drains WEB_EVENTS into umami's /api/send on the
+  # private network. in the "core" profile because it needs the nats topology
+  # from `platformctl nats apply`; start it with
+  # `docker compose --env-file deploy/compose/.env.dev -f deploy/compose/dev.yml --profile core up -d replayer`.
+  # only the ops port is published, on loopback.
+  replayer:
+    profiles: ["core"]
+    build:
+      context: ../..
+      dockerfile: deploy/images/go-service.Dockerfile
+      args:
+        CMD: replayer
+    image: stellar-analytics/replayer:dev
+    depends_on:
+      nats:
+        condition: service_healthy
+      umami:
+        condition: service_healthy
+    environment:
+      NATS_URL: nats://nats:4222
+      NATS_REPLICAS: "1"
+      REPLAYER_NODE_ID: dev-1
+      REPLAYER_OPS_ADDR: 0.0.0.0:9090
+      UMAMI_URL: http://umami:3000
+      REPLAYER_WORKERS: "16"
+      REPLAYER_MAX_IN_FLIGHT: "512"
+      TZ: UTC
+    ports:
+      - "127.0.0.1:9091:9090"
+
 volumes:
   pgdata:
   natsdata:

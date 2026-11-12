@@ -127,6 +127,9 @@ func TestJobsBoundaries(t *testing.T) {
 	require.Zero(t, n, "an applied message id is not applied twice")
 	_, err = attempt(t, pdb.RoleJobs, nil, `delete from cp.web_ingest_hourly`)
 	requireDenied(t, err, "jobs deleting edge counters")
+	// statsdedup-prune removes old message ids (migration 00006)
+	_, err = attempt(t, pdb.RoleJobs, nil, `delete from cp.stats_dedup where applied_at < now() - interval '8 days'`)
+	require.NoError(t, err)
 }
 
 func TestAuditLogAppendOnly(t *testing.T) {

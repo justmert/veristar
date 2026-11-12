@@ -50,7 +50,7 @@ var wantGrants = map[string]map[pdb.Role]string{
 		pdb.RoleCPOperator: "r",
 		pdb.RoleJobs:       "raw",
 	},
-	"cp.stats_dedup":    {pdb.RoleCPSystem: "rawd", pdb.RoleJobs: "raw"},
+	"cp.stats_dedup":    {pdb.RoleCPSystem: "rawd", pdb.RoleJobs: "rawd"},
 	"cp.leader_fence":   {pdb.RoleCPSystem: "rawd", pdb.RoleMetricsWriter: "rw", pdb.RoleJobs: "rw"},
 	"cp.operator_sites": {pdb.RoleCPSystem: "r", pdb.RoleCPOperator: "r"},
 }

@@ -104,6 +104,11 @@ func New(base *url.URL, hc *http.Client) (*Client, error) {
 const maxBody = 1 << 20
 
 func (c *Client) do(ctx context.Context, op, method, path string, token Token, in, out any) error {
+	return c.doHeaders(ctx, op, method, path, token, nil, in, out)
+}
+
+// doHeaders is do with extra request headers. only /api/send needs them.
+func (c *Client) doHeaders(ctx context.Context, op, method, path string, token Token, hdr http.Header, in, out any) error {
 	var body io.Reader
 	if in != nil {
 		b, err := json.Marshal(in)
@@ -122,6 +127,11 @@ func (c *Client) do(ctx context.Context, op, method, path string, token Token, i
 	}
 	if !token.Empty() {
 		req.Header.Set("Authorization", "Bearer "+token.Reveal())
+	}
+	for k, vs := range hdr {
+		for _, v := range vs {
+			req.Header.Add(k, v)
+		}
 	}
 	resp, err := c.hc.Do(req)
 	if err != nil {

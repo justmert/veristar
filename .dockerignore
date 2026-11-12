@@ -1,0 +1,13 @@
+# keeps the build context small and free of secrets and scratch files.
+# the go images need go.mod, go.sum, db, cmd, internal and scripts; the
+# gateway image also needs packages/tracker/releases.
+.git
+resources
+**/node_modules
+**/dist
+**/test-results
+**/playwright-report
+**/.env
+**/.env.*
+deploy/compose/.env.dev
+*.log

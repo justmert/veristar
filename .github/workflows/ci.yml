@@ -35,7 +35,11 @@ jobs:
           sudo install "golangci-lint-${v}-linux-amd64/golangci-lint" /usr/local/bin/
       - run: make vet
       - run: make lint
+      # db-ip country lite (cc by 4.0) for the gateway geo tests
+      - run: make geo-fetch
       - run: make test
+        env:
+          DBIP_MMDB: .scratch/scratch/geo/dbip-country-lite.mmdb
 
   js:
     runs-on: ubuntu-24.04

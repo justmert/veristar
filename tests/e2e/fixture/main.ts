@@ -19,9 +19,16 @@ import { fileURLToPath } from "node:url";
 import { GATEWAY_HOST, PORTS, SITES, TENANT_DOMAIN } from "../sites.ts";
 import { createCert } from "./certs.ts";
 import { checkVectors, FixtureGateway, type ProofVector } from "./gateway.ts";
+import { UpstreamGateway } from "./upstream.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const releasesDir = resolve(here, "../../../packages/tracker/releases");
+
+function requiredString(name: string): string {
+  const raw = process.env[name];
+  if (raw === undefined || raw === "") throw new Error(`missing env ${name}`);
+  return raw;
+}
 
 function requiredInt(name: string): number {
   const raw = process.env[name];
@@ -39,13 +46,23 @@ checkVectors(vectors);
 const proofKeyHex = vectors[0]?.proofKeyHex;
 if (!proofKeyHex) throw new Error(`${vectorsFile} has no proof key`);
 
-const gateway = new FixtureGateway({
-  releasesDir,
-  proofKey: Buffer.from(proofKeyHex, "hex"),
-  proofBits: requiredInt("SA_E2E_PROOF_BITS"),
-  replayLimit: requiredInt("SA_E2E_REPLAY_LIMIT"),
-  sites: SITES.map((s) => ({ siteId: s.siteId, origins: [s.origin], status: "active" })),
-});
+// SA_E2E_GATEWAY_UPSTREAM switches to the real-gateway mode (upstream.ts): the
+// go test in tests/gateway starts caddy, the gateway image and nats, then runs
+// the same specs with requests forwarded to caddy
+const upstream = process.env.SA_E2E_GATEWAY_UPSTREAM ?? "";
+const gateway = upstream
+  ? new UpstreamGateway({
+      upstream,
+      host: GATEWAY_HOST,
+      eventLog: requiredString("SA_E2E_EVENT_LOG"),
+    })
+  : new FixtureGateway({
+      releasesDir,
+      proofKey: Buffer.from(proofKeyHex, "hex"),
+      proofBits: requiredInt("SA_E2E_PROOF_BITS"),
+      replayLimit: requiredInt("SA_E2E_REPLAY_LIMIT"),
+      sites: SITES.map((s) => ({ siteId: s.siteId, origins: [s.origin], status: "active" })),
+    });
 
 const siteByHost = new Map(SITES.map((s) => [s.host, s]));
 // requests that reached the proxy or tls front for a host the fixture does not
@@ -150,7 +167,7 @@ tls.listen(PORTS.tls, "127.0.0.1");
 proxy.listen(PORTS.proxy, "127.0.0.1");
 control.listen(PORTS.control, "127.0.0.1");
 console.log(
-  `e2e fixture: proxy :${PORTS.proxy}, tls :${PORTS.tls}, control :${PORTS.control}, releases ${join(releasesDir)}`,
+  `e2e fixture (${upstream ? `real gateway via ${upstream}` : "fixture gateway"}): proxy :${PORTS.proxy}, tls :${PORTS.tls}, control :${PORTS.control}, releases ${join(releasesDir)}`,
 );
 
 for (const sig of ["SIGINT", "SIGTERM"] as const) {

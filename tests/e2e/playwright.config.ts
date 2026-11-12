@@ -63,7 +63,14 @@ export default defineConfig({
     {
       command: "node fixture/main.ts",
       url: `http://127.0.0.1:${PORTS.control}/health`,
-      env: { SA_E2E_PROOF_BITS: String(PROOF_BITS), SA_E2E_REPLAY_LIMIT: "100" },
+      // in the real-gateway mode (tests/gateway sets SA_E2E_GATEWAY_UPSTREAM and
+      // SA_E2E_EVENT_LOG) the gateway's own settings apply and these are unused
+      env: {
+        SA_E2E_PROOF_BITS: String(PROOF_BITS),
+        SA_E2E_REPLAY_LIMIT: "100",
+        SA_E2E_GATEWAY_UPSTREAM: process.env.SA_E2E_GATEWAY_UPSTREAM ?? "",
+        SA_E2E_EVENT_LOG: process.env.SA_E2E_EVENT_LOG ?? "",
+      },
       timeout: 30_000,
       reuseExistingServer: false,
       stdout: "pipe",

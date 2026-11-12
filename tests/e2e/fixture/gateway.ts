@@ -365,7 +365,7 @@ function send(res: ServerResponse, status: number, reason: string, cors = false)
   return { status, reason };
 }
 
-function flatHeaders(req: IncomingMessage): Record<string, string> {
+export function flatHeaders(req: IncomingMessage): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(req.headers)) {
     if (v === undefined) continue;
@@ -374,7 +374,7 @@ function flatHeaders(req: IncomingMessage): Record<string, string> {
   return out;
 }
 
-function readBody(req: IncomingMessage, limit: number): Promise<Buffer> {
+export function readBody(req: IncomingMessage, limit: number): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     let size = 0;
