@@ -19,6 +19,7 @@
     "react": "catalog:",
     "react-dom": "catalog:",
     "react-router": "catalog:",
+    "recharts": "catalog:",
     "shadcn": "catalog:",
     "tw-animate-css": "catalog:",
     "zod": "catalog:"

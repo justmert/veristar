@@ -3,7 +3,15 @@
 
 import { request, requestNoContent } from "./client";
 import {
+  type ApiRangePreset,
+  type ApiRouteSort,
   addMemberResult,
+  apiOverview,
+  apiRoutes,
+  apiServices,
+  apiStatus,
+  apiTimeseries,
+  apiWarnings,
   auditPage,
   type EnrollmentMode,
   enrollmentMode,
@@ -104,6 +112,61 @@ export function auditPath(q: AuditQuery, cursor: string | null): string {
     ["limit", "50"],
     ["cursor", cursor ?? ""],
   ])}`;
+}
+
+// contract 7.1: the range of every api metrics route. from and to exist
+// only for a custom range.
+export type ApiRangeQuery =
+  | { range: ApiRangePreset }
+  | { range: "custom"; from: string; to: string };
+
+// a filter is null when absent. an empty string is a real filter value
+// (contract 7.1: it matches points stored without that attribute), so it is
+// sent, unlike the empty values query() drops.
+export type ApiFilters = { service: string | null; route: string | null; method: string | null };
+
+export type ApiRoutesQuery = {
+  sort: ApiRouteSort;
+  order: "asc" | "desc";
+  limit: number;
+  cursor: string | null;
+};
+
+function rangeParams(r: ApiRangeQuery): [string, string][] {
+  return r.range === "custom"
+    ? [
+        ["range", "custom"],
+        ["from", r.from],
+        ["to", r.to],
+      ]
+    : [["range", r.range]];
+}
+
+function filterParams(f: ApiFilters): [string, string][] {
+  const out: [string, string][] = [];
+  if (f.service !== null) out.push(["service", f.service]);
+  if (f.route !== null) out.push(["route", f.route]);
+  if (f.method !== null) out.push(["method", f.method]);
+  return out;
+}
+
+function exactQuery(params: [string, string][]): string {
+  return params.length ? `?${params.map(([k, v]) => `${k}=${enc(v)}`).join("&")}` : "";
+}
+
+export function apiMetricsPath(
+  tenantId: string,
+  kind: "overview" | "timeseries" | "status" | "services" | "warnings" | "routes",
+  r: ApiRangeQuery,
+  f: ApiFilters | null,
+  routes?: ApiRoutesQuery,
+): string {
+  const params = [...rangeParams(r), ...(f ? filterParams(f) : [])];
+  if (routes) {
+    params.push(["sort", routes.sort], ["order", routes.order], ["limit", String(routes.limit)]);
+    if (routes.cursor !== null) params.push(["cursor", routes.cursor]);
+  }
+  return `/tenants/${enc(tenantId)}/api-metrics/${kind}${exactQuery(params)}`;
 }
 
 // a reason is sent only when one was written: approve and resume take an
@@ -211,6 +274,33 @@ export const api = {
     request("POST", `/tenants/${enc(tenantId)}/otlp-tokens`, otlpTokenCreated, body),
   revokeOtlpToken: (tenantId: string, tokenId: string) =>
     requestNoContent("DELETE", `/tenants/${enc(tenantId)}/otlp-tokens/${enc(tokenId)}`),
+
+  apiMetrics: {
+    overview: (tenantId: string, r: ApiRangeQuery, f: ApiFilters, signal?: AbortSignal) =>
+      request("GET", apiMetricsPath(tenantId, "overview", r, f), apiOverview, undefined, signal),
+    timeseries: (tenantId: string, r: ApiRangeQuery, f: ApiFilters, signal?: AbortSignal) =>
+      request(
+        "GET",
+        apiMetricsPath(tenantId, "timeseries", r, f),
+        apiTimeseries,
+        undefined,
+        signal,
+      ),
+    status: (tenantId: string, r: ApiRangeQuery, f: ApiFilters, signal?: AbortSignal) =>
+      request("GET", apiMetricsPath(tenantId, "status", r, f), apiStatus, undefined, signal),
+    routes: (
+      tenantId: string,
+      r: ApiRangeQuery,
+      f: ApiFilters,
+      q: ApiRoutesQuery,
+      signal?: AbortSignal,
+    ) => request("GET", apiMetricsPath(tenantId, "routes", r, f, q), apiRoutes, undefined, signal),
+    // services and warnings take the range only (contract 7.9 and 7.10)
+    services: (tenantId: string, r: ApiRangeQuery, signal?: AbortSignal) =>
+      request("GET", apiMetricsPath(tenantId, "services", r, null), apiServices, undefined, signal),
+    warnings: (tenantId: string, r: ApiRangeQuery, signal?: AbortSignal) =>
+      request("GET", apiMetricsPath(tenantId, "warnings", r, null), apiWarnings, undefined, signal),
+  },
 
   siteVerification: (siteId: string, signal?: AbortSignal) =>
     request("GET", `/sites/${enc(siteId)}/verification`, siteVerification, undefined, signal),

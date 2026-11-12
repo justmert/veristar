@@ -401,3 +401,152 @@ export const errorEnvelope = z.object({
     request_id: z.string(),
   }),
 });
+
+// 7.2 the range an api metrics answer was computed for
+export const apiRangePreset = z.enum(["1h", "24h", "7d", "30d", "90d", "12mo", "24mo"]);
+export type ApiRangePreset = z.infer<typeof apiRangePreset>;
+
+export const apiRange = z.object({
+  preset: z.union([apiRangePreset, z.literal("custom"), z.literal("previous")]),
+  from: time,
+  to: time,
+  resolution: z.enum(["minute", "hour", "day"]),
+  bucket_seconds: z.union([z.literal(60), z.literal(3600), z.literal(86400)]),
+  resolution_note: z
+    .enum(["older_than_minute_retention", "older_than_hourly_retention"])
+    .nullable(),
+});
+export type ApiRange = z.infer<typeof apiRange>;
+
+// 7.3 which rows a service's numbers come from
+export const apiSourceKind = z.enum(["metric", "span"]);
+export const apiSource = z.object({
+  service: z.string(),
+  source: apiSourceKind,
+  span_data_ignored: z.boolean(),
+});
+export type ApiSource = z.infer<typeof apiSource>;
+
+// 7.4 a percentile in seconds, the open bucket above 10 s, or none without requests
+export const percentile = z.union([z.number().nonnegative(), z.literal(">10 s")]).nullable();
+export type Percentile = z.infer<typeof percentile>;
+
+const nonneg = z.number().int().nonnegative();
+const rate = z.number().min(0).max(1).nullable();
+
+export const apiSummary = z.object({
+  requests: nonneg,
+  errors_4xx: nonneg,
+  errors_5xx: nonneg,
+  rate_4xx: rate,
+  rate_5xx: rate,
+  p50: percentile,
+  p95: percentile,
+  p99: percentile,
+  lossy: z.boolean(),
+});
+export type ApiSummary = z.infer<typeof apiSummary>;
+
+const apiPeriod = z.object({ range: apiRange, sources: z.array(apiSource), summary: apiSummary });
+
+// 7.5
+export const apiOverview = z.object({ current: apiPeriod, previous: apiPeriod });
+export type ApiOverview = z.infer<typeof apiOverview>;
+
+// 7.6
+export const apiPoint = apiSummary.extend({ at: time });
+export type ApiPoint = z.infer<typeof apiPoint>;
+export const apiTimeseries = z.object({
+  range: apiRange,
+  sources: z.array(apiSource),
+  points: z.array(apiPoint).max(800),
+});
+export type ApiTimeseries = z.infer<typeof apiTimeseries>;
+
+// 7.7
+export const apiRouteSort = z.enum([
+  "requests",
+  "errors_4xx",
+  "errors_5xx",
+  "rate_4xx",
+  "rate_5xx",
+  "p50",
+  "p95",
+  "p99",
+  "route",
+]);
+export type ApiRouteSort = z.infer<typeof apiRouteSort>;
+
+export const apiRouteItem = apiSummary.extend({
+  service: z.string(),
+  method: z.string(),
+  route: z.string(),
+  source: apiSourceKind,
+});
+export type ApiRouteItem = z.infer<typeof apiRouteItem>;
+export const apiRoutes = z.object({
+  range: apiRange,
+  sources: z.array(apiSource),
+  total: nonneg,
+  items: z.array(apiRouteItem),
+  next_cursor: z.string().nullable(),
+});
+export type ApiRoutes = z.infer<typeof apiRoutes>;
+
+// 7.8
+export const statusClass = z.enum(["1xx", "2xx", "3xx", "4xx", "5xx", "unknown"]);
+export type StatusClass = z.infer<typeof statusClass>;
+export const apiStatus = z.object({
+  range: apiRange,
+  sources: z.array(apiSource),
+  requests: nonneg,
+  // always these six, in this order
+  classes: z.tuple([
+    z.object({ class: z.literal("1xx"), requests: nonneg }),
+    z.object({ class: z.literal("2xx"), requests: nonneg }),
+    z.object({ class: z.literal("3xx"), requests: nonneg }),
+    z.object({ class: z.literal("4xx"), requests: nonneg }),
+    z.object({ class: z.literal("5xx"), requests: nonneg }),
+    z.object({ class: z.literal("unknown"), requests: nonneg }),
+  ]),
+  codes: z.array(
+    z.object({
+      status_code: z.number().int().min(0).max(999),
+      class: statusClass,
+      requests: nonneg,
+    }),
+  ),
+});
+export type ApiStatus = z.infer<typeof apiStatus>;
+
+// 7.9
+export const apiServiceItem = apiSource.extend({ requests: nonneg, lossy: z.boolean() });
+export type ApiServiceItem = z.infer<typeof apiServiceItem>;
+export const apiServices = z.object({ range: apiRange, items: z.array(apiServiceItem) });
+export type ApiServices = z.infer<typeof apiServices>;
+
+// 7.10
+export const warningKind = z.enum([
+  "span_derived",
+  "lossy_histogram",
+  "cardinality_overflow",
+  "secret_in_path",
+]);
+export type WarningKind = z.infer<typeof warningKind>;
+function warningTotal<K extends WarningKind>(kind: K) {
+  return z.object({ kind: z.literal(kind), count: nonneg, last_day: z.iso.date().nullable() });
+}
+export const apiWarnings = z.object({
+  range: apiRange,
+  // always these four, in this order
+  totals: z.tuple([
+    warningTotal("span_derived"),
+    warningTotal("lossy_histogram"),
+    warningTotal("cardinality_overflow"),
+    warningTotal("secret_in_path"),
+  ]),
+  days: z.array(
+    z.object({ day: z.iso.date(), kind: warningKind, count: z.number().int().positive() }),
+  ),
+});
+export type ApiWarnings = z.infer<typeof apiWarnings>;

@@ -2,6 +2,7 @@ import { createBrowserRouter, type LoaderFunctionArgs, redirect } from "react-ro
 import { ApiError } from "@/api/client";
 import { meQuery } from "@/api/queries";
 import { ApiSetupPage } from "@/pages/api-setup";
+import { ApiTrafficPage } from "@/pages/api-traffic";
 import { AppShell } from "@/pages/app-shell";
 import { EnrollPage } from "@/pages/enroll";
 import { MembersPage } from "@/pages/members";
@@ -66,6 +67,7 @@ export const router = createBrowserRouter([
           { path: "sites/:siteId/verify", element: <VerifyPage /> },
           { path: "members", element: <MembersPage /> },
           { path: "api", element: <ApiSetupPage /> },
+          { path: "api/traffic", element: <ApiTrafficPage /> },
         ],
       },
       {

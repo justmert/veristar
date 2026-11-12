@@ -32,6 +32,15 @@
   --color-good: var(--good);
   --color-warn: var(--warn);
   --color-orbit: var(--orbit);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4xx: var(--chart-4xx);
+  --color-chart-5xx: var(--chart-5xx);
+  --color-chart-1xx: var(--chart-1xx);
+  --color-chart-3xx: var(--chart-3xx);
+  --color-chart-none: var(--chart-none);
+  --color-chart-grid: var(--chart-grid);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -68,6 +77,22 @@
   --warn: #a35a00;
   --orbit: #b9c0dc;
   --radius: 0.5rem;
+  /*
+   * chart series, checked with the dataviz palette validator against the
+   * card surface of each mode. 1, 2, 3 are the latency lines and volume;
+   * the status class colours keep one meaning across the page (2xx uses
+   * chart-1). light aqua, yellow and pink are under 3:1 on white, so every
+   * chart has a legend and a table view.
+   */
+  --chart-1: #2a78d6;
+  --chart-2: #eb6834;
+  --chart-3: #1baf7a;
+  --chart-1xx: #e87ba4;
+  --chart-3xx: #1baf7a;
+  --chart-4xx: #eda100;
+  --chart-5xx: #d03b3b;
+  --chart-none: #898781;
+  --chart-grid: #e3e6ef;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -94,6 +119,15 @@
     --good: #5fd39a;
     --warn: #f0a94a;
     --orbit: #36406a;
+    --chart-1: #3987e5;
+    --chart-2: #d95926;
+    --chart-3: #199e70;
+    --chart-1xx: #d55181;
+    --chart-3xx: #199e70;
+    --chart-4xx: #c98500;
+    --chart-5xx: #d03b3b;
+    --chart-none: #898781;
+    --chart-grid: #252e4f;
   }
 }
 

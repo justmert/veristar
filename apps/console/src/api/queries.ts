@@ -2,7 +2,14 @@
 // it changed
 
 import { infiniteQueryOptions, queryOptions } from "@tanstack/react-query";
-import { type AuditQuery, api, type TenantListQuery } from "./endpoints";
+import {
+  type ApiFilters,
+  type ApiRangeQuery,
+  type ApiRoutesQuery,
+  type AuditQuery,
+  api,
+  type TenantListQuery,
+} from "./endpoints";
 
 export const keys = {
   me: ["me"] as const,
@@ -16,6 +23,8 @@ export const keys = {
   otlpTokens: (id: string, includeRevoked: boolean) =>
     ["tenant", id, "otlp-tokens", includeRevoked] as const,
   otlpTokensAll: (id: string) => ["tenant", id, "otlp-tokens"] as const,
+  apiMetrics: (id: string, kind: string, ...rest: unknown[]) =>
+    ["tenant", id, "api-metrics", kind, ...rest] as const,
   // everything an operator action can change lives under this prefix
   operator: ["operator"] as const,
   opTenants: (q: TenantListQuery) => ["operator", "tenants", q] as const,
@@ -121,4 +130,63 @@ export const auditQuery = (q: AuditQuery) =>
     queryFn: ({ signal, pageParam }) => api.operator.audit(q, pageParam, signal),
     initialPageParam: null as string | null,
     getNextPageParam: (last) => last.next_cursor,
+  });
+
+// rollups run every 5 minutes and minute rows arrive as batches are written,
+// so a minute is the useful refresh; earlier data stays on screen meanwhile
+const apiStale = 60_000;
+
+// a new range or filter keeps the previous answer on screen until the new
+// one arrives (no layout jump), but never the answer of another project
+function sameTenant(id: string) {
+  return <T>(prev: T | undefined, prevQuery: { queryKey: readonly unknown[] } | undefined) =>
+    prevQuery?.queryKey[1] === id ? prev : undefined;
+}
+
+export const apiOverviewQuery = (id: string, r: ApiRangeQuery, f: ApiFilters) =>
+  queryOptions({
+    queryKey: keys.apiMetrics(id, "overview", r, f),
+    queryFn: ({ signal }) => api.apiMetrics.overview(id, r, f, signal),
+    staleTime: apiStale,
+    placeholderData: sameTenant(id),
+  });
+
+export const apiTimeseriesQuery = (id: string, r: ApiRangeQuery, f: ApiFilters) =>
+  queryOptions({
+    queryKey: keys.apiMetrics(id, "timeseries", r, f),
+    queryFn: ({ signal }) => api.apiMetrics.timeseries(id, r, f, signal),
+    staleTime: apiStale,
+    placeholderData: sameTenant(id),
+  });
+
+export const apiStatusQuery = (id: string, r: ApiRangeQuery, f: ApiFilters) =>
+  queryOptions({
+    queryKey: keys.apiMetrics(id, "status", r, f),
+    queryFn: ({ signal }) => api.apiMetrics.status(id, r, f, signal),
+    staleTime: apiStale,
+    placeholderData: sameTenant(id),
+  });
+
+export const apiRoutesQuery = (id: string, r: ApiRangeQuery, f: ApiFilters, q: ApiRoutesQuery) =>
+  queryOptions({
+    queryKey: keys.apiMetrics(id, "routes", r, f, q),
+    queryFn: ({ signal }) => api.apiMetrics.routes(id, r, f, q, signal),
+    staleTime: apiStale,
+    placeholderData: sameTenant(id),
+  });
+
+export const apiServicesQuery = (id: string, r: ApiRangeQuery) =>
+  queryOptions({
+    queryKey: keys.apiMetrics(id, "services", r),
+    queryFn: ({ signal }) => api.apiMetrics.services(id, r, signal),
+    staleTime: apiStale,
+    placeholderData: sameTenant(id),
+  });
+
+export const apiWarningsQuery = (id: string, r: ApiRangeQuery) =>
+  queryOptions({
+    queryKey: keys.apiMetrics(id, "warnings", r),
+    queryFn: ({ signal }) => api.apiMetrics.warnings(id, r, signal),
+    staleTime: apiStale,
+    placeholderData: sameTenant(id),
   });

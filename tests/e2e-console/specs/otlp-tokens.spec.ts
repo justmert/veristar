@@ -54,7 +54,7 @@ test("the api analytics page shows the endpoint, the guides and what is kept", a
   await page.goto(`${APP}/projects/${tenant.id}`);
   await page
     .getByRole("navigation", { name: "Project" })
-    .getByRole("link", { name: "API analytics" })
+    .getByRole("link", { name: "API setup" })
     .click();
   await page.waitForURL(`${APP}/projects/${tenant.id}/api`);
   await expect(page.getByRole("heading", { name: "API analytics setup" })).toBeVisible();

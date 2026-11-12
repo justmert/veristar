@@ -401,3 +401,212 @@ export const otlpTokenBody = {
   last_seen_at: null,
 };
 export const otlpTokenCreatedBody = { ...otlpTokenBody, token: OTLP_PLAIN };
+
+// section 7: api metrics. the range, source, summary and item objects are the
+// examples of 7.2 to 7.10; lists are filled out to the shapes the text gives.
+export const apiRangeBody = {
+  preset: "24h",
+  from: "2026-11-11T10:00:00Z",
+  to: "2026-11-12T10:00:00Z",
+  resolution: "hour",
+  bucket_seconds: 3600,
+  resolution_note: null,
+};
+export const apiPreviousRangeBody = {
+  preset: "previous",
+  from: "2026-11-10T10:00:00Z",
+  to: "2026-11-11T10:00:00Z",
+  resolution: "hour",
+  bucket_seconds: 3600,
+  resolution_note: null,
+};
+export const apiSourceMetric = {
+  service: "payments-api",
+  source: "metric",
+  span_data_ignored: false,
+};
+export const apiSourceSpan = { service: "orders-worker", source: "span", span_data_ignored: false };
+export const apiSummaryBody = {
+  requests: 1200,
+  errors_4xx: 30,
+  errors_5xx: 2,
+  rate_4xx: 0.025,
+  rate_5xx: 0.0016666666666666668,
+  p50: 0.042,
+  p95: 0.31,
+  p99: ">10 s",
+  lossy: false,
+};
+export const apiPreviousSummaryBody = {
+  requests: 1000,
+  errors_4xx: 20,
+  errors_5xx: 5,
+  rate_4xx: 0.02,
+  rate_5xx: 0.005,
+  p50: 0.05,
+  p95: 0.25,
+  p99: 0.9,
+  lossy: false,
+};
+export const apiOverviewBody = {
+  current: { range: apiRangeBody, sources: [apiSourceMetric], summary: apiSummaryBody },
+  previous: {
+    range: apiPreviousRangeBody,
+    sources: [apiSourceMetric],
+    summary: apiPreviousSummaryBody,
+  },
+};
+export const apiEmptySummaryBody = {
+  requests: 0,
+  errors_4xx: 0,
+  errors_5xx: 0,
+  rate_4xx: null,
+  rate_5xx: null,
+  p50: null,
+  p95: null,
+  p99: null,
+  lossy: false,
+};
+
+// 7.6: one point per bucket of the 24 hour range, empty buckets included
+export const apiTimeseriesBody = {
+  range: apiRangeBody,
+  sources: [apiSourceMetric],
+  points: Array.from({ length: 24 }, (_, i) => {
+    const at = new Date(Date.parse("2026-11-11T10:00:00Z") + i * 3600_000)
+      .toISOString()
+      .replace(".000Z", "Z");
+    if (i === 23)
+      return {
+        at,
+        requests: 52,
+        errors_4xx: 1,
+        errors_5xx: 0,
+        rate_4xx: 0.019230769230769232,
+        rate_5xx: 0,
+        p50: 0.031,
+        p95: 0.2,
+        p99: 0.48,
+        lossy: false,
+      };
+    if (i === 22)
+      return {
+        at,
+        requests: 3,
+        errors_4xx: 0,
+        errors_5xx: 1,
+        rate_4xx: 0,
+        rate_5xx: 0.3333333333333333,
+        p50: 2,
+        p95: ">10 s",
+        p99: ">10 s",
+        lossy: true,
+      };
+    return { at, ...apiEmptySummaryBody };
+  }),
+};
+
+export const apiRouteItemBody = {
+  service: "payments-api",
+  method: "GET",
+  route: "/v1/accounts/{id}",
+  source: "metric",
+  requests: 930,
+  errors_4xx: 12,
+  errors_5xx: 0,
+  rate_4xx: 0.012903225806451613,
+  rate_5xx: 0,
+  p50: 0.04,
+  p95: 0.3,
+  p99: 0.9,
+  lossy: false,
+};
+export const apiSpanRouteItemBody = {
+  service: "orders-worker",
+  method: "POST",
+  route: "/jobs/{id}",
+  source: "span",
+  requests: 40,
+  errors_4xx: 0,
+  errors_5xx: 1,
+  rate_4xx: 0,
+  rate_5xx: 0.025,
+  p50: 0.12,
+  p95: 0.8,
+  p99: ">10 s",
+  lossy: false,
+};
+export const ROUTES_CURSOR = "eyJyIjoicm91dGVzIiwibyI6NTAsImgiOiJhYmMifQ";
+export const apiRoutesBody = {
+  range: apiRangeBody,
+  sources: [apiSourceSpan, apiSourceMetric],
+  total: 134,
+  items: [apiRouteItemBody, apiSpanRouteItemBody],
+  next_cursor: ROUTES_CURSOR,
+};
+
+export const apiStatusBody = {
+  range: apiRangeBody,
+  sources: [apiSourceMetric],
+  requests: 1200,
+  classes: [
+    { class: "1xx", requests: 0 },
+    { class: "2xx", requests: 1150 },
+    { class: "3xx", requests: 18 },
+    { class: "4xx", requests: 30 },
+    { class: "5xx", requests: 2 },
+    { class: "unknown", requests: 0 },
+  ],
+  codes: [
+    { status_code: 200, class: "2xx", requests: 1100 },
+    { status_code: 201, class: "2xx", requests: 50 },
+    { status_code: 304, class: "3xx", requests: 18 },
+    { status_code: 404, class: "4xx", requests: 30 },
+    { status_code: 503, class: "5xx", requests: 2 },
+  ],
+};
+
+export const apiServicesBody = {
+  range: apiRangeBody,
+  items: [
+    {
+      service: "orders-worker",
+      source: "span",
+      span_data_ignored: false,
+      requests: 40,
+      lossy: false,
+    },
+    {
+      service: "payments-api",
+      source: "metric",
+      span_data_ignored: false,
+      requests: 1200,
+      lossy: false,
+    },
+  ],
+};
+export const apiServicesEmptyBody = { range: apiRangeBody, items: [] };
+
+export const apiWarningsBody = {
+  range: apiRangeBody,
+  totals: [
+    { kind: "span_derived", count: 0, last_day: null },
+    { kind: "lossy_histogram", count: 4, last_day: "2026-11-12" },
+    { kind: "cardinality_overflow", count: 0, last_day: null },
+    { kind: "secret_in_path", count: 1, last_day: "2026-11-11" },
+  ],
+  days: [
+    { day: "2026-11-11", kind: "secret_in_path", count: 1 },
+    { day: "2026-11-12", kind: "lossy_histogram", count: 4 },
+  ],
+};
+export const apiWarningsNoneBody = {
+  range: apiRangeBody,
+  totals: [
+    { kind: "span_derived", count: 0, last_day: null },
+    { kind: "lossy_histogram", count: 0, last_day: null },
+    { kind: "cardinality_overflow", count: 0, last_day: null },
+    { kind: "secret_in_path", count: 0, last_day: null },
+  ],
+  days: [],
+};

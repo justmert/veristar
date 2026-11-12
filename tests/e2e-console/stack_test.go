@@ -715,16 +715,13 @@ func (s *Stack) StartMetricsWriter(t testing.TB) {
 // first copy to, as a tenant's own backend (deploy/compose/examples).
 func (s *Stack) StartTenantBackend(t testing.TB) {
 	t.Helper()
-	out := t.TempDir()
-	// the stock collector runs as uid 10001
-	if err := os.Chmod(out, 0o777); err != nil {
-		t.Fatal(err)
-	}
 	cfg := filepath.Join(repoRoot(), "deploy", "compose", "examples", "tenant-backend.yaml")
 	health := freePort(t)
 	s.run(t, "sa-ce-tenant-backend-"+s.ID, []string{
 		"--network-alias", "tenant-backend", "-p", "127.0.0.1:" + health + ":13133",
-		"-v", cfg + ":/etc/otelcol/tenant-backend.yaml:ro", "-v", out + ":/out",
+		// nothing reads what the tenant backend writes here, and files of
+		// its uid 10001 in a host directory could not be removed afterwards
+		"-v", cfg + ":/etc/otelcol/tenant-backend.yaml:ro", "--tmpfs", "/out:mode=1777",
 	}, tenantBackendImage, "--config=/etc/otelcol/tenant-backend.yaml")
 	waitHTTP(t, "http://127.0.0.1:"+health+"/", time.Minute)
 }
