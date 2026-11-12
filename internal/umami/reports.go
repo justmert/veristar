@@ -56,11 +56,14 @@ var metricTypes = map[string]bool{
 	"channel": true,
 }
 
-// MetricsQuery selects one ranked dimension. Limit 0 keeps umami's default.
+// MetricsQuery selects one ranked dimension. Limit 0 keeps umami's default
+// of 500 rows. Offset skips that many rows of the ranking, for reading a
+// dimension with more values than one page holds.
 type MetricsQuery struct {
-	Range Range
-	Type  string
-	Limit int
+	Range  Range
+	Type   string
+	Limit  int
+	Offset int
 }
 
 // MetricRow is one ranked value: x is the dimension value (null in umami
@@ -136,6 +139,12 @@ func metricsPath(websiteID string, q MetricsQuery) (string, error) {
 	}
 	if q.Limit > 0 {
 		v.Set("limit", strconv.Itoa(q.Limit))
+	}
+	if q.Offset < 0 {
+		return "", errors.New("umami metrics: negative offset")
+	}
+	if q.Offset > 0 {
+		v.Set("offset", strconv.Itoa(q.Offset))
 	}
 	return p + "?" + v.Encode(), nil
 }

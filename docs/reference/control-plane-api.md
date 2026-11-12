@@ -307,6 +307,8 @@ filter of 5.9 uses.
 this stage actions (section 6): `otlp_token.create`, `otlp_token.revoke`,
 `provision.otlp_registry_put`. Target added: `otlp_token:<id>`.
 
+this stage (section 7) is read-only and adds no audit action.
+
 ---
 
 ## 4. this stage: sign-in, tenants, members, sites, snippet, ingest, SSO
@@ -1221,3 +1223,573 @@ The entry of every token is a function of its row and its tenant's status:
 | `active` | allowed | allowed |
 | `suspended` | 409 `tenant_suspended` | allowed |
 | `removed` | 404 | 404 |
+
+---
+
+## 7. this stage: API metrics
+
+A tenant's own API traffic, read from the this stage tables `api.metrics_minute`,
+`api.metrics_hourly`, `api.metrics_daily` and `api.ingest_warnings`
+(`docs/reference/api-storage.md`). Handlers live in
+`internal/controlplane/apimetrics`, queries in
+`db/queries/tenant/apimetrics.sql`. Every query runs under `cp_tenant` through
+`db.WithTenant`, so row-level security limits it to the tenant in the path even
+if a handler passed the wrong one.
+
+All six routes are `GET`, session, member, any non-removed tenant status
+(`pending`, `rejected`, `active`, `suspended`); current terms are not required.
+A non-member or a removed tenant gets 404 `not_found` (1.3). No new error code:
+every malformed or unknown query parameter is 400 `invalid_query`, a bad cursor
+400 `invalid_cursor`.
+
+| Route | Section |
+|---|---|
+| `GET /api/tenants/{tenant_id}/api-metrics/overview` | 7.5 |
+| `GET /api/tenants/{tenant_id}/api-metrics/timeseries` | 7.6 |
+| `GET /api/tenants/{tenant_id}/api-metrics/routes` | 7.7 |
+| `GET /api/tenants/{tenant_id}/api-metrics/status` | 7.8 |
+| `GET /api/tenants/{tenant_id}/api-metrics/services` | 7.9 |
+| `GET /api/tenants/{tenant_id}/api-metrics/warnings` | 7.10 |
+
+### 7.1 Query parameters
+
+| Parameter | Routes | Rule |
+|---|---|---|
+| `range` | all | `1h`, `24h`, `7d`, `30d`, `90d`, `12mo`, `24mo` or `custom`; default `24h` |
+| `from`, `to` | all, only with `range=custom` (both required then, refused otherwise) | RFC 3339 with `Z` or a numeric offset; `from` not before `2000-01-01T00:00:00Z`, `from < to`, `to` at most 24 hours after server time, `to - from` at most 800 days |
+| `service` | overview, timeseries, routes, status | exact `service.name` |
+| `route` | overview, timeseries, routes, status | exact normalized `http.route` (for example `/v1/accounts/{id}`, or `{other}` for routes above the daily cap) |
+| `method` | overview, timeseries, routes, status | exact `http.request.method` (`GET`, `_OTHER`, ...) |
+| `sort`, `order`, `limit`, `cursor` | routes | 7.7 |
+
+- A parameter not listed for the route, or given twice, is 400 `invalid_query`.
+- Filter values are compared for equality and always sent to PostgreSQL as bound
+  parameters, never spliced into SQL, so quotes, `%`, `_` and SQL keywords are
+  literal characters that simply match nothing unless a stored value has them.
+- A filter present with an empty value (`service=`) matches the empty value,
+  which is how a point without that attribute is stored. An absent parameter
+  means no filter.
+- Filter values must be valid UTF-8 without control characters (U+0000 to
+  U+001F, U+007F) and at most the column limit in bytes: `service` 128,
+  `method` 16, `route` 1,024. Anything else is 400 `invalid_query`.
+
+### 7.2 Range and resolution
+
+Server time `now` is UTC. Each request resolves to a half-open range
+`[from, to)` and one resolution: `minute` (rows of `api.metrics_minute`),
+`hour` (`api.metrics_hourly`) or `day` (`api.metrics_daily`). Only the table of
+that resolution is read; resolutions are never mixed in one answer.
+
+| Preset | Resolution | `to` | `from` |
+|---|---|---|---|
+| `1h` | minute | start of the current minute + 1 minute | `to` − 60 minutes |
+| `24h` | hour | start of the current hour + 1 hour | `to` − 24 hours |
+| `7d` | hour | same | `to` − 168 hours |
+| `30d` | hour | same | `to` − 720 hours |
+| `90d` | day | start of the current UTC day + 1 day | `to` − 90 days |
+| `12mo` | day | same | `to` − 12 calendar months |
+| `24mo` | day | same | `to` − 24 calendar months |
+
+`custom`: the resolution follows `to − from` as given: `minute` up to and
+including 6 hours, `hour` up to and including 31 days, `day` beyond. Then `from`
+is moved back to the start of its unit and `to` forward to the next unit
+boundary (unless already on one).
+
+Retention step, applied after either of the above, in this order:
+
+1. Resolution `minute` and `from` before the minute horizon (start of the
+   current UTC day minus `API_MINUTE_RETENTION_DAYS` days, the first day whose
+   minute partition the retention job keeps): the resolution becomes `hour`,
+   `from` and `to` are aligned to hours, `resolution_note` is
+   `older_than_minute_retention`.
+2. Resolution `hour` and `from` before the hourly horizon (first day of the
+   current UTC month minus `API_HOURLY_RETENTION_MONTHS` months): the resolution
+   becomes `day`, aligned to days, `resolution_note` is
+   `older_than_hourly_retention`.
+
+This is a documented rule, not a fallback: the answer always says which table it
+read. Hourly and daily rows are recomputed by the `api-rollup` job every 5
+minutes, so the newest few minutes of an `hour` or `day` answer can be missing
+until the next rollup; the console says "updated every few minutes".
+
+**Range object**, in every answer:
+
+```json
+{
+  "preset": "24h",
+  "from": "2026-11-11T10:00:00Z",
+  "to": "2026-11-12T10:00:00Z",
+  "resolution": "hour",
+  "bucket_seconds": 3600,
+  "resolution_note": null
+}
+```
+
+- `preset`: the requested preset, `custom`, or `previous` for the comparison
+  range of 7.5.
+- `bucket_seconds`: 60, 3600 or 86400 (UTC days).
+- `resolution_note`: `null`, `older_than_minute_retention` or
+  `older_than_hourly_retention`.
+
+### 7.3 Source selection
+
+Metric rows (`source = metric`, from `http.server.request.duration`) count every
+request. Span rows (`source = span`, derived from SERVER spans) undercount when
+the tenant samples traces. For each service, over the whole resolved range at
+the resolved resolution (and only the `service` filter applied, never `route`
+or `method`, so filtering a route cannot switch a service's source), an answer
+uses:
+
+- `metric` rows when at least one metric row of that service exists in the
+  range,
+- otherwise `span` rows.
+
+The two are never added together. A service that moved from spans to metrics
+inside the range uses metric rows for the whole range; its span rows are left
+out and `span_data_ignored` says so. The selection is
+`internal/controlplane/apimetrics/source.go`, shared with phases 11 and 12.
+
+**Source object**, one per service with any row in the range, ordered by
+`service`, in every answer except warnings:
+
+```json
+{ "service": "payments-api", "source": "span", "span_data_ignored": false }
+```
+
+- `source`: `metric` or `span`. The console shows a "from traces" badge for
+  `span` with one line: "Derived from sampled traces; counts are lower than the
+  real request count when traces are sampled."
+- `span_data_ignored`: true when the service also has span rows in the range
+  that were not used because metric rows exist. The console notes "this service
+  switched to metrics during the range; earlier trace-derived data is not shown".
+
+The selection and the aggregate are two statements in one read committed
+transaction; a row committed between them can be counted, but a service's
+source cannot change between them in a way that mixes sources, because the
+aggregate is restricted to the selected source of each service.
+
+### 7.4 Numbers
+
+- `requests`: `sum(count)` of the selected rows.
+- `errors_4xx`: requests with `status_code` 400 to 499; `errors_5xx`: 500 to
+  599. `status_code` 0 means the point had no status attribute; it counts in
+  `requests` and in class `unknown`, never as an error.
+- `rate_4xx`, `rate_5xx`: errors divided by `requests`, a fraction between 0 and
+  1; `null` when `requests` is 0.
+- `p50`, `p95`, `p99`: `api.histogram_quantile(q, api.sum_buckets(counts))`
+  over exactly the rows the number describes: bucket arrays are
+  summed first, then interpolated linearly inside the bucket. Percentiles are
+  never averaged, neither across rows, buckets, services nor time. Value: a JSON
+  number in seconds; the string `">10 s"` when the percentile falls in the open
+  bucket above 10 s (never a number); `null` when there are no requests.
+- `lossy`: true when any selected row was re-bucketed inexactly from a
+  non-canonical histogram layout (this stage), so percentiles are approximate. The
+  console shows "approximate" next to such percentiles.
+
+**Summary object:**
+
+```json
+{
+  "requests": 1200, "errors_4xx": 30, "errors_5xx": 2,
+  "rate_4xx": 0.025, "rate_5xx": 0.0016666666666666668,
+  "p50": 0.042, "p95": 0.31, "p99": ">10 s", "lossy": false
+}
+```
+
+### 7.5 `GET .../api-metrics/overview`
+
+Parameters: range and filters. The summary of the range and of the preceding
+range of equal length: `previous.from = from − (to − from)`,
+`previous.to = from`, resolved with the retention step of 7.2 on its own
+(`preset: "previous"`), with its own source selection.
+
+```json
+{
+  "current":  { "range": { ... }, "sources": [ ... ], "summary": { ... } },
+  "previous": { "range": { ... }, "sources": [ ... ], "summary": { ... } }
+}
+```
+
+### 7.6 `GET .../api-metrics/timeseries`
+
+Parameters: range and filters. One point per bucket from `from` (inclusive) to
+`to` (exclusive), in time order, including buckets without data (zeros,
+`null` rates and percentiles), so a chart needs no gap filling. At most 801
+points (a 24-month range has 730 or 731).
+
+```json
+{
+  "range": { ... },
+  "sources": [ ... ],
+  "points": [
+    { "at": "2026-11-12T09:00:00Z", "requests": 52, "errors_4xx": 1, "errors_5xx": 0,
+      "rate_4xx": 0.019230769230769232, "rate_5xx": 0, "p50": 0.031, "p95": 0.2, "p99": 0.48, "lossy": false }
+  ]
+}
+```
+
+Each point's percentiles come from the bucket arrays of that time bucket only.
+
+### 7.7 `GET .../api-metrics/routes`
+
+Parameters: range, filters, `sort`, `order`, `limit`, `cursor`. One item per
+service, method and route with at least one selected row.
+
+- `sort`: `requests` (default), `errors_4xx`, `errors_5xx`, `rate_4xx`,
+  `rate_5xx`, `p50`, `p95`, `p99`, `route` (orders by service, method, route).
+- `order`: `asc` or `desc`; default `asc` for `route`, `desc` otherwise.
+- Ties are broken by service, method and route ascending. `null` values sort
+  last in both orders. `">10 s"` sorts above every number.
+- `limit` 1 to 200, default 50. `cursor` is the opaque `next_cursor` of the
+  previous page. Pages are offsets into the sorted list: the cursor is bound to
+  the route, `sort`, `order`, `range`, `from`, `to` and the filters, and is 400
+  `invalid_cursor` with any other combination. Because the numbers keep
+  changing as data arrives, an item can move between pages; `total` is the item
+  count at the time of the request.
+
+```json
+{
+  "range": { ... },
+  "sources": [ ... ],
+  "total": 134,
+  "items": [
+    { "service": "payments-api", "method": "GET", "route": "/v1/accounts/{id}", "source": "metric",
+      "requests": 930, "errors_4xx": 12, "errors_5xx": 0, "rate_4xx": 0.012903225806451613, "rate_5xx": 0,
+      "p50": 0.04, "p95": 0.3, "p99": 0.9, "lossy": false }
+  ],
+  "next_cursor": null
+}
+```
+
+### 7.8 `GET .../api-metrics/status`
+
+Parameters: range and filters.
+
+```json
+{
+  "range": { ... },
+  "sources": [ ... ],
+  "requests": 1200,
+  "classes": [
+    { "class": "1xx", "requests": 0 }, { "class": "2xx", "requests": 1150 },
+    { "class": "3xx", "requests": 18 }, { "class": "4xx", "requests": 30 },
+    { "class": "5xx", "requests": 2 }, { "class": "unknown", "requests": 0 }
+  ],
+  "codes": [
+    { "status_code": 200, "class": "2xx", "requests": 1100 }
+  ]
+}
+```
+
+- `classes`: always these six, in this order; `unknown` is `status_code` 0.
+- `codes`: every status code with requests, ascending.
+
+### 7.9 `GET .../api-metrics/services`
+
+Parameters: range only (a filter is 400 `invalid_query`). Every service with any
+row in the range, ordered by `service`; the list behind the service filter. An
+empty `items` is the console's empty state, which links to the OTLP token page
+(section 6).
+
+```json
+{
+  "range": { ... },
+  "items": [
+    { "service": "payments-api", "source": "metric", "span_data_ignored": false,
+      "requests": 1200, "lossy": false }
+  ]
+}
+```
+
+`requests` and `lossy` are over the selected source of that service.
+
+### 7.10 `GET .../api-metrics/warnings`
+
+Parameters: range only. Ingest warnings from `api.ingest_warnings`, which are
+counted per UTC day: every day from the day of `from` to the day of the last
+instant before `to`.
+
+```json
+{
+  "range": { ... },
+  "totals": [
+    { "kind": "span_derived", "count": 0, "last_day": null },
+    { "kind": "lossy_histogram", "count": 4, "last_day": "2026-11-12" },
+    { "kind": "cardinality_overflow", "count": 0, "last_day": null },
+    { "kind": "secret_in_path", "count": 1, "last_day": "2026-11-11" }
+  ],
+  "days": [
+    { "day": "2026-11-11", "kind": "secret_in_path", "count": 1 }
+  ]
+}
+```
+
+- `totals`: always these four kinds, in this order. `count` is the sum over the
+  days, `last_day` the latest day with a count.
+- `days`: every non-zero day and kind, ordered by day, then kind.
+- Kinds (this stage writer): `span_derived` (points derived from spans were
+  stored), `lossy_histogram` (a histogram was re-bucketed inexactly),
+  `cardinality_overflow` (routes or services above the daily cap were folded into
+  `{other}`), `secret_in_path` (a Stellar secret seed appeared in a request path
+  and was redacted). The console shows a banner per kind with a non-zero count.
+
+### 7.11 Configuration keys (this stage)
+
+Two keys become required for the control plane, with the same values as for
+`jobs`, because the retention step of 7.2 must match what the retention job
+keeps: `API_MINUTE_RETENTION_DAYS` (at least 2) and
+`API_HOURLY_RETENTION_MONTHS` (at least 24), loaded by
+`config.LoadAPIRetention`.
+
+---
+
+## 8. this stage: global web and API views
+
+the design. Operators compare every enrolled project on aggregates only.
+Every route here is **session** and **operator** (5.1), runs as `cp_operator`
+in one read-only, repeatable-read transaction, and reads only `agg.web_daily`,
+`agg.web_daily_dim`, `api.metrics_daily`, `cp.web_ingest_hourly`, `cp.tenants`
+and `cp.operator_sites`. `cp_operator` cannot read `api.metrics_minute`, any
+`cp` table outside 4.7, or connect to the `umami` database, and an operator
+session holds no Umami token, so no route can return session-level rows.
+Tenants with `is_internal = true` are never listed and answer 404 when named.
+No new error code, field code or audit action.
+
+Web numbers come from the `aggregate-web` jobs task, which copies Umami's own
+`/stats` and `/metrics` answers per site, band and UTC day
+(`docs/reference/web-metrics.md`, "Daily aggregates"). A project is the sum of
+its sites. Visitors over several days are the sum of daily visitors, which is
+exactly what Umami answers for the same range (measured there); a person who
+visits two sites of one project counts once per site.
+
+### 8.1 Range
+
+Every route takes `from` and `to`, UTC days `yyyy-mm-dd`, both included.
+
+| Given | Range |
+|---|---|
+| neither | the 30 days ending today (UTC) |
+| only `to` | the 30 days ending `to` |
+| only `from` | `from` to today |
+
+400 `invalid_query` when a value is not a date, `to` is after today, `to` is
+before `from`, or the range holds more than 366 days. Today is included and
+holds what the hourly task has read so far.
+
+### 8.2 Project filters, sort and pages
+
+Both project lists take these filters; all given filters must hold.
+
+| Parameter | Values | Matches |
+|---|---|---|
+| `status` | comma-separated subset of the five tenant statuses | `cp.tenants.status` |
+| `verified` | `true`, `false` | at least one non-removed site verified by the rule of 5.8 (`verified_at` set, `last_verify_error` null), or none |
+| `stellar_toml` | `true`, `false` | at least one non-removed site whose `stellar_toml.status` is `found`, or none |
+| `has_web_data` | `true`, `false` | primary-band page views above 0 in the range |
+| `has_api_data` | `true`, `false` | an `api.metrics_daily` row with requests in the range |
+| `enrolled_from`, `enrolled_to` | `yyyy-mm-dd` | `created_at` on or after the start of `enrolled_from`, before the end of `enrolled_to` (UTC) |
+| `q` | 1 to 100 characters | case-insensitive substring of `name` or `slug` |
+
+- `sort` is any column the route lists, `order` is `asc` or `desc`
+  (default `desc`). Projects without a value for the sort column (a rate
+  without a denominator, a percentile without requests) come last in both
+  orders. Ties are broken by `id` in the same direction. `name` sorts by
+  `lower(name)`.
+- `limit` and `cursor` as 2.3. The envelope adds `from`, `to` and `total`
+  (projects matching the filters): `{"from", "to", "total", "items", "next_cursor"}`.
+- Sort values are range sums that the hourly task changes, so no keyset
+  over them stays stable. The cursor is a position in the sorted list,
+  bound to the route, range, filters, sort and order it was made for; any
+  other combination is 400 `invalid_cursor`. A page fetched after the task
+  committed can repeat or skip a project whose numbers changed.
+- 400 `invalid_query` for an unknown status, sort or order, a boolean other
+  than `true` or `false`, a malformed date, `enrolled_to` before
+  `enrolled_from`, or `q` out of range.
+
+Every list row and compare project carries **TenantRef**
+`{"id", "slug", "name", "status", "created_at"}`, and list rows carry the site
+facts `sites`, `sites_verified`, `sites_with_stellar_toml` (non-removed sites,
+rules of 5.2) and `has_web_data`, `has_api_data`.
+
+### 8.3 `GET /api/operator/web/projects`
+
+Operator. Default sort `pageviews`. Item:
+
+```json
+{
+  "tenant": { "id": "uuid", "slug": "stellar-dex", "name": "Stellar DEX", "status": "active", "created_at": "..." },
+  "sites": 2, "sites_verified": 1, "sites_with_stellar_toml": 1,
+  "has_web_data": true, "has_api_data": false,
+  "pageviews": 1200, "visitors": 410, "visits": 530, "bounces": 260, "totaltime": 48200,
+  "bounce_rate": 0.4905660377358491, "avg_visit_duration": 90.94339622641509,
+  "quarantine_pageviews": 40, "quarantine_visitors": 12, "quarantine_share": 0.03225806451612903,
+  "ingest_requests": 1890, "ingest_rejected": 75, "rejected_share": 0.03968253968253968,
+  "top": {
+    "referrer": [ { "key": "github.com", "value": 81 } ],
+    "country": [ { "key": "DE", "value": 120 } ],
+    "device": [ { "key": "laptop", "value": 300 } ],
+    "browser": [ { "key": "chrome", "value": 250 } ]
+  }
+}
+```
+
+- `pageviews`, `visitors`, `visits`, `bounces`, `totaltime` (seconds): sums of
+  the primary band over the range.
+- `bounce_rate = bounces / visits`, `avg_visit_duration = totaltime / visits`
+  (seconds), both `null` when `visits` is 0. These are Umami's own dashboard
+  formulas.
+- `quarantine_pageviews`, `quarantine_visitors`: the quarantine band.
+  `quarantine_share = quarantine_pageviews / (pageviews + quarantine_pageviews)`,
+  `null` when both are 0.
+- `ingest_requests`: gateway outcomes in `cp.web_ingest_hourly` over the
+  range, `accepted + quarantined + rejected_*`; `ingest_rejected` the
+  `rejected_*` outcomes (including `rejected_gpc`, a privacy drop);
+  `rejected_share = ingest_rejected / ingest_requests`, `null` when there
+  were none. The replayer's `bot` and `dlq` outcomes describe accepted events
+  again and are not requests.
+- `top`: per dimension the 5 keys with the largest sum of daily values over
+  the range (ties by key); a value is Umami's `y`, distinct visitors with a
+  page view carrying that key on a day.
+- Sorts: `name`, `status`, `created_at`, `sites`, `sites_verified`,
+  `sites_with_stellar_toml`, `pageviews`, `visitors`, `visits`, `bounces`,
+  `totaltime`, `bounce_rate`, `avg_visit_duration`, `quarantine_pageviews`,
+  `quarantine_visitors`, `quarantine_share`, `ingest_requests`,
+  `ingest_rejected`, `rejected_share`.
+
+### 8.4 `GET /api/operator/web/compare`
+
+Operator. Query `tenants` (1 to 5 distinct tenant ids, comma-separated),
+`from`, `to` (8.1), `breakdown_limit` (1 to 500, default 10). **200**:
+
+```json
+{
+  "from": "2026-11-01", "to": "2026-11-12",
+  "days": ["2026-11-01", "...", "2026-11-12"],
+  "projects": [
+    {
+      "tenant": { "TenantRef": "..." },
+      "totals": {
+        "pageviews": 0, "visitors": 0, "visits": 0, "bounces": 0, "totaltime": 0,
+        "bounce_rate": null, "avg_visit_duration": null,
+        "quarantine_pageviews": 0, "quarantine_visitors": 0, "quarantine_share": null
+      },
+      "series": [
+        { "day": "2026-11-01", "aggregated": true, "pageviews": 31, "visitors": 12, "visits": 14,
+          "bounces": 6, "totaltime": 1300, "bounce_rate": 0.42857142857142855,
+          "avg_visit_duration": 92.85714285714286, "quarantine_pageviews": 2 }
+      ],
+      "breakdowns": {
+        "referrer": { "items": [ { "key": "github.com", "value": 9 } ], "total_keys": 14 },
+        "country": { "items": [], "total_keys": 0 },
+        "device": { "items": [], "total_keys": 0 },
+        "browser": { "items": [], "total_keys": 0 },
+        "os": { "items": [], "total_keys": 0 }
+      }
+    }
+  ]
+}
+```
+
+- `projects` come in the order of `tenants`. Every `series` has one point per
+  entry of `days`, so the charts align.
+- A point is `aggregated: false`, with every number `null`, when no site of
+  the project has a row for that day yet (the day was never read, for
+  example before a backfill). A day the task read without traffic is
+  `aggregated: true` with zeros.
+- `totals` sum the aggregated points; derived values follow 8.3.
+- `breakdowns`: referrer, country, device, browser and operating system of
+  the primary band over the range, the `breakdown_limit` largest keys (ties
+  by key), and `total_keys`, the number of distinct keys. For a project with
+  one site, each item equals Umami's `/metrics` for the same range.
+- 400 `invalid_query` when `tenants` is missing, empty, longer than 5,
+  repeats an id or holds anything but lowercase UUIDs, and for a bad
+  `breakdown_limit`. 404 `not_found` when an id is unknown or internal.
+
+### 8.5 `GET /api/operator/api/projects`
+
+Operator. Default sort `requests`. Source rows are chosen per tenant and
+service exactly as 7.3 (metric rows when the service has any in the range,
+otherwise span rows), over `api.metrics_daily` for the UTC days of the range.
+The operator view applies the rule in SQL over every tenant at once rather
+than through `apimetrics.Select`, which is tenant-scoped. Item:
+
+```json
+{
+  "tenant": { "TenantRef": "..." },
+  "sites": 1, "sites_verified": 1, "sites_with_stellar_toml": 0,
+  "has_web_data": false, "has_api_data": true,
+  "requests": 182000, "requests_4xx": 2100, "requests_5xx": 90,
+  "rate_4xx": 0.011538461538461539, "rate_5xx": 0.0004945054945054945,
+  "p50_seconds": 0.041, "p50_over_10s": false,
+  "p95_seconds": 0.62, "p95_over_10s": false,
+  "p99_seconds": null, "p99_over_10s": true,
+  "services": 3, "routes": 41, "span_services": 1, "source": "mixed", "lossy": false
+}
+```
+
+- `requests` is the sum of `count`; `requests_4xx` and `requests_5xx` count
+  status codes 400 to 499 and 500 to 599 (rows without a status code count
+  only in `requests`). Rates are `null` without requests.
+- Percentiles use `api.histogram_quantile` over the summed buckets of the
+  chosen rows, never averaged. A percentile in the open bucket
+  above 10 s has `*_seconds: null` and `*_over_10s: true`; without requests
+  both are `null` and `false`. Sorting puts over-10 s above every number.
+- `services`: distinct services; `routes`: distinct `(service, route)` pairs
+  with a non-empty route; `span_services`: services whose numbers are span
+  derived; `source`: `metric` or `span` when every service uses that source,
+  `mixed` when they differ, `null` without data; `lossy`: some chosen row was
+  re-bucketed inexactly.
+- Sorts: `name`, `status`, `created_at`, `sites`, `requests`, `requests_4xx`,
+  `requests_5xx`, `rate_4xx`, `rate_5xx`, `p50`, `p95`, `p99`, `services`,
+  `routes`. Sorting by `requests` in each order finds the lowest and highest
+  usage projects.
+
+### 8.6 `GET /api/operator/api/compare`
+
+Operator. Query `tenants` (as 8.4), `from`, `to`, `service_order` (`desc`
+default, or `asc`). **200**:
+
+```json
+{
+  "from": "...", "to": "...", "days": ["..."],
+  "projects": [
+    {
+      "tenant": { "TenantRef": "..." },
+      "totals": { "requests": 0, "requests_4xx": 0, "requests_5xx": 0, "rate_4xx": null, "rate_5xx": null,
+                  "p50_seconds": null, "p50_over_10s": false, "p95_seconds": null, "p95_over_10s": false,
+                  "p99_seconds": null, "p99_over_10s": false,
+                  "services": 0, "routes": 0, "span_services": 0, "source": null, "lossy": false },
+      "series": [ { "day": "...", "requests": 0, "requests_4xx": 0, "requests_5xx": 0, "rate_4xx": null,
+                    "rate_5xx": null, "p50_seconds": null, "p50_over_10s": false, "...": "..." } ],
+      "services": [ { "service": "payments-api", "source": "metric", "requests": 0, "...": "APINumbers",
+                      "routes": 12, "lossy": false } ]
+    }
+  ]
+}
+```
+
+- `totals` equal the project's row of 8.5 for the same range.
+- `series`: one point per day, the same source choice for every day (made
+  over the whole range); a day without requests has 0 requests and `null`
+  rates and percentiles.
+- `services`: every service with its source, numbers and routes, ordered by
+  requests (`service_order`), then by name, so the first and last entries
+  are the highest and lowest usage services.
+- Errors as 8.4.
+
+### 8.7 Removal and `removal_keep_aggregates`
+
+The purge step `agg` (after `api`, the design runner) deletes the tenant's
+`agg.web_daily` and `agg.web_daily_dim` rows through the security definer
+function `agg.purge_tenant`, the only right `cp_system` has in `agg`. With
+`keep_aggregates` the step records `{"skipped": "keep_aggregates"}` and every
+row stays (5.13). The function takes the tenant's advisory lock exclusively;
+`aggregate-web` holds it shared for each write and skips removed tenants, so
+rows of a purged tenant are never written again.
+
+### 8.8 Configuration (this stage)
+
+No new key. `jobs` gains the task `aggregate-web` (hourly: today and the 3
+days before) and `jobs run aggregate-web --from <yyyy-mm-dd> --to <yyyy-mm-dd>`
+for a backfill; both read Umami with `UMAMI_URL` and `UMAMI_ADMIN_PASSWORD`,
+which `jobs` already requires.

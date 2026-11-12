@@ -30,6 +30,8 @@ var wantGrants = map[string]map[pdb.Role]string{
 		pdb.RoleCPOperator: "r",
 		// the writer refuses queued metrics of a removed tenant (00018)
 		pdb.RoleMetricsWriter: "r(id,status)",
+		// aggregate-web skips removed tenants (00019)
+		pdb.RoleJobs: "r(id,status)",
 	},
 	"cp.tenant_members": {pdb.RoleCPSystem: "rawd", pdb.RoleCPTenant: "rawd"},
 	"cp.invites":        {pdb.RoleCPSystem: "rawd", pdb.RoleCPTenant: "rawd"},
@@ -71,6 +73,10 @@ var wantGrants = map[string]map[pdb.Role]string{
 		pdb.RoleCPTenant: "r", pdb.RoleMetricsWriter: "raw", pdb.RoleJobs: "rawd",
 	},
 	"api.rollup_pending": {pdb.RoleMetricsWriter: "raw", pdb.RoleJobs: "rawd"},
+
+	// agg (this stage): read by operators, written by aggregate-web
+	"agg.web_daily":     {pdb.RoleCPOperator: "r", pdb.RoleJobs: "rawd"},
+	"agg.web_daily_dim": {pdb.RoleCPOperator: "r", pdb.RoleJobs: "rawd"},
 }
 
 var tablePrivs = []struct{ letter, name string }{
@@ -150,8 +156,9 @@ func TestSchemaDatabaseAndFunctionRights(t *testing.T) {
 	wantUsage := map[string][]pdb.Role{
 		"cp": pdb.AppRoles,
 		// cp_system only to call api.purge_tenant (00017); it has no table right
-		"api":    pdb.AppRoles,
-		"agg":    {pdb.RoleCPOperator, pdb.RoleJobs},
+		"api": pdb.AppRoles,
+		// cp_system only to call agg.purge_tenant (00019)
+		"agg":    {pdb.RoleCPSystem, pdb.RoleCPOperator, pdb.RoleJobs},
 		"public": pdb.AppRoles,
 	}
 	for schema, roles := range wantUsage {
@@ -206,6 +213,7 @@ func TestSchemaDatabaseAndFunctionRights(t *testing.T) {
 		"api.minute_partitions()":           {pdb.RoleJobs},
 		"api.hourly_partitions()":           {pdb.RoleJobs},
 		"api.purge_tenant(uuid,boolean)":    {pdb.RoleCPSystem},
+		"agg.purge_tenant(uuid)":            {pdb.RoleCPSystem},
 	}
 	var names []string
 	for _, f := range fns {

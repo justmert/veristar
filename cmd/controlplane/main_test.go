@@ -39,6 +39,7 @@ func TestServeNamesEveryMissingKey(t *testing.T) {
 		"OPERATOR_GITHUB_IDS", "UMAMI_URL", "UMAMI_ADMIN_PASSWORD", "UMAMI_USER_PASSWORD_KEY",
 		"TRACKER_RELEASE_DIR", "NATS_URL", "PLATFORM_DB_HOST", "PLATFORM_DB_CP_SYSTEM_PASSWORD",
 		"PLATFORM_DB_CP_TENANT_PASSWORD", "PLATFORM_DB_CP_OPERATOR_PASSWORD",
+		"API_MINUTE_RETENTION_DAYS", "API_HOURLY_RETENTION_MONTHS",
 	} {
 		require.Contains(t, stderr.String(), k)
 	}
@@ -110,23 +111,25 @@ func TestServeStartsAndStops(t *testing.T) {
 	key := base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{7}, 32))
 	values := pg.EnvFor("platform")
 	for k, v := range map[string]string{
-		"CONTROLPLANE_ADDR":       addr,
-		"CONTROLPLANE_OPS_ADDR":   ops,
-		"CONSOLE_ORIGIN":          "http://" + addr,
-		"INGEST_ORIGIN":           "http://127.0.0.1:8080",
-		"WEB_ORIGIN":              "http://127.0.0.1:3000",
-		"GITHUB_CLIENT_ID":        "Iv1.cmdtest",
-		"GITHUB_CLIENT_SECRET":    "cmd-test-secret",
-		"GITHUB_REDIRECT_URL":     "http://" + addr + "/api/auth/github/callback",
-		"OAUTH_STATE_KEY":         key,
-		"OAUTH_FIXTURE_URL":       "http://127.0.0.1:1",
-		"OPERATOR_GITHUB_IDS":     "1",
-		"UMAMI_URL":               "http://127.0.0.1:3000",
-		"UMAMI_ADMIN_PASSWORD":    "0123456789abcdef",
-		"UMAMI_USER_PASSWORD_KEY": key,
-		"TRACKER_RELEASE_DIR":     filepath.Join(natsctr.RepoRoot(t), "packages", "tracker", "releases"),
-		"NATS_URL":                ns.URL,
-		"NATS_REPLICAS":           "1",
+		"CONTROLPLANE_ADDR":           addr,
+		"CONTROLPLANE_OPS_ADDR":       ops,
+		"CONSOLE_ORIGIN":              "http://" + addr,
+		"INGEST_ORIGIN":               "http://127.0.0.1:8080",
+		"WEB_ORIGIN":                  "http://127.0.0.1:3000",
+		"GITHUB_CLIENT_ID":            "Iv1.cmdtest",
+		"GITHUB_CLIENT_SECRET":        "cmd-test-secret",
+		"GITHUB_REDIRECT_URL":         "http://" + addr + "/api/auth/github/callback",
+		"OAUTH_STATE_KEY":             key,
+		"OAUTH_FIXTURE_URL":           "http://127.0.0.1:1",
+		"OPERATOR_GITHUB_IDS":         "1",
+		"UMAMI_URL":                   "http://127.0.0.1:3000",
+		"UMAMI_ADMIN_PASSWORD":        "0123456789abcdef",
+		"UMAMI_USER_PASSWORD_KEY":     key,
+		"TRACKER_RELEASE_DIR":         filepath.Join(natsctr.RepoRoot(t), "packages", "tracker", "releases"),
+		"NATS_URL":                    ns.URL,
+		"NATS_REPLICAS":               "1",
+		"API_MINUTE_RETENTION_DAYS":   "30",
+		"API_HOURLY_RETENTION_MONTHS": "36",
 	} {
 		values[k] = v
 	}

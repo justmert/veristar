@@ -168,9 +168,11 @@ webpath:
 # this stage browser flows (tests/e2e-console, build tag consolee2e): sign-in
 # through the TEST-ONLY github oauth fixture, enrollment, sites, snippet,
 # traffic through the real gateway, umami through sso, isolation, sso
-# hardening and session security. the control plane is built with the
-# oauthfixture tag; postgresql, nats, umami, the replayer, the gateway image
-# and the edge, web and app caddies run in containers the test owns. needs
+# hardening, session security, and the this stage api traffic dashboard on
+# real telemetry of the go example app. the control plane is built with the
+# oauthfixture tag; postgresql, nats, umami, the replayer, the gateway and
+# collector images, the metricswriter, a stock collector as the tenant's own
+# backend and the edge, web and app caddies run in containers the test owns. needs
 # docker, node 26 with pnpm and the playwright browsers. screenshots and, on
 # failure, container logs land in .scratch/scratch/console-e2e.
 # CONSOLE_E2E_ARGS passes extra playwright arguments (for example --grep).
@@ -222,3 +224,13 @@ metricswriter-it: collector-build
 
 test-metricswriter:
 	$(GO) test -race -count=1 ./internal/metricswriter/ ./cmd/metricswriter/
+
+# this stage volume run (tests/apivolume, build tag apivolume): 1,000,000
+# requests across 10 tenants and 30 services through the built scf-otelcol,
+# metricswriter and jobs binaries with real nats and postgresql. loads
+# .env.dev only for the umami keys `jobs run` reads. VOLUME_MINUTES (1 to 60,
+# default 20) spreads the requests; results go to docs/reference/capacity.md.
+.PHONY: api-volume
+api-volume: collector-build
+	@set -a && . ./$(DEV_ENV) && set +a && \
+		$(GO) test -tags apivolume -count=1 -timeout 120m -v ./tests/apivolume/

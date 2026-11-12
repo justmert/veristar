@@ -108,7 +108,7 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 	defer nc.Close()
 
 	reg := obs.NewRegistry()
-	w, err := metricswriter.New(metricswriter.Config{Settings: set, NC: nc, DB: d, Log: log, Registry: reg})
+	w, err := metricswriter.New(metricswriter.Config{Settings: set, NC: nc, Replicas: natsCfg.Replicas, DB: d, Log: log, Registry: reg})
 	if err != nil {
 		return err
 	}

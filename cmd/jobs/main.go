@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"log/slog"
@@ -31,6 +32,7 @@ import (
 	"github.com/justmert/stellar-analytics/internal/controlplane/domaincheck"
 	"github.com/justmert/stellar-analytics/internal/controlplane/provision"
 	pdb "github.com/justmert/stellar-analytics/internal/db"
+	"github.com/justmert/stellar-analytics/internal/jobs/aggregateweb"
 	"github.com/justmert/stellar-analytics/internal/jobs/apicapacity"
 	"github.com/justmert/stellar-analytics/internal/jobs/apipartition"
 	"github.com/justmert/stellar-analytics/internal/jobs/apiretention"
@@ -60,7 +62,10 @@ commands:
   run <task>        run one task once under the jobs lock (tasks: ` + edgestats.TaskName + `, ` + statsdedup.TaskName + `,
                     ` + reconcile.TaskName + `, ` + umamirotate.TaskName + `, ` + sessionprune.TaskName + `,
                     ` + verifydomains.TaskName + `, ` + apirollup.TaskName + `, ` + apipartition.TaskName + `,
-                    ` + apiretention.TaskName + `)
+                    ` + apiretention.TaskName + `, ` + aggregateweb.TaskName + `)
+  run ` + aggregateweb.TaskName + ` --from <yyyy-mm-dd> --to <yyyy-mm-dd>
+                    read the web aggregates of every active site again for
+                    each utc day of the range, both days included
   capacity          print the measured on-disk bytes per row of the api metric
                     tables as json (docs/reference/capacity.md); needs only the
                     PLATFORM_DB_* keys of the jobs role
@@ -102,8 +107,13 @@ func run(ctx context.Context, args []string, env *config.Env, stdout, stderr io.
 			return 1
 		}
 		return 0
-	case len(args) == 2 && args[0] == "run":
-		if err := runOnce(ctx, env, log, args[1]); err != nil {
+	case len(args) >= 2 && args[0] == "run":
+		days, err := parseRange(args[1], args[2:])
+		if err != nil {
+			_, _ = fmt.Fprintf(stderr, "jobs run %s: %v\n\n%s", args[1], err, usage)
+			return 2
+		}
+		if err := runOnce(ctx, env, log, args[1], days); err != nil {
 			log.Error("jobs run failed", "task", args[1], "error", err.Error())
 			return 1
 		}
@@ -126,6 +136,48 @@ func buildVersion() string {
 	return v
 }
 
+// dayRange is the --from and --to of `jobs run aggregate-web`.
+type dayRange struct {
+	from, to time.Time
+}
+
+// parseRange reads the flags after `jobs run <task>`. only aggregate-web
+// takes any, and it takes both or neither: a backfill with one end guessed
+// would read a range nobody asked for.
+func parseRange(task string, args []string) (*dayRange, error) {
+	if len(args) == 0 {
+		return nil, nil
+	}
+	if task != aggregateweb.TaskName {
+		return nil, fmt.Errorf("takes no arguments, got %q", strings.Join(args, " "))
+	}
+	fs := flag.NewFlagSet("jobs run "+task, flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	from := fs.String("from", "", "first utc day")
+	to := fs.String("to", "", "last utc day")
+	if err := fs.Parse(args); err != nil {
+		return nil, err
+	}
+	if fs.NArg() > 0 {
+		return nil, fmt.Errorf("unexpected arguments %q", strings.Join(fs.Args(), " "))
+	}
+	if *from == "" || *to == "" {
+		return nil, errors.New("--from and --to are both required for a backfill")
+	}
+	f, err := time.Parse(time.DateOnly, *from)
+	if err != nil {
+		return nil, fmt.Errorf("--from: %w", err)
+	}
+	t, err := time.Parse(time.DateOnly, *to)
+	if err != nil {
+		return nil, fmt.Errorf("--to: %w", err)
+	}
+	if t.Before(f) {
+		return nil, errors.New("--to is before --from")
+	}
+	return &dayRange{from: f, to: t}, nil
+}
+
 // deps are the connections both commands need.
 type deps struct {
 	nc      *nats.Conn
@@ -133,6 +185,7 @@ type deps struct {
 	db      *pdb.DB
 	sites   *registry.Watcher[registry.Site]
 	sched   *scheduler.Scheduler
+	aggWeb  *aggregateweb.Aggregator
 	reg     *prometheus.Registry
 	stop    func()
 }
@@ -312,6 +365,17 @@ func open(ctx context.Context, env *config.Env, log *slog.Logger, opsAddr bool) 
 		_, err := retention.Run(ctx, l.Tx)
 		return err
 	}
+	// web aggregates are read with the umami admin, like the reconciler,
+	// so operators see exactly the numbers umami shows tenants
+	aggWeb, err := aggregateweb.New(admin, sites, time.Now, log, reg)
+	if err != nil {
+		closeAll()
+		return nil, "", err
+	}
+	aggregate := func(ctx context.Context, l *scheduler.Leader) error {
+		_, err := aggWeb.Run(ctx, l.Tx)
+		return err
+	}
 	tasks := []scheduler.Task{{
 		Name: edgestats.TaskName,
 		Run: func(ctx context.Context, l *scheduler.Leader) error {
@@ -362,12 +426,18 @@ func open(ctx context.Context, env *config.Env, log *slog.Logger, opsAddr bool) 
 		Every: apiretention.Every,
 		Run:   retainAPI,
 		Once:  retainAPI,
+	}, {
+		Name:  aggregateweb.TaskName,
+		Every: aggregateweb.Every,
+		Run:   aggregate,
+		Once:  aggregate,
 	}}
 	return &deps{
 		nc:      nc,
 		buckets: buckets,
 		db:      d,
 		sites:   sites,
+		aggWeb:  aggWeb,
 		reg:     reg,
 		sched: &scheduler.Scheduler{
 			Lock: lock, DB: d, Tasks: tasks, Log: log, Metrics: sm, RetryEvery: retryEvery,
@@ -444,12 +514,25 @@ func daemon(ctx context.Context, env *config.Env, log *slog.Logger) error {
 	return ctx.Err()
 }
 
-func runOnce(ctx context.Context, env *config.Env, log *slog.Logger, name string) error {
+func runOnce(ctx context.Context, env *config.Env, log *slog.Logger, name string, days *dayRange) error {
 	dp, _, err := open(ctx, env, log, false)
 	if err != nil {
 		return err
 	}
 	defer dp.stop()
+	if days != nil {
+		// a backfill is the same task over another range, under the same
+		// lock and fence as a regular run
+		for i := range dp.sched.Tasks {
+			if dp.sched.Tasks[i].Name == aggregateweb.TaskName {
+				dp.sched.Tasks[i].Once = func(ctx context.Context, l *scheduler.Leader) error {
+					res, err := dp.aggWeb.Backfill(ctx, l.Tx, days.from, days.to)
+					log.Info("aggregate web backfill", "sites", res.Sites, "days", res.Days, "skipped", res.Skipped)
+					return err
+				}
+			}
+		}
+	}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	var wg sync.WaitGroup

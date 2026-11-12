@@ -36,16 +36,23 @@ const (
 	// lead context, because a commit that happened must be acked even when
 	// the lock is lost right after it; ingest_dedup covers a lost ack.
 	ackTimeout = 10 * time.Second
-	// bindRetry is how often the locks bucket is bound again while it is
-	// missing. the metricswriter user may not recreate it: the
-	// replayer and jobs on the same core nodes do.
+	// bindRetry is how often binding the locks bucket is tried again while
+	// it is missing; the bucket keeper recreates it meanwhile.
 	bindRetry = time.Second
 )
+
+// errNotReady ends a hold because jetstream could not serve the consumer
+// yet, as while a cluster recovers from a restart. Run contends again
+// instead of stopping the process.
+var errNotReady = errors.New("metricswriter: jetstream not ready")
 
 // Config wires a Writer.
 type Config struct {
 	Settings Settings
 	NC       *nats.Conn
+	// Replicas is NATS_REPLICAS, the replica count the locks bucket is
+	// recreated with when a restart lost it.
+	Replicas int
 	DB       *pdb.DB
 	Log      *slog.Logger
 	Registry *prometheus.Registry
@@ -65,6 +72,9 @@ type Writer struct {
 	now    func() time.Time
 	holder string
 	maxAge time.Duration
+	// buckets keeps the memory-backed locks bucket in existence: a full nats
+	// restart loses it, and the writer recovers without an operator
+	buckets *natsx.BucketKeeper
 
 	mu   sync.Mutex
 	lock *natsx.Lock
@@ -94,9 +104,14 @@ func New(cfg Config) (*Writer, error) {
 	if err != nil {
 		return nil, err
 	}
+	buckets, err := natsx.NewBucketKeeper(js, cfg.Replicas, cfg.Log, natsx.BucketLocks)
+	if err != nil {
+		return nil, err
+	}
 	w := &Writer{
 		set: cfg.Settings, nc: cfg.NC, js: js, db: cfg.DB, log: cfg.Log, reg: cfg.Registry,
 		now: cfg.Now, holder: cfg.Settings.NodeID + "-" + hex.EncodeToString(b), maxAge: maxAge,
+		buckets: buckets,
 	}
 	if w.now == nil {
 		w.now = time.Now
@@ -123,8 +138,8 @@ func apiMetricsMaxAge() (time.Duration, error) {
 	return 0, errors.New("metricswriter: topology declares no max age for API_METRICS")
 }
 
-// Ops serves /healthz, /readyz (nats connected, database reachable) and
-// /metrics.
+// Ops serves /healthz, /readyz (nats connected, locks bucket not known
+// missing, database reachable) and /metrics.
 func (w *Writer) Ops() http.Handler {
 	return obs.NewOpsHandler(w.reg, w.log,
 		obs.Check{Name: "nats", Fn: func(context.Context) error {
@@ -133,6 +148,7 @@ func (w *Writer) Ops() http.Handler {
 			}
 			return nil
 		}},
+		obs.Check{Name: "buckets", Fn: w.buckets.Ready},
 		obs.Check{Name: "database", Fn: func(ctx context.Context) error {
 			p, err := w.db.Pool(pdb.RoleMetricsWriter)
 			if err != nil {
@@ -163,6 +179,7 @@ func (w *Writer) bindLock(ctx context.Context) (*natsx.Lock, error) {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
+		w.buckets.Kick(err)
 		w.log.Warn("cannot bind the locks bucket, retrying", "error", err.Error())
 		if !sleepCtx(ctx, bindRetry) {
 			return nil, ctx.Err()
@@ -175,10 +192,16 @@ func (w *Writer) Run(ctx context.Context) error {
 	var wg sync.WaitGroup
 	bg, stopBg := context.WithCancel(context.WithoutCancel(ctx))
 	wg.Go(func() { w.sampleLag(bg) })
+	wg.Go(func() { w.buckets.Run(bg) })
 	defer func() {
 		stopBg()
 		wg.Wait()
 	}()
+	// a bucket the restart lost is recreated before the first bind; a
+	// failure here is retried by the keeper and the bind loop below
+	if err := w.buckets.Ensure(ctx); err != nil && ctx.Err() == nil {
+		w.log.Warn("locks bucket check failed, retrying", "error", err.Error())
+	}
 	lock, err := w.bindLock(ctx)
 	if err != nil {
 		if ctx.Err() != nil {
@@ -186,15 +209,25 @@ func (w *Writer) Run(ctx context.Context) error {
 		}
 		return err
 	}
-	el := &natsx.Elector{Lock: lock, RenewEvery: natsx.LockRenewEvery, RetryEvery: acquireRetry, Log: w.log}
+	el := &natsx.Elector{Lock: lock, RenewEvery: natsx.LockRenewEvery, RetryEvery: acquireRetry, Log: w.log, Buckets: w.buckets}
 	for {
 		err := el.Run(ctx, w.lead)
 		if ctx.Err() != nil {
 			return nil
 		}
-		if errors.Is(err, natsx.ErrFenced) || errors.Is(err, natsx.ErrLockLost) {
-			w.log.Warn("stopped consuming, a newer lock holder exists", "error", err.Error())
+		switch {
+		case errors.Is(err, natsx.ErrFenced) || errors.Is(err, natsx.ErrLockLost):
+			w.log.Warn("stopped consuming, the lock is lost or a newer holder exists", "error", err.Error())
 			continue
+		case errors.Is(err, errNotReady):
+			w.log.Warn("stopped consuming, jetstream not ready", "error", err.Error())
+			if !sleepCtx(ctx, acquireRetry) {
+				return nil
+			}
+			continue
+		case err == nil:
+			// lead returns nil only when ctx ended
+			return nil
 		}
 		return err
 	}
@@ -249,10 +282,9 @@ func (w *Writer) lead(ctx context.Context) error {
 	case errors.Is(err, jetstream.ErrConsumerNotFound) || errors.Is(err, jetstream.ErrStreamNotFound):
 		return fmt.Errorf("metricswriter: bind consumer %s on %s (run platformctl nats apply): %w", natsx.ConsumerMetricsWriter, natsx.StreamAPIMetrics, err)
 	default:
-		// a cluster that is still electing; the elector releases and retries
-		w.log.Warn("cannot bind the consumer yet", "error", err.Error())
-		sleepCtx(ctx, fetchRetryWait)
-		return nil
+		// a cluster that is still electing; the lock is released and Run
+		// contends again
+		return fmt.Errorf("%w: bind consumer: %w", errNotReady, err)
 	}
 	for ctx.Err() == nil {
 		batch, err := cons.Fetch(w.set.Batch, jetstream.FetchMaxWait(fetchWait))
@@ -270,6 +302,12 @@ func (w *Writer) lead(ctx context.Context) error {
 		}
 		if err := batch.Error(); err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, jetstream.ErrNoMessages) {
 			w.log.Warn("nats fetch ended with an error", "error", err.Error())
+			if len(msgs) == 0 {
+				// a fetch that fails at once (no responders while the
+				// stream has no leader) would otherwise spin
+				sleepCtx(ctx, fetchRetryWait)
+				continue
+			}
 		}
 		if len(msgs) == 0 {
 			continue

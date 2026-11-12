@@ -58,3 +58,7 @@ export const REFERRER_ORIGIN = `https://${REFERRER_HOST}`;
 export const EVIL_HOST = "evil.sa-attacker.example";
 export const EVIL_ORIGIN = `https://${EVIL_HOST}`;
 export const LOCAL_HOSTS = [`*.${TENANT_DOMAIN}`, REFERRER_HOST, EVIL_HOST];
+
+// the stack's loopback control api that starts an example app with a token
+// a spec created (stack_test.go AppsControl)
+export const APPS_CTL = required("CE2E_APPS_CTL");

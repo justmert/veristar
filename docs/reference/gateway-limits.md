@@ -63,7 +63,8 @@ A restart of a single NATS server loses the memory buckets (`edge_secrets`,
 `visit_state`, `locks`) entirely, not just their keys; a full restart of the 3-node
 cluster keeps their definitions but empties them. Each service recreates the buckets it
 uses itself, with exactly the topology config from `internal/natsx`: the gateway
-`edge_secrets`, the replayer `visit_state` and `locks`, jobs `locks`. They check at
+`edge_secrets`, the replayer `visit_state` and `locks`, jobs and the metricswriter
+`locks`. They check at
 startup, every second, and at once when a bucket operation fails as a missing stream
 would. Their NATS users may create exactly those `KV_<bucket>` streams and nothing
 else. No operator step is needed (`tests/recovery`, build tag `recoveryit`).

@@ -19,12 +19,14 @@ const (
 	PurgerWebIngest = "web_ingest"
 	// PurgerAPI is the this stage purger of the api schema
 	PurgerAPI = "api"
+	// PurgerAgg is the this stage purger of the agg schema
+	PurgerAgg = "agg"
 )
 
 // Purgers returns the purgers of every store, in the order of contract 5.5:
 // registry (web ingestion stops), otlp_tokens (api ingestion stops), then
-// umami, then cp.web_ingest_hourly, then the api schema. this stage appends
-// agg.
+// umami, then cp.web_ingest_hourly, then the api schema, then the agg
+// schema.
 func Purgers(reg *registry.Publisher, admin *umami.Admin) ([]Purger, error) {
 	if reg == nil || admin == nil {
 		return nil, errors.New("lifecycle: purgers need the registry publisher and the umami admin")
@@ -35,6 +37,7 @@ func Purgers(reg *registry.Publisher, admin *umami.Admin) ([]Purger, error) {
 		UmamiPurger{Admin: admin},
 		WebIngestPurger{},
 		APIPurger{},
+		AggPurger{},
 	}, nil
 }
 
@@ -234,4 +237,32 @@ func (APIPurger) Purge(ctx context.Context, r Removal) (map[string]any, error) {
 		detail["kept"] = []string{"metrics_hourly", "metrics_daily", "ingest_warnings"}
 	}
 	return detail, nil
+}
+
+// AggPurger deletes the tenant's agg rows (the design) through
+// agg.purge_tenant, the one agg right cp_system has. every agg row is an
+// aggregate, so a removal that keeps aggregates keeps all of them (contract
+// 5.13). it runs after umami: the registry step already stopped the
+// aggregation task from reading the tenant's sites, and the function waits
+// for a write of that task still in flight.
+type AggPurger struct{}
+
+// Name is the step key.
+func (AggPurger) Name() string { return PurgerAgg }
+
+// Purge deletes in the run's transaction, so the rows go with the step
+// record or not at all.
+func (AggPurger) Purge(ctx context.Context, r Removal) (map[string]any, error) {
+	if r.KeepAggregates {
+		return map[string]any{"skipped": "keep_aggregates"}, nil
+	}
+	rows, err := systemq.New(r.Tx).PurgeAggTenant(ctx, r.TenantID)
+	if err != nil {
+		return nil, &RecordError{fmt.Errorf("agg rows: %w", err)}
+	}
+	deleted := map[string]int64{}
+	for _, row := range rows {
+		deleted[row.TableName] = row.RowsDeleted
+	}
+	return map[string]any{"rows_deleted": deleted}, nil
 }

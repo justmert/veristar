@@ -286,6 +286,8 @@ func startAPIStack(t *testing.T) *apiStack {
 		"NATS_REPLICAS=1",
 		"NATS_USER=" + natsx.ServiceControlPlane,
 		"NATS_PASSWORD=" + s.creds[natsx.ServiceControlPlane],
+		"API_MINUTE_RETENTION_DAYS=30",
+		"API_HOURLY_RETENTION_MONTHS=36",
 		"TZ=UTC",
 	}
 	for k, v := range pg.EnvFor("platform") {

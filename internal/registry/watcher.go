@@ -62,6 +62,14 @@ func (w *Watcher[T]) Get(key string) (T, bool) {
 	return v, ok
 }
 
+// Snapshot returns a copy of every entry, keyed as in the bucket, for
+// callers that walk the whole registry (the jobs task aggregate-web).
+func (w *Watcher[T]) Snapshot() map[string]T {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	return maps.Clone(w.snap)
+}
+
 // Len returns the number of entries in the snapshot.
 func (w *Watcher[T]) Len() int {
 	w.mu.RLock()

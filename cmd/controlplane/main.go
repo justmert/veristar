@@ -25,6 +25,7 @@ import (
 
 	"github.com/justmert/stellar-analytics/internal/config"
 	"github.com/justmert/stellar-analytics/internal/controlplane"
+	"github.com/justmert/stellar-analytics/internal/controlplane/apimetrics"
 	"github.com/justmert/stellar-analytics/internal/controlplane/auth"
 	"github.com/justmert/stellar-analytics/internal/controlplane/domaincheck"
 	"github.com/justmert/stellar-analytics/internal/controlplane/ingest"
@@ -61,7 +62,9 @@ UMAMI_USER_PASSWORD_KEY, TRACKER_RELEASE_DIR, TRACKER_NPM_PACKAGE (optional),
 NATS_URL, NATS_REPLICAS, NATS_USER and NATS_PASSWORD (when the server
 requires auth), PLATFORM_DB_HOST, PLATFORM_DB_PORT, PLATFORM_DB_NAME,
 PLATFORM_DB_SSLMODE, PLATFORM_DB_CP_SYSTEM_PASSWORD,
-PLATFORM_DB_CP_TENANT_PASSWORD, PLATFORM_DB_CP_OPERATOR_PASSWORD.
+PLATFORM_DB_CP_TENANT_PASSWORD, PLATFORM_DB_CP_OPERATOR_PASSWORD,
+API_MINUTE_RETENTION_DAYS and API_HOURLY_RETENTION_MONTHS (section 7.11, the
+values jobs runs with).
 `
 
 func main() {
@@ -110,6 +113,9 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 	endpoints := auth.LoadEndpoints(env)
 	natsCfg, _ := config.LoadNATS(env)
 	poolCfg, _ := db.LoadPoolConfig(env, db.RoleCPSystem, db.RoleCPTenant, db.RoleCPOperator)
+	// the api metrics ranges switch tables at the horizons the jobs
+	// retention task drops data by, so both read the same keys
+	retention, _ := config.LoadAPIRetention(env)
 	cfg, err := config.LoadControlPlane(env)
 	if err != nil {
 		return err
@@ -223,12 +229,21 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	// this stage global web and api views, aggregate tables only
+	global, err := operator.NewGlobal(d)
+	if err != nil {
+		return err
+	}
 	review, err := operator.NewTenants(d)
 	if err != nil {
 		return err
 	}
 
 	otlpRoutes, err := otlptokens.NewRoutes(scope, publisher)
+	if err != nil {
+		return err
+	}
+	metricRoutes, err := apimetrics.NewRoutes(scope, apimetrics.Resolver{Now: time.Now, Retention: retention})
 	if err != nil {
 		return err
 	}
@@ -268,12 +283,13 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 			checks,
 			ingest.NewRoutes(scope),
 			otlpRoutes,
+			metricRoutes,
 			snippets,
 			// behind RequireUser like every private group; sso answers its own
 			// failures with a redirect, but an anonymous request gets 401
 			controlplane.RoutesFunc(func(r chi.Router) { r.Method(http.MethodGet, ssoPath, ssoH) }),
 			// /api/operator: 403 operator_required for everyone else (5.1)
-			controlplane.RoutesFunc(guard.Mount(modeRoutes, keepRoutes, auditRoutes, actions, review)),
+			controlplane.RoutesFunc(guard.Mount(modeRoutes, keepRoutes, auditRoutes, actions, review, global)),
 		},
 	})
 

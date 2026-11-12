@@ -2,10 +2,13 @@ package db_test
 
 import (
 	"context"
+	"fmt"
+	"net/url"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
 	pdb "github.com/justmert/stellar-analytics/internal/db"
@@ -75,6 +78,39 @@ func TestOperatorBoundaries(t *testing.T) {
 	requireDenied(t, err, "operator writing settings")
 	_, err = attempt(t, pdb.RoleCPOperator, nil, `update cp.tenants set status = 'active'`)
 	requireDenied(t, err, "operator changing tenants")
+
+	// this stage: aggregates of every tenant, read only; never minutes or
+	// writer state, never another database
+	for _, rel := range []string{"agg.web_daily", "agg.web_daily_dim", "api.metrics_hourly", "api.metrics_daily"} {
+		n, err := count(t, pdb.RoleCPOperator, nil, `select count(*) from `+rel)
+		require.NoError(t, err, rel)
+		require.Positive(t, n, "operators see every tenant's rows of "+rel)
+	}
+	for _, rel := range []string{"api.metrics_minute", "api.series_state", "api.resource_seen", "api.ingest_dedup",
+		"api.route_registry", "api.ingest_warnings", "api.rollup_pending"} {
+		_, err := count(t, pdb.RoleCPOperator, nil, `select count(*) from `+rel)
+		requireDenied(t, err, "cp_operator reading "+rel)
+	}
+	for _, sql := range []string{
+		`delete from agg.web_daily`, `update agg.web_daily_dim set value = value`,
+		`insert into agg.web_daily (site_id, tenant_id, day, band, pageviews, visitors, visits, bounces, totaltime)
+		 values (gen_random_uuid(), gen_random_uuid(), current_date, 'primary', 0, 0, 0, 0, 0)`,
+	} {
+		_, err := attempt(t, pdb.RoleCPOperator, nil, sql)
+		requireDenied(t, err, "cp_operator writing agg: "+sql)
+	}
+	_, err = attempt(t, pdb.RoleCPOperator, nil, `select * from agg.purge_tenant($1)`, seed.tenantA)
+	requireDenied(t, err, "cp_operator purging agg")
+
+	// the umami database is reachable for umami_app only
+	ocfg := pg.EnvFor("umami")
+	dsn := fmt.Sprintf("postgres://cp_operator:%s@%s:%d/umami?sslmode=disable",
+		url.QueryEscape(ocfg["PLATFORM_DB_CP_OPERATOR_PASSWORD"]), pg.Host, pg.Port)
+	c, err := pgx.Connect(ctx, dsn)
+	if err == nil {
+		_ = c.Close(ctx)
+	}
+	require.ErrorContains(t, err, "permission denied for database", "cp_operator connecting to umami")
 }
 
 func TestMetricsWriterBoundaries(t *testing.T) {
@@ -131,6 +167,16 @@ func TestJobsBoundaries(t *testing.T) {
 	// statsdedup-prune removes old message ids (migration 00006)
 	_, err = attempt(t, pdb.RoleJobs, nil, `delete from cp.stats_dedup where applied_at < now() - interval '8 days'`)
 	require.NoError(t, err)
+	// aggregate-web reads a tenant's status and nothing else of cp.tenants
+	n, err = count(t, pdb.RoleJobs, nil, `select count(*) from cp.tenants where status <> 'removed' and id is not null`)
+	require.NoError(t, err)
+	require.Equal(t, int64(2), n)
+	_, err = count(t, pdb.RoleJobs, nil, `select count(name) from cp.tenants`)
+	requireDenied(t, err, "jobs reading tenant names")
+	_, err = attempt(t, pdb.RoleJobs, nil, `update cp.tenants set status = 'active'`)
+	requireDenied(t, err, "jobs changing tenants")
+	_, err = attempt(t, pdb.RoleJobs, nil, `select * from agg.purge_tenant($1)`, seed.tenantA)
+	requireDenied(t, err, "jobs purging agg")
 }
 
 func TestAuditLogAppendOnly(t *testing.T) {

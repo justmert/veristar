@@ -1060,7 +1060,7 @@ func (s *suite) commitWithoutAck(t *testing.T) int {
 	}
 	defer d.Close()
 	nc := s.conn(t, natsx.ServiceMetricsWriter)
-	w, err := New(Config{Settings: set, NC: nc, DB: d, Log: slog.New(slog.DiscardHandler), Registry: obs.NewRegistry()})
+	w, err := New(Config{Settings: set, NC: nc, Replicas: 1, DB: d, Log: slog.New(slog.DiscardHandler), Registry: obs.NewRegistry()})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -63,6 +63,9 @@ var tenantTables = []tenantTable{
 	{name: "api.ingest_dedup", key: "tenant_id", denied: true},
 	{name: "api.route_registry", key: "tenant_id", denied: true},
 	{name: "api.rollup_pending", key: "tenant_id", denied: true},
+	// agg (this stage): operators only; cp_tenant has no usage on the schema
+	{name: "agg.web_daily", key: "tenant_id", denied: true},
+	{name: "agg.web_daily_dim", key: "tenant_id", denied: true},
 }
 
 // the isolation tests only mean something if they cover every tenant table

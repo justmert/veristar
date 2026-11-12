@@ -115,3 +115,46 @@ primary numbers.
   website's `resetAt` (`lib/request.ts`). The replayer sends whole acceptance seconds, so an
   event accepted in the same second as a reset, or a backlog accepted before it and replayed
   after it, is stored but never shown.
+
+## Daily aggregates (this stage)
+
+The operator views read `agg.web_daily` and `agg.web_daily_dim`, which the
+jobs task `aggregate-web` (`internal/jobs/aggregateweb`) fills from Umami's
+own read routes, as the admin, for each active site, both bands and each UTC
+day: `/stats` gives one `web_daily` row, `/metrics` with `type` `referrer`,
+`country`, `device`, `browser` and `os` gives the `web_daily_dim` rows.
+A run reads today and the 3 days before it every hour; `jobs run
+aggregate-web --from <day> --to <day>` reads any range again. Each site day
+replaces its rows in one fenced transaction, so re-running changes nothing
+and a backfill restores deleted rows.
+
+The research items of the design were measured on 2026-11-12 against the
+dev Umami (the pinned 3.5.0 image, events sent through `/api/send` the way
+the replayer sends them, three UTC days, six visitors, a bot, a custom event,
+own-host and `www.` referrers, an event at exactly 00:00:00) and are asserted
+by `TestAggregateWeb` (`internal/jobs/aggregateweb`) on every run.
+
+| Question | Answer | Source in Umami |
+|---|---|---|
+| What does `y` count? | For every type used here, `count(distinct session_id)` over page view events (`event_type` not 2 or 5) in the range with a non-empty value. A visit that holds only a custom event is not counted. On this platform a session is one visitor on one UTC day, so `y` is "visitors of that day whose page views carry the value". A visitor can carry two referrers in a day and then counts under both, so the values of `referrer` can add up to more than `visitors`. | `queries/sql/pageviews/getPageviewMetrics.ts` (referrer, domain), `queries/sql/sessions/getSessionMetrics.ts` (country, device, browser, os) |
+| `referrer` or `domain`? | The same. Both read `website_event.referrer_domain` (`FILTER_COLUMNS` in `lib/constants.ts`) and drop empty values and the site's own host, so the two answers are identical row for row. The stored domain is already lowercased with `www.` removed (`https://www.google.com/...` is `google.com`, `GitHub.com` is `github.com`); a referrer on the site's own host, with or without `www.`, is stored empty and never listed. The task stores `referrer` only. | as above |
+| Unknown values | A null or empty value (country without a `cf-ipcountry` header) is left out of `/metrics`; the visitor still counts in `/stats`. | `and <column> != ''` |
+| Day boundaries | `startAt` and `endAt` are both included (`created_at between start and end`). With the next midnight as `endAt`, an event at exactly 00:00:00 counts on two days (measured: 8 page views instead of 7). The task reads a day as `[00:00:00.000, 23:59:59.999]` UTC. | `getWebsiteStats.ts`, `getPageviewMetrics.ts` |
+| Visitors over a range | Equal to the sum of daily visitors. Measured over three days: page views 13 = 7 + 3 + 3, visitors 10 = 5 + 3 + 2, visits 10 = 5 + 3 + 2, bounces 7 = 3 + 3 + 1, total time 1560 s = 360 + 0 + 1200; every `/metrics` value of the range equals the sum of its daily values (for example `github.com` 4 = 2 + 2, `DE` 5 = 2 + 2 + 1). The same client salt on three days gave three sessions, because Umami's daily salt changes with the event's day even before the gateway's visitor token rotates. | `lib/crypto.ts` `getSalt`, `lib/collection-session.ts` |
+| Paging | `/metrics` takes `limit` (default 500) and `offset`, and orders only by `y desc`, so values with equal counts have no stable order across pages. The task asks for one page of 1,000 values, doubles the limit while a page comes back full, and fails the site day above 64,000 values instead of paging. | `getPageviewMetrics.ts`, `getSessionMetrics.ts` |
+| Unknown website | `/stats` and `/metrics` of a website id that does not exist answer 200 with zeros for the admin. The task therefore checks that both websites of a site exist before it reads, and reports a missing one as an error rather than storing a day without traffic. | `canViewWebsite` passes for an admin |
+| `type=url` | Not a type in 3.5.0 (400); `path` and `fullPath` replaced it. The operator views do not use paths. | `lib/constants.ts` |
+
+Consequences for the operator views (`docs/reference/control-plane-api.md`
+section 8):
+
+- Visitors, visits, bounces and total time over a range are sums of daily
+  rows, which equal Umami's answer for the same range. A project's numbers
+  are the sum of its sites; one person on two sites of a project is two
+  visitors, as Umami counts per website.
+- Bounce rate is `bounces / visits` and average visit duration
+  `totaltime / visits`, the formulas of Umami's dashboard.
+- A breakdown value over a range is the sum of its daily values, which equals
+  Umami's `/metrics` for the range.
+- Removed tenants are not read again; the purge step `agg` deletes their rows
+  unless `removal_keep_aggregates` keeps them.

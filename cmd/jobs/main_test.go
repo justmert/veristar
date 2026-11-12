@@ -17,16 +17,19 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 
 	"github.com/justmert/stellar-analytics/internal/config"
+	pdb "github.com/justmert/stellar-analytics/internal/db"
 	"github.com/justmert/stellar-analytics/internal/gateway"
 	"github.com/justmert/stellar-analytics/internal/jobs/jobstest"
 	"github.com/justmert/stellar-analytics/internal/natsx"
 	"github.com/justmert/stellar-analytics/internal/registry"
+	"github.com/justmert/stellar-analytics/internal/umami"
 	"github.com/justmert/stellar-analytics/tests/fixtures/natsctr"
 	"github.com/justmert/stellar-analytics/tests/fixtures/umamictr"
 )
@@ -125,12 +128,12 @@ func TestDaemonAndRun(t *testing.T) {
 	_, err = natsx.Apply(t.Context(), conn(natsx.ServicePlatformctl), spec)
 	require.NoError(t, err)
 
-	site, tenant := uuid.New(), uuid.New()
+	site, tenant, quarantine := uuid.New(), uuid.New(), uuid.New()
 	pub, err := registry.NewPublisher(t.Context(), conn(natsx.ServiceControlPlane))
 	require.NoError(t, err)
 	require.NoError(t, pub.PutSite(t.Context(), registry.Site{
 		ID: site.String(), TenantID: tenant.String(), Status: registry.StatusActive,
-		Origins: []string{"https://example.org"}, QuarantineWebsiteID: uuid.NewString(),
+		Origins: []string{"https://example.org"}, QuarantineWebsiteID: quarantine.String(),
 	}))
 	stats, err := gateway.NewStats(gateway.StatsConfig{
 		Node: "edge-1", JS: conn(natsx.ServiceGateway), Log: quiet(), Registerer: prometheus.NewRegistry(),
@@ -148,6 +151,19 @@ func TestDaemonAndRun(t *testing.T) {
 	envMap["JOBS_OPS_ADDR"] = ops
 	// reconcile and umami-rotate run against a private umami
 	um := umamictr.Start(t)
+	// aggregate-web reads both websites of the registered site, and skips
+	// nothing but removed tenants, so the tenant and its websites exist
+	team, _, err := um.Admin.CreateTeam(t.Context(), "jobs-test", "")
+	require.NoError(t, err)
+	for _, id := range []uuid.UUID{site, quarantine} {
+		_, err := um.Admin.CreateWebsite(t.Context(), umami.NewWebsite{ID: id.String(), Name: "jobs", Domain: "example.org", TeamID: team.ID})
+		require.NoError(t, err)
+	}
+	su, err := pg.Superuser(t.Context(), "platform")
+	require.NoError(t, err)
+	_, err = su.Exec(t.Context(), `insert into cp.tenants (id, slug, name, status) values ($1, 'jobs-test', 'Jobs test', 'active')`, tenant)
+	require.NoError(t, err)
+	require.NoError(t, su.Close(t.Context()))
 	envMap["UMAMI_URL"] = um.URL.String()
 	envMap["UMAMI_ADMIN_PASSWORD"] = um.AdminPassword
 	pwKey := make([]byte, 32)
@@ -239,6 +255,30 @@ func TestDaemonAndRun(t *testing.T) {
 		var l syncBuf
 		require.Equal(t, 0, run(t.Context(), []string{"run", task}, config.FromMap(envMap), io.Discard, &l), "%s: %s", task, l.String())
 	}
+	// aggregate-web runs its regular pass, then a backfill of a range
+	var aggLog syncBuf
+	require.Equal(t, 0, run(t.Context(), []string{"run", "aggregate-web"}, config.FromMap(envMap), io.Discard, &aggLog), aggLog.String())
+	today := time.Now().UTC().Truncate(24 * time.Hour)
+	backfill := []string{"run", "aggregate-web", "--from", today.AddDate(0, 0, -9).Format(time.DateOnly), "--to", today.Format(time.DateOnly)}
+	require.Equal(t, 0, run(t.Context(), backfill, config.FromMap(envMap), io.Discard, &aggLog), aggLog.String())
+	require.Contains(t, aggLog.String(), `"days":10`)
+	var aggRows int
+	require.NoError(t, jobsDB.WithRole(t.Context(), pdb.RoleJobs, func(tx pgx.Tx) error {
+		return tx.QueryRow(t.Context(), `select count(*) from agg.web_daily where site_id = $1`, site).Scan(&aggRows)
+	}))
+	require.Equal(t, 20, aggRows, "ten days, two bands")
+	for _, bad := range [][]string{
+		{"run", "aggregate-web", "--from", "2026-11-01"},
+		{"run", "aggregate-web", "--from", "2026-11-02", "--to", "2026-11-01"},
+		{"run", "aggregate-web", "--from", "yesterday", "--to", "2026-11-01"},
+		{"run", "aggregate-web", "--from", "2026-11-01", "--to", "2026-11-01", "extra"},
+		{"run", "edgestats", "--from", "2026-11-01", "--to", "2026-11-01"},
+	} {
+		var l syncBuf
+		require.Equal(t, 2, run(t.Context(), bad, config.FromMap(envMap), io.Discard, &l), strings.Join(bad, " "))
+		require.Contains(t, l.String(), "usage: jobs")
+	}
+
 	// an hourly horizon under the rfp's 24 months stops the process
 	low := maps.Clone(envMap)
 	low["API_HOURLY_RETENTION_MONTHS"] = "23"

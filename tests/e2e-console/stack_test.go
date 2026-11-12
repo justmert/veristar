@@ -6,7 +6,11 @@
 // (bootstrapped), the control plane built with the oauthfixture tag and
 // pointed at the TEST-ONLY github oauth fixture (tests/fixtures/githuboauth),
 // the replayer, the gateway image behind the edge caddy, the web caddy in
-// front of umami and the console's static build behind the app caddy. the
+// front of umami and the console's static build behind the app caddy. for
+// the api analytics flows (this stage) the stack adds the collector image and
+// the metricswriter behind otlp.<base domain> on the same edge caddy, a
+// stock collector as the tenants' own backend, and a loopback control api
+// that starts the go example app with a token the spec created. the
 // browsers reach the edge through a forwarder on a db-ip german range, so the
 // country panel has a real value. the playwright half lives in this
 // directory (specs/). run it with `make console-e2e`.
@@ -21,6 +25,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math/big"
 	"net"
 	"net/http"
@@ -33,6 +38,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -48,6 +54,13 @@ import (
 const (
 	baseDomain   = "sa-test.example"
 	gatewayImage = "stellar-analytics/gateway:console-e2e"
+	// the collector distribution (deploy/images/collector.Dockerfile) and
+	// the go example app (examples/otel-go-nethttp), built in TestMain
+	collectorImage = "stellar-analytics/collector:console-e2e"
+	exampleImage   = "stellar-analytics/otel-go-nethttp:console-e2e"
+	// the stock collector of deploy/compose/examples.yml, standing in for a
+	// tenant's own observability backend
+	tenantBackendImage = "otel/opentelemetry-collector-contrib:0.165.0@sha256:e40d61f10c9a617cca1ffd1be4d7e2b3a4b0f0001798ff07e58cabe82e618cea"
 	// caddy with the replace-response plugin (deploy/images/caddy.Dockerfile),
 	// which the web caddy needs for the db-ip attribution
 	caddyPluginImage = "stellar-analytics/caddy:2.11.9"
@@ -87,8 +100,8 @@ func repoRoot() string {
 
 // binaries built once in TestMain
 var bins struct {
-	controlplane, jobs, replayer, platformctl, fwd, oauth string
-	dir                                                   string
+	controlplane, jobs, replayer, metricswriter, platformctl, fwd, oauth string
+	dir                                                                  string
 }
 
 func TestMain(m *testing.M) {
@@ -117,6 +130,8 @@ func setup() (int, error) {
 	builds := [][]string{
 		{"build", "-q", "-f", "deploy/images/gateway.Dockerfile", "--build-arg", "DBIP_MONTH=" + month, "-t", gatewayImage, "."},
 		{"build", "-q", "-f", "deploy/images/caddy.Dockerfile", "-t", caddyPluginImage, "deploy/images"},
+		{"build", "-q", "-f", "deploy/images/collector.Dockerfile", "-t", collectorImage, "."},
+		{"build", "-q", "-t", exampleImage, "examples/otel-go-nethttp"},
 	}
 	for _, b := range builds {
 		cmd := exec.Command("docker", b...)
@@ -141,6 +156,7 @@ func setup() (int, error) {
 		{&bins.controlplane, "./cmd/controlplane", "oauthfixture"},
 		{&bins.jobs, "./cmd/jobs", ""},
 		{&bins.replayer, "./cmd/replayer", ""},
+		{&bins.metricswriter, "./cmd/metricswriter", ""},
 		{&bins.fwd, "./tests/webpath/fwd", ""},
 		{&bins.oauth, "./tests/fixtures/githuboauth/cmd/githuboauth-fixture", ""},
 	}
@@ -270,12 +286,16 @@ type Stack struct {
 	OAuthCtl    string
 
 	Edge string
+	// CADir holds root.crt, the edge caddy's local ca, for the example apps
+	CADir string
 	// Routes maps host:port as the browser asks for it to the loopback
 	// address of the published container port
 	Routes map[string]string
 
 	names []string
 	nets  []string
+	// names of containers the apps control api started, from its goroutines
+	mu sync.Mutex
 }
 
 func newStack(t testing.TB) *Stack {
@@ -302,7 +322,10 @@ func (s *Stack) cleanup(t testing.TB) {
 	// logs of every container, for diagnosis after a failure
 	if t.Failed() || os.Getenv("CONSOLE_E2E_LOGS") != "" {
 		dir := outDir()
-		for _, n := range s.names {
+		s.mu.Lock()
+		all := append([]string(nil), s.names...)
+		s.mu.Unlock()
+		for _, n := range all {
 			out, _ := exec.Command("docker", "logs", n).CombinedOutput()
 			_ = os.WriteFile(filepath.Join(dir, n+".log"), out, 0o644)
 		}
@@ -310,8 +333,11 @@ func (s *Stack) cleanup(t testing.TB) {
 	if os.Getenv("CONSOLE_E2E_KEEP") != "" {
 		return
 	}
-	for i := len(s.names) - 1; i >= 0; i-- {
-		_, _ = docker("rm", "-f", "-v", s.names[i])
+	s.mu.Lock()
+	names := append([]string(nil), s.names...)
+	s.mu.Unlock()
+	for i := len(names) - 1; i >= 0; i-- {
+		_, _ = docker("rm", "-f", "-v", names[i])
 	}
 	for _, n := range s.nets {
 		_, _ = docker("network", "rm", n)
@@ -324,7 +350,9 @@ func (s *Stack) run(t testing.TB, name string, opts []string, image string, args
 	all = append(all, image)
 	all = append(all, args...)
 	mustDocker(t, all...)
+	s.mu.Lock()
 	s.names = append(s.names, name)
+	s.mu.Unlock()
 }
 
 // mounted runs a static binary from bins on the distroless image.
@@ -494,7 +522,11 @@ func (s *Stack) common(userPWKey string) map[string]string {
 		"UMAMI_ADMIN_PASSWORD":    s.UmamiPW,
 		"UMAMI_USER_PASSWORD_KEY": userPWKey,
 		"TRACKER_RELEASE_DIR":     "/releases",
-		"TZ":                      "UTC",
+		// the control plane switches api metric tables at the horizons jobs
+		// keeps (control-plane-api 7.11), so both take the same values
+		"API_MINUTE_RETENTION_DAYS":   "30",
+		"API_HOURLY_RETENTION_MONTHS": "36",
+		"TZ":                          "UTC",
 	}
 	for k, v := range s.DBEnv {
 		env[k] = v
@@ -533,8 +565,6 @@ func (s *Stack) StartControlPlane(t testing.TB) {
 	jobsOps := freePort(t)
 	jenv := s.common(userKey)
 	jenv["JOBS_OPS_ADDR"] = "0.0.0.0:9090"
-	jenv["API_MINUTE_RETENTION_DAYS"] = "30"
-	jenv["API_HOURLY_RETENTION_MONTHS"] = "36"
 	s.mounted(t, "sa-ce-jobs-"+s.ID, bins.jobs,
 		[]string{"-p", "127.0.0.1:" + jobsOps + ":9090", "-v", releases}, jenv, "daemon")
 	waitHTTP(t, "http://127.0.0.1:"+jobsOps+"/healthz", time.Minute)
@@ -569,10 +599,13 @@ func (s *Stack) StartEdge(t testing.TB) {
 
 	s.Edge = "sa-ce-edge-" + s.ID
 	s.run(t, s.Edge, []string{
-		"--network-alias", "in." + baseDomain,
+		"--network-alias", "in." + baseDomain, "--network-alias", "otlp." + baseDomain,
 		"-v", filepath.Join(repoRoot(), "deploy", "caddy", "edge.Caddyfile") + ":/etc/caddy/Caddyfile:ro",
 		"-e", "BASE_DOMAIN=" + baseDomain, "-e", "GATEWAY_UPSTREAM=edge-1:8080", "-e", "EDGE_TLS=internal",
+		"-e", "COLLECTOR_GRPC_UPSTREAM=collector:4317", "-e", "COLLECTOR_HTTP_UPSTREAM=collector:4318",
+		"-e", "COLLECTOR_HEALTH_UPSTREAM=collector:13133",
 	}, umamictr.CaddyImage)
+	s.copyEdgeCA(t)
 
 	subnets := countrySubnets(t, "DE")
 	name := "sa-ce-de-" + s.ID
@@ -602,6 +635,193 @@ func (s *Stack) StartEdge(t testing.TB) {
 	s.names = append(s.names, fwd)
 	waitHTTP(t, "http://127.0.0.1:"+ctlPort+"/", 30*time.Second)
 	s.Routes["in."+baseDomain+":443"] = "127.0.0.1:" + tlsPort
+}
+
+// copyEdgeCA copies the edge caddy's local root certificate out, so the
+// example apps can trust otlp.<base domain> as tenant apps trust a public ca.
+func (s *Stack) copyEdgeCA(t testing.TB) {
+	t.Helper()
+	s.CADir = t.TempDir()
+	// the app runs as nonroot; the directory and file must be readable
+	if err := os.Chmod(s.CADir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	crt := filepath.Join(s.CADir, "root.crt")
+	deadline := time.Now().Add(time.Minute)
+	for {
+		_, err := docker("cp", s.Edge+":/data/caddy/pki/authorities/local/root.crt", crt)
+		if err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("edge ca not created: %v", err)
+		}
+		time.Sleep(300 * time.Millisecond)
+	}
+	if err := os.Chmod(crt, 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// StartCollector runs the collector image as the edge's otlp upstream. the
+// dev nats server has no auth, so user and password stay empty
+// (collector/otelcol.yaml).
+func (s *Stack) StartCollector(t testing.TB) {
+	t.Helper()
+	health := freePort(t)
+	s.run(t, "sa-ce-collector-"+s.ID, append([]string{"--network-alias", "collector", "-p", "127.0.0.1:" + health + ":13133"},
+		envOpts(map[string]string{
+			"NATS_URL":                           "nats://nats:4222",
+			"NATS_USER":                          "",
+			"NATS_PASSWORD":                      "",
+			"COLLECTOR_GRPC_ADDR":                "0.0.0.0:4317",
+			"COLLECTOR_HTTP_ADDR":                "0.0.0.0:4318",
+			"COLLECTOR_HEALTH_ADDR":              "0.0.0.0:13133",
+			"COLLECTOR_MEMORY_LIMIT_MIB":         "512",
+			"COLLECTOR_MEMORY_SPIKE_MIB":         "128",
+			"COLLECTOR_RATE_REQUESTS_PER_SECOND": "200",
+			"COLLECTOR_RATE_REQUESTS_BURST":      "400",
+			"COLLECTOR_RATE_ITEMS_PER_SECOND":    "100000",
+			"COLLECTOR_RATE_ITEMS_BURST":         "200000",
+			"TZ":                                 "UTC",
+		})...), collectorImage)
+	waitHTTP(t, "http://127.0.0.1:"+health+"/", 2*time.Minute)
+}
+
+// StartMetricsWriter drains API_METRICS into the api schema; jobs (started
+// with the control plane) rolls the minutes up to hours and days.
+func (s *Stack) StartMetricsWriter(t testing.TB) {
+	t.Helper()
+	ops := freePort(t)
+	env := map[string]string{
+		"NATS_URL":                            "nats://nats:4222",
+		"NATS_REPLICAS":                       "1",
+		"METRICSWRITER_NODE_ID":               "core-1",
+		"METRICSWRITER_OPS_ADDR":              "0.0.0.0:9090",
+		"METRICSWRITER_BATCH":                 "256",
+		"METRICSWRITER_FIRST_POINT_THRESHOLD": "120s",
+		"METRICSWRITER_ROUTE_CAP":             "300",
+		"METRICSWRITER_SERVICE_CAP":           "50",
+		"TZ":                                  "UTC",
+	}
+	for k, v := range s.DBEnv {
+		env[k] = v
+	}
+	s.mounted(t, "sa-ce-metricswriter-"+s.ID, bins.metricswriter, []string{"-p", "127.0.0.1:" + ops + ":9090"}, env)
+	waitHTTP(t, "http://127.0.0.1:"+ops+"/readyz", time.Minute)
+}
+
+// StartTenantBackend runs the stock collector the example apps export their
+// first copy to, as a tenant's own backend (deploy/compose/examples).
+func (s *Stack) StartTenantBackend(t testing.TB) {
+	t.Helper()
+	out := t.TempDir()
+	// the stock collector runs as uid 10001
+	if err := os.Chmod(out, 0o777); err != nil {
+		t.Fatal(err)
+	}
+	cfg := filepath.Join(repoRoot(), "deploy", "compose", "examples", "tenant-backend.yaml")
+	health := freePort(t)
+	s.run(t, "sa-ce-tenant-backend-"+s.ID, []string{
+		"--network-alias", "tenant-backend", "-p", "127.0.0.1:" + health + ":13133",
+		"-v", cfg + ":/etc/otelcol/tenant-backend.yaml:ro", "-v", out + ":/out",
+	}, tenantBackendImage, "--config=/etc/otelcol/tenant-backend.yaml")
+	waitHTTP(t, "http://127.0.0.1:"+health+"/", time.Minute)
+}
+
+// appRequest asks the control api for one example app process.
+type appRequest struct {
+	Service string `json:"service"`
+	Token   string `json:"token"`
+	// "metrics,traces" or "traces", the example's EXPORT_SIGNALS
+	Signals string `json:"signals"`
+}
+
+var serviceName = regexp.MustCompile(`^[a-z][a-z0-9-]{0,40}$`)
+
+// startApp runs the go example app with a tenant's token: its first
+// exporter goes to the tenant backend, the second to otlp.<base domain>
+// through the edge caddy, the collector, nats and the metricswriter. it
+// returns the loopback address the spec sends requests to.
+func (s *Stack) startApp(r appRequest) (string, error) {
+	if !serviceName.MatchString(r.Service) || !strings.HasPrefix(r.Token, "sa_otlp_") ||
+		(r.Signals != "metrics,traces" && r.Signals != "traces") {
+		return "", fmt.Errorf("bad app request %+v", r)
+	}
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return "", err
+	}
+	port := strconv.Itoa(l.Addr().(*net.TCPAddr).Port)
+	_ = l.Close()
+	name := "sa-ce-app-" + r.Service + "-" + s.ID
+	args := append([]string{"run", "-d", "--name", name, "--network", s.Net, "-p", "127.0.0.1:" + port + ":8080",
+		"-v", s.CADir + ":/edge-ca:ro"}, envOpts(map[string]string{
+		"TENANT_OTLP_ENDPOINT":   "http://tenant-backend:4318",
+		"PLATFORM_OTLP_ENDPOINT": "https://otlp." + baseDomain,
+		"PLATFORM_OTLP_TOKEN":    r.Token,
+		"EXPORT_SIGNALS":         r.Signals,
+		"METRICS_TEMPORALITY":    "cumulative",
+		"METRICS_HISTOGRAM":      "explicit",
+		// short, so the spec does not wait long for the first export
+		"METRICS_EXPORT_INTERVAL_MS": "3000",
+		"OTEL_SERVICE_NAME":          r.Service,
+		"SSL_CERT_FILE":              "/edge-ca/root.crt",
+		"PORT":                       "8080",
+		"TZ":                         "UTC",
+	})...)
+	args = append(args, exampleImage)
+	if _, err := docker(args...); err != nil {
+		return "", err
+	}
+	s.mu.Lock()
+	s.names = append(s.names, name)
+	s.mu.Unlock()
+	base := "http://127.0.0.1:" + port
+	deadline := time.Now().Add(time.Minute)
+	for {
+		resp, err := http.Get(base + "/healthz")
+		if err == nil {
+			_ = resp.Body.Close()
+			if resp.StatusCode == http.StatusNoContent {
+				return base, nil
+			}
+		}
+		if time.Now().After(deadline) {
+			logs, _ := exec.Command("docker", "logs", name).CombinedOutput()
+			return "", fmt.Errorf("app %s not healthy: %v\n%s", name, err, logs)
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+}
+
+// AppsControl serves POST /apps on loopback for the specs: the token comes
+// from the console, so the app can only start once a spec has created it.
+func (s *Stack) AppsControl(t testing.TB) string {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /apps", func(w http.ResponseWriter, req *http.Request) {
+		var r appRequest
+		if err := json.NewDecoder(io.LimitReader(req.Body, 4096)).Decode(&r); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		base, err := s.startApp(r)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{"url": base})
+	})
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := &http.Server{Handler: mux, ReadHeaderTimeout: 10 * time.Second}
+	go func() { _ = srv.Serve(l) }()
+	t.Cleanup(func() { _ = srv.Close() })
+	return "http://" + l.Addr().String()
 }
 
 // StartWeb runs deploy/caddy/web.Caddyfile in front of umami, on the caddy
@@ -721,9 +941,13 @@ func TestConsoleFlows(t *testing.T) {
 	s.StartOAuthFixture(t)
 	s.StartControlPlane(t)
 	s.StartReplayer(t)
+	s.StartCollector(t)
+	s.StartMetricsWriter(t)
+	s.StartTenantBackend(t)
 	s.StartEdge(t)
 	s.StartWeb(t)
 	s.StartApp(t)
+	appsCtl := s.AppsControl(t)
 
 	routes, err := json.Marshal(s.Routes)
 	if err != nil {
@@ -747,6 +971,7 @@ func TestConsoleFlows(t *testing.T) {
 		"CE2E_SITE_CTL_PORT="+freePort(t),
 		"CE2E_ROUTES="+string(routes),
 		"CE2E_OUT="+outDir(),
+		"CE2E_APPS_CTL="+appsCtl,
 	)
 	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 	runErr := cmd.Run()

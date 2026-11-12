@@ -197,6 +197,9 @@ services:
       PLATFORM_DB_CP_SYSTEM_PASSWORD: ${PLATFORM_DB_CP_SYSTEM_PASSWORD:?run make dev-env}
       PLATFORM_DB_CP_TENANT_PASSWORD: ${PLATFORM_DB_CP_TENANT_PASSWORD:?run make dev-env}
       PLATFORM_DB_CP_OPERATOR_PASSWORD: ${PLATFORM_DB_CP_OPERATOR_PASSWORD:?run make dev-env}
+      # the same horizons as jobs (control-plane-api 7.11)
+      API_MINUTE_RETENTION_DAYS: ${API_MINUTE_RETENTION_DAYS:?run make dev-env}
+      API_HOURLY_RETENTION_MONTHS: ${API_HOURLY_RETENTION_MONTHS:?run make dev-env}
       TZ: UTC
     volumes:
       - ../../packages/tracker/releases:/releases:ro
