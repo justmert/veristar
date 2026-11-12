@@ -9,8 +9,10 @@
 #                      this stage replaces it with dns-01 through caddy-dns/bunny,
 #                      which needs the custom caddy build.
 #
-# otlp.<BASE_DOMAIN> to the collector is added by this stage, with the same log
-# filter.
+#   COLLECTOR_GRPC_UPSTREAM    host:port of the collector's otlp grpc listener
+#   COLLECTOR_HTTP_UPSTREAM    host:port of the collector's otlp http listener
+#   COLLECTOR_HEALTH_UPSTREAM  host:port of the collector's health_check
+#                              endpoint (this stage, otlp.<BASE_DOMAIN>)
 
 (edge_log_fields) {
 	request>remote_ip delete
@@ -73,5 +75,73 @@ in.{$BASE_DOMAIN} {
 		header_up -X-Forwarded-For
 		header_up -X-Real-Ip
 		header_up -Forwarded
+	}
+}
+
+# otlp.<BASE_DOMAIN>: otlp grpc and otlp http on 443,
+# both to the local collector on the private side, with the same log filter.
+#
+# the http proxy health-checks the collector's health_check endpoint every
+# second. the collector reports ready only once its token snapshot is
+# loaded, so while it starts caddy answers 503 (no healthy upstream) or 502
+# (port not open yet), which otlp sdks retry, instead of letting the
+# collector answer 401, which they do not.
+(collector_health) {
+	health_upstream {$COLLECTOR_HEALTH_UPSTREAM}
+	health_uri /
+	health_status 200
+	health_interval 1s
+	health_timeout 1s
+	health_fails 1
+	health_passes 1
+}
+
+otlp.{$BASE_DOMAIN} {
+	tls {$EDGE_TLS}
+	import edge_log
+
+	# grpc is http/2 with content type application/grpc. caddy speaks
+	# cleartext http/2 (h2c) to the collector's grpc listener. no active
+	# health check here: caddy would send it over the same h2c transport,
+	# and the collector's health_check endpoint speaks only http/1.1. it is
+	# not needed for the startup window either: the collector opens its grpc
+	# port only after the token snapshot is loaded, so until then caddy gets
+	# a refused connection and answers 502, which grpc clients see as
+	# Unavailable and retry.
+	@grpc header Content-Type application/grpc*
+	handle @grpc {
+		reverse_proxy {
+			to {$COLLECTOR_GRPC_UPSTREAM}
+			transport http {
+				versions h2c
+			}
+			# the collector never needs the client address
+			header_up -X-Forwarded-For
+			header_up -X-Real-Ip
+			header_up -Forwarded
+		}
+	}
+
+	# otlp http: the three signal paths, post only. the collector checks the
+	# body size again after decompression; this bounds the bytes on the wire.
+	@otlphttp {
+		method POST
+		path /v1/metrics /v1/traces /v1/logs
+	}
+	handle @otlphttp {
+		request_body {
+			max_size 4MB
+		}
+		reverse_proxy {
+			to {$COLLECTOR_HTTP_UPSTREAM}
+			import collector_health
+			header_up -X-Forwarded-For
+			header_up -X-Real-Ip
+			header_up -Forwarded
+		}
+	}
+
+	handle {
+		respond 404
 	}
 }

@@ -27,6 +27,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/justmert/stellar-analytics/internal/controlplane/lifecycle"
+	"github.com/justmert/stellar-analytics/internal/controlplane/otlptokens"
 	"github.com/justmert/stellar-analytics/internal/db/systemq"
 	"github.com/justmert/stellar-analytics/internal/registry"
 	"github.com/justmert/stellar-analytics/internal/umami"
@@ -44,6 +45,8 @@ const (
 	ActionMembershipRemove = "provision.membership_remove"
 	ActionRegistryPut      = "provision.registry_put"
 	ActionRegistryDelete   = "provision.registry_delete"
+	// this stage: a registry_otlp entry written to match the cp tables
+	ActionOTLPRegistryPut = "provision.otlp_registry_put"
 )
 
 // Actor is the audit actor of every change the reconciler makes, whoever
@@ -154,14 +157,10 @@ func (r *Reconciler) Changes(ctx context.Context, tenantID uuid.UUID) ([]Change,
 	if err := r.check(); err != nil {
 		return nil, err
 	}
-	self, err := r.Admin.Self(ctx)
-	if err != nil {
-		return nil, err
-	}
 	var changes []Change
 	var runErr error
-	err = r.Tx(ctx, func(tx pgx.Tx) error {
-		s := &run{r: r, q: systemq.New(tx), tx: tx, adminID: self.ID}
+	err := r.Tx(ctx, func(tx pgx.Tx) error {
+		s := &run{r: r, q: systemq.New(tx), tx: tx}
 		t, err := s.q.ProvisionLockTenant(ctx, tenantID)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return fmt.Errorf("%w: %s", ErrTenantNotFound, tenantID)
@@ -209,12 +208,27 @@ func (s *run) reconcile(ctx context.Context) error {
 	}
 
 	if s.tenant.Status == statusRemoved {
-		return s.removedTenant(ctx)
+		if err := s.removedTenant(ctx); err != nil {
+			return err
+		}
+		// the purge revoked every row; this keeps the keys revoked if the
+		// bucket was ever rebuilt
+		return s.otlpTokens(ctx)
+	}
+	// tokens first and without umami: a suspension must reach the collector
+	// even while umami is unreachable
+	if err := s.otlpTokens(ctx); err != nil {
+		return err
 	}
 	if s.tenant.Status == statusPending || s.tenant.Status == statusRejected {
 		return s.unapprovedTenant(ctx, sites)
 	}
 
+	self, err := s.r.Admin.Self(ctx)
+	if err != nil {
+		return err
+	}
+	s.adminID = self.ID
 	teamID, err := s.team(ctx)
 	if err != nil {
 		return err
@@ -558,6 +572,36 @@ func (s *run) registryDelete(ctx context.Context, siteID uuid.UUID) error {
 		return err
 	}
 	return s.audit(ctx, ActionRegistryDelete, "site:"+siteID.String(), map[string]any{})
+}
+
+// otlpTokens makes every registry_otlp entry of the tenant match its row
+// and the tenant's status (otlptokens.RegistryStatus): suspended, pending
+// and rejected tenants publish their status, revoked rows publish revoked.
+// keys are kept, never deleted, so a token that turns inactive is refused
+// as such instead of as unknown.
+func (s *run) otlpTokens(ctx context.Context) error {
+	rows, err := s.q.ProvisionOTLPTokens(ctx, s.tenant.ID)
+	if err != nil {
+		return fmt.Errorf("provision: otlp tokens: %w", err)
+	}
+	for _, t := range rows {
+		want, err := otlptokens.Entry(s.tenant.ID, t.ID, t.Hash, t.Status, s.tenant.Status)
+		if err != nil {
+			return err
+		}
+		wrote, err := s.r.Registry.SyncOTLPToken(ctx, want)
+		if err != nil {
+			return err
+		}
+		if !wrote {
+			continue
+		}
+		if err := s.audit(ctx, ActionOTLPRegistryPut, "otlp_token:"+t.ID.String(),
+			map[string]any{"tenant_id": s.tenant.ID.String(), "status": want.Status}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // ReconcileAll runs Changes for every tenant. a failing tenant does not

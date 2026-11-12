@@ -45,6 +45,8 @@ const (
 	CodeProvisioningPending  = "provisioning_pending"
 	CodeTenantSuspended      = "tenant_suspended"
 	CodeInvalidTransition    = "invalid_transition"
+	// this stage: otlp token create while the tenant is pending or rejected
+	CodeTenantNotActive = "tenant_not_active"
 )
 
 // defaultUnavailableRetryIn is the Retry-After of a 503 when the caller does

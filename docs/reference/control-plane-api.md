@@ -154,7 +154,8 @@ List routes answer:
 | 409 | `site_removed` | change to a site with `status = 'removed'` |
 | 409 | `terms_version_mismatch` | accepted version is not the current one |
 | 409 | `invalid_transition` | lifecycle action not allowed from the current status (5.5) |
-| 409 | `tenant_suspended` | site create or update while the tenant is `suspended` (5.11) |
+| 409 | `tenant_suspended` | site create or update while the tenant is `suspended` (5.11); OTLP token create while `suspended` (6.2) |
+| 409 | `tenant_not_active` | OTLP token create while the tenant is `pending` or `rejected` (6.2) |
 | 410 | `tracker_version_revoked` | snippet for a revoked tracker version |
 | 413 | `body_too_large` | body over 64 KiB |
 | 415 | `unsupported_media_type` | see section 1 |
@@ -302,6 +303,9 @@ this stage actions (section 5): `user.operator_sync`, `settings.enrollment_mode`
 Every this stage operator action carries `reason` in `detail` when one was given,
 and every row about one tenant carries `detail.tenant_id`, which the audit
 filter of 5.9 uses.
+
+this stage actions (section 6): `otlp_token.create`, `otlp_token.revoke`,
+`provision.otlp_registry_put`. Target added: `otlp_token:<id>`.
 
 ---
 
@@ -847,7 +851,8 @@ the target state is also 409, so a double click never writes two audit rows.
    from `cp.settings.removal_keep_aggregates` at this moment.
 
 Then the purge runs in the reconciler, store by store, in this order: `registry`
-(site keys; OTLP keys from this stage), `otlp_tokens` (this stage), `umami` (both
+(site keys), `otlp_tokens` (this stage: revokes every token row and flips every
+OTLP key to `revoked`, 6.4), `umami` (both
 websites of every site with their data, the team, then Umami users whose console
 user has no membership in any non-removed tenant), `web_ingest`
 (`cp.web_ingest_hourly` rows; skipped when `keep_aggregates`), `api` (this stage),
@@ -1100,3 +1105,116 @@ as `cp_operator` (5.1). `OPERATOR_GITHUB_IDS` (4.5) now also drives the startup
 sync of 5.1. The `jobs` binary gains the task `verify-domains` with no new key;
 the request-forgery guard has no configuration key that could allow private
 addresses (tests use a `_test.go` hook only).
+
+---
+
+## 6. this stage: OTLP tokens
+
+Tenants create bearer tokens for the OTLP collector (`otlp.<BASE_DOMAIN>`). The
+collector reads `registry_otlp` and accepts a token only while its
+entry has `status = "active"`.
+
+### 6.1 Token object
+
+`cp.otlp_tokens` without the hash:
+
+```json
+{
+  "id": "uuid",
+  "tenant_id": "uuid",
+  "name": "Production API",
+  "environment": "production",
+  "prefix": "sa_otlp_Ab3x",
+  "status": "active",
+  "created_by": "uuid",
+  "created_at": "...",
+  "revoked_at": null,
+  "last_seen_at": null
+}
+```
+
+- Format: `sa_otlp_` followed by 40 characters drawn uniformly from
+  `0-9A-Za-z` with `crypto/rand`.
+- Storage: `hash` is the SHA-256 of the whole token (32 bytes); `prefix` is the
+  first 12 characters (`sa_otlp_` plus 4 random ones), for display only. The
+  token itself is stored nowhere: not in the database, the audit log, the
+  registry or a log line.
+- `status`: `active` or `revoked` (column check). `last_seen_at` is stamped by
+  the metrics writer (this stage).
+
+### 6.2 `POST /api/tenants/{tenant_id}/otlp-tokens`
+
+Session, member, current terms (4.2.6).
+
+```json
+{ "name": "Production API", "environment": "production" }
+```
+
+- `name`: 1 to 100 characters (text rules of 3.2). `environment`: optional,
+  empty or `^[a-z0-9]([a-z0-9._-]{0,31})?$`, else 422 `invalid_format`.
+- The tenant must be `active`: 409 `tenant_suspended` while `suspended`, 409
+  `tenant_not_active` while `pending` or `rejected`. The status is read again
+  under the tenant row lock in the insert transaction, so a concurrent
+  suspension waits for the insert and then reconciles the new token.
+- At most 50 `active` tokens per tenant: 422 `too_many` on `name`.
+- Under `cp_tenant`: insert, audit `otlp_token.create` (detail: `tenant_id`,
+  `name`, `environment`, `prefix`), then write the `registry_otlp` entry
+  `{tenant_id, token_id, status: "active"}` under the hex SHA-256 before the
+  commit. A registry failure rolls the insert back: **503 `unavailable`**.
+- **201** Token object plus `"token": "sa_otlp_..."`, with `Location` set to the
+  token's URL. This answer is the only place the token ever appears.
+
+### 6.3 `GET /api/tenants/{tenant_id}/otlp-tokens` and `GET .../otlp-tokens/{token_id}`
+
+Session, member, any non-removed status. The list is the envelope of 2.3 over
+Token objects, ordered by `(created_at, id)`. Query `include_revoked=true` adds
+revoked tokens. A token of another tenant is 404 `not_found` (1.3).
+
+### 6.4 `DELETE /api/tenants/{tenant_id}/otlp-tokens/{token_id}`
+
+Session, member. Allowed in every non-removed status and without current terms,
+because taking a credential out of use must never be blocked.
+
+- Under `cp_tenant` with the row locked: `status = 'revoked'`,
+  `revoked_at = now()`, audit `otlp_token.revoke` (detail `tenant_id`,
+  `status` old and new), then the `registry_otlp` entry is set to
+  `status: "revoked"` before the commit. A registry failure rolls back: 503
+  `unavailable`, so a revocation never looks done while the key still says
+  `active`.
+- **204**. Repeating the call: 204, no new audit row, the registry entry is
+  written again (which heals a lost write).
+
+### 6.5 Registry state and reconcile
+
+The entry of every token is a function of its row and its tenant's status:
+
+| Token | Tenant | `registry_otlp` status |
+|---|---|---|
+| `revoked` | any | `revoked` |
+| `active` | `active` | `active` |
+| `active` | `pending`, `rejected`, `suspended` | the tenant status |
+| any | `removed` | `revoked` (the purge revokes every row) |
+
+- Keys are never deleted, so an inactive token is refused as such, not as
+  unknown.
+- The reconciler (`provision`, after every lifecycle action and every 10
+  minutes in `jobs`) writes each entry that differs, first in its run and
+  before any Umami call, so suspension and resume reach the collector even
+  while Umami is unreachable. Each write is audited as
+  `provision.otlp_registry_put` (actor `system:reconcile`, target
+  `otlp_token:<id>`, detail `tenant_id`, `status`).
+- Removal (5.5): the `otlp_tokens` purge step runs right after `registry`. It
+  sets every active row to `revoked` and flips every key to `revoked`; its step
+  detail lists `tokens_revoked` and `keys_revoked`. Revocation by removal is
+  final.
+- NATS users: `controlplane` and `jobs` may write `registry_otlp` (jobs runs the
+  reconcile task); `collector` only watches it.
+
+### 6.6 Effects of tenant status (extends 5.11)
+
+| Tenant status | Token create | Token list, get, revoke |
+|---|---|---|
+| `pending`, `rejected` | 409 `tenant_not_active` | allowed |
+| `active` | allowed | allowed |
+| `suspended` | 409 `tenant_suspended` | allowed |
+| `removed` | 404 | 404 |

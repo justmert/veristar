@@ -44,6 +44,10 @@ func baseEnv() map[string]string {
 		"BASE_DOMAIN":      "edge.test",
 		"GATEWAY_UPSTREAM": "gateway:8080",
 		"EDGE_TLS":         "internal",
+		// otlp.<BASE_DOMAIN> (this stage)
+		"COLLECTOR_GRPC_UPSTREAM":   "collector:4317",
+		"COLLECTOR_HTTP_UPSTREAM":   "collector:4318",
+		"COLLECTOR_HEALTH_UPSTREAM": "collector:13133",
 	}
 }
 
@@ -77,7 +81,7 @@ func TestEdgeCaddyfileValidates(t *testing.T) {
 	require.Contains(t, out, "Valid configuration")
 
 	// every variable is required: an unset one fails validation
-	for _, k := range []string{"BASE_DOMAIN", "GATEWAY_UPSTREAM", "EDGE_TLS"} {
+	for _, k := range []string{"BASE_DOMAIN", "GATEWAY_UPSTREAM", "EDGE_TLS", "COLLECTOR_GRPC_UPSTREAM", "COLLECTOR_HTTP_UPSTREAM", "COLLECTOR_HEALTH_UPSTREAM"} {
 		env := baseEnv()
 		delete(env, k)
 		code, out := caddyRun(t, env, "caddy", "validate", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile")
@@ -116,8 +120,8 @@ func TestEdgeCaddyfileValidates(t *testing.T) {
 		} `json:"logging"`
 	}
 	require.NoError(t, json.Unmarshal([]byte(adapted), &cfg))
-	// the site log and caddy's default logger, which writes the access lines
-	// of requests for a host the file does not serve
+	// the in and otlp site logs and caddy's default logger, which writes the
+	// access lines of requests for a host the file does not serve
 	require.Contains(t, cfg.Logging.Logs, "default")
 	var filtered int
 	for name, l := range cfg.Logging.Logs {
@@ -130,7 +134,7 @@ func TestEdgeCaddyfileValidates(t *testing.T) {
 			require.Equal(t, "delete", l.Encoder.Fields[f].Filter, "%s must delete %s", name, f)
 		}
 	}
-	require.Equal(t, 2, filtered, "both loggers are filtered")
+	require.Equal(t, 3, filtered, "every logger is filtered")
 }
 
 // upstream stands in for the gateway and records the headers caddy sends.

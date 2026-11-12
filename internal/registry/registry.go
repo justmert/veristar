@@ -176,9 +176,6 @@ func (p *Publisher) DeleteSite(ctx context.Context, id string) error {
 
 // PutOTLPToken stores or replaces a token entry.
 func (p *Publisher) PutOTLPToken(ctx context.Context, t OTLPToken) error {
-	if p.otlp == nil {
-		return errNoOTLP
-	}
 	if err := t.Validate(); err != nil {
 		return err
 	}
@@ -194,9 +191,6 @@ func (p *Publisher) PutOTLPToken(ctx context.Context, t OTLPToken) error {
 
 // DeleteOTLPToken removes a token entry by its hash.
 func (p *Publisher) DeleteOTLPToken(ctx context.Context, hash string) error {
-	if p.otlp == nil {
-		return errNoOTLP
-	}
 	if !hashRe.MatchString(hash) {
 		return errors.New("registry: otlp token key is not a lowercase hex sha-256")
 	}

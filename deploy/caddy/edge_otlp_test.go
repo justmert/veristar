@@ -4,11 +4,14 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"io"
 	"net"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -23,23 +26,26 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
-// the otlp site (this stage) adapts to two upstreams read at request time and
-// adds no logger of its own: the existing check of exactly two filtered
-// loggers in TestEdgeCaddyfileValidates still holds.
+// the otlp site (this stage) proxies to the two collector listeners, health
+// checks the collector, and logs through the filtered site logger
+// (TestEdgeCaddyfileValidates checks the filter and that each collector
+// variable is required).
 func TestEdgeOTLPSiteAdapts(t *testing.T) {
 	code, out := caddyRun(t, baseEnv(), "caddy", "adapt", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile")
 	require.Equal(t, 0, code, out)
 	for _, want := range []string{
 		`"host":["otlp.edge.test"]`,
-		`"dial":"{env.COLLECTOR_GRPC_UPSTREAM}"`,
-		`"dial":"{env.COLLECTOR_HTTP_UPSTREAM}"`,
+		`"dial":"collector:4317"`,
+		`"dial":"collector:4318"`,
+		`"upstream":"collector:13133"`,
+		`"uri":"/"`,
 		`"versions":["h2c"]`,
 		`"path":["/v1/metrics","/v1/traces","/v1/logs"]`,
 		`"max_size":4000000`,
 	} {
 		require.Contains(t, out, want)
 	}
-	require.NotContains(t, out, `"otlp.edge.test":["log`, "otlp must use the filtered default logger")
+	require.Contains(t, out, `"otlp.edge.test":["log`, "otlp has its own filtered site log")
 }
 
 // otlpUpstream stands in for the collector: a real otlp grpc metrics
@@ -90,10 +96,24 @@ func TestEdgeOTLPProxiesGRPCAndHTTP(t *testing.T) {
 	hs := &http.Server{Handler: up, ReadHeaderTimeout: 5 * time.Second}
 	go func() { _ = hs.Serve(hln) }()
 	t.Cleanup(func() { _ = hs.Close() })
+	// the collector's health_check endpoint: 200 when ready, 503 before
+	var ready atomic.Bool
+	ready.Store(true)
+	cln, cport := listenAll(t)
+	cs := &http.Server{ReadHeaderTimeout: 5 * time.Second, Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if ready.Load() {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		w.WriteHeader(http.StatusServiceUnavailable)
+	})}
+	go func() { _ = cs.Serve(cln) }()
+	t.Cleanup(func() { _ = cs.Close() })
 
 	env := baseEnv()
 	env["COLLECTOR_GRPC_UPSTREAM"] = "host.docker.internal:" + strconv.Itoa(gport)
 	env["COLLECTOR_HTTP_UPSTREAM"] = "host.docker.internal:" + strconv.Itoa(hport)
+	env["COLLECTOR_HEALTH_UPSTREAM"] = "host.docker.internal:" + strconv.Itoa(cport)
 	c, err := testcontainers.Run(ctx, caddyImage,
 		testcontainers.WithEnv(env),
 		testcontainers.WithFiles(testcontainers.ContainerFile{
@@ -109,6 +129,14 @@ func TestEdgeOTLPProxiesGRPCAndHTTP(t *testing.T) {
 	require.NoError(t, err)
 	endpoint, err := c.PortEndpoint(ctx, "443/tcp", "")
 	require.NoError(t, err)
+	t.Cleanup(func() {
+		if t.Failed() {
+			if r, err := c.Logs(context.Background()); err == nil {
+				b, _ := io.ReadAll(r)
+				t.Logf("caddy log:\n%s", b)
+			}
+		}
+	})
 
 	const ua = "OTLPEdgeProbe/3.2"
 	tlsCfg := &tls.Config{ServerName: "otlp.edge.test", InsecureSkipVerify: true}
@@ -165,12 +193,51 @@ func TestEdgeOTLPProxiesGRPCAndHTTP(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, do(http.MethodGet, "/", nil))
 	require.Equal(t, http.StatusRequestEntityTooLarge, do(http.MethodPost, "/v1/metrics", make([]byte, 5<<20)))
 
-	// nothing caddy wrote carries the client's agent or forwarded address
-	logs, err := c.Logs(ctx)
-	require.NoError(t, err)
-	b, err := io.ReadAll(logs)
-	require.NoError(t, err)
-	all := string(b)
+	// a collector that is not ready (snapshot not loaded) receives nothing:
+	// caddy answers 503, which sdks retry, and forwards again once ready
+	up.mu.Lock()
+	before := len(up.httpHdr)
+	up.mu.Unlock()
+	ready.Store(false)
+	require.Eventually(t, func() bool { return do(http.MethodPost, "/v1/metrics", body) == http.StatusServiceUnavailable },
+		10*time.Second, 200*time.Millisecond, "caddy kept forwarding to an unready collector")
+	up.mu.Lock()
+	forwarded := len(up.httpHdr) - before
+	up.mu.Unlock()
+	ready.Store(true)
+	require.Eventually(t, func() bool { return do(http.MethodPost, "/v1/metrics", body) == http.StatusOK },
+		10*time.Second, 200*time.Millisecond, "caddy did not resume after the collector became ready")
+	t.Logf("requests forwarded while the health check caught up: %d", forwarded)
+
+	// otlp access lines exist and carry no client identity
+	var all string
+	var lines []string
+	require.Eventually(t, func() bool {
+		logs, err := c.Logs(ctx)
+		require.NoError(t, err)
+		b, err := io.ReadAll(logs)
+		require.NoError(t, err)
+		all = string(b)
+		lines = lines[:0]
+		for _, line := range strings.Split(all, "\n") {
+			if strings.Contains(line, `"logger":"http.log.access`) && strings.Contains(line, "otlp.edge.test") {
+				lines = append(lines, line)
+			}
+		}
+		return len(lines) >= 5
+	}, 10*time.Second, 100*time.Millisecond)
+	for _, line := range lines {
+		var entry map[string]any
+		require.NoError(t, json.Unmarshal([]byte(line), &entry), line)
+		req, ok := entry["request"].(map[string]any)
+		require.True(t, ok, line)
+		require.NotContains(t, req, "remote_ip", line)
+		require.NotContains(t, req, "client_ip", line)
+		hdr, ok := req["headers"].(map[string]any)
+		require.True(t, ok, line)
+		require.NotContains(t, hdr, "User-Agent", line)
+		require.NotContains(t, hdr, "X-Forwarded-For", line)
+	}
 	require.NotContains(t, all, ua)
 	require.NotContains(t, all, "198.51.100.7")
 }

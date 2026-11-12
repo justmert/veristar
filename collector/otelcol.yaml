@@ -1,0 +1,159 @@
+# scf-otelcol configuration (the design and this stage). every
+# value that differs per environment is a required environment variable;
+# an unset one leaves an empty value that fails validation, so the collector
+# refuses to start instead of running with a guess.
+#
+#   NATS_URL, NATS_USER, NATS_PASSWORD   collector nats user (internal/natsx);
+#                                        user and password empty only on the
+#                                        dev server, which has no auth
+#   COLLECTOR_GRPC_ADDR                  otlp grpc listen address
+#   COLLECTOR_HTTP_ADDR                  otlp http listen address
+#   COLLECTOR_HEALTH_ADDR                health check listen address
+#   COLLECTOR_MEMORY_LIMIT_MIB           memory_limiter hard limit
+#   COLLECTOR_MEMORY_SPIKE_MIB           memory_limiter spike allowance
+#   COLLECTOR_RATE_REQUESTS_PER_SECOND   tenantguard, per tenant and node
+#   COLLECTOR_RATE_REQUESTS_BURST
+#   COLLECTOR_RATE_ITEMS_PER_SECOND      data points, spans and log records
+#   COLLECTOR_RATE_ITEMS_BURST
+#
+# docs/reference/collector.md explains each choice against the pinned
+# component sources.
+
+extensions:
+  tenantauth:
+    nats:
+      url: ${env:NATS_URL}
+      user: ${env:NATS_USER}
+      password: ${env:NATS_PASSWORD}
+    # the collector starts no receiver until the token snapshot is loaded
+    # (docs/reference/collector.md); without one it exits after this long
+    snapshot_timeout: 60s
+  health_check:
+    endpoint: ${env:COLLECTOR_HEALTH_ADDR}
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: ${env:COLLECTOR_GRPC_ADDR}
+        # grpc-go checks this limit after decompression
+        max_recv_msg_size_mib: 4
+        auth:
+          authenticator: tenantauth
+      http:
+        endpoint: ${env:COLLECTOR_HTTP_ADDR}
+        # enforced on the received body and again after decompression
+        max_request_body_size: 4194304
+        # "" is an uncompressed body. only what tenant sdks send is accepted.
+        compression_algorithms: ["", "gzip", "zstd"]
+        auth:
+          authenticator: tenantauth
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: ${env:COLLECTOR_MEMORY_LIMIT_MIB}
+    spike_limit_mib: ${env:COLLECTOR_MEMORY_SPIKE_MIB}
+
+  tenantguard:
+    requests_per_second: ${env:COLLECTOR_RATE_REQUESTS_PER_SECOND}
+    requests_burst: ${env:COLLECTOR_RATE_REQUESTS_BURST}
+    items_per_second: ${env:COLLECTOR_RATE_ITEMS_PER_SECOND}
+    items_burst: ${env:COLLECTOR_RATE_ITEMS_BURST}
+    idle_bucket_ttl: 10m
+
+  # tenant metrics after tenantguard: legacy milliseconds to seconds and
+  # exponential histograms to the canonical explicit buckets,
+  # marked scf.lossy. a statement that fails leaves the metric unchanged;
+  # the jetstream exporter then drops anything that is not an explicit
+  # histogram in seconds and logs it, so nothing wrong is published.
+  transform/tenant:
+    error_mode: ignore
+    metric_statements:
+      - context: datapoint
+        statements:
+          - set(datapoint.attributes["scf.lossy"], true) where metric.type == METRIC_DATA_TYPE_EXPONENTIAL_HISTOGRAM
+      - context: metric
+        statements:
+          - convert_exponential_histogram_to_histogram("uniform", [5.0, 10.0, 25.0, 50.0, 75.0, 100.0, 250.0, 500.0, 750.0, 1000.0, 2500.0, 5000.0, 7500.0, 10000.0]) where metric.type == METRIC_DATA_TYPE_EXPONENTIAL_HISTOGRAM and metric.unit == "ms"
+          - convert_exponential_histogram_to_histogram("uniform", [0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1.0, 2.5, 5.0, 7.5, 10.0]) where metric.type == METRIC_DATA_TYPE_EXPONENTIAL_HISTOGRAM
+          - scale_metric(0.001, "s") where metric.unit == "ms"
+          - set(metric.name, "http.server.request.duration") where metric.name == "http.server.duration"
+
+  # span-derived metrics: drop the connector's collector instance attribute
+  # and its scope name, which only describe this collector
+  transform/spans:
+    error_mode: ignore
+    metric_statements:
+      - context: resource
+        statements:
+          - delete_key(resource.attributes, "signal_to_metrics.service.instance.id")
+      - context: scope
+        statements:
+          - set(scope.name, "")
+          - set(scope.version, "")
+
+connectors:
+  # alpha at v0.165.1 and stateless: one delta histogram per payload. used
+  # because the version is pinned and the this stage tests cover its output.
+  signal_to_metrics:
+    error_mode: ignore
+    spans:
+      - name: scf.http.server.request.duration.from_spans
+        description: duration of http server requests derived from server spans
+        unit: s
+        include_resource_attributes:
+          - key: service.name
+          - key: scf.tenant.id
+          - key: scf.token.id
+          - key: scf.resource.hash
+          - key: scf.flags
+        attributes:
+          - key: http.request.method
+          - key: http.route
+            optional: true
+          - key: http.response.status_code
+            optional: true
+          - key: error.type
+            optional: true
+        histogram:
+          buckets: [0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1.0, 2.5, 5.0, 7.5, 10.0]
+          value: Seconds(span.end_time - span.start_time)
+
+exporters:
+  jetstream:
+    nats:
+      url: ${env:NATS_URL}
+      user: ${env:NATS_USER}
+      password: ${env:NATS_PASSWORD}
+    publish_timeout: 5s
+  nop:
+
+service:
+  extensions: [health_check, tenantauth]
+  pipelines:
+    # spans end in the connector: no trace exporter exists
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, tenantguard]
+      exporters: [signal_to_metrics]
+    # accepted, answered with success, discarded by tenantguard
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, tenantguard]
+      exporters: [nop]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, tenantguard, transform/tenant]
+      exporters: [jetstream]
+    # a separate pipeline, so tenantguard runs exactly once per signal
+    metrics/spans:
+      receivers: [signal_to_metrics]
+      processors: [memory_limiter, transform/spans]
+      exporters: [jetstream]
+  telemetry:
+    logs:
+      level: info
+      encoding: json
+    metrics:
+      level: none

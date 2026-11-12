@@ -29,6 +29,9 @@ const (
 	SiteCreate        = "site.create"
 	SiteUpdate        = "site.update"
 	SiteDelete        = "site.delete"
+	// this stage
+	OTLPTokenCreate = "otlp_token.create" //nolint:gosec // an audit action name, not a credential
+	OTLPTokenRevoke = "otlp_token.revoke" //nolint:gosec // an audit action name, not a credential
 )
 
 // Entry is one audit row. Detail is encoded as a json object; it must never
@@ -54,6 +57,9 @@ func UserTarget(id uuid.UUID) string { return "user:" + id.String() }
 
 // InviteTarget names an invite.
 func InviteTarget(id uuid.UUID) string { return "invite:" + id.String() }
+
+// OTLPTokenTarget names an otlp token.
+func OTLPTokenTarget(id uuid.UUID) string { return "otlp_token:" + id.String() }
 
 // Change is the detail value of an updated field.
 func Change(old, new any) map[string]any { return map[string]any{"old": old, "new": new} }

@@ -1,0 +1,51 @@
+# ocb manifest of the scf-otelcol distribution (the design). build from the
+# repository root with ocb 0.165.0 and strict versioning on:
+#   go run go.opentelemetry.io/collector/cmd/builder@v0.165.0 \
+#     --config collector/builder-config.yaml --skip-strict-versioning=false
+# (make collector-build). the three custom components live in the root
+# module github.com/justmert/stellar-analytics, which `replaces` points at,
+# so the generated module resolves them from this checkout and its
+# requirements (collector v0.165.0 / v1.71.0, pdata v1.71.0) take part in
+# version selection. docs/reference/collector.md records why.
+dist:
+  module: github.com/justmert/stellar-analytics/scf-otelcol
+  name: scf-otelcol
+  description: stellar analytics otlp collector
+  output_path: ./dist/scf-otelcol
+  version: 0.1.0
+
+receivers:
+  - gomod: go.opentelemetry.io/collector/receiver/otlpreceiver v0.165.0
+
+processors:
+  - gomod: go.opentelemetry.io/collector/processor/memorylimiterprocessor v0.165.0
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/processor/transformprocessor v0.165.1
+  - gomod: github.com/justmert/stellar-analytics v0.0.0
+    import: github.com/justmert/stellar-analytics/collector/tenantguardprocessor
+    name: tenantguardprocessor
+
+exporters:
+  - gomod: go.opentelemetry.io/collector/exporter/nopexporter v0.165.0
+  - gomod: github.com/justmert/stellar-analytics v0.0.0
+    import: github.com/justmert/stellar-analytics/collector/jetstreamexporter
+    name: jetstreamexporter
+
+connectors:
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/connector/signaltometricsconnector v0.165.1
+
+extensions:
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/extension/healthcheckextension v0.165.1
+  - gomod: github.com/justmert/stellar-analytics v0.0.0
+    import: github.com/justmert/stellar-analytics/collector/tenantauthextension
+    name: tenantauthextension
+
+# configuration comes from a file with ${env:...} references only; the http
+# and https providers are left out so a configuration cannot be fetched
+# from the network
+providers:
+  - gomod: go.opentelemetry.io/collector/confmap/provider/envprovider v1.71.0
+  - gomod: go.opentelemetry.io/collector/confmap/provider/fileprovider v1.71.0
+
+replaces:
+  # relative to dist.output_path
+  - github.com/justmert/stellar-analytics => ../../

@@ -220,7 +220,8 @@ func open(ctx context.Context, env *config.Env, log *slog.Logger, opsAddr bool) 
 		closeAll()
 		return nil, "", err
 	}
-	publisher, err := registry.NewSitePublisher(cctx, js)
+	// the reconcile task publishes otlp token state as well as sites
+	publisher, err := registry.NewPublisher(cctx, js)
 	if err != nil {
 		closeAll()
 		return nil, "", err

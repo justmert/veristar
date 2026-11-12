@@ -6,23 +6,7 @@ import (
 	"fmt"
 
 	"github.com/nats-io/nats.go/jetstream"
-
-	"github.com/justmert/stellar-analytics/internal/natsx"
 )
-
-// NewSitePublisher binds registry_sites only, for a service whose nats user
-// may not touch registry_otlp (jobs, which runs the reconciler). its otlp
-// methods return an error.
-func NewSitePublisher(ctx context.Context, js jetstream.JetStream) (*Publisher, error) {
-	sites, err := js.KeyValue(ctx, natsx.BucketRegistrySites)
-	if err != nil {
-		return nil, fmt.Errorf("registry: bind %s: %w", natsx.BucketRegistrySites, err)
-	}
-	return &Publisher{sites: sites}, nil
-}
-
-// errNoOTLP is returned by the otlp methods of a site-only publisher.
-var errNoOTLP = errors.New("registry: this publisher was bound to registry_sites only")
 
 // ErrUnreadable wraps the error of an entry that does not decode or validate.
 var ErrUnreadable = errors.New("registry: unreadable entry")
@@ -48,4 +32,42 @@ func (p *Publisher) GetSite(ctx context.Context, id string) (s Site, ok bool, er
 		return Site{}, false, fmt.Errorf("%w: %w", ErrUnreadable, err)
 	}
 	return s, true, nil
+}
+
+// GetOTLPToken reads one registry_otlp entry by its hash. ok is false when
+// the key does not exist or was deleted. the reconciler compares it with
+// the desired entry, so an unchanged token is not written again.
+func (p *Publisher) GetOTLPToken(ctx context.Context, hash string) (t OTLPToken, ok bool, err error) {
+	if !hashRe.MatchString(hash) {
+		return OTLPToken{}, false, errors.New("registry: otlp token key is not a lowercase hex sha-256")
+	}
+	e, err := p.otlp.Get(ctx, hash)
+	if errors.Is(err, jetstream.ErrKeyNotFound) {
+		return OTLPToken{}, false, nil
+	}
+	if err != nil {
+		return OTLPToken{}, false, fmt.Errorf("registry: get otlp token: %w", err)
+	}
+	t, err = DecodeOTLPToken(hash, e.Value())
+	if err != nil {
+		// reported as its own kind, so the reconciler overwrites the entry
+		return OTLPToken{}, false, fmt.Errorf("%w: %w", ErrUnreadable, err)
+	}
+	return t, true, nil
+}
+
+// SyncOTLPToken makes the registry entry of a token equal to want and
+// reports whether it wrote. an unreadable entry is overwritten.
+func (p *Publisher) SyncOTLPToken(ctx context.Context, want OTLPToken) (bool, error) {
+	have, ok, err := p.GetOTLPToken(ctx, want.Hash)
+	if err != nil && !errors.Is(err, ErrUnreadable) {
+		return false, err
+	}
+	if ok && have == want {
+		return false, nil
+	}
+	if err := p.PutOTLPToken(ctx, want); err != nil {
+		return false, err
+	}
+	return true, nil
 }

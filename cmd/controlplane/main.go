@@ -31,6 +31,7 @@ import (
 	"github.com/justmert/stellar-analytics/internal/controlplane/lifecycle"
 	"github.com/justmert/stellar-analytics/internal/controlplane/members"
 	"github.com/justmert/stellar-analytics/internal/controlplane/operator"
+	"github.com/justmert/stellar-analytics/internal/controlplane/otlptokens"
 	"github.com/justmert/stellar-analytics/internal/controlplane/provision"
 	"github.com/justmert/stellar-analytics/internal/controlplane/session"
 	"github.com/justmert/stellar-analytics/internal/controlplane/sites"
@@ -154,7 +155,8 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	publisher, err := registry.NewSitePublisher(cctx, js)
+	// both registries: the reconciler publishes sites and otlp tokens
+	publisher, err := registry.NewPublisher(cctx, js)
 	if err != nil {
 		return err
 	}
@@ -226,6 +228,10 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 		return err
 	}
 
+	otlpRoutes, err := otlptokens.NewRoutes(scope, publisher)
+	if err != nil {
+		return err
+	}
 	snippets, err := controlplane.NewSnippetRoutes(scope, tracker, cfg.TrackerNPMPackage)
 	if err != nil {
 		return err
@@ -261,6 +267,7 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 			sites.NewRoutes(scope).OnCreate(checks),
 			checks,
 			ingest.NewRoutes(scope),
+			otlpRoutes,
 			snippets,
 			// behind RequireUser like every private group; sso answers its own
 			// failures with a redirect, but an anonymous request gets 401

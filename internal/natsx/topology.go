@@ -318,9 +318,10 @@ func Users() []User {
 			consume(StreamEdgeStats, ConsumerJobs),
 			kvWrite(BucketLocks),
 			kvRecreate(BucketLocks),
-			// reconcile writes the registry, erasure follow-up reads visit
+			// reconcile writes both registries, erasure follow-up reads visit
 			// state and cleans the web dlq
 			kvWrite(BucketRegistrySites),
+			kvWrite(BucketRegistryOTLP),
 			kvRead(BucketVisitState),
 			dlqManage(StreamWebDLQ),
 		),
