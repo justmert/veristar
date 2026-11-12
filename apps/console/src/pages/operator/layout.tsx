@@ -6,6 +6,10 @@ import { ErrorPanel, Loading } from "@/components/error-panel";
 const NAV = [
   { to: "/operator", label: "Review queue", end: true },
   { to: "/operator/tenants", label: "Projects", end: false },
+  { to: "/operator/web", label: "Global web", end: true },
+  { to: "/operator/api", label: "Global API", end: true },
+  { to: "/operator/compare", label: "Compare", end: true },
+  { to: "/operator/api-keys", label: "API keys", end: true },
   { to: "/operator/audit", label: "Audit log", end: true },
   { to: "/operator/settings", label: "Settings", end: true },
 ];
@@ -23,8 +27,9 @@ export function OperatorLayout() {
     <div>
       <h1 className="text-3xl font-semibold tracking-tight">Operator</h1>
       <p className="mt-1 text-sm text-muted-foreground">
-        Review projects, change their status and the enrollment mode. Every action is recorded in
-        the audit log with its reason.
+        Review projects, change their status and the enrollment mode, compare web and API numbers
+        across projects, and manage API keys for machine access. Every action is recorded in the
+        audit log.
       </p>
       <nav aria-label="Operator" className="mt-6 border-b">
         <ul className="-mb-px flex gap-1 overflow-x-auto">

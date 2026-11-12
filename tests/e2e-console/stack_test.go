@@ -286,6 +286,9 @@ type Stack struct {
 	OAuthCtl    string
 
 	Edge string
+	// Jobs is the jobs daemon's container and JobsOps its published ops port
+	Jobs    string
+	JobsOps string
 	// CADir holds root.crt, the edge caddy's local ca, for the example apps
 	CADir string
 	// Routes maps host:port as the browser asks for it to the loopback
@@ -562,12 +565,13 @@ func (s *Stack) StartControlPlane(t testing.TB) {
 		[]string{"--network-alias", "controlplane", "-p", "127.0.0.1:" + ops + ":9090", "-v", releases}, env)
 	waitHTTP(t, "http://127.0.0.1:"+ops+"/readyz", time.Minute)
 
-	jobsOps := freePort(t)
+	s.JobsOps = freePort(t)
+	s.Jobs = "sa-ce-jobs-" + s.ID
 	jenv := s.common(userKey)
 	jenv["JOBS_OPS_ADDR"] = "0.0.0.0:9090"
-	s.mounted(t, "sa-ce-jobs-"+s.ID, bins.jobs,
-		[]string{"-p", "127.0.0.1:" + jobsOps + ":9090", "-v", releases}, jenv, "daemon")
-	waitHTTP(t, "http://127.0.0.1:"+jobsOps+"/healthz", time.Minute)
+	s.mounted(t, s.Jobs, bins.jobs,
+		[]string{"-p", "127.0.0.1:" + s.JobsOps + ":9090", "-v", releases}, jenv, "daemon")
+	waitHTTP(t, "http://127.0.0.1:"+s.JobsOps+"/healthz", time.Minute)
 }
 
 // StartReplayer drains WEB_EVENTS into umami.
@@ -792,11 +796,81 @@ func (s *Stack) startApp(r appRequest) (string, error) {
 	}
 }
 
+var siteID = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+
+// verifySite records a successful file verification of a site, as the
+// control plane's domain check would. test fixture only: the real check
+// fetches https://<domain>/.well-known/stellar-analytics.txt through
+// internal/netguard, which refuses the private and loopback addresses every
+// host of this offline stack resolves to, and no dns server here can hold
+// the txt record. the global views (this stage) only read the result.
+func (s *Stack) verifySite(id string) error {
+	if !siteID.MatchString(id) {
+		return fmt.Errorf("bad site id %q", id)
+	}
+	out, err := docker("exec", s.Postgres, "psql", "-q", "-h", "127.0.0.1", "-U", "postgres", "-d", "platform", "-tAc",
+		"update cp.sites set verify_method = 'file', verified_at = now(), last_verify_at = now(), "+
+			"last_verify_error = null where id = '"+id+"' and status <> 'removed' returning id")
+	if err != nil {
+		return err
+	}
+	if out != id {
+		return fmt.Errorf("site %s not updated: %q", id, out)
+	}
+	return nil
+}
+
+// restartJobs restarts the jobs daemon. a daemon runs every periodic task
+// once as soon as it leads, so this is how a spec gets the hourly
+// aggregate-web task (and the 5 minute api rollup) to read new data now
+// instead of within the hour; `jobs run` refuses while a daemon leads.
+func (s *Stack) restartJobs() error {
+	if _, err := docker("restart", "-t", "20", s.Jobs); err != nil {
+		return err
+	}
+	deadline := time.Now().Add(time.Minute)
+	for {
+		resp, err := http.Get("http://127.0.0.1:" + s.JobsOps + "/healthz")
+		if err == nil {
+			_ = resp.Body.Close()
+			if resp.StatusCode == http.StatusOK {
+				return nil
+			}
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("jobs not healthy after restart: %v", err)
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+}
+
 // AppsControl serves POST /apps on loopback for the specs: the token comes
 // from the console, so the app can only start once a spec has created it.
+// POST /sites/verify and POST /jobs/restart are the two fixtures above.
 func (s *Stack) AppsControl(t testing.TB) string {
 	t.Helper()
 	mux := http.NewServeMux()
+	mux.HandleFunc("POST /sites/verify", func(w http.ResponseWriter, req *http.Request) {
+		var body struct {
+			SiteID string `json:"site_id"`
+		}
+		if err := json.NewDecoder(io.LimitReader(req.Body, 4096)).Decode(&body); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if err := s.verifySite(body.SiteID); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+	mux.HandleFunc("POST /jobs/restart", func(w http.ResponseWriter, _ *http.Request) {
+		if err := s.restartJobs(); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
 	mux.HandleFunc("POST /apps", func(w http.ResponseWriter, req *http.Request) {
 		var r appRequest
 		if err := json.NewDecoder(io.LimitReader(req.Body, 4096)).Decode(&r); err != nil {

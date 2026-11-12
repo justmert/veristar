@@ -2,14 +2,17 @@
 // it changed
 
 import { infiniteQueryOptions, queryOptions } from "@tanstack/react-query";
+import type { DayRange, ListState } from "@/lib/global";
 import {
   type ApiFilters,
   type ApiRangeQuery,
   type ApiRoutesQuery,
   type AuditQuery,
   api,
+  globalApi,
   type TenantListQuery,
 } from "./endpoints";
+import type { ApiSort, WebSort } from "./schemas";
 
 export const keys = {
   me: ["me"] as const,
@@ -32,6 +35,10 @@ export const keys = {
   opMode: ["operator", "settings", "enrollment-mode"] as const,
   opKeep: ["operator", "settings", "removal-keep-aggregates"] as const,
   opAudit: (q: AuditQuery) => ["operator", "audit", q] as const,
+  opGlobal: (kind: string, ...rest: unknown[]) => ["operator", "global", kind, ...rest] as const,
+  opKeys: ["operator", "api-keys"] as const,
+  opKeyUsage: (id: string) => ["operator", "api-keys", id, "usage"] as const,
+  opKeyTenants: ["operator", "key-tenants"] as const,
 };
 
 export const meQuery = queryOptions({
@@ -190,3 +197,58 @@ export const apiWarningsQuery = (id: string, r: ApiRangeQuery) =>
     staleTime: apiStale,
     placeholderData: sameTenant(id),
   });
+
+// the aggregation task reads umami every hour and the rollup runs every 5
+// minutes, so a minute is the useful refresh for the global views
+const globalStale = 60_000;
+
+export const webProjectsQuery = (s: ListState<WebSort>) =>
+  infiniteQueryOptions({
+    queryKey: keys.opGlobal("web-projects", s),
+    queryFn: ({ signal, pageParam }) => globalApi.webProjects(s, pageParam, signal),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => last.next_cursor,
+    staleTime: globalStale,
+    placeholderData: (prev) => prev,
+  });
+
+export const apiProjectsQuery = (s: ListState<ApiSort>) =>
+  infiniteQueryOptions({
+    queryKey: keys.opGlobal("api-projects", s),
+    queryFn: ({ signal, pageParam }) => globalApi.apiProjects(s, pageParam, signal),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => last.next_cursor,
+    staleTime: globalStale,
+    placeholderData: (prev) => prev,
+  });
+
+export const webCompareQuery = (tenants: string[], r: DayRange) =>
+  queryOptions({
+    queryKey: keys.opGlobal("web-compare", tenants, r),
+    queryFn: ({ signal }) => globalApi.webCompare(tenants, r, signal),
+    staleTime: globalStale,
+  });
+
+export const apiCompareQuery = (tenants: string[], r: DayRange) =>
+  queryOptions({
+    queryKey: keys.opGlobal("api-compare", tenants, r),
+    queryFn: ({ signal }) => globalApi.apiCompare(tenants, r, signal),
+    staleTime: globalStale,
+  });
+
+export const apiKeysQuery = queryOptions({
+  queryKey: keys.opKeys,
+  queryFn: ({ signal }) => globalApi.apiKeys(signal),
+});
+
+export const apiKeyUsageQuery = (id: string) =>
+  queryOptions({
+    queryKey: keys.opKeyUsage(id),
+    queryFn: ({ signal }) => globalApi.apiKeyUsage(id, signal),
+  });
+
+export const keyTenantsQuery = queryOptions({
+  queryKey: keys.opKeyTenants,
+  queryFn: ({ signal }) => globalApi.keyTenants(signal),
+  staleTime: 5 * 60_000,
+});

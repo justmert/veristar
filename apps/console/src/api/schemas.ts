@@ -550,3 +550,286 @@ export const apiWarnings = z.object({
   ),
 });
 export type ApiWarnings = z.infer<typeof apiWarnings>;
+
+// ---- this stage: global web and api views (contract section 8)
+
+const count = z.number().int().nonnegative();
+const share01 = z.number().min(0).max(1).nullable();
+const day = z.iso.date();
+
+// 8.2 the project every list row and compare project names
+export const tenantRef = z.object({
+  id,
+  slug: z.string(),
+  name: z.string(),
+  status: tenantStatus,
+  created_at: time,
+});
+export type TenantRef = z.infer<typeof tenantRef>;
+
+const siteFacts = {
+  sites: count,
+  sites_verified: count,
+  sites_with_stellar_toml: count,
+  has_web_data: z.boolean(),
+  has_api_data: z.boolean(),
+};
+
+export const keyValue = z.object({ key: z.string(), value: count });
+export type KeyValue = z.infer<typeof keyValue>;
+
+export const webDimension = z.enum(["referrer", "country", "device", "browser", "os"]);
+export type WebDimension = z.infer<typeof webDimension>;
+
+// 8.3 one row of the global web list
+export const webProject = z.object({
+  tenant: tenantRef,
+  ...siteFacts,
+  pageviews: count,
+  visitors: count,
+  visits: count,
+  bounces: count,
+  totaltime: count,
+  bounce_rate: share01,
+  avg_visit_duration: z.number().nonnegative().nullable(),
+  quarantine_pageviews: count,
+  quarantine_visitors: count,
+  quarantine_share: share01,
+  ingest_requests: count,
+  ingest_rejected: count,
+  rejected_share: share01,
+  top: z.object({
+    referrer: z.array(keyValue),
+    country: z.array(keyValue),
+    device: z.array(keyValue),
+    browser: z.array(keyValue),
+  }),
+});
+export type WebProject = z.infer<typeof webProject>;
+
+// 8.2 the list envelope of both project lists
+function globalPage<T extends z.ZodType>(item: T) {
+  return z.object({
+    from: day,
+    to: day,
+    total: count,
+    items: z.array(item),
+    next_cursor: z.string().nullable(),
+  });
+}
+export const webProjectPage = globalPage(webProject);
+export type WebProjectPage = z.infer<typeof webProjectPage>;
+
+export const webSort = z.enum([
+  "name",
+  "status",
+  "created_at",
+  "sites",
+  "sites_verified",
+  "sites_with_stellar_toml",
+  "pageviews",
+  "visitors",
+  "visits",
+  "bounces",
+  "totaltime",
+  "bounce_rate",
+  "avg_visit_duration",
+  "quarantine_pageviews",
+  "quarantine_visitors",
+  "quarantine_share",
+  "ingest_requests",
+  "ingest_rejected",
+  "rejected_share",
+]);
+export type WebSort = z.infer<typeof webSort>;
+
+// 8.5 a percentile: seconds, or the open bucket above 10 s (seconds null,
+// flag true), or none without requests (null and false)
+const percentiles = {
+  p50_seconds: z.number().nonnegative().nullable(),
+  p50_over_10s: z.boolean(),
+  p95_seconds: z.number().nonnegative().nullable(),
+  p95_over_10s: z.boolean(),
+  p99_seconds: z.number().nonnegative().nullable(),
+  p99_over_10s: z.boolean(),
+};
+
+const apiNumbers = {
+  requests: count,
+  requests_4xx: count,
+  requests_5xx: count,
+  rate_4xx: share01,
+  rate_5xx: share01,
+  ...percentiles,
+};
+export type ApiNumbers = {
+  requests: number;
+  requests_4xx: number;
+  requests_5xx: number;
+  rate_4xx: number | null;
+  rate_5xx: number | null;
+  p50_seconds: number | null;
+  p50_over_10s: boolean;
+  p95_seconds: number | null;
+  p95_over_10s: boolean;
+  p99_seconds: number | null;
+  p99_over_10s: boolean;
+};
+
+export const projectSource = z.enum(["metric", "span", "mixed"]).nullable();
+
+const apiShape = {
+  services: count,
+  routes: count,
+  span_services: count,
+  source: projectSource,
+  lossy: z.boolean(),
+};
+
+// 8.5 one row of the global api list
+export const apiProject = z.object({ tenant: tenantRef, ...siteFacts, ...apiNumbers, ...apiShape });
+export type ApiProject = z.infer<typeof apiProject>;
+export const apiProjectPage = globalPage(apiProject);
+export type ApiProjectPage = z.infer<typeof apiProjectPage>;
+
+export const apiSort = z.enum([
+  "name",
+  "status",
+  "created_at",
+  "sites",
+  "requests",
+  "requests_4xx",
+  "requests_5xx",
+  "rate_4xx",
+  "rate_5xx",
+  "p50",
+  "p95",
+  "p99",
+  "services",
+  "routes",
+]);
+export type ApiSort = z.infer<typeof apiSort>;
+
+// 8.4 web compare
+const nullableCount = count.nullable();
+export const webPoint = z.object({
+  day,
+  aggregated: z.boolean(),
+  pageviews: nullableCount,
+  visitors: nullableCount,
+  visits: nullableCount,
+  bounces: nullableCount,
+  totaltime: nullableCount,
+  bounce_rate: share01,
+  avg_visit_duration: z.number().nonnegative().nullable(),
+  quarantine_pageviews: nullableCount,
+});
+export type WebPoint = z.infer<typeof webPoint>;
+
+export const breakdown = z.object({ items: z.array(keyValue), total_keys: count });
+export type Breakdown = z.infer<typeof breakdown>;
+
+export const webCompareProject = z.object({
+  tenant: tenantRef,
+  totals: z.object({
+    pageviews: count,
+    visitors: count,
+    visits: count,
+    bounces: count,
+    totaltime: count,
+    bounce_rate: share01,
+    avg_visit_duration: z.number().nonnegative().nullable(),
+    quarantine_pageviews: count,
+    quarantine_visitors: count,
+    quarantine_share: share01,
+  }),
+  series: z.array(webPoint),
+  breakdowns: z.object({
+    referrer: breakdown,
+    country: breakdown,
+    device: breakdown,
+    browser: breakdown,
+    os: breakdown,
+  }),
+});
+export type WebCompareProject = z.infer<typeof webCompareProject>;
+
+// every series has one point per day, so the charts align
+function aligned<T extends { days: string[]; projects: { series: { day: string }[] }[] }>(
+  v: T,
+): boolean {
+  return v.projects.every(
+    (p) => p.series.length === v.days.length && p.series.every((s, i) => s.day === v.days[i]),
+  );
+}
+
+export const webCompare = z
+  .object({
+    from: day,
+    to: day,
+    days: z.array(day),
+    projects: z.array(webCompareProject).min(1).max(5),
+  })
+  .refine(aligned, { message: "series not aligned with days" });
+export type WebCompare = z.infer<typeof webCompare>;
+
+// 8.6 api compare
+export const apiComparePoint = z.object({ day, ...apiNumbers });
+export type ApiComparePoint = z.infer<typeof apiComparePoint>;
+export const apiCompareService = z.object({
+  service: z.string(),
+  source: apiSourceKind,
+  ...apiNumbers,
+  routes: count,
+  lossy: z.boolean(),
+});
+export type ApiCompareService = z.infer<typeof apiCompareService>;
+export const apiCompareProject = z.object({
+  tenant: tenantRef,
+  totals: z.object({ ...apiNumbers, ...apiShape }),
+  series: z.array(apiComparePoint),
+  services: z.array(apiCompareService),
+});
+export type ApiCompareProject = z.infer<typeof apiCompareProject>;
+export const apiCompare = z
+  .object({
+    from: day,
+    to: day,
+    days: z.array(day),
+    projects: z.array(apiCompareProject).min(1).max(5),
+  })
+  .refine(aligned, { message: "series not aligned with days" });
+export type ApiCompare = z.infer<typeof apiCompare>;
+
+// ---- this stage: operator api keys (contract 9.2 and 9.11)
+
+export const apiKeyStatus = z.enum(["active", "expired", "revoked"]);
+export type ApiKeyStatus = z.infer<typeof apiKeyStatus>;
+export const apiKey = z.object({
+  id,
+  name: z.string(),
+  prefix: z.string().startsWith("sa_op_"),
+  scope: z.literal("metrics:read"),
+  tenant_id: id.nullable(),
+  status: apiKeyStatus,
+  created_by: id,
+  created_at: time,
+  expires_at: time,
+  revoked_at: time.nullable(),
+  last_used_at: time.nullable(),
+});
+export type ApiKey = z.infer<typeof apiKey>;
+export const apiKeyPage = page(apiKey);
+
+// the design: sa_op_ and 40 base62 characters, shown once
+export const apiKeyCreated = apiKey.extend({ key: z.string().regex(/^sa_op_[0-9A-Za-z]{40}$/) });
+export type ApiKeyCreated = z.infer<typeof apiKeyCreated>;
+
+export const apiKeyUsage = z.object({
+  key_id: id,
+  from: day,
+  to: day,
+  totals: z.object({ requests: count, rejected: count }),
+  hours: z.array(z.object({ hour: time, requests: count, rejected: count })),
+});
+export type ApiKeyUsage = z.infer<typeof apiKeyUsage>;

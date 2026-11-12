@@ -1,12 +1,20 @@
 // one function per control plane route the console uses (contract sections 4
 // and 5)
 
+import { type DayRange, type ListState, listParams } from "@/lib/global";
 import { request, requestNoContent } from "./client";
 import {
+  type ApiKey,
   type ApiRangePreset,
   type ApiRouteSort,
+  type ApiSort,
   addMemberResult,
+  apiCompare,
+  apiKeyCreated,
+  apiKeyPage,
+  apiKeyUsage,
   apiOverview,
+  apiProjectPage,
   apiRoutes,
   apiServices,
   apiStatus,
@@ -20,6 +28,7 @@ import {
   me,
   member,
   members,
+  type OperatorTenantSummary,
   type OtlpToken,
   operatorSite,
   operatorTenantDetail,
@@ -38,6 +47,9 @@ import {
   tenant,
   terms,
   type VerifyMethod,
+  type WebSort,
+  webCompare,
+  webProjectPage,
 } from "./schemas";
 
 const enc = encodeURIComponent;
@@ -337,6 +349,93 @@ export const api = {
       request("PUT", "/operator/settings/removal-keep-aggregates", keepAggregates, { keep }),
     audit: (q: AuditQuery, cursor: string | null, signal?: AbortSignal) =>
       request("GET", auditPath(q, cursor), auditPage, undefined, signal),
+  },
+};
+
+// 8.3 and 8.5: one page of a project list
+export function globalListPath<S extends string>(
+  kind: "web" | "api",
+  s: ListState<S>,
+  cursor: string | null,
+): string {
+  const params = [...listParams(s), ["limit", "50"] as [string, string]];
+  if (cursor !== null) params.push(["cursor", cursor]);
+  return `/operator/${kind}/projects${exactQuery(params)}`;
+}
+
+// 8.4 and 8.6
+export function comparePath(kind: "web" | "api", tenants: string[], r: DayRange): string {
+  const params: [string, string][] = [["tenants", tenants.join(",")]];
+  if (r.from) params.push(["from", r.from]);
+  if (r.to) params.push(["to", r.to]);
+  if (kind === "web") params.push(["breakdown_limit", "10"]);
+  return `/operator/${kind}/compare${exactQuery(params)}`;
+}
+
+export type ApiKeyInput = {
+  name: string;
+  scope: "metrics:read";
+  tenant_id?: string;
+  expires_in_days: number;
+};
+
+export const globalApi = {
+  webProjects: (s: ListState<WebSort>, cursor: string | null, signal?: AbortSignal) =>
+    request("GET", globalListPath("web", s, cursor), webProjectPage, undefined, signal),
+  apiProjects: (s: ListState<ApiSort>, cursor: string | null, signal?: AbortSignal) =>
+    request("GET", globalListPath("api", s, cursor), apiProjectPage, undefined, signal),
+  webCompare: (tenants: string[], r: DayRange, signal?: AbortSignal) =>
+    request("GET", comparePath("web", tenants, r), webCompare, undefined, signal),
+  apiCompare: (tenants: string[], r: DayRange, signal?: AbortSignal) =>
+    request("GET", comparePath("api", tenants, r), apiCompare, undefined, signal),
+
+  // 9.2: every key, following next_cursor, newest first
+  apiKeys: async (signal?: AbortSignal): Promise<ApiKey[]> => {
+    const out: ApiKey[] = [];
+    let cursor: string | null = null;
+    do {
+      const q: string = cursor ? `&cursor=${enc(cursor)}` : "";
+      const p: { items: ApiKey[]; next_cursor: string | null } = await request(
+        "GET",
+        `/operator/api-keys?limit=200${q}`,
+        apiKeyPage,
+        undefined,
+        signal,
+      );
+      out.push(...p.items);
+      cursor = p.next_cursor;
+    } while (cursor !== null);
+    return out;
+  },
+  createApiKey: (body: ApiKeyInput) => request("POST", "/operator/api-keys", apiKeyCreated, body),
+  revokeApiKey: (keyId: string) => requestNoContent("DELETE", `/operator/api-keys/${enc(keyId)}`),
+  // 9.11: the default range, the 7 days ending today
+  apiKeyUsage: (keyId: string, signal?: AbortSignal) =>
+    request("GET", `/operator/api-keys/${enc(keyId)}/usage`, apiKeyUsage, undefined, signal),
+
+  // every project a key can be scoped to: any status but removed (9.2)
+  keyTenants: async (signal?: AbortSignal): Promise<OperatorTenantSummary[]> => {
+    const q: TenantListQuery = {
+      status: ["active", "pending", "suspended", "rejected"],
+      review: false,
+      q: "",
+      sort: "name",
+      order: "asc",
+    };
+    const out: OperatorTenantSummary[] = [];
+    let cursor: string | null = null;
+    do {
+      const p: { items: OperatorTenantSummary[]; next_cursor: string | null } = await request(
+        "GET",
+        tenantListPath(q, cursor),
+        operatorTenantPage,
+        undefined,
+        signal,
+      );
+      out.push(...p.items);
+      cursor = p.next_cursor;
+    } while (cursor !== null);
+    return out;
   },
 };
 
