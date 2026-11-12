@@ -20,6 +20,7 @@ export function useProject(): ProjectContext {
 const NAV = [
   { to: "", label: "Overview", end: true },
   { to: "sites", label: "Sites", end: false },
+  { to: "api", label: "API analytics", end: true },
   { to: "members", label: "Members", end: true },
 ];
 

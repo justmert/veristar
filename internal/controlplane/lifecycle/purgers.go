@@ -17,11 +17,14 @@ const (
 	PurgerOTLP      = "otlp_tokens"
 	PurgerUmami     = "umami"
 	PurgerWebIngest = "web_ingest"
+	// PurgerAPI is the this stage purger of the api schema
+	PurgerAPI = "api"
 )
 
 // Purgers returns the purgers of every store, in the order of contract 5.5:
 // registry (web ingestion stops), otlp_tokens (api ingestion stops), then
-// umami, then cp.web_ingest_hourly. phases 9 and 11 append api and agg.
+// umami, then cp.web_ingest_hourly, then the api schema. this stage appends
+// agg.
 func Purgers(reg *registry.Publisher, admin *umami.Admin) ([]Purger, error) {
 	if reg == nil || admin == nil {
 		return nil, errors.New("lifecycle: purgers need the registry publisher and the umami admin")
@@ -31,6 +34,7 @@ func Purgers(reg *registry.Publisher, admin *umami.Admin) ([]Purger, error) {
 		OTLPPurger{Registry: reg},
 		UmamiPurger{Admin: admin},
 		WebIngestPurger{},
+		APIPurger{},
 	}, nil
 }
 
@@ -200,4 +204,34 @@ func (p OTLPPurger) Purge(ctx context.Context, r Removal) (map[string]any, error
 		ids[i] = id.String()
 	}
 	return map[string]any{"tokens_revoked": ids, "keys_revoked": written}, nil
+}
+
+// APIPurger deletes the tenant's rows in the api schema (the design)
+// through api.purge_tenant, the one api right cp_system has. minute rows and
+// the writer's per-tenant state always go; hourly, daily and warning rows
+// stay when the removal keeps aggregates (contract 5.13). it runs after
+// otlp_tokens, so the collector already refuses the tenant's exports.
+type APIPurger struct{}
+
+// Name is the step key.
+func (APIPurger) Name() string { return PurgerAPI }
+
+// Purge deletes in the run's transaction, so the rows go with the step
+// record or not at all.
+func (APIPurger) Purge(ctx context.Context, r Removal) (map[string]any, error) {
+	rows, err := systemq.New(r.Tx).PurgeAPITenant(ctx, systemq.PurgeAPITenantParams{
+		TenantID: r.TenantID, KeepAggregates: r.KeepAggregates,
+	})
+	if err != nil {
+		return nil, &RecordError{fmt.Errorf("api rows: %w", err)}
+	}
+	deleted := map[string]int64{}
+	for _, row := range rows {
+		deleted[row.TableName] = row.RowsDeleted
+	}
+	detail := map[string]any{"rows_deleted": deleted}
+	if r.KeepAggregates {
+		detail["kept"] = []string{"metrics_hourly", "metrics_daily", "ingest_warnings"}
+	}
+	return detail, nil
 }

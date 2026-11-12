@@ -64,6 +64,11 @@ if INTERVAL_MS <= 0:
     raise SystemExit("METRICS_EXPORT_INTERVAL_MS must be a positive integer")
 SEMCONV = os.environ.get("OTEL_SEMCONV_STABILITY_OPT_IN", "")
 
+# the console's api analytics setup page shows the lines between each
+# docs:start and docs:end marker pair (apps/console/src/lib/otel-guides.ts),
+# so the instructions are this code and cannot drift from it.
+
+# docs:start telemetry
 AUTH = {"Authorization": f"Bearer {PLATFORM_TOKEN}"}
 resource = Resource.create({"service.name": SERVICE_NAME})
 
@@ -104,6 +109,7 @@ if METRICS_ENABLED:
         resource=resource,
         metric_readers=[metric_reader(TENANT_ENDPOINT, None), metric_reader(PLATFORM_ENDPOINT, AUTH)],
     )
+# docs:end telemetry
 
 tracer = trace.get_tracer("otel-python-fastapi")
 
@@ -194,10 +200,12 @@ def list_payments(account_id: str):
         return {"payments": list(payments[account_id])}
 
 
+# docs:start instrument
 # health checks are excluded so probes never change the request counts
 FastAPIInstrumentor.instrument_app(
     app, tracer_provider=tracer_provider, meter_provider=meter_provider, excluded_urls="/healthz"
 )
+# docs:end instrument
 
 
 print(

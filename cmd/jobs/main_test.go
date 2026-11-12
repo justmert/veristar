@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"io"
 	"log/slog"
+	"maps"
 	"net"
 	"net/http"
 	"strings"
@@ -62,6 +63,7 @@ func TestMissingConfigNamesEveryKey(t *testing.T) {
 	for _, k := range []string{
 		"NATS_URL", "NATS_REPLICAS", "PLATFORM_DB_HOST", "PLATFORM_DB_JOBS_PASSWORD", "PLATFORM_DB_CP_SYSTEM_PASSWORD",
 		"UMAMI_URL", "UMAMI_ADMIN_PASSWORD", "UMAMI_USER_PASSWORD_KEY", "JOBS_OPS_ADDR",
+		"API_MINUTE_RETENTION_DAYS", "API_HOURLY_RETENTION_MONTHS",
 	} {
 		require.Contains(t, errOut.String(), k)
 	}
@@ -152,6 +154,8 @@ func TestDaemonAndRun(t *testing.T) {
 	_, err = rand.Read(pwKey)
 	require.NoError(t, err)
 	envMap["UMAMI_USER_PASSWORD_KEY"] = base64.StdEncoding.EncodeToString(pwKey)
+	envMap["API_MINUTE_RETENTION_DAYS"] = "30"
+	envMap["API_HOURLY_RETENTION_MONTHS"] = "36"
 	key := site.String() + "/"
 
 	// the daemon leads, serves its ops endpoints and drains as stats arrive
@@ -228,6 +232,25 @@ func TestDaemonAndRun(t *testing.T) {
 	// no sites yet: the run checks nothing and succeeds
 	var verifyLog syncBuf
 	require.Equal(t, 0, run(t.Context(), []string{"run", "verify-domains"}, config.FromMap(envMap), io.Discard, &verifyLog), verifyLog.String())
+
+	// the api tasks run once: partitions ahead exist, nothing is pending and
+	// nothing has expired on a fresh database
+	for _, task := range []string{"api-partition", "api-rollup", "api-retention"} {
+		var l syncBuf
+		require.Equal(t, 0, run(t.Context(), []string{"run", task}, config.FromMap(envMap), io.Discard, &l), "%s: %s", task, l.String())
+	}
+	// an hourly horizon under the rfp's 24 months stops the process
+	low := maps.Clone(envMap)
+	low["API_HOURLY_RETENTION_MONTHS"] = "23"
+	var lowLog syncBuf
+	require.Equal(t, 1, run(t.Context(), []string{"run", "api-retention"}, config.FromMap(low), io.Discard, &lowLog))
+	require.Contains(t, lowLog.String(), "API_HOURLY_RETENTION_MONTHS")
+
+	// capacity reads the api tables with the jobs role alone
+	var capOut, capErr syncBuf
+	require.Equal(t, 0, run(t.Context(), []string{"capacity"}, config.FromMap(pg.EnvFor("platform")), &capOut, &capErr), capErr.String())
+	require.Contains(t, capOut.String(), `"table": "api.metrics_minute"`)
+	require.Contains(t, capOut.String(), `"bytes_per_row": null`, "an empty table has no per-row figure")
 
 	var unknown syncBuf
 	require.Equal(t, 1, run(t.Context(), []string{"run", "nope"}, config.FromMap(envMap), io.Discard, &unknown))

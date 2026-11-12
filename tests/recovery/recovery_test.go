@@ -395,7 +395,7 @@ func startJobs(t *testing.T, sh *shared, urls string, replicas int, creds map[st
 		env = append(env, k+"="+v)
 	}
 	ops := freeAddr(t)
-	env = append(env, "JOBS_OPS_ADDR="+ops)
+	env = append(env, "JOBS_OPS_ADDR="+ops, "API_MINUTE_RETENTION_DAYS=30", "API_HOURLY_RETENTION_MONTHS=36")
 	out := &syncBuf{}
 	cmd := exec.Command(sh.jobsBin, "daemon")
 	cmd.Env = env

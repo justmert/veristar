@@ -32,7 +32,9 @@ export function errorText(err: unknown): string {
         // the message names the current status (contract 5.5), so it is shown
         return `This is not possible from the current status. ${err.message}`;
       case "tenant_suspended":
-        return "This project is suspended. Sites cannot be added or changed until an operator resumes it.";
+        return "This project is suspended. Sites and tokens cannot be added or changed until an operator resumes it.";
+      case "tenant_not_active":
+        return "This project is not active yet. Tokens can be created once operators approve it.";
       case "tracker_version_revoked":
         return "This tracker version was revoked. Choose another version.";
       case "validation_failed":

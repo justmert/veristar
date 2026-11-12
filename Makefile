@@ -193,3 +193,32 @@ collector-build:
 
 collector-it: collector-build
 	$(GO) test -tags collectorit -race -count=1 -p 2 -timeout 20m -v ./tests/collector/
+
+# this stage api path (tests/otelapps, build tag apipath): the four example apps
+# export through the edge caddy (otlp.<BASE_DOMAIN>) to the built
+# scf-otelcol with real nats, with tokens created through the control plane
+# binary (oauthfixture build) on postgresql and umami. checks what reaches
+# API_METRICS against the load plan, the tenant backend's full copy, and
+# refusal within 5 s after revocation and suspension. needs docker.
+.PHONY: apipath
+apipath: collector-build
+	$(GO) test -tags apipath -count=1 -timeout 90m -run TestAPIPath -v ./tests/otelapps/
+
+# this stage metrics writer. metricswriter-up runs it on the dev stack (needs
+# dev-up, platformctl nats apply, db-migrate and db-roles); the image has no
+# shell, so readiness is polled on the loopback ops port. metricswriter-it is
+# the exactness suite: the built scf-otelcol and metricswriter binaries with
+# real nats and postgresql, driven by the pinned go otlp exporters
+# (internal/metricswriter, build tag metricswriterit).
+.PHONY: metricswriter-up metricswriter-it test-metricswriter
+metricswriter-up: dev-env
+	$(COMPOSE) --profile core up -d --build metricswriter
+	@for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do \
+		curl -fsS http://127.0.0.1:9096/readyz && exit 0; sleep 1; done; \
+		echo "metricswriter not ready on 127.0.0.1:9096/readyz" >&2; exit 1
+
+metricswriter-it: collector-build
+	$(GO) test -tags metricswriterit -race -count=1 -timeout 25m -run TestMetricsWriter -v ./internal/metricswriter/
+
+test-metricswriter:
+	$(GO) test -race -count=1 ./internal/metricswriter/ ./cmd/metricswriter/

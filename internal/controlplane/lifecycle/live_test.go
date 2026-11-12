@@ -594,6 +594,10 @@ func testRemove(t *testing.T, e *env, op *client) {
 		_, err := c.Exec(context.Background(), `insert into cp.web_ingest_hourly (site_id, tenant_id, hour, outcome, count)
 			values ($1, $2, date_trunc('hour', now()), 'accepted', 7)`, site, tenant)
 		require.NoError(t, err)
+		for _, q := range apiRowsSQL {
+			_, err = c.Exec(context.Background(), q, tenant)
+			require.NoError(t, err)
+		}
 	})
 	for _, u := range []*client{owner, only, shared} {
 		_, ok, err := e.um.Admin.GetUser(context.Background(), u.userID.String())
@@ -645,16 +649,18 @@ func testRemove(t *testing.T, e *env, op *client) {
 	require.NoError(t, err)
 	require.True(t, ok, "a member of another live project keeps the umami user")
 	require.Equal(t, 0, e.count(t, `select count(*) from cp.web_ingest_hourly where tenant_id = $1`, tenant))
+	require.Equal(t, 0, e.count(t, `select count(*) from api.metrics_minute where tenant_id = $1`, tenant))
+	require.Equal(t, 0, e.count(t, `select count(*) from api.metrics_hourly where tenant_id = $1`, tenant))
 
 	// the tenant row, members and audit trail remain
 	require.Equal(t, 1, e.count(t, `select count(*) from cp.tenants where id = $1 and status = 'removed'`, tenant))
 	require.Equal(t, 3, e.count(t, `select count(*) from cp.tenant_members where tenant_id = $1`, tenant))
 	require.Equal(t, 1, e.count(t, `select count(*) from cp.tenant_removals where tenant_id = $1 and completed_at is not null
 		and requested_by = $2 and reason = 'not built on stellar' and keep_aggregates = false
-		and steps ?& array['registry', 'otlp_tokens', 'umami', 'web_ingest']`, tenant, op.userID))
+		and steps ?& array['registry', 'otlp_tokens', 'umami', 'web_ingest', 'api']`, tenant, op.userID))
 	require.Equal(t, 1, e.count(t, `select count(*) from cp.audit_log where action = 'tenant.remove' and target = $1
 		and actor = $2 and detail->>'reason' = 'not built on stellar'`, "tenant:"+tenant.String(), "user:"+op.userID.String()))
-	require.Equal(t, 4, e.count(t, `select count(*) from cp.audit_log where action = 'purge.step' and actor = 'system:purge'
+	require.Equal(t, 5, e.count(t, `select count(*) from cp.audit_log where action = 'purge.step' and actor = 'system:purge'
 		and detail->>'tenant_id' = $1`, tenant.String()))
 	require.Equal(t, 1, e.count(t, `select count(*) from cp.audit_log where action = 'purge.complete' and detail->>'tenant_id' = $1`, tenant.String()))
 	require.Positive(t, e.count(t, `select count(*) from cp.audit_log where action = 'tenant.create' and target = $1`, "tenant:"+tenant.String()))
@@ -706,6 +712,10 @@ func testKeepAggregates(t *testing.T, e *env, op *client) {
 		_, err := c.Exec(context.Background(), `insert into cp.web_ingest_hourly (site_id, tenant_id, hour, outcome, count)
 			values ($1, $2, date_trunc('hour', now()), 'accepted', 3)`, site, tenant)
 		require.NoError(t, err)
+		for _, q := range apiRowsSQL {
+			_, err = c.Exec(context.Background(), q, tenant)
+			require.NoError(t, err)
+		}
 	})
 	r = op.action(t, tenant, "remove", map[string]any{"reason": "duplicate project"})
 	require.Equal(t, http.StatusOK, r.status, string(r.body))
@@ -714,6 +724,8 @@ func testKeepAggregates(t *testing.T, e *env, op *client) {
 	require.Equal(t, http.StatusOK, r.status)
 	e.reconcile(t, tenant)
 	require.Equal(t, 1, e.count(t, `select count(*) from cp.web_ingest_hourly where tenant_id = $1`, tenant), "aggregates kept")
+	require.Equal(t, 1, e.count(t, `select count(*) from api.metrics_hourly where tenant_id = $1`, tenant), "api aggregates kept")
+	require.Equal(t, 0, e.count(t, `select count(*) from api.metrics_minute where tenant_id = $1`, tenant), "api minutes always go")
 	_, ok, err := e.um.Admin.GetWebsite(context.Background(), site.String())
 	require.NoError(t, err)
 	require.False(t, ok, "raw data is always deleted")
@@ -882,4 +894,13 @@ func testAuditList(t *testing.T, e *env, op *client) {
 		r := op.call(t, http.MethodGet, "/api/operator/audit?"+q, nil)
 		require.Equal(t, http.StatusBadRequest, r.status, q)
 	}
+}
+
+// apiRowsSQL writes one minute and one hourly api row of tenant $1, as the
+// writer and the rollup would, so a removal has api data to purge
+var apiRowsSQL = []string{
+	`insert into api.metrics_minute (tenant_id, bucket_start, service, method, route, status_code, source, counts, sum, count)
+values ($1, date_trunc('minute', now(), 'UTC'), 'api', 'GET', '/', 200, 'metric', '{1,0,0,0,0,0,0,0,0,0,0,0,0,0,0}', 0.001, 1)`,
+	`insert into api.metrics_hourly (tenant_id, bucket_start, service, method, route, status_code, source, counts, sum, count)
+values ($1, date_trunc('hour', now(), 'UTC'), 'api', 'GET', '/', 200, 'metric', '{1,0,0,0,0,0,0,0,0,0,0,0,0,0,0}', 0.001, 1)`,
 }

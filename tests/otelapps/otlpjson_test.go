@@ -1,4 +1,4 @@
-//go:build otelapps
+//go:build otelapps || apipath
 
 package otelapps
 
@@ -58,6 +58,7 @@ type dataPoint struct {
 	StartTimeNano  string          `json:"startTimeUnixNano"`
 	TimeNano       string          `json:"timeUnixNano"`
 	Count          string          `json:"count"`
+	Sum            *float64        `json:"sum"`
 	ExplicitBounds []float64       `json:"explicitBounds"`
 	Scale          *int            `json:"scale"`
 	Positive       json.RawMessage `json:"positive"`

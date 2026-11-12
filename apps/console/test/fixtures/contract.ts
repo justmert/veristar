@@ -384,3 +384,20 @@ export const verificationBody = {
   last_verify_at: "2026-11-12T09:10:00Z",
   last_verify_error: "dns_no_record",
 };
+
+// 6.1 and 6.2
+export const TOKEN_ID = "0193a6fa-4444-7e66-bf77-a88b99caadbb";
+export const OTLP_PLAIN = "sa_otlp_Ab3x9QnRZtK2mW8vLp0sYcD4hJ7uE1fGiO5kNqBa";
+export const otlpTokenBody = {
+  id: TOKEN_ID,
+  tenant_id: TENANT_ID,
+  name: "Production API",
+  environment: "production",
+  prefix: "sa_otlp_Ab3x",
+  status: "active",
+  created_by: USER_ID,
+  created_at: "2026-11-12T09:00:00Z",
+  revoked_at: null,
+  last_seen_at: null,
+};
+export const otlpTokenCreatedBody = { ...otlpTokenBody, token: OTLP_PLAIN };

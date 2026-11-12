@@ -369,6 +369,29 @@ export const enrollmentMode = z.object({ mode: z.enum(["open", "approval"]) });
 export type EnrollmentMode = z.infer<typeof enrollmentMode>["mode"];
 export const keepAggregates = z.object({ keep: z.boolean() });
 
+// 6.1 otlp token; the plaintext is only in the create answer (6.2)
+export const otlpTokenStatus = z.enum(["active", "revoked"]);
+export const otlpToken = z.object({
+  id,
+  tenant_id: id,
+  name: z.string(),
+  environment: z.string(),
+  prefix: z.string().startsWith("sa_otlp_"),
+  status: otlpTokenStatus,
+  created_by: id,
+  created_at: time,
+  revoked_at: time.nullable(),
+  last_seen_at: time.nullable(),
+});
+export type OtlpToken = z.infer<typeof otlpToken>;
+export const otlpTokenPage = page(otlpToken);
+
+// the design: sa_otlp_ and 40 base62 characters
+export const otlpTokenCreated = otlpToken.extend({
+  token: z.string().regex(/^sa_otlp_[0-9A-Za-z]{40}$/),
+});
+export type OtlpTokenCreated = z.infer<typeof otlpTokenCreated>;
+
 // 2.2 error envelope
 export const errorEnvelope = z.object({
   error: z.object({

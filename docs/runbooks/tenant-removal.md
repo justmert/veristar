@@ -43,7 +43,7 @@ match.
    | `otlp_tokens` | `cp.otlp_tokens`, `registry_otlp` (this stage) | tokens revoked |
    | `umami` | Umami | both websites of every site with their data, the team, and the Umami users of members who belong to no other project that is not removed |
    | `web_ingest` | `cp.web_ingest_hourly` | the project's rows, unless `keep_aggregates` |
-   | `api` | `api` schema (this stage) | minute, hour and day rows |
+   | `api` | `api` schema (this stage) | minute rows, series and resource state, route caps and rollup marks always; hourly, daily and warning rows unless `keep_aggregates`. `ingest_dedup` ids stay until they expire (8 days), so a message still queued is not applied twice |
    | `agg` | `agg` schema (this stage) | aggregate rows, unless `keep_aggregates` |
 
    Each finished step is stored in `cp.tenant_removals.steps` and audited as

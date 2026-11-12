@@ -3,3 +3,20 @@
 //   sqlc v1.31.1
 
 package writerq
+
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
+
+type ApiSeriesState struct {
+	TenantID      uuid.UUID
+	SeriesHash    []byte
+	StartUnixNano int64
+	LastUnixNano  int64
+	LastCount     int64
+	LastSum       float64
+	LastCounts    []int64
+	LastSeenAt    time.Time
+}

@@ -17,6 +17,14 @@ overrides:
         go_type:
           type: time.Time
           pointer: true
+      # utc calendar days (api.route_registry, api.ingest_warnings)
+      - db_type: date
+        go_type: time.Time
+      - db_type: date
+        nullable: true
+        go_type:
+          type: time.Time
+          pointer: true
 sql:
   - engine: postgresql
     schema: db/migrations

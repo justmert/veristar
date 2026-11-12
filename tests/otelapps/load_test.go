@@ -1,4 +1,4 @@
-//go:build otelapps
+//go:build otelapps || apipath
 
 package otelapps
 
@@ -132,6 +132,10 @@ func driveLoad(base string, midpoint func()) (map[requestKey]int64, error) {
 		}
 	}
 	midpoint()
+	// the pause can outlast a server's keep-alive timeout (node closes idle
+	// sockets after 5 s); a request on a socket the server is closing ends in
+	// eof, and a retry could count a request twice, so start on fresh ones
+	d.client.CloseIdleConnections()
 	for _, id := range ids {
 		for p := 0; p < paymentsPerAcct; p++ {
 			amount := fmt.Sprintf("%d.%07d", p+1, 1234567)

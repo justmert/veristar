@@ -8,8 +8,10 @@ FROM python:3.14.10-slim-trixie@sha256:9aaa474097d094040649f2162a627c0049b408f52
 
 # the stable http semantic conventions are the default; set this to an empty
 # string at run time to get the legacy http.server.duration metric instead
-ENV OTEL_SEMCONV_STABILITY_OPT_IN=http \
-    UV_COMPILE_BYTECODE=1 \
+# docs:start semconv (shown on the console's api analytics setup page)
+ENV OTEL_SEMCONV_STABILITY_OPT_IN=http
+# docs:end semconv
+ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
     UV_PYTHON_DOWNLOADS=never \
     PYTHONUNBUFFERED=1

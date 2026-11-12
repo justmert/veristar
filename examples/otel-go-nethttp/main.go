@@ -95,6 +95,11 @@ func envOr(k, def string) string {
 	return def
 }
 
+// the console's api analytics setup page shows the lines between each
+// docs:start and docs:end marker pair (apps/console/src/lib/otel-guides.ts),
+// so the instructions are this code and cannot drift from it.
+
+// docs:start telemetry
 // setupTelemetry builds one tracer provider and one meter provider, each with
 // two exporters, so both backends see identical data from the same sdk state.
 func setupTelemetry(ctx context.Context, c config) (func(context.Context) error, error) {
@@ -163,6 +168,8 @@ func setupTelemetry(ctx context.Context, c config) (func(context.Context) error,
 	}, nil
 }
 
+// docs:end telemetry
+
 type account struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
@@ -182,6 +189,7 @@ type store struct {
 
 var tracer = otel.Tracer("otel-go-nethttp")
 
+// docs:start route
 // withRoute copies the mux pattern onto the server span. otelhttp names the
 // span after the pattern but only puts http.route on metrics, and the route is
 // what lets a backend group spans without guessing from the raw path.
@@ -201,6 +209,8 @@ func (s *store) routes() *http.ServeMux {
 	mux.HandleFunc("GET /accounts/{id}/payments", withRoute("/accounts/{id}/payments", s.listPayments))
 	return mux
 }
+
+// docs:end route
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
@@ -301,9 +311,11 @@ func main() {
 	}
 
 	s := &store{accounts: map[string]account{}, payments: map[string][]payment{}}
+	// docs:start handler
 	// health checks are filtered out so probes never change the request counts
 	handler := otelhttp.NewHandler(s.routes(), "http.server",
 		otelhttp.WithFilter(func(r *http.Request) bool { return r.URL.Path != "/healthz" }))
+	// docs:end handler
 	srv := &http.Server{Addr: ":" + c.port, Handler: handler, ReadHeaderTimeout: 10 * time.Second}
 
 	go func() {

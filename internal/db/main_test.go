@@ -82,7 +82,45 @@ func setup(ctx context.Context) error {
 	if conn, err = pdb.Open(ctx, pcfg, "db-test"); err != nil {
 		return err
 	}
-	return conn.WithSystem(ctx, seedRows)
+	if err := conn.WithSystem(ctx, seedRows); err != nil {
+		return err
+	}
+	return conn.WithRole(ctx, pdb.RoleJobs, seedAPIRows)
+}
+
+// seedAPIRows gives each tenant one row in every api table, written as jobs,
+// the one role with rights on all of them
+func seedAPIRows(tx pgx.Tx) error {
+	ctx := context.Background()
+	for i, tenant := range []uuid.UUID{seed.tenantA, seed.tenantB} {
+		hash := []byte(fmt.Sprintf("%032d", i))
+		counts := []int64{0, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}
+		stmts := []struct {
+			sql  string
+			args []any
+		}{
+			{`insert into api.metrics_minute (tenant_id, bucket_start, service, method, route, status_code, source, counts, sum, count)
+			  values ($1, date_trunc('minute', now(), 'UTC'), 'svc', 'GET', '/a', 200, 'metric', $2, 11.5, 4)`, []any{tenant, counts}},
+			{`insert into api.metrics_hourly (tenant_id, bucket_start, service, method, route, status_code, source, counts, sum, count)
+			  values ($1, date_trunc('hour', now(), 'UTC'), 'svc', 'GET', '/a', 200, 'metric', $2, 11.5, 4)`, []any{tenant, counts}},
+			{`insert into api.metrics_daily (tenant_id, bucket_start, service, method, route, status_code, source, counts, sum, count)
+			  values ($1, date_trunc('day', now(), 'UTC'), 'svc', 'GET', '/a', 200, 'metric', $2, 11.5, 4)`, []any{tenant, counts}},
+			{`insert into api.ingest_warnings (tenant_id, day, kind, count) values ($1, current_date, 'lossy_histogram', 1)`, []any{tenant}},
+			{`insert into api.series_state (tenant_id, series_hash, start_unix_nano, last_unix_nano, last_count, last_sum, last_counts, last_seen_at)
+			  values ($1, $2, 1, 2, 4, 11.5, $3, now())`, []any{tenant, hash, counts}},
+			{`insert into api.resource_seen (tenant_id, resource_hash, start_unix_nano, first_seen_at, last_seen_at)
+			  values ($1, $2, 1, now(), now())`, []any{tenant, hash}},
+			{`insert into api.ingest_dedup (msg_id, tenant_id) values ($1, $2)`, []any{fmt.Sprintf("seed-%d", i), tenant}},
+			{`insert into api.route_registry (tenant_id, day, service, route) values ($1, current_date, 'svc', '/a')`, []any{tenant}},
+			{`insert into api.rollup_pending (tenant_id, hour) values ($1, date_trunc('hour', now(), 'UTC'))`, []any{tenant}},
+		}
+		for _, s := range stmts {
+			if _, err := tx.Exec(ctx, s.sql, s.args...); err != nil {
+				return fmt.Errorf("%s: %w", s.sql, err)
+			}
+		}
+	}
+	return nil
 }
 
 // seedRows gives each of two tenants one row in every tenant table, written

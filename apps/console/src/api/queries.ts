@@ -13,6 +13,9 @@ export const keys = {
   snippet: (siteId: string, version: string | null) => ["snippet", siteId, version] as const,
   ingest: (siteId: string, window: string) => ["ingest", siteId, window] as const,
   verification: (siteId: string) => ["verification", siteId] as const,
+  otlpTokens: (id: string, includeRevoked: boolean) =>
+    ["tenant", id, "otlp-tokens", includeRevoked] as const,
+  otlpTokensAll: (id: string) => ["tenant", id, "otlp-tokens"] as const,
   // everything an operator action can change lives under this prefix
   operator: ["operator"] as const,
   opTenants: (q: TenantListQuery) => ["operator", "tenants", q] as const,
@@ -74,6 +77,12 @@ export const ingestMonthQuery = (siteId: string) =>
     queryKey: keys.ingest(siteId, "30d"),
     queryFn: ({ signal }) => api.ingest(siteId, thirtyDayRange(new Date()), signal),
     staleTime: 5 * 60_000,
+  });
+
+export const otlpTokensQuery = (id: string, includeRevoked: boolean) =>
+  queryOptions({
+    queryKey: keys.otlpTokens(id, includeRevoked),
+    queryFn: ({ signal }) => api.otlpTokens(id, includeRevoked, signal),
   });
 
 export const verificationQuery = (siteId: string) =>

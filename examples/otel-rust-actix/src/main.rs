@@ -94,6 +94,11 @@ fn load_config() -> Result<Config, String> {
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
+// the console's api analytics setup page shows the lines between each
+// docs:start and docs:end marker pair (apps/console/src/lib/otel-guides.ts),
+// so the instructions are this code and cannot drift from it.
+
+// docs:start telemetry
 // one tracer provider and one meter provider, each with two exporters, so
 // both backends see identical data from the same sdk state
 fn setup_telemetry(c: &Config) -> Result<(SdkTracerProvider, Option<SdkMeterProvider>), BoxError> {
@@ -166,6 +171,8 @@ fn setup_telemetry(c: &Config) -> Result<(SdkTracerProvider, Option<SdkMeterProv
     global::set_meter_provider(meter_provider.clone());
     Ok((tracer_provider, Some(meter_provider)))
 }
+
+// docs:end telemetry
 
 #[derive(Default)]
 struct Store {
@@ -302,6 +309,7 @@ fn main() -> Result<(), BoxError> {
                 // health checks sit outside the instrumented scope so probes
                 // never change the request counts
                 .route("/healthz", web::get().to(healthz))
+                // docs:start middleware
                 .service(
                     web::scope("")
                         .wrap(RequestMetrics::default())
@@ -311,6 +319,7 @@ fn main() -> Result<(), BoxError> {
                         .route("/accounts/{id}/payments", web::post().to(create_payment))
                         .route("/accounts/{id}/payments", web::get().to(list_payments)),
                 )
+                // docs:end middleware
         })
         .bind(("0.0.0.0", c.port))?
         .run(),

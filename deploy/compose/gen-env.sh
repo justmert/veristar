@@ -56,6 +56,11 @@ put NATS_REPLICAS 1
 rand_b64() { head -c "$1" /dev/urandom | base64 | tr -d '\n'; }
 put OAUTH_STATE_KEY "$(rand_b64 32)"
 put UMAMI_USER_PASSWORD_KEY "$(rand_b64 32)"
+# api metric retention (this stage, docs/reference/api-storage.md): minute rows
+# 30 days, hourly rows 36 months. jobs refuses an hourly value below 24.
+put API_MINUTE_RETENTION_DAYS 30
+put API_HOURLY_RETENTION_MONTHS 36
+
 # GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET an operator input, the dev oauth app with
 # callback http://localhost:8085/api/auth/github/callback) and
 # OPERATOR_GITHUB_IDS an operator input are not generated: add them to this file by

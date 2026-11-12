@@ -1,0 +1,33 @@
+# override of deploy/compose/examples.yml for the api path test
+# (apipath_test.go): the apps join the network on which the edge caddy
+# answers as otlp.<base domain>, trust that caddy's local ca for the
+# platform exporter, and send resource attributes that try to name another
+# tenant. every value comes from the test.
+#
+#   APIPATH_NETWORK   docker network the edge caddy is attached to
+#   APIPATH_CA_DIR    directory holding root.crt, the edge caddy's local ca
+#   APIPATH_FORGED    OTEL_RESOURCE_ATTRIBUTES with forged tenant ids
+
+networks:
+  default:
+    name: ${APIPATH_NETWORK:?set APIPATH_NETWORK}
+    external: true
+
+# each runtime reads its trust store from its own variable: go and rust
+# (rustls native roots) SSL_CERT_FILE, node NODE_EXTRA_CA_CERTS, python's
+# requests REQUESTS_CA_BUNDLE. the go, python and rust sdks read
+# OTEL_RESOURCE_ATTRIBUTES; the node example disables resource detection.
+x-edge-app: &edge-app
+  environment:
+    SSL_CERT_FILE: /edge-ca/root.crt
+    NODE_EXTRA_CA_CERTS: /edge-ca/root.crt
+    REQUESTS_CA_BUNDLE: /edge-ca/root.crt
+    OTEL_RESOURCE_ATTRIBUTES: ${APIPATH_FORGED:?set APIPATH_FORGED}
+  volumes:
+    - ${APIPATH_CA_DIR:?set APIPATH_CA_DIR}:/edge-ca:ro
+
+services:
+  otel-node-express: *edge-app
+  otel-go-nethttp: *edge-app
+  otel-python-fastapi: *edge-app
+  otel-rust-actix: *edge-app

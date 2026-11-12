@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
@@ -27,6 +28,8 @@ var wantGrants = map[string]map[pdb.Role]string{
 		pdb.RoleCPSystem:   "rawd",
 		pdb.RoleCPTenant:   "r w(accepted_terms_version,description,name,updated_at)",
 		pdb.RoleCPOperator: "r",
+		// the writer refuses queued metrics of a removed tenant (00018)
+		pdb.RoleMetricsWriter: "r(id,status)",
 	},
 	"cp.tenant_members": {pdb.RoleCPSystem: "rawd", pdb.RoleCPTenant: "rawd"},
 	"cp.invites":        {pdb.RoleCPSystem: "rawd", pdb.RoleCPTenant: "rawd"},
@@ -34,7 +37,7 @@ var wantGrants = map[string]map[pdb.Role]string{
 	"cp.otlp_tokens": {
 		pdb.RoleCPSystem:      "rawd",
 		pdb.RoleCPTenant:      "rawd",
-		pdb.RoleMetricsWriter: "r(id) w(last_seen_at)",
+		pdb.RoleMetricsWriter: "r(id,status,tenant_id) w(last_seen_at)",
 	},
 	"cp.operator_api_keys": {
 		pdb.RoleCPSystem:   "rawd",
@@ -54,6 +57,20 @@ var wantGrants = map[string]map[pdb.Role]string{
 	"cp.leader_fence":    {pdb.RoleCPSystem: "rawd", pdb.RoleMetricsWriter: "rw", pdb.RoleJobs: "rw"},
 	"cp.operator_sites":  {pdb.RoleCPSystem: "r", pdb.RoleCPOperator: "r"},
 	"cp.tenant_removals": {pdb.RoleCPSystem: "rawd", pdb.RoleCPOperator: "r"},
+
+	// api (this stage). partitions are checked on their own in
+	// TestPartitionRights: they carry no rights at all.
+	"api.metrics_minute": {pdb.RoleCPTenant: "r", pdb.RoleMetricsWriter: "raw", pdb.RoleJobs: "rawd"},
+	"api.metrics_hourly": {pdb.RoleCPTenant: "r", pdb.RoleCPOperator: "r", pdb.RoleJobs: "rawd"},
+	"api.metrics_daily":  {pdb.RoleCPTenant: "r", pdb.RoleCPOperator: "r", pdb.RoleJobs: "rawd"},
+	"api.series_state":   {pdb.RoleMetricsWriter: "raw", pdb.RoleJobs: "rawd"},
+	"api.resource_seen":  {pdb.RoleMetricsWriter: "raw", pdb.RoleJobs: "rawd"},
+	"api.ingest_dedup":   {pdb.RoleMetricsWriter: "raw", pdb.RoleJobs: "rawd"},
+	"api.route_registry": {pdb.RoleMetricsWriter: "raw", pdb.RoleJobs: "rawd"},
+	"api.ingest_warnings": {
+		pdb.RoleCPTenant: "r", pdb.RoleMetricsWriter: "raw", pdb.RoleJobs: "rawd",
+	},
+	"api.rollup_pending": {pdb.RoleMetricsWriter: "raw", pdb.RoleJobs: "rawd"},
 }
 
 var tablePrivs = []struct{ letter, name string }{
@@ -77,6 +94,7 @@ func TestGrantMatrix(t *testing.T) {
 		select c.oid, n.nspname || '.' || c.relname
 		from pg_class c join pg_namespace n on n.oid = c.relnamespace
 		where n.nspname in ('cp', 'api', 'agg') and c.relkind in ('r', 'p', 'v', 'm', 'f')
+		  and not c.relispartition
 		order by 2`)
 	require.NoError(t, err)
 	type rel struct {
@@ -130,8 +148,9 @@ func TestSchemaDatabaseAndFunctionRights(t *testing.T) {
 	c := superuser(t)
 
 	wantUsage := map[string][]pdb.Role{
-		"cp":     pdb.AppRoles,
-		"api":    {pdb.RoleCPOperator, pdb.RoleMetricsWriter, pdb.RoleJobs},
+		"cp": pdb.AppRoles,
+		// cp_system only to call api.purge_tenant (00017); it has no table right
+		"api":    pdb.AppRoles,
 		"agg":    {pdb.RoleCPOperator, pdb.RoleJobs},
 		"public": pdb.AppRoles,
 	}
@@ -173,6 +192,20 @@ func TestSchemaDatabaseAndFunctionRights(t *testing.T) {
 		"cp.current_tenant_id()":      {pdb.RoleCPTenant},
 		"cp.audit_log_append_only()":  nil,
 		"cp.leader_fence_monotonic()": nil,
+
+		"api.add_buckets(bigint[],bigint[])": {pdb.RoleCPTenant, pdb.RoleCPOperator, pdb.RoleMetricsWriter, pdb.RoleJobs},
+		"api.sum_buckets(bigint[])":          {pdb.RoleCPTenant, pdb.RoleCPOperator, pdb.RoleJobs},
+		"api.histogram_quantile(double precision,bigint[])": {
+			pdb.RoleCPTenant, pdb.RoleCPOperator, pdb.RoleJobs,
+		},
+		"api.protect_partition(text)":       nil,
+		"api.create_minute_partition(date)": {pdb.RoleJobs},
+		"api.create_hourly_partition(date)": {pdb.RoleJobs},
+		"api.drop_minute_partition(date)":   {pdb.RoleJobs},
+		"api.drop_hourly_partition(date)":   {pdb.RoleJobs},
+		"api.minute_partitions()":           {pdb.RoleJobs},
+		"api.hourly_partitions()":           {pdb.RoleJobs},
+		"api.purge_tenant(uuid,boolean)":    {pdb.RoleCPSystem},
 	}
 	var names []string
 	for _, f := range fns {
@@ -189,6 +222,73 @@ func TestSchemaDatabaseAndFunctionRights(t *testing.T) {
 	}
 	sort.Strings(want)
 	require.Equal(t, want, names)
+}
+
+// every partition of the api metric tables is reachable only through its
+// parent: no application role holds any right on it, and the security
+// definer functions that create partitions keep it that way
+func TestPartitionRights(t *testing.T) {
+	ctx := context.Background()
+	c := superuser(t)
+
+	// one more of each, created at runtime the way the partition job does
+	require.NoError(t, conn.WithRole(ctx, pdb.RoleJobs, func(tx pgxTx) error {
+		var a, b bool
+		if err := tx.QueryRow(ctx, `select api.create_minute_partition('2031-01-02'), api.create_hourly_partition('2031-01-01')`).Scan(&a, &b); err != nil {
+			return err
+		}
+		require.True(t, a && b)
+		return nil
+	}))
+	t.Cleanup(func() {
+		require.NoError(t, conn.WithRole(ctx, pdb.RoleJobs, func(tx pgxTx) error {
+			_, err := tx.Exec(ctx, `select api.drop_minute_partition('2031-01-02'), api.drop_hourly_partition('2031-01-01')`)
+			return err
+		}))
+	})
+
+	rows, err := c.Query(ctx, `
+		select c.oid, c.relname, p.relname, pg_get_userbyid(c.relowner)
+		from pg_inherits i
+		join pg_class c on c.oid = i.inhrelid
+		join pg_class p on p.oid = i.inhparent
+		join pg_namespace n on n.oid = c.relnamespace
+		where n.nspname = 'api' and c.relkind = 'r'
+		order by 2`)
+	require.NoError(t, err)
+	type part struct {
+		oid                 uint32
+		name, parent, owner string
+	}
+	parts, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (part, error) {
+		var p part
+		return p, r.Scan(&p.oid, &p.name, &p.parent, &p.owner)
+	})
+	require.NoError(t, err)
+
+	perParent := map[string]int{}
+	for _, p := range parts {
+		perParent[p.parent]++
+		require.Equal(t, pdb.OwnerRole, p.owner, p.name)
+		for _, role := range append([]pdb.Role{"public"}, pdb.AppRoles...) {
+			for _, priv := range tablePrivs {
+				var has bool
+				require.NoError(t, c.QueryRow(ctx, `select has_table_privilege($1, $2::oid, $3)`, string(role), p.oid, priv.name).Scan(&has))
+				require.False(t, has, "%s holds %s on partition %s", role, priv.name, p.name)
+			}
+		}
+		_, err := count(t, pdb.RoleCPTenant, &seed.tenantA, `select count(*) from api.`+p.name)
+		requireDenied(t, err, "cp_tenant reading partition "+p.name+" directly")
+	}
+	// the migration's window (00016), plus the one of each added above
+	today := time.Now().UTC().Truncate(24 * time.Hour)
+	first := time.Date(today.AddDate(0, 0, -31).Year(), today.AddDate(0, 0, -31).Month(), 1, 0, 0, 0, 0, time.UTC)
+	last := time.Date(today.Year(), today.Month()+3, 1, 0, 0, 0, 0, time.UTC)
+	months := 0
+	for m := first; !m.After(last); m = m.AddDate(0, 1, 0) {
+		months++
+	}
+	require.Equal(t, map[string]int{"metrics_minute": 15 + 1, "metrics_hourly": months + 1}, perParent)
 }
 
 func TestRoleAttributes(t *testing.T) {

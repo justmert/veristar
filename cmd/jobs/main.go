@@ -8,6 +8,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -21,6 +22,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/prometheus/client_golang/prometheus"
@@ -29,6 +31,10 @@ import (
 	"github.com/justmert/stellar-analytics/internal/controlplane/domaincheck"
 	"github.com/justmert/stellar-analytics/internal/controlplane/provision"
 	pdb "github.com/justmert/stellar-analytics/internal/db"
+	"github.com/justmert/stellar-analytics/internal/jobs/apicapacity"
+	"github.com/justmert/stellar-analytics/internal/jobs/apipartition"
+	"github.com/justmert/stellar-analytics/internal/jobs/apiretention"
+	"github.com/justmert/stellar-analytics/internal/jobs/apirollup"
 	"github.com/justmert/stellar-analytics/internal/jobs/edgestats"
 	"github.com/justmert/stellar-analytics/internal/jobs/reconcile"
 	"github.com/justmert/stellar-analytics/internal/jobs/scheduler"
@@ -53,14 +59,19 @@ commands:
                     /readyz and /metrics on JOBS_OPS_ADDR
   run <task>        run one task once under the jobs lock (tasks: ` + edgestats.TaskName + `, ` + statsdedup.TaskName + `,
                     ` + reconcile.TaskName + `, ` + umamirotate.TaskName + `, ` + sessionprune.TaskName + `,
-                    ` + verifydomains.TaskName + `)
+                    ` + verifydomains.TaskName + `, ` + apirollup.TaskName + `, ` + apipartition.TaskName + `,
+                    ` + apiretention.TaskName + `)
+  capacity          print the measured on-disk bytes per row of the api metric
+                    tables as json (docs/reference/capacity.md); needs only the
+                    PLATFORM_DB_* keys of the jobs role
   version           print the build version
 
 environment: NATS_URL, NATS_REPLICAS, NATS_USER and NATS_PASSWORD (when the
 server requires auth), PLATFORM_DB_HOST, PLATFORM_DB_PORT, PLATFORM_DB_NAME,
 PLATFORM_DB_SSLMODE, PLATFORM_DB_JOBS_PASSWORD, PLATFORM_DB_CP_SYSTEM_PASSWORD
 (reconcile and umami-rotate run control plane logic as cp_system), UMAMI_URL,
-UMAMI_ADMIN_PASSWORD, UMAMI_USER_PASSWORD_KEY, and JOBS_OPS_ADDR for daemon.
+UMAMI_ADMIN_PASSWORD, UMAMI_USER_PASSWORD_KEY, API_MINUTE_RETENTION_DAYS,
+API_HOURLY_RETENTION_MONTHS (at least 24), and JOBS_OPS_ADDR for daemon.
 `
 
 func main() {
@@ -82,6 +93,12 @@ func run(ctx context.Context, args []string, env *config.Env, stdout, stderr io.
 	case len(args) == 1 && args[0] == "daemon":
 		if err := daemon(ctx, env, log); err != nil && !errors.Is(err, context.Canceled) {
 			log.Error("jobs daemon failed", "error", err.Error())
+			return 1
+		}
+		return 0
+	case len(args) == 1 && args[0] == "capacity":
+		if err := capacity(ctx, env, stdout); err != nil {
+			log.Error("jobs capacity failed", "error", err.Error())
 			return 1
 		}
 		return 0
@@ -134,12 +151,13 @@ func open(ctx context.Context, env *config.Env, log *slog.Logger, opsAddr bool) 
 	dbCfg, dbErr := pdb.LoadPoolConfig(env, pdb.RoleJobs, pdb.RoleCPSystem)
 	umamiCfg, umamiErr := config.LoadUmamiAdmin(env)
 	pwKey := env.UmamiUserPasswordKey()
+	apiRet, apiRetErr := config.LoadAPIRetention(env)
 	var addr string
 	if opsAddr {
 		addr = env.String("JOBS_OPS_ADDR")
 	}
 	// one error naming every missing key, as config promises
-	if err := errors.Join(natsErr, dbErr, umamiErr, env.Err()); err != nil {
+	if err := errors.Join(natsErr, dbErr, umamiErr, apiRetErr, env.Err()); err != nil {
 		return nil, "", err
 	}
 	key, err := umami.NewPasswordKey(pwKey.Reveal())
@@ -267,6 +285,33 @@ func open(ctx context.Context, env *config.Env, log *slog.Logger, opsAddr bool) 
 		_, err := pruner.Prune(ctx, l.Tx)
 		return err
 	}
+	rollup, err := apirollup.New(log, reg)
+	if err != nil {
+		closeAll()
+		return nil, "", err
+	}
+	rollupAPI := func(ctx context.Context, l *scheduler.Leader) error {
+		_, err := rollup.Run(ctx, l.Tx)
+		return err
+	}
+	partitioner, err := apipartition.New(time.Now, log, reg)
+	if err != nil {
+		closeAll()
+		return nil, "", err
+	}
+	partitionAPI := func(ctx context.Context, l *scheduler.Leader) error {
+		_, err := partitioner.Ensure(ctx, apipartition.TxFunc(l.Tx))
+		return err
+	}
+	retention, err := apiretention.New(apiRet, partitioner, time.Now, log, reg)
+	if err != nil {
+		closeAll()
+		return nil, "", err
+	}
+	retainAPI := func(ctx context.Context, l *scheduler.Leader) error {
+		_, err := retention.Run(ctx, l.Tx)
+		return err
+	}
 	tasks := []scheduler.Task{{
 		Name: edgestats.TaskName,
 		Run: func(ctx context.Context, l *scheduler.Leader) error {
@@ -302,6 +347,21 @@ func open(ctx context.Context, env *config.Env, log *slog.Logger, opsAddr bool) 
 		Every: verifydomains.Every,
 		Run:   verify,
 		Once:  verify,
+	}, {
+		Name:  apirollup.TaskName,
+		Every: apirollup.Every,
+		Run:   rollupAPI,
+		Once:  rollupAPI,
+	}, {
+		Name:  apipartition.TaskName,
+		Every: apipartition.Every,
+		Run:   partitionAPI,
+		Once:  partitionAPI,
+	}, {
+		Name:  apiretention.TaskName,
+		Every: apiretention.Every,
+		Run:   retainAPI,
+		Once:  retainAPI,
 	}}
 	return &deps{
 		nc:      nc,
@@ -421,4 +481,53 @@ func waitLoaded(ctx context.Context, sites *registry.Watcher[registry.Site], wit
 		}
 	}
 	return nil
+}
+
+// capacity measures the api metric tables of a running database, for the
+// volume run of this stage and later capacity reviews. it reads sizes and row
+// counts only, so it needs neither the lock nor nats.
+func capacity(ctx context.Context, env *config.Env, stdout io.Writer) error {
+	cfg, err := pdb.LoadPoolConfig(env, pdb.RoleJobs)
+	if err != nil {
+		return err
+	}
+	cctx, cancel := context.WithTimeout(ctx, connectTimeout)
+	defer cancel()
+	d, err := pdb.Open(cctx, cfg, natsx.ServiceJobs)
+	if err != nil {
+		return err
+	}
+	defer d.Close()
+	var tables []apicapacity.Table
+	err = d.WithRole(ctx, pdb.RoleJobs, func(tx pgx.Tx) error {
+		var err error
+		tables, err = apicapacity.Measure(ctx, tx)
+		return err
+	})
+	if err != nil {
+		return err
+	}
+	type row struct {
+		Table           string   `json:"table"`
+		Rows            int64    `json:"rows"`
+		Bytes           int64    `json:"bytes"`
+		Partitions      int      `json:"partitions"`
+		EmptyPartitions int      `json:"empty_partitions"`
+		EmptyBytes      int64    `json:"empty_bytes"`
+		BytesPerRow     *float64 `json:"bytes_per_row"`
+	}
+	out := make([]row, 0, len(tables))
+	for _, t := range tables {
+		r := row{Table: t.Name, Rows: t.Rows, Bytes: t.Bytes, Partitions: t.Partitions,
+			EmptyPartitions: t.EmptyPartitions, EmptyBytes: t.EmptyBytes}
+		// an empty table has no per-row figure; json null says so
+		if t.Rows > 0 {
+			v := t.BytesPerRow()
+			r.BytesPerRow = &v
+		}
+		out = append(out, r)
+	}
+	enc := json.NewEncoder(stdout)
+	enc.SetIndent("", "  ")
+	return enc.Encode(out)
 }

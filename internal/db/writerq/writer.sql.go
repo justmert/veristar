@@ -12,6 +12,35 @@ import (
 	"github.com/google/uuid"
 )
 
+const ingestStatus = `-- name: IngestStatus :one
+select o.status as token_status, t.status as tenant_status
+from cp.otlp_tokens o
+join cp.tenants t on t.id = o.tenant_id
+where o.id = $1 and o.tenant_id = $2
+for share of o
+`
+
+type IngestStatusParams struct {
+	TokenID  uuid.UUID
+	TenantID uuid.UUID
+}
+
+type IngestStatusRow struct {
+	TokenStatus  string
+	TenantStatus string
+}
+
+// the token and tenant status of an API_METRICS message, checked in the
+// writer's fenced transaction. the share lock on the token row makes a
+// concurrent revocation wait for this transaction (00018). no row means the
+// token does not belong to the tenant, or does not exist.
+func (q *Queries) IngestStatus(ctx context.Context, arg IngestStatusParams) (IngestStatusRow, error) {
+	row := q.db.QueryRow(ctx, ingestStatus, arg.TokenID, arg.TenantID)
+	var i IngestStatusRow
+	err := row.Scan(&i.TokenStatus, &i.TenantStatus)
+	return i, err
+}
+
 const touchOTLPToken = `-- name: TouchOTLPToken :execrows
 
 update cp.otlp_tokens

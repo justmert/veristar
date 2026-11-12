@@ -12,10 +12,13 @@ import {
   me,
   member,
   members,
+  type OtlpToken,
   operatorSite,
   operatorTenantDetail,
   operatorTenantPage,
   operatorTenantSummary,
+  otlpTokenCreated,
+  otlpTokenPage,
   type Role,
   type Site,
   site,
@@ -177,6 +180,37 @@ export const api = {
     const q = range ? `?from=${enc(range.from)}&to=${enc(range.to)}&bucket=${range.bucket}` : "";
     return request("GET", `/sites/${enc(siteId)}/ingest${q}`, ingest, undefined, signal);
   },
+
+  // contract 6.3: every page, revoked tokens included when asked for
+  otlpTokens: async (
+    tenantId: string,
+    includeRevoked: boolean,
+    signal?: AbortSignal,
+  ): Promise<OtlpToken[]> => {
+    const out: OtlpToken[] = [];
+    let cursor: string | null = null;
+    do {
+      const q: string = query([
+        ["include_revoked", includeRevoked ? "true" : ""],
+        ["limit", "200"],
+        ["cursor", cursor ?? ""],
+      ]);
+      const p = await request(
+        "GET",
+        `/tenants/${enc(tenantId)}/otlp-tokens${q}`,
+        otlpTokenPage,
+        undefined,
+        signal,
+      );
+      out.push(...p.items);
+      cursor = p.next_cursor;
+    } while (cursor !== null);
+    return out;
+  },
+  createOtlpToken: (tenantId: string, body: { name: string; environment?: string }) =>
+    request("POST", `/tenants/${enc(tenantId)}/otlp-tokens`, otlpTokenCreated, body),
+  revokeOtlpToken: (tenantId: string, tokenId: string) =>
+    requestNoContent("DELETE", `/tenants/${enc(tenantId)}/otlp-tokens/${enc(tokenId)}`),
 
   siteVerification: (siteId: string, signal?: AbortSignal) =>
     request("GET", `/sites/${enc(siteId)}/verification`, siteVerification, undefined, signal),

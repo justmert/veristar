@@ -51,6 +51,18 @@ var tenantTables = []tenantTable{
 	}},
 	{name: "cp.web_ingest_hourly", key: "tenant_id"},
 	{name: "cp.tenant_removals", key: "tenant_id", denied: true},
+
+	// api (this stage): cp_tenant reads its metrics and warnings, and has no
+	// right at all on the writer's bookkeeping
+	{name: "api.metrics_minute", key: "tenant_id"},
+	{name: "api.metrics_hourly", key: "tenant_id"},
+	{name: "api.metrics_daily", key: "tenant_id"},
+	{name: "api.ingest_warnings", key: "tenant_id"},
+	{name: "api.series_state", key: "tenant_id", denied: true},
+	{name: "api.resource_seen", key: "tenant_id", denied: true},
+	{name: "api.ingest_dedup", key: "tenant_id", denied: true},
+	{name: "api.route_registry", key: "tenant_id", denied: true},
+	{name: "api.rollup_pending", key: "tenant_id", denied: true},
 }
 
 // the isolation tests only mean something if they cover every tenant table
@@ -63,7 +75,7 @@ func TestTenantTablesMatchCatalog(t *testing.T) {
 	rows, err := c.Query(ctx, `
 		select n.nspname || '.' || c.relname
 		from pg_class c join pg_namespace n on n.oid = c.relnamespace
-		where n.nspname in ('cp', 'api', 'agg') and c.relkind in ('r', 'p')
+		where n.nspname in ('cp', 'api', 'agg') and c.relkind in ('r', 'p') and not c.relispartition
 		  and (exists (select 1 from pg_attribute a where a.attrelid = c.oid and a.attname = 'tenant_id' and not a.attisdropped)
 		       or (n.nspname = 'cp' and c.relname = 'tenants'))
 		order by 1`)
@@ -91,10 +103,12 @@ func TestTenantIsolation(t *testing.T) {
 		self, other := pair[0], pair[1]
 		for _, tt := range tenantTables {
 			t.Run(fmt.Sprintf("%s/as_%s", tt.name, self.tenant), func(t *testing.T) {
-				own, err := count(t, pdb.RoleCPSystem, nil, `select count(*) from `+tt.name+` where `+tt.key+` = $1`, self.tenant)
-				require.NoError(t, err)
-				all, err := count(t, pdb.RoleCPSystem, nil, `select count(*) from `+tt.name)
-				require.NoError(t, err)
+				// the true counts, read past row-level security
+				c := superuser(t)
+				var own, all int64
+				require.NoError(t, c.QueryRow(context.Background(),
+					`select count(*) from `+tt.name+` where `+tt.key+` = $1`, self.tenant).Scan(&own))
+				require.NoError(t, c.QueryRow(context.Background(), `select count(*) from `+tt.name).Scan(&all))
 				require.Positive(t, own, "seed must give every tenant table rows for each tenant")
 				require.Greater(t, all, own, "seed must hold rows of the other tenant too")
 

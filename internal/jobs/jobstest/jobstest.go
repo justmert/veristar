@@ -17,6 +17,7 @@ import (
 	"github.com/justmert/stellar-analytics/db"
 	pdb "github.com/justmert/stellar-analytics/internal/db"
 	"github.com/justmert/stellar-analytics/internal/db/dbtest"
+	"github.com/justmert/stellar-analytics/internal/jobs/scheduler"
 	"github.com/justmert/stellar-analytics/internal/natsx"
 	"github.com/justmert/stellar-analytics/internal/registry"
 	"github.com/justmert/stellar-analytics/tests/fixtures/natsctr"
@@ -170,4 +171,41 @@ func DedupIDs(t testing.TB, d *pdb.DB) []string {
 		t.Fatal(err)
 	}
 	return out
+}
+
+// Leader takes the jobs lock on srv as holder and returns the leader whose
+// Tx and SystemTx the tasks under test run through, and its lock.
+func Leader(t testing.TB, srv *natsctr.Server, d *pdb.DB, holder string) (*scheduler.Leader, *natsx.Lock) {
+	t.Helper()
+	_, js := Connect(t, srv.URL)
+	kv, err := js.KeyValue(context.Background(), natsx.BucketLocks)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lock, err := natsx.NewLock(kv, natsx.LockJobs, holder)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := lock.Acquire(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	l, err := scheduler.NewLeader(lock, d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return l, lock
+}
+
+// FenceOff advances the stored jobs fence past any held token, as a newer
+// leader's first write would, so every later Tx of an existing leader is
+// refused with natsx.ErrFenced.
+func FenceOff(t testing.TB, d *pdb.DB) {
+	t.Helper()
+	err := d.WithRole(context.Background(), pdb.RoleJobs, func(tx pgx.Tx) error {
+		_, err := tx.Exec(context.Background(), `update cp.leader_fence set epoch = epoch + 1 where name = 'jobs'`)
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 }

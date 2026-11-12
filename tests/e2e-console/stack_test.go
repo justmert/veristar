@@ -533,6 +533,8 @@ func (s *Stack) StartControlPlane(t testing.TB) {
 	jobsOps := freePort(t)
 	jenv := s.common(userKey)
 	jenv["JOBS_OPS_ADDR"] = "0.0.0.0:9090"
+	jenv["API_MINUTE_RETENTION_DAYS"] = "30"
+	jenv["API_HOURLY_RETENTION_MONTHS"] = "36"
 	s.mounted(t, "sa-ce-jobs-"+s.ID, bins.jobs,
 		[]string{"-p", "127.0.0.1:" + jobsOps + ":9090", "-v", releases}, jenv, "daemon")
 	waitHTTP(t, "http://127.0.0.1:"+jobsOps+"/healthz", time.Minute)

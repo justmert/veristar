@@ -855,7 +855,9 @@ Then the purge runs in the reconciler, store by store, in this order: `registry`
 OTLP key to `revoked`, 6.4), `umami` (both
 websites of every site with their data, the team, then Umami users whose console
 user has no membership in any non-removed tenant), `web_ingest`
-(`cp.web_ingest_hourly` rows; skipped when `keep_aggregates`), `api` (this stage),
+(`cp.web_ingest_hourly` rows; skipped when `keep_aggregates`), `api` (this stage:
+`api.purge_tenant`; minute rows and writer state always, hourly, daily and
+warning rows unless `keep_aggregates`),
 `agg` (this stage; skipped when `keep_aggregates`). Each finished store writes
 `steps.<name>` and an audit row `purge.step` (actor `system:purge`); the last one
 sets `completed_at` and writes `purge.complete`. A failed store is retried on the
@@ -1093,8 +1095,9 @@ and new). **200** `{"keep": ...}`.
 
 - The value is copied into `cp.tenant_removals.keep_aggregates` when a tenant is
   removed (5.5), so changing it later never changes a removal in progress.
-- `true` keeps `cp.web_ingest_hourly` rows and, from this stage, `agg` rows of the
-  removed tenant. Umami websites, their raw data and `api` minute rows are always
+- `true` keeps `cp.web_ingest_hourly` rows, `api.metrics_hourly`,
+  `api.metrics_daily` and `api.ingest_warnings` rows and, from this stage, `agg`
+  rows of the removed tenant. Umami websites, their raw data and `api` minute rows are always
   deleted. The open SCF question behind the default is recorded in
   `docs/runbooks/tenant-removal.md`.
 

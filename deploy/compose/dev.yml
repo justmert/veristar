@@ -238,6 +238,43 @@ services:
       - "127.0.0.1:4318:4318"
       - "127.0.0.1:13133:13133"
 
+  # metrics writer (this stage). in the "core" profile: it needs the nats
+  # topology (platformctl nats apply) and the platform database migrated with
+  # role passwords (make db-migrate db-roles). values follow
+  # docs/reference/api-storage.md: batch 256, first-point threshold 120 s,
+  # caps of 300 routes and 50 services per tenant and utc day. only the ops
+  # port is published, on loopback.
+  metricswriter:
+    profiles: ["core"]
+    build:
+      context: ../..
+      dockerfile: deploy/images/go-service.Dockerfile
+      args:
+        CMD: metricswriter
+    image: stellar-analytics/metricswriter:dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    environment:
+      NATS_URL: nats://nats:4222
+      NATS_REPLICAS: "1"
+      PLATFORM_DB_HOST: postgres
+      PLATFORM_DB_PORT: "5432"
+      PLATFORM_DB_NAME: platform
+      PLATFORM_DB_SSLMODE: disable
+      PLATFORM_DB_METRICS_WRITER_PASSWORD: ${PLATFORM_DB_METRICS_WRITER_PASSWORD:?run make dev-env}
+      METRICSWRITER_NODE_ID: dev-1
+      METRICSWRITER_OPS_ADDR: 0.0.0.0:9090
+      METRICSWRITER_BATCH: "256"
+      METRICSWRITER_FIRST_POINT_THRESHOLD: 120s
+      METRICSWRITER_ROUTE_CAP: "300"
+      METRICSWRITER_SERVICE_CAP: "50"
+      TZ: UTC
+    ports:
+      - "127.0.0.1:9096:9090"
+
 volumes:
   pgdata:
   natsdata:
