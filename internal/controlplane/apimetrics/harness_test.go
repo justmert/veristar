@@ -31,6 +31,7 @@ import (
 	"github.com/justmert/stellar-analytics/internal/db/writerq"
 	"github.com/justmert/stellar-analytics/internal/jobs/apirollup"
 	"github.com/justmert/stellar-analytics/internal/jobs/jobstest"
+	"github.com/justmert/stellar-analytics/internal/jobs/scheduler"
 )
 
 // how the rows get into the tables: minute rows and warnings go in through
@@ -55,6 +56,8 @@ type env struct {
 	srv *httptest.Server
 	su  *pgx.Conn
 	gh  int64
+	// leader is the jobs lock holder the rollup runs under, made on first use
+	leader *scheduler.Leader
 }
 
 func start(t *testing.T) *env {
@@ -219,10 +222,18 @@ type warning struct {
 	count  int64
 }
 
-// write creates the partitions the points need, writes them and the
-// warnings through the writer's queries as metrics_writer, then runs the
-// real rollup so hourly and daily rows exist.
+// write stores points and warnings, then runs the real rollup so hourly
+// and daily rows exist.
 func (e *env) write(t *testing.T, points []point, warnings []warning) {
+	t.Helper()
+	e.writeMinutes(t, points, warnings)
+	e.rollup(t)
+}
+
+// writeMinutes creates the partitions the points need and writes them and
+// the warnings through the writer's queries as metrics_writer. their hours
+// stay marked in api.rollup_pending until rollup runs.
+func (e *env) writeMinutes(t *testing.T, points []point, warnings []warning) {
 	t.Helper()
 	ctx := t.Context()
 	days, months := map[time.Time]bool{}, map[time.Time]bool{}
@@ -278,11 +289,19 @@ func (e *env) write(t *testing.T, points []point, warnings []warning) {
 		return nil
 	}))
 
-	srv := jobstest.NATS(t)
-	leader, _ := jobstest.Leader(t, srv, e.d, "apimetrics-test")
+}
+
+// rollup runs the api-rollup task once, as the jobs daemon does every 5
+// minutes, and requires that it had pending hours to recompute.
+func (e *env) rollup(t *testing.T) {
+	t.Helper()
+	if e.leader == nil {
+		srv := jobstest.NATS(t)
+		e.leader, _ = jobstest.Leader(t, srv, e.d, "apimetrics-test")
+	}
 	r, err := apirollup.New(slog.New(slog.DiscardHandler), prometheus.NewRegistry())
 	require.NoError(t, err)
-	res, err := r.Run(ctx, leader.Tx)
+	res, err := r.Run(t.Context(), e.leader.Tx)
 	require.NoError(t, err)
 	require.Positive(t, res.HourlyRows)
 	require.Positive(t, res.DailyRows)

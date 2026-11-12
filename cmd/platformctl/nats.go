@@ -2,10 +2,14 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
+	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -19,6 +23,8 @@ import (
 // natsUsage lists the nats subcommands for the main usage text.
 const natsUsage = `  nats apply        create or update every nats stream, bucket and consumer (NATS_URL, NATS_REPLICAS)
   nats check        report differences between the server and the topology, change nothing
+  nats auth-config  print the nats server authorization block for every service user;
+                    reads a json object {"<user>": "<bcrypt hash>"} on stdin
 `
 
 // natsTimeout bounds one apply. a 3-replica stream create waits for a raft
@@ -29,6 +35,9 @@ const natsTimeout = time.Minute
 // "nats". it connects as the platformctl user (NATS_USER, NATS_PASSWORD when
 // the server requires auth).
 func runNATS(ctx context.Context, args []string) error {
+	if slices.Equal(args, []string{"auth-config"}) {
+		return natsAuthConfig(os.Stdin, os.Stdout)
+	}
 	return runNATSWith(ctx, args, config.FromEnviron(), obs.NewLogger(os.Stderr, slog.LevelInfo))
 }
 
@@ -77,4 +86,33 @@ func runNATSWith(ctx context.Context, args []string, env *config.Env, log *slog.
 	}
 	log.Info("nats topology in place", "replicas", cfg.Replicas, "objects", len(changes))
 	return nil
+}
+
+// bcryptHash is the shape nats-server recognises as a bcrypt password entry.
+// plain passwords are refused so a server config never carries a usable
+// credential, only its hash.
+var bcryptHash = regexp.MustCompile(`^\$2[abxy]?\$\d\d\$[./A-Za-z0-9]{53}$`)
+
+// natsAuthConfig renders the authorization block of the design from
+// the users in internal/natsx/topology.go and one bcrypt hash per user, so
+// the deployed server config and the permissions the code was tested with
+// cannot drift apart. the ansible edge role feeds it from the sops file.
+func natsAuthConfig(stdin io.Reader, stdout io.Writer) error {
+	var hashes map[string]string
+	dec := json.NewDecoder(io.LimitReader(stdin, 1<<20))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&hashes); err != nil {
+		return fmt.Errorf("read {\"<user>\": \"<bcrypt hash>\"} from stdin: %w", err)
+	}
+	for name, h := range hashes {
+		if !bcryptHash.MatchString(h) {
+			return fmt.Errorf("credential for nats user %s is not a bcrypt hash", name)
+		}
+	}
+	out, err := natsx.RenderAuthorization(natsx.Users(), hashes)
+	if err != nil {
+		return err
+	}
+	_, err = stdout.Write(out)
+	return err
 }

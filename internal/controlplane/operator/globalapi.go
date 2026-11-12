@@ -25,17 +25,17 @@ var apiSorts = map[string]string{
 	"services": "services", "routes": "routes",
 }
 
-// apiChosenCTE selects the api.metrics_daily rows of the range that a
-// project's numbers are made of: per tenant and service, metric rows when
+// apiChosenCTE selects the daily rows of the range that a project's
+// numbers are made of, through api.operator_daily, which also counts the
+// hours api-rollup has not reached yet (00022, control-plane-api 7.2): per tenant and service, metric rows when
 // the service has any in the range, otherwise span rows (the design, the
 // rule the tenant dashboard of this stage applies). it expects a cte t of
 // tenants.
 const apiChosenCTE = `
 r as (
   select m.tenant_id, m.bucket_start, m.service, m.route, m.status_code, m.source, m.counts, m.count, m.lossy
-  from api.metrics_daily m
+  from api.operator_daily(@from_at::timestamptz, @to_end::timestamptz) m
   join t on t.id = m.tenant_id
-  where m.bucket_start >= @from_at::timestamptz and m.bucket_start < @to_end::timestamptz
 ),
 svc as (
   select tenant_id, service,

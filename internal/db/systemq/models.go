@@ -10,6 +10,29 @@ import (
 	"github.com/google/uuid"
 )
 
+type CpErasureRequest struct {
+	ID                 uuid.UUID
+	TenantID           uuid.UUID
+	SiteID             uuid.UUID
+	Kind               string
+	Status             string
+	RequestedBy        uuid.UUID
+	RequestedAt        time.Time
+	CompletedAt        *time.Time
+	SessionsDeleted    int64
+	EventsDeleted      int64
+	DlqMessagesDeleted int64
+	Error              *string
+	Outcome            *string
+	Message            *string
+	Day                *time.Time
+	SessionID          uuid.NullUUID
+	HeartbeatAt        *time.Time
+	AffectedFrom       *time.Time
+	AffectedTo         *time.Time
+	ReaggregatedAt     *time.Time
+}
+
 type CpTenant struct {
 	ID                   uuid.UUID
 	Slug                 string

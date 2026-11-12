@@ -23,6 +23,25 @@ func (q *Queries) AggTenantStatus(ctx context.Context, id uuid.UUID) (string, er
 	return status, err
 }
 
+const deleteSiteAggregates = `-- name: DeleteSiteAggregates :one
+with d as (delete from agg.web_daily w where w.site_id = $1::uuid returning 1),
+     dd as (delete from agg.web_daily_dim m where m.site_id = $1::uuid returning 1)
+select (select count(*) from d)::bigint as daily, (select count(*) from dd)::bigint as dims
+`
+
+type DeleteSiteAggregatesRow struct {
+	Daily int64
+	Dims  int64
+}
+
+// a site reset (erasure) leaves no web data; its aggregates go with it
+func (q *Queries) DeleteSiteAggregates(ctx context.Context, siteID uuid.UUID) (DeleteSiteAggregatesRow, error) {
+	row := q.db.QueryRow(ctx, deleteSiteAggregates, siteID)
+	var i DeleteSiteAggregatesRow
+	err := row.Scan(&i.Daily, &i.Dims)
+	return i, err
+}
+
 const deleteWebDailyDims = `-- name: DeleteWebDailyDims :execrows
 delete from agg.web_daily_dim where site_id = $1 and day = $2 and band = $3
 `

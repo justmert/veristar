@@ -11,10 +11,12 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"runtime/debug"
 	"syscall"
+	"time"
 
 	"github.com/justmert/stellar-analytics/internal/config"
 	"github.com/justmert/stellar-analytics/internal/gateway"
@@ -36,6 +38,12 @@ PROOF_BITS, PROOF_REPLAY_LIMIT, IPCLUSTER_THRESHOLD, RATE_SITE_PER_SECOND,
 RATE_SITE_BURST, RATE_PREFIX_PER_SECOND, RATE_PREFIX_BURST, GATEWAY_MAX_BODY,
 CLIENT_IP_HEADER, DBIP_MMDB, TRACKER_RELEASE_DIR, GATEWAY_SECURE_TRANSPORT.
 docs/reference/gateway-limits.md gives the starting values.
+
+the ops port also serves /edgez, the edge node's composite health (gateway
+ready, collector healthy, local nats current with its meta leader). it reads
+EDGE_HEALTH_COLLECTOR_URL (the collector's health_check endpoint) and
+EDGE_HEALTH_NATS_URL (the local nats server's monitoring /healthz) and answers
+503 while either is unset. caddy serves it on port 80 for the dns monitor.
 `
 
 func main() {
@@ -129,8 +137,11 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 	serveCtx, stopServe := context.WithCancel(ctx)
 	defer stopServe()
 	errc := make(chan error, 2)
+	ops := http.NewServeMux()
+	ops.Handle("GET /edgez", edgeHealth(env, node, log))
+	ops.Handle("/", node.Ops())
 	go func() {
-		errc <- obs.Serve(serveCtx, obs.NewServer(gwCfg.OpsAddr, node.Ops()), log)
+		errc <- obs.Serve(serveCtx, obs.NewServer(gwCfg.OpsAddr, ops), log)
 	}()
 	go func() {
 		errc <- obs.Serve(serveCtx, obs.NewServer(gwCfg.Addr, node.Handler()), log)
@@ -145,4 +156,30 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 	}
 	stopLoops()
 	return errors.Join(serveErr, <-loopDone)
+}
+
+// edgeHealth is the composite health of an edge node (the design). both
+// urls are optional so the dev stack and the tests run without them, but a
+// node without them answers 503: an edge node that cannot vouch for its
+// collector and its nats server must not stay in dns.
+func edgeHealth(env *config.Env, node *gateway.Node, log *slog.Logger) http.Handler {
+	client := &http.Client{Timeout: 2 * time.Second}
+	var missing []string
+	checks := append([]obs.Check{}, node.Checks()...)
+	for _, k := range []struct{ key, name string }{
+		{"EDGE_HEALTH_COLLECTOR_URL", "collector"},
+		{"EDGE_HEALTH_NATS_URL", "nats"},
+	} {
+		if !env.Has(k.key) {
+			missing = append(missing, k.key)
+			continue
+		}
+		u := env.URL(k.key)
+		if u == nil {
+			missing = append(missing, k.key+" (not an absolute http url)")
+			continue
+		}
+		checks = append(checks, obs.HTTPCheck(k.name, u, client))
+	}
+	return obs.CompositeHandler(log, missing, checks...)
 }

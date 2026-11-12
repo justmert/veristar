@@ -28,6 +28,7 @@ import (
 	"github.com/justmert/stellar-analytics/internal/controlplane/apimetrics"
 	"github.com/justmert/stellar-analytics/internal/controlplane/auth"
 	"github.com/justmert/stellar-analytics/internal/controlplane/domaincheck"
+	"github.com/justmert/stellar-analytics/internal/controlplane/erasure"
 	"github.com/justmert/stellar-analytics/internal/controlplane/ingest"
 	"github.com/justmert/stellar-analytics/internal/controlplane/lifecycle"
 	"github.com/justmert/stellar-analytics/internal/controlplane/members"
@@ -64,7 +65,7 @@ requires auth), PLATFORM_DB_HOST, PLATFORM_DB_PORT, PLATFORM_DB_NAME,
 PLATFORM_DB_SSLMODE, PLATFORM_DB_CP_SYSTEM_PASSWORD,
 PLATFORM_DB_CP_TENANT_PASSWORD, PLATFORM_DB_CP_OPERATOR_PASSWORD,
 API_MINUTE_RETENTION_DAYS and API_HOURLY_RETENTION_MONTHS (section 7.11, the
-values jobs runs with).
+values jobs runs with), ERASURE_QUEUE_WAIT (optional, section 10.6).
 `
 
 func main() {
@@ -116,6 +117,7 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 	// the api metrics ranges switch tables at the horizons the jobs
 	// retention task drops data by, so both read the same keys
 	retention, _ := config.LoadAPIRetention(env)
+	erasureCfg, _ := config.LoadErasure(env)
 	cfg, err := config.LoadControlPlane(env)
 	if err != nil {
 		return err
@@ -238,6 +240,29 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	// this stage: operators manage keys in the console; machines read with
+	// them at /api/metrics/v1, which is mounted beside the session api
+	apiKeys, err := operator.NewAPIKeys(d)
+	if err != nil {
+		return err
+	}
+	machine, err := operator.NewMachine(operator.MachineConfig{DB: d, Umami: admin, Log: log})
+	if err != nil {
+		return err
+	}
+
+	// this stage erasure: runs started by requests finish before the pools close
+	eraser, err := erasure.New(erasure.Config{
+		DB: d, NC: nc, Umami: admin, QueueWait: erasureCfg.QueueWait, Now: time.Now, Log: log,
+	})
+	if err != nil {
+		return err
+	}
+	defer eraser.Wait()
+	erasureRoutes, err := erasure.NewRoutes(scope, eraser)
+	if err != nil {
+		return err
+	}
 
 	otlpRoutes, err := otlptokens.NewRoutes(scope, publisher)
 	if err != nil {
@@ -284,17 +309,22 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 			ingest.NewRoutes(scope),
 			otlpRoutes,
 			metricRoutes,
+			erasureRoutes,
 			snippets,
 			// behind RequireUser like every private group; sso answers its own
 			// failures with a redirect, but an anonymous request gets 401
 			controlplane.RoutesFunc(func(r chi.Router) { r.Method(http.MethodGet, ssoPath, ssoH) }),
 			// /api/operator: 403 operator_required for everyone else (5.1)
-			controlplane.RoutesFunc(guard.Mount(modeRoutes, keepRoutes, auditRoutes, actions, review, global)),
+			controlplane.RoutesFunc(guard.Mount(modeRoutes, keepRoutes, auditRoutes, actions, review, global, apiKeys)),
 		},
+		// keys only: no session middleware runs there (contract 9.1)
+		Mounts: []controlplane.Mount{{Path: operator.MachinePath, Handler: machine.Handler()}},
 	})
 
 	reg := obs.NewRegistry()
-	ops := obs.NewOpsHandler(reg, log, readiness(d, nc)...)
+	ops := http.NewServeMux()
+	ops.Handle("GET /corez", obs.CompositeHandler(log, nil, coreHealth(d, nc, umamiClient)...))
+	ops.Handle("/", obs.NewOpsHandler(reg, log, readiness(d, nc)...))
 
 	log.Info("controlplane started", "version", buildVersion(), "addr", cfg.Addr, "ops_addr", cfg.OpsAddr,
 		"console_origin", cfg.ConsoleOrigin, "terms_version", tm.Version, "operators", len(cfg.OperatorGitHubIDs))
@@ -337,5 +367,32 @@ func readiness(d *db.DB, nc *nats.Conn) []obs.Check {
 		}
 		return nil
 	}})
+	return checks
+}
+
+// coreHealth is the composite health of a core node (the design), served
+// on the ops port as /corez and by caddy on port 80 for the dns monitor: the
+// readiness checks, the database behind haproxy is the writable leader, and
+// umami answers its heartbeat. a ping alone would also pass on a replica that
+// haproxy should never have routed to.
+func coreHealth(d *db.DB, nc *nats.Conn, um *umami.Client) []obs.Check {
+	checks := readiness(d, nc)
+	checks = append(checks,
+		obs.Check{Name: "db leader", Fn: func(ctx context.Context) error {
+			p, err := d.Pool(db.RoleCPSystem)
+			if err != nil {
+				return err
+			}
+			var recovery bool
+			if err := p.QueryRow(ctx, "select pg_is_in_recovery()").Scan(&recovery); err != nil {
+				return err
+			}
+			if recovery {
+				return errors.New("database is a replica, not the leader")
+			}
+			return nil
+		}},
+		obs.Check{Name: "umami", Fn: um.Heartbeat},
+	)
 	return checks
 }

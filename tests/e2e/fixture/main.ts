@@ -16,7 +16,7 @@ import { createServer as createHttpsServer } from "node:https";
 import { connect, type Socket } from "node:net";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { GATEWAY_HOST, PORTS, SITES, TENANT_DOMAIN } from "../sites.ts";
+import { GATEWAY_HOST, HOSTED_SITES, PORTS, TENANT_DOMAIN } from "../sites.ts";
 import { createCert } from "./certs.ts";
 import { checkVectors, FixtureGateway, type ProofVector } from "./gateway.ts";
 import { UpstreamGateway } from "./upstream.ts";
@@ -61,10 +61,10 @@ const gateway = upstream
       proofKey: Buffer.from(proofKeyHex, "hex"),
       proofBits: requiredInt("SA_E2E_PROOF_BITS"),
       replayLimit: requiredInt("SA_E2E_REPLAY_LIMIT"),
-      sites: SITES.map((s) => ({ siteId: s.siteId, origins: [s.origin], status: "active" })),
+      sites: HOSTED_SITES.map((s) => ({ siteId: s.siteId, origins: [s.origin], status: "active" })),
     });
 
-const siteByHost = new Map(SITES.map((s) => [s.host, s]));
+const siteByHost = new Map(HOSTED_SITES.map((s) => [s.host, s]));
 // requests that reached the proxy or tls front for a host the fixture does not
 // serve; a test can assert this stays empty
 const refused: { at: number; kind: string; target: string }[] = [];

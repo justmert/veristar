@@ -32,7 +32,14 @@ const (
 	// this stage
 	OTLPTokenCreate = "otlp_token.create" //nolint:gosec // an audit action name, not a credential
 	OTLPTokenRevoke = "otlp_token.revoke" //nolint:gosec // an audit action name, not a credential
+	// this stage
+	ErasureRequest  = "erasure.request"
+	ErasureComplete = "erasure.complete"
+	ErasureFail     = "erasure.fail"
 )
+
+// ErasureTarget names an erasure request.
+func ErasureTarget(id uuid.UUID) string { return "erasure:" + id.String() }
 
 // Entry is one audit row. Detail is encoded as a json object; it must never
 // hold a token, cookie, password or secret.

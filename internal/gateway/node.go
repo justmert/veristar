@@ -58,6 +58,7 @@ type Node struct {
 	releases *Releases
 	public   *Server
 	ops      http.Handler
+	checks   []obs.Check
 }
 
 // NewNode builds every component and checks the configuration. it reads the
@@ -150,7 +151,8 @@ func NewNode(ctx context.Context, c NodeConfig) (*Node, error) {
 	if err != nil {
 		return nil, err
 	}
-	n.ops = obs.NewOpsHandler(c.Registry, c.Log, ReadinessChecks(n.sites, n.keys, n.visitor, n.pub, n.buckets)...)
+	n.checks = ReadinessChecks(n.sites, n.keys, n.visitor, n.pub, n.buckets)
+	n.ops = obs.NewOpsHandler(c.Registry, c.Log, n.checks...)
 	return n, nil
 }
 
@@ -159,6 +161,9 @@ func (n *Node) Handler() http.Handler { return n.public }
 
 // Ops serves /healthz, /readyz and /metrics.
 func (n *Node) Ops() http.Handler { return n.ops }
+
+// Checks are the /readyz checks, for the node's composite health.
+func (n *Node) Checks() []obs.Check { return n.checks }
 
 // Stats exposes the outcome counters, so a test can flush them at once.
 func (n *Node) Stats() *Stats { return n.stats }

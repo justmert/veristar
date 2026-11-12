@@ -33,3 +33,9 @@ delete from agg.web_daily_dim where site_id = @site_id and day = @day and band =
 insert into agg.web_daily_dim (site_id, tenant_id, day, band, dimension, key, value)
 select @site_id::uuid, @tenant_id::uuid, @day::date, @band::text,
        unnest(@dimensions::text[]), unnest(@keys::text[]), unnest(@dim_values::bigint[]);
+
+-- name: DeleteSiteAggregates :one
+-- a site reset (erasure) leaves no web data; its aggregates go with it
+with d as (delete from agg.web_daily w where w.site_id = @site_id::uuid returning 1),
+     dd as (delete from agg.web_daily_dim m where m.site_id = @site_id::uuid returning 1)
+select (select count(*) from d)::bigint as daily, (select count(*) from dd)::bigint as dims;

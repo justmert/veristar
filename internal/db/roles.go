@@ -120,3 +120,35 @@ func hmacSHA256(key []byte, msg string) []byte {
 	m.Write([]byte(msg))
 	return m.Sum(nil)
 }
+
+// SetLoginPassword gives role the login attribute and a password inside tx.
+// like SetRolePasswords, only a scram-sha-256 verifier reaches the server.
+// it serves roles outside the platform database, such as jobs_retention in
+// the umami database.
+func SetLoginPassword(ctx context.Context, tx pgx.Tx, role, password string) error {
+	if err := checkPasswordChars(password); err != nil {
+		return fmt.Errorf("db: password of %s: %w", role, err)
+	}
+	if len(password) < minRolePassword {
+		return fmt.Errorf("db: password of %s must be at least %d characters", role, minRolePassword)
+	}
+	verifier, err := scramVerifier(password)
+	if err != nil {
+		return err
+	}
+	stmt := "alter role " + pgx.Identifier{role}.Sanitize() + " with login password '" + verifier + "'"
+	if _, err := tx.Exec(ctx, stmt); err != nil {
+		return fmt.Errorf("db: set password of %s: %w", role, err)
+	}
+	return nil
+}
+
+// AdminConnect opens one connection as the admin login to cfg.Server's
+// database, for platformctl commands that work outside the migrations.
+func AdminConnect(ctx context.Context, cfg AdminConfig, appName string) (*pgx.Conn, error) {
+	conn, err := pgx.Connect(ctx, cfg.Server.connString(cfg.Admin, appName))
+	if err != nil {
+		return nil, fmt.Errorf("db: connect as admin to %s: %w", cfg.Server.Database, err)
+	}
+	return conn, nil
+}

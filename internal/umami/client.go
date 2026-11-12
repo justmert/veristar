@@ -76,8 +76,17 @@ func (e *APIError) Error() string {
 // ErrUnauthorized matches any APIError with status 401.
 var ErrUnauthorized = errors.New("umami: unauthorized")
 
+// ErrNotFound matches any APIError with status 404.
+var ErrNotFound = errors.New("umami: not found")
+
 func (e *APIError) Is(target error) bool {
-	return target == ErrUnauthorized && e.Status == http.StatusUnauthorized
+	switch target {
+	case ErrUnauthorized:
+		return e.Status == http.StatusUnauthorized
+	case ErrNotFound:
+		return e.Status == http.StatusNotFound
+	}
+	return false
 }
 
 // Client talks to one umami instance.

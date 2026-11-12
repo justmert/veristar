@@ -61,6 +61,14 @@ func (e *Env) raw(key string) (string, bool) {
 	return v, v != ""
 }
 
+// Has reports whether key is set to a non-empty value. it lets a loader
+// apply a documented default for an optional key and still validate a
+// value that is present.
+func (e *Env) Has(key string) bool {
+	_, ok := e.raw(key)
+	return ok
+}
+
 // String returns a required, non-empty value.
 func (e *Env) String(key string) string {
 	v, ok := e.raw(key)

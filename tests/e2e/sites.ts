@@ -25,7 +25,7 @@ export const PORTS = {
 } as const;
 
 export interface SiteDef {
-  key: "static-html" | "vite-react-spa" | "react-router-ssr" | "astro-ssr";
+  key: "static-html" | "vite-react-spa" | "react-router-ssr" | "astro-ssr" | "wallets-kit-spa";
   host: string;
   origin: string;
   port: number;
@@ -62,8 +62,23 @@ export const SITES: readonly SiteDef[] = [
   site("astro-ssr", "astro", 47104, "0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e04", "#nav-about"),
 ];
 
+// the this stage wallets kit example. it is not part of the this stage matrix
+// (SITES), which runs tracker 1.0.0; it needs 1.1.0 for data-wallets-kit and
+// is built with the test wallet (pnpm build:test).
+export const WALLET_SITE: SiteDef = site(
+  "wallets-kit-spa",
+  "wk",
+  47105,
+  "0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e05",
+  "#connect",
+);
+export const WALLET_TRACKER_VERSION = "1.1.0";
+
+// every site the fixture's tls front serves
+export const HOSTED_SITES: readonly SiteDef[] = [...SITES, WALLET_SITE];
+
 export function siteByKey(key: SiteDef["key"]): SiteDef {
-  const s = SITES.find((x) => x.key === key);
+  const s = HOSTED_SITES.find((x) => x.key === key);
   if (!s) throw new Error(`unknown site ${key}`);
   return s;
 }

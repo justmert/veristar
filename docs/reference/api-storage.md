@@ -128,7 +128,8 @@ no touched hour is missed.
 | `metrics_minute` | select (own rows) | none | select, insert, update | select, insert, update, delete |
 | `metrics_hourly`, `metrics_daily` | select (own rows) | select (all rows) | none | select, insert, update, delete |
 | `ingest_warnings` | select (own rows) | none | select, insert, update | select, insert, update, delete |
-| `series_state`, `resource_seen`, `ingest_dedup`, `route_registry`, `rollup_pending` | none | none | select, insert, update | select, insert, update, delete |
+| `series_state`, `resource_seen`, `ingest_dedup`, `route_registry` | none | none | select, insert, update | select, insert, update, delete |
+| `rollup_pending` | select (own rows, 00021: hourly and daily answers read pending hours from minutes) | none | select, insert, update | select, insert, update, delete |
 
 Every table has forced row-level security with exactly one `cp_tenant`
 policy keyed on `cp.current_tenant_id()`; `cp_operator` has a select policy

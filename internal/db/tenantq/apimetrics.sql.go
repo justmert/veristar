@@ -25,18 +25,55 @@ from (
     and ($7::text is null or method = $7::text)
   union all
   select service, method, route, status_code, source, counts, count, lossy, bucket_start
-  from api.metrics_hourly
+  from api.metrics_hourly h
   where $1::text = 'hour'
-    and bucket_start >= $2::timestamptz and bucket_start < $3::timestamptz
+    and h.bucket_start >= $2::timestamptz and h.bucket_start < $3::timestamptz
+    and not exists (select 1 from api.rollup_pending p where p.tenant_id = h.tenant_id and p.hour = h.bucket_start)
+    and ((source = 'metric' and service = any($4::text[]))
+         or (source = 'span' and service = any($5::text[])))
+    and ($6::text is null or route = $6::text)
+    and ($7::text is null or method = $7::text)
+  union all
+  select service, method, route, status_code, source, counts, count, lossy, p.hour as bucket_start
+  from api.rollup_pending p
+  join api.metrics_minute m
+    on m.tenant_id = p.tenant_id and m.bucket_start >= p.hour and m.bucket_start < p.hour + interval '1 hour'
+  where $1::text = 'hour'
+    and p.hour >= $2::timestamptz and p.hour < $3::timestamptz
     and ((source = 'metric' and service = any($4::text[]))
          or (source = 'span' and service = any($5::text[])))
     and ($6::text is null or route = $6::text)
     and ($7::text is null or method = $7::text)
   union all
   select service, method, route, status_code, source, counts, count, lossy, bucket_start
-  from api.metrics_daily
+  from api.metrics_daily d
   where $1::text = 'day'
-    and bucket_start >= $2::timestamptz and bucket_start < $3::timestamptz
+    and d.bucket_start >= $2::timestamptz and d.bucket_start < $3::timestamptz
+    and not exists (select 1 from api.rollup_pending p where p.tenant_id = d.tenant_id
+                    and p.hour >= d.bucket_start and p.hour < d.bucket_start + interval '24 hours')
+    and ((source = 'metric' and service = any($4::text[]))
+         or (source = 'span' and service = any($5::text[])))
+    and ($6::text is null or route = $6::text)
+    and ($7::text is null or method = $7::text)
+  union all
+  select service, method, route, status_code, source, counts, count, lossy, pd.day as bucket_start
+  from (select distinct tenant_id, date_trunc('day', hour, 'UTC') as day
+        from api.rollup_pending
+        where $1::text = 'day' and hour >= $2::timestamptz and hour < $3::timestamptz) pd
+  join api.metrics_hourly h
+    on h.tenant_id = pd.tenant_id and h.bucket_start >= pd.day and h.bucket_start < pd.day + interval '24 hours'
+  where not exists (select 1 from api.rollup_pending p where p.tenant_id = h.tenant_id and p.hour = h.bucket_start)
+    and ((source = 'metric' and service = any($4::text[]))
+         or (source = 'span' and service = any($5::text[])))
+    and ($6::text is null or route = $6::text)
+    and ($7::text is null or method = $7::text)
+  union all
+  select service, method, route, status_code, source, counts, count, lossy, date_trunc('day', p.hour, 'UTC') as bucket_start
+  from api.rollup_pending p
+  join api.metrics_minute m
+    on m.tenant_id = p.tenant_id and m.bucket_start >= p.hour and m.bucket_start < p.hour + interval '1 hour'
+  where $1::text = 'day'
+    and p.hour >= $2::timestamptz and p.hour < $3::timestamptz
     and ((source = 'metric' and service = any($4::text[]))
          or (source = 'span' and service = any($5::text[])))
     and ($6::text is null or route = $6::text)
@@ -93,18 +130,55 @@ with g as (
     and ($11::text is null or method = $11::text)
   union all
   select service, method, route, status_code, source, counts, count, lossy, bucket_start
-  from api.metrics_hourly
+  from api.metrics_hourly h
   where $5::text = 'hour'
-    and bucket_start >= $6::timestamptz and bucket_start < $7::timestamptz
+    and h.bucket_start >= $6::timestamptz and h.bucket_start < $7::timestamptz
+    and not exists (select 1 from api.rollup_pending p where p.tenant_id = h.tenant_id and p.hour = h.bucket_start)
+    and ((source = 'metric' and service = any($8::text[]))
+         or (source = 'span' and service = any($9::text[])))
+    and ($10::text is null or route = $10::text)
+    and ($11::text is null or method = $11::text)
+  union all
+  select service, method, route, status_code, source, counts, count, lossy, p.hour as bucket_start
+  from api.rollup_pending p
+  join api.metrics_minute m
+    on m.tenant_id = p.tenant_id and m.bucket_start >= p.hour and m.bucket_start < p.hour + interval '1 hour'
+  where $5::text = 'hour'
+    and p.hour >= $6::timestamptz and p.hour < $7::timestamptz
     and ((source = 'metric' and service = any($8::text[]))
          or (source = 'span' and service = any($9::text[])))
     and ($10::text is null or route = $10::text)
     and ($11::text is null or method = $11::text)
   union all
   select service, method, route, status_code, source, counts, count, lossy, bucket_start
-  from api.metrics_daily
+  from api.metrics_daily d
   where $5::text = 'day'
-    and bucket_start >= $6::timestamptz and bucket_start < $7::timestamptz
+    and d.bucket_start >= $6::timestamptz and d.bucket_start < $7::timestamptz
+    and not exists (select 1 from api.rollup_pending p where p.tenant_id = d.tenant_id
+                    and p.hour >= d.bucket_start and p.hour < d.bucket_start + interval '24 hours')
+    and ((source = 'metric' and service = any($8::text[]))
+         or (source = 'span' and service = any($9::text[])))
+    and ($10::text is null or route = $10::text)
+    and ($11::text is null or method = $11::text)
+  union all
+  select service, method, route, status_code, source, counts, count, lossy, pd.day as bucket_start
+  from (select distinct tenant_id, date_trunc('day', hour, 'UTC') as day
+        from api.rollup_pending
+        where $5::text = 'day' and hour >= $6::timestamptz and hour < $7::timestamptz) pd
+  join api.metrics_hourly h
+    on h.tenant_id = pd.tenant_id and h.bucket_start >= pd.day and h.bucket_start < pd.day + interval '24 hours'
+  where not exists (select 1 from api.rollup_pending p where p.tenant_id = h.tenant_id and p.hour = h.bucket_start)
+    and ((source = 'metric' and service = any($8::text[]))
+         or (source = 'span' and service = any($9::text[])))
+    and ($10::text is null or route = $10::text)
+    and ($11::text is null or method = $11::text)
+  union all
+  select service, method, route, status_code, source, counts, count, lossy, date_trunc('day', p.hour, 'UTC') as bucket_start
+  from api.rollup_pending p
+  join api.metrics_minute m
+    on m.tenant_id = p.tenant_id and m.bucket_start >= p.hour and m.bucket_start < p.hour + interval '1 hour'
+  where $5::text = 'day'
+    and p.hour >= $6::timestamptz and p.hour < $7::timestamptz
     and ((source = 'metric' and service = any($8::text[]))
          or (source = 'span' and service = any($9::text[])))
     and ($10::text is null or route = $10::text)
@@ -231,16 +305,47 @@ from (
          or (source = 'span' and service = any($5::text[])))
   union all
   select service, method, route, status_code, source, counts, count, lossy, bucket_start
-  from api.metrics_hourly
+  from api.metrics_hourly h
   where $1::text = 'hour'
-    and bucket_start >= $2::timestamptz and bucket_start < $3::timestamptz
+    and h.bucket_start >= $2::timestamptz and h.bucket_start < $3::timestamptz
+    and not exists (select 1 from api.rollup_pending p where p.tenant_id = h.tenant_id and p.hour = h.bucket_start)
+    and ((source = 'metric' and service = any($4::text[]))
+         or (source = 'span' and service = any($5::text[])))
+  union all
+  select service, method, route, status_code, source, counts, count, lossy, p.hour as bucket_start
+  from api.rollup_pending p
+  join api.metrics_minute m
+    on m.tenant_id = p.tenant_id and m.bucket_start >= p.hour and m.bucket_start < p.hour + interval '1 hour'
+  where $1::text = 'hour'
+    and p.hour >= $2::timestamptz and p.hour < $3::timestamptz
     and ((source = 'metric' and service = any($4::text[]))
          or (source = 'span' and service = any($5::text[])))
   union all
   select service, method, route, status_code, source, counts, count, lossy, bucket_start
-  from api.metrics_daily
+  from api.metrics_daily d
   where $1::text = 'day'
-    and bucket_start >= $2::timestamptz and bucket_start < $3::timestamptz
+    and d.bucket_start >= $2::timestamptz and d.bucket_start < $3::timestamptz
+    and not exists (select 1 from api.rollup_pending p where p.tenant_id = d.tenant_id
+                    and p.hour >= d.bucket_start and p.hour < d.bucket_start + interval '24 hours')
+    and ((source = 'metric' and service = any($4::text[]))
+         or (source = 'span' and service = any($5::text[])))
+  union all
+  select service, method, route, status_code, source, counts, count, lossy, pd.day as bucket_start
+  from (select distinct tenant_id, date_trunc('day', hour, 'UTC') as day
+        from api.rollup_pending
+        where $1::text = 'day' and hour >= $2::timestamptz and hour < $3::timestamptz) pd
+  join api.metrics_hourly h
+    on h.tenant_id = pd.tenant_id and h.bucket_start >= pd.day and h.bucket_start < pd.day + interval '24 hours'
+  where not exists (select 1 from api.rollup_pending p where p.tenant_id = h.tenant_id and p.hour = h.bucket_start)
+    and ((source = 'metric' and service = any($4::text[]))
+         or (source = 'span' and service = any($5::text[])))
+  union all
+  select service, method, route, status_code, source, counts, count, lossy, date_trunc('day', p.hour, 'UTC') as bucket_start
+  from api.rollup_pending p
+  join api.metrics_minute m
+    on m.tenant_id = p.tenant_id and m.bucket_start >= p.hour and m.bucket_start < p.hour + interval '1 hour'
+  where $1::text = 'day'
+    and p.hour >= $2::timestamptz and p.hour < $3::timestamptz
     and ((source = 'metric' and service = any($4::text[]))
          or (source = 'span' and service = any($5::text[])))
 ) r
@@ -302,15 +407,43 @@ from (
     and ($4::text is null or service = $4::text)
   union all
   select service, source
-  from api.metrics_hourly
+  from api.metrics_hourly h
   where $1::text = 'hour'
-    and bucket_start >= $2::timestamptz and bucket_start < $3::timestamptz
+    and h.bucket_start >= $2::timestamptz and h.bucket_start < $3::timestamptz
+    and not exists (select 1 from api.rollup_pending p where p.tenant_id = h.tenant_id and p.hour = h.bucket_start)
     and ($4::text is null or service = $4::text)
   union all
   select service, source
-  from api.metrics_daily
+  from api.rollup_pending p
+  join api.metrics_minute m
+    on m.tenant_id = p.tenant_id and m.bucket_start >= p.hour and m.bucket_start < p.hour + interval '1 hour'
+  where $1::text = 'hour'
+    and p.hour >= $2::timestamptz and p.hour < $3::timestamptz
+    and ($4::text is null or service = $4::text)
+  union all
+  select service, source
+  from api.metrics_daily d
   where $1::text = 'day'
-    and bucket_start >= $2::timestamptz and bucket_start < $3::timestamptz
+    and d.bucket_start >= $2::timestamptz and d.bucket_start < $3::timestamptz
+    and not exists (select 1 from api.rollup_pending p where p.tenant_id = d.tenant_id
+                    and p.hour >= d.bucket_start and p.hour < d.bucket_start + interval '24 hours')
+    and ($4::text is null or service = $4::text)
+  union all
+  select service, source
+  from (select distinct tenant_id, date_trunc('day', hour, 'UTC') as day
+        from api.rollup_pending
+        where $1::text = 'day' and hour >= $2::timestamptz and hour < $3::timestamptz) pd
+  join api.metrics_hourly h
+    on h.tenant_id = pd.tenant_id and h.bucket_start >= pd.day and h.bucket_start < pd.day + interval '24 hours'
+  where not exists (select 1 from api.rollup_pending p where p.tenant_id = h.tenant_id and p.hour = h.bucket_start)
+    and ($4::text is null or service = $4::text)
+  union all
+  select service, source
+  from api.rollup_pending p
+  join api.metrics_minute m
+    on m.tenant_id = p.tenant_id and m.bucket_start >= p.hour and m.bucket_start < p.hour + interval '1 hour'
+  where $1::text = 'day'
+    and p.hour >= $2::timestamptz and p.hour < $3::timestamptz
     and ($4::text is null or service = $4::text)
 ) r
 group by service
@@ -331,9 +464,11 @@ type APIMetricSourcesRow struct {
 }
 
 // cp_tenant queries of the api metrics routes (control-plane-api section 7).
-// each query unions the three resolutions, which differ only in their
-// table, so one query serves every range. every branch but the one named by
-// @resolution is cut by a one-time filter, so only one table is read. no query names a tenant: row-level security on the api tables keys
+// each query unions the branches of the three resolutions, so one query
+// serves every range; every branch but those of @resolution is cut by a
+// one-time filter. hourly and daily answers also read the hours still
+// marked in api.rollup_pending from api.metrics_minute (contract 7.2), so
+// traffic shows before the rollup runs and nothing is counted twice. no query names a tenant: row-level security on the api tables keys
 // every row on cp.current_tenant_id(), so a handler that set the wrong tenant
 // in db.WithTenant reads that tenant's rows or none, never a mix.
 //
@@ -381,18 +516,55 @@ from (
     and ($7::text is null or method = $7::text)
   union all
   select service, method, route, status_code, source, counts, count, lossy, bucket_start
-  from api.metrics_hourly
+  from api.metrics_hourly h
   where $1::text = 'hour'
-    and bucket_start >= $2::timestamptz and bucket_start < $3::timestamptz
+    and h.bucket_start >= $2::timestamptz and h.bucket_start < $3::timestamptz
+    and not exists (select 1 from api.rollup_pending p where p.tenant_id = h.tenant_id and p.hour = h.bucket_start)
+    and ((source = 'metric' and service = any($4::text[]))
+         or (source = 'span' and service = any($5::text[])))
+    and ($6::text is null or route = $6::text)
+    and ($7::text is null or method = $7::text)
+  union all
+  select service, method, route, status_code, source, counts, count, lossy, p.hour as bucket_start
+  from api.rollup_pending p
+  join api.metrics_minute m
+    on m.tenant_id = p.tenant_id and m.bucket_start >= p.hour and m.bucket_start < p.hour + interval '1 hour'
+  where $1::text = 'hour'
+    and p.hour >= $2::timestamptz and p.hour < $3::timestamptz
     and ((source = 'metric' and service = any($4::text[]))
          or (source = 'span' and service = any($5::text[])))
     and ($6::text is null or route = $6::text)
     and ($7::text is null or method = $7::text)
   union all
   select service, method, route, status_code, source, counts, count, lossy, bucket_start
-  from api.metrics_daily
+  from api.metrics_daily d
   where $1::text = 'day'
-    and bucket_start >= $2::timestamptz and bucket_start < $3::timestamptz
+    and d.bucket_start >= $2::timestamptz and d.bucket_start < $3::timestamptz
+    and not exists (select 1 from api.rollup_pending p where p.tenant_id = d.tenant_id
+                    and p.hour >= d.bucket_start and p.hour < d.bucket_start + interval '24 hours')
+    and ((source = 'metric' and service = any($4::text[]))
+         or (source = 'span' and service = any($5::text[])))
+    and ($6::text is null or route = $6::text)
+    and ($7::text is null or method = $7::text)
+  union all
+  select service, method, route, status_code, source, counts, count, lossy, pd.day as bucket_start
+  from (select distinct tenant_id, date_trunc('day', hour, 'UTC') as day
+        from api.rollup_pending
+        where $1::text = 'day' and hour >= $2::timestamptz and hour < $3::timestamptz) pd
+  join api.metrics_hourly h
+    on h.tenant_id = pd.tenant_id and h.bucket_start >= pd.day and h.bucket_start < pd.day + interval '24 hours'
+  where not exists (select 1 from api.rollup_pending p where p.tenant_id = h.tenant_id and p.hour = h.bucket_start)
+    and ((source = 'metric' and service = any($4::text[]))
+         or (source = 'span' and service = any($5::text[])))
+    and ($6::text is null or route = $6::text)
+    and ($7::text is null or method = $7::text)
+  union all
+  select service, method, route, status_code, source, counts, count, lossy, date_trunc('day', p.hour, 'UTC') as bucket_start
+  from api.rollup_pending p
+  join api.metrics_minute m
+    on m.tenant_id = p.tenant_id and m.bucket_start >= p.hour and m.bucket_start < p.hour + interval '1 hour'
+  where $1::text = 'day'
+    and p.hour >= $2::timestamptz and p.hour < $3::timestamptz
     and ((source = 'metric' and service = any($4::text[]))
          or (source = 'span' and service = any($5::text[])))
     and ($6::text is null or route = $6::text)
@@ -465,18 +637,55 @@ from (
     and ($7::text is null or method = $7::text)
   union all
   select service, method, route, status_code, source, counts, count, lossy, bucket_start
-  from api.metrics_hourly
+  from api.metrics_hourly h
   where $1::text = 'hour'
-    and bucket_start >= $2::timestamptz and bucket_start < $3::timestamptz
+    and h.bucket_start >= $2::timestamptz and h.bucket_start < $3::timestamptz
+    and not exists (select 1 from api.rollup_pending p where p.tenant_id = h.tenant_id and p.hour = h.bucket_start)
+    and ((source = 'metric' and service = any($4::text[]))
+         or (source = 'span' and service = any($5::text[])))
+    and ($6::text is null or route = $6::text)
+    and ($7::text is null or method = $7::text)
+  union all
+  select service, method, route, status_code, source, counts, count, lossy, p.hour as bucket_start
+  from api.rollup_pending p
+  join api.metrics_minute m
+    on m.tenant_id = p.tenant_id and m.bucket_start >= p.hour and m.bucket_start < p.hour + interval '1 hour'
+  where $1::text = 'hour'
+    and p.hour >= $2::timestamptz and p.hour < $3::timestamptz
     and ((source = 'metric' and service = any($4::text[]))
          or (source = 'span' and service = any($5::text[])))
     and ($6::text is null or route = $6::text)
     and ($7::text is null or method = $7::text)
   union all
   select service, method, route, status_code, source, counts, count, lossy, bucket_start
-  from api.metrics_daily
+  from api.metrics_daily d
   where $1::text = 'day'
-    and bucket_start >= $2::timestamptz and bucket_start < $3::timestamptz
+    and d.bucket_start >= $2::timestamptz and d.bucket_start < $3::timestamptz
+    and not exists (select 1 from api.rollup_pending p where p.tenant_id = d.tenant_id
+                    and p.hour >= d.bucket_start and p.hour < d.bucket_start + interval '24 hours')
+    and ((source = 'metric' and service = any($4::text[]))
+         or (source = 'span' and service = any($5::text[])))
+    and ($6::text is null or route = $6::text)
+    and ($7::text is null or method = $7::text)
+  union all
+  select service, method, route, status_code, source, counts, count, lossy, pd.day as bucket_start
+  from (select distinct tenant_id, date_trunc('day', hour, 'UTC') as day
+        from api.rollup_pending
+        where $1::text = 'day' and hour >= $2::timestamptz and hour < $3::timestamptz) pd
+  join api.metrics_hourly h
+    on h.tenant_id = pd.tenant_id and h.bucket_start >= pd.day and h.bucket_start < pd.day + interval '24 hours'
+  where not exists (select 1 from api.rollup_pending p where p.tenant_id = h.tenant_id and p.hour = h.bucket_start)
+    and ((source = 'metric' and service = any($4::text[]))
+         or (source = 'span' and service = any($5::text[])))
+    and ($6::text is null or route = $6::text)
+    and ($7::text is null or method = $7::text)
+  union all
+  select service, method, route, status_code, source, counts, count, lossy, date_trunc('day', p.hour, 'UTC') as bucket_start
+  from api.rollup_pending p
+  join api.metrics_minute m
+    on m.tenant_id = p.tenant_id and m.bucket_start >= p.hour and m.bucket_start < p.hour + interval '1 hour'
+  where $1::text = 'day'
+    and p.hour >= $2::timestamptz and p.hour < $3::timestamptz
     and ((source = 'metric' and service = any($4::text[]))
          or (source = 'span' and service = any($5::text[])))
     and ($6::text is null or route = $6::text)
@@ -548,18 +757,55 @@ from (
     and ($7::text is null or method = $7::text)
   union all
   select service, method, route, status_code, source, counts, count, lossy, bucket_start
-  from api.metrics_hourly
+  from api.metrics_hourly h
   where $1::text = 'hour'
-    and bucket_start >= $2::timestamptz and bucket_start < $3::timestamptz
+    and h.bucket_start >= $2::timestamptz and h.bucket_start < $3::timestamptz
+    and not exists (select 1 from api.rollup_pending p where p.tenant_id = h.tenant_id and p.hour = h.bucket_start)
+    and ((source = 'metric' and service = any($4::text[]))
+         or (source = 'span' and service = any($5::text[])))
+    and ($6::text is null or route = $6::text)
+    and ($7::text is null or method = $7::text)
+  union all
+  select service, method, route, status_code, source, counts, count, lossy, p.hour as bucket_start
+  from api.rollup_pending p
+  join api.metrics_minute m
+    on m.tenant_id = p.tenant_id and m.bucket_start >= p.hour and m.bucket_start < p.hour + interval '1 hour'
+  where $1::text = 'hour'
+    and p.hour >= $2::timestamptz and p.hour < $3::timestamptz
     and ((source = 'metric' and service = any($4::text[]))
          or (source = 'span' and service = any($5::text[])))
     and ($6::text is null or route = $6::text)
     and ($7::text is null or method = $7::text)
   union all
   select service, method, route, status_code, source, counts, count, lossy, bucket_start
-  from api.metrics_daily
+  from api.metrics_daily d
   where $1::text = 'day'
-    and bucket_start >= $2::timestamptz and bucket_start < $3::timestamptz
+    and d.bucket_start >= $2::timestamptz and d.bucket_start < $3::timestamptz
+    and not exists (select 1 from api.rollup_pending p where p.tenant_id = d.tenant_id
+                    and p.hour >= d.bucket_start and p.hour < d.bucket_start + interval '24 hours')
+    and ((source = 'metric' and service = any($4::text[]))
+         or (source = 'span' and service = any($5::text[])))
+    and ($6::text is null or route = $6::text)
+    and ($7::text is null or method = $7::text)
+  union all
+  select service, method, route, status_code, source, counts, count, lossy, pd.day as bucket_start
+  from (select distinct tenant_id, date_trunc('day', hour, 'UTC') as day
+        from api.rollup_pending
+        where $1::text = 'day' and hour >= $2::timestamptz and hour < $3::timestamptz) pd
+  join api.metrics_hourly h
+    on h.tenant_id = pd.tenant_id and h.bucket_start >= pd.day and h.bucket_start < pd.day + interval '24 hours'
+  where not exists (select 1 from api.rollup_pending p where p.tenant_id = h.tenant_id and p.hour = h.bucket_start)
+    and ((source = 'metric' and service = any($4::text[]))
+         or (source = 'span' and service = any($5::text[])))
+    and ($6::text is null or route = $6::text)
+    and ($7::text is null or method = $7::text)
+  union all
+  select service, method, route, status_code, source, counts, count, lossy, date_trunc('day', p.hour, 'UTC') as bucket_start
+  from api.rollup_pending p
+  join api.metrics_minute m
+    on m.tenant_id = p.tenant_id and m.bucket_start >= p.hour and m.bucket_start < p.hour + interval '1 hour'
+  where $1::text = 'day'
+    and p.hour >= $2::timestamptz and p.hour < $3::timestamptz
     and ((source = 'metric' and service = any($4::text[]))
          or (source = 'span' and service = any($5::text[])))
     and ($6::text is null or route = $6::text)

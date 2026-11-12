@@ -33,6 +33,19 @@ export default defineConfig({
     // other two engines
     { name: "chromium-mobile", use: { ...devices["Pixel 7"], proxy }, testMatch: scenarios },
     { name: "webkit-mobile", use: { ...devices["iPhone 15"], proxy }, testMatch: scenarios },
+    // this stage: the wallets kit example (tests/webpath wallets_test.go)
+    {
+      name: "wallets",
+      use: { ...devices["Desktop Chrome"], proxy },
+      testMatch: /webpath\/wallets\.webpath\.ts$/,
+      grepInvert: /@wallets-ui/,
+    },
+    {
+      name: "wallets-ui",
+      use: { ...devices["Desktop Chrome"] },
+      testMatch: /webpath\/wallets\.webpath\.ts$/,
+      grep: /@wallets-ui/,
+    },
     {
       // the umami dashboard is opened directly on its loopback port, without
       // the fixture proxy, so every request it makes is visible to the page

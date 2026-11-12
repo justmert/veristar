@@ -145,6 +145,7 @@ List routes answer:
 | 403 | `owner_required` | the action needs role `owner` |
 | 403 | `terms_not_accepted` | the tenant has not accepted the current terms version (4.2.6) |
 | 403 | `operator_required` | an `/api/operator` route without operator rights (5.1) |
+| 403 | `scope_forbidden` | a machine API key scoped to one tenant names another tenant (9.3) |
 | 404 | `not_found` | unknown id, malformed id, or not a member |
 | 405 | `method_not_allowed` | method not defined for the path |
 | 409 | `slug_taken` | `cp.tenants.slug` already exists |
@@ -156,6 +157,7 @@ List routes answer:
 | 409 | `invalid_transition` | lifecycle action not allowed from the current status (5.5) |
 | 409 | `tenant_suspended` | site create or update while the tenant is `suspended` (5.11); OTLP token create while `suspended` (6.2) |
 | 409 | `tenant_not_active` | OTLP token create while the tenant is `pending` or `rejected` (6.2) |
+| 409 | `erasure_in_progress` | an erasure request while another one runs for the same site (10.2) |
 | 410 | `tracker_version_revoked` | snippet for a revoked tracker version |
 | 413 | `body_too_large` | body over 64 KiB |
 | 415 | `unsupported_media_type` | see section 1 |
@@ -171,7 +173,8 @@ List routes answer:
 `not_bare_origin`, `origin_outside_domain`, `invalid_domain`, `invalid_strkey`,
 `invalid_github_login`, `invalid_role`, `duplicate`, `unknown_tracker_version`.
 this stage adds `invalid_value` (a value outside an enumerated set, such as
-`mode`).
+`mode`). this stage adds `unknown_tenant` (a `tenant_id` that names no tenant
+or a removed one, 9.2).
 
 ---
 
@@ -308,6 +311,16 @@ this stage actions (section 6): `otlp_token.create`, `otlp_token.revoke`,
 `provision.otlp_registry_put`. Target added: `otlp_token:<id>`.
 
 this stage (section 7) is read-only and adds no audit action.
+
+this stage actions (section 10): `erasure.request` (actor `user:<id>`),
+`erasure.complete` and `erasure.fail` (actor `system:erasure`). Target added:
+`erasure:<id>`. Detail carries `tenant_id`, `site_id`, `kind`, the counts and,
+for `session`, `session_id`; never an IP address, user agent or visitor token.
+
+this stage actions (section 9): `operator_api_key.create`,
+`operator_api_key.revoke`. Target added: `operator_api_key:<id>`. Detail:
+`name`, `prefix` and `tenant_id` (null for a key for all tenants), plus
+`scope` and `expires_at` on create. Never the key or its hash.
 
 ---
 
@@ -1277,8 +1290,9 @@ every malformed or unknown query parameter is 400 `invalid_query`, a bad cursor
 
 Server time `now` is UTC. Each request resolves to a half-open range
 `[from, to)` and one resolution: `minute` (rows of `api.metrics_minute`),
-`hour` (`api.metrics_hourly`) or `day` (`api.metrics_daily`). Only the table of
-that resolution is read; resolutions are never mixed in one answer.
+`hour` (`api.metrics_hourly`) or `day` (`api.metrics_daily`). Every bucket of
+an answer has that one resolution; the only other table read is
+`api.metrics_minute` for hours still pending a rollup (freshness, below).
 
 | Preset | Resolution | `to` | `from` |
 |---|---|---|---|
@@ -1307,10 +1321,20 @@ Retention step, applied after either of the above, in this order:
    becomes `day`, aligned to days, `resolution_note` is
    `older_than_hourly_retention`.
 
-This is a documented rule, not a fallback: the answer always says which table it
-read. Hourly and daily rows are recomputed by the `api-rollup` job every 5
-minutes, so the newest few minutes of an `hour` or `day` answer can be missing
-until the next rollup; the console says "updated every few minutes".
+This is a documented rule, not a fallback: the answer always says which
+resolution it has.
+
+**Freshness.** The `api-rollup` job recomputes hourly and daily rows every 5
+minutes from the hours the writer marked in `api.rollup_pending`. Until it has
+run, an `hour` or `day` answer computes each still-marked hour from
+`api.metrics_minute` instead of its stale hourly row, and a day containing one
+from its unmarked hourly rows plus its marked hours from minutes. Rolled-up and
+minute-derived rows are never both counted for the same hour: the rollup
+removes a mark in the transaction that replaces that hour's rows, and each
+query reads marks and rows in one statement. So hourly and daily answers show
+traffic as soon as the writer has stored it, and their numbers do not change
+when the rollup runs. (A pending hour before the minute horizon cannot occur:
+the retention job keeps a minute partition until its marks are rolled up.)
 
 **Range object**, in every answer:
 
@@ -1345,8 +1369,8 @@ uses:
 - otherwise `span` rows.
 
 The two are never added together. A service that moved from spans to metrics
-inside the range uses metric rows for the whole range; its span rows are left
-out and `span_data_ignored` says so. The selection is
+inside the range uses metric rows for the whole range and its span rows are
+left out, as for any service that has both. The selection is
 `internal/controlplane/apimetrics/source.go`, shared with phases 11 and 12.
 
 **Source object**, one per service with any row in the range, ordered by
@@ -1359,9 +1383,12 @@ out and `span_data_ignored` says so. The selection is
 - `source`: `metric` or `span`. The console shows a "from traces" badge for
   `span` with one line: "Derived from sampled traces; counts are lower than the
   real request count when traces are sampled."
-- `span_data_ignored`: true when the service also has span rows in the range
-  that were not used because metric rows exist. The console notes "this service
-  switched to metrics during the range; earlier trace-derived data is not shown".
+- `span_data_ignored`: true when the service has span rows in the range besides
+  its metric rows, which is the normal case for a service that exports both
+  metrics and traces. Only the metric rows are used. The console shows
+  "metric data used; span-derived data ignored for this service". It does not
+  imply the service switched sources; a service that moved from spans to
+  metrics during the range shows the same flag.
 
 The selection and the aggregate are two statements in one read committed
 transaction; a row committed between them can be counted, but a service's
@@ -1541,6 +1568,10 @@ keeps: `API_MINUTE_RETENTION_DAYS` (at least 2) and
 `API_HOURLY_RETENTION_MONTHS` (at least 24), loaded by
 `config.LoadAPIRetention`.
 
+Migration `00021_tenant_rollup_pending.sql` grants `cp_tenant` select on
+`api.rollup_pending` (own rows, under the existing policy) for the freshness
+rule of 7.2.
+
 ---
 
 ## 8. this stage: global web and API views
@@ -1548,8 +1579,14 @@ keeps: `API_MINUTE_RETENTION_DAYS` (at least 2) and
 the design. Operators compare every enrolled project on aggregates only.
 Every route here is **session** and **operator** (5.1), runs as `cp_operator`
 in one read-only, repeatable-read transaction, and reads only `agg.web_daily`,
-`agg.web_daily_dim`, `api.metrics_daily`, `cp.web_ingest_hourly`, `cp.tenants`
-and `cp.operator_sites`. `cp_operator` cannot read `api.metrics_minute`, any
+`agg.web_daily_dim`, `api.operator_daily`, `cp.web_ingest_hourly`, `cp.tenants`
+and `cp.operator_sites`. `api.operator_daily(from, to)` and
+`api.operator_hourly(from, to)` (migration 00022, security definer, execute for
+`cp_operator` only) return day- or hour-grain rows: the rolled-up rows, and
+for hours still marked in `api.rollup_pending` the same numbers computed from
+their minutes, never both for one hour (the freshness rule of 7.2). API
+answers therefore do not wait for `api-rollup` and do not change when it
+runs. `cp_operator` cannot read `api.metrics_minute` directly, any
 `cp` table outside 4.7, or connect to the `umami` database, and an operator
 session holds no Umami token, so no route can return session-level rows.
 Tenants with `is_internal = true` are never listed and answer 404 when named.
@@ -1793,3 +1830,324 @@ No new key. `jobs` gains the task `aggregate-web` (hourly: today and the 3
 days before) and `jobs run aggregate-web --from <yyyy-mm-dd> --to <yyyy-mm-dd>`
 for a backfill; both read Umami with `UMAMI_URL` and `UMAMI_ADMIN_PASSWORD`,
 which `jobs` already requires.
+
+---
+
+## 9. this stage: operator API keys and machine metrics API
+
+the design. Operators create keys in the console (9.2); machines read
+aggregate metrics with them under `/api/metrics/v1/` (9.3 to 9.10). The
+machine API's own contract, and the document its tests validate every answer
+against, is `docs/reference/openapi/metrics-v1.yaml` (OpenAPI 3.1, served at
+`GET /api/metrics/v1/openapi.yaml`). This section states the rules around it;
+where the two differ, the OpenAPI document is the contract of the machine API.
+Usage for operators: `docs/operators/api-keys.md`.
+
+### 9.1 Two doors that never open each other
+
+- A key is `sa_op_` plus 40 random base62 characters. The database
+  holds its SHA-256 (`cp.operator_api_keys.hash`) and the first 10 characters
+  (`prefix`) for display. The key is shown once, in the create answer.
+- The machine API is mounted beside `/api`, not inside it
+  (`controlplane.Options.Mounts`): no session middleware, CSRF check or cookie
+  handling runs there. A console session cookie on `/api/metrics/v1/` is 401.
+- Every other route ignores `Authorization`: a key on any route outside
+  `/api/metrics/v1/` authenticates nothing (401 or 404, as without it).
+- Every machine route is `GET`; other methods are 405.
+
+### 9.2 Key management (operator)
+
+Every route is **session** and **operator** (5.1) and runs as `cp_system`.
+Create and revoke follow the CSRF rules of 1.2.
+
+**APIKey** object:
+
+```json
+{
+  "id": "uuid", "name": "warehouse", "prefix": "sa_op_Ab3x",
+  "scope": "metrics:read", "tenant_id": null, "status": "active",
+  "created_by": "uuid", "created_at": "...", "expires_at": "...",
+  "revoked_at": null, "last_used_at": null
+}
+```
+
+- `scope` is always `metrics:read`; `tenant_id` is `null` for a key that reads
+  every tenant, or the one tenant it reads (`cp.operator_api_keys.scope` is
+  `global` or `tenant`).
+- `status`: `revoked` when `revoked_at` is set, else `expired` when
+  `expires_at` has passed, else `active`.
+- `last_used_at`: the last request the key was accepted for.
+
+| Route | Answer |
+|---|---|
+| `POST /api/operator/api-keys` | 201, APIKey plus `"key": "sa_op_..."`, `Location` set |
+| `GET /api/operator/api-keys` | list envelope (2.3) of APIKey, newest first, keyset over `(created_at, id)`; `limit` 1 to 200 |
+| `GET /api/operator/api-keys/{key_id}` | APIKey |
+| `GET /api/operator/api-keys/{key_id}/usage` | 9.11 |
+| `DELETE /api/operator/api-keys/{key_id}` | 204; revokes. Revoking a revoked key is 204 and changes nothing |
+
+Create body (unknown fields are 400 `invalid_body`):
+
+| Field | Rule | 422 field codes |
+|---|---|---|
+| `name` | required, 1 to 100 characters after trimming, text rules of 3.2 | `required`, `too_long`, `invalid_format` |
+| `scope` | required, exactly `metrics:read` | `required`, `invalid_value` |
+| `tenant_id` | optional; absent or `null` means every tenant. A tenant of any status but `removed`, internal tenants included (the this stage probe key) | `invalid_format`, `unknown_tenant` |
+| `expires_in_days` | optional integer 1 to 365, default 90 | `invalid_value` |
+
+`expires_at` is `created_at` plus `expires_in_days` days, from one database
+clock. Create and revoke write the audit rows of 3.3 in the same transaction.
+An unknown or malformed `key_id` is 404.
+
+### 9.3 Machine authentication, scope and limits
+
+Every request to `/api/metrics/v1/` carries exactly one
+`Authorization: Bearer sa_op_<40 base62>` header. In order:
+
+1. Missing, repeated or malformed header, or no key with that SHA-256: 401
+   `unauthenticated` with `WWW-Authenticate: Bearer realm="metrics"`. The
+   lookup is by hash (an index on the hash of a 238-bit random value tells a
+   timing observer nothing), and the stored hash is compared again in constant
+   time.
+2. `revoked_at` set or `expires_at` reached: 401 `unauthenticated`, the
+   message says which. Nothing is cached: a revocation or expiry applies to the
+   very next request.
+3. Token bucket per key and control plane instance: 10 requests per second,
+   burst 20. Empty: 429 `rate_limited` with `Retry-After` in whole seconds.
+4. A key scoped to one tenant with a `tenant` parameter naming another tenant:
+   403 `scope_forbidden`.
+5. The request is counted, then served.
+
+Every request of a matched key adds 1 to `requests` of its hour in
+`cp.api_key_usage_hourly`; one refused in steps 2 to 4 also adds 1 to
+`rejected`. An accepted request sets `last_used_at`. The count is written
+before the answer; if it cannot be written the request fails (500) rather
+than going uncounted.
+
+Tenant scope on every data route (`tenant` parameter, one lowercase UUID):
+
+| Key | `tenant` absent | `tenant` given |
+|---|---|---|
+| scoped to tenant X | X, whatever its status, internal included | X: as absent; another tenant: 403 |
+| for every tenant | every tenant except internal ones | that tenant; 404 `not_found` when unknown or internal |
+
+Shared query rules: a parameter the route does not list, or one given twice,
+is 400 `invalid_query`. Day ranges `from`, `to` are UTC days, both included,
+with the defaults and limits of 8.1 (30 days ending today, at most 366, `to`
+not after today). Hour ranges are RFC 3339 hour starts (`2026-11-12T09:00:00Z`),
+both included; default the 24 hours ending with the current hour; `to` not
+after the current hour; at most 744 hours for `/api/hourly`, 24 for
+`/web/hourly`. `service` follows 7.1 (exact match, empty matches points without
+a service, at most 128 bytes, no control characters).
+
+Lists: `limit` 1 to 500, default 500; `next_cursor` is a keyset position in
+the route's order, bound to the route, the key and every other parameter, and
+carrying the range the first page resolved (a page fetched after midnight
+continues the same days). A cursor used with anything else is 400
+`invalid_cursor`.
+
+All reads run as `cp_operator`, which reads `agg`, `api.metrics_hourly`,
+`api.metrics_daily`, `cp.tenants` and `cp.operator_sites` and writes only
+usage counters and `last_used_at`. The API routes (9.8 to 9.10)
+read through `api.operator_daily` and `api.operator_hourly`, so hours not yet
+rolled up are included as in section 8.
+
+### 9.4 `GET /tenants`
+
+Tenants in scope, ordered by id: `id`, `slug`, `name`, `status`, `created_at`,
+`sites`, `sites_verified`, `sites_with_stellar_toml` (the counts of 5.2) and
+`verified`, `stellar_toml` (each count above 0).
+
+### 9.5 `GET /web/daily`
+
+Parameters `tenant`, `band` (`primary` or `quarantine`, absent for both),
+`from`, `to`, `limit`, `cursor`. One item per tenant, day and band that
+`agg.web_daily` holds: the sums over the tenant's sites of `pageviews`,
+`visitors`, `visits`, `bounces`, `totaltime`, and `sites`, the number of site
+rows summed. A day the aggregation task read without traffic has zeros; a day
+it never read is absent. Ordered by tenant, day, band. Summed over a range
+these equal the totals of 8.3 for the same range.
+
+### 9.6 `GET /web/dimensions`
+
+Parameters as 9.5 plus `dimension` (`referrer`, `country`, `device`,
+`browser`, `os`; absent for all). One item per tenant, day, band, dimension and
+key: `value` summed over the tenant's sites (Umami's `y`, 8.3). Ordered by
+tenant, day, band, dimension, key (bytewise). Summed over a range these equal
+the breakdowns of 8.4.
+
+### 9.7 `GET /web/hourly`
+
+Parameters `tenant`, `from`, `to` (hours). A key for every tenant must give
+`tenant` (400 otherwise). The control plane reads Umami's `/stats` for every
+`active` site of the tenant, both websites, every hour (`[hour, hour + 1 h -
+1 ms]`, because Umami includes both ends), with its Umami service account, and
+returns only the sums: one item per hour and band, zeros included, with
+`complete: false` for the current hour, read up to `read_at`. A site whose
+website Umami does not know is a 500 (Umami answers such a website with zeros,
+which would pass for no traffic); Umami unreachable is 503 `unavailable`. At
+most 4 Umami requests of one answer run at once. This is the freshness check of
+the this stage prober.
+
+### 9.8 `GET /api/daily`
+
+Parameters `tenant`, `service`, `from`, `to`, `limit`, `cursor`. From
+`api.metrics_daily`, the source chosen per tenant and service over the whole
+range (7.3; metric rows when the service has any, otherwise span rows). One
+item per tenant and day with rows: `services`, `span_services`, `source`
+(`metric`, `span` or `mixed`), the numbers of 8.5 (`requests`,
+`requests_4xx`, `requests_5xx`, `rate_4xx`, `rate_5xx`, `p50_seconds`,
+`p50_over_10s`, ... `p99_over_10s`) and `lossy`. Equal to the daily series of
+8.6 for the same range; with `service`, to that service's numbers of 8.6.
+
+### 9.9 `GET /api/routes/daily`
+
+As 9.8, one item per tenant, day, service, method and route with that
+service's `source`. Ordered by tenant, day, service, method, route (bytewise).
+
+### 9.10 `GET /api/hourly`
+
+Parameters `tenant`, `service`, `from`, `to` (hours), `limit`, `cursor`. As
+9.8 over `api.metrics_hourly` (item field `hour`), which the rollup refreshes
+every 5 minutes, so the newest minutes of the current hour can be missing.
+
+### 9.11 `GET /api/operator/api-keys/{key_id}/usage`
+
+Operator. Parameters `from`, `to` (UTC days, default the 7 days ending today,
+at most 31). Answer: `key_id`, `from`, `to`, `totals` `{requests, rejected}`
+and `hours`, every hour with a row in `cp.api_key_usage_hourly`:
+`{hour, requests, rejected}`.
+
+### 9.12 Configuration (this stage)
+
+No new key. The rate limit (10 per second, burst 20), page size (500), key
+lifetime (90 days default, 365 maximum) and range limits are constants of
+`internal/controlplane/operator`, recorded in `docs/operators/api-keys.md`.
+
+---
+
+## 10. this stage: erasure
+
+Tenant-triggered erasure (the design). The workflow and its limits are
+described for people in `docs/compliance/erasure.md`; this section is the
+contract. Code: `internal/controlplane/erasure`, jobs task
+`internal/jobs/erasurefollowup`.
+
+### 10.1 Erasure request object
+
+```json
+{
+  "id": "uuid",
+  "tenant_id": "uuid",
+  "site_id": "uuid",
+  "kind": "visitor_today",
+  "status": "done",
+  "outcome": "erased",
+  "message": "Deleted 2 session(s) with 4 event(s) of this visitor on 2026-11-12 (UTC) and 0 undeliverable queued message(s).",
+  "day": "2026-11-12",
+  "session_id": null,
+  "requested_by": "uuid",
+  "requested_at": "...",
+  "completed_at": "...",
+  "sessions_deleted": 2,
+  "events_deleted": 4,
+  "dlq_messages_deleted": 0,
+  "affected_from": "2026-11-12",
+  "affected_to": "2026-11-12",
+  "reaggregated_at": null,
+  "error": null
+}
+```
+
+- `kind`: `visitor_today`, `session` or `site_reset`.
+- `status`: `running`, then `done` or `failed` (`pending` exists in the column
+  check but is not used).
+- `outcome` (only when `done`): `erased`, or `nothing_found` when the request was
+  valid but matched no data. `message` explains the result in English; clients
+  show it as is.
+- `day`: `visitor_today` only, the UTC day whose secret produced the token (the
+  gateways' day, not the client's).
+- `session_id`: `session` only, the Umami session id supplied.
+- `affected_from`, `affected_to`: UTC days whose aggregates the jobs task reads
+  again; null when nothing was deleted. `reaggregated_at` is set when that is done.
+- `error` (only when `failed`): why; counts still show what was deleted before
+  the failure.
+- No field ever holds the IP address, the user agent or the visitor token.
+
+### 10.2 `POST /api/tenants/{tenant_id}/erasure`
+
+Session, owner (403 `owner_required` for members). Allowed in every tenant
+status a member can reach (suspended included) and without current terms.
+
+Body, one of:
+
+```json
+{ "kind": "visitor_today", "site_id": "uuid", "ip": "203.0.113.7", "user_agent": "Mozilla/5.0 ..." }
+{ "kind": "session", "site_id": "uuid", "session_id": "uuid" }
+{ "kind": "site_reset", "site_id": "uuid", "confirm_domain": "example.org" }
+```
+
+Validation (422 with `fields`): `kind` required, one of the three
+(`invalid_value`); `site_id` required, a lowercase uuid of a site of the tenant
+(`invalid_format`, `invalid_value`); a field of another kind is refused
+(`invalid_value`); `ip` required for `visitor_today`, an IPv4 or IPv6 address
+without zone (`invalid_format`); `user_agent` required, at most 2,048 bytes, no
+control characters (`too_long`, `invalid_format`); `session_id` a lowercase uuid;
+`confirm_domain` equal to the site's `domain`. Error messages never quote `ip`
+or `user_agent`.
+
+Other answers: 409 `site_removed`; 503 `provisioning_pending` while the site's
+Umami websites do not exist; 503 `unavailable` when no gateway answers the
+visitor-token request or the event queue is unreachable; 409
+`erasure_in_progress` while another request of the same site is `running`.
+
+Success: **202** with the request object, `status = "running"`. The work
+continues in the control plane; clients poll 10.4.
+
+### 10.3 `GET /api/tenants/{tenant_id}/erasure`
+
+Session, member. List envelope (2.3), newest first by `(requested_at, id)`.
+Optional query `site_id` filters to one site.
+
+### 10.4 `GET /api/tenants/{tenant_id}/erasure/{request_id}`
+
+Session, member. The request object; 404 for an unknown id or one of another
+tenant.
+
+### 10.5 What a run does
+
+1. `visitor_today`: before the row is written, the control plane sends
+   `{site, addr, agent}` on `edge.visitor-token`; a gateway answers
+   `{vt, day}` (`internal/gateway/visitor.go`). The address and user agent are
+   dropped after this request.
+2. The control plane records the last sequence of `WEB_EVENTS`, inserts the row
+   (`running`, `heartbeat_at`), writes `erasure.request` and answers 202.
+3. The run renews `heartbeat_at` every 10 seconds and waits until `WEB_EVENTS`
+   holds no message on `web.events.<site>` at or below the recorded sequence. If
+   that takes longer than `ERASURE_QUEUE_WAIT`, it fails with nothing deleted.
+4. `visitor_today`: reads `visit.<site>.<vt>` in `visit_state`, purges it, and
+   deletes each Umami session it names (both bands); deletes `WEB_DLQ` messages
+   on `dlq.web.<site>` that contain the token (secure delete).
+   `session`: deletes the session from whichever band has it, then finds visit
+   records naming it, purges them and deletes their `WEB_DLQ` messages.
+   `site_reset`: reads Umami's session stats for the counts, resets both Umami
+   websites, deletes every `WEB_DLQ` message and visit record of the site.
+5. The row becomes `done` (or `failed`) with counts and affected days, and
+   `erasure.complete` (or `erasure.fail`) is written.
+6. The jobs task `erasure-followup` (every minute) fails `running` rows whose
+   heartbeat is older than 2 minutes, then for each finished row with
+   affected days reads those days of `agg.web_daily` and `agg.web_daily_dim`
+   again from Umami; for `site_reset` it deletes every aggregate row of the site
+   and reads the last 4 days again. It sets `reaggregated_at`.
+
+NATS rights this needs (`internal/natsx/topology.go`): the control plane sends
+on `edge.visitor-token`, writes `visit_state`, reads `WEB_EVENTS` (stream info
+and message get) and manages `WEB_DLQ`.
+
+### 10.6 Configuration (this stage)
+
+| Key | Service | Meaning |
+|---|---|---|
+| `ERASURE_QUEUE_WAIT` | controlplane | optional, Go duration, default `15m`, at most `72h`: how long a run waits for the site's queued events |
+| `WEB_RAW_RETENTION_MONTHS` | `jobs retain-web` | optional, default 25, 1 to 1200 |
+| `UMAMI_DB_NAME`, `UMAMI_DB_JOBS_RETENTION_PASSWORD` | `jobs retain-web`, `platformctl db umami-retention-role` | the umami database on the platform cluster (with `PLATFORM_DB_HOST`, `PLATFORM_DB_PORT`, `PLATFORM_DB_SSLMODE`) and the password of role `jobs_retention` |

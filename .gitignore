@@ -40,3 +40,13 @@ keys.txt
 
 # os and editor files
 .DS_Store
+
+# opentofu plan files (encrypted, but local to one run) and the generated
+# ansible inventory (rewritten from state by make <env>-inventory)
+tfplan
+infra/ansible/inventories/*/hosts.json
+infra/ansible/inventories/*/hosts.json.tmp
+
+# the local converge's generated secrets (encrypted to a throwaway key under
+# .scratch/scratch), never a real environment's
+infra/secrets/local/

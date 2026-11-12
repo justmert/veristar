@@ -72,7 +72,8 @@ var wantGrants = map[string]map[pdb.Role]string{
 	"api.ingest_warnings": {
 		pdb.RoleCPTenant: "r", pdb.RoleMetricsWriter: "raw", pdb.RoleJobs: "rawd",
 	},
-	"api.rollup_pending": {pdb.RoleMetricsWriter: "raw", pdb.RoleJobs: "rawd"},
+	// cp_tenant reads its own pending hours (00021, control-plane-api 7.2)
+	"api.rollup_pending": {pdb.RoleCPTenant: "r", pdb.RoleMetricsWriter: "raw", pdb.RoleJobs: "rawd"},
 
 	// agg (this stage): read by operators, written by aggregate-web
 	"agg.web_daily":     {pdb.RoleCPOperator: "r", pdb.RoleJobs: "rawd"},
@@ -213,7 +214,10 @@ func TestSchemaDatabaseAndFunctionRights(t *testing.T) {
 		"api.minute_partitions()":           {pdb.RoleJobs},
 		"api.hourly_partitions()":           {pdb.RoleJobs},
 		"api.purge_tenant(uuid,boolean)":    {pdb.RoleCPSystem},
-		"agg.purge_tenant(uuid)":            {pdb.RoleCPSystem},
+		// hour and day grain only; cp_operator never reads minute rows (00022)
+		"api.operator_hourly(timestamp with time zone,timestamp with time zone)": {pdb.RoleCPOperator},
+		"api.operator_daily(timestamp with time zone,timestamp with time zone)":  {pdb.RoleCPOperator},
+		"agg.purge_tenant(uuid)": {pdb.RoleCPSystem},
 	}
 	var names []string
 	for _, f := range fns {

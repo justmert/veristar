@@ -178,8 +178,8 @@ func seedRows(tx pgx.Tx) error {
 				fmt.Sprintf("s%d.example.org", p.n), []string{fmt.Sprintf("https://s%d.example.org", p.n)}, fmt.Sprintf("verify-secret-%d", p.n)}},
 			{`insert into cp.otlp_tokens (id, tenant_id, name, prefix, hash, created_by)
 			  values ($1, $2, 'default', $3, sha256($4::bytea), $5)`, []any{p.token, p.tenant, fmt.Sprintf("sa_otlp_%d", p.n), []byte(fmt.Sprintf("token-%d", p.n)), p.user}},
-			{`insert into cp.erasure_requests (tenant_id, site_id, kind, requested_by)
-			  values ($1, $2, 'session', $3)`, []any{p.tenant, p.site, p.user}},
+			{`insert into cp.erasure_requests (tenant_id, site_id, kind, requested_by, session_id)
+			  values ($1, $2, 'session', $3, gen_random_uuid())`, []any{p.tenant, p.site, p.user}},
 			{`insert into cp.web_ingest_hourly (site_id, tenant_id, hour, outcome, count)
 			  values ($1, $2, date_trunc('hour', now()), 'accepted', 5)`, []any{p.site, p.tenant}},
 			{`insert into cp.tenant_removals (tenant_id, requested_by, reason, keep_aggregates)

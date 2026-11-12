@@ -1,0 +1,890 @@
+openapi: 3.1.0
+info:
+  title: Stellar Analytics machine metrics API
+  version: 1.0.0
+  summary: Read-only aggregate web and API metrics for downstream machine consumers.
+  description: |
+    The contract of `/api/metrics/v1/` (the design,
+    docs/reference/control-plane-api.md section 9). Every request carries an
+    operator API key as `Authorization: Bearer sa_op_<40 base62 characters>`.
+    Console session cookies are never accepted here, and keys are accepted
+    nowhere else.
+
+    Conventions shared by every route:
+
+    * Only `GET` is defined. Every answer carries `Cache-Control: no-store`
+      and `X-Request-Id`.
+    * A query parameter that the route does not list, or one given twice, is
+      400 `invalid_query`.
+    * Days are UTC days `yyyy-mm-dd`; hours are RFC 3339 UTC hour starts such
+      as `2026-11-12T09:00:00Z`. Ranges include both ends.
+    * A key scoped to one tenant reads only that tenant. Naming another
+      tenant is 403 `scope_forbidden`. A key for all tenants never sees
+      internal tenants (the monitoring probe); naming one is 404.
+    * List routes return at most `limit` items (1 to 500, default 500) and an
+      opaque `next_cursor`, `null` on the last page. A cursor is bound to the
+      route and every other query parameter; with any other combination it
+      is 400 `invalid_cursor`.
+    * Each key may make 10 requests per second per control plane instance
+      (token bucket, burst 20). Above that the answer is 429 `rate_limited`
+      with `Retry-After` in seconds.
+    * Percentiles come from summed histogram buckets and are never averaged.
+      A percentile in the open bucket above 10 s has `*_seconds: null` and
+      `*_over_10s: true`.
+  license:
+    name: Apache-2.0
+    identifier: Apache-2.0
+servers:
+  - url: /api/metrics/v1
+security:
+  - operatorKey: []
+paths:
+  /tenants:
+    get:
+      operationId: listTenants
+      summary: Tenants in the key's scope
+      description: |
+        A key for all tenants lists every tenant except internal ones, in
+        id order. A key scoped to one tenant lists that tenant only.
+      parameters:
+        - $ref: '#/components/parameters/limit'
+        - $ref: '#/components/parameters/cursor'
+      responses:
+        '200':
+          description: One page of tenants.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /web/daily:
+    get:
+      operationId: webDaily
+      summary: Web totals per tenant, UTC day and band
+      description: |
+        Sums of `agg.web_daily` over the tenant's sites for every day the
+        aggregation task has read (a day it read without traffic has zeros,
+        a day it never read is absent). Ordered by tenant, day and band.
+        Visitors of a day are unique within that day and site; over a range
+        they add up (control-plane-api 8).
+      parameters:
+        - $ref: '#/components/parameters/tenant'
+        - $ref: '#/components/parameters/band'
+        - $ref: '#/components/parameters/fromDay'
+        - $ref: '#/components/parameters/toDay'
+        - $ref: '#/components/parameters/limit'
+        - $ref: '#/components/parameters/cursor'
+      responses:
+        '200':
+          description: One page of daily rows.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebDailyList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /web/dimensions:
+    get:
+      operationId: webDimensions
+      summary: Web breakdowns per tenant, UTC day, band, dimension and key
+      description: |
+        Sums of `agg.web_daily_dim` over the tenant's sites. `value` is
+        Umami's `y`: distinct visitors of that day whose page views carry the
+        key. Ordered by tenant, day, band, dimension and key.
+      parameters:
+        - $ref: '#/components/parameters/tenant'
+        - $ref: '#/components/parameters/band'
+        - name: dimension
+          in: query
+          required: false
+          description: One dimension; absent means all five.
+          schema:
+            $ref: '#/components/schemas/Dimension'
+        - $ref: '#/components/parameters/fromDay'
+        - $ref: '#/components/parameters/toDay'
+        - $ref: '#/components/parameters/limit'
+        - $ref: '#/components/parameters/cursor'
+      responses:
+        '200':
+          description: One page of dimension rows.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebDimensionList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /web/hourly:
+    get:
+      operationId: webHourly
+      summary: Web totals per UTC hour, read live from Umami
+      description: |
+        Reads Umami's own `/stats` for every active site of one tenant, both
+        bands and every hour of the range, through the control plane's
+        Umami service account, and returns the sums per hour and band. Only
+        aggregates leave the control plane. The current hour is read up to
+        the moment of the request and has `complete: false`. Every hour of
+        the range is present for both bands, zeros included. A key for all
+        tenants must name `tenant`; a scoped key reads its own tenant.
+      parameters:
+        - $ref: '#/components/parameters/tenant'
+        - name: from
+          in: query
+          required: false
+          description: First hour (included). Default `to` minus 23 hours.
+          schema:
+            $ref: '#/components/schemas/Hour'
+        - name: to
+          in: query
+          required: false
+          description: Last hour (included), not after the current hour. Default the current hour. At most 24 hours in one request.
+          schema:
+            $ref: '#/components/schemas/Hour'
+      responses:
+        '200':
+          description: Every hour of the range for both bands.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebHourly'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/Internal'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /api/daily:
+    get:
+      operationId: apiDaily
+      summary: API request numbers per tenant and UTC day
+      description: |
+        From `api.metrics_daily`. For each tenant and service the source is
+        chosen over the whole range: metric rows when the service has any,
+        otherwise span rows (control-plane-api 7.3); the two are never added.
+        One item per tenant and day with requests, over every service or the
+        one named by `service`. Equal to the daily series of
+        `GET /api/operator/api/compare` for the same range.
+      parameters:
+        - $ref: '#/components/parameters/tenant'
+        - $ref: '#/components/parameters/service'
+        - $ref: '#/components/parameters/fromDay'
+        - $ref: '#/components/parameters/toDay'
+        - $ref: '#/components/parameters/limit'
+        - $ref: '#/components/parameters/cursor'
+      responses:
+        '200':
+          description: One page of daily rows.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIDailyList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /api/routes/daily:
+    get:
+      operationId: apiRoutesDaily
+      summary: API request numbers per tenant, UTC day, service, method and route
+      description: |
+        From `api.metrics_daily` with the source choice of `/api/daily`.
+        Ordered by tenant, day, service, method and route.
+      parameters:
+        - $ref: '#/components/parameters/tenant'
+        - $ref: '#/components/parameters/service'
+        - $ref: '#/components/parameters/fromDay'
+        - $ref: '#/components/parameters/toDay'
+        - $ref: '#/components/parameters/limit'
+        - $ref: '#/components/parameters/cursor'
+      responses:
+        '200':
+          description: One page of route rows.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIRouteDailyList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /api/hourly:
+    get:
+      operationId: apiHourly
+      summary: API request numbers per tenant and UTC hour
+      description: |
+        From `api.metrics_hourly`, which the rollup job refreshes every 5
+        minutes, so the newest minutes of the current hour can be missing
+        until the next rollup. Source choice as `/api/daily`, over the hour
+        range. One item per tenant and hour with requests.
+      parameters:
+        - $ref: '#/components/parameters/tenant'
+        - $ref: '#/components/parameters/service'
+        - name: from
+          in: query
+          required: false
+          description: First hour (included). Default `to` minus 23 hours.
+          schema:
+            $ref: '#/components/schemas/Hour'
+        - name: to
+          in: query
+          required: false
+          description: Last hour (included), not after the current hour. Default the current hour. At most 744 hours (31 days) in one request.
+          schema:
+            $ref: '#/components/schemas/Hour'
+        - $ref: '#/components/parameters/limit'
+        - $ref: '#/components/parameters/cursor'
+      responses:
+        '200':
+          description: One page of hourly rows.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIHourlyList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /openapi.yaml:
+    get:
+      operationId: openapiDocument
+      summary: This document
+      responses:
+        '200':
+          description: The OpenAPI document of this API, byte for byte the served contract.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+          content:
+            application/yaml:
+              schema:
+                type: object
+                required: [openapi, info, paths]
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+components:
+  securitySchemes:
+    operatorKey:
+      type: http
+      scheme: bearer
+      description: An operator API key, `sa_op_` followed by 40 base62 characters.
+  headers:
+    X-Request-Id:
+      description: The id of the request, also in the error envelope and the server log.
+      schema:
+        type: string
+    Retry-After:
+      description: Seconds to wait before the next request.
+      required: true
+      schema:
+        type: string
+        pattern: '^[1-9][0-9]*$'
+  parameters:
+    tenant:
+      name: tenant
+      in: query
+      required: false
+      description: One tenant id. A scoped key defaults to its own tenant; a key for all tenants reads every non-internal tenant when absent.
+      schema:
+        $ref: '#/components/schemas/ID'
+    band:
+      name: band
+      in: query
+      required: false
+      description: One band; absent means both.
+      schema:
+        $ref: '#/components/schemas/Band'
+    service:
+      name: service
+      in: query
+      required: false
+      description: Exact `service.name`. An empty value matches points without one. At most 128 bytes, no control characters.
+      schema:
+        type: string
+        maxLength: 128
+    fromDay:
+      name: from
+      in: query
+      required: false
+      description: First UTC day (included). Default 29 days before `to`.
+      schema:
+        $ref: '#/components/schemas/Day'
+    toDay:
+      name: to
+      in: query
+      required: false
+      description: Last UTC day (included), not after today. Default today. At most 366 days in one request.
+      schema:
+        $ref: '#/components/schemas/Day'
+    limit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 500
+        default: 500
+    cursor:
+      name: cursor
+      in: query
+      required: false
+      description: The `next_cursor` of the previous page.
+      schema:
+        type: string
+        minLength: 1
+  responses:
+    BadRequest:
+      description: A malformed or unknown query parameter (`invalid_query`) or cursor (`invalid_cursor`).
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/X-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthenticated:
+      description: No key, a malformed or unknown key, or an expired or revoked key (`unauthenticated`).
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/X-Request-Id'
+        WWW-Authenticate:
+          required: true
+          schema:
+            type: string
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Forbidden:
+      description: The key is scoped to another tenant (`scope_forbidden`).
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/X-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: Unknown path, or a tenant that does not exist or is internal (`not_found`).
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/X-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    RateLimited:
+      description: The key's token bucket is empty (`rate_limited`).
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/X-Request-Id'
+        Retry-After:
+          $ref: '#/components/headers/Retry-After'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Internal:
+      description: Anything unexpected (`internal`); details only in the server log.
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/X-Request-Id'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unavailable:
+      description: Umami could not be read (`unavailable`).
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/X-Request-Id'
+        Retry-After:
+          $ref: '#/components/headers/Retry-After'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+  schemas:
+    ID:
+      type: string
+      pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    Day:
+      type: string
+      pattern: '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+    Hour:
+      type: string
+      description: An RFC 3339 UTC hour start.
+      pattern: '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:00:00Z$'
+    Time:
+      type: string
+      description: RFC 3339 in UTC with at most millisecond digits.
+      pattern: '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]{1,3})?Z$'
+    Band:
+      type: string
+      enum: [primary, quarantine]
+    Dimension:
+      type: string
+      enum: [referrer, country, device, browser, os]
+    TenantStatus:
+      type: string
+      enum: [pending, active, rejected, suspended, removed]
+    Cursor:
+      type: [string, 'null']
+      description: Opaque position of the next page, `null` on the last page.
+    Count:
+      type: integer
+      minimum: 0
+    Rate:
+      type: [number, 'null']
+      minimum: 0
+      maximum: 1
+      description: A fraction of requests; `null` without requests.
+    Error:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, request_id]
+          properties:
+            code:
+              type: string
+              enum: [invalid_query, invalid_cursor, unauthenticated, scope_forbidden, not_found,
+                     method_not_allowed, rate_limited, internal, unavailable]
+            message:
+              type: string
+            request_id:
+              type: string
+    Tenant:
+      type: object
+      additionalProperties: false
+      required: [id, slug, name, status, created_at, sites, sites_verified, sites_with_stellar_toml, verified, stellar_toml]
+      properties:
+        id:
+          $ref: '#/components/schemas/ID'
+        slug:
+          type: string
+        name:
+          type: string
+        status:
+          $ref: '#/components/schemas/TenantStatus'
+        created_at:
+          $ref: '#/components/schemas/Time'
+        sites:
+          description: Sites that are not removed.
+          allOf:
+            - $ref: '#/components/schemas/Count'
+        sites_verified:
+          description: Sites with a successful domain verification (control-plane-api 5.8).
+          allOf:
+            - $ref: '#/components/schemas/Count'
+        sites_with_stellar_toml:
+          description: Sites whose stellar.toml check found one (control-plane-api 5.12).
+          allOf:
+            - $ref: '#/components/schemas/Count'
+        verified:
+          type: boolean
+          description: At least one verified site.
+        stellar_toml:
+          type: boolean
+          description: At least one site with a stellar.toml.
+    TenantList:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Tenant'
+        next_cursor:
+          $ref: '#/components/schemas/Cursor'
+    WebTotals:
+      type: object
+      required: [sites, pageviews, visitors, visits, bounces, totaltime]
+      properties:
+        sites:
+          description: Sites the numbers are summed over.
+          allOf:
+            - $ref: '#/components/schemas/Count'
+        pageviews:
+          $ref: '#/components/schemas/Count'
+        visitors:
+          $ref: '#/components/schemas/Count'
+        visits:
+          $ref: '#/components/schemas/Count'
+        bounces:
+          $ref: '#/components/schemas/Count'
+        totaltime:
+          description: Seconds summed over visits.
+          allOf:
+            - $ref: '#/components/schemas/Count'
+    WebDaily:
+      type: object
+      additionalProperties: false
+      required: [tenant_id, day, band, sites, pageviews, visitors, visits, bounces, totaltime]
+      allOf:
+        - $ref: '#/components/schemas/WebTotals'
+      properties:
+        tenant_id:
+          $ref: '#/components/schemas/ID'
+        day:
+          $ref: '#/components/schemas/Day'
+        band:
+          $ref: '#/components/schemas/Band'
+        sites: true
+        pageviews: true
+        visitors: true
+        visits: true
+        bounces: true
+        totaltime: true
+    WebDailyList:
+      type: object
+      additionalProperties: false
+      required: [from, to, items, next_cursor]
+      properties:
+        from:
+          $ref: '#/components/schemas/Day'
+        to:
+          $ref: '#/components/schemas/Day'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/WebDaily'
+        next_cursor:
+          $ref: '#/components/schemas/Cursor'
+    WebDimension:
+      type: object
+      additionalProperties: false
+      required: [tenant_id, day, band, dimension, key, value]
+      properties:
+        tenant_id:
+          $ref: '#/components/schemas/ID'
+        day:
+          $ref: '#/components/schemas/Day'
+        band:
+          $ref: '#/components/schemas/Band'
+        dimension:
+          $ref: '#/components/schemas/Dimension'
+        key:
+          type: string
+          minLength: 1
+        value:
+          type: integer
+          minimum: 1
+    WebDimensionList:
+      type: object
+      additionalProperties: false
+      required: [from, to, items, next_cursor]
+      properties:
+        from:
+          $ref: '#/components/schemas/Day'
+        to:
+          $ref: '#/components/schemas/Day'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/WebDimension'
+        next_cursor:
+          $ref: '#/components/schemas/Cursor'
+    WebHour:
+      type: object
+      additionalProperties: false
+      required: [tenant_id, hour, band, complete, sites, pageviews, visitors, visits, bounces, totaltime]
+      allOf:
+        - $ref: '#/components/schemas/WebTotals'
+      properties:
+        tenant_id:
+          $ref: '#/components/schemas/ID'
+        hour:
+          $ref: '#/components/schemas/Hour'
+        band:
+          $ref: '#/components/schemas/Band'
+        complete:
+          type: boolean
+          description: False for the current hour, which was read before it ended.
+        sites: true
+        pageviews: true
+        visitors: true
+        visits: true
+        bounces: true
+        totaltime: true
+    WebHourly:
+      type: object
+      additionalProperties: false
+      required: [tenant_id, from, to, read_at, items]
+      properties:
+        tenant_id:
+          $ref: '#/components/schemas/ID'
+        from:
+          $ref: '#/components/schemas/Hour'
+        to:
+          $ref: '#/components/schemas/Hour'
+        read_at:
+          $ref: '#/components/schemas/Time'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/WebHour'
+    APINumbers:
+      type: object
+      required: [requests, requests_4xx, requests_5xx, rate_4xx, rate_5xx, p50_seconds, p50_over_10s,
+                 p95_seconds, p95_over_10s, p99_seconds, p99_over_10s, lossy]
+      properties:
+        requests:
+          $ref: '#/components/schemas/Count'
+        requests_4xx:
+          $ref: '#/components/schemas/Count'
+        requests_5xx:
+          $ref: '#/components/schemas/Count'
+        rate_4xx:
+          $ref: '#/components/schemas/Rate'
+        rate_5xx:
+          $ref: '#/components/schemas/Rate'
+        p50_seconds:
+          type: [number, 'null']
+          minimum: 0
+        p50_over_10s:
+          type: boolean
+        p95_seconds:
+          type: [number, 'null']
+          minimum: 0
+        p95_over_10s:
+          type: boolean
+        p99_seconds:
+          type: [number, 'null']
+          minimum: 0
+        p99_over_10s:
+          type: boolean
+        lossy:
+          type: boolean
+          description: Some row was re-bucketed inexactly, so percentiles are approximate.
+    APIDaily:
+      type: object
+      additionalProperties: false
+      required: [tenant_id, day, services, span_services, source, requests, requests_4xx, requests_5xx,
+                 rate_4xx, rate_5xx, p50_seconds, p50_over_10s, p95_seconds, p95_over_10s, p99_seconds,
+                 p99_over_10s, lossy]
+      allOf:
+        - $ref: '#/components/schemas/APINumbers'
+      properties:
+        tenant_id:
+          $ref: '#/components/schemas/ID'
+        day:
+          $ref: '#/components/schemas/Day'
+        services:
+          $ref: '#/components/schemas/Count'
+        span_services:
+          description: Services whose numbers are derived from spans.
+          allOf:
+            - $ref: '#/components/schemas/Count'
+        source:
+          type: string
+          enum: [metric, span, mixed]
+        requests: true
+        requests_4xx: true
+        requests_5xx: true
+        rate_4xx: true
+        rate_5xx: true
+        p50_seconds: true
+        p50_over_10s: true
+        p95_seconds: true
+        p95_over_10s: true
+        p99_seconds: true
+        p99_over_10s: true
+        lossy: true
+    APIDailyList:
+      type: object
+      additionalProperties: false
+      required: [from, to, items, next_cursor]
+      properties:
+        from:
+          $ref: '#/components/schemas/Day'
+        to:
+          $ref: '#/components/schemas/Day'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/APIDaily'
+        next_cursor:
+          $ref: '#/components/schemas/Cursor'
+    APIRouteDaily:
+      type: object
+      additionalProperties: false
+      required: [tenant_id, day, service, method, route, source, requests, requests_4xx, requests_5xx,
+                 rate_4xx, rate_5xx, p50_seconds, p50_over_10s, p95_seconds, p95_over_10s, p99_seconds,
+                 p99_over_10s, lossy]
+      allOf:
+        - $ref: '#/components/schemas/APINumbers'
+      properties:
+        tenant_id:
+          $ref: '#/components/schemas/ID'
+        day:
+          $ref: '#/components/schemas/Day'
+        service:
+          type: string
+        method:
+          type: string
+        route:
+          type: string
+          description: The normalized route, or an empty string for points without one.
+        source:
+          type: string
+          enum: [metric, span]
+        requests: true
+        requests_4xx: true
+        requests_5xx: true
+        rate_4xx: true
+        rate_5xx: true
+        p50_seconds: true
+        p50_over_10s: true
+        p95_seconds: true
+        p95_over_10s: true
+        p99_seconds: true
+        p99_over_10s: true
+        lossy: true
+    APIRouteDailyList:
+      type: object
+      additionalProperties: false
+      required: [from, to, items, next_cursor]
+      properties:
+        from:
+          $ref: '#/components/schemas/Day'
+        to:
+          $ref: '#/components/schemas/Day'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/APIRouteDaily'
+        next_cursor:
+          $ref: '#/components/schemas/Cursor'
+    APIHour:
+      type: object
+      additionalProperties: false
+      required: [tenant_id, hour, services, span_services, source, requests, requests_4xx, requests_5xx,
+                 rate_4xx, rate_5xx, p50_seconds, p50_over_10s, p95_seconds, p95_over_10s, p99_seconds,
+                 p99_over_10s, lossy]
+      allOf:
+        - $ref: '#/components/schemas/APINumbers'
+      properties:
+        tenant_id:
+          $ref: '#/components/schemas/ID'
+        hour:
+          $ref: '#/components/schemas/Hour'
+        services:
+          $ref: '#/components/schemas/Count'
+        span_services:
+          $ref: '#/components/schemas/Count'
+        source:
+          type: string
+          enum: [metric, span, mixed]
+        requests: true
+        requests_4xx: true
+        requests_5xx: true
+        rate_4xx: true
+        rate_5xx: true
+        p50_seconds: true
+        p50_over_10s: true
+        p95_seconds: true
+        p95_over_10s: true
+        p99_seconds: true
+        p99_over_10s: true
+        lossy: true
+    APIHourlyList:
+      type: object
+      additionalProperties: false
+      required: [from, to, items, next_cursor]
+      properties:
+        from:
+          $ref: '#/components/schemas/Hour'
+        to:
+          $ref: '#/components/schemas/Hour'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/APIHour'
+        next_cursor:
+          $ref: '#/components/schemas/Cursor'

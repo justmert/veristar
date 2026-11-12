@@ -565,10 +565,97 @@ func TestAPIMetrics(t *testing.T) {
 		require.NotEmpty(t, page.Items)
 	})
 
+	t.Run("hourly and daily answers include hours the rollup has not reached", func(t *testing.T) {
+		userD, tenantD := e.member(t, "active")
+		cd := e.client(t, userD)
+		pathD := "/tenants/" + tenantD.String() + "/api-metrics/"
+		// first batch rolled up, so the second batch lands partly in hours
+		// and days that already have (now stale) hourly and daily rows
+		e.write(t, []point{
+			{tenantD, at("2031-06-15T08:10:00Z"), "fresh", "GET", "/a", 200, "metric", h(map[int]int64{2: 10}), false},
+			{tenantD, at("2031-06-15T10:01:00Z"), "fresh", "GET", "/a", 200, "metric", h(map[int]int64{3: 5}), false},
+			{tenantD, at("2031-06-10T12:00:00Z"), "fresh", "GET", "/a", 500, "metric", h(map[int]int64{4: 3}), false},
+		}, nil)
+		e.writeMinutes(t, []point{
+			{tenantD, at("2031-06-15T10:02:00Z"), "fresh", "GET", "/a", 200, "metric", h(map[int]int64{3: 7}), false},
+			{tenantD, at("2031-06-15T10:02:00Z"), "fresh", "GET", "/a", 200, "span", h(map[int]int64{1: 50}), false},
+			{tenantD, at("2031-06-15T09:50:00Z"), "fresh-span", "GET", "/h", 0, "span", h(map[int]int64{0: 4}), false},
+			{tenantD, at("2031-06-15T10:03:00Z"), "fresh-span", "GET", "/h", 200, "span", h(map[int]int64{0: 1}), false},
+			{tenantD, at("2031-06-12T03:00:00Z"), "fresh", "POST", "/b", 201, "metric", h(map[int]int64{14: 2, 2: 1}), true},
+			{tenantD, at("2031-05-01T00:00:00Z"), "fresh", "GET", "/a", 404, "metric", h(map[int]int64{0: 6}), false},
+		}, nil)
+		var pending int
+		require.NoError(t, e.su.QueryRow(t.Context(), `select count(*) from api.rollup_pending where tenant_id = $1`, tenantD).Scan(&pending))
+		require.Equal(t, 4, pending, "hours 10:00 and 09:00 of 06-15, 06-12 03:00 and 05-01 00:00")
+
+		type views struct {
+			ov apimetrics.Overview
+			ts apimetrics.Timeseries
+			rt apimetrics.RouteList
+			st apimetrics.Status
+			sv apimetrics.Services
+		}
+		fetch := func(qs string) views {
+			var v views
+			cd.ok(t, pathD+"overview?"+qs, &v.ov)
+			cd.ok(t, pathD+"timeseries?"+qs, &v.ts)
+			cd.ok(t, pathD+"routes?"+qs+"&limit=200", &v.rt)
+			cd.ok(t, pathD+"status?"+qs, &v.st)
+			cd.ok(t, pathD+"services?"+qs, &v.sv)
+			return v
+		}
+		presets := []string{"range=24h", "range=7d", "range=90d"}
+		before := map[string]views{}
+		for _, qs := range presets {
+			v := fetch(qs)
+			before[qs] = v
+			require.NotEqual(t, apimetrics.Minute, v.ov.Current.Range.Resolution, qs)
+			// the expectation reads only metrics_minute over the same range
+			rng := v.ov.Current.Range
+			rng.Resolution = apimetrics.Minute
+			q := query{tenant: tenantD, rng: rng}
+			require.Equal(t, e.expSources(t, q), v.ov.Current.Sources, qs)
+			require.Equal(t, e.expSummary(t, q), v.ov.Current.Summary, qs)
+			require.Equal(t, e.expRoutes(t, q, "requests desc, service, method, route"), v.rt.Items, qs)
+			total, classes, codes := e.expStatus(t, q)
+			require.Equal(t, total, v.st.Requests, qs)
+			require.Equal(t, classes, v.st.Classes, qs)
+			require.Equal(t, codes, v.st.Codes, qs)
+			require.Equal(t, e.expServices(t, q), v.sv.Items, qs)
+			buckets := e.expMinuteBuckets(t, q, v.ts.Range.Resolution)
+			got := map[time.Time]apimetrics.Summary{}
+			for _, p := range v.ts.Points {
+				if p.Requests > 0 {
+					got[time.Time(p.At)] = p.Summary
+				}
+			}
+			require.Equal(t, buckets, got, qs)
+		}
+		// by hand: 10 + 5 + 7 (span 50 ignored) + 4 + 1 in the last 24 hours
+		require.Equal(t, int64(27), before["range=24h"].ov.Current.Summary.Requests)
+		require.Equal(t, int64(27+3+3), before["range=7d"].ov.Current.Summary.Requests)
+		require.Equal(t, int64(27+3+3+6), before["range=90d"].ov.Current.Summary.Requests)
+
+		e.rollup(t)
+		require.NoError(t, e.su.QueryRow(t.Context(), `select count(*) from api.rollup_pending where tenant_id = $1`, tenantD).Scan(&pending))
+		require.Zero(t, pending)
+		for _, qs := range presets {
+			after := fetch(qs)
+			b := before[qs]
+			require.Equal(t, b.ov, after.ov, qs)
+			require.Equal(t, b.ts, after.ts, qs)
+			require.Equal(t, b.rt, after.rt, qs)
+			require.Equal(t, b.st, after.st, qs)
+			require.Equal(t, b.sv, after.sv, qs)
+		}
+	})
+
 	t.Run("only the table of the resolution is read", func(t *testing.T) {
 		// the queries union all three tables; the branches of the other two
 		// must cost nothing. explain analyze shows a branch that ran as a scan
-		// with loops, one that was cut as never executed or not at all
+		// with loops, one that was cut as never executed or not at all. this
+		// runs with no hour pending, so the minute branches of hourly and
+		// daily answers must not run either
 		require.NoError(t, e.d.WithTenant(t.Context(), tenantA, func(tx pgx.Tx) error {
 			for res, tbl := range map[string]string{"minute": "metrics_minute", "hour": "metrics_hourly", "day": "metrics_daily"} {
 				rows, err := tx.Query(t.Context(), `explain (analyze, costs off, timing off) `+namedQuery(t, "APIMetricSummary"),

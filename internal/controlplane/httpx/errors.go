@@ -47,6 +47,8 @@ const (
 	CodeInvalidTransition    = "invalid_transition"
 	// this stage: otlp token create while the tenant is pending or rejected
 	CodeTenantNotActive = "tenant_not_active"
+	// this stage: an erasure request while another one runs for the same site
+	CodeErasureInProgress = "erasure_in_progress"
 )
 
 // defaultUnavailableRetryIn is the Retry-After of a 503 when the caller does

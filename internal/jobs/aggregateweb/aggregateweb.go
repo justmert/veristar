@@ -204,6 +204,42 @@ func (a *Aggregator) Backfill(ctx context.Context, tx TxFunc, from, to time.Time
 	return res, nil
 }
 
+// BackfillSite reads one site's days from from to to again, whatever the
+// site's status: an erasure can concern a suspended site, whose aggregates
+// must still stop counting erased visits. days after today are left out,
+// because umami has nothing for them yet. it returns the site days written.
+func (a *Aggregator) BackfillSite(ctx context.Context, tx TxFunc, s registry.Site, from, to time.Time) (int, error) {
+	from, to = UTCDay(from), UTCDay(to)
+	if today := UTCDay(a.now()); to.After(today) {
+		to = today
+	}
+	if to.Before(from) {
+		return 0, nil
+	}
+	if err := a.checkWebsites(ctx, s); err != nil {
+		return 0, fmt.Errorf("aggregateweb: site %s: %w", s.ID, err)
+	}
+	n := 0
+	for d := from; !d.After(to); d = d.AddDate(0, 0, 1) {
+		written, err := a.siteDay(ctx, tx, s, d)
+		if err != nil {
+			a.failed.Inc()
+			return n, fmt.Errorf("aggregateweb: site %s day %s: %w", s.ID, d.Format(time.DateOnly), err)
+		}
+		if written {
+			n++
+			a.days.Inc()
+		}
+	}
+	return n, nil
+}
+
+// Site returns a site of the registry snapshot.
+func (a *Aggregator) Site(id string) (registry.Site, bool) {
+	s, ok := a.sites.Snapshot()[id]
+	return s, ok
+}
+
 // checkWebsites confirms that both websites of a site exist in umami. umami
 // answers /stats and /metrics of an unknown website id with zeros for the
 // admin, so without this check a website that was never created, or was

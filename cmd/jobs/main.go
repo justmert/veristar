@@ -38,7 +38,9 @@ import (
 	"github.com/justmert/stellar-analytics/internal/jobs/apiretention"
 	"github.com/justmert/stellar-analytics/internal/jobs/apirollup"
 	"github.com/justmert/stellar-analytics/internal/jobs/edgestats"
+	"github.com/justmert/stellar-analytics/internal/jobs/erasurefollowup"
 	"github.com/justmert/stellar-analytics/internal/jobs/reconcile"
+	"github.com/justmert/stellar-analytics/internal/jobs/retainweb"
 	"github.com/justmert/stellar-analytics/internal/jobs/scheduler"
 	"github.com/justmert/stellar-analytics/internal/jobs/sessionprune"
 	"github.com/justmert/stellar-analytics/internal/jobs/statsdedup"
@@ -62,10 +64,17 @@ commands:
   run <task>        run one task once under the jobs lock (tasks: ` + edgestats.TaskName + `, ` + statsdedup.TaskName + `,
                     ` + reconcile.TaskName + `, ` + umamirotate.TaskName + `, ` + sessionprune.TaskName + `,
                     ` + verifydomains.TaskName + `, ` + apirollup.TaskName + `, ` + apipartition.TaskName + `,
-                    ` + apiretention.TaskName + `, ` + aggregateweb.TaskName + `)
+                    ` + apiretention.TaskName + `, ` + aggregateweb.TaskName + `,
+                    ` + erasurefollowup.TaskName + `)
   run ` + aggregateweb.TaskName + ` --from <yyyy-mm-dd> --to <yyyy-mm-dd>
                     read the web aggregates of every active site again for
                     each utc day of the range, both days included
+  retain-web        delete raw umami event and session rows older than
+                    WEB_RAW_RETENTION_MONTHS (default 25) as the role
+                    jobs_retention; refuses to run on an umami schema it was
+                    not tested with. needs PLATFORM_DB_HOST, PLATFORM_DB_PORT,
+                    PLATFORM_DB_SSLMODE, UMAMI_DB_NAME and
+                    UMAMI_DB_JOBS_RETENTION_PASSWORD only; run it once a day
   capacity          print the measured on-disk bytes per row of the api metric
                     tables as json (docs/reference/capacity.md); needs only the
                     PLATFORM_DB_* keys of the jobs role
@@ -98,6 +107,12 @@ func run(ctx context.Context, args []string, env *config.Env, stdout, stderr io.
 	case len(args) == 1 && args[0] == "daemon":
 		if err := daemon(ctx, env, log); err != nil && !errors.Is(err, context.Canceled) {
 			log.Error("jobs daemon failed", "error", err.Error())
+			return 1
+		}
+		return 0
+	case len(args) == 1 && args[0] == retainweb.TaskName:
+		if err := retainWeb(ctx, env, log, time.Now()); err != nil {
+			log.Error("jobs retain-web failed", "error", err.Error())
 			return 1
 		}
 		return 0
@@ -376,6 +391,15 @@ func open(ctx context.Context, env *config.Env, log *slog.Logger, opsAddr bool) 
 		_, err := aggWeb.Run(ctx, l.Tx)
 		return err
 	}
+	followup, err := erasurefollowup.New(aggWeb, time.Now, log)
+	if err != nil {
+		closeAll()
+		return nil, "", err
+	}
+	followErasure := func(ctx context.Context, l *scheduler.Leader) error {
+		_, err := followup.Run(ctx, l.Tx, l.SystemTx)
+		return err
+	}
 	tasks := []scheduler.Task{{
 		Name: edgestats.TaskName,
 		Run: func(ctx context.Context, l *scheduler.Leader) error {
@@ -431,6 +455,11 @@ func open(ctx context.Context, env *config.Env, log *slog.Logger, opsAddr bool) 
 		Every: aggregateweb.Every,
 		Run:   aggregate,
 		Once:  aggregate,
+	}, {
+		Name:  erasurefollowup.TaskName,
+		Every: erasurefollowup.Every,
+		Run:   followErasure,
+		Once:  followErasure,
 	}}
 	return &deps{
 		nc:      nc,
@@ -613,4 +642,23 @@ func capacity(ctx context.Context, env *config.Env, stdout io.Writer) error {
 	enc := json.NewEncoder(stdout)
 	enc.SetIndent("", "  ")
 	return enc.Encode(out)
+}
+
+// retainWeb runs `jobs retain-web`. it needs no nats and no leader lock:
+// each batch deletes only rows past the cutoff, so two runs at once delete
+// the same rows once between them.
+func retainWeb(ctx context.Context, env *config.Env, log *slog.Logger, now time.Time) error {
+	cfg, err := retainweb.Load(env)
+	if err != nil {
+		return err
+	}
+	cctx, cancel := context.WithTimeout(ctx, connectTimeout)
+	defer cancel()
+	conn, err := pgx.Connect(cctx, cfg.ConnString())
+	if err != nil {
+		return fmt.Errorf("connect to %s as %s: %w", cfg.Database, retainweb.Role, err)
+	}
+	defer func() { _ = conn.Close(context.WithoutCancel(ctx)) }()
+	_, err = retainweb.Run(ctx, conn, retainweb.Cutoff(now, cfg.Months), now, log)
+	return err
 }

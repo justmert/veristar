@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -10,12 +11,17 @@ import (
 	"github.com/justmert/stellar-analytics/db"
 	"github.com/justmert/stellar-analytics/internal/config"
 	pdb "github.com/justmert/stellar-analytics/internal/db"
+	"github.com/justmert/stellar-analytics/internal/jobs/retainweb"
 	"github.com/justmert/stellar-analytics/internal/obs"
 )
 
 // dbUsage lists the db subcommands for the main usage text.
 const dbUsage = `  db migrate        apply platform database migrations and check row-level security coverage
   db roles          set login passwords of the application roles from PLATFORM_DB_<ROLE>_PASSWORD
+  db umami-retention-role
+                    create the role jobs_retention in the umami database (UMAMI_DB_NAME)
+                    with UMAMI_DB_JOBS_RETENTION_PASSWORD and grant it select and delete
+                    on umami's event and session tables only; run after umami migrated
 `
 
 // runDB runs `platformctl db <subcommand>`; args are the words after "db".
@@ -34,7 +40,7 @@ func runDB(ctx context.Context, args []string) error {
 
 func runDBWith(ctx context.Context, args []string, env *config.Env, log *slog.Logger) error {
 	if len(args) != 1 {
-		return fmt.Errorf("usage: platformctl db migrate|roles, got %q", strings.Join(args, " "))
+		return fmt.Errorf("usage: platformctl db migrate|roles|umami-retention-role, got %q", strings.Join(args, " "))
 	}
 	switch args[0] {
 	case "migrate":
@@ -70,7 +76,25 @@ func runDBWith(ctx context.Context, args []string, env *config.Env, log *slog.Lo
 			"roles", strings.Join(names, ","),
 		)
 		return nil
+	case "umami-retention-role":
+		cfg, err := pdb.LoadAdminConfig(env)
+		name := env.String("UMAMI_DB_NAME")
+		pw := env.Secret("UMAMI_DB_JOBS_RETENTION_PASSWORD", 32)
+		if err := errors.Join(err, env.Err()); err != nil {
+			return err
+		}
+		cfg.Server.Database = name
+		conn, err := pdb.AdminConnect(ctx, cfg, "platformctl-umami-retention")
+		if err != nil {
+			return err
+		}
+		defer func() { _ = conn.Close(context.WithoutCancel(ctx)) }()
+		if err := retainweb.Provision(ctx, conn, pw.Reveal()); err != nil {
+			return err
+		}
+		log.Info("umami retention role set", "database", name, "role", retainweb.Role, "tables", strings.Join(retainweb.Tables, ","))
+		return nil
 	default:
-		return fmt.Errorf("usage: platformctl db migrate|roles, unknown subcommand %q", args[0])
+		return fmt.Errorf("usage: platformctl db migrate|roles|umami-retention-role, unknown subcommand %q", args[0])
 	}
 }

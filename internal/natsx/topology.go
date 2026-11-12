@@ -267,6 +267,15 @@ func dlqManage(stream string) []string {
 	}
 }
 
+// streamRead covers stream info and reading single messages by sequence or
+// by the next sequence on a subject, without a consumer.
+func streamRead(stream string) []string {
+	return []string{
+		jsAPI + ".STREAM.INFO." + stream,
+		jsAPI + ".STREAM.MSG.GET." + stream,
+	}
+}
+
 func user(name string, allowResponses bool, sub []string, pub ...[]string) User {
 	// every service may ask for account info, which the jetstream client
 	// uses for feature checks, and reads replies only on its own inbox
@@ -319,18 +328,21 @@ func Users() []User {
 			consume(StreamEdgeStats, ConsumerJobs),
 			kvWrite(BucketLocks),
 			kvRecreate(BucketLocks),
-			// reconcile writes both registries, erasure follow-up reads visit
-			// state and cleans the web dlq
+			// reconcile writes both registries
 			kvWrite(BucketRegistrySites),
 			kvWrite(BucketRegistryOTLP),
-			kvRead(BucketVisitState),
-			dlqManage(StreamWebDLQ),
 		),
+		// erasure (the design) runs in the control plane: it asks the
+		// gateways for a visitor token, waits until the replayer has taken
+		// a site's queued events (stream info and per-subject reads of
+		// WEB_EVENTS), finds and removes visit records and deletes matching
+		// web dlq messages
 		user(ServiceControlPlane, false, nil,
 			subjects(SubjectVisitorToken),
 			kvWrite(BucketRegistrySites),
 			kvWrite(BucketRegistryOTLP),
-			kvRead(BucketVisitState),
+			kvWrite(BucketVisitState),
+			streamRead(StreamWebEvents),
 			dlqManage(StreamWebDLQ),
 		),
 		// platformctl manages the topology and needs the whole api

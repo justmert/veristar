@@ -15,6 +15,8 @@ RUN go mod download && go mod verify
 
 COPY cmd ./cmd
 COPY internal ./internal
+# platformctl embeds the migrations (package db)
+COPY db ./db
 
 # cgo off gives a fully static binary, which the static distroless base needs
 RUN if [ -z "$CMD" ]; then echo "build arg CMD is required, e.g. --build-arg CMD=platformctl" >&2; exit 1; fi; \

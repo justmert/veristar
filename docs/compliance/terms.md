@@ -1,15 +1,16 @@
 ---
-version: 2026-11-12-draft.1
+version: 2026-11-12-draft.2
 status: draft
 effective: 2026-11-12
 ---
 
 # Terms of use
 
-> **Draft, not legally reviewed an operator input. this stage replaces this text.**
-> Projects accept this version when they enroll. When the final version is
+> **Status: draft, pending legal review an operator input.** Not legal advice.
+> Projects accept this version when they enroll. When a new version is
 > published, every project accepts it at its next sign-in, and changes to a
-> project are blocked until it does.
+> project are blocked until it does. The final version drops `draft` from the
+> version and the status.
 
 ## 1. Parties and roles
 
@@ -23,10 +24,10 @@ effective: 2026-11-12
   that data only to provide the service, following the tenant's documented
   instructions, which are the tenant's configuration of the service (sites,
   allowed origins, tokens, members).
-- Data processing terms covering the subjects of GDPR Article 28 (purpose,
-  duration, categories of data, sub-processors, security, help with data subject
-  requests, deletion at the end of the service) are published with the final
-  version of these terms in this stage.
+- The data processing terms in `docs/compliance/dpa-template.md` (GDPR Article
+  28: purpose, duration, categories of data, sub-processors, security, help with
+  data subject requests, deletion at the end of the service) are part of these
+  terms. Sub-processors are listed in `docs/compliance/subprocessors.md`.
 
 ## 2. No fees
 
@@ -36,7 +37,8 @@ There is no billing, no paid tier, no advertising and no sale or resale of data.
 ## 3. What is collected and what is not
 
 - **Websites**: page views and custom events sent by the tracker script. The
-  tracker uses no cookies and no browser storage.
+  tracker sets no cookies and writes no browser storage. It reads one storage
+  key, the visitor's opt-out flag, and honours Global Privacy Control.
 - **IP addresses are never stored.** The ingestion gateway reads a visitor's
   address only in memory, shortens it, looks up the country in the DB-IP
   database, and discards it.
@@ -69,10 +71,15 @@ operator may switch enrollment from open to approval-required.
 
 ## 6. Retention and deletion
 
+- Raw web events and sessions are deleted after `WEB_RAW_RETENTION_MONTHS`
+  months, 25 by default, so dashboards cover 24 full months.
 - API metric aggregates are kept for at least 24 months.
-- Raw web event retention is set in this stage and stated in the final version.
-- What removal of a project deletes is described in the operator documentation
-  and stated in the final version.
+- A project owner can erase one visitor's visit of the current UTC day, one
+  session at any time, or all web data of a site (`docs/compliance/erasure.md`).
+  A visit on an earlier day cannot be linked to a person, by design.
+- When a project is removed, its raw web data and per-minute API data are
+  deleted; aggregates are deleted unless the operator keeps them under the
+  published `removal_keep_aggregates` setting (`docs/runbooks/tenant-removal.md`).
 
 ## 7. Availability
 
@@ -96,4 +103,5 @@ accepted, the project can be read but not changed.
 
 Privacy and security questions: the public issue tracker of the repository for
 general questions, and the repository's private vulnerability reporting for
-security issues. The final version names a dedicated privacy contact.
+security issues. A dedicated privacy contact is named once the operating entity
+is decided.

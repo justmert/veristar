@@ -37,6 +37,17 @@ type Options struct {
 	// Private route groups answer 401 without a signed-in session; their
 	// handlers read the user with session.MustUser.
 	Private []Routes
+	// Mounts are handlers served beside /api rather than inside it: none of
+	// the api middleware runs for them, so no session is ever loaded. the
+	// machine metrics api (the design) is one; it authenticates by key.
+	Mounts []Mount
+}
+
+// Mount is a handler for every path under Path, which must lie under /api
+// but outside any route group.
+type Mount struct {
+	Path    string
+	Handler http.Handler
 }
 
 // NewHandler returns the api handler. middleware order, outermost first:
@@ -60,6 +71,11 @@ func NewHandler(o Options) http.Handler {
 
 	root := chi.NewRouter()
 	root.Mount("/api", api)
+	// chi matches the longer static prefix first, so a mount under /api
+	// takes its paths away from the api router and its session middleware
+	for _, m := range o.Mounts {
+		root.Mount(m.Path, m.Handler)
+	}
 	// outside /api the control plane serves nothing; caddy serves the console
 	root.NotFound(func(w http.ResponseWriter, r *http.Request) {
 		httpx.Base(o.Log)(http.HandlerFunc(httpx.NotFoundHandler)).ServeHTTP(w, r)

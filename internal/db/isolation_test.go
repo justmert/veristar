@@ -46,8 +46,10 @@ var tenantTables = []tenantTable{
 		        values ($1, 'new', 'sa_otlp_n', sha256($2::bytea), $3)`, []any{tenant, []byte(uuid.NewString()), user}
 	}},
 	{name: "cp.erasure_requests", key: "tenant_id", insert: func(tenant, user, site uuid.UUID) (string, []any) {
-		return `insert into cp.erasure_requests (tenant_id, site_id, kind, requested_by)
-		        values ($1, $2, 'site_reset', $3)`, []any{tenant, site, user}
+		// a finished request: one site may hold any number of those, but only
+		// one running request (00020 erasure_requests_one_active_idx)
+		return `insert into cp.erasure_requests (tenant_id, site_id, kind, requested_by, status, outcome, completed_at)
+		        values ($1, $2, 'site_reset', $3, 'done', 'erased', now())`, []any{tenant, site, user}
 	}},
 	{name: "cp.web_ingest_hourly", key: "tenant_id"},
 	{name: "cp.tenant_removals", key: "tenant_id", denied: true},
@@ -62,7 +64,8 @@ var tenantTables = []tenantTable{
 	{name: "api.resource_seen", key: "tenant_id", denied: true},
 	{name: "api.ingest_dedup", key: "tenant_id", denied: true},
 	{name: "api.route_registry", key: "tenant_id", denied: true},
-	{name: "api.rollup_pending", key: "tenant_id", denied: true},
+	// read-only since 00021: hourly and daily answers read pending hours
+	{name: "api.rollup_pending", key: "tenant_id"},
 	// agg (this stage): operators only; cp_tenant has no usage on the schema
 	{name: "agg.web_daily", key: "tenant_id", denied: true},
 	{name: "agg.web_daily_dim", key: "tenant_id", denied: true},

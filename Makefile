@@ -234,3 +234,76 @@ test-metricswriter:
 api-volume: collector-build
 	@set -a && . ./$(DEV_ENV) && set +a && \
 		$(GO) test -tags apivolume -count=1 -timeout 120m -v ./tests/apivolume/
+
+# this stage system-wide privacy audit (tests/privacy, build tag privacy): web
+# and api traffic from marker addresses on their own docker networks through
+# the edge caddy, then both databases, every jetstream stream and kv bucket,
+# every service and caddy log and every file the containers wrote are
+# scanned for the markers. needs docker.
+.PHONY: privacy
+privacy:
+	DBIP_MONTH=$(DBIP_MONTH) $(GO) test -tags privacy -count=1 -timeout 30m -v ./tests/privacy/
+
+# this stage opentofu (infra/tofu, docs/deploy/opentofu.md). credentials and the
+# state passphrase come only from the env's sops dotenv file; non-secret inputs
+# from infra/tofu/envs/<env>/terraform.tfvars. both are missing until the operator
+# supplies inputs I4, I5, I6, I13 and I14, and the targets stop with the name
+# of what is missing instead of guessing.
+TOFU     ?= tofu
+SOPS     ?= sops
+TOFU_DIR := infra/tofu/envs
+# one shared provider cache so both envs reuse the same provider binaries
+export TF_PLUGIN_CACHE_DIR ?= $(HOME)/.cache/opentofu/plugins
+
+define tofu_env
+	@test -f $(TOFU_DIR)/$(1)/terraform.tfvars || { echo "$(TOFU_DIR)/$(1)/terraform.tfvars is missing (inputs I4, I5, I13)" >&2; exit 1; }
+	@test -f infra/secrets/$(1)/tofu.enc.env || { echo "infra/secrets/$(1)/tofu.enc.env is missing (inputs I5, I6, I14)" >&2; exit 1; }
+	@mkdir -p $(TF_PLUGIN_CACHE_DIR)
+	$(SOPS) exec-env infra/secrets/$(1)/tofu.enc.env '$(2)'
+endef
+
+tofu_in = $(TOFU) -chdir=$(TOFU_DIR)/$(1)
+tofu_init = $(call tofu_in,$(1)) init -input=false
+tofu_inventory = mkdir -p infra/ansible/inventories/$(1) && $(call tofu_in,$(1)) output -json ansible_inventory > infra/ansible/inventories/$(1)/hosts.json.tmp && mv infra/ansible/inventories/$(1)/hosts.json.tmp infra/ansible/inventories/$(1)/hosts.json
+
+.PHONY: state-bootstrap tofu-check \
+        staging-plan staging-apply staging-inventory staging-destroy \
+        production-plan production-apply production-inventory production-destroy
+
+state-bootstrap:
+	@case "$(ENV)" in staging|production) ;; *) echo "usage: make state-bootstrap ENV=staging|production" >&2; exit 2;; esac
+	@test -f infra/secrets/$(ENV)/tofu.enc.env || { echo "infra/secrets/$(ENV)/tofu.enc.env is missing (inputs I5, I14)" >&2; exit 1; }
+	$(SOPS) exec-env infra/secrets/$(ENV)/tofu.enc.env './scripts/tofu-state-bootstrap.sh $(ENV)'
+
+# the plan file is encrypted by the env's encryption block
+staging-plan production-plan: %-plan:
+	$(call tofu_env,$*,$(call tofu_init,$*) && $(call tofu_in,$*) plan -input=false -out=tfplan)
+
+staging-apply production-apply: %-apply:
+	@test -f $(TOFU_DIR)/$*/tfplan || { echo "run make $*-plan first" >&2; exit 1; }
+	$(call tofu_env,$*,$(call tofu_init,$*) && $(call tofu_in,$*) apply -input=false tfplan && rm -f $(TOFU_DIR)/$*/tfplan && $(call tofu_inventory,$*))
+
+staging-inventory production-inventory: %-inventory:
+	$(call tofu_env,$*,$(call tofu_init,$*) && $(call tofu_inventory,$*))
+
+staging-destroy:
+	$(call tofu_env,staging,$(call tofu_init,staging) && $(call tofu_in,staging) destroy -input=false)
+
+# production servers and addresses carry delete protection, so this fails
+# until protect is turned off in envs/production/env.tf and applied
+production-destroy:
+	@test "$(CONFIRM)" = production || { echo "set CONFIRM=production to destroy production" >&2; exit 1; }
+	$(call tofu_env,production,$(call tofu_init,production) && $(call tofu_in,production) destroy -input=false)
+
+# local checks that need no account: formatting, provider schema validation
+# and the inventory contract tests (tests/infra) against mocked providers
+tofu-check:
+	@mkdir -p $(TF_PLUGIN_CACHE_DIR)
+	$(TOFU) fmt -recursive -check infra/tofu tests/infra
+	@for e in staging production; do \
+		$(TOFU) -chdir=$(TOFU_DIR)/$$e init -backend=false -input=false >/dev/null && \
+		$(TOFU) -chdir=$(TOFU_DIR)/$$e validate && \
+		$(TOFU) -chdir=$(TOFU_DIR)/$$e test -test-directory=../../../../tests/infra \
+			-var-file=../../../../tests/infra/sample.tfvars \
+			-filter=../../../../tests/infra/$$e.tftest.hcl || exit 1; \
+	done

@@ -27,7 +27,7 @@ import (
 
 // the global web and api views of the design (contract section 8). every
 // read runs as cp_operator over aggregate tables only: agg.web_daily,
-// agg.web_daily_dim, api.metrics_daily, cp.web_ingest_hourly, cp.tenants
+// agg.web_daily_dim, api.operator_daily (daily rows plus pending hours, 00022), cp.web_ingest_hourly, cp.tenants
 // and cp.operator_sites. internal tenants are never shown.
 
 // MaxRangeDays bounds the day range of every global route.
@@ -101,7 +101,15 @@ func parseDay(q url.Values, key string) (time.Time, bool, error) {
 // parseRange reads from and to (contract 8.1): both utc days, both
 // included, to not after today, at most MaxRangeDays days.
 func (g *Global) parseRange(q url.Values) (dayRange, error) {
-	today := utcDay(g.now())
+	return parseDayRange(q, g.now(), DefaultRangeDays, MaxRangeDays)
+}
+
+// parseDayRange reads from and to as utc days, both included. without to
+// the range ends today (or on from, when from is in the future, which the
+// to check then refuses); without from it holds defDays days. to after
+// today, to before from and more than maxDays days are 400 invalid_query.
+func parseDayRange(q url.Values, now time.Time, defDays, maxDays int) (dayRange, error) {
+	today := utcDay(now)
 	from, hasFrom, err := parseDay(q, "from")
 	if err != nil {
 		return dayRange{}, err
@@ -117,15 +125,15 @@ func (g *Global) parseRange(q url.Values) (dayRange, error) {
 		}
 	}
 	if !hasFrom {
-		from = to.AddDate(0, 0, -(DefaultRangeDays - 1))
+		from = to.AddDate(0, 0, -(defDays - 1))
 	}
 	switch {
 	case to.After(today):
 		return dayRange{}, httpx.BadQuery("to must not be after today (utc)")
 	case to.Before(from):
 		return dayRange{}, httpx.BadQuery("to must not be before from")
-	case int(to.Sub(from).Hours()/24)+1 > MaxRangeDays:
-		return dayRange{}, httpx.BadQuery(fmt.Sprintf("the range may hold at most %d days", MaxRangeDays))
+	case int(to.Sub(from).Hours()/24)+1 > maxDays:
+		return dayRange{}, httpx.BadQuery(fmt.Sprintf("the range may hold at most %d days", maxDays))
 	}
 	return dayRange{From: from, To: to}, nil
 }
@@ -439,9 +447,8 @@ w as (
 ),
 ap as (
   select m.tenant_id, bool_or(m.count > 0) as has_api
-  from api.metrics_daily m
+  from api.operator_daily(@from_at::timestamptz, @to_end::timestamptz) m
   join t on t.id = m.tenant_id
-  where m.bucket_start >= @from_at::timestamptz and m.bucket_start < @to_end::timestamptz
   group by m.tenant_id
 )`
 

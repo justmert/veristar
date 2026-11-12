@@ -47,6 +47,13 @@ type Stack struct {
 	Admin         *umami.Admin
 	AdminPassword string
 	Umami         *testcontainers.DockerContainer
+	// Postgres runs umami's database; PostgresHost and PostgresPort reach it
+	// from the test process as the superuser postgres with
+	// PostgresPassword, for tests that check umami's tables directly.
+	Postgres         *testcontainers.DockerContainer
+	PostgresHost     string
+	PostgresPort     int
+	PostgresPassword string
 }
 
 func repoRoot(t testing.TB) string {
@@ -127,10 +134,12 @@ func Start(t testing.TB) *Stack {
 	t.Cleanup(func() { _ = nw.Remove(context.Background()) })
 
 	dbPassword := secret(t)
+	superPassword := secret(t)
 	pg, err := testcontainers.Run(ctx, pgImage,
+		testcontainers.WithExposedPorts("5432/tcp"),
 		testcontainers.WithEnv(map[string]string{
 			"POSTGRES_USER":     "postgres",
-			"POSTGRES_PASSWORD": secret(t),
+			"POSTGRES_PASSWORD": superPassword,
 			"UMAMI_DB_PASSWORD": dbPassword,
 			"TZ":                "UTC",
 		}),
@@ -200,7 +209,16 @@ func Start(t testing.TB) *Stack {
 	if err != nil {
 		t.Fatalf("umamictr: %v", err)
 	}
-	return &Stack{Network: nw, URL: u, Client: c, Admin: a, AdminPassword: pw, Umami: um}
+	pgHost, err := pg.Host(ctx)
+	if err != nil {
+		t.Fatalf("umamictr: postgres host: %v", err)
+	}
+	pgPort, err := pg.MappedPort(ctx, "5432/tcp")
+	if err != nil {
+		t.Fatalf("umamictr: postgres port: %v", err)
+	}
+	return &Stack{Network: nw, URL: u, Client: c, Admin: a, AdminPassword: pw, Umami: um,
+		Postgres: pg, PostgresHost: pgHost, PostgresPort: int(pgPort.Num()), PostgresPassword: superPassword}
 }
 
 // CaddyImage is caddy 2.11.9 by the digest pinned in the design: the

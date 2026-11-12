@@ -1,0 +1,121 @@
+# Erasure workflow
+
+> **Status: draft, pending legal review an operator input.** Not legal advice. Last
+> updated 2026-11-12. This is the explicit erasure statement the RFP asks for.
+> The API contract is `docs/reference/control-plane-api.md` section 10; the
+> behaviour below is tested in `internal/controlplane/erasure/live_test.go`
+> against real PostgreSQL, NATS, Umami, the gateway's visitor code, the
+> replayer and the jobs follow-up.
+
+## 1. What can be erased
+
+A project **owner** asks for erasure in the console (or with
+`POST /api/tenants/{tenant_id}/erasure`). Erasure is never blocked by a
+suspension or by terms the project has not accepted yet. There are three kinds.
+
+| Kind | the operator supplies | What is deleted | When it works |
+|---|---|---|---|
+| `visitor_today` | the site, the data subject's IP address and user agent | that visitor's Umami sessions on both bands of the site for the current UTC day, with all their events; the visitor's undeliverable messages in `WEB_DLQ`; the visitor's record in `visit_state` | only during the UTC day of the visit |
+| `session` | the site and an Umami session id from the dashboard | that session and all its events; while the session's visit record still exists (24 hours after its last event), also the visitor's `WEB_DLQ` messages and the record | during the whole raw retention period |
+| `site_reset` | the site and its domain, typed again as confirmation | every event and session of both Umami websites of the site (Umami's reset), every `WEB_DLQ` message and visit record of the site, and every aggregate row of the site | at any time |
+
+After each kind the jobs task `erasure-followup` reads the affected UTC days of
+`agg.web_daily` and `agg.web_daily_dim` again from Umami (for `site_reset` it
+deletes every aggregate row of the site and reads the last days again), so the
+operator view stops counting erased visits. The request shows
+`reaggregated_at` when that is done.
+
+## 2. Why visitor erasure works only on the day of the visit
+
+The service never stores an IP address. A visitor is known only by a token
+computed from the address, the user agent, the site and a secret that exists
+for one UTC day in memory (`privacy-strategy.md` section 3). On the day of the
+visit the gateways can recompute the token from the address and user agent the
+owner supplies, and the replayer's visit record links the token to the Umami
+sessions.
+
+After midnight the secret is gone. No one, including the operator, can
+recompute the token or tell which stored session belongs to which person. A
+request on a later day therefore finds nothing, and the answer says so
+(`outcome = "nothing_found"`, with the explanation in `message`). GDPR Art.
+11(1) relieves a controller of keeping or acquiring information only to
+identify a data subject, and Art. 11(2) suspends Arts. 15 to 20 when the
+controller can show it cannot identify the person, unless the person provides
+additional information that enables identification (S10). Whether an address
+and user agent supplied by the data subject count as such information when the
+secret no longer exists is a question for counsel; technically, no supplied
+information can re-link a past day's sessions.
+
+A data subject who can point to a session (for example the tenant finds it in
+the dashboard by time and page) can still have it deleted with kind `session`.
+
+## 3. How a request runs
+
+1. The control plane checks membership and role, the body and the site.
+2. `visitor_today`: the control plane sends the address and user agent to the
+   gateways in one NATS request on `edge.visitor-token` (only the control plane
+   may send it, only gateways may answer, `internal/natsx/topology.go`). A
+   gateway answers with the token and the UTC day it belongs to. The address
+   and user agent are not kept anywhere after this step: not in a table, a log
+   line, an audit row, an error or a queue.
+3. The control plane notes the last sequence of `WEB_EVENTS`, inserts the
+   request into `cp.erasure_requests` (status `running`) with an audit row, and
+   answers 202.
+4. The run waits until `WEB_EVENTS` holds no event of the site with a sequence
+   at or below the noted one, so an event accepted before the request and
+   still queued (up to 72 hours) is in Umami or in the dead-letter queue before
+   anything is deleted, and is deleted with the rest. If that does not happen
+   within `ERASURE_QUEUE_WAIT` (default 15 minutes), the run fails without
+   deleting anything and says why.
+5. The run deletes as described in section 1. For `visitor_today` and
+   `session` it removes the visit record first, so a later event of the same
+   visitor starts a new session instead of reusing the deleted one.
+6. The run records `outcome`, `message`, the counts (`sessions_deleted`,
+   `events_deleted`, `dlq_messages_deleted`) and the affected days. A failed
+   run records what it deleted before the failure.
+7. `erasure-followup` re-aggregates the affected days. It also fails a run
+   whose control plane process stopped (no heartbeat for 2 minutes); such a
+   request must be submitted again, because a `visitor_today` token existed
+   only in that process.
+
+One request per site runs at a time; a second answers 409
+`erasure_in_progress`.
+
+## 4. What the records keep
+
+`cp.erasure_requests` keeps the kind, site, requesting user, times, status,
+outcome, message, counts, the UTC day (`visitor_today`) or the session id
+(`session`), and the affected days. It never holds an IP address, a user
+agent or a visitor token. The audit log keeps `erasure.request`,
+`erasure.complete` and `erasure.fail` rows with the same restriction. The test
+`TestErasure/no_residue` reads both tables, every message of every NATS stream
+and bucket, and every log line of every component for the addresses and user
+agents used, and finds none.
+
+## 5. Limits
+
+- **Same-day only for visitor erasure** (section 2).
+- **Concurrent event.** If the visitor's own browser sends an event at the
+  moment the run deletes the session, the replayer can store that event with
+  the old session id after the session row is gone. Such an event belongs to
+  no session, so Umami's reports, which join events to sessions, do not show
+  it. `jobs retain-web` deletes events without a session that are younger than
+  72 hours on its next run (tested in `internal/jobs/retainweb`).
+- **Session kind and the dead-letter queue.** `WEB_DLQ` messages carry the
+  visitor token, not the session id. A `session` request finds them only
+  through the visit record, which exists for 24 hours after the visitor's
+  last event. Older dead-lettered messages expire with the queue's 7-day
+  limit.
+- **Probing.** The workflow tells an owner whether an address and user agent
+  visited its site today, and deletes that data in the same step. Only owners
+  can use it, and every request is audited.
+- **Backups.** this stage builds backups. Data deleted here stays in backups
+  until they expire; their retention is stated in `data-residency.md` once
+  they exist.
+
+## 6. Tenant exit
+
+When an operator removes a project, the purge deletes its Umami team and
+websites, its registry entries and, unless `removal_keep_aggregates` is set,
+its aggregates (`docs/runbooks/tenant-removal.md`). A tenant that wants its
+web data deleted while it stays enrolled uses `site_reset` per site.

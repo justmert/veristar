@@ -264,3 +264,24 @@ group by k.kind, k.n order by k.n`, q.tenant, from, to)
 	require.NoError(t, rows.Err())
 	return totals, list
 }
+
+// expMinuteBuckets sums the minute rows of q's range per bucket of res,
+// with the source rule applied, for the buckets that have requests
+func (e *env) expMinuteBuckets(t *testing.T, q query, res apimetrics.Resolution) map[time.Time]apimetrics.Summary {
+	t.Helper()
+	unit := map[apimetrics.Resolution]string{apimetrics.Hour: "hour", apimetrics.Day: "day"}[res]
+	require.NotEmpty(t, unit)
+	rows, err := e.su.Query(t.Context(), fmt.Sprintf(selected, "api.metrics_minute")+`
+select date_trunc('`+unit+`', bucket_start, 'UTC'), `+summaryCols+`
+from s group by 1 having sum(count) > 0`, q.args()...)
+	require.NoError(t, err)
+	out := map[time.Time]apimetrics.Summary{}
+	for rows.Next() {
+		var at time.Time
+		s, err := scanSummary(rows, &at)
+		require.NoError(t, err)
+		out[at.UTC()] = s
+	}
+	require.NoError(t, rows.Err())
+	return out
+}
