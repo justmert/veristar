@@ -44,9 +44,9 @@ export class ResponseShapeError extends Error {
   }
 }
 
-type Method = "GET" | "POST" | "PATCH" | "DELETE";
+type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
-const MUTATING: ReadonlySet<Method> = new Set(["POST", "PATCH", "DELETE"]);
+const MUTATING: ReadonlySet<Method> = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
 function retryAfterSeconds(res: Response): number | null {
   const v = res.headers.get("Retry-After");

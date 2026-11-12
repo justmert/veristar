@@ -33,6 +33,7 @@ export const meBody = {
     },
   ],
   terms: { current_version: TERMS_VERSION, status: "draft", url: "/terms" },
+  removed_tenants: [],
 };
 
 // 4.1.5
@@ -98,8 +99,15 @@ export const siteBody = {
   origins: ["https://example.org", "https://www.example.org"],
   quarantine_website_id: QUARANTINE_ID,
   status: "active",
+  status_reason: null,
+  in_review: false,
+  verification: "unchecked",
   verify_method: null,
   verified_at: null,
+  last_verify_at: null,
+  last_verify_error: null,
+  stellar_toml: null,
+  stellar_toml_checked_at: null,
   created_at: "2026-11-12T09:00:00Z",
   updated_at: "2026-11-12T09:00:00Z",
 };
@@ -153,3 +161,226 @@ export function errorBody(code: string, fields?: Record<string, string>) {
     },
   };
 }
+
+// ---- this stage, contract section 5 ----
+
+export const OPERATOR_ID = "0193a6f6-4444-7e66-bf77-a88b99caadbb";
+export const REMOVED_TENANT_ID = "0193a6f7-5555-7f77-8a88-b99caadbbecc";
+
+// 5.10 /api/me of a member of a removed project
+export const meWithRemovedBody = {
+  ...meBody,
+  removed_tenants: [
+    {
+      id: REMOVED_TENANT_ID,
+      name: "Old Project",
+      status_reason: "Not a Stellar project",
+      status_changed_at: "2026-11-12T10:00:00Z",
+    },
+  ],
+};
+
+export const operatorMeBody = {
+  ...meBody,
+  user: { id: OPERATOR_ID, github_id: 1, github_login: "sa-operator", is_operator: true },
+  tenants: [],
+};
+
+// 5.12
+export const stellarTomlFound = {
+  status: "found",
+  error: null,
+  http_status: 200,
+  bytes: 2048,
+  version: "2.7.0",
+  network_passphrase: "Public Global Stellar Network ; September 2015",
+  network: "public",
+  accounts_count: 3,
+  accounts_valid: 3,
+  signing_key_present: true,
+  signing_key_valid: true,
+  org_url: "https://example.org",
+  org_url_same_domain: true,
+  currencies: [
+    { code: "USDX", issuer: G_KEY, contract: null, valid: true },
+    { code: "TKN", issuer: null, contract: C_KEY, valid: true },
+  ],
+  currencies_total: 2,
+};
+
+export const stellarTomlNotFound = {
+  status: "not_found",
+  error: null,
+  http_status: 404,
+  bytes: null,
+  version: null,
+  network_passphrase: null,
+  network: null,
+  accounts_count: 0,
+  accounts_valid: 0,
+  signing_key_present: false,
+  signing_key_valid: false,
+  org_url: null,
+  org_url_same_domain: false,
+  currencies: [],
+  currencies_total: 0,
+};
+
+// 5.10 site with the this stage fields filled
+export const siteVerifiedBody = {
+  ...siteBody,
+  verification: "verified",
+  verify_method: "dns",
+  verified_at: "2026-11-12T09:30:00Z",
+  last_verify_at: "2026-11-12T09:30:00Z",
+  stellar_toml: stellarTomlFound,
+  stellar_toml_checked_at: "2026-11-12T09:05:00Z",
+};
+
+// 5.2
+export const operatorSummaryBody = {
+  id: TENANT_ID,
+  slug: "stellar-dex",
+  name: "Stellar DEX",
+  status: "pending",
+  status_reason: null,
+  website: "https://example.org",
+  created_at: "2026-11-12T09:00:00Z",
+  status_changed_at: "2026-11-12T09:00:00Z",
+  site_count: 2,
+  sites_in_review: 0,
+  sites_verified: 1,
+  sites_with_stellar_toml: 1,
+};
+
+export const operatorSitePageBody = { items: [operatorSummaryBody], next_cursor: "Y3Vyc29y" };
+
+export const operatorSiteBody = {
+  id: SITE_ID,
+  name: "Marketing site",
+  domain: "example.org",
+  origins: ["https://example.org"],
+  status: "active",
+  status_reason: null,
+  in_review: false,
+  domain_previously_removed: false,
+  verification: "verified",
+  verify_method: "dns",
+  verified_at: "2026-11-12T09:30:00Z",
+  last_verify_at: "2026-11-12T09:30:00Z",
+  last_verify_error: null,
+  stellar_toml: stellarTomlFound,
+  stellar_toml_checked_at: "2026-11-12T09:05:00Z",
+  created_at: "2026-11-12T09:00:00Z",
+  updated_at: "2026-11-12T09:00:00Z",
+};
+
+// 5.9
+export const auditEntryBody = {
+  id: 1234,
+  at: "2026-11-12T10:00:00Z",
+  actor: `user:${OPERATOR_ID}`,
+  actor_login: "sa-operator",
+  action: "tenant.suspend",
+  target: `tenant:${TENANT_ID}`,
+  detail: {
+    tenant_id: TENANT_ID,
+    status: { old: "active", new: "suspended" },
+    reason: "Spam traffic",
+  },
+};
+
+export const auditPageBody = {
+  items: [
+    auditEntryBody,
+    {
+      id: 1200,
+      at: "2026-11-12T09:00:00Z",
+      actor: "system:umami-rotate",
+      actor_login: null,
+      action: "umami.password_rotate",
+      target: "",
+      detail: { day: "2026-11-12", users: 4 },
+    },
+  ],
+  next_cursor: null,
+};
+
+// 5.4
+export const operatorDetailBody = {
+  tenant: {
+    id: TENANT_ID,
+    slug: "stellar-dex",
+    name: "Stellar DEX",
+    description: "An AMM",
+    status: "pending",
+    status_reason: null,
+    enrollment_answers: {
+      website: "https://example.org",
+      stellar_usage: "Soroban AMM on mainnet",
+      stellar_ids: [G_KEY, G_BAD_CHECKSUM],
+      scf_round_url: null,
+    },
+    accepted_terms_version: TERMS_VERSION,
+    provisioning: "pending",
+    created_by: { id: USER_ID, github_id: 1234567, github_login: "octocat" },
+    approved_by: null,
+    created_at: "2026-11-12T09:00:00Z",
+    updated_at: "2026-11-12T09:00:00Z",
+    status_changed_at: "2026-11-12T09:00:00Z",
+  },
+  stellar_ids: [
+    { id: G_KEY, type: "account", valid: true },
+    { id: G_BAD_CHECKSUM, type: null, valid: false },
+  ],
+  members: [
+    {
+      github_id: 1234567,
+      github_login: "octocat",
+      role: "owner",
+      created_at: "2026-11-12T09:00:00Z",
+    },
+  ],
+  sites: [operatorSiteBody],
+  ingest: {
+    last_24h: { accepted: 2810, quarantined: 41, rejected_origin: 17 },
+    last_30d: { accepted: 90210 },
+  },
+  removal: null,
+  recent_audit: [auditEntryBody],
+  allowed_actions: ["approve", "reject", "remove"],
+};
+
+export const removedDetailBody = {
+  ...operatorDetailBody,
+  tenant: { ...operatorDetailBody.tenant, status: "removed", status_reason: "Fraud" },
+  removal: {
+    requested_at: "2026-11-12T11:00:00Z",
+    requested_by: OPERATOR_ID,
+    keep_aggregates: false,
+    completed_at: null,
+    steps: { registry: { done_at: "2026-11-12T11:00:05Z" } },
+  },
+  allowed_actions: [],
+};
+
+// 5.8
+export const verificationBody = {
+  site_id: SITE_ID,
+  domain: "example.org",
+  verify_token: "q8m3xK2vN0pZr7Tg5LhW1yBc4FdJ6sEu9AoRiVkXnMQ",
+  dns: {
+    name: "_stellar-analytics.example.org",
+    type: "TXT",
+    value: "stellar-analytics-verify=q8m3xK2vN0pZr7Tg5LhW1yBc4FdJ6sEu9AoRiVkXnMQ",
+  },
+  file: {
+    url: "https://example.org/.well-known/stellar-analytics.txt",
+    body: "q8m3xK2vN0pZr7Tg5LhW1yBc4FdJ6sEu9AoRiVkXnMQ",
+  },
+  verification: "unverified",
+  verify_method: null,
+  verified_at: null,
+  last_verify_at: "2026-11-12T09:10:00Z",
+  last_verify_error: "dns_no_record",
+};

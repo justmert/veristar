@@ -1,8 +1,8 @@
 // query keys and options in one place, so a mutation invalidates exactly what
 // it changed
 
-import { queryOptions } from "@tanstack/react-query";
-import { api } from "./endpoints";
+import { infiniteQueryOptions, queryOptions } from "@tanstack/react-query";
+import { type AuditQuery, api, type TenantListQuery } from "./endpoints";
 
 export const keys = {
   me: ["me"] as const,
@@ -12,6 +12,14 @@ export const keys = {
   sites: (id: string) => ["tenant", id, "sites"] as const,
   snippet: (siteId: string, version: string | null) => ["snippet", siteId, version] as const,
   ingest: (siteId: string, window: string) => ["ingest", siteId, window] as const,
+  verification: (siteId: string) => ["verification", siteId] as const,
+  // everything an operator action can change lives under this prefix
+  operator: ["operator"] as const,
+  opTenants: (q: TenantListQuery) => ["operator", "tenants", q] as const,
+  opTenant: (id: string) => ["operator", "tenant", id] as const,
+  opMode: ["operator", "settings", "enrollment-mode"] as const,
+  opKeep: ["operator", "settings", "removal-keep-aggregates"] as const,
+  opAudit: (q: AuditQuery) => ["operator", "audit", q] as const,
 };
 
 export const meQuery = queryOptions({
@@ -66,4 +74,42 @@ export const ingestMonthQuery = (siteId: string) =>
     queryKey: keys.ingest(siteId, "30d"),
     queryFn: ({ signal }) => api.ingest(siteId, thirtyDayRange(new Date()), signal),
     staleTime: 5 * 60_000,
+  });
+
+export const verificationQuery = (siteId: string) =>
+  queryOptions({
+    queryKey: keys.verification(siteId),
+    queryFn: ({ signal }) => api.siteVerification(siteId, signal),
+  });
+
+export const operatorTenantsQuery = (q: TenantListQuery) =>
+  infiniteQueryOptions({
+    queryKey: keys.opTenants(q),
+    queryFn: ({ signal, pageParam }) => api.operator.tenants(q, pageParam, signal),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => last.next_cursor,
+  });
+
+export const operatorTenantQuery = (id: string) =>
+  queryOptions({
+    queryKey: keys.opTenant(id),
+    queryFn: ({ signal }) => api.operator.tenant(id, signal),
+  });
+
+export const enrollmentModeQuery = queryOptions({
+  queryKey: keys.opMode,
+  queryFn: ({ signal }) => api.operator.enrollmentMode(signal),
+});
+
+export const keepAggregatesQuery = queryOptions({
+  queryKey: keys.opKeep,
+  queryFn: ({ signal }) => api.operator.keepAggregates(signal),
+});
+
+export const auditQuery = (q: AuditQuery) =>
+  infiniteQueryOptions({
+    queryKey: keys.opAudit(q),
+    queryFn: ({ signal, pageParam }) => api.operator.audit(q, pageParam, signal),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => last.next_cursor,
   });

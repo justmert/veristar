@@ -26,6 +26,13 @@ export function errorText(err: unknown): string {
         return "A project needs at least one owner. Make someone else an owner first.";
       case "site_removed":
         return "This site was deleted and can no longer be changed.";
+      case "operator_required":
+        return "Only operators of the service can do this.";
+      case "invalid_transition":
+        // the message names the current status (contract 5.5), so it is shown
+        return `This is not possible from the current status. ${err.message}`;
+      case "tenant_suspended":
+        return "This project is suspended. Sites cannot be added or changed until an operator resumes it.";
       case "tracker_version_revoked":
         return "This tracker version was revoked. Choose another version.";
       case "validation_failed":

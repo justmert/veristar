@@ -50,10 +50,21 @@ export const termsRef = z.object({
   url: z.string().min(1),
 });
 
+// 5.10 projects of the user that an operator removed; every tenant route
+// answers 404 for them, so this is the only place their reason shows up
+export const removedTenant = z.object({
+  id,
+  name: z.string(),
+  status_reason: z.string().nullable(),
+  status_changed_at: time,
+});
+export type RemovedTenant = z.infer<typeof removedTenant>;
+
 export const me = z.object({
   user,
   tenants: z.array(meTenant),
   terms: termsRef,
+  removed_tenants: z.array(removedTenant),
 });
 export type Me = z.infer<typeof me>;
 
@@ -127,7 +138,42 @@ export const addMemberResult = z.discriminatedUnion("kind", [
 ]);
 export type AddMemberResult = z.infer<typeof addMemberResult>;
 
-// 3.1 site
+export const verifyMethod = z.enum(["dns", "file"]);
+export type VerifyMethod = z.infer<typeof verifyMethod>;
+
+// 5.8 verified, unverified or never checked
+export const verification = z.enum(["verified", "unverified", "unchecked"]);
+export type Verification = z.infer<typeof verification>;
+
+// 5.12 the stellar.toml signal. outside status "found" the contract leaves
+// the read fields null, 0, false or empty, so scalars are nullable here
+const nint = z.number().int().nonnegative().nullable();
+export const stellarTomlCurrency = z.object({
+  code: z.string(),
+  issuer: z.string().nullable(),
+  contract: z.string().nullable(),
+  valid: z.boolean(),
+});
+export const stellarToml = z.object({
+  status: z.enum(["found", "not_found", "invalid", "too_large", "refused", "error"]),
+  error: z.string().nullable(),
+  http_status: z.number().int().nullable(),
+  bytes: nint,
+  version: z.string().nullable(),
+  network_passphrase: z.string().nullable(),
+  network: z.enum(["public", "testnet", "futurenet", "other"]).nullable(),
+  accounts_count: nint,
+  accounts_valid: nint,
+  signing_key_present: z.boolean().nullable(),
+  signing_key_valid: z.boolean().nullable(),
+  org_url: z.string().nullable(),
+  org_url_same_domain: z.boolean().nullable(),
+  currencies: z.array(stellarTomlCurrency).nullable(),
+  currencies_total: nint,
+});
+export type StellarToml = z.infer<typeof stellarToml>;
+
+// 3.1 site, with the this stage fields of 5.10
 export const site = z.object({
   id,
   tenant_id: id,
@@ -136,8 +182,15 @@ export const site = z.object({
   origins: z.array(z.string()),
   quarantine_website_id: id.nullable(),
   status: siteStatus,
-  verify_method: z.enum(["dns", "file"]).nullable(),
+  status_reason: z.string().nullable(),
+  in_review: z.boolean(),
+  verification,
+  verify_method: verifyMethod.nullable(),
   verified_at: time.nullable(),
+  last_verify_at: time.nullable(),
+  last_verify_error: z.string().nullable(),
+  stellar_toml: stellarToml.nullable(),
+  stellar_toml_checked_at: time.nullable(),
   created_at: time,
   updated_at: time,
 });
@@ -184,6 +237,137 @@ export const ingest = z.object({
   totals: counts,
 });
 export type Ingest = z.infer<typeof ingest>;
+
+// 5.8 the verification instructions of one site
+export const siteVerification = z.object({
+  site_id: id,
+  domain: z.string(),
+  verify_token: z.string().min(1),
+  dns: z.object({ name: z.string().min(1), type: z.literal("TXT"), value: z.string().min(1) }),
+  file: z.object({ url: z.url(), body: z.string().min(1) }),
+  verification,
+  verify_method: verifyMethod.nullable(),
+  verified_at: time.nullable(),
+  last_verify_at: time.nullable(),
+  last_verify_error: z.string().nullable(),
+});
+export type SiteVerification = z.infer<typeof siteVerification>;
+
+// 5.2 operator objects
+export const operatorTenantSummary = z.object({
+  id,
+  slug: z.string(),
+  name: z.string(),
+  status: tenantStatus,
+  status_reason: z.string().nullable(),
+  website: z.string(),
+  created_at: time,
+  status_changed_at: time,
+  site_count: z.number().int().nonnegative(),
+  sites_in_review: z.number().int().nonnegative(),
+  sites_verified: z.number().int().nonnegative(),
+  sites_with_stellar_toml: z.number().int().nonnegative(),
+});
+export type OperatorTenantSummary = z.infer<typeof operatorTenantSummary>;
+export const operatorTenantPage = page(operatorTenantSummary);
+
+export const operatorSite = z.object({
+  id,
+  name: z.string(),
+  domain: z.string(),
+  origins: z.array(z.string()),
+  status: siteStatus,
+  status_reason: z.string().nullable(),
+  in_review: z.boolean(),
+  domain_previously_removed: z.boolean(),
+  verification,
+  verify_method: verifyMethod.nullable(),
+  verified_at: time.nullable(),
+  last_verify_at: time.nullable(),
+  last_verify_error: z.string().nullable(),
+  stellar_toml: stellarToml.nullable(),
+  stellar_toml_checked_at: time.nullable(),
+  created_at: time,
+  updated_at: time,
+});
+export type OperatorSite = z.infer<typeof operatorSite>;
+
+export const tenantAction = z.enum(["approve", "reject", "suspend", "resume", "remove"]);
+export type TenantAction = z.infer<typeof tenantAction>;
+
+const userRef = z.object({
+  id,
+  github_id: z.number().int().positive(),
+  github_login: z.string().min(1),
+});
+
+// 5.9
+export const auditEntry = z.object({
+  id: z.number().int(),
+  at: time,
+  actor: z.string(),
+  actor_login: z.string().nullable(),
+  action: z.string().min(1),
+  target: z.string(),
+  detail: z.record(z.string(), z.unknown()).nullable(),
+});
+export type AuditEntry = z.infer<typeof auditEntry>;
+export const auditPage = page(auditEntry);
+
+// 5.4
+export const operatorTenantDetail = z.object({
+  tenant: z.object({
+    id,
+    slug: z.string(),
+    name: z.string(),
+    description: z.string(),
+    status: tenantStatus,
+    status_reason: z.string().nullable(),
+    enrollment_answers: enrollmentAnswers,
+    accepted_terms_version: z.string().nullable(),
+    provisioning: z.enum(["pending", "ready"]),
+    created_by: userRef.nullable(),
+    approved_by: userRef.nullable(),
+    created_at: time,
+    updated_at: time,
+    status_changed_at: time,
+  }),
+  stellar_ids: z.array(
+    z.object({
+      id: z.string(),
+      // an id that fails the strkey check has no type
+      type: z.enum(["account", "muxed_account", "contract"]).nullable(),
+      valid: z.boolean(),
+    }),
+  ),
+  members: z.array(
+    z.object({
+      github_id: z.number().int().positive(),
+      github_login: z.string().min(1),
+      role,
+      created_at: time,
+    }),
+  ),
+  sites: z.array(operatorSite),
+  ingest: z.object({ last_24h: counts, last_30d: counts }),
+  removal: z
+    .object({
+      requested_at: time,
+      requested_by: z.union([id, userRef]).nullable(),
+      keep_aggregates: z.boolean(),
+      completed_at: time.nullable(),
+      steps: z.record(z.string(), z.object({ done_at: time })),
+    })
+    .nullable(),
+  recent_audit: z.array(auditEntry),
+  allowed_actions: z.array(tenantAction),
+});
+export type OperatorTenantDetail = z.infer<typeof operatorTenantDetail>;
+
+// 5.7 and 5.13
+export const enrollmentMode = z.object({ mode: z.enum(["open", "approval"]) });
+export type EnrollmentMode = z.infer<typeof enrollmentMode>["mode"];
+export const keepAggregates = z.object({ keep: z.boolean() });
 
 // 2.2 error envelope
 export const errorEnvelope = z.object({

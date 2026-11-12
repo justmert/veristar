@@ -4,7 +4,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { createMemoryRouter, RouterProvider } from "react-router";
+import { createMemoryRouter, type RouteObject, RouterProvider } from "react-router";
 import { afterEach, vi } from "vitest";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -19,6 +19,20 @@ if (!("ResizeObserver" in globalThis)) {
   };
 }
 
+// jsdom has no showModal or close on <dialog>. every supported browser has
+// them; this fills the test dom with the open attribute and the close event
+// the console relies on.
+if (typeof HTMLDialogElement !== "undefined" && !HTMLDialogElement.prototype.showModal) {
+  HTMLDialogElement.prototype.showModal = function showModal(this: HTMLDialogElement) {
+    this.setAttribute("open", "");
+  };
+  HTMLDialogElement.prototype.close = function close(this: HTMLDialogElement) {
+    if (!this.hasAttribute("open")) return;
+    this.removeAttribute("open");
+    this.dispatchEvent(new Event("close"));
+  };
+}
+
 const mounted: { root: Root; host: HTMLElement }[] = [];
 
 afterEach(() => {
@@ -30,6 +44,17 @@ afterEach(() => {
 });
 
 export async function render(ui: ReactNode, path = "/"): Promise<HTMLElement> {
+  return renderRoutes(
+    [
+      { path: "*", element: ui },
+      { path: "/projects/:tenantId/sites", element: <p>sites page</p> },
+    ],
+    path,
+  );
+}
+
+// for pages that read route params or an outlet context
+export async function renderRoutes(routes: RouteObject[], path: string): Promise<HTMLElement> {
   const host = document.createElement("div");
   document.body.append(host);
   const root = createRoot(host);
@@ -37,13 +62,7 @@ export async function render(ui: ReactNode, path = "/"): Promise<HTMLElement> {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  const router = createMemoryRouter(
-    [
-      { path: "*", element: ui },
-      { path: "/projects/:tenantId/sites", element: <p>sites page</p> },
-    ],
-    { initialEntries: [path] },
-  );
+  const router = createMemoryRouter(routes, { initialEntries: [path] });
   await act(async () => {
     root.render(
       <QueryClientProvider client={client}>

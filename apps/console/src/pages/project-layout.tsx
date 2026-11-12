@@ -7,6 +7,7 @@ import { ErrorPanel, FormMessage, Loading } from "@/components/error-panel";
 import { StatusPill } from "@/components/status";
 import { Button } from "@/components/ui/button";
 import { isNotFound } from "@/lib/errors";
+import { ResubmitForm } from "@/pages/resubmit";
 import { queryClient } from "@/query-client";
 import { NotFoundPage } from "./not-found";
 
@@ -28,7 +29,16 @@ export function ProjectLayout() {
   const tenant = useQuery(tenantQuery(tenantId));
 
   if (tenant.isPending || me.isPending) return <Loading label="Loading the project" />;
-  if (isNotFound(tenant.error)) return <NotFoundPage />;
+  if (isNotFound(tenant.error)) {
+    // a removed project answers 404 everywhere (contract 1.3); /api/me still
+    // lists it with the operator's reason (5.10)
+    const removed = me.data?.removed_tenants.find((r) => r.id === tenantId);
+    return removed ? (
+      <RemovedNotice name={removed.name} reason={removed.status_reason} />
+    ) : (
+      <NotFoundPage />
+    );
+  }
   if (tenant.error) return <ErrorPanel error={tenant.error} onRetry={() => tenant.refetch()} />;
   if (me.error) return <ErrorPanel error={me.error} onRetry={() => me.refetch()} />;
 
@@ -74,7 +84,7 @@ export function ProjectLayout() {
       </nav>
 
       <div className="mt-6 space-y-3">
-        <StatusNotice tenant={t} />
+        <StatusNotice tenant={t} isOwner={ctx.isOwner} />
         {ctx.termsCurrent ? null : (
           <TermsNotice tenant={t} version={current} isOwner={ctx.isOwner} />
         )}
@@ -87,7 +97,13 @@ export function ProjectLayout() {
   );
 }
 
-function Notice({ tone, children }: { tone: "warn" | "bad" | "info"; children: React.ReactNode }) {
+export function Notice({
+  tone,
+  children,
+}: {
+  tone: "warn" | "bad" | "info";
+  children: React.ReactNode;
+}) {
   const cls =
     tone === "bad"
       ? "border-destructive/40 bg-destructive/5"
@@ -97,7 +113,24 @@ function Notice({ tone, children }: { tone: "warn" | "bad" | "info"; children: R
   return <div className={`rounded-lg border p-4 text-sm ${cls}`}>{children}</div>;
 }
 
-function StatusNotice({ tenant }: { tenant: Tenant }) {
+export function RemovedNotice({ name, reason }: { name: string; reason: string | null }) {
+  return (
+    <section className="max-w-2xl">
+      <h1 className="text-3xl font-semibold tracking-tight">{name}</h1>
+      <div className="mt-6">
+        <Notice tone="bad">
+          <p className="font-medium">This project was removed by an operator</p>
+          <p className="mt-1 text-muted-foreground">
+            Its sites no longer accept traffic and its dashboards were deleted.
+          </p>
+          {reason ? <p className="mt-1 text-muted-foreground">Reason given: {reason}</p> : null}
+        </Notice>
+      </div>
+    </section>
+  );
+}
+
+export function StatusNotice({ tenant, isOwner }: { tenant: Tenant; isOwner: boolean }) {
   const reason = tenant.status_reason ? (
     <p className="mt-1 text-muted-foreground">Reason given: {tenant.status_reason}</p>
   ) : null;
@@ -117,13 +150,22 @@ function StatusNotice({ tenant }: { tenant: Tenant }) {
         <Notice tone="bad">
           <p className="font-medium">Enrollment was not approved</p>
           {reason}
+          {isOwner ? (
+            <ResubmitForm tenant={tenant} />
+          ) : (
+            <p className="mt-1 text-muted-foreground">
+              An owner of this project can change the answers and submit them again.
+            </p>
+          )}
         </Notice>
       );
     case "suspended":
       return (
         <Notice tone="bad">
           <p className="font-medium">This project is suspended</p>
-          <p className="mt-1 text-muted-foreground">Its sites do not accept traffic.</p>
+          <p className="mt-1 text-muted-foreground">
+            New events from its sites are refused. Its dashboards stay readable.
+          </p>
           {reason}
         </Notice>
       );

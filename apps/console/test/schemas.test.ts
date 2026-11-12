@@ -1,13 +1,22 @@
 import { describe, expect, it } from "vitest";
 import {
   addMemberResult,
+  auditPage,
+  enrollmentMode,
   errorEnvelope,
   ingest,
+  keepAggregates,
   me,
   members,
+  operatorSite,
+  operatorTenantDetail,
+  operatorTenantPage,
+  operatorTenantSummary,
   site,
   sitePage,
+  siteVerification,
   snippet,
+  stellarToml,
   tenant,
   terms,
 } from "@/api/schemas";
@@ -26,6 +35,19 @@ describe("schemas accept the contract's response shapes", () => {
     ["snippet (4.3.6)", snippet, f.snippetBody],
     ["ingest (4.3.7)", ingest, f.ingestBody],
     ["error envelope (2.2)", errorEnvelope, f.validationErrorBody],
+    ["me with removed projects (5.10)", me, f.meWithRemovedBody],
+    ["site with this stage fields (5.10)", site, f.siteVerifiedBody],
+    ["stellar.toml found (5.12)", stellarToml, f.stellarTomlFound],
+    ["stellar.toml not found (5.12)", stellarToml, f.stellarTomlNotFound],
+    ["operator tenant summary (5.2)", operatorTenantSummary, f.operatorSummaryBody],
+    ["operator tenant list (5.3)", operatorTenantPage, f.operatorSitePageBody],
+    ["operator site (5.2)", operatorSite, f.operatorSiteBody],
+    ["operator tenant detail (5.4)", operatorTenantDetail, f.operatorDetailBody],
+    ["operator tenant detail, removed (5.4)", operatorTenantDetail, f.removedDetailBody],
+    ["audit list (5.9)", auditPage, f.auditPageBody],
+    ["enrollment mode (5.7)", enrollmentMode, { mode: "approval" }],
+    ["removal keep aggregates (5.13)", keepAggregates, { keep: false }],
+    ["site verification (5.8)", siteVerification, f.verificationBody],
   ])("%s", (_name, schema, body) => {
     const r = schema.safeParse(body);
     expect(r.success, JSON.stringify(r.error?.issues)).toBe(true);
@@ -39,8 +61,19 @@ describe("schemas accept the contract's response shapes", () => {
   });
 
   it("accepts fields a later phase adds", () => {
-    const s = site.parse({ ...f.siteBody, last_verify_at: null, stellar_toml: null });
+    const s = site.parse({ ...f.siteBody, added_in_phase_9: 1 });
     expect(s.id).toBe(f.SITE_ID);
+  });
+
+  it("refuses a this stage response with a missing or unknown value", () => {
+    const { in_review: _, ...noReview } = f.siteBody;
+    expect(site.safeParse(noReview).success).toBe(false);
+    expect(enrollmentMode.safeParse({ mode: "closed" }).success).toBe(false);
+    expect(
+      operatorTenantDetail.safeParse({ ...f.operatorDetailBody, allowed_actions: ["delete"] })
+        .success,
+    ).toBe(false);
+    expect(me.safeParse({ ...f.meBody, removed_tenants: undefined }).success).toBe(false);
   });
 
   it("parses the npm object once the tracker is published", () => {

@@ -1,19 +1,32 @@
-// one function per control plane route the console uses (contract section 4)
+// one function per control plane route the console uses (contract sections 4
+// and 5)
 
 import { request, requestNoContent } from "./client";
 import {
   addMemberResult,
+  auditPage,
+  type EnrollmentMode,
+  enrollmentMode,
   ingest,
+  keepAggregates,
   me,
   member,
   members,
+  operatorSite,
+  operatorTenantDetail,
+  operatorTenantPage,
+  operatorTenantSummary,
   type Role,
   type Site,
   site,
   sitePage,
+  siteVerification,
   snippet,
+  type TenantAction,
+  type TenantStatus,
   tenant,
   terms,
+  type VerifyMethod,
 } from "./schemas";
 
 const enc = encodeURIComponent;
@@ -34,6 +47,69 @@ export type EnrollmentInput = {
 export type SiteInput = { name: string; domain: string; origins: string[] };
 export type SitePatch = { name?: string; origins?: string[] };
 
+// 5.7 resubmission of a rejected enrollment
+export type ResubmitInput = {
+  name?: string;
+  description?: string;
+  enrollment: EnrollmentInput["enrollment"];
+};
+
+// 5.3 query of the operator tenant list
+export type TenantListQuery = {
+  status: TenantStatus[];
+  review: boolean;
+  q: string;
+  sort: "created_at" | "status_changed_at" | "name";
+  order: "asc" | "desc";
+};
+
+// 5.9 audit filters; empty strings are left out of the query
+export type AuditQuery = {
+  tenant_id: string;
+  target: string;
+  action: string;
+  actor: string;
+  from: string;
+  to: string;
+};
+
+function query(params: [string, string][]): string {
+  const kept = params.filter(([, v]) => v !== "");
+  return kept.length ? `?${kept.map(([k, v]) => `${k}=${enc(v)}`).join("&")}` : "";
+}
+
+export function tenantListPath(q: TenantListQuery, cursor: string | null): string {
+  return `/operator/tenants${query([
+    ["status", q.status.join(",")],
+    ["review", q.review ? "true" : ""],
+    ["q", q.q.trim()],
+    ["sort", q.sort],
+    ["order", q.order],
+    ["limit", "50"],
+    ["cursor", cursor ?? ""],
+  ])}`;
+}
+
+export function auditPath(q: AuditQuery, cursor: string | null): string {
+  return `/operator/audit${query([
+    ["tenant_id", q.tenant_id.trim()],
+    ["target", q.target.trim()],
+    ["action", q.action.trim()],
+    ["actor", q.actor.trim()],
+    ["from", q.from],
+    ["to", q.to],
+    ["limit", "50"],
+    ["cursor", cursor ?? ""],
+  ])}`;
+}
+
+// a reason is sent only when one was written: approve and resume take an
+// optional note, and an empty string would fail the 1 character minimum
+function reasonBody(reason: string): { reason?: string } {
+  const r = reason.trim();
+  return r ? { reason: r } : {};
+}
+
 export const api = {
   me: (signal?: AbortSignal) => request("GET", "/me", me, undefined, signal),
   terms: (signal?: AbortSignal) => request("GET", "/terms", terms, undefined, signal),
@@ -44,6 +120,8 @@ export const api = {
   createTenant: (body: EnrollmentInput) => request("POST", "/tenants", tenant, body),
   acceptTerms: (tenantId: string, version: string) =>
     request("POST", `/tenants/${enc(tenantId)}/terms`, tenant, { version }),
+  resubmit: (tenantId: string, body: ResubmitInput) =>
+    request("PUT", `/tenants/${enc(tenantId)}/enrollment`, tenant, body),
 
   members: (tenantId: string, signal?: AbortSignal) =>
     request("GET", `/tenants/${enc(tenantId)}/members`, members, undefined, signal),
@@ -98,6 +176,43 @@ export const api = {
   ) => {
     const q = range ? `?from=${enc(range.from)}&to=${enc(range.to)}&bucket=${range.bucket}` : "";
     return request("GET", `/sites/${enc(siteId)}/ingest${q}`, ingest, undefined, signal);
+  },
+
+  siteVerification: (siteId: string, signal?: AbortSignal) =>
+    request("GET", `/sites/${enc(siteId)}/verification`, siteVerification, undefined, signal),
+  verifySite: (siteId: string, method: VerifyMethod | null) =>
+    request("POST", `/sites/${enc(siteId)}/verify`, siteVerification, method ? { method } : {}),
+
+  operator: {
+    tenants: (q: TenantListQuery, cursor: string | null, signal?: AbortSignal) =>
+      request("GET", tenantListPath(q, cursor), operatorTenantPage, undefined, signal),
+    tenant: (tenantId: string, signal?: AbortSignal) =>
+      request("GET", `/operator/tenants/${enc(tenantId)}`, operatorTenantDetail, undefined, signal),
+    tenantAction: (tenantId: string, action: TenantAction, reason: string) =>
+      request(
+        "POST",
+        `/operator/tenants/${enc(tenantId)}/${action}`,
+        operatorTenantSummary,
+        reasonBody(reason),
+      ),
+    siteAction: (siteId: string, action: "approve" | "reject", reason: string) =>
+      request("POST", `/operator/sites/${enc(siteId)}/${action}`, operatorSite, reasonBody(reason)),
+    enrollmentMode: (signal?: AbortSignal) =>
+      request("GET", "/operator/settings/enrollment-mode", enrollmentMode, undefined, signal),
+    setEnrollmentMode: (mode: EnrollmentMode) =>
+      request("PUT", "/operator/settings/enrollment-mode", enrollmentMode, { mode }),
+    keepAggregates: (signal?: AbortSignal) =>
+      request(
+        "GET",
+        "/operator/settings/removal-keep-aggregates",
+        keepAggregates,
+        undefined,
+        signal,
+      ),
+    setKeepAggregates: (keep: boolean) =>
+      request("PUT", "/operator/settings/removal-keep-aggregates", keepAggregates, { keep }),
+    audit: (q: AuditQuery, cursor: string | null, signal?: AbortSignal) =>
+      request("GET", auditPath(q, cursor), auditPage, undefined, signal),
   },
 };
 

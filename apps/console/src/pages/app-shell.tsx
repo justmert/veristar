@@ -34,6 +34,11 @@ export function AppShell() {
             <span>Stellar Analytics</span>
           </Link>
           <div className="ml-auto flex items-center gap-2 text-sm">
+            {me.data?.user.is_operator ? (
+              <Button asChild variant="ghost" size="sm">
+                <Link to="/operator">Operator</Link>
+              </Button>
+            ) : null}
             {me.data ? (
               <span className="hidden text-muted-foreground sm:inline">
                 Signed in as{" "}

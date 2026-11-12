@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Code2, Pencil, Plus, Trash2 } from "lucide-react";
+import { Code2, Pencil, Plus, ShieldCheck, Trash2 } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { Link, useLocation } from "react-router";
 import { ApiError } from "@/api/client";
@@ -8,6 +8,7 @@ import { keys, sitesQuery } from "@/api/queries";
 import type { Site } from "@/api/schemas";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { ErrorPanel, FormMessage, Loading } from "@/components/error-panel";
+import { StellarTomlSummary, VerificationPill } from "@/components/evidence";
 import { TextAreaField, TextField } from "@/components/form-field";
 import { StatusPill } from "@/components/status";
 import { Button } from "@/components/ui/button";
@@ -74,6 +75,9 @@ export function sitePatch(site: Site, values: SiteValues): SitePatch {
 
 export function SitesPage() {
   const { tenant, isOwner, termsCurrent } = useProject();
+  // a suspended project's sites cannot be created or changed (contract 5.11);
+  // deleting stays possible
+  const canChange = termsCurrent && tenant.status !== "suspended";
   const sites = useQuery(sitesQuery(tenant.id));
   const location = useLocation();
   const justEnrolled = (location.state as { enrolled?: boolean } | null)?.enrolled === true;
@@ -94,7 +98,7 @@ export function SitesPage() {
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-xl font-semibold tracking-tight">Sites</h2>
-        {!showForm && termsCurrent ? (
+        {!showForm && canChange ? (
           <Button onClick={() => setAdding(true)}>
             <Plus aria-hidden />
             Add a site
@@ -102,7 +106,7 @@ export function SitesPage() {
         ) : null}
       </div>
 
-      {showForm && termsCurrent ? (
+      {showForm && canChange ? (
         <AddSiteForm
           tenantId={tenant.id}
           onDone={() => setAdding(false)}
@@ -114,7 +118,7 @@ export function SitesPage() {
         <ul className="divide-y overflow-hidden rounded-xl border bg-card">
           {live.map((s) => (
             <li key={s.id}>
-              <SiteRow site={s} canEdit={termsCurrent} canDelete={isOwner && termsCurrent} />
+              <SiteRow site={s} canEdit={canChange} canDelete={isOwner && termsCurrent} />
             </li>
           ))}
         </ul>
@@ -269,6 +273,20 @@ function SiteRow({
             <StatusPill status={site.status} />
           </div>
           <p className="text-sm text-muted-foreground">{site.domain}</p>
+          {site.in_review ? (
+            <p className="mt-1 text-sm text-warn">
+              In review: this domain belonged to a removed project, so an operator checks it before
+              it receives traffic.
+            </p>
+          ) : null}
+          {site.status_reason ? (
+            <p className="mt-1 text-sm text-muted-foreground">
+              Reason given by an operator: {site.status_reason}
+            </p>
+          ) : null}
+          <div className="mt-2">
+            <VerificationPill verification={site.verification} />
+          </div>
           {editing ? null : (
             <ul className="mt-2 flex flex-wrap gap-1.5" aria-label="Allowed origins">
               {site.origins.map((o) => (
@@ -286,6 +304,12 @@ function SiteRow({
               Snippet
             </Link>
           </Button>
+          <Button asChild variant="outline" size="sm">
+            <Link to={`/projects/${site.tenant_id}/sites/${site.id}/verify`}>
+              <ShieldCheck aria-hidden />
+              Verify domain
+            </Link>
+          </Button>
           {canEdit && !editing ? (
             <Button variant="ghost" size="sm" onClick={() => setEditing(true)}>
               <Pencil aria-hidden />
@@ -296,6 +320,13 @@ function SiteRow({
         </div>
       </div>
       {editing ? <EditSiteForm site={site} onDone={() => setEditing(false)} /> : null}
+      <div className="mt-4 border-t pt-3">
+        <StellarTomlSummary
+          toml={site.stellar_toml}
+          checkedAt={site.stellar_toml_checked_at}
+          domain={site.domain}
+        />
+      </div>
     </div>
   );
 }

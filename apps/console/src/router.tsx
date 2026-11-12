@@ -5,6 +5,12 @@ import { AppShell } from "@/pages/app-shell";
 import { EnrollPage } from "@/pages/enroll";
 import { MembersPage } from "@/pages/members";
 import { NotFoundPage, RouteErrorPage } from "@/pages/not-found";
+import { AuditPage } from "@/pages/operator/audit";
+import { OperatorLayout } from "@/pages/operator/layout";
+import { ReviewQueuePage } from "@/pages/operator/review";
+import { SettingsPage } from "@/pages/operator/settings";
+import { TenantDetailPage } from "@/pages/operator/tenant-detail";
+import { TenantsPage } from "@/pages/operator/tenants";
 import { OverviewPage } from "@/pages/overview";
 import { ProjectLayout } from "@/pages/project-layout";
 import { ProjectsPage } from "@/pages/projects";
@@ -13,6 +19,7 @@ import { SitesPage } from "@/pages/sites";
 import { SnippetPage } from "@/pages/snippet";
 import { SsoErrorPage } from "@/pages/sso-error";
 import { TermsPage } from "@/pages/terms";
+import { VerifyPage } from "@/pages/verify";
 import { queryClient } from "@/query-client";
 
 // every signed-in page needs /api/me first; without a session the browser
@@ -55,7 +62,19 @@ export const router = createBrowserRouter([
           { index: true, element: <OverviewPage /> },
           { path: "sites", element: <SitesPage /> },
           { path: "sites/:siteId/snippet", element: <SnippetPage /> },
+          { path: "sites/:siteId/verify", element: <VerifyPage /> },
           { path: "members", element: <MembersPage /> },
+        ],
+      },
+      {
+        path: "operator",
+        element: <OperatorLayout />,
+        children: [
+          { index: true, element: <ReviewQueuePage /> },
+          { path: "tenants", element: <TenantsPage /> },
+          { path: "tenants/:tenantId", element: <TenantDetailPage /> },
+          { path: "audit", element: <AuditPage /> },
+          { path: "settings", element: <SettingsPage /> },
         ],
       },
       { path: "*", element: <NotFoundPage /> },

@@ -17,6 +17,7 @@ export function ConfirmDialog({
   pending,
   error,
   onConfirm,
+  tone = "destructive",
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -28,6 +29,8 @@ export function ConfirmDialog({
   pending: boolean;
   error: unknown;
   onConfirm: () => void;
+  // a change that is easy to undo (a setting) is not drawn as destructive
+  tone?: "destructive" | "primary";
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -62,7 +65,9 @@ export function ConfirmDialog({
           {cancelLabel}
         </Button>
         <Button
-          className="bg-destructive text-white hover:bg-destructive/90"
+          className={
+            tone === "destructive" ? "bg-destructive text-white hover:bg-destructive/90" : ""
+          }
           disabled={pending}
           onClick={onConfirm}
         >

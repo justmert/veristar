@@ -13,7 +13,8 @@
       "!resources",
       "!**/dist",
       "!**/coverage",
-      "!packages/tracker/releases"
+      "!packages/tracker/releases",
+      "!tests/fixtures/stellartoml"
     ]
   },
   "formatter": {

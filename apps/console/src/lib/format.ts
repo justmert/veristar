@@ -25,3 +25,15 @@ export function formatHourUtc(iso: string): string {
 export function formatBytes(n: number): string {
   return n < 1024 ? `${n} B` : `${(n / 1024).toFixed(1)} KiB`;
 }
+
+const dateTimeFmt = new Intl.DateTimeFormat("en", {
+  dateStyle: "medium",
+  timeStyle: "short",
+  hourCycle: "h23",
+  timeZone: "UTC",
+});
+
+// audit rows and status changes need the time, not only the day
+export function formatDateTimeUtc(iso: string): string {
+  return `${dateTimeFmt.format(new Date(iso))} UTC`;
+}

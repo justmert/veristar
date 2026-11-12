@@ -17,7 +17,8 @@ export type FieldCode =
   | "invalid_github_login"
   | "invalid_role"
   | "duplicate"
-  | "unknown_tracker_version";
+  | "unknown_tracker_version"
+  | "invalid_value";
 
 // text fields refuse control characters other than newline and tab
 // biome-ignore lint/suspicious/noControlCharactersInRegex: matching control characters is the point
@@ -36,6 +37,9 @@ export const tenantName = (v: string) => text(v.trim(), 1, 100);
 export const siteName = (v: string) => text(v.trim(), 1, 100);
 export const description = (v: string) => text(v, 0, 1000);
 export const stellarUsage = (v: string) => text(v.trim(), 1, 2000);
+// 5.2 operator reasons: 1 to 1,000 characters after trimming
+export const reason = (v: string, required: boolean) =>
+  v.trim() === "" && !required ? null : text(v.trim(), 1, 1000);
 
 const SLUG = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
 export function slug(v: string): FieldCode | null {
@@ -184,6 +188,8 @@ export function fieldMessage(code: string): string {
       return "Listed twice.";
     case "unknown_tracker_version":
       return "This tracker version does not exist.";
+    case "invalid_value":
+      return "Not one of the allowed values.";
     default:
       return `Rejected by the server (${code}).`;
   }
