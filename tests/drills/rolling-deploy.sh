@@ -12,7 +12,7 @@ ensure_state
 reg="127.0.0.1:$LC_REGISTRY_HOST_PORT/sa"
 for img in gateway collector caddy console controlplane replayer metricswriter jobs platformctl oauth-fixture postgres-ha; do
 	from="lc" to="lc2"
-	[ "$img" = postgres-ha ] && from="18.6-lc" to="18.6-lc2"
+	[ "$img" = postgres-ha ] && from="18.7-lc" to="18.7-lc2"
 	docker pull -q "$reg/$img:$from" >/dev/null
 	docker tag "$reg/$img:$from" "$reg/$img:$to"
 	docker push -q "$reg/$img:$to" >/dev/null

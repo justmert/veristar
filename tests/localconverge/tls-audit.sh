@@ -120,7 +120,7 @@ echo "refusal exit $refusal"
 echo "== pgbackrest authorization"
 pgb=0
 docker run --rm --name sa-lc-tlsprobe --cap-add NET_ADMIN --network "name=sa-lc-hel1,ip=10.99.3.250" \
-	-v "$out/secret:/s:ro" --user 0 --entrypoint sh "127.0.0.1:$LC_REGISTRY_HOST_PORT/sa/postgres-ha:18.6-$LC_IMAGE_TAG" -c "
+	-v "$out/secret:/s:ro" --user 0 --entrypoint sh "127.0.0.1:$LC_REGISTRY_HOST_PORT/sa/postgres-ha:18.7-$LC_IMAGE_TAG" -c "
 		ip route replace $LC_PRIVATE_SUBNET via 10.99.3.254
 		mkdir /tmp/t && cp /s/ca.crt /s/client.crt /s/client.key /tmp/t/ && chown -R postgres /tmp/t && chmod 600 /tmp/t/*
 		r='--stanza=sa --repo1-host=10.99.3.31 --repo1-host-type=tls --repo1-host-port=8432 --repo1-host-ca-file=/tmp/t/ca.crt --log-level-console=warn'

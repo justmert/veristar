@@ -38,6 +38,6 @@ build caddy -f deploy/images/caddy.Dockerfile
 build console -f deploy/images/console.Dockerfile --build-arg CADDY_IMAGE="$push/caddy:$tag"
 build oauth-fixture -f infra/local/fixture.Dockerfile
 # the version comes first in the tag, so the core role can compare it
-docker build -q -f deploy/images/postgres-ha.Dockerfile -t "$push/postgres-ha:18.6-$tag" deploy/images >/dev/null
-docker push -q "$push/postgres-ha:18.6-$tag" >/dev/null
+docker build -q -f deploy/images/postgres-ha.Dockerfile -t "$push/postgres-ha:18.7-$tag" deploy/images >/dev/null
+docker push -q "$push/postgres-ha:18.7-$tag" >/dev/null
 echo "pushed to $push with tag $tag"

@@ -1,25 +1,23 @@
 # postgresql under patroni with pgbackrest (the design, this stage).
-#   docker build -f deploy/images/postgres-ha.Dockerfile -t veristar/postgres-ha:18.6-4.1.5 deploy/images
+#   docker build -f deploy/images/postgres-ha.Dockerfile -t veristar/postgres-ha:18.7-4.1.5 deploy/images
 # the build context is unused.
 #
-# PG_BASE is the one place the postgresql version is chosen. it is 18.6
-# because 18.7, which fixes 52 cves including CVE-2026-120154 (insert ... on
-# conflict reading rows despite row-level security), had neither an image nor
-# a pgdg trixie package on 2026-11-12. the design requires 18.7 before any
-# non-dev environment, and the ansible core role refuses to deploy an image
-# whose version is below infra/ansible group_vars postgres_min_version
-# outside the local converge. switching is: new PG_BASE (tag and digest),
-# new PG_VERSION, rebuild, re-resolve.
+# PG_BASE is the one place the postgresql version is chosen. it is 18.7
+# (postgresql-18 18.7-1.pgdg13+2), which fixes 52 cves including
+# CVE-2026-120154 (insert ... on conflict reading rows despite row-level
+# security); the design switching is: new PG_BASE (tag and index
+# digest), new PG_VERSION, postgres_version in infra/ansible/vars/pins.yml,
+# rebuild.
 #
 # patroni and pgbackrest come from the pgdg trixie repository that the
 # official image already configures. versions are pinned exactly, and the
 # build fails if installing them moved postgresql itself.
 
-ARG PG_BASE=postgres:18.6-trixie@sha256:e3d24f6906d0760bf4da0dae872415391ededefad23fd471c47dc53b0ddf3c42
+ARG PG_BASE=postgres:18.7-trixie@sha256:9f4fd4aa918f52ae3d6f3b687f1de90d8f867cd4d520021545a9a50c120eae3b
 
 FROM ${PG_BASE}
 
-ARG PG_VERSION=18.6
+ARG PG_VERSION=18.7
 ARG PATRONI_VERSION=4.1.5-2.pgdg13+1
 ARG PGBACKREST_VERSION=2.60.0-1.pgdg13+1
 

@@ -43,8 +43,8 @@ runs:
         # ghcr names must be lower case; the operator may not be
         repo="ghcr.io/${REPO,,}/${NAME}"
         tag="$TAG"
-        # postgres-ha carries its postgresql version first, because the core
-        # role compares it with postgres_min_version (vars/pins.yml)
+        # postgres-ha carries its postgresql version first, matching
+        # postgres_version in infra/ansible/vars/pins.yml
         if [ "$NAME" = postgres-ha ]; then
           pg="$(sed -n 's/^ARG PG_VERSION=//p' deploy/images/postgres-ha.Dockerfile)"
           tag="${pg}-${TAG}"

@@ -186,7 +186,7 @@ func TestDeployVerification(t *testing.T) {
 	for _, n := range images {
 		tag := w.tag
 		if n == "postgres-ha" {
-			tag = "18.6-" + w.tag
+			tag = "18.7-" + w.tag
 		}
 		d := w.push(n, tag, n+"-release")
 		w.sign(w.key, n, d)

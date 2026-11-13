@@ -27,19 +27,6 @@
       REPLAYER_WORKERS umami processes (core_umami_processes), and
       core_api_minute_retention_days of at least 8
 
-# the design: 18.7 is required before any non-dev environment and was
-# not published on 2026-11-12. the local converge may run 18.6 and says so
-# in its inventory; staging and production stop here until it exists.
-- name: Refuse a postgresql below the required minimum outside the local converge
-  ansible.builtin.assert:
-    that:
-      - (postgres_version is version(postgres_min_version, '>=')) or (sa_environment == 'local' and postgres_allow_below_min | default(false))
-    fail_msg: >-
-      postgres_version {{ postgres_version }} is below postgres_min_version
-      {{ postgres_min_version }} (CVE-2026-120154 and 51 others). build
-      postgres-ha from postgres:{{ postgres_min_version }}-trixie once it is
-      published, then raise postgres_version in vars/pins.yml.
-
 - name: Name the core peers
   ansible.builtin.set_fact:
     core_nats_urls: >-

@@ -29,8 +29,7 @@ upstream_images:
   umami: ghcr.io/umami-software/umami:3.5.0@sha256:b64f40400d77bcadd39cf5c62a1e368c99524ca442024f96e1133355a19a5dbc
 
 # the platform's images, built from deploy/images. postgres-ha carries its
-# postgresql version in the tag, because the deploy compares it with
-# postgres_min_version below.
+# postgresql version in the tag, so a node's image names the server it runs.
 platform_images:
   gateway: "{{ sa_image_registry }}/gateway:{{ sa_image_tag }}"
   collector: "{{ sa_image_registry }}/collector:{{ sa_image_tag }}"
@@ -45,13 +44,10 @@ platform_images:
   prober: "{{ sa_image_registry }}/prober:{{ sa_image_tag }}"
   postgres_ha: "{{ sa_image_registry }}/postgres-ha:{{ postgres_version }}-{{ sa_image_tag }}"
 
-# postgresql. 18.6 is what exists on 2026-11-12; 18.7 fixes
-# CVE-2026-120154 and 51 other cves and is required before any non-dev
-# environment. the core role refuses to deploy a version
-# below postgres_min_version unless the inventory is the local converge,
-# which sets postgres_allow_below_min explicitly.
-postgres_version: "18.6"
-postgres_min_version: "18.7"
+# postgresql 18.7 (published 2026-11-12, image postgres:18.7-trixie, pgdg
+# 18.7-1.pgdg13+2). it fixes CVE-2026-120154 and 51 other cves; plan
+# section 5. must equal PG_VERSION in deploy/images/postgres-ha.Dockerfile.
+postgres_version: "18.7"
 patroni_version: 4.1.5
 pgbackrest_version: 2.60.0
 

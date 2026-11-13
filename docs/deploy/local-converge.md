@@ -137,8 +137,7 @@ domain `sa-local.test` (the reserved `.test` TLD). Local-only settings are in
   inventory opens; no other environment may set `core_oauth_fixture` (the core role
   refuses). Real sign-in is blocked on I2, operator ids on I3 (the local operator is
   fixture user 1001).
-- **PostgreSQL 18.6.** The local inventory sets `postgres_allow_below_min`; staging and
-  production are refused until 18.7 exists.
+- **PostgreSQL 18.7**, the same image as every other environment.
 - **Two core nodes since this stage** (section 6); this stage ran one.
 - **Scripted events, not browsers.** The web path check uses `tests/gateway/gwclient`,
   which solves the proof in Go. The browser matrices stay with the this stage to 5 suites,

@@ -17,10 +17,6 @@ sa_tls: internal
 # may not set; chronyd measures the offset (-x) and the check still applies
 base_chrony_control_clock: false
 
-# postgresql 18.7 does not exist yet; the local converge
-# runs 18.6 and says so here, staging and production are refused
-postgres_allow_below_min: true
-
 # no github oauth app an operator input and no operator ids an operator input: sign-in
 # goes to the test-only fixture, where a test signs in as user 1001
 core_oauth_fixture: true
