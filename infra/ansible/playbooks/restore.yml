@@ -75,6 +75,9 @@
       ansible.builtin.include_role:
         name: backup
         tasks_from: pg.yml
+        # the tasks below read backup_conf_dir and backup_stanza from the
+        # role's defaults, which include_role keeps private otherwise
+        public: true
       when: restore_source is not defined
 
     # decrypted on the controller with the operator's age identity, which
@@ -93,6 +96,7 @@
       ansible.builtin.include_role:
         name: backup
         tasks_from: pg.yml
+        public: true
       vars:
         backup_repo_environment: "{{ restore_source.environment }}"
         backup_repo_object_storage: "{{ restore_source.object_storage }}"
@@ -177,4 +181,4 @@
 
     - name: Report the restored server
       ansible.builtin.debug:
-        msg: "restored to {{ restore_target | default('the end of backup ' ~ restore_set) }} on {{ sa_private_ip }}:5432"
+        msg: "restored to {{ restore_target if restore_target is defined else 'the end of backup ' ~ restore_set }} on {{ sa_private_ip }}:5432"
