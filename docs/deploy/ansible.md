@@ -49,6 +49,17 @@ HAProxy, Umami) are pinned by digest in `infra/ansible/vars/pins.yml`.
 
 ## 3. Roles
 
+**Converged nodes (tier `node`).** Production runs three nodes that are each in the `edge` and the
+`core` group (operator decision of 2026-11-13, [../reference/availability.md](../reference/availability.md)).
+Both roles run on such a node with their own Compose projects; the edge project then has no
+Caddy, and the core project's Caddy (the console image) serves `in.`, `otlp.`, `app.` and `web.`
+from one config (`assemble.sh node`), joins the edge project's network to reach the gateway
+and the collector, and answers port 80 with the edge health at `/` and the core health at
+`/core`. Every node runs a Patroni member (three members), an etcd member and a NATS server, and
+the observability project on it carries both tiers' exporters and relay targets. Roles keep
+accepting single-tier `edge` and `core` nodes, which the local converge's default topology uses;
+`LC_TOPOLOGY=node` runs the production layout locally ([local-converge.md](local-converge.md)).
+
 - **base**: checks the inventory contract; unattended upgrades from Debian security only,
   no automatic reboot; sshd drop-in (key-only, `AllowUsers ops`, no root, no forwarding);
   host firewall (section 4); chrony with an explicit check that the node is synchronised

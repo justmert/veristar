@@ -63,6 +63,18 @@ environment, and tries every private endpoint from a host without a certificate.
 On 2026-11-13 the full six-node topology exhausted this machine's memory alongside other work
 (load above 900); the audit ran on `LC_TOPOLOGY=minimal` with `-e core_umami_processes=1`.
 
+`LC_TOPOLOGY=node` before `local-converge-up` builds the production layout: three converged
+nodes `sa-lc-node-1` to `-3`, one per location, each in the `edge` and the `core` group, plus
+the backup node. Run on 2026-11-13 with release `v0.1.0`'s code and
+`ANSIBLE_EXTRA="-e core_umami_processes=1"`: the first `make local-converge` ended with
+`failed=0` on every node (`ok=238 changed=51` on node 1, `ok=190 changed=44` on nodes 2 and 3,
+`changed=10` on the backup node); `patronictl list` showed node 1 `Leader`, node 2 `Sync
+Standby` and node 3 `Replica`, both `streaming` with lag 0; port 80 of every node answered 308
+at `/` and at `/core`. The second run ended with `failed=0` and `changed=2` per node, both in
+"Start the edge services": the one-shot `volume-owners` container runs at every `compose up`.
+Idle memory after the first run, `docker stats`: 1,012 MiB on node 1 and 941 MiB on node 2
+(21 containers each).
+
 `LC_TOPOLOGY=minimal` before `local-converge-up` leaves out the second core node (3 edge, 1 core,
 1 backup node), the smallest set the roles converge; `make rotate-local` uses it for the
 credential rotation run (the design).

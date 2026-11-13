@@ -64,11 +64,52 @@ The run stops before any node is touched when:
 - no manifest is given, or it names another release, another registry, or not every image in
   `platform_images`;
 - an upstream image in `vars/pins.yml` is not pinned by digest;
-- `cosign verify` fails for any digest with identity
-  `https://github.com/justmert/veristar/.github/workflows/release-images.yml@refs/tags/<release>`
-  and issuer `https://token.actions.githubusercontent.com` (`vars/signing.yml`). This covers an
-  unsigned digest and a signature from any other workflow, branch, tag or repository;
+- `cosign verify` fails for any digest in the signature mode of `vars/signing.yml`:
+  - `key` (production since 2026-11-13, while the repository is private): the committed public key
+    `infra/ansible/vars/release-cosign.pub`, with `--insecure-ignore-tlog`. This covers an unsigned
+    digest and a signature by any other key;
+  - `keyless` (once the repository is public): identity
+    `https://github.com/justmert/veristar/.github/workflows/release-images.yml@refs/tags/<release>`
+    and issuer `https://token.actions.githubusercontent.com`. This covers an unsigned digest and a
+    signature from any other workflow, branch, tag or repository;
 - the release tag in the registry now points to a digest other than the manifest's.
+
+### Key mode while the repository is private (operator decision of 2026-11-13)
+
+The repository stays private for now. Two parts of the keyless path need it public: GitHub
+artifact attestations (`actions/attest`) are not available for a private repository of a user
+account, and a keyless signature writes the image name and digest to the public Rekor log. So
+`release-images.yml` runs with `SIGNING_MODE=key` (repository variable, `key` when unset):
+
+| Step | Key mode | Keyless mode |
+|---|---|---|
+| Build, push to `ghcr.io/justmert/veristar/*` with `GITHUB_TOKEN` | yes | yes |
+| SBOM (syft) and Trivy gate | yes | yes |
+| Signature | `cosign sign --key env://COSIGN_PRIVATE_KEY --tlog-upload=false` (Actions secrets `COSIGN_PRIVATE_KEY`, `COSIGN_PASSWORD`) | Fulcio certificate for the workflow, logged in Rekor |
+| SBOM attestation | `cosign attest --key ... --tlog-upload=false --type spdxjson` | `actions/attest` |
+| Build provenance attestation | not produced | `actions/attest` |
+| Manifest check before publishing | `cosign verify --key infra/ansible/vars/release-cosign.pub --insecure-ignore-tlog` | identity and issuer as above |
+
+What key mode gives up, stated plainly: no transparency log, so a signature made with a stolen
+key would not be visible to anyone watching Rekor; and no build provenance. The private key
+lives only in the two Actions secrets and, as a recovery copy, in the production SOPS file
+(`cosign_private_key`, `cosign_password`); rotation is in
+[../runbooks/secret-rotation.md](../runbooks/secret-rotation.md).
+
+The packages on `ghcr.io` are private with the repository. Every node signs in with a classic
+token that has `read:packages` only (`ghcr_pull_token`, `sa_registry_login` in the inventory,
+`roles/secrets/tasks/registry.yml`, credential at `/root/.docker/config.json`, 0600), and the
+controller gives cosign the same token through a docker config made for the run only
+(`playbooks/tasks/registry-auth.yml`).
+
+**Switching to keyless when the repository is public:** set the repository variable
+`SIGNING_MODE=keyless` and `sa_signature_mode: keyless` in `infra/ansible/vars/signing.yml`, cut a
+new release, deploy it; then set `sa_registry_login: ""`, delete the pull token and the release
+key secrets.
+
+Release `v0.1.0` (2026-11-13) is the first release in key mode: all eleven images built, passed
+the gate, were signed and attested with the release key, and the manifest job verified each
+digest with the public key before attaching `release-images.json`.
 
 The next play sets `platform_images` on every node to the verified `repo:tag@digest` references.
 Host facts outrank play variables, so the roles (including the imported bootstrap play) pull exactly
@@ -83,10 +124,10 @@ production signing design. Result on 2026-11-13: 10 of 10 cases pass (signed rel
 digests; unsigned digest, foreign key, other build under the release tag, moved tag, other release,
 other registry, incomplete manifest, missing manifest, test mode outside tests: all refused).
 
-**Status.** Built and proven locally with the test-only key. Keyless signing and `cosign verify` of a
-real release have not run: GitHub Actions on the account ends every workflow in `startup_failure`.
-Artifact attestations for a private repository also need GitHub Enterprise Cloud, so attestations
-need the repository to be public (owner's explicit confirmation, the design). The probe
+**Status.** Key mode ran for real with release `v0.1.0` on 2026-11-13 (release workflow and
+the deploy's verification, section "Key mode"). Keyless signing has not run yet: it waits for
+the repository to be public, since artifact attestations for a private repository need GitHub
+Enterprise Cloud. The probe
 node's own images (the `prober` and the custom Caddy, from the observability role) are verified the
 same way: the manifest must name the `prober` (it is in `platform_images`), the pin play sets
 `platform_images` on the probe too, and the observability role names its `prober` and `caddy`

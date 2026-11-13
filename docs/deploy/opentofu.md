@@ -42,20 +42,20 @@ This section is the agreement with the Ansible side. Change it only together.
       "sa_admin_cidrs": ["<I13>", "..."],
       "sa_object_storage": {
         "endpoint": "https://<backup storage account>.blob.core.windows.net",
-        "region": "swedencentral",
+        "region": "denmarkeast",
         "backup_bucket": "pgbackrest"
       }
     },
     "children": {
       "edge": {
         "hosts": {
-          "staging-edge-1": { "...host vars, see below..." },
-          "staging-edge-2": {},
-          "staging-edge-3": {}
+          "staging-node-1": { "...host vars, see below..." },
+          "staging-node-2": {},
+          "staging-node-3": {}
         }
       },
       "core": {
-        "hosts": { "staging-core-1": {}, "staging-core-2": {} }
+        "hosts": { "staging-node-1": {}, "staging-node-2": {}, "staging-node-3": {} }
       },
       "probe": { "hosts": {} },
       "restore": { "hosts": {} }
@@ -64,12 +64,13 @@ This section is the agreement with the Ansible side. Change it only together.
 }
 ```
 
-- Groups are always `edge` (3 hosts), `core` (2 hosts), `probe` and `restore` (0 or 1 host,
+- Groups are always `edge` and `core`, which both list the same three converged nodes (tier
+  `node`, operator decision of 2026-11-13), `probe` and `restore` (0 or 1 host,
   present only while `restore_enabled`, section 4). The group keys are always present. The
   probe runs outside Azure as a container ([probe.md](probe.md)), so OpenTofu leaves `probe`
   empty; the key stays so playbooks that name the group keep working.
 - Inventory host names equal the VM names: `<env>-<tier>-<index>`, index from 1.
-  Index 1 of `core` is the node that runs PostgreSQL first.
+  Every node runs a Patroni member; index 1 is the one that initialises the cluster.
 - Values written as `<I4>` and `<I13>` above are the real inputs once supplied; the
   file never contains anything else in their place.
 - `sa_object_storage` keeps the shape it had for S3: `endpoint` is the storage account's blob
@@ -82,10 +83,10 @@ This section is the agreement with the Ansible side. Change it only together.
 |---|---|---|
 | `ansible_host` | string | public IPv4, used for SSH |
 | `ansible_user` | string | always `ops`, created by cloud-init with the admin SSH keys and passwordless sudo; root login is left to the `base` role to disable |
-| `sa_tier` | string | `edge`, `core` or `restore` |
+| `sa_tier` | string | `node` (edge and core roles on one node) or `restore`; the roles also accept `edge` and `core` for nodes that run one tier, as the local converge's default topology does |
 | `sa_index` | number | 1-based index inside the tier |
 | `sa_provider` | string | `azure` |
-| `sa_location` | string | region and availability zone, `swedencentral-1` to `swedencentral-3` |
+| `sa_location` | string | region and availability zone, `denmarkeast-1` to `denmarkeast-3` |
 | `sa_public_ipv4` | string | same as `ansible_host` |
 | `sa_public_ipv6` | null | the nodes are IPv4 only |
 | `sa_private_ip` | string | address in the virtual network |
@@ -110,9 +111,11 @@ emit peer lists, so there is one source of truth.
 - Cloud-init only creates `ops` and installs SSH keys. Changes to `custom_data`, the admin keys
   and the image version are ignored after creation, so key rotation through Ansible never
   replaces a VM.
-- The core and restore nodes carry the user-assigned managed identity `<env>-core`, which holds
-  Storage Blob Data Contributor on the backup container and nothing else. Edge nodes have no
-  identity.
+- Every node and the restore node carry the user-assigned managed identity `<env>-node`,
+  which holds Storage Blob Data Contributor on the backup container and nothing else.
+- Traffic Manager asks `/` for `in` and `otlp` (the node's ingestion health) and `/core` for
+  `app` and `web` (its dashboard health); both answer 308 when healthy
+  (`deploy/caddy/assemble.sh`, tier `node`).
 
 ### Secrets handed to OpenTofu
 
@@ -145,22 +148,34 @@ infra/tofu/
 tests/infra/               tofu test files and the sample tfvars
 ```
 
-| Env | Resource group | Virtual network | Edge | Core | Protection |
+| Env | Resource group | Region (`location`) | Virtual network | Nodes | Protection |
 |---|---|---|---|---|---|
-| staging | `veristar-staging` | 10.20.0.0/16 | zones 1, 2, 3 | zones 1, 2 | off (rebuilt in the drill) |
-| production | `veristar-production` | 10.10.0.0/16 | zones 1, 2, 3 | zones 1, 2 | `CanNotDelete` locks on VMs, public addresses and the backup account |
+| staging | `veristar-staging` | from `terraform.tfvars` | 10.20.0.0/16 | zones 1, 2, 3 | off (rebuilt in the drill) |
+| production | `veristar-production` | `denmarkeast` | 10.10.0.0/16 | zones 1, 2, 3 | `CanNotDelete` locks on VMs, public addresses and the backup account |
 
 Subnets: `10.x.1.0/24` zone 1, `10.x.2.0/24` zone 2, `10.x.3.0/24` zone 3. Node addresses in
-their zone's subnet are `.11` to `.13` for edge nodes 1 to 3, `.21`, `.22` for core nodes 1 and
-2 and `.41` for the restore node (staging: edge-1 `10.20.1.11`, edge-2 `10.20.2.12`, edge-3
-`10.20.3.13`, core-1 `10.20.1.21`, core-2 `10.20.2.22`), so a private address tells the tier and
-zone. Each subnet has the `Microsoft.Storage` service endpoint and no default outbound access
-(every node has its own public address).
+their zone's subnet are `.11` to `.13` for nodes 1 to 3 and `.41` for the restore node
+(production: node-1 `10.10.1.11`, node-2 `10.10.2.12`, node-3 `10.10.3.13`). Each subnet has the
+`Microsoft.Storage` service endpoint and no default outbound access (every node has its own
+public address).
 
 | Node | Size | OS disk | Image |
 |---|---|---|---|
-| edge (3) | `Standard_B2als_v2`, 2 vCPU, 4 GB | Standard SSD, 32 GiB | `Debian` `debian-13` `13-gen2`, version pinned by `server_image_version` |
-| core (2), restore (0 or 1) | `Standard_B2as_v2`, 2 vCPU, 8 GB | Standard SSD, 128 GiB | same |
+| node (3), restore (0 or 1) | `Standard_B2as_v2` (`node_vm_size`), 2 vCPU, 8 GB | Standard SSD, 128 GiB | `Debian` `debian-13` `13-gen2`, version pinned by `server_image_version` |
+
+**Why `Standard_B2as_v2`.** The compose files set no container memory limits, so the size rests
+on fixed allocations and measured use. Fixed: PostgreSQL `shared_buffers` 2 GB and
+`effective_cache_size` 4 GB (`roles/core/defaults/main.yml`), the NATS memory store capped at
+512 MiB (`edge_nats_max_memory_store`), Prometheus with 30 days of retention. Measured on the
+local converge with the three-node layout (2026-11-13, `docker stats` after the first
+converge, idle, one Umami process): 1,012 MiB on the Patroni leader's node and 941 MiB on a
+replica's node over 21 containers; the largest were Grafana 275 to 299 MiB, PostgreSQL 127 to
+190 MiB, Umami 109 to 149 MiB (about 115 MB per further process, this stage), Prometheus 74 to
+79 MiB. With `shared_buffers` filled, the NATS store at its cap and the second Umami process,
+a node needs about 4 GB before the page cache, which rules out the 4 GB sizes and leaves room
+for the cache in 8 GB. `Standard_B2as_v2` is the cheapest B-series size with 8 GB
+(`Standard_B4als_v2` has the same memory with 4 vCPUs at 0.138 USD an hour in Sweden Central,
+against 0.0778).
 
 ## 3. Research findings (pinned versions, read 2026-11-13)
 
@@ -196,7 +211,7 @@ by OpenTofu: it belongs to the registrar account.
 
 ### 3.4 Health-checked failover: Traffic Manager, compared with the alternatives
 
-The edge and core nodes each keep their own public address, as before; what was needed is DNS
+Every node keeps its own public address; what was needed is DNS
 that answers with the healthy ones. Three options were compared on 2026-11-13:
 
 | | Azure Traffic Manager (chosen) | Azure Load Balancer + DNS | Cloudflare Load Balancing |
@@ -207,10 +222,10 @@ that answers with the healthy ones. Three options were compared on 2026-11-13:
 | Answer | MultiValue: all healthy addresses in every answer, so a client retries another without a new lookup | one address | one or more addresses depending on steering |
 | Price (2026-11-13) | 0.54 USD per external endpoint a month, 2.00 more with fast probing, 0.54 per million queries | 18.25 USD a month (0.025 per hour) for the first five rules, 0.01 per hour for each further rule, plus data processed; edge and core need separate rule sets for TCP 80, TCP 443 and UDP 443 | shown in the dashboard only; no public price list to compare against |
 
-Traffic Manager meets the need at the lowest published price: about 17.40 USD a month for the
-ten endpoints, with 10 s probing on the two ingestion names and 30 s on the dashboard names. It
-keeps the shape the design was built on (three independent edge addresses, any of which serves
-a client) and Microsoft's service level agreement for Traffic Manager states 99.99 %. Cloudflare points each
+Traffic Manager meets the need at the lowest published price: about 18.48 USD a month for the
+twelve endpoints (four names over three nodes), with 10 s probing on the two ingestion names and
+30 s on the dashboard names. It keeps the shape the design was built on (three independent
+addresses, any of which serves a client) and Microsoft's service level agreement for Traffic Manager states 99.99 %. Cloudflare points each
 hostname at its profile with a DNS-only CNAME (`<domain>-<env>-<label>.trafficmanager.net`).
 
 Failover time per name (Traffic Manager monitoring docs): an endpoint leaves after three failed
@@ -262,7 +277,8 @@ Cloudflare 4 CNAMEs and 2 CAA records. Nothing was applied.
 - `tofu test` (tests/infra, mocked providers, `command = apply`) renders both roots from
   `tests/infra/sample.tfvars` and checks: the groups, host names, every host var, zones, the
   private address scheme, the group vars, the default VM sizes, the Traffic Manager endpoints
-  (three edge addresses for `in` and `otlp`, two core for `app` and `web`), MultiValue routing,
+  (the three node addresses for every name, `/` for `in` and `otlp`, `/core` for `app` and
+  `web`), MultiValue routing,
   the HTTP probe on port 80 accepting 308, 10 s probing for ingestion and 30 s for dashboards,
   one DNS-only CNAME per hostname to its profile, CAA (`issue letsencrypt.org`, `issuewild ;`),
   the restore node, and that `0.0.0.0/0` for SSH, a short passphrase and a floating image
@@ -326,8 +342,8 @@ make staging-plan                           # must show no unexpected changes
 
 ### Restore node
 
-`restore_enabled = true` adds `<env>-restore-1` (tier `restore`, sized like a core node, with the
-core identity, private address `.41` in `restore_zone`) to the VMs and to the inventory group
+`restore_enabled = true` adds `<env>-restore-1` (tier `restore`, sized like a node, with the
+node identity, private address `.41` in `restore_zone`) to the VMs and to the inventory group
 `restore`, which `playbooks/restore.yml` targets
 ([../runbooks/point-in-time-restore.md](../runbooks/point-in-time-restore.md),
 [../runbooks/disaster-recovery.md](../runbooks/disaster-recovery.md)). Set it back to `false`
@@ -405,7 +421,7 @@ Staging is shown; production is the same with `production` (and `CONFIRM=product
 6. **Check SSH** to one node (cloud-init made `ops` with the keys of `<an operator input>`):
 
    ```sh
-   ssh ops@<ansible_host of staging-edge-1> true && echo ok
+   ssh ops@<ansible_host of staging-node-1> true && echo ok
    ```
 
 7. **Check Traffic Manager** sees the nodes once Ansible has converged them (before that, port

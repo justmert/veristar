@@ -19,7 +19,7 @@ repository substitutes a made-up value for one.
 | I5 | Azure subscription, with an `az login` of a user who may create resources in it | `subscription_id`, `state_resource_group`, `state_storage_account`, `backup_storage_account`, `server_image_version` in `terraform.tfvars` (the VM sizes default to `Standard_B2als_v2` and `Standard_B2as_v2`) | every Azure step; backups use the core nodes' managed identity, so there is no storage key | supplied 2026-11-13: one subscription, signed in with `az login` on an operator workstation; vCPU quota checked (section "Azure subscription" below) |
 | I6 | Cloudflare API token limited to the zone of `<an operator input>`, permissions `Zone:Zone:Read` and `Zone:DNS:Edit` | `CLOUDFLARE_API_TOKEN` in `infra/secrets/<env>/tofu.enc.env` (OpenTofu's records); `cloudflare_api_token` in `secrets.enc.yaml` (from `SA_CLOUDFLARE_API_TOKEN`, Caddy DNS-01) | DNS records, Caddy DNS-01 certificates | supplied 2026-11-13: one token, active, scoped to `veristar.app` |
 | I7 | no longer an input: the probe runs as a container on a host the operator already runs ([probe.md](probe.md)) | | | not needed |
-| I8 | Discord webhook URL for alerts | `alertmanager_discord_webhook_url`, `gatus_discord_webhook_url` in `secrets.enc.yaml`, added with `sops edit` | Alertmanager, Gatus | missing |
+| I8 | Discord webhook URL for alerts | `alertmanager_discord_webhook_url`, `gatus_discord_webhook_url` in `secrets.enc.yaml`, added with `sops edit` | Alertmanager, Gatus | optional (operator decision of 2026-11-13): production runs without it, the console Alerts page is the alert channel; adding it later is one sops key ([../runbooks/alerts.md](../runbooks/alerts.md), "Adding a receiver") |
 | I9 | npm scope with trusted publishing for the repository | `release-tracker.yml` | publishing the tracker package; not needed to deploy | missing |
 | I10 | Legal review of the compliance statements | `docs/compliance/` | publishing the statements as final (production launch); not needed to deploy staging | pending |
 | I11 | Three SCF-awarded web projects and one API project | none in the repository | this stage adoption proof; not needed to deploy | missing |
@@ -27,6 +27,7 @@ repository substitutes a made-up value for one.
 | I13 | Admin source address ranges (CIDRs) allowed to reach SSH | `admin_cidrs` in `terraform.tfvars` (it refuses `0.0.0.0/0`); its IPv4 ranges also reach the backup storage account | network security group, host firewall, storage network rules | supplied 2026-11-13 for production: `203.0.113.10/32`, the operator's admin address |
 | I14 | age public keys of everyone who may decrypt an environment's secrets (at least two per environment) | `infra/secrets/recipients/<env>.txt` | every SOPS file, so everything | production supplied 2026-11-13: one owner identity (`infra/secrets/recipients/production.txt`); a second recipient is still to be added |
 | I15 | Admin SSH public keys for the `ops` user (Ed25519 or RSA; Azure accepts both) | `admin_ssh_public_keys` in `terraform.tfvars` | cloud-init on every server | supplied 2026-11-13 for production: the controller's key and an operator workstation key |
+| GHCR pull token | classic GitHub token of `justmert` with `read:packages` only, while the repository and its packages are private | `ghcr_pull_token` in `infra/secrets/production/secrets.enc.yaml` | every node and the controller (`sa_registry_login`) | supplied 2026-11-13; rotation and removal in [../runbooks/secret-rotation.md](../runbooks/secret-rotation.md) |
 
 Besides the inputs, the environment's Ansible variables that are not secret go in
 `infra/ansible/inventories/<env>/group_vars/all.yml` ([bootstrap.md](bootstrap.md) step 1):
@@ -41,46 +42,57 @@ Azure node shares (`sa_tls: cloudflare`, `sa_public_bind_ipv4`).
 
 RFP section 3.4 makes the proposer host the service for 12 months. This section states what that
 costs and who holds what. Prices were read on 2026-11-13 from the Azure retail prices API
-(`https://prices.azure.com/api/retail/prices`, region `swedencentral`, pay as you go, USD
-excluding VAT) and change: check them again before ordering.
+(`https://prices.azure.com/api/retail/prices`, pay as you go, USD excluding VAT) and change:
+check them again before ordering.
 
 ### Providers
 
 | Provider | Used for | Account input |
 |---|---|---|
-| Microsoft Azure, region Sweden Central (`swedencentral`, three availability zones) | 3 edge and 2 core VMs, the virtual network, network security groups, static public IPv4 addresses, Traffic Manager (health-checked DNS failover), Blob Storage (OpenTofu state and pgBackRest backups) | I5 |
+| Microsoft Azure, region Denmark East (`denmarkeast`, three availability zones) | 3 converged VMs, the virtual network, network security groups, static public IPv4 addresses, Traffic Manager (health-checked DNS failover), Blob Storage (pgBackRest backups) | I5 |
+| Microsoft Azure, region Sweden Central | the OpenTofu state storage account (`veristarprodstate`, created before the region decision) | I5 |
+| GitHub | the repository, the release workflow, the platform images on `ghcr.io` (private while the repository is) | I1 |
 | Cloudflare | registrar and DNS for `<an operator input>`, DNS only (no proxy) | I4, I6 |
 
 The probe runs on a host outside Azure that the operator already operates ([probe.md](probe.md));
 it adds no provider.
 
+**Region.** On 2026-11-13 the subscription's SKU list (`Microsoft.Compute/skus`) offered
+`Standard_B2as_v2` in all three zones only in Sweden Central and Denmark East among the EU
+regions checked (Sweden Central, Denmark East, North Europe, West Europe, France Central,
+Germany West Central, Poland Central, Italy North, Austria East, Belgium Central, Spain Central,
+Switzerland North, Norway East). In Sweden Central every zone answered
+`ZonalAllocationFailed`; in Denmark East a test VM allocated in each of zones 1, 2 and 3
+([opentofu.md](opentofu.md) section 3.8).
+
 ### Monthly cost estimate per environment
+
+The retail prices API and the pricing calculator publish no `Standard_B2as_v2` price for Denmark
+East on 2026-11-13. The VM row below uses the Sweden Central price (0.0778 per hour) as the
+reference; the measured price is the one Azure Cost Management reports once the VMs have run for
+a day. Disks, public addresses and Traffic Manager have published prices that are the same in
+Denmark East.
 
 | Item | Unit price (USD) | Quantity | Per month (USD) |
 |---|---|---|---|
-| `Standard_B2als_v2` edge VM (2 vCPU, 4 GB) | 0.0389 per hour | 3 x 730 h | 85.19 |
-| `Standard_B2as_v2` core VM (2 vCPU, 8 GB) | 0.0778 per hour | 2 x 730 h | 113.59 |
-| Standard SSD E4 (32 GiB, LRS), edge OS disk | 2.40 | 3 | 7.20 |
-| Standard SSD E10 (128 GiB, LRS), core OS disk | 9.60 | 2 | 19.20 |
-| Standard static public IPv4 | 0.005 per hour | 5 x 730 h | 18.25 |
-| Traffic Manager health checks, external endpoints | 0.54 per endpoint | 10 | 5.40 |
+| `Standard_B2as_v2` node VM (2 vCPU, 8 GB) | 0.0778 per hour (Sweden Central reference) | 3 x 730 h | 170.38 |
+| Standard SSD E10 (128 GiB, LRS), node OS disk | 9.60 | 3 | 28.80 |
+| Standard static public IPv4 | 0.005 per hour | 3 x 730 h | 10.95 |
+| Traffic Manager health checks, external endpoints | 0.54 per endpoint | 12 | 6.48 |
 | Traffic Manager 10 s fast probing (`in`, `otlp`) | 2.00 per endpoint | 6 | 12.00 |
 | Virtual network, network security groups, managed identity | no charge | | 0.00 |
+| GitHub packages of a private repository | within the account's included storage | | 0.00 |
 | Cloudflare DNS (zone on the free plan) | no charge | 1 | 0.00 |
-| **Fixed monthly total, pay as you go** | | | **260.83** |
+| **Fixed monthly total, pay as you go** | | | **228.61** |
 
-Usage-based items come on top and have not been measured on a real environment yet:
-Traffic Manager DNS queries (0.54 per million), Blob Storage ZRS hot (0.023 per GB-month, writes
-0.0625 per 10,000), Standard SSD transactions (0.002 per 10,000), internet egress (the first
-100 GB a month free, then 0.087 per GB), and inter-zone traffic, which the price list meters at
-0.01 per GB in each direction.
+Usage-based items come on top and have not been measured yet: Traffic Manager DNS queries (0.54
+per million), Blob Storage ZRS hot (0.023 per GB-month, writes 0.0625 per 10,000), Standard SSD
+transactions (0.002 per 10,000), internet egress (the first 100 GB a month free, then 0.087 per
+GB), and inter-zone traffic, which the price list meters at 0.01 per GB in each direction.
 
-With 1-year reserved instances for the five VMs (201.00 per year for `Standard_B2als_v2` and
-402.00 per year for `Standard_B2as_v2`, from the same API), the VMs cost 117.25 a month instead
-of 198.78 and the fixed total is 179.30. The 12-month service window matches the 1-year term. A
-staging environment that runs all month costs the same as production without the reservation;
-Azure bills VMs by the second, so staging destroyed between drills (`make staging-destroy`)
-costs only the time it ran, plus its public addresses while they exist.
+With 1-year reserved instances for the three VMs (402.00 per year each for `Standard_B2as_v2`
+in Sweden Central, from the same API), the VMs cost 100.50 a month instead of 170.38 and the
+fixed total is 158.73. The 12-month service window matches the 1-year term.
 
 ### Azure subscription
 
@@ -88,8 +100,8 @@ Checked on 2026-11-13 with read-only `az` commands against the operator's subscr
 
 | Check | Result |
 |---|---|
-| `az vm list-usage --location swedencentral` | Standard Basv2 Family vCPUs 0 of 65, Total Regional vCPUs 0 of 65. The design needs 10 (12 with the restore node). |
-| `az vm list-skus --location swedencentral` | `Standard_B2als_v2` and `Standard_B2as_v2` offered in zones 1, 2 and 3, no restrictions |
+| `az vm list-usage --location <region>` | Standard Basv2 Family vCPUs 0 of 65 in each EU region checked. The design needs 6 (8 with the restore node). |
+| `Microsoft.Compute/skus` per region (`az rest`) | `Standard_B2as_v2` unrestricted in zones 1, 2 and 3 in Sweden Central and Denmark East only (section "Providers") |
 | `az network list-usages --location swedencentral` | public IP addresses 0 of 100 |
 | `az provider list` | `Microsoft.Compute`, `Microsoft.Network`, `Microsoft.Storage`, `Microsoft.ManagedIdentity`, `Microsoft.Authorization` registered |
 | `az vm image list -l swedencentral -p Debian -f debian-13 -s 13-gen2 --all` | `-f` matches offers by prefix, so the list mixes `debian-13` and `debian-13-daily`. In offer `debian-13` the newest version on 2026-11-13 is `0.20261111.2659`; `0.20261104.2652` and `0.20261112.2660` exist only in `debian-13-daily`. Check a version with `az vm image show -l swedencentral --urn Debian:debian-13:13-gen2:<version>` |
@@ -98,7 +110,7 @@ OpenTofu registers no resource providers itself (`resource_provider_registration
 A new subscription registers the five above once:
 `az provider register --namespace Microsoft.Network` (and the others), then checks
 `az provider show -n Microsoft.Network --query registrationState`. If a quota is lower in
-another subscription, raise it under Quotas in the Azure portal (Compute, region Sweden Central,
+another subscription, raise it under Quotas in the Azure portal (Compute, region Denmark East,
 family "Standard Basv2 Family vCPUs").
 
 ### Account holder, billing and renewal
@@ -173,7 +185,7 @@ Put `age` and `age-keygen` from `~/.local/share/veristar/tools/age/` on `PATH` t
    ```sh
    az login
    az account set --subscription <an operator input>
-   az vm list-usage --location swedencentral -o table | grep -E 'Basv2|Total Regional vCPUs'
+   az vm list-usage --location denmarkeast -o table | grep -E 'Basv2|Total Regional vCPUs'
    ```
 
    Expected: both lines show a limit of at least 12.

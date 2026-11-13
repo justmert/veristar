@@ -36,7 +36,25 @@ a push channel is configured: with an operator input set it sends each group of 
 name and node to Discord, with a resolved message when the condition ends,
 and the probe's Gatus sends its own messages for the status page checks and
 the prober's results. Without I8 nobody is notified, so someone has to look
-at the page.
+at the page. Production runs without I8 (operator decision of 2026-11-13):
+Prometheus evaluates every rule, Alertmanager holds every alert and the
+page, Grafana and the status page show them.
+
+### Adding a receiver
+
+Put the Discord webhook into the environment's sops file and converge; no
+other change is needed:
+
+```sh
+sops --config infra/secrets/.sops.yaml edit infra/secrets/production/secrets.enc.yaml
+# add: alertmanager_discord_webhook_url: https://discord.com/api/webhooks/...
+#      gatus_discord_webhook_url: https://discord.com/api/webhooks/...
+make production-deploy SA_IMAGE_TAG=<release> SA_RELEASE_MANIFEST=<release-images.json>
+```
+
+The observability role then writes `alertmanager.yml` with the `discord`
+receiver (and Gatus gets its alerting block when the probe bundle is
+rendered again). Removing the key removes the receiver at the next converge.
 
 The page also watches the alerting itself:
 
