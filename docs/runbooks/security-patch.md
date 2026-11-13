@@ -119,5 +119,29 @@ docker run --rm -v stellar-analytics-edge_caddydata:/data -v stellar-analytics-e
 
 ## 7. Rehearsal record
 
-See section 8 of [supply-chain.md](../security/supply-chain.md) for scan results. Patch path
-rehearsals are recorded here with their elapsed times.
+See section 8 of [supply-chain.md](../security/supply-chain.md) for scan results.
+
+**2026-11-13, Umami 3.4.1 to 3.5.0, local.** No Umami release newer than 3.5.0 existed, so the
+rehearsal ran on a throwaway copy of the repository pinned to 3.4.1 (index digest
+`sha256:e69d1a79...022e8`, the last release before 3.5.0), with a dev stack whose database 3.4.1 had
+migrated.
+
+| Time (UTC) | Step | Result |
+|---|---|---|
+| 01:42:32 | detection: `advisories.py` reports `umami-release-3.5.0` | T0 |
+| 01:42:38 | `make umami-upgrade VERSION=3.5.0`: digest `sha256:b64f4040...a5dbc` resolved, pin moved in 4 files | |
+| 01:42:54 | dev stack on 3.5.0 (database migrated from 3.4.1), 16 s; bootstrap 1 s | ok |
+| 01:43:34 | umami-compat, 39 s | ok |
+| 01:45:48 | isolation gate, 134 s | ok |
+| 01:50:33 | console-e2e, 285 s | ok |
+| 03:01:48 | webpath run 1, 71 min | red: Chromium renderer crash on one page of the second visit; the other 17 subtests passed |
+| 04:00:11 | webpath run 2, 58 min | red: 5 of 80 custom-event browser runs missed, during host load averages of 300 to 1,100; the other 17 subtests passed |
+| 05:00:11 | webpath run 3, 58 min, host quiet | ok, all subtests |
+
+Detection to every gate green: **3 h 18 min**, inside the 8 hour target, including two webpath
+reruns. Webpath alone takes about an hour because one check waits out a 31 minute visit gap.
+
+Not rehearsed: the rollout to staging and production. Staging does not exist yet (inputs I4, I5,
+I6, I13, I14, I15), and keyless signing of the release cannot run while GitHub Actions fails at
+startup on the account. The deploy-time verification was proven separately with a test-only key
+(`make supplychain-it`).
