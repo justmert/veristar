@@ -7,6 +7,16 @@ name: stellar-analytics-core
 
 x-defaults: &defaults
   restart: unless-stopped
+  # container hardening (the design): the root filesystem is read-only, so
+  # services write only to their volumes and a small /tmp (patroni's pgpass,
+  # pgbackrest's locks, caddy's temporary truststore); no capabilities; no
+  # privilege gain through setuid binaries or file capabilities. every image
+  # here already runs as a non-root user (postgres, haproxy, nextjs, caddy's
+  # 10001, distroless nonroot)
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  tmpfs: ["/tmp:size=64m"]
   logging:
     driver: local
     options:
@@ -90,13 +100,20 @@ services:
     image: {{ upstream_images.haproxy }}
     volumes:
       - {{ core_conf_dir }}/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    # the stats page on loopback only, for an ssh tunnel; prometheus reads
+    # /metrics through the observability relay instead
+    ports:
+      - "127.0.0.1:{{ core_haproxy_stats_port }}:{{ core_haproxy_stats_port }}"
 {% if core_runs_postgres %}
     depends_on:
       postgres:
         condition: service_healthy
 {% endif %}
 
-  umami:
+  # umami process 1 also serves the ui, the read api for caddy and the admin
+  # api for the control plane and jobs; bootstrap starts it alone, so it runs
+  # umami's migrations before any other process exists
+  umami: &umami
     <<: *defaults
     image: {{ upstream_images.umami }}
     depends_on: [haproxy]
@@ -118,6 +135,19 @@ services:
       timeout: 3s
       retries: 60
       start_period: 120s
+{% for i in range(2, (core_umami_processes | int) + 1) %}
+
+  # umami process {{ i }} of {{ core_umami_processes }}: /api/send for the replayer only
+  # (core_umami_processes). same image, database and APP_SECRET as process
+  # 1, so session and visit ids do not depend on the process
+  # (docs/reference/umami-contract.md item 14). started after process 1 is
+  # healthy, so it never races it on a migration.
+  umami-{{ i }}:
+    <<: *umami
+    depends_on:
+      umami:
+        condition: service_healthy
+{% endfor %}
 
   controlplane:
     <<: *defaults
@@ -150,12 +180,18 @@ services:
     depends_on:
       umami:
         condition: service_healthy
+{% for i in range(2, (core_umami_processes | int) + 1) %}
+      umami-{{ i }}:
+        condition: service_healthy
+{% endfor %}
     env_file: [{{ secrets_env_dir }}/replayer.env]
     environment:
       <<: *nats
       REPLAYER_NODE_ID: "{{ inventory_hostname }}"
       REPLAYER_OPS_ADDR: 0.0.0.0:9090
-      UMAMI_URL: http://umami:3000
+      # every umami process; the replayer sends each visitor's events to one
+      # of them, picked by the visitor hash of its lanes
+      UMAMI_URL: "http://umami:3000{% for i in range(2, (core_umami_processes | int) + 1) %},http://umami-{{ i }}:3000{% endfor %}"
       TZ: UTC
 {% for k, v in core_replayer_env.items() %}
       {{ k }}: "{{ v }}"

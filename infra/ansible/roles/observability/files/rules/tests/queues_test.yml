@@ -140,3 +140,28 @@ tests:
             exp_annotations:
               summary: "nats on edge-3 is not healthy"
               runbook: docs/runbooks/alerts.md#natsserverdown
+  - name: one umami process idle
+    interval: 1m
+    input_series:
+      # process 1 stops answering at minute 10 while 0 and 2 go on; at night
+      # (under one event a second) the alert stays quiet
+      - series: 'replayer_umami_sends_total{job="replayer",node="core-1",process="0"}'
+        values: '0+300x40'
+      - series: 'replayer_umami_sends_total{job="replayer",node="core-1",process="1"}'
+        values: '0+300x10 3000x30'
+      - series: 'replayer_umami_sends_total{job="replayer",node="core-1",process="2"}'
+        values: '0+300x40'
+      - series: 'replayer_umami_sends_total{job="replayer",node="core-2",process="0"}'
+        values: '0+20x40'
+      - series: 'replayer_umami_sends_total{job="replayer",node="core-2",process="1"}'
+        values: '0x40'
+    alert_rule_test:
+      - eval_time: 22m
+        alertname: ReplayerUmamiProcessIdle
+      - eval_time: 26m
+        alertname: ReplayerUmamiProcessIdle
+        exp_alerts:
+          - exp_labels: {severity: ticket, node: core-1, process: "1"}
+            exp_annotations:
+              summary: "umami process 1 on core-1 stored no event for 15 minutes while the others did"
+              runbook: docs/runbooks/alerts.md#replayerumamiprocessidle

@@ -5,7 +5,8 @@
   "scripts": {
     "check": "tsc -p tsconfig.json",
     "test": "playwright test",
-    "fixture": "node fixture/main.ts"
+    "fixture": "node fixture/main.ts",
+    "redirect": "playwright test -c redirect/playwright.config.ts"
   },
   "devDependencies": {
     "@playwright/test": "catalog:",

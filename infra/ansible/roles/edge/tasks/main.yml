@@ -22,13 +22,14 @@
   ansible.builtin.file:
     path: "{{ item.path }}"
     state: directory
-    owner: root
-    group: root
+    owner: "{{ item.owner | default('root') }}"
+    group: "{{ item.owner | default('root') }}"
     mode: "{{ item.mode }}"
   loop:
     - { path: "{{ edge_dir }}", mode: "0755" }
     - { path: "{{ edge_conf_dir }}", mode: "0700" }
-    - { path: "{{ edge_conf_dir }}/nats", mode: "0700" }
+    # nats runs as edge_nats_uid and reads its config from here
+    - { path: "{{ edge_conf_dir }}/nats", mode: "0700", owner: "{{ edge_nats_uid }}" }
     - { path: "{{ edge_drain_dir }}", mode: "0755" }
 
 - name: Assemble the edge caddyfile on the controller
@@ -57,8 +58,8 @@
   ansible.builtin.template:
     src: nats.conf.j2
     dest: "{{ edge_conf_dir }}/nats/nats.conf"
-    owner: root
-    group: root
+    owner: "{{ edge_nats_uid }}"
+    group: "{{ edge_nats_uid }}"
     mode: "0600"
   no_log: true
   notify: Reload nats
@@ -77,43 +78,16 @@
   ansible.builtin.copy:
     content: "{{ edge_nats_auth.stdout }}\n"
     dest: "{{ edge_conf_dir }}/nats/auth.conf"
-    owner: root
-    group: root
+    owner: "{{ edge_nats_uid }}"
+    group: "{{ edge_nats_uid }}"
     mode: "0600"
   no_log: true
   notify: Reload nats
 
-# docker's restart policy does not retry a container whose start failed
-# while the daemon came up. after an unclean power-off in the this stage edge
-# loss drill the nats container stayed exited that way, so a oneshot unit
-# starts every existing container of the project once docker is up. start
-# never recreates anything, so it cannot apply a half-written change.
-- name: Install the start-at-boot unit of the compose project
-  ansible.builtin.copy:
-    content: |
-      # managed by ansible (infra/ansible/roles/edge)
-      [Unit]
-      Description=start the edge compose project's containers after boot
-      After=docker.service
-      Requires=docker.service
-
-      [Service]
-      Type=oneshot
-      ExecStart=/usr/bin/docker compose --project-directory {{ edge_dir }} start
-
-      [Install]
-      WantedBy=multi-user.target
-    dest: /etc/systemd/system/sa-edge-start.service
-    owner: root
-    group: root
-    mode: "0644"
-  register: edge_start_unit
-
-- name: Enable the start-at-boot unit
-  ansible.builtin.systemd_service:
-    name: sa-edge-start.service
-    enabled: true
-    daemon_reload: "{{ edge_start_unit is changed }}"
+# a oneshot unit that starts the project's containers once docker is up,
+# also run alone by the restart drill (tests/drills/start-unit.sh)
+- name: Install the start-at-boot unit
+  ansible.builtin.include_tasks: start_unit.yml
 
 - name: Write the compose project
   ansible.builtin.template:

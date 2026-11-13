@@ -19,3 +19,18 @@ listen primary
 {% for h in core_postgres_hosts %}
     server {{ h }} {{ hostvars[h].sa_private_ip }}:5432 check port 8008
 {% endfor %}
+
+# prometheus metrics at /metrics and the stats page at /stats. the port is
+# not published to the network: prometheus reads /metrics through the
+# observability relay on this project's network, and operators open /stats
+# on the node's loopback through an ssh tunnel (core_haproxy_stats_port).
+frontend stats
+    mode http
+    bind *:{{ core_haproxy_stats_port }}
+    no log
+    timeout client 15s
+    http-request use-service prometheus-exporter if { path /metrics }
+    stats enable
+    stats uri /stats
+    stats refresh 10s
+    stats show-legends

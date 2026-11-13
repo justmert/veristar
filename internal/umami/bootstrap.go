@@ -90,3 +90,55 @@ func verify(ctx context.Context, c *Client, password string) error {
 		return fmt.Errorf("umami bootstrap: checking that the seeded password is rejected: %w", err)
 	}
 }
+
+// RotateAdmin replaces the admin password previous with next and proves
+// previous is refused afterwards. it is safe to run repeatedly: when next
+// is already in place and previous refused, it changes nothing. it is the
+// credential rotation of the design and the re-keying of an environment
+// that imported another environment's umami database.
+func RotateAdmin(ctx context.Context, c *Client, previous, next string) (Outcome, error) {
+	if previous == next {
+		return "", errors.New("umami rotate admin: the new password equals the previous one")
+	}
+	if next == SeededPassword {
+		return "", errors.New("umami rotate admin: the new password must differ from the seeded password")
+	}
+	if err := c.Heartbeat(ctx); err != nil {
+		return "", err
+	}
+	outcome := AlreadySet
+	old, err := c.Login(ctx, SeededUsername, previous)
+	switch {
+	case err == nil:
+		if !old.User.IsAdmin {
+			return "", fmt.Errorf("umami rotate admin: user %q is not an admin", SeededUsername)
+		}
+		if _, err := c.ChangeOwnPassword(ctx, old.Token, previous, next); err != nil {
+			return "", err
+		}
+		outcome = Rotated
+	case errors.Is(err, ErrUnauthorized):
+		// already rotated by an earlier run, which next must prove below
+	default:
+		return "", err
+	}
+	s, err := c.Login(ctx, SeededUsername, next)
+	if errors.Is(err, ErrUnauthorized) {
+		return "", errors.New("umami rotate admin: the admin accepts neither the previous nor the new password")
+	}
+	if err != nil {
+		return "", err
+	}
+	if !s.User.IsAdmin {
+		return "", fmt.Errorf("umami rotate admin: user %q is not an admin", SeededUsername)
+	}
+	_, err = c.Login(ctx, SeededUsername, previous)
+	switch {
+	case errors.Is(err, ErrUnauthorized):
+		return outcome, nil
+	case err == nil:
+		return "", errors.New("umami rotate admin: the previous password is still accepted after the change")
+	default:
+		return "", fmt.Errorf("umami rotate admin: checking that the previous password is refused: %w", err)
+	}
+}

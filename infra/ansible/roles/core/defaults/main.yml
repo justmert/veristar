@@ -71,6 +71,18 @@ core_metricswriter_env:
   METRICSWRITER_ROUTE_CAP: "300"
   METRICSWRITER_SERVICE_CAP: "50"
 
+# umami processes per core node. one umami process is one node.js process
+# and drained about 280 events a second in the this stage load drill, below the
+# 500 a second of the 10x profile. the replayer spreads visitors over all of
+# them by its lane hash. measured on one host with each process capped at
+# one core (internal/replayer TestDrainRateByUmamiProcesses,
+# docs/reference/drills/2026-11-13.md): 1 process about 440 to 500 events/s,
+# 2 about 680 to 755, 3 about 840 to 930, 4 about 1,160, so 4 is 2.3 times
+# one. scaled from the drill's 280/s that gives about 650/s for 4 and 520/s
+# for 3, and 4 is the smallest count with a clear margin over 500/s. each
+# idle process holds about 115 MB. must stay at most REPLAYER_WORKERS.
+core_umami_processes: 4
+
 # local converge only: sign in through the test-only github oauth fixture
 # (docs/deploy/local-converge.md). refused in any other environment.
 core_oauth_fixture: false
@@ -78,6 +90,10 @@ core_oauth_fixture_image: ""
 core_oauth_fixture_port: 8099
 
 core_stage: services
+
+# haproxy's stats frontend: /metrics (prometheus exporter, scraped through
+# the observability relay) and /stats (loopback, ssh tunnel only)
+core_haproxy_stats_port: 8404
 
 # where deploy.yml puts the drain flag; caddy answers 503 on port 80 while it
 # exists, which takes the node out of dns (deploy/caddy/assemble.sh)

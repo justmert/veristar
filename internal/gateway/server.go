@@ -147,7 +147,9 @@ func writeStatus(w http.ResponseWriter, status int, body string) {
 	h.Set("Content-Type", "text/plain; charset=utf-8")
 	h.Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(status)
-	_, _ = io.WriteString(w, body+"\n")
+	// every caller passes a fixed reason code, never request data, and the
+	// response is text/plain with nosniff, so there is nothing to escape
+	_, _ = io.WriteString(w, body+"\n") //nolint:gosec // see above
 }
 
 // tracker serves an immutable release. revoked versions answer 410; there

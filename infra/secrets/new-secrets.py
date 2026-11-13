@@ -33,6 +33,8 @@ INPUTS = {
     "SA_BUNNY_API_KEY": "bunny_api_key",  # I6, caddy dns-01
     "SA_OBJECT_STORAGE_ACCESS_KEY": "object_storage_access_key",  # I5, backups
     "SA_OBJECT_STORAGE_SECRET_KEY": "object_storage_secret_key",  # I5, backups
+    "SA_ALERTMANAGER_DISCORD_WEBHOOK_URL": "alertmanager_discord_webhook_url",  # I8, alerts
+    "SA_GATUS_DISCORD_WEBHOOK_URL": "gatus_discord_webhook_url",  # I8, status page alerts
 }
 
 
@@ -82,6 +84,12 @@ def main() -> int:
         "nats_password_hashes": {u: bcrypt_hash(p) for u, p in nats.items()},
         "nats_route_password": route,
         "nats_route_password_hash": bcrypt_hash(route),
+        # monitoring (roles/observability, the design)
+        "grafana_admin_password": hexkey(24),
+        "postgres_exporter_password": hexkey(24),
+        # prometheus on the core nodes reads the probe node's metrics with it
+        "probe_metrics_token": hexkey(32),
+        "gatus_external_token": hexkey(32),
     }
     for var, key in INPUTS.items():
         v = os.environ.get(var, "")

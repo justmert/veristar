@@ -3,16 +3,16 @@ import { createRoot } from "react-dom/client";
 import { createBrowserRouter, Link, Outlet, useParams } from "react-router";
 import { RouterProvider } from "react-router/dom";
 
+// docs:start types
+// window.umami as sdk.js installs it; optional because a visitor may block it
 declare global {
   interface Window {
     umami?: {
-      track: (
-        name: string,
-        data?: Record<string, string | number | boolean | null>,
-      ) => Promise<void>;
+      track: (name: string, data?: Record<string, string | number | boolean>) => Promise<void>;
     };
   }
 }
+// docs:end types
 
 function Layout() {
   return (
@@ -35,6 +35,7 @@ function Layout() {
   );
 }
 
+// docs:start track
 function Home() {
   return (
     <>
@@ -59,6 +60,7 @@ function Home() {
     </>
   );
 }
+// docs:end track
 
 function Pricing() {
   return <h1>Pricing</h1>;

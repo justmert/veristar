@@ -30,6 +30,8 @@ put UMAMI_DB_PASSWORD "$(rand 24)"
 put UMAMI_APP_SECRET "$(rand 32)"
 put UMAMI_URL http://localhost:3000
 put UMAMI_ADMIN_PASSWORD "$(rand 24)"
+# the umami database name, for the migration tooling (scripts/migrate.sh)
+put UMAMI_DB_NAME umami
 
 # platform database. platformctl db migrate connects as the postgres
 # superuser of the dev stack; db roles sets the role passwords below.

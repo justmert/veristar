@@ -3,6 +3,8 @@ package caddy_test
 import (
 	"context"
 	"io"
+	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -107,4 +109,75 @@ func TestAssembleRefusesUnknownInput(t *testing.T) {
 	require.Error(t, err)
 	err = exec.Command("sh", filepath.Join(dir, "assemble.sh"), "edge", filepath.Join(dir, "app.Caddyfile")).Run()
 	require.Error(t, err)
+}
+
+// both assembled node configs serve caddy's metrics, with the http request
+// counters of the global metrics option, on port 2021 for the observability
+// relay, while the admin api stays on the container's loopback.
+func TestAssembledNodeServesMetrics(t *testing.T) {
+	health := map[string]string{"NODE_HEALTH_UPSTREAM": "health:9090", "NODE_HEALTH_PATH": "/edgez", "SA_TLS": "internal"}
+	for _, tc := range []struct {
+		name string
+		args []string
+		env  map[string]string
+	}{
+		{"edge", []string{"edge", "edge.Caddyfile"}, baseEnv()},
+		{"core", []string{"core", "app.Caddyfile", "web.Caddyfile"}, map[string]string{
+			"BASE_DOMAIN": "sa.test", "CONTROLPLANE_UPSTREAM": "controlplane:8085",
+			"CONSOLE_ROOT": "/srv/console", "UMAMI_UPSTREAM": "umami:3000",
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p := assemble(t, tc.args...)
+			env := map[string]string{}
+			for k, v := range tc.env {
+				env[k] = v
+			}
+			for k, v := range health {
+				env[k] = v
+			}
+			ctx := context.Background()
+			c, err := testcontainers.Run(ctx, umamictr.WebCaddyImage(t),
+				testcontainers.WithEnv(env),
+				testcontainers.WithFiles(testcontainers.ContainerFile{HostFilePath: p, ContainerFilePath: "/etc/caddy/Caddyfile", FileMode: 0o644}),
+				testcontainers.WithCmd("caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"),
+				testcontainers.WithExposedPorts("2021/tcp", "2019/tcp", "80/tcp"),
+				testcontainers.WithWaitStrategy(wait.ForHTTP("/metrics").WithPort("2021/tcp").WithStartupTimeout(time.Minute)),
+			)
+			testcontainers.CleanupContainer(t, c)
+			require.NoError(t, err)
+			host, err := c.Host(ctx)
+			require.NoError(t, err)
+			get := func(port, path string) (int, string, error) {
+				mp, err := c.MappedPort(ctx, port)
+				require.NoError(t, err)
+				req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+net.JoinHostPort(host, mp.Port())+path, nil)
+				require.NoError(t, err)
+				resp, err := (&http.Client{Timeout: 5 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error {
+					return http.ErrUseLastResponse
+				}}).Do(req)
+				if err != nil {
+					return 0, "", err
+				}
+				defer resp.Body.Close()
+				b, err := io.ReadAll(resp.Body)
+				require.NoError(t, err)
+				return resp.StatusCode, string(b), nil
+			}
+			// one request through the node's port-80 site, so a request
+			// counter exists (the health upstream does not resolve: 503)
+			code, _, err := get("80/tcp", "/")
+			require.NoError(t, err)
+			require.Equal(t, http.StatusServiceUnavailable, code)
+			code, body, err := get("2021/tcp", "/metrics")
+			require.NoError(t, err)
+			require.Equal(t, http.StatusOK, code)
+			require.Contains(t, body, "caddy_config_last_reload_successful 1")
+			require.Contains(t, body, "caddy_http_requests_total{")
+			// the admin api listens on loopback only, so the published port
+			// leads nowhere
+			_, _, err = get("2019/tcp", "/config/")
+			require.Error(t, err)
+		})
+	}
 }

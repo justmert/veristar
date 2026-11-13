@@ -398,3 +398,37 @@ umami-upgrade:
 .PHONY: supplychain-it
 supplychain-it:
 	$(GO) test -tags supplychain -count=1 -v ./tests/supplychain/
+
+# data migration between two environments (the design,
+# docs/handover/rebuild.md section 5). MIGRATE_ENV is an env file naming the
+# server and its admin login (scripts/migrate.sh), MIGRATE_DIR the dump
+# directory. METHOD=pgbackrest first restores the source's backup set
+# RESTORE_SET onto the restore node of inventory ENV (restore.yml, with
+# RESTORE_EXTRA for restore_source), then exports from that standalone
+# server; METHOD=dump exports straight from a stopped source, the path to a
+# different provider. migrate-import replaces both databases of a stopped,
+# bootstrapped target, checks the schema and its row-level security, and
+# rebuilds the nats registries from the cp tables (jobs run reconcile); the
+# env file then also needs what platformctl db migrate and jobs read.
+.PHONY: migrate-export migrate-import verify-migration
+METHOD ?= pgbackrest
+migrate-export:
+	@test -n "$(MIGRATE_ENV)" -a -n "$(MIGRATE_DIR)" || { echo "usage: make migrate-export METHOD=pgbackrest|dump MIGRATE_ENV=<env file> MIGRATE_DIR=<new dir> [ENV=<inventory> RESTORE_SET=<label>]" >&2; exit 2; }
+	@case "$(METHOD)" in \
+	pgbackrest) test -n "$(ENV)" -a -n "$(RESTORE_SET)" || { echo "METHOD=pgbackrest needs ENV (the new environment's inventory) and RESTORE_SET (the source backup label)" >&2; exit 2; } ;; \
+	dump) ;; \
+	*) echo "METHOD must be pgbackrest or dump" >&2; exit 2 ;; \
+	esac
+	$(if $(filter pgbackrest,$(METHOD)),cd infra/ansible && $(ANSIBLE_BIN)/ansible-playbook -i inventories/$(ENV)/ playbooks/restore.yml -e restore_set=$(RESTORE_SET) $(RESTORE_EXTRA))
+	scripts/migrate.sh export $(MIGRATE_ENV) $(MIGRATE_DIR)
+
+migrate-import: build
+	@test -n "$(MIGRATE_ENV)" -a -n "$(MIGRATE_DIR)" || { echo "usage: make migrate-import MIGRATE_ENV=<env file> MIGRATE_DIR=<dir from migrate-export>" >&2; exit 2; }
+	scripts/migrate.sh import $(MIGRATE_ENV) $(MIGRATE_DIR)
+	@set -a && . ./$(MIGRATE_ENV) && set +a && $(BIN_DIR)/platformctl db migrate && $(BIN_DIR)/jobs run reconcile
+
+# SOURCE_ENV and TARGET_ENV: env files as migrate-export reads, plus
+# UMAMI_URL and UMAMI_ADMIN_PASSWORD of each side
+verify-migration: build
+	@test -n "$(SOURCE_ENV)" -a -n "$(TARGET_ENV)" || { echo "usage: make verify-migration SOURCE_ENV=<env file> TARGET_ENV=<env file>" >&2; exit 2; }
+	$(BIN_DIR)/platformctl verify-migration --source $(SOURCE_ENV) --target $(TARGET_ENV)

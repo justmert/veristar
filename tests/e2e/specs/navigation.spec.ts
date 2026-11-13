@@ -38,7 +38,13 @@ test("static-html: each full page load is one pageview", async ({ page }) => {
   await expectContract(site);
 });
 
-for (const key of ["vite-react-spa", "react-router-ssr"] as const) {
+for (const key of [
+  "vite-react-spa",
+  "react-router-ssr",
+  "vue-spa",
+  "sveltekit",
+  "nextjs",
+] as const) {
   test(`${key}: route changes, back and forward are one pageview each`, async ({ page }) => {
     const site = siteByKey(key);
     await page.goto(`${site.origin}/`);
@@ -69,13 +75,14 @@ for (const key of ["vite-react-spa", "react-router-ssr"] as const) {
       "/pricing",
       "/docs/getting-started",
     ]);
-    // each client-side pageview names the previous page as its referrer
-    expect(pvs.slice(1).map((e) => e.r)).toEqual([
-      "/",
-      "/pricing",
-      "/docs/getting-started",
-      "/pricing",
-    ]);
+    // each client-side pageview names the previous page as its referrer.
+    // next.js rewrites the history entry with replaceState right after a
+    // back or forward navigation, before the tracker's 300 ms delay ends, so
+    // there the referrer of those two pageviews is not the previous page;
+    // docs/onboarding/web/nextjs.md states this limitation
+    const referrers = ["/", "/pricing", "/docs/getting-started", "/pricing"];
+    const checked = key === "nextjs" ? 2 : referrers.length;
+    expect(pvs.slice(1, 1 + checked).map((e) => e.r)).toEqual(referrers.slice(0, checked));
     // one challenge per page load, reused by every event of that load
     expect(new Set(pvs.map((e) => e.p.salt)).size).toBe(1);
     await expectContract(site);

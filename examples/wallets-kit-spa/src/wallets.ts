@@ -15,8 +15,10 @@ async function walletModules(): Promise<ModuleInterface[]> {
   return defaultModules();
 }
 
+// docs:start kit
 // the example dapp runs on testnet
 export async function initKit(): Promise<typeof StellarWalletsKit> {
   StellarWalletsKit.init({ modules: await walletModules(), network: Networks.TESTNET });
   return StellarWalletsKit;
 }
+// docs:end kit

@@ -1,0 +1,73 @@
+# TEST-ONLY compose project for the start-at-boot drill (start-unit.sh). it
+# stands in for the edge project of the infra stage with the same upstream
+# images (vars/pins.yml), the same restart policy and the same dependency
+# shape: nats and etcd with health checks, and a service that depends on
+# nats, as the gateway does. a single node runs one nats and one etcd member,
+# so no cluster peers are needed.
+---
+name: stellar-analytics-edge
+
+x-defaults: &defaults
+  restart: unless-stopped
+
+services:
+  nats:
+    <<: *defaults
+    image: nats:2.15.3-alpine@sha256:558394a23dd3c36f2d3a64b51865fd09908010e80a542cea5e75c2af543ed62a
+    command: ["-js", "-sd", "/data", "-m", "8222"]
+    volumes:
+      - natsdata:/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8222/healthz?js-enabled-only=true"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+
+  etcd:
+    <<: *defaults
+    image: quay.io/coreos/etcd:v3.6.16@sha256:a9c7cc12156f4b26ca41f0b57ba5b76c45037ff6c1e47ea3d68cb7908d48a965
+    command:
+      - etcd
+      - --name=edge-1
+      - --data-dir=/var/lib/etcd
+      - --listen-client-urls=http://0.0.0.0:2379
+      - --advertise-client-urls=http://127.0.0.1:2379
+    volumes:
+      - etcddata:/var/lib/etcd
+    healthcheck:
+      test: ["CMD", "etcdctl", "--endpoints=http://127.0.0.1:2379", "endpoint", "health"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      start_period: 10s
+
+  # healthy only 100 s after it starts, like umami with its 120 s start
+  # period on a core node; the nats image's shell keeps it running without
+  # another image
+  slow:
+    <<: *defaults
+    image: nats:2.15.3-alpine@sha256:558394a23dd3c36f2d3a64b51865fd09908010e80a542cea5e75c2af543ed62a
+    entrypoint: ["sh", "-c", "rm -f /tmp/ready; sleep 100; touch /tmp/ready; exec sleep infinity"]
+    healthcheck:
+      test: ["CMD", "test", "-f", "/tmp/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 60
+      start_period: 120s
+
+  # depends on nats like the gateway, and on the slow service's health like
+  # the replayer on umami's
+  client:
+    <<: *defaults
+    image: nats:2.15.3-alpine@sha256:558394a23dd3c36f2d3a64b51865fd09908010e80a542cea5e75c2af543ed62a
+    depends_on:
+      nats:
+        condition: service_started
+      slow:
+        condition: service_healthy
+    entrypoint: ["sh", "-c", "exec sleep infinity"]
+
+volumes:
+  natsdata:
+  etcddata:

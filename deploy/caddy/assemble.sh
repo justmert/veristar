@@ -26,6 +26,12 @@
 #     monitor counts any non-5xx as healthy, so a redirect keeps the node in
 #     dns and a 503 takes it out. automatic http->https redirects are off,
 #     because they would answer 308 for in. and otlp. even on a sick node.
+#   - the `metrics` global option and a plain-http listener on port 2021 that
+#     serves only caddy's prometheus metrics. the compose files publish no
+#     port for it: prometheus reads it through the observability relay on
+#     the node's compose network. the admin api stays on loopback inside the
+#     container (caddy's default), because on any other address it would
+#     accept unauthenticated config changes from every host that reaches it.
 #
 # every replaced line must be found exactly once, so a change to an input
 # that this script does not understand fails the deploy instead of shipping
@@ -111,6 +117,11 @@ http:// {
 		respond "unavailable" 503
 	}
 }
+
+# caddy's prometheus metrics for the observability relay (assemble.sh)
+http://:2021 {
+	metrics
+}
 EOF
 }
 
@@ -125,7 +136,7 @@ edge)
 	# in. and otlp. each carry one tls line
 	swap_tls "$1" EDGE_TLS 2 >"$tmp"
 	header
-	awk '{ print } $0 == "{" && !done { print "\tauto_https disable_redirects"; done = 1 }' "$tmp"
+	awk '{ print } $0 == "{" && !done { print "\tauto_https disable_redirects"; print "\tmetrics"; done = 1 }' "$tmp"
 	health
 	;;
 core)
@@ -149,6 +160,7 @@ core)
 
 {
 	auto_https disable_redirects
+	metrics
 	log default {
 		output stdout
 		format filter {

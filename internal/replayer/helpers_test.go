@@ -194,19 +194,30 @@ func freeAddr(t *testing.T) string {
 // connection, as a separate instance would have.
 func startReplayer(t *testing.T, natsURL string, umamiURL *url.URL, node string) *running {
 	t.Helper()
+	return startReplayerTo(t, natsURL, []*url.URL{umamiURL}, node, 16, 512)
+}
+
+// startReplayerTo is startReplayer with several umami processes and chosen
+// lane and in-flight counts.
+func startReplayerTo(t *testing.T, natsURL string, umamiURLs []*url.URL, node string, workers, maxInFlight int) *running {
+	t.Helper()
 	nc, err := nats.Connect(natsURL, nats.MaxReconnects(-1), nats.ReconnectWait(100*time.Millisecond))
 	if err != nil {
 		t.Fatal(err)
 	}
-	uc, err := umami.New(umamiURL, nil)
-	if err != nil {
-		t.Fatal(err)
+	ucs := make([]*umami.Client, 0, len(umamiURLs))
+	for _, u := range umamiURLs {
+		uc, err := umami.New(u, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ucs = append(ucs, uc)
 	}
 	reg := obs.NewRegistry()
 	log := obs.NewLogger(testWriter{t}, slog.LevelInfo).With("node", node)
 	ops := freeAddr(t)
-	set := replayer.Settings{NodeID: node, OpsAddr: ops, UmamiURL: umamiURL, Workers: 16, MaxInFlight: 512}
-	r, err := replayer.New(context.Background(), replayer.Config{Settings: set, NC: nc, Replicas: 1, Umami: uc, Log: log, Registry: reg})
+	set := replayer.Settings{NodeID: node, OpsAddr: ops, UmamiURLs: umamiURLs, Workers: workers, MaxInFlight: maxInFlight}
+	r, err := replayer.New(context.Background(), replayer.Config{Settings: set, NC: nc, Replicas: 1, Umami: ucs, Log: log, Registry: reg})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -404,12 +415,15 @@ func imageFromDevYML(t *testing.T, repo string) string {
 }
 
 // umamiStack is a dedicated umami with its own postgres, so a test can stop
-// either without disturbing the shared dev stack.
+// either without disturbing the shared dev stack. with several processes,
+// URL and um are the first one's, and URLs and ums list every process.
 type umamiStack struct {
 	URL   *url.URL
+	URLs  []*url.URL
 	Admin *umami.Admin
 	pg    *testcontainers.DockerContainer
 	um    *testcontainers.DockerContainer
+	ums   []*testcontainers.DockerContainer
 }
 
 func randomSecret(t *testing.T) string {
@@ -422,6 +436,15 @@ func randomSecret(t *testing.T) string {
 }
 
 func startUmamiStack(t *testing.T) *umamiStack {
+	t.Helper()
+	return startUmamiProcesses(t, 1, nil)
+}
+
+// startUmamiProcesses runs n umami processes against one postgres, all with
+// one APP_SECRET, as a core node runs them. cpus, when set, caps each umami
+// container's cpu (in cores), so a measurement does not take the shared
+// host.
+func startUmamiProcesses(t *testing.T, n int, cpus *float64) *umamiStack {
 	t.Helper()
 	ctx := context.Background()
 	nw, err := tcnetwork.New(ctx)
@@ -444,6 +467,34 @@ func startUmamiStack(t *testing.T) *umamiStack {
 	if err != nil {
 		t.Fatal(err)
 	}
+	appSecret := randomSecret(t)
+	st := &umamiStack{pg: pg}
+	for i := range n {
+		u, um := runUmami(t, nw, "postgresql://umami:"+dbPass+"@pg:5432/umami", appSecret, i, cpus)
+		st.URLs = append(st.URLs, u)
+		st.ums = append(st.ums, um)
+	}
+	st.URL, st.um = st.URLs[0], st.ums[0]
+	c, err := umami.New(st.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pw := randomSecret(t)
+	if _, err := umami.Bootstrap(testCtx(t, time.Minute), c, pw); err != nil {
+		t.Fatal(err)
+	}
+	st.Admin, err = umami.NewAdmin(c, umami.SeededUsername, pw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return st
+}
+
+// runUmami starts one umami process on the stack's network. processes are
+// started one after another: each runs umami's migration check at start,
+// and only the first finds work to do.
+func runUmami(t *testing.T, nw *testcontainers.DockerNetwork, dbURL, appSecret string, i int, cpus *float64) (*url.URL, *testcontainers.DockerContainer) {
+	t.Helper()
 	port := freeAddr(t)
 	_, hostPort, err := net.SplitHostPort(port)
 	if err != nil {
@@ -451,10 +502,10 @@ func startUmamiStack(t *testing.T) *umamiStack {
 	}
 	loopback := netip.MustParseAddr("127.0.0.1")
 	// environment of the design, as in dev.yml
-	um, err := testcontainers.Run(ctx, imageFromDevYML(t, "ghcr.io/umami-software/umami"),
+	um, err := testcontainers.Run(context.Background(), imageFromDevYML(t, "ghcr.io/umami-software/umami"),
 		testcontainers.WithEnv(map[string]string{
-			"DATABASE_URL":       "postgresql://umami:" + dbPass + "@pg:5432/umami",
-			"APP_SECRET":         randomSecret(t),
+			"DATABASE_URL":       dbURL,
+			"APP_SECRET":         appSecret,
 			"CLIENT_IP_HEADER":   "x-edge-client-ip",
 			"ENABLE_CLIENT_SALT": "1",
 			"SALT_ROTATION":      "daily",
@@ -464,13 +515,16 @@ func startUmamiStack(t *testing.T) *umamiStack {
 			"DISABLE_LOGIN":      "1",
 			"TZ":                 "UTC",
 		}),
-		tcnetwork.WithNetwork([]string{"umami"}, nw),
+		tcnetwork.WithNetwork([]string{"umami-" + strconv.Itoa(i)}, nw),
 		testcontainers.WithExposedPorts("3000/tcp"),
 		// a fixed host port, so the replayer's url stays valid across a stop
 		// and start of the container
 		testcontainers.WithHostConfigModifier(func(hc *container.HostConfig) {
 			hc.PortBindings = mobynet.PortMap{
 				mobynet.MustParsePort("3000/tcp"): {{HostIP: loopback, HostPort: hostPort}},
+			}
+			if cpus != nil {
+				hc.NanoCPUs = int64(*cpus * 1e9)
 			}
 		}),
 		testcontainers.WithWaitStrategy(wait.ForHTTP("/api/heartbeat").WithPort("3000/tcp").
@@ -484,19 +538,7 @@ func startUmamiStack(t *testing.T) *umamiStack {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c, err := umami.New(u, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	pw := randomSecret(t)
-	if _, err := umami.Bootstrap(testCtx(t, time.Minute), c, pw); err != nil {
-		t.Fatal(err)
-	}
-	a, err := umami.NewAdmin(c, umami.SeededUsername, pw)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return &umamiStack{URL: u, Admin: a, pg: pg, um: um}
+	return u, um
 }
 
 func stopContainer(t *testing.T, c *testcontainers.DockerContainer) {

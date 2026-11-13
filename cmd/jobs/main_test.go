@@ -301,3 +301,21 @@ func TestDaemonAndRun(t *testing.T) {
 }
 
 func quiet() *slog.Logger { return slog.New(slog.DiscardHandler) }
+
+func TestParseRunArgs(t *testing.T) {
+	o, err := parseRunArgs("umami-rotate", []string{"--force"})
+	require.NoError(t, err)
+	require.True(t, o.force)
+	o, err = parseRunArgs("umami-rotate", nil)
+	require.NoError(t, err)
+	require.False(t, o.force)
+	for _, bad := range [][]string{{"--force", "x"}, {"--from", "2026-11-01"}} {
+		_, err = parseRunArgs("umami-rotate", bad)
+		require.Error(t, err, bad)
+	}
+	_, err = parseRunArgs("reconcile", []string{"--force"})
+	require.Error(t, err)
+	o, err = parseRunArgs("aggregate-web", []string{"--from", "2026-11-01", "--to", "2026-11-02"})
+	require.NoError(t, err)
+	require.NotNil(t, o.days)
+}

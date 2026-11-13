@@ -27,6 +27,7 @@ export function Layout({ children }: { children: ReactNode }) {
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <Meta />
         <Links />
+        {/* docs:start head */}
         {data ? (
           <script
             defer
@@ -36,6 +37,7 @@ export function Layout({ children }: { children: ReactNode }) {
             data-website-id={data.tracker.siteId}
           />
         ) : null}
+        {/* docs:end head */}
       </head>
       <body>
         <nav>

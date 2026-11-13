@@ -69,6 +69,11 @@ commands:
   run ` + aggregateweb.TaskName + ` --from <yyyy-mm-dd> --to <yyyy-mm-dd>
                     read the web aggregates of every active site again for
                     each utc day of the range, both days included
+  run ` + umamirotate.TaskName + ` --force
+                    set every umami user's password for today even when
+                    today's rotation is recorded; run it after
+                    UMAMI_USER_PASSWORD_KEY changed (credential rotation, or
+                    a migration into an environment with its own key)
   retain-web        delete raw umami event and session rows older than
                     WEB_RAW_RETENTION_MONTHS (default 25) as the role
                     jobs_retention; refuses to run on an umami schema it was
@@ -123,12 +128,12 @@ func run(ctx context.Context, args []string, env *config.Env, stdout, stderr io.
 		}
 		return 0
 	case len(args) >= 2 && args[0] == "run":
-		days, err := parseRange(args[1], args[2:])
+		opts, err := parseRunArgs(args[1], args[2:])
 		if err != nil {
 			_, _ = fmt.Fprintf(stderr, "jobs run %s: %v\n\n%s", args[1], err, usage)
 			return 2
 		}
-		if err := runOnce(ctx, env, log, args[1], days); err != nil {
+		if err := runOnce(ctx, env, log, args[1], opts); err != nil {
 			log.Error("jobs run failed", "task", args[1], "error", err.Error())
 			return 1
 		}
@@ -156,9 +161,28 @@ type dayRange struct {
 	from, to time.Time
 }
 
-// parseRange reads the flags after `jobs run <task>`. only aggregate-web
-// takes any, and it takes both or neither: a backfill with one end guessed
-// would read a range nobody asked for.
+// runOpts are the flags of `jobs run <task>`.
+type runOpts struct {
+	days *dayRange
+	// force makes umami-rotate set today's passwords again
+	force bool
+}
+
+// parseRunArgs reads the flags after `jobs run <task>`. only aggregate-web
+// and umami-rotate take any.
+func parseRunArgs(task string, args []string) (runOpts, error) {
+	if task == umamirotate.TaskName && len(args) > 0 {
+		if len(args) != 1 || args[0] != "--force" {
+			return runOpts{}, fmt.Errorf("takes only --force, got %q", strings.Join(args, " "))
+		}
+		return runOpts{force: true}, nil
+	}
+	days, err := parseRange(task, args)
+	return runOpts{days: days}, err
+}
+
+// parseRange reads the flags of aggregate-web, which takes both or neither:
+// a backfill with one end guessed would read a range nobody asked for.
 func parseRange(task string, args []string) (*dayRange, error) {
 	if len(args) == 0 {
 		return nil, nil
@@ -201,6 +225,7 @@ type deps struct {
 	sites   *registry.Watcher[registry.Site]
 	sched   *scheduler.Scheduler
 	aggWeb  *aggregateweb.Aggregator
+	rotator *umamirotate.Rotator
 	reg     *prometheus.Registry
 	stop    func()
 }
@@ -482,6 +507,7 @@ func open(ctx context.Context, env *config.Env, log *slog.Logger, opsAddr bool) 
 		db:      d,
 		sites:   sites,
 		aggWeb:  aggWeb,
+		rotator: rotator,
 		reg:     reg,
 		sched: &scheduler.Scheduler{
 			Lock: lock, DB: d, Tasks: tasks, Log: log, Metrics: sm, RetryEvery: retryEvery,
@@ -558,12 +584,26 @@ func daemon(ctx context.Context, env *config.Env, log *slog.Logger) error {
 	return ctx.Err()
 }
 
-func runOnce(ctx context.Context, env *config.Env, log *slog.Logger, name string, days *dayRange) error {
+func runOnce(ctx context.Context, env *config.Env, log *slog.Logger, name string, opts runOpts) error {
 	dp, _, err := open(ctx, env, log, false)
 	if err != nil {
 		return err
 	}
 	defer dp.stop()
+	if opts.force {
+		// same lock and fence as a regular run; only the recorded day is ignored
+		for i := range dp.sched.Tasks {
+			if dp.sched.Tasks[i].Name == umamirotate.TaskName {
+				dp.sched.Tasks[i].Once = func(ctx context.Context, l *scheduler.Leader) error {
+					r := *dp.rotator
+					r.Force = true
+					_, err := r.Rotate(ctx, l.SystemTx)
+					return err
+				}
+			}
+		}
+	}
+	days := opts.days
 	if days != nil {
 		// a backfill is the same task over another range, under the same
 		// lock and fence as a regular run

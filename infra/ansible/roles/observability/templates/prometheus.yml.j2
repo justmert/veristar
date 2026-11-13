@@ -44,16 +44,20 @@ scrape_configs:
         labels: {node: "{{ h }}", tier: "{{ hostvars[h].sa_tier }}"}
 {% endfor %}
 
-{% for tier in ['edge', 'core'] %}
-{% for r in observability_relay[tier] %}
-  - job_name: {{ r.job }}
+{# a job such as caddy runs on both tiers; prometheus wants each job name
+   once, so the relay entries are grouped by job #}
+{% for job in (observability_relay.edge + observability_relay.core) | map(attribute='job') | unique %}
+  - job_name: {{ job }}
     static_configs:
+{% for tier in ['edge', 'core'] %}
+{% for r in observability_relay[tier] if r.job == job %}
 {% for h in groups[tier] %}
       - targets: ["{{ hostvars[h].sa_private_ip }}:{{ r.port }}"]
         labels: {node: "{{ h }}", tier: {{ tier }}}
 {% endfor %}
-
 {% endfor %}
+{% endfor %}
+
 {% endfor %}
   # one exporter per nats server, run beside this prometheus
   - job_name: nats

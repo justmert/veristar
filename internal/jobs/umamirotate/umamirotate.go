@@ -50,6 +50,9 @@ type Rotator struct {
 	Key   umami.PasswordKey
 	Now   func() time.Time
 	Log   *slog.Logger
+	// Force sets today's passwords even when today's rotation is recorded,
+	// for a new UMAMI_USER_PASSWORD_KEY (jobs run umami-rotate --force)
+	Force bool
 }
 
 // Result says what one call did.
@@ -80,7 +83,7 @@ func (r *Rotator) Rotate(ctx context.Context, tx TxFunc) (Result, error) {
 	if err != nil {
 		return Result{}, fmt.Errorf("umamirotate: read rotated day: %w", err)
 	}
-	if done >= today {
+	if done >= today && !r.Force {
 		return Result{Day: today, Skipped: true}, nil
 	}
 

@@ -12,7 +12,7 @@ groups:
           summary: "{{ $labels.mountpoint }} on {{ $labels.node }} is {{ $value | humanizePercentage }} full"
           runbook: docs/runbooks/alerts.md#diskusagehigh
       - alert: ServiceDown
-        expr: up{job=~"controlplane|replayer|metricswriter|jobs|prober|node|postgres|patroni"} == 0
+        expr: up{job=~"controlplane|replayer|metricswriter|jobs|prober|node|postgres|patroni|caddy|haproxy"} == 0
         for: 2m
         labels: {severity: page}
         annotations:

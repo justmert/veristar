@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
+	"strconv"
 	"sync"
 	"time"
 
@@ -86,7 +88,11 @@ func (lr *leadRun) deliver(ctx context.Context, h *held) bool {
 		delay := natsx.RetryDelay(attempt)
 		lr.r.log.Warn("delivery failed, retrying in place", "stream_seq", h.seq, "attempt", attempt,
 			"retry_in", delay.String(), "error", f.err.Error())
-		if !lr.gate.wait(ctx, delay, f.unreachable) {
+		waitOn := noTarget
+		if f.unreachable {
+			waitOn = h.target
+		}
+		if !lr.gate.wait(ctx, delay, waitOn) {
 			return false
 		}
 	}
@@ -122,7 +128,7 @@ func (lr *leadRun) attempt(ctx context.Context, h *held) error {
 			return err
 		}
 		start := time.Now()
-		res, err := r.umami.Send(ctx, umami.SendRequest{
+		res, err := r.umami[h.target].Send(ctx, umami.SendRequest{
 			Event: umami.Event{
 				Website:   ev.WebsiteID,
 				Hostname:  ev.Hostname,
@@ -151,6 +157,7 @@ func (lr *leadRun) attempt(ctx context.Context, h *held) error {
 		} else {
 			r.m.send.WithLabelValues(sendOK).Observe(elapsed)
 		}
+		r.m.perProcess.WithLabelValues(strconv.Itoa(h.target)).Inc()
 		h.delivered, h.bot = true, res.Bot
 		h.sessionID, h.cache = res.SessionID, res.Cache
 	}
@@ -233,21 +240,29 @@ func (lr *leadRun) deadLetter(ctx context.Context, h *held, reason string) bool 
 	return true
 }
 
+// noTarget marks a waiter that waits for its delay only, not for an umami
+// process to come back.
+const noTarget = -1
+
 // gate lets lanes wait for their retry delay, and wakes the ones that wait
-// because umami was unreachable as soon as its heartbeat answers again.
+// because their umami process was unreachable as soon as its heartbeat
+// answers again.
 type gate struct {
-	mu      sync.Mutex
-	waiters map[chan struct{}]bool
+	mu sync.Mutex
+	// waiters maps each waiting lane to the umami process it waits for, or
+	// noTarget
+	waiters map[chan struct{}]int
 }
 
-// wait sleeps for d. it returns false when ctx ended first.
-func (g *gate) wait(ctx context.Context, d time.Duration, unreachable bool) bool {
+// wait sleeps for d, or until target answers again when target is not
+// noTarget. it returns false when ctx ended first.
+func (g *gate) wait(ctx context.Context, d time.Duration, target int) bool {
 	ch := make(chan struct{}, 1)
 	g.mu.Lock()
 	if g.waiters == nil {
-		g.waiters = map[chan struct{}]bool{}
+		g.waiters = map[chan struct{}]int{}
 	}
-	g.waiters[ch] = unreachable
+	g.waiters[ch] = target
 	g.mu.Unlock()
 	defer func() {
 		g.mu.Lock()
@@ -266,22 +281,25 @@ func (g *gate) wait(ctx context.Context, d time.Duration, unreachable bool) bool
 	}
 }
 
-func (g *gate) hasUnreachable() bool {
+// unreachableTargets lists the umami processes some lane waits for, sorted.
+func (g *gate) unreachableTargets() []int {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	for _, u := range g.waiters {
-		if u {
-			return true
+	var out []int
+	for _, t := range g.waiters {
+		if t != noTarget && !slices.Contains(out, t) {
+			out = append(out, t)
 		}
 	}
-	return false
+	slices.Sort(out)
+	return out
 }
 
-func (g *gate) wakeUnreachable() {
+func (g *gate) wakeUnreachable(target int) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	for ch, u := range g.waiters {
-		if u {
+	for ch, t := range g.waiters {
+		if t == target {
 			select {
 			case ch <- struct{}{}:
 			default:

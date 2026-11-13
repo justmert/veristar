@@ -6,6 +6,13 @@ name: stellar-analytics-edge
 
 x-defaults: &defaults
   restart: unless-stopped
+  # container hardening (the design): the root filesystem is read-only, so
+  # services write only to their volumes and a small /tmp; no capabilities;
+  # no privilege gain through setuid binaries or file capabilities
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  tmpfs: ["/tmp:size=64m"]
   logging:
     driver: local
     options:
@@ -13,9 +20,36 @@ x-defaults: &defaults
       max-file: "5"
 
 services:
+  # nats and etcd default to root in their upstream images and run as their
+  # own uids here. docker creates a new named volume owned by root, and a
+  # volume from before this change holds root-owned files, so this one-shot
+  # step hands both volumes over before either starts. children before
+  # parents (-depth), and only what is not owned yet, so it is quick and
+  # can be repeated.
+  volume-owners:
+    <<: *defaults
+    image: {{ upstream_images.nats }}
+    restart: "no"
+    user: "0:0"
+    cap_add: [CHOWN, DAC_READ_SEARCH]
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        for spec in "/v/nats {{ edge_nats_uid }}" "/v/etcd {{ edge_etcd_uid }}"; do
+          set -- $$spec
+          find "$$1" -depth \( ! -user "$$2" -o ! -group "$$2" \) -exec chown -h "$$2:$$2" {} +
+        done
+    volumes:
+      - natsdata:/v/nats
+      - etcddata:/v/etcd
+
   nats:
     <<: *defaults
     image: {{ upstream_images.nats }}
+    user: "{{ edge_nats_uid }}:{{ edge_nats_uid }}"
+    depends_on:
+      volume-owners:
+        condition: service_completed_successfully
     command: ["--config", "/etc/nats/nats.conf"]
     volumes:
       - {{ edge_conf_dir }}/nats:/etc/nats:ro
@@ -34,6 +68,10 @@ services:
   etcd:
     <<: *defaults
     image: {{ upstream_images.etcd }}
+    user: "{{ edge_etcd_uid }}:{{ edge_etcd_uid }}"
+    depends_on:
+      volume-owners:
+        condition: service_completed_successfully
     # etcd stores patroni's leader key; one member per edge node, peers and
     # clients on the private network
     command:

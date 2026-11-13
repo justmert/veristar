@@ -37,15 +37,21 @@ observability_tier_network:
 
 # relay ports on the private address, and the compose service and port
 # behind each. the collector's own telemetry is on 8888 (collector/otelcol.yaml).
+# caddy serves its metrics on 2021 of the node's compose network
+# (deploy/caddy/assemble.sh), haproxy its prometheus exporter on the core
+# role's stats port (core_haproxy_stats_port).
 observability_relay:
   edge:
     - {job: gateway, port: 9301, target: "gateway:9090"}
     - {job: collector, port: 9302, target: "collector:8888"}
+    - {job: caddy, port: 9307, target: "caddy:2021"}
   core:
     - {job: controlplane, port: 9303, target: "controlplane:9090"}
     - {job: replayer, port: 9304, target: "replayer:9090"}
     - {job: metricswriter, port: 9305, target: "metricswriter:9090"}
     - {job: jobs, port: 9306, target: "jobs:9090"}
+    - {job: caddy, port: 9307, target: "caddy:2021"}
+    - {job: haproxy, port: 9308, target: "haproxy:{{ core_haproxy_stats_port | default(8404) }}"}
 observability_node_exporter_port: 9100
 observability_postgres_exporter_port: 9187
 observability_nats_monitor_port: 8222
@@ -74,17 +80,17 @@ observability_probe_domain: "probe.{{ sa_base_domain }}"
 # sloreport collect -page-size must be the same number.
 observability_gatus_max_results: 20160
 
-# caddy and haproxy on the nodes do not expose metrics yet: the edge and core
-# caddyfiles keep the admin api on loopback without the metrics option, and
-# haproxy.cfg has no prometheus-exporter frontend. both belong to the edge and
-# core roles; once they publish an endpoint, list it here as {job, port,
-# target} entries of observability_relay and prometheus scrapes it.
-
 # postgresql runs under patroni on these core nodes (the core role's
-# core_postgres_hosts); postgres_exporter runs beside each
-observability_postgres_hosts: "{{ core_postgres_hosts | default(groups['core'][:1]) }}"
+# core_postgres_hosts, which is every core node unless the inventory says
+# otherwise); postgres_exporter runs beside each. the core role's defaults are
+# not visible in the observability play, so its default is repeated here.
+observability_postgres_hosts: "{{ core_postgres_hosts | default(groups['core']) }}"
 observability_patroni_hosts: "{{ observability_postgres_hosts }}"
 observability_core_dir: /opt/stellar-analytics/core
 
 # the checkout the controller runs from (playbooks live in infra/ansible/playbooks)
 observability_repo_root: "{{ playbook_dir }}/../../.."
+
+# container user of gatus, whose image defaults to root (the design
+# hardening); its data volume is handed to this uid by the volume-owners step
+observability_gatus_uid: 8080

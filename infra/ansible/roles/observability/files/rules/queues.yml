@@ -49,6 +49,20 @@ groups:
         annotations:
           summary: "no replayer instance holds the lock and consumes WEB_EVENTS"
           runbook: docs/runbooks/alerts.md#replayernotconsuming
+      # the replayer sends each visitor to one umami process. a process that
+      # stopped answering holds its visitors back in their lanes while the
+      # others go on, so the leader's total rate alone hides it. above one
+      # event a second the visitors spread over every process; below it a
+      # process can see none for ten minutes by chance.
+      - alert: ReplayerUmamiProcessIdle
+        expr: |
+          (sum by (node, process) (rate(replayer_umami_sends_total[10m])) == 0)
+          and on (node) (sum by (node) (rate(replayer_umami_sends_total[10m])) > 1)
+        for: 5m
+        labels: {severity: ticket}
+        annotations:
+          summary: "umami process {{ $labels.process }} on {{ $labels.node }} stored no event for 15 minutes while the others did"
+          runbook: docs/runbooks/alerts.md#replayerumamiprocessidle
       - alert: MetricsWriterNotConsuming
         expr: (sum(metricswriter_leader) < 1) or absent(metricswriter_leader)
         for: 2m

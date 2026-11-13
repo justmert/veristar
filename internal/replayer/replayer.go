@@ -7,6 +7,13 @@
 // lane retries a failing event in place and holds back everything behind it,
 // so a retry never lets a later event of that visitor overtake it.
 //
+// sends are spread over several umami processes by the same hash, so a
+// visitor's events always go to one process, one at a time from its lane.
+// the processes share one database and one APP_SECRET, and umami derives the
+// session id, the visit id and the cache token from those and the event alone
+// (docs/reference/umami-contract.md item 14), so which process stores an
+// event does not change what is stored.
+//
 // delivery is at least once with a narrow duplicate window: the lane checks
 // sent.<event id> in visit_state before sending and writes it after umami's
 // 200, then acks. a crash, kill or lock loss between umami's 200 and that
@@ -103,7 +110,9 @@ type Config struct {
 	// Replicas is NATS_REPLICAS, the replica count visit_state and locks are
 	// recreated with when a restart lost them.
 	Replicas int
-	Umami    *umami.Client
+	// Umami holds one client per umami process (Settings.UmamiURLs), in the
+	// same order; a visitor's events go to Umami[visitorHash % len(Umami)].
+	Umami    []*umami.Client
 	Log      *slog.Logger
 	Registry *prometheus.Registry
 }
@@ -113,7 +122,7 @@ type Replayer struct {
 	set     Settings
 	nc      *nats.Conn
 	js      jetstream.JetStream
-	umami   *umami.Client
+	umami   []*umami.Client
 	log     *slog.Logger
 	reg     *prometheus.Registry
 	store   visitStore
@@ -130,8 +139,8 @@ type Replayer struct {
 // New recreates the memory buckets when a restart lost them, binds them and
 // registers the metrics. it does not take the lock.
 func New(ctx context.Context, cfg Config) (*Replayer, error) {
-	if cfg.NC == nil || cfg.Umami == nil || cfg.Log == nil || cfg.Registry == nil {
-		return nil, errors.New("replayer: Config needs NC, Umami, Log and Registry")
+	if cfg.NC == nil || len(cfg.Umami) == 0 || slices.Contains(cfg.Umami, nil) || cfg.Log == nil || cfg.Registry == nil {
+		return nil, errors.New("replayer: Config needs NC, at least one Umami client, Log and Registry")
 	}
 	if cfg.Settings.Workers < 1 || cfg.Settings.MaxInFlight < cfg.Settings.Workers || !nodeIDRe.MatchString(cfg.Settings.NodeID) {
 		return nil, errors.New("replayer: settings are invalid, load them with LoadSettings")
@@ -181,7 +190,7 @@ func New(ctx context.Context, cfg Config) (*Replayer, error) {
 		buckets: buckets,
 		maxAge:  maxAge,
 	}
-	r.m, err = newMetrics(cfg.Registry, r.inFlight, r.oldestAge)
+	r.m, err = newMetrics(cfg.Registry, len(cfg.Umami), r.inFlight, r.oldestAge)
 	if err != nil {
 		return nil, err
 	}
@@ -358,7 +367,7 @@ func (r *Replayer) lead(parent context.Context) error {
 		r.current.Store(nil)
 		r.m.leader.Set(0)
 	}()
-	r.log.Info("consuming", "workers", r.set.Workers, "max_in_flight", r.set.MaxInFlight)
+	r.log.Info("consuming", "workers", r.set.Workers, "max_in_flight", r.set.MaxInFlight, "umami_processes", len(r.umami))
 	return lr.run(ctx, parent)
 }
 
@@ -436,6 +445,8 @@ type held struct {
 	seq       uint64
 	published time.Time
 	ev        *events.WebEvent
+	// target is the index of the umami process this visitor's events go to
+	target int
 
 	mu  sync.Mutex
 	msg jetstream.Msg
@@ -561,15 +572,26 @@ func (lr *leadRun) fetchLoop(ctx context.Context) error {
 	}
 }
 
-// laneOf picks the lane of a visitor. fnv-1a over site id and visitor token
-// is stable and cheap; the token is already a uniform hmac, so the spread is
-// even.
-func laneOf(siteID, vt string, n int) int {
+// visitorHash is fnv-1a over site id and visitor token: stable across
+// processes and restarts, and cheap; the token is already a uniform hmac, so
+// the spread is even.
+func visitorHash(siteID, vt string) uint64 {
 	f := fnv.New64a()
 	_, _ = f.Write([]byte(siteID))
 	_, _ = f.Write([]byte{0})
 	_, _ = f.Write([]byte(vt))
-	return int(f.Sum64() % uint64(n)) //nolint:gosec // n is a positive lane count
+	return f.Sum64()
+}
+
+// laneOf picks the lane of a visitor among n lanes.
+func laneOf(siteID, vt string, n int) int {
+	return int(visitorHash(siteID, vt) % uint64(n)) //nolint:gosec // n is a positive lane count
+}
+
+// targetOf picks the umami process of a visitor among n. it uses the same
+// hash as laneOf, so every event of one visitor goes to one process.
+func targetOf(siteID, vt string, n int) int {
+	return int(visitorHash(siteID, vt) % uint64(n)) //nolint:gosec // n is a positive process count
 }
 
 func (lr *leadRun) accept(ctx context.Context, msg jetstream.Msg) {
@@ -592,7 +614,7 @@ func (lr *leadRun) accept(ctx context.Context, msg jetstream.Msg) {
 		lr.deadLetterUnkeyed(ctx, msg, meta, reason)
 		return
 	}
-	h := &held{seq: meta.Sequence.Stream, published: meta.Timestamp, ev: ev, msg: msg}
+	h := &held{seq: meta.Sequence.Stream, published: meta.Timestamp, ev: ev, msg: msg, target: targetOf(ev.SiteID, ev.VT, len(lr.r.umami))}
 	lr.mu.Lock()
 	lr.held[h.seq] = h
 	lr.mu.Unlock()
@@ -712,8 +734,9 @@ func (lr *leadRun) keepalive(ctx context.Context) {
 	}
 }
 
-// probe wakes lanes that wait because umami was unreachable as soon as its
-// heartbeat answers again.
+// probe wakes lanes that wait because their umami process was unreachable
+// as soon as that process's heartbeat answers again. each process is probed
+// on its own, so one that is back does not wake lanes of one still down.
 func (lr *leadRun) probe(ctx context.Context) {
 	t := time.NewTicker(probeEvery)
 	defer t.Stop()
@@ -723,14 +746,13 @@ func (lr *leadRun) probe(ctx context.Context) {
 			return
 		case <-t.C:
 		}
-		if !lr.gate.hasUnreachable() {
-			continue
-		}
-		pctx, cancel := context.WithTimeout(ctx, probeEvery)
-		err := lr.r.umami.Heartbeat(pctx)
-		cancel()
-		if err == nil {
-			lr.gate.wakeUnreachable()
+		for _, target := range lr.gate.unreachableTargets() {
+			pctx, cancel := context.WithTimeout(ctx, probeEvery)
+			err := lr.r.umami[target].Heartbeat(pctx)
+			cancel()
+			if err == nil {
+				lr.gate.wakeUnreachable(target)
+			}
 		}
 	}
 }

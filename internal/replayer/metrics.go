@@ -2,6 +2,7 @@ package replayer
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -29,6 +30,7 @@ type metrics struct {
 	ackPending   prometheus.Gauge
 	lagSampled   prometheus.Gauge
 	send         *prometheus.HistogramVec
+	perProcess   *prometheus.CounterVec
 	outcomes     *prometheus.CounterVec
 	retries      prometheus.Counter
 	undecodable  prometheus.Counter
@@ -39,7 +41,7 @@ type metrics struct {
 	lockConfirms *prometheus.CounterVec
 }
 
-func newMetrics(reg prometheus.Registerer, inFlight, oldestAge func() float64) (*metrics, error) {
+func newMetrics(reg prometheus.Registerer, processes int, inFlight, oldestAge func() float64) (*metrics, error) {
 	m := &metrics{
 		leader: prometheus.NewGauge(prometheus.GaugeOpts{
 			Name: "replayer_leader",
@@ -62,6 +64,10 @@ func newMetrics(reg prometheus.Registerer, inFlight, oldestAge func() float64) (
 			Help:    "latency of umami /api/send calls by result (ok, bot, client_error, server_error, network).",
 			Buckets: []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 15},
 		}, []string{"result"}),
+		perProcess: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "replayer_umami_sends_total",
+			Help: "umami /api/send calls answered with 200, by umami process (its index in UMAMI_URL), so an uneven spread or an idle process shows.",
+		}, []string{"process"}),
 		outcomes: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "replayer_outcomes_total",
 			Help: "final outcome per WEB_EVENTS message (delivered, bot, dlq, duplicate_skipped).",
@@ -95,7 +101,7 @@ func newMetrics(reg prometheus.Registerer, inFlight, oldestAge func() float64) (
 			Help: "age, from its stream publish time, of the oldest message this leader holds unacknowledged. 0 on a standby or when nothing is held.",
 		}, oldestAge),
 	}
-	for _, c := range []prometheus.Collector{m.leader, m.pending, m.ackPending, m.lagSampled, m.send, m.outcomes,
+	for _, c := range []prometheus.Collector{m.leader, m.pending, m.ackPending, m.lagSampled, m.send, m.perProcess, m.outcomes,
 		m.retries, m.undecodable, m.bookkeeping, m.ackFailures, m.lockConfirms, m.inFlight, m.oldestHeld} {
 		if err := reg.Register(c); err != nil {
 			return nil, fmt.Errorf("replayer: register metrics: %w", err)
@@ -108,6 +114,9 @@ func newMetrics(reg prometheus.Registerer, inFlight, oldestAge func() float64) (
 	}
 	for _, r := range []string{sendOK, sendBot, sendClientError, sendServerError, sendNetwork} {
 		m.send.WithLabelValues(r)
+	}
+	for i := range processes {
+		m.perProcess.WithLabelValues(strconv.Itoa(i))
 	}
 	m.lockConfirms.WithLabelValues("ok")
 	m.lockConfirms.WithLabelValues("lost")

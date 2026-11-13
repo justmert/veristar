@@ -30,7 +30,8 @@ const usage = `usage: replayer [serve|version]
 serve (the default) runs the replayer until SIGINT or SIGTERM.
 
 environment: NATS_URL, NATS_REPLICAS, NATS_USER and NATS_PASSWORD (when the
-server requires auth), REPLAYER_NODE_ID, REPLAYER_OPS_ADDR, UMAMI_URL,
+server requires auth), REPLAYER_NODE_ID, REPLAYER_OPS_ADDR, UMAMI_URL (one
+url, or a comma-separated list with one url per umami process),
 REPLAYER_WORKERS, REPLAYER_MAX_IN_FLIGHT.
 `
 
@@ -83,9 +84,13 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 		return err
 	}
 	log = log.With("node", set.NodeID)
-	uc, err := umami.New(set.UmamiURL, nil)
-	if err != nil {
-		return err
+	ucs := make([]*umami.Client, 0, len(set.UmamiURLs))
+	for _, u := range set.UmamiURLs {
+		uc, err := umami.New(u, nil)
+		if err != nil {
+			return err
+		}
+		ucs = append(ucs, uc)
 	}
 	nc, err := natsx.Connect(natsCfg, natsx.ServiceReplayer, log)
 	if err != nil {
@@ -94,7 +99,7 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 	defer nc.Close()
 
 	reg := obs.NewRegistry()
-	rp, err := replayer.New(ctx, replayer.Config{Settings: set, NC: nc, Replicas: natsCfg.Replicas, Umami: uc, Log: log, Registry: reg})
+	rp, err := replayer.New(ctx, replayer.Config{Settings: set, NC: nc, Replicas: natsCfg.Replicas, Umami: ucs, Log: log, Registry: reg})
 	if err != nil {
 		return err
 	}
@@ -107,7 +112,7 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 	go func() { opsDone <- obs.Serve(opsCtx, obs.NewServer(set.OpsAddr, rp.Ops()), log) }()
 
 	log.Info("replayer started", "version", buildVersion(), "ops_addr", set.OpsAddr,
-		"workers", set.Workers, "max_in_flight", set.MaxInFlight)
+		"workers", set.Workers, "max_in_flight", set.MaxInFlight, "umami_processes", len(ucs))
 	runCtx, stopRun := context.WithCancel(ctx)
 	defer stopRun()
 	runDone := make(chan error, 1)

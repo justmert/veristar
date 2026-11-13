@@ -25,7 +25,10 @@ const usage = `usage: platformctl <command>
 
 commands:
   umami bootstrap   replace the seeded umami admin password with UMAMI_ADMIN_PASSWORD
-` + dbUsage + natsUsage + probeUsage + `  version           print the build version
+  umami rotate-admin
+                    replace the umami admin password UMAMI_ADMIN_PASSWORD_PREVIOUS with
+                    UMAMI_ADMIN_PASSWORD and prove the previous one is refused
+` + dbUsage + natsUsage + probeUsage + verifyUsage + `  version           print the build version
 `
 
 func main() {
@@ -47,6 +50,12 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 			return 1
 		}
 		return 0
+	case len(args) == 2 && args[0] == "umami" && args[1] == "rotate-admin":
+		if err := umamiRotateAdmin(ctx, log); err != nil {
+			log.Error("umami rotate-admin failed", "error", err.Error())
+			return 1
+		}
+		return 0
 	case len(args) >= 1 && args[0] == "db":
 		if err := runDB(ctx, args[1:]); err != nil {
 			log.Error("db command failed", "error", err.Error())
@@ -63,6 +72,16 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		if err := runProbeTenant(ctx, args[1:], config.FromEnviron(), stdout); err != nil {
 			log.Error("probe-tenant command failed", "error", err.Error())
 			return 1
+		}
+		return 0
+	case len(args) >= 1 && args[0] == "verify-migration":
+		err := runVerifyMigration(ctx, args[1:], stdout)
+		if errors.Is(err, errDiffers) {
+			return 1
+		}
+		if err != nil {
+			log.Error("verify-migration failed", "error", err.Error())
+			return 2
 		}
 		return 0
 	case len(args) == 1 && (args[0] == "help" || args[0] == "-h" || args[0] == "--help"):
@@ -115,6 +134,31 @@ func umamiBootstrap(ctx context.Context, log *slog.Logger) error {
 		"outcome", string(outcome),
 		"umami_url", cfg.URL.Redacted(),
 		"seeded_login", "rejected",
+	)
+	return nil
+}
+
+func umamiRotateAdmin(ctx context.Context, log *slog.Logger) error {
+	env := config.FromEnviron()
+	cfg, err := config.LoadUmamiAdmin(env)
+	prev := env.Secret("UMAMI_ADMIN_PASSWORD_PREVIOUS", 1)
+	if err := errors.Join(err, env.Err()); err != nil {
+		return err
+	}
+	c, err := umami.New(cfg.URL, nil)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(ctx, bootstrapTimeout)
+	defer cancel()
+	outcome, err := umami.RotateAdmin(ctx, c, prev.Reveal(), cfg.Password.Reveal())
+	if err != nil {
+		return err
+	}
+	log.Info("umami admin password in place",
+		"outcome", string(outcome),
+		"umami_url", cfg.URL.Redacted(),
+		"previous_login", "rejected",
 	)
 	return nil
 }

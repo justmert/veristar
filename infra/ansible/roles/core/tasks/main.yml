@@ -9,10 +9,13 @@
       - sa_tls == 'bunny' or sa_environment == 'local'
       - sa_operator_github_ids is defined and (sa_operator_github_ids | string | length) > 0
       - not core_oauth_fixture or sa_environment == 'local'
+      - core_umami_processes | int >= 1
+      - core_umami_processes | int <= core_replayer_env.REPLAYER_WORKERS | int
     fail_msg: >-
       core needs the secrets role first, OPERATOR_GITHUB_IDS an operator input as
-      sa_operator_github_ids, acme dns-01 outside the local converge, and the
-      oauth fixture only in the local converge
+      sa_operator_github_ids, acme dns-01 outside the local converge, the
+      oauth fixture only in the local converge, and between 1 and
+      REPLAYER_WORKERS umami processes (core_umami_processes)
 
 # the design: 18.7 is required before any non-dev environment and was
 # not published on 2026-11-12. the local converge may run 18.6 and says so
@@ -98,37 +101,10 @@
     mode: "0644"
   notify: Reload haproxy
 
-# docker's restart policy does not retry a container whose start failed
-# while the daemon came up. after an unclean power-off in the this stage edge
-# loss drill the nats container stayed exited that way, so a oneshot unit
-# starts every existing container of the project once docker is up. start
-# never recreates anything, so it cannot apply a half-written change.
-- name: Install the start-at-boot unit of the compose project
-  ansible.builtin.copy:
-    content: |
-      # managed by ansible (infra/ansible/roles/core)
-      [Unit]
-      Description=start the core compose project's containers after boot
-      After=docker.service
-      Requires=docker.service
-
-      [Service]
-      Type=oneshot
-      ExecStart=/usr/bin/docker compose --project-directory {{ core_dir }} start
-
-      [Install]
-      WantedBy=multi-user.target
-    dest: /etc/systemd/system/sa-core-start.service
-    owner: root
-    group: root
-    mode: "0644"
-  register: core_start_unit
-
-- name: Enable the start-at-boot unit
-  ansible.builtin.systemd_service:
-    name: sa-core-start.service
-    enabled: true
-    daemon_reload: "{{ core_start_unit is changed }}"
+# a oneshot unit that starts the project's containers once docker is up,
+# also run alone by the restart drill (tests/drills/start-unit.sh)
+- name: Install the start-at-boot unit
+  ansible.builtin.include_tasks: start_unit.yml
 
 - name: Write the compose project
   ansible.builtin.template:

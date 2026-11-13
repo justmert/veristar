@@ -9,10 +9,12 @@ import Base from "../layouts/Base.astro";
     Sign up
   </button>
   <button type="button" id="manual">Track by call</button>
+  <!-- docs:start track -->
   <script is:inline>
     // umami.track() from page code; the tracker may be blocked, so check first
     document.getElementById("manual").addEventListener("click", () => {
       if (window.umami) window.umami.track("manual-call", { source: "astro-ssr" });
     });
   </script>
+  <!-- docs:end track -->
 </Base>

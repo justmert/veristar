@@ -8,7 +8,11 @@ import { initKit } from "./wallets.ts";
 declare const __SA_SITE_ID__: string;
 declare const __SA_GATEWAY_ORIGIN__: string;
 
+// docs:start init
 init({ siteId: __SA_SITE_ID__, host: __SA_GATEWAY_ORIGIN__ });
+// docs:end init
+// docs:start attach
 // after the kit's init, so the restored session is the starting point
 attachWalletsKit(await initKit());
+// docs:end attach
 render("module");

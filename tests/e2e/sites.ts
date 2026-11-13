@@ -25,7 +25,15 @@ export const PORTS = {
 } as const;
 
 export interface SiteDef {
-  key: "static-html" | "vite-react-spa" | "react-router-ssr" | "astro-ssr" | "wallets-kit-spa";
+  key:
+    | "static-html"
+    | "vite-react-spa"
+    | "react-router-ssr"
+    | "astro-ssr"
+    | "vue-spa"
+    | "sveltekit"
+    | "nextjs"
+    | "wallets-kit-spa";
   host: string;
   origin: string;
   port: number;
@@ -60,6 +68,10 @@ export const SITES: readonly SiteDef[] = [
   site("vite-react-spa", "spa", 47102, "0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e02", "#nav-pricing"),
   site("react-router-ssr", "rr", 47103, "0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e03", "#nav-pricing"),
   site("astro-ssr", "astro", 47104, "0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e04", "#nav-about"),
+  // added in this stage for the vue, sveltekit and next.js onboarding guides
+  site("vue-spa", "vue", 47106, "0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e06", "#nav-pricing"),
+  site("sveltekit", "svelte", 47107, "0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e07", "#nav-pricing"),
+  site("nextjs", "next", 47108, "0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e08", "#nav-pricing"),
 ];
 
 // the this stage wallets kit example. it is not part of the this stage matrix

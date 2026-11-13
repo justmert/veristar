@@ -1,10 +1,7 @@
 declare global {
   interface Window {
     umami?: {
-      track: (
-        name: string,
-        data?: Record<string, string | number | boolean | null>,
-      ) => Promise<void>;
+      track: (name: string, data?: Record<string, string | number | boolean>) => Promise<void>;
     };
   }
 }

@@ -33,3 +33,9 @@ edge_stage: services
 # where deploy.yml puts the drain flag; caddy answers 503 on port 80 while it
 # exists, which takes the node out of dns (deploy/caddy/assemble.sh)
 edge_drain_dir: /etc/stellar-analytics/drain
+
+# container users of the upstream images that default to root (plan phase
+# 18 hardening). the nats config and the named volumes are owned by them;
+# the compose project's volume-owners step hands existing volumes over
+edge_nats_uid: 4222
+edge_etcd_uid: 2379

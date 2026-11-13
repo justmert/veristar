@@ -1,0 +1,50 @@
+---
+# the restart drill (start-unit.sh): the base role and the edge role's
+# start-at-boot unit on one local node, with a test-only compose project in
+# the edge project's directory. -e start_unit_enabled=false disables the
+# unit for the control run.
+- name: Converge one node for the restart drill
+  hosts: edge
+  become: true
+  vars_files: [../../infra/ansible/vars/pins.yml]
+  vars:
+    start_unit_enabled: true
+  roles:
+    - base
+  tasks:
+    - name: Install the edge start-at-boot unit
+      ansible.builtin.include_role:
+        name: edge
+        tasks_from: start_unit.yml
+        # edge_dir of the role defaults is used by the tasks below
+        public: true
+
+    - name: Set the unit's state for this run
+      ansible.builtin.systemd_service:
+        name: sa-edge-start.service
+        enabled: "{{ start_unit_enabled | bool }}"
+
+    - name: Create the project directory
+      ansible.builtin.file:
+        path: "{{ edge_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Install the test compose project
+      ansible.builtin.copy:
+        src: start-unit/compose.yml
+        dest: "{{ edge_dir }}/compose.yml"
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Start the test project
+      community.docker.docker_compose_v2:
+        project_src: "{{ edge_dir }}"
+        files: [compose.yml]
+        state: present
+        pull: missing
+        wait: true
+        wait_timeout: 300

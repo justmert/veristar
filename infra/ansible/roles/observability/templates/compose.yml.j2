@@ -4,6 +4,13 @@ name: stellar-analytics-observability
 
 x-defaults: &defaults
   restart: unless-stopped
+  # container hardening (the design): the root filesystem is read-only, so
+  # services write only to their volumes and a small /tmp; no capabilities;
+  # no privilege gain through setuid binaries or file capabilities
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  tmpfs: ["/tmp:size=64m"]
   logging:
     driver: local
     options:
@@ -78,6 +85,12 @@ services:
   grafana:
     <<: *defaults
     image: {{ observability_images.grafana }}
+    # grafana 13 updates its preinstalled plugins at start by replacing them
+    # under /usr/share/grafana/data/plugins-bundled. on a read-only root
+    # filesystem that fails halfway and the prometheus data source is gone
+    # (tried 2026-11-13), so grafana keeps a writable root filesystem until
+    # that update is turned off on purpose (a change of behaviour)
+    read_only: false
     env_file: [{{ secrets_env_dir }}/grafana.env]
     environment:
       GF_SERVER_HTTP_ADDR: 0.0.0.0
@@ -96,6 +109,8 @@ services:
   nats-exporter-{{ h }}:
     <<: *defaults
     image: {{ observability_images.nats_exporter }}
+    # the image defaults to root; the exporter needs no files at all
+    user: "65534:65534"
     command: ["-port", "7777", "-jsz", "all", "-varz", "-healthz", "http://{{ hostvars[h].sa_private_ip }}:{{ observability_nats_monitor_port }}"]
 {% endfor %}
 {% if inventory_hostname in observability_postgres_hosts %}
@@ -124,9 +139,29 @@ services:
       - "{{ sa_public_ipv4 }}:80:80"
       - "{{ sa_public_ipv4 }}:443:443"
 
+  # gatus defaults to root in its image and runs as observability_gatus_uid
+  # here. a new named volume is owned by root and one from before this change
+  # holds a root-owned database, so this one-shot step hands the volume over
+  # first (children before parents, only what is not owned yet)
+  volume-owners:
+    <<: *defaults
+    image: {{ observability_images.caddy }}
+    restart: "no"
+    user: "0:0"
+    cap_add: [CHOWN, DAC_READ_SEARCH]
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - find /v/gatus -depth \( ! -user {{ observability_gatus_uid }} -o ! -group {{ observability_gatus_uid }} \) -exec chown -h {{ observability_gatus_uid }}:{{ observability_gatus_uid }} {} +
+    volumes:
+      - gatus:/v/gatus
+
   gatus:
     <<: *defaults
     image: {{ observability_images.gatus }}
+    user: "{{ observability_gatus_uid }}:{{ observability_gatus_uid }}"
+    depends_on:
+      volume-owners:
+        condition: service_completed_successfully
     env_file: [{{ secrets_env_dir }}/gatus.env]
     environment:
       GATUS_CONFIG_PATH: /config/config.yaml

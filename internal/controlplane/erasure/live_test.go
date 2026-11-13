@@ -272,8 +272,8 @@ func (e *env) startReplayer(t *testing.T) {
 	t.Helper()
 	rpNC, _ := e.conn(e.root, natsx.ServiceReplayer)
 	r, err := replayer.New(t.Context(), replayer.Config{
-		Settings: replayer.Settings{NodeID: "rp-" + randHex(3), OpsAddr: "127.0.0.1:0", UmamiURL: e.um.URL, Workers: 4, MaxInFlight: 64},
-		NC:       rpNC, Replicas: 1, Umami: e.um.Client, Log: e.log, Registry: prometheus.NewRegistry(),
+		Settings: replayer.Settings{NodeID: "rp-" + randHex(3), OpsAddr: "127.0.0.1:0", UmamiURLs: []*url.URL{e.um.URL}, Workers: 4, MaxInFlight: 64},
+		NC:       rpNC, Replicas: 1, Umami: []*umami.Client{e.um.Client}, Log: e.log, Registry: prometheus.NewRegistry(),
 	})
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(context.Background())

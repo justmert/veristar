@@ -57,10 +57,14 @@ saturated host stretched every operation by more than 100 s.
   health check removes the record; it cannot recall copies that clients already hold.
 - **The port-80 health check sees no TLS failure.** An expired or broken certificate on port
   443 leaves the node in DNS. this stage adds TLS checks with alerts.
-- **One Umami process per core node, one active replayer.** At ten times the expected peak,
-  the measured drain rate (about 280 web events/s) is below the load (500/s). Events are
-  queued, not lost, but the dashboards lag behind (drill record, "what the load runs
-  showed").
+- **One active replayer, a fixed set of Umami processes.** The 10x load run of
+  2026-11-13 drained about 280 web events/s with one Umami process, below the 500/s
+  load. Each core node now runs `core_umami_processes` (default 4) Umami processes on one
+  database and `APP_SECRET`, and the replayer spreads visitors over them; on a small local
+  stack 4 processes drained about 2.3 times what 1 did (drill record, "web drain with
+  several Umami processes"). The drill at 10x has not been repeated on the real topology,
+  so the drain bound is still unmeasured there. One replayer leader remains: its lanes
+  and NATS round trips are the next limit.
 - **Two database nodes.** With synchronous mode not strict, the leader runs alone while the
   replica is down. A second failure in that time loses what only the leader had, back to the
   last archived WAL (`archive_timeout` 60 s).
