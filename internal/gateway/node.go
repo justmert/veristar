@@ -125,10 +125,16 @@ func NewNode(ctx context.Context, c NodeConfig) (*Node, error) {
 	if n.cluster, err = NewIPCluster(c.NC, g.NodeID, g.IPClusterThreshold, clusterKeys, c.Now); err != nil {
 		return nil, err
 	}
-	limiter, err := NewRateLimiter(
-		Rate{PerSecond: float64(g.SiteRatePerSecond), Burst: float64(g.SiteBurst)},
-		Rate{PerSecond: float64(g.PrefixRatePerSecond), Burst: float64(g.PrefixBurst)},
-		DefaultRateLimitKeys, c.Now)
+	siteRate := Rate{PerSecond: float64(g.SiteRatePerSecond), Burst: float64(g.SiteBurst)}
+	prefixRate := Rate{PerSecond: float64(g.PrefixRatePerSecond), Burst: float64(g.PrefixBurst)}
+	limiter, err := NewRateLimiter(siteRate, prefixRate, DefaultRateLimitKeys, c.Now)
+	if err != nil {
+		return nil, err
+	}
+	// challenges get their own buckets at the same rates: a page load takes
+	// one challenge and sends at least one event, so a visitor within the
+	// event limits is within the challenge limits too
+	challengeLimiter, err := NewRateLimiter(siteRate, prefixRate, DefaultRateLimitKeys, c.Now)
 	if err != nil {
 		return nil, err
 	}
@@ -140,22 +146,23 @@ func NewNode(ctx context.Context, c NodeConfig) (*Node, error) {
 	}
 	n.sites = registry.NewSiteWatcher(js, c.Log)
 	n.public, err = NewServer(ServerConfig{
-		Sites:      n.sites,
-		Challenger: challenger,
-		Proofs:     proofs,
-		Signals:    NewSignalsChecker(g.SecureTransport),
-		ClientIP:   ipr,
-		Geo:        n.geo,
-		Visitor:    n.visitor,
-		Cluster:    n.cluster,
-		Limiter:    limiter,
-		Stats:      n.stats,
-		Publisher:  n.pub,
-		Releases:   n.releases,
-		MaxBody:    g.MaxBody,
-		Log:        c.Log,
-		Registerer: c.Registry,
-		Now:        c.Now,
+		Sites:            n.sites,
+		Challenger:       challenger,
+		Proofs:           proofs,
+		Signals:          NewSignalsChecker(g.SecureTransport),
+		ClientIP:         ipr,
+		Geo:              n.geo,
+		Visitor:          n.visitor,
+		Cluster:          n.cluster,
+		Limiter:          limiter,
+		ChallengeLimiter: challengeLimiter,
+		Stats:            n.stats,
+		Publisher:        n.pub,
+		Releases:         n.releases,
+		MaxBody:          g.MaxBody,
+		Log:              c.Log,
+		Registerer:       c.Registry,
+		Now:              c.Now,
 	})
 	if err != nil {
 		return nil, err

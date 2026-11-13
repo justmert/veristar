@@ -29,7 +29,7 @@ import {
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as esbuild from "esbuild";
-import { ESBUILD_VERSION, packageVersion, ROOT } from "../build.mjs";
+import { ESBUILD_VERSION, ownInputsOnly, packageVersion, ROOT } from "../build.mjs";
 import { readManifest } from "./lib.mjs";
 
 const PINNED_ESBUILD = "0.28.2";
@@ -70,10 +70,12 @@ export async function pack(name, version, outRoot = join(ROOT, "npm")) {
     define: { __SDK_VERSION__: JSON.stringify(version) },
     write: true,
     logLevel: "silent",
+    metafile: true,
   });
   if (result.errors.length > 0 || result.warnings.length > 0) {
     throw new Error(`esbuild reported problems: ${JSON.stringify(result.warnings)}`);
   }
+  ownInputsOnly(result.metafile);
 
   // declaration files from the same sources; the .ts import suffixes are
   // rewritten to .js so the declarations resolve next to the javascript

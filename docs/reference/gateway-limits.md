@@ -14,6 +14,7 @@ reason in the table below.
 | `IPCLUSTER_THRESHOLD` | 20 | distinct visitor tokens per site and truncated prefix per hour; the event that brings the set to 20 and every later one in the window go to the quarantine band |
 | `RATE_SITE_PER_SECOND` / `RATE_SITE_BURST` | 200 / 400 | token bucket per site, per node |
 | `RATE_PREFIX_PER_SECOND` / `RATE_PREFIX_BURST` | 20 / 60 | token bucket per site and keyed hash of the /24 or /48, per node |
+| (same keys) for `GET /v1/c` | 200 / 400 per site, 20 / 60 per site and prefix | the challenge route has its own buckets at the same rates. a page load takes one challenge and sends at least one event, so a visitor within the event limits is within the challenge limits too, and fetching challenges never uses up the event budget |
 | `GATEWAY_MAX_BODY` | 8192 | event body bytes; larger answers 413 |
 | `CLIENT_IP_HEADER` | `X-Edge-Client-Ip` | the one header the local caddy sets (`deploy/caddy/edge.Caddyfile`) |
 | `GATEWAY_SECURE_TRANSPORT` | `true` | browsers reach the gateway over https and send fetch metadata |
@@ -37,14 +38,15 @@ browser suites was refused, rate limited or quarantined against the real gateway
 | Date | Key | Change | Reason |
 |---|---|---|---|
 | 2026-11-12 | all | starting values | the design |
+| 2026-11-13 | `RATE_SITE_*`, `RATE_PREFIX_*` | also applied to `GET /v1/c`, in separate buckets | this stage: the challenge route had no limit, so one client could request challenges without bound; checked after the origin and fetch metadata checks, so refused requests take no token (`TestChallengeRateLimits` in `tests/gateway`) |
 
 ## Responses
 
 202 queued (only after the JetStream acknowledgement), 204 dropped for `Sec-GPC: 1`,
 400 malformed (also a missing `User-Agent`), 403 origin, challenge, proof, replay or
 fetch metadata, 404 unknown or inactive site, 410 revoked tracker version, 413 body
-too large, 429 rate limited, 503 queue unavailable, registry not loaded or a missing
-client address header. Every response to a request with `Origin` carries
+too large, 429 rate limited (events and challenges), 503 queue unavailable, registry
+not loaded or a missing client address header (events and challenges). Every response to a request with `Origin` carries
 `Access-Control-Allow-Origin` with that origin and `Vary: Origin`. The tracker files
 carry `Access-Control-Allow-Origin: *`, `Cross-Origin-Resource-Policy: cross-origin`
 and `Cache-Control: public, max-age=31536000, immutable`; there is no `latest` alias.

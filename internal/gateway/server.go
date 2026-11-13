@@ -35,9 +35,13 @@ type ServerConfig struct {
 	Visitor    *Visitor
 	Cluster    *IPCluster
 	Limiter    *RateLimiter
-	Stats      *Stats
-	Publisher  *Publisher
-	Releases   *Releases
+	// ChallengeLimiter holds the token buckets of GET /v1/c, kept apart
+	// from the event buckets so that fetching challenges never uses up a
+	// visitor's event budget or the other way round.
+	ChallengeLimiter *RateLimiter
+	Stats            *Stats
+	Publisher        *Publisher
+	Releases         *Releases
 	// MaxBody is GATEWAY_MAX_BODY, at most events.MaxBody.
 	MaxBody    int
 	Log        *slog.Logger
@@ -72,7 +76,7 @@ type Server struct {
 // NewServer checks the configuration and registers the metrics.
 func NewServer(c ServerConfig) (*Server, error) {
 	if c.Sites == nil || c.Challenger == nil || c.Proofs == nil || c.Signals == nil || c.ClientIP == nil ||
-		c.Geo == nil || c.Visitor == nil || c.Cluster == nil || c.Limiter == nil || c.Stats == nil ||
+		c.Geo == nil || c.Visitor == nil || c.Cluster == nil || c.Limiter == nil || c.ChallengeLimiter == nil || c.Stats == nil ||
 		c.Publisher == nil || c.Releases == nil || c.Log == nil || c.Registerer == nil || c.Now == nil {
 		return nil, errors.New("gateway: ServerConfig is missing a dependency")
 	}
@@ -178,7 +182,9 @@ func (s *Server) tracker(w http.ResponseWriter, r *http.Request) {
 }
 
 // challenge answers GET /v1/c?w=<site id> for an active site, from one of
-// its origins.
+// its origins, within the site's and the truncated prefix's challenge rate.
+// the limit comes last, so refused requests for unknown sites or from
+// foreign origins neither take tokens nor create buckets.
 func (s *Server) challenge(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 	ctx, cancel := context.WithTimeout(r.Context(), requestBudget)
@@ -201,6 +207,9 @@ func (s *Server) challenge(w http.ResponseWriter, r *http.Request) {
 		if err = CheckOrigin(site, r.Header.Get("Origin")); err == nil {
 			err = s.c.Signals.Check(r.Header)
 		}
+		if err == nil {
+			err = s.limitChallenge(ctx, r, site.ID)
+		}
 	}
 	var body []byte
 	if err == nil {
@@ -218,6 +227,39 @@ func (s *Server) challenge(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(body)
 	s.observe(routeChallenge, "issued", start)
+}
+
+// limitChallenge takes a token from the challenge buckets of the site and of
+// the request's truncated prefix.
+func (s *Server) limitChallenge(ctx context.Context, r *http.Request, siteID string) error {
+	ip, err := s.c.ClientIP.FromRequest(r)
+	if err != nil {
+		// only caddy sets the header, so a missing or broken one is the
+		// server side's fault, not the visitor's
+		return &RejectError{Reason: ReasonUnavailable, Err: fmt.Errorf("client address header %s unusable: %w", s.c.ClientIP.Header(), err)}
+	}
+	_, pk, err := s.prefixOf(ctx, ip)
+	if err != nil {
+		return &RejectError{Reason: ReasonUnavailable, Err: err}
+	}
+	if s.c.ChallengeLimiter.Allow(siteID, pk) != RateAllowed {
+		return reject(ReasonRateLimited)
+	}
+	return nil
+}
+
+// prefixOf returns the keyed hash of ip's truncated prefix, as hex for the
+// ip-cluster and as the rate limiters' key.
+func (s *Server) prefixOf(ctx context.Context, ip ClientIP) (string, PrefixKey, error) {
+	var pk PrefixKey
+	prefix, err := s.c.Visitor.PrefixKey(ctx, ip)
+	if err != nil {
+		return "", pk, fmt.Errorf("ip-cluster secret unavailable: %w", err)
+	}
+	if _, err := hex.Decode(pk[:], []byte(prefix)); err != nil {
+		return "", pk, fmt.Errorf("prefix key is not hex: %w", err)
+	}
+	return prefix, pk, nil
 }
 
 // reasonOf maps an error to its reason and logs the ones that are the
@@ -316,14 +358,9 @@ func (s *Server) handleEvent(ctx context.Context, r *http.Request) verdict {
 		s.c.Log.Error("client address header unusable", "header", s.c.ClientIP.Header(), "error", err.Error())
 		return refused(ReasonUnavailable, site.ID)
 	}
-	prefix, err := s.c.Visitor.PrefixKey(ctx, ip)
+	prefix, pk, err := s.prefixOf(ctx, ip)
 	if err != nil {
-		s.c.Log.Error("ip-cluster secret unavailable", "error", err.Error())
-		return refused(ReasonUnavailable, site.ID)
-	}
-	var pk PrefixKey
-	if _, err := hex.Decode(pk[:], []byte(prefix)); err != nil {
-		s.c.Log.Error("prefix key is not hex", "error", err.Error())
+		s.c.Log.Error("prefix key unavailable", "error", err.Error())
 		return refused(ReasonUnavailable, site.ID)
 	}
 	if s.c.Limiter.Allow(site.ID, pk) != RateAllowed {

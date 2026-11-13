@@ -16,16 +16,19 @@ import (
 	"github.com/justmert/stellar-analytics/internal/events"
 )
 
-// the four example sites of tests/e2e/sites.ts, with the same fixed ids
+// the example sites of tests/e2e/sites.ts (SITES), with the same fixed ids
 var exampleSites = []struct{ id, origin string }{
 	{"0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e01", "https://static.sa-tenant.example"},
 	{"0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e02", "https://spa.sa-tenant.example"},
 	{"0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e03", "https://rr.sa-tenant.example"},
 	{"0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e04", "https://astro.sa-tenant.example"},
+	{"0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e06", "https://vue.sa-tenant.example"},
+	{"0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e07", "https://svelte.sa-tenant.example"},
+	{"0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e08", "https://next.sa-tenant.example"},
 }
 
 // TestBrowserMatrix runs the whole this stage browser matrix (chromium, firefox,
-// webkit, firefox with gpc; four example sites) against the real gateway
+// webkit, firefox with gpc; seven example sites) against the real gateway
 // image behind the edge caddy and real nats, then checks that every event
 // the gateway answered with 202 is exactly one WebEvent on WEB_EVENTS with
 // the fields the browser sent, and that none was refused, rate limited or
@@ -111,4 +114,17 @@ func TestBrowserMatrix(t *testing.T) {
 			strings.Join(want, "\n"), strings.Join(got, "\n"))
 	}
 	t.Logf("%d browser events answered 202, %d WebEvents queued, all primary", len(want), len(got))
+
+	// GET /v1/c has its own token buckets (docs/reference/gateway-limits.md);
+	// the browsers' normal load must not reach them either
+	ch := responses(t, g, "challenge")
+	t.Logf("gateway_responses_total{route=challenge}: %v", ch)
+	if ch["issued"] == 0 {
+		t.Errorf("no challenge issued")
+	}
+	for outcome, n := range ch {
+		if outcome != "issued" && outcome != "rejected_unknown_site" {
+			t.Errorf("challenge outcome %s: %v", outcome, n)
+		}
+	}
 }

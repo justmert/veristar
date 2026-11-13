@@ -132,23 +132,74 @@ run covers them.
 
 ## 7. Licences
 
-`scripts/supply-chain/licences.py` reads Trivy's package list of `go.mod`, `pnpm-lock.yaml`, the
-example lockfiles, `uv.lock` and `Cargo.lock`, looks up in the npm, PyPI or crates.io registry any
-package whose licence was not found on disk, and fails on any licence expression that is not on the
-OSI approved list, unless a reviewed exception in `docs/security/licence-exceptions.json` names
-that licence for that package (data licences only: CC-BY-4.0 for caniuse-lite, CC0-1.0 for
-mdn-data, CDLA-Permissive-2.0 for webpki-root-certs).
+**Policy.** Everything this project ships, and every production dependency of it, carries a licence
+on the OSI approved list. There are no exceptions for shipped code. Dependencies that are never
+shipped (development tools, test fixtures, example apps and operator tooling) are listed in a
+separate section of the report. Any of them under a licence that is not OSI approved must be on an
+explicit allowlist, reviewed for one exact version and licence, with a written reason. Nothing is
+skipped silently: a package that cannot be placed in either section, or whose licence cannot be
+found, fails the gate.
 
-**Result on 2026-11-13: not clean.** 1,689 packages, 26 failing. All 26 are transitive
-dependencies of `@creit.tech/stellar-wallets-kit` 2.7.1 and 2.8.0, which are only development
-dependencies of `packages/tracker` (the this stage adapter tests run the real kit) and a dependency of
-the example app `examples/wallets-kit-spa`: 20 `@reown/*` and `@walletconnect/*` packages under
-"SEE LICENSE IN LICENSE.md" (not an OSI licence), and `@creit.tech/xbull-wallet-connect`,
-`@hot-wallet/sdk`, `@near-wallet-selector/core`, `@trezor/crypto-utils`, `eyes` and
-`text-encoding-utf-8` with no licence in their registry metadata. None of them is in any shipped
-artifact: the tracker imports only the kit's types, and neither `sdk.js` nor the npm package
-contains kit code. the operator decides whether to accept these as test-only exceptions or to drop
-the real-kit tests; the `licences` CI job stays red until then.
+`scripts/supply-chain/licence-gate.sh` (the `licences` job in `ci.yml`, and local runs) feeds
+`scripts/supply-chain/licences.py`, which reads `docs/security/licence-policy.json`:
+
+| Section | What it contains | How it is derived | Fails on |
+|---|---|---|---|
+| shipped | Go modules linked into a platform binary; npm packages of the console bundle, `sdk.js` and the npm package of the tracker | `go list -deps ./cmd/...` in the root module and `go list -deps .` in the collector distribution that ocb generates (`dist/scf-otelcol`, from `collector/builder-config.yaml`); the `dependencies` and `optionalDependencies` closure of the shipped importers `apps/console` and `packages/tracker` in `pnpm-lock.yaml` | any licence not on the OSI list |
+| not shipped | everything else in `go.mod`, the collector module, `pnpm-lock.yaml`, the example lockfiles (`package-lock.json`, `uv.lock`, `Cargo.lock`, `go.mod`) and `infra/ansible/requirements.txt`, each with the importers that pull it in | the rest of the same graphs | a non-OSI licence without a matching allowlist entry, and any allowlist entry that no longer matches (package gone, upgraded, relicensed or now shipped) |
+
+Three checks keep the shipped section honest instead of trusting `package.json`:
+
+- The console bundle is built with its own Vite configuration and every npm package whose code lands
+  in it is listed (`apps/console/scripts/bundle-packages.mjs`). Each must be in the shipped section,
+  so a package imported at runtime but declared as a devDependency fails the gate. CSS is compiled
+  by the Tailwind plugin and is not part of that module graph, so the policy names what
+  `src/index.css` imports: `tailwindcss` (a devDependency) counts as shipped, and of `shadcn` only
+  the file `shadcn/tailwind.css` is used, so `shadcn` is shipped but the dependencies of its CLI
+  are not.
+- The tracker builds (`sdk.js` in `build.mjs`, the npm package in `scripts/pack.mjs`) fail when
+  esbuild reports any input outside `src/` and `releases/`, and the packed `package.json` declares
+  no dependencies. The tracker therefore ships no third-party code, including no Wallets Kit code.
+- Go: only modules that are linked into a shipped binary count as shipped. Test-only modules such
+  as testcontainers are listed as not shipped.
+
+Packages whose licence trivy did not find on disk are looked up in the npm, PyPI or crates.io
+registry. Our own modules (the root module, the collector distribution and the example roots) are
+reported separately as own code under the repository's Apache-2.0 licence.
+
+**Not covered by this gate.** The Caddy binary (built by xcaddy inside
+`deploy/images/caddy.Dockerfile` with two plugins) and the operating system packages of the base
+images (distroless, Alpine in the Caddy image, Debian in `postgres-ha`) are not part of these
+graphs. The image SBOMs from `scan-image.sh` list them; checking their licences is a separate step
+that does not exist yet.
+
+**Why the Wallets Kit packages are allowlisted.** `@creit.tech/stellar-wallets-kit` 2.7.1 and 2.8.0
+are installed only as devDependencies of `packages/tracker` (`swk-2.7.1`, `swk-2.8.0`, so the phase
+14 adapter tests run the real kit) and as a dependency of the example app
+`examples/wallets-kit-spa`, a sample for tenants that is also a test target and is never deployed.
+The lockfile graph shows no other path to them. Checked on 2026-11-13: esbuild's input list for
+`sdk.js` and for the npm entry points contains only `src/` and `releases/` files; the packed npm
+package (`@sa-local-test/tracker` 1.1.0) has no dependency fields, no bare imports and no kit
+code; the console bundle contains none of the kit's packages and no `walletconnect`, `reown`,
+`creit.tech`, `xbull` or `trezor` string; the SBOMs of all 12 platform images list none of them. The
+kit pulls in 26 lockfile entries the gate reports as non-OSI (25 distinct versions): 19 Reown and
+WalletConnect versions and `@trezor/crypto-utils` under "SEE LICENSE IN LICENSE.md" (not an OSI
+licence), and five with no licence in their registry metadata (`@creit.tech/xbull-wallet-connect`,
+`@hot-wallet/sdk`, `@near-wallet-selector/core`, `eyes`, `text-encoding-utf-8`). The project
+does not bundle or redistribute any of them, so they are allowlisted as test and example
+dependencies. Tenants who add the kit to their own sites take it from npm under its own terms.
+
+The other allowlisted packages are data, not code: `caniuse-lite` (CC-BY-4.0, browser support data
+for build tools; it reaches the console importer only through the shadcn CLI and is not bundled),
+`mdn-data` (CC0-1.0, CSS reference data for test and example tooling) and `webpki-root-certs`
+(CDLA-Permissive-2.0, root certificates in the Rust example app). Before 2026-11-13 these three were
+exceptions that applied wherever the package appeared; they are now accepted only while not
+shipped.
+
+**Changing the allowlist.** Add or update an entry in `not_shipped_allowlist` with the exact
+version and the licence string the report printed, a reason that says why the package is not
+shipped and what it is, and the review date. The reviewer checks the report's "pulled in by" line.
+A version bump of an allowlisted package fails the gate until the entry is reviewed again.
 
 ## 8. Results recorded on 2026-11-13
 

@@ -39,13 +39,26 @@ export async function build(version) {
     define: { __SDK_VERSION__: JSON.stringify(version) },
     write: false,
     logLevel: "silent",
+    metafile: true,
   });
   if (result.errors.length > 0 || result.warnings.length > 0) {
     throw new Error(`esbuild reported problems: ${JSON.stringify(result.warnings)}`);
   }
+  ownInputsOnly(result.metafile);
   const file = result.outputFiles[0];
   if (!file) throw new Error("esbuild produced no output");
   return describe(Buffer.from(file.contents));
+}
+
+// sdk.js and the npm package carry only this package's own source and release
+// files. the licence gate (docs/security/supply-chain.md section 7) relies on
+// that: the tracker has no runtime dependencies, so a third-party module
+// bundled in by accident fails the build instead of shipping unscanned.
+export function ownInputsOnly(metafile) {
+  const foreign = Object.keys(metafile.inputs).filter((i) => !/^(src|releases)\//.test(i));
+  if (foreign.length > 0) {
+    throw new Error(`the tracker bundle must not include other packages: ${foreign.join(", ")}`);
+  }
 }
 
 export function describe(bytes) {
