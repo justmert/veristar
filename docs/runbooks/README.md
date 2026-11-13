@@ -33,7 +33,7 @@ such as a tenant id, are written as `<tenant id>`. Nothing in angle brackets is 
 | [operators.md](operators.md) | 2026-11-13, sync path | this stage, `TestSyncFlags`, `TestOperatorFlag`, `TestLifecycle` |
 | [capacity.md](capacity.md) | 2026-11-13, measurement only | this stage, `TestMeasure` |
 | [slo-report.md](slo-report.md) | 2026-11-13 | this stage collection, this stage report rerun |
-| [alerts.md](alerts.md) | 2026-11-13, 16 fired and resolved, 3 fired only, of 35 alerts | alert fire-drills |
+| [alerts.md](alerts.md) | 2026-11-13, 16 fired and resolved, 3 fired only, of 37 alerts | alert fire-drills |
 
 No runbook has been run against staging or production: neither exists yet (inputs I4, I5, I6,
 I13, I14, I15). The plan requires every runbook to be executed on staging before this stage is

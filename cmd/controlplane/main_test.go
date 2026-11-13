@@ -21,6 +21,7 @@ import (
 
 	"github.com/justmert/stellar-analytics/db"
 	"github.com/justmert/stellar-analytics/internal/config"
+	"github.com/justmert/stellar-analytics/internal/controlplane/terms"
 	pdb "github.com/justmert/stellar-analytics/internal/db"
 	"github.com/justmert/stellar-analytics/internal/db/dbtest"
 	"github.com/justmert/stellar-analytics/internal/natsx"
@@ -170,7 +171,7 @@ func TestServeStartsAndStops(t *testing.T) {
 	require.NoError(t, json.NewDecoder(res.Body).Decode(&tm))
 	_ = res.Body.Close()
 	require.Equal(t, http.StatusOK, res.StatusCode)
-	require.Equal(t, "2026-11-13-draft.3", tm.Version)
+	require.Equal(t, terms.MustCurrent().Version, tm.Version)
 	require.Equal(t, "no-store", res.Header.Get("Cache-Control"))
 
 	// sign-in starts with a redirect to the identity provider of this build

@@ -224,7 +224,9 @@ func testMembersAndInvites(t *testing.T, e *env) {
 	require.Equal(t, http.StatusConflict, r.status)
 	require.Equal(t, "already_member", r.code(t))
 
-	// an unknown login gets an invite
+	// a login that holds a github account but never signed in gets an
+	// invite, bound to that account's id
+	futureID := e.githubAccount(t, "Future-Dev")
 	r = owner.call(t, http.MethodPost, mp, map[string]any{"github_login": "Future-Dev", "role": "owner"})
 	require.Equal(t, http.StatusCreated, r.status, string(r.body))
 	inv := r.json(t)
@@ -234,6 +236,11 @@ func testMembersAndInvites(t *testing.T, e *env) {
 	r = owner.call(t, http.MethodPost, mp, map[string]any{"github_login": "future-dev", "role": "member"})
 	require.Equal(t, http.StatusConflict, r.status)
 	require.Equal(t, "invite_exists", r.code(t))
+
+	// a login no github account holds can be neither added nor invited
+	r = owner.call(t, http.MethodPost, mp, map[string]any{"github_login": "nobody-on-github", "role": "member"})
+	require.Equal(t, http.StatusUnprocessableEntity, r.status, string(r.body))
+	require.Contains(t, string(r.body), "unknown_github_login")
 
 	for _, bad := range []map[string]any{
 		{"github_login": "-bad", "role": "member"},
@@ -254,7 +261,7 @@ func testMembersAndInvites(t *testing.T, e *env) {
 
 	// the invitee signs in for the first time: the invite becomes a
 	// membership with the invited role, and disappears
-	future := e.signIn(t, "future-dev")
+	future := e.signInAs(t, futureID, "future-dev")
 	r = future.call(t, http.MethodGet, "/api/tenants/"+tenant.String(), nil)
 	require.Equal(t, http.StatusOK, r.status, string(r.body))
 	require.Equal(t, "owner", r.json(t)["role"])
@@ -263,6 +270,7 @@ func testMembersAndInvites(t *testing.T, e *env) {
 	require.Empty(t, l["invites"])
 
 	// a revoked invite is gone and audited
+	e.githubAccount(t, "never-comes")
 	r = owner.call(t, http.MethodPost, mp, map[string]any{"github_login": "never-comes", "role": "member"})
 	require.Equal(t, http.StatusCreated, r.status)
 	id2 := r.json(t)["invite"].(map[string]any)["id"].(string)
@@ -275,6 +283,7 @@ func testMembersAndInvites(t *testing.T, e *env) {
 	require.Equal(t, http.StatusNotFound, r.status)
 
 	// an expired invite neither lists nor resolves, and a new one can be made
+	lateID := e.githubAccount(t, "late-person")
 	r = owner.call(t, http.MethodPost, mp, map[string]any{"github_login": "late-person", "role": "member"})
 	require.Equal(t, http.StatusCreated, r.status)
 	e.superuser(t, func(c *pgx.Conn) {
@@ -282,7 +291,7 @@ func testMembersAndInvites(t *testing.T, e *env) {
 		require.NoError(t, err)
 	})
 	require.Len(t, owner.call(t, http.MethodGet, mp, nil).json(t)["invites"], 0)
-	late := e.signIn(t, "late-person")
+	late := e.signInAs(t, lateID, "late-person")
 	require.Equal(t, http.StatusNotFound, late.call(t, http.MethodGet, "/api/tenants/"+tenant.String(), nil).status)
 	r = owner.call(t, http.MethodPost, mp, map[string]any{"github_login": "late-person", "role": "member"})
 	require.Equal(t, http.StatusCreated, r.status, string(r.body))
@@ -632,6 +641,7 @@ func testIsolation(t *testing.T, e *env) {
 	tb := bob.enroll(t, "Iso B")
 	sa := alice.addSite(t, ta, "a.example.org")
 	sb := bob.addSite(t, tb, "b.example.org")
+	e.githubAccount(t, "iso-pending")
 	r := alice.call(t, http.MethodPost, "/api/tenants/"+ta.String()+"/members", map[string]any{"github_login": "iso-pending", "role": "member"})
 	require.Equal(t, http.StatusCreated, r.status)
 	inviteA := r.json(t)["invite"].(map[string]any)["id"].(string)

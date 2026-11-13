@@ -86,6 +86,9 @@ type env struct {
 	tracker  *controlplane.Tracker
 	umami    *umamictr.Stack
 	nextGHID int64
+	// accounts is the oauth fixture, which also answers github's public
+	// users api; githubAccount registers a login there
+	accounts *githuboauth.Server
 	// router is the api handler, for walking its routes
 	router chi.Routes
 	// checks runs the stellar.toml fetch after a site is created; Wait
@@ -183,6 +186,7 @@ func start(t *testing.T) *env {
 	// are resolved to a github account id at add time (contract 4.2.5)
 	fx.Register(githuboauth.User{ID: 9_000_001, Login: "gate-pending"})
 	fx.Register(githuboauth.User{ID: 9_000_002, Login: "intruder-friend"})
+	e.accounts = fx
 	e.fixture = httptest.NewServer(fx.Handler())
 	t.Cleanup(e.fixture.Close)
 
@@ -331,6 +335,17 @@ func (e *env) signIn(t *testing.T, login string) *client {
 	t.Helper()
 	e.nextGHID++
 	return e.signInAs(t, e.nextGHID, login)
+}
+
+// githubAccount gives login a new github account id in the fixture, as
+// github holds an account for every login a person can be invited by. the
+// control plane binds an invite to that id (contract 4.2.5), so the invitee
+// must later sign in with it: signInAs(t, id, login).
+func (e *env) githubAccount(t *testing.T, login string) int64 {
+	t.Helper()
+	e.nextGHID++
+	e.accounts.Register(githuboauth.User{ID: e.nextGHID, Login: login})
+	return e.nextGHID
 }
 
 func (e *env) signInAs(t *testing.T, ghID int64, login string) *client {

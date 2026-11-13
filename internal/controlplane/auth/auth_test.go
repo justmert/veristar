@@ -364,7 +364,8 @@ func TestSignInRoundTrip(t *testing.T) {
 	require.False(t, got.User.IsOperator)
 	require.Empty(t, got.Tenants)
 	require.NotNil(t, got.Tenants, "tenants is an empty list, not null")
-	require.Equal(t, auth.MeTerms{CurrentVersion: "2026-11-12-draft.2", Status: "draft", URL: "/terms"}, got.Terms)
+	cur := terms.MustCurrent()
+	require.Equal(t, auth.MeTerms{CurrentVersion: cur.Version, Status: cur.Status, URL: "/terms"}, got.Terms)
 	require.Equal(t, "no-store", me.Header.Get("Cache-Control"))
 
 	// what the fixture saw on the back channel
@@ -563,7 +564,7 @@ func TestSignInResolvesInvites(t *testing.T) {
 			return err
 		}
 		tenantID = tn.ID
-		if _, err := tx.Exec(ctx, `update cp.tenants set status = 'active', accepted_terms_version = '2026-11-12-draft.2' where id = $1`, tn.ID); err != nil {
+		if _, err := tx.Exec(ctx, `update cp.tenants set status = 'active', accepted_terms_version = $2 where id = $1`, tn.ID, terms.MustCurrent().Version); err != nil {
 			return err
 		}
 		if err := tx.QueryRow(ctx, `insert into cp.invites (tenant_id, github_id, github_login, role, created_by, expires_at)
@@ -741,8 +742,10 @@ func TestUnauthenticatedAndTerms(t *testing.T) {
 	res = b.get(e.origin + "/api/terms")
 	require.Equal(t, http.StatusOK, res.StatusCode)
 	tm := decode[terms.Terms](t, res)
-	require.Equal(t, "2026-11-12-draft.2", tm.Version)
-	require.Equal(t, "draft", tm.Status)
+	// the served terms are the embedded document, whatever its version is
+	cur := terms.MustCurrent()
+	require.Equal(t, cur.Version, tm.Version)
+	require.Equal(t, cur.Status, tm.Status)
 
 	res = b.get(e.origin + "/api/nope")
 	require.Equal(t, http.StatusNotFound, res.StatusCode)
