@@ -7,6 +7,7 @@ import { AppShell } from "@/pages/app-shell";
 import { EnrollPage } from "@/pages/enroll";
 import { MembersPage } from "@/pages/members";
 import { NotFoundPage, RouteErrorPage } from "@/pages/not-found";
+import { AlertsPage } from "@/pages/operator/alerts";
 import { ApiKeysPage } from "@/pages/operator/api-keys";
 import { AuditPage } from "@/pages/operator/audit";
 import { ComparePage } from "@/pages/operator/compare";
@@ -81,6 +82,7 @@ export const router = createBrowserRouter([
         element: <OperatorLayout />,
         children: [
           { index: true, element: <ReviewQueuePage /> },
+          { path: "alerts", element: <AlertsPage /> },
           { path: "tenants", element: <TenantsPage /> },
           { path: "tenants/:tenantId", element: <TenantDetailPage /> },
           { path: "web", element: <GlobalWebPage /> },

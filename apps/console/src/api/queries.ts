@@ -42,6 +42,7 @@ export const keys = {
   opKeys: ["operator", "api-keys"] as const,
   opKeyUsage: (id: string) => ["operator", "api-keys", id, "usage"] as const,
   opKeyTenants: ["operator", "key-tenants"] as const,
+  opAlerts: ["operator", "alerts"] as const,
 };
 
 export const meQuery = queryOptions({
@@ -165,6 +166,20 @@ export const auditQuery = (q: AuditQuery) =>
     initialPageParam: null as string | null,
     getNextPageParam: (last) => last.next_cursor,
   });
+
+// the alerts page, the nav badge and the critical banner share this query,
+// so the operator area asks the control plane once per interval. polling
+// goes on in a background tab: an alert that fires while the tab is hidden
+// is on screen when the operator comes back, not 30 seconds later.
+export const ALERTS_REFRESH_MS = 30_000;
+
+export const operatorAlertsQuery = queryOptions({
+  queryKey: keys.opAlerts,
+  queryFn: ({ signal }) => api.operator.alerts(signal),
+  refetchInterval: ALERTS_REFRESH_MS,
+  refetchIntervalInBackground: true,
+  staleTime: 0,
+});
 
 // rollups run every 5 minutes and minute rows arrive as batches are written,
 // so a minute is the useful refresh; earlier data stays on screen meanwhile

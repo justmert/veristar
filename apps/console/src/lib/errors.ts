@@ -28,6 +28,11 @@ export function errorText(err: unknown): string {
         return "This site was deleted and can no longer be changed.";
       case "erasure_in_progress":
         return "Another erasure request for this site is still running. Wait for it to finish.";
+      case "alert_source_unreachable":
+        // the message names each alertmanager member and why it failed
+        return `Alert source unreachable. ${err.message}.${ref}`;
+      case "alert_source_not_configured":
+        return "No Alertmanager is configured for the control plane (ALERTMANAGER_URLS), so no alerts can be shown.";
       case "operator_required":
         return "Only operators of the service can do this.";
       case "invalid_transition":

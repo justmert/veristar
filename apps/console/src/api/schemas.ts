@@ -395,6 +395,42 @@ export const otlpTokenCreated = otlpToken.extend({
 });
 export type OtlpTokenCreated = z.infer<typeof otlpTokenCreated>;
 
+// 11.1 the live alerts of the alertmanager cluster (operators only)
+export const alertSource = z.object({
+  address: z.string().min(1),
+  reachable: z.boolean(),
+  watchdog_firing: z.boolean(),
+  error: z.string().nullable(),
+});
+export type AlertSource = z.infer<typeof alertSource>;
+
+export const alertState = z.enum(["active", "suppressed", "unprocessed"]);
+
+export const firingAlert = z.object({
+  fingerprint: z.string().min(1),
+  name: z.string().min(1),
+  severity: z.string().nullable(),
+  summary: z.string().nullable(),
+  description: z.string().nullable(),
+  node: z.string().nullable(),
+  instance: z.string().nullable(),
+  service: z.string().nullable(),
+  starts_at: time,
+  state: alertState,
+  inhibited_by: z.array(z.string()),
+  runbook: z.string().nullable(),
+  labels: z.record(z.string(), z.string()),
+});
+export type FiringAlert = z.infer<typeof firingAlert>;
+
+export const operatorAlerts = z.object({
+  checked_at: time,
+  watchdog_firing: z.boolean(),
+  sources: z.array(alertSource).min(1),
+  alerts: z.array(firingAlert),
+});
+export type OperatorAlerts = z.infer<typeof operatorAlerts>;
+
 // 2.2 error envelope
 export const errorEnvelope = z.object({
   error: z.object({

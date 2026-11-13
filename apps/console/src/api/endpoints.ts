@@ -32,6 +32,7 @@ import {
   members,
   type OperatorTenantSummary,
   type OtlpToken,
+  operatorAlerts,
   operatorSite,
   operatorTenantDetail,
   operatorTenantPage,
@@ -378,6 +379,9 @@ export const api = {
       request("PUT", "/operator/settings/removal-keep-aggregates", keepAggregates, { keep }),
     audit: (q: AuditQuery, cursor: string | null, signal?: AbortSignal) =>
       request("GET", auditPath(q, cursor), auditPage, undefined, signal),
+    // 11.1
+    alerts: (signal?: AbortSignal) =>
+      request("GET", "/operator/alerts", operatorAlerts, undefined, signal),
   },
 };
 

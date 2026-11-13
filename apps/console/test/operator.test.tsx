@@ -34,7 +34,21 @@ describe("operator area guard", () => {
   });
 
   it("opens the area for an operator", async () => {
-    stubFetch([{ status: 200, body: f.operatorMeBody }]);
+    // the area polls the alerts for its nav badge and critical banner
+    stubFetch([
+      { status: 200, body: f.operatorMeBody },
+      {
+        status: 200,
+        body: {
+          checked_at: "2026-11-13T12:00:00Z",
+          watchdog_firing: true,
+          sources: [
+            { address: "10.0.1.4:9093", reachable: true, watchdog_firing: true, error: null },
+          ],
+          alerts: [],
+        },
+      },
+    ]);
     const host = await renderRoutes(
       [
         {
