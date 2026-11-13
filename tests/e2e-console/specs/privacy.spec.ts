@@ -115,7 +115,8 @@ async function latest(): Promise<ErasureRow> {
 async function privacyPage(): Promise<Page> {
   const page = await owner.newPage();
   await page.goto(`${APP}/projects/${tenant.id}/privacy`);
-  await expect(page.getByRole("heading", { name: "Privacy" })).toBeVisible();
+  // exact: the project is named "Privacy project <host>", and its name is the page's h1
+  await expect(page.getByRole("heading", { name: "Privacy", exact: true })).toBeVisible();
   return page;
 }
 

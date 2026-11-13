@@ -249,6 +249,7 @@ func newService(t *testing.T, tn tenant, name, httpAddr, grpcAddr string, delta,
 	if err != nil {
 		t.Fatal(err)
 	}
+	exp = uncancelledExport{exp}
 	res := resource.NewSchemaless(attribute.String("service.name", name), attribute.String("service.instance.id", uuid.NewString()))
 	mp := sdkmetric.NewMeterProvider(sdkmetric.WithResource(res),
 		sdkmetric.WithReader(sdkmetric.NewPeriodicReader(exp, sdkmetric.WithInterval(exportEvery))))
@@ -259,6 +260,25 @@ func newService(t *testing.T, tn tenant, name, httpAddr, grpcAddr string, delta,
 	}
 	t.Cleanup(func() { _ = mp.Shutdown(context.Background()) })
 	return &service{tn: tn, name: name, mp: mp, hist: h}
+}
+
+// uncancelledExport runs every export to the reader's deadline even when the
+// reader cancels it. sdk/metric's PeriodicReader.Shutdown cancels the context
+// of a periodic export that is still in flight before its final collect, so
+// a delta batch being sent at that moment is dropped on the client (seen on a
+// github runner: 278 requests of one tenant, "failed to upload metrics:
+// context canceled"). the test counts every recorded request, so the client
+// must not lose one; the collector, nats and the writer are unchanged.
+type uncancelledExport struct{ sdkmetric.Exporter }
+
+func (e uncancelledExport) Export(ctx context.Context, rm *metricdata.ResourceMetrics) error {
+	detached := context.WithoutCancel(ctx)
+	if dl, ok := ctx.Deadline(); ok {
+		var cancel context.CancelFunc
+		detached, cancel = context.WithDeadline(detached, dl)
+		defer cancel()
+	}
+	return e.Exporter.Export(detached, rm)
 }
 
 // run records the service's quota evenly over d, in steps of 100 ms.
