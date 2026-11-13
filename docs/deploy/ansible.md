@@ -121,3 +121,64 @@ monitor counts non-5xx as healthy.
   revisits this together with the HA drills.
 - PostgreSQL connections from the services use `sslmode=disable` on the node's Compose
   network and the private network.
+
+## 8. Procedure, step by step
+
+Staging is shown. Needs [prerequisites.md](prerequisites.md), the SOPS files of
+[secrets.md](secrets.md) section 5, the inventory from [opentofu.md](opentofu.md) section 6,
+`cosign` on `PATH` and your age identity in `~/.config/sops/age/keys.txt` (or
+`SOPS_AGE_KEY_FILE`). Steps 1 to 3 are the first converge; [bootstrap.md](bootstrap.md) walks
+through it with the checks around it.
+
+1. **Environment variables that are not secret** go in
+   `infra/ansible/inventories/staging/group_vars/all.yml`, beside the generated `hosts.json`:
+
+   ```yaml
+   # images of the release workflow for repository <an operator input>
+   sa_image_registry: ghcr.io/justmert/stellar-analytics
+   # acme dns-01 through bunny.net an operator input; "internal" is refused outside the local converge
+   sa_tls: bunny
+   # numeric github ids of the scf operators an operator input, comma separated
+   sa_operator_github_ids: "<an operator input>"
+   ```
+
+2. **Converge** at a release tag (`v<release>`, whose images `release-images.yml` built and
+   signed):
+
+   ```sh
+   make staging-deploy SA_IMAGE_TAG=<release>
+   ```
+
+   This runs `site.yml`: base and secrets on every node, NATS and etcd, postgres-ha and HAProxy,
+   the backup settings, `bootstrap.yml`, the edge and core services, then the observability role.
+   Expected: a `PLAY RECAP` with `failed=0` and `unreachable=0` for every node. For comparison,
+   the local converge's first run reported `ok=91 changed=40 failed=0` on the core node and
+   `changed=32` on each edge node ([local-converge.md](local-converge.md) section 5). The guards
+   print `no inventory: run make staging-apply first` and
+   `set SA_IMAGE_TAG to the release to deploy` when their inputs are missing.
+
+   `site.yml` pulls the images by tag and does **not** verify their signatures; only
+   `deploy.yml` does (`ROLLING=1`). For the first converge of an environment, check the release
+   by hand first: `cosign verify` as in [../security/supply-chain.md](../security/supply-chain.md)
+   section 3, or run step 4 right after.
+
+3. **Run it again.** Expected: `changed=0` on every node (the local converge's second run:
+   `ok=82 changed=0 failed=0` on the core node).
+
+4. **Later rollouts** use the rolling deploy with signature verification
+   ([upgrade.md](upgrade.md)):
+
+   ```sh
+   make staging-deploy ROLLING=1 SA_IMAGE_TAG=<release> SA_RELEASE_MANIFEST=<path to release-images.json>
+   ```
+
+   Without the manifest it stops with
+   `ROLLING=1 needs SA_RELEASE_MANIFEST=<release-images.json of the release> (this stage signature check)`.
+
+5. **Lint** after changing a role: `make ansible-lint` (passed on 2026-11-13 with the production
+   profile, 0 failures).
+
+Steps 2 and 3 ran only against the local converge (`make local-converge`, same playbook,
+inventory `inventories/local/`); step 4's signature check ran in `make supplychain-it` with a
+test-only key. Nothing has run against staging: inputs I4, I5, I6, I13, I14, I15, and the
+PostgreSQL 18.7 gap in section 2.

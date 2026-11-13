@@ -51,6 +51,18 @@ make local-converge-e2e                # this stage and 8 paths through the conv
 make local-converge-down               # removes containers, volumes, networks, images, state
 ```
 
+Since 2026-11-13 `site.yml` ends with the `observability` play (this stage) on every edge
+and core node. It needs somewhere to send alerts: the Discord webhook an operator input does not
+exist locally, so pass the address of the test receiver instead, and run that receiver
+on the controller, where its log shows every Alertmanager message:
+
+```sh
+go run ./tests/observability/receiver -listen 172.31.99.1:8099 &
+make local-converge ANSIBLE_EXTRA='-e observability_test_webhook_base=http://172.31.99.1:8099'
+```
+
+Without one of the two the play stops at its input check and names both.
+
 Everything generated stays under `.scratch/scratch/local-converge/` (SSH key, known
 hosts, age identity, logs), `infra/secrets/local/` and
 `infra/ansible/inventories/local/hosts.json`, all gitignored. The local secrets are

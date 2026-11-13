@@ -74,6 +74,9 @@ the first failure:
 4. `make console-e2e` and `make webpath` (the end-to-end suites).
 
 The log is in `.scratch/scratch/umami-upgrade/`. Commit the diff only after every gate passed.
+Before rolling a new Umami out, take the dump that makes a rollback possible, and if the new
+version misbehaves, roll back as in [umami-upgrade.md](umami-upgrade.md) (Umami's migrations only
+go forward, so the rollback is a database restore).
 
 ### Our own images
 

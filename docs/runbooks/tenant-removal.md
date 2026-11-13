@@ -1,8 +1,47 @@
-# Tenant removal
+# Tenant suspension and removal
 
-How an operator removes a project, what happens to its data, and how to
-follow or repair a removal. Contract: `docs/reference/control-plane-api.md`
-sections 5.5 and 5.13. Code: `internal/controlplane/lifecycle`.
+How an operator suspends, resumes and removes a project, what happens to its
+data, and how to follow or repair a removal. Contract:
+`docs/reference/control-plane-api.md` sections 5.5, 5.11 and 5.13. Code:
+`internal/controlplane/lifecycle`. Every action is an operator route: a
+console session of a user whose GitHub id is in `OPERATOR_GITHUB_IDS`
+([operators.md](operators.md)).
+
+## Suspending a project
+
+Suspension stops ingestion and keeps everything else: use it while a
+question about a project is open (traffic that looks forged, a project that
+may not be part of the ecosystem, an abuse report), or as the reversible
+first step before removal.
+
+1. In the console operator area open the project and choose **Suspend**, or
+   call `POST /api/operator/tenants/{tenant_id}/suspend` with
+   `{"reason": "..."}`. The reason is required and the project's members see
+   it. Only an `active` project can be suspended; anything else answers
+   `409 invalid_transition` with the current status.
+2. In one transaction the status becomes `suspended` with an audit row
+   (`tenant.suspend`), then the reconciler switches the project's entries in
+   the `registry_sites` and `registry_otlp` buckets to `suspended`. From then
+   on the gateways refuse the project's web events and the collectors refuse
+   its OTLP tokens. Refusals are counted, so the project's ingest view shows
+   them.
+3. The Umami dashboards stay readable for the members. Data already stored
+   stays. Members see the status and reason in the console.
+4. Check it took effect:
+
+   ```sql
+   select status, status_reason, status_changed_at from cp.tenants where id = '<tenant id>';
+   select at, action, detail from cp.audit_log
+   where detail ->> 'tenant_id' = '<tenant id>' order by at desc limit 5;
+   ```
+
+   (run on the leader as in [README.md](README.md)). The gateway's refusal of
+   a suspended site is `rejected_inactive_site` in `cp.web_ingest_hourly`.
+
+**Resume** with **Resume** or `POST /api/operator/tenants/{tenant_id}/resume`
+(`reason` optional). The registry entries switch back to `active` and
+ingestion restarts. Events sent while suspended were refused, not queued, and
+do not come back.
 
 ## Open question for SCF
 
@@ -82,3 +121,14 @@ is in the control plane or jobs log with the step name and tenant id.
 - `removed tenant has no cp.tenant_removals row`: the status was set to
   `removed` by hand in the database. Removal must go through the operator api.
   Set the previous status back and remove the project through the api.
+
+## Exercised
+
+| Date | What ran | Result | Source |
+|---|---|---|---|
+| this stage | Operator lifecycle and console end-to-end suites | operator lifecycle 6/6, console e2e 35/35 | plan status, this stage |
+| 2026-11-13 | this stage: `go test -race -run 'TestLifecycle/(SuspendResume\|Remove\|OperatorIDRemoved\|PurgeResumes)$' ./internal/controlplane/lifecycle/` (real PostgreSQL, NATS and Umami containers; the operator routes this runbook calls, signed in through the test-only OAuth fixture) | `SuspendResume`, `Remove`, `PurgeResumes` and `OperatorIDRemoved` pass in 19.7 s | this page |
+
+Not yet exercised by a person through the console of a deployed
+environment: no staging exists. The SCF answer on whether aggregates are kept
+after removal is still open (section above).

@@ -290,3 +290,90 @@ Installed into `~/.local/bin/tofu` from the GitHub release
 | SSH firewall rule values | I13 |
 | SOPS file with the passphrase and credentials | I14 (recipients), I5, I6 |
 | Admin SSH public keys for cloud-init (`admin_ssh_public_keys`) | not in the input table; needed from the operator with I13 |
+
+## 6. Procedure, step by step
+
+Staging is shown; production is the same with `production` (and `CONFIRM=production` only for
+`production-destroy`). Needs [prerequisites.md](prerequisites.md) done, `sops` and `tofu` on
+`PATH`, and `infra/secrets/staging/tofu.enc.env` from [secrets.md](secrets.md) section 5.
+None of these steps has run against a real account: the expected outputs below are the
+messages the Makefile, `scripts/tofu-state-bootstrap.sh` and OpenTofu print, not a recorded run.
+
+1. **Write `infra/tofu/envs/staging/terraform.tfvars`** with the non-secret inputs. Its shape
+   is `tests/infra/sample.tfvars`, with real values in place of the documentation-only ones:
+
+   ```hcl
+   base_domain           = "<an operator input>"
+   admin_cidrs           = ["<an operator input>"]
+   admin_ssh_public_keys = ["<an operator input>"]
+   state_bucket          = "<state bucket name, an operator input>"
+   state_location        = "fsn1"
+   backup_bucket         = "<backup bucket name, an operator input>"
+   backup_location       = "hel1"
+   edge_server_type      = "<server type available in fsn1, nbg1 and hel1, an operator input>"
+   core_server_type      = "<server type available in fsn1 and nbg1, an operator input>"
+   server_image          = "<Debian 13 image name, an operator input>"
+   ```
+
+   `state_bucket` and `state_location` must each be on one plain `key = "value"` line (the
+   bootstrap script reads them with `sed`). The planning defaults for the server types are
+   `cpx22` (edge) and `cpx42` (core); check they can be ordered in those locations first.
+   Without this file every target stops with
+   `infra/tofu/envs/staging/terraform.tfvars is missing (inputs I4, I5, I13)` (checked
+   2026-11-13).
+
+2. **Create the state bucket** (once per environment):
+
+   ```sh
+   make state-bootstrap ENV=staging
+   ```
+
+   Expected: `created state bucket <name> in fsn1 (private, unversioned)`, or on a rerun
+   `state bucket <name> already exists in fsn1`. Any other HTTP answer stops with
+   `HEAD <url> answered <status>; not creating anything`. Without `ENV` the target prints
+   `usage: make state-bootstrap ENV=staging|production`.
+
+3. **Plan:**
+
+   ```sh
+   make staging-plan
+   ```
+
+   It runs `tofu init` against the S3 backend, then `plan -out=tfplan` (the plan file is
+   encrypted). Expected: OpenTofu's `Plan: <n> to add, 0 to change, 0 to destroy.` on a new
+   environment, creating the network, one subnet per location, the public firewall, the admin
+   SSH keys, five servers with their primary IPv4 and IPv6 addresses, and the bunny.net zone
+   with its monitored record sets and CAA. Read it; nothing should be destroyed on a first run.
+   The first `init` is also the first test of conditional-PUT locking on Hetzner (section 3.4).
+
+4. **Apply:**
+
+   ```sh
+   make staging-apply
+   ```
+
+   Expected: `Apply complete! Resources: <n> added, 0 changed, 0 destroyed.`, then the target
+   writes `infra/ansible/inventories/staging/hosts.json`. Without a plan file it stops with
+   `run make staging-plan first`.
+
+5. **Check the inventory** matches section 1:
+
+   ```sh
+   python3 -m json.tool infra/ansible/inventories/staging/hosts.json | head -40
+   ```
+
+   Expected: `sa_environment` `staging`, the five hostnames under `sa_hostnames`, groups
+   `edge` (three hosts), `core` (two) and `probe` (empty until the probe is enabled), each host
+   with `ansible_user` `ops` and its private address in the scheme of section 2.
+
+6. **Check SSH** to one node (cloud-init made `ops` with the keys of `<an operator input>`):
+
+   ```sh
+   ssh ops@<ansible_host of staging-edge-1> true && echo ok
+   ```
+
+7. **Rewrite the inventory** later without changing anything: `make staging-inventory`.
+
+Locally verified on 2026-11-13: `make tofu-check` (formatting, `validate`, and the inventory
+contract tests with mocked providers, 4 of 4 runs passing for each environment) and the message
+of step 1.

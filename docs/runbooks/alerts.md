@@ -10,6 +10,12 @@ the status page checks and the prober's results.
 Severity `page` means act now. Severity `ticket` means act within a working
 day.
 
+The actions below are short; the full procedures are in the task runbooks
+listed in [README.md](README.md), which also explains how to reach the nodes,
+run `platformctl` and `jobs` on a core node, and read NATS state. The
+fire-drill record at the end says which alerts have fired and resolved for
+real, and when.
+
 To reach the tools: `ssh -L 9090:127.0.0.1:9090 -L 3000:127.0.0.1:3000
 ops@<core node>`, then Prometheus on `http://127.0.0.1:9090` and Grafana on
 `http://127.0.0.1:3000` (dashboards in the folder Stellar Analytics).
@@ -22,8 +28,8 @@ fault: queue publish not acknowledged, secrets or registry not loaded) for
 5 minutes. Visitor-side refusals do not count.
 Action: open the Ingestion dashboard and find the node. Check the gateway log
 for `event not queued`; check NATS (NATSQuorumLost, NATSServerDown). If one
-node is affected, drain it (`/drain/draining` on the node, see the deploy
-runbook) and restart its gateway.
+node is affected, drain it and restart its gateway
+([edge-node-failure.md](edge-node-failure.md) steps 2 to 5).
 
 ### IngestOTLPErrorRatioHigh
 More than 1% of OTLP points refused or failed by the collector for 5 minutes
@@ -35,11 +41,11 @@ node. Rate-limit refusals of one tenant show as `rejected` in its token page.
 The gateway of an edge node does not answer scrapes, one of its readiness
 checks fails, or its collector does not answer, for 2 minutes. Caddy's port
 80 health already takes the node out of DNS.
-Action: `ssh` to the node, `docker compose ps` in
+Action: `ssh` to the node, `sudo docker compose ps` in
 `/opt/stellar-analytics/edge`, read the failing check in `ops_ready_check` or
-`curl -s 127.0.0.1` on the gateway's `/readyz` from inside the compose
-network. Restart the failing service; if NATS on the node is the cause, see
-NATSServerDown.
+with `sudo docker compose exec caddy wget -qO- http://gateway:9090/readyz`.
+Restart the failing service; if NATS on the node is the cause, see
+NATSServerDown. Full steps: [edge-node-failure.md](edge-node-failure.md).
 
 ### VisitorSecretMissing
 A gateway's `daily_secrets` readiness check fails for 1 minute: today's
@@ -51,16 +57,20 @@ and read its log for `visitor secret`.
 
 ### DBIPFileOld
 The DB-IP file the gateway uses was built more than 45 days ago.
-Action: run the monthly update (`make geo-fetch`, rebuild and deploy the
-gateway image, or replace the file and send SIGHUP). Attribution stays as
-required by CC BY 4.0.
+Action: run the monthly update ([dbip-update.md](dbip-update.md)): check the
+month with `make geo-fetch GEO_MONTH=<YYYY-MM>`, then release and deploy a
+gateway image built with that month. The file is inside the image, so a
+`SIGHUP` alone does not load a new month on a deployed node. Attribution stays
+as required by CC BY 4.0.
 
 ### CertificateExpiringSoon
 A node serves a certificate for one of its hosts that expires within 14
 days, read by the prober over a connection to the node's own address.
 Action: check Caddy's log on that node for ACME errors (DNS-01 through
-bunny.net, an operator input. `docker compose exec caddy caddy reload` after fixing
-the cause; a node that cannot renew is drained.
+bunny.net, an operator input.
+`sudo docker compose exec caddy caddy reload --config /etc/caddy/Caddyfile`
+after fixing the cause; a node that cannot renew is drained. Full steps:
+[certificates.md](certificates.md).
 
 ### CardinalityCapHit
 Points went to the overflow route or service of a tenant in the last 15
@@ -91,12 +101,23 @@ No instance holds the consumer's lock for 2 minutes, or none is scraped.
 Action: `docker compose ps` on both core nodes; start the service. If both
 run, check the `locks` bucket and NATS.
 
+### ReplayerUmamiProcessIdle
+One of the umami processes of a core node (`core_umami_processes`) stored no
+event for 15 minutes while the replayer leader on that node sent more than
+one event a second to the others. The visitors routed to that process wait
+in their lanes and their events queue in `WEB_EVENTS`; nothing is lost.
+Action: `docker compose ps` on the node and `docker compose logs umami-<n>`
+(process 0 is the service `umami`, process n is `umami-<n+1>`); restart it.
+
 ### DLQNotEmpty
 `WEB_DLQ` or `API_DLQ` holds messages: events or batches were rejected
 permanently downstream.
-Action: read the messages' `Sa-Dlq-Reason` header (`nats stream view
-WEB_DLQ` as platformctl). Fix the cause, then replay or purge them; the alert
-stays until the stream is empty.
+Action: read the reasons from the replayer and metricswriter logs (every
+message moved to a DLQ is logged with its stream sequence and reason) and fix
+the cause ([queue-backlog-and-dlq.md](queue-backlog-and-dlq.md)). No NATS
+client is installed and no replay or purge tool exists yet, so the messages
+expire with the stream (7 days web, 30 days API); the alert stays until the
+stream is empty.
 
 ### NATSQuorumLost
 Fewer than two NATS servers report JetStream, or no meta leader exists, for
@@ -119,8 +140,8 @@ Action: start the stopped members on the edge nodes. Check time sync.
 ### PatroniNoLeader
 No PostgreSQL member is primary for 1 minute. The control plane, the writer
 and jobs fail.
-Action: `patronictl list` in the postgres container; see the HA runbook
-(this stage). Check etcd first.
+Action: `patronictl list` in the postgres container; check etcd first, then
+[database-failover.md](database-failover.md).
 
 ### ReplicationLagHigh
 The replica replays more than 60 seconds behind for 5 minutes.
@@ -130,8 +151,12 @@ replica can hold replay.
 ### BackupTooOld
 The newest pgBackRest backup finished more than 26 hours ago, or no backup
 is known (the textfile written hourly by `sa-pgbackrest-textfile`).
-Action: `pgbackrest info` in the postgres container; run the backup by hand
-and fix the schedule. Until this stage configures backups this alert fires.
+Action: on the leader's node, `sudo docker compose exec postgres pgbackrest
+--stanza=sa info`; check the timers (`systemctl list-timers 'sa-pgbackrest-*'`)
+and the last run (`journalctl -u sa-pgbackrest-diff.service`); run a backup
+by hand with `sudo docker compose exec postgres pgbackrest --stanza=sa
+--type=full backup` and fix the schedule. Without object storage an operator input
+there is no repository in staging or production, so the alert fires there.
 
 ### WALArchivingFailing
 WAL archiving failed in the last 15 minutes, or the primary archived nothing
@@ -147,8 +172,10 @@ Action: find what grew (`du -xh / | sort -h | tail`): Docker images, logs,
 NATS store, PostgreSQL. Prune old images; grow the volume if data grew.
 
 ### ServiceDown
-A control plane, replayer, writer, jobs, prober, node, postgres or patroni
-target does not answer scrapes for 2 minutes.
+A control plane, replayer, writer, jobs, prober, node, postgres, patroni,
+caddy or haproxy target does not answer scrapes for 2 minutes. Caddy and
+HAProxy are scraped through the node's observability relay, so a stopped
+relay shows here as well.
 Action: `docker compose ps` on that node and start it; read its log.
 
 ### UmamiHeartbeatFailing
@@ -164,8 +191,11 @@ Action: jobs logs (`task failed`); usually Umami or the database.
 ### UmamiPasswordRotationNotRun
 After 01:00 UTC today's Umami password rotation is not recorded, or no jobs
 leader reports it for 15 minutes. Yesterday's Umami tokens stay valid.
-Action: jobs logs for `umami-rotate`; run `jobs run umami-rotate` once the
-cause is fixed.
+Action: jobs logs for `umami-rotate`. Once the cause is fixed, restart the
+jobs daemon (`sudo docker compose restart jobs`) so its leader runs the task.
+`jobs run umami-rotate` refuses while a daemon leads (`a jobs daemon is
+leading`); to run it by hand, stop `jobs` on both core nodes first
+([README.md](README.md), "Running a jobs task by hand").
 
 ## Probe
 

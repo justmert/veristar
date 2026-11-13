@@ -42,14 +42,22 @@ Generated (random, by `new-secrets.py`): PostgreSQL superuser and replication pa
 Patroni REST password, Umami database password, `APP_SECRET` and admin password,
 `UMAMI_USER_PASSWORD_KEY`, the Umami retention role password, `OAUTH_STATE_KEY`, the
 five platform role passwords, one NATS password per service user with its bcrypt hash,
-and the NATS route password with its hash. The hashes are generated once with the
-passwords, so the NATS server config does not change on every converge.
+and the NATS route password with its hash, and for monitoring (this stage) the Grafana admin
+password, the `postgres_exporter` password, the probe metrics token and the Gatus
+external-endpoint token. The hashes are generated once with the passwords, so the NATS
+server config does not change on every converge. A file made before the monitoring keys
+existed is refused by the `secrets` role, naming the missing key; add each with
+`sops edit` and a value from `openssl rand -hex 32`.
 
 Owner inputs (taken from the environment of `new-secrets.py`, never generated, left out
 when unset): `github_client_id` and `github_client_secret` (I2, as
 `SA_GITHUB_CLIENT_ID`, `SA_GITHUB_CLIENT_SECRET`), `bunny_api_key` (I6, as
-`SA_BUNNY_API_KEY`). The `secrets` role refuses to converge a core node without I2 and
-any node using DNS-01 without I6, naming the missing key.
+`SA_BUNNY_API_KEY`), `alertmanager_discord_webhook_url` and `gatus_discord_webhook_url`
+(I8, as `SA_ALERTMANAGER_DISCORD_WEBHOOK_URL`, `SA_GATUS_DISCORD_WEBHOOK_URL`). The `secrets`
+role refuses to converge a core node without I2 and any node using DNS-01 without I6,
+naming the missing key. The `observability` role, which `site.yml` runs on every edge and
+core node, refuses to run without the Alertmanager webhook; the local converge passes
+`observability_test_webhook_base` instead (`docs/deploy/local-converge.md`).
 
 ## 4. Procedures
 
@@ -79,8 +87,85 @@ bootstrap only creates and never alters them: the Umami database password, the U
 admin password (`platformctl umami bootstrap` replaces only the seeded one), the
 PostgreSQL superuser, replication and Patroni REST passwords, and
 `UMAMI_USER_PASSWORD_KEY` (changing it changes every derived Umami password). Their
-rotation steps are a this stage runbook item; until then removing a recipient is not a
-complete rotation.
+rotation steps are in [../runbooks/secret-rotation.md](../runbooks/secret-rotation.md);
+removing a recipient is a complete rotation only once those steps are done too.
 
 **Losing every identity** makes the files unreadable. Each recipient keeps their identity
 in a password manager; there must be at least two recipients per environment.
+
+## 5. Setting up an environment, step by step
+
+Staging is shown; production is the same with `production` in every path. Needs the
+controller tools of [prerequisites.md](prerequisites.md) with `sops` and `age-keygen` on
+`PATH`, and inputs I14 (recipients) plus whatever owner inputs exist.
+
+1. **Each recipient makes an identity** on their own machine and keeps the file private:
+
+   ```sh
+   age-keygen -o ~/.config/sops/age/keys.txt
+   ```
+
+   Expected: `Public key: age1...`. Only that public key is sent.
+
+2. **List the recipients** in `infra/secrets/recipients/staging.txt`, one public key per line,
+   each under a comment line naming the holder (at least two people).
+
+3. **Generate the SOPS rules:**
+
+   ```sh
+   SOPS=sops infra/secrets/sync-recipients.sh
+   ```
+
+   Expected: `wrote .../infra/secrets/.sops.yaml with 1 rule(s)` (2 once production has a
+   list too). The rule is `path_regex: (^|/)staging/[^/]+\.enc\.(yaml|env)$` with the listed
+   keys.
+
+4. **Create the platform secrets file** with the operator inputs that exist, typed into the
+   environment of this one command (the values are never written in plain text to disk):
+
+   ```sh
+   mkdir -p infra/secrets/staging
+   read -rs SA_GITHUB_CLIENT_SECRET; export SA_GITHUB_CLIENT_SECRET
+   SA_GITHUB_CLIENT_ID=<an operator input client id> \
+     ~/.local/share/stellar-analytics/ansible-venv/bin/python infra/secrets/new-secrets.py staging \
+     | sops --config infra/secrets/.sops.yaml encrypt --filename-override infra/secrets/staging/secrets.enc.yaml \
+         --input-type yaml --output-type yaml /dev/stdin > infra/secrets/staging/secrets.enc.yaml
+   unset SA_GITHUB_CLIENT_SECRET
+   ```
+
+   Do the same with `read -rs` for `SA_BUNNY_API_KEY`, `SA_OBJECT_STORAGE_ACCESS_KEY` and
+   `SA_OBJECT_STORAGE_SECRET_KEY`, `SA_ALERTMANAGER_DISCORD_WEBHOOK_URL` and
+   `SA_GATUS_DISCORD_WEBHOOK_URL` when you have them. The script names every input it
+   left out on standard error, for example
+   `new-secrets.py: SA_BUNNY_API_KEY unset, bunny_api_key left out`. The venv's Python is used
+   because the script needs `bcrypt` and PyYAML.
+
+5. **Check** that the file decrypts and holds every key:
+
+   ```sh
+   sops decrypt infra/secrets/staging/secrets.enc.yaml | grep -o '^[a-z_]*:'
+   ```
+
+   Expected: `sa_secrets_environment:` first, then every generated key of section 3 and the
+   owner inputs you supplied. Never redirect the decrypted output to a file.
+
+6. **Create the OpenTofu credentials file** `infra/secrets/staging/tofu.enc.env` with the
+   variables of [opentofu.md](opentofu.md) section 1 ("Secrets handed to OpenTofu"):
+
+   ```sh
+   sops --config infra/secrets/.sops.yaml edit infra/secrets/staging/tofu.enc.env
+   ```
+
+   SOPS opens an editor on an empty dotenv file; write one `NAME=value` line per variable
+   (`HCLOUD_TOKEN`, `BUNNYNET_API_KEY`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`,
+   `TF_VAR_state_passphrase`, and the `SCW_*` keys once the probe is enabled). Make the
+   passphrase with `python3 -c 'import secrets; print(secrets.token_urlsafe(32))'`; it must be
+   at least 16 characters and different per environment.
+
+7. **Commit** `infra/secrets/.sops.yaml`, the recipients list and both encrypted files.
+
+Steps 1 to 5 were rehearsed on 2026-11-13 in a scratch directory with a throwaway identity
+and a copy of `sync-recipients.sh` (never under `infra/secrets/`): the script wrote one rule,
+`new-secrets.py staging` piped into `sops encrypt` exited 0 and reported the seven owner inputs
+it left out, and the file decrypted to every generated key listed in section 3 (37 encrypted
+values). Steps 6 and 7 and every real recipient wait for an operator input.
