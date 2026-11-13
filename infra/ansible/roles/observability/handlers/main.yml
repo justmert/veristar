@@ -1,10 +1,18 @@
 ---
-# prometheus rereads its config and rules on POST /-/reload (--web.enable-lifecycle)
+# prometheus rereads its config and rules on POST /-/reload (--web.enable-lifecycle).
+# on a first converge the container was created moments before, and compose's
+# wait only means started: the listener may not be up yet and resets the
+# connection (seen in the rotate-local run on a github runner), so the reload
+# is retried for up to a minute
 - name: Reload prometheus
   ansible.builtin.uri:
     url: http://127.0.0.1:9090/-/reload
     method: POST
     status_code: 200
+  register: observability_prometheus_reload
+  until: observability_prometheus_reload.status == 200
+  retries: 30
+  delay: 2
 
 - name: Reload alertmanager
   ansible.builtin.command:
