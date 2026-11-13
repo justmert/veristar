@@ -139,9 +139,8 @@ check_backup() {
 	python3 -c 'import json,sys; s=json.load(open(sys.argv[1]))[0]; assert s["status"]["code"]==0, s["status"]; b=[x for x in s["backup"] if x["type"]=="full"]; assert b, "no full backup"; print("full backups:", [x["label"] for x in b])' "$out/info.json"
 }
 
-# the database node's key is the bucket's only key here, as on hetzner
-# where keys are not scoped: a plain delete only adds a marker, deleting the
-# locked version itself is refused
+# the database node's key is the bucket's only key here: a plain delete
+# only adds a marker, deleting the locked version itself is refused
 check_lock() {
 	key="$(bucket "$bucket_url/?list-type=2&prefix=local/backup/sa/" | sed -n -E 's/.*<Key>(local\/backup\/sa\/backup.info)<\/Key>.*/\1/p' | head -n1)"
 	[ -n "$key" ] || { echo "no backup.info in the bucket" >&2; return 1; }
@@ -188,41 +187,6 @@ check_target_time() {
 	done
 	core exec -T postgres pgbackrest --stanza=sa --output=json info >"$out/info-restored.json"
 	python3 -c 'import json,sys; s=json.load(open(sys.argv[1]))[0]; assert s["status"]["code"]==0, s["status"]' "$out/info-restored.json"
-}
-
-# O-24: the state copy of scripts/tofu-state-backup.sh against the
-# stand-in. a separate unversioned bucket plays the state bucket, and an
-# opaque random object plays the encrypted state.
-check_state_backup() {
-	d="$out/tofu"
-	mkdir -p "$d"
-	printf 'state_bucket = "sa-lc-state"\nstate_location = "%s"\nbackup_bucket = "%s"\nbackup_location = "%s"\n' \
-		"$LC_S3_LOCATION" "$LC_S3_BUCKET" "$LC_S3_LOCATION" >"$d/terraform.tfvars"
-	st="https://sa-lc-state.$LC_S3_DOMAIN"
-	s3state() {
-		# shellcheck disable=SC2046 # the file holds the key and the secret, one per line
-		set -- $(cat "$LC_STATE/s3/keys") "$@"
-		k="$1" sec="$2"
-		shift 2
-		curl -sS --cacert "$LC_STATE/s3/ca.crt" --connect-to "sa-lc-state.$LC_S3_DOMAIN:443:$LC_S3_IP:443" \
-			--aws-sigv4 "aws:amz:$LC_S3_LOCATION:s3" -u "$k:$sec" "$@"
-	}
-	s3state -o /dev/null -X PUT "$st/"
-	head -c 4096 /dev/urandom >"$d/state.bin"
-	s3state -fsS -o /dev/null -X PUT --data-binary "@$d/state.bin" "$st/staging/tofu.tfstate"
-	# shellcheck disable=SC2046 # the file holds the key and the secret, one per line
-	set -- $(cat "$LC_STATE/s3/keys")
-	export AWS_ACCESS_KEY_ID="$1" AWS_SECRET_ACCESS_KEY="$2"
-	export TFVARS="$d/terraform.tfvars" S3_HOST="$LC_S3_DOMAIN" CA_FILE="$LC_STATE/s3/ca.crt" CONNECT_HOST="$LC_S3_IP"
-	"$root/scripts/tofu-state-backup.sh" staging
-	key="$("$root/scripts/tofu-state-backup.sh" staging list | tail -n1 | cut -d' ' -f1)"
-	echo "copy: $key"
-	# the live state is lost; the copy brings back the same bytes
-	s3state -fsS -o /dev/null -X DELETE "$st/staging/tofu.tfstate"
-	"$root/scripts/tofu-state-backup.sh" staging restore "$key"
-	s3state -fsS -o "$d/restored.bin" "$st/staging/tofu.tfstate"
-	cmp "$d/state.bin" "$d/restored.bin"
-	unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY TFVARS S3_HOST CA_FILE CONNECT_HOST
 }
 
 rebuild_edge3() {
@@ -317,7 +281,6 @@ step archiving check_archiving
 step backup check_backup
 step lock check_lock
 step target-time check_target_time
-step state-backup check_state_backup
 step converge-again converge --limit 'all:!probe'
 step no-changes no_changes "$out/converge-again.log"
 step failsafe check_failsafe

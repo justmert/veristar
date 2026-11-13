@@ -1,4 +1,7 @@
-# Verify the tracker
+---
+title: "Verify the tracker"
+description: "Check that the sdk.js your pages load is exactly the released file."
+---
 
 How a tenant checks that the `sdk.js` their pages load is exactly the released file, and how to
 host it themselves (plan phases 3 and 18). Examples use version `1.1.0`; replace it with the version

@@ -1,4 +1,7 @@
-# Privacy strategy
+---
+title: "Privacy strategy"
+description: "How the platform minimises personal data: what is held in memory, queued and stored, and for how long."
+---
 
 > **Status: draft, pending legal review an operator input.** Not legal advice. Last
 > updated 2026-11-13. Legal statements cite `sources.md` (S1 to S11); technical

@@ -1,0 +1,139 @@
+---
+- name: Check the azure storage inputs
+  ansible.builtin.assert:
+    that:
+      - sa_object_storage is mapping
+      - sa_object_storage.endpoint is match('^https://[a-z0-9]{3,24}\.blob\.core\.windows\.net$')
+      - sa_object_storage.backup_bucket | default('') | length > 0
+      - storage_azure_lock_days | int >= 1
+      # the youngest file pgbackrest expires is a differential that has
+      # backup_retention_diff newer ones, plus one sunday per six
+      - storage_azure_lock_days | int < (storage_retention_diff | int) + ((storage_retention_diff | int) // 6)
+      - storage_azure_previous_version_days | int >= ((storage_retention_full | int) + 1) * 7
+    fail_msg: >-
+      the backup storage needs sa_object_storage from
+      infra/tofu/modules/backup-storage, a lock shorter than the age of the
+      youngest file pgbackrest expires (backup_retention_diff plus one day
+      per six), and previous versions kept at least
+      (backup_retention_full + 1) * 7 days.
+    quiet: true
+  run_once: true
+
+- name: Name the storage account
+  ansible.builtin.set_fact:
+    storage_account: "{{ sa_object_storage.endpoint | regex_replace('^https://([a-z0-9]+)\\..*$', '\\1') }}"
+  run_once: true
+
+# control-plane reads through the operator's az cli login; the data plane
+# of the account accepts the nodes' subnets and the admin ranges only
+- name: Read the storage account
+  ansible.builtin.command:
+    argv: [az, storage, account, show, --name, "{{ storage_account }}", --output, json, --only-show-errors]
+  register: storage_account_show
+  changed_when: false
+  delegate_to: localhost
+  run_once: true
+  become: false
+
+- name: Read the blob service of the storage account
+  ansible.builtin.command:
+    argv:
+      - az
+      - storage
+      - account
+      - blob-service-properties
+      - show
+      - --account-name
+      - "{{ storage_account }}"
+      - --resource-group
+      - "{{ (storage_account_show.stdout | from_json).resourceGroup }}"
+      - --output
+      - json
+      - --only-show-errors
+  register: storage_blob_service
+  changed_when: false
+  delegate_to: localhost
+  run_once: true
+  become: false
+
+- name: Read the lifecycle policy of the storage account
+  ansible.builtin.command:
+    argv:
+      - az
+      - storage
+      - account
+      - management-policy
+      - show
+      - --account-name
+      - "{{ storage_account }}"
+      - --resource-group
+      - "{{ (storage_account_show.stdout | from_json).resourceGroup }}"
+      - --output
+      - json
+      - --only-show-errors
+  register: storage_lifecycle
+  changed_when: false
+  delegate_to: localhost
+  run_once: true
+  become: false
+
+- name: Read the repository container
+  ansible.builtin.command:
+    argv:
+      - az
+      - storage
+      - container-rm
+      - show
+      - --storage-account
+      - "{{ storage_account }}"
+      - --name
+      - "{{ sa_object_storage.backup_bucket }}"
+      - --output
+      - json
+      - --only-show-errors
+  register: storage_container
+  changed_when: false
+  delegate_to: localhost
+  run_once: true
+  become: false
+
+- name: Require the protections of docs/deploy/backups.md
+  vars:
+    account: "{{ storage_account_show.stdout | from_json }}"
+    blob: "{{ storage_blob_service.stdout | from_json }}"
+    immutability: "{{ account.immutableStorageWithVersioning | default({}) }}"
+    rules: "{{ (storage_lifecycle.stdout | from_json).policy.rules | default([]) }}"
+    version_days: >-
+      {{ rules | map(attribute='definition.actions.version') | select('defined')
+         | map(attribute='delete') | select('defined')
+         | map(attribute='daysAfterCreationGreaterThan') | list }}
+  ansible.builtin.assert:
+    that:
+      - account.sku.name == 'Standard_ZRS'
+      - account.allowSharedKeyAccess == false
+      - account.networkRuleSet.defaultAction == 'Deny'
+      - blob.isVersioningEnabled
+      - immutability.enabled | default(false)
+      - immutability.immutabilityPolicy.state | default('') in ['Unlocked', 'Locked']
+      - immutability.immutabilityPolicy.immutabilityPeriodSinceCreationInDays | default(0) | int == storage_azure_lock_days | int
+      - version_days | length > 0
+      - version_days | map('int') | min >= ((storage_retention_full | int) + 1) * 7
+      - (storage_container.stdout | from_json).name == sa_object_storage.backup_bucket
+    fail_msg: >-
+      {{ storage_account }} lacks a protection the backups rely on: zone-redundant
+      storage, no account keys, network default deny, blob versioning,
+      version-level immutability of {{ storage_azure_lock_days }} days, a
+      lifecycle rule that keeps previous versions at least
+      ((backup_retention_full + 1) * 7) days, and the container
+      {{ sa_object_storage.backup_bucket }}. apply infra/tofu first.
+  run_once: true
+
+- name: Report the backup storage
+  vars:
+    immutability: "{{ (storage_account_show.stdout | from_json).immutableStorageWithVersioning }}"
+  ansible.builtin.debug:
+    msg: >-
+      ok: {{ storage_account }}/{{ sa_object_storage.backup_bucket }} zrs, versioned,
+      immutable {{ immutability.immutabilityPolicy.immutabilityPeriodSinceCreationInDays }}d
+      ({{ immutability.immutabilityPolicy.state }})
+  run_once: true

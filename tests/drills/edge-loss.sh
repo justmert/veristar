@@ -2,8 +2,8 @@
 # edge node loss under load: edge 2 is powered off (its container killed,
 # nothing shut down cleanly) 60 s into the load and powered on 120 s later.
 # the client keeps the dead address in its answer until the dns stand-in's
-# 30 s port-80 check drops it; bunny.net's removal time cannot be measured
-# here an operator input.
+# 30 s port-80 check drops it; traffic manager's removal time is measured on
+# staging, not here.
 . "$(dirname "$0")/lib.sh"
 out="$DRILLS/edge-loss"
 mkdir -p "$out"

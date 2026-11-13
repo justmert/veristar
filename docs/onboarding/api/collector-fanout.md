@@ -1,4 +1,8 @@
-# Fan-out from your own Collector
+---
+title: "Fan-out from your own Collector"
+sidebarTitle: "Collector fan-out"
+description: "Forward metrics from an OpenTelemetry Collector you already run, without changing your apps."
+---
 
 If your apps already send their telemetry to an OpenTelemetry Collector of your own, you do not
 need to change the apps. Add a second exporter to the Collector instead: it forwards metrics and
@@ -9,9 +13,9 @@ both a tenant backend and a platform stand-in that refuses requests without the 
 
 ## The configuration
 
-From [`examples/otel-collector-fanout/collector.yaml`](../../../examples/otel-collector-fanout/collector.yaml):
+From [`examples/otel-collector-fanout/collector.yaml`](https://github.com/justmert/veristar/blob/main/examples/otel-collector-fanout/collector.yaml):
 
-<!-- include examples/otel-collector-fanout/collector.yaml region=config -->
+{/* include examples/otel-collector-fanout/collector.yaml region=config */}
 ```yaml
 receivers:
   otlp:

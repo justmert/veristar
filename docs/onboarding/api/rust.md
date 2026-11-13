@@ -1,7 +1,10 @@
-# Rust
+---
+title: "Rust"
+description: "Dual export from a Rust service on actix-web with the OpenTelemetry Rust SDK."
+---
 
 Dual export from a Rust service on actix-web. Built from the example
-[`examples/otel-rust-actix`](../../../examples/otel-rust-actix): actix-web 4.18.2 with
+[`examples/otel-rust-actix`](https://github.com/justmert/veristar/tree/main/examples/otel-rust-actix): actix-web 4.18.2 with
 `opentelemetry-instrumentation-actix-web` 0.25.0 (`metrics` feature) and `opentelemetry` 0.33.1,
 on Rust 1.99.1. `tests/otelapps` runs it against stock collectors in every export mode, and the
 `apipath` tag runs it against the real platform collector. Read the
@@ -9,7 +12,7 @@ on Rust 1.99.1. `tests/otelapps` runs it against stock collectors in every expor
 
 ## Crates
 
-<!-- include examples/otel-rust-actix/Cargo.toml region=dependencies -->
+{/* include examples/otel-rust-actix/Cargo.toml region=dependencies */}
 ```toml
 [dependencies]
 actix-web = { version = "=4.18.2", default-features = false, features = ["macros"] }
@@ -33,7 +36,7 @@ carry the token. The exporters use HTTP with protobuf through the blocking reqwe
 rustls, so an https endpoint works without a system OpenSSL. That client must be built outside an
 async runtime, so the example sets telemetry up before the actix system starts:
 
-<!-- include examples/otel-rust-actix/src/main.rs region=telemetry -->
+{/* include examples/otel-rust-actix/src/main.rs region=telemetry */}
 ```rust
 // one tracer provider and one meter provider, each with two exporters, so
 // both backends see identical data from the same sdk state
@@ -114,7 +117,7 @@ fn setup_telemetry(c: &Config) -> Result<(SdkTracerProvider, Option<SdkMeterProv
 Wrap the routes with `RequestMetrics` and `RequestTracing`. The health check route sits outside
 the wrapped scope, so probes do not count as API traffic:
 
-<!-- include examples/otel-rust-actix/src/main.rs region=middleware -->
+{/* include examples/otel-rust-actix/src/main.rs region=middleware */}
 ```rust
 .service(
     web::scope("")

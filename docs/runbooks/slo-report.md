@@ -1,4 +1,7 @@
-# Monthly SLO report
+---
+title: "Monthly SLO report"
+description: "Produce the monthly SLO report from the probe's measurements."
+---
 
 The platform's targets are 99.99% ingestion and 99.90% dashboards (RFP 3.4). They are measured
 from outside by the probe: every 30 s the prober sends a web event and an OTLP metric and checks
@@ -60,6 +63,7 @@ Expected: `wrote docs/slo/<YYYY-MM>.md`. `-through <YYYY-MM-DD>` writes a partia
 | 2026-11-13 | this stage: `sloreport collect` against the Gatus of the local observability test stack (`tests/observability`), then `sloreport report` for 2026-11 | report written; its numbers matched a manual calculation from the raw results (plan status, this stage) | plan status, this stage |
 | 2026-11-13 | this stage: the report step again from the this stage data (`dist/bin/sloreport report -month 2026-11 -data <this stage data> -out <scratch> -through 2026-11-13`) | `wrote .../2026-11.md`, identical to the this stage report (empty diff); ingestion 236 results, 227 successes, 96.1864%; dashboard 238 results, 95.3782%; from a test stack disturbed by the alert drills and host load, with 12 missing days | this page |
 
-Not yet exercised: collection from a real status page (inputs I4 and I7) and the scheduled
+Not yet exercised: collection from a real status page (published as in
+[../deploy/probe.md](../deploy/probe.md) section 5) and the scheduled
 workflow (GitHub Actions fails at start-up on the account). The test-stack numbers are not
 availability figures of the platform.

@@ -1,4 +1,7 @@
-# What the numbers mean
+---
+title: "What the numbers mean"
+description: "Bands, daily-unique visitors and span-derived API data, and how they shape cross-project comparisons."
+---
 
 Three properties of the data change how cross-project numbers should be read: bands,
 daily-unique visitors, and span-derived API data. Each follows from a privacy or design

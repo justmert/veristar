@@ -1,4 +1,8 @@
-# Rebuild and data migration
+---
+title: "Rebuild and data migration"
+sidebarTitle: "Rebuild and data migration"
+description: "How a new operator builds its own environment, moves every tenant's data, takes over the domain and rotates credentials."
+---
 
 How a new operator builds its own environment from this repository, moves every tenant's data
 into it, takes over the domain and rotates every credential. This is the technical half of the
@@ -17,7 +21,7 @@ hands.
 
 ## 1. Build the new environment
 
-Follow [../deploy/README.md](../deploy/README.md) steps 1 to 6 with the new operator's own
+Follow [../deploy/overview.md](../deploy/overview.md) steps 1 to 6 with the new operator's own
 accounts and secrets. The new environment gets its own values for everything: database
 passwords, NATS users, the Umami admin password, `UMAMI_USER_PASSWORD_KEY`, `APP_SECRET`, the
 OAuth app, the pgBackRest cipher passphrase. Nothing is copied from the old environment's
@@ -323,7 +327,7 @@ Two kinds of value it does not generate:
 - `pgbackrest_cipher_pass` stays: the repository is encrypted with it. A rebuilt environment has
   its own repository and value already; a handover in place needs a new repository
   ([../runbooks/secret-rotation.md](../runbooks/secret-rotation.md)).
-- Owner inputs (GitHub client secret, bunny.net key, object storage keys, Discord webhooks) come
+- Owner inputs (GitHub client secret, Cloudflare token, Discord webhooks) come
   from their providers. Issue new ones, pass them to `rotate-secrets.py` in the `SA_*` variables
   `new-secrets.py` reads, and revoke the old ones at the provider. `rotate-all.yml` stops on any
   that kept its value unless it is named in `rotate_allow_kept_inputs`.

@@ -1,4 +1,7 @@
-# Bot and inflation strategy
+---
+title: "Bot and inflation strategy"
+description: "How the platform detects and limits bot traffic and artificial metric inflation."
+---
 
 RFP section 3.2 asks for "a concrete strategy for detecting/mitigating bot traffic and
 artificial metric inflation (at minimum: distinguish real browser JS execution from pure

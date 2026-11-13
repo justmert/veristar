@@ -1,4 +1,7 @@
-# API metrics storage (schema `api`)
+---
+title: "API metrics storage"
+description: "The tables, functions, rights and queries that hold API latency metrics."
+---
 
 this stage reference for the tables, functions, rights and queries that hold
 API latency metrics in the `platform` database. Migrations

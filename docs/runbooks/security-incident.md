@@ -1,4 +1,7 @@
-# Security incident
+---
+title: "Security incident"
+description: "Respond to a suspected attack or breach, with clear roles and steps."
+---
 
 Something suggests the platform's confidentiality, integrity or availability was attacked or
 broken: a credential seen where it should not be, a node behaving strangely, a tenant seeing

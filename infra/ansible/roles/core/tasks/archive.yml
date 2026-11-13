@@ -47,7 +47,7 @@
   retries: 5
   delay: 6
   until: core_stanza_create.rc == 0
-  when: backup_repo_mode == 's3' and core_primary_check.status == 200
+  when: backup_repo_mode in ['azure', 's3'] and core_primary_check.status == 200
 
 # info exits 0 for a stanza without backups too; its json says whether the
 # stanza exists (status code 0 ok, 2 no backups yet), so a missing stanza in

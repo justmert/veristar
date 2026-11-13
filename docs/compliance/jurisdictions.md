@@ -1,4 +1,8 @@
-# Jurisdictions: use without and with end-user opt-in
+---
+title: "Jurisdictions: use without and with end-user opt-in"
+sidebarTitle: "Jurisdictions"
+description: "Where the tracker can run without end-user opt-in, and where consent mode applies."
+---
 
 > **Status: draft, pending legal review an operator input.** Not legal advice. Last
 > updated 2026-11-13 (remaining EU and EEA states, United States, Brazil and

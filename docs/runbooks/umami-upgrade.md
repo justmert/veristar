@@ -1,4 +1,7 @@
-# Umami upgrade and rollback
+---
+title: "Umami upgrade and rollback"
+description: "Upgrade the pinned Umami image through the compatibility gate, and roll back."
+---
 
 Umami runs as its official image, unmodified, pinned by tag and index digest
 (`ghcr.io/umami-software/umami:3.5.0@sha256:b64f4040...a5dbc` in
@@ -33,7 +36,7 @@ plus the rollback.
    pulled by its pinned digest.
 
 3. **Take a dump of the Umami database before the rollout.** On the core node that holds the
-   Patroni leader ([README.md](README.md)):
+   Patroni leader ([overview.md](overview.md)):
 
    ```sh
    cd /opt/veristar/core
@@ -87,7 +90,7 @@ Use it when the new version misbehaves in a way a fix-forward cannot address in 
    ```
 
    Then recreate the retention role's grants, which live in the Umami database:
-   run `platformctl db umami-retention-role` as in [README.md](README.md).
+   run `platformctl db umami-retention-role` as in [overview.md](overview.md).
 
 3. **Check the migration level** matches what step 3 of the upgrade recorded:
 

@@ -1,4 +1,8 @@
-# Handover readiness checklist
+---
+title: "Handover readiness checklist"
+sidebarTitle: "Checklist"
+description: "Every item that changes hands so the new operator can run the service on its own, with the evidence for each."
+---
 
 Every item that has to change hands for the new operator to run the service on its own. Tick an
 item only with the evidence named next to it. The procedures are in [plan.md](plan.md) and
@@ -12,7 +16,7 @@ Who signs: the new operator for each item, SCF for section 9.
 - [ ] The new operator has its own GitHub owner (user or organisation), cloud project, DNS
       account, probe account, alert receiver, and age identities for at least two people.
 - [ ] The new operator's people have read [../architecture.md](../architecture.md),
-      [../deploy/](../deploy/README.md), [../runbooks/](../runbooks/README.md),
+      [../deploy/](../deploy/overview.md), [../runbooks/](../runbooks/overview.md),
       [../sla.md](../sla.md), [../support.md](../support.md) and this directory.
 - [ ] The new operator's age public keys are recipients of **staging** only
       (`infra/secrets/recipients/staging.txt`, `sync-recipients.sh`).
@@ -20,7 +24,7 @@ Who signs: the new operator for each item, SCF for section 9.
 ## 2. Independent rebuild (shadow period)
 
 - [ ] A new environment built from the repository alone in the new operator's accounts, following
-      [../deploy/README.md](../deploy/README.md); every gap in the docs found on the way is fixed
+      [../deploy/overview.md](../deploy/overview.md); every gap in the docs found on the way is fixed
       in the repository. Evidence: the issue or pull request per gap.
 - [ ] It runs the same release as production (`SA_IMAGE_TAG`).
 - [ ] `make tofu-check`, `make ansible-lint`, the second `site.yml` run reports `changed=0`.
@@ -71,8 +75,8 @@ Who signs: the new operator for each item, SCF for section 9.
       last play passed, which proves every previous PostgreSQL, NATS, NATS route, Umami admin,
       Umami user, Patroni REST and Grafana credential is refused and every new one accepted.
 - [ ] Owner inputs replaced at their providers and the old ones revoked there: GitHub OAuth client
-      secrets (I2; `rotate-all.yml` asks GitHub), bunny.net key, object storage keys,
-      Discord webhooks, Scaleway credentials, the OpenTofu state passphrase and the
+      secrets (I2; `rotate-all.yml` asks GitHub), Cloudflare token, Azure role assignments,
+      Discord webhooks, the OpenTofu state passphrase and the
       provider tokens in `tofu.enc.env`.
 - [ ] `secrets.previous.enc.yaml` deleted after `rotate-all.yml` passed.
 - [ ] Operator API keys the original operator created are revoked
@@ -100,7 +104,7 @@ Who signs: the new operator for each item, SCF for section 9.
 - [ ] GitHub OAuth apps of every environment belong to the new owner an operator input, with the
       callback URLs of the new environment and wildcard redirect matching off.
 - [ ] `OPERATOR_GITHUB_IDS` an operator input lists exactly the people SCF names; the control plane was
-      restarted after the change ([../operators/README.md](../operators/README.md)).
+      restarted after the change ([../operators/overview.md](../operators/overview.md)).
 - [ ] Alerts reach the new operator's receiver; a test alert was delivered before the old
       receiver was removed.
 

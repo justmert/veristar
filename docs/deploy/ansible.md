@@ -1,4 +1,8 @@
-# Ansible: roles, playbooks and images
+---
+title: "Ansible: roles, playbooks and images"
+sidebarTitle: "Ansible"
+description: "The Ansible roles, playbooks and images that configure every node."
+---
 
 Status: first version (this stage, stream b). Verified on the local converge
 (docs/deploy/local-converge.md); not yet run against staging, which is blocked on the
@@ -13,7 +17,7 @@ inputs listed in section 6.
 | Docker Engine, Compose | `5:29.9.3-1~debian.13~trixie`, `5.6.1-1~debian.13~trixie` | Docker's trixie apt repo; key fingerprint 9DC8 5822 9FC7 DD38 854A E2D8 8D81 803C 0EBF CD88 is checked |
 | Patroni, pgBackRest | `4.1.5-2.pgdg13+1`, `2.60.0-1.pgdg13+1` | PGDG trixie, installed into `postgres:18.6-trixie` without moving `postgresql-18` (the build checks it) |
 | SOPS, age | 3.13.3, 1.3.2 | SHA-256 against the release checksums file (SOPS) and GitHub's asset digest (age) |
-| Caddy | 2.11.9 with `caddy-dns/bunny` v1.2.0 | the existing `caddy.Dockerfile` compiles against 2.11.9 and `caddy validate` accepts `dns bunny`; no certificate issued yet |
+| Caddy | 2.11.9 with `caddy-dns/cloudflare` v0.2.4 | `caddy.Dockerfile` compiles against 2.11.9 and `caddy validate` accepts `dns cloudflare` for every assembled node config (2026-11-13); no certificate issued yet |
 
 Findings that changed the build:
 
@@ -62,13 +66,15 @@ while the version is below the minimum. When `postgres:18.7-trixie` exists: set
   `core[0]` only in this phase, DCS etcd3 on the edge nodes), HAProxy routing port 5000
   to the member whose Patroni REST answers `/primary` with 200, Umami (the design
   environment), control plane, replayer, metricswriter, jobs and Caddy with the console.
-- **storage** (on the controller): the backup bucket through the S3 API with object lock,
-  versioning and a 35-day compliance retention ([backups.md](backups.md)).
+- **storage** (on the controller): reads the Azure backup storage account back through the
+  az CLI (ZRS, no account keys, versioning, immutability, lifecycle, container) and stops when
+  a protection is missing ([backups.md](backups.md)). In the local converge's `s3` mode it
+  creates the stand-in's bucket instead.
 - **base** on the probe: the same role without a private network (no private interface,
   no private firewall rules), so the probe gets the firewall, SSH hardening, time sync and
   Docker at the pins.
 - Caddy configs are assembled by `deploy/caddy/assemble.sh` from the tested per-host
-  Caddyfiles: TLS by `SA_TLS` (`bunny` for DNS-01, `internal` only locally), automatic
+  Caddyfiles: TLS by `SA_TLS` (`cloudflare` for DNS-01, `internal` only locally), automatic
   HTTP redirects off, and port 80 answering the node's composite health.
 
 ## 4. Firewall and exposure
@@ -105,7 +111,7 @@ in `deploy/caddy` reproduces both layouts.
   everywhere, the backup bucket (storage role), NATS and etcd (a rebuilt edge node rejoins
   etcd, `roles/edge/tasks/etcd.yml`), postgres-ha and HAProxy, WAL archiving
   (`roles/core/tasks/archive.yml`), `bootstrap.yml`, all edge and core services, the
-  observability role, then the probe node. A second run reports no change.
+  observability role, then a probe node if the inventory has one. A second run reports no change.
 - `verify-release.yml`: imported first by `site.yml`, `deploy.yml`, `rotate-all.yml` and
   `restore.yml`; verifies the release manifest and pins every node to the verified digests.
 - `reboot.yml`: rolling host reboot for kernel and libc fixes
@@ -126,15 +132,20 @@ Composite health, served on port 80 by Caddy and behind it on the services' ops 
 - core: control plane `/corez` = readiness (database pools, NATS), the database behind
   HAProxy is not in recovery, Umami heartbeat.
 
-Healthy answers 308 to https, unhealthy 503, whatever the Host header; the bunny.net
-monitor counts non-5xx as healthy.
+Healthy answers 308 to https, unhealthy 503, whatever the Host header; Traffic Manager
+counts 200 to 299 and 308 as healthy (`infra/tofu/modules/failover`).
+
+On Azure the public address is NAT-mapped onto the VM's one interface, so Caddy publishes 80
+and 443 on the private address (`sa_public_bind_ipv4` in the environment's
+`group_vars/all.yml`), and the host firewall's forward chain lets the private network reach
+the ports published there, since it arrives on the same interface.
 
 ## 6. Blocked on inputs
 
 | What | Input |
 |---|---|
 | Any staging or production converge (no servers, no inventory) | I5 (via the OpenTofu stream) |
-| Hostnames and certificates, `sa_tls: bunny` issuing by DNS-01 | I4, I6 |
+| Hostnames and certificates, `sa_tls: cloudflare` issuing by DNS-01 | I4, I6 (both supplied; first issuance at the first converge) |
 | Control plane sign-in (`github_client_id`, `github_client_secret`) | I2 |
 | `sa_operator_github_ids` | I3 |
 | SSH rule of the firewall (`sa_admin_cidrs`) | I13 |
@@ -199,8 +210,6 @@ through it with the checks around it.
    ```yaml
    # images of the release workflow for repository <an operator input>
    sa_image_registry: ghcr.io/justmert/veristar
-   # acme dns-01 through bunny.net an operator input; "internal" is refused outside the local converge
-   sa_tls: bunny
    # numeric github ids of the scf operators an operator input, comma separated
    sa_operator_github_ids: "<an operator input>"
    ```

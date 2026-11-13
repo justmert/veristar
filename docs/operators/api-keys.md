@@ -1,4 +1,8 @@
-# Operator API keys
+---
+title: "Operator API keys"
+sidebarTitle: "API keys"
+description: "Give a downstream machine read access to aggregate metrics through the machine API."
+---
 
 Operator API keys give a downstream machine (a data warehouse job, a report
 script, the monitoring prober) read access to aggregate metrics through the

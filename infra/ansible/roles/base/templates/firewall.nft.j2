@@ -23,8 +23,9 @@ table inet sa_host {
 		# userland proxy receives that as input from the compose bridge
 		iifname "br-*" ip daddr {{ sa_private_ip }} accept
 {% endif %}
-		# and a port that is public anyway, on this node's public address
-		iifname "br-*" ip daddr {{ sa_public_ipv4 }} tcp dport { {{ base_public_tcp_ports | join(', ') }} } accept
+		# and a port that is public anyway, on the address the node publishes
+		# it on (its private address in azure, where the public one is nat)
+		iifname "br-*" ip daddr {{ sa_public_bind_ipv4 | default(sa_public_ipv4) }} tcp dport { {{ base_public_tcp_ports | join(', ') }} } accept
 		meta l4proto icmp accept
 		meta l4proto ipv6-icmp accept
 		iifname "{{ base_public_interface }}" tcp dport { {{ base_public_tcp_ports | join(', ') }} } accept
@@ -43,6 +44,12 @@ table inet sa_host {
 		iifname "{{ base_public_interface }}" ct state established,related accept
 		iifname "{{ base_public_interface }}" ct status dnat meta l4proto tcp ct original proto-dst { {{ base_public_tcp_ports | join(', ') }} } accept
 		iifname "{{ base_public_interface }}" ct status dnat meta l4proto udp ct original proto-dst { {{ base_public_udp_ports | join(', ') }} } accept
+{% if base_private_interface and base_private_interface == base_public_interface %}
+		# one interface carries both (azure): the private network reaches the
+		# ports the node publishes on its private address; the nsg keeps the
+		# internet off them
+		iifname "{{ base_public_interface }}" ip saddr {{ sa_private_network_cidr }} accept
+{% endif %}
 		iifname "{{ base_public_interface }}" drop
 	}
 }

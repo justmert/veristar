@@ -1,50 +1,19 @@
 ---
-- name: Read the backup retention of the backup role
+- name: Read the backup settings of the backup role
   ansible.builtin.include_vars:
     file: "{{ role_path }}/../backup/defaults/main.yml"
     name: storage_backup_defaults
 
-- name: Check the storage inputs an operator input
-  ansible.builtin.assert:
-    that:
-      - sa_object_storage is mapping
-      - sa_object_storage.endpoint is match('^https://[^/]+$')
-      - sa_object_storage.region | default('') | length > 0
-      - sa_object_storage.backup_bucket | default('') | length > 0
-      - sa_secrets.object_storage_access_key | default('') | length > 0
-      - sa_secrets.object_storage_secret_key | default('') | length > 0
-      - storage_lock_mode in ['COMPLIANCE', 'GOVERNANCE']
-      - storage_lock_days | int >= ((backup_retention_full | default(storage_backup_defaults.backup_retention_full)) | int + 1) * 7
-      - (storage_ca_file | length == 0 and storage_connect_host | length == 0) or sa_environment == 'local'
-    fail_msg: >-
-      the backup bucket needs object storage an operator input: sa_object_storage
-      (endpoint, region, backup_bucket) in the inventory and
-      object_storage_access_key and object_storage_secret_key in the sops
-      file, and a lock of at least (backup_retention_full + 1) * 7 days.
-      a private ca or connect address is for the local stand-in only.
-    quiet: true
+- name: Name the backup settings
+  ansible.builtin.set_fact:
+    storage_mode: "{{ backup_repo_mode | default(storage_backup_defaults.backup_repo_mode) }}"
+    storage_retention_full: "{{ (backup_retention_full | default(storage_backup_defaults.backup_retention_full)) | int }}"
+    storage_retention_diff: "{{ (backup_retention_diff | default(storage_backup_defaults.backup_retention_diff)) | int }}"
 
-# the script is idempotent and reads every setting back after writing it
-- name: Converge the backup bucket
-  ansible.builtin.command:
-    argv: [bash, "{{ role_path }}/files/backup-bucket.sh"]
-  environment:
-    S3_ENDPOINT: "{{ sa_object_storage.endpoint }}"
-    S3_REGION: "{{ sa_object_storage.region }}"
-    BUCKET: "{{ sa_object_storage.backup_bucket }}"
-    LOCK_MODE: "{{ storage_lock_mode }}"
-    LOCK_DAYS: "{{ storage_lock_days }}"
-    AWS_ACCESS_KEY_ID: "{{ sa_secrets.object_storage_access_key }}"
-    AWS_SECRET_ACCESS_KEY: "{{ sa_secrets.object_storage_secret_key }}"
-    CA_FILE: "{{ storage_ca_file }}"
-    CONNECT_HOST: "{{ storage_connect_host }}"
-  register: storage_bucket
-  changed_when: storage_bucket.stdout is search('^changed:', multiline=true)
-  delegate_to: localhost
-  run_once: true
-  become: false
+- name: Azure backup storage
+  ansible.builtin.include_tasks: azure.yml
+  when: storage_mode == 'azure'
 
-- name: Report the backup bucket
-  ansible.builtin.debug:
-    msg: "{{ storage_bucket.stdout_lines }}"
-  run_once: true
+- name: S3 stand-in bucket
+  ansible.builtin.include_tasks: s3.yml
+  when: storage_mode == 's3'

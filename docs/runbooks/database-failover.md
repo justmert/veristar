@@ -1,4 +1,8 @@
-# Database failover and replica rebuild
+---
+title: "Database failover and replica rebuild"
+sidebarTitle: "Database failover"
+description: "Patroni failover between the core nodes and rebuilding a replica."
+---
 
 PostgreSQL runs under Patroni on both core nodes: one leader, one synchronous replica, the
 leader key in etcd on the three edge nodes. HAProxy on each core node sends port 5000 to whichever
@@ -15,7 +19,7 @@ step 4); the database keeps serving.
 
 Alerts that lead here: `PatroniNoLeader`, `ReplicationLagHigh`, `EtcdNoLeader`,
 `EtcdMembersDown`, `WALArchivingFailing` ([alerts.md](alerts.md)). Conventions are in
-[README.md](README.md).
+[overview.md](overview.md).
 
 Ingestion does not depend on the database: gateways and collectors keep answering and the queues
 hold the work ([queue-backlog-and-dlq.md](queue-backlog-and-dlq.md)). Dashboards, the control

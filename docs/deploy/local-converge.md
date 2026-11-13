@@ -1,4 +1,8 @@
-# Local converge: the Ansible roles against real Debian 13 systems
+---
+title: "Local converge: the Ansible roles against real Debian 13 systems"
+sidebarTitle: "Local converge"
+description: "Run the same Ansible roles against Debian 13 containers on one machine."
+---
 
 Status: first version (this stage, stream b). The real servers, domain and credentials
 (inputs I2 to I6, I13, I14) do not exist yet, so the roles are verified against a local
@@ -19,7 +23,7 @@ virtualisation. Options considered:
 
 Each node is `infra/local/node.Dockerfile`: `debian:trixie` (pinned by digest) with
 systemd as PID 1, OpenSSH, sudo and Python, plus an `ops` user whose key is installed at
-start, which is what cloud-init does on a Hetzner Debian 13 server
+start, which is what cloud-init does on an Azure Debian 13 VM
 (docs/deploy/opentofu.md section 1). Nothing the roles configure is preinstalled:
 Docker Engine and Compose come from Docker's apt repository at their pins, chrony,
 nftables and unattended-upgrades from Debian.
@@ -89,7 +93,8 @@ domain `sa-local.test` (the reserved `.test` TLD). Local-only settings are in
 ## 3. What was verified (2026-11-12)
 
 - `ansible-lint` (production profile) and `yamllint -s` pass. `deploy/caddy/assemble_test.go`
-  validates both assembled node configs with `SA_TLS` bunny and internal on the custom
+  validates the assembled node configs with `SA_TLS` cloudflare, cloudflare-delegated and
+  internal on the custom
   Caddy build and refuses an unset or unknown value.
 - `site.yml` converged the four nodes from fresh containers, and the next run reported
   `changed=0` on every node (section 5 has the recap).
@@ -117,11 +122,12 @@ domain `sa-local.test` (the reserved `.test` TLD). Local-only settings are in
 
 ## 4. Limits: what this does not prove
 
-- **Not real servers, network or DNS.** No Hetzner firewall, no private network latency
-  between locations, no bunny.net health checks. Hostnames are mapped by the test client.
+- **Not real servers, network or DNS.** No network security group, no Azure NAT of the public
+  address (the local nodes hold theirs on an interface), no latency between zones, no Traffic
+  Manager health checks. Hostnames are mapped by the test client.
 - **No public TLS.** Caddy uses its local CA (`sa_tls: internal`); DNS-01 through
-  `caddy-dns/bunny` is configured (`sa_tls: bunny`), compiles and validates, but has not
-  issued a certificate: blocked on I4 and I6.
+  `caddy-dns/cloudflare` is configured (`sa_tls: cloudflare`), compiles and validates, but has
+  not issued a certificate yet: that happens at the first staging converge.
 - **Clock.** The nodes share this machine's kernel clock and may not set it, so chronyd
   runs with `-x` (measure, do not steer). The offset check runs for real; clock steering
   does not.
@@ -181,20 +187,21 @@ section 4.1 plus a backup node:
 - **Latency.** `tc netem` on the router delays what it sends into each location:
   1.5 ms toward fsn1 and nbg1, 11.5 ms toward hel1, 0.3 ms jitter. Round trips are
   therefore about 3 ms fsn1 to nbg1 and 23 ms to hel1 (measured with TCP connects:
-  4.8 ms and 24.3 ms including the handshake). These numbers are assumptions, not
-  measurements of Hetzner's network; the real cross-location latency is blocked on
-  an operator input.
+  4.8 ms and 24.3 ms including the handshake). The local network names keep the labels of the
+  first hosting plan; they stand for three separate zones. These numbers are assumptions, not
+  measurements of Azure's network between availability zones, which the first staging drill
+  measures.
 - **Partition.** `lc_partition <location>` takes the router's interface into that
   location down, cutting it off the private network in both directions while its
   public addresses stay reachable; `lc_heal` restores it.
-- **Backups.** No object storage exists an operator input, so the pgbackrest repository is
+- **Backups.** No Azure storage exists locally, so the pgbackrest repository is
   a posix repository on `sa-lc-backup-1` in hel1, a location with no database node,
   reached over pgbackrest's TLS protocol with the node certificates of the internal CA
   (`make internal-ca ENV=local`, which `make local-converge-up` runs). This is a stand-in, not an
   equivalent: object storage is not a server pgbackrest talks to, has its own
-  durability and latency, and `repo1-s3-uri-style=host` against Hetzner was never
-  tested. The S3 settings stay in `roles/backup` (`backup_repo_mode: s3`, the
-  default) and are refused until `sa_object_storage` and the S3 keys exist.
+  durability and latency. Staging and production use `backup_repo_mode: azure` (the
+  default), which this machine cannot run: it needs the Azure instance metadata service for
+  the managed identity.
 - **Power off** in the drills is `docker kill` of a node container: no clean
   shutdown of anything inside. Power on is `docker start`, which boots systemd and
   Docker again; compose restarts the services (`restart: unless-stopped`).
@@ -205,17 +212,17 @@ Two switches of `infra/local/env.sh`, read by `up.sh` and `down.sh`:
 
 - `LC_BACKUP=s3` replaces `sa-lc-backup-1` with `sa-lc-s3` (hel1, `10.99.3.35`), SeaweedFS 4.52
   serving S3 over TLS with a private CA, host-style addressing under `s3.sa-local.test`. The
-  inventory then carries `backup_repo_mode: s3` and an `sa_object_storage` with the same keys
-  as Hetzner's plus two local-only ones, `storage_host` and `ca_file`, which the roles refuse
-  outside the local converge. The stand-in's keys go into the SOPS file the way an operator input would.
-  What this proves and what it does not is in [backups.md](backups.md) section 4.
+  inventory then carries `backup_repo_mode: s3` and an `sa_object_storage` with the endpoint,
+  region and bucket plus two local-only keys, `storage_host` and `ca_file`. The roles accept
+  the `s3` mode in the local converge only. It exercises the stanza, archiving and backup flow
+  over an object store protocol, not Azure itself ([backups.md](backups.md) section 5).
 - `LC_PROBE=1` adds `sa-lc-probe-1` on the public network only (`172.31.99.51`), as the
-  Scaleway probe has no private address. `site.yml`'s probe play converges it.
+  a probe host outside the platform's network would. `site.yml`'s probe play converges it.
 
 `make ops-local` (`tests/localconverge/ops-local.sh`) runs the operations checks of
 the review notes on `LC_TOPOLOGY=minimal LC_BACKUP=s3 LC_PROBE=1`: backup
 bucket, stanza and WAL archiving in `s3` mode, a full backup, delete refusal and
-`--repo-target-time`, the OpenTofu state copy, idempotency, Patroni failsafe with etcd stopped,
+`--repo-target-time`, idempotency, Patroni failsafe with etcd stopped,
 the etcd rejoin of a rebuilt edge node, the probe and the watchdog push, then tears down. It
 refuses to start at a load average of 20 or more and waits before each step until the load is
 below 20 (ten minutes at most). `LC_SRC` builds the images from another checkout (for example

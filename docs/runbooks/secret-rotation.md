@@ -1,10 +1,13 @@
-# Secret rotation
+---
+title: "Secret rotation"
+description: "Replace each secret of an environment, and what users notice while you do."
+---
 
 How to replace each secret of an environment, what changes for users while you do, and what
 Ansible applies by itself. The secrets live in `infra/secrets/<env>/secrets.enc.yaml` (platform)
 and `infra/secrets/<env>/tofu.enc.env` (OpenTofu), both SOPS files encrypted to the age keys of
 `<an operator input>` ([../deploy/secrets.md](../deploy/secrets.md)). Conventions are in
-[README.md](README.md).
+[overview.md](overview.md).
 
 Rotate when a value may have been exposed (a node compromised, a file or identity leaked, a
 person with access left), when a provider forces it, or on a schedule the operators set.
@@ -69,19 +72,19 @@ replacing one value.
 | `postgres_superuser_password`, `postgres_replication_password`, `patroni_restapi_password` | Patroni, bootstrap, observability | `patroni.yml` only | change the role in PostgreSQL first (below), converge, then reload Patroni |
 | `pgbackrest_cipher_pass` | pgBackRest repository encryption | n/a | **cannot be rotated in place**: the repository is encrypted with it. A new value needs a new, empty repository (new bucket or path), a new full backup, and keeping the old repository and value until its backups expire |
 | `github_client_id`, `github_client_secret` | control plane sign-in (`<an operator input>`) | yes (env file) | create a new client secret in the GitHub OAuth App settings, converge, recreate `controlplane`, then delete the old secret in GitHub |
-| `bunny_api_key` | Caddy DNS-01 (`<an operator input>`) | yes (`caddy.env`) | also update `BUNNYNET_API_KEY` in `tofu.enc.env`; recreate `caddy` on every node; revoke the old key at bunny.net |
-| `object_storage_access_key`, `object_storage_secret_key` | pgBackRest S3 repository (`<an operator input>`) | yes (pgBackRest config) | create the new key pair in the Hetzner console, converge, run `pgbackrest --stanza=sa check` on the leader, then delete the old pair; also update `AWS_*` in `tofu.enc.env` if the same pair serves the state bucket |
-| `alertmanager_discord_webhook_url`, `gatus_discord_webhook_url` | Alertmanager, Gatus (`<an operator input>`) | Alertmanager: yes (observability play of `site.yml`); Gatus runs on the probe node, which no playbook converges yet | create a new webhook in Discord, delete the old one |
+| `cloudflare_api_token` | Caddy DNS-01 (`<an operator input>`) | yes (`caddy.env`) | create a new token with the same permissions (`Zone:Zone:Read`, `Zone:DNS:Edit` on the zone), converge, recreate `caddy` on every node, then delete the old token in Cloudflare; update `CLOUDFLARE_API_TOKEN` in `tofu.enc.env` too if the same token serves OpenTofu |
+| `object_storage_access_key`, `object_storage_secret_key` | the local converge's S3 stand-in only | n/a | Azure backups use the core nodes' managed identity: there is no storage key to rotate. Revoking access is removing the role assignment (`infra/tofu/modules/backup-storage`) |
+| `alertmanager_discord_webhook_url`, `gatus_discord_webhook_url` | Alertmanager, Gatus (`<an operator input>`) | Alertmanager: yes (observability play of `site.yml`); Gatus: render the probe bundle again and restart it ([../deploy/probe.md](../deploy/probe.md)) | create a new webhook in Discord, delete the old one |
 | `grafana_admin_password`, `postgres_exporter_password` | Grafana, postgres_exporter on the core nodes | yes (observability play; the exporter's `sa_monitor` role password is set through HAProxy at each run) | recreate `grafana` and the exporter if they did not restart |
-| `probe_metrics_token`, `gatus_external_token` | the probe node's Caddy and Gatus, Prometheus scraping the prober | core side yes; probe side waits for the probe node to be converged (same note) | |
-| `probe_otlp_token`, `probe_machine_api_key`, `probe_site_id` | the prober | waits for the probe node to be converged (same note) | create a new OTLP token for the internal probe tenant and a new scoped operator key, write them to the file, apply, then revoke the old ones |
+| `probe_metrics_token`, `gatus_external_token` | the probe node's Caddy and Gatus, Prometheus scraping the prober | core side yes; probe side: render the probe bundle again and restart it | |
+| `probe_otlp_token`, `probe_machine_api_key`, `probe_site_id` | the prober | render the probe bundle again and restart it | create a new OTLP token for the internal probe tenant and a new scoped operator key, write them to the file, apply, then revoke the old ones |
 
 The certificates of the private network are not in `secrets.enc.yaml`: they live in
 `ca.enc.yaml` and `tls.enc.yaml` beside it and have their own section,
 [Internal CA and node certificates](#internal-ca-and-node-certificates).
 
-Keys of `tofu.enc.env` (`HCLOUD_TOKEN`, `BUNNYNET_API_KEY`, `AWS_ACCESS_KEY_ID`,
-`AWS_SECRET_ACCESS_KEY`, `SCW_*`) are only used on the controller: edit with
+Keys of `tofu.enc.env` (`CLOUDFLARE_API_TOKEN`; Azure uses the operator's `az login`, which
+`az logout` ends) are only used on the controller: edit with
 `sops --config infra/secrets/.sops.yaml edit infra/secrets/staging/tofu.enc.env`, run
 `make staging-plan` to prove the new value works (expected: `No changes.`), and revoke the old
 one at the provider. `TF_VAR_state_passphrase` needs OpenTofu's `fallback` key provider for one
@@ -155,7 +158,7 @@ and recreate `controlplane` and `jobs` on both core nodes.
 
 After the converge and the recreation of `controlplane` and `jobs`, Umami still holds today's
 passwords derived from the old key, and `umami-rotate` skips a day it already recorded. Clear the
-record and run the task once ([README.md](README.md), "Running a jobs task by hand"):
+record and run the task once ([overview.md](overview.md), "Running a jobs task by hand"):
 
 ```sql
 delete from cp.settings where key = 'umami_password_day';
@@ -171,7 +174,7 @@ console's SSO.
 ## Internal CA and node certificates
 
 Every link between nodes is TLS with certificates of one internal CA per environment (finding
-O-26 of [the review notes](the review notes)). The files:
+O-26 of the review notes). The files:
 
 | File | Holds | Read by |
 |---|---|---|

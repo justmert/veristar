@@ -40,8 +40,8 @@ func assemble(t *testing.T, args ...string) string {
 func nodeCaddyRun(t *testing.T, path string, env map[string]string, cmd ...string) (int, string) {
 	t.Helper()
 	ctx := context.Background()
-	// the custom build: core needs replace-response, and the bunny variant
-	// needs caddy-dns/bunny
+	// the custom build: core needs replace-response, and the cloudflare
+	// variant needs caddy-dns/cloudflare
 	c, err := testcontainers.Run(ctx, umamictr.WebCaddyImage(t),
 		testcontainers.WithEnv(env),
 		testcontainers.WithFiles(testcontainers.ContainerFile{HostFilePath: path, ContainerFilePath: "/etc/caddy/Caddyfile", FileMode: 0o644}),
@@ -59,7 +59,7 @@ func nodeCaddyRun(t *testing.T, path string, env map[string]string, cmd ...strin
 	return state.ExitCode, string(b)
 }
 
-// the assembled node configs validate with dns-01 through bunny and with the
+// the assembled node configs validate with dns-01 through cloudflare and with the
 // local ca, and an unset or unknown SA_TLS fails instead of serving without
 // the intended issuer.
 func TestAssembledNodeCaddyfiles(t *testing.T) {
@@ -88,7 +88,10 @@ func TestAssembledNodeCaddyfiles(t *testing.T) {
 				env[k] = v
 			}
 			env["ACME_CHALLENGE_DOMAIN"] = "_acme-challenge.handover.example.net"
-			for _, good := range []string{"bunny", "bunny-delegated", "internal"} {
+			// caddy-dns/cloudflare checks the token's shape when it provisions;
+			// validate makes no api call
+			env["CLOUDFLARE_API_TOKEN"] = "validate-only-token-not-used-for-any-call"
+			for _, good := range []string{"cloudflare", "cloudflare-delegated", "internal"} {
 				env["SA_TLS"] = good
 				code, out := nodeCaddyRun(t, p, env, "caddy", "validate", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile")
 				require.Equal(t, 0, code, "SA_TLS=%s: %s", good, out)

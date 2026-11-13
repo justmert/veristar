@@ -1,4 +1,7 @@
-# Web metrics
+---
+title: "Web metrics"
+description: "How each of the seven web metrics is produced, and how visitors and visits are counted."
+---
 
 How each of the seven web metrics the RFP requires (page views, unique visitors, referrers,
 session duration, bounce rate, country, device and browser) is produced from Umami's tables

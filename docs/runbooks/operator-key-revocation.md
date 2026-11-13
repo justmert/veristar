@@ -1,4 +1,8 @@
-# Operator API key revocation
+---
+title: "Operator API key revocation"
+sidebarTitle: "Operator key revocation"
+description: "Revoke an operator API key and confirm that it no longer works."
+---
 
 Operator API keys (`sa_op_` plus 40 characters) give machine read access to the metrics API
 (`/api/metrics/v1/...` on `app.<an operator input>`), either to every tenant or to one. They are stored

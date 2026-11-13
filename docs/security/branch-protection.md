@@ -1,4 +1,7 @@
-# Branch protection for `main`
+---
+title: "Branch protection for main"
+description: "The repository settings that make every change go through a reviewed pull request with passing checks."
+---
 
 The settings below are required for `main` in `github.com/justmert/veristar`. They make
 every change go through a reviewed pull request with passing checks, which is the control that

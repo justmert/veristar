@@ -1,6 +1,9 @@
-# SvelteKit
+---
+title: "SvelteKit"
+description: "Add the tracker to a SvelteKit app."
+---
 
-For SvelteKit apps. Tested by the example [`examples/sveltekit`](../../../examples/sveltekit)
+For SvelteKit apps. Tested by the example [`examples/sveltekit`](https://github.com/justmert/veristar/tree/main/examples/sveltekit)
 (SvelteKit 3.1.1, Svelte 5.57.3, `@sveltejs/adapter-node` 6.0.2, Vite 8), which runs in the
 browser test matrix.
 
@@ -8,7 +11,7 @@ browser test matrix.
 
 Put the tag in `src/app.html`, before `%sveltekit.head%`:
 
-<!-- include examples/sveltekit/src/app.html region=head -->
+{/* include examples/sveltekit/src/app.html region=head */}
 ```html
 <!-- paste the tag from the console in place of the next line, before %sveltekit.head% -->
 <!-- tracker -->
@@ -18,7 +21,7 @@ Put the tag in `src/app.html`, before `%sveltekit.head%`:
 The example replaces the comment with the tag in a `handle` hook so that tests can set their own
 site id at run time. In your app the tag from the console stands there:
 
-<!-- snippet version=1.1.0 -->
+{/* snippet version=1.1.0 */}
 ```html
 <script defer src="https://in.analytics.example/v/1.1.0/sdk.js" integrity="sha384-lxlitLtIMAeT/K3ieev+MeMGxZe7oceuWLOy8GZAjK7TMKS2Uh9UPmfGLBczUPsq" crossorigin="anonymous" data-website-id="3f6a0c2e-9b1d-4e7a-8c5f-1d2e3f4a5b6c"></script>
 ```
@@ -39,7 +42,7 @@ forward included, is one pageview.
 `data-umami-event` attributes work in any component. For a call from code, use
 `window.umami?.track()`:
 
-<!-- include examples/sveltekit/src/routes/+page.svelte region=track -->
+{/* include examples/sveltekit/src/routes/+page.svelte region=track */}
 ```svelte
 // the tracker may be blocked by the visitor, so the call is optional
 function manualCall() {
@@ -49,7 +52,7 @@ function manualCall() {
 
 and declare the global in `src/app.d.ts` for TypeScript:
 
-<!-- include examples/sveltekit/src/app.d.ts -->
+{/* include examples/sveltekit/src/app.d.ts */}
 ```ts
 // window.umami as sdk.js installs it; optional because a visitor may block it
 declare global {

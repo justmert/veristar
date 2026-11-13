@@ -1,4 +1,7 @@
-# Content security policy
+---
+title: "Content security policy"
+description: "The Content-Security-Policy directives that let the tracker load and send events."
+---
 
 If your site sends a `Content-Security-Policy` header (or a `<meta http-equiv>` policy), the browser
 blocks the tracker unless the policy allows the gateway. Tested by the static example, whose server
@@ -19,7 +22,7 @@ worker. It uses WebCrypto in the page itself for the challenge.
 
 The example builds its policy from the gateway origin:
 
-<!-- include examples/static-html/csp.ts region=policy -->
+{/* include examples/static-html/csp.ts region=policy */}
 ```ts
 // gateway is the origin the tracker tag loads from, for example
 // https://in.analytics.example. sdk.js is a script from that origin, and
@@ -56,7 +59,7 @@ directives are the example site's own.
   with `'strict-dynamic'`, host entries in `script-src` are ignored, so the nonce is required. These
   variants were not tested.
 - **Page code that calls `umami.track()`** must itself be allowed by the policy. The example keeps
-  it in a file of its own ([`page.js`](../../../examples/static-html/src/page.js)) so that no
+  it in a file of its own ([`page.js`](https://github.com/justmert/veristar/blob/main/examples/static-html/src/page.js)) so that no
   inline script is needed.
 - **Integrity is separate.** The `integrity` attribute is checked whatever the policy says; a CSP
   does not replace it, and it does not replace a CSP.

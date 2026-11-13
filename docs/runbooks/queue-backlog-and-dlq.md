@@ -1,4 +1,8 @@
-# Queue backlog and dead-letter queues
+---
+title: "Queue backlog and dead-letter queues"
+sidebarTitle: "Queue backlog and DLQ"
+description: "Handle a growing queue and inspect or replay dead-lettered messages."
+---
 
 Web events wait in `WEB_EVENTS` until the replayer has stored them in Umami. API metric batches
 wait in `API_METRICS` until the metrics writer has stored them in PostgreSQL. Both streams are
@@ -7,7 +11,7 @@ go to `WEB_DLQ` (kept 7 days) and `API_DLQ` (kept 30 days).
 
 Alerts that lead here: `QueueOldestMessageTooOld`, `ReplayerLagHigh`, `MetricsWriterLagHigh`,
 `ReplayerNotConsuming`, `MetricsWriterNotConsuming`, `DLQNotEmpty` ([alerts.md](alerts.md)).
-Conventions are in [README.md](README.md).
+Conventions are in [overview.md](overview.md).
 
 ## Limits that set the urgency
 
@@ -116,7 +120,7 @@ message id.
 2. **List the messages.** `platformctl dlq list` prints one line per message: DLQ sequence,
    time it was dead-lettered, key (site id for `web`, tenant id for `api`), origin stream,
    sequence and subject, payload size and reason. It never prints the payload, which is a full
-   event. Run platformctl as in [README.md](README.md#running-platformctl-on-a-core-node) and
+   event. Run platformctl as in [README.md](overview.md#running-platformctl-on-a-core-node) and
    replace its last words with:
 
    ```sh

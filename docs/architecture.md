@@ -1,4 +1,7 @@
-# Architecture
+---
+title: "Architecture"
+description: "The services, hosts, data flows, queues and stores that make up Veristar, with diagrams of each path."
+---
 
 Veristar is a multi-tenant web and API analytics service. Web analytics are built on
 an unmodified Umami 3.5.0. Everything the RFP needs beyond Umami (buffered ingestion, bot and
@@ -22,7 +25,7 @@ flowchart LR
     machine["Machine consumer"]
   end
 
-  subgraph edge["Edge tier: 3 nodes, 3 locations"]
+  subgraph edge["Edge tier: 3 nodes, 3 availability zones"]
     ecaddy["Caddy<br/>in. and otlp. hosts"]
     gw["gateway"]
     col["collector<br/>custom OpenTelemetry Collector"]
@@ -30,7 +33,7 @@ flowchart LR
     etcd[("etcd<br/>3 members")]
   end
 
-  subgraph core["Core tier: 2 nodes, 2 locations"]
+  subgraph core["Core tier: 2 nodes, 2 availability zones"]
     ccaddy["Caddy<br/>app. and web. hosts"]
     console["console<br/>React static files"]
     cp["controlplane"]
@@ -43,7 +46,7 @@ flowchart LR
   end
 
   backup[("Object storage<br/>pgBackRest repository")]
-  subgraph probe["Probe: separate provider"]
+  subgraph probe["Probe: outside Azure"]
     prober["prober"]
     gatus["Gatus status page"]
   end
@@ -108,7 +111,7 @@ against current lists daily. Umami's own collect routes are never reachable from
 The edge accepts traffic with no dependency on PostgreSQL or Umami, so ingestion stays up
 while the core tier is down ([reference/availability.md](reference/availability.md)).
 Infrastructure is OpenTofu (`infra/tofu`) and Ansible (`infra/ansible`), see
-[deploy/](deploy/).
+[deploy/overview.md](deploy/overview.md).
 
 ## Web event flow
 
@@ -217,7 +220,7 @@ flowchart TB
 - **Operators** see aggregates only: the role `cp_operator` reads `agg`, hourly and daily `api`
   data and non-secret project facts, cannot read raw events or sessions, and cannot connect to
   the `umami` database. Operators get no Umami access
-  ([operators/README.md](operators/README.md)).
+  ([operators/overview.md](operators/overview.md)).
 - **Machine consumers** read the same aggregates with operator API keys under
   `/api/metrics/v1/`, which has no session handling at all
   ([operators/api-keys.md](operators/api-keys.md),
@@ -246,18 +249,18 @@ are in `db/migrations` and the design as summarised above.
 
 ```mermaid
 flowchart LR
-  dns["bunny.net DNS<br/>health-checked records"]
-  subgraph e["Edge nodes fsn1, nbg1, hel1"]
+  dns["Cloudflare DNS, CNAME to<br/>Azure Traffic Manager (health checks)"]
+  subgraph e["Edge nodes, Azure zones 1, 2, 3"]
     e1["edge 1"]
     e2["edge 2"]
     e3["edge 3"]
   end
-  subgraph c["Core nodes fsn1, nbg1"]
+  subgraph c["Core nodes, Azure zones 1, 2"]
     c1["core 1<br/>Patroni member, HAProxy"]
     c2["core 2<br/>Patroni member, HAProxy"]
   end
-  s3[("object storage<br/>pgBackRest repository")]
-  p["probe node<br/>prober, Gatus"]
+  s3[("Azure Blob Storage, ZRS<br/>pgBackRest repository")]
+  p["probe outside Azure<br/>prober, Gatus, uptime monitor"]
   dns --> e1 & e2 & e3
   dns --> c1 & c2
   e1 <-- "NATS and etcd clusters" --> e2

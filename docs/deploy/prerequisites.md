@@ -1,4 +1,8 @@
-# Prerequisites and accounts
+---
+title: "Prerequisites and accounts"
+sidebarTitle: "Prerequisites"
+description: "The accounts, inputs and controller tools an environment needs before the first command."
+---
 
 Everything an environment needs before the first command, mapped to the plan's required inputs
 . An input that is missing blocks the steps named in its row; nothing in the
@@ -11,22 +15,23 @@ repository substitutes a made-up value for one.
 | I1 | Git repository `github.com/justmert/veristar` | Go module path; `sa_signing_repository` in `infra/ansible/vars/signing.yml` (the only identity whose signed images `deploy.yml` accepts); images under `ghcr.io/justmert/veristar/` | release images, deploy | supplied; private, must be public before phases 18 and 20 publish |
 | I2 | GitHub OAuth App per environment: client id and secret | `github_client_id`, `github_client_secret` in `infra/secrets/<env>/secrets.enc.yaml` (from `SA_GITHUB_CLIENT_ID`, `SA_GITHUB_CLIENT_SECRET`) | core nodes (the `secrets` role refuses a core node without it) | missing |
 | I3 | Numeric GitHub ids of the SCF operators | `sa_operator_github_ids` in `infra/ansible/inventories/<env>/group_vars/all.yml` | `bootstrap.yml`, core role | missing |
-| I4 | `BASE_DOMAIN`, registered, zone delegated to bunny.net | `base_domain` in `infra/tofu/envs/<env>/terraform.tfvars`; `STATUS_BASE_URL` repository variable (`https://status.<an operator input>`) for the SLO workflow | DNS, certificates, every hostname | missing |
-| I5 | Hetzner Cloud API token; Hetzner Object Storage S3 keys (made by hand in the Hetzner console, there is no API for them) | `HCLOUD_TOKEN`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` in `infra/secrets/<env>/tofu.enc.env`; `object_storage_access_key`, `object_storage_secret_key` in `secrets.enc.yaml` (from `SA_OBJECT_STORAGE_ACCESS_KEY`, `SA_OBJECT_STORAGE_SECRET_KEY`); `state_bucket`, `state_location`, `backup_bucket`, `backup_location`, `edge_server_type`, `core_server_type`, `server_image` in `terraform.tfvars` | every cloud step, backups | missing |
-| I6 | bunny.net account API key (team member keys are not supported) | `BUNNYNET_API_KEY` in `tofu.enc.env`; `bunny_api_key` in `secrets.enc.yaml` (from `SA_BUNNY_API_KEY`) | DNS zone, health-checked records, Caddy DNS-01 certificates | missing |
-| I7 | Scaleway API credentials | `SCW_ACCESS_KEY`, `SCW_SECRET_KEY`, `SCW_DEFAULT_PROJECT_ID` in `tofu.enc.env`; `probe_enabled = true`, `probe_instance_type`, `probe_image` in `terraform.tfvars` | the probe node (status page, prober) | missing |
+| I4 | `BASE_DOMAIN`, registered, its zone active in Cloudflare DNS | `base_domain` in `infra/tofu/envs/<env>/terraform.tfvars`; `STATUS_BASE_URL` repository variable (`https://status.<an operator input>`) for the SLO workflow | DNS, certificates, every hostname | supplied 2026-11-13: `veristar.app`, registered at Cloudflare Registrar, zone active in Cloudflare |
+| I5 | Azure subscription, with an `az login` of a user who may create resources in it | `subscription_id`, `state_resource_group`, `state_storage_account`, `backup_storage_account`, `server_image_version` in `terraform.tfvars` (the VM sizes default to `Standard_B2als_v2` and `Standard_B2as_v2`) | every Azure step; backups use the core nodes' managed identity, so there is no storage key | supplied 2026-11-13: one subscription, signed in with `az login` on an operator workstation; vCPU quota checked (section "Azure subscription" below) |
+| I6 | Cloudflare API token limited to the zone of `<an operator input>`, permissions `Zone:Zone:Read` and `Zone:DNS:Edit` | `CLOUDFLARE_API_TOKEN` in `infra/secrets/<env>/tofu.enc.env` (OpenTofu's records); `cloudflare_api_token` in `secrets.enc.yaml` (from `SA_CLOUDFLARE_API_TOKEN`, Caddy DNS-01) | DNS records, Caddy DNS-01 certificates | supplied 2026-11-13: one token, active, scoped to `veristar.app` |
+| I7 | no longer an input: the probe runs as a container on a host the operator already runs ([probe.md](probe.md)) | | | not needed |
 | I8 | Discord webhook URL for alerts | `alertmanager_discord_webhook_url`, `gatus_discord_webhook_url` in `secrets.enc.yaml`, added with `sops edit` | Alertmanager, Gatus | missing |
 | I9 | npm scope with trusted publishing for the repository | `release-tracker.yml` | publishing the tracker package; not needed to deploy | missing |
 | I10 | Legal review of the compliance statements | `docs/compliance/` | publishing the statements as final (production launch); not needed to deploy staging | pending |
 | I11 | Three SCF-awarded web projects and one API project | none in the repository | this stage adoption proof; not needed to deploy | missing |
 | I12 | A second cloud project, a spare domain and a second GitHub owner | none yet | this stage handover rehearsal; not needed to deploy | missing |
-| I13 | Admin source address ranges (CIDRs) allowed to reach SSH | `admin_cidrs` in `terraform.tfvars` (it refuses `0.0.0.0/0`) | cloud firewall, host firewall | missing |
+| I13 | Admin source address ranges (CIDRs) allowed to reach SSH | `admin_cidrs` in `terraform.tfvars` (it refuses `0.0.0.0/0`); its IPv4 ranges also reach the backup storage account | network security group, host firewall, storage network rules | missing |
 | I14 | age public keys of everyone who may decrypt an environment's secrets (at least two per environment) | `infra/secrets/recipients/<env>.txt` | every SOPS file, so everything | missing |
-| I15 | Admin SSH public keys for the `ops` user | `admin_ssh_public_keys` in `terraform.tfvars` | cloud-init on every server | missing |
+| I15 | Admin SSH public keys for the `ops` user (Ed25519 or RSA; Azure accepts both) | `admin_ssh_public_keys` in `terraform.tfvars` | cloud-init on every server | missing |
 
 Besides the inputs, the environment's Ansible variables that are not secret go in
 `infra/ansible/inventories/<env>/group_vars/all.yml` ([bootstrap.md](bootstrap.md) step 1):
-`sa_image_registry`, `sa_tls`, `sa_operator_github_ids`.
+`sa_image_registry` and `sa_operator_github_ids`. The file already holds the settings every
+Azure node shares (`sa_tls: cloudflare`, `sa_public_bind_ipv4`).
 
 **Upstream blocker.** The core role refuses any environment other than the local converge while
 PostgreSQL is below 18.7 (`postgres_version` and `postgres_min_version` in
@@ -36,72 +41,78 @@ package existed. Until they do, a staging converge stops at the core role.
 ## Hosting: providers, cost and accounts for the 12-month service window
 
 RFP section 3.4 makes the proposer host the service for 12 months. This section states what that
-costs and who holds what. Prices were read on 2026-11-13, in euro excluding VAT unless marked,
-and change: check them again before ordering.
+costs and who holds what. Prices were read on 2026-11-13 from the Azure retail prices API
+(`https://prices.azure.com/api/retail/prices`, region `swedencentral`, pay as you go, USD
+excluding VAT) and change: check them again before ordering.
 
 ### Providers
 
 | Provider | Used for | Account input |
 |---|---|---|
-| Hetzner Cloud | 3 edge and 2 core servers in `fsn1`, `nbg1`, `hel1`, the private network, primary IPs, Object Storage (OpenTofu state and pgBackRest backups) | I5 |
-| bunny.net | the DNS zone with health-checked record sets | I6 |
-| Scaleway | the probe server in `fr-par` (status page, prober), outside Hetzner on purpose | I7 |
+| Microsoft Azure, region Sweden Central (`swedencentral`, three availability zones) | 3 edge and 2 core VMs, the virtual network, network security groups, static public IPv4 addresses, Traffic Manager (health-checked DNS failover), Blob Storage (OpenTofu state and pgBackRest backups) | I5 |
+| Cloudflare | registrar and DNS for `<an operator input>`, DNS only (no proxy) | I4, I6 |
+
+The probe runs on a host outside Azure that the operator already operates ([probe.md](probe.md));
+it adds no provider.
 
 ### Monthly cost estimate per environment
 
-Server types are inputs (`edge_server_type`, `core_server_type`, `probe_instance_type`); the
-estimate uses the planning defaults `cpx22` (edge) and `cpx42` (core) from
-[opentofu.md](opentofu.md) and, for the probe, `DEV1-S` with the 20 GB root volume of
-`infra/tofu/envs/*/main.tf`.
-
-| Item | Unit price | Quantity | Per month |
+| Item | Unit price (USD) | Quantity | Per month (USD) |
 |---|---|---|---|
-| Hetzner `cpx22` (2 vCPU, 4 GB) | 16.99 | 3 | 50.97 |
-| Hetzner `cpx42` (8 vCPU, 16 GB) | 59.49 | 2 | 118.98 |
-| Hetzner primary IPv4 (IPv6 free) | 0.50 | 5 | 2.50 |
-| Hetzner private network | free | 1 | 0.00 |
-| Hetzner Object Storage base price (1 TB storage and 1 TB egress included) | 6.49 | 1 per project | 6.49 |
-| **Hetzner subtotal** | | | **178.94** |
-| Scaleway `DEV1-S` probe | 0.008976 per hour | 730 h | 6.55 |
-| Scaleway flexible IPv4 | 0.005 per hour (assumed hourly, see below) | 730 h | 3.65 |
-| Scaleway block volume, 5K IOPS, 20 GB | 0.00013 per GB-hour (assumed) | 20 GB, 730 h | 1.90 |
-| **Probe subtotal** | | | **12.10** |
-| bunny.net DNS, zones and monitoring | free, with the account minimum of USD 1 a month | 1 per account | USD 1.00 |
+| `Standard_B2als_v2` edge VM (2 vCPU, 4 GB) | 0.0389 per hour | 3 x 730 h | 85.19 |
+| `Standard_B2as_v2` core VM (2 vCPU, 8 GB) | 0.0778 per hour | 2 x 730 h | 113.59 |
+| Standard SSD E4 (32 GiB, LRS), edge OS disk | 2.40 | 3 | 7.20 |
+| Standard SSD E10 (128 GiB, LRS), core OS disk | 9.60 | 2 | 19.20 |
+| Standard static public IPv4 | 0.005 per hour | 5 x 730 h | 18.25 |
+| Traffic Manager health checks, external endpoints | 0.54 per endpoint | 10 | 5.40 |
+| Traffic Manager 10 s fast probing (`in`, `otlp`) | 2.00 per endpoint | 6 | 12.00 |
+| Virtual network, network security groups, managed identity | no charge | | 0.00 |
+| Cloudflare DNS (zone on the free plan) | no charge | 1 | 0.00 |
+| **Fixed monthly total, pay as you go** | | | **260.83** |
 
-So production costs about 191 EUR plus USD 1 a month, about 2,300 EUR for the 12-month window.
-A staging environment that runs all month costs about another 179 EUR (plus 12 EUR if its probe
-is enabled); Hetzner and Scaleway bill by the hour, so staging destroyed between drills
-(`make staging-destroy`) costs only the hours it ran. Traffic is within what is included (20 TB
-a month per Hetzner server, 1 TB of Object Storage egress). Backup storage beyond the included
-1 TB costs 0.0087 per TB-hour, about 6.35 per TB-month; the backup volume has not been measured
-on a real environment an operator input.
+Usage-based items come on top and have not been measured on a real environment yet:
+Traffic Manager DNS queries (0.54 per million), Blob Storage ZRS hot (0.023 per GB-month, writes
+0.0625 per 10,000), Standard SSD transactions (0.002 per 10,000), internet egress (the first
+100 GB a month free, then 0.087 per GB), and inter-zone traffic, which the price list meters at
+0.01 per GB in each direction.
 
-Sources, read 2026-11-13:
-[Hetzner Cloud regular performance](https://www.hetzner.com/cloud/regular-performance/) (cpx22,
-cpx42), [Hetzner IP pricing](https://docs.hetzner.com/general/infrastructure-and-availability/ipv4-pricing/)
-(cloud primary IPv4 0.50), [Hetzner Object Storage](https://www.hetzner.com/storage/object-storage/)
-(base price 6.49, which also lists object locking and versioning),
-[bunny.net DNS pricing](https://bunny.net/pricing/dns/) (free DNS and monitoring, USD 1 monthly
-account minimum), and Scaleway's public product catalogue API
-(`https://api.scaleway.com/product-catalog/v2alpha1/public-catalog/products?zone=fr-par-1`; the
-Scaleway pricing pages refused automated reads). The catalogue gives `DEV1-S` per hour, but the
-IPv4 and block volume units only as "per ip" and "per GB"; they are read as hourly here, which
-is how Scaleway bills them, and should be confirmed in the Scaleway console. On the same day the
-catalogue reported `STARDUST1-S` in `fr-par-1` as short of stock, and Hetzner's order page showed
-the CPX types as unavailable in `hel1`: availability per location is part of an operator input and must
-be checked before `terraform.tfvars` is written.
+With 1-year reserved instances for the five VMs (201.00 per year for `Standard_B2als_v2` and
+402.00 per year for `Standard_B2as_v2`, from the same API), the VMs cost 117.25 a month instead
+of 198.78 and the fixed total is 179.30. The 12-month service window matches the 1-year term. A
+staging environment that runs all month costs the same as production without the reservation;
+Azure bills VMs by the second, so staging destroyed between drills (`make staging-destroy`)
+costs only the time it ran, plus its public addresses while they exist.
+
+### Azure subscription
+
+Checked on 2026-11-13 with read-only `az` commands against the operator's subscription:
+
+| Check | Result |
+|---|---|
+| `az vm list-usage --location swedencentral` | Standard Basv2 Family vCPUs 0 of 65, Total Regional vCPUs 0 of 65. The design needs 10 (12 with the restore node). |
+| `az vm list-skus --location swedencentral` | `Standard_B2als_v2` and `Standard_B2as_v2` offered in zones 1, 2 and 3, no restrictions |
+| `az network list-usages --location swedencentral` | public IP addresses 0 of 100 |
+| `az provider list` | `Microsoft.Compute`, `Microsoft.Network`, `Microsoft.Storage`, `Microsoft.ManagedIdentity`, `Microsoft.Authorization` registered |
+| `az vm image list -p Debian -f debian-13 -s 13-gen2 --all` | newest versions `0.20261104.2652`, `0.20261111.2659`, `0.20261112.2660` |
+
+OpenTofu registers no resource providers itself (`resource_provider_registrations = "none"`).
+A new subscription registers the five above once:
+`az provider register --namespace Microsoft.Network` (and the others), then checks
+`az provider show -n Microsoft.Network --query registrationState`. If a quota is lower in
+another subscription, raise it under Quotas in the Azure portal (Compute, region Sweden Central,
+family "Standard Basv2 Family vCPUs").
 
 ### Account holder, billing and renewal
 
-**Not decided: blocked on SCF.** Who holds the domain, the Hetzner, bunny.net and Scaleway
-accounts and the repository from day one is an open question to SCF (the design, "Who owns
+**Not decided: blocked on SCF.** Who holds the domain, the Azure subscription, the Cloudflare
+account and the repository from day one is an open question to SCF (the design, "Who owns
 the domain, cloud accounts and repository from day one?"). The answer sets who pays, who
 receives the providers' billing and abuse mail, and what the handover moves
 ([../handover/checklist.md](../handover/checklist.md)). Until it is answered, this document
 states only the requirements any arrangement must meet:
 
 - Each provider is billed by card or invoice to the account holder monthly, for at least the
-  12-month window; all three suspend unpaid accounts. The availability statement lists a billing
+  12-month window; both suspend unpaid accounts. The availability statement lists a billing
   failure as a single point of failure ([../reference/availability.md](../reference/availability.md)),
   so the payment method needs an owner who is alerted to failed charges and a second person who
   can pay.
@@ -112,11 +123,12 @@ states only the requirements any arrangement must meet:
 
 ## Controller (the machine you deploy from)
 
-A Linux machine with the repository checked out. Versions are the the design pins.
+A Linux or macOS machine with the repository checked out. Versions are the the design pins.
 
 | Tool | Version | How to get it | Check |
 |---|---|---|---|
-| OpenTofu | 1.13.9 | release `tofu_1.13.9_linux_amd64.zip`, checked against `tofu_1.13.9_SHA256SUMS` ([opentofu.md](opentofu.md) section 3.1) | `tofu version` prints `OpenTofu v1.13.9` |
+| OpenTofu | 1.13.9 | release `tofu_1.13.9_<os>_<arch>.zip`, checked against `tofu_1.13.9_SHA256SUMS` ([opentofu.md](opentofu.md) section 3.1) | `tofu version` prints `OpenTofu v1.13.9` |
+| Azure CLI | 2.91.0 (the version used on 2026-11-13) | learn.microsoft.com/cli/azure/install-azure-cli; then `az login` and `az account set --subscription <an operator input>` | `az account show --query id -o tsv` prints the subscription of an operator input |
 | uv | any recent | astral.sh | `uv --version` |
 | Python | 3.13 (installed by uv for the venv) | `make ansible-venv` | |
 | Ansible 14.6.0 (ansible-core 2.21.6), ansible-lint, yamllint, bcrypt, PyYAML | pinned in `infra/ansible/requirements.txt` | `make ansible-venv` (venv at `~/.local/share/veristar/ansible-venv`) | `~/.local/share/veristar/ansible-venv/bin/ansible --version` prints `ansible [core 2.21.6]` |
@@ -150,19 +162,30 @@ Put `age` and `age-keygen` from `~/.local/share/veristar/tools/age/` on `PATH` t
    ```
 
    Expected (run 2026-11-13): for each of staging and production `Success! The configuration is
-   valid.` and `Success! 4 passed, 0 failed.`; ansible-lint ends with
+   valid.` and `Success! 8 passed, 0 failed.`; ansible-lint ends with
    `Passed: 0 failure(s), 0 warning(s) ... Profile 'production' was required, and it passed.`
 
-3. **Collect the inputs** in the table above that the environment needs: I2 to I8 and I13 to I15
-   for a full staging, plus I1. Each person who will decrypt secrets makes an age identity
+3. **Collect the inputs** in the table above that the environment needs: I2 to I6, I8 and I13 to
+   I15 for a full staging, plus I1. Each person who will decrypt secrets makes an age identity
    ([secrets.md](secrets.md) section 4) and sends only the public key.
 
-4. **Delegate the zone** of `<an operator input>` to bunny.net's name servers at the registrar. OpenTofu
-   creates the zone; the delegation is a registrar setting.
+4. **Sign in to Azure** on the controller and select the subscription:
 
-5. **Create the Hetzner Object Storage keys** by hand in the Hetzner console an operator input. There is
-   no API for them in hcloud 1.70.2.
+   ```sh
+   az login
+   az account set --subscription <an operator input>
+   az vm list-usage --location swedencentral -o table | grep -E 'Basv2|Total Regional vCPUs'
+   ```
 
-Step 1 was run in this stage on the development host (the venv and tools there come from it); step 2
-was run again on 2026-11-13 with the output quoted above. Steps 3 to 5 have not been done: the
-inputs do not exist yet.
+   Expected: both lines show a limit of at least 12.
+
+5. **Create the Cloudflare API token** an operator input in the Cloudflare dashboard under My Profile,
+   API Tokens, Create Token, Custom token: permissions `Zone` `Zone` `Read` and `Zone` `DNS`
+   `Edit`; zone resources `Include` `Specific zone` `<an operator input>`; no account permissions; client
+   IP filtering optional. Caddy's DNS module looks the zone up by name, which needs `Zone:Read`
+   besides `Zone:DNS:Edit`; OpenTofu's zone lookup needs the same two. Store it only in the SOPS
+   files ([secrets.md](secrets.md)). One token per environment keeps a rotation local.
+
+Steps 1 and 2 were run on 2026-11-13 with the output quoted above. The quota check of step 4 was
+run on an operator workstation on 2026-11-13 (section "Azure subscription"), and the token of step 5
+exists for `veristar.app`.

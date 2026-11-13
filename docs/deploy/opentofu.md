@@ -1,9 +1,13 @@
-# OpenTofu: infrastructure, state and the Ansible inventory contract
+---
+title: "OpenTofu: infrastructure, state and the Ansible inventory contract"
+sidebarTitle: "OpenTofu"
+description: "The OpenTofu infrastructure, its state, and the inventory it hands to Ansible."
+---
 
-Status: first version (this stage, stream a). Everything here was validated locally with
-`tofu fmt`, `tofu validate` and `tofu test` against mocked providers. Nothing has been
-applied to a real account yet. The section "Blocked on inputs" lists exactly what still
-needs the operator's accounts.
+Status: Azure version (2026-11-13). Everything here was validated locally with `tofu fmt`,
+`tofu validate` and `tofu test` against mocked providers, and `tofu plan` ran against the
+owner's Azure subscription and the Cloudflare zone of `veristar.app` (section 3.6). Nothing has
+been applied yet. Section 5 lists what still needs an operator decision or input.
 
 ## 1. Inventory contract (OpenTofu to Ansible)
 
@@ -18,8 +22,9 @@ This section is the agreement with the Ansible side. Change it only together.
   (`tofu output -json ansible_inventory`). It is generated, never edited, and gitignored.
 - The format is Ansible's YAML inventory format written as JSON. The stock `yaml`
   inventory plugin reads `.json` files, so no custom plugin is needed. Point Ansible at
-  the directory (`-i infra/ansible/inventories/staging/`) so `group_vars/` and
-  `host_vars/` beside `hosts.json` are picked up.
+  the directory (`-i infra/ansible/inventories/staging/`) so `group_vars/` beside
+  `hosts.json` is picked up. `group_vars/all.yml` is committed and holds what every Azure node
+  shares (`sa_tls: cloudflare`, `sa_public_bind_ipv4`, see below).
 
 ### Shape
 
@@ -36,9 +41,9 @@ This section is the agreement with the Ansible side. Change it only together.
       "sa_private_network_cidr": "10.20.0.0/16",
       "sa_admin_cidrs": ["<I13>", "..."],
       "sa_object_storage": {
-        "endpoint": "https://<location>.your-objectstorage.com",
-        "region": "<location>",
-        "backup_bucket": "<bucket name>"
+        "endpoint": "https://<backup storage account>.blob.core.windows.net",
+        "region": "swedencentral",
+        "backup_bucket": "pgbackrest"
       }
     },
     "children": {
@@ -52,24 +57,24 @@ This section is the agreement with the Ansible side. Change it only together.
       "core": {
         "hosts": { "staging-core-1": {}, "staging-core-2": {} }
       },
-      "probe": {
-        "hosts": { "staging-probe-1": {} }
-      },
-      "restore": {
-        "hosts": {}
-      }
+      "probe": { "hosts": {} },
+      "restore": { "hosts": {} }
     }
   }
 }
 ```
 
-- Groups are always `edge` (3 hosts), `core` (2 hosts), `probe` (0 or 1 host; the
-  probe is applied in this stage, so `probe.hosts` is `{}` until then) and `restore` (0 or 1
-  host, present only while `restore_enabled`, section 4). The group keys are always present.
-- Inventory host names equal the cloud server names: `<env>-<tier>-<index>`, index from 1.
-  Index 1 of `core` is the node that runs PostgreSQL in this stage.
+- Groups are always `edge` (3 hosts), `core` (2 hosts), `probe` and `restore` (0 or 1 host,
+  present only while `restore_enabled`, section 4). The group keys are always present. The
+  probe runs outside Azure as a container ([probe.md](probe.md)), so OpenTofu leaves `probe`
+  empty; the key stays so playbooks that name the group keep working.
+- Inventory host names equal the VM names: `<env>-<tier>-<index>`, index from 1.
+  Index 1 of `core` is the node that runs PostgreSQL first.
 - Values written as `<I4>` and `<I13>` above are the real inputs once supplied; the
   file never contains anything else in their place.
+- `sa_object_storage` keeps the shape it had for S3: `endpoint` is the storage account's blob
+  endpoint, `backup_bucket` the container. The `backup` role derives the account name from the
+  endpoint.
 
 ### Host vars (every host)
 
@@ -77,13 +82,13 @@ This section is the agreement with the Ansible side. Change it only together.
 |---|---|---|
 | `ansible_host` | string | public IPv4, used for SSH |
 | `ansible_user` | string | always `ops`, created by cloud-init with the admin SSH keys and passwordless sudo; root login is left to the `base` role to disable |
-| `sa_tier` | string | `edge`, `core` or `probe` |
+| `sa_tier` | string | `edge`, `core` or `restore` |
 | `sa_index` | number | 1-based index inside the tier |
-| `sa_provider` | string | `hetzner` or `scaleway` |
-| `sa_location` | string | `fsn1`, `nbg1`, `hel1` (Hetzner) or the Scaleway zone, e.g. `fr-par-1` |
+| `sa_provider` | string | `azure` |
+| `sa_location` | string | region and availability zone, `swedencentral-1` to `swedencentral-3` |
 | `sa_public_ipv4` | string | same as `ansible_host` |
-| `sa_public_ipv6` | string or null | the server's public IPv6 address (`...::1` of its /64); null on the probe if it has none |
-| `sa_private_ip` | string or null | address on the private network; null on the probe (different provider, no private network) |
+| `sa_public_ipv6` | null | the nodes are IPv4 only |
+| `sa_private_ip` | string | address in the virtual network |
 
 Peers are derived by Ansible from the groups (for example NATS routes and etcd members
 from `groups['edge'] | map('extract', hostvars, 'sa_private_ip')`). OpenTofu does not
@@ -91,280 +96,255 @@ emit peer lists, so there is one source of truth.
 
 ### Things the Ansible and Caddy side can rely on
 
-- Hetzner cloud firewalls filter only the public interfaces. Traffic on the private
-  network is not filtered by the cloud firewall, so "everything else private network
-  only" depends on the host firewall from the `base` role matching section 3.2 below.
-- Public firewall (edge and core): TCP 80, TCP 443, UDP 443 (HTTP/3) and ICMP from
-  anywhere; TCP 22 only from the admin CIDRs. Nothing else is open publicly.
-- The bunny.net HTTP monitor calls each address on port 80 and counts any non-5xx answer
-  within 10 seconds as healthy. The Host header it sends is not documented, so the
-  port 80 health answer must not depend on the Host header.
-- Cloud-init only creates `ops` and installs SSH keys. `user_data` and `ssh_keys`
-  changes are ignored after creation so that key rotation through Ansible never
-  replaces a server.
+- Azure maps each public IPv4 address onto the VM's one network interface (1:1 NAT): the VM
+  holds only its private address. Public ports are therefore published on the private address
+  (`sa_public_bind_ipv4` in `group_vars/all.yml`), and the `base` role accepts that the
+  public and private interface are the same on Azure. The client's source address is kept.
+- The network security group, on every subnet: TCP 80, TCP 443, UDP 443 (HTTP/3) and ICMP from
+  the internet; TCP 22 only from the admin CIDRs; everything else from the internet is
+  denied. Azure's default rules allow traffic inside the virtual network; the host firewall of
+  the `base` role and the internal mTLS cover it, as on every private link.
+- Traffic Manager probes every node over HTTP on port 80, path `/`, and counts 200 to 299 and
+  308 as healthy (it does not follow redirects). The Host header it sends is the endpoint's
+  address, so the port 80 health answer must not depend on the Host header (it does not).
+- Cloud-init only creates `ops` and installs SSH keys. Changes to `custom_data`, the admin keys
+  and the image version are ignored after creation, so key rotation through Ansible never
+  replaces a VM.
+- The core and restore nodes carry the user-assigned managed identity `<env>-core`, which holds
+  Storage Blob Data Contributor on the backup container and nothing else. Edge nodes have no
+  identity.
 
 ### Secrets handed to OpenTofu
 
-OpenTofu reads every credential from environment variables. The make targets load them
-with `sops exec-env infra/secrets/<env>/tofu.enc.env '<tofu command>'`. That SOPS dotenv
-file must be covered by the `creation_rules` in `infra/secrets/.sops.yaml` (owned by the
-secrets stream) and holds:
+Azure is reached through the operator's `az login` (the azurerm provider and backend use the
+Azure CLI credential), so no Azure secret is stored. The make targets load the rest with
+`sops exec-env infra/secrets/<env>/tofu.enc.env '<tofu command>'`. That SOPS dotenv file must be
+covered by the `creation_rules` in `infra/secrets/.sops.yaml` and holds:
 
 | Variable | Used by | Input |
 |---|---|---|
-| `HCLOUD_TOKEN` | hcloud provider | I5 |
-| `BUNNYNET_API_KEY` | bunnynet provider (team member keys are not supported) | I6 |
-| `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | S3 state backend and `make state-bootstrap` (Hetzner Object Storage keys) | I5 |
+| `CLOUDFLARE_API_TOKEN` | cloudflare provider: zone lookup and records (`Zone:Zone:Read`, `Zone:DNS:Edit` on the zone only) | I6 |
 | `TF_VAR_state_passphrase` | state and plan encryption, at least 16 characters, generated, never reused across environments | generated, encrypted to I14 |
-| `SCW_ACCESS_KEY`, `SCW_SECRET_KEY`, `SCW_DEFAULT_PROJECT_ID` | scaleway provider, only once the probe is enabled | I7 |
 
 Non-secret inputs live in `infra/tofu/envs/<env>/terraform.tfvars` (committed once the
 inputs exist). `tests/infra/sample.tfvars` shows every variable with documentation-only
-values (RFC 2606 domain, RFC 5737 and RFC 3849 ranges); it is a test fixture, not a
-template with real values.
+values; it is a test fixture, not a template with real values.
 
 ## 2. Layout
 
 ```
 infra/tofu/
-  modules/network          private network, one subnet per location, public firewall
-  modules/node             primary IPv4 and IPv6, server, private address, cloud-init
-  modules/dns              bunny.net zone, health-monitored A/AAAA record sets, CAA
-  modules/object-storage   endpoint, region and bucket names for Hetzner Object Storage (no resources, see 3.4)
-  modules/probe            Scaleway instance, reserved IPv4, security group
+  modules/network          virtual network, one /24 subnet per zone, network security group
+  modules/node             static public IPv4, network interface, Debian 13 VM, cloud-init, delete locks
+  modules/failover         Traffic Manager profiles (MultiValue) with the nodes as external endpoints
+  modules/dns              Cloudflare records in the existing zone: CNAMEs to the profiles, CAA
+  modules/backup-storage   storage account (ZRS, versioning, immutability), container, lifecycle, role
   modules/inventory        pure function: node data in, inventory object out
-  envs/staging             root module, S3 backend, state encryption
-  envs/production          same modules, production network range and delete protection
+  envs/staging             root module, azurerm backend, state encryption
+  envs/production          same modules, production network range and delete locks
 tests/infra/               tofu test files and the sample tfvars
 ```
 
-| Env | Private network | Edge | Core | Protection |
-|---|---|---|---|---|
-| staging | 10.20.0.0/16 | fsn1, nbg1, hel1 | fsn1, nbg1 | off (rebuilt in the drill) |
-| production | 10.10.0.0/16 | fsn1, nbg1, hel1 | fsn1, nbg1 | delete and rebuild protection on servers and primary IPs |
+| Env | Resource group | Virtual network | Edge | Core | Protection |
+|---|---|---|---|---|---|
+| staging | `veristar-staging` | 10.20.0.0/16 | zones 1, 2, 3 | zones 1, 2 | off (rebuilt in the drill) |
+| production | `veristar-production` | 10.10.0.0/16 | zones 1, 2, 3 | zones 1, 2 | `CanNotDelete` locks on VMs, public addresses and the backup account |
 
-Subnets: `10.x.1.0/24` fsn1, `10.x.2.0/24` nbg1, `10.x.3.0/24` hel1, all in network zone
-`eu-central`. Node addresses in their location's subnet are `.11` to `.13` for edge nodes 1 to 3 and
-`.21`, `.22` for core nodes 1 and 2 (staging: edge-1 `10.20.1.11`, edge-2 `10.20.2.12`,
-edge-3 `10.20.3.13`, core-1 `10.20.1.21`, core-2 `10.20.2.22`), so a private address
-tells the tier and location.
+Subnets: `10.x.1.0/24` zone 1, `10.x.2.0/24` zone 2, `10.x.3.0/24` zone 3. Node addresses in
+their zone's subnet are `.11` to `.13` for edge nodes 1 to 3, `.21`, `.22` for core nodes 1 and
+2 and `.41` for the restore node (staging: edge-1 `10.20.1.11`, edge-2 `10.20.2.12`, edge-3
+`10.20.3.13`, core-1 `10.20.1.21`, core-2 `10.20.2.22`), so a private address tells the tier and
+zone. Each subnet has the `Microsoft.Storage` service endpoint and no default outbound access
+(every node has its own public address).
 
-## 3. Research findings (pinned versions, read 2026-11-12)
+| Node | Size | OS disk | Image |
+|---|---|---|---|
+| edge (3) | `Standard_B2als_v2`, 2 vCPU, 4 GB | Standard SSD, 32 GiB | `Debian` `debian-13` `13-gen2`, version pinned by `server_image_version` |
+| core (2), restore (0 or 1) | `Standard_B2as_v2`, 2 vCPU, 8 GB | Standard SSD, 128 GiB | same |
+
+## 3. Research findings (pinned versions, read 2026-11-13)
 
 ### 3.1 OpenTofu 1.13.9
 
-Installed into `~/.local/bin/tofu` from the GitHub release
-`tofu_1.13.9_linux_amd64.zip`, SHA-256 checked against `tofu_1.13.9_SHA256SUMS`
-(`OK`). gitleaks 8.30.1 likewise from `gitleaks_8.30.1_linux_x64.tar.gz` against
-`gitleaks_8.30.1_checksums.txt`.
+Unchanged pin. Releases come with `tofu_<version>_SHA256SUMS`; on 2026-11-13
+`tofu_1.13.9_darwin_arm64.zip` matched its line in that file before it was unpacked.
 
-### 3.2 `hetznercloud/hcloud` 1.70.2
+### 3.2 `hashicorp/azurerm` 5.13.0
 
-- `hcloud_network` (`ip_range`), `hcloud_network_subnet` (`type` = `cloud`, `server` or
-  `vswitch`; `network_zone` required). Subnets belong to a network zone, not a location:
-  all three locations share `eu-central`, so one network spans them.
-- `hcloud_server`: `location` (the `datacenter` argument is deprecated), `public_net`
-  links primary IPs, `network { subnet_id, ip, alias_ips }`. The docs say to set
-  `alias_ips = []` to avoid detach and attach on every apply. `ssh_keys` changes force
-  replacement unless ignored. `firewall_ids` attaches firewalls at creation, so a server
-  is never public without its firewall.
-- `hcloud_primary_ip`: `location` (datacenter deprecated since 1.67.0), `type`
-  `ipv4`/`ipv6`, `auto_delete` (the docs advise against `true`), `delete_protection`.
-  Separate primary IPs keep a node's public address across a server rebuild, so DNS and
-  firewall allowlists elsewhere do not change.
-- `hcloud_firewall`: `rule { direction, protocol (tcp, udp, icmp, gre, esp), port,
-  source_ips }`, `apply_to`. Cloud firewalls act on public interfaces only.
-- `hcloud_zone`, `hcloud_zone_rrset`, `hcloud_zone_record` exist (Hetzner DNS moved into
-  the Cloud API). They have no health checks, so bunny.net stays the DNS provider.
-- Object Storage: the provider's own guide (`docs/guides/s3-object-storage.md`) states
-  that there is no Hetzner Cloud API for buckets or for S3 credentials. **Correction to
-  the plan:** the `object-storage` module cannot issue credentials. S3 keys are created
-  once by hand in the Hetzner Console and are part of an operator input. The module only derives
-  endpoint, region and bucket names. Buckets stay with Ansible (backup bucket) and
-  `make state-bootstrap` (state bucket), as planned.
-- Server types and images per location need an authenticated API call
-  (`GET /server_types`, `GET /images`). Not checked: blocked on I5. Server types and the
-  image name are therefore required variables without defaults.
+Newest release on registry.opentofu.org on 2026-11-13 (published 2026-11-05). azurerm cuts a
+minor release every week, so the pin follows the plan's rule for fast-moving packages: the
+newest release at least 7 days old. Arguments were checked against the provider's schema
+(`tofu providers schema -json`) and by `tofu validate` and `tofu plan`. Points that shaped the
+modules:
 
-### 3.3 `BunnyWay/bunnynet` 0.20.1
+- `azurerm_subnet` takes `service_endpoint` blocks and `default_outbound_access_enabled`.
+- The provider is configured with `resource_provider_registrations = "none"`, so OpenTofu needs
+  no subscription-wide registration rights, and `storage_use_azuread = true`, because the
+  storage accounts accept no account keys.
+- `azurerm_storage_account` sets account-level version-level immutability through
+  `immutability_policy` (`period_since_creation_in_days`, `state`), which needs versioning and is
+  set when the account is created.
+- `azurerm_traffic_manager_profile` supports `traffic_routing_method = "MultiValue"`,
+  `max_return` and `monitor_config.expected_status_code_ranges`.
 
-- `bunnynet_dns_zone`: `domain` required; `dnssec_enabled`, `log_enabled`,
-  `log_anonymized`, `log_anonymized_style` optional. Query logging is left off (it would
-  record resolver addresses).
-- `bunnynet_dns_record`: `zone`, `name` (`""` for apex), `type`, `value`; `ttl`
-  (provider default 300, validator only `>= 0`), `weight` (A and AAAA 0 to 100, SRV up to
-  65535, rejected on other types by the provider's plan check), `monitor_type`
-  (`None`, `Ping`, `Http`, `Monitor`; API values 0 to 3, `Monitor` is undocumented),
-  `flags` and `tag` (used for CAA).
-- bunny.net docs (DNS Records page): monitoring tests each IP every 30 seconds from 3
-  regions; `Http` sends a request to port 80, must complete within 10 s and return a
-  non-5xx status. Single-value records are always returned; in a record set (same name
-  and type) offline records are removed; if all are offline, all are returned. With
-  equal weights up to 3 records are returned. No alerting on outages.
-- Minimum TTL: not documented. The provider accepts any value `>= 0`; the dashboard's
-  quick edit offers 15m as its smallest choice. The modules use 60 s, which is unverified
-  until the first apply: blocked on I6. If bunny.net rejects or rewrites it, the value
-  in `envs/*/main.tf` changes and this stage measures failover with the real value.
-- Team member API keys are not supported by the provider.
+### 3.3 `cloudflare/cloudflare` 5.28.1
 
-### 3.4 OpenTofu S3 backend on Hetzner Object Storage
+Newest release at least 7 days old on 2026-11-13 (5.29.0 was 2 days old). `cloudflare_dns_record`
+takes the full record name; CAA values go in `data = { flags, tag, value }`. The zone is looked
+up with `data "cloudflare_zone"` and `filter = { name = ... }`, and is never created or changed
+by OpenTofu: it belongs to the registrar account.
 
-- Endpoints: `https://fsn1.your-objectstorage.com`, `nbg1`, `hel1`. Region is the location.
-- Backend settings for a non-AWS S3: `endpoints.s3`, `skip_credentials_validation`,
-  `skip_region_validation`, `skip_requesting_account_id`, `skip_metadata_api_check`,
-  `skip_s3_checksum` (the docs name it for non-AWS S3 APIs).
-- Locking: `use_lockfile = true` uses conditional writes (`If-None-Match`). Hetzner's
-  "List of supported actions" says conditional PUT and DELETE are **not supported on
-  versioned buckets**. The state bucket is therefore created unversioned, so locking
-  works; state history is not kept by the bucket. Whether conditional PUT works on an
-  unversioned Hetzner bucket is not stated and is checked on the first `tofu init`:
-  blocked on I5.
-- `backend` and `encryption` blocks read variables (early evaluation), so bucket,
-  location and passphrase come from `terraform.tfvars` and the environment, and the
-  bootstrap script reads the same `state_bucket` and `state_location` lines.
+### 3.4 Health-checked failover: Traffic Manager, compared with the alternatives
 
-### 3.5 Native state encryption
+The edge and core nodes each keep their own public address, as before; what was needed is DNS
+that answers with the healthy ones. Three options were compared on 2026-11-13:
 
-- Key provider `pbkdf2` (passphrase of at least 16 characters, default 600,000
-  iterations, sha512) feeding method `aes_gcm`, used for both `state` and `plan`, each
-  with `enforced = true`, so OpenTofu refuses to write unencrypted state or plan files.
-- The passphrase comes from `TF_VAR_state_passphrase` (SOPS). Changing it later uses a
-  `fallback` block with the old key provider for one apply.
-- Losing the passphrase makes the state unreadable. It is stored only in the SOPS file,
-  encrypted to the I14 recipients.
+| | Azure Traffic Manager (chosen) | Azure Load Balancer + DNS | Cloudflare Load Balancing |
+|---|---|---|---|
+| How it fails over | DNS: an endpoint whose probe fails leaves the answer | one regional, zone-redundant frontend address; unhealthy backends stop receiving new flows | DNS-only mode (no proxy, so the gateway keeps the client address): unhealthy origins leave the answer |
+| Probe interval | 30 s, or 10 s with fast probing | 5 s and up | 60 s or 15 s minimum depending on the plan, 10 s on Enterprise (Cloudflare limits page) |
+| Accepts the 308 health answer | yes, `expected_status_code_ranges` | HTTP probes count only 200; a TCP probe would miss the composite health | configurable expected codes |
+| Answer | MultiValue: all healthy addresses in every answer, so a client retries another without a new lookup | one address | one or more addresses depending on steering |
+| Price (2026-11-13) | 0.54 USD per external endpoint a month, 2.00 more with fast probing, 0.54 per million queries | 18.25 USD a month (0.025 per hour) for the first five rules, 0.01 per hour for each further rule, plus data processed; edge and core need separate rule sets for TCP 80, TCP 443 and UDP 443 | shown in the dashboard only; no public price list to compare against |
 
-### 3.6 `scaleway/scaleway` 2.91.0 (probe)
+Traffic Manager meets the need at the lowest published price: about 17.40 USD a month for the
+ten endpoints, with 10 s probing on the two ingestion names and 30 s on the dashboard names. It
+keeps the shape the design was built on (three independent edge addresses, any of which serves
+a client) and Microsoft's service level agreement for Traffic Manager states 99.99 %. Cloudflare points each
+hostname at its profile with a DNS-only CNAME (`<domain>-<env>-<label>.trafficmanager.net`).
 
-- `scaleway_instance_server`: `type`, `image` (label or UUID), `zone`, `ip_ids`,
-  `security_group_id` (without one, an untracked default group is created),
-  `root_volume { size_in_gb, volume_type }`, `user_data` with key `cloud-init`.
-- `scaleway_instance_ip`: `type` `routed_ipv4` or `routed_ipv6`.
-- Credentials: `SCW_ACCESS_KEY`, `SCW_SECRET_KEY`, `SCW_DEFAULT_PROJECT_ID`.
-- Instance types and the Debian 13 image label need an authenticated call: blocked on
-  I7, so both are variables without defaults.
-- With `probe_enabled = false` the scaleway provider needs no credentials: a local
-  `tofu plan` with the provider required, a count-0 resource and no `SCW_*` variables
-  or config file reported "No changes". Staging and production can therefore be
-  planned before I7 exists.
+Failover time per name (Traffic Manager monitoring docs): an endpoint leaves after three failed
+probes in a row (`tolerated_number_of_failures = 2`). For `in` and `otlp`: 3 x 10 s, plus the 5 s
+timeout, plus up to 10 s of cached answers. For `app` and `web`: 3 x 30 s, plus the 10 s timeout,
+plus up to 30 s. When every endpoint of a profile fails, Traffic Manager answers with all of them
+rather than none.
 
-### 3.7 Local validation (2026-11-12)
+CAA: `in.<domain>` and the others are CNAMEs to `trafficmanager.net`. A CA looks up CAA at the
+name, follows the CNAME, finds none at the profile name, and continues at the parent of the
+original name, `<domain>`, whose CAA allows `letsencrypt.org` only (RFC 8659). DNS-01 writes
+`_acme-challenge.<name>` TXT records, which are separate names and unaffected by the CNAMEs.
 
-- `tofu fmt -recursive -check`, `tofu init -backend=false` and `tofu validate` pass for
-  both envs with the pinned providers (validate checks every argument against the
-  providers' schemas). Providers sit in one shared plugin cache (about 90 MB).
-- `tofu test` (tests/infra, mocked providers, `command = apply`) renders the inventory
-  from `tests/infra/sample.tfvars` and checks: the three groups, host names, every host
-  var, locations, the private address scheme, the group vars, the DNS record sets (three
-  edge addresses per family for `in` and `otlp`, two core for `app` and `web`, all
-  `Http` monitored), CAA (`issue letsencrypt.org`, `issuewild ;`), and that
-  `0.0.0.0/0` for SSH and a short passphrase are refused. 4 of 4 runs pass per env, and a
-  changed input makes the contract assertion fail.
-- The env's `encryption` block, run with a local backend and a random passphrase: the
-  state file holds no plaintext (a marker value was absent), the saved plan is not a
-  readable plan archive, and a wrong passphrase fails with "decryption failed".
-- gitleaks 8.30.1 (`gitleaks dir`) finds nothing in `infra/`, `tests/infra/`, `docs/`,
-  `scripts/`, `Makefile`. Elsewhere it flags only ignored files (`deploy/compose/.env.dev`,
-  `examples/astro-ssr/dist/`) and known false positives in tracked files: Stellar public
-  keys (G...), test fixture tokens and passwords, Umami migration checksums and Stripe's
-  published documentation key in the route normalization corpus.
+### 3.5 State backend: azurerm
+
+The state of each environment is one blob, `<env>/tofu.tfstate`, in container `tfstate` of a
+storage account that `make state-bootstrap` creates outside the environment's resource group
+(zone-redundant, account keys off, blob versioning, 35 days of soft delete). The backend signs in
+with Entra ID (`use_azuread_auth = true`, from the az CLI login) and locks the state with a blob
+lease. The signed-in user needs Storage Blob Data Contributor on the state account, which the
+bootstrap script grants.
+
+### 3.6 Plan against the real subscription (2026-11-13)
+
+Run on an operator workstation (the only machine with the az login): the configuration was copied to a
+scratch directory, OpenTofu 1.13.9 installed there after the checksum check, and a local backend
+override used in place of the not yet existing state account. Inputs: `base_domain =
+"veristar.app"`, a documentation-only admin range (`192.0.2.0/24`), a throwaway SSH key,
+`server_image_version = "0.20261104.2652"`, backup accounts `veristarprodbackups` and
+`veristarstgbackups` (both reported available by `az storage account check-name`). The
+Cloudflare provider used the zone-scoped token of an operator input read-only; the zone lookup returned
+the `veristar.app` zone, which held no records.
+
+| Environment | Result |
+|---|---|
+| production | `Plan: 66 to add, 0 to change, 0 to destroy.` |
+| staging | `Plan: 55 to add, 0 to change, 0 to destroy.` (no delete locks) |
+
+Production, by kind: 1 resource group, 1 managed identity, 1 virtual network, 3 subnets with 3
+NSG associations, 1 NSG with 6 rules, 5 public IPv4 addresses, 5 network interfaces, 5 VMs,
+10 delete locks on VMs and addresses, 1 storage account with 1 container, 1 lifecycle policy,
+1 role assignment and 1 delete lock, 4 Traffic Manager profiles with 10 endpoints, and in
+Cloudflare 4 CNAMEs and 2 CAA records. Nothing was applied.
+
+### 3.7 Local validation (2026-11-13)
+
+- `tofu fmt -recursive -check`, `tofu init -backend=false` and `tofu validate` pass for both
+  envs with the pinned providers.
+- `tofu test` (tests/infra, mocked providers, `command = apply`) renders both roots from
+  `tests/infra/sample.tfvars` and checks: the groups, host names, every host var, zones, the
+  private address scheme, the group vars, the default VM sizes, the Traffic Manager endpoints
+  (three edge addresses for `in` and `otlp`, two core for `app` and `web`), MultiValue routing,
+  the HTTP probe on port 80 accepting 308, 10 s probing for ingestion and 30 s for dashboards,
+  one DNS-only CNAME per hostname to its profile, CAA (`issue letsencrypt.org`, `issuewild ;`),
+  the restore node, and that `0.0.0.0/0` for SSH, a short passphrase and a floating image
+  version are refused. 8 of 8 runs pass per env.
 
 ## 4. Make targets
 
 | Target | Does |
 |---|---|
-| `state-bootstrap ENV=staging` | creates the env's state bucket through the S3 API (curl SigV4), unversioned, idempotent |
+| `state-bootstrap ENV=staging` | creates the env's state resource group, storage account and container with the az CLI, idempotent |
 | `staging-plan` | `init` then `plan -out=tfplan` (plan file is encrypted) |
-| `staging-apply` | applies `tfplan`, writes the inventory, then copies the encrypted state into the backup bucket (`scripts/tofu-state-backup.sh`) |
-| `staging-state-backup` | the same copy alone; `STATE_ARGS=list` lists the copies, `STATE_ARGS="restore <key>"` puts one back as the live state |
+| `staging-apply` | applies `tfplan`, then writes the inventory |
+| `staging-state-backup` | lists the earlier versions of the state blob; `STATE_ARGS="restore <version-id>"` puts one back |
 | `staging-inventory` | rewrites `hosts.json` from state |
 | `staging-destroy` | `destroy` |
-| `production-*` | same; `production-destroy` also needs `CONFIRM=production`, and fails while delete protection is on |
+| `production-*` | same; `production-destroy` also needs `CONFIRM=production`, and fails while the delete locks exist |
 | `tofu-check` | `fmt -check`, `init -backend=false`, `validate`, `tofu test` for both envs |
-
-`staging-deploy` belongs to the Ansible stream.
 
 ### State history
 
-The state bucket stays unversioned (section 3.4), so it keeps no history. After every apply,
-`scripts/tofu-state-backup.sh <env>` reads the state object `<env>/tofu.tfstate` and writes it
-unchanged, still encrypted with the state passphrase, to
-`tofu-state/<env>/<UTC timestamp>.tfstate` in the backup bucket, which is versioned and
-object-locked for 35 days ([backups.md](backups.md)). Nothing is decrypted on the way.
-
-To recover from an overwritten or deleted state, with no `tofu` command running:
+Blob versioning on the state account keeps every earlier state as a version, still encrypted
+with the state passphrase, and soft delete keeps a deleted blob for 35 days. To recover from an
+overwritten or deleted state, with no `tofu` command running:
 
 ```sh
-make staging-state-backup STATE_ARGS=list
-make staging-state-backup STATE_ARGS="restore tofu-state/staging/20261120T080000Z.tfstate"
-make staging-plan        # must show no unexpected changes
+make staging-state-backup                   # lists version ids, current version last
+make staging-state-backup STATE_ARGS="restore 2026-11-20T08:00:00.1234567Z"
+make staging-plan                           # must show no unexpected changes
 ```
-
-`make ops-local` (step `state-backup`) checks copy, list, deletion of the live object, restore and
-byte equality against the S3 stand-in; that step has not completed yet (the run of 2026-11-13
-was stopped earlier). Never run against Hetzner an operator input.
 
 ### Restore node
 
-`restore_enabled = true` adds `<env>-restore-1` (tier `restore`, sized like a core node, private
-address `.41` in `restore_location`) to the servers and to the inventory group `restore`, which
-`playbooks/restore.yml` targets ([../runbooks/point-in-time-restore.md](../runbooks/point-in-time-restore.md),
-[../runbooks/disaster-recovery.md](../runbooks/disaster-recovery.md)). Set it back to `false` after
-the restore. The inventory always has the `restore` group, empty without the node
-(`tests/infra/*.tftest.hcl`, runs `inventory_without_restore` and `inventory_with_restore`).
+`restore_enabled = true` adds `<env>-restore-1` (tier `restore`, sized like a core node, with the
+core identity, private address `.41` in `restore_zone`) to the VMs and to the inventory group
+`restore`, which `playbooks/restore.yml` targets
+([../runbooks/point-in-time-restore.md](../runbooks/point-in-time-restore.md),
+[../runbooks/disaster-recovery.md](../runbooks/disaster-recovery.md)). Set it back to `false`
+after the restore.
 
-## 5. Blocked on inputs
+## 5. Open items
 
-| What | Input |
+| What | Needs |
 |---|---|
-| `tofu plan` and `apply` for either env, server types and image availability in fsn1, nbg1, hel1, private network creation | I5 |
-| State bucket creation, S3 backend `init`, conditional PUT locking on Hetzner | I5 |
-| DNS zone, monitored record sets, minimum TTL, CAA acceptance | I6 and I4 (zone delegation) |
-| Probe instance type, image label, apply | I7 |
-| SSH firewall rule values | I13 |
-| SOPS file with the passphrase and credentials | I14 (recipients), I5, I6 |
-| Admin SSH public keys for cloud-init (`admin_ssh_public_keys`) | not in the input table; needed from the operator with I13 |
+| Admin SSH ranges and keys | I13, I15 |
+| SOPS file with the passphrase and the Cloudflare token | I14 (recipients) |
+| `backup_lock_state = "Locked"` for production (irreversible; [backups.md](backups.md) section 1) | operator decision after the first verified backup week |
+| The first apply | the lead, after review |
 
 ## 6. Procedure, step by step
 
 Staging is shown; production is the same with `production` (and `CONFIRM=production` only for
-`production-destroy`). Needs [prerequisites.md](prerequisites.md) done, `sops` and `tofu` on
-`PATH`, and `infra/secrets/staging/tofu.enc.env` from [secrets.md](secrets.md) section 5.
-None of these steps has run against a real account: the expected outputs below are the
-messages the Makefile, `scripts/tofu-state-bootstrap.sh` and OpenTofu print, not a recorded run.
+`production-destroy`). Needs [prerequisites.md](prerequisites.md) done (including `az login`),
+`sops` and `tofu` on `PATH`, and `infra/secrets/staging/tofu.enc.env` from
+[secrets.md](secrets.md) section 5.
 
 1. **Write `infra/tofu/envs/staging/terraform.tfvars`** with the non-secret inputs. Its shape
-   is `tests/infra/sample.tfvars`, with real values in place of the documentation-only ones:
+   is `tests/infra/sample.tfvars`, with real values:
 
    ```hcl
-   base_domain           = "<an operator input>"
-   admin_cidrs           = ["<an operator input>"]
-   admin_ssh_public_keys = ["<an operator input>"]
-   state_bucket          = "<state bucket name, an operator input>"
-   state_location        = "fsn1"
-   backup_bucket         = "<backup bucket name, an operator input>"
-   backup_location       = "hel1"
-   edge_server_type      = "<server type available in fsn1, nbg1 and hel1, an operator input>"
-   core_server_type      = "<server type available in fsn1 and nbg1, an operator input>"
-   server_image          = "<Debian 13 image name, an operator input>"
+   base_domain            = "veristar.app"
+   admin_cidrs            = ["<an operator input>"]
+   admin_ssh_public_keys  = ["<an operator input>"]
+   subscription_id        = "<an operator input>"
+   state_resource_group   = "veristar-tfstate"
+   state_storage_account  = "<globally unique, 3 to 24 lowercase letters and digits>"
+   backup_storage_account = "<globally unique, 3 to 24 lowercase letters and digits>"
+   server_image_version   = "0.20261104.2652"
    ```
 
-   `state_bucket` and `state_location` must each be on one plain `key = "value"` line (the
-   bootstrap script reads them with `sed`). The planning defaults for the server types are
-   `cpx22` (edge) and `cpx42` (core); check they can be ordered in those locations first.
-   Without this file every target stops with
-   `infra/tofu/envs/staging/terraform.tfvars is missing (inputs I4, I5, I13)` (checked
-   2026-11-13).
+   `subscription_id`, `state_resource_group` and `state_storage_account` must each be on one
+   plain `key = "value"` line (the scripts read them with `sed`). Check the account names with
+   `az storage account check-name -n <name>`. Without this file every target stops with
+   `infra/tofu/envs/staging/terraform.tfvars is missing (inputs I4, I5, I13)`.
 
-2. **Create the state bucket** (once per environment):
+2. **Create the state storage** (once per environment):
 
    ```sh
    make state-bootstrap ENV=staging
    ```
 
-   Expected: `created state bucket <name> in fsn1 (private, unversioned)`, or on a rerun
-   `state bucket <name> already exists in fsn1`. Any other HTTP answer stops with
-   `HEAD <url> answered <status>; not creating anything`. Without `ENV` the target prints
-   `usage: make state-bootstrap ENV=staging|production`.
+   Expected: the created resources, then
+   `ok: state storage <account> in veristar-tfstate (zrs, versioned, entra id only)`.
 
 3. **Plan:**
 
@@ -372,12 +352,8 @@ messages the Makefile, `scripts/tofu-state-bootstrap.sh` and OpenTofu print, not
    make staging-plan
    ```
 
-   It runs `tofu init` against the S3 backend, then `plan -out=tfplan` (the plan file is
-   encrypted). Expected: OpenTofu's `Plan: <n> to add, 0 to change, 0 to destroy.` on a new
-   environment, creating the network, one subnet per location, the public firewall, the admin
-   SSH keys, five servers with their primary IPv4 and IPv6 addresses, and the bunny.net zone
-   with its monitored record sets and CAA. Read it; nothing should be destroyed on a first run.
-   The first `init` is also the first test of conditional-PUT locking on Hetzner (section 3.4).
+   Expected on a new environment: `Plan: 55 to add, 0 to change, 0 to destroy.` (section 3.6).
+   Nothing should be destroyed on a first run.
 
 4. **Apply:**
 
@@ -385,7 +361,7 @@ messages the Makefile, `scripts/tofu-state-bootstrap.sh` and OpenTofu print, not
    make staging-apply
    ```
 
-   Expected: `Apply complete! Resources: <n> added, 0 changed, 0 destroyed.`, then the target
+   Expected: `Apply complete! Resources: 55 added, 0 changed, 0 destroyed.`, then the target
    writes `infra/ansible/inventories/staging/hosts.json`. Without a plan file it stops with
    `run make staging-plan first`.
 
@@ -395,18 +371,21 @@ messages the Makefile, `scripts/tofu-state-bootstrap.sh` and OpenTofu print, not
    python3 -m json.tool infra/ansible/inventories/staging/hosts.json | head -40
    ```
 
-   Expected: `sa_environment` `staging`, the five hostnames under `sa_hostnames`, groups
-   `edge` (three hosts), `core` (two) and `probe` (empty until the probe is enabled), each host
-   with `ansible_user` `ops` and its private address in the scheme of section 2.
-
 6. **Check SSH** to one node (cloud-init made `ops` with the keys of `<an operator input>`):
 
    ```sh
    ssh ops@<ansible_host of staging-edge-1> true && echo ok
    ```
 
-7. **Rewrite the inventory** later without changing anything: `make staging-inventory`.
+7. **Check Traffic Manager** sees the nodes once Ansible has converged them (before that, port
+   80 does not answer and every endpoint shows `Degraded`):
 
-Locally verified on 2026-11-13: `make tofu-check` (formatting, `validate`, and the inventory
-contract tests with mocked providers, 4 of 4 runs passing for each environment) and the message
-of step 1.
+   ```sh
+   az network traffic-manager endpoint list -g veristar-staging \
+     --profile-name veristar-app-staging-in --type externalEndpoints \
+     --query "[].{name:name,target:target,status:endpointMonitorStatus}" -o table
+   ```
+
+   Expected after the converge: every endpoint `Online`.
+
+8. **Rewrite the inventory** later without changing anything: `make staging-inventory`.

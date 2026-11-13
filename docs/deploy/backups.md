@@ -1,72 +1,83 @@
-# Backups: bucket, stanza and WAL archiving
+---
+title: "Backups: storage account, stanza and WAL archiving"
+sidebarTitle: "Backups"
+description: "How the pgBackRest repository is created and protected, from storage to WAL archiving."
+---
 
 How the pgBackRest repository of staging and production comes into existence and stays
-protected. `site.yml` does every step below; nothing is done by hand. Code:
-`infra/ansible/roles/storage`, `infra/ansible/roles/core/tasks/archive.yml`,
-`infra/ansible/roles/backup`. Restores are in
+protected. OpenTofu creates the storage (`infra/tofu/modules/backup-storage`); `site.yml` does
+every step after that; nothing is done by hand. Code: `infra/ansible/roles/storage`,
+`infra/ansible/roles/core/tasks/archive.yml`, `infra/ansible/roles/backup`. Restores are in
 [../runbooks/point-in-time-restore.md](../runbooks/point-in-time-restore.md) and
 [../runbooks/disaster-recovery.md](../runbooks/disaster-recovery.md).
 
-## 1. Order in `site.yml`
+## 1. The storage account
+
+One storage account per environment (`backup_storage_account` in `terraform.tfvars`) in Azure
+Sweden Central, with container `pgbackrest`. Each environment writes under its own path
+(`/<environment>`, or `/<environment>-g<n>` after a disaster recovery).
+
+| Setting | Value | Why |
+|---|---|---|
+| Redundancy | ZRS: three copies in three availability zones | the repository outlives the loss of a zone |
+| Access | Entra ID only: account keys and shared access signatures are off | no storage key exists that could leak |
+| Who writes | the managed identity `<env>-core` of the core and restore nodes, role Storage Blob Data Contributor on the container | pgBackRest signs in with `repo1-azure-key-type=auto` |
+| Network | default deny; the environment's three subnets (service endpoint) and the IPv4 admin ranges an operator input | |
+| Blob versioning | on | a delete or overwrite keeps the previous version |
+| Immutability | version-level, time-based: every version is immutable for 7 days after it was written; `Unlocked` until the operator locks it (`backup_lock_state`) | not even a subscription owner can delete a protected version early once the policy is `Locked` |
+| Lifecycle | previous versions are deleted 35 days after they became previous | covers the four-week retention plus a week |
+| Container soft delete | 35 days | |
+
+How the protection works against a stolen node identity: Storage Blob Data Contributor can
+delete the current version of a blob, which with versioning only turns it into a previous
+version, but it cannot delete a previous version (that needs the `deleteBlobVersion` data
+action, which only Storage Blob Data Owner has; Azure "blob versioning" documentation). So for
+35 days every backup file stays readable whatever is done with the node's identity, and for the
+first 7 days not even the subscription can remove it once the policy is locked.
+
+Why the immutability period is 7 days: Azure refuses to delete a blob while its retention runs,
+and pgBackRest deletes files itself when it expires old backups. The youngest file it expires
+with the retention of `roles/backup` is a differential backup with seven newer ones, which is 8
+days old (seven differentials, plus one Sunday full backup per six of them). A period of 7 days
+keeps every expire working; the storage role refuses a period that is not below that age
+(`storage_azure_lock_days < backup_retention_diff + backup_retention_diff // 6`).
+
+One case needs an operator: a backup that was interrupted and cannot be resumed is removed by
+the next backup run. If that run comes before the interrupted backup's files are 7 days old,
+Azure refuses the delete and the run fails; after 26 hours without a new backup the alert
+`BackupTooOld` pages. WAL archiving and
+the earlier backups are unaffected. The fix is to wait until the files reach 7 days and let the
+next scheduled run remove them, or, if a fresh full backup is needed sooner, raise
+`backup_repo_generation` so the new backups go to a new path (as in
+[../runbooks/disaster-recovery.md](../runbooks/disaster-recovery.md) step 2).
+
+**Locking.** `backup_lock_state = "Locked"` makes the policy permanent: the period can then only
+grow, and the storage account cannot be deleted while it holds a protected version. Lock it in
+production after the first week of verified backups (`pgbackrest verify` passes every day), with
+`make production-plan` and `make production-apply`.
+
+What it costs: every version, including those pgBackRest expired, is billed until the lifecycle
+policy deletes it, so the stored volume is about five weeks of backups and WAL rather than the
+four-week retention alone (Blob Storage ZRS hot, 0.023 USD per GB a month,
+[prerequisites.md](prerequisites.md)).
+
+## 2. Order in `site.yml`
 
 | Play | What it does | Why here |
 |---|---|---|
-| Backup bucket (`roles/storage`, on the controller) | creates `backup_bucket` with object lock, enables versioning, sets the default retention, reads all three back | before any database node can archive to it |
+| Backup storage (`roles/storage`, on the controller) | reads the storage account back through the az CLI: ZRS, no account keys, network default deny, versioning, immutability of 7 days, the lifecycle rule, the container | stops before any database node archives when a protection is missing |
 | Core infrastructure | Patroni starts PostgreSQL with `archive_mode = on` and an **empty** `archive_command` | PostgreSQL keeps every WAL segment and archives nothing, instead of failing each segment against a repository without a stanza |
-| WAL archiving (`core/tasks/archive.yml`) | the Patroni leader runs `pgbackrest stanza-create`; every database node gets the marker `/etc/veristar/pgbackrest/stanza-ready` and the real `archive_command`; Patroni reloads; `pgbackrest check` proves a fresh segment reaches the bucket | the stanza exists before archiving is switched on; the kept WAL is archived at once |
+| WAL archiving (`core/tasks/archive.yml`) | the Patroni leader runs `pgbackrest stanza-create`; every database node gets the marker `/etc/veristar/pgbackrest/stanza-ready` and the real `archive_command`; Patroni reloads; `pgbackrest check` proves a fresh segment reaches the container | the stanza exists before archiving is switched on; the kept WAL is archived at once |
 | Core services | the backup timers (`sa-pgbackrest-{full,diff,verify}`) on both core nodes; only the leader runs them | |
 
 Every step is idempotent: a second converge reports no change (`stanza-create` on an existing,
 matching stanza says so and changes nothing).
 
-## 2. The bucket
-
-`roles/storage/files/backup-bucket.sh` talks to the S3 API with curl (SigV4), like
-`make state-bootstrap`, so the controller needs no S3 client.
-
-- **Object lock** is enabled when the bucket is created (`x-amz-bucket-object-lock-enabled`).
-  It cannot be added to an existing bucket. A bucket that exists without it stops the run with
-  that message: create a new bucket name in `terraform.tfvars` (`backup_bucket`) rather than
-  converging without protection.
-- **Versioning** is enabled (Hetzner turns it on for locked buckets anyway; the script sets and
-  reads it back).
-- **Default retention:** `COMPLIANCE` for `storage_lock_days` (35) days. pgBackRest keeps four
-  weekly full backups and seven days of differentials, so the oldest file a kept backup needs is
-  at most about 34 days old. Compliance mode cannot be shortened or bypassed by any key,
-  including the one that wrote the object. Governance mode can be bypassed by a key with the
-  bypass right, and Hetzner keys are not scoped, so it would protect against mistakes only.
-  The role refuses a lock shorter than `(backup_retention_full + 1) * 7` days.
-
-Hetzner support, checked on 2026-11-13 against Hetzner's own documentation:
-
-- [Object Lock: Retention](https://docs.hetzner.com/storage/object-storage/howto-protect-objects/protect-object-lock-retention/):
-  object lock must be enabled at bucket creation; `put-object-lock-configuration` with a
-  `DefaultRetention` of `GOVERNANCE` or `COMPLIANCE` and `Days`; compliance mode cannot be ended
-  early; a new default retention "takes a few minutes" to apply (the script then stops and asks
-  for a rerun instead of passing).
-- [Buckets & objects FAQ](https://docs.hetzner.com/storage/object-storage/faq/buckets-objects/):
-  locked buckets always have versioning; a delete without a version id only adds a delete
-  marker; permanent deletion is blocked by compliance retention.
-- [List of supported actions](https://docs.hetzner.com/storage/object-storage/supported-actions/):
-  `CreateBucket` accepts `x-amz-bucket-object-lock-enabled`; conditional PUT and DELETE are not
-  supported on versioned buckets, which matters only for the OpenTofu state bucket
-  ([opentofu.md](opentofu.md) section 3.4), not here: pgBackRest does not use conditional writes.
-- Not documented by Hetzner: keys scoped to one bucket or to read-only. Every key of the project
-  can write and delete in every bucket. The lock is therefore the only protection against a
-  stolen core-node key, and the key in the SOPS file stays the only key the nodes hold.
-- Hetzner's documentation also says a contract termination deletes the data even before the
-  retention ends. The lock protects against keys, not against the account owner (see the
-  billing section of [prerequisites.md](prerequisites.md)).
-
-What it costs: every version, including those pgBackRest expired, stays billed until its lock
-ends, so the stored volume is about five weeks of backups and WAL rather than the four-week
-retention alone.
-
 ## 3. Reading the repository as it was before a deletion
 
-`pgbackrest expire`, or anyone with the key, can only add delete markers while the lock holds.
-pgBackRest 2.60 reads a versioned repository as it was at a moment with `--repo-target-time`
-(`pgbackrest help restore repo-target-time` in the `postgres-ha` image):
+pgBackRest 2.60 reads a repository on versioned Azure storage as it was at a moment with
+`--repo-target-time` (pgBackRest release notes; `pgbackrest help restore repo-target-time` in
+the `postgres-ha` image):
 
 ```sh
 cd /opt/veristar/core
@@ -77,19 +88,26 @@ sudo docker compose exec postgres pgbackrest --stanza=sa --repo=1 \
 `restore.yml` passes the same option through `restore_extra_args` (see
 [../runbooks/disaster-recovery.md](../runbooks/disaster-recovery.md) step 3).
 
-## 4. What was proven where
+## 4. pgBackRest on Azure
+
+Checked against the pgBackRest documentation and release notes on 2026-11-13: `repo-type=azure`
+with `repo-azure-account`, `repo-azure-container` and `repo-azure-key-type`, whose values are
+`shared`, `sas` and `auto`. `auto` ("automatically authorize using Azure managed identities")
+was added in the release of 2026-01-19 and is in the pinned 2.60.0. Later releases also added
+batch deletes on Azure (2026-07-20) and fixed retries of batch sub-requests (2026-10-18). The
+user guide warns against a hierarchical namespace, which the storage account does not have.
+
+pgBackRest runs inside the `postgres` container and fetches its token from the Azure instance
+metadata service (169.254.169.254), which Docker's bridge network reaches through the host.
+
+## 5. What was proven where
 
 | What | Where | Result |
 |---|---|---|
-| `backup-bucket.sh`: bucket created with object lock, default retention `COMPLIANCE` 35 days, versioning read back; second run reports no change; after a plain delete a locked version is still listed and deleting that version answers 403 | the script against a standalone SeaweedFS 4.52 with TLS (2026-11-13, by hand) | as stated |
-| `site.yml` in `s3` mode: storage role creates the bucket (`changed: created bucket sa-lc-backup with object lock`, `default retention none 0d -> COMPLIANCE 35d`), the leader creates the stanza before `archive_command` is set, `pgbackrest check` passes, `pg_stat_archiver` counts archived and no failed segments, archived WAL is in the bucket | `make ops-local`, steps `converge` (247 s, `failed=0`), `bucket` and `archiving`, 2026-11-13 | passed |
-| scheduled full backup, delete refusal with the node's key, `--repo-target-time` read after delete markers, second converge with no change | `make ops-local`, later steps | not completed: the run was stopped (host load, then the topology was removed from outside the run) |
-| The same against Hetzner Object Storage | never run | blocked on an operator input |
+| The storage account, container, lifecycle rule and role assignment as planned | `tofu plan` against the subscription, 2026-11-13 ([opentofu.md](opentofu.md) section 3.6) | planned, not applied |
+| The pgBackRest config for Azure renders as above | the `backup` role template with the inventory values, 2026-11-13 | as stated |
+| Archiving, backups, `verify`, delete refusal and `--repo-target-time` against Azure | the first staging converge | not run yet |
+| The same flow with the local converge's S3 stand-in (`LC_BACKUP=s3`) | `make ops-local`, 2026-11-13 (steps `converge`, `bucket`, `archiving`) | passed; the stand-in speaks S3, not Azure |
 
-The stand-in runs the same role, script, `pgbackrest.conf` template (`repo1-type=s3`,
-host-style addressing, the bucket and path) and the same commands. It differs in two settings
-only, both refused outside the local converge: `repo1-storage-host` (its address, because the
-`.test` name resolves nowhere) and `repo1-storage-ca-file` (its private CA). It is not Hetzner:
-whether Hetzner requires `Content-MD5` or another checksum on writes to a locked bucket is not
-documented, so the first staging converge proves it with `pgbackrest check`, which fails the run
-if writes are refused.
+The first staging converge proves the Azure path end to end: `pgbackrest check` in
+`archive.yml` fails the run if the identity cannot write, and the verify timer runs every day.

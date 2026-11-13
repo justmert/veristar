@@ -1,4 +1,7 @@
-# Umami contract
+---
+title: "Umami contract"
+description: "What the platform relies on in Umami, checked automatically against the pinned image."
+---
 
 What the platform relies on in Umami, confirmed by running the pinned image. The checks
 are automated and form the upgrade gate (`make umami-compat`, plan phases 5 and 18).

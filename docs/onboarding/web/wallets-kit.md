@@ -1,8 +1,12 @@
-# Wallet events from the Stellar Wallets Kit
+---
+title: "Wallet events from the Stellar Wallets Kit"
+sidebarTitle: "Wallets Kit"
+description: "Count wallet connections and other wallet activity from the Stellar Wallets Kit."
+---
 
 If your dapp uses [`@creit.tech/stellar-wallets-kit`](https://github.com/Creit-Tech/Stellar-Wallets-Kit)
 (tested with 2.7.1 and 2.8.0), the tracker can count wallet activity for you. Tested by the example
-[`examples/wallets-kit-spa`](../../../examples/wallets-kit-spa), which `TestWalletsKit` in
+[`examples/wallets-kit-spa`](https://github.com/justmert/veristar/tree/main/examples/wallets-kit-spa), which `TestWalletsKit` in
 `tests/webpath` runs in both modes below through the real gateway into Umami, and by the tracker's
 own tests against both kit versions.
 
@@ -30,14 +34,14 @@ its measurement.
 
 Add `data-wallets-kit="true"` to the tag from the console:
 
-<!-- snippet version=1.1.0 wallets-kit -->
+{/* snippet version=1.1.0 wallets-kit */}
 ```html
 <script defer src="https://in.analytics.example/v/1.1.0/sdk.js" integrity="sha384-lxlitLtIMAeT/K3ieev+MeMGxZe7oceuWLOy8GZAjK7TMKS2Uh9UPmfGLBczUPsq" crossorigin="anonymous" data-website-id="3f6a0c2e-9b1d-4e7a-8c5f-1d2e3f4a5b6c" data-wallets-kit="true"></script>
 ```
 
 The dapp itself only sets up the kit, as it would anyway:
 
-<!-- include examples/wallets-kit-spa/src/script-page.tsx -->
+{/* include examples/wallets-kit-spa/src/script-page.tsx */}
 ```tsx
 // script tag mode: sdk.js is on the page with data-wallets-kit="true" and
 // watches the kit's storage keys itself, so the dapp only sets up the kit
@@ -71,7 +75,7 @@ Notes on the script-tag mode:
 
 Call `attachWalletsKit` once, after the tracker's `init()` and the kit's `init()`:
 
-<!-- include examples/wallets-kit-spa/src/module-page.tsx region=attach -->
+{/* include examples/wallets-kit-spa/src/module-page.tsx region=attach */}
 ```tsx
 // after the kit's init, so the restored session is the starting point
 attachWalletsKit(await initKit());
@@ -79,7 +83,7 @@ attachWalletsKit(await initKit());
 
 where `initKit` is the dapp's usual kit setup:
 
-<!-- include examples/wallets-kit-spa/src/wallets.ts region=kit -->
+{/* include examples/wallets-kit-spa/src/wallets.ts region=kit */}
 ```ts
 // the example dapp runs on testnet
 export async function initKit(): Promise<typeof StellarWalletsKit> {

@@ -1,8 +1,11 @@
 ---
+title: "Terms of use"
+description: "The terms of use that every project accepts when it enrolls."
 version: 2026-11-13-draft.3
 status: draft
 effective: 2026-11-13
 ---
+
 
 # Terms of use
 

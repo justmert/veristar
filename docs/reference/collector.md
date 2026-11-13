@@ -1,4 +1,8 @@
-# OTLP collector (scf-otelcol)
+---
+title: "OTLP collector (scf-otelcol)"
+sidebarTitle: "OTLP collector"
+description: "What the OTLP collector accepts and publishes, and the upstream behaviour its configuration rests on."
+---
 
 this stage reference. What the collector accepts, what it publishes, and the
 facts about the pinned upstream components that the configuration rests on.

@@ -1,4 +1,7 @@
-# Adding and removing operators
+---
+title: "Adding and removing operators"
+description: "Add and remove operators through the list of GitHub account ids."
+---
 
 Operators are the SCF people who review projects, suspend or remove them, read the global views
 and manage operator API keys. An operator is a GitHub account whose **numeric** id is listed in

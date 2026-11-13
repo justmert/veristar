@@ -1,6 +1,9 @@
-# Next.js
+---
+title: "Next.js"
+description: "Add the tracker to a Next.js app that uses the App Router."
+---
 
-For Next.js with the App Router. Tested by the example [`examples/nextjs`](../../../examples/nextjs)
+For Next.js with the App Router. Tested by the example [`examples/nextjs`](https://github.com/justmert/veristar/tree/main/examples/nextjs)
 (Next.js 16.4.6, React 19.3.1, `next build` and `next start`), which runs in the browser test
 matrix.
 
@@ -9,7 +12,7 @@ matrix.
 Render the tag as a plain `<script>` element in the `<head>` of the root layout, `app/layout.js`
 (or `app/layout.tsx`):
 
-<!-- include examples/nextjs/app/layout.js region=head -->
+{/* include examples/nextjs/app/layout.js region=head */}
 ```js
 {/* a plain script element, not next/script: the tag must reach the
     browser exactly as the console wrote it, with its integrity value */}
@@ -25,7 +28,7 @@ Render the tag as a plain `<script>` element in the `<head>` of the root layout,
 The example reads the three values on the server from its environment and the tracker's release
 manifest, so tests can use their own site id:
 
-<!-- include examples/nextjs/app/tracker.js -->
+{/* include examples/nextjs/app/tracker.js */}
 ```js
 // the tracker tag's attributes, read on the server from the environment and
 // the release manifest, so tests can use their own site id and gateway. a
@@ -53,7 +56,7 @@ export function trackerTag() {
 In your app, write the values from the console's tag directly into the element: `src`,
 `integrity` and `data-website-id` of
 
-<!-- snippet version=1.1.0 -->
+{/* snippet version=1.1.0 */}
 ```html
 <script defer src="https://in.analytics.example/v/1.1.0/sdk.js" integrity="sha384-lxlitLtIMAeT/K3ieev+MeMGxZe7oceuWLOy8GZAjK7TMKS2Uh9UPmfGLBczUPsq" crossorigin="anonymous" data-website-id="3f6a0c2e-9b1d-4e7a-8c5f-1d2e3f4a5b6c"></script>
 ```
@@ -82,7 +85,7 @@ referrer only for forward navigations on this example for that reason.
 `data-umami-event` attributes work in server and client components alike. A click handler needs a
 client component:
 
-<!-- include examples/nextjs/app/track-button.js region=track -->
+{/* include examples/nextjs/app/track-button.js region=track */}
 ```js
 // a click handler needs a client component. the tracker may be blocked by the
 // visitor, so the call is optional.

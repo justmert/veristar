@@ -1,0 +1,264 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "Veristar",
+  "description": "Privacy-friendly web and API analytics for projects building on Stellar.",
+  "colors": {
+    "primary": "#5B4FE0",
+    "light": "#A59CFF",
+    "dark": "#4A3FC9"
+  },
+  "logo": {
+    "light": "/logo/light.svg",
+    "dark": "/logo/dark.svg",
+    "href": "/introduction"
+  },
+  "favicon": "/favicon.svg",
+  "appearance": {
+    "default": "system"
+  },
+  "navbar": {
+    "links": [
+      {
+        "label": "Support",
+        "href": "/support"
+      }
+    ],
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/justmert/veristar"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/justmert/veristar"
+    }
+  },
+  "api": {
+    "playground": {
+      "display": "simple"
+    }
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Get started",
+        "groups": [
+          {
+            "group": "Get started",
+            "pages": ["introduction", "how-it-works", "architecture"]
+          },
+          {
+            "group": "Design decisions",
+            "pages": ["adr/0001-base-platform", "adr/0002-overlay-not-fork", "adr/0003-licensing"]
+          }
+        ]
+      },
+      {
+        "tab": "Tenant guides",
+        "groups": [
+          {
+            "group": "Start here",
+            "pages": [
+              "onboarding/overview",
+              "onboarding/web/quickstart",
+              "onboarding/api/quickstart"
+            ]
+          },
+          {
+            "group": "Web analytics",
+            "pages": [
+              "onboarding/web/static-html",
+              "onboarding/web/vite-react",
+              "onboarding/web/vue",
+              "onboarding/web/astro",
+              "onboarding/web/sveltekit",
+              "onboarding/web/react-router",
+              "onboarding/web/nextjs",
+              "onboarding/web/npm",
+              "onboarding/web/self-hosting",
+              "onboarding/web/content-security-policy",
+              "onboarding/web/upgrading",
+              "onboarding/web/consent",
+              "onboarding/web/custom-events",
+              "onboarding/web/wallets-kit"
+            ]
+          },
+          {
+            "group": "API analytics",
+            "pages": [
+              "onboarding/api/node",
+              "onboarding/api/python",
+              "onboarding/api/go",
+              "onboarding/api/rust",
+              "onboarding/api/collector-fanout",
+              "onboarding/api/http-route",
+              "onboarding/api/what-gets-dropped",
+              "onboarding/api/troubleshooting"
+            ]
+          },
+          {
+            "group": "Help",
+            "pages": ["support"]
+          }
+        ]
+      },
+      {
+        "tab": "Operators",
+        "groups": [
+          {
+            "group": "Operator guide",
+            "pages": [
+              "operators/overview",
+              "operators/review-and-enrollment",
+              "operators/removal",
+              "operators/global-views",
+              "operators/reading-the-numbers",
+              "operators/api-keys"
+            ]
+          },
+          {
+            "group": "Live proof of adoption",
+            "pages": ["the adoption report", "the adoption report"]
+          }
+        ]
+      },
+      {
+        "tab": "Deploy and operate",
+        "groups": [
+          {
+            "group": "Deploy",
+            "pages": [
+              "deploy/overview",
+              "deploy/prerequisites",
+              "deploy/secrets",
+              "deploy/opentofu",
+              "deploy/ansible",
+              "deploy/bootstrap",
+              "deploy/verification",
+              "deploy/backups",
+              "deploy/probe",
+              "deploy/upgrade",
+              "deploy/teardown",
+              "deploy/verification",
+              "deploy/local-converge"
+            ]
+          },
+          {
+            "group": "Runbooks",
+            "pages": [
+              "runbooks/overview",
+              {
+                "group": "Incidents",
+                "pages": [
+                  "runbooks/alerts",
+                  "runbooks/edge-node-failure",
+                  "runbooks/database-failover",
+                  "runbooks/disaster-recovery",
+                  "runbooks/point-in-time-restore",
+                  "runbooks/queue-backlog-and-dlq",
+                  "runbooks/certificates",
+                  "runbooks/security-incident",
+                  "runbooks/metric-inflation"
+                ]
+              },
+              {
+                "group": "Routine operations",
+                "pages": [
+                  "runbooks/capacity",
+                  "runbooks/security-patch",
+                  "runbooks/secret-rotation",
+                  "runbooks/collector-upgrade",
+                  "runbooks/umami-upgrade",
+                  "runbooks/tracker-release",
+                  "runbooks/dbip-update",
+                  "runbooks/slo-report"
+                ]
+              },
+              {
+                "group": "People and projects",
+                "pages": [
+                  "runbooks/operators",
+                  "runbooks/operator-key-revocation",
+                  "runbooks/tenant-removal",
+                  "runbooks/erasure-requests"
+                ]
+              }
+            ]
+          },
+          {
+            "group": "Service targets",
+            "pages": ["sla", "reference/availability", "reference/observability"]
+          }
+        ]
+      },
+      {
+        "tab": "Reference",
+        "groups": [
+          {
+            "group": "Wire format and APIs",
+            "pages": ["reference/wire-v1", "reference/browser-proof", "reference/control-plane-api"]
+          },
+          {
+            "group": "Metrics API",
+            "openapi": "reference/openapi/metrics-v1.yaml"
+          },
+          {
+            "group": "Limits and capacity",
+            "pages": ["reference/gateway-limits", "reference/capacity"]
+          },
+          {
+            "group": "Data and metrics",
+            "pages": [
+              "reference/web-metrics",
+              "reference/collector",
+              "reference/api-storage",
+              "reference/geo",
+              "reference/umami-contract"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Security and privacy",
+        "groups": [
+          {
+            "group": "Security",
+            "pages": [
+              "security/SECURITY",
+              "security/threat-model",
+              "security/bot-and-inflation",
+              "security/supply-chain",
+              "security/verify-tracker",
+              "security/branch-protection"
+            ]
+          },
+          {
+            "group": "Privacy and compliance",
+            "pages": [
+              "compliance/privacy-strategy",
+              "compliance/jurisdictions",
+              "compliance/data-residency",
+              "compliance/erasure",
+              "compliance/dpia",
+              "compliance/records-of-processing",
+              "compliance/subprocessors",
+              "compliance/terms",
+              "compliance/dpa-template",
+              "compliance/sources"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Handover",
+        "groups": [
+          {
+            "group": "Handover",
+            "pages": ["handover/plan", "handover/checklist", "handover/rebuild"]
+          }
+        ]
+      }
+    ]
+  }
+}

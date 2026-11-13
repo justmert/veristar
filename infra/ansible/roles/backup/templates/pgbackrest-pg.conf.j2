@@ -4,17 +4,33 @@
 log-level-console=info
 log-level-file=off
 compress-type=zst
-{% if backup_repo_mode == 's3' %}
-# hetzner object storage an operator input. the backup runs on the patroni leader
-# (roles/core timers), so this node holds the repository settings itself.
+{% if backup_repo_mode == 'azure' %}
+# azure blob storage (infra/tofu/modules/backup-storage). the backup runs on
+# the patroni leader (roles/core timers), so this node holds the repository
+# settings itself. key-type auto takes a token from the instance metadata
+# service for the node's managed identity, which holds storage blob data
+# contributor on the container only (pgbackrest release of 2026-01-19
+# onwards; the pin is 2.60.0).
+repo1-type=azure
+repo1-azure-account={{ backup_repo_object_storage.endpoint | regex_replace('^https://([a-z0-9]+)\\.blob\\.core\\.windows\\.net$', '\\1') }}
+repo1-azure-container={{ backup_repo_object_storage.backup_bucket }}
+repo1-azure-key-type=auto
+repo1-path=/{{ backup_repo_environment }}{{ ('-g' ~ backup_repo_generation) if (backup_repo_generation | int) > 1 else '' }}
+repo1-cipher-type=aes-256-cbc
+repo1-cipher-pass={{ backup_repo_cipher_pass }}
+repo1-retention-full-type=count
+repo1-retention-full={{ backup_retention_full }}
+repo1-retention-diff={{ backup_retention_diff }}
+start-fast=y
+{% elif backup_repo_mode == 's3' %}
+# the local converge's s3 stand-in (LC_BACKUP=s3).
 repo1-type=s3
 repo1-s3-endpoint={{ backup_repo_object_storage.endpoint | regex_replace('^https://', '') }}
 repo1-s3-region={{ backup_repo_object_storage.region }}
 repo1-s3-bucket={{ backup_repo_object_storage.backup_bucket }}
 repo1-s3-uri-style=host
 {% if backup_repo_object_storage.storage_host is defined %}
-# local converge only: the stand-in's address and private ca; the endpoint,
-# bucket name, addressing and signatures are the same as against hetzner
+# the stand-in's address and private ca
 repo1-storage-host={{ backup_repo_object_storage.storage_host }}
 repo1-storage-ca-file=/etc/pgbackrest/s3-ca.crt
 {% endif %}

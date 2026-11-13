@@ -1,0 +1,75 @@
+---
+title: "Veristar"
+sidebarTitle: "Introduction"
+description: "Privacy-friendly web and API analytics for projects building on Stellar, run as a shared and free service."
+---
+
+Veristar gives projects in the Stellar ecosystem clear numbers about how their sites and APIs are
+used, without cookies and without storing anyone's IP address. It runs as one shared service for
+the Stellar Community Fund (SCF): every project gets private dashboards of its own traffic, and
+SCF operators get a cross-project view built from aggregates.
+
+The service is free. No fees are charged to projects or to anyone else.
+
+## What you get
+
+<CardGroup cols={2}>
+  <Card title="Web analytics" icon="globe" href="/onboarding/web/quickstart">
+    Pageviews, visitors, visits, visit duration, bounce rate, referrers, countries, devices and
+    browsers from one script tag, with custom events when you want them.
+  </Card>
+  <Card title="API analytics" icon="server" href="/onboarding/api/quickstart">
+    Request volume, status codes and latency percentiles per service, method and route, sent by
+    your backend with OpenTelemetry next to the tools you already use.
+  </Card>
+  <Card title="Privacy by design" icon="shield-check" href="/compliance/privacy-strategy">
+    No cookies, no stored IP addresses, and visitor counts based on a daily secret that is
+    destroyed at midnight UTC.
+  </Card>
+  <Card title="Open and verifiable" icon="code" href="/security/verify-tracker">
+    Open source from tracker to infrastructure, with version-pinned tracker files you can check
+    byte for byte.
+  </Card>
+</CardGroup>
+
+## Who it is for
+
+- **Project teams (tenants)** building on Stellar who want to understand the use of their sites,
+  dapps and APIs. Start with the [tenant guides](/onboarding/overview).
+- **SCF operators** who review projects and compare them on shared metrics for funding and
+  ecosystem decisions. Start with the [operator guide](/operators/overview).
+- **Whoever runs the service**, today or after a handover. Start with
+  [deploy and operate](/deploy/overview) and the [runbooks](/runbooks/overview).
+
+## How to start
+
+<Steps>
+  <Step title="Sign in and enroll your project">
+    Sign in to the console with GitHub and enroll your project. The console shows the addresses
+    of the service you use; the guides use the example domain `analytics.example`.
+  </Step>
+  <Step title="Add web analytics">
+    Register a site, copy its script tag into your pages and open your dashboard. The
+    [web quickstart](/onboarding/web/quickstart) walks through it, and there is a guide for each
+    common framework.
+  </Step>
+  <Step title="Add API analytics">
+    Create an OTLP token and add a second exporter to your application. The
+    [API quickstart](/onboarding/api/quickstart) explains the setup, and there are guides for
+    Node.js, Python, Go and Rust.
+  </Step>
+  <Step title="Get help">
+    Questions and problems go to the public issue tracker, as described in [support](/support).
+  </Step>
+</Steps>
+
+## Learn more
+
+<CardGroup cols={2}>
+  <Card title="How it works" icon="diagram-project" href="/how-it-works">
+    The path an event takes from a page or an app to a dashboard.
+  </Card>
+  <Card title="Architecture" icon="sitemap" href="/architecture">
+    The services, hosts, queues and stores, with diagrams.
+  </Card>
+</CardGroup>

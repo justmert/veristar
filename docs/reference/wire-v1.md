@@ -1,4 +1,7 @@
-# Wire format v1
+---
+title: "Wire format v1"
+description: "How sdk.js talks to the gateway: endpoints, payloads and limits."
+---
 
 How `sdk.js` talks to the gateway at `in.<BASE_DOMAIN>`. The TypeScript source of truth is
 `packages/tracker/src/wire.ts`; `internal/events/wire.go` mirrors it. A change to either needs the

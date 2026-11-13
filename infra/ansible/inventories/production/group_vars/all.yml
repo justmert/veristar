@@ -1,0 +1,13 @@
+---
+# settings of the azure environments (docs/deploy/ansible.md). hosts.json
+# beside this directory is written from the opentofu state by make
+# <env>-inventory; these values are the same for every azure node.
+
+# acme dns-01 through caddy-dns/cloudflare with the zone-scoped token of
+# an operator input (sops key cloudflare_api_token)
+sa_tls: cloudflare
+
+# azure maps a vm's public address onto its one interface (1:1 nat), so the
+# address is not on the vm: caddy publishes 80 and 443 on the private
+# address, where the mapped traffic arrives
+sa_public_bind_ipv4: "{{ sa_private_ip }}"

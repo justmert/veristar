@@ -5,7 +5,8 @@
 #   probe_metrics_token, gatus_external_token
 #   probe_site_id, probe_otlp_token, probe_machine_api_key
 #                       printed once by `platformctl probe-tenant create`
-# the probe node itself is an operator input (scaleway, module infra/tofu/modules/probe).
+# the probe runs outside the main provider; docs/deploy/probe.md describes
+# the container that runs it beside an existing uptime monitor.
 - name: Check the observability inputs
   ansible.builtin.assert:
     that:

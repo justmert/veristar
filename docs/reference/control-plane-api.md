@@ -1,4 +1,7 @@
-# Control plane HTTP API
+---
+title: "Control plane HTTP API"
+description: "The HTTP contract between the console and the control plane: routes, fields and error codes."
+---
 
 The contract between the console (`apps/console`) and the control plane
 (`cmd/controlplane`, `internal/controlplane`). Both sides build against this file.
@@ -773,7 +776,7 @@ the key.
 In builds with tag `oauthfixture` only: `OAUTH_FIXTURE_URL` replaces the three
 GitHub URLs. Production builds have no such key.
 
-<!-- this stage appends "## 5. this stage: operator governance" below this line -->
+{/* this stage appends "## 5. this stage: operator governance" below this line */}
 
 ## 5. this stage: operator governance
 

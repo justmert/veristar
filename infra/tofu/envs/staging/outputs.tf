@@ -4,6 +4,11 @@ output "ansible_inventory" {
 }
 
 output "nameservers" {
-  description = "delegate the zone to these at the registrar"
+  description = "cloudflare's nameservers for the zone (set by cloudflare registrar)"
   value       = module.dns.nameservers
+}
+
+output "traffic_manager" {
+  description = "hostname label to the traffic manager name its cname points at"
+  value       = module.failover.fqdns
 }

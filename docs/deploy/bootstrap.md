@@ -1,8 +1,12 @@
-# Bootstrap a new environment
+---
+title: "Bootstrap a new environment"
+sidebarTitle: "Bootstrap"
+description: "The first converge of an empty environment, end to end, with a check after each step."
+---
 
 The first converge of an empty environment, end to end, with a check after each step. Staging is
 shown; production is the same with `production`. Before starting, [prerequisites.md](prerequisites.md)
-is done and the inputs I1 to I6, I13, I14 and I15 exist (I7 and I8 for monitoring delivery).
+is done and the inputs I1 to I6, I13, I14 and I15 exist (I8 for monitoring delivery).
 
 **Status:** never run against a cloud account (the inputs do not exist yet, and the core role
 refuses PostgreSQL below 18.7 outside the local converge). The same playbooks ran end to end on
@@ -21,20 +25,21 @@ sections 3 and 5). Expected outputs quoted from those runs say so.
    Check: `infra/ansible/inventories/staging/hosts.json` exists with three edge and two core
    hosts, and `ssh ops@<edge 1 address> true` succeeds.
 
-3. **DNS delegation.** Check that the zone answers from bunny.net:
+3. **DNS.** Check that Cloudflare answers and points at Traffic Manager:
 
    ```sh
    dig +short NS <an operator input>
    dig +short A in.<an operator input>
    ```
 
-   Expected: bunny.net's name servers, and the three edge addresses (monitored records answer
-   only healthy addresses; before the first converge no node answers port 80, so bunny.net
-   returns all of them, which is its documented behaviour when every record is offline).
+   Expected: Cloudflare's name servers, then the CNAME to
+   `<domain>-<env>-in.trafficmanager.net` followed by the three edge addresses. Before the first
+   converge no node answers port 80, so every endpoint is `Degraded` and Traffic Manager returns
+   all of them, which is its documented behaviour when every endpoint fails.
 
 4. **Non-secret Ansible variables.** Write `infra/ansible/inventories/staging/group_vars/all.yml`
-   as in [ansible.md](ansible.md) section 8 step 1 (`sa_image_registry`, `sa_tls: bunny`,
-   `sa_operator_github_ids`).
+   as in [ansible.md](ansible.md) section 8 step 1 (`sa_image_registry`,
+   `sa_operator_github_ids`); `sa_tls: cloudflare` and `sa_public_bind_ipv4` are already there.
 
 5. **Release.** A tag `v<release>` on the commit to deploy runs `release-images.yml`, which builds,
    scans, signs and attests the eleven platform images and attaches `release-images.json`
@@ -94,16 +99,13 @@ sections 3 and 5). Expected outputs quoted from those runs say so.
     `/opt/veristar/core`): a new jobs leader runs every task at once, including the
     reconcile that provisions the probe's Umami websites and registry entries.
 
-11. **Probe node.** Needs an operator input (`probe_enabled = true` in `terraform.tfvars`, then plan and
-    apply), and the probe tenant's values of step 10 in the SOPS file. Then converge again
-    (`make staging-deploy ...` as in step 6): `site.yml`'s "Probe" play gives the probe the
-    base role without a private network (firewall, SSH hardening, time sync, Docker at the
-    pins), then the observability role (Caddy for `status.<an operator input>`, Gatus, the prober).
-    Expected: `failed=0` for the probe; `https://status.<an operator input>/` shows the endpoints, and
-    after a few minutes the `slo` group and `monitoring / watchdog` (the dead-man push from the
-    core nodes' Alertmanager) are green. `make ops-local` converges a local probe node the same way (steps `converge-probe` to
-    `gatus`), but its run of 2026-11-13 was stopped before those steps; never run against
-    Scaleway an operator input.
+11. **Probe.** The prober runs outside Azure as a container, on the probe host beside
+    an uptime monitor: render the bundle and follow [probe.md](probe.md). It needs the probe
+    tenant's values of step 10 in the SOPS file. Expected: every uptime monitor of probe.md
+    section 4 is up within a few minutes. A probe host in the inventory's `probe` group (with
+    its own public address) would instead get `site.yml`'s "Probe" play, with Caddy for
+    `status.<an operator input>` and the Alertmanager watchdog; `make ops-local` exercises that variant
+    locally.
 
 12. **SLO collection.** Set the repository variable `STATUS_BASE_URL` to `https://status.<an operator input>`
     so `slo-report.yml` can collect ([../runbooks/slo-report.md](../runbooks/slo-report.md)).

@@ -1,7 +1,10 @@
-# Go
+---
+title: "Go"
+description: "Dual export from a Go service on net/http with otelhttp and the OpenTelemetry Go SDK."
+---
 
 Dual export from a Go service on `net/http`. Built from the example
-[`examples/otel-go-nethttp`](../../../examples/otel-go-nethttp): Go 1.22 routing patterns,
+[`examples/otel-go-nethttp`](https://github.com/justmert/veristar/tree/main/examples/otel-go-nethttp): Go 1.22 routing patterns,
 `otelhttp` v0.72.0 and the OpenTelemetry Go SDK v1.47.0. `tests/otelapps` runs it against stock
 collectors in every export mode, the `apipath` tag runs it against the real platform collector,
 and `tests/collector` uses the same SDK version for the collector's own integration suite. Read
@@ -12,7 +15,7 @@ the [API quickstart](quickstart.md) first for the token and the environment vari
 The example has its own `go.mod`, so you can copy the directory as it is. Its direct
 dependencies:
 
-<!-- include examples/otel-go-nethttp/go.mod region=require -->
+{/* include examples/otel-go-nethttp/go.mod region=require */}
 ```go
 require (
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.72.0
@@ -30,7 +33,7 @@ require (
 One tracer provider and one meter provider, each with two exporters, so both backends see the same
 data from the same SDK state. Only the platform exporters carry the token:
 
-<!-- include examples/otel-go-nethttp/main.go region=telemetry -->
+{/* include examples/otel-go-nethttp/main.go region=telemetry */}
 ```go
 // setupTelemetry builds one tracer provider and one meter provider, each with
 // two exporters, so both backends see identical data from the same sdk state.
@@ -106,7 +109,7 @@ func setupTelemetry(ctx context.Context, c config) (func(context.Context) error,
 Wrap the whole mux with `otelhttp.NewHandler`. Health checks are filtered out so probes do not
 count as API traffic:
 
-<!-- include examples/otel-go-nethttp/main.go region=handler -->
+{/* include examples/otel-go-nethttp/main.go region=handler */}
 ```go
 // health checks are filtered out so probes never change the request counts
 handler := otelhttp.NewHandler(s.routes(), "http.server",
@@ -117,7 +120,7 @@ handler := otelhttp.NewHandler(s.routes(), "http.server",
 not on the span. Copy the pattern onto the span as well, so a traces-only export and your own
 backend group requests by route too ([http-route.md](http-route.md)):
 
-<!-- include examples/otel-go-nethttp/main.go region=route -->
+{/* include examples/otel-go-nethttp/main.go region=route */}
 ```go
 // withRoute copies the mux pattern onto the server span. otelhttp names the
 // span after the pattern but only puts http.route on metrics, and the route is

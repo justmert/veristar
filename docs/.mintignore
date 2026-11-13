@@ -1,0 +1,9 @@
+# files under docs/ that the mintlify site does not publish.
+# internal working documents stay in the repository: the audits and the slo
+# data and reports. readme files are skipped by mintlify itself.
+audit/
+slo/
+# go packages that embed documents for the binaries
+*.go
+# data files read by the security gates
+security/*.json

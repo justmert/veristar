@@ -7,8 +7,8 @@
 # of that node share its network namespace and address, like the services
 # bound to a node's private address in production.
 #
-# what is not real here: the probe runs on this machine, not on scaleway
-# an operator input, and alerts go to the labelled test receiver, not discord
+# what is not real here: the probe runs on this machine, not on a host
+# outside the platform, and alerts go to the labelled test receiver, not discord
 # an operator input. there is no patroni, pgbackrest or postgres replica.
 name: sa-p17
 

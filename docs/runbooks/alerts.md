@@ -1,4 +1,8 @@
-# Alerts runbook
+---
+title: "Alerts runbook"
+sidebarTitle: "Alerts"
+description: "Every alert, its threshold, what it means and what to do."
+---
 
 Every alert of the platform, its threshold, what it means and what to do.
 The rules live in `infra/ansible/roles/observability/files/rules/` and are
@@ -11,7 +15,7 @@ Severity `page` means act now. Severity `ticket` means act within a working
 day.
 
 The actions below are short; the full procedures are in the task runbooks
-listed in [README.md](README.md), which also explains how to reach the nodes,
+listed in [overview.md](overview.md), which also explains how to reach the nodes,
 run `platformctl` and `jobs` on a core node, and read NATS state. The
 fire-drill record at the end says which alerts have fired and resolved for
 real, and when.
@@ -67,7 +71,7 @@ as required by CC BY 4.0.
 A node serves a certificate for one of its hosts that expires within 14
 days, read by the prober over a connection to the node's own address.
 Action: check Caddy's log on that node for ACME errors (DNS-01 through
-bunny.net, an operator input.
+Cloudflare, an operator input.
 `sudo docker compose exec caddy caddy reload --config /etc/caddy/Caddyfile`
 after fixing the cause; a node that cannot renew is drained. Full steps:
 [certificates.md](certificates.md).
@@ -176,14 +180,16 @@ Action: on the leader's node, `sudo docker compose exec postgres pgbackrest
 --stanza=sa info`; check the timers (`systemctl list-timers 'sa-pgbackrest-*'`)
 and the last run (`journalctl -u sa-pgbackrest-diff.service`); run a backup
 by hand with `sudo docker compose exec postgres pgbackrest --stanza=sa
---type=full backup` and fix the schedule. Without object storage an operator input
-there is no repository in staging or production, so the alert fires there.
+--type=full backup` and fix the schedule. If the run failed on a refused
+delete of an interrupted backup, see docs/deploy/backups.md section 1.
 
 ### WALArchivingFailing
 WAL archiving failed in the last 15 minutes, or the primary archived nothing
 for 15 minutes.
-Action: `pg_stat_archiver` shows the last failed WAL; check object storage
-credentials and reachability an operator input. Unarchived WAL piles up on disk.
+Action: `pg_stat_archiver` shows the last failed WAL; check that the node
+reaches the storage account (`pgbackrest --stanza=sa check` in the postgres
+container) and that the core identity still holds its role on the container
+(`az role assignment list --scope <container id>`). Unarchived WAL piles up on disk.
 
 ## Platform
 
@@ -216,7 +222,7 @@ Action: jobs logs for `umami-rotate`. Once the cause is fixed, restart the
 jobs daemon (`sudo docker compose restart jobs`) so its leader runs the task.
 `jobs run umami-rotate` refuses while a daemon leads (`a jobs daemon is
 leading`); to run it by hand, stop `jobs` on both core nodes first
-([README.md](README.md), "Running a jobs task by hand").
+([overview.md](overview.md), "Running a jobs task by hand").
 
 ### APIRollupOrphanedMarks
 The API rollup found pending hours whose minute partition was already
@@ -260,8 +266,9 @@ Action when Gatus reports it missing: check the core nodes
 ([database-failover.md](database-failover.md) if both are down), then
 `docker compose ps` in `/opt/veristar/observability` on each core
 node. Never silence `Watchdog` in Alertmanager: a silence stops the heartbeat
-and Gatus alerts after 5 minutes. Without a probe node an operator input the route
-goes to a receiver with no target, so nothing watches it.
+and Gatus alerts after 5 minutes. Without a probe host in the inventory (the
+probe bundle of docs/deploy/probe.md has no public listener) the route goes
+to a receiver with no target, so nothing outside watches it.
 
 ## Probe
 
@@ -294,7 +301,7 @@ for Discord. Each drill causes the condition for real and waits for the
 firing and the resolved message. Results of 2026-11-13 below; "fired" and "resolved" are the times the
 test receiver got the Alertmanager or Gatus message. The drills were cut
 short when the shared host became overloaded, so the last group was not run.
-The staging drill with real Discord delivery waits for inputs I7 and I8.
+The staging drill with real Discord delivery waits for an operator input.
 
 | Alert | Drill | Result |
 |---|---|---|

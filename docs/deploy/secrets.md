@@ -1,4 +1,8 @@
-# Secrets: SOPS with age
+---
+title: "Secrets: SOPS with age"
+sidebarTitle: "Secrets"
+description: "How secrets are encrypted with SOPS and age, and which files hold them."
+---
 
 Status: first version (this stage, stream b). Pins: SOPS 3.13.3, age 1.3.2.
 
@@ -53,8 +57,9 @@ existed is refused by the `secrets` role, naming the missing key; add each with
 
 Owner inputs (taken from the environment of `new-secrets.py`, never generated, left out
 when unset): `github_client_id` and `github_client_secret` (I2, as
-`SA_GITHUB_CLIENT_ID`, `SA_GITHUB_CLIENT_SECRET`), `bunny_api_key` (I6, as
-`SA_BUNNY_API_KEY`), `alertmanager_discord_webhook_url` and `gatus_discord_webhook_url`
+`SA_GITHUB_CLIENT_ID`, `SA_GITHUB_CLIENT_SECRET`), `cloudflare_api_token` (I6, as
+`SA_CLOUDFLARE_API_TOKEN`; the zone-scoped token with `Zone:Zone:Read` and `Zone:DNS:Edit`,
+[prerequisites.md](prerequisites.md) step 5), `alertmanager_discord_webhook_url` and `gatus_discord_webhook_url`
 (I8, as `SA_ALERTMANAGER_DISCORD_WEBHOOK_URL`, `SA_GATUS_DISCORD_WEBHOOK_URL`). The `secrets`
 role refuses to converge a core node without I2 and any node using DNS-01 without I6,
 naming the missing key. The `observability` role, which `site.yml` runs on every edge and
@@ -66,7 +71,7 @@ core node, refuses to run without the Alertmanager webhook; the local converge p
 Create an environment's file (after I14 is in place):
 
 ```sh
-SA_GITHUB_CLIENT_ID=... SA_GITHUB_CLIENT_SECRET=... SA_BUNNY_API_KEY=... \
+SA_GITHUB_CLIENT_ID=... SA_GITHUB_CLIENT_SECRET=... SA_CLOUDFLARE_API_TOKEN=... \
   python3 infra/secrets/new-secrets.py staging \
   | sops --config infra/secrets/.sops.yaml encrypt --filename-override infra/secrets/staging/secrets.enc.yaml \
       --input-type yaml --output-type yaml /dev/stdin > infra/secrets/staging/secrets.enc.yaml
@@ -135,11 +140,11 @@ controller tools of [prerequisites.md](prerequisites.md) with `sops` and `age-ke
    unset SA_GITHUB_CLIENT_SECRET
    ```
 
-   Do the same with `read -rs` for `SA_BUNNY_API_KEY`, `SA_OBJECT_STORAGE_ACCESS_KEY` and
-   `SA_OBJECT_STORAGE_SECRET_KEY`, `SA_ALERTMANAGER_DISCORD_WEBHOOK_URL` and
+   Do the same with `read -rs` for `SA_CLOUDFLARE_API_TOKEN`,
+   `SA_ALERTMANAGER_DISCORD_WEBHOOK_URL` and
    `SA_GATUS_DISCORD_WEBHOOK_URL` when you have them. The script names every input it
    left out on standard error, for example
-   `new-secrets.py: SA_BUNNY_API_KEY unset, bunny_api_key left out`. The venv's Python is used
+   `new-secrets.py: SA_CLOUDFLARE_API_TOKEN unset, cloudflare_api_token left out`. The venv's Python is used
    because the script needs `bcrypt` and PyYAML.
 
 5. **Check** that the file decrypts and holds every key:
@@ -159,8 +164,8 @@ controller tools of [prerequisites.md](prerequisites.md) with `sops` and `age-ke
    ```
 
    SOPS opens an editor on an empty dotenv file; write one `NAME=value` line per variable
-   (`HCLOUD_TOKEN`, `BUNNYNET_API_KEY`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`,
-   `TF_VAR_state_passphrase`, and the `SCW_*` keys once the probe is enabled). Make the
+   (`CLOUDFLARE_API_TOKEN` and `TF_VAR_state_passphrase`; Azure needs no secret here, OpenTofu
+   uses the operator's `az login`). Make the
    passphrase with `python3 -c 'import secrets; print(secrets.token_urlsafe(32))'`; it must be
    at least 16 characters and different per environment.
 

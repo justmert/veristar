@@ -1,7 +1,10 @@
-# Static HTML
+---
+title: "Static HTML"
+description: "Add the tracker to hand-written pages and sites built by a static site generator."
+---
 
 For hand-written pages and for sites built by a static site generator. Tested by the example site
-[`examples/static-html`](../../../examples/static-html), which runs in the browser test matrix.
+[`examples/static-html`](https://github.com/justmert/veristar/tree/main/examples/static-html), which runs in the browser test matrix.
 
 ## Where the tag goes
 
@@ -9,7 +12,7 @@ Paste the tag from the console into the `<head>` of every page. In the example, 
 the comment `<!-- tracker -->` with the tag (it does so only so that tests can use their own site
 id); on your site the tag itself stands there:
 
-<!-- include examples/static-html/src/index.html region=head -->
+{/* include examples/static-html/src/index.html region=head */}
 ```html
 <!-- paste the tag from the console in place of the next line, on every page -->
 <!-- tracker -->
@@ -17,7 +20,7 @@ id); on your site the tag itself stands there:
 
 With the example values from the [quickstart](quickstart.md), the line becomes:
 
-<!-- snippet version=1.1.0 -->
+{/* snippet version=1.1.0 */}
 ```html
 <script defer src="https://in.analytics.example/v/1.1.0/sdk.js" integrity="sha384-lxlitLtIMAeT/K3ieev+MeMGxZe7oceuWLOy8GZAjK7TMKS2Uh9UPmfGLBczUPsq" crossorigin="anonymous" data-website-id="3f6a0c2e-9b1d-4e7a-8c5f-1d2e3f4a5b6c"></script>
 ```
@@ -34,7 +37,7 @@ the same page (`#details`) is not a pageview.
 Any element with a `data-umami-event` attribute sends an event of that name when it is clicked;
 each `data-umami-event-<key>` attribute adds one data entry:
 
-<!-- include examples/static-html/src/index.html region=event -->
+{/* include examples/static-html/src/index.html region=event */}
 ```html
 <button type="button" id="signup" data-umami-event="signup-click" data-umami-event-plan="free">
   Sign up
@@ -44,7 +47,7 @@ each `data-umami-event-<key>` attribute adds one data entry:
 From your own script, call `umami.track()`. Keep page code in a file of its own if your site has a
 content security policy:
 
-<!-- include examples/static-html/src/page.js region=track -->
+{/* include examples/static-html/src/page.js region=track */}
 ```js
 // umami.track() from page code; the tracker may be blocked, so check first
 document.getElementById("manual").addEventListener("click", () => {

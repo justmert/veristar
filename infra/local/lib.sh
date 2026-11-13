@@ -104,7 +104,7 @@ lc_node_create() {
 
 # lc_s3_up: the object storage stand-in of LC_BACKUP=s3 (env.sh). a private
 # ca signs a certificate for the endpoint name and every bucket under it
-# (host-style addressing, as on hetzner); the s3 identity's keys are the
+# (host-style addressing); the s3 identity's keys are the
 # ones up.sh puts into the sops file as object_storage_*. the container sits
 # in its location's network and, like the nodes, reaches the other locations
 # through the router.

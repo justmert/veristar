@@ -1,4 +1,8 @@
-# Data protection impact assessment
+---
+title: "Data protection impact assessment"
+sidebarTitle: "DPIA"
+description: "The data protection impact assessment for cookieless web analytics and API request metrics."
+---
 
 > **Status: draft, pending legal review an operator input.** Not legal advice. Last
 > updated 2026-11-12. Prepared by the service as processor, to help tenants

@@ -1,7 +1,12 @@
+# records in the existing cloudflare zone of BASE_DOMAIN an operator input. the
+# zone itself belongs to the registrar account and is only looked up here.
+# every record is dns only: the gateway needs the client's own address, and
+# a proxy in front of the collect path would replace it.
+
 terraform {
   required_providers {
-    bunnynet = {
-      source = "BunnyWay/bunnynet"
+    cloudflare = {
+      source = "cloudflare/cloudflare"
     }
   }
 }
@@ -12,32 +17,18 @@ variable "base_domain" {
 }
 
 variable "ttl" {
-  description = "ttl of the monitored record sets in seconds"
+  description = "ttl of the cname records in seconds; cloudflare's minimum for dns-only records is 60"
   type        = number
-}
-
-variable "record_sets" {
-  description = "label to the ipv4 and ipv6 addresses behind it; each address is health monitored"
-  type = map(object({
-    ipv4 = list(string)
-    ipv6 = list(string)
-  }))
 
   validation {
-    # bunny.net removes unhealthy records only from a set of two or more;
-    # a single record is always returned
-    condition     = alltrue([for s in values(var.record_sets) : length(s.ipv4) >= 2])
-    error_message = "every monitored record set needs at least two addresses."
+    condition     = var.ttl >= 60
+    error_message = "ttl must be at least 60."
   }
 }
 
-variable "single_records" {
-  description = "label to addresses that are not health monitored (the probe's status page)"
-  type = map(object({
-    ipv4 = list(string)
-    ipv6 = list(string)
-  }))
-  default = {}
+variable "cnames" {
+  description = "label to the name the label points at (a traffic manager profile)"
+  type        = map(string)
 }
 
 variable "caa_issuers" {
@@ -45,93 +36,75 @@ variable "caa_issuers" {
   type        = list(string)
 }
 
-resource "bunnynet_dns_zone" "this" {
-  domain = var.base_domain
-  # query logs would hold resolver addresses; nothing here needs them
-  log_enabled = false
+data "cloudflare_zone" "this" {
+  filter = {
+    name = var.base_domain
+  }
 }
 
 locals {
-  monitored = merge([
-    for label, set in var.record_sets : merge(
-      { for i, ip in set.ipv4 : "${label}/A/${i}" => { name = label, type = "A", value = ip } },
-      { for i, ip in set.ipv6 : "${label}/AAAA/${i}" => { name = label, type = "AAAA", value = ip } },
-    )
-  ]...)
-
-  single = merge([
-    for label, set in var.single_records : merge(
-      { for i, ip in set.ipv4 : "${label}/A/${i}" => { name = label, type = "A", value = ip } },
-      { for i, ip in set.ipv6 : "${label}/AAAA/${i}" => { name = label, type = "AAAA", value = ip } },
-    )
-  ]...)
+  zone_id = data.cloudflare_zone.this.zone_id
 }
 
-resource "bunnynet_dns_record" "monitored" {
-  for_each = local.monitored
+resource "cloudflare_dns_record" "cname" {
+  for_each = var.cnames
 
-  zone  = bunnynet_dns_zone.this.id
-  name  = each.value.name
-  type  = each.value.type
-  value = each.value.value
-  ttl   = var.ttl
-  # http on port 80, any non-5xx within 10 s is healthy; the node's port 80
-  # answers 503 when its composite check fails
-  monitor_type = "Http"
-  # equal weights: bunny.net returns up to three healthy records at random
-  weight = 100
+  zone_id = local.zone_id
+  name    = "${each.key}.${var.base_domain}"
+  type    = "CNAME"
+  content = each.value
+  ttl     = var.ttl
+  proxied = false
+  comment = "managed by opentofu; health-checked by azure traffic manager"
 }
 
-resource "bunnynet_dns_record" "single" {
-  for_each = local.single
-
-  zone  = bunnynet_dns_zone.this.id
-  name  = each.value.name
-  type  = each.value.type
-  value = each.value.value
-  ttl   = var.ttl
-}
-
-resource "bunnynet_dns_record" "caa_issue" {
+resource "cloudflare_dns_record" "caa_issue" {
   for_each = toset(var.caa_issuers)
 
-  zone  = bunnynet_dns_zone.this.id
-  name  = ""
-  type  = "CAA"
-  flags = 0
-  tag   = "issue"
-  value = each.value
+  zone_id = local.zone_id
+  name    = var.base_domain
+  type    = "CAA"
+  ttl     = 3600
+  data = {
+    flags = 0
+    tag   = "issue"
+    value = each.value
+  }
+  comment = "managed by opentofu"
 }
 
 # no wildcard certificates are used anywhere
-resource "bunnynet_dns_record" "caa_issuewild" {
-  zone  = bunnynet_dns_zone.this.id
-  name  = ""
-  type  = "CAA"
-  flags = 0
-  tag   = "issuewild"
-  value = ";"
+resource "cloudflare_dns_record" "caa_issuewild" {
+  zone_id = local.zone_id
+  name    = var.base_domain
+  type    = "CAA"
+  ttl     = 3600
+  data = {
+    flags = 0
+    tag   = "issuewild"
+    value = ";"
+  }
+  comment = "managed by opentofu"
 }
 
 output "zone_id" {
-  value = bunnynet_dns_zone.this.id
+  value = local.zone_id
 }
 
 output "nameservers" {
-  description = "set these at the registrar to delegate the zone"
-  value       = [bunnynet_dns_zone.this.nameserver1, bunnynet_dns_zone.this.nameserver2]
+  description = "cloudflare's nameservers for the zone, set by cloudflare registrar"
+  value       = data.cloudflare_zone.this.name_servers
 }
 
 output "hostnames" {
-  value = { for label in concat(keys(var.record_sets), keys(var.single_records)) : label => "${label}.${var.base_domain}" }
+  value = { for label in keys(var.cnames) : label => "${label}.${var.base_domain}" }
 }
 
 output "records" {
   description = "every record by key, for review and tests"
   value = merge(
-    { for k, r in bunnynet_dns_record.monitored : k => { type = r.type, value = r.value, monitor_type = r.monitor_type } },
-    { for k, r in bunnynet_dns_record.single : k => { type = r.type, value = r.value, monitor_type = r.monitor_type } },
-    { for k, r in bunnynet_dns_record.caa_issue : "@/CAA/issue/${k}" => { type = r.type, value = r.value, monitor_type = r.monitor_type } },
-    { "@/CAA/issuewild" = { type = "CAA", value = bunnynet_dns_record.caa_issuewild.value, monitor_type = bunnynet_dns_record.caa_issuewild.monitor_type } },
+    { for k, r in cloudflare_dns_record.cname : "${k}/CNAME" => { type = r.type, value = r.content, proxied = r.proxied } },
+    { for k, r in cloudflare_dns_record.caa_issue : "@/CAA/issue/${k}" => { type = r.type, value = r.data.value, proxied = false } },
+    { "@/CAA/issuewild" = { type = "CAA", value = cloudflare_dns_record.caa_issuewild.data.value, proxied = false } },
   )
 }

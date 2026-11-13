@@ -184,9 +184,9 @@ services:
       - caddydata:/data
       - caddyconfig:/config
     ports:
-      - "{{ sa_public_ipv4 }}:80:80"
-      - "{{ sa_public_ipv4 }}:443:443"
-      - "{{ sa_public_ipv4 }}:443:443/udp"
+      - "{{ sa_public_bind_ipv4 | default(sa_public_ipv4) }}:80:80"
+      - "{{ sa_public_bind_ipv4 | default(sa_public_ipv4) }}:443:443"
+      - "{{ sa_public_bind_ipv4 | default(sa_public_ipv4) }}:443:443/udp"
 {% if sa_public_ipv6 %}
       - "[{{ sa_public_ipv6 }}]:80:80"
       - "[{{ sa_public_ipv6 }}]:443:443"

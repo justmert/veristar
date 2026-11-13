@@ -1,12 +1,17 @@
 #!/usr/bin/env bash
-# creates the opentofu state bucket for one environment on hetzner object
-# storage through the s3 api. run once, before the first `tofu init`, by
-# `make state-bootstrap ENV=<env>` inside `sops exec-env`, which provides
-# AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY.
+# creates the opentofu state storage of one environment in azure: a resource
+# group, a storage account (zone-redundant, entra id only, blob versioning,
+# 35 days of soft delete) and the tfstate container. run once, before the
+# first `tofu init`, by `make state-bootstrap ENV=<env>` with an az cli
+# login (`az login`) on the subscription of an operator input.
 #
-# curl signs the requests itself (--aws-sigv4), so no s3 client has to be
-# installed. the bucket stays unversioned: hetzner does not support conditional
-# puts on versioned buckets, and the backend's use_lockfile depends on them.
+# the state account lives outside the environment's resource group, so a
+# `make <env>-destroy` never removes the state it runs on. the backend locks
+# the state with a blob lease, and versioning keeps every earlier state
+# (scripts/tofu-state-backup.sh lists and restores them).
+#
+# the script reads back what it set and exits non-zero on anything it could
+# not apply. it is safe to rerun.
 set -euo pipefail
 
 env_name="${1:?usage: tofu-state-bootstrap.sh <staging|production>}"
@@ -17,7 +22,7 @@ esac
 
 tfvars="infra/tofu/envs/$env_name/terraform.tfvars"
 if [[ ! -f "$tfvars" ]]; then
-  echo "$tfvars is missing: it needs state_bucket and state_location an operator input" >&2
+  echo "$tfvars is missing: it needs subscription_id, state_resource_group and state_storage_account an operator input" >&2
   exit 1
 fi
 
@@ -32,43 +37,58 @@ read_var() {
   printf '%s' "$value"
 }
 
-bucket="$(read_var state_bucket)"
-location="$(read_var state_location)"
-case "$location" in
-  fsn1|nbg1|hel1) ;;
-  *) echo "state_location must be fsn1, nbg1 or hel1, got $location" >&2; exit 1 ;;
-esac
+subscription="$(read_var subscription_id)"
+group="$(read_var state_resource_group)"
+account="$(read_var state_storage_account)"
+location=swedencentral
 
-: "${AWS_ACCESS_KEY_ID:?AWS_ACCESS_KEY_ID is not set (hetzner object storage key, an operator input}"
-: "${AWS_SECRET_ACCESS_KEY:?AWS_SECRET_ACCESS_KEY is not set an operator input}"
+command -v az >/dev/null || { echo "the az cli is not installed (docs/deploy/prerequisites.md)" >&2; exit 1; }
+az account show --subscription "$subscription" --query id -o tsv >/dev/null ||
+  { echo "not signed in to subscription $subscription: run az login" >&2; exit 1; }
 
-url="https://${bucket}.${location}.your-objectstorage.com/"
+az_() { az "$@" --subscription "$subscription" --only-show-errors; }
 
-# the key pair goes to curl on stdin, never on the command line where other
-# users could read it from the process list
-s3() {
-  printf 'user = "%s:%s"\n' "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" |
-    curl --config - --silent --show-error --aws-sigv4 "aws:amz:${location}:s3" "$@"
-}
-
-status="$(s3 --output /dev/null --write-out '%{http_code}' --head "$url")"
-case "$status" in
-  200)
-    echo "state bucket $bucket already exists in $location"
-    exit 0
-    ;;
-  404) ;;
-  *)
-    echo "HEAD $url answered $status; not creating anything" >&2
-    exit 1
-    ;;
-esac
-
-body="<CreateBucketConfiguration><LocationConstraint>${location}</LocationConstraint></CreateBucketConfiguration>"
-status="$(s3 --output /dev/stderr --write-out '%{http_code}' --request PUT \
-  --header 'x-amz-acl: private' --data-binary "$body" "$url")"
-if [[ "$status" != "200" ]]; then
-  echo "creating $bucket answered $status" >&2
-  exit 1
+if [[ "$(az_ group exists --name "$group")" != true ]]; then
+  az_ group create --name "$group" --location "$location" --tags managed-by=state-bootstrap project=veristar -o none
+  echo "created resource group $group"
 fi
-echo "created state bucket $bucket in $location (private, unversioned)"
+
+if ! az_ storage account show --resource-group "$group" --name "$account" -o none 2>/dev/null; then
+  az_ storage account create --resource-group "$group" --name "$account" --location "$location" \
+    --kind StorageV2 --sku Standard_ZRS --access-tier Hot --min-tls-version TLS1_2 \
+    --allow-shared-key-access false --allow-blob-public-access false \
+    --tags managed-by=state-bootstrap project=veristar -o none
+  echo "created state storage account $account"
+fi
+
+az_ storage account blob-service-properties update --resource-group "$group" --account-name "$account" \
+  --enable-versioning true --enable-delete-retention true --delete-retention-days 35 \
+  --enable-container-delete-retention true --container-delete-retention-days 35 -o none
+
+# the signed-in user writes the state through entra id, so it needs a data
+# role on the account; owner of the subscription alone does not grant it
+me="$(az ad signed-in-user show --query id -o tsv)"
+scope="$(az_ storage account show --resource-group "$group" --name "$account" --query id -o tsv)"
+if [[ -z "$(az_ role assignment list --assignee "$me" --scope "$scope" --role 'Storage Blob Data Contributor' --query '[].id' -o tsv)" ]]; then
+  az_ role assignment create --assignee-object-id "$me" --assignee-principal-type User \
+    --role 'Storage Blob Data Contributor' --scope "$scope" -o none
+  echo "granted Storage Blob Data Contributor on $account to the signed-in user"
+fi
+
+# a new role assignment takes a few minutes to apply to the data plane
+for _ in $(seq 1 30); do
+  if az_ storage container create --account-name "$account" --name tfstate --auth-mode login -o none 2>/dev/null; then
+    break
+  fi
+  sleep 10
+done
+
+# read everything back
+props="$(az_ storage account blob-service-properties show --resource-group "$group" --account-name "$account" \
+  --query '[isVersioningEnabled, deleteRetentionPolicy.enabled]' -o tsv | tr '\n' ' ')"
+[[ "$props" == "True True " ]] || { echo "versioning or soft delete of $account is not enabled: $props" >&2; exit 1; }
+[[ "$(az_ storage account show --resource-group "$group" --name "$account" --query allowSharedKeyAccess -o tsv)" == false ]] ||
+  { echo "$account still accepts account keys" >&2; exit 1; }
+[[ "$(az_ storage container exists --account-name "$account" --name tfstate --auth-mode login --query exists -o tsv)" == true ]] ||
+  { echo "container tfstate of $account does not exist; rerun in a few minutes" >&2; exit 1; }
+echo "ok: state storage $account in $group (zrs, versioned, entra id only)"

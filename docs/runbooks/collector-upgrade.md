@@ -1,4 +1,7 @@
-# Collector upgrade
+---
+title: "Collector upgrade"
+description: "Build, test and roll out a new version of the OTLP collector."
+---
 
 The OTLP collector (`scf-otelcol`) is a custom OpenTelemetry Collector distribution built with
 ocb from `collector/builder-config.yaml`: upstream core v0.165.0 / v1.71.0, contrib v0.165.1,

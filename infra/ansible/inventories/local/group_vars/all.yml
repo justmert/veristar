@@ -8,7 +8,7 @@ sa_image_registry: 172.31.99.5:5000/sa
 sa_image_tag: lc
 base_docker_insecure_registries: ["172.31.99.5:5000"]
 
-# no domain an operator input and no bunny.net key an operator input: caddy issues from its
+# no domain an operator input and no cloudflare token an operator input: caddy issues from its
 # local ca, and the names under the reserved .test tld resolve only where a
 # test maps them to the node addresses
 sa_tls: internal
@@ -59,10 +59,10 @@ local_converge_state: "{{ inventory_dir | default(playbook_dir ~ '/../inventorie
 ansible_ssh_private_key_file: "{{ local_converge_state }}/id_ed25519"
 ansible_ssh_common_args: "-o UserKnownHostsFile={{ local_converge_state }}/known_hosts"
 
-# no object storage an operator input. backup_repo_mode is set by up.sh in the
+# no azure storage. backup_repo_mode is set by up.sh in the
 # inventory: posix-host (a posix repository on the backup node, reached over
 # pgbackrest's tls protocol with the internal ca) or, with LC_BACKUP=s3, s3
-# against the seaweedfs stand-in. neither is hetzner object storage
+# against the seaweedfs stand-in. neither is azure blob storage
 # (docs/deploy/local-converge.md section 6). the tls protocol uses the node
 # certificates of the internal ca, as every other private link does.
 
@@ -70,3 +70,6 @@ ansible_ssh_common_args: "-o UserKnownHostsFile={{ local_converge_state }}/known
 # certificate-validity checks (336 hours in staging and production) would
 # fail on every local node; one hour still proves the check runs
 observability_probe_cert_min_validity: 1h
+
+# the local nodes hold their public address on their own interface
+sa_public_bind_ipv4: "{{ sa_public_ipv4 }}"

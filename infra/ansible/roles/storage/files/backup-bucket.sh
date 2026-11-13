@@ -4,15 +4,11 @@
 # object lock, has versioning enabled and carries a default retention of
 # LOCK_MODE for LOCK_DAYS days. run by roles/storage on the controller.
 #
-# why object lock: the s3 keys on the core nodes can delete objects. hetzner
-# object storage has no per-key permissions that would stop that, and object
-# lock can only be turned on when a bucket is created
-# (docs.hetzner.com/storage/object-storage/howto-protect-objects/
-# protect-object-lock-retention, checked 2026-11-13). with versioning and a
+# the local converge's s3 stand-in only (LC_BACKUP=s3): staging and
+# production keep the repository in azure blob storage, which opentofu
+# creates (infra/tofu/modules/backup-storage). with versioning and a
 # compliance-mode default retention, a delete only adds a delete marker and
-# every version stays readable until its retention ends, whoever holds the
-# keys. pgbackrest can read the repository as it was before such a delete
-# (repo-target-time).
+# every version stays readable until its retention ends.
 #
 # inputs (environment): S3_ENDPOINT (https://host), S3_REGION, BUCKET,
 # LOCK_MODE (COMPLIANCE or GOVERNANCE), LOCK_DAYS, AWS_ACCESS_KEY_ID,
@@ -27,8 +23,8 @@
 set -euo pipefail
 
 : "${S3_ENDPOINT:?}" "${S3_REGION:?}" "${BUCKET:?}" "${LOCK_MODE:?}" "${LOCK_DAYS:?}"
-: "${AWS_ACCESS_KEY_ID:?object storage access key missing an operator input}"
-: "${AWS_SECRET_ACCESS_KEY:?object storage secret key missing an operator input}"
+: "${AWS_ACCESS_KEY_ID:?object storage access key missing}"
+: "${AWS_SECRET_ACCESS_KEY:?object storage secret key missing}"
 
 case "$LOCK_MODE" in COMPLIANCE|GOVERNANCE) ;; *) echo "LOCK_MODE must be COMPLIANCE or GOVERNANCE" >&2; exit 2 ;; esac
 [[ "$LOCK_DAYS" =~ ^[1-9][0-9]*$ ]] || { echo "LOCK_DAYS must be a positive integer" >&2; exit 2; }
@@ -36,8 +32,7 @@ case "$LOCK_MODE" in COMPLIANCE|GOVERNANCE) ;; *) echo "LOCK_MODE must be COMPLI
 host="${S3_ENDPOINT#https://}"
 host="${host%/}"
 [[ "$S3_ENDPOINT" == https://* && "$host" != */* ]] || { echo "S3_ENDPOINT must be https://<host>" >&2; exit 2; }
-# virtual-host style, as hetzner documents and as pgbackrest uses it
-# (repo1-s3-uri-style=host)
+# virtual-host style, as pgbackrest uses it (repo1-s3-uri-style=host)
 url="https://${BUCKET}.${host}/"
 
 extra=()
@@ -123,7 +118,7 @@ s3_ok "reading the versioning of $BUCKET" "${url}?versioning"
 [[ "$(xml_value Status)" == Enabled ]] || { echo "versioning of $BUCKET is not Enabled after setting it" >&2; exit 1; }
 s3_ok "reading the object lock of $BUCKET" "${url}?object-lock"
 if [[ "$(xml_value Mode)" != "$LOCK_MODE" || "$(xml_value Days)" != "$LOCK_DAYS" ]]; then
-  # hetzner notes that a new default retention takes a few minutes to apply
+  # a new default retention can take a few minutes to apply
   echo "default retention of $BUCKET reads $(xml_value Mode) $(xml_value Days)d, expected $LOCK_MODE ${LOCK_DAYS}d; rerun in a few minutes" >&2
   exit 1
 fi

@@ -1,0 +1,97 @@
+---
+# renders the probe as a self-contained docker compose bundle for a host
+# outside azure, such as a probe host beside an uptime monitor
+# (docs/deploy/probe.md). runs on the controller only and touches no
+# server; copying the bundle to the probe host is a separate, manual step.
+#
+#   ansible-playbook -i inventories/<env>/ playbooks/probe-bundle.yml \
+#     -e sa_release_manifest=<release-images.json>
+#
+# the bundle holds the probe tenant's token and machine api key, so it is
+# written with mode 0700/0600 under .scratch/ (gitignored) by default.
+- name: Verify the release
+  ansible.builtin.import_playbook: verify-release.yml
+
+- name: Probe bundle
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files: [../vars/pins.yml]
+  vars:
+    probe_bundle_dir: "{{ playbook_dir }}/../../../.scratch/probe-bundle/{{ sa_environment }}"
+    probe_bundle_port: 8095
+  tasks:
+    - name: Load the secrets defaults and tools
+      ansible.builtin.include_role:
+        name: secrets
+        tasks_from: tools.yml
+        public: true
+
+    - name: Decrypt the environment's secrets
+      community.sops.load_vars:
+        file: "{{ secrets_file }}"
+        name: sa_secrets
+        sops_binary: "{{ secrets_tools_dir }}/sops-{{ sops_version }}"
+        age_keyfile: "{{ secrets_age_keyfile }}"
+      no_log: true
+
+    - name: Require the probe tenant
+      ansible.builtin.assert:
+        that:
+          - (sa_secrets.probe_otlp_token | default('')) is match('^sa_otlp_')
+          - (sa_secrets.probe_machine_api_key | default('')) is match('^sa_op_')
+          - (sa_secrets.probe_site_id | default('')) | length > 0
+          - (sa_secrets.gatus_external_token | default('')) | length >= 32
+          - observability_images.prober is match('^[^@]+@sha256:[0-9a-f]{64}$') or sa_environment == 'local'
+        fail_msg: >-
+          the bundle needs the output of platformctl probe-tenant create in
+          the sops file (docs/deploy/bootstrap.md step 10) and the release
+          manifest (-e sa_release_manifest=...) so the prober is pulled by a
+          verified digest
+      no_log: true
+
+    - name: Name the probe targets
+      ansible.builtin.include_role:
+        name: observability
+        tasks_from: probe_facts.yml
+        public: true
+
+    - name: Create the bundle directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0700"
+      loop: ["{{ probe_bundle_dir }}", "{{ probe_bundle_dir }}/releases"]
+
+    - name: Copy the tracker release manifest
+      ansible.builtin.copy:
+        src: "{{ observability_repo_root }}/packages/tracker/releases/{{ item }}"
+        dest: "{{ probe_bundle_dir }}/releases/{{ item }}"
+        mode: "0644"
+      loop: [manifest.json, revoked.json]
+
+    - name: Write the compose file and the gatus config
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../roles/observability/templates/{{ item.src }}"
+        dest: "{{ probe_bundle_dir }}/{{ item.dest }}"
+        mode: "0644"
+      loop:
+        - {src: probe-bundle-compose.yml.j2, dest: compose.yml}
+        - {src: gatus.yml.j2, dest: gatus.yml}
+
+    - name: Write the env files
+      ansible.builtin.copy:
+        content: "{{ item.content }}"
+        dest: "{{ probe_bundle_dir }}/{{ item.name }}"
+        mode: "0600"
+      loop:
+        - {name: prober.env, content: "{{ lookup('ansible.builtin.template', playbook_dir ~ '/../roles/observability/templates/prober.env.j2') }}"}
+        - name: gatus.env
+          content: |
+            GATUS_DISCORD_WEBHOOK_URL={{ sa_secrets.gatus_discord_webhook_url | default('') }}
+            GATUS_EXTERNAL_TOKEN={{ sa_secrets.gatus_external_token }}
+      no_log: true
+
+    - name: Report the bundle
+      ansible.builtin.debug:
+        msg: "probe bundle for {{ sa_environment }} in {{ probe_bundle_dir }}; next steps in docs/deploy/probe.md"

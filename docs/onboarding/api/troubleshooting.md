@@ -1,4 +1,8 @@
-# Troubleshooting API analytics
+---
+title: "Troubleshooting API analytics"
+sidebarTitle: "Troubleshooting"
+description: "Checks for the OTLP endpoint, the token and the data when API metrics do not appear."
+---
 
 ## Check the token and the endpoint first
 

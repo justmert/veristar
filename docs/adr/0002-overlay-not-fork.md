@@ -1,4 +1,8 @@
-# 0002: Separate services beside Umami, not a fork
+---
+title: "0002: Separate services beside Umami, not a fork"
+sidebarTitle: "0002: Overlay, not fork"
+description: "Why the extra features run as separate services beside an unmodified Umami."
+---
 
 - Status: accepted
 - Date: 2026-11-12

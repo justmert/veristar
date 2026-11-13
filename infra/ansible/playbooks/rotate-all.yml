@@ -452,7 +452,7 @@
 
     - name: Require a healthy node
       ansible.builtin.uri:
-        url: "http://{{ sa_public_ipv4 }}/"
+        url: "http://{{ sa_public_bind_ipv4 | default(sa_public_ipv4) }}/"
         status_code: [308]
         follow_redirects: none
       register: rotate_health

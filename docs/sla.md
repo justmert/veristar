@@ -1,4 +1,7 @@
-# Service targets
+---
+title: "Service targets"
+description: "The operational targets for ingestion, dashboards and security patching, and how each one is measured."
+---
 
 The operational targets the RFP sets for the 12-month service window (RFP 3.4), how each is
 measured, and what stands behind them today. Support response and resolution targets are in
@@ -20,10 +23,10 @@ The tenant terms say the same (`docs/compliance/terms.md` section 7).
 
 ## How availability is measured
 
-The `prober` is designed to run on its own small server at a different provider (Scaleway,
-`fr-par`) from the system it watches (Hetzner), so a provider-wide outage of the platform
-cannot also take down its measurement (that server is not yet created, an operator input. Every 30 seconds it pushes one result per measure to the Gatus status
-page at `status.<BASE_DOMAIN>` (`docs/reference/observability.md`, Measures).
+The `prober` runs outside Azure, on a server of the operator, so an outage of the platform
+cannot also take down its measurement ([deploy/probe.md](deploy/probe.md)). Every 30 seconds it
+pushes one result per measure to Gatus beside it (`docs/reference/observability.md`,
+Measures), and an uptime monitor alerts the operator on each measure.
 
 - **Ingestion** (`slo_ingestion`) is available in an interval when both answered: the gateway
   accepted the probe's web event with 202, and the collector accepted its OTLP metric with
@@ -63,23 +66,24 @@ patched production. The internal target is 8 hours, leaving 16 hours of margin.
 
 ## Hosting for the service window
 
-The providers, the monthly cost per environment (about 191 EUR plus USD 1 for production, read
-2026-11-13) and the billing requirements for the 12 months of hosting are in
+The providers (Microsoft Azure, region Sweden Central, and Cloudflare DNS), the monthly cost per
+environment (about 261 USD for production pay as you go, or about 179 USD with 1-year reserved
+VMs, read 2026-11-13) and the billing requirements for the 12 months of hosting are in
 [deploy/prerequisites.md](deploy/prerequisites.md), "Hosting". Who holds the accounts and pays is
 an open question to SCF and is not decided.
 
 ## What stands behind the targets today
 
-Stated plainly, as of 2026-11-13. No production or staging environment exists yet: the domain,
-cloud and DNS accounts are inputs that have not been supplied (plan inputs I4, I5, I6). The
-targets are designed for, not yet demonstrated.
+As of 2026-11-13. No production or staging environment exists yet. The domain (`veristar.app`),
+the Azure subscription and the Cloudflare token are supplied, and `tofu plan` ran against them;
+the first apply follows review. The targets are designed for, not yet demonstrated.
 
 ### Availability
 
 The availability statement with the arithmetic is
 [reference/availability.md](reference/availability.md). The design keeps ingestion separate
-from everything that can be slow or down: three edge nodes in three locations accept events
-and metrics into a replicated queue (NATS JetStream, three replicas) and answer without
+from everything that can be slow or down: three edge nodes in three Azure availability zones
+accept events and metrics into a replicated queue (NATS JetStream, three replicas) and answer without
 touching PostgreSQL or Umami. The queue holds web events for 72 hours, so a full outage of the
 core tier costs the dashboards, not ingestion.
 
@@ -87,37 +91,25 @@ Windows that follow from the configuration, not from measurement:
 
 | Failure | Ingestion | Dashboards |
 |---|---|---|
-| One edge node lost | requests to it fail until DNS drops it: health check every 30 s, TTL 60 s, up to about 90 s; a browser that cannot connect tries the next address | none |
+| One edge node or zone lost | requests to it fail until Traffic Manager drops it: probe every 10 s, three failures, 10 s answer TTL, up to about 45 s; a browser that cannot connect tries the next address of the same answer | none, unless the zone holds a core node |
+| One core node lost | none | up to about 130 s for clients of that address (30 s probing) |
 | Database leader lost | none | at most about 40 s until promotion |
 | Whole core tier down | none, queued for up to 72 h | down for the whole outage |
 | Full NATS restart | refused (503) until the queue has quorum again; visitors of that day counted again | none |
 
-With those windows the 99.99% ingestion budget of 259 s a month absorbs about two unhandled
-edge losses a month, and the 99.90% dashboard budget of 2,592 s absorbs about 64 database
-failovers or one 43-minute core outage. Real windows can only be longer.
+With those windows the 99.99% ingestion budget of 259 s a month absorbs five edge losses a
+month, and the 99.90% dashboard budget of 2,592 s absorbs 19 core node losses, 64 database
+failovers or one 43-minute core outage. The staging drills measure the real windows.
 
-### Single points of failure
+### Dependencies
 
-From [reference/availability.md](reference/availability.md):
-
-- **The DNS provider (bunny.net).** All failover for edge and core depends on its health
-  checks and record sets.
-- **The single cloud provider (Hetzner).** All three locations, the private network and the
-  object storage share one provider. An account suspension, a billing failure or a
-  provider-wide outage takes everything.
-- **Resolver caching.** Resolvers and browsers can keep a removed address past the TTL.
-- **The port-80 health check sees no TLS failure.** A broken certificate on port 443 leaves the
-  node in DNS. The prober checks each node's certificate by its own address, and the
-  `CertificateExpiringSoon` alert fires 14 days before expiry (`docs/runbooks/alerts.md`).
-- **One active replayer feeding a fixed number of Umami processes.** Each core node runs
-  `core_umami_processes` Umami processes (default 4). The this stage load drill measured about
-  280 web events a second with one process, below the 500 a second of ten times the expected
-  peak; four processes drained about 2.3 times one process in a later local measurement, and
-  the 10x drill was not rerun with them. Events are queued, not lost, but the dashboards can
-  fall behind.
-- **Two database nodes.** While the replica is down the leader runs alone; a second failure in
-  that time loses what only the leader had, back to the last archived WAL (at most 60 s).
-- **The backup repository** in one object storage location, not yet tested.
+From [reference/availability.md](reference/availability.md), "Dependencies the targets rest
+on": one Azure region with three availability zones (the loss of any one zone is tolerated),
+Traffic Manager and Cloudflare for DNS failover, resolver caching (MultiValue answers carry
+every healthy address), the port-80 check that sees no TLS failure (the prober checks every
+node's certificate and `CertificateExpiringSoon` fires 14 days ahead), the web event drain rate
+of two Umami processes per core node (bursts queue and drain after), two database nodes, and
+billing.
 
 ### What was and was not drilled
 
@@ -132,9 +124,9 @@ host, location delays simulated), not on staging. The record is
 | Edge node loss | invalid: the host froze for about 104 s at the moment of the power-off. It found a real defect (a NATS container not restarted after power-on); a fix is in place and not yet re-verified |
 | NATS member loss, database leader loss, whole core tier down, location partition, full NATS restart, point-in-time restore, certificate renewal, rolling deploy under load, clock skew detection | **not run** |
 
-Blocked regardless of the host, until staging exists: the real bunny.net removal timing,
-backups on Hetzner Object Storage and real cross-location latency, and ACME certificate
-issuance.
+Measured on staging, which needs the first apply: Traffic Manager removal timing, backups on
+Azure Blob Storage, latency between availability zones, and ACME certificate issuance through
+Cloudflare DNS.
 
 ### Monitoring
 
@@ -143,7 +135,8 @@ the SLO report were built and verified on a local test stack (the design). In th
 fire-drills 16 alerts fired and resolved and 3 more fired for real without a drill
 ([runbooks/alerts.md](runbooks/alerts.md), "Fire-drills"). The observability role is applied
 by `site.yml` on the edge and core nodes. Not yet done: delivery of alerts to the real
-receiver (Discord webhook, an operator input and the probe server at the second provider an operator input.
+receiver (Discord webhook, an operator input and the probe bundle with its uptime monitors on the
+operator's server.
 
 ### Patching
 

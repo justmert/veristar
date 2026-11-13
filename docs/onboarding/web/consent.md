@@ -1,16 +1,20 @@
-# Consent: starting the tracker later
+---
+title: "Consent: starting the tracker later"
+sidebarTitle: "Consent"
+description: "Load the tracker without measuring, and start it once the visitor agrees."
+---
 
 Some sites must ask visitors before measuring them; whether yours must depends on the countries it
 serves ([`docs/compliance/jurisdictions.md`](../../compliance/jurisdictions.md)). For those sites the
 tracker can load without doing anything and start only when your consent banner says so. Tested by
-the page [`consent.html`](../../../examples/static-html/src/consent.html) of the static example,
+the page [`consent.html`](https://github.com/justmert/veristar/blob/main/examples/static-html/src/consent.html) of the static example,
 which runs in the browser test matrix.
 
 ## How it works
 
 Add `data-auto-track="false"` to the tag from the console:
 
-<!-- snippet version=1.1.0 auto-track-off -->
+{/* snippet version=1.1.0 auto-track-off */}
 ```html
 <script defer src="https://in.analytics.example/v/1.1.0/sdk.js" integrity="sha384-lxlitLtIMAeT/K3ieev+MeMGxZe7oceuWLOy8GZAjK7TMKS2Uh9UPmfGLBczUPsq" crossorigin="anonymous" data-website-id="3f6a0c2e-9b1d-4e7a-8c5f-1d2e3f4a5b6c" data-auto-track="false"></script>
 ```
@@ -27,7 +31,7 @@ the next page load, call `umami.start()` again as soon as you know the visitor a
 
 The example page loads its own consent code after the tag, so it runs after `sdk.js`:
 
-<!-- include examples/static-html/src/consent.html region=head -->
+{/* include examples/static-html/src/consent.html region=head */}
 ```html
 <!-- the tag from the console with data-auto-track="false" added -->
 <!-- tracker:consent -->
@@ -37,7 +41,7 @@ The example page loads its own consent code after the tag, so it runs after `sdk
 
 and keeps the choice in its own storage key:
 
-<!-- include examples/static-html/src/consent.js region=consent -->
+{/* include examples/static-html/src/consent.js region=consent */}
 ```js
 // the site's own consent banner. the tracker tag carries
 // data-auto-track="false", so sdk.js loads but sends nothing until start().
@@ -80,7 +84,7 @@ Where measurement runs without prior consent, visitors must still be able to obj
 checks the opt-out flag `umami.disabled` in the site's local storage before every event, so a
 button in your privacy notice only has to set it:
 
-<!-- include examples/static-html/src/page.js region=opt-out -->
+{/* include examples/static-html/src/page.js region=opt-out */}
 ```js
 // an opt-out control for the site's privacy notice. the tracker checks this
 // flag before every send, in this browser, from the next event on.

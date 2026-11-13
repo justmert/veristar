@@ -1,7 +1,10 @@
-# React Router with server rendering
+---
+title: "React Router with server rendering"
+description: "Add the tracker to a React Router app in framework mode with server rendering."
+---
 
 For React Router in framework mode (the successor of Remix), rendered on the server. Tested by the
-example [`examples/react-router-ssr`](../../../examples/react-router-ssr) (React Router 8.4.0 with
+example [`examples/react-router-ssr`](https://github.com/justmert/veristar/tree/main/examples/react-router-ssr) (React Router 8.4.0 with
 `ssr: true`, served by `@react-router/serve`), which runs in the browser test matrix.
 
 ## Where the tag goes
@@ -11,7 +14,7 @@ writes it into the server-rendered HTML; on the client, React does not run it a 
 
 In the example, the values come from the server's environment so tests can use their own site id:
 
-<!-- include examples/react-router-ssr/app/root.tsx region=head -->
+{/* include examples/react-router-ssr/app/root.tsx region=head */}
 ```tsx
 {data ? (
   <script
@@ -26,7 +29,7 @@ In the example, the values come from the server's environment so tests can use t
 
 The root loader reads them from the release manifest of the tracker package:
 
-<!-- include examples/react-router-ssr/app/tracker.server.ts -->
+{/* include examples/react-router-ssr/app/tracker.server.ts */}
 ```ts
 // the tracker tag's attributes, read on the server for every request. they come
 // from the same release manifest the snippet generator uses; react renders them
@@ -56,7 +59,7 @@ export function trackerTag(): TrackerTag {
 In your app, write the three values from the console's tag directly into the element instead:
 `src`, `integrity` and `data-website-id` of
 
-<!-- snippet version=1.1.0 -->
+{/* snippet version=1.1.0 */}
 ```html
 <script defer src="https://in.analytics.example/v/1.1.0/sdk.js" integrity="sha384-lxlitLtIMAeT/K3ieev+MeMGxZe7oceuWLOy8GZAjK7TMKS2Uh9UPmfGLBczUPsq" crossorigin="anonymous" data-website-id="3f6a0c2e-9b1d-4e7a-8c5f-1d2e3f4a5b6c"></script>
 ```
@@ -72,7 +75,7 @@ with `history.pushState`, which the tracker watches, so each is one pageview; ba
 
 Declare `window.umami` once and call it with optional chaining, as in the
 [Vite and React guide](vite-react.md#custom-events); the example's
-[`app/routes/home.tsx`](../../../examples/react-router-ssr/app/routes/home.tsx) does exactly that.
+[`app/routes/home.tsx`](https://github.com/justmert/veristar/blob/main/examples/react-router-ssr/app/routes/home.tsx) does exactly that.
 
 ## What the browser tests check
 

@@ -1,4 +1,7 @@
-# Custom events
+---
+title: "Custom events"
+description: "Send named events of your own, such as a click on a sign-up button, next to the pageviews."
+---
 
 Pageviews are counted without any code beyond the script tag. On top of them you can send your own
 named events, for example a click on a sign-up button. They show up in your site's Umami dashboard
@@ -15,7 +18,7 @@ Two ways, both from Umami's documented integration, so existing Umami instructio
 **From HTML**, with no JavaScript. A click on an element with `data-umami-event` sends an event of
 that name. Every `data-umami-event-<key>` attribute on the same element becomes one data entry:
 
-<!-- include examples/static-html/src/index.html region=event -->
+{/* include examples/static-html/src/index.html region=event */}
 ```html
 <button type="button" id="signup" data-umami-event="signup-click" data-umami-event-plan="free">
   Sign up
@@ -27,7 +30,7 @@ A same-tab link with the attribute waits for the event before it navigates, so t
 
 **From JavaScript**, with `umami.track(name, data)`:
 
-<!-- include examples/static-html/src/page.js region=track -->
+{/* include examples/static-html/src/page.js region=track */}
 ```js
 // umami.track() from page code; the tracker may be blocked, so check first
 document.getElementById("manual").addEventListener("click", () => {

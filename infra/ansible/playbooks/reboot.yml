@@ -69,7 +69,7 @@
   max_fail_percentage: 0
   vars_files: [../vars/pins.yml]
   vars:
-    deploy_drain_seconds: 120
+    deploy_drain_seconds: 150
     sa_image_tag: reboot
   tasks:
     - name: Find out whether this node needs a reboot

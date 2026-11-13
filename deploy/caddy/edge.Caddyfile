@@ -6,7 +6,7 @@
 #   GATEWAY_UPSTREAM   host:port of the local gateway on the private side
 #   EDGE_TLS           first argument of the tls directive: the acme account
 #                      email in production, "internal" for the local ca in tests.
-#                      this stage replaces it with dns-01 through caddy-dns/bunny,
+#                      this stage replaces it with dns-01 through caddy-dns/cloudflare,
 #                      which needs the custom caddy build.
 #
 #   COLLECTOR_GRPC_UPSTREAM    host:port of the collector's otlp grpc listener

@@ -1,4 +1,8 @@
-# Observability reference (this stage)
+---
+title: "Observability reference (this stage)"
+sidebarTitle: "Observability"
+description: "The metrics, probes and alert rules behind monitoring, and the sources they were checked against."
+---
 
 Research findings behind `infra/ansible/roles/observability`, `cmd/prober`,
 `cmd/sloreport` and the alert rules. Everything was read from the pinned

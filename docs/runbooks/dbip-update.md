@@ -1,4 +1,7 @@
-# DB-IP monthly update
+---
+title: "DB-IP monthly update"
+description: "Update the monthly DB-IP country file baked into the gateway image."
+---
 
 The gateway turns a truncated client address into a country code with a local copy of DB-IP's
 "IP to Country Lite" file (CC BY 4.0, attribution required). DB-IP publishes one file per month.

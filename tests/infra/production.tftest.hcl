@@ -1,5 +1,6 @@
 # renders the production root with mocked providers from tests/infra/sample.tfvars
-# and checks the inventory contract in docs/deploy/opentofu.md section 1.
+# and checks the inventory contract in docs/deploy/opentofu.md section 1,
+# the failover profiles, the dns records and the backup storage settings.
 # run by make tofu-check.
 
 variables {
@@ -7,74 +8,99 @@ variables {
   state_passphrase = "fixture-passphrase-for-tofu-test-only"
 }
 
-# hetzner ids are numeric strings; the mock's random strings would fail the
-# number-typed arguments that reference them
-mock_provider "hcloud" {
-  mock_resource "hcloud_firewall" {
-    defaults = { id = "1001" }
+# arm ids are paths; the mock's random strings would not look like one
+mock_provider "azurerm" {
+  mock_resource "azurerm_resource_group" {
+    defaults = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/veristar-production" }
   }
-  mock_resource "hcloud_primary_ip" {
-    defaults = { id = "2001" }
+  mock_resource "azurerm_subnet" {
+    defaults = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/veristar-production/providers/Microsoft.Network/virtualNetworks/production-vnet/subnets/zone" }
   }
-  mock_resource "hcloud_ssh_key" {
-    defaults = { id = "3001" }
+  mock_resource "azurerm_user_assigned_identity" {
+    defaults = {
+      id           = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/veristar-production/providers/Microsoft.ManagedIdentity/userAssignedIdentities/production-core"
+      principal_id = "11111111-1111-1111-1111-111111111111"
+    }
   }
-  mock_resource "hcloud_network" {
-    defaults = { id = "4001" }
+  mock_resource "azurerm_virtual_network" {
+    defaults = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/veristar-production/providers/Microsoft.Network/virtualNetworks/production-vnet" }
   }
-}
-mock_provider "bunnynet" {}
-mock_provider "scaleway" {}
-
-override_resource {
-  target = module.node["production-edge-1"].hcloud_server.this
-  values = {
-    ipv4_address = "203.0.113.11"
-    ipv6_address = "2001:db8:11::1"
+  mock_resource "azurerm_network_security_group" {
+    defaults = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/veristar-production/providers/Microsoft.Network/networkSecurityGroups/production-public" }
   }
-}
-
-override_resource {
-  target = module.node["production-edge-2"].hcloud_server.this
-  values = {
-    ipv4_address = "203.0.113.12"
-    ipv6_address = "2001:db8:12::1"
+  mock_resource "azurerm_public_ip" {
+    defaults = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/veristar-production/providers/Microsoft.Network/publicIPAddresses/node-v4" }
   }
-}
-
-override_resource {
-  target = module.node["production-edge-3"].hcloud_server.this
-  values = {
-    ipv4_address = "203.0.113.13"
-    ipv6_address = "2001:db8:13::1"
+  mock_resource "azurerm_network_interface" {
+    defaults = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/veristar-production/providers/Microsoft.Network/networkInterfaces/node-nic" }
   }
-}
-
-override_resource {
-  target = module.node["production-core-1"].hcloud_server.this
-  values = {
-    ipv4_address = "203.0.113.21"
-    ipv6_address = "2001:db8:21::1"
+  mock_resource "azurerm_linux_virtual_machine" {
+    defaults = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/veristar-production/providers/Microsoft.Compute/virtualMachines/node" }
+  }
+  mock_resource "azurerm_storage_container" {
+    defaults = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/veristar-production/providers/Microsoft.Storage/storageAccounts/fixturebackups/blobServices/default/containers/pgbackrest" }
+  }
+  mock_resource "azurerm_traffic_manager_profile" {
+    defaults = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/veristar-production/providers/Microsoft.Network/trafficManagerProfiles/profile" }
+  }
+  mock_resource "azurerm_storage_account" {
+    defaults = {
+      id                    = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/veristar-production/providers/Microsoft.Storage/storageAccounts/fixturebackups"
+      primary_blob_endpoint = "https://fixturebackups.blob.core.windows.net/"
+    }
   }
 }
 
-override_resource {
-  target = module.node["production-core-2"].hcloud_server.this
-  values = {
-    ipv4_address = "203.0.113.22"
-    ipv6_address = "2001:db8:22::1"
+mock_provider "cloudflare" {
+  mock_data "cloudflare_zone" {
+    defaults = {
+      zone_id      = "023e105f4ecef8ad9ca31a8372d0c353"
+      name_servers = ["ada.ns.cloudflare.com", "bob.ns.cloudflare.com"]
+    }
   }
 }
 
 override_resource {
-  target = module.probe[0].scaleway_instance_ip.v4
+  target = module.node["production-edge-1"].azurerm_public_ip.v4
   values = {
-    address = "198.51.100.50"
+    id         = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/veristar-production/providers/Microsoft.Network/publicIPAddresses/node-v4"
+    ip_address = "203.0.113.11"
   }
 }
 
+override_resource {
+  target = module.node["production-edge-2"].azurerm_public_ip.v4
+  values = {
+    id         = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/veristar-production/providers/Microsoft.Network/publicIPAddresses/node-v4"
+    ip_address = "203.0.113.12"
+  }
+}
 
-run "inventory_without_probe" {
+override_resource {
+  target = module.node["production-edge-3"].azurerm_public_ip.v4
+  values = {
+    id         = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/veristar-production/providers/Microsoft.Network/publicIPAddresses/node-v4"
+    ip_address = "203.0.113.13"
+  }
+}
+
+override_resource {
+  target = module.node["production-core-1"].azurerm_public_ip.v4
+  values = {
+    id         = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/veristar-production/providers/Microsoft.Network/publicIPAddresses/node-v4"
+    ip_address = "203.0.113.21"
+  }
+}
+
+override_resource {
+  target = module.node["production-core-2"].azurerm_public_ip.v4
+  values = {
+    id         = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/veristar-production/providers/Microsoft.Network/publicIPAddresses/node-v4"
+    ip_address = "203.0.113.22"
+  }
+}
+
+run "inventory" {
   command = apply
 
   assert {
@@ -92,9 +118,10 @@ run "inventory_without_probe" {
     error_message = "core must hold two hosts named <env>-core-<n>"
   }
 
+  # the probe runs outside azure (docs/deploy/probe.md), not from this state
   assert {
     condition     = length(output.ansible_inventory.all.children.probe.hosts) == 0
-    error_message = "probe stays empty until probe_enabled"
+    error_message = "probe stays empty: the probe is not an azure node"
   }
 
   assert {
@@ -111,20 +138,20 @@ run "inventory_without_probe" {
     condition = alltrue(flatten([
       for g in ["edge", "core"] : [
         for name, h in output.ansible_inventory.all.children[g].hosts :
-        h.ansible_user == "ops" && h.sa_tier == g && h.sa_provider == "hetzner" && h.ansible_host == h.sa_public_ipv4 && can(cidrnetmask("${h.sa_public_ipv4}/32"))
+        h.ansible_user == "ops" && h.sa_tier == g && h.sa_provider == "azure" && h.ansible_host == h.sa_public_ipv4 && can(cidrnetmask("${h.sa_public_ipv4}/32")) && h.sa_public_ipv6 == null
       ]
     ]))
-    error_message = "ansible_host, user, tier or provider wrong"
+    error_message = "ansible_host, user, tier, provider or address family wrong"
   }
 
   assert {
-    condition     = [for h in values(output.ansible_inventory.all.children.edge.hosts) : h.sa_location] == ["fsn1", "nbg1", "hel1"]
-    error_message = "edge nodes must sit in fsn1, nbg1 and hel1"
+    condition     = [for h in values(output.ansible_inventory.all.children.edge.hosts) : h.sa_location] == ["swedencentral-1", "swedencentral-2", "swedencentral-3"]
+    error_message = "edge nodes must sit in zones 1, 2 and 3"
   }
 
   assert {
-    condition     = [for h in values(output.ansible_inventory.all.children.core.hosts) : h.sa_location] == ["fsn1", "nbg1"]
-    error_message = "core nodes must sit in fsn1 and nbg1"
+    condition     = [for h in values(output.ansible_inventory.all.children.core.hosts) : h.sa_location] == ["swedencentral-1", "swedencentral-2"]
+    error_message = "core nodes must sit in zones 1 and 2"
   }
 
   assert {
@@ -139,70 +166,73 @@ run "inventory_without_probe" {
     condition = jsonencode(output.ansible_inventory.all.vars) == jsonencode({
       sa_environment          = "production"
       sa_base_domain          = "example.org"
-      sa_hostnames            = { in = "in.example.org", otlp = "otlp.example.org", app = "app.example.org", web = "web.example.org", status = "status.example.org" }
+      sa_hostnames            = { app = "app.example.org", in = "in.example.org", otlp = "otlp.example.org", web = "web.example.org", status = "status.example.org" }
       sa_private_network_cidr = "10.10.0.0/16"
-      sa_admin_cidrs          = ["192.0.2.0/24", "2001:db8:ad::/48"]
-      sa_object_storage       = { endpoint = "https://hel1.your-objectstorage.com", region = "hel1", backup_bucket = "fixture-backups" }
+      sa_admin_cidrs          = ["192.0.2.0/24", "198.51.100.7/32", "2001:db8:ad::/48"]
+      sa_object_storage       = { endpoint = "https://fixturebackups.blob.core.windows.net", region = "swedencentral", backup_bucket = "pgbackrest" }
     })
     error_message = "group vars do not match the contract"
   }
 
-  # dns: in and otlp carry the three edge addresses, app and web the two
-  # core addresses, each per family and http monitored; plus caa
   assert {
-    condition = { for k, r in module.dns.records : k => r.value if r.type != "CAA" } == merge(
-      { for l in ["in", "otlp"] : "${l}/A/0" => "203.0.113.11" },
-      { for l in ["in", "otlp"] : "${l}/A/1" => "203.0.113.12" },
-      { for l in ["in", "otlp"] : "${l}/A/2" => "203.0.113.13" },
-      { for l in ["in", "otlp"] : "${l}/AAAA/0" => "2001:db8:11::1" },
-      { for l in ["in", "otlp"] : "${l}/AAAA/1" => "2001:db8:12::1" },
-      { for l in ["in", "otlp"] : "${l}/AAAA/2" => "2001:db8:13::1" },
-      { for l in ["app", "web"] : "${l}/A/0" => "203.0.113.21" },
-      { for l in ["app", "web"] : "${l}/A/1" => "203.0.113.22" },
-      { for l in ["app", "web"] : "${l}/AAAA/0" => "2001:db8:21::1" },
-      { for l in ["app", "web"] : "${l}/AAAA/1" => "2001:db8:22::1" },
+    condition     = module.node["production-edge-1"].server_type == "Standard_B2als_v2" && module.node["production-core-1"].server_type == "Standard_B2as_v2"
+    error_message = "the default vm sizes are the approved ones"
+  }
+}
+
+# failover: in and otlp over the three edge addresses with 10 s probing,
+# app and web over the two core addresses with 30 s probing, all on the
+# port 80 health answer where 308 is healthy
+run "failover" {
+  command = apply
+
+  assert {
+    condition = { for k, e in module.failover.endpoints : k => e.target } == merge(
+      { for l in ["in", "otlp"] : "${l}/0" => "203.0.113.11" },
+      { for l in ["in", "otlp"] : "${l}/1" => "203.0.113.12" },
+      { for l in ["in", "otlp"] : "${l}/2" => "203.0.113.13" },
+      { for l in ["app", "web"] : "${l}/0" => "203.0.113.21" },
+      { for l in ["app", "web"] : "${l}/1" => "203.0.113.22" },
     )
-    error_message = "dns record sets do not carry the expected addresses"
+    error_message = "traffic manager endpoints do not carry the expected addresses"
   }
 
   assert {
-    condition     = alltrue([for r in values(module.dns.records) : r.monitor_type == "Http" if r.type != "CAA"])
-    error_message = "every address record must be http monitored"
+    condition = alltrue([
+      for l, m in module.failover.monitors :
+      m.routing == "MultiValue" && m.protocol == "HTTP" && m.port == 80 && m.path == "/" && contains(m.codes, "308-308")
+    ])
+    error_message = "every profile must be multivalue and probe http port 80, accepting the 308"
+  }
+
+  assert {
+    condition = (
+      module.failover.monitors["in"].interval == 10 && module.failover.monitors["otlp"].interval == 10 &&
+      module.failover.monitors["app"].interval == 30 && module.failover.monitors["web"].interval == 30
+    )
+    error_message = "ingestion profiles probe every 10 s, dashboard profiles every 30 s"
+  }
+}
+
+# dns: one dns-only cname per hostname to its profile, plus caa
+run "dns" {
+  command = apply
+
+  assert {
+    condition = { for k, r in module.dns.records : k => r.value if r.type == "CNAME" } == {
+      for l in ["app", "in", "otlp", "web"] : "${l}/CNAME" => module.failover.fqdns[l]
+    }
+    error_message = "every hostname must be a cname to its traffic manager profile"
+  }
+
+  assert {
+    condition     = alltrue([for r in values(module.dns.records) : r.proxied == false])
+    error_message = "no record may be proxied: the gateway needs the client address"
   }
 
   assert {
     condition     = jsonencode(sort([for r in values(module.dns.records) : r.value if r.type == "CAA"])) == jsonencode([";", "letsencrypt.org"])
     error_message = "caa must allow only let's encrypt and forbid wildcards"
-  }
-}
-
-run "inventory_with_probe" {
-  command = apply
-
-  variables {
-    probe_enabled       = true
-    probe_instance_type = "fixture-probe-type"
-    probe_image         = "fixture-probe-image"
-  }
-
-  assert {
-    condition     = keys(output.ansible_inventory.all.children.probe.hosts) == ["production-probe-1"]
-    error_message = "probe host missing"
-  }
-
-  assert {
-    condition = jsonencode(output.ansible_inventory.all.children.probe.hosts["production-probe-1"]) == jsonencode({
-      ansible_host   = "198.51.100.50"
-      ansible_user   = "ops"
-      sa_index       = 1
-      sa_location    = "fr-par-1"
-      sa_private_ip  = null
-      sa_provider    = "scaleway"
-      sa_public_ipv4 = "198.51.100.50"
-      sa_public_ipv6 = null
-      sa_tier        = "probe"
-    })
-    error_message = "probe host vars do not match the contract"
   }
 }
 
@@ -216,20 +246,20 @@ run "inventory_without_restore" {
 }
 
 # the restore node of playbooks/restore.yml: core-sized, in
-# the chosen location, on the private network at .41
+# the chosen zone, on the private network at .41
 run "inventory_with_restore" {
   command = apply
 
   variables {
-    restore_enabled  = true
-    restore_location = "hel1"
+    restore_enabled = true
+    restore_zone    = "3"
   }
 
   override_resource {
-    target = module.node["production-restore-1"].hcloud_server.this
+    target = module.node["production-restore-1"].azurerm_public_ip.v4
     values = {
-      ipv4_address = "203.0.113.41"
-      ipv6_address = "2001:db8:41::1"
+      id         = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/veristar-production/providers/Microsoft.Network/publicIPAddresses/node-v4"
+      ip_address = "203.0.113.41"
     }
   }
 
@@ -238,18 +268,18 @@ run "inventory_with_restore" {
       ansible_host   = "203.0.113.41"
       ansible_user   = "ops"
       sa_index       = 1
-      sa_location    = "hel1"
+      sa_location    = "swedencentral-3"
       sa_private_ip  = "10.10.3.41"
-      sa_provider    = "hetzner"
+      sa_provider    = "azure"
       sa_public_ipv4 = "203.0.113.41"
-      sa_public_ipv6 = "2001:db8:41::1"
+      sa_public_ipv6 = null
       sa_tier        = "restore"
     })
     error_message = "restore host vars do not match the contract"
   }
 
   assert {
-    condition     = module.node["production-restore-1"].server_type == "fixture-core-type"
+    condition     = module.node["production-restore-1"].server_type == "Standard_B2as_v2"
     error_message = "the restore node must be sized like a core node"
   }
 
@@ -277,4 +307,14 @@ run "short_passphrase_is_refused" {
   }
 
   expect_failures = [var.state_passphrase]
+}
+
+run "floating_image_is_refused" {
+  command = plan
+
+  variables {
+    server_image_version = "latest"
+  }
+
+  expect_failures = [var.server_image_version]
 }

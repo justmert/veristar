@@ -1,4 +1,7 @@
-# Records of processing
+---
+title: "Records of processing"
+description: "The records of processing activities for the service."
+---
 
 > **Status: draft, pending legal review an operator input.** Not legal advice. Last
 > updated 2026-11-12. Two records: the operator as processor for tenants

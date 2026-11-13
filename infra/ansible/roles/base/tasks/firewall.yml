@@ -1,9 +1,10 @@
 ---
-# the host firewall matches the cloud firewall on the public interface and
-# adds what the cloud firewall cannot: hetzner does not filter the private
-# network, and docker-published ports bypass the input chain, so the forward
-# chain drops everything reaching containers from the public side except 80
-# and 443. its own table and unit are used because debian's nftables.service
+# the host firewall matches the cloud firewall (the azure nsg) on the public
+# side and adds what the cloud firewall cannot: the nsg allows all traffic
+# inside the virtual network, and docker-published ports bypass the input
+# chain, so the forward chain drops everything reaching containers from the
+# public side except 80 and 443 and, on azure's single interface, the
+# private network. its own table and unit are used because debian's nftables.service
 # flushes the whole ruleset on stop, which would remove docker's rules.
 - name: Do not run debian's ruleset-flushing nftables unit
   ansible.builtin.systemd_service:

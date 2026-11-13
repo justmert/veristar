@@ -5,14 +5,14 @@
       - sa_tier == 'edge'
       - groups['edge'] | length == 3
       - sa_secrets is defined
-      - sa_tls in ['bunny', 'bunny-delegated', 'internal']
+      - sa_tls in ['cloudflare', 'cloudflare-delegated', 'internal']
       - sa_tls != 'internal' or sa_environment == 'local'
-      # bunny-delegated: certificates through the old zone's cname during a
+      # cloudflare-delegated: certificates through the old zone's cname during a
       # handover cutover (docs/handover/plan.md section 2.3)
-      - sa_tls != 'bunny-delegated' or (sa_acme_challenge_domain | default('')) is match('^[a-z0-9_.-]+\\.[a-z]+$')
+      - sa_tls != 'cloudflare-delegated' or (sa_acme_challenge_domain | default('')) is match('^[a-z0-9_.-]+\\.[a-z]+$')
     fail_msg: >-
       edge needs three edge hosts, the secrets role first, and acme dns-01
-      (sa_tls bunny) outside the local converge
+      (sa_tls cloudflare) outside the local converge
 
 - name: Name the edge peers
   ansible.builtin.set_fact:
@@ -163,7 +163,7 @@
 
 - name: Wait for this node's composite health on port 80
   ansible.builtin.uri:
-    url: "http://{{ sa_public_ipv4 }}/"
+    url: "http://{{ sa_public_bind_ipv4 | default(sa_public_ipv4) }}/"
     follow_redirects: none
     status_code: 308
   register: edge_health

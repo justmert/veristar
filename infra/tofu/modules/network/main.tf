@@ -1,7 +1,7 @@
 terraform {
   required_providers {
-    hcloud = {
-      source = "hetznercloud/hcloud"
+    azurerm = {
+      source = "hashicorp/azurerm"
     }
   }
 }
@@ -11,8 +11,17 @@ variable "name_prefix" {
   type        = string
 }
 
+variable "resource_group_name" {
+  type = string
+}
+
+variable "location" {
+  description = "azure region"
+  type        = string
+}
+
 variable "ip_range" {
-  description = "private network range, a /16"
+  description = "virtual network range, a /16"
   type        = string
 
   validation {
@@ -21,13 +30,8 @@ variable "ip_range" {
   }
 }
 
-variable "network_zone" {
-  description = "hetzner network zone that holds every location"
-  type        = string
-}
-
-variable "locations" {
-  description = "location name to subnet number; subnet n is the n-th /24 of ip_range"
+variable "zones" {
+  description = "availability zone to subnet number; subnet n is the n-th /24 of ip_range"
   type        = map(number)
 }
 
@@ -46,95 +50,120 @@ variable "admin_cidrs" {
   }
 }
 
-variable "labels" {
+variable "tags" {
   type = map(string)
 }
 
-resource "hcloud_network" "this" {
-  name     = "${var.name_prefix}-private"
-  ip_range = var.ip_range
-  labels   = var.labels
+resource "azurerm_virtual_network" "this" {
+  name                = "${var.name_prefix}-vnet"
+  resource_group_name = var.resource_group_name
+  location            = var.location
+  address_space       = [var.ip_range]
+  tags                = var.tags
 }
 
-# subnets live in a network zone, not a location; one /24 per location only
-# makes a private address tell where the node runs
-resource "hcloud_network_subnet" "location" {
-  for_each = var.locations
+# azure subnets span every zone of the region; one /24 per zone only makes a
+# private address tell which zone a node runs in. the storage service
+# endpoint lets the backup storage account accept these subnets while it
+# refuses every other network.
+resource "azurerm_subnet" "zone" {
+  for_each = var.zones
 
-  network_id   = hcloud_network.this.id
-  type         = "cloud"
-  network_zone = var.network_zone
-  ip_range     = cidrsubnet(var.ip_range, 8, each.value)
+  name                 = "zone-${each.key}"
+  resource_group_name  = var.resource_group_name
+  virtual_network_name = azurerm_virtual_network.this.name
+  address_prefixes     = [cidrsubnet(var.ip_range, 8, each.value)]
+  # every node has its own public address, so azure's implicit outbound
+  # access is never used; turning it off keeps a node without a public
+  # address from reaching the internet by accident
+  default_outbound_access_enabled = false
+
+  service_endpoint {
+    service = "Microsoft.Storage"
+  }
+}
+
+# the nsg filters internet traffic. azure's default rules allow traffic
+# inside the virtual network, which is left to the host firewall of the
+# ansible base role and to the internal mtls, as on every private link.
+resource "azurerm_network_security_group" "public" {
+  name                = "${var.name_prefix}-public"
+  resource_group_name = var.resource_group_name
+  location            = var.location
+  tags                = var.tags
 }
 
 locals {
-  anywhere = ["0.0.0.0/0", "::/0"]
+  rules = {
+    # http on port 80 is also the traffic manager health probe
+    http  = { priority = 100, protocol = "Tcp", port = "80", sources = ["Internet"], description = "http and the traffic manager health probe" }
+    https = { priority = 110, protocol = "Tcp", port = "443", sources = ["Internet"], description = "https and otlp grpc" }
+    h3    = { priority = 120, protocol = "Udp", port = "443", sources = ["Internet"], description = "http/3, caddy serves it on udp 443" }
+    icmp  = { priority = 130, protocol = "Icmp", port = "*", sources = ["Internet"], description = "icmp, keeps path mtu discovery working" }
+    ssh   = { priority = 140, protocol = "Tcp", port = "22", sources = var.admin_cidrs, description = "ssh from admin ranges only" }
+  }
 }
 
-# cloud firewalls filter only public interfaces. private network traffic is
-# left to the host firewall of the ansible base role.
-resource "hcloud_firewall" "public" {
-  name   = "${var.name_prefix}-public"
-  labels = var.labels
+resource "azurerm_network_security_rule" "inbound" {
+  for_each = local.rules
 
-  rule {
-    description = "http, also the bunny.net health monitor"
-    direction   = "in"
-    protocol    = "tcp"
-    port        = "80"
-    source_ips  = local.anywhere
-  }
+  name                        = each.key
+  description                 = each.value.description
+  resource_group_name         = var.resource_group_name
+  network_security_group_name = azurerm_network_security_group.public.name
+  priority                    = each.value.priority
+  direction                   = "Inbound"
+  access                      = "Allow"
+  protocol                    = each.value.protocol
+  source_port_range           = "*"
+  destination_port_range      = each.value.port
+  source_address_prefix       = length(each.value.sources) == 1 ? each.value.sources[0] : null
+  source_address_prefixes     = length(each.value.sources) == 1 ? null : each.value.sources
+  destination_address_prefix  = "*"
+}
 
-  rule {
-    description = "https and otlp grpc"
-    direction   = "in"
-    protocol    = "tcp"
-    port        = "443"
-    source_ips  = local.anywhere
-  }
+# anything else from the internet; above azure's default rules (65000+),
+# below the allow rules
+resource "azurerm_network_security_rule" "deny_internet" {
+  name                        = "deny-internet"
+  description                 = "everything else from the internet"
+  resource_group_name         = var.resource_group_name
+  network_security_group_name = azurerm_network_security_group.public.name
+  priority                    = 4000
+  direction                   = "Inbound"
+  access                      = "Deny"
+  protocol                    = "*"
+  source_port_range           = "*"
+  destination_port_range      = "*"
+  source_address_prefix       = "Internet"
+  destination_address_prefix  = "*"
+}
 
-  rule {
-    description = "http/3, caddy serves it on udp 443"
-    direction   = "in"
-    protocol    = "udp"
-    port        = "443"
-    source_ips  = local.anywhere
-  }
+resource "azurerm_subnet_network_security_group_association" "zone" {
+  for_each = azurerm_subnet.zone
 
-  rule {
-    description = "icmp, keeps path mtu discovery working"
-    direction   = "in"
-    protocol    = "icmp"
-    source_ips  = local.anywhere
-  }
-
-  rule {
-    description = "ssh from admin ranges only"
-    direction   = "in"
-    protocol    = "tcp"
-    port        = "22"
-    source_ips  = var.admin_cidrs
-  }
+  subnet_id                 = each.value.id
+  network_security_group_id = azurerm_network_security_group.public.id
 }
 
 output "network_id" {
-  value = hcloud_network.this.id
+  value = azurerm_virtual_network.this.id
 }
 
 output "ip_range" {
-  value = hcloud_network.this.ip_range
+  value = var.ip_range
 }
 
 output "subnets" {
-  description = "location to subnet id and range"
+  description = "zone to subnet id and range"
   value = {
-    for loc, s in hcloud_network_subnet.location : loc => {
+    for z, s in azurerm_subnet.zone : z => {
       id       = s.id
-      ip_range = s.ip_range
+      ip_range = s.address_prefixes[0]
     }
   }
 }
 
-output "public_firewall_id" {
-  value = hcloud_firewall.public.id
+output "public_nsg_id" {
+  value = azurerm_network_security_group.public.id
 }

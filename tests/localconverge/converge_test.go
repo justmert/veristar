@@ -68,7 +68,7 @@ func loadInventory(t *testing.T) inventory {
 }
 
 // transport resolves every platform hostname to the given address, as the
-// bunny.net record sets would, and trusts caddy's local ca without checking
+// traffic manager's answers would, and trusts caddy's local ca without checking
 // (the local converge has no public certificates).
 func transport(addr string) *http.Transport {
 	d := &net.Dialer{Timeout: 10 * time.Second}

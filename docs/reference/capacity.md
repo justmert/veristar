@@ -1,4 +1,7 @@
-# API metrics capacity
+---
+title: "API metrics capacity"
+description: "Measured storage cost of API metric rows, extrapolated to the retention horizons."
+---
 
 this stage measurement of what API metric rows cost in PostgreSQL, and the
 extrapolation to the retention horizons: minute rows for 30 days

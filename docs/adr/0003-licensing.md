@@ -1,4 +1,7 @@
-# 0003: Licensing
+---
+title: "0003: Licensing"
+description: "The open-source licence of the repository and of the infrastructure tooling it depends on."
+---
 
 - Status: accepted
 - Date: 2026-11-12
@@ -12,7 +15,7 @@ infrastructure as code, must live in one open-source monorepo.
 Umami is not forked (ADR 0002), so its licence does not dictate ours. The one
 exception is the browser tracker in `packages/tracker`, whose source is derived
 from Umami's tracker. Umami is MIT licensed, with the notice
-"Copyright (c) 2022 Umami Software, Inc. <hello@umami.is>"
+"Copyright (c) 2022 Umami Software, Inc. \<hello@umami.is\>"
 ([LICENSE at v3.5.0](https://github.com/umami-software/umami/blob/v3.5.0/LICENSE)).
 The MIT licence requires that "The above copyright notice and this permission
 notice shall be included in all copies or substantial portions of the Software."
@@ -52,8 +55,8 @@ OSI approved.
   the tracker's own `LICENSE` make this visible, and new directories default to
   Apache-2.0.
 - Terraform-only features or providers that do not publish to the OpenTofu
-  registry cannot be used. The providers chosen in the plan (Hetzner Cloud,
-  bunny.net, Scaleway) are checked against the OpenTofu registry in this stage.
+  registry cannot be used. The providers in use (`hashicorp/azurerm` and
+  `cloudflare/cloudflare`) were read from the OpenTofu registry on 2026-11-13.
 - Container images and third-party tools the platform runs (Umami, NATS,
   PostgreSQL, Caddy and others) keep their own licences. They are not
   redistributed as part of this repository's source.

@@ -120,6 +120,21 @@ docs-check:
 docs-update:
 	$(GO) test -count=1 -run TestIncludedSnippets ./tests/docs/ -args -update
 
+# the mintlify documentation site, rooted at docs/ (docs/docs.json). the mint
+# cli is pinned and run through npx, so it stays out of the
+# pnpm workspace. docs-site-check builds the site strictly and checks its
+# links; docs-dev serves it on every interface so another device can open
+# http://<this host>:$(DOCS_PORT).
+MINT_VERSION ?= 4.2.1207
+MINT         ?= npx --yes mint@$(MINT_VERSION)
+DOCS_PORT    ?= 3333
+.PHONY: docs-site-check docs-dev
+docs-site-check:
+	cd docs && $(MINT) validate && $(MINT) broken-links
+
+docs-dev:
+	cd docs && $(MINT) dev --host --port $(DOCS_PORT) --no-open
+
 CMD ?= platformctl
 image:
 	$(DOCKER) build -f deploy/images/go-service.Dockerfile \
@@ -311,11 +326,12 @@ recovery-it:
 	@set -a && . ./$(DEV_ENV) && set +a && UMAMI_IT_URL=$$UMAMI_URL DBIP_MMDB=$(DBIP_MMDB) \
 		$(GO) test -tags recoveryit -race -count=1 -timeout 30m -v ./tests/recovery/
 
-# this stage opentofu (infra/tofu, docs/deploy/opentofu.md). credentials and the
-# state passphrase come only from the env's sops dotenv file; non-secret inputs
-# from infra/tofu/envs/<env>/terraform.tfvars. both are missing until the operator
-# supplies inputs I4, I5, I6, I13 and I14, and the targets stop with the name
-# of what is missing instead of guessing.
+# this stage opentofu (infra/tofu, docs/deploy/opentofu.md). azure is reached
+# through the operator's az cli login an operator input; the cloudflare api token
+# an operator input and the state passphrase come only from the env's sops dotenv
+# file; non-secret inputs from infra/tofu/envs/<env>/terraform.tfvars. both
+# files are missing until the operator supplies inputs I4, I5, I6, I13 and I14,
+# and the targets stop with the name of what is missing instead of guessing.
 TOFU     ?= tofu
 SOPS     ?= sops
 TOFU_DIR := infra/tofu/envs
@@ -324,7 +340,7 @@ export TF_PLUGIN_CACHE_DIR ?= $(HOME)/.cache/opentofu/plugins
 
 define tofu_env
 	@test -f $(TOFU_DIR)/$(1)/terraform.tfvars || { echo "$(TOFU_DIR)/$(1)/terraform.tfvars is missing (inputs I4, I5, I13)" >&2; exit 1; }
-	@test -f infra/secrets/$(1)/tofu.enc.env || { echo "infra/secrets/$(1)/tofu.enc.env is missing (inputs I5, I6, I14)" >&2; exit 1; }
+	@test -f infra/secrets/$(1)/tofu.enc.env || { echo "infra/secrets/$(1)/tofu.enc.env is missing (inputs I6, I14)" >&2; exit 1; }
 	@mkdir -p $(TF_PLUGIN_CACHE_DIR)
 	$(SOPS) exec-env infra/secrets/$(1)/tofu.enc.env '$(2)'
 endef
@@ -339,8 +355,7 @@ tofu_inventory = mkdir -p infra/ansible/inventories/$(1) && $(call tofu_in,$(1))
 
 state-bootstrap:
 	@case "$(ENV)" in staging|production) ;; *) echo "usage: make state-bootstrap ENV=staging|production" >&2; exit 2;; esac
-	@test -f infra/secrets/$(ENV)/tofu.enc.env || { echo "infra/secrets/$(ENV)/tofu.enc.env is missing (inputs I5, I14)" >&2; exit 1; }
-	$(SOPS) exec-env infra/secrets/$(ENV)/tofu.enc.env './scripts/tofu-state-bootstrap.sh $(ENV)'
+	./scripts/tofu-state-bootstrap.sh $(ENV)
 
 # the plan file is encrypted by the env's encryption block
 staging-plan production-plan: %-plan:
@@ -348,26 +363,32 @@ staging-plan production-plan: %-plan:
 
 staging-apply production-apply: %-apply:
 	@test -f $(TOFU_DIR)/$*/tfplan || { echo "run make $*-plan first" >&2; exit 1; }
-	$(call tofu_env,$*,$(call tofu_init,$*) && $(call tofu_in,$*) apply -input=false tfplan && rm -f $(TOFU_DIR)/$*/tfplan && $(call tofu_inventory,$*) && ./scripts/tofu-state-backup.sh $*)
+	$(call tofu_env,$*,$(call tofu_init,$*) && $(call tofu_in,$*) apply -input=false tfplan && rm -f $(TOFU_DIR)/$*/tfplan && $(call tofu_inventory,$*))
 
-# the state bucket keeps no history; every apply copies the encrypted state
-# into the versioned, object-locked backup bucket (docs/deploy/opentofu.md
-# section 6). STATE_ARGS=list or STATE_ARGS="restore <key>" for the rest.
+# the state account keeps every earlier state as a blob version
+# (docs/deploy/opentofu.md section 6). STATE_ARGS="restore <version-id>"
+# puts one back; without it the versions are listed.
 .PHONY: staging-state-backup production-state-backup
 staging-state-backup production-state-backup: %-state-backup:
-	$(call tofu_env,$*,./scripts/tofu-state-backup.sh $* $(STATE_ARGS))
+	./scripts/tofu-state-backup.sh $* $(STATE_ARGS)
 
 staging-inventory production-inventory: %-inventory:
 	$(call tofu_env,$*,$(call tofu_init,$*) && $(call tofu_inventory,$*))
 
-staging-destroy:
-	$(call tofu_env,staging,$(call tofu_init,staging) && $(call tofu_in,staging) destroy -input=false)
+# the backup storage account, the core identity that writes to it and their
+# resource group are kept: backups outlive the servers, and azure refuses to
+# delete an account while it holds immutable versions. TEARDOWN_ALL=1 also
+# destroys them (docs/deploy/teardown.md).
+TOFU_KEEP = $(if $(TEARDOWN_ALL),,-exclude=module.backup_storage -exclude=azurerm_user_assigned_identity.core -exclude=azurerm_resource_group.this)
 
-# production servers and addresses carry delete protection, so this fails
-# until protect is turned off in envs/production/env.tf and applied
+staging-destroy:
+	$(call tofu_env,staging,$(call tofu_init,staging) && $(call tofu_in,staging) destroy -input=false $(TOFU_KEEP))
+
+# production vms, addresses and the backup account carry delete locks, so
+# this fails until protect is turned off in envs/production/env.tf and applied
 production-destroy:
 	@test "$(CONFIRM)" = production || { echo "set CONFIRM=production to destroy production" >&2; exit 1; }
-	$(call tofu_env,production,$(call tofu_init,production) && $(call tofu_in,production) destroy -input=false)
+	$(call tofu_env,production,$(call tofu_init,production) && $(call tofu_in,production) destroy -input=false $(TOFU_KEEP))
 
 # local checks that need no account: formatting, provider schema validation
 # and the inventory contract tests (tests/infra) against mocked providers

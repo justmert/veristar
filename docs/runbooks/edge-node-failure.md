@@ -1,21 +1,25 @@
-# Edge node failure
+---
+title: "Edge node failure"
+description: "Diagnose and recover an edge node that answers badly or not at all."
+---
 
 An edge node (Caddy, gateway, collector, one NATS server, one etcd member) answers badly or not
 at all. Alerts that lead here: `EdgeNodeNotReady`, `ProbeNodeCheckFailing`, `NATSServerDown`,
 `EtcdMembersDown`, `IngestWebErrorRatioHigh`, `IngestOTLPErrorRatioHigh` ([alerts.md](alerts.md)).
-Conventions (node names, addresses, compose directories) are in [README.md](README.md).
+Conventions (node names, addresses, compose directories) are in [overview.md](overview.md).
 
 ## What protects ingestion while you work
 
 - Port 80 of every node answers the node's composite health: 308 healthy, 503 not
-  ([../deploy/ansible.md](../deploy/ansible.md) section 5). bunny.net checks port 80 every 30 s
-  and drops a node that answers 5xx or not at all from the `in` and `otlp` record sets
-  (TTL 60 s). A browser that cannot connect to one address tries the next.
+  ([../deploy/ansible.md](../deploy/ansible.md) section 5). Traffic Manager probes port 80 every
+  10 s and drops a node after three failed probes from the `in` and `otlp` answers (answer
+  TTL 10 s). A browser that cannot connect to one address tries the next.
 - NATS keeps every stream at three replicas; two of three servers keep publishing. etcd keeps
   Patroni's leader key with two of three members.
-- The configured window for clients pinned to a dead address is up to about 90 s
-  ([../reference/availability.md](../reference/availability.md)). It has not been measured
-  against bunny.net an operator input.
+- The configured window for clients pinned to a dead address is up to about 45 s
+  ([../reference/availability.md](../reference/availability.md)); the staging drill measures
+  it. `az network traffic-manager endpoint list -g veristar-<env> --profile-name
+  <domain>-<env>-in --type externalEndpoints -o table` shows each node's monitor status.
 
 ## Steps
 
@@ -29,7 +33,7 @@ Conventions (node names, addresses, compose directories) are in [README.md](READ
    is drained) or does not connect.
 
 2. **Take it out of DNS on purpose** if it is up but misbehaving (wrong answers, high latency),
-   so the DNS monitor stops sending traffic to it while you work:
+   so Traffic Manager stops sending traffic to it while you work:
 
    ```sh
    sudo mkdir -p /etc/veristar/drain
@@ -37,8 +41,8 @@ Conventions (node names, addresses, compose directories) are in [README.md](READ
    curl -s -o /dev/null -w '%{http_code}\n' http://<node public address>/
    ```
 
-   Expected: `503` at once. Wait 120 s before stopping anything (30 s check plus 60 s TTL,
-   with margin; the same wait `deploy.yml` uses).
+   Expected: `503` at once. Wait 120 s before stopping anything (three 10 s probes, the
+   5 s timeout and the 10 s answer TTL, with margin; the same wait `deploy.yml` uses).
 
 3. **See which part fails.** On the node:
 
@@ -76,7 +80,7 @@ Conventions (node names, addresses, compose directories) are in [README.md](READ
    curl -s -o /dev/null -w '%{http_code}\n' http://<node public address>/
    ```
 
-   Expected: `308`. bunny.net adds the address back after its next successful check.
+   Expected: `308`. Traffic Manager adds the address back after its next successful probe.
 
 6. **Check the cluster** from a core node:
 
@@ -93,19 +97,20 @@ Conventions (node names, addresses, compose directories) are in [README.md](READ
 
 ## A node that is gone for good
 
-The server is lost (hardware, deleted, or unbootable). Replace it with OpenTofu, keeping its
-primary IPv4 and IPv6 addresses, which are separate resources and survive the server:
+The VM is lost (deleted, or unbootable). Replace it with OpenTofu, keeping its public IPv4
+address, which is a separate resource and survives the VM, so the Traffic Manager endpoint
+stays valid:
 
 1. Plan the replacement of that one server (staging shown; the node name is the inventory name):
 
    ```sh
    sops exec-env infra/secrets/staging/tofu.enc.env \
-     'tofu -chdir=infra/tofu/envs/staging plan -input=false -replace=module.node["staging-edge-2"].hcloud_server.this -out=tfplan'
+     'tofu -chdir=infra/tofu/envs/staging plan -input=false -replace=module.node["staging-edge-2"].azurerm_linux_virtual_machine.this -out=tfplan'
    ```
 
-   Expected: `Plan: 1 to add, 0 to change, 1 to destroy.` with only that server. Production
-   servers carry rebuild and delete protection, so the plan fails there until `protect` is
-   turned off for that apply ([../deploy/opentofu.md](../deploy/opentofu.md)).
+   Expected: `Plan: 1 to add, 0 to change, 1 to destroy.` with only that VM. Production VMs
+   carry a delete lock, so the apply fails there until `protect` is turned off for that apply
+   ([../deploy/opentofu.md](../deploy/opentofu.md)).
 
 2. `make staging-apply`. Expected: `Apply complete!` and a rewritten
    `infra/ansible/inventories/staging/hosts.json`.
@@ -140,6 +145,6 @@ primary IPv4 and IPv6 addresses, which are separate resources and survive the se
 Not yet exercised: the automatic etcd rejoin of step 4 (`make ops-local` steps `rebuild-edge3`
 and `etcd` drive it, but the run of 2026-11-13 was stopped before them, see the O-6 resolution
 in the review notes), the manual drain and undrain of steps 2 and 5 by hand (the same flag file was
-used by `deploy.yml` in the local converge), DNS removal by bunny.net an operator input, and the
-replacement of a lost node (needs staging, inputs I5 and I6). The multi-node topology cannot
+used by `deploy.yml` in the local converge), removal by Traffic Manager, and the
+replacement of a lost node (both need staging). The multi-node topology cannot
 run on the shared development host, so none of this was repeated in this stage.

@@ -1,9 +1,13 @@
-# Certificate problems
+---
+title: "Certificate problems"
+sidebarTitle: "Certificates"
+description: "Diagnose and fix certificate issuance and renewal on edge and core nodes."
+---
 
 Every node's Caddy gets its own certificates from Let's Encrypt with the ACME DNS-01 challenge
-through bunny.net (`caddy-dns/bunny`, key `bunny_api_key` from `<an operator input>`), for the hostnames
-it serves: edge nodes `in.` and `otlp.<an operator input>`, core nodes `app.` and `web.<an operator input>`, the
-probe `status.<an operator input>`. DNS-01 is used because every node serves the same names, so an HTTP
+in the Cloudflare zone (`caddy-dns/cloudflare`, token `cloudflare_api_token` from `<an operator input>`),
+for the hostnames it serves: edge nodes `in.` and `otlp.<an operator input>`, core nodes `app.` and
+`web.<an operator input>`, and a probe host in the inventory `status.<an operator input>`. DNS-01 is used because every node serves the same names, so an HTTP
 or TLS-ALPN challenge could land on another node ([../deploy/ansible.md](../deploy/ansible.md)
 section 3). Certificates live in the node's `caddydata` volume under `/data/caddy/certificates/`.
 The zone's CAA record allows only `letsencrypt.org` and forbids wildcards.
@@ -37,11 +41,13 @@ does not see TLS, so a node with a broken certificate stays in DNS until you dra
    ```
 
    Common causes:
-   - **bunny.net key** rejected or missing: the log names an authorization error from the DNS
-     provider. Check `bunny_api_key` in the SOPS file and that the key is an account API key
-     (team member keys are not supported). Fix it as in [secret-rotation.md](secret-rotation.md),
-     which rewrites `/etc/veristar/env/caddy.env`.
-   - **CAA or zone delegation**: the domain's name servers must be bunny.net's and the CAA must
+   - **Cloudflare token** rejected or missing: the log names an authorization error from the
+     DNS provider. Check `cloudflare_api_token` in the SOPS file and that the token is active
+     with `Zone:Zone:Read` and `Zone:DNS:Edit` on the zone
+     (`curl -s -H "Authorization: Bearer $TOKEN" https://api.cloudflare.com/client/v4/user/tokens/verify`).
+     Fix it as in [secret-rotation.md](secret-rotation.md), which rewrites
+     `/etc/veristar/env/caddy.env`.
+   - **CAA or zone delegation**: the domain's name servers must be Cloudflare's and the CAA must
      allow `letsencrypt.org`. `dig +short CAA <an operator input>` and `dig +short NS <an operator input>`.
    - **Let's Encrypt rate limits**: the log says so and when to retry. Do not loop restarts.
    - **Clock**: ACME fails with a skewed clock. `chronyc tracking` on the node; the base role
@@ -75,7 +81,7 @@ does not see TLS, so a node with a broken certificate stays in DNS until you dra
 |---|---|---|---|
 | 2026-11-13 | Alert fire-drill: a 7-day certificate served on edge-2 of the observability test stack | CertificateExpiringSoon and the Gatus check for that node fired at 01:34:48 and resolved at 01:39:48 after the normal certificate was back | [alerts.md](alerts.md), fire-drills |
 
-Not yet exercised: issuance and renewal through Let's Encrypt and bunny.net (inputs I4 and I6
+Not yet exercised: issuance and renewal through Let's Encrypt and Cloudflare (first staging converge
 do not exist; the local converge uses Caddy's internal CA), and the forced renewal of step 4,
 whose drill (`tests/drills/cert-renewal.sh`) was not run because the shared host stopped the
 this stage drills ([../reference/drills/2026-11-13.md](../reference/drills/2026-11-13.md)). The

@@ -1,7 +1,10 @@
-# Astro
+---
+title: "Astro"
+description: "Add the tracker to an Astro site, static or server rendered."
+---
 
 For Astro sites, static or server rendered. Tested by the example
-[`examples/astro-ssr`](../../../examples/astro-ssr) (Astro 7.3.8 with `@astrojs/node` in
+[`examples/astro-ssr`](https://github.com/justmert/veristar/tree/main/examples/astro-ssr) (Astro 7.3.8 with `@astrojs/node` in
 standalone mode), which runs in the browser test matrix.
 
 ## Where the tag goes
@@ -9,14 +12,14 @@ standalone mode), which runs in the browser test matrix.
 Put the tag in the `<head>` of the layout every page uses, for example `src/layouts/Base.astro`.
 The example renders the tag from the environment so that tests can use their own site id:
 
-<!-- include examples/astro-ssr/src/layouts/Base.astro region=head -->
+{/* include examples/astro-ssr/src/layouts/Base.astro region=head */}
 ```astro
 <Fragment set:html={trackerTag()} />
 ```
 
 In your layout, write the tag from the console as it is:
 
-<!-- snippet version=1.1.0 -->
+{/* snippet version=1.1.0 */}
 ```html
 <script defer src="https://in.analytics.example/v/1.1.0/sdk.js" integrity="sha384-lxlitLtIMAeT/K3ieev+MeMGxZe7oceuWLOy8GZAjK7TMKS2Uh9UPmfGLBczUPsq" crossorigin="anonymous" data-website-id="3f6a0c2e-9b1d-4e7a-8c5f-1d2e3f4a5b6c"></script>
 ```
@@ -36,7 +39,7 @@ example and were not tested.
 `data-umami-event` attributes work in any template. For a call from page code, use a script with
 `is:inline`, so Astro does not bundle it and it can read `window.umami`:
 
-<!-- include examples/astro-ssr/src/pages/index.astro region=track -->
+{/* include examples/astro-ssr/src/pages/index.astro region=track */}
 ```astro
 <script is:inline>
   // umami.track() from page code; the tracker may be blocked, so check first

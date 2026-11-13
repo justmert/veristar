@@ -1,4 +1,7 @@
-# Data processing terms (template)
+---
+title: "Data processing terms (template)"
+description: "A template for the data processing terms between the operator and a tenant."
+---
 
 > **Status: draft, pending legal review an operator input.** Not legal advice. Last
 > updated 2026-11-12. These terms follow GDPR Art. 28(3) clause by clause (S10).

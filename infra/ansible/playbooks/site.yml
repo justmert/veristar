@@ -19,11 +19,12 @@
     - base
     - secrets
 
-# the pgbackrest bucket with versioning and object lock (roles/storage,
-# an operator input, before any database node can archive to it. the local converge
-# reaches it only in its object storage mode (docs/deploy/local-converge.md).
-# backup_repo_mode defaults to s3 in roles/backup, repeated here because role
-# defaults are not visible to a play's conditions.
+# the pgbackrest repository before any database node archives to it
+# (roles/storage): in azure it reads back what infra/tofu/modules/backup-storage
+# set (versioning, immutability, the container); the local converge's s3
+# stand-in gets its bucket created. backup_repo_mode defaults to azure in
+# roles/backup, repeated here because role defaults are not visible to a
+# play's conditions.
 - name: Backup bucket
   hosts: core
   gather_facts: false
@@ -32,7 +33,7 @@
     - name: Converge the backup bucket
       ansible.builtin.include_role:
         name: storage
-      when: (backup_repo_mode | default('s3')) == 's3'
+      when: (backup_repo_mode | default('azure')) in ['azure', 's3']
 
 - name: Edge infrastructure (nats, etcd)
   hosts: edge
@@ -104,10 +105,14 @@
   roles:
     - observability
 
-# the probe node an operator input, another provider, public interface only): the os
-# baseline without a private network, then caddy for the status page, gatus
-# and the prober. needs the probe tenant's values in the sops file
-# (docs/deploy/bootstrap.md step 10), so it comes after the platform is up.
+# a probe node in the probe group (a host outside azure with a public
+# interface only, added to the inventory by hand): the os baseline without a
+# private network, then caddy for the status page, gatus and the prober. the
+# staging and production inventories from opentofu hold no probe host; the
+# separate probe host runs the prober as a container instead
+# (docs/deploy/probe.md), and this play matches no host. it needs the
+# probe tenant's values in the sops file (docs/deploy/bootstrap.md step 10),
+# so it comes after the platform is up.
 - name: Probe
   hosts: probe
   become: true

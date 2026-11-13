@@ -1,4 +1,7 @@
-# Setting http.route
+---
+title: "Setting http.route"
+description: "Make sure every request carries the route template, so the API dashboard groups requests by route."
+---
 
 The API dashboard groups requests by route: `GET /accounts/{id}` is one row, however many accounts
 there are. The route comes from the `http.route` attribute, the route template your framework
@@ -21,7 +24,7 @@ exactly these routes, with no raw path left over.
 Set it yourself in a middleware that runs after routing, on the active server span. This is what
 the Go example does, because `otelhttp` puts the route on metrics but not on the span:
 
-<!-- include examples/otel-go-nethttp/main.go region=route -->
+{/* include examples/otel-go-nethttp/main.go region=route */}
 ```go
 // withRoute copies the mux pattern onto the server span. otelhttp names the
 // span after the pattern but only puts http.route on metrics, and the route is
@@ -68,4 +71,4 @@ stored:
   slug, a name) fills the allowance quickly; set `http.route` to the template to avoid that.
 
 The rules are hard coded and the same for every project; they cannot be configured
-([`internal/routenorm`](../../../internal/routenorm/routenorm.go) lists them in order).
+([`internal/routenorm`](https://github.com/justmert/veristar/blob/main/internal/routenorm/routenorm.go) lists them in order).

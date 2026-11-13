@@ -1,11 +1,15 @@
-# The npm package
+---
+title: "The npm package"
+sidebarTitle: "npm package"
+description: "Bundle the tracker into your app as an npm package instead of a script tag."
+---
 
 Instead of a script tag, the tracker can be bundled into your app as an npm package. It is the
 same tracker: `init()` installs `window.umami` exactly as `sdk.js` does, so `umami.track()` and
 `data-umami-event` work unchanged.
 
 **Status: not published yet.** The package is built by
-[`packages/tracker/scripts/pack.mjs`](../../../packages/tracker/scripts/pack.mjs) under the npm
+[`packages/tracker/scripts/pack.mjs`](https://github.com/justmert/veristar/blob/main/packages/tracker/scripts/pack.mjs) under the npm
 scope the service will publish it to, which is still being set up an operator input of the project plan).
 Until it is published, the console offers only the script tag, and that is what you should use.
 This page describes the package as it is built and tested today, so you can plan for it.
@@ -27,7 +31,7 @@ too: `releases/<version>/sdk.js` inside the package is byte for byte the file th
 Install the exact version (`--save-exact`, or the equivalent of your package manager), never a
 range, then call `init()` once in your app's entry module, before anything renders:
 
-<!-- include examples/wallets-kit-spa/src/module-page.tsx region=init -->
+{/* include examples/wallets-kit-spa/src/module-page.tsx region=init */}
 ```tsx
 init({ siteId: __SA_SITE_ID__, host: __SA_GATEWAY_ORIGIN__ });
 ```
@@ -48,7 +52,7 @@ installed `window.umami`, `init()` returns that one, so the two never count twic
 
 Inside this repository the examples use the workspace package, which exports the TypeScript
 sources. Those expect the bundler to define `__SDK_VERSION__`, as
-[`examples/wallets-kit-spa/vite.config.ts`](../../../examples/wallets-kit-spa/vite.config.ts) does.
+[`examples/wallets-kit-spa/vite.config.ts`](https://github.com/justmert/veristar/blob/main/examples/wallets-kit-spa/vite.config.ts) does.
 The package built by `pack.mjs` has the version compiled in and needs no such setting.
 
 ## What is tested

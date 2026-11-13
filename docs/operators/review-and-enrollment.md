@@ -1,4 +1,7 @@
-# Review and enrollment modes
+---
+title: "Review and enrollment modes"
+description: "Self-service enrollment, approval-required enrollment and project review."
+---
 
 The RFP asks for self-service enrollment open to any project built on Stellar, for operators
 to be able to remove projects that are not part of the ecosystem, and for a later switch to

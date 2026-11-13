@@ -1,4 +1,7 @@
-# Threat model
+---
+title: "Threat model"
+description: "What the platform protects, its trust boundaries, and the mitigation and test for each threat."
+---
 
 This document lists what the platform protects, where the trust boundaries are, and for each
 threat the mitigation as built, the test or check that proves it, and the risk that remains.

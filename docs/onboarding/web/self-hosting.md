@@ -1,8 +1,11 @@
-# Self-hosting sdk.js
+---
+title: "Self-hosting sdk.js"
+description: "Serve the tracker file from your own domain while events still go to the gateway."
+---
 
 You can serve the tracker file from your own domain instead of the gateway, for example to keep
 every script of your site on your own origin. Tested by the page
-[`self-hosted.html`](../../../examples/static-html/src/self-hosted.html) of the static example,
+[`self-hosted.html`](https://github.com/justmert/veristar/blob/main/examples/static-html/src/self-hosted.html) of the static example,
 which runs in the browser test matrix.
 
 Only the file moves. **Events still go from the visitor's browser directly to the gateway**,
@@ -30,7 +33,7 @@ from browsers, and only the file can be self-hosted.
    `data-host-url` with the gateway origin, because `sdk.js` can no longer find the gateway from its
    own address:
 
-<!-- snippet version=1.1.0 self-hosted=/js/sdk/1.1.0/sdk.js -->
+{/* snippet version=1.1.0 self-hosted=/js/sdk/1.1.0/sdk.js */}
 ```html
 <script defer src="/js/sdk/1.1.0/sdk.js" integrity="sha384-lxlitLtIMAeT/K3ieev+MeMGxZe7oceuWLOy8GZAjK7TMKS2Uh9UPmfGLBczUPsq" crossorigin="anonymous" data-website-id="3f6a0c2e-9b1d-4e7a-8c5f-1d2e3f4a5b6c" data-host-url="https://in.analytics.example"></script>
 ```
@@ -46,7 +49,7 @@ Your content security policy must still allow the gateway in `connect-src`
 - **Revocation does not reach your copy.** When a tracker version is revoked (because of a security
   problem), the gateway stops serving it, so tags that load it from the gateway stop running at
   once. A copy on your server keeps running until you replace it. Watch the release notes and the
-  revocation list ([`packages/tracker/releases/revoked.json`](../../../packages/tracker/releases/revoked.json))
+  revocation list ([`packages/tracker/releases/revoked.json`](https://github.com/justmert/veristar/blob/main/packages/tracker/releases/revoked.json))
   and upgrade the same day a version you host is revoked.
 - **Upgrades are yours.** Each new version is a new file, a new path and a new integrity value;
   [upgrading.md](upgrading.md) applies unchanged.

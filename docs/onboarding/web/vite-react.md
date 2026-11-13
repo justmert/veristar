@@ -1,14 +1,17 @@
-# Vite and React
+---
+title: "Vite and React"
+description: "Add the tracker to a client-routed React app built with Vite."
+---
 
 For a client-routed React app built with Vite. Tested by the example
-[`examples/vite-react-spa`](../../../examples/vite-react-spa) (React 19, React Router 8 in data
+[`examples/vite-react-spa`](https://github.com/justmert/veristar/tree/main/examples/vite-react-spa) (React 19, React Router 8 in data
 mode, Vite 8), which runs in the browser test matrix.
 
 ## Where the tag goes
 
 Put the tag in `index.html`, not in a component, so it loads once per page load:
 
-<!-- include examples/vite-react-spa/index.html region=head -->
+{/* include examples/vite-react-spa/index.html region=head */}
 ```html
 <!-- paste the tag from the console in place of the next line, once, in index.html -->
 <!-- tracker -->
@@ -17,7 +20,7 @@ Put the tag in `index.html`, not in a component, so it loads once per page load:
 The example replaces the comment with the tag at build time so that tests can use their own site
 id. In your app the tag from the console stands there:
 
-<!-- snippet version=1.1.0 -->
+{/* snippet version=1.1.0 */}
 ```html
 <script defer src="https://in.analytics.example/v/1.1.0/sdk.js" integrity="sha384-lxlitLtIMAeT/K3ieev+MeMGxZe7oceuWLOy8GZAjK7TMKS2Uh9UPmfGLBczUPsq" crossorigin="anonymous" data-website-id="3f6a0c2e-9b1d-4e7a-8c5f-1d2e3f4a5b6c"></script>
 ```
@@ -36,7 +39,7 @@ needs to be added to the router.
 `data-umami-event` attributes work on any element React renders. For a call from code, declare
 `window.umami` once so TypeScript knows it:
 
-<!-- include examples/vite-react-spa/src/main.tsx region=types -->
+{/* include examples/vite-react-spa/src/main.tsx region=types */}
 ```tsx
 // window.umami as sdk.js installs it; optional because a visitor may block it
 declare global {
@@ -50,7 +53,7 @@ declare global {
 
 and call it with optional chaining, because the visitor may block the tracker:
 
-<!-- include examples/vite-react-spa/src/main.tsx region=track -->
+{/* include examples/vite-react-spa/src/main.tsx region=track */}
 ```tsx
 function Home() {
   return (

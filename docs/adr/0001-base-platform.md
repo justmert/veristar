@@ -1,4 +1,8 @@
-# 0001: Umami as the base platform
+---
+title: "0001: Umami as the base platform"
+sidebarTitle: "0001: Umami as the base"
+description: "Why Veristar builds its web analytics on Umami."
+---
 
 - Status: accepted
 - Date: 2026-11-12

@@ -123,9 +123,9 @@ func (c *counters) failureSeconds(ok string) map[string]map[string]int64 {
 
 // dnsStandIn plays the health-checked record set: it checks port 80 of
 // every address on an interval and answers the healthy ones, or all of them
-// when none is healthy, which is what bunny.net documents. it is a stand-in:
-// it has no resolver caching, no ttl and no checks from three regions, so
-// the removal times it shows are not bunny.net's an operator input.
+// when none is healthy, which is what traffic manager documents. it is a
+// stand-in: it has no resolver caching, no ttl and no probes from several
+// regions, so the removal times it shows are not traffic manager's.
 type dnsStandIn struct {
 	all      []string
 	interval time.Duration

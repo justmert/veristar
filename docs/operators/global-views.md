@@ -1,4 +1,7 @@
-# Reading the global views
+---
+title: "Reading the global views"
+description: "Compare every enrolled project on the core web and API metrics."
+---
 
 The global views compare every enrolled project on the RFP's core metrics, for funding and
 ecosystem-visibility decisions (RFP 3.2 and 3.3). They read daily aggregates only, never raw

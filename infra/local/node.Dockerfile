@@ -1,5 +1,5 @@
 # a local stand-in for one cloud server (docs/deploy/local-converge.md): plain
-# debian 13 with systemd as pid 1 and openssh, which is what the hetzner
+# debian 13 with systemd as pid 1 and openssh, which is what azure's
 # debian-13 image gives after cloud-init. everything the roles configure
 # (docker engine, firewall, chrony, ssh hardening, unattended upgrades) is
 # deliberately absent, so a converge installs it from nothing.

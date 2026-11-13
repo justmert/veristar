@@ -91,7 +91,7 @@ func TestAlertCountStated(t *testing.T) {
 		re   *regexp.Regexp
 	}{
 		{"docs/sla.md", regexp.MustCompile(`(\d+) alert rules`)},
-		{"docs/runbooks/README.md", regexp.MustCompile(`of (\d+) alerts`)},
+		{"docs/runbooks/overview.md", regexp.MustCompile(`of (\d+) alerts`)},
 	} {
 		m := c.re.FindStringSubmatch(read(t, filepath.Join(root, c.file)))
 		if m == nil {

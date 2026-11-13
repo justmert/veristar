@@ -1,7 +1,10 @@
 # caddy 2.11.9 with the two plugins the platform needs:
 #   github.com/caddyserver/replace-response  injects the db-ip attribution
 #       link into umami's html on web.<BASE_DOMAIN> (the reference docs section 5)
-#   github.com/caddy-dns/bunny               dns-01 challenges (this stage)
+#   github.com/caddy-dns/cloudflare          dns-01 challenges in the cloudflare
+#       zone of BASE_DOMAIN (this stage). v0.2.4 (2026-03-23) is the newest
+#       release; it built against 2.11.9 on 2026-11-13 and resolves
+#       libdns/cloudflare v0.2.2 and libdns v1.1.1
 #
 #   docker build -f deploy/images/caddy.Dockerfile -t veristar/caddy:2.11.9 deploy/images
 #
@@ -17,7 +20,7 @@ RUN test "$(xcaddy version | cut -d' ' -f1)" = "v0.4.7" || { echo "xcaddy is not
 # replace-response has no tagged releases, so its pseudo-version is the pin
 RUN xcaddy build v2.11.9 --output /out/caddy \
       --with github.com/caddyserver/replace-response@v0.0.0-20250618171559-80962887e4c6 \
-      --with github.com/caddy-dns/bunny@v1.2.0 \
+      --with github.com/caddy-dns/cloudflare@v0.2.4 \
       # caddy 2.11.9 requires golang.org/x/net v0.60.0, which has fixable high
       # findings (CVE-2026-78661 and others, trivy 2026-11-13); v0.62.0 is the
       # the design pin. remove this line once a caddy release requires it.
@@ -31,7 +34,7 @@ COPY --from=build /out/caddy /usr/bin/caddy
 # change cannot ship an image without the attribution handler
 RUN caddy version | grep -q '^v2\.11\.9 ' \
  && caddy list-modules | grep -qx 'http.handlers.replace_response' \
- && caddy list-modules | grep -qx 'dns.providers.bunny'
+ && caddy list-modules | grep -qx 'dns.providers.cloudflare'
 
 # the official image runs caddy as root. caddy needs no root here: docker sets
 # net.ipv4.ip_unprivileged_port_start to 0 inside a container's network

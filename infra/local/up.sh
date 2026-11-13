@@ -45,7 +45,7 @@ recipient="$("$tools/age/age-keygen" -y "$LC_STATE/age.key")"
 secrets="$root/infra/secrets/local/secrets.enc.yaml"
 if [ ! -f "$secrets" ]; then
 	mkdir -p "$(dirname "$secrets")"
-	# in s3 mode the stand-in's keys go in as the operator an operator input would
+	# in s3 mode the stand-in's keys go into the sops file
 	if [ "$LC_BACKUP" = s3 ]; then
 		SA_OBJECT_STORAGE_ACCESS_KEY="$(sed -n 1p "$LC_STATE/s3/keys")"
 		SA_OBJECT_STORAGE_SECRET_KEY="$(sed -n 2p "$LC_STATE/s3/keys")"
@@ -69,8 +69,8 @@ hosts = {"edge": {}, "core": {}, "backup": {}, "restore": {}, "probe": {}}
 for line in nodes:
     name, loc, pub, priv = line.split()
     tier, idx = name.split("-")[-2], int(name.split("-")[-1])
-    # the probe has no location network and no private address, as on
-    # scaleway (infra/tofu/modules/probe)
+    # the probe has no location network and no private address, like a
+    # probe host outside the platform's network
     hosts[tier][name] = {
         "ansible_host": pub, "ansible_user": "$LC_ADMIN_USER",
         "sa_tier": tier, "sa_index": idx, "sa_provider": "local",
@@ -89,8 +89,8 @@ inv = {"all": {
         "sa_private_network_cidr": "$LC_PRIVATE_SUBNET",
         # the controller reaches the nodes from the public network's gateway
         "sa_admin_cidrs": ["$LC_PUBLIC_GATEWAY/32"],
-        # s3 mode: the stand-in, addressed like hetzner object storage
-        # (https endpoint, region, bucket, host-style); storage_host and
+        # s3 mode: the stand-in (https endpoint, region, bucket,
+        # host-style addressing); storage_host and
         # ca_file are the two local-only keys (roles/backup, roles/storage)
         "sa_object_storage": {
             "endpoint": "https://$LC_S3_DOMAIN", "region": "$LC_S3_LOCATION",

@@ -1,4 +1,7 @@
-# What gets dropped
+---
+title: "What gets dropped"
+description: "What the platform's collector keeps for the API dashboards and what it discards on arrival."
+---
 
 The platform's collector keeps only what the API dashboards need and discards everything else when
 it arrives, before anything is queued or stored. Your own backend, fed by the other exporter,

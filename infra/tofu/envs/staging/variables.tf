@@ -36,18 +36,28 @@ variable "admin_ssh_public_keys" {
   }
 }
 
-variable "state_bucket" {
-  description = "state bucket on hetzner object storage, created by make state-bootstrap an operator input"
-  type        = string
-}
-
-variable "state_location" {
-  description = "object storage location of the state bucket"
+variable "subscription_id" {
+  description = "azure subscription id, an operator input"
   type        = string
 
   validation {
-    condition     = contains(["fsn1", "nbg1", "hel1"], var.state_location)
-    error_message = "state_location must be fsn1, nbg1 or hel1."
+    condition     = can(regex("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", var.subscription_id))
+    error_message = "subscription_id must be a subscription guid."
+  }
+}
+
+variable "state_resource_group" {
+  description = "resource group of the state storage account, created by make state-bootstrap"
+  type        = string
+}
+
+variable "state_storage_account" {
+  description = "state storage account, created by make state-bootstrap an operator input"
+  type        = string
+
+  validation {
+    condition     = can(regex("^[a-z0-9]{3,24}$", var.state_storage_account))
+    error_message = "storage account names are 3 to 24 lowercase letters and digits."
   }
 }
 
@@ -62,24 +72,27 @@ variable "state_passphrase" {
   }
 }
 
-variable "backup_bucket" {
-  description = "backup bucket name, created by the ansible storage role"
+variable "backup_storage_account" {
+  description = "storage account of the pgbackrest repository, unique across azure"
   type        = string
 }
 
-variable "backup_location" {
-  description = "object storage location of the backup bucket"
+variable "backup_lock_state" {
+  description = "Unlocked or Locked; see docs/deploy/backups.md before locking"
   type        = string
+  default     = "Unlocked"
 }
 
-variable "edge_server_type" {
-  description = "hetzner server type for edge nodes; must be orderable in fsn1, nbg1 and hel1"
+variable "edge_vm_size" {
+  description = "vm size of the edge nodes; must be offered in zones 1, 2 and 3"
   type        = string
+  default     = "Standard_B2als_v2"
 }
 
-variable "core_server_type" {
-  description = "hetzner server type for core nodes; must be orderable in fsn1 and nbg1"
+variable "core_vm_size" {
+  description = "vm size of the core and restore nodes"
   type        = string
+  default     = "Standard_B2as_v2"
 }
 
 variable "restore_enabled" {
@@ -88,36 +101,23 @@ variable "restore_enabled" {
   default     = false
 }
 
-variable "restore_location" {
-  description = "location of the restore node"
+variable "restore_zone" {
+  description = "availability zone of the restore node"
   type        = string
-  default     = "fsn1"
+  default     = "3"
 
   validation {
-    condition     = contains(["fsn1", "nbg1", "hel1"], var.restore_location)
-    error_message = "restore_location must be fsn1, nbg1 or hel1."
+    condition     = contains(["1", "2", "3"], var.restore_zone)
+    error_message = "restore_zone must be 1, 2 or 3."
   }
 }
 
-variable "server_image" {
-  description = "hetzner image name for debian 13"
+variable "server_image_version" {
+  description = "version of the Debian debian-13 13-gen2 marketplace image (az vm image list -p Debian -f debian-13 -s 13-gen2 --all)"
   type        = string
-}
 
-variable "probe_enabled" {
-  description = "create the scaleway probe; applied in this stage with an operator input"
-  type        = bool
-  default     = false
-}
-
-variable "probe_instance_type" {
-  description = "scaleway instance type, required when probe_enabled"
-  type        = string
-  default     = null
-}
-
-variable "probe_image" {
-  description = "scaleway image label or id for debian 13, required when probe_enabled"
-  type        = string
-  default     = null
+  validation {
+    condition     = can(regex("^[0-9]+\\.[0-9]+\\.[0-9]+$", var.server_image_version))
+    error_message = "server_image_version must be an exact image version, not latest."
+  }
 }

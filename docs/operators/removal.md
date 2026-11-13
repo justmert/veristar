@@ -1,4 +1,7 @@
-# Removing a project
+---
+title: "Removing a project"
+description: "Remove a project that is not part of the Stellar ecosystem."
+---
 
 Operators remove projects that are not part of the Stellar ecosystem (RFP 3.1). Removal is
 final: there is no restore. Suspension ([review-and-enrollment.md](review-and-enrollment.md))

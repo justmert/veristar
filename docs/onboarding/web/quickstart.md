@@ -1,4 +1,8 @@
-# Web analytics quickstart
+---
+title: "Web analytics quickstart"
+sidebarTitle: "Quickstart"
+description: "Register a site, paste one script tag and see pageviews, visitors and referrers in your dashboard."
+---
 
 From a fresh site to data in your dashboard: register the site, paste one script tag, open the
 dashboard. Pageviews, visitors, visits, visit duration, bounce rate, referrers, countries, devices
@@ -39,7 +43,7 @@ count towards yours.
 
 Choose **Snippet** next to the site. The console shows the tag for the newest tracker version:
 
-<!-- snippet version=1.1.0 -->
+{/* snippet version=1.1.0 */}
 ```html
 <script defer src="https://in.analytics.example/v/1.1.0/sdk.js" integrity="sha384-lxlitLtIMAeT/K3ieev+MeMGxZe7oceuWLOy8GZAjK7TMKS2Uh9UPmfGLBczUPsq" crossorigin="anonymous" data-website-id="3f6a0c2e-9b1d-4e7a-8c5f-1d2e3f4a5b6c"></script>
 ```

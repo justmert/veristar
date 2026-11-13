@@ -1,4 +1,7 @@
-# Security patch
+---
+title: "Security patch"
+description: "Take a vulnerability from signal to patched production within the 24-hour commitment."
+---
 
 The path from a vulnerability signal to a patched production, inside the RFP's commitment that
 critical and high vulnerabilities are patched within 24 hours (RFP 3.4, the design). The target

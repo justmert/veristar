@@ -17,7 +17,8 @@ hel1 10.99.3"
 LC_ROUTER=sa-lc-router
 # one-way delay the router adds toward each location, in ms. the round trip
 # between two locations is the sum of both; these are assumptions standing
-# in for hetzner's private network, not measurements of it an operator input
+# in for the latency between availability zones, not measurements of it.
+# the location names are labels for three separate zones.
 LC_DELAY_fsn1=1.5
 LC_DELAY_nbg1=1.5
 LC_DELAY_hel1=11.5
@@ -46,13 +47,13 @@ if [ "${LC_TOPOLOGY:-}" = minimal ]; then
 	LC_NODES="$(printf '%s\n' "$LC_NODES" | grep -v '^sa-lc-core-2 ')"
 fi
 # LC_BACKUP=s3 replaces the backup node with an s3 object storage stand-in
-# (seaweedfs, private ca, host-style addressing like hetzner) in hel1, so the
-# staging and production path of the backup role runs: the storage role
-# creates the bucket with versioning and object lock, the patroni leader
-# creates the stanza, and archive-push and backups go to the bucket over s3.
-# seaweedfs 4.52 (2026-11-02, the newest release at least a week old; the
-# minio images are no longer published) is a stand-in, not hetzner: what it
-# proves and what it does not is in docs/deploy/local-converge.md section 6.
+# (seaweedfs, private ca, host-style addressing) in hel1, so the object
+# store path of the backup role runs: the storage role creates the bucket
+# with versioning and object lock, the patroni leader creates the stanza,
+# and archive-push and backups go to the bucket over s3. seaweedfs 4.52
+# (2026-11-02, the newest release at least a week old; the minio images are
+# no longer published) is a stand-in, not azure blob storage: what it proves
+# and what it does not is in docs/deploy/local-converge.md section 6.
 LC_BACKUP="${LC_BACKUP:-posix-host}"
 LC_S3=sa-lc-s3
 LC_S3_IP=10.99.3.35
@@ -63,8 +64,8 @@ LC_S3_BUCKET=sa-lc-backup
 if [ "$LC_BACKUP" = s3 ]; then
 	LC_NODES="$(printf '%s\n' "$LC_NODES" | grep -v '^sa-lc-backup-1 ')"
 fi
-# LC_PROBE=1 adds the probe node: public network only, like the scaleway
-# probe an operator input outside the private network
+# LC_PROBE=1 adds the probe node: public network only, like a probe host
+# outside the platform's private network
 LC_PROBE_NODE="sa-lc-probe-1 none 172.31.99.51 none"
 if [ "${LC_PROBE:-}" = 1 ]; then
 	LC_NODES="$(printf '%s\n%s' "$LC_NODES" "$LC_PROBE_NODE")"

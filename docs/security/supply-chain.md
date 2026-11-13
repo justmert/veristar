@@ -1,4 +1,7 @@
-# Supply chain
+---
+title: "Supply chain"
+description: "How images and the tracker are built, gated, signed, verified and kept up to date."
+---
 
 How the platform's images and the tracker are built, gated, signed, verified and kept up to date
 (the design). Status on 2026-11-13 is stated at the end of every section, because two parts of
@@ -89,8 +92,9 @@ same way: the manifest must name the `prober` (it is in `platform_images`), the 
 `platform_images` on the probe too, and the observability role names its `prober` and `caddy`
 through `platform_images`. The role also refuses a probe node whose `prober` or `caddy` is not
 pinned by digest outside the local converge, so a run that skipped the check stops. The probe
-converge has not completed on the local converge yet (`make ops-local`); against a real probe it
-waits for an operator input.
+converge has not completed on the local converge yet (`make ops-local`). The probe bundle of
+`docs/deploy/probe.md` uses the same check: `playbooks/probe-bundle.yml` imports
+`verify-release.yml` and refuses a prober not pinned by digest.
 
 ## 4. Tracker release (`release-tracker.yml`)
 

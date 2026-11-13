@@ -1,4 +1,7 @@
-# Erasure workflow
+---
+title: "Erasure workflow"
+description: "How a project owner asks for erasure, what is erased, and how the request is tracked."
+---
 
 > **Status: draft, pending legal review an operator input.** Not legal advice. Last
 > updated 2026-11-12. This is the explicit erasure statement the RFP asks for.

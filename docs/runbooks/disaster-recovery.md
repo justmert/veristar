@@ -1,4 +1,8 @@
-# Disaster recovery: both database nodes or the database lost
+---
+title: "Disaster recovery: both database nodes or the database lost"
+sidebarTitle: "Disaster recovery"
+description: "Bring the platform back when both core nodes or the database cluster are lost."
+---
 
 Brings the platform back after both core nodes, or the PostgreSQL cluster on them, are gone:
 a destroyed location pair, an operator mistake that dropped data on the leader and its
@@ -26,7 +30,7 @@ Data loss window: what was not yet archived when the database was lost, at most
    `cd /opt/veristar/core && sudo docker compose stop`.
 
 2. **Create the restore node.** In `infra/tofu/envs/<env>/terraform.tfvars` set
-   `restore_enabled = true` (and `restore_location` if `fsn1` is affected), then
+   `restore_enabled = true` (and `restore_zone` if zone 3 is affected), then
    `make <env>-plan` and `make <env>-apply`. Expected: `Plan: 1 to add` for
    `<env>-restore-1` (a core-sized server on the private network at `.41`) and an inventory
    whose `restore` group holds it (`tests/infra/*.tftest.hcl` run `inventory_with_restore`
@@ -57,7 +61,7 @@ Data loss window: what was not yet archived when the database was lost, at most
    ```
 
 5. **Replace the core nodes**:
-   `tofu ... plan -replace=module.node["<env>-core-1"].hcloud_server.this` (and core-2), as in
+   `tofu ... plan -replace=module.node["<env>-core-1"].azurerm_linux_virtual_machine.this` (and core-2), as in
    [edge-node-failure.md](edge-node-failure.md) step 1, then `make <env>-apply`.
 
 6. **Remove the old cluster from etcd**, so the new nodes bootstrap a new cluster instead of
@@ -107,6 +111,6 @@ Record the recovery time (from step 2 to step 9) and the data loss window
 |---|---|---|---|
 | 2026-11-13 | the restore node in the OpenTofu inventory (step 2) against mocked providers | `make tofu-check`: `inventory_with_restore` passes for staging and production | `tests/infra/*.tftest.hcl` |
 
-Not yet exercised: the whole chain on staging (blocked on an operator input, and steps 3 to 10 on the
+Not yet exercised: the whole chain on staging (needs the first apply), and steps 3 to 10 on the
 local converge. The local point-in-time drill (`tests/drills/pitr.sh`) covers step 3 only and has
 not been run either (the design).

@@ -1,4 +1,8 @@
-# Investigating suspected metric inflation
+---
+title: "Investigating suspected metric inflation"
+sidebarTitle: "Metric inflation"
+description: "Investigate a project whose numbers look higher than its real use."
+---
 
 A project's numbers look higher than its real use: someone reports it, an operator comparing
 projects for funding doubts a jump, or the outcome counters move. What the platform can and
@@ -10,7 +14,7 @@ The aim of an investigation is a written finding the operators can act on: what 
 what evidence points at forgery, and what was done. Deleting counted data is not an operator
 action; quarantine bands and counters are shown next to the numbers instead.
 
-All SQL below runs on the database leader ([README.md](README.md)), database `platform` unless
+All SQL below runs on the database leader ([overview.md](overview.md)), database `platform` unless
 it says `umami`. Replace `<tenant id>`, `<site id>` and the dates.
 
 ## Web traffic

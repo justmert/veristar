@@ -5,11 +5,11 @@
       - sa_tier == 'core'
       - groups['edge'] | length == 3
       - sa_secrets is defined
-      - sa_tls in ['bunny', 'bunny-delegated', 'internal']
+      - sa_tls in ['cloudflare', 'cloudflare-delegated', 'internal']
       - sa_tls != 'internal' or sa_environment == 'local'
-      # bunny-delegated: certificates through the old zone's cname during a
+      # cloudflare-delegated: certificates through the old zone's cname during a
       # handover cutover (docs/handover/plan.md section 2.3)
-      - sa_tls != 'bunny-delegated' or (sa_acme_challenge_domain | default('')) is match('^[a-z0-9_.-]+\\.[a-z]+$')
+      - sa_tls != 'cloudflare-delegated' or (sa_acme_challenge_domain | default('')) is match('^[a-z0-9_.-]+\\.[a-z]+$')
       - sa_operator_github_ids is defined and (sa_operator_github_ids | string | length) > 0
       - not core_oauth_fixture or sa_environment == 'local'
       - core_umami_processes | int >= 1
@@ -223,7 +223,7 @@
   vars:
     backup_compose_dir: "{{ core_dir }}"
     backup_compose_service: postgres
-  when: core_runs_postgres and backup_repo_mode == 's3'
+  when: core_runs_postgres and backup_repo_mode in ['azure', 's3']
 
 # deploy.yml drains the node first, which turns port 80 to 503 on purpose;
 # a drained node is checked behind caddy, at the same composite endpoint
@@ -239,7 +239,7 @@
 
 - name: Wait for this node's composite health on port 80
   ansible.builtin.uri:
-    url: "http://{{ sa_public_ipv4 }}/"
+    url: "http://{{ sa_public_bind_ipv4 | default(sa_public_ipv4) }}/"
     follow_redirects: none
     status_code: 308
   register: core_health

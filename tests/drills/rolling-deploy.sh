@@ -2,8 +2,9 @@
 # rolling deploy under load: every image is retagged lc2 (same content, new
 # reference, so compose recreates every service) and deploy.yml rolls it out
 # node by node with draining. the dns stand-in checks port 80 every 30 s, so
-# the drain wait is 45 s here instead of the 120 s that bunny.net's 30 s
-# check plus the 60 s ttl need. pass: zero failed ingest requests.
+# the drain wait is 45 s here instead of the 120 s that traffic manager's
+# probes and answer ttl need for the edge (deploy.yml). pass: zero failed
+# ingest requests.
 . "$(dirname "$0")/lib.sh"
 out="$DRILLS/rolling-deploy"
 mkdir -p "$out"

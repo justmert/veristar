@@ -1,21 +1,29 @@
 ---
-# the pgbackrest backup bucket (the design of
-# the review notes). runs on the controller against the
-# s3 api of sa_object_storage with the keys of the sops file an operator input.
+# the pgbackrest repository (the design of
+# the review notes). runs on the controller.
+#
+# azure (staging and production): infra/tofu/modules/backup-storage creates
+# the storage account and container; this role reads them back through the
+# az cli login and stops when a protection is missing or does not fit the
+# backup retention of roles/backup.
+#
+# s3 (the local converge's stand-in only): files/backup-bucket.sh creates
+# the bucket with object lock through the s3 api.
 
-# compliance mode: no key, not even the one that wrote an object, can shorten
-# the retention or delete a locked version before it ends. governance mode
-# can be bypassed by any key with the bypass right, and hetzner keys are not
-# scoped, so it would protect against mistakes only, not against a leaked key.
+# azure: every blob version is immutable for this many days after it was
+# written (module backup-storage, lock_days). azure refuses to delete a
+# blob whose retention still runs, also through pgbackrest's expire, so it
+# must stay below the age of the youngest file pgbackrest deletes: the
+# oldest differential expires when backup_retention_diff newer ones exist,
+# and the sunday full backup adds one day per six differentials.
+storage_azure_lock_days: 7
+# azure: the lifecycle policy deletes previous versions this many days after
+# they became previous (module backup-storage, previous_version_days); the
+# role refuses a value below (backup_retention_full + 1) * 7
+storage_azure_previous_version_days: 35
+
+# s3 stand-in: compliance mode and the default retention of the bucket
 storage_lock_mode: COMPLIANCE
-
-# days every object version stays undeletable. pgbackrest keeps
-# backup_retention_full weekly full backups (roles/backup), so the oldest
-# file a kept backup needs is at most backup_retention_full weeks plus the six
-# days of differentials old; one more week covers that. the role refuses a
-# value below (backup_retention_full + 1) * 7. a longer lock costs storage:
-# every version, including the ones pgbackrest expired, is billed until its
-# lock ends.
 storage_lock_days: 35
 
 # local converge only: the stand-in's private ca on the controller and the

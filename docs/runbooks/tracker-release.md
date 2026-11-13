@@ -1,4 +1,7 @@
-# Tracker release and revocation
+---
+title: "Tracker release and revocation"
+description: "Release a new immutable tracker version, and revoke one if needed."
+---
 
 The browser tracker `sdk.js` is released as immutable files:
 `packages/tracker/releases/<version>/sdk.js` plus one entry in

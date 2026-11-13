@@ -18,16 +18,19 @@
 # restore_source reads another environment's repository instead of this
 # one's (a migration into this environment from the old one). it names that
 # environment, its object storage and its sops file, from which only the
-# object storage keys and the repository cipher passphrase are read:
+# repository cipher passphrase (and in the local s3 stand-in the keys) are
+# read:
 #   -e '{"restore_source": {"environment": "production",
 #        "object_storage": {"endpoint": "https://...", "region": "...", "backup_bucket": "..."},
 #        "secrets_file": "/path/to/old/secrets.enc.yaml"}}'
-# it needs object storage (backup_repo_mode s3, an operator input.
+# it needs object storage (backup_repo_mode azure, or s3 locally). in azure
+# the restore node signs in with the core identity, which must hold storage
+# blob data reader on the source container (docs/runbooks/disaster-recovery.md).
 # the node must be fresh: an existing restore volume stops the run.
 #
 # restore_extra_args adds pgbackrest options, for example
 #   -e '{"restore_extra_args": ["--repo=1", "--repo-target-time=2026-11-20 08:00:00+00"]}'
-# to read the object-locked repository as it was before someone deleted
+# to read the versioned repository as it was before someone deleted
 # from it (docs/deploy/backups.md section 3).
 # pulls only verified image digests outside the local converge
 - name: Verify the release
@@ -61,7 +64,7 @@
           - restore_source.object_storage.region is defined
           - restore_source.object_storage.backup_bucket is defined
           - restore_source.secrets_file is file
-          - backup_repo_mode == 's3'
+          - backup_repo_mode in ['azure', 's3']
         fail_msg: restore_source needs environment, object_storage (endpoint, region, backup_bucket), a readable secrets_file and object storage mode
       when: restore_source is defined
   roles:
@@ -93,8 +96,8 @@
       vars:
         backup_repo_environment: "{{ restore_source.environment }}"
         backup_repo_object_storage: "{{ restore_source.object_storage }}"
-        backup_repo_access_key: "{{ restore_source_secrets.object_storage_access_key }}"
-        backup_repo_secret_key: "{{ restore_source_secrets.object_storage_secret_key }}"
+        backup_repo_access_key: "{{ restore_source_secrets.object_storage_access_key | default('') }}"
+        backup_repo_secret_key: "{{ restore_source_secrets.object_storage_secret_key | default('') }}"
         backup_repo_cipher_pass: "{{ restore_source_secrets.pgbackrest_cipher_pass }}"
       when: restore_source is defined
 

@@ -1,7 +1,10 @@
-# Node.js
+---
+title: "Node.js"
+description: "Dual export from a Node.js service on Express with the OpenTelemetry Node SDK."
+---
 
 Dual export from a Node.js service. Built from the example
-[`examples/otel-node-express`](../../../examples/otel-node-express): Express 5.3.0 with
+[`examples/otel-node-express`](https://github.com/justmert/veristar/tree/main/examples/otel-node-express): Express 5.3.0 with
 `@opentelemetry/sdk-node` 0.300.0, `instrumentation-http` 0.300.0 and `instrumentation-express`
 0.72.0. `tests/otelapps` runs it against stock collectors in every export mode, and the `apipath`
 tag runs it against the real platform collector. Read the [API quickstart](quickstart.md) first for
@@ -12,7 +15,7 @@ the token and the environment variables.
 Pin exact versions. `@opentelemetry/api` must be 1.10.0, because the 3.0.0 SDK packages declare the
 peer range `>=1.10.0 <1.11.0`; the `overrides` keep the shared core packages on one version:
 
-<!-- include examples/otel-node-express/package.json -->
+{/* include examples/otel-node-express/package.json */}
 ```json
 {
   "name": "otel-node-express",
@@ -51,7 +54,7 @@ The whole setup is one file, loaded with `node --require` before the app so the 
 instrumentations can patch those modules when they are first required. Each signal gets two
 exporters: the one to your backend without a token, the one to the platform with it.
 
-<!-- include examples/otel-node-express/src/telemetry.js -->
+{/* include examples/otel-node-express/src/telemetry.js */}
 ```js
 "use strict";
 
@@ -136,7 +139,7 @@ node --require ./src/telemetry.js src/server.js
 
 - **Shut down cleanly.** Call `sdk.shutdown()` after the server stopped accepting requests, so the
   last interval's metrics are exported; the example does it on `SIGTERM`
-  ([`src/server.js`](../../../examples/otel-node-express/src/server.js)).
+  ([`src/server.js`](https://github.com/justmert/veristar/blob/main/examples/otel-node-express/src/server.js)).
 - **Routes.** `instrumentation-express` sets `http.route` from the Express route
   (`/accounts/:id`); see [http-route.md](http-route.md).
 - **Health checks** are excluded with `ignoreIncomingRequestHook`, so probes do not count as API

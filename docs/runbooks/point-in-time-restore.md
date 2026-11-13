@@ -1,4 +1,7 @@
-# Point-in-time restore
+---
+title: "Point-in-time restore"
+description: "Restore the PostgreSQL cluster to a past moment on a fresh node, without touching the running cluster."
+---
 
 Restores the whole PostgreSQL cluster (both databases, `umami` and `platform`) to a moment in
 the past onto a **fresh** node, from the pgBackRest repository, without touching the running
@@ -10,7 +13,8 @@ at 01:00 UTC, `verify` plus `check` daily at 05:30 UTC, and continuous WAL archi
 (`archive_timeout` 60 s). Retention: four full backups and the differentials of the last seven
 days, so any point from the oldest full backup to the newest archived WAL can be reached.
 Backups are encrypted with `pgbackrest_cipher_pass` from the SOPS file. In staging and
-production the repository is Hetzner Object Storage (`backup_repo_mode: s3`, an operator input.
+production the repository is Azure Blob Storage (`backup_repo_mode: azure`,
+[../deploy/backups.md](../deploy/backups.md)).
 
 ## Steps
 
@@ -82,8 +86,8 @@ restore; re-run those erasure requests ([erasure-requests.md](erasure-requests.m
 the this stage drills stopped when the shared host became unusable
 ([../reference/drills/2026-11-13.md](../reference/drills/2026-11-13.md)). What did run: on the
 local converge, `stanza-create` and `check` succeeded against the posix repository on the backup
-node, and the timers exist (same record, "Topology checks"). The S3 repository on Hetzner Object
-Storage, including `repo1-s3-uri-style=host`, has never been tested an operator input. In this stage this
+node, and the timers exist (same record, "Topology checks"). The Azure repository is exercised
+by the first staging converge. In this stage this
 could not be executed: it needs Patroni, pgBackRest and a repository node, which is the
 multi-node topology the shared host may not run. It must be executed on staging, with recovery
 time and loss window recorded, before production.

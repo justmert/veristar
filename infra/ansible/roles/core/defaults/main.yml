@@ -42,13 +42,17 @@ core_archive_timeout: 60
 # each core node runs at its own minute so one node down still runs it.
 core_retain_web_hour: 3
 
-# postgresql settings for a cpx42 (16 GB); patroni owns the rest
+# postgresql settings for a Standard_B2as_v2 (2 vcpu, 8 GB), which it
+# shares with umami, the platform services and the observability stack;
+# patroni owns the rest. shared_buffers stays at a quarter of memory, and
+# effective_cache_size counts what the page cache can hold beside the
+# other processes (about 4 GB).
 core_postgres_parameters:
   max_connections: 200
   shared_buffers: 2GB
-  effective_cache_size: 6GB
+  effective_cache_size: 4GB
   work_mem: 16MB
-  maintenance_work_mem: 512MB
+  maintenance_work_mem: 256MB
   wal_level: replica
   max_wal_senders: 10
   max_replication_slots: 10
@@ -88,7 +92,19 @@ core_metricswriter_env:
 # one. scaled from the drill's 280/s that gives about 650/s for 4 and 520/s
 # for 3, and 4 is the smallest count with a clear margin over 500/s. each
 # idle process holds about 115 MB. must stay at most REPLAYER_WORKERS.
-core_umami_processes: 4
+#
+# on the azure core node (Standard_B2as_v2, 2 vcpu, 8 GB) the count is 2.
+# memory would fit 4 (about 460 MB idle), but the drain rate comes from
+# cpu: the measurement above gave each process its own core, and this node
+# has two, shared with postgresql. a third and fourth process would only
+# take turns on the same cores. by the same measurement 2 processes drain
+# about 1.5 times one, about 420 events/s scaled from the drill's 280/s.
+# that is far above the 1x profile (50/s) and below the 10x burst profile
+# (500/s): a burst queues in jetstream and drains after it, which keeps
+# ingestion up and delays the dashboards (docs/reference/availability.md).
+# the rate on this node size has not been measured yet; this stage's load
+# drill on staging measures it.
+core_umami_processes: 2
 
 # local converge only: sign in through the test-only github oauth fixture
 # (docs/deploy/local-converge.md). refused in any other environment.

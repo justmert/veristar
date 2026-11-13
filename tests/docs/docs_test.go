@@ -6,16 +6,18 @@
 //	go test ./tests/docs/                 check
 //	go test ./tests/docs/ -args -update   rewrite included blocks from source
 //
-// Directives, each on the line right before a fenced code block:
+// The pages are the Mintlify site rooted at docs/ (docs/docs.json), so
+// directives are MDX comments, each on the line right before a fenced code
+// block:
 //
-//	<!-- include examples/<path> -->              the whole file
-//	<!-- include examples/<path> region=<name> --> the lines between
-//	                                              "docs:start <name>" and
-//	                                              "docs:end <name>"
-//	<!-- include examples/<dir>/go.mod region=require -->
-//	                                              the first require block
-//	<!-- snippet version=<x.y.z> [options] -->    the tracker tag the console
-//	                                              builds for the example site
+//	{/* include examples/<path> */}              the whole file
+//	{/* include examples/<path> region=<name> */} the lines between
+//	                                             "docs:start <name>" and
+//	                                             "docs:end <name>"
+//	{/* include examples/<dir>/go.mod region=require */}
+//	                                             the first require block
+//	{/* snippet version=<x.y.z> [options] */}    the tracker tag the console
+//	                                             builds for the example site
 //
 // Region markers follow apps/console/src/lib/otel-guides.ts: a comment line
 // (//, #, <!--, /* or {/*) holding "docs:start <name>"; the marker lines are
@@ -60,8 +62,8 @@ func repoRoot(t *testing.T) string {
 	return filepath.Clean(filepath.Join(filepath.Dir(file), "..", ".."))
 }
 
-// markdownFiles lists the documentation: everything under docs/ plus the
-// markdown files at the repository root and in each example
+// markdownFiles lists the documentation: every .md and .mdx file under docs/
+// plus the markdown files at the repository root and in each example
 func markdownFiles(t *testing.T, root string) []string {
 	t.Helper()
 	var out []string
@@ -69,7 +71,7 @@ func markdownFiles(t *testing.T, root string) []string {
 		if err != nil {
 			return err
 		}
-		if !d.IsDir() && strings.HasSuffix(p, ".md") {
+		if !d.IsDir() && (strings.HasSuffix(p, ".md") || strings.HasSuffix(p, ".mdx")) {
 			out = append(out, p)
 		}
 		return nil
@@ -118,6 +120,8 @@ var (
 	schemeRe = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9+.-]*:`)
 	headRe   = regexp.MustCompile(`^(#{1,6})\s+(.*?)\s*#*\s*$`)
 	anchorRe = regexp.MustCompile(`<a\s+(?:name|id)="([^"]+)"`)
+	// links into this repository on github, by branch
+	repoLinkRe = regexp.MustCompile(`^https://github\.com/justmert/veristar/(blob|tree)/main/([^?]+)$`)
 )
 
 // proseLines returns the lines outside fenced code blocks, with inline code
@@ -177,8 +181,25 @@ func anchors(text string) map[string]bool {
 	return set
 }
 
+// sitePage resolves a site route such as /onboarding/web/quickstart to the
+// file under docs/ that mintlify serves for it: the path itself when it names
+// a file, otherwise the path with .md or .mdx appended
+func sitePage(docsDir, route string) string {
+	p := filepath.Join(docsDir, filepath.FromSlash(route))
+	if fi, err := os.Stat(p); err == nil && !fi.IsDir() {
+		return p
+	}
+	for _, ext := range []string{".mdx", ".md"} {
+		if _, err := os.Stat(p + ext); err == nil {
+			return p + ext
+		}
+	}
+	return p
+}
+
 func TestRelativeLinks(t *testing.T) {
 	root := repoRoot(t)
+	docsDir := filepath.Join(root, "docs")
 	anchorCache := map[string]map[string]bool{}
 	anchorsOf := func(p string) map[string]bool {
 		if a, ok := anchorCache[p]; ok {
@@ -202,6 +223,16 @@ func TestRelativeLinks(t *testing.T) {
 				targets = append(targets, m[1])
 			}
 			for _, target := range targets {
+				// the site serves only docs/, so pages link to the rest of the
+				// repository on github; those links must name existing paths
+				if m := repoLinkRe.FindStringSubmatch(target); m != nil {
+					checked++
+					p, _, _ := strings.Cut(m[2], "#")
+					if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(p))); err != nil {
+						t.Errorf("%s:%d: %s: no %s in the repository", rel(root, file), i+1, target, p)
+					}
+					continue
+				}
 				if schemeRe.MatchString(target) || strings.HasPrefix(target, "//") {
 					continue
 				}
@@ -210,9 +241,13 @@ func TestRelativeLinks(t *testing.T) {
 				path, frag, _ := strings.Cut(target, "#")
 				dest := file
 				if path != "" {
-					if strings.HasPrefix(path, "/") {
+					switch {
+					case strings.HasPrefix(path, "/") && strings.HasPrefix(file, docsDir+string(filepath.Separator)):
+						// a site route: the page's path under docs/ without its extension
+						dest = sitePage(docsDir, path)
+					case strings.HasPrefix(path, "/"):
 						dest = filepath.Join(root, path)
-					} else {
+					default:
 						dest = filepath.Join(filepath.Dir(file), path)
 					}
 					if _, err := os.Stat(dest); err != nil {
@@ -220,7 +255,7 @@ func TestRelativeLinks(t *testing.T) {
 						continue
 					}
 				}
-				if frag != "" && strings.HasSuffix(dest, ".md") && !anchorsOf(dest)[frag] {
+				if frag != "" && (strings.HasSuffix(dest, ".md") || strings.HasSuffix(dest, ".mdx")) && !anchorsOf(dest)[frag] {
 					t.Errorf("%s: no heading with anchor #%s in %s", where, frag, rel(root, dest))
 				}
 			}
@@ -245,8 +280,10 @@ func goRequires(mod string) (string, error) {
 }
 
 var (
-	includeRe = regexp.MustCompile(`^<!-- include (\S+)(?: region=(\S+))? -->$`)
-	snippetRe = regexp.MustCompile(`^<!-- snippet version=(\d+\.\d+\.\d+)((?: [a-z-]+(?:=\S+)?)*) -->$`)
+	includeRe = regexp.MustCompile(`^\{/\* include (\S+)(?: region=(\S+))? \*/\}$`)
+	snippetRe = regexp.MustCompile(`^\{/\* snippet version=(\d+\.\d+\.\d+)((?: [a-z-]+(?:=\S+)?)*) \*/\}$`)
+	// the html comment form of a directive, which mdx cannot parse
+	oldDirectiveRe = regexp.MustCompile(`^\s*<!--\s*(include|snippet)\b`)
 )
 
 // region returns the lines between the docs:start and docs:end markers of
@@ -351,7 +388,10 @@ func guideBlocks(root, text string) ([]block, error) {
 		inc := includeRe.FindStringSubmatch(l)
 		snip := snippetRe.FindStringSubmatch(l)
 		if inc == nil && snip == nil {
-			if strings.HasPrefix(strings.TrimSpace(l), "<!-- include") || strings.HasPrefix(strings.TrimSpace(l), "<!-- snippet") {
+			if oldDirectiveRe.MatchString(l) {
+				return nil, fmt.Errorf("line %d: directive %q is an html comment; mdx needs {/* ... */}", i+1, l)
+			}
+			if strings.HasPrefix(strings.TrimSpace(l), "{/* include") || strings.HasPrefix(strings.TrimSpace(l), "{/* snippet") {
 				return nil, fmt.Errorf("line %d: malformed directive %q", i+1, l)
 			}
 			continue

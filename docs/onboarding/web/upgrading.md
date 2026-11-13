@@ -1,4 +1,7 @@
-# Upgrading the tracker
+---
+title: "Upgrading the tracker"
+description: "Move your pages to a newer pinned tracker version, at the time you choose."
+---
 
 The tag pins one tracker version, and the browser checks the file against the tag's `integrity`
 value. Nothing on your pages changes unless you change the tag: the service has no "latest" URL and
@@ -8,7 +11,7 @@ never updates a released file. This page explains how to move to a newer version
 
 Each release is one file, `https://in.analytics.example/v/<version>/sdk.js`, and one SHA-384 hash.
 The list of releases, with their sizes and hashes, is
-[`packages/tracker/releases/manifest.json`](../../../packages/tracker/releases/manifest.json); a
+[`packages/tracker/releases/manifest.json`](https://github.com/justmert/veristar/blob/main/packages/tracker/releases/manifest.json); a
 released file is never rebuilt or replaced. Released so far:
 
 | Version | Adds |
@@ -29,12 +32,12 @@ released file is never rebuilt or replaced. Released so far:
 
 Moving from 1.0.0 to 1.1.0 changes only these two attributes:
 
-<!-- snippet version=1.0.0 -->
+{/* snippet version=1.0.0 */}
 ```html
 <script defer src="https://in.analytics.example/v/1.0.0/sdk.js" integrity="sha384-G7jAlHsp/0HhreHeIKFZIr1Udyb8lXfTJPPZcLC8YcVCAQ9Mr/OS3JOMW4n4OT6j" crossorigin="anonymous" data-website-id="3f6a0c2e-9b1d-4e7a-8c5f-1d2e3f4a5b6c"></script>
 ```
 
-<!-- snippet version=1.1.0 -->
+{/* snippet version=1.1.0 */}
 ```html
 <script defer src="https://in.analytics.example/v/1.1.0/sdk.js" integrity="sha384-lxlitLtIMAeT/K3ieev+MeMGxZe7oceuWLOy8GZAjK7TMKS2Uh9UPmfGLBczUPsq" crossorigin="anonymous" data-website-id="3f6a0c2e-9b1d-4e7a-8c5f-1d2e3f4a5b6c"></script>
 ```
@@ -57,7 +60,7 @@ release pipeline signs releases, with its signature:
 If a released version turns out to have a security problem, it is revoked: the gateway answers
 `410 Gone` for its file, the console stops offering it, and pages that still load it from the
 gateway send nothing until their tag is replaced. A revoked version is listed in
-[`revoked.json`](../../../packages/tracker/releases/revoked.json) with the reason. No version has
+[`revoked.json`](https://github.com/justmert/veristar/blob/main/packages/tracker/releases/revoked.json) with the reason. No version has
 been revoked so far.
 
 Because the tracker is pinned, the service cannot fix a problem on your pages without you: watch

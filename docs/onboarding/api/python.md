@@ -1,7 +1,10 @@
-# Python
+---
+title: "Python"
+description: "Dual export from a Python service on FastAPI with the OpenTelemetry Python SDK."
+---
 
 Dual export from a Python service. Built from the example
-[`examples/otel-python-fastapi`](../../../examples/otel-python-fastapi): FastAPI 0.161.1 on uvicorn
+[`examples/otel-python-fastapi`](https://github.com/justmert/veristar/tree/main/examples/otel-python-fastapi): FastAPI 0.161.1 on uvicorn
 0.54.0 with `opentelemetry-instrumentation-fastapi` 0.66b2 and the OpenTelemetry Python SDK 1.45.2,
 on Python 3.14.10 with uv. `tests/otelapps` runs it against stock collectors in every export mode,
 including both semantic convention settings below, and the `apipath` tag runs it against the real
@@ -10,7 +13,7 @@ environment variables.
 
 ## Packages
 
-<!-- include examples/otel-python-fastapi/pyproject.toml region=dependencies -->
+{/* include examples/otel-python-fastapi/pyproject.toml region=dependencies */}
 ```toml
 dependencies = [
     "fastapi==0.161.1",
@@ -29,7 +32,7 @@ here, to the release that matches the SDK version.
 
 Set `OTEL_SEMCONV_STABILITY_OPT_IN=http`. The example's image sets it:
 
-<!-- include examples/otel-python-fastapi/Dockerfile region=semconv -->
+{/* include examples/otel-python-fastapi/Dockerfile region=semconv */}
 ```dockerfile
 ENV OTEL_SEMCONV_STABILITY_OPT_IN=http
 ```
@@ -46,7 +49,7 @@ Both tested settings give the same numbers in the dashboard; `http` avoids the c
 
 Two exporters per signal; only the platform exporters carry the token:
 
-<!-- include examples/otel-python-fastapi/app.py region=telemetry -->
+{/* include examples/otel-python-fastapi/app.py region=telemetry */}
 ```python
 AUTH = {"Authorization": f"Bearer {PLATFORM_TOKEN}"}
 resource = Resource.create({"service.name": SERVICE_NAME})
@@ -95,7 +98,7 @@ if METRICS_ENABLED:
 Pass both providers to the instrumentor explicitly. Health checks are excluded so probes do not
 count as API traffic:
 
-<!-- include examples/otel-python-fastapi/app.py region=instrument -->
+{/* include examples/otel-python-fastapi/app.py region=instrument */}
 ```python
 # health checks are excluded so probes never change the request counts
 FastAPIInstrumentor.instrument_app(
@@ -110,7 +113,7 @@ see [http-route.md](http-route.md).
 
 - **Shut down cleanly.** Shut down the meter provider and the tracer provider at the end of the
   app's lifespan, after uvicorn stopped accepting requests, so the last interval is exported (see
-  `lifespan` in [`app.py`](../../../examples/otel-python-fastapi/app.py)).
+  `lifespan` in [`app.py`](https://github.com/justmert/veristar/blob/main/examples/otel-python-fastapi/app.py)).
 - **Delta temporality** follows the specification's delta preference: counters and histograms
   switch to delta, up-down counters and gauges stay cumulative.
 

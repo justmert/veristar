@@ -23,13 +23,16 @@
          | selectattr('ipv4.address', 'equalto', sa_private_ip)
          | map(attribute='device') | first | default('') }}
 
-- name: Require a private interface distinct from the public one
+# azure gives a vm one interface with its private address and maps the
+# public address onto it (1:1 nat), so there both are the same interface;
+# elsewhere the private network has its own interface
+- name: Require the private interface
   when: sa_tier != 'probe'
   ansible.builtin.assert:
     that:
       - base_private_interface | length > 0
-      - base_private_interface != base_public_interface
-    fail_msg: "no interface holds {{ sa_private_ip }}, or it is the default-route interface"
+      - base_private_interface != base_public_interface or sa_provider == 'azure'
+    fail_msg: "no interface holds {{ sa_private_ip }}, or it is the default-route interface outside azure"
 
 - name: Install base packages
   ansible.builtin.apt:

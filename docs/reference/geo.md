@@ -1,4 +1,7 @@
-# Country lookup (DB-IP)
+---
+title: "Country lookup (DB-IP)"
+description: "How the gateway derives a country code with a local DB-IP database, and nothing more precise."
+---
 
 The gateway turns a client address into an ISO 3166-1 alpha-2 country code with
 a local copy of the DB-IP "IP to Country Lite" database. Only the country code
@@ -10,10 +13,10 @@ Code: `internal/gateway/geo.go` (lookup), `internal/gateway/clientip.go`
 
 ## Licence and attribution
 
-Checked on 2026-11-12 at <https://db-ip.com/db/download/ip-to-country-lite>.
+Checked on 2026-11-12 at [https://db-ip.com/db/download/ip-to-country-lite](https://db-ip.com/db/download/ip-to-country-lite).
 
 - Licence: Creative Commons Attribution 4.0 International (CC BY 4.0),
-  <https://creativecommons.org/licenses/by/4.0/>.
+  [https://creativecommons.org/licenses/by/4.0/](https://creativecommons.org/licenses/by/4.0/).
 - Requirement, in DB-IP's words: use is allowed "provided you give attribution
   to DB-IP.com for the data", and web applications must "include a link back to
   DB-IP.com on pages that display or use results from the database".

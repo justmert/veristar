@@ -1,10 +1,14 @@
-# Verifying an environment
+---
+title: "Verifying an environment"
+sidebarTitle: "Verification"
+description: "Checks that prove a converged environment works, from the outside in."
+---
 
 Checks that prove a converged environment works, from the outside in. Run them after
 [bootstrap.md](bootstrap.md), after every rollout ([upgrade.md](upgrade.md)), and whenever you
 doubt the state. Staging is shown; node addresses come from
 `infra/ansible/inventories/staging/hosts.json`, private addresses and compose directories from
-[../runbooks/README.md](../runbooks/README.md).
+[../runbooks/overview.md](../runbooks/overview.md).
 
 **Status:** never run against staging or production (they do not exist). The node-level checks
 of steps 1, 3, 4, 5 and 7 ran on the local converge on 2026-11-12 and 2026-11-13
@@ -46,7 +50,7 @@ gateway on 2026-11-13 ([../runbooks/tracker-release.md](../runbooks/tracker-rele
    ```
 
    Expected: a leader and three peers, all current. Then `platformctl nats check` as in
-   [../runbooks/README.md](../runbooks/README.md): every object `"action":"unchanged"` and no
+   [../runbooks/overview.md](../runbooks/overview.md): every object `"action":"unchanged"` and no
    `nats topology differs from the spec` error.
 
 5. **etcd and Patroni:**
@@ -95,5 +99,5 @@ gateway on 2026-11-13 ([../runbooks/tracker-release.md](../runbooks/tracker-rele
     ([../runbooks/tenant-removal.md](../runbooks/tenant-removal.md)).
 
 11. **Monitoring:** Prometheus targets all `UP` and no alert firing other than those explained
-    by missing inputs (for example `BackupTooOld` without object storage). Once the probe node
-    exists, the status page shows every check green.
+    by missing inputs (for example `BackupTooOld` before the first backup). Once the probe
+    bundle runs ([probe.md](probe.md)), every uptime monitor of it is up.

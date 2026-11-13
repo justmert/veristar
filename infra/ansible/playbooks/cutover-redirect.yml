@@ -89,7 +89,7 @@
         validate: >-
           docker run --rm -v %s:/etc/caddy/Caddyfile:ro -e SA_TLS={{ sa_tls }}
           -e BASE_DOMAIN={{ sa_base_domain }} -e GATEWAY_UPSTREAM=gateway:8080
-          -e NODE_HEALTH_UPSTREAM=gateway:9090 -e NODE_HEALTH_PATH=/edgez -e BUNNY_API_KEY=validate-only
+          -e NODE_HEALTH_UPSTREAM=gateway:9090 -e NODE_HEALTH_PATH=/edgez -e CLOUDFLARE_API_TOKEN=validate-only-token-not-used-for-any-call
           {{ platform_images.caddy }} caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
       notify: Reload caddy
 

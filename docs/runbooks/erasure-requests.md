@@ -1,4 +1,7 @@
-# Erasure requests
+---
+title: "Erasure requests"
+description: "What an operator does when a data subject or a tenant asks for data to be erased."
+---
 
 What an operator does when a data subject or a tenant asks for data to be erased. The statement
 of what can be erased and why is [../compliance/erasure.md](../compliance/erasure.md); the API is
@@ -55,7 +58,7 @@ identify the site and session concerned.
 ## Operator checks
 
 The records keep no address, user agent or visitor token. To see requests across projects, on
-the database leader ([README.md](README.md)):
+the database leader ([overview.md](overview.md)):
 
 ```sql
 select id, tenant_id, site_id, kind, status, outcome, requested_at, completed_at, reaggregated_at

@@ -30,9 +30,11 @@ NATS_USERS = ["gateway", "collector", "replayer", "metricswriter", "jobs", "cont
 INPUTS = {
     "SA_GITHUB_CLIENT_ID": "github_client_id",  # I2
     "SA_GITHUB_CLIENT_SECRET": "github_client_secret",  # I2
-    "SA_BUNNY_API_KEY": "bunny_api_key",  # I6, caddy dns-01
-    "SA_OBJECT_STORAGE_ACCESS_KEY": "object_storage_access_key",  # I5, backups
-    "SA_OBJECT_STORAGE_SECRET_KEY": "object_storage_secret_key",  # I5, backups
+    "SA_CLOUDFLARE_API_TOKEN": "cloudflare_api_token",  # I6, caddy dns-01
+    # the local converge's s3 stand-in only; azure backups use the core
+    # nodes' managed identity and have no key
+    "SA_OBJECT_STORAGE_ACCESS_KEY": "object_storage_access_key",
+    "SA_OBJECT_STORAGE_SECRET_KEY": "object_storage_secret_key",
     "SA_ALERTMANAGER_DISCORD_WEBHOOK_URL": "alertmanager_discord_webhook_url",  # I8, alerts
     "SA_GATUS_DISCORD_WEBHOOK_URL": "gatus_discord_webhook_url",  # I8, status page alerts
 }

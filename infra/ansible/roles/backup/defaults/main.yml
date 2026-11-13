@@ -3,14 +3,16 @@
 backup_stanza: sa
 
 # where the repository lives:
-#   s3          hetzner object storage in a location without a database node
-#               (staging and production; needs an operator input: sa_object_storage in
-#               the inventory and the s3 keys in the sops file)
+#   azure       azure blob storage, zone-redundant, versioned and immutable
+#               (staging and production; sa_object_storage in the inventory
+#               from infra/tofu/modules/backup-storage). pgbackrest signs in
+#               with the node's managed identity, so there is no key.
+#   s3          the local converge's s3 stand-in (LC_BACKUP=s3) only
 #   posix-host  a separate node of the backup group holding a posix
 #               repository, reached over pgbackrest's tls protocol. the local
 #               converge uses it as a stand-in for object storage; it is not
 #               equivalent (docs/deploy/local-converge.md section 6).
-backup_repo_mode: s3
+backup_repo_mode: azure
 
 backup_dir: /opt/veristar/backup
 backup_conf_dir: /etc/veristar/pgbackrest
@@ -52,6 +54,7 @@ backup_repo_environment: "{{ sa_environment }}"
 # readable until their retention ends (docs/runbooks/disaster-recovery.md)
 backup_repo_generation: 1
 backup_repo_object_storage: "{{ sa_object_storage | default(none) }}"
+# s3 mode only (the local stand-in)
 backup_repo_access_key: "{{ sa_secrets.object_storage_access_key | default('') }}"
 backup_repo_secret_key: "{{ sa_secrets.object_storage_secret_key | default('') }}"
 backup_repo_cipher_pass: "{{ sa_secrets.pgbackrest_cipher_pass }}"

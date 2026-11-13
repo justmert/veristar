@@ -1,4 +1,7 @@
-# Tenant suspension and removal
+---
+title: "Tenant suspension and removal"
+description: "Suspend, resume and remove a project, and follow a removal to completion."
+---
 
 How an operator suspends, resumes and removes a project, what happens to its
 data, and how to follow or repair a removal. Contract:
@@ -35,7 +38,7 @@ first step before removal.
    where detail ->> 'tenant_id' = '<tenant id>' order by at desc limit 5;
    ```
 
-   (run on the leader as in [README.md](README.md)). The gateway's refusal of
+   (run on the leader as in [overview.md](overview.md)). The gateway's refusal of
    a suspended site is `rejected_inactive_site` in `cp.web_ingest_hourly`.
 
 **Resume** with **Resume** or `POST /api/operator/tenants/{tenant_id}/resume`

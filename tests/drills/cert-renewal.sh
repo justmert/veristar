@@ -1,7 +1,7 @@
 #!/bin/sh
 # certificate renewal forced on every node. the local converge issues from
-# caddy's local ca (sa_tls internal); acme dns-01 through bunny.net cannot
-# run here (inputs I4 and I6), so this proves caddy re-issues and serves a
+# caddy's local ca (sa_tls internal); acme dns-01 through cloudflare needs
+# the real zone, so this proves caddy re-issues and serves a
 # new certificate on every node, not that let's encrypt does.
 . "$(dirname "$0")/lib.sh"
 out="$DRILLS/cert-renewal"

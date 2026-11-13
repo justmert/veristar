@@ -1,4 +1,8 @@
-# Upgrading an environment
+---
+title: "Upgrading an environment"
+sidebarTitle: "Upgrade"
+description: "Release a new version and roll it out one node at a time, with signatures checked first."
+---
 
 A new version of the platform is a release tag; rolling it out is `deploy.yml`, one node at a
 time, with every image's signature checked first. Upstream images (Umami, NATS, etcd, HAProxy,

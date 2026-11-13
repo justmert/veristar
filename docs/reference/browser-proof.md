@@ -1,4 +1,7 @@
-# Browser proof
+---
+title: "Browser proof"
+description: "The proof of work every page load solves, and what it does and does not prove."
+---
 
 Every page load that runs `sdk.js` fetches a challenge from `GET /v1/c`, solves a small SHA-256
 proof of work with WebCrypto and attaches the result to every event of that page load. The exact

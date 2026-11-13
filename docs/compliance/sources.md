@@ -1,4 +1,7 @@
-# Legal sources register
+---
+title: "Legal sources register"
+description: "The register of legal sources the compliance documents rely on."
+---
 
 Status: draft, pending legal review an operator input. Not legal advice. Date checked: 2026-11-12 (S1 to S11); entries S12 to S40 added 2026-11-13, and S4 and S11 updated 2026-11-13.
 

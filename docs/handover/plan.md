@@ -1,4 +1,8 @@
-# Handover plan
+---
+title: "Handover plan"
+sidebarTitle: "Plan"
+description: "How stewardship of the service moves from the original operator to a community-appointed operator."
+---
 
 > **Status (2026-11-13): tooling built and rehearsed locally; the independent rehearsal is
 > blocked.** The migration tooling, `rotate-all.yml` and the domain cutover playbooks exist
@@ -24,10 +28,10 @@ operator. The RFP sets the frame (RFP 3.4):
 | Asset | Today | Moves by |
 |---|---|---|
 | Repository `github.com/justmert/veristar` (code, IaC, docs, issues, releases) | personal account of the proposer | GitHub repository transfer to the new operator's owner |
-| Domain `BASE_DOMAIN` an operator input, not yet chosen) | ideally registered to SCF from day one, which makes this step a permission change | registrar transfer, or permanent redirect (section 5) |
-| Cloud project (Hetzner: servers, private network, object storage with backups) | an operator input | rebuild in the new operator's account from `infra/tofu`, then data migration |
-| DNS zone (bunny.net) | an operator input | recreated from `infra/tofu/modules/dns` in the new account |
-| Probe server and status page (Scaleway) | an operator input | rebuilt from `infra/tofu/modules/probe` |
+| Domain `BASE_DOMAIN` an operator input, `veristar.app`, at Cloudflare Registrar) | ideally registered to SCF from day one, which makes this step a permission change | registrar transfer, or permanent redirect (section 5) |
+| Azure subscription (VMs, virtual network, Traffic Manager, Blob Storage with backups) | an operator input | rebuild in the new operator's subscription from `infra/tofu`, then data migration; or a subscription transfer to the new operator's tenant |
+| DNS records in the Cloudflare zone | an operator input | recreated from `infra/tofu/modules/dns` with the new operator's token; the zone moves with the domain |
+| Probe (prober and Gatus as a container bundle) | the operator's own server | rendered again from `playbooks/probe-bundle.yml` on the new operator's server ([../deploy/probe.md](../deploy/probe.md)) |
 | Secrets (`infra/secrets/<env>/secrets.enc.yaml`, SOPS with age) | encrypted to the age keys in `infra/secrets/recipients/<env>.txt` an operator input | new operator's keys added, then every value rotated, then the old keys removed (section 4) |
 | GitHub OAuth apps for console sign-in an operator input | owned by the proposer | new apps under the new owner, new client ids and secrets |
 | Operator list `OPERATOR_GITHUB_IDS` an operator input | SCF's operators | unchanged unless SCF changes it |
@@ -50,7 +54,7 @@ I12 and has not run.
 
 1. SCF names the community operator and the date the handover starts.
 2. The new operator reads the repository's documentation: [../architecture.md](../architecture.md),
-   [../deploy/](../deploy/), [../runbooks/](../runbooks/), [../sla.md](../sla.md),
+   [../deploy/overview.md](../deploy/overview.md), [../runbooks/overview.md](../runbooks/overview.md), [../sla.md](../sla.md),
    [../support.md](../support.md) and this plan.
 3. The new operator creates its own accounts: a GitHub owner, a cloud project, a DNS account, a
    probe account, an alert receiver, and age identities for at least two people.
@@ -65,7 +69,7 @@ and no write access to production, and builds its own copy.
 - The new operator answers support issues, with the original operator reviewing, so the
   5 and 10 business day targets are kept by the people who will own them.
 - The new operator builds a complete environment in its own cloud account from the repository
-  alone (independent rebuild), following [../deploy/](../deploy/). Every point where it needed
+  alone (independent rebuild), following [../deploy/overview.md](../deploy/overview.md). Every point where it needed
   knowledge not in the repository is fixed in the docs.
 - The new operator runs the runbooks that can run without production write access on its own
   environment: edge node loss, database failover, point-in-time restore, Umami upgrade.
@@ -92,7 +96,7 @@ the delegation changes.
    advance notice of a processor or sub-processor change; the length of that notice is open
    for the legal review (`docs/compliance/dpa-template.md`, an operator input.
 2. **New environment built and bootstrapped**, empty, in the new operator's accounts (section
-   2.2), with `sa_tls: bunny-delegated` and `sa_acme_challenge_domain` set in its
+   2.2), with `sa_tls: cloudflare-delegated` and `sa_acme_challenge_domain` set in its
    `group_vars/all.yml`.
 3. **Certificates before the delegation.** The domain still delegates to the old DNS account,
    so Let's Encrypt asks the old zone for every DNS-01 answer. The old operator adds one CNAME
@@ -105,13 +109,14 @@ the delegation changes.
    _acme-challenge.web.<domain>   CNAME  <sa_acme_challenge_domain>
    ```
 
-   `<sa_acme_challenge_domain>` is a name in a zone the new operator's bunny.net account
-   already serves publicly (for example `_acme-challenge.<a domain the new operator owns>`).
-   The new nodes' Caddy (`sa_tls_bunny-delegated` in `deploy/caddy/assemble.sh`, Caddy's
+   `<sa_acme_challenge_domain>` is a name in a Cloudflare zone the new operator's token may
+   edit (for example `_acme-challenge.<a domain the new operator owns>`).
+   The new nodes' Caddy (`sa_tls_cloudflare-delegated` in `deploy/caddy/assemble.sh`, Caddy's
    `dns_challenge_override_domain`) writes the answer there, and Let's Encrypt follows the
    CNAME. Expected: each new node serves a Let's Encrypt certificate for its names when asked
    by address with SNI (`docs/runbooks/certificates.md` step 1), before anything moves.
-4. **Record TTLs.** The address records already have a 60 s TTL (`infra/tofu/envs/*/main.tf`);
+4. **Record TTLs.** Traffic Manager answers with a 10 s or 30 s TTL behind 300 s CNAMEs
+   (`infra/tofu/envs/*/main.tf`);
    the NS TTL at the TLD cannot be lowered and is the length of the parallel phase below.
 
 **Cutover day** (the freeze lasts for the export and import only, typically under an hour;
@@ -159,16 +164,16 @@ What tenants notice: the console is unavailable during the freeze (steps 5 to 7)
 sent during the freeze reach Umami only after the forwarder delivers them, so dashboards show
 them late, not missing. A visitor seen on both stacks on cutover day is counted twice that day,
 because each environment has its own daily visitor secret (the same effect as the `APP_SECRET`
-note in section 4). Removing the old `_acme-challenge` CNAMEs and the `bunny-delegated`
+note in section 4). Removing the old `_acme-challenge` CNAMEs and the `cloudflare-delegated`
 setting after the move is part of section 2.4; renewals then use the new zone directly
-(`sa_tls: bunny`).
+(`sa_tls: cloudflare`).
 
 What was proven locally (2026-11-13): the forwarder against two real NATS servers with the
 production users and permissions (`go test -run TestQueueForward ./cmd/platformctl/`): every
 queue moved with its ids, a message the target already held stored once, late events after the
 start forwarded, a running consumer and a target without the topology refused. The
-`bunny-delegated` Caddy configuration validates with the pinned Caddy build
-(`TestAssembledNodeCaddyfiles`). Not proven: certificate issuance through the CNAME and the
+`cloudflare-delegated` Caddy configuration validates with the pinned Caddy build
+(`caddy validate` on 2026-11-13; `TestAssembledNodeCaddyfiles`). Not proven: certificate issuance through the CNAME and the
 registrar transfer (inputs I4, I6, I12), and the whole order on two real environments.
 
 ### 2.4 Removal of the original operator
@@ -180,7 +185,7 @@ After the cutover is confirmed working:
 - Their GitHub access to the repository, their cloud, DNS, probe and registrar access, their
   alert receiver and any operator API keys they created are removed or revoked.
 - Their GitHub id is removed from `OPERATOR_GITHUB_IDS` if it is there, and the control plane
-  is restarted so the change takes effect at once ([../operators/README.md](../operators/README.md)).
+  is restarted so the change takes effect at once ([../operators/overview.md](../operators/overview.md)).
 - The old environment is torn down after the advisory tail (section 6) or when SCF says so,
   and its backups are deleted at the end of their retention. Tenants are told when.
 
@@ -213,8 +218,8 @@ and `infra/ansible/playbooks/rotate-all.yml` ([rebuild.md](rebuild.md) section 7
 generated value (database roles including the superuser and replication, NATS users and routes,
 the Umami database, admin and user password key, `APP_SECRET`, the OAuth state key, Patroni,
 Grafana, exporter and probe tokens), re-encryption to the new age recipients, and proof that
-every previous credential is refused. Owner inputs (GitHub OAuth secret, bunny.net, object
-storage, Discord) are replaced at their providers and passed in; the playbook stops on any that
+every previous credential is refused. Owner inputs (GitHub OAuth secret, the Cloudflare
+token, Discord) are replaced at their providers and passed in; the playbook stops on any that
 kept its value, and asks GitHub whether the previous OAuth client secret is refused. The
 pgBackRest cipher passphrase is the exception: a rebuilt environment has its own, an in-place
 handover needs a new repository.

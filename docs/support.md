@@ -1,4 +1,7 @@
-# Support
+---
+title: "Support"
+description: "How tenants and everyone else get help, and the response and resolution targets the operator commits to."
+---
 
 How tenants and anyone else get help with the service, and the targets the operator commits
 to (RFP 3.4). The operational targets for availability and security patching are in

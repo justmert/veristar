@@ -1,4 +1,8 @@
-# API analytics quickstart
+---
+title: "API analytics quickstart"
+sidebarTitle: "Quickstart"
+description: "Count your backend's HTTP requests, status codes and latency by adding a second OpenTelemetry exporter."
+---
 
 API analytics counts the HTTP requests your backend serves: volume, status codes and latency
 percentiles (p50, p95) per service, method and route. Your app sends them with OpenTelemetry, the

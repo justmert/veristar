@@ -17,9 +17,12 @@
 #   ... playbooks/deploy.yml -e sa_image_tag=<release> -e sa_release_manifest=<release-images.json>
 #
 # deploy_drain_seconds: how long a drained node keeps serving before it is
-# touched. bunny.net checks every 30 s and the record ttl is 60 s
-# (infra/tofu envs), so a resolver that fetched the set just before removal
-# may keep the address for up to 30 + 60 s; 120 s covers that with margin.
+# touched. traffic manager (infra/tofu/modules/failover) drops an endpoint
+# after three failed probes: for in. and otlp. every 10 s with a 5 s timeout
+# and a 10 s answer ttl, so a resolver may keep the address for up to
+# 30 + 5 + 10 s; for app. and web. every 30 s with a 10 s timeout and a 30 s
+# ttl, up to 90 + 10 + 30 s. 120 s (edge) and 150 s (core) cover that with
+# margin.
 - name: Verify the release
   ansible.builtin.import_playbook: verify-release.yml
 
@@ -59,7 +62,7 @@
   vars_files: [../vars/pins.yml]
   vars:
     sa_draining: true
-    deploy_drain_seconds: 120
+    deploy_drain_seconds: 150
   pre_tasks:
     - name: Drain the node
       ansible.builtin.include_tasks: tasks/drain.yml

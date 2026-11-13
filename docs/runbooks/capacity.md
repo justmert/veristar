@@ -1,4 +1,7 @@
-# Capacity changes
+---
+title: "Capacity changes"
+description: "Add resources before a limit is reached, or remove them when they are not used."
+---
 
 Adding resources before a limit is reached, or removing them when they are not used. The measured
 numbers behind the sizing are in [../reference/capacity.md](../reference/capacity.md) (API metric
@@ -53,18 +56,20 @@ it, keeping a quarter of the store free (the test checks that ratio), then run
    `core_api_minute_retention_days` and `core_api_hourly_retention_months` in the core role;
    raw Umami events are kept `WEB_RAW_RETENTION_MONTHS` (25 by default) by `jobs retain-web`.
 
-## Change a server type
+## Change a VM size
 
-1. Set `edge_server_type` or `core_server_type` in `infra/tofu/envs/<env>/terraform.tfvars`
-   (types available in fsn1, nbg1 and hel1 must be checked in the Hetzner console or API; an operator input.
+1. Set `edge_vm_size` or `core_vm_size` in `infra/tofu/envs/<env>/terraform.tfvars`. Check the
+   size is offered in every zone the tier uses and that the family's vCPU quota fits:
+   `az vm list-skus -l swedencentral --size <size> -o table` and
+   `az vm list-usage -l swedencentral -o table`.
 2. Plan and read it:
 
    ```sh
    make staging-plan
    ```
 
-   An in-place update (`~`) of `hcloud_server` changes the type of the existing server, which
-   powers it off and on. A replacement (`-/+`) would build a new server; do not apply a plan that
+   An in-place update (`~`) of `azurerm_linux_virtual_machine` resizes the existing VM, which
+   restarts it. A replacement (`-/+`) would build a new server; do not apply a plan that
    replaces servers you meant to resize. Production servers have delete and rebuild protection.
 3. Drain the node first if the change restarts it ([edge-node-failure.md](edge-node-failure.md)
    step 2; on a core node holding the Patroni leader, switch it over first,

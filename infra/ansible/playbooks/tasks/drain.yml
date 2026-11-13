@@ -21,7 +21,7 @@
 # that would be a silent drain, so the run stops instead
 - name: Check that port 80 now answers 503
   ansible.builtin.uri:
-    url: "http://{{ sa_public_ipv4 }}/"
+    url: "http://{{ sa_public_bind_ipv4 | default(sa_public_ipv4) }}/"
     follow_redirects: none
     status_code: 503
   register: drain_health
