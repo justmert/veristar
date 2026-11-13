@@ -14,6 +14,9 @@ it and take it down. Follow the pages in this order:
 | 7 | [upgrade.md](upgrade.md) | releasing and rolling out a new version |
 | 8 | [teardown.md](teardown.md) | removing an environment |
 
+Before production takes its first real project, every item of
+the verification page is run and signed off.
+
 [local-converge.md](local-converge.md) is the stand-in that runs the same roles against four to
 seven Debian 13 containers on one machine; everything below was first proven there.
 
