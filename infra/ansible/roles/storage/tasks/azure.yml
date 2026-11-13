@@ -31,7 +31,17 @@
 # machine the operator controls (docs/deploy/ansible.md section 8)
 - name: Read the storage account
   ansible.builtin.command:
-    argv: "{{ storage_az_argv + ['storage', 'account', 'show', '--name', storage_account, '--output', 'json', '--only-show-errors'] }}"
+    argv: >-
+      {{ storage_az_argv + [
+           'storage',
+           'account',
+           'show',
+           '--name',
+           storage_account,
+           '--output',
+           'json',
+           '--only-show-errors'
+         ] }}
   register: storage_account_show
   changed_when: false
   delegate_to: localhost
@@ -40,7 +50,20 @@
 
 - name: Read the blob service of the storage account
   ansible.builtin.command:
-    argv: "{{ storage_az_argv + ['storage', 'account', 'blob-service-properties', 'show', '--account-name', storage_account, '--resource-group', (storage_account_show.stdout | from_json).resourceGroup, '--output', 'json', '--only-show-errors'] }}"
+    argv: >-
+      {{ storage_az_argv + [
+           'storage',
+           'account',
+           'blob-service-properties',
+           'show',
+           '--account-name',
+           storage_account,
+           '--resource-group',
+           (storage_account_show.stdout | from_json).resourceGroup,
+           '--output',
+           'json',
+           '--only-show-errors'
+         ] }}
   register: storage_blob_service
   changed_when: false
   delegate_to: localhost
@@ -49,7 +72,20 @@
 
 - name: Read the lifecycle policy of the storage account
   ansible.builtin.command:
-    argv: "{{ storage_az_argv + ['storage', 'account', 'management-policy', 'show', '--account-name', storage_account, '--resource-group', (storage_account_show.stdout | from_json).resourceGroup, '--output', 'json', '--only-show-errors'] }}"
+    argv: >-
+      {{ storage_az_argv + [
+           'storage',
+           'account',
+           'management-policy',
+           'show',
+           '--account-name',
+           storage_account,
+           '--resource-group',
+           (storage_account_show.stdout | from_json).resourceGroup,
+           '--output',
+           'json',
+           '--only-show-errors'
+         ] }}
   register: storage_lifecycle
   changed_when: false
   delegate_to: localhost
@@ -58,7 +94,19 @@
 
 - name: Read the repository container
   ansible.builtin.command:
-    argv: "{{ storage_az_argv + ['storage', 'container-rm', 'show', '--storage-account', storage_account, '--name', sa_object_storage.backup_bucket, '--output', 'json', '--only-show-errors'] }}"
+    argv: >-
+      {{ storage_az_argv + [
+           'storage',
+           'container-rm',
+           'show',
+           '--storage-account',
+           storage_account,
+           '--name',
+           sa_object_storage.backup_bucket,
+           '--output',
+           'json',
+           '--only-show-errors'
+         ] }}
   register: storage_container
   changed_when: false
   delegate_to: localhost
