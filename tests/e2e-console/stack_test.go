@@ -12,8 +12,9 @@
 // stock collector as the tenants' own backend, and a loopback control api
 // that starts the go example app with a token the spec created. the
 // browsers reach the edge through a forwarder on a db-ip german range, so the
-// country panel has a real value. the playwright half lives in this
-// directory (specs/). run it with `make console-e2e`.
+// country panel has a real value. an alertmanager member behind mutual tls
+// feeds the operator alerts page (alertmanager_test.go). the playwright half
+// lives in this directory (specs/). run it with `make console-e2e`.
 package consolee2e
 
 import (
@@ -296,6 +297,9 @@ type Stack struct {
 	// address of the published container port
 	Routes map[string]string
 
+	// AM is the alertmanager of the operator alerts page
+	AM *amStack
+
 	names []string
 	nets  []string
 	// names of containers the apps control api started, from its goroutines
@@ -560,10 +564,14 @@ func (s *Stack) StartControlPlane(t testing.TB) {
 	} {
 		env[k] = v
 	}
+	for k, v := range s.alertmanagerEnv() {
+		env[k] = v
+	}
 	releases := filepath.Join(repoRoot(), "packages", "tracker", "releases") + ":/releases:ro"
 	ops := freePort(t)
 	s.mounted(t, "sa-ce-controlplane-"+s.ID, bins.controlplane,
-		[]string{"--network-alias", "controlplane", "-p", "127.0.0.1:" + ops + ":9090", "-v", releases}, env)
+		[]string{"--network-alias", "controlplane", "-p", "127.0.0.1:" + ops + ":9090", "-v", releases,
+			"-v", s.AM.clientDir + ":" + amClientDir + ":ro"}, env)
 	waitHTTP(t, "http://127.0.0.1:"+ops+"/readyz", time.Minute)
 
 	s.JobsOps = freePort(t)
@@ -851,10 +859,12 @@ func (s *Stack) restartJobs() error {
 
 // AppsControl serves POST /apps on loopback for the specs: the token comes
 // from the console, so the app can only start once a spec has created it.
-// POST /sites/verify and POST /jobs/restart are the two fixtures above.
+// POST /sites/verify and POST /jobs/restart are the two fixtures above;
+// /alertmanager/* serves the alerts spec (alertmanager_test.go).
 func (s *Stack) AppsControl(t testing.TB) string {
 	t.Helper()
 	mux := http.NewServeMux()
+	s.alertmanagerRoutes(mux)
 	mux.HandleFunc("POST /sites/verify", func(w http.ResponseWriter, req *http.Request) {
 		var body struct {
 			SiteID string `json:"site_id"`
@@ -1015,6 +1025,7 @@ func TestConsoleFlows(t *testing.T) {
 	s.StartPostgres(t)
 	s.StartNATS(t)
 	s.StartOAuthFixture(t)
+	s.StartAlertmanager(t)
 	s.StartControlPlane(t)
 	s.StartReplayer(t)
 	s.StartCollector(t)
