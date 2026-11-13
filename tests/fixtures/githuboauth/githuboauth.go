@@ -10,6 +10,14 @@
 //	POST /login/oauth/authorize     the consent decision, redirects with code or error
 //	POST /login/oauth/access_token  code exchange with pkce s256 verification
 //	GET  /user                      the public user response (id, login, ...)
+//	GET  /users/{login}             the public profile of a login, read with the
+//	                                app's client credentials (basic auth)
+//
+// the fixture knows a login once a user authorized with it, or once a test
+// registered it with POST /_fixture/users {"id", "login"}. one login names
+// one account and one account has one login, as on github: registering a
+// login again for another id moves the name (a rename followed by someone
+// else taking the freed login), and a new login for a known id renames it.
 //
 // and a control api under /_fixture/ for test runners: every authorize, token
 // and /user request is recorded so a test can assert what the client sent
@@ -110,9 +118,11 @@ type grant struct {
 type Server struct {
 	cfg Config
 
-	mu         sync.Mutex
-	codes      map[string]grant
-	tokens     map[string]User
+	mu     sync.Mutex
+	codes  map[string]grant
+	tokens map[string]User
+	// accounts maps a lowercase login to the account that holds it
+	accounts   map[string]User
 	authorizes []AuthorizeRecord
 	tokenReqs  []TokenRecord
 	userReqs   []UserRecord
@@ -123,7 +133,7 @@ func New(cfg Config) *Server {
 	if cfg.Now == nil {
 		cfg.Now = time.Now
 	}
-	return &Server{cfg: cfg, codes: map[string]grant{}, tokens: map[string]User{}}
+	return &Server{cfg: cfg, codes: map[string]grant{}, tokens: map[string]User{}, accounts: map[string]User{}}
 }
 
 // Handler serves the github endpoints and the control api.
@@ -133,6 +143,16 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /login/oauth/authorize", s.authorizeDecision)
 	mux.HandleFunc("POST /login/oauth/access_token", s.accessToken)
 	mux.HandleFunc("GET /user", s.user)
+	mux.HandleFunc("GET /users/{login}", s.publicUser)
+	mux.HandleFunc("POST /_fixture/users", func(w http.ResponseWriter, r *http.Request) {
+		var u User
+		if err := json.NewDecoder(r.Body).Decode(&u); err != nil || u.ID <= 0 || !loginRe.MatchString(u.Login) {
+			http.Error(w, "need a positive id and a valid github login", http.StatusBadRequest)
+			return
+		}
+		s.Register(u)
+		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	})
 	mux.HandleFunc("GET /_fixture/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 	})
@@ -171,12 +191,58 @@ func (s *Server) Requests() Requests {
 	}
 }
 
-// Reset forgets codes, tokens and records.
+// Register makes u the holder of its login: an earlier holder of the
+// login loses it, and an earlier login of u's id is freed.
+func (s *Server) Register(u User) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.register(u)
+}
+
+func (s *Server) register(u User) {
+	for login, held := range s.accounts {
+		if held.ID == u.ID {
+			delete(s.accounts, login)
+		}
+	}
+	s.accounts[strings.ToLower(u.Login)] = u
+}
+
+// publicUser is GET /users/{login}: github answers 404 for a login no
+// account holds and the public profile otherwise. the fixture accepts only
+// the registered app's credentials, which is how the control plane calls it.
+func (s *Server) publicUser(w http.ResponseWriter, r *http.Request) {
+	id, secret, ok := r.BasicAuth()
+	if !ok || subtle.ConstantTimeCompare([]byte(id), []byte(s.cfg.ClientID)) != 1 ||
+		subtle.ConstantTimeCompare([]byte(secret), []byte(s.cfg.ClientSecret)) != 1 {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{
+			"message": "Bad credentials", "documentation_url": "https://docs.github.com/rest", "status": "401",
+		})
+		return
+	}
+	s.mu.Lock()
+	u, found := s.accounts[strings.ToLower(r.PathValue("login"))]
+	s.mu.Unlock()
+	if !found {
+		writeJSON(w, http.StatusNotFound, map[string]string{
+			"message": "Not Found", "documentation_url": "https://docs.github.com/rest/users/users#get-a-user", "status": "404",
+		})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"login": u.Login, "id": u.ID, "type": "User", "site_admin": false,
+		"node_id":  "U_fixture" + strconv.FormatInt(u.ID, 10),
+		"html_url": "https://github.com/" + u.Login,
+	})
+}
+
+// Reset forgets codes, tokens, accounts and records.
 func (s *Server) Reset() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.codes = map[string]grant{}
 	s.tokens = map[string]User{}
+	s.accounts = map[string]User{}
 	s.authorizes, s.tokenReqs, s.userReqs = nil, nil, nil
 }
 
@@ -291,6 +357,8 @@ func (s *Server) authorizeDecision(w http.ResponseWriter, r *http.Request) {
 	}
 	code := randomToken(20)
 	s.mu.Lock()
+	// the person who signs in holds that login from now on
+	s.register(User{ID: id, Login: login})
 	s.codes[code] = grant{
 		user:        User{ID: id, Login: login},
 		challenge:   q.Get("code_challenge"),

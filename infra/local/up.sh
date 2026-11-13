@@ -29,6 +29,9 @@ docker build -q -f "$root/infra/local/node.Dockerfile" --build-arg ADMIN_USER="$
 	-t "$LC_NODE_IMAGE" "$root/infra/local" >/dev/null
 
 lc_router_up
+if [ "$LC_BACKUP" = s3 ]; then
+	lc_s3_up
+fi
 echo "$LC_NODES" | while read -r name loc pub priv; do
 	lc_node_create "$name" "$loc" "$pub" "$priv"
 done
@@ -42,6 +45,12 @@ recipient="$("$tools/age/age-keygen" -y "$LC_STATE/age.key")"
 secrets="$root/infra/secrets/local/secrets.enc.yaml"
 if [ ! -f "$secrets" ]; then
 	mkdir -p "$(dirname "$secrets")"
+	# in s3 mode the stand-in's keys go in as the operator an operator input would
+	if [ "$LC_BACKUP" = s3 ]; then
+		SA_OBJECT_STORAGE_ACCESS_KEY="$(sed -n 1p "$LC_STATE/s3/keys")"
+		SA_OBJECT_STORAGE_SECRET_KEY="$(sed -n 2p "$LC_STATE/s3/keys")"
+		export SA_OBJECT_STORAGE_ACCESS_KEY SA_OBJECT_STORAGE_SECRET_KEY
+	fi
 	"${ANSIBLE_VENV:-$HOME/.local/share/stellar-analytics/ansible-venv}/bin/python" "$root/infra/secrets/new-secrets.py" local >"$LC_STATE/secrets.plain.yaml"
 	"$tools/sops-3.13.3" encrypt --age "$recipient" --input-type yaml --output-type yaml \
 		"$LC_STATE/secrets.plain.yaml" >"$secrets"
@@ -60,12 +69,18 @@ hosts = {"edge": {}, "core": {}, "backup": {}, "restore": {}, "probe": {}}
 for line in nodes:
     name, loc, pub, priv = line.split()
     tier, idx = name.split("-")[-2], int(name.split("-")[-1])
+    # the probe has no location network and no private address, as on
+    # scaleway (infra/tofu/modules/probe)
     hosts[tier][name] = {
         "ansible_host": pub, "ansible_user": "$LC_ADMIN_USER",
-        "sa_tier": tier, "sa_index": idx, "sa_provider": "local", "sa_location": loc,
-        "sa_public_ipv4": pub, "sa_public_ipv6": None, "sa_private_ip": priv,
+        "sa_tier": tier, "sa_index": idx, "sa_provider": "local",
+        "sa_location": None if loc == "none" else loc,
+        "sa_public_ipv4": pub, "sa_public_ipv6": None,
+        "sa_private_ip": None if priv == "none" else priv,
     }
 domain = "sa-local.test"
+s3 = "$LC_BACKUP" == "s3"
+state = "$LC_STATE"
 inv = {"all": {
     "vars": {
         "sa_environment": "local",
@@ -74,7 +89,15 @@ inv = {"all": {
         "sa_private_network_cidr": "$LC_PRIVATE_SUBNET",
         # the controller reaches the nodes from the public network's gateway
         "sa_admin_cidrs": ["$LC_PUBLIC_GATEWAY/32"],
-        "sa_object_storage": None,
+        # s3 mode: the stand-in, addressed like hetzner object storage
+        # (https endpoint, region, bucket, host-style); storage_host and
+        # ca_file are the two local-only keys (roles/backup, roles/storage)
+        "sa_object_storage": {
+            "endpoint": "https://$LC_S3_DOMAIN", "region": "$LC_S3_LOCATION",
+            "backup_bucket": "$LC_S3_BUCKET", "storage_host": "$LC_S3_IP",
+            "ca_file": state + "/s3/ca.crt",
+        } if s3 else None,
+        "backup_repo_mode": "s3" if s3 else "posix-host",
     },
     "children": {t: {"hosts": h} for t, h in hosts.items()},
 }}

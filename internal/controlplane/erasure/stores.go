@@ -171,9 +171,74 @@ func purgeVisit(ctx context.Context, kv jetstream.KeyValue, site, vt string) err
 	return nil
 }
 
+// pendingKey holds the sessions a visitor_today run is deleting, written
+// before the visit record goes and removed once every session is gone. a
+// run that fails in between leaves it, so the next request of the same day
+// still finds the sessions. it lives in visit_state next to the
+// record it replaces, with the same 24 hour ttl, and holds nothing the
+// record did not.
+func pendingKey(site, vt string) string { return "erasing." + site + "." + vt }
+
+// pendingErasure reads the progress record of an earlier run; nil when none.
+func pendingErasure(ctx context.Context, kv jetstream.KeyValue, site, vt string) (*replayer.VisitRecord, error) {
+	e, err := kv.Get(ctx, pendingKey(site, vt))
+	if errors.Is(err, jetstream.ErrKeyNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("erasure: read %s: %w", natsx.BucketVisitState, err)
+	}
+	var r replayer.VisitRecord
+	if err := json.Unmarshal(e.Value(), &r); err != nil {
+		return nil, fmt.Errorf("erasure: progress record of the visitor is not readable: %w", err)
+	}
+	return &r, nil
+}
+
+func savePending(ctx context.Context, kv jetstream.KeyValue, site, vt string, r *replayer.VisitRecord) error {
+	b, err := json.Marshal(r)
+	if err != nil {
+		return fmt.Errorf("erasure: encode progress record: %w", err)
+	}
+	if _, err := kv.Put(ctx, pendingKey(site, vt), b); err != nil {
+		return fmt.Errorf("erasure: write progress record: %w", err)
+	}
+	return nil
+}
+
+func clearPending(ctx context.Context, kv jetstream.KeyValue, site, vt string) error {
+	if err := kv.Purge(ctx, pendingKey(site, vt)); err != nil {
+		return fmt.Errorf("erasure: remove progress record: %w", err)
+	}
+	return nil
+}
+
+// bucketSince is when visit_state was created. the bucket is memory-backed,
+// so a nats restart empties it and the replayer creates it again; a time
+// after the start of the day means links of that day may be lost.
+func bucketSince(ctx context.Context, kv jetstream.KeyValue) (time.Time, error) {
+	st, err := kv.Status(ctx)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("erasure: %s status: %w", natsx.BucketVisitState, err)
+	}
+	bs, ok := st.(*jetstream.KeyValueBucketStatus)
+	if !ok {
+		return time.Time{}, fmt.Errorf("erasure: %s status has no stream info", natsx.BucketVisitState)
+	}
+	return bs.StreamInfo().Created, nil
+}
+
 // siteVisits lists the visitor tokens that have a record on the site.
 func siteVisits(ctx context.Context, kv jetstream.KeyValue, site string) ([]string, error) {
-	prefix := "visit." + site + "."
+	return siteKeys(ctx, kv, "visit."+site+".")
+}
+
+// sitePending lists the visitor tokens with a progress record on the site.
+func sitePending(ctx context.Context, kv jetstream.KeyValue, site string) ([]string, error) {
+	return siteKeys(ctx, kv, "erasing."+site+".")
+}
+
+func siteKeys(ctx context.Context, kv jetstream.KeyValue, prefix string) ([]string, error) {
 	l, err := kv.ListKeysFiltered(ctx, prefix+"*")
 	if err != nil {
 		return nil, fmt.Errorf("erasure: list visit records: %w", err)

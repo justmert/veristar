@@ -28,6 +28,7 @@ A 30-day month has 30 x 24 x 60 = 43,200 minutes.
 | Whole core tier down | none: the edge queues for 72 h (`WEB_EVENTS` max age) | down for the whole outage | configured, not measured |
 | One location cut off | the cut-off edge answers 503 until DNS drops it (as edge loss) | if the cut-off location holds the Patroni leader: as leader loss | not measured |
 | Rolling deploy | none if DNS drains the node first (`deploy.yml` waits 120 s) | one switchover per core node with a changed postgres image, a few seconds each | not measured |
+| etcd quorum lost (two edge nodes down, the edge tier cut off from the core tier, or a rebuilt member that did not rejoin) | none: the edge does not touch etcd for ingestion | none while the Patroni leader still reaches every member in `/failsafe` through the REST API: `failsafe_mode: true` (`core_patroni_dcs`) keeps it primary without the DCS. Without failsafe the leader would demote within the 30 s TTL and dashboards and the pipeline would stop | configured, not measured (`make ops-local` step `failsafe` stops etcd on all three edges for 75 s and checks the leader stays writable; not yet completed) |
 | Full NATS restart | ingest answers 503 until JetStream has quorum again; visitors seen earlier that day are counted again | none | not measured |
 
 ## What the targets tolerate

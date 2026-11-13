@@ -89,12 +89,16 @@ Action: check ReplayerNotConsuming / MetricsWriterNotConsuming and the
 consumer's log. A replayer stuck on Umami errors shows in
 `replayer_send_duration_seconds{result!="ok"}`.
 
+<a id="replayerlaghigh"></a><a id="metricswriterlaghigh"></a>
+
 ### ReplayerLagHigh, MetricsWriterLagHigh
 More than 5,000 messages pending or unacknowledged for the replayer or the
 metrics writer for 10 minutes.
 Action: check that the leader consumes and how fast (Queues dashboard). If
 Umami or the database is slow, fix that first; the consumers catch up by
 themselves.
+
+<a id="replayernotconsuming"></a><a id="metricswriternotconsuming"></a>
 
 ### ReplayerNotConsuming, MetricsWriterNotConsuming
 No instance holds the consumer's lock for 2 minutes, or none is scraped.
@@ -112,12 +116,12 @@ Action: `docker compose ps` on the node and `docker compose logs umami-<n>`
 ### DLQNotEmpty
 `WEB_DLQ` or `API_DLQ` holds messages: events or batches were rejected
 permanently downstream.
-Action: read the reasons from the replayer and metricswriter logs (every
-message moved to a DLQ is logged with its stream sequence and reason) and fix
-the cause ([queue-backlog-and-dlq.md](queue-backlog-and-dlq.md)). No NATS
-client is installed and no replay or purge tool exists yet, so the messages
-expire with the stream (7 days web, 30 days API); the alert stays until the
-stream is empty.
+Action: list the messages and their reasons with `platformctl dlq list`, fix
+the cause, then `platformctl dlq replay` what is now storable and
+`platformctl dlq purge --yes` what never will be
+([queue-backlog-and-dlq.md](queue-backlog-and-dlq.md)). The alert resolves
+when both streams are empty; without action the messages expire with the
+stream (7 days web, 30 days API).
 
 ### NATSQuorumLost
 Fewer than two NATS servers report JetStream, or no meta leader exists, for
@@ -130,6 +134,8 @@ One NATS server is unhealthy or its exporter cannot read it for 2 minutes.
 Action: restart it on that node; it rejoins and catches up.
 
 ## Database
+
+<a id="etcdnoleader"></a><a id="etcdmembersdown"></a>
 
 ### EtcdNoLeader, EtcdMembersDown
 An etcd member sees no leader, or fewer than two of three answer, for 1
@@ -196,6 +202,51 @@ jobs daemon (`sudo docker compose restart jobs`) so its leader runs the task.
 `jobs run umami-rotate` refuses while a daemon leads (`a jobs daemon is
 leading`); to run it by hand, stop `jobs` on both core nodes first
 ([README.md](README.md), "Running a jobs task by hand").
+
+### APIRollupOrphanedMarks
+The API rollup found pending hours whose minute partition was already
+dropped by retention (`jobs_api_rollup_orphaned_marks_total` rose within the
+last hour). The hourly rows of those hours were kept as they were and can no
+longer be recomputed from minute data, so they may miss late points.
+Action: check that `core_api_minute_retention_days` is at least 8 (the role
+refuses less) and that the rollup is not far behind (`jobs` logs, `task
+failed` for `api-rollup`, `jobs_api_rollup_last_batch_hours`). The jobs log
+line `api rollup` names the counts; list the affected tenants and hours from
+it and record them in the incident, since their hourly and daily figures
+stay as they were.
+
+### APIRollupDriftedHours
+The API rollup found hours whose hourly rows disagreed with their minute rows
+although no pending mark existed (`jobs_api_rollup_drifted_hours_total`
+rose). The rollup has marked them again and recomputes them on its next pass,
+so the figures heal on their own; the alert means a mark was lost, which is a
+bug.
+Action: confirm the next pass cleared it (the counter stops rising, the alert
+resolves within the hour), then open an issue with the jobs log lines of the
+pass (tenants and hours) and recent metrics writer restarts or errors.
+
+### HostRebootRequired
+Installed updates (a kernel or libc fix from unattended upgrades) have waited
+12 hours for a reboot on this node (`/var/run/reboot-required`, written to
+`node_reboot_required` by `sa-reboot-required.timer`). Until the reboot the
+fix does not apply, and the patch target is 24 hours.
+Action: `ansible-playbook -i inventories/<env>/ playbooks/reboot.yml`, which
+drains, hands over the Patroni leader and reboots one node at a time
+([security-patch.md](security-patch.md) section 6a).
+
+### Watchdog
+Always firing, by design. Alertmanager sends it every minute to the probe's
+Gatus (external endpoint `monitoring_watchdog`, through the probe's Caddy,
+which accepts that push only from the core nodes' addresses). Gatus alerts to
+Discord when no push arrived for 5 minutes: then both Prometheus servers,
+both Alertmanagers or the whole core tier are down, or the core tier cannot
+reach the probe, and no other alert can be sent from inside.
+Action when Gatus reports it missing: check the core nodes
+([database-failover.md](database-failover.md) if both are down), then
+`docker compose ps` in `/opt/stellar-analytics/observability` on each core
+node. Never silence `Watchdog` in Alertmanager: a silence stops the heartbeat
+and Gatus alerts after 5 minutes. Without a probe node an operator input the route
+goes to a receiver with no target, so nothing watches it.
 
 ## Probe
 

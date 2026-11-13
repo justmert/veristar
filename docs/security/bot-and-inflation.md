@@ -175,6 +175,19 @@ next to the primary data, never deletion, so the tenant and operators can still 
 those visits. A popular site with much mobile traffic should expect a non-zero quarantine band.
 Change `IPCLUSTER_THRESHOLD` only with a recorded reason in `docs/reference/gateway-limits.md`.
 
+### One visitor's volume
+
+Same-IP skepticism counts distinct visitor tokens, so one scripted client with one address and
+one user agent stays one token and is never caught by it. A second count closes that gap: each
+gateway counts queued events per site and visitor token in a window of one hour from the
+visitor's first event. Past `VISITOR_EVENTS_PER_HOUR` (default **600**, ten a minute on
+average) every further event of that visitor in the window goes to the quarantine band and is
+counted as `quarantined` (`internal/gateway/volume.go`). The count is per node, in a bounded
+table of 200,000 visitors, and nothing is persisted; a visitor spread over three nodes can send
+three times the limit into the primary band.
+
+Proved by: `TestOneVisitorsVolumeIsQuarantined` (`internal/gateway/node_test.go`).
+
 ## 7. Rate limits
 
 Token buckets in each gateway, per node (`internal/gateway/ratelimit.go`):
@@ -186,7 +199,10 @@ Token buckets in each gateway, per node (`internal/gateway/ratelimit.go`):
 
 Over either: 429. A refusal by the prefix bucket does not take a site token. Each table holds at
 most 200,000 buckets. Limits are per node, so a site can send three times the site rate across
-three edge nodes. Only `POST /v1/e` is rate limited; `GET /v1/c` is not.
+three edge nodes. `GET /v1/c` has its own buckets at the same rates, checked after the origin
+and fetch metadata checks, so fetching challenges never uses up the event budget and refused
+challenge requests take no token (`docs/reference/gateway-limits.md`, change of 2026-11-13;
+`TestChallengeRateLimits` in `tests/gateway`).
 
 Proved by: `TestRateLimitPrefixBurstAndRefill`, `TestRateLimitSite`,
 `TestRateLimitPrefixRefusalKeepsSiteTokens`, `TestRateLimitClockBackwards`,
@@ -218,7 +234,14 @@ privacy choice, not a sign of forgery.
   genuine; `isbot` does not match; and spreading the traffic over many residential addresses in
   different prefixes keeps each prefix under `IPCLUSTER_THRESHOLD` and the prefix rate limit.
 - **Replay** is per node and in memory: up to 3 x `PROOF_REPLAY_LIMIT` events per proof across
-  three nodes, more if the table evicts the entry or a gateway restarts.
+  three nodes, more if the table evicts the entry or a gateway restarts. Only queued events
+  count; an event refused by a later check gives its use back.
+- **Volume per visitor is bounded, not stopped.** One address and one user agent can send
+  `VISITOR_EVENTS_PER_HOUR` (600) events an hour per node into the primary band, three times that
+  across three nodes, before the rest go to quarantine (section 6). Page views, custom events
+  and session duration can therefore still be raised by one client within that bound, while
+  visitors stay at 1. A client that rotates its user agent becomes several visitors and then
+  meets same-IP skepticism instead.
 - **Same-IP skepticism has false positives** on shared addresses (section 6) and false negatives
   for traffic spread over many prefixes.
 - **API metrics are self-reported.** OTLP data comes from the tenant's own servers; the collector

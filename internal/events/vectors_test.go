@@ -81,3 +81,53 @@ func TestTrackerProofVectors(t *testing.T) {
 		})
 	}
 }
+
+// TestStorableVectors posts every case of the shared storable vectors as
+// event data or event name. the tracker's test reads the same file, so both
+// sides refuse exactly what umami 3.5.0 cannot store.
+func TestStorableVectors(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "packages", "tracker", "test", "vectors", "storable-v1.json"))
+	require.NoError(t, err)
+	var file struct {
+		Data []struct {
+			Data   json.RawMessage `json:"data"`
+			OK     bool            `json:"ok"`
+			Reason string          `json:"reason"`
+		} `json:"data"`
+		Names []struct {
+			Name string `json:"name"`
+			OK   bool   `json:"ok"`
+		} `json:"names"`
+	}
+	require.NoError(t, json.Unmarshal(raw, &file))
+	require.NotEmpty(t, file.Data)
+	require.NotEmpty(t, file.Names)
+	for _, c := range file.Data {
+		// the raw data object goes into the body unchanged, so number
+		// literals such as 999999999999999.99999 reach the parser as written
+		b := body(t, func(m map[string]any) {
+			m["t"] = "ev"
+			m["n"] = "x"
+			m["d"] = c.Data
+		})
+		_, err := events.ParseWire(b)
+		if c.OK {
+			require.NoError(t, err, "data %s", c.Data)
+			continue
+		}
+		var pe *events.ParseError
+		require.ErrorAs(t, err, &pe, "data %s", c.Data)
+		require.Equal(t, c.Reason, pe.Reason, "data %s", c.Data)
+	}
+	for _, c := range file.Names {
+		_, err := events.ParseWire(body(t, func(m map[string]any) {
+			m["t"] = "ev"
+			m["n"] = c.Name
+		}))
+		if c.OK {
+			require.NoError(t, err, "name %q", c.Name)
+		} else {
+			require.Error(t, err, "name %q", c.Name)
+		}
+	}
+}

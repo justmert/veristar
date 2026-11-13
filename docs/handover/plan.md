@@ -75,25 +75,101 @@ and no write access to production, and builds its own copy.
 Exit condition: the new operator's environment passes the end-to-end suites and the
 readiness checklist, and SCF agrees that the cutover can start.
 
-### 2.3 Cutover (one announced maintenance window)
+### 2.3 Cutover: both environments run, ingestion never stops
 
-1. **Tenant notice.** Ahead of the cutover every project is told the date, the new
-   processor, and that nothing changes in its snippet if the domain moves (section 5). The
-   processing terms require advance notice of a processor or sub-processor change; the length
-   of that notice is open for the legal review (`docs/compliance/dpa-template.md`, an operator input.
-2. **Data migration** ([rebuild.md](rebuild.md) sections 2 to 5): ingestion is drained and the
-   source stopped; both PostgreSQL databases (`umami` and `platform`) are restored in the new
-   environment from the source's pgBackRest backup set and copied into the new cluster
-   (`make migrate-export METHOD=pgbackrest`, `make migrate-import`), or dumped with `pg_dump`
-   when the providers differ (`METHOD=dump`). Queue contents are not migrated; `jobs run
-   reconcile` rebuilds the NATS registries from the `cp` tables. `platformctl verify-migration`
-   compares row counts of every table, per-tenant daily web and API aggregates, and Umami
-   `/stats` for a sample of sites and days, and exits non-zero on any difference.
-3. **Permission transfer** (section 3).
-4. **Domain**: transfer or redirect (section 5).
-5. **Credential rotation** (section 4).
-6. The new operator's probe and status page measure the service; the first SLO report under
-   the new operator covers the month after cutover.
+Redesigned on 2026-11-13. The earlier
+order stopped ingestion on the old edge nodes before the domain moved, so every event sent
+while resolvers still held the old delegation (up to the TLD's NS TTL, often 48 hours) was
+refused and lost, and the new nodes could not get certificates until the delegation pointed at
+the new zone. Now the old edge tier keeps accepting events until nobody reaches it any more,
+its queues are moved to the new environment, and the new nodes hold valid certificates before
+the delegation changes.
+
+**Weeks ahead**
+
+1. **Tenant notice.** Every project is told the date, the new processor, and that nothing
+   changes in its snippet when the domain moves (section 5). The processing terms require
+   advance notice of a processor or sub-processor change; the length of that notice is open
+   for the legal review (`docs/compliance/dpa-template.md`, an operator input.
+2. **New environment built and bootstrapped**, empty, in the new operator's accounts (section
+   2.2), with `sa_tls: bunny-delegated` and `sa_acme_challenge_domain` set in its
+   `group_vars/all.yml`.
+3. **Certificates before the delegation.** The domain still delegates to the old DNS account,
+   so Let's Encrypt asks the old zone for every DNS-01 answer. The old operator adds one CNAME
+   per name to the old zone (by hand or as extra records in its OpenTofu `dns` module):
+
+   ```
+   _acme-challenge.in.<domain>    CNAME  <sa_acme_challenge_domain>
+   _acme-challenge.otlp.<domain>  CNAME  <sa_acme_challenge_domain>
+   _acme-challenge.app.<domain>   CNAME  <sa_acme_challenge_domain>
+   _acme-challenge.web.<domain>   CNAME  <sa_acme_challenge_domain>
+   ```
+
+   `<sa_acme_challenge_domain>` is a name in a zone the new operator's bunny.net account
+   already serves publicly (for example `_acme-challenge.<a domain the new operator owns>`).
+   The new nodes' Caddy (`sa_tls_bunny-delegated` in `deploy/caddy/assemble.sh`, Caddy's
+   `dns_challenge_override_domain`) writes the answer there, and Let's Encrypt follows the
+   CNAME. Expected: each new node serves a Let's Encrypt certificate for its names when asked
+   by address with SNI (`docs/runbooks/certificates.md` step 1), before anything moves.
+4. **Record TTLs.** The address records already have a 60 s TTL (`infra/tofu/envs/*/main.tf`);
+   the NS TTL at the TLD cannot be lowered and is the length of the parallel phase below.
+
+**Cutover day** (the freeze lasts for the export and import only, typically under an hour;
+ingestion is never refused)
+
+5. **Freeze the old core tier.** On both old core nodes stop `controlplane`, `replayer`,
+   `metricswriter` and `jobs`. The console is unavailable for the freeze (announced). The old
+   edge nodes keep answering `202` after the JetStream acknowledgement, so events and metric
+   batches queue in the old `WEB_EVENTS` (72 hours), `API_METRICS` and `EDGE_STATS` (7 days).
+6. **Data migration** ([rebuild.md](rebuild.md) sections 3 to 5) from the now frozen old
+   databases: `make migrate-export` (`METHOD=pgbackrest` from the old repository, or `dump`),
+   `make migrate-import`, `jobs run reconcile`, `platformctl verify-migration`, which must exit 0.
+7. **Start the new environment** (`make <env>-deploy`). It now accepts ingestion on its own
+   addresses and serves the console. Nothing points at it yet.
+8. **Start the queue forwarder** on the controller, with an SSH tunnel to one old edge node's
+   NATS (4222) and one new edge node's NATS:
+
+   ```sh
+   # old environment: the platformctl user of its sops file
+   NATS_URL=nats://127.0.0.1:14222 NATS_USER=platformctl NATS_PASSWORD=<old> \
+   TARGET_NATS_URL=nats://127.0.0.1:24222 TARGET_NATS_USER=platformctl TARGET_NATS_PASSWORD=<new> \
+     dist/bin/platformctl queue forward
+   ```
+
+   It binds the consumers of the stopped old replayer, metrics writer and jobs (and refuses to
+   start while one of them still pulls), publishes every queued message to the new
+   environment's stream with its subject, headers and `Nats-Msg-Id` unchanged, and acks it in
+   the old stream only after the new stream acknowledged it, so a crash at any point loses
+   nothing and stores nothing twice (`cmd/platformctl/forward.go`, `TestQueueForward`). It keeps
+   running for the whole parallel phase.
+9. **Permission transfer** (section 3) and **domain** move (section 5): the zone is recreated
+   from OpenTofu in the new DNS account, then the registrar transfer or delegation change.
+   From now on resolvers move to the new nodes as their cached delegation expires. Both stacks
+   take events meanwhile: the new one directly, the old one through the forwarder.
+10. **Drain the old edge tier** only when it is idle: the TLD's NS TTL has passed since the
+    delegation changed, the old edge Caddy request rate (Grafana "Ingestion" dashboard, or
+    `caddy_http_requests_total` of the old nodes) has been zero for 24 hours, and the
+    forwarder's queues are empty. Then stop the old edge services, run
+    `platformctl queue forward --until-empty` once more, and stop the forwarder.
+11. **Credential rotation** (section 4).
+12. The new operator's probe and status page measure the service; the first SLO report under
+    the new operator covers the month after cutover.
+
+What tenants notice: the console is unavailable during the freeze (steps 5 to 7). Web events
+sent during the freeze reach Umami only after the forwarder delivers them, so dashboards show
+them late, not missing. A visitor seen on both stacks on cutover day is counted twice that day,
+because each environment has its own daily visitor secret (the same effect as the `APP_SECRET`
+note in section 4). Removing the old `_acme-challenge` CNAMEs and the `bunny-delegated`
+setting after the move is part of section 2.4; renewals then use the new zone directly
+(`sa_tls: bunny`).
+
+What was proven locally (2026-11-13): the forwarder against two real NATS servers with the
+production users and permissions (`go test -run TestQueueForward ./cmd/platformctl/`): every
+queue moved with its ids, a message the target already held stored once, late events after the
+start forwarded, a running consumer and a target without the topology refused. The
+`bunny-delegated` Caddy configuration validates with the pinned Caddy build
+(`TestAssembledNodeCaddyfiles`). Not proven: certificate issuance through the CNAME and the
+registrar transfer (inputs I4, I6, I12), and the whole order on two real environments.
 
 ### 2.4 Removal of the original operator
 

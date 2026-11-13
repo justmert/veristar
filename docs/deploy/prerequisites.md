@@ -33,6 +33,83 @@ PostgreSQL is below 18.7 (`postgres_version` and `postgres_min_version` in
 `infra/ansible/vars/pins.yml`). On 2026-11-12 neither `postgres:18.7-trixie` nor the PGDG trixie
 package existed. Until they do, a staging converge stops at the core role.
 
+## Hosting: providers, cost and accounts for the 12-month service window
+
+RFP section 3.4 makes the proposer host the service for 12 months. This section states what that
+costs and who holds what. Prices were read on 2026-11-13, in euro excluding VAT unless marked,
+and change: check them again before ordering.
+
+### Providers
+
+| Provider | Used for | Account input |
+|---|---|---|
+| Hetzner Cloud | 3 edge and 2 core servers in `fsn1`, `nbg1`, `hel1`, the private network, primary IPs, Object Storage (OpenTofu state and pgBackRest backups) | I5 |
+| bunny.net | the DNS zone with health-checked record sets | I6 |
+| Scaleway | the probe server in `fr-par` (status page, prober), outside Hetzner on purpose | I7 |
+
+### Monthly cost estimate per environment
+
+Server types are inputs (`edge_server_type`, `core_server_type`, `probe_instance_type`); the
+estimate uses the planning defaults `cpx22` (edge) and `cpx42` (core) from
+[opentofu.md](opentofu.md) and, for the probe, `DEV1-S` with the 20 GB root volume of
+`infra/tofu/envs/*/main.tf`.
+
+| Item | Unit price | Quantity | Per month |
+|---|---|---|---|
+| Hetzner `cpx22` (2 vCPU, 4 GB) | 16.99 | 3 | 50.97 |
+| Hetzner `cpx42` (8 vCPU, 16 GB) | 59.49 | 2 | 118.98 |
+| Hetzner primary IPv4 (IPv6 free) | 0.50 | 5 | 2.50 |
+| Hetzner private network | free | 1 | 0.00 |
+| Hetzner Object Storage base price (1 TB storage and 1 TB egress included) | 6.49 | 1 per project | 6.49 |
+| **Hetzner subtotal** | | | **178.94** |
+| Scaleway `DEV1-S` probe | 0.008976 per hour | 730 h | 6.55 |
+| Scaleway flexible IPv4 | 0.005 per hour (assumed hourly, see below) | 730 h | 3.65 |
+| Scaleway block volume, 5K IOPS, 20 GB | 0.00013 per GB-hour (assumed) | 20 GB, 730 h | 1.90 |
+| **Probe subtotal** | | | **12.10** |
+| bunny.net DNS, zones and monitoring | free, with the account minimum of USD 1 a month | 1 per account | USD 1.00 |
+
+So production costs about 191 EUR plus USD 1 a month, about 2,300 EUR for the 12-month window.
+A staging environment that runs all month costs about another 179 EUR (plus 12 EUR if its probe
+is enabled); Hetzner and Scaleway bill by the hour, so staging destroyed between drills
+(`make staging-destroy`) costs only the hours it ran. Traffic is within what is included (20 TB
+a month per Hetzner server, 1 TB of Object Storage egress). Backup storage beyond the included
+1 TB costs 0.0087 per TB-hour, about 6.35 per TB-month; the backup volume has not been measured
+on a real environment an operator input.
+
+Sources, read 2026-11-13:
+[Hetzner Cloud regular performance](https://www.hetzner.com/cloud/regular-performance/) (cpx22,
+cpx42), [Hetzner IP pricing](https://docs.hetzner.com/general/infrastructure-and-availability/ipv4-pricing/)
+(cloud primary IPv4 0.50), [Hetzner Object Storage](https://www.hetzner.com/storage/object-storage/)
+(base price 6.49, which also lists object locking and versioning),
+[bunny.net DNS pricing](https://bunny.net/pricing/dns/) (free DNS and monitoring, USD 1 monthly
+account minimum), and Scaleway's public product catalogue API
+(`https://api.scaleway.com/product-catalog/v2alpha1/public-catalog/products?zone=fr-par-1`; the
+Scaleway pricing pages refused automated reads). The catalogue gives `DEV1-S` per hour, but the
+IPv4 and block volume units only as "per ip" and "per GB"; they are read as hourly here, which
+is how Scaleway bills them, and should be confirmed in the Scaleway console. On the same day the
+catalogue reported `STARDUST1-S` in `fr-par-1` as short of stock, and Hetzner's order page showed
+the CPX types as unavailable in `hel1`: availability per location is part of an operator input and must
+be checked before `terraform.tfvars` is written.
+
+### Account holder, billing and renewal
+
+**Not decided: blocked on SCF.** Who holds the domain, the Hetzner, bunny.net and Scaleway
+accounts and the repository from day one is an open question to SCF (the design, "Who owns
+the domain, cloud accounts and repository from day one?"). The answer sets who pays, who
+receives the providers' billing and abuse mail, and what the handover moves
+([../handover/checklist.md](../handover/checklist.md)). Until it is answered, this document
+states only the requirements any arrangement must meet:
+
+- Each provider is billed by card or invoice to the account holder monthly, for at least the
+  12-month window; all three suspend unpaid accounts. The availability statement lists a billing
+  failure as a single point of failure ([../reference/availability.md](../reference/availability.md)),
+  so the payment method needs an owner who is alerted to failed charges and a second person who
+  can pay.
+- The domain must be renewed for the whole window plus the handover an operator input, with automatic
+  renewal on.
+- Every provider account holds at least two administrators, so one person's absence cannot lock
+  the operator out.
+
 ## Controller (the machine you deploy from)
 
 A Linux machine with the repository checked out. Versions are the the design pins.

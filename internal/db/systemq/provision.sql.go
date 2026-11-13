@@ -83,7 +83,7 @@ func (q *Queries) ProvisionSetTeam(ctx context.Context, arg ProvisionSetTeamPara
 }
 
 const provisionSites = `-- name: ProvisionSites :many
-select id, name, domain, origins, quarantine_website_id, status
+select id, name, domain, origins, quarantine_website_id, status, collect_utm
 from cp.sites
 where tenant_id = $1
 order by id
@@ -96,6 +96,7 @@ type ProvisionSitesRow struct {
 	Origins             []string
 	QuarantineWebsiteID uuid.NullUUID
 	Status              string
+	CollectUtm          bool
 }
 
 func (q *Queries) ProvisionSites(ctx context.Context, tenantID uuid.UUID) ([]ProvisionSitesRow, error) {
@@ -114,6 +115,7 @@ func (q *Queries) ProvisionSites(ctx context.Context, tenantID uuid.UUID) ([]Pro
 			&i.Origins,
 			&i.QuarantineWebsiteID,
 			&i.Status,
+			&i.CollectUtm,
 		); err != nil {
 			return nil, err
 		}

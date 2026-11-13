@@ -92,11 +92,13 @@ bounds, attributes, removal of its instance attribute). Facts relied on:
 - `attributes` without `optional` makes the attribute required; the method
   is required, route, status and error type are optional.
 - `include_resource_attributes` is an include list; the five `scf`/service
-  attributes are listed.
+  attributes and `scf.batch.id` are listed.
 - It always adds `signal_to_metrics.service.instance.id` and names its own
   scope; `transform/spans` removes both.
 - Data point timestamps are the collector's processing time, not the span
-  end time, and there is no start time. See "For this stage" below.
+  end time, there is no start time, and points come out in Go map order.
+  tenantguard's stamps fix both (`scf.span.minute`, `scf.batch.id`); see
+  "For this stage" below.
 - Count is one per span (no `AdjustedCount()`), so sampled traces undercount,
   as the design states.
 
@@ -273,7 +275,9 @@ still open**; nothing here asked SCF.
   A request with more items than `items_burst` can never pass.
 - Resource: `scf.resource.hash` is SHA-256 over the original resource
   attributes (sorted keys, type and value). Then the resource is reduced to
-  `service.name` (redacted, at most 128 bytes), `scf.tenant.id` and
+  `service.name` (redacted; invalid UTF-8 and control characters replaced
+  with U+FFFD, then cut to at most 128 bytes on a rune boundary, so the
+  value is always storable; review), `scf.tenant.id` and
   `scf.token.id` from the credential, the hash, and `scf.flags` (bit 1: a
   secret seed was redacted). Forged `scf.*` or `tenant.id` attributes are
   dropped with everything else.
@@ -283,15 +287,35 @@ still open**; nothing here asked SCF.
   `http.server.duration` in `ms` or `s`, histogram or exponential histogram
   only. `scf.http.server.request.duration.from_spans` from a tenant is
   dropped: only the connector may produce it.
-- Data point attributes: `http.request.method` (from `http.method`; values
-  outside the semconv set CONNECT, DELETE, GET, HEAD, OPTIONS, PATCH, POST,
-  PUT, TRACE, QUERY become `_OTHER`, case-sensitive), `http.route`
-  (normalized; from `url.path` or legacy `http.target` when absent),
+- `OTEL_SEMCONV_STABILITY_OPT_IN=http/dup`: an instrumentation scope that
+  sends both `http.server.request.duration` and `http.server.duration`
+  records every request under both names, and after `transform/tenant`
+  scales and renames the legacy one both would be stored. When a scope
+  holds a kept stable metric, its legacy metrics are dropped. A legacy
+  metric in another scope comes from another library and is kept (audit
+  A-4).
+- Data point attributes: `http.request.method` (from `http.method`;
+  upper-cased first, as semconv allows for instrumentation that treats
+  methods case-insensitively; values outside the semconv set
+  CONNECT, DELETE, GET, HEAD, OPTIONS, PATCH, POST, PUT, TRACE, QUERY become
+  `_OTHER`), `http.route` (normalized with `internal/routenorm` rule set 2;
+  from `url.path` or legacy `http.target` when absent),
   `http.response.status_code` (from `http.status_code`, int or string,
-  100 to 599), `error.type` (redacted, longer than 64 bytes becomes
-  `_OTHER`). Nothing else.
+  100 to 599), `error.type` (redacted; longer than 64 bytes or not storable
+  text becomes `_OTHER`). Nothing else.
+- Route normalization rule set 2 (review and A-11) adds to rule set 1: a
+  segment that decodes to invalid UTF-8 or a control character becomes
+  `{invalid}`; every run of digits between separators (`- _ . , ~ : + ; =`)
+  becomes `{id}` (`order-12345`, `123.json`, `42,43`, `-5`, `1.5`); a
+  segment with a space or an `@` that is not an email becomes `{text}`;
+  a route longer than 512 bytes keeps its leading whole segments and ends
+  in `/{long}`. File names with letters (`john.doe`, `app.3f9a2b1c.js`) are
+  kept: they cannot be told from route words.
 - Spans kept: kind SERVER with an HTTP method. Name set to the method;
-  events, links, status message and trace state removed.
+  events, links, status message and trace state removed. Each kept span
+  gets `scf.span.minute`, the start of the UTC minute it ended in (unix
+  nanoseconds), and every resource of the export gets `scf.batch.id`, the
+  SHA-256 of the filtered export. Both exist only inside the collector.
 - Logs: authenticated, rate limited, answered with success, dropped.
 
 ### jetstream exporter
@@ -300,11 +324,23 @@ still open**; nothing here asked SCF.
   error: the pipeline is misconfigured), checks every part against
   `collector/internal/schema` again, marshals with `pmetric.ProtoMarshaler`,
   and publishes with `natsx.PublishDedup` to `api.metrics.<tenant>`,
-  expected stream `API_METRICS`, `Nats-Msg-Id` = hex SHA-256 of the payload.
+  expected stream `API_METRICS`. `Nats-Msg-Id` is the hex SHA-256 of the
+  payload for tenant metrics, and for span-derived points the SHA-256 of
+  the tenant and the sorted `scf.batch.id` values of their resources.
+- Span-derived points: the exporter sets each point's time to its
+  `scf.span.minute` and removes that attribute and `scf.batch.id`. A span
+  point without either stamp is a permanent error: the connector
+  configuration lost them, and publishing would bring back the double
+  counting they prevent.
 - Synchronous, no sending queue, no retry, `publish_timeout` 5 s. Failure is
   `Unavailable` (503); the SDK retries the same bytes, so a publish that was
-  stored but not acknowledged is deduplicated within the stream's 2 minute
-  window.
+  stored but not acknowledged is deduplicated by the stream's 2 minute
+  window and by the writer's `api.ingest_dedup` (8 days). For tenant
+  metrics the payload is the same bytes. For spans the connector aggregates
+  the retry again at another moment and in another map order, so the
+  payload differs; the batch id is what makes the message id equal (audit
+  A-3). Two different exports differ at least in their span ids, so they
+  never share an id.
 - The NATS reconnect buffer is off (`ReconnectBufSize(-1)`): while
   disconnected a publish fails at once instead of being flushed into the
   stream later after the client was already told 503. Found by the
@@ -312,17 +348,19 @@ still open**; nothing here asked SCF.
 - Connects as the `collector` NATS user (publish `api.metrics.*`, watch
   `registry_otlp`); the suite runs NATS with the real permission set.
 
-## For this stage: span-derived points carry receive time
+## For this stage: span-derived points carry the span end minute
 
 Every `scf.http.server.request.duration.from_spans` data point has
-`time_unix_nano` set to the moment the connector aggregated the payload in
-the collector (receive time), not the span's start or end time, and
+`time_unix_nano` set to the start of the UTC minute its spans ended in, and
 `start_time_unix_nano` is 0. Temporality is delta, one point per attribute
-set per received payload. The metricswriter must bucket span-derived rows by
-this receive time. Spans an SDK held back (batching, retries, a collector
-restart) land in the minute they arrived, not the minute the requests
-happened; tenant metrics (`http.server.request.duration`) keep the SDK's own
-timestamps.
+set and end minute per received payload: `scf.span.minute` is one of the
+connector's point attributes, so spans of different minutes become
+different points. Spans an SDK held back (batching, retries, a collector
+restart) land in the minute the requests ended, as tenant metrics
+(`http.server.request.duration`) keep the SDK's own timestamps (review;
+before, the connector's processing time was used). The time comes from the
+client's clock, like a tenant metric's; a point more than 10 minutes in the
+future or older than 7 days is refused by the writer.
 
 ## Limits in otelcol.yaml
 

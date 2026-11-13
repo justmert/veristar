@@ -119,10 +119,14 @@ func (c Config) ConnString() string {
 }
 
 // Cutoff is the start of the utc day months months before now's utc day.
-// rows created before it are deleted.
+// rows created before it are deleted. a day the target month does not have
+// becomes that month's last day: time.Date would roll 2024-04-31 over to
+// 2024-05-01 and delete one day too many.
 func Cutoff(now time.Time, months int) time.Time {
 	d := now.UTC()
-	return time.Date(d.Year(), d.Month()-time.Month(months), d.Day(), 0, 0, 0, 0, time.UTC)
+	first := time.Date(d.Year(), d.Month()-time.Month(months), 1, 0, 0, 0, 0, time.UTC)
+	last := first.AddDate(0, 1, -1).Day()
+	return first.AddDate(0, 0, min(d.Day(), last)-1)
 }
 
 // ErrUntested means the database is not the umami schema the job was

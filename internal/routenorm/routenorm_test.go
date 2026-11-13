@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/stellar/go-stellar-sdk/strkey"
 
@@ -86,7 +87,7 @@ func TestCorpusCoversEveryStrkeyType(t *testing.T) {
 			t.Errorf("no corpus case produces %s", p)
 		}
 	}
-	for _, p := range []string{"{asset}", "{hash}", "{hex}", "{uuid}", "{ulid}", "{id}", "{token}", "{date}", "{long}"} {
+	for _, p := range []string{"{asset}", "{hash}", "{hex}", "{uuid}", "{ulid}", "{id}", "{token}", "{date}", "{long}", "{invalid}", "{text}"} {
 		found := false
 		for _, c := range cases {
 			if strings.Contains(c.want, p) && !strings.Contains(c.in, p) {
@@ -294,6 +295,45 @@ func TestEveryStrkeyTypeRandom(t *testing.T) {
 			if got != "/a/"+kind.Placeholder() {
 				t.Fatalf("Normalize(/a/%s) = %s, want %s", k, got, kind.Placeholder())
 			}
+		}
+	}
+}
+
+// every output must be storable: valid utf-8 without control characters
+// (postgresql refuses invalid utf-8 and nul in text) and at most MaxRouteLen
+// bytes (the route columns allow 1024). the inputs are raw bytes and
+// arbitrary escapes, as a scanner sends them.
+func TestPropertyStorable(t *testing.T) {
+	r := rand.New(rand.NewPCG(9, 10))
+	for i := 0; i < 20000; i++ {
+		var b strings.Builder
+		for range 1 + r.IntN(120) {
+			switch r.IntN(4) {
+			case 0:
+				b.WriteByte(byte(r.UintN(256)))
+			case 1:
+				fmt.Fprintf(&b, "%%%02X", r.UintN(256))
+			case 2:
+				b.WriteByte('/')
+			default:
+				b.WriteString(randFrom(r, "abc019-_. @", 1+r.IntN(30)))
+			}
+		}
+		in := b.String()
+		out, _ := Normalize(in)
+		if !utf8.ValidString(out) {
+			t.Fatalf("Normalize(%q) = %q is not valid utf-8", in, out)
+		}
+		for _, c := range out {
+			if c < 0x20 || c == 0x7f {
+				t.Fatalf("Normalize(%q) = %q holds control character %U", in, out, c)
+			}
+		}
+		if len(out) > MaxRouteLen {
+			t.Fatalf("Normalize(%q) is %d bytes, more than %d", in, len(out), MaxRouteLen)
+		}
+		if again, _ := Normalize(out); again != out {
+			t.Fatalf("not idempotent: %q then %q", out, again)
 		}
 	}
 }

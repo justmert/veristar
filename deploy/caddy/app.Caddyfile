@@ -104,11 +104,17 @@ app.{$BASE_DOMAIN} {
 	handle /api/* {
 		reverse_proxy {
 			to {$CONTROLPLANE_UPSTREAM}
-			# the control plane needs no client address (its limits are per
-			# session and per route) and must never log one, so none is sent
+			# the forwarding headers are not sent: the control plane must never
+			# log or store a client address
 			header_up -X-Forwarded-For
 			header_up -X-Real-Ip
 			header_up -Forwarded
+			# the sign-in limits are per client (contract 4.1.1, review). the
+			# control plane turns this address into a keyed hash in memory and
+			# keeps nothing else; it never logs or stores the address. the value
+			# replaces anything the client sent under the same name, so a
+			# client cannot pick its own bucket.
+			header_up X-Sa-Client-Addr {client_ip}
 			# the header behind next's middleware bypass means nothing to the
 			# control plane; dropped so no client header reaches it unchecked
 			header_up -X-Middleware-Subrequest

@@ -10,9 +10,11 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/prometheus/client_golang/prometheus"
@@ -80,6 +82,8 @@ type Writer struct {
 
 	mu   sync.Mutex
 	lock *natsx.Lock
+	// lastCommit is the unix nanoseconds of the last committed batch
+	lastCommit atomic.Int64
 }
 
 // New checks the configuration and registers the metrics. it neither takes
@@ -324,8 +328,7 @@ func (w *Writer) lead(ctx context.Context) error {
 // process applies one fetched batch and acks or naks every message of it.
 func (w *Writer) process(ctx context.Context, msgs []jetstream.Msg) error {
 	start := time.Now()
-	lock := w.currentLock()
-	fence := lock.Fence()
+	fence := w.currentLock().Fence()
 	if fence.Revision == 0 {
 		nakAll(msgs, 0)
 		return natsx.ErrLockLost
@@ -333,25 +336,104 @@ func (w *Writer) process(ctx context.Context, msgs []jetstream.Msg) error {
 	res, err := w.apply(ctx, fence, msgs)
 	switch {
 	case err == nil:
+		w.committed(ctx, msgs, res, start)
+		return nil
 	case errors.Is(err, natsx.ErrFenced):
 		w.m.batches.WithLabelValues(batchFenced).Inc()
 		nakAll(msgs, 0)
 		return err
-	default:
-		w.m.batches.WithLabelValues(batchFailed).Inc()
-		if ctx.Err() == nil {
-			w.log.Warn("batch not applied, it is redelivered", "messages", len(msgs), "error", err.Error())
-		}
-		var delivered uint64
-		if meta, merr := msgs[0].Metadata(); merr == nil {
-			delivered = meta.NumDelivered
-		}
-		nakAll(msgs, natsx.RetryDelay(delivered))
-		// a database that is down fails every batch; pause instead of
-		// fetching the next messages at once
-		sleepCtx(ctx, fetchRetryWait)
-		return nil
 	}
+	w.m.batches.WithLabelValues(batchFailed).Inc()
+	if ctx.Err() == nil {
+		w.log.Warn("batch not applied", "messages", len(msgs), "error", err.Error())
+	}
+	if refusedBySQL(err) {
+		// the database is up and refused something in the batch. a retry
+		// of the same batch would fail the same way and take every other
+		// tenant's messages in it down again, so each message is applied
+		// on its own: the good ones commit, the one that fails is retried
+		// or dead-lettered alone
+		return w.isolate(ctx, msgs)
+	}
+	nakAll(msgs, natsx.RetryDelay(delivered(msgs[0])))
+	// a database that is down fails every batch; pause instead of
+	// fetching the next messages at once
+	sleepCtx(ctx, fetchRetryWait)
+	return nil
+}
+
+// maxDeliveries bounds how often a message the database refuses for a
+// reason that is not a data error is tried before it is dead-lettered. with
+// the retry backoff (1 s, 5 s, 30 s, 2 min) that is about 2.5 minutes.
+const maxDeliveries = 5
+
+// poisonWindow is how recent another message's commit must be for a
+// message that keeps failing alone to count as the culprit rather than the
+// database.
+const poisonWindow = 10 * time.Minute
+
+// isolate applies the messages of a failed batch one transaction each, in
+// queue order. a message the database refuses with a data error (sqlstate
+// classes 22 and 23) is dead-lettered at once: it fails the same way every
+// time. any other refusal is retried with the usual backoff, and after
+// maxDeliveries deliveries it is dead-lettered too, provided other messages
+// committed recently, so a poison message never stalls the stream while a
+// database fault that fails everything is never mistaken for one.
+func (w *Writer) isolate(ctx context.Context, msgs []jetstream.Msg) error {
+	for i, m := range msgs {
+		start := time.Now()
+		fence := w.currentLock().Fence()
+		if fence.Revision == 0 {
+			nakAll(msgs[i:], 0)
+			return natsx.ErrLockLost
+		}
+		one := []jetstream.Msg{m}
+		res, err := w.apply(ctx, fence, one)
+		switch {
+		case err == nil:
+			w.committed(ctx, one, res, start)
+			continue
+		case errors.Is(err, natsx.ErrFenced):
+			w.m.batches.WithLabelValues(batchFenced).Inc()
+			nakAll(msgs[i:], 0)
+			return err
+		case !refusedBySQL(err):
+			// the database went away meanwhile: everything left waits
+			nakAll(msgs[i:], natsx.RetryDelay(delivered(m)))
+			sleepCtx(ctx, fetchRetryWait)
+			return nil
+		}
+		w.m.batches.WithLabelValues(batchFailed).Inc()
+		n := delivered(m)
+		data := dataError(err)
+		if !data && (n < maxDeliveries || !w.committedSince(time.Now().Add(-poisonWindow))) {
+			w.log.Warn("message refused by the database, it is redelivered alone", "deliveries", n, "error", err.Error())
+			_ = m.NakWithDelay(natsx.RetryDelay(n))
+			continue
+		}
+		reason := fmt.Sprintf("refused by the database after %d deliveries: %v", n, err)
+		if data {
+			reason = fmt.Sprintf("refused by the database (data error): %v", err)
+		}
+		if err := w.deadLetter(ctx, m, reason); err != nil {
+			w.log.Warn("dead letter failed, the message is redelivered", "error", err.Error())
+			_ = m.NakWithDelay(natsx.RetryDelay(n))
+			continue
+		}
+		actx, cancel := context.WithTimeout(context.WithoutCancel(ctx), ackTimeout)
+		if err := m.DoubleAck(actx); err != nil {
+			w.m.ackFailures.Inc()
+			w.log.Warn("ack of a dead-lettered message not confirmed, it comes back", "error", err.Error())
+		}
+		cancel()
+		w.m.messages.WithLabelValues(msgDLQ).Inc()
+	}
+	return nil
+}
+
+// committed records a committed batch and acks its messages.
+func (w *Writer) committed(ctx context.Context, msgs []jetstream.Msg, res *result, start time.Time) {
+	w.lastCommit.Store(time.Now().UnixNano())
 	w.m.batches.WithLabelValues(batchCommitted).Inc()
 	w.m.batchTime.Observe(time.Since(start).Seconds())
 	actx, cancel := context.WithTimeout(context.WithoutCancel(ctx), ackTimeout)
@@ -376,7 +458,43 @@ func (w *Writer) process(ctx context.Context, msgs []jetstream.Msg) error {
 	}
 	wg.Wait()
 	res.record(w.m)
-	return nil
+}
+
+// committedSince reports whether a batch committed after t.
+func (w *Writer) committedSince(t time.Time) bool {
+	return w.lastCommit.Load() > t.UnixNano()
+}
+
+func delivered(m jetstream.Msg) uint64 {
+	if meta, err := m.Metadata(); err == nil {
+		return meta.NumDelivered
+	}
+	return 0
+}
+
+// refusedBySQL reports whether the database answered with an error that a
+// retry of the same transaction would get again: an sql error outside the
+// classes that describe the connection, a conflict with another
+// transaction, missing resources or the server itself (08, 40, 53, 55, 57,
+// 58, XX). those are left to the plain retry of the whole batch.
+func refusedBySQL(err error) bool {
+	var pe *pgconn.PgError
+	if !errors.As(err, &pe) || len(pe.Code) != 5 {
+		return false
+	}
+	switch pe.Code[:2] {
+	case "08", "40", "53", "55", "57", "58", "XX":
+		return false
+	}
+	return true
+}
+
+// dataError reports a data exception (22, for example invalid utf-8) or an
+// integrity violation (23, for example a check constraint): properties of
+// the values the message carries.
+func dataError(err error) bool {
+	var pe *pgconn.PgError
+	return errors.As(err, &pe) && (strings.HasPrefix(pe.Code, "22") || strings.HasPrefix(pe.Code, "23"))
 }
 
 func (w *Writer) currentLock() *natsx.Lock {

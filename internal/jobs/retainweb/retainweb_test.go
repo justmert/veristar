@@ -152,3 +152,26 @@ func TestCutoff(t *testing.T) {
 	require.Equal(t, time.Date(2024, 10, 12, 0, 0, 0, 0, time.UTC), retainweb.Cutoff(now, 25))
 	require.Equal(t, time.Date(2026, 10, 12, 0, 0, 0, 0, time.UTC), retainweb.Cutoff(now, 1))
 }
+
+// W-13: on a month end the cutoff is the last day of the target month, not
+// the first day of the month after it, so a tenant at 24 months loses no day
+// early.
+func TestCutoffClampsTheDay(t *testing.T) {
+	for _, c := range []struct {
+		now    string
+		months int
+		want   string
+	}{
+		{"2026-05-31T13:00:00Z", 25, "2024-04-30"},
+		{"2026-03-31T00:00:01Z", 1, "2026-02-28"},
+		{"2028-03-30T10:00:00Z", 1, "2028-02-29"},
+		{"2026-12-31T23:59:59Z", 10, "2026-02-28"},
+		{"2026-01-31T12:00:00Z", 24, "2024-01-31"},
+		{"2026-07-15T12:00:00+03:00", 24, "2024-07-15"},
+	} {
+		now, err := time.Parse(time.RFC3339, c.now)
+		require.NoError(t, err)
+		got := retainweb.Cutoff(now, c.months)
+		require.Equal(t, c.want+"T00:00:00Z", got.Format(time.RFC3339), "%s minus %d months", c.now, c.months)
+	}
+}

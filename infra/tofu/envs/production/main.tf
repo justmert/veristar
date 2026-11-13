@@ -14,17 +14,23 @@ locals {
     hel1 = 3
   }
 
-  # three edge nodes in three locations, two core nodes in two
-  nodes = {
+  # three edge nodes in three locations, two core nodes in two,
+  # and while restore_enabled the restore node of playbooks/restore.yml,
+  # sized like a core node because it holds a full copy of the database
+  nodes = merge({
     "${local.environment}-edge-1" = { tier = "edge", index = 1, location = "fsn1" }
     "${local.environment}-edge-2" = { tier = "edge", index = 2, location = "nbg1" }
     "${local.environment}-edge-3" = { tier = "edge", index = 3, location = "hel1" }
     "${local.environment}-core-1" = { tier = "core", index = 1, location = "fsn1" }
     "${local.environment}-core-2" = { tier = "core", index = 2, location = "nbg1" }
-  }
+    },
+    var.restore_enabled ? {
+      "${local.environment}-restore-1" = { tier = "restore", index = 1, location = var.restore_location }
+    } : {},
+  )
 
-  # host part encodes the tier: .11+ edge, .21+ core
-  host_base = { edge = 10, core = 20 }
+  # host part encodes the tier: .11+ edge, .21+ core, .41+ restore
+  host_base = { edge = 10, core = 20, restore = 40 }
 
   # bunny.net does not document a minimum ttl; checked on the first apply
   dns_ttl = 60

@@ -70,8 +70,11 @@ type Site struct {
 	LastVerifyError      *string          `json:"last_verify_error"`
 	StellarToml          json.RawMessage  `json:"stellar_toml"`
 	StellarTomlCheckedAt *httpx.Timestamp `json:"stellar_toml_checked_at"`
-	CreatedAt            httpx.Timestamp  `json:"created_at"`
-	UpdatedAt            httpx.Timestamp  `json:"updated_at"`
+	// collect_utm keeps the utm_* and ref query parameters of page urls;
+	// off unless the operator turns it on (contract 4.3)
+	CollectUTM bool            `json:"collect_utm"`
+	CreatedAt  httpx.Timestamp `json:"created_at"`
+	UpdatedAt  httpx.Timestamp `json:"updated_at"`
 }
 
 // verification is the value of contract 5.8, as lifecycle.Verification.
@@ -110,7 +113,8 @@ func ToSite(s tenantq.CpSite, tenantStatus string) Site {
 		VerifyMethod: s.VerifyMethod, VerifiedAt: httpx.TimestampPtr(s.VerifiedAt),
 		LastVerifyAt: httpx.TimestampPtr(s.LastVerifyAt), LastVerifyError: s.LastVerifyError,
 		StellarToml: toml, StellarTomlCheckedAt: httpx.TimestampPtr(s.StellarTomlCheckedAt),
-		CreatedAt: httpx.Timestamp(s.CreatedAt), UpdatedAt: httpx.Timestamp(s.UpdatedAt),
+		CollectUTM: s.CollectUtm,
+		CreatedAt:  httpx.Timestamp(s.CreatedAt), UpdatedAt: httpx.Timestamp(s.UpdatedAt),
 	}
 }
 
@@ -207,10 +211,6 @@ func (h *Routes) create(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	status := StatusPending
-	if a.TenantStatus == tenantActive {
-		status = StatusActive
-	}
 	// a domain of a removed project always goes to an operator (contract
 	// 5.6), in either enrollment mode. cp_tenant cannot see other tenants'
 	// sites, so the match runs under cp_system before the insert.
@@ -231,14 +231,23 @@ func (h *Routes) create(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	if match != nil {
-		status = StatusPending
-	}
 	var site tenantq.CpSite
+	var status string
 	err = h.s.InTenant(ctx, a, func(tx pgx.Tx) error {
 		q := tenantq.New(tx)
-		if err := q.LockTenant(ctx); err != nil {
+		// the site status follows the tenant status as of the lock, not the
+		// one read before it: a site created while an approval
+		// commits is active, one created while a suspension commits is
+		// refused, one created while a removal commits is 404
+		if err := tenants.LockTenant(ctx, tx, &a); err != nil {
 			return err
+		}
+		if err := refuseSuspended(a); err != nil {
+			return err
+		}
+		status = StatusPending
+		if a.TenantStatus == tenantActive && match == nil {
+			status = StatusActive
 		}
 		n, err := q.CountLiveSites(ctx)
 		if err != nil {
@@ -368,8 +377,9 @@ func (h *Routes) get(w http.ResponseWriter, r *http.Request) error {
 }
 
 type patchBody struct {
-	Name    *string  `json:"name"`
-	Origins []string `json:"origins"`
+	Name       *string  `json:"name"`
+	Origins    []string `json:"origins"`
+	CollectUTM *bool    `json:"collect_utm"`
 	// domain is listed only to answer 422 instead of 400 unknown field: it
 	// is immutable after creation
 	Domain *string `json:"domain"`
@@ -424,11 +434,14 @@ func (h *Routes) patch(w http.ResponseWriter, r *http.Request) error {
 		if b.Origins != nil && !slices.Equal(b.Origins, old.Origins) {
 			detail["origins"] = audit.Change(old.Origins, b.Origins)
 		}
+		if b.CollectUTM != nil && *b.CollectUTM != old.CollectUtm {
+			detail["collect_utm"] = audit.Change(old.CollectUtm, *b.CollectUTM)
+		}
 		if len(detail) == 1 {
 			out = old
 			return nil
 		}
-		out, err = q.UpdateSite(ctx, tenantq.UpdateSiteParams{Name: name, Origins: b.Origins, ID: id})
+		out, err = q.UpdateSite(ctx, tenantq.UpdateSiteParams{Name: name, Origins: b.Origins, CollectUtm: b.CollectUTM, ID: id})
 		if err != nil {
 			return err
 		}

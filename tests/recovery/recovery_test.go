@@ -259,7 +259,7 @@ func startGateway(t *testing.T, sh *shared, urls string, replicas int, creds map
 		// the listeners are httptest servers; the addresses only pass the
 		// config check
 		"GATEWAY_NODE_ID": node, "GATEWAY_ADDR": freeAddr(t), "GATEWAY_OPS_ADDR": freeAddr(t),
-		"PROOF_BITS": "8", "PROOF_REPLAY_LIMIT": "50", "IPCLUSTER_THRESHOLD": "20",
+		"PROOF_BITS": "8", "PROOF_REPLAY_LIMIT": "50", "IPCLUSTER_THRESHOLD": "20", "VISITOR_EVENTS_PER_HOUR": "600",
 		"RATE_SITE_PER_SECOND": "200", "RATE_SITE_BURST": "400",
 		"RATE_PREFIX_PER_SECOND": "20", "RATE_PREFIX_BURST": "60",
 		"GATEWAY_MAX_BODY": "8192", "CLIENT_IP_HEADER": clientIPHdr, "GATEWAY_SECURE_TRANSPORT": "true",
@@ -348,8 +348,8 @@ func startReplayer(t *testing.T, sh *shared, urls string, replicas int, creds ma
 	require.NoError(t, err)
 	uc, err := umami.New(sh.umami, nil)
 	require.NoError(t, err)
-	set := replayer.Settings{NodeID: "replayer-rc", OpsAddr: "127.0.0.1:0", UmamiURL: sh.umami, Workers: 4, MaxInFlight: 64}
-	r, err := replayer.New(context.Background(), replayer.Config{Settings: set, NC: nc, Replicas: cfg.Replicas, Umami: uc, Log: log, Registry: obs.NewRegistry()})
+	set := replayer.Settings{NodeID: "replayer-rc", OpsAddr: "127.0.0.1:0", UmamiURLs: []*url.URL{sh.umami}, Workers: 4, MaxInFlight: 64}
+	r, err := replayer.New(context.Background(), replayer.Config{Settings: set, NC: nc, Replicas: cfg.Replicas, Umami: []*umami.Client{uc}, Log: log, Registry: obs.NewRegistry()})
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)

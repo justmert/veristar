@@ -14,6 +14,7 @@ import (
 	"go.opentelemetry.io/collector/config/configopaque"
 	"go.opentelemetry.io/collector/consumer/consumererror"
 	"go.opentelemetry.io/collector/exporter/exportertest"
+	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -50,7 +51,8 @@ func TestSplitByTenantAndFilter(t *testing.T) {
 	a, b := uuid.NewString(), uuid.NewString()
 	md := pmetric.NewMetrics()
 	histogram(md, a, schema.MetricDuration, "s", map[string]any{"user.id": "leak-user"})
-	histogram(md, b, schema.MetricFromSpans, "s", nil)
+	histogram(md, b, schema.MetricFromSpans, "s", map[string]any{schema.AttrSpanMinute: int64(time.Minute)})
+	md.ResourceMetrics().At(1).Resource().Attributes().PutStr(schema.ResBatchID, "b1")
 	histogram(md, a, schema.MetricDuration, "s", map[string]any{schema.AttrLossy: true})
 	histogram(md, b, "http.client.request.duration", "s", nil) // not published
 	histogram(md, b, schema.MetricLegacyDuration, "ms", nil)   // transform missed it
@@ -67,8 +69,11 @@ func TestSplitByTenantAndFilter(t *testing.T) {
 	}
 	for _, p := range parts {
 		sum := sha256.Sum256(p.Data)
-		if p.MsgID != hex.EncodeToString(sum[:]) {
+		if p.TenantID == a && p.MsgID != hex.EncodeToString(sum[:]) {
 			t.Errorf("msg id is not the payload sha-256")
+		}
+		if p.TenantID == b && p.MsgID != spanMsgID(b, []string{"b1"}) {
+			t.Errorf("span msg id is not derived from the batch id")
 		}
 		var u pmetric.ProtoUnmarshaler
 		got, err := u.UnmarshalMetrics(p.Data)
@@ -226,3 +231,96 @@ func TestConfigValidate(t *testing.T) {
 		t.Fatal("missing timeout accepted")
 	}
 }
+
+// spanExport builds what the connector emits for one trace export: points
+// stamped with the moment it ran, in map order.
+func spanExport(tenant, batch string, now time.Time, reverse bool) pmetric.Metrics {
+	md := pmetric.NewMetrics()
+	rm := md.ResourceMetrics().AppendEmpty()
+	ra := rm.Resource().Attributes()
+	ra.PutStr(schema.ResTenantID, tenant)
+	ra.PutStr(schema.ResTokenID, "8a1c3c1e-0f53-4e02-9d0b-6a7f0f0e3a11")
+	ra.PutStr(schema.ResBatchID, batch)
+	m := rm.ScopeMetrics().AppendEmpty().Metrics().AppendEmpty()
+	m.SetName(schema.MetricFromSpans)
+	m.SetUnit("s")
+	h := m.SetEmptyHistogram()
+	h.SetAggregationTemporality(pmetric.AggregationTemporalityDelta)
+	minutes := []int64{1_763_000_040_000_000_000, 1_763_000_100_000_000_000}
+	if reverse {
+		minutes[0], minutes[1] = minutes[1], minutes[0]
+	}
+	for _, min := range minutes {
+		dp := h.DataPoints().AppendEmpty()
+		dp.SetTimestamp(pcommonTS(now))
+		dp.SetCount(1)
+		dp.ExplicitBounds().FromRaw(schema.Bounds)
+		bc := make([]uint64, 15)
+		bc[3] = 1
+		dp.BucketCounts().FromRaw(bc)
+		dp.Attributes().PutStr(schema.AttrMethod, "GET")
+		dp.Attributes().PutInt(schema.AttrSpanMinute, min)
+	}
+	return md
+}
+
+// a retried trace export is aggregated again at another moment and in
+// another map order; its message must still be recognised as the same one
+//, and its points must carry the minute the requests ended in
+//.
+func TestSpanPartsDeduplicateOnRetry(t *testing.T) {
+	tenant := uuid.NewString()
+	first, _, err := Split(spanExport(tenant, "batch-1", time.Now(), false))
+	if err != nil {
+		t.Fatal(err)
+	}
+	retry, _, err := Split(spanExport(tenant, "batch-1", time.Now().Add(7*time.Second), true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(first) != 1 || len(retry) != 1 {
+		t.Fatalf("parts %d and %d", len(first), len(retry))
+	}
+	if first[0].MsgID != retry[0].MsgID {
+		t.Errorf("retry got message id %s, first %s", retry[0].MsgID, first[0].MsgID)
+	}
+	other, _, err := Split(spanExport(tenant, "batch-2", time.Now(), false))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if other[0].MsgID == first[0].MsgID {
+		t.Error("different exports share a message id")
+	}
+	var u pmetric.ProtoUnmarshaler
+	got, err := u.UnmarshalMetrics(first[0].Data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rm := got.ResourceMetrics().At(0)
+	if _, ok := rm.Resource().Attributes().Get(schema.ResBatchID); ok {
+		t.Error("batch id published")
+	}
+	dps := rm.ScopeMetrics().At(0).Metrics().At(0).Histogram().DataPoints()
+	for i := 0; i < dps.Len(); i++ {
+		dp := dps.At(i)
+		if _, ok := dp.Attributes().Get(schema.AttrSpanMinute); ok {
+			t.Error("span minute published")
+		}
+		if ts := int64(dp.Timestamp()); ts%int64(time.Minute) != 0 || ts < 1_763_000_040_000_000_000 {
+			t.Errorf("point time %d is not the span minute", ts)
+		}
+	}
+	// without the guard's stamps the pipeline is misconfigured
+	bad := spanExport(tenant, "batch-1", time.Now(), false)
+	bad.ResourceMetrics().At(0).Resource().Attributes().Remove(schema.ResBatchID)
+	if _, _, err := Split(bad); err == nil {
+		t.Error("span points without a batch id accepted")
+	}
+	bad = spanExport(tenant, "batch-1", time.Now(), false)
+	bad.ResourceMetrics().At(0).ScopeMetrics().At(0).Metrics().At(0).Histogram().DataPoints().At(0).Attributes().Remove(schema.AttrSpanMinute)
+	if _, _, err := Split(bad); err == nil {
+		t.Error("span point without a minute accepted")
+	}
+}
+
+func pcommonTS(t time.Time) pcommon.Timestamp { return pcommon.NewTimestampFromTime(t) }

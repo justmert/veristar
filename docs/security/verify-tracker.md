@@ -20,7 +20,13 @@ The console's snippet pins one version and its hash:
   are immutable: CI fails if either changes, and every release rebuilds the newest file and compares
   it byte for byte. A new tracker is a new version and a new snippet; nothing updates by itself.
 - A version with a problem is listed in `packages/tracker/releases/revoked.json` (empty today). The
-  console refuses to show a snippet for a revoked version.
+  console refuses to show a snippet for a revoked version, and the gateway answers 410 for its
+  `sdk.js`. The file is served with `max-age=31536000, immutable` and may be self-hosted, so a
+  page can keep running a revoked release from its cache or its own copy. From release 1.2.0 every
+  event names its release (`sv`, [../reference/wire-v1.md](../reference/wire-v1.md)) and the gateway
+  refuses events of a revoked one with 410 (`rejected_revoked_version`). Releases 1.0.0 and 1.1.0
+  do not name themselves, so their events cannot be refused this way; revoking one of them stops
+  only new loads of the file.
 
 ## 2. Check a file by hand
 

@@ -61,6 +61,31 @@
   no_log: true
   notify: Reload alertmanager
 
+# the watchdog push to the probe's gatus (templates/alertmanager.yml.j2)
+- name: Write the gatus push token for the watchdog
+  ansible.builtin.copy:
+    content: "{{ sa_secrets.gatus_external_token }}"
+    dest: "{{ observability_conf_dir }}/alertmanager/gatus-external-token"
+    owner: "65534"
+    group: "65534"
+    mode: "0400"
+  no_log: true
+  notify: Reload alertmanager
+
+# local converge only: the probe's caddy has a private ca
+- name: Install the probe ca for prometheus and alertmanager
+  ansible.builtin.copy:
+    src: "{{ observability_probe_ca_file }}"
+    dest: "{{ observability_conf_dir }}/{{ item.dir }}/probe-ca.crt"
+    owner: "65534"
+    group: "65534"
+    mode: "0444"
+  loop:
+    - {dir: prometheus}
+    - {dir: alertmanager}
+  when: observability_probe_ca_file is defined
+  notify: [Reload prometheus, Reload alertmanager]
+
 - name: Install the grafana provisioning and dashboards
   ansible.builtin.copy:
     src: "grafana/{{ item }}/"

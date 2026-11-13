@@ -18,16 +18,12 @@
     "go": [
       {
         "dir": ".",
-        "packages": [
-          "./cmd/..."
-        ],
+        "packages": ["./cmd/..."],
         "artifact": "gateway, controlplane, replayer, metricswriter, jobs, platformctl, prober, sloreport binaries"
       },
       {
         "dir": "dist/scf-otelcol",
-        "packages": [
-          "."
-        ],
+        "packages": ["."],
         "artifact": "collector image (ocb distribution generated from collector/builder-config.yaml)"
       }
     ]

@@ -114,6 +114,7 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 	endpoints := auth.LoadEndpoints(env)
 	natsCfg, _ := config.LoadNATS(env)
 	poolCfg, _ := db.LoadPoolConfig(env, db.RoleCPSystem, db.RoleCPTenant, db.RoleCPOperator)
+	poolCfg.MaxConns = requestPoolSizes
 	// the api metrics ranges switch tables at the horizons the jobs
 	// retention task drops data by, so both read the same keys
 	retention, _ := config.LoadAPIRetention(env)
@@ -154,6 +155,19 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 		return err
 	}
 	defer d.Close()
+	// the reconciler gets a cp_system pool of its own, one connection per
+	// reconcile worker: a run holds its connection across umami calls, so
+	// on the request pool a few slow runs would make every session load
+	// wait
+	recCfg, err := poolCfg.Only(db.RoleCPSystem, tenants.ReconcileWorkers)
+	if err != nil {
+		return err
+	}
+	recDB, err := db.Open(cctx, recCfg, "controlplane-reconcile")
+	if err != nil {
+		return err
+	}
+	defer recDB.Close()
 	nc, err := natsx.Connect(natsCfg, natsx.ServiceControlPlane, log)
 	if err != nil {
 		return err
@@ -177,7 +191,7 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 	log.Info("operator flags synced", "changed", changed)
 
 	rec := &provision.Reconciler{
-		Admin: admin, Registry: publisher, Key: pwKey, Tx: d.WithSystem, Now: time.Now, Log: log,
+		Admin: admin, Registry: publisher, Key: pwKey, Tx: recDB.WithSystem, Now: time.Now, Log: log,
 	}
 	scope, err := tenants.NewScope(d, tm.Version, rec, log)
 	if err != nil {
@@ -196,6 +210,18 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 		Endpoints:    endpoints,
 		Reconcile:    scope.Reconcile,
 	}, d, sessions)
+	if err != nil {
+		return err
+	}
+	// invites and direct adds are bound to the github account id (contract
+	// 4.2.5), read with the app's credentials
+	users, err := auth.NewUserLookup(auth.UserLookupConfig{
+		ClientID: cfg.GitHubClientID, ClientSecret: cfg.GitHubClientSecret, Endpoints: endpoints,
+	})
+	if err != nil {
+		return err
+	}
+	memberRoutes, err := members.NewRoutes(scope, users)
 	if err != nil {
 		return err
 	}
@@ -303,7 +329,7 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 		Private: []controlplane.Routes{
 			controlplane.RoutesFunc(authH.Private),
 			tenants.NewRoutes(scope),
-			members.NewRoutes(scope),
+			memberRoutes,
 			sites.NewRoutes(scope).OnCreate(checks),
 			checks,
 			ingest.NewRoutes(scope),
@@ -336,6 +362,16 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 	apiErr := obs.Serve(ctx, apiServer(cfg.Addr, api), log)
 	stopOps()
 	return errors.Join(apiErr, <-opsDone)
+}
+
+// requestPoolSizes are the pools the api requests use, sized explicitly
+// rather than by the cpu count of the node. every request loads its
+// session from cp_system; tenant routes then work under cp_tenant and
+// operator views under cp_operator. the reconciler has its own pool.
+var requestPoolSizes = map[db.Role]int32{
+	db.RoleCPSystem:   16,
+	db.RoleCPTenant:   16,
+	db.RoleCPOperator: 8,
 }
 
 // connectTimeout bounds the startup connections, so a wrong address fails

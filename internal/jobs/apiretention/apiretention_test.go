@@ -2,6 +2,7 @@ package apiretention_test
 
 import (
 	"log/slog"
+	"strconv"
 	"testing"
 	"time"
 
@@ -230,4 +231,27 @@ func TestRefusesBelowFloor(t *testing.T) {
 		"API_MINUTE_RETENTION_DAYS": "30", "API_HOURLY_RETENTION_MONTHS": "23",
 	}))
 	require.ErrorContains(t, err, "API_HOURLY_RETENTION_MONTHS")
+}
+
+// TestRefusesMinuteHorizonBelowLateDataWindow: the writer accepts points as
+// old as API_METRICS keeps messages (7 days), so a minute horizon that drops
+// their partitions earlier would discard a backlog the queue kept safe
+//. 8 days is the floor, in the constructor and the loader.
+func TestRefusesMinuteHorizonBelowLateDataWindow(t *testing.T) {
+	now := time.Now()
+	clock := func() time.Time { return now }
+	p, err := apipartition.New(clock, slog.New(slog.DiscardHandler), prometheus.NewRegistry())
+	require.NoError(t, err)
+	for _, days := range []int{7, 2} {
+		_, err := apiretention.New(config.APIRetention{MinuteDays: days, HourlyMonths: 36}, p, clock,
+			slog.New(slog.DiscardHandler), prometheus.NewRegistry())
+		require.Error(t, err, "%d days", days)
+		_, err = config.LoadAPIRetention(config.FromMap(map[string]string{
+			"API_MINUTE_RETENTION_DAYS": strconv.Itoa(days), "API_HOURLY_RETENTION_MONTHS": "36",
+		}))
+		require.ErrorContains(t, err, "API_MINUTE_RETENTION_DAYS", "%d days", days)
+	}
+	_, err = apiretention.New(config.APIRetention{MinuteDays: 8, HourlyMonths: 36}, p, clock,
+		slog.New(slog.DiscardHandler), prometheus.NewRegistry())
+	require.NoError(t, err)
 }

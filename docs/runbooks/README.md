@@ -17,6 +17,7 @@ such as a tenant id, are written as `<tenant id>`. Nothing in angle brackets is 
 | [queue-backlog-and-dlq.md](queue-backlog-and-dlq.md) | 2026-11-13, in part | this stage load run, alert fire-drills, dev stack |
 | [database-failover.md](database-failover.md) | not yet exercised | needs the multi-node topology |
 | [point-in-time-restore.md](point-in-time-restore.md) | not yet exercised | needs the multi-node topology and a backup repository |
+| [disaster-recovery.md](disaster-recovery.md) (both database nodes lost) | not yet exercised; the restore node's inventory shape is tested | `make tofu-check`; the chain needs staging an operator input |
 | [umami-upgrade.md](umami-upgrade.md) | 2026-11-13 (upgrade and rollback) | this stage patch rehearsal, this stage rollback rehearsal |
 | [collector-upgrade.md](collector-upgrade.md) | 2026-11-13, build and gate only | this stage, local |
 | [tracker-release.md](tracker-release.md) | 2026-11-13 (revocation) | this stage, local gateway |
@@ -32,11 +33,12 @@ such as a tenant id, are written as `<tenant id>`. Nothing in angle brackets is 
 | [operators.md](operators.md) | 2026-11-13, sync path | this stage, `TestSyncFlags`, `TestOperatorFlag`, `TestLifecycle` |
 | [capacity.md](capacity.md) | 2026-11-13, measurement only | this stage, `TestMeasure` |
 | [slo-report.md](slo-report.md) | 2026-11-13 | this stage collection, this stage report rerun |
-| [alerts.md](alerts.md) | 2026-11-13, 20 of 35 alerts | alert fire-drills |
+| [alerts.md](alerts.md) | 2026-11-13, 16 fired and resolved, 3 fired only, of 35 alerts | alert fire-drills |
 
 No runbook has been run against staging or production: neither exists yet (inputs I4, I5, I6,
 I13, I14, I15). The plan requires every runbook to be executed on staging before this stage is
-done; that requirement is still open.
+done; that requirement is still open, so the documentation phase is not done by
+its own condition until staging exists.
 
 ## Conventions used in every runbook
 

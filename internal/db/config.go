@@ -133,6 +133,21 @@ func LoadRolesConfig(e *config.Env) (RolesConfig, error) {
 type PoolConfig struct {
 	Server Server
 	Roles  []Login
+	// MaxConns sets the size of a role's pool. a role not listed gets
+	// pgxpool's default, max(4, number of cpus).
+	MaxConns map[Role]int32
+}
+
+// Only returns the configuration for one of its roles, with that role's
+// pool size, so a service can open a second, separate pool for the same
+// role (the control plane's reconciler, review).
+func (c PoolConfig) Only(r Role, maxConns int32) (PoolConfig, error) {
+	for _, l := range c.Roles {
+		if Role(l.User) == r {
+			return PoolConfig{Server: c.Server, Roles: []Login{l}, MaxConns: map[Role]int32{r: maxConns}}, nil
+		}
+	}
+	return PoolConfig{}, fmt.Errorf("db: role %s is not loaded", r)
 }
 
 // LoadPoolConfig reads the server and the passwords of the given roles only,

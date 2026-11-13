@@ -168,8 +168,10 @@ func toResults(rs []gatusResult) []Result {
 //	budget (1-0.9999)*259200/60 = 0.432 min -> 0.43 min, used 6*30/60 = 3.00 min
 //	verdict missed (99.8958 < 99.99)
 //
-// dashboard: no failures, 5760 results, 100.0000%, met, used 0.00 min,
-// budget (1-0.999)*259200/60 = 4.32 min.
+// dashboard: no failures, 5760 results, 100.0000%, used 0.00 min,
+// budget (1-0.999)*259200/60 = 4.32 min. coverage 66.6667% is below the
+// 95% floor, so the verdict is not measured; ingestion stays missed because
+// its 3.00 failed minutes already exceed its 0.43 minute budget.
 func TestReportMatchesAHandCalculation(t *testing.T) {
 	dir := t.TempDir()
 	d1 := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
@@ -201,7 +203,7 @@ func TestReportMatchesAHandCalculation(t *testing.T) {
 		"Covered range: 2026-11-01 to 2026-11-03 (UTC), 3 days. This is a partial month: it ends before 2026-11-30.",
 		"Missing days: 1 (2026-11-02)",
 		"| Ingestion (`slo_ingestion`) | 5760 | 5754 | 6 | 99.8958% | 99.9900% | missed | 66.6667% | 0.43 min | 3.00 min |",
-		"| Dashboard (`slo_dashboard`) | 5760 | 5760 | 0 | 100.0000% | 99.9000% | met | 66.6667% | 4.32 min | 0.00 min |",
+		"| Dashboard (`slo_dashboard`) | 5760 | 5760 | 0 | 100.0000% | 99.9000% | not measured | 66.6667% | 4.32 min | 0.00 min |",
 		"| API pipeline freshness (`slo_freshness-api`) | 2880 | 2880 | 0 | 100.0000% | none | reported only | 33.3333% | n/a | n/a |",
 		"| Ingestion | 2026-11-01T00:50:00Z | 2026-11-01T00:52:00Z | 2m 00s | 4 | gateway answered 503 |",
 		"| Ingestion | 2026-11-03T23:59:00Z | ongoing at end of data | at least 1m 00s | 2 | gateway answered 503 |",
@@ -292,4 +294,31 @@ func TestHeartbeatGapsAreUnmeasured(t *testing.T) {
 		require.Len(t, s.Incidents, 1)
 	}
 	require.Contains(t, Render(m), "Probe gaps: slo_ingestion 1")
+}
+
+// TestVerdictCoverageFloor pins the verdict rules of docs/sla.md: one day of
+// clean data in a 30 day month is not a met objective, a failure beyond the
+// whole budget is missed at any coverage, and at full coverage availability
+// decides.
+func TestVerdictCoverageFloor(t *testing.T) {
+	month := 30 * 86400.0
+	perDay := 86400 / IntervalSeconds
+	cases := []struct {
+		name string
+		s    Stats
+		want string
+	}{
+		{"no results", Stats{}, "not measured"},
+		{"one clean day", Stats{Results: perDay, Successes: perDay}, "not measured"},
+		{"one day, failures beyond the month budget", Stats{Results: perDay, Successes: perDay - 10}, "missed"},
+		{"just under the floor", Stats{Results: perDay * 28, Successes: perDay * 28}, "not measured"},
+		{"full month clean", Stats{Results: perDay * 30, Successes: perDay * 30}, "met"},
+		{"full month, availability below objective", Stats{Results: perDay * 30, Successes: perDay*30 - 9}, "missed"},
+		{"full month, availability at objective", Stats{Results: perDay * 30, Successes: perDay*30 - 8}, "met"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			require.Equal(t, c.want, Verdict(c.s, 99.99, month))
+		})
+	}
 }

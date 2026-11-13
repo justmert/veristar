@@ -49,16 +49,21 @@ render("script");
 ```
 
 The kit sets no browser global and fires no DOM events, so a separately loaded script cannot see
-its events. Instead `sdk.js` checks the kit's two storage keys twice a second: whether
-`@StellarWalletsKit/activeAddress` exists (by its name only; its value is never read) and which
-wallet id `@StellarWalletsKit/selectedModuleId` holds. The kit keeps the network in memory only,
+its events. Instead `sdk.js` checks the kit's two storage keys twice a second, and whenever
+another tab of your site changes storage. To find them it lists the names of your site's
+`localStorage` keys (names only). It then reads which wallet id
+`@StellarWalletsKit/selectedModuleId` holds and checks whether `@StellarWalletsKit/activeAddress`
+exists; the address value, and the value of every other key, is never read. The kit keeps the network in memory only,
 so in this mode `wallet_connected` has no `network`. Use the npm package if you need it.
 
 Notes on the script-tag mode:
 
 - It needs tracker version **1.1.0** or newer. Version 1.0.0 ignores the attribute.
 - With `data-auto-track="false"` ([consent.md](consent.md)), storage is not read until you call
-  `umami.start()`. With Global Privacy Control on, nothing is read or sent.
+  `umami.start()`. Without it, a visitor with Global Privacy Control or the opt-out flag set has
+  nothing read beyond the opt-out flag and nothing sent. If you call `umami.start()` for such a
+  visitor, the kit's keys are watched from then on, but no event is sent; call `start()` only
+  after consent.
 - A change made in another tab of your site is left to that tab, so it is not counted twice.
 - A connect and disconnect within half a second can be missed.
 

@@ -17,6 +17,8 @@ export type Recorded = {
   path: string;
   headers: IncomingHttpHeaders;
   body: string;
+  // the status the fixture answered with
+  status?: number;
 };
 
 export type Gateway = {
@@ -25,6 +27,9 @@ export type Gateway = {
   events: () => Recorded[];
   challenges: () => Recorded[];
   bits: number;
+  // events one proof may carry, as PROOF_REPLAY_LIMIT on one gateway node.
+  // past it the fixture answers 403 rejected_replay like the gateway
+  replayLimit: number;
   // extra routes, for example the sdk.js file or an html page
   files: Map<string, { type: string; body: string | Buffer }>;
   close: () => Promise<void>;
@@ -39,18 +44,20 @@ export function tagFor(w: string, iat: number, salt: string, bits: number): stri
 export async function startGateway(bits = 8): Promise<Gateway> {
   const requests: Recorded[] = [];
   const files = new Map<string, { type: string; body: string | Buffer }>();
-  const gw: Partial<Gateway> = { requests, files, bits };
+  const gw: Partial<Gateway> = { requests, files, bits, replayLimit: Number.POSITIVE_INFINITY };
+  const uses = new Map<string, number>();
   const server: Server = createServer((req, res) => {
     const chunks: Buffer[] = [];
     req.on("data", (c: Buffer) => chunks.push(c));
     req.on("end", () => {
       const url = new URL(req.url ?? "/", "http://fixture");
-      requests.push({
+      const recorded: Recorded = {
         method: req.method ?? "",
         path: `${url.pathname}${url.search}`,
         headers: req.headers,
         body: Buffer.concat(chunks).toString("utf8"),
-      });
+      };
+      requests.push(recorded);
       const cors = { "access-control-allow-origin": "*" };
       if (req.method === "GET" && url.pathname === "/v1/c") {
         const w = url.searchParams.get("w") ?? "";
@@ -63,6 +70,22 @@ export async function startGateway(bits = 8): Promise<Gateway> {
         return;
       }
       if (req.method === "POST" && url.pathname === "/v1/e") {
+        // the tag identifies the challenge, as in the gateway's replay table
+        let tag = "";
+        try {
+          tag = (JSON.parse(recorded.body) as { p?: { tag?: string } }).p?.tag ?? "";
+        } catch {
+          // counted under the empty tag
+        }
+        const n = (uses.get(tag) ?? 0) + 1;
+        if (n > (gw.replayLimit as number)) {
+          recorded.status = 403;
+          res.writeHead(403, { ...cors, "content-type": "text/plain; charset=utf-8" });
+          res.end("rejected_replay\n");
+          return;
+        }
+        uses.set(tag, n);
+        recorded.status = 202;
         res.writeHead(202, cors);
         res.end();
         return;

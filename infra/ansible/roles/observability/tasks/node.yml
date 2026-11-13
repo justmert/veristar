@@ -41,3 +41,68 @@
     group: root
     mode: "0644"
   when: inventory_hostname in observability_postgres_hosts
+
+# unattended upgrades install security fixes without rebooting
+# (roles/base upgrades.yml); a kernel or libc fix applies only after a reboot.
+# debian's unattended-upgrades kernel hook creates /var/run/reboot-required.
+# this timer turns the file into node_reboot_required for the
+# HostRebootRequired alert; playbooks/reboot.yml does the rolling reboot.
+- name: Install the reboot-required textfile writer
+  ansible.builtin.copy:
+    dest: /usr/local/sbin/sa-reboot-required
+    content: |
+      #!/bin/sh
+      # managed by ansible (infra/ansible/roles/observability)
+      set -eu
+      v=0
+      [ -e /var/run/reboot-required ] && v=1
+      f={{ observability_conf_dir }}/textfile/reboot.prom
+      {
+        echo '# HELP node_reboot_required 1 when installed updates wait for a reboot'
+        echo '# TYPE node_reboot_required gauge'
+        echo "node_reboot_required $v"
+      } >"$f.tmp"
+      mv "$f.tmp" "$f"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the reboot-required timer
+  ansible.builtin.copy:
+    dest: "/etc/systemd/system/{{ item.name }}"
+    content: "{{ item.content }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - name: sa-reboot-required.service
+      content: |
+        # managed by ansible (infra/ansible/roles/observability)
+        [Unit]
+        Description=write node_reboot_required for node_exporter
+
+        [Service]
+        Type=oneshot
+        ExecStart=/usr/local/sbin/sa-reboot-required
+    - name: sa-reboot-required.timer
+      content: |
+        # managed by ansible (infra/ansible/roles/observability)
+        [Unit]
+        Description=write node_reboot_required every 10 minutes
+
+        [Timer]
+        OnBootSec=1min
+        OnUnitActiveSec=10min
+
+        [Install]
+        WantedBy=timers.target
+  loop_control:
+    label: "{{ item.name }}"
+  register: observability_reboot_units
+
+- name: Start the reboot-required timer
+  ansible.builtin.systemd_service:
+    name: sa-reboot-required.timer
+    enabled: true
+    state: started
+    daemon_reload: "{{ observability_reboot_units is changed }}"

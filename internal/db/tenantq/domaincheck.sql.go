@@ -45,7 +45,7 @@ set verify_method = case when $1::boolean then $2::text else verify_method end,
     last_verify_at = now(),
     last_verify_error = $3::text
 where id = $4 and status <> 'removed'
-returning id, tenant_id, name, domain, origins, quarantine_website_id, status, verify_token, verify_method, verified_at, last_verify_at, last_verify_error, stellar_toml, stellar_toml_checked_at, created_at, updated_at, status_reason
+returning id, tenant_id, name, domain, origins, quarantine_website_id, status, verify_token, verify_method, verified_at, last_verify_at, last_verify_error, stellar_toml, stellar_toml_checked_at, created_at, updated_at, status_reason, collect_utm
 `
 
 type SetSiteVerifyResultParams struct {
@@ -85,6 +85,7 @@ func (q *Queries) SetSiteVerifyResult(ctx context.Context, arg SetSiteVerifyResu
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.StatusReason,
+		&i.CollectUtm,
 	)
 	return i, err
 }

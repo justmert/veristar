@@ -316,29 +316,42 @@ func (s *Service) websites(j job) map[string]bool {
 
 func (s *Service) visitorToday(ctx context.Context, st stores, j job, c *counts) (string, string, error) {
 	site := j.req.SiteID.String()
-	day := utcDay(*j.req.Day).Format(time.DateOnly)
+	day := utcDay(*j.req.Day)
 	rec, err := visitRecord(ctx, st.visits, site, j.vt)
 	if err != nil {
 		return "", "", err
 	}
+	// sessions an earlier run of today recorded before it failed
+	pending, err := pendingErasure(ctx, st.visits, site, j.vt)
+	if err != nil {
+		return "", "", err
+	}
+	sessions := mergeVisits(rec, pending)
+	allowed := s.websites(j)
+	for website := range sessions {
+		if !allowed[website] {
+			return "", "", fmt.Errorf("erasure: visit record names website %s, which is not a website of the site", website)
+		}
+	}
+	if len(sessions) > 0 {
+		// the sessions are written down first, so a run that fails after
+		// the record went still leaves them for the next request
+		if err := savePending(ctx, st.visits, site, j.vt, &replayer.VisitRecord{Websites: sessions}); err != nil {
+			return "", "", err
+		}
+	}
 	if rec != nil {
-		// the record goes first, so an event of this visitor that arrives
-		// while the sessions are deleted is sent without the old cache
-		// token and starts a new session
+		// the record goes before the sessions, so an event of this visitor
+		// that arrives while the sessions are deleted is sent without the
+		// old cache token and starts a new session
 		if err := purgeVisit(ctx, st.visits, site, j.vt); err != nil {
 			return "", "", err
 		}
-		allowed := s.websites(j)
-		for website, e := range rec.Websites {
-			if !allowed[website] {
-				return "", "", fmt.Errorf("erasure: visit record names website %s, which is not a website of the site", website)
-			}
-			if e.SessionID == "" {
-				continue
-			}
-			if _, err := s.deleteSession(ctx, website, e.SessionID, c); err != nil {
-				return "", "", err
-			}
+	}
+	for website, e := range sessions {
+		// a session an earlier run already deleted answers not found
+		if _, err := s.deleteSession(ctx, website, e.SessionID, c); err != nil {
+			return "", "", err
 		}
 	}
 	n, err := deleteDLQ(ctx, st.dlq, site, containsToken(j.vt))
@@ -346,13 +359,63 @@ func (s *Service) visitorToday(ctx context.Context, st stores, j job, c *counts)
 	if err != nil {
 		return "", "", err
 	}
-	if c.sessions == 0 && c.dlq == 0 {
-		return OutcomeNothingFound, fmt.Sprintf("No visit by this address and user agent was recorded on %s (UTC). "+
-			"Visits on earlier days cannot be linked to a person: the daily secret that produced their visitor "+
-			"token was destroyed when that day ended, so this service cannot identify them (GDPR Article 11).", day), nil
+	if len(sessions) > 0 {
+		if err := clearPending(ctx, st.visits, site, j.vt); err != nil {
+			return "", "", err
+		}
 	}
-	return OutcomeErased, fmt.Sprintf("Deleted %d session(s) with %d event(s) of this visitor on %s (UTC) "+
-		"and %d undeliverable queued message(s).", c.sessions, c.events, day, c.dlq), nil
+	date := day.Format(time.DateOnly)
+	if len(sessions) == 0 && c.dlq == 0 {
+		return OutcomeNothingFound, s.notLocated(ctx, st, day), nil
+	}
+	msg := fmt.Sprintf("Deleted %d session(s) with %d event(s) of this visitor on %s (UTC) "+
+		"and %d undeliverable queued message(s).", c.sessions, c.events, date, c.dlq)
+	if pending != nil {
+		msg += " This request finished the erasure an earlier request of today started."
+	}
+	return OutcomeErased, msg, nil
+}
+
+// mergeVisits joins the sessions of the visit record and of an earlier
+// run's progress record, by website.
+func mergeVisits(recs ...*replayer.VisitRecord) map[string]replayer.VisitEntry {
+	out := map[string]replayer.VisitEntry{}
+	for _, r := range recs {
+		if r == nil {
+			continue
+		}
+		for website, e := range r.Websites {
+			if e.SessionID != "" {
+				out[website] = e
+			}
+		}
+	}
+	return out
+}
+
+// notLocated is the answer when no link from the visitor token to a session
+// exists. it says what is known: the link lives in a memory bucket for
+// the day, so a missing link does not prove there was no visit.
+func (s *Service) notLocated(ctx context.Context, st stores, day time.Time) string {
+	date := day.Format(time.DateOnly)
+	msg := fmt.Sprintf("A visit by this address and user agent on %s (UTC) could not be located. ", date)
+	since, err := bucketSince(ctx, st.visits)
+	switch {
+	case err != nil:
+		s.cfg.Log.Warn("erasure: visit link store age unknown", "error", err.Error())
+		msg += "Whether the store that links visitors to their sessions was emptied today could not be checked. "
+	case since.After(day):
+		msg += fmt.Sprintf("The store that links visitors to their sessions is kept in memory only and was emptied at %s UTC "+
+			"today (a restart of the messaging cluster), so a visit before that time cannot be located, although it may "+
+			"still be stored. ", since.UTC().Format("15:04"))
+	default:
+		msg += "The store that links visitors to their sessions has kept every link since the start of the day. "
+	}
+	msg += "A restart that also replaced the daily secret changes this visitor's token, and a visit before it cannot be " +
+		"linked either. To remove every web record that may remain, a site reset erases all data of the site. " +
+		"Visits on earlier days cannot be linked to a person: the daily secret that produced their visitor token was " +
+		"destroyed when that day ended, so this service cannot identify them (GDPR Article 11)."
+	return msg
 }
 
 func (s *Service) session(ctx context.Context, st stores, j job, c *counts) (string, string, error) {
@@ -435,6 +498,17 @@ func (s *Service) siteReset(ctx context.Context, st stores, j job, c *counts) (s
 	}
 	for _, vt := range vts {
 		if err := purgeVisit(ctx, st.visits, site, vt); err != nil {
+			return "", "", err
+		}
+	}
+	// progress records of failed visitor runs name sessions the reset
+	// just deleted
+	pend, err := sitePending(ctx, st.visits, site)
+	if err != nil {
+		return "", "", err
+	}
+	for _, vt := range pend {
+		if err := clearPending(ctx, st.visits, site, vt); err != nil {
 			return "", "", err
 		}
 	}

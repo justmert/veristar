@@ -5,6 +5,12 @@ package config
 // refused at startup instead of quietly deleting data the rfp promises.
 const MinHourlyRetentionMonths = 24
 
+// MinMinuteRetentionDays is the floor of API_MINUTE_RETENTION_DAYS. the
+// metrics writer accepts points as old as API_METRICS keeps messages (7
+// days), so the minute partitions they belong to must still exist; one more
+// day covers the utc day boundary.
+const MinMinuteRetentionDays = 8
+
 // APIRetention is how long the jobs retention task keeps api metric rows.
 // both keys are required: the starting values (30 days, 36 months) live in
 // deploy/compose and docs/reference/api-storage.md, so a deployment never
@@ -20,8 +26,7 @@ type APIRetention struct {
 // API_HOURLY_RETENTION_MONTHS.
 func LoadAPIRetention(e *Env) (APIRetention, error) {
 	c := APIRetention{
-		// at least 2 days, so the rollup of yesterday always finds its minutes
-		MinuteDays:   e.Int("API_MINUTE_RETENTION_DAYS", 2, 3660),
+		MinuteDays:   e.Int("API_MINUTE_RETENTION_DAYS", MinMinuteRetentionDays, 3660),
 		HourlyMonths: e.Int("API_HOURLY_RETENTION_MONTHS", MinHourlyRetentionMonths, 1200),
 	}
 	return c, e.Err()

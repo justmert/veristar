@@ -3,6 +3,14 @@
 # every node, the edge and core infrastructure, the backup repository, the
 # bootstrap, the services, then the monitoring of edge and core.
 # a second run reports no changes.
+#
+# images: playbooks/verify-release.yml checks every platform image of the
+# release first (needs -e sa_release_manifest=<release-images.json>), so the
+# first converge and a node replacement pull verified digests like a rolling
+# deploy does.
+- name: Verify the release
+  ansible.builtin.import_playbook: verify-release.yml
+
 - name: Baseline and secrets
   hosts: edge:core:backup
   become: true
@@ -10,6 +18,21 @@
   roles:
     - base
     - secrets
+
+# the pgbackrest bucket with versioning and object lock (roles/storage,
+# an operator input, before any database node can archive to it. the local converge
+# reaches it only in its object storage mode (docs/deploy/local-converge.md).
+# backup_repo_mode defaults to s3 in roles/backup, repeated here because role
+# defaults are not visible to a play's conditions.
+- name: Backup bucket
+  hosts: core
+  gather_facts: false
+  vars_files: [../vars/pins.yml]
+  tasks:
+    - name: Converge the backup bucket
+      ansible.builtin.include_role:
+        name: storage
+      when: (backup_repo_mode | default('s3')) == 's3'
 
 - name: Edge infrastructure (nats, etcd)
   hosts: edge
@@ -39,6 +62,19 @@
   roles:
     - backup
 
+# the stanza, then the real archive_command on every database node, then
+# pgbackrest check (roles/core tasks/archive.yml). until this
+# play postgresql keeps its wal and archives nothing.
+- name: WAL archiving
+  hosts: core
+  become: true
+  vars_files: [../vars/pins.yml]
+  tasks:
+    - name: Enable wal archiving
+      ansible.builtin.include_role:
+        name: core
+        tasks_from: archive.yml
+
 - name: Bootstrap
   ansible.builtin.import_playbook: bootstrap.yml
 
@@ -60,12 +96,23 @@
 # node; prometheus, alertmanager, grafana and the exporters on the core
 # nodes. after the services, because the relay joins the edge and core
 # compose networks and the postgres_exporter role is created through the
-# core node's haproxy. the probe node an operator input is not converged here: it
-# has no private address, so the base role refuses it, and nothing installs
-# docker on it yet.
+# core node's haproxy.
 - name: Observability
   hosts: edge:core
   become: true
   vars_files: [../vars/pins.yml]
   roles:
+    - observability
+
+# the probe node an operator input, another provider, public interface only): the os
+# baseline without a private network, then caddy for the status page, gatus
+# and the prober. needs the probe tenant's values in the sops file
+# (docs/deploy/bootstrap.md step 10), so it comes after the platform is up.
+- name: Probe
+  hosts: probe
+  become: true
+  vars_files: [../vars/pins.yml]
+  roles:
+    - base
+    - secrets
     - observability

@@ -29,6 +29,10 @@
 # expect an ingestion gap of seconds per edge node between the nats reload
 # and the recreated gateway and collector: run it in a maintenance window.
 
+# pulls only verified image digests outside the local converge
+- name: Verify the release
+  ansible.builtin.import_playbook: verify-release.yml
+
 - name: Check the rotation
   hosts: edge:core
   gather_facts: false

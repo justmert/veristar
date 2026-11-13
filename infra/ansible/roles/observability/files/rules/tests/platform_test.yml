@@ -131,3 +131,61 @@ tests:
             exp_annotations:
               summary: "nodes_edge-2-in-example-org fails by address (tls, certificate or http)"
               runbook: docs/runbooks/alerts.md#probenodecheckfailing
+
+  - name: host reboot required and watchdog
+    interval: 1m
+    input_series:
+      - series: 'node_reboot_required{job="node",node="edge-2"}'
+        values: '0x60 1x780'
+      - series: 'node_reboot_required{job="node",node="edge-1"}'
+        values: '0x840'
+    alert_rule_test:
+      # pending since minute 61, so not yet at 12 hours later
+      - eval_time: 12h
+        alertname: HostRebootRequired
+      - eval_time: 13h5m
+        alertname: HostRebootRequired
+        exp_alerts:
+          - exp_labels: {severity: ticket, job: node, node: edge-2}
+            exp_annotations:
+              summary: "edge-2 has installed updates that need a reboot"
+              runbook: docs/runbooks/alerts.md#hostrebootrequired
+      - eval_time: 1m
+        alertname: Watchdog
+        exp_alerts:
+          - exp_labels: {severity: heartbeat}
+            exp_annotations:
+              summary: "always firing; its absence at the probe means the alerting pipeline is down"
+              runbook: docs/runbooks/alerts.md#watchdog
+
+  - name: api rollup integrity
+    interval: 1m
+    input_series:
+      - series: 'jobs_api_rollup_orphaned_marks_total{job="jobs",node="core-1"}'
+        values: '0x30 2x60'
+      - series: 'jobs_api_rollup_drifted_hours_total{job="jobs",node="core-2"}'
+        values: '0x30 1x90'
+      - series: 'jobs_api_rollup_drifted_hours_total{job="jobs",node="core-1"}'
+        values: '0x120'
+    alert_rule_test:
+      - eval_time: 29m
+        alertname: APIRollupOrphanedMarks
+      - eval_time: 29m
+        alertname: APIRollupDriftedHours
+      - eval_time: 35m
+        alertname: APIRollupOrphanedMarks
+        exp_alerts:
+          - exp_labels: {severity: ticket, job: jobs, node: core-1}
+            exp_annotations:
+              summary: "the api rollup on core-1 found pending hours whose minute rows were already gone"
+              runbook: docs/runbooks/alerts.md#apirolluporphanedmarks
+      - eval_time: 35m
+        alertname: APIRollupDriftedHours
+        exp_alerts:
+          - exp_labels: {severity: ticket, job: jobs, node: core-2}
+            exp_annotations:
+              summary: "the api rollup on core-2 found hourly rows that disagreed with their minute rows"
+              runbook: docs/runbooks/alerts.md#apirollupdriftedhours
+      # an hour after the last increase the window no longer holds it
+      - eval_time: 100m
+        alertname: APIRollupOrphanedMarks

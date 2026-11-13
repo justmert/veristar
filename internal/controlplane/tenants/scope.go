@@ -21,6 +21,7 @@ import (
 	"github.com/justmert/stellar-analytics/internal/controlplane/session"
 	"github.com/justmert/stellar-analytics/internal/db"
 	"github.com/justmert/stellar-analytics/internal/db/systemq"
+	"github.com/justmert/stellar-analytics/internal/db/tenantq"
 )
 
 // roles of cp.tenant_members
@@ -54,8 +55,29 @@ type Scope struct {
 	termsVersion string
 	reconciler   Reconciler
 	log          *slog.Logger
-	running      sync.WaitGroup
+
+	// the reconcile queue: a tenant is in queued while it is
+	// waiting for a worker or running, and ready lists the waiting ones in
+	// trigger order
+	mu      sync.Mutex
+	queued  map[uuid.UUID]*queueEntry
+	ready   []uuid.UUID
+	workers int
+	running sync.WaitGroup
 }
+
+type queueEntry struct {
+	running bool
+	// pending is set when a change arrives while the tenant's run is in
+	// flight: that run may have read the cp tables before the change, so
+	// one more run follows it
+	pending bool
+}
+
+// ReconcileWorkers bounds how many reconciles the control plane runs at
+// once. each run holds one connection of the reconcile pool and the tenant
+// row lock across its umami calls, so the reconcile pool is sized to this.
+const ReconcileWorkers = 4
 
 // reconcileTimeout bounds one triggered run; the jobs task reconcile runs
 // every tenant every 10 minutes, so a run cut short here is repeated there.
@@ -71,7 +93,7 @@ func NewScope(d *db.DB, termsVersion string, r Reconciler, log *slog.Logger) (*S
 	if termsVersion == "" {
 		return nil, errors.New("tenants: current terms version is required")
 	}
-	return &Scope{db: d, termsVersion: termsVersion, reconciler: r, log: log}, nil
+	return &Scope{db: d, termsVersion: termsVersion, reconciler: r, log: log, queued: map[uuid.UUID]*queueEntry{}}, nil
 }
 
 // DB returns the database the scope checks against.
@@ -185,29 +207,108 @@ func (s *Scope) SiteByID(ctx context.Context, siteID uuid.UUID) (Access, uuid.UU
 	return a, siteID, nil
 }
 
+// LockTenant takes the tenant row lock inside a cp_tenant transaction and
+// refreshes a.TenantStatus from the locked row. the status in Access was
+// read before the transaction, so an operator removal, approval or
+// suspension that committed while the request waited for the lock would
+// otherwise go unseen. a tenant removed meanwhile answers 404,
+// as every route does for a removed tenant (contract 1.3).
+func LockTenant(ctx context.Context, tx pgx.Tx, a *Access) error {
+	status, err := tenantq.New(tx).LockTenant(ctx)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return httpx.NotFound()
+	}
+	if err != nil {
+		return err
+	}
+	if status == StatusRemoved {
+		return httpx.NotFound()
+	}
+	a.TenantStatus = status
+	return nil
+}
+
+// lockTimeout bounds how long a tenant request waits for a row lock. the
+// reconciler holds the tenant row lock across its umami calls (minutes
+// when umami is slow); a request that needs that lock answers 503
+// unavailable with Retry-After instead of holding a pooled connection
+// until the run ends.
+const lockTimeout = "5s"
+
 // InTenant runs fn under cp_tenant for the verified tenant.
 func (s *Scope) InTenant(ctx context.Context, a Access, fn func(pgx.Tx) error) error {
-	return s.db.WithTenant(ctx, a.TenantID, fn)
+	return s.db.WithTenant(ctx, a.TenantID, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, `select set_config('lock_timeout', $1, true)`, lockTimeout); err != nil {
+			return fmt.Errorf("tenants: set lock timeout: %w", err)
+		}
+		return fn(tx)
+	})
 }
 
-// Reconcile starts the reconciler for a tenant after a committed change.
-// it runs detached from the request, so the answer does not wait for umami;
-// the contract reports progress through the tenant's provisioning field. a
+// Reconcile asks for a reconcile of a tenant after a committed change. it
+// never waits: the answer does not wait for umami, and the contract reports
+// progress through the tenant's provisioning field. requests coalesce per
+// tenant: a tenant waiting for a worker is queued once,
+// and a change that arrives while its run is in flight makes exactly one
+// more run follow, so a burst of edits costs at most two runs. at most
+// ReconcileWorkers runs are in flight, whatever the number of tenants. a
 // failed run is logged and repeated by the jobs task reconcile.
 func (s *Scope) Reconcile(ctx context.Context, tenantID uuid.UUID) {
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), reconcileTimeout)
-	s.running.Add(1)
-	go func() {
-		defer s.running.Done()
-		defer cancel()
-		if err := s.reconciler.Reconcile(ctx, tenantID); err != nil {
-			s.log.Error("reconcile after change failed; the periodic reconcile task retries it",
-				"tenant_id", tenantID.String(), "error", err.Error())
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if e, ok := s.queued[tenantID]; ok {
+		if e.running {
+			e.pending = true
 		}
-	}()
+		return
+	}
+	s.queued[tenantID] = &queueEntry{}
+	s.ready = append(s.ready, tenantID)
+	if s.workers < ReconcileWorkers {
+		s.workers++
+		s.running.Add(1)
+		// detached from the request that asked for it, which answers now;
+		// the request's values (its logger) stay with the worker
+		go s.work(context.WithoutCancel(ctx))
+	}
 }
 
-// Wait blocks until every reconcile started by Reconcile has returned. the
-// server calls it on shutdown, after the listener stopped taking requests,
-// so a run is not cut off halfway through its umami calls.
+// work runs queued tenants until none is left. workers start on demand and
+// stop when the queue is empty, so an idle control plane holds none.
+func (s *Scope) work(base context.Context) {
+	defer s.running.Done()
+	for {
+		s.mu.Lock()
+		if len(s.ready) == 0 {
+			s.workers--
+			s.mu.Unlock()
+			return
+		}
+		id := s.ready[0]
+		s.ready = s.ready[1:]
+		e := s.queued[id]
+		e.running = true
+		s.mu.Unlock()
+
+		ctx, cancel := context.WithTimeout(base, reconcileTimeout)
+		if err := s.reconciler.Reconcile(ctx, id); err != nil {
+			s.log.Error("reconcile after change failed; the periodic reconcile task retries it",
+				"tenant_id", id.String(), "error", err.Error())
+		}
+		cancel()
+
+		s.mu.Lock()
+		if e.pending {
+			e.running, e.pending = false, false
+			s.ready = append(s.ready, id)
+		} else {
+			delete(s.queued, id)
+		}
+		s.mu.Unlock()
+	}
+}
+
+// Wait blocks until every requested reconcile has run, the pending ones
+// included. the server calls it on shutdown, after the listener stopped
+// taking requests, so a run is not cut off halfway through its umami calls.
 func (s *Scope) Wait() { s.running.Wait() }

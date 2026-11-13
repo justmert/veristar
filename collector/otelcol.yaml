@@ -96,6 +96,8 @@ processors:
 connectors:
   # alpha at v0.165.1 and stateless: one delta histogram per payload. used
   # because the version is pinned and the this stage tests cover its output.
+  # it stamps points with the moment it runs and emits them in map order,
+  # so the minute and the message id come from tenantguard's stamps below.
   signal_to_metrics:
     error_mode: ignore
     spans:
@@ -108,7 +110,14 @@ connectors:
           - key: scf.token.id
           - key: scf.resource.hash
           - key: scf.flags
+          # tenantguard's id of the trace export, the message id of the
+          # derived points; the jetstream exporter removes it
+          - key: scf.batch.id
         attributes:
+          # the minute the span ended in, set by tenantguard on every
+          # server span: points are split by it and the jetstream exporter
+          # makes it their time and removes it
+          - key: scf.span.minute
           - key: http.request.method
           - key: http.route
             optional: true

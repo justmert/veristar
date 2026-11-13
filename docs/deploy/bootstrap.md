@@ -45,7 +45,7 @@ sections 3 and 5). Expected outputs quoted from those runs say so.
 6. **First converge:**
 
    ```sh
-   make staging-deploy SA_IMAGE_TAG=<release>
+   make staging-deploy SA_IMAGE_TAG=<release> SA_RELEASE_MANIFEST=<path to release-images.json>
    ```
 
    What happens, in order (`infra/ansible/playbooks/site.yml`): the base role (users, SSH
@@ -94,9 +94,15 @@ sections 3 and 5). Expected outputs quoted from those runs say so.
     reconcile that provisions the probe's Umami websites and registry entries.
 
 11. **Probe node.** Needs an operator input (`probe_enabled = true` in `terraform.tfvars`, then plan and
-    apply). No playbook converges the probe node yet: the base role requires a private address,
-    which the probe (on another provider) does not have. The status page and the prober are
-    therefore not deployable until that gap is closed.
+    apply), and the probe tenant's values of step 10 in the SOPS file. Then converge again
+    (`make staging-deploy ...` as in step 6): `site.yml`'s "Probe" play gives the probe the
+    base role without a private network (firewall, SSH hardening, time sync, Docker at the
+    pins), then the observability role (Caddy for `status.<an operator input>`, Gatus, the prober).
+    Expected: `failed=0` for the probe; `https://status.<an operator input>/` shows the endpoints, and
+    after a few minutes the `slo` group and `monitoring / watchdog` (the dead-man push from the
+    core nodes' Alertmanager) are green. `make ops-local` converges a local probe node the same way (steps `converge-probe` to
+    `gatus`), but its run of 2026-11-13 was stopped before those steps; never run against
+    Scaleway an operator input.
 
 12. **SLO collection.** Set the repository variable `STATUS_BASE_URL` to `https://status.<an operator input>`
     so `slo-report.yml` can collect ([../runbooks/slo-report.md](../runbooks/slo-report.md)).

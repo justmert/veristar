@@ -129,7 +129,7 @@ func TestEdgeCaddyfileValidates(t *testing.T) {
 		require.Equal(t, "filter", l.Encoder.Format, name)
 		for _, f := range []string{
 			"request>remote_ip", "request>remote_port", "request>client_ip",
-			"request>headers>User-Agent", "request>headers>X-Forwarded-For",
+			"request>headers", "resp_headers",
 		} {
 			require.Equal(t, "delete", l.Encoder.Fields[f].Filter, "%s must delete %s", name, f)
 		}
@@ -192,6 +192,8 @@ func TestEdgeAccessLogHasNoClientIdentity(t *testing.T) {
 
 	const ua = "Mozilla/5.0 (X11; Linux x86_64) EdgeLogProbe/7.1"
 	const spoofed = "198.51.100.77"
+	// W-7: a page with Referrer-Policy: unsafe-url sends its full url
+	const referer = "https://shop.example/reset?token=EdgeRefererProbe&email=maria%40example.com"
 	client := &http.Client{Timeout: 10 * time.Second, Transport: &http.Transport{
 		// caddy's local ca signs the test certificate; the test checks the
 		// log, not the chain
@@ -207,6 +209,7 @@ func TestEdgeAccessLogHasNoClientIdentity(t *testing.T) {
 		req.Header.Set("X-Edge-Client-Ip", spoofed)
 		req.Header.Set("X-Forwarded-For", spoofed)
 		req.Header.Set("X-Real-Ip", spoofed)
+		req.Header.Set("Referer", referer)
 		resp, err := client.Do(req)
 		if err != nil {
 			return false
@@ -237,6 +240,7 @@ func TestEdgeAccessLogHasNoClientIdentity(t *testing.T) {
 	unmapped.Host = "other.edge.test"
 	unmapped.Header.Set("User-Agent", ua)
 	unmapped.Header.Set("X-Forwarded-For", spoofed)
+	unmapped.Header.Set("Referer", referer)
 	resp, err := client.Do(unmapped)
 	require.NoError(t, err)
 	_ = resp.Body.Close()
@@ -267,15 +271,15 @@ func TestEdgeAccessLogHasNoClientIdentity(t *testing.T) {
 		require.NotContains(t, req, "remote_ip", line)
 		require.NotContains(t, req, "remote_port", line)
 		require.NotContains(t, req, "client_ip", line)
-		hdr, ok := req["headers"].(map[string]any)
-		require.True(t, ok, line)
-		require.NotContains(t, hdr, "User-Agent", line)
-		require.NotContains(t, hdr, "X-Forwarded-For", line)
-		require.NotContains(t, hdr, "X-Real-Ip", line)
+		// no request header at all: user agent, forwarding headers, Referer
+		require.NotContains(t, req, "headers", line)
+		require.NotContains(t, entry, "resp_headers", line)
 	}
 
 	// and nowhere in anything caddy wrote: neither the address nor the agent
 	require.NotContains(t, all, remote.String())
 	require.NotContains(t, all, ua)
 	require.NotContains(t, all, "EdgeLogProbe")
+	require.NotContains(t, all, "EdgeRefererProbe")
+	require.NotContains(t, all, "maria")
 }

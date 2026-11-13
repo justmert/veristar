@@ -2,19 +2,21 @@
 - name: Check the inventory contract (docs/deploy/opentofu.md section 1)
   ansible.builtin.assert:
     that:
-      - sa_private_ip is string and sa_private_ip | length > 0
-      - sa_private_network_cidr is string and sa_private_network_cidr | length > 0
+      - sa_tier in ['edge', 'core', 'backup', 'restore', 'probe']
+      # the probe sits at another provider an operator input and has a public
+      # interface only; every other node is on the private network
+      - sa_tier == 'probe' or (sa_private_ip is string and sa_private_ip | length > 0)
+      - sa_tier == 'probe' or (sa_private_network_cidr is string and sa_private_network_cidr | length > 0)
       - sa_admin_cidrs | length > 0
-      - sa_tier in ['edge', 'core', 'backup', 'restore']
     fail_msg: >-
       the inventory lacks sa_private_ip, sa_private_network_cidr or
-      sa_admin_cidrs an operator input, or the host is not edge or core
+      sa_admin_cidrs an operator input, or the host's tier is unknown
 
 - name: Find the public and private interfaces
   ansible.builtin.set_fact:
     base_public_interface: "{{ ansible_facts.default_ipv4.interface }}"
     base_private_interface: >-
-      {{ ansible_facts.interfaces
+      {{ '' if sa_tier == 'probe' else ansible_facts.interfaces
          | map('regex_replace', '-', '_')
          | map('extract', ansible_facts)
          | selectattr('ipv4', 'defined')
@@ -22,6 +24,7 @@
          | map(attribute='device') | first | default('') }}
 
 - name: Require a private interface distinct from the public one
+  when: sa_tier != 'probe'
   ansible.builtin.assert:
     that:
       - base_private_interface | length > 0

@@ -18,10 +18,8 @@
 	request>remote_ip delete
 	request>remote_port delete
 	request>client_ip delete
-	request>headers>User-Agent delete
-	request>headers>X-Forwarded-For delete
-	request>headers>X-Real-Ip delete
-	request>headers>Forwarded delete
+	request>headers delete
+	resp_headers delete
 }
 
 {
@@ -41,11 +39,15 @@
 }
 
 (edge_log) {
-	# access logs keep no client identifier: the remote address, the address
-	# caddy derives from it, the user agent and the forwarded-for header are
-	# deleted before the entry is written. x-real-ip and
-	# forwarded go too, because a proxy on the visitor's side can put the
-	# visitor's real address in either.
+	# access logs keep no client identifier: the remote address and the
+	# address caddy derives from it are deleted before the entry is written
+	#, and so are all request headers. they hold the user
+	# agent, the forwarding headers (a proxy on the visitor's side can put the
+	# visitor's real address in x-forwarded-for, x-real-ip or forwarded), the
+	# otlp bearer token, and Referer: a tenant page with
+	# Referrer-Policy: unsafe-url sends its full url, query included, with
+	# every tracker request, and that copy never passes the gateway's
+	# sanitizer. response headers go as well, as on web and app.
 	log {
 		output stdout
 		format filter {

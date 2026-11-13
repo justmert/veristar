@@ -14,7 +14,9 @@
       "!**/dist",
       "!**/coverage",
       "!packages/tracker/releases",
-      "!tests/fixtures/stellartoml"
+      "!tests/fixtures/stellartoml",
+      "!**/testdata",
+      "!infra/ansible/roles/observability/files/grafana/dashboards"
     ]
   },
   "formatter": {

@@ -1,6 +1,6 @@
 import { JSDOM } from "jsdom";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createTracker, type Tracker, type TrackerOptions } from "../src/index.ts";
+import { createTracker, type Tracker, type TrackerOptions, VERSION } from "../src/index.ts";
 import { verifyNonce } from "../src/proof.ts";
 import type { WireEvent } from "../src/wire.ts";
 import {
@@ -88,6 +88,7 @@ describe("pageviews", () => {
       "p",
       "r",
       "s",
+      "sv",
       "t",
       "ti",
       "ts",
@@ -162,6 +163,81 @@ describe("spa navigation", () => {
     const third = parse(gw.events()[2] as Recorded);
     expect(third.u).toBe("/");
     expect(third.r).toBe("/next");
+  });
+});
+
+describe("long spa sessions", () => {
+  it("keeps every pageview of 60 navigations under the gateway's 50 events per proof", async () => {
+    gw.replayLimit = 50;
+    const w = openPage({ url: "https://site.example/" });
+    track(w);
+    await waitFor(() => gw.events().length === 1);
+    for (let i = 0; i < 60; i++) {
+      w.history.pushState({}, "", `/page/${i}`);
+      await waitFor(() => gw.events().length === i + 2);
+    }
+    const statuses = gw.events().map((r) => r.status);
+    expect(statuses).toHaveLength(61);
+    expect(statuses.every((s) => s === 202)).toBe(true);
+    // a new challenge after 40 uses, before the limit
+    expect(gw.challenges()).toHaveLength(2);
+    expect(parse(gw.events()[60] as Recorded).u).toBe("/page/59");
+  });
+
+  it("fetches a new challenge after a replay refusal and sends the event once more", async () => {
+    // a gateway configured below the tracker's own budget
+    gw.replayLimit = 5;
+    const w = openPage();
+    const t = track(w, { autoTrack: false });
+    for (let i = 0; i < 12; i++) await t.track(`e${i}`);
+    const accepted = gw.events().filter((r) => r.status === 202);
+    const refused = gw.events().filter((r) => r.status === 403);
+    expect(accepted.map((r) => parse(r).n)).toEqual(Array.from({ length: 12 }, (_, i) => `e${i}`));
+    expect(refused.map((r) => parse(r).n)).toEqual(["e5", "e10"]);
+    expect(gw.challenges()).toHaveLength(3);
+  });
+
+  it("sends a refused event at most twice", async () => {
+    gw.replayLimit = 0;
+    const w = openPage();
+    const t = track(w, { autoTrack: false });
+    await t.track("once");
+    // the retry with a fresh proof is refused too, and then the tracker stops
+    expect(gw.events().map((r) => r.status)).toEqual([403, 403]);
+    expect(gw.challenges()).toHaveLength(2);
+  });
+
+  it("names the release on every event", async () => {
+    const w = openPage();
+    track(w);
+    await waitFor(() => gw.events().length === 1);
+    expect(parse(gw.events()[0] as Recorded).sv).toBe(VERSION);
+  });
+});
+
+describe("back and forward in next.js", () => {
+  it("keeps the previous page as referrer when the router replaces the current url", async () => {
+    const w = openPage({ url: "https://site.example/a" });
+    track(w);
+    await waitFor(() => gw.events().length === 1);
+    w.history.pushState({}, "", "/b");
+    await waitFor(() => gw.events().length === 2);
+    // next.js answers popstate with replaceState for the url it restored
+    w.addEventListener("popstate", () =>
+      w.history.replaceState({ __NA: true }, "", w.location.href),
+    );
+    w.history.back();
+    await waitFor(() => gw.events().length === 3);
+    const back = parse(gw.events()[2] as Recorded);
+    expect(back.u).toBe("/a");
+    expect(back.r).toBe("/b");
+    w.history.forward();
+    await waitFor(() => gw.events().length === 4);
+    const forward = parse(gw.events()[3] as Recorded);
+    expect(forward.u).toBe("/b");
+    expect(forward.r).toBe("/a");
+    await pause(QUIET_MS);
+    expect(gw.events()).toHaveLength(4);
   });
 });
 
@@ -265,6 +341,11 @@ describe("custom events", () => {
     await expect(t.track("x", { a: "nul\u0000" })).rejects.toThrow(/nul character/);
     await expect(t.track("x", { "k\n": 1 })).rejects.toThrow(/control characters/);
     await expect(t.track("line\nbreak")).rejects.toThrow(/control characters/);
+    // values umami cannot store
+    await expect(t.track("swap", { amount: 1e15 })).rejects.toThrow(/below 1e15/);
+    await expect(t.track("x", { at: "0000-01-01T00:00:00Z" })).rejects.toThrow(/before year 1/);
+    await expect(t.track("x", { revenue: 1e14, currency: "USD" })).rejects.toThrow(/revenue/);
+    await expect(t.track("-x")).rejects.toThrow(/must not start/);
     const big = Object.fromEntries(
       Array.from({ length: 16 }, (_, i) => [`key${i}`, "v".repeat(500)]),
     );

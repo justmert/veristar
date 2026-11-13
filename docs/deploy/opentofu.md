@@ -54,15 +54,18 @@ This section is the agreement with the Ansible side. Change it only together.
       },
       "probe": {
         "hosts": { "staging-probe-1": {} }
+      },
+      "restore": {
+        "hosts": {}
       }
     }
   }
 }
 ```
 
-- Groups are always `edge` (3 hosts), `core` (2 hosts) and `probe` (0 or 1 host; the
-  probe is applied in this stage, so `probe.hosts` is `{}` until then). The group keys are
-  always present.
+- Groups are always `edge` (3 hosts), `core` (2 hosts), `probe` (0 or 1 host; the
+  probe is applied in this stage, so `probe.hosts` is `{}` until then) and `restore` (0 or 1
+  host, present only while `restore_enabled`, section 4). The group keys are always present.
 - Inventory host names equal the cloud server names: `<env>-<tier>-<index>`, index from 1.
   Index 1 of `core` is the node that runs PostgreSQL in this stage.
 - Values written as `<I4>` and `<I13>` above are the real inputs once supplied; the
@@ -271,13 +274,43 @@ Installed into `~/.local/bin/tofu` from the GitHub release
 |---|---|
 | `state-bootstrap ENV=staging` | creates the env's state bucket through the S3 API (curl SigV4), unversioned, idempotent |
 | `staging-plan` | `init` then `plan -out=tfplan` (plan file is encrypted) |
-| `staging-apply` | applies `tfplan`, then writes the inventory |
+| `staging-apply` | applies `tfplan`, writes the inventory, then copies the encrypted state into the backup bucket (`scripts/tofu-state-backup.sh`) |
+| `staging-state-backup` | the same copy alone; `STATE_ARGS=list` lists the copies, `STATE_ARGS="restore <key>"` puts one back as the live state |
 | `staging-inventory` | rewrites `hosts.json` from state |
 | `staging-destroy` | `destroy` |
 | `production-*` | same; `production-destroy` also needs `CONFIRM=production`, and fails while delete protection is on |
 | `tofu-check` | `fmt -check`, `init -backend=false`, `validate`, `tofu test` for both envs |
 
 `staging-deploy` belongs to the Ansible stream.
+
+### State history
+
+The state bucket stays unversioned (section 3.4), so it keeps no history. After every apply,
+`scripts/tofu-state-backup.sh <env>` reads the state object `<env>/tofu.tfstate` and writes it
+unchanged, still encrypted with the state passphrase, to
+`tofu-state/<env>/<UTC timestamp>.tfstate` in the backup bucket, which is versioned and
+object-locked for 35 days ([backups.md](backups.md)). Nothing is decrypted on the way.
+
+To recover from an overwritten or deleted state, with no `tofu` command running:
+
+```sh
+make staging-state-backup STATE_ARGS=list
+make staging-state-backup STATE_ARGS="restore tofu-state/staging/20261120T080000Z.tfstate"
+make staging-plan        # must show no unexpected changes
+```
+
+`make ops-local` (step `state-backup`) checks copy, list, deletion of the live object, restore and
+byte equality against the S3 stand-in; that step has not completed yet (the run of 2026-11-13
+was stopped earlier). Never run against Hetzner an operator input.
+
+### Restore node
+
+`restore_enabled = true` adds `<env>-restore-1` (tier `restore`, sized like a core node, private
+address `.41` in `restore_location`) to the servers and to the inventory group `restore`, which
+`playbooks/restore.yml` targets ([../runbooks/point-in-time-restore.md](../runbooks/point-in-time-restore.md),
+[../runbooks/disaster-recovery.md](../runbooks/disaster-recovery.md)). Set it back to `false` after
+the restore. The inventory always has the `restore` group, empty without the node
+(`tests/infra/*.tftest.hcl`, runs `inventory_without_restore` and `inventory_with_restore`).
 
 ## 5. Blocked on inputs
 

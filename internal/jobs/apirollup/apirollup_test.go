@@ -382,10 +382,11 @@ func TestRollup(t *testing.T) {
 	check(t)
 }
 
-// TestRollupRefusesHourWithoutMinutes keeps hourly rows whose minutes are
-// gone: a pending hour without a minute partition fails the run instead of
-// replacing its hourly rows with nothing.
-func TestRollupRefusesHourWithoutMinutes(t *testing.T) {
+// TestRollupSkipsHourWithoutMinutes keeps hourly rows whose minutes are
+// gone, and does not let that one mark stop the rollup of every other
+// tenant: the hour is skipped and counted, the others are
+// recomputed.
+func TestRollupSkipsHourWithoutMinutes(t *testing.T) {
 	srv := jobstest.NATS(t)
 	pg := jobstest.Postgres(t)
 	d := jobstest.JobsDB(t, pg)
@@ -393,9 +394,10 @@ func TestRollupRefusesHourWithoutMinutes(t *testing.T) {
 	r, err := apirollup.New(slog.New(slog.DiscardHandler), prometheus.NewRegistry())
 	require.NoError(t, err)
 
-	tenant := uuid.New()
+	tenant, other := uuid.New(), uuid.New()
 	hour := time.Date(2031, 3, 1, 5, 0, 0, 0, time.UTC)
-	ensurePartitions(t, d, []time.Time{dayOf(hour)}, []time.Time{time.Date(2031, 3, 1, 0, 0, 0, 0, time.UTC)})
+	later := time.Date(2031, 3, 2, 7, 0, 0, 0, time.UTC)
+	ensurePartitions(t, d, []time.Time{dayOf(hour), dayOf(later)}, []time.Time{time.Date(2031, 3, 1, 0, 0, 0, 0, time.UTC)})
 	insertMinutes(t, d, []minuteRow{{key{dims{tenant, "api", "GET", "/a", 200, "metric"}, hour}, agg{Counts: [15]int64{1}, Sum: 0.001, Count: 1}}})
 	_, err = r.Run(t.Context(), leader.Tx)
 	require.NoError(t, err)
@@ -409,10 +411,54 @@ func TestRollupRefusesHourWithoutMinutes(t *testing.T) {
 		_, err := tx.Exec(t.Context(), `insert into api.rollup_pending (tenant_id, hour) values ($1, $2)`, tenant, hour)
 		return err
 	}))
-	_, err = r.Run(t.Context(), leader.Tx)
-	require.ErrorContains(t, err, "minute partition is gone")
-	require.Equal(t, before, readRows(t, d, "metrics_hourly"))
-	require.Equal(t, 1, pendingCount(t, d))
+	// another tenant's hour, claimed after the orphaned one (oldest first)
+	insertMinutes(t, d, []minuteRow{{key{dims{other, "api", "GET", "/b", 200, "metric"}, later}, agg{Counts: [15]int64{2}, Sum: 0.002, Count: 2}}})
+	res, err := r.Run(t.Context(), leader.Tx)
+	require.NoError(t, err)
+	require.Equal(t, 1, res.Orphaned)
+	require.Equal(t, 1, res.Hours, "the other tenant's hour is rolled up")
+	after := readRows(t, d, "metrics_hourly")
+	require.Equal(t, before[key{dims{tenant, "api", "GET", "/a", 200, "metric"}, hour}], after[key{dims{tenant, "api", "GET", "/a", 200, "metric"}, hour}],
+		"the orphaned hour keeps its hourly rows")
+	require.Equal(t, int64(2), after[key{dims{other, "api", "GET", "/b", 200, "metric"}, later}].Count)
+	require.Zero(t, pendingCount(t, d))
+}
+
+// TestRollupDayIsTwentyFourHoursInAnyTimeZone runs the rollup in a session
+// whose time zone has a daylight saving change on the day: the daily row
+// must still hold all 24 utc hours.
+func TestRollupDayIsTwentyFourHoursInAnyTimeZone(t *testing.T) {
+	srv := jobstest.NATS(t)
+	pg := jobstest.Postgres(t)
+	d := jobstest.JobsDB(t, pg)
+	leader, _ := jobstest.Leader(t, srv, d, "rollup-tz")
+	r, err := apirollup.New(slog.New(slog.DiscardHandler), prometheus.NewRegistry())
+	require.NoError(t, err)
+
+	// europe moves its clocks forward on sunday 2031-03-30
+	day := time.Date(2031, 3, 30, 0, 0, 0, 0, time.UTC)
+	ensurePartitions(t, d, []time.Time{day}, []time.Time{time.Date(2031, 3, 1, 0, 0, 0, 0, time.UTC)})
+	tenant := uuid.New()
+	var rows []minuteRow
+	for h := range 24 {
+		rows = append(rows, minuteRow{key{dims{tenant, "api", "GET", "/a", 200, "metric"}, day.Add(time.Duration(h)*time.Hour + 30*time.Minute)},
+			agg{Counts: [15]int64{1}, Sum: 0.001, Count: 1}})
+	}
+	insertMinutes(t, d, rows)
+	berlin := func(ctx context.Context, fn func(pgx.Tx) error) error {
+		return leader.Tx(ctx, func(tx pgx.Tx) error {
+			if _, err := tx.Exec(ctx, `set local timezone = 'Europe/Berlin'`); err != nil {
+				return err
+			}
+			return fn(tx)
+		})
+	}
+	res, err := r.Run(t.Context(), berlin)
+	require.NoError(t, err)
+	require.Equal(t, 24, res.Hours)
+	daily := readRows(t, d, "metrics_daily")
+	require.Equal(t, int64(24), daily[key{dims{tenant, "api", "GET", "/a", 200, "metric"}, day}].Count,
+		"the daily row must cover 24 utc hours, not a calendar day of the session time zone")
 }
 
 func arrayLiteral(c [15]int64) string {

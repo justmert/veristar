@@ -38,12 +38,15 @@ where m.user_id = @user_id
 order by t.created_at, t.id
 limit @row_limit;
 
--- name: FindUserByLogin :one
--- github logins can be renamed and later taken by someone else, so an old
--- row may still carry a login. the account that signed in last with it is
--- the one that holds it now.
+-- name: FindUserByGitHubID :one
+-- the account the operator named, resolved from the login through github
+-- first: a stored login can be stale after a rename, the id cannot
 select id, github_id, github_login, created_at
 from cp.users
-where lower(github_login) = lower(@github_login)
-order by last_login_at desc nulls last, created_at desc
-limit 1;
+where github_id = @github_id;
+
+-- name: RefreshUserLogin :exec
+-- the login github reported for the account just now; member lists show
+-- it instead of the one stored at the last sign-in
+update cp.users set github_login = @github_login
+where github_id = @github_id and github_login <> @github_login;

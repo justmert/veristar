@@ -73,14 +73,21 @@ the dashboard by time and page) can still have it deleted with kind `session`.
    deleting anything and says why.
 5. The run deletes as described in section 1. For `visitor_today` and
    `session` it removes the visit record first, so a later event of the same
-   visitor starts a new session instead of reusing the deleted one.
+   visitor starts a new session instead of reusing the deleted one. A
+   `visitor_today` run first writes the session ids it is about to delete to
+   a progress record (`erasing.<site>.<token>` in the same memory bucket, same
+   24 hour limit) and removes it only after every session and dead-letter
+   message is gone. A run that fails part way therefore leaves the sessions
+   findable: the next request of the same day finishes the work and answers
+   `erased` (`TestErasure/a_failed_visitor_run_is_finished_by_the_next_request`).
 6. The run records `outcome`, `message`, the counts (`sessions_deleted`,
    `events_deleted`, `dlq_messages_deleted`) and the affected days. A failed
    run records what it deleted before the failure.
 7. `erasure-followup` re-aggregates the affected days. It also fails a run
    whose control plane process stopped (no heartbeat for 2 minutes); such a
    request must be submitted again, because a `visitor_today` token existed
-   only in that process.
+   only in that process. A request submitted again on the same day finds what
+   the failed run left (step 5).
 
 One request per site runs at a time; a second answers 409
 `erasure_in_progress`.
@@ -99,6 +106,18 @@ agents used, and finds none.
 ## 5. Limits
 
 - **Same-day only for visitor erasure** (section 2).
+- **The link is in memory.** The record that links a visitor token to its
+  Umami sessions lives in the memory bucket `visit_state`, which a NATS
+  restart empties; a restart that also empties `edge_secrets` changes the
+  visitor's token for the rest of the day. A visit before such a restart
+  cannot be located, although it may still be stored. The answer then says
+  that the visit "could not be located", never that none was recorded, and
+  names the time the link store was emptied when that was today; it points to
+  a site reset as the way to remove everything that may remain
+  (`TestErasure/a_visit_whose_link_was_lost_is_not_located`). Umami derives
+  the session id from the token with its own `APP_SECRET`, which the control
+  plane deliberately does not hold (it also signs Umami's login tokens), so
+  the session cannot be computed instead.
 - **Concurrent event.** If the visitor's own browser sends an event at the
   moment the run deletes the session, the replayer can store that event with
   the old session id after the session row is gone. Such an event belongs to

@@ -13,6 +13,7 @@ table inet sa_host {
 		iif "lo" accept
 		ct state established,related accept
 		ct state invalid drop
+{% if base_private_interface %}
 		# the private network carries nats, etcd, postgresql, patroni and
 		# the core services; the cloud firewall does not filter it, and the
 		# private network holds only this environment's nodes
@@ -21,6 +22,7 @@ table inet sa_host {
 		# its private address (haproxy to patroni and postgresql); docker's
 		# userland proxy receives that as input from the compose bridge
 		iifname "br-*" ip daddr {{ sa_private_ip }} accept
+{% endif %}
 		# and a port that is public anyway, on this node's public address
 		iifname "br-*" ip daddr {{ sa_public_ipv4 }} tcp dport { {{ base_public_tcp_ports | join(', ') }} } accept
 		meta l4proto icmp accept

@@ -12,23 +12,30 @@ on conflict (msg_id) do nothing;
 -- name: GetSeriesStates :many
 -- every known stream of the given series of one tenant, whatever its start
 -- time, so the caller can tell a known stream from a new start time
-select tenant_id, series_hash, start_unix_nano, last_unix_nano, last_count, last_sum, last_counts, last_seen_at
+select tenant_id, series_hash, start_unix_nano, last_unix_nano, last_count, last_sum, last_counts, last_seen_at, baseline
 from api.series_state
 where tenant_id = @tenant_id and series_hash = any(@series_hashes::bytea[]);
 
 -- name: UpsertSeriesState :batchexec
 -- stores the last cumulative point of a stream. last_counts are on the
--- canonical layout (15 buckets).
+-- canonical layout (15 buckets). baseline is true while the last point is
+-- the baseline of a stream first met after the first-point threshold.
 insert into api.series_state (tenant_id, series_hash, start_unix_nano, last_unix_nano,
-                              last_count, last_sum, last_counts, last_seen_at)
+                              last_count, last_sum, last_counts, last_seen_at, baseline)
 values (@tenant_id, @series_hash, @start_unix_nano, @last_unix_nano,
-        @last_count, @last_sum, @last_counts::bigint[], @seen_at::timestamptz)
+        @last_count, @last_sum, @last_counts::bigint[], @seen_at::timestamptz, @baseline)
 on conflict (tenant_id, series_hash, start_unix_nano) do update
   set last_unix_nano = excluded.last_unix_nano,
       last_count = excluded.last_count,
       last_sum = excluded.last_sum,
       last_counts = excluded.last_counts,
-      last_seen_at = excluded.last_seen_at;
+      last_seen_at = excluded.last_seen_at,
+      baseline = excluded.baseline;
+
+-- name: CountSeriesStates :one
+-- the streams the writer follows for a tenant, for the per-tenant stream
+-- cap
+select count(*)::bigint as n from api.series_state where tenant_id = @tenant_id;
 
 -- name: GetResourcesSeen :many
 -- the resources of one tenant the writer has followed before, for the
@@ -58,6 +65,14 @@ on conflict (tenant_id, bucket_start, service, method, route, status_code, sourc
       sum = api.metrics_minute.sum + excluded.sum,
       count = api.metrics_minute.count + excluded.count,
       lossy = api.metrics_minute.lossy or excluded.lossy;
+
+-- name: LockRollupHour :exec
+-- takes the shared lock of a (tenant, utc hour) for this transaction. the
+-- writer takes it before it writes minute rows into the hour; the rollup
+-- skips an hour whose lock it cannot take exclusively, so it never
+-- recomputes an hour from minutes a writer has not committed yet (audit
+-- A-2). writers share the lock, so they never wait for each other.
+select pg_advisory_xact_lock_shared(api.rollup_lock_key(@tenant_id, @hour::timestamptz));
 
 -- name: MarkRollupPending :batchexec
 -- marks the utc hour of a written minute for the rollup. send it in the same

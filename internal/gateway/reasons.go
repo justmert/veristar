@@ -31,6 +31,9 @@ const (
 	ReasonSignals          Reason = "rejected_signals"
 	ReasonRateLimited      Reason = "rejected_rate_limited"
 	ReasonUnavailable      Reason = "rejected_unavailable"
+	// ReasonRevokedVersion: the event names a tracker release listed in
+	// revoked.json, which the gateway also refuses to serve
+	ReasonRevokedVersion Reason = "rejected_revoked_version"
 )
 
 // Reasons lists every reason, for metric label pre-registration and tests.
@@ -39,7 +42,7 @@ func Reasons() []Reason {
 		ReasonBodyTooLarge, ReasonMalformed, ReasonMissingProof, ReasonUnknownSite, ReasonInactiveSite,
 		ReasonGPC, ReasonOriginMissing, ReasonOrigin, ReasonChallengeTag, ReasonChallengeExpired,
 		ReasonChallengeFuture, ReasonProofWork, ReasonReplay, ReasonSignals, ReasonRateLimited,
-		ReasonUnavailable,
+		ReasonUnavailable, ReasonRevokedVersion,
 	}
 }
 
@@ -59,6 +62,8 @@ func (r Reason) Status() int {
 		return http.StatusTooManyRequests
 	case ReasonUnavailable:
 		return http.StatusServiceUnavailable
+	case ReasonRevokedVersion:
+		return http.StatusGone
 	case ReasonMissingProof, ReasonOriginMissing, ReasonOrigin, ReasonChallengeTag, ReasonChallengeExpired,
 		ReasonChallengeFuture, ReasonProofWork, ReasonReplay, ReasonSignals:
 		return http.StatusForbidden

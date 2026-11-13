@@ -120,6 +120,7 @@ export type Member = z.infer<typeof member>;
 
 export const invite = z.object({
   id,
+  github_id: z.number().int().positive(),
   github_login: z.string().min(1),
   role,
   created_by: id,
@@ -191,6 +192,8 @@ export const site = z.object({
   last_verify_error: z.string().nullable(),
   stellar_toml: stellarToml.nullable(),
   stellar_toml_checked_at: time.nullable(),
+  // 3.1: the gateway keeps utm_* and ref only when this is on
+  collect_utm: z.boolean(),
   created_at: time,
   updated_at: time,
 });
@@ -531,6 +534,7 @@ export const warningKind = z.enum([
   "lossy_histogram",
   "cardinality_overflow",
   "secret_in_path",
+  "coarse_buckets",
 ]);
 export type WarningKind = z.infer<typeof warningKind>;
 function warningTotal<K extends WarningKind>(kind: K) {
@@ -538,12 +542,13 @@ function warningTotal<K extends WarningKind>(kind: K) {
 }
 export const apiWarnings = z.object({
   range: apiRange,
-  // always these four, in this order
+  // always these five, in this order
   totals: z.tuple([
     warningTotal("span_derived"),
     warningTotal("lossy_histogram"),
     warningTotal("cardinality_overflow"),
     warningTotal("secret_in_path"),
+    warningTotal("coarse_buckets"),
   ]),
   days: z.array(
     z.object({ day: z.iso.date(), kind: warningKind, count: z.number().int().positive() }),

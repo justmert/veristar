@@ -16,6 +16,45 @@ where (p.tenant_id, p.hour) in (
   for update skip locked)
 returning p.tenant_id, p.hour;
 
+-- name: TryLockRollupHour :one
+-- takes the exclusive lock of a claimed (tenant, utc hour) for this
+-- transaction without waiting. false means a writer transaction that writes
+-- minute rows into the hour is still open; the caller puts the mark back and
+-- leaves the hour to a later run.
+select pg_try_advisory_xact_lock(api.rollup_lock_key(@tenant_id, @hour::timestamptz))::boolean as locked;
+
+-- name: RestoreRollupMark :exec
+-- puts back a claimed mark whose hour was not recomputed
+insert into api.rollup_pending (tenant_id, hour) values (@tenant_id, @hour::timestamptz)
+on conflict (tenant_id, hour) do nothing;
+
+-- name: MarkDriftedHours :many
+-- the consistency check behind the rollup: every (tenant, utc
+-- hour) between from and to that has minute rows, whose hourly rows
+-- disagree with them on the request count, and that no mark covers, is
+-- marked again so the next batch recomputes it. hours without minute rows
+-- are never marked: a purge that keeps aggregates deletes the minutes on
+-- purpose, and recomputing would erase the hourly rows it kept. it returns
+-- what it marked; any row means a mark was lost, which the rollup reports.
+insert into api.rollup_pending (tenant_id, hour)
+select m.tenant_id, m.hour
+from (
+  select mm.tenant_id, date_trunc('hour', mm.bucket_start, 'UTC') as hour, sum(mm.count)::bigint as n
+  from api.metrics_minute mm
+  where mm.bucket_start >= sqlc.arg(from_hour)::timestamptz and mm.bucket_start < sqlc.arg(to_hour)::timestamptz
+  group by 1, 2
+) m
+left join (
+  select hh.tenant_id, hh.bucket_start as hour, sum(hh.count)::bigint as n
+  from api.metrics_hourly hh
+  where hh.bucket_start >= sqlc.arg(from_hour)::timestamptz and hh.bucket_start < sqlc.arg(to_hour)::timestamptz
+  group by 1, 2
+) h on h.tenant_id = m.tenant_id and h.hour = m.hour
+where m.n is distinct from h.n
+  and not exists (select 1 from api.rollup_pending p where p.tenant_id = m.tenant_id and p.hour = m.hour)
+on conflict (tenant_id, hour) do nothing
+returning tenant_id, hour;
+
 -- name: DeleteHourlyRows :execrows
 -- first half of recomputing one tenant's hour: the old rows go, so a
 -- dimension that has no minute rows any more does not survive
@@ -43,7 +82,10 @@ where tenant_id = @tenant_id and bucket_start = sqlc.arg(day)::timestamptz;
 
 -- name: RollupDay :execrows
 -- one daily row per dimension from the hourly rows of the utc day starting
--- at day. run it after the hours of that day were recomputed.
+-- at day. run it after the hours of that day were recomputed. the day is 24
+-- hours, not interval '1 day': on timestamptz that is calendar arithmetic in
+-- the session time zone and gives 23 or 25 hours on a daylight saving day
+--.
 insert into api.metrics_daily (tenant_id, bucket_start, service, method, route, status_code,
                                source, counts, sum, count, lossy)
 select h.tenant_id, sqlc.arg(day)::timestamptz, h.service, h.method, h.route, h.status_code, h.source,
@@ -52,7 +94,7 @@ select h.tenant_id, sqlc.arg(day)::timestamptz, h.service, h.method, h.route, h.
 from api.metrics_hourly h
 where h.tenant_id = @tenant_id
   and h.bucket_start >= sqlc.arg(day)::timestamptz
-  and h.bucket_start < sqlc.arg(day)::timestamptz + interval '1 day'
+  and h.bucket_start < sqlc.arg(day)::timestamptz + interval '24 hours'
 group by h.tenant_id, h.service, h.method, h.route, h.status_code, h.source;
 
 -- name: CreateMinutePartition :one

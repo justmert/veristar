@@ -66,7 +66,9 @@ func zeroBits(d []byte) int {
 
 // Event is a wire v1 body. every field the parser requires is present.
 type Event struct {
-	V  int            `json:"v"`
+	V int `json:"v"`
+	// SV is the tracker release, sent from 1.2.0 on
+	SV string         `json:"sv,omitempty"`
 	W  string         `json:"w"`
 	T  string         `json:"t"`
 	H  string         `json:"h"`

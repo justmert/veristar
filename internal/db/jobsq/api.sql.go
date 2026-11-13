@@ -191,6 +191,64 @@ func (q *Queries) ListMinutePartitions(ctx context.Context) ([]time.Time, error)
 	return items, nil
 }
 
+const markDriftedHours = `-- name: MarkDriftedHours :many
+insert into api.rollup_pending (tenant_id, hour)
+select m.tenant_id, m.hour
+from (
+  select mm.tenant_id, date_trunc('hour', mm.bucket_start, 'UTC') as hour, sum(mm.count)::bigint as n
+  from api.metrics_minute mm
+  where mm.bucket_start >= $1::timestamptz and mm.bucket_start < $2::timestamptz
+  group by 1, 2
+) m
+left join (
+  select hh.tenant_id, hh.bucket_start as hour, sum(hh.count)::bigint as n
+  from api.metrics_hourly hh
+  where hh.bucket_start >= $1::timestamptz and hh.bucket_start < $2::timestamptz
+  group by 1, 2
+) h on h.tenant_id = m.tenant_id and h.hour = m.hour
+where m.n is distinct from h.n
+  and not exists (select 1 from api.rollup_pending p where p.tenant_id = m.tenant_id and p.hour = m.hour)
+on conflict (tenant_id, hour) do nothing
+returning tenant_id, hour
+`
+
+type MarkDriftedHoursParams struct {
+	FromHour time.Time
+	ToHour   time.Time
+}
+
+type MarkDriftedHoursRow struct {
+	TenantID uuid.UUID
+	Hour     time.Time
+}
+
+// the consistency check behind the rollup: every (tenant, utc
+// hour) between from and to that has minute rows, whose hourly rows
+// disagree with them on the request count, and that no mark covers, is
+// marked again so the next batch recomputes it. hours without minute rows
+// are never marked: a purge that keeps aggregates deletes the minutes on
+// purpose, and recomputing would erase the hourly rows it kept. it returns
+// what it marked; any row means a mark was lost, which the rollup reports.
+func (q *Queries) MarkDriftedHours(ctx context.Context, arg MarkDriftedHoursParams) ([]MarkDriftedHoursRow, error) {
+	rows, err := q.db.Query(ctx, markDriftedHours, arg.FromHour, arg.ToHour)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []MarkDriftedHoursRow{}
+	for rows.Next() {
+		var i MarkDriftedHoursRow
+		if err := rows.Scan(&i.TenantID, &i.Hour); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const pruneIngestDedup = `-- name: PruneIngestDedup :execrows
 delete from api.ingest_dedup where applied_at < $1::timestamptz
 `
@@ -245,6 +303,22 @@ func (q *Queries) PruneSeriesState(ctx context.Context, cutoff time.Time) (int64
 	return result.RowsAffected(), nil
 }
 
+const restoreRollupMark = `-- name: RestoreRollupMark :exec
+insert into api.rollup_pending (tenant_id, hour) values ($1, $2::timestamptz)
+on conflict (tenant_id, hour) do nothing
+`
+
+type RestoreRollupMarkParams struct {
+	TenantID uuid.UUID
+	Hour     time.Time
+}
+
+// puts back a claimed mark whose hour was not recomputed
+func (q *Queries) RestoreRollupMark(ctx context.Context, arg RestoreRollupMarkParams) error {
+	_, err := q.db.Exec(ctx, restoreRollupMark, arg.TenantID, arg.Hour)
+	return err
+}
+
 const rollupDay = `-- name: RollupDay :execrows
 insert into api.metrics_daily (tenant_id, bucket_start, service, method, route, status_code,
                                source, counts, sum, count, lossy)
@@ -254,7 +328,7 @@ select h.tenant_id, $1::timestamptz, h.service, h.method, h.route, h.status_code
 from api.metrics_hourly h
 where h.tenant_id = $2
   and h.bucket_start >= $1::timestamptz
-  and h.bucket_start < $1::timestamptz + interval '1 day'
+  and h.bucket_start < $1::timestamptz + interval '24 hours'
 group by h.tenant_id, h.service, h.method, h.route, h.status_code, h.source
 `
 
@@ -264,7 +338,10 @@ type RollupDayParams struct {
 }
 
 // one daily row per dimension from the hourly rows of the utc day starting
-// at day. run it after the hours of that day were recomputed.
+// at day. run it after the hours of that day were recomputed. the day is 24
+// hours, not interval '1 day': on timestamptz that is calendar arithmetic in
+// the session time zone and gives 23 or 25 hours on a daylight saving day
+//.
 func (q *Queries) RollupDay(ctx context.Context, arg RollupDayParams) (int64, error) {
 	result, err := q.db.Exec(ctx, rollupDay, arg.Day, arg.TenantID)
 	if err != nil {
@@ -300,4 +377,24 @@ func (q *Queries) RollupHour(ctx context.Context, arg RollupHourParams) (int64, 
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const tryLockRollupHour = `-- name: TryLockRollupHour :one
+select pg_try_advisory_xact_lock(api.rollup_lock_key($1, $2::timestamptz))::boolean as locked
+`
+
+type TryLockRollupHourParams struct {
+	TenantID uuid.UUID
+	Hour     time.Time
+}
+
+// takes the exclusive lock of a claimed (tenant, utc hour) for this
+// transaction without waiting. false means a writer transaction that writes
+// minute rows into the hour is still open; the caller puts the mark back and
+// leaves the hour to a later run.
+func (q *Queries) TryLockRollupHour(ctx context.Context, arg TryLockRollupHourParams) (bool, error) {
+	row := q.db.QueryRow(ctx, tryLockRollupHour, arg.TenantID, arg.Hour)
+	var locked bool
+	err := row.Scan(&locked)
+	return locked, err
 }

@@ -43,14 +43,30 @@ type Result struct {
 	Days       int
 	HourlyRows int64
 	DailyRows  int64
+	// Busy counts claimed hours a writer still had open; their marks went
+	// back for a later run.
+	Busy int
+	// Orphaned counts claimed hours whose minute partition was gone.
+	Orphaned int
+	// Drifted counts hours the consistency check found disagreeing with
+	// their minutes without a mark, and marked again.
+	Drifted int
 }
+
+// DriftWindow is how far back the consistency check compares hourly rows
+// with their minutes. a lost mark shows up within minutes, and a day bounds
+// what each run scans.
+const DriftWindow = 24 * time.Hour
 
 // Rollup recomputes the pending hours.
 type Rollup struct {
-	log     *slog.Logger
-	hours   prometheus.Counter
-	days    prometheus.Counter
-	pending prometheus.Gauge
+	log      *slog.Logger
+	now      func() time.Time
+	hours    prometheus.Counter
+	days     prometheus.Counter
+	pending  prometheus.Gauge
+	orphaned prometheus.Counter
+	drifted  prometheus.Counter
 }
 
 // New returns a Rollup and registers its metrics.
@@ -60,6 +76,7 @@ func New(log *slog.Logger, reg prometheus.Registerer) (*Rollup, error) {
 	}
 	r := &Rollup{
 		log: log,
+		now: time.Now,
 		hours: prometheus.NewCounter(prometheus.CounterOpts{
 			Name: "jobs_api_rollup_hours_total",
 			Help: "tenant hours of api.metrics_hourly recomputed from minute rows.",
@@ -73,7 +90,15 @@ func New(log *slog.Logger, reg prometheus.Registerer) (*Rollup, error) {
 			Help: "tenant hours claimed by the last rollup transaction; ClaimBatch means a backlog.",
 		}),
 	}
-	for _, c := range []prometheus.Collector{r.hours, r.days, r.pending} {
+	r.orphaned = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "jobs_api_rollup_orphaned_marks_total",
+		Help: "pending hours whose minute partition was gone; their hourly rows were kept as they were. any increase needs a look.",
+	})
+	r.drifted = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "jobs_api_rollup_drifted_hours_total",
+		Help: "hours whose hourly rows disagreed with their minute rows without a pending mark; marked again. any increase means a lost mark.",
+	})
+	for _, c := range []prometheus.Collector{r.hours, r.days, r.pending, r.orphaned, r.drifted} {
 		if err := reg.Register(c); err != nil {
 			return nil, fmt.Errorf("apirollup: register metrics: %w", err)
 		}
@@ -91,28 +116,50 @@ type tenantDay struct {
 // back, which puts its marks back for the next leader.
 func (r *Rollup) Run(ctx context.Context, tx TxFunc) (Result, error) {
 	var total Result
+	drift := true
 	for {
-		res, err := r.batch(ctx, tx)
+		res, claimed, err := r.batch(ctx, tx)
 		if err != nil {
 			return total, err
 		}
-		total.Hours += res.Hours
-		total.Days += res.Days
-		total.HourlyRows += res.HourlyRows
-		total.DailyRows += res.DailyRows
-		if res.Hours < ClaimBatch {
-			break
+		total.add(res)
+		if claimed < ClaimBatch {
+			// the check runs once per run, after the backlog is worked off,
+			// and what it marks is recomputed by one more batch
+			if !drift {
+				break
+			}
+			drift = false
+			n, err := r.checkDrift(ctx, tx, r.now())
+			if err != nil {
+				return total, err
+			}
+			total.Drifted += n
+			if n == 0 {
+				break
+			}
 		}
 	}
-	if total.Hours > 0 {
+	if total.Hours+total.Busy+total.Orphaned+total.Drifted > 0 {
 		r.log.Info("api rollup", "hours", total.Hours, "days", total.Days,
-			"hourly_rows", total.HourlyRows, "daily_rows", total.DailyRows)
+			"hourly_rows", total.HourlyRows, "daily_rows", total.DailyRows,
+			"busy", total.Busy, "orphaned", total.Orphaned, "drifted", total.Drifted)
 	}
 	return total, nil
 }
 
-func (r *Rollup) batch(ctx context.Context, tx TxFunc) (Result, error) {
+func (r *Result) add(b Result) {
+	r.Hours += b.Hours
+	r.Days += b.Days
+	r.HourlyRows += b.HourlyRows
+	r.DailyRows += b.DailyRows
+	r.Busy += b.Busy
+	r.Orphaned += b.Orphaned
+}
+
+func (r *Rollup) batch(ctx context.Context, tx TxFunc) (Result, int, error) {
 	var res Result
+	var claimedN int
 	err := tx(ctx, func(tx pgx.Tx) error {
 		res = Result{}
 		q := jobsq.New(tx)
@@ -120,12 +167,10 @@ func (r *Rollup) batch(ctx context.Context, tx TxFunc) (Result, error) {
 		if err != nil {
 			return fmt.Errorf("claim: %w", err)
 		}
+		claimedN = len(claimed)
 		if len(claimed) == 0 {
 			return nil
 		}
-		// an hour whose minute partition was dropped has no minutes left to
-		// recompute from; replacing its hourly rows would erase them, so the
-		// whole batch fails instead and its marks stay for a person to look at
 		parts, err := q.ListMinutePartitions(ctx)
 		if err != nil {
 			return fmt.Errorf("minute partitions: %w", err)
@@ -139,8 +184,31 @@ func (r *Rollup) batch(ctx context.Context, tx TxFunc) (Result, error) {
 		for _, c := range claimed {
 			hour := c.Hour.UTC()
 			if !have[utcDay(hour)] {
-				return fmt.Errorf("tenant %s hour %s is pending but its minute partition is gone",
-					c.TenantID, hour.Format(time.RFC3339))
+				// the minutes of this hour are gone (a partition dropped or
+				// restored by hand: retention waits for pending days), so
+				// the hourly rows stay the only record and are left as they
+				// are. failing the batch would stop every other tenant's
+				// rollup until a person intervened; the mark is
+				// dropped with an error log and a counter to alert on.
+				res.Orphaned++
+				r.log.Error("pending hour has no minute partition, its hourly rows are kept as they are",
+					"tenant", c.TenantID.String(), "hour", hour.Format(time.RFC3339))
+				continue
+			}
+			// a writer that is still writing minute rows into this hour
+			// holds its lock; recomputing now would miss those rows and,
+			// with the mark gone, they would never reach the hourly and
+			// daily rows. the mark goes back for a later run.
+			locked, err := q.TryLockRollupHour(ctx, jobsq.TryLockRollupHourParams{TenantID: c.TenantID, Hour: hour})
+			if err != nil {
+				return fmt.Errorf("lock hour %s of %s: %w", hour.Format(time.RFC3339), c.TenantID, err)
+			}
+			if !locked {
+				if err := q.RestoreRollupMark(ctx, jobsq.RestoreRollupMarkParams{TenantID: c.TenantID, Hour: hour}); err != nil {
+					return fmt.Errorf("restore mark %s of %s: %w", hour.Format(time.RFC3339), c.TenantID, err)
+				}
+				res.Busy++
+				continue
 			}
 			if _, err := q.DeleteHourlyRows(ctx, jobsq.DeleteHourlyRowsParams{TenantID: c.TenantID, Hour: hour}); err != nil {
 				return fmt.Errorf("delete hour %s of %s: %w", hour.Format(time.RFC3339), c.TenantID, err)
@@ -173,12 +241,37 @@ func (r *Rollup) batch(ctx context.Context, tx TxFunc) (Result, error) {
 		return nil
 	})
 	if err != nil {
-		return Result{}, fmt.Errorf("apirollup: %w", err)
+		return Result{}, 0, fmt.Errorf("apirollup: %w", err)
 	}
 	r.pending.Set(float64(res.Hours))
 	r.hours.Add(float64(res.Hours))
 	r.days.Add(float64(res.Days))
-	return res, nil
+	r.orphaned.Add(float64(res.Orphaned))
+	return res, claimedN, nil
+}
+
+// checkDrift marks again every recent hour whose hourly rows disagree with
+// its minute rows and that no mark covers. with the hour locks nothing
+// should be found; a finding means a mark was lost some other way, and it is
+// repaired by the next batch and reported.
+func (r *Rollup) checkDrift(ctx context.Context, tx TxFunc, now time.Time) (int, error) {
+	to := now.UTC().Truncate(time.Hour)
+	from := to.Add(-DriftWindow)
+	var marked []jobsq.MarkDriftedHoursRow
+	err := tx(ctx, func(tx pgx.Tx) error {
+		var err error
+		marked, err = jobsq.New(tx).MarkDriftedHours(ctx, jobsq.MarkDriftedHoursParams{FromHour: from, ToHour: to})
+		return err
+	})
+	if err != nil {
+		return 0, fmt.Errorf("apirollup: consistency check: %w", err)
+	}
+	for _, m := range marked {
+		r.log.Error("hourly rows disagree with their minute rows without a pending mark, the hour is marked again",
+			"tenant", m.TenantID.String(), "hour", m.Hour.UTC().Format(time.RFC3339))
+	}
+	r.drifted.Add(float64(len(marked)))
+	return len(marked), nil
 }
 
 // utcDay is the start of t's utc day. dates read from postgres arrive as

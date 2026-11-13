@@ -107,6 +107,14 @@ func (v *ProofVerifier) Verify(ctx context.Context, siteID string, p events.Proo
 	return nil
 }
 
+// Release gives back one use of a proof that Verify accepted, for an event
+// refused by a later check (fetch metadata, rate limit, user agent, queue).
+// only queued events use up a proof, so a tracker that keeps one proof for a
+// long single-page session is not cut off by refusals it never saw.
+func (v *ProofVerifier) Release(p events.Proof) {
+	v.replay.release(p.Tag)
+}
+
 // replayLRU counts uses per proof in a bounded least recently used table.
 type replayLRU struct {
 	limit   int
@@ -147,6 +155,19 @@ func (r *replayLRU) allow(tag [32]byte) bool {
 		delete(r.index, oldest.Value.(*replayEntry).tag) //nolint:errcheck,forcetypeassert // only *replayEntry is stored
 	}
 	return true
+}
+
+// release takes back one use. a proof pushed out of the table meanwhile is
+// left alone: it starts counting again anyway.
+func (r *replayLRU) release(tag [32]byte) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if el, ok := r.index[tag]; ok {
+		e := el.Value.(*replayEntry) //nolint:errcheck,forcetypeassert // only *replayEntry is stored
+		if e.count > 0 {
+			e.count--
+		}
+	}
 }
 
 // size reports how many proofs the table remembers.

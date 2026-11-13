@@ -1,4 +1,4 @@
-# managed by ansible (infra/ansible/roles/observability). gatus 5.37.0 on the
+# managed by ansible (infra/ansible/roles/observability). gatus 5.38.0 on the
 # probe node, outside the main provider: the public status page on
 # status.<BASE_DOMAIN> and alerting to discord an operator input.
 #
@@ -6,7 +6,7 @@
 # console and the umami host. what the prober pushes as external endpoints:
 # ingestion (web event and otlp metric), freshness through the machine api,
 # the tracker file's sha-384 against the release manifest, and every node by
-# address with sni. gatus 5.37.0 cannot do the last two: its conditions have
+# address with sni. gatus 5.38.0 cannot do the last two: its conditions have
 # no hash function, and it sets no tls server name from a Host header, so a
 # check by address cannot present the right sni (client/client.go).
 metrics: true
@@ -84,6 +84,15 @@ endpoints:
       - "len([BODY]) == {{ observability_tracker_latest_bytes }}"
 
 external-endpoints:
+  # pushed by alertmanager on the core nodes every minute while prometheus
+  # evaluates rules and alertmanager delivers (rules/platform.yml Watchdog)
+  - name: watchdog
+    group: monitoring
+    token: "${GATUS_EXTERNAL_TOKEN}"
+    heartbeat:
+      interval: 5m
+    alerts:
+      - type: discord
 {% for e in observability_external_endpoints %}
   - name: "{{ e.name }}"
     group: {{ e.group }}

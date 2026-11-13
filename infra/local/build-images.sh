@@ -10,6 +10,9 @@ set -eu
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 . "$root/infra/local/env.sh"
+# LC_SRC builds from another checkout of the same repository, for example
+# `git archive HEAD` unpacked elsewhere while the working tree is mid-change
+src="${LC_SRC:-$root}"
 
 push="127.0.0.1:${LC_REGISTRY_HOST_PORT}/sa"
 tag="$LC_IMAGE_TAG"
@@ -19,14 +22,14 @@ build() {
 	name="$1"
 	shift
 	echo "== $name"
-	docker build -q "$@" -t "$push/$name:$tag" "$root" >/dev/null
+	docker build -q "$@" -t "$push/$name:$tag" "$src" >/dev/null
 	docker push -q "$push/$name:$tag" >/dev/null
 }
 
-cd "$root"
+cd "$src"
 build gateway -f deploy/images/gateway.Dockerfile --build-arg DBIP_MONTH="$month"
 build collector -f deploy/images/collector.Dockerfile
-for c in replayer metricswriter jobs platformctl; do
+for c in replayer metricswriter jobs platformctl prober; do
 	build "$c" -f deploy/images/go-service.Dockerfile --build-arg CMD="$c"
 done
 # the oauthfixture tag exists only in this local image (local-converge.md)

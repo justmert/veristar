@@ -19,4 +19,5 @@ type ApiSeriesState struct {
 	LastSum       float64
 	LastCounts    []int64
 	LastSeenAt    time.Time
+	Baseline      bool
 }

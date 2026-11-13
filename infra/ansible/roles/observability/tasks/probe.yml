@@ -26,6 +26,17 @@
     mode: "0644"
   loop: [manifest.json, revoked.json]
 
+# local converge only: the private cas of the local nodes' caddies
+- name: Install the ca the probe trusts
+  ansible.builtin.copy:
+    src: "{{ observability_probe_ca_file }}"
+    dest: "{{ observability_conf_dir }}/probe-ca.crt"
+    owner: root
+    group: root
+    mode: "0644"
+  when: observability_probe_ca_file is defined
+  notify: [Restart gatus, Restart prober]
+
 - name: Write the probe configs
   ansible.builtin.template:
     src: "{{ item.src }}"

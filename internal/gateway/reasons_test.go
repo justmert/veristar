@@ -35,6 +35,7 @@ func TestReasonStatus(t *testing.T) {
 		ReasonChallengeFuture: http.StatusForbidden, ReasonProofWork: http.StatusForbidden,
 		ReasonReplay: http.StatusForbidden, ReasonSignals: http.StatusForbidden,
 		ReasonRateLimited: http.StatusTooManyRequests, ReasonUnavailable: http.StatusServiceUnavailable,
+		ReasonRevokedVersion: http.StatusGone,
 	}
 	require.Len(t, want, len(Reasons()))
 	for _, r := range Reasons() {

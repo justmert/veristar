@@ -19,45 +19,79 @@ type failure struct {
 	err error
 	// permanent: a retry cannot fix it, the message goes to the dlq
 	permanent bool
-	// unreachable: umami did not answer at all (or its proxy said so), so a
-	// heartbeat that answers again is a reason to retry early
-	unreachable bool
+	// send: the error came from the umami send (an answer, a bad answer or
+	// no answer), not from nats bookkeeping, so umami's health decides how
+	// it is retried
+	send bool
 }
 
 func (f *failure) Error() string { return f.err.Error() }
 func (f *failure) Unwrap() error { return f.err }
 
-// classify maps a send error to a failure. 4xx is permanent, except 408 and
-// 429, which say "later" rather than "never". 5xx and transport errors are
-// transient; 502, 503 and 504 come from something in front of umami and
-// count as unreachable, like transport errors.
+// classify maps a send error to a failure and a metric label. 4xx is
+// permanent, except 408 and 429, which say "later" rather than "never".
+// every other error is retried; whether without limit or a bounded number
+// of times is decided by umami's health (deliver).
 func classify(err error) (*failure, string) {
 	var api *umami.APIError
 	if errors.As(err, &api) {
 		switch {
 		case api.Status == http.StatusRequestTimeout || api.Status == http.StatusTooManyRequests:
-			return &failure{err: err}, sendClientError
+			return &failure{err: err, send: true}, sendClientError
 		case api.Status >= 400 && api.Status < 500:
-			return &failure{err: err, permanent: true}, sendClientError
-		case api.Status == http.StatusBadGateway || api.Status == http.StatusServiceUnavailable || api.Status == http.StatusGatewayTimeout:
-			return &failure{err: err, unreachable: true}, sendServerError
+			return &failure{err: err, permanent: true, send: true}, sendClientError
 		default:
-			return &failure{err: err}, sendServerError
+			return &failure{err: err, send: true}, sendServerError
 		}
 	}
-	return &failure{err: err, unreachable: true}, sendNetwork
+	return &failure{err: err, send: true}, sendNetwork
+}
+
+// maxHealthyFailures is how many sends of one event may fail while umami's
+// health checks pass before the event goes to the dlq. umami 3.5.0 inserts
+// the website_event row before the event data, so a failing data row leaves
+// one stored custom event per attempt; the bound keeps that small, where the
+// in-place retry until the stream's max age stored one about every 10
+// minutes for 72 hours.
+const maxHealthyFailures = 4
+
+// healthyRetryDelay is the pause after the n-th failure on a healthy umami:
+// 1 s, 5 s, 30 s, so the event is retried for about 36 s in all. a short
+// spell of contention on one row can pass in that time; a value umami cannot
+// store never does.
+func healthyRetryDelay(n int) time.Duration {
+	return natsx.RetryDelay(uint64(n)) //nolint:gosec // n is a small positive count
 }
 
 // deliver handles one held message until it is acked or moved to the dlq
-// (true), or until ctx ends (false, the message stays held). transient
-// failures are retried in place with natsx.RetryDelay, which keeps the lane,
-// and so every later event of the same visitor, behind this one. once the
-// message is older than the stream's max age the server has dropped it, and
-// what the lane still holds is moved to the dlq rather than lost.
-func (lr *leadRun) deliver(ctx context.Context, h *held) bool {
+// (true), or until ctx ends (false, the message stays held). only this
+// visitor's later events wait while it is retried (runVisitor), so a failing
+// event never holds back another visitor or site.
+//
+// a failed send is followed by a health check of the umami process
+// (heartbeat and collection probe). when umami is unhealthy, umami as a
+// whole cannot store events: the event is retried without limit, up to the
+// stream's max age, and is woken early when the process is healthy again.
+// when umami is healthy the event itself is the problem: after
+// maxHealthyFailures such failures it goes to the dlq. nats errors in the
+// bookkeeping are retried without limit, as they say nothing about the
+// event.
+func (lr *leadRun) deliver(ctx context.Context, q *visitorQueue, h *held) bool {
 	for attempt := uint64(1); ; attempt++ {
 		if ctx.Err() != nil {
 			return false
+		}
+		if !h.delivered && time.Since(h.published) >= lr.r.maxAge {
+			// the server has already dropped it from the stream, and an
+			// erasure run that waited for the stream may have finished, so
+			// it is not sent any more
+			if lr.deadLetter(ctx, h, fmt.Sprintf("not delivered within the %s max age of %s", lr.r.maxAge, natsx.StreamWebEvents)) {
+				return true
+			}
+			if !lr.gate.wait(ctx, natsx.RetryDelay(attempt), noTarget) {
+				return false
+			}
+			continue
 		}
 		err := lr.attempt(ctx, h)
 		if err == nil {
@@ -79,19 +113,28 @@ func (lr *leadRun) deliver(ctx context.Context, h *held) bool {
 				return true
 			}
 			// the dlq publish failed; retry the whole step later
-		} else if time.Since(h.published) >= lr.r.maxAge {
-			if lr.deadLetter(ctx, h, fmt.Sprintf("not delivered within the %s max age of %s: %s", lr.r.maxAge, natsx.StreamWebEvents, f.err.Error())) {
-				return true
+		}
+		delay := natsx.RetryDelay(attempt)
+		waitOn := noTarget
+		if f.send && !f.permanent {
+			if lr.healthy(ctx, h.target) {
+				h.healthyFailures++
+				if h.healthyFailures >= maxHealthyFailures {
+					reason := fmt.Sprintf("umami failed this event %d times while its health checks passed: %s", h.healthyFailures, f.err.Error())
+					if lr.deadLetter(ctx, h, reason) {
+						return true
+					}
+				}
+				lr.setBlocked(q, true)
+				delay = healthyRetryDelay(h.healthyFailures)
+			} else {
+				lr.setBlocked(q, false)
+				waitOn = h.target
 			}
 		}
 		lr.r.m.retries.Inc()
-		delay := natsx.RetryDelay(attempt)
-		lr.r.log.Warn("delivery failed, retrying in place", "stream_seq", h.seq, "attempt", attempt,
-			"retry_in", delay.String(), "error", f.err.Error())
-		waitOn := noTarget
-		if f.unreachable {
-			waitOn = h.target
-		}
+		lr.r.log.Warn("delivery failed, retrying", "stream_seq", h.seq, "attempt", attempt,
+			"healthy_failures", h.healthyFailures, "retry_in", delay.String(), "error", f.err.Error())
 		if !lr.gate.wait(ctx, delay, waitOn) {
 			return false
 		}
@@ -100,6 +143,11 @@ func (lr *leadRun) deliver(ctx context.Context, h *held) bool {
 
 // attempt runs the duplicate guard, the send and the bookkeeping once.
 func (lr *leadRun) attempt(ctx context.Context, h *held) error {
+	release, err := lr.acquire(ctx, h.target)
+	if err != nil {
+		return err
+	}
+	defer release()
 	r := lr.r
 	ev := h.ev
 	if !h.delivered {
@@ -174,7 +222,7 @@ func (lr *leadRun) bookkeep(ctx context.Context, h *held) error {
 	bctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), bookkeepingTimeout)
 	defer cancel()
 	if !h.bot && !h.visitSaved {
-		// one lane owns this visitor, so reading again here sees the record
+		// one goroutine owns this visitor, so reading again here sees the record
 		// the send was based on
 		rec, err := r.store.load(bctx, ev.SiteID, ev.VT)
 		if errors.Is(err, errBadVisitRecord) {
@@ -244,12 +292,12 @@ func (lr *leadRun) deadLetter(ctx context.Context, h *held, reason string) bool 
 // process to come back.
 const noTarget = -1
 
-// gate lets lanes wait for their retry delay, and wakes the ones that wait
+// gate lets visitors wait for their retry delay, and wakes the ones that wait
 // because their umami process was unreachable as soon as its heartbeat
 // answers again.
 type gate struct {
 	mu sync.Mutex
-	// waiters maps each waiting lane to the umami process it waits for, or
+	// waiters maps each waiting visitor to the umami process it waits for, or
 	// noTarget
 	waiters map[chan struct{}]int
 }
@@ -281,7 +329,7 @@ func (g *gate) wait(ctx context.Context, d time.Duration, target int) bool {
 	}
 }
 
-// unreachableTargets lists the umami processes some lane waits for, sorted.
+// unreachableTargets lists the umami processes some visitor waits for, sorted.
 func (g *gate) unreachableTargets() []int {
 	g.mu.Lock()
 	defer g.mu.Unlock()

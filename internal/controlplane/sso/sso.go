@@ -205,7 +205,9 @@ func (h *Handler) redirect(r *http.Request, user uuid.UUID, siteParam string) (s
 	if site.TenantStatus == "removed" {
 		return "", fail(CodeNotFound, nil)
 	}
-	if site.Status == "removed" || !site.UmamiTeamID.Valid {
+	// a site in review (contract 5.6) is treated like a pending tenant: the
+	// reconciler made no umami website for it, so there is nothing to open
+	if site.Status == "removed" || site.Status == "pending" || !site.UmamiTeamID.Valid {
 		return "", fail(CodeProvisioningPending, nil)
 	}
 	websiteID := site.ID.String()

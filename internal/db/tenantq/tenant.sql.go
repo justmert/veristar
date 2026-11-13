@@ -62,7 +62,7 @@ func (q *Queries) CreateOTLPToken(ctx context.Context, arg CreateOTLPTokenParams
 const createSite = `-- name: CreateSite :one
 insert into cp.sites (id, tenant_id, name, domain, origins, verify_token)
 values ($1, cp.current_tenant_id(), $2, $3, $4, $5)
-returning id, tenant_id, name, domain, origins, quarantine_website_id, status, verify_token, verify_method, verified_at, last_verify_at, last_verify_error, stellar_toml, stellar_toml_checked_at, created_at, updated_at, status_reason
+returning id, tenant_id, name, domain, origins, quarantine_website_id, status, verify_token, verify_method, verified_at, last_verify_at, last_verify_error, stellar_toml, stellar_toml_checked_at, created_at, updated_at, status_reason, collect_utm
 `
 
 type CreateSiteParams struct {
@@ -100,6 +100,7 @@ func (q *Queries) CreateSite(ctx context.Context, arg CreateSiteParams) (CpSite,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.StatusReason,
+		&i.CollectUtm,
 	)
 	return i, err
 }
@@ -223,7 +224,7 @@ func (q *Queries) ListOTLPTokens(ctx context.Context) ([]ListOTLPTokensRow, erro
 }
 
 const listSites = `-- name: ListSites :many
-select id, tenant_id, name, domain, origins, quarantine_website_id, status, verify_token, verify_method, verified_at, last_verify_at, last_verify_error, stellar_toml, stellar_toml_checked_at, created_at, updated_at, status_reason from cp.sites order by created_at, id
+select id, tenant_id, name, domain, origins, quarantine_website_id, status, verify_token, verify_method, verified_at, last_verify_at, last_verify_error, stellar_toml, stellar_toml_checked_at, created_at, updated_at, status_reason, collect_utm from cp.sites order by created_at, id
 `
 
 func (q *Queries) ListSites(ctx context.Context) ([]CpSite, error) {
@@ -253,6 +254,7 @@ func (q *Queries) ListSites(ctx context.Context) ([]CpSite, error) {
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.StatusReason,
+			&i.CollectUtm,
 		); err != nil {
 			return nil, err
 		}

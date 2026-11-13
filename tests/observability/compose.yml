@@ -21,7 +21,7 @@ x-go: &go
     - ${P17}/bin:/bin-sa:ro
 
 x-node: &node
-  image: haproxy:3.4.7@sha256:f6d2ee87b47192d9cc8c22e88fef405122ff339859644883edc2a7d1827f87b3
+  image: haproxy:3.4.7-alpine@sha256:b9fe316f718d5015c5cfebd8ca019591f3e44656f61d93cb8b59a1028961e530
   restart: unless-stopped
 
 x-nodeexp: &nodeexp
@@ -311,7 +311,7 @@ services:
     networks: {default: {ipv4_address: 172.30.17.41}}
     ports: ["127.0.0.1:18443:443"]
   gatus:
-    image: twinproduction/gatus:v5.37.0@sha256:094eb186e55235db367e90e9d56140e5897b7044c41de23cde4cc18e6da1242e
+    image: twinproduction/gatus:v5.38.0@sha256:085ed63da963728965d00a3c78aa6167e3bf135218485b893201758e079e8415
     restart: unless-stopped
     env_file: ["${P17}/env/gatus.env"]
     environment: {GATUS_CONFIG_PATH: /config/config.yaml}

@@ -10,7 +10,9 @@
 // solved against a gateway challenge; identify, distinct ids, client salts,
 // web vitals, error capture, the credentials option and recorder hooks are
 // removed; popstate is tracked; global privacy control stops all sending;
-// tracking can be started later (after consent) with start().
+// tracking can be started later (after consent) with start(); a proof is
+// replaced before the gateway's per-proof limit and after a 403 that says it
+// is used up, and that event is sent once more.
 
 import { solve } from "./proof.ts";
 import { watchWalletsKitStorage } from "./wallets-kit.ts";
@@ -26,9 +28,11 @@ import {
   EVENT_PATH,
   encodeEvent,
   LIMITS,
+  PROOF_MAX_USES,
   type Proof,
   parseChallenge,
   routeFragment,
+  STALE_PROOF_REASONS,
   WIRE_VERSION,
   type WireData,
   type WireEvent,
@@ -173,8 +177,9 @@ export function createTracker(window: Window, options: TrackerOptions): Tracker 
 
   /* challenge and proof, held in memory only */
 
-  let proof: Promise<Proof> | undefined;
-  let proofFetchedAt = 0;
+  // one challenge and the number of events that used its proof
+  type ProofSlot = { proof: Promise<Proof>; fetchedAt: number; uses: number };
+  let slot: ProofSlot | undefined;
 
   const fetchProof = async (): Promise<Proof> => {
     const res = await win.fetch(`${host}${CHALLENGE_PATH}?w=${encodeURIComponent(website)}`, {
@@ -188,18 +193,27 @@ export function createTracker(window: Window, options: TrackerOptions): Tracker 
     return solve(win.crypto.subtle, challenge);
   };
 
-  const getProof = (): Promise<Proof> => {
+  // takes one use of the current proof. a spa keeps one page load for as
+  // long as the tab is open, so the proof is replaced after PROOF_MAX_USES
+  // events, before the gateway's per-proof limit, as well as after 5 hours
+  const takeProof = (): ProofSlot => {
     const now = win.performance.now();
-    if (!proof || now - proofFetchedAt > CHALLENGE_REFRESH_MS) {
-      proofFetchedAt = now;
-      const pending = fetchProof();
+    if (!slot || now - slot.fetchedAt > CHALLENGE_REFRESH_MS || slot.uses >= PROOF_MAX_USES) {
+      const fresh: ProofSlot = { proof: fetchProof(), fetchedAt: now, uses: 0 };
       // a failed challenge is forgotten so the next event asks again
-      pending.catch(() => {
-        if (proof === pending) proof = undefined;
+      fresh.proof.catch(() => {
+        if (slot === fresh) slot = undefined;
       });
-      proof = pending;
+      slot = fresh;
     }
-    return proof;
+    slot.uses++;
+    return slot;
+  };
+
+  // forgets a proof the gateway called used up, unless another event has
+  // already replaced it
+  const dropProof = (used: ProofSlot) => {
+    if (slot === used) slot = undefined;
   };
 
   /* wire conversion */
@@ -208,6 +222,7 @@ export function createTracker(window: Window, options: TrackerOptions): Tracker 
     const u = new URL(payload.url, location.href);
     const event: WireEvent = {
       v: WIRE_VERSION,
+      sv: VERSION,
       w: website,
       t: payload.name ? "ev" : "pv",
       h: clip(payload.hostname || u.hostname, LIMITS.hostname),
@@ -246,28 +261,43 @@ export function createTracker(window: Window, options: TrackerOptions): Tracker 
       data = checked;
     }
 
-    let p: Proof;
-    try {
-      p = await getProof();
-    } catch {
-      // the gateway is unreachable or blocked; the page must not break because
-      // of that, and there is no other place to send the event
-      return;
-    }
-    const body = encodeEvent(toWire(payload, data, p));
-    if (byteLength(body) > LIMITS.bodyBytes) {
-      throw new TypeError(`umami: event body exceeds ${LIMITS.bodyBytes} bytes`);
-    }
-    try {
-      await win.fetch(`${host}${EVENT_PATH}`, {
-        method: "POST",
-        keepalive: true,
-        credentials: "omit",
-        headers: { "Content-Type": EVENT_CONTENT_TYPE },
-        body,
-      });
-    } catch {
-      // same reason as above: a network failure is not the page's problem
+    // the second round runs only when the gateway called the proof used up
+    for (let round = 0; round < 2; round++) {
+      const used = takeProof();
+      let p: Proof;
+      try {
+        p = await used.proof;
+      } catch {
+        // the gateway is unreachable or blocked; the page must not break
+        // because of that, and there is no other place to send the event
+        return;
+      }
+      const body = encodeEvent(toWire(payload, data, p));
+      if (byteLength(body) > LIMITS.bodyBytes) {
+        throw new TypeError(`umami: event body exceeds ${LIMITS.bodyBytes} bytes`);
+      }
+      let res: Response;
+      try {
+        res = await win.fetch(`${host}${EVENT_PATH}`, {
+          method: "POST",
+          keepalive: true,
+          credentials: "omit",
+          headers: { "Content-Type": EVENT_CONTENT_TYPE },
+          body,
+        });
+      } catch {
+        // same reason as above: a network failure is not the page's problem
+        return;
+      }
+      if (res.status !== 403) return;
+      let reason = "";
+      try {
+        reason = (await res.text()).trim();
+      } catch {
+        return;
+      }
+      if (!STALE_PROOF_REASONS.includes(reason)) return;
+      dropProof(used);
     }
   };
 
@@ -287,11 +317,17 @@ export function createTracker(window: Window, options: TrackerOptions): Tracker 
 
   /* navigation */
 
+  // a call for the url already current changes nothing. next.js calls
+  // replaceState with the current url after it handled a popstate; moving the
+  // referrer there made the pageview of a back or forward navigation name the
+  // page itself as its referrer.
   const onNavigate = (url: string | URL | null | undefined) => {
     if (!url) return;
+    const next = normalize(url);
+    if (next === currentUrl) return;
     currentRef = currentUrl;
-    currentUrl = normalize(url);
-    if (currentUrl !== currentRef) setTimeout(() => void track(), DELAY_MS);
+    currentUrl = next;
+    setTimeout(() => void track(), DELAY_MS);
   };
 
   const hookHistory = () => {
@@ -358,8 +394,10 @@ export function createTracker(window: Window, options: TrackerOptions): Tracker 
     hookHistory();
     handleClicks();
     // started with tracking, so a consent-gated site does not have the kit's
-    // storage read before start() and a visitor with gpc never has it read
-    if (options.walletsKit === true) watchWalletsKitStorage(win, track);
+    // storage read before start(), and checked here because start() can be
+    // called for a visitor with gpc, an opt-out or do-not-track honoured:
+    // their storage is never read
+    if (options.walletsKit === true && !trackingDisabled()) watchWalletsKitStorage(win, track);
   };
 
   if (autoTrack && !trackingDisabled()) {

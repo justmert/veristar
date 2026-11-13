@@ -9,7 +9,11 @@
 // candidate is a window of the base32 alphabet A-Z2-7 whose first character
 // names a type, whose second character carries algorithm 0 and whose length
 // is exact for that type (56, 58 for B, 69 for M and W, 69 to 165 for P).
-// every candidate is then checked with strkey.DecodeAny from
+// every candidate is first checked cheaply here, without allocating: it is
+// decoded into a stack buffer and its crc16 compared, and for a signed
+// payload the declared payload length picks the one candidate length. only a
+// candidate whose checksum matches (about one in 65536 of random text) is
+// then checked with strkey.DecodeAny from
 // github.com/stellar/go-stellar-sdk: crc16 checksum, version byte, canonical
 // base32 tail and payload length or signed payload structure. one SEP-23
 // rule that DecodeAny does not apply is added here: a claimable balance must
@@ -37,6 +41,7 @@
 package redact
 
 import (
+	"encoding/binary"
 	"regexp"
 	"strings"
 
@@ -200,7 +205,9 @@ func Strkey(s string) (Kind, bool) {
 }
 
 // matchAt returns the length and kind of a valid strkey that starts at
-// run[0], where run consists of base32 characters of either case.
+// run[0], where run consists of base32 characters of either case. its work
+// is bounded per position: one candidate length per type, each checked with
+// an allocation-free decode and checksum before the full decode.
 func matchAt(run string) (int, Kind, bool) {
 	if len(run) < 2 {
 		return 0, 0, false
@@ -210,19 +217,122 @@ func matchAt(run string) (int, Kind, bool) {
 	if c := upper(run[1]); c < 'A' || c > 'D' {
 		return 0, 0, false
 	}
+	first := upper(run[0])
+	lengths := lengthsByFirst[first]
+	var one [1]int
+	if first == 'P' {
+		n, ok := signedPayloadLen(run)
+		if !ok {
+			return 0, 0, false
+		}
+		one[0] = n
+		lengths = one[:]
+	}
 	var buf [256]byte
-	for _, n := range lengthsByFirst[upper(run[0])] {
+	for _, n := range lengths {
 		if n > len(run) {
 			continue
 		}
 		for i := 0; i < n; i++ {
 			buf[i] = upper(run[i])
 		}
+		if !checksumOK(buf[:n]) {
+			continue
+		}
 		if k, ok := Strkey(string(buf[:n])); ok {
 			return n, k, true
 		}
 	}
 	return 0, 0, false
+}
+
+// signedPayloadLen reads the payload length a signed payload candidate
+// declares (bytes 33 to 36, after the version byte and the 32 byte key) and
+// returns the one strkey length it allows. a strkey with another length
+// fails strkey.DecodeAny anyway, so trying every length is wasted work.
+func signedPayloadLen(run string) (int, bool) {
+	const prefix = 60 // characters that hold the first 37 bytes
+	if len(run) < prefix {
+		return 0, false
+	}
+	var src [prefix]byte
+	for i := range src {
+		src[i] = upper(run[i])
+	}
+	var raw [38]byte
+	n, ok := decodeBase32(raw[:], src[:])
+	if !ok || n < 37 {
+		return 0, false
+	}
+	declared := binary.BigEndian.Uint32(raw[33:37])
+	if declared < 1 || declared > 64 {
+		return 0, false
+	}
+	padded := int(declared+3) &^ 3
+	return encodedLen(1 + 32 + 4 + padded + 2), true
+}
+
+// decodeBase32 decodes upper case unpadded base32 into dst and reports the
+// byte count. leftover bits are ignored; strkey.DecodeAny checks them on the
+// candidates that get that far.
+func decodeBase32(dst, src []byte) (int, bool) {
+	var acc uint32
+	bits, n := 0, 0
+	for _, c := range src {
+		var v byte
+		switch {
+		case c >= 'A' && c <= 'Z':
+			v = c - 'A'
+		case c >= '2' && c <= '7':
+			v = c - '2' + 26
+		default:
+			return 0, false
+		}
+		acc = acc<<5 | uint32(v)
+		bits += 5
+		if bits >= 8 {
+			bits -= 8
+			if n == len(dst) {
+				return 0, false
+			}
+			dst[n] = byte(acc >> bits) //nolint:gosec // keeping the low 8 bits is the decode
+			n++
+		}
+	}
+	return n, true
+}
+
+// crcTable is crc16-xmodem (polynomial 0x1021, initial 0), the checksum
+// SEP-23 appends little endian.
+var crcTable = func() [256]uint16 {
+	var t [256]uint16
+	for i := range t {
+		crc := uint16(i) << 8
+		for range 8 {
+			if crc&0x8000 != 0 {
+				crc = crc<<1 ^ 0x1021
+			} else {
+				crc <<= 1
+			}
+		}
+		t[i] = crc
+	}
+	return t
+}()
+
+// checksumOK decodes an upper case candidate on the stack and compares its
+// crc16 with the two bytes it ends in.
+func checksumOK(cand []byte) bool {
+	var raw [128]byte
+	n, ok := decodeBase32(raw[:], cand)
+	if !ok || n < 3 {
+		return false
+	}
+	var crc uint16
+	for _, b := range raw[:n-2] {
+		crc = crc<<8 ^ crcTable[byte(crc>>8)^b]
+	}
+	return crc == binary.LittleEndian.Uint16(raw[n-2:n])
 }
 
 func redactStrkeys(s string) (string, Flags) {

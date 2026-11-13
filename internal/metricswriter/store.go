@@ -29,12 +29,17 @@ const Other = "{other}"
 // past the partitions would block the queue.
 const futureSkew = 10 * time.Minute
 
-// warning kinds of api.ingest_warnings
+// warning kinds of api.ingest_warnings. every count is in requests, so it
+// does not grow with how often a process exports: a cumulative
+// series re-exported with no new request adds nothing. the one exception is
+// a cumulative point refused by the stream cap, whose new requests cannot
+// be known without the stream's state; it adds one.
 const (
 	warnOverflow   = "cardinality_overflow"
 	warnLossy      = "lossy_histogram"
 	warnSecret     = "secret_in_path"
 	warnSpanDerive = "span_derived"
+	warnCoarse     = "coarse_buckets"
 )
 
 // item is one fetched message on its way through a batch.
@@ -129,6 +134,11 @@ func prepare(msgs []jetstream.Msg) ([]*item, error) {
 			it.dlq = fmt.Sprintf("message id of %d bytes, want 1 to 256", len(it.id))
 			continue
 		}
+		if err := checkText("message id", it.id, 256); err != nil {
+			// the id is stored in api.ingest_dedup, a text column
+			it.dlq = err.Error()
+			continue
+		}
 		if it.decoded, err = Decode(it.tenant, m.Data()); err != nil {
 			it.dlq = err.Error()
 		}
@@ -163,17 +173,30 @@ func (w *Writer) apply(ctx context.Context, fence natsx.Fence, msgs []jetstream.
 		if it.dlq == "" {
 			continue
 		}
-		tok := strings.TrimPrefix(it.msg.Subject(), natsx.SubjectAPIMetrics+".")
-		if strings.ContainsAny(tok, ".*> ") || tok == "" {
-			tok = "invalid"
-		}
-		if err := natsx.DeadLetter(ctx, w.js, natsx.StreamAPIDLQ, natsx.Subject(natsx.SubjectAPIDLQ, tok), it.msg, it.dlq); err != nil {
+		if err := w.deadLetter(ctx, it.msg, it.dlq); err != nil {
 			// nothing of it was stored, so a redelivery is harmless
-			return nil, fmt.Errorf("metricswriter: dead letter stream seq %d: %w", it.meta.Sequence.Stream, err)
+			return nil, err
 		}
-		w.log.Error("message moved to the dead-letter stream", "stream_seq", it.meta.Sequence.Stream, "reason", it.dlq)
 	}
 	return res, nil
+}
+
+// deadLetter copies a message to API_DLQ with the reason. the caller acks
+// it afterwards.
+func (w *Writer) deadLetter(ctx context.Context, msg jetstream.Msg, reason string) error {
+	tok := strings.TrimPrefix(msg.Subject(), natsx.SubjectAPIMetrics+".")
+	if strings.ContainsAny(tok, ".*> ") || tok == "" {
+		tok = "invalid"
+	}
+	var seq uint64
+	if meta, err := msg.Metadata(); err == nil {
+		seq = meta.Sequence.Stream
+	}
+	if err := natsx.DeadLetter(ctx, w.js, natsx.StreamAPIDLQ, natsx.Subject(natsx.SubjectAPIDLQ, tok), msg, reason); err != nil {
+		return fmt.Errorf("metricswriter: dead letter stream seq %d: %w", seq, err)
+	}
+	w.log.Error("message moved to the dead-letter stream", "stream_seq", seq, "reason", reason)
+	return nil
 }
 
 func (w *Writer) applyTx(ctx context.Context, tx pgx.Tx, items []*item) (*result, error) {
@@ -209,7 +232,7 @@ func (w *Writer) applyTx(ctx context.Context, tx pgx.Tx, items []*item) (*result
 	}
 
 	// 3. load the stored state of every cumulative stream and resource
-	state := NewState(w.set.FirstPointThreshold)
+	state := NewState(w.set.FirstPointThreshold, MaxSeriesPerTenant)
 	if err := loadState(ctx, q, items, state); err != nil {
 		return nil, err
 	}
@@ -223,10 +246,6 @@ func (w *Writer) applyTx(ctx context.Context, tx pgx.Tx, items []*item) (*result
 			continue
 		}
 		recv := it.meta.Timestamp
-		day := utcDay(recv.UnixNano())
-		if it.decoded.SecretSeeds > 0 {
-			warns[warnKey{it.tenant, day, warnSecret}] += int64(it.decoded.SecretSeeds)
-		}
 		for i := range it.decoded.Points {
 			d := &it.decoded.Points[i]
 			if t := recv; t.After(tokens[d.TokenID]) {
@@ -241,6 +260,15 @@ func (w *Writer) applyTx(ctx context.Context, tx pgx.Tx, items []*item) (*result
 				continue
 			}
 			c, out, err := state.Apply(&d.Point)
+			if errors.Is(err, ErrSeriesCap) {
+				res.rejected++
+				warns[warnKey{it.tenant, utcDay(d.Time), warnOverflow}]++
+				w.log.Warn("new stream refused, the tenant reached the stream cap", "tenant", it.tenant.String(), "error", err.Error())
+				continue
+			}
+			if errors.Is(err, errSeriesCountNotLoaded) {
+				return nil, err
+			}
 			if err != nil {
 				res.rejected++
 				w.log.Warn("point refused", "tenant", it.tenant.String(), "error", err.Error())
@@ -268,11 +296,18 @@ func (w *Writer) applyTx(ctx context.Context, tx pgx.Tx, items []*item) (*result
 			r.lossy = r.lossy || d.Lossy
 			r.points++
 			pday := utcDay(d.Time)
+			n := int64(c.Count) //nolint:gosec // request counts of one point fit in int64
 			if d.Lossy {
-				warns[warnKey{it.tenant, pday, warnLossy}]++
+				warns[warnKey{it.tenant, pday, warnLossy}] += n
+			}
+			if d.Coarse {
+				warns[warnKey{it.tenant, pday, warnCoarse}] += n
 			}
 			if d.Source == SourceSpan {
-				warns[warnKey{it.tenant, pday, warnSpanDerive}]++
+				warns[warnKey{it.tenant, pday, warnSpanDerive}] += n
+			}
+			if d.SecretSeed {
+				warns[warnKey{it.tenant, pday, warnSecret}] += n
 			}
 		}
 	}
@@ -321,6 +356,7 @@ func utcDay(ns int64) int64 {
 // of the applied messages, per tenant.
 func loadState(ctx context.Context, q *writerq.Queries, items []*item, state *State) error {
 	series := map[uuid.UUID]map[[32]byte]bool{}
+	streams := map[uuid.UUID][]SeriesKey{}
 	resources := map[uuid.UUID]map[string]bool{}
 	for _, it := range items {
 		if it.dlq != "" || it.refused != "" || it.duplicate {
@@ -335,7 +371,9 @@ func loadState(ctx context.Context, q *writerq.Queries, items []*item, state *St
 				series[it.tenant] = map[[32]byte]bool{}
 				resources[it.tenant] = map[string]bool{}
 			}
-			series[it.tenant][p.Key().Hash] = true
+			k := p.Key()
+			series[it.tenant][k.Hash] = true
+			streams[it.tenant] = append(streams[it.tenant], k)
 			resources[it.tenant][p.ResourceHash] = true
 		}
 	}
@@ -344,6 +382,7 @@ func loadState(ctx context.Context, q *writerq.Queries, items []*item, state *St
 		for k := range keys {
 			hashes = append(hashes, k[:])
 		}
+		known := map[SeriesKey]bool{}
 		rows, err := q.GetSeriesStates(ctx, writerq.GetSeriesStatesParams{TenantID: tenant, SeriesHashes: hashes})
 		if err != nil {
 			return fmt.Errorf("load series state: %w", err)
@@ -355,11 +394,25 @@ func loadState(ctx context.Context, q *writerq.Queries, items []*item, state *St
 			}
 			copy(k.Hash[:], r.SeriesHash)
 			k.Start = r.StartUnixNano
-			st := SeriesState{Start: r.StartUnixNano, Last: r.LastUnixNano, Count: uint64(r.LastCount), Sum: r.LastSum}
+			known[k] = true
+			st := SeriesState{Start: r.StartUnixNano, Last: r.LastUnixNano, Count: uint64(r.LastCount), Sum: r.LastSum, Baseline: r.Baseline}
 			for i, c := range r.LastCounts {
 				st.Counts[i] = uint64(c) //nolint:gosec // the table's check keeps counts non-negative
 			}
 			state.LoadSeries(k, st)
+		}
+		// the stream cap needs the tenant's count only when a stream of
+		// the batch is not stored yet; most batches have none
+		for _, k := range streams[tenant] {
+			if known[k] {
+				continue
+			}
+			n, err := q.CountSeriesStates(ctx, tenant)
+			if err != nil {
+				return fmt.Errorf("count series state: %w", err)
+			}
+			state.LoadSeriesCount(tenant.String(), int(n))
+			break
 		}
 		rh := make([][]byte, 0, len(resources[tenant]))
 		for h := range resources[tenant] {
@@ -395,8 +448,8 @@ type capState struct {
 }
 
 // applyCaps returns the rows with every service and route beyond the
-// tenant's daily caps replaced by Other, and the overflow warnings: one per
-// data point that was relabelled. a pair admitted earlier the same day
+// tenant's daily caps replaced by Other, and the overflow warnings: the
+// requests that were relabelled. a pair admitted earlier the same day
 // keeps its labels. services are checked first: a refused service takes its
 // route with it, because the route under an unknown service would still
 // grow the registry without bound.
@@ -451,7 +504,7 @@ func (w *Writer) applyCaps(ctx context.Context, q *writerq.Queries, rows map[row
 			}
 		}
 		if service != k.service || route != k.route {
-			overflow[warnKey{k.tenant, ck.day, warnOverflow}] += int64(r.points)
+			overflow[warnKey{k.tenant, ck.day, warnOverflow}] += int64(r.count) //nolint:gosec // as in toInt64
 		}
 		nk := k
 		nk.service, nk.route = service, route
@@ -532,6 +585,22 @@ func writeRows(ctx context.Context, tx pgx.Tx, q *writerq.Queries, rows map[rowK
 		tenant uuid.UUID
 		hour   int64
 	}
+	// the hour locks come before the first minute row: the rollup skips an
+	// hour whose lock a writer holds, so it never recomputes an hour from
+	// minutes this transaction has written but not committed.
+	// keys are sorted by tenant and minute, so every writer takes the locks
+	// in the same order.
+	locked := map[hourKey]bool{}
+	for _, k := range keys {
+		hk := hourKey{k.tenant, time.Unix(k.minute, 0).UTC().Truncate(time.Hour).Unix()}
+		if locked[hk] {
+			continue
+		}
+		locked[hk] = true
+		if err := q.LockRollupHour(ctx, writerq.LockRollupHourParams{TenantID: hk.tenant, Hour: time.Unix(hk.hour, 0).UTC()}); err != nil {
+			return fmt.Errorf("lock rollup hour: %w", err)
+		}
+	}
 	for _, k := range keys {
 		r := rows[k]
 		start := time.Unix(k.minute, 0).UTC()
@@ -581,7 +650,7 @@ func writeState(ctx context.Context, q *writerq.Queries, state *State, now time.
 			params = append(params, writerq.UpsertSeriesStateParams{
 				TenantID: tenant, SeriesHash: append([]byte(nil), k.Hash[:]...), StartUnixNano: st.Start,
 				LastUnixNano: st.Last, LastCount: int64(st.Count), LastSum: st.Sum, //nolint:gosec // as in toInt64
-				LastCounts: toInt64(st.Counts), SeenAt: now,
+				LastCounts: toInt64(st.Counts), SeenAt: now, Baseline: st.Baseline,
 			})
 		}
 		f, done := batchErr("store series state")

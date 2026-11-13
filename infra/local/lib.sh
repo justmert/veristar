@@ -76,7 +76,11 @@ lc_node_create() {
 	if docker inspect "$name" >/dev/null 2>&1; then
 		return 0
 	fi
-	prefix="$(lc_loc_prefix "$loc")"
+	# the probe (location none) has the public network only
+	route=""
+	if [ "$loc" != none ]; then
+		route="LC_PRIVATE_ROUTE=$LC_PRIVATE_SUBNET via $(lc_loc_prefix "$loc").254"
+	fi
 	# the public network carries the default route, as on a cloud server;
 	# without gw-priority docker may pick the private one.
 	# privileged inside this unprivileged container: capabilities stay inside the
@@ -88,12 +92,63 @@ lc_node_create() {
 	docker create --name "$name" --hostname "$name" --privileged --cgroupns=private \
 		--network "name=$LC_PUBLIC_NET,ip=$pub,gw-priority=1" \
 		--tmpfs /run --tmpfs /run/lock --tmpfs /tmp \
-		-e "LC_PRIVATE_ROUTE=$LC_PRIVATE_SUBNET via $prefix.254" \
+		-e "${route:-LC_PRIVATE_ROUTE=}" \
 		-v "$name-docker:/var/lib/docker" -v "$name-containerd:/var/lib/containerd" \
 		-v "$LC_STATE/id_ed25519.pub:/etc/local-node/authorized_key:ro" \
 		"$LC_NODE_IMAGE" >/dev/null
-	docker network connect --ip "$priv" "$(lc_loc_net "$loc")" "$name"
+	if [ "$loc" != none ]; then
+		docker network connect --ip "$priv" "$(lc_loc_net "$loc")" "$name"
+	fi
 	docker start "$name" >/dev/null
+}
+
+# lc_s3_up: the object storage stand-in of LC_BACKUP=s3 (env.sh). a private
+# ca signs a certificate for the endpoint name and every bucket under it
+# (host-style addressing, as on hetzner); the s3 identity's keys are the
+# ones up.sh puts into the sops file as object_storage_*. the container sits
+# in its location's network and, like the nodes, reaches the other locations
+# through the router.
+lc_s3_up() {
+	dir="$LC_STATE/s3"
+	mkdir -p "$dir"
+	if [ ! -f "$dir/ca.crt" ]; then
+		(
+			umask 077
+			cd "$dir" || exit 1
+			openssl req -x509 -newkey ed25519 -nodes -days 3650 -subj "/CN=sa-lc-s3-ca" -keyout ca.key -out ca.crt 2>/dev/null
+			openssl req -newkey ed25519 -nodes -subj "/CN=$LC_S3_DOMAIN" -keyout s3.key -out s3.csr 2>/dev/null
+			# pgbackrest checks the certificate against repo1-storage-host, the
+			# address it connects to, so the address is in it too
+			printf 'subjectAltName=DNS:%s,DNS:*.%s,IP:%s\nextendedKeyUsage=serverAuth\n' "$LC_S3_DOMAIN" "$LC_S3_DOMAIN" "$LC_S3_IP" >s3.ext
+			openssl x509 -req -in s3.csr -CA ca.crt -CAkey ca.key -CAcreateserial -days 825 -extfile s3.ext -out s3.crt 2>/dev/null
+			rm -f s3.csr s3.ext
+			printf '%s\n%s\n' "$(openssl rand -hex 10)" "$(openssl rand -hex 20)" >keys
+			set -- $(cat keys)
+			printf '{"identities":[{"name":"backup","credentials":[{"accessKey":"%s","secretKey":"%s"}],"actions":["Admin","Read","Write","List","Tagging"]}]}\n' "$1" "$2" >s3.json
+		)
+	fi
+	if ! docker inspect "$LC_S3" >/dev/null 2>&1; then
+		# the stand-in's files are read inside the container as root; the
+		# copies keep the state directory itself private
+		docker volume create sa-lc-s3-conf >/dev/null
+		docker run --rm -v sa-lc-s3-conf:/c -v "$dir:/src:ro" --entrypoint sh "$LC_S3_IMAGE" \
+			-c 'cp /src/s3.crt /src/s3.key /src/s3.json /c/ && chmod 0400 /c/s3.key /c/s3.json' >/dev/null
+		prefix="$(lc_loc_prefix "$LC_S3_LOCATION")"
+		docker run -d --name "$LC_S3" --hostname "$LC_S3" --restart unless-stopped \
+			--cap-add NET_ADMIN \
+			--network "name=$(lc_loc_net "$LC_S3_LOCATION"),ip=$LC_S3_IP" \
+			-v sa-lc-s3-conf:/conf:ro -v sa-lc-s3-data:/data \
+			--entrypoint sh "$LC_S3_IMAGE" -ec "
+				ip route replace $LC_PRIVATE_SUBNET via $prefix.254
+				exec weed mini -dir=/data -master.telemetry=false -admin.ui=false \
+					-s3.config=/conf/s3.json -s3.cert.file=/conf/s3.crt -s3.key.file=/conf/s3.key \
+					-s3.port.https=443 -s3.domainName=$LC_S3_DOMAIN" >/dev/null
+	fi
+}
+
+lc_s3_rm() {
+	docker rm -f "$LC_S3" >/dev/null 2>&1 || true
+	docker volume rm -f sa-lc-s3-conf sa-lc-s3-data >/dev/null 2>&1 || true
 }
 
 lc_node_rm() {

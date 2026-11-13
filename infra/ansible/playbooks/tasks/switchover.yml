@@ -43,7 +43,8 @@
          | selectattr('state', 'equalto', 'streaming') | map(attribute='name') | list }}
   when:
     - switchover_image.rc == 0
-    - switchover_image.stdout != platform_images.postgres_ha
+    # a reboot (playbooks/reboot.yml) restarts postgres whatever the image
+    - switchover_always | default(false) or switchover_image.stdout != platform_images.postgres_ha
     - (switchover_members | selectattr('role', 'equalto', 'leader') | map(attribute='name') | first | default('')) == inventory_hostname
   changed_when: true
   register: switchover_done

@@ -11,6 +11,7 @@ edge_gateway_env:
   PROOF_BITS: "12"
   PROOF_REPLAY_LIMIT: "50"
   IPCLUSTER_THRESHOLD: "20"
+  VISITOR_EVENTS_PER_HOUR: "600"
   RATE_SITE_PER_SECOND: "200"
   RATE_SITE_BURST: "400"
   RATE_PREFIX_PER_SECOND: "20"
@@ -39,3 +40,9 @@ edge_drain_dir: /etc/stellar-analytics/drain
 # the compose project's volume-owners step hands existing volumes over
 edge_nats_uid: 4222
 edge_etcd_uid: 2379
+
+# etcd membership (tasks/etcd.yml): the compose volume holding the member's
+# data, the marker recording how the member started, and its peer url
+edge_etcd_volume: stellar-analytics-edge_etcddata
+edge_etcd_state_file: "{{ edge_conf_dir }}/etcd-initial-state"
+edge_etcd_peer_url: "http://{{ sa_private_ip }}:2380"

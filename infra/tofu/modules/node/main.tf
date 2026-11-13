@@ -14,8 +14,8 @@ variable "tier" {
   type = string
 
   validation {
-    condition     = contains(["edge", "core"], var.tier)
-    error_message = "tier must be edge or core."
+    condition     = contains(["edge", "core", "restore"], var.tier)
+    error_message = "tier must be edge, core or restore."
   }
 }
 
@@ -156,4 +156,8 @@ output "public_ipv6" {
 
 output "private_ip" {
   value = var.private_ip
+}
+
+output "server_type" {
+  value = hcloud_server.this.server_type
 }

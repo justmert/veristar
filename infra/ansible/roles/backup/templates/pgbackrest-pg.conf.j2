@@ -12,9 +12,15 @@ repo1-s3-endpoint={{ backup_repo_object_storage.endpoint | regex_replace('^https
 repo1-s3-region={{ backup_repo_object_storage.region }}
 repo1-s3-bucket={{ backup_repo_object_storage.backup_bucket }}
 repo1-s3-uri-style=host
+{% if backup_repo_object_storage.storage_host is defined %}
+# local converge only: the stand-in's address and private ca; the endpoint,
+# bucket name, addressing and signatures are the same as against hetzner
+repo1-storage-host={{ backup_repo_object_storage.storage_host }}
+repo1-storage-ca-file=/etc/pgbackrest/s3-ca.crt
+{% endif %}
 repo1-s3-key={{ backup_repo_access_key }}
 repo1-s3-key-secret={{ backup_repo_secret_key }}
-repo1-path=/{{ backup_repo_environment }}
+repo1-path=/{{ backup_repo_environment }}{{ ('-g' ~ backup_repo_generation) if (backup_repo_generation | int) > 1 else '' }}
 repo1-cipher-type=aes-256-cbc
 repo1-cipher-pass={{ backup_repo_cipher_pass }}
 repo1-retention-full-type=count

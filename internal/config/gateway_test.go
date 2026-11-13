@@ -13,6 +13,7 @@ func gatewayEnv() map[string]string {
 		"PROOF_BITS":               "12",
 		"PROOF_REPLAY_LIMIT":       "50",
 		"IPCLUSTER_THRESHOLD":      "20",
+		"VISITOR_EVENTS_PER_HOUR":  "600",
 		"RATE_SITE_PER_SECOND":     "200",
 		"RATE_SITE_BURST":          "400",
 		"RATE_PREFIX_PER_SECOND":   "20",

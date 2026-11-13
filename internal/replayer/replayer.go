@@ -2,29 +2,30 @@
 // /api/send.
 //
 // one instance runs on each core node; only the holder of the replayer lock
-// consumes. events are spread over a fixed set of lanes by a hash of site id
-// and visitor token, so one visitor's events reach umami in stream order. a
-// lane retries a failing event in place and holds back everything behind it,
-// so a retry never lets a later event of that visitor overtake it.
+// consumes. each visitor (site id and visitor token) with held messages has
+// its own queue, delivered one message at a time in stream order, so one
+// visitor's events reach umami in stream order. a failing event is retried
+// in place and holds back only that visitor's later events, never another
+// visitor or site. REPLAYER_WORKERS bounds the sends in flight at once.
 //
-// sends are spread over several umami processes by the same hash, so a
-// visitor's events always go to one process, one at a time from its lane.
+// sends are spread over several umami processes by a hash of site id and
+// visitor token, so a visitor's events always go to one process.
 // the processes share one database and one APP_SECRET, and umami derives the
 // session id, the visit id and the cache token from those and the event alone
 // (docs/reference/umami-contract.md item 14), so which process stores an
 // event does not change what is stored.
 //
-// delivery is at least once with a narrow duplicate window: the lane checks
+// delivery is at least once with a narrow duplicate window: the replayer checks
 // sent.<event id> in visit_state before sending and writes it after umami's
 // 200, then acks. a crash, kill or lock loss between umami's 200 and that
-// write stores the event twice; at most one event per lane can be in that
+// write stores the event twice; at most one event per delivery slot can be in that
 // window at any moment.
 //
 // umami's database cannot be fenced, so the lock is confirmed with the
 // server before every fetch and, at most a second apart, before sends. a
 // former leader that was paused and resumes after losing the lock can still
 // complete the sends it had already passed that check for: at most one per
-// lane. a new leader first waits until the previous holder's unacknowledged
+// delivery slot. a new leader first waits until the previous holder's unacknowledged
 // messages are redeliverable (at most natsx.AckWait), so they reach umami
 // before anything newer of the same visitor.
 //
@@ -73,17 +74,28 @@ const (
 	// client reconnects.
 	fetchRetryWait = time.Second
 	// keepaliveEvery resets the ack wait of every held message. a message
-	// waits in its lane while an earlier event of the same lane retries, which
-	// can take far longer than natsx.AckWait.
+	// waits in its visitor's queue while an earlier event of the visitor
+	// retries, which can take far longer than natsx.AckWait.
 	keepaliveEvery = natsx.AckWait / 3
-	// confirmMaxAge is how old the last lock confirmation may be when a lane
+	// confirmMaxAge is how old the last lock confirmation may be when a visitor
 	// sends. together with the confirmation before every fetch it bounds what
-	// a paused former leader can still send to one in-flight send per lane.
+	// a paused former leader can still send to one in-flight send per delivery slot.
 	confirmMaxAge = time.Second
-	// probeEvery is how often umami's heartbeat is polled while lanes wait
-	// because umami was unreachable, so they resume as soon as it is back
+	// probeEvery is how often umami's health is checked while visitors wait
+	// because umami was unhealthy, so they resume as soon as it is back
 	// instead of at the end of a long backoff step.
 	probeEvery = 2 * time.Second
+	// healthTTL is how long one health check result of an umami process is
+	// reused. during an outage every waiting visitor fails at once, and one
+	// check answers for all of them.
+	healthTTL = time.Second
+	// blockedBacklog caps the messages a visitor may have held while its
+	// oldest event fails on a healthy umami. a burst beyond it goes to the
+	// dlq instead of filling MaxInFlight, which would stop the fetch for
+	// every site. no browser sends that many events within the ~36 s a
+	// failing event is retried (the gateway's replay limit is 50 events per
+	// proof and node).
+	blockedBacklog = 64
 	// bookkeepingTimeout bounds the visit state write, the duplicate guard
 	// write, the dlq publish and the ack after umami answered. it is detached
 	// from the lead context so a lock loss right after a 200 still records the
@@ -259,7 +271,7 @@ func (r *Replayer) Run(ctx context.Context) error {
 			return nil
 		}
 		if errors.Is(err, natsx.ErrLockLost) {
-			// a lane or the fetch loop could not confirm the hold; contend again
+			// a visitor or the fetch loop could not confirm the hold; contend again
 			r.log.Warn("stopped consuming, lock not confirmed", "error", err.Error())
 			continue
 		}
@@ -348,18 +360,21 @@ func (r *Replayer) lead(parent context.Context) error {
 	ctx, cancel := context.WithCancelCause(parent)
 	defer cancel(nil)
 	lr := &leadRun{
-		r:      r,
-		cons:   cons,
-		cancel: cancel,
-		guard:  &lockGuard{lock: r.lock, m: r.m},
-		lanes:  make([]chan *held, r.set.Workers),
-		held:   map[uint64]*held{},
-		freed:  make(chan struct{}, 1),
-		gate:   &gate{},
+		r:        r,
+		cons:     cons,
+		cancel:   cancel,
+		guard:    &lockGuard{lock: r.lock, m: r.m},
+		slots:    make([]chan struct{}, len(r.umami)),
+		health:   make([]targetHealth, len(r.umami)),
+		held:     map[uint64]*held{},
+		visitors: map[string]*visitorQueue{},
+		freed:    make(chan struct{}, 1),
+		gate:     &gate{},
 	}
-	for i := range lr.lanes {
-		// each lane can take every in-flight message, so dispatch never blocks
-		lr.lanes[i] = make(chan *held, r.set.MaxInFlight)
+	for i := range lr.slots {
+		// the workers are shared evenly; LoadSettings keeps the process
+		// count at most the worker count, so every process gets a slot
+		lr.slots[i] = make(chan struct{}, slotsPerTarget(r.set.Workers, len(r.umami), i))
 	}
 	r.current.Store(lr)
 	r.m.leader.Set(1)
@@ -447,6 +462,11 @@ type held struct {
 	ev        *events.WebEvent
 	// target is the index of the umami process this visitor's events go to
 	target int
+	// key is the visitor: site id and visitor token
+	key string
+	// healthyFailures counts failed sends while umami's health checks
+	// passed; only the visitor's queue goroutine touches it
+	healthyFailures int
 
 	mu  sync.Mutex
 	msg jetstream.Msg
@@ -480,12 +500,38 @@ type leadRun struct {
 	cons   jetstream.Consumer
 	cancel context.CancelCauseFunc
 	guard  *lockGuard
-	lanes  []chan *held
 	gate   *gate
+	// slots holds one semaphore per umami process; together they allow
+	// REPLAYER_WORKERS sends at once
+	slots []chan struct{}
+	// health caches one health check per umami process
+	health []targetHealth
+	// visitorsWG tracks the visitor goroutines, which are started by the
+	// fetch loop
+	visitorsWG sync.WaitGroup
 
-	mu    sync.Mutex
-	held  map[uint64]*held
-	freed chan struct{}
+	mu       sync.Mutex
+	held     map[uint64]*held
+	visitors map[string]*visitorQueue
+	freed    chan struct{}
+}
+
+// visitorQueue is one visitor's held messages in stream order. one
+// goroutine delivers them, oldest first.
+type visitorQueue struct {
+	key string
+	// msgs and blocked are guarded by leadRun.mu
+	msgs []*held
+	// blocked is set while the oldest message fails on a healthy umami
+	blocked bool
+}
+
+// targetHealth is the last health check of one umami process. mu is held
+// during a check, so concurrent callers wait for it and reuse its result.
+type targetHealth struct {
+	mu sync.Mutex
+	at time.Time
+	ok bool
 }
 
 func (lr *leadRun) count() int {
@@ -508,14 +554,13 @@ func (lr *leadRun) oldest() time.Time {
 
 func (lr *leadRun) run(ctx, parent context.Context) error {
 	var wg sync.WaitGroup
-	for i := range lr.lanes {
-		wg.Go(func() { lr.lane(ctx, lr.lanes[i]) })
-	}
 	wg.Go(func() { lr.keepalive(ctx) })
 	wg.Go(func() { lr.probe(ctx) })
 	err := lr.fetchLoop(ctx)
 	lr.cancel(err)
 	wg.Wait()
+	// the fetch loop has returned, so no visitor goroutine starts any more
+	lr.visitorsWG.Wait()
 	lr.release()
 	if parent.Err() != nil {
 		return nil
@@ -527,7 +572,7 @@ func (lr *leadRun) run(ctx, parent context.Context) error {
 }
 
 // fetchLoop confirms the hold, fetches up to the free capacity and hands
-// each message to its lane, until ctx ends or a confirmation fails.
+// each message to its visitor's queue, until ctx ends or a confirmation fails.
 func (lr *leadRun) fetchLoop(ctx context.Context) error {
 	maxInFlight := lr.r.set.MaxInFlight
 	for {
@@ -583,13 +628,8 @@ func visitorHash(siteID, vt string) uint64 {
 	return f.Sum64()
 }
 
-// laneOf picks the lane of a visitor among n lanes.
-func laneOf(siteID, vt string, n int) int {
-	return int(visitorHash(siteID, vt) % uint64(n)) //nolint:gosec // n is a positive lane count
-}
-
-// targetOf picks the umami process of a visitor among n. it uses the same
-// hash as laneOf, so every event of one visitor goes to one process.
+// targetOf picks the umami process of a visitor among n, so every event of
+// one visitor goes to one process.
 func targetOf(siteID, vt string, n int) int {
 	return int(visitorHash(siteID, vt) % uint64(n)) //nolint:gosec // n is a positive process count
 }
@@ -614,11 +654,109 @@ func (lr *leadRun) accept(ctx context.Context, msg jetstream.Msg) {
 		lr.deadLetterUnkeyed(ctx, msg, meta, reason)
 		return
 	}
-	h := &held{seq: meta.Sequence.Stream, published: meta.Timestamp, ev: ev, msg: msg, target: targetOf(ev.SiteID, ev.VT, len(lr.r.umami))}
+	h := &held{seq: meta.Sequence.Stream, published: meta.Timestamp, ev: ev, msg: msg,
+		target: targetOf(ev.SiteID, ev.VT, len(lr.r.umami)), key: ev.SiteID + "\x00" + ev.VT}
 	lr.mu.Lock()
+	q := lr.visitors[h.key]
+	if q != nil && q.blocked && len(q.msgs) >= blockedBacklog {
+		lr.mu.Unlock()
+		reason := fmt.Sprintf("visitor already has %d events held behind one that fails on a healthy umami", blockedBacklog)
+		if lr.deadLetter(ctx, h, reason) {
+			return
+		}
+		// the dlq publish failed: hold it after all, which is what happened
+		// before the cap existed
+		lr.mu.Lock()
+		q = lr.visitors[h.key]
+	}
 	lr.held[h.seq] = h
+	fresh := q == nil
+	if fresh {
+		q = &visitorQueue{key: h.key}
+		lr.visitors[h.key] = q
+	}
+	q.msgs = append(q.msgs, h)
 	lr.mu.Unlock()
-	lr.lanes[laneOf(ev.SiteID, ev.VT, len(lr.lanes))] <- h
+	if fresh {
+		lr.visitorsWG.Go(func() { lr.runVisitor(ctx, q) })
+	}
+}
+
+// runVisitor delivers one visitor's messages in stream order until its queue
+// is empty or ctx ends. messages left held when ctx ends are naked by
+// release, in stream order.
+func (lr *leadRun) runVisitor(ctx context.Context, q *visitorQueue) {
+	for {
+		lr.mu.Lock()
+		if len(q.msgs) == 0 {
+			delete(lr.visitors, q.key)
+			lr.mu.Unlock()
+			return
+		}
+		h := q.msgs[0]
+		lr.mu.Unlock()
+		if !lr.deliver(ctx, q, h) {
+			return
+		}
+		lr.mu.Lock()
+		q.msgs[0] = nil
+		q.msgs = q.msgs[1:]
+		q.blocked = false
+		lr.mu.Unlock()
+		lr.done(h)
+	}
+}
+
+// setBlocked records whether the visitor's oldest message is failing on a
+// healthy umami, which caps how many more of its messages are held.
+func (lr *leadRun) setBlocked(q *visitorQueue, blocked bool) {
+	lr.mu.Lock()
+	q.blocked = blocked
+	lr.mu.Unlock()
+}
+
+// slotsPerTarget shares workers delivery slots over n umami processes as
+// evenly as possible, at least one each.
+func slotsPerTarget(workers, n, i int) int {
+	s := workers / n
+	if i < workers%n {
+		s++
+	}
+	return max(s, 1)
+}
+
+// acquire takes a delivery slot of an umami process; release gives it back.
+func (lr *leadRun) acquire(ctx context.Context, target int) (func(), error) {
+	select {
+	case lr.slots[target] <- struct{}{}:
+		return func() { <-lr.slots[target] }, nil
+	case <-ctx.Done():
+		return nil, context.Cause(ctx)
+	}
+}
+
+// healthy reports whether an umami process passes its heartbeat and the
+// collection probe, which reaches its database (umami.Client.Healthy). a
+// result is reused for healthTTL.
+func (lr *leadRun) healthy(ctx context.Context, target int) bool {
+	th := &lr.health[target]
+	th.mu.Lock()
+	defer th.mu.Unlock()
+	if time.Since(th.at) < healthTTL {
+		return th.ok
+	}
+	pctx, cancel := context.WithTimeout(ctx, probeEvery)
+	err := lr.r.umami[target].Healthy(pctx)
+	cancel()
+	if ctx.Err() != nil {
+		// a shutdown is no verdict on umami
+		return false
+	}
+	th.at, th.ok = time.Now(), err == nil
+	if err != nil {
+		lr.r.log.Warn("umami health check failed", "umami_process", target, "error", err.Error())
+	}
+	return th.ok
 }
 
 // decode returns the event or the reason it can never be delivered.
@@ -642,7 +780,7 @@ func decode(msg jetstream.Msg) (*events.WebEvent, string) {
 }
 
 // deadLetterUnkeyed moves a message without a usable visitor key to the dlq
-// at once. it has no lane, so ordering does not apply to it.
+// at once. it has no visitor, so ordering does not apply to it.
 func (lr *leadRun) deadLetterUnkeyed(ctx context.Context, msg jetstream.Msg, meta *jetstream.MsgMetadata, reason string) {
 	site := siteFromSubject(msg.Subject())
 	bctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), bookkeepingTimeout)
@@ -689,23 +827,6 @@ func (lr *leadRun) done(h *held) {
 	}
 }
 
-func (lr *leadRun) lane(ctx context.Context, in <-chan *held) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case h := <-in:
-			if lr.deliver(ctx, h) {
-				lr.done(h)
-				continue
-			}
-			// not finished: ctx ended. the message stays held and release
-			// naks it with everything behind it, in stream order
-			return
-		}
-	}
-}
-
 // keepalive resets the ack wait of every held message.
 func (lr *leadRun) keepalive(ctx context.Context) {
 	t := time.NewTicker(keepaliveEvery)
@@ -734,9 +855,10 @@ func (lr *leadRun) keepalive(ctx context.Context) {
 	}
 }
 
-// probe wakes lanes that wait because their umami process was unreachable
-// as soon as that process's heartbeat answers again. each process is probed
-// on its own, so one that is back does not wake lanes of one still down.
+// probe wakes visitors that wait because their umami process was unhealthy
+// as soon as that process passes its health check again. each process is
+// checked on its own, so one that is back does not wake visitors of one
+// still down.
 func (lr *leadRun) probe(ctx context.Context) {
 	t := time.NewTicker(probeEvery)
 	defer t.Stop()
@@ -747,10 +869,7 @@ func (lr *leadRun) probe(ctx context.Context) {
 		case <-t.C:
 		}
 		for _, target := range lr.gate.unreachableTargets() {
-			pctx, cancel := context.WithTimeout(ctx, probeEvery)
-			err := lr.r.umami[target].Heartbeat(pctx)
-			cancel()
-			if err == nil {
+			if lr.healthy(ctx, target) {
 				lr.gate.wakeUnreachable(target)
 			}
 		}

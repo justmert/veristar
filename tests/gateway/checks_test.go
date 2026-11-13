@@ -185,7 +185,9 @@ func TestEventChecks(t *testing.T) {
 				t.Errorf("queued event still contains %q: %s", secret, raw)
 			}
 		}
-		if ev.URL != "/account/{account}/contract/{contract}/import/{redacted-secret}?utm_source=%7Baccount%7D" {
+		// the site does not collect utm parameters (the default), so the
+		// query is dropped whole; internal/gateway covers a site that does
+		if ev.URL != "/account/{account}/contract/{contract}/import/{redacted-secret}" {
 			t.Errorf("url %q", ev.URL)
 		}
 		if ev.Title != "Wallet {muxed}" || ev.Referrer != "https://ref.example" || ev.Language != "de" {

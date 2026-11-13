@@ -22,7 +22,9 @@ Two things block this today:
    ends in `startup_failure` (plan, this stage status). Required status checks would then never
    report success, so every pull request would be blocked. Protection can be applied, but it
    cannot be enforced meaningfully until the operator fixes GitHub Actions for the account. Until
-   then the checks below are run locally and their output is reported by hand.
+   then the checks below are run locally with `make ci-local` (`scripts/ci-local.sh`, the same
+   jobs and make targets as `ci.yml`) and their output is reported by hand. That is not a
+   recorded GitHub run.
 
 ## Required settings
 
@@ -58,7 +60,8 @@ Read from `.github/workflows/*.yml` on 2026-11-13:
 
 | Workflow file | Job (check name) | Runs on pull requests | Required |
 |---|---|---|---|
-| `ci.yml` | `go` | yes | yes |
+| `ci.yml` | `go` | yes | yes. `make test`: unit tests, no containers |
+| `ci.yml` | `containers` | yes | yes. `make test-containers`: the packages whose tests start PostgreSQL, NATS, Umami or Caddy |
 | `ci.yml` | `js` | yes | yes |
 | `ci.yml` | `integration` | yes | yes |
 | `ci.yml` | `image` | yes | yes |
@@ -66,12 +69,17 @@ Read from `.github/workflows/*.yml` on 2026-11-13:
 | `ci.yml` | `licences` | yes | yes |
 | `ci.yml` | `isolation` | yes | yes. The tenant isolation gate (the design) |
 | `ci.yml` | `supplychain` | yes | yes |
+| `ci.yml` | `actionlint` | yes | yes. The workflows themselves, with shellcheck on every `run:` block |
+| `ci.yml` | `tofu` | yes | yes. `make tofu-check`: OpenTofu format, validate and the mocked inventory tests |
+| `ci.yml` | `ansible` | yes | yes. `make ansible-lint`: yamllint and ansible-lint (production profile) |
+| `ci.yml` | `promtool` | yes | yes. `make promtool`: alert rule syntax and the promtool rule tests |
 | `tracker.yml` | `releases` | yes | yes |
 | `tracker.yml` | `filter-lists` | yes (also daily) | yes. It downloads the current filter lists, so a list change can fail it without a code change; that is the point, because the endpoint names must stay unblocked (RFP 3.2). |
 | `release-images.yml` | `caddy`, `images`, `manifest` | no (tags `v*` only) | no |
 | `release-tracker.yml` | `prove`, `publish` | no (tags `tracker-v*` only) | no |
 | `security.yml` | `advisories`, `images`, `go`, `npm`, `report` | no (hourly schedule and manual) | no |
 | `slo-report.yml` | `collect` | no (schedule and manual) | no |
+| `e2e.yml` | `suite` (one matrix job per end-to-end and container suite, named after the suite) | no (nightly schedule and manual) | no |
 | `stellartoml-live.yml` | `live` | no (schedule and manual) | no |
 | `issue-age.yml` | `label` | no (hourly schedule and manual) | no |
 
@@ -94,6 +102,7 @@ gh api --method PUT \
     "strict": true,
     "checks": [
       { "context": "go" },
+      { "context": "containers" },
       { "context": "js" },
       { "context": "integration" },
       { "context": "image" },
@@ -101,6 +110,10 @@ gh api --method PUT \
       { "context": "licences" },
       { "context": "isolation" },
       { "context": "supplychain" },
+      { "context": "actionlint" },
+      { "context": "tofu" },
+      { "context": "ansible" },
+      { "context": "promtool" },
       { "context": "releases" },
       { "context": "filter-lists" }
     ]

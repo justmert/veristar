@@ -490,6 +490,10 @@ const WARNING_TEXT: Record<WarningKind, { title: string; body: string }> = {
     title: "Some routes or services were grouped as {other}",
     body: "More distinct routes or services arrived in a day than the daily limit, and the rest were counted under {other}. Check that your routes are templates, not raw paths with ids.",
   },
+  coarse_buckets: {
+    title: "Some latency percentiles are not reliable",
+    body: "A histogram arrived with buckets much wider than the standard ones, for example millisecond bounds on a metric in seconds. Its requests were placed at the top of their wide bucket, so percentiles for it can be ten times too high or more. Record http.server.request.duration in seconds with the standard bucket bounds.",
+  },
   secret_in_path: {
     title: "A Stellar secret seed appeared in a request path",
     body: "It was replaced with {redacted-secret} before anything was stored here, but it travelled in a URL and may sit in your own logs and proxies. Treat that key as exposed and move its funds to a new account.",

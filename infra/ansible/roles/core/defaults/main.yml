@@ -24,6 +24,13 @@ core_patroni_dcs:
   maximum_lag_on_failover: 1048576
   synchronous_mode: true
   synchronous_mode_strict: false
+  # without failsafe a leader that loses etcd quorum (two edge nodes down,
+  # the edge tier cut off from the core tier, an edge rebuild that did not
+  # rejoin etcd) demotes itself although both database nodes are fine. with
+  # it, the leader stays primary as long as it reaches every member listed
+  # in /failsafe through the rest api, so an edge-side failure no longer
+  # stops the dashboards and the pipeline.
+  failsafe_mode: true
 
 # wal archiving to the pgbackrest repository. archive_timeout bounds how old
 # the newest archived wal may be, which is the data-loss window when both

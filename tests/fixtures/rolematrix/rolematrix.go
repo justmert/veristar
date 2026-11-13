@@ -36,10 +36,14 @@ var Want = map[string]map[db.Role]string{
 	},
 	"cp.tenant_members": {db.RoleCPSystem: "rawd", db.RoleCPTenant: "rawd"},
 	"cp.invites":        {db.RoleCPSystem: "rawd", db.RoleCPTenant: "rawd"},
-	"cp.sites":          {db.RoleCPSystem: "rawd", db.RoleCPTenant: "rawd"},
+	// cp_tenant updates only what its handlers write (00024, review)
+	"cp.sites": {
+		db.RoleCPSystem: "rawd",
+		db.RoleCPTenant: "rad w(collect_utm,last_verify_at,last_verify_error,name,origins,status,stellar_toml,stellar_toml_checked_at,updated_at,verified_at,verify_method)",
+	},
 	"cp.otlp_tokens": {
 		db.RoleCPSystem:      "rawd",
-		db.RoleCPTenant:      "rawd",
+		db.RoleCPTenant:      "rad w(revoked_at,status)",
 		db.RoleMetricsWriter: "r(id,status,tenant_id) w(last_seen_at)",
 	},
 	"cp.operator_api_keys": {

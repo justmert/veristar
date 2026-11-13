@@ -79,8 +79,10 @@ type Handler struct {
 	db        *db.DB
 	sessions  *session.Manager
 	reconcile func(ctx context.Context, tenantID uuid.UUID)
-	starts    *bucket
-	exchanges *bucket
+	clients   *clientHasher
+	starts    *limiter
+	exchanges *limiter
+	used      usedStates
 	now       func() time.Time
 }
 
@@ -103,6 +105,11 @@ func New(cfg Config, d *db.DB, s *session.Manager) (*Handler, error) {
 	if client == nil {
 		client = &http.Client{Timeout: githubTimeout}
 	}
+	clients, err := newClientHasher()
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now()
 	return &Handler{
 		oauth: &oauth2.Config{
 			ClientID:     cfg.ClientID,
@@ -119,8 +126,9 @@ func New(cfg Config, d *db.DB, s *session.Manager) (*Handler, error) {
 		db:        d,
 		sessions:  s,
 		reconcile: cfg.Reconcile,
-		starts:    newBucket(StartRatePerSecond, StartBurst, time.Now()),
-		exchanges: newBucket(ExchangeRatePerSecond, ExchangeBurst, time.Now()),
+		clients:   clients,
+		starts:    newLimiter(StartClientRatePerSecond, StartClientBurst, StartRatePerSecond, StartBurst, now),
+		exchanges: newLimiter(ExchangeClientRatePerSecond, ExchangeClientBurst, ExchangeRatePerSecond, ExchangeBurst, now),
 		now:       time.Now,
 	}, nil
 }
@@ -158,9 +166,11 @@ func cleanReturnTo(s string) string {
 // start answers 302 to github's authorize page with fresh state and a pkce
 // challenge, and keeps both secrets in the sealed sa_oauth cookie.
 func (h *Handler) start(w http.ResponseWriter, r *http.Request) error {
-	// every start sets a cookie and sends a browser to github; the bucket
-	// keeps a flood of them from reaching github's limits for our client id
-	if ok, wait := h.starts.take(h.now()); !ok {
+	// every start sets a cookie and sends a browser to github; the buckets
+	// keep one client's flood from locking others out (per client) and a
+	// distributed flood from reaching github's limits for our client id
+	// (global ceiling)
+	if ok, wait := h.starts.take(h.clients.of(r), h.now()); !ok {
 		return httpx.RateLimited(wait)
 	}
 	state, err := randomToken(32)
@@ -226,9 +236,23 @@ func (h *Handler) callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// a sealed state cookie can be replayed with made-up codes until it
-	// expires, and each try costs a request to github; the bucket bounds them
-	if ok, _ := h.exchanges.take(h.now()); !ok {
+	// a copy of a sealed state cookie could be replayed with made-up codes
+	// until it expires, each try costing a request to github: a state
+	// reaches the exchange once, and the buckets bound the rest per client
+	// and in total
+	now := h.now()
+	fresh, full := h.used.use(p.State, time.Unix(p.Exp, 0), now)
+	if full {
+		log.Warn("sign-in refused", "reason", failRateLimited, "detail", "used state set is full")
+		fail(w, r, failRateLimited)
+		return
+	}
+	if !fresh {
+		log.Info("sign-in refused", "reason", failStateMismatch, "detail", "state already used")
+		fail(w, r, failStateMismatch)
+		return
+	}
+	if ok, _ := h.exchanges.take(h.clients.of(r), now); !ok {
 		log.Info("sign-in refused", "reason", failRateLimited)
 		fail(w, r, failRateLimited)
 		return
@@ -316,7 +340,7 @@ func (h *Handler) githubUser(ctx context.Context, accessToken string) (githubUse
 	return u, nil
 }
 
-// signIn upserts the user, resolves open invites for the login into
+// signIn upserts the user, resolves open invites for the github account into
 // memberships and writes the audit rows, in one cp_system transaction. it
 // returns the tenants the user joined.
 func (h *Handler) signIn(ctx context.Context, gh githubUser) (systemq.CpUser, []uuid.UUID, error) {
@@ -333,7 +357,7 @@ func (h *Handler) signIn(ctx context.Context, gh githubUser) (systemq.CpUser, []
 			return fmt.Errorf("upsert user: %w", err)
 		}
 		actor := "user:" + u.ID.String()
-		resolved, err := q.ResolveInvites(ctx, systemq.ResolveInvitesParams{GithubLogin: gh.Login, UserID: u.ID})
+		resolved, err := q.ResolveInvites(ctx, systemq.ResolveInvitesParams{GithubID: gh.ID, UserID: u.ID})
 		if err != nil {
 			return fmt.Errorf("resolve invites: %w", err)
 		}

@@ -19,7 +19,7 @@ where m.tenant_id = @tenant_id
 order by u.id;
 
 -- name: ProvisionSites :many
-select id, name, domain, origins, quarantine_website_id, status
+select id, name, domain, origins, quarantine_website_id, status, collect_utm
 from cp.sites
 where tenant_id = @tenant_id
 order by id;

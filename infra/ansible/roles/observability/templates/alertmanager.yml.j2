@@ -8,6 +8,15 @@ route:
   group_wait: 30s
   group_interval: 5m
   repeat_interval: 4h
+  routes:
+    # the dead-man signal (rules/platform.yml Watchdog): pushed to the
+    # probe's gatus every minute; gatus alerts when it stops arriving
+    - matchers: [alertname="Watchdog"]
+      receiver: heartbeat
+      group_by: [alertname]
+      group_wait: 0s
+      group_interval: 1m
+      repeat_interval: 1m
 
 receivers:
   - name: discord
@@ -17,6 +26,25 @@ receivers:
         send_resolved: true
         title: '{% raw %}{{ if eq .Status "firing" }}FIRING{{ else }}RESOLVED{{ end }} {{ .CommonLabels.alertname }}{% endraw %} ({{ sa_environment }})'
         message: '{% raw %}{{ range .Alerts }}{{ .Annotations.summary }} ({{ .Annotations.runbook }}){{ "\n" }}{{ end }}{% endraw %}'
+
+{% if groups['probe'] | default([]) | length > 0 %}
+  # gatus external endpoint "monitoring watchdog" (templates/gatus.yml.j2);
+  # gatus ignores the body and takes the result from the query
+  - name: heartbeat
+    webhook_configs:
+      - url: "https://{{ sa_hostnames.status }}/api/v1/endpoints/monitoring_watchdog/external?success=true"
+        send_resolved: false
+        http_config:
+          authorization:
+            credentials_file: /etc/alertmanager/gatus-external-token
+{% if observability_probe_ca_file is defined %}
+          tls_config: {ca_file: /etc/alertmanager/probe-ca.crt}
+{% endif %}
+{% else %}
+  # no probe node yet an operator input: nothing outside the core tier can watch
+  # the watchdog, so it goes nowhere rather than to discord every minute
+  - name: heartbeat
+{% endif %}
 
 # a node that is down raises its own alert; the per-check alerts of the
 # same node add nothing until it is back

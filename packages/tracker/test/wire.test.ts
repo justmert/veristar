@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   checkData,
@@ -88,4 +89,25 @@ describe("checkName", () => {
     expect(checkName("a\tb")).toBeTypeOf("string");
     expect(checkName("a\u0085b")).toBeTypeOf("string");
   });
+});
+
+// the same file is read by internal/events (TestStorableVectors), so tracker
+// and gateway refuse exactly what umami 3.5.0 cannot store
+describe("storable vectors", () => {
+  const file = JSON.parse(
+    readFileSync(new URL("./vectors/storable-v1.json", import.meta.url), "utf8"),
+  ) as {
+    data: { data: Record<string, unknown>; ok: boolean }[];
+    names: { name: string; ok: boolean }[];
+  };
+  for (const c of file.data) {
+    it(`${c.ok ? "accepts" : "refuses"} ${JSON.stringify(c.data)}`, () => {
+      expect(typeof checkData(c.data) === "string").toBe(!c.ok);
+    });
+  }
+  for (const c of file.names) {
+    it(`${c.ok ? "accepts" : "refuses"} the name ${JSON.stringify(c.name)}`, () => {
+      expect(checkName(c.name) === undefined).toBe(c.ok);
+    });
+  }
 });

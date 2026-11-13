@@ -373,8 +373,8 @@ func seed(t *testing.T, c *pgx.Conn) (side, side) {
 			sql  string
 			args []any
 		}{
-			{`insert into cp.invites (tenant_id, github_login, role, created_by, expires_at)
-			  values ($1, $2, 'member', $3, now() + interval '7 days')`, []any{s.tenant, fmt.Sprintf("gate-invitee-%d", i), s.user}},
+			{`insert into cp.invites (tenant_id, github_id, github_login, role, created_by, expires_at)
+			  values ($1, $4, $2, 'member', $3, now() + interval '7 days')`, []any{s.tenant, fmt.Sprintf("gate-invitee-%d", i), s.user, 5000 + i}},
 			{`insert into cp.sites (id, tenant_id, name, domain, origins, verify_token)
 			  values ($1, $2, $3, $4, $5, $6)`, []any{s.site, s.tenant, fmt.Sprintf("gate site %d", i),
 				fmt.Sprintf("gate%d.example.org", i), []string{fmt.Sprintf("https://gate%d.example.org", i)}, fmt.Sprintf("gate-verify-%d", i)}},

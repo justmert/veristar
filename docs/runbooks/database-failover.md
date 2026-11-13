@@ -4,8 +4,14 @@ PostgreSQL runs under Patroni on both core nodes: one leader, one synchronous re
 leader key in etcd on the three edge nodes. HAProxy on each core node sends port 5000 to whichever
 member answers `/primary` on Patroni's REST port 8008. Settings (`core_patroni_dcs` in
 `infra/ansible/roles/core/defaults/main.yml`): `ttl` 30 s, `loop_wait` 10 s,
-`synchronous_mode` on, `synchronous_mode_strict` off, `maximum_lag_on_failover` 1 MiB. The
-cluster is named `sa-<env>` (`sa-staging`, `sa-production`).
+`synchronous_mode` on, `synchronous_mode_strict` off, `maximum_lag_on_failover` 1 MiB,
+`failsafe_mode` on. The cluster is named `sa-<env>` (`sa-staging`, `sa-production`).
+
+**etcd down is not a database outage.** With `failsafe_mode`, a leader that loses etcd quorum
+(`EtcdNoLeader`, two edge nodes down, the edge tier cut off from the core tier) stays primary as
+long as it reaches every member listed in Patroni's `/failsafe` through the REST API; no
+failover can happen meanwhile. Restore etcd first ([edge-node-failure.md](edge-node-failure.md)
+step 4); the database keeps serving.
 
 Alerts that lead here: `PatroniNoLeader`, `ReplicationLagHigh`, `EtcdNoLeader`,
 `EtcdMembersDown`, `WALArchivingFailing` ([alerts.md](alerts.md)). Conventions are in
@@ -85,7 +91,7 @@ recover, `start failed` in the list).
 
 Replace the server with OpenTofu as in [edge-node-failure.md](edge-node-failure.md) ("A node
 that is gone for good", with `module.node["staging-core-<n>"]`), then
-`make staging-deploy SA_IMAGE_TAG=<release tag>`. Patroni on the new node finds the cluster in
+`make staging-deploy SA_IMAGE_TAG=<release tag> SA_RELEASE_MANIFEST=<release-images.json>`. Patroni on the new node finds the cluster in
 etcd and creates a replica from the leader.
 
 ## Exercised

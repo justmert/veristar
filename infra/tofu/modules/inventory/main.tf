@@ -46,14 +46,16 @@ variable "nodes" {
   }))
 
   validation {
-    condition     = alltrue([for n in values(var.nodes) : contains(["edge", "core", "probe"], n.tier)])
-    error_message = "tier must be edge, core or probe."
+    condition     = alltrue([for n in values(var.nodes) : contains(["edge", "core", "probe", "restore"], n.tier)])
+    error_message = "tier must be edge, core, probe or restore."
   }
 }
 
 locals {
   hosts_of = {
-    for tier in ["edge", "core", "probe"] : tier => {
+    # restore is the fresh node of playbooks/restore.yml, present only while
+    # restore_enabled (a point-in-time restore drill or a disaster recovery)
+    for tier in ["edge", "core", "probe", "restore"] : tier => {
       for name, n in var.nodes : name => {
         ansible_host   = n.public_ipv4
         ansible_user   = var.admin_user

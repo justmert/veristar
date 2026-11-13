@@ -48,15 +48,18 @@ type Proof struct {
 
 // Wire is a parsed wire format v1 body.
 type Wire struct {
-	SiteID   string
-	Type     string
-	Hostname string
-	URL      string
-	Referrer string
-	Title    string
-	Screen   string
-	Language string
-	Name     string
+	// SDKVersion is the tracker release that sent the event (x.y.z), empty
+	// for releases before 1.2.0, which do not send it
+	SDKVersion string
+	SiteID     string
+	Type       string
+	Hostname   string
+	URL        string
+	Referrer   string
+	Title      string
+	Screen     string
+	Language   string
+	Name       string
 	// Data holds string, json.Number and bool values only.
 	Data map[string]any
 	// ClientTS is informational only and never trusted.
@@ -71,6 +74,8 @@ var (
 	// a plain non-negative decimal integer: no sign, fraction, exponent or
 	// leading zero
 	uintRe = regexp.MustCompile(`^(0|[1-9][0-9]*)$`)
+	// a release version as packages/tracker/releases names them
+	sdkVersionRe = regexp.MustCompile(`^(0|[1-9][0-9]{0,5})\.(0|[1-9][0-9]{0,5})\.(0|[1-9][0-9]{0,5})$`)
 )
 
 // lowerHex is how the tracker encodes the proof salt and tag. only lowercase
@@ -98,7 +103,7 @@ func ParseWire(body []byte) (*Wire, error) {
 	}
 
 	var w Wire
-	known := map[string]bool{"v": true, "w": true, "t": true, "h": true, "u": true, "r": true, "ti": true,
+	known := map[string]bool{"v": true, "sv": true, "w": true, "t": true, "h": true, "u": true, "r": true, "ti": true,
 		"s": true, "l": true, "n": true, "d": true, "ts": true, "p": true}
 	for k := range raw {
 		if !known[k] {
@@ -111,6 +116,12 @@ func ParseWire(body []byte) (*Wire, error) {
 	}
 	if v != wireVersion {
 		return nil, malformed("unsupported_version")
+	}
+	if w.SDKVersion, err = stringField(raw, "sv", false, 20, true); err != nil {
+		return nil, err
+	}
+	if _, ok := raw["sv"]; ok && !sdkVersionRe.MatchString(w.SDKVersion) {
+		return nil, malformed("invalid_sdk_version")
 	}
 	if w.SiteID, err = stringField(raw, "w", true, 36, true); err != nil {
 		return nil, err
@@ -170,8 +181,16 @@ func ParseWire(body []byte) (*Wire, error) {
 		if w.Name == "" {
 			return nil, malformed("missing_event_name")
 		}
+		if formulaTrigger(w.Name) {
+			// umami answers 400 for these names, which would lose the event
+			// in the dlq
+			return nil, malformed("invalid_event_name")
+		}
 		if hasData {
 			if w.Data, err = parseData(raw["d"]); err != nil {
+				return nil, err
+			}
+			if err := checkStorable(w.Data); err != nil {
 				return nil, err
 			}
 		}
@@ -271,7 +290,7 @@ func stringField(raw map[string]json.RawMessage, key string, required bool, maxL
 }
 
 var fieldName = map[string]string{
-	"v": "version", "w": "site_id", "t": "type", "h": "hostname", "u": "url", "r": "referrer",
+	"v": "version", "sv": "sdk_version", "w": "site_id", "t": "type", "h": "hostname", "u": "url", "r": "referrer",
 	"ti": "title", "s": "screen", "l": "language", "n": "event_name", "ts": "client_ts",
 }
 

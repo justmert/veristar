@@ -241,7 +241,7 @@ where tenant_id = $1
 	rows, err := e.su.Query(t.Context(), `
 with d as (`+days+`)
 select k.kind, coalesce(sum(d.count), 0)::bigint, to_char(max(d.day), 'YYYY-MM-DD')
-from unnest(array['span_derived', 'lossy_histogram', 'cardinality_overflow', 'secret_in_path']) with ordinality k(kind, n)
+from unnest(array['span_derived', 'lossy_histogram', 'cardinality_overflow', 'secret_in_path', 'coarse_buckets']) with ordinality k(kind, n)
 left join d on d.kind = k.kind
 group by k.kind, k.n order by k.n`, q.tenant, from, to)
 	require.NoError(t, err)

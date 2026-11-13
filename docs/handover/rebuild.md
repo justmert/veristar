@@ -33,18 +33,19 @@ That bootstrapped state is what the import replaces.
 
 ## 2. Freeze the source
 
-During the announced cutover window:
+During the cutover. The old edge nodes keep accepting events
+the whole time; what they accept from now on waits in the old streams and reaches the new
+environment through `platformctl queue forward`.
 
-1. Stop ingestion on every old edge node, so nothing new is accepted:
-   `sudo docker compose -f /opt/stellar-analytics/edge/compose.yml stop caddy gateway collector`.
-2. Wait until `WEB_EVENTS` and `API_METRICS` hold no messages
-   (`platformctl nats check` reports the streams; the replayer and the metrics writer drain them).
-   Queue contents are never migrated; draining them first is what keeps every accepted event.
-3. Run `jobs run apirollup` and `jobs run aggregate-web` once more, or wait for the daemon's
+1. Stop `replayer` and `metricswriter` on every old core node, so nothing more is written from
+   the queues into the old databases. What the edges accept from here on stays in
+   `WEB_EVENTS`, `API_METRICS` and `EDGE_STATS`.
+2. Run `jobs run api-rollup` and `jobs run aggregate-web` once more, or wait for the daemon's
    next pass, so hourly and daily rows include the last minutes.
-4. Stop `replayer`, `metricswriter`, `jobs`, `controlplane` and every Umami process on every old
-   core node. `scripts/migrate.sh` refuses to export while any connection to `umami` or
-   `platform` is open, and names the connections it found.
+3. Stop `jobs`, `controlplane` and every Umami process on every old core node.
+   `scripts/migrate.sh` refuses to export while any connection to `umami` or `platform` is
+   open, and names the connections it found. Do **not** stop the old edge services: the plan
+   drains them only after the delegation moved.
 
 ## 3. Export
 
@@ -136,6 +137,80 @@ therefore also hold what `platformctl db migrate` and `jobs` read (the `PLATFORM
 keys, `NATS_*`, `UMAMI_URL`, `UMAMI_ADMIN_PASSWORD`, `UMAMI_USER_PASSWORD_KEY`, the API retention
 keys); start `umami` before the reconcile.
 
+### 4.1 Where the import runs
+
+`make migrate-import` builds `platformctl` and `jobs` on the machine that runs `make` (the
+controller, with Go 1.27.4 and Docker) and connects them, and the `pg_restore` container of
+`scripts/migrate.sh`, straight to PostgreSQL, NATS and Umami. The controller is outside the
+private network, and the cloud and host firewalls close 5432, 4222 and 3000 to it on purpose
+([../deploy/verification.md](../deploy/verification.md) step 7). Do not open them. Reach the
+three services through one SSH session to the new environment's Patroni leader instead:
+
+```sh
+# on the leader: the umami container's address on the core compose network
+# (umami is not published on any host port)
+ssh ops@<leader public address> \
+  "sudo docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' stellar-analytics-core-umami-1"
+
+# on the controller, kept open for the whole import
+ssh -N -L 15432:<leader private address>:5432 \
+       -L 14222:<edge-1 private address>:4222 \
+       -L 13000:<umami container address>:3000 \
+       ops@<leader public address>
+```
+
+PostgreSQL is reached on the leader's private address, port 5432, not through HAProxy: HAProxy's
+port 5000 exists only inside each core node's compose network. The leader's `pg_hba` admits the
+private network, which is where the forwarded connection comes from. The SSH session encrypts
+the traffic, so `PLATFORM_DB_SSLMODE=disable` is correct here. `scripts/migrate.sh` runs its
+client container on the host network by default, so `127.0.0.1` is the tunnel.
+
+The env file for the import, with every value taken from the new environment (the passwords
+are those in `/etc/stellar-analytics/env/platformctl.env` and `jobs.env` on the leader, or in
+its SOPS file):
+
+```sh
+PLATFORM_DB_HOST=127.0.0.1
+PLATFORM_DB_PORT=15432
+PLATFORM_DB_NAME=platform
+PLATFORM_DB_SSLMODE=disable
+PLATFORM_DB_ADMIN_USER=postgres
+PLATFORM_DB_ADMIN_PASSWORD=<postgres superuser password>
+UMAMI_DB_NAME=umami
+PLATFORM_DB_JOBS_PASSWORD=<jobs role password>
+PLATFORM_DB_CP_SYSTEM_PASSWORD=<cp_system role password>
+NATS_URL=nats://127.0.0.1:14222
+NATS_REPLICAS=3
+NATS_USER=jobs
+NATS_PASSWORD=<jobs nats password>
+UMAMI_URL=http://127.0.0.1:13000
+UMAMI_ADMIN_PASSWORD=<umami admin password>
+UMAMI_USER_PASSWORD_KEY=<umami user password key>
+API_MINUTE_RETENTION_DAYS=30
+API_HOURLY_RETENTION_MONTHS=36
+```
+
+The retention values are the core role defaults (`core_api_minute_retention_days`,
+`core_api_hourly_retention_months`); use the inventory's values if it overrides them. NATS
+answers the client with the other edge members' private addresses, which the controller cannot
+reach; the one forwarded member is enough for `jobs run reconcile`.
+
+Because Umami must be running for the reconcile and stopped for the restore, run the three
+steps of `make migrate-import` one by one rather than the target itself:
+
+```sh
+make build
+scripts/migrate.sh import <env file> <directory>
+# on the leader: start umami (process 1 only), then read its address again,
+# because a recreated container can get a new one
+set -a && . ./<env file> && set +a
+dist/bin/platformctl db migrate && dist/bin/jobs run reconcile
+```
+
+Keep the env file on encrypted storage and delete it with the dump directory. This tunnel path
+has **not been rehearsed**: the local rehearsal (section 8) ran with every service on one host.
+Rehearsing it on staging is blocked on an operator input (and I4, I6 for the environment itself).
+
 The imported Umami database still holds the **old** Umami admin password and user passwords.
 Re-key it to the new environment's values before anything else uses Umami:
 
@@ -150,7 +225,8 @@ today's passwords even though the imported database records today's rotation as 
 
 ### What is not carried over, on purpose
 
-- **Queue contents and memory buckets.** The streams were drained in section 2. `edge_secrets`,
+- **Memory buckets.** Queue contents are not exported with the databases; they move through
+  `platformctl queue forward` with their message ids. `edge_secrets`,
   `visit_state` and `locks` are memory state of the old NATS cluster: the new cluster creates
   new daily secrets, so a visitor active across the cutover is counted again on that UTC day,
   and an open visit splits.

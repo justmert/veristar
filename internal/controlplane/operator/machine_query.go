@@ -213,11 +213,15 @@ func parseHourRange(q url.Values, now time.Time, maxHours int) (hourRange, error
 // machinePage is the keyset paging of a machine list. a cursor holds the
 // sort key of the last item, the range the first page resolved (so a page
 // fetched after midnight continues the same days), and a hash of every
-// other parameter and the key, so it works only for the query and the key
-// it was made for (400 invalid_cursor otherwise).
+// other parameter, the key and that range, so it works only for the query
+// and the key it was made for (400 invalid_cursor otherwise). the hash has
+// no secret, so a key holder can recompute it: the range limits are
+// therefore checked again on every page (days, hourSpan), and a cursor
+// can never carry more than a first page could have asked for.
 type machinePage struct {
 	route string
-	hash  string
+	// base is what the hash covers besides the range
+	base  string
 	Limit int
 	// After is the sort key of the last item of the previous page, nil on
 	// the first page.
@@ -249,8 +253,7 @@ func parseMachinePage(q url.Values, route string, key machineKey) (machinePage, 
 			rest[k] = v
 		}
 	}
-	sum := sha256.Sum256([]byte(route + "\x00" + key.ID.String() + "\x00" + rest.Encode()))
-	p.hash = hex.EncodeToString(sum[:16])
+	p.base = route + "\x00" + key.ID.String() + "\x00" + rest.Encode()
 	v, ok, err := oneValue(q, "cursor")
 	if err != nil {
 		return p, httpx.BadCursor()
@@ -263,16 +266,22 @@ func parseMachinePage(q url.Values, route string, key machineKey) (machinePage, 
 		return p, httpx.BadCursor()
 	}
 	var c machineCursor
-	if err := json.Unmarshal(raw, &c); err != nil || c.R != route || c.H != p.hash || len(c.K) == 0 {
+	if err := json.Unmarshal(raw, &c); err != nil || c.R != route || c.H != p.hash(c.F, c.T) || len(c.K) == 0 {
 		return p, httpx.BadCursor()
 	}
 	p.After, p.From, p.To = c.K, c.F, c.T
 	return p, nil
 }
 
+// hash binds a cursor to the route, key, parameters and range.
+func (p machinePage) hash(from, to string) string {
+	sum := sha256.Sum256([]byte(p.base + "\x00" + from + "\x00" + to))
+	return hex.EncodeToString(sum[:16])
+}
+
 // next encodes the cursor after an item with sort key k.
 func (p machinePage) next(k []string, from, to string) *string {
-	b, err := json.Marshal(machineCursor{R: p.route, H: p.hash, K: k, F: from, T: to})
+	b, err := json.Marshal(machineCursor{R: p.route, H: p.hash(from, to), K: k, F: from, T: to})
 	if err != nil {
 		panic(err) // strings always encode
 	}
@@ -288,7 +297,10 @@ func (p machinePage) days(q url.Values, now time.Time) (dayRange, error) {
 	}
 	from, err1 := time.Parse(time.DateOnly, p.From)
 	to, err2 := time.Parse(time.DateOnly, p.To)
-	if err1 != nil || err2 != nil {
+	// the same limits as a first page. today only moves
+	// forward, so a range valid when the first page was read stays valid.
+	if err1 != nil || err2 != nil || to.After(utcDay(now)) || to.Before(from) ||
+		int(to.Sub(from).Hours()/24)+1 > MaxRangeDays {
 		return dayRange{}, httpx.BadCursor()
 	}
 	return dayRange{From: from, To: to}, nil
@@ -301,7 +313,9 @@ func (p machinePage) hourSpan(q url.Values, now time.Time, maxHours int) (hourRa
 	}
 	from, err1 := time.Parse(hourLayout, p.From)
 	to, err2 := time.Parse(hourLayout, p.To)
-	if err1 != nil || err2 != nil {
+	// the same limits as a first page
+	if err1 != nil || err2 != nil || !from.Equal(from.Truncate(time.Hour)) || !to.Equal(to.Truncate(time.Hour)) ||
+		to.After(now.UTC().Truncate(time.Hour)) || to.Before(from) || int(to.Sub(from).Hours())+1 > maxHours {
 		return hourRange{}, httpx.BadCursor()
 	}
 	return hourRange{From: from, To: to}, nil

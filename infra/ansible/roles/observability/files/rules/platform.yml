@@ -79,3 +79,46 @@ groups:
         annotations:
           summary: "{{ $labels.check }} fails by address (tls, certificate or http)"
           runbook: docs/runbooks/alerts.md#probenodecheckfailing
+
+      # unattended upgrades install kernel and libc fixes without a reboot,
+      # and they apply only after one. the patch target is 24 hours
+      # (docs/runbooks/security-patch.md section 6), so a reboot that waits
+      # 12 hours is raised with time left to do it (playbooks/reboot.yml)
+      - alert: HostRebootRequired
+        expr: node_reboot_required == 1
+        for: 12h
+        labels: {severity: ticket}
+        annotations:
+          summary: "{{ $labels.node }} has installed updates that need a reboot"
+          runbook: docs/runbooks/alerts.md#hostrebootrequired
+
+      # api rollup integrity (internal/jobs/apirollup). an orphaned mark is
+      # a pending hour whose minute partition was already dropped, so its
+      # hourly rows can no longer be recomputed; a drifted hour had hourly
+      # rows that disagreed with its minute rows without a pending mark (a
+      # lost mark). neither should ever happen, so any increase alerts
+      - alert: APIRollupOrphanedMarks
+        expr: increase(jobs_api_rollup_orphaned_marks_total[1h]) > 0
+        labels: {severity: ticket}
+        annotations:
+          summary: "the api rollup on {{ $labels.node }} found pending hours whose minute rows were already gone"
+          runbook: docs/runbooks/alerts.md#apirolluporphanedmarks
+      - alert: APIRollupDriftedHours
+        expr: increase(jobs_api_rollup_drifted_hours_total[1h]) > 0
+        labels: {severity: ticket}
+        annotations:
+          summary: "the api rollup on {{ $labels.node }} found hourly rows that disagreed with their minute rows"
+          runbook: docs/runbooks/alerts.md#apirollupdriftedhours
+
+  # always firing. alertmanager sends it to the probe's gatus every minute
+  # (alertmanager.yml, route heartbeat), and gatus alerts from outside the
+  # main provider when it stops: both prometheus servers, both alertmanagers
+  # or the whole core tier down raise an alert nothing inside could send
+  - name: watchdog
+    rules:
+      - alert: Watchdog
+        expr: vector(1)
+        labels: {severity: heartbeat}
+        annotations:
+          summary: "always firing; its absence at the probe means the alerting pipeline is down"
+          runbook: docs/runbooks/alerts.md#watchdog

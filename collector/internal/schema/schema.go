@@ -25,6 +25,12 @@ const (
 	ResTokenID      = "scf.token.id" //nolint:gosec // an attribute name, not a credential
 	ResResourceHash = "scf.resource.hash"
 	ResFlags        = "scf.flags"
+	// ResBatchID is the sha-256 of one received trace export after
+	// tenantguard. the connector copies it onto the span-derived metrics and
+	// the jetstream exporter turns it into the message id and removes it, so
+	// a retried export is deduplicated. it never leaves the
+	// collector.
+	ResBatchID = "scf.batch.id"
 )
 
 // flag bits of ResFlags
@@ -42,6 +48,12 @@ const (
 	// AttrLossy marks a histogram that was converted from an exponential one
 	// and is therefore approximate. set by the transform processor.
 	AttrLossy = "scf.lossy"
+	// AttrSpanMinute is the start of the utc minute a server span ended in,
+	// in unix nanoseconds. tenantguard sets it on every span, the connector
+	// keeps it as a point attribute so points are split by minute, and the
+	// jetstream exporter makes it the point's time and removes it (audit
+	// A-3 and A-7). it never leaves the collector.
+	AttrSpanMinute = "scf.span.minute"
 )
 
 // legacy names (semconv before v1.21 http stabilization) mapped by tenantguard

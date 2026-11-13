@@ -121,11 +121,62 @@ func TestDecodeRefuses(t *testing.T) {
 		"cumulative spans": build(t, good, func(ms pmetric.MetricSlice) {
 			histogram(ms, metricFromSpans, pmetric.AggregationTemporalityCumulative, canonical, make([]uint64, 15), nil)
 		}),
+		// review: values postgresql refuses must never reach a batch
+		"invalid utf-8 route": withAttrs(t, good, map[string]any{attrRoute: "/a/\xff/b"}),
+		"nul in route":        withAttrs(t, good, map[string]any{attrRoute: "/a/\x00"}),
+		"overlong route":      withAttrs(t, good, map[string]any{attrRoute: "/" + strings.Repeat("a", 1024)}),
+		"overlong method":     withAttrs(t, good, map[string]any{attrMethod: strings.Repeat("G", 17)}),
+		"invalid method":      withAttrs(t, good, map[string]any{attrMethod: "G\xffT"}),
+		"invalid service":     build(t, payload{tenant: good.tenant, token: good.token, hash: good.hash, service: "api\xc3"}, one),
+		"overlong service":    build(t, payload{tenant: good.tenant, token: good.token, hash: good.hash, service: strings.Repeat("s", 129)}, one),
 	}
 	for name, data := range cases {
 		if _, err := Decode(tenant, data); !errors.Is(err, ErrUndecodable) {
 			t.Errorf("%s: %v", name, err)
 		}
+	}
+}
+
+func withAttrs(t *testing.T, p payload, attrs map[string]any) []byte {
+	t.Helper()
+	return build(t, p, func(ms pmetric.MetricSlice) {
+		histogram(ms, metricDuration, pmetric.AggregationTemporalityDelta, canonical, make([]uint64, 15), attrs)
+	})
+}
+
+// review: a source histogram whose buckets are far wider than the
+// canonical ones puts every request at its bucket's upper bound. such a
+// point is marked coarse, beyond the plain lossy flag.
+func TestDecodeMarksCoarseBuckets(t *testing.T) {
+	tenant := uuid.New()
+	p := payload{tenant: tenant.String(), token: uuid.NewString(), hash: strings.Repeat("ab", 32)}
+	// an sdk's generic default bounds, meant for milliseconds, on a metric
+	// in seconds: every request under 5 s falls in (0, 5]
+	generic := []float64{0, 5, 10, 25, 50, 75, 100, 250, 500, 750, 1000, 2500, 5000, 7500, 10000}
+	coarse := make([]uint64, len(generic)+1)
+	coarse[1] = 100
+	// prometheus' defaults are a subset of the canonical bounds
+	prom := []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10}
+	fine := make([]uint64, len(prom)+1)
+	fine[2] = 100
+	data := build(t, p, func(ms pmetric.MetricSlice) {
+		histogram(ms, metricDuration, pmetric.AggregationTemporalityDelta, generic, coarse, map[string]any{attrRoute: "/coarse"})
+		histogram(ms, metricDuration, pmetric.AggregationTemporalityDelta, prom, fine, map[string]any{attrRoute: "/fine"})
+		histogram(ms, metricDuration, pmetric.AggregationTemporalityDelta, []float64{0.1, 1}, []uint64{1, 2, 3}, map[string]any{attrRoute: "/lossy"})
+	})
+	msg, err := Decode(tenant, data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !msg.Points[0].Coarse || !msg.Points[0].Lossy {
+		t.Errorf("generic bounds in seconds not marked coarse: %+v", msg.Points[0])
+	}
+	if msg.Points[1].Coarse {
+		t.Errorf("prometheus defaults marked coarse")
+	}
+	// (1, +inf) holds half the requests and spans 2.5 to 10 s
+	if !msg.Points[2].Coarse {
+		t.Errorf("an open bucket from 1 s holding half the requests not marked coarse")
 	}
 }
 

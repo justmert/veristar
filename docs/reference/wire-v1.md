@@ -40,6 +40,13 @@ types above, or with `bits` above 24 (`MAX_PROOF_BITS`). It then sends nothing a
 next event. The challenge is kept in memory only. The tracker fetches a new one after 5 hours of
 local monotonic time, inside the gateway's 6-hour validity.
 
+A single-page app keeps one page load for as long as the tab is open, while the gateway accepts
+one proof for `PROOF_REPLAY_LIMIT` queued events per node (50). From release 1.2.0 the tracker
+fetches a new challenge after 40 events (`PROOF_MAX_USES` in `wire.ts`), and when an event is
+answered 403 with `rejected_replay`, `rejected_challenge_expired` or `rejected_challenge_tag`
+it forgets the proof and sends that event once more with a new one. Releases 1.0.0 and 1.1.0
+keep one proof per page load and lose the events of a long session after the 50th per node.
+
 ## Proof
 
 The tracker searches `nonce = 0, 1, 2, ...` and takes the smallest nonce for which
@@ -59,9 +66,10 @@ sent with `fetch` and `keepalive: true`.
 | Field | Type | Required | Limit | Meaning |
 |---|---|---|---|---|
 | `v` | integer | yes | | always `1` |
+| `sv` | string | no | 20 | tracker release as `x.y.z`, sent from 1.2.0 on; the gateway answers 410 when it names a revoked release |
 | `w` | string | yes | | site id |
 | `t` | string | yes | | `pv` pageview or `ev` custom event |
-| `h` | string | yes | 100 | hostname of the page |
+| `h` | string | yes | 100 | hostname of the page; the gateway replaces it with the host of the checked `Origin` header, so a page can report only its own host |
 | `u` | string | yes | 500 | path and query of the page, plus a route fragment (see below) |
 | `r` | string | yes | 500 | referrer: full url for another origin, path for the same origin, empty if none; the gateway keeps only scheme and host (see Referrer below) |
 | `ti` | string | yes | 500 | document title |
@@ -95,7 +103,14 @@ Limits are in UTF-16 code units, as JavaScript counts string length. The tracker
 never make an event invalid. Unknown fields are not sent.
 
 **Event data** is a flat object: at most 16 keys, each 1 to 50 characters, each value a string (cut
-to 500 characters, no nul character), a finite number or a boolean. The tracker refuses anything
+to 500 characters, no nul character), a finite number or a boolean. Values Umami 3.5.0 cannot
+store are refused as well (tracker from 1.2.0 and gateway; cases in
+`packages/tracker/test/vectors/storable-v1.json`): a number of 1e15 or more in absolute value
+(`event_data.number_value` is `numeric(19,4)`), a `revenue` of 1e14 or more when `currency` is
+a non-blank string (Umami's own check), and a string in Umami's date format
+(`YYYY-MM-DDTHH:MM:SS`, optional `.mmm`, `Z` or `+HH:MM`) dated year 0000 or 0001-01-01, which the
+timestamp column refuses. An event name may not start with `=`, `+`, `-` or `@`, which Umami
+refuses as spreadsheet formula triggers. The tracker refuses anything
 else: `null`, nested objects, arrays, `undefined`, `NaN`, too many keys, too long keys, keys with
 control characters, and a body over 8192 bytes. An event name with control characters is refused
 the same way. In

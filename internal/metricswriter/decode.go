@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"go.opentelemetry.io/collector/pdata/pcommon"
@@ -53,6 +54,9 @@ type Decoded struct {
 	// SecretSeed is the resource's scf.flags bit: a secret seed was redacted
 	// from something this resource sent.
 	SecretSeed bool
+	// Coarse marks a point whose source buckets are much wider than the
+	// canonical ones (histo.Coarse).
+	Coarse bool
 }
 
 // Message is the decoded content of one API_METRICS message.
@@ -63,6 +67,35 @@ type Message struct {
 	// how many of them carry the secret seed flag.
 	Resources   int
 	SecretSeeds int
+}
+
+// byte limits of the text columns of api.metrics_minute and
+// api.route_registry (00015)
+const (
+	maxServiceLen = 128
+	maxMethodLen  = 16
+	maxRouteLen   = 1024
+)
+
+// checkText refuses a value postgresql would refuse in a text column:
+// invalid utf-8 (sqlstate 22021), a nul byte (also 22021), or more bytes than
+// the column's check allows (23514). such a value in a batch fails the whole
+// transaction, so it is caught here and only its own message goes to the
+// dlq. control characters are refused as well: the collector
+// never produces them.
+func checkText(what, s string, limit int) error {
+	if len(s) > limit {
+		return undecodable("%s of %d bytes, the column allows %d", what, len(s), limit)
+	}
+	if !utf8.ValidString(s) {
+		return undecodable("%s %q is not valid utf-8", what, s)
+	}
+	for _, c := range s {
+		if c < 0x20 || c == 0x7f || (c >= 0x80 && c < 0xa0) {
+			return undecodable("%s %q holds control character %U", what, s, c)
+		}
+	}
+	return nil
 }
 
 // ErrUndecodable marks a message that can never be applied. the writer
@@ -140,6 +173,9 @@ func decodeResource(tenant uuid.UUID, attrs pcommon.Map) (Decoded, error) {
 	d.ResourceHash = h.Str()
 	if v, ok := attrs.Get(resServiceName); ok {
 		d.Service = v.AsString()
+		if err := checkText("service.name", d.Service, maxServiceLen); err != nil {
+			return d, err
+		}
 	}
 	if v, ok := attrs.Get(resFlags); ok {
 		if v.Type() != pcommon.ValueTypeInt {
@@ -206,8 +242,14 @@ func decodePoint(d *Decoded, dp pmetric.HistogramDataPoint) error {
 			continue
 		case attrMethod:
 			d.Method = v.AsString()
+			if err := checkText("method", d.Method, maxMethodLen); err != nil {
+				return err
+			}
 		case attrRoute:
 			d.Route = v.AsString()
+			if err := checkText("route", d.Route, maxRouteLen); err != nil {
+				return err
+			}
 		case attrStatusCode:
 			if v.Type() != pcommon.ValueTypeInt || v.Int() < 100 || v.Int() > 599 {
 				return undecodable("status code %s", v.AsString())
@@ -237,6 +279,7 @@ func decodePoint(d *Decoded, dp pmetric.HistogramDataPoint) error {
 	}
 	if !exact {
 		d.Lossy = true
+		d.Coarse = histo.Coarse(bounds, src)
 	}
 	for i, c := range counts {
 		if c < 0 {

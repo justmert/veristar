@@ -42,7 +42,9 @@ func TestSanitizeVerificationCase(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	rep := SanitizeWire(w)
+	// a site that turned utm collection on; TestSanitizeUTMOffByDefault
+	// covers the default
+	rep := SanitizeWire(w, true)
 
 	wantURL := "/account/{account}/contract/{contract}/import/{redacted-secret}?utm_source=news&ref=%7Baccount%7D#/tab/{account}"
 	if w.URL != wantURL {
@@ -91,6 +93,8 @@ func TestSanitizeVerificationCase(t *testing.T) {
 	}
 }
 
+// a site that collects utm parameters; with collection off every query
+// parameter is dropped (TestSanitizeUTMOffByDefault)
 func TestSanitizeURL(t *testing.T) {
 	cases := []struct {
 		in, out string
@@ -114,23 +118,56 @@ func TestSanitizeURL(t *testing.T) {
 		{"/pay/jed*stellar.org", "/pay/{federation}", 0},
 	}
 	for _, c := range cases {
-		out, _, dropped := SanitizeURL(c.in)
+		out, _, dropped := SanitizeURL(c.in, true)
 		if out != c.out || dropped != c.dropped {
 			t.Errorf("SanitizeURL(%q) = %q, %d; want %q, %d", c.in, out, dropped, c.out, c.dropped)
 		}
 	}
 }
 
+// utm collection is a per-site setting that is off unless the site's owner
+// turns it on (registry.Site.CollectUTM): then every query parameter,
+// campaign ones included, is dropped and counted, while the path and a #/
+// route are kept as before.
+func TestSanitizeUTMOffByDefault(t *testing.T) {
+	cases := []struct {
+		in, out string
+		dropped int
+	}{
+		{"/a?b=1&utm_term=x%20y&utm_campaign=a+b", "/a", 3},
+		{"/a?utm_source=news&utm_medium=mail&utm_content=c&ref=x", "/a", 4},
+		{"/a?ref", "/a", 1},
+		{"/app/" + sanG + "?utm_source=x#/users/7?tab=2", "/app/{account}#/users/7", 1},
+	}
+	for _, c := range cases {
+		out, _, dropped := SanitizeURL(c.in, false)
+		if out != c.out || dropped != c.dropped {
+			t.Errorf("SanitizeURL(%q, off) = %q, %d; want %q, %d", c.in, out, dropped, c.out, c.dropped)
+		}
+	}
+
+	w := &events.Wire{URL: "/p?utm_source=news&ref=friend", Referrer: "https://news.example/x?utm_campaign=y"}
+	rep := SanitizeWire(w, false)
+	if w.URL != "/p" || w.Referrer != "https://news.example" || rep.DroppedQueryParams != 2 {
+		t.Errorf("off: url %q referrer %q report %+v", w.URL, w.Referrer, rep)
+	}
+	w = &events.Wire{URL: "/p?utm_source=news&ref=friend&q=secret"}
+	rep = SanitizeWire(w, true)
+	if w.URL != "/p?utm_source=news&ref=friend" || rep.DroppedQueryParams != 1 {
+		t.Errorf("on: url %q report %+v", w.URL, rep)
+	}
+}
+
 func TestSanitizeURLLength(t *testing.T) {
 	// many short emails grow when redacted; the result must still fit.
 	in := "/" + strings.Repeat("a@b.co/", 80)
-	out, f, _ := SanitizeURL(in[:events.MaxURL])
+	out, f, _ := SanitizeURL(in[:events.MaxURL], false)
 	if !f.Has(redact.KindEmail) || len(out) > events.MaxURL || out[0] != '/' {
 		t.Errorf("len %d flags %b", len(out), f)
 	}
 	// a cut must not leave half of a percent escape behind.
 	in = "/" + strings.Repeat("x", events.MaxURL-3) + "%40" + "a@b.co"
-	out, _, _ = SanitizeURL(in)
+	out, _, _ = SanitizeURL(in, false)
 	if strings.HasSuffix(out, "%") || strings.HasSuffix(out, "%4") || len(out) > events.MaxURL {
 		t.Errorf("cut escape: %q", out[len(out)-5:])
 	}
@@ -222,7 +259,8 @@ func TestSanitizeText(t *testing.T) {
 // fixed point of SanitizeURL.
 func TestSanitizeURLProperties(t *testing.T) {
 	r := rand.New(rand.NewPCG(7, 8))
-	parts := []string{"/", "?", "&", "=", "#", "#/", "%", "%2F", "%40", "%53", "@", "*", ".", "x", "utm_source=",
+	rc := rand.New(rand.NewPCG(9, 10))
+	parts := []string{"/", "?", "&", "=", "#", "#/", "%", "%2F", "%23", "%3F", "%40", "%53", "@", "*", ".", "x", strings.Repeat("y", 60), "utm_source=",
 		"ref=", "example.com", sanSeed, strings.ToLower(sanSeed), sanG, "%2" + sanSeed[:10], sanSeed[10:]}
 	for range 20000 {
 		var b strings.Builder
@@ -231,7 +269,11 @@ func TestSanitizeURLProperties(t *testing.T) {
 			b.WriteString(parts[r.IntN(len(parts))])
 		}
 		in := b.String()
-		out, _, _ := SanitizeURL(in)
+		// both settings: the campaign parameters are the only query text
+		// that can survive, and only with collection on. a second generator
+		// picks the setting, so the urls are the same ones as before
+		collect := rc.IntN(2) == 0
+		out, _, _ := SanitizeURL(in, collect)
 		dec, _ := sanPercentDecode(out)
 		if out == "" || out[0] != '/' || len(out) > events.MaxURL {
 			t.Fatalf("SanitizeURL(%q) = %q", in, out)
@@ -242,8 +284,24 @@ func TestSanitizeURLProperties(t *testing.T) {
 		if _, f := redact.String(dec); f.SecretSeed() {
 			t.Fatalf("encoded seed left in %q (from %q)", out, in)
 		}
-		if again, _, _ := SanitizeURL(out); again != out {
+		if !collect && strings.Contains(out, "?") {
+			t.Fatalf("query kept with utm collection off: %q (from %q)", out, in)
+		}
+		if again, _, _ := SanitizeURL(out, collect); again != out {
 			t.Fatalf("not a fixed point:\n in    %q\n once  %q\n twice %q", in, out, again)
+		}
+	}
+	// the url cap cutting a #/ route that holds %23, or a kept campaign
+	// parameter, left a tail the next pass read differently
+	for n := 470; n < 505; n++ {
+		for _, tail := range []string{"#/a%23b", "%23#/x%23", "#/%23%23%23", "#/r#%23", "?utm_source=a%23b"} {
+			in := "/" + strings.Repeat("a", n) + tail
+			for _, collect := range []bool{false, true} {
+				out, _, _ := SanitizeURL(in, collect)
+				if again, _, _ := SanitizeURL(out, collect); again != out {
+					t.Fatalf("not a fixed point at length %d:\n in    %q\n once  %q\n twice %q", n, in, out, again)
+				}
+			}
 		}
 	}
 }

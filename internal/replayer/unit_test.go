@@ -41,46 +41,66 @@ func TestCacheFor(t *testing.T) {
 
 func TestClassify(t *testing.T) {
 	cases := []struct {
-		err         error
-		permanent   bool
-		unreachable bool
-		label       string
+		err       error
+		permanent bool
+		label     string
 	}{
-		{&umami.APIError{Status: 400}, true, false, sendClientError},
-		{&umami.APIError{Status: 404}, true, false, sendClientError},
-		{&umami.APIError{Status: 408}, false, false, sendClientError},
-		{&umami.APIError{Status: 429}, false, false, sendClientError},
-		{&umami.APIError{Status: 500}, false, false, sendServerError},
-		{&umami.APIError{Status: 503}, false, true, sendServerError},
-		{fmt.Errorf("umami send: %w", &url.Error{Op: "Post", URL: "http://u", Err: errors.New("connection refused")}), false, true, sendNetwork},
+		{&umami.APIError{Status: 400}, true, sendClientError},
+		{&umami.APIError{Status: 404}, true, sendClientError},
+		{&umami.APIError{Status: 408}, false, sendClientError},
+		{&umami.APIError{Status: 429}, false, sendClientError},
+		{&umami.APIError{Status: 500}, false, sendServerError},
+		{&umami.APIError{Status: 503}, false, sendServerError},
+		{fmt.Errorf("umami send: %w", &url.Error{Op: "Post", URL: "http://u", Err: errors.New("connection refused")}), false, sendNetwork},
+		// W-14: an undecodable 200 is a send failure like any other, so
+		// umami's health decides whether it is retried without limit
+		{errors.New("umami send: 200 answer without cache, sessionId or visitId"), false, sendNetwork},
 	}
 	for _, c := range cases {
 		f, label := classify(c.err)
-		if f.permanent != c.permanent || f.unreachable != c.unreachable || label != c.label {
+		if f.permanent != c.permanent || !f.send || label != c.label {
 			t.Errorf("classify(%v) = %+v %s", c.err, f, label)
 		}
 	}
 }
 
-func TestLaneOfIsStableAndSpreads(t *testing.T) {
-	const lanes = 16
-	// fnv-1a is fixed, so a lane is the same in every process and after a
-	// restart; this value pins it
-	if got := laneOf("s", "v", lanes); got != laneOf("s", "v", lanes) || got < 0 || got >= lanes {
-		t.Fatalf("lane %d", got)
+func TestVisitorHashIsStableAndSpreads(t *testing.T) {
+	const n = 16
+	// fnv-1a is fixed, so a visitor's process is the same in every replayer
+	// and after a restart
+	if got := targetOf("s", "v", n); got != targetOf("s", "v", n) || got < 0 || got >= n {
+		t.Fatalf("target %d", got)
 	}
 	// the separator keeps ("ab","c") and ("a","bc") apart
-	if laneOf("ab", "c", 1<<20) == laneOf("a", "bc", 1<<20) {
+	if visitorHash("ab", "c") == visitorHash("a", "bc") {
 		t.Error("separator does not split site id and token")
 	}
-	seen := map[int]int{}
-	for i := range 1600 {
-		seen[laneOf("site", fmt.Sprintf("%064x", i), lanes)]++
-	}
-	for l := range lanes {
-		if seen[l] < 50 {
-			t.Errorf("lane %d got %d of 1600 keys", l, seen[l])
+}
+
+func TestSlotsPerTarget(t *testing.T) {
+	for _, c := range []struct{ workers, n int }{{16, 1}, {16, 3}, {128, 5}, {3, 3}, {1, 1}} {
+		sum := 0
+		for i := range c.n {
+			s := slotsPerTarget(c.workers, c.n, i)
+			if s < 1 {
+				t.Errorf("%d workers over %d: process %d gets %d", c.workers, c.n, i, s)
+			}
+			sum += s
 		}
+		if sum != c.workers {
+			t.Errorf("%d workers over %d processes give %d slots", c.workers, c.n, sum)
+		}
+	}
+}
+
+// W-1: retries on a healthy umami are bounded and spaced 1 s, 5 s, 30 s
+func TestHealthyRetriesAreBounded(t *testing.T) {
+	var total time.Duration
+	for n := 1; n < maxHealthyFailures; n++ {
+		total += healthyRetryDelay(n)
+	}
+	if maxHealthyFailures != 4 || total != 36*time.Second {
+		t.Fatalf("%d attempts over %s", maxHealthyFailures, total)
 	}
 }
 
@@ -116,7 +136,7 @@ func TestLoadSettings(t *testing.T) {
 		_, err := LoadSettings(config.FromMap(m))
 		return err
 	}
-	// more umami processes than the 16 lanes
+	// more umami processes than the 16 workers
 	urls := make([]string, 17)
 	for i := range urls {
 		urls[i] = fmt.Sprintf("http://umami-%d:3000", i)
@@ -146,11 +166,6 @@ func TestTargetOfFollowsTheVisitorHash(t *testing.T) {
 		if got != targetOf("site", vt, procs) || got < 0 || got >= procs {
 			t.Fatalf("target %d", got)
 		}
-		// same hash as the lanes: with a lane count that is a multiple of
-		// the process count, a lane always sends to one process
-		if laneOf("site", vt, 128)%procs != got {
-			t.Fatalf("lane %d and target %d disagree", laneOf("site", vt, 128), got)
-		}
 		seen[got]++
 	}
 	for p := range procs {
@@ -163,7 +178,7 @@ func TestTargetOfFollowsTheVisitorHash(t *testing.T) {
 	}
 }
 
-// a lane waiting for one umami process is woken when that process answers,
+// a visitor waiting for one umami process is woken when that process answers,
 // not when another one does
 func TestGateWakesOnlyTheTargetThatAnswered(t *testing.T) {
 	var g gate

@@ -34,7 +34,9 @@ type ServerConfig struct {
 	Geo        *Geo
 	Visitor    *Visitor
 	Cluster    *IPCluster
-	Limiter    *RateLimiter
+	// Volume quarantines one visitor's events past VISITOR_EVENTS_PER_HOUR.
+	Volume  *VisitorVolume
+	Limiter *RateLimiter
 	// ChallengeLimiter holds the token buckets of GET /v1/c, kept apart
 	// from the event buckets so that fetching challenges never uses up a
 	// visitor's event budget or the other way round.
@@ -76,7 +78,7 @@ type Server struct {
 // NewServer checks the configuration and registers the metrics.
 func NewServer(c ServerConfig) (*Server, error) {
 	if c.Sites == nil || c.Challenger == nil || c.Proofs == nil || c.Signals == nil || c.ClientIP == nil ||
-		c.Geo == nil || c.Visitor == nil || c.Cluster == nil || c.Limiter == nil || c.ChallengeLimiter == nil || c.Stats == nil ||
+		c.Geo == nil || c.Visitor == nil || c.Cluster == nil || c.Volume == nil || c.Limiter == nil || c.ChallengeLimiter == nil || c.Stats == nil ||
 		c.Publisher == nil || c.Releases == nil || c.Log == nil || c.Registerer == nil || c.Now == nil {
 		return nil, errors.New("gateway: ServerConfig is missing a dependency")
 	}
@@ -310,10 +312,21 @@ func (s *Server) event(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleEvent runs the checks of the design step 6 in order: body size
-// and schema, site exists and is active, Sec-GPC, Origin, challenge tag, age
-// and work, replay limit, fetch metadata, rate limits. an event that passes
-// is enriched (visitor token, country, band), sanitized and queued.
+// and schema, site exists and is active, Sec-GPC, a revoked tracker release,
+// Origin, challenge tag, age and work, replay limit, fetch metadata, rate
+// limits. an event that passes is enriched (visitor token, country, band),
+// sanitized and queued. a proof use taken by the replay check is given back
+// when a later check refuses the event, so only queued events count.
 func (s *Server) handleEvent(ctx context.Context, r *http.Request) verdict {
+	var used *events.Proof
+	v := s.checkEvent(ctx, r, &used)
+	if used != nil && v.status != http.StatusAccepted {
+		s.c.Proofs.Release(*used)
+	}
+	return v
+}
+
+func (s *Server) checkEvent(ctx context.Context, r *http.Request, used **events.Proof) verdict {
 	if r.ContentLength > int64(s.c.MaxBody) {
 		return refused(ReasonBodyTooLarge, "")
 	}
@@ -344,12 +357,20 @@ func (s *Server) handleEvent(ctx context.Context, r *http.Request) verdict {
 	if r.Header.Get("Sec-GPC") == "1" {
 		return refused(ReasonGPC, site.ID)
 	}
+	if wire.SDKVersion != "" {
+		// sdk.js of a revoked release answers 410, but a cached or
+		// self-hosted copy keeps running; its events are refused here
+		if _, revoked, _ := s.c.Releases.Lookup(wire.SDKVersion); revoked {
+			return refused(ReasonRevokedVersion, site.ID)
+		}
+	}
 	if err := CheckOrigin(site, r.Header.Get("Origin")); err != nil {
 		return refused(s.reasonOf(err, routeEvent), site.ID)
 	}
 	if err := s.c.Proofs.Verify(ctx, site.ID, wire.Proof); err != nil {
 		return refused(s.reasonOf(err, routeEvent), site.ID)
 	}
+	*used = &wire.Proof
 	if err := s.c.Signals.Check(r.Header); err != nil {
 		return refused(s.reasonOf(err, routeEvent), site.ID)
 	}
@@ -393,8 +414,16 @@ func (s *Server) handleEvent(ctx context.Context, r *http.Request) verdict {
 		s.warnings.WithLabelValues("ipcluster").Inc()
 		s.c.Log.Warn("ip-cluster gossip failed", "error", err.Error())
 	}
+	if s.c.Volume.Observe(site.ID, vt) {
+		quarantine = true
+	}
 
-	SanitizeWire(wire)
+	// the hostname umami reports is the page's, which the Origin check above
+	// established; the body's h is only the tracker's claim
+	if host, ok := OriginHost(r.Header.Get("Origin")); ok {
+		wire.Hostname = host
+	}
+	SanitizeWire(wire, site.CollectUTM)
 	id, err := events.NewEventID()
 	if err != nil {
 		s.c.Log.Error("event id generation failed", "error", err.Error())

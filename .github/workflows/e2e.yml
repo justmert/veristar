@@ -1,0 +1,138 @@
+name: e2e
+
+# the end-to-end and container suites that are too slow for every pull
+# request (rfp conformance audit, gaps 1 and 2). ci.yml already gates every
+# change on make test, make test-containers, the isolation gate, the
+# supply-chain check, test-integration and the promtool rule tests; this
+# workflow runs every other suite each night and on demand, one matrix job
+# per make target, so a failure names its suite.
+
+on:
+  schedule:
+    - cron: "23 1 * * *"
+  # a single failed suite is rerun from the run page (re-run failed jobs)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  suite:
+    name: ${{ matrix.suite }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: ${{ matrix.timeout }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # browsers: node, pnpm and the playwright browsers; geo: the db-ip
+        # country file; devstack: make dev-up and umami-bootstrap first;
+        # devenv: only the generated .env.dev; ansible: the controller venv
+        # (uv, sops, age)
+        include:
+          - suite: gateway-it
+            timeout: 75
+            browsers: true
+            geo: true
+          - suite: test-caddy-web
+            timeout: 30
+            browsers: true
+          - suite: umami-compat
+            timeout: 30
+            browsers: true
+            devstack: true
+          - suite: webpath
+            timeout: 130
+            browsers: true
+            geo: true
+          - suite: console-e2e
+            timeout: 75
+            browsers: true
+            geo: true
+          - suite: handover-it
+            timeout: 100
+            browsers: true
+            geo: true
+          - suite: enrollment-it
+            timeout: 40
+            geo: true
+          - suite: recovery-it
+            timeout: 40
+            geo: true
+            devstack: true
+          - suite: db-it
+            timeout: 20
+            devstack: true
+          - suite: collector-it
+            timeout: 30
+          - suite: metricswriter-it
+            timeout: 35
+          - suite: otelapps
+            timeout: 70
+          - suite: apipath
+            timeout: 100
+          - suite: api-volume
+            timeout: 130
+            devenv: true
+          - suite: privacy
+            timeout: 40
+          - suite: local-converge
+            timeout: 120
+            ansible: true
+          - suite: rotate-local
+            timeout: 120
+            ansible: true
+    env:
+      DBIP_MMDB: ${{ github.workspace }}/.scratch/scratch/geo/dbip-country-lite.mmdb
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - if: matrix.browsers
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - if: matrix.browsers
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26.13.1
+          cache: pnpm
+      - if: matrix.browsers
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm --filter ./tests/e2e exec playwright install --with-deps chromium firefox webkit
+      - if: matrix.geo
+        run: make geo-fetch
+      - if: matrix.devenv
+        run: make dev-env
+      - if: matrix.devstack
+        run: |
+          make dev-up
+          make umami-bootstrap
+      # uv builds the controller venv; the runner image does not pin it
+      - if: matrix.ansible
+        run: |
+          scripts/supply-chain/install-tools.sh "$RUNNER_TEMP/bin" uv
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - if: matrix.ansible
+        run: make ansible-venv
+
+      - if: matrix.suite != 'local-converge'
+        run: make "${{ matrix.suite }}"
+
+      # docs/deploy/local-converge.md section 2: the test receiver stands in
+      # for the discord webhook an operator input that the observability play needs
+      - if: matrix.suite == 'local-converge'
+        run: |
+          make local-converge-up
+          make local-converge-images
+          go run ./tests/observability/receiver -listen 172.31.99.1:8099 > "$RUNNER_TEMP/receiver.log" 2>&1 &
+          make local-converge ANSIBLE_EXTRA='-e observability_test_webhook_base=http://172.31.99.1:8099'
+          make local-converge-e2e
+
+      - if: failure() && matrix.devstack
+        run: docker compose --env-file deploy/compose/.env.dev -f deploy/compose/dev.yml logs --tail 200
+      - if: always() && matrix.suite == 'local-converge'
+        run: make local-converge-down

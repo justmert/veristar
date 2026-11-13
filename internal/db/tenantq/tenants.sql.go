@@ -55,12 +55,13 @@ func (q *Queries) CountMembersAndOpenInvites(ctx context.Context) (int32, error)
 }
 
 const createInvite = `-- name: CreateInvite :one
-insert into cp.invites (tenant_id, github_login, role, created_by, expires_at)
-values (cp.current_tenant_id(), $1, $2, $3, $4)
-returning id, tenant_id, github_login, role, created_by, created_at, expires_at
+insert into cp.invites (tenant_id, github_id, github_login, role, created_by, expires_at)
+values (cp.current_tenant_id(), $1, $2, $3, $4, $5)
+returning id, tenant_id, github_login, role, created_by, created_at, expires_at, github_id
 `
 
 type CreateInviteParams struct {
+	GithubID    int64
 	GithubLogin string
 	Role        string
 	CreatedBy   uuid.UUID
@@ -69,6 +70,7 @@ type CreateInviteParams struct {
 
 func (q *Queries) CreateInvite(ctx context.Context, arg CreateInviteParams) (CpInvite, error) {
 	row := q.db.QueryRow(ctx, createInvite,
+		arg.GithubID,
 		arg.GithubLogin,
 		arg.Role,
 		arg.CreatedBy,
@@ -83,17 +85,18 @@ func (q *Queries) CreateInvite(ctx context.Context, arg CreateInviteParams) (CpI
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.ExpiresAt,
+		&i.GithubID,
 	)
 	return i, err
 }
 
-const deleteExpiredInvitesForLogin = `-- name: DeleteExpiredInvitesForLogin :execrows
-delete from cp.invites where lower(github_login) = lower($1) and expires_at <= now()
+const deleteExpiredInvitesForAccount = `-- name: DeleteExpiredInvitesForAccount :execrows
+delete from cp.invites where github_id = $1 and expires_at <= now()
 `
 
-// an expired invite still holds its slot in invites_tenant_login_idx
-func (q *Queries) DeleteExpiredInvitesForLogin(ctx context.Context, githubLogin string) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteExpiredInvitesForLogin, githubLogin)
+// an expired invite still holds its slot in invites_tenant_github_idx
+func (q *Queries) DeleteExpiredInvitesForAccount(ctx context.Context, githubID int64) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteExpiredInvitesForAccount, githubID)
 	if err != nil {
 		return 0, err
 	}
@@ -101,7 +104,7 @@ func (q *Queries) DeleteExpiredInvitesForLogin(ctx context.Context, githubLogin 
 }
 
 const deleteInvite = `-- name: DeleteInvite :one
-delete from cp.invites where id = $1 returning id, tenant_id, github_login, role, created_by, created_at, expires_at
+delete from cp.invites where id = $1 returning id, tenant_id, github_login, role, created_by, created_at, expires_at, github_id
 `
 
 func (q *Queries) DeleteInvite(ctx context.Context, id uuid.UUID) (CpInvite, error) {
@@ -115,6 +118,7 @@ func (q *Queries) DeleteInvite(ctx context.Context, id uuid.UUID) (CpInvite, err
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.ExpiresAt,
+		&i.GithubID,
 	)
 	return i, err
 }
@@ -207,7 +211,7 @@ func (q *Queries) InsertTenantMember(ctx context.Context, arg InsertTenantMember
 }
 
 const listOpenInvites = `-- name: ListOpenInvites :many
-select id, tenant_id, github_login, role, created_by, created_at, expires_at from cp.invites where expires_at > now() order by created_at, id
+select id, tenant_id, github_login, role, created_by, created_at, expires_at, github_id from cp.invites where expires_at > now() order by created_at, id
 `
 
 func (q *Queries) ListOpenInvites(ctx context.Context) ([]CpInvite, error) {
@@ -227,6 +231,7 @@ func (q *Queries) ListOpenInvites(ctx context.Context) ([]CpInvite, error) {
 			&i.CreatedBy,
 			&i.CreatedAt,
 			&i.ExpiresAt,
+			&i.GithubID,
 		); err != nil {
 			return nil, err
 		}
@@ -279,18 +284,22 @@ func (q *Queries) ListTenantMembers(ctx context.Context) ([]ListTenantMembersRow
 	return items, nil
 }
 
-const lockTenant = `-- name: LockTenant :exec
+const lockTenant = `-- name: LockTenant :one
 
-select 1 from cp.tenants where id = cp.current_tenant_id() for update
+select status from cp.tenants where id = cp.current_tenant_id() for update
 `
 
 // cp_tenant queries of the tenant and member routes. row-level security
 // limits every statement to app.tenant_id.
 // serialises the member and site limit checks of one tenant, so two
-// concurrent requests cannot both pass a count of 49
-func (q *Queries) LockTenant(ctx context.Context) error {
-	_, err := q.db.Exec(ctx, lockTenant)
-	return err
+// concurrent requests cannot both pass a count of 49. it returns the status
+// as of the lock: an operator action that committed while the request
+// waited is seen here, not the status read before the lock
+func (q *Queries) LockTenant(ctx context.Context) (string, error) {
+	row := q.db.QueryRow(ctx, lockTenant)
+	var status string
+	err := row.Scan(&status)
+	return status, err
 }
 
 const lockTenantOwners = `-- name: LockTenantOwners :many

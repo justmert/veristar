@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Code2, Pencil, Plus, ShieldCheck, Trash2 } from "lucide-react";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useId, useState } from "react";
 import { Link, useLocation } from "react-router";
 import { ApiError } from "@/api/client";
 import { api, type SiteInput, type SitePatch } from "@/api/endpoints";
@@ -12,6 +12,7 @@ import { StellarTomlSummary, VerificationPill } from "@/components/evidence";
 import { TextAreaField, TextField } from "@/components/form-field";
 import { StatusPill } from "@/components/status";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import * as v from "@/lib/validate";
 import { queryClient } from "@/query-client";
 import { useProject } from "./project-layout";
@@ -320,6 +321,7 @@ function SiteRow({
         </div>
       </div>
       {editing ? <EditSiteForm site={site} onDone={() => setEditing(false)} /> : null}
+      <CampaignParams site={site} canEdit={canEdit} />
       <div className="mt-4 border-t pt-3">
         <StellarTomlSummary
           toml={site.stellar_toml}
@@ -400,6 +402,44 @@ function EditSiteForm({ site, onDone }: { site: Site; onDone: () => void }) {
         />
       </div>
     </form>
+  );
+}
+
+// utm collection (contract 3.1 collect_utm): off unless a member turns it on.
+// saved at once, because it is one switch and not part of the edit form.
+export function CampaignParams({ site, canEdit }: { site: Site; canEdit: boolean }) {
+  const id = useId();
+  const save = useMutation({
+    mutationFn: (on: boolean) => api.updateSite(site.tenant_id, site.id, { collect_utm: on }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: keys.sites(site.tenant_id) });
+    },
+  });
+  const checked =
+    save.isPending && save.variables !== undefined ? save.variables : site.collect_utm;
+  return (
+    <div className="mt-4 space-y-1 border-t pt-3">
+      <div className="flex items-start gap-3">
+        <Checkbox
+          id={id}
+          checked={checked}
+          disabled={!canEdit || save.isPending}
+          onCheckedChange={(c) => save.mutate(c === true)}
+          aria-describedby={`${id}-d`}
+          className="mt-0.5"
+        />
+        <label htmlFor={id} className="text-sm leading-snug">
+          Keep campaign parameters (<code className="font-mono text-xs">utm_*</code> and{" "}
+          <code className="font-mono text-xs">ref</code>) in page addresses
+        </label>
+      </div>
+      <p id={`${id}-d`} className="text-xs text-muted-foreground">
+        Off by default: every query parameter is dropped before storage. Turning this on keeps the
+        campaign parameters, which France's CNIL recommends not collecting for analytics run without
+        consent. It applies to new events within a minute.
+      </p>
+      <FormMessage error={save.error} />
+    </div>
   );
 }
 

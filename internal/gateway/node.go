@@ -24,6 +24,7 @@ import (
 const (
 	replayEntries = 200_000
 	clusterKeys   = 200_000
+	volumeKeys    = 200_000
 )
 
 // NodeConfig is everything one gateway process needs. cmd/gateway fills it
@@ -125,6 +126,10 @@ func NewNode(ctx context.Context, c NodeConfig) (*Node, error) {
 	if n.cluster, err = NewIPCluster(c.NC, g.NodeID, g.IPClusterThreshold, clusterKeys, c.Now); err != nil {
 		return nil, err
 	}
+	volume, err := NewVisitorVolume(g.VisitorEventsPerHour, volumeKeys, c.Now)
+	if err != nil {
+		return nil, err
+	}
 	siteRate := Rate{PerSecond: float64(g.SiteRatePerSecond), Burst: float64(g.SiteBurst)}
 	prefixRate := Rate{PerSecond: float64(g.PrefixRatePerSecond), Burst: float64(g.PrefixBurst)}
 	limiter, err := NewRateLimiter(siteRate, prefixRate, DefaultRateLimitKeys, c.Now)
@@ -154,6 +159,7 @@ func NewNode(ctx context.Context, c NodeConfig) (*Node, error) {
 		Geo:              n.geo,
 		Visitor:          n.visitor,
 		Cluster:          n.cluster,
+		Volume:           volume,
 		Limiter:          limiter,
 		ChallengeLimiter: challengeLimiter,
 		Stats:            n.stats,

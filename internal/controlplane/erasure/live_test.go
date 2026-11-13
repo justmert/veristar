@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -102,6 +103,9 @@ type env struct {
 	agg    *aggregateweb.Aggregator
 	follow *erasurefollowup.Followup
 	eraser *erasure.Service
+	// flaky is the umami client of the eraser; a test arms it to fail
+	// session deletes, as an umami or network error would
+	flaky  *flakyUmami
 	tenant uuid.UUID
 	site   jobstest.WebSite
 	owner  *client
@@ -209,7 +213,8 @@ func start(t *testing.T) *env {
 	scope, err := tenants.NewScope(e.d, cur.Version, rec, e.log)
 	require.NoError(t, err)
 	t.Cleanup(scope.Wait)
-	e.eraser, err = erasure.New(erasure.Config{DB: e.d, NC: cpNC, Umami: e.um.Admin, QueueWait: 2 * time.Minute, Now: time.Now, Log: e.log})
+	e.flaky = &flakyUmami{Admin: e.um.Admin}
+	e.eraser, err = erasure.New(erasure.Config{DB: e.d, NC: cpNC, Umami: e.flaky, QueueWait: 2 * time.Minute, Now: time.Now, Log: e.log})
 	require.NoError(t, err)
 	t.Cleanup(e.eraser.Wait)
 	routes, err := erasure.NewRoutes(scope, e.eraser)
@@ -246,6 +251,21 @@ func start(t *testing.T) *env {
 	e.terms = cur.Version
 	e.owner = e.member(t, "owner", cur.Version)
 	return e
+}
+
+// flakyUmami is the real umami admin client whose session deletes fail
+// while failDeletes is above zero, one failure per call.
+type flakyUmami struct {
+	*umami.Admin
+	failDeletes atomic.Int32
+}
+
+func (f *flakyUmami) DeleteSession(ctx context.Context, website, session string) error {
+	if f.failDeletes.Add(-1) >= 0 {
+		return errors.New("umami delete session: injected failure")
+	}
+	f.failDeletes.Store(0)
+	return f.Admin.DeleteSession(ctx, website, session)
 }
 
 // serveGateway replaces the gateway's visitor code with one on clock c.
@@ -516,6 +536,10 @@ const (
 	ipB = "203.0.113.77"
 	ipC = "2001:db8:5:6::9"
 	ipD = "198.51.100.200"
+	uaE = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36 erasure-e"
+	ipE = "198.51.100.61"
+	uaF = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 erasure-f"
+	ipF = "198.51.100.62"
 )
 
 //nolint:contextcheck // the helpers take the test and use its context, t.Context()
@@ -677,8 +701,57 @@ func TestErasure(t *testing.T) {
 		require.Equal(t, "site_reset", items[0].(map[string]any)["kind"], "newest first")
 	})
 
+	// W-3: a run that removed the visit record and then failed is finished
+	// by the next request of the same day, which still finds the sessions
+	t.Run("a failed visitor run is finished by the next request", func(t *testing.T) {
+		vtE := e.visit(t, ipE, uaE, events.BandPrimary, 2)
+		e.drained(t)
+		sessE := e.sessionsOf(t, vtE)
+		require.Len(t, sessE, 1)
+		e.flaky.failDeletes.Store(1)
+		m := e.erase(t, e.owner, map[string]any{"kind": "visitor_today", "site_id": site, "ip": ipE, "user_agent": uaE})
+		require.Equal(t, "failed", m["status"], m)
+		require.Equal(t, int64(2), e.eventsOfSessions(t, sessE), "nothing was deleted yet")
+		m = e.erase(t, e.owner, map[string]any{"kind": "visitor_today", "site_id": site, "ip": ipE, "user_agent": uaE})
+		require.Equal(t, "done", m["status"], m)
+		require.Equal(t, "erased", m["outcome"], m)
+		require.EqualValues(t, 1, m["sessions_deleted"])
+		require.EqualValues(t, 2, m["events_deleted"])
+		require.Zero(t, e.eventsOfSessions(t, sessE))
+		require.Nil(t, e.visitRecord(t, vtE))
+		kv, err := e.admin.KeyValue(ctx, natsx.BucketVisitState)
+		require.NoError(t, err)
+		_, err = kv.Get(ctx, "erasing."+site+"."+vtE)
+		require.ErrorIs(t, err, jetstream.ErrKeyNotFound, "the run's progress record is removed at the end")
+	})
+
+	// W-4: after the memory bucket that links visitors to sessions was
+	// emptied (a nats restart), a visit of today is reported as not located,
+	// never as not recorded
+	t.Run("a visit whose link was lost is not located", func(t *testing.T) {
+		vtF := e.visit(t, ipF, uaF, events.BandPrimary, 1)
+		e.drained(t)
+		sessF := e.sessionsOf(t, vtF)
+		require.NoError(t, e.admin.DeleteKeyValue(ctx, natsx.BucketVisitState))
+		// the replayer recreates its bucket, as after a restart
+		require.Eventually(t, func() bool {
+			_, err := e.admin.KeyValue(ctx, natsx.BucketVisitState)
+			return err == nil
+		}, 30*time.Second, 100*time.Millisecond)
+		m := e.erase(t, e.owner, map[string]any{"kind": "visitor_today", "site_id": site, "ip": ipF, "user_agent": uaF})
+		require.Equal(t, "done", m["status"], m)
+		require.Equal(t, "nothing_found", m["outcome"], m)
+		msg := m["message"].(string)
+		require.Contains(t, msg, "could not be located")
+		require.Contains(t, msg, "was emptied at")
+		require.NotContains(t, msg, "was recorded")
+		// the visit is still stored; the message says how to remove it
+		require.Equal(t, int64(1), e.eventsOfSessions(t, sessF))
+		require.Contains(t, msg, "site reset")
+	})
+
 	t.Run("no residue", func(t *testing.T) {
-		markers := []string{ipA, ipC, uaA, uaC, "erasure-a", "erasure-c"}
+		markers := []string{ipA, ipC, ipE, ipF, uaA, uaC, uaE, uaF, "erasure-a", "erasure-c", "erasure-e", "erasure-f"}
 		var dumps []string
 		su, err := e.pg.Superuser(ctx, "platform")
 		require.NoError(t, err)
@@ -700,7 +773,7 @@ func TestErasure(t *testing.T) {
 			}
 		}
 		// the raw user agent never reached umami's tables either
-		for _, mk := range []string{"erasure-a", "erasure-c"} {
+		for _, mk := range []string{"erasure-a", "erasure-c", "erasure-e", "erasure-f"} {
 			require.Zero(t, e.umamiCount(t, `select count(*) from session s where row_to_json(s)::text like '%' || $1 || '%'`, mk))
 		}
 	})

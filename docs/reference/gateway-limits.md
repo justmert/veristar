@@ -10,8 +10,9 @@ reason in the table below.
 | Key | Value | Meaning |
 |---|---|---|
 | `PROOF_BITS` | 12 | difficulty of the challenge; the highest tested value with a median solve under 150 ms at 6x CPU slowdown in all three engines ([browser-proof.md](browser-proof.md)) |
-| `PROOF_REPLAY_LIMIT` | 50 | events one proof (one page load) may carry on one node |
+| `PROOF_REPLAY_LIMIT` | 50 | events one proof (one page load) may carry on one node. only queued events count: an event refused after the proof check (fetch metadata, rate limit, user agent, queue) gives its use back. tracker 1.2.0 fetches a new challenge after 40 events and after a 403 `rejected_replay`, `rejected_challenge_expired` or `rejected_challenge_tag`, and sends that event once more |
 | `IPCLUSTER_THRESHOLD` | 20 | distinct visitor tokens per site and truncated prefix per hour; the event that brings the set to 20 and every later one in the window go to the quarantine band |
+| `VISITOR_EVENTS_PER_HOUR` | 600 | queued events per site and visitor token in an hour from the visitor's first event, per node; later events of that visitor in the window go to the quarantine band ([../security/bot-and-inflation.md](../security/bot-and-inflation.md) section 6) |
 | `RATE_SITE_PER_SECOND` / `RATE_SITE_BURST` | 200 / 400 | token bucket per site, per node |
 | `RATE_PREFIX_PER_SECOND` / `RATE_PREFIX_BURST` | 20 / 60 | token bucket per site and keyed hash of the /24 or /48, per node |
 | (same keys) for `GET /v1/c` | 200 / 400 per site, 20 / 60 per site and prefix | the challenge route has its own buckets at the same rates. a page load takes one challenge and sends at least one event, so a visitor within the event limits is within the challenge limits too, and fetching challenges never uses up the event budget |
@@ -25,8 +26,8 @@ Other settings: `GATEWAY_NODE_ID` (unique per instance), `GATEWAY_ADDR` (for cad
 
 Fixed in code: publish acknowledgement wait 2 s (`PublishAckWait`), readiness canary
 every 1 s with a maximum age of 7 s (`CanaryMaxAge`, so `/readyz` fails within 10 s
-of a queue outage), 200,000 entries each for the replay table, the ip-cluster sets
-and each rate limit table.
+of a queue outage), 200,000 entries each for the replay table, the ip-cluster sets,
+the visitor volume table and each rate limit table.
 
 Each limit is per node. With three edge nodes, a site can send three times the
 site rate, and a captured proof can be replayed three times the replay limit.
@@ -38,14 +39,16 @@ browser suites was refused, rate limited or quarantined against the real gateway
 | Date | Key | Change | Reason |
 |---|---|---|---|
 | 2026-11-12 | all | starting values | the design |
+| 2026-11-13 | `VISITOR_EVENTS_PER_HOUR` | new, 600 | review: same-ip skepticism counts distinct visitor tokens only, so one address and one user agent could send at the prefix rate into the primary band; ten events a minute on average is far above a person's use of one site |
+| 2026-11-13 | `PROOF_REPLAY_LIMIT` | counts queued events only | review: refused events used up a proof that a single-page app keeps for the whole tab (`TestRefusedEventsKeepTheProofAllowance` in `internal/gateway`) |
 | 2026-11-13 | `RATE_SITE_*`, `RATE_PREFIX_*` | also applied to `GET /v1/c`, in separate buckets | this stage: the challenge route had no limit, so one client could request challenges without bound; checked after the origin and fetch metadata checks, so refused requests take no token (`TestChallengeRateLimits` in `tests/gateway`) |
 
 ## Responses
 
 202 queued (only after the JetStream acknowledgement), 204 dropped for `Sec-GPC: 1`,
 400 malformed (also a missing `User-Agent`), 403 origin, challenge, proof, replay or
-fetch metadata, 404 unknown or inactive site, 410 revoked tracker version, 413 body
-too large, 429 rate limited (events and challenges), 503 queue unavailable, registry
+fetch metadata, 404 unknown or inactive site, 410 revoked tracker version (the file,
+and an event whose `sv` names a revoked release), 413 body too large, 429 rate limited (events and challenges), 503 queue unavailable, registry
 not loaded or a missing client address header (events and challenges). Every response to a request with `Origin` carries
 `Access-Control-Allow-Origin` with that origin and `Vary: Origin`. The tracker files
 carry `Access-Control-Allow-Origin: *`, `Cross-Origin-Resource-Policy: cross-origin`

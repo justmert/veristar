@@ -154,6 +154,9 @@ type SeriesState struct {
 	Count  uint64
 	Sum    float64
 	Counts Buckets
+	// Baseline is set while the last point is the baseline of a stream
+	// first met past the threshold.
+	Baseline bool
 }
 
 // Outcome says what a point contributed.
@@ -181,11 +184,15 @@ const (
 	// OutcomeOld: a point not newer than the last applied point of its
 	// stream. its requests are already contained in that point.
 	OutcomeOld
+	// OutcomeCatchUp: the second point of a stream whose first point became
+	// a baseline, when the export cadence shows the process had only just
+	// started at that first point. it counts in full.
+	OutcomeCatchUp
 )
 
 var outcomeNames = map[Outcome]string{
 	OutcomeDelta: "delta", OutcomeNew: "new", OutcomeBaseline: "baseline", OutcomeIncrement: "increment",
-	OutcomeReset: "reset", OutcomeStale: "stale", OutcomeOld: "old",
+	OutcomeReset: "reset", OutcomeStale: "stale", OutcomeOld: "old", OutcomeCatchUp: "catch_up",
 }
 
 func (o Outcome) String() string {
@@ -197,7 +204,7 @@ func (o Outcome) String() string {
 
 // Outcomes lists every outcome, for metrics that create each label up front.
 func Outcomes() []Outcome {
-	return []Outcome{OutcomeDelta, OutcomeNew, OutcomeBaseline, OutcomeIncrement, OutcomeReset, OutcomeStale, OutcomeOld}
+	return []Outcome{OutcomeDelta, OutcomeNew, OutcomeBaseline, OutcomeIncrement, OutcomeReset, OutcomeStale, OutcomeOld, OutcomeCatchUp}
 }
 
 // Contribution is what one point adds to its minute row.
@@ -236,18 +243,49 @@ type State struct {
 	fresh map[ResourceKey]bool
 	// owners is the tenant of every changed series
 	owners map[SeriesKey]string
+	// seriesCap bounds the streams the writer follows per tenant
+	seriesCap int
+	// series counts the followed streams per tenant, for SeriesCap
+	seriesN map[string]int
 }
 
-// NewState returns an empty state with the given threshold.
-func NewState(threshold time.Duration) *State {
+// ErrSeriesCap marks a new cumulative stream of a tenant that already has
+// the cap's number of streams.
+var ErrSeriesCap = errors.New("metricswriter: tenant stream cap reached")
+
+// LoadSeriesCount records how many streams a tenant has stored. the writer
+// loads it for every tenant that has a stream the batch does not know yet.
+func (s *State) LoadSeriesCount(tenant string, n int) {
+	s.seriesN[tenant] = n
+}
+
+// errSeriesCountNotLoaded means the writer did not load a tenant's stream
+// count before a new stream of it arrived: a bug in the writer, reported
+// rather than letting the stream pass the cap unchecked.
+var errSeriesCountNotLoaded = errors.New("metricswriter: stream count of the tenant was not loaded")
+
+// MaxSeriesPerTenant is the stream cap the writer applies. the route,
+// service, method and status caps bound what a tenant's rows hold, not how
+// many streams the writer must follow: every process restart is a new
+// resource and every distinct error.type a new stream. 100,000 is about 20
+// processes of a service with the full 300 routes, 9 methods and 10
+// statuses, and each stream costs one api.series_state row (about 250
+// bytes), so a tenant can hold at most about 25 mb of writer state.
+const MaxSeriesPerTenant = 100_000
+
+// NewState returns an empty state with the given threshold and per-tenant
+// stream cap.
+func NewState(threshold time.Duration, seriesCap int) *State {
 	return &State{
 		Threshold: threshold,
+		seriesCap: seriesCap,
 		series:    map[SeriesKey]*SeriesState{},
 		resources: map[ResourceKey]int64{},
 		dirty:     map[SeriesKey]bool{},
 		touched:   map[ResourceKey]int64{},
 		fresh:     map[ResourceKey]bool{},
 		owners:    map[SeriesKey]string{},
+		seriesN:   map[string]int{},
 	}
 }
 
@@ -353,10 +391,24 @@ func (s *State) Apply(p *Point) (Contribution, Outcome, error) {
 	key := p.Key()
 	at := Micro(p.Time)
 	rk := ResourceKey{Tenant: p.Tenant, ResourceHash: p.ResourceHash, Start: p.Start}
+	st, known := s.series[key]
+	if !known {
+		// the state the writer keeps per stream is bounded per tenant
+		//: a tenant that keeps inventing streams (a random
+		// resource attribute per export, ids normalization misses) is
+		// refused new ones, and nothing of a refused one is stored
+		n, loaded := s.seriesN[p.Tenant]
+		if !loaded {
+			return Contribution{}, 0, errSeriesCountNotLoaded
+		}
+		if n >= s.seriesCap {
+			return Contribution{}, 0, fmt.Errorf("%w: %d streams", ErrSeriesCap, n)
+		}
+		s.seriesN[p.Tenant] = n + 1
+	}
 	if t, ok := s.touched[rk]; !ok || p.Time > t {
 		s.touched[rk] = p.Time
 	}
-	st, known := s.series[key]
 	if !known {
 		first, seen := s.resources[rk]
 		if !seen {
@@ -373,6 +425,7 @@ func (s *State) Apply(p *Point) (Contribution, Outcome, error) {
 			// a process the writer meets for the first time and that has run
 			// for a while: its counts so far are history from before the
 			// writer followed it, and would all land in this one minute
+			s.series[key].Baseline = true
 			return Contribution{}, OutcomeBaseline, nil
 		}
 		return full, OutcomeNew, nil
@@ -383,6 +436,18 @@ func (s *State) Apply(p *Point) (Contribution, Outcome, error) {
 	if p.Count < st.Count {
 		s.remember(key, p)
 		return full, OutcomeReset, nil
+	}
+	if st.Baseline && st.Last-st.Start <= 2*(p.Time-st.Last) {
+		// the baseline was the process' first export: it was younger than
+		// two export intervals, as the gap to this second export shows. a
+		// process that exports every 5 minutes is 300 s old at its first
+		// export, past the threshold, and without this its whole first
+		// interval would be lost. a process that had run for a
+		// long time is older than that and keeps its baseline. the count
+		// since the start is the first two intervals; it lands in this
+		// minute, one interval late for the first.
+		s.remember(key, p)
+		return full, OutcomeCatchUp, nil
 	}
 	var c Contribution
 	c.Count = p.Count - st.Count

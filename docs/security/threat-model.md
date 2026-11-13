@@ -49,6 +49,21 @@ built yet; they are marked **not built** with the reason.
 6. **Private network.** Gateway, collector, replayer, metricswriter, jobs, control plane, Umami,
    PostgreSQL and NATS. Each service connects to NATS as its own user with publish and subscribe
    allow lists (`internal/natsx/topology.go`) and to PostgreSQL as its own role.
+   **Decision:** traffic on
+   the private network is not encrypted. PostgreSQL (`PLATFORM_DB_SSLMODE: disable`),
+   replication, the Patroni REST API, NATS client and route connections and etcd (`http://`,
+   no client authentication) cross locations in clear text. Hetzner documents its private
+   networks as isolated per project, not as encrypted, so the exposure is anyone with access to
+   Hetzner's network path between locations. What limits it today: every credential is per
+   service, the platform never sends raw IP addresses or tokens over these links (visitor
+   tokens are HMACs, OTLP tokens stay at the collector), and the host firewall admits only the
+   project's private range. What it does not limit: an observer on that path reads queued
+   events (page URLs, referrers, event names), metric rows and database contents, and could
+   write to etcd, which would let it take over the Patroni leader key. This is accepted for
+   now and is not fixed: turning on TLS for PostgreSQL, Patroni, etcd (with client
+   certificates) and NATS, or a WireGuard mesh between the nodes, touches every role and must
+   be converged and drilled; it is listed as open in the review resolution, to be done
+   before production takes its first project.
 7. **Upstream code.** Umami image, Go modules, npm packages, base images, GitHub Actions.
 
 ## 3. Threats
@@ -239,9 +254,12 @@ Planned in this stage, and its state when this was written:
 - `make umami-upgrade VERSION=` running `tests/umami-compat/`, the isolation suite and the
   end-to-end suite before rollout, and the patch path in
   [../runbooks/security-patch.md](../runbooks/security-patch.md).
-- Read-only container filesystems and dropped capabilities: no `read_only` or `cap_drop` is set
-  in any compose template under `infra/ansible/roles/*/templates/` or in
-  `deploy/compose/dev.yml` at the time of writing.
+- Read-only container filesystems and dropped capabilities: done for the deployed services.
+  The edge, core and observability compose templates under `infra/ansible/roles/*/templates/`
+  set `read_only: true`, `cap_drop: [ALL]` and `no-new-privileges` on every service, with a
+  small `/tmp` tmpfs. Not set in the local-converge-only backup repository template
+  (`roles/backup`) or in the development stack `deploy/compose/dev.yml`, which never run in
+  staging or production.
 
 Residual risk: until the scheduled scans run, detection depends on someone watching advisories by
 hand. Umami has published advisories without a stated fixed version, so the patch path must not
@@ -272,9 +290,11 @@ second at p99 1.48 ms on one gateway).
 Residual risk: there is no rate limit on `GET /v1/c` (challenge) in the gateway or in edge Caddy;
 the limiter runs only on `POST /v1/e`. A challenge costs one HMAC and is cheap, but the route is
 unbounded. Neither edge Caddy nor core Caddy has a rate limiter; volumetric attacks are left to
-the network provider. The sign-in start route has one token bucket per control plane instance
-shared by every client (10 per second, burst 30, `internal/controlplane/auth/ratelimit.go`), so
-a flood of sign-in starts can delay sign-in for everyone.
+the network provider. The sign-in start and callback routes limit each client on its own (a keyed
+hash of the address core Caddy passes, held only in memory) under a per-instance ceiling, and each
+OAuth state reaches the code exchange once (`internal/controlplane/auth/ratelimit.go`, control
+plane API 4.1.1). One client cannot lock others out; a flood from many addresses can still reach
+the ceiling (50 starts per second per instance) and delay sign-in for everyone.
 
 ### 3.8 Operator credential compromise
 

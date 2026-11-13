@@ -75,6 +75,7 @@ export const memberBody = {
 
 export const inviteBody = {
   id: INVITE_ID,
+  github_id: 7654321,
   github_login: "someone",
   role: "member",
   created_by: USER_ID,
@@ -108,6 +109,7 @@ export const siteBody = {
   last_verify_error: null,
   stellar_toml: null,
   stellar_toml_checked_at: null,
+  collect_utm: false,
   created_at: "2026-11-12T09:00:00Z",
   updated_at: "2026-11-12T09:00:00Z",
 };
@@ -594,9 +596,11 @@ export const apiWarningsBody = {
     { kind: "lossy_histogram", count: 4, last_day: "2026-11-12" },
     { kind: "cardinality_overflow", count: 0, last_day: null },
     { kind: "secret_in_path", count: 1, last_day: "2026-11-11" },
+    { kind: "coarse_buckets", count: 4, last_day: "2026-11-12" },
   ],
   days: [
     { day: "2026-11-11", kind: "secret_in_path", count: 1 },
+    { day: "2026-11-12", kind: "coarse_buckets", count: 4 },
     { day: "2026-11-12", kind: "lossy_histogram", count: 4 },
   ],
 };
@@ -607,6 +611,7 @@ export const apiWarningsNoneBody = {
     { kind: "lossy_histogram", count: 0, last_day: null },
     { kind: "cardinality_overflow", count: 0, last_day: null },
     { kind: "secret_in_path", count: 0, last_day: null },
+    { kind: "coarse_buckets", count: 0, last_day: null },
   ],
   days: [],
 };

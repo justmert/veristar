@@ -25,15 +25,19 @@ const LABELS: Record<string, string> = {
   rejected_signals: "Browser signals failed",
   rejected_rate_limited: "Rate limited",
   rejected_unavailable: "Queue unavailable",
+  rejected_revoked_version: "Revoked tracker version",
 };
 
 const HINTS: Record<string, string> = {
   accepted: "Stored in the primary web dashboard.",
-  quarantined: "Many visitors from one network. Kept apart in the quarantine view.",
+  quarantined:
+    "Many visitors from one network, or very many events from one visitor. Kept apart in the quarantine view.",
   bot: "Dropped by Umami's bot check.",
   dlq: "Could not be written to the dashboard.",
   rejected_origin: "The page's origin is not in the site's allowed origins.",
   rejected_gpc: "The visitor's browser asked not to be tracked.",
+  rejected_revoked_version:
+    "The page runs a tracker version that was revoked. Update the snippet to a current version.",
 };
 
 export function outcomeLabel(outcome: string): string {

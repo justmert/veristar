@@ -20,7 +20,7 @@ type DB struct {
 func Open(ctx context.Context, cfg PoolConfig, appName string) (*DB, error) {
 	d := &DB{pools: make(map[Role]*pgxpool.Pool, len(cfg.Roles))}
 	for _, l := range cfg.Roles {
-		p, err := openPool(ctx, cfg.Server, l, appName)
+		p, err := openPool(ctx, cfg.Server, l, appName, cfg.MaxConns[Role(l.User)])
 		if err != nil {
 			d.Close()
 			return nil, err
@@ -30,11 +30,17 @@ func Open(ctx context.Context, cfg PoolConfig, appName string) (*DB, error) {
 	return d, nil
 }
 
-func openPool(ctx context.Context, s Server, l Login, appName string) (*pgxpool.Pool, error) {
+func openPool(ctx context.Context, s Server, l Login, appName string, maxConns int32) (*pgxpool.Pool, error) {
 	pc, err := pgxpool.ParseConfig(s.connString(l, appName))
 	if err != nil {
 		// the parse error can quote the connection string, password included
 		return nil, fmt.Errorf("db: invalid connection settings for role %s", l.User)
+	}
+	if maxConns < 0 {
+		return nil, fmt.Errorf("db: pool size for role %s must not be negative", l.User)
+	}
+	if maxConns > 0 {
+		pc.MaxConns = maxConns
 	}
 	role := l.User
 	pc.AfterConnect = func(ctx context.Context, c *pgx.Conn) error {

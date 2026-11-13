@@ -45,6 +45,30 @@ sa-lc-backup-1 hel1 172.31.99.31 10.99.3.31"
 if [ "${LC_TOPOLOGY:-}" = minimal ]; then
 	LC_NODES="$(printf '%s\n' "$LC_NODES" | grep -v '^sa-lc-core-2 ')"
 fi
+# LC_BACKUP=s3 replaces the backup node with an s3 object storage stand-in
+# (seaweedfs, private ca, host-style addressing like hetzner) in hel1, so the
+# staging and production path of the backup role runs: the storage role
+# creates the bucket with versioning and object lock, the patroni leader
+# creates the stanza, and archive-push and backups go to the bucket over s3.
+# seaweedfs 4.52 (2026-11-02, the newest release at least a week old; the
+# minio images are no longer published) is a stand-in, not hetzner: what it
+# proves and what it does not is in docs/deploy/local-converge.md section 6.
+LC_BACKUP="${LC_BACKUP:-posix-host}"
+LC_S3=sa-lc-s3
+LC_S3_IP=10.99.3.35
+LC_S3_LOCATION=hel1
+LC_S3_IMAGE=chrislusf/seaweedfs:4.52@sha256:57877e32bb90073b37dc109b438ba66e84fd5ed9ced5f5c04f56444ef243ce59
+LC_S3_DOMAIN=s3.sa-local.test
+LC_S3_BUCKET=sa-lc-backup
+if [ "$LC_BACKUP" = s3 ]; then
+	LC_NODES="$(printf '%s\n' "$LC_NODES" | grep -v '^sa-lc-backup-1 ')"
+fi
+# LC_PROBE=1 adds the probe node: public network only, like the scaleway
+# probe an operator input outside the private network
+LC_PROBE_NODE="sa-lc-probe-1 none 172.31.99.51 none"
+if [ "${LC_PROBE:-}" = 1 ]; then
+	LC_NODES="$(printf '%s\n%s' "$LC_NODES" "$LC_PROBE_NODE")"
+fi
 # the fresh node a point-in-time restore goes to; created by the restore
 # drill only (tests/drills/pitr.sh) and removed after it
 LC_RESTORE_NODE="sa-lc-restore-1 fsn1 172.31.99.41 10.99.1.41"

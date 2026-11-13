@@ -1,4 +1,4 @@
-# routenorm corpus, rule set version 1 (the design).
+# routenorm corpus, rule set version 2 (the design).
 # columns: input path, expected route, flags (secret when a secret seed was
 # replaced, - otherwise). strkeys are SEP-23 v1.4.0 vectors plus the
 # seed, pre-auth and hash-x vectors of go-stellar-sdk v0.8.0.
@@ -143,7 +143,7 @@ a/b	/a/b	-
 /a/./b	/a/./b	-
 /a/../b	/a/../b	-
 /caf%C3%A9	/café	-
-/a%20b	/a b	-
+/a%20b	/{text}	-
 /a%2Fb	/a%2Fb	-
 /a%252Fb	/a%252Fb	-
 /a%25	/a%25	-
@@ -168,13 +168,13 @@ a/b	/a/b	-
 /u/bob.smith+tag@mail.example.co.uk/x	/u/{email}/x	-
 /f/maria@example.com*stellar.org	/f/{federation}	-
 /f/a*b.xn--p1ai	/f/{federation}	-
-/u/a@b	/u/a@b	-
+/u/a@b	/u/{text}	-
 /f/a*b	/f/a*b	-
 /u/USER@EXAMPLE.COM	/u/{email}	-
 /lookup/jed*stellar.org/info	/lookup/{federation}/info	-
 /u/first.last@sub.domain.example	/u/{email}	-
 /u/x%2Ay.example.com	/u/{federation}	-
-/mail/a@b.c	/mail/a@b.c	-
+/mail/a@b.c	/mail/{text}	-
 /mail/a@b.co	/mail/{email}	-
 /notify?email=a@example.com	/notify	-
 /assets/USDC:GA7QYNF7SOWQ3GLR2BGMZEHXAVIRZA4KVWLTJJFC7MGXUA74P7UJVSGZ	/assets/{asset}	-
@@ -220,7 +220,7 @@ a/b	/a/b	-
 /eth/0x52908400098527886E0F7030069857D2E4169EE7	/eth/{hex}	-
 /u/123e4567-e89b-12d3-a456-426614174000	/u/{uuid}	-
 /u/123E4567-E89B-12D3-A456-426614174000/x	/u/{uuid}/x	-
-/u/123e4567-e89b-12d3-a456-42661417400	/u/123e4567-e89b-12d3-a456-42661417400	-
+/u/123e4567-e89b-12d3-a456-42661417400	/u/123e4567-e89b-12d3-a456-{id}	-
 /u/01ARZ3NDEKTSV4RRFFQ69G5FAV	/u/{ulid}	-
 /u/01arz3ndektsv4rrffq69g5fav	/u/{ulid}	-
 /u/01ARZ3NDEKTSV4RRFFQ69G5FA	/u/01ARZ3NDEKTSV4RRFFQ69G5FA	-
@@ -231,17 +231,17 @@ a/b	/a/b	-
 /ledgers/123456789012345678901234	/ledgers/{id}	-
 /v1	/v1	-
 /v2/items/7/sub/8	/v2/items/{id}/sub/{id}	-
-/-1	/-1	-
-/1.5	/1.5	-
+/-1	/-{id}	-
+/1.5	/{id}.{id}	-
 /12a	/12a	-
 /d/2026-11-12	/d/{date}	-
 /d/2026-11-12T10:20:30Z	/d/{date}	-
 /d/2026-11-12T10:20:30.123+03:00	/d/{date}	-
 /d/2026-11-12T10:20	/d/{date}	-
-/d/2026-13-12	/d/2026-13-12	-
-/d/2026-11-32	/d/2026-11-32	-
+/d/2026-13-12	/d/{id}-{id}-{id}	-
+/d/2026-11-32	/d/{id}-{id}-{id}	-
 /d/2026-11-12%2010:20:30	/d/{date}	-
-/d/2026-1-12	/d/2026-1-12	-
+/d/2026-1-12	/d/{id}-{id}-{id}	-
 /t/eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.c2lnbmF0dXJlX2hlcmU	/t/{token}	-
 /t/eyJhbGciOiJub25lIn0.eyJ4IjoxfQ.	/t/{token}	-
 /t/dGhpcyBpcyBhIHRva2VuIDEyMw	/t/{token}	-
@@ -304,7 +304,7 @@ a/b	/a/b	-
 /trade_aggregations?base_asset_type=native&resolution=60000	/trade_aggregations	-
 /v1/users/42/wallets/GA7QYNF7SOWQ3GLR2BGMZEHXAVIRZA4KVWLTJJFC7MGXUA74P7UJVSGZ	/v1/users/{id}/wallets/{account}	-
 /v1/users/123e4567-e89b-12d3-a456-426614174000/sessions/01ARZ3NDEKTSV4RRFFQ69G5FAV	/v1/users/{uuid}/sessions/{ulid}	-
-/v1/invoices/2026-11-12/INV-0042	/v1/invoices/{date}/INV-0042	-
+/v1/invoices/2026-11-12/INV-0042	/v1/invoices/{date}/INV-{id}	-
 /webhooks/stripe/whsec_Ab3dEf6hIj9kLm2nOp5qRs	/webhooks/stripe/{token}	-
 /sep10/auth?account=GA7QYNF7SOWQ3GLR2BGMZEHXAVIRZA4KVWLTJJFC7MGXUA74P7UJVSGZ	/sep10/auth	-
 /sep24/transactions/deposit/interactive	/sep24/transactions/deposit/interactive	-
@@ -320,10 +320,29 @@ a/b	/a/b	-
 /static/app.3f9a2b1c.js	/static/app.3f9a2b1c.js	-
 /static/app-3f9a2b1c4d5e6f70.js	/static/app-3f9a2b1c4d5e6f70.js	-
 /images/3f9a2b1c4d5e6f70	/images/{hex}	-
-/p/hello-world-2026	/p/hello-world-2026	-
-/search/stellar%20lumens	/search/stellar lumens	-
+/p/hello-world-2026	/p/hello-world-{id}	-
+/search/stellar%20lumens	/search/{text}	-
 /users/me	/users/me	-
 /users/me/avatar.png	/users/me/avatar.png	-
 /orders/42/items/7?expand=true#top	/orders/{id}/items/{id}	-
 /graphql	/graphql	-
 /health/live	/health/live	-
+# rule set version 2 additions (functional review and A-11): escapes that
+# decode to invalid utf-8 or control characters, digits inside a segment,
+# free text, and the bound on the whole route.
+/a/%FF/b	/a/{invalid}/b	-
+/%c0%ae%c0%ae/etc/passwd	/{invalid}/etc/passwd	-
+/x/%00	/x/{invalid}	-
+/x/a%0Ab	/x/{invalid}	-
+/x/%e2%82	/x/{invalid}	-
+/x/%C3%A9t%C3%A9	/x/été	-
+/order-12345	/order-{id}	-
+/files/123.json	/files/{id}.json	-
+/v1/users/42,43	/v1/users/{id},{id}	-
+/ledger/-5	/ledger/-{id}	-
+/x/1.5	/x/{id}.{id}	-
+/search/hello world	/search/{text}	-
+/u/john@doe	/u/{text}	-
+/v1/oauth2/token	/v1/oauth2/token	-
+/api/v2.1/items	/api/v2.{id}/items	-
+/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop	/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/abcdefghijklmnop/{long}	-

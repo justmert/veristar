@@ -14,6 +14,8 @@ import (
 	"net/http"
 	"strconv"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 // error codes of contract section 2.4. clients branch on these values.
@@ -57,17 +59,19 @@ const defaultUnavailableRetryIn = 5 * time.Second
 
 // field codes of contract section 2.5, used as values of Error.Fields.
 const (
-	FieldRequired              = "required"
-	FieldTooLong               = "too_long"
-	FieldTooShort              = "too_short"
-	FieldTooMany               = "too_many"
-	FieldInvalidFormat         = "invalid_format"
-	FieldNotHTTPSURL           = "not_https_url"
-	FieldNotBareOrigin         = "not_bare_origin"
-	FieldOriginOutsideDomain   = "origin_outside_domain"
-	FieldInvalidDomain         = "invalid_domain"
-	FieldInvalidStrkey         = "invalid_strkey"
-	FieldInvalidGitHubLogin    = "invalid_github_login"
+	FieldRequired            = "required"
+	FieldTooLong             = "too_long"
+	FieldTooShort            = "too_short"
+	FieldTooMany             = "too_many"
+	FieldInvalidFormat       = "invalid_format"
+	FieldNotHTTPSURL         = "not_https_url"
+	FieldNotBareOrigin       = "not_bare_origin"
+	FieldOriginOutsideDomain = "origin_outside_domain"
+	FieldInvalidDomain       = "invalid_domain"
+	FieldInvalidStrkey       = "invalid_strkey"
+	FieldInvalidGitHubLogin  = "invalid_github_login"
+	// a well-formed login that names no github user account (4.2.5)
+	FieldUnknownGitHubLogin    = "unknown_github_login"
 	FieldInvalidRole           = "invalid_role"
 	FieldDuplicate             = "duplicate"
 	FieldUnknownTrackerVersion = "unknown_tracker_version"
@@ -147,6 +151,10 @@ func AsError(err error) (*Error, bool) {
 	return nil, false
 }
 
+// pgLockNotAvailable is postgresql's lock_not_available, raised when a
+// statement waited longer than lock_timeout.
+const pgLockNotAvailable = "55P03"
+
 // envelope is the body of every 4xx and 5xx answer (contract 2.2).
 type envelope struct {
 	Error envelopeError `json:"error"`
@@ -164,6 +172,13 @@ type envelopeError struct {
 // detail never reaches the client.
 func WriteError(w http.ResponseWriter, r *http.Request, err error) {
 	e, ok := AsError(err)
+	var pe *pgconn.PgError
+	if !ok && errors.As(err, &pe) && pe.Code == pgLockNotAvailable {
+		// a tenant request that waited longer than its lock timeout for a
+		// row another transaction holds (the reconciler, an operator
+		// action): retrying shortly works, so it is 503, not 500
+		e, ok = Unavailable("the project is busy with another change; try again shortly"), true
+	}
 	if !ok {
 		Logger(r.Context()).Error("request failed", "path", r.URL.Path, "method", r.Method, "error", err.Error())
 		e = E(http.StatusInternalServerError, CodeInternal, "internal error")

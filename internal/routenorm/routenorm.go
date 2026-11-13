@@ -18,6 +18,21 @@
 //     {date}, jwts and long base64url strings {token}
 //  7. any remaining segment longer than 64 bytes {long}
 //
+// rule set version 2 adds (functional review and A-11):
+//
+//   - after rule 2, a segment that is not valid utf-8 or holds a control
+//     character becomes {invalid}. postgresql refuses invalid utf-8 and nul
+//     in text, and keeping the replacement characters of a scanner probe
+//     would only add routes nobody asked for.
+//   - after rule 6, every run of digits inside a segment that stands between
+//     separators (- _ . , ~ : + ; = or the segment's edges) becomes {id}:
+//     order-12345, 123.json, 42,43, -5 and 1.5.
+//   - a segment that still holds a space or an @ (an email is replaced
+//     before) is free text such as a search term or a user name, and
+//     becomes {text}.
+//   - a route longer than MaxRouteLen keeps its leading whole segments that
+//     fit and ends in /{long}.
+//
 // a segment that still holds a percent escape after rule 2 is decoded up to
 // four more times only to look for a secret seed; if one appears, the whole
 // segment becomes {redacted-secret}.
@@ -31,13 +46,14 @@ package routenorm
 import (
 	"regexp"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/justmert/stellar-analytics/internal/redact"
 )
 
 // Version identifies the rule set. it changes whenever a rule changes, so
 // stored routes can be traced to the rules that produced them.
-const Version = 1
+const Version = 2
 
 // Flags reports noteworthy findings of one normalization.
 type Flags uint8
@@ -48,6 +64,14 @@ const FlagSecretSeed Flags = 1
 
 // MaxSegmentLen is the longest segment rule 7 leaves in place.
 const MaxSegmentLen = 64
+
+// MaxRouteLen bounds the whole route. the route columns allow 1024 bytes;
+// half of that leaves room for every real route and cannot be exceeded by
+// adding a few placeholders.
+const MaxRouteLen = 512
+
+// longTail ends a route that was cut at MaxRouteLen.
+const longTail = "/{long}"
 
 // Normalize applies rules 1 to 7 to path.
 func Normalize(path string) (string, Flags) {
@@ -70,7 +94,27 @@ func Normalize(path string) (string, Flags) {
 	if b.Len() == 0 {
 		return "/", flags
 	}
-	return b.String(), flags
+	return bound(b.String()), flags
+}
+
+// bound cuts a route longer than MaxRouteLen after the last whole segment
+// that leaves room for longTail. an output is never longer than
+// MaxRouteLen, so a second pass leaves it as it is.
+func bound(r string) string {
+	if len(r) <= MaxRouteLen {
+		return r
+	}
+	cut := 0
+	for i := 1; i < len(r); i++ {
+		if r[i] != '/' {
+			continue
+		}
+		if i > MaxRouteLen-len(longTail) {
+			break
+		}
+		cut = i
+	}
+	return r[:cut] + longTail
 }
 
 func segment(raw string) (string, Flags) {
@@ -85,6 +129,9 @@ func segment(raw string) (string, Flags) {
 	if rf.SecretSeed() {
 		flags |= FlagSecretSeed
 	}
+	if !storable(s) {
+		return "{invalid}", flags
+	}
 
 	// rule 5: the issuer is already {account} after rule 3
 	if strings.Contains(s, redact.KindAccount.Placeholder()) {
@@ -95,6 +142,10 @@ func segment(raw string) (string, Flags) {
 	if p, ok := wholeSegment(s); ok {
 		return p, flags
 	}
+	if strings.ContainsAny(s, " @") {
+		return "{text}", flags
+	}
+	s = innerIDs(s)
 
 	s = escape(s)
 	// rule 7
@@ -102,6 +153,52 @@ func segment(raw string) (string, Flags) {
 		return "{long}", flags
 	}
 	return s, flags
+}
+
+// storable reports whether s is valid utf-8 without control characters.
+func storable(s string) bool {
+	if !utf8.ValidString(s) {
+		return false
+	}
+	for _, c := range s {
+		if c < 0x20 || c == 0x7f || (c >= 0x80 && c < 0xa0) {
+			return false
+		}
+	}
+	return true
+}
+
+// innerSep lists the characters that separate an id from the rest of a
+// segment.
+const innerSep = "-_.,~:+;="
+
+// innerIDs replaces every all-digit token between separators with {id}.
+// letters glued to digits (v1, oauth2, a hex hash) are left alone: they
+// are names or already handled by rule 6.
+func innerIDs(s string) string {
+	if !strings.ContainsAny(s, "0123456789") {
+		return s
+	}
+	var b strings.Builder
+	b.Grow(len(s) + 8)
+	start := 0
+	flush := func(end int) {
+		tok := s[start:end]
+		if tok != "" && intRe.MatchString(tok) {
+			b.WriteString("{id}")
+		} else {
+			b.WriteString(tok)
+		}
+	}
+	for i := 0; i < len(s); i++ {
+		if strings.IndexByte(innerSep, s[i]) >= 0 {
+			flush(i)
+			b.WriteByte(s[i])
+			start = i + 1
+		}
+	}
+	flush(len(s))
+	return b.String()
 }
 
 func unhex(c byte) (byte, bool) {

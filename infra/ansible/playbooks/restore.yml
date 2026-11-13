@@ -24,6 +24,15 @@
 #        "secrets_file": "/path/to/old/secrets.enc.yaml"}}'
 # it needs object storage (backup_repo_mode s3, an operator input.
 # the node must be fresh: an existing restore volume stops the run.
+#
+# restore_extra_args adds pgbackrest options, for example
+#   -e '{"restore_extra_args": ["--repo=1", "--repo-target-time=2026-11-20 08:00:00+00"]}'
+# to read the object-locked repository as it was before someone deleted
+# from it (docs/deploy/backups.md section 3).
+# pulls only verified image digests outside the local converge
+- name: Verify the release
+  ansible.builtin.import_playbook: verify-release.yml
+
 - name: Restore to a point in time
   hosts: restore
   become: true
@@ -39,6 +48,7 @@
           - (restore_target is defined) != (restore_set is defined)
           - restore_target is not defined or restore_target is match('^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9:.]+[+-][0-9]{2}(:?[0-9]{2})?$')
           - restore_set is not defined or restore_set is match('^[0-9]{8}-[0-9]{6}F(_[0-9]{8}-[0-9]{6}[DI])?$')
+          - restore_extra_args is not defined or (restore_extra_args | select('match', '^--[a-z0-9-]+(=.*)?$') | list | length) == (restore_extra_args | length)
         fail_msg: >-
           set restore_target to a timestamp with offset ('2026-11-13 10:00:00+00')
           or restore_set to a pgbackrest backup label (20261113-101500F), not both
@@ -118,6 +128,7 @@
               '--stanza=' ~ backup_stanza, '--pg1-path=' ~ restore_pg_path]
              + (['--type=time', '--target=' ~ restore_target] if restore_target is defined
                 else ['--set=' ~ restore_set, '--type=immediate'])
+             + (restore_extra_args | default([]))
              + ['--target-action=promote', 'restore'] }}
       register: restore_run
       changed_when: true

@@ -357,6 +357,28 @@ func TestProvisioningLive(t *testing.T) {
 		require.Empty(t, all)
 	})
 
+	// the site setting of contract 4.3 reaches the gateway only through the
+	// registry entry, so a change must rewrite it, and only it
+	t.Run("utm collection reaches the registry entry", func(t *testing.T) {
+		for _, on := range []bool{true, false} {
+			e.sys(t, func(tx pgx.Tx) error {
+				_, err := tx.Exec(ctx, `update cp.sites set collect_utm = $1 where id = $2`, on, s.id)
+				return err
+			})
+			changes, err := e.rec.Changes(ctx, tenant)
+			require.NoError(t, err)
+			require.Equal(t, []string{provision.ActionRegistryPut}, actions(changes))
+			entry, err := e.kv.Get(ctx, s.id.String())
+			require.NoError(t, err)
+			got, err := registry.DecodeSite(s.id.String(), entry.Value())
+			require.NoError(t, err)
+			require.Equal(t, on, got.CollectUTM)
+			again, err := e.rec.Changes(ctx, tenant)
+			require.NoError(t, err)
+			require.Empty(t, again)
+		}
+	})
+
 	t.Run("a website deleted directly in umami is repaired", func(t *testing.T) {
 		require.NoError(t, e.um.Admin.DeleteWebsite(ctx, s.id.String()))
 		_, ok, err := e.um.Admin.GetWebsite(ctx, s.id.String())
@@ -452,6 +474,28 @@ func TestProvisioningLive(t *testing.T) {
 		require.Equal(t, sso.CodeNotFound, e.ssoFailure(t, outsiderCookie, "site="+s.id.String(), "none"))
 		status, _ = e.ssoClick(t, "", "site="+s.id.String(), "same-origin")
 		require.Equal(t, http.StatusUnauthorized, status)
+	})
+
+	//: a site in review (contract 5.6) has no umami
+	// website the user may open, so sso answers provisioning_pending
+	// instead of sending the browser to an umami error page. the tenant is
+	// active and its team and the membership exist, as for a reviewed site.
+	t.Run("sso for a site in review answers provisioning_pending", func(t *testing.T) {
+		ownerCookie := e.signIn(t, owner)
+		setStatus := func(status string) {
+			e.sys(t, func(tx pgx.Tx) error {
+				_, err := tx.Exec(ctx, `update cp.sites set status = $2 where id = $1`, s.id, status)
+				return err
+			})
+		}
+		setStatus("pending")
+		defer setStatus("active")
+		for _, view := range []string{"", "&view=quarantine"} {
+			require.Equal(t, sso.CodeProvisioningPending, e.ssoFailure(t, ownerCookie, "site="+s.id.String()+view, "same-origin"))
+		}
+		setStatus("active")
+		status, _ := e.ssoClick(t, ownerCookie, "site="+s.id.String(), "same-origin")
+		require.Equal(t, http.StatusFound, status)
 	})
 
 	t.Run("two tabs stay logged in after a second sso click", func(t *testing.T) {

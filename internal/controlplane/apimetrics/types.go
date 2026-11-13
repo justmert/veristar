@@ -253,5 +253,7 @@ func classOf(code int16) string {
 	return "unknown"
 }
 
-// warning kinds in contract order (api.ingest_warnings check)
-var warningKinds = []string{"span_derived", "lossy_histogram", "cardinality_overflow", "secret_in_path"}
+// warning kinds in contract order (api.ingest_warnings check). coarse_buckets
+// came with review and is last, so the earlier positions keep their
+// meaning for existing clients.
+var warningKinds = []string{"span_derived", "lossy_histogram", "cardinality_overflow", "secret_in_path", "coarse_buckets"}

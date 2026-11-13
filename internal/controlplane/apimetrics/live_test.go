@@ -299,6 +299,10 @@ func TestAPIMetrics(t *testing.T) {
 		}, wn.Days)
 		require.Equal(t, "2031-06-15", *wn.Totals[3].LastDay)
 		require.Nil(t, wn.Totals[0].LastDay)
+		// review added the coarse_buckets kind, always listed last
+		require.Len(t, wn.Totals, 5)
+		require.Equal(t, "coarse_buckets", wn.Totals[4].Kind)
+		require.Zero(t, wn.Totals[4].Count)
 	})
 
 	t.Run("source selection at minute, hourly and daily resolution", func(t *testing.T) {

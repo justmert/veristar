@@ -20,30 +20,8 @@
 # touched. bunny.net checks every 30 s and the record ttl is 60 s
 # (infra/tofu envs), so a resolver that fetched the set just before removal
 # may keep the address for up to 30 + 60 s; 120 s covers that with margin.
-- name: Verify the release image signatures
-  hosts: localhost
-  connection: local
-  gather_facts: false
-  any_errors_fatal: true
-  vars_files: [../vars/pins.yml, ../vars/signing.yml]
-  tasks:
-    - name: Verify every platform image of the release
-      ansible.builtin.include_tasks: tasks/verify-images.yml
-
-# host facts outrank play vars, so the roles' platform_images (vars/pins.yml)
-# become the verified repo:tag@digest references on every node, including in
-# the imported bootstrap play
-- name: Pin the nodes to the verified digests
-  hosts: edge:core
-  gather_facts: false
-  any_errors_fatal: true
-  vars_files: [../vars/pins.yml]
-  tasks:
-    - name: Use only verified image references
-      ansible.builtin.set_fact:
-        platform_images: "{{ platform_images | combine(deploy_verified | selectattr('key', 'in', platform_images.keys() | list) | items2dict) }}"
-      vars:
-        deploy_verified: "{{ hostvars['localhost'].sa_verified_images | dict2items }}"
+- name: Verify the release
+  ansible.builtin.import_playbook: verify-release.yml
 
 - name: Deploy edge nodes one by one
   hosts: edge
@@ -97,3 +75,22 @@
       ansible.builtin.include_tasks: tasks/undrain.yml
       vars:
         drain_dir: /etc/stellar-analytics/drain
+
+# the observability role's own images (prober and caddy on the probe node,
+# an operator input and its configs move with the release too. verify-release.yml
+# pinned platform_images, and with it observability_images.prober and
+# .caddy, to the verified digests. one node at a time: the
+# relay and the exporters restart only where their config changed, so
+# ingestion is not touched. the probe's os baseline and docker come from
+# site.yml's probe play.
+- name: Deploy the observability of every node
+  hosts: edge:core:probe
+  become: true
+  serial: 1
+  any_errors_fatal: true
+  max_fail_percentage: 0
+  vars_files: [../vars/pins.yml]
+  roles:
+    # the probe has had no secrets loaded in this run yet
+    - secrets
+    - observability

@@ -24,6 +24,8 @@ info:
     * List routes return at most `limit` items (1 to 500, default 500) and an
       opaque `next_cursor`, `null` on the last page. A cursor is bound to the
       route and every other query parameter; with any other combination it
+      is 400 `invalid_cursor`. The range a cursor carries is checked again on
+      every page with the limits of a first page; a cursor that breaks them
       is 400 `invalid_cursor`.
     * Each key may make 10 requests per second per control plane instance
       (token bucket, burst 20). Above that the answer is 429 `rate_limited`

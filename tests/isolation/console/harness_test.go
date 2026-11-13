@@ -179,6 +179,10 @@ func start(t *testing.T) *env {
 
 	callback := e.srv.URL + "/api/auth/github/callback"
 	fx := githuboauth.New(githuboauth.Config{ClientID: "console-test", ClientSecret: "console-test-secret", RedirectURL: callback})
+	// logins the tests add without their holders ever signing in; members
+	// are resolved to a github account id at add time (contract 4.2.5)
+	fx.Register(githuboauth.User{ID: 9_000_001, Login: "gate-pending"})
+	fx.Register(githuboauth.User{ID: 9_000_002, Login: "intruder-friend"})
 	e.fixture = httptest.NewServer(fx.Handler())
 	t.Cleanup(e.fixture.Close)
 
@@ -206,6 +210,12 @@ func start(t *testing.T) *env {
 			APIBase: e.fixture.URL,
 		},
 	}, e.conn, sessions)
+	require.NoError(t, err)
+	users, err := auth.NewUserLookup(auth.UserLookupConfig{
+		ClientID:     "console-test",
+		ClientSecret: config.FromMap(map[string]string{"S": "console-test-secret"}).Secret("S", 1),
+		Endpoints:    auth.Endpoints{APIBase: e.fixture.URL},
+	})
 	require.NoError(t, err)
 
 	// from here on the wiring follows cmd/controlplane/main.go serve, group
@@ -269,6 +279,8 @@ func start(t *testing.T) *env {
 	ssoPath, ok := strings.CutPrefix(sso.Path, "/api")
 	require.True(t, ok)
 
+	memberRoutes, err := members.NewRoutes(scope, users)
+	require.NoError(t, err)
 	api = controlplane.NewHandler(controlplane.Options{
 		Log:           log,
 		ConsoleOrigin: e.srv.URL,
@@ -277,7 +289,7 @@ func start(t *testing.T) *env {
 		Private: []controlplane.Routes{
 			controlplane.RoutesFunc(ah.Private),
 			tenants.NewRoutes(scope),
-			members.NewRoutes(scope),
+			memberRoutes,
 			sites.NewRoutes(scope).OnCreate(checks),
 			checks,
 			ingest.NewRoutes(scope),

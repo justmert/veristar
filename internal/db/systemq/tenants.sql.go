@@ -59,27 +59,24 @@ func (q *Queries) EnrollTenant(ctx context.Context, arg EnrollTenantParams) (CpT
 	return i, err
 }
 
-const findUserByLogin = `-- name: FindUserByLogin :one
+const findUserByGitHubID = `-- name: FindUserByGitHubID :one
 select id, github_id, github_login, created_at
 from cp.users
-where lower(github_login) = lower($1)
-order by last_login_at desc nulls last, created_at desc
-limit 1
+where github_id = $1
 `
 
-type FindUserByLoginRow struct {
+type FindUserByGitHubIDRow struct {
 	ID          uuid.UUID
 	GithubID    int64
 	GithubLogin string
 	CreatedAt   time.Time
 }
 
-// github logins can be renamed and later taken by someone else, so an old
-// row may still carry a login. the account that signed in last with it is
-// the one that holds it now.
-func (q *Queries) FindUserByLogin(ctx context.Context, githubLogin string) (FindUserByLoginRow, error) {
-	row := q.db.QueryRow(ctx, findUserByLogin, githubLogin)
-	var i FindUserByLoginRow
+// the account the operator named, resolved from the login through github
+// first: a stored login can be stale after a rename, the id cannot
+func (q *Queries) FindUserByGitHubID(ctx context.Context, githubID int64) (FindUserByGitHubIDRow, error) {
+	row := q.db.QueryRow(ctx, findUserByGitHubID, githubID)
+	var i FindUserByGitHubIDRow
 	err := row.Scan(
 		&i.ID,
 		&i.GithubID,
@@ -212,6 +209,23 @@ func (q *Queries) ListUserTenantsPage(ctx context.Context, arg ListUserTenantsPa
 		return nil, err
 	}
 	return items, nil
+}
+
+const refreshUserLogin = `-- name: RefreshUserLogin :exec
+update cp.users set github_login = $1
+where github_id = $2 and github_login <> $1
+`
+
+type RefreshUserLoginParams struct {
+	GithubLogin string
+	GithubID    int64
+}
+
+// the login github reported for the account just now; member lists show
+// it instead of the one stored at the last sign-in
+func (q *Queries) RefreshUserLogin(ctx context.Context, arg RefreshUserLoginParams) error {
+	_, err := q.db.Exec(ctx, refreshUserLogin, arg.GithubLogin, arg.GithubID)
+	return err
 }
 
 const tenantsCreatedSince = `-- name: TenantsCreatedSince :one

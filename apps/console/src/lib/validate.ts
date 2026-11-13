@@ -15,6 +15,7 @@ export type FieldCode =
   | "invalid_domain"
   | "invalid_strkey"
   | "invalid_github_login"
+  | "unknown_github_login"
   | "invalid_role"
   | "duplicate"
   | "unknown_tracker_version"
@@ -182,6 +183,8 @@ export function fieldMessage(code: string): string {
       return "Not a valid account (G...), muxed account (M...) or contract (C...) id.";
     case "invalid_github_login":
       return "Not a valid GitHub username.";
+    case "unknown_github_login":
+      return "No GitHub user has this username.";
     case "invalid_role":
       return "Choose owner or member.";
     case "duplicate":

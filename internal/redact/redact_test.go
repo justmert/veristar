@@ -308,3 +308,41 @@ func BenchmarkString(b *testing.B) {
 		String(s)
 	}
 }
+
+// worstCases are inputs that make many positions look like the start of a
+// strkey: "PA" is a signed payload candidate at every second position, "GA"
+// an account candidate. 8000 characters is about the redactable text one
+// event body carries.
+func worstCases() map[string]string {
+	return map[string]string{
+		"pa_500":  strings.Repeat("PA", 250),
+		"pa_8000": strings.Repeat("PA", 4000),
+		"ga_8000": strings.Repeat("GA", 4000),
+		"mixed":   strings.Repeat("PAGAMABAWA", 800),
+	}
+}
+
+func BenchmarkStringWorstCase(b *testing.B) {
+	for name, s := range worstCases() {
+		b.Run(name, func(b *testing.B) {
+			b.ReportAllocs()
+			for b.Loop() {
+				String(s)
+			}
+		})
+	}
+}
+
+// W-5: the work per input stays linear and small. every strkey decode
+// attempt allocates, so the allocation count bounds the decode attempts
+// without timing the host: before the fix "PA" x 4000 tried 16 signed
+// payload lengths at each of 4000 positions.
+func TestWorstCaseWorkIsBounded(t *testing.T) {
+	for name, s := range worstCases() {
+		allocs := testing.AllocsPerRun(5, func() { String(s) })
+		// at most one decode, with its few allocations, per two characters
+		if limit := float64(len(s)) * 2; allocs > limit {
+			t.Errorf("%s: %.0f allocations for %d characters, want at most %.0f", name, allocs, len(s), limit)
+		}
+	}
+}

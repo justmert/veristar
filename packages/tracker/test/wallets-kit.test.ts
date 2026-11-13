@@ -270,12 +270,13 @@ describe("storage watcher", () => {
 
 describe("data-wallets-kit through createTracker", () => {
   // a separate window, so its watcher ends with it
-  function page(): Window & typeof globalThis {
+  function page(gpc = false): Window & typeof globalThis {
     const dom = new JSDOM("<!doctype html><title>dapp</title>", {
       url: "https://dapp.example/",
       beforeParse(w) {
         w.fetch = fetch;
         Object.defineProperty(w, "crypto", { value: globalThis.crypto, configurable: true });
+        if (gpc) Object.defineProperty(w.navigator, "globalPrivacyControl", { value: true });
       },
     });
     return dom.window as unknown as Window & typeof globalThis;
@@ -312,6 +313,37 @@ describe("data-wallets-kit through createTracker", () => {
     ]);
     off.close();
     on.close();
+  });
+
+  // W-9
+  it("never reads the kit's storage when start() is called for a gpc visitor", async () => {
+    gw.requests.length = 0;
+    const w = page(true);
+    const tracker = createTracker(w, {
+      siteId: SITE,
+      host: gw.origin,
+      autoTrack: false,
+      walletsKit: true,
+    });
+    const proto = Object.getPrototypeOf(w.localStorage) as Storage;
+    let reads = 0;
+    const key = proto.key;
+    proto.key = function (this: Storage, i: number) {
+      reads++;
+      return key.call(this, i);
+    };
+    try {
+      // a consent banner that calls start() without checking gpc itself
+      tracker.start();
+      w.localStorage.setItem(KIT_SELECTED_KEY, "lobstr");
+      w.localStorage.setItem(KIT_ADDRESS_KEY, "present");
+      await pause(STORAGE_POLL_MS * 2);
+      expect(reads).toBe(0);
+      expect(gw.requests).toEqual([]);
+    } finally {
+      proto.key = key;
+      w.close();
+    }
   });
 });
 

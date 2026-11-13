@@ -28,7 +28,7 @@ commands:
   umami rotate-admin
                     replace the umami admin password UMAMI_ADMIN_PASSWORD_PREVIOUS with
                     UMAMI_ADMIN_PASSWORD and prove the previous one is refused
-` + dbUsage + natsUsage + probeUsage + verifyUsage + rotationUsage + `  version           print the build version
+` + dbUsage + natsUsage + dlqUsage + forwardUsage + probeUsage + verifyUsage + rotationUsage + `  version           print the build version
 `
 
 func main() {
@@ -65,6 +65,18 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	case len(args) >= 1 && args[0] == "nats":
 		if err := runNATS(ctx, args[1:]); err != nil {
 			log.Error("nats command failed", "error", err.Error())
+			return 1
+		}
+		return 0
+	case len(args) >= 1 && args[0] == "dlq":
+		if err := runDLQ(ctx, args[1:]); err != nil {
+			log.Error("dlq command failed", "error", err.Error())
+			return 1
+		}
+		return 0
+	case len(args) >= 1 && args[0] == "queue":
+		if err := runForward(ctx, args[1:]); err != nil {
+			log.Error("queue command failed", "error", err.Error())
 			return 1
 		}
 		return 0

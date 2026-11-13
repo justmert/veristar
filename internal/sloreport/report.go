@@ -269,19 +269,13 @@ func Render(m Month) string {
 			// covered range; used is the failed intervals' time
 			budget = minutes((1 - obj/100) * period / 60)
 			used = minutes(float64(s.Failed()*IntervalSeconds) / 60)
-			a, ok := s.Availability()
-			switch {
-			case !ok:
-				verdict = "not measured"
-			case a >= obj:
-				verdict = "met"
-			default:
-				verdict = "missed"
-			}
+			verdict = Verdict(s, obj, period)
 		}
 		w("| %s (`%s`) | %d | %d | %d | %s | %s | %s | %s | %s | %s |\n",
 			titles[s.Key], s.Key, s.Results, s.Successes, s.Failed(), avail, objective, verdict, coverage, budget, used)
 	}
+
+	w("\nBelow %s coverage a measure is reported as not measured, unless its failed intervals alone already exceed the downtime budget, which makes it missed whatever the unmeasured time held.\n", pct(CoverageFloor))
 
 	w("\n## Incidents\n\n")
 	w("An incident is a run of consecutive failed results of one measure; it ends at the next success.\n\n")
@@ -318,4 +312,34 @@ func WriteReport(dir string, m Month) (string, error) {
 		return "", err
 	}
 	return path, nil
+}
+
+// CoverageFloor is the share of the covered range, in percent, that must be
+// measured before a verdict of met is given. without it a month with one
+// day of probe data and no failures would read as met (docs/sla.md).
+const CoverageFloor = 95.0
+
+// Verdict compares one measure with its objective over a period of the
+// given seconds. availability alone is computed over measured results, so a
+// barely measured month cannot say met; it can still say missed, because
+// failed time beyond the whole budget stays a miss whatever the unmeasured
+// intervals held.
+func Verdict(s Stats, objective, periodSeconds float64) string {
+	a, ok := s.Availability()
+	if !ok {
+		return "not measured"
+	}
+	failed := float64(s.Failed() * IntervalSeconds)
+	budget := (1 - objective/100) * periodSeconds
+	coverage := 100 * float64(s.Results*IntervalSeconds) / periodSeconds
+	switch {
+	case failed > budget:
+		return "missed"
+	case coverage < CoverageFloor:
+		return "not measured"
+	case a >= objective:
+		return "met"
+	default:
+		return "missed"
+	}
 }

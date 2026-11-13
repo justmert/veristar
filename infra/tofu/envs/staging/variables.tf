@@ -82,6 +82,23 @@ variable "core_server_type" {
   type        = string
 }
 
+variable "restore_enabled" {
+  description = "create the restore node that playbooks/restore.yml restores onto (docs/runbooks/disaster-recovery.md); set false again afterwards"
+  type        = bool
+  default     = false
+}
+
+variable "restore_location" {
+  description = "location of the restore node"
+  type        = string
+  default     = "fsn1"
+
+  validation {
+    condition     = contains(["fsn1", "nbg1", "hel1"], var.restore_location)
+    error_message = "restore_location must be fsn1, nbg1 or hel1."
+  }
+}
+
 variable "server_image" {
   description = "hetzner image name for debian 13"
   type        = string

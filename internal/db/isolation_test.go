@@ -34,8 +34,8 @@ var tenantTables = []tenantTable{
 		return `insert into cp.tenant_members (tenant_id, user_id, role) values ($1, $2, 'member')`, []any{tenant, other}
 	}},
 	{name: "cp.invites", key: "tenant_id", insert: func(tenant, user, _ uuid.UUID) (string, []any) {
-		return `insert into cp.invites (tenant_id, github_login, role, created_by, expires_at)
-		        values ($1, 'newcomer', 'member', $2, now() + interval '1 day')`, []any{tenant, user}
+		return `insert into cp.invites (tenant_id, github_id, github_login, role, created_by, expires_at)
+		        values ($1, 4242, 'newcomer', 'member', $2, now() + interval '1 day')`, []any{tenant, user}
 	}},
 	{name: "cp.sites", key: "tenant_id", insert: func(tenant, _, _ uuid.UUID) (string, []any) {
 		return `insert into cp.sites (id, tenant_id, name, domain, verify_token)

@@ -56,9 +56,13 @@ postgresql:
   # node-local parameters: wal archiving through pgbackrest
   # (roles/backup). archive_mode needs a restart, which a new cluster gets
   # anyway; patroni reports pending_restart on a running one.
+  # archive_command stays empty until the stanza exists (tasks/archive.yml):
+  # with archive_mode on and an empty command postgresql keeps every wal
+  # segment and archives nothing, instead of failing each segment against a
+  # repository that has no stanza yet. a reload sets the real command.
   parameters:
     archive_mode: "on"
-    archive_command: "pgbackrest --stanza={{ backup_stanza }} archive-push %p"
+    archive_command: "{{ core_archive_command }}"
     archive_timeout: "{{ core_archive_timeout }}"
   pg_hba:
     - local all postgres peer

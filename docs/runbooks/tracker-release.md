@@ -69,7 +69,10 @@ that sends more than the wire format allows, or a doubt about how a file was bui
 
 2. `pnpm --filter tracker verify-releases`, then commit and tag a platform release, and roll it
    out to every edge and core node. Pages that load the version get 410 and record nothing;
-   snippet requests for it get `410 tracker_version_revoked`.
+   snippet requests for it get `410 tracker_version_revoked`. A page that still runs the file from
+   its cache or a self-hosted copy keeps sending: from 1.2.0 those events name the release and
+   the gateway refuses them with 410 (`rejected_revoked_version` on the site's counters); events
+   of 1.0.0 and 1.1.0 carry no release name and still pass.
 
 3. On a node that already runs an image with the new list, a reload without restart is
    possible: `SIGHUP` makes the gateway read `revoked.json` (and the DB-IP file) again, and the

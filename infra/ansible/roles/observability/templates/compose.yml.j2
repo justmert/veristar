@@ -59,6 +59,10 @@ services:
       - prometheus:/prometheus
     # loopback only: operators use an ssh tunnel (the design)
     ports: ["127.0.0.1:9090:9090"]
+{% if observability_probe_extra_hosts is defined %}
+    # local converge only: the platform names resolve nowhere else
+    extra_hosts: {{ observability_probe_extra_hosts | to_json }}
+{% endif %}
 
   alertmanager:
     <<: *defaults
@@ -75,6 +79,10 @@ services:
     volumes:
       - {{ observability_conf_dir }}/alertmanager:/etc/alertmanager:ro
       - alertmanager:/alertmanager
+{% if observability_probe_extra_hosts is defined %}
+    # local converge only: the platform names resolve nowhere else
+    extra_hosts: {{ observability_probe_extra_hosts | to_json }}
+{% endif %}
     # the private address only: the other core node's prometheus and the
     # other cluster member
     ports:
@@ -168,6 +176,14 @@ services:
     volumes:
       - {{ observability_conf_dir }}/gatus.yml:/config/config.yaml:ro
       - gatus:/data
+{% if observability_probe_ca_file is defined %}
+      # local converge only: trust the caddy cas of the local nodes
+      - {{ observability_conf_dir }}/probe-ca.crt:/etc/ssl/certs/ca-certificates.crt:ro
+{% endif %}
+{% if observability_probe_extra_hosts is defined %}
+    # local converge only: the platform names resolve nowhere else
+    extra_hosts: {{ observability_probe_extra_hosts | to_json }}
+{% endif %}
 
   prober:
     <<: *defaults
@@ -176,6 +192,13 @@ services:
     env_file: [{{ secrets_env_dir }}/prober.env]
     volumes:
       - {{ observability_conf_dir }}/releases:/releases:ro
+{% if observability_probe_ca_file is defined %}
+      - {{ observability_conf_dir }}/probe-ca.crt:/etc/prober/ca.crt:ro
+{% endif %}
+{% if observability_probe_extra_hosts is defined %}
+    # local converge only: the platform names resolve nowhere else
+    extra_hosts: {{ observability_probe_extra_hosts | to_json }}
+{% endif %}
 {% endif %}
 {% if sa_tier in ['edge', 'core'] %}
 

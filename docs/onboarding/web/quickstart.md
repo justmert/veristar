@@ -100,7 +100,8 @@ Countries come from the DB-IP country database:
 ## How visitors are counted
 
 - **No cookies and nothing stored in the browser.** The tracker reads one browser storage key, the
-  opt-out flag, and stores nothing.
+  opt-out flag, and stores nothing. Only if you turn on Wallets Kit capture with the script tag
+  does it also read the kit's storage keys ([wallets-kit.md](wallets-kit.md)).
 - **Unique visitors are unique per UTC day.** A daily secret that mixes the network address and
   browser into a visitor token is destroyed at midnight UTC, so the same person on two days counts
   twice, and visitors over a week are the sum of the daily visitors.
@@ -108,9 +109,10 @@ Countries come from the DB-IP country database:
   the daily visitor token and the gateway's rate and abuse checks. Region and city are never
   recorded.
 - **Global Privacy Control is honoured.** A browser that sends it is not counted at all.
-- **URLs are cleaned before they are stored.** Query parameters other than `utm_source`,
-  `utm_medium`, `utm_campaign`, `utm_content`, `utm_term` and `ref` are removed, fragments other
-  than `#/` routes are never sent, referrers are cut to their scheme and host, and Stellar keys and
+- **URLs are cleaned before they are stored.** Query parameters are removed. Campaign
+  parameters (`utm_source`, `utm_medium`, `utm_campaign`, `utm_content`, `utm_term` and `ref`)
+  are kept only if you turn on "Keep campaign parameters" for the site in the console; it is off
+  by default. Fragments other than `#/` routes are never sent, referrers are cut to their scheme and host, and Stellar keys and
   email addresses are replaced with placeholders.
 
 [`docs/reference/web-metrics.md`](../../reference/web-metrics.md) defines each metric exactly.

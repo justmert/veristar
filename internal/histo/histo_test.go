@@ -165,3 +165,36 @@ func TestQuantile(t *testing.T) {
 	_, err = histo.Quantile(0.5, c(map[int]int64{3: -1}))
 	require.ErrorContains(t, err, "holds -1")
 }
+
+// review: a source bucket that spans several canonical buckets puts its
+// requests at its upper bound; when most requests sit in such buckets the
+// histogram is coarse.
+func TestCoarse(t *testing.T) {
+	generic := []float64{0, 5, 10, 25, 50, 75, 100, 250, 500, 750, 1000, 2500, 5000, 7500, 10000}
+	counts := make([]uint64, len(generic)+1)
+	counts[1] = 100
+	if !histo.Coarse(generic, counts) {
+		t.Error("millisecond defaults on a seconds metric not coarse")
+	}
+	canon := histo.Bounds[:]
+	c := make([]uint64, histo.Buckets)
+	c[3] = 50
+	if histo.Coarse(canon, c) {
+		t.Error("the canonical layout is coarse")
+	}
+	prom := []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10}
+	p := make([]uint64, len(prom)+1)
+	p[4] = 10
+	if histo.Coarse(prom, p) {
+		t.Error("prometheus defaults are coarse")
+	}
+	// one wide bucket with a few requests and most requests in fine ones
+	mixed := []float64{0.005, 0.01, 0.025, 5}
+	m := []uint64{40, 40, 10, 9, 1}
+	if histo.Coarse(mixed, m) {
+		t.Error("10 of 100 requests in a wide bucket made the histogram coarse")
+	}
+	if histo.Coarse(generic, make([]uint64, len(generic)+1)) {
+		t.Error("an empty histogram is coarse")
+	}
+}

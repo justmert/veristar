@@ -50,6 +50,26 @@ type env struct {
 
 	mu         sync.Mutex
 	reconciled []uuid.UUID
+	logs       lockedBuffer
+}
+
+// lockedBuffer collects the control plane log, so a test can check that
+// no client address ever reaches it.
+type lockedBuffer struct {
+	mu sync.Mutex
+	b  strings.Builder
+}
+
+func (l *lockedBuffer) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.b.Write(p)
+}
+
+func (l *lockedBuffer) String() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.b.String()
 }
 
 func (e *env) reconciledTenants() []uuid.UUID {
@@ -113,7 +133,7 @@ func newEnv(t *testing.T, operators ...int64) *env {
 	}, conn, sessions)
 	require.NoError(t, err)
 	box.h.Store(controlplane.NewHandler(controlplane.Options{
-		Log:           slog.New(slog.DiscardHandler),
+		Log:           slog.New(slog.NewJSONHandler(&e.logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
 		ConsoleOrigin: cp.URL,
 		Sessions:      sessions,
 		Public:        []controlplane.Routes{controlplane.RoutesFunc(h.Public), controlplane.RoutesFunc(terms.Routes)},
@@ -546,9 +566,9 @@ func TestSignInResolvesInvites(t *testing.T) {
 		if _, err := tx.Exec(ctx, `update cp.tenants set status = 'active', accepted_terms_version = '2026-11-12-draft.2' where id = $1`, tn.ID); err != nil {
 			return err
 		}
-		if err := tx.QueryRow(ctx, `insert into cp.invites (tenant_id, github_login, role, created_by, expires_at)
-			values ($1, $2, 'member', $3, now() + interval '14 days') returning id`,
-			tn.ID, strings.ToLower(login), owner.ID).Scan(&inviteID); err != nil {
+		if err := tx.QueryRow(ctx, `insert into cp.invites (tenant_id, github_id, github_login, role, created_by, expires_at)
+			values ($1, $4, $2, 'member', $3, now() + interval '14 days') returning id`,
+			tn.ID, strings.ToLower(login), owner.ID, id).Scan(&inviteID); err != nil {
 			return err
 		}
 		// an expired invite for another tenant is not resolved
@@ -559,9 +579,9 @@ func TestSignInResolvesInvites(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		return tx.QueryRow(ctx, `insert into cp.invites (tenant_id, github_login, role, created_by, created_at, expires_at)
-			values ($1, $2, 'owner', $3, now() - interval '20 days', now() - interval '6 days') returning id`,
-			tn2.ID, login, owner.ID).Scan(&expiredID)
+		return tx.QueryRow(ctx, `insert into cp.invites (tenant_id, github_id, github_login, role, created_by, created_at, expires_at)
+			values ($1, $4, $2, 'owner', $3, now() - interval '20 days', now() - interval '6 days') returning id`,
+			tn2.ID, login, owner.ID, id).Scan(&expiredID)
 	})
 	require.NoError(t, err)
 
@@ -740,13 +760,28 @@ func oauthEndpoint(base string) oauth2.Endpoint {
 	}
 }
 
-func TestStartRateLimited(t *testing.T) {
+// startFrom opens /api/auth/github/start as caddy forwards it for a client
+// with address addr.
+func (e *env) startFrom(t *testing.T, addr string) *resp {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodGet, e.origin+"/api/auth/github/start", nil)
+	require.NoError(t, err)
+	req.Header.Set(auth.ClientAddrHeader, addr)
+	c := e.cp.Client()
+	c.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	return fetch(t, c, req)
+}
+
+//: the start limit is per client. one client that runs
+// out of starts gets 429, everyone else still signs in, and the address
+// that keyed the bucket appears nowhere in the log.
+func TestStartRateLimitedPerClient(t *testing.T) {
 	e := newEnv(t)
-	b := e.browser(t)
+	const flooder = "203.0.113.77"
 	ok := 0
 	var limited *resp
 	for range auth.StartBurst + 10 {
-		res := b.get(e.origin + "/api/auth/github/start")
+		res := e.startFrom(t, flooder)
 		if res.StatusCode == http.StatusTooManyRequests {
 			limited = res
 			break
@@ -754,16 +789,35 @@ func TestStartRateLimited(t *testing.T) {
 		require.Equal(t, http.StatusFound, res.StatusCode)
 		ok++
 	}
-	require.NotNil(t, limited, "the bucket never ran out")
-	require.GreaterOrEqual(t, ok, auth.StartBurst)
+	require.NotNil(t, limited, "the client's bucket never ran out")
+	require.GreaterOrEqual(t, ok, auth.StartClientBurst)
+	require.Less(t, ok, auth.StartBurst, "one client must run out long before the global ceiling")
 	require.Equal(t, "rate_limited", decode[apiError](t, limited).Error.Code)
-	require.Equal(t, "1", limited.Header.Get("Retry-After"))
+	require.Equal(t, "2", limited.Header.Get("Retry-After"))
 	require.Nil(t, setCookie(t, limited, "sa_oauth"), "a refused start sets no state cookie")
+
+	// other clients are not affected, also another address in the same /24
+	for _, other := range []string{"198.51.100.20", "203.0.113.78", "2001:db8:1::1"} {
+		require.Equal(t, http.StatusFound, e.startFrom(t, other).StatusCode, other)
+	}
+	// one ipv6 subscriber holds a /64: its addresses share one bucket
+	for i := range auth.StartClientBurst {
+		res := e.startFrom(t, "2001:db8:2::"+strconv.FormatInt(int64(i+1), 16))
+		require.Equal(t, http.StatusFound, res.StatusCode, i)
+	}
+	require.Equal(t, http.StatusTooManyRequests, e.startFrom(t, "2001:db8:2::ffff").StatusCode)
+
+	logs := e.logs.String()
+	require.NotEmpty(t, logs)
+	for _, addr := range []string{flooder, "198.51.100.20", "2001:db8"} {
+		require.NotContains(t, logs, addr, "the log must never hold a client address")
+	}
 }
 
-// one sealed state cookie replayed with made-up codes: each replay passes the
-// state check, so only the exchange bucket stops the requests to github
-func TestCallbackExchangeRateLimited(t *testing.T) {
+//: one sealed state cookie replayed with made-up codes
+// reaches the code exchange once. the replays no longer drain a shared
+// exchange budget, so another person's sign-in still works afterwards.
+func TestCallbackStateIsSingleUse(t *testing.T) {
 	e := newEnv(t)
 	b := e.browser(t)
 	authorize := b.start("")
@@ -772,23 +826,32 @@ func TestCallbackExchangeRateLimited(t *testing.T) {
 	require.NotNil(t, sealed)
 	plain := e.cp.Client()
 	plain.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	limited := 0
 	for i := range auth.ExchangeBurst + 10 {
 		u := e.origin + callbackPath + "?state=" + url.QueryEscape(state) + "&code=made-up-" + strconv.Itoa(i)
 		req, err := http.NewRequest(http.MethodGet, u, nil)
 		require.NoError(t, err)
 		req.AddCookie(&http.Cookie{Name: "sa_oauth", Value: sealed.Value})
+		// each replay from a different address, as a distributed attacker
+		req.Header.Set(auth.ClientAddrHeader, "192.0.2."+strconv.Itoa(i+1))
 		res := fetch(t, plain, req)
 		require.Equal(t, http.StatusSeeOther, res.StatusCode)
-		switch loc := res.Header.Get("Location"); loc {
-		case "/sign-in?error=exchange_failed":
-			require.Zero(t, limited, "an exchange ran after the bucket was empty")
-		case "/sign-in?error=rate_limited":
-			limited++
-		default:
-			t.Fatalf("unexpected redirect %s", loc)
+		want := "/sign-in?error=state_mismatch"
+		if i == 0 {
+			want = "/sign-in?error=exchange_failed"
+		}
+		require.Equal(t, want, res.Header.Get("Location"), "replay %d", i)
+	}
+	exchanges := 0
+	for _, rec := range e.fixture.Requests().Token {
+		if strings.HasPrefix(rec.Form["code"], "made-up-") {
+			exchanges++
 		}
 	}
-	require.GreaterOrEqual(t, limited, 1, "the bucket never ran out")
-	require.LessOrEqual(t, limited, 10)
+	require.Equal(t, 1, exchanges, "the replayed state reached github once")
+
+	// a real person signs in normally after the replays
+	other := e.browser(t)
+	res := other.signIn(newGitHubID(), "after-replay", "/")
+	require.Equal(t, http.StatusSeeOther, res.StatusCode)
+	require.Equal(t, "/", res.Header.Get("Location"))
 }

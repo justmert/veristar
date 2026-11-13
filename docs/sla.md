@@ -38,7 +38,12 @@ Gatus keeps raw results for about a week and hourly uptime for 30 days, which is
 a month. So the workflow `slo-report.yml` copies each day's raw results into `docs/slo/data/`
 every night, and on the first day of a month `cmd/sloreport` computes the month's
 availability per measure from those files and opens a pull request with `docs/slo/<YYYY-MM>.md`.
-The monthly report is the record of whether a target was met. `TestCollectThenReport`
+The monthly report is the record of whether a target was met. A measure gets a verdict of
+`met` only when the probe measured at least 95% of the covered range (coverage). Below that
+floor the verdict is `not measured`, so a month with one day of clean probe data does not read
+as compliant. The one exception is a measure whose failed intervals alone already exceed the
+downtime budget: that is `missed` at any coverage, because the unmeasured time cannot undo it.
+`TestVerdictCoverageFloor` (`internal/sloreport`) pins these rules. `TestCollectThenReport`
 (`cmd/sloreport`) and the `internal/sloreport` tests check the computation against raw data.
 
 ## How the 24-hour patch target is measured
@@ -55,6 +60,13 @@ when the first signal is filed, not when someone reads it:
 
 The issue of each finding is closed with the elapsed time from the first signal to the
 patched production. The internal target is 8 hours, leaving 16 hours of margin.
+
+## Hosting for the service window
+
+The providers, the monthly cost per environment (about 191 EUR plus USD 1 for production, read
+2026-11-13) and the billing requirements for the 12 months of hosting are in
+[deploy/prerequisites.md](deploy/prerequisites.md), "Hosting". Who holds the accounts and pays is
+an open question to SCF and is not decided.
 
 ## What stands behind the targets today
 
@@ -97,9 +109,12 @@ From [reference/availability.md](reference/availability.md):
 - **The port-80 health check sees no TLS failure.** A broken certificate on port 443 leaves the
   node in DNS. The prober checks each node's certificate by its own address, and the
   `CertificateExpiringSoon` alert fires 14 days before expiry (`docs/runbooks/alerts.md`).
-- **One Umami process per core node and one active replayer.** At ten times the expected peak
-  the measured drain rate (about 280 web events a second) is below the load (500 a second).
-  Events are queued, not lost, but the dashboards fall behind.
+- **One active replayer feeding a fixed number of Umami processes.** Each core node runs
+  `core_umami_processes` Umami processes (default 4). The this stage load drill measured about
+  280 web events a second with one process, below the 500 a second of ten times the expected
+  peak; four processes drained about 2.3 times one process in a later local measurement, and
+  the 10x drill was not rerun with them. Events are queued, not lost, but the dashboards can
+  fall behind.
 - **Two database nodes.** While the replica is down the leader runs alone; a second failure in
   that time loses what only the leader had, back to the last archived WAL (at most 60 s).
 - **The backup repository** in one object storage location, not yet tested.
@@ -123,10 +138,12 @@ issuance.
 
 ### Monitoring
 
-35 alert rules with tests, of which 20 were fire-drilled, the prober, the status page and the
-SLO report were built and verified on a local test stack (the design). Not yet done:
-delivery of alerts to the real receiver (Discord webhook, an operator input, the probe server at the
-second provider an operator input, and applying the observability role in `site.yml`.
+35 alert rules (plus 5 recording rules) with promtool tests, the prober, the status page and
+the SLO report were built and verified on a local test stack (the design). In the alert
+fire-drills 16 alerts fired and resolved and 3 more fired for real without a drill
+([runbooks/alerts.md](runbooks/alerts.md), "Fire-drills"). The observability role is applied
+by `site.yml` on the edge and core nodes. Not yet done: delivery of alerts to the real
+receiver (Discord webhook, an operator input and the probe server at the second provider an operator input.
 
 ### Patching
 

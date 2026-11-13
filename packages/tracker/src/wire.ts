@@ -32,6 +32,21 @@ export const MAX_PROOF_BITS = 24;
 // one after 5 hours of local monotonic time, which leaves an hour of margin.
 export const CHALLENGE_REFRESH_MS = 5 * 60 * 60 * 1000;
 
+// the gateway accepts one proof for PROOF_REPLAY_LIMIT events per node (50 at
+// the starting values). a single-page app keeps one page load for as long as
+// the tab is open, so the tracker fetches a new challenge after this many
+// events, below the limit
+export const PROOF_MAX_USES = 40;
+
+// 403 reasons after which a new challenge can succeed: the proof was used up
+// on that node or its challenge is no longer valid there. the event is sent
+// once more with a fresh proof
+export const STALE_PROOF_REASONS: readonly string[] = [
+  "rejected_replay",
+  "rejected_challenge_expired",
+  "rejected_challenge_tag",
+];
+
 export type EventType = "pv" | "ev";
 
 // flat object only: nested values are refused by the gateway
@@ -57,6 +72,9 @@ export type Proof = {
 
 export type WireEvent = {
   v: typeof WIRE_VERSION;
+  // tracker release that sent the event, so the gateway can refuse events of
+  // a revoked release. optional: 1.0.0 and 1.1.0 do not send it
+  sv?: string;
   w: string;
   t: EventType;
   h: string;
@@ -119,10 +137,39 @@ function isHighSurrogate(code: number): boolean {
 // biome-ignore lint/suspicious/noControlCharactersInRegex: matching them is the point
 export const CONTROL = /[\u0000-\u001f\u007f-\u009f]/;
 
-// an event name is checked like a data key: control characters are refused
+// umami refuses event names starting with a spreadsheet formula trigger
+// (src/app/api/send/request-schema.ts, FORMULA_TRIGGER_RE)
+const FORMULA_TRIGGER = /^[=+\-@\t\r]/;
+
+// an event name is checked like a data key: control characters are refused,
+// and so are names umami would refuse
 export function checkName(name: string): string | undefined {
   if (CONTROL.test(name)) return "event name contains control characters";
+  if (FORMULA_TRIGGER.test(name)) return "event name must not start with =, +, -, @, tab or return";
   return undefined;
+}
+
+// what umami 3.5.0 can store (test/vectors/storable-v1.json, mirrored by
+// internal/events/storable.go). numbers go to a numeric(19,4) column and umami
+// refuses 1e15 and more; revenue with a currency is refused from 1e14; a
+// string in umami's date format goes to a timestamp column, which refuses
+// years before 1, so 0000 and all of 0001-01-01 are refused
+export const MAX_DATA_NUMBER = 1e15;
+export const MAX_REVENUE = 1e14;
+const UMAMI_DATE =
+  /^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]{3})?(Z|\+[0-9]{2}:[0-9]{2})?$/;
+
+function dateBeforeYearTwo(value: string): boolean {
+  return UMAMI_DATE.test(value) && (value.startsWith("0000-") || value.startsWith("0001-01-01T"));
+}
+
+// mirrors umami's isRevenueOutOfRange
+function revenueOutOfRange(data: WireData): boolean {
+  const { revenue, currency } = data;
+  if (typeof currency !== "string" || currency.trim() === "") return false;
+  if (typeof revenue !== "number" && typeof revenue !== "string") return false;
+  const n = Number(revenue);
+  return Number.isFinite(n) && n >= MAX_REVENUE;
 }
 
 // a fragment is sent only when it is a hash-router route ("#/..."), because
@@ -149,11 +196,16 @@ export function checkData(data: unknown): WireData | string {
     const value = (data as Record<string, unknown>)[key];
     if (typeof value === "string") {
       if (value.includes("\u0000")) return `event data value for "${key}" contains a nul character`;
+      if (dateBeforeYearTwo(value)) return `event data date for "${key}" is before year 1`;
       out[key] = clip(value, LIMITS.dataValueLength);
     } else if (typeof value === "boolean") out[key] = value;
-    else if (typeof value === "number" && Number.isFinite(value)) out[key] = value;
-    else return `event data value for "${key}" must be a string, finite number or boolean`;
+    else if (typeof value === "number" && Number.isFinite(value)) {
+      if (Math.abs(value) >= MAX_DATA_NUMBER)
+        return `event data number for "${key}" must be below 1e15 in absolute value`;
+      out[key] = value;
+    } else return `event data value for "${key}" must be a string, finite number or boolean`;
   }
+  if (revenueOutOfRange(out)) return "event data revenue must be below 1e14 when a currency is set";
   return out;
 }
 

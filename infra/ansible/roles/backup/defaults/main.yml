@@ -46,6 +46,12 @@ backup_jobs:
 # environment's own by default. restore.yml points them at another
 # environment's repository for a migration (the design).
 backup_repo_environment: "{{ sa_environment }}"
+# a database rebuilt after a total loss is a new postgresql cluster (new
+# system id), which the old stanza refuses. the disaster recovery runbook
+# raises the generation, so the new cluster gets a new repository path
+# (/<environment>-g<n>) beside the old one, whose objects stay locked and
+# readable until their retention ends (docs/runbooks/disaster-recovery.md)
+backup_repo_generation: 1
 backup_repo_object_storage: "{{ sa_object_storage | default(none) }}"
 backup_repo_access_key: "{{ sa_secrets.object_storage_access_key | default('') }}"
 backup_repo_secret_key: "{{ sa_secrets.object_storage_secret_key | default('') }}"

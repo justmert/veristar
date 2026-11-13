@@ -13,6 +13,7 @@
       - sa_secrets is defined
       - (sa_secrets.alertmanager_discord_webhook_url | default('')) | length > 0 or observability_test_webhook_base is defined
       - observability_test_webhook_base is not defined or sa_environment == 'local'
+      - (observability_probe_ca_file is not defined and observability_probe_extra_hosts is not defined) or sa_environment == 'local'
       - sa_tier != 'core' or (sa_secrets.grafana_admin_password | default('')) | length >= 16
       - sa_tier != 'core' or (sa_secrets.postgres_exporter_password | default('')) | length >= 16
       - sa_tier != 'probe' or (sa_secrets.probe_otlp_token | default('')) is match('^sa_otlp_')
@@ -25,6 +26,23 @@
       and on the probe node the output of platformctl probe-tenant create.
       observability_test_webhook_base (a local test receiver) is accepted in
       the local environment only.
+
+# the probe pulls the release's own prober and caddy. outside the local test
+# stacks site.yml and deploy.yml converge it only after
+# playbooks/verify-release.yml pinned both to the digests verified on the
+# controller (docs/security/supply-chain.md section 3), so a reference by
+# tag alone means the signature check was skipped
+- name: Refuse unverified probe images
+  ansible.builtin.assert:
+    that:
+      - >-
+        sa_tier != 'probe' or sa_environment == 'local'
+        or (observability_images.prober is match('^[^@]+@sha256:[0-9a-f]{64}$')
+            and observability_images.caddy is match('^[^@]+@sha256:[0-9a-f]{64}$'))
+    fail_msg: >-
+      the probe node pulls the prober and caddy only by a verified digest:
+      converge it with site.yml or deploy.yml and the release manifest
+      (-e sa_release_manifest=...)
 
 - name: Name what this node runs
   ansible.builtin.include_tasks: facts.yml
@@ -61,6 +79,19 @@
     group: root
     mode: "0644"
     validate: docker compose -f %s config --quiet
+
+# pulls are retried on their own, as in the edge and core roles: a registry
+# answering one request with an error (docker hub's token service timed out
+# during the local converge on 2026-11-13) must not fail the node
+- name: Pull the observability images
+  community.docker.docker_compose_v2_pull:
+    project_src: "{{ observability_dir }}"
+    files: [compose.yml]
+    policy: missing
+  register: observability_pull
+  until: observability_pull is succeeded
+  retries: 5
+  delay: 10
 
 - name: Start the observability services
   community.docker.docker_compose_v2:

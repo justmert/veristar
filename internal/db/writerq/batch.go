@@ -209,15 +209,16 @@ func (b *TouchResourceBatchResults) Close() error {
 
 const upsertSeriesState = `-- name: UpsertSeriesState :batchexec
 insert into api.series_state (tenant_id, series_hash, start_unix_nano, last_unix_nano,
-                              last_count, last_sum, last_counts, last_seen_at)
+                              last_count, last_sum, last_counts, last_seen_at, baseline)
 values ($1, $2, $3, $4,
-        $5, $6, $7::bigint[], $8::timestamptz)
+        $5, $6, $7::bigint[], $8::timestamptz, $9)
 on conflict (tenant_id, series_hash, start_unix_nano) do update
   set last_unix_nano = excluded.last_unix_nano,
       last_count = excluded.last_count,
       last_sum = excluded.last_sum,
       last_counts = excluded.last_counts,
-      last_seen_at = excluded.last_seen_at
+      last_seen_at = excluded.last_seen_at,
+      baseline = excluded.baseline
 `
 
 type UpsertSeriesStateBatchResults struct {
@@ -235,10 +236,12 @@ type UpsertSeriesStateParams struct {
 	LastSum       float64
 	LastCounts    []int64
 	SeenAt        time.Time
+	Baseline      bool
 }
 
 // stores the last cumulative point of a stream. last_counts are on the
-// canonical layout (15 buckets).
+// canonical layout (15 buckets). baseline is true while the last point is
+// the baseline of a stream first met after the first-point threshold.
 func (q *Queries) UpsertSeriesState(ctx context.Context, arg []UpsertSeriesStateParams) *UpsertSeriesStateBatchResults {
 	batch := &pgx.Batch{}
 	for _, a := range arg {
@@ -251,6 +254,7 @@ func (q *Queries) UpsertSeriesState(ctx context.Context, arg []UpsertSeriesState
 			a.LastSum,
 			a.LastCounts,
 			a.SeenAt,
+			a.Baseline,
 		}
 		batch.Queue(upsertSeriesState, vals...)
 	}

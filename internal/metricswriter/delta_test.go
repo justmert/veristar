@@ -54,6 +54,15 @@ func runSteps(t *testing.T, s *State, steps []step) {
 	}
 }
 
+// newState is a state with the writer's cap and the stream counts of the
+// test tenants loaded, as loadState does.
+func newState() *State {
+	s := NewState(DefaultFirstPointThreshold, MaxSeriesPerTenant)
+	s.LoadSeriesCount("t1", 0)
+	s.LoadSeriesCount("t2", 0)
+	return s
+}
+
 func contrib(counts Buckets, sum float64) Contribution {
 	return Contribution{Count: counts.Total(), Sum: sum, Counts: counts}
 }
@@ -213,7 +222,7 @@ func TestEngine(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			s := NewState(DefaultFirstPointThreshold)
+			s := newState()
 			if c.setup != nil {
 				c.setup(s)
 			}
@@ -245,7 +254,7 @@ func TestEngineTenantsAndResourcesAreSeparate(t *testing.T) {
 }
 
 func TestEngineRejectsInconsistentPoints(t *testing.T) {
-	s := NewState(DefaultFirstPointThreshold)
+	s := newState()
 	p := cum(0, sec, bk(1, 1), 0)
 	p.Count = 3
 	if _, _, err := s.Apply(&p); !errors.Is(err, ErrInvalidPoint) {
@@ -263,7 +272,7 @@ func TestEngineRejectsInconsistentPoints(t *testing.T) {
 
 func TestEngineRecordsChanges(t *testing.T) {
 	now := int64(1_800_000_000) * sec
-	s := NewState(DefaultFirstPointThreshold)
+	s := newState()
 	p1 := cum(now, now+10*sec, bk(1), 1, routeA)
 	p2 := cum(now, now+20*sec, bk(2), 2, routeA)
 	p3 := cum(now, now+15*sec, bk(1), 1, routeB)
@@ -308,5 +317,71 @@ func TestRebalanceKeepsTheSum(t *testing.T) {
 		if after != before {
 			t.Fatalf("sum changed %d to %d: %v", before, after, d)
 		}
+	}
+}
+
+// review: a process exporting every 5 minutes is 300 s old at its first
+// export, past the 120 s threshold, so that point is a baseline. its next
+// export shows from the cadence that the process had only just started, and
+// then counts in full: the first interval's requests are not lost.
+func TestEngineLongExportIntervalKeepsFirstInterval(t *testing.T) {
+	now := int64(1_800_000_000) * sec
+	s := newState()
+	runSteps(t, s, []step{
+		{"first export", cum(now, now+300*sec, bk(3), 0.25, get, routeA), OutcomeBaseline, Contribution{}},
+		{"second export", cum(now, now+600*sec, bk(7), 0.75, get, routeA), OutcomeCatchUp, contrib(bk(7), 0.75)},
+		{"third export", cum(now, now+900*sec, bk(9), 1, get, routeA), OutcomeIncrement, contrib(bk(2), 0.25)},
+	})
+
+	// the baseline is stored, so the catch-up also works across batches
+	p := cum(now, now+300*sec, bk(3), 0.25, get, routeB)
+	s = newState()
+	s.LoadSeries(p.Key(), SeriesState{Start: now, Last: now + 300*sec, Count: 3, Sum: 0.25, Counts: bk(3), Baseline: true})
+	runSteps(t, s, []step{{"next batch", cum(now, now+600*sec, bk(5), 0.5, get, routeB), OutcomeCatchUp, contrib(bk(5), 0.5)}})
+	if st, _ := s.Series(p.Key()); st.Baseline {
+		t.Error("baseline flag kept after the catch-up")
+	}
+
+	// a process that ran an hour before its first export seen here stays a
+	// baseline even with a 5 minute cadence: 3600 s is more than two
+	// intervals
+	s = newState()
+	runSteps(t, s, []step{
+		{"history", cum(now-3600*sec, now, bk(900), 50, routeA), OutcomeBaseline, Contribution{}},
+		{"next", cum(now-3600*sec, now+300*sec, bk(905), 51, routeA), OutcomeIncrement, contrib(bk(5), 1)},
+	})
+}
+
+// review: the writer's per-stream state is capped per tenant. a new
+// cumulative stream beyond the cap is refused; known streams and delta
+// points carry on.
+func TestEngineSeriesCap(t *testing.T) {
+	now := int64(1_800_000_000) * sec
+	s := NewState(DefaultFirstPointThreshold, 2)
+	s.LoadSeriesCount("t1", 1)
+	a := cum(now, now+10*sec, bk(1), 0.1, routeA)
+	if _, out, err := s.Apply(&a); err != nil || out != OutcomeNew {
+		t.Fatalf("first new stream: %s %v", out, err)
+	}
+	b := cum(now, now+10*sec, bk(1), 0.1, routeB)
+	if _, _, err := s.Apply(&b); !errors.Is(err, ErrSeriesCap) {
+		t.Fatalf("stream beyond the cap: %v", err)
+	}
+	if len(s.Touched()) != 1 {
+		t.Errorf("a refused stream touched its resource")
+	}
+	a2 := cum(now, now+20*sec, bk(3), 0.3, routeA)
+	if c, out, err := s.Apply(&a2); err != nil || out != OutcomeIncrement || c.Count != 2 {
+		t.Fatalf("known stream: %s %+v %v", out, c, err)
+	}
+	d := Point{Tenant: "t1", Metric: "m", Temporality: Delta, Time: now, Count: 1, Counts: bk(1)}
+	if _, out, err := s.Apply(&d); err != nil || out != OutcomeDelta {
+		t.Fatalf("delta point: %s %v", out, err)
+	}
+	// a tenant whose count was not loaded is a writer bug, not a silent pass
+	o := cum(now, now+10*sec, bk(1), 0.1, routeA)
+	o.Tenant = "t2"
+	if _, _, err := s.Apply(&o); err == nil || errors.Is(err, ErrSeriesCap) {
+		t.Fatalf("unloaded tenant: %v", err)
 	}
 }

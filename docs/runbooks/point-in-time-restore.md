@@ -32,27 +32,11 @@ production the repository is Hetzner Object Storage (`backup_repo_mode: s3`, an 
    ```
 
 3. **Provide a fresh node.** `restore.yml` runs on the hosts of the inventory group `restore`.
-   OpenTofu does not create such a node and its inventory has no `restore` group. Create one
-   Debian 13 server on the environment's private network with the `ops` user and the admin
-   keys (the same shape `modules/node` builds), then add it beside the generated inventory in a
-   file Ansible also reads, `infra/ansible/inventories/staging/restore.yml`:
-
-   ```yaml
-   all:
-     children:
-       restore:
-         hosts:
-           staging-restore-1:
-             ansible_host: <public address of the new server>
-             ansible_user: ops
-             sa_tier: restore
-             sa_index: 1
-             sa_provider: hetzner
-             sa_location: <location>
-             sa_public_ipv4: <public address of the new server>
-             sa_public_ipv6: null
-             sa_private_ip: <private address of the new server>
-   ```
+   Set `restore_enabled = true` (and `restore_location` if needed) in
+   `infra/tofu/envs/staging/terraform.tfvars`, then `make staging-plan` and
+   `make staging-apply`. OpenTofu creates `staging-restore-1`, a core-sized Debian 13 server on
+   the private network at `.41` of its location, and the regenerated inventory lists it in
+   `restore` (checked by `inventory_with_restore` in `tests/infra/staging.tftest.hcl`).
 
    The playbook refuses a node that already holds a restore volume.
 
@@ -79,13 +63,10 @@ production the repository is Hetzner Object Storage (`backup_repo_mode: s3`, an 
 
 6. **Use it.** Either copy the needed rows back into the running cluster (`pg_dump` of the
    affected tables on the restore node, reviewed, then loaded on the leader), or, for a total
-   loss, make the restored data the new cluster. The second path is not automated: it means
-   stopping every core service, rebuilding the core nodes, and bootstrapping Patroni from a
-   restore, and it has never been written down as tested steps.
+   loss, make the restored data the new cluster with
+   [disaster-recovery.md](disaster-recovery.md), which continues from this step.
 
-7. **Remove the restore node** when done: delete the server, the `restore.yml` inventory file,
-   and on the node the container `sa-restore-postgres` and volume `sa-restore-pgdata` if it is
-   kept for a while.
+7. **Remove the restore node** when done: `restore_enabled = false`, then plan and apply.
 
 ## What is lost
 

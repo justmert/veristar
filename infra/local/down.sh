@@ -9,6 +9,11 @@ root="$(cd "$(dirname "$0")/../.." && pwd)"
 printf '%s\n%s\n' "$LC_NODES" "$LC_RESTORE_NODE" | while read -r name _ _ _; do
 	lc_node_rm "$name"
 done
+# every optional node, whatever LC_BACKUP and LC_PROBE were at up.sh
+for name in sa-lc-backup-1 sa-lc-core-2 sa-lc-probe-1; do
+	lc_node_rm "$name"
+done
+lc_s3_rm
 docker rm -f "$LC_ROUTER" >/dev/null 2>&1 || true
 docker rm -f "$LC_REGISTRY" >/dev/null 2>&1 || true
 docker volume rm -f sa-lc-registry >/dev/null 2>&1 || true

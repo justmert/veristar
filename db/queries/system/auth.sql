@@ -17,12 +17,13 @@ returning *;
 select * from cp.users where id = @id;
 
 -- name: ResolveInvites :many
--- turns the open invites for a login into memberships and deletes them, in
--- one statement. an invite for a tenant the user already belongs to is
--- consumed without changing the existing role.
+-- turns the open invites for a github account into memberships and deletes
+-- them, in one statement. the account id is matched, never the login,
+-- which can change hands (00025). an invite for a tenant the user already
+-- belongs to is consumed without changing the existing role.
 with resolved as (
   delete from cp.invites
-  where lower(github_login) = lower(@github_login::text) and expires_at > now()
+  where github_id = @github_id and expires_at > now()
   returning id, tenant_id, role
 ), added as (
   insert into cp.tenant_members (tenant_id, user_id, role)

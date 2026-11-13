@@ -11,6 +11,7 @@ it and take it down. Follow the pages in this order:
 | 4 | [ansible.md](ansible.md) | roles, images, firewall, the playbooks |
 | 5 | [bootstrap.md](bootstrap.md) | first converge of a new environment, first sign-in, the probe tenant |
 | 6 | [verification.md](verification.md) | checks that prove the environment works |
+| | [backups.md](backups.md) | the backup bucket with object lock, the stanza and WAL archiving, as `site.yml` sets them up |
 | 7 | [upgrade.md](upgrade.md) | releasing and rolling out a new version |
 | 8 | [teardown.md](teardown.md) | removing an environment |
 

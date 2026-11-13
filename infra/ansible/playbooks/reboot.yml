@@ -1,0 +1,138 @@
+---
+# rolling host reboot 
+# docs/runbooks/security-patch.md section 6). unattended upgrades install
+# debian security fixes without rebooting, so a kernel or libc fix applies
+# only after a reboot; the HostRebootRequired alert names the nodes.
+#
+#   ansible-playbook -i inventories/<env>/ playbooks/reboot.yml
+#   ansible-playbook -i inventories/<env>/ playbooks/reboot.yml -e reboot_all=true
+#
+# by default only nodes holding /var/run/reboot-required are rebooted. edge
+# nodes one at a time, then core nodes one at a time, then the probe. each
+# edge and core node is drained first (port 80 answers 503 and dns drops it,
+# as in deploy.yml); a core node holding the patroni leader hands it to the
+# synchronous replica before it goes down. after the reboot the start-at-boot
+# unit brings the compose projects up, and the node must be healthy again
+# before the drain flag is removed. any failure stops the run with the
+# remaining nodes untouched.
+- name: Reboot edge nodes one by one
+  hosts: edge
+  become: true
+  serial: 1
+  any_errors_fatal: true
+  max_fail_percentage: 0
+  vars_files: [../vars/pins.yml]
+  vars:
+    deploy_drain_seconds: 120
+    sa_image_tag: reboot
+  tasks:
+    - name: Find out whether this node needs a reboot
+      ansible.builtin.stat:
+        path: /var/run/reboot-required
+      register: reboot_flag
+
+    - name: Skip a node that does not need one
+      ansible.builtin.meta: end_host
+      when: not reboot_flag.stat.exists and not (reboot_all | default(false) | bool)
+
+    - name: Drain the node
+      ansible.builtin.include_tasks: tasks/drain.yml
+      vars:
+        drain_dir: /etc/stellar-analytics/drain
+
+    - name: Reboot
+      ansible.builtin.reboot:
+        reboot_timeout: 900
+        msg: rolling reboot by playbooks/reboot.yml
+
+    # the drain flag survives the reboot, so caddy answers 503 on port 80;
+    # the gateway's composite check is read behind it
+    - name: Wait for the edge services behind caddy
+      ansible.builtin.command:
+        argv: [docker, compose, --project-directory, /opt/stellar-analytics/edge, exec, -T, caddy, wget, -q, -O, /dev/null, "http://gateway:9090/readyz"]
+      register: reboot_edge_health
+      until: reboot_edge_health.rc == 0
+      retries: 90
+      delay: 2
+      changed_when: false
+
+    - name: Undrain the node
+      ansible.builtin.include_tasks: tasks/undrain.yml
+      vars:
+        drain_dir: /etc/stellar-analytics/drain
+
+- name: Reboot core nodes one by one
+  hosts: core
+  become: true
+  serial: 1
+  any_errors_fatal: true
+  max_fail_percentage: 0
+  vars_files: [../vars/pins.yml]
+  vars:
+    deploy_drain_seconds: 120
+    sa_image_tag: reboot
+  tasks:
+    - name: Find out whether this node needs a reboot
+      ansible.builtin.stat:
+        path: /var/run/reboot-required
+      register: reboot_flag
+
+    - name: Skip a node that does not need one
+      ansible.builtin.meta: end_host
+      when: not reboot_flag.stat.exists and not (reboot_all | default(false) | bool)
+
+    - name: Drain the node
+      ansible.builtin.include_tasks: tasks/drain.yml
+      vars:
+        drain_dir: /etc/stellar-analytics/drain
+
+    - name: Hand the patroni leader to the replica
+      ansible.builtin.include_tasks: tasks/switchover.yml
+      vars:
+        switchover_always: true
+
+    - name: Reboot
+      ansible.builtin.reboot:
+        reboot_timeout: 900
+        msg: rolling reboot by playbooks/reboot.yml
+
+    # back as a streaming member before the next node may go down
+    - name: Wait for this node's patroni member
+      ansible.builtin.uri:
+        url: "http://{{ sa_private_ip }}:8008/health"
+        status_code: 200
+      register: reboot_patroni
+      until: reboot_patroni.status == 200
+      retries: 150
+      delay: 2
+
+    - name: Wait for the core services behind caddy
+      ansible.builtin.command:
+        argv: [docker, compose, --project-directory, /opt/stellar-analytics/core, exec, -T, caddy, wget, -q, -O, /dev/null, "http://controlplane:9090/corez"]
+      register: reboot_core_health
+      until: reboot_core_health.rc == 0
+      retries: 150
+      delay: 2
+      changed_when: false
+
+    - name: Undrain the node
+      ansible.builtin.include_tasks: tasks/undrain.yml
+      vars:
+        drain_dir: /etc/stellar-analytics/drain
+
+# the probe has no drain: while it reboots, the status page and the outside
+# measurement pause, which the slo report counts as unmeasured time
+- name: Reboot the probe
+  hosts: probe
+  become: true
+  tasks:
+    - name: Find out whether the probe needs a reboot
+      ansible.builtin.stat:
+        path: /var/run/reboot-required
+      register: reboot_flag
+
+    - name: Reboot
+      ansible.builtin.reboot:
+        reboot_timeout: 900
+        msg: rolling reboot by playbooks/reboot.yml
+      when: reboot_flag.stat.exists or (reboot_all | default(false) | bool)

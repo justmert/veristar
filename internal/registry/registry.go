@@ -31,6 +31,13 @@ type Site struct {
 	Status              string   `json:"status"`
 	Origins             []string `json:"origins"`
 	QuarantineWebsiteID string   `json:"quarantine_website_id"`
+	// CollectUTM lets the gateway keep the utm_* and ref query parameters
+	// of page urls. off unless the site's owner turns it on (cp.sites
+	// collect_utm): campaign parameters are not needed for any metric the
+	// service promises, and cnil's audience measurement tool recommends not
+	// collecting them (docs/compliance/privacy-strategy.md section 9). an
+	// entry written before the field existed decodes as off.
+	CollectUTM bool `json:"collect_utm,omitempty"`
 }
 
 // Active reports whether the gateway accepts events for the site.

@@ -39,7 +39,7 @@ const registryImage = "registry:3.0.0@sha256:6c5666b861f3505b116bb9aa9b25175e712
 
 // the platform_images keys of vars/pins.yml, as release-images.yml names them
 var images = []string{"gateway", "collector", "caddy", "console", "controlplane", "replayer",
-	"metricswriter", "jobs", "platformctl", "postgres-ha"}
+	"metricswriter", "jobs", "platformctl", "postgres-ha", "prober"}
 
 type world struct {
 	t        *testing.T
@@ -257,6 +257,14 @@ func TestDeployVerification(t *testing.T) {
 	t.Run("incomplete manifest is refused", func(t *testing.T) {
 		m := clone()
 		delete(m, "console")
+		out, _, ok := w.verify(w.manifest(w.tag, m))
+		require.False(t, ok)
+		require.Contains(t, out, "completely", out)
+	})
+
+	t.Run("manifest without the prober is refused", func(t *testing.T) {
+		m := clone()
+		delete(m, "prober")
 		out, _, ok := w.verify(w.manifest(w.tag, m))
 		require.False(t, ok)
 		require.Contains(t, out, "completely", out)

@@ -34,7 +34,7 @@ var apiSorts = map[string]string{
 const apiChosenCTE = `
 r as (
   select m.tenant_id, m.bucket_start, m.service, m.route, m.status_code, m.source, m.counts, m.count, m.lossy
-  from api.operator_daily(@from_at::timestamptz, @to_end::timestamptz) m
+  from api.operator_daily(@from_at::timestamptz, @to_end::timestamptz, array(select id from t)) m
   join t on t.id = m.tenant_id
 ),
 svc as (

@@ -79,6 +79,32 @@ the database are the two browser redirects (`/api/auth/github/start` and
   Members already know the tenant exists, so 403 reveals nothing.
 - Tenants with `cp.tenants.status = 'removed'` answer 404 for every member (this stage
   sets that status; the rule is listed here so this stage code already honours it).
+- A route that checks the tenant status before a write (site create, member
+  add) checks it again under the tenant row lock (`LockTenant`), so an
+  operator removal, approval or suspension that commits while the request
+  waits is what the write sees: removed answers 404, suspended 409
+  `tenant_suspended`, and a site's `pending` or `active` status follows the
+  locked tenant status.
+- Every `cp_tenant` transaction sets `lock_timeout = 5s`. A request that would
+  wait longer for a row lock (the reconciler holds the tenant row across its
+  Umami calls) answers 503 `unavailable` with `Retry-After` instead of holding
+  a database connection.
+- `cp_tenant` may update only the `cp.sites` columns its routes write (`name`,
+  `origins`, `updated_at`, `status`, and the verification and `stellar_toml`
+  columns of 5.8 and 5.12) and only `status` and `revoked_at` of
+  `cp.otlp_tokens`. Under `cp_tenant` a site's status may only change to
+  `removed` and a token only from `active` to `revoked`, and audit rows must
+  name a console user (`user:<uuid>`) as actor. Triggers enforce this
+  (migration `00024`); operator and system transitions run
+  as `cp_system`.
+- **Reconcile after a change.** Routes that say "Reconcile runs" ask for a run
+  and answer at once. Requests coalesce per tenant: a tenant is queued once,
+  and a change that arrives while its run is in flight makes exactly one more
+  run follow, so any burst of edits costs at most two runs. At most 4 runs are
+  in flight per control plane instance, on a `cp_system` pool of their own
+  (4 connections), so session loads never wait behind them. The request pools
+  are sized explicitly: `cp_system` 16, `cp_tenant` 16, `cp_operator` 8
+.
 
 ---
 
@@ -150,7 +176,7 @@ List routes answer:
 | 405 | `method_not_allowed` | method not defined for the path |
 | 409 | `slug_taken` | `cp.tenants.slug` already exists |
 | 409 | `already_member` | invite or add for a user who is a member |
-| 409 | `invite_exists` | an open invite for that login exists (`invites_tenant_login_idx`) |
+| 409 | `invite_exists` | an open invite for that GitHub account exists (`invites_tenant_github_idx`) |
 | 409 | `last_owner` | removing or demoting the last owner |
 | 409 | `site_removed` | change to a site with `status = 'removed'` |
 | 409 | `terms_version_mismatch` | accepted version is not the current one |
@@ -162,9 +188,9 @@ List routes answer:
 | 413 | `body_too_large` | body over 64 KiB |
 | 415 | `unsupported_media_type` | see section 1 |
 | 422 | `validation_failed` | field rules, details in `fields` |
-| 429 | `rate_limited` | per-session or per-route limit; `Retry-After` header set |
+| 429 | `rate_limited` | per-client, per-session or per-route limit; `Retry-After` header set |
 | 500 | `internal` | anything unexpected; details only in the log |
-| 503 | `unavailable` | database, NATS or Umami unreachable; `Retry-After` set |
+| 503 | `unavailable` | database, NATS, Umami or GitHub unreachable, or a tenant request that waited longer than its 5 second lock timeout for the tenant row (a reconcile or an operator action holds it; 1.3); `Retry-After` set |
 | 503 | `provisioning_pending` | SSO before the reconciler created the Umami objects; `Retry-After` set |
 
 ### 2.5 Field codes (422)
@@ -172,6 +198,8 @@ List routes answer:
 `required`, `too_long`, `too_short`, `too_many`, `invalid_format`, `not_https_url`,
 `not_bare_origin`, `origin_outside_domain`, `invalid_domain`, `invalid_strkey`,
 `invalid_github_login`, `invalid_role`, `duplicate`, `unknown_tracker_version`.
+`unknown_github_login` (a well-formed login that names no GitHub user
+account, 4.2.5; added after).
 this stage adds `invalid_value` (a value outside an enumerated set, such as
 `mode`). this stage adds `unknown_tenant` (a `tenant_id` that names no tenant
 or a removed one, 9.2).
@@ -231,8 +259,11 @@ at that person's next sign-in. this stage builds the operator routes on it.
 **Invite** (`cp.invites`):
 
 ```json
-{ "id": "uuid", "github_login": "someone", "role": "member", "created_by": "uuid", "created_at": "...", "expires_at": "..." }
+{ "id": "uuid", "github_id": 7654321, "github_login": "someone", "role": "member", "created_by": "uuid", "created_at": "...", "expires_at": "..." }
 ```
+
+`github_id` is the GitHub account the invite is bound to; `github_login` is
+that account's login when the invite was made, for display (4.2.5).
 
 **Site** (`cp.sites`):
 
@@ -247,12 +278,19 @@ at that person's next sign-in. this stage builds the operator routes on it.
   "status": "active",
   "verify_method": null,
   "verified_at": null,
+  "collect_utm": false,
   "created_at": "...",
   "updated_at": "..."
 }
 ```
 
 - `status`: `pending`, `active`, `suspended`, `removed` (column check).
+- `collect_utm`: whether the gateway keeps the `utm_source`, `utm_medium`,
+  `utm_campaign`, `utm_content`, `utm_term` and `ref` query parameters of page
+  URLs for this site. `false` on every new site and on every site that existed
+  before the field (migration 00027); members turn it on with 4.3.4. With
+  `false` the gateway drops every query parameter. Published to the gateway
+  in the site's `registry_sites` entry.
 - `verify_token`, `last_verify_*` and `stellar_toml*` are this stage fields. this stage
   adds them to this object; `verify_token` is shown only through the this stage
   verification route.
@@ -341,9 +379,22 @@ Effect: creates `state` (32 random bytes, base64url) and a PKCE verifier
 `redirect_uri` (`GITHUB_REDIRECT_URL`), `state`, `code_challenge`,
 `code_challenge_method=S256` and `allow_signup=true`. No `scope` parameter is sent
 (the reference docs section 1.3). Rate limited inside the control plane (core Caddy has
-no rate limiter): one in-memory token bucket per control plane instance, shared by
-all clients, 10 per second with a burst of 30. Over the limit: 429 `rate_limited`
-with `Retry-After` (JSON envelope, no redirect, no `sa_oauth` cookie).
+no rate limiter), per client: one in-memory token bucket per
+client and control plane instance, 0.5 per second with a burst of 20, under a
+global ceiling per instance of 50 per second with a burst of 200. A request
+takes from its client's bucket first, so a client over its limit spends nothing
+of the ceiling. Over either limit: 429 `rate_limited` with `Retry-After` (JSON
+envelope, no redirect, no `sa_oauth` cookie).
+
+The client is the address core Caddy passes in `X-Sa-Client-Addr` (set from the
+connection, replacing any value the client sent; `deploy/caddy/app.Caddyfile`),
+or the connection's peer when no Caddy is in front (dev). The control plane
+keys the bucket by `HMAC-SHA256(k, address)`, where `k` is 32 random bytes made
+at process start and held only in memory; IPv4 addresses are used whole, IPv6
+addresses by their /64. The address is never logged, stored or kept beyond the
+request, and Caddy's access log drops all request headers. Buckets that have
+refilled are forgotten; at most 100,000 clients are tracked per instance, and
+beyond that new clients get 429 until buckets refill.
 
 #### 4.1.2 `GET /api/auth/github/callback`
 
@@ -359,18 +410,24 @@ Steps:
    must not be expired. Otherwise: failure `state_mismatch`.
 3. `error=access_denied`: failure `access_denied`. Any other `error`: failure
    `github_error`.
-4. Take a token from the exchange bucket (one per control plane instance,
-   shared by all clients, 10 per second with a burst of 30; this stage). Empty:
-   failure `rate_limited`. Then exchange `code` with the cookie's verifier
-   (`oauth2.VerifierOption`). Failure: `exchange_failed`.
+4. The cookie's `state` must not have reached this step before on this
+   control plane instance; a replayed copy of the cookie is failure
+   `state_mismatch` (states are remembered until their cookie expires; audit
+  ). Then take a token from the exchange buckets: the client's
+   (0.5 per second, burst 20, keyed as in 4.1.1) and the instance's ceiling
+   (10 per second, burst 30). Empty: failure `rate_limited`. Then exchange
+   `code` with the cookie's verifier (`oauth2.VerifierOption`). Failure:
+   `exchange_failed`.
 5. `GET https://api.github.com/user` with the access token, headers
    `Accept: application/vnd.github+json` and `X-GitHub-Api-Version: 2022-11-28`.
    Use `id` (int64) and `login` only; the token is then discarded, never stored.
    Failure: `github_unavailable`.
 6. Under `cp_system`, in one transaction: upsert `cp.users` (`UpsertUser`: key
    `github_id`, refresh `github_login` and `last_login_at`); resolve open, unexpired
-   `cp.invites` whose `lower(github_login)` equals the login into `cp.tenant_members`
-   and delete those invites (audit `invite.resolve`); audit `user.sign_in`.
+   `cp.invites` whose `github_id` equals the user's GitHub id into
+   `cp.tenant_members` and delete those invites (audit `invite.resolve`); audit
+   `user.sign_in`. The login is never matched: it can be renamed and taken by
+   someone else.
 7. Renew the session token, store `user_id`, answer **303** to `return_to`.
 
 Failure: **303** to `/sign-in?error=<code>` with `code` one of `state_mismatch`,
@@ -480,15 +537,29 @@ not listed. Not paginated (bounded by the limits below).
 { "github_login": "someone", "role": "member" }
 ```
 
-- If a `cp.users` row with that login (case-insensitive) exists, the user is added
-  to `cp.tenant_members` at once: **201** `{"kind": "member", "member": Member}`,
-  audit `member.add`.
-- Otherwise an invite is created with `expires_at = now() + 14 days`: **201**
-  `{"kind": "invite", "invite": Invite}`, audit `invite.create`. It is resolved at
-  that person's next sign-in (4.1.2 step 6).
-- The login is not looked up on GitHub; a typo stays an unresolved invite until
-  it expires or is revoked.
-- Errors: 409 `already_member`, 409 `invite_exists`, 422, and 422 `too_many` on field
+- The login is first resolved to the GitHub account that holds it now:
+  `GET https://api.github.com/users/{login}` with the OAuth app's client id and
+  secret as basic auth (GitHub's public-data rate limit for an OAuth app,
+  instead of the 60 per hour of an anonymous caller), headers as in 4.1.2
+  step 5. Everything below uses that account's numeric `id`; the login is kept
+  for display only. A login renamed later, and
+  then taken by someone else, never moves a membership or an invite.
+- If a `cp.users` row with that GitHub id exists, the user is added to
+  `cp.tenant_members` at once and the row's `github_login` is refreshed to
+  GitHub's current login: **201** `{"kind": "member", "member": Member}`, audit
+  `member.add`.
+- Otherwise an invite bound to that GitHub id is created with
+  `expires_at = now() + 14 days`: **201** `{"kind": "invite", "invite": Invite}`,
+  audit `invite.create` (detail includes `github_id`). It is resolved when that
+  account next signs in, under whatever login it has then (4.1.2 step 6).
+- A login GitHub does not know, or one that names an organization (which
+  cannot sign in), is 422 `unknown_github_login` on `github_login`. GitHub
+  unreachable or answering anything else: 503 `unavailable`.
+- Invites made before migration `00025` carried no GitHub id; that migration
+  revoked them (one `invite.revoke` audit row each, actor `system:migration`),
+  and owners send them again.
+- Errors: 409 `already_member`, 409 `invite_exists`, 422, 422
+  `unknown_github_login`, 503 `unavailable`, and 422 `too_many` on field
   `github_login` when the tenant would exceed 50 members plus open invites.
 - Reconcile runs after the change (Umami membership).
 
@@ -526,7 +597,10 @@ Session, member.
 
 - The control plane makes `id` and `quarantine_website_id` (UUIDv7 each) and
   `verify_token` (32 random bytes, base64url, used from this stage).
-- `status` is `active` when the tenant is `active`, else `pending`.
+- `status` is `active` when the tenant is `active`, else `pending`, with the
+  tenant status read under the tenant row lock (1.3): a tenant removed while
+  the request waited answers 404, one suspended meanwhile 409
+  `tenant_suspended`.
 - Under `cp_tenant`: insert `cp.sites` (`CreateSite`), audit `site.create`.
   Reconcile then creates the two Umami websites and publishes `registry_sites`.
 - **201** Site.
@@ -543,10 +617,13 @@ Session, member. **200** Site.
 
 #### 4.3.4 `PATCH /api/tenants/{tenant_id}/sites/{site_id}`
 
-Session, member. Body: any of `name`, `origins` (whole list replaced). `domain` is
+Session, member. Body: any of `name`, `origins` (whole list replaced),
+`collect_utm` (boolean; any other JSON type answers 400). `domain` is
 immutable (422 `invalid_format` on `domain`). **200** Site. 409 `site_removed`.
-Audit `site.update`. Reconcile republishes the registry entry, so the gateway
-applies new origins within its watcher delay.
+Audit `site.update`, with the old and new value of each changed field; a body
+that changes nothing writes no audit row and starts no reconcile. Reconcile
+republishes the registry entry, so the gateway applies new origins and the
+`collect_utm` setting within its watcher delay.
 
 #### 4.3.5 `DELETE /api/tenants/{tenant_id}/sites/{site_id}`
 
@@ -628,8 +705,10 @@ Query: `site` (site id, required), `view` (`primary` default, or `quarantine`).
 
 - Requires `Sec-Fetch-Site` `same-origin` or `none` when the header is present;
   otherwise failure `cross_site`.
-- The site must not be `removed`; the tenant's Umami user and team membership must
-  exist (reconciler done). Otherwise failure `provisioning_pending`.
+- The site must not be `removed` or `pending` (in review, 5.6: the reconciler
+  creates no Umami website for it); the tenant's Umami user and team membership
+  must exist (reconciler done). Otherwise failure `provisioning_pending` (audit
+ ).
 - Logs in to Umami on the private network (`POST /api/auth/login`) as `gh-<github_id>`
   with that user's derived password for the current UTC day. It never
   sets a password.
@@ -1545,7 +1624,8 @@ instant before `to`.
     { "kind": "span_derived", "count": 0, "last_day": null },
     { "kind": "lossy_histogram", "count": 4, "last_day": "2026-11-12" },
     { "kind": "cardinality_overflow", "count": 0, "last_day": null },
-    { "kind": "secret_in_path", "count": 1, "last_day": "2026-11-11" }
+    { "kind": "secret_in_path", "count": 1, "last_day": "2026-11-11" },
+    { "kind": "coarse_buckets", "count": 0, "last_day": null }
   ],
   "days": [
     { "day": "2026-11-11", "kind": "secret_in_path", "count": 1 }
@@ -1553,20 +1633,25 @@ instant before `to`.
 }
 ```
 
-- `totals`: always these four kinds, in this order. `count` is the sum over the
+- `totals`: always these five kinds, in this order. `count` is the sum over the
   days, `last_day` the latest day with a count.
 - `days`: every non-zero day and kind, ordered by day, then kind.
 - Kinds (this stage writer): `span_derived` (points derived from spans were
   stored), `lossy_histogram` (a histogram was re-bucketed inexactly),
   `cardinality_overflow` (routes or services above the daily cap were folded into
-  `{other}`), `secret_in_path` (a Stellar secret seed appeared in a request path
-  and was redacted). The console shows a banner per kind with a non-zero count.
+  `{other}`, or a new stream was refused by the writer's stream cap),
+  `secret_in_path` (a Stellar secret seed appeared in a request path and was
+  redacted), `coarse_buckets` (a histogram's buckets were much wider than the
+  canonical ones, so its percentiles are not reliable; added by the functional
+  audit, A-12). Counts are requests, not exports; see
+  `docs/reference/api-storage.md`. The console shows a banner per kind with a
+  non-zero count.
 
 ### 7.11 Configuration keys (this stage)
 
 Two keys become required for the control plane, with the same values as for
 `jobs`, because the retention step of 7.2 must match what the retention job
-keeps: `API_MINUTE_RETENTION_DAYS` (at least 2) and
+keeps: `API_MINUTE_RETENTION_DAYS` (at least 8, the writer's late-data window) and
 `API_HOURLY_RETENTION_MONTHS` (at least 24), loaded by
 `config.LoadAPIRetention`.
 
@@ -1943,16 +2028,23 @@ after the current hour; at most 744 hours for `/api/hourly`, 24 for
 a service, at most 128 bytes, no control characters).
 
 Lists: `limit` 1 to 500, default 500; `next_cursor` is a keyset position in
-the route's order, bound to the route, the key and every other parameter, and
-carrying the range the first page resolved (a page fetched after midnight
-continues the same days). A cursor used with anything else is 400
-`invalid_cursor`.
+the route's order, bound to the route, the key, every other parameter and the
+range it carries, and carrying the range the first page resolved (a page
+fetched after midnight continues the same days). A cursor used with anything
+else is 400 `invalid_cursor`. The binding hash has no secret, so the carried
+range is checked again on every page with the limits of a first page (at most
+366 days or 744 hours, `to` not after today or the current hour, `to` not
+before `from`); a cursor whose range breaks them is 400 `invalid_cursor`
+.
 
 All reads run as `cp_operator`, which reads `agg`, `api.metrics_hourly`,
 `api.metrics_daily`, `cp.tenants` and `cp.operator_sites` and writes only
 usage counters and `last_used_at`. The API routes (9.8 to 9.10)
 read through `api.operator_daily` and `api.operator_hourly`, so hours not yet
-rolled up are included as in section 8.
+rolled up are included as in section 8. Both functions take the set of tenants
+to return as an argument (migration `00023`) and return rows of those tenants
+only; callers pass the tenants of their scope, so no call returns every
+tenant's rows.
 
 ### 9.4 `GET /tenants`
 

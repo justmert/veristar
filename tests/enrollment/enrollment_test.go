@@ -225,7 +225,7 @@ func start(t *testing.T) *env {
 	runBinary(t, bins.gateway, map[string]string{
 		"NATS_URL": ns.URL, "NATS_REPLICAS": "1", "GATEWAY_NODE_ID": "edge-1",
 		"GATEWAY_ADDR": "127.0.0.1:" + gwPort, "GATEWAY_OPS_ADDR": "127.0.0.1:" + gwOps,
-		"PROOF_BITS": "8", "PROOF_REPLAY_LIMIT": "50", "IPCLUSTER_THRESHOLD": "20",
+		"PROOF_BITS": "8", "PROOF_REPLAY_LIMIT": "50", "IPCLUSTER_THRESHOLD": "20", "VISITOR_EVENTS_PER_HOUR": "600",
 		"RATE_SITE_PER_SECOND": "200", "RATE_SITE_BURST": "400",
 		"RATE_PREFIX_PER_SECOND": "20", "RATE_PREFIX_BURST": "60",
 		"GATEWAY_MAX_BODY": "8192", "CLIENT_IP_HEADER": "X-Edge-Client-Ip",

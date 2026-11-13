@@ -13,8 +13,9 @@ import (
 // sanitization of a parsed wire event before it becomes a WebEvent (plan
 // section 4.4 step 10). the rules:
 //
-//   - url: query parameters outside QueryAllowlist are dropped, kept values
-//     and the path are redacted, a #/ hash route is kept (redacted, without a
+//   - url: every query parameter is dropped, except the CampaignParams on a
+//     site whose owner turned on utm collection; kept values and the path
+//     are redacted, a #/ hash route is kept (redacted, without a
 //     query of its own) and every other fragment is dropped.
 //   - referrer: only the scheme and host of an absolute url are kept (port,
 //     user info, path, query and fragment are dropped), and the host is
@@ -39,9 +40,14 @@ import (
 // kept. decoding happens once, like routenorm in this stage, so a double
 // encoded value (%2540) is not decoded twice.
 
-// QueryAllowlist is the set of query parameters that survive sanitization.
-// everything else can carry personal data (search terms, tokens, ids).
-var QueryAllowlist = map[string]bool{
+// CampaignParams are the only query parameters that can survive
+// sanitization, and only for a site whose registry entry has CollectUTM.
+// they are off by default: no metric the service promises needs them, and
+// cnil's self-assessment tool for consent-exempt audience measurement
+// recommends not collecting them (docs/compliance/privacy-strategy.md
+// section 9). every other parameter can carry personal data (search terms,
+// tokens, ids) and is always dropped.
+var CampaignParams = map[string]bool{
 	"utm_source":   true,
 	"utm_medium":   true,
 	"utm_campaign": true,
@@ -55,8 +61,9 @@ var QueryAllowlist = map[string]bool{
 type SanitizeReport struct {
 	// Redacted holds every kind of value that was replaced.
 	Redacted redact.Flags
-	// DroppedQueryParams counts query parameters of the page url outside
-	// the allowlist or with an undecodable name or value. the referrer's
+	// DroppedQueryParams counts query parameters of the page url that were
+	// not kept: outside CampaignParams, campaign parameters of a site that
+	// does not collect them, or with an undecodable name or value. the referrer's
 	// query is dropped whole and not counted, because it is never kept.
 	DroppedQueryParams int
 	// DroppedDataKeys counts event data entries dropped because their key,
@@ -67,11 +74,12 @@ type SanitizeReport struct {
 // SanitizeWire rewrites the privacy relevant fields of w in place: URL,
 // Referrer, Title, Language, Name and Data. hostname, screen and the proof
 // are left alone; the wire parser already restricts them to fixed shapes.
-func SanitizeWire(w *events.Wire) SanitizeReport {
+// collectUTM is the site's registry setting (registry.Site.CollectUTM).
+func SanitizeWire(w *events.Wire, collectUTM bool) SanitizeReport {
 	var rep SanitizeReport
 	var f redact.Flags
 	var n int
-	w.URL, f, n = SanitizeURL(w.URL)
+	w.URL, f, n = SanitizeURL(w.URL, collectUTM)
 	rep.Redacted |= f
 	rep.DroppedQueryParams += n
 	w.Referrer, f = SanitizeReferrer(w.Referrer)
@@ -96,15 +104,35 @@ func SanitizeWire(w *events.Wire) SanitizeReport {
 // number of query parameters dropped. a url that does not start with / is
 // returned as / so the result always satisfies the WebEvent contract; the
 // wire parser rejects such urls before this point.
-func SanitizeURL(u string) (string, redact.Flags, int) {
-	out, flags, dropped := sanitizePathQueryFragment(u)
-	if out == "" || out[0] != '/' {
-		out = "/"
+func SanitizeURL(u string, collectUTM bool) (string, redact.Flags, int) {
+	out, flags, dropped := sanitizePathQueryFragment(u, collectUTM)
+	out = sanCapURL(sanRooted(out), events.MaxURL)
+	// the cap can cut a url inside its query or its #/ route, leaving
+	// "#", "?utm_sou" or a route end that the rules read differently, so a
+	// second pass would change it again. the capped result goes through the
+	// rules until it stops changing; each pass only drops a cut tail, so
+	// this ends after a pass or two, and the result is a fixed point that
+	// the replayer and a re-sanitization see the same way.
+	for range 8 {
+		again, _, _ := sanitizePathQueryFragment(out, collectUTM)
+		again = sanCapURL(sanRooted(again), events.MaxURL)
+		if again == out {
+			break
+		}
+		out = again
 	}
-	return sanCapURL(out, events.MaxURL), flags, dropped
+	return out, flags, dropped
 }
 
-func sanitizePathQueryFragment(u string) (string, redact.Flags, int) {
+// sanRooted returns / for a url that does not start with one.
+func sanRooted(s string) string {
+	if s == "" || s[0] != '/' {
+		return "/"
+	}
+	return s
+}
+
+func sanitizePathQueryFragment(u string, collectUTM bool) (string, redact.Flags, int) {
 	rest, frag, hasFrag := strings.Cut(u, "#")
 	path, query, hasQuery := strings.Cut(rest, "?")
 
@@ -113,7 +141,7 @@ func sanitizePathQueryFragment(u string) (string, redact.Flags, int) {
 	b.WriteString(p)
 	dropped := 0
 	if hasQuery {
-		q, f, n := sanitizeQuery(query)
+		q, f, n := sanitizeQuery(query, collectUTM)
 		flags |= f
 		dropped = n
 		if q != "" {
@@ -213,10 +241,11 @@ func sanEscapePath(s string) string {
 	return b.String()
 }
 
-// sanitizeQuery keeps allowlisted parameters in their original order,
-// redacts their decoded values and re-encodes them. a parameter whose name
-// or value does not decode is dropped and counted.
-func sanitizeQuery(q string) (string, redact.Flags, int) {
+// sanitizeQuery keeps the campaign parameters of a site that collects them
+// in their original order, redacts their decoded values and re-encodes
+// them. every other parameter, and one whose name or value does not decode,
+// is dropped and counted.
+func sanitizeQuery(q string, collectUTM bool) (string, redact.Flags, int) {
 	var b strings.Builder
 	var flags redact.Flags
 	dropped := 0
@@ -226,7 +255,7 @@ func sanitizeQuery(q string) (string, redact.Flags, int) {
 		}
 		rawKey, rawVal, hasVal := strings.Cut(part, "=")
 		key, err := url.QueryUnescape(rawKey)
-		if err != nil || !QueryAllowlist[key] {
+		if err != nil || !collectUTM || !CampaignParams[key] {
 			dropped++
 			continue
 		}

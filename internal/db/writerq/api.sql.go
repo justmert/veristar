@@ -38,6 +38,19 @@ func (q *Queries) AddIngestWarning(ctx context.Context, arg AddIngestWarningPara
 	return err
 }
 
+const countSeriesStates = `-- name: CountSeriesStates :one
+select count(*)::bigint as n from api.series_state where tenant_id = $1
+`
+
+// the streams the writer follows for a tenant, for the per-tenant stream
+// cap
+func (q *Queries) CountSeriesStates(ctx context.Context, tenantID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countSeriesStates, tenantID)
+	var n int64
+	err := row.Scan(&n)
+	return n, err
+}
+
 const getResourcesSeen = `-- name: GetResourcesSeen :many
 select resource_hash, start_unix_nano, first_seen_at, last_seen_at
 from api.resource_seen
@@ -84,7 +97,7 @@ func (q *Queries) GetResourcesSeen(ctx context.Context, arg GetResourcesSeenPara
 }
 
 const getSeriesStates = `-- name: GetSeriesStates :many
-select tenant_id, series_hash, start_unix_nano, last_unix_nano, last_count, last_sum, last_counts, last_seen_at
+select tenant_id, series_hash, start_unix_nano, last_unix_nano, last_count, last_sum, last_counts, last_seen_at, baseline
 from api.series_state
 where tenant_id = $1 and series_hash = any($2::bytea[])
 `
@@ -114,6 +127,7 @@ func (q *Queries) GetSeriesStates(ctx context.Context, arg GetSeriesStatesParams
 			&i.LastSum,
 			&i.LastCounts,
 			&i.LastSeenAt,
+			&i.Baseline,
 		); err != nil {
 			return nil, err
 		}
@@ -161,6 +175,25 @@ func (q *Queries) ListRoutes(ctx context.Context, arg ListRoutesParams) ([]ListR
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockRollupHour = `-- name: LockRollupHour :exec
+select pg_advisory_xact_lock_shared(api.rollup_lock_key($1, $2::timestamptz))
+`
+
+type LockRollupHourParams struct {
+	TenantID uuid.UUID
+	Hour     time.Time
+}
+
+// takes the shared lock of a (tenant, utc hour) for this transaction. the
+// writer takes it before it writes minute rows into the hour; the rollup
+// skips an hour whose lock it cannot take exclusively, so it never
+// recomputes an hour from minutes a writer has not committed yet (audit
+// A-2). writers share the lock, so they never wait for each other.
+func (q *Queries) LockRollupHour(ctx context.Context, arg LockRollupHourParams) error {
+	_, err := q.db.Exec(ctx, lockRollupHour, arg.TenantID, arg.Hour)
+	return err
 }
 
 const recordIngestMessage = `-- name: RecordIngestMessage :execrows

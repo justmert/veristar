@@ -160,3 +160,47 @@ func Quantile(q float64, counts []int64) (float64, error) {
 
 // IsOpen reports whether a quantile fell in the open bucket above 10 s.
 func IsOpen(v float64) bool { return math.IsInf(v, 1) }
+
+// CoarseSpan is how many canonical bounds a source bucket must contain
+// strictly inside it to count as wide: its requests could lie anywhere in
+// four or more canonical buckets, yet all of them land in the one of its
+// upper bound.
+const CoarseSpan = 3
+
+// Coarse reports whether at least half of the requests of a source
+// histogram sit in wide source buckets (CoarseSpan). re-bucketing by upper
+// bound then shows a percentile that can be wrong by a factor of 10 or
+// more, for example a seconds metric recorded with an sdk's default bounds
+// for milliseconds, where every request under 5 s lands in (2.5, 5]. the
+// lossy flag alone does not convey that. the first source
+// bucket starts at 0, because durations are never negative. bounds and
+// counts must have the shape Rebucket accepts.
+func Coarse(bounds []float64, counts []uint64) bool {
+	if len(counts) != len(bounds)+1 {
+		return false
+	}
+	var total, wide uint64
+	for i, n := range counts {
+		total += n
+		if n == 0 {
+			continue
+		}
+		lo, hi := 0.0, math.Inf(1)
+		if i > 0 {
+			lo = bounds[i-1]
+		}
+		if i < len(bounds) {
+			hi = bounds[i]
+		}
+		inside := 0
+		for _, b := range Bounds {
+			if b > lo && b < hi {
+				inside++
+			}
+		}
+		if inside >= CoarseSpan {
+			wide += n
+		}
+	}
+	return total > 0 && wide >= total-wide
+}

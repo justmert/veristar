@@ -540,6 +540,7 @@ func (s *run) registryPut(ctx context.Context, site systemq.ProvisionSitesRow) e
 		Status:              s.registryStatus(site),
 		Origins:             site.Origins,
 		QuarantineWebsiteID: site.QuarantineWebsiteID.UUID.String(),
+		CollectUTM:          site.CollectUtm,
 	}
 	if want.Origins == nil {
 		want.Origins = []string{}
@@ -549,7 +550,8 @@ func (s *run) registryPut(ctx context.Context, site systemq.ProvisionSitesRow) e
 		return err
 	}
 	if ok && have.TenantID == want.TenantID && have.Status == want.Status &&
-		have.QuarantineWebsiteID == want.QuarantineWebsiteID && slices.Equal(have.Origins, want.Origins) {
+		have.QuarantineWebsiteID == want.QuarantineWebsiteID && slices.Equal(have.Origins, want.Origins) &&
+		have.CollectUTM == want.CollectUTM {
 		return nil
 	}
 	if err := s.r.Registry.PutSite(ctx, want); err != nil {
@@ -557,6 +559,7 @@ func (s *run) registryPut(ctx context.Context, site systemq.ProvisionSitesRow) e
 	}
 	return s.audit(ctx, ActionRegistryPut, "site:"+want.ID, map[string]any{
 		"status": want.Status, "origins": want.Origins, "quarantine_website_id": want.QuarantineWebsiteID,
+		"collect_utm": want.CollectUTM,
 	})
 }
 

@@ -430,3 +430,25 @@ func TestAPIPartitionAndRetentionQueries(t *testing.T) {
 		require.Equal(t, int64(1), n, "%s removes only the old row", name)
 	}
 }
+
+//: the security definer functions that give cp_operator
+// hour and day grain rows return only the tenants their caller names, so a
+// query that forgets the tenant join can no longer read every tenant (the
+// internal probe tenant included). no call returns all tenants at once.
+func TestOperatorAPIFunctionsReadOnlyNamedTenants(t *testing.T) {
+	for _, fn := range []string{"api.operator_hourly", "api.operator_daily"} {
+		args := `(now() - interval '2 days', now() + interval '1 day', array[$1]::uuid[])`
+		mine, err := count(t, pdb.RoleCPOperator, nil, `select count(*) from `+fn+args+` where tenant_id = $1`, seed.tenantA)
+		require.NoError(t, err, fn)
+		require.Positive(t, mine, "%s returns the named tenant's rows", fn)
+		other, err := count(t, pdb.RoleCPOperator, nil, `select count(*) from `+fn+args+` where tenant_id <> $1`, seed.tenantA)
+		require.NoError(t, err, fn)
+		require.Zero(t, other, "%s returns no other tenant", fn)
+		none, err := count(t, pdb.RoleCPOperator, nil,
+			`select count(*) from `+fn+`(now() - interval '2 days', now() + interval '1 day', '{}'::uuid[])`)
+		require.NoError(t, err, fn)
+		require.Zero(t, none, "%s with no tenant named returns nothing", fn)
+		_, err = count(t, pdb.RoleCPOperator, nil, `select count(*) from `+fn+`(now() - interval '2 days', now() + interval '1 day')`)
+		require.Error(t, err, "%s has no form that reads every tenant", fn)
+	}
+}

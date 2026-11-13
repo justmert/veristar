@@ -136,3 +136,17 @@ func CheckOrigin(site registry.Site, header string) error {
 	}
 	return reject(ReasonOrigin)
 }
+
+// OriginHost returns the host of an Origin header as location.hostname
+// gives it: lower case, without the port, an ipv6 address in brackets. ok is
+// false when the header is not an origin.
+func OriginHost(header string) (string, bool) {
+	o, err := parseOrigin(header, false)
+	if err != nil {
+		return "", false
+	}
+	if strings.Contains(o.host, ":") {
+		return "[" + o.host + "]", true
+	}
+	return o.host, true
+}

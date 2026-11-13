@@ -171,8 +171,8 @@ func seedRows(tx pgx.Tx) error {
 			sql  string
 			args []any
 		}{
-			{`insert into cp.invites (tenant_id, github_login, role, created_by, expires_at)
-			  values ($1, $2, 'member', $3, now() + interval '7 days')`, []any{p.tenant, fmt.Sprintf("invitee%d", p.n), p.user}},
+			{`insert into cp.invites (tenant_id, github_id, github_login, role, created_by, expires_at)
+			  values ($1, $4, $2, 'member', $3, now() + interval '7 days')`, []any{p.tenant, fmt.Sprintf("invitee%d", p.n), p.user, 1000 + p.n}},
 			{`insert into cp.sites (id, tenant_id, name, domain, origins, verify_token)
 			  values ($1, $2, $3, $4, $5, $6)`, []any{p.site, p.tenant, fmt.Sprintf("site %d", p.n),
 				fmt.Sprintf("s%d.example.org", p.n), []string{fmt.Sprintf("https://s%d.example.org", p.n)}, fmt.Sprintf("verify-secret-%d", p.n)}},

@@ -45,8 +45,8 @@ c as (
 // the row sources of the machine api routes: hour and day grain rows of
 // the range, with pending hours computed from minutes (00022)
 const (
-	operatorDaily  = "api.operator_daily(@from_at::timestamptz, @to_end::timestamptz)"
-	operatorHourly = "api.operator_hourly(@from_at::timestamptz, @to_end::timestamptz)"
+	operatorDaily  = "api.operator_daily(@from_at::timestamptz, @to_end::timestamptz, array(select id from t))"
+	operatorHourly = "api.operator_hourly(@from_at::timestamptz, @to_end::timestamptz, array(select id from t))"
 )
 
 // MachineAPIBucket are the numbers of one tenant in one day or hour, over

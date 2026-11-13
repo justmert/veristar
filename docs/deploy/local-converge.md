@@ -190,3 +190,32 @@ section 4.1 plus a backup node:
 - **Power off** in the drills is `docker kill` of a node container: no clean
   shutdown of anything inside. Power on is `docker start`, which boots systemd and
   Docker again; compose restarts the services (`restart: unless-stopped`).
+
+## 7. Object storage stand-in, probe node and `make ops-local`
+
+Two switches of `infra/local/env.sh`, read by `up.sh` and `down.sh`:
+
+- `LC_BACKUP=s3` replaces `sa-lc-backup-1` with `sa-lc-s3` (hel1, `10.99.3.35`), SeaweedFS 4.52
+  serving S3 over TLS with a private CA, host-style addressing under `s3.sa-local.test`. The
+  inventory then carries `backup_repo_mode: s3` and an `sa_object_storage` with the same keys
+  as Hetzner's plus two local-only ones, `storage_host` and `ca_file`, which the roles refuse
+  outside the local converge. The stand-in's keys go into the SOPS file the way an operator input would.
+  What this proves and what it does not is in [backups.md](backups.md) section 4.
+- `LC_PROBE=1` adds `sa-lc-probe-1` on the public network only (`172.31.99.51`), as the
+  Scaleway probe has no private address. `site.yml`'s probe play converges it.
+
+`make ops-local` (`tests/localconverge/ops-local.sh`) runs the operations checks of
+the review notes on `LC_TOPOLOGY=minimal LC_BACKUP=s3 LC_PROBE=1`: backup
+bucket, stanza and WAL archiving in `s3` mode, a full backup, delete refusal and
+`--repo-target-time`, the OpenTofu state copy, idempotency, Patroni failsafe with etcd stopped,
+the etcd rejoin of a rebuilt edge node, the probe and the watchdog push, then tears down. It
+refuses to start at a load average of 20 or more and waits before each step until the load is
+below 20 (ten minutes at most). `LC_SRC` builds the images from another checkout (for example
+`git archive HEAD` unpacked elsewhere) when the working tree is mid-change.
+
+Run record, 2026-11-13: steps `up`, `images`, `converge` (247 s, `failed=0` on every node),
+`bucket` and `archiving` passed. The run stopped during `backup` when the shared host's load
+average rose above 600, and was torn down. Three later attempts lost their node containers
+within seconds to `docker rm -f` from outside the run (Docker events show `kill` signal 9 and
+`destroy` of every `sa-lc` container, newest first, which no script in this repository does),
+so the remaining steps have not completed yet.

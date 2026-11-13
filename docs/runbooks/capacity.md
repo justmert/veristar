@@ -16,6 +16,20 @@ the availability effects of the topology are in
 | `MetricsWriterLagHigh` | core nodes | `METRICSWRITER_BATCH`, larger core server type |
 | Gateway or collector latency, `429` from rate limits for legitimate tenants | edge nodes | larger edge server type, `edge_gateway_env` and `edge_collector_env` limits |
 | JetStream store close to `max_file_store` or `max_memory_store` | edge nodes | `edge_nats_max_file_store` (20G) and `edge_nats_max_memory_store` (512M), and a larger disk |
+| `visit_state` close to its cap, replayer logs "write duplicate guard" failures | edge nodes, replayer | `natsx.VisitStateMaxBytes` (384 MiB) with `edge_nats_max_memory_store`, see below |
+
+## The visit_state cap
+
+`visit_state` holds one duplicate-guard key for every delivered web event for 24 hours, plus one
+visit record per visitor, in each NATS server's memory store, which it shares with
+`edge_secrets`. It is capped at `natsx.VisitStateMaxBytes` (384 MiB of the 512 MiB store), so the
+gateways can always create the next day's secrets: a full bucket refuses only the replayer's
+writes, delivery waits and ingestion goes on. One key takes 74 bytes in the store (measured by
+`TestVisitStateLeavesRoomForEdgeSecrets`, `internal/natsx`), so the cap holds about 5 million
+delivered events a day, fewer with many distinct visitors. Above about 4 million events a day,
+raise `edge_nats_max_memory_store` on a larger edge server type and `VisitStateMaxBytes` with
+it, keeping a quarter of the store free (the test checks that ratio), then run
+`platformctl nats apply`, which updates the bucket's limit in place.
 
 ## Measure first
 
@@ -31,7 +45,7 @@ the availability effects of the topology are in
    and `api.metrics_daily`. Vacuum the three tables first or dead tuples count as bytes.
    Compare with the planning bound in [../reference/capacity.md](../reference/capacity.md)
    (about 500 bytes per minute row; 2,000 series need about 41 GiB for 30 days of minute rows).
-3. **Retention settings** that set the size: `API_MINUTE_RETENTION_DAYS` and
+3. **Retention settings** that set the size: `API_MINUTE_RETENTION_DAYS` (at least 8) and
    `API_HOURLY_RETENTION_MONTHS` (at least 24) on `jobs` and `controlplane`, from
    `core_api_minute_retention_days` and `core_api_hourly_retention_months` in the core role;
    raw Umami events are kept `WEB_RAW_RETENTION_MONTHS` (25 by default) by `jobs retain-web`.
@@ -54,7 +68,7 @@ the availability effects of the topology are in
    [database-failover.md](database-failover.md)). Change one node at a time by applying while
    only that node's change is in the plan, or accept that `make staging-apply` changes every
    node of a tier and do it in a quiet hour.
-4. `make staging-apply`, then `make staging-deploy SA_IMAGE_TAG=<current release>` so Ansible
+4. `make staging-apply`, then `make staging-deploy SA_IMAGE_TAG=<current release> SA_RELEASE_MANIFEST=<release-images.json>` so Ansible
    checks the node again, then undrain.
 
 ## Change a limit or a tunable

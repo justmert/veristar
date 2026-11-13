@@ -1,0 +1,24 @@
+---
+# the pgbackrest backup bucket (the design of
+# the review notes). runs on the controller against the
+# s3 api of sa_object_storage with the keys of the sops file an operator input.
+
+# compliance mode: no key, not even the one that wrote an object, can shorten
+# the retention or delete a locked version before it ends. governance mode
+# can be bypassed by any key with the bypass right, and hetzner keys are not
+# scoped, so it would protect against mistakes only, not against a leaked key.
+storage_lock_mode: COMPLIANCE
+
+# days every object version stays undeletable. pgbackrest keeps
+# backup_retention_full weekly full backups (roles/backup), so the oldest
+# file a kept backup needs is at most backup_retention_full weeks plus the six
+# days of differentials old; one more week covers that. the role refuses a
+# value below (backup_retention_full + 1) * 7. a longer lock costs storage:
+# every version, including the ones pgbackrest expired, is billed until its
+# lock ends.
+storage_lock_days: 35
+
+# local converge only: the stand-in's private ca on the controller and the
+# address to connect to (infra/local, s3 mode). empty everywhere else.
+storage_ca_file: "{{ sa_object_storage.ca_file | default('') if sa_object_storage is mapping else '' }}"
+storage_connect_host: "{{ sa_object_storage.storage_host | default('') if sa_object_storage is mapping else '' }}"

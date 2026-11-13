@@ -25,3 +25,8 @@
   ansible.builtin.command:
     argv: [docker, compose, --project-directory, "{{ observability_dir }}", exec, caddy, caddy, reload, --config, /etc/caddy/Caddyfile]
   changed_when: true
+
+- name: Restart prober
+  ansible.builtin.command:
+    argv: [docker, compose, --project-directory, "{{ observability_dir }}", restart, prober]
+  changed_when: true

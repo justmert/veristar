@@ -1,0 +1,59 @@
+---
+# deploy-time image verification (the design) shared by every playbook
+# that pulls platform images: site.yml, deploy.yml, rotate-all.yml and
+# restore.yml. before any
+# node is touched, every platform image of the release must pass
+# tasks/verify-images.yml on the controller; then every node uses the
+# verified repo:tag@digest references instead of the tag alone.
+#
+#   ... -e sa_image_tag=<release> -e sa_release_manifest=<release-images.json>
+#
+# the local converge is the one exception: its images come from the
+# throwaway registry that infra/local/build-images.sh fills, unsigned, so it
+# says so and pulls by tag. every other environment stops without a
+# manifest.
+- name: Verify the release image signatures
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  any_errors_fatal: true
+  vars_files: [../vars/pins.yml, ../vars/signing.yml]
+  tasks:
+    # the inventory's environment, read from a node because localhost is
+    # outside the inventory's groups
+    - name: Name the environment
+      ansible.builtin.set_fact:
+        verify_environment: "{{ hostvars[verify_nodes | first].sa_environment }}"
+      vars:
+        verify_nodes: "{{ groups['edge'] + groups['core'] + groups['probe'] | default([]) + groups['restore'] | default([]) }}"
+
+    - name: Say that the local converge pulls unverified images
+      ansible.builtin.debug:
+        msg: "local converge: images from the local registry are not signed and are pulled by tag"
+      when: verify_environment == 'local' and sa_release_manifest is not defined
+
+    - name: Verify every platform image of the release
+      ansible.builtin.include_tasks: tasks/verify-images.yml
+      when: verify_environment != 'local' or sa_release_manifest is defined
+
+# host facts outrank play vars, so the roles' platform_images (vars/pins.yml)
+# become the verified repo:tag@digest references on every node, including in
+# imported plays
+- name: Pin the nodes to the verified digests
+  hosts: edge:core:probe:restore
+  gather_facts: false
+  any_errors_fatal: true
+  vars_files: [../vars/pins.yml]
+  tasks:
+    - name: Use only verified image references
+      ansible.builtin.set_fact:
+        platform_images: "{{ platform_images | combine(verify_verified | selectattr('key', 'in', platform_images.keys() | list) | items2dict) }}"
+      vars:
+        verify_verified: "{{ hostvars['localhost'].sa_verified_images | dict2items }}"
+      when: hostvars['localhost'].sa_verified_images is defined
+
+    - name: Refuse to continue without verified images outside the local converge
+      ansible.builtin.assert:
+        that:
+          - hostvars['localhost'].sa_verified_images is defined or sa_environment == 'local'
+        fail_msg: images are deployed only by verified digest outside the local converge

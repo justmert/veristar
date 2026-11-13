@@ -80,6 +80,18 @@ header() {
 	}
 }
 
+# a handover cutover (docs/handover/plan.md section 2.3): the new nodes get
+# their certificates before the domain's delegation moves to the new dns
+# account. the old zone points _acme-challenge.<name> of every name at
+# ACME_CHALLENGE_DOMAIN by cname, and caddy writes the dns-01 answer there,
+# in a zone the new bunny.net account holds
+(sa_tls_bunny-delegated) {
+	tls {
+		dns bunny {env.BUNNY_API_KEY}
+		dns_challenge_override_domain {env.ACME_CHALLENGE_DOMAIN}
+	}
+}
+
 (sa_tls_internal) {
 	tls internal
 }

@@ -40,7 +40,17 @@
 	handle /internal/* {
 		respond "not found" 404
 	}
-	# pushes come from the prober on the compose network, never from outside
+	# the watchdog push of alertmanager on the core nodes (rules Watchdog);
+	# gatus checks its bearer token, caddy only lets the core nodes reach it
+	@watchdog {
+		path /api/v1/endpoints/monitoring_watchdog/external
+		remote_ip {{ groups['core'] | map('extract', hostvars, 'sa_public_ipv4') | join(' ') }}
+	}
+	handle @watchdog {
+		reverse_proxy gatus:8080
+	}
+	# every other push comes from the prober on the compose network, never
+	# from outside
 	handle /api/v1/endpoints/*/external {
 		respond "not found" 404
 	}

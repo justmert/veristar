@@ -30,7 +30,7 @@ Confirm the id with the person through a channel other than the request itself.
 2. Converge the core nodes so the control plane gets the new list:
 
    ```sh
-   make staging-deploy SA_IMAGE_TAG=<current release>
+   make staging-deploy SA_IMAGE_TAG=<current release> SA_RELEASE_MANIFEST=<release-images.json>
    ```
 
    The core compose file changes (`OPERATOR_GITHUB_IDS`), so `controlplane` is recreated on both

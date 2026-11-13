@@ -14,10 +14,13 @@ import (
 	"time"
 
 	"github.com/klauspost/compress/zstd"
+	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/plog"
 	"go.opentelemetry.io/collector/pdata/plog/plogotlp"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.opentelemetry.io/collector/pdata/pmetric/pmetricotlp"
+	"go.opentelemetry.io/collector/pdata/ptrace"
+	"go.opentelemetry.io/collector/pdata/ptrace/ptraceotlp"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
@@ -316,6 +319,63 @@ func TestCollector(t *testing.T) {
 		}
 		if s.points(tn.ID, "http.server.request.duration") != nil {
 			t.Error("a traces-only app produced tenant metric rows")
+		}
+	})
+
+	// review and A-7: an sdk that retries a trace export (its ack timed
+	// out, the collector answered 503 after jetstream stored the publish)
+	// sends the same spans again. the derived points must be queued once,
+	// in the minute the spans ended in, not the minute they arrived.
+	t.Run("retried trace export is queued once in the span end minute", func(t *testing.T) {
+		tn := s.newTenant(t)
+		end := time.Now().UTC().Add(-3 * time.Minute)
+		minute := end.Truncate(time.Minute)
+		req := ptraceotlp.NewExportRequest()
+		rs := req.Traces().ResourceSpans().AppendEmpty()
+		rs.Resource().Attributes().PutStr("service.name", "api-retry")
+		ss := rs.ScopeSpans().AppendEmpty()
+		for i := range 3 {
+			sp := ss.Spans().AppendEmpty()
+			sp.SetKind(ptrace.SpanKindServer)
+			sp.SetName("GET")
+			sp.SetTraceID(pcommon.TraceID{1, byte(i)})
+			sp.SetSpanID(pcommon.SpanID{2, byte(i)})
+			sp.SetStartTimestamp(pcommon.NewTimestampFromTime(end.Add(-20 * time.Millisecond)))
+			sp.SetEndTimestamp(pcommon.NewTimestampFromTime(end))
+			sp.Attributes().PutStr("http.request.method", "GET")
+			sp.Attributes().PutStr("http.route", "/retry")
+			sp.Attributes().PutInt("http.response.status_code", 200)
+		}
+		body, err := req.MarshalProto()
+		if err != nil {
+			t.Fatal(err)
+		}
+		for attempt := range 2 {
+			if code, msg := s.post(t, "/v1/traces", tn.Token, body, ""); code != http.StatusOK {
+				t.Fatalf("attempt %d: %d %s", attempt, code, msg)
+			}
+			// the connector stamps its points with the moment it runs, so
+			// the retry arrives with another time
+			time.Sleep(1100 * time.Millisecond)
+		}
+		s.waitPoints(t, tn.ID, "scf.http.server.request.duration.from_spans", 30*time.Second, func(p []point) bool { return totalCount(p) >= 3 })
+		// one more drain, so a second copy queued after the first is seen
+		time.Sleep(time.Second)
+		s.drain(t)
+		ps := s.points(tn.ID, "scf.http.server.request.duration.from_spans")
+		if totalCount(ps) != 3 {
+			t.Fatalf("span-derived count %d, want 3 (the retry was queued again): %s", totalCount(ps), describe(ps))
+		}
+		for _, p := range ps {
+			if got := p.dp.Timestamp().AsTime().UTC(); !got.Equal(minute) {
+				t.Errorf("point time %s, want the span end minute %s", got, minute)
+			}
+			if _, ok := p.dp.Attributes().Get("scf.span.minute"); ok {
+				t.Error("span minute attribute queued")
+			}
+			if _, ok := p.resource.Get("scf.batch.id"); ok {
+				t.Error("batch id attribute queued")
+			}
 		}
 	})
 

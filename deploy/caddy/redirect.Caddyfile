@@ -27,10 +27,10 @@
 				request>remote_ip delete
 				request>remote_port delete
 				request>client_ip delete
-				request>headers>User-Agent delete
-				request>headers>X-Forwarded-For delete
-				request>headers>X-Real-Ip delete
-				request>headers>Forwarded delete
+				# every request header, as on the edge: user agent,
+				# forwarding headers and a Referer that can carry a full url
+				request>headers delete
+				resp_headers delete
 			}
 		}
 	}

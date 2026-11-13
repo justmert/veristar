@@ -47,14 +47,19 @@ Every change must pass these locally; CI runs the same:
 ```sh
 make vet
 make lint                     # golangci-lint
-make test                     # go test -race ./...
+make test                     # unit tests only, starts no container
+make test-containers          # the packages whose tests start postgresql, nats, umami or caddy
 pnpm install --frozen-lockfile
 pnpm check                    # biome and type checks
 pnpm test                     # vitest suites
 ```
 
-The geo tests need the DB-IP country file: `make geo-fetch`, then
-`DBIP_MMDB=.scratch/scratch/geo/dbip-country-lite.mmdb make test`.
+`make test` runs every package whose tests do not pull in testcontainers; `make
+test-containers` runs the others, one package at a time (`-p 1`), and needs Docker.
+`scripts/go-test-packages.sh` derives the split from each package's test imports, so a new
+container test lands in `test-containers` without a build tag. The gateway geo tests need the
+DB-IP country file: `make geo-fetch`, then
+`DBIP_MMDB=.scratch/scratch/geo/dbip-country-lite.mmdb make test-containers`.
 
 Suites that start real services, run when the change touches their area:
 
@@ -67,6 +72,18 @@ Suites that start real services, run when the change touches their area:
 | `make privacy` | the privacy audit: no address or user agent anywhere it must not be |
 | `make umami-compat` | Umami behaviour the platform depends on; required for an Umami upgrade |
 | `make test-caddy-web` | the Umami host's allowlist and deny list |
+| `make gateway-it` | the collect gateway image with NATS, Caddy and browsers |
+| `make metricswriter-it`, `make api-volume` | metrics writer exactness and the 1,000,000 request volume run |
+| `make enrollment-it` | enrollment modes end to end |
+| `make otelapps` | the example apps' dual export and the tenant collector guide |
+| `make recovery-it` | recovery after a full NATS restart; needs `make dev-up` and `umami-bootstrap` |
+| `make handover-it` | the data migration and transfer rehearsal |
+| `make promtool` | the alert and recording rule tests |
+
+`.github/workflows/ci.yml` runs `test`, `test-containers`, `isolation`, `supplychain-it`,
+`test-integration` and `promtool` on every change. `.github/workflows/e2e.yml` runs every other
+suite above, plus `db-it`, `local-converge` and `rotate-local`, each night and on demand, one
+matrix job per suite.
 
 The required checks for pull requests are listed in
 [docs/security/branch-protection.md](docs/security/branch-protection.md).

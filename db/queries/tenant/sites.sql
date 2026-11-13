@@ -23,6 +23,7 @@ select count(*) from cp.sites where status <> 'removed';
 update cp.sites
 set name = coalesce(sqlc.narg(name)::text, name),
     origins = coalesce(sqlc.narg(origins)::text[], origins),
+    collect_utm = coalesce(sqlc.narg(collect_utm)::boolean, collect_utm),
     updated_at = now()
 where id = @id
 returning *;

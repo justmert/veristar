@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -224,6 +225,8 @@ func TestAppCaddyServesConsoleAndApi(t *testing.T) {
 		req.Header.Set("User-Agent", ua)
 		req.Header.Set("Cookie", "sa_session=request-cookie-must-not-be-logged")
 		req.Header.Set("X-Forwarded-For", "198.51.100.77")
+		// a client cannot choose the address the sign-in limits key on
+		req.Header.Set("X-Sa-Client-Addr", "198.51.100.88")
 		resp, err := client.Do(req)
 		require.NoError(t, err)
 		b, err := io.ReadAll(resp.Body)
@@ -285,6 +288,13 @@ func TestAppCaddyServesConsoleAndApi(t *testing.T) {
 	require.Empty(t, h.Values("X-Forwarded-For"))
 	require.Empty(t, h.Values("X-Real-Ip"))
 	require.Empty(t, h.Values("Forwarded"))
+	// the sign-in limits key on the connection's address, set by caddy;
+	// the value the client sent is replaced (contract 4.1.1)
+	require.Len(t, h.Values("X-Sa-Client-Addr"), 1)
+	require.NotEqual(t, "198.51.100.88", h.Get("X-Sa-Client-Addr"))
+	require.NotEqual(t, "198.51.100.77", h.Get("X-Sa-Client-Addr"))
+	_, err = netip.ParseAddr(h.Get("X-Sa-Client-Addr"))
+	require.NoError(t, err, "caddy sends a bare address")
 	require.Equal(t, "sa_session=request-cookie-must-not-be-logged", h.Get("Cookie"), "the session cookie must reach the control plane")
 
 	// caddy's own error, the control plane gone, still carries the headers
@@ -305,7 +315,7 @@ func TestAppCaddyServesConsoleAndApi(t *testing.T) {
 		return strings.Count(all, `"logger":"http.log.access`) >= 5
 	}, 10*time.Second, 100*time.Millisecond, "no access log lines: %s", all)
 	for _, secret := range []string{
-		ua, "AppLogProbe", "198.51.100.77", "request-cookie-must-not-be-logged",
+		ua, "AppLogProbe", "198.51.100.77", "198.51.100.88", "request-cookie-must-not-be-logged",
 		"cookie-must-not-be-logged", ssoToken, "probe-site",
 	} {
 		require.NotContains(t, all, secret)

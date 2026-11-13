@@ -38,7 +38,7 @@ ENV OTEL_SEMCONV_STABILITY_OPT_IN=http
 |---|---|---|
 | `http` | `http.server.request.duration` in seconds, with `http.route` and the current attribute names | stored as sent |
 | empty or unset | the legacy `http.server.duration` in milliseconds, with `http.target` holding the route template and the old attribute names | converted to seconds and to the current names; tested |
-| `http/dup` | both metrics for every request | **do not use**: the platform renames the legacy metric to the current one, so each request would be counted twice. This follows from the collector configuration and was not run as a test. |
+| `http/dup` | both metrics for every request | the platform keeps `http.server.request.duration` and drops `http.server.duration` when one instrumentation sends both, so each request is counted once (tested in the collector's unit tests). `http` still saves sending the duplicate. |
 
 Both tested settings give the same numbers in the dashboard; `http` avoids the conversion.
 

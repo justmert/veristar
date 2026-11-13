@@ -80,7 +80,7 @@ go forward, so the rollback is a database restore).
 
 ### Our own images
 
-Bump the dependency (`go get`, `pnpm update`, a base image digest), run `make test`, `make isolation`
+Bump the dependency (`go get`, `pnpm update`, a base image digest), run `make test`, `make test-containers`, `make isolation`
 and the image scan (`scripts/supply-chain/scan-image.sh <image> <dir>` on a local build).
 
 ### Upstream images other than Umami
@@ -91,7 +91,7 @@ present), resolved from the registry, and run the suites that start that image.
 ### PostgreSQL
 
 Change `PG_BASE` and `PG_VERSION` in `deploy/images/postgres-ha.Dockerfile` and `postgres_version`
-in `vars/pins.yml`, rebuild, then run `make test`, `make isolation` and the this stage recovery
+in `vars/pins.yml`, rebuild, then run `make test`, `make test-containers`, `make isolation` and the this stage recovery
 drills before rollout.
 
 ## 5. Release and roll out (target: 4 hours)
@@ -119,6 +119,37 @@ docker run --rm -v stellar-analytics-edge_caddydata:/data -v stellar-analytics-e
 ```
 
 (`stellar-analytics-core_*` on core nodes.)
+
+## 6a. Host operating system (Debian security updates)
+
+Unattended upgrades (`roles/base/tasks/upgrades.yml`) install Debian security updates every day
+on every node, with `Automatic-Reboot "false"` so a node never restarts on its own while it
+holds a Patroni leader or is in DNS. A kernel or libc fix therefore applies only after a reboot.
+
+- **Signal.** Debian's unattended-upgrades kernel hook creates `/var/run/reboot-required`.
+  A timer on every edge and core node (`sa-reboot-required.timer`, `roles/observability`)
+  turns it into `node_reboot_required`, and the `HostRebootRequired` alert fires after 12 hours
+  ([alerts.md](alerts.md#hostrebootrequired)), which leaves half of the 24-hour target for the
+  reboot. For a critical kernel CVE do not wait for the alert.
+- **Reboot, one node at a time:**
+
+  ```sh
+  cd infra/ansible
+  ansible-playbook -i inventories/<env>/ playbooks/reboot.yml
+  ```
+
+  It reboots only the nodes holding `/var/run/reboot-required` (`-e reboot_all=true` reboots
+  every node): edge nodes one by one, drained from DNS first as in `deploy.yml`; then core
+  nodes one by one, drained and with the Patroni leader handed to the synchronous replica before
+  the reboot; then the probe. Each node must be healthy again (gateway readiness behind Caddy,
+  Patroni `/health`, the control plane's composite check) before its drain flag is removed and
+  the next node starts. Any failure stops the run with the other nodes untouched.
+- **Check:** `node_reboot_required` is 0 on every node in Prometheus, and
+  `uname -r` on each node shows the new kernel.
+
+Not yet exercised: `reboot.yml` has never run. The local converge nodes are containers sharing
+this machine's kernel, so a reboot there proves nothing about a kernel update; it is checked by
+`ansible-lint` and `--syntax-check` only, and must run on staging an operator input.
 
 ## 7. Rehearsal record
 

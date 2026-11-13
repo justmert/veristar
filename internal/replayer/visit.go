@@ -81,7 +81,7 @@ func (v visitStore) load(ctx context.Context, siteID, vt string) (*VisitRecord, 
 }
 
 // save writes the visitor's record. one visitor's events are handled by one
-// lane at a time, so a plain put cannot lose a concurrent update.
+// goroutine at a time, so a plain put cannot lose a concurrent update.
 func (v visitStore) save(ctx context.Context, siteID, vt string, r *VisitRecord) error {
 	b, err := json.Marshal(r)
 	if err != nil {

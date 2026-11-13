@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"go.opentelemetry.io/collector/consumer/consumertest"
@@ -59,7 +60,11 @@ func tenantMetrics() pmetric.Metrics {
 	ex := dp.Exemplars().AppendEmpty()
 	ex.FilteredAttributes().PutStr("user", "u1")
 
-	legacy := sm.Metrics().AppendEmpty()
+	// the legacy name comes from another library (its own scope), so it is
+	// not the http/dup copy of the stable metric above and is kept
+	sm2 := rm.ScopeMetrics().AppendEmpty()
+	sm2.Scope().SetName("legacy-lib")
+	legacy := sm2.Metrics().AppendEmpty()
 	legacy.SetName(schema.MetricLegacyDuration)
 	legacy.SetUnit("ms")
 	ldp := legacy.SetEmptyHistogram().DataPoints().AppendEmpty()
@@ -129,7 +134,7 @@ func TestMetricsFilteredAndStamped(t *testing.T) {
 		t.Errorf("scope not cleared")
 	}
 	ms := sm.Metrics()
-	if ms.Len() != 3 {
+	if ms.Len() != 2 || rm.ScopeMetrics().Len() != 2 {
 		var names []string
 		for i := 0; i < ms.Len(); i++ {
 			names = append(names, ms.At(i).Name()+"/"+ms.At(i).Unit())
@@ -146,15 +151,17 @@ func TestMetricsFilteredAndStamped(t *testing.T) {
 	if ms.At(0).Description() != "" {
 		t.Errorf("description kept")
 	}
-	leg := ms.At(1).Histogram().DataPoints().At(0).Attributes().AsRaw()
+	lm := rm.ScopeMetrics().At(1).Metrics().At(0)
+	leg := lm.Histogram().DataPoints().At(0).Attributes().AsRaw()
 	if leg["http.request.method"] != "_OTHER" || leg["http.route"] != "/keys/{redacted-secret}" || leg["http.response.status_code"] != int64(503) || leg["error.type"] != "timeout" || len(leg) != 4 {
 		t.Errorf("legacy attrs %v", leg)
 	}
-	if ms.At(1).Name() != schema.MetricLegacyDuration || ms.At(1).Unit() != "ms" {
-		t.Errorf("legacy metric renamed early: %s %s", ms.At(1).Name(), ms.At(1).Unit())
+	if lm.Name() != schema.MetricLegacyDuration || lm.Unit() != "ms" {
+		t.Errorf("legacy metric renamed early: %s %s", lm.Name(), lm.Unit())
 	}
-	// method values are case sensitive in semconv: "post" is not a known method
-	if m := ms.At(2).ExponentialHistogram().DataPoints().At(0).Attributes().AsRaw(); m["http.request.method"] != "_OTHER" {
+	// semconv lets instrumentation that treats methods case-insensitively
+	// record the canonical name, so "post" is POST
+	if m := ms.At(1).ExponentialHistogram().DataPoints().At(0).Attributes().AsRaw(); m["http.request.method"] != "POST" {
 		t.Errorf("exp attrs %v", m)
 	}
 	// no byte of the seed anywhere
@@ -259,7 +266,7 @@ func TestTracesFiltered(t *testing.T) {
 			t.Errorf("span %d keeps events, links or status message", i)
 		}
 		for k := range s.Attributes().All() {
-			if k != "http.request.method" && k != "http.route" && k != "http.response.status_code" && k != "error.type" {
+			if k != "http.request.method" && k != "http.route" && k != "http.response.status_code" && k != "error.type" && k != schema.AttrSpanMinute {
 				t.Errorf("span %d keeps %s", i, k)
 			}
 		}
@@ -366,5 +373,127 @@ func TestConfigValidate(t *testing.T) {
 	}
 	if err := testCfg.Validate(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// sdks in OTEL_SEMCONV_STABILITY_OPT_IN=http/dup mode record every request
+// under both names from one instrumentation scope; after the legacy name is
+// scaled and renamed both would be stored. the stable one wins.
+func TestHTTPDupKeepsStableNameOnly(t *testing.T) {
+	for _, temp := range []pmetric.AggregationTemporality{pmetric.AggregationTemporalityDelta, pmetric.AggregationTemporalityCumulative} {
+		md := pmetric.NewMetrics()
+		rm := md.ResourceMetrics().AppendEmpty()
+		rm.Resource().Attributes().PutStr("service.name", "api")
+		dup := rm.ScopeMetrics().AppendEmpty()
+		dup.Scope().SetName("otelhttp")
+		for _, n := range []struct{ name, unit string }{{schema.MetricLegacyDuration, "ms"}, {schema.MetricDuration, "s"}} {
+			m := dup.Metrics().AppendEmpty()
+			m.SetName(n.name)
+			m.SetUnit(n.unit)
+			h := m.SetEmptyHistogram()
+			h.SetAggregationTemporality(temp)
+			dp := h.DataPoints().AppendEmpty()
+			dp.Attributes().PutStr("http.request.method", "GET")
+			dp.SetCount(1)
+		}
+		only := rm.ScopeMetrics().AppendEmpty()
+		only.Scope().SetName("old-lib")
+		m := only.Metrics().AppendEmpty()
+		m.SetName(schema.MetricLegacyDuration)
+		m.SetUnit("ms")
+		m.SetEmptyHistogram().DataPoints().AppendEmpty().SetCount(1)
+
+		g := newGuard(testCfg, processortest.NewNopSettings(Type).Logger, time.Now)
+		out, err := g.processMetrics(authed(uuid.NewString(), uuid.NewString()), md)
+		if err != nil {
+			t.Fatal(err)
+		}
+		sms := out.ResourceMetrics().At(0).ScopeMetrics()
+		if sms.Len() != 2 {
+			t.Fatalf("%s: scopes = %d", temp, sms.Len())
+		}
+		if ms := sms.At(0).Metrics(); ms.Len() != 1 || ms.At(0).Name() != schema.MetricDuration {
+			t.Errorf("%s: dup scope keeps %d metrics, first %s", temp, ms.Len(), ms.At(0).Name())
+		}
+		if ms := sms.At(1).Metrics(); ms.Len() != 1 || ms.At(0).Name() != schema.MetricLegacyDuration {
+			t.Errorf("%s: legacy-only scope lost its metric", temp)
+		}
+	}
+}
+
+// service.name is cut on a rune boundary and invalid bytes are replaced,
+// so what leaves the collector is always storable.
+func TestServiceNameStorable(t *testing.T) {
+	for _, in := range []string{
+		strings.Repeat("a", 127) + "é",
+		"api\xff\xfe-" + strings.Repeat("b", 200),
+		"a\x00b",
+	} {
+		md := tenantMetrics()
+		md.ResourceMetrics().At(0).Resource().Attributes().PutStr("service.name", in)
+		g := newGuard(testCfg, processortest.NewNopSettings(Type).Logger, time.Now)
+		out, err := g.processMetrics(authed(uuid.NewString(), uuid.NewString()), md)
+		if err != nil {
+			t.Fatal(err)
+		}
+		v, _ := out.ResourceMetrics().At(0).Resource().Attributes().Get("service.name")
+		s := v.Str()
+		if !utf8.ValidString(s) || len(s) > maxServiceNameLen || strings.ContainsRune(s, 0) {
+			t.Errorf("service.name %q from %q is not storable (%d bytes)", s, in, len(s))
+		}
+	}
+}
+
+// error.type with invalid bytes would reach the writer's stream identity
+// and the span-derived rows; it becomes _OTHER like an overlong one.
+func TestErrorTypeStorable(t *testing.T) {
+	attrs := pcommon.NewMap()
+	attrs.PutStr("http.request.method", "GET")
+	attrs.PutStr("error.type", "bad\xffvalue")
+	normalizeAttrs(attrs)
+	if v, _ := attrs.Get("error.type"); v.Str() != schema.MethodOther {
+		t.Errorf("error.type = %q", v.Str())
+	}
+}
+
+// a retried export carries the same spans; its derived points must get the
+// same message id and the minute the requests ended in.
+func TestTracesCarryBatchIDAndEndMinute(t *testing.T) {
+	tenant, token := uuid.NewString(), uuid.NewString()
+	g := newGuard(testCfg, processortest.NewNopSettings(Type).Logger, time.Now)
+	run := func(td ptrace.Traces) (string, ptrace.Traces) {
+		out, err := g.processTraces(authed(tenant, token), td)
+		if err != nil {
+			t.Fatal(err)
+		}
+		v, ok := out.ResourceSpans().At(0).Resource().Attributes().Get(schema.ResBatchID)
+		if !ok || len(v.Str()) != 64 {
+			t.Fatalf("batch id %q", v.Str())
+		}
+		return v.Str(), out
+	}
+	a, out := run(spans())
+	b, _ := run(spans())
+	if a != b {
+		t.Errorf("same spans, different batch ids %s and %s", a, b)
+	}
+	other := spans()
+	other.ResourceSpans().At(0).ScopeSpans().At(0).Spans().At(0).SetSpanID(pcommon.SpanID{1, 2, 3})
+	if c, _ := run(other); c == a {
+		t.Error("different spans, same batch id")
+	}
+	sp := out.ResourceSpans().At(0).ScopeSpans().At(0).Spans().At(0)
+	v, ok := sp.Attributes().Get(schema.AttrSpanMinute)
+	// the spans end at 1.25 s after the epoch, in the first minute
+	if !ok || v.Type() != pcommon.ValueTypeInt || v.Int() != 0 {
+		t.Errorf("span minute %v", v.AsRaw())
+	}
+	end := pcommon.NewTimestampFromTime(time.Date(2026, 11, 13, 10, 7, 59, 900, time.UTC))
+	late := spans()
+	late.ResourceSpans().At(0).ScopeSpans().At(0).Spans().At(0).SetEndTimestamp(end)
+	_, out = run(late)
+	v, _ = out.ResourceSpans().At(0).ScopeSpans().At(0).Spans().At(0).Attributes().Get(schema.AttrSpanMinute)
+	if want := time.Date(2026, 11, 13, 10, 7, 0, 0, time.UTC).UnixNano(); v.Int() != want {
+		t.Errorf("span minute %d, want %d", v.Int(), want)
 	}
 }

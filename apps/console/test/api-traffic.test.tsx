@@ -308,7 +308,7 @@ describe("api traffic page", () => {
     const kinds = [...host.querySelectorAll("[data-warning]")].map((e) =>
       e.getAttribute("data-warning"),
     );
-    expect(kinds).toEqual(["lossy_histogram", "secret_in_path"]);
+    expect(kinds).toEqual(["lossy_histogram", "secret_in_path", "coarse_buckets"]);
     expect(text(host.querySelector('[data-warning="secret_in_path"]'))).toContain(
       "last on Nov 11, 2026",
     );

@@ -110,21 +110,24 @@ primary IPv4 and IPv6 addresses, which are separate resources and survive the se
 2. `make staging-apply`. Expected: `Apply complete!` and a rewritten
    `infra/ansible/inventories/staging/hosts.json`.
 
-3. Converge: `make staging-deploy SA_IMAGE_TAG=<release tag>` (see
+3. Converge: `make staging-deploy SA_IMAGE_TAG=<release tag> SA_RELEASE_MANIFEST=<release-images.json>` (see
    [../deploy/ansible.md](../deploy/ansible.md)). NATS on the new node starts with an empty store
    and catches up from the other two, because a JetStream peer is identified by its server name.
 
-4. **etcd needs a manual step that the edge role does not do yet.** The role always starts
-   etcd with `--initial-cluster-state=new`. A member whose data directory was lost must, by
-   etcd's own rules, be removed and added again and then started with
-   `--initial-cluster-state=existing`. The role cannot express that today, so after a
-   replacement the new node's etcd will not rejoin cleanly. Leave the old member listed (the
-   cluster keeps quorum with 2 of 3) and raise the gap before a second edge node fails. Check the
-   member list from a healthy edge node:
+4. **etcd rejoins on its own.** The edge role (`roles/edge/tasks/etcd.yml`) sees that the new
+   node has no etcd data volume while the other two members answer, removes the stale member of
+   this node's name (or an unstarted member at its address) through a healthy peer, adds the
+   node again and starts it with `--initial-cluster-state=existing`. It records that in
+   `/etc/stellar-analytics/edge/etcd-initial-state`, so later converges change nothing. Check
+   from any edge node that three members are `started` and healthy:
 
    ```sh
    cd /opt/stellar-analytics/edge && sudo docker compose exec etcd etcdctl --endpoints=http://127.0.0.1:2379 member list -w table
    ```
+
+   If the converge failed between the member add and the start, converge again: the unstarted
+   member at this address is removed and added once more. If only the etcd volume of a running
+   node was lost, delete the marker file on that node first, so the role decides again.
 
 ## Exercised
 
@@ -134,7 +137,9 @@ primary IPv4 and IPv6 addresses, which are separate resources and survive the se
 | 2026-11-13 | Alert fire-drill: gateway of edge-2 stopped | EdgeNodeNotReady and ProbeNodeCheckFailing fired and resolved; the `in` hostname check and ingestion stayed up | [alerts.md](alerts.md), fire-drills |
 | 2026-11-13 | this stage drill: edge 2 powered off under load | invalid: the shared host froze for about 104 s at the power-off; finding: edge 2's NATS stayed `Exited (255)` after power-on, which led to `sa-edge-start.service` (not yet re-verified by a power-off) | [../reference/drills/2026-11-13.md](../reference/drills/2026-11-13.md) |
 
-Not yet exercised: the manual drain and undrain of steps 2 and 5 by hand (the same flag file was
+Not yet exercised: the automatic etcd rejoin of step 4 (`make ops-local` steps `rebuild-edge3`
+and `etcd` drive it, but the run of 2026-11-13 was stopped before them, see the O-6 resolution
+in the review notes), the manual drain and undrain of steps 2 and 5 by hand (the same flag file was
 used by `deploy.yml` in the local converge), DNS removal by bunny.net an operator input, and the
 replacement of a lost node (needs staging, inputs I5 and I6). The multi-node topology cannot
 run on the shared development host, so none of this was repeated in this stage.

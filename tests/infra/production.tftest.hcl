@@ -78,8 +78,8 @@ run "inventory_without_probe" {
   command = apply
 
   assert {
-    condition     = keys(output.ansible_inventory.all.children) == ["core", "edge", "probe"]
-    error_message = "groups must be exactly edge, core and probe"
+    condition     = keys(output.ansible_inventory.all.children) == ["core", "edge", "probe", "restore"]
+    error_message = "groups must be exactly edge, core, probe and restore"
   }
 
   assert {
@@ -203,6 +203,59 @@ run "inventory_with_probe" {
       sa_tier        = "probe"
     })
     error_message = "probe host vars do not match the contract"
+  }
+}
+
+run "inventory_without_restore" {
+  command = apply
+
+  assert {
+    condition     = length(output.ansible_inventory.all.children.restore.hosts) == 0
+    error_message = "restore stays empty until restore_enabled"
+  }
+}
+
+# the restore node of playbooks/restore.yml: core-sized, in
+# the chosen location, on the private network at .41
+run "inventory_with_restore" {
+  command = apply
+
+  variables {
+    restore_enabled  = true
+    restore_location = "hel1"
+  }
+
+  override_resource {
+    target = module.node["production-restore-1"].hcloud_server.this
+    values = {
+      ipv4_address = "203.0.113.41"
+      ipv6_address = "2001:db8:41::1"
+    }
+  }
+
+  assert {
+    condition = jsonencode(output.ansible_inventory.all.children.restore.hosts["production-restore-1"]) == jsonencode({
+      ansible_host   = "203.0.113.41"
+      ansible_user   = "ops"
+      sa_index       = 1
+      sa_location    = "hel1"
+      sa_private_ip  = "10.10.3.41"
+      sa_provider    = "hetzner"
+      sa_public_ipv4 = "203.0.113.41"
+      sa_public_ipv6 = "2001:db8:41::1"
+      sa_tier        = "restore"
+    })
+    error_message = "restore host vars do not match the contract"
+  }
+
+  assert {
+    condition     = module.node["production-restore-1"].server_type == "fixture-core-type"
+    error_message = "the restore node must be sized like a core node"
+  }
+
+  assert {
+    condition     = keys(output.ansible_inventory.all.children.core.hosts) == ["production-core-1", "production-core-2"]
+    error_message = "the restore node must not join the core group"
   }
 }
 

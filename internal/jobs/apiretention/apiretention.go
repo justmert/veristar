@@ -78,8 +78,9 @@ func New(cfg config.APIRetention, parts *apipartition.Partitioner, now func() ti
 	if cfg.HourlyMonths < config.MinHourlyRetentionMonths {
 		return nil, fmt.Errorf("%w: have %d", ErrBelowFloor, cfg.HourlyMonths)
 	}
-	if cfg.MinuteDays < 2 {
-		return nil, fmt.Errorf("apiretention: minute retention must be at least 2 days, have %d", cfg.MinuteDays)
+	if cfg.MinuteDays < config.MinMinuteRetentionDays {
+		return nil, fmt.Errorf("apiretention: minute retention must be at least %d days, the writer's late-data window, have %d",
+			config.MinMinuteRetentionDays, cfg.MinuteDays)
 	}
 	r := &Retention{cfg: cfg, parts: parts, now: now, log: log, removed: prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "jobs_api_retention_removed_total",

@@ -1,0 +1,3 @@
+# the production pin of haproxy (infra/ansible), here so dependabot proposes
+# updates for it. tests/pins fails until the ansible pin equals this line.
+FROM haproxy:3.4.7-alpine@sha256:b9fe316f718d5015c5cfebd8ca019591f3e44656f61d93cb8b59a1028961e530

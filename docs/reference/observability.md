@@ -22,7 +22,7 @@ names were confirmed on the local test stack (`tests/observability`).
 | pgBackRest | node_exporter textfile written hourly by the role | `pgbackrest_last_backup_completion_timestamp_seconds{stanza,type}`, `pgbackrest_info_success` |
 | nodes | node_exporter 1.12.1 | `node_filesystem_*`, `node_cpu_*`, `node_memory_*` |
 | Caddy 2.11.9 (edge and core) | plain-http listener `:2021` with only the `metrics` handler, added by `deploy/caddy/assemble.sh`, plus the global `metrics` option for the HTTP counters; relay port 9307 | `caddy_http_requests_total{server,handler}`, `caddy_http_request_duration_seconds`, `caddy_reverse_proxy_upstreams_healthy`, `caddy_config_last_reload_successful`. The admin API stays on the container's loopback: on any other address it accepts unauthenticated config changes from every host that reaches it, and `caddy reload` and the health check use it there |
-| HAProxy 3.4.7 (core) | `frontend stats` on `core_haproxy_stats_port` (8404): `/metrics` from the built-in prometheus-exporter service (`USE_PROMEX`), `/stats` page; relay port 9308 for `/metrics`, `/stats` on the node's loopback for an SSH tunnel | `haproxy_backend_active_servers{proxy="primary"}` (0 means no Patroni leader reachable), `haproxy_server_status`, `haproxy_frontend_*`, `haproxy_process_*` |
+| HAProxy 3.4.7, alpine build (core) | `frontend stats` on `core_haproxy_stats_port` (8404): `/metrics` from the built-in prometheus-exporter service (`USE_PROMEX`), `/stats` page; relay port 9308 for `/metrics`, `/stats` on the node's loopback for an SSH tunnel | `haproxy_backend_active_servers{proxy="primary"}` (0 means no Patroni leader reachable), `haproxy_server_status`, `haproxy_frontend_*`, `haproxy_process_*` |
 | prober | ops port, through the probe Caddy behind a bearer token | `prober_check_success{check}`, `prober_check_runs_total{check,result}`, `prober_check_duration_seconds`, `prober_freshness_backlog_events{pipeline}`, `prober_tls_certificate_expiry_timestamp_seconds{node,host}` |
 
 The exporter has no first-message timestamp, so "age of the oldest message"
@@ -38,7 +38,7 @@ is at least 10 minutes old (rule `QueueOldestMessageTooOld`).
   `username`, `avatar_url`, `send_resolved`. Title is cut at 256 runes,
   message at 4096, content at 2000 (`notify/discord`). The role uses
   `webhook_url_file`, so the secret stays in a 0400 file.
-- Gatus 5.37.0: `alerting.discord` with `webhook-url`, `title`,
+- Gatus 5.38.0: `alerting.discord` with `webhook-url`, `title`,
   `message-content`, `default-alert`, and per-group `overrides`
   (`alerting/provider/discord`). The URL is read from the environment
   (`${GATUS_DISCORD_WEBHOOK_URL}`).
@@ -65,7 +65,7 @@ is at least 10 minutes old (rule `QueueOldestMessageTooOld`).
 - Uptime API: `GET /api/v1/endpoints/{key}/uptimes/{1h|24h|7d|30d}`; raw
   results: `GET /api/v1/endpoints/{key}/statuses?page=&pageSize=`, newest
   page first, page 1 capped at the maximum number of results.
-- What Gatus cannot do at 5.37.0, so the prober does it and pushes the
+- What Gatus cannot do at 5.38.0, so the prober does it and pushes the
   result: conditions have no hash function (no SHA-384 of the tracker file),
   and a check by address cannot present SNI, because the client sets no TLS
   server name from a `Host` header and `tls://` checks dial without one

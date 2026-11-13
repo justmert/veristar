@@ -1,0 +1,101 @@
+---
+# etcd membership of this edge node ( of
+# the review notes, plan audit backlog "etcd member rejoin
+# when an edge node is rebuilt"). etcd's rule: a member that lost its data
+# directory cannot start again as itself. it must be removed from the
+# cluster, added again, and started with --initial-cluster-state=existing.
+#
+# the decision is made once per data directory and kept in a marker, so later
+# converges render the same compose command (etcd ignores the flag once its
+# data directory holds a member, but a changed command would recreate the
+# container):
+#   - the data volume exists (a node converged before the marker existed):
+#     state new, which etcd ignores for a member that has its data; nothing
+#     in the cluster is touched
+#   - no data volume and no peer answers: the cluster is being created,
+#     state new
+#   - no data volume and a peer answers: this node was rebuilt. remove the
+#     stale member of this name or address if there is one, add this node,
+#     state existing
+- name: Look for this node's etcd data
+  ansible.builtin.command:
+    argv: [docker, volume, inspect, "{{ edge_etcd_volume }}"]
+  register: edge_etcd_volume_check
+  changed_when: false
+  failed_when: false
+
+- name: Look for this node's etcd membership marker
+  ansible.builtin.stat:
+    path: "{{ edge_etcd_state_file }}"
+  register: edge_etcd_marker
+
+# a marker without a volume means the data was lost; decide again
+- name: Read the recorded membership
+  ansible.builtin.slurp:
+    src: "{{ edge_etcd_state_file }}"
+  register: edge_etcd_marker_content
+  when: edge_etcd_marker.stat.exists and edge_etcd_volume_check.rc == 0
+
+- name: Ask the other edge nodes for the member list
+  ansible.builtin.uri:
+    url: "http://{{ hostvars[item].sa_private_ip }}:2379/v3/cluster/member/list"
+    method: POST
+    body_format: json
+    body: {}
+    timeout: 5
+  register: edge_etcd_peer_lists
+  failed_when: false
+  loop: "{{ groups['edge'] | reject('equalto', inventory_hostname) | list }}"
+  when: edge_etcd_marker_content is skipped and edge_etcd_volume_check.rc != 0
+
+- name: Choose how this member starts
+  ansible.builtin.set_fact:
+    edge_etcd_members: "{{ edge_etcd_answer.json.members | default([]) if edge_etcd_answer else [] }}"
+    edge_etcd_peer: "{{ edge_etcd_answer.item if edge_etcd_answer else '' }}"
+    edge_etcd_rejoin: "{{ edge_etcd_marker_content is skipped and edge_etcd_volume_check.rc != 0 and edge_etcd_answer is truthy }}"
+    edge_etcd_initial_state: >-
+      {{ (edge_etcd_marker_content.content | b64decode | trim) if edge_etcd_marker_content is not skipped
+         else ('existing' if edge_etcd_answer else 'new') }}
+  vars:
+    edge_etcd_answer: >-
+      {{ (edge_etcd_peer_lists.results | default([]) | selectattr('status', 'defined')
+          | selectattr('status', 'equalto', 200) | list + [false]) | first }}
+
+- name: Require a recorded state that etcd knows
+  ansible.builtin.assert:
+    that:
+      - edge_etcd_initial_state in ['new', 'existing']
+    fail_msg: "{{ edge_etcd_state_file }} holds {{ edge_etcd_initial_state }}; delete it and converge again"
+
+# the stale member has this node's name, or this node's peer address with
+# no name (added before but never started); ids are uint64 strings in json
+- name: Remove the stale member of this node
+  ansible.builtin.uri:
+    url: "http://{{ hostvars[edge_etcd_peer].sa_private_ip }}:2379/v3/cluster/member/remove"
+    method: POST
+    body_format: json
+    body: {ID: "{{ item.ID }}"}
+  loop: >-
+    {{ edge_etcd_members | selectattr('name', 'defined') | selectattr('name', 'equalto', inventory_hostname) | list
+       + (edge_etcd_members | rejectattr('name', 'defined') | selectattr('peerURLs', 'contains', edge_etcd_peer_url) | list) }}
+  loop_control:
+    label: "{{ item.ID }}"
+  when: edge_etcd_rejoin
+  changed_when: true
+
+- name: Add this node as a new member
+  ansible.builtin.uri:
+    url: "http://{{ hostvars[edge_etcd_peer].sa_private_ip }}:2379/v3/cluster/member/add"
+    method: POST
+    body_format: json
+    body: {peerURLs: ["{{ edge_etcd_peer_url }}"]}
+  when: edge_etcd_rejoin
+  changed_when: true
+
+- name: Record how this member started
+  ansible.builtin.copy:
+    content: "{{ edge_etcd_initial_state }}\n"
+    dest: "{{ edge_etcd_state_file }}"
+    owner: root
+    group: root
+    mode: "0644"

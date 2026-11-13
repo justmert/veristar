@@ -26,6 +26,9 @@ type Gateway struct {
 	// IPClusterThreshold is the distinct visitor token count per site and
 	// truncated prefix per hour from which events are quarantined.
 	IPClusterThreshold int
+	// VisitorEventsPerHour is how many events one visitor token may send to
+	// a site per hour on this node before the rest go to quarantine.
+	VisitorEventsPerHour int
 	// per-site and per-prefix token buckets, per node
 	SiteRatePerSecond   int
 	SiteBurst           int
@@ -56,21 +59,22 @@ var nodeIDRe = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
 // LoadGateway reads the gateway settings.
 func LoadGateway(e *Env) (Gateway, error) {
 	c := Gateway{
-		NodeID:              e.String("GATEWAY_NODE_ID"),
-		Addr:                e.ListenAddr("GATEWAY_ADDR"),
-		OpsAddr:             e.ListenAddr("GATEWAY_OPS_ADDR"),
-		ProofBits:           e.Int("PROOF_BITS", 0, maxProofBits),
-		ReplayLimit:         e.Int("PROOF_REPLAY_LIMIT", 1, 100_000),
-		IPClusterThreshold:  e.Int("IPCLUSTER_THRESHOLD", 1, 100_000),
-		SiteRatePerSecond:   e.Int("RATE_SITE_PER_SECOND", 1, 1_000_000),
-		SiteBurst:           e.Int("RATE_SITE_BURST", 1, 1_000_000),
-		PrefixRatePerSecond: e.Int("RATE_PREFIX_PER_SECOND", 1, 1_000_000),
-		PrefixBurst:         e.Int("RATE_PREFIX_BURST", 1, 1_000_000),
-		MaxBody:             e.Int("GATEWAY_MAX_BODY", 1, maxBody),
-		ClientIPHeader:      e.String("CLIENT_IP_HEADER"),
-		DBIPPath:            e.String("DBIP_MMDB"),
-		ReleaseDir:          e.String("TRACKER_RELEASE_DIR"),
-		SecureTransport:     e.Bool("GATEWAY_SECURE_TRANSPORT"),
+		NodeID:               e.String("GATEWAY_NODE_ID"),
+		Addr:                 e.ListenAddr("GATEWAY_ADDR"),
+		OpsAddr:              e.ListenAddr("GATEWAY_OPS_ADDR"),
+		ProofBits:            e.Int("PROOF_BITS", 0, maxProofBits),
+		ReplayLimit:          e.Int("PROOF_REPLAY_LIMIT", 1, 100_000),
+		IPClusterThreshold:   e.Int("IPCLUSTER_THRESHOLD", 1, 100_000),
+		VisitorEventsPerHour: e.Int("VISITOR_EVENTS_PER_HOUR", 1, 1_000_000),
+		SiteRatePerSecond:    e.Int("RATE_SITE_PER_SECOND", 1, 1_000_000),
+		SiteBurst:            e.Int("RATE_SITE_BURST", 1, 1_000_000),
+		PrefixRatePerSecond:  e.Int("RATE_PREFIX_PER_SECOND", 1, 1_000_000),
+		PrefixBurst:          e.Int("RATE_PREFIX_BURST", 1, 1_000_000),
+		MaxBody:              e.Int("GATEWAY_MAX_BODY", 1, maxBody),
+		ClientIPHeader:       e.String("CLIENT_IP_HEADER"),
+		DBIPPath:             e.String("DBIP_MMDB"),
+		ReleaseDir:           e.String("TRACKER_RELEASE_DIR"),
+		SecureTransport:      e.Bool("GATEWAY_SECURE_TRANSPORT"),
 	}
 	if c.NodeID != "" && !nodeIDRe.MatchString(c.NodeID) {
 		e.fail("GATEWAY_NODE_ID", "must be 1 to 64 letters, digits, - or _ (it is a nats subject token)")

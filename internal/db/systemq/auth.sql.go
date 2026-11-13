@@ -181,7 +181,7 @@ func (q *Queries) PruneSessions(ctx context.Context, cutoff time.Time) (int64, e
 const resolveInvites = `-- name: ResolveInvites :many
 with resolved as (
   delete from cp.invites
-  where lower(github_login) = lower($1::text) and expires_at > now()
+  where github_id = $1 and expires_at > now()
   returning id, tenant_id, role
 ), added as (
   insert into cp.tenant_members (tenant_id, user_id, role)
@@ -195,8 +195,8 @@ order by r.id
 `
 
 type ResolveInvitesParams struct {
-	GithubLogin string
-	UserID      uuid.UUID
+	GithubID int64
+	UserID   uuid.UUID
 }
 
 type ResolveInvitesRow struct {
@@ -206,11 +206,12 @@ type ResolveInvitesRow struct {
 	Added    bool
 }
 
-// turns the open invites for a login into memberships and deletes them, in
-// one statement. an invite for a tenant the user already belongs to is
-// consumed without changing the existing role.
+// turns the open invites for a github account into memberships and deletes
+// them, in one statement. the account id is matched, never the login,
+// which can change hands (00025). an invite for a tenant the user already
+// belongs to is consumed without changing the existing role.
 func (q *Queries) ResolveInvites(ctx context.Context, arg ResolveInvitesParams) ([]ResolveInvitesRow, error) {
-	rows, err := q.db.Query(ctx, resolveInvites, arg.GithubLogin, arg.UserID)
+	rows, err := q.db.Query(ctx, resolveInvites, arg.GithubID, arg.UserID)
 	if err != nil {
 		return nil, err
 	}

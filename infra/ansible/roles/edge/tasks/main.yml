@@ -5,8 +5,11 @@
       - sa_tier == 'edge'
       - groups['edge'] | length == 3
       - sa_secrets is defined
-      - sa_tls in ['bunny', 'internal']
-      - sa_tls == 'bunny' or sa_environment == 'local'
+      - sa_tls in ['bunny', 'bunny-delegated', 'internal']
+      - sa_tls != 'internal' or sa_environment == 'local'
+      # bunny-delegated: certificates through the old zone's cname during a
+      # handover cutover (docs/handover/plan.md section 2.3)
+      - sa_tls != 'bunny-delegated' or (sa_acme_challenge_domain | default('')) is match('^[a-z0-9_.-]+\\.[a-z]+$')
     fail_msg: >-
       edge needs three edge hosts, the secrets role first, and acme dns-01
       (sa_tls bunny) outside the local converge
@@ -88,6 +91,9 @@
 # also run alone by the restart drill (tests/drills/start-unit.sh)
 - name: Install the start-at-boot unit
   ansible.builtin.include_tasks: start_unit.yml
+
+- name: Decide how this node's etcd member starts
+  ansible.builtin.include_tasks: etcd.yml
 
 - name: Write the compose project
   ansible.builtin.template:

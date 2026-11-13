@@ -113,6 +113,9 @@ func start(t *testing.T) *env {
 	fx := githuboauth.New(githuboauth.Config{
 		ClientID: "lifecycle-test", ClientSecret: "lifecycle-test-secret", RedirectURL: e.srv.URL + "/api/auth/github/callback",
 	})
+	// invited below without ever signing in; invites are bound to the
+	// github account id the login resolves to (contract 4.2.5)
+	fx.Register(githuboauth.User{ID: 9_000_001, Login: "not-yet-signed-in"})
 	e.fixture = httptest.NewServer(fx.Handler())
 	t.Cleanup(e.fixture.Close)
 	return e
@@ -144,6 +147,12 @@ func (e *env) build(t *testing.T, operators ...int64) {
 		},
 	}, e.d, e.sessions)
 	require.NoError(t, err)
+	users, err := auth.NewUserLookup(auth.UserLookupConfig{
+		ClientID:     "lifecycle-test",
+		ClientSecret: config.FromMap(map[string]string{"S": "lifecycle-test-secret"}).Secret("S", 1),
+		Endpoints:    auth.Endpoints{APIBase: e.fixture.URL},
+	})
+	require.NoError(t, err)
 	guard, err := operator.NewGuard(ids)
 	require.NoError(t, err)
 	mode, err := operator.NewEnrollmentMode(e.d)
@@ -154,6 +163,8 @@ func (e *env) build(t *testing.T, operators ...int64) {
 	require.NoError(t, err)
 	actions, err := lifecycle.NewActions(e.d, e.scope.Reconcile)
 	require.NoError(t, err)
+	memberRoutes, err := members.NewRoutes(e.scope, users)
+	require.NoError(t, err)
 	h := controlplane.NewHandler(controlplane.Options{
 		Log:           log,
 		ConsoleOrigin: e.srv.URL,
@@ -161,7 +172,7 @@ func (e *env) build(t *testing.T, operators ...int64) {
 		Public:        []controlplane.Routes{controlplane.RoutesFunc(ah.Public)},
 		Private: []controlplane.Routes{
 			controlplane.RoutesFunc(ah.Private),
-			tenants.NewRoutes(e.scope), members.NewRoutes(e.scope), sites.NewRoutes(e.scope),
+			tenants.NewRoutes(e.scope), memberRoutes, sites.NewRoutes(e.scope),
 			controlplane.RoutesFunc(guard.Mount(mode, keep, auditLog, actions)),
 		},
 	})

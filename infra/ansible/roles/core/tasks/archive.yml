@@ -1,0 +1,124 @@
+---
+# wal archiving. runs on
+# the core nodes after the database is up (site.yml, play "WAL archiving"):
+#   1. the stanza exists in the repository: in object storage mode the
+#      patroni leader creates it here; in the local converge's posix-host
+#      mode the repository node created it (roles/backup)
+#   2. every database node gets the marker and the real archive_command,
+#      which patroni applies on reload; until then archive_command is empty
+#      and postgresql keeps its wal (templates/patroni.yml.j2)
+#   3. pgbackrest check on the leader proves a fresh wal segment reaches the
+#      repository
+# every step is idempotent: stanza-create on an existing, matching stanza
+# says so and changes nothing.
+
+# patroni.yml, the stanza name and the repository settings come from the
+# backup role
+- name: Write the pgbackrest settings
+  ansible.builtin.include_role:
+    name: backup
+    tasks_from: pg.yml
+    public: true
+
+- name: Find the patroni leader
+  ansible.builtin.uri:
+    url: "http://{{ sa_private_ip }}:8008/primary"
+    status_code: [200, 503]
+  register: core_primary_check
+  until: core_primary_check.status in [200, 503]
+  retries: 30
+  delay: 2
+
+- name: Require exactly one leader
+  ansible.builtin.assert:
+    that:
+      - ansible_play_hosts | map('extract', hostvars, ['core_primary_check', 'status']) | select('equalto', 200) | list | length == 1
+    fail_msg: wal archiving needs exactly one patroni leader among the core nodes
+  run_once: true
+
+- name: Create the stanza in object storage
+  ansible.builtin.command:
+    argv: [docker, compose, --project-directory, "{{ core_dir }}", exec, -T, postgres, pgbackrest, "--stanza={{ backup_stanza }}", stanza-create]
+  register: core_stanza_create
+  changed_when: core_stanza_create.stdout is not search('already exists')
+  retries: 5
+  delay: 6
+  until: core_stanza_create.rc == 0
+  when: backup_repo_mode == 's3' and core_primary_check.status == 200
+
+# info exits 0 for a stanza without backups too; its json says whether the
+# stanza exists (status code 0 ok, 2 no backups yet), so a missing stanza in
+# either mode stops here rather than at the first archive-push
+- name: Read the stanza from the leader
+  ansible.builtin.command:
+    argv: [docker, compose, --project-directory, "{{ core_dir }}", exec, -T, postgres, pgbackrest, "--stanza={{ backup_stanza }}", --output=json, info]
+  register: core_stanza_info
+  changed_when: false
+  when: core_primary_check.status == 200
+
+- name: Require the stanza to exist
+  ansible.builtin.assert:
+    that:
+      - (core_stanza_info.stdout | from_json)[0].status.code in [0, 2]
+    fail_msg: "stanza {{ backup_stanza }} is not usable: {{ (core_stanza_info.stdout | from_json)[0].status.message }}"
+  when: core_primary_check.status == 200
+
+- name: Mark the stanza as present
+  ansible.builtin.copy:
+    content: "stanza {{ backup_stanza }} exists in the repository; archive_command is set (roles/core tasks/archive.yml)\n"
+    dest: "{{ backup_conf_dir }}/stanza-ready"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Choose the archive command
+  ansible.builtin.set_fact:
+    core_archive_command: "pgbackrest --stanza={{ backup_stanza }} archive-push %p"
+
+- name: Write the patroni config with wal archiving
+  ansible.builtin.template:
+    src: patroni.yml.j2
+    dest: "{{ core_conf_dir }}/patroni/patroni.yml"
+    owner: "999"
+    group: "999"
+    mode: "0600"
+  no_log: true
+  notify: Reload patroni
+
+- name: Apply the patroni reload now
+  ansible.builtin.meta: flush_handlers
+
+- name: Wait for postgresql to use the archive command
+  ansible.builtin.command:
+    argv:
+      - docker
+      - compose
+      - --project-directory
+      - "{{ core_dir }}"
+      - exec
+      - -T
+      - postgres
+      - psql
+      - -h
+      - /var/run/postgresql
+      - -U
+      - postgres
+      - -tAX
+      - -c
+      - show archive_command
+  register: core_archive_live
+  until: core_archive_live.rc == 0 and core_archive_live.stdout == core_archive_command
+  retries: 30
+  delay: 2
+  changed_when: false
+
+# check forces a wal switch and waits until that segment is in the repository
+- name: Check wal archiving end to end
+  ansible.builtin.command:
+    argv: [docker, compose, --project-directory, "{{ core_dir }}", exec, -T, postgres, pgbackrest, "--stanza={{ backup_stanza }}", check]
+  register: core_archive_check
+  changed_when: false
+  retries: 3
+  delay: 10
+  until: core_archive_check.rc == 0
+  when: core_primary_check.status == 200

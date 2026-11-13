@@ -87,7 +87,8 @@ func TestAssembledNodeCaddyfiles(t *testing.T) {
 			for k, v := range health {
 				env[k] = v
 			}
-			for _, good := range []string{"bunny", "internal"} {
+			env["ACME_CHALLENGE_DOMAIN"] = "_acme-challenge.handover.example.net"
+			for _, good := range []string{"bunny", "bunny-delegated", "internal"} {
 				env["SA_TLS"] = good
 				code, out := nodeCaddyRun(t, p, env, "caddy", "validate", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile")
 				require.Equal(t, 0, code, "SA_TLS=%s: %s", good, out)

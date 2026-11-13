@@ -54,9 +54,15 @@ core_postgres_parameters:
 ansible_ssh_private_key_file: "{{ inventory_dir }}/../../../../.scratch/scratch/local-converge/id_ed25519"
 ansible_ssh_common_args: "-o UserKnownHostsFile={{ inventory_dir }}/../../../../.scratch/scratch/local-converge/known_hosts"
 
-# no object storage an operator input: the pgbackrest repository is a posix
-# repository on the backup node, reached over pgbackrest's tls protocol with
-# a throwaway ca. a stand-in, not equivalent to hetzner object storage
-# (docs/deploy/local-converge.md section 6)
-backup_repo_mode: posix-host
+# no object storage an operator input. backup_repo_mode is set by up.sh in the
+# inventory: posix-host (a posix repository on the backup node, reached over
+# pgbackrest's tls protocol with a throwaway ca) or, with LC_BACKUP=s3, s3
+# against the seaweedfs stand-in. neither is hetzner object storage
+# (docs/deploy/local-converge.md section 6). the tls ca directory is used in
+# posix-host mode only.
 backup_tls_controller_dir: "{{ playbook_dir }}/../../../.scratch/scratch/local-converge/pgbackrest-tls"
+
+# caddy's local ca issues certificates for 12 hours, so the probe's
+# certificate-validity checks (336 hours in staging and production) would
+# fail on every local node; one hour still proves the check runs
+observability_probe_cert_min_validity: 1h

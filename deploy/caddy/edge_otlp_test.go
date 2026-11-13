@@ -233,11 +233,11 @@ func TestEdgeOTLPProxiesGRPCAndHTTP(t *testing.T) {
 		require.True(t, ok, line)
 		require.NotContains(t, req, "remote_ip", line)
 		require.NotContains(t, req, "client_ip", line)
-		hdr, ok := req["headers"].(map[string]any)
-		require.True(t, ok, line)
-		require.NotContains(t, hdr, "User-Agent", line)
-		require.NotContains(t, hdr, "X-Forwarded-For", line)
+		// no request header at all, so neither the user agent nor the
+		// bearer token
+		require.NotContains(t, req, "headers", line)
 	}
 	require.NotContains(t, all, ua)
 	require.NotContains(t, all, "198.51.100.7")
+	require.NotContains(t, all, "sa_otlp_probe")
 }

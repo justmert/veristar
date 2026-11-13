@@ -8,7 +8,7 @@ the design cannot run yet.
 
 | Artifact | Built by | Gated by | Signed or attested | Verified by |
 |---|---|---|---|---|
-| Platform images (gateway, collector, caddy, console, controlplane, replayer, metricswriter, jobs, platformctl, prober, postgres-ha) | `.github/workflows/release-images.yml` on a tag `v*` | syft SBOM, Trivy (fixable critical or high fails) | cosign keyless signature, build provenance and SBOM attestations (`actions/attest`) | `infra/ansible/playbooks/deploy.yml` before any node pulls |
+| Platform images (gateway, collector, caddy, console, controlplane, replayer, metricswriter, jobs, platformctl, prober, postgres-ha) | `.github/workflows/release-images.yml` on a tag `v*` | syft SBOM, Trivy (fixable critical or high fails) | cosign keyless signature, build provenance and SBOM attestations (`actions/attest`) | `infra/ansible/playbooks/verify-release.yml`, imported first by `site.yml`, `deploy.yml`, `rotate-all.yml` and `restore.yml`, before any node pulls |
 | `sdk.js` (tracker) | `packages/tracker/build.mjs`, committed under `releases/<version>/` | immutability, byte-identical rebuild, size (`verify-releases`) | build provenance attestation | tenants: SRI hash in the snippet, `gh attestation verify` ([verify-tracker.md](verify-tracker.md)) |
 | npm package of the tracker | `packages/tracker/scripts/pack.mjs` in `release-tracker.yml` on a tag `tracker-v*` | packs to the same bytes twice, installs and type-checks in a consumer | npm provenance (trusted publishing) and a build provenance attestation | `npm audit signatures`, the npm package page |
 | Upstream images (Umami, NATS, etcd, HAProxy, the observability images) | upstream | pinned by tag and index digest in `infra/ansible/vars/pins.yml` and the observability role defaults; the deploy refuses an upstream reference without a digest | upstream | digest pin |
@@ -42,10 +42,14 @@ tag and digest; `scripts/supply-chain/release-manifest.py` refuses a set of name
 expected eleven), verifies every digest again with the deploy's identity, attests the file, and
 attaches it to the GitHub release.
 
-## 3. Deploy-time verification (`deploy.yml`)
+## 3. Deploy-time verification (every playbook that pulls images)
 
-`deploy.yml` starts with a play on the controller that runs
-`infra/ansible/playbooks/tasks/verify-images.yml`:
+`site.yml` (first converge and node replacement), `deploy.yml` (rolling deploy), `rotate-all.yml`
+and `restore.yml` all start with `playbooks/verify-release.yml`, whose first play runs
+`infra/ansible/playbooks/tasks/verify-images.yml` on the controller (; before
+2026-11-13 only `deploy.yml` did, so the documented first converge pulled by tag). The local
+converge is the one exception, refused for any other environment: its images come unsigned from
+its throwaway registry, and the play says so instead of verifying.
 
 ```
 ansible-playbook -i inventories/<env>/ playbooks/deploy.yml \
@@ -79,9 +83,14 @@ other registry, incomplete manifest, missing manifest, test mode outside tests: 
 **Status.** Built and proven locally with the test-only key. Keyless signing and `cosign verify` of a
 real release have not run: GitHub Actions on the account ends every workflow in `startup_failure`.
 Artifact attestations for a private repository also need GitHub Enterprise Cloud, so attestations
-need the repository to be public (owner's explicit confirmation, the design). Not yet covered:
-the `prober` image of the observability role is in the manifest and signed, but the observability
-role is not deployed through `deploy.yml`, so its pull is not yet verified.
+need the repository to be public (owner's explicit confirmation, the design). The probe
+node's own images (the `prober` and the custom Caddy, from the observability role) are verified the
+same way: the manifest must name the `prober` (it is in `platform_images`), the pin play sets
+`platform_images` on the probe too, and the observability role names its `prober` and `caddy`
+through `platform_images`. The role also refuses a probe node whose `prober` or `caddy` is not
+pinned by digest outside the local converge, so a run that skipped the check stops. The probe
+converge has not completed on the local converge yet (`make ops-local`); against a real probe it
+waits for an operator input.
 
 ## 4. Tracker release (`release-tracker.yml`)
 
@@ -211,10 +220,47 @@ A version bump of an allowlisted package fails the gate until the entry is revie
 - Upstream images with fixable high findings that only their maintainers can fix: Umami 3.5.0
   (`undici` 6.28.0), HAProxy 3.4.7 (`zlib1g`), etcd 3.6.16, Prometheus 3.15.1, Alertmanager 0.34.2,
   Grafana 13.2.6, Gatus 5.37.0, node_exporter 1.12.1, postgres_exporter 0.20.1,
-  prometheus-nats-exporter 0.20.3. The hourly workflow files these as issues; each one needs a pin
-  bump to a fixed upstream release or a documented mitigation.
+  prometheus-nats-exporter 0.20.3. Section 8.1 records, per finding, the pin bump or the
+  mitigation and its reasoning.
 - govulncheck: no called vulnerability in either module after the fixes (the example app moved to
   `golang.org/x/net` v0.62.0). One uncalled module finding remains (`golang.org/x/crypto/openpgp`,
   GO-2026-5932, fixed only in a pseudo-version; the package is not imported).
 - A throwaway build of `postgres-ha` with `gosu` left in fails the gate: 1 critical, 25 high,
   exit 1.
+
+### 8.1 Upstream image findings: bump or mitigation (2026-11-13)
+
+Every fixable critical or high finding of the upstream images, rechecked on 2026-11-13 with
+Trivy 0.76.2 (`--scanners vuln`, registry images by digest, one at a time). For each image the
+registry was checked for a release that fixes it (the design pin policy: a younger minor line
+is taken when it carries a security fix). Where no release fixes a Go finding, the image's binary
+was checked with `govulncheck -mode=binary` (v1.9.0, database of 2026-11-11), which reports
+whether the vulnerable symbols are compiled into the binary at all. No critical finding exists in
+any upstream image. Nothing here was run against production, which does not exist yet.
+
+**Bumped (each rescanned after the change):**
+
+| Image | Was | Now | Findings before, after | Checks |
+|---|---|---|---|---|
+| HAProxy | `haproxy:3.4.7` (Debian trixie) `sha256:f6d2ee87...` | `haproxy:3.4.7-alpine` `sha256:b9fe316f718d5015c5cfebd8ca019591f3e44656f61d93cb8b59a1028961e530` | 2 high (`zlib1g` CVE-2026-76844, CVE-2026-85091; no rebuilt trixie image exists), 0 | Same HAProxy release, Alpine 3.24 base. Both builds run as uid 99 and are built with `PROMEX`; `haproxy -c` passes on a rendered core `haproxy.cfg` and on the edge and core relay configs with both builds |
+| Gatus | `v5.37.0` `sha256:094eb186...` | `v5.38.0` `sha256:085ed63da963728965d00a3c78aa6167e3bf135218485b893201758e079e8415` | 12 high, 5 high (the Go standard library and gRPC findings are gone) | The 5.38 line is 16 days old, taken for the fixes. The v5.37.0...v5.38.0 diff leaves `config/key/key.go`, `config/endpoint/result.go` and the statuses API that `internal/prober` and `cmd/sloreport` depend on unchanged. A rendered probe `gatus.yml` loads the same 5 endpoints and 20 external endpoints in both versions |
+
+Pins moved together in `infra/ansible/vars/pins.yml`, the observability role defaults,
+`deploy/images/upstream/` (`tests/pins` checks they agree) and `tests/observability/compose.yml`.
+
+**Mitigated (no fixed release exists on 2026-11-13):**
+
+| Image | Finding | Why it is accepted, and when to revisit |
+|---|---|---|
+| Umami 3.5.0 (newest release; 3.5.0 is the newest tag on GHCR) | `undici` 6.28.0: CVE-2026-109383 (TLS options dropped), CVE-2026-109869, CVE-2026-19534, CVE-2026-87018 (client-side denial of service) | All four are in undici's HTTP client. Umami makes no outbound request in this deployment: `PRIVATE_MODE`, `DISABLE_TELEMETRY` and `DISABLE_UPDATES` are set, and `TestWebPath` checks no egress from boot and during a UI session (`threat-model.md`). Inbound requests are served by Next.js, not undici. Revisit at the next Umami release through `make umami-upgrade`. |
+| etcd 3.6.16 (newest 3.6 release) | `golang.org/x/net` CVE-2026-78661 (HTML parser denial of service, GO-2026-6860); the symbol is in the binary | etcd's client and peer ports are published on the private address only, the firewall accepts the private network only, and the only client is Patroni. No etcd API takes HTML. The 3.7 line is not used until Patroni support is confirmed. Revisit at 3.6.17. |
+| Prometheus 3.15.1, Alertmanager 0.34.2 | `golang.org/x/net` CVE-2026-78661 | govulncheck: module present, vulnerable symbols not in either binary. The younger lines (Prometheus 3.16.0, Alertmanager 0.35.0, scanned) carry the same finding, so a bump would not fix it. |
+| node_exporter 1.12.1 (newest) | 16 high: Go 1.26.5 standard library (CVE-2026-111943, -33818, -39821, -46600, -56853, -56858, -56859, -56860, -56862, -78667, -78669, -97031), `x/net` CVE-2026-78661 and -78669, `x/crypto` CVE-2026-56854, `x/text` CVE-2026-56851 | govulncheck: the `x/net/html`, `x/crypto`, `x/text`, CVE-2026-46600 and CVE-2026-78667 symbols are not in the binary. The rest are present and are denial of service in the HTTP server, TLS and parsers, or an x509 client issue. The exporter listens on the private address only (`--web.listen-address`), the firewall drops everything else, it has no TLS configuration and makes no outbound TLS connection, and only Prometheus scrapes it. An attacker must already be on the private network. Revisit at the next node_exporter release. |
+| postgres_exporter 0.20.1 (newest) | 19 high: Go 1.26.4 standard library (CVE-2026-111943, -33818, -39821, -39822, -46600, -56853, -56858, -56859, -56860, -56862, -78667, -78669, -97031), `x/net` CVE-2026-46600, -78661 and -78669, `x/crypto` CVE-2026-56854, `x/text` CVE-2026-56851 and -56852 | govulncheck: the `x/net/html`, `x/crypto`, `x/text`, CVE-2026-39821, -39822, -56859 and -78667 symbols are not in the binary. The rest are present. The exporter is on the private address of the PostgreSQL hosts only, scraped by Prometheus, and connects only to PostgreSQL through HAProxy on the private network as a role that holds `pg_monitor` and nothing else (`tasks/core.yml`). Revisit at the next release. |
+| Grafana 13.2.6 (newest 13.2) | 19 high, all in bundled plugin binaries under `data/plugins-bundled` (MySQL, Tempo, InfluxDB, Loki, Stackdriver, PostgreSQL, Pyroscope, Jaeger, MSSQL, OpenTSDB, Prometheus, Zipkin): `x/net`, Go standard library, and Tempo CVE-2026-28377 and CVE-2026-21728 | The only provisioned data source is Prometheus (`files/grafana/provisioning/datasources/prometheus.yml`); the other plugins handle a query only for a data source of their type, and none exists. The Prometheus plugin's finding is the HTML parser one, reachable only through responses of the platform's own Prometheus. Grafana is published on `127.0.0.1:3000` only (operators reach it through an SSH tunnel) with sign-up and anonymous access off. The `-slim` build has no findings but also no bundled Prometheus data source, so it cannot replace it. Revisit at 13.2.7 or when the 13.3 line is 30 days old. |
+| Gatus 5.38.0 | `go-jose` CVE-2026-116587 (JWK parsing), `klauspost/compress` CVE-2026-63209, `x/image` CVE-2026-46603, `x/net` CVE-2026-78661 and CVE-2026-78669 (HTTP/2 SETTINGS) | govulncheck: the `x/image` and `x/net/html` symbols are not in the binary. `go-jose` is used only by Gatus's OIDC login, which `gatus.yml` does not configure. Gatus's port is not published: only the probe node's Caddy reaches it on the compose network, and Caddy speaks HTTP/1.1 to it, so no outside client can send it HTTP/2 frames; its own checks call only the platform's hosts. Revisit at 5.39. |
+| prometheus-nats-exporter 0.20.3 (newest) | Alpine `musl` CVE-2026-107891 (`regcomp`), `zlib` CVE-2026-85091 | The exporter is a statically linked Go binary (go1.27.3), so it loads neither library. Only the image's `/entrypoint.sh` runs under BusyBox `sh` (linked to musl) to `exec` the exporter, with no regular expression and no input from outside. Revisit at the next release. |
+
+The hourly `security.yml` workflow keeps filing these findings until a fixed release exists. A
+fixable high finding that is not in this table has no recorded decision and is handled under the
+24-hour rule (`docs/runbooks/security-patch.md`).

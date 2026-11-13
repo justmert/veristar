@@ -84,7 +84,9 @@ services:
       - --advertise-client-urls=http://{{ sa_private_ip }}:2379
       - --initial-cluster={{ groups['edge'] | map('extract', hostvars) | map(attribute='inventory_hostname') | zip(groups['edge'] | map('extract', hostvars, 'sa_private_ip')) | map('join', '=http://') | map('regex_replace', '$', ':2380') | join(',') }}
       - --initial-cluster-token=sa-{{ sa_environment }}
-      - --initial-cluster-state=new
+      # new when the cluster is created, existing when a rebuilt node rejoins
+      # (tasks/etcd.yml)
+      - --initial-cluster-state={{ edge_etcd_initial_state }}
     volumes:
       - etcddata:/var/lib/etcd
     ports:

@@ -32,6 +32,16 @@ updates:
     directories: ["/deploy/images", "/infra/local", "/examples/otel-go-nethttp", "/examples/otel-node-express", "/examples/otel-python-fastapi", "/examples/otel-rust-actix"]
     schedule: { interval: weekly, day: monday }
 
+  # the upstream images production runs are pinned in ansible variables
+  # (infra/ansible/vars/pins.yml upstream_images, roles/observability
+  # observability_images), which dependabot cannot parse. each has a one-line
+  # dockerfile here that it can; a pull request that moves one fails
+  # tests/pins until the ansible pin is moved to the same reference, so the
+  # reviewer completes the change in the same pull request.
+  - package-ecosystem: docker
+    directories: ["/deploy/images/upstream"]
+    schedule: { interval: weekly, day: monday }
+
   - package-ecosystem: docker-compose
     directories: ["/deploy/compose", "/tests/observability"]
     schedule: { interval: weekly, day: monday }

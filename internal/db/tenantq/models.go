@@ -41,6 +41,7 @@ type CpInvite struct {
 	CreatedBy   uuid.UUID
 	CreatedAt   time.Time
 	ExpiresAt   time.Time
+	GithubID    int64
 }
 
 type CpSite struct {
@@ -61,6 +62,7 @@ type CpSite struct {
 	CreatedAt            time.Time
 	UpdatedAt            time.Time
 	StatusReason         *string
+	CollectUtm           bool
 }
 
 type CpTenant struct {

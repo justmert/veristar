@@ -24,9 +24,11 @@ type Settings struct {
 	// /api/send is reachable. one umami process tops out near 280 events a
 	// second (docs/reference/drills/2026-11-13.md), so a core node runs
 	// several, and each visitor's events go to one of them, picked by the
-	// same hash that picks the visitor's lane.
+	// same visitor hash.
 	UmamiURLs []*url.URL
-	// Workers is the fixed number of ordered delivery lanes.
+	// Workers is how many sends to umami may be in flight at once, shared
+	// evenly over the umami processes. each visitor's events are still sent
+	// one at a time, in stream order.
 	Workers int
 	// MaxInFlight bounds the messages held between fetch and ack. it stays
 	// below the consumer's server-side max ack pending (1000 by default).
@@ -42,8 +44,8 @@ var nodeIDRe = regexp.MustCompile(`^[A-Za-z0-9_-]{1,55}$`)
 // below its own bound.
 const maxInFlightLimit = 900
 
-// maxUmamiURLs bounds the list; more processes than lanes would leave some
-// without work, and the lane count is at most 256.
+// maxUmamiURLs bounds the list; more processes than workers would leave
+// some without a delivery slot of its own, and workers are at most 256.
 const maxUmamiURLs = 64
 
 // LoadSettings reads REPLAYER_NODE_ID, REPLAYER_OPS_ADDR, UMAMI_URL,
@@ -70,7 +72,7 @@ func LoadSettings(e *config.Env) (Settings, error) {
 		err = errors.Join(err, &config.KeyError{Key: "UMAMI_URL", Reason: fmt.Sprintf("lists %d urls, more than REPLAYER_WORKERS (%d); some umami processes would get no work", len(s.UmamiURLs), s.Workers)})
 	}
 	if s.Workers > 0 && s.MaxInFlight > 0 && s.MaxInFlight < s.Workers {
-		err = errors.Join(err, &config.KeyError{Key: "REPLAYER_MAX_IN_FLIGHT", Reason: fmt.Sprintf("must be at least REPLAYER_WORKERS (%d), or some lanes never get work", s.Workers)})
+		err = errors.Join(err, &config.KeyError{Key: "REPLAYER_MAX_IN_FLIGHT", Reason: fmt.Sprintf("must be at least REPLAYER_WORKERS (%d), or some delivery slots never get work", s.Workers)})
 	}
 	return s, err
 }

@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"net/http"
 	"testing"
 	"time"
 
@@ -9,8 +10,8 @@ import (
 
 func TestBucket(t *testing.T) {
 	now := time.Date(2026, 11, 12, 9, 0, 0, 0, time.UTC)
-	b := newBucket(StartRatePerSecond, StartBurst, now)
-	for i := range StartBurst {
+	b := newBucket(10, 30, now)
+	for i := range 30 {
 		ok, _ := b.take(now)
 		require.True(t, ok, i)
 	}
@@ -24,10 +25,72 @@ func TestBucket(t *testing.T) {
 	require.False(t, ok)
 	// a long pause refills to the burst, not beyond
 	later := now.Add(time.Hour)
-	for range StartBurst {
+	for range 30 {
 		ok, _ = b.take(later)
 		require.True(t, ok)
 	}
 	ok, _ = b.take(later)
 	require.False(t, ok)
+}
+
+func requestFrom(header, remote string) *http.Request {
+	r, _ := http.NewRequest(http.MethodGet, "/", nil)
+	r.RemoteAddr = remote
+	if header != "" {
+		r.Header.Set(ClientAddrHeader, header)
+	}
+	return r
+}
+
+func TestClientKeys(t *testing.T) {
+	h, err := newClientHasher()
+	require.NoError(t, err)
+	// caddy's header wins over the peer, which is caddy itself
+	require.Equal(t, h.of(requestFrom("203.0.113.5", "10.0.0.2:5000")), h.of(requestFrom("203.0.113.5", "10.0.0.3:6000")))
+	require.NotEqual(t, h.of(requestFrom("203.0.113.5", "10.0.0.2:5000")), h.of(requestFrom("203.0.113.6", "10.0.0.2:5000")))
+	// without caddy (dev) the peer is the client
+	require.Equal(t, h.of(requestFrom("", "127.0.0.1:1")), h.of(requestFrom("127.0.0.1", "")))
+	// ipv6 by /64, ipv4-mapped ipv6 as ipv4
+	require.Equal(t, h.of(requestFrom("2001:db8::1", "")), h.of(requestFrom("2001:db8::ffff:1", "")))
+	require.NotEqual(t, h.of(requestFrom("2001:db8::1", "")), h.of(requestFrom("2001:db8:0:1::1", "")))
+	require.Equal(t, h.of(requestFrom("::ffff:192.0.2.1", "")), h.of(requestFrom("192.0.2.1", "")))
+	// another process has another key, so keys mean nothing outside it
+	h2, err := newClientHasher()
+	require.NoError(t, err)
+	require.NotEqual(t, h.of(requestFrom("192.0.2.1", "")), h2.of(requestFrom("192.0.2.1", "")))
+}
+
+func TestLimiter(t *testing.T) {
+	now := time.Date(2026, 11, 12, 9, 0, 0, 0, time.UTC)
+	l := newLimiter(1, 2, 100, 3, now)
+	a, b, c := clientKey{1}, clientKey{2}, clientKey{3}
+	for range 2 {
+		ok, _ := l.take(a, now)
+		require.True(t, ok)
+	}
+	ok, wait := l.take(a, now)
+	require.False(t, ok, "a's own bucket is empty")
+	require.Equal(t, time.Second, wait)
+	ok, _ = l.take(b, now)
+	require.True(t, ok, "b has its own bucket")
+	// the global ceiling (3) is reached by a and b together; a refused
+	// request of a did not spend from it
+	ok, _ = l.take(c, now)
+	require.False(t, ok, "the global ceiling holds")
+	// refilled buckets are forgotten when the map is full
+	l.clients = map[clientKey]*bucket{a: newBucket(1, 2, now)}
+	l.forgetRefilled(now.Add(2 * time.Second))
+	require.Empty(t, l.clients)
+}
+
+func TestUsedStates(t *testing.T) {
+	now := time.Date(2026, 11, 12, 9, 0, 0, 0, time.UTC)
+	var u usedStates
+	fresh, full := u.use("s1", now.Add(time.Minute), now)
+	require.True(t, fresh)
+	require.False(t, full)
+	fresh, _ = u.use("s1", now.Add(time.Minute), now)
+	require.False(t, fresh, "a state is used once")
+	fresh, _ = u.use("s2", now.Add(time.Minute), now)
+	require.True(t, fresh)
 }

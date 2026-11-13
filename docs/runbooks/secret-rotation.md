@@ -37,7 +37,7 @@ replacing one value.
 2. **Apply** with a converge at the release that runs now:
 
    ```sh
-   make staging-deploy SA_IMAGE_TAG=<current release>
+   make staging-deploy SA_IMAGE_TAG=<current release> SA_RELEASE_MANIFEST=<release-images.json>
    ```
 
    `site.yml` rewrites the env files in `/etc/stellar-analytics/env/`, the NATS and Patroni

@@ -15,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"sync"
 
 	"github.com/google/uuid"
@@ -101,6 +102,12 @@ func (e *metricsExporter) Shutdown(context.Context) error {
 // tenantguard. that is a configuration error, not something a retry fixes.
 var errNoTenant = errors.New("jetstream exporter: resource without a valid scf.tenant.id")
 
+// errNoSpanStamp means span-derived points arrived without the batch id or
+// the end minute tenantguard puts on every server span: the connector's
+// configuration lost them. publishing them would bring back the double
+// counting and the arrival-time minutes those stamps exist to prevent.
+var errNoSpanStamp = errors.New("jetstream exporter: span-derived points without scf.batch.id or scf.span.minute")
+
 func (e *metricsExporter) push(ctx context.Context, md pmetric.Metrics) error {
 	parts, dropped, err := Split(md)
 	if err != nil {
@@ -179,6 +186,10 @@ func Split(md pmetric.Metrics) ([]Part, int, error) {
 	var m pmetric.ProtoMarshaler
 	for _, tenant := range order {
 		out := byTenant[tenant]
+		batches, err := spanStamps(out)
+		if err != nil {
+			return nil, dropped, err
+		}
 		dropped += filter(out)
 		if out.DataPointCount() == 0 {
 			continue
@@ -188,9 +199,64 @@ func Split(md pmetric.Metrics) ([]Part, int, error) {
 			return nil, dropped, fmt.Errorf("jetstream exporter: marshal: %w", err)
 		}
 		sum := sha256.Sum256(b)
-		parts = append(parts, Part{TenantID: tenant, MsgID: hex.EncodeToString(sum[:]), Data: b})
+		id := hex.EncodeToString(sum[:])
+		if len(batches) > 0 {
+			id = spanMsgID(tenant, batches)
+		}
+		parts = append(parts, Part{TenantID: tenant, MsgID: id, Data: b})
 	}
 	return parts, dropped, nil
+}
+
+// spanStamps consumes the stamps of span-derived points: each point's time
+// becomes the minute its spans ended in, and the batch ids are removed from
+// the resources and returned sorted. both attributes exist only inside the
+// collector.
+func spanStamps(md pmetric.Metrics) ([]string, error) {
+	var batches []string
+	rms := md.ResourceMetrics()
+	for i := 0; i < rms.Len(); i++ {
+		rm := rms.At(i)
+		attrs := rm.Resource().Attributes()
+		batch := ""
+		if v, ok := attrs.Get(schema.ResBatchID); ok {
+			batch = v.AsString()
+			attrs.Remove(schema.ResBatchID)
+		}
+		spans := false
+		sms := rm.ScopeMetrics()
+		for j := 0; j < sms.Len(); j++ {
+			ms := sms.At(j).Metrics()
+			for k := 0; k < ms.Len(); k++ {
+				mt := ms.At(k)
+				if mt.Name() != schema.MetricFromSpans || mt.Type() != pmetric.MetricTypeHistogram {
+					continue
+				}
+				spans = true
+				dps := mt.Histogram().DataPoints()
+				for d := 0; d < dps.Len(); d++ {
+					dp := dps.At(d)
+					v, ok := dp.Attributes().Get(schema.AttrSpanMinute)
+					if !ok || v.Type() != pcommon.ValueTypeInt || v.Int() <= 0 {
+						return nil, errNoSpanStamp
+					}
+					dp.SetTimestamp(pcommon.Timestamp(v.Int())) //nolint:gosec // checked positive above
+					dp.Attributes().Remove(schema.AttrSpanMinute)
+				}
+			}
+		}
+		if !spans {
+			continue
+		}
+		if batch == "" {
+			return nil, errNoSpanStamp
+		}
+		if !slices.Contains(batches, batch) {
+			batches = append(batches, batch)
+		}
+	}
+	slices.Sort(batches)
+	return batches, nil
 }
 
 func filterAttrs(m pcommon.Map, allowed map[string]bool) int {
@@ -240,4 +306,19 @@ func filter(md pmetric.Metrics) int {
 		return rm.ScopeMetrics().Len() == 0
 	})
 	return dropped
+}
+
+// spanMsgID is the message id of a part derived from spans: the sha-256 of
+// the tenant and the batch ids tenantguard stamped on the trace exports it
+// came from. the payload hash cannot serve, because the connector stamps
+// its points with the moment it ran and emits them in map order, so a
+// retried export would get a new id and be counted twice.
+func spanMsgID(tenant string, batches []string) string {
+	h := sha256.New()
+	h.Write([]byte("span\x00" + tenant))
+	for _, b := range batches {
+		h.Write([]byte{0})
+		h.Write([]byte(b))
+	}
+	return hex.EncodeToString(h.Sum(nil))
 }

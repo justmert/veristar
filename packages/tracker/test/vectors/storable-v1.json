@@ -1,0 +1,84 @@
+{
+  "description": "event names and event data that umami 3.5.0 can and cannot store. the tracker (checkName, checkData) and the gateway (events.ParseWire) both refuse every case with ok false. checked against the pinned image: numbers of 1e15 or more and revenue of 1e14 or more with a currency are answered 400 (src/app/api/send/request-schema.ts), names starting with = + - @ tab or carriage return are answered 400, and a string in umami's date format before year 1 is answered 500 after the website_event row was inserted (postgres 22008 on event_data.date_value). the date rule refuses all of 0001-01-01 because an offset or umami's time zone can move that day into year 0, and every 0000 value whether or not it parses as a date; umamiStores marks the refused cases umami would in fact store, the price of a rule that needs no date parser.",
+  "data": [
+    { "data": { "n": 0 }, "ok": true },
+    { "data": { "n": 999999999999999 }, "ok": true },
+    { "data": { "n": -999999999999999.9 }, "ok": true },
+    { "data": { "n": 1e-300 }, "ok": true },
+    { "data": { "n": 1e15 }, "ok": false, "reason": "event_data_number_out_of_range" },
+    { "data": { "n": -1e15 }, "ok": false, "reason": "event_data_number_out_of_range" },
+    {
+      "data": { "n": 999999999999999.99999 },
+      "ok": false,
+      "reason": "event_data_number_out_of_range"
+    },
+    { "data": { "n": 1e400 }, "ok": false, "reason": "event_data_number_out_of_range" },
+    { "data": { "d": "0001-01-02T00:00:00Z" }, "ok": true },
+    { "data": { "d": "2024-02-30T00:00:00Z" }, "ok": true },
+    { "data": { "d": "9999-12-31T23:59:59+23:59" }, "ok": true },
+    { "data": { "d": "0000-01-01" }, "ok": true },
+    {
+      "data": { "d": "0000-01-01T00:00:00Z" },
+      "ok": false,
+      "reason": "event_data_date_out_of_range"
+    },
+    {
+      "data": { "d": "0000-13-45T99:99:99" },
+      "ok": false,
+      "reason": "event_data_date_out_of_range",
+      "umamiStores": true
+    },
+    {
+      "data": { "d": "0001-01-01T00:00:00+23:59" },
+      "ok": false,
+      "reason": "event_data_date_out_of_range"
+    },
+    {
+      "data": { "d": "0001-01-01T12:00:00.000Z" },
+      "ok": false,
+      "reason": "event_data_date_out_of_range",
+      "umamiStores": true
+    },
+    { "data": { "revenue": 99999999999999, "currency": "USD" }, "ok": true },
+    { "data": { "revenue": -1e14, "currency": "USD" }, "ok": true },
+    { "data": { "revenue": "1e14" }, "ok": true },
+    { "data": { "revenue": "1e14", "currency": " \u00a0" }, "ok": true },
+    { "data": { "revenue": "abc", "currency": "USD" }, "ok": true },
+    { "data": { "revenue": "Infinity", "currency": "USD" }, "ok": true },
+    { "data": { "revenue": "1_000", "currency": "USD" }, "ok": true },
+    {
+      "data": { "revenue": 1e14, "currency": "USD" },
+      "ok": false,
+      "reason": "event_data_revenue_out_of_range"
+    },
+    {
+      "data": { "revenue": "1e14", "currency": "USD" },
+      "ok": false,
+      "reason": "event_data_revenue_out_of_range"
+    },
+    {
+      "data": { "revenue": "0x5AF3107A4000", "currency": "USD" },
+      "ok": false,
+      "reason": "event_data_revenue_out_of_range"
+    },
+    {
+      "data": { "revenue": " 100000000000000.\n", "currency": "EUR" },
+      "ok": false,
+      "reason": "event_data_revenue_out_of_range"
+    },
+    {
+      "data": { "revenue": "+.1e15", "currency": "EUR" },
+      "ok": false,
+      "reason": "event_data_revenue_out_of_range"
+    }
+  ],
+  "names": [
+    { "name": "signup", "ok": true },
+    { "name": "a-b", "ok": true },
+    { "name": "a=b", "ok": true },
+    { "name": "-signup", "ok": false },
+    { "name": "=SUM(A1)", "ok": false },
+    { "name": "+1", "ok": false },
+    { "name": "@user", "ok": false }
+  ]
+}

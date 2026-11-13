@@ -14,14 +14,15 @@ const rollupPendingInDay = `-- name: RollupPendingInDay :one
 
 select exists (
   select 1 from api.rollup_pending
-  where hour >= $1::timestamptz and hour < $1::timestamptz + interval '1 day'
+  where hour >= $1::timestamptz and hour < $1::timestamptz + interval '24 hours'
 )::boolean as pending
 `
 
 // api retention queries for the jobs role (the design), beside api.sql.
 // whether any hour of the utc day starting at day_start still waits for the
 // rollup. its minute partition must not be dropped before the rollup has
-// read it, or the hour's rollup would have nothing to recompute from.
+// read it, or the hour's rollup would have nothing to recompute from. 24
+// hours, not a calendar day in the session time zone.
 func (q *Queries) RollupPendingInDay(ctx context.Context, dayStart time.Time) (bool, error) {
 	row := q.db.QueryRow(ctx, rollupPendingInDay, dayStart)
 	var pending bool

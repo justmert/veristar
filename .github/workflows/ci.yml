@@ -43,6 +43,22 @@ jobs:
         env:
           DBIP_MMDB: .scratch/scratch/geo/dbip-country-lite.mmdb
 
+  # the default-build packages whose tests start postgresql, nats, umami or
+  # caddy through testcontainers (scripts/go-test-packages.sh)
+  containers:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      # the gateway geo tests read the db-ip country file
+      - run: make geo-fetch
+      - run: make test-containers
+        env:
+          DBIP_MMDB: .scratch/scratch/geo/dbip-country-lite.mmdb
+
   js:
     runs-on: ubuntu-24.04
     steps:
@@ -87,7 +103,7 @@ jobs:
         with:
           fetch-depth: 0
       - run: scripts/supply-chain/install-tools.sh "$RUNNER_TEMP/bin" gitleaks
-      - run: '"$RUNNER_TEMP/bin/gitleaks" git --redact --no-banner --exit-code 1 .'
+      - run: make gitleaks GITLEAKS="$RUNNER_TEMP/bin/gitleaks"
 
   # shipped code and its production dependencies must carry an osi approved
   # licence; dev, test, example and tooling packages with another licence
@@ -136,6 +152,54 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
-      - run: scripts/supply-chain/install-tools.sh "$HOME/.local/bin" cosign
+      # uv builds the ansible venv; the runner image does not pin it. the
+      # tools go on the path of the later steps
+      - run: |
+          scripts/supply-chain/install-tools.sh "$RUNNER_TEMP/bin" cosign uv
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
       - run: make ansible-venv
       - run: make supplychain-it
+
+  # the workflows themselves, with shellcheck on every run: block
+  actionlint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: |
+          scripts/supply-chain/install-tools.sh "$RUNNER_TEMP/bin" actionlint shellcheck
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - run: make actionlint
+
+  # opentofu formatting, provider schema validation and the inventory
+  # contract tests against mocked providers (tests/infra); needs no account
+  tofu:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
+        with:
+          tofu_version: 1.13.9
+          tofu_wrapper: false
+      - run: make tofu-check
+
+  # yamllint and ansible-lint (production profile) over roles and playbooks
+  ansible:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: |
+          scripts/supply-chain/install-tools.sh "$RUNNER_TEMP/bin" uv
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - run: make ansible-venv
+      - run: make ansible-lint
+
+  # alert and recording rules: syntax, then the promtool unit tests, with
+  # the promtool of the prometheus pin
+  promtool:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: |
+          scripts/supply-chain/install-tools.sh "$RUNNER_TEMP/bin" promtool
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - run: make promtool

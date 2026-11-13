@@ -127,9 +127,39 @@ The deny list lives in `deploy/caddy/web.Caddyfile` and
   `navigator.globalPrivacyControl` is true, and the gateway drops any event
   that arrives with `Sec-GPC: 1` (`internal/gateway/server.go`).
 - **Opt-out flag.** The tracker sends nothing when the browser's
-  `localStorage` holds `umami.disabled`. This is the only storage the tracker
-  reads, and it never writes any. A tenant offers its visitors an opt-out link
-  that sets this key.
+  `localStorage` holds `umami.disabled`. A tenant offers its visitors an
+  opt-out link that sets this key. The tracker never writes browser storage.
+- **What the tracker reads from browser storage, and when.** Exactly this,
+  from `packages/tracker/src/index.ts` and `wallets-kit.ts`:
+  - On every site: the value of `umami.disabled`. In default mode it is read
+    when the page loads and again before every event. In consent mode
+    (`data-auto-track="false"`) nothing is read until the site calls
+    `umami.start()`, and then before every event.
+  - Only on a site that turns on Wallets Kit capture with the script tag
+    (`data-wallets-kit="true"`), and only once the tracker has started: every
+    500 ms, and on each `storage` event raised by another tab of the site, the
+    tracker lists the names of the page's `localStorage` keys to find the
+    kit's two keys. It reads the value of `@StellarWalletsKit/selectedModuleId`
+    (the wallet id, for example `xbull`) and checks only whether
+    `@StellarWalletsKit/activeAddress` exists; it never reads that value or
+    the value of any other key. Nothing it reads leaves the browser except the
+    wallet events of `docs/onboarding/web/wallets-kit.md`: the wallet id, never
+    an address. "Started" means page load in default mode, and only when
+    neither Global Privacy Control nor the opt-out flag is set; in consent
+    mode it means the site's `umami.start()` call. From tracker 1.2.0 that
+    call starts the reading only when neither Global Privacy Control, the
+    opt-out flag nor an honoured Do Not Track is set (1.1.0 started it
+    regardless, although it sent no event); tested by `never reads the kit's
+    storage when start() is called for a gpc visitor`
+    (`packages/tracker/test/wallets-kit.test.ts`).
+  - With the npm adapter (`attachWalletsKit`) the tracker reads no kit
+    storage: it subscribes to the events of the kit the dapp set up itself.
+  - Nothing else. The challenge and proof stay in page memory.
+
+  Reading the kit's keys is access to information stored on the visitor's
+  device (EDPB Guidelines 2/2023, `sources.md` S1), which is why Wallets Kit
+  capture is off unless the tenant turns it on for its own site, and why a
+  tenant that turns it on must include it in its own assessment.
 - **Do Not Track.** With `data-do-not-track="true"` the tracker also honours
   the browser's Do Not Track setting.
 - **Deferred start.** With `data-auto-track="false"` the tracker loads, sends
@@ -150,8 +180,12 @@ Before an event is queued, the gateway (`internal/redact`,
 - replaces all ten SEP-23 strkey types (G, M, C, W, L, B, T, X, P, S),
   email addresses and federation addresses in the path, kept query values,
   referrer host, title and event data; S secret seeds become `{redacted-secret}`;
-- drops every query parameter outside the allowlist (`utm_source`,
-  `utm_medium`, `utm_campaign`, `utm_content`, `utm_term`, `ref`);
+- drops every query parameter of the page URL. Only on a site whose owner
+  turned on UTM collection (the site setting `collect_utm`, off by default;
+  `docs/reference/control-plane-api.md` 3.1) does it keep `utm_source`,
+  `utm_medium`, `utm_campaign`, `utm_content`, `utm_term` and `ref`
+  (`CampaignParams`, tested in `internal/gateway/sanitize_test.go` and through
+  the registry in `internal/gateway/utm_node_test.go`);
 - drops URL fragments except a `#/` hash route, without its own query.
 
 It cannot recognise every identifier a tenant puts in a path, title or event:
@@ -170,7 +204,7 @@ conditions of the exemption are those of délibération 2020-091 art. 5 (S2).
 | Criterion (tool, section 4) | CNIL's recommended measure | What the service does | Met? |
 |---|---|---|---|
 | No import of outside data | referrer, if collected, limited to the host | the gateway keeps only `scheme://host` of the referrer before queueing (section 7); the referrers metric is unchanged, since it always listed hosts | yes, by the recommended measure |
-| No import of outside data | no collection of UTM or campaign identifiers in URLs | the gateway keeps `utm_source`, `utm_medium`, `utm_campaign`, `utm_content`, `utm_term` and `ref` (`QueryAllowlist`), and Umami reports them | no (section 9) |
+| No import of outside data | no collection of UTM or campaign identifiers in URLs | by default the gateway drops every query parameter, UTM and `ref` included (section 7). A site owner can turn on `collect_utm` for one site; the gateway then keeps `utm_*` and `ref` for that site only, and Umami reports them | yes by default, by the recommended measure; no for a site that turns `collect_utm` on |
 | All reports and exports contain only anonymous statistics | aggregation and presentation rounded to the nearest ten, or a documented anonymity analysis (WP29) | exact counts in Umami's dashboards, read API and exports | no (section 9) |
 | No filter combination isolates a user | none named | Umami's filters and Sessions page can show one visitor's pages of a day | no (section 9) |
 | No tracking of a single user's navigation | session replay disabled | replay is off (section 5), but the Sessions page lists one session's page views | replay: yes; the criterion as a whole: no |
@@ -210,9 +244,11 @@ That is a product change for the operator to decide; it is not built.
 
 - **Exact counts and single-visitor views.** Section 8: no rounding, and
   Umami's Sessions page shows one visitor's pages of a day.
-- **UTM parameters.** CNIL's tool recommends disabling the collection of UTM
-  and campaign identifiers in URLs; the query allowlist keeps them (section
-  7). Removing them is a product decision for the operator, not taken here.
+- **UTM parameters.** Off by default since 2026-11-13: the gateway drops
+  them unless the site's owner turns on `collect_utm` (section 7), which moves
+  the default to CNIL's recommended measure. A site that turns it on no
+  longer meets that measure; the console says so next to the switch. Sites
+  that existed before the setting start with it off.
 - **Erasure race.** See `erasure.md`, "Limits".
 - **NATS file blocks.** An acknowledged `WEB_EVENTS` message is removed from
   the stream, but its bytes can stay in a JetStream file block until the block

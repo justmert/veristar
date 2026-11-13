@@ -97,6 +97,15 @@ const (
 // the first delivery to 1 s.
 var RetryBackoff = []time.Duration{time.Second, 5 * time.Second, 30 * time.Second, 2 * time.Minute, 10 * time.Minute}
 
+// VisitStateMaxBytes caps visit_state, which grows with every delivered
+// event (a sent.<event id> key kept 24 hours) and shares each server's memory
+// store (edge_nats_max_memory_store, 512 MiB) with edge_secrets. without a
+// cap a busy day filled the store, and the gateways could no longer create
+// the next day's secrets, which stops all ingestion. with it a full bucket
+// refuses replayer writes only: delivery waits, ingestion goes on, and
+// docs/runbooks/capacity.md says when to raise both numbers.
+const VisitStateMaxBytes = 384 << 20
+
 // Spec is the full topology for one replica count.
 type Spec struct {
 	Streams   []jetstream.StreamConfig
@@ -174,7 +183,7 @@ func Topology(replicas int) (Spec, error) {
 			{Bucket: BucketRegistryOTLP, Description: "sha-256 of otlp token to tenant, token id and status", History: 1, Storage: jetstream.FileStorage, Replicas: replicas},
 			// memory only: the daily secrets must never touch disk
 			{Bucket: BucketEdgeSecrets, Description: "daily visitor secret, ip-cluster secret and proof key", History: 1, Storage: jetstream.MemoryStorage, Replicas: replicas, LimitMarkerTTL: edgeSecretsMarkerTTL},
-			{Bucket: BucketVisitState, Description: "replayer visit continuity and duplicate guard", History: 1, Storage: jetstream.MemoryStorage, Replicas: replicas, TTL: 24 * time.Hour},
+			{Bucket: BucketVisitState, Description: "replayer visit continuity and duplicate guard", History: 1, Storage: jetstream.MemoryStorage, Replicas: replicas, TTL: 24 * time.Hour, MaxBytes: VisitStateMaxBytes},
 			{Bucket: BucketLocks, Description: "leader locks for singleton workers", History: 1, Storage: jetstream.MemoryStorage, Replicas: replicas, TTL: LocksTTL},
 		},
 		Consumers: []ConsumerSpec{
@@ -345,9 +354,19 @@ func Users() []User {
 			streamRead(StreamWebEvents),
 			dlqManage(StreamWebDLQ),
 		),
-		// platformctl manages the topology and needs the whole api
+		// platformctl manages the topology and needs the whole api. it also
+		// publishes to the two work-queue subjects, because `platformctl dlq
+		// replay` puts dead-lettered messages back where they came from.
+		// `platformctl queue forward` (handover cutover) acks on the three
+		// work-queue consumers of the stopped services in the old
+		// environment and publishes their messages, edge stats included, in
+		// the new one
 		user(ServicePlatformctl, false, nil,
 			subjects(jsAPI+".>"),
+			subjects(SubjectWebEvents+".*", SubjectAPIMetrics+".*", SubjectEdgeStats+".*"),
+			consume(StreamWebEvents, ConsumerReplayer),
+			consume(StreamAPIMetrics, ConsumerMetricsWriter),
+			consume(StreamEdgeStats, ConsumerJobs),
 		),
 	}
 }

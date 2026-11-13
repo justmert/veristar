@@ -170,7 +170,7 @@ func TestServeStartsAndStops(t *testing.T) {
 	require.NoError(t, json.NewDecoder(res.Body).Decode(&tm))
 	_ = res.Body.Close()
 	require.Equal(t, http.StatusOK, res.StatusCode)
-	require.Equal(t, "2026-11-12-draft.2", tm.Version)
+	require.Equal(t, "2026-11-13-draft.3", tm.Version)
 	require.Equal(t, "no-store", res.Header.Get("Cache-Control"))
 
 	// sign-in starts with a redirect to the identity provider of this build

@@ -62,6 +62,11 @@ while the version is below the minimum. When `postgres:18.7-trixie` exists: set
   `core[0]` only in this phase, DCS etcd3 on the edge nodes), HAProxy routing port 5000
   to the member whose Patroni REST answers `/primary` with 200, Umami (the design
   environment), control plane, replayer, metricswriter, jobs and Caddy with the console.
+- **storage** (on the controller): the backup bucket through the S3 API with object lock,
+  versioning and a 35-day compliance retention ([backups.md](backups.md)).
+- **base** on the probe: the same role without a private network (no private interface,
+  no private firewall rules), so the probe gets the firewall, SSH hardening, time sync and
+  Docker at the pins.
 - Caddy configs are assembled by `deploy/caddy/assemble.sh` from the tested per-host
   Caddyfiles: TLS by `SA_TLS` (`bunny` for DNS-01, `internal` only locally), automatic
   HTTP redirects off, and port 80 answering the node's composite health.
@@ -78,14 +83,21 @@ services also bind only the private address, so they never listen publicly at al
 
 ## 5. Playbooks
 
-- `site.yml`: base and secrets everywhere, NATS and etcd, postgres-ha and HAProxy,
-  `bootstrap.yml`, then all edge and core services. A second run reports no change.
+- `site.yml`: `verify-release.yml` (image signatures, section 8), base and secrets
+  everywhere, the backup bucket (storage role), NATS and etcd (a rebuilt edge node rejoins
+  etcd, `roles/edge/tasks/etcd.yml`), postgres-ha and HAProxy, WAL archiving
+  (`roles/core/tasks/archive.yml`), `bootstrap.yml`, all edge and core services, the
+  observability role, then the probe node. A second run reports no change.
+- `verify-release.yml`: imported first by `site.yml`, `deploy.yml`, `rotate-all.yml` and
+  `restore.yml`; verifies the release manifest and pins every node to the verified digests.
+- `reboot.yml`: rolling host reboot for kernel and libc fixes
+  ([../runbooks/security-patch.md](../runbooks/security-patch.md) section 6a).
 - `bootstrap.yml` (core[0]): checks I3, waits for a writable leader, creates the Umami
   role and database and the platform database, `platformctl db migrate`, `db roles`,
   starts Umami (which migrates itself), `umami bootstrap`, `db umami-retention-role`,
   `nats apply`. Each step reports a change only when it made one.
-- `deploy.yml`: edge nodes one at a time, the NATS topology, then core nodes one at a
-  time. Each node must answer 308 on port 80 (the composite health) before the next
+- `deploy.yml`: edge nodes one at a time, the NATS topology, core nodes one at a
+  time, then the observability role on every node including the probe. Each node must answer 308 on port 80 (the composite health) before the next
   starts; any failure stops the run.
 
 Composite health, served on port 80 by Caddy and behind it on the services' ops ports:
@@ -146,7 +158,7 @@ through it with the checks around it.
    signed):
 
    ```sh
-   make staging-deploy SA_IMAGE_TAG=<release>
+   make staging-deploy SA_IMAGE_TAG=<release> SA_RELEASE_MANIFEST=<path to release-images.json>
    ```
 
    This runs `site.yml`: base and secrets on every node, NATS and etcd, postgres-ha and HAProxy,
@@ -157,10 +169,10 @@ through it with the checks around it.
    print `no inventory: run make staging-apply first` and
    `set SA_IMAGE_TAG to the release to deploy` when their inputs are missing.
 
-   `site.yml` pulls the images by tag and does **not** verify their signatures; only
-   `deploy.yml` does (`ROLLING=1`). For the first converge of an environment, check the release
-   by hand first: `cosign verify` as in [../security/supply-chain.md](../security/supply-chain.md)
-   section 3, or run step 4 right after.
+   `site.yml` first verifies every platform image's signature against the release manifest
+   (`playbooks/verify-release.yml`, so `SA_RELEASE_MANIFEST=<release-images.json>` is required)
+   and the nodes pull the verified digests, exactly as the rolling deploy does
+   ([../security/supply-chain.md](../security/supply-chain.md) section 3).
 
 3. **Run it again.** Expected: `changed=0` on every node (the local converge's second run:
    `ok=82 changed=0 failed=0` on the core node).

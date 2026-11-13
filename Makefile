@@ -16,7 +16,7 @@ BIN_DIR       := dist/bin
 
 help:
 	@echo "dev-up dev-down dev-reset dev-ps dev-logs umami-bootstrap"
-	@echo "build test test-integration vet lint fmt tidy image CMD=<name>"
+	@echo "build test test-containers test-integration vet lint fmt tidy image CMD=<name>"
 
 dev-env:
 	@sh deploy/compose/gen-env.sh $(DEV_ENV)
@@ -65,8 +65,19 @@ build:
 	@mkdir -p $(BIN_DIR)
 	CGO_ENABLED=0 $(GO) build -trimpath -ldflags "-X main.version=$(VERSION)" -o $(BIN_DIR)/ ./cmd/...
 
+# unit tests only, no containers: every package whose tests do not pull in
+# testcontainers (scripts/go-test-packages.sh explains the split). the
+# packages that start postgresql, nats, umami or caddy run in test-containers.
 test:
-	$(GO) test -race ./...
+	@pkgs="$$(GO=$(GO) scripts/go-test-packages.sh unit)" && $(GO) test -race $$pkgs
+
+# the default-build packages whose tests start containers through
+# testcontainers. -p 1 keeps one package's containers up at a time on a
+# shared machine. build-tagged suites have their own targets below.
+.PHONY: test-containers
+test-containers:
+	@pkgs="$$(GO=$(GO) scripts/go-test-packages.sh containers)" && \
+		$(GO) test -race -count=1 -p 1 -timeout 90m $$pkgs
 
 # downloads the db-ip country file the geo tests and the gateway image use.
 # GEO_MONTH (YYYY-MM) defaults to the current utc month. the tests find the
@@ -271,6 +282,35 @@ api-volume: collector-build
 privacy:
 	DBIP_MONTH=$(DBIP_MONTH) $(GO) test -tags privacy -count=1 -timeout 30m -v ./tests/privacy/
 
+# the db-ip country file the gateway needs in the suites below (make geo-fetch)
+DBIP_MMDB ?= $(CURDIR)/.scratch/scratch/geo/dbip-country-lite.mmdb
+
+# this stage enrollment modes (tests/enrollment, build tag enrollmentit): the
+# control plane routes in process with the oauth fixture, the reconciler,
+# real postgresql, nats and umami, and the gateway and replayer binaries.
+# needs docker and the db-ip file.
+.PHONY: enrollment-it
+enrollment-it:
+	DBIP_MMDB=$(DBIP_MMDB) $(GO) test -tags enrollmentit -race -count=1 -timeout 30m -v ./tests/enrollment/
+
+# this stage example apps (tests/otelapps, build tag otelapps): each app
+# dual-exports through deploy/compose/examples.yml to a stock collector as
+# the tenant backend and a platform stand-in, and both copies must equal the
+# load plan; TestCollectorFanout checks the tenant collector guide's config.
+# needs docker. OTELAPPS_APPS and OTELAPPS_MODES narrow the run.
+.PHONY: otelapps
+otelapps:
+	$(GO) test -tags otelapps -count=1 -timeout 60m -v ./tests/otelapps/
+
+# recovery after a full nats restart (tests/recovery, build tag recoveryit):
+# gateway, replayer, jobs and metricswriter recreate the memory buckets and
+# data flows again, on one server and on a 3-node cluster. needs make dev-up,
+# umami-bootstrap and the db-ip file.
+.PHONY: recovery-it
+recovery-it:
+	@set -a && . ./$(DEV_ENV) && set +a && UMAMI_IT_URL=$$UMAMI_URL DBIP_MMDB=$(DBIP_MMDB) \
+		$(GO) test -tags recoveryit -race -count=1 -timeout 30m -v ./tests/recovery/
+
 # this stage opentofu (infra/tofu, docs/deploy/opentofu.md). credentials and the
 # state passphrase come only from the env's sops dotenv file; non-secret inputs
 # from infra/tofu/envs/<env>/terraform.tfvars. both are missing until the operator
@@ -308,7 +348,14 @@ staging-plan production-plan: %-plan:
 
 staging-apply production-apply: %-apply:
 	@test -f $(TOFU_DIR)/$*/tfplan || { echo "run make $*-plan first" >&2; exit 1; }
-	$(call tofu_env,$*,$(call tofu_init,$*) && $(call tofu_in,$*) apply -input=false tfplan && rm -f $(TOFU_DIR)/$*/tfplan && $(call tofu_inventory,$*))
+	$(call tofu_env,$*,$(call tofu_init,$*) && $(call tofu_in,$*) apply -input=false tfplan && rm -f $(TOFU_DIR)/$*/tfplan && $(call tofu_inventory,$*) && ./scripts/tofu-state-backup.sh $*)
+
+# the state bucket keeps no history; every apply copies the encrypted state
+# into the versioned, object-locked backup bucket (docs/deploy/opentofu.md
+# section 6). STATE_ARGS=list or STATE_ARGS="restore <key>" for the rest.
+.PHONY: staging-state-backup production-state-backup
+staging-state-backup production-state-backup: %-state-backup:
+	$(call tofu_env,$*,./scripts/tofu-state-backup.sh $* $(STATE_ARGS))
 
 staging-inventory production-inventory: %-inventory:
 	$(call tofu_env,$*,$(call tofu_init,$*) && $(call tofu_inventory,$*))
@@ -357,10 +404,10 @@ ansible-lint:
 staging-deploy production-deploy: %-deploy:
 	@test -f infra/ansible/inventories/$*/hosts.json || { echo "no inventory: run make $*-apply first" >&2; exit 1; }
 	@test -n "$(SA_IMAGE_TAG)" || { echo "set SA_IMAGE_TAG to the release to deploy" >&2; exit 1; }
-	@test -z "$(ROLLING)" || test -f "$(SA_RELEASE_MANIFEST)" || { echo "ROLLING=1 needs SA_RELEASE_MANIFEST=<release-images.json of the release> (this stage signature check)" >&2; exit 1; }
+	@test -f "$(SA_RELEASE_MANIFEST)" || { echo "set SA_RELEASE_MANIFEST=<release-images.json of the release>: site.yml and deploy.yml both verify the image signatures first (this stage, playbooks/verify-release.yml)" >&2; exit 1; }
 	cd infra/ansible && $(ANSIBLE_BIN)/ansible-playbook -i inventories/$*/ \
 		playbooks/$(if $(ROLLING),deploy.yml,site.yml) -e sa_image_tag=$(SA_IMAGE_TAG) \
-		$(if $(ROLLING),-e sa_release_manifest=$(abspath $(SA_RELEASE_MANIFEST)))
+		-e sa_release_manifest=$(abspath $(SA_RELEASE_MANIFEST))
 
 # the local converge (docs/deploy/local-converge.md): 3 edge and 1 core
 # debian 13 systemd containers on this machine
@@ -449,3 +496,41 @@ handover-it:
 .PHONY: rotate-local
 rotate-local:
 	ANSIBLE_VENV=$(ANSIBLE_VENV) tests/handover/rotate-local.sh
+
+# the operations checks of the review notes on the minimal
+# local converge with the s3 stand-in and the probe node
+# (tests/localconverge/ops-local.sh): bucket with object lock, stanza and wal
+# archiving in object storage mode, patroni failsafe, etcd rejoin of a
+# rebuilt edge node, the probe and the watchdog. then teardown (KEEP=1 keeps it)
+.PHONY: ops-local
+ops-local:
+	ANSIBLE_VENV=$(ANSIBLE_VENV) tests/localconverge/ops-local.sh
+
+# repository checks that need only a pinned binary (ops review, O-10).
+# scripts/supply-chain/install-tools.sh installs each at its pin with its
+# checksum; the ci jobs of the same names run exactly these targets.
+GITLEAKS   ?= gitleaks
+PROMTOOL   ?= promtool
+ACTIONLINT ?= actionlint
+RULES_DIR  := infra/ansible/roles/observability/files/rules
+
+.PHONY: gitleaks promtool actionlint ci-local
+# the whole history, as the required ci check scans it; reviewed false
+# positives are listed with their reason in .gitleaksignore
+gitleaks:
+	$(GITLEAKS) git --redact --no-banner --exit-code 1 .
+
+promtool:
+	cd $(RULES_DIR) && $(PROMTOOL) check rules *.yml && $(PROMTOOL) test rules tests/*.yml
+
+# actionlint runs shellcheck on every run: block when shellcheck is on PATH
+actionlint:
+	$(ACTIONLINT) .github/workflows/*.yml
+
+# the jobs of .github/workflows/ci.yml on this machine, with the same make
+# targets (scripts/ci-local.sh), for as long as no workflow can run on
+# github (ops review). CI_JOBS picks jobs, default all; jobs that start
+# container stacks refuse to start while the load average is at or above
+# CI_LOCAL_MAX_LOAD (default 20), since the host is shared.
+ci-local:
+	scripts/ci-local.sh $(CI_JOBS)

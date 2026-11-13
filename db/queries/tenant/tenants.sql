@@ -1,10 +1,12 @@
 -- cp_tenant queries of the tenant and member routes. row-level security
 -- limits every statement to app.tenant_id.
 
--- name: LockTenant :exec
+-- name: LockTenant :one
 -- serialises the member and site limit checks of one tenant, so two
--- concurrent requests cannot both pass a count of 49
-select 1 from cp.tenants where id = cp.current_tenant_id() for update;
+-- concurrent requests cannot both pass a count of 49. it returns the status
+-- as of the lock: an operator action that committed while the request
+-- waited is seen here, not the status read before the lock
+select status from cp.tenants where id = cp.current_tenant_id() for update;
 
 -- name: UpdateTenantProfile :one
 update cp.tenants
@@ -61,13 +63,13 @@ select * from cp.invites where expires_at > now() order by created_at, id;
 select (select count(*) from cp.tenant_members)
      + (select count(*) from cp.invites where expires_at > now()) as total;
 
--- name: DeleteExpiredInvitesForLogin :execrows
--- an expired invite still holds its slot in invites_tenant_login_idx
-delete from cp.invites where lower(github_login) = lower(@github_login) and expires_at <= now();
+-- name: DeleteExpiredInvitesForAccount :execrows
+-- an expired invite still holds its slot in invites_tenant_github_idx
+delete from cp.invites where github_id = @github_id and expires_at <= now();
 
 -- name: CreateInvite :one
-insert into cp.invites (tenant_id, github_login, role, created_by, expires_at)
-values (cp.current_tenant_id(), @github_login, @role, @created_by, @expires_at)
+insert into cp.invites (tenant_id, github_id, github_login, role, created_by, expires_at)
+values (cp.current_tenant_id(), @github_id, @github_login, @role, @created_by, @expires_at)
 returning *;
 
 -- name: DeleteInvite :one

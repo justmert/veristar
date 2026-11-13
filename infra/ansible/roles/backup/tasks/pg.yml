@@ -12,6 +12,9 @@
       - backup_repo_mode != 's3' or (backup_repo_access_key | length > 0)
       - backup_repo_mode != 's3' or (backup_repo_secret_key | length > 0)
       - backup_repo_mode != 'posix-host' or (groups['backup'] | length == 1)
+      - >-
+        backup_repo_mode != 's3' or sa_environment == 'local'
+        or (backup_repo_object_storage.storage_host is not defined and backup_repo_object_storage.ca_file is not defined)
     fail_msg: >-
       backups need object storage an operator input: sa_object_storage in the
       inventory and object_storage_access_key and object_storage_secret_key
@@ -30,6 +33,16 @@
     group: "999"
     mode: "0700"
   when: backup_repo_mode == 's3'
+
+# local converge only (LC_BACKUP=s3): the object storage stand-in's ca
+- name: Install the object storage stand-in's ca
+  ansible.builtin.copy:
+    src: "{{ backup_repo_object_storage.ca_file }}"
+    dest: "{{ backup_conf_dir }}/s3-ca.crt"
+    owner: "999"
+    group: "999"
+    mode: "0644"
+  when: backup_repo_mode == 's3' and backup_repo_object_storage.ca_file is defined
 
 - name: Write the pgbackrest config of this database node
   ansible.builtin.template:

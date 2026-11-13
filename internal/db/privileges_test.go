@@ -142,6 +142,10 @@ func TestSchemaDatabaseAndFunctionRights(t *testing.T) {
 		"cp.current_tenant_id()":      {pdb.RoleCPTenant},
 		"cp.audit_log_append_only()":  nil,
 		"cp.leader_fence_monotonic()": nil,
+		// cp_tenant write limits (00024)
+		"cp.tenant_site_status_guard()":  nil,
+		"cp.tenant_token_status_guard()": nil,
+		"cp.tenant_audit_actor_guard()":  nil,
 
 		"api.add_buckets(bigint[],bigint[])": {pdb.RoleCPTenant, pdb.RoleCPOperator, pdb.RoleMetricsWriter, pdb.RoleJobs},
 		"api.sum_buckets(bigint[])":          {pdb.RoleCPTenant, pdb.RoleCPOperator, pdb.RoleJobs},
@@ -156,9 +160,12 @@ func TestSchemaDatabaseAndFunctionRights(t *testing.T) {
 		"api.minute_partitions()":           {pdb.RoleJobs},
 		"api.hourly_partitions()":           {pdb.RoleJobs},
 		"api.purge_tenant(uuid,boolean)":    {pdb.RoleCPSystem},
-		// hour and day grain only; cp_operator never reads minute rows (00022)
-		"api.operator_hourly(timestamp with time zone,timestamp with time zone)": {pdb.RoleCPOperator},
-		"api.operator_daily(timestamp with time zone,timestamp with time zone)":  {pdb.RoleCPOperator},
+		// the hour lock key the writer and the rollup share (00026, review)
+		"api.rollup_lock_key(uuid,timestamp with time zone)": {pdb.RoleMetricsWriter, pdb.RoleJobs},
+		// hour and day grain only; cp_operator never reads minute rows (00022),
+		// and only of the tenants it names (00023)
+		"api.operator_hourly(timestamp with time zone,timestamp with time zone,uuid[])": {pdb.RoleCPOperator},
+		"api.operator_daily(timestamp with time zone,timestamp with time zone,uuid[])":  {pdb.RoleCPOperator},
 		"agg.purge_tenant(uuid)": {pdb.RoleCPSystem},
 	}
 	var names []string

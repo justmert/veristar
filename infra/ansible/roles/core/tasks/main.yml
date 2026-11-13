@@ -5,17 +5,27 @@
       - sa_tier == 'core'
       - groups['edge'] | length == 3
       - sa_secrets is defined
-      - sa_tls in ['bunny', 'internal']
-      - sa_tls == 'bunny' or sa_environment == 'local'
+      - sa_tls in ['bunny', 'bunny-delegated', 'internal']
+      - sa_tls != 'internal' or sa_environment == 'local'
+      # bunny-delegated: certificates through the old zone's cname during a
+      # handover cutover (docs/handover/plan.md section 2.3)
+      - sa_tls != 'bunny-delegated' or (sa_acme_challenge_domain | default('')) is match('^[a-z0-9_.-]+\\.[a-z]+$')
       - sa_operator_github_ids is defined and (sa_operator_github_ids | string | length) > 0
       - not core_oauth_fixture or sa_environment == 'local'
       - core_umami_processes | int >= 1
+      # the metrics writer accepts points as old as API_METRICS keeps
+      # messages (7 days), so their minute partitions must still exist; one
+      # more day covers the utc day boundary (internal/config
+      # MinMinuteRetentionDays, review). jobs refuses less at start,
+      # this stops the converge before that
+      - core_api_minute_retention_days | int >= 8
       - core_umami_processes | int <= core_replayer_env.REPLAYER_WORKERS | int
     fail_msg: >-
       core needs the secrets role first, OPERATOR_GITHUB_IDS an operator input as
       sa_operator_github_ids, acme dns-01 outside the local converge, the
-      oauth fixture only in the local converge, and between 1 and
-      REPLAYER_WORKERS umami processes (core_umami_processes)
+      oauth fixture only in the local converge, between 1 and
+      REPLAYER_WORKERS umami processes (core_umami_processes), and
+      core_api_minute_retention_days of at least 8
 
 # the design: 18.7 is required before any non-dev environment and was
 # not published on 2026-11-12. the local converge may run 18.6 and says so
@@ -81,6 +91,20 @@
     name: backup
     tasks_from: pg.yml
     public: true
+  when: core_runs_postgres
+
+# tasks/archive.yml leaves the marker once the stanza exists; until then
+# patroni.yml carries an empty archive_command
+- name: Find out whether the stanza exists
+  ansible.builtin.stat:
+    path: "{{ backup_conf_dir }}/stanza-ready"
+  register: core_stanza_marker
+  when: core_runs_postgres
+
+- name: Choose the archive command
+  ansible.builtin.set_fact:
+    core_archive_command: >-
+      {{ ('pgbackrest --stanza=' ~ backup_stanza ~ ' archive-push %p') if core_stanza_marker.stat.exists else '' }}
   when: core_runs_postgres
 
 # the postgres-ha image runs patroni as the postgres user (uid 999 in the

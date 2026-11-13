@@ -1,7 +1,7 @@
 ---
-version: 2026-11-12-draft.2
+version: 2026-11-13-draft.3
 status: draft
-effective: 2026-11-12
+effective: 2026-11-13
 ---
 
 # Terms of use
@@ -38,7 +38,10 @@ There is no billing, no paid tier, no advertising and no sale or resale of data.
 
 - **Websites**: page views and custom events sent by the tracker script. The
   tracker sets no cookies and writes no browser storage. It reads one storage
-  key, the visitor's opt-out flag, and honours Global Privacy Control.
+  key, the visitor's opt-out flag, and honours Global Privacy Control. On a
+  site that turns on Wallets Kit capture with the script tag, it also reads
+  the names of the site's local storage keys and the kit's selected wallet id
+  (`privacy-strategy.md` section 6).
 - **IP addresses are never stored.** The ingestion gateway reads a visitor's
   address only in memory, shortens it, looks up the country in the DB-IP
   database, and discards it.

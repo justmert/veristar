@@ -76,7 +76,7 @@ export type ErasureInput =
   | { kind: "visitor_today"; site_id: string; ip: string; user_agent: string }
   | { kind: "session"; site_id: string; session_id: string }
   | { kind: "site_reset"; site_id: string; confirm_domain: string };
-export type SitePatch = { name?: string; origins?: string[] };
+export type SitePatch = { name?: string; origins?: string[]; collect_utm?: boolean };
 
 // 5.7 resubmission of a rejected enrollment
 export type ResubmitInput = {
