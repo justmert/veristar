@@ -66,12 +66,16 @@ $LC_RESTORE_NODE""".strip().splitlines()
 # backup holds the pgbackrest repository; restore is the fresh node of the
 # point-in-time restore drill, which exists only while that drill runs
 hosts = {"edge": {}, "core": {}, "backup": {}, "restore": {}, "probe": {}}
+# a converged node (LC_TOPOLOGY=node) is in both the edge and the core group,
+# as opentofu's inventory lists it (infra/tofu/modules/inventory)
+groups_of = {"node": ["edge", "core"]}
 for line in nodes:
     name, loc, pub, priv = line.split()
     tier, idx = name.split("-")[-2], int(name.split("-")[-1])
     # the probe has no location network and no private address, like a
     # probe host outside the platform's network
-    hosts[tier][name] = {
+    for group in groups_of.get(tier, [tier]):
+      hosts[group][name] = {
         "ansible_host": pub, "ansible_user": "$LC_ADMIN_USER",
         "sa_tier": tier, "sa_index": idx, "sa_provider": "local",
         "sa_location": None if loc == "none" else loc,

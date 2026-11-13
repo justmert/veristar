@@ -68,6 +68,8 @@ sa_tls_consumers:
   # plane, which presents the node certificate to alertmanager for the
   # operator alerts page (docs/reference/control-plane-api.md section 11)
   core: {root: 0, postgres: 999, haproxy: 99, nobody: 65534, controlplane: 65532}
+  # a converged node (three-node layout) runs both
+  node: {root: 0, nats: 4222, etcd: 2379, postgres: 999, haproxy: 99, nobody: 65534, controlplane: 65532}
   backup: {root: 0, postgres: 999}
   restore: {root: 0, postgres: 999}
   probe: {}

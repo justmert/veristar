@@ -14,8 +14,8 @@ variable "tier" {
   type = string
 
   validation {
-    condition     = contains(["edge", "core", "restore"], var.tier)
-    error_message = "tier must be edge, core or restore."
+    condition     = contains(["node", "restore"], var.tier)
+    error_message = "tier must be node or restore."
   }
 }
 

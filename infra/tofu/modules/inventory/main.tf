@@ -46,16 +46,24 @@ variable "nodes" {
   }))
 
   validation {
-    condition     = alltrue([for n in values(var.nodes) : contains(["edge", "core", "probe", "restore"], n.tier)])
-    error_message = "tier must be edge, core, probe or restore."
+    condition     = alltrue([for n in values(var.nodes) : contains(["node", "probe", "restore"], n.tier)])
+    error_message = "tier must be node, probe or restore."
   }
 }
 
 locals {
+  # a converged node (tier node) runs the edge and the core roles, so it is
+  # listed in both groups; the roles read sa_tier to know they share a node
+  groups_of = {
+    node    = ["edge", "core"]
+    probe   = ["probe"]
+    restore = ["restore"]
+  }
+
   hosts_of = {
     # restore is the fresh node of playbooks/restore.yml, present only while
     # restore_enabled (a point-in-time restore drill or a disaster recovery)
-    for tier in ["edge", "core", "probe", "restore"] : tier => {
+    for group in ["edge", "core", "probe", "restore"] : group => {
       for name, n in var.nodes : name => {
         ansible_host   = n.public_ipv4
         ansible_user   = var.admin_user
@@ -66,7 +74,7 @@ locals {
         sa_public_ipv4 = n.public_ipv4
         sa_public_ipv6 = n.public_ipv6
         sa_private_ip  = n.private_ip
-      } if n.tier == tier
+      } if contains(local.groups_of[n.tier], group)
     }
   }
 }

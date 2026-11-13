@@ -1,6 +1,6 @@
 locals {
   environment = "production"
-  location    = "swedencentral"
+  location    = var.location
 
   tags = {
     environment = local.environment
@@ -17,27 +17,28 @@ locals {
     "3" = 3
   }
 
-  # three edge nodes in three zones, two core nodes in two, and
-  # while restore_enabled the restore node of playbooks/restore.yml, sized
-  # like a core node because it holds a full copy of the database
+  # three converged nodes, one per zone (operator decision of 2026-11-13,
+  # docs/reference/availability.md): every node runs the edge and the core
+  # roles, so every service, the nats cluster, the etcd store and the
+  # patroni cluster have one member in each zone. while restore_enabled, the
+  # restore node of playbooks/restore.yml joins them, sized like a node
+  # because it holds a full copy of the database
   nodes = merge({
-    "${local.environment}-edge-1" = { tier = "edge", index = 1, zone = "1" }
-    "${local.environment}-edge-2" = { tier = "edge", index = 2, zone = "2" }
-    "${local.environment}-edge-3" = { tier = "edge", index = 3, zone = "3" }
-    "${local.environment}-core-1" = { tier = "core", index = 1, zone = "1" }
-    "${local.environment}-core-2" = { tier = "core", index = 2, zone = "2" }
+    "${local.environment}-node-1" = { tier = "node", index = 1, zone = "1" }
+    "${local.environment}-node-2" = { tier = "node", index = 2, zone = "2" }
+    "${local.environment}-node-3" = { tier = "node", index = 3, zone = "3" }
     },
     var.restore_enabled ? {
       "${local.environment}-restore-1" = { tier = "restore", index = 1, zone = var.restore_zone }
     } : {},
   )
 
-  # host part encodes the tier: .11+ edge, .21+ core, .41+ restore
-  host_base = { edge = 10, core = 20, restore = 40 }
+  # host part encodes the tier: .11 to .13 the nodes, .41 the restore node
+  host_base = { node = 10, restore = 40 }
 
-  # edge os disks hold the jetstream buffer, core os disks postgresql, its
-  # wal and prometheus (docs/deploy/prerequisites.md, cost table)
-  disk_gb = { edge = 32, core = 128, restore = 128 }
+  # each os disk holds the jetstream store, postgresql with its wal, and
+  # prometheus (docs/deploy/prerequisites.md, cost table)
+  disk_gb = { node = 128, restore = 128 }
 
   image = {
     publisher = "Debian"
@@ -65,11 +66,11 @@ module "network" {
   tags                = local.tags
 }
 
-# the identity of the core and restore nodes: pgbackrest reaches the backup
-# container with it (repo-azure-key-type=auto), so no storage key exists.
-# edge nodes need no azure access and get no identity.
-resource "azurerm_user_assigned_identity" "core" {
-  name                = "${local.environment}-core"
+# the identity of every node and the restore node: pgbackrest reaches the
+# backup container with it (repo-azure-key-type=auto), so no storage key
+# exists
+resource "azurerm_user_assigned_identity" "node" {
+  name                = "${local.environment}-node"
   resource_group_name = azurerm_resource_group.this.name
   location            = local.location
   tags                = local.tags
@@ -85,13 +86,13 @@ module "node" {
   resource_group_name   = azurerm_resource_group.this.name
   location              = local.location
   zone                  = each.value.zone
-  size                  = each.value.tier == "edge" ? var.edge_vm_size : var.core_vm_size
+  size                  = var.node_vm_size
   image                 = local.image
   os_disk_gb            = local.disk_gb[each.value.tier]
   os_disk_type          = "StandardSSD_LRS"
   subnet_id             = module.network.subnets[each.value.zone].id
   private_ip            = cidrhost(module.network.subnets[each.value.zone].ip_range, local.host_base[each.value.tier] + each.value.index)
-  identity_ids          = each.value.tier == "edge" ? [] : [azurerm_user_assigned_identity.core.id]
+  identity_ids          = [azurerm_user_assigned_identity.node.id]
   admin_user            = local.admin_user
   admin_ssh_public_keys = var.admin_ssh_public_keys
   protect               = local.protect
@@ -112,14 +113,13 @@ module "backup_storage" {
   previous_version_days = 35
   allowed_subnet_ids    = [for s in values(module.network.subnets) : s.id]
   admin_ipv4_ranges     = [for c in var.admin_cidrs : c if !strcontains(c, ":")]
-  writer_principal_ids  = { core = azurerm_user_assigned_identity.core.principal_id }
+  writer_principal_ids  = { node = azurerm_user_assigned_identity.node.principal_id }
   protect               = local.protect
   tags                  = local.tags
 }
 
 locals {
-  edge = [for name, n in local.nodes : module.node[name] if n.tier == "edge"]
-  core = [for name, n in local.nodes : module.node[name] if n.tier == "core"]
+  serving = [for name, n in local.nodes : module.node[name] if n.tier == "node"]
 }
 
 module "failover" {
@@ -127,12 +127,14 @@ module "failover" {
 
   resource_group_name = azurerm_resource_group.this.name
   name_prefix         = "${replace(var.base_domain, ".", "-")}-${local.environment}"
-  # ingestion (99.99 %) gets 10 s probing, the dashboards (99.90 %) 30 s
+  # every hostname is served by all three nodes. ingestion (99.99 %) gets
+  # 10 s probing of the node's edge health, the dashboards (99.90 %) 30 s
+  # probing of its core health (deploy/caddy/assemble.sh, tier node)
   profiles = {
-    in   = { ipv4 = local.edge[*].public_ipv4, fast = true }
-    otlp = { ipv4 = local.edge[*].public_ipv4, fast = true }
-    app  = { ipv4 = local.core[*].public_ipv4, fast = false }
-    web  = { ipv4 = local.core[*].public_ipv4, fast = false }
+    in   = { ipv4 = local.serving[*].public_ipv4, fast = true, path = "/" }
+    otlp = { ipv4 = local.serving[*].public_ipv4, fast = true, path = "/" }
+    app  = { ipv4 = local.serving[*].public_ipv4, fast = false, path = "/core" }
+    web  = { ipv4 = local.serving[*].public_ipv4, fast = false, path = "/core" }
   }
   tags = local.tags
 }

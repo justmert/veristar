@@ -128,6 +128,10 @@ core_haproxy_stats_port: 8404
 # exists, which takes the node out of dns (deploy/caddy/assemble.sh)
 core_drain_dir: /etc/veristar/drain
 
+# a converged node (sa_tier node, the three-node layout) runs the edge role
+# too; this project's caddy then serves the edge sites as well
+core_node: "{{ sa_tier == 'node' }}"
+
 # ipv6-only docker network that only caddy joins, so published ipv6 ports
 # keep the visitor's address. a unique local prefix: it never
 # leaves the node, and every node may use the same one.

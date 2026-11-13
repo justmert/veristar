@@ -1,5 +1,7 @@
 # managed by ansible (infra/ansible/roles/edge). edge tier of the design
-# 4.1: caddy, gateway, collector, one nats server and one etcd member.
+# 4.1: caddy, gateway, collector, one nats server and one etcd member. on a
+# converged node (sa_tier node) the core project's caddy serves the edge
+# sites too and joins this project's network, so this one has no caddy.
 # private ports bind to the private address only; caddy alone binds the
 # public one. secrets come from the root-only env files of the secrets role.
 name: veristar-edge
@@ -161,6 +163,7 @@ services:
       {{ k }}: "{{ v }}"
 {% endfor %}
 
+{% if not edge_shares_node %}
   caddy:
     <<: *defaults
     image: {{ platform_images.caddy }}
@@ -197,6 +200,8 @@ services:
       interval: 10s
       timeout: 3s
       retries: 6
+{% endif %}
+{% if not edge_shares_node %}
 
 # review: docker can forward a published ipv6 port into a container only
 # through docker-proxy when the container has no ipv6 address, and caddy then
@@ -216,9 +221,12 @@ networks:
     ipam:
       config:
         - subnet: {{ edge_public6_subnet }}
+{% endif %}
 
 volumes:
   natsdata:
   etcddata:
+{% if not edge_shares_node %}
   caddydata:
   caddyconfig:
+{% endif %}

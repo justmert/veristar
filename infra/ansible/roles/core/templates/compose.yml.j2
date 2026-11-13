@@ -64,6 +64,13 @@ networks:
     ipam:
       config:
         - subnet: {{ core_public6_subnet }}
+{% if core_node %}
+  # a converged node: this caddy also serves in. and otlp., so it reaches the
+  # gateway and the collector on the edge project's network
+  edge:
+    name: veristar-edge_default
+    external: true
+{% endif %}
 
 services:
 {% if core_runs_postgres %}
@@ -280,8 +287,8 @@ services:
     # the custom caddy build with the console's static files at /srv/console
     image: {{ platform_images.console }}
     depends_on: [controlplane, umami]
-    # both networks: see the public network below
-    networks: [default, public]
+    # both networks: see the public network above
+    networks: {{ ['default', 'public'] + (['edge'] if core_node else []) }}
     env_file: [{{ secrets_env_dir }}/caddy.env]
     environment:
       SA_TLS: {{ sa_tls }}
@@ -289,8 +296,21 @@ services:
       CONTROLPLANE_UPSTREAM: controlplane:8085
       CONSOLE_ROOT: /srv/console
       UMAMI_UPSTREAM: umami:3000
+{% if core_node %}
+      # port 80: "/" is the edge health (in. and otlp.), "/core" this
+      # project's (app. and web.); deploy/caddy/assemble.sh, tier node
+      GATEWAY_UPSTREAM: gateway:8080
+      COLLECTOR_GRPC_UPSTREAM: collector:4317
+      COLLECTOR_HTTP_UPSTREAM: collector:4318
+      COLLECTOR_HEALTH_UPSTREAM: collector:13133
+      NODE_HEALTH_UPSTREAM: gateway:9090
+      NODE_HEALTH_PATH: /edgez
+      CORE_HEALTH_UPSTREAM: controlplane:9090
+      CORE_HEALTH_PATH: /corez
+{% else %}
       NODE_HEALTH_UPSTREAM: controlplane:9090
       NODE_HEALTH_PATH: /corez
+{% endif %}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       # deploy.yml's drain flag (deploy/caddy/assemble.sh)

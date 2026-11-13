@@ -44,7 +44,8 @@
          | default(lookup('env', 'HOME') ~ '/.config/sops/age/keys.txt', true) }}
     # every node of the private network gets a certificate; the probe has
     # no private address and none
-    tls_nodes: "{{ groups['edge'] + groups['core'] + groups['backup'] | default([]) + groups['restore'] | default([]) }}"
+    # a converged node is in both edge and core; one certificate per host
+    tls_nodes: "{{ (groups['edge'] + groups['core'] + groups['backup'] | default([]) + groups['restore'] | default([])) | unique }}"
     # names the services dial inside a node's compose network, beside the
     # node name and its private address: nats on the edge nodes (the
     # gateway and collector reach the local server as nats), haproxy and
@@ -53,6 +54,7 @@
     tls_tier_names:
       edge: [nats]
       core: [postgres, haproxy]
+      node: [nats, postgres, haproxy]
       restore: [postgres, haproxy]
       backup: []
     tls_rotate: "{{ ca_rotate | default('') }}"

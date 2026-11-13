@@ -2,7 +2,7 @@
 - name: Check the core inputs
   ansible.builtin.assert:
     that:
-      - sa_tier == 'core'
+      - sa_tier in ['core', 'node']
       - groups['edge'] | length == 3
       - sa_secrets is defined
       - sa_tls in ['cloudflare', 'cloudflare-delegated', 'internal']
@@ -51,12 +51,13 @@
 
 - name: Assemble the core caddyfile on the controller
   ansible.builtin.command:
-    argv:
-      - sh
-      - "{{ playbook_dir }}/../../../deploy/caddy/assemble.sh"
-      - core
-      - "{{ playbook_dir }}/../../../deploy/caddy/app.Caddyfile"
-      - "{{ playbook_dir }}/../../../deploy/caddy/web.Caddyfile"
+    # a converged node's caddy serves the edge sites too
+    argv: >-
+      {{ ['sh', core_caddy_dir ~ '/assemble.sh', 'node' if core_node else 'core']
+         + ((['edge'] if core_node else []) + ['app', 'web']) | map('regex_replace', '^', core_caddy_dir ~ '/')
+           | map('regex_replace', '$', '.Caddyfile') | list }}
+  vars:
+    core_caddy_dir: "{{ playbook_dir }}/../../../deploy/caddy"
   register: core_caddyfile
   changed_when: false
   delegate_to: localhost
@@ -224,14 +225,17 @@
   when: core_stage != 'infra' and sa_draining | default(false)
   changed_when: false
 
+# a converged node answers the edge health at "/" and the core health at
+# "/core" (deploy/caddy/assemble.sh, tier node); both must pass
 - name: Wait for this node's composite health on port 80
   ansible.builtin.uri:
-    url: "http://{{ sa_public_bind_ipv4 | default(sa_public_ipv4) }}/"
+    url: "http://{{ sa_public_bind_ipv4 | default(sa_public_ipv4) }}{{ item }}"
     follow_redirects: none
     status_code: 308
   register: core_health
   until: core_health.status == 308
   retries: 90
   delay: 2
+  loop: "{{ ['/', '/core'] if core_node else ['/'] }}"
   when: core_stage != 'infra' and not (sa_draining | default(false))
   changed_when: false

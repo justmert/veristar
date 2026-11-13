@@ -35,6 +35,10 @@ edge_stage: services
 # exists, which takes the node out of dns (deploy/caddy/assemble.sh)
 edge_drain_dir: /etc/veristar/drain
 
+# a converged node (sa_tier node, the three-node layout) runs the core role
+# too; its caddy, in the core project, serves the edge sites as well
+edge_shares_node: "{{ sa_tier == 'node' }}"
+
 # container users of the upstream images that default to root (plan phase
 # 18 hardening). the nats config and the named volumes are owned by them;
 # the compose project's volume-owners step hands existing volumes over

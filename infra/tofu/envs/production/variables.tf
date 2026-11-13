@@ -83,14 +83,18 @@ variable "backup_lock_state" {
   default     = "Unlocked"
 }
 
-variable "edge_vm_size" {
-  description = "vm size of the edge nodes; must be offered in zones 1, 2 and 3"
+variable "location" {
+  description = "azure region; it must offer node_vm_size in availability zones 1, 2 and 3"
   type        = string
-  default     = "Standard_B2als_v2"
+
+  validation {
+    condition     = can(regex("^[a-z0-9]+$", var.location))
+    error_message = "location must be an azure region name such as germanywestcentral."
+  }
 }
 
-variable "core_vm_size" {
-  description = "vm size of the core and restore nodes"
+variable "node_vm_size" {
+  description = "vm size of the three converged nodes and the restore node; must be offered in zones 1, 2 and 3"
   type        = string
   default     = "Standard_B2as_v2"
 }

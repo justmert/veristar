@@ -23,7 +23,7 @@ core_oauth_fixture: true
 core_oauth_fixture_image: "{{ sa_image_registry }}/oauth-fixture:{{ sa_image_tag }}"
 sa_operator_github_ids: "1001"
 # the fixture listens beside caddy on the core node's public address
-base_public_tcp_ports: "{{ [80, 443] + ([core_oauth_fixture_port | default(8099)] if sa_tier == 'core' else []) }}"
+base_public_tcp_ports: "{{ [80, 443] + ([core_oauth_fixture_port | default(8099)] if sa_tier in ['core', 'node'] else []) }}"
 
 # the controller decrypts with the throwaway identity up.sh created
 secrets_age_keyfile: "{{ playbook_dir }}/../../../.scratch/scratch/local-converge/age.key"

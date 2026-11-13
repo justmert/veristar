@@ -5,6 +5,14 @@
 #   assemble.sh edge   edge.Caddyfile                  > node.Caddyfile
 #   assemble.sh core   app.Caddyfile web.Caddyfile     > node.Caddyfile
 #   assemble.sh redirect redirect.Caddyfile            > node.Caddyfile
+#   assemble.sh node edge.Caddyfile app.Caddyfile web.Caddyfile > node.Caddyfile
+#
+# node is a converged node (the three-node layout,
+# docs/reference/availability.md): one caddy serves in., otlp., app. and
+# web. its port 80 answers the edge health at every path except /core,
+# which answers the core health, so traffic manager probes ingestion and
+# dashboards separately (infra/tofu/modules/failover). it reads
+# CORE_HEALTH_UPSTREAM and CORE_HEALTH_PATH beside the NODE_HEALTH_ pair.
 #
 # redirect is an old edge node after a handover by permanent redirect
 # (infra/ansible/playbooks/cutover-redirect.yml): the same node-level parts
@@ -100,6 +108,27 @@ header() {
 EOF
 }
 
+# one reverse_proxy that turns an upstream health answer into 308 or 503;
+# $1 and $2 name the environment variables of upstream and path
+health_proxy() {
+	cat <<EOF
+		reverse_proxy {\$$1} {
+			rewrite {\$$2}
+			method GET
+			header_up -X-Forwarded-For
+			header_up -X-Real-Ip
+			header_up -Forwarded
+			@healthy status 200
+			handle_response @healthy {
+				redir https://{host}{uri} 308
+			}
+			handle_response {
+				respond "unavailable" 503
+			}
+		}
+EOF
+}
+
 health() {
 	cat <<'EOF'
 
@@ -115,22 +144,16 @@ http:// {
 	handle @draining {
 		respond "draining" 503
 	}
-	handle {
-		reverse_proxy {$NODE_HEALTH_UPSTREAM} {
-			rewrite {$NODE_HEALTH_PATH}
-			method GET
-			header_up -X-Forwarded-For
-			header_up -X-Real-Ip
-			header_up -Forwarded
-			@healthy status 200
-			handle_response @healthy {
-				redir https://{host}{uri} 308
-			}
-			handle_response {
-				respond "unavailable" 503
-			}
-		}
-	}
+EOF
+	if [ "${1:-}" = node ]; then
+		echo "	handle /core {"
+		health_proxy CORE_HEALTH_UPSTREAM CORE_HEALTH_PATH
+		echo "	}"
+	fi
+	echo "	handle {"
+	health_proxy NODE_HEALTH_UPSTREAM NODE_HEALTH_PATH
+	echo "	}"
+	cat <<'EOF'
 	handle_errors {
 		respond "unavailable" 503
 	}
@@ -158,10 +181,22 @@ edge | redirect)
 	awk '{ print } $0 == "{" && !done { print "\tauto_https disable_redirects"; print "\tmetrics"; done = 1 }' "$tmp"
 	health
 	;;
-core)
-	[ $# -eq 2 ] || { echo "usage: assemble.sh core <app.Caddyfile> <web.Caddyfile>" >&2; exit 2; }
-	tmp="$(mktemp)" app="$(mktemp)" web="$(mktemp)"
-	trap 'rm -f "$tmp" "$app" "$web"' EXIT
+core | node)
+	if [ "$tier" = node ]; then
+		[ $# -eq 3 ] || { echo "usage: assemble.sh node <edge.Caddyfile> <app.Caddyfile> <web.Caddyfile>" >&2; exit 2; }
+	else
+		[ $# -eq 2 ] || { echo "usage: assemble.sh core <app.Caddyfile> <web.Caddyfile>" >&2; exit 2; }
+	fi
+	tmp="$(mktemp)" app="$(mktemp)" web="$(mktemp)" edge="$(mktemp)"
+	trap 'rm -f "$tmp" "$app" "$web" "$edge"' EXIT
+	if [ "$tier" = node ]; then
+		# the edge sites keep their own log snippets; only their global
+		# block goes, and the core one below replaces it (it deletes the
+		# same fields and the query string as well)
+		strip_global "$1" >"$tmp"
+		swap_tls "$tmp" EDGE_TLS 2 >"$edge"
+		shift
+	fi
 	strip_global "$1" >"$tmp"
 	swap_tls "$tmp" APP_TLS 1 >"$app"
 	strip_global "$2" >"$tmp"
@@ -192,11 +227,11 @@ core)
 }
 
 EOF
-	cat "$app" "$web"
-	health
+	cat "$edge" "$app" "$web"
+	health "$tier"
 	;;
 *)
-	echo "assemble.sh: tier must be edge, core or redirect, got $tier" >&2
+	echo "assemble.sh: tier must be edge, core, node or redirect, got $tier" >&2
 	exit 2
 	;;
 esac

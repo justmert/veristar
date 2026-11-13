@@ -367,7 +367,7 @@
         - {name: new, pw: "{{ sa_secrets.patroni_restapi_password }}", want: 202}
       loop_control:
         label: "{{ item.name }} patroni password answers {{ item.want }}"
-      when: sa_tier == 'core'
+      when: sa_tier in ['core', 'node']
       no_log: false
 
     - name: Try grafana with each admin password
@@ -382,7 +382,7 @@
         - {name: new, pw: "{{ sa_secrets.grafana_admin_password }}", want: 200}
       loop_control:
         label: "{{ item.name }} grafana password answers {{ item.want }}"
-      when: sa_tier == 'core'
+      when: sa_tier in ['core', 'node']
       register: rotate_grafana
       until: rotate_grafana is succeeded
       retries: 15
@@ -436,7 +436,7 @@
       register: rotate_route_old
       changed_when: false
       failed_when: rotate_route_old.stdout != 'refused'
-      when: sa_tier == 'edge'
+      when: sa_tier in ['edge', 'node']
       no_log: false
 
     - name: Require full nats routes with the new route password
@@ -448,7 +448,7 @@
       until: rotate_routez.json.num_routes | default(0) >= (groups['edge'] | length - 1)
       retries: 30
       delay: 2
-      when: sa_tier == 'edge'
+      when: sa_tier in ['edge', 'node']
 
     - name: Require a healthy node
       ansible.builtin.uri:

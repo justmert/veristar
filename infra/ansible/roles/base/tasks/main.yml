@@ -2,7 +2,7 @@
 - name: Check the inventory contract (docs/deploy/opentofu.md section 1)
   ansible.builtin.assert:
     that:
-      - sa_tier in ['edge', 'core', 'backup', 'restore', 'probe']
+      - sa_tier in ['edge', 'core', 'node', 'backup', 'restore', 'probe']
       # the probe sits at another provider an operator input and has a public
       # interface only; every other node is on the private network
       - sa_tier == 'probe' or (sa_private_ip is string and sa_private_ip | length > 0)

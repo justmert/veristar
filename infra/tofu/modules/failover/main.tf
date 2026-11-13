@@ -28,10 +28,11 @@ variable "name_prefix" {
 }
 
 variable "profiles" {
-  description = "label to the ipv4 addresses behind it and whether it uses 10 s fast probing"
+  description = "label to the ipv4 addresses behind it, whether it uses 10 s fast probing, and the port 80 path its monitor asks"
   type = map(object({
     ipv4 = list(string)
     fast = bool
+    path = string
   }))
 
   validation {
@@ -59,7 +60,7 @@ resource "azurerm_traffic_manager_profile" "this" {
   name                   = "${var.name_prefix}-${each.key}"
   resource_group_name    = var.resource_group_name
   traffic_routing_method = "MultiValue"
-  # every address of the tier; the largest set is the three edge nodes
+  # every address behind the hostname
   max_return = length(each.value.ipv4)
   tags       = var.tags
 
@@ -73,10 +74,11 @@ resource "azurerm_traffic_manager_profile" "this" {
     # the node's port 80 answers 308 to https when its composite health
     # check passes and 503 when it fails or the node drains
     # (deploy/caddy/assemble.sh). traffic manager does not follow redirects,
-    # so the 308 itself is the healthy answer.
+    # so the 308 itself is the healthy answer. on a converged node "/" is
+    # the edge health and "/core" the core health.
     protocol                     = "HTTP"
     port                         = 80
-    path                         = "/"
+    path                         = each.value.path
     expected_status_code_ranges  = ["200-299", "308-308"]
     interval_in_seconds          = each.value.fast ? 10 : 30
     timeout_in_seconds           = each.value.fast ? 5 : 10

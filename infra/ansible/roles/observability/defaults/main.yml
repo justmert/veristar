@@ -37,9 +37,15 @@ observability_images:
   caddy: "{{ platform_images.caddy }}"
 
 # the compose project of each tier, whose network the relay joins
-observability_tier_network:
-  edge: veristar-edge_default
-  core: veristar-core_default
+# the compose networks of the platform projects the relay and the nats
+# exporter join; a converged node (tier node) has both
+observability_tier_networks:
+  edge: {edge: veristar-edge_default}
+  core: {core: veristar-core_default}
+  node: {edge: veristar-edge_default, core: veristar-core_default}
+# what this node runs: a converged node runs both parts
+observability_runs_edge: "{{ sa_tier in ['edge', 'node'] }}"
+observability_runs_core: "{{ sa_tier in ['core', 'node'] }}"
 
 # relay ports on the private address, and the compose service and port
 # behind each. the collector's own telemetry is on 8888 (collector/otelcol.yaml).
@@ -58,6 +64,17 @@ observability_relay:
     - {job: metricswriter, port: 9305, target: "metricswriter:9090"}
     - {job: jobs, port: 9306, target: "jobs:9090"}
     - {job: caddy, port: 9307, target: "caddy:2021"}
+    - {job: haproxy, port: 9308, target: "haproxy:{{ core_haproxy_stats_port | default(8404) }}"}
+  # a converged node: both lists, with its one caddy once
+  node:
+    - {job: gateway, port: 9301, target: "gateway:9090"}
+    - {job: collector, port: 9302, target: "collector:8888"}
+    - {job: caddy, port: 9307, target: "caddy:2021"}
+    - {job: nats, port: 9309, target: "nats-exporter:7777"}
+    - {job: controlplane, port: 9303, target: "controlplane:9090"}
+    - {job: replayer, port: 9304, target: "replayer:9090"}
+    - {job: metricswriter, port: 9305, target: "metricswriter:9090"}
+    - {job: jobs, port: 9306, target: "jobs:9090"}
     - {job: haproxy, port: 9308, target: "haproxy:{{ core_haproxy_stats_port | default(8404) }}"}
 # every listener of this role on the private address is tls with the node
 # certificate and asks the client for one of the internal ca (finding

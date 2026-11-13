@@ -60,13 +60,15 @@ scrape_configs:
     tls_config: {ca_file: /etc/sa-tls/ca.crt, cert_file: /etc/sa-tls/node.crt, key_file: /etc/sa-tls/node.key, min_version: TLS13}
 {% endif %}
     static_configs:
-{% for h in groups['edge'] + groups['core'] %}
+{% for h in (groups['edge'] + groups['core']) | unique %}
       - targets: ["{{ hostvars[h].sa_private_ip }}:{{ observability_node_exporter_port }}"]
         labels: {node: "{{ h }}", tier: "{{ hostvars[h].sa_tier }}"}
 {% endfor %}
 
 {# a job such as caddy runs on both tiers; prometheus wants each job name
-   once, so the relay entries are grouped by job #}
+   once, so the relay entries are grouped by job. a converged node is in
+   both groups and its relay list (tier node) holds each job once #}
+{% set relay_hosts = (groups['edge'] + groups['core']) | unique %}
 {% for job in (observability_relay.edge + observability_relay.core) | map(attribute='job') | unique %}
   - job_name: {{ job }}
 {% if tls %}
@@ -74,12 +76,10 @@ scrape_configs:
     tls_config: {ca_file: /etc/sa-tls/ca.crt, cert_file: /etc/sa-tls/node.crt, key_file: /etc/sa-tls/node.key, min_version: TLS13}
 {% endif %}
     static_configs:
-{% for tier in ['edge', 'core'] %}
-{% for r in observability_relay[tier] if r.job == job %}
-{% for h in groups[tier] %}
+{% for h in relay_hosts %}
+{% for r in observability_relay[hostvars[h].sa_tier] if r.job == job %}
       - targets: ["{{ hostvars[h].sa_private_ip }}:{{ r.port }}"]
-        labels: {node: "{{ h }}", tier: {{ tier }}}
-{% endfor %}
+        labels: {node: "{{ h }}", tier: {{ hostvars[h].sa_tier }}}
 {% endfor %}
 {% endfor %}
 

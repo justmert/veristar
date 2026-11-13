@@ -16,7 +16,7 @@
     owner: root
     group: root
     mode: "0644"
-  loop: "{{ ['web-config.yml'] + (['alertmanager-cluster-tls.yml'] if sa_tier == 'core' else []) }}"
+  loop: "{{ ['web-config.yml'] + (['alertmanager-cluster-tls.yml'] if observability_runs_core else []) }}"
 
 - name: Write the metrics relay config
   ansible.builtin.template:

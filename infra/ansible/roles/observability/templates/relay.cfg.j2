@@ -36,7 +36,7 @@ backend {{ r.job }}
     server {{ r.job }} {{ r.target }} resolvers docker init-addr none
 
 {% endfor %}
-{% if sa_tier == 'edge' and observability_tls | bool %}
+{% if observability_runs_edge and observability_tls | bool %}
 # nats monitoring (/varz, /jsz, /healthz, /routez ...) for operators and the
 # drills, read only, with a client certificate; nats publishes it on the
 # node's loopback only (roles/edge)

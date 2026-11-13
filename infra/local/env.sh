@@ -46,6 +46,15 @@ sa-lc-backup-1 hel1 172.31.99.31 10.99.3.31"
 if [ "${LC_TOPOLOGY:-}" = minimal ]; then
 	LC_NODES="$(printf '%s\n' "$LC_NODES" | grep -v '^sa-lc-core-2 ')"
 fi
+# LC_TOPOLOGY=node is the production layout (docs/reference/availability.md):
+# three converged nodes, one per location, each running the edge and the
+# core roles, plus the backup node
+if [ "${LC_TOPOLOGY:-}" = node ]; then
+	LC_NODES="sa-lc-node-1 fsn1 172.31.99.12 10.99.1.12
+sa-lc-node-2 nbg1 172.31.99.13 10.99.2.13
+sa-lc-node-3 hel1 172.31.99.14 10.99.3.14
+sa-lc-backup-1 hel1 172.31.99.31 10.99.3.31"
+fi
 # LC_BACKUP=s3 replaces the backup node with an s3 object storage stand-in
 # (seaweedfs, private ca, host-style addressing) in hel1, so the object
 # store path of the backup role runs: the storage role creates the bucket

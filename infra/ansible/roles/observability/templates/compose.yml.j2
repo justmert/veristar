@@ -24,7 +24,7 @@ x-defaults: &defaults
       max-file: "5"
 
 services:
-{% if sa_tier in ['edge', 'core'] %}
+{% if observability_runs_edge or observability_runs_core %}
   node-exporter:
     <<: *defaults
     image: {{ observability_images.node_exporter }}
@@ -48,16 +48,16 @@ services:
     volumes:
       - {{ observability_conf_dir }}/relay.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
       - {{ sa_tls_dir }}/haproxy:/etc/haproxy-tls:ro
-    networks: [tier]
+    networks: {{ observability_tier_networks[sa_tier].keys() | list }}
     ports:
 {% for r in observability_relay_targets %}
       - "{{ sa_private_ip }}:{{ r.port }}:{{ r.port }}"
 {% endfor %}
-{% if sa_tier == 'edge' %}
+{% if observability_runs_edge %}
       - "{{ sa_private_ip }}:{{ observability_nats_monitor_relay_port }}:{{ observability_nats_monitor_relay_port }}"
 {% endif %}
 {% endif %}
-{% if sa_tier == 'edge' %}
+{% if observability_runs_edge %}
 
   # reads this node's nats monitoring inside the node; prometheus scrapes it
   # through the relay (job nats)
@@ -66,10 +66,10 @@ services:
     image: {{ observability_images.nats_exporter }}
     # the image defaults to root; the exporter needs no files at all
     user: "65534:65534"
-    networks: [tier]
+    networks: {{ observability_tier_networks[sa_tier].keys() | list }}
     command: ["-port", "7777", "-jsz", "all", "-varz", "-healthz", "http://nats:8222"]
 {% endif %}
-{% if sa_tier == 'core' %}
+{% if observability_runs_core %}
 
   prometheus:
     <<: *defaults
@@ -230,16 +230,18 @@ services:
     extra_hosts: {{ observability_probe_extra_hosts | to_json }}
 {% endif %}
 {% endif %}
-{% if sa_tier in ['edge', 'core'] %}
+{% if observability_runs_edge or observability_runs_core %}
 
 networks:
-  tier:
-    name: {{ observability_tier_network[sa_tier] }}
+{% for key, name in observability_tier_networks[sa_tier].items() %}
+  {{ key }}:
+    name: {{ name }}
     external: true
+{% endfor %}
 {% endif %}
 
 volumes:
-{% if sa_tier == 'core' %}
+{% if observability_runs_core %}
   prometheus:
   alertmanager:
   grafana:

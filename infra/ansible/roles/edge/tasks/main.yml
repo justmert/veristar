@@ -2,7 +2,7 @@
 - name: Check the edge inputs
   ansible.builtin.assert:
     that:
-      - sa_tier == 'edge'
+      - sa_tier in ['edge', 'node']
       - groups['edge'] | length == 3
       - sa_secrets is defined
       - sa_tls in ['cloudflare', 'cloudflare-delegated', 'internal']
@@ -47,6 +47,7 @@
   delegate_to: localhost
   run_once: true
   become: false
+  when: not edge_shares_node
 
 - name: Install the caddyfile
   ansible.builtin.copy:
@@ -56,6 +57,7 @@
     group: root
     mode: "0644"
   register: edge_caddyfile_file
+  when: not edge_shares_node
 
 - name: Write the nats server config
   ansible.builtin.template:
@@ -132,7 +134,7 @@
 - name: Reload caddy after a caddyfile change
   ansible.builtin.command:
     argv: [docker, compose, --project-directory, "{{ edge_dir }}", exec, caddy, caddy, reload, --config, /etc/caddy/Caddyfile]
-  when: edge_stage != 'infra' and edge_caddyfile_file is changed and edge_compose is not changed
+  when: not edge_shares_node and edge_stage != 'infra' and edge_caddyfile_file is changed and edge_compose is not changed
   changed_when: true
 
 - name: Apply a nats config change now
@@ -150,15 +152,30 @@
   changed_when: false
 
 # deploy.yml drains the node first, which turns port 80 to 503 on purpose;
-# a drained node is checked behind caddy, at the same composite endpoint
+# a drained node is checked behind caddy, at the same composite endpoint.
+# on a converged node the caddy comes with the core role, later in the run,
+# so the edge health is read from the edge project's own network (nats has
+# wget) and the core role then checks port 80
 - name: Wait for this node's composite health behind caddy while it is drained
   ansible.builtin.command:
-    argv: [docker, compose, --project-directory, "{{ edge_dir }}", exec, -T, caddy, wget, -q, -O, /dev/null, "http://gateway:9090/edgez"]
+    argv:
+      - docker
+      - compose
+      - --project-directory
+      - "{{ edge_dir }}"
+      - exec
+      - -T
+      - "{{ 'nats' if edge_shares_node else 'caddy' }}"
+      - wget
+      - -q
+      - -O
+      - /dev/null
+      - http://gateway:9090/edgez
   register: edge_drained_health
   until: edge_drained_health.rc == 0
   retries: 90
   delay: 2
-  when: edge_stage != 'infra' and sa_draining | default(false)
+  when: edge_stage != 'infra' and (sa_draining | default(false) or edge_shares_node)
   changed_when: false
 
 - name: Wait for this node's composite health on port 80
@@ -170,5 +187,5 @@
   until: edge_health.status == 308
   retries: 60
   delay: 2
-  when: edge_stage != 'infra' and not (sa_draining | default(false))
+  when: edge_stage != 'infra' and not (sa_draining | default(false)) and not edge_shares_node
   changed_when: false

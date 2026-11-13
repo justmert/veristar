@@ -387,7 +387,7 @@ staging-inventory production-inventory: %-inventory:
 # resource group are kept: backups outlive the servers, and azure refuses to
 # delete an account while it holds immutable versions. TEARDOWN_ALL=1 also
 # destroys them (docs/deploy/teardown.md).
-TOFU_KEEP = $(if $(TEARDOWN_ALL),,-exclude=module.backup_storage -exclude=azurerm_user_assigned_identity.core -exclude=azurerm_resource_group.this)
+TOFU_KEEP = $(if $(TEARDOWN_ALL),,-exclude=module.backup_storage -exclude=azurerm_user_assigned_identity.node -exclude=azurerm_resource_group.this)
 
 staging-destroy:
 	$(call tofu_env,staging,$(call tofu_init,staging) && $(call tofu_in,staging) destroy -input=false $(TOFU_KEEP))
