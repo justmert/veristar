@@ -9,11 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nats-io/nats.go"
-	"github.com/nats-io/nats.go/jetstream"
-
 	"github.com/justmert/stellar-analytics/internal/events"
-	"github.com/justmert/stellar-analytics/internal/natsx"
 	"github.com/justmert/stellar-analytics/tests/gateway/gwclient"
 )
 
@@ -124,38 +120,12 @@ func TestQueueOutage(t *testing.T) {
 
 	mustDocker(t, "start", s.NATS)
 	// a restarted single server keeps its file streams but not the memory
-	// buckets (edge_secrets, visit_state, locks), the accepted cost of plan
-	// section 4.4. the gateway stays not ready until the topology is applied
-	// again, as `platformctl nats apply` does after a whole-cluster restart.
-	time.Sleep(3 * time.Second)
-	resp, err := http.Get(g.OpsURL + "/readyz")
-	if err != nil {
-		t.Fatal(err)
-	}
-	_ = resp.Body.Close()
-	if resp.StatusCode != http.StatusServiceUnavailable {
-		t.Fatalf("/readyz %d after a restart that lost edge_secrets, want 503", resp.StatusCode)
-	}
-	natsURL := "nats://" + hostPort(t, s.NATS, "4222")
-	nc, err := nats.Connect(natsURL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer nc.Close()
-	js, err := jetstream.New(nc)
-	if err != nil {
-		t.Fatal(err)
-	}
-	spec, err := natsx.Topology(1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := natsx.Apply(context.Background(), js, spec); err != nil {
-		t.Fatal(err)
-	}
-	reapplied := time.Now()
-	waitReady(t, g.OpsURL+"/readyz", time.Minute)
-	t.Logf("/readyz ready again %s after the topology was applied", time.Since(reapplied).Round(time.Millisecond))
+	// buckets (edge_secrets, visit_state, locks). the gateway recreates its own
+	// bucket from the topology (natsx.BucketKeeper), so it must come back
+	// without anyone running `platformctl nats apply`.
+	restarted := time.Now()
+	waitReady(t, g.OpsURL+"/readyz", 30*time.Second)
+	t.Logf("/readyz ready again %s after nats restarted, with no manual apply", time.Since(restarted).Round(time.Millisecond))
 	// the memory bucket lost the day's proof key with the restart, so a new
 	// challenge is needed
 	p = proofFor(t, c, site.ID)
