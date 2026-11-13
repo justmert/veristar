@@ -1,6 +1,16 @@
 ---
-# who signs release images (the design, docs/security/supply-chain.md).
-# release-images.yml in this repository an operator input signs keyless with
-# github's oidc identity; playbooks/tasks/verify-images.yml accepts only that
-# workflow at the tag being deployed.
+# who signs release images (the design, docs/security/supply-chain.md
+# section 3). playbooks/tasks/verify-images.yml accepts a release only when
+# every image verifies in the mode below.
 sa_signing_repository: justmert/veristar
+
+# key: the release key pair (operator decision of 2026-11-13, while the
+# repository is private). release-images.yml signs with the private key
+# (github actions secret COSIGN_PRIVATE_KEY, a recovery copy in the
+# production sops file) and uploads nothing to the public rekor log;
+# release-cosign.pub beside this file is the public half.
+# keyless: github's oidc identity of release-images.yml at the tag, through
+# fulcio and rekor; the mode once the repository is public (set the
+# repository variable SIGNING_MODE=keyless and this value together).
+sa_signature_mode: key
+sa_signature_key: "{{ playbook_dir }}/../vars/release-cosign.pub"

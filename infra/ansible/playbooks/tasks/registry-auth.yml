@@ -1,0 +1,35 @@
+---
+# the controller's side of a private registry (verify-images.yml): the pull
+# token comes from the environment's sops file and is written only into a
+# temporary docker config that cosign reads through DOCKER_CONFIG
+- name: Read the pull token from the sops file
+  community.sops.load_vars:
+    file: "{{ playbook_dir }}/../../secrets/{{ verify_environment }}/secrets.enc.yaml"
+    name: verify_sops
+    sops_binary: "{{ lookup('env', 'HOME') }}/.local/share/veristar/tools/sops-3.13.3"
+    age_keyfile: "{{ lookup('env', 'SOPS_AGE_KEY_FILE') | default(lookup('env', 'HOME') ~ '/.config/sops/age/keys.txt', true) }}"
+  no_log: true
+
+- name: Refuse a private registry without a pull token
+  ansible.builtin.assert:
+    that:
+      - (verify_sops.ghcr_pull_token | default('')) | length > 0
+    fail_msg: "{{ verify_registry_login }} needs ghcr_pull_token in the sops file (docs/runbooks/secret-rotation.md)"
+
+- name: Make a docker config for this run
+  ansible.builtin.tempfile:
+    state: directory
+    suffix: -cosign
+  register: verify_docker_config
+
+- name: Write the registry credential
+  ansible.builtin.copy:
+    content: "{{ {'auths': {verify_registry_login: {'auth': (verify_registry_login_user ~ ':' ~ verify_sops.ghcr_pull_token) | b64encode}}} | to_json }}"
+    dest: "{{ verify_docker_config.path }}/config.json"
+    mode: "0600"
+  no_log: true
+
+- name: Point cosign at it
+  ansible.builtin.set_fact:
+    verify_cosign_env:
+      DOCKER_CONFIG: "{{ verify_docker_config.path }}"

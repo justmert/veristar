@@ -18,3 +18,10 @@ sa_image_registry: ghcr.io/justmert/veristar
 # numeric github ids of the scf operators an operator input, comma separated:
 # 37740842 is justmert
 sa_operator_github_ids: "37740842"
+
+# while the packages on ghcr.io are private (the repository is private),
+# every node and the controller sign in with the read:packages token (sops
+# key ghcr_pull_token, docs/runbooks/secret-rotation.md). set to "" once
+# the packages are public: then nothing signs in.
+sa_registry_login: ghcr.io
+sa_registry_login_user: justmert

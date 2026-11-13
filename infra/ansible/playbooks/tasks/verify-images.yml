@@ -15,10 +15,18 @@
 # the result, sa_verified_images, maps platform_images keys to
 # repo:tag@digest, so the nodes pull exactly the verified digests.
 #
-# sa_signature_mode: keyless (the only mode for staging and production).
-# test-ephemeral-key exists so tests/supplychain can prove this logic with a
-# key made for one test run; it is refused unless the inventory lives under
-# tests/, and it never verifies a real release.
+# sa_signature_mode (vars/signing.yml):
+#   key      the release key pair: release-images.yml signs with the private
+#            key (a github actions secret, a sops copy for recovery) and
+#            uploads nothing to the public rekor log, so a private repository
+#            reveals nothing; verified here with the committed public key
+#            (sa_signature_key) and --insecure-ignore-tlog. the mode while the
+#            repository is private.
+#   keyless  github's oidc identity of the release workflow at the tag,
+#            checked against fulcio and rekor; for a public repository.
+#   test-ephemeral-key  tests/supplychain proves this logic with a key made
+#            for one test run; refused unless the inventory lives under
+#            tests/, and it never verifies a real release.
 - name: Refuse a missing release manifest
   ansible.builtin.assert:
     that:
@@ -37,10 +45,13 @@
 - name: Refuse a test signing mode outside tests
   ansible.builtin.assert:
     that:
-      - (sa_signature_mode | default('keyless')) in ['keyless', 'test-ephemeral-key']
+      - (sa_signature_mode | default('keyless')) in ['keyless', 'key', 'test-ephemeral-key']
       - >-
-        (sa_signature_mode | default('keyless')) == 'keyless'
+        (sa_signature_mode | default('keyless')) != 'test-ephemeral-key'
         or ('/tests/' in inventory_dir and sa_signature_test_key | default('') | length > 0)
+      - >-
+        (sa_signature_mode | default('keyless')) != 'key'
+        or (sa_signature_key | default('') is file and lookup('ansible.builtin.file', sa_signature_key) is match('^-----BEGIN PUBLIC KEY-----'))
     fail_msg: "signature mode {{ sa_signature_mode | default('keyless') }} is allowed only for an inventory under tests/"
 
 - name: Check the manifest names this release and only this registry
@@ -73,9 +84,19 @@
           'https://github.com/' ~ sa_signing_repository ~ '/.github/workflows/release-images.yml@refs/tags/' ~ sa_image_tag,
           '--certificate-oidc-issuer', 'https://token.actions.githubusercontent.com']
          if (sa_signature_mode | default('keyless')) == 'keyless'
-         else ['--key', sa_signature_test_key, '--insecure-ignore-tlog=true', '--allow-http-registry'] }}
+         else (['--key', sa_signature_key, '--insecure-ignore-tlog=true']
+               if sa_signature_mode == 'key'
+               else ['--key', sa_signature_test_key, '--insecure-ignore-tlog=true', '--allow-http-registry']) }}
+
+# private images: cosign reads the registry credential from a docker config
+# made for this run only (mode 0600 in a 0700 directory), filled from the
+# pull token in the sops file, and removed at the end of the play
+- name: Give cosign the registry credential of a private registry
+  ansible.builtin.include_tasks: registry-auth.yml
+  when: verify_registry_login | length > 0
 
 - name: Verify the signature of every image digest
+  environment: "{{ verify_cosign_env | default({}) }}"
   ansible.builtin.command:
     argv: >-
       {{ ['cosign', 'verify', '--output', 'json']
@@ -88,6 +109,7 @@
   register: verify_digest
 
 - name: Verify what each release tag points to now
+  environment: "{{ verify_cosign_env | default({}) }}"
   ansible.builtin.command:
     argv: >-
       {{ ['cosign', 'verify', '--output', 'json']
@@ -122,3 +144,9 @@
   loop: "{{ verify_manifest.images | dict2items }}"
   loop_control:
     label: "{{ item.key }}"
+
+- name: Remove the run's registry credential
+  ansible.builtin.file:
+    path: "{{ verify_cosign_env.DOCKER_CONFIG }}"
+    state: absent
+  when: verify_cosign_env is defined

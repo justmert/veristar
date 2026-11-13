@@ -37,6 +37,9 @@ INPUTS = {
     "SA_OBJECT_STORAGE_SECRET_KEY": "object_storage_secret_key",
     "SA_ALERTMANAGER_DISCORD_WEBHOOK_URL": "alertmanager_discord_webhook_url",  # I8, alerts
     "SA_GATUS_DISCORD_WEBHOOK_URL": "gatus_discord_webhook_url",  # I8, status page alerts
+    # while the repository is private: a classic token with read:packages
+    # only, with which every node pulls the platform images from ghcr.io
+    "SA_GHCR_PULL_TOKEN": "ghcr_pull_token",
 }
 
 

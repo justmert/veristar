@@ -24,6 +24,9 @@
     - name: Name the environment
       ansible.builtin.set_fact:
         verify_environment: "{{ hostvars[verify_nodes | first].sa_environment }}"
+        # a private registry's login, named by the inventory (group_vars)
+        verify_registry_login: "{{ hostvars[verify_nodes | first].sa_registry_login | default('') }}"
+        verify_registry_login_user: "{{ hostvars[verify_nodes | first].sa_registry_login_user | default('') }}"
       vars:
         verify_nodes: "{{ groups['edge'] + groups['core'] + groups['probe'] | default([]) + groups['restore'] | default([]) }}"
 

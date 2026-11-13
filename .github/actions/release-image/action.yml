@@ -1,7 +1,9 @@
 name: release-image
 description: >
-  build and push one platform image, gate it with syft and trivy, then sign it
-  keyless with cosign and attest build provenance and the sbom. used by
+  build and push one platform image, gate it with syft and trivy, then sign
+  it with cosign: with the release key and no transparency log while the
+  repository is private (signing-mode key), or keyless with build provenance
+  and sbom attestations once it is public (signing-mode keyless). used by
   release-images.yml for every image, so each one passes the same steps.
 
 inputs:
@@ -21,6 +23,17 @@ inputs:
   token:
     description: token for ghcr
     required: true
+  signing-mode:
+    description: key (release key pair, no rekor upload) or keyless (fulcio, rekor, github attestations)
+    required: true
+  cosign-key:
+    description: the release private key (cosign format), signing-mode key only
+    required: false
+    default: ""
+  cosign-password:
+    description: the password of the release private key, signing-mode key only
+    required: false
+    default: ""
 
 outputs:
   digest:
@@ -84,24 +97,63 @@ runs:
     - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
       with:
         cosign-release: v3.1.4
+    - name: refuse an unknown signing mode
+      shell: bash
+      env:
+        MODE: ${{ inputs.signing-mode }}
+        KEY: ${{ inputs.cosign-key }}
+      run: |
+        case "$MODE" in
+          keyless) ;;
+          key) [ -n "$KEY" ] || { echo "signing-mode key needs the COSIGN_PRIVATE_KEY secret" >&2; exit 1; } ;;
+          *) echo "signing-mode must be key or keyless, got '$MODE'" >&2; exit 1 ;;
+        esac
+    # key mode: nothing goes to the public rekor log, so the private
+    # repository's image names and digests stay private. deploy verifies
+    # with the committed public key (infra/ansible/vars/release-cosign.pub)
+    - name: key signature, no transparency log
+      if: inputs.signing-mode == 'key'
+      shell: bash
+      env:
+        REF: ${{ steps.ref.outputs.repo }}@${{ steps.build.outputs.digest }}
+        COSIGN_PRIVATE_KEY: ${{ inputs.cosign-key }}
+        COSIGN_PASSWORD: ${{ inputs.cosign-password }}
+      run: cosign sign --yes --key env://COSIGN_PRIVATE_KEY --use-signing-config=false --tlog-upload=false "$REF"
+    - name: sbom attestation with the release key, no transparency log
+      if: inputs.signing-mode == 'key'
+      shell: bash
+      env:
+        REF: ${{ steps.ref.outputs.repo }}@${{ steps.build.outputs.digest }}
+        COSIGN_PRIVATE_KEY: ${{ inputs.cosign-key }}
+        COSIGN_PASSWORD: ${{ inputs.cosign-password }}
+      run: |
+        sbom="$RUNNER_TEMP/scan/$(printf '%s' "$REF" | tr '/:@' '___').spdx.json"
+        cosign attest --yes --key env://COSIGN_PRIVATE_KEY --use-signing-config=false --tlog-upload=false \
+          --type spdxjson --predicate "$sbom" "$REF"
     - name: keyless signature
+      if: inputs.signing-mode == 'keyless'
       shell: bash
       env:
         REF: ${{ steps.ref.outputs.repo }}@${{ steps.build.outputs.digest }}
       run: cosign sign --yes "$REF"
+    # github artifact attestations need a public repository (or enterprise
+    # cloud), so they run in keyless mode only
     - name: build provenance attestation
+      if: inputs.signing-mode == 'keyless'
       uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
       with:
         subject-name: ${{ steps.ref.outputs.repo }}
         subject-digest: ${{ steps.build.outputs.digest }}
         push-to-registry: true
     - name: sbom attestation
+      if: inputs.signing-mode == 'keyless'
       shell: bash
       id: sbom
       env:
         REF: ${{ steps.ref.outputs.repo }}@${{ steps.build.outputs.digest }}
       run: echo "path=$RUNNER_TEMP/scan/$(printf '%s' "$REF" | tr '/:@' '___').spdx.json" >> "$GITHUB_OUTPUT"
     - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+      if: inputs.signing-mode == 'keyless'
       with:
         subject-name: ${{ steps.ref.outputs.repo }}
         subject-digest: ${{ steps.build.outputs.digest }}

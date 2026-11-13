@@ -24,6 +24,10 @@ concurrency:
 
 env:
   SYFT_VERSION: 1.57.1
+  # key while the repository is private (release key pair, nothing in the
+  # public rekor log), keyless once it is public; repository variable
+  # SIGNING_MODE, docs/security/supply-chain.md section 3
+  SIGNING_MODE: ${{ vars.SIGNING_MODE || 'key' }}
   TRIVY_VERSION: 0.76.2
   COSIGN_VERSION: v3.1.4
 
@@ -49,6 +53,9 @@ jobs:
           context: deploy/images
           build-args: ""
           token: ${{ secrets.GITHUB_TOKEN }}
+          signing-mode: ${{ env.SIGNING_MODE }}
+          cosign-key: ${{ secrets.COSIGN_PRIVATE_KEY }}
+          cosign-password: ${{ secrets.COSIGN_PASSWORD }}
 
   images:
     needs: caddy
@@ -98,6 +105,9 @@ jobs:
           context: ${{ matrix.context }}
           build-args: ${{ steps.args.outputs.value }}
           token: ${{ secrets.GITHUB_TOKEN }}
+          signing-mode: ${{ env.SIGNING_MODE }}
+          cosign-key: ${{ secrets.COSIGN_PRIVATE_KEY }}
+          cosign-password: ${{ secrets.COSIGN_PASSWORD }}
 
   manifest:
     needs: [caddy, images]
@@ -105,6 +115,8 @@ jobs:
     permissions:
       # uploads release-images.json to the release of this tag
       contents: write
+      # reads the private images' signatures for the check below
+      packages: read
       id-token: write
       attestations: write
     steps:
@@ -119,6 +131,11 @@ jobs:
           cosign-release: ${{ env.COSIGN_VERSION }}
       # every digest is verified once more with the identity deploy.yml uses,
       # so a manifest is only published for images a deploy will accept
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - name: write and verify release-images.json
         env:
           TAG: ${{ github.ref_name }}
@@ -127,10 +144,15 @@ jobs:
           python3 scripts/supply-chain/release-manifest.py digests "$TAG" > release-images.json
           python3 -c 'import json,sys; [print(i["repo"]+"@"+i["digest"]) for i in json.load(open("release-images.json"))["images"].values()]' |
           while read -r ref; do
-            cosign verify --certificate-identity "$IDENTITY" \
-              --certificate-oidc-issuer https://token.actions.githubusercontent.com "$ref" >/dev/null
+            if [ "$SIGNING_MODE" = key ]; then
+              cosign verify --key infra/ansible/vars/release-cosign.pub --insecure-ignore-tlog=true "$ref" >/dev/null
+            else
+              cosign verify --certificate-identity "$IDENTITY" \
+                --certificate-oidc-issuer https://token.actions.githubusercontent.com "$ref" >/dev/null
+            fi
           done
       - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        if: env.SIGNING_MODE == 'keyless'
         with:
           subject-path: release-images.json
       - name: attach to the release
