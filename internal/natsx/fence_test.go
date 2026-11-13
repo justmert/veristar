@@ -9,9 +9,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
-	"github.com/justmert/stellar-analytics/db"
-	pdb "github.com/justmert/stellar-analytics/internal/db"
-	"github.com/justmert/stellar-analytics/internal/db/dbtest"
+	"github.com/justmert/veristar/db"
+	pdb "github.com/justmert/veristar/internal/db"
+	"github.com/justmert/veristar/internal/db/dbtest"
 )
 
 type txT = pgx.Tx

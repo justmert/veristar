@@ -1,5 +1,5 @@
 {
-  "name": "@stellar-analytics/example-astro-ssr",
+  "name": "@veristar/example-astro-ssr",
   "private": true,
   "type": "module",
   "scripts": {

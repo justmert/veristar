@@ -15,9 +15,9 @@ import (
 
 	"github.com/nats-io/nats.go/jetstream"
 
-	"github.com/justmert/stellar-analytics/internal/events"
-	"github.com/justmert/stellar-analytics/internal/natsx"
-	"github.com/justmert/stellar-analytics/tests/gateway/gwclient"
+	"github.com/justmert/veristar/internal/events"
+	"github.com/justmert/veristar/internal/natsx"
+	"github.com/justmert/veristar/tests/gateway/gwclient"
 )
 
 func httpsClient() *http.Client {

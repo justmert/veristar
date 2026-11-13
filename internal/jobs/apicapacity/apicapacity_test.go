@@ -13,11 +13,11 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 
-	pdb "github.com/justmert/stellar-analytics/internal/db"
-	"github.com/justmert/stellar-analytics/internal/db/jobsq"
-	"github.com/justmert/stellar-analytics/internal/jobs/apicapacity"
-	"github.com/justmert/stellar-analytics/internal/jobs/apirollup"
-	"github.com/justmert/stellar-analytics/internal/jobs/jobstest"
+	pdb "github.com/justmert/veristar/internal/db"
+	"github.com/justmert/veristar/internal/db/jobsq"
+	"github.com/justmert/veristar/internal/jobs/apicapacity"
+	"github.com/justmert/veristar/internal/jobs/apirollup"
+	"github.com/justmert/veristar/internal/jobs/jobstest"
 )
 
 // the steady state of the design: about 2,000 active series, each

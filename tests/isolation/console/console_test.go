@@ -16,7 +16,7 @@ import (
 	"github.com/stellar/go-stellar-sdk/strkey"
 	"github.com/stretchr/testify/require"
 
-	"github.com/justmert/stellar-analytics/internal/db/tenantq"
+	"github.com/justmert/veristar/internal/db/tenantq"
 )
 
 // one set of containers for every scenario; each scenario uses its own

@@ -13,11 +13,11 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"github.com/justmert/stellar-analytics/internal/controlplane/audit"
-	"github.com/justmert/stellar-analytics/internal/controlplane/httpx"
-	"github.com/justmert/stellar-analytics/internal/controlplane/session"
-	"github.com/justmert/stellar-analytics/internal/db/systemq"
-	"github.com/justmert/stellar-analytics/internal/db/tenantq"
+	"github.com/justmert/veristar/internal/controlplane/audit"
+	"github.com/justmert/veristar/internal/controlplane/httpx"
+	"github.com/justmert/veristar/internal/controlplane/session"
+	"github.com/justmert/veristar/internal/db/systemq"
+	"github.com/justmert/veristar/internal/db/tenantq"
 )
 
 // enrollment limit of contract 4.2.1

@@ -34,7 +34,7 @@ Alert: `DBIPFileOld` fires when the file in use was built more than 45 days ago
    DBIP_MMDB=.scratch/scratch/geo/dbip-country-lite.mmdb go test -race -count=1 -run TestGeo ./internal/gateway/
    ```
 
-   Expected: `ok  github.com/justmert/stellar-analytics/internal/gateway`.
+   Expected: `ok  github.com/justmert/veristar/internal/gateway`.
 
 3. **Build the release with the new month.** `release-images.yml` builds the gateway with
    `DBIP_MONTH` set to the month of the release tag's commit date, so a release tagged on a

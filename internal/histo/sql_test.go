@@ -15,10 +15,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
-	"github.com/justmert/stellar-analytics/db"
-	pdb "github.com/justmert/stellar-analytics/internal/db"
-	"github.com/justmert/stellar-analytics/internal/db/dbtest"
-	"github.com/justmert/stellar-analytics/internal/histo"
+	"github.com/justmert/veristar/db"
+	pdb "github.com/justmert/veristar/internal/db"
+	"github.com/justmert/veristar/internal/db/dbtest"
+	"github.com/justmert/veristar/internal/histo"
 )
 
 var conn *pdb.DB

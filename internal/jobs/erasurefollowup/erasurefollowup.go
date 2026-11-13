@@ -14,10 +14,10 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/justmert/stellar-analytics/internal/controlplane/erasure"
-	"github.com/justmert/stellar-analytics/internal/db/jobsq"
-	"github.com/justmert/stellar-analytics/internal/db/systemq"
-	"github.com/justmert/stellar-analytics/internal/jobs/aggregateweb"
+	"github.com/justmert/veristar/internal/controlplane/erasure"
+	"github.com/justmert/veristar/internal/db/jobsq"
+	"github.com/justmert/veristar/internal/db/systemq"
+	"github.com/justmert/veristar/internal/jobs/aggregateweb"
 )
 
 // TaskName is the name of the task in the scheduler and in `jobs run`.

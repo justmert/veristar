@@ -1,6 +1,6 @@
 ---
 galaxy_info:
-  author: stellar-analytics
+  author: veristar
   description: os baseline of every node (updates, ssh, firewall, time, docker)
   license: Apache-2.0
   min_ansible_version: "2.21"

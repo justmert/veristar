@@ -13,12 +13,12 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/justmert/stellar-analytics/internal/config"
-	"github.com/justmert/stellar-analytics/internal/controlplane/audit"
-	"github.com/justmert/stellar-analytics/internal/controlplane/operator"
-	"github.com/justmert/stellar-analytics/internal/controlplane/otlptokens"
-	"github.com/justmert/stellar-analytics/internal/controlplane/sites"
-	pdb "github.com/justmert/stellar-analytics/internal/db"
+	"github.com/justmert/veristar/internal/config"
+	"github.com/justmert/veristar/internal/controlplane/audit"
+	"github.com/justmert/veristar/internal/controlplane/operator"
+	"github.com/justmert/veristar/internal/controlplane/otlptokens"
+	"github.com/justmert/veristar/internal/controlplane/sites"
+	pdb "github.com/justmert/veristar/internal/db"
 )
 
 const probeUsage = `  probe-tenant create -operator-github-id N -domain D -origin URL

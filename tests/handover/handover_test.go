@@ -33,11 +33,11 @@ import (
 
 const (
 	baseDomain         = "sa-test.example"
-	gatewayImage       = "stellar-analytics/gateway:handover"
-	collectorImage     = "stellar-analytics/collector:handover"
-	exampleImage       = "stellar-analytics/otel-go-nethttp:handover"
-	postgresHAImage    = "stellar-analytics/postgres-ha:handover"
-	caddyPluginImage   = "stellar-analytics/caddy:2.11.9"
+	gatewayImage       = "veristar/gateway:handover"
+	collectorImage     = "veristar/collector:handover"
+	exampleImage       = "veristar/otel-go-nethttp:handover"
+	postgresHAImage    = "veristar/postgres-ha:handover"
+	caddyPluginImage   = "veristar/caddy:2.11.9"
 	tenantBackendImage = "otel/opentelemetry-collector-contrib:0.165.0@sha256:e40d61f10c9a617cca1ffd1be4d7e2b3a4b0f0001798ff07e58cabe82e618cea"
 	staticImage        = "gcr.io/distroless/static-debian13:nonroot@sha256:25ac8f0c3b2334a9eb05452266bd4697864a8c8ef0ef71e5e6480d7f92868329"
 	oauthHost          = "oauth." + baseDomain
@@ -130,7 +130,7 @@ func setup() error {
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("go build platformctl: %w\n%s", err, out)
 	}
-	cmd = exec.Command("pnpm", "--filter", "@stellar-analytics/console", "build")
+	cmd = exec.Command("pnpm", "--filter", "@veristar/console", "build")
 	cmd.Dir = repoRoot()
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("console build: %w\n%s", err, out)
@@ -191,7 +191,7 @@ func playwright(t *testing.T, sb *switchboard, s *Stack, phase, statePath, appsC
 	if err != nil {
 		t.Fatal(err)
 	}
-	args := []string{"--filter", "@stellar-analytics/e2e-console", "exec", "playwright", "test", "-c", "handover.config.ts"}
+	args := []string{"--filter", "@veristar/e2e-console", "exec", "playwright", "test", "-c", "handover.config.ts"}
 	for _, p := range projects {
 		args = append(args, "--project="+p)
 	}

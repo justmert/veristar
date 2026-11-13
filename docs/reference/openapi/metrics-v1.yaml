@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info:
-  title: Stellar Analytics machine metrics API
+  title: Veristar machine metrics API
   version: 1.0.0
   summary: Read-only aggregate web and API metrics for downstream machine consumers.
   description: |

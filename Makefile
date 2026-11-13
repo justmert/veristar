@@ -95,7 +95,7 @@ umami-compat:
 	@set -a && . ./$(DEV_ENV) && set +a && UMAMI_IT_URL=$$UMAMI_URL \
 		$(GO) test -race -count=1 -tags umamicompat -v ./tests/umami-compat/
 	@set -a && . ./$(DEV_ENV) && set +a && UMAMI_IT_URL=$$UMAMI_URL \
-		pnpm --filter @stellar-analytics/umami-compat test:live
+		pnpm --filter @veristar/umami-compat test:live
 
 vet:
 	$(GO) vet ./...
@@ -124,7 +124,7 @@ CMD ?= platformctl
 image:
 	$(DOCKER) build -f deploy/images/go-service.Dockerfile \
 		--build-arg CMD=$(CMD) --build-arg VERSION=$(VERSION) \
-		-t stellar-analytics/$(CMD):$(VERSION) .
+		-t veristar/$(CMD):$(VERSION) .
 
 # jobs: the daemon and one-off task runs against the dev stack, and the tests
 # of the jobs packages, the stats publisher and the edge caddy config (they
@@ -387,7 +387,7 @@ tofu-check:
 # staging-deploy and production-deploy converge every node (site.yml) at the
 # release SA_IMAGE_TAG; ROLLING=1 runs deploy.yml instead, one node at a time
 # gated on the port-80 health. the inventory comes from make <env>-apply.
-ANSIBLE_VENV ?= $(HOME)/.local/share/stellar-analytics/ansible-venv
+ANSIBLE_VENV ?= $(HOME)/.local/share/veristar/ansible-venv
 ANSIBLE_BIN := $(ANSIBLE_VENV)/bin
 
 .PHONY: ansible-venv ansible-lint staging-deploy production-deploy \

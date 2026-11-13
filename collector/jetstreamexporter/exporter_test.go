@@ -19,10 +19,10 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/justmert/stellar-analytics/collector/internal/natsconn"
-	"github.com/justmert/stellar-analytics/collector/internal/schema"
-	"github.com/justmert/stellar-analytics/internal/natsx"
-	"github.com/justmert/stellar-analytics/tests/fixtures/natsctr"
+	"github.com/justmert/veristar/collector/internal/natsconn"
+	"github.com/justmert/veristar/collector/internal/schema"
+	"github.com/justmert/veristar/internal/natsx"
+	"github.com/justmert/veristar/tests/fixtures/natsctr"
 )
 
 func histogram(md pmetric.Metrics, tenant, name, unit string, extra map[string]any) {

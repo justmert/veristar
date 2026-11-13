@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/justmert/stellar-analytics/db"
-	pdb "github.com/justmert/stellar-analytics/internal/db"
-	"github.com/justmert/stellar-analytics/internal/db/dbtest"
+	"github.com/justmert/veristar/db"
+	pdb "github.com/justmert/veristar/internal/db"
+	"github.com/justmert/veristar/internal/db/dbtest"
 )
 
 // one real postgresql server for the package, migrated, with role passwords

@@ -1,4 +1,4 @@
-module github.com/justmert/stellar-analytics
+module github.com/justmert/veristar
 
 go 1.27.4
 

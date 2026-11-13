@@ -10,10 +10,10 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
-	"github.com/justmert/stellar-analytics/internal/controlplane/tenants"
-	pdb "github.com/justmert/stellar-analytics/internal/db"
-	"github.com/justmert/stellar-analytics/internal/jobs/jobstest"
-	"github.com/justmert/stellar-analytics/tests/fixtures/consoleapi"
+	"github.com/justmert/veristar/internal/controlplane/tenants"
+	pdb "github.com/justmert/veristar/internal/db"
+	"github.com/justmert/veristar/internal/jobs/jobstest"
+	"github.com/justmert/veristar/tests/fixtures/consoleapi"
 )
 
 // startRace serves the console api over a real postgresql. the reconciler

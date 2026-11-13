@@ -15,7 +15,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/justmert/stellar-analytics/internal/registry"
+	"github.com/justmert/veristar/internal/registry"
 )
 
 // Prefix starts every token.

@@ -34,7 +34,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/justmert/stellar-analytics/tests/gateway/gwclient"
+	"github.com/justmert/veristar/tests/gateway/gwclient"
 )
 
 type host struct {
@@ -166,7 +166,7 @@ func signIn(t *testing.T, inv inventory, core host, githubID int, login string) 
 // output. it reads the stored result; nothing is written through it.
 func sql(t *testing.T, db, q string) string {
 	t.Helper()
-	out, err := exec.Command("docker", "exec", "sa-lc-core-1", "docker", "exec", "stellar-analytics-core-postgres-1",
+	out, err := exec.Command("docker", "exec", "sa-lc-core-1", "docker", "exec", "veristar-core-postgres-1",
 		"psql", "-U", "postgres", "-d", db, "-tAX", "-c", q).CombinedOutput()
 	require.NoError(t, err, string(out))
 	return strings.TrimSpace(string(out))

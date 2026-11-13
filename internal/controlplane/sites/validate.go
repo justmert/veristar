@@ -6,9 +6,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/justmert/stellar-analytics/internal/controlplane/httpx"
-	"github.com/justmert/stellar-analytics/internal/controlplane/tenants"
-	"github.com/justmert/stellar-analytics/internal/gateway"
+	"github.com/justmert/veristar/internal/controlplane/httpx"
+	"github.com/justmert/veristar/internal/controlplane/tenants"
+	"github.com/justmert/veristar/internal/gateway"
 )
 
 const maxOrigins = 20

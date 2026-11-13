@@ -1,5 +1,5 @@
 {
-  "name": "@stellar-analytics/e2e",
+  "name": "@veristar/e2e",
   "private": true,
   "type": "module",
   "scripts": {

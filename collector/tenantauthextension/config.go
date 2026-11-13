@@ -4,7 +4,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/justmert/stellar-analytics/collector/internal/natsconn"
+	"github.com/justmert/veristar/collector/internal/natsconn"
 )
 
 // Config is the tenantauth configuration. the registry bucket is fixed

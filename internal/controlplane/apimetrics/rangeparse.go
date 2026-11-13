@@ -6,9 +6,9 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/justmert/stellar-analytics/internal/config"
-	"github.com/justmert/stellar-analytics/internal/controlplane/httpx"
-	"github.com/justmert/stellar-analytics/internal/jobs/apipartition"
+	"github.com/justmert/veristar/internal/config"
+	"github.com/justmert/veristar/internal/controlplane/httpx"
+	"github.com/justmert/veristar/internal/jobs/apipartition"
 )
 
 // Resolution names the table a range is read from (contract 7.2).

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/justmert/stellar-analytics/internal/config"
+	"github.com/justmert/veristar/internal/config"
 )
 
 func TestRunNamesMissingKeys(t *testing.T) {

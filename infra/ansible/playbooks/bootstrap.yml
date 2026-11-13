@@ -44,12 +44,12 @@
   become: true
   vars_files: [../vars/pins.yml]
   vars:
-    bootstrap_core_dir: /opt/stellar-analytics/core
-    bootstrap_network: stellar-analytics-core_default
+    bootstrap_core_dir: /opt/veristar/core
+    bootstrap_network: veristar-core_default
     bootstrap_psql: [docker, compose, --project-directory, "{{ bootstrap_core_dir }}", exec, -T, postgres, psql, -U, postgres, -v, ON_ERROR_STOP=1, -tAX]
     bootstrap_platformctl: >-
       {{ ['docker', 'run', '--rm', '--network', bootstrap_network,
-          '--env-file', '/etc/stellar-analytics/env/platformctl.env',
+          '--env-file', '/etc/veristar/env/platformctl.env',
           '-v', sa_tls_dir ~ '/ca:/etc/sa-tls:ro',
           '-e', 'PLATFORM_DB_HOST=haproxy', '-e', 'PLATFORM_DB_PORT=5000',
           '-e', 'PLATFORM_DB_NAME=platform', '-e', 'PLATFORM_DB_SSLMODE=verify-full',

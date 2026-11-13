@@ -6,8 +6,8 @@ import (
 	"strings"
 	"unicode/utf16"
 
-	"github.com/justmert/stellar-analytics/internal/events"
-	"github.com/justmert/stellar-analytics/internal/redact"
+	"github.com/justmert/veristar/internal/events"
+	"github.com/justmert/veristar/internal/redact"
 )
 
 // sanitization of a parsed wire event before it becomes a WebEvent (plan

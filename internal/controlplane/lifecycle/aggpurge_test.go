@@ -9,10 +9,10 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
-	"github.com/justmert/stellar-analytics/internal/controlplane/lifecycle"
-	pdb "github.com/justmert/stellar-analytics/internal/db"
-	"github.com/justmert/stellar-analytics/internal/db/jobsq"
-	"github.com/justmert/stellar-analytics/internal/jobs/jobstest"
+	"github.com/justmert/veristar/internal/controlplane/lifecycle"
+	pdb "github.com/justmert/veristar/internal/db"
+	"github.com/justmert/veristar/internal/db/jobsq"
+	"github.com/justmert/veristar/internal/jobs/jobstest"
 )
 
 func seedAgg(t *testing.T, tx pgx.Tx, tenant uuid.UUID) {

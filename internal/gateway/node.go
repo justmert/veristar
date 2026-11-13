@@ -13,10 +13,10 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/justmert/stellar-analytics/internal/config"
-	"github.com/justmert/stellar-analytics/internal/natsx"
-	"github.com/justmert/stellar-analytics/internal/obs"
-	"github.com/justmert/stellar-analytics/internal/registry"
+	"github.com/justmert/veristar/internal/config"
+	"github.com/justmert/veristar/internal/natsx"
+	"github.com/justmert/veristar/internal/obs"
+	"github.com/justmert/veristar/internal/registry"
 )
 
 // bounds of the in-memory tables. each is a few hundred bytes per entry, so

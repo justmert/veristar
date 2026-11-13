@@ -11,7 +11,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/justmert/stellar-analytics/internal/db"
+	"github.com/justmert/veristar/internal/db"
 )
 
 // Want is the whole rights matrix. letters follow postgresql acl notation:

@@ -38,7 +38,7 @@
     - name: Drain the node
       ansible.builtin.include_tasks: tasks/drain.yml
       vars:
-        drain_dir: /etc/stellar-analytics/drain
+        drain_dir: /etc/veristar/drain
 
     - name: Reboot
       ansible.builtin.reboot:
@@ -49,7 +49,7 @@
     # the gateway's composite check is read behind it
     - name: Wait for the edge services behind caddy
       ansible.builtin.command:
-        argv: [docker, compose, --project-directory, /opt/stellar-analytics/edge, exec, -T, caddy, wget, -q, -O, /dev/null, "http://gateway:9090/readyz"]
+        argv: [docker, compose, --project-directory, /opt/veristar/edge, exec, -T, caddy, wget, -q, -O, /dev/null, "http://gateway:9090/readyz"]
       register: reboot_edge_health
       until: reboot_edge_health.rc == 0
       retries: 90
@@ -59,7 +59,7 @@
     - name: Undrain the node
       ansible.builtin.include_tasks: tasks/undrain.yml
       vars:
-        drain_dir: /etc/stellar-analytics/drain
+        drain_dir: /etc/veristar/drain
 
 - name: Reboot core nodes one by one
   hosts: core
@@ -84,7 +84,7 @@
     - name: Drain the node
       ansible.builtin.include_tasks: tasks/drain.yml
       vars:
-        drain_dir: /etc/stellar-analytics/drain
+        drain_dir: /etc/veristar/drain
 
     - name: Hand the patroni leader to the replica
       ansible.builtin.include_tasks: tasks/switchover.yml
@@ -111,7 +111,7 @@
 
     - name: Wait for the core services behind caddy
       ansible.builtin.command:
-        argv: [docker, compose, --project-directory, /opt/stellar-analytics/core, exec, -T, caddy, wget, -q, -O, /dev/null, "http://controlplane:9090/corez"]
+        argv: [docker, compose, --project-directory, /opt/veristar/core, exec, -T, caddy, wget, -q, -O, /dev/null, "http://controlplane:9090/corez"]
       register: reboot_core_health
       until: reboot_core_health.rc == 0
       retries: 150
@@ -121,7 +121,7 @@
     - name: Undrain the node
       ansible.builtin.include_tasks: tasks/undrain.yml
       vars:
-        drain_dir: /etc/stellar-analytics/drain
+        drain_dir: /etc/veristar/drain
 
 # the probe has no drain: while it reboots, the status page and the outside
 # measurement pause, which the slo report counts as unmeasured time

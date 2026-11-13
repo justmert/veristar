@@ -57,10 +57,10 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/justmert/stellar-analytics/internal/events"
-	"github.com/justmert/stellar-analytics/internal/natsx"
-	"github.com/justmert/stellar-analytics/internal/obs"
-	"github.com/justmert/stellar-analytics/internal/umami"
+	"github.com/justmert/veristar/internal/events"
+	"github.com/justmert/veristar/internal/natsx"
+	"github.com/justmert/veristar/internal/obs"
+	"github.com/justmert/veristar/internal/umami"
 )
 
 const (

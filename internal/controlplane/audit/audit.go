@@ -12,8 +12,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/justmert/stellar-analytics/internal/db/systemq"
-	"github.com/justmert/stellar-analytics/internal/db/tenantq"
+	"github.com/justmert/veristar/internal/db/systemq"
+	"github.com/justmert/veristar/internal/db/tenantq"
 )
 
 // actions of contract 3.3 written by the tenants, members and sites routes

@@ -18,10 +18,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/justmert/stellar-analytics/internal/config"
-	"github.com/justmert/stellar-analytics/internal/gateway"
-	"github.com/justmert/stellar-analytics/internal/natsx"
-	"github.com/justmert/stellar-analytics/internal/obs"
+	"github.com/justmert/veristar/internal/config"
+	"github.com/justmert/veristar/internal/gateway"
+	"github.com/justmert/veristar/internal/natsx"
+	"github.com/justmert/veristar/internal/obs"
 )
 
 // version is set at build time with -ldflags "-X main.version=...".

@@ -12,8 +12,8 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/stretchr/testify/require"
 
-	"github.com/justmert/stellar-analytics/internal/natsx"
-	"github.com/justmert/stellar-analytics/tests/fixtures/natsctr"
+	"github.com/justmert/veristar/internal/natsx"
+	"github.com/justmert/veristar/tests/fixtures/natsctr"
 )
 
 // the starting value from the this stage research list

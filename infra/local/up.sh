@@ -37,7 +37,7 @@ echo "$LC_NODES" | while read -r name loc pub priv; do
 done
 
 # age identity and secrets for the local environment only
-tools="$HOME/.local/share/stellar-analytics/tools"
+tools="$HOME/.local/share/veristar/tools"
 if [ ! -f "$LC_STATE/age.key" ]; then
 	"$tools/age/age-keygen" -o "$LC_STATE/age.key" 2>/dev/null
 fi
@@ -51,7 +51,7 @@ if [ ! -f "$secrets" ]; then
 		SA_OBJECT_STORAGE_SECRET_KEY="$(sed -n 2p "$LC_STATE/s3/keys")"
 		export SA_OBJECT_STORAGE_ACCESS_KEY SA_OBJECT_STORAGE_SECRET_KEY
 	fi
-	"${ANSIBLE_VENV:-$HOME/.local/share/stellar-analytics/ansible-venv}/bin/python" "$root/infra/secrets/new-secrets.py" local >"$LC_STATE/secrets.plain.yaml"
+	"${ANSIBLE_VENV:-$HOME/.local/share/veristar/ansible-venv}/bin/python" "$root/infra/secrets/new-secrets.py" local >"$LC_STATE/secrets.plain.yaml"
 	"$tools/sops-3.13.3" encrypt --age "$recipient" --input-type yaml --output-type yaml \
 		"$LC_STATE/secrets.plain.yaml" >"$secrets"
 	rm -f "$LC_STATE/secrets.plain.yaml"
@@ -59,7 +59,7 @@ fi
 
 # the inventory in the shape of docs/deploy/opentofu.md section 1
 inv="$root/infra/ansible/inventories/local/hosts.json"
-"${ANSIBLE_VENV:-$HOME/.local/share/stellar-analytics/ansible-venv}/bin/python" - "$inv" <<PY
+"${ANSIBLE_VENV:-$HOME/.local/share/veristar/ansible-venv}/bin/python" - "$inv" <<PY
 import json, sys
 nodes = """$LC_NODES
 $LC_RESTORE_NODE""".strip().splitlines()

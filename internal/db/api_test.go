@@ -10,10 +10,10 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
-	pdb "github.com/justmert/stellar-analytics/internal/db"
-	"github.com/justmert/stellar-analytics/internal/db/jobsq"
-	"github.com/justmert/stellar-analytics/internal/db/writerq"
-	"github.com/justmert/stellar-analytics/internal/histo"
+	pdb "github.com/justmert/veristar/internal/db"
+	"github.com/justmert/veristar/internal/db/jobsq"
+	"github.com/justmert/veristar/internal/db/writerq"
+	"github.com/justmert/veristar/internal/histo"
 )
 
 // every api relation, for the "reads nothing else" checks

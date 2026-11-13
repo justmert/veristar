@@ -24,12 +24,12 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
-	"github.com/justmert/stellar-analytics/docs/reference/openapi"
-	"github.com/justmert/stellar-analytics/internal/controlplane"
-	"github.com/justmert/stellar-analytics/internal/controlplane/session"
-	"github.com/justmert/stellar-analytics/internal/jobs/jobstest"
-	"github.com/justmert/stellar-analytics/internal/umami"
-	"github.com/justmert/stellar-analytics/tests/fixtures/umamictr"
+	"github.com/justmert/veristar/docs/reference/openapi"
+	"github.com/justmert/veristar/internal/controlplane"
+	"github.com/justmert/veristar/internal/controlplane/session"
+	"github.com/justmert/veristar/internal/jobs/jobstest"
+	"github.com/justmert/veristar/internal/umami"
+	"github.com/justmert/veristar/tests/fixtures/umamictr"
 )
 
 // machineEnv is the control plane as cmd/controlplane wires it for phase

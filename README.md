@@ -1,4 +1,4 @@
-# Stellar Analytics
+# Veristar
 
 Multi-tenant web and API analytics for projects building on Stellar, run as a shared, free
 service for the Stellar Community Fund (SCF). Projects get private dashboards of their own

@@ -14,7 +14,7 @@
 - name: Write the host firewall rules
   ansible.builtin.template:
     src: firewall.nft.j2
-    dest: /etc/stellar-analytics/firewall.nft
+    dest: /etc/veristar/firewall.nft
     owner: root
     group: root
     mode: "0600"

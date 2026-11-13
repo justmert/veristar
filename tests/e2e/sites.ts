@@ -58,7 +58,7 @@ function site(
     origin: `https://${host}`,
     port,
     siteId,
-    pkg: `@stellar-analytics/example-${key}`,
+    pkg: `@veristar/example-${key}`,
     navSelector,
   };
 }

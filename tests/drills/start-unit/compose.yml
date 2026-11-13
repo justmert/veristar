@@ -5,7 +5,7 @@
 # nats, as the gateway does. a single node runs one nats and one etcd member,
 # so no cluster peers are needed.
 ---
-name: stellar-analytics-edge
+name: veristar-edge
 
 x-defaults: &defaults
   restart: unless-stopped

@@ -10,8 +10,8 @@ import (
 	"slices"
 	"time"
 
-	"github.com/justmert/stellar-analytics/internal/migration"
-	"github.com/justmert/stellar-analytics/internal/rotationcheck"
+	"github.com/justmert/veristar/internal/migration"
+	"github.com/justmert/veristar/internal/rotationcheck"
 )
 
 // verifyUsage lists verify-migration for the main usage text.

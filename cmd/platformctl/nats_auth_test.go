@@ -8,7 +8,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/justmert/stellar-analytics/internal/natsx"
+	"github.com/justmert/veristar/internal/natsx"
 )
 
 // a syntactically valid bcrypt hash; nats-server only compares it, so the

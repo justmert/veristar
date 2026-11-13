@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/justmert/stellar-analytics/internal/controlplane/httpx"
-	"github.com/justmert/stellar-analytics/internal/histo"
+	"github.com/justmert/veristar/internal/controlplane/httpx"
+	"github.com/justmert/veristar/internal/histo"
 )
 
 // OpenLabel is how a percentile in the open bucket above 10 s is reported

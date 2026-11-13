@@ -29,8 +29,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/justmert/stellar-analytics/internal/umami"
-	"github.com/justmert/stellar-analytics/tests/fixtures/umamictr"
+	"github.com/justmert/veristar/internal/umami"
+	"github.com/justmert/veristar/tests/fixtures/umamictr"
 )
 
 // a desktop chrome user agent that umami's isbot check accepts

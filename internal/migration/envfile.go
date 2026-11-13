@@ -11,9 +11,9 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/justmert/stellar-analytics/internal/config"
-	pdb "github.com/justmert/stellar-analytics/internal/db"
-	"github.com/justmert/stellar-analytics/internal/umami"
+	"github.com/justmert/veristar/internal/config"
+	pdb "github.com/justmert/veristar/internal/db"
+	"github.com/justmert/veristar/internal/umami"
 )
 
 // ParseEnv reads KEY=VALUE lines as the dev stack's .env file and sops

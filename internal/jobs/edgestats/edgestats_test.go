@@ -12,13 +12,13 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 
-	pdb "github.com/justmert/stellar-analytics/internal/db"
-	"github.com/justmert/stellar-analytics/internal/events"
-	"github.com/justmert/stellar-analytics/internal/jobs/edgestats"
-	"github.com/justmert/stellar-analytics/internal/jobs/jobstest"
-	"github.com/justmert/stellar-analytics/internal/jobs/scheduler"
-	"github.com/justmert/stellar-analytics/internal/natsx"
-	"github.com/justmert/stellar-analytics/internal/registry"
+	pdb "github.com/justmert/veristar/internal/db"
+	"github.com/justmert/veristar/internal/events"
+	"github.com/justmert/veristar/internal/jobs/edgestats"
+	"github.com/justmert/veristar/internal/jobs/jobstest"
+	"github.com/justmert/veristar/internal/jobs/scheduler"
+	"github.com/justmert/veristar/internal/natsx"
+	"github.com/justmert/veristar/internal/registry"
 )
 
 func quietLog() *slog.Logger { return slog.New(slog.DiscardHandler) }

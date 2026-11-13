@@ -45,7 +45,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 POLICY = ROOT / "docs" / "security" / "licence-policy.json"
-OWN_MODULE = "github.com/justmert/stellar-analytics"
+OWN_MODULE = "github.com/justmert/veristar"
 
 # spdx ids of licences on the osi approved list (opensource.org/licenses)
 OSI = {

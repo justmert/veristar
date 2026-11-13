@@ -18,8 +18,8 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/nats-io/nats.go"
 
-	"github.com/justmert/stellar-analytics/internal/config"
-	"github.com/justmert/stellar-analytics/internal/umami"
+	"github.com/justmert/veristar/internal/config"
+	"github.com/justmert/veristar/internal/umami"
 )
 
 // Pair is one credential before and after the rotation.

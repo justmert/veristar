@@ -23,9 +23,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/justmert/stellar-analytics/internal/db/jobsq"
-	"github.com/justmert/stellar-analytics/internal/registry"
-	"github.com/justmert/stellar-analytics/internal/umami"
+	"github.com/justmert/veristar/internal/db/jobsq"
+	"github.com/justmert/veristar/internal/registry"
+	"github.com/justmert/veristar/internal/umami"
 )
 
 // TaskName is the name of the task in the scheduler and in `jobs run`.

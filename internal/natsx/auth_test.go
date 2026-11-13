@@ -14,9 +14,9 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stretchr/testify/require"
 
-	"github.com/justmert/stellar-analytics/internal/config"
-	"github.com/justmert/stellar-analytics/internal/natsx"
-	"github.com/justmert/stellar-analytics/tests/fixtures/natsctr"
+	"github.com/justmert/veristar/internal/config"
+	"github.com/justmert/veristar/internal/natsx"
+	"github.com/justmert/veristar/tests/fixtures/natsctr"
 )
 
 // svcConn is one service's connection with the async errors it received.

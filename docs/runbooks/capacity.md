@@ -41,7 +41,7 @@ it, keeping a quarter of the store free (the test checks that ratio), then run
    role's credentials (the `jobs` container already has them):
 
    ```sh
-   cd /opt/stellar-analytics/core && sudo docker compose exec jobs /service capacity
+   cd /opt/veristar/core && sudo docker compose exec jobs /service capacity
    ```
 
    It prints JSON with rows, bytes and bytes per row of `api.metrics_minute`, `api.metrics_hourly`

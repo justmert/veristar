@@ -19,9 +19,9 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/prometheus/client_golang/prometheus"
 
-	pdb "github.com/justmert/stellar-analytics/internal/db"
-	"github.com/justmert/stellar-analytics/internal/natsx"
-	"github.com/justmert/stellar-analytics/internal/obs"
+	pdb "github.com/justmert/veristar/internal/db"
+	"github.com/justmert/veristar/internal/natsx"
+	"github.com/justmert/veristar/internal/obs"
 )
 
 const (

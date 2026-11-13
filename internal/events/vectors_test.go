@@ -13,7 +13,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/justmert/stellar-analytics/internal/events"
+	"github.com/justmert/veristar/internal/events"
 )
 
 type proofVector struct {

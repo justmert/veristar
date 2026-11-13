@@ -1,4 +1,4 @@
-# Deploying Stellar Analytics
+# Deploying Veristar
 
 How to stand up an environment (staging or production) from this repository, check it, upgrade
 it and take it down. Follow the pages in this order:

@@ -36,7 +36,7 @@
     tls_secrets_dir: "{{ playbook_dir }}/../../secrets/{{ tls_env }}"
     tls_ca_file: "{{ tls_secrets_dir }}/ca.enc.yaml"
     tls_file: "{{ tls_secrets_dir }}/tls.enc.yaml"
-    secrets_tools_dir: "{{ lookup('env', 'HOME') }}/.local/share/stellar-analytics/tools"
+    secrets_tools_dir: "{{ lookup('env', 'HOME') }}/.local/share/veristar/tools"
     tls_sops_binary: "{{ secrets_tools_dir }}/sops-{{ sops_version }}"
     tls_age_keyfile: >-
       {{ hostvars[groups['edge'][0]].secrets_age_keyfile

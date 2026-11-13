@@ -23,7 +23,7 @@ Data loss window: what was not yet archived when the database was lost, at most
 
 1. **Stop what still runs on the core nodes**, if anything does, so nothing writes into a
    half-dead cluster: on each reachable core node
-   `cd /opt/stellar-analytics/core && sudo docker compose stop`.
+   `cd /opt/veristar/core && sudo docker compose stop`.
 
 2. **Create the restore node.** In `infra/tofu/envs/<env>/terraform.tfvars` set
    `restore_enabled = true` (and `restore_location` if `fsn1` is affected), then
@@ -64,10 +64,10 @@ Data loss window: what was not yet archived when the database was lost, at most
    waiting to join a leader that no longer exists. On any edge node:
 
    ```sh
-   cd /opt/stellar-analytics/edge
+   cd /opt/veristar/edge
    sudo docker compose exec etcd etcdctl --endpoints=https://127.0.0.1:2379 \
      --cacert=/etc/etcd/tls/ca.crt --cert=/etc/etcd/tls/node.crt --key=/etc/etcd/tls/node.key \
-     del --prefix /stellar-analytics/sa-<env>/
+     del --prefix /veristar/sa-<env>/
    ```
 
 7. **Raise the repository generation.** The new cluster has a new system id, which the old

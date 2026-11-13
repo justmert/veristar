@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 
-	"github.com/justmert/stellar-analytics/internal/natsx"
-	"github.com/justmert/stellar-analytics/internal/obs"
+	"github.com/justmert/veristar/internal/natsx"
+	"github.com/justmert/veristar/internal/obs"
 )
 
 // ReadinessChecks are the /readyz checks (the design): the registry

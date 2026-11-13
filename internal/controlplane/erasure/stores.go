@@ -12,9 +12,9 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 
-	"github.com/justmert/stellar-analytics/internal/gateway"
-	"github.com/justmert/stellar-analytics/internal/natsx"
-	"github.com/justmert/stellar-analytics/internal/replayer"
+	"github.com/justmert/veristar/internal/gateway"
+	"github.com/justmert/veristar/internal/natsx"
+	"github.com/justmert/veristar/internal/replayer"
 )
 
 // tokenTimeout bounds the visitor-token request to the gateways. a gateway

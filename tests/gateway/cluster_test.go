@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/justmert/stellar-analytics/internal/events"
-	"github.com/justmert/stellar-analytics/tests/gateway/gwclient"
+	"github.com/justmert/veristar/internal/events"
+	"github.com/justmert/veristar/tests/gateway/gwclient"
 )
 
 // TestThreeInstances: same-ip skepticism across three gateways, each getting

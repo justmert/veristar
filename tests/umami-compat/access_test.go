@@ -17,7 +17,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/justmert/stellar-analytics/internal/umami"
+	"github.com/justmert/veristar/internal/umami"
 )
 
 // the design: DISABLE_LOGIN=1 blocks the /login page and leaves

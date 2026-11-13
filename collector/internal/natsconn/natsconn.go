@@ -14,9 +14,9 @@ import (
 	"github.com/nats-io/nats.go"
 	"go.opentelemetry.io/collector/config/configopaque"
 
-	"github.com/justmert/stellar-analytics/internal/config"
-	"github.com/justmert/stellar-analytics/internal/natsx"
-	"github.com/justmert/stellar-analytics/internal/obs"
+	"github.com/justmert/veristar/internal/config"
+	"github.com/justmert/veristar/internal/natsx"
+	"github.com/justmert/veristar/internal/obs"
 )
 
 // Config is the nats part of a component configuration.

@@ -154,7 +154,7 @@ func (w *world) verify(manifest string, extra ...string) (string, map[string]str
 	if venv == "" {
 		home, err := os.UserHomeDir()
 		require.NoError(t, err)
-		venv = filepath.Join(home, ".local", "share", "stellar-analytics", "ansible-venv")
+		venv = filepath.Join(home, ".local", "share", "veristar", "ansible-venv")
 	}
 	out := filepath.Join(w.dir, fmt.Sprintf("verified-%d.json", time.Now().UnixNano()))
 	inv := "inventory/hosts.yml"

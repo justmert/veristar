@@ -105,9 +105,9 @@ describe("domain verification page (contract 5.8)", () => {
   it("shows both methods with the token and the last error", async () => {
     stubFetch([{ status: 200, body: f.verificationBody }]);
     const host = await renderRoutes(routes, path);
-    await waitFor(() => expect(host.textContent).toContain("_stellar-analytics.example.org"));
+    await waitFor(() => expect(host.textContent).toContain("_veristar.example.org"));
     expect(host.textContent).toContain(f.verificationBody.dns.value);
-    expect(host.textContent).toContain("https://example.org/.well-known/stellar-analytics.txt");
+    expect(host.textContent).toContain("https://example.org/.well-known/veristar.txt");
     expect(host.textContent).toContain("No TXT record was found");
     expect(host.textContent).toContain("Domain not verified");
   });

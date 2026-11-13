@@ -26,11 +26,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/justmert/stellar-analytics/internal/controlplane/lifecycle"
-	"github.com/justmert/stellar-analytics/internal/controlplane/otlptokens"
-	"github.com/justmert/stellar-analytics/internal/db/systemq"
-	"github.com/justmert/stellar-analytics/internal/registry"
-	"github.com/justmert/stellar-analytics/internal/umami"
+	"github.com/justmert/veristar/internal/controlplane/lifecycle"
+	"github.com/justmert/veristar/internal/controlplane/otlptokens"
+	"github.com/justmert/veristar/internal/db/systemq"
+	"github.com/justmert/veristar/internal/registry"
+	"github.com/justmert/veristar/internal/umami"
 )
 
 // audit actions (docs/reference/control-plane-api.md section 3.3)

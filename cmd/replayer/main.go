@@ -15,11 +15,11 @@ import (
 	"runtime/debug"
 	"syscall"
 
-	"github.com/justmert/stellar-analytics/internal/config"
-	"github.com/justmert/stellar-analytics/internal/natsx"
-	"github.com/justmert/stellar-analytics/internal/obs"
-	"github.com/justmert/stellar-analytics/internal/replayer"
-	"github.com/justmert/stellar-analytics/internal/umami"
+	"github.com/justmert/veristar/internal/config"
+	"github.com/justmert/veristar/internal/natsx"
+	"github.com/justmert/veristar/internal/obs"
+	"github.com/justmert/veristar/internal/replayer"
+	"github.com/justmert/veristar/internal/umami"
 )
 
 // version is set at build time with -ldflags "-X main.version=...".

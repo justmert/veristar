@@ -18,10 +18,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/justmert/stellar-analytics/internal/controlplane/httpx"
-	"github.com/justmert/stellar-analytics/internal/controlplane/provision"
-	"github.com/justmert/stellar-analytics/internal/db/systemq"
-	"github.com/justmert/stellar-analytics/internal/umami"
+	"github.com/justmert/veristar/internal/controlplane/httpx"
+	"github.com/justmert/veristar/internal/controlplane/provision"
+	"github.com/justmert/veristar/internal/db/systemq"
+	"github.com/justmert/veristar/internal/umami"
 )
 
 // failure codes of contract 4.4.1, sent to /sso-error

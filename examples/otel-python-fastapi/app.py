@@ -1,6 +1,6 @@
 """fastapi example that dual-exports opentelemetry data.
 
-one copy goes to the tenant's own backend and one to stellar analytics. see
+one copy goes to the tenant's own backend and one to veristar. see
 README.md for the environment contract. OTEL_SEMCONV_STABILITY_OPT_IN=http
 makes the instrumentation emit http.server.request.duration in seconds;
 without it the legacy http.server.duration in milliseconds is emitted.

@@ -10,11 +10,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/justmert/stellar-analytics/internal/controlplane/audit"
-	"github.com/justmert/stellar-analytics/internal/controlplane/httpx"
-	"github.com/justmert/stellar-analytics/internal/controlplane/session"
-	"github.com/justmert/stellar-analytics/internal/controlplane/tenants"
-	"github.com/justmert/stellar-analytics/internal/db"
+	"github.com/justmert/veristar/internal/controlplane/audit"
+	"github.com/justmert/veristar/internal/controlplane/httpx"
+	"github.com/justmert/veristar/internal/controlplane/session"
+	"github.com/justmert/veristar/internal/controlplane/tenants"
+	"github.com/justmert/veristar/internal/db"
 )
 
 // operator api key management (the design, contract 9.2). every route is

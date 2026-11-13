@@ -10,10 +10,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/nats-io/nats.go/jetstream"
 
-	"github.com/justmert/stellar-analytics/internal/db/dbtest"
-	"github.com/justmert/stellar-analytics/internal/registry"
-	"github.com/justmert/stellar-analytics/internal/umami"
-	"github.com/justmert/stellar-analytics/tests/fixtures/umamictr"
+	"github.com/justmert/veristar/internal/db/dbtest"
+	"github.com/justmert/veristar/internal/registry"
+	"github.com/justmert/veristar/internal/umami"
+	"github.com/justmert/veristar/tests/fixtures/umamictr"
 )
 
 // WebSite is a site provisioned the way the reconciler leaves it: rows in

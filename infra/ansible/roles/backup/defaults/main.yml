@@ -12,8 +12,8 @@ backup_stanza: sa
 #               equivalent (docs/deploy/local-converge.md section 6).
 backup_repo_mode: s3
 
-backup_dir: /opt/stellar-analytics/backup
-backup_conf_dir: /etc/stellar-analytics/pgbackrest
+backup_dir: /opt/veristar/backup
+backup_conf_dir: /etc/veristar/pgbackrest
 
 # pgdata path inside the postgres-ha image (roles/core patroni.yml)
 backup_pg_path: /var/lib/postgresql/patroni/data

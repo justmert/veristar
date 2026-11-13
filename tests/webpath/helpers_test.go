@@ -19,9 +19,9 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 
-	"github.com/justmert/stellar-analytics/internal/events"
-	"github.com/justmert/stellar-analytics/internal/natsx"
-	"github.com/justmert/stellar-analytics/internal/umami"
+	"github.com/justmert/veristar/internal/events"
+	"github.com/justmert/veristar/internal/natsx"
+	"github.com/justmert/veristar/internal/umami"
 )
 
 // UmamiEvent is one row of GET /api/websites/<id>/events

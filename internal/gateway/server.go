@@ -13,8 +13,8 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/justmert/stellar-analytics/internal/events"
-	"github.com/justmert/stellar-analytics/internal/registry"
+	"github.com/justmert/veristar/internal/events"
+	"github.com/justmert/veristar/internal/registry"
 )
 
 // Sites is the registry snapshot the gateway checks sites against.

@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/justmert/stellar-analytics/internal/config"
+	"github.com/justmert/veristar/internal/config"
 )
 
 // Role is a postgresql role an application connects as.

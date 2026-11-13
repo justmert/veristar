@@ -53,12 +53,12 @@ while the version is below the minimum. When `postgres:18.7-trixie` exists: set
   held, with a `local` log driver and `live-restore`.
 - **secrets**: SOPS and age on the controller, decryption on the controller, root-only
   env files on the nodes (docs/deploy/secrets.md).
-- **edge**: Compose project `/opt/stellar-analytics/edge` with Caddy, gateway, collector,
+- **edge**: Compose project `/opt/veristar/edge` with Caddy, gateway, collector,
   NATS and etcd. NATS: one cluster `sa-<env>` with authenticated routes over the private
   network and the authorization block rendered by `platformctl nats auth-config` from
   `internal/natsx` (so the deployed permissions are the tested ones). etcd: one member
   per edge node, peers and clients on the private network.
-- **core**: Compose project `/opt/stellar-analytics/core` with postgres-ha (Patroni, on
+- **core**: Compose project `/opt/veristar/core` with postgres-ha (Patroni, on
   `core[0]` only in this phase, DCS etcd3 on the edge nodes), HAProxy routing port 5000
   to the member whose Patroni REST answers `/primary` with 200, Umami (the design
   environment), control plane, replayer, metricswriter, jobs and Caddy with the console.
@@ -154,7 +154,7 @@ monitor counts non-5xx as healthy.
 `playbooks/internal-ca.yml` (`make internal-ca ENV=<env>`, before the first converge and
 after any inventory change) keeps one CA per environment in `infra/secrets/<env>/ca.enc.yaml`,
 read on the controller only, and one key and certificate per node in `tls.enc.yaml`, which the
-`secrets` role installs under `/etc/stellar-analytics/tls/<container user>/` (each directory
+`secrets` role installs under `/etc/veristar/tls/<container user>/` (each directory
 `0500`, the key `0400`, owned by the user of the container that reads it). Rotation:
 [../runbooks/secret-rotation.md](../runbooks/secret-rotation.md), "Internal CA and node
 certificates".
@@ -198,7 +198,7 @@ through it with the checks around it.
 
    ```yaml
    # images of the release workflow for repository <an operator input>
-   sa_image_registry: ghcr.io/justmert/stellar-analytics
+   sa_image_registry: ghcr.io/justmert/veristar
    # acme dns-01 through bunny.net an operator input; "internal" is refused outside the local converge
    sa_tls: bunny
    # numeric github ids of the scf operators an operator input, comma separated

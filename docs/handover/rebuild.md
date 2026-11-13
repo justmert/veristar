@@ -73,7 +73,7 @@ UMAMI_ADMIN_PASSWORD=<umami admin password of that environment>
 
 The PostgreSQL client tools run from the pinned server image (`MIGRATE_PG_IMAGE`), so `pg_dump`
 is never older than the server. `MIGRATE_DOCKER_NETWORK` (default `host`) is the network that
-container joins; on a core node, the compose network `stellar-analytics-core_default` reaches
+container joins; on a core node, the compose network `veristar-core_default` reaches
 `haproxy:5000`.
 
 ### 3.1 The pgBackRest path (same provider, the default)
@@ -82,9 +82,9 @@ The old environment has backed up continuously to its repository (roles/backup).
 freeze, take one more full backup on the old Patroni leader and note its label:
 
 ```sh
-sudo docker compose -f /opt/stellar-analytics/core/compose.yml exec postgres \
+sudo docker compose -f /opt/veristar/core/compose.yml exec postgres \
   pgbackrest --stanza=sa --type=full backup
-sudo docker compose -f /opt/stellar-analytics/core/compose.yml exec postgres \
+sudo docker compose -f /opt/veristar/core/compose.yml exec postgres \
   pgbackrest --stanza=sa --output=json info      # backup[-1].label, e.g. 20261113-060059F
 ```
 
@@ -153,7 +153,7 @@ three services through one SSH session to the new environment's Patroni leader i
 # on the leader: the umami container's address on the core compose network
 # (umami is not published on any host port)
 ssh ops@<leader public address> \
-  "sudo docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' stellar-analytics-core-umami-1"
+  "sudo docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' veristar-core-umami-1"
 
 # on the controller, kept open for the whole import
 ssh -N -L 15432:<leader private address>:5432 \
@@ -171,7 +171,7 @@ connection still uses `verify-full` with the new environment's CA bundle; its ce
 client container on the host network by default, so `127.0.0.1` is the tunnel.
 
 The env file for the import, with every value taken from the new environment (the passwords
-are those in `/etc/stellar-analytics/env/platformctl.env` and `jobs.env` on the leader, or in
+are those in `/etc/veristar/env/platformctl.env` and `jobs.env` on the leader, or in
 its SOPS file):
 
 ```sh

@@ -15,7 +15,7 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 
-	"github.com/justmert/stellar-analytics/tests/fixtures/umamictr"
+	"github.com/justmert/veristar/tests/fixtures/umamictr"
 )
 
 func webCaddyfile(t *testing.T) string {

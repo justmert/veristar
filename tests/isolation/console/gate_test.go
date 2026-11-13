@@ -22,7 +22,7 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stretchr/testify/require"
 
-	"github.com/justmert/stellar-analytics/internal/controlplane/operator"
+	"github.com/justmert/veristar/internal/controlplane/operator"
 )
 
 // the console part of the isolation gate (the design): every route the

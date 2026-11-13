@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/justmert/stellar-analytics/internal/histo"
+	"github.com/justmert/veristar/internal/histo"
 )
 
 func TestBoundsMatchPlan(t *testing.T) {

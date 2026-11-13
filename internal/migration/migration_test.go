@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/justmert/stellar-analytics/internal/umami"
+	"github.com/justmert/veristar/internal/umami"
 )
 
 func TestParseEnv(t *testing.T) {

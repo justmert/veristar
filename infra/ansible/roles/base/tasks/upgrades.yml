@@ -14,7 +14,7 @@
 
 - name: Limit unattended upgrades to debian security
   ansible.builtin.copy:
-    dest: /etc/apt/apt.conf.d/52stellar-analytics-upgrades
+    dest: /etc/apt/apt.conf.d/52veristar-upgrades
     content: |
       // managed by ansible (infra/ansible/roles/base). only the security
       // pocket is applied unattended; reboots stay a deliberate operator step

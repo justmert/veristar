@@ -10,8 +10,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
-	"github.com/justmert/stellar-analytics/internal/controlplane/apimetrics"
-	"github.com/justmert/stellar-analytics/internal/controlplane/httpx"
+	"github.com/justmert/veristar/internal/controlplane/apimetrics"
+	"github.com/justmert/veristar/internal/controlplane/httpx"
 )
 
 // the expectations below are computed by sql written here, as superuser

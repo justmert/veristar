@@ -21,9 +21,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/justmert/stellar-analytics/internal/events"
-	"github.com/justmert/stellar-analytics/internal/registry"
-	"github.com/justmert/stellar-analytics/internal/umami"
+	"github.com/justmert/veristar/internal/events"
+	"github.com/justmert/veristar/internal/registry"
+	"github.com/justmert/veristar/internal/umami"
 )
 
 // suite is the state the ordered checks of TestWebPath share.

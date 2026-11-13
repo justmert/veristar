@@ -15,10 +15,10 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 
-	pdb "github.com/justmert/stellar-analytics/internal/db"
-	"github.com/justmert/stellar-analytics/internal/jobs/jobstest"
-	"github.com/justmert/stellar-analytics/internal/jobs/scheduler"
-	"github.com/justmert/stellar-analytics/internal/natsx"
+	pdb "github.com/justmert/veristar/internal/db"
+	"github.com/justmert/veristar/internal/jobs/jobstest"
+	"github.com/justmert/veristar/internal/jobs/scheduler"
+	"github.com/justmert/veristar/internal/natsx"
 )
 
 func quietLog() *slog.Logger { return slog.New(slog.DiscardHandler) }

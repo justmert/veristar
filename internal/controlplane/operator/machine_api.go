@@ -8,7 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/justmert/stellar-analytics/internal/controlplane/httpx"
+	"github.com/justmert/veristar/internal/controlplane/httpx"
 )
 
 // the api routes of the machine api (contract 9.8 to 9.10). they apply the

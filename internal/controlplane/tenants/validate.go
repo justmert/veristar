@@ -12,7 +12,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/stellar/go-stellar-sdk/strkey"
 
-	"github.com/justmert/stellar-analytics/internal/controlplane/httpx"
+	"github.com/justmert/veristar/internal/controlplane/httpx"
 )
 
 func chiParam(r *http.Request, name string) string { return chi.URLParam(r, name) }

@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/justmert/stellar-analytics/internal/events"
-	"github.com/justmert/stellar-analytics/internal/redact"
+	"github.com/justmert/veristar/internal/events"
+	"github.com/justmert/veristar/internal/redact"
 )
 
 const (

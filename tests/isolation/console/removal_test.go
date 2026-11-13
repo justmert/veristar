@@ -11,7 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/justmert/stellar-analytics/internal/controlplane/lifecycle"
+	"github.com/justmert/veristar/internal/controlplane/lifecycle"
 )
 
 // a tenant removed through the real operator action (the design) answers

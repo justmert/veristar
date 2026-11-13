@@ -36,7 +36,7 @@ plus the rollback.
    Patroni leader ([README.md](README.md)):
 
    ```sh
-   cd /opt/stellar-analytics/core
+   cd /opt/veristar/core
    sudo sh -c 'docker compose exec -T postgres pg_dump -U postgres -Fc -d umami > /root/umami-pre-upgrade.dump'
    sudo ls -l /root/umami-pre-upgrade.dump
    sudo docker compose exec -T postgres psql -U postgres -d umami -tAc \
@@ -68,7 +68,7 @@ Use it when the new version misbehaves in a way a fix-forward cannot address in 
    you are about to replace. Accepted events wait in `WEB_EVENTS` (72 hours):
 
    ```sh
-   cd /opt/stellar-analytics/core && sudo docker compose stop replayer umami umami-2 umami-3 umami-4
+   cd /opt/veristar/core && sudo docker compose stop replayer umami umami-2 umami-3 umami-4
    ```
 
    Run it on both core nodes. The list names every Umami process: `umami` plus `umami-2` up to
@@ -78,7 +78,7 @@ Use it when the new version misbehaves in a way a fix-forward cannot address in 
 2. **Restore the dump** on the leader's node:
 
    ```sh
-   cd /opt/stellar-analytics/core
+   cd /opt/veristar/core
    sudo docker compose exec -T postgres psql -U postgres -d postgres -c 'drop database umami with (force)'
    sudo docker compose exec -T postgres psql -U postgres -d postgres -c 'create database umami owner umami_app'
    sudo docker compose exec -T postgres psql -U postgres -d postgres -c 'revoke all on database umami from public'

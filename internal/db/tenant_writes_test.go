@@ -9,7 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
-	pdb "github.com/justmert/stellar-analytics/internal/db"
+	pdb "github.com/justmert/veristar/internal/db"
 )
 
 // tenantStmt runs statements as cp_tenant for tenant A with its owner as the

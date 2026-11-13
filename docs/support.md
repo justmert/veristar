@@ -7,7 +7,7 @@ to (RFP 3.4). The operational targets for availability and security patching are
 ## The channel: the public issue tracker
 
 Support runs on the repository's GitHub issue tracker,
-`https://github.com/justmert/stellar-analytics/issues`. The RFP states that a public issue
+`https://github.com/justmert/veristar/issues`. The RFP states that a public issue
 tracker is sufficient and that no on-call rotation or other public support channel is
 required. There is none: no chat, no email address, no phone.
 
@@ -103,7 +103,7 @@ an "overdue" label.
 Run it by hand, without changing anything:
 
 ```sh
-GITHUB_TOKEN=$(gh auth token) go run ./cmd/issueage -repo justmert/stellar-analytics
+GITHUB_TOKEN=$(gh auth token) go run ./cmd/issueage -repo justmert/veristar
 ```
 
 Add `-apply` to change labels, `-now 2026-11-20T09:00:00Z` to assess at another time, and see

@@ -5,10 +5,10 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/justmert/stellar-analytics/internal/controlplane/otlptokens"
-	"github.com/justmert/stellar-analytics/internal/db/systemq"
-	"github.com/justmert/stellar-analytics/internal/registry"
-	"github.com/justmert/stellar-analytics/internal/umami"
+	"github.com/justmert/veristar/internal/controlplane/otlptokens"
+	"github.com/justmert/veristar/internal/db/systemq"
+	"github.com/justmert/veristar/internal/registry"
+	"github.com/justmert/veristar/internal/umami"
 )
 
 // names of the this stage purgers, the keys of cp.tenant_removals.steps

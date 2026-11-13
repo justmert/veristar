@@ -10,9 +10,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/justmert/stellar-analytics/internal/config"
-	"github.com/justmert/stellar-analytics/internal/obs"
-	"github.com/justmert/stellar-analytics/tests/fixtures/natsctr"
+	"github.com/justmert/veristar/internal/config"
+	"github.com/justmert/veristar/internal/obs"
+	"github.com/justmert/veristar/tests/fixtures/natsctr"
 )
 
 func TestNATSApplyAndCheck(t *testing.T) {

@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/justmert/stellar-analytics/tests/gateway/gwclient"
+	"github.com/justmert/veristar/tests/gateway/gwclient"
 )
 
 // runSetup creates the drill tenants through the console api: web tenants

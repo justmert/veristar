@@ -12,7 +12,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/justmert/stellar-analytics/internal/obs"
+	"github.com/justmert/veristar/internal/obs"
 )
 
 func TestClientIPReader(t *testing.T) {

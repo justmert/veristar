@@ -7,7 +7,7 @@ import (
 
 	"golang.org/x/oauth2"
 
-	"github.com/justmert/stellar-analytics/internal/config"
+	"github.com/justmert/veristar/internal/config"
 )
 
 // FixtureBuild is true only in binaries built with the oauthfixture tag,

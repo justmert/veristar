@@ -19,12 +19,12 @@ import (
 	"github.com/jackc/pgx/v5"
 	"golang.org/x/oauth2"
 
-	"github.com/justmert/stellar-analytics/internal/config"
-	"github.com/justmert/stellar-analytics/internal/controlplane/httpx"
-	"github.com/justmert/stellar-analytics/internal/controlplane/session"
-	"github.com/justmert/stellar-analytics/internal/controlplane/terms"
-	"github.com/justmert/stellar-analytics/internal/db"
-	"github.com/justmert/stellar-analytics/internal/db/systemq"
+	"github.com/justmert/veristar/internal/config"
+	"github.com/justmert/veristar/internal/controlplane/httpx"
+	"github.com/justmert/veristar/internal/controlplane/session"
+	"github.com/justmert/veristar/internal/controlplane/terms"
+	"github.com/justmert/veristar/internal/db"
+	"github.com/justmert/veristar/internal/db/systemq"
 )
 
 // failure codes of the callback (contract 4.1.2), sent to the console as

@@ -5,7 +5,7 @@
 # instead of a failover after the 30 s leader ttl
 - name: Read the running postgres image
   ansible.builtin.command:
-    argv: [docker, inspect, --format, "{{ '{{' }}.Config.Image{{ '}}' }}", stellar-analytics-core-postgres-1]
+    argv: [docker, inspect, --format, "{{ '{{' }}.Config.Image{{ '}}' }}", veristar-core-postgres-1]
   register: switchover_image
   changed_when: false
   failed_when: false
@@ -26,7 +26,7 @@
       - docker
       - compose
       - --project-directory
-      - /opt/stellar-analytics/core
+      - /opt/veristar/core
       - exec
       - -T
       - postgres

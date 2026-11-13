@@ -12,7 +12,7 @@
 # with the reason; nothing is reported as passed that did not run.
 #
 # the tools are installed at their pins with their checksums into
-# CI_TOOLS (default ~/.local/share/stellar-analytics/ci-tools), as the
+# CI_TOOLS (default ~/.local/share/veristar/ci-tools), as the
 # workflow installs them into the runner's temporary directory.
 #
 # the host is shared: a job that starts container stacks refuses to start
@@ -22,7 +22,7 @@ set -eu
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
-tools="${CI_TOOLS:-$HOME/.local/share/stellar-analytics/ci-tools}"
+tools="${CI_TOOLS:-$HOME/.local/share/veristar/ci-tools}"
 max_load="${CI_LOCAL_MAX_LOAD:-20}"
 mkdir -p "$tools"
 PATH="$tools:$PATH"

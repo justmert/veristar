@@ -26,7 +26,7 @@ LC_REGISTRY=sa-lc-registry
 LC_REGISTRY_IP=172.31.99.5
 LC_REGISTRY_HOST_PORT=5099
 LC_REGISTRY_IMAGE=registry:3.0.0@sha256:6c5666b861f3505b116bb9aa9b25175e71210414bd010d92035ff64018f9457e
-LC_NODE_IMAGE=stellar-analytics/local-node:trixie
+LC_NODE_IMAGE=veristar/local-node:trixie
 LC_IMAGE_TAG=lc
 LC_ADMIN_USER=ops
 # name location public-address private-address, mirroring

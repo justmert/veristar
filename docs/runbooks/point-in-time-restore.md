@@ -18,7 +18,7 @@ production the repository is Hetzner Object Storage (`backup_repo_mode: s3`, an 
    moment an incident started. Check what the repository can reach, on the leader's node:
 
    ```sh
-   cd /opt/stellar-analytics/core && sudo docker compose exec postgres pgbackrest --stanza=sa info
+   cd /opt/veristar/core && sudo docker compose exec postgres pgbackrest --stanza=sa info
    ```
 
    Expected: `status: ok`, the list of full and diff backups with their times, and the WAL
@@ -43,7 +43,7 @@ production the repository is Hetzner Object Storage (`backup_repo_mode: s3`, an 
 4. **Run the restore** from the controller:
 
    ```sh
-   cd infra/ansible && ~/.local/share/stellar-analytics/ansible-venv/bin/ansible-playbook \
+   cd infra/ansible && ~/.local/share/veristar/ansible-venv/bin/ansible-playbook \
      -i inventories/staging/ playbooks/restore.yml -e "restore_target='<YYYY-MM-DD HH:MM:SS+00>'"
    ```
 

@@ -11,9 +11,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/justmert/stellar-analytics/internal/controlplane/httpx"
-	"github.com/justmert/stellar-analytics/internal/controlplane/tenants"
-	"github.com/justmert/stellar-analytics/internal/db/tenantq"
+	"github.com/justmert/veristar/internal/controlplane/httpx"
+	"github.com/justmert/veristar/internal/controlplane/tenants"
+	"github.com/justmert/veristar/internal/db/tenantq"
 )
 
 // range limits per bucket (contract 4.3.7)

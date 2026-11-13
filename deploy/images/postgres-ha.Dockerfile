@@ -1,5 +1,5 @@
 # postgresql under patroni with pgbackrest (the design, this stage).
-#   docker build -f deploy/images/postgres-ha.Dockerfile -t stellar-analytics/postgres-ha:18.6-4.1.5 deploy/images
+#   docker build -f deploy/images/postgres-ha.Dockerfile -t veristar/postgres-ha:18.6-4.1.5 deploy/images
 # the build context is unused.
 #
 # PG_BASE is the one place the postgresql version is chosen. it is 18.6
@@ -54,10 +54,10 @@ RUN set -eu; \
     echo "${PG_VERSION}" > /etc/postgres-ha-version
 
 # the version a deploy checks against the minimum, readable without a shell
-LABEL org.opencontainers.image.title="stellar-analytics postgres-ha" \
-      io.stellar-analytics.postgres.version="${PG_VERSION}" \
-      io.stellar-analytics.patroni.version="4.1.5" \
-      io.stellar-analytics.pgbackrest.version="2.60.0"
+LABEL org.opencontainers.image.title="veristar postgres-ha" \
+      io.veristar.postgres.version="${PG_VERSION}" \
+      io.veristar.patroni.version="4.1.5" \
+      io.veristar.pgbackrest.version="2.60.0"
 
 ENV PATH="/usr/lib/postgresql/${PG_MAJOR}/bin:${PATH}"
 

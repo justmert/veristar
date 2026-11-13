@@ -10,8 +10,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/justmert/stellar-analytics/internal/controlplane/tenants"
-	"github.com/justmert/stellar-analytics/internal/db"
+	"github.com/justmert/veristar/internal/controlplane/tenants"
+	"github.com/justmert/veristar/internal/db"
 )
 
 // gate is a reconciler whose runs block until released, and which counts

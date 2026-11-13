@@ -23,8 +23,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/justmert/stellar-analytics/internal/umami"
-	"github.com/justmert/stellar-analytics/tests/fixtures/umamictr"
+	"github.com/justmert/veristar/internal/umami"
+	"github.com/justmert/veristar/tests/fixtures/umamictr"
 )
 
 // a desktop chrome user agent that umami's isbot check accepts
@@ -549,7 +549,7 @@ func webDashboardInBrowser(t *testing.T, l *liveWeb) {
 	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, pnpm, "--filter", "@stellar-analytics/caddy-web", "test:live")
+	cmd := exec.CommandContext(ctx, pnpm, "--filter", "@veristar/caddy-web", "test:live")
 	cmd.Dir = root
 	cmd.Env = append(os.Environ(),
 		"WEB_PORT="+port,

@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/justmert/stellar-analytics/internal/events"
+	"github.com/justmert/veristar/internal/events"
 )
 
 // the example sites of tests/e2e/sites.ts (SITES), with the same fixed ids
@@ -49,7 +49,7 @@ func TestBrowserMatrix(t *testing.T) {
 	mark := lastSeq(t, s.JS)
 
 	eventLog := filepath.Join(t.TempDir(), "events.jsonl")
-	cmd := exec.Command("pnpm", "--filter", "@stellar-analytics/e2e", "exec", "playwright", "test")
+	cmd := exec.Command("pnpm", "--filter", "@veristar/e2e", "exec", "playwright", "test")
 	cmd.Dir = repoRoot()
 	cmd.Env = append(os.Environ(), "SA_E2E_GATEWAY_UPSTREAM="+caddyAddr, "SA_E2E_EVENT_LOG="+eventLog)
 	out, err := cmd.CombinedOutput()

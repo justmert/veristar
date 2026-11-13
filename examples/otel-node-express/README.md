@@ -9,7 +9,7 @@ A small accounts and payments API on Express 5.3.0, instrumented with `@opentele
 | Variable | Values | Purpose |
 |---|---|---|
 | `TENANT_OTLP_ENDPOINT` | base URL, required | your own backend, e.g. `http://otel-collector:4318` |
-| `PLATFORM_OTLP_ENDPOINT` | base URL, required | Stellar Analytics, `https://otlp.<BASE_DOMAIN>` |
+| `PLATFORM_OTLP_ENDPOINT` | base URL, required | Veristar, `https://otlp.<BASE_DOMAIN>` |
 | `PLATFORM_OTLP_TOKEN` | `sa_otlp_...`, required | sent as `Authorization: Bearer <token>` to the platform only |
 | `EXPORT_SIGNALS` | `metrics,traces` (default), `traces` | `traces` registers no metric readers; the platform then derives request metrics from server spans |
 | `METRICS_TEMPORALITY` | `cumulative` (default), `delta` | aggregation temporality of both metric exporters |

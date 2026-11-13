@@ -11,13 +11,13 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 
-	"github.com/justmert/stellar-analytics/internal/config"
-	pdb "github.com/justmert/stellar-analytics/internal/db"
-	"github.com/justmert/stellar-analytics/internal/db/jobsq"
-	"github.com/justmert/stellar-analytics/internal/jobs/apipartition"
-	"github.com/justmert/stellar-analytics/internal/jobs/apiretention"
-	"github.com/justmert/stellar-analytics/internal/jobs/jobstest"
-	"github.com/justmert/stellar-analytics/internal/natsx"
+	"github.com/justmert/veristar/internal/config"
+	pdb "github.com/justmert/veristar/internal/db"
+	"github.com/justmert/veristar/internal/db/jobsq"
+	"github.com/justmert/veristar/internal/jobs/apipartition"
+	"github.com/justmert/veristar/internal/jobs/apiretention"
+	"github.com/justmert/veristar/internal/jobs/jobstest"
+	"github.com/justmert/veristar/internal/natsx"
 )
 
 func day(y int, m time.Month, d int) time.Time { return time.Date(y, m, d, 0, 0, 0, 0, time.UTC) }

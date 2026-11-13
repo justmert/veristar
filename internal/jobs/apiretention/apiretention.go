@@ -17,10 +17,10 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/justmert/stellar-analytics/internal/config"
-	"github.com/justmert/stellar-analytics/internal/db/jobsq"
-	"github.com/justmert/stellar-analytics/internal/jobs/apipartition"
-	"github.com/justmert/stellar-analytics/internal/metricswriter"
+	"github.com/justmert/veristar/internal/config"
+	"github.com/justmert/veristar/internal/db/jobsq"
+	"github.com/justmert/veristar/internal/jobs/apipartition"
+	"github.com/justmert/veristar/internal/metricswriter"
 )
 
 // TaskName is the name of the task in the scheduler and in `jobs run`.

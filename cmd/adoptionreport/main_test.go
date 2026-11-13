@@ -23,7 +23,7 @@ import (
 	"github.com/getkin/kin-openapi/routers/gorillamux"
 	"github.com/stretchr/testify/require"
 
-	"github.com/justmert/stellar-analytics/docs/reference/openapi"
+	"github.com/justmert/veristar/docs/reference/openapi"
 )
 
 var update = flag.Bool("update", false, "rewrite the golden evidence files")

@@ -30,7 +30,7 @@ export function createCert(hosts: string[]): FixtureCert {
         "-days",
         "2",
         "-subj",
-        "/CN=stellar-analytics e2e fixture",
+        "/CN=veristar e2e fixture",
         "-addext",
         `subjectAltName=${san}`,
         "-keyout",

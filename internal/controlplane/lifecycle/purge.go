@@ -10,8 +10,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/justmert/stellar-analytics/internal/controlplane/audit"
-	"github.com/justmert/stellar-analytics/internal/db/systemq"
+	"github.com/justmert/veristar/internal/controlplane/audit"
+	"github.com/justmert/veristar/internal/db/systemq"
 )
 
 // a Purger deletes one data store's share of a removed tenant. Purge must be

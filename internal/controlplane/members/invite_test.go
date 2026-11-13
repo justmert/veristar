@@ -8,11 +8,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/justmert/stellar-analytics/internal/controlplane/tenants"
-	pdb "github.com/justmert/stellar-analytics/internal/db"
-	"github.com/justmert/stellar-analytics/internal/jobs/jobstest"
-	"github.com/justmert/stellar-analytics/tests/fixtures/consoleapi"
-	"github.com/justmert/stellar-analytics/tests/fixtures/githuboauth"
+	"github.com/justmert/veristar/internal/controlplane/tenants"
+	pdb "github.com/justmert/veristar/internal/db"
+	"github.com/justmert/veristar/internal/jobs/jobstest"
+	"github.com/justmert/veristar/tests/fixtures/consoleapi"
+	"github.com/justmert/veristar/tests/fixtures/githuboauth"
 )
 
 func start(t *testing.T) *consoleapi.Env {

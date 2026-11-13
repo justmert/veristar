@@ -14,13 +14,13 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 
-	"github.com/justmert/stellar-analytics/db"
-	pdb "github.com/justmert/stellar-analytics/internal/db"
-	"github.com/justmert/stellar-analytics/internal/db/dbtest"
-	"github.com/justmert/stellar-analytics/internal/jobs/scheduler"
-	"github.com/justmert/stellar-analytics/internal/natsx"
-	"github.com/justmert/stellar-analytics/internal/registry"
-	"github.com/justmert/stellar-analytics/tests/fixtures/natsctr"
+	"github.com/justmert/veristar/db"
+	pdb "github.com/justmert/veristar/internal/db"
+	"github.com/justmert/veristar/internal/db/dbtest"
+	"github.com/justmert/veristar/internal/jobs/scheduler"
+	"github.com/justmert/veristar/internal/natsx"
+	"github.com/justmert/veristar/internal/registry"
+	"github.com/justmert/veristar/tests/fixtures/natsctr"
 )
 
 // Postgres starts postgres, migrates the platform database and gives every

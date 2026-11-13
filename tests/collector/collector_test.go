@@ -39,8 +39,8 @@ import (
 	grpcmeta "google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
-	"github.com/justmert/stellar-analytics/internal/natsx"
-	"github.com/justmert/stellar-analytics/internal/registry"
+	"github.com/justmert/veristar/internal/natsx"
+	"github.com/justmert/veristar/internal/registry"
 )
 
 var canonical = []float64{0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1, 2.5, 5, 7.5, 10}

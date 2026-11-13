@@ -1,6 +1,6 @@
 # a tenant's own opentelemetry collector that fans out: the apps export once,
 # to this collector, and it forwards everything to the tenant's own backend
-# and metrics and traces to stellar analytics. runs on the stock contrib
+# and metrics and traces to veristar. runs on the stock contrib
 # distribution (tested with otel/opentelemetry-collector-contrib 0.165.0).
 #
 #   TENANT_BACKEND_ENDPOINT  base url of your own backend, e.g. http://otel-backend:4318

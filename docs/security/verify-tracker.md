@@ -39,7 +39,7 @@ sha384sum sdk.js
 ```
 
 Compare both with the entry for the version in
-`https://github.com/justmert/stellar-analytics/blob/main/packages/tracker/releases/manifest.json`
+`https://github.com/justmert/veristar/blob/main/packages/tracker/releases/manifest.json`
 (fields `integrity` and `sha384`).
 
 ## 3. Check where it was built
@@ -48,7 +48,7 @@ Each tracker release is attested by the release workflow (`release-tracker.yml`)
 CLI:
 
 ```sh
-gh attestation verify sdk.js --repo justmert/stellar-analytics
+gh attestation verify sdk.js --repo justmert/veristar
 ```
 
 This checks a Sigstore-signed provenance statement saying that this exact file was produced by a
@@ -64,7 +64,7 @@ and 4.
 The build is reproducible: the same source and the pinned esbuild (0.28.2) give the same bytes.
 
 ```sh
-git clone https://github.com/justmert/stellar-analytics && cd stellar-analytics
+git clone https://github.com/justmert/veristar && cd veristar
 git checkout tracker-v1.1.0          # or the commit that added releases/1.1.0
 corepack disable; npm install -g pnpm@12.18.0
 pnpm install --frozen-lockfile

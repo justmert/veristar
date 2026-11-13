@@ -17,11 +17,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/nats-io/nats.go"
 
-	"github.com/justmert/stellar-analytics/internal/events"
-	"github.com/justmert/stellar-analytics/internal/natsx"
-	"github.com/justmert/stellar-analytics/internal/replayer"
-	"github.com/justmert/stellar-analytics/internal/umami"
-	"github.com/justmert/stellar-analytics/tests/fixtures/natsctr"
+	"github.com/justmert/veristar/internal/events"
+	"github.com/justmert/veristar/internal/natsx"
+	"github.com/justmert/veristar/internal/replayer"
+	"github.com/justmert/veristar/internal/umami"
+	"github.com/justmert/veristar/tests/fixtures/natsctr"
 )
 
 func dayRange(d time.Time) umami.Range {

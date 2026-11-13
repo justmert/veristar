@@ -18,7 +18,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/justmert/stellar-analytics/internal/controlplane/httpx"
+	"github.com/justmert/veristar/internal/controlplane/httpx"
 )
 
 // query handling shared by the machine routes (contract 9.3).

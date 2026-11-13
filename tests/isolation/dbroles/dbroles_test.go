@@ -26,11 +26,11 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/require"
 
-	"github.com/justmert/stellar-analytics/db"
-	pdb "github.com/justmert/stellar-analytics/internal/db"
-	"github.com/justmert/stellar-analytics/internal/db/dbtest"
-	"github.com/justmert/stellar-analytics/internal/db/systemq"
-	"github.com/justmert/stellar-analytics/tests/fixtures/rolematrix"
+	"github.com/justmert/veristar/db"
+	pdb "github.com/justmert/veristar/internal/db"
+	"github.com/justmert/veristar/internal/db/dbtest"
+	"github.com/justmert/veristar/internal/db/systemq"
+	"github.com/justmert/veristar/tests/fixtures/rolematrix"
 )
 
 // insufficient_privilege: a missing grant, and also a row that fails a

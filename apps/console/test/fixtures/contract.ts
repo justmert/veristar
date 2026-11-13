@@ -372,12 +372,12 @@ export const verificationBody = {
   domain: "example.org",
   verify_token: "q8m3xK2vN0pZr7Tg5LhW1yBc4FdJ6sEu9AoRiVkXnMQ",
   dns: {
-    name: "_stellar-analytics.example.org",
+    name: "_veristar.example.org",
     type: "TXT",
-    value: "stellar-analytics-verify=q8m3xK2vN0pZr7Tg5LhW1yBc4FdJ6sEu9AoRiVkXnMQ",
+    value: "veristar-verify=q8m3xK2vN0pZr7Tg5LhW1yBc4FdJ6sEu9AoRiVkXnMQ",
   },
   file: {
-    url: "https://example.org/.well-known/stellar-analytics.txt",
+    url: "https://example.org/.well-known/veristar.txt",
     body: "q8m3xK2vN0pZr7Tg5LhW1yBc4FdJ6sEu9AoRiVkXnMQ",
   },
   verification: "unverified",

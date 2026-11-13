@@ -32,8 +32,8 @@ Conventions (node names, addresses, compose directories) are in [README.md](READ
    so the DNS monitor stops sending traffic to it while you work:
 
    ```sh
-   sudo mkdir -p /etc/stellar-analytics/drain
-   echo "manual $(date -u +%FT%TZ)" | sudo tee /etc/stellar-analytics/drain/draining
+   sudo mkdir -p /etc/veristar/drain
+   echo "manual $(date -u +%FT%TZ)" | sudo tee /etc/veristar/drain/draining
    curl -s -o /dev/null -w '%{http_code}\n' http://<node public address>/
    ```
 
@@ -43,7 +43,7 @@ Conventions (node names, addresses, compose directories) are in [README.md](READ
 3. **See which part fails.** On the node:
 
    ```sh
-   cd /opt/stellar-analytics/edge && sudo docker compose ps
+   cd /opt/veristar/edge && sudo docker compose ps
    sudo docker compose exec caddy wget -qO- http://gateway:9090/edgez; echo
    sudo docker compose exec caddy wget -qO- http://gateway:9090/readyz; echo
    ```
@@ -72,7 +72,7 @@ Conventions (node names, addresses, compose directories) are in [README.md](READ
 5. **Put it back.** When `/edgez` answers and port 80 would be healthy:
 
    ```sh
-   sudo rm /etc/stellar-analytics/drain/draining
+   sudo rm /etc/veristar/drain/draining
    curl -s -o /dev/null -w '%{http_code}\n' http://<node public address>/
    ```
 
@@ -118,11 +118,11 @@ primary IPv4 and IPv6 addresses, which are separate resources and survive the se
    node has no etcd data volume while the other two members answer, removes the stale member of
    this node's name (or an unstarted member at its address) through a healthy peer, adds the
    node again and starts it with `--initial-cluster-state=existing`. It records that in
-   `/etc/stellar-analytics/edge/etcd-initial-state`, so later converges change nothing. Check
+   `/etc/veristar/edge/etcd-initial-state`, so later converges change nothing. Check
    from any edge node that three members are `started` and healthy:
 
    ```sh
-   cd /opt/stellar-analytics/edge && sudo docker compose exec etcd etcdctl --endpoints=http://127.0.0.1:2379 member list -w table
+   cd /opt/veristar/edge && sudo docker compose exec etcd etcdctl --endpoints=http://127.0.0.1:2379 member list -w table
    ```
 
    If the converge failed between the member add and the start, converge again: the unstarted

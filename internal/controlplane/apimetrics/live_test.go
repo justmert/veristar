@@ -17,8 +17,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
-	"github.com/justmert/stellar-analytics/internal/controlplane/apimetrics"
-	"github.com/justmert/stellar-analytics/internal/db/tenantq"
+	"github.com/justmert/veristar/internal/controlplane/apimetrics"
+	"github.com/justmert/veristar/internal/db/tenantq"
 )
 
 func at(s string) time.Time {

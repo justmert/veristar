@@ -114,11 +114,11 @@ volumes were created by an older root image needs one change before the first de
 image, or Caddy cannot write its certificates:
 
 ```
-docker run --rm -v stellar-analytics-edge_caddydata:/data -v stellar-analytics-edge_caddyconfig:/config \
+docker run --rm -v veristar-edge_caddydata:/data -v veristar-edge_caddyconfig:/config \
   --user 0 --entrypoint chown <caddy image> -R 10001:10001 /data /config
 ```
 
-(`stellar-analytics-core_*` on core nodes.)
+(`veristar-core_*` on core nodes.)
 
 ## 6a. Host operating system (Debian security updates)
 

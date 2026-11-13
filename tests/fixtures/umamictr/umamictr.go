@@ -30,7 +30,7 @@ import (
 	tcnetwork "github.com/testcontainers/testcontainers-go/network"
 	"github.com/testcontainers/testcontainers-go/wait"
 
-	"github.com/justmert/stellar-analytics/internal/umami"
+	"github.com/justmert/veristar/internal/umami"
 )
 
 // UpstreamAddr is where umami listens for containers on Stack.Network.
@@ -229,7 +229,7 @@ const CaddyImage = "caddy:2.11.9@sha256:e40b94d0a43b5ff69cb20568d73f10c70703df7b
 // WebCaddyTag names the image built from deploy/images/caddy.Dockerfile: caddy
 // with the replace-response plugin, which web.Caddyfile needs for the db-ip
 // attribution. stock caddy refuses that file.
-const WebCaddyTag = "stellar-analytics/caddy:2.11.9-test"
+const WebCaddyTag = "veristar/caddy:2.11.9-test"
 
 var (
 	webImageOnce sync.Once

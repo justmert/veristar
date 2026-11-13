@@ -6,7 +6,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/justmert/stellar-analytics/internal/registry"
+	"github.com/justmert/veristar/internal/registry"
 )
 
 func TestCheckOrigin(t *testing.T) {

@@ -1,5 +1,5 @@
 {
-  "name": "@stellar-analytics/example-react-router-ssr",
+  "name": "@veristar/example-react-router-ssr",
   "private": true,
   "type": "module",
   "scripts": {

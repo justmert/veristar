@@ -32,13 +32,13 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 
-	"github.com/justmert/stellar-analytics/db"
-	pdb "github.com/justmert/stellar-analytics/internal/db"
-	"github.com/justmert/stellar-analytics/internal/db/dbtest"
-	"github.com/justmert/stellar-analytics/internal/natsx"
-	"github.com/justmert/stellar-analytics/tests/fixtures/githuboauth"
-	"github.com/justmert/stellar-analytics/tests/fixtures/natsctr"
-	"github.com/justmert/stellar-analytics/tests/fixtures/umamictr"
+	"github.com/justmert/veristar/db"
+	pdb "github.com/justmert/veristar/internal/db"
+	"github.com/justmert/veristar/internal/db/dbtest"
+	"github.com/justmert/veristar/internal/natsx"
+	"github.com/justmert/veristar/tests/fixtures/githuboauth"
+	"github.com/justmert/veristar/tests/fixtures/natsctr"
+	"github.com/justmert/veristar/tests/fixtures/umamictr"
 )
 
 // the stack of the api path: postgresql with the platform migrations, umami,

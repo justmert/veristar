@@ -12,12 +12,12 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/justmert/stellar-analytics/internal/jobs/edgestats"
-	"github.com/justmert/stellar-analytics/internal/jobs/jobstest"
-	"github.com/justmert/stellar-analytics/internal/jobs/scheduler"
-	"github.com/justmert/stellar-analytics/internal/natsx"
-	"github.com/justmert/stellar-analytics/internal/registry"
-	"github.com/justmert/stellar-analytics/tests/gateway/gwclient"
+	"github.com/justmert/veristar/internal/jobs/edgestats"
+	"github.com/justmert/veristar/internal/jobs/jobstest"
+	"github.com/justmert/veristar/internal/jobs/scheduler"
+	"github.com/justmert/veristar/internal/natsx"
+	"github.com/justmert/veristar/internal/registry"
+	"github.com/justmert/veristar/tests/gateway/gwclient"
 )
 
 // TestStatsIntoPostgres sends known outcomes through a gateway node, lets it

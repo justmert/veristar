@@ -13,8 +13,8 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	tcexec "github.com/testcontainers/testcontainers-go/exec"
 
-	"github.com/justmert/stellar-analytics/internal/events"
-	"github.com/justmert/stellar-analytics/internal/umami"
+	"github.com/justmert/veristar/internal/events"
+	"github.com/justmert/veristar/internal/umami"
 )
 
 // several umami processes sharing one database and one APP_SECRET give a

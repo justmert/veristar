@@ -4,7 +4,7 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/justmert/stellar-analytics/internal/events"
+	"github.com/justmert/veristar/internal/events"
 )
 
 // Reason is why the gateway refused a request. its value is the outcome the

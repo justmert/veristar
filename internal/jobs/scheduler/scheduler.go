@@ -18,8 +18,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/prometheus/client_golang/prometheus"
 
-	pdb "github.com/justmert/stellar-analytics/internal/db"
-	"github.com/justmert/stellar-analytics/internal/natsx"
+	pdb "github.com/justmert/veristar/internal/db"
+	"github.com/justmert/veristar/internal/natsx"
 )
 
 // Leader is what a task gets while its node holds the jobs lock.

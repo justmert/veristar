@@ -8,11 +8,11 @@ import (
 	"os"
 	"strings"
 
-	"github.com/justmert/stellar-analytics/db"
-	"github.com/justmert/stellar-analytics/internal/config"
-	pdb "github.com/justmert/stellar-analytics/internal/db"
-	"github.com/justmert/stellar-analytics/internal/jobs/retainweb"
-	"github.com/justmert/stellar-analytics/internal/obs"
+	"github.com/justmert/veristar/db"
+	"github.com/justmert/veristar/internal/config"
+	pdb "github.com/justmert/veristar/internal/db"
+	"github.com/justmert/veristar/internal/jobs/retainweb"
+	"github.com/justmert/veristar/internal/obs"
 )
 
 // dbUsage lists the db subcommands for the main usage text.

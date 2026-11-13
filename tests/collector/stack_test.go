@@ -31,9 +31,9 @@ import (
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 
-	"github.com/justmert/stellar-analytics/internal/natsx"
-	"github.com/justmert/stellar-analytics/internal/registry"
-	"github.com/justmert/stellar-analytics/tests/fixtures/natsctr"
+	"github.com/justmert/veristar/internal/natsx"
+	"github.com/justmert/veristar/internal/registry"
+	"github.com/justmert/veristar/tests/fixtures/natsctr"
 )
 
 // limits the collector runs with in this suite. the request burst is small

@@ -17,7 +17,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/justmert/stellar-analytics/tests/gateway/gwclient"
+	"github.com/justmert/veristar/tests/gateway/gwclient"
 )
 
 // the browser user agents of the web profile. a few per site keep each

@@ -8,8 +8,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/justmert/stellar-analytics/internal/registry"
-	"github.com/justmert/stellar-analytics/tests/gateway/gwclient"
+	"github.com/justmert/veristar/internal/registry"
+	"github.com/justmert/veristar/tests/gateway/gwclient"
 )
 
 // utm collection is read from the site's registry entry on every event: a

@@ -26,11 +26,11 @@ dc verify -ledger "$out/ledger.json" -wait 10m >"$out/verify.json" || true
 leader="$(patroni_leader)"
 q="select case when created_at < '$at' then 'before' else 'after' end, count(distinct session_id), count(distinct visit_id), count(*)
    from website_event where url_path like '/d/$run/%' group by 1 order by 1"
-docker exec "$leader" docker compose --project-directory /opt/stellar-analytics/core exec -T postgres \
+docker exec "$leader" docker compose --project-directory /opt/veristar/core exec -T postgres \
 	psql -U postgres -d umami -tAX -F ' ' -c "$q" >"$out/sessions.txt"
 both="select count(*) from (select session_id from website_event where url_path like '/d/$run/%' and created_at < '$at'
    intersect select session_id from website_event where url_path like '/d/$run/%' and created_at >= '$at') x"
-docker exec "$leader" docker compose --project-directory /opt/stellar-analytics/core exec -T postgres \
+docker exec "$leader" docker compose --project-directory /opt/veristar/core exec -T postgres \
 	psql -U postgres -d umami -tAX -c "$both" >"$out/sessions-both.txt"
 echo "{\"restart\": \"$at\"}" | tee "$out/events.json"
 echo "period sessions visits events"; cat "$out/sessions.txt"; echo "sessions seen on both sides: $(cat "$out/sessions-both.txt")"

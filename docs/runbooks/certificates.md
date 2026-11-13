@@ -32,7 +32,7 @@ does not see TLS, so a node with a broken certificate stays in DNS until you dra
 3. **Read Caddy's log** on the node:
 
    ```sh
-   cd /opt/stellar-analytics/<edge or core>
+   cd /opt/veristar/<edge or core>
    sudo docker compose logs --since 24h caddy | grep -i -E 'acme|certificate|obtain|renew|dns|challenge' | tail -50
    ```
 
@@ -40,7 +40,7 @@ does not see TLS, so a node with a broken certificate stays in DNS until you dra
    - **bunny.net key** rejected or missing: the log names an authorization error from the DNS
      provider. Check `bunny_api_key` in the SOPS file and that the key is an account API key
      (team member keys are not supported). Fix it as in [secret-rotation.md](secret-rotation.md),
-     which rewrites `/etc/stellar-analytics/env/caddy.env`.
+     which rewrites `/etc/veristar/env/caddy.env`.
    - **CAA or zone delegation**: the domain's name servers must be bunny.net's and the CAA must
      allow `letsencrypt.org`. `dig +short CAA <an operator input>` and `dig +short NS <an operator input>`.
    - **Let's Encrypt rate limits**: the log says so and when to retry. Do not loop restarts.

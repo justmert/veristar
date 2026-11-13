@@ -4,7 +4,7 @@
 
 Report vulnerabilities privately through GitHub private vulnerability reporting:
 
-1. Open the repository `github.com/justmert/stellar-analytics`.
+1. Open the repository `github.com/justmert/veristar`.
 2. Go to the **Security** tab, then **Advisories**.
 3. Press **Report a vulnerability** and fill in the form.
 
@@ -22,7 +22,7 @@ Current state, stated plainly:
   GitHub's documentation describes the feature for public repositories ("Owners and
   administrators of public repositories can allow security researchers to report
   vulnerabilities securely"). On 2026-11-13 the API
-  `GET /repos/justmert/stellar-analytics/private-vulnerability-reporting` answered 404 for this
+  `GET /repos/justmert/veristar/private-vulnerability-reporting` answered 404 for this
   private repository, so the setting is expected to become available once it is public.
 - No separate security email address exists. GitHub private vulnerability reporting is the only
   channel.

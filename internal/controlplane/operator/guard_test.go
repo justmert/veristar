@@ -3,7 +3,7 @@ package operator
 import (
 	"testing"
 
-	"github.com/justmert/stellar-analytics/internal/controlplane/session"
+	"github.com/justmert/veristar/internal/controlplane/session"
 )
 
 // both the flag and the loaded id list are needed: a stale flag alone (an

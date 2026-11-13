@@ -16,7 +16,7 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 
-	"github.com/justmert/stellar-analytics/tests/fixtures/umamictr"
+	"github.com/justmert/veristar/tests/fixtures/umamictr"
 )
 
 // assemble runs deploy/caddy/assemble.sh and writes the node caddyfile to a

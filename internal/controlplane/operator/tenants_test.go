@@ -16,10 +16,10 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
-	"github.com/justmert/stellar-analytics/db"
-	"github.com/justmert/stellar-analytics/internal/controlplane/httpx"
-	pdb "github.com/justmert/stellar-analytics/internal/db"
-	"github.com/justmert/stellar-analytics/internal/db/dbtest"
+	"github.com/justmert/veristar/db"
+	"github.com/justmert/veristar/internal/controlplane/httpx"
+	pdb "github.com/justmert/veristar/internal/db"
+	"github.com/justmert/veristar/internal/db/dbtest"
 )
 
 // real postgresql with the migrations, the cp_operator and cp_system pools

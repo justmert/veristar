@@ -14,7 +14,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/justmert/stellar-analytics/tests/gateway/gwclient"
+	"github.com/justmert/veristar/tests/gateway/gwclient"
 )
 
 func main() {

@@ -1,6 +1,6 @@
 ---
-edge_dir: /opt/stellar-analytics/edge
-edge_conf_dir: /etc/stellar-analytics/edge
+edge_dir: /opt/veristar/edge
+edge_conf_dir: /etc/veristar/edge
 
 # jetstream limits per node; a cpx22 has 4 GB of memory
 edge_nats_max_memory_store: 512M
@@ -33,7 +33,7 @@ edge_stage: services
 
 # where deploy.yml puts the drain flag; caddy answers 503 on port 80 while it
 # exists, which takes the node out of dns (deploy/caddy/assemble.sh)
-edge_drain_dir: /etc/stellar-analytics/drain
+edge_drain_dir: /etc/veristar/drain
 
 # container users of the upstream images that default to root (plan phase
 # 18 hardening). the nats config and the named volumes are owned by them;
@@ -43,7 +43,7 @@ edge_etcd_uid: 2379
 
 # etcd membership (tasks/etcd.yml): the compose volume holding the member's
 # data, the marker recording how the member started, and its peer url
-edge_etcd_volume: stellar-analytics-edge_etcddata
+edge_etcd_volume: veristar-edge_etcddata
 edge_etcd_state_file: "{{ edge_conf_dir }}/etcd-initial-state"
 edge_etcd_peer_url: "https://{{ sa_private_ip }}:2380"
 

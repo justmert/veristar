@@ -1043,12 +1043,12 @@ Proves control of `cp.sites.domain`. Beyond-RFP; never gates ingestion.
   "domain": "example.org",
   "verify_token": "43 characters base64url",
   "dns": {
-    "name": "_stellar-analytics.example.org",
+    "name": "_veristar.example.org",
     "type": "TXT",
-    "value": "stellar-analytics-verify=<verify_token>"
+    "value": "veristar-verify=<verify_token>"
   },
   "file": {
-    "url": "https://example.org/.well-known/stellar-analytics.txt",
+    "url": "https://example.org/.well-known/veristar.txt",
     "body": "<verify_token>"
   },
   "verification": "unverified",

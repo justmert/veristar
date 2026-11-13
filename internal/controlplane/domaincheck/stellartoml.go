@@ -14,7 +14,7 @@ import (
 	"github.com/stellar/go-stellar-sdk/strkey"
 	"golang.org/x/net/idna"
 
-	"github.com/justmert/stellar-analytics/internal/netguard"
+	"github.com/justmert/veristar/internal/netguard"
 )
 
 // the sep-1 location and size cap. they equal the constants of the sdk's

@@ -1,6 +1,6 @@
 ---
-core_dir: /opt/stellar-analytics/core
-core_conf_dir: /etc/stellar-analytics/core
+core_dir: /opt/veristar/core
+core_conf_dir: /etc/veristar/core
 
 # the compose network of a core node; postgresql's pg_hba admits it because
 # haproxy and the services reach the database from it
@@ -104,7 +104,7 @@ core_haproxy_stats_port: 8404
 
 # where deploy.yml puts the drain flag; caddy answers 503 on port 80 while it
 # exists, which takes the node out of dns (deploy/caddy/assemble.sh)
-core_drain_dir: /etc/stellar-analytics/drain
+core_drain_dir: /etc/veristar/drain
 
 # ipv6-only docker network that only caddy joins, so published ipv6 ports
 # keep the visitor's address. a unique local prefix: it never

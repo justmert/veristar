@@ -27,7 +27,7 @@ plane, the writer and jobs stop while no leader exists. The configured window is
 1. On either core node:
 
    ```sh
-   cd /opt/stellar-analytics/core && sudo docker compose exec postgres patronictl -c /etc/patroni/patroni.yml list
+   cd /opt/veristar/core && sudo docker compose exec postgres patronictl -c /etc/patroni/patroni.yml list
    ```
 
    Expected after a leader loss: the former replica shows `Leader` and `running`, the lost
@@ -40,7 +40,7 @@ plane, the writer and jobs stop while no leader exists. The configured window is
    ```
 
    Expected: `f`. The command asks for the superuser password; it is in
-   `/etc/stellar-analytics/env/platformctl.env` as `PLATFORM_DB_ADMIN_PASSWORD`. Without
+   `/etc/veristar/env/platformctl.env` as `PLATFORM_DB_ADMIN_PASSWORD`. Without
    automatic failover (no `Leader` for more than a minute), check etcd first: Patroni cannot
    take the leader key without two etcd members ([edge-node-failure.md](edge-node-failure.md)).
 
@@ -57,7 +57,7 @@ For maintenance on the leader's node. `deploy.yml` does the same before it recre
 postgres container (`infra/ansible/playbooks/tasks/switchover.yml`).
 
 ```sh
-cd /opt/stellar-analytics/core
+cd /opt/veristar/core
 sudo docker compose exec postgres patronictl -c /etc/patroni/patroni.yml switchover \
   --leader <current leader name> --candidate <replica name> --force
 ```

@@ -22,7 +22,7 @@ GO="${GO:-go}"
 out="$root/.scratch/scratch/tls-audit/$(date -u +%Y%m%dT%H%M%SZ)"
 mkdir -p "$out"
 chmod 700 "$out"
-sops="$HOME/.local/share/stellar-analytics/tools/sops-3.13.3"
+sops="$HOME/.local/share/veristar/tools/sops-3.13.3"
 export SOPS_AGE_KEY_FILE="$LC_STATE/age.key"
 window="${TLS_AUDIT_WINDOW:-90}"
 

@@ -16,9 +16,9 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stretchr/testify/require"
 
-	pdb "github.com/justmert/stellar-analytics/internal/db"
-	"github.com/justmert/stellar-analytics/internal/natsx"
-	"github.com/justmert/stellar-analytics/tests/fixtures/natsctr"
+	pdb "github.com/justmert/veristar/internal/db"
+	"github.com/justmert/veristar/internal/natsx"
+	"github.com/justmert/veristar/tests/fixtures/natsctr"
 )
 
 func quietLog() *slog.Logger { return slog.New(slog.DiscardHandler) }

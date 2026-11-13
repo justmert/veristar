@@ -33,7 +33,7 @@ wait "$lp" "$cp" "$pp"
 dc commits -check "$out/commits-acked.json" >"$out/commits-check.json" || true
 dc lag -until-zero 600s >"$out/lag.json" || true
 dc verify -ledger "$out/ledger.json" -wait 10m >"$out/verify.json" || true
-docker exec "$new" docker compose --project-directory /opt/stellar-analytics/core exec -T postgres patronictl -c /etc/patroni/patroni.yml list >"$out/patroni-after.txt" 2>&1 || true
+docker exec "$new" docker compose --project-directory /opt/veristar/core exec -T postgres patronictl -c /etc/patroni/patroni.yml list >"$out/patroni-after.txt" 2>&1 || true
 echo "{\"victim\": \"$victim\", \"off\": \"$off\", \"new_leader\": \"$new\", \"promoted_after_s\": $promoted}" | tee "$out/events.json"
 cat "$out/commits.json" "$out/commits-check.json" "$out/probe.json" "$out/load.json" "$out/verify.json" "$out/patroni-after.txt"
 dc commits -drop >/dev/null || true

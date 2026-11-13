@@ -48,7 +48,7 @@ ocb's strict check refuses a mixed set.
    make test
    ```
 
-   `collector-it` must end with `ok  github.com/justmert/stellar-analytics/tests/collector`.
+   `collector-it` must end with `ok  github.com/justmert/veristar/tests/collector`.
    Also run `promtool` rule tests if a telemetry metric name changed
    (`infra/ansible/roles/observability/files/rules/tests/`).
 

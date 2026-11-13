@@ -17,7 +17,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/justmert/stellar-analytics/tests/gateway/gwclient"
+	"github.com/justmert/veristar/tests/gateway/gwclient"
 )
 
 // load shape: 20 sites keep the 200/s per-site bucket of one node above the

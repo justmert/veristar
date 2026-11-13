@@ -12,8 +12,8 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stretchr/testify/require"
 
-	"github.com/justmert/stellar-analytics/internal/controlplane/sites"
-	"github.com/justmert/stellar-analytics/internal/controlplane/tenants"
+	"github.com/justmert/veristar/internal/controlplane/sites"
+	"github.com/justmert/veristar/internal/controlplane/tenants"
 )
 
 func (c *client) site(t *testing.T, tenant, site uuid.UUID) map[string]any {

@@ -49,7 +49,7 @@
 
 - name: Create the platform configuration directory
   ansible.builtin.file:
-    path: /etc/stellar-analytics
+    path: /etc/veristar
     state: directory
     owner: root
     group: root

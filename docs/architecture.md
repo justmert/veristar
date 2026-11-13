@@ -1,6 +1,6 @@
 # Architecture
 
-Stellar Analytics is a multi-tenant web and API analytics service. Web analytics are built on
+Veristar is a multi-tenant web and API analytics service. Web analytics are built on
 an unmodified Umami 3.5.0. Everything the RFP needs beyond Umami (buffered ingestion, bot and
 inflation checks, neutral endpoint names, OpenTelemetry ingest, tenancy, operator views) runs
 in separate services beside it ([ADR 0001](adr/0001-base-platform.md),

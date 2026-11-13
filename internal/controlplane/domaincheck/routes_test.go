@@ -19,13 +19,13 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
-	"github.com/justmert/stellar-analytics/internal/controlplane"
-	"github.com/justmert/stellar-analytics/internal/controlplane/domaincheck"
-	"github.com/justmert/stellar-analytics/internal/controlplane/httpx"
-	"github.com/justmert/stellar-analytics/internal/controlplane/session"
-	"github.com/justmert/stellar-analytics/internal/controlplane/tenants"
-	pdb "github.com/justmert/stellar-analytics/internal/db"
-	"github.com/justmert/stellar-analytics/internal/jobs/jobstest"
+	"github.com/justmert/veristar/internal/controlplane"
+	"github.com/justmert/veristar/internal/controlplane/domaincheck"
+	"github.com/justmert/veristar/internal/controlplane/httpx"
+	"github.com/justmert/veristar/internal/controlplane/session"
+	"github.com/justmert/veristar/internal/controlplane/tenants"
+	pdb "github.com/justmert/veristar/internal/db"
+	"github.com/justmert/veristar/internal/jobs/jobstest"
 )
 
 // routeEnv is the verification routes behind the real control plane
@@ -224,8 +224,8 @@ func TestVerifyRoutes(t *testing.T) {
 	require.Equal(t, http.StatusOK, r.status)
 	require.Equal(t, token, r.body["verify_token"])
 	require.Equal(t, "unchecked", r.body["verification"])
-	require.Equal(t, map[string]any{"name": "_stellar-analytics." + domain, "type": "TXT", "value": "stellar-analytics-verify=" + token}, r.body["dns"])
-	require.Equal(t, map[string]any{"url": "https://" + domain + "/.well-known/stellar-analytics.txt", "body": token}, r.body["file"])
+	require.Equal(t, map[string]any{"name": "_veristar." + domain, "type": "TXT", "value": "veristar-verify=" + token}, r.body["dns"])
+	require.Equal(t, map[string]any{"url": "https://" + domain + "/.well-known/veristar.txt", "body": token}, r.body["file"])
 	require.Nil(t, r.body["last_verify_at"])
 
 	r = c.call(t, http.MethodPost, path+"/verify", map[string]any{"method": "smtp"})
@@ -240,7 +240,7 @@ func TestVerifyRoutes(t *testing.T) {
 	require.Nil(t, r.body["verified_at"])
 
 	// a real txt record with the token
-	e.net.dns.SetTXT("_stellar-analytics."+domain, []string{domaincheck.DNSValue(token)})
+	e.net.dns.SetTXT("_veristar."+domain, []string{domaincheck.DNSValue(token)})
 	r = c.call(t, http.MethodPost, path+"/verify", map[string]any{})
 	require.Equal(t, http.StatusOK, r.status)
 	require.Equal(t, "verified", r.body["verification"])
@@ -250,7 +250,7 @@ func TestVerifyRoutes(t *testing.T) {
 	require.NotNil(t, verifiedAt)
 
 	// the record now carries a wrong token: unverified, last success kept
-	e.net.dns.SetTXT("_stellar-analytics."+domain, []string{domaincheck.DNSValue("wrong-token")})
+	e.net.dns.SetTXT("_veristar."+domain, []string{domaincheck.DNSValue("wrong-token")})
 	r = c.call(t, http.MethodPost, path+"/verify", map[string]any{"method": "dns"})
 	require.Equal(t, http.StatusOK, r.status)
 	require.Equal(t, "unverified", r.body["verification"])
@@ -336,7 +336,7 @@ func TestAfterSiteCreate(t *testing.T) {
 	require.NotNil(t, at)
 	require.Equal(t, "not_found", doc["status"])
 	require.EqualValues(t, 404, doc["http_status"])
-	// a repeat with the same outcome writes no the review row
+	// a repeat with the same outcome writes no second audit row
 	e.routes.AfterSiteCreate(t.Context(), tenant, site, domain, actor)
 	e.routes.Wait()
 	rows := e.auditRows(t, "site:"+site.String(), domaincheck.ActionStellarToml)

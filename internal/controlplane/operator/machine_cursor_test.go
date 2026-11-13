@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/justmert/stellar-analytics/internal/controlplane/httpx"
+	"github.com/justmert/veristar/internal/controlplane/httpx"
 )
 
 // tamper decodes a cursor, lets edit change it and encodes it again, the

@@ -1,5 +1,5 @@
 {
-  "name": "@stellar-analytics/example-wallets-kit-spa",
+  "name": "@veristar/example-wallets-kit-spa",
   "private": true,
   "type": "module",
   "scripts": {

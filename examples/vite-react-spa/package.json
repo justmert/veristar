@@ -1,5 +1,5 @@
 {
-  "name": "@stellar-analytics/example-vite-react-spa",
+  "name": "@veristar/example-vite-react-spa",
   "private": true,
   "type": "module",
   "scripts": {

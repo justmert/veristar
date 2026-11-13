@@ -144,13 +144,13 @@ export async function pack(name, version, outRoot = join(ROOT, "npm")) {
   const pkg = {
     name,
     version,
-    description: "browser tracker for stellar analytics, derived from the umami tracker",
+    description: "browser tracker for veristar, derived from the umami tracker",
     license: "MIT",
     type: "module",
     // npm provenance checks that this matches the repository that built it
     repository: {
       type: "git",
-      url: "git+https://github.com/justmert/stellar-analytics.git",
+      url: "git+https://github.com/justmert/veristar.git",
       directory: "packages/tracker",
     },
     exports: {

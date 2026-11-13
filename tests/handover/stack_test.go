@@ -37,9 +37,9 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/oschwald/maxminddb-golang/v2"
 
-	"github.com/justmert/stellar-analytics/internal/natsx"
-	"github.com/justmert/stellar-analytics/internal/umami"
-	"github.com/justmert/stellar-analytics/tests/fixtures/umamictr"
+	"github.com/justmert/veristar/internal/natsx"
+	"github.com/justmert/veristar/internal/umami"
+	"github.com/justmert/veristar/tests/fixtures/umamictr"
 )
 
 func randHex(n int) string {

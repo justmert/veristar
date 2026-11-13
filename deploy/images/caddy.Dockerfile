@@ -3,7 +3,7 @@
 #       link into umami's html on web.<BASE_DOMAIN> (the reference docs section 5)
 #   github.com/caddy-dns/bunny               dns-01 challenges (this stage)
 #
-#   docker build -f deploy/images/caddy.Dockerfile -t stellar-analytics/caddy:2.11.9 deploy/images
+#   docker build -f deploy/images/caddy.Dockerfile -t veristar/caddy:2.11.9 deploy/images
 #
 # the build context is unused; any directory works. base images are pinned by
 # tag and index digest (resolved 2026-11-12).

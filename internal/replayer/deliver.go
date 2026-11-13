@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/justmert/stellar-analytics/internal/natsx"
-	"github.com/justmert/stellar-analytics/internal/umami"
+	"github.com/justmert/veristar/internal/natsx"
+	"github.com/justmert/veristar/internal/umami"
 )
 
 // failure is a classified error of one delivery attempt.

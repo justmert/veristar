@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/justmert/stellar-analytics/internal/natsx"
+	"github.com/justmert/veristar/internal/natsx"
 )
 
 // write faults. umami's collection probe proves that /api/send

@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/justmert/stellar-analytics/internal/config"
+	"github.com/justmert/veristar/internal/config"
 )
 
 // Settings is what the writer needs besides nats and the database. every

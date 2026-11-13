@@ -19,7 +19,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
-	"github.com/justmert/stellar-analytics/internal/db/dbtest"
+	"github.com/justmert/veristar/internal/db/dbtest"
 )
 
 // globalFixture is a platform database holding web aggregates, edge

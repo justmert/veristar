@@ -1,5 +1,5 @@
 {
-  "name": "@stellar-analytics/example-static-html",
+  "name": "@veristar/example-static-html",
   "private": true,
   "type": "module",
   "scripts": {

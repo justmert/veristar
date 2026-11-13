@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/justmert/stellar-analytics/internal/config"
+	"github.com/justmert/veristar/internal/config"
 )
 
 // Node is one server checked by address: every host it serves is fetched

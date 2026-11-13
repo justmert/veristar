@@ -1,7 +1,7 @@
 [project]
 name = "otel-python-fastapi"
 version = "1.0.0"
-description = "fastapi example that dual-exports opentelemetry data to a tenant backend and stellar analytics"
+description = "fastapi example that dual-exports opentelemetry data to a tenant backend and veristar"
 requires-python = "==3.14.10"
 # docs:start dependencies (shown on the console's api analytics setup page)
 dependencies = [

@@ -62,7 +62,7 @@ The run stops before any node is touched when:
   `platform_images`;
 - an upstream image in `vars/pins.yml` is not pinned by digest;
 - `cosign verify` fails for any digest with identity
-  `https://github.com/justmert/stellar-analytics/.github/workflows/release-images.yml@refs/tags/<release>`
+  `https://github.com/justmert/veristar/.github/workflows/release-images.yml@refs/tags/<release>`
   and issuer `https://token.actions.githubusercontent.com` (`vars/signing.yml`). This covers an
   unsigned digest and a signature from any other workflow, branch, tag or repository;
 - the release tag in the registry now points to a digest other than the manifest's.

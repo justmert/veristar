@@ -64,29 +64,29 @@ section 2):
 
 | Tier | Directory | Services |
 |---|---|---|
-| edge | `/opt/stellar-analytics/edge` | `caddy`, `gateway`, `collector`, `nats`, `etcd` |
-| core | `/opt/stellar-analytics/core` | `postgres`, `haproxy`, `umami` (and `umami-2` up to `umami-<core_umami_processes>`, 4 by default), `controlplane`, `replayer`, `metricswriter`, `jobs`, `caddy` |
+| edge | `/opt/veristar/edge` | `caddy`, `gateway`, `collector`, `nats`, `etcd` |
+| core | `/opt/veristar/core` | `postgres`, `haproxy`, `umami` (and `umami-2` up to `umami-<core_umami_processes>`, 4 by default), `controlplane`, `replayer`, `metricswriter`, `jobs`, `caddy` |
 
 Every compose command below runs in that directory with `sudo`, for example:
 
 ```sh
-cd /opt/stellar-analytics/core && sudo docker compose ps
+cd /opt/veristar/core && sudo docker compose ps
 ```
 
-Env files with credentials are in `/etc/stellar-analytics/env/` (root only). Never copy them off
+Env files with credentials are in `/etc/veristar/env/` (root only). Never copy them off
 the node.
 
 ### Which core node holds the database
 
 ```sh
-cd /opt/stellar-analytics/core && sudo docker compose exec postgres patronictl -c /etc/patroni/patroni.yml list
+cd /opt/veristar/core && sudo docker compose exec postgres patronictl -c /etc/patroni/patroni.yml list
 ```
 
 The member with role `Leader` is the primary. Run every `psql` command of these runbooks on that
 node:
 
 ```sh
-cd /opt/stellar-analytics/core && sudo docker compose exec postgres psql -U postgres -d platform
+cd /opt/veristar/core && sudo docker compose exec postgres psql -U postgres -d platform
 ```
 
 Use `-d umami` for the Umami database.
@@ -98,19 +98,19 @@ with the production ones from the table above when working on production, and
 `<release tag>` with the deployed `SA_IMAGE_TAG`:
 
 ```sh
-sudo docker run --rm --network stellar-analytics-core_default \
-  --env-file /etc/stellar-analytics/env/platformctl.env \
-  -v /etc/stellar-analytics/tls/ca:/etc/sa-tls:ro \
+sudo docker run --rm --network veristar-core_default \
+  --env-file /etc/veristar/env/platformctl.env \
+  -v /etc/veristar/tls/ca:/etc/sa-tls:ro \
   -e PLATFORM_DB_HOST=haproxy -e PLATFORM_DB_PORT=5000 -e PLATFORM_DB_NAME=platform \
   -e PLATFORM_DB_SSLMODE=verify-full -e PLATFORM_DB_SSLROOTCERT=/etc/sa-tls/ca.crt \
   -e UMAMI_DB_NAME=umami -e UMAMI_URL=http://umami:3000 \
   -e NATS_URL=tls://10.20.1.11:4222,tls://10.20.2.12:4222,tls://10.20.3.13:4222 \
   -e NATS_TLS_CA=/etc/sa-tls/ca.crt \
   -e NATS_REPLICAS=3 \
-  ghcr.io/justmert/stellar-analytics/platformctl:<release tag> nats check
+  ghcr.io/justmert/veristar/platformctl:<release tag> nats check
 ```
 
-The image name is `<sa_image_registry>/platformctl:<tag>`; `ghcr.io/justmert/stellar-analytics`
+The image name is `<sa_image_registry>/platformctl:<tag>`; `ghcr.io/justmert/veristar`
 is where `release-images.yml` publishes for repository `<an operator input>`.
 
 ### Running a jobs task by hand
@@ -122,7 +122,7 @@ either let the daemon run the task on its schedule (restart it with
 nodes and then run, on one of them:
 
 ```sh
-cd /opt/stellar-analytics/core && sudo docker compose run --rm --no-deps jobs run <task>
+cd /opt/veristar/core && sudo docker compose run --rm --no-deps jobs run <task>
 ```
 
 Start `jobs` again on both nodes afterwards (`sudo docker compose start jobs`).
@@ -134,7 +134,7 @@ read from the NATS monitoring port on the private network, from any core node. T
 relay serves it over TLS and asks for a client certificate of the internal CA:
 
 ```sh
-sudo curl -s --cacert /etc/stellar-analytics/tls/root/ca.crt --cert /etc/stellar-analytics/tls/root/node.crt --key /etc/stellar-analytics/tls/root/node.key 'https://10.20.1.11:8222/jsz?streams=true&consumers=true'
+sudo curl -s --cacert /etc/veristar/tls/root/ca.crt --cert /etc/veristar/tls/root/node.crt --key /etc/veristar/tls/root/node.key 'https://10.20.1.11:8222/jsz?streams=true&consumers=true'
 ```
 
 The JSON lists every stream with `state.messages`, `state.first_seq` and its consumers'

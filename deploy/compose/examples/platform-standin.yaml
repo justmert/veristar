@@ -1,4 +1,4 @@
-# stock upstream collector standing in for the stellar analytics otlp
+# stock upstream collector standing in for the veristar otlp
 # endpoint when the scf-otelcol build is not part of the run. it only checks
 # that the bearer token the apps send matches PLATFORM_OTLP_TOKEN and records
 # the raw payloads. it does none of the platform's filtering; point the apps'

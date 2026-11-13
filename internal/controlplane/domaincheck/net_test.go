@@ -9,9 +9,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/justmert/stellar-analytics/internal/controlplane/domaincheck"
-	"github.com/justmert/stellar-analytics/internal/netguard"
-	"github.com/justmert/stellar-analytics/tests/fixtures/domainfix"
+	"github.com/justmert/veristar/internal/controlplane/domaincheck"
+	"github.com/justmert/veristar/internal/netguard"
+	"github.com/justmert/veristar/tests/fixtures/domainfix"
 )
 
 const zone = "stellar-verify.test"

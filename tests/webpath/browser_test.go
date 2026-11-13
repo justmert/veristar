@@ -24,10 +24,10 @@ type exampleSite struct {
 }
 
 var (
-	siteStatic = exampleSite{"static-html", "static.sa-tenant.example", "0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e01", "@stellar-analytics/example-static-html", 47101}
-	siteSPA    = exampleSite{"vite-react-spa", "spa.sa-tenant.example", "0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e02", "@stellar-analytics/example-vite-react-spa", 47102}
-	siteRR     = exampleSite{"react-router-ssr", "rr.sa-tenant.example", "0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e03", "@stellar-analytics/example-react-router-ssr", 47103}
-	siteAstro  = exampleSite{"astro-ssr", "astro.sa-tenant.example", "0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e04", "@stellar-analytics/example-astro-ssr", 47104}
+	siteStatic = exampleSite{"static-html", "static.sa-tenant.example", "0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e01", "@veristar/example-static-html", 47101}
+	siteSPA    = exampleSite{"vite-react-spa", "spa.sa-tenant.example", "0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e02", "@veristar/example-vite-react-spa", 47102}
+	siteRR     = exampleSite{"react-router-ssr", "rr.sa-tenant.example", "0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e03", "@veristar/example-react-router-ssr", 47103}
+	siteAstro  = exampleSite{"astro-ssr", "astro.sa-tenant.example", "0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e04", "@veristar/example-astro-ssr", 47104}
 	allSites   = []exampleSite{siteStatic, siteSPA, siteRR, siteAstro}
 )
 
@@ -139,7 +139,7 @@ func (b *Browsers) stop() {
 // tests; env adds WEBPATH_* parameters. it returns the summary and the error.
 func (b *Browsers) Run(t testing.TB, projects []string, grep string, extra []string, env ...string) (string, error) {
 	t.Helper()
-	args := []string{"--filter", "@stellar-analytics/e2e", "exec", "playwright", "test", "-c", "specs/webpath/playwright.config.ts"}
+	args := []string{"--filter", "@veristar/e2e", "exec", "playwright", "test", "-c", "specs/webpath/playwright.config.ts"}
 	for _, p := range projects {
 		args = append(args, "--project", p)
 	}

@@ -11,9 +11,9 @@ import (
 
 	"github.com/testcontainers/testcontainers-go"
 
-	"github.com/justmert/stellar-analytics/internal/events"
-	"github.com/justmert/stellar-analytics/internal/natsx"
-	"github.com/justmert/stellar-analytics/internal/umami"
+	"github.com/justmert/veristar/internal/events"
+	"github.com/justmert/veristar/internal/natsx"
+	"github.com/justmert/veristar/internal/umami"
 )
 
 // setUmamiReadOnly makes every new session of umami's database read-only

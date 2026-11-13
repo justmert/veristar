@@ -3,4 +3,4 @@
 # release-images.yml in this repository an operator input signs keyless with
 # github's oidc identity; playbooks/tasks/verify-images.yml accepts only that
 # workflow at the tag being deployed.
-sa_signing_repository: justmert/stellar-analytics
+sa_signing_repository: justmert/veristar

@@ -3,7 +3,7 @@
 # serves as CONSOLE_ROOT. shipping both in one image makes a console release
 # and the caddy that serves it one atomic deploy.
 #   docker build -f deploy/images/console.Dockerfile \
-#     --build-arg CADDY_IMAGE=stellar-analytics/caddy:2.11.9 -t stellar-analytics/console:dev .
+#     --build-arg CADDY_IMAGE=veristar/caddy:2.11.9 -t veristar/console:dev .
 # CADDY_IMAGE is required: it names the caddy.Dockerfile build to extend.
 # base images are pinned by tag and index digest (resolved 2026-11-12).
 
@@ -16,8 +16,8 @@ WORKDIR /src
 # package.json's packageManager names
 RUN npm install -g pnpm@12.18.0 && pnpm --version | grep -qx 12.18.0
 COPY . .
-RUN pnpm install --frozen-lockfile --filter "@stellar-analytics/console..." \
- && pnpm --filter @stellar-analytics/console build \
+RUN pnpm install --frozen-lockfile --filter "@veristar/console..." \
+ && pnpm --filter @veristar/console build \
  && test -f apps/console/dist/index.html
 
 FROM ${CADDY_IMAGE}

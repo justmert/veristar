@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/justmert/stellar-analytics/internal/events"
+	"github.com/justmert/veristar/internal/events"
 )
 
 const siteID = "0193a3f2-6a4e-7cc1-9b1a-3f2d8e9c1a20"

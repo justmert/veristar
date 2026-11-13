@@ -1,7 +1,7 @@
 # managed by ansible (infra/ansible/roles/core). patroni owns initdb,
 # replication and failover; etcd on the edge nodes holds the leader key.
 scope: "sa-{{ sa_environment }}"
-namespace: /stellar-analytics/
+namespace: /veristar/
 name: "{{ inventory_hostname }}"
 
 # every link is tls with the node certificate of the internal ca (finding

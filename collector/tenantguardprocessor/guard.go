@@ -19,10 +19,10 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/justmert/stellar-analytics/collector/internal/schema"
-	"github.com/justmert/stellar-analytics/collector/tenantauthextension"
-	"github.com/justmert/stellar-analytics/internal/redact"
-	"github.com/justmert/stellar-analytics/internal/routenorm"
+	"github.com/justmert/veristar/collector/internal/schema"
+	"github.com/justmert/veristar/collector/tenantauthextension"
+	"github.com/justmert/veristar/internal/redact"
+	"github.com/justmert/veristar/internal/routenorm"
 )
 
 // errors returned to the receiver, which maps the grpc codes to http:

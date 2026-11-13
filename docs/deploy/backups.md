@@ -13,7 +13,7 @@ protected. `site.yml` does every step below; nothing is done by hand. Code:
 |---|---|---|
 | Backup bucket (`roles/storage`, on the controller) | creates `backup_bucket` with object lock, enables versioning, sets the default retention, reads all three back | before any database node can archive to it |
 | Core infrastructure | Patroni starts PostgreSQL with `archive_mode = on` and an **empty** `archive_command` | PostgreSQL keeps every WAL segment and archives nothing, instead of failing each segment against a repository without a stanza |
-| WAL archiving (`core/tasks/archive.yml`) | the Patroni leader runs `pgbackrest stanza-create`; every database node gets the marker `/etc/stellar-analytics/pgbackrest/stanza-ready` and the real `archive_command`; Patroni reloads; `pgbackrest check` proves a fresh segment reaches the bucket | the stanza exists before archiving is switched on; the kept WAL is archived at once |
+| WAL archiving (`core/tasks/archive.yml`) | the Patroni leader runs `pgbackrest stanza-create`; every database node gets the marker `/etc/veristar/pgbackrest/stanza-ready` and the real `archive_command`; Patroni reloads; `pgbackrest check` proves a fresh segment reaches the bucket | the stanza exists before archiving is switched on; the kept WAL is archived at once |
 | Core services | the backup timers (`sa-pgbackrest-{full,diff,verify}`) on both core nodes; only the leader runs them | |
 
 Every step is idempotent: a second converge reports no change (`stanza-create` on an existing,
@@ -69,7 +69,7 @@ pgBackRest 2.60 reads a versioned repository as it was at a moment with `--repo-
 (`pgbackrest help restore repo-target-time` in the `postgres-ha` image):
 
 ```sh
-cd /opt/stellar-analytics/core
+cd /opt/veristar/core
 sudo docker compose exec postgres pgbackrest --stanza=sa --repo=1 \
   --repo-target-time="2026-11-20 08:00:00+00" info
 ```

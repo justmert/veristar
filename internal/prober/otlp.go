@@ -12,7 +12,7 @@ import (
 	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.opentelemetry.io/collector/pdata/pmetric/pmetricotlp"
 
-	"github.com/justmert/stellar-analytics/internal/histo"
+	"github.com/justmert/veristar/internal/histo"
 )
 
 // probeService is the service.name of the probe metric. the probe tenant
@@ -28,7 +28,7 @@ func otlpRequest(start, end time.Time) ([]byte, error) {
 	rm := md.ResourceMetrics().AppendEmpty()
 	rm.Resource().Attributes().PutStr("service.name", probeService)
 	sm := rm.ScopeMetrics().AppendEmpty()
-	sm.Scope().SetName("github.com/justmert/stellar-analytics/internal/prober")
+	sm.Scope().SetName("github.com/justmert/veristar/internal/prober")
 	m := sm.Metrics().AppendEmpty()
 	m.SetName("http.server.request.duration")
 	m.SetUnit("s")

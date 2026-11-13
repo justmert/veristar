@@ -24,13 +24,13 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2"
 
-	"github.com/justmert/stellar-analytics/internal/config"
-	"github.com/justmert/stellar-analytics/internal/controlplane"
-	"github.com/justmert/stellar-analytics/internal/controlplane/auth"
-	"github.com/justmert/stellar-analytics/internal/controlplane/session"
-	"github.com/justmert/stellar-analytics/internal/controlplane/terms"
-	"github.com/justmert/stellar-analytics/internal/db/systemq"
-	"github.com/justmert/stellar-analytics/tests/fixtures/githuboauth"
+	"github.com/justmert/veristar/internal/config"
+	"github.com/justmert/veristar/internal/controlplane"
+	"github.com/justmert/veristar/internal/controlplane/auth"
+	"github.com/justmert/veristar/internal/controlplane/session"
+	"github.com/justmert/veristar/internal/controlplane/terms"
+	"github.com/justmert/veristar/internal/db/systemq"
+	"github.com/justmert/veristar/tests/fixtures/githuboauth"
 )
 
 const (

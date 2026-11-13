@@ -8,7 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/justmert/stellar-analytics/internal/db/fenceq"
+	"github.com/justmert/veristar/internal/db/fenceq"
 )
 
 // ErrFenced means a newer lock holder has already written: the caller is a

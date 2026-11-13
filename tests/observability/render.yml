@@ -13,8 +13,8 @@
   vars:
     role_dir: "{{ playbook_dir }}/../../infra/ansible/roles/observability"
     out: "{{ p17 }}/conf/{{ inventory_hostname }}"
-    observability_conf_dir: /etc/stellar-analytics/observability
-    secrets_env_dir: /etc/stellar-analytics/env
+    observability_conf_dir: /etc/veristar/observability
+    secrets_env_dir: /etc/veristar/env
   tasks:
     - name: Run the role's facts
       ansible.builtin.import_role:

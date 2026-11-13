@@ -15,8 +15,8 @@ set -eu
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 export LC_TOPOLOGY=minimal
-venv="${ANSIBLE_VENV:-$HOME/.local/share/stellar-analytics/ansible-venv}"
-tools="$HOME/.local/share/stellar-analytics/tools"
+venv="${ANSIBLE_VENV:-$HOME/.local/share/veristar/ansible-venv}"
+tools="$HOME/.local/share/veristar/tools"
 out="$root/.scratch/scratch/rotate-local"
 state="$root/.scratch/scratch/local-converge"
 mkdir -p "$out"

@@ -17,7 +17,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/justmert/stellar-analytics/internal/sloreport"
+	"github.com/justmert/veristar/internal/sloreport"
 )
 
 const usage = `usage:

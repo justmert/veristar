@@ -6,8 +6,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/justmert/stellar-analytics/internal/controlplane/domaincheck"
-	"github.com/justmert/stellar-analytics/internal/netguard"
+	"github.com/justmert/veristar/internal/controlplane/domaincheck"
+	"github.com/justmert/veristar/internal/netguard"
 )
 
 const token = "Zm9vYmFyYmF6cXV4cXV1eGNvcmdlZ3JhdWx0Z2FycGx5" // 43 characters like a real one
@@ -17,24 +17,24 @@ func TestCheckDNS(t *testing.T) {
 	n := newNet(t, &tokenFiles{})
 	c := n.checker(t)
 
-	n.dns.SetTXT("_stellar-analytics.ok."+zone, []string{"v=spf1 -all"}, []string{domaincheck.DNSValue(token)})
+	n.dns.SetTXT("_veristar.ok."+zone, []string{"v=spf1 -all"}, []string{domaincheck.DNSValue(token)})
 	require.Empty(t, c.CheckDNS(t.Context(), "ok."+zone, token))
 
 	// one record split into several strings is joined before comparing
 	v := domaincheck.DNSValue(token)
-	n.dns.SetTXT("_stellar-analytics.split."+zone, []string{v[:10], v[10:]})
+	n.dns.SetTXT("_veristar.split."+zone, []string{v[:10], v[10:]})
 	require.Empty(t, c.CheckDNS(t.Context(), "split."+zone, token))
 
-	n.dns.SetTXT("_stellar-analytics.wrong."+zone, []string{domaincheck.DNSValue("another-token")})
+	n.dns.SetTXT("_veristar.wrong."+zone, []string{domaincheck.DNSValue("another-token")})
 	require.Equal(t, domaincheck.CodeDNSMismatch, c.CheckDNS(t.Context(), "wrong."+zone, token))
 
 	// a prefix match is not enough
-	n.dns.SetTXT("_stellar-analytics.prefix."+zone, []string{domaincheck.DNSValue(token) + "x"})
+	n.dns.SetTXT("_veristar.prefix."+zone, []string{domaincheck.DNSValue(token) + "x"})
 	require.Equal(t, domaincheck.CodeDNSMismatch, c.CheckDNS(t.Context(), "prefix."+zone, token))
 
 	require.Equal(t, domaincheck.CodeDNSNoRecord, c.CheckDNS(t.Context(), "none."+zone, token))
 	// the name exists but holds no txt record
-	n.dns.SetAddrs("_stellar-analytics.empty."+zone, loopback)
+	n.dns.SetAddrs("_veristar.empty."+zone, loopback)
 	require.Equal(t, domaincheck.CodeDNSNoRecord, c.CheckDNS(t.Context(), "empty."+zone, token))
 }
 
@@ -66,7 +66,7 @@ func TestVerifyOrder(t *testing.T) {
 	files := &tokenFiles{}
 	n := newNet(t, files, "both", "fileonly", "neither")
 	c := n.checker(t)
-	n.dns.SetTXT("_stellar-analytics.both."+zone, []string{domaincheck.DNSValue(token)})
+	n.dns.SetTXT("_veristar.both."+zone, []string{domaincheck.DNSValue(token)})
 	files.set("both."+zone, token)
 	files.set("fileonly."+zone, token)
 

@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/justmert/stellar-analytics/internal/registry"
+	"github.com/justmert/veristar/internal/registry"
 )
 
 // origin is a parsed origin or origin pattern: scheme, host and effective

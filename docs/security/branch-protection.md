@@ -1,6 +1,6 @@
 # Branch protection for `main`
 
-The settings below are required for `main` in `github.com/justmert/stellar-analytics`. They make
+The settings below are required for `main` in `github.com/justmert/veristar`. They make
 every change go through a reviewed pull request with passing checks, which is the control that
 stops a single compromised account or a careless push from changing the tracker, the Caddy
 deny lists or the infrastructure code ([threat-model.md](threat-model.md)).
@@ -14,7 +14,7 @@ Two things block this today:
    GitHub Free and GitHub Free for organizations, and in public and private repositories with
    GitHub Pro, GitHub Team, GitHub Enterprise Cloud, and GitHub Enterprise Server." Checked
    against the repository on 2026-11-13:
-   `gh api repos/justmert/stellar-analytics/branches/main/protection` answered
+   `gh api repos/justmert/veristar/branches/main/protection` answered
    `403 Upgrade to GitHub Pro or make this repository public to enable this feature.`
    Protection can be applied once the repository is public (planned, needs the operator's explicit
    confirmation) or the operator moves to a paid plan.
@@ -95,7 +95,7 @@ repositories; `restrictions` is `null` for the same reason.
 gh api --method PUT \
   -H "Accept: application/vnd.github+json" \
   -H "X-GitHub-Api-Version: 2022-11-28" \
-  repos/justmert/stellar-analytics/branches/main/protection \
+  repos/justmert/veristar/branches/main/protection \
   --input - <<'EOF'
 {
   "required_status_checks": {
@@ -142,7 +142,7 @@ Optional, signed commits:
 ```bash
 gh api --method POST \
   -H "Accept: application/vnd.github+json" \
-  repos/justmert/stellar-analytics/branches/main/protection/required_signatures
+  repos/justmert/veristar/branches/main/protection/required_signatures
 ```
 
 The signed-commit endpoint path was not checked against the documentation text in this session;
@@ -151,7 +151,7 @@ the main `PUT` body above was.
 Check the result:
 
 ```bash
-gh api repos/justmert/stellar-analytics/branches/main/protection
+gh api repos/justmert/veristar/branches/main/protection
 ```
 
 ## Keeping this current

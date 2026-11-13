@@ -3,8 +3,8 @@
 # a change goes through review like any other
 apiVersion: 1
 providers:
-  - name: stellar-analytics
-    folder: Stellar Analytics
+  - name: veristar
+    folder: Veristar
     type: file
     disableDeletion: true
     allowUiUpdates: false

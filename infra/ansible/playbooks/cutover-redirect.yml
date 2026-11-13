@@ -23,7 +23,7 @@
   become: true
   vars_files: [../vars/pins.yml]
   vars:
-    cutover_edge_dir: /opt/stellar-analytics/edge
+    cutover_edge_dir: /opt/veristar/edge
   pre_tasks:
     - name: Require the new domain and the acknowledgement
       ansible.builtin.assert:

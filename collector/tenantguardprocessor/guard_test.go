@@ -17,9 +17,9 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/justmert/stellar-analytics/collector/internal/schema"
-	"github.com/justmert/stellar-analytics/collector/tenantauthextension"
-	"github.com/justmert/stellar-analytics/internal/registry"
+	"github.com/justmert/veristar/collector/internal/schema"
+	"github.com/justmert/veristar/collector/tenantauthextension"
+	"github.com/justmert/veristar/internal/registry"
 )
 
 const seed = "SBU2RRGLXH3E5CQHTD3ODLDF2BWDCYUSSBLLZ5GNW7JXHDIYKXZWHOKR"

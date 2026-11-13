@@ -1,5 +1,5 @@
 {
-  "name": "@stellar-analytics/console",
+  "name": "@veristar/console",
   "private": true,
   "type": "module",
   "scripts": {

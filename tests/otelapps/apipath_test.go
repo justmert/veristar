@@ -32,7 +32,7 @@ import (
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 
-	"github.com/justmert/stellar-analytics/internal/natsx"
+	"github.com/justmert/veristar/internal/natsx"
 )
 
 const (

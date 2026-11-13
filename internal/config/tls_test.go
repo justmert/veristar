@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/justmert/stellar-analytics/tests/fixtures/tlsca"
+	"github.com/justmert/veristar/tests/fixtures/tlsca"
 )
 
 func tlsFiles(t *testing.T) (ca, cert, key string) {

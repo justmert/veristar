@@ -28,7 +28,7 @@ identity: the Ansible `secrets` role decrypts on the controller with the operato
 identity (`SOPS_AGE_KEY_FILE`, else `~/.config/sops/age/keys.txt`) through
 `community.sops.load_vars`, and writes per-service env files on each node:
 
-- `/etc/stellar-analytics/env/` is `root:root 0700`, every file in it `root:root 0600`.
+- `/etc/veristar/env/` is `root:root 0700`, every file in it `root:root 0600`.
 - Each service gets only its own keys (`roles/secrets/templates/<service>.env.j2`), read
   by Docker Compose's `env_file`.
 - Config files that must carry a credential (NATS, Patroni) are written by the edge and
@@ -129,7 +129,7 @@ controller tools of [prerequisites.md](prerequisites.md) with `sops` and `age-ke
    mkdir -p infra/secrets/staging
    read -rs SA_GITHUB_CLIENT_SECRET; export SA_GITHUB_CLIENT_SECRET
    SA_GITHUB_CLIENT_ID=<an operator input client id> \
-     ~/.local/share/stellar-analytics/ansible-venv/bin/python infra/secrets/new-secrets.py staging \
+     ~/.local/share/veristar/ansible-venv/bin/python infra/secrets/new-secrets.py staging \
      | sops --config infra/secrets/.sops.yaml encrypt --filename-override infra/secrets/staging/secrets.enc.yaml \
          --input-type yaml --output-type yaml /dev/stdin > infra/secrets/staging/secrets.enc.yaml
    unset SA_GITHUB_CLIENT_SECRET

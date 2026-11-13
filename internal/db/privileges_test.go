@@ -10,8 +10,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
-	pdb "github.com/justmert/stellar-analytics/internal/db"
-	"github.com/justmert/stellar-analytics/tests/fixtures/rolematrix"
+	pdb "github.com/justmert/veristar/internal/db"
+	"github.com/justmert/veristar/tests/fixtures/rolematrix"
 )
 
 // the expected rights matrix lives in tests/fixtures/rolematrix, shared with

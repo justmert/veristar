@@ -10,8 +10,8 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/justmert/stellar-analytics/internal/controlplane/provision"
-	"github.com/justmert/stellar-analytics/internal/jobs/scheduler"
+	"github.com/justmert/veristar/internal/controlplane/provision"
+	"github.com/justmert/veristar/internal/jobs/scheduler"
 )
 
 // TaskName is the name of the task in the jobs daemon.

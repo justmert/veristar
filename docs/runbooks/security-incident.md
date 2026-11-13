@@ -32,7 +32,7 @@ evidence is saved (step 3), unless the damage is ongoing.
 3. **Save evidence** before changing anything on an affected node:
 
    ```sh
-   cd /opt/stellar-analytics/<edge or core>
+   cd /opt/veristar/<edge or core>
    sudo docker compose ps > /tmp/incident-ps.txt
    sudo sh -c 'docker compose logs --timestamps --no-color > /root/incident-compose.log'
    sudo journalctl --since '<YYYY-MM-DD HH:MM>' --utc > /tmp/incident-journal.txt

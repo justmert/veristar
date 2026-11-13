@@ -14,7 +14,7 @@ import (
 	"slices"
 	"time"
 
-	"github.com/justmert/stellar-analytics/internal/histo"
+	"github.com/justmert/veristar/internal/histo"
 )
 
 // NumBuckets is the length of every bucket array the engine handles: the

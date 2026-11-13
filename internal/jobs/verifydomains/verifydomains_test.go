@@ -15,14 +15,14 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 
-	"github.com/justmert/stellar-analytics/internal/controlplane/domaincheck"
-	pdb "github.com/justmert/stellar-analytics/internal/db"
-	"github.com/justmert/stellar-analytics/internal/jobs/jobstest"
-	"github.com/justmert/stellar-analytics/internal/jobs/scheduler"
-	"github.com/justmert/stellar-analytics/internal/jobs/verifydomains"
-	"github.com/justmert/stellar-analytics/internal/natsx"
-	"github.com/justmert/stellar-analytics/internal/netguard"
-	"github.com/justmert/stellar-analytics/tests/fixtures/domainfix"
+	"github.com/justmert/veristar/internal/controlplane/domaincheck"
+	pdb "github.com/justmert/veristar/internal/db"
+	"github.com/justmert/veristar/internal/jobs/jobstest"
+	"github.com/justmert/veristar/internal/jobs/scheduler"
+	"github.com/justmert/veristar/internal/jobs/verifydomains"
+	"github.com/justmert/veristar/internal/natsx"
+	"github.com/justmert/veristar/internal/netguard"
+	"github.com/justmert/veristar/tests/fixtures/domainfix"
 )
 
 const zone = "stellar-verify.test"
@@ -145,7 +145,7 @@ func TestRun(t *testing.T) {
 			last_verify_error = 'file_not_found', stellar_toml = '{"status":"not_found"}' where id = $1`, fresh)
 		return err
 	})
-	dns.SetTXT("_stellar-analytics.dns."+zone, []string{domaincheck.DNSValue("token-dns")})
+	dns.SetTXT("_veristar.dns."+zone, []string{domaincheck.DNSValue("token-dns")})
 	fs.set("file."+zone+domaincheck.FilePath, "token-file\n")
 	valid, err := os.ReadFile(filepath.Join("..", "..", "..", "tests", "fixtures", "stellartoml", "valid.toml"))
 	require.NoError(t, err)
@@ -187,7 +187,7 @@ func TestRun(t *testing.T) {
 	// a day later every live site is due; unchanged outcomes add no audit
 	// rows, a changed one does
 	now = now.Add(25 * time.Hour)
-	dns.SetTXT("_stellar-analytics.dns."+zone, []string{domaincheck.DNSValue("rotated")})
+	dns.SetTXT("_veristar.dns."+zone, []string{domaincheck.DNSValue("rotated")})
 	res, err = task.Run(ctx, leader.SystemTx)
 	require.NoError(t, err)
 	require.Equal(t, 4, res.Sites)

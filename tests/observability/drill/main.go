@@ -44,7 +44,7 @@ import (
 	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.opentelemetry.io/collector/pdata/pmetric/pmetricotlp"
 
-	"github.com/justmert/stellar-analytics/internal/histo"
+	"github.com/justmert/veristar/internal/histo"
 )
 
 const app = "https://app.p17.test"

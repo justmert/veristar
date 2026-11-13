@@ -1,5 +1,5 @@
 //! actix-web example that dual-exports opentelemetry data: one copy to the
-//! tenant's own backend and one to stellar analytics. see README.md for the
+//! tenant's own backend and one to veristar. see README.md for the
 //! environment contract.
 
 use std::collections::HashMap;

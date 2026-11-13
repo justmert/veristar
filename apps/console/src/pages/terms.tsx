@@ -13,7 +13,7 @@ export function TermsPage() {
       <header className="mx-auto flex max-w-3xl items-center gap-2 px-4 pt-8 sm:px-6">
         <Link to="/" className="flex items-center gap-2 rounded-md font-semibold tracking-tight">
           <Mark className="size-6 text-primary" />
-          Stellar Analytics
+          Veristar
         </Link>
       </header>
       <main id="main" className="mx-auto max-w-3xl px-4 py-8 sm:px-6">

@@ -27,12 +27,12 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 
-	"github.com/justmert/stellar-analytics/internal/controlplane/audit"
-	"github.com/justmert/stellar-analytics/internal/db"
-	"github.com/justmert/stellar-analytics/internal/db/systemq"
-	"github.com/justmert/stellar-analytics/internal/natsx"
-	"github.com/justmert/stellar-analytics/internal/replayer"
-	"github.com/justmert/stellar-analytics/internal/umami"
+	"github.com/justmert/veristar/internal/controlplane/audit"
+	"github.com/justmert/veristar/internal/db"
+	"github.com/justmert/veristar/internal/db/systemq"
+	"github.com/justmert/veristar/internal/natsx"
+	"github.com/justmert/veristar/internal/replayer"
+	"github.com/justmert/veristar/internal/umami"
 )
 
 // kinds of cp.erasure_requests

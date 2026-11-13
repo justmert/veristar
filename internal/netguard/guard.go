@@ -277,7 +277,7 @@ func (g *Guard) Get(ctx context.Context, host, path string, maxBody int64) (Resp
 	if err != nil {
 		return Response{}, err
 	}
-	req.Header.Set("User-Agent", "stellar-analytics-domain-check")
+	req.Header.Set("User-Agent", "veristar-domain-check")
 	resp, err := g.client.Do(req)
 	if err != nil {
 		return Response{}, err

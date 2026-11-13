@@ -20,8 +20,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/justmert/stellar-analytics/collector/internal/natsconn"
-	"github.com/justmert/stellar-analytics/internal/registry"
+	"github.com/justmert/veristar/collector/internal/natsconn"
+	"github.com/justmert/veristar/internal/registry"
 )
 
 // attribute names of the auth data. tenantguard reads them; they are the

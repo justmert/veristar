@@ -37,7 +37,7 @@
     - name: Drain the node
       ansible.builtin.include_tasks: tasks/drain.yml
       vars:
-        drain_dir: /etc/stellar-analytics/drain
+        drain_dir: /etc/veristar/drain
   roles:
     - secrets
     - edge
@@ -45,7 +45,7 @@
     - name: Undrain the node
       ansible.builtin.include_tasks: tasks/undrain.yml
       vars:
-        drain_dir: /etc/stellar-analytics/drain
+        drain_dir: /etc/veristar/drain
 
 - name: Apply the nats topology of the new release
   ansible.builtin.import_playbook: bootstrap.yml
@@ -64,7 +64,7 @@
     - name: Drain the node
       ansible.builtin.include_tasks: tasks/drain.yml
       vars:
-        drain_dir: /etc/stellar-analytics/drain
+        drain_dir: /etc/veristar/drain
     - name: Hand the patroni leader to the replica
       ansible.builtin.include_tasks: tasks/switchover.yml
   roles:
@@ -74,7 +74,7 @@
     - name: Undrain the node
       ansible.builtin.include_tasks: tasks/undrain.yml
       vars:
-        drain_dir: /etc/stellar-analytics/drain
+        drain_dir: /etc/veristar/drain
 
 # the observability role's own images (prober and caddy on the probe node,
 # an operator input and its configs move with the release too. verify-release.yml

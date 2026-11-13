@@ -18,7 +18,7 @@ real, and when.
 
 To reach the tools: `ssh -L 9090:127.0.0.1:9090 -L 3000:127.0.0.1:3000
 ops@<core node>`, then Prometheus on `http://127.0.0.1:9090` and Grafana on
-`http://127.0.0.1:3000` (dashboards in the folder Stellar Analytics).
+`http://127.0.0.1:3000` (dashboards in the folder Veristar).
 
 ## Ingestion and edge
 
@@ -42,7 +42,7 @@ The gateway of an edge node does not answer scrapes, one of its readiness
 checks fails, or its collector does not answer, for 2 minutes. Caddy's port
 80 health already takes the node out of DNS.
 Action: `ssh` to the node, `sudo docker compose ps` in
-`/opt/stellar-analytics/edge`, read the failing check in `ops_ready_check` or
+`/opt/veristar/edge`, read the failing check in `ops_ready_check` or
 with `sudo docker compose exec caddy wget -qO- http://gateway:9090/readyz`.
 Restart the failing service; if NATS on the node is the cause, see
 NATSServerDown. Full steps: [edge-node-failure.md](edge-node-failure.md).
@@ -258,7 +258,7 @@ both Alertmanagers or the whole core tier are down, or the core tier cannot
 reach the probe, and no other alert can be sent from inside.
 Action when Gatus reports it missing: check the core nodes
 ([database-failover.md](database-failover.md) if both are down), then
-`docker compose ps` in `/opt/stellar-analytics/observability` on each core
+`docker compose ps` in `/opt/veristar/observability` on each core
 node. Never silence `Watchdog` in Alertmanager: a silence stops the heartbeat
 and Gatus alerts after 5 minutes. Without a probe node an operator input the route
 goes to a receiver with no target, so nothing watches it.

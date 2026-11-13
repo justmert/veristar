@@ -77,12 +77,12 @@ sections 3 and 5). Expected outputs quoted from those runs say so.
     with the operator of step 9:
 
     ```sh
-    sudo docker run --rm --network stellar-analytics-core_default \
-      --env-file /etc/stellar-analytics/env/platformctl.env \
-      -v /etc/stellar-analytics/tls/ca:/etc/sa-tls:ro \
+    sudo docker run --rm --network veristar-core_default \
+      --env-file /etc/veristar/env/platformctl.env \
+      -v /etc/veristar/tls/ca:/etc/sa-tls:ro \
       -e PLATFORM_DB_HOST=haproxy -e PLATFORM_DB_PORT=5000 -e PLATFORM_DB_NAME=platform \
       -e PLATFORM_DB_SSLMODE=verify-full -e PLATFORM_DB_SSLROOTCERT=/etc/sa-tls/ca.crt \
-      ghcr.io/justmert/stellar-analytics/platformctl:<release> \
+      ghcr.io/justmert/veristar/platformctl:<release> \
       probe-tenant create -operator-github-id <operator github id> -domain probe.<an operator input> -origin https://probe.<an operator input>
     ```
 
@@ -91,7 +91,7 @@ sections 3 and 5). Expected outputs quoted from those runs say so.
     `probe_otlp_token` and `probe_machine_api_key`
     (`sops --config infra/secrets/.sops.yaml edit infra/secrets/staging/secrets.enc.yaml`). Then
     restart `jobs` on both core nodes (`sudo docker compose restart jobs` in
-    `/opt/stellar-analytics/core`): a new jobs leader runs every task at once, including the
+    `/opt/veristar/core`): a new jobs leader runs every task at once, including the
     reconcile that provisions the probe's Umami websites and registry entries.
 
 11. **Probe node.** Needs an operator input (`probe_enabled = true` in `terraform.tfvars`, then plan and

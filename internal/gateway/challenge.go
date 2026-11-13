@@ -16,7 +16,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/nats-io/nats.go/jetstream"
 
-	"github.com/justmert/stellar-analytics/internal/natsx"
+	"github.com/justmert/veristar/internal/natsx"
 )
 
 const (

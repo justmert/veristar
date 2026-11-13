@@ -14,11 +14,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/justmert/stellar-analytics/docs/reference/openapi"
-	"github.com/justmert/stellar-analytics/internal/controlplane/httpx"
-	"github.com/justmert/stellar-analytics/internal/db"
-	"github.com/justmert/stellar-analytics/internal/db/operatorq"
-	"github.com/justmert/stellar-analytics/internal/umami"
+	"github.com/justmert/veristar/docs/reference/openapi"
+	"github.com/justmert/veristar/internal/controlplane/httpx"
+	"github.com/justmert/veristar/internal/db"
+	"github.com/justmert/veristar/internal/db/operatorq"
+	"github.com/justmert/veristar/internal/umami"
 )
 
 // the machine metrics api of the design (contract section 9,

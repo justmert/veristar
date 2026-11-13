@@ -17,7 +17,7 @@ import (
 	"github.com/oschwald/maxminddb-golang/v2"
 	"github.com/stellar/go-stellar-sdk/strkey"
 
-	"github.com/justmert/stellar-analytics/tests/gateway/gwclient"
+	"github.com/justmert/veristar/tests/gateway/gwclient"
 )
 
 const (

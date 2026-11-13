@@ -23,7 +23,7 @@ operator. The RFP sets the frame (RFP 3.4):
 
 | Asset | Today | Moves by |
 |---|---|---|
-| Repository `github.com/justmert/stellar-analytics` (code, IaC, docs, issues, releases) | personal account of the proposer | GitHub repository transfer to the new operator's owner |
+| Repository `github.com/justmert/veristar` (code, IaC, docs, issues, releases) | personal account of the proposer | GitHub repository transfer to the new operator's owner |
 | Domain `BASE_DOMAIN` an operator input, not yet chosen) | ideally registered to SCF from day one, which makes this step a permission change | registrar transfer, or permanent redirect (section 5) |
 | Cloud project (Hetzner: servers, private network, object storage with backups) | an operator input | rebuild in the new operator's account from `infra/tofu`, then data migration |
 | DNS zone (bunny.net) | an operator input | recreated from `infra/tofu/modules/dns` in the new account |

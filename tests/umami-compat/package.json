@@ -1,5 +1,5 @@
 {
-  "name": "@stellar-analytics/umami-compat",
+  "name": "@veristar/umami-compat",
   "private": true,
   "type": "module",
   "scripts": {

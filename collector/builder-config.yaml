@@ -3,14 +3,14 @@
 #   go run go.opentelemetry.io/collector/cmd/builder@v0.165.0 \
 #     --config collector/builder-config.yaml --skip-strict-versioning=false
 # (make collector-build). the three custom components live in the root
-# module github.com/justmert/stellar-analytics, which `replaces` points at,
+# module github.com/justmert/veristar, which `replaces` points at,
 # so the generated module resolves them from this checkout and its
 # requirements (collector v0.165.0 / v1.71.0, pdata v1.71.0) take part in
 # version selection. docs/reference/collector.md records why.
 dist:
-  module: github.com/justmert/stellar-analytics/scf-otelcol
+  module: github.com/justmert/veristar/scf-otelcol
   name: scf-otelcol
-  description: stellar analytics otlp collector
+  description: veristar otlp collector
   output_path: ./dist/scf-otelcol
   version: 0.1.0
 
@@ -20,14 +20,14 @@ receivers:
 processors:
   - gomod: go.opentelemetry.io/collector/processor/memorylimiterprocessor v0.165.0
   - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/processor/transformprocessor v0.165.1
-  - gomod: github.com/justmert/stellar-analytics v0.0.0
-    import: github.com/justmert/stellar-analytics/collector/tenantguardprocessor
+  - gomod: github.com/justmert/veristar v0.0.0
+    import: github.com/justmert/veristar/collector/tenantguardprocessor
     name: tenantguardprocessor
 
 exporters:
   - gomod: go.opentelemetry.io/collector/exporter/nopexporter v0.165.0
-  - gomod: github.com/justmert/stellar-analytics v0.0.0
-    import: github.com/justmert/stellar-analytics/collector/jetstreamexporter
+  - gomod: github.com/justmert/veristar v0.0.0
+    import: github.com/justmert/veristar/collector/jetstreamexporter
     name: jetstreamexporter
 
 connectors:
@@ -35,8 +35,8 @@ connectors:
 
 extensions:
   - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/extension/healthcheckextension v0.165.1
-  - gomod: github.com/justmert/stellar-analytics v0.0.0
-    import: github.com/justmert/stellar-analytics/collector/tenantauthextension
+  - gomod: github.com/justmert/veristar v0.0.0
+    import: github.com/justmert/veristar/collector/tenantauthextension
     name: tenantauthextension
 
 # configuration comes from a file with ${env:...} references only; the http
@@ -48,4 +48,4 @@ providers:
 
 replaces:
   # relative to dist.output_path
-  - github.com/justmert/stellar-analytics => ../../
+  - github.com/justmert/veristar => ../../

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/justmert/stellar-analytics/internal/config"
+	"github.com/justmert/veristar/internal/config"
 )
 
 // a writer without configuration exits before connecting and names every

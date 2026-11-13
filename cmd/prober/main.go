@@ -18,9 +18,9 @@ import (
 	"runtime/debug"
 	"syscall"
 
-	"github.com/justmert/stellar-analytics/internal/config"
-	"github.com/justmert/stellar-analytics/internal/obs"
-	"github.com/justmert/stellar-analytics/internal/prober"
+	"github.com/justmert/veristar/internal/config"
+	"github.com/justmert/veristar/internal/obs"
+	"github.com/justmert/veristar/internal/prober"
 )
 
 // version is set at build time with -ldflags "-X main.version=...".

@@ -10,7 +10,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/justmert/stellar-analytics/internal/config"
+	"github.com/justmert/veristar/internal/config"
 )
 
 // ErrGitHubUserNotFound is returned by Lookup for a login that names no

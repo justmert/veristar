@@ -10,11 +10,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/justmert/stellar-analytics/internal/controlplane/audit"
-	"github.com/justmert/stellar-analytics/internal/controlplane/httpx"
-	"github.com/justmert/stellar-analytics/internal/controlplane/tenants"
-	"github.com/justmert/stellar-analytics/internal/db/tenantq"
-	"github.com/justmert/stellar-analytics/internal/registry"
+	"github.com/justmert/veristar/internal/controlplane/audit"
+	"github.com/justmert/veristar/internal/controlplane/httpx"
+	"github.com/justmert/veristar/internal/controlplane/tenants"
+	"github.com/justmert/veristar/internal/db/tenantq"
+	"github.com/justmert/veristar/internal/registry"
 )
 
 // maxActive bounds the active tokens of one tenant, so a leaked session

@@ -8,7 +8,7 @@ repository substitutes a made-up value for one.
 
 | Input | What | Where it goes | Needed by | Status 2026-11-13 |
 |---|---|---|---|---|
-| I1 | Git repository `github.com/justmert/stellar-analytics` | Go module path; `sa_signing_repository` in `infra/ansible/vars/signing.yml` (the only identity whose signed images `deploy.yml` accepts); images under `ghcr.io/justmert/stellar-analytics/` | release images, deploy | supplied; private, must be public before phases 18 and 20 publish |
+| I1 | Git repository `github.com/justmert/veristar` | Go module path; `sa_signing_repository` in `infra/ansible/vars/signing.yml` (the only identity whose signed images `deploy.yml` accepts); images under `ghcr.io/justmert/veristar/` | release images, deploy | supplied; private, must be public before phases 18 and 20 publish |
 | I2 | GitHub OAuth App per environment: client id and secret | `github_client_id`, `github_client_secret` in `infra/secrets/<env>/secrets.enc.yaml` (from `SA_GITHUB_CLIENT_ID`, `SA_GITHUB_CLIENT_SECRET`) | core nodes (the `secrets` role refuses a core node without it) | missing |
 | I3 | Numeric GitHub ids of the SCF operators | `sa_operator_github_ids` in `infra/ansible/inventories/<env>/group_vars/all.yml` | `bootstrap.yml`, core role | missing |
 | I4 | `BASE_DOMAIN`, registered, zone delegated to bunny.net | `base_domain` in `infra/tofu/envs/<env>/terraform.tfvars`; `STATUS_BASE_URL` repository variable (`https://status.<an operator input>`) for the SLO workflow | DNS, certificates, every hostname | missing |
@@ -119,17 +119,17 @@ A Linux machine with the repository checked out. Versions are the the design pin
 | OpenTofu | 1.13.9 | release `tofu_1.13.9_linux_amd64.zip`, checked against `tofu_1.13.9_SHA256SUMS` ([opentofu.md](opentofu.md) section 3.1) | `tofu version` prints `OpenTofu v1.13.9` |
 | uv | any recent | astral.sh | `uv --version` |
 | Python | 3.13 (installed by uv for the venv) | `make ansible-venv` | |
-| Ansible 14.6.0 (ansible-core 2.21.6), ansible-lint, yamllint, bcrypt, PyYAML | pinned in `infra/ansible/requirements.txt` | `make ansible-venv` (venv at `~/.local/share/stellar-analytics/ansible-venv`) | `~/.local/share/stellar-analytics/ansible-venv/bin/ansible --version` prints `ansible [core 2.21.6]` |
-| SOPS, age | 3.13.3, 1.3.2 | `make ansible-venv` runs `playbooks/controller-tools.yml`, which downloads both and checks their SHA-256 into `~/.local/share/stellar-analytics/tools/` | `~/.local/share/stellar-analytics/tools/sops-3.13.3 --version` prints `sops 3.13.3` |
+| Ansible 14.6.0 (ansible-core 2.21.6), ansible-lint, yamllint, bcrypt, PyYAML | pinned in `infra/ansible/requirements.txt` | `make ansible-venv` (venv at `~/.local/share/veristar/ansible-venv`) | `~/.local/share/veristar/ansible-venv/bin/ansible --version` prints `ansible [core 2.21.6]` |
+| SOPS, age | 3.13.3, 1.3.2 | `make ansible-venv` runs `playbooks/controller-tools.yml`, which downloads both and checks their SHA-256 into `~/.local/share/veristar/tools/` | `~/.local/share/veristar/tools/sops-3.13.3 --version` prints `sops 3.13.3` |
 | cosign | 3.1.4 | release binary, on `PATH` (`deploy.yml` calls `cosign verify`) | `cosign version` shows `GitVersion: v3.1.4` |
 | Go | 1.27.4 | go.dev, on `PATH` (the Makefile calls `go`) | `go version` |
 | Docker Engine and Compose | 29.9.3, 5.6.1 | only for local checks, builds and the local converge | `docker version` |
 | curl, openssl, ssh | system | | |
 
 The Makefile calls `sops` and `tofu` from `PATH`. The controller tools install SOPS under a
-versioned name, so either link it (`ln -s ~/.local/share/stellar-analytics/tools/sops-3.13.3 ~/.local/bin/sops`)
-or pass it per command (`make SOPS=~/.local/share/stellar-analytics/tools/sops-3.13.3 staging-plan`).
-Put `age` and `age-keygen` from `~/.local/share/stellar-analytics/tools/age/` on `PATH` the same way.
+versioned name, so either link it (`ln -s ~/.local/share/veristar/tools/sops-3.13.3 ~/.local/bin/sops`)
+or pass it per command (`make SOPS=~/.local/share/veristar/tools/sops-3.13.3 staging-plan`).
+Put `age` and `age-keygen` from `~/.local/share/veristar/tools/age/` on `PATH` the same way.
 
 ## Steps
 

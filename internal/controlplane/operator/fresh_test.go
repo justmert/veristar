@@ -14,10 +14,10 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 
-	pdb "github.com/justmert/stellar-analytics/internal/db"
-	"github.com/justmert/stellar-analytics/internal/db/writerq"
-	"github.com/justmert/stellar-analytics/internal/jobs/apirollup"
-	"github.com/justmert/stellar-analytics/internal/jobs/jobstest"
+	pdb "github.com/justmert/veristar/internal/db"
+	"github.com/justmert/veristar/internal/db/writerq"
+	"github.com/justmert/veristar/internal/jobs/apirollup"
+	"github.com/justmert/veristar/internal/jobs/jobstest"
 )
 
 // freshChosen is the independent expectation: the tenant's minute rows of

@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/justmert/stellar-analytics/internal/events"
+	"github.com/justmert/veristar/internal/events"
 )
 
 // proofInput is w|iat|salt|nonce, salt as lowercase hex (docs/reference/wire-v1.md).

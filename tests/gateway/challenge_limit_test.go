@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/justmert/stellar-analytics/tests/gateway/gwclient"
+	"github.com/justmert/veristar/tests/gateway/gwclient"
 )
 
 // frozenClock stands still until a test moves it, so token buckets refill

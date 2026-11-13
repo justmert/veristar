@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/justmert/stellar-analytics/internal/config"
+	"github.com/justmert/veristar/internal/config"
 )
 
 // Settings is what the replayer needs besides nats. every value is required,

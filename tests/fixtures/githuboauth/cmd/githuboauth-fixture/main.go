@@ -12,7 +12,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/justmert/stellar-analytics/tests/fixtures/githuboauth"
+	"github.com/justmert/veristar/tests/fixtures/githuboauth"
 )
 
 func main() {

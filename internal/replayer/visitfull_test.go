@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/justmert/stellar-analytics/internal/events"
-	"github.com/justmert/stellar-analytics/internal/natsx"
-	"github.com/justmert/stellar-analytics/internal/umami"
+	"github.com/justmert/veristar/internal/events"
+	"github.com/justmert/veristar/internal/natsx"
+	"github.com/justmert/veristar/internal/umami"
 )
 
 // W-12: visit_state refuses writes once it holds natsx.VisitStateMaxBytes

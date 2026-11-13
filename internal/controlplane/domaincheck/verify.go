@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/justmert/stellar-analytics/internal/netguard"
+	"github.com/justmert/veristar/internal/netguard"
 )
 
 // verification methods (cp.sites.verify_method)
@@ -22,9 +22,9 @@ const (
 
 // where and what the tenant publishes (the reference docs 4.4)
 const (
-	DNSLabel     = "_stellar-analytics."
-	TXTPrefix    = "stellar-analytics-verify="
-	FilePath     = "/.well-known/stellar-analytics.txt"
+	DNSLabel     = "_veristar."
+	TXTPrefix    = "veristar-verify="
+	FilePath     = "/.well-known/veristar.txt"
 	MaxFileBytes = 1024
 	DNSTimeout   = 5 * time.Second
 )
@@ -68,7 +68,7 @@ func DNSValue(token string) string { return TXTPrefix + token }
 // FileURL is where the file check fetches the token.
 func FileURL(domain string) string { return "https://" + domain + FilePath }
 
-// CheckDNS returns "" when a txt record at _stellar-analytics.<domain>
+// CheckDNS returns "" when a txt record at _veristar.<domain>
 // equals the expected value exactly, else a code.
 func (c *Checker) CheckDNS(ctx context.Context, domain, token string) string {
 	ctx, cancel := context.WithTimeout(ctx, DNSTimeout)
@@ -93,7 +93,7 @@ func (c *Checker) CheckDNS(ctx context.Context, domain, token string) string {
 	return CodeDNSMismatch
 }
 
-// CheckFile returns "" when https://<domain>/.well-known/stellar-analytics.txt
+// CheckFile returns "" when https://<domain>/.well-known/veristar.txt
 // answers 200 with the token (trailing whitespace ignored), else a code.
 func (c *Checker) CheckFile(ctx context.Context, domain, token string) string {
 	r, err := c.Guard.Get(ctx, domain, FilePath, MaxFileBytes)

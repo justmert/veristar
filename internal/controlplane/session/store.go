@@ -14,8 +14,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/justmert/stellar-analytics/internal/db"
-	"github.com/justmert/stellar-analytics/internal/db/systemq"
+	"github.com/justmert/veristar/internal/db"
+	"github.com/justmert/veristar/internal/db/systemq"
 )
 
 // userIDKey is the session value that holds the signed-in user id, as a

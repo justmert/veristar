@@ -48,7 +48,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/justmert/stellar-analytics/internal/redact"
+	"github.com/justmert/veristar/internal/redact"
 )
 
 // Version identifies the rule set. it changes whenever a rule changes, so

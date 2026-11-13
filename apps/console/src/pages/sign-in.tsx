@@ -35,9 +35,7 @@ export function SignInPage() {
       <div className="relative w-full max-w-md">
         <div className="flex items-center gap-2 text-primary">
           <Mark className="size-9" />
-          <span className="text-lg font-semibold tracking-tight text-foreground">
-            Stellar Analytics
-          </span>
+          <span className="text-lg font-semibold tracking-tight text-foreground">Veristar</span>
         </div>
         <h1 className="mt-8 text-4xl font-semibold tracking-tight text-balance sm:text-5xl">
           Know who uses your Stellar project.

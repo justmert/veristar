@@ -149,7 +149,7 @@
   become: true
   vars_files: [../vars/pins.yml]
   vars:
-    rotate_core_dir: /opt/stellar-analytics/core
+    rotate_core_dir: /opt/veristar/core
     rotate_psql: [docker, compose, --project-directory, "{{ rotate_core_dir }}", exec, -T, postgres,
                   psql, -U, postgres, -d, postgres, -v, ON_ERROR_STOP=1, -tAX]
   tasks:
@@ -161,7 +161,7 @@
           UMAMI_URL=http://umami:3000
           UMAMI_ADMIN_PASSWORD={{ sa_secrets.umami_admin_password }}
           UMAMI_ADMIN_PASSWORD_PREVIOUS={{ rotate_previous.umami_admin_password }}
-        dest: /etc/stellar-analytics/env/rotate-umami-admin.env
+        dest: /etc/veristar/env/rotate-umami-admin.env
         owner: root
         group: root
         mode: "0600"
@@ -169,15 +169,15 @@
 
     - name: Change the umami admin password through umami
       ansible.builtin.command:
-        argv: [docker, run, --rm, --network, stellar-analytics-core_default,
-               --env-file, /etc/stellar-analytics/env/rotate-umami-admin.env,
+        argv: [docker, run, --rm, --network, veristar-core_default,
+               --env-file, /etc/veristar/env/rotate-umami-admin.env,
                "{{ platform_images.platformctl }}", umami, rotate-admin]
       register: rotate_umami_admin
       changed_when: rotate_umami_admin.stderr is search('"outcome":"rotated"')
 
     - name: Remove the one-off env file
       ansible.builtin.file:
-        path: /etc/stellar-analytics/env/rotate-umami-admin.env
+        path: /etc/veristar/env/rotate-umami-admin.env
         state: absent
 
     # psql's local socket uses peer authentication, so this works with
@@ -206,7 +206,7 @@
     # nats itself reloaded its config in site.yml; etcd holds no secret
     - name: Recreate gateway, collector and caddy
       ansible.builtin.command:
-        argv: [docker, compose, --project-directory, /opt/stellar-analytics/edge, up, -d, --wait, --force-recreate, --no-deps, gateway, collector, caddy]
+        argv: [docker, compose, --project-directory, /opt/veristar/edge, up, -d, --wait, --force-recreate, --no-deps, gateway, collector, caddy]
       changed_when: true
 
 - name: Recreate the core services with their new credentials
@@ -216,7 +216,7 @@
   tasks:
     - name: List the core services
       ansible.builtin.command:
-        argv: [docker, compose, --project-directory, /opt/stellar-analytics/core, config, --services]
+        argv: [docker, compose, --project-directory, /opt/veristar/core, config, --services]
       register: rotate_services
       changed_when: false
 
@@ -225,7 +225,7 @@
     - name: Recreate the services that read rotated values
       ansible.builtin.command:
         argv: >-
-          {{ ['docker', 'compose', '--project-directory', '/opt/stellar-analytics/core', 'up', '-d', '--wait', '--force-recreate', '--no-deps']
+          {{ ['docker', 'compose', '--project-directory', '/opt/veristar/core', 'up', '-d', '--wait', '--force-recreate', '--no-deps']
              + (rotate_services.stdout_lines | reject('in', ['postgres', 'haproxy', 'pgbackrest', 'volume-owners']) | list) }}
       changed_when: true
 
@@ -233,7 +233,7 @@
     # database, so the stored password is set through grafana's own cli
     - name: Reset grafana's stored admin password
       ansible.builtin.command:
-        argv: [docker, compose, --project-directory, /opt/stellar-analytics/core, exec, -T, grafana,
+        argv: [docker, compose, --project-directory, /opt/veristar/core, exec, -T, grafana,
                grafana, cli, admin, reset-admin-password, --password-from-stdin]
         stdin: "{{ sa_secrets.grafana_admin_password }}"
       changed_when: true
@@ -248,19 +248,19 @@
     # key must not rotate in between: stop it on every core node first
     - name: Stop the jobs daemons
       ansible.builtin.command:
-        argv: [docker, compose, --project-directory, /opt/stellar-analytics/core, stop, jobs]
+        argv: [docker, compose, --project-directory, /opt/veristar/core, stop, jobs]
       delegate_to: "{{ item }}"
       loop: "{{ groups['core'] }}"
       changed_when: true
 
     - name: Set today's passwords with the new key
       ansible.builtin.command:
-        argv: [docker, compose, --project-directory, /opt/stellar-analytics/core, run, --rm, --no-deps, jobs, run, umami-rotate, --force]
+        argv: [docker, compose, --project-directory, /opt/veristar/core, run, --rm, --no-deps, jobs, run, umami-rotate, --force]
       changed_when: true
 
     - name: Start the jobs daemons
       ansible.builtin.command:
-        argv: [docker, compose, --project-directory, /opt/stellar-analytics/core, up, -d, --wait, --no-deps, jobs]
+        argv: [docker, compose, --project-directory, /opt/veristar/core, up, -d, --wait, --no-deps, jobs]
       delegate_to: "{{ item }}"
       loop: "{{ groups['core'] }}"
       changed_when: true
@@ -324,7 +324,7 @@
 
     - name: Try the umami admin and user passwords
       ansible.builtin.command:
-        argv: [docker, run, --rm, -i, --network, stellar-analytics-core_default, "{{ platform_images.platformctl }}", rotation-check]
+        argv: [docker, run, --rm, -i, --network, veristar-core_default, "{{ platform_images.platformctl }}", rotation-check]
         stdin: "{{ rotate_spec_umami | to_json }}"
       register: rotate_check_umami
       changed_when: false

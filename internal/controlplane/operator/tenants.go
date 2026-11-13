@@ -16,11 +16,11 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/stellar/go-stellar-sdk/strkey"
 
-	"github.com/justmert/stellar-analytics/internal/controlplane/httpx"
-	"github.com/justmert/stellar-analytics/internal/controlplane/lifecycle"
-	"github.com/justmert/stellar-analytics/internal/db"
-	"github.com/justmert/stellar-analytics/internal/db/operatorq"
-	"github.com/justmert/stellar-analytics/internal/db/systemq"
+	"github.com/justmert/veristar/internal/controlplane/httpx"
+	"github.com/justmert/veristar/internal/controlplane/lifecycle"
+	"github.com/justmert/veristar/internal/db"
+	"github.com/justmert/veristar/internal/db/operatorq"
+	"github.com/justmert/veristar/internal/db/systemq"
 )
 
 // Tenants serves the review reads of contract 5.3 and 5.4. tenant, site,

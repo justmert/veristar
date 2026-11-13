@@ -8,7 +8,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/justmert/stellar-analytics/internal/gateway"
+	"github.com/justmert/veristar/internal/gateway"
 )
 
 func main() {

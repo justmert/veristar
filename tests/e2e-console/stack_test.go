@@ -46,24 +46,24 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/oschwald/maxminddb-golang/v2"
 
-	"github.com/justmert/stellar-analytics/internal/natsx"
-	"github.com/justmert/stellar-analytics/internal/umami"
-	"github.com/justmert/stellar-analytics/tests/fixtures/umamictr"
+	"github.com/justmert/veristar/internal/natsx"
+	"github.com/justmert/veristar/internal/umami"
+	"github.com/justmert/veristar/tests/fixtures/umamictr"
 )
 
 const (
 	baseDomain   = "sa-test.example"
-	gatewayImage = "stellar-analytics/gateway:console-e2e"
+	gatewayImage = "veristar/gateway:console-e2e"
 	// the collector distribution (deploy/images/collector.Dockerfile) and
 	// the go example app (examples/otel-go-nethttp), built in TestMain
-	collectorImage = "stellar-analytics/collector:console-e2e"
-	exampleImage   = "stellar-analytics/otel-go-nethttp:console-e2e"
+	collectorImage = "veristar/collector:console-e2e"
+	exampleImage   = "veristar/otel-go-nethttp:console-e2e"
 	// the stock collector of deploy/compose/examples.yml, standing in for a
 	// tenant's own observability backend
 	tenantBackendImage = "otel/opentelemetry-collector-contrib:0.165.0@sha256:e40d61f10c9a617cca1ffd1be4d7e2b3a4b0f0001798ff07e58cabe82e618cea"
 	// caddy with the replace-response plugin (deploy/images/caddy.Dockerfile),
 	// which the web caddy needs for the db-ip attribution
-	caddyPluginImage = "stellar-analytics/caddy:2.11.9"
+	caddyPluginImage = "veristar/caddy:2.11.9"
 	staticImage      = "gcr.io/distroless/static-debian13:nonroot@sha256:25ac8f0c3b2334a9eb05452266bd4697864a8c8ef0ef71e5e6480d7f92868329"
 	// the oauth fixture's host as the browser and the control plane see it.
 	// plain http: the control plane trusts only the system roots, and the
@@ -187,7 +187,7 @@ func setup() (int, error) {
 		return 0, fmt.Errorf("go build platformctl: %w\n%s", err, out)
 	}
 	// the console's static build, served by the app caddy
-	cmd = exec.Command("pnpm", "--filter", "@stellar-analytics/console", "build")
+	cmd = exec.Command("pnpm", "--filter", "@veristar/console", "build")
 	cmd.Dir = repoRoot()
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return 0, fmt.Errorf("console build: %w\n%s", err, out)
@@ -804,7 +804,7 @@ var siteID = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4
 
 // verifySite records a successful file verification of a site, as the
 // control plane's domain check would. test fixture only: the real check
-// fetches https://<domain>/.well-known/stellar-analytics.txt through
+// fetches https://<domain>/.well-known/veristar.txt through
 // internal/netguard, which refuses the private and loopback addresses every
 // host of this offline stack resolves to, and no dns server here can hold
 // the txt record. the global views (this stage) only read the result.
@@ -1029,7 +1029,7 @@ func TestConsoleFlows(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	args := []string{"--filter", "@stellar-analytics/e2e-console", "exec", "playwright", "test"}
+	args := []string{"--filter", "@veristar/e2e-console", "exec", "playwright", "test"}
 	if extra := os.Getenv("CONSOLE_E2E_ARGS"); extra != "" {
 		args = append(args, strings.Fields(extra)...)
 	}

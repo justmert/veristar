@@ -1,5 +1,5 @@
 // redirect research for the domain handover (docs/handover/redirect-research.md).
-// run with `pnpm --filter @stellar-analytics/e2e redirect`. kept apart from the
+// run with `pnpm --filter @veristar/e2e redirect`. kept apart from the
 // main matrix (testDir ./specs) because it answers a research question rather
 // than gating a release, and it uses its own ports.
 import { defineConfig, devices } from "@playwright/test";

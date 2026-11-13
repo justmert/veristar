@@ -13,9 +13,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/justmert/stellar-analytics/internal/config"
-	"github.com/justmert/stellar-analytics/internal/obs"
-	"github.com/justmert/stellar-analytics/internal/umami"
+	"github.com/justmert/veristar/internal/config"
+	"github.com/justmert/veristar/internal/obs"
+	"github.com/justmert/veristar/internal/umami"
 )
 
 // version is set at build time with -ldflags "-X main.version=...".

@@ -32,14 +32,14 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 
-	"github.com/justmert/stellar-analytics/internal/natsx"
-	"github.com/justmert/stellar-analytics/internal/registry"
-	"github.com/justmert/stellar-analytics/internal/umami"
+	"github.com/justmert/veristar/internal/natsx"
+	"github.com/justmert/veristar/internal/registry"
+	"github.com/justmert/veristar/internal/umami"
 )
 
 const (
-	gatewayImage  = "stellar-analytics/gateway:webpath"
-	replayerImage = "stellar-analytics/replayer:webpath"
+	gatewayImage  = "veristar/gateway:webpath"
+	replayerImage = "veristar/replayer:webpath"
 	// pinned in the design, the same digests the gateway tests use
 	caddyImage  = "caddy:2.11.9@sha256:e40b94d0a43b5ff69cb20568d73f10c70703df7b0ffc2298eb3d723cdc9d0bd1"
 	staticImage = "gcr.io/distroless/static-debian13:nonroot@sha256:25ac8f0c3b2334a9eb05452266bd4697864a8c8ef0ef71e5e6480d7f92868329"

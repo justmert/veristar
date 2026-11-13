@@ -41,18 +41,18 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 
-	"github.com/justmert/stellar-analytics/internal/controlplane/otlptokens"
-	"github.com/justmert/stellar-analytics/internal/natsx"
-	"github.com/justmert/stellar-analytics/internal/registry"
-	"github.com/justmert/stellar-analytics/internal/umami"
-	"github.com/justmert/stellar-analytics/tests/fixtures/umamictr"
+	"github.com/justmert/veristar/internal/controlplane/otlptokens"
+	"github.com/justmert/veristar/internal/natsx"
+	"github.com/justmert/veristar/internal/registry"
+	"github.com/justmert/veristar/internal/umami"
+	"github.com/justmert/veristar/tests/fixtures/umamictr"
 )
 
 const (
 	baseDomain     = "sa-privacy.example"
-	gatewayImage   = "stellar-analytics/gateway:privacy"
-	collectorImage = "stellar-analytics/collector:privacy"
-	exampleImage   = "stellar-analytics/otel-go-nethttp:privacy"
+	gatewayImage   = "veristar/gateway:privacy"
+	collectorImage = "veristar/collector:privacy"
+	exampleImage   = "veristar/otel-go-nethttp:privacy"
 	staticImage    = "gcr.io/distroless/static-debian13:nonroot@sha256:25ac8f0c3b2334a9eb05452266bd4697864a8c8ef0ef71e5e6480d7f92868329"
 	// the stock collector standing in for the tenant's own backend; it is
 	// the tenant's system, not this service's, so it is not scanned

@@ -12,7 +12,7 @@ import (
 
 	"github.com/stellar/go-stellar-sdk/strkey"
 
-	"github.com/justmert/stellar-analytics/internal/redact"
+	"github.com/justmert/veristar/internal/redact"
 )
 
 type corpusCase struct {

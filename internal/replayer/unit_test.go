@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/justmert/stellar-analytics/internal/config"
-	"github.com/justmert/stellar-analytics/internal/umami"
+	"github.com/justmert/veristar/internal/config"
+	"github.com/justmert/veristar/internal/umami"
 )
 
 func TestCacheFor(t *testing.T) {

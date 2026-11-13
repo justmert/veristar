@@ -38,7 +38,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/justmert/stellar-analytics/internal/controlplane"
+	"github.com/justmert/veristar/internal/controlplane"
 )
 
 var update = flag.Bool("update", false, "rewrite included code blocks from their sources")

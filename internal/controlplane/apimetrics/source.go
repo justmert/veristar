@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/justmert/stellar-analytics/internal/db/tenantq"
+	"github.com/justmert/veristar/internal/db/tenantq"
 )
 
 // the two values of the source column

@@ -1,5 +1,5 @@
 {
-  "name": "@stellar-analytics/example-vue-spa",
+  "name": "@veristar/example-vue-spa",
   "private": true,
   "type": "module",
   "scripts": {

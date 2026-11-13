@@ -18,15 +18,15 @@ import (
 	"github.com/google/uuid"
 	"github.com/stellar/go-stellar-sdk/keypair"
 
-	"github.com/justmert/stellar-analytics/internal/events"
-	"github.com/justmert/stellar-analytics/internal/natsx"
-	"github.com/justmert/stellar-analytics/internal/registry"
-	"github.com/justmert/stellar-analytics/internal/umami"
-	"github.com/justmert/stellar-analytics/tests/gateway/gwclient"
+	"github.com/justmert/veristar/internal/events"
+	"github.com/justmert/veristar/internal/natsx"
+	"github.com/justmert/veristar/internal/registry"
+	"github.com/justmert/veristar/internal/umami"
+	"github.com/justmert/veristar/tests/gateway/gwclient"
 )
 
 // the this stage example of tests/e2e/sites.ts (WALLET_SITE)
-var siteWallets = exampleSite{"wallets-kit-spa", "wk.sa-tenant.example", "0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e05", "@stellar-analytics/example-wallets-kit-spa", 47105}
+var siteWallets = exampleSite{"wallets-kit-spa", "wk.sa-tenant.example", "0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e05", "@veristar/example-wallets-kit-spa", 47105}
 
 // TEST_WALLET_ADDRESS of tests/fixtures/wallets-kit-module, the account the
 // test wallet hands the kit. it must reach no request body, no queued message

@@ -21,7 +21,7 @@ so it cannot be destroyed by one command.
   backup:
 
   ```sh
-  cd /opt/stellar-analytics/core && sudo docker compose exec postgres pgbackrest --stanza=sa --type=full backup
+  cd /opt/veristar/core && sudo docker compose exec postgres pgbackrest --stanza=sa --type=full backup
   ```
 
 ## Staging

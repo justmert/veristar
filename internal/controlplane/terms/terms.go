@@ -14,8 +14,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/justmert/stellar-analytics/docs/compliance"
-	"github.com/justmert/stellar-analytics/internal/controlplane/httpx"
+	"github.com/justmert/veristar/docs/compliance"
+	"github.com/justmert/veristar/internal/controlplane/httpx"
 )
 
 // Terms is one version of the terms of use.

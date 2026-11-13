@@ -10,7 +10,7 @@ INV="$root/infra/ansible/inventories/local/hosts.json"
 DRILLS="$root/.scratch/scratch/drills"
 STATE="$DRILLS/state.json"
 GO="${GO:-go}"
-ANSIBLE_BIN="${ANSIBLE_VENV:-$HOME/.local/share/stellar-analytics/ansible-venv}/bin"
+ANSIBLE_BIN="${ANSIBLE_VENV:-$HOME/.local/share/veristar/ansible-venv}/bin"
 mkdir -p "$DRILLS"
 
 # the drill tool, built once per run of a script
@@ -20,7 +20,7 @@ DRILLCTL="$DRILLS/drillctl"
 # the postgresql superuser password, decrypted from the local sops file for
 # the drill tool's own connections; it stays in this process's environment
 SA_DRILL_PG_PASSWORD="$(SOPS_AGE_KEY_FILE="$LC_STATE/age.key" \
-	"$HOME/.local/share/stellar-analytics/tools/sops-3.13.3" decrypt --extract '["postgres_superuser_password"]' \
+	"$HOME/.local/share/veristar/tools/sops-3.13.3" decrypt --extract '["postgres_superuser_password"]' \
 	"$root/infra/secrets/local/secrets.enc.yaml")"
 export SA_DRILL_PG_PASSWORD
 
@@ -35,7 +35,7 @@ SA_DRILL_TLS_DIR="$DRILLS/tls"
 	mkdir -p "$SA_DRILL_TLS_DIR"
 	for k in ca_bundle:ca.crt operator.cert:client.crt operator.key:client.key; do
 		path="$(echo "${k%%:*}" | sed 's/\./"]["/; s/^/["/; s/$/"]/')"
-		SOPS_AGE_KEY_FILE="$LC_STATE/age.key" "$HOME/.local/share/stellar-analytics/tools/sops-3.13.3" decrypt \
+		SOPS_AGE_KEY_FILE="$LC_STATE/age.key" "$HOME/.local/share/veristar/tools/sops-3.13.3" decrypt \
 			--extract "$path" "$root/infra/secrets/local/tls.enc.yaml" >"$SA_DRILL_TLS_DIR/${k#*:}"
 	done
 )
@@ -50,7 +50,7 @@ tcurl() {
 etcdctl_in() {
 	node="$1"
 	shift
-	docker exec "$node" docker compose --project-directory /opt/stellar-analytics/edge exec -T etcd \
+	docker exec "$node" docker compose --project-directory /opt/veristar/edge exec -T etcd \
 		etcdctl --cacert=/etc/etcd/tls/ca.crt --cert=/etc/etcd/tls/node.crt --key=/etc/etcd/tls/node.key "$@"
 }
 
@@ -69,7 +69,7 @@ log() { echo "[$(ts)] $*" >&2; }
 nexec() {
 	node="$1" project="$2"
 	shift 2
-	docker exec "$node" docker compose --project-directory "/opt/stellar-analytics/$project" "$@"
+	docker exec "$node" docker compose --project-directory "/opt/veristar/$project" "$@"
 }
 
 patroni_leader() {

@@ -31,7 +31,7 @@ export function AppShell() {
         <div className="mx-auto flex h-14 max-w-6xl items-center gap-3 px-4 sm:px-6">
           <Link to="/" className="flex items-center gap-2 rounded-md font-semibold tracking-tight">
             <Mark className="size-6 text-primary" />
-            <span>Stellar Analytics</span>
+            <span>Veristar</span>
           </Link>
           <div className="ml-auto flex items-center gap-2 text-sm">
             {me.data?.user.is_operator ? (

@@ -52,4 +52,4 @@ formatters:
   settings:
     goimports:
       local-prefixes:
-        - github.com/justmert/stellar-analytics
+        - github.com/justmert/veristar

@@ -24,10 +24,10 @@ set -eu
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 . "$root/infra/local/env.sh"
 . "$root/infra/local/lib.sh"
-ANSIBLE_BIN="${ANSIBLE_VENV:-$HOME/.local/share/stellar-analytics/ansible-venv}/bin"
+ANSIBLE_BIN="${ANSIBLE_VENV:-$HOME/.local/share/veristar/ansible-venv}/bin"
 OUT="$root/.scratch/scratch/drills/start-unit"
 NODE=sa-lc-edge-1 LOC=fsn1 PUB=172.31.99.12 PRIV=10.99.1.12
-PROJECT=/opt/stellar-analytics/edge
+PROJECT=/opt/veristar/edge
 mkdir -p "$OUT"
 
 ts() { date -u +%Y-%m-%dT%H:%M:%S.%3NZ; }

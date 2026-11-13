@@ -2,7 +2,7 @@
 # start it with `make dev-up`, which creates .env.dev with random secrets first.
 # images are pinned by tag and index digest (resolved 2026-11-12 with
 # `docker buildx imagetools inspect`).
-name: stellar-analytics-dev
+name: veristar-dev
 
 services:
   postgres:
@@ -94,7 +94,7 @@ services:
       args:
         # the makefile passes the current utc month; empty fails the build
         DBIP_MONTH: ${DBIP_MONTH:-}
-    image: stellar-analytics/gateway:dev
+    image: veristar/gateway:dev
     depends_on:
       nats:
         condition: service_healthy
@@ -134,7 +134,7 @@ services:
       dockerfile: deploy/images/go-service.Dockerfile
       args:
         CMD: replayer
-    image: stellar-analytics/replayer:dev
+    image: veristar/replayer:dev
     depends_on:
       nats:
         condition: service_healthy
@@ -166,7 +166,7 @@ services:
     build:
       context: ../..
       dockerfile: deploy/images/controlplane.Dockerfile
-    image: stellar-analytics/controlplane:dev
+    image: veristar/controlplane:dev
     depends_on:
       postgres:
         condition: service_healthy
@@ -219,7 +219,7 @@ services:
     build:
       context: ../..
       dockerfile: deploy/images/collector.Dockerfile
-    image: stellar-analytics/collector:dev
+    image: veristar/collector:dev
     depends_on:
       nats:
         condition: service_healthy
@@ -255,7 +255,7 @@ services:
       dockerfile: deploy/images/go-service.Dockerfile
       args:
         CMD: metricswriter
-    image: stellar-analytics/metricswriter:dev
+    image: veristar/metricswriter:dev
     depends_on:
       postgres:
         condition: service_healthy

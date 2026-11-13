@@ -12,8 +12,8 @@
 #                only: reach them with `ssh -L 9090:127.0.0.1:9090` and
 #                `ssh -L 3000:127.0.0.1:3000`
 #   probe node   caddy for status.<BASE_DOMAIN>, gatus and the prober
-observability_dir: /opt/stellar-analytics/observability
-observability_conf_dir: /etc/stellar-analytics/observability
+observability_dir: /opt/veristar/observability
+observability_conf_dir: /etc/veristar/observability
 
 # upstream images, tag and index digest as in the design (resolved
 # 2026-11-12). each also has deploy/images/upstream/<name>.Dockerfile, which
@@ -38,8 +38,8 @@ observability_images:
 
 # the compose project of each tier, whose network the relay joins
 observability_tier_network:
-  edge: stellar-analytics-edge_default
-  core: stellar-analytics-core_default
+  edge: veristar-edge_default
+  core: veristar-core_default
 
 # relay ports on the private address, and the compose service and port
 # behind each. the collector's own telemetry is on 8888 (collector/otelcol.yaml).
@@ -103,7 +103,7 @@ observability_gatus_max_results: 20160
 # not visible in the observability play, so its default is repeated here.
 observability_postgres_hosts: "{{ core_postgres_hosts | default(groups['core']) }}"
 observability_patroni_hosts: "{{ observability_postgres_hosts }}"
-observability_core_dir: /opt/stellar-analytics/core
+observability_core_dir: /opt/veristar/core
 
 # the checkout the controller runs from (playbooks live in infra/ansible/playbooks)
 observability_repo_root: "{{ playbook_dir }}/../../.."

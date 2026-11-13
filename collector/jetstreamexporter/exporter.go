@@ -31,9 +31,9 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/justmert/stellar-analytics/collector/internal/natsconn"
-	"github.com/justmert/stellar-analytics/collector/internal/schema"
-	"github.com/justmert/stellar-analytics/internal/natsx"
+	"github.com/justmert/veristar/collector/internal/natsconn"
+	"github.com/justmert/veristar/collector/internal/schema"
+	"github.com/justmert/veristar/internal/natsx"
 )
 
 // Type is the component type used in otelcol.yaml.

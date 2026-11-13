@@ -2,7 +2,7 @@
 - name: Harden sshd
   ansible.builtin.template:
     src: sshd.conf.j2
-    dest: /etc/ssh/sshd_config.d/10-stellar-analytics.conf
+    dest: /etc/ssh/sshd_config.d/10-veristar.conf
     owner: root
     group: root
     mode: "0644"

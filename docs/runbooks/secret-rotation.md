@@ -40,7 +40,7 @@ replacing one value.
    make staging-deploy SA_IMAGE_TAG=<current release> SA_RELEASE_MANIFEST=<release-images.json>
    ```
 
-   `site.yml` rewrites the env files in `/etc/stellar-analytics/env/`, the NATS and Patroni
+   `site.yml` rewrites the env files in `/etc/veristar/env/`, the NATS and Patroni
    configs, and runs `platformctl db roles` and `db umami-retention-role`.
 
 3. **Make the services use it.** Compose recreates a service whose configuration changed; check
@@ -48,7 +48,7 @@ replacing one value.
    `CREATED`) and recreate it if not:
 
    ```sh
-   cd /opt/stellar-analytics/core && sudo docker compose up -d --force-recreate <service>
+   cd /opt/veristar/core && sudo docker compose up -d --force-recreate <service>
    ```
 
 4. **Commit** the changed SOPS file.
@@ -92,7 +92,7 @@ apply ([../deploy/opentofu.md](../deploy/opentofu.md) section 3.5).
 ### A NATS user password and its hash
 
 ```sh
-~/.local/share/stellar-analytics/ansible-venv/bin/python -c '
+~/.local/share/veristar/ansible-venv/bin/python -c '
 import bcrypt, secrets
 p = secrets.token_hex(24)
 print(p)
@@ -108,7 +108,7 @@ On the database leader, inside psql, `\password` sends only a SCRAM verifier, so
 never appears in logs or history:
 
 ```sh
-cd /opt/stellar-analytics/core && sudo docker compose exec postgres psql -U postgres -d postgres
+cd /opt/veristar/core && sudo docker compose exec postgres psql -U postgres -d postgres
 ```
 
 ```
@@ -131,7 +131,7 @@ On a core node, with the current and the new password typed in (not echoed):
 
 ```sh
 read -rs OLD_PW; read -rs NEW_PW; export OLD_PW NEW_PW
-cd /opt/stellar-analytics/core
+cd /opt/veristar/core
 sudo --preserve-env=OLD_PW,NEW_PW docker compose exec -T -e OLD_PW -e NEW_PW umami node -e '
 const b = "http://127.0.0.1:3000";
 (async () => {
@@ -162,7 +162,7 @@ delete from cp.settings where key = 'umami_password_day';
 ```
 
 ```sh
-cd /opt/stellar-analytics/core && sudo docker compose run --rm --no-deps jobs run umami-rotate
+cd /opt/veristar/core && sudo docker compose run --rm --no-deps jobs run umami-rotate
 ```
 
 Every Umami session token is invalidated by the password change; users re-enter through the
@@ -176,7 +176,7 @@ O-26 of [the review notes](the review notes)). The files:
 | File | Holds | Read by |
 |---|---|---|
 | `infra/secrets/<env>/ca.enc.yaml` | `ca_key`, `ca_cert`, `previous_ca_certs` (retired CAs still trusted) | `playbooks/internal-ca.yml` on the controller only. No role loads it, so the CA key never reaches a node |
-| `infra/secrets/<env>/tls.enc.yaml` | `ca_bundle` (current and still-trusted CAs), `nodes.<name>.cert` and `.key` for every edge, core, backup and restore node, `operator.cert` and `.key` (client certificate for operators and the drills) | the `secrets` role, which installs each node's own pair under `/etc/stellar-analytics/tls/<container user>/` |
+| `infra/secrets/<env>/tls.enc.yaml` | `ca_bundle` (current and still-trusted CAs), `nodes.<name>.cert` and `.key` for every edge, core, backup and restore node, `operator.cert` and `.key` (client certificate for operators and the drills) | the `secrets` role, which installs each node's own pair under `/etc/veristar/tls/<container user>/` |
 
 `make internal-ca ENV=<env>` (`playbooks/internal-ca.yml`, community.crypto 3.5.1 from the pinned
 Ansible 14.6.0) issues only what is missing or due: a node certificate is issued again when the

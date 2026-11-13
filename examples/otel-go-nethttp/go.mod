@@ -1,4 +1,4 @@
-module github.com/justmert/stellar-analytics/examples/otel-go-nethttp
+module github.com/justmert/veristar/examples/otel-go-nethttp
 
 go 1.27.4
 

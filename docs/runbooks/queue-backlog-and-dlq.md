@@ -33,7 +33,7 @@ are not a measurement of staging.
 
    ```sh
    # nats monitoring through the edge relay: tls with the node's client certificate
-   sudo curl -s --cacert /etc/stellar-analytics/tls/root/ca.crt --cert /etc/stellar-analytics/tls/root/node.crt --key /etc/stellar-analytics/tls/root/node.key \
+   sudo curl -s --cacert /etc/veristar/tls/root/ca.crt --cert /etc/veristar/tls/root/node.crt --key /etc/veristar/tls/root/node.key \
      'https://10.20.1.11:8222/jsz?streams=true&consumers=true' \
      | python3 -c 'import json,sys
    d=json.load(sys.stdin)
@@ -51,7 +51,7 @@ are not a measurement of staging.
    on either core node. On each core node:
 
    ```sh
-   cd /opt/stellar-analytics/core && sudo docker compose ps replayer metricswriter jobs
+   cd /opt/veristar/core && sudo docker compose ps replayer metricswriter jobs
    sudo docker compose logs --since 15m --tail 100 replayer
    ```
 
