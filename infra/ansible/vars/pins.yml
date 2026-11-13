@@ -64,7 +64,10 @@ secrets_env_dir: /etc/veristar/env
 sa_tls_dir: /etc/veristar/tls
 sa_tls_consumers:
   edge: {root: 0, nats: 4222, etcd: 2379, haproxy: 99, nobody: 65534}
-  core: {root: 0, postgres: 999, haproxy: 99, nobody: 65534}
+  # controlplane is the distroless nonroot user (65532) of the control
+  # plane, which presents the node certificate to alertmanager for the
+  # operator alerts page (docs/reference/control-plane-api.md section 11)
+  core: {root: 0, postgres: 999, haproxy: 99, nobody: 65534, controlplane: 65532}
   backup: {root: 0, postgres: 999}
   restore: {root: 0, postgres: 999}
   probe: {}

@@ -187,6 +187,9 @@ services:
     env_file: [{{ secrets_env_dir }}/controlplane.env]
     volumes:
       - {{ sa_tls_dir }}/ca:/etc/sa-tls:ro
+      # this node's certificate, owned by the control plane's user: every
+      # alertmanager member asks its clients for one
+      - {{ sa_tls_dir }}/controlplane:/etc/sa-alertmanager-tls:ro
     environment:
       <<: [*db, *nats]
       CONTROLPLANE_ADDR: 0.0.0.0:8085
@@ -199,6 +202,13 @@ services:
       UMAMI_URL: http://umami:3000
       API_MINUTE_RETENTION_DAYS: "{{ core_api_minute_retention_days }}"
       API_HOURLY_RETENTION_MONTHS: "{{ core_api_hourly_retention_months }}"
+      # the operator alerts page (contract 11) asks every alertmanager member
+      # on its private address; prometheus sends each alert to all of them,
+      # so the page also names a member that does not answer
+      ALERTMANAGER_URLS: "{% for h in groups['core'] %}https://{{ hostvars[h].sa_private_ip }}:{{ core_alertmanager_port }}{{ '' if loop.last else ',' }}{% endfor %}"
+      ALERTMANAGER_TLS_CA: /etc/sa-alertmanager-tls/ca.crt
+      ALERTMANAGER_TLS_CERT: /etc/sa-alertmanager-tls/node.crt
+      ALERTMANAGER_TLS_KEY: /etc/sa-alertmanager-tls/node.key
 {% if core_oauth_fixture %}
       # local converge only (asserted above): the test-only oauth fixture
       OAUTH_FIXTURE_URL: http://{{ sa_public_ipv4 }}:{{ core_oauth_fixture_port }}

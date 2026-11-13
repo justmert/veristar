@@ -68,6 +68,12 @@ core_postgres_parameters:
 core_api_minute_retention_days: 30
 core_api_hourly_retention_months: 36
 
+# the alertmanager port of the observability role
+# (observability_alertmanager_port), repeated here because role defaults are
+# not visible across plays. the control plane reads the live alerts of every
+# member there for the operator alerts page.
+core_alertmanager_port: 9093
+
 # each event costs the replayer several confirmed round trips to nats
 # (duplicate guard, visit state, ack), whose leaders can sit in another
 # location. with 16 lanes this stage measured about 80 events a second against
