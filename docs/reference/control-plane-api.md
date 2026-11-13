@@ -202,6 +202,8 @@ List routes answer:
 | 500 | `internal` | anything unexpected; details only in the log |
 | 503 | `unavailable` | database, NATS, Umami or GitHub unreachable, or a tenant request that waited longer than its 5 second lock timeout for the tenant row (a reconcile or an operator action holds it; 1.3); `Retry-After` set |
 | 503 | `provisioning_pending` | SSO before the reconciler created the Umami objects; `Retry-After` set |
+| 503 | `alert_source_unreachable` | no Alertmanager member answered the operator alerts route (11.2) |
+| 503 | `alert_source_not_configured` | the operator alerts route on a control plane without `ALERTMANAGER_URLS` (11.2) |
 
 ### 2.5 Field codes (422)
 
@@ -2263,3 +2265,88 @@ and message get) and manages `WEB_DLQ`.
 | `ERASURE_QUEUE_WAIT` | controlplane | optional, Go duration, default `15m`, at most `72h`: how long a run waits for the site's queued events |
 | `WEB_RAW_RETENTION_MONTHS` | `jobs retain-web` | optional, default 25, 1 to 1200 |
 | `UMAMI_DB_NAME`, `UMAMI_DB_JOBS_RETENTION_PASSWORD` | `jobs retain-web`, `platformctl db umami-retention-role` | the umami database on the platform cluster (with `PLATFORM_DB_HOST`, `PLATFORM_DB_PORT`, `PLATFORM_DB_SSLMODE`) and the password of role `jobs_retention` |
+
+## 11. Operator alerts
+
+The console's Alerts page (`/operator/alerts`) shows what the Alertmanager
+cluster holds right now. It is where alerts are seen when no push channel is
+configured an operator input unset): nothing is sent anywhere else, so the page must
+never say "all clear" without having asked Alertmanager.
+
+### 11.1 `GET /api/operator/alerts`
+
+Operator (5.1). No query parameters. The control plane asks every configured
+Alertmanager member at once (`GET /api/v2/alerts` without filters, 5 seconds
+per member) and merges the answers.
+
+```json
+{
+  "checked_at": "2026-11-13T12:00:05Z",
+  "watchdog_firing": true,
+  "sources": [
+    { "address": "10.0.1.4:9093", "reachable": true, "watchdog_firing": true, "error": null },
+    { "address": "10.0.1.5:9093", "reachable": false, "watchdog_firing": false,
+      "error": "dial tcp 10.0.1.5:9093: connect: connection refused" }
+  ],
+  "alerts": [
+    { "fingerprint": "5f1c0e7d2a9b3c41", "name": "ServiceDown", "severity": "page",
+      "summary": "controlplane on core-2 does not answer scrapes", "description": null,
+      "node": "core-2", "instance": "10.0.1.5:9303", "service": "controlplane",
+      "starts_at": "2026-11-13T09:55:00Z", "state": "active", "inhibited_by": [],
+      "runbook": "docs/runbooks/alerts.md#servicedown",
+      "labels": { "alertname": "ServiceDown", "severity": "page", "node": "core-2",
+                  "job": "controlplane", "instance": "10.0.1.5:9303" } }
+  ]
+}
+```
+
+- `checked_at`: when the control plane asked.
+- `sources`: one entry per member of `ALERTMANAGER_URLS`, in that order.
+  `error` is the reason a member gave no usable answer (connection, TLS, an
+  HTTP status other than 200, a body that is not a list of alerts carrying
+  the fields the v2 API documents as required), else `null`.
+- `alerts`: every alert that has not resolved, without silenced alerts (a
+  non-empty `silencedBy`) and without `Watchdog`. Prometheus sends every
+  alert to every member, so one fingerprint seen by several members is one
+  entry: the first member in configured order gives its fields, and
+  `starts_at` is the earliest of them. Ordered by severity (`page`, then
+  `ticket`, then any other severity by name, then none), then `starts_at`
+  ascending (longest firing first), then `name` and `fingerprint`.
+- `name` is the `alertname` label. `severity`, `node`, `instance` are labels
+  of those names, `service` is the label `job` (the scrape job, which names
+  the service in every rule), `summary`, `description` and `runbook` are the
+  annotations of those names; each is `null` when absent. `labels` holds every
+  label.
+- `state` is Alertmanager's: `active`; `suppressed` (inhibited by another
+  firing alert, named in `inhibited_by` by fingerprint, or muted);
+  `unprocessed` (received, not yet processed).
+- `watchdog_firing` is `true` when at least one member that answered holds
+  `Watchdog` (`infra/ansible/roles/observability/files/rules/platform.yml`),
+  silenced or not; per member in `sources`. `Watchdog` always fires, so
+  `false` means the pipeline from Prometheus to Alertmanager is down
+  (Prometheus not evaluating rules, or unable to reach Alertmanager) and
+  `alerts` can be missing alerts. The console shows that as "alerting
+  pipeline down" and never as all clear.
+
+### 11.2 Errors
+
+- 503 `alert_source_unreachable` when no member answered. The message names
+  each member and its reason. There is no list in this case: an empty list
+  would read as all clear.
+- 503 `alert_source_not_configured` when `ALERTMANAGER_URLS` is unset.
+- As every operator route: 401 without a session, 403 `operator_required`
+  for everyone else, and the route then never asks Alertmanager.
+
+### 11.3 Configuration
+
+| Key | Required | Meaning |
+|---|---|---|
+| `ALERTMANAGER_URLS` | no | comma-separated base URLs of every Alertmanager member, `http://` or `https://`, no path. Unset means 11.2 `alert_source_not_configured` |
+| `ALERTMANAGER_TLS_CA` | for `https://` | the internal CA that signs the members' certificates; the system roots are never used. Set together with `https://` URLs only |
+| `ALERTMANAGER_TLS_CERT`, `ALERTMANAGER_TLS_KEY` | when the members ask for a client certificate | the client certificate, which every member of a deployment asks for |
+
+The core role (`infra/ansible/roles/core`) sets all four: every node of the
+`core` group on its private address at `core_alertmanager_port` (9093), and
+the node certificate installed for the control plane's user
+(`sa_tls_consumers`, uid 65532).
+

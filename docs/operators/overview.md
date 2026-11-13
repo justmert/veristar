@@ -15,6 +15,7 @@ project and get no access to a project's own web dashboard.
 | [global-views.md](global-views.md) | The Global web, Global API and Compare pages: ranges, filters, sorting and side-by-side comparison |
 | [reading-the-numbers.md](reading-the-numbers.md) | What bands, daily-unique visitors and span-derived API data mean, and how to read them fairly across projects |
 | [api-keys.md](api-keys.md) | Keys for machine consumers of the metrics API: create, use, revoke, usage |
+| [alerts.md](alerts.md) | The Alerts page: the platform's live alerts, the count badge and critical banner, and what the page shows when alerting itself is broken |
 
 ## Becoming an operator
 
@@ -36,11 +37,12 @@ The numeric id of a GitHub account is the `id` field of `https://api.github.com/
 
 ## The operator area
 
-The console's operator area has eight tabs, all at `https://app.<BASE_DOMAIN>/operator`:
+The console's operator area has nine tabs, all at `https://app.<BASE_DOMAIN>/operator`:
 
 | Tab | What it does |
 |---|---|
 | Review queue | Projects waiting for approval, and active projects with a site in review, oldest first |
+| Alerts | The platform's firing alerts from Alertmanager, by severity, refreshed every 30 seconds ([alerts.md](alerts.md)) |
 | Projects | Every project with search, status filter and sort; opens the project detail with its actions |
 | Global web | Web numbers of every project over a range, with filters and sort |
 | Global API | API numbers of every project over a range, with filters and sort |

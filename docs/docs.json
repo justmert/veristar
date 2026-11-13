@@ -114,7 +114,8 @@
               "operators/removal",
               "operators/global-views",
               "operators/reading-the-numbers",
-              "operators/api-keys"
+              "operators/api-keys",
+              "operators/alerts"
             ]
           },
           {

@@ -6,10 +6,7 @@ description: "Every alert, its threshold, what it means and what to do."
 
 Every alert of the platform, its threshold, what it means and what to do.
 The rules live in `infra/ansible/roles/observability/files/rules/` and are
-tested with `promtool test rules` (`rules/tests/`). Alertmanager sends them to
-Discord an operator input as one message per group of alert name and node, with a
-resolved message when the condition ends. Gatus sends its own messages for
-the status page checks and the prober's results.
+tested with `promtool test rules` (`rules/tests/`).
 
 Severity `page` means act now. Severity `ticket` means act within a working
 day.
@@ -23,6 +20,37 @@ real, and when.
 To reach the tools: `ssh -L 9090:127.0.0.1:9090 -L 3000:127.0.0.1:3000
 ops@<core node>`, then Prometheus on `http://127.0.0.1:9090` and Grafana on
 `http://127.0.0.1:3000` (dashboards in the folder Veristar).
+
+## Where alerts show
+
+Every firing alert is listed on the console's **Alerts** page,
+`https://app.<BASE_DOMAIN>/operator/alerts`, for operators only. The control
+plane reads every Alertmanager member live, and the page refreshes every 30
+seconds, groups the alerts by severity, says how long each has been firing
+and links each one to its section below. The operator tabs carry the number
+of firing alerts, and every operator page shows a banner while an alert of
+severity `page` fires. Details: [the operator guide](../operators/alerts.md).
+
+That page is the alert channel. Alertmanager pushes nothing anywhere unless
+a push channel is configured: with an operator input set it sends each group of alert
+name and node to Discord, with a resolved message when the condition ends,
+and the probe's Gatus sends its own messages for the status page checks and
+the prober's results. Without I8 nobody is notified, so someone has to look
+at the page.
+
+The page also watches the alerting itself:
+
+- **Alerting pipeline down**: the always-firing `Watchdog` is missing from
+  Alertmanager. Prometheus is not evaluating rules or cannot reach
+  Alertmanager, so alerts that should fire may be missing. Follow
+  [Watchdog](#watchdog).
+- **Alert source unreachable**: no Alertmanager member answered the control
+  plane. The page then shows no list at all, never "all clear". Check
+  `docker compose ps` in `/opt/veristar/observability` on the core nodes and
+  the control plane's log for `alert_source_unreachable`.
+- **N of M Alertmanager members did not answer**: the list comes from the
+  members that answered, which each hold every alert; bring the named member
+  back.
 
 ## Ingestion and edge
 
@@ -262,7 +290,10 @@ which accepts that push only from the core nodes' addresses). Gatus alerts to
 Discord when no push arrived for 5 minutes: then both Prometheus servers,
 both Alertmanagers or the whole core tier are down, or the core tier cannot
 reach the probe, and no other alert can be sent from inside.
-Action when Gatus reports it missing: check the core nodes
+The console's Alerts page uses the same signal: while no Alertmanager
+member holds `Watchdog`, it shows "Alerting pipeline down" instead of the
+all-clear, with or without a probe.
+Action when Gatus or the console reports it missing: check the core nodes
 ([database-failover.md](database-failover.md) if both are down), then
 `docker compose ps` in `/opt/veristar/observability` on each core
 node. Never silence `Watchdog` in Alertmanager: a silence stops the heartbeat
