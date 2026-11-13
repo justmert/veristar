@@ -28,11 +28,13 @@ seven Debian 13 containers on one machine; everything below was first proven the
 
 ## Status on 2026-11-13
 
-Production is being created in Microsoft Azure, region Sweden Central (EU), with DNS at
-Cloudflare; there is no separate staging (operator decision of 2026-11-13). Its state storage, network,
-addresses, backup account and CAA records exist; the five VMs wait for Azure capacity
-([opentofu.md](opentofu.md) section 3.8). PostgreSQL 18.7 is pinned. The first converge also
-needs a signed release and an operator input (the verification page). Each page says which
+Production runs in Microsoft Azure, region Denmark East (EU), on three converged nodes, one per
+availability zone, with DNS at Cloudflare and no separate staging (owner decisions of
+2026-11-13). Release `v0.1.0` (key-signed, images on `ghcr.io`) is deployed with PostgreSQL 18.7;
+`https://app.veristar.app` and the other hostnames answer through Traffic Manager with Let's
+Encrypt certificates. The checks and drills run so far are in
+[../reference/drills/2026-11-13-azure.md](../reference/drills/2026-11-13-azure.md); the checks
+that need the first operator sign-in are listed there under "Waiting". Each page says which
 of its steps were run locally and which have never run. Expected outputs of steps that have
 never run are taken from the code that prints them (the Makefile, scripts and playbooks), not
 from a run, and are marked that way.

@@ -6,9 +6,10 @@ description: "The availability targets, the failover behaviour they rest on, and
 Targets (RFP 3.4): ingestion 99.99%, dashboards 99.90%. This page shows how the Azure design
 meets them: the arithmetic, the failover windows the configuration sets, and what each failure
 costs. The windows below follow from the configuration (`infra/tofu/modules/failover`,
-Patroni, NATS). The production drills will measure them; their record,
-`drills/2026-11-13-azure.md`, does not exist yet. The local drill record is
-[drills/2026-11-13.md](drills/2026-11-13.md).
+Patroni, NATS). The production drills measured the node loss and the leader loss:
+[drills/2026-11-13-azure.md](drills/2026-11-13-azure.md) (one node's address left the `in`
+answer 41.9 s after a power-off, writes resumed 30.3 s after the leader's power-off with no
+committed row lost). The local drill record is [drills/2026-11-13.md](drills/2026-11-13.md).
 
 ## Budgets
 

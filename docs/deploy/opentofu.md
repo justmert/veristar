@@ -311,6 +311,21 @@ Azure suggested `Standard_D2lds_v5` or `Standard_D2ls_v5` for the edge size and
 `Standard_D2as_v6` 0.097, `Standard_D2s_v5` 0.102. The sizes are the variables `edge_vm_size`
 and `core_vm_size`.
 
+**Second attempt, Denmark East with three nodes (2026-11-13).** the operator approved a region
+move and the three-node layout. Test VMs of `Standard_B2as_v2` (created in a temporary resource
+group and deleted at once) answered `ZonalAllocationFailed` in every Sweden Central zone again
+and allocated in all three zones of Denmark East; the subscription's SKU list offered the size
+in three zones nowhere else in the EU regions checked ([prerequisites.md](prerequisites.md)).
+The Sweden Central resources were destroyed (the backup account's lock removed first, since
+its lock does not depend on the account's sub-resources), the CAA records and the state
+account kept. In Denmark East Azure Resource Manager answered `404 ResourceNotFound` to the
+provider's read right after several successful creates, so the first apply round stopped
+with resources that existed but were not in the state; they were deleted with `az` and the
+second round ended with `Apply complete! Resources: 42 added`. A further plan shows
+`No changes.` with 58 resources in the state: 56 of the plan for an empty environment plus the
+two CAA records. `tofu import` could not adopt the strays, because the root module's
+`for_each` keys depend on values known only after apply.
+
 Cloudflare publishes its own CAA records beside the two of this module (for its Universal SSL
 issuers), so `dig CAA veristar.app` also lists `comodoca.com`, `digicert.com`, `pki.goog` and
 `ssl.com`.
