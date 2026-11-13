@@ -11,7 +11,11 @@
    the same way new-secrets.py makes them,
 4. encrypts both files to the environment's recipients: the creation rule
    of infra/secrets/.sops.yaml (staging, production), or the recipients
-   given with --age (the local converge, which has no rule).
+   given with --age (the local converge, which has no rule),
+5. re-encrypts the private network's ca.enc.yaml and tls.enc.yaml
+   (playbooks/internal-ca.yml) to the same recipients, values unchanged:
+   every play reads tls.enc.yaml with the new identity, so a file left on the
+   old recipients would stop rotate-all.yml at its first node.
 
 rotate-all.yml reads both files, applies the new values, and proves every
 previous value is refused. delete secrets.previous.enc.yaml after it passed:
@@ -122,10 +126,21 @@ def main() -> int:
             new[k] = v
             print(f"rotate-secrets.py: {k} kept (not generated)", file=sys.stderr)
 
+    # the certificate files first: when one cannot be read with this
+    # identity, nothing has been rewritten yet
+    rekeyed = []
+    for name in ("ca.enc.yaml", "tls.enc.yaml"):
+        path = os.path.join(root, "infra/secrets", a.env, name)
+        if os.path.exists(path):
+            doc = yaml.safe_load(sops(["decrypt", "--input-type", "yaml", "--output-type", "yaml", path]))
+            encrypt(doc, path, root, a.age)
+            rekeyed.append(name)
     encrypt(old, previous, root, a.age)
     encrypt(new, current, root, a.age)
     changed = sorted(k for k in new if new.get(k) != old.get(k))
     print(f"rotated {len(changed)} keys of {a.env}; previous values in {previous}")
+    if rekeyed:
+        print(f"re-encrypted {', '.join(rekeyed)} of {a.env} to the new recipients, values unchanged")
     return 0
 
 

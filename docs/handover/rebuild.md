@@ -311,7 +311,9 @@ ansible-playbook -i inventories/<env>/ playbooks/rotate-all.yml -e sa_image_tag=
 
 Remove the original operator's age key from `infra/secrets/recipients/<env>.txt` and run
 `infra/secrets/sync-recipients.sh` before `rotate-secrets.py`, so the new file is encrypted to the
-new list only. `rotate-all.yml` refuses a file in which a generated value did not change, applies
+new list only. `rotate-secrets.py` also re-encrypts the private network's `ca.enc.yaml` and
+`tls.enc.yaml` to that list, with their values unchanged (new certificates come from
+`make internal-ca`). `rotate-all.yml` refuses a file in which a generated value did not change, applies
 every value in the order a running system needs (PostgreSQL roles before the services that log
 in with them, the Umami admin through Umami, the NATS config before the clients), recreates every
 service, resets Grafana's stored admin password and re-keys every Umami user. Then it proves
