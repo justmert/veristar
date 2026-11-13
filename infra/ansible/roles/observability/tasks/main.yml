@@ -73,6 +73,38 @@
   ansible.builtin.include_tasks: probe.yml
   when: sa_tier == 'probe'
 
+# docker does not retry a container whose start failed while the daemon came
+# up: after a power-off in the production database drill (2026-11-13)
+# alertmanager stayed exited with code 255. the same oneshot unit as the edge
+# and core projects starts every existing container once docker is up.
+- name: Install the start-at-boot unit of the observability project
+  ansible.builtin.copy:
+    content: |
+      # managed by ansible (infra/ansible/roles/observability)
+      [Unit]
+      Description=start the observability compose project's containers after boot
+      After=docker.service sa-core-start.service sa-edge-start.service
+      Requires=docker.service
+
+      [Service]
+      Type=oneshot
+      TimeoutStartSec=15min
+      ExecStart=/usr/bin/docker compose --project-directory {{ observability_dir }} start
+
+      [Install]
+      WantedBy=multi-user.target
+    dest: /etc/systemd/system/sa-observability-start.service
+    owner: root
+    group: root
+    mode: "0644"
+  register: observability_start_unit
+
+- name: Enable the start-at-boot unit
+  ansible.builtin.systemd_service:
+    name: sa-observability-start.service
+    enabled: true
+    daemon_reload: "{{ observability_start_unit is changed }}"
+
 - name: Write the compose project
   ansible.builtin.template:
     src: compose.yml.j2
