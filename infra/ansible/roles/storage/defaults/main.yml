@@ -30,3 +30,6 @@ storage_lock_days: 35
 # address to connect to (infra/local, s3 mode). empty everywhere else.
 storage_ca_file: "{{ sa_object_storage.ca_file | default('') if sa_object_storage is mapping else '' }}"
 storage_connect_host: "{{ sa_object_storage.storage_host | default('') if sa_object_storage is mapping else '' }}"
+
+# how the controller runs the az cli (tasks/azure.yml)
+storage_az_argv: [az]

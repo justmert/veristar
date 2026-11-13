@@ -436,7 +436,7 @@ staging-deploy production-deploy: %-deploy:
 	@test -f "$(SA_RELEASE_MANIFEST)" || { echo "set SA_RELEASE_MANIFEST=<release-images.json of the release>: site.yml and deploy.yml both verify the image signatures first (this stage, playbooks/verify-release.yml)" >&2; exit 1; }
 	cd infra/ansible && $(ANSIBLE_BIN)/ansible-playbook -i inventories/$*/ \
 		playbooks/$(if $(ROLLING),deploy.yml,site.yml) -e sa_image_tag=$(SA_IMAGE_TAG) \
-		-e sa_release_manifest=$(abspath $(SA_RELEASE_MANIFEST))
+		-e sa_release_manifest=$(abspath $(SA_RELEASE_MANIFEST)) $(ANSIBLE_EXTRA)
 
 # the local converge (docs/deploy/local-converge.md): 3 edge and 1 core
 # debian 13 systemd containers on this machine
