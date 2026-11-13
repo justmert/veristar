@@ -1,0 +1,124 @@
+---
+# deploy-time signature verification (the design,
+# docs/security/supply-chain.md). runs on the controller before any node is
+# touched. input: the release manifest that release-images.yml attached to
+# the github release (release-images.json), passed as sa_release_manifest.
+# every platform image must
+#   - belong to sa_image_registry and to the release named by sa_image_tag
+#   - carry a valid cosign signature for its digest from the release
+#     workflow's identity (keyless: fulcio certificate issued to
+#     .github/workflows/release-images.yml at refs/tags/<sa_image_tag>, by
+#     github's oidc issuer, checked against the rekor transparency log)
+#   - be the image its tag points to in the registry right now
+# anything else stops the run: an unsigned digest, a signature from another
+# identity, a manifest digest that differs from the registry's.
+# the result, sa_verified_images, maps platform_images keys to
+# repo:tag@digest, so the nodes pull exactly the verified digests.
+#
+# sa_signature_mode: keyless (the only mode for staging and production).
+# test-ephemeral-key exists so tests/supplychain can prove this logic with a
+# key made for one test run; it is refused unless the inventory lives under
+# tests/, and it never verifies a real release.
+- name: Refuse a missing release manifest
+  ansible.builtin.assert:
+    that:
+      - sa_release_manifest is defined
+      - sa_release_manifest | length > 0
+      - sa_image_tag is defined
+    fail_msg: >-
+      deploy needs -e sa_release_manifest=<path to release-images.json of
+      release {{ sa_image_tag | default('?') }}>; images are deployed only by
+      verified digest
+
+- name: Read the release manifest
+  ansible.builtin.set_fact:
+    verify_manifest: "{{ lookup('ansible.builtin.file', sa_release_manifest) | from_json }}"
+
+- name: Refuse a test signing mode outside tests
+  ansible.builtin.assert:
+    that:
+      - (sa_signature_mode | default('keyless')) in ['keyless', 'test-ephemeral-key']
+      - >-
+        (sa_signature_mode | default('keyless')) == 'keyless'
+        or ('/tests/' in inventory_dir and sa_signature_test_key | default('') | length > 0)
+    fail_msg: "signature mode {{ sa_signature_mode | default('keyless') }} is allowed only for an inventory under tests/"
+
+- name: Check the manifest names this release and only this registry
+  ansible.builtin.assert:
+    that:
+      - verify_manifest.schema == 1
+      - verify_manifest.release == sa_image_tag
+      - verify_manifest.images | length > 0
+      - verify_manifest.images.values() | map(attribute='repo') | reject('match', verify_repo_pattern) | list | length == 0
+      - verify_manifest.images.values() | map(attribute='digest') | reject('match', '^sha256:[0-9a-f]{64}$') | list | length == 0
+      - (verify_manifest.images.keys() | map('replace', '-', '_') | list) is superset(verify_required_images)
+    fail_msg: "release manifest {{ sa_release_manifest }} does not describe release {{ sa_image_tag }} in {{ sa_image_registry }} completely"
+  vars:
+    verify_required_images: "{{ platform_images.keys() | list }}"
+    verify_repo_pattern: "{{ '^' ~ (sa_image_registry | regex_escape) ~ '/[a-z0-9-]+$' }}"
+
+- name: Refuse upstream images that are not pinned by digest
+  ansible.builtin.assert:
+    that:
+      - upstream_images.values() | reject('match', '^[^@]+@sha256:[0-9a-f]{64}$') | list | length == 0
+    fail_msg: every upstream image in vars/pins.yml must be pinned by digest
+
+# keyless: the release workflow's identity at this release's tag, and the
+# rekor log (cosign's default). test mode: the test's public key, no rekor,
+# a plain http registry; reachable only through the assert above.
+- name: Choose the verification identity
+  ansible.builtin.set_fact:
+    verify_identity_args: >-
+      {{ ['--certificate-identity',
+          'https://github.com/' ~ sa_signing_repository ~ '/.github/workflows/release-images.yml@refs/tags/' ~ sa_image_tag,
+          '--certificate-oidc-issuer', 'https://token.actions.githubusercontent.com']
+         if (sa_signature_mode | default('keyless')) == 'keyless'
+         else ['--key', sa_signature_test_key, '--insecure-ignore-tlog=true', '--allow-http-registry'] }}
+
+- name: Verify the signature of every image digest
+  ansible.builtin.command:
+    argv: >-
+      {{ ['cosign', 'verify', '--output', 'json']
+         + verify_identity_args
+         + [item.value.repo ~ '@' ~ item.value.digest] }}
+  loop: "{{ verify_manifest.images | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  changed_when: false
+  register: verify_digest
+
+- name: Verify what each release tag points to now
+  ansible.builtin.command:
+    argv: >-
+      {{ ['cosign', 'verify', '--output', 'json']
+         + verify_identity_args
+         + [item.value.repo ~ ':' ~ item.value.tag] }}
+  loop: "{{ verify_manifest.images | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  changed_when: false
+  register: verify_tag
+
+# cosign resolves the tag before verifying; the digest in its signed payload
+# is the image the tag names right now, which must be the manifest's
+- name: Refuse a tag that moved away from the signed digest
+  ansible.builtin.assert:
+    that:
+      - (item.stdout | from_json | map(attribute='critical') | map(attribute='image')
+         | map(attribute='docker-manifest-digest') | unique | list) == [verify_manifest.images[item.item.key].digest]
+    fail_msg: >-
+      {{ item.item.value.repo }}:{{ item.item.value.tag }} points to
+      {{ item.stdout | from_json | map(attribute='critical') | map(attribute='image') | map(attribute='docker-manifest-digest') | unique | list }},
+      the manifest says {{ verify_manifest.images[item.item.key].digest }}
+  loop: "{{ verify_tag.results }}"
+  loop_control:
+    label: "{{ item.item.key }}"
+
+- name: Record the verified references
+  ansible.builtin.set_fact:
+    sa_verified_images: "{{ sa_verified_images | default({}) | combine({item.key | replace('-', '_'): verify_ref}) }}"
+  vars:
+    verify_ref: "{{ item.value.repo ~ ':' ~ item.value.tag ~ '@' ~ item.value.digest }}"
+  loop: "{{ verify_manifest.images | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"

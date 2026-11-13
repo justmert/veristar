@@ -17,6 +17,10 @@ COPY cmd ./cmd
 COPY internal ./internal
 # platformctl embeds the migrations (package db)
 COPY db ./db
+# platformctl and jobs link control-plane packages that embed the terms and
+# compliance texts and the machine api's openapi document (this stage)
+COPY docs/compliance ./docs/compliance
+COPY docs/reference/openapi ./docs/reference/openapi
 
 # cgo off gives a fully static binary, which the static distroless base needs
 RUN if [ -z "$CMD" ]; then echo "build arg CMD is required, e.g. --build-arg CMD=platformctl" >&2; exit 1; fi; \

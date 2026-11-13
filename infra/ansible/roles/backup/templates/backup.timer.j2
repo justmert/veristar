@@ -1,0 +1,11 @@
+# managed by ansible (infra/ansible/roles/backup)
+[Unit]
+Description=pgbackrest {{ item.name }} schedule
+
+[Timer]
+OnCalendar={{ item.calendar }}
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

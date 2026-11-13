@@ -1,0 +1,52 @@
+---
+# the probe node an operator input: the tracker manifest of this checkout is copied
+# so the prober compares the served files with what the release committed
+- name: Name the probe targets and endpoints
+  ansible.builtin.include_tasks: probe_facts.yml
+
+- name: Create the probe directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "{{ item.mode }}"
+  loop:
+    - {path: "{{ observability_conf_dir }}/releases", mode: "0755"}
+    # the secrets role does not run on the probe node; the env files of this
+    # role are the only secrets there
+    - {path: "{{ secrets_env_dir }}", mode: "0700"}
+
+- name: Install the tracker release manifest
+  ansible.builtin.copy:
+    src: "{{ observability_repo_root }}/packages/tracker/releases/{{ item }}"
+    dest: "{{ observability_conf_dir }}/releases/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: [manifest.json, revoked.json]
+
+- name: Write the probe configs
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "{{ observability_conf_dir }}/{{ item.dest }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - {src: gatus.yml.j2, dest: gatus.yml}
+    - {src: probe.Caddyfile.j2, dest: Caddyfile}
+  notify: [Restart gatus, Reload probe caddy]
+
+- name: Write the probe env files
+  ansible.builtin.copy:
+    content: "{{ item.content }}"
+    dest: "{{ secrets_env_dir }}/{{ item.name }}"
+    owner: root
+    group: root
+    mode: "0600"
+  loop:
+    - {name: prober.env, content: "{{ lookup('ansible.builtin.template', 'prober.env.j2') }}"}
+    - {name: gatus.env, content: "GATUS_DISCORD_WEBHOOK_URL={{ observability_webhook_gatus }}\nGATUS_EXTERNAL_TOKEN={{ sa_secrets.gatus_external_token }}\n"}
+    - {name: probe-caddy.env, content: "PROBE_METRICS_TOKEN={{ sa_secrets.probe_metrics_token }}\n"}
+  no_log: true

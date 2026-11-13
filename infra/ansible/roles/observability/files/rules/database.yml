@@ -1,0 +1,59 @@
+---
+# alert rules, etcd, patroni and postgresql (the design). patroni 4.1.5
+# serves /metrics on its rest api (patroni/api.py), postgres_exporter 0.20.1
+# reads pg_stat_archiver and pg_replication with its default collectors,
+# and the pgbackrest metrics come from the textfile the observability role
+# writes after each `pgbackrest info` (templates/pgbackrest-textfile.py.j2).
+groups:
+  - name: database
+    rules:
+      - alert: EtcdNoLeader
+        expr: etcd_server_has_leader == 0
+        for: 1m
+        labels: {severity: page}
+        annotations:
+          summary: "etcd member on {{ $labels.node }} sees no leader"
+          runbook: docs/runbooks/alerts.md#etcdnoleader
+      - alert: EtcdMembersDown
+        expr: (count(up{job="etcd"} == 1) or vector(0)) < 2
+        for: 1m
+        labels: {severity: page}
+        annotations:
+          summary: "fewer than two of the three etcd members answer"
+          runbook: docs/runbooks/alerts.md#etcdmembersdown
+
+      # one cluster scope; a leader is a member with patroni_primary 1
+      - alert: PatroniNoLeader
+        expr: (max(patroni_primary) < 1) or absent(patroni_primary) or (max(patroni_cluster_unlocked) == 1)
+        for: 1m
+        labels: {severity: page}
+        annotations:
+          summary: "the patroni cluster has no primary"
+          runbook: docs/runbooks/alerts.md#patroninoleader
+      - alert: ReplicationLagHigh
+        expr: max by (node) (pg_replication_lag_seconds and on (node, instance) pg_replication_is_replica == 1) > 60
+        for: 5m
+        labels: {severity: page}
+        annotations:
+          summary: "the replica on {{ $labels.node }} is {{ $value | humanizeDuration }} behind"
+          runbook: docs/runbooks/alerts.md#replicationlaghigh
+
+      - alert: BackupTooOld
+        expr: |
+          (time() - max(pgbackrest_last_backup_completion_timestamp_seconds) > 26 * 3600)
+          or absent(pgbackrest_last_backup_completion_timestamp_seconds)
+        for: 15m
+        labels: {severity: page}
+        annotations:
+          summary: "the newest pgbackrest backup is older than 26 hours, or none is known"
+          runbook: docs/runbooks/alerts.md#backuptooold
+      # a failure since the last 15 minutes, or nothing archived for 15
+      # minutes on the primary while wal is being written
+      - alert: WALArchivingFailing
+        expr: |
+          (increase(pg_stat_archiver_failed_count[15m]) > 0)
+          or (pg_stat_archiver_last_archive_age > 900 and on (node, instance) pg_replication_is_replica == 0)
+        labels: {severity: page}
+        annotations:
+          summary: "wal archiving fails on {{ $labels.node }}"
+          runbook: docs/runbooks/alerts.md#walarchivingfailing

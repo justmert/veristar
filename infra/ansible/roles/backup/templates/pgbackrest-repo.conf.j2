@@ -1,0 +1,37 @@
+# managed by ansible (infra/ansible/roles/backup). the repository node of
+# the local converge: a posix repository standing in for object storage. it
+# takes the backups itself, reading the database nodes over tls.
+[global]
+log-level-console=info
+log-level-file=off
+compress-type=zst
+repo1-path=/var/spool/pgbackrest/repo
+repo1-cipher-type=aes-256-cbc
+repo1-cipher-pass={{ sa_secrets.pgbackrest_cipher_pass }}
+repo1-retention-full-type=count
+repo1-retention-full={{ backup_retention_full }}
+repo1-retention-diff={{ backup_retention_diff }}
+start-fast=y
+# the database nodes push wal here and the restore node reads from here
+tls-server-address=*
+tls-server-port={{ backup_tls_port }}
+tls-server-ca-file=/etc/pgbackrest/tls/ca.crt
+tls-server-cert-file=/etc/pgbackrest/tls/node.crt
+tls-server-key-file=/etc/pgbackrest/tls/node.key
+# one line per client common name: the value after = lists stanzas, so
+# common names cannot share a line
+{% for h in groups['core'] + groups['restore'] %}
+tls-server-auth={{ h }}={{ backup_stanza }}
+{% endfor %}
+
+[{{ backup_stanza }}]
+{% for h in groups['core'] %}
+pg{{ loop.index }}-host={{ hostvars[h].sa_private_ip }}
+pg{{ loop.index }}-host-type=tls
+pg{{ loop.index }}-host-port={{ backup_tls_port }}
+pg{{ loop.index }}-host-ca-file=/etc/pgbackrest/tls/ca.crt
+pg{{ loop.index }}-host-cert-file=/etc/pgbackrest/tls/node.crt
+pg{{ loop.index }}-host-key-file=/etc/pgbackrest/tls/node.key
+pg{{ loop.index }}-path={{ backup_pg_path }}
+pg{{ loop.index }}-socket-path=/var/run/postgresql
+{% endfor %}

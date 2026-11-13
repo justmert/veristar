@@ -1,0 +1,18 @@
+# gitleaks findings reviewed on 2026-11-13 (the design). every one is a
+# test fixture or a false positive: umami migration names, made-up test
+# passwords and tokens, a public stellar G key, and stripe's published
+# documentation key in the route normalization corpus. a new finding is not
+# covered by these fingerprints and fails ci.
+ef1b4fbaedef059fdcdb62ed885c11d8d54dc5cb:apps/console/test/fixtures/global.ts:generic-api-key:10
+e826ca8a5c51f488450ca4290240a6513af84f9a:internal/jobs/retainweb/migrations.go:generic-api-key:26
+e826ca8a5c51f488450ca4290240a6513af84f9a:internal/jobs/retainweb/migrations.go:generic-api-key:35
+d462083dffd142ae2ffc66fd8f2104396d7946f3:apps/console/test/fixtures/contract.ts:generic-api-key:389
+9a6b0bdb506249a34161783992f9a9fa6146e535:apps/console/test/fixtures/contract.ts:generic-api-key:371
+b439dc543b99cbf92a7808a9ad2e71c957366fbf:internal/controlplane/domaincheck/verify_test.go:generic-api-key:13
+b439dc543b99cbf92a7808a9ad2e71c957366fbf:tests/fixtures/stellartoml/valid.toml:generic-api-key:4
+9a4a2137fc16dc14c148573619f09eaa6ba6e336:apps/console/test/fixtures/contract.ts:generic-api-key:13
+9a4a2137fc16dc14c148573619f09eaa6ba6e336:apps/console/test/fixtures/contract.ts:generic-api-key:14
+34365959f18aec84ed0ea2f1acf616eece9fafbb:internal/routenorm/testdata/corpus.tsv:stripe-access-token:256
+9a4a2137fc16dc14c148573619f09eaa6ba6e336:cmd/controlplane/main_test.go:generic-api-key:125
+9a4a2137fc16dc14c148573619f09eaa6ba6e336:internal/config/controlplane_test.go:generic-api-key:24
+5a2e870f9fd0a6b698775a9ce500806b6c490c7d:internal/config/config_test.go:generic-api-key:75

@@ -1,9 +1,10 @@
 ---
-# converges everything (the design): os baseline and secrets on every
-# node, the edge and core infrastructure, the bootstrap, then the services.
+# converges everything (plan phases 15 and 16): os baseline and secrets on
+# every node, the edge and core infrastructure, the backup repository, the
+# bootstrap, then the services.
 # a second run reports no changes.
 - name: Baseline and secrets
-  hosts: edge:core
+  hosts: edge:core:backup
   become: true
   vars_files: [../vars/pins.yml]
   roles:
@@ -27,6 +28,16 @@
     - role: core
       vars:
         core_stage: infra
+
+# the local converge's pgbackrest repository node (roles/backup). in staging
+# and production the backup group is empty and the repository is object
+# storage, configured on the core nodes.
+- name: Backup repository
+  hosts: backup
+  become: true
+  vars_files: [../vars/pins.yml]
+  roles:
+    - backup
 
 - name: Bootstrap
   ansible.builtin.import_playbook: bootstrap.yml

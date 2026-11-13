@@ -31,6 +31,8 @@ INPUTS = {
     "SA_GITHUB_CLIENT_ID": "github_client_id",  # I2
     "SA_GITHUB_CLIENT_SECRET": "github_client_secret",  # I2
     "SA_BUNNY_API_KEY": "bunny_api_key",  # I6, caddy dns-01
+    "SA_OBJECT_STORAGE_ACCESS_KEY": "object_storage_access_key",  # I5, backups
+    "SA_OBJECT_STORAGE_SECRET_KEY": "object_storage_secret_key",  # I5, backups
 }
 
 
@@ -67,6 +69,9 @@ def main() -> int:
         "umami_admin_password": hexkey(24),
         "umami_user_password_key": b64key(32),
         "umami_db_jobs_retention_password": hexkey(24),
+        # pgbackrest encrypts the repository with it (aes-256-cbc), so the
+        # object storage provider never holds readable backups
+        "pgbackrest_cipher_pass": hexkey(32),
         "oauth_state_key": b64key(32),
         "platform_db_cp_system_password": hexkey(24),
         "platform_db_cp_tenant_password": hexkey(24),

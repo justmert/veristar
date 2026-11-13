@@ -1,0 +1,9 @@
+# managed by ansible (infra/ansible/roles/core)
+[Unit]
+Description=delete raw umami rows past the retention horizon (jobs retain-web)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/docker compose --project-directory {{ core_dir }} run --rm --no-deps -T jobs retain-web

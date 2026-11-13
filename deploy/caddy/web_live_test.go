@@ -194,6 +194,18 @@ func openapiPaths(t *testing.T, l *liveWeb) map[string][]string {
 	return ops
 }
 
+// requireCaddyRefusal checks that caddy itself refused the request: 403
+// with the "forbidden" body of every respond in web.Caddyfile. umami refuses
+// many of these routes for a view-only user as well, so without the body a
+// deleted deny rule could go unnoticed. a HEAD answer has no body.
+func requireCaddyRefusal(t *testing.T, r webResp, method, path string) {
+	t.Helper()
+	require.Equal(t, http.StatusForbidden, r.status, "%s %s answered %d: %.200s", method, path, r.status, r.body)
+	if method != http.MethodHead {
+		require.Equal(t, "forbidden", r.body, "%s %s: 403 not from caddy", method, path)
+	}
+}
+
 func requireWebHeaders(t *testing.T, r webResp, what string) {
 	t.Helper()
 	require.Equal(t, "no-referrer", r.header.Get("Referrer-Policy"), "%s: Referrer-Policy", what)
@@ -243,7 +255,7 @@ func webDenyList(t *testing.T, l *liveWeb) {
 		for _, v := range variants(p) {
 			for _, m := range allMethods {
 				r := l.do(t, m, v, nil, "{}")
-				require.Equal(t, http.StatusForbidden, r.status, "%s %s answered %d: %.200s", m, v, r.status, r.body)
+				requireCaddyRefusal(t, r, m, v)
 				requireWebHeaders(t, r, m+" "+v)
 			}
 		}
@@ -273,7 +285,7 @@ func webAPIMethodAllowlist(t *testing.T, l *liveWeb) {
 			}
 			for _, v := range []string{p, "/teams/" + l.teamID + p} {
 				r := l.do(t, m, v, nil, "{}")
-				require.Equal(t, http.StatusForbidden, r.status, "%s %s answered %d: %.200s", m, v, r.status, r.body)
+				requireCaddyRefusal(t, r, m, v)
 				requireWebHeaders(t, r, m+" "+v)
 				checked++
 			}
@@ -286,7 +298,7 @@ func webAPIMethodAllowlist(t *testing.T, l *liveWeb) {
 	for _, sub := range []string{"/teams", "/websites"} {
 		p := "/api/users/" + l.userID + sub
 		for _, m := range []string{http.MethodOptions, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete} {
-			require.Equal(t, http.StatusForbidden, l.do(t, m, p, nil, "{}").status, "%s %s", m, p)
+			requireCaddyRefusal(t, l.do(t, m, p, nil, "{}"), m, p)
 		}
 	}
 	for _, p := range []string{
@@ -294,7 +306,7 @@ func webAPIMethodAllowlist(t *testing.T, l *liveWeb) {
 		"/api/users/" + l.userID + "/websitesx", "/api/usersx/" + l.userID + "/teams",
 		"/api/auth/subscription", "/api/auth/subscription?teamId=" + l.teamID,
 	} {
-		require.Equal(t, http.StatusForbidden, l.do(t, http.MethodGet, p, nil, "").status, "GET %s", p)
+		requireCaddyRefusal(t, l.do(t, http.MethodGet, p, nil, ""), http.MethodGet, p)
 	}
 
 	// the allowed writes reach umami

@@ -9,6 +9,7 @@ const SIGN_IN_ERRORS: Record<string, string> = {
     "The sign-in link expired or was opened in another browser. Start again from this page.",
   access_denied: "GitHub sign-in was cancelled. Nothing was shared.",
   github_error: "GitHub refused the sign-in request. Try again in a moment.",
+  rate_limited: "Too many sign-ins right now. Wait a few seconds and start again.",
   exchange_failed: "GitHub did not confirm the sign-in. Start again from this page.",
   github_unavailable: "GitHub could not be reached. Try again in a moment.",
   internal: "Sign-in failed on our side. Try again; if it keeps failing, report it.",

@@ -1,0 +1,100 @@
+---
+- name: Create the core observability directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner | default('root') }}"
+    group: "{{ item.owner | default('root') }}"
+    mode: "{{ item.mode | default('0755') }}"
+  loop:
+    - {path: "{{ observability_conf_dir }}/prometheus"}
+    - {path: "{{ observability_conf_dir }}/prometheus/rules"}
+    - {path: "{{ observability_conf_dir }}/alertmanager", owner: "65534", mode: "0700"}
+    - {path: "{{ observability_conf_dir }}/grafana"}
+    - {path: "{{ observability_conf_dir }}/grafana/dashboards"}
+
+- name: Install the alert rules
+  ansible.builtin.copy:
+    src: rules/
+    dest: "{{ observability_conf_dir }}/prometheus/rules/"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload prometheus
+
+- name: Write the prometheus config
+  ansible.builtin.template:
+    src: prometheus.yml.j2
+    dest: "{{ observability_conf_dir }}/prometheus/prometheus.yml"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload prometheus
+
+# prometheus runs as nobody and reads the token from a file
+- name: Write the probe metrics token
+  ansible.builtin.copy:
+    content: "{{ sa_secrets.probe_metrics_token }}"
+    dest: "{{ observability_conf_dir }}/prometheus/probe-metrics-token"
+    owner: "65534"
+    group: "65534"
+    mode: "0400"
+  no_log: true
+  notify: Reload prometheus
+
+- name: Write the alertmanager config
+  ansible.builtin.template:
+    src: alertmanager.yml.j2
+    dest: "{{ observability_conf_dir }}/alertmanager/alertmanager.yml"
+    owner: "65534"
+    group: "65534"
+    mode: "0400"
+  notify: Reload alertmanager
+
+- name: Write the discord webhook url an operator input
+  ansible.builtin.copy:
+    content: "{{ observability_webhook_alertmanager }}"
+    dest: "{{ observability_conf_dir }}/alertmanager/discord-webhook-url"
+    owner: "65534"
+    group: "65534"
+    mode: "0400"
+  no_log: true
+  notify: Reload alertmanager
+
+- name: Install the grafana provisioning and dashboards
+  ansible.builtin.copy:
+    src: "grafana/{{ item }}/"
+    dest: "{{ observability_conf_dir }}/grafana/{{ item }}/"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: [provisioning, dashboards]
+
+- name: Write the grafana and postgres_exporter env files
+  ansible.builtin.copy:
+    content: "{{ item.content }}"
+    dest: "{{ secrets_env_dir }}/{{ item.name }}"
+    owner: root
+    group: root
+    mode: "0600"
+  loop:
+    - {name: grafana.env, content: "GF_SECURITY_ADMIN_USER=admin\nGF_SECURITY_ADMIN_PASSWORD={{ sa_secrets.grafana_admin_password }}\n"}
+    - {name: postgres-exporter.env, content: "DATA_SOURCE_PASS={{ sa_secrets.postgres_exporter_password }}\n"}
+  no_log: true
+
+# postgres_exporter reads statistics only: pg_monitor, nothing else. it
+# goes through haproxy, so it lands on the patroni leader wherever that is.
+- name: Create the monitoring role
+  ansible.builtin.command:
+    argv: [docker, compose, --project-directory, "{{ observability_core_dir }}", exec, -T,
+           -e, "PGPASSWORD={{ sa_secrets.postgres_superuser_password }}", postgres,
+           psql, -h, haproxy, -p, "5000", -U, postgres, -d, postgres, -v, ON_ERROR_STOP=1,
+           -v, "pw={{ sa_secrets.postgres_exporter_password }}"]
+    stdin: |
+      select format(case when exists (select 1 from pg_roles where rolname = 'sa_monitor')
+        then 'alter role sa_monitor login password %L'
+        else 'create role sa_monitor login password %L in role pg_monitor' end, :'pw') \gexec
+  changed_when: false
+  no_log: true
+  run_once: true
+  delegate_to: "{{ observability_postgres_hosts[0] }}"

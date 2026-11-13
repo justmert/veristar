@@ -1,0 +1,34 @@
+---
+# takes the node out of dns: port 80 answers 503 while the flag exists
+# (deploy/caddy/assemble.sh), then waits for resolvers to drop the address
+- name: Create the drain directory
+  ansible.builtin.file:
+    path: "{{ drain_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Set the drain flag
+  ansible.builtin.copy:
+    content: "deploy {{ sa_image_tag }}\n"
+    dest: "{{ drain_dir }}/draining"
+    owner: root
+    group: root
+    mode: "0644"
+
+# a node converged before the drain mount existed would ignore the flag;
+# that would be a silent drain, so the run stops instead
+- name: Check that port 80 now answers 503
+  ansible.builtin.uri:
+    url: "http://{{ sa_public_ipv4 }}/"
+    follow_redirects: none
+    status_code: 503
+  register: drain_health
+  until: drain_health.status == 503
+  retries: 10
+  delay: 1
+
+- name: Wait for dns to drop the node
+  ansible.builtin.pause:
+    seconds: "{{ deploy_drain_seconds }}"

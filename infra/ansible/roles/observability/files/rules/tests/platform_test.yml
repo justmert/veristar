@@ -1,0 +1,133 @@
+---
+# promtool test rules for platform.yml. promtool starts the clock at unix 0,
+# so day arithmetic below is relative to 1970-01-01 00:00 utc.
+rule_files: [../platform.yml]
+evaluation_interval: 1m
+tests:
+  - name: disk, service, umami heartbeat
+    interval: 1m
+    input_series:
+      - series: 'node_filesystem_avail_bytes{job="node",node="core-1",mountpoint="/",fstype="ext4"}'
+        values: '30x5 10x15'
+      - series: 'node_filesystem_size_bytes{job="node",node="core-1",mountpoint="/",fstype="ext4"}'
+        values: '100x20'
+      - series: 'node_filesystem_avail_bytes{job="node",node="core-1",mountpoint="/run",fstype="tmpfs"}'
+        values: '1x20'
+      - series: 'node_filesystem_size_bytes{job="node",node="core-1",mountpoint="/run",fstype="tmpfs"}'
+        values: '100x20'
+      - series: 'up{job="replayer",node="core-2"}'
+        values: '1 0 0 0 0'
+      - series: 'ops_ready_check{job="controlplane",node="core-1",check="umami"}'
+        values: '1 0 0 0 0 1'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: DiskUsageHigh
+      - eval_time: 16m
+        alertname: DiskUsageHigh
+        exp_alerts:
+          - exp_labels: {severity: ticket, job: node, node: core-1, mountpoint: /, fstype: ext4}
+            exp_annotations:
+              summary: "/ on core-1 is 90% full"
+              runbook: docs/runbooks/alerts.md#diskusagehigh
+      - eval_time: 4m
+        alertname: ServiceDown
+        exp_alerts:
+          - exp_labels: {severity: page, job: replayer, node: core-2}
+            exp_annotations:
+              summary: "replayer on core-2 does not answer scrapes"
+              runbook: docs/runbooks/alerts.md#servicedown
+      - eval_time: 4m
+        alertname: UmamiHeartbeatFailing
+        exp_alerts:
+          - exp_labels: {severity: page, job: controlplane, node: core-1, check: umami}
+            exp_annotations:
+              summary: "the control plane on core-1 gets no umami heartbeat"
+              runbook: docs/runbooks/alerts.md#umamiheartbeatfailing
+      - eval_time: 5m
+        alertname: UmamiHeartbeatFailing
+  - name: web aggregation
+    interval: 1m
+    input_series:
+      # succeeded at minute 0 and 60, then fails
+      - series: 'jobs_task_last_success_timestamp_seconds{job="jobs",node="core-1",task="aggregate-web"}'
+        values: '0x59 3600x200'
+    alert_rule_test:
+      - eval_time: 3h
+        alertname: WebAggregationStale
+      - eval_time: 3h30m
+        alertname: WebAggregationStale
+        exp_alerts:
+          - exp_labels: {severity: ticket}
+            exp_annotations:
+              summary: "web aggregation has not succeeded for over two hours"
+              runbook: docs/runbooks/alerts.md#webaggregationstale
+  - name: aggregation never succeeded
+    interval: 1m
+    input_series:
+      - series: 'jobs_leader{job="jobs",node="core-1"}'
+        values: '1x30'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: WebAggregationStale
+      - eval_time: 20m
+        alertname: WebAggregationStale
+        exp_alerts:
+          - exp_labels: {severity: ticket, task: aggregate-web}
+            exp_annotations:
+              summary: "web aggregation has not succeeded for over two hours"
+              runbook: docs/runbooks/alerts.md#webaggregationstale
+  - name: umami password rotation
+    interval: 10m
+    input_series:
+      # day 0 is rotated; on day 1 (from minute 1440) nothing new is recorded
+      - series: 'jobs_umami_rotated_epoch_day{job="jobs",node="core-1"}'
+        values: '0x300'
+    alert_rule_test:
+      - eval_time: 23h
+        alertname: UmamiPasswordRotationNotRun
+      # 00:50 on day 1: inside the hour of slack
+      - eval_time: 24h50m
+        alertname: UmamiPasswordRotationNotRun
+      # 01:20 on day 1, the condition has held for 15 minutes
+      - eval_time: 25h20m
+        alertname: UmamiPasswordRotationNotRun
+        exp_alerts:
+          - exp_labels: {severity: page}
+            exp_annotations:
+              summary: "today's umami password rotation has not been recorded"
+              runbook: docs/runbooks/alerts.md#umamipasswordrotationnotrun
+  - name: probe checks
+    interval: 1m
+    input_series:
+      - series: 'prober_check_success{job="prober",node="probe-1",check="slo_ingestion"}'
+        values: '1 0 0 0 0'
+      - series: 'prober_check_success{job="prober",node="probe-1",check="slo_freshness-web"}'
+        values: '1 0 0 0 0'
+      - series: 'prober_check_success{job="prober",node="probe-1",check="slo_dashboard"}'
+        values: '1 1 1 1 1'
+      - series: 'prober_check_success{job="prober",node="probe-1",check="nodes_edge-2-in-example-org"}'
+        values: '1 0 0 0 0'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: ProbeIngestionFailing
+        exp_alerts:
+          - exp_labels: {severity: page, job: prober, node: probe-1, check: slo_ingestion}
+            exp_annotations:
+              summary: "the probe's web event or otlp metric is not accepted"
+              runbook: docs/runbooks/alerts.md#probeingestionfailing
+      - eval_time: 4m
+        alertname: ProbeFreshnessFailing
+        exp_alerts:
+          - exp_labels: {severity: page, job: prober, node: probe-1, check: slo_freshness-web}
+            exp_annotations:
+              summary: "slo_freshness-web: accepted probe events are not visible in the machine api"
+              runbook: docs/runbooks/alerts.md#probefreshnessfailing
+      - eval_time: 4m
+        alertname: ProbeDashboardFailing
+      - eval_time: 4m
+        alertname: ProbeNodeCheckFailing
+        exp_alerts:
+          - exp_labels: {severity: page, job: prober, node: probe-1, check: nodes_edge-2-in-example-org}
+            exp_annotations:
+              summary: "nodes_edge-2-in-example-org fails by address (tls, certificate or http)"
+              runbook: docs/runbooks/alerts.md#probenodecheckfailing

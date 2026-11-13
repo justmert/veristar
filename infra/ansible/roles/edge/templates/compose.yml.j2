@@ -110,6 +110,8 @@ services:
       NODE_HEALTH_PATH: /edgez
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # deploy.yml's drain flag (deploy/caddy/assemble.sh)
+      - {{ edge_drain_dir }}:/drain:ro
       - caddydata:/data
       - caddyconfig:/config
     ports:

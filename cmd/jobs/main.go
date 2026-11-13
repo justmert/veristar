@@ -345,8 +345,23 @@ func open(ctx context.Context, env *config.Env, log *slog.Logger, opsAddr bool) 
 		return err
 	}
 	rotator := &umamirotate.Rotator{Admin: admin, Key: key, Now: time.Now, Log: log}
+	// the alert "daily umami password rotation not run" compares this day
+	// with the current utc day. Rotate returns today both after rotating and
+	// when the database already records today's rotation, and an error
+	// leaves the gauge alone, so it only moves when today is really done
+	rotatedDay := prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "jobs_umami_rotated_epoch_day",
+		Help: "utc epoch day (unix days) of the newest completed umami password rotation, as read or written by the last successful umami-rotate run.",
+	})
+	if err := reg.Register(rotatedDay); err != nil {
+		closeAll()
+		return nil, "", fmt.Errorf("jobs: register metrics: %w", err)
+	}
 	rotate := func(ctx context.Context, l *scheduler.Leader) error {
-		_, err := rotator.Rotate(ctx, l.SystemTx)
+		res, err := rotator.Rotate(ctx, l.SystemTx)
+		if err == nil {
+			rotatedDay.Set(float64(res.Day))
+		}
 		return err
 	}
 	prune := func(ctx context.Context, l *scheduler.Leader) error {

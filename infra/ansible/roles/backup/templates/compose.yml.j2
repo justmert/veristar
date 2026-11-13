@@ -1,0 +1,30 @@
+# managed by ansible (infra/ansible/roles/backup). the pgbackrest repository
+# node of the local converge: one pgbackrest server on the private address.
+name: stellar-analytics-backup
+
+services:
+  pgbackrest:
+    image: {{ platform_images.postgres_ha }}
+    restart: unless-stopped
+    entrypoint: ["pgbackrest", "server"]
+    command: []
+    logging:
+      driver: local
+      options:
+        max-size: 20m
+        max-file: "5"
+    environment:
+      TZ: UTC
+    volumes:
+      - {{ backup_conf_dir }}:/etc/pgbackrest:ro
+      - repo:/var/spool/pgbackrest
+    ports:
+      - "{{ sa_private_ip }}:{{ backup_tls_port }}:{{ backup_tls_port }}"
+    healthcheck:
+      test: ["CMD", "pgbackrest", "server-ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+volumes:
+  repo:

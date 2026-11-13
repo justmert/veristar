@@ -1,0 +1,19 @@
+---
+# runs the deploy-time verification of infra/ansible/playbooks/deploy.yml
+# (tasks/verify-images.yml) on its own, for tests/supplychain. the test
+# passes sa_image_registry, sa_image_tag, sa_release_manifest,
+# sa_signature_test_key and verify_out.
+- name: Verify release images
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - ../../infra/ansible/vars/pins.yml
+    - ../../infra/ansible/vars/signing.yml
+  tasks:
+    - name: Verify
+      ansible.builtin.include_tasks: ../../infra/ansible/playbooks/tasks/verify-images.yml
+    - name: Write the verified references for the test to compare
+      ansible.builtin.copy:
+        content: "{{ sa_verified_images | to_json }}"
+        dest: "{{ verify_out }}"
+        mode: "0600"

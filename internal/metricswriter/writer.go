@@ -36,6 +36,8 @@ const (
 	// lead context, because a commit that happened must be acked even when
 	// the lock is lost right after it; ingest_dedup covers a lost ack.
 	ackTimeout = 10 * time.Second
+	// confirmed acks in flight at once after a committed batch
+	ackConcurrency = 64
 	// bindRetry is how often binding the locks bucket is tried again while
 	// it is missing; the bucket keeper recreates it meanwhile.
 	bindRetry = time.Second
@@ -354,12 +356,25 @@ func (w *Writer) process(ctx context.Context, msgs []jetstream.Msg) error {
 	w.m.batchTime.Observe(time.Since(start).Seconds())
 	actx, cancel := context.WithTimeout(context.WithoutCancel(ctx), ackTimeout)
 	defer cancel()
+	// the batch is committed, so the acks only tell the server what is done.
+	// each confirmed ack is one round trip to the consumer's leader, which
+	// can sit in another location (one after the other, this stage measured
+	// about 150 messages a second, so about 6.7 ms each), so they go out
+	// concurrently. an ack that fails brings its message back, and it is
+	// skipped as already applied.
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, ackConcurrency)
 	for _, m := range msgs {
-		if err := m.DoubleAck(actx); err != nil {
-			w.m.ackFailures.Inc()
-			w.log.Warn("ack not confirmed, the message comes back and is skipped as applied", "error", err.Error())
-		}
+		sem <- struct{}{}
+		wg.Go(func() {
+			defer func() { <-sem }()
+			if err := m.DoubleAck(actx); err != nil {
+				w.m.ackFailures.Inc()
+				w.log.Warn("ack not confirmed, the message comes back and is skipped as applied", "error", err.Error())
+			}
+		})
 	}
+	wg.Wait()
 	res.record(w.m)
 	return nil
 }

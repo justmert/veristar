@@ -50,3 +50,4 @@ infra/ansible/inventories/*/hosts.json.tmp
 # the local converge's generated secrets (encrypted to a throwaway key under
 # .scratch/scratch), never a real environment's
 infra/secrets/local/
+packages/tracker/npm/

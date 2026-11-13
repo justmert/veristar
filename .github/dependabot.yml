@@ -1,0 +1,62 @@
+# dependency update pull requests (the design). every pull request runs the
+# ci gates, including the isolation suite, before review. security updates
+# are not grouped, so each one can be merged on its own inside the 24 hour
+# window; routine version updates are grouped per ecosystem to keep the
+# queue reviewable. versions still follow the pin policy of the design,
+# so a reviewer may close an update that is too young.
+#
+# umami is deliberately not updated here: its digest moves only through
+# `make umami-upgrade VERSION=` (docs/runbooks/security-patch.md), which runs
+# the compatibility, isolation and end-to-end gates.
+version: 2
+
+updates:
+  - package-ecosystem: gomod
+    directories: ["/", "/examples/otel-go-nethttp"]
+    schedule: { interval: weekly, day: monday }
+    groups:
+      go:
+        applies-to: version-updates
+        patterns: ["*"]
+
+  - package-ecosystem: npm
+    # the pnpm workspace (apps, packages, examples, tests) has one lockfile
+    directories: ["/", "/examples/otel-node-express"]
+    schedule: { interval: weekly, day: monday }
+    groups:
+      npm:
+        applies-to: version-updates
+        patterns: ["*"]
+
+  - package-ecosystem: docker
+    directories: ["/deploy/images", "/infra/local", "/examples/otel-go-nethttp", "/examples/otel-node-express", "/examples/otel-python-fastapi", "/examples/otel-rust-actix"]
+    schedule: { interval: weekly, day: monday }
+
+  - package-ecosystem: docker-compose
+    directories: ["/deploy/compose", "/tests/observability"]
+    schedule: { interval: weekly, day: monday }
+    ignore:
+      # moved only by make umami-upgrade, see above
+      - dependency-name: ghcr.io/umami-software/umami
+
+  - package-ecosystem: github-actions
+    directories: ["/", "/.github/actions/release-image"]
+    schedule: { interval: weekly, day: monday }
+
+  - package-ecosystem: terraform
+    # opentofu reads the same provider blocks; dependabot resolves them
+    # from the registry named in required_providers
+    directories: ["/infra/tofu/envs/staging", "/infra/tofu/envs/production", "/infra/tofu/modules/*"]
+    schedule: { interval: weekly, day: monday }
+
+  - package-ecosystem: uv
+    directories: ["/examples/otel-python-fastapi"]
+    schedule: { interval: weekly, day: monday }
+
+  - package-ecosystem: pip
+    directories: ["/infra/ansible"]
+    schedule: { interval: weekly, day: monday }
+
+  - package-ecosystem: cargo
+    directories: ["/examples/otel-rust-actix"]
+    schedule: { interval: weekly, day: monday }

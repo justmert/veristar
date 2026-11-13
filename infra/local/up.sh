@@ -1,22 +1,20 @@
 #!/bin/sh
 # creates the local converge topology (docs/deploy/local-converge.md): a
-# registry, two networks standing in for the public and the private network,
-# and four debian 13 systemd containers standing in for 3 edge and 1 core
-# server, each with its own docker engine storage. then generates the
+# registry, a public network, one private network per location joined by a
+# router that adds the inter-location latency, and six debian 13 systemd
+# containers standing in for 3 edge, 2 core and 1 backup server, each with
+# its own docker engine storage. then generates the
 # throwaway ssh key, age identity, sops-encrypted secrets and the inventory.
 # everything generated lives under .scratch/scratch/local-converge.
 set -eu
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 . "$root/infra/local/env.sh"
+. "$root/infra/local/lib.sh"
 mkdir -p "$LC_STATE"
 chmod 700 "$LC_STATE"
 
-net() {
-	docker network inspect "$1" >/dev/null 2>&1 || docker network create --subnet "$2" --gateway "$3" "$1" >/dev/null
-}
-net "$LC_PUBLIC_NET" "$LC_PUBLIC_SUBNET" "$LC_PUBLIC_GATEWAY"
-net "$LC_PRIVATE_NET" "$LC_PRIVATE_SUBNET" 10.99.0.1
+lc_net "$LC_PUBLIC_NET" "$LC_PUBLIC_SUBNET" "$LC_PUBLIC_GATEWAY"
 
 if ! docker inspect "$LC_REGISTRY" >/dev/null 2>&1; then
 	docker run -d --name "$LC_REGISTRY" --restart unless-stopped \
@@ -30,24 +28,9 @@ fi
 docker build -q -f "$root/infra/local/node.Dockerfile" --build-arg ADMIN_USER="$LC_ADMIN_USER" \
 	-t "$LC_NODE_IMAGE" "$root/infra/local" >/dev/null
 
-echo "$LC_NODES" | while read -r name pub priv; do
-	if docker inspect "$name" >/dev/null 2>&1; then
-		continue
-	fi
-	# the public network carries the default route, as on a cloud server;
-	# without gw-priority docker may pick the private one.
-	# privileged inside this unprivileged container: capabilities stay inside the
-	# container's user namespace (the host clock cannot be set, for example).
-	# docker and containerd storage are volumes, because overlayfs cannot
-	# stack on the container's own overlay root.
-	docker create --name "$name" --hostname "$name" --privileged --cgroupns=private \
-		--network "name=$LC_PUBLIC_NET,ip=$pub,gw-priority=1" \
-		--tmpfs /run --tmpfs /run/lock --tmpfs /tmp \
-		-v "$name-docker:/var/lib/docker" -v "$name-containerd:/var/lib/containerd" \
-		-v "$LC_STATE/id_ed25519.pub:/etc/local-node/authorized_key:ro" \
-		"$LC_NODE_IMAGE" >/dev/null
-	docker network connect --ip "$priv" "$LC_PRIVATE_NET" "$name"
-	docker start "$name" >/dev/null
+lc_router_up
+echo "$LC_NODES" | while read -r name loc pub priv; do
+	lc_node_create "$name" "$loc" "$pub" "$priv"
 done
 
 # age identity and secrets for the local environment only
@@ -69,12 +52,14 @@ fi
 inv="$root/infra/ansible/inventories/local/hosts.json"
 "${ANSIBLE_VENV:-$HOME/.local/share/stellar-analytics/ansible-venv}/bin/python" - "$inv" <<PY
 import json, sys
-nodes = """$LC_NODES""".strip().splitlines()
-hosts = {"edge": {}, "core": {}, "probe": {}}
+nodes = """$LC_NODES
+$LC_RESTORE_NODE""".strip().splitlines()
+# backup holds the pgbackrest repository; restore is the fresh node of the
+# point-in-time restore drill, which exists only while that drill runs
+hosts = {"edge": {}, "core": {}, "backup": {}, "restore": {}, "probe": {}}
 for line in nodes:
-    name, pub, priv = line.split()
+    name, loc, pub, priv = line.split()
     tier, idx = name.split("-")[-2], int(name.split("-")[-1])
-    loc = ["fsn1", "nbg1", "hel1"][idx - 1]
     hosts[tier][name] = {
         "ansible_host": pub, "ansible_user": "$LC_ADMIN_USER",
         "sa_tier": tier, "sa_index": idx, "sa_provider": "local", "sa_location": loc,

@@ -1,0 +1,66 @@
+---
+# posix-host mode: pgbackrest's tls protocol between the database nodes, the
+# restore node and the repository node. a throwaway ca on the controller
+# signs one certificate per node, whose common name is the node name (what
+# tls-server-auth matches) and whose address is the private address (what
+# the client checks against repo1-host and pgN-host).
+- name: Require a controller directory for the pgbackrest ca
+  ansible.builtin.assert:
+    that:
+      - backup_tls_controller_dir | length > 0
+      - backup_repo_mode == 'posix-host'
+    fail_msg: the pgbackrest tls certificates exist only for backup_repo_mode posix-host
+
+- name: Create the pgbackrest ca on the controller
+  ansible.builtin.shell:
+    cmd: |
+      set -eu
+      umask 077
+      mkdir -p "{{ backup_tls_controller_dir }}"
+      cd "{{ backup_tls_controller_dir }}"
+      openssl req -x509 -newkey ed25519 -nodes -days 3650 -subj "/CN=sa-{{ sa_environment }}-pgbackrest-ca" -keyout ca.key -out ca.crt 2>/dev/null
+    creates: "{{ backup_tls_controller_dir }}/ca.crt"
+  delegate_to: localhost
+  run_once: true
+  become: false
+
+- name: Issue the node certificates on the controller
+  ansible.builtin.shell:
+    cmd: |
+      set -eu
+      umask 077
+      cd "{{ backup_tls_controller_dir }}"
+      openssl req -newkey ed25519 -nodes -subj "/CN={{ item }}" -keyout "{{ item }}.key" -out "{{ item }}.csr" 2>/dev/null
+      printf 'subjectAltName=IP:%s,DNS:%s\nextendedKeyUsage=serverAuth,clientAuth\n' "{{ hostvars[item].sa_private_ip }}" "{{ item }}" > "{{ item }}.ext"
+      openssl x509 -req -in "{{ item }}.csr" -CA ca.crt -CAkey ca.key -CAcreateserial -days 825 -extfile "{{ item }}.ext" -out "{{ item }}.crt" 2>/dev/null
+      rm -f "{{ item }}.csr" "{{ item }}.ext"
+    creates: "{{ backup_tls_controller_dir }}/{{ item }}.crt"
+  loop: "{{ groups['core'] + groups['backup'] + groups['restore'] }}"
+  delegate_to: localhost
+  run_once: true
+  become: false
+
+- name: Create the pgbackrest config directory
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "999"
+    group: "999"
+    mode: "0700"
+  loop:
+    - "{{ backup_conf_dir }}"
+    - "{{ backup_conf_dir }}/tls"
+
+# the postgres user of the postgres-ha image (uid 999) runs pgbackrest
+- name: Install this node's certificate, key and the ca
+  ansible.builtin.copy:
+    src: "{{ backup_tls_controller_dir }}/{{ item.src }}"
+    dest: "{{ backup_conf_dir }}/tls/{{ item.dest }}"
+    owner: "999"
+    group: "999"
+    mode: "0600"
+  loop:
+    - { src: ca.crt, dest: ca.crt }
+    - { src: "{{ inventory_hostname }}.crt", dest: node.crt }
+    - { src: "{{ inventory_hostname }}.key", dest: node.key }
+  no_log: true

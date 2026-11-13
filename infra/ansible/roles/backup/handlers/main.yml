@@ -1,0 +1,10 @@
+---
+- name: Reload systemd
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+
+# the pgbackrest server reads its config only at start
+- name: Restart the pgbackrest server
+  ansible.builtin.command:
+    argv: [docker, compose, --project-directory, "{{ backup_dir }}", restart, pgbackrest]
+  changed_when: true

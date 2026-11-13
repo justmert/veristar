@@ -1,0 +1,91 @@
+---
+# alert rules, ingestion and edge (the design). thresholds and the action
+# for each alert are in docs/runbooks/alerts.md; promtool tests are in
+# rules/tests/. severity page means act now, ticket means within a day.
+groups:
+  - name: ingestion
+    rules:
+      # share of web events the gateway refused for its own fault (503,
+      # rejected_unavailable) over every event answer. visitor-side refusals
+      # (origin, proof, rate limits) are not errors of the platform.
+      - record: sa:gateway_event_error_ratio:rate5m
+        expr: |
+          (sum(rate(gateway_responses_total{route="event",outcome="rejected_unavailable"}[5m])) or vector(0))
+          /
+          sum(rate(gateway_responses_total{route="event"}[5m]))
+      # share of otlp metric points the collector did not take for its own
+      # fault (memory limiter, unacknowledged jetstream publish), over every
+      # point it received. the receiver's refused count also holds what
+      # tenantguard refused (a tenant's rate limit), which is the tenant's
+      # doing, so tenantguard's own drop (incoming minus outgoing) is taken
+      # off. measured on the local stack: 4,957 rate-limited points showed
+      # as 4,957 refused and as 4,957 tenantguard drops. names as the
+      # collector v0.165 prometheus reader exports them (no _total suffix).
+      - record: sa:collector_refused_ratio:rate5m
+        expr: |
+          clamp_min(
+            (sum(rate(otelcol_receiver_refused_metric_points[5m])) or vector(0))
+            + (sum(rate(otelcol_receiver_failed_metric_points[5m])) or vector(0))
+            - ((sum(rate(otelcol_processor_incoming_items{processor="tenantguard"}[5m])) or vector(0))
+               - (sum(rate(otelcol_processor_outgoing_items{processor="tenantguard"}[5m])) or vector(0))),
+            0)
+          /
+          (
+            sum(rate(otelcol_receiver_accepted_metric_points[5m]))
+            + (sum(rate(otelcol_receiver_refused_metric_points[5m])) or vector(0))
+            + (sum(rate(otelcol_receiver_failed_metric_points[5m])) or vector(0))
+          )
+
+      - alert: IngestWebErrorRatioHigh
+        expr: sa:gateway_event_error_ratio:rate5m > 0.01
+        for: 5m
+        labels: {severity: page}
+        annotations:
+          summary: "{{ $value | humanizePercentage }} of web events refused as unavailable"
+          runbook: docs/runbooks/alerts.md#ingestweberrorratiohigh
+      - alert: IngestOTLPErrorRatioHigh
+        expr: sa:collector_refused_ratio:rate5m > 0.01
+        for: 5m
+        labels: {severity: page}
+        annotations:
+          summary: "{{ $value | humanizePercentage }} of otlp points refused by the collector"
+          runbook: docs/runbooks/alerts.md#ingestotlperrorratiohigh
+
+      # an edge node is not ready when its gateway does not answer scrapes or
+      # one of its readiness checks fails; caddy's port-80 health then takes
+      # it out of dns, this alert says why
+      - alert: EdgeNodeNotReady
+        expr: |
+          (up{job="gateway"} == 0)
+          or (min by (node, instance) (ops_ready_check{job="gateway"}) == 0)
+          or (up{job="collector"} == 0)
+        for: 2m
+        labels: {severity: page}
+        annotations:
+          summary: "edge node {{ $labels.node }} is not ready"
+          runbook: docs/runbooks/alerts.md#edgenodenotready
+      - alert: VisitorSecretMissing
+        expr: ops_ready_check{job="gateway",check="daily_secrets"} == 0
+        for: 1m
+        labels: {severity: page}
+        annotations:
+          summary: "gateway {{ $labels.node }} cannot load today's visitor secret"
+          runbook: docs/runbooks/alerts.md#visitorsecretmissing
+      - alert: DBIPFileOld
+        expr: time() - gateway_geo_build_timestamp_seconds > 45 * 86400
+        labels: {severity: ticket}
+        annotations:
+          summary: "db-ip file on {{ $labels.node }} was built {{ $value | humanizeDuration }} ago"
+          runbook: docs/runbooks/alerts.md#dbipfileold
+      - alert: CertificateExpiringSoon
+        expr: prober_tls_certificate_expiry_timestamp_seconds - time() < 14 * 86400
+        labels: {severity: page}
+        annotations:
+          summary: "{{ $labels.host }} on {{ $labels.node }} serves a certificate that expires in {{ $value | humanizeDuration }}"
+          runbook: docs/runbooks/alerts.md#certificateexpiringsoon
+      - alert: CardinalityCapHit
+        expr: increase(metricswriter_cardinality_overflow_points_total[15m]) > 0
+        labels: {severity: ticket}
+        annotations:
+          summary: "{{ $value }} api points went to the overflow route or service in 15 minutes"
+          runbook: docs/runbooks/alerts.md#cardinalitycaphit

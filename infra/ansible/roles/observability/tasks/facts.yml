@@ -1,0 +1,11 @@
+---
+# also included by tests/observability/render.yml
+- name: Name what this node runs
+  ansible.builtin.set_fact:
+    observability_relay_targets: "{{ observability_relay_targets | default(observability_relay[sa_tier] | default([])) }}"
+    observability_webhook_alertmanager: >-
+      {{ (observability_test_webhook_base ~ '/webhook/alertmanager') if observability_test_webhook_base is defined
+         else sa_secrets.alertmanager_discord_webhook_url }}
+    observability_webhook_gatus: >-
+      {{ (observability_test_webhook_base ~ '/webhook/gatus') if observability_test_webhook_base is defined
+         else sa_secrets.gatus_discord_webhook_url }}

@@ -359,8 +359,10 @@ Steps:
    must not be expired. Otherwise: failure `state_mismatch`.
 3. `error=access_denied`: failure `access_denied`. Any other `error`: failure
    `github_error`.
-4. Exchange `code` with the cookie's verifier (`oauth2.VerifierOption`). Failure:
-   `exchange_failed`.
+4. Take a token from the exchange bucket (one per control plane instance,
+   shared by all clients, 10 per second with a burst of 30; this stage). Empty:
+   failure `rate_limited`. Then exchange `code` with the cookie's verifier
+   (`oauth2.VerifierOption`). Failure: `exchange_failed`.
 5. `GET https://api.github.com/user` with the access token, headers
    `Accept: application/vnd.github+json` and `X-GitHub-Api-Version: 2022-11-28`.
    Use `id` (int64) and `login` only; the token is then discarded, never stored.
@@ -372,8 +374,8 @@ Steps:
 7. Renew the session token, store `user_id`, answer **303** to `return_to`.
 
 Failure: **303** to `/sign-in?error=<code>` with `code` one of `state_mismatch`,
-`access_denied`, `github_error`, `exchange_failed`, `github_unavailable`,
-`internal`. The console shows a message per code. No JSON body.
+`access_denied`, `github_error`, `rate_limited`, `exchange_failed`,
+`github_unavailable`, `internal`. The console shows a message per code. No JSON body.
 
 #### 4.1.3 `POST /api/auth/logout`
 

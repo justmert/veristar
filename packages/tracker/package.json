@@ -25,7 +25,8 @@
     "verify-releases": "node scripts/verify-releases.mjs",
     "bench:proof": "node bench/proof-cost.mjs",
     "check": "tsc -p tsconfig.json",
-    "test": "vitest run"
+    "test": "vitest run",
+    "pack:npm": "node scripts/pack.mjs"
   },
   "devDependencies": {
     "@playwright/test": "catalog:",

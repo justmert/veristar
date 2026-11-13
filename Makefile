@@ -154,6 +154,22 @@ test-caddy-web:
 isolation-umami:
 	$(GO) test -tags isolation -race -count=1 -timeout 20m -v ./tests/isolation/umami/
 
+# the whole tenant isolation gate (the design), required on every pull
+# request and for every release. one target, so a gate cannot be half run:
+# tests/isolation/... (build tag isolation) is umami cross-team through the
+# web caddy, every console, operator and machine api route against the real
+# router, and the behavioural database role matrix; internal/db holds the
+# catalog grant matrix and the row-level security tests; the web caddy deny
+# list and method allowlist are the edge rules the gate must notice losing.
+# -p 1 keeps one suite's containers up at a time on a shared machine.
+.PHONY: isolation
+isolation:
+	$(GO) test -tags isolation -race -count=1 -p 1 -timeout 60m -v ./tests/isolation/...
+	$(GO) test -race -count=1 -v ./internal/db/
+	$(GO) test -race -count=1 -run 'TestWebCaddyfileValidates' ./deploy/caddy/
+	$(GO) test -tags caddyweb -race -count=1 -timeout 20m -v \
+		-run 'TestWebCaddyLive/(deny_list|api_method_allowlist|sso_rules)$$' ./deploy/caddy/
+
 # this stage end-to-end web path (tests/webpath, build tag webpath): real
 # browsers on the example sites through the edge caddy, gateway, nats,
 # replayer and umami, all in containers the test owns (images from the
@@ -307,3 +323,65 @@ tofu-check:
 			-var-file=../../../../tests/infra/sample.tfvars \
 			-filter=../../../../tests/infra/$$e.tftest.hcl || exit 1; \
 	done
+
+# ansible (this stage stream b, docs/deploy/ansible.md). the controller tools
+# live in their own venv, made with uv from infra/ansible/requirements.txt.
+# staging-deploy and production-deploy converge every node (site.yml) at the
+# release SA_IMAGE_TAG; ROLLING=1 runs deploy.yml instead, one node at a time
+# gated on the port-80 health. the inventory comes from make <env>-apply.
+ANSIBLE_VENV ?= $(HOME)/.local/share/stellar-analytics/ansible-venv
+ANSIBLE_BIN := $(ANSIBLE_VENV)/bin
+
+.PHONY: ansible-venv ansible-lint staging-deploy production-deploy \
+        local-converge-up local-converge-images local-converge local-converge-e2e local-converge-down
+
+ansible-venv:
+	uv venv --python 3.13 $(ANSIBLE_VENV)
+	uv pip install --python $(ANSIBLE_VENV)/bin/python -r infra/ansible/requirements.txt
+	cd infra/ansible && $(ANSIBLE_BIN)/ansible-playbook playbooks/controller-tools.yml
+
+ansible-lint:
+	cd infra/ansible && $(ANSIBLE_BIN)/yamllint -s . && $(ANSIBLE_BIN)/ansible-lint
+
+staging-deploy production-deploy: %-deploy:
+	@test -f infra/ansible/inventories/$*/hosts.json || { echo "no inventory: run make $*-apply first" >&2; exit 1; }
+	@test -n "$(SA_IMAGE_TAG)" || { echo "set SA_IMAGE_TAG to the release to deploy" >&2; exit 1; }
+	@test -z "$(ROLLING)" || test -f "$(SA_RELEASE_MANIFEST)" || { echo "ROLLING=1 needs SA_RELEASE_MANIFEST=<release-images.json of the release> (this stage signature check)" >&2; exit 1; }
+	cd infra/ansible && $(ANSIBLE_BIN)/ansible-playbook -i inventories/$*/ \
+		playbooks/$(if $(ROLLING),deploy.yml,site.yml) -e sa_image_tag=$(SA_IMAGE_TAG) \
+		$(if $(ROLLING),-e sa_release_manifest=$(abspath $(SA_RELEASE_MANIFEST)))
+
+# the local converge (docs/deploy/local-converge.md): 3 edge and 1 core
+# debian 13 systemd containers on this machine
+local-converge-up:
+	cd infra/ansible && $(ANSIBLE_BIN)/ansible-playbook playbooks/controller-tools.yml
+	ANSIBLE_VENV=$(ANSIBLE_VENV) infra/local/up.sh
+
+local-converge-images:
+	infra/local/build-images.sh
+
+local-converge:
+	cd infra/ansible && $(ANSIBLE_BIN)/ansible-playbook -i inventories/local/ playbooks/site.yml
+
+local-converge-e2e:
+	SA_LC_INVENTORY=$(CURDIR)/infra/ansible/inventories/local/hosts.json \
+		$(GO) test -tags localconverge -count=1 -v ./tests/localconverge/
+
+local-converge-down:
+	infra/local/down.sh
+
+# the umami patch path (the design, docs/runbooks/security-patch.md): pins
+# umami VERSION by the digest the registry serves now, then runs the dev stack
+# migration, umami-compat, the isolation gate and the end-to-end suites,
+# timed, stopping at the first failure. needs everything those targets need.
+.PHONY: umami-upgrade
+umami-upgrade:
+	VERSION=$(VERSION) scripts/umami-upgrade.sh
+
+# deploy-time image verification (the design, tests/supplychain): the
+# verification tasks of deploy.yml against a real registry and real cosign
+# signatures made with a TEST-ONLY ephemeral key. needs docker, cosign 3.1.4
+# and the ansible venv.
+.PHONY: supplychain-it
+supplychain-it:
+	$(GO) test -tags supplychain -count=1 -v ./tests/supplychain/

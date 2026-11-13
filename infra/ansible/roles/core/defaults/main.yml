@@ -6,9 +6,34 @@ core_conf_dir: /etc/stellar-analytics/core
 # haproxy and the services reach the database from it
 core_compose_subnet: 172.29.10.0/24
 
-# this stage runs postgresql on the first core node only; this stage adds the
-# second as a patroni replica
-core_postgres_hosts: "{{ groups['core'][:1] }}"
+# every core node runs a patroni member (the design): one leader, one
+# synchronous replica, etcd on the edge nodes as the consensus store
+core_postgres_hosts: "{{ groups['core'] }}"
+
+# patroni settings kept in etcd. synchronous_mode makes a commit wait for the
+# replica, and patroni promotes only that synchronous replica, so a failover
+# loses no committed transaction. it is not strict: with the replica gone
+# the leader goes on alone, so writes never stop because one node is down;
+# during that time a second failure can lose what only the leader had.
+# ttl 30 and loop_wait 10 are patroni's defaults: a dead leader's key
+# expires within 30 s, and the replica takes over at its next loop.
+core_patroni_dcs:
+  ttl: 30
+  loop_wait: 10
+  retry_timeout: 10
+  maximum_lag_on_failover: 1048576
+  synchronous_mode: true
+  synchronous_mode_strict: false
+
+# wal archiving to the pgbackrest repository. archive_timeout bounds how old
+# the newest archived wal may be, which is the data-loss window when both
+# database nodes are lost at once (docs/reference/availability.md)
+core_archive_timeout: 60
+
+# the retain-web systemd timer (the design): `jobs retain-web` as the
+# jobs_retention role once a day. two runs at once are safe (cmd/jobs), and
+# each core node runs at its own minute so one node down still runs it.
+core_retain_web_hour: 3
 
 # postgresql settings for a cpx42 (16 GB); patroni owns the rest
 core_postgres_parameters:
@@ -32,9 +57,14 @@ core_postgres_parameters:
 core_api_minute_retention_days: 30
 core_api_hourly_retention_months: 36
 
+# each event costs the replayer several confirmed round trips to nats
+# (duplicate guard, visit state, ack), whose leaders can sit in another
+# location. with 16 lanes this stage measured about 80 events a second against
+# a 500 per second load; lanes run in parallel per visitor, so 128 lanes
+# (the in-flight bound stays under the consumer's max ack pending of 1000)
 core_replayer_env:
-  REPLAYER_WORKERS: "16"
-  REPLAYER_MAX_IN_FLIGHT: "512"
+  REPLAYER_WORKERS: "128"
+  REPLAYER_MAX_IN_FLIGHT: "900"
 core_metricswriter_env:
   METRICSWRITER_BATCH: "256"
   METRICSWRITER_FIRST_POINT_THRESHOLD: 120s
@@ -48,3 +78,7 @@ core_oauth_fixture_image: ""
 core_oauth_fixture_port: 8099
 
 core_stage: services
+
+# where deploy.yml puts the drain flag; caddy answers 503 on port 80 while it
+# exists, which takes the node out of dns (deploy/caddy/assemble.sh)
+core_drain_dir: /etc/stellar-analytics/drain

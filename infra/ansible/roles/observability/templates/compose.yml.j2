@@ -1,0 +1,164 @@
+# managed by ansible (infra/ansible/roles/observability). the observability
+# project of one node; which services it has depends on the node's tier.
+name: stellar-analytics-observability
+
+x-defaults: &defaults
+  restart: unless-stopped
+  logging:
+    driver: local
+    options:
+      max-size: 20m
+      max-file: "5"
+
+services:
+{% if sa_tier in ['edge', 'core'] %}
+  node-exporter:
+    <<: *defaults
+    image: {{ observability_images.node_exporter }}
+    network_mode: host
+    pid: host
+    command:
+      - --web.listen-address={{ sa_private_ip }}:{{ observability_node_exporter_port }}
+      - --path.rootfs=/host
+      - --collector.textfile.directory=/textfile
+    volumes:
+      - /:/host:ro,rslave
+      - {{ observability_conf_dir }}/textfile:/textfile:ro
+
+  relay:
+    <<: *defaults
+    image: {{ observability_images.haproxy }}
+    volumes:
+      - {{ observability_conf_dir }}/relay.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    networks: [tier]
+    ports:
+{% for r in observability_relay_targets %}
+      - "{{ sa_private_ip }}:{{ r.port }}:{{ r.port }}"
+{% endfor %}
+{% endif %}
+{% if sa_tier == 'core' %}
+
+  prometheus:
+    <<: *defaults
+    image: {{ observability_images.prometheus }}
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time={{ observability_prometheus_retention }}
+      - --web.listen-address=0.0.0.0:9090
+      - --web.enable-lifecycle
+    volumes:
+      - {{ observability_conf_dir }}/prometheus:/etc/prometheus:ro
+      - prometheus:/prometheus
+    # loopback only: operators use an ssh tunnel (the design)
+    ports: ["127.0.0.1:9090:9090"]
+
+  alertmanager:
+    <<: *defaults
+    image: {{ observability_images.alertmanager }}
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+      - --web.listen-address=0.0.0.0:{{ observability_alertmanager_port }}
+      - --cluster.listen-address=0.0.0.0:{{ observability_alertmanager_cluster_port }}
+      - --cluster.advertise-address={{ sa_private_ip }}:{{ observability_alertmanager_cluster_port }}
+{% for h in groups['core'] if h != inventory_hostname %}
+      - --cluster.peer={{ hostvars[h].sa_private_ip }}:{{ observability_alertmanager_cluster_port }}
+{% endfor %}
+    volumes:
+      - {{ observability_conf_dir }}/alertmanager:/etc/alertmanager:ro
+      - alertmanager:/alertmanager
+    # the private address only: the other core node's prometheus and the
+    # other cluster member
+    ports:
+      - "{{ sa_private_ip }}:{{ observability_alertmanager_port }}:{{ observability_alertmanager_port }}"
+      - "{{ sa_private_ip }}:{{ observability_alertmanager_cluster_port }}:{{ observability_alertmanager_cluster_port }}"
+      - "{{ sa_private_ip }}:{{ observability_alertmanager_cluster_port }}:{{ observability_alertmanager_cluster_port }}/udp"
+
+  grafana:
+    <<: *defaults
+    image: {{ observability_images.grafana }}
+    env_file: [{{ secrets_env_dir }}/grafana.env]
+    environment:
+      GF_SERVER_HTTP_ADDR: 0.0.0.0
+      GF_SERVER_HTTP_PORT: "3000"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+    volumes:
+      - {{ observability_conf_dir }}/grafana/provisioning:/etc/grafana/provisioning:ro
+      - {{ observability_conf_dir }}/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana:/var/lib/grafana
+    ports: ["127.0.0.1:3000:3000"]
+{% for h in groups['edge'] %}
+
+  nats-exporter-{{ h }}:
+    <<: *defaults
+    image: {{ observability_images.nats_exporter }}
+    command: ["-port", "7777", "-jsz", "all", "-varz", "-healthz", "http://{{ hostvars[h].sa_private_ip }}:{{ observability_nats_monitor_port }}"]
+{% endfor %}
+{% if inventory_hostname in observability_postgres_hosts %}
+
+  postgres-exporter:
+    <<: *defaults
+    image: {{ observability_images.postgres_exporter }}
+    env_file: [{{ secrets_env_dir }}/postgres-exporter.env]
+    environment:
+      DATA_SOURCE_URI: "{{ sa_private_ip }}:5432/postgres?sslmode=disable"
+      DATA_SOURCE_USER: sa_monitor
+    ports: ["{{ sa_private_ip }}:{{ observability_postgres_exporter_port }}:9187"]
+{% endif %}
+{% endif %}
+{% if sa_tier == 'probe' %}
+
+  caddy:
+    <<: *defaults
+    image: {{ observability_images.caddy }}
+    env_file: [{{ secrets_env_dir }}/probe-caddy.env]
+    volumes:
+      - {{ observability_conf_dir }}/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddydata:/data
+      - caddyconfig:/config
+    ports:
+      - "{{ sa_public_ipv4 }}:80:80"
+      - "{{ sa_public_ipv4 }}:443:443"
+
+  gatus:
+    <<: *defaults
+    image: {{ observability_images.gatus }}
+    env_file: [{{ secrets_env_dir }}/gatus.env]
+    environment:
+      GATUS_CONFIG_PATH: /config/config.yaml
+    volumes:
+      - {{ observability_conf_dir }}/gatus.yml:/config/config.yaml:ro
+      - gatus:/data
+
+  prober:
+    <<: *defaults
+    image: {{ observability_images.prober }}
+    depends_on: [gatus]
+    env_file: [{{ secrets_env_dir }}/prober.env]
+    volumes:
+      - {{ observability_conf_dir }}/releases:/releases:ro
+{% endif %}
+{% if sa_tier in ['edge', 'core'] %}
+
+networks:
+  tier:
+    name: {{ observability_tier_network[sa_tier] }}
+    external: true
+{% endif %}
+
+volumes:
+{% if sa_tier == 'core' %}
+  prometheus:
+  alertmanager:
+  grafana:
+{% elif sa_tier == 'probe' %}
+  caddydata:
+  caddyconfig:
+  gatus:
+{% else %}
+  {}
+{% endif %}

@@ -1,0 +1,354 @@
+# TEST STACK for the design, local only (tests/observability/up.sh). it
+# runs the real services (gateway, collector, replayer, metrics writer,
+# control plane, jobs, umami, postgresql, a three-server nats cluster, three
+# etcd members, caddy with the assembled edge and core caddyfiles) and the
+# observability stack from infra/ansible/roles/observability, rendered by
+# render.yml. each "node-*" container stands in for one server: the services
+# of that node share its network namespace and address, like the services
+# bound to a node's private address in production.
+#
+# what is not real here: the probe runs on this machine, not on scaleway
+# an operator input, and alerts go to the labelled test receiver, not discord
+# an operator input. there is no patroni, pgbackrest or postgres replica.
+name: sa-p17
+
+x-go: &go
+  image: debian:trixie
+  user: "65534:65534"
+  restart: unless-stopped
+  env_file: ["${P17}/env/stack.env"]
+  volumes:
+    - ${P17}/bin:/bin-sa:ro
+
+x-node: &node
+  image: haproxy:3.4.7@sha256:f6d2ee87b47192d9cc8c22e88fef405122ff339859644883edc2a7d1827f87b3
+  restart: unless-stopped
+
+x-nodeexp: &nodeexp
+  image: prom/node-exporter:v1.12.1@sha256:1b4e4438faca4dd7e001dd445d161a4a2091b0fededa84093b3a8dfeae1f1be0
+  restart: unless-stopped
+  # the container's own bind mounts (/etc/hosts and the like) are not the
+  # host's filesystems; in production node_exporter runs with the host's pid
+  # and network namespaces and sees only those
+  command: [--web.listen-address=0.0.0.0:9100, --path.rootfs=/host, --collector.textfile.directory=/textfile, "--collector.filesystem.mount-points-exclude=^/(etc|dev|proc|sys|run)($$|/)"]
+
+x-nats: &nats
+  image: nats:2.15.3-alpine@sha256:558394a23dd3c36f2d3a64b51865fd09908010e80a542cea5e75c2af543ed62a
+  restart: unless-stopped
+
+x-etcd: &etcd
+  image: quay.io/coreos/etcd:v3.6.16@sha256:a9c7cc12156f4b26ca41f0b57ba5b76c45037ff6c1e47ea3d68cb7908d48a965
+  restart: unless-stopped
+
+x-caddy-edge: &caddy-edge
+  image: sa-p17/caddy:local
+  restart: unless-stopped
+  environment: &caddy-edge-env
+    BASE_DOMAIN: p17.test
+    SA_TLS: files
+
+x-collector: &collector
+  image: sa-p17/collector:local
+  restart: unless-stopped
+  environment: &collector-env
+    NATS_URL: nats://172.30.17.21:4222,nats://172.30.17.22:4222,nats://172.30.17.23:4222
+    NATS_USER: ""
+    NATS_PASSWORD: ""
+    COLLECTOR_GRPC_ADDR: 0.0.0.0:4317
+    COLLECTOR_HTTP_ADDR: 0.0.0.0:4318
+    COLLECTOR_HEALTH_ADDR: 0.0.0.0:13133
+    COLLECTOR_MEMORY_LIMIT_MIB: "256"
+    COLLECTOR_MEMORY_SPIKE_MIB: "64"
+    COLLECTOR_RATE_REQUESTS_PER_SECOND: "50"
+    COLLECTOR_RATE_REQUESTS_BURST: "100"
+    COLLECTOR_RATE_ITEMS_PER_SECOND: "50000"
+    COLLECTOR_RATE_ITEMS_BURST: "200000"
+    TZ: UTC
+  volumes:
+    - ../../collector/otelcol.yaml:/etc/scf-otelcol/otelcol.yaml:ro
+
+networks:
+  default:
+    name: sa-p17
+    ipam:
+      config:
+        - subnet: 172.30.17.0/24
+
+services:
+  postgres:
+    image: postgres:18.6-trixie@sha256:e3d24f6906d0760bf4da0dae872415391ededefad23fd471c47dc53b0ddf3c42
+    restart: unless-stopped
+    # archiving is on so the wal archiving alert can be drilled; the command
+    # is replaced at runtime with alter system (drill.sh)
+    command: [postgres, -c, wal_level=replica, -c, archive_mode=on, -c, archive_command=/bin/true, -c, archive_timeout=60]
+    env_file: ["${P17}/env/stack.env"]
+    environment:
+      POSTGRES_USER: postgres
+      TZ: UTC
+    volumes:
+      - pgdata:/var/lib/postgresql
+      - ../../deploy/compose/postgres-init.sh:/docker-entrypoint-initdb.d/10-init.sh:ro
+    networks: {default: {ipv4_address: 172.30.17.10}}
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -h 127.0.0.1 -U postgres -d platform"]
+      interval: 5s
+      retries: 30
+
+  umami:
+    image: ghcr.io/umami-software/umami:3.5.0@sha256:b64f40400d77bcadd39cf5c62a1e368c99524ca442024f96e1133355a19a5dbc
+    restart: unless-stopped
+    depends_on: {postgres: {condition: service_healthy}}
+    env_file: ["${P17}/env/umami.env"]
+    environment:
+      CLIENT_IP_HEADER: x-edge-client-ip
+      ENABLE_CLIENT_SALT: "1"
+      SALT_ROTATION: daily
+      PRIVATE_MODE: "1"
+      DISABLE_TELEMETRY: "1"
+      DISABLE_UPDATES: "1"
+      DISABLE_LOGIN: "1"
+      TZ: UTC
+    networks: {default: {ipv4_address: 172.30.17.11}}
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, "http://127.0.0.1:3000/api/heartbeat"]
+      interval: 5s
+      retries: 40
+      start_period: 120s
+
+  # edge nodes: relay, node exporter, nats, etcd and caddy on the node address
+  node-edge-1:
+    <<: *node
+    volumes: ["${P17}/conf/edge-1/relay.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro"]
+    networks: {default: {ipv4_address: 172.30.17.21}}
+  node-edge-2:
+    <<: *node
+    volumes: ["${P17}/conf/edge-2/relay.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro"]
+    networks: {default: {ipv4_address: 172.30.17.22}}
+  node-edge-3:
+    <<: *node
+    volumes: ["${P17}/conf/edge-3/relay.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro"]
+    networks: {default: {ipv4_address: 172.30.17.23}}
+  nodeexp-edge-1: {<<: *nodeexp, network_mode: "service:node-edge-1", volumes: ["/:/host:ro,rslave", "${P17}/textfile/edge-1:/textfile:ro"]}
+  nodeexp-edge-2: {<<: *nodeexp, network_mode: "service:node-edge-2", volumes: ["/:/host:ro,rslave", "${P17}/textfile/edge-2:/textfile:ro"]}
+  nodeexp-edge-3: {<<: *nodeexp, network_mode: "service:node-edge-3", volumes: ["/:/host:ro,rslave", "${P17}/textfile/edge-3:/textfile:ro"]}
+  nats-1:
+    <<: *nats
+    network_mode: "service:node-edge-1"
+    command: [--name, edge-1, --cluster_name, sa-p17, --cluster, "nats://0.0.0.0:6222", --routes, "nats://172.30.17.22:6222,nats://172.30.17.23:6222", --jetstream, --store_dir, /data, --http_port, "8222"]
+    volumes: [nats1:/data]
+  nats-2:
+    <<: *nats
+    network_mode: "service:node-edge-2"
+    command: [--name, edge-2, --cluster_name, sa-p17, --cluster, "nats://0.0.0.0:6222", --routes, "nats://172.30.17.21:6222,nats://172.30.17.23:6222", --jetstream, --store_dir, /data, --http_port, "8222"]
+    volumes: [nats2:/data]
+  nats-3:
+    <<: *nats
+    network_mode: "service:node-edge-3"
+    command: [--name, edge-3, --cluster_name, sa-p17, --cluster, "nats://0.0.0.0:6222", --routes, "nats://172.30.17.21:6222,nats://172.30.17.22:6222", --jetstream, --store_dir, /data, --http_port, "8222"]
+    volumes: [nats3:/data]
+  etcd-1:
+    <<: *etcd
+    network_mode: "service:node-edge-1"
+    command: [etcd, --name=edge-1, --data-dir=/var/lib/etcd, --listen-peer-urls=http://0.0.0.0:2380, --listen-client-urls=http://0.0.0.0:2379,
+      --initial-advertise-peer-urls=http://172.30.17.21:2380, --advertise-client-urls=http://172.30.17.21:2379,
+      "--initial-cluster=edge-1=http://172.30.17.21:2380,edge-2=http://172.30.17.22:2380,edge-3=http://172.30.17.23:2380", --initial-cluster-token=sa-p17, --initial-cluster-state=new]
+    volumes: [etcd1:/var/lib/etcd]
+  etcd-2:
+    <<: *etcd
+    network_mode: "service:node-edge-2"
+    command: [etcd, --name=edge-2, --data-dir=/var/lib/etcd, --listen-peer-urls=http://0.0.0.0:2380, --listen-client-urls=http://0.0.0.0:2379,
+      --initial-advertise-peer-urls=http://172.30.17.22:2380, --advertise-client-urls=http://172.30.17.22:2379,
+      "--initial-cluster=edge-1=http://172.30.17.21:2380,edge-2=http://172.30.17.22:2380,edge-3=http://172.30.17.23:2380", --initial-cluster-token=sa-p17, --initial-cluster-state=new]
+    volumes: [etcd2:/var/lib/etcd]
+  etcd-3:
+    <<: *etcd
+    network_mode: "service:node-edge-3"
+    command: [etcd, --name=edge-3, --data-dir=/var/lib/etcd, --listen-peer-urls=http://0.0.0.0:2380, --listen-client-urls=http://0.0.0.0:2379,
+      --initial-advertise-peer-urls=http://172.30.17.23:2380, --advertise-client-urls=http://172.30.17.23:2379,
+      "--initial-cluster=edge-1=http://172.30.17.21:2380,edge-2=http://172.30.17.22:2380,edge-3=http://172.30.17.23:2380", --initial-cluster-token=sa-p17, --initial-cluster-state=new]
+    volumes: [etcd3:/var/lib/etcd]
+  caddy-edge-1:
+    <<: *caddy-edge
+    network_mode: "service:node-edge-1"
+    environment: {<<: *caddy-edge-env, GATEWAY_UPSTREAM: "gateway-1:8080", COLLECTOR_GRPC_UPSTREAM: "collector-1:4317", COLLECTOR_HTTP_UPSTREAM: "collector-1:4318", COLLECTOR_HEALTH_UPSTREAM: "collector-1:13133", NODE_HEALTH_UPSTREAM: "gateway-1:9090", NODE_HEALTH_PATH: /edgez}
+    volumes: ["${P17}/conf/edge.Caddyfile:/etc/caddy/Caddyfile:ro", "${P17}/certs/edge-1.crt:/certs/node.crt:ro", "${P17}/certs/edge-1.key:/certs/node.key:ro"]
+  caddy-edge-2:
+    <<: *caddy-edge
+    network_mode: "service:node-edge-2"
+    environment: {<<: *caddy-edge-env, GATEWAY_UPSTREAM: "gateway-2:8080", COLLECTOR_GRPC_UPSTREAM: "collector-2:4317", COLLECTOR_HTTP_UPSTREAM: "collector-2:4318", COLLECTOR_HEALTH_UPSTREAM: "collector-2:13133", NODE_HEALTH_UPSTREAM: "gateway-2:9090", NODE_HEALTH_PATH: /edgez}
+    volumes: ["${P17}/conf/edge.Caddyfile:/etc/caddy/Caddyfile:ro", "${P17}/certs/edge-2.crt:/certs/node.crt:ro", "${P17}/certs/edge-2.key:/certs/node.key:ro"]
+  caddy-edge-3:
+    <<: *caddy-edge
+    network_mode: "service:node-edge-3"
+    environment: {<<: *caddy-edge-env, GATEWAY_UPSTREAM: "gateway-3:8080", COLLECTOR_GRPC_UPSTREAM: "collector-3:4317", COLLECTOR_HTTP_UPSTREAM: "collector-3:4318", COLLECTOR_HEALTH_UPSTREAM: "collector-3:13133", NODE_HEALTH_UPSTREAM: "gateway-3:9090", NODE_HEALTH_PATH: /edgez}
+    volumes: ["${P17}/conf/edge.Caddyfile:/etc/caddy/Caddyfile:ro", "${P17}/certs/edge-3.crt:/certs/node.crt:ro", "${P17}/certs/edge-3.key:/certs/node.key:ro"]
+
+  gateway-1:
+    <<: *go
+    command: [/bin-sa/gateway]
+    environment: &gw-env
+      GATEWAY_NODE_ID: edge-1
+      EDGE_HEALTH_COLLECTOR_URL: http://collector-1:13133/
+      EDGE_HEALTH_NATS_URL: http://172.30.17.21:8222/healthz
+    volumes: &gw-vol
+      - ${P17}/bin:/bin-sa:ro
+      - ../../packages/tracker/releases:/releases:ro
+      - ../../.scratch/scratch/geo:/geo:ro
+  gateway-2:
+    <<: *go
+    command: [/bin-sa/gateway]
+    environment: {GATEWAY_NODE_ID: edge-2, EDGE_HEALTH_COLLECTOR_URL: "http://collector-2:13133/", EDGE_HEALTH_NATS_URL: "http://172.30.17.22:8222/healthz"}
+    volumes: *gw-vol
+  gateway-3:
+    <<: *go
+    command: [/bin-sa/gateway]
+    environment: {GATEWAY_NODE_ID: edge-3, EDGE_HEALTH_COLLECTOR_URL: "http://collector-3:13133/", EDGE_HEALTH_NATS_URL: "http://172.30.17.23:8222/healthz"}
+    volumes: *gw-vol
+  collector-1: *collector
+  collector-2: *collector
+  collector-3: *collector
+
+  # core nodes
+  node-core-1:
+    <<: *node
+    volumes: ["${P17}/conf/core-1/relay.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro"]
+    networks: {default: {ipv4_address: 172.30.17.31, aliases: [prometheus]}}
+    extra_hosts: ["status.p17.test:172.30.17.41"]
+    # loopback only, the local equivalent of the ssh tunnel
+    ports: ["127.0.0.1:19090:9090", "127.0.0.1:19093:9093", "127.0.0.1:13000:3000"]
+  node-core-2:
+    <<: *node
+    volumes: ["${P17}/conf/core-2/relay.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro"]
+    networks: {default: {ipv4_address: 172.30.17.32}}
+    extra_hosts: ["status.p17.test:172.30.17.41"]
+    ports: ["127.0.0.1:29090:9090", "127.0.0.1:29093:9093"]
+  nodeexp-core-1: {<<: *nodeexp, network_mode: "service:node-core-1", volumes: ["/:/host:ro,rslave", "${P17}/textfile/core-1:/textfile:ro"]}
+  nodeexp-core-2: {<<: *nodeexp, network_mode: "service:node-core-2", volumes: ["/:/host:ro,rslave", "${P17}/textfile/core-2:/textfile:ro"]}
+  caddy-core-1:
+    image: sa-p17/caddy:local
+    restart: unless-stopped
+    network_mode: "service:node-core-1"
+    environment: &caddy-core-env
+      BASE_DOMAIN: p17.test
+      SA_TLS: files
+      CONTROLPLANE_UPSTREAM: controlplane-1:8085
+      CONSOLE_ROOT: /srv/console
+      UMAMI_UPSTREAM: umami:3000
+      NODE_HEALTH_UPSTREAM: controlplane-1:9090
+      NODE_HEALTH_PATH: /corez
+    volumes: ["${P17}/conf/core.Caddyfile:/etc/caddy/Caddyfile:ro", "../../apps/console/dist:/srv/console:ro", "${P17}/certs/core-1.crt:/certs/node.crt:ro", "${P17}/certs/core-1.key:/certs/node.key:ro"]
+  caddy-core-2:
+    image: sa-p17/caddy:local
+    restart: unless-stopped
+    network_mode: "service:node-core-2"
+    environment: {<<: *caddy-core-env, CONTROLPLANE_UPSTREAM: "controlplane-2:8085", NODE_HEALTH_UPSTREAM: "controlplane-2:9090"}
+    volumes: ["${P17}/conf/core.Caddyfile:/etc/caddy/Caddyfile:ro", "../../apps/console/dist:/srv/console:ro", "${P17}/certs/core-2.crt:/certs/node.crt:ro", "${P17}/certs/core-2.key:/certs/node.key:ro"]
+  controlplane-1: &cp {<<: *go, command: [/bin-sa/controlplane], volumes: ["${P17}/bin:/bin-sa:ro", "../../packages/tracker/releases:/releases:ro"]}
+  controlplane-2: *cp
+  replayer-1: {<<: *go, command: [/bin-sa/replayer], environment: {REPLAYER_NODE_ID: core-1}}
+  replayer-2: {<<: *go, command: [/bin-sa/replayer], environment: {REPLAYER_NODE_ID: core-2}}
+  metricswriter-1: {<<: *go, command: [/bin-sa/metricswriter], environment: {METRICSWRITER_NODE_ID: core-1}}
+  metricswriter-2: {<<: *go, command: [/bin-sa/metricswriter], environment: {METRICSWRITER_NODE_ID: core-2}}
+  jobs-1: {<<: *go, command: [/bin-sa/jobs, daemon]}
+  jobs-2: {<<: *go, command: [/bin-sa/jobs, daemon]}
+  # TEST-ONLY github oauth stand-in (tests/fixtures/githuboauth), as in the
+  # console e2e suite; an operator input is not used here
+  oauth-fixture:
+    <<: *go
+    command: [/bin-sa/githuboauth-fixture, -listen=0.0.0.0:8099, -client-id=p17-fixture-client, -client-secret=p17-fixture-secret, -redirect-url=https://app.p17.test/api/auth/github/callback]
+
+  prometheus-1: &prom
+    image: prom/prometheus:v3.15.1@sha256:fa3302279710be2f21a8301ec17a8b4f2301fd829bd113839b3b6b02b6f191a2
+    restart: unless-stopped
+    network_mode: "service:node-core-1"
+    command: [--config.file=/etc/prometheus/prometheus.yml, --storage.tsdb.path=/prometheus, --web.listen-address=0.0.0.0:9090, --web.enable-lifecycle]
+    volumes: ["${P17}/conf/core-1/prometheus:/etc/prometheus:ro", "prom1:/prometheus"]
+  prometheus-2:
+    <<: *prom
+    network_mode: "service:node-core-2"
+    volumes: ["${P17}/conf/core-2/prometheus:/etc/prometheus:ro", "prom2:/prometheus"]
+  alertmanager-1:
+    image: prom/alertmanager:v0.34.2@sha256:39d8bb3966c694a124428a3a88fbcffd40bd069129ecd47c059f8a3f17c55f3b
+    restart: unless-stopped
+    network_mode: "service:node-core-1"
+    command: [--config.file=/etc/alertmanager/alertmanager.yml, --storage.path=/alertmanager, --web.listen-address=0.0.0.0:9093,
+      --cluster.listen-address=0.0.0.0:9094, --cluster.advertise-address=172.30.17.31:9094, --cluster.peer=172.30.17.32:9094]
+    volumes: ["${P17}/conf/core-1/alertmanager:/etc/alertmanager:ro", "am1:/alertmanager"]
+  alertmanager-2:
+    image: prom/alertmanager:v0.34.2@sha256:39d8bb3966c694a124428a3a88fbcffd40bd069129ecd47c059f8a3f17c55f3b
+    restart: unless-stopped
+    network_mode: "service:node-core-2"
+    command: [--config.file=/etc/alertmanager/alertmanager.yml, --storage.path=/alertmanager, --web.listen-address=0.0.0.0:9093,
+      --cluster.listen-address=0.0.0.0:9094, --cluster.advertise-address=172.30.17.32:9094, --cluster.peer=172.30.17.31:9094]
+    volumes: ["${P17}/conf/core-2/alertmanager:/etc/alertmanager:ro", "am2:/alertmanager"]
+  grafana:
+    image: grafana/grafana:13.2.6@sha256:b21409d7951ddcfd63a4b49083e4ef2cc35bc1437d071813bf82bfb238b00bca
+    restart: unless-stopped
+    network_mode: "service:node-core-1"
+    env_file: ["${P17}/env/grafana.env"]
+    environment: {GF_SERVER_HTTP_PORT: "3000", GF_ANALYTICS_REPORTING_ENABLED: "false", GF_ANALYTICS_CHECK_FOR_UPDATES: "false", GF_USERS_ALLOW_SIGN_UP: "false"}
+    volumes:
+      - ../../infra/ansible/roles/observability/files/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../../infra/ansible/roles/observability/files/grafana/dashboards:/var/lib/grafana/dashboards:ro
+  # grafana reaches prometheus as http://prometheus:9090 (the role's
+  # datasource); here that name is an alias of node-core-1
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.20.1@sha256:ac5ec343104fae0e2d84a27bb8d69b38430a11910c5382cad85d478d2bab713e
+    restart: unless-stopped
+    network_mode: "service:node-core-1"
+    env_file: ["${P17}/env/pgexp.env"]
+    environment: {DATA_SOURCE_URI: "postgres:5432/postgres?sslmode=disable", DATA_SOURCE_USER: sa_monitor}
+  nats-exporter-edge-1: {image: "natsio/prometheus-nats-exporter:0.20.3@sha256:4b8ddc1c86fec360b5cd3d5e1fbc6fb52bdafd5805bba3901cc52926538af255", restart: unless-stopped, command: [-port, "7777", -jsz, all, -varz, -healthz, "http://172.30.17.21:8222"]}
+  nats-exporter-edge-2: {image: "natsio/prometheus-nats-exporter:0.20.3@sha256:4b8ddc1c86fec360b5cd3d5e1fbc6fb52bdafd5805bba3901cc52926538af255", restart: unless-stopped, command: [-port, "7777", -jsz, all, -varz, -healthz, "http://172.30.17.22:8222"]}
+  nats-exporter-edge-3: {image: "natsio/prometheus-nats-exporter:0.20.3@sha256:4b8ddc1c86fec360b5cd3d5e1fbc6fb52bdafd5805bba3901cc52926538af255", restart: unless-stopped, command: [-port, "7777", -jsz, all, -varz, -healthz, "http://172.30.17.23:8222"]}
+
+  # the probe node
+  caddy-probe:
+    image: sa-p17/caddy:local
+    restart: unless-stopped
+    env_file: ["${P17}/env/probe-caddy.env"]
+    volumes: ["${P17}/conf/probe-1/Caddyfile:/etc/caddy/Caddyfile:ro", "${P17}/certs/probe-1.crt:/certs/node.crt:ro", "${P17}/certs/probe-1.key:/certs/node.key:ro"]
+    networks: {default: {ipv4_address: 172.30.17.41}}
+    ports: ["127.0.0.1:18443:443"]
+  gatus:
+    image: twinproduction/gatus:v5.37.0@sha256:094eb186e55235db367e90e9d56140e5897b7044c41de23cde4cc18e6da1242e
+    restart: unless-stopped
+    env_file: ["${P17}/env/gatus.env"]
+    environment: {GATUS_CONFIG_PATH: /config/config.yaml}
+    volumes: ["${P17}/conf/probe-1/gatus.yml:/config/config.yaml:ro", "${P17}/certs/ca.crt:/etc/ssl/certs/ca-certificates.crt:ro", "gatus:/data"]
+    extra_hosts: &probe-hosts
+      - "in.p17.test:172.30.17.21"
+      - "otlp.p17.test:172.30.17.21"
+      - "app.p17.test:172.30.17.31"
+      - "web.p17.test:172.30.17.31"
+      - "status.p17.test:172.30.17.41"
+    ports: ["127.0.0.1:18080:8080"]
+  prober:
+    <<: *go
+    # written by up.sh once the probe tenant exists; the prober refuses to
+    # start without it, naming each missing key
+    env_file: [{path: "${P17}/env/prober.env", required: false}]
+    command: [/bin-sa/prober]
+    volumes: ["${P17}/bin:/bin-sa:ro", "../../packages/tracker/releases:/releases:ro", "${P17}/certs/ca.crt:/etc/prober/ca.crt:ro"]
+    extra_hosts: *probe-hosts
+    ports: ["127.0.0.1:19300:9090"]
+  # TEST FIXTURE standing in for the discord webhook an operator input
+  receiver:
+    <<: *go
+    env_file: []
+    command: [/bin-sa/receiver]
+    ports: ["127.0.0.1:18099:8099"]
+
+volumes:
+  pgdata:
+  nats1:
+  nats2:
+  nats3:
+  etcd1:
+  etcd2:
+  etcd3:
+  prom1:
+  prom2:
+  am1:
+  am2:
+  gatus:

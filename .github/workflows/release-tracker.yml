@@ -1,0 +1,118 @@
+name: release-tracker
+
+# publishes one tracker release (plan phases 3, 14 and 18;
+# docs/security/verify-tracker.md). a tag tracker-v<x.y.z> names a version
+# that is already committed under packages/tracker/releases/. the workflow
+#   1. proves the release: immutability against the previous commit, a
+#      byte-identical rebuild of sdk.js on this runner, and an npm package
+#      that packs to the same bytes twice
+#   2. attests sdk.js and the npm tarball with build provenance
+#      (gh attestation verify checks it)
+#   3. publishes the package to npm through trusted publishing: npm trades
+#      this workflow's oidc token for a short-lived publish credential and
+#      adds provenance itself, so no npm token exists anywhere
+#   4. creates the github release carrying the manifest, sdk.js and tarball
+#
+# repository variable NPM_PACKAGE an operator input: the scoped package name whose
+# trusted publisher is this repository and this workflow file) is required;
+# the publish job stops when it is missing instead of choosing a name.
+on:
+  push:
+    tags: ["tracker-v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-tracker-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  prove:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26.13.1
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - id: version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          v="${TAG#tracker-v}"
+          pkg="$(node -p 'require("./packages/tracker/package.json").version')"
+          # the tag, package.json and the newest manifest entry must agree, so a
+          # tag cannot publish an older or an unreleased version
+          newest="$(node -p 'require("./packages/tracker/releases/manifest.json").versions.at(-1).version')"
+          test "$v" = "$pkg" || { echo "tag $v but package.json $pkg" >&2; exit 1; }
+          test "$v" = "$newest" || { echo "tag $v but newest release $newest" >&2; exit 1; }
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+      # immutability against the parent commit, consistency, size and a
+      # byte-identical rebuild of the newest sdk.js on this runner
+      - run: pnpm --filter tracker verify-releases --base HEAD~1
+      # the package build test packs twice and compares, installs the
+      # tarball into a consumer and type-checks it
+      - run: pnpm --filter tracker test
+
+  publish:
+    needs: prove
+    runs-on: ubuntu-24.04
+    environment: npm
+    permissions:
+      contents: write
+      # trusted publishing and both attestations
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26.13.1
+          registry-url: https://registry.npmjs.org
+      - run: pnpm install --frozen-lockfile
+      - name: npm package name an operator input
+        env:
+          NPM_PACKAGE: ${{ vars.NPM_PACKAGE }}
+        run: |
+          test -n "$NPM_PACKAGE" || { echo "repository variable NPM_PACKAGE is not set an operator input" >&2; exit 1; }
+          # trusted publishing needs npm 11.5.1 or newer
+          node -e 'const [a,b,c]=process.argv[1].split(".").map(Number); process.exit(a>11||(a===11&&(b>5||(b===5&&c>=1)))?0:1)' "$(npm --version)" ||
+            { echo "npm $(npm --version) cannot use trusted publishing" >&2; exit 1; }
+      - name: pack
+        id: pack
+        env:
+          NPM_PACKAGE: ${{ vars.NPM_PACKAGE }}
+          VERSION: ${{ needs.prove.outputs.version }}
+        run: |
+          cd packages/tracker
+          node scripts/pack.mjs "$VERSION" > pack.json
+          echo "tarball=packages/tracker/$(node -p 'require("./pack.json").tarball')" >> "$GITHUB_OUTPUT"
+          echo "dir=packages/tracker/$(node -p 'require("./pack.json").dir')" >> "$GITHUB_OUTPUT"
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: |
+            packages/tracker/releases/${{ needs.prove.outputs.version }}/sdk.js
+            ${{ steps.pack.outputs.tarball }}
+      # no NODE_AUTH_TOKEN: npm uses the oidc token of this job. provenance
+      # is attached automatically for a public repository
+      - name: npm publish (trusted publishing)
+        working-directory: ${{ steps.pack.outputs.dir }}
+        run: npm publish --access public
+      - name: github release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.prove.outputs.version }}
+          TARBALL: ${{ steps.pack.outputs.tarball }}
+        run: |
+          gh release create "$TAG" --verify-tag --title "tracker $VERSION" \
+            --notes "sdk.js $VERSION. verify it with docs/security/verify-tracker.md." \
+            "packages/tracker/releases/$VERSION/sdk.js" packages/tracker/releases/manifest.json "$TARBALL"

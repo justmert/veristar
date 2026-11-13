@@ -1,0 +1,100 @@
+name: slo-report
+
+# the design: gatus keeps raw probe results for about a week and hourly
+# uptime for only 30 days, shorter than a month, so yesterday's raw results
+# are copied into docs/slo/data/ every day on the branch slo/<YYYY-MM>. on
+# the day after the last day of a month the report is written on the same
+# branch and a pull request to main is opened.
+
+on:
+  schedule:
+    - cron: "30 0 * * *"
+  workflow_dispatch:
+    inputs:
+      day:
+        description: utc day to collect (YYYY-MM-DD), default yesterday
+        required: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: slo-report
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-24.04
+    env:
+      # the status page host follows BASE_DOMAIN an operator input
+      STATUS_BASE_URL: ${{ vars.STATUS_BASE_URL }}
+      GH_TOKEN: ${{ github.token }}
+      INPUT_DAY: ${{ inputs.day }}
+    steps:
+      - name: require the status page url
+        run: |
+          if [ -z "$STATUS_BASE_URL" ]; then
+            echo "repository variable STATUS_BASE_URL is not set (https://status.<BASE_DOMAIN>, an operator input" >&2
+            exit 1
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: pick the day and branch
+        id: day
+        run: |
+          day="${INPUT_DAY:-$(date -u -d yesterday +%F)}"
+          month="${day%-*}"
+          last="$(date -u -d "${month}-01 +1 month -1 day" +%F)"
+          {
+            echo "day=$day"
+            echo "month=$month"
+            echo "branch=slo/$month"
+            echo "last=$([ "$day" = "$last" ] && echo true || echo false)"
+          } >> "$GITHUB_OUTPUT"
+      - name: check out the month branch
+        env:
+          BRANCH: ${{ steps.day.outputs.branch }}
+        run: |
+          if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null; then
+            git checkout -B "$BRANCH" "origin/$BRANCH"
+          else
+            git checkout -B "$BRANCH" origin/main
+          fi
+      - name: collect
+        env:
+          DAY: ${{ steps.day.outputs.day }}
+        run: go run ./cmd/sloreport collect -gatus "$STATUS_BASE_URL" -day "$DAY" -out docs/slo/data
+      # the ci bot identity is set per command only, never in the repository config
+      - name: commit the data
+        env:
+          DAY: ${{ steps.day.outputs.day }}
+          BRANCH: ${{ steps.day.outputs.branch }}
+        run: |
+          git add "docs/slo/data/$DAY.json"
+          if ! git diff --cached --quiet; then
+            git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+              commit -m "add slo probe results for $DAY"
+            git push origin "$BRANCH"
+          fi
+      - name: write the monthly report
+        if: steps.day.outputs.last == 'true'
+        env:
+          MONTH: ${{ steps.day.outputs.month }}
+          BRANCH: ${{ steps.day.outputs.branch }}
+        run: |
+          go run ./cmd/sloreport report -month "$MONTH" -data docs/slo/data -out docs/slo
+          git add "docs/slo/$MONTH.md"
+          if ! git diff --cached --quiet; then
+            git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+              commit -m "add slo report for $MONTH"
+            git push origin "$BRANCH"
+          fi
+          if [ -z "$(gh pr list --head "$BRANCH" --base main --state open --json number --jq '.[].number')" ]; then
+            gh pr create --base main --head "$BRANCH" --title "slo report $MONTH" \
+              --body "Monthly SLO report for $MONTH from the daily probe results in docs/slo/data/ (cmd/sloreport)."
+          fi

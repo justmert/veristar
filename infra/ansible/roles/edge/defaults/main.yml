@@ -29,3 +29,7 @@ edge_collector_env:
 # infra brings up nats and etcd only (before bootstrap creates the nats
 # topology); services brings up the rest
 edge_stage: services
+
+# where deploy.yml puts the drain flag; caddy answers 503 on port 80 while it
+# exists, which takes the node out of dns (deploy/caddy/assemble.sh)
+edge_drain_dir: /etc/stellar-analytics/drain

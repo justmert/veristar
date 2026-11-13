@@ -1,0 +1,15 @@
+# managed by ansible (infra/ansible/roles/backup)
+[Unit]
+Description=pgbackrest {{ item.name }} of stanza {{ backup_stanza }}
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+{% if backup_repo_mode == 's3' %}
+# both core nodes carry the timer; only the patroni leader runs it
+ExecCondition=/usr/bin/curl -fsS -o /dev/null http://{{ sa_private_ip }}:8008/primary
+{% endif %}
+{% for c in item.commands %}
+ExecStart=/usr/bin/docker compose --project-directory {{ backup_compose_dir }} exec -T {{ backup_compose_service }} pgbackrest --stanza={{ backup_stanza }} {{ c }}
+{% endfor %}

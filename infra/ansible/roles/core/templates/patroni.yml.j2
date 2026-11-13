@@ -20,11 +20,12 @@ etcd3:
 {% endfor %}
 
 bootstrap:
+  # read once, when the cluster is created; the core role keeps the live
+  # values equal to core_patroni_dcs through the rest api afterwards
   dcs:
-    ttl: 30
-    loop_wait: 10
-    retry_timeout: 10
-    maximum_lag_on_failover: 1048576
+{% for k, v in core_patroni_dcs.items() %}
+    {{ k }}: {{ v | to_json }}
+{% endfor %}
     postgresql:
       use_pg_rewind: true
       use_slots: true
@@ -52,6 +53,13 @@ postgresql:
     replication:
       username: replicator
       password: "{{ sa_secrets.postgres_replication_password }}"
+  # node-local parameters: wal archiving through pgbackrest
+  # (roles/backup). archive_mode needs a restart, which a new cluster gets
+  # anyway; patroni reports pending_restart on a running one.
+  parameters:
+    archive_mode: "on"
+    archive_command: "pgbackrest --stanza={{ backup_stanza }} archive-push %p"
+    archive_timeout: "{{ core_archive_timeout }}"
   pg_hba:
     - local all postgres peer
     - local all all scram-sha-256

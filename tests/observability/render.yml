@@ -1,0 +1,72 @@
+# renders the observability role's templates for the local test stack
+# (tests/observability/up.sh). the role's own fact tasks run first, so the
+# rendered files are what the role would write on these nodes.
+#   ansible-playbook -i inventory.yml render.yml -e p17=<dir>
+- name: Render the observability configs
+  hosts: all
+  connection: local
+  gather_facts: false
+  # role defaults come in through import_role, so the inventory overrides
+  # them with the same precedence as in a real run
+  vars_files:
+    - "{{ p17 }}/secrets.yml"
+  vars:
+    role_dir: "{{ playbook_dir }}/../../infra/ansible/roles/observability"
+    out: "{{ p17 }}/conf/{{ inventory_hostname }}"
+    observability_conf_dir: /etc/stellar-analytics/observability
+    secrets_env_dir: /etc/stellar-analytics/env
+  tasks:
+    - name: Run the role's facts
+      ansible.builtin.import_role:
+        name: observability
+        tasks_from: facts.yml
+    - name: Run the probe facts
+      ansible.builtin.include_role:
+        name: observability
+        tasks_from: probe_facts.yml
+      when: sa_tier == 'probe'
+    - name: Create the output directories
+      ansible.builtin.file:
+        path: "{{ out }}/{{ item }}"
+        state: directory
+        mode: "0755"
+      loop: [prometheus/rules, alertmanager]
+    - name: Render the relay config
+      ansible.builtin.template:
+        src: "{{ role_dir }}/templates/relay.cfg.j2"
+        dest: "{{ out }}/relay.cfg"
+        mode: "0644"
+      vars:
+        observability_bind_ip: 0.0.0.0
+      when: sa_tier in ['edge', 'core']
+    - name: Render prometheus and alertmanager
+      ansible.builtin.template:
+        src: "{{ role_dir }}/templates/{{ item.src }}"
+        dest: "{{ out }}/{{ item.dest }}"
+        mode: "0644"
+      loop:
+        - {src: prometheus.yml.j2, dest: prometheus/prometheus.yml}
+        - {src: alertmanager.yml.j2, dest: alertmanager/alertmanager.yml}
+      when: sa_tier == 'core'
+    - name: Copy the rules and the alertmanager and prometheus secret files
+      ansible.builtin.copy:
+        src: "{{ item.src | default(omit) }}"
+        content: "{{ item.content | default(omit) }}"
+        dest: "{{ out }}/{{ item.dest }}"
+        mode: "0644"
+      loop:
+        - {src: "{{ role_dir }}/files/rules/", dest: prometheus/rules/}
+        - {content: "{{ observability_webhook_alertmanager }}", dest: alertmanager/discord-webhook-url}
+        - {content: "{{ sa_secrets.probe_metrics_token }}", dest: prometheus/probe-metrics-token}
+        - {src: "{{ p17 }}/certs/ca.crt", dest: prometheus/probe-ca.crt}
+      when: sa_tier == 'core'
+    - name: Render the probe configs
+      ansible.builtin.template:
+        src: "{{ role_dir }}/templates/{{ item.src }}"
+        dest: "{{ out }}/{{ item.dest }}"
+        mode: "0644"
+      loop:
+        - {src: gatus.yml.j2, dest: gatus.yml}
+        - {src: probe.Caddyfile.j2, dest: Caddyfile}
+        - {src: prober.env.j2, dest: prober.env}
+      when: sa_tier == 'probe' and sa_secrets.probe_otlp_token is defined

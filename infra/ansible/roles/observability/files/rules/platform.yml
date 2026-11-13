@@ -1,0 +1,81 @@
+---
+# alert rules, nodes, platform services, jobs and the probe (the design)
+groups:
+  - name: platform
+    rules:
+      - alert: DiskUsageHigh
+        expr: |
+          (1 - node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|squashfs|nsfs"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay|squashfs|nsfs"}) > 0.80
+        for: 10m
+        labels: {severity: ticket}
+        annotations:
+          summary: "{{ $labels.mountpoint }} on {{ $labels.node }} is {{ $value | humanizePercentage }} full"
+          runbook: docs/runbooks/alerts.md#diskusagehigh
+      - alert: ServiceDown
+        expr: up{job=~"controlplane|replayer|metricswriter|jobs|prober|node|postgres|patroni"} == 0
+        for: 2m
+        labels: {severity: page}
+        annotations:
+          summary: "{{ $labels.job }} on {{ $labels.node }} does not answer scrapes"
+          runbook: docs/runbooks/alerts.md#servicedown
+      - alert: UmamiHeartbeatFailing
+        expr: ops_ready_check{job="controlplane",check="umami"} == 0
+        for: 2m
+        labels: {severity: page}
+        annotations:
+          summary: "the control plane on {{ $labels.node }} gets no umami heartbeat"
+          runbook: docs/runbooks/alerts.md#umamiheartbeatfailing
+
+      # aggregate-web runs hourly; two missed runs and some slack. a jobs
+      # leader that never succeeded leaves the series absent, which counts
+      # after 15 minutes because a new leader runs every task at once.
+      - alert: WebAggregationStale
+        expr: |
+          (time() - max(jobs_task_last_success_timestamp_seconds{task="aggregate-web"}) > 7800)
+          or absent(jobs_task_last_success_timestamp_seconds{task="aggregate-web"})
+        for: 15m
+        labels: {severity: ticket}
+        annotations:
+          summary: "web aggregation has not succeeded for over two hours"
+          runbook: docs/runbooks/alerts.md#webaggregationstale
+      # the rotation runs shortly after 00:00 utc; one hour of slack
+      - alert: UmamiPasswordRotationNotRun
+        expr: |
+          (((floor(vector(time()) / 86400) - max(jobs_umami_rotated_epoch_day)) >= 1) and ((vector(time()) % 86400) > 3600))
+          or absent(jobs_umami_rotated_epoch_day)
+        for: 15m
+        labels: {severity: page}
+        annotations:
+          summary: "today's umami password rotation has not been recorded"
+          runbook: docs/runbooks/alerts.md#umamipasswordrotationnotrun
+
+      # the probe's own view; gatus alerts on the same results from the
+      # probe node, these reach alertmanager from prometheus
+      - alert: ProbeIngestionFailing
+        expr: prober_check_success{check="slo_ingestion"} == 0
+        for: 2m
+        labels: {severity: page}
+        annotations:
+          summary: "the probe's web event or otlp metric is not accepted"
+          runbook: docs/runbooks/alerts.md#probeingestionfailing
+      - alert: ProbeFreshnessFailing
+        expr: prober_check_success{check=~"slo_freshness-web|slo_freshness-api"} == 0
+        for: 1m
+        labels: {severity: page}
+        annotations:
+          summary: "{{ $labels.check }}: accepted probe events are not visible in the machine api"
+          runbook: docs/runbooks/alerts.md#probefreshnessfailing
+      - alert: ProbeDashboardFailing
+        expr: prober_check_success{check="slo_dashboard"} == 0
+        for: 2m
+        labels: {severity: page}
+        annotations:
+          summary: "console, umami host or machine api check fails from the probe"
+          runbook: docs/runbooks/alerts.md#probedashboardfailing
+      - alert: ProbeNodeCheckFailing
+        expr: prober_check_success{check=~"nodes_.*"} == 0
+        for: 2m
+        labels: {severity: page}
+        annotations:
+          summary: "{{ $labels.check }} fails by address (tls, certificate or http)"
+          runbook: docs/runbooks/alerts.md#probenodecheckfailing

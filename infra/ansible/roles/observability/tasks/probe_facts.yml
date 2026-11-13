@@ -1,0 +1,42 @@
+---
+# also included by tests/observability/render.yml, which renders the
+# templates for the local test stack
+- name: Read the tracker release manifest
+  ansible.builtin.set_fact:
+    observability_manifest: "{{ lookup('ansible.builtin.file', observability_repo_root ~ '/packages/tracker/releases/manifest.json') | from_json }}"
+
+- name: Name the probe targets
+  ansible.builtin.set_fact:
+    observability_tracker_latest: "{{ (observability_manifest.versions | last).version }}"
+    observability_tracker_latest_bytes: "{{ (observability_manifest.versions | last).bytes }}"
+    # every node by its public address with the hosts it serves
+    observability_probe_nodes: >-
+      {%- set out = [] -%}
+      {%- for h in groups['edge'] -%}
+      {%- set _ = out.append({'name': h, 'hosts': [sa_hostnames.in, sa_hostnames.otlp],
+            'spec': h ~ '@' ~ hostvars[h].sa_public_ipv4 ~ ':443=' ~ sa_hostnames.in ~ ',' ~ sa_hostnames.otlp}) -%}
+      {%- endfor -%}
+      {%- for h in groups['core'] -%}
+      {%- set _ = out.append({'name': h, 'hosts': [sa_hostnames.app, sa_hostnames.web],
+            'spec': h ~ '@' ~ hostvars[h].sa_public_ipv4 ~ ':443=' ~ sa_hostnames.app ~ ',' ~ sa_hostnames.web}) -%}
+      {%- endfor -%}
+      {{ out }}
+
+# the keys cmd/prober pushes to (internal/prober/prober.go); the slo group
+# is what cmd/sloreport reads
+- name: Name the gatus external endpoints
+  ansible.builtin.set_fact:
+    observability_external_endpoints: >-
+      {%- set out = [] -%}
+      {%- for n in ['ingestion', 'dashboard', 'freshness web', 'freshness api'] -%}
+      {%- set _ = out.append({'group': 'slo', 'name': n}) -%}
+      {%- endfor -%}
+      {%- for n in ['web event', 'otlp metric', 'console', 'web host', 'machine api', 'tracker integrity'] -%}
+      {%- set _ = out.append({'group': 'probe', 'name': n}) -%}
+      {%- endfor -%}
+      {%- for node in observability_probe_nodes -%}
+      {%- for host in node.hosts -%}
+      {%- set _ = out.append({'group': 'nodes', 'name': node.name ~ ' ' ~ host}) -%}
+      {%- endfor -%}
+      {%- endfor -%}
+      {{ out }}

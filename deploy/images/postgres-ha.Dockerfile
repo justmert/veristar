@@ -34,7 +34,15 @@ RUN set -eu; \
       # patroni's etcd3 store needs python-etcd; without it apt satisfies
       # patroni's store dependency with consul and etcd3 is unavailable
       python3-etcd; \
+    # zlib1g from the debian security update: the base image carries a build
+    # with a fixable high finding (trivy 2026-11-13). only-upgrade cannot pull
+    # in postgresql, and the version check below would catch it anyway
+    apt-get install -y --no-install-recommends --only-upgrade zlib1g; \
     apt-get clean; rm -rf /var/lib/apt/lists/*; \
+    # gosu serves only the official docker-entrypoint.sh, which this image
+    # replaces with patroni; it is built with go 1.24.6 and carries a fixable
+    # critical and ten high stdlib findings, so it is removed, not kept unused
+    rm -f /usr/local/bin/gosu; \
     after="$(dpkg-query -W -f '${Version}' "postgresql-${PG_MAJOR}")"; \
     test "$before" = "$after" || { echo "postgresql moved from $before to $after" >&2; exit 1; }; \
     server="$(postgres --version | awk '{print $3}')"; \

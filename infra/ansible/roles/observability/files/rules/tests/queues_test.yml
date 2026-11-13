@@ -1,0 +1,142 @@
+---
+# promtool test rules for queues.yml
+rule_files: [../queues.yml]
+evaluation_interval: 1m
+tests:
+  - name: oldest message, lag, consumers
+    interval: 1m
+    input_series:
+      # two replicas report WEB_EVENTS; the replayer stops at minute 5, the
+      # first sequence stops moving and messages pile up
+      - series: 'jetstream_stream_total_messages{job="nats",node="edge-1",stream_name="WEB_EVENTS",is_stream_leader="true"}'
+        values: '3 2 3 2 3 10+400x25'
+      - series: 'jetstream_stream_total_messages{job="nats",node="edge-2",stream_name="WEB_EVENTS",is_stream_leader="false"}'
+        values: '3 2 3 2 3 10+400x25'
+      - series: 'jetstream_stream_first_seq{job="nats",node="edge-1",stream_name="WEB_EVENTS",is_stream_leader="true"}'
+        values: '100+5x5 125x25'
+      - series: 'jetstream_stream_first_seq{job="nats",node="edge-2",stream_name="WEB_EVENTS",is_stream_leader="false"}'
+        values: '100+5x5 125x25'
+      # API_METRICS stays empty: first sequence does not move, but no message waits
+      - series: 'jetstream_stream_total_messages{job="nats",node="edge-1",stream_name="API_METRICS"}'
+        values: '0x30'
+      - series: 'jetstream_stream_first_seq{job="nats",node="edge-1",stream_name="API_METRICS"}'
+        values: '7x30'
+      - series: 'jetstream_consumer_num_pending{job="nats",node="edge-1",stream_name="WEB_EVENTS",consumer_name="replayer"}'
+        values: '0x5 0+400x25'
+      - series: 'jetstream_consumer_num_ack_pending{job="nats",node="edge-1",stream_name="WEB_EVENTS",consumer_name="replayer"}'
+        values: '0x30'
+      - series: 'replayer_leader{job="replayer",node="core-1"}'
+        values: '1x4 _x26'
+      - series: 'replayer_leader{job="replayer",node="core-2"}'
+        values: '0x4 _x26'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: QueueOldestMessageTooOld
+      - eval_time: 16m
+        alertname: QueueOldestMessageTooOld
+        exp_alerts:
+          - exp_labels: {severity: page, stream_name: WEB_EVENTS}
+            exp_annotations:
+              summary: "the oldest message in WEB_EVENTS has waited at least 10 minutes"
+              runbook: docs/runbooks/alerts.md#queueoldestmessagetooold
+      - eval_time: 3m
+        alertname: ReplayerNotConsuming
+      - eval_time: 12m
+        alertname: ReplayerNotConsuming
+        exp_alerts:
+          - exp_labels: {severity: page}
+            exp_annotations:
+              summary: "no replayer instance holds the lock and consumes WEB_EVENTS"
+              runbook: docs/runbooks/alerts.md#replayernotconsuming
+      - eval_time: 18m
+        alertname: ReplayerLagHigh
+      - eval_time: 29m
+        alertname: ReplayerLagHigh
+        exp_alerts:
+          - exp_labels: {severity: ticket, stream_name: WEB_EVENTS, consumer_name: replayer}
+            exp_annotations:
+              summary: "9200 web events wait for the replayer"
+              runbook: docs/runbooks/alerts.md#replayerlaghigh
+  - name: metrics writer lag and leader
+    interval: 1m
+    input_series:
+      - series: 'jetstream_consumer_num_pending{job="nats",node="edge-1",stream_name="API_METRICS",consumer_name="metricswriter"}'
+        values: '6000x15'
+      - series: 'jetstream_consumer_num_ack_pending{job="nats",node="edge-1",stream_name="API_METRICS",consumer_name="metricswriter"}'
+        values: '0x15'
+      - series: 'metricswriter_leader{job="metricswriter",node="core-1"}'
+        values: '0x15'
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: MetricsWriterLagHigh
+        exp_alerts:
+          - exp_labels: {severity: ticket, stream_name: API_METRICS, consumer_name: metricswriter}
+            exp_annotations:
+              summary: "6000 metric batches wait for the metrics writer"
+              runbook: docs/runbooks/alerts.md#metricswriterlaghigh
+      - eval_time: 3m
+        alertname: MetricsWriterNotConsuming
+        exp_alerts:
+          - exp_labels: {severity: page}
+            exp_annotations:
+              summary: "no metrics writer instance holds the lock and consumes API_METRICS"
+              runbook: docs/runbooks/alerts.md#metricswriternotconsuming
+  - name: dlq
+    interval: 1m
+    input_series:
+      - series: 'jetstream_stream_total_messages{job="nats",node="edge-1",stream_name="WEB_DLQ"}'
+        values: '0 0 2 2'
+      - series: 'jetstream_stream_total_messages{job="nats",node="edge-1",stream_name="API_DLQ"}'
+        values: '0 0 0 0'
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: DLQNotEmpty
+      - eval_time: 3m
+        alertname: DLQNotEmpty
+        exp_alerts:
+          - exp_labels: {severity: ticket, stream_name: WEB_DLQ}
+            exp_annotations:
+              summary: "WEB_DLQ holds 2 messages"
+              runbook: docs/runbooks/alerts.md#dlqnotempty
+  - name: nats quorum
+    interval: 1m
+    input_series:
+      # three servers until minute 4, then two stop answering
+      - series: 'jetstream_server_jetstream_disabled{job="nats",node="edge-1",is_meta_leader="true"}'
+        values: '0x10'
+      - series: 'jetstream_server_jetstream_disabled{job="nats",node="edge-2",is_meta_leader="false"}'
+        values: '0x3 _x7'
+      - series: 'jetstream_server_jetstream_disabled{job="nats",node="edge-3",is_meta_leader="false"}'
+        values: '0x3 _x7'
+      - series: 'jetstream_server_total_streams{job="nats",node="edge-1",is_meta_leader="true"}'
+        values: '5x10'
+      - series: 'up{job="nats",node="edge-2"}'
+        values: '1x3 0x7'
+      # edge-3's exporter answers but its server does not
+      - series: 'up{job="nats",node="edge-3"}'
+        values: '1x10'
+      - series: 'gnatsd_healthz_status_value{job="nats",node="edge-3",value="ok"}'
+        values: '1x3 _x7'
+      - series: 'gnatsd_healthz_status_value{job="nats",node="edge-3",value="unreachable"}'
+        values: '_x3 0x7'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: NATSQuorumLost
+      - eval_time: 10m
+        alertname: NATSQuorumLost
+        exp_alerts:
+          - exp_labels: {severity: page}
+            exp_annotations:
+              summary: "nats jetstream has no quorum or no meta leader"
+              runbook: docs/runbooks/alerts.md#natsquorumlost
+      - eval_time: 10m
+        alertname: NATSServerDown
+        exp_alerts:
+          - exp_labels: {severity: ticket, job: nats, node: edge-2}
+            exp_annotations:
+              summary: "nats on edge-2 is not healthy"
+              runbook: docs/runbooks/alerts.md#natsserverdown
+          - exp_labels: {severity: ticket, job: nats, node: edge-3}
+            exp_annotations:
+              summary: "nats on edge-3 is not healthy"
+              runbook: docs/runbooks/alerts.md#natsserverdown

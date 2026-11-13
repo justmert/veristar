@@ -1,0 +1,60 @@
+---
+# a core node about to get a new postgres-ha image hands the patroni leader
+# to the synchronous replica first, so the restart is a planned switchover
+# (no committed transaction lost, a few seconds without a writable leader)
+# instead of a failover after the 30 s leader ttl
+- name: Read the running postgres image
+  ansible.builtin.command:
+    argv: [docker, inspect, --format, "{{ '{{' }}.Config.Image{{ '}}' }}", stellar-analytics-core-postgres-1]
+  register: switchover_image
+  changed_when: false
+  failed_when: false
+
+- name: Read the patroni cluster
+  ansible.builtin.uri:
+    url: "http://{{ sa_private_ip }}:8008/cluster"
+    return_content: true
+  register: switchover_cluster
+  when: switchover_image.rc == 0
+
+- name: Switch the leader over to the synchronous replica
+  ansible.builtin.command:
+    argv:
+      - docker
+      - compose
+      - --project-directory
+      - /opt/stellar-analytics/core
+      - exec
+      - -T
+      - postgres
+      - patronictl
+      - -c
+      - /etc/patroni/patroni.yml
+      - switchover
+      - --leader
+      - "{{ inventory_hostname }}"
+      - --candidate
+      - "{{ switchover_sync | first }}"
+      - --force
+  vars:
+    switchover_members: "{{ switchover_cluster.json.members }}"
+    switchover_sync: >-
+      {{ switchover_members | selectattr('role', 'equalto', 'sync_standby')
+         | selectattr('state', 'equalto', 'streaming') | map(attribute='name') | list }}
+  when:
+    - switchover_image.rc == 0
+    - switchover_image.stdout != platform_images.postgres_ha
+    - (switchover_members | selectattr('role', 'equalto', 'leader') | map(attribute='name') | first | default('')) == inventory_hostname
+  changed_when: true
+  register: switchover_done
+  failed_when: switchover_done.rc != 0 or (switchover_sync | length) == 0
+
+- name: Wait until this node is a replica
+  ansible.builtin.uri:
+    url: "http://{{ sa_private_ip }}:8008/replica"
+    status_code: 200
+  register: switchover_replica
+  until: switchover_replica.status == 200
+  retries: 30
+  delay: 2
+  when: switchover_done is not skipped

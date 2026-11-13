@@ -98,8 +98,9 @@ delivery.
 ## Bands
 
 Each site has a primary website (id equals the site id) and a quarantine website. Events
-from an address prefix that sent more than `IPCLUSTER_THRESHOLD` distinct visitor tokens to
-the site within an hour go to the quarantine website. Every metric above is
+from an address prefix go to the quarantine website from the event that brings the prefix to
+`IPCLUSTER_THRESHOLD` distinct visitor tokens for the site within an hour
+(`internal/gateway/ipcluster.go`). Every metric above is
 computed per website, so quarantined traffic is counted separately and never mixed into the
 primary numbers.
 

@@ -1,0 +1,114 @@
+---
+# point-in-time restore onto a fresh node (the design):
+#
+#   ansible-playbook -i inventories/<env>/ playbooks/restore.yml \
+#     -e restore_target='2026-11-13 10:00:00.123456+00'
+#
+# the host of the restore group gets the os baseline, the pgbackrest
+# settings, then pgbackrest restores the stanza to restore_target and
+# postgresql replays wal up to it and promotes. the result is a standalone
+# postgresql (not a patroni member, wal archiving off), so it can be checked
+# and copied from without touching the running cluster or its repository.
+# the node must be fresh: an existing restore volume stops the run.
+- name: Restore to a point in time
+  hosts: restore
+  become: true
+  vars_files: [../vars/pins.yml]
+  vars:
+    restore_volume: sa-restore-pgdata
+    restore_container: sa-restore-postgres
+    restore_pg_path: /var/lib/postgresql/patroni/data
+  pre_tasks:
+    - name: Require the target time
+      ansible.builtin.assert:
+        that:
+          - restore_target is defined
+          - restore_target is match('^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9:.]+[+-][0-9]{2}(:?[0-9]{2})?$')
+        fail_msg: restore_target must be a timestamp with offset, for example '2026-11-13 10:00:00+00'
+  roles:
+    - base
+    - secrets
+  tasks:
+    - name: Write the pgbackrest settings
+      ansible.builtin.include_role:
+        name: backup
+        tasks_from: pg.yml
+
+    - name: Refuse a node that already holds a restore
+      ansible.builtin.command:
+        argv: [docker, volume, inspect, "{{ restore_volume }}"]
+      register: restore_existing
+      changed_when: false
+      failed_when: restore_existing.rc == 0
+
+    - name: Pull the postgres-ha image
+      community.docker.docker_image_pull:
+        name: "{{ platform_images.postgres_ha }}"
+      register: restore_pull
+      until: restore_pull is succeeded
+      retries: 5
+      delay: 10
+
+    # the volume starts as a copy of the image's /var/lib/postgresql, which
+    # holds the empty patroni directory owned by postgres
+    - name: Restore the stanza to the target time
+      ansible.builtin.command:
+        argv:
+          - docker
+          - run
+          - --rm
+          - --network=host
+          - -v
+          - "{{ restore_volume }}:/var/lib/postgresql"
+          - -v
+          - "{{ backup_conf_dir }}:/etc/pgbackrest:ro"
+          - --entrypoint
+          - pgbackrest
+          - "{{ platform_images.postgres_ha }}"
+          - "--stanza={{ backup_stanza }}"
+          - "--pg1-path={{ restore_pg_path }}"
+          - --type=time
+          - "--target={{ restore_target }}"
+          - --target-action=promote
+          - restore
+      register: restore_run
+      changed_when: true
+
+    # patroni's postgresql.conf came back with the data directory; the
+    # overrides make this a standalone server: no wal archiving into the
+    # production repository, no wait for a synchronous standby
+    - name: Start postgresql on the restored data
+      community.docker.docker_container:
+        name: "{{ restore_container }}"
+        image: "{{ platform_images.postgres_ha }}"
+        network_mode: host
+        entrypoint: [postgres]
+        command:
+          - -D
+          - "{{ restore_pg_path }}"
+          - -c
+          - archive_mode=off
+          - -c
+          - synchronous_standby_names=
+          - -c
+          - "listen_addresses={{ sa_private_ip }},127.0.0.1"
+          - -c
+          - "restore_command=pgbackrest --stanza={{ backup_stanza }} archive-get %f \"%p\""
+        volumes:
+          - "{{ restore_volume }}:/var/lib/postgresql"
+          - "{{ backup_conf_dir }}:/etc/pgbackrest:ro"
+        restart_policy: "no"
+        state: started
+
+    - name: Wait for recovery to reach the target and promote
+      ansible.builtin.command:
+        argv: [docker, exec, "{{ restore_container }}", psql, -h, /var/run/postgresql, -U, postgres, -tAX, -c, "select pg_is_in_recovery()"]
+      register: restore_promoted
+      until: restore_promoted.rc == 0 and restore_promoted.stdout == 'f'
+      retries: 300
+      delay: 2
+      changed_when: false
+
+    - name: Report the restored server
+      ansible.builtin.debug:
+        msg: "restored to {{ restore_target }} on {{ sa_private_ip }}:5432"

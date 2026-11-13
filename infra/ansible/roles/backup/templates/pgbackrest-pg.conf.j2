@@ -1,0 +1,45 @@
+# managed by ansible (infra/ansible/roles/backup). pgbackrest on a database
+# node: archive-push from postgresql's archive_command, and restore.
+[global]
+log-level-console=info
+log-level-file=off
+compress-type=zst
+{% if backup_repo_mode == 's3' %}
+# hetzner object storage an operator input. the backup runs on the patroni leader
+# (roles/core timers), so this node holds the repository settings itself.
+repo1-type=s3
+repo1-s3-endpoint={{ sa_object_storage.endpoint | regex_replace('^https://', '') }}
+repo1-s3-region={{ sa_object_storage.region }}
+repo1-s3-bucket={{ sa_object_storage.backup_bucket }}
+repo1-s3-uri-style=host
+repo1-s3-key={{ sa_secrets.object_storage_access_key }}
+repo1-s3-key-secret={{ sa_secrets.object_storage_secret_key }}
+repo1-path=/{{ sa_environment }}
+repo1-cipher-type=aes-256-cbc
+repo1-cipher-pass={{ sa_secrets.pgbackrest_cipher_pass }}
+repo1-retention-full-type=count
+repo1-retention-full={{ backup_retention_full }}
+repo1-retention-diff={{ backup_retention_diff }}
+start-fast=y
+{% else %}
+# the repository node of the local converge, over pgbackrest's tls protocol.
+# encryption happens there, so this node needs no cipher passphrase.
+repo1-host={{ hostvars[groups['backup'][0]].sa_private_ip }}
+repo1-host-type=tls
+repo1-host-port={{ backup_tls_port }}
+repo1-host-ca-file=/etc/pgbackrest/tls/ca.crt
+repo1-host-cert-file=/etc/pgbackrest/tls/node.crt
+repo1-host-key-file=/etc/pgbackrest/tls/node.key
+# the repository node reaches this node's pgbackrest server to take backups
+tls-server-address=*
+tls-server-port={{ backup_tls_port }}
+tls-server-ca-file=/etc/pgbackrest/tls/ca.crt
+tls-server-cert-file=/etc/pgbackrest/tls/node.crt
+tls-server-key-file=/etc/pgbackrest/tls/node.key
+tls-server-auth={{ groups['backup'][0] }}={{ backup_stanza }}
+{% endif %}
+
+[{{ backup_stanza }}]
+pg1-path={{ backup_pg_path }}
+pg1-socket-path=/var/run/postgresql
+pg1-user=postgres

@@ -1,0 +1,53 @@
+# managed by ansible (infra/ansible/roles/observability). the probe node's
+# only public listener: the status page, and the prober's and gatus's
+# metrics for prometheus on the core nodes behind a bearer token.
+{
+	admin localhost:2019
+}
+
+{{ sa_hostnames.status }} {
+{% if observability_probe_tls is defined %}
+	tls {{ observability_probe_tls }}
+{% endif %}
+	log {
+		output stdout
+		format filter {
+			wrap json
+			fields {
+				request>remote_ip delete
+				request>remote_port delete
+				request>client_ip delete
+				request>headers delete
+			}
+		}
+	}
+
+	@metrics_ok {
+		path /internal/prober/metrics /internal/gatus/metrics
+		header Authorization "Bearer {$PROBE_METRICS_TOKEN}"
+	}
+	handle @metrics_ok {
+		@prober path /internal/prober/metrics
+		handle @prober {
+			rewrite * /metrics
+			reverse_proxy prober:9090
+		}
+		handle {
+			rewrite * /metrics
+			reverse_proxy gatus:8080
+		}
+	}
+	handle /internal/* {
+		respond "not found" 404
+	}
+	# pushes come from the prober on the compose network, never from outside
+	handle /api/v1/endpoints/*/external {
+		respond "not found" 404
+	}
+	handle /metrics {
+		respond "not found" 404
+	}
+	handle {
+		reverse_proxy gatus:8080
+	}
+}

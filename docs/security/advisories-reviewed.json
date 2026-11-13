@@ -1,0 +1,15 @@
+{
+  "note": "umami repository advisories that were triaged against the pinned umami (docs/runbooks/security-patch.md). scripts/supply-chain/advisories.py reports every published advisory not listed here. add an entry only after triage, with the decision.",
+  "umami_repository_advisories": [
+    {
+      "id": "GHSA-8www-cffh-4q98",
+      "reviewed": "2026-11-13",
+      "decision": "published 2023-07-27, before the 3.x line; the pinned 3.5.0 is a later release. listed so the check reports only new advisories."
+    },
+    {
+      "id": "GHSA-3xx8-742v-m4mq",
+      "reviewed": "2026-11-13",
+      "decision": "published 2026-06-30, before 3.5.0 (2026-11-12) was pinned. listed so the check reports only new advisories."
+    }
+  ]
+}

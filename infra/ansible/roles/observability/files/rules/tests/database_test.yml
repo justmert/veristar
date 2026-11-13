@@ -1,0 +1,117 @@
+---
+# promtool test rules for database.yml
+rule_files: [../database.yml]
+evaluation_interval: 1m
+tests:
+  - name: etcd
+    interval: 1m
+    input_series:
+      - series: 'etcd_server_has_leader{job="etcd",node="edge-1"}'
+        values: '1 1 0 0 0 1'
+      - series: 'up{job="etcd",node="edge-1"}'
+        values: '1x5'
+      - series: 'up{job="etcd",node="edge-2"}'
+        values: '1 1 0 0 0 0'
+      - series: 'up{job="etcd",node="edge-3"}'
+        values: '1 1 0 0 0 0'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: EtcdNoLeader
+        exp_alerts:
+          - exp_labels: {severity: page, job: etcd, node: edge-1}
+            exp_annotations:
+              summary: "etcd member on edge-1 sees no leader"
+              runbook: docs/runbooks/alerts.md#etcdnoleader
+      - eval_time: 5m
+        alertname: EtcdNoLeader
+      - eval_time: 4m
+        alertname: EtcdMembersDown
+        exp_alerts:
+          - exp_labels: {severity: page}
+            exp_annotations:
+              summary: "fewer than two of the three etcd members answer"
+              runbook: docs/runbooks/alerts.md#etcdmembersdown
+  - name: patroni leader and replication lag
+    interval: 1m
+    input_series:
+      - series: 'patroni_primary{job="patroni",node="core-1",scope="sa"}'
+        values: '1 1 0 0 0 0'
+      - series: 'patroni_primary{job="patroni",node="core-2",scope="sa"}'
+        values: '0 0 0 0 0 1'
+      - series: 'patroni_cluster_unlocked{job="patroni",node="core-2",scope="sa"}'
+        values: '0x5'
+      - series: 'pg_replication_lag_seconds{job="postgres",node="core-2",instance="10.0.2.23:9187"}'
+        values: '1 1 120x10'
+      - series: 'pg_replication_is_replica{job="postgres",node="core-2",instance="10.0.2.23:9187"}'
+        values: '1x12'
+      - series: 'pg_replication_lag_seconds{job="postgres",node="core-1",instance="10.0.1.22:9187"}'
+        values: '0x12'
+      - series: 'pg_replication_is_replica{job="postgres",node="core-1",instance="10.0.1.22:9187"}'
+        values: '0x12'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: PatroniNoLeader
+        exp_alerts:
+          - exp_labels: {severity: page}
+            exp_annotations:
+              summary: "the patroni cluster has no primary"
+              runbook: docs/runbooks/alerts.md#patroninoleader
+      - eval_time: 5m
+        alertname: PatroniNoLeader
+      - eval_time: 4m
+        alertname: ReplicationLagHigh
+      - eval_time: 9m
+        alertname: ReplicationLagHigh
+        exp_alerts:
+          - exp_labels: {severity: page, node: core-2}
+            exp_annotations:
+              summary: "the replica on core-2 is 2m 0s behind"
+              runbook: docs/runbooks/alerts.md#replicationlaghigh
+  - name: backups
+    interval: 1m
+    input_series:
+      # last backup 25 hours before minute 0, so older than 26 hours from minute 60
+      - series: 'pgbackrest_last_backup_completion_timestamp_seconds{job="node",node="core-1",stanza="platform",type="full"}'
+        values: '-90000x100'
+    alert_rule_test:
+      - eval_time: 50m
+        alertname: BackupTooOld
+      - eval_time: 80m
+        alertname: BackupTooOld
+        exp_alerts:
+          - exp_labels: {severity: page}
+            exp_annotations:
+              summary: "the newest pgbackrest backup is older than 26 hours, or none is known"
+              runbook: docs/runbooks/alerts.md#backuptooold
+  - name: no backup metric at all
+    interval: 1m
+    input_series:
+      - series: 'up{job="node",node="core-1"}'
+        values: '1x30'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: BackupTooOld
+        exp_alerts:
+          - exp_labels: {severity: page}
+            exp_annotations:
+              summary: "the newest pgbackrest backup is older than 26 hours, or none is known"
+              runbook: docs/runbooks/alerts.md#backuptooold
+  - name: wal archiving
+    interval: 1m
+    input_series:
+      - series: 'pg_stat_archiver_failed_count{job="postgres",node="core-1",instance="10.0.1.22:9187"}'
+        values: '0x20 1+1x10'
+      - series: 'pg_stat_archiver_last_archive_age{job="postgres",node="core-1",instance="10.0.1.22:9187"}'
+        values: '30x20 30+60x10'
+      - series: 'pg_replication_is_replica{job="postgres",node="core-1",instance="10.0.1.22:9187"}'
+        values: '0x30'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: WALArchivingFailing
+      - eval_time: 25m
+        alertname: WALArchivingFailing
+        exp_alerts:
+          - exp_labels: {severity: page, job: postgres, node: core-1, instance: "10.0.1.22:9187"}
+            exp_annotations:
+              summary: "wal archiving fails on core-1"
+              runbook: docs/runbooks/alerts.md#walarchivingfailing

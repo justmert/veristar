@@ -109,7 +109,7 @@ domain `sa-local.test` (the reserved `.test` TLD). Local-only settings are in
   fixture user 1001).
 - **PostgreSQL 18.6.** The local inventory sets `postgres_allow_below_min`; staging and
   production are refused until 18.7 exists.
-- **One core node.** The second core node and Patroni replication are this stage.
+- **Two core nodes since this stage** (section 6); this stage ran one.
 - **Scripted events, not browsers.** The web path check uses `tests/gateway/gwclient`,
   which solves the proof in Go. The browser matrices stay with the this stage to 5 suites,
   which start their own stacks and were not re-pointed at this one.
@@ -132,3 +132,45 @@ run 2: sa-lc-core-1 ok=82 changed=0  failed=0 | sa-lc-edge-1 ok=69 changed=0  | 
 An earlier fresh run failed once on edge 3 when quay.io answered one pull of the pinned
 etcd digest with `not found` (the same digest pulled on the other nodes). Image pulls are
 now a separate task retried five times; every other compose failure still fails the node.
+
+## 6. this stage topology: locations, latency, backups
+
+this stage (high availability and drills) extends the topology to the shape of plan
+section 4.1 plus a backup node:
+
+| Node | Location | Private | Runs |
+|---|---|---|---|
+| `sa-lc-edge-1` | fsn1 | 10.99.1.12 | caddy, gateway, collector, nats, etcd |
+| `sa-lc-edge-2` | nbg1 | 10.99.2.13 | same |
+| `sa-lc-edge-3` | hel1 | 10.99.3.14 | same |
+| `sa-lc-core-1` | fsn1 | 10.99.1.22 | patroni member, haproxy, umami, control plane, replayer, metricswriter, jobs, pgbackrest server, caddy |
+| `sa-lc-core-2` | nbg1 | 10.99.2.23 | same |
+| `sa-lc-backup-1` | hel1 | 10.99.3.31 | pgbackrest repository (posix) |
+| `sa-lc-restore-1` | fsn1 | 10.99.1.41 | created only by the restore drill, removed after it |
+
+- **Locations are separate Docker networks** (`sa-lc-fsn1`, `sa-lc-nbg1`,
+  `sa-lc-hel1`). A router container (`sa-lc-router`, `infra/local/lib.sh`) joins
+  them; each node gets the route `10.99.0.0/16 via 10.99.<loc>.254` at every
+  start (`node-init.sh`), as a cloud private network would hand it out. Docker
+  drops packets routed between its bridges unless the source bridge is trusted, so
+  each location network trusts the other two (`trusted_host_interfaces`).
+- **Latency.** `tc netem` on the router delays what it sends into each location:
+  1.5 ms toward fsn1 and nbg1, 11.5 ms toward hel1, 0.3 ms jitter. Round trips are
+  therefore about 3 ms fsn1 to nbg1 and 23 ms to hel1 (measured with TCP connects:
+  4.8 ms and 24.3 ms including the handshake). These numbers are assumptions, not
+  measurements of Hetzner's network; the real cross-location latency is blocked on
+  an operator input.
+- **Partition.** `lc_partition <location>` takes the router's interface into that
+  location down, cutting it off the private network in both directions while its
+  public addresses stay reachable; `lc_heal` restores it.
+- **Backups.** No object storage exists an operator input, so the pgbackrest repository is
+  a posix repository on `sa-lc-backup-1` in hel1, a location with no database node,
+  reached over pgbackrest's TLS protocol with a throwaway CA the backup role creates
+  under `.scratch/scratch/local-converge/pgbackrest-tls`. This is a stand-in, not an
+  equivalent: object storage is not a server pgbackrest talks to, has its own
+  durability and latency, and `repo1-s3-uri-style=host` against Hetzner was never
+  tested. The S3 settings stay in `roles/backup` (`backup_repo_mode: s3`, the
+  default) and are refused until `sa_object_storage` and the S3 keys exist.
+- **Power off** in the drills is `docker kill` of a node container: no clean
+  shutdown of anything inside. Power on is `docker start`, which boots systemd and
+  Docker again; compose restarts the services (`restart: unless-stopped`).

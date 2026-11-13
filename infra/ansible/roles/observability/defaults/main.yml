@@ -1,0 +1,90 @@
+---
+# observability role (the design). runs on every node:
+#   every node   node_exporter and a metrics relay (haproxy) that serves the
+#                /metrics of the node's compose services on the private
+#                address, so prometheus on the core nodes can scrape them
+#                without the edge and core compose projects publishing their
+#                ops ports
+#   core nodes   prometheus, alertmanager (two-node cluster), grafana, one
+#                prometheus-nats-exporter per nats server, postgres_exporter
+#                on the postgres hosts. prometheus and grafana bind loopback
+#                only: reach them with `ssh -L 9090:127.0.0.1:9090` and
+#                `ssh -L 3000:127.0.0.1:3000`
+#   probe node   caddy for status.<BASE_DOMAIN>, gatus and the prober
+observability_dir: /opt/stellar-analytics/observability
+observability_conf_dir: /etc/stellar-analytics/observability
+
+# upstream images, tag and index digest as in the design (resolved
+# 2026-11-12)
+observability_images:
+  prometheus: prom/prometheus:v3.15.1@sha256:fa3302279710be2f21a8301ec17a8b4f2301fd829bd113839b3b6b02b6f191a2
+  alertmanager: prom/alertmanager:v0.34.2@sha256:39d8bb3966c694a124428a3a88fbcffd40bd069129ecd47c059f8a3f17c55f3b
+  grafana: grafana/grafana:13.2.6@sha256:b21409d7951ddcfd63a4b49083e4ef2cc35bc1437d071813bf82bfb238b00bca
+  gatus: twinproduction/gatus:v5.37.0@sha256:094eb186e55235db367e90e9d56140e5897b7044c41de23cde4cc18e6da1242e
+  postgres_exporter: prometheuscommunity/postgres-exporter:v0.20.1@sha256:ac5ec343104fae0e2d84a27bb8d69b38430a11910c5382cad85d478d2bab713e
+  nats_exporter: natsio/prometheus-nats-exporter:0.20.3@sha256:4b8ddc1c86fec360b5cd3d5e1fbc6fb52bdafd5805bba3901cc52926538af255
+  node_exporter: prom/node-exporter:v1.12.1@sha256:1b4e4438faca4dd7e001dd445d161a4a2091b0fededa84093b3a8dfeae1f1be0
+  haproxy: haproxy:3.4.7@sha256:f6d2ee87b47192d9cc8c22e88fef405122ff339859644883edc2a7d1827f87b3
+  # the platform's own images (deploy/images/go-service.Dockerfile with
+  # CMD=prober, and the custom caddy build)
+  prober: "{{ sa_image_registry }}/prober:{{ sa_image_tag }}"
+  caddy: "{{ sa_image_registry }}/caddy:{{ sa_image_tag }}"
+
+# the compose project of each tier, whose network the relay joins
+observability_tier_network:
+  edge: stellar-analytics-edge_default
+  core: stellar-analytics-core_default
+
+# relay ports on the private address, and the compose service and port
+# behind each. the collector's own telemetry is on 8888 (collector/otelcol.yaml).
+observability_relay:
+  edge:
+    - {job: gateway, port: 9301, target: "gateway:9090"}
+    - {job: collector, port: 9302, target: "collector:8888"}
+  core:
+    - {job: controlplane, port: 9303, target: "controlplane:9090"}
+    - {job: replayer, port: 9304, target: "replayer:9090"}
+    - {job: metricswriter, port: 9305, target: "metricswriter:9090"}
+    - {job: jobs, port: 9306, target: "jobs:9090"}
+observability_node_exporter_port: 9100
+observability_postgres_exporter_port: 9187
+observability_nats_monitor_port: 8222
+observability_etcd_client_port: 2379
+observability_patroni_port: 8008
+observability_alertmanager_port: 9093
+observability_alertmanager_cluster_port: 9094
+
+observability_scrape_interval: 15s
+observability_prometheus_retention: 30d
+
+# the probe (the design): every interval one web event and one otlp
+# metric. FreshnessMaxDelay is the 10 minutes of the plan.
+observability_probe_interval: 30s
+observability_probe_timeout: 10s
+observability_probe_freshness_max_delay: 10m
+observability_probe_cert_min_validity: 336h
+# umami drops events whose user agent looks like a bot, so the probe sends a
+# current browser user agent; it is the only thing about the probe that
+# imitates a browser, and it is set here where it can be seen
+observability_probe_user_agent: "Mozilla/5.0 (X11; Linux x86_64; rv:146.0) Gecko/20100101 Firefox/146.0"
+observability_probe_domain: "probe.{{ sa_base_domain }}"
+
+# gatus keeps this many results per endpoint: one week at 30 s, so the daily
+# sloreport collection (docs/slo/data) can miss six days and still catch up.
+# sloreport collect -page-size must be the same number.
+observability_gatus_max_results: 20160
+
+# caddy and haproxy on the nodes do not expose metrics yet: the edge and core
+# caddyfiles keep the admin api on loopback without the metrics option, and
+# haproxy.cfg has no prometheus-exporter frontend. both belong to the edge and
+# core roles; once they publish an endpoint, list it here as {job, port,
+# target} entries of observability_relay and prometheus scrapes it.
+
+# postgresql runs under patroni on these core nodes (the core role's
+# core_postgres_hosts); postgres_exporter runs beside each
+observability_postgres_hosts: "{{ core_postgres_hosts | default(groups['core'][:1]) }}"
+observability_patroni_hosts: "{{ observability_postgres_hosts }}"
+observability_core_dir: /opt/stellar-analytics/core
+
+# the checkout the controller runs from (playbooks live in infra/ansible/playbooks)
+observability_repo_root: "{{ playbook_dir }}/../../.."

@@ -17,7 +17,11 @@ RUN test "$(xcaddy version | cut -d' ' -f1)" = "v0.4.7" || { echo "xcaddy is not
 # replace-response has no tagged releases, so its pseudo-version is the pin
 RUN xcaddy build v2.11.9 --output /out/caddy \
       --with github.com/caddyserver/replace-response@v0.0.0-20250618171559-80962887e4c6 \
-      --with github.com/caddy-dns/bunny@v1.2.0
+      --with github.com/caddy-dns/bunny@v1.2.0 \
+      # caddy 2.11.9 requires golang.org/x/net v0.60.0, which has fixable high
+      # findings (CVE-2026-78661 and others, trivy 2026-11-13); v0.62.0 is the
+      # the design pin. remove this line once a caddy release requires it.
+      --replace golang.org/x/net=golang.org/x/net@v0.62.0
 
 FROM caddy:2.11.9@sha256:e40b94d0a43b5ff69cb20568d73f10c70703df7b0ffc2298eb3d723cdc9d0bd1
 
@@ -28,3 +32,23 @@ COPY --from=build /out/caddy /usr/bin/caddy
 RUN caddy version | grep -q '^v2\.11\.9 ' \
  && caddy list-modules | grep -qx 'http.handlers.replace_response' \
  && caddy list-modules | grep -qx 'dns.providers.bunny'
+
+# the official image runs caddy as root. caddy needs no root here: docker sets
+# net.ipv4.ip_unprivileged_port_start to 0 inside a container's network
+# namespace, so an unprivileged process binds 80 and 443 without any
+# capability, and the compose files drop every capability. file capabilities
+# would not help anyway, because no-new-privileges ignores them. /data and
+# /config (certificates, the local ca, autosave) belong to this user, so a
+# fresh named volume starts with the right owner. a volume created by an
+# older root image keeps root ownership and must be chowned to 10001 once
+# (docs/runbooks/security-patch.md, "caddy runs as non-root").
+# the copied binary keeps the base image's cap_net_bind_service file
+# capability. with every capability dropped and no-new-privileges, the
+# kernel refuses to exec a file whose capabilities it cannot grant
+# ("operation not permitted"), and no capability is needed (see above), so
+# the file capability is removed.
+RUN setcap -r /usr/bin/caddy \
+ && addgroup -S -g 10001 caddy \
+ && adduser -S -D -H -u 10001 -G caddy -h /data caddy \
+ && chown -R 10001:10001 /data /config
+USER 10001:10001

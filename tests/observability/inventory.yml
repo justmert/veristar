@@ -1,0 +1,31 @@
+# TEST INVENTORY for render.yml: the nodes of the this stage local test stack
+# (compose.yml). addresses are the stack's container addresses.
+all:
+  vars:
+    sa_environment: local
+    sa_base_domain: p17.test
+    sa_hostnames: {in: in.p17.test, otlp: otlp.p17.test, app: app.p17.test, web: web.p17.test, status: status.p17.test}
+    observability_test_webhook_base: http://receiver:8099
+    observability_probe_ca_file: /etc/prober/ca.crt
+    observability_probe_tls: /certs/node.crt /certs/node.key
+    # 45 s instead of 10 minutes, so the freshness drill fails within two
+    # minutes of stopping the replayer or the metrics writer
+    observability_probe_freshness_max_delay: 45s
+    # no patroni here; postgres runs as one plain container
+    observability_patroni_hosts: []
+    observability_postgres_hosts: [core-1]
+    sa_image_registry: local
+    sa_image_tag: p17
+  children:
+    edge:
+      hosts:
+        edge-1: {sa_tier: edge, sa_private_ip: 172.30.17.21, sa_public_ipv4: 172.30.17.21, observability_relay_targets: [{job: gateway, port: 9301, target: "gateway-1:9090"}, {job: collector, port: 9302, target: "collector-1:8888"}]}
+        edge-2: {sa_tier: edge, sa_private_ip: 172.30.17.22, sa_public_ipv4: 172.30.17.22, observability_relay_targets: [{job: gateway, port: 9301, target: "gateway-2:9090"}, {job: collector, port: 9302, target: "collector-2:8888"}]}
+        edge-3: {sa_tier: edge, sa_private_ip: 172.30.17.23, sa_public_ipv4: 172.30.17.23, observability_relay_targets: [{job: gateway, port: 9301, target: "gateway-3:9090"}, {job: collector, port: 9302, target: "collector-3:8888"}]}
+    core:
+      hosts:
+        core-1: {sa_tier: core, sa_private_ip: 172.30.17.31, sa_public_ipv4: 172.30.17.31, observability_relay_targets: [{job: controlplane, port: 9303, target: "controlplane-1:9090"}, {job: replayer, port: 9304, target: "replayer-1:9090"}, {job: metricswriter, port: 9305, target: "metricswriter-1:9090"}, {job: jobs, port: 9306, target: "jobs-1:9090"}]}
+        core-2: {sa_tier: core, sa_private_ip: 172.30.17.32, sa_public_ipv4: 172.30.17.32, observability_relay_targets: [{job: controlplane, port: 9303, target: "controlplane-2:9090"}, {job: replayer, port: 9304, target: "replayer-2:9090"}, {job: metricswriter, port: 9305, target: "metricswriter-2:9090"}, {job: jobs, port: 9306, target: "jobs-2:9090"}]}
+    probe:
+      hosts:
+        probe-1: {sa_tier: probe, sa_public_ipv4: 172.30.17.41}

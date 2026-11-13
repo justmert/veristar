@@ -1,0 +1,96 @@
+# managed by ansible (infra/ansible/roles/observability). gatus 5.37.0 on the
+# probe node, outside the main provider: the public status page on
+# status.<BASE_DOMAIN> and alerting to discord an operator input.
+#
+# what gatus checks itself: the public hostnames, the tracker file, the
+# console and the umami host. what the prober pushes as external endpoints:
+# ingestion (web event and otlp metric), freshness through the machine api,
+# the tracker file's sha-384 against the release manifest, and every node by
+# address with sni. gatus 5.37.0 cannot do the last two: its conditions have
+# no hash function, and it sets no tls server name from a Host header, so a
+# check by address cannot present the right sni (client/client.go).
+metrics: true
+storage:
+  type: sqlite
+  path: /data/gatus.db
+  # one week at 30 s; cmd/sloreport collects each day into docs/slo/data
+  # because gatus keeps hourly uptime for only 30 days
+  maximum-number-of-results: {{ observability_gatus_max_results }}
+  maximum-number-of-events: 500
+ui:
+  title: "{{ sa_base_domain }} status"
+  header: "Stellar Analytics status"
+web:
+  port: 8080
+
+alerting:
+  discord:
+    webhook-url: "${GATUS_DISCORD_WEBHOOK_URL}"
+    title: "{{ sa_environment }} status"
+    default-alert:
+      enabled: true
+      failure-threshold: 3
+      success-threshold: 2
+      send-on-resolved: true
+
+x-default: &default
+  interval: {{ observability_probe_interval }}
+  client:
+    timeout: {{ observability_probe_timeout }}
+  alerts:
+    - type: discord
+
+endpoints:
+  - name: in host
+    group: hosts
+    url: "https://{{ sa_hostnames.in }}/v/{{ observability_tracker_latest }}/sdk.js"
+    <<: *default
+    conditions:
+      - "[STATUS] == 200"
+      - "len([BODY]) > 0"
+      - "[CERTIFICATE_EXPIRATION] > {{ observability_probe_cert_min_validity }}"
+  # without a token the collector must refuse with 401: the answer comes from
+  # tenantauth behind caddy, so it proves the whole otlp path is up
+  - name: otlp host
+    group: hosts
+    url: "https://{{ sa_hostnames.otlp }}/v1/metrics"
+    method: POST
+    headers:
+      Content-Type: application/x-protobuf
+    <<: *default
+    conditions:
+      - "[STATUS] == 401"
+      - "[CERTIFICATE_EXPIRATION] > {{ observability_probe_cert_min_validity }}"
+  - name: console
+    group: hosts
+    url: "https://{{ sa_hostnames.app }}/"
+    <<: *default
+    conditions:
+      - "[STATUS] == 200"
+      - "[CERTIFICATE_EXPIRATION] > {{ observability_probe_cert_min_validity }}"
+  - name: umami host
+    group: hosts
+    url: "https://{{ sa_hostnames.web }}/api/heartbeat"
+    <<: *default
+    conditions:
+      - "[STATUS] == 200"
+      - "[CERTIFICATE_EXPIRATION] > {{ observability_probe_cert_min_validity }}"
+  - name: tracker file
+    group: hosts
+    url: "https://{{ sa_hostnames.in }}/v/{{ observability_tracker_latest }}/sdk.js"
+    <<: *default
+    conditions:
+      - "[STATUS] == 200"
+      - "len([BODY]) == {{ observability_tracker_latest_bytes }}"
+
+external-endpoints:
+{% for e in observability_external_endpoints %}
+  - name: "{{ e.name }}"
+    group: {{ e.group }}
+    token: "${GATUS_EXTERNAL_TOKEN}"
+    heartbeat:
+      # a missing push is an outage of the probe, alerted like a failure
+      interval: 2m
+    alerts:
+      - type: discord
+{% endfor %}

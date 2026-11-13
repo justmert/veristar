@@ -43,6 +43,7 @@
   loop:
     - { path: "{{ core_dir }}", mode: "0755" }
     - { path: "{{ core_conf_dir }}", mode: "0755" }
+    - { path: "{{ core_drain_dir }}", mode: "0755" }
 
 - name: Assemble the core caddyfile on the controller
   ansible.builtin.command:
@@ -67,6 +68,14 @@
     mode: "0644"
   register: core_caddyfile_file
 
+# public, because patroni.yml and compose.yml use the backup role's settings
+- name: Write the pgbackrest settings
+  ansible.builtin.include_role:
+    name: backup
+    tasks_from: pg.yml
+    public: true
+  when: core_runs_postgres
+
 # the postgres-ha image runs patroni as the postgres user (uid 999 in the
 # official image), which must read its config and nobody else
 - name: Write the patroni config
@@ -88,6 +97,38 @@
     group: root
     mode: "0644"
   notify: Reload haproxy
+
+# docker's restart policy does not retry a container whose start failed
+# while the daemon came up. after an unclean power-off in the this stage edge
+# loss drill the nats container stayed exited that way, so a oneshot unit
+# starts every existing container of the project once docker is up. start
+# never recreates anything, so it cannot apply a half-written change.
+- name: Install the start-at-boot unit of the compose project
+  ansible.builtin.copy:
+    content: |
+      # managed by ansible (infra/ansible/roles/core)
+      [Unit]
+      Description=start the core compose project's containers after boot
+      After=docker.service
+      Requires=docker.service
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/bin/docker compose --project-directory {{ core_dir }} start
+
+      [Install]
+      WantedBy=multi-user.target
+    dest: /etc/systemd/system/sa-core-start.service
+    owner: root
+    group: root
+    mode: "0644"
+  register: core_start_unit
+
+- name: Enable the start-at-boot unit
+  ansible.builtin.systemd_service:
+    name: sa-core-start.service
+    enabled: true
+    daemon_reload: "{{ core_start_unit is changed }}"
 
 - name: Write the compose project
   ansible.builtin.template:
@@ -116,7 +157,9 @@
     project_src: "{{ core_dir }}"
     files: [compose.yml]
     # umami needs its database, which bootstrap creates, so it is not infra
-    services: "{{ (['postgres', 'haproxy'] if core_runs_postgres else ['haproxy']) if core_stage == 'infra' else omit }}"
+    services: >-
+      {{ ((['postgres', 'haproxy'] + (['pgbackrest'] if backup_repo_mode == 'posix-host' else []))
+          if core_runs_postgres else ['haproxy']) if core_stage == 'infra' else omit }}
     state: present
     pull: missing
     wait: true
@@ -132,6 +175,58 @@
 - name: Apply config reloads now
   ansible.builtin.meta: flush_handlers
 
+# bootstrap.dcs applies only when the cluster is created; afterwards the
+# live settings are kept equal to core_patroni_dcs through the rest api
+- name: Read the patroni cluster settings
+  ansible.builtin.uri:
+    url: "http://{{ sa_private_ip }}:8008/config"
+    return_content: true
+  register: core_dcs
+  until: core_dcs.status == 200
+  retries: 60
+  delay: 2
+  when: core_runs_postgres and inventory_hostname == core_postgres_hosts[0]
+
+- name: Apply the patroni cluster settings
+  ansible.builtin.uri:
+    url: "http://{{ sa_private_ip }}:8008/config"
+    method: PATCH
+    body_format: json
+    body: "{{ core_patroni_dcs }}"
+    url_username: patroni
+    url_password: "{{ sa_secrets.patroni_restapi_password }}"
+    force_basic_auth: true
+  when:
+    - core_runs_postgres and inventory_hostname == core_postgres_hosts[0]
+    - core_dcs.json | dict2items | selectattr('key', 'in', core_patroni_dcs.keys() | list) | items2dict != core_patroni_dcs
+  changed_when: true
+  no_log: true
+
+- name: Install the retain-web timer
+  ansible.builtin.include_tasks: retain_web.yml
+  when: core_stage != 'infra'
+
+- name: Install the backup schedules on the database nodes (object storage)
+  ansible.builtin.include_role:
+    name: backup
+    tasks_from: timers.yml
+  vars:
+    backup_compose_dir: "{{ core_dir }}"
+    backup_compose_service: postgres
+  when: core_runs_postgres and backup_repo_mode == 's3'
+
+# deploy.yml drains the node first, which turns port 80 to 503 on purpose;
+# a drained node is checked behind caddy, at the same composite endpoint
+- name: Wait for this node's composite health behind caddy while it is drained
+  ansible.builtin.command:
+    argv: [docker, compose, --project-directory, "{{ core_dir }}", exec, -T, caddy, wget, -q, -O, /dev/null, "http://controlplane:9090/corez"]
+  register: core_drained_health
+  until: core_drained_health.rc == 0
+  retries: 90
+  delay: 2
+  when: core_stage != 'infra' and sa_draining | default(false)
+  changed_when: false
+
 - name: Wait for this node's composite health on port 80
   ansible.builtin.uri:
     url: "http://{{ sa_public_ipv4 }}/"
@@ -141,5 +236,5 @@
   until: core_health.status == 308
   retries: 90
   delay: 2
-  when: core_stage != 'infra'
+  when: core_stage != 'infra' and not (sa_draining | default(false))
   changed_when: false

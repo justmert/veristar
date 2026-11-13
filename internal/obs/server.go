@@ -40,7 +40,16 @@ const readyTimeout = 2 * time.Second
 // /healthz answers 200 whenever the process can serve http at all.
 // /readyz runs every check and answers 503 naming the first failing one, so
 // a load balancer stops sending traffic while a dependency is down.
+//
+// every check is also exported as ops_ready_check{check} (1 ready, 0 not),
+// evaluated at scrape time, so prometheus sees the same answer a load
+// balancer gets from /readyz and an alert can name the failing dependency.
 func NewOpsHandler(reg *prometheus.Registry, log *slog.Logger, checks ...Check) http.Handler {
+	if err := reg.Register(&readinessCollector{checks: checks}); err != nil {
+		// a second handler on one registry would export the checks twice;
+		// it is a wiring mistake, so it is logged where it happens
+		log.Error("readiness metric not registered", "error", err.Error())
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
@@ -66,6 +75,30 @@ func NewOpsHandler(reg *prometheus.Registry, log *slog.Logger, checks ...Check) 
 		EnableOpenMetrics: true,
 	}))
 	return mux
+}
+
+var readyCheckDesc = prometheus.NewDesc("ops_ready_check",
+	"1 when the named readiness check passes at scrape time, 0 when it fails. /readyz answers 503 while any is 0.",
+	[]string{"check"}, nil)
+
+// readinessCollector runs the readiness checks on every scrape. each check
+// gets its own deadline, so one hung dependency does not hide the others.
+type readinessCollector struct {
+	checks []Check
+}
+
+func (c *readinessCollector) Describe(ch chan<- *prometheus.Desc) { ch <- readyCheckDesc }
+
+func (c *readinessCollector) Collect(ch chan<- prometheus.Metric) {
+	for _, chk := range c.checks {
+		ctx, cancel := context.WithTimeout(context.Background(), readyTimeout)
+		v := 1.0
+		if err := chk.Fn(ctx); err != nil {
+			v = 0
+		}
+		cancel()
+		ch <- prometheus.MustNewConstMetric(readyCheckDesc, prometheus.GaugeValue, v, chk.Name)
+	}
 }
 
 // NewServer returns an http.Server with timeouts suited to small internal endpoints.

@@ -760,3 +760,35 @@ func TestStartRateLimited(t *testing.T) {
 	require.Equal(t, "1", limited.Header.Get("Retry-After"))
 	require.Nil(t, setCookie(t, limited, "sa_oauth"), "a refused start sets no state cookie")
 }
+
+// one sealed state cookie replayed with made-up codes: each replay passes the
+// state check, so only the exchange bucket stops the requests to github
+func TestCallbackExchangeRateLimited(t *testing.T) {
+	e := newEnv(t)
+	b := e.browser(t)
+	authorize := b.start("")
+	state := authorize.Query().Get("state")
+	sealed := b.cookie("sa_oauth")
+	require.NotNil(t, sealed)
+	plain := e.cp.Client()
+	plain.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	limited := 0
+	for i := range auth.ExchangeBurst + 10 {
+		u := e.origin + callbackPath + "?state=" + url.QueryEscape(state) + "&code=made-up-" + strconv.Itoa(i)
+		req, err := http.NewRequest(http.MethodGet, u, nil)
+		require.NoError(t, err)
+		req.AddCookie(&http.Cookie{Name: "sa_oauth", Value: sealed.Value})
+		res := fetch(t, plain, req)
+		require.Equal(t, http.StatusSeeOther, res.StatusCode)
+		switch loc := res.Header.Get("Location"); loc {
+		case "/sign-in?error=exchange_failed":
+			require.Zero(t, limited, "an exchange ran after the bucket was empty")
+		case "/sign-in?error=rate_limited":
+			limited++
+		default:
+			t.Fatalf("unexpected redirect %s", loc)
+		}
+	}
+	require.GreaterOrEqual(t, limited, 1, "the bucket never ran out")
+	require.LessOrEqual(t, limited, 10)
+}

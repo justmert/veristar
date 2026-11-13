@@ -1,0 +1,27 @@
+---
+# prometheus rereads its config and rules on POST /-/reload (--web.enable-lifecycle)
+- name: Reload prometheus
+  ansible.builtin.uri:
+    url: http://127.0.0.1:9090/-/reload
+    method: POST
+    status_code: 200
+
+- name: Reload alertmanager
+  ansible.builtin.command:
+    argv: [docker, compose, --project-directory, "{{ observability_dir }}", kill, --signal, HUP, alertmanager]
+  changed_when: true
+
+- name: Restart relay
+  ansible.builtin.command:
+    argv: [docker, compose, --project-directory, "{{ observability_dir }}", restart, relay]
+  changed_when: true
+
+- name: Restart gatus
+  ansible.builtin.command:
+    argv: [docker, compose, --project-directory, "{{ observability_dir }}", restart, gatus]
+  changed_when: true
+
+- name: Reload probe caddy
+  ansible.builtin.command:
+    argv: [docker, compose, --project-directory, "{{ observability_dir }}", exec, caddy, caddy, reload, --config, /etc/caddy/Caddyfile]
+  changed_when: true

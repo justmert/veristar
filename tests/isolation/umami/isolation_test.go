@@ -588,6 +588,9 @@ func (w *world) body(o op) any {
 	return nil
 }
 
+// caddyRefusal is the body of every respond ... 403 in web.Caddyfile
+const caddyRefusal = "forbidden"
+
 func denied(status int) bool {
 	return status == http.StatusUnauthorized || status == http.StatusForbidden || status == http.StatusNotFound
 }
@@ -631,8 +634,12 @@ func (w *world) check(t *testing.T, o op, edge bool) string {
 	}
 	r := w.call(t, edge, w.b.token, o.method, path, w.body(o))
 	if edge && umamictr.RefusedAtEdge(o.method, path) {
-		if r.status != http.StatusForbidden {
-			t.Errorf("%s %s %s: http %d, want 403 from caddy: %.300s", where, o.method, path, r.status, r.body)
+		// the refusal must be caddy's own (web.Caddyfile answers "forbidden"
+		// with 403), not umami's: umami also refuses most of these for user
+		// b, so a status check alone would stay green after a deny rule was
+		// deleted and the route reached umami again
+		if r.status != http.StatusForbidden || r.body != caddyRefusal {
+			t.Errorf("%s %s %s: http %d %.300q, want caddy's own refusal: http 403 %q", where, o.method, path, r.status, r.body, caddyRefusal)
 		}
 		return ""
 	}

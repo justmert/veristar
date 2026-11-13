@@ -1,0 +1,43 @@
+---
+# pgbackrest (the design). one stanza holds the cluster's backups and wal.
+backup_stanza: sa
+
+# where the repository lives:
+#   s3          hetzner object storage in a location without a database node
+#               (staging and production; needs an operator input: sa_object_storage in
+#               the inventory and the s3 keys in the sops file)
+#   posix-host  a separate node of the backup group holding a posix
+#               repository, reached over pgbackrest's tls protocol. the local
+#               converge uses it as a stand-in for object storage; it is not
+#               equivalent (docs/deploy/local-converge.md section 6).
+backup_repo_mode: s3
+
+backup_dir: /opt/stellar-analytics/backup
+backup_conf_dir: /etc/stellar-analytics/pgbackrest
+
+# pgdata path inside the postgres-ha image (roles/core patroni.yml)
+backup_pg_path: /var/lib/postgresql/patroni/data
+
+# retention: four weekly full backups, and the differentials of the last
+# seven days. wal needed by a kept backup is kept with it, so a restore can
+# reach any point from the oldest full backup to the newest archived wal.
+backup_retention_full: 4
+backup_retention_diff: 7
+
+# schedules, systemd calendar expressions in utc
+backup_full_calendar: "Sun *-*-* 01:00:00 UTC"
+backup_diff_calendar: "Mon..Sat *-*-* 01:00:00 UTC"
+# verify reads every file in the repository and checks its checksum, then
+# check proves a fresh wal segment reaches the repository
+backup_verify_calendar: "*-*-* 05:30:00 UTC"
+
+# posix-host mode only: where the controller keeps the throwaway tls ca and
+# node certificates of pgbackrest's tls protocol
+backup_tls_controller_dir: ""
+backup_tls_port: 8432
+
+# the scheduled commands; each runs inside the pgbackrest container
+backup_jobs:
+  - { name: full, calendar: "{{ backup_full_calendar }}", commands: ["--type=full backup"] }
+  - { name: diff, calendar: "{{ backup_diff_calendar }}", commands: ["--type=diff backup"] }
+  - { name: verify, calendar: "{{ backup_verify_calendar }}", commands: [verify, check] }

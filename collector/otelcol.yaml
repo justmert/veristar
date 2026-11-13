@@ -155,5 +155,14 @@ service:
     logs:
       level: info
       encoding: json
+    # the collector's own metrics for prometheus (the design). the port
+    # is not published by any compose file; only the node's metrics relay
+    # on the private network reaches it. no attribute carries tenant data.
     metrics:
-      level: none
+      level: normal
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: 0.0.0.0
+                port: 8888

@@ -8,7 +8,7 @@ require (
 	github.com/go-chi/chi/v5 v5.5.0
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.12.0
-	github.com/klauspost/compress v1.20.1
+	github.com/klauspost/compress v1.20.4
 	github.com/moby/moby/api v1.56.1
 	github.com/nats-io/nats.go v1.55.0
 	github.com/oschwald/maxminddb-golang/v2 v2.9.0
@@ -20,6 +20,7 @@ require (
 	github.com/testcontainers/testcontainers-go v0.45.0
 	go.opentelemetry.io/collector/client v1.71.0
 	go.opentelemetry.io/collector/component v1.71.0
+	go.opentelemetry.io/collector/component/componentstatus v0.165.0
 	go.opentelemetry.io/collector/config/configopaque v1.71.0
 	go.opentelemetry.io/collector/consumer v1.71.0
 	go.opentelemetry.io/collector/consumer/consumererror v0.165.0
@@ -116,7 +117,6 @@ require (
 	github.com/tklauser/numcpus v0.12.0 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
-	go.opentelemetry.io/collector/component/componentstatus v0.165.0 // indirect
 	go.opentelemetry.io/collector/component/componenttest v0.165.0 // indirect
 	go.opentelemetry.io/collector/confmap v1.71.0 // indirect
 	go.opentelemetry.io/collector/consumer/xconsumer v0.165.0 // indirect

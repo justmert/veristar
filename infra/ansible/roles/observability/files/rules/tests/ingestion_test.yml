@@ -1,0 +1,149 @@
+---
+# promtool test rules for ingestion.yml. each alert fires on its condition
+# and stays quiet (or resolves) without it.
+rule_files: [../ingestion.yml]
+evaluation_interval: 1m
+tests:
+  - name: web error ratio
+    interval: 1m
+    input_series:
+      - series: 'gateway_responses_total{job="gateway",node="edge-1",route="event",outcome="accepted"}'
+        values: '0+600x30'
+      # 0.5% for 10 minutes, then 5%
+      - series: 'gateway_responses_total{job="gateway",node="edge-1",route="event",outcome="rejected_unavailable"}'
+        values: '0+3x10 30+30x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: IngestWebErrorRatioHigh
+      - eval_time: 25m
+        alertname: IngestWebErrorRatioHigh
+        exp_alerts:
+          - exp_labels: {severity: page}
+            exp_annotations:
+              summary: "4.762% of web events refused as unavailable"
+              runbook: docs/runbooks/alerts.md#ingestweberrorratiohigh
+  - name: otlp error ratio
+    interval: 1m
+    input_series:
+      - series: 'otelcol_receiver_accepted_metric_points{job="collector",node="edge-1"}'
+        values: '0+100x30'
+      - series: 'otelcol_receiver_refused_metric_points{job="collector",node="edge-1"}'
+        values: '0x10 0+25x20'
+      - series: 'otelcol_receiver_failed_metric_points{job="collector",node="edge-1"}'
+        values: '0x10 0+25x20'
+      # tenantguard passes everything here; the next group shows that its
+      # drops are not counted
+      - series: 'otelcol_processor_incoming_items{job="collector",node="edge-1",processor="tenantguard"}'
+        values: '0+100x30'
+      - series: 'otelcol_processor_outgoing_items{job="collector",node="edge-1",processor="tenantguard"}'
+        values: '0+100x30'
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: IngestOTLPErrorRatioHigh
+      - eval_time: 25m
+        alertname: IngestOTLPErrorRatioHigh
+        exp_alerts:
+          - exp_labels: {severity: page}
+            exp_annotations:
+              summary: "33.33% of otlp points refused by the collector"
+              runbook: docs/runbooks/alerts.md#ingestotlperrorratiohigh
+  - name: a tenant's rate limit is not a platform error
+    interval: 1m
+    input_series:
+      - series: 'otelcol_receiver_accepted_metric_points{job="collector",node="edge-1"}'
+        values: '0+100x30'
+      - series: 'otelcol_receiver_refused_metric_points{job="collector",node="edge-1"}'
+        values: '0+900x30'
+      - series: 'otelcol_receiver_failed_metric_points{job="collector",node="edge-1"}'
+        values: '0x30'
+      - series: 'otelcol_processor_incoming_items{job="collector",node="edge-1",processor="tenantguard"}'
+        values: '0+1000x30'
+      - series: 'otelcol_processor_outgoing_items{job="collector",node="edge-1",processor="tenantguard"}'
+        values: '0+100x30'
+    alert_rule_test:
+      - eval_time: 25m
+        alertname: IngestOTLPErrorRatioHigh
+  - name: edge node readiness and visitor secret
+    interval: 1m
+    input_series:
+      - series: 'up{job="gateway",node="edge-1",instance="10.0.1.12:9301"}'
+        values: '1x20'
+      - series: 'ops_ready_check{job="gateway",node="edge-1",instance="10.0.1.12:9301",check="queue"}'
+        values: '1x20'
+      - series: 'ops_ready_check{job="gateway",node="edge-1",instance="10.0.1.12:9301",check="daily_secrets"}'
+        values: '1x4 0x10 1x5'
+      - series: 'up{job="collector",node="edge-1",instance="10.0.1.12:9302"}'
+        values: '1x20'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: EdgeNodeNotReady
+      - eval_time: 8m
+        alertname: EdgeNodeNotReady
+        exp_alerts:
+          - exp_labels: {severity: page, node: edge-1, instance: "10.0.1.12:9301"}
+            exp_annotations:
+              summary: "edge node edge-1 is not ready"
+              runbook: docs/runbooks/alerts.md#edgenodenotready
+      - eval_time: 7m
+        alertname: VisitorSecretMissing
+        exp_alerts:
+          - exp_labels: {severity: page, job: gateway, node: edge-1, instance: "10.0.1.12:9301", check: daily_secrets}
+            exp_annotations:
+              summary: "gateway edge-1 cannot load today's visitor secret"
+              runbook: docs/runbooks/alerts.md#visitorsecretmissing
+      - eval_time: 18m
+        alertname: VisitorSecretMissing
+      - eval_time: 18m
+        alertname: EdgeNodeNotReady
+  - name: gateway down
+    interval: 1m
+    input_series:
+      - series: 'up{job="gateway",node="edge-2",instance="10.0.2.13:9301"}'
+        values: '1 1 0 0 0 0'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: EdgeNodeNotReady
+        exp_alerts:
+          - exp_labels: {severity: page, job: gateway, node: edge-2, instance: "10.0.2.13:9301"}
+            exp_annotations:
+              summary: "edge node edge-2 is not ready"
+              runbook: docs/runbooks/alerts.md#edgenodenotready
+  - name: db-ip age, certificates, cardinality
+    interval: 1m
+    input_series:
+      # built 2026-09-01 and 2026-11-01; evaluated at unix 0 + offsets, so
+      # the timestamps are relative: 50 days and 10 days before eval time
+      - series: 'gateway_geo_build_timestamp_seconds{job="gateway",node="edge-1"}'
+        values: '-4320000x5'
+      - series: 'gateway_geo_build_timestamp_seconds{job="gateway",node="edge-2"}'
+        values: '-864000x5'
+      - series: 'prober_tls_certificate_expiry_timestamp_seconds{job="prober",node="edge-1",host="in.example.org"}'
+        values: '864000x5'
+      - series: 'prober_tls_certificate_expiry_timestamp_seconds{job="prober",node="edge-2",host="in.example.org"}'
+        values: '5184000x5'
+      - series: 'metricswriter_cardinality_overflow_points_total{job="metricswriter",node="core-1"}'
+        values: '0 0 4 4 4 4'
+    alert_rule_test:
+      - eval_time: 0m
+        alertname: DBIPFileOld
+        exp_alerts:
+          - exp_labels: {severity: ticket, job: gateway, node: edge-1}
+            exp_annotations:
+              summary: "db-ip file on edge-1 was built 50d 0h 0m 0s ago"
+              runbook: docs/runbooks/alerts.md#dbipfileold
+      - eval_time: 0m
+        alertname: CertificateExpiringSoon
+        exp_alerts:
+          - exp_labels: {severity: page, job: prober, node: edge-1, host: in.example.org}
+            exp_annotations:
+              summary: "in.example.org on edge-1 serves a certificate that expires in 10d 0h 0m 0s"
+              runbook: docs/runbooks/alerts.md#certificateexpiringsoon
+      - eval_time: 3m
+        alertname: CardinalityCapHit
+        exp_alerts:
+          - exp_labels: {severity: ticket, job: metricswriter, node: core-1}
+            exp_annotations:
+              summary: "4 api points went to the overflow route or service in 15 minutes"
+              runbook: docs/runbooks/alerts.md#cardinalitycaphit
+      - eval_time: 1m
+        alertname: CardinalityCapHit

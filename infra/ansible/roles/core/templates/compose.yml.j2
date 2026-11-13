@@ -44,6 +44,9 @@ services:
     volumes:
       - {{ core_conf_dir }}/patroni.yml:/etc/patroni/patroni.yml:ro
       - pgdata:/var/lib/postgresql
+      # archive_command runs pgbackrest archive-push (roles/backup)
+      - {{ backup_conf_dir }}:/etc/pgbackrest:ro
+      - pgrun:/var/run/postgresql
     ports:
       - "{{ sa_private_ip }}:5432:5432"
       - "{{ sa_private_ip }}:8008:8008"
@@ -55,6 +58,32 @@ services:
       retries: 60
       start_period: 30s
 
+{% if backup_repo_mode == 'posix-host' %}
+  # the repository node takes backups by reading this node through its own
+  # pgbackrest server (local converge only, roles/backup)
+  pgbackrest:
+    <<: *defaults
+    image: {{ platform_images.postgres_ha }}
+    # created after postgres: two containers that create the same new
+    # volume at once race on copying the image's directory into it
+    depends_on: [postgres]
+    entrypoint: ["pgbackrest", "server"]
+    command: []
+    environment:
+      TZ: UTC
+    volumes:
+      - {{ backup_conf_dir }}:/etc/pgbackrest:ro
+      - pgdata:/var/lib/postgresql
+      - pgrun:/var/run/postgresql
+    ports:
+      - "{{ sa_private_ip }}:{{ backup_tls_port }}:{{ backup_tls_port }}"
+    healthcheck:
+      test: ["CMD", "pgbackrest", "server-ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+{% endif %}
 {% endif %}
   haproxy:
     <<: *defaults
@@ -179,6 +208,8 @@ services:
       NODE_HEALTH_PATH: /corez
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # deploy.yml's drain flag (deploy/caddy/assemble.sh)
+      - {{ core_drain_dir }}:/drain:ro
       - caddydata:/data
       - caddyconfig:/config
     ports:
@@ -213,6 +244,7 @@ services:
 volumes:
 {% if core_runs_postgres %}
   pgdata:
+  pgrun:
 {% endif %}
   caddydata:
   caddyconfig:

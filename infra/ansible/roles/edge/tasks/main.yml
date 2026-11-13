@@ -29,6 +29,7 @@
     - { path: "{{ edge_dir }}", mode: "0755" }
     - { path: "{{ edge_conf_dir }}", mode: "0700" }
     - { path: "{{ edge_conf_dir }}/nats", mode: "0700" }
+    - { path: "{{ edge_drain_dir }}", mode: "0755" }
 
 - name: Assemble the edge caddyfile on the controller
   ansible.builtin.command:
@@ -81,6 +82,38 @@
     mode: "0600"
   no_log: true
   notify: Reload nats
+
+# docker's restart policy does not retry a container whose start failed
+# while the daemon came up. after an unclean power-off in the this stage edge
+# loss drill the nats container stayed exited that way, so a oneshot unit
+# starts every existing container of the project once docker is up. start
+# never recreates anything, so it cannot apply a half-written change.
+- name: Install the start-at-boot unit of the compose project
+  ansible.builtin.copy:
+    content: |
+      # managed by ansible (infra/ansible/roles/edge)
+      [Unit]
+      Description=start the edge compose project's containers after boot
+      After=docker.service
+      Requires=docker.service
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/bin/docker compose --project-directory {{ edge_dir }} start
+
+      [Install]
+      WantedBy=multi-user.target
+    dest: /etc/systemd/system/sa-edge-start.service
+    owner: root
+    group: root
+    mode: "0644"
+  register: edge_start_unit
+
+- name: Enable the start-at-boot unit
+  ansible.builtin.systemd_service:
+    name: sa-edge-start.service
+    enabled: true
+    daemon_reload: "{{ edge_start_unit is changed }}"
 
 - name: Write the compose project
   ansible.builtin.template:
@@ -135,6 +168,18 @@
   delay: 2
   changed_when: false
 
+# deploy.yml drains the node first, which turns port 80 to 503 on purpose;
+# a drained node is checked behind caddy, at the same composite endpoint
+- name: Wait for this node's composite health behind caddy while it is drained
+  ansible.builtin.command:
+    argv: [docker, compose, --project-directory, "{{ edge_dir }}", exec, -T, caddy, wget, -q, -O, /dev/null, "http://gateway:9090/edgez"]
+  register: edge_drained_health
+  until: edge_drained_health.rc == 0
+  retries: 90
+  delay: 2
+  when: edge_stage != 'infra' and sa_draining | default(false)
+  changed_when: false
+
 - name: Wait for this node's composite health on port 80
   ansible.builtin.uri:
     url: "http://{{ sa_public_ipv4 }}/"
@@ -144,5 +189,5 @@
   until: edge_health.status == 308
   retries: 60
   delay: 2
-  when: edge_stage != 'infra'
+  when: edge_stage != 'infra' and not (sa_draining | default(false))
   changed_when: false

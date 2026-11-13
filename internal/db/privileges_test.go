@@ -11,79 +11,21 @@ import (
 	"github.com/stretchr/testify/require"
 
 	pdb "github.com/justmert/stellar-analytics/internal/db"
+	"github.com/justmert/stellar-analytics/tests/fixtures/rolematrix"
 )
 
-// wantGrants is the whole rights matrix of the design for every relation in cp,
-// api and agg. letters follow postgresql acl notation: r select, a insert,
-// w update, d delete, D truncate, x references, t trigger. column rights are
-// written as letter(columns). a relation missing here, or a right not listed,
-// fails the test, so every new table must state its rights.
-var wantGrants = map[string]map[pdb.Role]string{
-	"cp.users": {
-		pdb.RoleCPSystem: "rawd",
-		pdb.RoleCPTenant: "r(github_id,github_login,id)",
-	},
-	"cp.sessions": {pdb.RoleCPSystem: "rawd"},
-	"cp.tenants": {
-		pdb.RoleCPSystem:   "rawd",
-		pdb.RoleCPTenant:   "r w(accepted_terms_version,description,name,updated_at)",
-		pdb.RoleCPOperator: "r",
-		// the writer refuses queued metrics of a removed tenant (00018)
-		pdb.RoleMetricsWriter: "r(id,status)",
-		// aggregate-web skips removed tenants (00019)
-		pdb.RoleJobs: "r(id,status)",
-	},
-	"cp.tenant_members": {pdb.RoleCPSystem: "rawd", pdb.RoleCPTenant: "rawd"},
-	"cp.invites":        {pdb.RoleCPSystem: "rawd", pdb.RoleCPTenant: "rawd"},
-	"cp.sites":          {pdb.RoleCPSystem: "rawd", pdb.RoleCPTenant: "rawd"},
-	"cp.otlp_tokens": {
-		pdb.RoleCPSystem:      "rawd",
-		pdb.RoleCPTenant:      "rawd",
-		pdb.RoleMetricsWriter: "r(id,status,tenant_id) w(last_seen_at)",
-	},
-	"cp.operator_api_keys": {
-		pdb.RoleCPSystem:   "rawd",
-		pdb.RoleCPOperator: "r w(last_used_at)",
-	},
-	"cp.api_key_usage_hourly": {pdb.RoleCPSystem: "rawd", pdb.RoleCPOperator: "raw"},
-	"cp.settings":             {pdb.RoleCPSystem: "rawd", pdb.RoleCPOperator: "r"},
-	"cp.audit_log":            {pdb.RoleCPSystem: "ra", pdb.RoleCPTenant: "a"},
-	"cp.erasure_requests":     {pdb.RoleCPSystem: "rawd", pdb.RoleCPTenant: "ra"},
-	"cp.web_ingest_hourly": {
-		pdb.RoleCPSystem:   "rawd",
-		pdb.RoleCPTenant:   "r",
-		pdb.RoleCPOperator: "r",
-		pdb.RoleJobs:       "raw",
-	},
-	"cp.stats_dedup":     {pdb.RoleCPSystem: "rawd", pdb.RoleJobs: "rawd"},
-	"cp.leader_fence":    {pdb.RoleCPSystem: "rawd", pdb.RoleMetricsWriter: "rw", pdb.RoleJobs: "rw"},
-	"cp.operator_sites":  {pdb.RoleCPSystem: "r", pdb.RoleCPOperator: "r"},
-	"cp.tenant_removals": {pdb.RoleCPSystem: "rawd", pdb.RoleCPOperator: "r"},
+// the expected rights matrix lives in tests/fixtures/rolematrix, shared with
+// the behavioural role gate in tests/isolation/dbroles, so both test the same
+// matrix
+var wantGrants = rolematrix.Want
 
-	// api (this stage). partitions are checked on their own in
-	// TestPartitionRights: they carry no rights at all.
-	"api.metrics_minute": {pdb.RoleCPTenant: "r", pdb.RoleMetricsWriter: "raw", pdb.RoleJobs: "rawd"},
-	"api.metrics_hourly": {pdb.RoleCPTenant: "r", pdb.RoleCPOperator: "r", pdb.RoleJobs: "rawd"},
-	"api.metrics_daily":  {pdb.RoleCPTenant: "r", pdb.RoleCPOperator: "r", pdb.RoleJobs: "rawd"},
-	"api.series_state":   {pdb.RoleMetricsWriter: "raw", pdb.RoleJobs: "rawd"},
-	"api.resource_seen":  {pdb.RoleMetricsWriter: "raw", pdb.RoleJobs: "rawd"},
-	"api.ingest_dedup":   {pdb.RoleMetricsWriter: "raw", pdb.RoleJobs: "rawd"},
-	"api.route_registry": {pdb.RoleMetricsWriter: "raw", pdb.RoleJobs: "rawd"},
-	"api.ingest_warnings": {
-		pdb.RoleCPTenant: "r", pdb.RoleMetricsWriter: "raw", pdb.RoleJobs: "rawd",
-	},
-	// cp_tenant reads its own pending hours (00021, control-plane-api 7.2)
-	"api.rollup_pending": {pdb.RoleCPTenant: "r", pdb.RoleMetricsWriter: "raw", pdb.RoleJobs: "rawd"},
-
-	// agg (this stage): read by operators, written by aggregate-web
-	"agg.web_daily":     {pdb.RoleCPOperator: "r", pdb.RoleJobs: "rawd"},
-	"agg.web_daily_dim": {pdb.RoleCPOperator: "r", pdb.RoleJobs: "rawd"},
-}
-
-var tablePrivs = []struct{ letter, name string }{
-	{"r", "SELECT"}, {"a", "INSERT"}, {"w", "UPDATE"}, {"d", "DELETE"},
-	{"D", "TRUNCATE"}, {"x", "REFERENCES"}, {"t", "TRIGGER"},
-}
+var tablePrivs = func() []struct{ letter, name string } {
+	out := make([]struct{ letter, name string }, 0, len(rolematrix.Rights))
+	for _, r := range rolematrix.Rights {
+		out = append(out, struct{ letter, name string }{r.Letter, r.Name})
+	}
+	return out
+}()
 
 func superuser(t *testing.T) *pgx.Conn {
 	t.Helper()

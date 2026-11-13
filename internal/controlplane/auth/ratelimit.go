@@ -14,6 +14,15 @@ const (
 	StartBurst         = 30
 )
 
+// callback exchange limit (contract 4.1.2 step 4): the same shape, taken only
+// by callbacks that passed the state check, right before the code exchange
+// with github. the start limit alone does not bound exchanges, because one
+// sealed state cookie can be replayed with any code until it expires.
+const (
+	ExchangeRatePerSecond = 10
+	ExchangeBurst         = 30
+)
+
 // bucket is a token bucket: up to burst tokens, refilled at rate per second.
 type bucket struct {
 	mu     sync.Mutex

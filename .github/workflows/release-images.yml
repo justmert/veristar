@@ -1,0 +1,142 @@
+name: release-images
+
+# builds, scans, signs and attests every platform image for a release tag
+# (the design, docs/security/supply-chain.md). each image is pushed to
+# ghcr, then gated: syft sbom, trivy fails on a critical or high finding that
+# has a fix. only an image that passed is signed with a keyless cosign
+# signature (fulcio certificate for this workflow's oidc identity, logged in
+# rekor) and gets a build provenance and an sbom attestation. an image that
+# failed stays in the registry unsigned, and deploy.yml refuses unsigned
+# digests, so it can never be deployed.
+#
+# the last job writes release-images.json (name, reference, digest) to the
+# github release. deploy.yml reads that file and deploys by digest.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-images-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  SYFT_VERSION: 1.57.1
+  TRIVY_VERSION: 0.76.2
+  COSIGN_VERSION: v3.1.4
+
+jobs:
+  # caddy first: the console image is built on top of this release's caddy
+  caddy:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    outputs:
+      digest: ${{ steps.release.outputs.digest }}
+      repo: ${{ steps.release.outputs.repo }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: release
+        uses: ./.github/actions/release-image
+        with:
+          name: caddy
+          dockerfile: deploy/images/caddy.Dockerfile
+          context: deploy/images
+          build-args: ""
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  images:
+    needs: caddy
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: gateway, dockerfile: deploy/images/gateway.Dockerfile, context: ".", args: "DBIP_MONTH=from-tag" }
+          - { name: collector, dockerfile: deploy/images/collector.Dockerfile, context: ".", args: "" }
+          - { name: controlplane, dockerfile: deploy/images/controlplane.Dockerfile, context: ".", args: "" }
+          - { name: replayer, dockerfile: deploy/images/go-service.Dockerfile, context: ".", args: "CMD=replayer" }
+          - { name: metricswriter, dockerfile: deploy/images/go-service.Dockerfile, context: ".", args: "CMD=metricswriter" }
+          - { name: jobs, dockerfile: deploy/images/go-service.Dockerfile, context: ".", args: "CMD=jobs" }
+          - { name: platformctl, dockerfile: deploy/images/go-service.Dockerfile, context: ".", args: "CMD=platformctl" }
+          - { name: prober, dockerfile: deploy/images/go-service.Dockerfile, context: ".", args: "CMD=prober" }
+          - { name: console, dockerfile: deploy/images/console.Dockerfile, context: ".", args: "CADDY_IMAGE=from-caddy-job" }
+          - { name: postgres-ha, dockerfile: deploy/images/postgres-ha.Dockerfile, context: deploy/images, args: "" }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # placeholders in the matrix are resolved here, because a matrix entry
+      # cannot read another job's output or the tag
+      - id: args
+        env:
+          ARGS: ${{ matrix.args }}
+          CADDY: ${{ needs.caddy.outputs.repo }}@${{ needs.caddy.outputs.digest }}
+        run: |
+          case "$ARGS" in
+            DBIP_MONTH=from-tag)
+              # the db-ip month is a release input: the tag's commit date month,
+              # so a re-run of the same tag picks the same file
+              month="$(git log -1 --format=%cd --date=format:%Y-%m "$GITHUB_SHA")"
+              echo "value=DBIP_MONTH=$month" >> "$GITHUB_OUTPUT" ;;
+            CADDY_IMAGE=from-caddy-job) echo "value=CADDY_IMAGE=$CADDY" >> "$GITHUB_OUTPUT" ;;
+            *) echo "value=$ARGS" >> "$GITHUB_OUTPUT" ;;
+          esac
+      - id: release
+        uses: ./.github/actions/release-image
+        with:
+          name: ${{ matrix.name }}
+          dockerfile: ${{ matrix.dockerfile }}
+          context: ${{ matrix.context }}
+          build-args: ${{ steps.args.outputs.value }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  manifest:
+    needs: [caddy, images]
+    runs-on: ubuntu-24.04
+    permissions:
+      # uploads release-images.json to the release of this tag
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: digest-*
+          path: digests
+          merge-multiple: true
+      - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+        with:
+          cosign-release: ${{ env.COSIGN_VERSION }}
+      # every digest is verified once more with the identity deploy.yml uses,
+      # so a manifest is only published for images a deploy will accept
+      - name: write and verify release-images.json
+        env:
+          TAG: ${{ github.ref_name }}
+          IDENTITY: https://github.com/${{ github.repository }}/.github/workflows/release-images.yml@${{ github.ref }}
+        run: |
+          python3 scripts/supply-chain/release-manifest.py digests "$TAG" > release-images.json
+          python3 -c 'import json,sys; [print(i["repo"]+"@"+i["digest"]) for i in json.load(open("release-images.json"))["images"].values()]' |
+          while read -r ref; do
+            cosign verify --certificate-identity "$IDENTITY" \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com "$ref" >/dev/null
+          done
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: release-images.json
+      - name: attach to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --verify-tag --title "$TAG" --notes "images: release-images.json"
+          gh release upload "$TAG" release-images.json --clobber

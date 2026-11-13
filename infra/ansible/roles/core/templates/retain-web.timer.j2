@@ -1,0 +1,12 @@
+# managed by ansible (infra/ansible/roles/core). each core node runs at its
+# own minute, so the job still runs while one node is down; two runs at once
+# delete each row once between them (cmd/jobs retainWeb).
+[Unit]
+Description=daily raw web retention
+
+[Timer]
+OnCalendar=*-*-* {{ '%02d' | format(core_retain_web_hour) }}:{{ '%02d' | format(17 + 30 * (groups['core'].index(inventory_hostname) % 2)) }}:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,15 @@
+---
+- name: Remove the drain flag
+  ansible.builtin.file:
+    path: "{{ drain_dir }}/draining"
+    state: absent
+
+- name: Wait for port 80 to answer healthy again
+  ansible.builtin.uri:
+    url: "http://{{ sa_public_ipv4 }}/"
+    follow_redirects: none
+    status_code: 308
+  register: undrain_health
+  until: undrain_health.status == 308
+  retries: 60
+  delay: 2

@@ -1,0 +1,35 @@
+---
+- name: Write the metrics relay config
+  ansible.builtin.template:
+    src: relay.cfg.j2
+    dest: "{{ observability_conf_dir }}/relay.cfg"
+    owner: root
+    group: root
+    mode: "0644"
+  vars:
+    observability_bind_ip: 0.0.0.0
+  notify: Restart relay
+
+# pgbackrest runs in the postgres container; the textfile is read by
+# node_exporter. hourly, so a backup shows within the hour and the 26 hour
+# alert has slack.
+- name: Install the pgbackrest textfile writer
+  ansible.builtin.template:
+    src: pgbackrest-textfile.py.j2
+    dest: /usr/local/sbin/sa-pgbackrest-textfile
+    owner: root
+    group: root
+    mode: "0755"
+  when: inventory_hostname in observability_postgres_hosts
+
+- name: Schedule the pgbackrest textfile writer
+  ansible.builtin.copy:
+    dest: /etc/cron.d/sa-pgbackrest-textfile
+    content: |
+      # managed by ansible (infra/ansible/roles/observability)
+      PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      7 * * * * root /usr/local/sbin/sa-pgbackrest-textfile
+    owner: root
+    group: root
+    mode: "0644"
+  when: inventory_hostname in observability_postgres_hosts

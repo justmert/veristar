@@ -11,3 +11,7 @@
   ansible.builtin.command:
     argv: [docker, compose, --project-directory, "{{ core_dir }}", kill, --signal, USR2, haproxy]
   changed_when: true
+
+- name: Reload systemd
+  ansible.builtin.systemd_service:
+    daemon_reload: true

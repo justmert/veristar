@@ -167,6 +167,13 @@ func TestOpsHandler(t *testing.T) {
 	if code != http.StatusOK || !strings.Contains(body, "obs_test_total 1") || !strings.Contains(body, "go_goroutines") {
 		t.Fatalf("metrics: %d %s", code, body)
 	}
+	if !strings.Contains(body, `ops_ready_check{check="database"} 1`) {
+		t.Fatalf("readiness metric while up: %s", body)
+	}
+	dbUp.Store(false)
+	if _, body := get("/metrics"); !strings.Contains(body, `ops_ready_check{check="database"} 0`) {
+		t.Fatalf("readiness metric while down: %s", body)
+	}
 
 	cancel()
 	select {

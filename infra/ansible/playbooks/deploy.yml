@@ -1,11 +1,50 @@
 ---
-# rolling deploy of a new image tag (the design): edge nodes one at a
-# time, then core nodes one at a time. each node pulls, recreates what
-# changed and must report healthy on port 80 (the same composite answer the
-# dns monitor reads) before the next node starts. any failure stops the run
-# with the remaining nodes untouched.
+# rolling deploy of a new image tag (plan phases 15 and 16): edge nodes one
+# at a time, then core nodes one at a time. each node is drained first: its
+# port 80 answers 503, so the dns monitor removes it while https keeps
+# serving the clients that still have its address; after the drain wait the
+# node pulls, recreates what changed and must be healthy before the drain
+# flag is removed and port 80 answers 308 again. a core node that holds the
+# patroni leader hands it to the synchronous replica before its postgres is
+# recreated. any failure stops the run with the remaining nodes untouched.
 #
 #   ansible-playbook -i inventories/<env>/ playbooks/deploy.yml -e sa_image_tag=<release>
+#
+# images (this stage): nothing is pulled until every platform image of the
+# release passed playbooks/tasks/verify-images.yml on the controller. the
+# nodes then pull by the verified digest, never by tag alone.
+#
+#   ... playbooks/deploy.yml -e sa_image_tag=<release> -e sa_release_manifest=<release-images.json>
+#
+# deploy_drain_seconds: how long a drained node keeps serving before it is
+# touched. bunny.net checks every 30 s and the record ttl is 60 s
+# (infra/tofu envs), so a resolver that fetched the set just before removal
+# may keep the address for up to 30 + 60 s; 120 s covers that with margin.
+- name: Verify the release image signatures
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  any_errors_fatal: true
+  vars_files: [../vars/pins.yml, ../vars/signing.yml]
+  tasks:
+    - name: Verify every platform image of the release
+      ansible.builtin.include_tasks: tasks/verify-images.yml
+
+# host facts outrank play vars, so the roles' platform_images (vars/pins.yml)
+# become the verified repo:tag@digest references on every node, including in
+# the imported bootstrap play
+- name: Pin the nodes to the verified digests
+  hosts: edge:core
+  gather_facts: false
+  any_errors_fatal: true
+  vars_files: [../vars/pins.yml]
+  tasks:
+    - name: Use only verified image references
+      ansible.builtin.set_fact:
+        platform_images: "{{ platform_images | combine(deploy_verified | selectattr('key', 'in', platform_images.keys() | list) | items2dict) }}"
+      vars:
+        deploy_verified: "{{ hostvars['localhost'].sa_verified_images | dict2items }}"
+
 - name: Deploy edge nodes one by one
   hosts: edge
   become: true
@@ -13,9 +52,22 @@
   any_errors_fatal: true
   max_fail_percentage: 0
   vars_files: [../vars/pins.yml]
+  vars:
+    sa_draining: true
+    deploy_drain_seconds: 120
+  pre_tasks:
+    - name: Drain the node
+      ansible.builtin.include_tasks: tasks/drain.yml
+      vars:
+        drain_dir: /etc/stellar-analytics/drain
   roles:
     - secrets
     - edge
+  post_tasks:
+    - name: Undrain the node
+      ansible.builtin.include_tasks: tasks/undrain.yml
+      vars:
+        drain_dir: /etc/stellar-analytics/drain
 
 - name: Apply the nats topology of the new release
   ansible.builtin.import_playbook: bootstrap.yml
@@ -27,6 +79,21 @@
   any_errors_fatal: true
   max_fail_percentage: 0
   vars_files: [../vars/pins.yml]
+  vars:
+    sa_draining: true
+    deploy_drain_seconds: 120
+  pre_tasks:
+    - name: Drain the node
+      ansible.builtin.include_tasks: tasks/drain.yml
+      vars:
+        drain_dir: /etc/stellar-analytics/drain
+    - name: Hand the patroni leader to the replica
+      ansible.builtin.include_tasks: tasks/switchover.yml
   roles:
     - secrets
     - core
+  post_tasks:
+    - name: Undrain the node
+      ansible.builtin.include_tasks: tasks/undrain.yml
+      vars:
+        drain_dir: /etc/stellar-analytics/drain

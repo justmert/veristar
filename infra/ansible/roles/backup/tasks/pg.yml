@@ -1,0 +1,39 @@
+---
+# pgbackrest settings of a database node (core) or of the restore node: the
+# archive-push that postgresql's archive_command runs, and the restore.
+- name: Check the backup inputs
+  ansible.builtin.assert:
+    that:
+      - backup_repo_mode in ['s3', 'posix-host']
+      - backup_repo_mode == 's3' or sa_environment == 'local'
+      - backup_repo_mode != 's3' or (sa_object_storage is mapping and sa_object_storage.endpoint is defined and sa_object_storage.backup_bucket is defined)
+      - backup_repo_mode != 's3' or (sa_secrets.object_storage_access_key | default('') | length > 0)
+      - backup_repo_mode != 's3' or (sa_secrets.object_storage_secret_key | default('') | length > 0)
+      - backup_repo_mode != 'posix-host' or (groups['backup'] | length == 1)
+    fail_msg: >-
+      backups need object storage an operator input: sa_object_storage in the
+      inventory and object_storage_access_key and object_storage_secret_key
+      in the sops file. the posix-host stand-in is for the local converge only
+      and needs exactly one backup node.
+
+- name: Set up pgbackrest tls
+  ansible.builtin.include_tasks: tls.yml
+  when: backup_repo_mode == 'posix-host'
+
+- name: Create the pgbackrest config directory
+  ansible.builtin.file:
+    path: "{{ backup_conf_dir }}"
+    state: directory
+    owner: "999"
+    group: "999"
+    mode: "0700"
+  when: backup_repo_mode == 's3'
+
+- name: Write the pgbackrest config of this database node
+  ansible.builtin.template:
+    src: pgbackrest-pg.conf.j2
+    dest: "{{ backup_conf_dir }}/pgbackrest.conf"
+    owner: "999"
+    group: "999"
+    mode: "0600"
+  no_log: true

@@ -76,3 +76,62 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: make image CMD=platformctl
+
+  # secrets in the whole history, not only the change (the design)
+  gitleaks:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - run: scripts/supply-chain/install-tools.sh "$RUNNER_TEMP/bin" gitleaks
+      - run: '"$RUNNER_TEMP/bin/gitleaks" git --redact --no-banner --exit-code 1 .'
+
+  # every go, npm, python and rust dependency must carry an osi approved
+  # licence or a reviewed exception (docs/security/licence-exceptions.json)
+  licences:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26.13.1
+          cache: pnpm
+      # trivy reads licences from the module cache and node_modules
+      - run: go mod download all && (cd examples/otel-go-nethttp && go mod download all)
+      - run: pnpm install --frozen-lockfile
+      - run: scripts/supply-chain/install-tools.sh "$RUNNER_TEMP/bin" trivy
+      - run: |
+          "$RUNNER_TEMP/bin/trivy" fs --quiet --scanners vuln --list-all-pkgs --format json \
+            --output pkgs.json --skip-dirs resources --skip-dirs dist .
+          python3 -I scripts/supply-chain/licences.py pkgs.json
+
+  # the tenant isolation gate (the design): required on every pull request
+  # and for every release
+  isolation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - run: make isolation
+
+  # the deploy-time signature checks against a real registry, with a
+  # test-only ephemeral key (tests/supplychain)
+  supplychain:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - run: scripts/supply-chain/install-tools.sh "$HOME/.local/bin" cosign
+      - run: make ansible-venv
+      - run: make supplychain-it

@@ -1,0 +1,114 @@
+# managed by ansible (infra/ansible/roles/observability). each core node runs
+# one prometheus that scrapes every target; the two are an ha pair, and both
+# send to both alertmanagers, which deduplicate.
+global:
+  scrape_interval: {{ observability_scrape_interval }}
+  evaluation_interval: {{ observability_scrape_interval }}
+  external_labels:
+    environment: {{ sa_environment }}
+    replica: {{ inventory_hostname }}
+
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+alerting:
+  # both prometheus send the same alert; without their replica label the
+  # alertmanager cluster sees one alert and notifies once
+  alert_relabel_configs:
+    - action: labeldrop
+      regex: replica
+  alertmanagers:
+    - static_configs:
+        - targets:
+{% for h in groups['core'] %}
+            - "{{ hostvars[h].sa_private_ip }}:{{ observability_alertmanager_port }}"
+{% endfor %}
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["127.0.0.1:9090"]
+        labels: {node: "{{ inventory_hostname }}", tier: core}
+
+  - job_name: alertmanager
+    static_configs:
+{% for h in groups['core'] %}
+      - targets: ["{{ hostvars[h].sa_private_ip }}:{{ observability_alertmanager_port }}"]
+        labels: {node: "{{ h }}", tier: core}
+{% endfor %}
+
+  - job_name: node
+    static_configs:
+{% for h in groups['edge'] + groups['core'] %}
+      - targets: ["{{ hostvars[h].sa_private_ip }}:{{ observability_node_exporter_port }}"]
+        labels: {node: "{{ h }}", tier: "{{ hostvars[h].sa_tier }}"}
+{% endfor %}
+
+{% for tier in ['edge', 'core'] %}
+{% for r in observability_relay[tier] %}
+  - job_name: {{ r.job }}
+    static_configs:
+{% for h in groups[tier] %}
+      - targets: ["{{ hostvars[h].sa_private_ip }}:{{ r.port }}"]
+        labels: {node: "{{ h }}", tier: {{ tier }}}
+{% endfor %}
+
+{% endfor %}
+{% endfor %}
+  # one exporter per nats server, run beside this prometheus
+  - job_name: nats
+    static_configs:
+{% for h in groups['edge'] %}
+      - targets: ["nats-exporter-{{ h }}:7777"]
+        labels: {node: "{{ h }}", tier: edge}
+{% endfor %}
+
+  - job_name: etcd
+    static_configs:
+{% for h in groups['edge'] %}
+      - targets: ["{{ hostvars[h].sa_private_ip }}:{{ observability_etcd_client_port }}"]
+        labels: {node: "{{ h }}", tier: edge}
+{% endfor %}
+
+{% if observability_patroni_hosts | length > 0 %}
+  - job_name: patroni
+    static_configs:
+{% for h in observability_patroni_hosts %}
+      - targets: ["{{ hostvars[h].sa_private_ip }}:{{ observability_patroni_port }}"]
+        labels: {node: "{{ h }}", tier: core}
+{% endfor %}
+{% endif %}
+
+  - job_name: postgres
+    static_configs:
+{% for h in observability_postgres_hosts %}
+      - targets: ["{{ hostvars[h].sa_private_ip }}:{{ observability_postgres_exporter_port }}"]
+        labels: {node: "{{ h }}", tier: core}
+{% endfor %}
+{% for h in groups['probe'] | default([]) %}
+
+  # the probe node is outside the private network; its caddy serves the
+  # prober's and gatus's metrics behind a bearer token
+  - job_name: prober
+    scheme: https
+    metrics_path: /internal/prober/metrics
+    authorization:
+      credentials_file: /etc/prometheus/probe-metrics-token
+{% if observability_probe_ca_file is defined %}
+    tls_config: {ca_file: /etc/prometheus/probe-ca.crt}
+{% endif %}
+    static_configs:
+      - targets: ["{{ sa_hostnames.status }}"]
+        labels: {node: "{{ h }}", tier: probe}
+  - job_name: gatus
+    scheme: https
+    metrics_path: /internal/gatus/metrics
+    authorization:
+      credentials_file: /etc/prometheus/probe-metrics-token
+{% if observability_probe_ca_file is defined %}
+    tls_config: {ca_file: /etc/prometheus/probe-ca.crt}
+{% endif %}
+    static_configs:
+      - targets: ["{{ sa_hostnames.status }}"]
+        labels: {node: "{{ h }}", tier: probe}
+{% endfor %}

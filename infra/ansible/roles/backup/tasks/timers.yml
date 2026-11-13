@@ -1,0 +1,27 @@
+---
+# the backup schedules as systemd timers: weekly full, daily differential,
+# daily verification. on the repository node (posix-host) they run there; in
+# s3 mode both core nodes carry them and only the patroni leader runs them.
+- name: Write the backup units
+  ansible.builtin.template:
+    src: "backup.{{ unit[1] }}.j2"
+    dest: "/etc/systemd/system/sa-pgbackrest-{{ unit[0].name }}.{{ unit[1] }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ backup_jobs | product(['service', 'timer']) | list }}"
+  loop_control:
+    loop_var: unit
+  vars:
+    item: "{{ unit[0] }}"
+  notify: Reload systemd
+
+- name: Apply unit changes now
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable the backup timers
+  ansible.builtin.systemd_service:
+    name: "sa-pgbackrest-{{ item.name }}.timer"
+    enabled: true
+    state: started
+  loop: "{{ backup_jobs }}"

@@ -1,0 +1,51 @@
+#!/usr/bin/python3
+# managed by ansible (infra/ansible/roles/observability). writes the age of
+# the newest pgbackrest backup per type as node_exporter textfile metrics,
+# for the alert BackupTooOld. pgbackrest runs inside the postgres container
+# of the core project. a failed `pgbackrest info` writes
+# pgbackrest_info_success 0 and no timestamp, so the alert fires instead of
+# showing an old value.
+import json
+import os
+import subprocess
+import tempfile
+
+OUT = "{{ observability_conf_dir }}/textfile/pgbackrest.prom"
+
+
+def main():
+    lines = [
+        "# HELP pgbackrest_info_success 1 when pgbackrest info answered with json.",
+        "# TYPE pgbackrest_info_success gauge",
+    ]
+    stamps = {}
+    ok = 0
+    try:
+        out = subprocess.run(
+            ["docker", "compose", "--project-directory", "{{ observability_core_dir }}",
+             "exec", "-T", "postgres", "pgbackrest", "--output=json", "info"],
+            check=True, capture_output=True, timeout=120,
+        ).stdout
+        for stanza in json.loads(out):
+            for b in stanza.get("backup", []):
+                if b.get("error"):
+                    continue
+                key = (stanza["name"], b["type"])
+                stamps[key] = max(stamps.get(key, 0), b["timestamp"]["stop"])
+        ok = 1
+    except (subprocess.SubprocessError, OSError, ValueError, KeyError) as e:
+        print("pgbackrest info failed:", type(e).__name__)
+    lines.append("pgbackrest_info_success %d" % ok)
+    lines.append("# HELP pgbackrest_last_backup_completion_timestamp_seconds stop time of the newest backup without error, by stanza and type.")
+    lines.append("# TYPE pgbackrest_last_backup_completion_timestamp_seconds gauge")
+    for (stanza, typ), ts in sorted(stamps.items()):
+        lines.append('pgbackrest_last_backup_completion_timestamp_seconds{stanza="%s",type="%s"} %d' % (stanza, typ, ts))
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(OUT))
+    with os.fdopen(fd, "w") as f:
+        f.write("\n".join(lines) + "\n")
+    os.chmod(tmp, 0o644)
+    os.replace(tmp, OUT)
+
+
+if __name__ == "__main__":
+    main()

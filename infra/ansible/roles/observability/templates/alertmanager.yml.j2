@@ -1,0 +1,28 @@
+# managed by ansible (infra/ansible/roles/observability). both core nodes run
+# one member of the cluster (--cluster.peer); either prometheus reaches
+# both, and the members share silences and notification state, so an alert
+# is sent once.
+route:
+  receiver: discord
+  group_by: [alertname, node, stream_name, check]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+
+receivers:
+  - name: discord
+    discord_configs:
+      # an operator input. the url is a secret, read from a root-only file
+      - webhook_url_file: /etc/alertmanager/discord-webhook-url
+        send_resolved: true
+        title: '{% raw %}{{ if eq .Status "firing" }}FIRING{{ else }}RESOLVED{{ end }} {{ .CommonLabels.alertname }}{% endraw %} ({{ sa_environment }})'
+        message: '{% raw %}{{ range .Alerts }}{{ .Annotations.summary }} ({{ .Annotations.runbook }}){{ "\n" }}{{ end }}{% endraw %}'
+
+# a node that is down raises its own alert; the per-check alerts of the
+# same node add nothing until it is back
+inhibit_rules:
+  - source_matchers: [alertname="EdgeNodeNotReady"]
+    target_matchers: [alertname="VisitorSecretMissing"]
+    equal: [node]
+  - source_matchers: [alertname="NATSQuorumLost"]
+    target_matchers: [alertname=~"VisitorSecretMissing|EdgeNodeNotReady"]

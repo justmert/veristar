@@ -94,8 +94,9 @@ const RestartWait = 5 * time.Second
 
 // Metrics are the scheduler's prometheus metrics.
 type Metrics struct {
-	leading prometheus.Gauge
-	runs    *prometheus.CounterVec
+	leading     prometheus.Gauge
+	runs        *prometheus.CounterVec
+	lastSuccess *prometheus.GaugeVec
 }
 
 // NewMetrics registers the scheduler metrics on reg.
@@ -109,8 +110,15 @@ func NewMetrics(reg prometheus.Registerer) (*Metrics, error) {
 			Name: "jobs_task_runs_total",
 			Help: "task runs by task and result (ok, error). a continuous task counts one run per start.",
 		}, []string{"task", "result"}),
+		// alerts on a task that stopped succeeding (web aggregation, the
+		// daily umami password rotation) read this; a counter alone cannot
+		// tell "not run for a day" after a restart reset it
+		lastSuccess: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "jobs_task_last_success_timestamp_seconds",
+			Help: "unix time at which the task last finished a run without error in this process. absent until the first success.",
+		}, []string{"task"}),
 	}
-	for _, c := range []prometheus.Collector{m.leading, m.runs} {
+	for _, c := range []prometheus.Collector{m.leading, m.runs, m.lastSuccess} {
 		if err := reg.Register(c); err != nil {
 			return nil, fmt.Errorf("scheduler: register metrics: %w", err)
 		}
@@ -188,6 +196,7 @@ func (s *Scheduler) runTask(ctx context.Context, l *Leader, t Task) {
 			wait = RestartWait
 		} else {
 			s.Metrics.runs.WithLabelValues(t.Name, "ok").Inc()
+			s.Metrics.lastSuccess.WithLabelValues(t.Name).SetToCurrentTime()
 			if t.Every == 0 {
 				s.Log.Warn("continuous task returned, restarting", "task", t.Name)
 				wait = RestartWait

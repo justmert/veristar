@@ -1,0 +1,129 @@
+name: release-image
+description: >
+  build and push one platform image, gate it with syft and trivy, then sign it
+  keyless with cosign and attest build provenance and the sbom. used by
+  release-images.yml for every image, so each one passes the same steps.
+
+inputs:
+  name:
+    description: image name under ghcr.io/<owner>/<repo>/
+    required: true
+  dockerfile:
+    description: path of the dockerfile
+    required: true
+  context:
+    description: build context
+    required: true
+  build-args:
+    description: build arguments, one KEY=value per line (may be empty)
+    required: false
+    default: ""
+  token:
+    description: token for ghcr
+    required: true
+
+outputs:
+  digest:
+    description: the pushed image digest
+    value: ${{ steps.build.outputs.digest }}
+  repo:
+    description: the image repository without tag
+    value: ${{ steps.ref.outputs.repo }}
+
+runs:
+  using: composite
+  steps:
+    - id: ref
+      shell: bash
+      env:
+        NAME: ${{ inputs.name }}
+        REPO: ${{ github.repository }}
+        TAG: ${{ github.ref_name }}
+      run: |
+        # ghcr names must be lower case; the operator may not be
+        repo="ghcr.io/${REPO,,}/${NAME}"
+        tag="$TAG"
+        # postgres-ha carries its postgresql version first, because the core
+        # role compares it with postgres_min_version (vars/pins.yml)
+        if [ "$NAME" = postgres-ha ]; then
+          pg="$(sed -n 's/^ARG PG_VERSION=//p' deploy/images/postgres-ha.Dockerfile)"
+          tag="${pg}-${TAG}"
+        fi
+        echo "repo=$repo" >> "$GITHUB_OUTPUT"
+        echo "tag=$tag" >> "$GITHUB_OUTPUT"
+    - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+    - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ inputs.token }}
+    - id: build
+      uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+      with:
+        context: ${{ inputs.context }}
+        file: ${{ inputs.dockerfile }}
+        build-args: |
+          VERSION=${{ github.ref_name }}
+          ${{ inputs.build-args }}
+        tags: ${{ steps.ref.outputs.repo }}:${{ steps.ref.outputs.tag }}
+        push: true
+        # provenance comes from actions/attest below, signed for this
+        # workflow's identity; buildkit's unsigned attestation adds nothing
+        provenance: false
+        sbom: false
+    - name: install syft and trivy with checksum verification
+      shell: bash
+      run: scripts/supply-chain/install-tools.sh "$RUNNER_TEMP/bin" syft trivy && echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+    # the gate: a fixable critical or high finding stops the job before the
+    # image is signed
+    - name: sbom and vulnerability gate
+      shell: bash
+      env:
+        REF: ${{ steps.ref.outputs.repo }}@${{ steps.build.outputs.digest }}
+      run: scripts/supply-chain/scan-image.sh "$REF" "$RUNNER_TEMP/scan"
+    - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+      with:
+        cosign-release: v3.1.4
+    - name: keyless signature
+      shell: bash
+      env:
+        REF: ${{ steps.ref.outputs.repo }}@${{ steps.build.outputs.digest }}
+      run: cosign sign --yes "$REF"
+    - name: build provenance attestation
+      uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+      with:
+        subject-name: ${{ steps.ref.outputs.repo }}
+        subject-digest: ${{ steps.build.outputs.digest }}
+        push-to-registry: true
+    - name: sbom attestation
+      shell: bash
+      id: sbom
+      env:
+        REF: ${{ steps.ref.outputs.repo }}@${{ steps.build.outputs.digest }}
+      run: echo "path=$RUNNER_TEMP/scan/$(printf '%s' "$REF" | tr '/:@' '___').spdx.json" >> "$GITHUB_OUTPUT"
+    - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+      with:
+        subject-name: ${{ steps.ref.outputs.repo }}
+        subject-digest: ${{ steps.build.outputs.digest }}
+        sbom-path: ${{ steps.sbom.outputs.path }}
+        push-to-registry: true
+    - name: record the digest for the release manifest
+      shell: bash
+      env:
+        NAME: ${{ inputs.name }}
+        REPO: ${{ steps.ref.outputs.repo }}
+        TAG: ${{ steps.ref.outputs.tag }}
+        DIGEST: ${{ steps.build.outputs.digest }}
+      run: |
+        mkdir -p "$RUNNER_TEMP/digest"
+        printf '{"name":"%s","repo":"%s","tag":"%s","digest":"%s"}\n' "$NAME" "$REPO" "$TAG" "$DIGEST" > "$RUNNER_TEMP/digest/$NAME.json"
+    - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      with:
+        name: digest-${{ inputs.name }}
+        path: ${{ runner.temp }}/digest/${{ inputs.name }}.json
+        retention-days: 7
+    - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      with:
+        name: scan-${{ inputs.name }}
+        path: ${{ runner.temp }}/scan
+        retention-days: 90

@@ -1,0 +1,89 @@
+---
+# alert rules, nats and the two queue consumers (the design). the stream
+# numbers come from prometheus-nats-exporter 0.20.3 (-jsz=all), one per nats
+# server; every replica reports the stream, so they are reduced by stream.
+groups:
+  - name: queues
+    rules:
+      - record: sa:stream_messages:max
+        expr: max by (stream_name) (jetstream_stream_total_messages)
+      - record: sa:stream_first_seq:max
+        expr: max by (stream_name) (jetstream_stream_first_seq)
+      - record: sa:consumer_backlog:max
+        expr: max by (stream_name, consumer_name) (jetstream_consumer_num_pending + jetstream_consumer_num_ack_pending)
+
+      # the exporter has no first-message timestamp. WEB_EVENTS and
+      # API_METRICS are work queues, so the first sequence is the oldest
+      # unacknowledged message: when the stream was never empty and its first
+      # sequence did not move for 10 minutes, the oldest message is at least
+      # 10 minutes old. that is the freshness budget of the design.
+      - alert: QueueOldestMessageTooOld
+        expr: |
+          (min_over_time(sa:stream_messages:max{stream_name=~"WEB_EVENTS|API_METRICS"}[10m]) > 0)
+          and on (stream_name)
+          (changes(sa:stream_first_seq:max{stream_name=~"WEB_EVENTS|API_METRICS"}[10m]) == 0)
+        labels: {severity: page}
+        annotations:
+          summary: "the oldest message in {{ $labels.stream_name }} has waited at least 10 minutes"
+          runbook: docs/runbooks/alerts.md#queueoldestmessagetooold
+
+      - alert: ReplayerLagHigh
+        expr: sa:consumer_backlog:max{stream_name="WEB_EVENTS",consumer_name="replayer"} > 5000
+        for: 10m
+        labels: {severity: ticket}
+        annotations:
+          summary: "{{ $value }} web events wait for the replayer"
+          runbook: docs/runbooks/alerts.md#replayerlaghigh
+      - alert: MetricsWriterLagHigh
+        expr: sa:consumer_backlog:max{stream_name="API_METRICS",consumer_name="metricswriter"} > 5000
+        for: 10m
+        labels: {severity: ticket}
+        annotations:
+          summary: "{{ $value }} metric batches wait for the metrics writer"
+          runbook: docs/runbooks/alerts.md#metricswriterlaghigh
+      # no instance holds the lock: nothing consumes, whatever the backlog
+      - alert: ReplayerNotConsuming
+        expr: (sum(replayer_leader) < 1) or absent(replayer_leader)
+        for: 2m
+        labels: {severity: page}
+        annotations:
+          summary: "no replayer instance holds the lock and consumes WEB_EVENTS"
+          runbook: docs/runbooks/alerts.md#replayernotconsuming
+      - alert: MetricsWriterNotConsuming
+        expr: (sum(metricswriter_leader) < 1) or absent(metricswriter_leader)
+        for: 2m
+        labels: {severity: page}
+        annotations:
+          summary: "no metrics writer instance holds the lock and consumes API_METRICS"
+          runbook: docs/runbooks/alerts.md#metricswriternotconsuming
+
+      - alert: DLQNotEmpty
+        expr: sa:stream_messages:max{stream_name=~"WEB_DLQ|API_DLQ"} > 0
+        labels: {severity: ticket}
+        annotations:
+          summary: "{{ $labels.stream_name }} holds {{ $value }} messages"
+          runbook: docs/runbooks/alerts.md#dlqnotempty
+
+      # three servers; jetstream needs two for a meta leader. a server
+      # counts when its exporter reads jetstream from it.
+      - alert: NATSQuorumLost
+        expr: |
+          (count(jetstream_server_jetstream_disabled == 0) or vector(0)) < 2
+          or absent(jetstream_server_total_streams{is_meta_leader="true"})
+        for: 1m
+        labels: {severity: page}
+        annotations:
+          summary: "nats jetstream has no quorum or no meta leader"
+          runbook: docs/runbooks/alerts.md#natsquorumlost
+      - alert: NATSServerDown
+        # the exporter stays up when its server is down; it then reports
+        # gnatsd_healthz_status_value{value="unreachable"} instead of
+        # value="ok" (checked on the local stack)
+        expr: |
+          (up{job="nats"} == 0)
+          or (up{job="nats"} == 1 unless on (node) (gnatsd_healthz_status_value{value="ok"} == 1))
+        for: 2m
+        labels: {severity: ticket}
+        annotations:
+          summary: "nats on {{ $labels.node }} is not healthy"
+          runbook: docs/runbooks/alerts.md#natsserverdown

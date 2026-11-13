@@ -1,0 +1,75 @@
+---
+# the design. inputs from the sops secrets (secrets role):
+#   alertmanager_discord_webhook_url, gatus_discord_webhook_url  an operator input
+#   grafana_admin_password, postgres_exporter_password,
+#   probe_metrics_token, gatus_external_token
+#   probe_site_id, probe_otlp_token, probe_machine_api_key
+#                       printed once by `platformctl probe-tenant create`
+# the probe node itself is an operator input (scaleway, module infra/tofu/modules/probe).
+- name: Check the observability inputs
+  ansible.builtin.assert:
+    that:
+      - sa_tier in ['edge', 'core', 'probe']
+      - sa_secrets is defined
+      - (sa_secrets.alertmanager_discord_webhook_url | default('')) | length > 0 or observability_test_webhook_base is defined
+      - observability_test_webhook_base is not defined or sa_environment == 'local'
+      - sa_tier != 'core' or (sa_secrets.grafana_admin_password | default('')) | length >= 16
+      - sa_tier != 'core' or (sa_secrets.postgres_exporter_password | default('')) | length >= 16
+      - sa_tier != 'probe' or (sa_secrets.probe_otlp_token | default('')) is match('^sa_otlp_')
+      - sa_tier != 'probe' or (sa_secrets.probe_machine_api_key | default('')) is match('^sa_op_')
+      - (sa_secrets.probe_metrics_token | default('')) | length >= 32
+    fail_msg: >-
+      observability needs the discord webhook an operator input as
+      sa_secrets.alertmanager_discord_webhook_url and gatus_discord_webhook_url,
+      the grafana and postgres_exporter passwords, the probe metrics token,
+      and on the probe node the output of platformctl probe-tenant create.
+      observability_test_webhook_base (a local test receiver) is accepted in
+      the local environment only.
+
+- name: Name what this node runs
+  ansible.builtin.include_tasks: facts.yml
+
+- name: Create the observability directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner | default('root') }}"
+    group: "{{ item.owner | default('root') }}"
+    mode: "{{ item.mode | default('0755') }}"
+  loop:
+    - {path: "{{ observability_dir }}"}
+    - {path: "{{ observability_conf_dir }}"}
+    - {path: "{{ observability_conf_dir }}/textfile"}
+
+- name: Edge and core nodes
+  ansible.builtin.include_tasks: node.yml
+  when: sa_tier in ['edge', 'core']
+
+- name: Core nodes
+  ansible.builtin.include_tasks: core.yml
+  when: sa_tier == 'core'
+
+- name: Probe node
+  ansible.builtin.include_tasks: probe.yml
+  when: sa_tier == 'probe'
+
+- name: Write the compose project
+  ansible.builtin.template:
+    src: compose.yml.j2
+    dest: "{{ observability_dir }}/compose.yml"
+    owner: root
+    group: root
+    mode: "0644"
+    validate: docker compose -f %s config --quiet
+
+- name: Start the observability services
+  community.docker.docker_compose_v2:
+    project_src: "{{ observability_dir }}"
+    files: [compose.yml]
+    state: present
+    pull: missing
+    wait: true
+    wait_timeout: 300
+
+- name: Apply config reloads now
+  ansible.builtin.meta: flush_handlers

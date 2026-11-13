@@ -1,0 +1,65 @@
+---
+# the repository node (posix-host mode, local converge only). runs after the
+# database nodes are up, because stanza-create reads them.
+- name: Check the repository node inputs
+  ansible.builtin.assert:
+    that:
+      - sa_tier == 'backup'
+      - backup_repo_mode == 'posix-host'
+      - sa_environment == 'local'
+    fail_msg: a repository node exists only in the local converge; staging and production use object storage an operator input
+
+- name: Set up pgbackrest tls
+  ansible.builtin.include_tasks: tls.yml
+
+- name: Create the backup directory
+  ansible.builtin.file:
+    path: "{{ backup_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Write the repository config
+  ansible.builtin.template:
+    src: pgbackrest-repo.conf.j2
+    dest: "{{ backup_conf_dir }}/pgbackrest.conf"
+    owner: "999"
+    group: "999"
+    mode: "0600"
+  no_log: true
+  notify: Restart the pgbackrest server
+
+- name: Write the compose project
+  ansible.builtin.template:
+    src: compose.yml.j2
+    dest: "{{ backup_dir }}/compose.yml"
+    owner: root
+    group: root
+    mode: "0644"
+    validate: docker compose -f %s config --quiet
+
+- name: Start the pgbackrest server
+  community.docker.docker_compose_v2:
+    project_src: "{{ backup_dir }}"
+    files: [compose.yml]
+    state: present
+    pull: missing
+    wait: true
+    wait_timeout: 300
+
+# stanza-create on an existing, matching stanza is a no-op that says so
+- name: Create the stanza
+  ansible.builtin.command:
+    argv: [docker, compose, --project-directory, "{{ backup_dir }}", exec, -T, pgbackrest, pgbackrest, "--stanza={{ backup_stanza }}", stanza-create]
+  register: backup_stanza_create
+  changed_when: backup_stanza_create.stdout is not search('already exists')
+  retries: 10
+  delay: 6
+  until: backup_stanza_create.rc == 0
+
+- name: Install the schedules
+  ansible.builtin.include_tasks: timers.yml
+  vars:
+    backup_compose_dir: "{{ backup_dir }}"
+    backup_compose_service: pgbackrest

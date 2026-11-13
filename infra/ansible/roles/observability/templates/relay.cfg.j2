@@ -1,0 +1,28 @@
+# managed by ansible (infra/ansible/roles/observability). serves GET /metrics
+# of this node's compose services on the private address, one port per
+# service, so prometheus on the core nodes can scrape them. every other path
+# and method is refused: /readyz and /healthz stay inside the node.
+global
+    maxconn 200
+
+resolvers docker
+    nameserver dns 127.0.0.11:53
+    hold valid 10s
+
+defaults
+    mode http
+    log stdout format raw local0 warning
+    timeout connect 3s
+    timeout client 15s
+    timeout server 15s
+
+{% for r in observability_relay_targets %}
+frontend {{ r.job }}_in
+    bind {{ observability_bind_ip }}:{{ r.port }}
+    http-request deny unless { method GET } { path /metrics }
+    default_backend {{ r.job }}
+
+backend {{ r.job }}
+    server {{ r.job }} {{ r.target }} resolvers docker init-addr none
+
+{% endfor %}

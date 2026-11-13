@@ -1,0 +1,24 @@
+---
+# the raw web retention job of the design as a systemd timer: `jobs
+# retain-web` deletes umami rows older than WEB_RAW_RETENTION_MONTHS as the
+# jobs_retention role, which may read and delete those tables and nothing
+# else (internal/jobs/retainweb). it uses the jobs image and env file in a
+# one-off container on this node's compose network.
+- name: Write the retain-web units
+  ansible.builtin.template:
+    src: "retain-web.{{ item }}.j2"
+    dest: "/etc/systemd/system/sa-retain-web.{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: [service, timer]
+  notify: Reload systemd
+
+- name: Apply unit changes now
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable the retain-web timer
+  ansible.builtin.systemd_service:
+    name: sa-retain-web.timer
+    enabled: true
+    state: started

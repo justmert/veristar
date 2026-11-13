@@ -1,0 +1,146 @@
+name: security
+
+# hourly security detection (the design, docs/runbooks/security-patch.md),
+# so that finding a problem never uses up the 24 hour patch window:
+#   - upstream advisories for the pinned umami (and the next and react it
+#     ships), nats, caddy, etcd, the collector modules and postgresql
+#   - trivy against the digests a deploy uses: release-images.json of the
+#     newest image release, and the upstream digests in vars/pins.yml
+#   - govulncheck on every go module, pnpm audit on the workspace
+# every finding opens one labelled issue (security-finding) and the run sends
+# one alert to ALERT_WEBHOOK_URL an operator input.
+on:
+  schedule:
+    - cron: "23 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security
+  cancel-in-progress: false
+
+jobs:
+  advisories:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # exit 1 is "findings", which the report job handles; exit 2 (a source
+      # could not be read) fails this job, because no answer is not "clean"
+      - env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p findings
+          rc=0; python3 -I scripts/supply-chain/advisories.py --json findings/advisories.json || rc=$?
+          test "$rc" -le 1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: findings-advisories
+          path: findings
+          if-no-files-found: ignore
+
+  images:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: scripts/supply-chain/install-tools.sh "$RUNNER_TEMP/bin" syft trivy && echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - name: deployed digests
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # upstream images are pinned by digest in vars/pins.yml and the
+          # observability role defaults
+          grep -hoE '[a-z0-9./_-]+:[A-Za-z0-9._-]+@sha256:[0-9a-f]{64}' \
+            infra/ansible/vars/pins.yml infra/ansible/roles/observability/defaults/main.yml | sort -u > refs.txt
+          # the platform images of the newest image release (tags v*)
+          tag="$(gh release list --limit 50 --json tagName --jq '[.[].tagName | select(startswith("v"))][0] // ""')"
+          if [ -n "$tag" ]; then
+            gh release download "$tag" --pattern release-images.json
+            python3 -c 'import json; [print(i["repo"]+"@"+i["digest"]) for i in json.load(open("release-images.json"))["images"].values()]' >> refs.txt
+          else
+            # said out loud in the log: until the first release there are
+            # no platform digests to scan, only upstream ones
+            echo "::warning::no image release (tag v*) exists yet; scanning upstream pins only"
+          fi
+          cat refs.txt
+      - name: scan
+        run: |
+          mkdir -p findings
+          while read -r ref; do
+            scripts/supply-chain/scan-image.sh "$ref" scan || true
+            f="scan/$(printf '%s' "$ref" | tr '/:@' '___').trivy.json"
+            python3 -I scripts/supply-chain/findings-from.py trivy "$ref" "$f" > "findings/$(basename "$f")"
+          done < refs.txt
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: findings-images
+          path: findings
+
+  go:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      # govulncheck v1.9.0; go install verifies it against
+      # the checksum database
+      - run: go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
+      - run: |
+          mkdir -p findings
+          for mod in . examples/otel-go-nethttp; do
+            (cd "$mod" && govulncheck -format json ./... > "$RUNNER_TEMP/vuln.json") || true
+            python3 -I scripts/supply-chain/findings-from.py govulncheck "$mod" "$RUNNER_TEMP/vuln.json" \
+              > "findings/govulncheck-$(echo "$mod" | tr '/.' '__').json"
+          done
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: findings-go
+          path: findings
+
+  npm:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26.13.1
+      - run: |
+          mkdir -p findings
+          pnpm audit --json > "$RUNNER_TEMP/audit.json" || true
+          python3 -I scripts/supply-chain/findings-from.py pnpm-audit "$RUNNER_TEMP/audit.json" > findings/pnpm-audit.json
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: findings-npm
+          path: findings
+
+  report:
+    needs: [advisories, images, go, npm]
+    # a failed scan job is itself reported: the run turns red and github
+    # notifies; findings from the jobs that did finish are still filed
+    if: always()
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: findings-*
+          path: findings
+          merge-multiple: true
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          ALERT_WEBHOOK_URL: ${{ secrets.ALERT_WEBHOOK_URL }}
+        run: python3 -I scripts/supply-chain/report-findings.py findings
+      - if: needs.advisories.result != 'success' || needs.images.result != 'success' || needs.go.result != 'success' || needs.npm.result != 'success'
+        run: |
+          echo "a detection job failed; its sources were not checked this hour" >&2
+          exit 1

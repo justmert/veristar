@@ -4,8 +4,37 @@
 # logins, the umami admin password and retention role, the nats topology,
 # and the operator ids. every step is idempotent and reports a change only
 # when it made one.
+# the steps below talk to postgresql through the local container, so they
+# run on whichever core node holds the patroni leader right now
+- name: Find the patroni leader
+  hosts: core
+  gather_facts: false
+  tasks:
+    - name: Ask patroni whether this node is the primary
+      ansible.builtin.uri:
+        url: "http://{{ sa_private_ip }}:8008/primary"
+        status_code: [200, 503]
+      register: bootstrap_role
+      until: bootstrap_role.status in [200, 503]
+      retries: 30
+      delay: 2
+
+    - name: Group the leader
+      ansible.builtin.group_by:
+        key: patroni_leader
+      when: bootstrap_role.status == 200
+      changed_when: false
+
+    # an empty group would skip the bootstrap without a word
+    - name: Require exactly one leader
+      ansible.builtin.assert:
+        that:
+          - groups['patroni_leader'] | default([]) | length == 1
+        fail_msg: "patroni has {{ groups['patroni_leader'] | default([]) | length }} primaries; the bootstrap needs exactly one"
+      run_once: true
+
 - name: Bootstrap the platform
-  hosts: core[0]
+  hosts: patroni_leader
   become: true
   vars_files: [../vars/pins.yml]
   vars:

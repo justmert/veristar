@@ -18,6 +18,8 @@
 #     the local converge only). dns-01 is required because three edge nodes
 #     serve the same names, so an http-01 or tls-alpn challenge can land on
 #     another node.
+#   - port 80 answers 503 while the drain flag /drain/draining exists
+#     (deploy.yml mounts it), then
 #   - port 80 answers for the node's composite health, whatever the host
 #     header: it asks NODE_HEALTH_UPSTREAM at NODE_HEALTH_PATH, redirects to
 #     https when that answers 200 and answers 503 otherwise. the bunny.net
@@ -79,18 +81,30 @@ health() {
 
 # port 80: the node's composite health for the dns monitor (assemble.sh)
 http:// {
-	reverse_proxy {$NODE_HEALTH_UPSTREAM} {
-		rewrite {$NODE_HEALTH_PATH}
-		method GET
-		header_up -X-Forwarded-For
-		header_up -X-Real-Ip
-		header_up -Forwarded
-		@healthy status 200
-		handle_response @healthy {
-			redir https://{host}{uri} 308
-		}
-		handle_response {
-			respond "unavailable" 503
+	# deploy.yml drains a node by creating /drain/draining: port 80 answers
+	# 503, so the dns monitor takes the node out while https still serves
+	# the clients that have not yet moved
+	@draining file {
+		root /drain
+		try_files /draining
+	}
+	handle @draining {
+		respond "draining" 503
+	}
+	handle {
+		reverse_proxy {$NODE_HEALTH_UPSTREAM} {
+			rewrite {$NODE_HEALTH_PATH}
+			method GET
+			header_up -X-Forwarded-For
+			header_up -X-Real-Ip
+			header_up -Forwarded
+			@healthy status 200
+			handle_response @healthy {
+				redir https://{host}{uri} 308
+			}
+			handle_response {
+				respond "unavailable" 503
+			}
 		}
 	}
 	handle_errors {

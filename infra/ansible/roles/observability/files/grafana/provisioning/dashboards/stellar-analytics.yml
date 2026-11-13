@@ -1,0 +1,12 @@
+---
+# dashboards are files in the repository; edits in the ui are not saved, so
+# a change goes through review like any other
+apiVersion: 1
+providers:
+  - name: stellar-analytics
+    folder: Stellar Analytics
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    options:
+      path: /var/lib/grafana/dashboards

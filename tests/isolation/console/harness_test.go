@@ -1,11 +1,13 @@
 //go:build isolation
 
-// Package consoleisolation tests the tenant, member, site, snippet and
-// ingest routes of the control plane over real https, real postgresql,
-// real nats and a real umami (the design, isolation tests for the
-// console api). users sign in through the real auth routes against the
-// github oauth fixture, and the real provisioning reconciler runs after
-// every change.
+// Package consoleisolation tests the control plane api over real https,
+// real postgresql, real nats and a real umami (the design, isolation
+// tests for the console api, completed as the this stage isolation gate).
+// start wires every route group the way cmd/controlplane/main.go does, with
+// the production constructors: the private session routes, the operator
+// area behind its guard and the machine metrics api mount. users sign in
+// through the real auth routes against the github oauth fixture, and the
+// real provisioning reconciler runs after every change.
 package consoleisolation
 
 import (
@@ -15,6 +17,7 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
@@ -22,9 +25,11 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/nats-io/nats.go"
@@ -35,17 +40,25 @@ import (
 	"github.com/justmert/stellar-analytics/db"
 	"github.com/justmert/stellar-analytics/internal/config"
 	"github.com/justmert/stellar-analytics/internal/controlplane"
+	"github.com/justmert/stellar-analytics/internal/controlplane/apimetrics"
 	"github.com/justmert/stellar-analytics/internal/controlplane/auth"
+	"github.com/justmert/stellar-analytics/internal/controlplane/domaincheck"
+	"github.com/justmert/stellar-analytics/internal/controlplane/erasure"
 	"github.com/justmert/stellar-analytics/internal/controlplane/ingest"
+	"github.com/justmert/stellar-analytics/internal/controlplane/lifecycle"
 	"github.com/justmert/stellar-analytics/internal/controlplane/members"
+	"github.com/justmert/stellar-analytics/internal/controlplane/operator"
+	"github.com/justmert/stellar-analytics/internal/controlplane/otlptokens"
 	"github.com/justmert/stellar-analytics/internal/controlplane/provision"
 	"github.com/justmert/stellar-analytics/internal/controlplane/session"
 	"github.com/justmert/stellar-analytics/internal/controlplane/sites"
+	"github.com/justmert/stellar-analytics/internal/controlplane/sso"
 	"github.com/justmert/stellar-analytics/internal/controlplane/tenants"
 	"github.com/justmert/stellar-analytics/internal/controlplane/terms"
 	pdb "github.com/justmert/stellar-analytics/internal/db"
 	"github.com/justmert/stellar-analytics/internal/db/dbtest"
 	"github.com/justmert/stellar-analytics/internal/natsx"
+	"github.com/justmert/stellar-analytics/internal/netguard"
 	"github.com/justmert/stellar-analytics/internal/registry"
 	"github.com/justmert/stellar-analytics/internal/umami"
 	"github.com/justmert/stellar-analytics/tests/fixtures/githuboauth"
@@ -55,16 +68,29 @@ import (
 
 const ingestOrigin = "https://in.example.org"
 
+// webOrigin is where sso sends a browser; nothing listens there in these
+// tests, the redirect itself is what they check
+const webOrigin = "https://web.example.org"
+
+// operatorGHID is the one github id in the harness's OPERATOR_GITHUB_IDS
+const operatorGHID int64 = 4_000_001
+
 type env struct {
 	srv      *httptest.Server
 	fixture  *httptest.Server
 	conn     *pdb.DB
 	pg       *dbtest.Postgres
 	sites    jetstream.KeyValue
+	otlp     jetstream.KeyValue
 	terms    string
 	tracker  *controlplane.Tracker
 	umami    *umamictr.Stack
 	nextGHID int64
+	// router is the api handler, for walking its routes
+	router chi.Routes
+	// checks runs the stellar.toml fetch after a site is created; Wait
+	// lets a test compare site rows once those writes are done
+	checks *domaincheck.Routes
 }
 
 func repoRoot(t *testing.T) string {
@@ -103,7 +129,8 @@ func start(t *testing.T) *env {
 	rcfg, err := pdb.LoadRolesConfig(pg.Config("platform"))
 	require.NoError(t, err)
 	require.NoError(t, pdb.SetRolePasswords(ctx, rcfg))
-	pcfg, err := pdb.LoadPoolConfig(pg.Config("platform"), pdb.RoleCPSystem, pdb.RoleCPTenant)
+	// the three pools of cmd/controlplane
+	pcfg, err := pdb.LoadPoolConfig(pg.Config("platform"), pdb.RoleCPSystem, pdb.RoleCPTenant, pdb.RoleCPOperator)
 	require.NoError(t, err)
 	e.conn, err = pdb.Open(ctx, pcfg, "console-isolation-test")
 	require.NoError(t, err)
@@ -123,6 +150,8 @@ func start(t *testing.T) *env {
 	pub, err := registry.NewPublisher(ctx, js)
 	require.NoError(t, err)
 	e.sites, err = js.KeyValue(ctx, natsx.BucketRegistrySites)
+	require.NoError(t, err)
+	e.otlp, err = js.KeyValue(ctx, natsx.BucketRegistryOTLP)
 	require.NoError(t, err)
 
 	// umami and the real reconciler
@@ -159,6 +188,7 @@ func start(t *testing.T) *env {
 	t.Cleanup(scope.Wait)
 
 	sessions := session.New(e.conn)
+	operators := map[int64]bool{operatorGHID: true}
 	ah, err := auth.New(auth.Config{
 		// as in cmd/controlplane: invites resolved at sign-in reconcile at once
 		Reconcile:    scope.Reconcile,
@@ -166,6 +196,7 @@ func start(t *testing.T) *env {
 		ClientSecret: config.FromMap(map[string]string{"S": "console-test-secret"}).Secret("S", 1),
 		RedirectURL:  callback,
 		StateKey:     random32(t),
+		Operators:    operators,
 		Endpoints: auth.Endpoints{
 			OAuth: oauth2.Endpoint{
 				AuthURL:   e.fixture.URL + "/login/oauth/authorize",
@@ -177,20 +208,91 @@ func start(t *testing.T) *env {
 	}, e.conn, sessions)
 	require.NoError(t, err)
 
+	// from here on the wiring follows cmd/controlplane/main.go serve, group
+	// by group and in the same order, with the production constructors. the
+	// settings are the values deploy/compose/gen-env.sh writes, read by the
+	// production loaders
+	settings := config.FromMap(map[string]string{"API_MINUTE_RETENTION_DAYS": "30", "API_HOURLY_RETENTION_MONTHS": "36"})
+	retention, err := config.LoadAPIRetention(settings)
+	require.NoError(t, err)
+	erasureCfg, err := config.LoadErasure(settings)
+	require.NoError(t, err)
+	guard, err := operator.NewGuard(operators)
+	require.NoError(t, err)
+	ng, err := netguard.New(net.DefaultResolver)
+	require.NoError(t, err)
+	checks, err := domaincheck.NewRoutes(scope, &domaincheck.Checker{Guard: ng, Resolver: net.DefaultResolver}, time.Now, log)
+	require.NoError(t, err)
+	t.Cleanup(checks.Wait)
+	e.checks = checks
+	modeRoutes, err := operator.NewEnrollmentMode(e.conn)
+	require.NoError(t, err)
+	auditRoutes, err := operator.NewAuditLog(e.conn)
+	require.NoError(t, err)
+	keepRoutes, err := operator.NewRemovalKeepAggregates(e.conn)
+	require.NoError(t, err)
+	actions, err := lifecycle.NewActions(e.conn, scope.Reconcile)
+	require.NoError(t, err)
+	global, err := operator.NewGlobal(e.conn)
+	require.NoError(t, err)
+	review, err := operator.NewTenants(e.conn)
+	require.NoError(t, err)
+	apiKeys, err := operator.NewAPIKeys(e.conn)
+	require.NoError(t, err)
+	machine, err := operator.NewMachine(operator.MachineConfig{DB: e.conn, Umami: e.umami.Admin, Log: log})
+	require.NoError(t, err)
+	eraser, err := erasure.New(erasure.Config{
+		DB: e.conn, NC: nc, Umami: e.umami.Admin, QueueWait: erasureCfg.QueueWait, Now: time.Now, Log: log,
+	})
+	require.NoError(t, err)
+	t.Cleanup(eraser.Wait)
+	erasureRoutes, err := erasure.NewRoutes(scope, eraser)
+	require.NoError(t, err)
+	otlpRoutes, err := otlptokens.NewRoutes(scope, pub)
+	require.NoError(t, err)
+	metricRoutes, err := apimetrics.NewRoutes(scope, apimetrics.Resolver{Now: time.Now, Retention: retention})
+	require.NoError(t, err)
 	snippet, err := controlplane.NewSnippetRoutes(scope, e.tracker, "")
 	require.NoError(t, err)
+	ssoH := &sso.Handler{
+		Tx:        e.conn.WithSystem,
+		Umami:     e.umami.Client,
+		Key:       key,
+		WebOrigin: webOrigin,
+		UserID: func(r *http.Request) (uuid.UUID, bool) {
+			u, ok := session.CurrentUser(r.Context())
+			return u.ID, ok
+		},
+		Now: time.Now,
+	}
+	require.NoError(t, ssoH.Check())
+	ssoPath, ok := strings.CutPrefix(sso.Path, "/api")
+	require.True(t, ok)
 
 	api = controlplane.NewHandler(controlplane.Options{
 		Log:           log,
 		ConsoleOrigin: e.srv.URL,
 		Sessions:      sessions,
-		Public:        []controlplane.Routes{controlplane.RoutesFunc(ah.Public)},
+		Public:        []controlplane.Routes{controlplane.RoutesFunc(ah.Public), controlplane.RoutesFunc(terms.Routes)},
 		Private: []controlplane.Routes{
 			controlplane.RoutesFunc(ah.Private),
-			tenants.NewRoutes(scope), members.NewRoutes(scope), sites.NewRoutes(scope),
-			ingest.NewRoutes(scope), snippet,
+			tenants.NewRoutes(scope),
+			members.NewRoutes(scope),
+			sites.NewRoutes(scope).OnCreate(checks),
+			checks,
+			ingest.NewRoutes(scope),
+			otlpRoutes,
+			metricRoutes,
+			erasureRoutes,
+			snippet,
+			controlplane.RoutesFunc(func(r chi.Router) { r.Method(http.MethodGet, ssoPath, ssoH) }),
+			controlplane.RoutesFunc(guard.Mount(modeRoutes, keepRoutes, auditRoutes, actions, review, global, apiKeys)),
 		},
+		Mounts: []controlplane.Mount{{Path: operator.MachinePath, Handler: machine.Handler()}},
 	})
+	routes, ok := api.(chi.Routes)
+	require.True(t, ok, "the api handler is a chi router")
+	e.router = routes
 	return e
 }
 

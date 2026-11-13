@@ -25,7 +25,7 @@ const usage = `usage: platformctl <command>
 
 commands:
   umami bootstrap   replace the seeded umami admin password with UMAMI_ADMIN_PASSWORD
-` + dbUsage + natsUsage + `  version           print the build version
+` + dbUsage + natsUsage + probeUsage + `  version           print the build version
 `
 
 func main() {
@@ -56,6 +56,12 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	case len(args) >= 1 && args[0] == "nats":
 		if err := runNATS(ctx, args[1:]); err != nil {
 			log.Error("nats command failed", "error", err.Error())
+			return 1
+		}
+		return 0
+	case len(args) >= 1 && args[0] == "probe-tenant":
+		if err := runProbeTenant(ctx, args[1:], config.FromEnviron(), stdout); err != nil {
+			log.Error("probe-tenant command failed", "error", err.Error())
 			return 1
 		}
 		return 0

@@ -36,6 +36,7 @@ const (
 	failExchangeFailed    = "exchange_failed"
 	failGitHubUnavailable = "github_unavailable"
 	failInternal          = "internal"
+	failRateLimited       = "rate_limited"
 )
 
 // the /user api version is pinned because its end date is known
@@ -79,6 +80,7 @@ type Handler struct {
 	sessions  *session.Manager
 	reconcile func(ctx context.Context, tenantID uuid.UUID)
 	starts    *bucket
+	exchanges *bucket
 	now       func() time.Time
 }
 
@@ -118,6 +120,7 @@ func New(cfg Config, d *db.DB, s *session.Manager) (*Handler, error) {
 		sessions:  s,
 		reconcile: cfg.Reconcile,
 		starts:    newBucket(StartRatePerSecond, StartBurst, time.Now()),
+		exchanges: newBucket(ExchangeRatePerSecond, ExchangeBurst, time.Now()),
 		now:       time.Now,
 	}, nil
 }
@@ -223,6 +226,13 @@ func (h *Handler) callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// a sealed state cookie can be replayed with made-up codes until it
+	// expires, and each try costs a request to github; the bucket bounds them
+	if ok, _ := h.exchanges.take(h.now()); !ok {
+		log.Info("sign-in refused", "reason", failRateLimited)
+		fail(w, r, failRateLimited)
+		return
+	}
 	ctx := context.WithValue(r.Context(), oauth2.HTTPClient, h.client)
 	tok, err := h.oauth.Exchange(ctx, code, oauth2.VerifierOption(p.Verifier))
 	if err != nil {
