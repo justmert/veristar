@@ -85,8 +85,9 @@ done
 
 # read everything back
 props="$(az_ storage account blob-service-properties show --resource-group "$group" --account-name "$account" \
-  --query '[isVersioningEnabled, deleteRetentionPolicy.enabled]' -o tsv | tr '\n' ' ')"
-[[ "$props" == "True True " ]] || { echo "versioning or soft delete of $account is not enabled: $props" >&2; exit 1; }
+  --query '[isVersioningEnabled, deleteRetentionPolicy.enabled]' -o tsv | tr '\n' ' ' | tr '[:upper:]' '[:lower:]')"
+# az prints booleans in tsv as True or true depending on its version
+[[ "$props" == "true true " ]] || { echo "versioning or soft delete of $account is not enabled: $props" >&2; exit 1; }
 [[ "$(az_ storage account show --resource-group "$group" --name "$account" --query allowSharedKeyAccess -o tsv)" == false ]] ||
   { echo "$account still accepts account keys" >&2; exit 1; }
 [[ "$(az_ storage container exists --account-name "$account" --name tfstate --auth-mode login --query exists -o tsv)" == true ]] ||

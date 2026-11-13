@@ -268,6 +268,37 @@ Cloudflare 4 CNAMEs and 2 CAA records. Nothing was applied.
   the restore node, and that `0.0.0.0/0` for SSH, a short passphrase and a floating image
   version are refused. 8 of 8 runs pass per env.
 
+### 3.8 Production apply (2026-11-13)
+
+Run on an operator workstation, from a scratch copy of the repository (synced with rsync, without
+`.scratch/`), with OpenTofu 1.13.9 and SOPS 3.13.3 for `darwin_arm64`, each checked against its
+release checksums file. The operator workstation holds the az login and the operator's age identity, so no Azure
+credential was created for another machine. `SOPS_AGE_KEY_FILE=~/.config/sops/age/keys.txt` is
+needed on macOS, where SOPS otherwise looks under `~/Library/Application Support/sops/age/`.
+
+| Step | Result |
+|---|---|
+| `make state-bootstrap ENV=production` | `ok: state storage veristarprodstate in veristar-tfstate (zrs, versioned, entra id only)` |
+| `make production-plan` | `Plan: 66 to add, 0 to change, 0 to destroy.`, by kind exactly as in section 3.6, with `admin_cidrs = ["203.0.113.10/32"]` |
+| `make production-apply` | 38 resources created: resource group, identity, network, NSG and rules, 5 public addresses with their locks, 5 network interfaces, the backup account with container, lifecycle, role assignment and lock, and the two CAA records |
+| VMs, image `0.20261104.2652` | `PlatformImageNotFound`: that version exists only in offer `debian-13-daily`. The production pin is `0.20261111.2659`, the newest version of offer `debian-13` |
+| VMs, image `0.20261111.2659`, two attempts | `ZonalAllocationFailed` for all five VMs (`Standard_B2als_v2` in zones 1 to 3, `Standard_B2as_v2` in zones 1 and 2): "We do not have sufficient capacity for the requested VM size in this zone". `az vm list-skus` shows no restriction for the subscription, so this is regional capacity |
+
+The failed VM objects and their OS disks were deleted after each attempt, so the state holds the
+38 created resources and the next `make production-plan` shows the remaining 28 (5 VMs, 5 VM
+locks, 4 Traffic Manager profiles, 10 endpoints, 4 CNAMEs).
+
+Azure suggested `Standard_D2lds_v5` or `Standard_D2ls_v5` for the edge size and
+`Standard_D2ads_v5` or `Standard_D2s_v5` for the core size. Pay-as-you-go prices in
+`swedencentral` on 2026-11-13 (USD per hour): `Standard_B2als_v2` 0.0389, `Standard_B2as_v2`
+0.0778, `Standard_D2als_v6` 0.086, `Standard_D2ls_v5` 0.091, `Standard_D2as_v5` 0.092,
+`Standard_D2as_v6` 0.097, `Standard_D2s_v5` 0.102. The sizes are the variables `edge_vm_size`
+and `core_vm_size`.
+
+Cloudflare publishes its own CAA records beside the two of this module (for its Universal SSL
+issuers), so `dig CAA veristar.app` also lists `comodoca.com`, `digicert.com`, `pki.goog` and
+`ssl.com`.
+
 ## 4. Make targets
 
 | Target | Does |
@@ -309,7 +340,7 @@ after the restore.
 | Admin SSH ranges and keys | I13, I15 |
 | SOPS file with the passphrase and the Cloudflare token | I14 (recipients) |
 | `backup_lock_state = "Locked"` for production (irreversible; [backups.md](backups.md) section 1) | operator decision after the first verified backup week |
-| The first apply | the lead, after review |
+| The five VMs | regional capacity for `Standard_B2als_v2` and `Standard_B2as_v2` (section 3.8): a retry later or an operator decision on other sizes |
 
 ## 6. Procedure, step by step
 
@@ -329,7 +360,7 @@ Staging is shown; production is the same with `production` (and `CONFIRM=product
    state_resource_group   = "veristar-tfstate"
    state_storage_account  = "<globally unique, 3 to 24 lowercase letters and digits>"
    backup_storage_account = "<globally unique, 3 to 24 lowercase letters and digits>"
-   server_image_version   = "0.20261104.2652"
+   server_image_version   = "0.20261111.2659"
    ```
 
    `subscription_id`, `state_resource_group` and `state_storage_account` must each be on one

@@ -11,3 +11,10 @@ sa_tls: cloudflare
 # address is not on the vm: caddy publishes 80 and 443 on the private
 # address, where the mapped traffic arrives
 sa_public_bind_ipv4: "{{ sa_private_ip }}"
+
+# images of the release workflow for repository an operator input
+sa_image_registry: ghcr.io/justmert/veristar
+
+# numeric github ids of the scf operators an operator input, comma separated:
+# 37740842 is justmert
+sa_operator_github_ids: "37740842"

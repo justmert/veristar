@@ -15,7 +15,7 @@ inputs listed in section 6.
 | Ansible | 14.6.0 | resolves `ansible-core` 2.21.6; ships community.docker 5.4.0, community.sops 2.5.0, ansible.posix 2.2.2, community.general 13.5.1 |
 | ansible-lint, yamllint | 26.11.0, 1.38.0 | `infra/ansible/requirements.txt` |
 | Docker Engine, Compose | `5:29.9.3-1~debian.13~trixie`, `5.6.1-1~debian.13~trixie` | Docker's trixie apt repo; key fingerprint 9DC8 5822 9FC7 DD38 854A E2D8 8D81 803C 0EBF CD88 is checked |
-| Patroni, pgBackRest | `4.1.5-2.pgdg13+1`, `2.60.0-1.pgdg13+1` | PGDG trixie, installed into `postgres:18.6-trixie` without moving `postgresql-18` (the build checks it) |
+| Patroni, pgBackRest | `4.1.5-2.pgdg13+1`, `2.60.0-1.pgdg13+1` | PGDG trixie, installed into `postgres:18.7-trixie` without moving `postgresql-18` (the build checks it) |
 | SOPS, age | 3.13.3, 1.3.2 | SHA-256 against the release checksums file (SOPS) and GitHub's asset digest (age) |
 | Caddy | 2.11.9 with `caddy-dns/cloudflare` v0.2.4 | `caddy.Dockerfile` compiles against 2.11.9 and `caddy validate` accepts `dns cloudflare` for every assembled node config (2026-11-13); no certificate issued yet |
 
@@ -41,11 +41,11 @@ Findings that changed the build:
 Names: `{{ sa_image_registry }}/<name>:{{ sa_image_tag }}`. Upstream images (NATS, etcd,
 HAProxy, Umami) are pinned by digest in `infra/ansible/vars/pins.yml`.
 
-**PostgreSQL 18.7 gap.** `postgres_version: "18.6"` and `postgres_min_version: "18.7"`
-in `pins.yml`. The core role refuses any environment other than the local converge
-while the version is below the minimum. When `postgres:18.7-trixie` exists: set
-`PG_BASE` and `PG_VERSION` in the Dockerfile, resolve the digest, raise
-`postgres_version`.
+**PostgreSQL 18.7.** `postgres_version: "18.7"` in `pins.yml`, `PG_BASE`
+`postgres:18.7-trixie@sha256:9f4fd4aa918f52ae3d6f3b687f1de90d8f867cd4d520021545a9a50c120eae3b`
+(index digest, resolved 2026-11-13) and `PG_VERSION=18.7` in the Dockerfile. The image built on
+2026-11-13 reports `postgres (PostgreSQL) 18.7 (Debian 18.7-1.pgdg13+2)`, `patroni 4.1.5` and
+`pgBackRest 2.60.0`.
 
 ## 3. Roles
 
@@ -150,7 +150,6 @@ the ports published there, since it arrives on the same interface.
 | `sa_operator_github_ids` | I3 |
 | SSH rule of the firewall (`sa_admin_cidrs`) | I13 |
 | `.sops.yaml` rules and every `secrets.enc.yaml` | I14 |
-| PostgreSQL 18.7 image and packages | upstream release, the design |
 
 ## 7. Not in this stream
 
@@ -252,5 +251,5 @@ through it with the checks around it.
 
 Steps 2 and 3 ran only against the local converge (`make local-converge`, same playbook,
 inventory `inventories/local/`); step 4's signature check ran in `make supplychain-it` with a
-test-only key. Nothing has run against staging: inputs I4, I5, I6, I13, I14, I15, and the
-PostgreSQL 18.7 gap in section 2.
+test-only key. No cloud converge has run yet: production waits for its VMs
+([opentofu.md](opentofu.md) section 3.8) and for a signed release (section 5).

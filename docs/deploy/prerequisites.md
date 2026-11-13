@@ -13,8 +13,8 @@ repository substitutes a made-up value for one.
 | Input | What | Where it goes | Needed by | Status 2026-11-13 |
 |---|---|---|---|---|
 | I1 | Git repository `github.com/justmert/veristar` | Go module path; `sa_signing_repository` in `infra/ansible/vars/signing.yml` (the only identity whose signed images `deploy.yml` accepts); images under `ghcr.io/justmert/veristar/` | release images, deploy | supplied; private, must be public before phases 18 and 20 publish |
-| I2 | GitHub OAuth App per environment: client id and secret | `github_client_id`, `github_client_secret` in `infra/secrets/<env>/secrets.enc.yaml` (from `SA_GITHUB_CLIENT_ID`, `SA_GITHUB_CLIENT_SECRET`) | core nodes (the `secrets` role refuses a core node without it) | missing |
-| I3 | Numeric GitHub ids of the SCF operators | `sa_operator_github_ids` in `infra/ansible/inventories/<env>/group_vars/all.yml` | `bootstrap.yml`, core role | missing |
+| I2 | GitHub OAuth App per environment: client id and secret | `github_client_id`, `github_client_secret` in `infra/secrets/<env>/secrets.enc.yaml` (from `SA_GITHUB_CLIENT_ID`, `SA_GITHUB_CLIENT_SECRET`) | core nodes (the `secrets` role refuses a core node without it) | production supplied 2026-11-13: OAuth App "Veristar", callback `https://app.veristar.app/api/auth/github/callback`, in `infra/secrets/production/secrets.enc.yaml` |
+| I3 | Numeric GitHub ids of the SCF operators | `sa_operator_github_ids` in `infra/ansible/inventories/<env>/group_vars/all.yml` | `bootstrap.yml`, core role | supplied 2026-11-13: `37740842` (justmert), in `inventories/production/group_vars/all.yml` |
 | I4 | `BASE_DOMAIN`, registered, its zone active in Cloudflare DNS | `base_domain` in `infra/tofu/envs/<env>/terraform.tfvars`; `STATUS_BASE_URL` repository variable (`https://status.<an operator input>`) for the SLO workflow | DNS, certificates, every hostname | supplied 2026-11-13: `veristar.app`, registered at Cloudflare Registrar, zone active in Cloudflare |
 | I5 | Azure subscription, with an `az login` of a user who may create resources in it | `subscription_id`, `state_resource_group`, `state_storage_account`, `backup_storage_account`, `server_image_version` in `terraform.tfvars` (the VM sizes default to `Standard_B2als_v2` and `Standard_B2as_v2`) | every Azure step; backups use the core nodes' managed identity, so there is no storage key | supplied 2026-11-13: one subscription, signed in with `az login` on an operator workstation; vCPU quota checked (section "Azure subscription" below) |
 | I6 | Cloudflare API token limited to the zone of `<an operator input>`, permissions `Zone:Zone:Read` and `Zone:DNS:Edit` | `CLOUDFLARE_API_TOKEN` in `infra/secrets/<env>/tofu.enc.env` (OpenTofu's records); `cloudflare_api_token` in `secrets.enc.yaml` (from `SA_CLOUDFLARE_API_TOKEN`, Caddy DNS-01) | DNS records, Caddy DNS-01 certificates | supplied 2026-11-13: one token, active, scoped to `veristar.app` |
@@ -24,19 +24,18 @@ repository substitutes a made-up value for one.
 | I10 | Legal review of the compliance statements | `docs/compliance/` | publishing the statements as final (production launch); not needed to deploy staging | pending |
 | I11 | Three SCF-awarded web projects and one API project | none in the repository | this stage adoption proof; not needed to deploy | missing |
 | I12 | A second cloud project, a spare domain and a second GitHub owner | none yet | this stage handover rehearsal; not needed to deploy | missing |
-| I13 | Admin source address ranges (CIDRs) allowed to reach SSH | `admin_cidrs` in `terraform.tfvars` (it refuses `0.0.0.0/0`); its IPv4 ranges also reach the backup storage account | network security group, host firewall, storage network rules | missing |
-| I14 | age public keys of everyone who may decrypt an environment's secrets (at least two per environment) | `infra/secrets/recipients/<env>.txt` | every SOPS file, so everything | missing |
-| I15 | Admin SSH public keys for the `ops` user (Ed25519 or RSA; Azure accepts both) | `admin_ssh_public_keys` in `terraform.tfvars` | cloud-init on every server | missing |
+| I13 | Admin source address ranges (CIDRs) allowed to reach SSH | `admin_cidrs` in `terraform.tfvars` (it refuses `0.0.0.0/0`); its IPv4 ranges also reach the backup storage account | network security group, host firewall, storage network rules | supplied 2026-11-13 for production: `203.0.113.10/32`, the operator's admin address |
+| I14 | age public keys of everyone who may decrypt an environment's secrets (at least two per environment) | `infra/secrets/recipients/<env>.txt` | every SOPS file, so everything | production supplied 2026-11-13: one owner identity (`infra/secrets/recipients/production.txt`); a second recipient is still to be added |
+| I15 | Admin SSH public keys for the `ops` user (Ed25519 or RSA; Azure accepts both) | `admin_ssh_public_keys` in `terraform.tfvars` | cloud-init on every server | supplied 2026-11-13 for production: the controller's key and an operator workstation key |
 
 Besides the inputs, the environment's Ansible variables that are not secret go in
 `infra/ansible/inventories/<env>/group_vars/all.yml` ([bootstrap.md](bootstrap.md) step 1):
 `sa_image_registry` and `sa_operator_github_ids`. The file already holds the settings every
 Azure node shares (`sa_tls: cloudflare`, `sa_public_bind_ipv4`).
 
-**Upstream blocker.** The core role refuses any environment other than the local converge while
-PostgreSQL is below 18.7 (`postgres_version` and `postgres_min_version` in
-`infra/ansible/vars/pins.yml`). On 2026-11-12 neither `postgres:18.7-trixie` nor the PGDG trixie
-package existed. Until they do, a staging converge stops at the core role.
+**PostgreSQL.** Every environment runs PostgreSQL 18.7 (`postgres:18.7-trixie`, PGDG
+`18.7-1.pgdg13+2`, pinned on 2026-11-13 in `infra/ansible/vars/pins.yml` and
+`deploy/images/postgres-ha.Dockerfile`).
 
 ## Hosting: providers, cost and accounts for the 12-month service window
 
@@ -93,7 +92,7 @@ Checked on 2026-11-13 with read-only `az` commands against the operator's subscr
 | `az vm list-skus --location swedencentral` | `Standard_B2als_v2` and `Standard_B2as_v2` offered in zones 1, 2 and 3, no restrictions |
 | `az network list-usages --location swedencentral` | public IP addresses 0 of 100 |
 | `az provider list` | `Microsoft.Compute`, `Microsoft.Network`, `Microsoft.Storage`, `Microsoft.ManagedIdentity`, `Microsoft.Authorization` registered |
-| `az vm image list -p Debian -f debian-13 -s 13-gen2 --all` | newest versions `0.20261104.2652`, `0.20261111.2659`, `0.20261112.2660` |
+| `az vm image list -l swedencentral -p Debian -f debian-13 -s 13-gen2 --all` | `-f` matches offers by prefix, so the list mixes `debian-13` and `debian-13-daily`. In offer `debian-13` the newest version on 2026-11-13 is `0.20261111.2659`; `0.20261104.2652` and `0.20261112.2660` exist only in `debian-13-daily`. Check a version with `az vm image show -l swedencentral --urn Debian:debian-13:13-gen2:<version>` |
 
 OpenTofu registers no resource providers itself (`resource_provider_registrations = "none"`).
 A new subscription registers the five above once:

@@ -28,12 +28,11 @@ seven Debian 13 containers on one machine; everything below was first proven the
 
 ## Status on 2026-11-13
 
-No staging or production environment exists. The platform is hosted in Microsoft Azure, region
-Sweden Central (EU), with DNS at Cloudflare. Inputs I4 (`veristar.app`), I5 (the Azure
-subscription) and I6 (the Cloudflare token) are supplied and `tofu plan` ran against them on
-2026-11-13; the first apply waits for review and for I13, I14 and I15 (I8 for monitoring), and
-the core role refuses
-staging and production until PostgreSQL 18.7 images exist. Each page says which
+Production is being created in Microsoft Azure, region Sweden Central (EU), with DNS at
+Cloudflare; there is no separate staging (operator decision of 2026-11-13). Its state storage, network,
+addresses, backup account and CAA records exist; the five VMs wait for Azure capacity
+([opentofu.md](opentofu.md) section 3.8). PostgreSQL 18.7 is pinned. The first converge also
+needs a signed release and an operator input (the verification page). Each page says which
 of its steps were run locally and which have never run. Expected outputs of steps that have
 never run are taken from the code that prints them (the Makefile, scripts and playbooks), not
 from a run, and are marked that way.

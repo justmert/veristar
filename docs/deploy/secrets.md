@@ -20,10 +20,11 @@ infra/secrets/
   <env>/tofu.enc.env         OpenTofu's credentials (opentofu.md section 1)
 ```
 
-No recipient list exists yet: an operator input has not been supplied. `.sops.yaml` therefore has
-no creation rules and `sops encrypt` for staging or production refuses with
-`no matching creation rules found`. That refusal is intended; nothing can be encrypted
-to an unreviewed key.
+Production has a recipient list since 2026-11-13 (`recipients/production.txt`, the operator's
+identity) and therefore a creation rule; its `secrets.enc.yaml` and `tofu.enc.env` exist. Staging
+has no list, so `sops encrypt` for staging refuses with `no matching creation rules found`. That
+refusal is intended; nothing can be encrypted to an unreviewed key. Section 4 asks for at least
+two recipients per environment; production has one until a second person's key is added.
 
 ## 2. Who decrypts
 
