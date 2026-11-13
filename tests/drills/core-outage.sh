@@ -16,7 +16,7 @@ mkdir -p "$out"
 ensure_state
 mins="${CORE_OUTAGE_MINUTES:-12}"
 run="core$(date -u +%H%M%S)"
-curl -fsS "http://$(priv_of sa-lc-edge-1):8222/jsz?accounts=true&streams=true&consumers=true&config=true" >"$out/jsz-before.json"
+tcurl -fsS "https://$(priv_of sa-lc-edge-1):8222/jsz?accounts=true&streams=true&consumers=true&config=true" >"$out/jsz-before.json"
 dc load -state "$STATE" -run "$run" -web "$LOAD_WEB_RATE" -api "$LOAD_API_RATE" -duration "$((mins + 2))m" -out "$out/ledger.json" >"$out/load.json" &
 lp=$!
 sleep 60

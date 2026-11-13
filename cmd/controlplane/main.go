@@ -61,8 +61,10 @@ WEB_ORIGIN, GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, GITHUB_REDIRECT_URL,
 OAUTH_STATE_KEY, OPERATOR_GITHUB_IDS, UMAMI_URL, UMAMI_ADMIN_PASSWORD,
 UMAMI_USER_PASSWORD_KEY, TRACKER_RELEASE_DIR, TRACKER_NPM_PACKAGE (optional),
 NATS_URL, NATS_REPLICAS, NATS_USER and NATS_PASSWORD (when the server
-requires auth), PLATFORM_DB_HOST, PLATFORM_DB_PORT, PLATFORM_DB_NAME,
-PLATFORM_DB_SSLMODE, PLATFORM_DB_CP_SYSTEM_PASSWORD,
+requires auth), NATS_TLS_CA with the optional NATS_TLS_CERT and
+NATS_TLS_KEY (tls only, from the first byte), PLATFORM_DB_HOST, PLATFORM_DB_PORT, PLATFORM_DB_NAME,
+PLATFORM_DB_SSLMODE, PLATFORM_DB_SSLROOTCERT (verify-full only) with the
+optional PLATFORM_DB_SSLCERT and PLATFORM_DB_SSLKEY, PLATFORM_DB_CP_SYSTEM_PASSWORD,
 PLATFORM_DB_CP_TENANT_PASSWORD, PLATFORM_DB_CP_OPERATOR_PASSWORD,
 API_MINUTE_RETENTION_DAYS and API_HOURLY_RETENTION_MONTHS (section 7.11, the
 values jobs runs with), ERASURE_QUEUE_WAIT (optional, section 10.6).
@@ -197,8 +199,9 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	// reconciles started by requests finish before the process exits
-	defer scope.Wait()
+	// reconciles in flight finish before the process exits; queued ones are
+	// left to the periodic reconcile task
+	defer scope.Stop()
 
 	sessions := session.New(d)
 	authH, err := auth.New(auth.Config{

@@ -63,6 +63,24 @@ groups:
         annotations:
           summary: "umami process {{ $labels.process }} on {{ $labels.node }} stored no event for 15 minutes while the others did"
           runbook: docs/runbooks/alerts.md#replayerumamiprocessidle
+      # review: visit_state holds a sent.<event id> key per delivered
+      # event for 24 hours under a byte limit. a full bucket no longer stops
+      # delivery, but every event then goes without its duplicate guard and
+      # visit continuity, so it is announced before it fills and when it is
+      # full. the replayer samples the bucket every 5 seconds.
+      - alert: ReplayerVisitStateNearlyFull
+        expr: max(replayer_visit_state_bytes / replayer_visit_state_max_bytes) > 0.8
+        for: 10m
+        labels: {severity: ticket}
+        annotations:
+          summary: "visit_state is {{ $value | humanizePercentage }} full"
+          runbook: docs/runbooks/alerts.md#replayervisitstatenearlyfull-replayervisitstatefull
+      - alert: ReplayerVisitStateFull
+        expr: sum(increase(replayer_visit_state_writes_skipped_total[5m])) > 0
+        labels: {severity: page}
+        annotations:
+          summary: "visit_state is full: {{ $value }} duplicate guard and visit writes skipped in 5 minutes"
+          runbook: docs/runbooks/alerts.md#replayervisitstatenearlyfull-replayervisitstatefull
       - alert: MetricsWriterNotConsuming
         expr: (sum(metricswriter_leader) < 1) or absent(metricswriter_leader)
         for: 2m

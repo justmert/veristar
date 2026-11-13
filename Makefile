@@ -414,6 +414,18 @@ staging-deploy production-deploy: %-deploy:
 local-converge-up:
 	cd infra/ansible && $(ANSIBLE_BIN)/ansible-playbook playbooks/controller-tools.yml
 	ANSIBLE_VENV=$(ANSIBLE_VENV) infra/local/up.sh
+	$(MAKE) internal-ca ENV=local
+
+# the internal ca of the private network: issues what is
+# missing or due into infra/secrets/<ENV>/ca.enc.yaml and tls.enc.yaml on
+# this machine only. CA_ROTATE=new or retire rotates the ca
+# (docs/runbooks/secret-rotation.md, "internal ca")
+.PHONY: internal-ca
+internal-ca:
+	@test -n "$(ENV)" || { echo "set ENV to local, staging or production" >&2; exit 1; }
+	@test -f infra/ansible/inventories/$(ENV)/hosts.json || { echo "no inventory for $(ENV)" >&2; exit 1; }
+	cd infra/ansible && $(ANSIBLE_BIN)/ansible-playbook -i inventories/$(ENV)/ playbooks/internal-ca.yml \
+		$(if $(CA_ROTATE),-e ca_rotate=$(CA_ROTATE))
 
 local-converge-images:
 	infra/local/build-images.sh

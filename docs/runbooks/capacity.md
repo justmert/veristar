@@ -16,7 +16,7 @@ the availability effects of the topology are in
 | `MetricsWriterLagHigh` | core nodes | `METRICSWRITER_BATCH`, larger core server type |
 | Gateway or collector latency, `429` from rate limits for legitimate tenants | edge nodes | larger edge server type, `edge_gateway_env` and `edge_collector_env` limits |
 | JetStream store close to `max_file_store` or `max_memory_store` | edge nodes | `edge_nats_max_file_store` (20G) and `edge_nats_max_memory_store` (512M), and a larger disk |
-| `visit_state` close to its cap, replayer logs "write duplicate guard" failures | edge nodes, replayer | `natsx.VisitStateMaxBytes` (384 MiB) with `edge_nats_max_memory_store`, see below |
+| `ReplayerVisitStateNearlyFull` or `ReplayerVisitStateFull`, replayer logs "visit_state is full" | edge nodes, replayer | `natsx.VisitStateMaxBytes` (384 MiB) with `edge_nats_max_memory_store`, see below |
 
 ## The visit_state cap
 
@@ -24,7 +24,10 @@ the availability effects of the topology are in
 visit record per visitor, in each NATS server's memory store, which it shares with
 `edge_secrets`. It is capped at `natsx.VisitStateMaxBytes` (384 MiB of the 512 MiB store), so the
 gateways can always create the next day's secrets: a full bucket refuses only the replayer's
-writes, delivery waits and ingestion goes on. One key takes 74 bytes in the store (measured by
+writes. Delivery goes on: the replayer skips the refused duplicate guard and visit
+writes and counts them, so events are stored without their duplicate guard and visit continuity
+until keys expire. `ReplayerVisitStateNearlyFull` fires above 80 % and `ReplayerVisitStateFull`
+when writes are skipped (`TestFullVisitStateKeepsDelivering`, `internal/replayer`). One key takes 74 bytes in the store (measured by
 `TestVisitStateLeavesRoomForEdgeSecrets`, `internal/natsx`), so the cap holds about 5 million
 delivered events a day, fewer with many distinct visitors. Above about 4 million events a day,
 raise `edge_nats_max_memory_store` on a larger edge server type and `VisitStateMaxBytes` with

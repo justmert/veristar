@@ -27,7 +27,8 @@ const dbUsage = `  db migrate        apply platform database migrations and chec
 // runDB runs `platformctl db <subcommand>`; args are the words after "db".
 //
 //	db migrate  needs PLATFORM_DB_HOST, PLATFORM_DB_PORT, PLATFORM_DB_NAME,
-//	            PLATFORM_DB_SSLMODE, PLATFORM_DB_ADMIN_USER, PLATFORM_DB_ADMIN_PASSWORD
+//	            PLATFORM_DB_SSLMODE (with PLATFORM_DB_SSLROOTCERT for verify-full),
+//	            PLATFORM_DB_ADMIN_USER, PLATFORM_DB_ADMIN_PASSWORD
 //	db roles    needs the same plus PLATFORM_DB_CP_SYSTEM_PASSWORD,
 //	            PLATFORM_DB_CP_TENANT_PASSWORD, PLATFORM_DB_CP_OPERATOR_PASSWORD,
 //	            PLATFORM_DB_METRICS_WRITER_PASSWORD, PLATFORM_DB_JOBS_PASSWORD

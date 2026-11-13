@@ -4,13 +4,17 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -210,4 +214,29 @@ func httpGet(ctx context.Context, hc *http.Client, u string) (*http.Response, er
 		return nil, err
 	}
 	return hc.Do(req)
+}
+
+// privateTransport presents the operators' client certificate and trusts
+// only the internal ca, for the private endpoints (patroni, nats monitoring
+// through the relay), which are tls with client certificates since finding
+// O-26. the drill scripts decrypt the files into SA_DRILL_TLS_DIR
+// (tests/drills/lib.sh). plain http urls (caddy's port 80) still work.
+func privateTransport() (*http.Transport, error) {
+	dir := os.Getenv("SA_DRILL_TLS_DIR")
+	if dir == "" {
+		return nil, errors.New("SA_DRILL_TLS_DIR is not set")
+	}
+	ca, err := os.ReadFile(filepath.Join(dir, "ca.crt")) //nolint:gosec // the drill scripts name this directory
+	if err != nil {
+		return nil, err
+	}
+	pool := x509.NewCertPool()
+	if !pool.AppendCertsFromPEM(ca) {
+		return nil, errors.New("no certificate in " + filepath.Join(dir, "ca.crt"))
+	}
+	cert, err := tls.LoadX509KeyPair(filepath.Join(dir, "client.crt"), filepath.Join(dir, "client.key"))
+	if err != nil {
+		return nil, err
+	}
+	return &http.Transport{TLSClientConfig: &tls.Config{RootCAs: pool, Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS13}}, nil
 }

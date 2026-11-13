@@ -90,12 +90,19 @@ the database are the two browser redirects (`/api/auth/github/start` and
   Umami calls) answers 503 `unavailable` with `Retry-After` instead of holding
   a database connection.
 - `cp_tenant` may update only the `cp.sites` columns its routes write (`name`,
-  `origins`, `updated_at`, `status`, and the verification and `stellar_toml`
-  columns of 5.8 and 5.12) and only `status` and `revoked_at` of
-  `cp.otlp_tokens`. Under `cp_tenant` a site's status may only change to
-  `removed` and a token only from `active` to `revoked`, and audit rows must
-  name a console user (`user:<uuid>`) as actor. Triggers enforce this
-  (migration `00024`); operator and system transitions run
+  `origins`, `updated_at`, `status`, `collect_utm`), only `status` and
+  `revoked_at` of `cp.otlp_tokens`, and only `role` of `cp.tenant_members`.
+  The verification and `stellar_toml` columns of 5.8 and 5.12 are written
+  under `cp_system` by the verify route, the stellar.toml fetch after site
+  creation and the `verify-domains` task, next to the check that decides
+  them, so no tenant handler can mark a domain verified. Every tenant
+  transaction carries the session user in `app.user_id` beside
+  `app.tenant_id`. Under `cp_tenant` a site's status may only change to
+  `removed`, a token only from `active` to `revoked`, audit rows must name
+  exactly the session user (`user:<uuid>`) as actor, and member rows may be
+  added, changed or removed only when the session user is an owner of the
+  tenant (a member may remove itself). Triggers enforce this (migrations
+  `00024` and `00028`); operator and system transitions run
   as `cp_system`.
 - **Reconcile after a change.** Routes that say "Reconcile runs" ask for a run
   and answer at once. Requests coalesce per tenant: a tenant is queued once,
@@ -288,7 +295,7 @@ that account's login when the invite was made, for display (4.2.5).
 - `collect_utm`: whether the gateway keeps the `utm_source`, `utm_medium`,
   `utm_campaign`, `utm_content`, `utm_term` and `ref` query parameters of page
   URLs for this site. `false` on every new site and on every site that existed
-  before the field (migration 00027); members turn it on with 4.3.4. With
+  before the field (migration 00027); owners turn it on with 4.3.4. With
   `false` the gateway drops every query parameter. Published to the gateway
   in the site's `registry_sites` entry.
 - `verify_token`, `last_verify_*` and `stellar_toml*` are this stage fields. this stage
@@ -383,7 +390,10 @@ no rate limiter), per client: one in-memory token bucket per
 client and control plane instance, 0.5 per second with a burst of 20, under a
 global ceiling per instance of 50 per second with a burst of 200. A request
 takes from its client's bucket first, so a client over its limit spends nothing
-of the ceiling. Over either limit: 429 `rate_limited` with `Retry-After` (JSON
+of the ceiling. When the ceiling is empty, a client whose own bucket was full
+(idle for at least 40 seconds) takes from a reserve of 5 per second, burst 20,
+instead: a flood keeps its own buckets below full and
+cannot reach it with the keys it is using. Over the limits: 429 `rate_limited` with `Retry-After` (JSON
 envelope, no redirect, no `sa_oauth` cookie).
 
 The client is the address core Caddy passes in `X-Sa-Client-Addr` (set from the
@@ -391,7 +401,8 @@ connection, replacing any value the client sent; `deploy/caddy/app.Caddyfile`),
 or the connection's peer when no Caddy is in front (dev). The control plane
 keys the bucket by `HMAC-SHA256(k, address)`, where `k` is 32 random bytes made
 at process start and held only in memory; IPv4 addresses are used whole, IPv6
-addresses by their /64. The address is never logged, stored or kept beyond the
+addresses by their /48 (the largest assignment one end site normally holds, so
+one holder of a /48 gets one bucket, not 65,536;). The address is never logged, stored or kept beyond the
 request, and Caddy's access log drops all request headers. Buckets that have
 refilled are forgotten; at most 100,000 clients are tracked per instance, and
 beyond that new clients get 429 until buckets refill.
@@ -415,7 +426,8 @@ Steps:
    `state_mismatch` (states are remembered until their cookie expires; audit
   ). Then take a token from the exchange buckets: the client's
    (0.5 per second, burst 20, keyed as in 4.1.1) and the instance's ceiling
-   (10 per second, burst 30). Empty: failure `rate_limited`. Then exchange
+   (10 per second, burst 30), or, for a client whose bucket was full, the
+   reserve (2 per second, burst 10) when the ceiling is empty. Empty: failure `rate_limited`. Then exchange
    `code` with the cookie's verifier (`oauth2.VerifierOption`). Failure:
    `exchange_failed`.
 5. `GET https://api.github.com/user` with the access token, headers
@@ -619,7 +631,10 @@ Session, member. **200** Site.
 
 Session, member. Body: any of `name`, `origins` (whole list replaced),
 `collect_utm` (boolean; any other JSON type answers 400). `domain` is
-immutable (422 `invalid_format` on `domain`). **200** Site. 409 `site_removed`.
+immutable (422 `invalid_format` on `domain`). Changing `collect_utm` needs the
+owner role (403 `owner_required` for a member, review): it changes the site's
+privacy position. A member may send the current value unchanged. **200** Site.
+409 `site_removed`.
 Audit `site.update`, with the old and new value of each changed field; a body
 that changes nothing writes no audit row and starts no reconcile. Reconcile
 republishes the registry entry, so the gateway applies new origins and the

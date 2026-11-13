@@ -1,4 +1,23 @@
 ---
+# the exporter toolkit's tls settings (node_exporter here, alertmanager and
+# postgres_exporter on the core nodes); they reread it on every connection
+- name: Create the web config directory
+  ansible.builtin.file:
+    path: "{{ observability_conf_dir }}/web"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Write the exporter web configs
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "{{ observability_conf_dir }}/web/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ ['web-config.yml'] + (['alertmanager-cluster-tls.yml'] if sa_tier == 'core' else []) }}"
+
 - name: Write the metrics relay config
   ansible.builtin.template:
     src: relay.cfg.j2

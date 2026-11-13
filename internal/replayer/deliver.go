@@ -72,7 +72,9 @@ func healthyRetryDelay(n int) time.Duration {
 // (heartbeat and collection probe). when umami is unhealthy, umami as a
 // whole cannot store events: the event is retried without limit, up to the
 // stream's max age, and is woken early when the process is healthy again.
-// when umami is healthy the event itself is the problem: after
+// when umami is healthy but failing sends of many visitors show it cannot
+// write (writefault.go), the same holds, and the event is woken by the next
+// send the process stores. otherwise the event itself is the problem: after
 // maxHealthyFailures such failures it goes to the dlq. nats errors in the
 // bookkeeping are retried without limit, as they say nothing about the
 // event.
@@ -117,7 +119,21 @@ func (lr *leadRun) deliver(ctx context.Context, q *visitorQueue, h *held) bool {
 		delay := natsx.RetryDelay(attempt)
 		waitOn := noTarget
 		if f.send && !f.permanent {
-			if lr.healthy(ctx, h.target) {
+			healthy := lr.healthy(ctx, h.target)
+			if healthy {
+				lr.writes[h.target].fail(h.key, time.Now())
+			}
+			switch {
+			case healthy && lr.writes[h.target].faulted(time.Now()):
+				// the process cannot write (writefault.go): the failure says
+				// nothing about this event, so it is not counted and the
+				// visitor waits for the process's next stored send
+				h.healthyFailures = 0
+				lr.setBlocked(q, false)
+				delay = writeFaultDelay(attempt)
+				waitOn = writeFaultWaiter(h.target)
+				lr.r.m.writeFaultRetries.Inc()
+			case healthy:
 				h.healthyFailures++
 				if h.healthyFailures >= maxHealthyFailures {
 					reason := fmt.Sprintf("umami failed this event %d times while its health checks passed: %s", h.healthyFailures, f.err.Error())
@@ -127,7 +143,7 @@ func (lr *leadRun) deliver(ctx context.Context, q *visitorQueue, h *held) bool {
 				}
 				lr.setBlocked(q, true)
 				delay = healthyRetryDelay(h.healthyFailures)
-			} else {
+			default:
 				lr.setBlocked(q, false)
 				waitOn = h.target
 			}
@@ -206,6 +222,10 @@ func (lr *leadRun) attempt(ctx context.Context, h *held) error {
 			r.m.send.WithLabelValues(sendOK).Observe(elapsed)
 		}
 		r.m.perProcess.WithLabelValues(strconv.Itoa(h.target)).Inc()
+		if lr.writes[h.target].succeed(h.key, time.Now()) {
+			// visitors waiting out a write fault of this process retry now
+			lr.gate.wake(writeFaultWaiter(h.target))
+		}
 		h.delivered, h.bot = true, res.Bot
 		h.sessionID, h.cache = res.SessionID, res.Cache
 	}
@@ -242,14 +262,29 @@ func (lr *leadRun) bookkeep(ctx context.Context, h *held) error {
 		prev := rec.Websites[ev.WebsiteID]
 		rec.Websites[ev.WebsiteID] = VisitEntry{SessionID: h.sessionID, Cache: h.cache, LastEventTS: max(prev.LastEventTS, ts)}
 		if err := r.store.save(bctx, ev.SiteID, ev.VT, rec); err != nil {
-			r.m.bookkeeping.Inc()
-			return err
+			if !bucketFull(err) {
+				r.m.bookkeeping.Inc()
+				return err
+			}
+			// a full visit_state must not stop delivery: the
+			// event is stored in umami already, and only this visitor's
+			// continuity is lost (its next event starts a visit of its own
+			// hour). ReplayerVisitStateFull alerts on the counter.
+			r.m.visitStateSkipped.WithLabelValues("visit").Inc()
+			r.log.Warn("visit_state is full, visit continuity not recorded", "stream_seq", h.seq)
 		}
 		h.visitSaved = true
 	}
 	if err := r.store.markSent(bctx, ev.ID); err != nil {
-		r.m.bookkeeping.Inc()
-		return err
+		if !bucketFull(err) {
+			r.m.bookkeeping.Inc()
+			return err
+		}
+		// without the guard a crash between here and the ack can store this
+		// event once more; refusing the ack instead held every event until
+		// keys expired, up to 24 hours
+		r.m.visitStateSkipped.WithLabelValues("sent").Inc()
+		r.log.Warn("visit_state is full, duplicate guard not recorded", "stream_seq", h.seq)
 	}
 	if h.bot {
 		r.stats.count(ev.SiteID, StatBot)
@@ -335,7 +370,7 @@ func (g *gate) unreachableTargets() []int {
 	defer g.mu.Unlock()
 	var out []int
 	for _, t := range g.waiters {
-		if t != noTarget && !slices.Contains(out, t) {
+		if t >= 0 && !slices.Contains(out, t) {
 			out = append(out, t)
 		}
 	}
@@ -343,11 +378,15 @@ func (g *gate) unreachableTargets() []int {
 	return out
 }
 
-func (g *gate) wakeUnreachable(target int) {
+func (g *gate) wakeUnreachable(target int) { g.wake(target) }
+
+// wake wakes every visitor waiting under key: an umami process index, or a
+// writeFaultWaiter key.
+func (g *gate) wake(key int) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	for ch, t := range g.waiters {
-		if t == target {
+		if t == key {
 			select {
 			case ch <- struct{}{}:
 			default:

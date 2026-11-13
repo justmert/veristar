@@ -19,13 +19,15 @@
       - sa_tier != 'probe' or (sa_secrets.probe_otlp_token | default('')) is match('^sa_otlp_')
       - sa_tier != 'probe' or (sa_secrets.probe_machine_api_key | default('')) is match('^sa_op_')
       - (sa_secrets.probe_metrics_token | default('')) | length >= 32
+      - observability_tls | bool
     fail_msg: >-
       observability needs the discord webhook an operator input as
       sa_secrets.alertmanager_discord_webhook_url and gatus_discord_webhook_url,
       the grafana and postgres_exporter passwords, the probe metrics token,
       and on the probe node the output of platformctl probe-tenant create.
       observability_test_webhook_base (a local test receiver) is accepted in
-      the local environment only.
+      the local environment only. observability_tls must stay true: the
+      private network carries no plain text scrape.
 
 # the probe pulls the release's own prober and caddy. outside the local test
 # stacks site.yml and deploy.yml converge it only after

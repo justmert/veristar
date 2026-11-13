@@ -6,6 +6,10 @@ name: stellar-analytics-edge
 
 x-defaults: &defaults
   restart: unless-stopped
+  # the certificate installed by the secrets role; a new certificate or ca
+  # bundle changes the label and so recreates every container reading them
+  labels:
+    sa.tls: "{{ secrets_tls_fingerprint }}"
   # container hardening (the design): the root filesystem is read-only, so
   # services write only to their volumes and a small /tmp; no capabilities;
   # no privilege gain through setuid binaries or file capabilities
@@ -53,11 +57,14 @@ services:
     command: ["--config", "/etc/nats/nats.conf"]
     volumes:
       - {{ edge_conf_dir }}/nats:/etc/nats:ro
+      - {{ sa_tls_dir }}/nats:/etc/nats-tls:ro
       - natsdata:/data
+    # clients (tls) and routes (mutual tls) on the private address;
+    # monitoring on loopback only, the relay serves it over tls
     ports:
       - "{{ sa_private_ip }}:4222:4222"
       - "{{ sa_private_ip }}:6222:6222"
-      - "{{ sa_private_ip }}:8222:8222"
+      - "127.0.0.1:8222:8222"
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8222/healthz?js-enabled-only=true"]
       interval: 5s
@@ -73,27 +80,41 @@ services:
       volume-owners:
         condition: service_completed_successfully
     # etcd stores patroni's leader key; one member per edge node, peers and
-    # clients on the private network
+    # clients on the private network. both are mutual
+    # tls with the node certificate: a peer or client without a certificate
+    # of the internal ca is refused in the handshake, before any request
+    #. prometheus reads /metrics the same way.
     command:
       - etcd
       - --name={{ inventory_hostname }}
       - --data-dir=/var/lib/etcd
-      - --listen-peer-urls=http://0.0.0.0:2380
-      - --listen-client-urls=http://0.0.0.0:2379
-      - --initial-advertise-peer-urls=http://{{ sa_private_ip }}:2380
-      - --advertise-client-urls=http://{{ sa_private_ip }}:2379
-      - --initial-cluster={{ groups['edge'] | map('extract', hostvars) | map(attribute='inventory_hostname') | zip(groups['edge'] | map('extract', hostvars, 'sa_private_ip')) | map('join', '=http://') | map('regex_replace', '$', ':2380') | join(',') }}
+      - --listen-peer-urls=https://0.0.0.0:2380
+      - --listen-client-urls=https://0.0.0.0:2379
+      - --initial-advertise-peer-urls=https://{{ sa_private_ip }}:2380
+      - --advertise-client-urls=https://{{ sa_private_ip }}:2379
+      - --initial-cluster={{ groups['edge'] | map('extract', hostvars) | map(attribute='inventory_hostname') | zip(groups['edge'] | map('extract', hostvars, 'sa_private_ip')) | map('join', '=https://') | map('regex_replace', '$', ':2380') | join(',') }}
+      - --client-cert-auth=true
+      - --trusted-ca-file=/etc/etcd/tls/ca.crt
+      - --cert-file=/etc/etcd/tls/node.crt
+      - --key-file=/etc/etcd/tls/node.key
+      - --peer-client-cert-auth=true
+      - --peer-trusted-ca-file=/etc/etcd/tls/ca.crt
+      - --peer-cert-file=/etc/etcd/tls/node.crt
+      - --peer-key-file=/etc/etcd/tls/node.key
+      - --tls-min-version=TLS1.3
       - --initial-cluster-token=sa-{{ sa_environment }}
       # new when the cluster is created, existing when a rebuilt node rejoins
       # (tasks/etcd.yml)
       - --initial-cluster-state={{ edge_etcd_initial_state }}
     volumes:
       - etcddata:/var/lib/etcd
+      - {{ sa_tls_dir }}/etcd:/etc/etcd/tls:ro
     ports:
       - "{{ sa_private_ip }}:2379:2379"
       - "{{ sa_private_ip }}:2380:2380"
     healthcheck:
-      test: ["CMD", "etcdctl", "--endpoints=http://127.0.0.1:2379", "endpoint", "health"]
+      test: ["CMD", "etcdctl", "--endpoints=https://127.0.0.1:2379", "--cacert=/etc/etcd/tls/ca.crt",
+             "--cert=/etc/etcd/tls/node.crt", "--key=/etc/etcd/tls/node.key", "endpoint", "health"]
       interval: 5s
       timeout: 3s
       retries: 24
@@ -104,8 +125,11 @@ services:
     image: {{ platform_images.gateway }}
     depends_on: [nats]
     env_file: [{{ secrets_env_dir }}/gateway.env]
+    volumes:
+      - {{ sa_tls_dir }}/ca:/etc/sa-tls:ro
     environment:
       NATS_URL: "{{ edge_nats_urls }}"
+      NATS_TLS_CA: /etc/sa-tls/ca.crt
       NATS_REPLICAS: "3"
       GATEWAY_NODE_ID: "{{ inventory_hostname }}"
       GATEWAY_ADDR: 0.0.0.0:8080
@@ -124,8 +148,11 @@ services:
     image: {{ platform_images.collector }}
     depends_on: [nats]
     env_file: [{{ secrets_env_dir }}/collector.env]
+    volumes:
+      - {{ sa_tls_dir }}/ca:/etc/sa-tls:ro
     environment:
       NATS_URL: "{{ edge_nats_urls }}"
+      NATS_TLS_CA: /etc/sa-tls/ca.crt
       COLLECTOR_GRPC_ADDR: 0.0.0.0:4317
       COLLECTOR_HTTP_ADDR: 0.0.0.0:4318
       COLLECTOR_HEALTH_ADDR: 0.0.0.0:13133
@@ -138,6 +165,8 @@ services:
     <<: *defaults
     image: {{ platform_images.caddy }}
     depends_on: [gateway, collector]
+    # both networks: see the public network below
+    networks: [default, public]
     env_file: [{{ secrets_env_dir }}/caddy.env]
     environment:
       SA_TLS: {{ sa_tls }}
@@ -168,6 +197,25 @@ services:
       interval: 10s
       timeout: 3s
       retries: 6
+
+# review: docker can forward a published ipv6 port into a container only
+# through docker-proxy when the container has no ipv6 address, and caddy then
+# sees the bridge gateway (one ipv4 address) as the peer of every ipv6
+# visitor, so every per-client limit and the visitor token collapse into one
+# key. caddy alone also joins this ipv6-only network: docker then dnats ipv6
+# straight to it and the real client address survives, while ipv4 still
+# arrives through the default network. the other services stay ipv4-only, so
+# their names keep resolving to ipv4 addresses (pg_hba, nats, haproxy).
+# needs docker 28 or newer (per-family gateway endpoints, enable_ipv4) and
+# ip6tables, which the base role's daemon.json keeps on.
+# docs/deploy/ansible.md "client addresses over ipv6".
+networks:
+  public:
+    enable_ipv4: false
+    enable_ipv6: true
+    ipam:
+      config:
+        - subnet: {{ edge_public6_subnet }}
 
 volumes:
   natsdata:

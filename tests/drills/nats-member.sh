@@ -20,10 +20,10 @@ nexec sa-lc-edge-3 edge start nats >/dev/null 2>&1
 start=$(date +%s)
 # caught up: the server on edge 3 reports jetstream healthy, which needs
 # every stream and consumer it holds a replica of to be current
-until curl -fsS -m 3 -o /dev/null "http://$(priv_of sa-lc-edge-3):8222/healthz"; do sleep 1; done
+until tcurl -fsS -m 3 -o /dev/null "https://$(priv_of sa-lc-edge-3):8222/healthz"; do sleep 1; done
 caught=$(( $(date +%s) - start ))
 wait "$lp"
-curl -fsS "http://$(priv_of sa-lc-edge-3):8222/jsz?streams=true" >"$out/jsz-edge3.json"
+tcurl -fsS "https://$(priv_of sa-lc-edge-3):8222/jsz?streams=true" >"$out/jsz-edge3.json"
 dc lag -until-zero 600s >"$out/lag.json" || true
 dc verify -ledger "$out/ledger.json" -wait 10m >"$out/verify.json" || true
 echo "{\"stopped\": \"$off\", \"started\": \"$on\", \"caught_up_after_start_s\": $caught}" | tee "$out/events.json"

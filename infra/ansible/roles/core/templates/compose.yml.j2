@@ -7,6 +7,10 @@ name: stellar-analytics-core
 
 x-defaults: &defaults
   restart: unless-stopped
+  # the certificate installed by the secrets role; a new certificate or ca
+  # bundle changes the label and so recreates every container reading them
+  labels:
+    sa.tls: "{{ secrets_tls_fingerprint }}"
   # container hardening (the design): the root filesystem is read-only, so
   # services write only to their volumes and a small /tmp (patroni's pgpass,
   # pgbackrest's locks, caddy's temporary truststore); no capabilities; no
@@ -27,19 +31,39 @@ x-db: &db
   PLATFORM_DB_HOST: haproxy
   PLATFORM_DB_PORT: "5000"
   PLATFORM_DB_NAME: platform
-  # the database is reached over this node's compose network or the private
-  # network only (docs/deploy/ansible.md, "database transport")
-  PLATFORM_DB_SSLMODE: disable
+  # tls to postgresql through haproxy, checked against the internal ca and
+  # the name "haproxy"; the server refuses plain text and
+  # the services refuse anything but verify-full with a ca configured
+  PLATFORM_DB_SSLMODE: verify-full
+  PLATFORM_DB_SSLROOTCERT: /etc/sa-tls/ca.crt
 
 x-nats: &nats
   NATS_URL: "{{ core_nats_urls }}"
+  NATS_TLS_CA: /etc/sa-tls/ca.crt
   NATS_REPLICAS: "3"
 
+# review: docker can forward a published ipv6 port into a container only
+# through docker-proxy when the container has no ipv6 address, and caddy then
+# sees the bridge gateway (one ipv4 address) as the peer of every ipv6
+# visitor, so every per-client limit and the visitor token collapse into one
+# key. caddy alone also joins this ipv6-only network: docker then dnats ipv6
+# straight to it and the real client address survives, while ipv4 still
+# arrives through the default network. the other services stay ipv4-only, so
+# their names keep resolving to ipv4 addresses (pg_hba, nats, haproxy).
+# needs docker 28 or newer (per-family gateway endpoints, enable_ipv4) and
+# ip6tables, which the base role's daemon.json keeps on.
+# docs/deploy/ansible.md "client addresses over ipv6".
 networks:
   default:
     ipam:
       config:
         - subnet: {{ core_compose_subnet }}
+  public:
+    enable_ipv4: false
+    enable_ipv6: true
+    ipam:
+      config:
+        - subnet: {{ core_public6_subnet }}
 
 services:
 {% if core_runs_postgres %}
@@ -53,6 +77,7 @@ services:
       TZ: UTC
     volumes:
       - {{ core_conf_dir }}/patroni:/etc/patroni:ro
+      - {{ sa_tls_dir }}/postgres:/etc/patroni-tls:ro
       - pgdata:/var/lib/postgresql
       # archive_command runs pgbackrest archive-push (roles/backup)
       - {{ backup_conf_dir }}:/etc/pgbackrest:ro
@@ -62,7 +87,8 @@ services:
       - "{{ sa_private_ip }}:8008:8008"
     healthcheck:
       # healthy once postgresql runs under patroni, leader or replica
-      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:8008/health"]
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "--cacert", "/etc/patroni-tls/ca.crt",
+             "--cert", "/etc/patroni-tls/node.crt", "--key", "/etc/patroni-tls/node.key", "https://127.0.0.1:8008/health"]
       interval: 5s
       timeout: 3s
       retries: 60
@@ -100,6 +126,7 @@ services:
     image: {{ upstream_images.haproxy }}
     volumes:
       - {{ core_conf_dir }}/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+      - {{ sa_tls_dir }}/haproxy:/etc/haproxy-tls:ro
     # the stats page on loopback only, for an ssh tunnel; prometheus reads
     # /metrics through the observability relay instead
     ports:
@@ -118,6 +145,8 @@ services:
     image: {{ upstream_images.umami }}
     depends_on: [haproxy]
     env_file: [{{ secrets_env_dir }}/umami.env]
+    volumes:
+      - {{ sa_tls_dir }}/ca:/etc/sa-tls:ro
     # the design; REDIS_URL, CLICKHOUSE_URL, KAFKA_URL, CLOUD_MODE,
     # MCP_ENABLED, DISABLE_BOT_CHECK and SKIP_LOCATION_HEADERS stay unset
     environment:
@@ -156,6 +185,8 @@ services:
       umami:
         condition: service_healthy
     env_file: [{{ secrets_env_dir }}/controlplane.env]
+    volumes:
+      - {{ sa_tls_dir }}/ca:/etc/sa-tls:ro
     environment:
       <<: [*db, *nats]
       CONTROLPLANE_ADDR: 0.0.0.0:8085
@@ -185,6 +216,8 @@ services:
         condition: service_healthy
 {% endfor %}
     env_file: [{{ secrets_env_dir }}/replayer.env]
+    volumes:
+      - {{ sa_tls_dir }}/ca:/etc/sa-tls:ro
     environment:
       <<: *nats
       REPLAYER_NODE_ID: "{{ inventory_hostname }}"
@@ -202,6 +235,8 @@ services:
     image: {{ platform_images.metricswriter }}
     depends_on: [haproxy]
     env_file: [{{ secrets_env_dir }}/metricswriter.env]
+    volumes:
+      - {{ sa_tls_dir }}/ca:/etc/sa-tls:ro
     environment:
       <<: [*db, *nats]
       METRICSWRITER_NODE_ID: "{{ inventory_hostname }}"
@@ -219,6 +254,8 @@ services:
       umami:
         condition: service_healthy
     env_file: [{{ secrets_env_dir }}/jobs.env]
+    volumes:
+      - {{ sa_tls_dir }}/ca:/etc/sa-tls:ro
     environment:
       <<: [*db, *nats]
       JOBS_OPS_ADDR: 0.0.0.0:9090
@@ -233,6 +270,8 @@ services:
     # the custom caddy build with the console's static files at /srv/console
     image: {{ platform_images.console }}
     depends_on: [controlplane, umami]
+    # both networks: see the public network below
+    networks: [default, public]
     env_file: [{{ secrets_env_dir }}/caddy.env]
     environment:
       SA_TLS: {{ sa_tls }}

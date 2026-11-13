@@ -105,3 +105,8 @@ core_haproxy_stats_port: 8404
 # where deploy.yml puts the drain flag; caddy answers 503 on port 80 while it
 # exists, which takes the node out of dns (deploy/caddy/assemble.sh)
 core_drain_dir: /etc/stellar-analytics/drain
+
+# ipv6-only docker network that only caddy joins, so published ipv6 ports
+# keep the visitor's address. a unique local prefix: it never
+# leaves the node, and every node may use the same one.
+core_public6_subnet: fd53:6100:c::/64

@@ -37,7 +37,7 @@ func TestUnreachableIsInconclusive(t *testing.T) {
 	if o, _ := pgAttempt(ctx, pg, "u", "p", "d", false); o != Inconclusive {
 		t.Fatalf("postgres: %s", o)
 	}
-	if o, _ := natsAttempt([]string{"nats://" + addr.String()}, "u", "p"); o != Inconclusive {
+	if o, _ := natsAttempt([]string{"nats://" + addr.String()}, nil, "u", "p"); o != Inconclusive {
 		t.Fatalf("nats: %s", o)
 	}
 }

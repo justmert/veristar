@@ -59,7 +59,10 @@ Every command reads an env file naming one server and an admin login:
 PLATFORM_DB_HOST=<address>
 PLATFORM_DB_PORT=5432
 PLATFORM_DB_NAME=platform
-PLATFORM_DB_SSLMODE=disable
+# a converged environment admits tls only: verify-full with
+# that environment's ca bundle (ca_bundle of infra/secrets/<env>/tls.enc.yaml)
+PLATFORM_DB_SSLMODE=verify-full
+PLATFORM_DB_SSLROOTCERT=<path to the ca bundle>
 PLATFORM_DB_ADMIN_USER=postgres
 PLATFORM_DB_ADMIN_PASSWORD=<superuser password of that server>
 UMAMI_DB_NAME=umami
@@ -162,7 +165,9 @@ ssh -N -L 15432:<leader private address>:5432 \
 PostgreSQL is reached on the leader's private address, port 5432, not through HAProxy: HAProxy's
 port 5000 exists only inside each core node's compose network. The leader's `pg_hba` admits the
 private network, which is where the forwarded connection comes from. The SSH session encrypts
-the traffic, so `PLATFORM_DB_SSLMODE=disable` is correct here. `scripts/migrate.sh` runs its
+the traffic, but the leader's `pg_hba` admits TLS only (`hostssl`), so the
+connection still uses `verify-full` with the new environment's CA bundle; its certificate names
+`127.0.0.1`, which is the tunnel's end. `scripts/migrate.sh` runs its
 client container on the host network by default, so `127.0.0.1` is the tunnel.
 
 The env file for the import, with every value taken from the new environment (the passwords
@@ -173,7 +178,8 @@ its SOPS file):
 PLATFORM_DB_HOST=127.0.0.1
 PLATFORM_DB_PORT=15432
 PLATFORM_DB_NAME=platform
-PLATFORM_DB_SSLMODE=disable
+PLATFORM_DB_SSLMODE=verify-full
+PLATFORM_DB_SSLROOTCERT=<path to the new environment's ca bundle>
 PLATFORM_DB_ADMIN_USER=postgres
 PLATFORM_DB_ADMIN_PASSWORD=<postgres superuser password>
 UMAMI_DB_NAME=umami

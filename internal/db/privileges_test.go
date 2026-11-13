@@ -146,6 +146,10 @@ func TestSchemaDatabaseAndFunctionRights(t *testing.T) {
 		"cp.tenant_site_status_guard()":  nil,
 		"cp.tenant_token_status_guard()": nil,
 		"cp.tenant_audit_actor_guard()":  nil,
+		// the session user of a tenant transaction and the member guard
+		// (00028, review)
+		"cp.app_user_id()":         {pdb.RoleCPTenant},
+		"cp.tenant_member_guard()": nil,
 
 		"api.add_buckets(bigint[],bigint[])": {pdb.RoleCPTenant, pdb.RoleCPOperator, pdb.RoleMetricsWriter, pdb.RoleJobs},
 		"api.sum_buckets(bigint[])":          {pdb.RoleCPTenant, pdb.RoleCPOperator, pdb.RoleJobs},
@@ -160,6 +164,8 @@ func TestSchemaDatabaseAndFunctionRights(t *testing.T) {
 		"api.minute_partitions()":           {pdb.RoleJobs},
 		"api.hourly_partitions()":           {pdb.RoleJobs},
 		"api.purge_tenant(uuid,boolean)":    {pdb.RoleCPSystem},
+		// eviction of idle writer streams by api-retention (00029, review)
+		"api.evict_idle_series_states(timestamp with time zone,bigint)": {pdb.RoleJobs},
 		// the hour lock key the writer and the rollup share (00026, review)
 		"api.rollup_lock_key(uuid,timestamp with time zone)": {pdb.RoleMetricsWriter, pdb.RoleJobs},
 		// hour and day grain only; cp_operator never reads minute rows (00022),

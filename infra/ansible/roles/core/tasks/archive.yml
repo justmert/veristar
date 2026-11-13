@@ -22,7 +22,10 @@
 
 - name: Find the patroni leader
   ansible.builtin.uri:
-    url: "http://{{ sa_private_ip }}:8008/primary"
+    url: "https://{{ sa_private_ip }}:8008/primary"
+    ca_path: "{{ sa_tls_root.ca_path }}"
+    client_cert: "{{ sa_tls_root.client_cert }}"
+    client_key: "{{ sa_tls_root.client_key }}"
     status_code: [200, 503]
   register: core_primary_check
   until: core_primary_check.status in [200, 503]

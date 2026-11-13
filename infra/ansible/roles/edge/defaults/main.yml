@@ -45,4 +45,9 @@ edge_etcd_uid: 2379
 # data, the marker recording how the member started, and its peer url
 edge_etcd_volume: stellar-analytics-edge_etcddata
 edge_etcd_state_file: "{{ edge_conf_dir }}/etcd-initial-state"
-edge_etcd_peer_url: "http://{{ sa_private_ip }}:2380"
+edge_etcd_peer_url: "https://{{ sa_private_ip }}:2380"
+
+# ipv6-only docker network that only caddy joins, so published ipv6 ports
+# keep the visitor's address. a unique local prefix: it never
+# leaves the node, and every node may use the same one.
+edge_public6_subnet: fd53:6100:e::/64

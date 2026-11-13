@@ -99,7 +99,10 @@
     # back as a streaming member before the next node may go down
     - name: Wait for this node's patroni member
       ansible.builtin.uri:
-        url: "http://{{ sa_private_ip }}:8008/health"
+        url: "https://{{ sa_private_ip }}:8008/health"
+        ca_path: "{{ sa_tls_root.ca_path }}"
+        client_cert: "{{ sa_tls_root.client_cert }}"
+        client_key: "{{ sa_tls_root.client_key }}"
         status_code: 200
       register: reboot_patroni
       until: reboot_patroni.status == 200

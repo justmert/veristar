@@ -6,6 +6,10 @@ services:
   pgbackrest:
     image: {{ platform_images.postgres_ha }}
     restart: unless-stopped
+    # a new certificate or ca bundle (roles/secrets) recreates the server,
+    # which reads its tls files only at start
+    labels:
+      sa.tls: "{{ secrets_tls_fingerprint }}"
     entrypoint: ["pgbackrest", "server"]
     command: []
     logging:

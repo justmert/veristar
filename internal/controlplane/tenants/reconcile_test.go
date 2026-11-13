@@ -94,3 +94,45 @@ func TestReconcileCoalescesAndIsBounded(t *testing.T) {
 	runs, _, _ = g.snapshot()
 	require.Equal(t, 3, runs[flooded])
 }
+
+// review: shutdown waits for the runs in flight only. queued and pending
+// runs are dropped (the periodic reconcile task covers them), so a stop with
+// a long queue behind a slow umami ends when the in-flight runs end.
+func TestStopFinishesInFlightAndDropsTheQueue(t *testing.T) {
+	g := &gate{runs: map[uuid.UUID]int{}, release: make(chan struct{})}
+	s, err := tenants.NewScope(&db.DB{}, "v1", tenants.ReconcileFunc(g.reconcile), slog.New(slog.DiscardHandler))
+	require.NoError(t, err)
+	ctx := context.Background()
+	ids := make([]uuid.UUID, 3*tenants.ReconcileWorkers)
+	for i := range ids {
+		ids[i] = uuid.New()
+		s.Reconcile(ctx, ids[i])
+	}
+	require.Eventually(t, func() bool { _, n, _ := g.snapshot(); return n == tenants.ReconcileWorkers }, 5*time.Second, time.Millisecond)
+	// one more change for a running tenant (the first ones run first) makes
+	// it pending
+	s.Reconcile(ctx, ids[0])
+
+	done := make(chan int, 1)
+	go func() { done <- s.Stop() }()
+	// the in-flight runs end; nothing else may start
+	time.Sleep(50 * time.Millisecond)
+	close(g.release)
+	select {
+	case dropped := <-done:
+		require.Equal(t, len(ids)-tenants.ReconcileWorkers+1, dropped, "queued tenants plus the pending run")
+	case <-time.After(5 * time.Second):
+		t.Fatal("Stop waited for the queue")
+	}
+	runs, _, _ := g.snapshot()
+	total := 0
+	for _, n := range runs {
+		total += n
+	}
+	require.Equal(t, tenants.ReconcileWorkers, total, "only the runs in flight at the stop ran")
+	// a change after the stop starts nothing
+	s.Reconcile(ctx, uuid.New())
+	s.Wait()
+	runs, _, _ = g.snapshot()
+	require.Len(t, runs, tenants.ReconcileWorkers)
+}

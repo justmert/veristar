@@ -32,7 +32,9 @@ are not a measurement of staging.
 1. **Read the size and age.** From a core node:
 
    ```sh
-   curl -s 'http://10.20.1.11:8222/jsz?streams=true&consumers=true' \
+   # nats monitoring through the edge relay: tls with the node's client certificate
+   sudo curl -s --cacert /etc/stellar-analytics/tls/root/ca.crt --cert /etc/stellar-analytics/tls/root/node.crt --key /etc/stellar-analytics/tls/root/node.key \
+     'https://10.20.1.11:8222/jsz?streams=true&consumers=true' \
      | python3 -c 'import json,sys
    d=json.load(sys.stdin)
    for a in d.get("account_details",[]):
@@ -80,6 +82,20 @@ are not a measurement of staging.
    (`TestPoisonEventDoesNotStallOtherSites`, `internal/replayer`). A visitor with more than 64
    events held behind such an event has the excess dead-lettered too, so one visitor cannot fill
    `REPLAYER_MAX_IN_FLIGHT`.
+
+   The probe is a read, so it passes while Umami cannot write (a full data disk, a database
+   connection that went to a read-only node, lock or statement timeouts on `website_event`,
+   Prisma's pool exhausted). The replayer recognises that case from the sends themselves
+   (review, `internal/replayer/writefault.go`): when within one minute at least 3 distinct
+   visitors had a send fail on a process whose checks passed, and they are at least as many as
+   the sends that process stored, the process counts as unable to write. Failures then do not
+   count against the event and nothing is dead-lettered; the events are retried at most every
+   30 s and all retry at once when a send succeeds again. `replayer_write_fault_retries_total`
+   rises while this lasts (`TestWriteFaultIsNotDeadLettered` makes Umami's database read-only
+   and checks that nothing reaches `WEB_DLQ`). Fix the database as for an outage. With very
+   little traffic (fewer than 3 visitors failing within a minute) a write fault still looks like
+   bad events and those events reach `WEB_DLQ` with the reason above; after the fix, replay them
+   with `dlq replay --queue web --reason 'health checks passed'` (Dead-letter queues, step 4).
 
 4. **Watch it drain.** Repeat step 1 every few minutes. If the backlog grows faster than it
    drains and the oldest message approaches the stream's max age, check that every Umami
@@ -141,6 +157,15 @@ message id.
    when it started, so a message that fails again is not taken twice. A message whose origin
    subject is not on the original stream is skipped, kept and reported, and the command exits
    non-zero.
+
+   Ordering: a replayed event is stored after the events its visitor sent later,
+   because those were delivered while it waited in the DLQ. This matters only for events
+   dead-lettered behind a failing one (the 64-event cap of step 3 under Backlog). The event
+   keeps its acceptance time, so it still lands in the right hour, but it joins the visit of
+   the visitor's latest events (the cache token kept in `visit_state`), or, once that state
+   expired after 24 hours, the visit Umami derives from the session and the event's hour. It
+   can therefore be counted in another visit than the one it belonged to, which can change that
+   visitor's visit count, visit duration and bounce by one visit.
 
 5. **Purge what can never be stored.** Same selection, plus `--yes`:
 

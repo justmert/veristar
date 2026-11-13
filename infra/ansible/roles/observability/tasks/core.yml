@@ -112,7 +112,9 @@
 - name: Create the monitoring role
   ansible.builtin.command:
     argv: [docker, compose, --project-directory, "{{ observability_core_dir }}", exec, -T,
-           -e, "PGPASSWORD={{ sa_secrets.postgres_superuser_password }}", postgres,
+           -e, "PGPASSWORD={{ sa_secrets.postgres_superuser_password }}",
+           # tls through haproxy, as every client (roles/core pg_hba)
+           -e, PGSSLMODE=verify-full, -e, PGSSLROOTCERT=/etc/patroni-tls/ca.crt, postgres,
            psql, -h, haproxy, -p, "5000", -U, postgres, -d, postgres, -v, ON_ERROR_STOP=1,
            -v, "pw={{ sa_secrets.postgres_exporter_password }}"]
     stdin: |

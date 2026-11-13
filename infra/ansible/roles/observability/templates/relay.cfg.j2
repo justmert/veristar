@@ -2,8 +2,17 @@
 # of this node's compose services on the private address, one port per
 # service, so prometheus on the core nodes can scrape them. every other path
 # and method is refused: /readyz and /healthz stay inside the node.
+{% if observability_tls | bool %}
+# each listener is tls with the node certificate and asks the client for a
+# certificate of the internal ca: a client without one is
+# refused in the handshake. the hop behind it stays inside the node's
+# compose network.
+{% endif %}
 global
     maxconn 200
+{% if observability_tls | bool %}
+    ssl-default-bind-options ssl-min-ver TLSv1.3
+{% endif %}
 
 resolvers docker
     nameserver dns 127.0.0.11:53
@@ -18,7 +27,8 @@ defaults
 
 {% for r in observability_relay_targets %}
 frontend {{ r.job }}_in
-    bind {{ observability_bind_ip }}:{{ r.port }}
+    bind {{ observability_bind_ip }}:{{ r.port }}{% if observability_tls | bool %} ssl crt /etc/haproxy-tls/node.pem ca-file /etc/haproxy-tls/ca.crt verify required{% endif %}
+
     http-request deny unless { method GET } { path /metrics }
     default_backend {{ r.job }}
 
@@ -26,3 +36,15 @@ backend {{ r.job }}
     server {{ r.job }} {{ r.target }} resolvers docker init-addr none
 
 {% endfor %}
+{% if sa_tier == 'edge' and observability_tls | bool %}
+# nats monitoring (/varz, /jsz, /healthz, /routez ...) for operators and the
+# drills, read only, with a client certificate; nats publishes it on the
+# node's loopback only (roles/edge)
+frontend nats_monitor_in
+    bind {{ observability_bind_ip }}:{{ observability_nats_monitor_relay_port }} ssl crt /etc/haproxy-tls/node.pem ca-file /etc/haproxy-tls/ca.crt verify required
+    http-request deny unless { method GET }
+    default_backend nats_monitor
+
+backend nats_monitor
+    server nats nats:8222 resolvers docker init-addr none
+{% endif %}

@@ -1,0 +1,294 @@
+---
+# the internal certificate authority of the private network ( of
+# the review notes). runs on the controller only and
+# touches no node:
+#
+#   infra/secrets/<env>/ca.enc.yaml   the ca key and certificate, and the
+#                                     certificates of retired cas still
+#                                     trusted during a rotation. read by this
+#                                     playbook only; no role loads it, so the
+#                                     ca key never reaches a node.
+#   infra/secrets/<env>/tls.enc.yaml  the trusted ca bundle, one key and
+#                                     certificate per node of the inventory,
+#                                     and the operators' client certificate.
+#                                     the secrets role installs each node's
+#                                     own pair (roles/secrets tasks/tls.yml).
+#
+# both files are written with sops (community.sops 2.5.0) and the keys are
+# generated with community.crypto 3.5.1, both shipped in the pinned ansible
+# 14.6.0 (requirements.txt): the private keys exist in this process's memory
+# and in sops's stdin, never as plain files.
+#
+#   make internal-ca ENV=<env>                   issue what is missing or due
+#   make internal-ca ENV=<env> CA_ROTATE=new     new ca, old one still trusted
+#   make internal-ca ENV=<env> CA_ROTATE=retire  stop trusting the old cas
+#
+# docs/runbooks/secret-rotation.md section "internal ca" has the order of a
+# rotation. a second run with nothing due changes nothing.
+- name: Internal certificate authority
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  become: false
+  vars_files: [../vars/pins.yml]
+  vars:
+    tls_env: "{{ hostvars[groups['edge'][0]].sa_environment }}"
+    tls_secrets_dir: "{{ playbook_dir }}/../../secrets/{{ tls_env }}"
+    tls_ca_file: "{{ tls_secrets_dir }}/ca.enc.yaml"
+    tls_file: "{{ tls_secrets_dir }}/tls.enc.yaml"
+    secrets_tools_dir: "{{ lookup('env', 'HOME') }}/.local/share/stellar-analytics/tools"
+    tls_sops_binary: "{{ secrets_tools_dir }}/sops-{{ sops_version }}"
+    tls_age_keyfile: >-
+      {{ hostvars[groups['edge'][0]].secrets_age_keyfile
+         | default(lookup('env', 'SOPS_AGE_KEY_FILE'), true)
+         | default(lookup('env', 'HOME') ~ '/.config/sops/age/keys.txt', true) }}
+    # every node of the private network gets a certificate; the probe has
+    # no private address and none
+    tls_nodes: "{{ groups['edge'] + groups['core'] + groups['backup'] | default([]) + groups['restore'] | default([]) }}"
+    # names the services dial inside a node's compose network, beside the
+    # node name and its private address: nats on the edge nodes (the
+    # gateway and collector reach the local server as nats), haproxy and
+    # postgres on the database nodes (the services reach the database
+    # through haproxy, pgbackrest and patroni their own postgres)
+    tls_tier_names:
+      edge: [nats]
+      core: [postgres, haproxy]
+      restore: [postgres, haproxy]
+      backup: []
+    tls_rotate: "{{ ca_rotate | default('') }}"
+    # a real newline: a jinja literal inside a folded yaml scalar keeps
+    # the backslash
+    tls_nl: "\n"
+    # what the certificate file held before this run
+    tls_old: "{{ {'nodes': {}, 'operator': {}} | combine(tls_doc | default({})) }}"
+  tasks:
+    - name: Check the inputs
+      ansible.builtin.assert:
+        that:
+          - tls_env in ['local', 'staging', 'production']
+          - tls_rotate in ['', 'new', 'retire']
+          - tls_nodes | map('extract', hostvars, 'sa_private_ip') | select('string') | list | length == tls_nodes | length
+        fail_msg: >-
+          needs an inventory whose nodes all have sa_private_ip, and ca_rotate
+          empty, new or retire
+
+    # the local converge has no creation rule (.sops.yaml); its files are
+    # encrypted to the throwaway identity up.sh made, like secrets.enc.yaml
+    - name: Name the recipients of the local converge
+      ansible.builtin.command:
+        argv: ["{{ secrets_tools_dir }}/age/age-keygen", -y, "{{ tls_age_keyfile }}"]
+      register: tls_local_recipient
+      changed_when: false
+      when: tls_env == 'local'
+
+    - name: Read the ca file
+      community.sops.load_vars:
+        file: "{{ tls_ca_file }}"
+        name: tls_ca_doc
+        sops_binary: "{{ tls_sops_binary }}"
+        age_keyfile: "{{ tls_age_keyfile }}"
+      when: tls_ca_file is file
+      no_log: true
+
+    - name: Read the certificate file
+      community.sops.load_vars:
+        file: "{{ tls_file }}"
+        name: tls_doc
+        sops_binary: "{{ tls_sops_binary }}"
+        age_keyfile: "{{ tls_age_keyfile }}"
+      when: tls_file is file
+      no_log: true
+
+    - name: Check the files belong to this environment
+      ansible.builtin.assert:
+        that:
+          - tls_ca_doc is not defined or tls_ca_doc.sa_ca_environment == tls_env
+          - tls_doc is not defined or tls_doc.sa_tls_environment == tls_env
+          - tls_rotate == '' or tls_ca_doc is defined
+        fail_msg: the ca files belong to another environment, or a rotation was asked for before a ca exists
+
+    - name: Decide what to make
+      ansible.builtin.set_fact:
+        tls_make_ca: "{{ tls_ca_doc is not defined or tls_rotate == 'new' }}"
+        tls_previous_cas: >-
+          {{ ([] if tls_rotate == 'retire' else (tls_ca_doc.previous_ca_certs | default([])))
+             + ([tls_ca_doc.ca_cert] if tls_rotate == 'new' else []) }}
+
+    - name: Generate the ca key
+      community.crypto.openssl_privatekey_pipe:
+        type: ECC
+        curve: secp384r1
+      register: tls_new_ca_key
+      when: tls_make_ca
+      # values in memory only; the files written below are the change
+      changed_when: false
+      no_log: true
+
+    - name: Make the ca signing request
+      community.crypto.openssl_csr_pipe:
+        privatekey_content: "{{ tls_new_ca_key.privatekey }}"
+        common_name: "sa-{{ tls_env }}-internal-ca-{{ now(utc=true, fmt='%Y%m%d%H%M%S') }}"
+        basic_constraints: ["CA:TRUE", "pathlen:0"]
+        basic_constraints_critical: true
+        key_usage: [keyCertSign, cRLSign]
+        key_usage_critical: true
+        use_common_name_for_san: false
+      register: tls_new_ca_csr
+      when: tls_make_ca
+      # values in memory only; the files written below are the change
+      changed_when: false
+      no_log: true
+
+    # ten years: the ca is replaced by the rotation in the runbook, not by
+    # expiry; node certificates are short and renewed below
+    - name: Self-sign the ca
+      community.crypto.x509_certificate_pipe:
+        provider: selfsigned
+        csr_content: "{{ tls_new_ca_csr.csr }}"
+        privatekey_content: "{{ tls_new_ca_key.privatekey }}"
+        selfsigned_not_after: "+3650d"
+      register: tls_new_ca_cert
+      when: tls_make_ca
+      no_log: true
+
+    - name: Choose the signing ca
+      ansible.builtin.set_fact:
+        tls_ca:
+          sa_ca_environment: "{{ tls_env }}"
+          ca_key: "{{ tls_new_ca_key.privatekey if tls_make_ca else tls_ca_doc.ca_key }}"
+          ca_cert: "{{ tls_new_ca_cert.certificate if tls_make_ca else tls_ca_doc.ca_cert }}"
+          previous_ca_certs: "{{ tls_previous_cas }}"
+      no_log: true
+
+    - name: Write the ca file
+      community.sops.sops_encrypt:
+        path: "{{ tls_ca_file }}"
+        content_yaml: "{{ tls_ca }}"
+        sops_binary: "{{ tls_sops_binary }}"
+        age_keyfile: "{{ tls_age_keyfile }}"
+        age: "{{ [tls_local_recipient.stdout] if tls_env == 'local' else omit }}"
+        # the local converge encrypts to --age alone; sops would otherwise
+        # find infra/secrets/.sops.yaml, which has no rule for local
+        config_path: "{{ (playbook_dir ~ '/../../secrets/.sops.yaml') if tls_env != 'local' else '/dev/null' }}"
+        mode: "0600"
+      no_log: true
+
+    # one leaf per node and one for the operators. the certificate names the
+    # node (the pgbackrest tls-server-auth match and haproxy's verifyhost),
+    # localhost and 127.0.0.1 (health checks inside the node), the private
+    # address (every peer dials it) and the tier's compose names. serverAuth
+    # and clientAuth both: etcd peers, nats routes and patroni members are
+    # client and server of each other.
+    - name: List the certificates
+      ansible.builtin.set_fact:
+        tls_leaves: >-
+          {%- set out = [] -%}
+          {%- for h in tls_nodes -%}
+          {{ out.append({'name': h, 'key': 'nodes', 'sans':
+               ['DNS:' ~ h, 'DNS:localhost'] + (tls_tier_names[hostvars[h].sa_tier] | map('regex_replace', '^', 'DNS:') | list)
+               + ['IP:127.0.0.1', 'IP:' ~ hostvars[h].sa_private_ip]}) }}
+          {%- endfor -%}
+          {{ out + [{'name': 'sa-' ~ tls_env ~ '-operator', 'key': 'operator', 'sans': ['DNS:sa-' ~ tls_env ~ '-operator']}] }}
+
+    - name: Keep or generate each key
+      community.crypto.openssl_privatekey_pipe:
+        type: ECC
+        curve: secp256r1
+        content: "{{ tls_existing.key | default(omit) }}"
+        # an unchanged key is not returned unless asked for
+        return_current_key: true
+      vars:
+        tls_existing: "{{ tls_old.nodes.get(item.name, {}) if item.key == 'nodes' else tls_old.operator }}"
+      loop: "{{ tls_leaves }}"
+      loop_control:
+        label: "{{ item.name }}"
+      register: tls_keys
+      # values in memory only; the files written below are the change
+      changed_when: false
+      no_log: true
+
+    - name: Make each signing request
+      community.crypto.openssl_csr_pipe:
+        privatekey_content: "{{ item.0.privatekey }}"
+        common_name: "{{ item.1.name }}"
+        subject_alt_name: "{{ item.1.sans }}"
+        subject_alt_name_critical: false
+        key_usage: [digitalSignature]
+        key_usage_critical: true
+        extended_key_usage: "{{ ['clientAuth'] if item.1.key == 'operator' else ['serverAuth', 'clientAuth'] }}"
+      loop: "{{ tls_keys.results | zip(tls_leaves) | list }}"
+      loop_control:
+        label: "{{ item.1.name }}"
+      register: tls_csrs
+      # values in memory only; the files written below are the change
+      changed_when: false
+      no_log: true
+
+    # a certificate is issued again when it is missing, when its key or
+    # names changed (the module compares it with the request), when it is
+    # valid for less than tls_renew_before more, or when the ca changed
+    - name: Read the validity of each certificate
+      community.crypto.x509_certificate_info:
+        content: "{{ tls_existing.cert }}"
+        valid_at:
+          renew: "+{{ tls_renew_before_days | default(30) }}d"
+      vars:
+        tls_existing: "{{ tls_old.nodes.get(item.name, {}) if item.key == 'nodes' else tls_old.operator }}"
+      loop: "{{ tls_leaves }}"
+      loop_control:
+        label: "{{ item.name }}"
+      register: tls_infos
+      when: tls_existing.cert is defined
+      no_log: true
+
+    - name: Sign each certificate
+      community.crypto.x509_certificate_pipe:
+        provider: ownca
+        content: "{{ tls_existing.cert | default(omit) }}"
+        csr_content: "{{ item.0.csr }}"
+        ownca_content: "{{ tls_ca.ca_cert }}"
+        ownca_privatekey_content: "{{ tls_ca.ca_key }}"
+        ownca_not_after: "+{{ tls_leaf_days | default(365) }}d"
+        force: "{{ tls_make_ca or (item.1 is not skipped and not item.1.valid_at.renew) }}"
+      vars:
+        tls_leaf: "{{ item.2 }}"
+        tls_existing: "{{ tls_old.nodes.get(tls_leaf.name, {}) if tls_leaf.key == 'nodes' else tls_old.operator }}"
+      loop: "{{ tls_csrs.results | zip(tls_infos.results, tls_leaves) | list }}"
+      loop_control:
+        label: "{{ item.2.name }}"
+      register: tls_certs
+      no_log: true
+
+    - name: Assemble the certificate file
+      ansible.builtin.set_fact:
+        tls_new_doc: >-
+          {%- set nodes = {} -%}
+          {%- set operator = {} -%}
+          {%- for r in tls_certs.results -%}
+          {%- set leaf = r.item.2 -%}
+          {%- set pair = {'cert': r.certificate, 'key': (tls_keys.results | selectattr('item.name', 'equalto', leaf.name) | first).privatekey} -%}
+          {%- if leaf.key == 'nodes' -%}{{ nodes.update({leaf.name: pair}) }}{%- else -%}{{ operator.update(pair) }}{%- endif -%}
+          {%- endfor -%}
+          {{ {'sa_tls_environment': tls_env,
+              'ca_bundle': ([tls_ca.ca_cert] + tls_ca.previous_ca_certs) | map('trim') | join(tls_nl) ~ tls_nl,
+              'nodes': nodes, 'operator': operator} }}
+      no_log: true
+
+    - name: Write the certificate file
+      community.sops.sops_encrypt:
+        path: "{{ tls_file }}"
+        content_yaml: "{{ tls_new_doc }}"
+        sops_binary: "{{ tls_sops_binary }}"
+        age_keyfile: "{{ tls_age_keyfile }}"
+        age: "{{ [tls_local_recipient.stdout] if tls_env == 'local' else omit }}"
+        # the local converge encrypts to --age alone; sops would otherwise
+        # find infra/secrets/.sops.yaml, which has no rule for local
+        config_path: "{{ (playbook_dir ~ '/../../secrets/.sops.yaml') if tls_env != 'local' else '/dev/null' }}"
+        mode: "0600"
+      no_log: true
+
+    - name: Report the certificates
+      ansible.builtin.debug:
+        msg: >-
+          {{ tls_certs.results | selectattr('changed') | map(attribute='item.2.name') | list | length }} certificate(s) issued,
+          ca {{ 'new' if tls_make_ca else 'unchanged' }}, {{ tls_ca.previous_ca_certs | length }} retired ca(s) still trusted

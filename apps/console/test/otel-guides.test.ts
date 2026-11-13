@@ -40,8 +40,10 @@ describe("api analytics guides built from the example apps", () => {
         .find((g) => g.id === id)
         ?.files.map((f) => f.code)
         .join("\n") ?? "";
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: the guide's source text must hold the placeholder itself
     expect(code("node")).toContain("Authorization: `Bearer ${config.platformToken}`");
     expect(code("node")).toContain(
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: the guide's source text must hold the placeholder itself
       "url: `${config.platformEndpoint}/v1/traces`,\n        headers: auth,",
     );
     expect(code("go")).toContain(

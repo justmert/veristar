@@ -42,7 +42,7 @@ gateway on 2026-11-13 ([../runbooks/tracker-release.md](../runbooks/tracker-rele
 4. **NATS** from a core node:
 
    ```sh
-   curl -s 'http://10.20.1.11:8222/jsz' | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("meta_cluster"))'
+   sudo curl -s --cacert /etc/stellar-analytics/tls/root/ca.crt --cert /etc/stellar-analytics/tls/root/node.crt --key /etc/stellar-analytics/tls/root/node.key 'https://10.20.1.11:8222/jsz' | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("meta_cluster"))'
    ```
 
    Expected: a leader and three peers, all current. Then `platformctl nats check` as in
@@ -52,7 +52,7 @@ gateway on 2026-11-13 ([../runbooks/tracker-release.md](../runbooks/tracker-rele
 5. **etcd and Patroni:**
 
    ```sh
-   cd /opt/stellar-analytics/edge && sudo docker compose exec etcd etcdctl --endpoints=http://127.0.0.1:2379 member list -w table
+   cd /opt/stellar-analytics/edge && sudo docker compose exec etcd etcdctl --endpoints=https://127.0.0.1:2379 --cacert=/etc/etcd/tls/ca.crt --cert=/etc/etcd/tls/node.crt --key=/etc/etcd/tls/node.key member list -w table
    cd /opt/stellar-analytics/core && sudo docker compose exec postgres patronictl -c /etc/patroni/patroni.yml list
    ```
 

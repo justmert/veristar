@@ -328,11 +328,30 @@ func (r *Replayer) sampleLag(ctx context.Context) {
 				r.log.Warn("consumer info failed, lag gauges are stale", "error", err.Error())
 			}
 		}
+		r.sampleVisitState(ctx)
 		select {
 		case <-ctx.Done():
 			return
 		case <-t.C:
 		}
+	}
+}
+
+// sampleVisitState refreshes the visit_state usage gauges, which the
+// ReplayerVisitStateNearlyFull alert reads.
+func (r *Replayer) sampleVisitState(ctx context.Context) {
+	ictx, cancel := context.WithTimeout(ctx, lagEvery)
+	defer cancel()
+	st, err := r.store.kv.Status(ictx)
+	if err != nil {
+		if ctx.Err() == nil {
+			r.log.Warn("visit_state status failed, usage gauges are stale", "error", err.Error())
+		}
+		return
+	}
+	r.m.visitStateBytes.Set(float64(st.Bytes()))
+	if kv, ok := st.(*jetstream.KeyValueBucketStatus); ok {
+		r.m.visitStateMax.Set(float64(kv.StreamInfo().Config.MaxBytes))
 	}
 }
 
@@ -366,6 +385,7 @@ func (r *Replayer) lead(parent context.Context) error {
 		guard:    &lockGuard{lock: r.lock, m: r.m},
 		slots:    make([]chan struct{}, len(r.umami)),
 		health:   make([]targetHealth, len(r.umami)),
+		writes:   make([]writeWatch, len(r.umami)),
 		held:     map[uint64]*held{},
 		visitors: map[string]*visitorQueue{},
 		freed:    make(chan struct{}, 1),
@@ -506,6 +526,9 @@ type leadRun struct {
 	slots []chan struct{}
 	// health caches one health check per umami process
 	health []targetHealth
+	// writes is the recent send record per umami process, which shows a
+	// write fault the health check cannot see (writefault.go)
+	writes []writeWatch
 	// visitorsWG tracks the visitor goroutines, which are started by the
 	// fetch loop
 	visitorsWG sync.WaitGroup

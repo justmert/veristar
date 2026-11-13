@@ -76,6 +76,10 @@ replacing one value.
 | `probe_metrics_token`, `gatus_external_token` | the probe node's Caddy and Gatus, Prometheus scraping the prober | core side yes; probe side waits for the probe node to be converged (same note) | |
 | `probe_otlp_token`, `probe_machine_api_key`, `probe_site_id` | the prober | waits for the probe node to be converged (same note) | create a new OTLP token for the internal probe tenant and a new scoped operator key, write them to the file, apply, then revoke the old ones |
 
+The certificates of the private network are not in `secrets.enc.yaml`: they live in
+`ca.enc.yaml` and `tls.enc.yaml` beside it and have their own section,
+[Internal CA and node certificates](#internal-ca-and-node-certificates).
+
 Keys of `tofu.enc.env` (`HCLOUD_TOKEN`, `BUNNYNET_API_KEY`, `AWS_ACCESS_KEY_ID`,
 `AWS_SECRET_ACCESS_KEY`, `SCW_*`) are only used on the controller: edit with
 `sops --config infra/secrets/.sops.yaml edit infra/secrets/staging/tofu.enc.env`, run
@@ -164,12 +168,78 @@ cd /opt/stellar-analytics/core && sudo docker compose run --rm --no-deps jobs ru
 Every Umami session token is invalidated by the password change; users re-enter through the
 console's SSO.
 
+## Internal CA and node certificates
+
+Every link between nodes is TLS with certificates of one internal CA per environment (finding
+O-26 of [the review notes](the review notes)). The files:
+
+| File | Holds | Read by |
+|---|---|---|
+| `infra/secrets/<env>/ca.enc.yaml` | `ca_key`, `ca_cert`, `previous_ca_certs` (retired CAs still trusted) | `playbooks/internal-ca.yml` on the controller only. No role loads it, so the CA key never reaches a node |
+| `infra/secrets/<env>/tls.enc.yaml` | `ca_bundle` (current and still-trusted CAs), `nodes.<name>.cert` and `.key` for every edge, core, backup and restore node, `operator.cert` and `.key` (client certificate for operators and the drills) | the `secrets` role, which installs each node's own pair under `/etc/stellar-analytics/tls/<container user>/` |
+
+`make internal-ca ENV=<env>` (`playbooks/internal-ca.yml`, community.crypto 3.5.1 from the pinned
+Ansible 14.6.0) issues only what is missing or due: a node certificate is issued again when the
+node is new, its names changed (node name, private address), or it is valid for less than 30
+more days. Keys are generated in the playbook's memory and written only through SOPS. A second
+run reports `0 certificate(s) issued`. Node certificates last 365 days, the CA 10 years.
+
+Each container that reads a certificate carries the label `sa.tls` (a hash of the node's
+certificate and the CA bundle), so `site.yml` recreates exactly those containers when either
+changes. A converge after a reissue therefore restarts NATS, etcd, PostgreSQL (Patroni), HAProxy,
+the relay, the exporters, Prometheus, Alertmanager and the services on each node; deploy with
+`deploy.yml` (one node at a time, drained, the Patroni leader switched over first) rather than
+`site.yml` in production.
+
+**Renew node certificates** (yearly, or when the `make internal-ca` report shows certificates
+due; also after adding a node or changing a private address):
+
+```sh
+make internal-ca ENV=staging
+make staging-deploy ROLLING=1 SA_IMAGE_TAG=<running release> SA_RELEASE_MANIFEST=<its release-images.json>
+```
+
+Expected: `N certificate(s) issued, ca unchanged`, then every node healthy in turn. Peers keep
+working through the rollout because the CA is unchanged.
+
+**Rotate the CA** (the CA key may have been exposed, or before it expires). Two converges, so no
+link ever meets a certificate its peer does not trust:
+
+1. `make internal-ca ENV=staging CA_ROTATE=new`: a new CA signs every node certificate again;
+   the old CA certificate moves to `previous_ca_certs` and stays in `ca_bundle`. Expected:
+   `N certificate(s) issued, ca new, 1 retired ca(s) still trusted`.
+2. Roll it out (`make staging-deploy ROLLING=1 ...`). During the rollout, nodes with old
+   certificates and nodes with new ones trust each other through the bundle.
+3. `make internal-ca ENV=staging CA_ROTATE=retire`: drops the retired CAs from the bundle
+   (`ca unchanged, 0 retired ca(s) still trusted`), and roll out again.
+
+If the old CA key was exposed, do step 3 straight after step 2: until then a certificate the
+attacker signed with the old key is still trusted.
+
+**Remove a node**: delete it from the inventory and run `make internal-ca`; its certificate
+leaves `tls.enc.yaml`. Its certificate is still valid until it expires, and nothing revokes it
+(there is no CRL), so after a node was compromised rotate the CA as above.
+
+**The operators' certificate** (`operator.cert`, CN `sa-<env>-operator`) is renewed with the node
+certificates. Extract it only into a private directory on your own machine, for example to read
+Patroni or NATS monitoring through an SSH tunnel, and delete it afterwards:
+
+```sh
+umask 077; mkdir -p ~/sa-tls
+for k in ca_bundle:ca.crt operator.cert:client.crt operator.key:client.key; do
+  sops decrypt --extract "$(echo "${k%%:*}" | sed 's/\./"]["/; s/^/["/; s/$/"]/')" \
+    infra/secrets/staging/tls.enc.yaml > ~/sa-tls/"${k#*:}"
+done
+```
+
 ## Exercised
 
 | Date | What ran | Result | Source |
 |---|---|---|---|
 | 2026-11-13 | this stage: platform role rotation path on a scratch PostgreSQL 18.6 (`platformctl db migrate`, `db roles` with one password, then `db roles` with a new one, logins tried over TCP) | `application role logins set and verified` both times; after rotation the old password was refused (`password authentication failed for user "cp_system"`), the new one logged in | this page |
 | 2026-11-13 | this stage: the Umami admin password command above, on a throwaway Umami 3.5.0 | seeded to first: `change password 200`; first to second: `change password 200`; old password `login 401`, new password `login 200` | this page |
+
+| 2026-11-13 | O-26: `make internal-ca ENV=local` on the local converge's inventory, first run then second run | first run: CA and 8 certificates issued; second run `0 certificate(s) issued, ca unchanged`, `changed=0` | this page |
 
 Not yet exercised: any rotation through `site.yml` on deployed nodes (no staging), the NATS,
 Patroni, Umami key and `APP_SECRET` rotations, and the provider keys. The this stage drills and the

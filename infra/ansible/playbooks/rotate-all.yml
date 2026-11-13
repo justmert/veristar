@@ -115,10 +115,16 @@
 - name: Find the patroni leader
   hosts: core
   gather_facts: false
+  # the rest api asks for the node's client certificate, readable by root
+  become: true
+  vars_files: [../vars/pins.yml]
   tasks:
     - name: Ask patroni whether this node is the primary
       ansible.builtin.uri:
-        url: "http://{{ sa_private_ip }}:8008/primary"
+        url: "https://{{ sa_private_ip }}:8008/primary"
+        ca_path: "{{ sa_tls_root.ca_path }}"
+        client_cert: "{{ sa_tls_root.client_cert }}"
+        client_key: "{{ sa_tls_root.client_key }}"
         status_code: [200, 503]
       register: rotate_role
       until: rotate_role.status in [200, 503]
@@ -279,7 +285,8 @@
       postgres:
         host: "{{ sa_private_ip }}"
         port: 5432
-        sslmode: disable
+        sslmode: verify-full
+        sslrootcert: /etc/sa-tls/ca.crt
         logins: >-
           {%- set out = [] -%}
           {%- for l in rotate_db_logins -%}
@@ -288,7 +295,8 @@
           {%- endfor -%}
           {{ out }}
       nats:
-        urls: "{{ groups['edge'] | map('extract', hostvars, 'sa_private_ip') | map('regex_replace', '^(.*)$', 'nats://\\1:4222') | list }}"
+        urls: "{{ groups['edge'] | map('extract', hostvars, 'sa_private_ip') | map('regex_replace', '^(.*)$', 'tls://\\1:4222') | list }}"
+        ca_file: /etc/sa-tls/ca.crt
         users: >-
           {%- set out = [] -%}
           {%- for u in sa_secrets.nats_passwords.keys() | sort -%}
@@ -307,7 +315,7 @@
     # replication role and what nats listens on
     - name: Try postgresql and nats logins
       ansible.builtin.command:
-        argv: [docker, run, --rm, -i, --network, host, "{{ platform_images.platformctl }}", rotation-check]
+        argv: [docker, run, --rm, -i, --network, host, -v, "{{ sa_tls_dir }}/ca:/etc/sa-tls:ro", "{{ platform_images.platformctl }}", rotation-check]
         stdin: "{{ rotate_spec_host | to_json }}"
       register: rotate_check_host
       changed_when: false
@@ -339,12 +347,16 @@
   hosts: edge:core
   become: true
   gather_facts: false
+  vars_files: [../vars/pins.yml]
   tasks:
     # post /reload needs the rest api's authentication and only makes
     # patroni read its own config again
     - name: Try the patroni rest api with each password
       ansible.builtin.uri:
-        url: "http://{{ sa_private_ip }}:8008/reload"
+        url: "https://{{ sa_private_ip }}:8008/reload"
+        ca_path: "{{ sa_tls_root.ca_path }}"
+        client_cert: "{{ sa_tls_root.client_cert }}"
+        client_key: "{{ sa_tls_root.client_key }}"
         method: POST
         url_username: patroni
         url_password: "{{ item.pw }}"
@@ -384,9 +396,27 @@
           - python3
           - -c
           - |
-            import json, socket, sys
-            s = socket.create_connection((sys.argv[1], 6222), timeout=5)
-            s.recv(65536)
+            import json, socket, ssl, sys
+            raw = socket.create_connection((sys.argv[1], 6222), timeout=5)
+            # routes are mutual tls (roles/edge nats.conf): the check
+            # presents this node's certificate, as a route would, so the
+            # password is what is tested. a server that sends INFO before
+            # the handshake gets it read first.
+            raw.settimeout(1)
+            try:
+                if raw.recv(4, socket.MSG_PEEK) == b"INFO":
+                    raw.recv(65536)
+            except socket.timeout:
+                pass
+            raw.settimeout(5)
+            ctx = ssl.create_default_context(cafile=sys.argv[2])
+            ctx.minimum_version = ssl.TLSVersion.TLSv1_3
+            ctx.load_cert_chain(sys.argv[3], sys.argv[4])
+            s = ctx.wrap_socket(raw, server_hostname=sys.argv[1])
+            try:
+                s.recv(65536)
+            except socket.timeout:
+                pass
             s.sendall(b"CONNECT " + json.dumps({"user": "route", "pass": sys.stdin.read(), "verbose": False}).encode() + b"\r\nPING\r\n")
             buf = b""
             try:
@@ -399,6 +429,9 @@
                 pass
             print("refused" if b"Authorization Violation" in buf else "not refused: " + buf[:80].decode(errors="replace"))
           - "{{ sa_private_ip }}"
+          - "{{ sa_tls_root.ca_path }}"
+          - "{{ sa_tls_root.client_cert }}"
+          - "{{ sa_tls_root.client_key }}"
         stdin: "{{ rotate_previous.nats_route_password }}"
       register: rotate_route_old
       changed_when: false
@@ -408,7 +441,8 @@
 
     - name: Require full nats routes with the new route password
       ansible.builtin.uri:
-        url: "http://{{ sa_private_ip }}:8222/routez"
+        # monitoring listens on the node's loopback only
+        url: "http://127.0.0.1:8222/routez"
         return_content: true
       register: rotate_routez
       until: rotate_routez.json.num_routes | default(0) >= (groups['edge'] | length - 1)

@@ -58,6 +58,11 @@ type Result struct {
 // what each run scans.
 const DriftWindow = 24 * time.Hour
 
+// DriftEvery is how often the consistency check runs. it scans
+// a day of minute rows, so it runs hourly rather than in every 5 minute
+// rollup run; a lost mark is a bug path, and an hour is soon enough.
+const DriftEvery = time.Hour
+
 // Rollup recomputes the pending hours.
 type Rollup struct {
 	log      *slog.Logger
@@ -67,6 +72,9 @@ type Rollup struct {
 	pending  prometheus.Gauge
 	orphaned prometheus.Counter
 	drifted  prometheus.Counter
+	// lastDrift is when the consistency check last ran in this process;
+	// the scheduler runs one Run at a time, so it needs no lock
+	lastDrift time.Time
 }
 
 // New returns a Rollup and registers its metrics.
@@ -116,21 +124,29 @@ type tenantDay struct {
 // back, which puts its marks back for the next leader.
 func (r *Rollup) Run(ctx context.Context, tx TxFunc) (Result, error) {
 	var total Result
-	drift := true
+	drift := r.lastDrift.IsZero() || r.now().Sub(r.lastDrift) >= DriftEvery
 	for {
 		res, claimed, err := r.batch(ctx, tx)
 		if err != nil {
 			return total, err
 		}
 		total.add(res)
-		if claimed < ClaimBatch {
-			// the check runs once per run, after the backlog is worked off,
-			// and what it marks is recomputed by one more batch
+		// a full batch is followed by another only when it got somewhere:
+		// marks of hours a writer still holds go back and, being oldest,
+		// would be claimed again at once, so a batch of busy marks would
+		// loop back to back until the writers paused. they
+		// wait for the next run instead.
+		progressed := res.Hours+res.Orphaned > 0
+		if claimed < ClaimBatch || !progressed {
+			// the check runs at most once per DriftEvery, after the backlog
+			// is worked off, and what it marks is recomputed by one more
+			// batch
 			if !drift {
 				break
 			}
 			drift = false
-			n, err := r.checkDrift(ctx, tx, r.now())
+			r.lastDrift = r.now()
+			n, err := r.checkDrift(ctx, tx, r.lastDrift)
 			if err != nil {
 				return total, err
 			}

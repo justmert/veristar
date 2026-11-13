@@ -471,3 +471,73 @@ func arrayLiteral(c [15]int64) string {
 	}
 	return string(append(b, '}'))
 }
+
+// review: a full batch of marks whose hours a writer still holds made no
+// progress, and since busy marks go back as the oldest, Run claimed and
+// restored the same batch back to back until the writer let go. now a batch
+// without progress ends the run. separately, the 24 hour consistency check
+// ran in every 5 minute run; it now runs at most once per DriftEvery.
+func TestRollupStopsOnBusyBatchesAndChecksDriftHourly(t *testing.T) {
+	srv := jobstest.NATS(t)
+	pg := jobstest.Postgres(t)
+	d := jobstest.JobsDB(t, pg)
+	leader, _ := jobstest.Leader(t, srv, d, "rollup-busy")
+	r, err := apirollup.New(slog.New(slog.DiscardHandler), prometheus.NewRegistry())
+	require.NoError(t, err)
+	var txs int
+	counted := func(ctx context.Context, fn func(pgx.Tx) error) error {
+		txs++
+		return leader.Tx(ctx, fn)
+	}
+
+	// an empty run: one batch and the consistency check
+	_, err = r.Run(t.Context(), counted)
+	require.NoError(t, err)
+	require.Equal(t, 2, txs, "batch and consistency check")
+	// the next run within the hour skips the check
+	txs = 0
+	_, err = r.Run(t.Context(), counted)
+	require.NoError(t, err)
+	require.Equal(t, 1, txs, "the consistency check runs at most once per DriftEvery")
+
+	// more marks than one batch, every hour held by an open writer
+	// transaction, as a writer's batch holds its tenants' hours to commit
+	tenant := uuid.New()
+	first := time.Date(2031, 4, 1, 0, 0, 0, 0, time.UTC)
+	const hours = apirollup.ClaimBatch + 100
+	var days []time.Time
+	for h := 0; h < hours; h += 24 {
+		days = append(days, dayOf(first.Add(time.Duration(h)*time.Hour)))
+	}
+	ensurePartitions(t, d, days, []time.Time{first, first.AddDate(0, 1, 0)})
+	writer, err := d.Pool(pdb.RoleJobs)
+	require.NoError(t, err)
+	wtx, err := writer.Begin(t.Context())
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = wtx.Rollback(context.Background()) })
+	for h := range hours {
+		hour := first.Add(time.Duration(h) * time.Hour)
+		_, err := wtx.Exec(t.Context(), `select pg_advisory_xact_lock_shared(api.rollup_lock_key($1, $2))`, tenant, hour)
+		require.NoError(t, err)
+	}
+	require.NoError(t, d.WithRole(t.Context(), pdb.RoleJobs, func(tx pgx.Tx) error {
+		_, err := tx.Exec(t.Context(), `insert into api.rollup_pending (tenant_id, hour)
+			select $1, $2::timestamptz + make_interval(hours => g) from generate_series(0, $3::int - 1) g`, tenant, first, hours)
+		return err
+	}))
+	txs = 0
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	res, err := r.Run(ctx, counted)
+	require.NoError(t, err, "the run must end while the writer holds the hours")
+	require.Equal(t, 1, txs, "one batch without progress ends the run")
+	require.Equal(t, apirollup.ClaimBatch, res.Busy)
+	require.Equal(t, hours, pendingCount(t, d), "every mark is kept for a later run")
+
+	// once the writer committed, the next run rolls everything up
+	require.NoError(t, wtx.Rollback(t.Context()))
+	res, err = r.Run(t.Context(), counted)
+	require.NoError(t, err)
+	require.Equal(t, hours, res.Hours)
+	require.Zero(t, pendingCount(t, d))
+}

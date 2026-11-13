@@ -57,6 +57,11 @@ type Server struct {
 	// SSLMode is a libpq sslmode. it is required rather than defaulted so that
 	// production never runs without tls by omission.
 	SSLMode string
+	// TLS names the internal ca and an optional client certificate
+	// (PLATFORM_DB_SSLROOTCERT, PLATFORM_DB_SSLCERT, PLATFORM_DB_SSLKEY).
+	// with a ca, SSLMode is verify-full, so a connection is encrypted and
+	// the server's name checked, or it fails; it never continues in clear.
+	TLS *config.TLSFiles
 }
 
 // Login is a user name and password for the platform database.
@@ -67,15 +72,19 @@ type Login struct {
 
 var sslModes = map[string]bool{"disable": true, "require": true, "verify-ca": true, "verify-full": true}
 
-// loadServer reads PLATFORM_DB_HOST, PLATFORM_DB_PORT, PLATFORM_DB_NAME and
-// PLATFORM_DB_SSLMODE. missing keys are recorded on e.
+// loadServer reads PLATFORM_DB_HOST, PLATFORM_DB_PORT, PLATFORM_DB_NAME,
+// PLATFORM_DB_SSLMODE and the optional PLATFORM_DB_SSLROOTCERT,
+// PLATFORM_DB_SSLCERT and PLATFORM_DB_SSLKEY (config.LoadPostgresTLS).
+// missing keys are recorded on e.
 func loadServer(e *config.Env) Server {
-	return Server{
+	s := Server{
 		Host:     e.String("PLATFORM_DB_HOST"),
 		Port:     e.Int("PLATFORM_DB_PORT", 1, 65535),
 		Database: e.String("PLATFORM_DB_NAME"),
 		SSLMode:  e.String("PLATFORM_DB_SSLMODE"),
 	}
+	s.TLS = config.LoadPostgresTLS(e, s.SSLMode)
+	return s
 }
 
 // check reports a value that is present but not acceptable.
@@ -180,6 +189,7 @@ func (s Server) connString(l Login, appName string) string {
 		{"password", l.Password.Reveal()},
 		{"application_name", appName},
 	}
+	kv = append(kv, s.TLS.PGParams()...)
 	var b strings.Builder
 	for i, p := range kv {
 		if i > 0 {

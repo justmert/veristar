@@ -427,6 +427,14 @@ func (h *Routes) patch(w http.ResponseWriter, r *http.Request) error {
 		if old.Status == StatusRemoved {
 			return httpx.Conflict(httpx.CodeSiteRemoved, "the site is removed")
 		}
+		// keeping campaign parameters changes the site's privacy position
+		// (cnil's consent exemption), so it is the operator's decision (audit
+		// N-7); members may still send the value unchanged with other fields
+		if b.CollectUTM != nil && *b.CollectUTM != old.CollectUtm {
+			if err := a.RequireOwner(); err != nil {
+				return err
+			}
+		}
 		detail := map[string]any{"tenant_id": a.TenantID}
 		if name != nil && *name != old.Name {
 			detail["name"] = audit.Change(old.Name, *name)

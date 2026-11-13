@@ -141,6 +141,23 @@ func (q *Queries) DropMinutePartition(ctx context.Context, day time.Time) (bool,
 	return dropped, err
 }
 
+const evictIdleSeriesStates = `-- name: EvictIdleSeriesStates :one
+select api.evict_idle_series_states($1::timestamptz, $2::bigint)::bigint as evicted
+`
+
+type EvictIdleSeriesStatesParams struct {
+	IdleBefore time.Time
+	MaxStored  int64
+}
+
+// bounds the stored streams of each tenant (review, migration 00029)
+func (q *Queries) EvictIdleSeriesStates(ctx context.Context, arg EvictIdleSeriesStatesParams) (int64, error) {
+	row := q.db.QueryRow(ctx, evictIdleSeriesStates, arg.IdleBefore, arg.MaxStored)
+	var evicted int64
+	err := row.Scan(&evicted)
+	return evicted, err
+}
+
 const listHourlyPartitions = `-- name: ListHourlyPartitions :many
 select m::date as month from api.hourly_partitions() as m
 `

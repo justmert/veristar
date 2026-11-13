@@ -4,6 +4,12 @@ name: stellar-analytics-observability
 
 x-defaults: &defaults
   restart: unless-stopped
+{% if secrets_tls_fingerprint is defined %}
+  # the certificate installed by the secrets role; a new certificate or ca
+  # bundle changes the label and so recreates every container reading them
+  labels:
+    sa.tls: "{{ secrets_tls_fingerprint }}"
+{% endif %}
   # container hardening (the design): the root filesystem is read-only, so
   # services write only to their volumes and a small /tmp; no capabilities;
   # no privilege gain through setuid binaries or file capabilities
@@ -26,22 +32,42 @@ services:
     pid: host
     command:
       - --web.listen-address={{ sa_private_ip }}:{{ observability_node_exporter_port }}
+      # https with a client certificate of the internal ca
+      - --web.config.file=/etc/sa-web/web-config.yml
       - --path.rootfs=/host
       - --collector.textfile.directory=/textfile
     volumes:
       - /:/host:ro,rslave
       - {{ observability_conf_dir }}/textfile:/textfile:ro
+      - {{ observability_conf_dir }}/web:/etc/sa-web:ro
+      - {{ sa_tls_dir }}/nobody:/etc/sa-tls:ro
 
   relay:
     <<: *defaults
     image: {{ observability_images.haproxy }}
     volumes:
       - {{ observability_conf_dir }}/relay.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+      - {{ sa_tls_dir }}/haproxy:/etc/haproxy-tls:ro
     networks: [tier]
     ports:
 {% for r in observability_relay_targets %}
       - "{{ sa_private_ip }}:{{ r.port }}:{{ r.port }}"
 {% endfor %}
+{% if sa_tier == 'edge' %}
+      - "{{ sa_private_ip }}:{{ observability_nats_monitor_relay_port }}:{{ observability_nats_monitor_relay_port }}"
+{% endif %}
+{% endif %}
+{% if sa_tier == 'edge' %}
+
+  # reads this node's nats monitoring inside the node; prometheus scrapes it
+  # through the relay (job nats)
+  nats-exporter:
+    <<: *defaults
+    image: {{ observability_images.nats_exporter }}
+    # the image defaults to root; the exporter needs no files at all
+    user: "65534:65534"
+    networks: [tier]
+    command: ["-port", "7777", "-jsz", "all", "-varz", "-healthz", "http://nats:8222"]
 {% endif %}
 {% if sa_tier == 'core' %}
 
@@ -56,6 +82,7 @@ services:
       - --web.enable-lifecycle
     volumes:
       - {{ observability_conf_dir }}/prometheus:/etc/prometheus:ro
+      - {{ sa_tls_dir }}/nobody:/etc/sa-tls:ro
       - prometheus:/prometheus
     # loopback only: operators use an ssh tunnel (the design)
     ports: ["127.0.0.1:9090:9090"]
@@ -71,6 +98,10 @@ services:
       - --config.file=/etc/alertmanager/alertmanager.yml
       - --storage.path=/alertmanager
       - --web.listen-address=0.0.0.0:{{ observability_alertmanager_port }}
+      # https for prometheus and mutual tls for the cluster's gossip, both
+      # with the node certificate
+      - --web.config.file=/etc/sa-web/web-config.yml
+      - --cluster.tls-config=/etc/sa-web/alertmanager-cluster-tls.yml
       - --cluster.listen-address=0.0.0.0:{{ observability_alertmanager_cluster_port }}
       - --cluster.advertise-address={{ sa_private_ip }}:{{ observability_alertmanager_cluster_port }}
 {% for h in groups['core'] if h != inventory_hostname %}
@@ -78,17 +109,19 @@ services:
 {% endfor %}
     volumes:
       - {{ observability_conf_dir }}/alertmanager:/etc/alertmanager:ro
+      - {{ observability_conf_dir }}/web:/etc/sa-web:ro
+      - {{ sa_tls_dir }}/nobody:/etc/sa-tls:ro
       - alertmanager:/alertmanager
 {% if observability_probe_extra_hosts is defined %}
     # local converge only: the platform names resolve nowhere else
     extra_hosts: {{ observability_probe_extra_hosts | to_json }}
 {% endif %}
     # the private address only: the other core node's prometheus and the
-    # other cluster member
+    # other cluster member. with the cluster's tls the gossip is tcp only,
+    # so no udp port is published
     ports:
       - "{{ sa_private_ip }}:{{ observability_alertmanager_port }}:{{ observability_alertmanager_port }}"
       - "{{ sa_private_ip }}:{{ observability_alertmanager_cluster_port }}:{{ observability_alertmanager_cluster_port }}"
-      - "{{ sa_private_ip }}:{{ observability_alertmanager_cluster_port }}:{{ observability_alertmanager_cluster_port }}/udp"
 
   grafana:
     <<: *defaults
@@ -112,24 +145,21 @@ services:
       - {{ observability_conf_dir }}/grafana/dashboards:/var/lib/grafana/dashboards:ro
       - grafana:/var/lib/grafana
     ports: ["127.0.0.1:3000:3000"]
-{% for h in groups['edge'] %}
-
-  nats-exporter-{{ h }}:
-    <<: *defaults
-    image: {{ observability_images.nats_exporter }}
-    # the image defaults to root; the exporter needs no files at all
-    user: "65534:65534"
-    command: ["-port", "7777", "-jsz", "all", "-varz", "-healthz", "http://{{ hostvars[h].sa_private_ip }}:{{ observability_nats_monitor_port }}"]
-{% endfor %}
 {% if inventory_hostname in observability_postgres_hosts %}
 
   postgres-exporter:
     <<: *defaults
     image: {{ observability_images.postgres_exporter }}
     env_file: [{{ secrets_env_dir }}/postgres-exporter.env]
+    # tls to postgresql checked against the private address, and https with
+    # a client certificate for prometheus
+    command: ["--web.config.file=/etc/sa-web/web-config.yml"]
     environment:
-      DATA_SOURCE_URI: "{{ sa_private_ip }}:5432/postgres?sslmode=disable"
+      DATA_SOURCE_URI: "{{ sa_private_ip }}:5432/postgres?sslmode=verify-full&sslrootcert=/etc/sa-tls/ca.crt"
       DATA_SOURCE_USER: sa_monitor
+    volumes:
+      - {{ observability_conf_dir }}/web:/etc/sa-web:ro
+      - {{ sa_tls_dir }}/nobody:/etc/sa-tls:ro
     ports: ["{{ sa_private_ip }}:{{ observability_postgres_exporter_port }}:9187"]
 {% endif %}
 {% endif %}

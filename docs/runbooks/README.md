@@ -100,9 +100,12 @@ with the production ones from the table above when working on production, and
 ```sh
 sudo docker run --rm --network stellar-analytics-core_default \
   --env-file /etc/stellar-analytics/env/platformctl.env \
+  -v /etc/stellar-analytics/tls/ca:/etc/sa-tls:ro \
   -e PLATFORM_DB_HOST=haproxy -e PLATFORM_DB_PORT=5000 -e PLATFORM_DB_NAME=platform \
-  -e PLATFORM_DB_SSLMODE=disable -e UMAMI_DB_NAME=umami -e UMAMI_URL=http://umami:3000 \
-  -e NATS_URL=nats://10.20.1.11:4222,nats://10.20.2.12:4222,nats://10.20.3.13:4222 \
+  -e PLATFORM_DB_SSLMODE=verify-full -e PLATFORM_DB_SSLROOTCERT=/etc/sa-tls/ca.crt \
+  -e UMAMI_DB_NAME=umami -e UMAMI_URL=http://umami:3000 \
+  -e NATS_URL=tls://10.20.1.11:4222,tls://10.20.2.12:4222,tls://10.20.3.13:4222 \
+  -e NATS_TLS_CA=/etc/sa-tls/ca.crt \
   -e NATS_REPLICAS=3 \
   ghcr.io/justmert/stellar-analytics/platformctl:<release tag> nats check
 ```
@@ -127,10 +130,11 @@ Start `jobs` again on both nodes afterwards (`sudo docker compose start jobs`).
 ### NATS state without a NATS client
 
 No NATS command-line client is pinned or installed by any role. Stream and consumer counters are
-read from the NATS monitoring port on the private network, from any core node:
+read from the NATS monitoring port on the private network, from any core node. The edge
+relay serves it over TLS and asks for a client certificate of the internal CA:
 
 ```sh
-curl -s 'http://10.20.1.11:8222/jsz?streams=true&consumers=true'
+sudo curl -s --cacert /etc/stellar-analytics/tls/root/ca.crt --cert /etc/stellar-analytics/tls/root/node.crt --key /etc/stellar-analytics/tls/root/node.key 'https://10.20.1.11:8222/jsz?streams=true&consumers=true'
 ```
 
 The JSON lists every stream with `state.messages`, `state.first_seq` and its consumers'

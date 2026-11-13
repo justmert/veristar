@@ -209,9 +209,22 @@ type pgxTx = pgx.Tx
 
 func quietLog() *slog.Logger { return slog.New(slog.DiscardHandler) }
 
+// sessionUser is the user tenants.Scope.InTenant sets in app.user_id for a
+// tenant transaction: here the seeded owner of the tenant (migration 00028).
+func sessionUser(tenant uuid.UUID) string {
+	switch tenant {
+	case seed.tenantA:
+		return seed.userA.String()
+	case seed.tenantB:
+		return seed.userB.String()
+	}
+	return ""
+}
+
 // attempt runs one statement as a role in its own transaction and always
 // rolls back, so the shared seed stays as it is. tenant is set with
-// set_config exactly as WithTenant does; nil leaves app.tenant_id unset.
+// set_config exactly as WithTenant and tenants.Scope.InTenant do, with the
+// tenant's owner as session user; nil leaves both unset.
 func attempt(t *testing.T, role pdb.Role, tenant *uuid.UUID, sql string, args ...any) (int64, error) {
 	t.Helper()
 	ctx := context.Background()
@@ -221,7 +234,8 @@ func attempt(t *testing.T, role pdb.Role, tenant *uuid.UUID, sql string, args ..
 	require.NoError(t, err)
 	defer func() { _ = tx.Rollback(ctx) }()
 	if tenant != nil {
-		_, err := tx.Exec(ctx, `select set_config('app.tenant_id', $1, true)`, tenant.String())
+		_, err := tx.Exec(ctx, `select set_config('app.tenant_id', $1, true), set_config('app.user_id', $2, true)`,
+			tenant.String(), sessionUser(*tenant))
 		require.NoError(t, err)
 	}
 	tag, err := tx.Exec(ctx, sql, args...)

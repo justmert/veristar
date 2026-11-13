@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -27,9 +28,13 @@ func pgPassword() (string, error) {
 // leader asks each core node's patroni which one is the primary, as haproxy
 // does
 func leader(ctx context.Context, inv inventory) (string, error) {
-	hc := &http.Client{Timeout: 2 * time.Second}
+	tr, err := privateTransport()
+	if err != nil {
+		return "", err
+	}
+	hc := &http.Client{Timeout: 2 * time.Second, Transport: tr}
 	for _, c := range inv.group("core") {
-		resp, err := httpGet(ctx, hc, "http://"+c.Private+":8008/primary")
+		resp, err := httpGet(ctx, hc, "https://"+c.Private+":8008/primary")
 		if err != nil {
 			continue
 		}
@@ -46,7 +51,10 @@ func connect(ctx context.Context, addr, db string) (*pgx.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	cfg, err := pgx.ParseConfig(fmt.Sprintf("host=%s port=5432 dbname=%s user=postgres sslmode=disable connect_timeout=5 application_name=drillctl", addr, db))
+	// postgresql admits tls only (roles/core pg_hba); the certificate names
+	// the private address the drill dials
+	cfg, err := pgx.ParseConfig(fmt.Sprintf("host=%s port=5432 dbname=%s user=postgres sslmode=verify-full sslrootcert=%s connect_timeout=5 application_name=drillctl",
+		addr, db, filepath.Join(os.Getenv("SA_DRILL_TLS_DIR"), "ca.crt")))
 	if err != nil {
 		return nil, err
 	}

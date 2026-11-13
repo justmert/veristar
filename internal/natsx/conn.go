@@ -20,7 +20,8 @@ const reconnectWait = time.Second
 // Options returns the connection options every service uses: a connection
 // named after the service, reconnects that never give up, a per-service reply
 // inbox that the subject permissions are written against, the service's
-// credentials when configured, and connection events in the log.
+// credentials when configured, tls when configured, and connection events in
+// the log.
 func Options(cfg config.NATS, service string, log *slog.Logger) ([]nats.Option, error) {
 	if service == "" || strings.ContainsAny(service, ".*> \t") {
 		return nil, fmt.Errorf("natsx: service name %q is not a single subject token", service)
@@ -59,6 +60,19 @@ func Options(cfg config.NATS, service string, log *slog.Logger) ([]nats.Option, 
 			return nil, fmt.Errorf("natsx: NATS_USER is %q but this service is %q", cfg.User, service)
 		}
 		opts = append(opts, nats.UserInfo(cfg.User, cfg.Password.Reveal()))
+	}
+	if cfg.TLS != nil {
+		tc, err := cfg.TLS.ClientConfig()
+		if err != nil {
+			return nil, fmt.Errorf("natsx: %w", err)
+		}
+		// Secure makes the client refuse a server that does not offer tls,
+		// so a misconfigured server is an error and never a plain text
+		// connection. handshake first starts tls before the server's INFO
+		// line, so nothing of the protocol crosses the network in clear;
+		// the servers set tls.handshake_first to match (roles/edge). the
+		// client sets the server name to each url's host when it dials.
+		opts = append(opts, nats.Secure(tc), nats.TLSHandshakeFirst())
 	}
 	return opts, nil
 }

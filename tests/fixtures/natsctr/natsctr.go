@@ -5,6 +5,7 @@
 package natsctr
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net"
@@ -98,6 +99,7 @@ func freePort() (string, error) {
 type options struct {
 	image   string
 	config  string
+	files   map[string][]byte
 	network *testcontainers.DockerNetwork
 	alias   string
 	args    []string
@@ -108,6 +110,17 @@ type Option func(*options)
 
 // WithConfig starts the server with this configuration file content.
 func WithConfig(content string) Option { return func(o *options) { o.config = content } }
+
+// WithFile puts a file into the container before it starts, for example a
+// certificate the configuration names.
+func WithFile(path string, content []byte) Option {
+	return func(o *options) {
+		if o.files == nil {
+			o.files = map[string][]byte{}
+		}
+		o.files[path] = content
+	}
+}
 
 // start must not call t.Fatal, because StartCluster runs it in goroutines.
 func start(t testing.TB, name string, o options) (*Server, error) {
@@ -142,6 +155,13 @@ func start(t testing.TB, name string, o options) (*Server, error) {
 		opts = append(opts, testcontainers.WithFiles(testcontainers.ContainerFile{
 			Reader:            strings.NewReader(o.config),
 			ContainerFilePath: "/etc/nats/test.conf",
+			FileMode:          0o644,
+		}))
+	}
+	for p, b := range o.files {
+		opts = append(opts, testcontainers.WithFiles(testcontainers.ContainerFile{
+			Reader:            bytes.NewReader(b),
+			ContainerFilePath: p,
 			FileMode:          0o644,
 		}))
 	}

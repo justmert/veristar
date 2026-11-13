@@ -119,7 +119,12 @@ export function SitesPage() {
         <ul className="divide-y overflow-hidden rounded-xl border bg-card">
           {live.map((s) => (
             <li key={s.id}>
-              <SiteRow site={s} canEdit={canChange} canDelete={isOwner && termsCurrent} />
+              <SiteRow
+                site={s}
+                canEdit={canChange}
+                canDelete={isOwner && termsCurrent}
+                isOwner={isOwner}
+              />
             </li>
           ))}
         </ul>
@@ -259,10 +264,12 @@ function SiteRow({
   site,
   canEdit,
   canDelete,
+  isOwner,
 }: {
   site: Site;
   canEdit: boolean;
   canDelete: boolean;
+  isOwner: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   return (
@@ -321,7 +328,7 @@ function SiteRow({
         </div>
       </div>
       {editing ? <EditSiteForm site={site} onDone={() => setEditing(false)} /> : null}
-      <CampaignParams site={site} canEdit={canEdit} />
+      <CampaignParams site={site} canEdit={canEdit} isOwner={isOwner} />
       <div className="mt-4 border-t pt-3">
         <StellarTomlSummary
           toml={site.stellar_toml}
@@ -405,9 +412,18 @@ function EditSiteForm({ site, onDone }: { site: Site; onDone: () => void }) {
   );
 }
 
-// utm collection (contract 3.1 collect_utm): off unless a member turns it on.
-// saved at once, because it is one switch and not part of the edit form.
-export function CampaignParams({ site, canEdit }: { site: Site; canEdit: boolean }) {
+// utm collection (contract 3.1 collect_utm, 4.3.4): off unless an owner turns
+// it on, because it changes the site's privacy position. saved at
+// once, because it is one switch and not part of the edit form.
+export function CampaignParams({
+  site,
+  canEdit,
+  isOwner,
+}: {
+  site: Site;
+  canEdit: boolean;
+  isOwner: boolean;
+}) {
   const id = useId();
   const save = useMutation({
     mutationFn: (on: boolean) => api.updateSite(site.tenant_id, site.id, { collect_utm: on }),
@@ -423,7 +439,7 @@ export function CampaignParams({ site, canEdit }: { site: Site; canEdit: boolean
         <Checkbox
           id={id}
           checked={checked}
-          disabled={!canEdit || save.isPending}
+          disabled={!canEdit || !isOwner || save.isPending}
           onCheckedChange={(c) => save.mutate(c === true)}
           aria-describedby={`${id}-d`}
           className="mt-0.5"
@@ -437,6 +453,7 @@ export function CampaignParams({ site, canEdit }: { site: Site; canEdit: boolean
         Off by default: every query parameter is dropped before storage. Turning this on keeps the
         campaign parameters, which France's CNIL recommends not collecting for analytics run without
         consent. It applies to new events within a minute.
+        {canEdit && !isOwner ? " Only an owner of the project can change it." : null}
       </p>
       <FormMessage error={save.error} />
     </div>

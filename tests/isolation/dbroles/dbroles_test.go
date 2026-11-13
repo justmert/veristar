@@ -413,7 +413,9 @@ func seed(t *testing.T, c *pgx.Conn) (side, side) {
 }
 
 // asTenant runs fn as cp_tenant with app.tenant_id set exactly as
-// db.WithTenant sets it (tenant nil leaves it unset), and rolls back.
+// db.WithTenant sets it, and app.user_id set to the tenant's owner as
+// tenants.Scope.InTenant sets the session user (migration 00028); tenant nil
+// leaves both unset. it rolls back.
 func (e *env) asTenant(t *testing.T, tenant *uuid.UUID, fn func(tx pgx.Tx)) {
 	t.Helper()
 	ctx := context.Background()
@@ -424,6 +426,9 @@ func (e *env) asTenant(t *testing.T, tenant *uuid.UUID, fn func(tx pgx.Tx)) {
 	defer func() { _ = tx.Rollback(ctx) }()
 	if tenant != nil {
 		_, err := tx.Exec(ctx, `select set_config('app.tenant_id', $1, true)`, tenant.String())
+		require.NoError(t, err)
+		_, err = tx.Exec(ctx, `select set_config('app.user_id',
+			(select user_id::text from cp.tenant_members where role = 'owner' order by created_at limit 1), true)`)
 		require.NoError(t, err)
 	}
 	fn(tx)

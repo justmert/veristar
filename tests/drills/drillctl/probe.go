@@ -132,10 +132,15 @@ func runLag(ctx context.Context, args []string) (any, error) {
 }
 
 func natsLag(ctx context.Context, inv inventory) (map[string]int64, error) {
-	hc := &http.Client{Timeout: 5 * time.Second}
+	tr, err := privateTransport()
+	if err != nil {
+		return nil, err
+	}
+	hc := &http.Client{Timeout: 5 * time.Second, Transport: tr}
 	var lastErr error
 	for _, e := range inv.group("edge") {
-		resp, err := httpGet(ctx, hc, "http://"+e.Private+":8222/jsz?accounts=true&streams=true")
+		// nats monitoring through the relay's tls listener (roles/observability)
+		resp, err := httpGet(ctx, hc, "https://"+e.Private+":8222/jsz?accounts=true&streams=true")
 		if err != nil {
 			lastErr = err
 			continue

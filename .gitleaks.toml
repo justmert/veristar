@@ -1,0 +1,15 @@
+# gitleaks configuration (the design): the default rules, plus one
+# reviewed allowlist. env file examples in the docs show each secret as an
+# angle-bracket placeholder (UMAMI_USER_PASSWORD_KEY=<umami user password key>),
+# which the generic-api-key rule takes for a key. a fingerprint in
+# .gitleaksignore pins one commit and line, so every edit of such a doc moved
+# the finding and failed the gate again. the rule's match then starts inside
+# the placeholder (for example "password key>"); this allows only a match
+# that is two or more lowercase words closed by ">", which no secret is.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "env example lines whose value is an angle-bracket placeholder"
+regexTarget = "match"
+regexes = ['''^[a-z]+( [a-z]+)+>''']

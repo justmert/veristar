@@ -26,3 +26,9 @@ cf1cfce506982637c3ea2389cbb226d5fff3042a:cmd/adoptionreport/main_test.go:generic
 # the literal p17-fixture-secret that the observability test stack hands to
 # the test-only github oauth fixture container; no real oauth app exists
 15e5ba26e80a37da4325c71f0208e33d19b322d0:tests/observability/up.sh:generic-api-key:75
+# reviewed 2026-11-13 (the review), each read at its commit:
+# a fixed made-up token id uuid stamped on a test batch; token ids are
+# public row ids, never credentials
+bc09545f82bb0fadb14c5c0c6086610495f65424:collector/jetstreamexporter/exporter_test.go:generic-api-key:242
+# the documentation placeholder <umami user password key> in an env example
+bc09545f82bb0fadb14c5c0c6086610495f65424:docs/handover/rebuild.md:generic-api-key:188

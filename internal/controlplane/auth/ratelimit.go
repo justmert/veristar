@@ -11,25 +11,49 @@ import (
 	"time"
 )
 
-// sign-in limits (contract 4.1.1 and 4.1.2 step 4).
-// each client has its own bucket, so one client running out cannot lock
-// anyone else out; a global bucket per control plane instance stays as a
-// ceiling, sized well above what clients within their own limits produce
+// sign-in limits (contract 4.1.1 and 4.1.2 step 4 and
+// N-2). each client has its own bucket, so one client running out cannot
+// lock anyone else out; a global bucket per control plane instance stays as
+// a ceiling, sized well above what clients within their own limits produce
 // together, so it only bounds the load a large distributed flood puts on
 // github. a request takes from its client's bucket first and only then
 // from the global one, so a client already over its limit spends nothing
 // of the shared budget.
+//
+// when the global bucket is empty, a client whose own bucket was full (one
+// that had been idle, which is what a person starting a sign-in looks like)
+// may still take from a small reserve. a flood keeps its own buckets below
+// full, so it cannot reach the reserve with the keys it is using; it would
+// need a fresh key per reserve token, and a key is a whole ipv4 address or
+// a whole ipv6 /48. the per-client burst stays 20: keying by /48 and a
+// shared ipv4 address (an office, a campus nat) puts several people behind
+// one key, and their sign-ins arrive close together.
 const (
-	StartClientRatePerSecond = 0.5
-	StartClientBurst         = 20
-	StartRatePerSecond       = 50
-	StartBurst               = 200
+	StartClientRatePerSecond  = 0.5
+	StartClientBurst          = 20
+	StartRatePerSecond        = 50
+	StartBurst                = 200
+	StartReserveRatePerSecond = 5
+	StartReserveBurst         = 20
 
-	ExchangeClientRatePerSecond = 0.5
-	ExchangeClientBurst         = 20
-	ExchangeRatePerSecond       = 10
-	ExchangeBurst               = 30
+	ExchangeClientRatePerSecond  = 0.5
+	ExchangeClientBurst          = 20
+	ExchangeRatePerSecond        = 10
+	ExchangeBurst                = 30
+	ExchangeReserveRatePerSecond = 2
+	ExchangeReserveBurst         = 10
 )
+
+// IPv6ClientPrefix is the ipv6 prefix length that keys one client (audit
+// N-2). /48 is the largest assignment one end site normally gets (ripe-690
+// recommends /48 or /56 per site, hosting providers route a /48 to one
+// customer, and tunnel brokers hand a free /48 to anyone who signs up).
+// keyed by /56 or /64, one such holder would get 256 or 65,536 buckets of
+// its own and drain the global ceiling alone; keyed by /48 it gets one.
+// the cost is that unrelated clients inside one /48 (a campus, or a mobile
+// carrier's pool) share a bucket, which for sign-in, one start per person
+// and visit, is at most a 2 second wait.
+const IPv6ClientPrefix = 48
 
 // ClientAddrHeader carries the client address from core caddy to the
 // control plane (deploy/caddy/app.Caddyfile sets it from the connection,
@@ -66,16 +90,27 @@ func (b *bucket) take(now time.Time) (bool, time.Duration) {
 }
 
 func (b *bucket) takeLocked(now time.Time) (bool, time.Duration) {
-	if el := now.Sub(b.last); el > 0 {
-		b.tokens = min(b.burst, b.tokens+el.Seconds()*b.rate)
-		b.last = now
-	}
+	b.refillLocked(now)
 	if b.tokens >= 1 {
 		b.tokens--
 		return true, 0
 	}
 	wait := time.Duration((1 - b.tokens) / b.rate * float64(time.Second))
 	return false, wait
+}
+
+func (b *bucket) refillLocked(now time.Time) {
+	if el := now.Sub(b.last); el > 0 {
+		b.tokens = min(b.burst, b.tokens+el.Seconds()*b.rate)
+		b.last = now
+	}
+}
+
+// fullLocked reports whether the bucket holds its whole burst at now, which
+// a client's bucket does only after it was idle for burst/rate seconds.
+func (b *bucket) fullLocked(now time.Time) bool {
+	b.refillLocked(now)
+	return b.tokens >= b.burst
 }
 
 // clientKey is the keyed hash of a client address prefix. the key is 32
@@ -96,8 +131,8 @@ func newClientHasher() (*clientHasher, error) {
 // of returns the client of a request: the address caddy passed in
 // ClientAddrHeader, or the connection's peer when the request did not come
 // through caddy (the dev setup, where the browser connects directly). ipv4
-// is used whole; ipv6 is cut to its /64, because one subscriber holds a
-// whole /64 and could otherwise take a new bucket per address. a value
+// is used whole; ipv6 is cut to its IPv6ClientPrefix, because one holder of
+// a prefix could otherwise take a new bucket per address or subnet. a value
 // that is not an address is hashed as given, so it still gets a bucket of
 // its own and never shares one with real clients.
 func (c *clientHasher) of(r *http.Request) clientKey {
@@ -112,7 +147,7 @@ func (c *clientHasher) of(r *http.Request) clientKey {
 	if a, err := netip.ParseAddr(raw); err == nil {
 		a = a.Unmap()
 		if a.Is6() {
-			p, _ := a.Prefix(64)
+			p, _ := a.Prefix(IPv6ClientPrefix)
 			material = "v6:" + p.String()
 		} else {
 			material = "v4:" + a.String()
@@ -125,24 +160,29 @@ func (c *clientHasher) of(r *http.Request) clientKey {
 	return k
 }
 
-// limiter is a per-client bucket set under a global ceiling.
+// limiter is a per-client bucket set under a global ceiling, with a reserve
+// beside the ceiling for clients that had been idle.
 type limiter struct {
 	mu          sync.Mutex
 	rate, burst float64
 	clients     map[clientKey]*bucket
 	global      *bucket
+	reserve     *bucket
 }
 
-func newLimiter(clientRate, clientBurst, globalRate, globalBurst float64, now time.Time) *limiter {
+func newLimiter(clientRate, clientBurst, globalRate, globalBurst, reserveRate, reserveBurst float64, now time.Time) *limiter {
 	return &limiter{
 		rate: clientRate, burst: clientBurst,
 		clients: map[clientKey]*bucket{},
 		global:  newBucket(globalRate, globalBurst, now),
+		reserve: newBucket(reserveRate, reserveBurst, now),
 	}
 }
 
 // take spends one token of the client's bucket and then one of the global
-// bucket. it returns false and the wait when either is empty.
+// bucket, or of the reserve when the global one is empty and the client's
+// bucket was full before this request. it returns false and the wait when
+// the request is refused.
 func (l *limiter) take(k clientKey, now time.Time) (bool, time.Duration) {
 	l.mu.Lock()
 	b, ok := l.clients[k]
@@ -157,12 +197,20 @@ func (l *limiter) take(k clientKey, now time.Time) (bool, time.Duration) {
 		b = newBucket(l.rate, l.burst, now)
 		l.clients[k] = b
 	}
-	okClient, wait := b.takeLocked(now)
+	idle := b.fullLocked(now)
+	ok, wait := b.takeLocked(now)
 	l.mu.Unlock()
-	if !okClient {
+	if !ok {
 		return false, wait
 	}
-	return l.global.take(now)
+	ok, wait = l.global.take(now)
+	if ok || !idle {
+		return ok, wait
+	}
+	if okReserve, _ := l.reserve.take(now); okReserve {
+		return true, 0
+	}
+	return false, wait
 }
 
 // forgetRefilled drops the buckets that are full again: a new bucket

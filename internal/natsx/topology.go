@@ -102,8 +102,9 @@ var RetryBackoff = []time.Duration{time.Second, 5 * time.Second, 30 * time.Secon
 // store (edge_nats_max_memory_store, 512 MiB) with edge_secrets. without a
 // cap a busy day filled the store, and the gateways could no longer create
 // the next day's secrets, which stops all ingestion. with it a full bucket
-// refuses replayer writes only: delivery waits, ingestion goes on, and
-// docs/runbooks/capacity.md says when to raise both numbers.
+// refuses replayer writes only; the replayer skips them and keeps delivering
+//, ingestion goes on, and docs/runbooks/capacity.md says when to
+// raise both numbers.
 const VisitStateMaxBytes = 384 << 20
 
 // Spec is the full topology for one replica count.

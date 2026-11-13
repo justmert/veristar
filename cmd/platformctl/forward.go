@@ -24,7 +24,8 @@ import (
 const forwardUsage = `  queue forward [--queues web,api,stats] [--until-empty] [--idle 2m] [--batch 100]
                     moves the queued messages of this environment's WEB_EVENTS,
                     API_METRICS and EDGE_STATS to another environment's streams
-                    (TARGET_NATS_URL, TARGET_NATS_USER, TARGET_NATS_PASSWORD) during a
+                    (TARGET_NATS_URL, TARGET_NATS_USER, TARGET_NATS_PASSWORD and the
+                    TARGET_NATS_TLS_* files) during a
                     handover cutover (docs/handover/plan.md section 2.3). it binds the
                     consumers of the stopped replayer, metricswriter and jobs and acks each
                     message only after the target stream acknowledged it
@@ -48,7 +49,7 @@ var errConsumerBusy = errors.New("queue forward: a client is still pulling")
 
 func runForward(ctx context.Context, args []string) error {
 	target := map[string]string{}
-	for _, k := range []string{"NATS_URL", "NATS_USER", "NATS_PASSWORD"} {
+	for _, k := range []string{"NATS_URL", "NATS_USER", "NATS_PASSWORD", "NATS_TLS_CA", "NATS_TLS_CERT", "NATS_TLS_KEY"} {
 		if v, ok := os.LookupEnv("TARGET_" + k); ok {
 			target[k] = v
 		}

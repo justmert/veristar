@@ -78,7 +78,8 @@ commands:
                     WEB_RAW_RETENTION_MONTHS (default 25) as the role
                     jobs_retention; refuses to run on an umami schema it was
                     not tested with. needs PLATFORM_DB_HOST, PLATFORM_DB_PORT,
-                    PLATFORM_DB_SSLMODE, UMAMI_DB_NAME and
+                    PLATFORM_DB_SSLMODE, PLATFORM_DB_SSLROOTCERT (verify-full only) with the
+optional PLATFORM_DB_SSLCERT and PLATFORM_DB_SSLKEY, UMAMI_DB_NAME and
                     UMAMI_DB_JOBS_RETENTION_PASSWORD only; run it once a day
   capacity          print the measured on-disk bytes per row of the api metric
                     tables as json (docs/reference/capacity.md); needs only the
@@ -86,8 +87,10 @@ commands:
   version           print the build version
 
 environment: NATS_URL, NATS_REPLICAS, NATS_USER and NATS_PASSWORD (when the
-server requires auth), PLATFORM_DB_HOST, PLATFORM_DB_PORT, PLATFORM_DB_NAME,
-PLATFORM_DB_SSLMODE, PLATFORM_DB_JOBS_PASSWORD, PLATFORM_DB_CP_SYSTEM_PASSWORD
+server requires auth), NATS_TLS_CA with the optional NATS_TLS_CERT and
+NATS_TLS_KEY (tls only, from the first byte), PLATFORM_DB_HOST, PLATFORM_DB_PORT, PLATFORM_DB_NAME,
+PLATFORM_DB_SSLMODE, PLATFORM_DB_SSLROOTCERT (verify-full only) with the
+optional PLATFORM_DB_SSLCERT and PLATFORM_DB_SSLKEY, PLATFORM_DB_JOBS_PASSWORD, PLATFORM_DB_CP_SYSTEM_PASSWORD
 (reconcile and umami-rotate run control plane logic as cp_system), UMAMI_URL,
 UMAMI_ADMIN_PASSWORD, UMAMI_USER_PASSWORD_KEY, API_MINUTE_RETENTION_DAYS,
 API_HOURLY_RETENTION_MONTHS (at least 24), and JOBS_OPS_ADDR for daemon.

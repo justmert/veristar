@@ -24,6 +24,36 @@ SA_DRILL_PG_PASSWORD="$(SOPS_AGE_KEY_FILE="$LC_STATE/age.key" \
 	"$root/infra/secrets/local/secrets.enc.yaml")"
 export SA_DRILL_PG_PASSWORD
 
+# the operators' client certificate and the ca bundle of the internal ca
+# (infra/ansible/playbooks/internal-ca.yml): every private endpoint the
+# drills read (patroni, nats monitoring through the relay, postgresql) is
+# tls with client certificates since. kept 0600 under the
+# drills' scratch directory for the length of the run.
+SA_DRILL_TLS_DIR="$DRILLS/tls"
+(
+	umask 077
+	mkdir -p "$SA_DRILL_TLS_DIR"
+	for k in ca_bundle:ca.crt operator.cert:client.crt operator.key:client.key; do
+		path="$(echo "${k%%:*}" | sed 's/\./"]["/; s/^/["/; s/$/"]/')"
+		SOPS_AGE_KEY_FILE="$LC_STATE/age.key" "$HOME/.local/share/stellar-analytics/tools/sops-3.13.3" decrypt \
+			--extract "$path" "$root/infra/secrets/local/tls.enc.yaml" >"$SA_DRILL_TLS_DIR/${k#*:}"
+	done
+)
+export SA_DRILL_TLS_DIR
+
+# curl with the operators' client certificate, for the private endpoints
+tcurl() {
+	curl --cacert "$SA_DRILL_TLS_DIR/ca.crt" --cert "$SA_DRILL_TLS_DIR/client.crt" --key "$SA_DRILL_TLS_DIR/client.key" "$@"
+}
+
+# etcdctl inside an edge node's etcd container, with that node's certificate
+etcdctl_in() {
+	node="$1"
+	shift
+	docker exec "$node" docker compose --project-directory /opt/stellar-analytics/edge exec -T etcd \
+		etcdctl --cacert=/etc/etcd/tls/ca.crt --cert=/etc/etcd/tls/node.crt --key=/etc/etcd/tls/node.key "$@"
+}
+
 
 # drillctl's flag sets take -inv after the command name
 dc() {
@@ -44,7 +74,7 @@ nexec() {
 
 patroni_leader() {
 	for n in sa-lc-core-1 sa-lc-core-2; do
-		if docker exec "$n" curl -fsS -o /dev/null "http://$(priv_of "$n"):8008/primary" 2>/dev/null; then
+		if tcurl -fsS -o /dev/null "https://$(priv_of "$n"):8008/primary" 2>/dev/null; then
 			echo "$n"
 			return 0
 		fi

@@ -1,6 +1,13 @@
 # managed by ansible (infra/ansible/roles/observability). each core node runs
 # one prometheus that scrapes every target; the two are an ha pair, and both
 # send to both alertmanagers, which deduplicate.
+{% if observability_tls | bool %}
+# every target on the private network, and both alertmanagers, are https
+# with a client certificate: prometheus presents its node's
+# certificate and checks the target's against the internal ca and the
+# address it dials.
+{% endif %}
+{% set tls = observability_tls | bool %}
 global:
   scrape_interval: {{ observability_scrape_interval }}
   evaluation_interval: {{ observability_scrape_interval }}
@@ -18,7 +25,13 @@ alerting:
     - action: labeldrop
       regex: replica
   alertmanagers:
+{% if tls %}
+    - scheme: https
+      tls_config: {ca_file: /etc/sa-tls/ca.crt, cert_file: /etc/sa-tls/node.crt, key_file: /etc/sa-tls/node.key, min_version: TLS13}
+      static_configs:
+{% else %}
     - static_configs:
+{% endif %}
         - targets:
 {% for h in groups['core'] %}
             - "{{ hostvars[h].sa_private_ip }}:{{ observability_alertmanager_port }}"
@@ -31,6 +44,10 @@ scrape_configs:
         labels: {node: "{{ inventory_hostname }}", tier: core}
 
   - job_name: alertmanager
+{% if tls %}
+    scheme: https
+    tls_config: {ca_file: /etc/sa-tls/ca.crt, cert_file: /etc/sa-tls/node.crt, key_file: /etc/sa-tls/node.key, min_version: TLS13}
+{% endif %}
     static_configs:
 {% for h in groups['core'] %}
       - targets: ["{{ hostvars[h].sa_private_ip }}:{{ observability_alertmanager_port }}"]
@@ -38,6 +55,10 @@ scrape_configs:
 {% endfor %}
 
   - job_name: node
+{% if tls %}
+    scheme: https
+    tls_config: {ca_file: /etc/sa-tls/ca.crt, cert_file: /etc/sa-tls/node.crt, key_file: /etc/sa-tls/node.key, min_version: TLS13}
+{% endif %}
     static_configs:
 {% for h in groups['edge'] + groups['core'] %}
       - targets: ["{{ hostvars[h].sa_private_ip }}:{{ observability_node_exporter_port }}"]
@@ -48,6 +69,10 @@ scrape_configs:
    once, so the relay entries are grouped by job #}
 {% for job in (observability_relay.edge + observability_relay.core) | map(attribute='job') | unique %}
   - job_name: {{ job }}
+{% if tls %}
+    scheme: https
+    tls_config: {ca_file: /etc/sa-tls/ca.crt, cert_file: /etc/sa-tls/node.crt, key_file: /etc/sa-tls/node.key, min_version: TLS13}
+{% endif %}
     static_configs:
 {% for tier in ['edge', 'core'] %}
 {% for r in observability_relay[tier] if r.job == job %}
@@ -59,15 +84,11 @@ scrape_configs:
 {% endfor %}
 
 {% endfor %}
-  # one exporter per nats server, run beside this prometheus
-  - job_name: nats
-    static_configs:
-{% for h in groups['edge'] %}
-      - targets: ["nats-exporter-{{ h }}:7777"]
-        labels: {node: "{{ h }}", tier: edge}
-{% endfor %}
-
   - job_name: etcd
+{% if tls %}
+    scheme: https
+    tls_config: {ca_file: /etc/sa-tls/ca.crt, cert_file: /etc/sa-tls/node.crt, key_file: /etc/sa-tls/node.key, min_version: TLS13}
+{% endif %}
     static_configs:
 {% for h in groups['edge'] %}
       - targets: ["{{ hostvars[h].sa_private_ip }}:{{ observability_etcd_client_port }}"]
@@ -76,6 +97,10 @@ scrape_configs:
 
 {% if observability_patroni_hosts | length > 0 %}
   - job_name: patroni
+{% if tls %}
+    scheme: https
+    tls_config: {ca_file: /etc/sa-tls/ca.crt, cert_file: /etc/sa-tls/node.crt, key_file: /etc/sa-tls/node.key, min_version: TLS13}
+{% endif %}
     static_configs:
 {% for h in observability_patroni_hosts %}
       - targets: ["{{ hostvars[h].sa_private_ip }}:{{ observability_patroni_port }}"]
@@ -84,6 +109,10 @@ scrape_configs:
 {% endif %}
 
   - job_name: postgres
+{% if tls %}
+    scheme: https
+    tls_config: {ca_file: /etc/sa-tls/ca.crt, cert_file: /etc/sa-tls/node.crt, key_file: /etc/sa-tls/node.key, min_version: TLS13}
+{% endif %}
     static_configs:
 {% for h in observability_postgres_hosts %}
       - targets: ["{{ hostvars[h].sa_private_ip }}:{{ observability_postgres_exporter_port }}"]

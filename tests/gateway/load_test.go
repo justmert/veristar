@@ -5,6 +5,7 @@ package gatewayit
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/rand/v2"
 	"net/http"
@@ -112,6 +113,37 @@ export default function () {
 }
 `
 
+// k6Summary is the part of k6's --summary-export file the test reads.
+// metric values are numbers; the thresholds entry is an object, which the
+// per-field number decoding skips.
+type k6Summary struct {
+	Metrics map[string]map[string]json.RawMessage `json:"metrics"`
+}
+
+// readK6Summary reads the summary a k6 run exported into dir. k6 exits 99
+// when a threshold is crossed and still writes the summary, so a run error
+// alone is not fatal here: the numbers of a failed run are reported too.
+// when the summary is missing or unreadable the run itself failed before
+// writing it (docker, image pull, oom, script error), and that run error is
+// the cause the test must report, not the missing file.
+func readK6Summary(dir string, runErr error) (k6Summary, error) {
+	var sum k6Summary
+	sb, err := os.ReadFile(filepath.Join(dir, "summary.json"))
+	if err != nil {
+		if runErr != nil {
+			return sum, fmt.Errorf("k6 run failed before writing its summary: %w (summary: %w)", runErr, err)
+		}
+		return sum, err
+	}
+	if err := json.Unmarshal(sb, &sum); err != nil {
+		if runErr != nil {
+			return sum, fmt.Errorf("k6 run failed with an unreadable summary: %w (summary: %w)", runErr, err)
+		}
+		return sum, err
+	}
+	return sum, nil
+}
+
 // TestThroughputK6 drives one gateway container with k6 2.3.0 (its docker
 // image) at 2,500 events per second for 30 s, every request a full event
 // path ending in a jetstream acknowledgement. the result goes into
@@ -141,19 +173,9 @@ func TestThroughputK6(t *testing.T) {
 	out, err := docker("run", "--rm", "--network", s.Net, "-v", dir+":/load", k6Image,
 		"run", "--quiet", "--summary-export", "/load/summary.json", "/load/script.js")
 	t.Logf("k6 output:\n%s", out)
-	// k6 exits 99 when a threshold is crossed and still writes the summary,
-	// which is read below so the numbers of a failed run are reported too
 	runErr := err
-	// metric values are numbers; the thresholds entry is an object, which
-	// json.Number decoding below skips
-	var sum struct {
-		Metrics map[string]map[string]json.RawMessage `json:"metrics"`
-	}
-	sb, err := os.ReadFile(filepath.Join(dir, "summary.json"))
+	sum, err := readK6Summary(dir, runErr)
 	if err != nil {
-		t.Fatal(err)
-	}
-	if err := json.Unmarshal(sb, &sum); err != nil {
 		t.Fatal(err)
 	}
 	num := func(metric, field string) float64 {
@@ -228,4 +250,28 @@ func BenchmarkEventPath(b *testing.B) {
 	b.ReportMetric(float64(b.N)/elapsed.Seconds(), "req/s")
 	b.ReportMetric(float64(lat[len(lat)*99/100].Microseconds())/1000, "p99-ms")
 	b.ReportMetric(float64(lat[len(lat)/2].Microseconds())/1000, "p50-ms")
+}
+
+// TestReadK6SummaryReportsRunError pins the diagnosis order of
+// TestThroughputK6: when k6 died before exporting its summary, the failure
+// names k6's run error rather than only the missing summary file; a summary
+// written by a run that crossed a threshold is still read.
+func TestReadK6SummaryReportsRunError(t *testing.T) {
+	runErr := errors.New("docker run grafana/k6: exit status 137: oom killed")
+	_, err := readK6Summary(t.TempDir(), runErr)
+	if !errors.Is(err, runErr) {
+		t.Fatalf("missing summary: got %v, want the k6 run error", err)
+	}
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "summary.json"),
+		[]byte(`{"metrics":{"http_reqs":{"count":3}}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	sum, err := readK6Summary(dir, errors.New("exit status 99"))
+	if err != nil {
+		t.Fatalf("threshold run with a summary: %v", err)
+	}
+	if string(sum.Metrics["http_reqs"]["count"]) != "3" {
+		t.Fatalf("summary not decoded: %v", sum.Metrics)
+	}
 }

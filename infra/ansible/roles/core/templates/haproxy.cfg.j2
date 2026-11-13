@@ -11,13 +11,19 @@ defaults
     timeout server 30m
     timeout check 3s
 
+# the postgresql traffic passes through as tcp: the services' tls session
+# runs end to end to postgresql, which names "haproxy" in its certificate
+# (sslmode verify-full against the host the services dial). the health
+# checks are https to patroni's rest api with this node's client
+# certificate, checking patroni's certificate against the member's name
+#; check-ssl does not turn on tls for the traffic itself.
 listen primary
     bind *:5000
     option httpchk GET /primary
     http-check expect status 200
     default-server inter 2s fall 3 rise 2 on-marked-down shutdown-sessions
 {% for h in core_postgres_hosts %}
-    server {{ h }} {{ hostvars[h].sa_private_ip }}:5432 check port 8008
+    server {{ h }} {{ hostvars[h].sa_private_ip }}:5432 check port 8008 check-ssl verify required ca-file /etc/haproxy-tls/ca.crt crt /etc/haproxy-tls/node.pem verifyhost {{ h }} ssl-min-ver TLSv1.3
 {% endfor %}
 
 # prometheus metrics at /metrics and the stats page at /stats. the port is

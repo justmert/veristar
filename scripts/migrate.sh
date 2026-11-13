@@ -16,8 +16,10 @@
 #
 # the env file names the server and an admin login: PLATFORM_DB_HOST,
 # PLATFORM_DB_PORT, PLATFORM_DB_NAME, PLATFORM_DB_SSLMODE,
-# PLATFORM_DB_ADMIN_USER, PLATFORM_DB_ADMIN_PASSWORD (a superuser) and
-# UMAMI_DB_NAME. the postgresql client tools run from MIGRATE_PG_IMAGE (the
+# PLATFORM_DB_ADMIN_USER, PLATFORM_DB_ADMIN_PASSWORD (a superuser),
+# UMAMI_DB_NAME and, for sslmode verify-full against a converged
+# environment,
+# PLATFORM_DB_SSLROOTCERT: the environment's ca bundle. the postgresql client tools run from MIGRATE_PG_IMAGE (the
 # pinned server image, so pg_dump is never older than the server) on
 # MIGRATE_DOCKER_NETWORK (default host, so 127.0.0.1 is this machine).
 set -eu
@@ -58,13 +60,24 @@ platform_db="$(key PLATFORM_DB_NAME)"
 umami_db="$(key UMAMI_DB_NAME)"
 PGPASSWORD="$(key PLATFORM_DB_ADMIN_PASSWORD)"
 export PGPASSWORD
+# the ca is optional in the file, but verify-full needs it and a ca with
+# any other mode is refused, as the services refuse it (internal/config)
+rootcert="$(sed -n 's/^PLATFORM_DB_SSLROOTCERT=//p' "$env_file")"
+case "$sslmode" in
+verify-ca | verify-full) [ -f "$rootcert" ] || die "sslmode $sslmode needs PLATFORM_DB_SSLROOTCERT naming the ca bundle" ;;
+*) [ -z "$rootcert" ] || die "PLATFORM_DB_SSLROOTCERT is set, so PLATFORM_DB_SSLMODE must be verify-full" ;;
+esac
 
-conninfo() { printf 'host=%s port=%s user=%s sslmode=%s dbname=%s' "$host" "$port" "$admin" "$sslmode" "$1"; }
+conninfo() {
+	printf 'host=%s port=%s user=%s sslmode=%s dbname=%s' "$host" "$port" "$admin" "$sslmode" "$1"
+	[ -z "$rootcert" ] || printf ' sslrootcert=/tls/ca.crt'
+}
 
 # runs a postgresql client tool from the pinned image. the password travels
 # in the environment, never on a command line. $dir is mounted at /work.
 pgtool() {
 	docker run --rm -i --network "$NETWORK" -e PGPASSWORD --user "$(id -u):$(id -g)" \
+		${rootcert:+-v "$(cd "$(dirname "$rootcert")" && pwd)/$(basename "$rootcert"):/tls/ca.crt:ro"} \
 		-v "$(cd "$dir" && pwd):/work" -w /work "$PG_IMAGE" "$@"
 }
 

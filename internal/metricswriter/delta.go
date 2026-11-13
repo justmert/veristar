@@ -250,11 +250,12 @@ type State struct {
 }
 
 // ErrSeriesCap marks a new cumulative stream of a tenant that already has
-// the cap's number of streams.
+// the cap's number of active streams.
 var ErrSeriesCap = errors.New("metricswriter: tenant stream cap reached")
 
-// LoadSeriesCount records how many streams a tenant has stored. the writer
-// loads it for every tenant that has a stream the batch does not know yet.
+// LoadSeriesCount records how many active streams a tenant has (stored a
+// point within ActiveSeriesWindow). the writer loads it for every tenant
+// that has a stream the batch does not know yet.
 func (s *State) LoadSeriesCount(tenant string, n int) {
 	s.seriesN[tenant] = n
 }
@@ -264,14 +265,30 @@ func (s *State) LoadSeriesCount(tenant string, n int) {
 // rather than letting the stream pass the cap unchecked.
 var errSeriesCountNotLoaded = errors.New("metricswriter: stream count of the tenant was not loaded")
 
-// MaxSeriesPerTenant is the stream cap the writer applies. the route,
-// service, method and status caps bound what a tenant's rows hold, not how
-// many streams the writer must follow: every process restart is a new
-// resource and every distinct error.type a new stream. 100,000 is about 20
+// MaxSeriesPerTenant is the cap on a tenant's active streams, the ones the
+// writer stored a point of within ActiveSeriesWindow. the route, service,
+// method and status caps bound what a tenant's rows hold, not how many
+// streams the writer must follow: every process restart is a new resource
+// and every distinct error.type a new stream. 100,000 is about 20 running
 // processes of a service with the full 300 routes, 9 methods and 10
-// statuses, and each stream costs one api.series_state row (about 250
-// bytes), so a tenant can hold at most about 25 mb of writer state.
+// statuses. only active streams count: the streams of a process
+// that restarted stop counting an hour after its last export, so restarts,
+// deploys and autoscaling never reach the cap; only that many streams alive
+// at once do. their rows are bounded separately (MaxStoredSeriesPerTenant).
 const MaxSeriesPerTenant = 100_000
+
+// ActiveSeriesWindow is how long after its last stored point a stream still
+// counts towards MaxSeriesPerTenant. an hour covers every common export
+// interval (60 s default, 5 minutes at most in practice) many times over,
+// so a live stream never drops out between two exports.
+const ActiveSeriesWindow = time.Hour
+
+// MaxStoredSeriesPerTenant bounds the api.series_state rows of a tenant,
+// active or idle: api-retention evicts the longest idle streams (idle
+// longer than ActiveSeriesWindow) above it every hour. at about 250 bytes a
+// row a tenant holds at most about 125 mb of writer state, plus what it
+// adds within one hour.
+const MaxStoredSeriesPerTenant = 500_000
 
 // NewState returns an empty state with the given threshold and per-tenant
 // stream cap.

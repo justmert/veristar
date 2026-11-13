@@ -18,8 +18,8 @@
   ansible.builtin.set_fact:
     edge_peers: "{{ groups['edge'] | map('extract', hostvars) | list }}"
     edge_nats_urls: >-
-      {{ (['nats://nats:4222'] + (groups['edge'] | reject('equalto', inventory_hostname)
-          | map('extract', hostvars, 'sa_private_ip') | map('regex_replace', '^(.*)$', 'nats://\1:4222') | list)) | join(',') }}
+      {{ (['tls://nats:4222'] + (groups['edge'] | reject('equalto', inventory_hostname)
+          | map('extract', hostvars, 'sa_private_ip') | map('regex_replace', '^(.*)$', 'tls://\1:4222') | list)) | join(',') }}
 
 - name: Create the edge directories
   ansible.builtin.file:
@@ -138,9 +138,10 @@
 - name: Apply a nats config change now
   ansible.builtin.meta: flush_handlers
 
+# monitoring listens on the node's loopback only (templates/nats.conf.j2)
 - name: Wait for jetstream to be current with its meta leader
   ansible.builtin.uri:
-    url: "http://{{ sa_private_ip }}:8222/healthz"
+    url: "http://127.0.0.1:8222/healthz"
     status_code: 200
   register: edge_nats_health
   until: edge_nats_health.status == 200

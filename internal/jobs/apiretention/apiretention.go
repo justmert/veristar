@@ -20,6 +20,7 @@ import (
 	"github.com/justmert/stellar-analytics/internal/config"
 	"github.com/justmert/stellar-analytics/internal/db/jobsq"
 	"github.com/justmert/stellar-analytics/internal/jobs/apipartition"
+	"github.com/justmert/stellar-analytics/internal/metricswriter"
 )
 
 // TaskName is the name of the task in the scheduler and in `jobs run`.
@@ -122,6 +123,15 @@ func (r *Retention) Run(ctx context.Context, tx TxFunc) (Result, error) {
 		if res.SeriesState, err = q.PruneSeriesState(ctx, now.Add(-IdleMaxAge)); err != nil {
 			return fmt.Errorf("series_state: %w", err)
 		}
+		// the writer caps only active streams, so the stored
+		// ones are bounded here, by evicting the longest idle
+		evicted, err := q.EvictIdleSeriesStates(ctx, jobsq.EvictIdleSeriesStatesParams{
+			IdleBefore: now.Add(-metricswriter.ActiveSeriesWindow), MaxStored: metricswriter.MaxStoredSeriesPerTenant,
+		})
+		if err != nil {
+			return fmt.Errorf("series_state eviction: %w", err)
+		}
+		res.SeriesState += evicted
 		if res.ResourceSeen, err = q.PruneResourceSeen(ctx, now.Add(-IdleMaxAge)); err != nil {
 			return fmt.Errorf("resource_seen: %w", err)
 		}

@@ -87,12 +87,13 @@ type Config struct {
 	Port     int
 	Database string
 	SSLMode  string
+	TLS      *config.TLSFiles
 	Password config.Secret
 	Months   int
 }
 
-// Load reads PLATFORM_DB_HOST, PLATFORM_DB_PORT, PLATFORM_DB_SSLMODE,
-// UMAMI_DB_NAME, UMAMI_DB_JOBS_RETENTION_PASSWORD and
+// Load reads PLATFORM_DB_HOST, PLATFORM_DB_PORT, PLATFORM_DB_SSLMODE, the
+// tls files of config.LoadPostgresTLS, UMAMI_DB_NAME, UMAMI_DB_JOBS_RETENTION_PASSWORD and
 // WEB_RAW_RETENTION_MONTHS (default 25).
 func Load(e *config.Env) (Config, error) {
 	ret, _ := config.LoadWebRetention(e)
@@ -104,6 +105,7 @@ func Load(e *config.Env) (Config, error) {
 		Password: e.Secret("UMAMI_DB_JOBS_RETENTION_PASSWORD", 32),
 		Months:   ret.Months,
 	}
+	c.TLS = config.LoadPostgresTLS(e, c.SSLMode)
 	return c, e.Err()
 }
 
@@ -113,9 +115,13 @@ func quote(v string) string {
 
 // ConnString is the keyword/value connection string of the job's role.
 func (c Config) ConnString() string {
-	return "host=" + quote(c.Host) + " port=" + strconv.Itoa(c.Port) + " dbname=" + quote(c.Database) +
+	s := "host=" + quote(c.Host) + " port=" + strconv.Itoa(c.Port) + " dbname=" + quote(c.Database) +
 		" sslmode=" + quote(c.SSLMode) + " user=" + Role + " password=" + quote(c.Password.Reveal()) +
 		" application_name=jobs-retain-web"
+	for _, p := range c.TLS.PGParams() {
+		s += " " + p[0] + "=" + quote(p[1])
+	}
+	return s
 }
 
 // Cutoff is the start of the utc day months months before now's utc day.

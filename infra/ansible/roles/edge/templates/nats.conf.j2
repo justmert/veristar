@@ -2,9 +2,27 @@
 # cluster (the design); routes run over the private network.
 server_name: "{{ inventory_hostname }}"
 listen: "0.0.0.0:4222"
+# monitoring stays plain http inside the node: compose publishes it on the
+# node's loopback only, the gateway's health check reads it on the compose
+# network, and the observability relay serves it to the private network
+# over tls with client certificates (roles/observability)
 http: "0.0.0.0:8222"
 # clients on other nodes (the core services) are told this address
 client_advertise: "{{ sa_private_ip }}:4222"
+
+# client connections: tls only, from the first byte (handshake_first), so
+# not even the INFO line crosses the network in clear; a plain client gets
+# no answer. clients authenticate with their user and password
+# (auth.conf), so no client certificate is asked for. the certificate
+# names the private address and "nats", the two names clients dial.
+tls {
+  cert_file: "/etc/nats-tls/node.crt"
+  key_file: "/etc/nats-tls/node.key"
+  ca_file: "/etc/nats-tls/ca.crt"
+  handshake_first: true
+  min_version: "1.3"
+  timeout: 5
+}
 
 jetstream {
   store_dir: "/data"
@@ -16,12 +34,25 @@ cluster {
   name: "sa-{{ sa_environment }}"
   listen: "0.0.0.0:6222"
   advertise: "{{ sa_private_ip }}:6222"
+  # routes are mutual tls: each side presents its node certificate and
+  # checks the other's against the internal ca (verify), on top of the
+  # route password, so a host without a certificate cannot even reach the
+  # authorization step. routes do the tls handshake before any protocol.
+  tls {
+    cert_file: "/etc/nats-tls/node.crt"
+    key_file: "/etc/nats-tls/node.key"
+    ca_file: "/etc/nats-tls/ca.crt"
+    verify: true
+    min_version: "1.3"
+    timeout: 5
+  }
   # route connections authenticate too, so a host on the private network
   # cannot join the cluster
   authorization {
     user: "route"
     password: "{{ sa_secrets.nats_route_password_hash }}"
   }
+  # the cluster tls block above makes every route tls, whatever the scheme
   routes: [
 {% for h in groups['edge'] | reject('equalto', inventory_hostname) %}
     "nats://route:{{ sa_secrets.nats_route_password }}@{{ hostvars[h].sa_private_ip }}:6222"

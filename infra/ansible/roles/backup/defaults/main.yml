@@ -31,9 +31,8 @@ backup_diff_calendar: "Mon..Sat *-*-* 01:00:00 UTC"
 # check proves a fresh wal segment reaches the repository
 backup_verify_calendar: "*-*-* 05:30:00 UTC"
 
-# posix-host mode only: where the controller keeps the throwaway tls ca and
-# node certificates of pgbackrest's tls protocol
-backup_tls_controller_dir: ""
+# posix-host mode only: the port of pgbackrest's tls protocol, whose
+# certificates come from the internal ca (tasks/tls.yml)
 backup_tls_port: 8432
 
 # the scheduled commands; each runs inside the pgbackrest container

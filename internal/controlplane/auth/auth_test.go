@@ -800,7 +800,7 @@ func TestStartRateLimitedPerClient(t *testing.T) {
 	for _, other := range []string{"198.51.100.20", "203.0.113.78", "2001:db8:1::1"} {
 		require.Equal(t, http.StatusFound, e.startFrom(t, other).StatusCode, other)
 	}
-	// one ipv6 subscriber holds a /64: its addresses share one bucket
+	// one ipv6 site holds up to a /48: its addresses share one bucket (n-2)
 	for i := range auth.StartClientBurst {
 		res := e.startFrom(t, "2001:db8:2::"+strconv.FormatInt(int64(i+1), 16))
 		require.Equal(t, http.StatusFound, res.StatusCode, i)

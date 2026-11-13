@@ -58,3 +58,27 @@ pgbackrest_version: 2.60.0
 # shared path: the secrets role writes the root-only env files here and the
 # edge and core compose projects read them
 secrets_env_dir: /etc/stellar-analytics/env
+
+# shared paths of the private network's tls (, playbooks/
+# internal-ca.yml). the secrets role installs, per container user that
+# needs them, a directory <sa_tls_dir>/<consumer>/ with ca.crt, node.crt and
+# node.key owned by that user (node.pem, certificate and key in one file,
+# for haproxy), plus <sa_tls_dir>/ca/ca.crt for services that only check
+# servers. root's copy is what ansible and curl on the node use.
+sa_tls_dir: /etc/stellar-analytics/tls
+sa_tls_consumers:
+  edge: {root: 0, nats: 4222, etcd: 2379, haproxy: 99, nobody: 65534}
+  core: {root: 0, postgres: 999, haproxy: 99, nobody: 65534}
+  backup: {root: 0, postgres: 999}
+  restore: {root: 0, postgres: 999}
+  probe: {}
+# the files root's ansible tasks present to the private endpoints
+sa_tls_root:
+  ca_path: /etc/stellar-analytics/tls/root/ca.crt
+  client_cert: /etc/stellar-analytics/tls/root/node.crt
+  client_key: /etc/stellar-analytics/tls/root/node.key
+# curl arguments for the same, in shell units and systemd units
+sa_tls_curl: >-
+  --cacert /etc/stellar-analytics/tls/root/ca.crt
+  --cert /etc/stellar-analytics/tls/root/node.crt
+  --key /etc/stellar-analytics/tls/root/node.key

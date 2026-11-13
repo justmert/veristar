@@ -6,6 +6,10 @@
 #   NATS_URL, NATS_USER, NATS_PASSWORD   collector nats user (internal/natsx);
 #                                        user and password empty only on the
 #                                        dev server, which has no auth
+#   NATS_TLS_CA, NATS_TLS_CERT,          the internal ca and an optional
+#   NATS_TLS_KEY                         client certificate; with the ca set
+#                                        the connection is tls only. empty
+#                                        only on the dev server
 #   COLLECTOR_GRPC_ADDR                  otlp grpc listen address
 #   COLLECTOR_HTTP_ADDR                  otlp http listen address
 #   COLLECTOR_HEALTH_ADDR                health check listen address
@@ -25,6 +29,9 @@ extensions:
       url: ${env:NATS_URL}
       user: ${env:NATS_USER}
       password: ${env:NATS_PASSWORD}
+      tls_ca_file: ${env:NATS_TLS_CA}
+      tls_cert_file: ${env:NATS_TLS_CERT}
+      tls_key_file: ${env:NATS_TLS_KEY}
     # the collector starts no receiver until the token snapshot is loaded
     # (docs/reference/collector.md); without one it exits after this long
     snapshot_timeout: 60s
@@ -135,6 +142,9 @@ exporters:
       url: ${env:NATS_URL}
       user: ${env:NATS_USER}
       password: ${env:NATS_PASSWORD}
+      tls_ca_file: ${env:NATS_TLS_CA}
+      tls_cert_file: ${env:NATS_TLS_CERT}
+      tls_key_file: ${env:NATS_TLS_KEY}
     publish_timeout: 5s
   nop:
 

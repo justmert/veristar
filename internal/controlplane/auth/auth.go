@@ -127,9 +127,11 @@ func New(cfg Config, d *db.DB, s *session.Manager) (*Handler, error) {
 		sessions:  s,
 		reconcile: cfg.Reconcile,
 		clients:   clients,
-		starts:    newLimiter(StartClientRatePerSecond, StartClientBurst, StartRatePerSecond, StartBurst, now),
-		exchanges: newLimiter(ExchangeClientRatePerSecond, ExchangeClientBurst, ExchangeRatePerSecond, ExchangeBurst, now),
-		now:       time.Now,
+		starts: newLimiter(StartClientRatePerSecond, StartClientBurst, StartRatePerSecond, StartBurst,
+			StartReserveRatePerSecond, StartReserveBurst, now),
+		exchanges: newLimiter(ExchangeClientRatePerSecond, ExchangeClientBurst, ExchangeRatePerSecond, ExchangeBurst,
+			ExchangeReserveRatePerSecond, ExchangeReserveBurst, now),
+		now: time.Now,
 	}, nil
 }
 

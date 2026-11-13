@@ -153,9 +153,13 @@
           - "listen_addresses={{ sa_private_ip }},127.0.0.1"
           - -c
           - "restore_command=pgbackrest --stanza={{ backup_stanza }} archive-get %f \"%p\""
+        # postgresql.conf names patroni's tls files (ssl on, roles/core) and
+        # pg_hba admits hostssl only, so the restored server speaks tls with
+        # this node's certificate from the internal ca
         volumes:
           - "{{ restore_volume }}:/var/lib/postgresql"
           - "{{ backup_conf_dir }}:/etc/pgbackrest:ro"
+          - "{{ sa_tls_dir }}/postgres:/etc/patroni-tls:ro"
         restart_policy: "no"
         state: started
 

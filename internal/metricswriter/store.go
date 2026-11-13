@@ -233,7 +233,7 @@ func (w *Writer) applyTx(ctx context.Context, tx pgx.Tx, items []*item) (*result
 
 	// 3. load the stored state of every cumulative stream and resource
 	state := NewState(w.set.FirstPointThreshold, MaxSeriesPerTenant)
-	if err := loadState(ctx, q, items, state); err != nil {
+	if err := loadState(ctx, q, items, state, now.Add(-ActiveSeriesWindow)); err != nil {
 		return nil, err
 	}
 
@@ -353,8 +353,9 @@ func utcDay(ns int64) int64 {
 }
 
 // loadState reads series_state and resource_seen for every cumulative point
-// of the applied messages, per tenant.
-func loadState(ctx context.Context, q *writerq.Queries, items []*item, state *State) error {
+// of the applied messages, per tenant. activeSince is the start of the
+// window in which a stored stream counts as active for the stream cap.
+func loadState(ctx context.Context, q *writerq.Queries, items []*item, state *State, activeSince time.Time) error {
 	series := map[uuid.UUID]map[[32]byte]bool{}
 	streams := map[uuid.UUID][]SeriesKey{}
 	resources := map[uuid.UUID]map[string]bool{}
@@ -407,7 +408,7 @@ func loadState(ctx context.Context, q *writerq.Queries, items []*item, state *St
 			if known[k] {
 				continue
 			}
-			n, err := q.CountSeriesStates(ctx, tenant)
+			n, err := q.CountActiveSeriesStates(ctx, writerq.CountActiveSeriesStatesParams{TenantID: tenant, ActiveSince: activeSince})
 			if err != nil {
 				return fmt.Errorf("count series state: %w", err)
 			}

@@ -226,3 +226,57 @@ func TestGateWakesOnlyTheTargetThatAnswered(t *testing.T) {
 		t.Fatalf("woke %d", got)
 	}
 }
+
+// N-1: failing sends of several visitors on a process whose health checks
+// pass are a write fault; one visitor failing among stored sends is not.
+func TestWriteWatch(t *testing.T) {
+	now := time.Date(2026, 11, 13, 9, 0, 0, 0, time.UTC)
+	var w writeWatch
+	// one poison visitor among normal traffic
+	for i := range 20 {
+		w.succeed(fmt.Sprintf("ok%d", i), now)
+	}
+	w.fail("poison", now)
+	if w.faulted(now) {
+		t.Fatal("one failing visitor was taken for a write fault")
+	}
+	// every send fails: a fault from the third visitor on
+	var x writeWatch
+	x.fail("a", now)
+	x.fail("b", now)
+	if x.faulted(now) {
+		t.Fatal("two visitors are below the minimum")
+	}
+	x.fail("c", now)
+	if !x.faulted(now) {
+		t.Fatal("three failing visitors and no stored send is a write fault")
+	}
+	// the first stored send says waiters should retry; more stored sends
+	// than failing visitors end the fault
+	if !x.succeed("a", now.Add(time.Second)) {
+		t.Fatal("a stored send must wake the visitors that wait out the fault")
+	}
+	x.succeed("d", now.Add(time.Second))
+	if x.faulted(now.Add(time.Second)) {
+		t.Fatal("as many stored sends as failing visitors end the fault")
+	}
+	// failures leave the window
+	var y writeWatch
+	for _, k := range []string{"a", "b", "c"} {
+		y.fail(k, now)
+	}
+	if y.faulted(now.Add(writeFaultWindow)) {
+		t.Fatal("failures older than the window still count")
+	}
+	// write-fault waiters are woken by a stored send, never by the probe
+	if k := writeFaultWaiter(0); k >= 0 || k == noTarget {
+		t.Fatalf("write fault key %d collides with a process or noTarget", k)
+	}
+	g := gate{waiters: map[chan struct{}]int{make(chan struct{}, 1): writeFaultWaiter(0)}}
+	if got := g.unreachableTargets(); len(got) != 0 {
+		t.Fatalf("the health probe would wake write-fault waiters: %v", got)
+	}
+	if writeFaultDelay(10) != writeFaultRetryMax {
+		t.Fatalf("write fault delay %s", writeFaultDelay(10))
+	}
+}

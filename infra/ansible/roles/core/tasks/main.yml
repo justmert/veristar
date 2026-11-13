@@ -43,7 +43,7 @@
 - name: Name the core peers
   ansible.builtin.set_fact:
     core_nats_urls: >-
-      {{ groups['edge'] | map('extract', hostvars, 'sa_private_ip') | map('regex_replace', '^(.*)$', 'nats://\1:4222') | join(',') }}
+      {{ groups['edge'] | map('extract', hostvars, 'sa_private_ip') | map('regex_replace', '^(.*)$', 'tls://\1:4222') | join(',') }}
     core_runs_postgres: "{{ inventory_hostname in core_postgres_hosts }}"
 
 - name: Create the core directories
@@ -183,7 +183,10 @@
 # live settings are kept equal to core_patroni_dcs through the rest api
 - name: Read the patroni cluster settings
   ansible.builtin.uri:
-    url: "http://{{ sa_private_ip }}:8008/config"
+    url: "https://{{ sa_private_ip }}:8008/config"
+    ca_path: "{{ sa_tls_root.ca_path }}"
+    client_cert: "{{ sa_tls_root.client_cert }}"
+    client_key: "{{ sa_tls_root.client_key }}"
     return_content: true
   register: core_dcs
   until: core_dcs.status == 200
@@ -193,7 +196,10 @@
 
 - name: Apply the patroni cluster settings
   ansible.builtin.uri:
-    url: "http://{{ sa_private_ip }}:8008/config"
+    url: "https://{{ sa_private_ip }}:8008/config"
+    ca_path: "{{ sa_tls_root.ca_path }}"
+    client_cert: "{{ sa_tls_root.client_cert }}"
+    client_key: "{{ sa_tls_root.client_key }}"
     method: PATCH
     body_format: json
     body: "{{ core_patroni_dcs }}"

@@ -49,21 +49,31 @@ built yet; they are marked **not built** with the reason.
 6. **Private network.** Gateway, collector, replayer, metricswriter, jobs, control plane, Umami,
    PostgreSQL and NATS. Each service connects to NATS as its own user with publish and subscribe
    allow lists (`internal/natsx/topology.go`) and to PostgreSQL as its own role.
-   **Decision:** traffic on
-   the private network is not encrypted. PostgreSQL (`PLATFORM_DB_SSLMODE: disable`),
-   replication, the Patroni REST API, NATS client and route connections and etcd (`http://`,
-   no client authentication) cross locations in clear text. Hetzner documents its private
-   networks as isolated per project, not as encrypted, so the exposure is anyone with access to
-   Hetzner's network path between locations. What limits it today: every credential is per
-   service, the platform never sends raw IP addresses or tokens over these links (visitor
-   tokens are HMACs, OTLP tokens stay at the collector), and the host firewall admits only the
-   project's private range. What it does not limit: an observer on that path reads queued
-   events (page URLs, referrers, event names), metric rows and database contents, and could
-   write to etcd, which would let it take over the Patroni leader key. This is accepted for
-   now and is not fixed: turning on TLS for PostgreSQL, Patroni, etcd (with client
-   certificates) and NATS, or a WireGuard mesh between the nodes, touches every role and must
-   be converged and drilled; it is listed as open in the review resolution, to be done
-   before production takes its first project.
+   **Transport:**
+   every hop between nodes is encrypted and authenticated with certificates of an internal CA,
+   one per environment. The CA key lives only in the SOPS file `infra/secrets/<env>/ca.enc.yaml`,
+   which only `playbooks/internal-ca.yml` reads on the controller; nodes receive their own key
+   and certificate from `tls.enc.yaml` ([../deploy/ansible.md](../deploy/ansible.md) section 9
+   lists every link). NATS client connections are TLS 1.3 from the first byte; NATS routes,
+   etcd peers and clients, the Patroni REST API, pgBackRest, the metrics relay, the exporters
+   and Alertmanager (web and gossip) require a client certificate of the internal CA;
+   PostgreSQL admits `hostssl` lines only and every client (services, Umami, replication,
+   `pg_rewind`, `postgres_exporter`) uses `verify-full`. Services refuse a CA with a weaker
+   `sslmode` and never fall back to plain text. NATS and PostgreSQL clients still log in with
+   their per-service password on top of TLS; they present no client certificate.
+   Proved by: `TestLoadNATSWithTLS`, `TestLoadNATSRefusesBrokenTLS`, `TestLoadPostgresTLS`
+   (`internal/config/tls_test.go`); `TestConnectWithTLS` (`internal/natsx/tls_test.go`, real
+   NATS 2.15.3: plain, wrong-CA and non-TLS-first clients refused); `TestTLSOnlyServer`
+   (`internal/db/tls_test.go`, real PostgreSQL 18.6 with `hostssl` only: plain text,
+   foreign CA and wrong name refused); `tests/localconverge/tls-audit.sh` on the local
+   converge (capture of the private network, refusal of a host without a certificate, the
+   end-to-end suite), results in the O-26 resolution row of the review.
+   Residual risk: NATS monitoring is plain HTTP on each edge node's loopback and Compose
+   network (not on the private network); the operators' client certificate, if leaked, reads
+   every monitoring endpoint until the CA is rotated (there is no revocation list); traffic
+   inside one node's Compose network (Caddy to its upstreams, the replayer, control plane and
+   jobs to Umami, the relay to the exporters behind it) is not encrypted, and observing it
+   needs code execution on that node; and Alertmanager's gossip TLS is marked experimental upstream.
 7. **Upstream code.** Umami image, Go modules, npm packages, base images, GitHub Actions.
 
 ## 3. Threats
@@ -293,8 +303,12 @@ unbounded. Neither edge Caddy nor core Caddy has a rate limiter; volumetric atta
 the network provider. The sign-in start and callback routes limit each client on its own (a keyed
 hash of the address core Caddy passes, held only in memory) under a per-instance ceiling, and each
 OAuth state reaches the code exchange once (`internal/controlplane/auth/ratelimit.go`, control
-plane API 4.1.1). One client cannot lock others out; a flood from many addresses can still reach
-the ceiling (50 starts per second per instance) and delay sign-in for everyone.
+plane API 4.1.1). A client is an IPv4 address or an IPv6 /48, so one site's whole allocation is
+one client. One client cannot lock others out; a flood from about 100 or more addresses or /48s
+can still hold the ceiling (50 starts per second per instance), but a person who had been idle
+then takes from a separate reserve that busy keys cannot reach. Only a flood with a
+fresh address or /48 for every request, at more than the reserve's 5 per second, delays
+sign-in for everyone.
 
 ### 3.8 Operator credential compromise
 

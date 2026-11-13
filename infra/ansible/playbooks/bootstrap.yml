@@ -9,10 +9,16 @@
 - name: Find the patroni leader
   hosts: core
   gather_facts: false
+  # the rest api asks for the node's client certificate, readable by root
+  become: true
+  vars_files: [../vars/pins.yml]
   tasks:
     - name: Ask patroni whether this node is the primary
       ansible.builtin.uri:
-        url: "http://{{ sa_private_ip }}:8008/primary"
+        url: "https://{{ sa_private_ip }}:8008/primary"
+        ca_path: "{{ sa_tls_root.ca_path }}"
+        client_cert: "{{ sa_tls_root.client_cert }}"
+        client_key: "{{ sa_tls_root.client_key }}"
         status_code: [200, 503]
       register: bootstrap_role
       until: bootstrap_role.status in [200, 503]
@@ -44,10 +50,13 @@
     bootstrap_platformctl: >-
       {{ ['docker', 'run', '--rm', '--network', bootstrap_network,
           '--env-file', '/etc/stellar-analytics/env/platformctl.env',
+          '-v', sa_tls_dir ~ '/ca:/etc/sa-tls:ro',
           '-e', 'PLATFORM_DB_HOST=haproxy', '-e', 'PLATFORM_DB_PORT=5000',
-          '-e', 'PLATFORM_DB_NAME=platform', '-e', 'PLATFORM_DB_SSLMODE=disable',
+          '-e', 'PLATFORM_DB_NAME=platform', '-e', 'PLATFORM_DB_SSLMODE=verify-full',
+          '-e', 'PLATFORM_DB_SSLROOTCERT=/etc/sa-tls/ca.crt',
           '-e', 'UMAMI_DB_NAME=umami', '-e', 'UMAMI_URL=http://umami:3000',
-          '-e', 'NATS_URL=' ~ (groups['edge'] | map('extract', hostvars, 'sa_private_ip') | map('regex_replace', '^(.*)$', 'nats://\1:4222') | join(',')),
+          '-e', 'NATS_URL=' ~ (groups['edge'] | map('extract', hostvars, 'sa_private_ip') | map('regex_replace', '^(.*)$', 'tls://\1:4222') | join(',')),
+          '-e', 'NATS_TLS_CA=/etc/sa-tls/ca.crt',
           '-e', 'NATS_REPLICAS=3',
           platform_images.platformctl] }}
   roles:

@@ -12,7 +12,10 @@
 
 - name: Read the patroni cluster
   ansible.builtin.uri:
-    url: "http://{{ sa_private_ip }}:8008/cluster"
+    url: "https://{{ sa_private_ip }}:8008/cluster"
+    ca_path: "{{ sa_tls_root.ca_path }}"
+    client_cert: "{{ sa_tls_root.client_cert }}"
+    client_key: "{{ sa_tls_root.client_key }}"
     return_content: true
   register: switchover_cluster
   when: switchover_image.rc == 0
@@ -52,7 +55,10 @@
 
 - name: Wait until this node is a replica
   ansible.builtin.uri:
-    url: "http://{{ sa_private_ip }}:8008/replica"
+    url: "https://{{ sa_private_ip }}:8008/replica"
+    ca_path: "{{ sa_tls_root.ca_path }}"
+    client_cert: "{{ sa_tls_root.client_cert }}"
+    client_key: "{{ sa_tls_root.client_key }}"
     status_code: 200
   register: switchover_replica
   until: switchover_replica.status == 200

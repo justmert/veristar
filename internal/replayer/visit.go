@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/nats-io/nats.go/jetstream"
 )
@@ -92,6 +93,24 @@ func (v visitStore) save(ctx context.Context, siteID, vt string, r *VisitRecord)
 	}
 	return nil
 }
+
+// bucketFull reports whether a visit_state write was refused because the
+// bucket reached natsx.VisitStateMaxBytes. the bucket keeps
+// keys for 24 hours and refuses new ones when full, so this lasts until old
+// keys expire. the server answers a stream store failure (10077) naming the
+// byte limit.
+func bucketFull(err error) bool {
+	var api *jetstream.APIError
+	if errors.As(err, &api) && api.ErrorCode == jsErrCodeStreamStoreFailed {
+		return strings.Contains(api.Description, "maximum bytes")
+	}
+	return strings.Contains(err.Error(), "maximum bytes exceeded")
+}
+
+// jsErrCodeStreamStoreFailed is the server's error code for a message the
+// stream store refused (nats-server JSStreamStoreFailedF); nats.go 1.55.0
+// has no constant for it.
+const jsErrCodeStreamStoreFailed jetstream.ErrorCode = 10077
 
 func (v visitStore) sent(ctx context.Context, eventID string) (bool, error) {
 	_, err := v.kv.Get(ctx, SentKey(eventID))

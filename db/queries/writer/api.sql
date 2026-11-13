@@ -32,10 +32,14 @@ on conflict (tenant_id, series_hash, start_unix_nano) do update
       last_seen_at = excluded.last_seen_at,
       baseline = excluded.baseline;
 
--- name: CountSeriesStates :one
--- the streams the writer follows for a tenant, for the per-tenant stream
--- cap
-select count(*)::bigint as n from api.series_state where tenant_id = @tenant_id;
+-- name: CountActiveSeriesStates :one
+-- the streams of a tenant the writer stored a point of since active_since,
+-- for the per-tenant stream cap (audits A-6, N-4). streams of processes that
+-- ended or restarted stop counting once they are idle that long, so normal
+-- process churn never reaches the cap; their rows stay for late data until
+-- api-retention removes them.
+select count(*)::bigint as n from api.series_state
+where tenant_id = @tenant_id and last_seen_at >= @active_since::timestamptz;
 
 -- name: GetResourcesSeen :many
 -- the resources of one tenant the writer has followed before, for the

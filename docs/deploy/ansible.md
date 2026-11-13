@@ -81,6 +81,24 @@ containers reaching ports it publishes on itself. Forward (before Docker's chain
 from the public interface only established traffic and DNAT to 80 and 443. Private
 services also bind only the private address, so they never listen publicly at all.
 
+### Client addresses over IPv6
+
+Caddy is the only container that sees the visitor's address, and it hands that address to
+the gateway (`X-Edge-Client-Ip`: visitor token, country, per-prefix limits) and to the
+control plane (`X-Sa-Client-Addr`: sign-in limits). Docker forwards a published IPv6 port
+into a container with no IPv6 address through `docker-proxy`, so Caddy then sees the
+bridge gateway, one IPv4 address, as the peer of every IPv6 visitor (review, confirmed
+with the shipped edge Caddyfile on Docker 29.3.1: an IPv6 client was seen as `172.31.0.1`).
+Both compose files therefore attach Caddy, and only Caddy, to a second network `public`
+that is IPv6-only (`enable_ipv4: false`, a unique local /64 from `edge_public6_subnet`
+and `core_public6_subnet`). Docker picks the gateway endpoint per address family, so IPv6
+is DNATed straight to Caddy's `public` address and keeps the client address, while IPv4
+still arrives through the default network. The other services keep IPv4-only names, so
+nothing else changes (pg_hba, NATS and HAProxy addresses). This needs Docker 28 or newer
+and `ip6tables` (set in `daemon.json` by the base role). The forward chain of `sa_host`
+is an `inet` table, so its DNAT rule already admits IPv6. `TestCaddySeesIPv6ClientAddress`
+in `deploy/caddy` reproduces both layouts.
+
 ## 5. Playbooks
 
 - `site.yml`: `verify-release.yml` (image signatures, section 8), base and secrets
@@ -128,11 +146,44 @@ monitor counts non-5xx as healthy.
 - `jobs retain-web` (this stage) must run once a day; no timer is deployed for it yet.
 - The second core node, Patroni replication, pgBackRest repositories and the backup
   bucket (`storage` role) are this stage work.
-- etcd and NATS run without TLS on the private network, and etcd without client
-  authentication; both rely on the private network and the host firewall. this stage
-  revisits this together with the HA drills.
-- PostgreSQL connections from the services use `sslmode=disable` on the node's Compose
-  network and the private network.
+- Every link between nodes is TLS with certificates of an
+  internal CA: section 9.
+
+## 9. Transport security on the private network
+
+`playbooks/internal-ca.yml` (`make internal-ca ENV=<env>`, before the first converge and
+after any inventory change) keeps one CA per environment in `infra/secrets/<env>/ca.enc.yaml`,
+read on the controller only, and one key and certificate per node in `tls.enc.yaml`, which the
+`secrets` role installs under `/etc/stellar-analytics/tls/<container user>/` (each directory
+`0500`, the key `0400`, owned by the user of the container that reads it). Rotation:
+[../runbooks/secret-rotation.md](../runbooks/secret-rotation.md), "Internal CA and node
+certificates".
+
+| Link | Transport | Client authentication |
+|---|---|---|
+| Services to NATS (gateway, collector, core services, platformctl) | TLS 1.3 from the first byte (`tls.handshake_first`, `nats.TLSHandshakeFirst`), server certificate checked against the dialled name or address | NATS user and password (unchanged) |
+| NATS routes | TLS 1.3, `verify: true` | node certificate, then the route password |
+| etcd clients (Patroni, Ansible) and peers | `https`, `--client-cert-auth`, `--peer-client-cert-auth` | node certificate |
+| Services and Umami to PostgreSQL, through HAProxy | TLS end to end, `sslmode=verify-full` against `haproxy`; `pg_hba` has `hostssl` lines only | SCRAM password (unchanged) |
+| Replication, `pg_rewind`, `postgres_exporter` to PostgreSQL | `sslmode=verify-full` against the leader's private address | SCRAM password |
+| HAProxy checks, Prometheus, Patroni members, Ansible to the Patroni REST API | `https`, `verify_client: required` | node certificate |
+| pgBackRest TLS server (posix-host mode) | TLS, `tls-server-auth` by common name | node certificate |
+| Prometheus to node_exporter, postgres_exporter, Alertmanager, etcd, Patroni and the metrics relay | `https`, exporter-toolkit `RequireAndVerifyClientCert`, HAProxy `verify required` | node certificate |
+| Alertmanager gossip | `--cluster.tls-config` (experimental in 0.34.2): TCP with mutual TLS, no UDP | node certificate |
+| NATS monitoring | plain HTTP on the node's loopback; to the private network only through the relay's TLS listener on port 8222 | node or operators' certificate |
+| Caddy to its upstreams | stays inside each node's Compose network; no cross-node hop exists | n/a |
+
+Services take the files from configuration (`NATS_TLS_CA`, `NATS_TLS_CERT`, `NATS_TLS_KEY`,
+`PLATFORM_DB_SSLROOTCERT`, `PLATFORM_DB_SSLCERT`, `PLATFORM_DB_SSLKEY`, `internal/config/tls.go`)
+and refuse to start with a CA and `PLATFORM_DB_SSLMODE` other than `verify-full`; with a CA the
+NATS client refuses a server without TLS. There is no fallback to plain text anywhere.
+
+Each container that reads a certificate carries the label `sa.tls` (hash of the node certificate
+and the CA bundle), so a reissue recreates exactly those containers at the next converge.
+
+**Existing clusters.** No staging or production environment had been converged when this was
+built, so the roles do not migrate a running etcd from `http` to `https` peer URLs (etcd keeps the
+advertised peer URLs of an existing member); converge an environment with TLS from the start.
 
 ## 8. Procedure, step by step
 

@@ -28,14 +28,18 @@ func runClock(ctx context.Context, args []string) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	hc := &http.Client{Timeout: 5 * time.Second,
+	tr, err := privateTransport()
+	if err != nil {
+		return nil, err
+	}
+	hc := &http.Client{Timeout: 5 * time.Second, Transport: tr,
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	natsOff := map[string]float64{}
 	dateOff := map[string]float64{}
 	lo, hi := math.Inf(1), math.Inf(-1)
 	for _, e := range inv.group("edge") {
 		t0 := time.Now()
-		resp, err := httpGet(ctx, hc, "http://"+e.Private+":8222/varz")
+		resp, err := httpGet(ctx, hc, "https://"+e.Private+":8222/varz")
 		if err != nil {
 			return nil, fmt.Errorf("varz of %s: %w", e.Name, err)
 		}
@@ -57,7 +61,7 @@ func runClock(ctx context.Context, args []string) (any, error) {
 		for _, h := range inv.group(g) {
 			targets := map[string]string{h.Name + " caddy": "http://" + h.Public + "/"}
 			if g == "core" {
-				targets[h.Name+" patroni"] = "http://" + h.Private + ":8008/health"
+				targets[h.Name+" patroni"] = "https://" + h.Private + ":8008/health"
 			}
 			if g == "backup" {
 				continue

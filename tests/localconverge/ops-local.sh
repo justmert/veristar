@@ -155,7 +155,8 @@ check_failsafe() {
 	for n in sa-lc-edge-1 sa-lc-edge-2 sa-lc-edge-3; do edge "$n" stop etcd; done
 	# patroni's ttl is 30 s: without failsafe the leader demotes within it
 	sleep 75
-	on sa-lc-core-1 curl -fsS -o /dev/null -w 'primary %{http_code}\n' http://10.99.1.22:8008/primary
+	# patroni's rest api is https with client certificates
+	on sa-lc-core-1 curl -fsS -o /dev/null -w 'primary %{http_code}\n' --cacert /etc/stellar-analytics/tls/root/ca.crt --cert /etc/stellar-analytics/tls/root/node.crt --key /etc/stellar-analytics/tls/root/node.key https://10.99.1.22:8008/primary
 	core exec -T postgres psql -h /var/run/postgresql -U postgres -tAX -c \
 		"create table if not exists failsafe_probe(t timestamptz); insert into failsafe_probe values (now()); select pg_is_in_recovery()" | tee "$out/failsafe.txt"
 	grep -qx f "$out/failsafe.txt"
@@ -233,9 +234,9 @@ rebuild_edge3() {
 }
 
 check_etcd() {
-	edge sa-lc-edge-1 exec -T etcd etcdctl --endpoints=http://127.0.0.1:2379 member list -w table | tee "$out/members.txt"
+	edge sa-lc-edge-1 exec -T etcd etcdctl --cacert=/etc/etcd/tls/ca.crt --cert=/etc/etcd/tls/node.crt --key=/etc/etcd/tls/node.key --endpoints=https://127.0.0.1:2379 member list -w table | tee "$out/members.txt"
 	[ "$(grep -c ', started, ' "$out/members.txt")" = 3 ] || [ "$(grep -c '| started |' "$out/members.txt")" = 3 ]
-	edge sa-lc-edge-1 exec -T etcd etcdctl --endpoints=http://10.99.1.12:2379,http://10.99.2.13:2379,http://10.99.3.14:2379 endpoint health
+	edge sa-lc-edge-1 exec -T etcd etcdctl --cacert=/etc/etcd/tls/ca.crt --cert=/etc/etcd/tls/node.crt --key=/etc/etcd/tls/node.key --endpoints=https://10.99.1.12:2379,https://10.99.2.13:2379,https://10.99.3.14:2379 endpoint health
 	[ "$(on sa-lc-edge-3 cat /etc/stellar-analytics/edge/etcd-initial-state)" = existing ]
 }
 
@@ -245,7 +246,9 @@ probe_secrets() {
 	(cd "$root" && SA_LC_INVENTORY="$root/infra/ansible/inventories/local/hosts.json" go test -tags localconverge -count=1 ./tests/localconverge/)
 	on sa-lc-core-1 docker run --rm --network stellar-analytics-core_default \
 		--env-file /etc/stellar-analytics/env/platformctl.env \
-		-e PLATFORM_DB_HOST=haproxy -e PLATFORM_DB_PORT=5000 -e PLATFORM_DB_NAME=platform -e PLATFORM_DB_SSLMODE=disable \
+		-v /etc/stellar-analytics/tls/ca:/etc/sa-tls:ro \
+		-e PLATFORM_DB_HOST=haproxy -e PLATFORM_DB_PORT=5000 -e PLATFORM_DB_NAME=platform \
+		-e PLATFORM_DB_SSLMODE=verify-full -e PLATFORM_DB_SSLROOTCERT=/etc/sa-tls/ca.crt \
 		"$LC_REGISTRY_IP:5000/sa/platformctl:$LC_IMAGE_TAG" \
 		probe-tenant create -operator-github-id 1001 -domain probe.sa-local.test -origin https://probe.sa-local.test >"$LC_STATE/probe-tenant.out"
 	f="$root/infra/secrets/local/secrets.enc.yaml"

@@ -64,6 +64,8 @@ type Scope struct {
 	ready   []uuid.UUID
 	workers int
 	running sync.WaitGroup
+	// stopped is set by Stop: no run starts any more
+	stopped bool
 }
 
 type queueEntry struct {
@@ -241,6 +243,12 @@ func (s *Scope) InTenant(ctx context.Context, a Access, fn func(pgx.Tx) error) e
 		if _, err := tx.Exec(ctx, `select set_config('lock_timeout', $1, true)`, lockTimeout); err != nil {
 			return fmt.Errorf("tenants: set lock timeout: %w", err)
 		}
+		// the session user, so the database holds tenant writes to what
+		// that user may do: audit rows name exactly this user, and member
+		// changes need an owner (migration 00028, review)
+		if _, err := tx.Exec(ctx, `select set_config('app.user_id', $1, true)`, a.User.ID.String()); err != nil {
+			return fmt.Errorf("tenants: set session user: %w", err)
+		}
 		return fn(tx)
 	})
 }
@@ -256,6 +264,10 @@ func (s *Scope) InTenant(ctx context.Context, a Access, fn func(pgx.Tx) error) e
 func (s *Scope) Reconcile(ctx context.Context, tenantID uuid.UUID) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.stopped {
+		// shutting down; the periodic reconcile task covers the change
+		return
+	}
 	if e, ok := s.queued[tenantID]; ok {
 		if e.running {
 			e.pending = true
@@ -279,7 +291,7 @@ func (s *Scope) work(base context.Context) {
 	defer s.running.Done()
 	for {
 		s.mu.Lock()
-		if len(s.ready) == 0 {
+		if len(s.ready) == 0 || s.stopped {
 			s.workers--
 			s.mu.Unlock()
 			return
@@ -309,6 +321,35 @@ func (s *Scope) work(base context.Context) {
 }
 
 // Wait blocks until every requested reconcile has run, the pending ones
-// included. the server calls it on shutdown, after the listener stopped
-// taking requests, so a run is not cut off halfway through its umami calls.
+// included. tests use it to settle the queue.
 func (s *Scope) Wait() { s.running.Wait() }
+
+// Stop is the shutdown of the reconcile queue. the server calls
+// it after the listener stopped taking requests. runs in flight finish, so
+// none is cut off halfway through its umami calls; queued and pending runs
+// are dropped, because draining them could take far longer than the
+// container's stop grace (each run up to reconcileTimeout, ReconcileWorkers
+// at a time), and the process would then be killed mid-run anyway. the
+// jobs task reconcile repeats every tenant within its period, so nothing
+// dropped here is lost. it returns how many tenants were dropped.
+func (s *Scope) Stop() int {
+	s.mu.Lock()
+	s.stopped = true
+	dropped := len(s.ready)
+	for _, id := range s.ready {
+		delete(s.queued, id)
+	}
+	s.ready = nil
+	for _, e := range s.queued {
+		if e.pending {
+			dropped++
+			e.pending = false
+		}
+	}
+	s.mu.Unlock()
+	s.running.Wait()
+	if dropped > 0 {
+		s.log.Info("reconciles dropped at shutdown; the periodic reconcile task runs them", "tenants", dropped)
+	}
+	return dropped
+}

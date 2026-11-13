@@ -84,13 +84,15 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-// docker runs the docker cli and returns trimmed stdout.
+// docker runs the docker cli and returns trimmed stdout. stdout is returned
+// on failure too: a container that exits non-zero (k6 crossing a threshold)
+// has printed its own diagnosis there.
 func docker(args ...string) (string, error) {
 	var out, errb bytes.Buffer
 	cmd := exec.Command("docker", args...)
 	cmd.Stdout, cmd.Stderr = &out, &errb
 	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("docker %s: %w: %s", strings.Join(args, " "), err, errb.String())
+		return strings.TrimSpace(out.String()), fmt.Errorf("docker %s: %w: %s", strings.Join(args, " "), err, errb.String())
 	}
 	return strings.TrimSpace(out.String()), nil
 }

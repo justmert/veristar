@@ -38,14 +38,23 @@ func (q *Queries) AddIngestWarning(ctx context.Context, arg AddIngestWarningPara
 	return err
 }
 
-const countSeriesStates = `-- name: CountSeriesStates :one
-select count(*)::bigint as n from api.series_state where tenant_id = $1
+const countActiveSeriesStates = `-- name: CountActiveSeriesStates :one
+select count(*)::bigint as n from api.series_state
+where tenant_id = $1 and last_seen_at >= $2::timestamptz
 `
 
-// the streams the writer follows for a tenant, for the per-tenant stream
-// cap
-func (q *Queries) CountSeriesStates(ctx context.Context, tenantID uuid.UUID) (int64, error) {
-	row := q.db.QueryRow(ctx, countSeriesStates, tenantID)
+type CountActiveSeriesStatesParams struct {
+	TenantID    uuid.UUID
+	ActiveSince time.Time
+}
+
+// the streams of a tenant the writer stored a point of since active_since,
+// for the per-tenant stream cap (audits A-6, N-4). streams of processes that
+// ended or restarted stop counting once they are idle that long, so normal
+// process churn never reaches the cap; their rows stay for late data until
+// api-retention removes them.
+func (q *Queries) CountActiveSeriesStates(ctx context.Context, arg CountActiveSeriesStatesParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countActiveSeriesStates, arg.TenantID, arg.ActiveSince)
 	var n int64
 	err := row.Scan(&n)
 	return n, err

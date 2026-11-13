@@ -20,7 +20,8 @@ const verifyUsage = `  verify-migration --source <env file> --target <env file> 
                     every table, per-tenant daily web and api aggregates, and umami
                     /stats for a sample of sites and days; exit 1 on any difference.
                     each env file holds PLATFORM_DB_HOST, PLATFORM_DB_PORT,
-                    PLATFORM_DB_NAME, PLATFORM_DB_SSLMODE, PLATFORM_DB_ADMIN_USER,
+                    PLATFORM_DB_NAME, PLATFORM_DB_SSLMODE (PLATFORM_DB_SSLROOTCERT for
+                    verify-full), PLATFORM_DB_ADMIN_USER,
                     PLATFORM_DB_ADMIN_PASSWORD, UMAMI_DB_NAME, UMAMI_URL and
                     UMAMI_ADMIN_PASSWORD
 `

@@ -165,3 +165,35 @@ tests:
             exp_annotations:
               summary: "umami process 1 on core-1 stored no event for 15 minutes while the others did"
               runbook: docs/runbooks/alerts.md#replayerumamiprocessidle
+  - name: visit_state filling up, then full
+    interval: 1m
+    input_series:
+      # the leader samples the bucket; it passes 80 % at minute 5 and is full
+      # from minute 30, when the replayer starts skipping writes
+      - series: 'replayer_visit_state_max_bytes{job="replayer",node="core-1"}'
+        values: '400x40'
+      - series: 'replayer_visit_state_bytes{job="replayer",node="core-1"}'
+        values: '300 310 320 320 320 340+2x25 400x10'
+      - series: 'replayer_visit_state_writes_skipped_total{job="replayer",node="core-1",kind="sent"}'
+        values: '0x30 0+50x10'
+      - series: 'replayer_visit_state_writes_skipped_total{job="replayer",node="core-1",kind="visit"}'
+        values: '0x30 0+10x10'
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: ReplayerVisitStateNearlyFull
+      - eval_time: 16m
+        alertname: ReplayerVisitStateNearlyFull
+        exp_alerts:
+          - exp_labels: {severity: ticket}
+            exp_annotations:
+              summary: "visit_state is 90.5% full"
+              runbook: docs/runbooks/alerts.md#replayervisitstatenearlyfull-replayervisitstatefull
+      - eval_time: 29m
+        alertname: ReplayerVisitStateFull
+      - eval_time: 34m
+        alertname: ReplayerVisitStateFull
+        exp_alerts:
+          - exp_labels: {severity: page}
+            exp_annotations:
+              summary: "visit_state is full: 180 duplicate guard and visit writes skipped in 5 minutes"
+              runbook: docs/runbooks/alerts.md#replayervisitstatenearlyfull-replayervisitstatefull

@@ -11,6 +11,9 @@ all:
     # 45 s instead of 10 minutes, so the freshness drill fails within two
     # minutes of stopping the replayer or the metrics writer
     observability_probe_freshness_max_delay: 45s
+    # this stack runs the rendered configs in plain compose containers
+    # without the internal ca; the role itself refuses false
+    observability_tls: false
     # no patroni here; postgres runs as one plain container
     observability_patroni_hosts: []
     observability_postgres_hosts: [core-1]
@@ -19,9 +22,9 @@ all:
   children:
     edge:
       hosts:
-        edge-1: {sa_tier: edge, sa_private_ip: 172.30.17.21, sa_public_ipv4: 172.30.17.21, observability_relay_targets: [{job: gateway, port: 9301, target: "gateway-1:9090"}, {job: collector, port: 9302, target: "collector-1:8888"}]}
-        edge-2: {sa_tier: edge, sa_private_ip: 172.30.17.22, sa_public_ipv4: 172.30.17.22, observability_relay_targets: [{job: gateway, port: 9301, target: "gateway-2:9090"}, {job: collector, port: 9302, target: "collector-2:8888"}]}
-        edge-3: {sa_tier: edge, sa_private_ip: 172.30.17.23, sa_public_ipv4: 172.30.17.23, observability_relay_targets: [{job: gateway, port: 9301, target: "gateway-3:9090"}, {job: collector, port: 9302, target: "collector-3:8888"}]}
+        edge-1: {sa_tier: edge, sa_private_ip: 172.30.17.21, sa_public_ipv4: 172.30.17.21, observability_relay_targets: [{job: gateway, port: 9301, target: "gateway-1:9090"}, {job: collector, port: 9302, target: "collector-1:8888"}, {job: nats, port: 9309, target: "nats-exporter-edge-1:7777"}]}
+        edge-2: {sa_tier: edge, sa_private_ip: 172.30.17.22, sa_public_ipv4: 172.30.17.22, observability_relay_targets: [{job: gateway, port: 9301, target: "gateway-2:9090"}, {job: collector, port: 9302, target: "collector-2:8888"}, {job: nats, port: 9309, target: "nats-exporter-edge-2:7777"}]}
+        edge-3: {sa_tier: edge, sa_private_ip: 172.30.17.23, sa_public_ipv4: 172.30.17.23, observability_relay_targets: [{job: gateway, port: 9301, target: "gateway-3:9090"}, {job: collector, port: 9302, target: "collector-3:8888"}, {job: nats, port: 9309, target: "nats-exporter-edge-3:7777"}]}
     core:
       hosts:
         core-1: {sa_tier: core, sa_private_ip: 172.30.17.31, sa_public_ipv4: 172.30.17.31, observability_relay_targets: [{job: controlplane, port: 9303, target: "controlplane-1:9090"}, {job: replayer, port: 9304, target: "replayer-1:9090"}, {job: metricswriter, port: 9305, target: "metricswriter-1:9090"}, {job: jobs, port: 9306, target: "jobs-1:9090"}]}

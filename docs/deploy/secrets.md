@@ -11,6 +11,8 @@ infra/secrets/
   sync-recipients.sh         regenerates .sops.yaml and re-encrypts to the lists
   new-secrets.py             generates one environment's secrets file
   <env>/secrets.enc.yaml     the platform's secrets (Ansible), SOPS-encrypted yaml
+  <env>/ca.enc.yaml          the internal CA of the private network (controller only)
+  <env>/tls.enc.yaml         the CA bundle and one key and certificate per node (ansible.md section 9)
   <env>/tofu.enc.env         OpenTofu's credentials (opentofu.md section 1)
 ```
 
@@ -162,7 +164,19 @@ controller tools of [prerequisites.md](prerequisites.md) with `sops` and `age-ke
    passphrase with `python3 -c 'import secrets; print(secrets.token_urlsafe(32))'`; it must be
    at least 16 characters and different per environment.
 
-7. **Commit** `infra/secrets/.sops.yaml`, the recipients list and both encrypted files.
+7. **Issue the private network's certificates** once the inventory exists
+   ([opentofu.md](opentofu.md) section 6), before the first converge:
+
+   ```sh
+   make internal-ca ENV=staging
+   ```
+
+   Expected: `N certificate(s) issued, ca new, 0 retired ca(s) still trusted`, one certificate
+   per edge, core, backup and restore node plus the operators' one, and two new files,
+   `infra/secrets/staging/ca.enc.yaml` and `tls.enc.yaml` ([ansible.md](ansible.md) section 9).
+   The `secrets` role refuses to converge a node without them.
+
+8. **Commit** `infra/secrets/.sops.yaml`, the recipients list and the encrypted files.
 
 Steps 1 to 5 were rehearsed on 2026-11-13 in a scratch directory with a throwaway identity
 and a copy of `sync-recipients.sh` (never under `infra/secrets/`): the script wrote one rule,

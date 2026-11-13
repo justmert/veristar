@@ -25,20 +25,24 @@ const (
 )
 
 type metrics struct {
-	leader       prometheus.Gauge
-	pending      prometheus.Gauge
-	ackPending   prometheus.Gauge
-	lagSampled   prometheus.Gauge
-	send         *prometheus.HistogramVec
-	perProcess   *prometheus.CounterVec
-	outcomes     *prometheus.CounterVec
-	retries      prometheus.Counter
-	undecodable  prometheus.Counter
-	bookkeeping  prometheus.Counter
-	inFlight     prometheus.GaugeFunc
-	oldestHeld   prometheus.GaugeFunc
-	ackFailures  prometheus.Counter
-	lockConfirms *prometheus.CounterVec
+	leader            prometheus.Gauge
+	pending           prometheus.Gauge
+	ackPending        prometheus.Gauge
+	lagSampled        prometheus.Gauge
+	send              *prometheus.HistogramVec
+	perProcess        *prometheus.CounterVec
+	outcomes          *prometheus.CounterVec
+	retries           prometheus.Counter
+	writeFaultRetries prometheus.Counter
+	visitStateSkipped *prometheus.CounterVec
+	visitStateBytes   prometheus.Gauge
+	visitStateMax     prometheus.Gauge
+	undecodable       prometheus.Counter
+	bookkeeping       prometheus.Counter
+	inFlight          prometheus.GaugeFunc
+	oldestHeld        prometheus.GaugeFunc
+	ackFailures       prometheus.Counter
+	lockConfirms      *prometheus.CounterVec
 }
 
 func newMetrics(reg prometheus.Registerer, processes int, inFlight, oldestAge func() float64) (*metrics, error) {
@@ -76,6 +80,22 @@ func newMetrics(reg prometheus.Registerer, processes int, inFlight, oldestAge fu
 			Name: "replayer_retries_total",
 			Help: "transient failures retried in place (umami 5xx, 408, 429, network, nats).",
 		}),
+		writeFaultRetries: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "replayer_write_fault_retries_total",
+			Help: "failed sends retried without counting against the event because umami looked unable to write (failures of several visitors on a process whose health checks passed, review).",
+		}),
+		visitStateSkipped: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "replayer_visit_state_writes_skipped_total",
+			Help: "visit_state writes skipped because the bucket is full, by kind: visit (continuity) or sent (duplicate guard). the events were delivered.",
+		}, []string{"kind"}),
+		visitStateBytes: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "replayer_visit_state_bytes",
+			Help: "bytes held by the visit_state bucket, sampled with the lag gauges.",
+		}),
+		visitStateMax: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "replayer_visit_state_max_bytes",
+			Help: "byte limit of the visit_state bucket; writes beyond it are refused and skipped.",
+		}),
 		undecodable: prometheus.NewCounter(prometheus.CounterOpts{
 			Name: "replayer_undecodable_total",
 			Help: "messages moved to WEB_DLQ because they are not a valid web event.",
@@ -102,7 +122,7 @@ func newMetrics(reg prometheus.Registerer, processes int, inFlight, oldestAge fu
 		}, oldestAge),
 	}
 	for _, c := range []prometheus.Collector{m.leader, m.pending, m.ackPending, m.lagSampled, m.send, m.perProcess, m.outcomes,
-		m.retries, m.undecodable, m.bookkeeping, m.ackFailures, m.lockConfirms, m.inFlight, m.oldestHeld} {
+		m.retries, m.writeFaultRetries, m.visitStateSkipped, m.visitStateBytes, m.visitStateMax, m.undecodable, m.bookkeeping, m.ackFailures, m.lockConfirms, m.inFlight, m.oldestHeld} {
 		if err := reg.Register(c); err != nil {
 			return nil, fmt.Errorf("replayer: register metrics: %w", err)
 		}
@@ -118,6 +138,8 @@ func newMetrics(reg prometheus.Registerer, processes int, inFlight, oldestAge fu
 	for i := range processes {
 		m.perProcess.WithLabelValues(strconv.Itoa(i))
 	}
+	m.visitStateSkipped.WithLabelValues("visit")
+	m.visitStateSkipped.WithLabelValues("sent")
 	m.lockConfirms.WithLabelValues("ok")
 	m.lockConfirms.WithLabelValues("lost")
 	return m, nil

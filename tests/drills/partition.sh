@@ -20,11 +20,9 @@ off="$(ts)"
 lc_partition "$loc"
 sleep 20
 # quorum seen from the majority side
-curl -fsS "http://$(priv_of sa-lc-edge-2):8222/jsz" >"$out/jsz-majority.json" || true
-docker exec sa-lc-edge-2 docker compose --project-directory /opt/stellar-analytics/edge exec -T etcd \
-	etcdctl --endpoints=http://10.99.2.13:2379,http://10.99.3.14:2379 endpoint status -w json >"$out/etcd-majority.json" 2>&1 || true
-docker exec sa-lc-edge-1 docker compose --project-directory /opt/stellar-analytics/edge exec -T etcd \
-	etcdctl --endpoints=http://10.99.1.12:2379 endpoint health >"$out/etcd-minority.txt" 2>&1 || true
+tcurl -fsS "https://$(priv_of sa-lc-edge-2):8222/jsz" >"$out/jsz-majority.json" || true
+etcdctl_in sa-lc-edge-2 --endpoints=https://10.99.2.13:2379,https://10.99.3.14:2379 endpoint status -w json >"$out/etcd-majority.json" 2>&1 || true
+etcdctl_in sa-lc-edge-1 --endpoints=https://10.99.1.12:2379 endpoint health >"$out/etcd-minority.txt" 2>&1 || true
 curl -s -o /dev/null -w '%{http_code}\n' "http://$(pub_of sa-lc-edge-1)/" >"$out/edge1-port80.txt" || true
 sleep 160
 log "heal $loc"

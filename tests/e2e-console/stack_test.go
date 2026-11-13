@@ -788,10 +788,13 @@ func (s *Stack) startApp(r appRequest) (string, error) {
 			if resp.StatusCode == http.StatusNoContent {
 				return base, nil
 			}
+			// a non-204 answer has no error of its own; name the status so
+			// the timeout below still says what the app answered
+			err = fmt.Errorf("healthz answered %d", resp.StatusCode)
 		}
 		if time.Now().After(deadline) {
 			logs, _ := exec.Command("docker", "logs", name).CombinedOutput()
-			return "", fmt.Errorf("app %s not healthy: %v\n%s", name, err, logs)
+			return "", fmt.Errorf("app %s not healthy: %w\n%s", name, err, logs)
 		}
 		time.Sleep(250 * time.Millisecond)
 	}
@@ -837,9 +840,10 @@ func (s *Stack) restartJobs() error {
 			if resp.StatusCode == http.StatusOK {
 				return nil
 			}
+			err = fmt.Errorf("healthz answered %d", resp.StatusCode)
 		}
 		if time.Now().After(deadline) {
-			return fmt.Errorf("jobs not healthy after restart: %v", err)
+			return fmt.Errorf("jobs not healthy after restart: %w", err)
 		}
 		time.Sleep(250 * time.Millisecond)
 	}

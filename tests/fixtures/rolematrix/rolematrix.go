@@ -34,12 +34,14 @@ var Want = map[string]map[db.Role]string{
 		// aggregate-web skips removed tenants (00019)
 		db.RoleJobs: "r(id,status)",
 	},
-	"cp.tenant_members": {db.RoleCPSystem: "rawd", db.RoleCPTenant: "rawd"},
+	// role only, and a trigger lets only an owner change members (00028, C-6)
+	"cp.tenant_members": {db.RoleCPSystem: "rawd", db.RoleCPTenant: "rad w(role)"},
 	"cp.invites":        {db.RoleCPSystem: "rawd", db.RoleCPTenant: "rawd"},
-	// cp_tenant updates only what its handlers write (00024, review)
+	// cp_tenant updates only what its handlers write (00024, review);
+	// the verification columns are written under cp_system (00028)
 	"cp.sites": {
 		db.RoleCPSystem: "rawd",
-		db.RoleCPTenant: "rad w(collect_utm,last_verify_at,last_verify_error,name,origins,status,stellar_toml,stellar_toml_checked_at,updated_at,verified_at,verify_method)",
+		db.RoleCPTenant: "rad w(collect_utm,name,origins,status,updated_at)",
 	},
 	"cp.otlp_tokens": {
 		db.RoleCPSystem:      "rawd",

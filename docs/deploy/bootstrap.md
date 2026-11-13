@@ -79,8 +79,9 @@ sections 3 and 5). Expected outputs quoted from those runs say so.
     ```sh
     sudo docker run --rm --network stellar-analytics-core_default \
       --env-file /etc/stellar-analytics/env/platformctl.env \
+      -v /etc/stellar-analytics/tls/ca:/etc/sa-tls:ro \
       -e PLATFORM_DB_HOST=haproxy -e PLATFORM_DB_PORT=5000 -e PLATFORM_DB_NAME=platform \
-      -e PLATFORM_DB_SSLMODE=disable \
+      -e PLATFORM_DB_SSLMODE=verify-full -e PLATFORM_DB_SSLROOTCERT=/etc/sa-tls/ca.crt \
       ghcr.io/justmert/stellar-analytics/platformctl:<release> \
       probe-tenant create -operator-github-id <operator github id> -domain probe.<an operator input> -origin https://probe.<an operator input>
     ```

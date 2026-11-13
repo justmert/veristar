@@ -18,6 +18,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/nats-io/nats.go"
 
+	"github.com/justmert/stellar-analytics/internal/config"
 	"github.com/justmert/stellar-analytics/internal/umami"
 )
 
@@ -36,7 +37,10 @@ type Postgres struct {
 	Host    string `json:"host"`
 	Port    int    `json:"port"`
 	SSLMode string `json:"sslmode"`
-	Logins  []struct {
+	// SSLRootCert is the internal ca; with it sslmode must be verify-full
+	// (config.LoadPostgresTLS), so a check never logs in over plain text
+	SSLRootCert string `json:"sslrootcert"`
+	Logins      []struct {
 		Pair
 		Database    string `json:"database"`
 		Replication bool   `json:"replication"`
@@ -47,6 +51,9 @@ type Postgres struct {
 type NATS struct {
 	URLs  []string `json:"urls"`
 	Users []Pair   `json:"users"`
+	// CAFile is the internal ca; with it every attempt is tls from the
+	// first byte, as the services connect (natsx.Options)
+	CAFile string `json:"ca_file"`
 }
 
 // Umami names the instance, the admin passwords, and the previous and new
@@ -100,6 +107,9 @@ const attemptTimeout = 15 * time.Second
 func pgAttempt(ctx context.Context, p *Postgres, user, pw, db string, repl bool) (Outcome, string) {
 	cfg := fmt.Sprintf("host=%s port=%d user=%s dbname=%s sslmode=%s connect_timeout=10",
 		p.Host, p.Port, user, db, p.SSLMode)
+	if p.SSLRootCert != "" {
+		cfg += " sslrootcert=" + p.SSLRootCert
+	}
 	c, err := pgconn.ParseConfig(cfg)
 	if err != nil {
 		return Inconclusive, err.Error()
@@ -122,9 +132,29 @@ func pgAttempt(ctx context.Context, p *Postgres, user, pw, db string, repl bool)
 	return Inconclusive, err.Error()
 }
 
-func natsAttempt(urls []string, user, pw string) (Outcome, string) {
-	nc, err := nats.Connect(strings.Join(urls, ","), nats.UserInfo(user, pw), nats.Timeout(attemptTimeout),
-		nats.MaxReconnects(0), nats.NoReconnect(), nats.DontRandomize())
+// natsTLS returns the tls options of the spec, the same as a service's
+// (natsx.Options); none when no ca is named.
+func natsTLS(n *NATS) ([]nats.Option, error) {
+	if n.CAFile == "" {
+		return nil, nil
+	}
+	cfg, err := config.LoadNATS(config.FromMap(map[string]string{
+		"NATS_URL": strings.Join(n.URLs, ","), "NATS_REPLICAS": "1", "NATS_TLS_CA": n.CAFile,
+	}))
+	if err != nil {
+		return nil, err
+	}
+	tc, err := cfg.TLS.ClientConfig()
+	if err != nil {
+		return nil, err
+	}
+	return []nats.Option{nats.Secure(tc), nats.TLSHandshakeFirst()}, nil
+}
+
+func natsAttempt(urls []string, tlsOpts []nats.Option, user, pw string) (Outcome, string) {
+	opts := append([]nats.Option{nats.UserInfo(user, pw), nats.Timeout(attemptTimeout),
+		nats.MaxReconnects(0), nats.NoReconnect(), nats.DontRandomize()}, tlsOpts...)
+	nc, err := nats.Connect(strings.Join(urls, ","), opts...)
 	if err == nil {
 		nc.Close()
 		return Accepted, ""
@@ -172,9 +202,13 @@ func Run(ctx context.Context, s Spec, now time.Time) ([]Result, error) {
 		}
 	}
 	if n := s.NATS; n != nil {
+		tlsOpts, err := natsTLS(n)
+		if err != nil {
+			return nil, fmt.Errorf("nats tls: %w", err)
+		}
 		for _, u := range n.Users {
 			out = append(out, pair("nats", u.Name, func(pw string) (Outcome, string) {
-				return natsAttempt(n.URLs, u.User, pw)
+				return natsAttempt(n.URLs, tlsOpts, u.User, pw)
 			}, u))
 		}
 	}

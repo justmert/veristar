@@ -30,7 +30,8 @@ const usage = `usage: replayer [serve|version]
 serve (the default) runs the replayer until SIGINT or SIGTERM.
 
 environment: NATS_URL, NATS_REPLICAS, NATS_USER and NATS_PASSWORD (when the
-server requires auth), REPLAYER_NODE_ID, REPLAYER_OPS_ADDR, UMAMI_URL (one
+server requires auth), NATS_TLS_CA with the optional NATS_TLS_CERT and
+NATS_TLS_KEY (tls only, from the first byte), REPLAYER_NODE_ID, REPLAYER_OPS_ADDR, UMAMI_URL (one
 url, or a comma-separated list with one url per umami process),
 REPLAYER_WORKERS, REPLAYER_MAX_IN_FLIGHT.
 `

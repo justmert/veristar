@@ -4,9 +4,20 @@ scope: "sa-{{ sa_environment }}"
 namespace: /stellar-analytics/
 name: "{{ inventory_hostname }}"
 
+# every link is tls with the node certificate of the internal ca (finding
+# O-26). the certificates are mounted at /etc/patroni-tls by the compose
+# project (owned by the postgres user, as postgresql requires of a key).
 restapi:
   listen: 0.0.0.0:8008
   connect_address: "{{ sa_private_ip }}:8008"
+  # https only, and a client must present a certificate of the internal
+  # ca: haproxy's checks, prometheus, the other member (failsafe and leader
+  # race calls use these same files as their client certificate) and
+  # ansible on the node all do
+  certfile: /etc/patroni-tls/node.crt
+  keyfile: /etc/patroni-tls/node.key
+  cafile: /etc/patroni-tls/ca.crt
+  verify_client: required
   # unsafe endpoints (restart, failover, config) need these; the read-only
   # role checks haproxy uses (/primary) do not
   authentication:
@@ -14,6 +25,11 @@ restapi:
     password: "{{ sa_secrets.patroni_restapi_password }}"
 
 etcd3:
+  # mutual tls to the etcd members on the edge nodes (roles/edge)
+  protocol: https
+  cacert: /etc/patroni-tls/ca.crt
+  cert: /etc/patroni-tls/node.crt
+  key: /etc/patroni-tls/node.key
   hosts:
 {% for h in groups['edge'] %}
     - "{{ hostvars[h].sa_private_ip }}:2379"
@@ -46,13 +62,23 @@ postgresql:
   data_dir: /var/lib/postgresql/patroni/data
   bin_dir: /usr/lib/postgresql/18/bin
   pgpass: /tmp/pgpass
+  # patroni's own connections to its postgresql go through the unix socket,
+  # so the hostssl-only pg_hba below never sees them
+  use_unix_socket: true
+  # replication (the replica's primary_conninfo) and pg_rewind (superuser)
+  # cross nodes; both check the leader's certificate against its private
+  # address, so they never run unencrypted or against another server
   authentication:
     superuser:
       username: postgres
       password: "{{ sa_secrets.postgres_superuser_password }}"
+      sslmode: verify-full
+      sslrootcert: /etc/patroni-tls/ca.crt
     replication:
       username: replicator
       password: "{{ sa_secrets.postgres_replication_password }}"
+      sslmode: verify-full
+      sslrootcert: /etc/patroni-tls/ca.crt
   # node-local parameters: wal archiving through pgbackrest
   # (roles/backup). archive_mode needs a restart, which a new cluster gets
   # anyway; patroni reports pending_restart on a running one.
@@ -61,16 +87,24 @@ postgresql:
   # segment and archives nothing, instead of failing each segment against a
   # repository that has no stanza yet. a reload sets the real command.
   parameters:
+    # tls for every tcp client; pg_hba below admits nothing else
+    ssl: "on"
+    ssl_cert_file: /etc/patroni-tls/node.crt
+    ssl_key_file: /etc/patroni-tls/node.key
+    ssl_ca_file: /etc/patroni-tls/ca.crt
+    ssl_min_protocol_version: TLSv1.3
     archive_mode: "on"
     archive_command: "{{ core_archive_command }}"
     archive_timeout: "{{ core_archive_timeout }}"
+  # hostssl only: a tcp connection that did not negotiate tls matches no
+  # line and is refused, wherever it comes from
   pg_hba:
     - local all postgres peer
     - local all all scram-sha-256
-    - host replication replicator {{ sa_private_network_cidr }} scram-sha-256
-    - host all all {{ sa_private_network_cidr }} scram-sha-256
-    - host all all {{ core_compose_subnet }} scram-sha-256
-    - host all all 127.0.0.1/32 scram-sha-256
+    - hostssl replication replicator {{ sa_private_network_cidr }} scram-sha-256
+    - hostssl all all {{ sa_private_network_cidr }} scram-sha-256
+    - hostssl all all {{ core_compose_subnet }} scram-sha-256
+    - hostssl all all 127.0.0.1/32 scram-sha-256
 
 tags:
   nofailover: false

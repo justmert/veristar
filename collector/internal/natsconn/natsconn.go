@@ -28,6 +28,12 @@ type Config struct {
 	// only against the dev server, which runs without auth.
 	User     string              `mapstructure:"user"`
 	Password configopaque.String `mapstructure:"password"`
+	// TLSCA, TLSCert and TLSKey are the files of NATS_TLS_CA, NATS_TLS_CERT
+	// and NATS_TLS_KEY. all empty only against the dev server; with a ca
+	// the collector never connects in plain text (natsx.Options).
+	TLSCA   string `mapstructure:"tls_ca_file"`
+	TLSCert string `mapstructure:"tls_cert_file"`
+	TLSKey  string `mapstructure:"tls_key_file"`
 }
 
 // load runs the same checks as every service's NATS_* keys. the replica
@@ -40,6 +46,11 @@ func (c Config) load() (config.NATS, error) {
 	}
 	if c.Password != "" {
 		m["NATS_PASSWORD"] = string(c.Password)
+	}
+	for k, v := range map[string]string{"NATS_TLS_CA": c.TLSCA, "NATS_TLS_CERT": c.TLSCert, "NATS_TLS_KEY": c.TLSKey} {
+		if v != "" {
+			m[k] = v
+		}
 	}
 	return config.LoadNATS(config.FromMap(m))
 }

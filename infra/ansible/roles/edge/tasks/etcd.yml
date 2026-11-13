@@ -38,7 +38,10 @@
 
 - name: Ask the other edge nodes for the member list
   ansible.builtin.uri:
-    url: "http://{{ hostvars[item].sa_private_ip }}:2379/v3/cluster/member/list"
+    url: "https://{{ hostvars[item].sa_private_ip }}:2379/v3/cluster/member/list"
+    ca_path: "{{ sa_tls_root.ca_path }}"
+    client_cert: "{{ sa_tls_root.client_cert }}"
+    client_key: "{{ sa_tls_root.client_key }}"
     method: POST
     body_format: json
     body: {}
@@ -71,7 +74,10 @@
 # no name (added before but never started); ids are uint64 strings in json
 - name: Remove the stale member of this node
   ansible.builtin.uri:
-    url: "http://{{ hostvars[edge_etcd_peer].sa_private_ip }}:2379/v3/cluster/member/remove"
+    url: "https://{{ hostvars[edge_etcd_peer].sa_private_ip }}:2379/v3/cluster/member/remove"
+    ca_path: "{{ sa_tls_root.ca_path }}"
+    client_cert: "{{ sa_tls_root.client_cert }}"
+    client_key: "{{ sa_tls_root.client_key }}"
     method: POST
     body_format: json
     body: {ID: "{{ item.ID }}"}
@@ -85,7 +91,10 @@
 
 - name: Add this node as a new member
   ansible.builtin.uri:
-    url: "http://{{ hostvars[edge_etcd_peer].sa_private_ip }}:2379/v3/cluster/member/add"
+    url: "https://{{ hostvars[edge_etcd_peer].sa_private_ip }}:2379/v3/cluster/member/add"
+    ca_path: "{{ sa_tls_root.ca_path }}"
+    client_cert: "{{ sa_tls_root.client_cert }}"
+    client_key: "{{ sa_tls_root.client_key }}"
     method: POST
     body_format: json
     body: {peerURLs: ["{{ edge_etcd_peer_url }}"]}

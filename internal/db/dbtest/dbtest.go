@@ -5,6 +5,7 @@ package dbtest
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -35,8 +36,50 @@ type Postgres struct {
 	container *testcontainers.DockerContainer
 }
 
+// ServerTLS makes the server speak tls only, as the core role configures
+// patroni (roles/core): ssl on, tls 1.3 at least, and a pg_hba that admits
+// hostssl lines only, so a plain text login is refused by the server. the
+// pem values are the server's certificate and key; CAFile is the ca on the
+// test's side, which Env then names with sslmode verify-full.
+type ServerTLS struct {
+	CertPEM, KeyPEM []byte
+	CAFile          string
+}
+
+// Option customises the server.
+type Option func(*options)
+
+type options struct{ tls *ServerTLS }
+
+// WithTLS starts the server with tls only.
+func WithTLS(t ServerTLS) Option { return func(o *options) { o.tls = &t } }
+
+// hostsslOnly runs after initdb: it replaces the image's pg_hba (one
+// "host all all all" line) with hostssl lines, so the server itself refuses
+// every connection that did not negotiate tls
+const hostsslOnly = `#!/bin/sh
+set -eu
+cat >"$PGDATA/pg_hba.conf" <<'HBA'
+local all all trust
+hostssl all all all scram-sha-256
+HBA
+`
+
+// tlsEntrypoint gives the key to the postgres user, which postgresql
+// requires of a key file, then hands over to the image's entrypoint
+const tlsEntrypoint = `set -eu
+install -d -o postgres -g postgres -m 0700 /var/lib/postgresql/tls
+install -o postgres -g postgres -m 0600 /tls-src/server.key /var/lib/postgresql/tls/server.key
+install -o postgres -g postgres -m 0644 /tls-src/server.crt /var/lib/postgresql/tls/server.crt
+exec docker-entrypoint.sh postgres -c ssl=on -c ssl_min_protocol_version=TLSv1.3 \
+  -c ssl_cert_file=/var/lib/postgresql/tls/server.crt -c ssl_key_file=/var/lib/postgresql/tls/server.key`
+
 // Start runs the container. call Terminate when done.
-func Start(ctx context.Context) (*Postgres, error) {
+func Start(ctx context.Context, opts ...Option) (*Postgres, error) {
+	var o options
+	for _, f := range opts {
+		f(&o)
+	}
 	root, err := repoRoot()
 	if err != nil {
 		return nil, err
@@ -54,7 +97,18 @@ func Start(ctx context.Context) (*Postgres, error) {
 		return nil, err
 	}
 
-	c, err := testcontainers.Run(ctx, image,
+	custom := []testcontainers.ContainerCustomizer{}
+	if o.tls != nil {
+		custom = append(custom,
+			testcontainers.WithFiles(
+				testcontainers.ContainerFile{Reader: strings.NewReader(hostsslOnly), ContainerFilePath: "/docker-entrypoint-initdb.d/99-hostssl.sh", FileMode: 0o755},
+				testcontainers.ContainerFile{Reader: bytes.NewReader(o.tls.CertPEM), ContainerFilePath: "/tls-src/server.crt", FileMode: 0o644},
+				testcontainers.ContainerFile{Reader: bytes.NewReader(o.tls.KeyPEM), ContainerFilePath: "/tls-src/server.key", FileMode: 0o600},
+			),
+			testcontainers.WithEntrypoint("sh", "-c", tlsEntrypoint),
+		)
+	}
+	c, err := testcontainers.Run(ctx, image, append([]testcontainers.ContainerCustomizer{
 		testcontainers.WithEnv(map[string]string{
 			"POSTGRES_USER":     "postgres",
 			"POSTGRES_PASSWORD": superPW,
@@ -74,7 +128,7 @@ func Start(ctx context.Context) (*Postgres, error) {
 				WithOccurrence(2).WithStartupTimeout(2*time.Minute),
 			wait.ForListeningPort("5432/tcp"),
 		),
-	)
+	}, custom...)...)
 	if err != nil {
 		if c != nil {
 			_ = c.Terminate(context.WithoutCancel(ctx))
@@ -99,6 +153,10 @@ func Start(ctx context.Context) (*Postgres, error) {
 		"PLATFORM_DB_SSLMODE":        "disable",
 		"PLATFORM_DB_ADMIN_USER":     "postgres",
 		"PLATFORM_DB_ADMIN_PASSWORD": superPW,
+	}
+	if o.tls != nil {
+		p.Env["PLATFORM_DB_SSLMODE"] = "verify-full"
+		p.Env["PLATFORM_DB_SSLROOTCERT"] = o.tls.CAFile
 	}
 	for _, r := range pdb.AppRoles {
 		pw, err := randHex(24)
@@ -131,10 +189,15 @@ func (p *Postgres) Config(database string) *config.Env {
 	return config.FromMap(p.EnvFor(database))
 }
 
-// Superuser connects to a database as the postgres superuser.
+// Superuser connects to a database as the postgres superuser, with the
+// server's tls settings when it has them.
 func (p *Postgres) Superuser(ctx context.Context, database string) (*pgx.Conn, error) {
-	return pgx.Connect(ctx, fmt.Sprintf("host=%s port=%d dbname=%s user=postgres password=%s sslmode=disable",
-		p.Host, p.Port, database, p.Env["PLATFORM_DB_ADMIN_PASSWORD"]))
+	s := fmt.Sprintf("host=%s port=%d dbname=%s user=postgres password=%s sslmode=%s",
+		p.Host, p.Port, database, p.Env["PLATFORM_DB_ADMIN_PASSWORD"], p.Env["PLATFORM_DB_SSLMODE"])
+	if ca := p.Env["PLATFORM_DB_SSLROOTCERT"]; ca != "" {
+		s += " sslrootcert=" + ca
+	}
+	return pgx.Connect(ctx, s)
 }
 
 // CreateDatabase creates an empty database the way postgres-init.sh creates

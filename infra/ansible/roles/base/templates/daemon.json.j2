@@ -4,7 +4,8 @@
     "max-size": "20m",
     "max-file": "5"
   },
-  "live-restore": true{% if base_docker_insecure_registries %},
+  "live-restore": true,
+  "ip6tables": true{% if base_docker_insecure_registries %},
   "insecure-registries": {{ base_docker_insecure_registries | to_json }}{% endif %}
 
 }

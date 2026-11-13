@@ -161,20 +161,28 @@ func (h *Routes) verify(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	var out tenantq.CpSite
-	err = h.scope.InTenant(ctx, a, func(tx pgx.Tx) error {
-		p := tenantq.SetSiteVerifyResultParams{Ok: o.OK, ID: s.ID}
+	// the outcome is written under cp_system, next to the check that
+	// decided it: cp_tenant cannot write the verification columns, so no
+	// other tenant handler can mark a domain verified (migration 00028,
+	// review). the site id was read under the member's tenant scope.
+	out := s
+	err = h.scope.DB().WithSystem(ctx, func(tx pgx.Tx) error {
+		p := systemq.SystemSetSiteVerifyResultParams{Ok: o.OK, ID: s.ID}
 		if o.OK {
 			p.Method = &o.Method
 		} else {
 			p.Error = &o.Error
 		}
-		var qerr error
-		out, qerr = tenantq.New(tx).SetSiteVerifyResult(ctx, p)
+		row, qerr := systemq.New(tx).SystemSetSiteVerifyResult(ctx, p)
 		if qerr != nil {
 			return qerr
 		}
-		return audit.InTenant(ctx, tx, audit.Entry{
+		if row.TenantID != a.TenantID {
+			return fmt.Errorf("domaincheck: site %s moved to another tenant", s.ID)
+		}
+		out.VerifyMethod, out.VerifiedAt = row.VerifyMethod, row.VerifiedAt
+		out.LastVerifyAt, out.LastVerifyError = row.LastVerifyAt, row.LastVerifyError
+		return audit.InSystem(ctx, tx, audit.Entry{
 			Actor: audit.User(a.User.ID), Action: ActionVerify, Target: audit.SiteTarget(s.ID),
 			Detail: o.auditDetail(a.TenantID.String()),
 		})
@@ -218,8 +226,9 @@ func (h *Routes) limit(ctx context.Context, siteID uuid.UUID) error {
 }
 
 // AfterSiteCreate fetches the new site's stellar.toml in the background
-// and stores it under cp_tenant (control-plane-api 5.12: asynchronously,
-// after the response). actor is the user who created the site. a failure
+// and stores it under cp_system, as the daily task does (control-plane-api
+// 5.12: asynchronously, after the response; cp_tenant cannot write the
+// column, review). actor is the user who created the site. a failure
 // is logged; the daily verify-domains task fetches again.
 func (h *Routes) AfterSiteCreate(ctx context.Context, tenantID, siteID uuid.UUID, domain, actor string) {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), afterCreateTimeout)
@@ -240,31 +249,8 @@ func (h *Routes) Wait() { h.running.Wait() }
 
 func (h *Routes) fetchAndStore(ctx context.Context, tenantID, siteID uuid.UUID, domain, actor string) error {
 	st := FetchStellarToml(ctx, h.checker.Guard, domain)
-	return h.scope.DB().WithTenant(ctx, tenantID, func(tx pgx.Tx) error {
-		q := tenantq.New(tx)
-		prev, err := q.LockSiteStellarToml(ctx, siteID)
-		if errors.Is(err, pgx.ErrNoRows) {
-			// removed in the meantime; nothing to record
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		doc, err := json.Marshal(st)
-		if err != nil {
-			return err
-		}
-		if err := q.SetSiteStellarToml(ctx, tenantq.SetSiteStellarTomlParams{Doc: doc, ID: siteID}); err != nil {
-			return err
-		}
-		change, changed, err := tomlChange(prev, st)
-		if err != nil || !changed {
-			return err
-		}
-		change["tenant_id"] = tenantID.String()
-		return audit.InTenant(ctx, tx, audit.Entry{
-			Actor: actor, Action: ActionStellarToml, Target: audit.SiteTarget(siteID), Detail: change,
-		})
+	return h.scope.DB().WithSystem(ctx, func(tx pgx.Tx) error {
+		return StoreSystem(ctx, tx, tenantID, siteID, st, actor)
 	})
 }
 

@@ -113,6 +113,21 @@ in their lanes and their events queue in `WEB_EVENTS`; nothing is lost.
 Action: `docker compose ps` on the node and `docker compose logs umami-<n>`
 (process 0 is the service `umami`, process n is `umami-<n+1>`); restart it.
 
+### ReplayerVisitStateNearlyFull, ReplayerVisitStateFull
+The `visit_state` bucket holds more than 80 % of its byte limit
+(`natsx.VisitStateMaxBytes`, 384 MiB) for 10 minutes, or it is full and the
+replayer skipped writes in the last 5 minutes. It holds a
+`sent.<event id>` key per delivered event for 24 hours, so it fills at about
+4 to 5 million delivered events a day. When full, delivery goes on, but each
+event is stored without its duplicate guard (a replayer crash before the ack
+can store it twice) and without visit continuity (the visitor's next event
+starts a new visit). Nothing is lost and the bucket drains as keys expire.
+Action: if this is steady traffic, raise `VisitStateMaxBytes` and
+`edge_nats_max_memory_store` together as [capacity.md](capacity.md) describes,
+then `platformctl nats apply`; the numbers are the gauges
+`replayer_visit_state_bytes`, `replayer_visit_state_max_bytes` and the counter
+`replayer_visit_state_writes_skipped_total`.
+
 ### DLQNotEmpty
 `WEB_DLQ` or `API_DLQ` holds messages: events or batches were rejected
 permanently downstream.

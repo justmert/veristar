@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
 	"github.com/justmert/stellar-analytics/internal/controlplane/tenants"
@@ -17,7 +18,8 @@ import (
 )
 
 // contract 4.3: collect_utm is a site setting that is off on a new site and
-// that the site's members change with the site edit route. a change starts
+// that the site's owners change with the site edit route (review: a
+// member gets 403 owner_required). a change starts
 // a reconcile, which publishes it to the gateway (provision live test); an
 // unchanged value does not. the change is audited.
 func TestSiteCollectUTM(t *testing.T) {
@@ -73,4 +75,21 @@ func TestSiteCollectUTM(t *testing.T) {
 
 	r = set("yes")
 	require.Equal(t, http.StatusBadRequest, r.Status, string(r.Body))
+
+	// a member may edit the site but not turn campaign parameters on or off
+	member := e.SignIn(t, e.NewGitHubID(), "utm-member")
+	e.Superuser(t, func(c *pgx.Conn) {
+		_, err := c.Exec(ctx, `insert into cp.tenant_members (tenant_id, user_id, role)
+			select $1, id, 'member' from cp.users where github_id = $2`, tenant, member.GHID)
+		require.NoError(t, err)
+	})
+	r = member.Call(t, http.MethodPatch, path, map[string]any{"collect_utm": true})
+	require.Equal(t, http.StatusForbidden, r.Status, string(r.Body))
+	require.Equal(t, "owner_required", r.Code(t))
+	r = member.Call(t, http.MethodGet, path, nil)
+	require.Equal(t, false, r.JSON(t)["collect_utm"], "the member's change was not applied")
+	// the unchanged value with a name change is an ordinary member edit
+	r = member.Call(t, http.MethodPatch, path, map[string]any{"collect_utm": false, "name": "renamed by member"})
+	require.Equal(t, http.StatusOK, r.Status, string(r.Body))
+	require.Equal(t, "renamed by member", r.JSON(t)["name"])
 }

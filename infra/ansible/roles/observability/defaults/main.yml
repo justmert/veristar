@@ -5,9 +5,10 @@
 #                address, so prometheus on the core nodes can scrape them
 #                without the edge and core compose projects publishing their
 #                ops ports
-#   core nodes   prometheus, alertmanager (two-node cluster), grafana, one
-#                prometheus-nats-exporter per nats server, postgres_exporter
-#                on the postgres hosts. prometheus and grafana bind loopback
+#   edge nodes   prometheus-nats-exporter beside the node's nats server,
+#                reading its monitoring port inside the node
+#   core nodes   prometheus, alertmanager (two-node cluster), grafana,
+#                postgres_exporter on the postgres hosts. prometheus and grafana bind loopback
 #                only: reach them with `ssh -L 9090:127.0.0.1:9090` and
 #                `ssh -L 3000:127.0.0.1:3000`
 #   probe node   caddy for status.<BASE_DOMAIN>, gatus and the prober
@@ -50,6 +51,7 @@ observability_relay:
     - {job: gateway, port: 9301, target: "gateway:9090"}
     - {job: collector, port: 9302, target: "collector:8888"}
     - {job: caddy, port: 9307, target: "caddy:2021"}
+    - {job: nats, port: 9309, target: "nats-exporter:7777"}
   core:
     - {job: controlplane, port: 9303, target: "controlplane:9090"}
     - {job: replayer, port: 9304, target: "replayer:9090"}
@@ -57,6 +59,16 @@ observability_relay:
     - {job: jobs, port: 9306, target: "jobs:9090"}
     - {job: caddy, port: 9307, target: "caddy:2021"}
     - {job: haproxy, port: 9308, target: "haproxy:{{ core_haproxy_stats_port | default(8404) }}"}
+# every listener of this role on the private address is tls with the node
+# certificate and asks the client for one of the internal ca (finding
+# O-26); prometheus presents its node's certificate. only the this stage test
+# stack (tests/observability), which renders these templates without
+# running the role, sets this to false; the role refuses false.
+observability_tls: true
+# nats monitoring served to the private network by the relay, over the
+# same tls, for operators and the drills (any GET path, not only /metrics);
+# nats itself publishes it on the node's loopback only (roles/edge)
+observability_nats_monitor_relay_port: 8222
 observability_node_exporter_port: 9100
 observability_postgres_exporter_port: 9187
 observability_nats_monitor_port: 8222

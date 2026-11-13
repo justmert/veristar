@@ -18,10 +18,15 @@ type NATS struct {
 	// both are empty only on the dev server, which runs without auth.
 	User     string
 	Password Secret
+	// TLS is set when NATS_TLS_CA is. the client then speaks tls from the
+	// first byte (natsx.Options) and never falls back to plain text; nil
+	// only for the dev server on a single machine.
+	TLS *TLSFiles
 }
 
-// LoadNATS reads NATS_URL, NATS_REPLICAS and the optional pair NATS_USER and
-// NATS_PASSWORD.
+// LoadNATS reads NATS_URL, NATS_REPLICAS, the optional pair NATS_USER and
+// NATS_PASSWORD, and the optional NATS_TLS_CA with NATS_TLS_CERT and
+// NATS_TLS_KEY.
 func LoadNATS(e *Env) (NATS, error) {
 	c := NATS{
 		URLs:     natsURLs(e, "NATS_URL"),
@@ -42,6 +47,17 @@ func LoadNATS(e *Env) (NATS, error) {
 	case hasUser:
 		c.User = user
 		c.Password = Secret{v: pass}
+	}
+	c.TLS = loadTLSFiles(e, "NATS_TLS_CA", "NATS_TLS_CERT", "NATS_TLS_KEY")
+	// a tls:// url without the ca would make the client trust the system
+	// roots, which never sign the private network's servers
+	if c.TLS == nil {
+		for _, u := range c.URLs {
+			if strings.HasPrefix(u, "tls://") {
+				e.fail("NATS_TLS_CA", "is required for tls:// urls")
+				break
+			}
+		}
 	}
 	return c, e.Err()
 }

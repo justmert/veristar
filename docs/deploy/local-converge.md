@@ -51,6 +51,14 @@ make local-converge-e2e                # this stage and 8 paths through the conv
 make local-converge-down               # removes containers, volumes, networks, images, state
 ```
 
+`make local-converge-up` also issues the internal CA and node certificates
+(`make internal-ca ENV=local`, [ansible.md](ansible.md) section 9). After a converge,
+`tests/localconverge/tls-audit.sh` captures the private network with tcpdump sidecars while the
+end-to-end suite runs, checks that no flow carries readable protocol data or any secret of the
+environment, and tries every private endpoint from a host without a certificate.
+On 2026-11-13 the full six-node topology exhausted this machine's memory alongside other work
+(load above 900); the audit ran on `LC_TOPOLOGY=minimal` with `-e core_umami_processes=1`.
+
 `LC_TOPOLOGY=minimal` before `local-converge-up` leaves out the second core node (3 edge, 1 core,
 1 backup node), the smallest set the roles converge; `make rotate-local` uses it for the
 credential rotation run (the design).
@@ -181,8 +189,8 @@ section 4.1 plus a backup node:
   public addresses stay reachable; `lc_heal` restores it.
 - **Backups.** No object storage exists an operator input, so the pgbackrest repository is
   a posix repository on `sa-lc-backup-1` in hel1, a location with no database node,
-  reached over pgbackrest's TLS protocol with a throwaway CA the backup role creates
-  under `.scratch/scratch/local-converge/pgbackrest-tls`. This is a stand-in, not an
+  reached over pgbackrest's TLS protocol with the node certificates of the internal CA
+  (`make internal-ca ENV=local`, which `make local-converge-up` runs). This is a stand-in, not an
   equivalent: object storage is not a server pgbackrest talks to, has its own
   durability and latency, and `repo1-s3-uri-style=host` against Hetzner was never
   tested. The S3 settings stay in `roles/backup` (`backup_repo_mode: s3`, the

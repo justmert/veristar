@@ -129,6 +129,10 @@ delete from api.ingest_dedup where applied_at < @cutoff::timestamptz;
 -- streams idle since before the cutoff (7 days)
 delete from api.series_state where last_seen_at < @cutoff::timestamptz;
 
+-- name: EvictIdleSeriesStates :one
+-- bounds the stored streams of each tenant (review, migration 00029)
+select api.evict_idle_series_states(@idle_before::timestamptz, @max_stored::bigint)::bigint as evicted;
+
 -- name: PruneResourceSeen :execrows
 -- resources idle since before the cutoff (7 days)
 delete from api.resource_seen where last_seen_at < @cutoff::timestamptz;

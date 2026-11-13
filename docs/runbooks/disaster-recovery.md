@@ -65,7 +65,8 @@ Data loss window: what was not yet archived when the database was lost, at most
 
    ```sh
    cd /opt/stellar-analytics/edge
-   sudo docker compose exec etcd etcdctl --endpoints=http://127.0.0.1:2379 \
+   sudo docker compose exec etcd etcdctl --endpoints=https://127.0.0.1:2379 \
+     --cacert=/etc/etcd/tls/ca.crt --cert=/etc/etcd/tls/node.crt --key=/etc/etcd/tls/node.key \
      del --prefix /stellar-analytics/sa-<env>/
    ```
 
