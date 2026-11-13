@@ -27,7 +27,10 @@ trivy --version | grep -q '^Version: 0\.76\.2$' || { echo "trivy is not 0.76.2" 
 
 go mod download all
 (cd examples/otel-go-nethttp && go mod download all)
-# same ocb version and manifest as make collector-build; sources only
+# same ocb version and manifest as make collector-build; sources only. ocb
+# creates dist/scf-otelcol but not its parent, and a fresh checkout has no
+# dist/ (it is gitignored)
+mkdir -p dist
 go run go.opentelemetry.io/collector/cmd/builder@v0.165.0 \
 	--config collector/builder-config.yaml --skip-compilation --skip-strict-versioning=false
 (cd dist/scf-otelcol && go mod download all)

@@ -41,6 +41,11 @@ const here = dirname(fileURLToPath(import.meta.url));
 // the hand-written example site; a tenant pastes the snippet where the marker is
 const exampleDir = resolve(here, "../../../examples/static-html/src");
 const MARKER = "<!-- tracker -->";
+// the files index.html and about.html reference, with their content types
+const exampleAssets: Record<string, string> = {
+  "/site.css": "text/css; charset=utf-8",
+  "/page.js": "text/javascript; charset=utf-8",
+};
 
 function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((ok, fail) => {
@@ -75,9 +80,11 @@ export async function startServers(): Promise<Fixture> {
     };
     if (isTenantHost(host)) {
       const snippet = snippets.get(host) ?? "";
-      if (path === "/site.css") {
-        res.writeHead(200, { "content-type": "text/css; charset=utf-8" });
-        res.end(readFileSync(resolve(exampleDir, "site.css")));
+      // the example's own assets, which its pages load
+      const asset = exampleAssets[path];
+      if (asset) {
+        res.writeHead(200, { "content-type": asset });
+        res.end(readFileSync(resolve(exampleDir, path.slice(1))));
         return;
       }
       // a page of the tenant origin without the snippet, from which a test

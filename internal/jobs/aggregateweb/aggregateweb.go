@@ -66,9 +66,16 @@ type Reader interface {
 
 // Sites is the registry snapshot of sites. the jobs role cannot read
 // cp.sites; the registry is where ingestion learns which sites are active.
+// Loaded is false until the first complete snapshot is built.
 type Sites interface {
 	Snapshot() map[string]registry.Site
+	Loaded() bool
 }
+
+// ErrRegistryNotLoaded is returned by a run that starts before the site
+// registry's first snapshot: that snapshot is empty, and a run over it would
+// succeed without reading a single site, then wait an hour for the next one.
+var ErrRegistryNotLoaded = errors.New("aggregateweb: site registry snapshot not loaded yet")
 
 // TxFunc runs fn in one fenced jobs transaction (scheduler.Leader.Tx).
 type TxFunc func(ctx context.Context, fn func(pgx.Tx) error) error
@@ -150,6 +157,9 @@ func (a *Aggregator) Backfill(ctx context.Context, tx TxFunc, from, to time.Time
 	}
 	if today := UTCDay(a.now()); to.After(today) {
 		return Result{}, fmt.Errorf("aggregateweb: --to %s is after today %s (utc)", to.Format(time.DateOnly), today.Format(time.DateOnly))
+	}
+	if !a.sites.Loaded() {
+		return Result{}, ErrRegistryNotLoaded
 	}
 	snap := a.sites.Snapshot()
 	ids := make([]string, 0, len(snap))
@@ -234,10 +244,14 @@ func (a *Aggregator) BackfillSite(ctx context.Context, tx TxFunc, s registry.Sit
 	return n, nil
 }
 
-// Site returns a site of the registry snapshot.
-func (a *Aggregator) Site(id string) (registry.Site, bool) {
+// Site returns a site of the registry snapshot. before the first snapshot
+// every site would look removed, so that is ErrRegistryNotLoaded instead.
+func (a *Aggregator) Site(id string) (registry.Site, bool, error) {
+	if !a.sites.Loaded() {
+		return registry.Site{}, false, ErrRegistryNotLoaded
+	}
 	s, ok := a.sites.Snapshot()[id]
-	return s, ok
+	return s, ok, nil
 }
 
 // checkWebsites confirms that both websites of a site exist in umami. umami

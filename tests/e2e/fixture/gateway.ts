@@ -298,6 +298,7 @@ function fetchMetadataProblem(req: IncomingMessage): string | null {
 
 export interface WireEvent {
   v: 1;
+  sv?: string;
   w: string;
   t: "pv" | "ev";
   h: string;
@@ -312,7 +313,25 @@ export interface WireEvent {
   p: Proof;
 }
 
-const WIRE_KEYS = new Set(["v", "w", "t", "h", "u", "r", "ti", "s", "l", "n", "d", "ts", "p"]);
+const WIRE_KEYS = new Set([
+  "v",
+  "sv",
+  "w",
+  "t",
+  "h",
+  "u",
+  "r",
+  "ti",
+  "s",
+  "l",
+  "n",
+  "d",
+  "ts",
+  "p",
+]);
+// sv is optional (trackers before 1.2.0 do not send it), at most 20
+// characters of x.y.z, as internal/events/wire.go checks it
+const SDK_VERSION_RE = /^(0|[1-9][0-9]{0,5})\.(0|[1-9][0-9]{0,5})\.(0|[1-9][0-9]{0,5})$/;
 const PROOF_KEYS = new Set(["iat", "salt", "bits", "tag", "nonce"]);
 
 // wire format v1 from the design item 4. returns an error string or null.
@@ -321,6 +340,11 @@ export function validateWire(x: unknown): string | null {
   const o = x as Record<string, unknown>;
   for (const k of Object.keys(o)) if (!WIRE_KEYS.has(k)) return `unknown key ${k}`;
   if (o.v !== 1) return "v must be 1";
+  if (
+    o.sv !== undefined &&
+    (typeof o.sv !== "string" || o.sv.length > 20 || !SDK_VERSION_RE.test(o.sv))
+  )
+    return "sv";
   if (typeof o.w !== "string" || !SITE_ID_RE.test(o.w)) return "w";
   if (o.t !== "pv" && o.t !== "ev") return "t";
   for (const k of ["h", "u", "r", "ti", "l"] as const) {

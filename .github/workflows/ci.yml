@@ -53,6 +53,9 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+      # the engine production runs; the caddy tests check docker's port
+      # forwarding, which differs on the runner image's older engine
+      - run: scripts/ci/install-docker.sh
       # the gateway geo tests read the db-ip country file
       - run: make geo-fetch
       - run: make test-containers

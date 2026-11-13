@@ -255,7 +255,8 @@ test("the tenant sees its own endpoints with the numbers that were sent", async 
     .getByRole("link", { name: "API traffic" })
     .click();
   await page.waitForURL(`${APP}/projects/${tenant.id}/api/traffic`);
-  await expect(page.getByRole("heading", { name: "API traffic" })).toBeVisible();
+  // exact: the project is named "API traffic <run>", and its name is the page's h1
+  await expect(page.getByRole("heading", { name: "API traffic", exact: true })).toBeVisible();
 
   await pickRange(page, "1 hour");
   await page.waitForURL(/range=1h/);

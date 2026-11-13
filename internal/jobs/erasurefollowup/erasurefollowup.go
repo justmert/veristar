@@ -100,7 +100,10 @@ func (f *Followup) Run(ctx context.Context, jobsTx, systemTx TxFunc) (Result, er
 }
 
 func (f *Followup) one(ctx context.Context, jobsTx TxFunc, r systemq.CpErasureRequest) (int, error) {
-	site, ok := f.agg.Site(r.SiteID.String())
+	site, ok, err := f.agg.Site(r.SiteID.String())
+	if err != nil {
+		return 0, err
+	}
 	if !ok {
 		// a removed site is gone from the registry; its aggregates go with
 		// the tenant purge or stay by removal_keep_aggregates, which is
