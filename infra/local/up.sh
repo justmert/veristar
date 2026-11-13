@@ -59,7 +59,7 @@ recipient="$("$tools/age/age-keygen" -y "$LC_STATE/age.key")"
 secrets="$root/infra/secrets/local/secrets.enc.yaml"
 if [ ! -f "$secrets" ]; then
 	mkdir -p "$(dirname "$secrets")"
-	"$root/.scratch/scratch/ansible-venv/bin/python" "$root/infra/secrets/new-secrets.py" local >"$LC_STATE/secrets.plain.yaml"
+	"${ANSIBLE_VENV:-$HOME/.local/share/stellar-analytics/ansible-venv}/bin/python" "$root/infra/secrets/new-secrets.py" local >"$LC_STATE/secrets.plain.yaml"
 	"$tools/sops-3.13.3" encrypt --age "$recipient" --input-type yaml --output-type yaml \
 		"$LC_STATE/secrets.plain.yaml" >"$secrets"
 	rm -f "$LC_STATE/secrets.plain.yaml"
@@ -67,7 +67,7 @@ fi
 
 # the inventory in the shape of docs/deploy/opentofu.md section 1
 inv="$root/infra/ansible/inventories/local/hosts.json"
-"$root/.scratch/scratch/ansible-venv/bin/python" - "$inv" <<PY
+"${ANSIBLE_VENV:-$HOME/.local/share/stellar-analytics/ansible-venv}/bin/python" - "$inv" <<PY
 import json, sys
 nodes = """$LC_NODES""".strip().splitlines()
 hosts = {"edge": {}, "core": {}, "probe": {}}

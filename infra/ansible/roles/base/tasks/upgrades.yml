@@ -1,0 +1,38 @@
+---
+# security updates install daily without a reboot. docker packages are held
+# at their pins (docker.yml), so they are never moved by this.
+- name: Enable the daily apt runs
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/20auto-upgrades
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+      APT::Periodic::AutocleanInterval "7";
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Limit unattended upgrades to debian security
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/52stellar-analytics-upgrades
+    content: |
+      // managed by ansible (infra/ansible/roles/base). only the security
+      // pocket is applied unattended; reboots stay a deliberate operator step
+      // because a core node reboot moves the patroni leader.
+      Unattended-Upgrade::Origins-Pattern {
+              "origin=Debian,codename=${distro_codename}-security,label=Debian-Security";
+      };
+      Unattended-Upgrade::Automatic-Reboot "false";
+      Unattended-Upgrade::Remove-Unused-Dependencies "true";
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Run the unattended upgrade timers
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+    enabled: true
+    state: started
+  loop:
+    - apt-daily.timer
+    - apt-daily-upgrade.timer

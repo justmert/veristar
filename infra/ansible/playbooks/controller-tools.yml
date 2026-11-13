@@ -1,0 +1,12 @@
+---
+# installs the pinned sops and age on the controller only
+- name: Controller tools
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files: [../vars/pins.yml]
+  tasks:
+    - name: Install sops and age
+      ansible.builtin.include_role:
+        name: secrets
+        tasks_from: tools.yml

@@ -1,0 +1,145 @@
+---
+- name: Check the core inputs
+  ansible.builtin.assert:
+    that:
+      - sa_tier == 'core'
+      - groups['edge'] | length == 3
+      - sa_secrets is defined
+      - sa_tls in ['bunny', 'internal']
+      - sa_tls == 'bunny' or sa_environment == 'local'
+      - sa_operator_github_ids is defined and (sa_operator_github_ids | string | length) > 0
+      - not core_oauth_fixture or sa_environment == 'local'
+    fail_msg: >-
+      core needs the secrets role first, OPERATOR_GITHUB_IDS an operator input as
+      sa_operator_github_ids, acme dns-01 outside the local converge, and the
+      oauth fixture only in the local converge
+
+# the design: 18.7 is required before any non-dev environment and was
+# not published on 2026-11-12. the local converge may run 18.6 and says so
+# in its inventory; staging and production stop here until it exists.
+- name: Refuse a postgresql below the required minimum outside the local converge
+  ansible.builtin.assert:
+    that:
+      - (postgres_version is version(postgres_min_version, '>=')) or (sa_environment == 'local' and postgres_allow_below_min | default(false))
+    fail_msg: >-
+      postgres_version {{ postgres_version }} is below postgres_min_version
+      {{ postgres_min_version }} (CVE-2026-120154 and 51 others). build
+      postgres-ha from postgres:{{ postgres_min_version }}-trixie once it is
+      published, then raise postgres_version in vars/pins.yml.
+
+- name: Name the core peers
+  ansible.builtin.set_fact:
+    core_nats_urls: >-
+      {{ groups['edge'] | map('extract', hostvars, 'sa_private_ip') | map('regex_replace', '^(.*)$', 'nats://\1:4222') | join(',') }}
+    core_runs_postgres: "{{ inventory_hostname in core_postgres_hosts }}"
+
+- name: Create the core directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner | default('root') }}"
+    group: "{{ item.owner | default('root') }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - { path: "{{ core_dir }}", mode: "0755" }
+    - { path: "{{ core_conf_dir }}", mode: "0755" }
+
+- name: Assemble the core caddyfile on the controller
+  ansible.builtin.command:
+    argv:
+      - sh
+      - "{{ playbook_dir }}/../../../deploy/caddy/assemble.sh"
+      - core
+      - "{{ playbook_dir }}/../../../deploy/caddy/app.Caddyfile"
+      - "{{ playbook_dir }}/../../../deploy/caddy/web.Caddyfile"
+  register: core_caddyfile
+  changed_when: false
+  delegate_to: localhost
+  run_once: true
+  become: false
+
+- name: Install the caddyfile
+  ansible.builtin.copy:
+    content: "{{ core_caddyfile.stdout }}\n"
+    dest: "{{ core_dir }}/Caddyfile"
+    owner: root
+    group: root
+    mode: "0644"
+  register: core_caddyfile_file
+
+# the postgres-ha image runs patroni as the postgres user (uid 999 in the
+# official image), which must read its config and nobody else
+- name: Write the patroni config
+  ansible.builtin.template:
+    src: patroni.yml.j2
+    dest: "{{ core_conf_dir }}/patroni.yml"
+    owner: "999"
+    group: "999"
+    mode: "0600"
+  when: core_runs_postgres
+  no_log: true
+  notify: Reload patroni
+
+- name: Write the haproxy config
+  ansible.builtin.template:
+    src: haproxy.cfg.j2
+    dest: "{{ core_conf_dir }}/haproxy.cfg"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload haproxy
+
+- name: Write the compose project
+  ansible.builtin.template:
+    src: compose.yml.j2
+    dest: "{{ core_dir }}/compose.yml"
+    owner: root
+    group: root
+    mode: "0644"
+    validate: docker compose -f %s config --quiet
+
+# pulls are retried on their own: a registry answering one request with an
+# error (seen once from quay.io during the local converge) must not fail the
+# node, while every other compose failure still does
+- name: Pull the core images
+  community.docker.docker_compose_v2_pull:
+    project_src: "{{ core_dir }}"
+    files: [compose.yml]
+    policy: missing
+  register: core_pull
+  until: core_pull is succeeded
+  retries: 5
+  delay: 10
+
+- name: Start the core services
+  community.docker.docker_compose_v2:
+    project_src: "{{ core_dir }}"
+    files: [compose.yml]
+    # umami needs its database, which bootstrap creates, so it is not infra
+    services: "{{ (['postgres', 'haproxy'] if core_runs_postgres else ['haproxy']) if core_stage == 'infra' else omit }}"
+    state: present
+    pull: missing
+    wait: true
+    wait_timeout: 600
+  register: core_compose
+
+- name: Reload caddy after a caddyfile change
+  ansible.builtin.command:
+    argv: [docker, compose, --project-directory, "{{ core_dir }}", exec, caddy, caddy, reload, --config, /etc/caddy/Caddyfile]
+  when: core_stage != 'infra' and core_caddyfile_file is changed and core_compose is not changed
+  changed_when: true
+
+- name: Apply config reloads now
+  ansible.builtin.meta: flush_handlers
+
+- name: Wait for this node's composite health on port 80
+  ansible.builtin.uri:
+    url: "http://{{ sa_public_ipv4 }}/"
+    follow_redirects: none
+    status_code: 308
+  register: core_health
+  until: core_health.status == 308
+  retries: 90
+  delay: 2
+  when: core_stage != 'infra'
+  changed_when: false

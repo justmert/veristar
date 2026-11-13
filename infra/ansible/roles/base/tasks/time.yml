@@ -1,0 +1,58 @@
+---
+# leader-lock fencing assumes the servers' clocks agree within 15 s (plan
+# this stage). chrony keeps them on ntp, and the converge stops if a node is
+# not synchronised within base_time_max_offset_seconds.
+- name: Remove systemd-timesyncd, which would fight chrony
+  ansible.builtin.apt:
+    name: systemd-timesyncd
+    state: absent
+
+- name: Configure chrony
+  ansible.builtin.template:
+    src: chrony.conf.j2
+    dest: /etc/chrony/chrony.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart chrony
+
+- name: Set chronyd options
+  ansible.builtin.copy:
+    dest: /etc/default/chrony
+    content: |
+      # managed by ansible (infra/ansible/roles/base)
+      DAEMON_OPTS="-F 1{{ '' if base_chrony_control_clock else ' -x' }}"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart chrony
+
+- name: Run chrony
+  ansible.builtin.systemd_service:
+    name: chrony
+    enabled: true
+    state: started
+
+- name: Apply chrony changes before measuring
+  ansible.builtin.meta: flush_handlers
+
+- name: Wait until chrony is synchronised within the allowed offset
+  ansible.builtin.command:
+    argv: [chronyc, waitsync, "{{ base_time_sync_wait_seconds }}", "{{ base_time_max_offset_seconds }}", "0", "1"]
+  changed_when: false
+
+- name: Read the measured offset
+  ansible.builtin.command:
+    argv: [chronyc, -c, tracking]
+  register: base_tracking
+  changed_when: false
+
+# chronyc -c tracking: field 5 is the system time offset in seconds and the
+# last field the leap status
+- name: Check the offset and leap status
+  ansible.builtin.assert:
+    that:
+      - (base_tracking.stdout.split(',')[4] | float | abs) < (base_time_max_offset_seconds | float)
+      - base_tracking.stdout.split(',')[-1] == 'Normal'
+    fail_msg: "clock offset or leap status out of bounds: {{ base_tracking.stdout }}"
+    success_msg: "offset {{ base_tracking.stdout.split(',')[4] }} s, leap {{ base_tracking.stdout.split(',')[-1] }}"

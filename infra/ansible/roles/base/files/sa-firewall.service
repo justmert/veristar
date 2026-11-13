@@ -1,0 +1,18 @@
+# managed by ansible (infra/ansible/roles/base). loads only the sa_host
+# table; stop removes only that table, never docker's.
+[Unit]
+Description=stellar-analytics host firewall
+Wants=network-pre.target
+Before=network-pre.target docker.service
+DefaultDependencies=no
+After=local-fs.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/nft -f /etc/stellar-analytics/firewall.nft
+ExecReload=/usr/sbin/nft -f /etc/stellar-analytics/firewall.nft
+ExecStop=/usr/sbin/nft delete table inet sa_host
+
+[Install]
+WantedBy=multi-user.target

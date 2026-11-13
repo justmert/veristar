@@ -1,0 +1,10 @@
+{
+  "log-driver": "local",
+  "log-opts": {
+    "max-size": "20m",
+    "max-file": "5"
+  },
+  "live-restore": true{% if base_docker_insecure_registries %},
+  "insecure-registries": {{ base_docker_insecure_registries | to_json }}{% endif %}
+
+}

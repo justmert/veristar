@@ -1,0 +1,148 @@
+---
+- name: Check the edge inputs
+  ansible.builtin.assert:
+    that:
+      - sa_tier == 'edge'
+      - groups['edge'] | length == 3
+      - sa_secrets is defined
+      - sa_tls in ['bunny', 'internal']
+      - sa_tls == 'bunny' or sa_environment == 'local'
+    fail_msg: >-
+      edge needs three edge hosts, the secrets role first, and acme dns-01
+      (sa_tls bunny) outside the local converge
+
+- name: Name the edge peers
+  ansible.builtin.set_fact:
+    edge_peers: "{{ groups['edge'] | map('extract', hostvars) | list }}"
+    edge_nats_urls: >-
+      {{ (['nats://nats:4222'] + (groups['edge'] | reject('equalto', inventory_hostname)
+          | map('extract', hostvars, 'sa_private_ip') | map('regex_replace', '^(.*)$', 'nats://\1:4222') | list)) | join(',') }}
+
+- name: Create the edge directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "{{ item.mode }}"
+  loop:
+    - { path: "{{ edge_dir }}", mode: "0755" }
+    - { path: "{{ edge_conf_dir }}", mode: "0700" }
+    - { path: "{{ edge_conf_dir }}/nats", mode: "0700" }
+
+- name: Assemble the edge caddyfile on the controller
+  ansible.builtin.command:
+    argv:
+      - sh
+      - "{{ playbook_dir }}/../../../deploy/caddy/assemble.sh"
+      - edge
+      - "{{ playbook_dir }}/../../../deploy/caddy/edge.Caddyfile"
+  register: edge_caddyfile
+  changed_when: false
+  delegate_to: localhost
+  run_once: true
+  become: false
+
+- name: Install the caddyfile
+  ansible.builtin.copy:
+    content: "{{ edge_caddyfile.stdout }}\n"
+    dest: "{{ edge_dir }}/Caddyfile"
+    owner: root
+    group: root
+    mode: "0644"
+  register: edge_caddyfile_file
+
+- name: Write the nats server config
+  ansible.builtin.template:
+    src: nats.conf.j2
+    dest: "{{ edge_conf_dir }}/nats/nats.conf"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  notify: Reload nats
+
+# the authorization block comes from internal/natsx through platformctl, so
+# the deployed permissions are the ones the code was tested with
+- name: Render the nats authorization from the topology
+  ansible.builtin.command:
+    argv: [docker, run, --rm, -i, --network, none, "{{ platform_images.platformctl }}", nats, auth-config]
+    stdin: "{{ sa_secrets.nats_password_hashes | to_json }}"
+  register: edge_nats_auth
+  changed_when: false
+  no_log: true
+
+- name: Install the nats authorization
+  ansible.builtin.copy:
+    content: "{{ edge_nats_auth.stdout }}\n"
+    dest: "{{ edge_conf_dir }}/nats/auth.conf"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  notify: Reload nats
+
+- name: Write the compose project
+  ansible.builtin.template:
+    src: compose.yml.j2
+    dest: "{{ edge_dir }}/compose.yml"
+    owner: root
+    group: root
+    mode: "0644"
+    validate: docker compose -f %s config --quiet
+
+# pulls are retried on their own: a registry answering one request with an
+# error (seen once from quay.io during the local converge) must not fail the
+# node, while every other compose failure still does
+- name: Pull the edge images
+  community.docker.docker_compose_v2_pull:
+    project_src: "{{ edge_dir }}"
+    files: [compose.yml]
+    policy: missing
+  register: edge_pull
+  until: edge_pull is succeeded
+  retries: 5
+  delay: 10
+
+- name: Start the edge services
+  community.docker.docker_compose_v2:
+    project_src: "{{ edge_dir }}"
+    files: [compose.yml]
+    services: "{{ ['nats', 'etcd'] if edge_stage == 'infra' else omit }}"
+    state: present
+    pull: missing
+    wait: true
+    wait_timeout: 300
+  register: edge_compose
+
+# caddy reads its config at start; a changed caddyfile is applied in place
+- name: Reload caddy after a caddyfile change
+  ansible.builtin.command:
+    argv: [docker, compose, --project-directory, "{{ edge_dir }}", exec, caddy, caddy, reload, --config, /etc/caddy/Caddyfile]
+  when: edge_stage != 'infra' and edge_caddyfile_file is changed and edge_compose is not changed
+  changed_when: true
+
+- name: Apply a nats config change now
+  ansible.builtin.meta: flush_handlers
+
+- name: Wait for jetstream to be current with its meta leader
+  ansible.builtin.uri:
+    url: "http://{{ sa_private_ip }}:8222/healthz"
+    status_code: 200
+  register: edge_nats_health
+  until: edge_nats_health.status == 200
+  retries: 60
+  delay: 2
+  changed_when: false
+
+- name: Wait for this node's composite health on port 80
+  ansible.builtin.uri:
+    url: "http://{{ sa_public_ipv4 }}/"
+    follow_redirects: none
+    status_code: 308
+  register: edge_health
+  until: edge_health.status == 308
+  retries: 60
+  delay: 2
+  when: edge_stage != 'infra'
+  changed_when: false

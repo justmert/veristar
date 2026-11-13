@@ -1,0 +1,20 @@
+---
+# time sync. fencing of the leader locks assumes server clocks agree within
+# the 15 s lock ttl (the design); each node must be within
+# base_time_max_offset_seconds of ntp, so any two agree within twice that.
+base_time_max_offset_seconds: 1.0
+base_time_sync_wait_seconds: 120
+base_chrony_pools:
+  - 2.debian.pool.ntp.org
+# false only where the kernel clock belongs to someone else (the local
+# converge runs in containers, docs/deploy/local-converge.md): chronyd then
+# measures the offset with -x but does not steer the clock
+base_chrony_control_clock: true
+
+# extra docker daemon settings; the local converge sets insecure registries
+base_docker_insecure_registries: []
+
+# public tcp ports open to everyone, matching the cloud firewall
+# (docs/deploy/opentofu.md section 1)
+base_public_tcp_ports: [80, 443]
+base_public_udp_ports: [443]

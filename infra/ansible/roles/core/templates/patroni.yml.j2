@@ -1,0 +1,67 @@
+# managed by ansible (infra/ansible/roles/core). patroni owns initdb,
+# replication and failover; etcd on the edge nodes holds the leader key.
+scope: "sa-{{ sa_environment }}"
+namespace: /stellar-analytics/
+name: "{{ inventory_hostname }}"
+
+restapi:
+  listen: 0.0.0.0:8008
+  connect_address: "{{ sa_private_ip }}:8008"
+  # unsafe endpoints (restart, failover, config) need these; the read-only
+  # role checks haproxy uses (/primary) do not
+  authentication:
+    username: patroni
+    password: "{{ sa_secrets.patroni_restapi_password }}"
+
+etcd3:
+  hosts:
+{% for h in groups['edge'] %}
+    - "{{ hostvars[h].sa_private_ip }}:2379"
+{% endfor %}
+
+bootstrap:
+  dcs:
+    ttl: 30
+    loop_wait: 10
+    retry_timeout: 10
+    maximum_lag_on_failover: 1048576
+    postgresql:
+      use_pg_rewind: true
+      use_slots: true
+      parameters:
+{% for k, v in core_postgres_parameters.items() %}
+        {{ k }}: "{{ v }}"
+{% endfor %}
+  initdb:
+    - encoding: UTF8
+    - locale: en_US.utf8
+    - data-checksums
+    - auth-host: scram-sha-256
+    - auth-local: peer
+
+postgresql:
+  listen: 0.0.0.0:5432
+  connect_address: "{{ sa_private_ip }}:5432"
+  data_dir: /var/lib/postgresql/patroni/data
+  bin_dir: /usr/lib/postgresql/18/bin
+  pgpass: /tmp/pgpass
+  authentication:
+    superuser:
+      username: postgres
+      password: "{{ sa_secrets.postgres_superuser_password }}"
+    replication:
+      username: replicator
+      password: "{{ sa_secrets.postgres_replication_password }}"
+  pg_hba:
+    - local all postgres peer
+    - local all all scram-sha-256
+    - host replication replicator {{ sa_private_network_cidr }} scram-sha-256
+    - host all all {{ sa_private_network_cidr }} scram-sha-256
+    - host all all {{ core_compose_subnet }} scram-sha-256
+    - host all all 127.0.0.1/32 scram-sha-256
+
+tags:
+  nofailover: false
+  noloadbalance: false
+  clonefrom: false
+  nosync: false

@@ -10,6 +10,9 @@
 # rule, so nothing can be encrypted for it by accident. removing a person
 # also needs rotating every secret they could read: re-encryption only stops
 # them reading future versions (docs/deploy/secrets.md, "removing").
+# sops matches path_regex against the path relative to .sops.yaml, so the
+# rules name <env>/ only. re-encryption needs the runner's own age identity
+# (SOPS_AGE_KEY_FILE), which must already be a recipient.
 set -eu
 
 dir="$(cd "$(dirname "$0")" && pwd)"
@@ -39,7 +42,7 @@ for env in staging production; do
 		esac
 	done
 	{
-		echo "  - path_regex: (^|/)infra/secrets/$env/[^/]+\\.enc\\.(yaml|env)\$"
+		echo "  - path_regex: (^|/)$env/[^/]+\\.enc\\.(yaml|env)\$"
 		echo "    age: >-"
 		for k in $keys; do echo "      $k,"; done | sed '$ s/,$//'
 	} >>"$tmp"

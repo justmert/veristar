@@ -1,0 +1,21 @@
+# managed by ansible (infra/ansible/roles/core). port 5000 always reaches the
+# patroni leader: patroni's rest api answers /primary with 200 only there.
+global
+    maxconn 2000
+
+defaults
+    mode tcp
+    log stdout format raw local0 info
+    timeout connect 5s
+    timeout client 30m
+    timeout server 30m
+    timeout check 3s
+
+listen primary
+    bind *:5000
+    option httpchk GET /primary
+    http-check expect status 200
+    default-server inter 2s fall 3 rise 2 on-marked-down shutdown-sessions
+{% for h in core_postgres_hosts %}
+    server {{ h }} {{ hostvars[h].sa_private_ip }}:5432 check port 8008
+{% endfor %}

@@ -1,0 +1,218 @@
+# managed by ansible (infra/ansible/roles/core). core tier of the design
+# 4.1. only caddy binds the public address; postgresql and patroni bind the
+# private one (replication, haproxy on the other core node); everything else
+# stays on this project's network. secrets come from the root-only env files
+# of the secrets role.
+name: stellar-analytics-core
+
+x-defaults: &defaults
+  restart: unless-stopped
+  logging:
+    driver: local
+    options:
+      max-size: 20m
+      max-file: "5"
+
+x-db: &db
+  PLATFORM_DB_HOST: haproxy
+  PLATFORM_DB_PORT: "5000"
+  PLATFORM_DB_NAME: platform
+  # the database is reached over this node's compose network or the private
+  # network only (docs/deploy/ansible.md, "database transport")
+  PLATFORM_DB_SSLMODE: disable
+
+x-nats: &nats
+  NATS_URL: "{{ core_nats_urls }}"
+  NATS_REPLICAS: "3"
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: {{ core_compose_subnet }}
+
+services:
+{% if core_runs_postgres %}
+  postgres:
+    <<: *defaults
+    image: {{ platform_images.postgres_ha }}
+    # patroni stops postgresql cleanly on sigterm; give it time
+    stop_grace_period: 2m
+    shm_size: 256m
+    environment:
+      TZ: UTC
+    volumes:
+      - {{ core_conf_dir }}/patroni.yml:/etc/patroni/patroni.yml:ro
+      - pgdata:/var/lib/postgresql
+    ports:
+      - "{{ sa_private_ip }}:5432:5432"
+      - "{{ sa_private_ip }}:8008:8008"
+    healthcheck:
+      # healthy once postgresql runs under patroni, leader or replica
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:8008/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 60
+      start_period: 30s
+
+{% endif %}
+  haproxy:
+    <<: *defaults
+    image: {{ upstream_images.haproxy }}
+    volumes:
+      - {{ core_conf_dir }}/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+{% if core_runs_postgres %}
+    depends_on:
+      postgres:
+        condition: service_healthy
+{% endif %}
+
+  umami:
+    <<: *defaults
+    image: {{ upstream_images.umami }}
+    depends_on: [haproxy]
+    env_file: [{{ secrets_env_dir }}/umami.env]
+    # the design; REDIS_URL, CLICKHOUSE_URL, KAFKA_URL, CLOUD_MODE,
+    # MCP_ENABLED, DISABLE_BOT_CHECK and SKIP_LOCATION_HEADERS stay unset
+    environment:
+      CLIENT_IP_HEADER: x-edge-client-ip
+      ENABLE_CLIENT_SALT: "1"
+      SALT_ROTATION: daily
+      PRIVATE_MODE: "1"
+      DISABLE_TELEMETRY: "1"
+      DISABLE_UPDATES: "1"
+      DISABLE_LOGIN: "1"
+      TZ: UTC
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/api/heartbeat"]
+      interval: 5s
+      timeout: 3s
+      retries: 60
+      start_period: 120s
+
+  controlplane:
+    <<: *defaults
+    image: {{ platform_images.controlplane }}
+    depends_on:
+      umami:
+        condition: service_healthy
+    env_file: [{{ secrets_env_dir }}/controlplane.env]
+    environment:
+      <<: [*db, *nats]
+      CONTROLPLANE_ADDR: 0.0.0.0:8085
+      CONTROLPLANE_OPS_ADDR: 0.0.0.0:9090
+      CONSOLE_ORIGIN: https://{{ sa_hostnames.app }}
+      INGEST_ORIGIN: https://{{ sa_hostnames.in }}
+      WEB_ORIGIN: https://{{ sa_hostnames.web }}
+      GITHUB_REDIRECT_URL: https://{{ sa_hostnames.app }}/api/auth/github/callback
+      OPERATOR_GITHUB_IDS: "{{ sa_operator_github_ids }}"
+      UMAMI_URL: http://umami:3000
+      API_MINUTE_RETENTION_DAYS: "{{ core_api_minute_retention_days }}"
+      API_HOURLY_RETENTION_MONTHS: "{{ core_api_hourly_retention_months }}"
+{% if core_oauth_fixture %}
+      # local converge only (asserted above): the test-only oauth fixture
+      OAUTH_FIXTURE_URL: http://{{ sa_public_ipv4 }}:{{ core_oauth_fixture_port }}
+{% endif %}
+      TZ: UTC
+
+  replayer:
+    <<: *defaults
+    image: {{ platform_images.replayer }}
+    depends_on:
+      umami:
+        condition: service_healthy
+    env_file: [{{ secrets_env_dir }}/replayer.env]
+    environment:
+      <<: *nats
+      REPLAYER_NODE_ID: "{{ inventory_hostname }}"
+      REPLAYER_OPS_ADDR: 0.0.0.0:9090
+      UMAMI_URL: http://umami:3000
+      TZ: UTC
+{% for k, v in core_replayer_env.items() %}
+      {{ k }}: "{{ v }}"
+{% endfor %}
+
+  metricswriter:
+    <<: *defaults
+    image: {{ platform_images.metricswriter }}
+    depends_on: [haproxy]
+    env_file: [{{ secrets_env_dir }}/metricswriter.env]
+    environment:
+      <<: [*db, *nats]
+      METRICSWRITER_NODE_ID: "{{ inventory_hostname }}"
+      METRICSWRITER_OPS_ADDR: 0.0.0.0:9090
+      TZ: UTC
+{% for k, v in core_metricswriter_env.items() %}
+      {{ k }}: "{{ v }}"
+{% endfor %}
+
+  jobs:
+    <<: *defaults
+    image: {{ platform_images.jobs }}
+    command: ["daemon"]
+    depends_on:
+      umami:
+        condition: service_healthy
+    env_file: [{{ secrets_env_dir }}/jobs.env]
+    environment:
+      <<: [*db, *nats]
+      JOBS_OPS_ADDR: 0.0.0.0:9090
+      UMAMI_URL: http://umami:3000
+      UMAMI_DB_NAME: umami
+      API_MINUTE_RETENTION_DAYS: "{{ core_api_minute_retention_days }}"
+      API_HOURLY_RETENTION_MONTHS: "{{ core_api_hourly_retention_months }}"
+      TZ: UTC
+
+  caddy:
+    <<: *defaults
+    # the custom caddy build with the console's static files at /srv/console
+    image: {{ platform_images.console }}
+    depends_on: [controlplane, umami]
+    env_file: [{{ secrets_env_dir }}/caddy.env]
+    environment:
+      SA_TLS: {{ sa_tls }}
+      BASE_DOMAIN: "{{ sa_base_domain }}"
+      CONTROLPLANE_UPSTREAM: controlplane:8085
+      CONSOLE_ROOT: /srv/console
+      UMAMI_UPSTREAM: umami:3000
+      NODE_HEALTH_UPSTREAM: controlplane:9090
+      NODE_HEALTH_PATH: /corez
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddydata:/data
+      - caddyconfig:/config
+    ports:
+      - "{{ sa_public_ipv4 }}:80:80"
+      - "{{ sa_public_ipv4 }}:443:443"
+      - "{{ sa_public_ipv4 }}:443:443/udp"
+{% if sa_public_ipv6 %}
+      - "[{{ sa_public_ipv6 }}]:80:80"
+      - "[{{ sa_public_ipv6 }}]:443:443"
+      - "[{{ sa_public_ipv6 }}]:443:443/udp"
+{% endif %}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:2019/config/"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+{% if core_oauth_fixture %}
+
+  # TEST-ONLY github oauth stand-in for the local converge (asserted above)
+  oauth-fixture:
+    <<: *defaults
+    image: {{ core_oauth_fixture_image }}
+    command:
+      - -listen=0.0.0.0:8099
+      - -client-id=local-converge-fixture-client
+      - -client-secret=local-converge-fixture-secret
+      - -redirect-url=https://{{ sa_hostnames.app }}/api/auth/github/callback
+    ports:
+      - "{{ sa_public_ipv4 }}:{{ core_oauth_fixture_port }}:8099"
+{% endif %}
+
+volumes:
+{% if core_runs_postgres %}
+  pgdata:
+{% endif %}
+  caddydata:
+  caddyconfig:

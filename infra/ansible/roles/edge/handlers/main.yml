@@ -1,0 +1,6 @@
+---
+# nats rereads its config, including authorization and routes, on SIGHUP
+- name: Reload nats
+  ansible.builtin.command:
+    argv: [docker, compose, --project-directory, "{{ edge_dir }}", kill, --signal, HUP, nats]
+  changed_when: true

@@ -1,0 +1,46 @@
+---
+# converges everything (the design): os baseline and secrets on every
+# node, the edge and core infrastructure, the bootstrap, then the services.
+# a second run reports no changes.
+- name: Baseline and secrets
+  hosts: edge:core
+  become: true
+  vars_files: [../vars/pins.yml]
+  roles:
+    - base
+    - secrets
+
+- name: Edge infrastructure (nats, etcd)
+  hosts: edge
+  become: true
+  vars_files: [../vars/pins.yml]
+  roles:
+    - role: edge
+      vars:
+        edge_stage: infra
+
+- name: Core infrastructure (postgres-ha, haproxy)
+  hosts: core
+  become: true
+  vars_files: [../vars/pins.yml]
+  roles:
+    - role: core
+      vars:
+        core_stage: infra
+
+- name: Bootstrap
+  ansible.builtin.import_playbook: bootstrap.yml
+
+- name: Edge services
+  hosts: edge
+  become: true
+  vars_files: [../vars/pins.yml]
+  roles:
+    - edge
+
+- name: Core services
+  hosts: core
+  become: true
+  vars_files: [../vars/pins.yml]
+  roles:
+    - core

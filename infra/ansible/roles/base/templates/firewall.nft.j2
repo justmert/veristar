@@ -1,0 +1,46 @@
+#!/usr/sbin/nft -f
+# managed by ansible (infra/ansible/roles/base). the file replaces the
+# sa_host table in one transaction: the first two lines make sure the table
+# exists so the delete never fails, then it is rebuilt.
+table inet sa_host
+delete table inet sa_host
+
+{% set v4 = sa_admin_cidrs | reject('search', ':') | list %}
+{% set v6 = sa_admin_cidrs | select('search', ':') | list %}
+table inet sa_host {
+	chain input {
+		type filter hook input priority filter; policy drop;
+		iif "lo" accept
+		ct state established,related accept
+		ct state invalid drop
+		# the private network carries nats, etcd, postgresql, patroni and
+		# the core services; the cloud firewall does not filter it, and the
+		# private network holds only this environment's nodes
+		iifname "{{ base_private_interface }}" ip saddr {{ sa_private_network_cidr }} accept
+		# this node's containers reaching a service the node publishes on
+		# its private address (haproxy to patroni and postgresql); docker's
+		# userland proxy receives that as input from the compose bridge
+		iifname "br-*" ip daddr {{ sa_private_ip }} accept
+		# and a port that is public anyway, on this node's public address
+		iifname "br-*" ip daddr {{ sa_public_ipv4 }} tcp dport { {{ base_public_tcp_ports | join(', ') }} } accept
+		meta l4proto icmp accept
+		meta l4proto ipv6-icmp accept
+		iifname "{{ base_public_interface }}" tcp dport { {{ base_public_tcp_ports | join(', ') }} } accept
+		iifname "{{ base_public_interface }}" udp dport { {{ base_public_udp_ports | join(', ') }} } accept
+{% if v4 %}
+		iifname "{{ base_public_interface }}" ip saddr { {{ v4 | join(', ') }} } tcp dport 22 accept
+{% endif %}
+{% if v6 %}
+		iifname "{{ base_public_interface }}" ip6 saddr { {{ v6 | join(', ') }} } tcp dport 22 accept
+{% endif %}
+	}
+
+	chain forward {
+		# runs before docker's own filter chains
+		type filter hook forward priority filter - 10; policy accept;
+		iifname "{{ base_public_interface }}" ct state established,related accept
+		iifname "{{ base_public_interface }}" ct status dnat meta l4proto tcp ct original proto-dst { {{ base_public_tcp_ports | join(', ') }} } accept
+		iifname "{{ base_public_interface }}" ct status dnat meta l4proto udp ct original proto-dst { {{ base_public_udp_ports | join(', ') }} } accept
+		iifname "{{ base_public_interface }}" drop
+	}
+}

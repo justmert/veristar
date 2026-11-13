@@ -1,0 +1,121 @@
+---
+# one-time and repeatable setup that needs the running infrastructure (plan
+# this stage): the umami and platform databases, platform migrations and role
+# logins, the umami admin password and retention role, the nats topology,
+# and the operator ids. every step is idempotent and reports a change only
+# when it made one.
+- name: Bootstrap the platform
+  hosts: core[0]
+  become: true
+  vars_files: [../vars/pins.yml]
+  vars:
+    bootstrap_core_dir: /opt/stellar-analytics/core
+    bootstrap_network: stellar-analytics-core_default
+    bootstrap_psql: [docker, compose, --project-directory, "{{ bootstrap_core_dir }}", exec, -T, postgres, psql, -U, postgres, -v, ON_ERROR_STOP=1, -tAX]
+    bootstrap_platformctl: >-
+      {{ ['docker', 'run', '--rm', '--network', bootstrap_network,
+          '--env-file', '/etc/stellar-analytics/env/platformctl.env',
+          '-e', 'PLATFORM_DB_HOST=haproxy', '-e', 'PLATFORM_DB_PORT=5000',
+          '-e', 'PLATFORM_DB_NAME=platform', '-e', 'PLATFORM_DB_SSLMODE=disable',
+          '-e', 'UMAMI_DB_NAME=umami', '-e', 'UMAMI_URL=http://umami:3000',
+          '-e', 'NATS_URL=' ~ (groups['edge'] | map('extract', hostvars, 'sa_private_ip') | map('regex_replace', '^(.*)$', 'nats://\1:4222') | join(',')),
+          '-e', 'NATS_REPLICAS=3',
+          platform_images.platformctl] }}
+  roles:
+    - secrets
+  tasks:
+    # OPERATOR_GITHUB_IDS an operator input is applied by the control plane at
+    # start (operator.SyncFlags); bootstrap only refuses to go on without it
+    - name: Require the operator github ids an operator input
+      ansible.builtin.assert:
+        that:
+          - sa_operator_github_ids is defined
+          - (sa_operator_github_ids | string) is match('^[0-9]+(,[0-9]+)*$')
+        fail_msg: sa_operator_github_ids must list the numeric github ids of the scf operators an operator input
+
+    - name: Wait for the patroni leader to accept writes
+      ansible.builtin.command:
+        argv: "{{ bootstrap_psql + ['-c', 'select pg_is_in_recovery()'] }}"
+      register: bootstrap_recovery
+      until: bootstrap_recovery.rc == 0 and bootstrap_recovery.stdout == 'f'
+      retries: 60
+      delay: 2
+      changed_when: false
+
+    - name: Read which databases and roles exist
+      ansible.builtin.command:
+        argv: "{{ bootstrap_psql + ['-c', bootstrap_existing_sql] }}"
+      vars:
+        bootstrap_existing_sql: >-
+          select string_agg(n, ',') from (select datname n from pg_database
+          union all select 'role:' || rolname from pg_roles) x
+      register: bootstrap_existing
+      changed_when: false
+
+    # the same statements as deploy/compose/postgres-init.sh in the dev stack
+    - name: Create the umami login role
+      ansible.builtin.command:
+        argv: "{{ bootstrap_psql + ['-v', 'pw=' ~ sa_secrets.umami_db_password] }}"
+        stdin: "create role umami_app login password :'pw';"
+      when: "'role:umami_app' not in bootstrap_existing.stdout.split(',')"
+      no_log: true
+      changed_when: true
+
+    - name: Create the umami database
+      ansible.builtin.command:
+        argv: "{{ bootstrap_psql }}"
+        stdin: |
+          create database umami owner umami_app;
+          revoke all on database umami from public;
+          grant connect on database umami to umami_app;
+      when: "'umami' not in bootstrap_existing.stdout.split(',')"
+      changed_when: true
+
+    - name: Create the platform database
+      ansible.builtin.command:
+        argv: "{{ bootstrap_psql }}"
+        stdin: |
+          create database platform;
+          revoke all on database platform from public;
+      when: "'platform' not in bootstrap_existing.stdout.split(',')"
+      changed_when: true
+
+    - name: Migrate the platform database
+      ansible.builtin.command:
+        argv: "{{ bootstrap_platformctl + ['db', 'migrate'] }}"
+      register: bootstrap_migrate
+      changed_when: bootstrap_migrate.stderr is search('"applied":[1-9]')
+
+    # sets each role's password from the sops file; with unchanged secrets
+    # the result is the same state, so it never reports a change
+    - name: Set the application role logins
+      ansible.builtin.command:
+        argv: "{{ bootstrap_platformctl + ['db', 'roles'] }}"
+      changed_when: false
+
+    - name: Start umami, which migrates its own database
+      community.docker.docker_compose_v2:
+        project_src: "{{ bootstrap_core_dir }}"
+        files: [compose.yml]
+        services: [umami]
+        state: present
+        pull: missing
+        wait: true
+        wait_timeout: 600
+
+    - name: Replace umami's seeded admin password
+      ansible.builtin.command:
+        argv: "{{ bootstrap_platformctl + ['umami', 'bootstrap'] }}"
+      register: bootstrap_umami_admin
+      changed_when: bootstrap_umami_admin.stderr is search('"outcome":"rotated"')
+
+    - name: Create the umami retention role
+      ansible.builtin.command:
+        argv: "{{ bootstrap_platformctl + ['db', 'umami-retention-role'] }}"
+      changed_when: false
+
+    - name: Apply the nats topology
+      ansible.builtin.command:
+        argv: "{{ bootstrap_platformctl + ['nats', 'apply'] }}"
+      register: bootstrap_nats
+      changed_when: bootstrap_nats.stderr is search('"action":"(create|update)"')

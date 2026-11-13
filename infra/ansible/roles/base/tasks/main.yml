@@ -1,0 +1,68 @@
+---
+- name: Check the inventory contract (docs/deploy/opentofu.md section 1)
+  ansible.builtin.assert:
+    that:
+      - sa_private_ip is string and sa_private_ip | length > 0
+      - sa_private_network_cidr is string and sa_private_network_cidr | length > 0
+      - sa_admin_cidrs | length > 0
+      - sa_tier in ['edge', 'core']
+    fail_msg: >-
+      the inventory lacks sa_private_ip, sa_private_network_cidr or
+      sa_admin_cidrs an operator input, or the host is not edge or core
+
+- name: Find the public and private interfaces
+  ansible.builtin.set_fact:
+    base_public_interface: "{{ ansible_facts.default_ipv4.interface }}"
+    base_private_interface: >-
+      {{ ansible_facts.interfaces
+         | map('regex_replace', '-', '_')
+         | map('extract', ansible_facts)
+         | selectattr('ipv4', 'defined')
+         | selectattr('ipv4.address', 'equalto', sa_private_ip)
+         | map(attribute='device') | first | default('') }}
+
+- name: Require a private interface distinct from the public one
+  ansible.builtin.assert:
+    that:
+      - base_private_interface | length > 0
+      - base_private_interface != base_public_interface
+    fail_msg: "no interface holds {{ sa_private_ip }}, or it is the default-route interface"
+
+- name: Install base packages
+  ansible.builtin.apt:
+    name:
+      - unattended-upgrades
+      - apt-listchanges
+      - chrony
+      - nftables
+      - ca-certificates
+      - curl
+      - gnupg
+      # ansible.builtin.deb822_repository needs it
+      - python3-debian
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Create the platform configuration directory
+  ansible.builtin.file:
+    path: /etc/stellar-analytics
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Import unattended upgrades
+  ansible.builtin.import_tasks: upgrades.yml
+
+- name: Import ssh hardening
+  ansible.builtin.import_tasks: ssh.yml
+
+- name: Import host firewall
+  ansible.builtin.import_tasks: firewall.yml
+
+- name: Import time sync
+  ansible.builtin.import_tasks: time.yml
+
+- name: Import docker engine
+  ansible.builtin.import_tasks: docker.yml

@@ -1,0 +1,33 @@
+# managed by ansible (infra/ansible/roles/edge). one member of the edge nats
+# cluster (the design); routes run over the private network.
+server_name: "{{ inventory_hostname }}"
+listen: "0.0.0.0:4222"
+http: "0.0.0.0:8222"
+# clients on other nodes (the core services) are told this address
+client_advertise: "{{ sa_private_ip }}:4222"
+
+jetstream {
+  store_dir: "/data"
+  max_memory_store: {{ edge_nats_max_memory_store }}
+  max_file_store: {{ edge_nats_max_file_store }}
+}
+
+cluster {
+  name: "sa-{{ sa_environment }}"
+  listen: "0.0.0.0:6222"
+  advertise: "{{ sa_private_ip }}:6222"
+  # route connections authenticate too, so a host on the private network
+  # cannot join the cluster
+  authorization {
+    user: "route"
+    password: "{{ sa_secrets.nats_route_password_hash }}"
+  }
+  routes: [
+{% for h in groups['edge'] | reject('equalto', inventory_hostname) %}
+    "nats://route:{{ sa_secrets.nats_route_password }}@{{ hostvars[h].sa_private_ip }}:6222"
+{% endfor %}
+  ]
+}
+
+# rendered by platformctl nats auth-config from internal/natsx/topology.go
+include "auth.conf"

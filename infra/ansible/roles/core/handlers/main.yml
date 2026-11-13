@@ -1,0 +1,13 @@
+---
+# patroni rereads patroni.yml on SIGHUP
+- name: Reload patroni
+  ansible.builtin.command:
+    argv: [docker, compose, --project-directory, "{{ core_dir }}", kill, --signal, HUP, postgres]
+  changed_when: true
+  when: inventory_hostname in core_postgres_hosts
+
+# haproxy's master process reloads its workers on SIGUSR2
+- name: Reload haproxy
+  ansible.builtin.command:
+    argv: [docker, compose, --project-directory, "{{ core_dir }}", kill, --signal, USR2, haproxy]
+  changed_when: true

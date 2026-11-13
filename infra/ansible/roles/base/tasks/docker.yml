@@ -1,0 +1,90 @@
+---
+- name: Fetch docker's apt signing key
+  ansible.builtin.get_url:
+    url: https://download.docker.com/linux/debian/gpg
+    dest: /etc/apt/keyrings/docker.asc
+    owner: root
+    group: root
+    mode: "0644"
+  register: base_docker_key
+
+- name: Read the key's fingerprint
+  ansible.builtin.command:
+    argv: [gpg, --show-keys, --with-colons, /etc/apt/keyrings/docker.asc]
+  register: base_docker_key_info
+  changed_when: false
+
+# the key is taken over https, then checked against the fingerprint docker
+# publishes, so a swapped key fails the converge
+- name: Check docker's key fingerprint
+  ansible.builtin.assert:
+    that:
+      - ("fpr:::::::::" ~ docker_apt_key_fingerprint ~ ":") in base_docker_key_info.stdout
+    fail_msg: "/etc/apt/keyrings/docker.asc is not docker's release key {{ docker_apt_key_fingerprint }}"
+
+- name: Add docker's apt repository
+  ansible.builtin.deb822_repository:
+    name: docker
+    types: [deb]
+    uris: https://download.docker.com/linux/debian
+    suites: ["{{ ansible_facts.distribution_release }}"]
+    components: [stable]
+    architectures: [amd64]
+    signed_by: /etc/apt/keyrings/docker.asc
+  register: base_docker_repo
+
+- name: Install docker engine and compose at their pins
+  ansible.builtin.apt:
+    name:
+      - "docker-ce={{ docker_ce_version }}"
+      - "docker-ce-cli={{ docker_ce_version }}"
+      - "docker-compose-plugin={{ docker_compose_version }}"
+      - containerd.io
+      - docker-buildx-plugin
+    state: present
+    update_cache: "{{ base_docker_repo is changed }}"
+    allow_downgrade: true
+    # the packages are held below; a pin change in vars/pins.yml moves them
+    allow_change_held_packages: true
+
+- name: Hold docker packages at their pins
+  ansible.builtin.dpkg_selections:
+    name: "{{ item }}"
+    selection: hold
+  loop: [docker-ce, docker-ce-cli, docker-compose-plugin]
+
+- name: Configure the docker daemon
+  ansible.builtin.template:
+    src: daemon.json.j2
+    dest: /etc/docker/daemon.json
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart docker
+
+- name: Run docker
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+    enabled: true
+    state: started
+  loop: [containerd, docker]
+
+- name: Apply daemon changes before services deploy
+  ansible.builtin.meta: flush_handlers
+
+- name: Check the running engine and compose versions
+  ansible.builtin.command:
+    argv: [docker, version, --format, "{{ '{{' }}.Server.Version{{ '}}' }} {{ '{{' }}.Client.Version{{ '}}' }}"]
+  register: base_docker_version
+  changed_when: false
+  # 5:29.9.3-1~debian.13~trixie runs as 29.9.3
+  failed_when: base_docker_version.stdout.split() != [base_docker_upstream_version, base_docker_upstream_version]
+  vars:
+    base_docker_upstream_version: "{{ docker_ce_version | regex_replace('^\\d+:([^-]+)-.*$', '\\1') }}"
+
+- name: Check the compose plugin version
+  ansible.builtin.command:
+    argv: [docker, compose, version, --short]
+  register: base_compose_version
+  changed_when: false
+  failed_when: base_compose_version.stdout != (docker_compose_version | regex_replace('-.*$', ''))

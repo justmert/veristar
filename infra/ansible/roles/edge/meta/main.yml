@@ -1,0 +1,10 @@
+---
+galaxy_info:
+  author: stellar-analytics
+  description: edge node compose project (caddy, gateway, collector, nats, etcd)
+  license: Apache-2.0
+  min_ansible_version: "2.21"
+  platforms:
+    - name: Debian
+      versions: [trixie]
+dependencies: []

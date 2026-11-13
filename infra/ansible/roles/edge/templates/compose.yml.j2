@@ -1,0 +1,134 @@
+# managed by ansible (infra/ansible/roles/edge). edge tier of the design
+# 4.1: caddy, gateway, collector, one nats server and one etcd member.
+# private ports bind to the private address only; caddy alone binds the
+# public one. secrets come from the root-only env files of the secrets role.
+name: stellar-analytics-edge
+
+x-defaults: &defaults
+  restart: unless-stopped
+  logging:
+    driver: local
+    options:
+      max-size: 20m
+      max-file: "5"
+
+services:
+  nats:
+    <<: *defaults
+    image: {{ upstream_images.nats }}
+    command: ["--config", "/etc/nats/nats.conf"]
+    volumes:
+      - {{ edge_conf_dir }}/nats:/etc/nats:ro
+      - natsdata:/data
+    ports:
+      - "{{ sa_private_ip }}:4222:4222"
+      - "{{ sa_private_ip }}:6222:6222"
+      - "{{ sa_private_ip }}:8222:8222"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8222/healthz?js-enabled-only=true"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+
+  etcd:
+    <<: *defaults
+    image: {{ upstream_images.etcd }}
+    # etcd stores patroni's leader key; one member per edge node, peers and
+    # clients on the private network
+    command:
+      - etcd
+      - --name={{ inventory_hostname }}
+      - --data-dir=/var/lib/etcd
+      - --listen-peer-urls=http://0.0.0.0:2380
+      - --listen-client-urls=http://0.0.0.0:2379
+      - --initial-advertise-peer-urls=http://{{ sa_private_ip }}:2380
+      - --advertise-client-urls=http://{{ sa_private_ip }}:2379
+      - --initial-cluster={{ groups['edge'] | map('extract', hostvars) | map(attribute='inventory_hostname') | zip(groups['edge'] | map('extract', hostvars, 'sa_private_ip')) | map('join', '=http://') | map('regex_replace', '$', ':2380') | join(',') }}
+      - --initial-cluster-token=sa-{{ sa_environment }}
+      - --initial-cluster-state=new
+    volumes:
+      - etcddata:/var/lib/etcd
+    ports:
+      - "{{ sa_private_ip }}:2379:2379"
+      - "{{ sa_private_ip }}:2380:2380"
+    healthcheck:
+      test: ["CMD", "etcdctl", "--endpoints=http://127.0.0.1:2379", "endpoint", "health"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      start_period: 10s
+
+  gateway:
+    <<: *defaults
+    image: {{ platform_images.gateway }}
+    depends_on: [nats]
+    env_file: [{{ secrets_env_dir }}/gateway.env]
+    environment:
+      NATS_URL: "{{ edge_nats_urls }}"
+      NATS_REPLICAS: "3"
+      GATEWAY_NODE_ID: "{{ inventory_hostname }}"
+      GATEWAY_ADDR: 0.0.0.0:8080
+      GATEWAY_OPS_ADDR: 0.0.0.0:9090
+      CLIENT_IP_HEADER: X-Edge-Client-Ip
+      GATEWAY_SECURE_TRANSPORT: "true"
+      EDGE_HEALTH_COLLECTOR_URL: http://collector:13133/
+      EDGE_HEALTH_NATS_URL: http://nats:8222/healthz
+      TZ: UTC
+{% for k, v in edge_gateway_env.items() %}
+      {{ k }}: "{{ v }}"
+{% endfor %}
+
+  collector:
+    <<: *defaults
+    image: {{ platform_images.collector }}
+    depends_on: [nats]
+    env_file: [{{ secrets_env_dir }}/collector.env]
+    environment:
+      NATS_URL: "{{ edge_nats_urls }}"
+      COLLECTOR_GRPC_ADDR: 0.0.0.0:4317
+      COLLECTOR_HTTP_ADDR: 0.0.0.0:4318
+      COLLECTOR_HEALTH_ADDR: 0.0.0.0:13133
+      TZ: UTC
+{% for k, v in edge_collector_env.items() %}
+      {{ k }}: "{{ v }}"
+{% endfor %}
+
+  caddy:
+    <<: *defaults
+    image: {{ platform_images.caddy }}
+    depends_on: [gateway, collector]
+    env_file: [{{ secrets_env_dir }}/caddy.env]
+    environment:
+      SA_TLS: {{ sa_tls }}
+      BASE_DOMAIN: "{{ sa_base_domain }}"
+      GATEWAY_UPSTREAM: gateway:8080
+      COLLECTOR_GRPC_UPSTREAM: collector:4317
+      COLLECTOR_HTTP_UPSTREAM: collector:4318
+      COLLECTOR_HEALTH_UPSTREAM: collector:13133
+      NODE_HEALTH_UPSTREAM: gateway:9090
+      NODE_HEALTH_PATH: /edgez
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddydata:/data
+      - caddyconfig:/config
+    ports:
+      - "{{ sa_public_ipv4 }}:80:80"
+      - "{{ sa_public_ipv4 }}:443:443"
+      - "{{ sa_public_ipv4 }}:443:443/udp"
+{% if sa_public_ipv6 %}
+      - "[{{ sa_public_ipv6 }}]:80:80"
+      - "[{{ sa_public_ipv6 }}]:443:443"
+      - "[{{ sa_public_ipv6 }}]:443:443/udp"
+{% endif %}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:2019/config/"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+
+volumes:
+  natsdata:
+  etcddata:
+  caddydata:
+  caddyconfig:

@@ -1,0 +1,12 @@
+# managed by ansible (infra/ansible/roles/base)
+{% for p in base_chrony_pools %}
+pool {{ p }} iburst maxsources 4
+{% endfor %}
+driftfile /var/lib/chrony/chrony.drift
+ntsdumpdir /var/lib/chrony
+logdir /var/log/chrony
+# step the clock only at start; afterwards slew, so time never jumps under
+# the services
+makestep 1 3
+rtcsync
+leapsectz right/UTC

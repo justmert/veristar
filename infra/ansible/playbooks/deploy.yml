@@ -1,0 +1,32 @@
+---
+# rolling deploy of a new image tag (the design): edge nodes one at a
+# time, then core nodes one at a time. each node pulls, recreates what
+# changed and must report healthy on port 80 (the same composite answer the
+# dns monitor reads) before the next node starts. any failure stops the run
+# with the remaining nodes untouched.
+#
+#   ansible-playbook -i inventories/<env>/ playbooks/deploy.yml -e sa_image_tag=<release>
+- name: Deploy edge nodes one by one
+  hosts: edge
+  become: true
+  serial: 1
+  any_errors_fatal: true
+  max_fail_percentage: 0
+  vars_files: [../vars/pins.yml]
+  roles:
+    - secrets
+    - edge
+
+- name: Apply the nats topology of the new release
+  ansible.builtin.import_playbook: bootstrap.yml
+
+- name: Deploy core nodes one by one
+  hosts: core
+  become: true
+  serial: 1
+  any_errors_fatal: true
+  max_fail_percentage: 0
+  vars_files: [../vars/pins.yml]
+  roles:
+    - secrets
+    - core
