@@ -51,6 +51,10 @@ const (
 	CodeTenantNotActive = "tenant_not_active"
 	// this stage: an erasure request while another one runs for the same site
 	CodeErasureInProgress = "erasure_in_progress"
+	// operator alerts: no alertmanager member answered, or none is
+	// configured (contract 11.2)
+	CodeAlertSourceUnreachable   = "alert_source_unreachable"
+	CodeAlertSourceNotConfigured = "alert_source_not_configured"
 )
 
 // defaultUnavailableRetryIn is the Retry-After of a 503 when the caller does

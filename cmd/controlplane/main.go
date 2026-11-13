@@ -23,6 +23,7 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 
+	"github.com/justmert/veristar/internal/alertmanager"
 	"github.com/justmert/veristar/internal/config"
 	"github.com/justmert/veristar/internal/controlplane"
 	"github.com/justmert/veristar/internal/controlplane/apimetrics"
@@ -67,7 +68,10 @@ PLATFORM_DB_SSLMODE, PLATFORM_DB_SSLROOTCERT (verify-full only) with the
 optional PLATFORM_DB_SSLCERT and PLATFORM_DB_SSLKEY, PLATFORM_DB_CP_SYSTEM_PASSWORD,
 PLATFORM_DB_CP_TENANT_PASSWORD, PLATFORM_DB_CP_OPERATOR_PASSWORD,
 API_MINUTE_RETENTION_DAYS and API_HOURLY_RETENTION_MONTHS (section 7.11, the
-values jobs runs with), ERASURE_QUEUE_WAIT (optional, section 10.6).
+values jobs runs with), ERASURE_QUEUE_WAIT (optional, section 10.6),
+ALERTMANAGER_URLS with ALERTMANAGER_TLS_CA, ALERTMANAGER_TLS_CERT and
+ALERTMANAGER_TLS_KEY (optional, section 11.3; without them the operator
+alerts page answers alert_source_not_configured).
 `
 
 func main() {
@@ -121,6 +125,7 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 	// retention task drops data by, so both read the same keys
 	retention, _ := config.LoadAPIRetention(env)
 	erasureCfg, _ := config.LoadErasure(env)
+	amCfg, _ := config.LoadAlertmanager(env)
 	cfg, err := config.LoadControlPlane(env)
 	if err != nil {
 		return err
@@ -279,6 +284,10 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	alertRoutes, err := newAlertRoutes(amCfg, log)
+	if err != nil {
+		return err
+	}
 
 	// this stage erasure: runs started by requests finish before the pools close
 	eraser, err := erasure.New(erasure.Config{
@@ -344,7 +353,7 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 			// failures with a redirect, but an anonymous request gets 401
 			controlplane.RoutesFunc(func(r chi.Router) { r.Method(http.MethodGet, ssoPath, ssoH) }),
 			// /api/operator: 403 operator_required for everyone else (5.1)
-			controlplane.RoutesFunc(guard.Mount(modeRoutes, keepRoutes, auditRoutes, actions, review, global, apiKeys)),
+			controlplane.RoutesFunc(guard.Mount(modeRoutes, keepRoutes, auditRoutes, actions, review, global, apiKeys, alertRoutes)),
 		},
 		// keys only: no session middleware runs there (contract 9.1)
 		Mounts: []controlplane.Mount{{Path: operator.MachinePath, Handler: machine.Handler()}},
@@ -365,6 +374,25 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 	apiErr := obs.Serve(ctx, apiServer(cfg.Addr, api), log)
 	stopOps()
 	return errors.Join(apiErr, <-opsDone)
+}
+
+// newAlertRoutes builds the operator alerts route (contract 11). without
+// ALERTMANAGER_URLS the route exists and answers alert_source_not_configured,
+// so the console says why it shows no alerts instead of showing none.
+func newAlertRoutes(c config.Alertmanager, log *slog.Logger) (*operator.Alerts, error) {
+	if !c.Configured() {
+		log.Warn("no alertmanager configured (ALERTMANAGER_URLS): the operator alerts page answers alert_source_not_configured")
+		return operator.NewAlerts(nil, time.Now), nil
+	}
+	tlsCfg, err := c.ClientTLS()
+	if err != nil {
+		return nil, err
+	}
+	am, err := alertmanager.New(c.URLs, tlsCfg, alertmanager.DefaultTimeout)
+	if err != nil {
+		return nil, err
+	}
+	return operator.NewAlerts(am, time.Now), nil
 }
 
 // requestPoolSizes are the pools the api requests use, sized explicitly
