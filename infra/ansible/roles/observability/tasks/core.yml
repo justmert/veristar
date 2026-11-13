@@ -60,6 +60,14 @@
     mode: "0400"
   no_log: true
   notify: Reload alertmanager
+  when: observability_alertmanager_receiver
+
+- name: Remove a webhook url that is no longer configured
+  ansible.builtin.file:
+    path: "{{ observability_conf_dir }}/alertmanager/discord-webhook-url"
+    state: absent
+  notify: Reload alertmanager
+  when: not observability_alertmanager_receiver
 
 # the watchdog push to the probe's gatus (templates/alertmanager.yml.j2)
 - name: Write the gatus push token for the watchdog

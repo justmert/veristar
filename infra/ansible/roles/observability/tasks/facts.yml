@@ -5,7 +5,17 @@
     observability_relay_targets: "{{ observability_relay_targets | default(observability_relay[sa_tier] | default([])) }}"
     observability_webhook_alertmanager: >-
       {{ (observability_test_webhook_base ~ '/webhook/alertmanager') if observability_test_webhook_base is defined
-         else sa_secrets.alertmanager_discord_webhook_url }}
+         else sa_secrets.alertmanager_discord_webhook_url | default('') }}
     observability_webhook_gatus: >-
       {{ (observability_test_webhook_base ~ '/webhook/gatus') if observability_test_webhook_base is defined
-         else sa_secrets.gatus_discord_webhook_url }}
+         else sa_secrets.gatus_discord_webhook_url | default('') }}
+
+# an operator input is optional (operator decision of 2026-11-13): without a webhook
+# prometheus still evaluates every rule, grafana and the status page still
+# show them, and alertmanager holds the alerts without sending them anywhere.
+# setting the webhook in the sops file adds the receiver at the next converge
+# (docs/runbooks/alerts.md, "adding a receiver").
+- name: Decide whether alerts are delivered
+  ansible.builtin.set_fact:
+    observability_alertmanager_receiver: "{{ observability_webhook_alertmanager | length > 0 }}"
+    observability_gatus_receiver: "{{ observability_webhook_gatus | length > 0 }}"

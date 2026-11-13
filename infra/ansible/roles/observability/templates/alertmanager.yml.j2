@@ -3,7 +3,7 @@
 # both, and the members share silences and notification state, so an alert
 # is sent once.
 route:
-  receiver: discord
+  receiver: {{ 'discord' if observability_alertmanager_receiver else 'none' }}
   group_by: [alertname, node, stream_name, check]
   group_wait: 30s
   group_interval: 5m
@@ -19,6 +19,7 @@ route:
       repeat_interval: 1m
 
 receivers:
+{% if observability_alertmanager_receiver %}
   - name: discord
     discord_configs:
       # an operator input. the url is a secret, read from a root-only file
@@ -26,6 +27,11 @@ receivers:
         send_resolved: true
         title: '{% raw %}{{ if eq .Status "firing" }}FIRING{{ else }}RESOLVED{{ end }} {{ .CommonLabels.alertname }}{% endraw %} ({{ sa_environment }})'
         message: '{% raw %}{{ range .Alerts }}{{ .Annotations.summary }} ({{ .Annotations.runbook }}){{ "\n" }}{{ end }}{% endraw %}'
+{% else %}
+  # no webhook an operator input unset): alerts are evaluated and listed in
+  # alertmanager and grafana, and sent nowhere (docs/runbooks/alerts.md)
+  - name: none
+{% endif %}
 
 {% if groups['probe'] | default([]) | length > 0 %}
   # gatus external endpoint "monitoring watchdog" (templates/gatus.yml.j2);

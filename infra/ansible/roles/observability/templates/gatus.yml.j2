@@ -23,6 +23,7 @@ ui:
 web:
   port: 8080
 
+{% if observability_gatus_receiver %}
 alerting:
   discord:
     webhook-url: "${GATUS_DISCORD_WEBHOOK_URL}"
@@ -32,13 +33,16 @@ alerting:
       failure-threshold: 3
       success-threshold: 2
       send-on-resolved: true
+{% endif %}
 
 x-default: &default
   interval: {{ observability_probe_interval }}
   client:
     timeout: {{ observability_probe_timeout }}
+{% if observability_gatus_receiver %}
   alerts:
     - type: discord
+{% endif %}
 
 endpoints:
   - name: in host
@@ -91,8 +95,10 @@ external-endpoints:
     token: "${GATUS_EXTERNAL_TOKEN}"
     heartbeat:
       interval: 5m
+{% if observability_gatus_receiver %}
     alerts:
       - type: discord
+{% endif %}
 {% for e in observability_external_endpoints %}
   - name: "{{ e.name }}"
     group: {{ e.group }}
@@ -100,6 +106,8 @@ external-endpoints:
     heartbeat:
       # a missing push is an outage of the probe, alerted like a failure
       interval: 2m
+{% if observability_gatus_receiver %}
     alerts:
       - type: discord
+{% endif %}
 {% endfor %}

@@ -1,6 +1,7 @@
 ---
 # the design. inputs from the sops secrets (secrets role):
-#   alertmanager_discord_webhook_url, gatus_discord_webhook_url  an operator input
+#   alertmanager_discord_webhook_url, gatus_discord_webhook_url  an operator input,
+#                       optional: without it alerts are not delivered
 #   grafana_admin_password, postgres_exporter_password,
 #   probe_metrics_token, gatus_external_token
 #   probe_site_id, probe_otlp_token, probe_machine_api_key
@@ -10,21 +11,19 @@
 - name: Check the observability inputs
   ansible.builtin.assert:
     that:
-      - sa_tier in ['edge', 'core', 'probe']
+      - sa_tier in ['edge', 'core', 'node', 'probe']
       - sa_secrets is defined
-      - (sa_secrets.alertmanager_discord_webhook_url | default('')) | length > 0 or observability_test_webhook_base is defined
       - observability_test_webhook_base is not defined or sa_environment == 'local'
       - (observability_probe_ca_file is not defined and observability_probe_extra_hosts is not defined) or sa_environment == 'local'
-      - sa_tier != 'core' or (sa_secrets.grafana_admin_password | default('')) | length >= 16
-      - sa_tier != 'core' or (sa_secrets.postgres_exporter_password | default('')) | length >= 16
+      - not observability_runs_core or (sa_secrets.grafana_admin_password | default('')) | length >= 16
+      - not observability_runs_core or (sa_secrets.postgres_exporter_password | default('')) | length >= 16
       - sa_tier != 'probe' or (sa_secrets.probe_otlp_token | default('')) is match('^sa_otlp_')
       - sa_tier != 'probe' or (sa_secrets.probe_machine_api_key | default('')) is match('^sa_op_')
       - (sa_secrets.probe_metrics_token | default('')) | length >= 32
       - observability_tls | bool
     fail_msg: >-
-      observability needs the discord webhook an operator input as
-      sa_secrets.alertmanager_discord_webhook_url and gatus_discord_webhook_url,
-      the grafana and postgres_exporter passwords, the probe metrics token,
+      observability needs the grafana and postgres_exporter passwords, the
+      probe metrics token,
       and on the probe node the output of platformctl probe-tenant create.
       observability_test_webhook_base (a local test receiver) is accepted in
       the local environment only. observability_tls must stay true: the
@@ -64,11 +63,11 @@
 
 - name: Edge and core nodes
   ansible.builtin.include_tasks: node.yml
-  when: sa_tier in ['edge', 'core']
+  when: observability_runs_edge or observability_runs_core
 
 - name: Core nodes
   ansible.builtin.include_tasks: core.yml
-  when: sa_tier == 'core'
+  when: observability_runs_core
 
 - name: Probe node
   ansible.builtin.include_tasks: probe.yml
