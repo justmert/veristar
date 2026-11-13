@@ -147,9 +147,20 @@ func playwrightTotals(out string) map[string]int {
 // stored every event.
 func (su *suite) customEventRerun(t *testing.T) {
 	s, b := su.s, su.b
-	out, err := b.Run(t, []string{"chromium"}, `umami\.track\(\)`, []string{"--repeat-each", "20"})
+	// only the sites this suite serves and registers: events.spec.ts covers
+	// every site of tests/e2e/sites.ts, and a site without a server here
+	// (vue, sveltekit, next.js) waits out the 5-minute test timeout 20 times
+	keys := make([]string, 0, len(allSites))
+	for _, x := range allSites {
+		keys = append(keys, regexp.QuoteMeta(x.Key))
+	}
+	grep := `(` + strings.Join(keys, "|") + `): data-umami-event and umami\.track\(\)`
+	out, err := b.Run(t, []string{"chromium"}, grep, []string{"--repeat-each", "20"})
 	tot := playwrightTotals(out)
 	t.Logf("events.spec.ts x20 in chromium through the real gateway: %v", tot)
+	if want := 20 * len(allSites); tot["passed"]+tot["failed"]+tot["flaky"] != want {
+		t.Errorf("playwright ran %v, want %d runs (%d sites x20)", tot, want, len(allSites))
+	}
 	if err != nil {
 		var failed []string
 		for _, l := range strings.Split(out, "\n") {

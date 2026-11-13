@@ -124,8 +124,14 @@ jobs:
       - if: matrix.ansible
         run: make ansible-venv
 
+      # webpath copies the output of a failed playwright run here
+      # (WEBPATH_LOGS), which the artifact step below uploads
       - if: matrix.suite != 'local-converge'
-        run: make "${{ matrix.suite }}"
+        env:
+          WEBPATH_LOGS: ${{ github.workspace }}/.scratch/scratch/webpath-logs
+        run: |
+          mkdir -p "$WEBPATH_LOGS"
+          make "${{ matrix.suite }}"
 
       # docs/deploy/local-converge.md section 2: the test receiver stands in
       # for the discord webhook an operator input that the observability play needs
@@ -138,7 +144,7 @@ jobs:
           make local-converge-e2e
 
       # suite logs, saved container logs and playwright results of a failure
-      - if: failure()
+      - if: failure() || cancelled()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: logs-${{ matrix.suite }}
