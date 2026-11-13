@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -77,6 +78,7 @@ func TestAssembledNodeCaddyfiles(t *testing.T) {
 			"BASE_DOMAIN": "sa.test", "CONTROLPLANE_UPSTREAM": "controlplane:8085",
 			"CONSOLE_ROOT": "/srv/console", "UMAMI_UPSTREAM": "umami:3000",
 		}},
+		{"node", []string{"node", "edge.Caddyfile", "app.Caddyfile", "web.Caddyfile"}, nodeEnv()},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			p := assemble(t, tc.args...)
@@ -116,6 +118,24 @@ func TestAssembleRefusesUnknownInput(t *testing.T) {
 	require.Error(t, err)
 	err = exec.Command("sh", filepath.Join(dir, "assemble.sh"), "edge", filepath.Join(dir, "app.Caddyfile")).Run()
 	require.Error(t, err)
+	// a converged node needs the edge file first
+	err = exec.Command("sh", filepath.Join(dir, "assemble.sh"), "node", filepath.Join(dir, "app.Caddyfile"),
+		filepath.Join(dir, "app.Caddyfile"), filepath.Join(dir, "web.Caddyfile")).Run()
+	require.Error(t, err)
+}
+
+// nodeEnv is the environment of a converged node's caddy: the edge and the
+// core upstreams, and the core health beside the edge health
+func nodeEnv() map[string]string {
+	env := baseEnv()
+	for k, v := range map[string]string{
+		"BASE_DOMAIN": "sa.test", "CONTROLPLANE_UPSTREAM": "controlplane:8085",
+		"CONSOLE_ROOT": "/srv/console", "UMAMI_UPSTREAM": "umami:3000",
+		"CORE_HEALTH_UPSTREAM": "core-health:9090", "CORE_HEALTH_PATH": "/corez",
+	} {
+		env[k] = v
+	}
+	return env
 }
 
 // both assembled node configs serve caddy's metrics, with the http request
@@ -133,6 +153,7 @@ func TestAssembledNodeServesMetrics(t *testing.T) {
 			"BASE_DOMAIN": "sa.test", "CONTROLPLANE_UPSTREAM": "controlplane:8085",
 			"CONSOLE_ROOT": "/srv/console", "UMAMI_UPSTREAM": "umami:3000",
 		}},
+		{"node", []string{"node", "edge.Caddyfile", "app.Caddyfile", "web.Caddyfile"}, nodeEnv()},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			p := assemble(t, tc.args...)
@@ -176,10 +197,22 @@ func TestAssembledNodeServesMetrics(t *testing.T) {
 			code, _, err := get("80/tcp", "/")
 			require.NoError(t, err)
 			require.Equal(t, http.StatusServiceUnavailable, code)
-			code, body, err := get("2021/tcp", "/metrics")
-			require.NoError(t, err)
-			require.Equal(t, http.StatusOK, code)
-			require.Contains(t, body, "caddy_config_last_reload_successful 1")
+			// caddy serves the metrics site while its config load is still
+			// finishing (the internal ca on a slow host) and sets the reload
+			// gauge only at the end of the load, so it is polled; a failed load
+			// leaves it at 0 and the test fails at the deadline
+			var body string
+			for deadline := time.Now().Add(30 * time.Second); ; {
+				code, b, err := get("2021/tcp", "/metrics")
+				require.NoError(t, err)
+				require.Equal(t, http.StatusOK, code)
+				body = b
+				if strings.Contains(body, "caddy_config_last_reload_successful 1") {
+					break
+				}
+				require.False(t, time.Now().After(deadline), "no successful config load in the metrics:\n%s", body)
+				time.Sleep(250 * time.Millisecond)
+			}
 			require.Contains(t, body, "caddy_http_requests_total{")
 			// the admin api listens on loopback only, so the published port
 			// leads nowhere
