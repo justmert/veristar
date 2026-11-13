@@ -1,0 +1,57 @@
+# a tenant's own opentelemetry collector that fans out: the apps export once,
+# to this collector, and it forwards everything to the tenant's own backend
+# and metrics and traces to stellar analytics. runs on the stock contrib
+# distribution (tested with otel/opentelemetry-collector-contrib 0.165.0).
+#
+#   TENANT_BACKEND_ENDPOINT  base url of your own backend, e.g. http://otel-backend:4318
+#   PLATFORM_OTLP_ENDPOINT   https://otlp.<your platform domain>
+#   PLATFORM_OTLP_TOKEN      the sa_otlp_... token from the console
+#
+# docs:start config
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  # bounds memory before anything is queued
+  memory_limiter:
+    check_interval: 1s
+    limit_percentage: 80
+    spike_limit_percentage: 20
+  batch: {}
+
+exporters:
+  otlphttp/tenant:
+    endpoint: ${env:TENANT_BACKEND_ENDPOINT}
+  # the platform copy is the only one that carries the token
+  otlphttp/platform:
+    endpoint: ${env:PLATFORM_OTLP_ENDPOINT}
+    headers:
+      Authorization: Bearer ${env:PLATFORM_OTLP_TOKEN}
+    # retries the 429, 502 and 503 answers the platform gives for rate limits
+    # and short outages, and queues in memory meanwhile
+    retry_on_failure:
+      enabled: true
+    sending_queue:
+      enabled: true
+
+service:
+  pipelines:
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlphttp/tenant, otlphttp/platform]
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlphttp/tenant, otlphttp/platform]
+    # the platform accepts logs and discards them, so they stay with the tenant
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlphttp/tenant]
+# docs:end config

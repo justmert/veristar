@@ -1,0 +1,21 @@
+{
+  "name": "@stellar-analytics/example-sveltekit",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "start": "node build",
+    "test": "node --test 'test/*.test.ts'"
+  },
+  "dependencies": {
+    "tracker": "workspace:*"
+  },
+  "devDependencies": {
+    "@sveltejs/adapter-node": "catalog:",
+    "@sveltejs/kit": "catalog:",
+    "@sveltejs/vite-plugin-svelte": "catalog:",
+    "@types/node": "catalog:",
+    "svelte": "catalog:",
+    "vite": "catalog:"
+  }
+}

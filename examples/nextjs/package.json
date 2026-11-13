@@ -1,0 +1,19 @@
+{
+  "name": "@stellar-analytics/example-nextjs",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "next build",
+    "start": "next start --hostname 127.0.0.1",
+    "test": "node --test 'test/*.test.ts'"
+  },
+  "dependencies": {
+    "next": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "tracker": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:"
+  }
+}

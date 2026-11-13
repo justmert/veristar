@@ -5,26 +5,32 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Static example: home</title>
     <link rel="stylesheet" href="/site.css" />
+    <!-- docs:start head -->
+    <!-- paste the tag from the console in place of the next line, on every page -->
     <!-- tracker -->
+    <!-- docs:end head -->
   </head>
   <body>
-    <nav><a href="/">Home</a> <a href="/about.html" id="to-about">About</a></nav>
+    <nav>
+      <a href="/">Home</a> <a href="/about.html" id="to-about">About</a>
+      <a href="/consent.html" id="to-consent">Consent</a>
+      <a href="/self-hosted.html" id="to-self-hosted">Self-hosted</a>
+    </nav>
     <main>
       <h1>Static example</h1>
       <p>A hand-written page with the tracker snippet pasted into its head.</p>
+      <!-- docs:start event -->
       <button type="button" id="signup" data-umami-event="signup-click" data-umami-event-plan="free">
         Sign up
       </button>
+      <!-- docs:end event -->
       <button type="button" id="manual">Track by call</button>
+      <p><button type="button" id="opt-out">Turn off analytics in this browser</button></p>
       <p><a href="#details" id="jump">Jump to details</a></p>
       <h2 id="details">Details</h2>
       <p>An in-page anchor jump is not a pageview.</p>
     </main>
-    <script>
-      // umami.track() from page code; the tracker may be blocked, so check first
-      document.getElementById("manual").addEventListener("click", () => {
-        if (window.umami) window.umami.track("manual-call", { source: "static-html" });
-      });
-    </script>
+    <!-- page code in a file of its own, so the content security policy needs no inline scripts -->
+    <script src="/page.js"></script>
   </body>
 </html>

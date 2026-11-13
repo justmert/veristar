@@ -98,6 +98,17 @@ fmt:
 tidy:
 	$(GO) mod tidy
 
+# documentation checks (the design): every relative link in docs/ and the
+# root and example readmes resolves, and every code block a guide includes
+# from examples/ equals its source. docs-update rewrites the included blocks
+# from their sources after an example changed.
+.PHONY: docs-check docs-update
+docs-check:
+	$(GO) test -count=1 ./tests/docs/
+
+docs-update:
+	$(GO) test -count=1 -run TestIncludedSnippets ./tests/docs/ -args -update
+
 CMD ?= platformctl
 image:
 	$(DOCKER) build -f deploy/images/go-service.Dockerfile \
@@ -360,8 +371,10 @@ local-converge-up:
 local-converge-images:
 	infra/local/build-images.sh
 
+# ANSIBLE_EXTRA passes extra ansible-playbook arguments, such as the test
+# webhook receiver of the observability play (docs/deploy/local-converge.md)
 local-converge:
-	cd infra/ansible && $(ANSIBLE_BIN)/ansible-playbook -i inventories/local/ playbooks/site.yml
+	cd infra/ansible && $(ANSIBLE_BIN)/ansible-playbook -i inventories/local/ playbooks/site.yml $(ANSIBLE_EXTRA)
 
 local-converge-e2e:
 	SA_LC_INVENTORY=$(CURDIR)/infra/ansible/inventories/local/hosts.json \

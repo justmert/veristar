@@ -1,0 +1,20 @@
+{
+  "name": "@stellar-analytics/example-vue-spa",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "start": "vite preview --strictPort",
+    "test": "node --test 'test/*.test.ts'"
+  },
+  "dependencies": {
+    "tracker": "workspace:*",
+    "vue": "catalog:",
+    "vue-router": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "@vitejs/plugin-vue": "catalog:",
+    "vite": "catalog:"
+  }
+}

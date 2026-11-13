@@ -1,8 +1,12 @@
-# Custom events and wallet events
+# Custom events
 
-Pageviews are counted without any code beyond the script tag. This page covers what you can add on
-top: your own named events, and wallet events from the Stellar Wallets Kit. Both show up in your
-site's Umami dashboard on the **Events** page, next to the pageviews.
+Pageviews are counted without any code beyond the script tag. On top of them you can send your own
+named events, for example a click on a sign-up button. They show up in your site's Umami dashboard
+on the **Events** page, next to the pageviews. Every example site in the browser test matrix sends
+both kinds of custom event below (`tests/e2e/specs/events.spec.ts`), and `tests/webpath` follows
+them into Umami.
+
+For wallet connect events from the Stellar Wallets Kit, see [wallets-kit.md](wallets-kit.md).
 
 ## Sending a custom event
 
@@ -11,8 +15,11 @@ Two ways, both from Umami's documented integration, so existing Umami instructio
 **From HTML**, with no JavaScript. A click on an element with `data-umami-event` sends an event of
 that name. Every `data-umami-event-<key>` attribute on the same element becomes one data entry:
 
+<!-- include examples/static-html/src/index.html region=event -->
 ```html
-<button data-umami-event="signup-click" data-umami-event-plan="free">Sign up</button>
+<button type="button" id="signup" data-umami-event="signup-click" data-umami-event-plan="free">
+  Sign up
+</button>
 ```
 
 This sends `signup-click` with the data `{ "plan": "free" }`. Attribute values are always strings.
@@ -20,15 +27,22 @@ A same-tab link with the attribute waits for the event before it navigates, so t
 
 **From JavaScript**, with `umami.track(name, data)`:
 
+<!-- include examples/static-html/src/page.js region=track -->
 ```js
-umami.track("manual-call", { source: "pricing-page", seats: 3, annual: true });
+// umami.track() from page code; the tracker may be blocked, so check first
+document.getElementById("manual").addEventListener("click", () => {
+  window.umami?.track("manual-call", { source: "static-html" });
+});
 ```
 
-`umami.track()` returns a promise. The visitor may block the tracker, so call it as
-`window.umami?.track(...)` and never let your own code depend on it.
+Data values may be strings, numbers or booleans, for example
+`umami.track("plan-chosen", { plan: "pro", seats: 3, annual: true })`. `umami.track()` returns a
+promise. The visitor may block the tracker, so call it as `window.umami?.track(...)` and never let
+your own code depend on it. The framework guides show the same call in React, Vue, Svelte and
+Next.js components.
 
-If you installed the npm package instead of the script tag, `init({ siteId, host })` installs the
-same `window.umami`, so both ways above work unchanged.
+If you installed the [npm package](npm.md) instead of the script tag, `init({ siteId, host })`
+installs the same `window.umami`, so both ways above work unchanged.
 
 ## Limits
 
@@ -76,71 +90,6 @@ seed, an address or any other personal value into event data in the first place.
 event redact to the same text, only one of them is kept.
 
 Numbers and booleans are stored unchanged.
-
-## Wallet events from the Stellar Wallets Kit
-
-If your dapp uses [`@creit.tech/stellar-wallets-kit`](https://github.com/Creit-Tech/Stellar-Wallets-Kit)
-(tested with 2.7.1 and 2.8.0), the tracker can count wallet activity for you:
-
-| Event | Sent when | Data |
-|---|---|---|
-| `wallet_selected` | the visitor picks a wallet in the kit | `wallet`: the kit's wallet id, for example `xbull` |
-| `wallet_connected` | the kit goes from no address to an address | `network`: `public`, `testnet`, `futurenet` or `other` (npm package only, see below) |
-| `wallet_disconnected` | the visitor disconnects through the kit | none |
-
-**The account address is never sent, hashed or stored.** It is only used to notice that a
-connection happened. A visitor who comes back with the wallet still connected (the kit restores
-the session from browser storage) is not counted again, and neither is a network switch or a
-second address request while connected.
-
-Wallet capture is off until you turn it on, with one line. It is not automatic on purpose: it means
-reading the kit's own browser storage or events, and doing that on every site by default would be
-access to stored information that a site without a consent banner should not do without deciding
-to.
-
-### With the npm package
-
-Call `attachWalletsKit` once, after `StellarWalletsKit.init()`:
-
-```ts
-import { StellarWalletsKit, Networks } from "@creit.tech/stellar-wallets-kit";
-import { defaultModules } from "@creit.tech/stellar-wallets-kit/modules/utils";
-import { init } from "tracker";
-import { attachWalletsKit } from "tracker/wallets-kit";
-
-init({ siteId: "<your site id>", host: "https://in.<BASE_DOMAIN>" });
-StellarWalletsKit.init({ modules: defaultModules(), network: Networks.PUBLIC });
-
-const detach = attachWalletsKit(StellarWalletsKit);
-// later, to stop capturing: detach();
-```
-
-This subscribes to the kit's own events, so `wallet_connected` carries the network. Attaching the
-same kit twice throws, because every event would be counted twice. Calling it before `init()` of
-the tracker throws too.
-
-### With the script tag
-
-Add `data-wallets-kit="true"` to the tag from the console:
-
-```html
-<script defer src="https://in.<BASE_DOMAIN>/v/1.1.0/sdk.js" integrity="sha384-..."
-  crossorigin="anonymous" data-website-id="<your site id>" data-wallets-kit="true"></script>
-```
-
-The kit sets no browser global and fires no DOM events, so a separately loaded script cannot see
-its events. Instead `sdk.js` checks the kit's two storage keys twice a second: whether
-`@StellarWalletsKit/activeAddress` exists (by its name only; its value is never read) and which
-wallet id `@StellarWalletsKit/selectedModuleId` holds. The kit keeps the network in memory only,
-so in this mode `wallet_connected` has no `network`. Use the npm package if you need it.
-
-Notes on the script-tag mode:
-
-- It needs tracker version **1.1.0** or newer. Version 1.0.0 ignores the attribute.
-- With `data-auto-track="false"` (consent-gated sites), storage is not read until you call
-  `umami.start()`. With Global Privacy Control on, nothing is read or sent.
-- A change made in another tab of your site is left to that tab, so it is not counted twice.
-- A connect and disconnect within half a second can be missed.
 
 ## Where to see them
 

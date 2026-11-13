@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Static example: consent</title>
+    <link rel="stylesheet" href="/site.css" />
+    <!-- docs:start head -->
+    <!-- the tag from the console with data-auto-track="false" added -->
+    <!-- tracker:consent -->
+    <!-- the site's own consent code, after the tag so it runs after sdk.js -->
+    <script defer src="/consent.js"></script>
+    <!-- docs:end head -->
+  </head>
+  <body>
+    <nav><a href="/" id="to-home">Home</a></nav>
+    <main>
+      <h1>Consent</h1>
+      <p>Nothing is sent until the visitor agrees.</p>
+      <p id="consent-banner">
+        <button type="button" id="consent-accept">Accept analytics</button>
+        <button type="button" id="consent-decline">Decline</button>
+      </p>
+    </main>
+  </body>
+</html>
