@@ -39,6 +39,12 @@ sa-lc-edge-3 hel1 172.31.99.14 10.99.3.14
 sa-lc-core-1 fsn1 172.31.99.22 10.99.1.22
 sa-lc-core-2 nbg1 172.31.99.23 10.99.2.23
 sa-lc-backup-1 hel1 172.31.99.31 10.99.3.31"
+# LC_TOPOLOGY=minimal leaves out the second core node: the smallest set the
+# roles converge (nats runs three replicas, backups need the backup node),
+# used by the credential rotation run (tests/handover/rotate-local.sh)
+if [ "${LC_TOPOLOGY:-}" = minimal ]; then
+	LC_NODES="$(printf '%s\n' "$LC_NODES" | grep -v '^sa-lc-core-2 ')"
+fi
 # the fresh node a point-in-time restore goes to; created by the restore
 # drill only (tests/drills/pitr.sh) and removed after it
 LC_RESTORE_NODE="sa-lc-restore-1 fsn1 172.31.99.41 10.99.1.41"

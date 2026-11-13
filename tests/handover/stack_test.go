@@ -247,19 +247,6 @@ func (s *Stack) mounted(t testing.TB, name, bin string, opts []string, env map[s
 	s.run(t, name, all, staticImage, args...)
 }
 
-// oneShot runs a static binary to completion on the stack's network.
-func (s *Stack) oneShot(t testing.TB, bin string, env map[string]string, args ...string) string {
-	t.Helper()
-	all := append([]string{"run", "--rm", "--network", s.Net, "-v", bin + ":/bin/service:ro", "--entrypoint", "/bin/service"}, envOpts(env)...)
-	all = append(all, staticImage)
-	all = append(all, args...)
-	out, err := docker(all...)
-	if err != nil {
-		t.Fatalf("%s %v on stack %s: %v", filepath.Base(bin), args, s.Label, err)
-	}
-	return out
-}
-
 func (s *Stack) psql(t testing.TB, db, q string) string {
 	t.Helper()
 	return mustDocker(t, "exec", s.Postgres, "psql", "-X", "-q", "-h", "127.0.0.1", "-U", "postgres", "-d", db, "-tAc", q)
@@ -315,7 +302,8 @@ func (s *Stack) StartPostgres(t testing.TB, archive bool) {
 		mustDocker(t, "volume", "create", s.RepoVolume)
 		s.vols = append(s.vols, s.RepoVolume)
 		// the image has no gosu, so the official entrypoint runs as postgres
-		opts = append(opts, "--user", "postgres",
+		// the image's entrypoint is patroni; this source is a plain server
+		opts = append(opts, "--user", "postgres", "--entrypoint", "docker-entrypoint.sh",
 			"-v", s.RepoVolume+":/var/spool/pgbackrest",
 			"-v", s.RepoConf+":/etc/pgbackrest/pgbackrest.conf:ro")
 		args = []string{"postgres", "-c", "wal_level=replica", "-c", "archive_mode=on",
@@ -739,7 +727,7 @@ func (s *Stack) startApp(t testing.TB, r appRequest) (string, error) {
 			}
 		}
 		if time.Now().After(deadline) {
-			return "", fmt.Errorf("app %s not healthy: %v", name, err)
+			return "", fmt.Errorf("app %s not healthy: %w", name, err)
 		}
 		time.Sleep(250 * time.Millisecond)
 	}
@@ -763,8 +751,6 @@ func (s *Stack) StopApps(t testing.TB) {
 	}
 	s.Stop(t, apps...)
 }
-
-var siteID = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
 // AppsControl serves POST /apps (start an example app with a token a spec
 // created) and POST /sites/verify (the domain check result, as the console
@@ -833,7 +819,7 @@ func waitTLS(t testing.TB, addr, host, path string) {
 				var d net.Dialer
 				return d.DialContext(ctx, network, addr)
 			},
-			TLSClientConfig: &tls.Config{ServerName: host, InsecureSkipVerify: true}, //nolint:gosec // caddy's internal ca of a test container
+			TLSClientConfig: &tls.Config{ServerName: host, InsecureSkipVerify: true}, // caddy's internal ca of a test container
 		},
 	}
 	deadline := time.Now().Add(time.Minute)

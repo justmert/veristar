@@ -51,6 +51,10 @@ make local-converge-e2e                # this stage and 8 paths through the conv
 make local-converge-down               # removes containers, volumes, networks, images, state
 ```
 
+`LC_TOPOLOGY=minimal` before `local-converge-up` leaves out the second core node (3 edge, 1 core,
+1 backup node), the smallest set the roles converge; `make rotate-local` uses it for the
+credential rotation run (the design).
+
 Since 2026-11-13 `site.yml` ends with the `observability` play (this stage) on every edge
 and core node. It needs somewhere to send alerts: the Discord webhook an operator input does not
 exist locally, so pass the address of the test receiver instead, and run that receiver

@@ -52,7 +52,7 @@ services:
     environment:
       TZ: UTC
     volumes:
-      - {{ core_conf_dir }}/patroni.yml:/etc/patroni/patroni.yml:ro
+      - {{ core_conf_dir }}/patroni:/etc/patroni:ro
       - pgdata:/var/lib/postgresql
       # archive_command runs pgbackrest archive-push (roles/backup)
       - {{ backup_conf_dir }}:/etc/pgbackrest:ro

@@ -28,7 +28,7 @@ commands:
   umami rotate-admin
                     replace the umami admin password UMAMI_ADMIN_PASSWORD_PREVIOUS with
                     UMAMI_ADMIN_PASSWORD and prove the previous one is refused
-` + dbUsage + natsUsage + probeUsage + verifyUsage + `  version           print the build version
+` + dbUsage + natsUsage + probeUsage + verifyUsage + rotationUsage + `  version           print the build version
 `
 
 func main() {
@@ -81,6 +81,16 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		}
 		if err != nil {
 			log.Error("verify-migration failed", "error", err.Error())
+			return 2
+		}
+		return 0
+	case len(args) == 1 && args[0] == "rotation-check":
+		err := runRotationCheck(ctx, os.Stdin, stdout)
+		if errors.Is(err, errDiffers) {
+			return 1
+		}
+		if err != nil {
+			log.Error("rotation-check failed", "error", err.Error())
 			return 2
 		}
 		return 0

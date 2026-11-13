@@ -10,6 +10,14 @@ Rotate when a value may have been exposed (a node compromised, a file or identit
 person with access left), when a provider forces it, or on a schedule the operators set.
 Rotating everything in a file is the answer to a leaked file or identity.
 
+## Everything at once
+
+To replace every value of a file (a leaked file or identity, a person with access leaving, a
+handover), use `infra/secrets/rotate-secrets.py <env>` and `playbooks/rotate-all.yml`: they apply
+every step of the table below in the right order and prove each previous credential is refused
+([../handover/rebuild.md](../handover/rebuild.md) section 7). The rest of this page is for
+replacing one value.
+
 ## The general pattern
 
 1. **Edit the value** in the SOPS file on the controller:

@@ -77,7 +77,7 @@ func setup() error {
 		return fmt.Errorf("DBIP_MONTH (YYYY-MM) is required; make handover-it sets it")
 	}
 	if out, err := exec.Command("node", "--version").Output(); err != nil || !strings.HasPrefix(string(out), "v26.") {
-		return fmt.Errorf("node 26 is required on PATH: %q %v", out, err)
+		return fmt.Errorf("node 26 is required on PATH: %q %w", out, err)
 	}
 	builds := [][]string{
 		{"build", "-q", "-f", "deploy/images/gateway.Dockerfile", "--build-arg", "DBIP_MONTH=" + month, "-t", gatewayImage, "."},
@@ -312,14 +312,14 @@ func TestHandover(t *testing.T) {
 	a.StopApps(t)
 	for _, tn := range data.Tenants {
 		waitFor(t, "api requests of tenant "+tn.ID+" in minute rows of a", 3*time.Minute, func() string {
-			return a.psql(t, "platform", "select coalesce(sum(count), 0) from api.metrics_minute where tenant_id = '"+tn.ID+"'")
+			return a.psql(t, "platform", "select coalesce(sum(count), 0) from api.metrics_minute where source = 'metric' and tenant_id = '"+tn.ID+"'")
 		}, strconv.FormatInt(tn.Requests, 10))
 	}
 	// a leading daemon runs the api rollup and the web aggregates at once
 	a.RestartJobs(t)
 	for _, tn := range data.Tenants {
 		waitFor(t, "hourly api rows of tenant "+tn.ID, 3*time.Minute, func() string {
-			return a.psql(t, "platform", "select coalesce(sum(count), 0) from api.metrics_hourly where tenant_id = '"+tn.ID+"'")
+			return a.psql(t, "platform", "select coalesce(sum(count), 0) from api.metrics_hourly where source = 'metric' and tenant_id = '"+tn.ID+"'")
 		}, strconv.FormatInt(tn.Requests, 10))
 	}
 	for id, n := range sumPageviews(data) {
@@ -390,7 +390,7 @@ func TestHandover(t *testing.T) {
 	restoredPort := freePort(t)
 	mustDocker(t, "run", "-d", "--name", restored, "--network", b.Net, "--user", "postgres", "-p", "127.0.0.1:"+restoredPort+":5432",
 		"-v", restoreVol+":/var/lib/postgresql", "-v", a.RepoVolume+":/var/spool/pgbackrest:ro",
-		"-v", a.RepoConf+":/etc/pgbackrest/pgbackrest.conf:ro", postgresHAImage,
+		"-v", a.RepoConf+":/etc/pgbackrest/pgbackrest.conf:ro", "--entrypoint", "docker-entrypoint.sh", postgresHAImage,
 		"postgres", "-c", "archive_mode=off", "-c", "restore_command=pgbackrest --stanza=sa archive-get %f \"%p\"")
 	b.track(restored)
 	b.waitPostgres(t, restored)
@@ -476,9 +476,20 @@ func TestHandover(t *testing.T) {
 	// the cutover spec loads the first site of the first tenant once per
 	// engine with the snippet pasted before the migration
 	first := data.Tenants[0].Sites[0].ID
-	waitFor(t, "pageviews of the old snippet in umami b", 2*time.Minute, func() string {
-		return b.psql(t, "umami", "select count(*) from website_event where website_id = '"+first+"' and event_type = 1")
-	}, strconv.FormatInt(before[first]+int64(len(engines)), 10))
+	// at least one per engine; a retried attempt (network change only, see
+	// playwright()) may have had its pageview accepted before it failed
+	deadline := time.Now().Add(2 * time.Minute)
+	for {
+		n, _ := strconv.ParseInt(b.psql(t, "umami", "select count(*) from website_event where website_id = '"+first+"' and event_type = 1"), 10, 64)
+		if n >= before[first]+int64(len(engines)) {
+			t.Logf("old snippet: %d pageviews before the cutover, %d after", before[first], n)
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("old snippet: %d pageviews before the cutover, %d after, want at least %d more", before[first], n, len(engines))
+		}
+		time.Sleep(time.Second)
+	}
 	hostsSeen := b.psql(t, "umami", "select string_agg(distinct hostname, ',') from website_event where website_id = '"+first+"'")
 	if hostsSeen != data.Tenants[0].Sites[0].Host {
 		t.Fatalf("events of site %s carry hostnames %q", first, hostsSeen)

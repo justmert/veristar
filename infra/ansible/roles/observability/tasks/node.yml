@@ -22,6 +22,14 @@
     mode: "0755"
   when: inventory_hostname in observability_postgres_hosts
 
+# debian 13 server images ship systemd timers but no cron daemon, so
+# /etc/cron.d would hold a file nothing reads (and does not exist)
+- name: Install cron for the textfile writer
+  ansible.builtin.apt:
+    name: cron
+    state: present
+  when: inventory_hostname in observability_postgres_hosts
+
 - name: Schedule the pgbackrest textfile writer
   ansible.builtin.copy:
     dest: /etc/cron.d/sa-pgbackrest-textfile

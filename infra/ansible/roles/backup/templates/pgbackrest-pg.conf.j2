@@ -8,15 +8,15 @@ compress-type=zst
 # hetzner object storage an operator input. the backup runs on the patroni leader
 # (roles/core timers), so this node holds the repository settings itself.
 repo1-type=s3
-repo1-s3-endpoint={{ sa_object_storage.endpoint | regex_replace('^https://', '') }}
-repo1-s3-region={{ sa_object_storage.region }}
-repo1-s3-bucket={{ sa_object_storage.backup_bucket }}
+repo1-s3-endpoint={{ backup_repo_object_storage.endpoint | regex_replace('^https://', '') }}
+repo1-s3-region={{ backup_repo_object_storage.region }}
+repo1-s3-bucket={{ backup_repo_object_storage.backup_bucket }}
 repo1-s3-uri-style=host
-repo1-s3-key={{ sa_secrets.object_storage_access_key }}
-repo1-s3-key-secret={{ sa_secrets.object_storage_secret_key }}
-repo1-path=/{{ sa_environment }}
+repo1-s3-key={{ backup_repo_access_key }}
+repo1-s3-key-secret={{ backup_repo_secret_key }}
+repo1-path=/{{ backup_repo_environment }}
 repo1-cipher-type=aes-256-cbc
-repo1-cipher-pass={{ sa_secrets.pgbackrest_cipher_pass }}
+repo1-cipher-pass={{ backup_repo_cipher_pass }}
 repo1-retention-full-type=count
 repo1-retention-full={{ backup_retention_full }}
 repo1-retention-diff={{ backup_retention_diff }}

@@ -1,0 +1,139 @@
+---
+# domain cutover by transfer (the design, docs/handover/plan.md section
+# 5): the names do not change, so every tenant snippet, integrity hash and
+# otlp endpoint keeps working. docs/handover/redirect-research.md found this
+# the only path that keeps existing integrations. run it against the NEW
+# environment's inventory, twice:
+#
+#   ansible-playbook -i inventories/<new env>/ playbooks/cutover-transfer.yml \
+#     -e cutover_stage=precheck -e '{"cutover_nameservers": ["ns1...", "ns2..."]}'
+#   (the registrar transfer, docs/handover/checklist.md section 3)
+#   ansible-playbook -i inventories/<new env>/ playbooks/cutover-transfer.yml \
+#     -e cutover_stage=verify -e '{"cutover_nameservers": ["ns1...", "ns2..."]}'
+#
+# cutover_nameservers are the new dns account's nameservers, the
+# nameservers output of `make <env>-apply` (infra/tofu/modules/dns).
+# precheck asks them directly, before the domain points at them: every
+# hostname must answer with exactly the new nodes' addresses. verify asks
+# public resolvers after the transfer: the delegation and every answer must
+# be the new ones, and every hostname must serve a publicly trusted
+# certificate and the pinned tracker files with their integrity hashes.
+- name: Check the domain cutover
+  hosts: localhost
+  gather_facts: false
+  become: false
+  vars:
+    cutover_public_resolvers: [1.1.1.1, 9.9.9.9]
+    cutover_edge: "{{ groups['edge'] | map('extract', hostvars, 'sa_public_ipv4') | sort }}"
+    cutover_core: "{{ groups['core'] | map('extract', hostvars, 'sa_public_ipv4') | sort }}"
+    cutover_domain: "{{ hostvars[groups['edge'][0]].sa_base_domain }}"
+    cutover_hosts: "{{ hostvars[groups['edge'][0]].sa_hostnames }}"
+    # which tier answers which name (infra/tofu/envs/*/env.tf record sets);
+    # status is the probe, which is checked when it is in the inventory
+    cutover_expected:
+      in: "{{ cutover_edge }}"
+      otlp: "{{ cutover_edge }}"
+      app: "{{ cutover_core }}"
+      web: "{{ cutover_core }}"
+    cutover_releases: "{{ (lookup('file', playbook_dir ~ '/../../../packages/tracker/releases/manifest.json') | from_json).versions }}"
+  tasks:
+    - name: Require the stage and the new nameservers
+      ansible.builtin.assert:
+        that:
+          - cutover_stage in ['precheck', 'verify']
+          - cutover_nameservers is defined and cutover_nameservers | length >= 2
+          - hostvars[groups['edge'][0]].sa_environment != 'local'
+        fail_msg: >-
+          set cutover_stage to precheck or verify, and cutover_nameservers to the new
+          dns account's nameservers; the local converge has no public domain
+
+    - name: Ask the new nameservers directly
+      ansible.builtin.command:
+        argv: [dig, +short, +norecurse, "@{{ item.0 }}", "{{ cutover_hosts[item.1] }}", A]
+      loop: "{{ cutover_nameservers | product(cutover_expected.keys() | list) | list }}"
+      register: cutover_direct
+      changed_when: false
+      failed_when: >-
+        cutover_direct.rc != 0
+        or (cutover_direct.stdout_lines | sort) != cutover_expected[item.1]
+      when: cutover_stage == 'precheck'
+
+    - name: Require every new node healthy on port 80
+      ansible.builtin.uri:
+        url: "http://{{ item }}/"
+        status_code: [308]
+        follow_redirects: none
+      loop: "{{ cutover_edge + cutover_core }}"
+
+    - name: Read the public delegation
+      ansible.builtin.command:
+        argv: [dig, +short, "@{{ item }}", "{{ cutover_domain }}", NS]
+      loop: "{{ cutover_public_resolvers }}"
+      register: cutover_ns
+      changed_when: false
+      failed_when: >-
+        cutover_ns.rc != 0
+        or (cutover_ns.stdout_lines | map('regex_replace', '\.$', '') | sort)
+           != (cutover_nameservers | map('regex_replace', '\.$', '') | sort)
+      when: cutover_stage == 'verify'
+
+    - name: Resolve every name through public resolvers
+      ansible.builtin.command:
+        argv: [dig, +short, "@{{ item.0 }}", "{{ cutover_hosts[item.1] }}", A]
+      loop: "{{ cutover_public_resolvers | product(cutover_expected.keys() | list) | list }}"
+      register: cutover_public
+      changed_when: false
+      failed_when: >-
+        cutover_public.rc != 0
+        or (cutover_public.stdout_lines | sort) != cutover_expected[item.1]
+      when: cutover_stage == 'verify'
+
+    # validate_certs: a name served with caddy's local ca or a certificate
+    # for another name fails here
+    - name: Fetch every pinned tracker release over the new names
+      ansible.builtin.uri:
+        url: "https://{{ cutover_hosts.in }}/v/{{ item.version }}/sdk.js"
+        return_content: true
+        validate_certs: true
+      loop: "{{ cutover_releases }}"
+      loop_control:
+        label: "{{ item.version }}"
+      register: cutover_sdk
+      when: cutover_stage == 'verify'
+
+    # the release files are the bytes their integrity hashes name
+    # (packages/tracker release tests), so equal bytes keep every snippet valid
+    - name: Compare the served bytes with the release files
+      ansible.builtin.stat:
+        path: "{{ playbook_dir }}/../../../packages/tracker/releases/{{ item.item.version }}/sdk.js"
+        checksum_algorithm: sha256
+      loop: "{{ cutover_sdk.results | default([]) }}"
+      loop_control:
+        label: "{{ item.item.version | default('') }}"
+      register: cutover_local_sdk
+      when: cutover_stage == 'verify'
+
+    - name: Require the served tracker to equal the release file byte for byte
+      ansible.builtin.assert:
+        that:
+          - item.0.content | ansible.builtin.hash('sha256') == item.1.stat.checksum
+        fail_msg: "{{ cutover_hosts.in }} serves different bytes for {{ item.0.item.version }}"
+        quiet: true
+      loop: "{{ (cutover_sdk.results | default([])) | zip(cutover_local_sdk.results | default([])) | list }}"
+      loop_control:
+        label: "{{ item.0.item.version | default('') }}"
+      when: cutover_stage == 'verify'
+
+    - name: Require the console, the web dashboards and the otlp endpoint over the new names
+      ansible.builtin.uri:
+        url: "{{ item.url }}"
+        method: "{{ item.method }}"
+        status_code: "{{ item.status }}"
+        validate_certs: true
+        follow_redirects: none
+      loop:
+        - {url: "https://{{ cutover_hosts.app }}/", method: GET, status: [200]}
+        - {url: "https://{{ cutover_hosts.web }}/api/heartbeat", method: GET, status: [200]}
+        # no token: the collector refuses it, which proves the route reaches it
+        - {url: "https://{{ cutover_hosts.otlp }}/v1/metrics", method: POST, status: [401]}
+      when: cutover_stage == 'verify'

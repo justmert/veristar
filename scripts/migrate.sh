@@ -68,10 +68,11 @@ pgtool() {
 		-v "$(cd "$dir" && pwd):/work" -w /work "$PG_IMAGE" "$@"
 }
 
+# its own variable name: sh has no local, and callers loop over $db
 psqlq() {
-	db="$1"
+	_psql_db="$1"
 	shift
-	pgtool psql -X -v ON_ERROR_STOP=1 -tA -d "$(conninfo "$db")" "$@"
+	pgtool psql -X -v ON_ERROR_STOP=1 -tA -d "$(conninfo "$_psql_db")" "$@"
 }
 
 # a dump of a database something still writes to would not match the source

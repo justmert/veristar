@@ -1,0 +1,77 @@
+# the old domain after a handover by permanent redirect (the design,
+# infra/ansible/playbooks/cutover-redirect.yml). every name of the old
+# domain answers 308 to the same name under the new domain, with the path
+# and query kept, except the tracker files, which keep being served from
+# here by the local gateway, so a page whose snippet names the old host
+# still loads the exact bytes its integrity hash names.
+#
+# docs/handover/redirect-research.md found that this does not keep an
+# existing snippet working in any engine: the redirected challenge and
+# event requests reach the new gateway with Origin: null, which it refuses.
+# the transfer path is the safe one; this file exists for the case the
+# domain cannot be transferred, and for what still benefits from it
+# (people opening the console or the web dashboards by the old name).
+#
+# environment, all required:
+#   OLD_DOMAIN        the domain being left
+#   NEW_DOMAIN        the new operator's domain
+#   GATEWAY_UPSTREAM  host:port of the local gateway, which serves /v/*
+#   EDGE_TLS          first argument of the tls directive (an acme email,
+#                     "internal" for the local ca in tests)
+{
+	log default {
+		output stdout
+		format filter {
+			wrap json
+			fields {
+				request>remote_ip delete
+				request>remote_port delete
+				request>client_ip delete
+				request>headers>User-Agent delete
+				request>headers>X-Forwarded-For delete
+				request>headers>X-Real-Ip delete
+				request>headers>Forwarded delete
+			}
+		}
+	}
+}
+
+(moved) {
+	# research case a and b: a cross-origin redirect is followed by a cors
+	# request only when the 308 itself allows the origin
+	header Access-Control-Allow-Origin *
+	redir https://{args[0]}.{$NEW_DOMAIN}{uri} 308
+}
+
+in.{$OLD_DOMAIN} {
+	# caddy replaces an unset variable with nothing; these lines need a
+	# value, so a missing domain stops caddy instead of serving bare names
+	vars old_domain {$OLD_DOMAIN}
+	vars new_domain {$NEW_DOMAIN}
+	tls {$EDGE_TLS}
+	@tracker path /v/*
+	handle @tracker {
+		reverse_proxy {
+			# an empty to fails validation, unlike a bare reverse_proxy
+			to {$GATEWAY_UPSTREAM}
+		}
+	}
+	handle {
+		import moved in
+	}
+}
+
+otlp.{$OLD_DOMAIN} {
+	tls {$EDGE_TLS}
+	import moved otlp
+}
+
+app.{$OLD_DOMAIN} {
+	tls {$EDGE_TLS}
+	import moved app
+}
+
+web.{$OLD_DOMAIN} {
+	tls {$EDGE_TLS}
+	import moved web
+}

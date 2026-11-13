@@ -41,3 +41,12 @@ backup_jobs:
   - { name: full, calendar: "{{ backup_full_calendar }}", commands: ["--type=full backup"] }
   - { name: diff, calendar: "{{ backup_diff_calendar }}", commands: ["--type=diff backup"] }
   - { name: verify, calendar: "{{ backup_verify_calendar }}", commands: [verify, check] }
+
+# the repository a database or restore node reads and writes: this
+# environment's own by default. restore.yml points them at another
+# environment's repository for a migration (the design).
+backup_repo_environment: "{{ sa_environment }}"
+backup_repo_object_storage: "{{ sa_object_storage | default(none) }}"
+backup_repo_access_key: "{{ sa_secrets.object_storage_access_key | default('') }}"
+backup_repo_secret_key: "{{ sa_secrets.object_storage_secret_key | default('') }}"
+backup_repo_cipher_pass: "{{ sa_secrets.pgbackrest_cipher_pass }}"

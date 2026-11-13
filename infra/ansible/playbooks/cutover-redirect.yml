@@ -1,0 +1,118 @@
+---
+# domain cutover by permanent redirect (the design, docs/handover/plan.md
+# section 5), for when the old domain cannot be transferred. run it against
+# the OLD environment's inventory once the new environment serves its own
+# domain:
+#
+#   ansible-playbook -i inventories/<old env>/ playbooks/cutover-redirect.yml \
+#     -e cutover_new_domain=<new BASE_DOMAIN> -e cutover_redirect_breaks_snippets=true
+#
+# every old edge node then answers app., web., in. and otlp. of the old
+# domain with a 308 to the same name, path and query under the new domain,
+# and keeps serving the pinned tracker files from its own gateway
+# (deploy/caddy/redirect.Caddyfile). the old zone must point app. and web.
+# at the edge nodes as well (infra/tofu, record sets); this play checks it.
+#
+# THIS DOES NOT KEEP EXISTING SNIPPETS WORKING. docs/handover/redirect-research.md
+# measured it in chromium, firefox and webkit: the redirected challenge and
+# event requests reach the new gateway with Origin: null, which it refuses,
+# and otlp exporters drop the authorization header on a redirect to another
+# host. cutover_redirect_breaks_snippets=true states that this was read.
+- name: Redirect the old domain to the new one
+  hosts: edge
+  become: true
+  vars_files: [../vars/pins.yml]
+  vars:
+    cutover_edge_dir: /opt/stellar-analytics/edge
+  pre_tasks:
+    - name: Require the new domain and the acknowledgement
+      ansible.builtin.assert:
+        that:
+          - cutover_redirect_breaks_snippets | default(false) | bool
+          - cutover_new_domain is defined
+          - cutover_new_domain is match('^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$')
+          - cutover_new_domain != sa_base_domain
+        fail_msg: >-
+          set cutover_new_domain to the new BASE_DOMAIN and
+          cutover_redirect_breaks_snippets=true after reading
+          docs/handover/redirect-research.md: existing snippets stop
+          delivering events on this path
+
+    - name: Resolve the old app. and web. names
+      ansible.builtin.command:
+        argv: [dig, +short, "{{ sa_hostnames[item] }}", A]
+      loop: [app, web]
+      register: cutover_old_names
+      changed_when: false
+      delegate_to: localhost
+      become: false
+      run_once: true
+      when: sa_environment != 'local'
+
+    - name: Require the old app. and web. names on the edge nodes
+      ansible.builtin.assert:
+        that:
+          - (item.stdout_lines | sort) == (groups['edge'] | map('extract', hostvars, 'sa_public_ipv4') | sort)
+        fail_msg: "{{ item.item }} still points elsewhere; move it to the edge nodes in the old zone first"
+        quiet: true
+      loop: "{{ cutover_old_names.results | default([]) }}"
+      loop_control:
+        label: "{{ item.item | default('') }}"
+      run_once: true
+      when: sa_environment != 'local'
+  tasks:
+    - name: Assemble the redirect caddyfile on the controller
+      ansible.builtin.command:
+        argv:
+          - sh
+          - "{{ playbook_dir }}/../../../deploy/caddy/assemble.sh"
+          - redirect
+          - "{{ playbook_dir }}/../../../deploy/caddy/redirect.Caddyfile"
+      register: cutover_caddyfile
+      changed_when: false
+      delegate_to: localhost
+      run_once: true
+      become: false
+
+    # the edge caddy's environment has BASE_DOMAIN (the old domain) and the
+    # gateway upstream; the new domain is written in, after the check above
+    - name: Install the redirect caddyfile
+      ansible.builtin.copy:
+        content: >-
+          {{ cutover_caddyfile.stdout
+             | replace('{$OLD_DOMAIN}', '{$BASE_DOMAIN}')
+             | replace('{$NEW_DOMAIN}', cutover_new_domain) }}
+        dest: "{{ cutover_edge_dir }}/Caddyfile"
+        owner: root
+        group: root
+        mode: "0644"
+        validate: >-
+          docker run --rm -v %s:/etc/caddy/Caddyfile:ro -e SA_TLS={{ sa_tls }}
+          -e BASE_DOMAIN={{ sa_base_domain }} -e GATEWAY_UPSTREAM=gateway:8080
+          -e NODE_HEALTH_UPSTREAM=gateway:9090 -e NODE_HEALTH_PATH=/edgez -e BUNNY_API_KEY=validate-only
+          {{ platform_images.caddy }} caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+      notify: Reload caddy
+
+    - name: Apply the new caddyfile now
+      ansible.builtin.meta: flush_handlers
+
+    - name: Require a 308 to the new name for every old name
+      ansible.builtin.uri:
+        url: "https://{{ sa_hostnames[item] }}/handover-check?x=1"
+        follow_redirects: none
+        status_code: [308]
+        validate_certs: "{{ sa_tls != 'internal' }}"
+      loop: [in, otlp, app, web]
+      register: cutover_redirects
+      failed_when: >-
+        cutover_redirects.status != 308
+        or cutover_redirects.location != 'https://' ~ item ~ '.' ~ cutover_new_domain ~ '/handover-check?x=1'
+      delegate_to: localhost
+      become: false
+      run_once: true
+      when: sa_environment != 'local'
+  handlers:
+    - name: Reload caddy
+      ansible.builtin.command:
+        argv: [docker, compose, --project-directory, "{{ cutover_edge_dir }}", exec, -T, caddy, caddy, reload, --config, /etc/caddy/Caddyfile]
+      changed_when: true

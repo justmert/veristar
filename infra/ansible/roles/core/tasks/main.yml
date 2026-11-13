@@ -46,6 +46,10 @@
   loop:
     - { path: "{{ core_dir }}", mode: "0755" }
     - { path: "{{ core_conf_dir }}", mode: "0755" }
+    # patroni's own directory, mounted whole: a single-file bind mount keeps
+    # the inode it started with, so a rewritten patroni.yml (an atomic
+    # rename) was never seen by the sighup reload
+    - { path: "{{ core_conf_dir }}/patroni", mode: "0700", owner: "999" }
     - { path: "{{ core_drain_dir }}", mode: "0755" }
 
 - name: Assemble the core caddyfile on the controller
@@ -84,7 +88,7 @@
 - name: Write the patroni config
   ansible.builtin.template:
     src: patroni.yml.j2
-    dest: "{{ core_conf_dir }}/patroni.yml"
+    dest: "{{ core_conf_dir }}/patroni/patroni.yml"
     owner: "999"
     group: "999"
     mode: "0600"

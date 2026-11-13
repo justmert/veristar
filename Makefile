@@ -425,10 +425,27 @@ migrate-export:
 migrate-import: build
 	@test -n "$(MIGRATE_ENV)" -a -n "$(MIGRATE_DIR)" || { echo "usage: make migrate-import MIGRATE_ENV=<env file> MIGRATE_DIR=<dir from migrate-export>" >&2; exit 2; }
 	scripts/migrate.sh import $(MIGRATE_ENV) $(MIGRATE_DIR)
-	@set -a && . ./$(MIGRATE_ENV) && set +a && $(BIN_DIR)/platformctl db migrate && $(BIN_DIR)/jobs run reconcile
+	@set -a && . $(abspath $(MIGRATE_ENV)) && set +a && $(BIN_DIR)/platformctl db migrate && $(BIN_DIR)/jobs run reconcile
 
 # SOURCE_ENV and TARGET_ENV: env files as migrate-export reads, plus
 # UMAMI_URL and UMAMI_ADMIN_PASSWORD of each side
 verify-migration: build
 	@test -n "$(SOURCE_ENV)" -a -n "$(TARGET_ENV)" || { echo "usage: make verify-migration SOURCE_ENV=<env file> TARGET_ENV=<env file>" >&2; exit 2; }
 	$(BIN_DIR)/platformctl verify-migration --source $(SOURCE_ENV) --target $(TARGET_ENV)
+
+# the design local rehearsal (tests/handover, build tag handover):
+# environment a populated through the real pipeline, migrated into a
+# separate environment b by the pgbackrest and the pg_dump paths, checked
+# with verify-migration, signed in to through the oauth fixture, and the old
+# snippet delivering into b after the names move (transfer path) in three
+# engines. needs docker, node 26 with pnpm and the playwright browsers.
+.PHONY: handover-it
+handover-it:
+	DBIP_MONTH=$(DBIP_MONTH) $(GO) test -tags handover -count=1 -timeout 90m -v ./tests/handover/
+
+# rotate-all.yml on the minimal local converge (tests/handover/rotate-local.sh):
+# converge, traffic, new secrets for a new age identity, rotate-all with the
+# previous-credential checks, the end-to-end check again, then teardown
+.PHONY: rotate-local
+rotate-local:
+	ANSIBLE_VENV=$(ANSIBLE_VENV) tests/handover/rotate-local.sh

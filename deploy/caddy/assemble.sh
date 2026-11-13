@@ -4,6 +4,11 @@
 #
 #   assemble.sh edge   edge.Caddyfile                  > node.Caddyfile
 #   assemble.sh core   app.Caddyfile web.Caddyfile     > node.Caddyfile
+#   assemble.sh redirect redirect.Caddyfile            > node.Caddyfile
+#
+# redirect is an old edge node after a handover by permanent redirect
+# (infra/ansible/playbooks/cutover-redirect.yml): the same node-level parts
+# as edge around redirect.Caddyfile.
 #
 # a core node serves app. and web. from one caddy, and caddy allows one
 # global options block per config, so each input's global block is dropped
@@ -126,15 +131,16 @@ EOF
 }
 
 case "$tier" in
-edge)
-	[ $# -eq 1 ] || { echo "usage: assemble.sh edge <edge.Caddyfile>" >&2; exit 2; }
+edge | redirect)
+	[ $# -eq 1 ] || { echo "usage: assemble.sh $tier <$tier.Caddyfile>" >&2; exit 2; }
 	# edge keeps its own global block; only redirects are switched off in it
 	n="$(grep -c '^{$' "$1" || true)"
 	[ "$n" = 1 ] || { echo "assemble.sh: expected one global block in $1, found $n" >&2; exit 1; }
 	tmp="$(mktemp)"
 	trap 'rm -f "$tmp"' EXIT
-	# in. and otlp. each carry one tls line
-	swap_tls "$1" EDGE_TLS 2 >"$tmp"
+	# in. and otlp. each carry one tls line; the redirect file adds app. and web.
+	if [ "$tier" = edge ]; then want=2; else want=4; fi
+	swap_tls "$1" EDGE_TLS "$want" >"$tmp"
 	header
 	awk '{ print } $0 == "{" && !done { print "\tauto_https disable_redirects"; print "\tmetrics"; done = 1 }' "$tmp"
 	health
@@ -177,7 +183,7 @@ EOF
 	health
 	;;
 *)
-	echo "assemble.sh: tier must be edge or core, got $tier" >&2
+	echo "assemble.sh: tier must be edge, core or redirect, got $tier" >&2
 	exit 2
 	;;
 esac

@@ -6,9 +6,11 @@
     that:
       - backup_repo_mode in ['s3', 'posix-host']
       - backup_repo_mode == 's3' or sa_environment == 'local'
-      - backup_repo_mode != 's3' or (sa_object_storage is mapping and sa_object_storage.endpoint is defined and sa_object_storage.backup_bucket is defined)
-      - backup_repo_mode != 's3' or (sa_secrets.object_storage_access_key | default('') | length > 0)
-      - backup_repo_mode != 's3' or (sa_secrets.object_storage_secret_key | default('') | length > 0)
+      - >-
+        backup_repo_mode != 's3' or (backup_repo_object_storage is mapping
+        and backup_repo_object_storage.endpoint is defined and backup_repo_object_storage.backup_bucket is defined)
+      - backup_repo_mode != 's3' or (backup_repo_access_key | length > 0)
+      - backup_repo_mode != 's3' or (backup_repo_secret_key | length > 0)
       - backup_repo_mode != 'posix-host' or (groups['backup'] | length == 1)
     fail_msg: >-
       backups need object storage an operator input: sa_object_storage in the

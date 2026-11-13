@@ -1,0 +1,461 @@
+---
+# rotates every credential of an environment and proves the previous ones
+# are refused (the design, docs/handover/checklist.md section 4):
+#
+#   infra/secrets/rotate-secrets.py <env>        # new values, previous kept aside
+#   ansible-playbook -i inventories/<env>/ playbooks/rotate-all.yml \
+#     -e sa_image_tag=<current release> \
+#     [-e rotate_previous_age_identity=<file of a removed age identity>]
+#
+# reads infra/secrets/<env>/secrets.enc.yaml (new) and
+# secrets.previous.enc.yaml (previous), both with the runner's age identity.
+# order matters, because a login changed in one place and not yet in the
+# other is a refused service:
+#   1. checks: every generated value changed, except the backup cipher
+#      passphrase, which cannot change in place; owner inputs without a new
+#      value are listed; a removed age identity opens neither file
+#   2. on the patroni leader: the umami admin password (through umami, while
+#      umami still reaches its database), then the superuser, replication and
+#      umami database passwords (alter role)
+#   3. site.yml: env files, nats and patroni config, the platform role
+#      logins, the retention and monitoring roles
+#   4. every service recreated with its new env file, grafana's stored admin
+#      password reset, every umami user's password for today set from the new
+#      UMAMI_USER_PASSWORD_KEY
+#   5. proof: platformctl rotation-check tries every previous and new
+#      postgresql, nats and umami credential; the patroni rest api, grafana
+#      and the nats route port are tried here; github is asked whether the
+#      previous oauth client secret still works; every node is healthy
+# expect an ingestion gap of seconds per edge node between the nats reload
+# and the recreated gateway and collector: run it in a maintenance window.
+
+- name: Check the rotation
+  hosts: edge:core
+  gather_facts: false
+  # the secrets role writes root-only env files on the nodes
+  become: true
+  vars_files: [../vars/pins.yml]
+  vars:
+    rotate_previous_file: "{{ playbook_dir }}/../../secrets/{{ sa_environment }}/secrets.previous.enc.yaml"
+    # the value that encrypts existing backups (docs/runbooks/secret-rotation.md)
+    rotate_kept_keys: [pgbackrest_cipher_pass]
+  roles:
+    # loads the new values; the env files it writes are read by a service
+    # only when it is recreated, which happens after step 2
+    - secrets
+  tasks:
+    - name: Read the previous secrets
+      community.sops.load_vars:
+        file: "{{ rotate_previous_file }}"
+        name: rotate_previous
+        sops_binary: "{{ secrets_tools_dir }}/sops-{{ sops_version }}"
+        age_keyfile: "{{ secrets_age_keyfile }}"
+      no_log: true
+
+    - name: Require that every generated value changed
+      ansible.builtin.assert:
+        that:
+          - rotate_previous.sa_secrets_environment == sa_environment
+          - rotate_previous[item] != sa_secrets[item]
+        fail_msg: "{{ item }} has the same value in both files; run infra/secrets/rotate-secrets.py"
+        quiet: true
+      loop: "{{ secrets_generated_keys | difference(rotate_kept_keys) }}"
+      run_once: true
+
+    - name: Require that the kept values did not change
+      ansible.builtin.assert:
+        that:
+          - rotate_previous[item] == sa_secrets[item]
+        fail_msg: "{{ item }} changed, but the existing backup repository is encrypted with it"
+        quiet: true
+      loop: "{{ rotate_kept_keys }}"
+      run_once: true
+
+    - name: List the operator inputs that were not rotated
+      ansible.builtin.set_fact:
+        rotate_inputs_kept: >-
+          {%- set kept = [] -%}
+          {%- for k in secrets_input_names.keys() if k in rotate_previous and k in sa_secrets
+                and rotate_previous[k] == sa_secrets[k] -%}{{ kept.append(k) }}{%- endfor -%}
+          {{ kept }}
+      run_once: true
+      no_log: true
+
+    - name: Refuse owner inputs that were not rotated unless named
+      ansible.builtin.assert:
+        that:
+          - rotate_inputs_kept | difference(rotate_allow_kept_inputs | default([])) | length == 0
+        fail_msg: >-
+          {{ rotate_inputs_kept | difference(rotate_allow_kept_inputs | default([])) | join(', ') }}
+          kept the previous value. issue new ones at the provider (secret-rotation.md) and rerun
+          rotate-secrets.py with them, or name them in rotate_allow_kept_inputs and rotate them
+          by hand afterwards
+      run_once: true
+
+    # a removed person's identity must open neither the new file nor the
+    # previous one, which also holds working values until step 2
+    - name: Try the removed age identity on both files
+      ansible.builtin.command:
+        argv: ["{{ secrets_tools_dir }}/sops-{{ sops_version }}", decrypt, --output, /dev/null, "{{ item }}"]
+      environment:
+        SOPS_AGE_KEY_FILE: "{{ rotate_previous_age_identity }}"
+      loop: ["{{ secrets_file }}", "{{ rotate_previous_file }}"]
+      register: rotate_age_old
+      failed_when: rotate_age_old.rc == 0
+      changed_when: false
+      delegate_to: localhost
+      become: false
+      run_once: true
+      when: rotate_previous_age_identity is defined
+
+- name: Find the patroni leader
+  hosts: core
+  gather_facts: false
+  tasks:
+    - name: Ask patroni whether this node is the primary
+      ansible.builtin.uri:
+        url: "http://{{ sa_private_ip }}:8008/primary"
+        status_code: [200, 503]
+      register: rotate_role
+      until: rotate_role.status in [200, 503]
+      retries: 30
+      delay: 2
+
+    - name: Group the leader
+      ansible.builtin.group_by:
+        key: patroni_leader
+      when: rotate_role.status == 200
+      changed_when: false
+
+    - name: Require exactly one leader
+      ansible.builtin.assert:
+        that:
+          - groups['patroni_leader'] | default([]) | length == 1
+        fail_msg: "patroni has {{ groups['patroni_leader'] | default([]) | length }} primaries; rotation needs exactly one"
+      run_once: true
+
+- name: Rotate what site.yml only creates
+  hosts: patroni_leader
+  become: true
+  vars_files: [../vars/pins.yml]
+  vars:
+    rotate_core_dir: /opt/stellar-analytics/core
+    rotate_psql: [docker, compose, --project-directory, "{{ rotate_core_dir }}", exec, -T, postgres,
+                  psql, -U, postgres, -d, postgres, -v, ON_ERROR_STOP=1, -tAX]
+  tasks:
+    # first, while umami still reaches its database with the previous
+    # password: the admin password is changed through umami itself
+    - name: Write a one-off env file for the umami admin rotation
+      ansible.builtin.copy:
+        content: |
+          UMAMI_URL=http://umami:3000
+          UMAMI_ADMIN_PASSWORD={{ sa_secrets.umami_admin_password }}
+          UMAMI_ADMIN_PASSWORD_PREVIOUS={{ rotate_previous.umami_admin_password }}
+        dest: /etc/stellar-analytics/env/rotate-umami-admin.env
+        owner: root
+        group: root
+        mode: "0600"
+      no_log: true
+
+    - name: Change the umami admin password through umami
+      ansible.builtin.command:
+        argv: [docker, run, --rm, --network, stellar-analytics-core_default,
+               --env-file, /etc/stellar-analytics/env/rotate-umami-admin.env,
+               "{{ platform_images.platformctl }}", umami, rotate-admin]
+      register: rotate_umami_admin
+      changed_when: rotate_umami_admin.stderr is search('"outcome":"rotated"')
+
+    - name: Remove the one-off env file
+      ansible.builtin.file:
+        path: /etc/stellar-analytics/env/rotate-umami-admin.env
+        state: absent
+
+    # psql's local socket uses peer authentication, so this works with
+    # either password; format(%L) keeps the value out of the statement log
+    - name: Set the superuser, replication and umami database passwords
+      ansible.builtin.command:
+        argv: "{{ rotate_psql + ['-v', 'role=' ~ item.role, '-v', 'pw=' ~ item.pw] }}"
+        stdin: "select format('alter role %I password %L', :'role', :'pw') \\gexec"
+      loop:
+        - {role: postgres, pw: "{{ sa_secrets.postgres_superuser_password }}"}
+        - {role: replicator, pw: "{{ sa_secrets.postgres_replication_password }}"}
+        - {role: umami_app, pw: "{{ sa_secrets.umami_db_password }}"}
+      loop_control:
+        label: "{{ item.role }}"
+      changed_when: true
+      no_log: true
+
+- name: Apply the new values everywhere
+  ansible.builtin.import_playbook: site.yml
+
+- name: Recreate the edge services with their new credentials
+  hosts: edge
+  become: true
+  serial: 1
+  tasks:
+    # nats itself reloaded its config in site.yml; etcd holds no secret
+    - name: Recreate gateway, collector and caddy
+      ansible.builtin.command:
+        argv: [docker, compose, --project-directory, /opt/stellar-analytics/edge, up, -d, --wait, --force-recreate, --no-deps, gateway, collector, caddy]
+      changed_when: true
+
+- name: Recreate the core services with their new credentials
+  hosts: core
+  become: true
+  serial: 1
+  tasks:
+    - name: List the core services
+      ansible.builtin.command:
+        argv: [docker, compose, --project-directory, /opt/stellar-analytics/core, config, --services]
+      register: rotate_services
+      changed_when: false
+
+    # postgres and haproxy reloaded in site.yml (patroni on sighup); the
+    # pgbackrest repository server holds no rotated value
+    - name: Recreate the services that read rotated values
+      ansible.builtin.command:
+        argv: >-
+          {{ ['docker', 'compose', '--project-directory', '/opt/stellar-analytics/core', 'up', '-d', '--wait', '--force-recreate', '--no-deps']
+             + (rotate_services.stdout_lines | reject('in', ['postgres', 'haproxy', 'pgbackrest', 'volume-owners']) | list) }}
+      changed_when: true
+
+    # GF_SECURITY_ADMIN_PASSWORD applies only when grafana creates its
+    # database, so the stored password is set through grafana's own cli
+    - name: Reset grafana's stored admin password
+      ansible.builtin.command:
+        argv: [docker, compose, --project-directory, /opt/stellar-analytics/core, exec, -T, grafana,
+               grafana, cli, admin, reset-admin-password, --password-from-stdin]
+        stdin: "{{ sa_secrets.grafana_admin_password }}"
+      changed_when: true
+      no_log: true
+      when: "'grafana' in rotate_services.stdout_lines"
+
+- name: Set every umami user's password from the new key
+  hosts: patroni_leader
+  become: true
+  tasks:
+    # jobs run refuses while a daemon leads, and a daemon with the previous
+    # key must not rotate in between: stop it on every core node first
+    - name: Stop the jobs daemons
+      ansible.builtin.command:
+        argv: [docker, compose, --project-directory, /opt/stellar-analytics/core, stop, jobs]
+      delegate_to: "{{ item }}"
+      loop: "{{ groups['core'] }}"
+      changed_when: true
+
+    - name: Set today's passwords with the new key
+      ansible.builtin.command:
+        argv: [docker, compose, --project-directory, /opt/stellar-analytics/core, run, --rm, --no-deps, jobs, run, umami-rotate, --force]
+      changed_when: true
+
+    - name: Start the jobs daemons
+      ansible.builtin.command:
+        argv: [docker, compose, --project-directory, /opt/stellar-analytics/core, up, -d, --wait, --no-deps, jobs]
+      delegate_to: "{{ item }}"
+      loop: "{{ groups['core'] }}"
+      changed_when: true
+
+- name: Prove every previous credential is refused
+  hosts: patroni_leader
+  become: true
+  vars_files: [../vars/pins.yml]
+  vars:
+    rotate_db_logins:
+      - {name: postgres, user: postgres, database: postgres, key: postgres_superuser_password}
+      - {name: replicator, user: replicator, database: postgres, key: postgres_replication_password, replication: true}
+      - {name: umami_app, user: umami_app, database: umami, key: umami_db_password}
+      - {name: jobs_retention, user: jobs_retention, database: umami, key: umami_db_jobs_retention_password}
+      - {name: sa_monitor, user: sa_monitor, database: postgres, key: postgres_exporter_password}
+      - {name: cp_system, user: cp_system, database: platform, key: platform_db_cp_system_password}
+      - {name: cp_tenant, user: cp_tenant, database: platform, key: platform_db_cp_tenant_password}
+      - {name: cp_operator, user: cp_operator, database: platform, key: platform_db_cp_operator_password}
+      - {name: metrics_writer, user: metrics_writer, database: platform, key: platform_db_metrics_writer_password}
+      - {name: jobs, user: jobs, database: platform, key: platform_db_jobs_password}
+    rotate_spec_host:
+      postgres:
+        host: "{{ sa_private_ip }}"
+        port: 5432
+        sslmode: disable
+        logins: >-
+          {%- set out = [] -%}
+          {%- for l in rotate_db_logins -%}
+          {{ out.append({'name': l.name, 'user': l.user, 'database': l.database, 'replication': l.replication | default(false),
+                         'old': rotate_previous[l.key], 'new': sa_secrets[l.key]}) }}
+          {%- endfor -%}
+          {{ out }}
+      nats:
+        urls: "{{ groups['edge'] | map('extract', hostvars, 'sa_private_ip') | map('regex_replace', '^(.*)$', 'nats://\\1:4222') | list }}"
+        users: >-
+          {%- set out = [] -%}
+          {%- for u in sa_secrets.nats_passwords.keys() | sort -%}
+          {{ out.append({'name': u, 'user': u, 'old': rotate_previous.nats_passwords[u], 'new': sa_secrets.nats_passwords[u]}) }}
+          {%- endfor -%}
+          {{ out }}
+    rotate_spec_umami:
+      umami:
+        url: http://umami:3000
+        admin: {name: admin, user: admin, old: "{{ rotate_previous.umami_admin_password }}", new: "{{ sa_secrets.umami_admin_password }}"}
+        user_key_old: "{{ rotate_previous.umami_user_password_key }}"
+        user_key_new: "{{ sa_secrets.umami_user_password_key }}"
+        sample_users: 5
+  tasks:
+    # host network: the private address is what pg_hba allows for the
+    # replication role and what nats listens on
+    - name: Try postgresql and nats logins
+      ansible.builtin.command:
+        argv: [docker, run, --rm, -i, --network, host, "{{ platform_images.platformctl }}", rotation-check]
+        stdin: "{{ rotate_spec_host | to_json }}"
+      register: rotate_check_host
+      changed_when: false
+      failed_when: false
+      no_log: true
+
+    - name: Try the umami admin and user passwords
+      ansible.builtin.command:
+        argv: [docker, run, --rm, -i, --network, stellar-analytics-core_default, "{{ platform_images.platformctl }}", rotation-check]
+        stdin: "{{ rotate_spec_umami | to_json }}"
+      register: rotate_check_umami
+      changed_when: false
+      failed_when: false
+      no_log: true
+
+    # the output names credentials and outcomes, never values
+    - name: Report the login checks
+      ansible.builtin.debug:
+        msg: "{{ rotate_check_host.stdout_lines + rotate_check_umami.stdout_lines + rotate_check_host.stderr_lines + rotate_check_umami.stderr_lines }}"
+
+    - name: Require that every login check passed
+      ansible.builtin.assert:
+        that:
+          - rotate_check_host.rc == 0
+          - rotate_check_umami.rc == 0
+        fail_msg: a previous credential is still accepted, a new one refused, or a check was inconclusive (report above)
+
+- name: Prove the previous http and route credentials are refused
+  hosts: edge:core
+  become: true
+  gather_facts: false
+  tasks:
+    # post /reload needs the rest api's authentication and only makes
+    # patroni read its own config again
+    - name: Try the patroni rest api with each password
+      ansible.builtin.uri:
+        url: "http://{{ sa_private_ip }}:8008/reload"
+        method: POST
+        url_username: patroni
+        url_password: "{{ item.pw }}"
+        force_basic_auth: true
+        status_code: "{{ [item.want] }}"
+      loop:
+        - {name: previous, pw: "{{ rotate_previous.patroni_restapi_password }}", want: 401}
+        - {name: new, pw: "{{ sa_secrets.patroni_restapi_password }}", want: 202}
+      loop_control:
+        label: "{{ item.name }} patroni password answers {{ item.want }}"
+      when: sa_tier == 'core'
+      no_log: false
+
+    - name: Try grafana with each admin password
+      ansible.builtin.uri:
+        url: http://127.0.0.1:3000/api/user
+        url_username: admin
+        url_password: "{{ item.pw }}"
+        force_basic_auth: true
+        status_code: "{{ [item.want] }}"
+      loop:
+        - {name: previous, pw: "{{ rotate_previous.grafana_admin_password }}", want: 401}
+        - {name: new, pw: "{{ sa_secrets.grafana_admin_password }}", want: 200}
+      loop_control:
+        label: "{{ item.name }} grafana password answers {{ item.want }}"
+      when: sa_tier == 'core'
+      register: rotate_grafana
+      until: rotate_grafana is succeeded
+      retries: 15
+      delay: 2
+
+    # a route connection with the previous password must be closed with an
+    # authorization error; routes with the new one are checked below
+    - name: Try the nats route port with the previous route password
+      ansible.builtin.command:
+        argv:
+          - python3
+          - -c
+          - |
+            import json, socket, sys
+            s = socket.create_connection((sys.argv[1], 6222), timeout=5)
+            s.recv(65536)
+            s.sendall(b"CONNECT " + json.dumps({"user": "route", "pass": sys.stdin.read(), "verbose": False}).encode() + b"\r\nPING\r\n")
+            buf = b""
+            try:
+                while b"-ERR" not in buf:
+                    chunk = s.recv(65536)
+                    if not chunk:
+                        break
+                    buf += chunk
+            except socket.timeout:
+                pass
+            print("refused" if b"Authorization Violation" in buf else "not refused: " + buf[:80].decode(errors="replace"))
+          - "{{ sa_private_ip }}"
+        stdin: "{{ rotate_previous.nats_route_password }}"
+      register: rotate_route_old
+      changed_when: false
+      failed_when: rotate_route_old.stdout != 'refused'
+      when: sa_tier == 'edge'
+      no_log: false
+
+    - name: Require full nats routes with the new route password
+      ansible.builtin.uri:
+        url: "http://{{ sa_private_ip }}:8222/routez"
+        return_content: true
+      register: rotate_routez
+      until: rotate_routez.json.num_routes | default(0) >= (groups['edge'] | length - 1)
+      retries: 30
+      delay: 2
+      when: sa_tier == 'edge'
+
+    - name: Require a healthy node
+      ansible.builtin.uri:
+        url: "http://{{ sa_public_ipv4 }}/"
+        status_code: [308]
+        follow_redirects: none
+      register: rotate_health
+      until: rotate_health is succeeded
+      retries: 60
+      delay: 2
+
+- name: Ask github whether the previous oauth client secret still works
+  hosts: localhost
+  gather_facts: false
+  become: false
+  tasks:
+    - name: Name what was not checked
+      ansible.builtin.debug:
+        msg: >-
+          the github oauth client secret was not checked: this environment
+          signs in through the test-only fixture (core_oauth_fixture) and has
+          no github app an operator input
+      when: hostvars[groups['core'][0]].core_oauth_fixture | default(false)
+
+    # github answers incorrect_client_credentials for a wrong secret and
+    # bad_verification_code for a right secret with an unknown code, so the
+    # code needs no user and nothing is issued
+    - name: Try both client secrets with an unknown code
+      ansible.builtin.uri:
+        url: https://github.com/login/oauth/access_token
+        method: POST
+        body_format: form-urlencoded
+        body:
+          client_id: "{{ hostvars[groups['core'][0]].sa_secrets.github_client_id }}"
+          client_secret: "{{ item.secret }}"
+          code: rotate-all-unknown-code
+        headers:
+          Accept: application/json
+        return_content: true
+      loop: >-
+        {{ [] if (hostvars[groups['core'][0]].core_oauth_fixture | default(false)) else
+           [{'name': 'previous', 'secret': hostvars[groups['core'][0]].rotate_previous.github_client_secret, 'want': 'incorrect_client_credentials'},
+            {'name': 'new', 'secret': hostvars[groups['core'][0]].sa_secrets.github_client_secret, 'want': 'bad_verification_code'}] }}
+      loop_control:
+        label: "{{ item.name }} secret answers {{ item.want }}"
+      register: rotate_github
+      failed_when: rotate_github.json.error | default('') != item.want
+      no_log: true

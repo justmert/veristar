@@ -70,6 +70,9 @@ func TestAssembledNodeCaddyfiles(t *testing.T) {
 		env  map[string]string
 	}{
 		{"edge", []string{"edge", "edge.Caddyfile"}, baseEnv()},
+		{"redirect", []string{"redirect", "redirect.Caddyfile"}, map[string]string{
+			"OLD_DOMAIN": "old.test", "NEW_DOMAIN": "new.test", "GATEWAY_UPSTREAM": "gateway:8080",
+		}},
 		{"core", []string{"core", "app.Caddyfile", "web.Caddyfile"}, map[string]string{
 			"BASE_DOMAIN": "sa.test", "CONTROLPLANE_UPSTREAM": "controlplane:8085",
 			"CONSOLE_ROOT": "/srv/console", "UMAMI_UPSTREAM": "umami:3000",

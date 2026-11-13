@@ -1,14 +1,28 @@
 ---
-# point-in-time restore onto a fresh node (the design):
+# restore onto a fresh node (plan phases 16 and 21), in one of two modes:
 #
-#   ansible-playbook -i inventories/<env>/ playbooks/restore.yml \
-#     -e restore_target='2026-11-13 10:00:00.123456+00'
+#   point in time:
+#     ansible-playbook -i inventories/<env>/ playbooks/restore.yml \
+#       -e restore_target='2026-11-13 10:00:00.123456+00'
+#   one backup set, to the end of that backup (the migration export of
+#   docs/handover/rebuild.md section 5):
+#     ansible-playbook -i inventories/<env>/ playbooks/restore.yml \
+#       -e restore_set=20261113-101500F
 #
 # the host of the restore group gets the os baseline, the pgbackrest
-# settings, then pgbackrest restores the stanza to restore_target and
-# postgresql replays wal up to it and promotes. the result is a standalone
-# postgresql (not a patroni member, wal archiving off), so it can be checked
-# and copied from without touching the running cluster or its repository.
+# settings, then pgbackrest restores the stanza and postgresql replays wal up
+# to the target and promotes. the result is a standalone postgresql (not a
+# patroni member, wal archiving off), so it can be checked and copied from
+# without touching the running cluster or its repository.
+#
+# restore_source reads another environment's repository instead of this
+# one's (a migration into this environment from the old one). it names that
+# environment, its object storage and its sops file, from which only the
+# object storage keys and the repository cipher passphrase are read:
+#   -e '{"restore_source": {"environment": "production",
+#        "object_storage": {"endpoint": "https://...", "region": "...", "backup_bucket": "..."},
+#        "secrets_file": "/path/to/old/secrets.enc.yaml"}}'
+# it needs object storage (backup_repo_mode s3, an operator input.
 # the node must be fresh: an existing restore volume stops the run.
 - name: Restore to a point in time
   hosts: restore
@@ -19,12 +33,27 @@
     restore_container: sa-restore-postgres
     restore_pg_path: /var/lib/postgresql/patroni/data
   pre_tasks:
-    - name: Require the target time
+    - name: Require exactly one of a target time and a backup set
       ansible.builtin.assert:
         that:
-          - restore_target is defined
-          - restore_target is match('^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9:.]+[+-][0-9]{2}(:?[0-9]{2})?$')
-        fail_msg: restore_target must be a timestamp with offset, for example '2026-11-13 10:00:00+00'
+          - (restore_target is defined) != (restore_set is defined)
+          - restore_target is not defined or restore_target is match('^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9:.]+[+-][0-9]{2}(:?[0-9]{2})?$')
+          - restore_set is not defined or restore_set is match('^[0-9]{8}-[0-9]{6}F(_[0-9]{8}-[0-9]{6}[DI])?$')
+        fail_msg: >-
+          set restore_target to a timestamp with offset ('2026-11-13 10:00:00+00')
+          or restore_set to a pgbackrest backup label (20261113-101500F), not both
+
+    - name: Require the source repository settings
+      ansible.builtin.assert:
+        that:
+          - restore_source.environment is match('^[a-z]+$')
+          - restore_source.object_storage.endpoint is defined
+          - restore_source.object_storage.region is defined
+          - restore_source.object_storage.backup_bucket is defined
+          - restore_source.secrets_file is file
+          - backup_repo_mode == 's3'
+        fail_msg: restore_source needs environment, object_storage (endpoint, region, backup_bucket), a readable secrets_file and object storage mode
+      when: restore_source is defined
   roles:
     - base
     - secrets
@@ -33,6 +62,31 @@
       ansible.builtin.include_role:
         name: backup
         tasks_from: pg.yml
+      when: restore_source is not defined
+
+    # decrypted on the controller with the operator's age identity, which
+    # must be a recipient of the old environment's file during the handover
+    - name: Read the source environment's repository secrets
+      community.sops.load_vars:
+        file: "{{ restore_source.secrets_file }}"
+        name: restore_source_secrets
+        sops_binary: "{{ secrets_tools_dir }}/sops-{{ sops_version }}"
+        age_keyfile: "{{ secrets_age_keyfile }}"
+      when: restore_source is defined
+      no_log: true
+
+    # the same template, pointed at the source's bucket, path and cipher
+    - name: Write the pgbackrest settings of the source repository
+      ansible.builtin.include_role:
+        name: backup
+        tasks_from: pg.yml
+      vars:
+        backup_repo_environment: "{{ restore_source.environment }}"
+        backup_repo_object_storage: "{{ restore_source.object_storage }}"
+        backup_repo_access_key: "{{ restore_source_secrets.object_storage_access_key }}"
+        backup_repo_secret_key: "{{ restore_source_secrets.object_storage_secret_key }}"
+        backup_repo_cipher_pass: "{{ restore_source_secrets.pgbackrest_cipher_pass }}"
+      when: restore_source is defined
 
     - name: Refuse a node that already holds a restore
       ansible.builtin.command:
@@ -51,26 +105,20 @@
 
     # the volume starts as a copy of the image's /var/lib/postgresql, which
     # holds the empty patroni directory owned by postgres
-    - name: Restore the stanza to the target time
+    # a backup set restores to its own end (type immediate): the state the
+    # source had when the backup finished, which is the frozen source of a
+    # migration
+    - name: Restore the stanza
       ansible.builtin.command:
-        argv:
-          - docker
-          - run
-          - --rm
-          - --network=host
-          - -v
-          - "{{ restore_volume }}:/var/lib/postgresql"
-          - -v
-          - "{{ backup_conf_dir }}:/etc/pgbackrest:ro"
-          - --entrypoint
-          - pgbackrest
-          - "{{ platform_images.postgres_ha }}"
-          - "--stanza={{ backup_stanza }}"
-          - "--pg1-path={{ restore_pg_path }}"
-          - --type=time
-          - "--target={{ restore_target }}"
-          - --target-action=promote
-          - restore
+        argv: >-
+          {{ ['docker', 'run', '--rm', '--network=host',
+              '-v', restore_volume ~ ':/var/lib/postgresql',
+              '-v', backup_conf_dir ~ ':/etc/pgbackrest:ro',
+              '--entrypoint', 'pgbackrest', platform_images.postgres_ha,
+              '--stanza=' ~ backup_stanza, '--pg1-path=' ~ restore_pg_path]
+             + (['--type=time', '--target=' ~ restore_target] if restore_target is defined
+                else ['--set=' ~ restore_set, '--type=immediate'])
+             + ['--target-action=promote', 'restore'] }}
       register: restore_run
       changed_when: true
 
@@ -111,4 +159,4 @@
 
     - name: Report the restored server
       ansible.builtin.debug:
-        msg: "restored to {{ restore_target }} on {{ sa_private_ip }}:5432"
+        msg: "restored to {{ restore_target | default('the end of backup ' ~ restore_set) }} on {{ sa_private_ip }}:5432"

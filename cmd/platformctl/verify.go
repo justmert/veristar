@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/justmert/stellar-analytics/internal/migration"
+	"github.com/justmert/stellar-analytics/internal/rotationcheck"
 )
 
 // verifyUsage lists verify-migration for the main usage text.
@@ -129,4 +131,46 @@ func (e *errWriter) printf(format string, args ...any) {
 	if e.err == nil {
 		_, e.err = fmt.Fprintf(e.w, format, args...)
 	}
+}
+
+// rotationUsage lists rotation-check for the main usage text.
+const rotationUsage = `  rotation-check    read a json spec on stdin (internal/rotationcheck) naming postgresql
+                    logins, nats users and the umami admin and user key, each with its
+                    previous and new value; exit 1 unless every previous value is refused
+                    and every new one accepted (rotate-all.yml)
+`
+
+func runRotationCheck(ctx context.Context, stdin io.Reader, stdout io.Writer) error {
+	var spec rotationcheck.Spec
+	dec := json.NewDecoder(io.LimitReader(stdin, 1<<20))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&spec); err != nil {
+		return fmt.Errorf("rotation-check: spec: %w", err)
+	}
+	res, err := rotationcheck.Run(ctx, spec, time.Now())
+	if err != nil {
+		return err
+	}
+	if len(res) == 0 {
+		return errors.New("rotation-check: the spec names no credential")
+	}
+	w := &errWriter{w: stdout}
+	bad := 0
+	for _, r := range res {
+		mark := "ok  "
+		if !r.OK() {
+			mark = "FAIL"
+			bad++
+		}
+		w.printf("%s %s\n", mark, r)
+	}
+	if w.err != nil {
+		return w.err
+	}
+	if bad > 0 {
+		w.printf("result: %d of %d credentials not rotated as required\n", bad, len(res))
+		return errDiffers
+	}
+	w.printf("result: %d previous credentials refused, every new one accepted\n", len(res))
+	return w.err
 }
