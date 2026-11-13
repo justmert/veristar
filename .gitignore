@@ -19,8 +19,15 @@ next-env.d.ts
 playwright-report/
 test-results/
 
-# go build output
+# go build output; `go build ./cmd/sloreport` at the root writes /sloreport
 /bin/
+/sloreport
+
+# python bytecode and wheels: build output, opaque to review and to the
+# licence gate, and rewritten whenever the scripts run
+__pycache__/
+*.pyc
+*.whl
 
 # environment files (the example file is meant to be committed)
 .env
@@ -54,3 +61,17 @@ infra/ansible/inventories/*/hosts.json.tmp
 # .scratch/scratch), never a real environment's
 infra/secrets/local/
 packages/tracker/npm/
+
+# build outputs and python caches never belong in git
+__pycache__/
+*.pyc
+*.whl
+/controlplane
+/sloreport
+/gateway
+/replayer
+/jobs
+/platformctl
+/prober
+/metricswriter
+/collector/scf-otelcol
