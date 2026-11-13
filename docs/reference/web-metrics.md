@@ -20,6 +20,7 @@ replayer as one `POST /api/send`:
 | header `User-Agent` | the browser's user agent | Umami's bot check, `session.browser`, `os`, `device` |
 | header `x-umami-cache` | Umami's last answer for this visitor, while the gap is at most 1800 s | keeps the visit id |
 | `url`, `referrer`, `title`, `screen`, `language`, `name`, `data` | the wire event after redaction | `website_event` and `event_data` columns, `session.screen`, `session.language` |
+| `referrer` | only `scheme://host` of a referrer from another origin; empty for a same-origin path or no referrer (`wire-v1.md`, Referrer) | `website_event.referrer_domain` is that host without `www.`; `referrer_path` is `/` and `referrer_query` empty for every event |
 
 Umami's session id is `uuid(website, ip, userAgent, hash(dailySalt, vt), distinctId)` and its
 visit id is `uuid(sessionId, hash(startOfHour(createdAt)))` unless a cache token carries an
@@ -39,7 +40,7 @@ All read routes take `startAt` and `endAt` in unix milliseconds and count only e
 | Visits (used by the two below) | `visits` of `/stats` | `count(distinct visit_id)` over visits that contain at least one pageview |
 | Session duration | `totaltime` of `/stats`, seconds; the dashboard shows `totaltime / visits` as "Visit duration" | sum over visits of the time between the visit's first and last pageview. The time spent on the last page is not measured (no event marks leaving it). |
 | Bounce rate | `bounces / visits` of `/stats`; the dashboard shows it as "Bounce rate" | a bounce is a visit with exactly one pageview and no custom event |
-| Referrers | `GET /metrics?type=referrer` | `referrer_domain` of pageview events, excluding the site's own hostname and empty values; `y` is distinct sessions. The tracker sends same-origin referrers as a path, so internal navigation never counts. Browsers send only the origin of another site (`strict-origin-when-cross-origin`). |
+| Referrers | `GET /metrics?type=referrer` | `referrer_domain` of pageview events, excluding the site's own hostname and empty values; `y` is distinct sessions. The tracker sends same-origin referrers as a path and the gateway turns them into an empty referrer, so internal navigation never counts. The gateway keeps only the scheme and host of any other referrer, so Umami stores `/` as every referrer path and an empty referrer query; the metric lists hosts, which is all it ever listed. |
 | Country | `GET /metrics?type=country` | `session.country`, ISO 3166-1 alpha-2 from the `cf-ipcountry` header the replayer sets from the gateway's DB-IP lookup; `y` is distinct sessions. Region and city stay null: no header carries them and the constant address has no GeoLite entry. |
 | Device and browser | `GET /metrics?type=device`, `type=browser`, `type=os` | `session.device`, `browser`, `os` from Umami's parsing of the original user agent (`lib/detect.ts`); a desktop user agent with a screen up to 1920 px wide is `laptop`, wider is `desktop`; `y` is distinct sessions |
 

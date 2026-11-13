@@ -63,7 +63,7 @@ sent with `fetch` and `keepalive: true`.
 | `t` | string | yes | | `pv` pageview or `ev` custom event |
 | `h` | string | yes | 100 | hostname of the page |
 | `u` | string | yes | 500 | path and query of the page, plus a route fragment (see below) |
-| `r` | string | yes | 500 | referrer: full url for another origin, path for the same origin, empty if none |
+| `r` | string | yes | 500 | referrer: full url for another origin, path for the same origin, empty if none; the gateway keeps only scheme and host (see Referrer below) |
 | `ti` | string | yes | 500 | document title |
 | `s` | string | yes | 11 | screen as `WxH` |
 | `l` | string | yes | 35 | `navigator.language` |
@@ -79,6 +79,16 @@ query part inside it: `/app#/users/7?tab=2` is sent as `/app#/users/7`. Every ot
 (`#section`, `#access_token=...`, `#`) is dropped. The same rule applies to the url a
 `data-before-send` hook or `umami.track(props)` supplies. Because pageviews compare urls after this
 rule, a jump to an in-page anchor is not counted as a pageview, while a change of hash route is.
+
+**Referrer.** The tracker sends what the browser gives it (`r` above), but the gateway keeps only
+the scheme and host of a referrer from another origin before the event is queued:
+`https://news.example/story/42?utm_campaign=x#top` is stored as `https://news.example`. The port,
+user info, path, query and fragment are dropped, the host is lower cased and redacted like every
+other field, and a same-origin path, a scheme-relative url, an opaque url (`mailto:`) or anything
+that does not parse becomes empty. CNIL's self-assessment tool for consent-exempt audience
+measurement lists a referrer limited to the host as its measure against importing outside data
+(`docs/compliance/sources.md`, S2), and the referrers metric needs only the host
+(`internal/gateway/sanitize.go`, `SanitizeReferrer`).
 
 Limits are in UTF-16 code units, as JavaScript counts string length. The tracker cuts `h`, `u`,
 `r`, `ti`, `s`, `l` and `n` to their limits (never splitting a surrogate pair), so automatic fields

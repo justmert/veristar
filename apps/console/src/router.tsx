@@ -18,6 +18,7 @@ import { SettingsPage } from "@/pages/operator/settings";
 import { TenantDetailPage } from "@/pages/operator/tenant-detail";
 import { TenantsPage } from "@/pages/operator/tenants";
 import { OverviewPage } from "@/pages/overview";
+import { PrivacyPage } from "@/pages/privacy";
 import { ProjectLayout } from "@/pages/project-layout";
 import { ProjectsPage } from "@/pages/projects";
 import { SignInPage } from "@/pages/sign-in";
@@ -70,6 +71,7 @@ export const router = createBrowserRouter([
           { path: "sites/:siteId/snippet", element: <SnippetPage /> },
           { path: "sites/:siteId/verify", element: <VerifyPage /> },
           { path: "members", element: <MembersPage /> },
+          { path: "privacy", element: <PrivacyPage /> },
           { path: "api", element: <ApiSetupPage /> },
           { path: "api/traffic", element: <ApiTrafficPage /> },
         ],

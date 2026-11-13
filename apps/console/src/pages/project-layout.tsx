@@ -23,6 +23,7 @@ const NAV = [
   { to: "api/traffic", label: "API traffic", end: true },
   { to: "api", label: "API setup", end: true },
   { to: "members", label: "Members", end: true },
+  { to: "privacy", label: "Privacy", end: true },
 ];
 
 export function ProjectLayout() {

@@ -26,6 +26,8 @@ export function errorText(err: unknown): string {
         return "A project needs at least one owner. Make someone else an owner first.";
       case "site_removed":
         return "This site was deleted and can no longer be changed.";
+      case "erasure_in_progress":
+        return "Another erasure request for this site is still running. Wait for it to finish.";
       case "operator_required":
         return "Only operators of the service can do this.";
       case "invalid_transition":

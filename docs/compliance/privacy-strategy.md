@@ -1,7 +1,7 @@
 # Privacy strategy
 
 > **Status: draft, pending legal review an operator input.** Not legal advice. Last
-> updated 2026-11-12. Legal statements cite `sources.md` (S1 to S11); technical
+> updated 2026-11-13. Legal statements cite `sources.md` (S1 to S11); technical
 > statements point to the code or test that shows them. A statement that is
 > neither sourced nor tested does not belong here.
 
@@ -35,10 +35,10 @@ file-backed stream. "Stored" means PostgreSQL.
 | Gateway | client address (in `X-Edge-Client-Ip` from Caddy) | memory | the request. It is truncated to /24 (IPv4) or /48 (IPv6) for the country lookup and is never logged, queued or stored (`internal/gateway/clientip.go`, `docs/reference/geo.md`) |
 | Gateway | daily visitor secret, daily IP-cluster secret, daily proof key | `edge_secrets`, memory bucket | until the next UTC midnight (per-key TTL), then gone; gateways zero their copies at midnight (`internal/gateway/visitor.go`) |
 | Gateway | IP-cluster sets: keyed HMAC of the truncated network, visitor tokens | memory | a sliding hour |
-| `WEB_EVENTS` | accepted event: site, band, visitor token, user agent (cut to the this stage limit), country code, hostname, path with allowlisted query, referrer, title, screen, language, event name and data | queued | until the replayer delivers it, at most 72 hours |
+| `WEB_EVENTS` | accepted event: site, band, visitor token, user agent (cut to the this stage limit), country code, hostname, path with allowlisted query, referrer scheme and host, title, screen, language, event name and data | queued | until the replayer delivers it, at most 72 hours |
 | `WEB_DLQ` | events Umami refused permanently, same fields | queued | at most 7 days; erasure deletes matching messages |
 | `visit_state` | per site and visitor token: Umami session id, cache token, last event time; duplicate-guard keys | memory bucket | 24 hours after the last write |
-| Umami (`umami` database) | `session` (browser, OS, device, screen, language, country), `website_event` (time, path, query, referrer path, query and domain, title, event name, hostname), `event_data` | stored | `WEB_RAW_RETENTION_MONTHS`, default 25 (section 4) |
+| Umami (`umami` database) | `session` (browser, OS, device, screen, language, country), `website_event` (time, path, query, referrer domain, title, event name, hostname; the referrer path is always `/` and its query empty, section 7), `event_data` | stored | `WEB_RAW_RETENTION_MONTHS`, default 25 (section 4) |
 | `agg.web_daily`, `agg.web_daily_dim` | per site, band and UTC day: page views, visitors, visits, bounces, total time; ranked referrers, countries, devices, browsers, OSes | stored | as long as the site exists; removal follows `removal_keep_aggregates` |
 | OTLP collector | tenant metrics and spans; logs are accepted and discarded | memory | the request; spans become duration histograms and are dropped (`collector/`) |
 | `API_METRICS` | filtered metric batches: tenant, service, normalized route, method, status class and code, histogram buckets | queued | until stored, at most 7 days |
@@ -143,9 +143,13 @@ The deny list lives in `deploy/caddy/web.Caddyfile` and
 Before an event is queued, the gateway (`internal/redact`,
 `internal/gateway/sanitize.go`):
 
+- reduces the referrer to its scheme and host (`https://news.example/a?b#c`
+  becomes `https://news.example`); a same-origin path becomes empty
+  (`SanitizeReferrer`, tested in `internal/gateway/sanitize_test.go` and
+  end to end in `tests/gateway`);
 - replaces all ten SEP-23 strkey types (G, M, C, W, L, B, T, X, P, S),
   email addresses and federation addresses in the path, kept query values,
-  referrer, title and event data; S secret seeds become `{redacted-secret}`;
+  referrer host, title and event data; S secret seeds become `{redacted-secret}`;
 - drops every query parameter outside the allowlist (`utm_source`,
   `utm_medium`, `utm_campaign`, `utm_content`, `utm_term`, `ref`);
 - drops URL fragments except a `#/` hash route, without its own query.
@@ -156,14 +160,59 @@ terms forbid personal data in URLs, titles, referrers and event data, and
 session erasure and `site_reset` remain available for the whole raw retention
 period.
 
-## 8. Known gaps
+## 8. CNIL self-assessment criteria: what the code does
 
-- **Referrer detail.** Umami stores the referrer's path and query (after
-  redaction and the allowlist), not only its host. CNIL's self-assessment tool
-  lists "referrer limited to the host" among its criteria (S2), so this
-  deployment does not meet that criterion as built.
-- **Exact counts.** Dashboards show exact counts. CNIL's tool recommends
-  rounding reports to the nearest ten (S2); Umami's dashboards do not.
+The primary text of CNIL's July 2025 self-assessment tool, quoted in S2,
+says that the technical measures it names are recommendations: a provider may
+use an alternative if it shows the alternative meets the criterion. The
+conditions of the exemption are those of délibération 2020-091 art. 5 (S2).
+
+| Criterion (tool, section 4) | CNIL's recommended measure | What the service does | Met? |
+|---|---|---|---|
+| No import of outside data | referrer, if collected, limited to the host | the gateway keeps only `scheme://host` of the referrer before queueing (section 7); the referrers metric is unchanged, since it always listed hosts | yes, by the recommended measure |
+| No import of outside data | no collection of UTM or campaign identifiers in URLs | the gateway keeps `utm_source`, `utm_medium`, `utm_campaign`, `utm_content`, `utm_term` and `ref` (`QueryAllowlist`), and Umami reports them | no (section 9) |
+| All reports and exports contain only anonymous statistics | aggregation and presentation rounded to the nearest ten, or a documented anonymity analysis (WP29) | exact counts in Umami's dashboards, read API and exports | no (section 9) |
+| No filter combination isolates a user | none named | Umami's filters and Sessions page can show one visitor's pages of a day | no (section 9) |
+| No tracking of a single user's navigation | session replay disabled | replay is off (section 5), but the Sessions page lists one session's page views | replay: yes; the criterion as a whole: no |
+
+### Decision on rounding to ten: documented limitation
+
+Three options were weighed: a display rule for every tenant, a per-tenant
+"CNIL mode", and a documented limitation. The service takes the third, for
+these reasons:
+
+1. **Where tenants see numbers.** Every tenant web report is Umami's own UI,
+   read API and CSV export, run from the official image unmodified (plan
+   section 1, the design). The console shows tenants no web counts. Rounding
+   there would change nothing a tenant sees. Rounding in Umami would mean
+   patching the image or rewriting every JSON and CSV answer of dozens of
+   report routes in the web proxy, which the project ruled out by running
+   Umami unmodified.
+2. **Rounding alone would not meet the criterion.** The criterion is that
+   every report is anonymous for any combination of filters, and the next
+   row asks that no single user's navigation can be followed. Umami's
+   Sessions and realtime pages show the pages of one visitor's day to a
+   `team-view-only` member (`docs/reference/umami-contract.md`, item 10).
+   A rounded overview next to those pages is still not anonymous output, so
+   a "CNIL mode" that only rounded would invite a claim the system does not
+   satisfy. Blocking those pages would also remove the session ids a tenant
+   needs for session erasure (`erasure.md`).
+3. **No false claim.** France therefore stays "not as built"
+   (`jurisdictions.md`): tenants with French visitors use consent mode until
+   counsel decides otherwise. No anonymity analysis has been made, and none
+   is claimed.
+
+What would close it: a tenant view built from rounded aggregates with the
+Sessions, realtime and filter views withheld, with a written WP29 analysis.
+That is a product change for the operator to decide; it is not built.
+
+## 9. Known gaps
+
+- **Exact counts and single-visitor views.** Section 8: no rounding, and
+  Umami's Sessions page shows one visitor's pages of a day.
+- **UTM parameters.** CNIL's tool recommends disabling the collection of UTM
+  and campaign identifiers in URLs; the query allowlist keeps them (section
+  7). Removing them is a product decision for the operator, not taken here.
 - **Erasure race.** See `erasure.md`, "Limits".
 - **NATS file blocks.** An acknowledged `WEB_EVENTS` message is removed from
   the stream, but its bytes can stay in a JetStream file block until the block

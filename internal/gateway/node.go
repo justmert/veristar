@@ -83,6 +83,15 @@ func NewNode(ctx context.Context, c NodeConfig) (*Node, error) {
 	if n.geo, err = OpenGeo(g.DBIPPath); err != nil {
 		return nil, err
 	}
+	// the alert "db-ip file older than 45 days" reads the build time of the
+	// file in use; Reload swaps the reader inside the same Geo, so the gauge
+	// follows a monthly update without registering again
+	if err := c.Registry.Register(prometheus.NewGaugeFunc(prometheus.GaugeOpts{
+		Name: "gateway_geo_build_timestamp_seconds",
+		Help: "unix build time recorded in the metadata of the db-ip country file the gateway is using.",
+	}, func() float64 { return float64(n.geo.BuildTime().Unix()) })); err != nil {
+		return nil, fmt.Errorf("gateway: register geo metric: %w", err)
+	}
 	// edge_secrets is memory-backed and gone after a restart of a single
 	// server; the gateway recreates it itself so it never waits for an
 	// operator

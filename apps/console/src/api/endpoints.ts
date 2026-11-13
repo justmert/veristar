@@ -23,6 +23,8 @@ import {
   auditPage,
   type EnrollmentMode,
   enrollmentMode,
+  erasureRequest,
+  erasureRequestPage,
   ingest,
   keepAggregates,
   me,
@@ -68,6 +70,12 @@ export type EnrollmentInput = {
 };
 
 export type SiteInput = { name: string; domain: string; origins: string[] };
+
+// 10.2 one body per kind; a field of another kind is refused by the server
+export type ErasureInput =
+  | { kind: "visitor_today"; site_id: string; ip: string; user_agent: string }
+  | { kind: "session"; site_id: string; session_id: string }
+  | { kind: "site_reset"; site_id: string; confirm_domain: string };
 export type SitePatch = { name?: string; origins?: string[] };
 
 // 5.7 resubmission of a rejected enrollment
@@ -230,6 +238,27 @@ export const api = {
     } while (cursor !== null);
     return out;
   },
+  // 10.3 newest first; a cursor continues an earlier page
+  erasureRequests: (tenantId: string, cursor: string | null, signal?: AbortSignal) =>
+    request(
+      "GET",
+      `/tenants/${enc(tenantId)}/erasure?limit=50${cursor ? `&cursor=${enc(cursor)}` : ""}`,
+      erasureRequestPage,
+      undefined,
+      signal,
+    ),
+  erasureRequest: (tenantId: string, requestId: string, signal?: AbortSignal) =>
+    request(
+      "GET",
+      `/tenants/${enc(tenantId)}/erasure/${enc(requestId)}`,
+      erasureRequest,
+      undefined,
+      signal,
+    ),
+  // the body is sent once and never kept: the visitor_today address and
+  // user agent live only in the page's react state until it is cleared
+  requestErasure: (tenantId: string, body: ErasureInput) =>
+    request("POST", `/tenants/${enc(tenantId)}/erasure`, erasureRequest, body),
   site: (tenantId: string, siteId: string, signal?: AbortSignal) =>
     request("GET", `/tenants/${enc(tenantId)}/sites/${enc(siteId)}`, site, undefined, signal),
   createSite: (tenantId: string, body: SiteInput) =>

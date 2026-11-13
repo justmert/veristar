@@ -833,3 +833,38 @@ export const apiKeyUsage = z.object({
   hours: z.array(z.object({ hour: time, requests: count, rejected: count })),
 });
 export type ApiKeyUsage = z.infer<typeof apiKeyUsage>;
+
+// 10.1 erasure request. the object never carries the ip address, the user
+// agent or the visitor token of a visitor_today request (contract 10.1)
+export const erasureKind = z.enum(["visitor_today", "session", "site_reset"]);
+export type ErasureKind = z.infer<typeof erasureKind>;
+export const erasureStatus = z.enum(["pending", "running", "done", "failed"]);
+export type ErasureStatus = z.infer<typeof erasureStatus>;
+export const erasureOutcome = z.enum(["erased", "nothing_found"]);
+export type ErasureOutcome = z.infer<typeof erasureOutcome>;
+
+const nonnegCount = z.number().int().nonnegative();
+export const erasureRequest = z.object({
+  id,
+  tenant_id: id,
+  site_id: id,
+  kind: erasureKind,
+  status: erasureStatus,
+  outcome: erasureOutcome.nullable(),
+  message: z.string().nullable(),
+  day: z.iso.date().nullable(),
+  session_id: id.nullable(),
+  requested_by: id,
+  requested_at: time,
+  completed_at: time.nullable(),
+  sessions_deleted: nonnegCount,
+  events_deleted: nonnegCount,
+  dlq_messages_deleted: nonnegCount,
+  affected_from: z.iso.date().nullable(),
+  affected_to: z.iso.date().nullable(),
+  reaggregated_at: time.nullable(),
+  error: z.string().nullable(),
+});
+export type ErasureRequest = z.infer<typeof erasureRequest>;
+export const erasureRequestPage = page(erasureRequest);
+export type ErasureRequestPage = z.infer<typeof erasureRequestPage>;

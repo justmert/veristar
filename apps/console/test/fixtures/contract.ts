@@ -610,3 +610,43 @@ export const apiWarningsNoneBody = {
   ],
   days: [],
 };
+
+// ---- this stage, contract section 10 ----
+export const ERASURE_ID = "0193a6fa-6666-7a88-9b99-caadbbeccfdd";
+export const SESSION_ID = "2f1c7a9e-5b3d-4c8e-9a1f-6d0b2e4c8a7f";
+
+// 10.1 as the contract's example
+export const erasureDoneBody = {
+  id: ERASURE_ID,
+  tenant_id: TENANT_ID,
+  site_id: SITE_ID,
+  kind: "visitor_today",
+  status: "done",
+  outcome: "erased",
+  message:
+    "Deleted 2 session(s) with 4 event(s) of this visitor on 2026-11-12 (UTC) and 0 undeliverable queued message(s).",
+  day: "2026-11-12",
+  session_id: null,
+  requested_by: USER_ID,
+  requested_at: "2026-11-12T10:00:00Z",
+  completed_at: "2026-11-12T10:00:03Z",
+  sessions_deleted: 2,
+  events_deleted: 4,
+  dlq_messages_deleted: 0,
+  affected_from: "2026-11-12",
+  affected_to: "2026-11-12",
+  reaggregated_at: null,
+  error: null,
+};
+
+export const erasureRunningBody = {
+  ...erasureDoneBody,
+  status: "running",
+  outcome: null,
+  message: null,
+  completed_at: null,
+  sessions_deleted: 0,
+  events_deleted: 0,
+  affected_from: null,
+  affected_to: null,
+};

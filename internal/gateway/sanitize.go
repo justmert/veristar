@@ -16,10 +16,16 @@ import (
 //   - url: query parameters outside QueryAllowlist are dropped, kept values
 //     and the path are redacted, a #/ hash route is kept (redacted, without a
 //     query of its own) and every other fragment is dropped.
-//   - referrer: a same-origin path gets the url rules. an absolute url keeps
-//     scheme, host and port, loses user info and fragment, and gets the url
-//     rules for path and query. anything else (opaque urls, junk) becomes
-//     empty, since there is no way to tell which part of it is private.
+//   - referrer: only the scheme and host of an absolute url are kept (port,
+//     user info, path, query and fragment are dropped), and the host is
+//     redacted. cnil's self-assessment tool for consent-exempt audience
+//     measurement (july 2025) names "the referrer, if collected, is limited
+//     to the domain (host)" as its measure against importing outside data
+//     (docs/compliance/sources.md S2), and the referrers metric needs
+//     nothing beyond the host. a
+//     same-origin path becomes empty: it names a page of the site itself,
+//     which umami never counts as a referrer. anything else (opaque urls,
+//     scheme relative urls, junk) becomes empty too.
 //   - title, event name and event data keys and string values are redacted.
 //   - language is cut to its primary subtag.
 //   - every field is cut to its this stage limit after redaction, because a
@@ -49,8 +55,9 @@ var QueryAllowlist = map[string]bool{
 type SanitizeReport struct {
 	// Redacted holds every kind of value that was replaced.
 	Redacted redact.Flags
-	// DroppedQueryParams counts query parameters outside the allowlist or
-	// with an undecodable name or value, in the url and the referrer.
+	// DroppedQueryParams counts query parameters of the page url outside
+	// the allowlist or with an undecodable name or value. the referrer's
+	// query is dropped whole and not counted, because it is never kept.
 	DroppedQueryParams int
 	// DroppedDataKeys counts event data entries dropped because their key,
 	// once redacted, equalled the key of another entry.
@@ -67,9 +74,8 @@ func SanitizeWire(w *events.Wire) SanitizeReport {
 	w.URL, f, n = SanitizeURL(w.URL)
 	rep.Redacted |= f
 	rep.DroppedQueryParams += n
-	w.Referrer, f, n = SanitizeReferrer(w.Referrer)
+	w.Referrer, f = SanitizeReferrer(w.Referrer)
 	rep.Redacted |= f
-	rep.DroppedQueryParams += n
 	w.Title, f = SanitizeText(w.Title, events.MaxTitle)
 	rep.Redacted |= f
 	w.Language = SanitizeLanguage(w.Language)
@@ -91,14 +97,14 @@ func SanitizeWire(w *events.Wire) SanitizeReport {
 // returned as / so the result always satisfies the WebEvent contract; the
 // wire parser rejects such urls before this point.
 func SanitizeURL(u string) (string, redact.Flags, int) {
-	out, flags, dropped := sanitizePathQueryFragment(u, true)
+	out, flags, dropped := sanitizePathQueryFragment(u)
 	if out == "" || out[0] != '/' {
 		out = "/"
 	}
 	return sanCapURL(out, events.MaxURL), flags, dropped
 }
 
-func sanitizePathQueryFragment(u string, keepHashRoute bool) (string, redact.Flags, int) {
+func sanitizePathQueryFragment(u string) (string, redact.Flags, int) {
 	rest, frag, hasFrag := strings.Cut(u, "#")
 	path, query, hasQuery := strings.Cut(rest, "?")
 
@@ -117,7 +123,7 @@ func sanitizePathQueryFragment(u string, keepHashRoute bool) (string, redact.Fla
 	}
 	// only a #/ route is kept; #section and #access_token=... are dropped
 	// because a fragment can carry an oauth token (wire-v1.md, fragments).
-	if keepHashRoute && hasFrag && strings.HasPrefix(frag, "/") {
+	if hasFrag && strings.HasPrefix(frag, "/") {
 		route, _, _ := strings.Cut(frag, "?")
 		r, f := sanRedactPath(route)
 		flags |= f
@@ -243,34 +249,24 @@ func sanitizeQuery(q string) (string, redact.Flags, int) {
 	return b.String(), flags, dropped
 }
 
-// SanitizeReferrer applies the referrer rules. it returns the result, the
-// kinds redacted and the number of query parameters dropped.
-func SanitizeReferrer(r string) (string, redact.Flags, int) {
-	if r == "" {
-		return "", 0, 0
-	}
-	if r[0] == '/' {
-		if strings.HasPrefix(r, "//") {
-			// a scheme relative url is not what the tracker sends for the
-			// same origin, and it names another host.
-			return "", 0, 0
-		}
-		out, flags, dropped := sanitizePathQueryFragment(r, false)
-		return sanCapURL(out, events.MaxReferrer), flags, dropped
+// SanitizeReferrer reduces a referrer to scheme://host, lower cased and
+// redacted, or to "" when it is empty, a same-origin path or not an absolute
+// url with a host. it returns the result and the kinds redacted.
+func SanitizeReferrer(r string) (string, redact.Flags) {
+	if r == "" || r[0] == '/' {
+		return "", 0
 	}
 	pu, err := url.Parse(r)
-	if err != nil || pu.Scheme == "" || pu.Host == "" || pu.Opaque != "" {
-		return "", 0, 0
+	if err != nil || pu.Scheme == "" || pu.Opaque != "" || pu.Hostname() == "" {
+		return "", 0
 	}
-	host, flags := redact.String(strings.ToLower(pu.Host))
-	pathQuery := pu.EscapedPath()
-	if pu.RawQuery != "" || pu.ForceQuery {
-		pathQuery += "?" + pu.RawQuery
+	// the port goes with the path: a host is what the referrers metric lists
+	host, flags := redact.String(strings.ToLower(pu.Hostname()))
+	if strings.Contains(host, ":") {
+		// an ipv6 literal keeps its brackets so the result still parses
+		host = "[" + host + "]"
 	}
-	pq, f, dropped := sanitizePathQueryFragment(pathQuery, false)
-	flags |= f
-	out := strings.ToLower(pu.Scheme) + "://" + host + pq
-	return sanCapURL(out, events.MaxReferrer), flags, dropped
+	return sanCapURL(strings.ToLower(pu.Scheme)+"://"+host, events.MaxReferrer), flags
 }
 
 // SanitizeText redacts free text and cuts it to max utf-16 code units.

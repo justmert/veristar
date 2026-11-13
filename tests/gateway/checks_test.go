@@ -188,7 +188,7 @@ func TestEventChecks(t *testing.T) {
 		if ev.URL != "/account/{account}/contract/{contract}/import/{redacted-secret}?utm_source=%7Baccount%7D" {
 			t.Errorf("url %q", ev.URL)
 		}
-		if ev.Title != "Wallet {muxed}" || ev.Referrer != "https://ref.example/u/{account}" || ev.Language != "de" {
+		if ev.Title != "Wallet {muxed}" || ev.Referrer != "https://ref.example" || ev.Language != "de" {
 			t.Errorf("title %q referrer %q language %q", ev.Title, ev.Referrer, ev.Language)
 		}
 		if ev.Data["to"] != "{account}" {

@@ -48,7 +48,8 @@ func TestSanitizeVerificationCase(t *testing.T) {
 	if w.URL != wantURL {
 		t.Errorf("url = %q\nwant  %q", w.URL, wantURL)
 	}
-	if w.Referrer != "https://ref.example/p/{account}?utm_medium=mail" {
+	// the referrer keeps scheme and host only (cnil host-only referrer)
+	if w.Referrer != "https://ref.example" {
 		t.Errorf("referrer = %q", w.Referrer)
 	}
 	if w.Title != "Payment to {muxed}" {
@@ -65,11 +66,13 @@ func TestSanitizeVerificationCase(t *testing.T) {
 			t.Errorf("report misses %v: %b", k, rep.Redacted)
 		}
 	}
-	if rep.DroppedQueryParams != 2 || rep.DroppedDataKeys != 0 {
+	// only the page url's email parameter counts; the referrer's query is
+	// dropped whole
+	if rep.DroppedQueryParams != 1 || rep.DroppedDataKeys != 0 {
 		t.Errorf("report = %+v", rep)
 	}
 	everything := w.URL + w.Referrer + w.Title + w.Data["to"].(string)
-	for _, secret := range []string{sanG, sanM, sanC, sanSeed, "jane", "example.com", "hidden", "q=", "user", "pw", "frag"} {
+	for _, secret := range []string{sanG, sanM, sanC, sanSeed, "jane", "example.com", "hidden", "q=", "user", "pw", "frag", "/p/", "utm_medium", "mail"} {
 		if strings.Contains(everything, secret) {
 			t.Errorf("%q survived: %s", secret, everything)
 		}
@@ -136,18 +139,33 @@ func TestSanitizeURLLength(t *testing.T) {
 func TestSanitizeReferrer(t *testing.T) {
 	cases := []struct{ in, out string }{
 		{"", ""},
-		{"/same/" + sanG + "?utm_source=a&q=b", "/same/{account}?utm_source=a"},
-		{"https://www.google.com/", "https://www.google.com/"},
-		{"https://www.google.com/search?q=jane%40example.com", "https://www.google.com/search"},
-		{"HTTPS://Me:Secret@Example.COM:8443/a#x", "https://example.com:8443/a"},
-		{"android-app://com.google.android.gm/", "android-app://com.google.android.gm/"},
+		// a same-origin path names a page of the site itself; it is not kept
+		{"/same/" + sanG + "?utm_source=a&q=b", ""},
+		{"/", ""},
+		{"https://www.google.com/", "https://www.google.com"},
+		{"https://www.google.com/search?q=jane%40example.com", "https://www.google.com"},
+		{"HTTPS://Me:Secret@Example.COM:8443/a#x", "https://example.com"},
+		{"https://news.example/story/42?utm_campaign=x#top", "https://news.example"},
+		{"https://" + strings.ToLower(sanG) + ".example/x", "https://{account}.example"},
+		{"http://[2001:DB8::1]:8080/path", "http://[2001:db8::1]"},
+		{"http://192.0.2.7/a?b=c", "http://192.0.2.7"},
+		{"android-app://com.google.android.gm/", "android-app://com.google.android.gm"},
 		{"mailto:jane@example.com", ""},
+		{"file:///home/jane/page.html", ""},
 		{"//evil.example/x", ""},
 		{"not a url", ""},
 	}
 	for _, c := range cases {
-		if out, _, _ := SanitizeReferrer(c.in); out != c.out {
+		out, _ := SanitizeReferrer(c.in)
+		if out != c.out {
 			t.Errorf("SanitizeReferrer(%q) = %q, want %q", c.in, out, c.out)
+		}
+		// whatever is kept is a bare origin: no path, query or fragment
+		if out != "" {
+			rest := out[strings.Index(out, "://")+3:]
+			if strings.ContainsAny(rest, "/?#@") {
+				t.Errorf("SanitizeReferrer(%q) = %q keeps more than the host", c.in, out)
+			}
 		}
 	}
 }

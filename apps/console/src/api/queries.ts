@@ -20,6 +20,9 @@ export const keys = {
   tenant: (id: string) => ["tenant", id] as const,
   members: (id: string) => ["tenant", id, "members"] as const,
   sites: (id: string) => ["tenant", id, "sites"] as const,
+  erasure: (id: string) => ["tenant", id, "erasure"] as const,
+  erasureRequest: (id: string, requestId: string) =>
+    ["tenant", id, "erasure", "one", requestId] as const,
   snippet: (siteId: string, version: string | null) => ["snippet", siteId, version] as const,
   ingest: (siteId: string, window: string) => ["ingest", siteId, window] as const,
   verification: (siteId: string) => ["verification", siteId] as const,
@@ -61,6 +64,30 @@ export const membersQuery = (id: string) =>
 
 export const sitesQuery = (id: string) =>
   queryOptions({ queryKey: keys.sites(id), queryFn: ({ signal }) => api.sites(id, signal) });
+
+// erasure runs finish in the control plane after the 202; while one is
+// running the history is read again every few seconds so its result shows
+// without a reload
+const erasurePoll = 2_000;
+
+export const erasureListQuery = (id: string) =>
+  infiniteQueryOptions({
+    queryKey: keys.erasure(id),
+    queryFn: ({ signal, pageParam }) => api.erasureRequests(id, pageParam, signal),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => last.next_cursor,
+    refetchInterval: (q) =>
+      q.state.data?.pages.some((p) => p.items.some((r) => r.status === "running"))
+        ? erasurePoll
+        : false,
+  });
+
+export const erasureRequestQuery = (id: string, requestId: string) =>
+  queryOptions({
+    queryKey: keys.erasureRequest(id, requestId),
+    queryFn: ({ signal }) => api.erasureRequest(id, requestId, signal),
+    refetchInterval: (q) => (q.state.data?.status === "running" ? erasurePoll : false),
+  });
 
 export const snippetQuery = (siteId: string, version: string | null) =>
   queryOptions({

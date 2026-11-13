@@ -9,8 +9,12 @@
 
 ## 1. What can be erased
 
-A project **owner** asks for erasure in the console (or with
-`POST /api/tenants/{tenant_id}/erasure`). Erasure is never blocked by a
+A project **owner** asks for erasure on the project's Privacy page in the
+console (`/projects/{tenant_id}/privacy`, tested in
+`tests/e2e-console/specs/privacy.spec.ts`) or with
+`POST /api/tenants/{tenant_id}/erasure`. Every member sees the request
+history there. The page keeps a typed IP address and user agent in memory
+only, never in browser storage, and clears them once the request is answered. Erasure is never blocked by a
 suspension or by terms the project has not accepted yet. There are three kinds.
 
 | Kind | the operator supplies | What is deleted | When it works |

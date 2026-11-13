@@ -241,6 +241,10 @@ func (s *Stack) AddCaddy(t testing.TB, upstream string) (addr, name string) {
 		"--network-alias", gatewayHost, "-p", "127.0.0.1::443",
 		"-v", caddyfile + ":/etc/caddy/Caddyfile:ro",
 		"-e", "BASE_DOMAIN=sa-test.example", "-e", "GATEWAY_UPSTREAM=" + upstream, "-e", "EDGE_TLS=internal",
+		// the edge file requires the otlp upstreams; this suite never sends otlp,
+		// so they name a host that does not exist rather than a running collector
+		"-e", "COLLECTOR_GRPC_UPSTREAM=no-collector:4317", "-e", "COLLECTOR_HTTP_UPSTREAM=no-collector:4318",
+		"-e", "COLLECTOR_HEALTH_UPSTREAM=no-collector:13133",
 	}, caddyImage)
 	addr = hostPort(t, name, "443")
 	// ready when caddy answers a tracker request from the gateway

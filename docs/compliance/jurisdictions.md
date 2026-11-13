@@ -1,7 +1,7 @@
 # Jurisdictions: use without and with end-user opt-in
 
 > **Status: draft, pending legal review an operator input.** Not legal advice. Last
-> updated 2026-11-12. This is the explicit jurisdictions statement the RFP asks
+> updated 2026-11-13. This is the explicit jurisdictions statement the RFP asks
 > for. Every row cites `sources.md`; a row without a confirmed source says so.
 
 ## Why this needs a per-country answer
@@ -32,7 +32,7 @@ for its own site.
 
 | Jurisdiction | Default mode possible | Conditions and gaps | Source, confidence |
 |---|---|---|---|
-| France | Not as built | CNIL exempts audience measurement used only for the publisher's own statistics, producing anonymous statistics, without cross-site tracking or combination with other processing (délibération 2020-091, art. 5). Its July 2025 self-assessment tool adds criteria the service does not meet today: referrer limited to the host (Umami keeps the referrer path), reports rounded to the nearest ten (Umami shows exact counts), and no reuse for the provider's account (the SCF operator view is an open question). Use consent mode until these are resolved or counsel decides otherwise. | S2, high |
+| France | Not as built | CNIL exempts audience measurement used only for the publisher's own statistics, producing anonymous statistics, without cross-site tracking or combination with other processing (délibération 2020-091, art. 5). Its July 2025 self-assessment tool names technical measures that are recommendations an alternative may replace (S2). The referrer is now limited to the host as recommended. Still not met: reports are exact counts, not rounded to ten, and no anonymity analysis replaces the rounding; Umami's Sessions page shows one visitor's pages of a day; UTM parameters are kept although the tool recommends not collecting them; and no reuse for the provider's account (the SCF operator view is an open question). See `privacy-strategy.md` sections 8 and 9. Use consent mode until these are resolved or counsel decides otherwise. | S2, high |
 | United Kingdom | Yes, with conditions | PECR Sch. A1 para 5 (inserted by the Data (Use and Access) Act 2025, in force 5 February 2026): sole purpose of statistics to improve the service, not shared except with a party that helps improve it, clear and comprehensive information, and a simple free means to object. The ICO says a third-party analytics provider must be a processor, and objection must not rely on browser settings alone. Tenants must state the processing in their privacy notice and offer an opt-out link that sets the opt-out flag. | S3, high |
 | Germany | No (use consent mode) | § 25 TDDDG has no analytics exemption. The supervisory authorities (DSK, OH Digitale Dienste v1.2) make no general finding that reach measurement is strictly necessary; it is case by case. | S4, high |
 | Netherlands | Possibly, with conditions | Art. 11.7a(3)(b) Telecommunicatiewet exempts access with no or little privacy impact to learn about the quality or effectiveness of the service. The AP's page describes limited analytics cookies without consent. We found no AP guidance on cookieless techniques; the reading that the exemption covers them rests on the statute's wording. | S5, high on statute, medium on practice |
