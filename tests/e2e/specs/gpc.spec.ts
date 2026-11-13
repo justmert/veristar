@@ -17,6 +17,10 @@ for (const site of SITES) {
 
     // a navigation, then both kinds of custom event
     await page.click(site.navSelector);
+    // a client-side router (next.js) is still navigating when the click
+    // returns, and "load" already fired; a goto started then is aborted by
+    // that navigation (NS_BINDING_ABORTED in firefox), so wait for the url
+    await page.waitForURL((u) => u.pathname !== "/");
     await page.waitForLoadState("load");
     await page.goto(`${site.origin}/`);
     await page.waitForFunction(() => typeof window.umami?.track === "function");

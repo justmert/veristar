@@ -104,10 +104,17 @@ cap it.
 
 | Tool | Load | Result |
 |---|---|---|
-| k6 2.3.0 (`TestThroughputK6`, docker image, gateway container directly) | constant arrival 2,500 req/s for 30 s | 74,723 requests, 2,490.6 req/s, 0 failed, every one queued; latency median 0.23 ms, p95 0.42 ms, p99 1.48 ms, max 246 ms. A second run with the host under load from other jobs (load average about 30): 2,499.1 req/s, p99 5.73 ms. During a load average near 50 one run crossed the 50 ms p99 threshold (81 ms), so the measurement needs a host that is not shared with other heavy work. |
+| k6 2.3.0 (`TestThroughputK6`, `make gateway-load`, docker image, gateway container directly) | constant arrival 2,500 req/s for 30 s | 74,723 requests, 2,490.6 req/s, 0 failed, every one queued; latency median 0.23 ms, p95 0.42 ms, p99 1.48 ms, max 246 ms. A second run with the host under load from other jobs (load average about 30): 2,499.1 req/s, p99 5.73 ms. During a load average near 50 one run crossed the 50 ms p99 threshold (81 ms), so the measurement needs a host that is not shared with other heavy work. |
 | `go test -bench EventPath -benchtime 20000x` (in-process `gateway.Node`, loopback http, same nats) | 20 concurrent closed-loop clients, 400 sites | 20,000 requests, 4,214 req/s, every one 202; latency p50 3.27 ms, p99 22.67 ms (client, gateway and nats share the 10 cores) |
 
 Target: at least 2,000 req/s with p99 under 50 ms on one instance. Met by both.
+
+`make gateway-load` is a manual target and not part of `make gateway-it` or the nightly e2e
+workflow. On GitHub's standard runner for private repositories (2 vCPUs, 7 GB) k6, the gateway and
+NATS share two cores; two runs there sent 2,400 and 2,221 req/s with p99 174 ms and 222 ms
+(e2e runs 43437576423 and 43454017432), which measures the runner, not the gateway. Run it on a host
+with cores to spare for k6 before a release that touches the event path. The production edge VM
+(`Standard_B2als_v2`, 2 vCPUs) has not been measured with this test.
 Under saturation (160 concurrent clients) the in-process node reached 7,721 req/s
 with p99 79.8 ms, so latency at the target rate comes from queueing, not the path.
 

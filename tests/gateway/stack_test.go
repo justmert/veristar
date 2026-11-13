@@ -38,8 +38,6 @@ const (
 	gatewayImage = "veristar/gateway:gatewayit"
 	caddyImage   = "caddy:2.11.9@sha256:e40b94d0a43b5ff69cb20568d73f10c70703df7b0ffc2298eb3d723cdc9d0bd1"
 	staticImage  = "gcr.io/distroless/static-debian13:nonroot@sha256:25ac8f0c3b2334a9eb05452266bd4697864a8c8ef0ef71e5e6480d7f92868329"
-	// the pinned load tool of the design
-	k6Image = "grafana/k6:2.3.0@sha256:2dd4756ec6e14e62778916e1eb850108e4b499304c02df56760fa0bdb0fba0b8"
 
 	gatewayHost = "in.sa-test.example"
 	clientIPHdr = "X-Edge-Client-Ip"

@@ -34,19 +34,40 @@ const TYPES = ["script", "xmlhttprequest", "ping"] as const;
 
 const engines = new Map<string, FiltersEngine>();
 
+// list hosts are small servers that time out or answer 5xx now and then; a
+// list is fetched up to three times, and one that never arrives still fails
+async function download(name: string, url: string): Promise<string> {
+  const failures: string[] = [];
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const res = await fetch(url, {
+        headers: { "user-agent": "filter-list-check" },
+        signal: AbortSignal.timeout(30_000),
+      });
+      if (res.ok) return await res.text();
+      failures.push(`answered ${res.status}`);
+      // a 4xx will not change on a retry
+      if (res.status < 500) break;
+    } catch (e) {
+      const cause = (e as { cause?: unknown }).cause;
+      failures.push(`${String(e)}${cause ? ` (${String(cause)})` : ""}`);
+    }
+    if (attempt < 3) await new Promise((ok) => setTimeout(ok, attempt * 5_000));
+  }
+  throw new Error(`${name}: ${url} could not be downloaded: ${failures.join("; ")}`);
+}
+
 beforeAll(async () => {
   await Promise.all(
     Object.entries(LISTS).map(async ([name, url]) => {
-      const res = await fetch(url, { headers: { "user-agent": "filter-list-check" } });
-      if (!res.ok) throw new Error(`${name}: ${url} answered ${res.status}`);
-      const text = await res.text();
+      const text = await download(name, url);
       const rules = text.split("\n").filter((l) => l.trim() !== "" && !l.startsWith("!"));
       if (rules.length < 500)
         throw new Error(`${name}: only ${rules.length} rules, download is suspect`);
       engines.set(name, FiltersEngine.parse(text));
     }),
   );
-}, 120000);
+}, 240000);
 
 describe("filter lists", () => {
   it("has a release to check", () => {

@@ -12,7 +12,7 @@ BIN_DIR       := dist/bin
 
 .PHONY: help dev-env dev-up dev-down dev-reset dev-ps dev-logs umami-bootstrap \
         build test test-integration vet lint fmt tidy image geo-fetch \
-        db-migrate db-roles db-it sqlc umami-compat gateway-up gateway-it
+        db-migrate db-roles db-it sqlc umami-compat gateway-up gateway-it gateway-load
 
 help:
 	@echo "dev-up dev-down dev-reset dev-ps dev-logs umami-bootstrap"
@@ -173,6 +173,14 @@ gateway-up: dev-env
 # playwright browsers, and DBIP_MMDB pointing at a fetched file (geo-fetch).
 gateway-it:
 	DBIP_MONTH=$(DBIP_MONTH) $(GO) test -tags gatewayit -race -count=1 -timeout 60m -v ./tests/gateway/
+
+# the k6 throughput measurement of docs/reference/gateway-limits.md
+# (TestThroughputK6, build tags gatewayit and gatewayload): 2,500 events/s
+# for 30 s against one gateway container, p99 under 50 ms. a manual target
+# for a host that is not shared with other heavy work and has cores to spare
+# for k6; github's 2-vcpu runner is not one (tests/gateway/throughput_test.go).
+gateway-load:
+	DBIP_MONTH=$(DBIP_MONTH) $(GO) test -tags 'gatewayit gatewayload' -count=1 -timeout 30m -v -run '^TestThroughputK6$$' ./tests/gateway/
 
 # web.<BASE_DOMAIN> caddy: caddy validate with the pinned
 # image, then real requests through caddy in front of a private umami and

@@ -297,7 +297,7 @@ Proved by: `TestRateLimitBoundedKeys`, `TestRateLimitConcurrent`
 (`tests/gateway/checks_test.go`); `TestCollector` subtests `oversize and decompression bombs`
 and `nats stopped gives 503 and recovers without a gap`; `TestQueueOutage`
 (`tests/gateway/cluster_test.go`); `TestWebPath` subtests `outage umami stopped` and
-`outage postgres stopped`; `TestThroughputK6` (`tests/gateway/load_test.go`, 2,490 requests per
+`outage postgres stopped`; `TestThroughputK6` (`tests/gateway/throughput_test.go`, `make gateway-load`, 2,490 requests per
 second at p99 1.48 ms on one gateway).
 
 Residual risk: there is no rate limit on `GET /v1/c` (challenge) in the gateway or in edge Caddy;
