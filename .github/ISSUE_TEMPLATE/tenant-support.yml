@@ -1,0 +1,41 @@
+name: Tenant support
+description: Help for an enrolled project with onboarding, the dashboards, tokens or the account.
+title: "support: "
+labels: ["support"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A maintainer answers within 5 business days and aims to resolve it within 10 (docs/support.md). The onboarding guides in docs/onboarding answer most setup questions.
+
+        This tracker is public. Do not paste OTLP tokens, operator API keys, session cookies, visitor IP addresses or user agents. Name your project by its slug; the maintainers can look it up.
+  - type: input
+    id: project
+    attributes:
+      label: Project slug
+      description: As shown in the console under your project name.
+    validations:
+      required: true
+  - type: dropdown
+    id: topic
+    attributes:
+      label: Topic
+      options:
+        - Enrollment, review or project status
+        - Installing the web snippet
+        - Web dashboard numbers
+        - Sending API metrics (OpenTelemetry)
+        - API dashboard numbers
+        - OTLP tokens
+        - Members and invites
+        - Domain verification
+        - Something else
+    validations:
+      required: true
+  - type: textarea
+    id: question
+    attributes:
+      label: Question or problem
+      description: What you are trying to do and what you see. Include site domains, framework, and times in UTC where relevant.
+    validations:
+      required: true

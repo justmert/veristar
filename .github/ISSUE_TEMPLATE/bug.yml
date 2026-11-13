@@ -1,0 +1,55 @@
+name: Bug report
+description: Something in the platform does not work as documented.
+title: "bug: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. A maintainer answers within 5 business days and aims to resolve it within 10 (docs/support.md).
+
+        This tracker is public. Do not paste OTLP tokens, operator API keys, session cookies, visitor IP addresses or user agents. If the bug is a security problem, close this form and use **Report a security vulnerability** instead.
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - Tracker script (sdk.js) or the npm package
+        - Web event ingestion (in. host)
+        - OTLP ingestion (otlp. host)
+        - Console (app. host)
+        - Web dashboard (web. host)
+        - Tenant API dashboard
+        - Operator views or machine metrics API
+        - Infrastructure code or documentation
+        - Not sure
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The tracker version in your script tag (for example 1.1.0), or the commit or release you run if you self-host.
+    validations:
+      required: false
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead. Include times in UTC.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: false
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error messages or console output
+      description: Remove tokens, keys and personal data first.
+      render: text
+    validations:
+      required: false

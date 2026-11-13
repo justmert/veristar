@@ -1,0 +1,50 @@
+name: Erasure request help
+description: For project owners whose erasure request in the console failed or needs explanation.
+title: "erasure: "
+labels: ["erasure"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Never post personal data here.** This tracker is public. Do not paste an IP address, a user agent, a session id or anything else that identifies a visitor.
+
+        **Project owners** run erasure themselves on the project's Privacy page in the console (docs/compliance/erasure.md). Use this form only when a request failed or its result is unclear.
+
+        **Visitors of a website** that uses this service: the website's owner decides about your data. Ask the website directly; it can erase your visit on the day of the visit, or a session it can point to later. Requests that reach the maintainers are forwarded to the website's owner (docs/compliance/dpa-template.md section 7). The service never stores IP addresses, so it cannot find your visits itself (docs/compliance/erasure.md section 2).
+  - type: input
+    id: project
+    attributes:
+      label: Project slug
+    validations:
+      required: true
+  - type: input
+    id: request
+    attributes:
+      label: Site and request time
+      description: The site domain and the "requested" time (UTC) of the entry in the request history on the Privacy page. The maintainers find the request from these.
+    validations:
+      required: true
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Kind
+      options:
+        - Visitor today (visitor_today)
+        - Session (session)
+        - Site reset (site_reset)
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: What the console shows
+      description: The message or error of the entry and its counts. Leave out the session id that a session request shows.
+    validations:
+      required: true
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: Confirmation
+      options:
+        - label: This issue contains no IP address, user agent, session id or other personal data.
+          required: true

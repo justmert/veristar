@@ -1,0 +1,43 @@
+name: issue-age
+
+# support targets (docs/support.md, rfp 3.4): a maintainer response within 5
+# business days and resolution within 10. every hour cmd/issueage labels open
+# support issues one business day before either limit ("support: ... due")
+# and when they cross it ("support: ... overdue"), and writes the table to the
+# run summary. the logic and its tests live in cmd/issueage.
+#
+# repository variables (optional):
+#   SUPPORT_HOLIDAYS     comma-separated utc days (YYYY-MM-DD) that are not business days
+#   SUPPORT_MAINTAINERS  comma-separated logins that answer issues besides
+#                        owners, organisation members and collaborators
+
+on:
+  schedule:
+    - cron: "41 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: issue-age
+  cancel-in-progress: false
+
+jobs:
+  label:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: label issues near or past a support limit
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          HOLIDAYS: ${{ vars.SUPPORT_HOLIDAYS }}
+          MAINTAINERS: ${{ vars.SUPPORT_MAINTAINERS }}
+        run: |
+          go run ./cmd/issueage -repo "$GITHUB_REPOSITORY" -api "$GITHUB_API_URL" -apply \
+            -holidays "$HOLIDAYS" -maintainers "$MAINTAINERS" >> "$GITHUB_STEP_SUMMARY"

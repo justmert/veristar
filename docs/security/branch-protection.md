@@ -73,6 +73,7 @@ Read from `.github/workflows/*.yml` on 2026-11-13:
 | `security.yml` | `advisories`, `images`, `go`, `npm`, `report` | no (hourly schedule and manual) | no |
 | `slo-report.yml` | `collect` | no (schedule and manual) | no |
 | `stellartoml-live.yml` | `live` | no (schedule and manual) | no |
+| `issue-age.yml` | `label` | no (hourly schedule and manual) | no |
 
 ## Command to apply
 

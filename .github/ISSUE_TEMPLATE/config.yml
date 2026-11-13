@@ -1,0 +1,10 @@
+# support runs on this public issue tracker (docs/support.md). security
+# reports never go here: they go through private vulnerability reporting.
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/justmert/stellar-analytics/security/advisories/new
+    about: Report privately through GitHub private vulnerability reporting. Never open a public issue for a vulnerability. See docs/security/SECURITY.md.
+  - name: Documentation
+    url: https://github.com/justmert/stellar-analytics/tree/main/docs
+    about: Onboarding guides, operator guide, support model and the service targets.
