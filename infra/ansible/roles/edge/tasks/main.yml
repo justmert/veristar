@@ -16,7 +16,6 @@
 
 - name: Name the edge peers
   ansible.builtin.set_fact:
-    edge_peers: "{{ groups['edge'] | map('extract', hostvars) | list }}"
     edge_nats_urls: >-
       {{ (['tls://nats:4222'] + (groups['edge'] | reject('equalto', inventory_hostname)
           | map('extract', hostvars, 'sa_private_ip') | map('regex_replace', '^(.*)$', 'tls://\1:4222') | list)) | join(',') }}

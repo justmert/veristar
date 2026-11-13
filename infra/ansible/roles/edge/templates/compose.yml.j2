@@ -94,7 +94,7 @@ services:
       - --listen-client-urls=https://0.0.0.0:2379
       - --initial-advertise-peer-urls=https://{{ sa_private_ip }}:2380
       - --advertise-client-urls=https://{{ sa_private_ip }}:2379
-      - --initial-cluster={{ groups['edge'] | map('extract', hostvars) | map(attribute='inventory_hostname') | zip(groups['edge'] | map('extract', hostvars, 'sa_private_ip')) | map('join', '=https://') | map('regex_replace', '$', ':2380') | join(',') }}
+      - --initial-cluster={{ groups['edge'] | zip(groups['edge'] | map('extract', hostvars, 'sa_private_ip')) | map('join', '=https://') | map('regex_replace', '$', ':2380') | join(',') }}
       - --client-cert-auth=true
       - --trusted-ca-file=/etc/etcd/tls/ca.crt
       - --cert-file=/etc/etcd/tls/node.crt
