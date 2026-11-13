@@ -165,6 +165,9 @@ func (w *world) verify(manifest string, extra ...string) (string, map[string]str
 	args := []string{"-i", inv, "verify.yml",
 		"-e", "sa_image_registry=" + w.registry, "-e", "sa_image_tag=" + w.tag,
 		"-e", "sa_release_manifest=" + manifest, "-e", "sa_signature_test_key=" + w.pub,
+		// an extra var: verify.yml loads vars/signing.yml as play vars, which
+		// take precedence over the inventory's sa_signature_mode
+		"-e", "sa_signature_mode=test-ephemeral-key",
 		"-e", "verify_out=" + out}
 	args = append(args, extra...)
 	text, err := run(t, filepath.Join(root, "tests", "supplychain"),
