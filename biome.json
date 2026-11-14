@@ -15,6 +15,7 @@
       "!**/coverage",
       "!packages/tracker/releases",
       "!tests/fixtures/stellartoml",
+      "!deploy/caddy/umami-theme/site/_veristar/fonts",
       "!**/testdata",
       "!infra/ansible/roles/observability/files/grafana/dashboards"
     ]

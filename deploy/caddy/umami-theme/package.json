@@ -1,0 +1,16 @@
+{
+  "name": "@veristar/umami-theme",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "assets": "node assets.ts",
+    "check": "tsc -p tsconfig.json && node assets.ts --check"
+  },
+  "devDependencies": {
+    "@fontsource-variable/geist": "catalog:",
+    "@fontsource-variable/geist-mono": "catalog:",
+    "@playwright/test": "catalog:",
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
+  }
+}
