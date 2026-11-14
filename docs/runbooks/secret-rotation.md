@@ -46,6 +46,23 @@ replacing one value.
    `site.yml` rewrites the env files in `/etc/veristar/env/`, the NATS and Patroni
    configs, and runs `platformctl db roles` and `db umami-retention-role`.
 
+   On Azure the backup bucket play of `site.yml` reads the storage account with the `az` CLI on
+   the controller. When your `az` login lives on another machine you control, point the
+   playbook at it with `storage_az_argv` in a vars file (Make passes `ANSIBLE_EXTRA` to the
+   shell unquoted, so inline JSON loses its quotes):
+
+   ```sh
+   printf 'storage_az_argv: [ssh, <az host>, az]\n' > /tmp/az-argv.yml
+   make <env>-deploy SA_IMAGE_TAG=<current release> SA_RELEASE_MANIFEST=<release-images.json> \
+     ANSIBLE_EXTRA="-e @/tmp/az-argv.yml"
+   ```
+
+   Without it the run stops at `Read the storage account` with `No such file or directory: b'az'`,
+   after the first play has already written the new env files to every node. Running services
+   keep their old values until they are recreated, but a `retain-web` run that starts in between
+   reads the new retention password before the role has it and fails, so fix the call and run
+   the converge again at once.
+
 3. **Make the services use it.** Compose recreates a service whose configuration changed; check
    that each affected container was recreated after the change (`sudo docker compose ps`, column
    `CREATED`) and recreate it if not:
