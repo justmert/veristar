@@ -8,16 +8,28 @@ The contract between the console (`apps/console`) and the control plane
 A change to a route, a field or an error code is made here first, in the same
 commit as the code.
 
-- Plan reference: `.scratch/plan.md` sections 4.7 to 4.10 and this stage.
-- Database names: tables and columns are those of `db/migrations/00002_cp_tables.sql`
-  and `00003_cp_security.sql`. Where a response field maps to a column, the field
-  has the column's name.
-- Research behind the choices: `docs/reference/the reference docs`.
+Database names are those of the migrations in `db/migrations/`
+(`00002_cp_tables.sql` and `00003_cp_security.sql` for the core tables). Where a
+response field maps to a column, the field has the column's name.
 
-Sections 1 to 3 hold the conventions every phase follows. Section 4 onward holds
-one section per phase. Later phases append a section (`## 5. this stage: ...`,
-`## 6. this stage: ...` and so on), add their error codes to section 2.4 and their
-audit actions to section 3.3, and never change the meaning of an existing field.
+Sections 1 to 3 hold the conventions every route follows: transport,
+authentication, errors, shared objects and the audit log. Sections 4 to 12 hold
+the routes by area:
+
+| Section | Area |
+|---|---|
+| 4 | sign-in, tenants, members, sites, snippet, ingest counts, SSO to Umami |
+| 5 | operator governance: review, enrollment modes, suspension, removal, domain checks |
+| 6 | OTLP tokens |
+| 7 | a tenant's API metrics |
+| 8 | the operators' global web and API views |
+| 9 | operator API keys and the machine metrics API |
+| 10 | erasure |
+| 11 | operator alerts |
+| 12 | the MCP server |
+
+A new route adds its error codes to section 2.4 and its audit actions to section
+3.3. The meaning of an existing field never changes.
 
 ---
 
@@ -26,7 +38,7 @@ audit actions to section 3.3, and never change the meaning of an existing field.
 | Item | Rule |
 |---|---|
 | Base URL | `https://app.<BASE_DOMAIN>/api`. Caddy (`deploy/caddy/app.Caddyfile`) serves the console and proxies `/api/*` to the control plane unchanged. |
-| Dev base URL | `http://localhost:8085/api` (callback of an operator input: `http://localhost:8085/api/auth/github/callback`). 8080 is the dev gateway, so the control plane listens on 8085 and is also the dev console origin. |
+| Dev base URL | `http://localhost:8085/api` (the GitHub OAuth App callback is `http://localhost:8085/api/auth/github/callback`). 8080 is the dev gateway, so the control plane listens on 8085 and is also the dev console origin. |
 | Media type | Request and response bodies are `application/json; charset=utf-8`. A body on a request with another `Content-Type` is refused with 415. |
 | Body size | Request bodies are limited to 64 KiB (413). |
 | Unknown fields | A request body with a field this document does not list is refused with 400 `invalid_body`, so a typo never passes silently. |
@@ -44,7 +56,9 @@ audit actions to section 3.3, and never change the meaning of an existing field.
   (host-only, so the cookie never reaches `web.` or `in.<BASE_DOMAIN>`). Persistent,
   absolute lifetime 7 days, idle timeout 24 hours. The database holds only the
   SHA-256 of the value (`cp.sessions.token_hash`, 32 bytes) and the user
-  (`cp.sessions.user_id`). See the reference docs section 3 for why `pgxstore` is not used.
+  (`cp.sessions.user_id`). The session store is the project's own `scs` store
+  (`internal/controlplane/session`), because `scs`'s `pgxstore` works only on its
+  fixed table layout, which `cp.sessions` does not have.
 - The token is renewed (`RenewToken`) at sign-in, so a session id fixed before
   sign-in is useless afterwards.
 - **OAuth state cookie.** `sa_oauth`, only during sign-in: `HttpOnly`, `Secure`,
@@ -76,14 +90,14 @@ the database are the two browser redirects (`/api/auth/github/start` and
 - Every route under `/api/tenants/{tenant_id}` and `/api/sites/{site_id}` first checks
   membership under `cp_system` (`cp.tenant_members` for the session user). A
   non-member gets **404 `not_found`**, never 403, for every such route, also for ids
-  that exist. The isolation tests (the design) assert this.
+  that exist. The isolation tests (`tests/isolation/`) assert this.
 - The handler then runs under `cp_tenant` through `db.WithTenant(ctx, tenant_id, fn)`.
 - `/api/sites/{site_id}` resolves the site's `tenant_id` under `cp_system`, then
   applies the same rule.
 - A member whose role is not enough for the action gets **403 `owner_required`**.
   Members already know the tenant exists, so 403 reveals nothing.
-- Tenants with `cp.tenants.status = 'removed'` answer 404 for every member (this stage
-  sets that status; the rule is listed here so this stage code already honours it).
+- Tenants with `cp.tenants.status = 'removed'` answer 404 for every member
+  (removal: 5.5).
 - A route that checks the tenant status before a write (site create, member
   add) checks it again under the tenant row lock (`LockTenant`), so an
   operator removal, approval or suspension that commits while the request
@@ -115,8 +129,7 @@ the database are the two browser redirects (`/api/auth/github/start` and
   run follow, so any burst of edits costs at most two runs. At most 4 runs are
   in flight per control plane instance, on a `cp_system` pool of their own
   (4 connections), so session loads never wait behind them. The request pools
-  are sized explicitly: `cp_system` 16, `cp_tenant` 16, `cp_operator` 8
-.
+  are sized explicitly: `cp_system` 16, `cp_tenant` 16, `cp_operator` 8.
 
 ---
 
@@ -149,7 +162,7 @@ redirect instead) has this body:
 ```
 
 - `code`: stable machine value from 2.4. Clients branch on it, never on `message`.
-- `message`: English text for people. May change.
+- `message`: English text for people. Its wording can change between releases.
 - `fields`: present only for 422; maps a JSON path (`name`, `origins[1]`,
   `enrollment.stellar_ids[0]`) to a field code from 2.5.
 - `request_id`: also sent as response header `X-Request-Id`, and logged.
@@ -212,12 +225,10 @@ List routes answer:
 
 `required`, `too_long`, `too_short`, `too_many`, `invalid_format`, `not_https_url`,
 `not_bare_origin`, `origin_outside_domain`, `invalid_domain`, `invalid_strkey`,
-`invalid_github_login`, `invalid_role`, `duplicate`, `unknown_tracker_version`.
-`unknown_github_login` (a well-formed login that names no GitHub user
-account, 4.2.5; added after).
-this stage adds `invalid_value` (a value outside an enumerated set, such as
-`mode`). this stage adds `unknown_tenant` (a `tenant_id` that names no tenant
-or a removed one, 9.2).
+`invalid_github_login`, `invalid_role`, `duplicate`, `unknown_tracker_version`,
+`unknown_github_login` (a well-formed login that names no GitHub user account,
+4.2.5), `invalid_value` (a value outside an enumerated set, such as `mode`) and
+`unknown_tenant` (a `tenant_id` that names no tenant or a removed one, 9.2).
 
 ---
 
@@ -233,7 +244,7 @@ or a removed one, 9.2).
 
 `is_operator` is set at every sign-in from `OPERATOR_GITHUB_IDS` (4.5): true when the
 user's numeric GitHub id is listed, false otherwise, so removing an id takes effect
-at that person's next sign-in. this stage builds the operator routes on it.
+at that person's next sign-in. The operator routes of section 5 build on it.
 
 **Tenant** (`cp.tenants` plus the caller's role):
 
@@ -306,9 +317,9 @@ that account's login when the invite was made, for display (4.2.5).
   before the field (migration 00027); owners turn it on with 4.3.4. With
   `false` the gateway drops every query parameter. Published to the gateway
   in the site's `registry_sites` entry.
-- `verify_token`, `last_verify_*` and `stellar_toml*` are this stage fields. this stage
-  adds them to this object; `verify_token` is shown only through the this stage
-  verification route.
+- Site also carries the review, verification and stellar.toml fields listed in
+  5.10. `verify_token` is never part of Site; only the verification route of 5.8
+  returns it.
 
 ### 3.2 Validation rules
 
@@ -340,7 +351,7 @@ Every mutation writes one `cp.audit_log` row in the same transaction as the chan
 - `detail`: JSON with the changed fields (old and new values for updates). Never a
   token, cookie, password or secret.
 
-this stage actions: `user.sign_in`, `user.sign_out`, `tenant.create`, `tenant.update`,
+Sign-in, tenants and sites (section 4): `user.sign_in`, `user.sign_out`, `tenant.create`, `tenant.update`,
 `tenant.terms_accept`, `member.add`, `member.role_change`, `member.remove`,
 `invite.create`, `invite.revoke`, `invite.resolve`, `site.create`, `site.update`,
 `site.delete`, `provision.team_create`, `provision.website_create`,
@@ -350,39 +361,39 @@ this stage actions: `user.sign_in`, `user.sign_out`, `tenant.create`, `tenant.up
 `umami-rotate` writes one `umami.password_rotate` row per run (actor
 `system:umami-rotate`, `target` empty, detail: day and user count), not one per user.
 
-this stage actions (section 5): `user.operator_sync`, `settings.enrollment_mode`,
+Operator governance (section 5): `user.operator_sync`, `settings.enrollment_mode`,
 `settings.removal_keep_aggregates`, `tenant.approve`, `tenant.reject`,
 `tenant.resubmit`, `tenant.suspend`, `tenant.resume`, `tenant.remove`,
 `site.review_queue`, `site.approve`, `site.reject`, `purge.step`,
 `purge.complete`, `site.verify`, `site.stellar_toml`. Actors added:
 `system:startup` (operator sync), `system:verify-domains`, `system:purge`.
-Every this stage operator action carries `reason` in `detail` when one was given,
+Every operator action of section 5 carries `reason` in `detail` when one was given,
 and every row about one tenant carries `detail.tenant_id`, which the audit
 filter of 5.9 uses.
 
-this stage actions (section 6): `otlp_token.create`, `otlp_token.revoke`,
+OTLP tokens (section 6): `otlp_token.create`, `otlp_token.revoke`,
 `provision.otlp_registry_put`. Target added: `otlp_token:<id>`.
 
-this stage (section 7) is read-only and adds no audit action.
+The API metrics routes (section 7) are read-only and write no audit row.
 
-this stage actions (section 10): `erasure.request` (actor `user:<id>`),
+Erasure (section 10): `erasure.request` (actor `user:<id>`),
 `erasure.complete` and `erasure.fail` (actor `system:erasure`). Target added:
 `erasure:<id>`. Detail carries `tenant_id`, `site_id`, `kind`, the counts and,
 for `session`, `session_id`; never an IP address, user agent or visitor token.
 
-MCP actions (section 12): `mcp_credential.create`, `mcp_credential.revoke`,
+MCP server (section 12): `mcp_credential.create`, `mcp_credential.revoke`,
 `mcp_oauth.consent`, `mcp.tool_call`. Actors added: `mcp_credential:<id>`,
 `system:mcp-revoke`, `system:mcp-oauth`. Targets added: `mcp_credential:<id>`,
 `mcp_client:<id>`.
 
-this stage actions (section 9): `operator_api_key.create`,
+Operator API keys (section 9): `operator_api_key.create`,
 `operator_api_key.revoke`. Target added: `operator_api_key:<id>`. Detail:
 `name`, `prefix` and `tenant_id` (null for a key for all tenants), plus
 `scope` and `expires_at` on create. Never the key or its hash.
 
 ---
 
-## 4. this stage: sign-in, tenants, members, sites, snippet, ingest, SSO
+## 4. Sign-in, tenants, members, sites, snippet, ingest, SSO
 
 ### 4.1 Auth
 
@@ -397,9 +408,11 @@ Effect: creates `state` (32 random bytes, base64url) and a PKCE verifier
 (`oauth2.GenerateVerifier`), sets the `sa_oauth` cookie (1.1), and answers
 **302** to `https://github.com/login/oauth/authorize` with `client_id`,
 `redirect_uri` (`GITHUB_REDIRECT_URL`), `state`, `code_challenge`,
-`code_challenge_method=S256` and `allow_signup=true`. No `scope` parameter is sent
-(the reference docs section 1.3). Rate limited inside the control plane (core Caddy has
-no rate limiter), per client: one in-memory token bucket per
+`code_challenge_method=S256` and `allow_signup=true`. No `scope` parameter is sent:
+without a scope GitHub grants read-only access to public information, and the
+public `GET /user` answer holds the only two fields the control plane stores
+(`id` and `login`). Rate limited inside the control plane (core Caddy has no rate
+limiter), per client: one in-memory token bucket per
 client and control plane instance, 0.5 per second with a burst of 20, under a
 global ceiling per instance of 50 per second with a burst of 200. A request
 takes from its client's bucket first, so a client over its limit spends nothing
@@ -415,7 +428,7 @@ or the connection's peer when no Caddy is in front (dev). The control plane
 keys the bucket by `HMAC-SHA256(k, address)`, where `k` is 32 random bytes made
 at process start and held only in memory; IPv4 addresses are used whole, IPv6
 addresses by their /48 (the largest assignment one end site normally holds, so
-one holder of a /48 gets one bucket, not 65,536;). The address is never logged, stored or kept beyond the
+one holder of a /48 gets one bucket, not 65,536). The address is never logged, stored or kept beyond the
 request, and Caddy's access log drops all request headers. Buckets that have
 refilled are forgotten; at most 100,000 clients are tracked per instance, and
 beyond that new clients get 429 until buckets refill.
@@ -436,8 +449,7 @@ Steps:
    `github_error`.
 4. The cookie's `state` must not have reached this step before on this
    control plane instance; a replayed copy of the cookie is failure
-   `state_mismatch` (states are remembered until their cookie expires; audit
-  ). Then take a token from the exchange buckets: the client's
+   `state_mismatch` (states are remembered until their cookie expires). Then take a token from the exchange buckets: the client's
    (0.5 per second, burst 20, keyed as in 4.1.1) and the instance's ceiling
    (10 per second, burst 30), or, for a client whose bucket was full, the
    reserve (2 per second, burst 10) when the ceiling is empty. Empty: failure `rate_limited`. Then exchange
@@ -521,8 +533,8 @@ Session. Enrollment.
   `terms_version_mismatch`.
 - Under `cp_system`, one transaction: insert `cp.tenants` (`enrollment_answers` =
   the `enrollment` object, `accepted_terms_version`, `created_by`, `status` from
-  `cp.settings` `enrollment_mode`: `open` gives `active`; `approval`, added in
-  this stage, gives `pending`), insert the creator into `cp.tenant_members` with role
+  `cp.settings` `enrollment_mode`: `open` gives `active`, `approval` (5.7) gives
+  `pending`), insert the creator into `cp.tenant_members` with role
   `owner`, audit `tenant.create`. Then trigger `Reconcile(tenant_id)`
   asynchronously.
 - **201** Tenant (3.1), `provisioning: "pending"` until the reconciler finishes.
@@ -542,7 +554,7 @@ Session, member. **200** Tenant.
 
 Session, owner. Body: any of `name`, `description`. These are the only tenant
 columns `cp_tenant` may update (`00003_cp_security.sql`). Editing
-`enrollment_answers` is a this stage route (resubmission after rejection).
+`enrollment_answers` is the resubmission route of 5.7, after a rejection.
 **200** Tenant. Audit `tenant.update`.
 
 #### 4.2.5 Members and invites
@@ -608,7 +620,7 @@ Audit `tenant.terms_accept`.
 
 While a tenant's accepted version is not current, every mutating tenant route
 except this one and member removal answers 403 `terms_not_accepted`. Reads keep
-working. This is how this stage's new version is accepted at the next sign-in.
+working. A tenant accepts a new terms version through this route.
 
 ### 4.3 Sites
 
@@ -621,7 +633,7 @@ Session, member.
 ```
 
 - The control plane makes `id` and `quarantine_website_id` (UUIDv7 each) and
-  `verify_token` (32 random bytes, base64url, used from this stage).
+  `verify_token` (32 random bytes, base64url, used by the domain check of 5.8).
 - `status` is `active` when the tenant is `active`, else `pending`, with the
   tenant status read under the tenant row lock (1.3): a tenant removed while
   the request waited answers 404, one suspended meanwhile 409
@@ -645,7 +657,7 @@ Session, member. **200** Site.
 Session, member. Body: any of `name`, `origins` (whole list replaced),
 `collect_utm` (boolean; any other JSON type answers 400). `domain` is
 immutable (422 `invalid_format` on `domain`). Changing `collect_utm` needs the
-owner role (403 `owner_required` for a member, review): it changes the site's
+owner role (403 `owner_required` for a member): it changes the site's
 privacy position. A member may send the current value unchanged. **200** Site.
 409 `site_removed`.
 Audit `site.update`, with the old and new value of each changed field; a body
@@ -656,7 +668,7 @@ republishes the registry entry, so the gateway applies new origins and the
 #### 4.3.5 `DELETE /api/tenants/{tenant_id}/sites/{site_id}`
 
 Session, owner. Sets `status = 'removed'` (the row stays: `cp.erasure_requests`
-references it and this stage keeps removed domains). **202** Site with
+references it, and the review rule of 5.6 reads the domains of removed tenants' sites). **202** Site with
 `status: "removed"`. Reconcile deletes both Umami websites (and their data) and the
 `registry_sites` key. Audit `site.delete`. Repeating the call: 202, no change.
 
@@ -684,12 +696,10 @@ Query: `version` (optional; default the newest non-revoked version of
   `origin = INGEST_ORIGIN` (attribute order and quoting are part of that contract).
 - `integrity` equals the manifest's `integrity` for the version.
 - `versions`: every non-revoked manifest entry, newest first.
-- `npm`: `null` until the tracker package is published (this stage, an operator input. Then
-  `{"package": "<name>", "version": "1.0.0", "install": "pnpm add <name>@1.0.0",
-  "import": ...}`. The `import` line is **not yet defined**: this stage defines it with
-  the published package. Until then the control plane refuses to start when
-  `TRACKER_NPM_PACKAGE` is set, rather than answer with a guessed import. The console
-  hides the npm tab while `npm` is `null`.
+- `npm`: `null`. The console offers the script tag and hides the npm tab while
+  `npm` is `null`. The control plane refuses to start when `TRACKER_NPM_PACKAGE`
+  is set (4.5), so it never answers with an install line for a package name it
+  has not been built for.
 - Errors: 404 `not_found` (site), 422 `unknown_tracker_version` on `version`, 410
   `tracker_version_revoked`, 409 `site_removed`.
 
@@ -735,8 +745,7 @@ Query: `site` (site id, required), `view` (`primary` default, or `quarantine`).
   otherwise failure `cross_site`.
 - The site must not be `removed` or `pending` (in review, 5.6: the reconciler
   creates no Umami website for it); the tenant's Umami user and team membership
-  must exist (reconciler done). Otherwise failure `provisioning_pending` (audit
- ).
+  must exist (reconciler done). Otherwise failure `provisioning_pending`.
 - Logs in to Umami on the private network (`POST /api/auth/login`) as `gh-<github_id>`
   with that user's derived password for the current UTC day. It never
   sets a password.
@@ -757,9 +766,11 @@ Query: `site` (site id, required), `view` (`primary` default, or `quarantine`).
 
 Attribution: every console page that links into Umami carries
 `<a href="https://db-ip.com">IP Geolocation by DB-IP</a>`, and every HTML page
-Caddy serves on `web.<BASE_DOMAIN>` carries it too (the reference docs section 5).
+Caddy serves on `web.<BASE_DOMAIN>` carries it too. The DB-IP Lite licence asks
+for a link back to DB-IP on every page that displays or uses results from the
+database, and an Umami page is a separate page on its own host.
 
-### 4.5 Configuration keys (control plane, this stage)
+### 4.5 Configuration keys (control plane)
 
 Loaded by `internal/config`; a missing required key stops the process and names
 the key.
@@ -771,28 +782,27 @@ the key.
 | `CONSOLE_ORIGIN` | yes | exact `Origin` accepted on state changes (1.2) |
 | `INGEST_ORIGIN` | yes | `https://in.<BASE_DOMAIN>` for snippets |
 | `WEB_ORIGIN` | yes | `https://web.<BASE_DOMAIN>` for SSO redirects |
-| `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | yes | an operator input |
+| `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | yes | the GitHub OAuth App of the environment |
 | `GITHUB_REDIRECT_URL` | yes | `<CONSOLE_ORIGIN>/api/auth/github/callback`, checked at startup |
-| `OPERATOR_GITHUB_IDS` | yes | an operator input: comma separated numeric GitHub user ids, at least one; sets `is_operator` at sign-in |
+| `OPERATOR_GITHUB_IDS` | yes | comma separated numeric GitHub user ids of the operators, at least one; sets `is_operator` at sign-in |
 | `OAUTH_STATE_KEY` | yes | 32 bytes, base64; seals `sa_oauth` |
-| `UMAMI_URL`, `UMAMI_ADMIN_PASSWORD` | yes | existing keys (this stage) |
+| `UMAMI_URL`, `UMAMI_ADMIN_PASSWORD` | yes | Umami's address on the private network and its admin password |
 | `UMAMI_USER_PASSWORD_KEY` | yes | 32 bytes, base64; derives daily Umami passwords; shared with `jobs` |
-| `TRACKER_RELEASE_DIR` | yes | existing key; holds `manifest.json` and `revoked.json` |
-| `TRACKER_NPM_PACKAGE` | no | must stay unset until this stage defines the npm snippet (4.3.6); absent means `npm: null` |
-| `NATS_URL`, `NATS_REPLICAS` | yes | existing keys |
-| `NATS_USER`, `NATS_PASSWORD` | when the server requires auth | existing keys |
-| database keys | yes | as `internal/db` `PoolConfig` for `cp_system`, `cp_tenant` and, from this stage, `cp_operator` |
+| `TRACKER_RELEASE_DIR` | yes | holds `manifest.json` and `revoked.json` |
+| `TRACKER_NPM_PACKAGE` | no | leave unset: the control plane refuses to start when it is set (4.3.6) |
+| `NATS_URL`, `NATS_REPLICAS` | yes | NATS address and stream replica count |
+| `NATS_USER`, `NATS_PASSWORD` | when the server requires auth | NATS credentials |
+| database keys | yes | as `internal/db` `PoolConfig` for `cp_system`, `cp_tenant` and `cp_operator` |
 
 In builds with tag `oauthfixture` only: `OAUTH_FIXTURE_URL` replaces the three
 GitHub URLs. Production builds have no such key.
 
-{/* this stage appends "## 5. this stage: operator governance" below this line */}
+## 5. Operator governance
 
-## 5. this stage: operator governance
-
-the design. Research and decisions: `docs/reference/the reference docs`.
-New tables and columns (`cp.tenant_removals`, `cp.sites.status_reason`) come from
-the this stage migrations listed in that file, section 6.
+Operators review projects, switch enrollment modes, suspend and remove
+projects, and see domain checks. The tables and columns this section adds come
+from migrations `00010_tenant_removals.sql` (`cp.tenant_removals`) and
+`00011_sites_status_reason.sql` (`cp.sites.status_reason`, `cp.operator_sites`).
 
 ### 5.1 Operator identity
 
@@ -975,14 +985,14 @@ the target state is also 409, so a double click never writes two audit rows.
    from `cp.settings.removal_keep_aggregates` at this moment.
 
 Then the purge runs in the reconciler, store by store, in this order: `registry`
-(site keys), `otlp_tokens` (this stage: revokes every token row and flips every
+(site keys), `otlp_tokens` (revokes every token row and flips every
 OTLP key to `revoked`, 6.4), `umami` (both
 websites of every site with their data, the team, then Umami users whose console
 user has no membership in any non-removed tenant), `web_ingest`
-(`cp.web_ingest_hourly` rows; skipped when `keep_aggregates`), `api` (this stage:
-`api.purge_tenant`; minute rows and writer state always, hourly, daily and
+(`cp.web_ingest_hourly` rows; skipped when `keep_aggregates`), `api`
+(`api.purge_tenant`; minute rows and writer state always, hourly, daily and
 warning rows unless `keep_aggregates`),
-`agg` (this stage; skipped when `keep_aggregates`). Each finished store writes
+`agg` (8.7; skipped when `keep_aggregates`). Each finished store writes
 `steps.<name>` and an audit row `purge.step` (actor `system:purge`); the last one
 sets `completed_at` and writes `purge.complete`. A failed store is retried on the
 next reconcile. The tenant row, its member rows and all audit rows remain.
@@ -1046,7 +1056,8 @@ Tenant. The tenant appears in the review queue (5.3 `review=true`).
 
 ### 5.8 Site domain verification
 
-Proves control of `cp.sites.domain`. Beyond-RFP; never gates ingestion.
+Proves control of `cp.sites.domain`. The result is evidence for operators; it
+never gates ingestion.
 
 `GET /api/sites/{site_id}/verification`: session, member of the site's tenant.
 
@@ -1086,7 +1097,7 @@ all control plane instances without shared memory.
 - DNS check: a TXT record at `dns.name` whose value (strings of one record
   joined) equals `dns.value` exactly.
 - File check: `GET file.url` through the request-forgery guard
-  (the reference docs section 3), status 200, body at most 1,024 bytes, equal to the
+  (`internal/netguard`), status 200, body at most 1,024 bytes, equal to the
   token after trimming trailing whitespace.
 - On success: `verify_method`, `verified_at = now()`, `last_verify_at = now()`,
   `last_verify_error = null`. On failure: `last_verify_at = now()`,
@@ -1106,6 +1117,14 @@ all control plane instances without shared memory.
   `site.verify` audit row is written only when the result changes (verification
   value or error code), so the daily run does not add one row per site per day;
   `POST .../verify` always writes one.
+
+The request-forgery guard is the only way the control plane fetches a tenant's
+domain. It connects over HTTPS to port 443 only, refuses host names such as
+`localhost` or names ending in `.localhost`, `.internal`, `.local` or
+`.home.arpa`, refuses loopback, private, link-local, multicast and other
+non-public addresses (`refused_address`), follows at most 3 redirects and only
+to the same host over HTTPS (`redirect_refused`), and gives a request 10
+seconds.
 
 ### 5.9 `GET /api/operator/audit`
 
@@ -1159,8 +1178,7 @@ Fetched for the site's `domain` at site creation (asynchronously, after the
 response) and by `verify-domains` daily, from
 `https://<domain>/.well-known/stellar.toml` through the request-forgery guard,
 body at most 102,400 bytes. Stored in `cp.sites.stellar_toml` with
-`stellar_toml_checked_at`. Beyond-RFP evidence for operators; it decides
-nothing.
+`stellar_toml_checked_at`. It is evidence for operators and decides nothing.
 
 **StellarToml**:
 
@@ -1220,25 +1238,24 @@ and new). **200** `{"keep": ...}`.
 - The value is copied into `cp.tenant_removals.keep_aggregates` when a tenant is
   removed (5.5), so changing it later never changes a removal in progress.
 - `true` keeps `cp.web_ingest_hourly` rows, `api.metrics_hourly`,
-  `api.metrics_daily` and `api.ingest_warnings` rows and, from this stage, `agg`
-  rows of the removed tenant. Umami websites, their raw data and `api` minute rows are always
-  deleted. The open SCF question behind the default is recorded in
-  `docs/runbooks/tenant-removal.md`.
+  `api.metrics_daily` and `api.ingest_warnings` rows and `agg` rows of the
+  removed tenant. Umami websites, their raw data and `api` minute rows are
+  always deleted.
 
-### 5.14 Configuration keys (this stage)
+### 5.14 Configuration keys
 
-One new required key: `PLATFORM_DB_CP_OPERATOR_PASSWORD`, because operator reads run
-as `cp_operator` (5.1). `OPERATOR_GITHUB_IDS` (4.5) now also drives the startup
-sync of 5.1. The `jobs` binary gains the task `verify-domains` with no new key;
+Required: `PLATFORM_DB_CP_OPERATOR_PASSWORD`, because operator reads run as
+`cp_operator` (5.1). `OPERATOR_GITHUB_IDS` (4.5) also drives the startup sync of
+5.1. The `jobs` task `verify-domains` needs no key of its own;
 the request-forgery guard has no configuration key that could allow private
 addresses (tests use a `_test.go` hook only).
 
 ---
 
-## 6. this stage: OTLP tokens
+## 6. OTLP tokens
 
 Tenants create bearer tokens for the OTLP collector (`otlp.<BASE_DOMAIN>`). The
-collector reads `registry_otlp` and accepts a token only while its
+collector reads the NATS key-value bucket `registry_otlp` and accepts a token only while its
 entry has `status = "active"`.
 
 ### 6.1 Token object
@@ -1267,7 +1284,7 @@ entry has `status = "active"`.
   token itself is stored nowhere: not in the database, the audit log, the
   registry or a log line.
 - `status`: `active` or `revoked` (column check). `last_seen_at` is stamped by
-  the metrics writer (this stage).
+  the metrics writer.
 
 ### 6.2 `POST /api/tenants/{tenant_id}/otlp-tokens`
 
@@ -1348,9 +1365,9 @@ The entry of every token is a function of its row and its tenant's status:
 
 ---
 
-## 7. this stage: API metrics
+## 7. API metrics
 
-A tenant's own API traffic, read from the this stage tables `api.metrics_minute`,
+A tenant's own API traffic, read from the metrics writer's tables `api.metrics_minute`,
 `api.metrics_hourly`, `api.metrics_daily` and `api.ingest_warnings`
 (`docs/reference/api-storage.md`). Handlers live in
 `internal/controlplane/apimetrics`, queries in
@@ -1480,7 +1497,7 @@ uses:
 The two are never added together. A service that moved from spans to metrics
 inside the range uses metric rows for the whole range and its span rows are
 left out, as for any service that has both. The selection is
-`internal/controlplane/apimetrics/source.go`, shared with phases 11 and 12.
+`internal/controlplane/apimetrics/source.go`; sections 8 and 9 apply the same rule.
 
 **Source object**, one per service with any row in the range, ordered by
 `service`, in every answer except warnings:
@@ -1519,7 +1536,7 @@ aggregate is restricted to the selected source of each service.
   number in seconds; the string `">10 s"` when the percentile falls in the open
   bucket above 10 s (never a number); `null` when there are no requests.
 - `lossy`: true when any selected row was re-bucketed inexactly from a
-  non-canonical histogram layout (this stage), so percentiles are approximate. The
+  non-canonical histogram layout, so percentiles are approximate. The
   console shows "approximate" next to such percentiles.
 
 **Summary object:**
@@ -1664,20 +1681,20 @@ instant before `to`.
 - `totals`: always these five kinds, in this order. `count` is the sum over the
   days, `last_day` the latest day with a count.
 - `days`: every non-zero day and kind, ordered by day, then kind.
-- Kinds (this stage writer): `span_derived` (points derived from spans were
+- Kinds, written by the metrics writer: `span_derived` (points derived from spans were
   stored), `lossy_histogram` (a histogram was re-bucketed inexactly),
   `cardinality_overflow` (routes or services above the daily cap were folded into
   `{other}`, or a new stream was refused by the writer's stream cap),
   `secret_in_path` (a Stellar secret seed appeared in a request path and was
   redacted), `coarse_buckets` (a histogram's buckets were much wider than the
-  canonical ones, so its percentiles are not reliable; added by the functional
-  audit, A-12). Counts are requests, not exports; see
+  canonical ones, so its percentiles are not reliable). Counts are requests,
+  not exports; see
   `docs/reference/api-storage.md`. The console shows a banner per kind with a
   non-zero count.
 
-### 7.11 Configuration keys (this stage)
+### 7.11 Configuration keys
 
-Two keys become required for the control plane, with the same values as for
+Two keys are required for the control plane, with the same values as for
 `jobs`, because the retention step of 7.2 must match what the retention job
 keeps: `API_MINUTE_RETENTION_DAYS` (at least 8, the writer's late-data window) and
 `API_HOURLY_RETENTION_MONTHS` (at least 24), loaded by
@@ -1689,9 +1706,9 @@ rule of 7.2.
 
 ---
 
-## 8. this stage: global web and API views
+## 8. Global web and API views
 
-the design. Operators compare every enrolled project on aggregates only.
+Operators compare every enrolled project on aggregates only.
 Every route here is **session** and **operator** (5.1), runs as `cp_operator`
 in one read-only, repeatable-read transaction, and reads only `agg.web_daily`,
 `agg.web_daily_dim`, `api.operator_daily`, `cp.web_ingest_hourly`, `cp.tenants`
@@ -1701,8 +1718,10 @@ and `cp.operator_sites`. `api.operator_daily(from, to)` and
 for hours still marked in `api.rollup_pending` the same numbers computed from
 their minutes, never both for one hour (the freshness rule of 7.2). API
 answers therefore do not wait for `api-rollup` and do not change when it
-runs. `cp_operator` cannot read `api.metrics_minute` directly, any
-`cp` table outside 4.7, or connect to the `umami` database, and an operator
+runs. `cp_operator` cannot read `api.metrics_minute` directly, reads in `cp`
+only `cp.tenants`, `cp.operator_sites`, `cp.web_ingest_hourly`, `cp.settings`,
+`cp.tenant_removals` and its own key tables, cannot connect to the `umami`
+database, and an operator
 session holds no Umami token, so no route can return session-level rows.
 Tenants with `is_internal = true` are never listed and answer 404 when named.
 No new error code, field code or audit action.
@@ -1931,7 +1950,7 @@ default, or `asc`). **200**:
 
 ### 8.7 Removal and `removal_keep_aggregates`
 
-The purge step `agg` (after `api`, the design runner) deletes the tenant's
+The purge step `agg` (after `api` in the removal purge of 5.5) deletes the tenant's
 `agg.web_daily` and `agg.web_daily_dim` rows through the security definer
 function `agg.purge_tenant`, the only right `cp_system` has in `agg`. With
 `keep_aggregates` the step records `{"skipped": "keep_aggregates"}` and every
@@ -1939,24 +1958,24 @@ row stays (5.13). The function takes the tenant's advisory lock exclusively;
 `aggregate-web` holds it shared for each write and skips removed tenants, so
 rows of a purged tenant are never written again.
 
-### 8.8 Configuration (this stage)
+### 8.8 Configuration
 
-No new key. `jobs` gains the task `aggregate-web` (hourly: today and the 3
+No key of its own. `jobs` runs the task `aggregate-web` (hourly: today and the 3
 days before) and `jobs run aggregate-web --from <yyyy-mm-dd> --to <yyyy-mm-dd>`
 for a backfill; both read Umami with `UMAMI_URL` and `UMAMI_ADMIN_PASSWORD`,
 which `jobs` already requires.
 
 ---
 
-## 9. this stage: operator API keys and machine metrics API
+## 9. Operator API keys and machine metrics API
 
-the design. Operators create keys in the console (9.2); machines read
+Operators create keys in the console (9.2); machines read
 aggregate metrics with them under `/api/metrics/v1/` (9.3 to 9.10). The
 machine API's own contract, and the document its tests validate every answer
 against, is `docs/reference/openapi/metrics-v1.yaml` (OpenAPI 3.1, served at
 `GET /api/metrics/v1/openapi.yaml`). This section states the rules around it;
 where the two differ, the OpenAPI document is the contract of the machine API.
-Usage for operators: `docs/operators/api-keys.md`.
+Usage for operators: [Operator API keys](../operators/api-keys.md).
 
 ### 9.1 Two doors that never open each other
 
@@ -2007,7 +2026,7 @@ Create body (unknown fields are 400 `invalid_body`):
 |---|---|---|
 | `name` | required, 1 to 100 characters after trimming, text rules of 3.2 | `required`, `too_long`, `invalid_format` |
 | `scope` | required, exactly `metrics:read` | `required`, `invalid_value` |
-| `tenant_id` | optional; absent or `null` means every tenant. A tenant of any status but `removed`, internal tenants included (the this stage probe key) | `invalid_format`, `unknown_tenant` |
+| `tenant_id` | optional; absent or `null` means every tenant. A tenant of any status but `removed`, internal tenants included (the external prober's key) | `invalid_format`, `unknown_tenant` |
 | `expires_in_days` | optional integer 1 to 365, default 90 | `invalid_value` |
 
 `expires_at` is `created_at` plus `expires_in_days` days, from one database
@@ -2062,8 +2081,7 @@ fetched after midnight continues the same days). A cursor used with anything
 else is 400 `invalid_cursor`. The binding hash has no secret, so the carried
 range is checked again on every page with the limits of a first page (at most
 366 days or 744 hours, `to` not after today or the current hour, `to` not
-before `from`); a cursor whose range breaks them is 400 `invalid_cursor`
-.
+before `from`); a cursor whose range breaks them is 400 `invalid_cursor`.
 
 All reads run as `cp_operator`, which reads `agg`, `api.metrics_hourly`,
 `api.metrics_daily`, `cp.tenants` and `cp.operator_sites` and writes only
@@ -2108,8 +2126,8 @@ returns only the sums: one item per hour and band, zeros included, with
 `complete: false` for the current hour, read up to `read_at`. A site whose
 website Umami does not know is a 500 (Umami answers such a website with zeros,
 which would pass for no traffic); Umami unreachable is 503 `unavailable`. At
-most 4 Umami requests of one answer run at once. This is the freshness check of
-the this stage prober.
+most 4 Umami requests of one answer run at once. The external prober
+(`cmd/prober`) uses this route as its freshness check.
 
 ### 9.8 `GET /api/daily`
 
@@ -2140,19 +2158,18 @@ at most 31). Answer: `key_id`, `from`, `to`, `totals` `{requests, rejected}`
 and `hours`, every hour with a row in `cp.api_key_usage_hourly`:
 `{hour, requests, rejected}`.
 
-### 9.12 Configuration (this stage)
+### 9.12 Configuration
 
-No new key. The rate limit (10 per second, burst 20), page size (500), key
-lifetime (90 days default, 365 maximum) and range limits are constants of
-`internal/controlplane/operator`, recorded in `docs/operators/api-keys.md`.
+No key of its own. The rate limit (10 per second, burst 20), page size (500),
+key lifetime (90 days default, 365 maximum) and range limits are constants of
+`internal/controlplane/operator`.
 
 ---
 
-## 10. this stage: erasure
+## 10. Erasure
 
-Tenant-triggered erasure (the design). The workflow and its limits are
-described for people in `docs/compliance/erasure.md`; this section is the
-contract. Code: `internal/controlplane/erasure`, jobs task
+Tenant-triggered erasure. The workflow and its limits are described for people
+in [Right to erasure](../compliance/erasure.md); this section is the contract. Code: `internal/controlplane/erasure`, jobs task
 `internal/jobs/erasurefollowup`.
 
 ### 10.1 Erasure request object
@@ -2266,7 +2283,7 @@ NATS rights this needs (`internal/natsx/topology.go`): the control plane sends
 on `edge.visitor-token`, writes `visit_state`, reads `WEB_EVENTS` (stream info
 and message get) and manages `WEB_DLQ`.
 
-### 10.6 Configuration (this stage)
+### 10.6 Configuration
 
 | Key | Service | Meaning |
 |---|---|---|
@@ -2277,9 +2294,8 @@ and message get) and manages `WEB_DLQ`.
 ## 11. Operator alerts
 
 The console's Alerts page (`/operator/alerts`) shows what the Alertmanager
-cluster holds right now. It is where alerts are seen when no push channel is
-configured an operator input unset): nothing is sent anywhere else, so the page must
-never say "all clear" without having asked Alertmanager.
+cluster holds right now. It is the operators' alert channel, so the route never
+lets the page say "all clear" without having asked Alertmanager.
 
 ### 11.1 `GET /api/operator/alerts`
 
@@ -2363,12 +2379,12 @@ the node certificate installed for the control plane's user
 
 ## 12. MCP server
 
-The control plane serves a Model Context Protocol server, so AI clients
-(Claude Code, Claude Desktop and claude.ai connectors, ChatGPT connectors,
-Cursor and any other MCP client) can read a project's web and API analytics,
-and operators the global view. Code: `internal/controlplane/mcpserver`,
-migration `00030_mcp.sql`. Guides: `docs/onboarding/mcp.mdx` (projects) and
-`docs/operators/mcp.md` (operators). Umami's own MCP endpoint stays off and
+The control plane serves a Model Context Protocol server, so any MCP client
+(desktop and command-line assistants, editors, and the AI vendors' web
+connectors) can read a project's web and API analytics, and operators the
+global view. Code: `internal/controlplane/mcpserver`, migration
+`00030_mcp.sql`. Guides: [AI assistants](../onboarding/mcp.md) for projects
+and [AI assistants for operators](../operators/mcp.md). Umami's own MCP endpoint stays off and
 blocked by the web Caddy (`/mcp`, `api/me/api-keys`): its keys live outside
 the control plane, which could then not revoke them on the events of 12.2.
 
@@ -2441,7 +2457,7 @@ resource is `<CONSOLE_ORIGIN>/mcp`.
 | `GET /.well-known/oauth-protected-resource/mcp` and `GET /.well-known/oauth-protected-resource` | RFC 9728 | `resource`, `authorization_servers: [issuer]`, `scopes_supported: ["analytics:read"]`, `bearer_methods_supported: ["header"]`; `Access-Control-Allow-Origin: *` |
 | `GET /.well-known/oauth-authorization-server` | RFC 8414 | endpoints below, `code_challenge_methods_supported: ["S256"]`, `token_endpoint_auth_methods_supported: ["none"]`, `grant_types_supported: ["authorization_code", "refresh_token"]`, `authorization_response_iss_parameter_supported: true`, `client_id_metadata_document_supported: false` |
 | `POST /oauth/register` | RFC 7591 | public clients only (`token_endpoint_auth_method` absent or `none`); 1 to 10 `redirect_uris`, each `https`, `http` on a loopback host (RFC 8252 7.3) or a private-use scheme without a fragment (`javascript`, `data`, `file` and similar refused); `client_name` at most 100 characters. Unknown metadata is ignored. 201 with `client_id` (`mcpc_` and 32 characters). At most 10 registrations a minute per instance, burst 30; a client without any grant is deleted after a day |
-| `GET /oauth/authorize` | OAuth 2.1 | `response_type=code`, `client_id`, `redirect_uri` (exactly a registered one; may be omitted when the client registered one), `code_challenge` with `code_challenge_method=S256` (required), `state` (at most 1,024 characters), optional `resource` (must equal the resource URI, RFC 8707) and `scope` (`analytics:read`; `offline_access` is accepted and ignored, every grant gets a refresh token). An unknown client or redirect URI is shown on the console page with `error`; every later error goes to the redirect URI with `error`, `state` and `iss`. A valid request is sealed (AES-256-GCM, key derived from `OAUTH_STATE_KEY` with HKDF and its own label, 10 minutes) and the browser goes to the console page `/ai/consent?request=<sealed>` |
+| `GET /oauth/authorize` | OAuth 2.1 | `response_type=code`, `client_id`, `redirect_uri` (exactly a registered one; optional when the client registered exactly one), `code_challenge` with `code_challenge_method=S256` (required), `state` (at most 1,024 characters), optional `resource` (must equal the resource URI, RFC 8707) and `scope` (`analytics:read`; `offline_access` is accepted and ignored, every grant gets a refresh token). An unknown client or redirect URI is shown on the console page with `error`; every later error goes to the redirect URI with `error`, `state` and `iss`. A valid request is sealed (AES-256-GCM, key derived from `OAUTH_STATE_KEY` with HKDF and its own label, 10 minutes) and the browser goes to the console page `/ai/consent?request=<sealed>` |
 | `POST /api/mcp/authorize/inspect`, `.../approve`, `.../deny` | console | session routes with the CSRF rules of 1.2 (12.8) |
 | `POST /oauth/token` | OAuth 2.1 | form body. `authorization_code`: `client_id`, `code` (single use, 60 seconds), `redirect_uri` (as in the request), `code_verifier` (43 to 128 unreserved characters, S256 checked), optional `resource`. `refresh_token`: `client_id`, `refresh_token`. 200 `{access_token, token_type: "Bearer", expires_in: 3600, refresh_token, scope}` with `Cache-Control: no-store` |
 | `POST /oauth/revoke` | RFC 7009 | `client_id`, `token` (refresh or access token); revokes the whole grant of the presenting client; 200 whatever the token was |
@@ -2573,7 +2589,7 @@ a JSON-RPC error.
   `controlplane_mcp_tool_calls_total{tool, outcome}`,
   `controlplane_mcp_tool_call_duration_seconds{tool}`,
   `controlplane_mcp_oauth_requests_total{endpoint, outcome}`. Alert
-  `MCPToolFailuresHigh` (`docs/runbooks/alerts.md`).
+  `MCPToolFailuresHigh` ([alert runbook](../runbooks/alerts.md)).
 
 ### 12.8 Console routes
 

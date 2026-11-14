@@ -6,7 +6,7 @@ package openapi
 import _ "embed"
 
 // MetricsV1 is docs/reference/openapi/metrics-v1.yaml, the contract of
-// /api/metrics/v1/ (the design).
+// /api/metrics/v1/.
 //
 //go:embed metrics-v1.yaml
 var MetricsV1 []byte
