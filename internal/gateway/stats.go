@@ -24,7 +24,7 @@ const (
 	StatQuarantined = "quarantined"
 )
 
-// StatsInterval is how often counters are published (the design).
+// StatsInterval is how often counters are published.
 const StatsInterval = 10 * time.Second
 
 // statsSeqUnit is the clock unit of the window sequence. it is finer than

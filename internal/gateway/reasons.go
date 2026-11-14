@@ -46,8 +46,7 @@ func Reasons() []Reason {
 	}
 }
 
-// Status is the http status of the response for this reason (the design,
-// responses). gpc is a drop, not an error, so the browser sees 204.
+// Status is the http status of the response for this reason. gpc is a drop, not an error, so the browser sees 204.
 func (r Reason) Status() int {
 	switch r {
 	case ReasonBodyTooLarge:

@@ -96,8 +96,7 @@ func EnsureDailySecret(ctx context.Context, kv jetstream.KeyValue, key string, t
 // Visitor computes visitor tokens and ip-cluster keys from the two daily
 // secrets in edge_secrets. it holds only the current utc day's secrets and
 // zeroes them when the day changes, so after midnight no token of the
-// previous day can be computed again from this process (the design
-// step 8).
+// previous day can be computed again from this process.
 type Visitor struct {
 	kv  jetstream.KeyValue
 	now func() time.Time
@@ -372,7 +371,7 @@ func (v *Visitor) PrefixKey(ctx context.Context, ip ClientIP) (string, error) {
 }
 
 // VisitorTokenRequest is what the control plane sends on edge.visitor-token
-// for a visitor_today erasure (the design). it carries the data subject's
+// for a visitor_today erasure. it carries the data subject's
 // address and user agent, so neither side may log it.
 type VisitorTokenRequest struct {
 	Site      string `json:"site"`

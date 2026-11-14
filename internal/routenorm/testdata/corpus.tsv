@@ -1,4 +1,4 @@
-# routenorm corpus, rule set version 2 (the design).
+# routenorm corpus, rule set version 2.
 # columns: input path, expected route, flags (secret when a secret seed was
 # replaced, - otherwise). strkeys are SEP-23 v1.4.0 vectors plus the
 # seed, pre-auth and hash-x vectors of go-stellar-sdk v0.8.0.

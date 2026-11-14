@@ -15,7 +15,7 @@ type Rate struct {
 	Burst     float64
 }
 
-// starting values from this stage of the plan, recorded in
+// starting values, recorded in
 // docs/reference/gateway-limits.md. change them only with a recorded reason.
 var (
 	DefaultSiteRate   = Rate{PerSecond: 200, Burst: 400}

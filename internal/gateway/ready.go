@@ -8,7 +8,7 @@ import (
 	"github.com/justmert/veristar/internal/obs"
 )
 
-// ReadinessChecks are the /readyz checks (the design): the registry
+// ReadinessChecks are the /readyz checks: the registry
 // snapshot is loaded, today's proof key and daily secrets are available, and
 // jetstream acknowledged a publish within CanaryMaxAge, and edge_secrets is
 // not known to be missing without a way to recreate it. a node that fails

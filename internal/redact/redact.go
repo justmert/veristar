@@ -1,7 +1,6 @@
 // Package redact replaces stellar identifiers, secret seeds, email addresses
 // and federation addresses in free text with fixed placeholders. the gateway
-// applies it to every text field of a web event before publishing (plan
-// section 4.4 step 10) and routenorm reuses it for api routes (this stage).
+// applies it to every text field of a web event before publishing, and routenorm reuses it for api routes.
 //
 // strkeys: all ten SEP-23 v1.4.0 types are recognised (G account, M muxed
 // account, C contract, W muxed contract, L liquidity pool, B claimable
@@ -68,7 +67,7 @@ const (
 	numKinds
 )
 
-// placeholders follow the this stage routenorm rule list, so the gateway and
+// placeholders follow the routenorm rule list, so the gateway and
 // the api route normaliser use the same words.
 var placeholders = [numKinds]string{
 	KindAccount:          "{account}",

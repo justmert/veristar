@@ -1,5 +1,4 @@
-// Package gateway is the collect gateway behind in.<BASE_DOMAIN> (plan
-// section 4.4 and this stage). it accepts web events from the tracker, checks
+// Package gateway is the collect gateway behind in.<BASE_DOMAIN>. it accepts web events from the tracker, checks
 // them and queues them in jetstream.
 //
 // the checks are small units with no http server of their own, so each one

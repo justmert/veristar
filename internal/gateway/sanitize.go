@@ -10,8 +10,8 @@ import (
 	"github.com/justmert/veristar/internal/redact"
 )
 
-// sanitization of a parsed wire event before it becomes a WebEvent (plan
-// section 4.4 step 10). the rules:
+// sanitization of a parsed wire event before it becomes a WebEvent. the
+// rules:
 //
 //   - url: every query parameter is dropped, except the CampaignParams on a
 //     site whose owner turned on utm collection; kept values and the path
@@ -29,7 +29,7 @@ import (
 //     scheme relative urls, junk) becomes empty too.
 //   - title, event name and event data keys and string values are redacted.
 //   - language is cut to its primary subtag.
-//   - every field is cut to its this stage limit after redaction, because a
+//   - every field is cut to its field limit after redaction, because a
 //     placeholder can be longer than what it replaced (a@b.co is shorter
 //     than {email}).
 //
@@ -37,7 +37,7 @@ import (
 // once more after decoding %XX escapes, so a%40example.com is caught. only
 // when the decoded form still has something to redact is the result
 // re-escaped from the decoded text; otherwise the browser's own encoding is
-// kept. decoding happens once, like routenorm in this stage, so a double
+// kept. decoding happens once, like routenorm, so a double
 // encoded value (%2540) is not decoded twice.
 
 // CampaignParams are the only query parameters that can survive

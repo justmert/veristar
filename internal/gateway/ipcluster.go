@@ -16,8 +16,7 @@ import (
 	"github.com/justmert/veristar/internal/natsx"
 )
 
-// IPClusterWindow is the sliding window of the same-ip check the design
-// 4.4 step 9).
+// IPClusterWindow is the sliding window of the same-ip check.
 const IPClusterWindow = time.Hour
 
 // IPCluster tracks, per site and truncated-address key, the distinct visitor

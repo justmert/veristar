@@ -25,7 +25,7 @@ func geoTestFile(t *testing.T) string {
 	t.Helper()
 	p := os.Getenv("DBIP_MMDB")
 	if p == "" {
-		t.Skip("DBIP_MMDB is not set: run make geo-fetch and set DBIP_MMDB=.scratch/scratch/geo/dbip-country-lite.mmdb")
+		t.Skip("DBIP_MMDB is not set: run make geo-fetch and set DBIP_MMDB=.scratch/geo/dbip-country-lite.mmdb")
 	}
 	if !filepath.IsAbs(p) {
 		// go test runs in the package directory; the make target writes

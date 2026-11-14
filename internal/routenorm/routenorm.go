@@ -1,5 +1,5 @@
 // Package routenorm turns a request path or a tenant-supplied route template
-// into a low-cardinality route (the design). the rule set is hard-coded,
+// into a low-cardinality route. the rule set is hard-coded,
 // ordered and versioned; tenants cannot configure it, so every tenant's
 // routes are normalized the same way and an id can never become a dimension.
 //
@@ -18,7 +18,7 @@
 //     {date}, jwts and long base64url strings {token}
 //  7. any remaining segment longer than 64 bytes {long}
 //
-// rule set version 2 adds (functional review and A-11):
+// rule set version 2 adds:
 //
 //   - after rule 2, a segment that is not valid utf-8 or holds a control
 //     character becomes {invalid}. postgresql refuses invalid utf-8 and nul
