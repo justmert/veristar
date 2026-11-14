@@ -3,13 +3,12 @@ title: "API metrics storage"
 description: "The tables, functions, rights and queries that hold API latency metrics."
 ---
 
-this stage reference for the tables, functions, rights and queries that hold
+Reference for the tables, functions, rights and queries that hold
 API latency metrics in the `platform` database. Migrations
 `db/migrations/00015_api_metrics.sql` (tables, histogram functions),
 `00016_api_security.sql` (row-level security, rights, partition functions,
 initial partitions) and `00026_api_audit_fixes.sql` (rollup hour locks,
-`series_state.baseline`, the `coarse_buckets` warning kind; the review
-A-2, A-5 and A-12). Queries: `db/queries/writer/api.sql` (package
+`series_state.baseline`, the `coarse_buckets` warning kind). Queries: `db/queries/writer/api.sql` (package
 `internal/db/writerq`) and `db/queries/jobs/api.sql` (package
 `internal/db/jobsq`); regenerate with `make sqlc`. The histogram layout and
 its Go side live in `internal/histo`.
@@ -77,7 +76,8 @@ that the key stays unique. `error.type` is not a dimension. Metric and span
 rows are never merged; queries choose per tenant and service.
 
 Span-derived points carry the start of the UTC minute their spans ended in
-and no start time (`docs/reference/collector.md`, "For this stage"); bucket them
+and no start time ([collector.md](collector.md), "Span-derived points carry the span end
+minute"); bucket them
 by that time.
 
 The writer checks every text value before the batch (`checkText` in
@@ -114,8 +114,8 @@ The mark alone does not make that safe. `insert ... on conflict do nothing`
 takes no lock on a mark that is already committed, so a rollup could claim
 it and recompute the hour while a writer transaction that had just added
 minute rows to it was still open; those rows were invisible to the rollup
-and, with the mark gone, never reached the hourly and daily rows (audit
-A-2). Hour locks close that gap. Before its first minute row, the writer
+and, with the mark gone, never reached the hourly and daily rows. Hour locks
+close that gap. Before its first minute row, the writer
 takes `pg_advisory_xact_lock_shared(api.rollup_lock_key(tenant, hour))` for
 every hour it writes (`LockRollupHour`, in sorted order; writers share the
 lock). For every claimed hour the rollup first tries the exclusive lock
@@ -132,7 +132,7 @@ Behind the locks the rollup runs a consistency check once per run
 that has minute rows, whose hourly rows disagree with them on the request
 count and that no mark covers is marked again, recomputed in the same run,
 logged as an error and counted in `jobs_api_rollup_drifted_hours_total`.
-With the locks it should find nothing. Hours without minute rows are never
+It is a second line of defence behind the locks. Hours without minute rows are never
 marked, because a purge that keeps aggregates deletes minutes on purpose.
 
 `ingest_warnings` counts requests, not exports: a cumulative
@@ -153,7 +153,7 @@ without its state).
   `api.drop_minute_partition(day)`, `api.drop_hourly_partition(month)` (each
   returns false when there was nothing to do), `api.minute_partitions()` and
   `api.hourly_partitions()` (days and months that exist, read from the
-  partition bounds). Only the operator of a partitioned table may add or remove
+  partition bounds). Only the owner of a partitioned table may add or remove
   partitions, which is why these are functions.
 - Every partition gets forced row-level security and the same `cp_tenant`
   policy as the parent (`internal/db.CheckPolicyCoverage` checks
@@ -260,7 +260,7 @@ insert a row with the same key.
 
 | Task | Every | Package | Does |
 |---|---|---|---|
-| `api-rollup` | 5 min | `internal/jobs/apirollup` | claims up to 500 pending hours per transaction until none is left; recomputes each hour whose lock it gets, then each day containing one, then runs the consistency check. A pending hour whose minute partition is gone keeps its hourly rows: the mark is dropped, logged as an error and counted in `jobs_api_rollup_orphaned_marks_total`, and the other hours carry on (review; before, one such mark stopped every tenant's rollup). Days are 24 hours, never a calendar day of the session time zone |
+| `api-rollup` | 5 min | `internal/jobs/apirollup` | claims up to 500 pending hours per transaction until none is left; recomputes each hour whose lock it gets, then each day containing one, then runs the consistency check. A pending hour whose minute partition is gone keeps its hourly rows: the mark is dropped, logged as an error and counted in `jobs_api_rollup_orphaned_marks_total`, and the other hours carry on. Days are 24 hours, never a calendar day of the session time zone |
 | `api-partition` | 1 h | `internal/jobs/apipartition` | creates minute partitions for today and 7 days ahead, hourly partitions for this month and 3 ahead |
 | `api-retention` | 1 h | `internal/jobs/apiretention` | drops minute partitions of days before today minus `API_MINUTE_RETENTION_DAYS` and hourly partitions of months before this month minus `API_HOURLY_RETENTION_MONTHS` (each drop its own transaction); an expired day with hours still in `rollup_pending` waits for the rollup (`RollupPendingInDay`, `db/queries/jobs/apiretention.sql`). Prunes `ingest_dedup` after 8 days, `series_state` and `resource_seen` after 7 idle days, `route_registry` days older than 8 days (a backlog can deliver points up to 7 days old) |
 
@@ -269,7 +269,7 @@ refused at startup by `config.LoadAPIRetention` and by `apiretention.New`;
 `API_MINUTE_RETENTION_DAYS` must be 8 or more (`config.MinMinuteRetentionDays`):
 the writer accepts points as old as `API_METRICS` keeps messages (7 days), and
 a backlog after an outage must still find their partitions. `jobs capacity` measures the
-tables (`docs/reference/capacity.md`).
+tables ([capacity.md](capacity.md)).
 
 ## Tenant purge
 
@@ -313,4 +313,4 @@ counts in full (outcome `catch_up`), so the first interval is not lost; it
 lands one interval late, in the second point's minute. A process that had
 run longer keeps its baseline. A process that exports once and
 exits with an interval above the threshold is still lost; keep the
-interval at 60 s or less, as `docs/onboarding/api/troubleshooting.md` says.
+interval at 60 s or less, as [../onboarding/api/troubleshooting.md](../onboarding/api/troubleshooting.md) says.
