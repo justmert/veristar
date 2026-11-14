@@ -1,6 +1,6 @@
 import { Link, useSearchParams } from "react-router";
 import { signInUrl } from "@/api/endpoints";
-import { Mark } from "@/components/mark";
+import { Mark } from "@veristar/brand/mark";
 import { Button } from "@/components/ui/button";
 
 // failure codes of the oauth callback (contract 4.1.2)

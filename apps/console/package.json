@@ -12,16 +12,16 @@
   "dependencies": {
     "@fontsource-variable/geist": "catalog:",
     "@tanstack/react-query": "catalog:",
+    "@veristar/brand": "workspace:*",
     "class-variance-authority": "catalog:",
     "cn": "catalog:",
     "lucide-react": "catalog:",
+    "motion": "catalog:",
     "radix-ui": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
     "react-router": "catalog:",
     "recharts": "catalog:",
-    "shadcn": "catalog:",
-    "tw-animate-css": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {

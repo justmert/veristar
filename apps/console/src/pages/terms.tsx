@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router";
 import { termsQuery } from "@/api/queries";
 import { ErrorPanel, Loading } from "@/components/error-panel";
-import { Mark } from "@/components/mark";
+import { Mark } from "@veristar/brand/mark";
 import { Markdown } from "@/lib/markdown";
 
 // public: people read the terms before they sign in and enroll

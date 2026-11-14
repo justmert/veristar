@@ -1,0 +1,13 @@
+/*
+ * the veristar brand for tailwind 4. an app imports only this file:
+ *   @import "tailwindcss";
+ *   @import "@veristar/brand/index.css";
+ *   @source "../../../packages/brand/src";
+ * values live in tokens.ts; tokens.css and theme.generated.css are written
+ * from it. this file and base.css only reference --vs-* properties.
+ */
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
+@import "./tokens.css";
+@import "./theme.generated.css";
+@import "./base.css";

@@ -1,0 +1,250 @@
+/* hand-written base styles; every value is a --vs-* token */
+
+@layer base {
+  *,
+  ::before,
+  ::after {
+    border-color: var(--vs-line);
+  }
+  html {
+    font-family: var(--vs-font-sans);
+    font-size: var(--vs-text-body);
+    line-height: var(--vs-text-body-line);
+    background: var(--vs-ground);
+    color: var(--vs-fg);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+  }
+  body {
+    min-height: 100dvh;
+    background: var(--vs-ground);
+  }
+  code,
+  kbd,
+  pre,
+  samp {
+    font-family: var(--vs-font-mono);
+  }
+  ::selection {
+    background: var(--vs-accent-soft);
+    color: var(--vs-fg);
+  }
+  :focus-visible {
+    outline: 2px solid var(--vs-accent);
+    outline-offset: 2px;
+  }
+  ::placeholder {
+    color: var(--vs-fg-3);
+  }
+  * {
+    scrollbar-color: var(--vs-line-strong) transparent;
+    scrollbar-width: thin;
+  }
+  dialog::backdrop {
+    background: var(--vs-scrim);
+  }
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
+}
+
+@theme {
+  --animate-live: vs-live var(--vs-duration-live) var(--vs-ease-standard) infinite;
+  --animate-highlight: vs-highlight var(--vs-duration-highlight) var(--vs-ease-standard) both;
+  --animate-skeleton: vs-skeleton var(--vs-duration-live) var(--vs-ease-standard) infinite;
+  --animate-spin: vs-spin var(--vs-duration-spin) linear infinite;
+  --animate-flash: vs-flash var(--vs-duration-highlight) var(--vs-ease-standard) both;
+
+  /* the breathing dot of anything that listens */
+  @keyframes vs-live {
+    0%,
+    100% {
+      opacity: 1;
+      box-shadow: 0 0 0 0 currentColor;
+    }
+    50% {
+      opacity: 0.55;
+      box-shadow: 0 0 0 4px transparent;
+    }
+  }
+  /* an arrived row starts selected and fades back to its surface */
+  @keyframes vs-highlight {
+    from {
+      background-color: var(--vs-selected);
+    }
+    to {
+      background-color: transparent;
+    }
+  }
+  @keyframes vs-skeleton {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.5;
+    }
+  }
+  @keyframes vs-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  --animate-reveal-in: vs-reveal-in var(--vs-duration-reveal) var(--vs-ease-standard) both;
+  --animate-reveal-out: vs-reveal-out var(--vs-duration-press) var(--vs-ease-exit) both;
+  --animate-fade-in: vs-fade-in var(--vs-duration-reveal) var(--vs-ease-standard) both;
+  --animate-fade-out: vs-fade-out var(--vs-duration-press) var(--vs-ease-exit) both;
+  --animate-rise-in: vs-rise-in var(--vs-duration-page) var(--vs-ease-standard) both;
+
+  @keyframes vs-reveal-in {
+    from {
+      opacity: 0;
+      transform: translateY(var(--vs-motion-distance)) scale(0.98);
+    }
+  }
+  @keyframes vs-reveal-out {
+    to {
+      opacity: 0;
+      transform: translateY(calc(var(--vs-motion-distance) / 2)) scale(0.98);
+    }
+  }
+  @keyframes vs-fade-in {
+    from {
+      opacity: 0;
+    }
+  }
+  @keyframes vs-fade-out {
+    to {
+      opacity: 0;
+    }
+  }
+  @keyframes vs-rise-in {
+    from {
+      opacity: 0;
+      transform: translateY(var(--vs-motion-distance));
+    }
+  }
+  /* a changed value flashes its text once */
+  @keyframes vs-flash {
+    from {
+      color: var(--vs-accent);
+    }
+  }
+}
+
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* the focus halo every control shares: accent border plus a soft ring */
+@utility focus-ring {
+  &:focus-visible {
+    outline: 2px solid var(--vs-accent);
+    outline-offset: 2px;
+  }
+}
+@utility field-ring {
+  &:focus-visible,
+  &:focus {
+    outline: 3px solid var(--vs-accent-soft);
+    outline-offset: 0;
+    border-color: var(--vs-accent);
+  }
+}
+
+/*
+ * a native <dialog> that grows in over a fading scrim. css only, so it works
+ * under the console's style-src 'self' and with showModal()'s top layer.
+ */
+@utility dialog-motion {
+  opacity: 0;
+  transform: translateY(calc(var(--vs-motion-distance) * 2)) scale(0.97);
+  transition:
+    opacity var(--vs-duration-change) var(--vs-ease-standard),
+    transform var(--vs-duration-change) var(--vs-ease-standard),
+    overlay var(--vs-duration-change) allow-discrete,
+    display var(--vs-duration-change) allow-discrete;
+  &[open] {
+    opacity: 1;
+    transform: none;
+  }
+  @starting-style {
+    &[open] {
+      opacity: 0;
+      transform: translateY(calc(var(--vs-motion-distance) * 2)) scale(0.97);
+    }
+  }
+  &::backdrop {
+    opacity: 0;
+    transition:
+      opacity var(--vs-duration-change) var(--vs-ease-standard),
+      overlay var(--vs-duration-change) allow-discrete,
+      display var(--vs-duration-change) allow-discrete;
+  }
+  &[open]::backdrop {
+    opacity: 1;
+  }
+  @starting-style {
+    &[open]::backdrop {
+      opacity: 0;
+    }
+  }
+}
+
+/* the same, sliding from the left edge: the phone navigation drawer */
+@utility drawer-motion {
+  transform: translateX(-100%);
+  transition:
+    transform var(--vs-duration-change) var(--vs-ease-standard),
+    overlay var(--vs-duration-change) allow-discrete,
+    display var(--vs-duration-change) allow-discrete;
+  &[open] {
+    transform: none;
+  }
+  @starting-style {
+    &[open] {
+      transform: translateX(-100%);
+    }
+  }
+  &::backdrop {
+    opacity: 0;
+    transition:
+      opacity var(--vs-duration-change) var(--vs-ease-standard),
+      overlay var(--vs-duration-change) allow-discrete,
+      display var(--vs-duration-change) allow-discrete;
+  }
+  &[open]::backdrop {
+    opacity: 1;
+  }
+  @starting-style {
+    &[open]::backdrop {
+      opacity: 0;
+    }
+  }
+}
+
+@utility hatch {
+  background-image: repeating-linear-gradient(
+    135deg,
+    var(--vs-line-subtle) 0 1px,
+    transparent 1px 6px
+  );
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    /* biome-ignore lint/complexity/noImportantStyles: reduced motion must beat every component's own duration */
+    animation-duration: 0.01ms !important;
+    /* biome-ignore lint/complexity/noImportantStyles: as above */
+    animation-iteration-count: 1 !important;
+    /* biome-ignore lint/complexity/noImportantStyles: as above */
+    transition-duration: 0.01ms !important;
+    /* biome-ignore lint/complexity/noImportantStyles: as above */
+    scroll-behavior: auto !important;
+  }
+}
