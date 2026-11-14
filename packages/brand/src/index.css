@@ -6,8 +6,9 @@
  * values live in tokens.ts; tokens.css and theme.generated.css are written
  * from it. this file and base.css only reference --vs-* properties.
  */
-@import "@fontsource-variable/geist";
-@import "@fontsource-variable/geist-mono";
+/* inter with its optical size axis: large titles tighten, small text opens */
+@import "@fontsource-variable/inter/opsz.css";
+@import "@fontsource-variable/jetbrains-mono";
 @import "./tokens.css";
 @import "./theme.generated.css";
 @import "./base.css";

@@ -7,8 +7,8 @@
     "check": "tsc -p tsconfig.json && node assets.ts --check"
   },
   "devDependencies": {
-    "@fontsource-variable/geist": "catalog:",
-    "@fontsource-variable/geist-mono": "catalog:",
+    "@fontsource-variable/inter": "catalog:",
+    "@fontsource-variable/jetbrains-mono": "catalog:",
     "@playwright/test": "catalog:",
     "@types/node": "catalog:",
     "typescript": "catalog:"

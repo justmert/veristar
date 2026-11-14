@@ -6,7 +6,7 @@ import { expect, type Page, test } from "@playwright/test";
 
 // the veristar theme on umami's dashboard (docs/adr/0004): a view-only tenant
 // opens its dashboard through the web caddy, once with the system set to dark
-// and once to light. both must render the same dark brand, with geist from
+// and once to light. both must render the same dark brand, with inter from
 // the same host, no csp refusal, no request to another host and every text
 // at wcag aa contrast (axe's color-contrast rule on the rendered pages).
 // screenshots of both modes go to .scratch/design/umami for review.
@@ -56,16 +56,16 @@ async function expectTheme(page: Page, where: string) {
       color: body.color,
       font: body.fontFamily,
       scheme: getComputedStyle(document.documentElement).colorScheme,
-      geist: document.fonts.check('16px "Geist Variable"'),
+      inter: document.fonts.check('16px "Inter Variable"'),
       primary: getComputedStyle(document.documentElement).getPropertyValue("--zen-primary").trim(),
     };
   });
   expect(s.background, `${where}: page ground`).toBe(background);
   expect(s.color, `${where}: ink`).toBe(foreground);
-  expect(s.font, `${where}: font`).toMatch(/^"Geist Variable"/);
+  expect(s.font, `${where}: font`).toMatch(/^"Inter Variable"/);
   expect(s.scheme, `${where}: color-scheme`).toBe("dark");
-  expect(s.geist, `${where}: geist loaded`).toBe(true);
-  expect(s.primary, `${where}: primary`).toBe("#ff7a3d");
+  expect(s.inter, `${where}: inter loaded`).toBe(true);
+  expect(s.primary, `${where}: primary`).toBe("#b5482e");
 }
 
 // the sidebar shows the veristar mark and wordmark in place of umami's, and

@@ -54,7 +54,7 @@ export function MembersPage() {
   const list = useQuery(membersQuery(tenant.id));
 
   return (
-    <div className="flex max-w-[61rem] flex-col gap-6">
+    <div className="flex flex-col gap-6">
       <PageHeader title="Settings" />
       <NavTabs label="Settings" items={projectTabs(tenant.id, "settings") ?? []} />
       <MembersBody
@@ -86,13 +86,16 @@ function MembersBody({
   const ownerCount = list.data.members.filter((m) => m.role === "owner").length;
 
   return (
-    <div className="flex animate-rise-in flex-col gap-6">
-      <section aria-labelledby="members-h" className="flex flex-col gap-4">
-        <h2 id="members-h" className="sr-only">
-          Members
-        </h2>
-        {canManage ? <AddMemberForm tenantId={tenantId} /> : null}
-        <div className="grid gap-3 text-small text-fg-2 sm:grid-cols-2">
+    // the people on the left, adding someone and what each role may do on
+    // the right; on a narrow screen the aside comes first
+    <div className="grid animate-rise-in items-start gap-6 xl:grid-cols-[minmax(0,1fr)_24rem]">
+      <aside className="flex flex-col gap-4 xl:order-2">
+        {canManage ? (
+          <Panel title="Add a person" className="@container">
+            <AddMemberForm tenantId={tenantId} />
+          </Panel>
+        ) : null}
+        <div className="grid gap-3 text-small text-fg-2 sm:grid-cols-2 xl:grid-cols-1">
           <p className="rounded-lg border border-line px-3.5 py-3">
             <span className="font-medium text-fg">Owners</span> also add and remove people, delete
             sites, accept new terms and request erasure.
@@ -102,59 +105,66 @@ function MembersBody({
             dashboards.
           </p>
         </div>
-        <Panel flush>
-          <div className="relative overflow-x-auto">
-            <table className="w-full min-w-[36rem] border-separate border-spacing-0 text-body">
-              <thead>
-                <tr className="text-left text-caption text-fg-3">
-                  <th scope="col" className="border-b border-line px-4 py-2.5 font-medium">
-                    Member
-                  </th>
-                  <th scope="col" className="border-b border-line px-4 py-2.5 font-medium">
-                    Role
-                  </th>
-                  <th scope="col" className="border-b border-line px-4 py-2.5 font-medium">
-                    Added
-                  </th>
-                  <th scope="col" className="border-b border-line px-4 py-2.5">
-                    <span className="sr-only">Actions</span>
-                  </th>
-                </tr>
-              </thead>
-              <Stagger as="tbody" className="[&_tr:last-child>td]:border-0">
-                {list.data.members.map((m) => (
-                  <MemberRow
-                    key={m.user_id}
-                    tenantId={tenantId}
-                    tenantName={tenantName}
-                    member={m}
-                    isSelf={m.user_id === selfId}
-                    canManage={canManage}
-                    lastOwner={m.role === "owner" && ownerCount === 1}
-                  />
-                ))}
-              </Stagger>
-            </table>
-          </div>
-        </Panel>
-      </section>
-
-      {list.data.invites.length > 0 ? (
-        <section aria-labelledby="invites-h" className="flex flex-col gap-3">
-          <h2 id="invites-h" className="text-title text-fg">
-            Open invites
+      </aside>
+      <div className="flex min-w-0 flex-col gap-6 xl:order-1">
+        <section aria-labelledby="members-h" className="flex flex-col gap-4">
+          <h2 id="members-h" className="sr-only">
+            Members
           </h2>
           <Panel flush>
-            <Stagger as="ul" className="divide-y divide-line-subtle">
-              {list.data.invites.map((i) => (
-                <StaggerItem as="li" key={i.id}>
-                  <InviteRow tenantId={tenantId} invite={i} canManage={canManage} />
-                </StaggerItem>
-              ))}
-            </Stagger>
+            <div className="relative overflow-x-auto">
+              <table className="w-full min-w-[36rem] border-separate border-spacing-0 text-body">
+                <thead>
+                  <tr className="text-left text-caption text-fg-3">
+                    <th scope="col" className="border-b border-line px-4 py-2.5 font-medium">
+                      Member
+                    </th>
+                    <th scope="col" className="border-b border-line px-4 py-2.5 font-medium">
+                      Role
+                    </th>
+                    <th scope="col" className="border-b border-line px-4 py-2.5 font-medium">
+                      Added
+                    </th>
+                    <th scope="col" className="border-b border-line px-4 py-2.5">
+                      <span className="sr-only">Actions</span>
+                    </th>
+                  </tr>
+                </thead>
+                <Stagger as="tbody" className="[&_tr:last-child>td]:border-0">
+                  {list.data.members.map((m) => (
+                    <MemberRow
+                      key={m.user_id}
+                      tenantId={tenantId}
+                      tenantName={tenantName}
+                      member={m}
+                      isSelf={m.user_id === selfId}
+                      canManage={canManage}
+                      lastOwner={m.role === "owner" && ownerCount === 1}
+                    />
+                  ))}
+                </Stagger>
+              </table>
+            </div>
           </Panel>
         </section>
-      ) : null}
+
+        {list.data.invites.length > 0 ? (
+          <section aria-labelledby="invites-h" className="flex flex-col gap-3">
+            <h2 id="invites-h" className="text-title text-fg">
+              Open invites
+            </h2>
+            <Panel flush>
+              <Stagger as="ul" className="divide-y divide-line-subtle">
+                {list.data.invites.map((i) => (
+                  <StaggerItem as="li" key={i.id}>
+                    <InviteRow tenantId={tenantId} invite={i} canManage={canManage} />
+                  </StaggerItem>
+                ))}
+              </Stagger>
+            </Panel>
+          </section>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -198,7 +208,7 @@ export function AddMemberForm({ tenantId }: { tenantId: string }) {
 
   return (
     <form noValidate onSubmit={submit} aria-label="Add a member" className="flex flex-col gap-3">
-      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_10rem_auto] sm:items-start">
+      <div className="grid gap-3 @lg:grid-cols-[minmax(0,1fr)_10rem_auto] @lg:items-start">
         <TextField
           label="GitHub username"
           name="github_login"
@@ -226,7 +236,7 @@ export function AddMemberForm({ tenantId }: { tenantId: string }) {
         </SelectField>
         <Button
           type="submit"
-          className="sm:mt-6.5 max-lg:h-(--vs-control-touch)"
+          className="@lg:mt-6.5 max-lg:h-(--vs-control-touch)"
           pending={add.isPending}
         >
           {add.isPending ? null : <UserPlus aria-hidden />}

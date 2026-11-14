@@ -14,8 +14,8 @@
       "deploy/caddy/umami-theme": {
         "artifact": "the umami dashboard theme in the console image at /srv/umami-theme (deploy/images/console.Dockerfile, docs/adr/0004-umami-dashboard-theme.md). assets.ts copies the woff2 files and the licence of the two font packages into site/; nothing else of the importer is shipped",
         "also_bundled": {
-          "@fontsource-variable/geist": "its upright woff2 files and LICENSE are copied into site/_veristar/fonts",
-          "@fontsource-variable/geist-mono": "its upright woff2 files and LICENSE are copied into site/_veristar/fonts"
+          "@fontsource-variable/inter": "its upright woff2 files and LICENSE are copied into site/_veristar/fonts",
+          "@fontsource-variable/jetbrains-mono": "its upright woff2 files and LICENSE are copied into site/_veristar/fonts"
         }
       },
       "packages/tracker": {

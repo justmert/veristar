@@ -169,7 +169,7 @@ Fonts are self-hosted next to the stylesheet. No script, no image change.
   shows only the bare version number. `theme_test.go` fails if the title loses the credit.
 - **Sidebar.** The stylesheet hides Umami's logo SVG and draws `brand/mark.svg` as the icon
   span's background, and hides the word "umami" (no size, not visible, so screen readers skip
-  it) while the span's `::after` shows and reads "Veristar" in Geist 600 with -0.03em tracking.
+  it) while the span's `::after` shows and reads "Veristar" in Inter 600 with -0.03em tracking.
   The selectors are the viewBox and the "icon span, then text span" structure; `theme_test.go`
   checks the viewBox in Umami's JavaScript, and `tests/umami-compat/specs/ui.spec.ts` checks the
   rendered structure and the word "umami" in a real browser.

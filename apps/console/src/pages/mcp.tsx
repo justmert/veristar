@@ -74,7 +74,7 @@ export function McpPage() {
   const canCreate = tenant.status === "active" || tenant.status === "pending";
 
   return (
-    <div className="flex max-w-[60rem] flex-col gap-6">
+    <div className="flex flex-col gap-6">
       <PageHeader
         title="AI assistants (MCP)"
         description="Ask Claude, ChatGPT, Cursor or any client of the Model Context Protocol about this project's web and API analytics. A connection acts as the person who made it and reads this project only."
