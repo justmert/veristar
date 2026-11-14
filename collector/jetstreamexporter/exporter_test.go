@@ -265,9 +265,8 @@ func spanExport(tenant, batch string, now time.Time, reverse bool) pmetric.Metri
 }
 
 // a retried trace export is aggregated again at another moment and in
-// another map order; its message must still be recognised as the same one
-//, and its points must carry the minute the requests ended in
-//.
+// another map order; its message must still be recognised as the same one,
+// and its points must carry the minute the requests ended in.
 func TestSpanPartsDeduplicateOnRetry(t *testing.T) {
 	tenant := uuid.NewString()
 	first, _, err := Split(spanExport(tenant, "batch-1", time.Now(), false))

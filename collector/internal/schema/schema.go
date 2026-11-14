@@ -51,8 +51,8 @@ const (
 	// AttrSpanMinute is the start of the utc minute a server span ended in,
 	// in unix nanoseconds. tenantguard sets it on every span, the connector
 	// keeps it as a point attribute so points are split by minute, and the
-	// jetstream exporter makes it the point's time and removes it (audit
-	// A-3 and A-7). it never leaves the collector.
+	// jetstream exporter makes it the point's time and removes it. it
+	// never leaves the collector.
 	AttrSpanMinute = "scf.span.minute"
 )
 
