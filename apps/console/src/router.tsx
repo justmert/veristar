@@ -2,6 +2,7 @@ import { Mark } from "@veristar/brand/mark";
 import { createBrowserRouter, type LoaderFunctionArgs, redirect } from "react-router";
 import { ApiError } from "@/api/client";
 import { meQuery } from "@/api/queries";
+import { AccountPage } from "@/pages/account";
 import { ApiSetupPage } from "@/pages/api-setup";
 import { ApiTrafficPage } from "@/pages/api-traffic";
 import { AppShell } from "@/pages/app-shell";
@@ -80,6 +81,7 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <ProjectsPage /> },
       { path: "projects/new", element: <EnrollPage /> },
+      { path: "account", element: <AccountPage /> },
       {
         path: "projects/:tenantId",
         element: <ProjectLayout />,

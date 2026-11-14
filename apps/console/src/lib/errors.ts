@@ -22,6 +22,8 @@ export function errorText(err: unknown): string {
         return "That person is already a member.";
       case "invite_exists":
         return "That person already has an open invite.";
+      case "sole_owner":
+        return "You are the only owner of a project. Make another member an owner, or ask the operators to remove the project, before you delete your account.";
       case "last_owner":
         return "A project needs at least one owner. Make someone else an owner first.";
       case "site_removed":

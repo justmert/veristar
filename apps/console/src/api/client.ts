@@ -12,6 +12,8 @@ export class ApiError extends Error {
   readonly status: number;
   readonly code: string;
   readonly fields: Record<string, string>;
+  // the projects named by sole_owner (contract 4.1.6), empty otherwise
+  readonly tenants: { id: string; name: string }[];
   readonly requestId: string | null;
   readonly retryAfter: number | null;
 
@@ -20,6 +22,7 @@ export class ApiError extends Error {
     code: string;
     message: string;
     fields?: Record<string, string>;
+    tenants?: { id: string; name: string }[];
     requestId?: string | null;
     retryAfter?: number | null;
   }) {
@@ -28,6 +31,7 @@ export class ApiError extends Error {
     this.status = opts.status;
     this.code = opts.code;
     this.fields = opts.fields ?? {};
+    this.tenants = opts.tenants ?? [];
     this.requestId = opts.requestId ?? null;
     this.retryAfter = opts.retryAfter ?? null;
   }
@@ -71,6 +75,7 @@ async function errorFrom(res: Response, path: string): Promise<ApiError> {
       code: e.code,
       message: e.message,
       fields: e.fields,
+      tenants: e.tenants,
       requestId: e.request_id,
       retryAfter: retryAfterSeconds(res),
     });
