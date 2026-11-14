@@ -9,8 +9,8 @@ root="$(cd "$(dirname "$0")/../.." && pwd)"
 printf '%s\n%s\n' "$LC_NODES" "$LC_RESTORE_NODE" | while read -r name _ _ _; do
 	lc_node_rm "$name"
 done
-# every optional node, whatever LC_BACKUP and LC_PROBE were at up.sh
-for name in sa-lc-backup-1 sa-lc-core-2 sa-lc-probe-1; do
+# every optional node, whatever LC_BACKUP, LC_PROBE and LC_TOPOLOGY were at up.sh
+for name in sa-lc-backup-1 sa-lc-core-2 sa-lc-probe-1 sa-lc-node-1 sa-lc-node-2 sa-lc-node-3; do
 	lc_node_rm "$name"
 done
 lc_s3_rm
