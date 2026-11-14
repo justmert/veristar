@@ -6,8 +6,7 @@ description: "Bring the platform back when the database cluster is lost."
 
 Brings the platform back after the PostgreSQL cluster is gone: an operator mistake that dropped
 data on every member alike, ransomware on the database nodes, or the loss of the nodes holding
-the members. Finding O-4 of
-the review notes. Ingestion does not stop meanwhile: the edge tier keeps
+the members. Ingestion does not stop meanwhile: the edge tier keeps
 accepting events into JetStream (`WEB_EVENTS` 72 hours, `API_METRICS` 7 days), and they are
 delivered once the core tier is back.
 
@@ -16,8 +15,7 @@ delivered once the core tier is back.
 > and the core project (`/opt/veristar/core`: Caddy for every site, a Patroni member, HAProxy,
 > Umami, control plane, replayer, metrics writer, jobs). The NATS store on each node holds the
 > queued events, so this runbook keeps a node's VM whenever its system can be trusted and
-> replaces only what was lost. Steps 2 and 3 (restore node, `restore.yml`) ran on production on
-> 2026-11-13.
+> replaces only what was lost.
 
 **This runbook or a replica rebuild.** Check the members first, on any node that still runs:
 `cd /opt/veristar/core && sudo docker compose exec postgres patronictl -c /etc/patroni/patroni.yml list`.
@@ -216,7 +214,7 @@ Record the recovery time (from step 2 to step 9) and the data loss window
 | Date | What ran | Result | Source |
 |---|---|---|---|
 | 2026-11-13 | the restore node in the OpenTofu inventory (step 2) against mocked providers | `make tofu-check`: `inventory_with_restore` passes for staging and production | `tests/infra/*.tftest.hcl` |
-| 2026-11-13 | steps 2 and 3 on production: `production-restore-1` created, `restore.yml` restored to a target time and promoted, then the node removed | `pg_is_in_recovery()` false, both databases present, newest `cp.audit_log` row equal to the running cluster's; 5 resources destroyed afterwards | [../reference/drills/2026-11-13-azure.md](../reference/drills/2026-11-13-azure.md), "Restore" |
+| 2026-11-13 | steps 2, 3 and 11 on production: `production-restore-1` created, `restore.yml` restored to a target time and promoted, then the node removed | `pg_is_in_recovery()` false, both databases present, newest `cp.audit_log` row equal to the running cluster's; 5 resources destroyed afterwards | [../reference/drills/2026-11-13-azure.md](../reference/drills/2026-11-13-azure.md), "Restore" |
 
-Not yet exercised: the whole chain, and steps 4 to 10 on any environment. The local point-in-time drill (`tests/drills/pitr.sh`) covers step 3 only and has
-not been run either (the design).
+The export, import and verification of steps 4 and 9 are the migration tools of the handover,
+run between two separate local environments ([../handover/rebuild.md](../handover/rebuild.md)).
