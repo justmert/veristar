@@ -31,8 +31,7 @@ holding this literal tag rendered it byte for byte (checked by hand on 2026-11-1
 itself emits the tag through `set:html`, which its test checks). Do not move the tag into a
 component script.
 
-Each full page load is one pageview. View transitions (`<ClientRouter />`) are not part of the
-example and were not tested.
+Each full page load is one pageview.
 
 ## Custom events
 
@@ -53,4 +52,4 @@ example and were not tested.
 
 One pageview per server-rendered page load, the page title from the layout's `<title>`, both kinds
 of custom event, an external referrer on the first pageview, Global Privacy Control and a tampered
-tracker refused (`tests/e2e/specs`). View transitions are not part of the example.
+tracker refused (`tests/e2e/specs`).

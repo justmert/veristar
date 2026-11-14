@@ -95,8 +95,8 @@ export async function initKit(): Promise<typeof StellarWalletsKit> {
 `attachWalletsKit` comes from the package's `wallets-kit` entry (`tracker/wallets-kit` in the
 example) and returns a function that stops the capture. It subscribes to the kit's own events, so
 `wallet_connected` carries the network. Attaching the same kit twice throws, because every event
-would be counted twice. Calling it before the tracker's `init()` throws too. The package is not
-published yet; see [npm.md](npm.md).
+would be counted twice. Calling it before the tracker's `init()` throws too. [The npm package](npm.md) explains how to
+build and install the package.
 
 ## Where to see them
 

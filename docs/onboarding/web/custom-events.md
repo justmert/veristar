@@ -38,9 +38,9 @@ document.getElementById("manual").addEventListener("click", () => {
 });
 ```
 
-Data values may be strings, numbers or booleans, for example
+Data values can be strings, numbers or booleans, for example
 `umami.track("plan-chosen", { plan: "pro", seats: 3, annual: true })`. `umami.track()` returns a
-promise. The visitor may block the tracker, so call it as `window.umami?.track(...)` and never let
+promise. The visitor can block the tracker, so call it as `window.umami?.track(...)` and never let
 your own code depend on it. The framework guides show the same call in React, Vue, Svelte and
 Next.js components.
 

@@ -48,11 +48,12 @@ message for names and marker strings that must not be there.
 ## Stored and for how long
 
 One row per minute, service, method, route, status code and source (metric or span) with the
-bucket counts, sum and count. Minute rows are rolled up into hours and days; daily aggregates are
-kept for at least 24 months. No request, trace, log line, address or user identifier is stored.
+bucket counts, sum and count. Minute rows are rolled up into hours and days. With the default
+settings, minute rows are kept for 30 days, hourly rows for 36 months and daily rows without a
+time limit. No request, trace, log line, address or user identifier is stored.
 
 ## Why
 
-The RFP asks for request volume, status and latency per API and for nothing beyond that. Keeping
-less means there is less to protect, less to erase and nothing in the platform that could identify
+The API dashboards show request volume, status codes and latency per route, and nothing beyond
+that. Keeping less means there is less to protect, less to erase and nothing in the platform that could identify
 one of your users. If you need traces, logs or other metrics, your own backend already has them.

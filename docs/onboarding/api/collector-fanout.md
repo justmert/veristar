@@ -78,7 +78,7 @@ part of the core and contrib distributions.
 
 ## Adding it to an existing configuration
 
-You probably have receivers, processors and an exporter already. Only two things are new:
+If your Collector already has receivers, processors and an exporter, add two things:
 
 1. the `otlphttp/platform` exporter with the `Authorization` header, and
 2. that exporter added to the `metrics` and `traces` pipelines.

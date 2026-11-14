@@ -46,14 +46,13 @@ Versions can be mixed: pages still carrying the old tag keep working while you r
 one, and all pages count into the same dashboard.
 
 For the [React Router](react-router.md) and [Next.js](nextjs.md) layouts, update the `src` and
-`integrity` values in the element. With the [npm package](npm.md), install the new exact version.
+`integrity` values in the element. With the [npm package](npm.md), build and install the new exact version.
 A [self-hosted](self-hosting.md) copy needs the new file at a new path as well.
 
 ## Checking a file yourself
 
-Before you trust a new version, you can compare the file with the published hash and, once the
-release pipeline signs releases, with its signature:
-[`docs/security/verify-tracker.md`](../../security/verify-tracker.md).
+Before you trust a new version, compare the file with the published hash or rebuild it from
+source: [Verify the tracker](../../security/verify-tracker.md).
 
 ## Revoked versions
 
