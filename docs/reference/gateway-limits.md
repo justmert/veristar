@@ -113,8 +113,15 @@ Target: at least 2,000 req/s with p99 under 50 ms on one instance. Met by both.
 workflow. On GitHub's standard runner for private repositories (2 vCPUs, 7 GB) k6, the gateway and
 NATS share two cores; two runs there sent 2,400 and 2,221 req/s with p99 174 ms and 222 ms
 (e2e runs 43437576423 and 43454017432), which measures the runner, not the gateway. Run it on a host
-with cores to spare for k6 before a release that touches the event path. The production edge VM
-(`Standard_B2als_v2`, 2 vCPUs) has not been measured with this test.
+with cores to spare for k6 before a release that touches the event path.
+
+On a production node (`Standard_B2as_v2`, 2 vCPUs, converged: Caddy with TLS, the gateway, NATS
+and the core services share them), measured on 2026-11-14 through the node's Caddy with the
+same profile: p99 51.4 ms at 500 req/s, 92 ms at 800, 198 ms at 1,200, and at 2,500 offered the
+node reached 863 req/s with p99 2,134 ms, CPU-bound mostly in Caddy. The target above is not met
+on that size. The expected peak (50 a second) and its 10x burst (500 a second) are within what
+one node serves, and three nodes share them
+([drills/2026-11-13-azure.md](drills/2026-11-13-azure.md), "Gateway load on one node").
 Under saturation (160 concurrent clients) the in-process node reached 7,721 req/s
 with p99 79.8 ms, so latency at the target rate comes from queueing, not the path.
 
