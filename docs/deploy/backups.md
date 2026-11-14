@@ -4,8 +4,8 @@ sidebarTitle: "Backups"
 description: "How the pgBackRest repository is created and protected, from storage to WAL archiving."
 ---
 
-How the pgBackRest repository of staging and production comes into existence and stays
-protected. OpenTofu creates the storage (`infra/tofu/modules/backup-storage`); `site.yml` does
+This page describes how the pgBackRest repository of an environment comes into existence and
+stays protected. OpenTofu creates the storage (`infra/tofu/modules/backup-storage`); `site.yml` does
 every step after that; nothing is done by hand. Code: `infra/ansible/roles/storage`,
 `infra/ansible/roles/core/tasks/archive.yml`, `infra/ansible/roles/backup`. Restores are in
 [../runbooks/point-in-time-restore.md](../runbooks/point-in-time-restore.md) and
@@ -23,7 +23,7 @@ environment's region, Azure Denmark East for production (`veristarprodbackups`),
 | Redundancy | ZRS: three copies in three availability zones | the repository outlives the loss of a zone |
 | Access | Entra ID only: account keys and shared access signatures are off | no storage key exists that could leak |
 | Who writes | the managed identity `<env>-node` of the three nodes and the restore node, role Storage Blob Data Contributor on the container | pgBackRest signs in with `repo1-azure-key-type=auto` |
-| Network | default deny; the environment's three subnets (service endpoint) and the IPv4 admin ranges an operator input | |
+| Network | default deny; the environment's three subnets (service endpoint) and the IPv4 ranges of `admin_cidrs` | |
 | Blob versioning | on | a delete or overwrite keeps the previous version |
 | Immutability | version-level, time-based: every version is immutable for 7 days after it was written; `Unlocked` until the operator locks it (`backup_lock_state`) | not even a subscription owner can delete a protected version early once the policy is `Locked` |
 | Lifecycle | previous versions are deleted 35 days after they became previous | covers the four-week retention plus a week |
@@ -101,14 +101,13 @@ user guide warns against a hierarchical namespace, which the storage account doe
 pgBackRest runs inside the `postgres` container and fetches its token from the Azure instance
 metadata service (169.254.169.254), which Docker's bridge network reaches through the host.
 
-## 5. What was proven where
+## 5. Evidence
 
-| What | Where | Result |
-|---|---|---|
-| The storage account, container, lifecycle rule and role assignment as planned | `tofu plan` against the subscription, 2026-11-13 ([opentofu.md](opentofu.md) section 3.6) | planned, not applied |
-| The pgBackRest config for Azure renders as above | the `backup` role template with the inventory values, 2026-11-13 | as stated |
-| Archiving, backups, `verify`, delete refusal and `--repo-target-time` against Azure | the first staging converge | not run yet |
-| The same flow with the local converge's S3 stand-in (`LC_BACKUP=s3`) | `make ops-local`, 2026-11-13 (steps `converge`, `bucket`, `archiving`) | passed; the stand-in speaks S3, not Azure |
-
-The first staging converge proves the Azure path end to end: `pgbackrest check` in
-`archive.yml` fails the run if the identity cannot write, and the verify timer runs every day.
+On production, `pgbackrest check` archived a WAL segment to the backup storage account, a full
+backup took 17 s, and `pgbackrest info` reports `status: ok`; a point-in-time restore onto the
+restore node promoted at its target
+([../reference/drills/2026-11-13-azure.md](../reference/drills/2026-11-13-azure.md)). The
+converge itself proves the identity can write: `pgbackrest check` in `archive.yml` fails the run
+if it cannot, and the verify timer runs every day. `make ops-local` runs the stanza, archiving,
+backup, delete refusal and `--repo-target-time` steps on the local converge, against an S3 object
+storage stand-in ([local-converge.md](local-converge.md) section 7).
