@@ -87,10 +87,14 @@ export function inline(text: string): ReactNode[] {
     if (at > last) out.push(text.slice(last, at));
     const key = `i${i++}`;
     if (token.startsWith("**")) {
-      out.push(<strong key={key}>{token.slice(2, -2)}</strong>);
+      out.push(
+        <strong key={key} className="font-semibold text-fg">
+          {token.slice(2, -2)}
+        </strong>,
+      );
     } else if (token.startsWith("`")) {
       out.push(
-        <code key={key} className="rounded bg-muted px-1 font-mono text-[0.9em]">
+        <code key={key} className="rounded-sm bg-sunken px-1 font-mono text-small">
           {token.slice(1, -1)}
         </code>,
       );
@@ -99,7 +103,11 @@ export function inline(text: string): ReactNode[] {
       const href = link?.[2] ? safeHref(link[2]) : null;
       if (link?.[1] && href) {
         out.push(
-          <a key={key} href={href} className="text-primary underline underline-offset-2">
+          <a
+            key={key}
+            href={href}
+            className="rounded-sm text-fg underline decoration-line-strong underline-offset-2 transition-colors duration-(--vs-duration-press) hover:decoration-fg focus-ring"
+          >
             {link[1]}
           </a>,
         );
@@ -113,35 +121,58 @@ export function inline(text: string): ReactNode[] {
   return out;
 }
 
-export function Markdown({ source }: { source: string }) {
-  const blocks = parseBlocks(source);
+// an anchor id for a heading, so a table of contents can link to it
+export function headingId(text: string): string {
   return (
-    <div className="space-y-4 leading-relaxed">
+    text
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "section"
+  );
+}
+
+// the second-level headings of a document, in order, for a table of contents
+export function outline(source: string): { id: string; text: string }[] {
+  return parseBlocks(source)
+    .filter((b): b is Extract<Block, { kind: "h" }> => b.kind === "h" && b.level === 2)
+    .map((b) => ({
+      id: headingId(b.text.replace(/[*`]/g, "")),
+      text: b.text.replace(/[*`]/g, ""),
+    }));
+}
+
+// `afterTitle` is placed right under the document's first-level heading (the
+// terms page puts the version there)
+export function Markdown({ source, afterTitle }: { source: string; afterTitle?: ReactNode }) {
+  const blocks = parseBlocks(source);
+  const titled = blocks.some((b) => b.kind === "h" && b.level === 1);
+  return (
+    <div className="flex flex-col gap-4 text-body text-fg-2">
+      {titled ? null : afterTitle}
       {blocks.map((b, n) => {
         // blocks have no identity beyond their position in a static document
         const key = `b${n}`;
         switch (b.kind) {
           case "h": {
-            const cls =
-              b.level === 1
-                ? "text-3xl font-semibold tracking-tight"
-                : b.level === 2
-                  ? "pt-4 text-xl font-semibold tracking-tight"
-                  : "pt-2 text-base font-semibold";
             if (b.level === 1)
               return (
-                <h1 key={key} className={cls}>
-                  {inline(b.text)}
-                </h1>
+                <div key={key} className="flex flex-col gap-3">
+                  <h1 className="text-h1 tracking-tight text-fg">{inline(b.text)}</h1>
+                  {afterTitle}
+                </div>
               );
             if (b.level === 2)
               return (
-                <h2 key={key} className={cls}>
+                <h2
+                  key={key}
+                  id={headingId(b.text.replace(/[*`]/g, ""))}
+                  className="scroll-mt-6 pt-4 text-section text-fg"
+                >
                   {inline(b.text)}
                 </h2>
               );
             return (
-              <h3 key={key} className={cls}>
+              <h3 key={key} className="pt-2 text-title text-fg">
                 {inline(b.text)}
               </h3>
             );
@@ -152,14 +183,14 @@ export function Markdown({ source }: { source: string }) {
             return (
               <blockquote
                 key={key}
-                className="border-l-4 border-warn bg-warn/8 py-2 pr-3 pl-4 text-sm"
+                className="rounded-md border border-warning-line bg-warning-soft px-3.5 py-2.5 text-small text-fg"
               >
                 {inline(b.text)}
               </blockquote>
             );
           case "ul":
             return (
-              <ul key={key} className="list-disc space-y-1 pl-6">
+              <ul key={key} className="flex list-disc flex-col gap-1.5 pl-5 marker:text-fg-3">
                 {b.items.map((it, j) => (
                   <li key={`${key}-${j}`}>{inline(it)}</li>
                 ))}
@@ -167,7 +198,7 @@ export function Markdown({ source }: { source: string }) {
             );
           case "ol":
             return (
-              <ol key={key} className="list-decimal space-y-1 pl-6">
+              <ol key={key} className="flex list-decimal flex-col gap-1.5 pl-5 marker:text-fg-3">
                 {b.items.map((it, j) => (
                   <li key={`${key}-${j}`}>{inline(it)}</li>
                 ))}
