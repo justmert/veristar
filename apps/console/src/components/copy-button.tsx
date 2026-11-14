@@ -1,6 +1,6 @@
+import { fade } from "@veristar/brand/motion";
 import { Check, Copy } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { fade } from "@veristar/brand/motion";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 

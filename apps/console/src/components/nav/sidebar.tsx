@@ -1,7 +1,7 @@
-import { Mark } from "@veristar/brand/mark";
-import { transition } from "@veristar/brand/motion";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@veristar/brand/cn";
+import { Mark } from "@veristar/brand/mark";
+import { transition } from "@veristar/brand/motion";
 import {
   Activity,
   BookOpen,

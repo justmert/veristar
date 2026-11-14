@@ -79,6 +79,7 @@ export function Dialog({
   );
 
   return (
+    // biome-ignore lint/a11y/useKeyWithClickEvents: the click only closes on the scrim; the keyboard closes with Escape, which the native dialog handles
     <dialog
       ref={ref}
       aria-labelledby={titleId}

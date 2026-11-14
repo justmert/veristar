@@ -1,10 +1,10 @@
-import { cva } from "class-variance-authority";
 import { cn } from "@veristar/brand/cn";
+import { transition } from "@veristar/brand/motion";
+import { cva } from "class-variance-authority";
 import { LayoutGroup, motion } from "motion/react";
 import { Tabs as TabsPrimitive } from "radix-ui";
-import { createContext, useContext, useId, useState } from "react";
 import type * as React from "react";
-import { transition } from "@veristar/brand/motion";
+import { createContext, useContext, useId, useState } from "react";
 
 // the active tab's marker slides between triggers (a shared layout id), so a
 // switch reads as one control moving, not two repaints

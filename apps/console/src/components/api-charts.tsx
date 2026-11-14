@@ -5,8 +5,8 @@
 // every chart also has a table view, so no value depends on hovering or on
 // colour.
 
-import { fade, transition } from "@veristar/brand/motion";
 import { cn } from "@veristar/brand/cn";
+import { fade, transition } from "@veristar/brand/motion";
 import { Table2 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { type ReactNode, useId, useRef, useState } from "react";
