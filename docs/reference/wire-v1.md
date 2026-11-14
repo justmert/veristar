@@ -129,8 +129,9 @@ Example:
  "tag":"<64 hex>","nonce":87}}
 ```
 
-All events of one page load carry the same proof. What the gateway checks, and in which order, is
-in section 4.4 of the plan and in [browser-proof.md](browser-proof.md).
+All events of one page load carry the same proof. What the proof shows and what it costs is in
+[browser-proof.md](browser-proof.md); the order of the gateway's checks is in
+[../security/bot-and-inflation.md](../security/bot-and-inflation.md), "Where the checks run".
 
 ## Consent-gated start
 
