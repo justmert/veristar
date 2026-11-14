@@ -1,10 +1,10 @@
 # core tier caddy for app.<BASE_DOMAIN>: the console single-page app as
-# static files, and the control plane api under /api (the design,
-# this stage; docs/reference/control-plane-api.md section 1).
+# static files, and the control plane api under /api
+# (docs/reference/control-plane-api.md section 1).
 #
 # environment, all required; each one is used where caddy refuses an empty
 # value, so a missing variable fails `caddy validate` and startup:
-#   BASE_DOMAIN            registered domain, an operator input; the site is app.<BASE_DOMAIN>
+#   BASE_DOMAIN            registered domain; the site is app.<BASE_DOMAIN>
 #   CONTROLPLANE_UPSTREAM  host:port of the control plane api listener on the
 #                          private network (CONTROLPLANE_ADDR), for example
 #                          controlplane:8085
@@ -42,7 +42,7 @@
 
 (app_log) {
 	# access logs keep no client identifier, no credential and no query
-	# string (contract section 1, the design step 7): the remote and client
+	# string (contract section 1): the remote and client
 	# address are deleted, and so are all request headers, because they carry
 	# the session cookie and the user agent besides any forwarding header.
 	# the query is cut from the uri. response headers go too: Set-Cookie
@@ -109,7 +109,7 @@ app.{$BASE_DOMAIN} {
 			header_up -X-Forwarded-For
 			header_up -X-Real-Ip
 			header_up -Forwarded
-			# the sign-in limits are per client (contract 4.1.1, review). the
+			# the sign-in limits are per client (contract 4.1.1). the
 			# control plane turns this address into a keyed hash in memory and
 			# keeps nothing else; it never logs or stores the address. the value
 			# replaces anything the client sent under the same name, so a

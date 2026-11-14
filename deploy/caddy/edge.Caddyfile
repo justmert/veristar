@@ -1,18 +1,18 @@
-# edge tier caddy (the design, this stage).
+# edge tier caddy.
 #
 # environment, all required; each one is used where caddy refuses an empty
 # value, so a missing variable fails `caddy validate` and startup:
-#   BASE_DOMAIN        registered domain, an operator input; the site is in.<BASE_DOMAIN>
+#   BASE_DOMAIN        registered domain; the site is in.<BASE_DOMAIN>
 #   GATEWAY_UPSTREAM   host:port of the local gateway on the private side
 #   EDGE_TLS           first argument of the tls directive: the acme account
 #                      email in production, "internal" for the local ca in tests.
-#                      this stage replaces it with dns-01 through caddy-dns/cloudflare,
+#                      deployed nodes use dns-01 through caddy-dns/cloudflare instead,
 #                      which needs the custom caddy build.
 #
 #   COLLECTOR_GRPC_UPSTREAM    host:port of the collector's otlp grpc listener
 #   COLLECTOR_HTTP_UPSTREAM    host:port of the collector's otlp http listener
 #   COLLECTOR_HEALTH_UPSTREAM  host:port of the collector's health_check
-#                              endpoint (this stage, otlp.<BASE_DOMAIN>)
+#                              endpoint (otlp.<BASE_DOMAIN>)
 
 (edge_log_fields) {
 	request>remote_ip delete
@@ -40,8 +40,8 @@
 
 (edge_log) {
 	# access logs keep no client identifier: the remote address and the
-	# address caddy derives from it are deleted before the entry is written
-	#, and so are all request headers. they hold the user
+	# address caddy derives from it are deleted before the entry is
+	# written, and so are all request headers. they hold the user
 	# agent, the forwarding headers (a proxy on the visitor's side can put the
 	# visitor's real address in x-forwarded-for, x-real-ip or forwarded), the
 	# otlp bearer token, and Referer: a tenant page with

@@ -1,6 +1,6 @@
 #!/bin/sh
-# assembles the caddyfile a deployed node runs (the design) from the
-# per-host caddyfiles that the earlier phases test one by one:
+# assembles the caddyfile a deployed node runs from the per-host
+# caddyfiles that the caddy tests check one by one:
 #
 #   assemble.sh edge   edge.Caddyfile                  > node.Caddyfile
 #   assemble.sh core   app.Caddyfile web.Caddyfile     > node.Caddyfile

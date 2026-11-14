@@ -1,4 +1,4 @@
-# the scf-otelcol collector (the design): the ocb manifest in
+# the scf-otelcol collector: the ocb manifest in
 # collector/builder-config.yaml compiled with strict version checking, and
 # collector/otelcol.yaml baked in. every environment-specific value stays a
 # required environment variable (see the header of otelcol.yaml).

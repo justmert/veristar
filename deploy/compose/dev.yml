@@ -54,7 +54,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    # environment follows the design REDIS_URL, CLICKHOUSE_URL,
+    # environment follows docs/reference/umami-contract.md. REDIS_URL, CLICKHOUSE_URL,
     # KAFKA_URL, CLOUD_MODE, MCP_ENABLED, DISABLE_BOT_CHECK and
     # SKIP_LOCATION_HEADERS stay unset on purpose.
     environment:
@@ -81,7 +81,7 @@ services:
       # first boot runs every prisma migration before the server listens
       start_period: 120s
 
-  # collect gateway (this stage). in the "edge" profile, because it needs the
+  # collect gateway. in the "edge" profile, because it needs the
   # nats topology that `platformctl nats apply` creates after dev-up; start
   # it with `make gateway-up`. ports bind to loopback only: in production
   # only the local caddy reaches the public port, and here a client that
@@ -122,7 +122,7 @@ services:
       - "127.0.0.1:8080:8080"
       - "127.0.0.1:9090:9090"
 
-  # replayer (this stage): drains WEB_EVENTS into umami's /api/send on the
+  # replayer: drains WEB_EVENTS into umami's /api/send on the
   # private network. in the "core" profile because it needs the nats topology
   # from `platformctl nats apply`; start it with
   # `docker compose --env-file deploy/compose/.env.dev -f deploy/compose/dev.yml --profile core up -d replayer`.
@@ -152,13 +152,13 @@ services:
     ports:
       - "127.0.0.1:9091:9090"
 
-  # control plane api (this stage). in the "core" profile: it needs the platform
+  # control plane api. in the "core" profile: it needs the platform
   # database migrated with role passwords (make db-migrate db-roles). port
-  # 8085 is the dev oauth callback of an operator input (8080 is the dev gateway). the
+  # 8085 is the dev github oauth app's callback (8080 is the dev gateway). the
   # api is reached directly at http://localhost:8085/api, which is also the
   # console origin, so the host-only session cookie and the csrf origin check
   # see one origin. ops port on loopback only. GITHUB_CLIENT_ID,
-  # GITHUB_CLIENT_SECRET an operator input and OPERATOR_GITHUB_IDS an operator input are added
+  # GITHUB_CLIENT_SECRET (the dev github oauth app) and OPERATOR_GITHUB_IDS are added
   # to .env.dev by hand; they default to empty here so the other services still
   # start, and the control plane then refuses to start and names each key.
   controlplane:
@@ -208,7 +208,7 @@ services:
       - "127.0.0.1:8085:8085"
       - "127.0.0.1:9095:9090"
 
-  # otlp collector (this stage). in the "edge" profile, because it needs the
+  # otlp collector. in the "edge" profile, because it needs the
   # nats topology from `platformctl nats apply`. ports bind to loopback only:
   # in production only the local caddy reaches them. the dev nats server has
   # no auth, so NATS_USER and NATS_PASSWORD are empty. the image has no
@@ -242,7 +242,7 @@ services:
       - "127.0.0.1:4318:4318"
       - "127.0.0.1:13133:13133"
 
-  # metrics writer (this stage). in the "core" profile: it needs the nats
+  # metrics writer. in the "core" profile: it needs the nats
   # topology (platformctl nats apply) and the platform database migrated with
   # role passwords (make db-migrate db-roles). values follow
   # docs/reference/api-storage.md: batch 256, first-point threshold 120 s,

@@ -18,7 +18,7 @@ COPY internal ./internal
 # platformctl embeds the migrations (package db)
 COPY db ./db
 # platformctl and jobs link control-plane packages that embed the terms and
-# compliance texts and the machine api's openapi document (this stage)
+# compliance texts and the machine api's openapi document
 COPY docs/compliance ./docs/compliance
 COPY docs/reference/openapi ./docs/reference/openapi
 

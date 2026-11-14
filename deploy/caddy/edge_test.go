@@ -26,7 +26,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
-// caddyImage is caddy 2.11.9 by the digest pinned in the design
+// caddyImage is caddy 2.11.9 by its pinned digest.
 const caddyImage = "caddy:2.11.9@sha256:e40b94d0a43b5ff69cb20568d73f10c70703df7b0ffc2298eb3d723cdc9d0bd1"
 
 func caddyfile(t *testing.T) string {
@@ -44,7 +44,7 @@ func baseEnv() map[string]string {
 		"BASE_DOMAIN":      "edge.test",
 		"GATEWAY_UPSTREAM": "gateway:8080",
 		"EDGE_TLS":         "internal",
-		// otlp.<BASE_DOMAIN> (this stage)
+		// otlp.<BASE_DOMAIN>
 		"COLLECTOR_GRPC_UPSTREAM":   "collector:4317",
 		"COLLECTOR_HTTP_UPSTREAM":   "collector:4318",
 		"COLLECTOR_HEALTH_UPSTREAM": "collector:13133",
@@ -192,7 +192,7 @@ func TestEdgeAccessLogHasNoClientIdentity(t *testing.T) {
 
 	const ua = "Mozilla/5.0 (X11; Linux x86_64) EdgeLogProbe/7.1"
 	const spoofed = "198.51.100.77"
-	// W-7: a page with Referrer-Policy: unsafe-url sends its full url
+	// a page with Referrer-Policy: unsafe-url sends its full url
 	const referer = "https://shop.example/reset?token=EdgeRefererProbe&email=maria%40example.com"
 	client := &http.Client{Timeout: 10 * time.Second, Transport: &http.Transport{
 		// caddy's local ca signs the test certificate; the test checks the

@@ -1,5 +1,5 @@
-# the old domain after a handover by permanent redirect (the design,
-# infra/ansible/playbooks/cutover-redirect.yml). every name of the old
+# the old domain after a handover by permanent redirect
+# (infra/ansible/playbooks/cutover-redirect.yml). every name of the old
 # domain answers 308 to the same name under the new domain, with the path
 # and query kept, except the tracker files, which keep being served from
 # here by the local gateway, so a page whose snippet names the old host
