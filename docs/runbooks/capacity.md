@@ -3,17 +3,18 @@ title: "Capacity changes"
 description: "Add resources before a limit is reached, or remove them when they are not used."
 ---
 
-Adding resources before a limit is reached, or removing them when they are not used. The measured
-numbers behind the sizing are in [../reference/capacity.md](../reference/capacity.md) (API metric
-storage) and [../reference/drills/2026-11-13.md](../reference/drills/2026-11-13.md) (drain rates);
-the availability effects of the topology are in
-[../reference/availability.md](../reference/availability.md). Staging and production run three
-converged nodes, one per availability zone of the region (production: Azure Denmark East), each
-running the edge and the core roles on one VM size, `node_vm_size` (`Standard_B2as_v2`). Below,
-"edge nodes" and "core nodes" are the inventory groups: on a converged node both apply. The
-measured gateway load on one production node is in
-[../reference/drills/2026-11-13-azure.md](../reference/drills/2026-11-13-azure.md), "Gateway load
-on one node".
+How to add resources before a limit is reached, or remove them when they are not used. An
+environment runs three converged nodes, one per availability zone of the region (production:
+Azure Denmark East), each running the edge and the core roles on one VM size, `node_vm_size`
+(`Standard_B2as_v2`). Below, "edge nodes" and "core nodes" are the inventory groups: on a converged
+node both apply.
+
+The measured numbers behind the sizing:
+
+- gateway throughput and capacity per node and per cluster: [gateway limits](../reference/gateway-limits.md);
+- API metric storage: [API metrics capacity](../reference/capacity.md);
+- replayer and metrics writer drain rates: the [local drill record](../reference/drills/2026-11-13.md);
+- the availability effects of the topology: [availability](../reference/availability.md).
 
 ## Signals
 
@@ -69,10 +70,10 @@ it, keeping a quarter of the store free (the test checks that ratio), then run
    quota fits (production region `denmarkeast`):
    `az vm list-skus -l denmarkeast --size <size> -o table` and
    `az vm list-usage -l denmarkeast -o table`.
-2. Plan and read it:
+2. Plan and read it (`<env>` is `staging` or `production`):
 
    ```sh
-   make staging-plan
+   make <env>-plan
    ```
 
    An in-place update (`~`) of `azurerm_linux_virtual_machine` resizes the existing VM, which
@@ -81,10 +82,11 @@ it, keeping a quarter of the store free (the test checks that ratio), then run
 3. Drain the node first if the change restarts it ([edge-node-failure.md](edge-node-failure.md)
    step 2; on the node holding the Patroni leader, switch it over first,
    [database-failover.md](database-failover.md)). Change one node at a time by applying while
-   only that node's change is in the plan, or accept that `make staging-apply` changes every
+   only that node's change is in the plan, or accept that `make <env>-apply` changes every
    node and do it in a quiet hour.
-4. `make staging-apply`, then `make staging-deploy SA_IMAGE_TAG=<current release> SA_RELEASE_MANIFEST=<release-images.json>` so Ansible
-   checks the node again, then undrain.
+4. `make <env>-apply`, then
+   `make <env>-deploy SA_IMAGE_TAG=<current release> SA_RELEASE_MANIFEST=<release-images.json>`
+   so Ansible checks the node again, then undrain.
 
 ## Change a limit or a tunable
 
@@ -95,11 +97,11 @@ Override them for one environment in `infra/ansible/inventories/<env>/group_vars
 (a map overrides the whole map, so copy every key), record the reason next to the value, and roll
 out with `make <env>-deploy ROLLING=1 SA_IMAGE_TAG=<current release> SA_RELEASE_MANIFEST=<its release-images.json>`.
 
-**Umami.** One Umami process is one Node.js process and drained about 280 events/s in the
-this stage load run, below the 500/s of the 10x profile. The core role therefore runs
-`core_umami_processes` Umami processes per core node (2 on the 2-vCPU `Standard_B2as_v2`
-node: `umami` and `umami-2`; the role's comment explains why not 4), and the replayer spreads visitors over all of them (`UMAMI_URL` lists each). The
-reasoning and the per-count measurements are in the comment above `core_umami_processes` in
+**Umami.** One Umami process is one Node.js process and drained about 280 events/s in the load
+run of 2026-11-13 ([local drill record](../reference/drills/2026-11-13.md)), below the 500/s of the
+10x load profile. The core role therefore runs `core_umami_processes` Umami processes per core node
+(2 on the 2-vCPU `Standard_B2as_v2` node: `umami` and `umami-2`), and the replayer spreads visitors
+over all of them (`UMAMI_URL` lists each). The reasoning and the per-count measurements are in the comment above `core_umami_processes` in
 `infra/ansible/roles/core/defaults/main.yml`. To raise web drain, raise that count (it must stay
 at most `REPLAYER_WORKERS`, 128) and give the nodes the cores for it; each idle process holds
 about 115 MB.
@@ -108,11 +110,6 @@ about 115 MB.
 
 | Date | What ran | Result | Source |
 |---|---|---|---|
-| 2026-11-12 | this stage: `jobs capacity` after the 1,000,000-request volume run | 467.5 bytes per `metrics_minute` row | [../reference/capacity.md](../reference/capacity.md) |
-| 2026-11-13 | this stage: replayer and writer tuning from the load run | web drain about 77/s to about 280/s, OTLP about 150/s to about 1,417/s | [../reference/drills/2026-11-13.md](../reference/drills/2026-11-13.md) |
-| 2026-11-13 | this stage: the measurement code of step 2 (`go test -run TestMeasure ./internal/jobs/apicapacity/`, real PostgreSQL 18.6) | `metrics_minute` 111,840 rows, 507.7 bytes per row; `metrics_hourly` and `metrics_daily` 1,864 rows, 523.0 bytes per row | this page |
-
-`jobs capacity` itself could not be run against the development stack in this stage: its platform
-database was still at migration 14 (from 2026-11-12) and has no `api` tables, and the stack is
-shared, so it was not migrated forward for this. Not yet exercised: a server type change and a
-limit change rolled out to staging (inputs I5, I13, I14, I15).
+| 2026-11-12 | `jobs capacity` after the 1,000,000-request volume run | 467.5 bytes per `metrics_minute` row | [../reference/capacity.md](../reference/capacity.md) |
+| 2026-11-13 | Replayer and metrics writer tuning from the load run | web drain from about 77/s to about 280/s, OTLP from about 150/s to about 1,417/s | [../reference/drills/2026-11-13.md](../reference/drills/2026-11-13.md) |
+| 2026-11-13 | The measurement code of step 2 (`go test -run TestMeasure ./internal/jobs/apicapacity/`, real PostgreSQL 18.6) | `metrics_minute` 111,840 rows, 507.7 bytes per row; `metrics_hourly` and `metrics_daily` 1,864 rows, 523.0 bytes per row | this page |

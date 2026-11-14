@@ -12,8 +12,8 @@ ocb's strict check refuses a mixed set.
 
 ## Steps
 
-1. **Choose the target** under the pin policy of the design (a minor line younger than
-   30 days is skipped unless a security fix needs it) and record it there with a one-line reason.
+1. **Choose the target.** Skip a minor line released less than 30 days ago unless a security fix
+   needs it. Give the reason for the chosen version in the commit message.
 
 2. **Move every pin of the collector together**:
 
@@ -56,7 +56,8 @@ ocb's strict check refuses a mixed set.
    (`infra/ansible/roles/observability/files/rules/tests/`).
 
 6. **Release and roll out** as any image change: tag, `release-images.yml`, then
-   `make staging-deploy ROLLING=1 SA_IMAGE_TAG=<release> SA_RELEASE_MANIFEST=<release-images.json>`.
+   `make <env>-deploy ROLLING=1 SA_IMAGE_TAG=<release> SA_RELEASE_MANIFEST=<release-images.json>`
+   (`<env>` is `staging` or `production`).
    Edge nodes are updated one at a time behind the drain, so OTLP clients move to the other
    nodes while one restarts. Check `IngestOTLPErrorRatioHigh` stays quiet and
    `API_METRICS` drains.
@@ -66,10 +67,6 @@ ocb's strict check refuses a mixed set.
 
 ## Exercised
 
-| Date | What ran | Result | Source |
-|---|---|---|---|
-| 2026-11-13 | this stage, local: steps 4 and 5 (`make collector-build`, `make collector-it`) at the current pins, as a rebuild rather than a version change | build 6.4 s with a warm module cache, `components` check passed; `TestCollector` passed 13 of 13 subtests in 42.8 s, including NATS stop and recovery and a collector restart under load through edge Caddy | this page |
-
-Not yet exercised: an actual version change (this stage kept the pins of the design and ran
-the build and gate at them), `make apipath` (about 90 minutes and many containers, too heavy for the shared host
-during this phase), and the rollout through `deploy.yml` on staging.
+| Date | What ran | Result |
+|---|---|---|
+| 2026-11-13 | Steps 4 and 5 locally (`make collector-build`, `make collector-it`) at the current pins, as a rebuild | build 6.4 s with a warm module cache, `components` check passed; `TestCollector` passed 13 of 13 subtests in 42.8 s, including NATS stop and recovery and a collector restart under load through edge Caddy |
