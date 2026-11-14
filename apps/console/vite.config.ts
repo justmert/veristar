@@ -15,8 +15,16 @@ export default defineConfig(({ command }) => {
   return {
     plugins: [react(), tailwindcss()],
     resolve: { alias: { "@": path.resolve(import.meta.dirname, "src") } },
+    // the mcp endpoint and its oauth paths are served by the control plane
+    // beside /api, as caddy routes them in production
     server: upstream
-      ? { proxy: { "/api": { target: upstream, changeOrigin: false, xfwd: false } } }
+      ? {
+          proxy: Object.fromEntries(
+            ["/api", "/mcp", "/oauth", "/.well-known/oauth-protected-resource", "/.well-known/oauth-authorization-server"].map(
+              (p) => [p, { target: upstream, changeOrigin: false, xfwd: false }],
+            ),
+          ),
+        }
       : undefined,
     build: {
       // no inline assets: the csp in deploy/caddy/app.Caddyfile allows only
