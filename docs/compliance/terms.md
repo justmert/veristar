@@ -9,7 +9,7 @@ effective: 2026-11-13
 
 # Terms of use
 
-> **Status: draft, pending legal review an operator input.** Not legal advice.
+> **Status: draft.** Not legal advice.
 > Projects accept this version when they enroll. When a new version is
 > published, every project accepts it at its next sign-in, and changes to a
 > project are blocked until it does. The final version drops `draft` from the

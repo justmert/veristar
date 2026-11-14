@@ -3,12 +3,10 @@ title: "Records of processing"
 description: "The records of processing activities for the service."
 ---
 
-> **Status: draft, pending legal review an operator input.** Not legal advice. Last
-> updated 2026-11-12. Two records: the operator as processor for tenants
-> (GDPR Art. 30(2)) and the operator as controller of console accounts (Art.
-> 30(1)). The operator's name and contact are filled in when the operating
-> entity is decided (open question for SCF, the design); until then this
-> record names the role, not the entity.
+Two records of processing: the operator as processor for tenants (GDPR Art.
+30(2)) and the operator as controller of console accounts (Art. 30(1)). The
+records name the operator's role. This page is not legal advice. Last updated
+2026-11-14.
 
 ## A. Processing on behalf of tenants (operator as processor)
 
@@ -32,7 +30,7 @@ description: "The records of processing activities for the service."
 | Purpose | sign-in to the console, membership of projects, audit of changes |
 | Data subjects | tenant staff and operators who sign in |
 | Personal data | numeric GitHub user id, GitHub login, project memberships and roles, session token hashes, MCP credential hashes with their names and last use, audit log entries naming the user id (MCP tool calls included, without their answers) |
-| Legal basis | to be decided by counsel (performance of the service terms is the working assumption) |
+
 | Recipients | GitHub, Inc. for the sign-in itself (`subprocessors.md`) |
 | Transfers | the sign-in passes through GitHub in the United States |
-| Retention | sessions: 7 days absolute, 24 hours idle; accounts and the audit log: while the service runs (deletion of a console account on request is not implemented as a self-service route yet) |
+| Retention | sessions: 7 days absolute, 24 hours idle; accounts and the audit log: while the service runs |

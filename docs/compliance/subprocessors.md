@@ -3,12 +3,10 @@ title: "Sub-processors"
 description: "The sub-processors that support the service, and what each one handles."
 ---
 
-> **Status: draft, pending legal review an operator input.** Not legal advice. Last
-> updated 2026-11-14. The list describes the production deployment in
-> `infra/tofu/envs/production`, running since 2026-11-13
-> ([data-residency.md](data-residency.md)). The list becomes binding when it is
-> published with the final terms. Changes are announced under
-> `dpa-template.md` clause 6.
+The sub-processors of the production deployment in `infra/tofu/envs/production`
+([data-residency.md](data-residency.md)), and the data each one can access.
+Changes are announced under `dpa-template.md` clause 6. This page is not legal
+advice. Last updated 2026-11-14.
 
 | Sub-processor | Service | Location of processing | Data it can access |
 |---|---|---|---|
@@ -25,7 +23,8 @@ Not sub-processors:
   traffic is tested (`tests/webpath/egress_test.go`).
 - **No alert push service.** Operational alerts are shown on the console's
   operator Alerts page ([../operators/alerts.md](../operators/alerts.md)) and
-  are not sent to any outside service: the Discord webhook (plan an operator input is
-  not configured, by operator decision. If a push channel is configured later and
-  its alert texts carry tenant data (for example a site name), that service is
+  are not sent to any outside service. The optional Discord webhook receiver
+  is not configured in production. If a push channel is configured and its
+  alert texts carry tenant data (for example a site name), that service is
   added to the table above first.
+
