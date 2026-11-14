@@ -236,12 +236,7 @@ export function InlineSelect({
       <label htmlFor={id} className="text-caption whitespace-nowrap text-fg-3">
         {label}
       </label>
-      <NativeSelect
-        id={id}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="[&>select]:h-(--vs-control-sm) [&>select]:text-small max-lg:[&>select]:h-(--vs-control-touch)"
-      >
+      <NativeSelect id={id} value={value} onChange={(e) => onChange(e.target.value)} size="sm">
         {children}
       </NativeSelect>
     </span>
