@@ -203,7 +203,7 @@ travels over SSH standard input and never appears on a command line:
 ```sh
 sops --config infra/secrets/.sops.yaml decrypt --extract '["grafana_admin_password"]' \
   infra/secrets/<env>/secrets.enc.yaml |
-  ssh ops@<node> 'cd /opt/veristar/core && sudo docker compose exec -T grafana \
+  ssh ops@<node> 'cd /opt/veristar/observability && sudo docker compose exec -T grafana \
     grafana cli admin reset-admin-password --password-from-stdin'
 ```
 
