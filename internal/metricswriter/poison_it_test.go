@@ -22,7 +22,7 @@ import (
 	"github.com/justmert/veristar/internal/natsx"
 )
 
-// TestMetricsWriterPoisonMessages is review against a real postgresql
+// TestMetricsWriterPoisonMessages runs the poison message case against a real postgresql
 // and a real nats server, with the writer's own Run loop: poison messages of
 // one tenant sit in the same fetched batch as normal traffic of another
 // tenant and of the poison tenant itself. three kinds of poison:

@@ -440,7 +440,7 @@ func (w *Writer) committed(ctx context.Context, msgs []jetstream.Msg, res *resul
 	defer cancel()
 	// the batch is committed, so the acks only tell the server what is done.
 	// each confirmed ack is one round trip to the consumer's leader, which
-	// can sit in another location (one after the other, this stage measured
+	// can sit in another location (one after the other, a cross-region test measured
 	// about 150 messages a second, so about 6.7 ms each), so they go out
 	// concurrently. an ack that fails brings its message back, and it is
 	// skipped as already applied.

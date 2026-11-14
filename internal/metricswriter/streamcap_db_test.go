@@ -18,7 +18,7 @@ import (
 	"github.com/justmert/veristar/internal/jobs/jobstest"
 )
 
-// review: a stream is a (series, start time) row, so every process
+// a stream is a (series, start time) row, so every process
 // restart adds a new set and the old rows stay for 7 idle days. the cap
 // counted all of them, so ordinary restarts reached it and every new
 // process's data was refused for up to a week. the cap now counts streams

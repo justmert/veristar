@@ -3,8 +3,7 @@
 // holds it; `jobs run <name>` takes the same lock for a single run. every
 // database transaction a task commits goes through Leader.Tx, which writes
 // the lock's fencing token into cp.leader_fence first, so a former leader
-// that paused past its lock's ttl cannot commit after its successor did
-//.
+// that paused past its lock's ttl cannot commit after its successor did.
 package scheduler
 
 import (

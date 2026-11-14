@@ -12,7 +12,7 @@ import (
 	"github.com/justmert/veristar/internal/umami"
 )
 
-// W-12: visit_state refuses writes once it holds natsx.VisitStateMaxBytes
+// visit_state refuses writes once it holds natsx.VisitStateMaxBytes
 // and keeps refusing until keys expire, up to 24 hours. before, the replayer
 // retried the visit state and duplicate guard writes without end, so a full
 // bucket stopped all web delivery. now it skips them, counts the skip, and

@@ -1,5 +1,5 @@
-// Package erasurefollowup is the jobs task erasure-followup (the design,
-// control-plane-api 10.5). it finishes what an erasure run in the control
+// Package erasurefollowup is the jobs task erasure-followup
+// (control-plane-api 10.5). it finishes what an erasure run in the control
 // plane leaves to jobs: it reads the affected utc days of agg.web_daily
 // again from umami, deletes every aggregate of a reset site, and fails a run
 // whose control plane process stopped renewing its heartbeat.

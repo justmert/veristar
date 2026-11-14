@@ -10,7 +10,7 @@ import (
 )
 
 func TestBoundsMatchPlan(t *testing.T) {
-	// the design; the collector converts legacy milliseconds by scaling
+	// the canonical bounds; the collector converts legacy milliseconds by scaling
 	// 5 ... 10000 by 0.001, which must give these exact float64 values
 	ms := []float64{5, 10, 25, 50, 75, 100, 250, 500, 750, 1000, 2500, 5000, 7500, 10000}
 	require.Len(t, histo.Bounds, len(ms))
@@ -166,7 +166,7 @@ func TestQuantile(t *testing.T) {
 	require.ErrorContains(t, err, "holds -1")
 }
 
-// review: a source bucket that spans several canonical buckets puts its
+// a source bucket that spans several canonical buckets puts its
 // requests at its upper bound; when most requests sit in such buckets the
 // histogram is coarse.
 func TestCoarse(t *testing.T) {

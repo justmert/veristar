@@ -1,7 +1,7 @@
 package retainweb
 
-// TestedMigrations are the prisma migrations of umami 3.5.0 at the digest pinned
-// in the design, with the checksums prisma stores in _prisma_migrations.
+// TestedMigrations are the prisma migrations of umami 3.5.0 at the pinned digest
+// (deploy/compose/dev.yml), with the checksums prisma stores in _prisma_migrations.
 // read from a database the pinned image migrated (2026-11-12). retain-web
 // runs only when the database holds exactly these, finished and not rolled
 // back: another set means another schema, whose tables this job was not

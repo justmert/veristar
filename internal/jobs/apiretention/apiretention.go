@@ -1,5 +1,5 @@
-// Package apiretention is the jobs task that enforces api metric retention
-// (the design): minute rows for API_MINUTE_RETENTION_DAYS (30), hourly
+// Package apiretention is the jobs task that enforces api metric retention:
+// minute rows for API_MINUTE_RETENTION_DAYS (30), hourly
 // rows for API_HOURLY_RETENTION_MONTHS (36, never below 24), daily rows
 // forever. metric rows expire by whole partitions (apipartition.DropExpired);
 // the writer's bookkeeping expires by rows: ingest_dedup ids after 8 days,

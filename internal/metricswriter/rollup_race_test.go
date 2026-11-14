@@ -18,7 +18,7 @@ import (
 	"github.com/justmert/veristar/internal/jobs/jobstest"
 )
 
-// review: a writer transaction adds minute rows to an hour whose mark is
+// a writer transaction adds minute rows to an hour whose mark is
 // already committed, and the rollup claims that mark while the writer is
 // still open. the rollup must not recompute the hour from minutes it cannot
 // see yet, or those requests never reach the hourly and daily rows. two real

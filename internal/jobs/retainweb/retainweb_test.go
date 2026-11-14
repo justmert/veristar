@@ -153,7 +153,7 @@ func TestCutoff(t *testing.T) {
 	require.Equal(t, time.Date(2026, 10, 12, 0, 0, 0, 0, time.UTC), retainweb.Cutoff(now, 1))
 }
 
-// W-13: on a month end the cutoff is the last day of the target month, not
+// on a month end the cutoff is the last day of the target month, not
 // the first day of the month after it, so a tenant at 24 months loses no day
 // early.
 func TestCutoffClampsTheDay(t *testing.T) {

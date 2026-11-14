@@ -1,7 +1,7 @@
-// Package retainweb is `jobs retain-web` (the design): it deletes raw
+// Package retainweb is `jobs retain-web`: it deletes raw
 // umami event and session rows older than WEB_RAW_RETENTION_MONTHS. umami
-// has no retention feature and no delete-by-date route (the design,
-// correction 7), so the job deletes in umami's own tables, as the role
+// has no retention feature and no delete-by-date route
+// (docs/reference/umami-contract.md), so the job deletes in umami's own tables, as the role
 // jobs_retention, which may read and delete those tables and nothing else.
 // before it deletes anything it checks that the database holds exactly the
 // umami migrations it was tested with, and the columns it uses.

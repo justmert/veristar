@@ -52,7 +52,7 @@ func TestClassify(t *testing.T) {
 		{&umami.APIError{Status: 500}, false, sendServerError},
 		{&umami.APIError{Status: 503}, false, sendServerError},
 		{fmt.Errorf("umami send: %w", &url.Error{Op: "Post", URL: "http://u", Err: errors.New("connection refused")}), false, sendNetwork},
-		// W-14: an undecodable 200 is a send failure like any other, so
+		// an undecodable 200 is a send failure like any other, so
 		// umami's health decides whether it is retried without limit
 		{errors.New("umami send: 200 answer without cache, sessionId or visitId"), false, sendNetwork},
 	}
@@ -93,7 +93,7 @@ func TestSlotsPerTarget(t *testing.T) {
 	}
 }
 
-// W-1: retries on a healthy umami are bounded and spaced 1 s, 5 s, 30 s
+// retries on a healthy umami are bounded and spaced 1 s, 5 s, 30 s
 func TestHealthyRetriesAreBounded(t *testing.T) {
 	var total time.Duration
 	for n := 1; n < maxHealthyFailures; n++ {
@@ -227,7 +227,7 @@ func TestGateWakesOnlyTheTargetThatAnswered(t *testing.T) {
 	}
 }
 
-// N-1: failing sends of several visitors on a process whose health checks
+// failing sends of several visitors on a process whose health checks
 // pass are a write fault; one visitor failing among stored sends is not.
 func TestWriteWatch(t *testing.T) {
 	now := time.Date(2026, 11, 13, 9, 0, 0, 0, time.UTC)

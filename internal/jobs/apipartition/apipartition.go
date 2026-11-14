@@ -1,5 +1,5 @@
 // Package apipartition is the jobs task that keeps partitions of the api
-// metric tables ahead of the clock (the design): minute partitions for
+// metric tables ahead of the clock: minute partitions for
 // today and the next 7 utc days, hourly partitions for this month and the
 // next 3. the writer has no default partition to fall back on, so a missing
 // partition would make every point of that day fail; creating a week ahead
@@ -27,8 +27,8 @@ const TaskName = "api-partition"
 // hourly runs mean a week of margin is never more than an hour short.
 const Every = time.Hour
 
-// DaysAhead and MonthsAhead are the windows kept ahead of today (plan
-// this stage: 7 days of daily, 3 months of monthly partitions).
+// DaysAhead and MonthsAhead are the windows kept ahead of today (7
+// days of daily, 3 months of monthly partitions).
 const (
 	DaysAhead   = 7
 	MonthsAhead = 3

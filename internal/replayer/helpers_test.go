@@ -501,7 +501,7 @@ func runUmami(t *testing.T, nw *testcontainers.DockerNetwork, dbURL, appSecret s
 		t.Fatal(err)
 	}
 	loopback := netip.MustParseAddr("127.0.0.1")
-	// environment of the design, as in dev.yml
+	// umami's environment, as in dev.yml
 	um, err := testcontainers.Run(context.Background(), imageFromDevYML(t, "ghcr.io/umami-software/umami"),
 		testcontainers.WithEnv(map[string]string{
 			"DATABASE_URL":       dbURL,

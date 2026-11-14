@@ -22,11 +22,11 @@ import (
 // event_data.date_value, and postgres refuses year 0 with 22008. umami has
 // already inserted the website_event row by then and answers 500, while its
 // heartbeat and every other event stay fine. the gateway refuses this value
-// since W-1, so here it stands for an event queued by an older gateway or a
+// now, so here it stands for an event queued by an older gateway or a
 // failure nobody has found yet.
 const poisonValue = "0000-01-01T00:00:00Z"
 
-// W-1: a poison event on a healthy umami is dead-lettered after a bounded
+// a poison event on a healthy umami is dead-lettered after a bounded
 // number of attempts, and while it is retried another site's traffic, and
 // even another visitor of the same site, flows through. one delivery slot
 // (REPLAYER_WORKERS=1) and a small in-flight bound are the worst case: with

@@ -121,7 +121,7 @@ func TestDecodeRefuses(t *testing.T) {
 		"cumulative spans": build(t, good, func(ms pmetric.MetricSlice) {
 			histogram(ms, metricFromSpans, pmetric.AggregationTemporalityCumulative, canonical, make([]uint64, 15), nil)
 		}),
-		// review: values postgresql refuses must never reach a batch
+		// values postgresql refuses must never reach a batch
 		"invalid utf-8 route": withAttrs(t, good, map[string]any{attrRoute: "/a/\xff/b"}),
 		"nul in route":        withAttrs(t, good, map[string]any{attrRoute: "/a/\x00"}),
 		"overlong route":      withAttrs(t, good, map[string]any{attrRoute: "/" + strings.Repeat("a", 1024)}),
@@ -144,7 +144,7 @@ func withAttrs(t *testing.T, p payload, attrs map[string]any) []byte {
 	})
 }
 
-// review: a source histogram whose buckets are far wider than the
+// a source histogram whose buckets are far wider than the
 // canonical ones puts every request at its bucket's upper bound. such a
 // point is marked coarse, beyond the plain lossy flag.
 func TestDecodeMarksCoarseBuckets(t *testing.T) {

@@ -1,5 +1,5 @@
 // Package reconcile is the jobs task that runs the provisioning reconciler
-// for every tenant (the design). the control plane reconciles a tenant
+// for every tenant. the control plane reconciles a tenant
 // after each change; this task repairs whatever such a run missed, and
 // whatever was changed directly in umami or the registry, within Every.
 package reconcile
@@ -17,7 +17,7 @@ import (
 // TaskName is the name of the task in the jobs daemon.
 const TaskName = "reconcile"
 
-// Every is the task's period (the design: every 10 minutes).
+// Every is the task's period (every 10 minutes).
 const Every = 10 * time.Minute
 
 // Task runs the reconciler with the jobs leader's fenced cp_system

@@ -196,8 +196,7 @@ func (d *Drainer) Drain(ctx context.Context, tx TxFunc) (int, error) {
 	}
 }
 
-// discard is the dead-letter path. EDGE_STATS has no dlq stream (plan
-// section 4.6), and a message that cannot be decoded never will be, so it is
+// discard is the dead-letter path. EDGE_STATS has no dlq stream, and a message that cannot be decoded never will be, so it is
 // acked and logged at error level with its id; the metric makes it visible.
 func (d *Drainer) discard(_ context.Context, msg jetstream.Msg, reason string) error {
 	d.metrics.discarded.Inc()
