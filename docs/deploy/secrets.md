@@ -21,7 +21,7 @@ infra/secrets/
   <env>/secrets.enc.yaml     the platform's secrets (Ansible), SOPS-encrypted yaml
   <env>/ca.enc.yaml          the internal CA of the private network (controller only)
   <env>/tls.enc.yaml         the CA bundle and one key and certificate per node (ansible.md section 9)
-  <env>/tofu.enc.env         OpenTofu's credentials (opentofu.md section 1)
+  <env>/tofu.enc.env         OpenTofu's credentials (opentofu.md, "Secrets handed to OpenTofu")
 ```
 
 An environment gets a creation rule in `.sops.yaml` only once its recipients list exists. For an
@@ -162,7 +162,7 @@ controller tools of [prerequisites.md](prerequisites.md) with `sops` and `age-ke
    values you supplied. Never redirect the decrypted output to a file.
 
 6. **Create the OpenTofu credentials file** `infra/secrets/staging/tofu.enc.env` with the
-   variables of [opentofu.md](opentofu.md) section 1 ("Secrets handed to OpenTofu"):
+   variables of [Secrets handed to OpenTofu](opentofu.md#secrets-handed-to-opentofu):
 
    ```sh
    sops --config infra/secrets/.sops.yaml edit infra/secrets/staging/tofu.enc.env
@@ -175,7 +175,7 @@ controller tools of [prerequisites.md](prerequisites.md) with `sops` and `age-ke
    at least 16 characters and different per environment.
 
 7. **Issue the private network's certificates** once the inventory exists
-   ([opentofu.md](opentofu.md) section 6), before the first converge:
+   ([opentofu.md](opentofu.md#procedure)), before the first converge:
 
    ```sh
    make internal-ca ENV=staging
