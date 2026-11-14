@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """replaces every generated secret of one environment, for rotate-all.yml
-(the design, docs/handover/checklist.md):
+(docs/handover/checklist.md):
 
     infra/secrets/rotate-secrets.py <env> [--age <recipient>[,<recipient>...]]
 
@@ -26,9 +26,10 @@ two kinds of value are not generated here:
 - pgbackrest_cipher_pass is kept: the backup repository is encrypted with it
   and cannot be re-keyed in place (docs/runbooks/secret-rotation.md). a new
   environment built for a handover has its own repository and value.
-- owner inputs come from their providers. a new value is
-  taken from the same SA_* variables new-secrets.py reads; an input without
-  one keeps its value, and rotate-all.yml then names it as not rotated.
+- provider-issued values (github oauth, azure, cloudflare, discord) come
+  from their providers. a new value is taken from the same SA_* variables
+  new-secrets.py reads; a value without one keeps its value, and
+  rotate-all.yml then names it as not rotated.
 
 both plaintexts exist only in memory and in sops's stdin.
 """
@@ -97,7 +98,7 @@ def main() -> int:
         return 1
 
     # new-secrets.py prints a fresh document; its own input handling reads
-    # the SA_* variables, so a new owner input lands in it the same way
+    # the SA_* variables, so a new provider-issued value lands in it the same way
     from io import StringIO
 
     buf, real = StringIO(), sys.stdout

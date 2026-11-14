@@ -21,7 +21,7 @@ docker network rm "$LC_PUBLIC_NET" >/dev/null 2>&1 || true
 echo "$LC_LOCATIONS" | while read -r loc _; do
 	docker network rm "$(lc_loc_net "$loc")" >/dev/null 2>&1 || true
 done
-# the network of the this stage topology, in case it is still there
+# the network of the earlier single-network topology, in case it is still there
 docker network rm sa-lc-private >/dev/null 2>&1 || true
 docker image rm "$LC_NODE_IMAGE" >/dev/null 2>&1 || true
 docker images --format '{{.Repository}}:{{.Tag}}' | grep "^127.0.0.1:$LC_REGISTRY_HOST_PORT/sa/" | xargs -r docker image rm >/dev/null 2>&1 || true
