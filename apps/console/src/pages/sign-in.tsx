@@ -32,7 +32,7 @@ export function SignInPage() {
 
   return (
     <PublicFrame>
-      <div className="flex w-full max-w-sm flex-col gap-6">
+      <div className="flex w-full max-w-[24rem] flex-col gap-6">
         <div className="flex flex-col gap-2">
           <h1 className="text-h1 tracking-tight text-fg">Sign in</h1>
           <p className="text-body text-fg-2">

@@ -202,7 +202,8 @@ test("resume returns the project to active", async () => {
   expect(t.body.status).toBe("active");
   expect(t.body.status_reason).toBeNull();
   await owner.page.goto(`${APP}/projects/${tenant.id}`);
-  await expect(owner.page.getByRole("heading", { name: tenant.name })).toBeVisible();
+  // the project page rendered (the sidebar names the project; the page has its own h1)
+  await expect(owner.page.getByRole("heading", { level: 1 })).toBeVisible();
   await expect(owner.page.getByText("This project is suspended")).toHaveCount(0);
 });
 

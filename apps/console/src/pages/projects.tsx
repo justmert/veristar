@@ -27,7 +27,7 @@ export function ProjectsPage() {
   const tenants = me.data.tenants;
 
   return (
-    <section className="flex max-w-4xl flex-col gap-5">
+    <section className="flex max-w-[58rem] flex-col gap-5">
       <PageHeader
         title="Your projects"
         description="A project is one team. It holds its websites and the people who manage them."

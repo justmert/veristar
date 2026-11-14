@@ -28,21 +28,21 @@ const SSO_ERRORS: Record<string, SsoError> = {
   },
   provisioning_pending: {
     title: "The dashboard is still being set up",
-    text: "The dashboard for this site is still being set up. This takes a minute after a project or site is created.",
+    text: "This takes a minute after a project or site is created.",
     retry: true,
     icon: WAIT,
     tone: "text-warning",
   },
   umami_unavailable: {
     title: "The web dashboard is unreachable",
-    text: "The web dashboard is unreachable right now.",
+    text: "The dashboard service did not answer. Try again in a moment.",
     retry: true,
     icon: FAIL,
     tone: "text-critical",
   },
   rate_limited: {
     title: "Too many dashboard sign-ins",
-    text: "Too many dashboard sign-ins in the last minute. Wait a moment.",
+    text: "There were too many in the last minute. Wait a moment, then try again.",
     retry: true,
     icon: WAIT,
     tone: "text-warning",
@@ -68,7 +68,7 @@ export function SsoErrorPage() {
 
   return (
     <PublicFrame>
-      <div className="flex w-full max-w-md flex-col gap-5">
+      <div className="flex w-full max-w-dialog-sm flex-col gap-5">
         <span
           className={`flex size-10 items-center justify-center rounded-lg border border-line-strong [&_svg]:size-5 ${info.tone}`}
         >
