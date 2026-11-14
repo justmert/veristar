@@ -118,10 +118,12 @@ scrape_configs:
       - targets: ["{{ hostvars[h].sa_private_ip }}:{{ observability_postgres_exporter_port }}"]
         labels: {node: "{{ h }}", tier: core}
 {% endfor %}
-{% for h in groups['probe'] | default([]) %}
+{% for h in groups['probe'] | default([]) or (['probe'] if observability_probe_external else []) %}
 
   # the probe node is outside the private network; its caddy serves the
-  # prober's and gatus's metrics behind a bearer token
+  # prober's and gatus's metrics behind a bearer token. a probe on a shared
+  # host outside the inventory (observability_probe_external, the bundle of
+  # playbooks/probe-bundle.yml) is labelled node "probe"
   - job_name: prober
     scheme: https
     metrics_path: /internal/prober/metrics

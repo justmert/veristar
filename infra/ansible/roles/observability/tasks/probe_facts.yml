@@ -9,16 +9,16 @@
   ansible.builtin.set_fact:
     observability_tracker_latest: "{{ (observability_manifest.versions | last).version }}"
     observability_tracker_latest_bytes: "{{ (observability_manifest.versions | last).bytes }}"
-    # every node by its public address with the hosts it serves
+    # every node by its public address with the hosts it serves, once: a
+    # converged node is in both the edge and the core group, and the prober
+    # refuses a node listed twice
     observability_probe_nodes: >-
       {%- set out = [] -%}
-      {%- for h in groups['edge'] -%}
-      {%- set _ = out.append({'name': h, 'hosts': [sa_hostnames.in, sa_hostnames.otlp],
-            'spec': h ~ '@' ~ hostvars[h].sa_public_ipv4 ~ ':443=' ~ sa_hostnames.in ~ ',' ~ sa_hostnames.otlp}) -%}
-      {%- endfor -%}
-      {%- for h in groups['core'] -%}
-      {%- set _ = out.append({'name': h, 'hosts': [sa_hostnames.app, sa_hostnames.web],
-            'spec': h ~ '@' ~ hostvars[h].sa_public_ipv4 ~ ':443=' ~ sa_hostnames.app ~ ',' ~ sa_hostnames.web}) -%}
+      {%- for h in (groups['edge'] + groups['core']) | unique -%}
+      {%- set hosts = ([sa_hostnames.in, sa_hostnames.otlp] if h in groups['edge'] else [])
+            + ([sa_hostnames.app, sa_hostnames.web] if h in groups['core'] else []) -%}
+      {%- set _ = out.append({'name': h, 'hosts': hosts,
+            'spec': h ~ '@' ~ hostvars[h].sa_public_ipv4 ~ ':443=' ~ hosts | join(',')}) -%}
       {%- endfor -%}
       {{ out }}
 

@@ -25,3 +25,7 @@ sa_operator_github_ids: "37740842"
 # the packages are public: then nothing signs in.
 sa_registry_login: ghcr.io
 sa_registry_login_user: justmert
+
+# the probe's status page also checks the documentation site, which is
+# hosted apart from the platform (docs/deploy/probe.md)
+observability_probe_docs_url: https://docs.veristar.app/

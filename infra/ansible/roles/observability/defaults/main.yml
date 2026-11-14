@@ -109,6 +109,14 @@ observability_probe_cert_min_validity: 336h
 observability_probe_user_agent: "Mozilla/5.0 (X11; Linux x86_64; rv:146.0) Gecko/20100101 Firefox/146.0"
 observability_probe_domain: "probe.{{ sa_base_domain }}"
 
+# a probe outside the inventory: the bundle of playbooks/probe-bundle.yml on
+# a shared host (docs/deploy/probe.md). true makes prometheus on the core
+# nodes scrape its metrics and alertmanager push the watchdog to its gatus
+# through status.<BASE_DOMAIN>, as for a probe node in the probe group
+observability_probe_external: false
+# the documentation site, hosted apart from the platform; empty: no check
+observability_probe_docs_url: ""
+
 # gatus keeps this many results per endpoint: one week at 30 s, so the daily
 # sloreport collection (docs/slo/data) can miss six days and still catch up.
 # sloreport collect -page-size must be the same number.

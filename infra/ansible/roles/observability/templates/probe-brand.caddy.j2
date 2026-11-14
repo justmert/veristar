@@ -1,0 +1,13 @@
+	# veristar's mark and favicon for the status page (gatus.yml ui logo and
+	# favicon), from deploy/caddy/umami-theme/site/_veristar/brand. gatus's
+	# html template drops data: urls in its favicon links, so they are
+	# served here, inline, as same-origin files
+	handle /_veristar/brand/* {
+		header Content-Type image/svg+xml
+		header Cache-Control "public, max-age=86400"
+		@mark path /_veristar/brand/mark.svg
+		respond @mark `{{ lookup('ansible.builtin.file', observability_repo_root ~ '/deploy/caddy/umami-theme/site/_veristar/brand/mark.svg') | replace('`', '') }}` 200
+		@favicon path /_veristar/brand/favicon.svg
+		respond @favicon `{{ lookup('ansible.builtin.file', observability_repo_root ~ '/deploy/caddy/umami-theme/site/_veristar/brand/favicon.svg') | replace('`', '') }}` 200
+		respond "not found" 404
+	}

@@ -22,6 +22,8 @@
 		}
 	}
 
+{% include 'probe-brand.caddy.j2' %}
+
 	@metrics_ok {
 		path /internal/prober/metrics /internal/gatus/metrics
 		header Authorization "Bearer {$PROBE_METRICS_TOKEN}"

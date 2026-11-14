@@ -18,8 +18,46 @@ storage:
   maximum-number-of-results: {{ observability_gatus_max_results }}
   maximum-number-of-events: 500
 ui:
-  title: "{{ sa_base_domain }} status"
+  title: "Veristar status"
+  description: "Availability of Veristar's public endpoints, measured from outside every 30 seconds."
   header: "Veristar status"
+  dashboard-heading: "Veristar status"
+  dashboard-subheading: "Ingestion, OTLP, the console and the dashboards, checked end to end from outside the platform"
+  # served by the status page's caddy (templates/probe-brand.caddy.j2)
+  logo: "/_veristar/brand/mark.svg"
+  favicon:
+    default: "/_veristar/brand/favicon.svg"
+    size16x16: "/_veristar/brand/favicon.svg"
+    size32x32: "/_veristar/brand/favicon.svg"
+  dark-mode: true
+  # the brand is dark only, so both of gatus's modes get the same palette
+  # (the tokens of deploy/caddy/umami-theme/site/_veristar/theme.css as the
+  # hsl triples gatus's stylesheet expects). gatus links this file before
+  # its own stylesheet, so the selectors carry one more type selector than
+  # gatus's :root and :root.dark to win
+  custom-css: |
+    html:root, html:root.dark {
+      --background: 60 2.4% 8%;
+      --foreground: 50 15% 92.2%;
+      --card: 60 3.7% 10.6%;
+      --card-foreground: 50 15% 92.2%;
+      --popover: 60 4.6% 12.7%;
+      --popover-foreground: 50 15% 92.2%;
+      --primary: 18.9 100% 62%;
+      --primary-foreground: 20 85.7% 5.5%;
+      --secondary: 60 4.5% 13.1%;
+      --secondary-foreground: 50 15% 92.2%;
+      --muted: 60 4.5% 13.1%;
+      --muted-foreground: 48 5.3% 63.1%;
+      --accent: 60 4.2% 13.9%;
+      --accent-foreground: 50 15% 92.2%;
+      --destructive: 358.1 75.1% 59%;
+      --destructive-foreground: 50 15% 92.2%;
+      --border: 48 5.7% 17.1%;
+      --input: 50 5.2% 22.7%;
+      --ring: 18.9 100% 62%;
+    }
+    html, body { background-color: hsl(var(--background)); color: hsl(var(--foreground)); }
 web:
   port: 8080
 
@@ -87,7 +125,19 @@ endpoints:
       - "[STATUS] == 200"
       - "len([BODY]) == {{ observability_tracker_latest_bytes }}"
 
+{% if observability_probe_docs_url | default('') | length > 0 %}
+  # the documentation site, hosted apart from the platform
+  - name: docs
+    group: hosts
+    url: "{{ observability_probe_docs_url }}"
+    <<: *default
+    conditions:
+      - "[STATUS] == 200"
+      - "[CERTIFICATE_EXPIRATION] > {{ observability_probe_cert_min_validity }}"
+{% endif %}
+
 external-endpoints:
+{% if observability_gatus_watchdog | default(true) %}
   # pushed by alertmanager on the core nodes every minute while prometheus
   # evaluates rules and alertmanager delivers (rules/platform.yml Watchdog)
   - name: watchdog
@@ -98,6 +148,7 @@ external-endpoints:
 {% if observability_gatus_receiver %}
     alerts:
       - type: discord
+{% endif %}
 {% endif %}
 {% for e in observability_external_endpoints %}
   - name: "{{ e.name }}"

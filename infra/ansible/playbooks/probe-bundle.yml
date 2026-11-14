@@ -1,8 +1,10 @@
 ---
-# renders the probe as a self-contained docker compose bundle for a host
-# outside azure, such as a probe host beside an uptime monitor
-# (docs/deploy/probe.md). runs on the controller only and touches no
-# server; copying the bundle to the probe host is a separate, manual step.
+# renders the probe as a self-contained docker compose bundle for a shared
+# host outside the platform's hosting that already runs one edge caddy on
+# a docker network (docs/deploy/probe.md): gatus, the prober and the daily
+# slo collector, plus the one site file for status.<BASE_DOMAIN>. runs on
+# the controller only and touches no server; copying the bundle to the
+# probe host is a separate, manual step.
 #
 #   ansible-playbook -i inventories/<env>/ playbooks/probe-bundle.yml \
 #     -e sa_release_manifest=<release-images.json>
@@ -19,7 +21,32 @@
   vars_files: [../vars/pins.yml]
   vars:
     probe_bundle_dir: "{{ playbook_dir }}/../../../.scratch/probe-bundle/{{ sa_environment }}"
-    probe_bundle_port: 8095
+    # the compose project and the prefix of its container names on the host
+    probe_bundle_project: veristar-probe
+    # the bundle's file for the edge caddy's sites/ directory
+    probe_bundle_site_file: veristar.caddy
+    # the host's external docker network that its edge caddy shares
+    probe_bundle_edge_network: edge
+    # the host user that owns the bundle directory; the slo collector writes
+    # its files as this uid
+    probe_bundle_uid: 1000
+    # the slo collector runs the static sloreport binary of this checkout
+    # (make build) on the same distroless base as the platform's go images
+    probe_bundle_sloreport_bin: "{{ playbook_dir }}/../../../dist/bin/sloreport"
+    probe_bundle_sloreport_base: gcr.io/distroless/static-debian13:nonroot@sha256:25ac8f0c3b2334a9eb05452266bd4697864a8c8ef0ef71e5e6480d7f92868329
+    # the edge caddy serves the prober's and gatus's metrics to prometheus;
+    # the watchdog push is wired when the core nodes know the probe
+    probe_bundle_metrics: true
+    probe_bundle_watchdog: "{{ observability_probe_external }}"
+    observability_gatus_watchdog: "{{ probe_bundle_watchdog }}"
+    # sha-256 of gatus's one inline script, which embeds gatus.yml's ui
+    # block; measured on the page that gatus 5.38.0 renders for production
+    # (docs/deploy/probe.md section 4) and changed together with the ui
+    # block or the gatus version, or the page stays blank
+    probe_bundle_csp_script_hashes: ["sha256-relL1Gi3VD3fLkkXMa51vyHYmRIGB/qvtWvWK+qPzXg="]
+    # gatus alerts to discord only with an operator input (roles/observability
+    # tasks/facts.yml decides the same on a probe node)
+    observability_gatus_receiver: "{{ (sa_secrets.gatus_discord_webhook_url | default('')) | length > 0 }}"
   tasks:
     - name: Load the secrets defaults and tools
       ansible.builtin.include_role:
@@ -34,6 +61,22 @@
         sops_binary: "{{ secrets_tools_dir }}/sops-{{ sops_version }}"
         age_keyfile: "{{ secrets_age_keyfile }}"
       no_log: true
+
+    # verify-release.yml left the verified repo:tag@digest references on
+    # localhost; the bundle pulls exactly those
+    - name: Use only verified image references
+      ansible.builtin.set_fact:
+        platform_images: >-
+          {{ platform_images | combine(sa_verified_images | dict2items
+             | selectattr('key', 'in', platform_images.keys() | list) | items2dict) }}
+      when: sa_verified_images is defined
+
+    # also loads the observability role's defaults (observability_images)
+    - name: Name the probe targets
+      ansible.builtin.include_role:
+        name: observability
+        tasks_from: probe_facts.yml
+        public: true
 
     - name: Require the probe tenant
       ansible.builtin.assert:
@@ -50,18 +93,29 @@
           verified digest
       no_log: true
 
-    - name: Name the probe targets
-      ansible.builtin.include_role:
-        name: observability
-        tasks_from: probe_facts.yml
-        public: true
+    - name: Require the sloreport binary
+      ansible.builtin.stat:
+        path: "{{ probe_bundle_sloreport_bin }}"
+      register: probe_bundle_sloreport
+      failed_when: not probe_bundle_sloreport.stat.exists
+      changed_when: false
 
     - name: Create the bundle directories
       ansible.builtin.file:
-        path: "{{ item }}"
+        path: "{{ item.path }}"
         state: directory
-        mode: "0700"
-      loop: ["{{ probe_bundle_dir }}", "{{ probe_bundle_dir }}/releases"]
+        mode: "{{ item.mode }}"
+      loop:
+        - {path: "{{ probe_bundle_dir }}", mode: "0700"}
+        - {path: "{{ probe_bundle_dir }}/releases", mode: "0755"}
+        - {path: "{{ probe_bundle_dir }}/bin", mode: "0755"}
+        - {path: "{{ probe_bundle_dir }}/slo-data", mode: "0755"}
+
+    - name: Copy the sloreport binary
+      ansible.builtin.copy:
+        src: "{{ probe_bundle_sloreport_bin }}"
+        dest: "{{ probe_bundle_dir }}/bin/sloreport"
+        mode: "0755"
 
     - name: Copy the tracker release manifest
       ansible.builtin.copy:
@@ -78,6 +132,14 @@
       loop:
         - {src: probe-bundle-compose.yml.j2, dest: compose.yml}
         - {src: gatus.yml.j2, dest: gatus.yml}
+
+    # holds the probe metrics token; the edge caddy reads it as root
+    - name: Write the edge caddy site file
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../roles/observability/templates/probe-bundle-site.caddy.j2"
+        dest: "{{ probe_bundle_dir }}/{{ probe_bundle_site_file }}"
+        mode: "0600"
+      no_log: true
 
     - name: Write the env files
       ansible.builtin.copy:
