@@ -27,7 +27,9 @@
  * umami-version: 3.5.0
  * pinned to that version: tests/umami-compat fails when an umami upgrade
  * removes a property, class or attribute named here, so a rename can never
- * silently drop the theme. to change the brand, edit only the --vs-* block.
+ * silently drop the theme. the --vs-* block is generated from
+ * packages/brand/src/tokens.ts (pnpm --filter @veristar/brand generate);
+ * change the brand there.
  */
 
 @import url("fonts/geist.css");

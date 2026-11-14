@@ -14,7 +14,7 @@ import {
   ScrollText,
 } from "lucide-react";
 import { LayoutGroup, motion } from "motion/react";
-import type { ReactNode } from "react";
+import { type ReactNode, useId } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { operatorAlertsQuery, tenantQuery } from "@/api/queries";
 import type { Me } from "@/api/schemas";
@@ -62,8 +62,11 @@ export function Sidebar({
   const area = useArea();
   const docs = siblingUrl(window.location.hostname, "docs");
   const status = siblingUrl(window.location.hostname, "status");
+  // the desktop sidebar and the phone drawer are two instances; each needs
+  // its own group, or their current-item markers would crossfade
+  const group = useId();
   return (
-    <LayoutGroup id="sidebar">
+    <LayoutGroup id={group}>
       <div className="flex h-full flex-col gap-3.5 px-2.5 py-3.5">
         <Link
           to="/"
