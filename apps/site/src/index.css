@@ -1,0 +1,10 @@
+@import "tailwindcss";
+@import "@veristar/brand/index.css";
+/* the mark and the motion presets carry classes too */
+@source "../../../packages/brand/src";
+
+html {
+  scroll-behavior: smooth;
+  /* anchor targets land below the sticky header */
+  scroll-padding-top: calc(var(--vs-control-touch) + 1.5rem);
+}
