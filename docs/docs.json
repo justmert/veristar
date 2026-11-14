@@ -158,7 +158,6 @@
               "deploy/probe",
               "deploy/upgrade",
               "deploy/teardown",
-              "deploy/verification",
               "deploy/local-converge"
             ]
           },

@@ -98,3 +98,58 @@ in [../reference/drills/2026-11-13-azure.md](../reference/drills/2026-11-13-azur
     ([../operators/alerts.md](../operators/alerts.md)) lists no firing alert other than one you
     can explain (for example `BackupTooOld` before the first backup). With the probe running
     ([probe.md](probe.md)), every measure on `status.<BASE_DOMAIN>` is up.
+
+## Before the first real project
+
+Run these once more on a new environment before it takes its first real project, in addition to
+the steps above.
+
+1. **Release signed.** Every image of the deployed release verifies with `cosign verify` as in
+   [../security/supply-chain.md](../security/supply-chain.md). `verify-release.yml` runs the same
+   check before every converge, so a converge that ended without error already passed it.
+
+2. **PostgreSQL version.** On the leader's node:
+
+   ```sh
+   cd /opt/veristar/core && sudo docker compose exec postgres psql -U postgres -tAc 'show server_version'
+   ```
+
+   Expected: the `postgres_version` of `infra/ansible/vars/pins.yml`.
+
+3. **Backup repository.** On the leader's node:
+   `sudo docker compose exec postgres pgbackrest --stanza=sa info`. Expected: `status: ok` and at
+   least one full backup. Then restore once, as in
+   [../runbooks/point-in-time-restore.md](../runbooks/point-in-time-restore.md), and record how
+   long it took: that is your measured recovery time.
+
+4. **Alert rules loaded.** Tunnel to Prometheus ([../runbooks/overview.md](../runbooks/overview.md),
+   "Prometheus and Grafana"), then:
+
+   ```sh
+   curl -s http://127.0.0.1:9090/api/v1/rules | python3 -c 'import json,sys; print(sum(len(g["rules"]) for g in json.load(sys.stdin)["data"]["groups"]))'
+   ```
+
+   Expected: the number of rules in `infra/ansible/roles/observability/files/rules/*.yml` of the
+   release.
+
+5. **Alerts reach the console.** On a core node, post a test alert to Alertmanager on the node's
+   private address, over mutual TLS with the node certificate of the internal CA:
+
+   ```sh
+   sudo curl -fsS --cacert /etc/veristar/tls/root/ca.crt --cert /etc/veristar/tls/root/node.crt \
+     --key /etc/veristar/tls/root/node.key -X POST -H 'Content-Type: application/json' \
+     https://<private address>:9093/api/v2/alerts \
+     -d '[{"labels":{"alertname":"VerificationTest","severity":"ticket"},"annotations":{"summary":"verification test alert"}}]'
+   ```
+
+   Expected: `VerificationTest` appears under Ticket on the console's Alerts page
+   (`https://app.<BASE_DOMAIN>/operator/alerts`, [../operators/alerts.md](../operators/alerts.md))
+   and disappears after it expires.
+
+6. **Probe.** The checks of [probe.md](probe.md) section 8 pass, and the first daily SLO file
+   appears the day after ([../runbooks/slo-report.md](../runbooks/slo-report.md)).
+
+7. **Isolation gate on the deployed code.** Check out the commit the release tag points to
+   (`git rev-list -n 1 <release>`) and run `make isolation`
+   ([../security/threat-model.md](../security/threat-model.md)). Expected: every test passes. The
+   gate builds the working copy, so it proves the deployed versions only at that commit.
