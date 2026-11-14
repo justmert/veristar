@@ -69,9 +69,3 @@ __pycache__/
 /metricswriter
 /collector/scf-otelcol
 
-# internal working documents kept outside the published repository
-/docs/README.md
-/docs/review/
-/the adoption report
-/docs/reference/phase*-research.md
-/docs/handover/redirect-research.md
