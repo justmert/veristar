@@ -30,7 +30,7 @@ records name the operator's role. This page is not legal advice. Last updated
 | Purpose | sign-in to the console, membership of projects, audit of changes |
 | Data subjects | tenant staff and operators who sign in |
 | Personal data | numeric GitHub user id, GitHub login, project memberships and roles, session token hashes, MCP credential hashes with their names and last use, audit log entries naming the user id (MCP tool calls included, without their answers) |
-
 | Recipients | GitHub, Inc. for the sign-in itself (`subprocessors.md`) |
 | Transfers | the sign-in passes through GitHub in the United States |
-| Retention | sessions: 7 days absolute, 24 hours idle; accounts and the audit log: while the service runs |
+| Retention | sessions: 7 days absolute, 24 hours idle; accounts: until the person deletes the account or the service stops; the audit log: while the service runs |
+| Erasure | each person deletes their own account on the console's Account page; GitHub id, login, memberships, sessions, MCP credentials and invites are deleted, and audit rows keep a pseudonymous account id (`erasure.md` section 7) |

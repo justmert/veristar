@@ -21,7 +21,8 @@ here, before they take effect, as the processing terms require
 - Console accounts can be deleted by their owner in the account area. Deletion
   removes the account's GitHub id, login and avatar, its project memberships
   with their web dashboard access, its sessions, MCP access keys and OAuth
-  tokens; it is refused while the account is the only owner of a project.
+  tokens, and the invites addressed to it; it is refused while the account is
+  the only owner of a project.
 - Light theme for the console and the public website, with a system, light and
   dark choice. The Umami web dashboards follow the light mode with their own
   light palette.

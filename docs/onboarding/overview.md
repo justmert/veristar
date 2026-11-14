@@ -65,3 +65,7 @@ Each guide is backed by an example that runs in the test suites:
 
 Ask questions and report problems on the public issue tracker. [Support](../support.md) describes
 the forms and the response times.
+
+To delete your console account, open the account menu at the bottom of the sidebar, choose
+**Account** and use **Delete account**. Hand over ownership of any project you own alone first.
+What the deletion removes is in [Erasure workflow](../compliance/erasure.md#7-deleting-your-console-account).
