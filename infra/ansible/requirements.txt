@@ -1,5 +1,5 @@
 # controller tools, installed with uv into a venv (docs/deploy/ansible.md).
-# ansible 14.6.0 is the the design pin and resolves ansible-core 2.21.6
+# ansible 14.6.0 is the pinned release and resolves ansible-core 2.21.6
 # (checked 2026-11-12); it ships community.docker 5.4.0, community.sops 2.5.0,
 # ansible.posix 2.2.2 and community.general 13.5.1, so no galaxy install runs.
 ansible==14.6.0

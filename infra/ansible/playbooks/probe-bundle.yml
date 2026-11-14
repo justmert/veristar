@@ -44,7 +44,7 @@
     # (docs/deploy/probe.md section 4) and changed together with the ui
     # block or the gatus version, or the page stays blank
     probe_bundle_csp_script_hashes: ["sha256-relL1Gi3VD3fLkkXMa51vyHYmRIGB/qvtWvWK+qPzXg="]
-    # gatus alerts to discord only with an operator input (roles/observability
+    # gatus alerts to discord only with a discord webhook (roles/observability
     # tasks/facts.yml decides the same on a probe node)
     observability_gatus_receiver: "{{ (sa_secrets.gatus_discord_webhook_url | default('')) | length > 0 }}"
   tasks:

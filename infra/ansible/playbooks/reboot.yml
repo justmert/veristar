@@ -1,8 +1,7 @@
 ---
-# rolling host reboot 
-# docs/runbooks/security-patch.md section 6). unattended upgrades install
-# debian security fixes without rebooting, so a kernel or libc fix applies
-# only after a reboot; the HostRebootRequired alert names the nodes.
+# rolling host reboot (docs/runbooks/security-patch.md section 6). unattended
+# upgrades install debian security fixes without rebooting, so a kernel or libc
+# fix applies only after a reboot; the HostRebootRequired alert names the nodes.
 #
 #   ansible-playbook -i inventories/<env>/ playbooks/reboot.yml
 #   ansible-playbook -i inventories/<env>/ playbooks/reboot.yml -e reboot_all=true

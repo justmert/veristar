@@ -45,8 +45,8 @@ platform_images:
   postgres_ha: "{{ sa_image_registry }}/postgres-ha:{{ postgres_version }}-{{ sa_image_tag }}"
 
 # postgresql 18.7 (published 2026-11-12, image postgres:18.7-trixie, pgdg
-# 18.7-1.pgdg13+2). it fixes CVE-2026-120154 and 51 other cves; plan
-# section 5. must equal PG_VERSION in deploy/images/postgres-ha.Dockerfile.
+# 18.7-1.pgdg13+2). it fixes CVE-2026-120154 and 51 other cves.
+# must equal PG_VERSION in deploy/images/postgres-ha.Dockerfile.
 postgres_version: "18.7"
 patroni_version: 4.1.5
 pgbackrest_version: 2.60.0
@@ -55,12 +55,12 @@ pgbackrest_version: 2.60.0
 # edge and core compose projects read them
 secrets_env_dir: /etc/veristar/env
 
-# shared paths of the private network's tls (, playbooks/
-# internal-ca.yml). the secrets role installs, per container user that
-# needs them, a directory <sa_tls_dir>/<consumer>/ with ca.crt, node.crt and
-# node.key owned by that user (node.pem, certificate and key in one file,
-# for haproxy), plus <sa_tls_dir>/ca/ca.crt for services that only check
-# servers. root's copy is what ansible and curl on the node use.
+# shared paths of the private network's tls (playbooks/internal-ca.yml). the
+# secrets role installs, per container user that needs them, a directory
+# <sa_tls_dir>/<consumer>/ with ca.crt, node.crt and node.key owned by that user
+# (node.pem, certificate and key in one file, for haproxy), plus
+# <sa_tls_dir>/ca/ca.crt for services that only check servers. root's copy is
+# what ansible and curl on the node use.
 sa_tls_dir: /etc/veristar/tls
 sa_tls_consumers:
   edge: {root: 0, nats: 4222, etcd: 2379, haproxy: 99, nobody: 65534}

@@ -3,8 +3,8 @@
 # beside this directory is written from the opentofu state by make
 # <env>-inventory; these values are the same for every azure node.
 
-# acme dns-01 through caddy-dns/cloudflare with the zone-scoped token of
-# an operator input (sops key cloudflare_api_token)
+# acme dns-01 through caddy-dns/cloudflare with the zone-scoped cloudflare
+# token (sops key cloudflare_api_token)
 sa_tls: cloudflare
 
 # azure maps a vm's public address onto its one interface (1:1 nat), so the
@@ -12,10 +12,10 @@ sa_tls: cloudflare
 # address, where the mapped traffic arrives
 sa_public_bind_ipv4: "{{ sa_private_ip }}"
 
-# images of the release workflow for repository an operator input
+# images of the release workflow of this repository
 sa_image_registry: ghcr.io/justmert/veristar
 
-# numeric github ids of the scf operators an operator input, comma separated:
+# numeric github ids of the scf operators, comma separated:
 # 37740842 is justmert
 sa_operator_github_ids: "37740842"
 

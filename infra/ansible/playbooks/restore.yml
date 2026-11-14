@@ -1,5 +1,5 @@
 ---
-# restore onto a fresh node (plan phases 16 and 21), in one of two modes:
+# restore onto a fresh node, in one of two modes:
 #
 #   point in time:
 #     ansible-playbook -i inventories/<env>/ playbooks/restore.yml \
