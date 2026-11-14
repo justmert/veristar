@@ -54,7 +54,8 @@ const ActorPurge = "system:purge"
 // is not allowed from the current status.
 const CodeInvalidTransition = "invalid_transition"
 
-// transition is one row of the table in the reference docs 4.1.
+// transition is one row of the transition table
+// (docs/reference/control-plane-api.md section 5.5).
 type transition struct {
 	from           []string
 	to             string

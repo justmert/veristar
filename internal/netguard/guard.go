@@ -19,7 +19,7 @@ import (
 	"golang.org/x/net/idna"
 )
 
-// caps of the reference docs 3.3
+// caps that bound one fetch from a tenant domain in time and size
 const (
 	RequestTimeout        = 10 * time.Second
 	ConnectTimeout        = 5 * time.Second
@@ -216,7 +216,8 @@ func (g *Guard) control(_ context.Context, _, address string, _ syscall.RawConn)
 
 // checkRedirect allows at most MaxRedirects hops, each to https on the
 // original host and port 443. another host, even www. of the same domain,
-// is refused (the reference docs 3.4).
+// is refused, so a redirect cannot move the fetch to a host the address
+// checks did not see.
 func checkRedirect(req *http.Request, via []*http.Request) error {
 	if len(via) > MaxRedirects {
 		return &Error{Code: CodeRedirectRefused, Detail: fmt.Sprintf("more than %d redirects", MaxRedirects)}

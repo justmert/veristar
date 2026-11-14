@@ -1,6 +1,6 @@
 // Package netguard fetches files from tenant-supplied domains without
 // letting a tenant point the fetch at the platform's own network
-// (docs/reference/the reference docs section 3). the host is resolved
+// (docs/security/threat-model.md section 3.10). the host is resolved
 // first, every address outside the public internet is refused, the
 // connection goes to the checked address only (and is checked again right
 // before connect(2)), and size, time and redirects are capped.
@@ -12,7 +12,7 @@ import (
 )
 
 // refusedPrefixes are the iana special-purpose ranges that the netip
-// helpers in Refused do not cover (the reference docs 3.2).
+// helpers in Refused do not cover.
 var refusedPrefixes = func() []netip.Prefix {
 	ps := []string{
 		"0.0.0.0/8",          // this network
@@ -69,7 +69,7 @@ func Refused(addr netip.Addr) bool {
 
 // localSuffixes name hosts that only exist inside some private network.
 // tenant domains are public by contract, so these are refused before any
-// lookup (the reference docs 3.2).
+// lookup.
 var localSuffixes = []string{".localhost", ".internal", ".local", ".home.arpa"}
 
 // refusedName reports a host name that is never fetched.
