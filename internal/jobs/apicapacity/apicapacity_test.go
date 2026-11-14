@@ -20,11 +20,11 @@ import (
 	"github.com/justmert/veristar/internal/jobs/jobstest"
 )
 
-// the steady state of the design: about 2,000 active series, each
+// the design steady state: about 2,000 active series, each
 // reporting every minute
 const (
 	tenants        = 10
-	servicesPer    = 3 // 30 services in all, as in the this stage volume run
+	servicesPer    = 3 // 30 services in all, as in the api volume run (tests/apivolume)
 	seriesPerSvc   = 67
 	measuredMinute = 60
 )

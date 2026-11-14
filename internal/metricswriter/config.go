@@ -20,7 +20,7 @@ type Settings struct {
 	// Batch is the most API_METRICS messages applied in one transaction.
 	Batch int
 	// FirstPointThreshold is the age above which the first point of a
-	// process the writer never saw becomes a baseline (the design).
+	// process the writer never saw becomes a baseline.
 	FirstPointThreshold time.Duration
 	// RouteCap and ServiceCap bound the distinct routes and services a
 	// tenant gets per utc day; the rest are stored as {other}.

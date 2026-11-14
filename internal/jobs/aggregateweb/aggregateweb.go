@@ -1,4 +1,4 @@
-// Package aggregateweb is the jobs task aggregate-web (the design). for
+// Package aggregateweb is the jobs task aggregate-web. for
 // every active site and both of its bands it reads umami's own /stats and
 // /metrics routes for each utc day and replaces that day's rows in
 // agg.web_daily and agg.web_daily_dim. reading umami's api instead of its

@@ -1,6 +1,6 @@
 //go:build metricswriterit
 
-// the this stage exactness suite: the real scf-otelcol binary and the built
+// the exactness suite: the real scf-otelcol binary and the built
 // metricswriter binary against a real nats server (production user
 // permissions) and a real postgresql, driven by the pinned opentelemetry go
 // sdk exporters. run it with `make metricswriter-it`, which builds the

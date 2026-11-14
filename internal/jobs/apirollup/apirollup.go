@@ -1,5 +1,5 @@
 // Package apirollup is the jobs task that rolls api minute rows up to hours
-// and days (the design). the writer marks every utc hour it writes minute
+// and days. the writer marks every utc hour it writes minute
 // rows for in api.rollup_pending; each run claims those marks and, in the
 // same fenced transaction, recomputes each claimed hour from its minutes and
 // then each day that contains one from its hours. recomputing replaces the
@@ -25,11 +25,11 @@ import (
 // TaskName is the name of the task in the scheduler and in `jobs run`.
 const TaskName = "api-rollup"
 
-// Every is the period of the task (the design: every 5 minutes).
+// Every is the period of the task (every 5 minutes).
 const Every = 5 * time.Minute
 
 // ClaimBatch is how many pending (tenant, hour) marks one transaction takes.
-// it bounds the transaction: at the plan's volume a 5 minute run finds about
+// it bounds the transaction: at the design volume a 5 minute run finds about
 // one mark per active tenant, and a backlog after an outage is worked off in
 // batches instead of one long transaction that holds every mark's lock.
 const ClaimBatch = 500

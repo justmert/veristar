@@ -235,8 +235,8 @@ func TestRefusesBelowFloor(t *testing.T) {
 
 // TestRefusesMinuteHorizonBelowLateDataWindow: the writer accepts points as
 // old as API_METRICS keeps messages (7 days), so a minute horizon that drops
-// their partitions earlier would discard a backlog the queue kept safe
-//. 8 days is the floor, in the constructor and the loader.
+// their partitions earlier would discard a backlog the queue kept safe.
+// 8 days is the floor, in the constructor and the loader.
 func TestRefusesMinuteHorizonBelowLateDataWindow(t *testing.T) {
 	now := time.Now()
 	clock := func() time.Time { return now }

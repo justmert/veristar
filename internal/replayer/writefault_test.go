@@ -42,7 +42,7 @@ func setUmamiReadOnly(t *testing.T, pg *testcontainers.DockerContainer, on bool)
 	}
 }
 
-// N-1: umami answers the collection probe (a read) while it cannot write.
+// umami answers the collection probe (a read) while it cannot write.
 // before the fix every event then counted as failing on a healthy umami and
 // went to WEB_DLQ after about 36 s. now the failures of many visitors are
 // recognised as a write fault: nothing is dead-lettered, and once writes

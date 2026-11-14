@@ -1,4 +1,4 @@
-// Package histo holds the canonical latency histogram layout of the design:
+// Package histo holds the canonical latency histogram layout:
 // re-bucketing of source histograms onto it, and quantiles read from it.
 // the sql function api.histogram_quantile computes the same quantile as
 // Quantile, operation for operation; tests check that they agree bit for bit.

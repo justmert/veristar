@@ -472,7 +472,7 @@ func arrayLiteral(c [15]int64) string {
 	return string(append(b, '}'))
 }
 
-// review: a full batch of marks whose hours a writer still holds made no
+// a full batch of marks whose hours a writer still holds made no
 // progress, and since busy marks go back as the oldest, Run claimed and
 // restored the same batch back to back until the writer let go. now a batch
 // without progress ends the run. separately, the 24 hour consistency check

@@ -320,7 +320,7 @@ func TestRebalanceKeepsTheSum(t *testing.T) {
 	}
 }
 
-// review: a process exporting every 5 minutes is 300 s old at its first
+// a process exporting every 5 minutes is 300 s old at its first
 // export, past the 120 s threshold, so that point is a baseline. its next
 // export shows from the cadence that the process had only just started, and
 // then counts in full: the first interval's requests are not lost.
@@ -352,7 +352,7 @@ func TestEngineLongExportIntervalKeepsFirstInterval(t *testing.T) {
 	})
 }
 
-// review: the writer's per-stream state is capped per tenant. a new
+// the writer's per-stream state is capped per tenant. a new
 // cumulative stream beyond the cap is refused; known streams and delta
 // points carry on.
 func TestEngineSeriesCap(t *testing.T) {

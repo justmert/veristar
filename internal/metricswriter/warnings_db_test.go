@@ -17,11 +17,11 @@ import (
 	"github.com/justmert/veristar/internal/jobs/jobstest"
 )
 
-// review: a cumulative series is re-exported every interval for the life
+// a cumulative series is re-exported every interval for the life
 // of its process. warnings must count requests, so exports without a new
 // request add nothing; before, every export of a resource with a redacted
 // seed and every lossy point added one, so the numbers grew by the minute
-// with no traffic. the coarse_buckets kind of review counts the same way.
+// with no traffic. the coarse_buckets kind counts the same way.
 // runs the writer's own transaction code against a real postgresql.
 func TestWarningsCountRequestsNotExports(t *testing.T) {
 	ctx := t.Context()

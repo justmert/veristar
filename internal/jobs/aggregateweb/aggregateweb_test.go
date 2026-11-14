@@ -180,7 +180,7 @@ func TestAggregateWeb(t *testing.T) {
 		require.Equal(t, len(all)*len(days)*2, nonzero, "every site, band and day carries traffic")
 	})
 
-	// research items of the design, recorded in docs/reference/web-metrics.md
+	// research items recorded in docs/reference/web-metrics.md
 	t.Run("referrer and domain are the same ranking", func(t *testing.T) {
 		for _, s := range all {
 			for _, d := range days {

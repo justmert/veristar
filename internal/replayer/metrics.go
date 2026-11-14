@@ -82,7 +82,7 @@ func newMetrics(reg prometheus.Registerer, processes int, inFlight, oldestAge fu
 		}),
 		writeFaultRetries: prometheus.NewCounter(prometheus.CounterOpts{
 			Name: "replayer_write_fault_retries_total",
-			Help: "failed sends retried without counting against the event because umami looked unable to write (failures of several visitors on a process whose health checks passed, review).",
+			Help: "failed sends retried without counting against the event because umami looked unable to write (failures of several visitors on a process whose health checks passed).",
 		}),
 		visitStateSkipped: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "replayer_visit_state_writes_skipped_total",

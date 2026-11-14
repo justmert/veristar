@@ -1,5 +1,5 @@
 // Package metricswriter turns the histogram points on API_METRICS into exact
-// per-minute rows in the api schema (the design, sections 4.5 and 4.11).
+// per-minute rows in the api schema.
 //
 // delta.go is the delta engine: a pure function of the points and the state
 // loaded for them, with no nats and no sql, so its rules are tested on their
@@ -18,7 +18,7 @@ import (
 )
 
 // NumBuckets is the length of every bucket array the engine handles: the
-// canonical layout of the design boundaries and 15 buckets.
+// canonical layout (internal/histo), 14 boundaries and 15 buckets.
 const NumBuckets = histo.Buckets
 
 // Buckets holds counts on the canonical layout.
@@ -219,7 +219,7 @@ type Contribution struct {
 // exactly, so the writer reports it instead of guessing.
 var ErrInvalidPoint = errors.New("metricswriter: invalid point")
 
-// DefaultFirstPointThreshold is the plan's default for the first-point rule.
+// DefaultFirstPointThreshold is the default for the first-point rule.
 const DefaultFirstPointThreshold = 120 * time.Second
 
 // State is the engine's view of the stored state for one batch. the writer
@@ -227,7 +227,7 @@ const DefaultFirstPointThreshold = 120 * time.Second
 // the points in stream order and records what changed, and the writer
 // stores the changes in the same transaction.
 type State struct {
-	// Threshold is the first-point rule's age limit (the design).
+	// Threshold is the first-point rule's age limit.
 	Threshold time.Duration
 
 	series map[SeriesKey]*SeriesState
@@ -410,8 +410,8 @@ func (s *State) Apply(p *Point) (Contribution, Outcome, error) {
 	rk := ResourceKey{Tenant: p.Tenant, ResourceHash: p.ResourceHash, Start: p.Start}
 	st, known := s.series[key]
 	if !known {
-		// the state the writer keeps per stream is bounded per tenant
-		//: a tenant that keeps inventing streams (a random
+		// the state the writer keeps per stream is bounded per tenant:
+		// a tenant that keeps inventing streams (a random
 		// resource attribute per export, ids normalization misses) is
 		// refused new ones, and nothing of a refused one is stored
 		n, loaded := s.seriesN[p.Tenant]
