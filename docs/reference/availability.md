@@ -89,7 +89,7 @@ contention add time, which the production drills measure.
   region's zone-redundant storage, and [../runbooks/disaster-recovery.md](../runbooks/disaster-recovery.md)
   rebuilds from them.
 - **Traffic Manager and Cloudflare DNS.** Failover depends on Traffic Manager's health checks
-  and answers (Microsoft's service level agreement states 99.99 %) and on Cloudflare
+  and answers and on Cloudflare
   answering the CNAMEs. When every endpoint of a profile fails, Traffic Manager answers with
   all of them rather than none.
 - **Resolver caching.** Resolvers and browsers can keep an address past the TTL. MultiValue
