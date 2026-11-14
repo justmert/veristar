@@ -41,7 +41,7 @@ jobs:
       - run: make geo-fetch
       - run: make test
         env:
-          DBIP_MMDB: .scratch/scratch/geo/dbip-country-lite.mmdb
+          DBIP_MMDB: .scratch/geo/dbip-country-lite.mmdb
 
   # the default-build packages whose tests start postgresql, nats, umami or
   # caddy through testcontainers (scripts/go-test-packages.sh)
@@ -60,7 +60,7 @@ jobs:
       - run: make geo-fetch
       - run: make test-containers
         env:
-          DBIP_MMDB: .scratch/scratch/geo/dbip-country-lite.mmdb
+          DBIP_MMDB: .scratch/geo/dbip-country-lite.mmdb
 
   js:
     runs-on: ubuntu-24.04
