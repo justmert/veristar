@@ -102,8 +102,17 @@ describe("domain verification page (contract 5.8)", () => {
   ];
   const path = `/projects/${f.TENANT_ID}/sites/${f.SITE_ID}/verify`;
 
+  // the setup frame reads the project's sites (name, stellar.toml) and the
+  // site's ingest counts (the first event step) next to the verification
+  const frame = (verification: unknown) => [
+    { status: 200, body: f.sitePageBody },
+    { status: 200, body: verification },
+    { status: 200, body: f.ingestBody },
+    { status: 200, body: f.ingestBody },
+  ];
+
   it("shows both methods with the token and the last error", async () => {
-    stubFetch([{ status: 200, body: f.verificationBody }]);
+    stubFetch(frame(f.verificationBody));
     const host = await renderRoutes(routes, path);
     await waitFor(() => expect(host.textContent).toContain("_veristar.example.org"));
     expect(host.textContent).toContain(f.verificationBody.dns.value);
@@ -114,7 +123,7 @@ describe("domain verification page (contract 5.8)", () => {
 
   it("runs the chosen check and reports the result", async () => {
     const calls = stubFetch([
-      { status: 200, body: f.verificationBody },
+      ...frame(f.verificationBody),
       {
         status: 200,
         body: {
@@ -126,28 +135,29 @@ describe("domain verification page (contract 5.8)", () => {
           last_verify_error: null,
         },
       },
+      { status: 200, body: f.sitePageBody },
     ]);
     const host = await renderRoutes(routes, path);
-    await waitFor(() => byRole(host, "button", "Verify now"));
+    await waitFor(() => byRole(host, "button", "Check now"));
     const select = byLabel(host, "Check") as unknown as HTMLSelectElement;
     const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set;
     setter?.call(select, "file");
     select.dispatchEvent(new Event("change", { bubbles: true }));
-    await click(byRole(host, "button", "Verify now"));
+    await click(byRole(host, "button", "Check now"));
     await waitFor(() => expect(host.textContent).toContain("Verified."));
-    expect(calls[1]?.method).toBe("POST");
-    expect(calls[1]?.url).toBe(`/api/sites/${f.SITE_ID}/verify`);
-    expect(calls[1]?.body).toEqual({ method: "file" });
+    const post = calls.find((c) => c.method === "POST");
+    expect(post?.url).toBe(`/api/sites/${f.SITE_ID}/verify`);
+    expect(post?.body).toEqual({ method: "file" });
   });
 
   it("explains a rate limit", async () => {
     stubFetch([
-      { status: 200, body: f.verificationBody },
+      ...frame(f.verificationBody),
       { status: 429, body: f.errorBody("rate_limited"), headers: { "Retry-After": "600" } },
     ]);
     const host = await renderRoutes(routes, path);
-    await waitFor(() => byRole(host, "button", "Verify now"));
-    await click(byRole(host, "button", "Verify now"));
+    await waitFor(() => byRole(host, "button", "Check now"));
+    await click(byRole(host, "button", "Check now"));
     await waitFor(() => expect(host.textContent).toContain("Try again in 600 s"));
   });
 });

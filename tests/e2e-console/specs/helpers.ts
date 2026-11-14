@@ -257,9 +257,9 @@ export async function openDashboard(page: Page, tenantId: string, site: Site): P
   const deadline = Date.now() + 120_000;
   for (;;) {
     await page.goto(`${APP}/projects/${tenantId}`);
-    // each site is an article named by its heading
-    const card = page.getByRole("article", { name: site.name, exact: true });
-    await card.getByRole("link", { name: "Open web dashboard" }).click();
+    // each site is a row of the overview's sites table, found by its domain
+    const row = page.getByRole("row").filter({ hasText: site.domain });
+    await row.getByRole("link", { name: "Open web dashboard" }).click();
     await page.waitForURL((u) => u.origin === WEB || u.pathname === "/sso-error", {
       timeout: 30_000,
     });
