@@ -382,6 +382,10 @@ describe("api keys", () => {
 
     await type(byLabel(host, "Name") as HTMLInputElement, "warehouse");
     await click(byRole(host, "button", "Create key"));
+    // the one-time secret is masked until it is revealed
+    await waitFor(() => byRole(host, "button", "Copy key"));
+    expect(host.querySelector('[aria-label="Secret hidden"]')).toBeTruthy();
+    await click(host.querySelector('[aria-label="Show the secret"]') as HTMLElement);
     await waitFor(() => expect(host.textContent).toContain(f.KEY_PLAIN));
     const post = calls.find((x) => x.method === "POST");
     expect(post).toMatchObject({
@@ -393,7 +397,10 @@ describe("api keys", () => {
     expect(byRole(host, "button", "Copy key")).toBeTruthy();
 
     // once dismissed, the key is not shown again
-    await click(byRole(host, "button", "I have copied the key"));
+    // done stays disabled until the operator says the key is stored
+    expect(byRole(host, "button", "Done").hasAttribute("disabled")).toBe(true);
+    await click(host.querySelector('[role="checkbox"]') as HTMLElement);
+    await click(byRole(host, "button", "Done"));
     await waitFor(() => expect(host.textContent).toContain("sa_op_Ab3x..."));
     expect(host.textContent).not.toContain(f.KEY_PLAIN);
 

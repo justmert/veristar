@@ -1,14 +1,19 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { type UseQueryResult, useMutation, useQuery } from "@tanstack/react-query";
+import { cn } from "cn";
 import { UserPlus } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { useNavigate } from "react-router";
 import { ApiError } from "@/api/client";
 import { api } from "@/api/endpoints";
 import { keys, membersQuery } from "@/api/queries";
-import type { AddMemberResult, Invite, Member, Role } from "@/api/schemas";
+import type { AddMemberResult, Invite, Member, Members, Role } from "@/api/schemas";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { ErrorPanel, FormMessage, Loading } from "@/components/error-panel";
 import { NativeSelect, SelectField, TextField } from "@/components/form-field";
+import { Stagger, StaggerItem } from "@/components/motion";
+import { projectTabs } from "@/components/nav/nav-items";
+import { NavTabs } from "@/components/nav/nav-tabs";
+import { PageHeader, Panel } from "@/components/panel";
 import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/format";
 import * as v from "@/lib/validate";
@@ -48,47 +53,123 @@ export function MembersPage() {
   const { tenant, me, isOwner, termsCurrent } = useProject();
   const list = useQuery(membersQuery(tenant.id));
 
+  return (
+    <div className="flex max-w-[61rem] flex-col gap-6">
+      <PageHeader title="Settings" />
+      <NavTabs label="Settings" items={projectTabs(tenant.id, "settings") ?? []} />
+      <MembersBody
+        tenantId={tenant.id}
+        tenantName={tenant.name}
+        selfId={me.user.id}
+        canManage={isOwner && termsCurrent}
+        list={list}
+      />
+    </div>
+  );
+}
+
+function MembersBody({
+  tenantId,
+  tenantName,
+  selfId,
+  canManage,
+  list,
+}: {
+  tenantId: string;
+  tenantName: string;
+  selfId: string;
+  canManage: boolean;
+  list: UseQueryResult<Members>;
+}) {
   if (list.isPending) return <Loading label="Loading members" />;
   if (list.error) return <ErrorPanel error={list.error} onRetry={() => list.refetch()} />;
   const ownerCount = list.data.members.filter((m) => m.role === "owner").length;
 
   return (
-    <div className="space-y-8">
-      <section className="space-y-4">
-        <h2 className="text-xl font-semibold tracking-tight">Members</h2>
-        <p className="max-w-prose text-sm text-muted-foreground">
-          Members manage sites and open the web dashboards. Owners also add and remove people and
-          delete sites.
-        </p>
-        {isOwner && termsCurrent ? <AddMemberForm tenantId={tenant.id} /> : null}
-        <ul className="divide-y overflow-hidden rounded-xl border bg-card">
-          {list.data.members.map((m) => (
-            <li key={m.user_id}>
-              <MemberRow
-                tenantId={tenant.id}
-                member={m}
-                isSelf={m.user_id === me.user.id}
-                canManage={isOwner && termsCurrent}
-                lastOwner={m.role === "owner" && ownerCount === 1}
-              />
-            </li>
-          ))}
-        </ul>
+    <div className="flex animate-rise-in flex-col gap-6">
+      <section aria-labelledby="members-h" className="flex flex-col gap-4">
+        <h2 id="members-h" className="sr-only">
+          Members
+        </h2>
+        {canManage ? <AddMemberForm tenantId={tenantId} /> : null}
+        <div className="grid gap-3 text-small text-fg-2 sm:grid-cols-2">
+          <p className="rounded-lg border border-line px-3.5 py-3">
+            <span className="font-medium text-fg">Owners</span> also add and remove people, delete
+            sites, accept new terms and request erasure.
+          </p>
+          <p className="rounded-lg border border-line px-3.5 py-3">
+            <span className="font-medium text-fg">Members</span> manage sites and open the web
+            dashboards.
+          </p>
+        </div>
+        <Panel flush>
+          <div className="relative overflow-x-auto">
+            <table className="w-full min-w-[36rem] border-separate border-spacing-0 text-body">
+              <thead>
+                <tr className="text-left text-caption text-fg-3">
+                  <th scope="col" className="border-b border-line px-4 py-2.5 font-medium">
+                    Member
+                  </th>
+                  <th scope="col" className="border-b border-line px-4 py-2.5 font-medium">
+                    Role
+                  </th>
+                  <th scope="col" className="border-b border-line px-4 py-2.5 font-medium">
+                    Added
+                  </th>
+                  <th scope="col" className="border-b border-line px-4 py-2.5">
+                    <span className="sr-only">Actions</span>
+                  </th>
+                </tr>
+              </thead>
+              <Stagger as="tbody" className="[&_tr:last-child>td]:border-0">
+                {list.data.members.map((m) => (
+                  <MemberRow
+                    key={m.user_id}
+                    tenantId={tenantId}
+                    tenantName={tenantName}
+                    member={m}
+                    isSelf={m.user_id === selfId}
+                    canManage={canManage}
+                    lastOwner={m.role === "owner" && ownerCount === 1}
+                  />
+                ))}
+              </Stagger>
+            </table>
+          </div>
+        </Panel>
       </section>
 
       {list.data.invites.length > 0 ? (
-        <section className="space-y-4">
-          <h2 className="text-lg font-semibold tracking-tight">Open invites</h2>
-          <ul className="divide-y overflow-hidden rounded-xl border bg-card">
-            {list.data.invites.map((i) => (
-              <li key={i.id}>
-                <InviteRow tenantId={tenant.id} invite={i} canManage={isOwner && termsCurrent} />
-              </li>
-            ))}
-          </ul>
+        <section aria-labelledby="invites-h" className="flex flex-col gap-3">
+          <h2 id="invites-h" className="text-title text-fg">
+            Open invites
+          </h2>
+          <Panel flush>
+            <Stagger as="ul" className="divide-y divide-line-subtle">
+              {list.data.invites.map((i) => (
+                <StaggerItem as="li" key={i.id}>
+                  <InviteRow tenantId={tenantId} invite={i} canManage={canManage} />
+                </StaggerItem>
+              ))}
+            </Stagger>
+          </Panel>
         </section>
       ) : null}
     </div>
+  );
+}
+
+function Initial({ login, dashed }: { login: string; dashed?: boolean }) {
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        "flex size-7 shrink-0 items-center justify-center rounded-full text-caption font-semibold",
+        dashed ? "border border-dashed border-line-strong text-fg-2" : "bg-muted text-fg",
+      )}
+    >
+      {login.slice(0, 1).toUpperCase()}
+    </span>
   );
 }
 
@@ -116,13 +197,8 @@ export function AddMemberForm({ tenantId }: { tenantId: string }) {
   }
 
   return (
-    <form
-      noValidate
-      onSubmit={submit}
-      aria-label="Add a member"
-      className="rounded-xl border bg-card p-4 sm:p-5"
-    >
-      <div className="grid gap-4 sm:grid-cols-[1fr_10rem_auto] sm:items-start">
+    <form noValidate onSubmit={submit} aria-label="Add a member" className="flex flex-col gap-3">
+      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_10rem_auto] sm:items-start">
         <TextField
           label="GitHub username"
           name="github_login"
@@ -130,6 +206,9 @@ export function AddMemberForm({ tenantId }: { tenantId: string }) {
           autoComplete="off"
           spellCheck={false}
           maxLength={40}
+          placeholder="octocat"
+          hint="Someone without an account yet gets an invite and joins at first sign-in."
+          className="max-lg:h-(--vs-control-touch)"
           value={values.login}
           onChange={(e) => setValues((s) => ({ ...s, login: e.target.value }))}
           error={errors.login}
@@ -137,6 +216,7 @@ export function AddMemberForm({ tenantId }: { tenantId: string }) {
         <SelectField
           label="Role"
           name="role"
+          className="max-lg:h-(--vs-control-touch)"
           value={values.role}
           onChange={(e) => setValues((s) => ({ ...s, role: e.target.value as Role }))}
           error={errors.role}
@@ -144,35 +224,41 @@ export function AddMemberForm({ tenantId }: { tenantId: string }) {
           <option value="member">Member</option>
           <option value="owner">Owner</option>
         </SelectField>
-        <Button type="submit" className="sm:mt-6" disabled={add.isPending}>
-          <UserPlus aria-hidden />
+        <Button
+          type="submit"
+          className="sm:mt-6.5 max-lg:h-(--vs-control-touch)"
+          pending={add.isPending}
+        >
+          {add.isPending ? null : <UserPlus aria-hidden />}
           {add.isPending ? "Adding" : "Add"}
         </Button>
       </div>
-      <div className="mt-3">
-        {done ? (
-          <p role="status" className="text-sm text-good">
-            {done}
-          </p>
-        ) : null}
-        <FormMessage
-          error={
-            add.error && Object.keys(serverMemberErrors(add.error)).length === 0 ? add.error : null
-          }
-        />
-      </div>
+      {done ? (
+        <p role="status" className="animate-fade-in text-small text-success">
+          {done}
+        </p>
+      ) : null}
+      <FormMessage
+        error={
+          add.error && Object.keys(serverMemberErrors(add.error)).length === 0 ? add.error : null
+        }
+      />
     </form>
   );
 }
 
+const cell = "border-b border-line-subtle px-4 py-3 align-middle";
+
 function MemberRow({
   tenantId,
+  tenantName,
   member,
   isSelf,
   canManage,
   lastOwner,
 }: {
   tenantId: string;
+  tenantName: string;
   member: Member;
   isSelf: boolean;
   canManage: boolean;
@@ -204,77 +290,108 @@ function MemberRow({
   });
 
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 p-4 sm:px-5">
-      <div className="min-w-0 flex-1">
-        <p className="truncate font-medium">
-          <a
-            href={`https://github.com/${encodeURIComponent(member.github_login)}`}
-            rel="noopener noreferrer"
-            className="hover:underline"
-          >
-            {member.github_login}
-          </a>
-          {isSelf ? <span className="font-normal text-muted-foreground"> (you)</span> : null}
-        </p>
-        <p className="text-sm text-muted-foreground">Since {formatDate(member.created_at)}</p>
-      </div>
-      {canManage ? (
-        <NativeSelect
-          aria-label={`Role of ${member.github_login}`}
-          value={member.role}
-          disabled={setRole.isPending || lastOwner}
-          title={lastOwner ? "The last owner cannot be made a member" : undefined}
-          onChange={(e) => setRole.mutate(e.target.value as Role)}
-        >
-          <option value="member">Member</option>
-          <option value="owner">Owner</option>
-        </NativeSelect>
-      ) : (
-        <span className="text-sm text-muted-foreground">
-          {member.role === "owner" ? "Owner" : "Member"}
+    <StaggerItem
+      as="tr"
+      className="transition-colors duration-(--vs-duration-press) ease-standard hover:bg-hover"
+    >
+      <td className={cell}>
+        <span className="flex min-w-0 items-center gap-2.5">
+          <Initial login={member.github_login} />
+          <span className="min-w-0 truncate font-medium text-fg">
+            <a
+              href={`https://github.com/${encodeURIComponent(member.github_login)}`}
+              rel="noopener noreferrer"
+              className="rounded-sm hover:underline focus-ring"
+            >
+              @{member.github_login}
+            </a>
+            {isSelf ? <span className="font-normal text-fg-3"> (you)</span> : null}
+          </span>
         </span>
-      )}
-      {(canManage || isSelf) && !lastOwner ? (
-        <RemoveMember
-          login={member.github_login}
-          isSelf={isSelf}
-          pending={remove.isPending}
-          error={remove.error}
-          onConfirm={() => remove.mutate()}
-        />
-      ) : null}
-      {setRole.error ? (
-        <div className="basis-full">
-          <FormMessage error={setRole.error} />
-        </div>
-      ) : null}
-    </div>
+      </td>
+      <td className={cell}>
+        {canManage ? (
+          <NativeSelect
+            aria-label={`Role of ${member.github_login}`}
+            value={member.role}
+            disabled={setRole.isPending || lastOwner}
+            title={lastOwner ? "The last owner cannot be made a member" : undefined}
+            className="max-lg:h-(--vs-control-touch)"
+            onChange={(e) => setRole.mutate(e.target.value as Role)}
+          >
+            <option value="member">Member</option>
+            <option value="owner">Owner</option>
+          </NativeSelect>
+        ) : (
+          <span className="text-small text-fg-2">
+            {member.role === "owner" ? "Owner" : "Member"}
+          </span>
+        )}
+        {canManage && lastOwner ? (
+          <span className="mt-1 block text-caption font-normal text-fg-3">
+            The last owner cannot be made a member or removed.
+          </span>
+        ) : null}
+        {setRole.error ? <FormMessage error={setRole.error} className="mt-2" /> : null}
+      </td>
+      <td className={cn(cell, "whitespace-nowrap text-small text-fg-2")}>
+        {formatDate(member.created_at)}
+      </td>
+      <td className={cn(cell, "text-right")}>
+        {(canManage || isSelf) && !lastOwner ? (
+          <RemoveMember
+            login={member.github_login}
+            tenantName={tenantName}
+            isSelf={isSelf}
+            pending={remove.isPending}
+            error={remove.error}
+            onConfirm={() => remove.mutate()}
+            onClose={() => remove.reset()}
+          />
+        ) : null}
+      </td>
+    </StaggerItem>
   );
 }
 
 function RemoveMember({
   login,
+  tenantName,
   isSelf,
   pending,
   error,
   onConfirm,
+  onClose,
 }: {
   login: string;
+  tenantName: string;
   isSelf: boolean;
   pending: boolean;
   error: unknown;
   onConfirm: () => void;
+  onClose: () => void;
 }) {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <Button variant="ghost" size="sm" onClick={() => setOpen(true)}>
+      <Button
+        variant="ghost"
+        size="sm"
+        className={cn(
+          "max-lg:h-(--vs-control-touch)",
+          isSelf ? "text-fg-2" : "text-fg-2 hover:text-critical",
+        )}
+        onClick={() => setOpen(true)}
+      >
         {isSelf ? "Leave" : "Remove"}
       </Button>
       <ConfirmDialog
         open={open}
-        onOpenChange={setOpen}
-        title={isSelf ? "Leave this project?" : `Remove ${login}?`}
+        onOpenChange={(o) => {
+          setOpen(o);
+          if (!o) onClose();
+        }}
+        title={isSelf ? `Leave ${tenantName}?` : `Remove ${login}?`}
         description={
           isSelf
             ? "You lose access to its sites and web dashboards at once. An owner can add you again."
@@ -304,10 +421,14 @@ function InviteRow({
     onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.members(tenantId) }),
   });
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 p-4 sm:px-5">
-      <div className="min-w-0 flex-1">
-        <p className="truncate font-medium">{invite.github_login}</p>
-        <p className="text-sm text-muted-foreground">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 transition-colors duration-(--vs-duration-press) ease-standard hover:bg-hover">
+      <Initial login={invite.github_login} dashed />
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <p className="truncate text-body font-medium text-fg">
+          @{invite.github_login}
+          <span className="ml-2 text-caption font-normal text-warning">Has not signed in yet</span>
+        </p>
+        <p className="text-small text-fg-2">
           Joins as {invite.role} at first sign-in. Expires {formatDate(invite.expires_at)}.
         </p>
       </div>
@@ -315,8 +436,9 @@ function InviteRow({
         <Button
           variant="ghost"
           size="sm"
+          className="text-fg-2 max-lg:h-(--vs-control-touch)"
           onClick={() => revoke.mutate()}
-          disabled={revoke.isPending}
+          pending={revoke.isPending}
         >
           Revoke
         </Button>

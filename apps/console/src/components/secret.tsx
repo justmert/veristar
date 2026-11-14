@@ -1,6 +1,6 @@
+import { fade } from "@veristar/brand/motion";
 import { Eye, EyeOff, KeyRound } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { fade } from "@veristar/brand/motion";
 import { type ReactNode, useState } from "react";
 import { CopyButton } from "@/components/copy-button";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,7 @@ export function OneTimeSecret({
   description,
   onDone,
   doneLabel = "Done",
+  copyLabel = "Copy",
   children,
 }: {
   value: string;
@@ -22,6 +23,8 @@ export function OneTimeSecret({
   description?: ReactNode;
   onDone?: () => void;
   doneLabel?: string;
+  // names what is copied, such as "Copy key"
+  copyLabel?: string;
   children?: ReactNode;
 }) {
   const [shown, setShown] = useState(false);
@@ -64,7 +67,7 @@ export function OneTimeSecret({
           {shown ? <EyeOff aria-hidden /> : <Eye aria-hidden />}
         </Button>
         <div className="pr-1">
-          <CopyButton text={value} size="xs" variant="ghost" />
+          <CopyButton text={value} label={copyLabel} size="xs" variant="ghost" />
         </div>
       </div>
       {children}
