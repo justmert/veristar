@@ -1,5 +1,5 @@
 // Package tenantguardprocessor is the tenantguard processor of the
-// scf-otelcol distribution (the design). it is the first processor after
+// scf-otelcol distribution (docs/reference/collector.md). it is the first processor after
 // memory_limiter in every tenant pipeline and cannot be skipped: it refuses
 // data without tenantauth credentials, enforces per-tenant token buckets,
 // stamps the tenant from the credential, reduces resources to an allowlist,

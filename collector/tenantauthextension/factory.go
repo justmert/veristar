@@ -1,5 +1,5 @@
 // Package tenantauthextension is the tenantauth server authenticator of the
-// scf-otelcol distribution (the design and this stage). it maps an otlp
+// scf-otelcol distribution (docs/reference/collector.md). it maps an otlp
 // bearer token to the tenant that owns it through an in-memory snapshot of
 // the registry_otlp kv bucket, and fails closed while no snapshot exists.
 package tenantauthextension

@@ -1,5 +1,5 @@
 // Package jetstreamexporter is the jetstream exporter of the scf-otelcol
-// distribution (the design). it splits a metrics payload by tenant,
+// distribution (docs/reference/collector.md). it splits a metrics payload by tenant,
 // checks every field against the published schema once more, marshals each
 // part as otlp protobuf and publishes it to api.metrics.<tenant> on
 // API_METRICS with Nats-Msg-Id set to the sha-256 of the payload, waiting
