@@ -20,9 +20,13 @@ export default defineConfig(({ command }) => {
     server: upstream
       ? {
           proxy: Object.fromEntries(
-            ["/api", "/mcp", "/oauth", "/.well-known/oauth-protected-resource", "/.well-known/oauth-authorization-server"].map(
-              (p) => [p, { target: upstream, changeOrigin: false, xfwd: false }],
-            ),
+            [
+              "/api",
+              "/mcp",
+              "/oauth",
+              "/.well-known/oauth-protected-resource",
+              "/.well-known/oauth-authorization-server",
+            ].map((p) => [p, { target: upstream, changeOrigin: false, xfwd: false }]),
           ),
         }
       : undefined,

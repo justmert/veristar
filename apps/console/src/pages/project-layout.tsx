@@ -23,6 +23,7 @@ const NAV = [
   { to: "api/traffic", label: "API traffic", end: true },
   { to: "api", label: "API setup", end: true },
   { to: "members", label: "Members", end: true },
+  { to: "ai", label: "AI / MCP", end: true },
   { to: "privacy", label: "Privacy", end: true },
 ];
 

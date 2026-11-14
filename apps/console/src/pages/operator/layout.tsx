@@ -15,6 +15,7 @@ const NAV = [
   { to: "/operator/api", label: "Global API", end: true },
   { to: "/operator/compare", label: "Compare", end: true },
   { to: "/operator/api-keys", label: "API keys", end: true },
+  { to: "/operator/ai", label: "AI / MCP", end: true },
   { to: "/operator/audit", label: "Audit log", end: true },
   { to: "/operator/settings", label: "Settings", end: true },
 ];

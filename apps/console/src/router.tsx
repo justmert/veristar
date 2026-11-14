@@ -5,6 +5,8 @@ import { ApiSetupPage } from "@/pages/api-setup";
 import { ApiTrafficPage } from "@/pages/api-traffic";
 import { AppShell } from "@/pages/app-shell";
 import { EnrollPage } from "@/pages/enroll";
+import { McpPage } from "@/pages/mcp";
+import { McpConsentPage } from "@/pages/mcp-consent";
 import { MembersPage } from "@/pages/members";
 import { NotFoundPage, RouteErrorPage } from "@/pages/not-found";
 import { AlertsPage } from "@/pages/operator/alerts";
@@ -14,6 +16,7 @@ import { ComparePage } from "@/pages/operator/compare";
 import { GlobalApiPage } from "@/pages/operator/global-api";
 import { GlobalWebPage } from "@/pages/operator/global-web";
 import { OperatorLayout } from "@/pages/operator/layout";
+import { OperatorMcpPage } from "@/pages/operator/mcp";
 import { ReviewQueuePage } from "@/pages/operator/review";
 import { SettingsPage } from "@/pages/operator/settings";
 import { TenantDetailPage } from "@/pages/operator/tenant-detail";
@@ -48,6 +51,9 @@ export const router = createBrowserRouter([
   { path: "/sign-in", element: <SignInPage />, errorElement: <RouteErrorPage /> },
   { path: "/terms", element: <TermsPage />, errorElement: <RouteErrorPage /> },
   { path: "/sso-error", element: <SsoErrorPage />, errorElement: <RouteErrorPage /> },
+  // the mcp oauth consent screen; it signs the person in itself, so the
+  // sealed request survives the github round trip (contract 12.3)
+  { path: "/ai/consent", element: <McpConsentPage />, errorElement: <RouteErrorPage /> },
   {
     path: "/",
     id: "session",
@@ -75,6 +81,7 @@ export const router = createBrowserRouter([
           { path: "privacy", element: <PrivacyPage /> },
           { path: "api", element: <ApiSetupPage /> },
           { path: "api/traffic", element: <ApiTrafficPage /> },
+          { path: "ai", element: <McpPage /> },
         ],
       },
       {
@@ -89,6 +96,7 @@ export const router = createBrowserRouter([
           { path: "api", element: <GlobalApiPage /> },
           { path: "compare", element: <ComparePage /> },
           { path: "api-keys", element: <ApiKeysPage /> },
+          { path: "ai", element: <OperatorMcpPage /> },
           { path: "audit", element: <AuditPage /> },
           { path: "settings", element: <SettingsPage /> },
         ],
