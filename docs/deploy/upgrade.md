@@ -9,7 +9,7 @@ time, with every image's signature checked first. Upstream images (Umami, NATS, 
 observability) change only when their pin in `infra/ansible/vars/pins.yml` changes, which is a
 code change released the same way.
 
-Production rolls out releases this way: release `v0.2.1` reached all three nodes with
+Production rolls out releases this way: release `v0.2.2` reached all three nodes with
 `failed=0` and two planned Patroni switchovers
 ([../reference/drills/2026-11-13-azure.md](../reference/drills/2026-11-13-azure.md)).
 
