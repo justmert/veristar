@@ -17,6 +17,18 @@ import (
 // surviving node is tried within a second.
 const reconnectWait = time.Second
 
+// a server that disappears without closing the tcp connection (a powered
+// off node) is noticed only by missed pings. with nats.go's defaults (a ping
+// every 2 minutes, 2 outstanding) a service kept publishing into a dead
+// connection for 5.5 minutes in the production node loss drill of
+// 2026-11-14, so its gateway answered 503 for that long. a ping every 5 s
+// with 3 outstanding notices it within 20 s, and the client then moves to
+// the next url.
+const (
+	pingInterval        = 5 * time.Second
+	maxPingsOutstanding = 3
+)
+
 // Options returns the connection options every service uses: a connection
 // named after the service, reconnects that never give up, a per-service reply
 // inbox that the subject permissions are written against, the service's
@@ -30,6 +42,12 @@ func Options(cfg config.NATS, service string, log *slog.Logger) ([]nats.Option, 
 		nats.Name(service),
 		nats.MaxReconnects(-1),
 		nats.ReconnectWait(reconnectWait),
+		nats.PingInterval(pingInterval),
+		nats.MaxPingsOutstanding(maxPingsOutstanding),
+		// NATS_URL lists the node's own server first (roles/edge and
+		// roles/core), so a service talks to the server on its own node and
+		// a lost node takes only its own services' connections with it
+		nats.DontRandomize(),
 		nats.CustomInboxPrefix(InboxPrefix(service)),
 		nats.DisconnectErrHandler(func(_ *nats.Conn, err error) {
 			// a nil error is our own Close, which the closed handler logs
