@@ -1,4 +1,4 @@
-import { cn } from "cn";
+import { cn } from "@veristar/brand/cn";
 
 // a placeholder in the shape of what is coming; it breathes, it never spins
 function Skeleton({ className, ...props }: React.ComponentProps<"div">) {

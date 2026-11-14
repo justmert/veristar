@@ -1,4 +1,4 @@
-import { cn } from "cn";
+import { cn } from "@veristar/brand/cn";
 import { X } from "lucide-react";
 import type * as React from "react";
 import { type ReactNode, useEffect, useId, useRef } from "react";

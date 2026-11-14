@@ -1,4 +1,4 @@
-import { cn } from "cn";
+import { cn } from "@veristar/brand/cn";
 import { CircleAlert, CircleCheck, CircleX, Info, TriangleAlert } from "lucide-react";
 import type { ReactNode } from "react";
 

@@ -7,7 +7,8 @@
     "./index.css": "./src/index.css",
     "./tokens": "./src/tokens.ts",
     "./motion": "./src/motion.ts",
-    "./mark": "./src/mark.tsx"
+    "./mark": "./src/mark.tsx",
+    "./cn": "./src/cn.ts"
   },
   "scripts": {
     "generate": "node scripts/generate.ts",
@@ -15,7 +16,8 @@
   },
   "dependencies": {
     "@fontsource-variable/geist": "catalog:",
-    "@fontsource-variable/geist-mono": "catalog:"
+    "@fontsource-variable/geist-mono": "catalog:",
+    "cn": "catalog:"
   },
   "peerDependencies": {
     "react": "*"

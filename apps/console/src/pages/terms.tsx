@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { cn } from "cn";
+import { cn } from "@veristar/brand/cn";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
 import { termsQuery } from "@/api/queries";

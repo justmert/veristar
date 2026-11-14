@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { fade, stagger } from "@veristar/brand/motion";
-import { cn } from "cn";
+import { cn } from "@veristar/brand/cn";
 import { ArrowRight, Check, KeyRound, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { type FormEvent, type ReactNode, useState } from "react";

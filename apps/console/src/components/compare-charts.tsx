@@ -6,7 +6,7 @@
 // line depends on its colour alone, and every chart has a table view.
 
 import { durationMs } from "@veristar/brand/motion";
-import { cn } from "cn";
+import { cn } from "@veristar/brand/cn";
 import { useReducedMotion } from "motion/react";
 import {
   CartesianGrid,

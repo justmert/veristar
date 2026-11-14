@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { cn } from "cn";
+import { cn } from "@veristar/brand/cn";
 import { CircleAlert, Plug, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router";

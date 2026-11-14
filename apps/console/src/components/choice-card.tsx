@@ -1,4 +1,4 @@
-import { cn } from "cn";
+import { cn } from "@veristar/brand/cn";
 import { type ReactNode, useId } from "react";
 
 // one option of a radio group drawn as a card: a native radio (keyboard,

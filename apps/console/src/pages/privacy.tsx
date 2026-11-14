@@ -1,6 +1,6 @@
 import { useInfiniteQuery, useMutation, useQuery } from "@tanstack/react-query";
 import { fade } from "@veristar/brand/motion";
-import { cn } from "cn";
+import { cn } from "@veristar/brand/cn";
 import { Check, Clock, Eraser, Minus, X } from "lucide-react";
 import { motion } from "motion/react";
 import { type FormEvent, useEffect, useState } from "react";

@@ -1,5 +1,5 @@
 import { useMutation } from "@tanstack/react-query";
-import { cn } from "cn";
+import { cn } from "@veristar/brand/cn";
 import { LockKeyhole, LogOut, RotateCcw, SearchX, TriangleAlert } from "lucide-react";
 import type { ReactNode } from "react";
 import { isRouteErrorResponse, Link, useNavigate, useRouteError } from "react-router";

@@ -1,4 +1,4 @@
-import { cn } from "cn";
+import { cn } from "@veristar/brand/cn";
 import { ArrowDown, ArrowRight, ArrowUp, CircleAlert, Info } from "lucide-react";
 import type { ReactNode } from "react";
 import { AnimatedNumber } from "@/components/motion";

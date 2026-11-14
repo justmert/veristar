@@ -1,4 +1,4 @@
-import { cn } from "cn";
+import { cn } from "@veristar/brand/cn";
 import type { SiteStatus, TenantStatus } from "@/api/schemas";
 
 export type Tone = "success" | "warning" | "critical" | "info" | "accent";
