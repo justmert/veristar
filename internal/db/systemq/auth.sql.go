@@ -58,9 +58,11 @@ func (q *Queries) FindSession(ctx context.Context, tokenHash []byte) ([]byte, er
 }
 
 const getUser = `-- name: GetUser :one
-select id, github_id, github_login, is_operator, created_at, last_login_at from cp.users where id = $1
+select id, github_id, github_login, is_operator, created_at, last_login_at, deleted_at from cp.users where id = $1 and deleted_at is null
 `
 
+// a deleted account is no user: its sessions are gone, and this keeps a
+// session row written in a race with the deletion from loading it
 func (q *Queries) GetUser(ctx context.Context, id uuid.UUID) (CpUser, error) {
 	row := q.db.QueryRow(ctx, getUser, id)
 	var i CpUser
@@ -71,6 +73,7 @@ func (q *Queries) GetUser(ctx context.Context, id uuid.UUID) (CpUser, error) {
 		&i.IsOperator,
 		&i.CreatedAt,
 		&i.LastLoginAt,
+		&i.DeletedAt,
 	)
 	return i, err
 }
@@ -239,11 +242,11 @@ const signInUser = `-- name: SignInUser :one
 
 insert into cp.users (github_id, github_login, is_operator, last_login_at)
 values ($1, $2, $3, now())
-on conflict (github_id) do update
+on conflict (github_id) where deleted_at is null do update
   set github_login = excluded.github_login,
       is_operator = excluded.is_operator,
       last_login_at = excluded.last_login_at
-returning id, github_id, github_login, is_operator, created_at, last_login_at
+returning id, github_id, github_login, is_operator, created_at, last_login_at, deleted_at
 `
 
 type SignInUserParams struct {
@@ -256,7 +259,9 @@ type SignInUserParams struct {
 // these run before any tenant is known.
 // the numeric github id is the identity, the login can change. is_operator
 // follows OPERATOR_GITHUB_IDS at every sign-in, so removing an id from the
-// setting takes effect at that person's next sign-in.
+// setting takes effect at that person's next sign-in. a deleted account's
+// emptied row never matches (00031), so signing in again after deleting
+// the account makes a new row.
 func (q *Queries) SignInUser(ctx context.Context, arg SignInUserParams) (CpUser, error) {
 	row := q.db.QueryRow(ctx, signInUser, arg.GithubID, arg.GithubLogin, arg.IsOperator)
 	var i CpUser
@@ -267,6 +272,7 @@ func (q *Queries) SignInUser(ctx context.Context, arg SignInUserParams) (CpUser,
 		&i.IsOperator,
 		&i.CreatedAt,
 		&i.LastLoginAt,
+		&i.DeletedAt,
 	)
 	return i, err
 }

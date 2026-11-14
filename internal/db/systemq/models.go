@@ -58,4 +58,5 @@ type CpUser struct {
 	IsOperator  bool
 	CreatedAt   time.Time
 	LastLoginAt *time.Time
+	DeletedAt   *time.Time
 }

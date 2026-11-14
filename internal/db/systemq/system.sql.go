@@ -114,9 +114,9 @@ const upsertUser = `-- name: UpsertUser :one
 
 insert into cp.users (github_id, github_login, last_login_at)
 values ($1, $2, now())
-on conflict (github_id) do update
+on conflict (github_id) where deleted_at is null do update
   set github_login = excluded.github_login, last_login_at = excluded.last_login_at
-returning id, github_id, github_login, is_operator, created_at, last_login_at
+returning id, github_id, github_login, is_operator, created_at, last_login_at, deleted_at
 `
 
 type UpsertUserParams struct {
@@ -136,6 +136,7 @@ func (q *Queries) UpsertUser(ctx context.Context, arg UpsertUserParams) (CpUser,
 		&i.IsOperator,
 		&i.CreatedAt,
 		&i.LastLoginAt,
+		&i.DeletedAt,
 	)
 	return i, err
 }

@@ -2,7 +2,8 @@
 -- 5.1 and 5.4): users and members, as cp_system.
 
 -- name: OperatorUserRef :one
-select id, github_id, github_login from cp.users where id = @id;
+-- no row for a deleted account: the detail names no one then
+select id, github_id, github_login from cp.users where id = @id and deleted_at is null;
 
 -- name: OperatorTenantMembers :many
 select u.github_id, u.github_login, m.role, m.created_at
