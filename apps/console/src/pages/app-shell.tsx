@@ -1,5 +1,5 @@
-import { Mark } from "@veristar/brand/mark";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { Mark } from "@veristar/brand/mark";
 import { Menu as MenuIcon, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router";
@@ -28,7 +28,6 @@ export function AppShell() {
   });
 
   // a navigation closes the drawer and starts the page at its top
-  // biome-ignore lint/correctness/useExhaustiveDependencies: runs on every route change
   useEffect(() => {
     setDrawer(false);
     window.scrollTo({ top: 0 });
@@ -111,6 +110,7 @@ function Drawer({
     if (!open && d.open) d.close();
   }, [open]);
   return (
+    // biome-ignore lint/a11y/useKeyWithClickEvents: the click only closes on the scrim; Escape closes the native dialog
     <dialog
       ref={ref}
       aria-label="Navigation"

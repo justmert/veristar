@@ -115,7 +115,6 @@ export function Loading({
       <Skeleton className="h-3 w-2/5" />
       <Skeleton className="h-3 w-3/5" />
       {Array.from({ length: rows }, (_, i) => (
-        // biome-ignore lint/suspicious/noArrayIndexKey: placeholders have no identity
         <Skeleton key={i} className="h-9 w-full" />
       ))}
     </div>

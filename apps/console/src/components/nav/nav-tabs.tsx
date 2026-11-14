@@ -1,6 +1,6 @@
 import { cn } from "@veristar/brand/cn";
-import { LayoutGroup, motion } from "motion/react";
 import { transition } from "@veristar/brand/motion";
+import { LayoutGroup, motion } from "motion/react";
 import { useId } from "react";
 import { Link, useLocation } from "react-router";
 

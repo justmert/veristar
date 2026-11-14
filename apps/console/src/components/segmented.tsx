@@ -1,6 +1,6 @@
 import { cn } from "@veristar/brand/cn";
-import { LayoutGroup, motion } from "motion/react";
 import { transition } from "@veristar/brand/motion";
+import { LayoutGroup, motion } from "motion/react";
 import { useId } from "react";
 
 // a single choice among a few (a date range, a breakdown). arrow keys move
@@ -52,6 +52,7 @@ export function Segmented<T extends string>({
           {options.map((o, i) => {
             const on = o.value === value;
             return (
+              // biome-ignore lint/a11y/useSemanticElements: a native radio cannot carry the sliding marker; the arrow keys and roles follow the radio group pattern
               <button
                 key={o.value}
                 type="button"
