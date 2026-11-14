@@ -98,6 +98,10 @@
             ]
           },
           {
+            "group": "AI assistants",
+            "pages": ["onboarding/mcp"]
+          },
+          {
             "group": "Help",
             "pages": ["support"]
           }
@@ -115,6 +119,7 @@
               "operators/global-views",
               "operators/reading-the-numbers",
               "operators/api-keys",
+              "operators/mcp",
               "operators/alerts"
             ]
           },
@@ -181,6 +186,7 @@
                 "pages": [
                   "runbooks/operators",
                   "runbooks/operator-key-revocation",
+                  "runbooks/mcp-access",
                   "runbooks/tenant-removal",
                   "runbooks/erasure-requests"
                 ]
@@ -228,6 +234,7 @@
             "pages": [
               "security/SECURITY",
               "security/threat-model",
+              "security/mcp",
               "security/bot-and-inflation",
               "security/supply-chain",
               "security/verify-tracker",

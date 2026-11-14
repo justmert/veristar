@@ -236,13 +236,13 @@ services:
       UMAMI_UPSTREAM: umami:3000
       NODE_HEALTH_UPSTREAM: controlplane-1:9090
       NODE_HEALTH_PATH: /corez
-    volumes: ["${P17}/conf/core.Caddyfile:/etc/caddy/Caddyfile:ro", "../../apps/console/dist:/srv/console:ro", "${P17}/certs/core-1.crt:/certs/node.crt:ro", "${P17}/certs/core-1.key:/certs/node.key:ro"]
+    volumes: ["${P17}/conf/core.Caddyfile:/etc/caddy/Caddyfile:ro", "../../apps/console/dist:/srv/console:ro", "../../deploy/caddy/umami-theme/site:/srv/umami-theme:ro", "${P17}/certs/core-1.crt:/certs/node.crt:ro", "${P17}/certs/core-1.key:/certs/node.key:ro"]
   caddy-core-2:
     image: sa-p17/caddy:local
     restart: unless-stopped
     network_mode: "service:node-core-2"
     environment: {<<: *caddy-core-env, CONTROLPLANE_UPSTREAM: "controlplane-2:8085", NODE_HEALTH_UPSTREAM: "controlplane-2:9090"}
-    volumes: ["${P17}/conf/core.Caddyfile:/etc/caddy/Caddyfile:ro", "../../apps/console/dist:/srv/console:ro", "${P17}/certs/core-2.crt:/certs/node.crt:ro", "${P17}/certs/core-2.key:/certs/node.key:ro"]
+    volumes: ["${P17}/conf/core.Caddyfile:/etc/caddy/Caddyfile:ro", "../../apps/console/dist:/srv/console:ro", "../../deploy/caddy/umami-theme/site:/srv/umami-theme:ro", "${P17}/certs/core-2.crt:/certs/node.crt:ro", "${P17}/certs/core-2.key:/certs/node.key:ro"]
   controlplane-1: &cp {<<: *go, command: [/bin-sa/controlplane], volumes: ["${P17}/bin:/bin-sa:ro", "../../packages/tracker/releases:/releases:ro"]}
   controlplane-2: *cp
   replayer-1: {<<: *go, command: [/bin-sa/replayer], environment: {REPLAYER_NODE_ID: core-1}}

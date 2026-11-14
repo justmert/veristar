@@ -9,6 +9,10 @@
 #   WEB_TLS          first argument of the tls directive: the acme account
 #                    email in production, "internal" for the local ca in tests
 #
+# files: /srv/umami-theme holds deploy/caddy/umami-theme/site, the theme of
+# umami's dashboard (docs/adr/0004). the console image ships it there; tests
+# bind the directory.
+#
 # umami's write routes and its collection routes stay reachable only on the
 # private network, for the replayer and the control plane.
 #
@@ -150,6 +154,29 @@ web.{$BASE_DOMAIN} {
 		}
 		respond @sso_refused "forbidden" 403
 
+		# the veristar theme for umami's dashboard (docs/adr/0004): one
+		# stylesheet, its self-hosted fonts and the brand icons, served from
+		# the directory deploy/caddy/umami-theme/site, which the console image
+		# holds at /srv/umami-theme. the icon paths are the ones umami 3.5.0's
+		# html links (src/app/layout.tsx) and its manifest names; caddy answers
+		# them, so umami's own files at those paths are never reached. every
+		# method stops here: file_server answers GET and HEAD and refuses the
+		# rest, and a missing file is a 404, never a request to umami.
+		# tests/umami-compat fails when an upgrade changes these paths.
+		@theme path /_veristar/* /favicon.ico /favicon-16x16.png /favicon-32x32.png /apple-touch-icon.png /android-chrome-192x192.png /android-chrome-512x512.png /mstile-150x150.png /safari-pinned-tab.svg /site.webmanifest /browserconfig.xml
+		route @theme {
+			root * /srv/umami-theme
+			header {
+				# fixed names, so a browser asks again (an etag answers 304)
+				# instead of keeping an old theme after a deploy
+				Cache-Control no-cache
+				X-Content-Type-Options nosniff
+				# an svg opened on its own is a document; it runs nothing
+				Content-Security-Policy "default-src 'none'; frame-ancestors 'none'"
+			}
+			file_server
+		}
+
 		# db-ip's country lite licence asks for a link back on every page
 		# that shows results from the database, and umami's pages show
 		# countries (the design, the reference docs section 5). umami runs
@@ -160,11 +187,18 @@ web.{$BASE_DOMAIN} {
 		# buffered and rewritten; json, scripts and refusals pass untouched.
 		# the plugin cannot read compressed bodies, hence Accept-Encoding
 		# identity towards umami below.
+		#
+		# the same rewrite links the theme stylesheet just before </head>,
+		# after umami's own stylesheets. it is a same-origin link and no
+		# script: umami's csp (default-src 'self', style-src 'self'
+		# 'unsafe-inline') already allows it. react 19 skips unknown tags in
+		# the head when it hydrates, so the link stays for the session.
 		@page method GET
 		replace @page {
 			match {
 				header Content-Type text/html*
 			}
+			</head> `<link rel="stylesheet" href="/_veristar/theme.css"></head>`
 			</body> `<a href="https://db-ip.com" style="position:fixed;right:8px;bottom:4px;z-index:2147483647;font:11px/1.4 system-ui,sans-serif;color:#555;background:rgba(255,255,255,.85);padding:1px 4px;border-radius:3px;text-decoration:none">IP Geolocation by DB-IP</a></body>`
 		}
 

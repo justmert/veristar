@@ -28,6 +28,25 @@ func webCaddyfile(t *testing.T) string {
 	return p
 }
 
+func themeDir(t *testing.T) string {
+	t.Helper()
+	return filepath.Join(filepath.Dir(webCaddyfile(t)), "umami-theme", "site")
+}
+
+// themePaths reads the path list of the @theme matcher in web.Caddyfile.
+func themePaths(t *testing.T) []string {
+	t.Helper()
+	b, err := os.ReadFile(webCaddyfile(t))
+	require.NoError(t, err)
+	for _, line := range strings.Split(string(b), "\n") {
+		if rest, ok := strings.CutPrefix(strings.TrimSpace(line), "@theme path "); ok {
+			return strings.Fields(rest)
+		}
+	}
+	t.Fatal("web.Caddyfile has no @theme path matcher")
+	return nil
+}
+
 func webEnv() map[string]string {
 	return map[string]string{
 		"BASE_DOMAIN":    "web.test",
@@ -103,9 +122,32 @@ func TestWebCaddyfileValidates(t *testing.T) {
 		`"replace":"\u003ca href=\"https://db-ip.com\"`,
 		`IP Geolocation by DB-IP\u003c/a\u003e\u003c/body\u003e`,
 		`"Accept-Encoding":["identity"]`,
+		// the umami theme (docs/adr/0004): the stylesheet link before
+		// </head>, and the theme files from /srv/umami-theme
+		`"search":"\u003c/head\u003e"`,
+		`"replace":"\u003clink rel=\"stylesheet\" href=\"/_veristar/theme.css\"\u003e\u003c/head\u003e"`,
+		`"root":"/srv/umami-theme"`,
+		`"handler":"file_server"`,
+		`"Cache-Control":["no-cache"]`,
+		`"X-Content-Type-Options":["nosniff"]`,
+		`"Content-Security-Policy":["default-src 'none'; frame-ancestors 'none'"]`,
 	} {
 		require.Contains(t, adapted, want)
 	}
+	// every path the theme matcher names is a file of the theme, so caddy
+	// never answers one of umami's icon paths with a 404
+	paths := themePaths(t)
+	require.Contains(t, paths, "/_veristar/*")
+	for _, p := range paths {
+		if p == "/_veristar/*" {
+			continue
+		}
+		require.Contains(t, adapted, `"`+p+`"`)
+		_, err := os.Stat(filepath.Join(themeDir(t), filepath.FromSlash(p)))
+		require.NoError(t, err, "%s is in the theme matcher but not in the theme", p)
+	}
+	_, err = os.Stat(filepath.Join(themeDir(t), "_veristar", "theme.css"))
+	require.NoError(t, err)
 	var cfg struct {
 		Logging struct {
 			Logs map[string]struct {

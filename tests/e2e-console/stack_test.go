@@ -918,6 +918,8 @@ func (s *Stack) StartWeb(t testing.TB) {
 	s.run(t, "sa-ce-web-"+s.ID, []string{
 		"-p", "127.0.0.1:" + port + ":443",
 		"-v", filepath.Join(repoRoot(), "deploy", "caddy", "web.Caddyfile") + ":/etc/caddy/Caddyfile:ro",
+		// the theme web.Caddyfile serves, which the console image holds in production
+		"-v", filepath.Join(repoRoot(), "deploy", "caddy", "umami-theme", "site") + ":/srv/umami-theme:ro",
 		"-e", "BASE_DOMAIN=" + baseDomain, "-e", "UMAMI_UPSTREAM=" + umamictr.UpstreamAddr, "-e", "WEB_TLS=internal",
 	}, caddyPluginImage)
 	s.Routes["web."+baseDomain+":443"] = "127.0.0.1:" + port

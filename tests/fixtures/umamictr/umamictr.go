@@ -25,6 +25,7 @@ import (
 	"testing"
 	"time"
 
+	mobycontainer "github.com/moby/moby/api/types/container"
 	mobynet "github.com/moby/moby/api/types/network"
 	"github.com/testcontainers/testcontainers-go"
 	tcnetwork "github.com/testcontainers/testcontainers-go/network"
@@ -262,6 +263,15 @@ func WebCaddyImage(t testing.TB) string {
 	return WebCaddyTag
 }
 
+// ThemeRoot is where web.Caddyfile serves the umami theme from.
+const ThemeRoot = "/srv/umami-theme"
+
+// ThemeDir is the theme's source directory in the repository.
+func ThemeDir(t testing.TB) string {
+	t.Helper()
+	return filepath.Join(repoRoot(t), "deploy", "caddy", "umami-theme", "site")
+}
+
 // WebDomain is BASE_DOMAIN for the web caddy; the site is web.WebDomain.
 const WebDomain = "umami.test"
 
@@ -290,6 +300,11 @@ func StartWeb(t testing.TB, s *Stack) *Web {
 			HostFilePath:      filepath.Join(repoRoot(t), "deploy", "caddy", "web.Caddyfile"),
 			ContainerFilePath: "/etc/caddy/Caddyfile",
 			FileMode:          0o644,
+		}),
+		// the umami theme web.Caddyfile serves (docs/adr/0004), which the
+		// console image holds at the same path in production
+		testcontainers.WithHostConfigModifier(func(hc *mobycontainer.HostConfig) {
+			hc.Binds = append(hc.Binds, ThemeDir(t)+":"+ThemeRoot+":ro")
 		}),
 		testcontainers.WithExposedPorts("443/tcp"),
 		tcnetwork.WithNetwork([]string{"web"}, s.Network),
