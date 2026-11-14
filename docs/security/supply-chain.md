@@ -79,7 +79,7 @@ manifest and the registry digests are the same.
 
 **Release `v0.2.0` (2026-11-14).** Built by
 `scripts/supply-chain/release-workstation.sh v0.2.0 <work dir>` from a clean worktree at the tag
-(commit `df4c830` on `main`, with the MCP server, migration 00030, the Umami theme, the event
+(commit `e166062` on `main`, with the MCP server, migration 00030, the Umami theme, the event
 route without an access log, and `GOGC=200` with adaptive goroutine stacks for Caddy and the
 gateway). The
 script ran every step above in 9 min 36 s: eleven images built and pushed, each gated by `scan-image.sh` (syft 1.57.1,
@@ -103,7 +103,7 @@ transparency log; then `release-images.json` written, every digest verified with
 | `replayer` | `v0.2.0` | `sha256:b89d0ef67613e0dc8914160a5e3b4d13a28678de4aa75fe6af9f87432d1a8a9a` |
 
 **Release `v0.2.1` (2026-11-14).** Built the same way by
-`scripts/supply-chain/release-workstation.sh v0.2.1 <work dir>` from a clean worktree at the tag (commit `14f7bf5` on `main`. Since `v0.2.0` it adds `platformctl probe-tenant
+`scripts/supply-chain/release-workstation.sh v0.2.1 <work dir>` from a clean worktree at the tag (commit `d9478b9` on `main`. Since `v0.2.0` it adds `platformctl probe-tenant
 rotate-otlp-token`, the HAProxy start fix, the replica's WAL fetch from the pgBackRest repository,
 and the probe scrape and watchdog wiring) in
 8 min 44 s: eleven images gated by `scan-image.sh` (no fixable critical or high finding), signed
@@ -129,7 +129,7 @@ before it touched a node.
 
 **Release `v0.2.2` (2026-11-14), the release production runs.** Built the same way by
 `scripts/supply-chain/release-workstation.sh v0.2.2 <work dir>` from a clean worktree at the tag
-(commit `230c1c7` on `main`. Since `v0.2.1` it adds the console redesign with the light theme,
+(commit `e57b724` on `main`. Since `v0.2.1` it adds the console redesign with the light theme,
 account deletion with `DELETE /api/me` and migration 00031, the Umami theme's light mode, and the
 prober's HTTP/2 health check) in 9 min 20 s: eleven images gated by `scan-image.sh` (no fixable
 critical or high finding), signed and SBOM-attested with the release key from the SOPS file,
