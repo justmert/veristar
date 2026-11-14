@@ -18,7 +18,7 @@ session concerned.
 |---|---|---|
 | A visitor of a tenant's site, to the tenant | that visitor's data on that site | the tenant's owner files the request; point them to the Privacy page and to step 2 below |
 | A visitor, to SCF or the operators directly | a site they visited | the platform cannot identify them; forward to the tenant (the controller for its site), keep the request record outside the platform without the address or user agent |
-| A tenant, for a whole site | every event and session of a site | the operator files `site_reset` |
+| A tenant, for a whole site | every event and session of a site | the project's owner files `site_reset` |
 | A tenant leaving | the whole project | removal ([tenant-removal.md](tenant-removal.md)) |
 
 ## Steps (owner, with operator support)
@@ -27,9 +27,9 @@ session concerned.
    - `visitor_today`: the visitor gives their IP address and user agent, **the same UTC day** as
      the visit. After midnight UTC the day's secret is gone and nothing can be found; the answer
      says `nothing_found`.
-   - `session`: the operator finds the session in the Umami dashboard (by time and page) and gives
+   - `session`: the project's owner finds the session in the Umami dashboard (by time and page) and gives
      its session id. Works for the whole raw retention.
-   - `site_reset`: the operator types the site's domain again to confirm.
+   - `site_reset`: the project's owner types the site's domain again to confirm.
 
 2. **File it** on the project's Privacy page (`/projects/<tenant id>/privacy`). The page keeps the
    typed address and user agent in memory only. The answer is `202` and the request appears in

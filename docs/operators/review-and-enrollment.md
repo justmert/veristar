@@ -71,7 +71,7 @@ status. Each one asks for confirmation.
 | Action | From | To | Reason | Effect |
 |---|---|---|---|---|
 | Approve | `pending` | `active` | optional | every pending site becomes active; dashboards are set up and the sites start receiving traffic |
-| Reject | `pending` | `rejected` | required | nothing is set up; the owners see the reason and can edit and resubmit, which puts the project back in the queue as `pending` |
+| Reject | `pending` | `rejected` | required | nothing is set up; the project's owners see the reason and can edit and resubmit, which puts the project back in the queue as `pending` |
 | Suspend | `active` | `suspended` | required | new events from the project's sites are refused and its OTLP tokens stop working; its dashboards stay readable; members can read but cannot add or change sites |
 | Resume | `suspended` | `active` | optional | events and OTLP data are accepted again |
 | Remove | any status except `removed` | `removed` | required | see [removal.md](removal.md) |
@@ -88,7 +88,7 @@ status. Each one asks for confirmation.
 
 A site in review shows **In review** on the project page, with **Approve site** and
 **Reject site**. Approving makes the site active and it starts receiving traffic. Rejecting
-requires a reason, sets the site to `removed` and shows the reason to the owners. Sites of a
+requires a reason, sets the site to `removed` and shows the reason to the project's owners. Sites of a
 `pending` project are not approved one by one; they are approved with the project. Audit
 actions: `site.approve`, `site.reject`, and `site.review_queue` when the site entered review.
 
