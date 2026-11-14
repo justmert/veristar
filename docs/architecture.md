@@ -4,9 +4,9 @@ description: "The services, hosts, data flows, queues and stores that make up Ve
 ---
 
 Veristar is a multi-tenant web and API analytics service. Web analytics are built on
-an unmodified Umami 3.5.0. Everything the RFP needs beyond Umami (buffered ingestion, bot and
-inflation checks, neutral endpoint names, OpenTelemetry ingest, tenancy, operator views) runs
-in separate services beside it ([ADR 0001](adr/0001-base-platform.md),
+an unmodified Umami 3.5.0. Everything beyond Umami (buffered ingestion, bot and inflation
+checks, neutral endpoint names, OpenTelemetry ingest, tenancy, operator views) runs in separate
+services beside it ([ADR 0001](adr/0001-base-platform.md),
 [ADR 0002](adr/0002-overlay-not-fork.md)). Every diagram below names components that exist in
 this repository; the paths in the tables point to them.
 
@@ -26,7 +26,7 @@ flowchart LR
     ai["AI client (MCP)"]
   end
 
-  subgraph edge["Edge tier: 3 nodes, 3 availability zones"]
+  subgraph edge["Edge role: every node"]
     ecaddy["Caddy<br/>in. and otlp. hosts"]
     gw["gateway"]
     col["collector<br/>custom OpenTelemetry Collector"]
@@ -34,7 +34,7 @@ flowchart LR
     etcd[("etcd<br/>3 members")]
   end
 
-  subgraph core["Core tier: 2 nodes, 2 availability zones"]
+  subgraph core["Core role: every node"]
     ccaddy["Caddy<br/>app. and web. hosts"]
     console["console<br/>React static files"]
     cp["controlplane"]
@@ -47,7 +47,7 @@ flowchart LR
   end
 
   backup[("Object storage<br/>pgBackRest repository")]
-  subgraph probe["Probe: outside Azure"]
+  subgraph probe["Probe: Azure East US"]
     prober["prober"]
     gatus["Gatus status page"]
   end
@@ -248,8 +248,8 @@ flowchart TB
 | PostgreSQL `umami` | database | Umami's events and sessions | raw retention job `retain-web` |
 | PostgreSQL `platform` | database | `cp`, `api`, `agg` schemas | API aggregates at least 24 months |
 
-The topology is declared once in `internal/natsx/topology.go`. The database layout and roles
-are in `db/migrations` and the design as summarised above.
+The NATS topology is declared once in `internal/natsx/topology.go`. The database layout and
+roles are in `db/migrations`.
 
 ## High availability and operations
 
@@ -272,8 +272,8 @@ flowchart LR
 
 - Staging and production run three converged nodes, one per availability zone: every node is in
   the edge and the core inventory groups and runs every service
-  ([reference/availability.md](reference/availability.md)). The local converge also runs the
-  older split layout of three edge and two core nodes ([deploy/local-converge.md](deploy/local-converge.md)).
+  ([reference/availability.md](reference/availability.md)). The local converge can also run a
+  split layout of three edge and two core nodes ([deploy/local-converge.md](deploy/local-converge.md)).
 - One NATS cluster and one etcd cluster have one member on each node. Patroni (three members:
   leader, synchronous standby, replica) uses etcd for its leader key; HAProxy on each node
   routes to the current leader.
@@ -281,14 +281,15 @@ flowchart LR
   chosen by leader locks in NATS. `metricswriter` and `jobs` write the lock revision into every
   transaction and abort if a newer leader wrote, so a paused former leader cannot write.
 - Backups: pgBackRest on the database nodes archives WAL and takes scheduled full and
-  differential backups from the Patroni leader to object storage. The local converge uses a
-  separate repository node instead, because object storage does not exist there
-  ([deploy/local-converge.md](deploy/local-converge.md)).
-- Monitoring: Prometheus, Alertmanager and Grafana on the nodes, the prober and Gatus on the
-  probe host ([reference/observability.md](reference/observability.md),
-  [runbooks/alerts.md](runbooks/alerts.md)). `site.yml` applies the observability role on every
-  node; firing alerts are shown on the console's operator Alerts page
-  ([operators/alerts.md](operators/alerts.md)).
+  differential backups from the Patroni leader to zone-redundant Azure Blob Storage
+  ([deploy/backups.md](deploy/backups.md)). The local converge uses a separate repository node
+  in place of object storage ([deploy/local-converge.md](deploy/local-converge.md)).
+- Monitoring: Prometheus, Alertmanager and Grafana on the nodes; the prober and Gatus on a
+  separate virtual machine in Azure East US, which serves the public status page
+  `status.<BASE_DOMAIN>` ([deploy/probe.md](deploy/probe.md),
+  [reference/observability.md](reference/observability.md), [runbooks/alerts.md](runbooks/alerts.md)).
+  `site.yml` applies the observability role on every node, and firing alerts appear on the
+  console's operator Alerts page, the alert channel ([operators/alerts.md](operators/alerts.md)).
 - Measured and configured failure windows, single points of failure and drill results:
   [reference/availability.md](reference/availability.md), [sla.md](sla.md).
 
@@ -296,9 +297,8 @@ flowchart LR
 
 The tracker is released as immutable, versioned files with published SHA-384 integrity
 hashes; tenants pin a version and upgrade on purpose, and a flawed version can be revoked so
-the gateway answers 410 for it. The release pipeline scans, signs and attests every container
-image, and a deployment refuses any image whose signature does not verify. Keyless signing in
-the pipeline has not run yet, because GitHub Actions fails at startup on the account; the
-deploy-time verification was proven with a test key. Details:
+the gateway answers 410 for it. Every container image of a release is scanned, given an SBOM
+and signed with cosign, and every playbook that deploys refuses an image whose signature does
+not verify. Details:
 [security/supply-chain.md](security/supply-chain.md),
 [security/verify-tracker.md](security/verify-tracker.md).

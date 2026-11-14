@@ -22,27 +22,24 @@ funding and ecosystem-visibility decisions.
 How it fits together: [docs/architecture.md](docs/architecture.md). Why Umami and why beside
 it rather than a fork: [docs/adr](docs/adr).
 
-## Status
+## Production
 
-Built, tested and running in production. As of 2026-11-14:
+Veristar runs in Azure Denmark East (EU) on three converged nodes, one in each availability
+zone, behind health-checked DNS from Azure Traffic Manager. Every node runs the ingestion edge
+and the core services, PostgreSQL runs as three Patroni members, and backups go to
+zone-redundant Blob Storage in the same region. Node loss, database leader loss, point-in-time
+restore and rolling deploys were drilled on production
+([docs/reference/drills/2026-11-13-azure.md](docs/reference/drills/2026-11-13-azure.md)).
+Measured gateway capacity is in
+[docs/reference/gateway-limits.md](docs/reference/gateway-limits.md).
 
-- Every application component, the console, the tracker, the infrastructure code, the
-  monitoring stack and the release pipeline exist, with automated tests that pass locally.
-- Production runs in Azure Denmark East (EU) on three converged nodes, one in each
-  availability zone: every node runs the ingestion edge and the core, PostgreSQL runs as three
-  Patroni members, and backups go to zone-redundant Blob Storage in the same region. Release
-  `v0.1.0` was converged on 2026-11-13; node loss, database leader loss and point-in-time
-  restore were drilled there
-  ([docs/reference/drills/2026-11-13-azure.md](docs/reference/drills/2026-11-13-azure.md)).
-- Firing alerts are shown on the console's operator Alerts page; the external probe and the
-  public status page are being set up on a separate Azure host in East US.
-- GitHub Actions is off while the repository is private (operator decision); every test runs
-  locally. The scheduled workflows run on GitHub once the repository is public, which the RFP
-  requires before launch.
-- Still waiting on the operator and SCF: the public repository, legal review of the compliance
-  statements, the participating SCF projects and the video.
-
-What the targets rest on and what was and was not verified: [docs/sla.md](docs/sla.md).
+- Console: `https://app.veristar.app`, with the MCP server for AI clients at
+  `https://app.veristar.app/mcp`.
+- Public status page: `https://status.veristar.app`, served by an external probe on a separate
+  virtual machine in Azure East US ([docs/deploy/probe.md](docs/deploy/probe.md)).
+- Release images are signed with cosign and verified before any node pulls them
+  ([docs/security/supply-chain.md](docs/security/supply-chain.md)).
+- Service targets and how they are measured: [docs/sla.md](docs/sla.md).
 
 ## For projects (tenants)
 
@@ -66,8 +63,6 @@ views, and API keys for machine consumers.
 - Service targets and how they are measured: [docs/sla.md](docs/sla.md)
 - Security policy and reporting a vulnerability: [docs/security/SECURITY.md](docs/security/SECURITY.md)
 - Handing the service to a new operator: [docs/handover/plan.md](docs/handover/plan.md)
-
-Every RFP deliverable mapped to its files: [docs/README.md](docs/README.md).
 
 ## Repository layout
 
