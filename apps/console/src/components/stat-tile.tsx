@@ -83,7 +83,7 @@ export function StatTile({
           ) : null}
         </span>
         {pressed ? (
-          <span className="animate-fade-in rounded-full border border-line-strong px-1.5 text-axis font-medium text-fg">
+          <span className="shrink-0 animate-fade-in whitespace-nowrap rounded-full border border-line-strong px-1.5 text-axis font-medium text-fg">
             In chart
           </span>
         ) : null}

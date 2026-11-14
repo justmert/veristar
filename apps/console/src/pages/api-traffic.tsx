@@ -361,7 +361,9 @@ function FilterSelect({
         id={id}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="h-full max-w-48 min-w-0 cursor-pointer rounded-md border-0 bg-transparent pr-2 pl-1.5 text-small text-fg outline-none"
+        size="sm"
+        bare
+        className="h-full max-w-48"
       >
         {children}
       </NativeSelect>
