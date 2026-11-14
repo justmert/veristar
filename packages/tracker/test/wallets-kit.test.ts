@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 // the wallets kit adapter against the real kit at both pinned versions
-//. the kit runs its own code: init,
+// (2.7.1 and 2.8.0). the kit runs its own code: init,
 // setWallet, fetchAddress, setNetwork, disconnect, its signals, its
 // localStorage writes. the only stand-in is the wallet itself, the test
 // module from tests/fixtures/wallets-kit-module, because a test runner has
@@ -315,7 +315,7 @@ describe("data-wallets-kit through createTracker", () => {
     on.close();
   });
 
-  // W-9
+  // gpc: the kit's storage is the visitor's, so a gpc visit must not read it
   it("never reads the kit's storage when start() is called for a gpc visitor", async () => {
     gw.requests.length = 0;
     const w = page(true);

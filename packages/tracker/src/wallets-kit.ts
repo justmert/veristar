@@ -1,4 +1,4 @@
-// stellar wallets kit capture (the design). two ways in, both opt-in:
+// stellar wallets kit capture. two ways in, both opt-in:
 //
 //   attachWalletsKit(StellarWalletsKit) for bundler users: subscribes to the
 //   kit's own events (STATE_UPDATE, WALLET_SELECTED, DISCONNECT).

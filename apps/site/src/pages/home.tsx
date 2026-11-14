@@ -235,8 +235,8 @@ function Targets() {
 }
 
 // the real adoption state: no project has been named, and none is named
-// before it gives written permission (the adoption report sections 3
-// and status). change this only together with the adoption report.
+// before it gives written permission. change this only when a project has
+// agreed in writing to be named.
 function Adoption() {
   return (
     <Section

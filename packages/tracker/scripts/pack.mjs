@@ -1,4 +1,4 @@
-// builds the npm package of the tracker (plan phases 14 and 18) into
+// builds the npm package of the tracker into
 // npm/<version>/ and packs it with `npm pack`. the source package.json exports
 // the typescript sources, which only work when the consumer's bundler defines
 // __SDK_VERSION__; the published package instead carries esm javascript with
@@ -7,7 +7,7 @@
 //
 //   NPM_PACKAGE=@scope/name node scripts/pack.mjs [version]
 //
-// NPM_PACKAGE is an operator input (the npm scope with trusted publishing). it is
+// NPM_PACKAGE is the npm scope that has trusted publishing set up. it is
 // required and never guessed, so nothing can be packed under a made-up name.
 // the version must be a released version in releases/manifest.json, so the
 // sdk.js inside the package is byte-identical to the immutable release.
@@ -39,7 +39,7 @@ const ENTRIES = ["index", "snippet", "wire", "wallets-kit", "proof"];
 
 export async function pack(name, version, outRoot = join(ROOT, "npm")) {
   if (!NAME.test(name ?? "")) {
-    throw new Error("NPM_PACKAGE must be a scoped npm name an operator input, for example @scope/tracker");
+    throw new Error("NPM_PACKAGE must be a scoped npm name, for example @scope/tracker");
   }
   if (ESBUILD_VERSION !== PINNED_ESBUILD) {
     throw new Error(`esbuild ${ESBUILD_VERSION} is installed, the build needs ${PINNED_ESBUILD}`);

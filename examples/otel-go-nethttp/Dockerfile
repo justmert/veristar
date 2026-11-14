@@ -1,6 +1,6 @@
 # builds the go example into a static binary on distroless.
 #   docker build -t otel-go-nethttp examples/otel-go-nethttp
-# base images are pinned by tag and index digest.
+# base images are pinned by tag and index digest, so a rebuild is reproducible.
 
 FROM golang:1.27.4-trixie@sha256:b54b2639de8c1bfe538ec5ffc45f29b1932235ac5f6d63c059853646677112d9 AS build
 
