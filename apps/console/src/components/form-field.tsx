@@ -1,6 +1,7 @@
+import { ChevronDown } from "lucide-react";
 import { type ReactNode, useId } from "react";
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
+import { controlClass, Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
 type Common = {
@@ -26,7 +27,7 @@ function Label({ text, optional, htmlFor }: { text: string; optional?: boolean; 
   return (
     <FieldLabel htmlFor={htmlFor}>
       {text}
-      {optional ? <span className="font-normal text-muted-foreground">(optional)</span> : null}
+      {optional ? <span className="font-normal text-fg-3">(optional)</span> : null}
     </FieldLabel>
   );
 }
@@ -104,11 +105,18 @@ export function SelectField({
   );
 }
 
+// a native select drawn like the other controls, with its own chevron
 export function NativeSelect({ className, ...props }: React.ComponentProps<"select">) {
   return (
-    <select
-      className={`h-8 rounded-lg border border-input bg-card px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/40 aria-invalid:border-destructive disabled:opacity-50 ${className ?? ""}`}
-      {...props}
-    />
+    <span className={`relative inline-flex min-w-0 ${className ?? ""}`}>
+      <select
+        className={`${controlClass} h-(--vs-control) w-full appearance-none pr-8`}
+        {...props}
+      />
+      <ChevronDown
+        aria-hidden
+        className="pointer-events-none absolute top-1/2 right-2.5 size-4 -translate-y-1/2 text-fg-3"
+      />
+    </span>
   );
 }
