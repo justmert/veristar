@@ -61,7 +61,9 @@ Every request with method `POST`, `PUT`, `PATCH` or `DELETE` must carry both:
 1. `X-Requested-With: sa-console` (exact, case-sensitive value). Missing or different:
    403 `csrf_header_missing`. A cross-site form cannot set a custom header, and a
    cross-site `fetch` with one needs a CORS preflight, which the control plane never
-   grants (it sends no `Access-Control-Allow-*` header on any route).
+   grants (it sends no `Access-Control-Allow-*` header on any `/api` route; the
+   only such header is `Access-Control-Allow-Origin: *` on the two public OAuth
+   discovery documents of 12.3).
 2. `Origin` equal to `CONSOLE_ORIGIN` (`https://app.<BASE_DOMAIN>`; dev
    `http://localhost:8085`). Missing or different: 403 `origin_mismatch`.
 
@@ -194,6 +196,7 @@ List routes answer:
 | 409 | `tenant_suspended` | site create or update while the tenant is `suspended` (5.11); OTLP token create while `suspended` (6.2) |
 | 409 | `tenant_not_active` | OTLP token create while the tenant is `pending` or `rejected` (6.2) |
 | 409 | `erasure_in_progress` | an erasure request while another one runs for the same site (10.2) |
+| 409 | `too_many_keys` | an MCP access key create over 20 active keys of the user (12.8) |
 | 410 | `tracker_version_revoked` | snippet for a revoked tracker version |
 | 413 | `body_too_large` | body over 64 KiB |
 | 415 | `unsupported_media_type` | see section 1 |
@@ -366,6 +369,11 @@ this stage actions (section 10): `erasure.request` (actor `user:<id>`),
 `erasure.complete` and `erasure.fail` (actor `system:erasure`). Target added:
 `erasure:<id>`. Detail carries `tenant_id`, `site_id`, `kind`, the counts and,
 for `session`, `session_id`; never an IP address, user agent or visitor token.
+
+MCP actions (section 12): `mcp_credential.create`, `mcp_credential.revoke`,
+`mcp_oauth.consent`, `mcp.tool_call`. Actors added: `mcp_credential:<id>`,
+`system:mcp-revoke`, `system:mcp-oauth`. Targets added: `mcp_credential:<id>`,
+`mcp_client:<id>`.
 
 this stage actions (section 9): `operator_api_key.create`,
 `operator_api_key.revoke`. Target added: `operator_api_key:<id>`. Detail:
@@ -2350,3 +2358,258 @@ The core role (`infra/ansible/roles/core`) sets all four: every node of the
 the node certificate installed for the control plane's user
 (`sa_tls_consumers`, uid 65532).
 
+
+---
+
+## 12. MCP server
+
+The control plane serves a Model Context Protocol server, so AI clients
+(Claude Code, Claude Desktop and claude.ai connectors, ChatGPT connectors,
+Cursor and any other MCP client) can read a project's web and API analytics,
+and operators the global view. Code: `internal/controlplane/mcpserver`,
+migration `00030_mcp.sql`. Guides: `docs/onboarding/mcp.mdx` (projects) and
+`docs/operators/mcp.md` (operators). Umami's own MCP endpoint stays off and
+blocked by the web Caddy (`/mcp`, `api/me/api-keys`): its keys live outside
+the control plane, which could then not revoke them on the events of 12.2.
+
+### 12.1 Transport
+
+| Item | Rule |
+|---|---|
+| Endpoint | `https://app.<BASE_DOMAIN>/mcp`, routed by `deploy/caddy/app.Caddyfile` to the control plane beside `/api`. Dev: `http://localhost:5173/mcp` through the console's Vite proxy |
+| Transport | Streamable HTTP of the official Go SDK (`github.com/modelcontextprotocol/go-sdk` v1.8.0), stateless and with JSON answers: every request carries its credential and no session is kept, so any control plane instance answers any request |
+| Protocol | the SDK's versions; `2026-07-28` is negotiated with clients that support it, `2025-11-25` and earlier with the others |
+| Methods | `POST /mcp` only; `GET` and `DELETE` are 405 (no server stream, no session) |
+| Origin | a request with an `Origin` header is 403 `origin_mismatch` (the transport's DNS rebinding rule). No browser page is a client: native clients and the vendors' connector servers send none. No CORS header is sent on `/mcp`, `/oauth/token`, `/oauth/register` or `/oauth/revoke` |
+| Cookies, CSRF | none: the session cookie means nothing on `/mcp`, and the CSRF rules of 1.2 do not apply there |
+| Body | at most 64 KiB per JSON-RPC request |
+| Errors outside tools | the error envelope of 2.2 (401 `unauthenticated`, 403, 429 `rate_limited` with `Retry-After`) |
+
+### 12.2 Credentials and the principal
+
+Every request carries exactly one `Authorization: Bearer <credential>`:
+
+- an **MCP access key**, `sa_mcp_` plus 40 random base62 characters, made in
+  the console (12.8) and shown once; the database holds its SHA-256 and the
+  first four random characters for display;
+- an **OAuth access token**, `sa_mcpat_` plus 40 characters, from the flow of
+  12.3.
+
+Both are rows of `cp.mcp_credentials` (`kind` `key` or `oauth`) and act as
+one console user: the user who made the key or approved the grant. A
+`tenant` credential reads one tenant with that member's role; an `operator`
+credential reads the operator tools. On every request, in one `cp_system`
+statement, the control plane reads the credential, its user, the membership
+and the tenant status. Refused with 401 and
+`WWW-Authenticate: Bearer resource_metadata="<12.3 document>", scope="analytics:read", error="invalid_token"`:
+
+| Case | Message |
+|---|---|
+| missing, repeated or malformed header; unknown key or token | `unknown ...` or the format message |
+| revoked | `this credential was revoked` |
+| key past `expires_at`, access token past its hour | `... expired` |
+| issued for another resource URI (12.3 audience) | `... another resource` |
+| tenant credential whose user is not a member any more | `... no longer a member` |
+| tenant status `suspended`, `rejected` or `removed` | `the project of this credential is <status>` |
+| operator credential whose user lost the operator flag or left `OPERATOR_GITHUB_IDS` | `... no longer an operator` |
+
+**Automatic revocation.** Triggers of migration 00030 set `revoked_at` and
+`revoked_reason` and write one audit row per credential in the transaction of
+the change: a member removed (`member_removed`), a tenant suspended, rejected
+or removed (`tenant_suspended`, `tenant_rejected`, `tenant_removed`), a
+user's `is_operator` turned off (`operator_removed`). A deleted user row
+deletes its credentials (`on delete cascade`). Revocation is final: resuming a
+suspended tenant or restoring a flag does not restore a credential. The
+per-request check above covers the same events, so nothing waits for a
+trigger or a cache.
+
+`last_seen_at` is stamped at most once a minute per credential.
+
+### 12.3 OAuth 2.1 authorization server
+
+The control plane is its own authorization server, as the MCP authorization
+specification describes: the issuer is `CONSOLE_ORIGIN`, the protected
+resource is `<CONSOLE_ORIGIN>/mcp`.
+
+| Path | Standard | Notes |
+|---|---|---|
+| `GET /.well-known/oauth-protected-resource/mcp` and `GET /.well-known/oauth-protected-resource` | RFC 9728 | `resource`, `authorization_servers: [issuer]`, `scopes_supported: ["analytics:read"]`, `bearer_methods_supported: ["header"]`; `Access-Control-Allow-Origin: *` |
+| `GET /.well-known/oauth-authorization-server` | RFC 8414 | endpoints below, `code_challenge_methods_supported: ["S256"]`, `token_endpoint_auth_methods_supported: ["none"]`, `grant_types_supported: ["authorization_code", "refresh_token"]`, `authorization_response_iss_parameter_supported: true`, `client_id_metadata_document_supported: false` |
+| `POST /oauth/register` | RFC 7591 | public clients only (`token_endpoint_auth_method` absent or `none`); 1 to 10 `redirect_uris`, each `https`, `http` on a loopback host (RFC 8252 7.3) or a private-use scheme without a fragment (`javascript`, `data`, `file` and similar refused); `client_name` at most 100 characters. Unknown metadata is ignored. 201 with `client_id` (`mcpc_` and 32 characters). At most 10 registrations a minute per instance, burst 30; a client without any grant is deleted after a day |
+| `GET /oauth/authorize` | OAuth 2.1 | `response_type=code`, `client_id`, `redirect_uri` (exactly a registered one; may be omitted when the client registered one), `code_challenge` with `code_challenge_method=S256` (required), `state` (at most 1,024 characters), optional `resource` (must equal the resource URI, RFC 8707) and `scope` (`analytics:read`; `offline_access` is accepted and ignored, every grant gets a refresh token). An unknown client or redirect URI is shown on the console page with `error`; every later error goes to the redirect URI with `error`, `state` and `iss`. A valid request is sealed (AES-256-GCM, key derived from `OAUTH_STATE_KEY` with HKDF and its own label, 10 minutes) and the browser goes to the console page `/ai/consent?request=<sealed>` |
+| `POST /api/mcp/authorize/inspect`, `.../approve`, `.../deny` | console | session routes with the CSRF rules of 1.2 (12.8) |
+| `POST /oauth/token` | OAuth 2.1 | form body. `authorization_code`: `client_id`, `code` (single use, 60 seconds), `redirect_uri` (as in the request), `code_verifier` (43 to 128 unreserved characters, S256 checked), optional `resource`. `refresh_token`: `client_id`, `refresh_token`. 200 `{access_token, token_type: "Bearer", expires_in: 3600, refresh_token, scope}` with `Cache-Control: no-store` |
+| `POST /oauth/revoke` | RFC 7009 | `client_id`, `token` (refresh or access token); revokes the whole grant of the presenting client; 200 whatever the token was |
+
+Lifetimes: access token 1 hour, refresh token 30 days from its issue, rotated
+on every use. A refresh token used twice revokes its grant
+(`refresh_reuse`), and an authorization code used twice revokes the grant the
+first use made (`code_reuse`). At token time, both grants check membership,
+tenant status and the operator flag again. Token errors follow RFC 6749 5.2:
+`invalid_request`, `invalid_client` (401), `invalid_grant`,
+`unsupported_grant_type`, `invalid_target`.
+
+Consent: the console page `/ai/consent` signs the person in with GitHub if
+needed (the sealed request waits in the tab's session storage), shows the
+client name, where the browser returns and what is granted, and lists the
+person's projects with status `active` or `pending`; operators also see "the
+operator view". Approve writes the code and answers `{redirect_to}`, which the
+page follows; deny answers the redirect with `error=access_denied`.
+
+### 12.4 Tools
+
+Every tool is read-only (`readOnlyHint: true`, `openWorldHint: false`), takes
+a JSON object whose schema refuses unknown properties, and answers structured
+content (also as JSON text). A tenant credential sees the tenant tools only,
+an operator credential the operator tools only.
+
+Shared input rules:
+
+- Dates are ISO 8601: a UTC day `2026-11-01` or an RFC 3339 timestamp with a
+  zone. A day as the end of a web range means the end of that day.
+- Web ranges: `from` and `to` optional, default the 7 days ending now; `from`
+  not before 2000, `to` at most a day ahead, at most 366 days. `unit`
+  `minute` is for ranges up to a day, `hour` up to 31 days. `timezone` is an
+  IANA name, default UTC.
+- API ranges are those of 7.1 and 7.2 (`range` presets or `custom` with
+  `from` and `to`), operator ranges those of 8.1 (UTC days, at most 366).
+- Site ids, tenant ids, funnel and goal ids are lowercase UUIDs.
+- Lists page with the console's own `limit` and `cursor` (1 to 200), Umami
+  lists with `page` (1 to 10,000) and `page_size` (1 to 100), rankings with
+  `limit` (1 to 500) and `offset`.
+- Text filters are UTF-8 without control characters, at most 500 bytes for
+  web filters and the column limits of 7.1 for API filters.
+
+**12.4.1 Project tools** call the console's own read routes in process as the
+credential's user (`tenants.Routes`, `sites.Routes`, `apimetrics.Routes`):
+membership under `cp_system`, the read under `cp_tenant` with row-level
+security, exactly as for the console. Only `GET` reaches them.
+
+| Tool | Reads |
+|---|---|
+| `list_projects` | 4.2.3 of the credential's tenant |
+| `list_sites`, `get_site` | 4.3.2, 4.3.3 |
+
+**12.4.2 Web analytics tools** read Umami's REST API on the private network as
+the credential user's own Umami user, the login of the SSO route (4.4.1,
+daily derived password, a 5 minute login cache per user and site, a 401 drops
+the entry). A `site_id` from the client is first read through 4.3.3 as the
+principal, which answers only for a site of the credential's tenant; only
+then is the Umami website id derived from it (`view` `primary` is the site
+id, `quarantine` its `quarantine_website_id`). Saved funnel and goal ids are
+checked against the site's own list before use, besides Umami's own check.
+`internal/umami.ReadWebsite` allows exactly these read routes:
+
+| Tool | Umami route |
+|---|---|
+| `get_web_stats` | `/stats` with `compare` `prev` or `yoy`; adds bounce rate, average visit seconds and page views per visit |
+| `get_web_traffic` | `/pageviews` |
+| `get_web_metrics` | `/metrics`, `type` one of path, entry, exit, title, query, hostname, referrer, domain, channel, event, tag, browser, os, device, screen, language, country, region, city, utmSource, utmMedium, utmCampaign, utmContent, utmTerm |
+| `get_web_realtime` | `/active` |
+| `get_event_stats`, `get_event_series` | `/events/stats`, `/events/series` |
+| `get_event_properties` | `/event-data/properties` with `/event-data/stats`, or `/event-data/values` |
+| `get_sessions`, `get_session_stats` | `/sessions`, `/sessions/stats` |
+| `list_funnels`, `run_funnel` | `/funnels`, `/funnels/stats` or `/funnels/<id>/stats` |
+| `run_journey`, `run_retention` | `/journeys`, `/retention` |
+| `get_goals` | `/goals`, and `/goals/<id>/stats` with `with_results` |
+
+Filters: path, referrer, title, query, hostname, event, tag, browser, os,
+device, country, region, city, language, `utm_*` and `match`. Distinct ids,
+segments, cohorts, revenue and Web Vitals are not offered: the pinned tracker
+sends no distinct id and no Web Vitals, and no project defines segments or
+revenue, so those tools would only answer zeros.
+
+**12.4.3 API analytics tools** call 7.5 to 7.10 in process:
+`list_api_services` (7.9), `get_api_overview` (7.5), `get_api_timeseries`
+(7.6), `get_api_status_codes` (7.8), `list_api_routes` (7.7),
+`get_api_top_error_routes` (7.7 sorted by `errors_5xx`, `rate_5xx`,
+`errors_4xx` or `rate_4xx`) and `get_api_warnings` (7.10). Answers carry a
+`note` that the percentiles are estimates from histogram buckets (7.4).
+
+**12.4.4 Operator tools** call the operator routes in process behind the
+guard of 5.1: `list_tenants` (5.3, search and filters), `get_tenant` (5.4),
+`get_global_web_overview` (8.3), `get_global_api_overview` (8.5),
+`compare_tenants_web` (8.4) and `compare_tenants_api` (8.6), with their
+filters, sorts and pages.
+
+No MCP resources or prompts are offered; the server's instructions tell a
+model the order to call tools in.
+
+### 12.5 Tool errors
+
+A refused call answers `isError: true` with
+`{"error": {"code", "message"}}` and no stack trace or internal detail:
+`invalid_input` (the schema, a range, a filter, a cursor, a console 4xx),
+`not_found` (an id that is not the tenant's, including another tenant's
+site), `forbidden`, `provisioning_pending`, `rate_limited`, `unavailable`
+(Umami or the database), `timeout`, `result_too_large`, `internal`. An
+unknown tool, including an operator tool called with a tenant credential, is
+a JSON-RPC error.
+
+### 12.6 Limits
+
+| Limit | Value |
+|---|---|
+| Requests per credential and instance | 5 per second, burst 30 (429 with `Retry-After`) |
+| Tool calls running per credential | 4 |
+| One tool call | 30 seconds |
+| One tool result | 512 KiB of JSON |
+| Access keys per user and project, per operator | 20 active |
+| Key lifetime | 90 days by default, 1 to 365 |
+
+### 12.7 Audit and metrics
+
+- Every tool call writes one `cp.audit_log` row before the answer: actor
+  `mcp_credential:<id>`, action `mcp.tool_call`, target `tenant:<id>` (empty
+  for operator calls), detail `{tool, outcome, duration_ms, kind, scope,
+  user_id, tenant_id, credential_id}`. Never the arguments or the result. A
+  call whose row cannot be written answers `internal`.
+- Metrics on the ops port: `controlplane_mcp_requests_total{outcome}`,
+  `controlplane_mcp_tool_calls_total{tool, outcome}`,
+  `controlplane_mcp_tool_call_duration_seconds{tool}`,
+  `controlplane_mcp_oauth_requests_total{endpoint, outcome}`. Alert
+  `MCPToolFailuresHigh` (`docs/runbooks/alerts.md`).
+
+### 12.8 Console routes
+
+Session routes with the CSRF rules of 1.2.
+
+**Credential** object:
+
+```json
+{
+  "id": "uuid", "kind": "key", "scope": "tenant", "tenant_id": "uuid",
+  "name": "laptop", "prefix": "sa_mcp_Ab3x", "client_id": null,
+  "user_id": "uuid", "github_login": "octocat", "status": "active",
+  "created_at": "...", "expires_at": "...", "revoked_at": null,
+  "revoked_reason": null, "last_seen_at": null
+}
+```
+
+`kind` `oauth` rows carry the client's name as `name`, its `client_id`, no
+`prefix` and `expires_at` null. `status` is `revoked`, else `expired`, else
+`active`.
+
+| Route | Who | Answer |
+|---|---|---|
+| `GET /api/tenants/{tenant_id}/mcp-credentials` | member (1.3) | list envelope of Credential, keys and OAuth grants of the tenant, newest first, keyset over `(created_at, id)`, under `cp_tenant` |
+| `POST /api/tenants/{tenant_id}/mcp-credentials` | member | body `{name, expires_in_days}` (name 1 to 100 characters after trimming, the text rules of 3.2; days 1 to 365, default 90). 201 Credential plus `"key"`, shown once. 409 `tenant_suspended` or `tenant_not_active` (rejected), 409 `too_many_keys` over 20 active keys of the user. The key acts as the caller; a trigger refuses any other user |
+| `DELETE /api/tenants/{tenant_id}/mcp-credentials/{credential_id}` | the credential's user, or an owner | 204, `revoked_reason` `user`; 403 `owner_required` for another member's credential; repeating is 204 |
+| `GET /api/operator/mcp-credentials` | operator | operator-scope credentials |
+| `POST /api/operator/mcp-credentials` | operator | as the tenant create, `scope` `operator` |
+| `DELETE /api/operator/mcp-credentials/{credential_id}` | operator | 204, reason `operator`; any operator may revoke any operator credential |
+| `POST /api/mcp/authorize/inspect` | session | body `{request}`; `{client_name, client_id, redirect_origin, scope, resource, expires_at, tenants: [{id, slug, name, status, role}], operator}` |
+| `POST /api/mcp/authorize/approve` | session | body `{request, scope: "tenant" or "operator", tenant_id}`; 200 `{redirect_to}`; 404 for a tenant the user may not grant, 403 `operator_required` for the operator view without the flag, 422 for a tampered or expired request |
+| `POST /api/mcp/authorize/deny` | session | body `{request}`; 200 `{redirect_to}` with `error=access_denied` |
+
+Audit actions: `mcp_credential.create` (actor `user:<id>`; detail `kind`,
+`scope`, `tenant_id`, `name`, `prefix` or `client_id`), `mcp_credential.revoke`
+(actor `user:<id>`, `system:mcp-revoke` for the triggers or
+`system:mcp-oauth`; detail `kind`, `scope`, `tenant_id`, `user_id`, `reason`),
+`mcp_oauth.consent` (target `mcp_client:<id>`), `mcp.tool_call` (12.7).
+
+### 12.9 Configuration
+
+No new key: the issuer is `CONSOLE_ORIGIN` and the seal key is derived from
+`OAUTH_STATE_KEY`. The limits of 12.6 are constants of
+`internal/controlplane/mcpserver`.
