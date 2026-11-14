@@ -4,16 +4,12 @@ sidebarTitle: "Verification"
 description: "Checks that prove a converged environment works, from the outside in."
 ---
 
-Checks that prove a converged environment works, from the outside in. Run them after
+These checks prove that a converged environment works, from the outside in. Run them after
 [bootstrap.md](bootstrap.md), after every rollout ([upgrade.md](upgrade.md)), and whenever you
 doubt the state. Staging is shown; node addresses come from
 `infra/ansible/inventories/staging/hosts.json`, private addresses and compose directories from
-[../runbooks/overview.md](../runbooks/overview.md).
-
-**Status:** never run against staging or production (they do not exist). The node-level checks
-of steps 1, 3, 4, 5 and 7 ran on the local converge on 2026-11-12 and 2026-11-13
-([local-converge.md](local-converge.md) section 3); step 2's tracker check ran against a local
-gateway on 2026-11-13 ([../runbooks/tracker-release.md](../runbooks/tracker-release.md)).
+[../runbooks/overview.md](../runbooks/overview.md). The results of these checks on production are
+in [../reference/drills/2026-11-13-azure.md](../reference/drills/2026-11-13-azure.md).
 
 ## Steps
 
@@ -29,14 +25,14 @@ gateway on 2026-11-13 ([../runbooks/tracker-release.md](../runbooks/tracker-rele
 2. **Public endpoints:**
 
    ```sh
-   curl -s -o /dev/null -w '%{http_code}\n' https://app.<an operator input>/
-   curl -s -o /dev/null -w '%{http_code}\n' https://web.<an operator input>/login
-   curl -fsS -o sdk.js https://in.<an operator input>/v/1.1.0/sdk.js && sha384sum sdk.js
-   curl -s -o /dev/null -w '%{http_code}\n' -X POST https://web.<an operator input>/api/send
+   curl -s -o /dev/null -w '%{http_code}\n' https://app.<BASE_DOMAIN>/
+   curl -s -o /dev/null -w '%{http_code}\n' https://web.<BASE_DOMAIN>/login
+   curl -fsS -o sdk.js https://in.<BASE_DOMAIN>/v/1.2.0/sdk.js && sha384sum sdk.js
+   curl -s -o /dev/null -w '%{http_code}\n' -X POST https://web.<BASE_DOMAIN>/api/send
    ```
 
-   Expected: `200` for the console; `302` for `/login` (to `https://app.<an operator input>/`); the
-   SHA-384 of `sdk.js` equals the `sha384` of version 1.1.0 in
+   Expected: `200` for the console; `302` for `/login` (to `https://app.<BASE_DOMAIN>/`); the
+   SHA-384 of `sdk.js` equals the `sha384` of version 1.2.0 in
    `packages/tracker/releases/manifest.json`; `403` for Umami's collect route, which must never be
    reachable from outside.
 
@@ -49,7 +45,7 @@ gateway on 2026-11-13 ([../runbooks/tracker-release.md](../runbooks/tracker-rele
    sudo curl -s --cacert /etc/veristar/tls/root/ca.crt --cert /etc/veristar/tls/root/node.crt --key /etc/veristar/tls/root/node.key 'https://10.20.1.11:8222/jsz' | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("meta_cluster"))'
    ```
 
-   Expected: a leader and three peers, all current. Then `platformctl nats check` as in
+   Expected: a meta leader and two current peers. Then `platformctl nats check` as in
    [../runbooks/overview.md](../runbooks/overview.md): every object `"action":"unchanged"` and no
    `nats topology differs from the spec` error.
 
@@ -60,8 +56,8 @@ gateway on 2026-11-13 ([../runbooks/tracker-release.md](../runbooks/tracker-rele
    cd /opt/veristar/core && sudo docker compose exec postgres patronictl -c /etc/patroni/patroni.yml list
    ```
 
-   Expected: three `started` etcd members; one `Leader` and one `Sync Standby` in state
-   `streaming` with lag 0.
+   Expected: three `started` etcd members; one `Leader`, one `Sync Standby` and one `Replica`,
+   both standbys `streaming` with lag 0.
 
 6. **Backups** on the leader's node:
 
@@ -73,7 +69,7 @@ gateway on 2026-11-13 ([../runbooks/tracker-release.md](../runbooks/tracker-rele
    Expected: `check` exits 0 (a WAL segment reached the repository); timers for `full`, `diff`,
    `verify` and `retain-web`.
 
-7. **Exposure.** From an address outside `<an operator input>`:
+7. **Exposure.** From an address outside `admin_cidrs`:
 
    ```sh
    for p in 22 4222 6222 8222 2379 2380 5432 5000 8008 3000 9090; do
@@ -92,12 +88,13 @@ gateway on 2026-11-13 ([../runbooks/tracker-release.md](../runbooks/tracker-rele
    within the 10-minute freshness budget.
 
 10. **End to end, API.** Create an OTLP token on the project's token page and run
-    `examples/otel-go-nethttp` with `PLATFORM_OTLP_ENDPOINT=https://otlp.<an operator input>`,
+    `examples/otel-go-nethttp` with `PLATFORM_OTLP_ENDPOINT=https://otlp.<BASE_DOMAIN>`,
     `PLATFORM_OTLP_TOKEN=<the token>` and `TENANT_OTLP_ENDPOINT` pointing at any OTLP receiver
     you run (see its README); send a few requests to it. Expected: the requests appear in the
     project's API dashboard. Remove the test project afterwards
     ([../runbooks/tenant-removal.md](../runbooks/tenant-removal.md)).
 
-11. **Monitoring:** Prometheus targets all `UP` and no alert firing other than those explained
-    by missing inputs (for example `BackupTooOld` before the first backup). Once the probe
-    host runs ([probe.md](probe.md)), every measure on `status.<an operator input>` is up.
+11. **Monitoring:** every Prometheus target is `UP`, and the console's operator Alerts page
+    ([../operators/alerts.md](../operators/alerts.md)) lists no firing alert other than one you
+    can explain (for example `BackupTooOld` before the first backup). With the probe running
+    ([probe.md](probe.md)), every measure on `status.<BASE_DOMAIN>` is up.
