@@ -43,8 +43,9 @@ type Options struct {
 	Mounts []Mount
 }
 
-// Mount is a handler for every path under Path, which must lie under /api
-// but outside any route group.
+// Mount is a handler for every path under Path, which must lie outside
+// every route group: under /api (the machine api) or beside it (the mcp
+// endpoint and its oauth paths).
 type Mount struct {
 	Path    string
 	Handler http.Handler

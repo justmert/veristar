@@ -32,6 +32,7 @@ import (
 	"github.com/justmert/veristar/internal/controlplane/erasure"
 	"github.com/justmert/veristar/internal/controlplane/ingest"
 	"github.com/justmert/veristar/internal/controlplane/lifecycle"
+	"github.com/justmert/veristar/internal/controlplane/mcpserver"
 	"github.com/justmert/veristar/internal/controlplane/members"
 	"github.com/justmert/veristar/internal/controlplane/operator"
 	"github.com/justmert/veristar/internal/controlplane/otlptokens"
@@ -333,6 +334,28 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 		return fmt.Errorf("sso path %s is not under /api", sso.Path)
 	}
 
+	// the mcp server (contract 12): its tools call the console's read
+	// routes in process, built here with the same constructors as below
+	reg := obs.NewRegistry()
+	mcpSrv, err := mcpserver.New(mcpserver.Config{
+		DB:    d,
+		Guard: guard,
+		Reads: []mcpserver.Routes{
+			tenants.NewRoutes(scope), sites.NewRoutes(scope), metricRoutes,
+			controlplane.RoutesFunc(guard.Mount(review, global)),
+		},
+		Sessions: ssoH,
+		Umami:    umamiClient,
+		Issuer:   cfg.ConsoleOrigin,
+		StateKey: cfg.OAuthStateKey.Reveal(),
+		Log:      log,
+		Registry: reg,
+		Version:  buildVersion(),
+	})
+	if err != nil {
+		return err
+	}
+
 	api := controlplane.NewHandler(controlplane.Options{
 		Log:           log,
 		ConsoleOrigin: cfg.ConsoleOrigin,
@@ -353,13 +376,23 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 			// failures with a redirect, but an anonymous request gets 401
 			controlplane.RoutesFunc(func(r chi.Router) { r.Method(http.MethodGet, ssoPath, ssoH) }),
 			// /api/operator: 403 operator_required for everyone else (5.1)
-			controlplane.RoutesFunc(guard.Mount(modeRoutes, keepRoutes, auditRoutes, actions, review, global, apiKeys, alertRoutes)),
+			// mcp access keys and the oauth consent page (contract 12.8)
+			mcpSrv.TenantRoutes(scope),
+			mcpSrv.ConsentRoutes(),
+			controlplane.RoutesFunc(guard.Mount(modeRoutes, keepRoutes, auditRoutes, actions, review, global, apiKeys, alertRoutes,
+				mcpSrv.OperatorRoutes())),
 		},
-		// keys only: no session middleware runs there (contract 9.1)
-		Mounts: []controlplane.Mount{{Path: operator.MachinePath, Handler: machine.Handler()}},
+		// keys only: no session middleware runs there (contract 9.1); the
+		// mcp endpoint and its oauth server authenticate by bearer
+		// credential or not at all (contract 12.2)
+		Mounts: []controlplane.Mount{
+			{Path: operator.MachinePath, Handler: machine.Handler()},
+			{Path: mcpserver.Path, Handler: mcpSrv.Handler()},
+			{Path: "/oauth", Handler: mcpSrv.OAuthHandler()},
+			{Path: "/.well-known", Handler: mcpSrv.MetadataHandler()},
+		},
 	})
 
-	reg := obs.NewRegistry()
 	ops := http.NewServeMux()
 	ops.Handle("GET /corez", obs.CompositeHandler(log, nil, coreHealth(d, nc, umamiClient)...))
 	ops.Handle("/", obs.NewOpsHandler(reg, log, readiness(d, nc)...))
