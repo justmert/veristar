@@ -1,5 +1,5 @@
 ---
-# observability role (the design). runs on every node:
+# observability role. runs on every node:
 #   every node   node_exporter and a metrics relay (haproxy) that serves the
 #                /metrics of the node's compose services on the private
 #                address, so prometheus on the core nodes can scrape them
@@ -15,7 +15,7 @@
 observability_dir: /opt/veristar/observability
 observability_conf_dir: /etc/veristar/observability
 
-# upstream images, tag and index digest as in the design (resolved
+# upstream images, pinned by tag and index digest (resolved
 # 2026-11-12). each also has deploy/images/upstream/<name>.Dockerfile, which
 # dependabot watches; tests/pins fails when the two differ
 observability_images:
@@ -77,8 +77,8 @@ observability_relay:
     - {job: jobs, port: 9306, target: "jobs:9090"}
     - {job: haproxy, port: 9308, target: "haproxy:{{ core_haproxy_stats_port | default(8404) }}"}
 # every listener of this role on the private address is tls with the node
-# certificate and asks the client for one of the internal ca (finding
-# O-26); prometheus presents its node's certificate. only the this stage test
+# certificate and asks the client for one of the internal ca;
+# prometheus presents its node's certificate. only the observability test
 # stack (tests/observability), which renders these templates without
 # running the role, sets this to false; the role refuses false.
 observability_tls: true
@@ -97,8 +97,8 @@ observability_alertmanager_cluster_port: 9094
 observability_scrape_interval: 15s
 observability_prometheus_retention: 30d
 
-# the probe (the design): every interval one web event and one otlp
-# metric. FreshnessMaxDelay is the 10 minutes of the plan.
+# the probe: every interval one web event and one otlp metric.
+# FreshnessMaxDelay is the 10 minute freshness target of docs/sla.md.
 observability_probe_interval: 30s
 observability_probe_timeout: 10s
 observability_probe_freshness_max_delay: 10m
@@ -133,6 +133,6 @@ observability_core_dir: /opt/veristar/core
 # the checkout the controller runs from (playbooks live in infra/ansible/playbooks)
 observability_repo_root: "{{ playbook_dir }}/../../.."
 
-# container user of gatus, whose image defaults to root (the design
+# container user of gatus, whose image defaults to root (container
 # hardening); its data volume is handed to this uid by the volume-owners step
 observability_gatus_uid: 8080

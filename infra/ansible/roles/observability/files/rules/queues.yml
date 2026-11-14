@@ -1,5 +1,5 @@
 ---
-# alert rules, nats and the two queue consumers (the design). the stream
+# alert rules, nats and the two queue consumers. the stream
 # numbers come from prometheus-nats-exporter 0.20.3 (-jsz=all), one per nats
 # server; every replica reports the stream, so they are reduced by stream.
 groups:
@@ -16,7 +16,7 @@ groups:
       # API_METRICS are work queues, so the first sequence is the oldest
       # unacknowledged message: when the stream was never empty and its first
       # sequence did not move for 10 minutes, the oldest message is at least
-      # 10 minutes old. that is the freshness budget of the design.
+      # 10 minutes old. that is the freshness budget of docs/sla.md.
       - alert: QueueOldestMessageTooOld
         expr: |
           (min_over_time(sa:stream_messages:max{stream_name=~"WEB_EVENTS|API_METRICS"}[10m]) > 0)
@@ -63,7 +63,7 @@ groups:
         annotations:
           summary: "umami process {{ $labels.process }} on {{ $labels.node }} stored no event for 15 minutes while the others did"
           runbook: docs/runbooks/alerts.md#replayerumamiprocessidle
-      # review: visit_state holds a sent.<event id> key per delivered
+      # visit_state holds a sent.<event id> key per delivered
       # event for 24 hours under a byte limit. a full bucket no longer stops
       # delivery, but every event then goes without its duplicate guard and
       # visit continuity, so it is announced before it fills and when it is

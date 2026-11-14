@@ -1,6 +1,7 @@
 ---
-# the probe node an operator input: the tracker manifest of this checkout is copied
-# so the prober compares the served files with what the release committed
+# the probe node (docs/deploy/probe.md): the tracker manifest of this checkout
+# is copied so the prober compares the served files with what the release
+# committed
 - name: Name the probe targets and endpoints
   ansible.builtin.include_tasks: probe_facts.yml
 

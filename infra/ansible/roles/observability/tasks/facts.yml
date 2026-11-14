@@ -10,7 +10,7 @@
       {{ (observability_test_webhook_base ~ '/webhook/gatus') if observability_test_webhook_base is defined
          else sa_secrets.gatus_discord_webhook_url | default('') }}
 
-# an operator input is optional (operator decision of 2026-11-13): without a webhook
+# the discord webhook is optional: without a webhook
 # prometheus still evaluates every rule, grafana and the status page still
 # show them, and alertmanager holds the alerts without sending them anywhere.
 # setting the webhook in the sops file adds the receiver at the next converge
