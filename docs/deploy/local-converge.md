@@ -123,7 +123,7 @@ over SSH, so SSH hardening, `AllowUsers` and the firewall's SSH rule all run as 
   internal CA. `LC_BACKUP=s3` exercises the object store protocol instead. Cloud environments use
   `backup_repo_mode: azure` (the default), which needs the Azure instance metadata service for
   the managed identity ([backups.md](backups.md)).
-- **Clock.** The nodes share the host's kernel clock and may not set it, so chronyd runs with
+- **Clock.** The nodes share the host's kernel clock and cannot set it, so chronyd runs with
   `-x` (measure, do not steer). The offset check runs for real.
 - **Power off** in the drills is `docker kill` of a node container, with no clean shutdown of
   anything inside. Power on is `docker start`, which boots systemd and Docker again; compose
