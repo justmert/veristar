@@ -33,7 +33,7 @@ import { fieldMessage } from "@/lib/validate";
 import { queryClient } from "@/query-client";
 import { useProject } from "./project-layout";
 
-// the form's values. ip and userAgent are personal data the operator types on
+// the form's values. ip and userAgent are personal data the owner types on
 // behalf of a visitor: they live only in this react state, are sent once in
 // the request body and are cleared as soon as the request is answered. they
 // never go to localStorage, sessionStorage, a url, the query cache or the
@@ -175,7 +175,7 @@ function PrivacyBody({
   const live = all.filter((s) => s.status !== "removed");
   return (
     <div className="grid animate-rise-in items-start gap-8 xl:grid-cols-[minmax(0,1fr)_20rem]">
-      <div className="flex min-w-0 max-w-[52rem] flex-col gap-6">
+      <div className="flex min-w-0 flex-col gap-6">
         <section aria-labelledby="privacy-h" className="flex flex-col gap-4">
           <h2 id="privacy-h" className="sr-only">
             Privacy
@@ -232,7 +232,7 @@ function ErasureForm({ tenantId, sites }: { tenantId: string; sites: Site[] }) {
       send.reset();
       await queryClient.invalidateQueries({ queryKey: keys.erasure(tenantId) });
     },
-    // the typed values stay in the form so the operator can correct them; like
+    // the typed values stay in the form so the owner can correct them; like
     // the mutation's copy of the body they are in memory only, since the
     // console persists neither react state nor the query cache
     onError: (err) => {

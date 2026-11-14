@@ -566,7 +566,7 @@ func webTheme(t *testing.T, l *liveWeb) {
 	}
 	for _, ct := range [][2]string{
 		{"/_veristar/theme.css", "text/css"},
-		{"/_veristar/fonts/geist-latin-wght-normal.woff2", "font/woff2"},
+		{"/_veristar/fonts/inter-latin-wght-normal.woff2", "font/woff2"},
 		{"/favicon.ico", "image/vnd.microsoft.icon"},
 		{"/favicon-32x32.png", "image/png"},
 		{"/site.webmanifest", "application/manifest+json"},

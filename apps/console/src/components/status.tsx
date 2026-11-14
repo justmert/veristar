@@ -8,7 +8,7 @@ const DOT: Record<Tone, string> = {
   warning: "bg-warning",
   critical: "bg-critical",
   info: "bg-fg-3",
-  accent: "bg-accent",
+  accent: "bg-accent-text",
 };
 
 const TEXT: Record<Tone, string> = {
@@ -16,7 +16,7 @@ const TEXT: Record<Tone, string> = {
   warning: "text-warning",
   critical: "text-critical",
   info: "text-fg-2",
-  accent: "text-accent",
+  accent: "text-accent-text",
 };
 
 export function toneText(t: Tone) {

@@ -47,7 +47,7 @@ export function NavTabs({
                       layoutId="navtab-marker"
                       transition={transition.layout}
                       aria-hidden
-                      className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-accent"
+                      className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-accent-text"
                     />
                   ) : null}
                 </Link>

@@ -4,27 +4,28 @@
   "name": "Veristar",
   "description": "Privacy-friendly web and API analytics for projects building on Stellar.",
   "colors": {
-    "primary": "#FF7A3D",
-    "light": "#FF7A3D",
-    "dark": "#FF7A3D"
+    "primary": "#B5482E",
+    "light": "#F29A80",
+    "dark": "#A13F28"
   },
   "logo": {
-    "light": "/logo/veristar.svg",
+    "light": "/logo/veristar-light.svg",
     "dark": "/logo/veristar.svg",
     "href": "/introduction"
   },
   "favicon": "/favicon.svg",
   "appearance": {
-    "default": "dark",
-    "strict": true
+    "default": "system",
+    "strict": false
   },
   "background": {
     "color": {
+      "light": "#F6F5F2",
       "dark": "#151514"
     }
   },
   "fonts": {
-    "family": "Geist"
+    "family": "Inter"
   },
   "navbar": {
     "links": [

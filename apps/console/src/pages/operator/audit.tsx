@@ -292,7 +292,7 @@ function QuickChip({
         "inline-flex h-7 items-center rounded-full border px-3 text-small transition-colors duration-(--vs-duration-press) ease-standard focus-ring max-lg:h-(--vs-control-touch)",
         mono && "font-mono text-caption",
         on
-          ? "border-accent bg-selected text-fg"
+          ? "border-accent-text bg-selected text-fg"
           : "border-line text-fg-2 hover:border-line-strong hover:text-fg",
       )}
     >

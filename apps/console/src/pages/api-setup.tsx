@@ -172,7 +172,7 @@ function Step({
           state === "done"
             ? "bg-success text-ground"
             : state === "current"
-              ? "border-2 border-accent text-accent"
+              ? "border-2 border-accent-text text-accent-text"
               : "border-2 border-line-strong text-fg-3",
         )}
       >

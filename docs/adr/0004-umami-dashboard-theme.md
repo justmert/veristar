@@ -169,7 +169,7 @@ Fonts are self-hosted next to the stylesheet. No script, no image change.
   shows only the bare version number. `theme_test.go` fails if the title loses the credit.
 - **Sidebar.** The stylesheet hides Umami's logo SVG and draws `brand/mark.svg` as the icon
   span's background, and hides the word "umami" (no size, not visible, so screen readers skip
-  it) while the span's `::after` shows and reads "Veristar" in Geist 600 with -0.03em tracking.
+  it) while the span's `::after` shows and reads "Veristar" in Inter 600 with -0.03em tracking.
   The selectors are the viewBox and the "icon span, then text span" structure; `theme_test.go`
   checks the viewBox in Umami's JavaScript, and `tests/umami-compat/specs/ui.spec.ts` checks the
   rendered structure and the word "umami" in a real browser.
@@ -214,10 +214,11 @@ Option (b). The web Caddy serves `deploy/caddy/umami-theme/site` at `/srv/umami-
 links `/_veristar/theme.css` before `</head>` of Umami's HTML. The console image carries the
 directory, next to the console build, so a release ships both.
 
-The brand is dark only. Umami keeps its light and dark switch, and there is no way to force
-dark without JavaScript, so both modes render the same dark palette: the semantic tokens are
-identical, and in light mode the neutral ramp is reversed so the rules that use a light step
-directly still land on dark values.
+Both of Umami's modes are themed. Dark mode takes the brand's dark theme and light mode its light
+theme, so the dashboard matches the console whichever mode the viewer's switch or system setting
+picks. Each mode has its own `--vs-*` values and its own neutral ramp, generated from
+`packages/brand/src/tokens.ts`. In light mode the charts keep Umami's own light colours, which
+are drawn for a white card.
 
 ## Consequences
 

@@ -304,7 +304,7 @@ function Choice({
     <label
       className={cn(
         "grid cursor-pointer grid-cols-[auto_minmax(0,1fr)] items-start gap-x-2.5 rounded-lg border px-3 py-2.5 transition-colors duration-(--vs-duration-press)",
-        checked ? "border-accent bg-selected" : "border-line hover:bg-hover",
+        checked ? "border-accent-text bg-selected" : "border-line hover:bg-hover",
       )}
     >
       <input
