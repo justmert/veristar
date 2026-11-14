@@ -16,9 +16,15 @@
 
 - name: Name the edge peers
   ansible.builtin.set_fact:
+    # a converged node's services use only the server on their own node:
+    # with other servers in the list the client picks one at random, and a
+    # connection to a peer that is powered off is noticed only by missed
+    # pings (the production node loss drill of 2026-11-14: 5.5 minutes of
+    # failed publishes on a surviving node). the local server goes away only
+    # with the node, whose health then takes it out of dns.
     edge_nats_urls: >-
-      {{ (['tls://nats:4222'] + (groups['edge'] | reject('equalto', inventory_hostname)
-          | map('extract', hostvars, 'sa_private_ip') | map('regex_replace', '^(.*)$', 'tls://\1:4222') | list)) | join(',') }}
+      {{ (['tls://nats:4222'] + ([] if edge_shares_node else (groups['edge'] | reject('equalto', inventory_hostname)
+          | map('extract', hostvars, 'sa_private_ip') | map('regex_replace', '^(.*)$', 'tls://\1:4222') | list))) | join(',') }}
 
 - name: Create the edge directories
   ansible.builtin.file:

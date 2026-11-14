@@ -5,6 +5,9 @@ edge_conf_dir: /etc/veristar/edge
 # jetstream limits per node; a cpx22 has 4 GB of memory
 edge_nats_max_memory_store: 512M
 edge_nats_max_file_store: 20G
+# route liveness (templates/nats.conf.j2)
+edge_nats_route_ping_interval: 5s
+edge_nats_route_ping_max: 3
 
 # gateway limits, starting values of docs/reference/gateway-limits.md
 edge_gateway_env:
