@@ -1,7 +1,7 @@
 # renders the observability role's templates for the local test stack
 # (tests/observability/up.sh). the role's own fact tasks run first, so the
 # rendered files are what the role would write on these nodes.
-#   ansible-playbook -i inventory.yml render.yml -e p17=<dir>
+#   ansible-playbook -i inventory.yml render.yml -e obs=<dir>
 - name: Render the observability configs
   hosts: all
   connection: local
@@ -9,10 +9,10 @@
   # role defaults come in through import_role, so the inventory overrides
   # them with the same precedence as in a real run
   vars_files:
-    - "{{ p17 }}/secrets.yml"
+    - "{{ obs }}/secrets.yml"
   vars:
     role_dir: "{{ playbook_dir }}/../../infra/ansible/roles/observability"
-    out: "{{ p17 }}/conf/{{ inventory_hostname }}"
+    out: "{{ obs }}/conf/{{ inventory_hostname }}"
     observability_conf_dir: /etc/veristar/observability
     secrets_env_dir: /etc/veristar/env
   tasks:
@@ -58,7 +58,7 @@
         - {src: "{{ role_dir }}/files/rules/", dest: prometheus/rules/}
         - {content: "{{ observability_webhook_alertmanager }}", dest: alertmanager/discord-webhook-url}
         - {content: "{{ sa_secrets.probe_metrics_token }}", dest: prometheus/probe-metrics-token}
-        - {src: "{{ p17 }}/certs/ca.crt", dest: prometheus/probe-ca.crt}
+        - {src: "{{ obs }}/certs/ca.crt", dest: prometheus/probe-ca.crt}
       when: sa_tier == 'core'
     - name: Render the probe configs
       ansible.builtin.template:

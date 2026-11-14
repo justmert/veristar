@@ -12,7 +12,7 @@ mkdir -p "$dir"
 cd "$dir"
 if [ ! -f ca.key ]; then
 	openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -keyout ca.key -out ca.crt \
-		-days 365 -subj "/CN=sa-p17 test ca" 2>/dev/null
+		-days 365 -subj "/CN=sa-obs test ca" 2>/dev/null
 fi
 leaf() {
 	node="$1" days="$2"
@@ -33,6 +33,6 @@ if [ $# -ge 4 ]; then
 	leaf "$node" "$days" "$@"
 	exit 0
 fi
-for n in edge-1 edge-2 edge-3; do leaf "$n" 90 in.p17.test otlp.p17.test; done
-for n in core-1 core-2; do leaf "$n" 90 app.p17.test web.p17.test; done
-leaf probe-1 90 status.p17.test
+for n in edge-1 edge-2 edge-3; do leaf "$n" 90 in.obs.test otlp.obs.test; done
+for n in core-1 core-2; do leaf "$n" 90 app.obs.test web.obs.test; done
+leaf probe-1 90 status.obs.test

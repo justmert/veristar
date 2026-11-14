@@ -60,7 +60,7 @@ func otlpMany(c *http.Client, token string, n int) error {
 				dp.SetCount(1)
 				dp.SetSum(0.001)
 				b, _ := pmetricotlp.NewExportRequestFromMetrics(md).MarshalProto()
-				resp, _, err := do(c, http.MethodPost, "https://otlp.p17.test/v1/metrics", bytes.NewReader(b), map[string]string{
+				resp, _, err := do(c, http.MethodPost, "https://otlp.obs.test/v1/metrics", bytes.NewReader(b), map[string]string{
 					"Content-Type": "application/x-protobuf", "Authorization": "Bearer " + token,
 				})
 				if err == nil && resp.StatusCode == http.StatusOK {
@@ -103,7 +103,7 @@ func events(c *http.Client, site, origin string, n int) error {
 	ok, bad := 0, 0
 	for range n {
 		<-tick.C
-		resp, b, err := do(c, http.MethodGet, "https://in.p17.test/v1/c?w="+url.QueryEscape(site), nil, h)
+		resp, b, err := do(c, http.MethodGet, "https://in.obs.test/v1/c?w="+url.QueryEscape(site), nil, h)
 		if err != nil || resp.StatusCode != http.StatusOK {
 			bad++
 			continue
@@ -142,7 +142,7 @@ func events(c *http.Client, site, origin string, n int) error {
 		for k, v := range h {
 			h2[k] = v
 		}
-		resp, _, err = do(c, http.MethodPost, "https://in.p17.test/v1/e", bytes.NewReader(ev), h2)
+		resp, _, err = do(c, http.MethodPost, "https://in.obs.test/v1/e", bytes.NewReader(ev), h2)
 		if err == nil && resp.StatusCode == http.StatusAccepted {
 			ok++
 		} else {

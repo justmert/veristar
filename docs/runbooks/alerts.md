@@ -370,8 +370,8 @@ tests in `rules/tests/`.
 
 | Alert | Drill | Result |
 |---|---|---|
-| EdgeNodeNotReady, ProbeNodeCheckFailing, Gatus `edge-2 in.p17.test` | stop the gateway of edge-2 | fired 01:28:46, resolved 01:33:00 to 01:33:36; the `in` hostname check and ingestion stayed up |
-| CertificateExpiringSoon, Gatus `edge-2 in.p17.test` | serve a 7-day certificate on edge-2 | fired 01:34:48, resolved 01:39:48 |
+| EdgeNodeNotReady, ProbeNodeCheckFailing, Gatus `edge-2 in.obs.test` | stop the gateway of edge-2 | fired 01:28:46, resolved 01:33:00 to 01:33:36; the `in` hostname check and ingestion stayed up |
+| CertificateExpiringSoon, Gatus `edge-2 in.obs.test` | serve a 7-day certificate on edge-2 | fired 01:34:48, resolved 01:39:48 |
 | DLQNotEmpty | publish one message to `dlq.web.drill`, then purge | fired 01:40:29, resolved 01:45:25 |
 | EtcdMembersDown, EtcdNoLeader | stop two of three etcd members | fired 01:47:20, resolved 01:52:20 |
 | NATSServerDown | stop one NATS server | fired 02:13:44, resolved 02:18:40 |
