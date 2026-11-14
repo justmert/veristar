@@ -3,9 +3,10 @@ title: "Erasure workflow"
 description: "How a project owner asks for erasure, what is erased, and how the request is tracked."
 ---
 
-> **Status: draft, pending legal review an operator input.** Not legal advice. Last
-> updated 2026-11-12. This is the explicit erasure statement the RFP asks for.
-> The API contract is `docs/reference/control-plane-api.md` section 10; the
+How a project owner erases web analytics data, what each kind of request
+deletes, and how the request is tracked. This page is not legal advice. Last
+updated 2026-11-14. The API contract is
+`docs/reference/control-plane-api.md` section 10; the
 > behaviour below is tested in `internal/controlplane/erasure/live_test.go`
 > against real PostgreSQL, NATS, Umami, the gateway's visitor code, the
 > replayer and the jobs follow-up.
@@ -20,7 +21,7 @@ history there. The page keeps a typed IP address and user agent in memory
 only, never in browser storage, and clears them once the request is answered. Erasure is never blocked by a
 suspension or by terms the project has not accepted yet. There are three kinds.
 
-| Kind | the operator supplies | What is deleted | When it works |
+| Kind | The project owner supplies | What is deleted | When it works |
 |---|---|---|---|
 | `visitor_today` | the site, the data subject's IP address and user agent | that visitor's Umami sessions on both bands of the site for the current UTC day, with all their events; the visitor's undeliverable messages in `WEB_DLQ`; the visitor's record in `visit_state` | only during the UTC day of the visit |
 | `session` | the site and an Umami session id from the dashboard | that session and all its events; while the session's visit record still exists (24 hours after its last event), also the visitor's `WEB_DLQ` messages and the record | during the whole raw retention period |
@@ -48,10 +49,9 @@ request on a later day therefore finds nothing, and the answer says so
 11(1) relieves a controller of keeping or acquiring information only to
 identify a data subject, and Art. 11(2) suspends Arts. 15 to 20 when the
 controller can show it cannot identify the person, unless the person provides
-additional information that enables identification (S10). Whether an address
-and user agent supplied by the data subject count as such information when the
-secret no longer exists is a question for counsel; technically, no supplied
-information can re-link a past day's sessions.
+additional information that enables identification (S10). Once the secret no
+longer exists, no information a data subject supplies, including an address
+and user agent, can re-link a past day's sessions.
 
 A data subject who can point to a session (for example the tenant finds it in
 the dashboard by time and page) can still have it deleted with kind `session`.
@@ -135,9 +135,11 @@ agents used, and finds none.
 - **Probing.** The workflow tells an owner whether an address and user agent
   visited its site today, and deletes that data in the same step. Only owners
   can use it, and every request is audited.
-- **Backups.** this stage builds backups. Data deleted here stays in backups
-  until they expire; their retention is stated in `data-residency.md` once
-  they exist.
+- **Backups.** Data deleted here stays in the encrypted PostgreSQL backups
+  until they expire. The backup role keeps four weekly full backups, and the
+  backup storage deletes previous blob versions 35 days after they were
+  replaced ([../deploy/backups.md](../deploy/backups.md)).
+
 
 ## 6. Tenant exit
 

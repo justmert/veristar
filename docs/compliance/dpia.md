@@ -4,10 +4,10 @@ sidebarTitle: "DPIA"
 description: "The data protection impact assessment for cookieless web analytics and API request metrics."
 ---
 
-> **Status: draft, pending legal review an operator input.** Not legal advice. Last
-> updated 2026-11-12. Prepared by the service as processor, to help tenants
-> (controllers) with their own assessment under GDPR Art. 35. Whether a DPIA
-> is mandatory for a given tenant is the tenant's decision with its counsel.
+The service, as processor, prepares this assessment to help tenants
+(controllers) with their own assessment under GDPR Art. 35. Each tenant decides
+with its counsel whether a DPIA is mandatory for it. This page is not legal
+advice. Last updated 2026-11-14.
 
 ## 1. Description
 
@@ -23,7 +23,7 @@ inventory are in `privacy-strategy.md` section 2; residency in
 | Purpose limitation | audience measurement for the tenant; SCF sees aggregates only | `cp_operator` role rights, `internal/db/boundaries_test.go` |
 | Data minimisation | no IP stored, no region or city, query allowlist, strkey and email redaction, Umami features off, API traces and logs discarded | `privacy-strategy.md` sections 3, 5 and 7; `tests/privacy/` |
 | Storage limitation | raw web rows deleted after 25 months by default; queues and memory stores expire in hours or days | `internal/jobs/retainweb`, `privacy-strategy.md` section 4 |
-| Accuracy | not relevant to statistics; visitors are unique per UTC day by design | the design |
+| Accuracy | not relevant to statistics; visitors are unique per UTC day by design | `privacy-strategy.md` section 3 |
 | Data subject rights | same-day visitor erasure, session erasure, site reset; objection through GPC, opt-out flag, Do Not Track, consent mode | `erasure.md`, `privacy-strategy.md` section 6 |
 
 ## 3. Risks to data subjects
@@ -34,9 +34,9 @@ inventory are in `privacy-strategy.md` section 2; residency in
 | Personal data in URLs, titles or event data | medium | medium | redaction of strkeys, emails, secret seeds; query allowlist; terms forbid personal data there | medium: free-form identifiers pass redaction (`privacy-strategy.md` section 7) |
 | Cross-site tracking | low | medium | token includes the site id and a daily secret; no cookies; no identify | low |
 | Cross-tenant data access | low | high | row-level security on every tenant table; Umami users limited to their team with view-only roles; isolation tests | low |
-| Operator reuse of data | low | medium | operators read aggregates only | open: whether the aggregates are anonymous (CNIL criterion, S2) |
-| Breach of the database | low | medium | private network, no public database port, role separation (phases 15 and 18 harden it) | to be assessed after this stage |
-| Retention beyond need | low | low | `jobs retain-web`, expiring queues | low, once this stage schedules the job |
+| Operator reuse of data | low | medium | operators read aggregates only, through the `cp_operator` role | low if the aggregates are anonymous under the CNIL criterion (S2, `privacy-strategy.md` section 1) |
+| Breach of the database | low | medium | private network, no public database port, one role per service, signed images, SSH open only to the operator's admin address ranges (`../security/threat-model.md`) | stored rows hold no IP address and no visitor identifier that lasts beyond one UTC day |
+| Retention beyond need | low | low | `jobs retain-web` on a daily systemd timer, expiring queues | low |
 
 ## 4. Consultation
 
@@ -53,11 +53,9 @@ shows high residual risk must consult their authority before use (Art. 36).
 - One NATS user per service with subject allow lists (`internal/natsx/topology.go`).
 - Secrets for daily visitor tokens in memory only.
 - Audit log, append-only, for every change in the control plane.
-- Supply chain, vulnerability patching and hardening: this stage.
-- Backups and recovery drills: this stage.
+- Signed release images, dependency gates and the 24-hour patch procedure
+  (`../security/supply-chain.md`, `../runbooks/security-patch.md`).
+- Backups encrypted by pgBackRest (AES-256) before upload, with point-in-time restore exercised on production
 
-## 6. Sign-off
+  (`../deploy/backups.md`, `../reference/drills/2026-11-13-azure.md`).
 
-| Role | Name | Date |
-|---|---|---|
-| Legal review an operator input | pending | pending |

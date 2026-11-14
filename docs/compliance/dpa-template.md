@@ -3,11 +3,10 @@ title: "Data processing terms (template)"
 description: "A template for the data processing terms between the operator and a tenant."
 ---
 
-> **Status: draft, pending legal review an operator input.** Not legal advice. Last
-> updated 2026-11-12. These terms follow GDPR Art. 28(3) clause by clause (S10).
-> They are part of the terms of use (`terms.md`, section 1) that every project
-> accepts at enrollment. The operator's legal name and contact are added when
-> the operating entity is decided.
+The data processing terms between the operator and each tenant. They follow
+GDPR Art. 28(3) clause by clause (S10) and are part of the terms of use
+(`terms.md`, section 1) that every project accepts at enrollment. This page is
+not legal advice. Last updated 2026-11-12.
 
 ## 1. Subject matter, duration, nature and purpose
 
@@ -36,7 +35,8 @@ immediately if, in its opinion, an instruction infringes data protection law.
 
 Everyone the operator authorises to process the data is bound to
 confidentiality. Production access is limited to the people who hold the
-deployment's secrets (plan an operator input.
+deployment's secrets, whose age keys are the recipients listed in
+`infra/secrets/recipients/`.
 
 ## 5. Security (Art. 28(3)(c), Art. 32)
 
@@ -48,8 +48,7 @@ The tenant gives general authorisation for the sub-processors in
 `subprocessors.md`. The operator announces an intended addition or replacement
 in the repository's changelog and in the console before it takes effect, so
 the tenant can object; if the objection cannot be resolved, the tenant may
-leave the service and have its data deleted under clause 9. The length of the
-notice period is an open item for the legal review an operator input. The operator imposes on each sub-processor the same
+leave the service and have its data deleted under clause 9. The operator imposes on each sub-processor the same
 data protection obligations as in these terms and remains liable for it.
 
 ## 7. Assistance with data subject rights (Art. 28(3)(e))
@@ -81,7 +80,8 @@ another format: the tenant can read its own dashboards before it leaves.
 ## 10. Information and audits (Art. 28(3)(h))
 
 The operator makes available the documents in `docs/compliance/` and the
-source code of the whole service (the repository, public from this stage on), and allows for and
+source code of the whole service (the repository `github.com/justmert/veristar`), and allows for and
+
 contributes to audits by the tenant or an auditor it mandates, on reasonable
 notice.
 
