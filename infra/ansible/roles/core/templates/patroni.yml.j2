@@ -11,9 +11,8 @@ restapi:
   listen: 0.0.0.0:8008
   connect_address: "{{ sa_private_ip }}:8008"
   # https only, and a client must present a certificate of the internal
-  # ca: haproxy's checks, prometheus, the other member (failsafe and leader
-  # race calls use these same files as their client certificate) and
-  # ansible on the node all do
+  # ca: haproxy's checks, prometheus, the other members (with the files of
+  # the ctl section below) and ansible on the node all do
   certfile: /etc/patroni-tls/node.crt
   keyfile: /etc/patroni-tls/node.key
   cafile: /etc/patroni-tls/ca.crt
@@ -23,6 +22,17 @@ restapi:
   authentication:
     username: patroni
     password: "{{ sa_secrets.patroni_restapi_password }}"
+
+# patroni's own requests to the other members' rest api (the candidate check
+# of a switchover, the wal comparison of a failover, failsafe) and patronictl
+# take their client certificate from this section only, never from restapi
+# (patroni/request.py). without it every member refuses the others with
+# "certificate required": the v0.2.0 rollout of 2026-11-14 stopped at
+# "switchover: no healthy members found" with a streaming sync standby
+ctl:
+  certfile: /etc/patroni-tls/node.crt
+  keyfile: /etc/patroni-tls/node.key
+  cacert: /etc/patroni-tls/ca.crt
 
 etcd3:
   # mutual tls to the etcd members on the edge nodes (roles/edge)
