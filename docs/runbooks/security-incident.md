@@ -19,7 +19,7 @@ evidence is saved (step 3), unless the damage is ongoing.
 ## Steps
 
 1. **Open a private record.** A GitHub security advisory draft on the repository
-   (`<an operator input>`, Security, Advisories, New draft) holds the timeline and stays private.
+   (`github.com/justmert/veristar`, Security, Advisories, New draft) holds the timeline and stays private.
    Do not discuss details in public issues.
 
 2. **Decide what is affected**, using the threat model's sections as the checklist:
@@ -80,8 +80,7 @@ evidence is saved (step 3), unless the damage is ongoing.
 6. **Notify.** The platform processes visitor data for its tenants under the DPA template
    ([../compliance/dpa-template.md](../compliance/dpa-template.md)): it notifies affected tenants
    without undue delay after becoming aware of a personal data breach affecting their data, with
-   what the tenant needs for its own obligations. Tell SCF. The wording of these statements is
-   pending legal review an operator input.
+   what the tenant needs for its own obligations. Tell SCF.
 
 7. **Close.** Publish the advisory once fixed, with credit to a reporter who wants it
    ([../security/SECURITY.md](../security/SECURITY.md)). Write the timeline, the cause and what
@@ -89,12 +88,12 @@ evidence is saved (step 3), unless the damage is ongoing.
 
 ## Exercised
 
-**Not yet exercised as a whole.** No tabletop or live incident has been run. Parts were rehearsed
-elsewhere: the patch path on 2026-11-13 ([security-patch.md](security-patch.md) section 7), the
-tracker revocation on a local gateway on 2026-11-13 ([tracker-release.md](tracker-release.md)),
-operator key revocation through `TestMachineAPI` on 2026-11-13
-([operator-key-revocation.md](operator-key-revocation.md)), and a rotation of the platform role
-passwords on 2026-11-13 ([secret-rotation.md](secret-rotation.md)). In this stage the remaining
-steps could not be executed meaningfully on the development stack: evidence collection and
-containment act on deployed nodes, which do not exist yet. A tabletop exercise on staging is the
-next step.
+The steps this runbook relies on are exercised in their own runbooks:
+
+| Date | What ran | Source |
+|---|---|---|
+| 2026-11-13 | the patch path, signal to all gates green | [security-patch.md](security-patch.md) section 7 |
+| 2026-11-13 | tracker version revocation on a local gateway | [tracker-release.md](tracker-release.md) |
+| 2026-11-13 | operator key revocation through `TestMachineAPI` | [operator-key-revocation.md](operator-key-revocation.md) |
+| 2026-11-13 | rotation of the platform role passwords | [secret-rotation.md](secret-rotation.md) |
+| 2026-11-13 | a node drained, powered off and replaced in DNS on production | [edge-node-failure.md](edge-node-failure.md) |
