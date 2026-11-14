@@ -1,4 +1,4 @@
-"""hourly upstream advisory check (the design, docs/runbooks/security-patch.md).
+"""hourly upstream advisory check (docs/runbooks/security-patch.md).
 
 reports every upstream security signal for the pinned versions, so detection
 does not use up the 24 hour patch window:

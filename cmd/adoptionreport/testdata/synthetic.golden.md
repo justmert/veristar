@@ -9,7 +9,7 @@ numbers. To refresh them, run the command again ([README.md](README.md), section
 | Generated at | 2026-11-21T08:00:00Z |
 | Machine API | `http://contract.test/api/metrics/v1` |
 | Range | 2026-11-01 to 2026-11-20 (20 UTC days) |
-| Threshold | 9 consecutive UTC days with accepted page views (the design, beyond the RFP) |
+| Threshold | 9 consecutive UTC days with accepted page views (beyond the RFP) |
 
 ## Summary
 

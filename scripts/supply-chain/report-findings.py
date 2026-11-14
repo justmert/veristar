@@ -1,13 +1,12 @@
 """opens one labelled github issue per new security finding and sends one
-alert for the run (the design: "a finding opens a labelled issue and sends
-an alert").
+alert for the run, so a finding is tracked and seen.
 
     python3 scripts/supply-chain/report-findings.py <findings dir>
 
 reads every *.json in the directory: a list of {id, source, subject, pinned,
 severity, summary, url}. an issue whose title carries the finding id and that
 is still open is not opened again, so an hourly run does not repeat itself.
-the alert goes to ALERT_WEBHOOK_URL (a discord webhook, an operator input. without it
+the alert goes to ALERT_WEBHOOK_URL (a discord webhook). without it
 the script exits 1 after opening the issues, so the run is red and github's
 own failure notice still reaches the maintainers.
 """
@@ -59,7 +58,7 @@ def main(argv):
         return 0
     hook = os.environ.get("ALERT_WEBHOOK_URL", "")
     if not hook:
-        print("ALERT_WEBHOOK_URL is not set an operator input: issues opened, no alert sent", file=sys.stderr)
+        print("ALERT_WEBHOOK_URL is not set: issues opened, no alert sent", file=sys.stderr)
         return 1
     text = "security findings:\n" + "\n".join(f"- [{f['id']}] {f['severity']} {f['subject']}: {u}" for f, u in opened)
     req = urllib.request.Request(hook, data=json.dumps({"content": text[:1900]}).encode(),

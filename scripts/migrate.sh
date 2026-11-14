@@ -1,6 +1,6 @@
 #!/bin/sh
-# data migration between two environments (the design,
-# docs/handover/rebuild.md section 5). the two databases, umami and
+# data migration between two environments
+# (docs/handover/rebuild.md section 5). the two databases, umami and
 # platform, move as postgresql custom-format dumps:
 #
 #   scripts/migrate.sh export <env file> <new directory>
@@ -18,7 +18,7 @@
 # PLATFORM_DB_PORT, PLATFORM_DB_NAME, PLATFORM_DB_SSLMODE,
 # PLATFORM_DB_ADMIN_USER, PLATFORM_DB_ADMIN_PASSWORD (a superuser),
 # UMAMI_DB_NAME and, for sslmode verify-full against a converged
-# environment,
+# environment (postgresql admits tls only there),
 # PLATFORM_DB_SSLROOTCERT: the environment's ca bundle. the postgresql client tools run from MIGRATE_PG_IMAGE (the
 # pinned server image, so pg_dump is never older than the server) on
 # MIGRATE_DOCKER_NETWORK (default host, so 127.0.0.1 is this machine).

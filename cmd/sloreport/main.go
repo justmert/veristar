@@ -1,5 +1,5 @@
 // Command sloreport copies the prober's daily results out of gatus and
-// writes the monthly slo report (the design).
+// writes the monthly slo report (docs/slo).
 //
 //	sloreport collect -gatus <base url> -day YYYY-MM-DD -out docs/slo/data [-page-size 20160] [-until RFC3339]
 //	sloreport report -month YYYY-MM -data docs/slo/data -out docs/slo [-through YYYY-MM-DD]

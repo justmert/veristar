@@ -654,7 +654,7 @@ func waitLoaded(ctx context.Context, sites *registry.Watcher[registry.Site], wit
 }
 
 // capacity measures the api metric tables of a running database, for the
-// volume run of this stage and later capacity reviews. it reads sizes and row
+// api volume run and later capacity reviews. it reads sizes and row
 // counts only, so it needs neither the lock nor nats.
 func capacity(ctx context.Context, env *config.Env, stdout io.Writer) error {
 	cfg, err := pdb.LoadPoolConfig(env, pdb.RoleJobs)

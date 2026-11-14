@@ -80,7 +80,7 @@ for tool in "$@"; do
 		install -m 0755 "$work/shellcheck-v$v/shellcheck" "$dest/shellcheck"
 		;;
 	promtool)
-		# the prometheus pin of the design, so rule checks match the server
+		# the pinned prometheus version, so rule checks match the server
 		v=3.15.1
 		base="https://github.com/prometheus/prometheus/releases/download/v$v"
 		fetch "$base/prometheus-$v.linux-amd64.tar.gz" "$base/sha256sums.txt" "prometheus-$v.linux-amd64.tar.gz"

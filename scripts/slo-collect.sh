@@ -1,5 +1,5 @@
 #!/bin/sh
-# daily slo data collection with catch-up (the design, .github/workflows/slo-report.yml).
+# daily slo data collection with catch-up (.github/workflows/slo-report.yml).
 #
 #   scripts/slo-collect.sh missing <today YYYY-MM-DD>
 #       prints the days of the catch-up window that have no data file on
@@ -103,7 +103,7 @@ report_month() {
 }
 
 run() {
-	: "${STATUS_BASE_URL:?repository variable STATUS_BASE_URL is not set (https://status.<BASE_DOMAIN>, an operator input}"
+	: "${STATUS_BASE_URL:?repository variable STATUS_BASE_URL is not set (https://status.<BASE_DOMAIN>)}"
 	git fetch -q origin
 	today="$(date -u +%F)"
 	if [ -n "${1:-}" ]; then

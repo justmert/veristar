@@ -22,7 +22,7 @@ import (
 )
 
 const probeUsage = `  probe-tenant create -operator-github-id N -domain D -origin URL
-                    create the internal monitoring tenant (the design):
+                    create the internal monitoring tenant:
                     an active tenant with is_internal set, one active site,
                     one otlp token and one machine api key scoped to it.
                     prints the site id, token and key once; the jobs
@@ -142,7 +142,7 @@ func createProbeTenant(ctx context.Context, d *pdb.DB, ghID int64, domain, origi
 			return errors.New("an internal tenant already exists; the probe tenant is created once per environment")
 		}
 		if err := tx.QueryRow(ctx, `insert into cp.tenants (slug, name, description, status, is_internal, created_by, approved_by)
-			values ($1, 'Internal probe', 'monitoring probe tenant (the design), hidden from operator views', 'active', true, $2, $2)
+			values ($1, 'Internal probe', 'monitoring probe tenant, hidden from operator views', 'active', true, $2, $2)
 			returning id`, probeSlug, opID).Scan(&out.TenantID); err != nil {
 			return fmt.Errorf("insert tenant: %w", err)
 		}

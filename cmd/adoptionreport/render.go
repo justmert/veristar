@@ -73,7 +73,7 @@ func render(w io.Writer, ev evidence) error {
 	if !ev.To.Before(ev.Today) {
 		p("| Note | the range ends today, which is not complete; its numbers will still grow |\n")
 	}
-	p("| Threshold | %d consecutive UTC days with accepted page views (the design, beyond the RFP) |\n\n", ev.MinDays)
+	p("| Threshold | %d consecutive UTC days with accepted page views (beyond the RFP) |\n\n", ev.MinDays)
 
 	p("## Summary\n\n")
 	p("| Project | Tenant id | Status | Enrolled | First accepted page view in range | Longest run | Meets %d days | Days with API requests |\n", ev.MinDays)

@@ -1,4 +1,4 @@
-"""licence gate (the design: everything we ship is osi-compatible).
+"""licence gate: everything we ship is osi-compatible.
 
     go mod download all
     go run go.opentelemetry.io/collector/cmd/builder@v0.165.0 \\
