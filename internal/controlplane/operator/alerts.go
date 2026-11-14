@@ -25,7 +25,8 @@ type AlertReader interface {
 
 // Alerts serves GET /api/operator/alerts (contract 11): the live alerts of
 // the alertmanager cluster, for the console's alerts page. it replaces push
-// delivery for deployments without a receiver an operator input unset).
+// delivery for deployments without a receiver (no discord webhook
+// configured).
 type Alerts struct {
 	src AlertReader
 	now func() time.Time

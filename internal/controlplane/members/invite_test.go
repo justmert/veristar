@@ -29,8 +29,8 @@ func start(t *testing.T) *consoleapi.Env {
 	})
 }
 
-//: an invite and a direct add name the github
-// account that held the login when the operator added it. whoever holds that
+// an invite and a direct add name the github
+// account that held the login when the tenant owner added it. whoever holds that
 // login later, after a rename, gets nothing.
 func TestMembersAreBoundToTheGitHubAccount(t *testing.T) {
 	e := start(t)

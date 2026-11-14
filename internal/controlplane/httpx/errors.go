@@ -47,9 +47,9 @@ const (
 	CodeProvisioningPending  = "provisioning_pending"
 	CodeTenantSuspended      = "tenant_suspended"
 	CodeInvalidTransition    = "invalid_transition"
-	// this stage: otlp token create while the tenant is pending or rejected
+	// otlp token create while the tenant is pending or rejected
 	CodeTenantNotActive = "tenant_not_active"
-	// this stage: an erasure request while another one runs for the same site
+	// an erasure request while another one runs for the same site
 	CodeErasureInProgress = "erasure_in_progress"
 	// operator alerts: no alertmanager member answered, or none is
 	// configured (contract 11.2)
@@ -79,7 +79,7 @@ const (
 	FieldInvalidRole           = "invalid_role"
 	FieldDuplicate             = "duplicate"
 	FieldUnknownTrackerVersion = "unknown_tracker_version"
-	// this stage: a value outside an enumerated set, such as the enrollment mode
+	// a value outside an enumerated set, such as the enrollment mode
 	FieldInvalidValue = "invalid_value"
 )
 

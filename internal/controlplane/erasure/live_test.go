@@ -701,7 +701,7 @@ func TestErasure(t *testing.T) {
 		require.Equal(t, "site_reset", items[0].(map[string]any)["kind"], "newest first")
 	})
 
-	// W-3: a run that removed the visit record and then failed is finished
+	// a run that removed the visit record and then failed is finished
 	// by the next request of the same day, which still finds the sessions
 	t.Run("a failed visitor run is finished by the next request", func(t *testing.T) {
 		vtE := e.visit(t, ipE, uaE, events.BandPrimary, 2)
@@ -725,7 +725,7 @@ func TestErasure(t *testing.T) {
 		require.ErrorIs(t, err, jetstream.ErrKeyNotFound, "the run's progress record is removed at the end")
 	})
 
-	// W-4: after the memory bucket that links visitors to sessions was
+	// after the memory bucket that links visitors to sessions was
 	// emptied (a nats restart), a visit of today is reported as not located,
 	// never as not recorded
 	t.Run("a visit whose link was lost is not located", func(t *testing.T) {

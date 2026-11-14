@@ -28,8 +28,8 @@ var apiSorts = map[string]string{
 // apiChosenCTE selects the daily rows of the range that a project's
 // numbers are made of, through api.operator_daily, which also counts the
 // hours api-rollup has not reached yet (00022, control-plane-api 7.2): per tenant and service, metric rows when
-// the service has any in the range, otherwise span rows (the design, the
-// rule the tenant dashboard of this stage applies). it expects a cte t of
+// the service has any in the range, otherwise span rows (the
+// rule the tenant dashboard applies). it expects a cte t of
 // tenants.
 const apiChosenCTE = `
 r as (

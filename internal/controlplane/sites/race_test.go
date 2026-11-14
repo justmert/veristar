@@ -60,7 +60,7 @@ func race(t *testing.T, e *consoleapi.Env, tx pgx.Tx, send func() consoleapi.Res
 	return <-got
 }
 
-//: a site create or a member add that waits on the tenant
+// a site create or a member add that waits on the tenant
 // row lock while an operator removes or approves the tenant sees the status
 // that operator committed, not the one read before the lock.
 func TestTenantWritesRecheckStatusUnderTheLock(t *testing.T) {
@@ -132,7 +132,7 @@ func TestTenantWritesRecheckStatusUnderTheLock(t *testing.T) {
 		require.Equal(t, "tenant_suspended", r.Code(t))
 	})
 
-	//: a tenant request does not wait for the tenant row
+	// a tenant request does not wait for the tenant row
 	// lock longer than its lock timeout (a reconcile holds the lock across
 	// umami calls); it answers 503 with Retry-After instead of holding a
 	// pooled connection

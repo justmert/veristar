@@ -43,7 +43,7 @@ func slowUmami(t *testing.T, delay time.Duration) *url.URL {
 	return u
 }
 
-//: a member floods site edits while umami is slow. every
+// a member floods site edits while umami is slow. every
 // edit triggers a reconcile, and each run holds the tenant row lock and a
 // cp_system connection across its umami calls. reconciles coalesce per
 // tenant, run on bounded workers and use a pool of their own, so the

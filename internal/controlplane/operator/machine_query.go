@@ -23,7 +23,7 @@ import (
 
 // query handling shared by the machine routes (contract 9.3).
 
-// machine list page size (the design: 500)
+// machine list page size (500)
 const (
 	machineDefaultLimit = 500
 	machineMaxLimit     = 500
@@ -69,7 +69,7 @@ const tenantScopeCTE = `t as (
 
 // resolveScope applies the key's scope to the tenant parameter. a scoped
 // key reads its own tenant whatever its status, internal included, because
-// an operator chose that tenant for it (the probe's key, this stage); another
+// an operator chose that tenant for it (the probe's key); another
 // tenant was already refused with 403 by authenticate. a key for all
 // tenants reads one named tenant, which must exist and not be internal
 // (404 otherwise, as on every operator route), or all of them.

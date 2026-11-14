@@ -50,7 +50,7 @@ func (g *gate) snapshot() (runs map[uuid.UUID]int, inFlight, maxSeen int) {
 	return runs, g.inFlight, g.maxSeen
 }
 
-//: reconciles triggered by requests coalesce per
+// reconciles triggered by requests coalesce per
 // tenant (at most one running and one pending) and run on a bounded set of
 // workers, so a burst of edits costs at most two runs and cannot start an
 // unbounded number of goroutines that each hold a database connection.
@@ -95,7 +95,7 @@ func TestReconcileCoalescesAndIsBounded(t *testing.T) {
 	require.Equal(t, 3, runs[flooded])
 }
 
-// review: shutdown waits for the runs in flight only. queued and pending
+// shutdown waits for the runs in flight only. queued and pending
 // runs are dropped (the periodic reconcile task covers them), so a stop with
 // a long queue behind a slow umami ends when the in-flight runs end.
 func TestStopFinishesInFlightAndDropsTheQueue(t *testing.T) {

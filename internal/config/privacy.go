@@ -27,7 +27,7 @@ func LoadErasure(e *Env) (Erasure, error) {
 }
 
 // DefaultWebRawRetentionMonths keeps raw umami rows for 25 months, so tenant
-// dashboards always cover 24 full months (the design).
+// dashboards always cover 24 full months.
 const DefaultWebRawRetentionMonths = 25
 
 // WebRetention is the setting of `jobs retain-web`.

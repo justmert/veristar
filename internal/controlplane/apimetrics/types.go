@@ -9,8 +9,8 @@ import (
 	"github.com/justmert/veristar/internal/histo"
 )
 
-// OpenLabel is how a percentile in the open bucket above 10 s is reported
-//: never as a number, because the bucket has no upper bound to
+// OpenLabel is how a percentile in the open bucket above 10 s is reported:
+// never as a number, because the bucket has no upper bound to
 // interpolate towards.
 const OpenLabel = ">10 s"
 
@@ -254,6 +254,6 @@ func classOf(code int16) string {
 }
 
 // warning kinds in contract order (api.ingest_warnings check). coarse_buckets
-// came with review and is last, so the earlier positions keep their
+// was added last and stays last, so the earlier positions keep their
 // meaning for existing clients.
 var warningKinds = []string{"span_derived", "lossy_histogram", "cardinality_overflow", "secret_in_path", "coarse_buckets"}

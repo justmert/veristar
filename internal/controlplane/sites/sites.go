@@ -51,7 +51,7 @@ func refuseSuspended(a tenants.Access) error {
 	return nil
 }
 
-// Site is the site object of contract 3.1 with the this stage fields of 5.10.
+// Site is the site object of contract 3.1 with the operator fields of 5.10.
 // verify_token is never part of it (5.8 only).
 type Site struct {
 	ID                   uuid.UUID        `json:"id"`
@@ -71,7 +71,7 @@ type Site struct {
 	StellarToml          json.RawMessage  `json:"stellar_toml"`
 	StellarTomlCheckedAt *httpx.Timestamp `json:"stellar_toml_checked_at"`
 	// collect_utm keeps the utm_* and ref query parameters of page urls;
-	// off unless the operator turns it on (contract 4.3)
+	// off unless a tenant owner turns it on (contract 4.3)
 	CollectUTM bool            `json:"collect_utm"`
 	CreatedAt  httpx.Timestamp `json:"created_at"`
 	UpdatedAt  httpx.Timestamp `json:"updated_at"`
@@ -428,8 +428,8 @@ func (h *Routes) patch(w http.ResponseWriter, r *http.Request) error {
 			return httpx.Conflict(httpx.CodeSiteRemoved, "the site is removed")
 		}
 		// keeping campaign parameters changes the site's privacy position
-		// (cnil's consent exemption), so it is the operator's decision (audit
-		// N-7); members may still send the value unchanged with other fields
+		// (cnil's consent exemption), so it is the tenant owner's
+		// decision; members may still send the value unchanged with other fields
 		if b.CollectUTM != nil && *b.CollectUTM != old.CollectUtm {
 			if err := a.RequireOwner(); err != nil {
 				return err

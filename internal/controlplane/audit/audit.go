@@ -29,10 +29,10 @@ const (
 	SiteCreate        = "site.create"
 	SiteUpdate        = "site.update"
 	SiteDelete        = "site.delete"
-	// this stage
+	// otlp tokens
 	OTLPTokenCreate = "otlp_token.create" //nolint:gosec // an audit action name, not a credential
 	OTLPTokenRevoke = "otlp_token.revoke" //nolint:gosec // an audit action name, not a credential
-	// this stage
+	// erasure
 	ErasureRequest  = "erasure.request"
 	ErasureComplete = "erasure.complete"
 	ErasureFail     = "erasure.fail"

@@ -775,7 +775,7 @@ func (e *env) startFrom(t *testing.T, addr string) *resp {
 	return fetch(t, c, req)
 }
 
-//: the start limit is per client. one client that runs
+// the start limit is per client. one client that runs
 // out of starts gets 429, everyone else still signs in, and the address
 // that keyed the bucket appears nowhere in the log.
 func TestStartRateLimitedPerClient(t *testing.T) {
@@ -817,7 +817,7 @@ func TestStartRateLimitedPerClient(t *testing.T) {
 	}
 }
 
-//: one sealed state cookie replayed with made-up codes
+// one sealed state cookie replayed with made-up codes
 // reaches the code exchange once. the replays no longer drain a shared
 // exchange budget, so another person's sign-in still works afterwards.
 func TestCallbackStateIsSingleUse(t *testing.T) {

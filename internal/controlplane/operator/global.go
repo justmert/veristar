@@ -25,7 +25,7 @@ import (
 	"github.com/justmert/veristar/internal/db"
 )
 
-// the global web and api views of the design (contract section 8). every
+// the global web and api views (contract section 8). every
 // read runs as cp_operator over aggregate tables only: agg.web_daily,
 // agg.web_daily_dim, api.operator_daily (daily rows plus pending hours, 00022), cp.web_ingest_hourly, cp.tenants
 // and cp.operator_sites. internal tenants are never shown.

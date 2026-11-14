@@ -11,15 +11,15 @@ import (
 	"github.com/justmert/veristar/internal/umami"
 )
 
-// names of the this stage purgers, the keys of cp.tenant_removals.steps
+// names of the purgers, the keys of cp.tenant_removals.steps
 const (
 	PurgerRegistry  = "registry"
 	PurgerOTLP      = "otlp_tokens"
 	PurgerUmami     = "umami"
 	PurgerWebIngest = "web_ingest"
-	// PurgerAPI is the this stage purger of the api schema
+	// PurgerAPI is the purger of the api schema
 	PurgerAPI = "api"
-	// PurgerAgg is the this stage purger of the agg schema
+	// PurgerAgg is the purger of the agg schema
 	PurgerAgg = "agg"
 )
 
@@ -209,7 +209,7 @@ func (p OTLPPurger) Purge(ctx context.Context, r Removal) (map[string]any, error
 	return map[string]any{"tokens_revoked": ids, "keys_revoked": written}, nil
 }
 
-// APIPurger deletes the tenant's rows in the api schema (the design)
+// APIPurger deletes the tenant's rows in the api schema
 // through api.purge_tenant, the one api right cp_system has. minute rows and
 // the writer's per-tenant state always go; hourly, daily and warning rows
 // stay when the removal keeps aggregates (contract 5.13). it runs after
@@ -239,7 +239,7 @@ func (APIPurger) Purge(ctx context.Context, r Removal) (map[string]any, error) {
 	return detail, nil
 }
 
-// AggPurger deletes the tenant's agg rows (the design) through
+// AggPurger deletes the tenant's agg rows through
 // agg.purge_tenant, the one agg right cp_system has. every agg row is an
 // aggregate, so a removal that keeps aggregates keeps all of them (contract
 // 5.13). it runs after umami: the registry step already stopped the

@@ -21,7 +21,7 @@ import (
 	"github.com/justmert/veristar/internal/umami"
 )
 
-// the machine metrics api of the design (contract section 9,
+// the machine metrics api (contract section 9,
 // docs/reference/openapi/metrics-v1.yaml). it is mounted next to /api, not
 // inside it, so the session middleware never runs: a console cookie means
 // nothing here, and an operator api key means nothing anywhere else. every
@@ -30,7 +30,7 @@ import (
 // MachinePath is where the machine api is mounted.
 const MachinePath = "/api/metrics/v1"
 
-// rate limit per key and control plane instance (the design: 10
+// rate limit per key and control plane instance (10
 // requests per second). the burst lets a client fetch a few pages at once.
 const (
 	DefaultMachineRate  = 10
@@ -108,7 +108,7 @@ func (m *Machine) Handler() http.Handler {
 }
 
 // CodeScopeForbidden is the 403 of a key scoped to another tenant
-// (contract 2.4, this stage).
+// (contract 2.4).
 const CodeScopeForbidden = "scope_forbidden"
 
 // machineKey is the authenticated key of a request. Tenant is set for a

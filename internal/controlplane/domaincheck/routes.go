@@ -163,8 +163,8 @@ func (h *Routes) verify(w http.ResponseWriter, r *http.Request) error {
 	}
 	// the outcome is written under cp_system, next to the check that
 	// decided it: cp_tenant cannot write the verification columns, so no
-	// other tenant handler can mark a domain verified (migration 00028,
-	// review). the site id was read under the member's tenant scope.
+	// other tenant handler can mark a domain verified (migration
+	// 00028). the site id was read under the member's tenant scope.
 	out := s
 	err = h.scope.DB().WithSystem(ctx, func(tx pgx.Tx) error {
 		p := systemq.SystemSetSiteVerifyResultParams{Ok: o.OK, ID: s.ID}
@@ -228,7 +228,7 @@ func (h *Routes) limit(ctx context.Context, siteID uuid.UUID) error {
 // AfterSiteCreate fetches the new site's stellar.toml in the background
 // and stores it under cp_system, as the daily task does (control-plane-api
 // 5.12: asynchronously, after the response; cp_tenant cannot write the
-// column, review). actor is the user who created the site. a failure
+// column). actor is the user who created the site. a failure
 // is logged; the daily verify-domains task fetches again.
 func (h *Routes) AfterSiteCreate(ctx context.Context, tenantID, siteID uuid.UUID, domain, actor string) {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), afterCreateTimeout)

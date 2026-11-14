@@ -16,7 +16,7 @@ import (
 
 // a Purger deletes one data store's share of a removed tenant. Purge must be
 // idempotent: it runs again after a crash and on every reconcile until done.
-// phases 8, 9 and 11 add purgers (otlp_tokens, api, agg) to Purgers; a
+// otlp_tokens, api and agg are purgers too, listed in Purgers; a
 // purger added later runs for tenants removed before it existed, because
 // the runner keys finished stores by Name.
 type Purger interface {

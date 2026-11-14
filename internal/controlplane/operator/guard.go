@@ -1,4 +1,4 @@
-// Package operator serves the operator routes of the design
+// Package operator serves the operator routes
 // (docs/reference/control-plane-api.md section 5). every route lives under
 // /api/operator and passes the guard of this file first.
 package operator

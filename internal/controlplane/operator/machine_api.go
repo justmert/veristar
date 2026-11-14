@@ -12,7 +12,7 @@ import (
 )
 
 // the api routes of the machine api (contract 9.8 to 9.10). they apply the
-// source rule of the design the way the operator views of this stage do
+// source rule the way the operator views do
 // (apiChosenCTE): per tenant and service over the whole range, metric rows
 // when the service has any, otherwise span rows, never both.
 

@@ -32,9 +32,9 @@ import (
 	"github.com/justmert/veristar/tests/fixtures/umamictr"
 )
 
-// machineEnv is the control plane as cmd/controlplane wires it for phase
-// 12: the session api with the operator guard and the key routes, and the
-// machine api mounted beside it, over the this stage fixture database and a
+// machineEnv is the control plane as cmd/controlplane wires it:
+// the session api with the operator guard and the key routes, and the
+// machine api mounted beside it, over the operator views' fixture database and a
 // real umami.
 type machineEnv struct {
 	f      *globalFixture
@@ -424,7 +424,7 @@ func TestMachineAPI(t *testing.T) {
 			}
 		}
 		// the probe's key reads the internal probe tenant, which a key for
-		// all tenants never sees (this stage)
+		// all tenants never sees
 		pt := decode[MachineList[MachineTenant]](t, e.get(t, probe.Key, "/tenants", 200).body)
 		require.Len(t, pt.Items, 1)
 		require.Equal(t, ids["probe"], pt.Items[0].ID)
@@ -436,7 +436,7 @@ func TestMachineAPI(t *testing.T) {
 		e.get(t, global.Key, "/api/hourly?tenant="+ids["probe"].String(), 404)
 	})
 
-	t.Run("numbers equal the this stage operator views", func(t *testing.T) {
+	t.Run("numbers equal the operator views", func(t *testing.T) {
 		opGet := func(path string) []byte {
 			_, a := do(t, e.op, http.MethodGet, e.srv.URL+"/api/operator"+path, "", "")
 			require.Equal(t, http.StatusOK, a.code, string(a.body))

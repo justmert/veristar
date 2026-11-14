@@ -17,7 +17,7 @@ import (
 // the expectations below are computed by sql written here, as superuser
 // (which row-level security does not apply to) with the tenant named
 // explicitly, the table picked from the answer's resolution and the
-// source rule of the design written out again. nothing of the package under
+// source rule (metric rows win over span rows) written out again. nothing of the package under
 // test is used except its json types.
 
 func table(t *testing.T, res apimetrics.Resolution) string {

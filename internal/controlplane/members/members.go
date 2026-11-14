@@ -175,8 +175,7 @@ func (h *Routes) add(w http.ResponseWriter, r *http.Request) error {
 	role := *b.Role
 
 	// the login is resolved to the github account that holds it now, and
-	// the member or invite is bound to that account's id (review,
-	// C-10): a login can be renamed and the freed name taken by someone
+	// the member or invite is bound to that account's id: a login can be renamed and the freed name taken by someone
 	// else, the id never changes hands
 	gh, err := h.users.Lookup(ctx, *b.GitHubLogin)
 	if errors.Is(err, auth.ErrGitHubUserNotFound) {

@@ -24,7 +24,7 @@ type List[T any] struct {
 }
 
 // Cursor is a keyset position over (created_at, id), the order of every
-// this stage list route.
+// list route.
 type Cursor struct {
 	At time.Time
 	ID uuid.UUID
