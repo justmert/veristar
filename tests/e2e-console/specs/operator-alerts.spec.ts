@@ -135,7 +135,7 @@ test("an operator sees firing alerts by severity, the badge and the critical ban
   await expect(page.getByText("Alerting pipeline down")).toHaveCount(0);
   await expect(page.getByText(/^Last checked \d\d:\d\d:\d\d UTC$/)).toBeVisible();
 
-  const nav = page.getByRole("navigation", { name: "Operator" });
+  const nav = page.getByRole("navigation", { name: "Operator sections" });
   await expect(nav.getByRole("link", { name: /^Alerts\s*2 alerts firing$/ })).toBeVisible();
   await page.screenshot({ path: join(shots, "firing.png"), fullPage: true });
 
@@ -201,7 +201,7 @@ test("alert source unreachable while alertmanager is down, and no list", async (
     await expect(page.getByText("Alert source unreachable", { exact: true })).toBeVisible();
     await expect(page.getByText("All clear", { exact: true })).toHaveCount(0);
     await expect(page.locator("[data-alert]")).toHaveCount(0);
-    const nav = page.getByRole("navigation", { name: "Operator" });
+    const nav = page.getByRole("navigation", { name: "Operator sections" });
     await expect(nav.getByRole("link", { name: /alert source unreachable/ })).toBeVisible();
     const r = await api<{ error?: { code?: string } }>(op.ctx, "GET", "/api/operator/alerts");
     expect(r.status).toBe(503);

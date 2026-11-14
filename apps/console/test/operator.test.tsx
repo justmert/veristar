@@ -3,6 +3,7 @@ import { auditPath, type TenantListQuery, tenantListPath } from "@/api/endpoints
 import { tenantAction } from "@/api/schemas";
 import { AuditPage, auditSummary, dayToUtc } from "@/pages/operator/audit";
 import { OperatorLayout } from "@/pages/operator/layout";
+import { ReviewQueuePage } from "@/pages/operator/review";
 import { SettingsPage } from "@/pages/operator/settings";
 import { TenantDetailPage } from "@/pages/operator/tenant-detail";
 import { queryFromParams, TenantsPage } from "@/pages/operator/tenants";
@@ -320,4 +321,55 @@ describe("audit log", () => {
 
 it("knows every lifecycle action of contract 5.5", () => {
   expect(tenantAction.options).toEqual(["approve", "reject", "suspend", "resume", "remove"]);
+});
+
+describe("review workspace", () => {
+  const noAlerts = {
+    checked_at: "2026-11-13T12:00:00Z",
+    watchdog_firing: true,
+    sources: [{ address: "10.0.1.4:9093", reachable: true, watchdog_firing: true, error: null }],
+    alerts: [],
+  };
+  const pendingDetail = {
+    ...f.operatorDetailBody,
+    tenant: { ...f.operatorDetailBody.tenant, status: "pending" },
+    allowed_actions: ["approve", "reject", "remove"],
+  };
+
+  it("shows the queue, the evidence and rejects with a required reason", async () => {
+    const calls = stubFetch([
+      { status: 200, body: noAlerts },
+      {
+        status: 200,
+        body: { items: [{ ...f.operatorSummaryBody, status: "pending" }], next_cursor: null },
+      },
+      { status: 200, body: pendingDetail },
+      { status: 200, body: { ...f.operatorSummaryBody, status: "rejected" } },
+    ]);
+    const host = await renderRoutes(
+      [{ path: "/operator", element: <ReviewQueuePage /> }],
+      "/operator",
+    );
+    await waitFor(() => expect(host.textContent).toContain("Soroban AMM on mainnet"));
+    expect(calls[1]?.url).toBe(
+      "/api/operator/tenants?review=true&sort=created_at&order=asc&limit=50",
+    );
+    expect(host.textContent).toContain("No alert needs action.");
+    expect(host.querySelector("ul[aria-label=Evidence]")?.textContent).toContain(
+      "1 of 2 not a valid id",
+    );
+
+    const reject = [...host.querySelectorAll("[role=radio]")].find((r) =>
+      r.textContent?.includes("Reject"),
+    ) as HTMLElement;
+    await click(reject);
+    await click(byRole(host, "button", "Reject projectCtrl Enter"));
+    expect(calls).toHaveLength(3);
+    expect(host.textContent).toContain("Required.");
+    await type(byLabel(host, "Reason"), " Not on Stellar ");
+    await click(byRole(host, "button", "Reject projectCtrl Enter"));
+    await waitFor(() => expect(calls).toHaveLength(4));
+    expect(calls[3]?.url).toBe(`/api/operator/tenants/${f.TENANT_ID}/reject`);
+    expect(calls[3]?.body).toEqual({ reason: "Not on Stellar" });
+  });
 });

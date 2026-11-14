@@ -123,7 +123,7 @@ export function GlobalApiPage() {
             filters={state.filters}
             onChange={(filters) => set({ ...state, filters })}
           />
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <div className="grid grid-cols-2 gap-x-3 gap-y-2 sm:flex sm:flex-wrap sm:items-center sm:gap-x-4">
             <InlineSelect
               label="Sort by"
               value={state.sort}
@@ -299,7 +299,7 @@ function ApiRow({
   return (
     <tr data-tenant={t.id} data-state={slot >= 0 ? "selected" : undefined} className={ROW}>
       <SelectCell id={t.id} name={t.name} selection={selection} />
-      <th scope="row" className={`${TD} max-w-64 text-left font-normal`}>
+      <th scope="row" className={`${TD} min-w-48 max-w-64 text-left font-normal`}>
         <span className="flex min-w-0 items-center gap-2">
           <SeriesSwatch slot={slot} />
           <Link

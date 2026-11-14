@@ -118,9 +118,15 @@ test("the operator switches enrollment to approval after a confirmation", async 
   );
   expect(before.status).toBe(200);
   const page = op.page;
-  await page.goto(`${APP}/`);
-  await page.getByRole("link", { name: "Operator", exact: true }).click();
-  await page.getByRole("link", { name: "Settings" }).click();
+  await page.goto(`${APP}/operator`);
+  await page
+    .getByRole("navigation", { name: "Operator" })
+    .getByRole("link", { name: "Admin" })
+    .click();
+  await page
+    .getByRole("navigation", { name: "Operator sections" })
+    .getByRole("link", { name: "Settings" })
+    .click();
   // the enrollment mode is a radio group; change setting asks for confirmation
   const mode = page.getByRole("region", { name: "Enrollment mode" });
   if (before.body.mode === "approval") {
@@ -159,7 +165,14 @@ test("a new project waits in the review queue and the operator approves it", asy
 
   const page = op.page;
   await page.goto(`${APP}/operator`);
-  await page.getByRole("link").filter({ hasText: tenant.name }).click();
+  // the review workspace: pick the project in the queue, its evidence and
+  // the decision show beside it, the project page holds every action
+  const queue = page.getByRole("region", { name: /^Review queue/ });
+  await queue.getByRole("button").filter({ hasText: tenant.name }).click();
+  const review = page.getByRole("region", { name: `Review ${tenant.name}` });
+  await expect(review.getByRole("list", { name: "Evidence" })).toBeVisible();
+  await expect(review.getByRole("radiogroup", { name: "Decision" })).toBeVisible();
+  await review.getByRole("link", { name: "Open project page" }).click();
   await page.waitForURL(`${APP}/operator/tenants/${tenant.id}`);
   // enrollment answers and the site with its evidence
   await expect(page.getByText("Soroban contracts on testnet", { exact: true })).toBeVisible();

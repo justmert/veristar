@@ -4,7 +4,7 @@
 // project page.
 
 import { useMutation } from "@tanstack/react-query";
-import { cn } from "cn";
+import { cn } from "@veristar/brand/cn";
 import { Check, CircleAlert, Clock, Minus, RotateCcw, X } from "lucide-react";
 import { type FormEvent, type KeyboardEvent, type ReactNode, useId, useState } from "react";
 import { ApiError } from "@/api/client";
@@ -122,13 +122,17 @@ export function evidenceOf(detail: OperatorTenantDetail): EvidenceItem[] {
   return items;
 }
 
-export function EvidenceList({ items }: { items: EvidenceItem[] }) {
+// stacked puts each value under its label, for a narrow column
+export function EvidenceList({ items, stacked }: { items: EvidenceItem[]; stacked?: boolean }) {
   return (
     <ul aria-label="Evidence" className="flex flex-col">
       {items.map((e) => (
         <li
           key={e.key}
-          className="grid grid-cols-[1rem_minmax(0,1fr)] items-start gap-x-2.5 py-1.5 text-small sm:grid-cols-[1rem_10rem_minmax(0,1fr)]"
+          className={cn(
+            "grid grid-cols-[1rem_minmax(0,1fr)] items-start gap-x-2.5 py-1.5 text-small",
+            !stacked && "sm:grid-cols-[1rem_10rem_minmax(0,1fr)]",
+          )}
         >
           <span className="mt-0.5 flex">{SIGNAL_ICON[e.signal]}</span>
           <span className="text-fg-2">
@@ -137,7 +141,8 @@ export function EvidenceList({ items }: { items: EvidenceItem[] }) {
           </span>
           <span
             className={cn(
-              "col-start-2 min-w-0 break-words sm:col-start-3",
+              "col-start-2 min-w-0 break-words",
+              !stacked && "sm:col-start-3",
               e.signal === "absent" ? "text-fg-2" : "text-fg",
             )}
           >
@@ -355,8 +360,8 @@ export function DecisionPanel({
             : choice === "reject"
               ? "Reject project"
               : "Approve project"}
-          <span aria-hidden className="max-lg:hidden">
-            <Kbd>Ctrl Enter</Kbd>
+          <span aria-hidden className="font-mono text-axis font-normal opacity-70 max-lg:hidden">
+            Ctrl Enter
           </span>
         </Button>
       </div>
