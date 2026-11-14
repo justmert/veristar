@@ -4,15 +4,15 @@ sidebarTitle: "Checklist"
 description: "Every item that changes hands so the new operator can run the service on its own, with the evidence for each."
 ---
 
-Every item that has to change hands for the new operator to run the service on its own. Tick an
-item only with the evidence named next to it. The procedures are in [plan.md](plan.md) and
+This checklist lists every item that changes hands for the new operator to run the service on its
+own. Tick an item only with the evidence named next to it. The procedures are in [plan.md](plan.md) and
 [rebuild.md](rebuild.md); the order of sections follows the cutover.
 
 Who signs: the new operator for each item, SCF for section 9.
 
 ## 1. Before the shadow period
 
-- [ ] SCF has named the community operator and the handover start date.
+- [ ] SCF has named the community operator and the handover start date ([plan.md](plan.md) section 2.1).
 - [ ] The new operator has its own GitHub owner (user or organisation), cloud project, DNS
       account, probe account, alert receiver, and age identities for at least two people.
 - [ ] The new operator's people have read [../architecture.md](../architecture.md),
@@ -36,7 +36,7 @@ Who signs: the new operator for each item, SCF for section 9.
 
 ## 3. Domain
 
-- [ ] The registrar account that holds `<an operator input>` is known, and so is its transfer lock state
+- [ ] The registrar account that holds `<BASE_DOMAIN>` is known, and so is its transfer lock state
       (many registrars refuse a transfer within 60 days of a registration or a previous transfer,
       and the ICANN 60-day lock after a registrant change applies unless it was waived).
 - [ ] The new DNS zone exists in the new account (`make <env>-apply`, `infra/tofu/modules/dns`)
@@ -50,13 +50,12 @@ Who signs: the new operator for each item, SCF for section 9.
 - [ ] An example page that still carries a snippet from before the cutover delivers a pageview in
       Chromium, Firefox and WebKit (the `@cutover` check of `tests/handover`, pointed at the real
       names, or by hand with the browsers' network tools).
-- [ ] Not used: the redirect path. If the domain cannot be transferred, every tenant was told to
-      replace its snippet and OTLP endpoint before `cutover-redirect.yml` ran
-      ([redirect-research.md](redirect-research.md)).
+- [ ] Only if the domain cannot be transferred: every tenant was told to replace its snippet and
+      OTLP endpoint before `cutover-redirect.yml` ran ([plan.md](plan.md) section 5).
 
 ## 4. Data
 
-- [ ] Ingestion was drained and the source stopped (rebuild.md section 2).
+- [ ] Ingestion was drained and the source stopped ([rebuild.md](rebuild.md) section 2).
 - [ ] The export ran by the pgBackRest path (or the pg_dump path for another provider), and the
       directory's `SHA256SUMS` was checked on import.
 - [ ] `make migrate-import` passed: schema versions equal, row-level security coverage check,
@@ -74,15 +73,15 @@ Who signs: the new operator for each item, SCF for section 9.
       `rotate-all.yml` with `rotate_previous_age_identity` when that identity is available. Its
       last play passed, which proves every previous PostgreSQL, NATS, NATS route, Umami admin,
       Umami user, Patroni REST and Grafana credential is refused and every new one accepted.
-- [ ] Owner inputs replaced at their providers and the old ones revoked there: GitHub OAuth client
-      secrets (I2; `rotate-all.yml` asks GitHub), Cloudflare token, Azure role assignments,
-      Discord webhooks, the OpenTofu state passphrase and the
-      provider tokens in `tofu.enc.env`.
+- [ ] Values issued by providers are replaced there and the old ones revoked: GitHub OAuth client
+      secrets (`rotate-all.yml` asks GitHub), the Cloudflare token, Azure role assignments, Discord
+      webhooks, the registry pull token, the OpenTofu state passphrase and the provider tokens in
+      `tofu.enc.env`.
 - [ ] `secrets.previous.enc.yaml` deleted after `rotate-all.yml` passed.
 - [ ] Operator API keys the original operator created are revoked
       ([../runbooks/operator-key-revocation.md](../runbooks/operator-key-revocation.md)).
-- [ ] The original operator's SSH keys are removed from the `ops` user of every server (input
-      I15, the inventory's admin keys), and their source addresses from the admin CIDRs.
+- [ ] The original operator's SSH keys are removed from the `ops` user of every server
+      (`admin_ssh_public_keys`), and their source addresses from `admin_cidrs`.
 
 ## 6. Repository and packages
 
@@ -91,7 +90,7 @@ Who signs: the new operator for each item, SCF for section 9.
 - [ ] Set up again under the new owner, because a transfer does not move them: Actions secrets
       and variables, environments and their protection rules, branch protection, Dependabot
       settings and alerts, the container registry path (images under `ghcr.io/<owner>/...`), the
-      npm trusted publisher an operator input bound to the new repository.
+      npm trusted publisher bound to the new repository.
 - [ ] The npm scope is transferred and one tracker release is published from the new repository
       ([../runbooks/tracker-release.md](../runbooks/tracker-release.md)).
 - [ ] Release images are built and signed from the new repository; `deploy.yml` verifies the new
@@ -101,22 +100,23 @@ Who signs: the new operator for each item, SCF for section 9.
 
 - [ ] Cloud, DNS, probe and registrar accounts of the original operator hold nothing the new
       environment needs, and the original operator has no access to the new ones.
-- [ ] GitHub OAuth apps of every environment belong to the new owner an operator input, with the
+- [ ] GitHub OAuth apps of every environment belong to the new owner, with the
       callback URLs of the new environment and wildcard redirect matching off.
-- [ ] `OPERATOR_GITHUB_IDS` an operator input lists exactly the people SCF names; the control plane was
+- [ ] `OPERATOR_GITHUB_IDS` lists exactly the people SCF names; the control plane was
       restarted after the change ([../operators/overview.md](../operators/overview.md)).
-- [ ] Alerts reach the new operator's receiver; a test alert was delivered before the old
-      receiver was removed.
+- [ ] Alerts reach the new operator: the console's operator Alerts page lists them, and a Discord
+      webhook, if used, belongs to the new operator and received a test alert before the old one
+      was removed.
 
 ## 8. Tenants
 
 - [ ] Every project was told the cutover date, the new processor and that nothing changes in its
-      snippet or exporter, with the notice period the legal review set
-      an operator input.
+      snippet or exporter ([plan.md](plan.md) section 2.3, step 1), announced in the repository's
+      changelog and in the console before it took effect.
 - [ ] The public issue tracker and [../support.md](../support.md) name the new operator.
 
 ## 9. Done
 
 - [ ] SCF confirms the new operator runs the system on its own, and the closing issue on the
-      repository links the evidence above.
+      repository links the evidence above ([plan.md](plan.md) section 7).
 - [ ] The old environment's teardown date is announced; its backups expire with their retention.
