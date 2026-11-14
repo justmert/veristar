@@ -11,20 +11,28 @@ the review notes. Ingestion does not stop meanwhile: the edge tier keeps
 accepting events into JetStream (`WEB_EVENTS` 72 hours, `API_METRICS` 7 days), and they are
 delivered once the core tier is back.
 
-> **Layout.** Staging and production run three converged nodes: every node holds a Patroni
-> member and also the edge services and a NATS member. Steps 1 and 9 act on the core compose
-> project (`/opt/veristar/core`) only and apply as written. Step 5 was written for the split
-> layout, where the core nodes held only the database and its services: replacing a converged
-> node's VM also replaces its edge services and its NATS member, which hold the queued events,
-> so that step is not yet adapted to the converged layout. Steps 2 and 3 (restore node,
-> `restore.yml`) ran on production on 2026-11-13.
+> **Layout.** Staging and production run three converged nodes (`<env>-node-1` to `-3`, one per
+> zone). Each node runs the edge project (`/opt/veristar/edge`: gateway, collector, NATS, etcd)
+> and the core project (`/opt/veristar/core`: Caddy for every site, a Patroni member, HAProxy,
+> Umami, control plane, replayer, metrics writer, jobs). The NATS store on each node holds the
+> queued events, so this runbook keeps a node's VM whenever its system can be trusted and
+> replaces only what was lost. Steps 2 and 3 (restore node, `restore.yml`) ran on production on
+> 2026-11-13.
+
+**This runbook or a replica rebuild.** Check the members first, on any node that still runs:
+`cd /opt/veristar/core && sudo docker compose exec postgres patronictl -c /etc/patroni/patroni.yml list`.
+While one member still holds good data (a lost node, a damaged replica), the cluster is not lost:
+replace the node or rebuild the replica as in
+[database-failover.md](database-failover.md) ("A lost node", "Replica rebuild"), and Patroni
+re-joins it from the leader. Follow this runbook, which restores from pgBackRest, only when no
+member holds good data.
 
 The path chains pieces that exist and are tested on their own:
 
 1. a fresh **restore node** from OpenTofu (`restore_enabled`);
 2. `restore.yml`, which restores the pgBackRest repository to a moment on that node;
 3. `migrate-export METHOD=dump` from the restored server;
-4. new core nodes with an empty, bootstrapped cluster on a **new repository generation**;
+4. an empty, bootstrapped cluster on the three nodes, archiving to a **new repository generation**;
 5. `migrate-import`, `verify-migration` against the restored server, then the services.
 
 Data loss window: what was not yet archived when the database was lost, at most
@@ -33,9 +41,19 @@ Data loss window: what was not yet archived when the database was lost, at most
 
 ## Steps
 
-1. **Stop what still runs on the core nodes**, if anything does, so nothing writes into a
-   half-dead cluster: on each reachable core node
-   `cd /opt/veristar/core && sudo docker compose stop`.
+1. **Stop the database and its services on every node**, if anything still runs, so nothing
+   writes into a half-dead cluster. Caddy keeps running: it is in the same project and also
+   serves ingestion, which the edge project keeps queueing into JetStream. On each reachable
+   node:
+
+   ```sh
+   cd /opt/veristar/core
+   sudo docker compose stop $(sudo docker compose config --services | grep -vx caddy)
+   ```
+
+   Expected: `docker compose ps` lists only `caddy` as running. The node's `app` and `web`
+   endpoints in Traffic Manager turn degraded (their `/core` probe fails); `in` and `otlp` stay
+   online.
 
 2. **Create the restore node.** In `infra/tofu/envs/<env>/terraform.tfvars` set
    `restore_enabled = true` (and `restore_zone` if zone 3 is affected), then
@@ -68,12 +86,76 @@ Data loss window: what was not yet archived when the database was lost, at most
    make migrate-export METHOD=dump MIGRATE_ENV=<restore env file> MIGRATE_DIR=<new directory>
    ```
 
-5. **Replace the core nodes**:
-   `tofu ... plan -replace=module.node["<env>-core-1"].azurerm_linux_virtual_machine.this` (and core-2) in the split layout, as in
-   [edge-node-failure.md](edge-node-failure.md) step 1, then `make <env>-apply`.
+5. **Prepare the nodes for the new cluster.** Decide for each node, then do all three:
 
-6. **Remove the old cluster from etcd**, so the new nodes bootstrap a new cluster instead of
-   waiting to join a leader that no longer exists. On any edge node:
+   - **The VM runs and its system is trusted** (an operator mistake, or damage confined to the
+     database): keep the VM, so its NATS member and its queued events stay, and delete only the
+     database volumes. On that node:
+
+     ```sh
+     cd /opt/veristar/core
+     sudo docker compose rm -sf postgres
+     sudo docker volume rm veristar-core_pgdata veristar-core_pgrun
+     ```
+
+     Expected: `docker volume ls` no longer lists either volume. The converge of step 8 creates
+     them empty.
+
+   - **The VM is lost or not trusted** (ransomware, a deleted or unbootable server): replace
+     it. Its public IPv4 address is a separate resource that survives the VM, so the Traffic
+     Manager endpoints keep their targets and need no change. Plan one `-replace` per node
+     (production shown; the node name is the inventory name):
+
+     ```sh
+     sops exec-env infra/secrets/production/tofu.enc.env \
+       'tofu -chdir=infra/tofu/envs/production plan -input=false -out=tfplan \
+         -replace=module.node["production-node-2"].azurerm_linux_virtual_machine.this'
+     ```
+
+     Expected: `1 to add, 1 to destroy` for each replaced VM and nothing else apart from the
+     delete locks. Production VMs carry a delete lock; handle `protect` as in
+     [edge-node-failure.md](edge-node-failure.md) ("A node that is gone for good", step 1).
+     Then `make production-apply`, which rewrites `infra/ansible/inventories/production/hosts.json`.
+     The new VM has a new SSH host key, which the controller refuses for a known address
+     (`ansible.cfg`), so remove the old key: `ssh-keygen -R <node public address>`. Run
+     `make internal-ca ENV=production`: the node keeps its name and private address, so its
+     certificate in `tls.enc.yaml` stays valid and nothing is issued.
+
+   **One or two nodes replaced, at least one kept.** Replace one node at a time where you can:
+   the kept nodes hold the NATS quorum and the queued events, and the new node takes its copy
+   of every stream from them once step 8 starts its NATS server, because a JetStream peer is
+   identified by its server name. With two nodes replaced, the kept node holds the only copy
+   of the queued events: never replace it in the same run. etcd keeps its quorum on the kept
+   nodes for step 6, and the edge role adds each new node's member again in step 8
+   (`roles/edge/tasks/etcd.yml`, [edge-node-failure.md](edge-node-failure.md) step 4).
+
+   **All three nodes replaced.** Put all three `-replace` arguments in one plan
+   (`3 to add, 3 to destroy`). The NATS stores go with the VMs, so the events queued and not
+   yet replayed are part of the data loss, and ingestion answers on no node until step 8. Skip
+   step 6: the new etcd cluster starts empty. In step 8 `site.yml` starts NATS on all three
+   nodes, the routes connect over the private network (`roles/edge/templates/nats.conf.j2`),
+   the servers elect a JetStream meta leader, and `bootstrap.yml` creates every stream, bucket
+   and consumer (`platformctl nats apply`).
+
+   **Traffic Manager.** A replaced node fails its health checks until step 8 has converged it,
+   so its `in`, `otlp`, `app` and `web` endpoints show degraded and are left out of the answers
+   without any change. To keep a node out on purpose until you have checked it, disable its four
+   endpoints, `in-<n>`, `otlp-<n>`, `app-<n>` and `web-<n>` (profile names
+   `veristar-app-production-<label>`):
+
+   ```sh
+   az network traffic-manager endpoint update -g veristar-production \
+     --profile-name veristar-app-production-in --type externalEndpoints -n in-2 \
+     --endpoint-status Disabled
+   ```
+
+   and enable them again with `--endpoint-status Enabled` once the node is healthy. OpenTofu
+   declares every endpoint enabled, so `make production-plan` shows a change while one is
+   disabled. Staging uses the same names with `staging`.
+
+6. **Remove the old cluster from etcd**, so the nodes bootstrap a new cluster instead of
+   waiting to join a leader that no longer exists. Skip this step when all three nodes were
+   replaced. On any kept node:
 
    ```sh
    cd /opt/veristar/edge
@@ -89,10 +171,26 @@ Data loss window: what was not yet archived when the database was lost, at most
    retention ends. Restores from the old generation pass `-e backup_repo_generation=<old>`.
 
 8. **Converge**: `make <env>-deploy SA_IMAGE_TAG=<release> SA_RELEASE_MANIFEST=<...>`.
-   `site.yml` bootstraps an empty cluster, creates the stanza of the new generation, switches
-   WAL archiving on and starts the services.
+   `site.yml` runs in this order: baseline and secrets on every node, the edge infrastructure
+   (NATS and etcd; a replaced node's etcd member joins again), the core infrastructure (Patroni
+   bootstraps an empty cluster on one node and the other two join it as replicas, HAProxy), the
+   stanza of the new generation and WAL archiving, `bootstrap.yml` (databases, roles, the NATS
+   topology), then the edge and core services and the monitoring. Check on each node:
 
-9. **Import and verify** with the services on the core nodes stopped
+   ```sh
+   curl -s 'http://127.0.0.1:8222/jsz?streams=true' | head -c 600; echo
+   cd /opt/veristar/core && sudo docker compose exec postgres patronictl -c /etc/patroni/patroni.yml list
+   cd /opt/veristar/edge && sudo docker compose exec etcd etcdctl --endpoints=https://127.0.0.1:2379 \
+     --cacert=/etc/etcd/tls/ca.crt --cert=/etc/etcd/tls/node.crt --key=/etc/etcd/tls/node.key \
+     member list -w table
+   ```
+
+   Expected: a `meta_cluster` with a `leader`, `cluster_size` 3 and the other two peers
+   `current`; one `Leader`, one
+   `Sync Standby` and one `Replica`, all `streaming`; three etcd members `started`. Each node's
+   port 80 answers `308`, and Traffic Manager adds its endpoints back.
+
+9. **Import and verify** with the services on every node stopped
    (`sudo docker compose stop umami controlplane replayer metricswriter jobs` on each):
 
    ```sh
