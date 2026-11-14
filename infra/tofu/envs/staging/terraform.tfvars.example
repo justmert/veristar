@@ -1,0 +1,32 @@
+# copy to terraform.tfvars in this directory and fill in the values of your
+# staging environment. terraform.tfvars is gitignored: it holds the operator's
+# own addresses, keys and account names, which do not belong in the
+# repository. the cloudflare api token and the state passphrase are secrets
+# and live in infra/secrets/staging/tofu.enc.env instead (docs/deploy/secrets.md).
+# the values below are placeholders reserved for documentation.
+
+# the domain the platform is served under
+base_domain = "example.org"
+
+# source ranges allowed to reach ssh on the nodes; never 0.0.0.0/0
+admin_cidrs = ["203.0.113.10/32"]
+
+# public keys installed for the admin user by cloud-init
+admin_ssh_public_keys = [
+  "ssh-ed25519 AAAA... admin@workstation",
+]
+
+# azure subscription, and the state account made by make state-bootstrap
+subscription_id       = "00000000-0000-0000-0000-000000000000"
+state_resource_group  = "example-tfstate"
+state_storage_account = "examplestagstate"
+
+# storage account of the pgbackrest repository, unique across azure
+backup_storage_account = "examplestagbackups"
+
+# exact ubuntu image version of the nodes, never latest
+server_image_version = "0.20261111.2659"
+
+# an azure region that offers the node size in zones 1, 2 and 3
+# (docs/deploy/opentofu.md)
+location = "swedencentral"
