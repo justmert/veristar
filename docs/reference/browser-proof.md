@@ -13,7 +13,8 @@ bytes are in [wire-v1.md](wire-v1.md). This page says what the proof is worth an
   (a plain HTTP client posting a JSON body) are rejected.
 - It does **not** prove that a browser ran the page. A scripted client can fetch a challenge, solve
   it in a few milliseconds and forge `Origin` and `Sec-Fetch-*` headers. The proof raises the cost
-  of forged traffic and catches naive posts. It cannot stop a determined actor.
+  of forged traffic and catches naive posts; the other layers against scripted traffic are in
+  [../security/bot-and-inflation.md](../security/bot-and-inflation.md).
 - Replay protection is an in-memory limit on each edge node. A captured proof can be replayed up to
   the per-proof limit on each of the three nodes, at most three times the limit in total.
 - The challenge is held in page memory only: no cookie, no `localStorage`, no `sessionStorage`. A
@@ -21,9 +22,6 @@ bytes are in [wire-v1.md](wire-v1.md). This page says what the proof is worth an
 - Difficulty (`bits`) and time (`iat`) come from the server, so difficulty can change without a
   tracker release, and a wrong client clock does not matter. The tracker refuses challenges above
   24 bits, so a misconfiguration cannot freeze visitors' browsers.
-
-The plan's `docs/security/bot-and-inflation.md` (this stage) covers the whole bot and inflation
-strategy.
 
 ## Chosen difficulty
 
@@ -89,7 +87,7 @@ on `http://127.0.0.1`, gateway on `http://localhost` (two different sites), the 
 | Firefox 157 | none | same | same | no |
 | WebKit 27.2 | none | same | same | no |
 
-All three send `Origin` on both requests. The gateway's fetch-metadata check (this stage) can expect
+All three send `Origin` on both requests. The gateway's fetch-metadata check can expect
 `cross-site` (or `same-site` when the tenant site shares the base domain), `cors` and `empty`.
 
 ## Filter lists
