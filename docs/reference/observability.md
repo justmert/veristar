@@ -1,24 +1,24 @@
 ---
-title: "Observability reference (this stage)"
+title: "Observability reference"
 sidebarTitle: "Observability"
 description: "The metrics, probes and alert rules behind monitoring, and the sources they were checked against."
 ---
 
-Research findings behind `infra/ansible/roles/observability`, `cmd/prober`,
-`cmd/sloreport` and the alert rules. Everything was read from the pinned
-sources in the Go module cache or the PyPI sdist on 2026-11-13, and the metric
+The metrics, receivers, status checks and SLO measures behind
+`infra/ansible/roles/observability`, `cmd/prober`, `cmd/sloreport` and the alert
+rules. Upstream behaviour was read from the pinned sources in the Go module cache or the PyPI sdist on 2026-11-13, and the metric
 names were confirmed on the local test stack (`tests/observability`).
 
 ## Metrics by component
 
 | Component | Endpoint | Names used |
 |---|---|---|
-| Go services | ops port `/metrics` (`internal/obs`) | `ops_ready_check{check}` (new: each readiness check at scrape time), `go_*`, `process_*` |
-| gateway | ops port | `gateway_responses_total{route,outcome}`, `gateway_request_duration_seconds`, `gateway_degraded_total`, `gateway_outcomes_total`, `gateway_geo_build_timestamp_seconds` (new) |
-| collector v0.165 | `service.telemetry.metrics` with a pull prometheus reader on 8888 (was `level: none`) | `otelcol_receiver_accepted_metric_points`, `otelcol_receiver_refused_metric_points`, `otelcol_receiver_failed_metric_points`, `otelcol_processor_incoming_items`/`outgoing_items{processor}`, `otelcol_process_*`. No `_total` suffix; the custom jetstream exporter has no exporterhelper metrics |
-| replayer | ops port | `replayer_leader`, `replayer_consumer_pending_messages`, `replayer_outcomes_total`, `replayer_send_duration_seconds`, `replayer_oldest_pending_age_seconds`, `replayer_umami_sends_total{process}` (new 2026-11-13: sends answered 200 per umami process, rule `ReplayerUmamiProcessIdle`) |
+| Go services | ops port `/metrics` (`internal/obs`) | `ops_ready_check{check}` (each readiness check at scrape time), `go_*`, `process_*` |
+| gateway | ops port | `gateway_responses_total{route,outcome}`, `gateway_request_duration_seconds`, `gateway_degraded_total`, `gateway_outcomes_total`, `gateway_geo_build_timestamp_seconds` |
+| collector v0.165 | `service.telemetry.metrics` with a pull prometheus reader on 8888 | `otelcol_receiver_accepted_metric_points`, `otelcol_receiver_refused_metric_points`, `otelcol_receiver_failed_metric_points`, `otelcol_processor_incoming_items`/`outgoing_items{processor}`, `otelcol_process_*`. No `_total` suffix; the custom jetstream exporter has no exporterhelper metrics |
+| replayer | ops port | `replayer_leader`, `replayer_consumer_pending_messages`, `replayer_outcomes_total`, `replayer_send_duration_seconds`, `replayer_oldest_pending_age_seconds`, `replayer_umami_sends_total{process}` (sends answered 200 per Umami process, rule `ReplayerUmamiProcessIdle`) |
 | metrics writer | ops port | `metricswriter_leader`, `metricswriter_consumer_pending_messages`, `metricswriter_cardinality_overflow_points_total`, batch and point counters |
-| jobs | ops port | `jobs_leader`, `jobs_task_runs_total{task,result}`, `jobs_task_last_success_timestamp_seconds{task}` (new), `jobs_umami_rotated_epoch_day` (new) |
+| jobs | ops port | `jobs_leader`, `jobs_task_runs_total{task,result}`, `jobs_task_last_success_timestamp_seconds{task}`, `jobs_umami_rotated_epoch_day` |
 | NATS | prometheus-nats-exporter 0.20.3, `-jsz=all -varz -healthz`, one per server | `jetstream_stream_total_messages`, `jetstream_stream_first_seq`, `jetstream_consumer_num_pending`, `jetstream_consumer_num_ack_pending`, `jetstream_server_jetstream_disabled`, `jetstream_server_total_streams{is_meta_leader}`, `gnatsd_healthz_status` (0 is healthy), `gnatsd_varz_*` |
 | etcd 3.6 | client port `/metrics` | `etcd_server_has_leader`, `etcd_server_leader_changes_seen_total` |
 | Patroni 4.1.5 | REST API `/metrics` (`patroni/api.py`) | `patroni_primary`, `patroni_replica`, `patroni_cluster_unlocked`, `patroni_xlog_location`, `patroni_xlog_replayed_location`, `patroni_postgres_running` |
@@ -48,7 +48,8 @@ is at least 10 minutes old (rule `QueueOldestMessageTooOld`).
   (`${GATUS_DISCORD_WEBHOOK_URL}`).
 - Neither validates the host of the URL, so the local test stack points both
   at a labelled test receiver (`tests/observability/receiver`) and exercises
-  the real Discord code paths. Real delivery needs an operator input.
+  the real Discord code paths. Adding a Discord webhook to an environment is in
+  [../runbooks/alerts.md](../runbooks/alerts.md), "Adding a receiver".
 
 ## Gatus
 
