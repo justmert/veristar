@@ -48,7 +48,7 @@ describe("utm collection setting (contract 3.1 collect_utm, 4.3.4)", () => {
     expect(calls).toHaveLength(0);
   });
 
-  it("is the operator's decision: a member sees it but cannot change it", async () => {
+  it("is the owner's decision: a member sees it but cannot change it", async () => {
     const calls = stubFetch([]);
     const host = await render(<CampaignParams site={f.siteBody as Site} canEdit isOwner={false} />);
     expect(box(host).hasAttribute("disabled")).toBe(true);

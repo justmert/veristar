@@ -36,7 +36,7 @@ describe("schemas accept the contract's response shapes", () => {
     ["ingest (4.3.7)", ingest, f.ingestBody],
     ["error envelope (2.2)", errorEnvelope, f.validationErrorBody],
     ["me with removed projects (5.10)", me, f.meWithRemovedBody],
-    ["site with this stage fields (5.10)", site, f.siteVerifiedBody],
+    ["site with verification fields (5.10)", site, f.siteVerifiedBody],
     ["stellar.toml found (5.12)", stellarToml, f.stellarTomlFound],
     ["stellar.toml not found (5.12)", stellarToml, f.stellarTomlNotFound],
     ["operator tenant summary (5.2)", operatorTenantSummary, f.operatorSummaryBody],
@@ -65,7 +65,7 @@ describe("schemas accept the contract's response shapes", () => {
     expect(s.id).toBe(f.SITE_ID);
   });
 
-  it("refuses a this stage response with a missing or unknown value", () => {
+  it("refuses a site or enrollment response with a missing or unknown value", () => {
     const { in_review: _, ...noReview } = f.siteBody;
     expect(site.safeParse(noReview).success).toBe(false);
     expect(enrollmentMode.safeParse({ mode: "closed" }).success).toBe(false);

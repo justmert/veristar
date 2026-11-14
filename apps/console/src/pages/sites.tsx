@@ -1006,8 +1006,9 @@ function EditSiteForm({ site }: { site: Site }) {
 }
 
 // utm collection (contract 3.1 collect_utm, 4.3.4): off unless an owner turns
-// it on, because it changes the site's privacy position. saved at
-// once, because it is one switch and not part of the edit form.
+// it on, because campaign parameters can carry identifiers and so change the
+// site's privacy position. saved at once, because it is one switch and not
+// part of the edit form.
 export function CampaignParams({
   site,
   canEdit,

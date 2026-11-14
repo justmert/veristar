@@ -12,7 +12,7 @@ function read(dir: string, path: string): string {
 describe("api analytics guides built from the example apps", () => {
   const guides = otelGuides();
 
-  it("has the four languages of the this stage examples", () => {
+  it("has the four languages of the example apps", () => {
     expect(guides.map((g) => g.id)).toEqual(["node", "go", "python", "rust"]);
   });
 
