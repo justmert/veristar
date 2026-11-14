@@ -2,7 +2,7 @@
 -- operator's remove action inserts the row in the same transaction as the
 -- status change; the purge runner in the reconciler fills steps store by
 -- store, so a crash or a failing store resumes where it stopped, and a store
--- added in a later phase runs for tenants removed before it existed.
+-- added in a later release runs for tenants removed before it existed.
 
 -- +goose Up
 create table cp.tenant_removals (

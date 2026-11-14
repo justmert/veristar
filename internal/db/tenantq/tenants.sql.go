@@ -306,8 +306,8 @@ const lockTenantOwners = `-- name: LockTenantOwners :many
 select user_id from cp.tenant_members where role = 'owner' for update
 `
 
-// row locks on the operator memberships, so two concurrent demotions or removals cannot
-// both see a second owner and leave the tenant with none
+// row locks on every owner membership, so two concurrent demotions or
+// removals cannot both see a second owner and leave the tenant with none
 func (q *Queries) LockTenantOwners(ctx context.Context) ([]uuid.UUID, error) {
 	rows, err := q.db.Query(ctx, lockTenantOwners)
 	if err != nil {

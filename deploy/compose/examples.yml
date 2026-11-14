@@ -91,8 +91,8 @@ services:
     ports: ["127.0.0.1:47204:8080"]
     depends_on: [tenant-backend, platform-standin]
 
-  # a tenant's own collector that fans out to both backends (this stage,
-  # examples/otel-collector-fanout); tests/otelapps posts to it directly
+  # a tenant's own collector that fans out to both backends
+  # (examples/otel-collector-fanout); tests/otelapps posts to it directly
   tenant-collector:
     <<: *collector
     command: ["--config=/etc/otelcol/collector.yaml"]
