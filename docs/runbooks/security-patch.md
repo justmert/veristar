@@ -159,17 +159,17 @@ holds a Patroni leader or is in DNS. A kernel or libc fix therefore applies only
   the reboot; then the probe. Each node must be healthy again (gateway readiness behind Caddy,
   Patroni `/health`, the control plane's composite check) before its drain flag is removed and
   the next node starts. Any failure stops the run with the other nodes untouched.
+  To reboot one node, add `--limit <node>` and `-e reboot_all=true` when the node holds no
+  `/var/run/reboot-required`. Its leader handover needs no other host in the limit.
 - **Check:** `node_reboot_required` is 0 on every node in Prometheus, and
   `uname -r` on each node shows the new kernel.
-- **Afterwards:** when the `probe` and `slo` checks of the status page stay red while every node
-  and host check is green, the prober still holds connections to a node from before its reboot.
-  Restart it on the probe host: `docker restart veristar-probe-prober`.
 
 ### Exercised
 
 | Date | What ran | Result |
 |---|---|---|
 | 2026-11-14 | Production: `reboot.yml` on all three converged nodes, release `v0.2.1`, under 4 page views a second for 40 minutes | `failed=0` on every node in 14 min 47 s; three planned switchovers, each within 7 s; each node out of rotation 4 min 12 s to 5 min 16 s and back 1 min 23 s to 2 min 27 s after its shutdown; 9,305 of 9,352 events acknowledged and **0 acknowledged events lost**, 46 refused with 503 by drained nodes still holding the client's keep-alive connection at their shutdown. Node 3 missed the new kernel (fixed above with the install step), and the prober needed a restart ([drill record](../reference/drills/2026-11-13-azure.md), "Rolling reboot under event load") |
+| 2026-11-14 | Production: `reboot.yml --limit production-node-2 -e reboot_all=true`, release `v0.2.2` | `failed=0` in 5 min 20 s; node 2 shut down at 23:22:19, booted at 23:23:26, and the run ended at 23:24:53 with the drain flag removed; red on the status page were node 2's four by-address checks from 23:22:56 to 23:24:47 and one `hosts_tracker-file` result at 23:23:12 (Gatus's kept-alive connection). The prober closed its connections to node 2 on its own and its checks stayed green, with no restart ([drill record](../reference/drills/2026-11-13-azure.md), "Release v0.2.2 rollout and prober recovery") |
 
 ## 7. Rehearsal record
 
