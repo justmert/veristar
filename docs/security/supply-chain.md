@@ -52,8 +52,8 @@ the GitHub release (in keyless mode it also attests the file).
 A release can also be built and signed on a workstation, with the same gate and the same key as
 the workflow's key mode (section 3). `scripts/supply-chain/release-workstation.sh <tag> <work dir>`
 runs every step below; it refuses a checkout that is not exactly at the tag or that has local
-changes. Release `v0.1.0` was built by `release-images.yml`; `v0.2.0` and `v0.2.1` were built on a
-workstation. The steps, run from a clean checkout of the tag:
+changes. Release `v0.1.0` was built by `release-images.yml`; `v0.2.0`, `v0.2.1` and `v0.2.2` were built
+on a workstation. The steps, run from a clean checkout of the tag:
 
 1. **Build and push** each image of the matrix in `release-images.yml` with the same Dockerfile,
    context and build arguments (`VERSION=<tag>`, `DBIP_MONTH` from the tag's commit month,
@@ -102,7 +102,7 @@ transparency log; then `release-images.json` written, every digest verified with
 | `prober` | `v0.2.0` | `sha256:b5e3f5a5e99945dc954a04d6e21696517c7b8a1f9635893c1ec6984ac12b79f8` |
 | `replayer` | `v0.2.0` | `sha256:b89d0ef67613e0dc8914160a5e3b4d13a28678de4aa75fe6af9f87432d1a8a9a` |
 
-**Release `v0.2.1` (2026-11-14), the release production runs.** Built the same way by
+**Release `v0.2.1` (2026-11-14).** Built the same way by
 `scripts/supply-chain/release-workstation.sh v0.2.1 <work dir>` from a clean worktree at the tag (commit `14f7bf5` on `main`. Since `v0.2.0` it adds `platformctl probe-tenant
 rotate-otlp-token`, the HAProxy start fix, the replica's WAL fetch from the pgBackRest repository,
 and the probe scrape and watchdog wiring) in
@@ -126,6 +126,31 @@ before it touched a node.
 | `postgres-ha` | `18.7-v0.2.1` | `sha256:ac80c5ba3ca0ab798bfc5d40a00da5cb84fa09fdf0457d06d5f9ed158cddd6e5` (same as `v0.2.0`) |
 | `prober` | `v0.2.1` | `sha256:63c87826ade03405133351c2487806d6c086c6a02c5659cce620aac20917d9b3` |
 | `replayer` | `v0.2.1` | `sha256:6b996c7f140c7b677b0ee29b08f5f948f81874bdbbb4ac16210a752224af66e6` |
+
+**Release `v0.2.2` (2026-11-14), the release production runs.** Built the same way by
+`scripts/supply-chain/release-workstation.sh v0.2.2 <work dir>` from a clean worktree at the tag
+(commit `230c1c7` on `main`. Since `v0.2.1` it adds the console redesign with the light theme,
+account deletion with `DELETE /api/me` and migration 00031, the Umami theme's light mode, and the
+prober's HTTP/2 health check) in 9 min 20 s: eleven images gated by `scan-image.sh` (no fixable
+critical or high finding), signed and SBOM-attested with the release key from the SOPS file,
+`release-images.json` verified with `infra/ansible/vars/release-cosign.pub` and attached to the
+GitHub release `v0.2.2`. `caddy` and `postgres-ha` have no source change since `v0.2.0` and came
+out with the same digests. `deploy.yml` verified every digest with the release key before it
+touched a node.
+
+| Image | Tag | Digest |
+|---|---|---|
+| `caddy` | `v0.2.2` | `sha256:5318e90aad4e2cbc0fc7a37c34e11cfc48ae7cb5d4caa44a4ae276ce5e733c87` (same as `v0.2.0`) |
+| `collector` | `v0.2.2` | `sha256:80fe4daf9464e1131eb5e7764f88e62fb3e43b85ac27e21f1d7962384f70946e` |
+| `console` | `v0.2.2` | `sha256:79634a938c2283f898688cb0b85fbcc8576932d886cd150cd6cce445d1256ffc` |
+| `controlplane` | `v0.2.2` | `sha256:1f264700b93256d412a5d15b91ffd393eb737fe9589fbd9ae0d8b9804a7a2335` |
+| `gateway` | `v0.2.2` | `sha256:c85c3301817b62b9c8760a4ff215548323de022aff1fedc6cf935eca3c37cba8` |
+| `jobs` | `v0.2.2` | `sha256:de58464064aa111c805a65fae9e7b512603c3d78071d89dae171c0561aa4b7ae` |
+| `metricswriter` | `v0.2.2` | `sha256:1043fdf46c083931cde90357bddb28d26a256fe1837c06cef010fba98f1312b2` |
+| `platformctl` | `v0.2.2` | `sha256:c124f9d86286d5729f2da8dcd14eefa228e45041ad24874d3219e8f2211b9f9d` |
+| `postgres-ha` | `18.7-v0.2.2` | `sha256:ac80c5ba3ca0ab798bfc5d40a00da5cb84fa09fdf0457d06d5f9ed158cddd6e5` (same as `v0.2.0`) |
+| `prober` | `v0.2.2` | `sha256:b80c2df685a5edbe6d82a64d141b91349b4c2799c52a31385be5f994d624d5dd` |
+| `replayer` | `v0.2.2` | `sha256:75bf539d3b794ab7b29db45008efe24ee0377897f03d63ef4f37aa73d3af2458` |
 
 ## 3. Deploy-time verification (every playbook that pulls images)
 
