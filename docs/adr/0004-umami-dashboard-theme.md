@@ -215,11 +215,11 @@ Option (b). The web Caddy serves `deploy/caddy/umami-theme/site` at `/srv/umami-
 links `/_veristar/theme.css` before `</head>` of Umami's HTML. The console image carries the
 directory, next to the console build, so a release ships both.
 
-The dashboard theme is dark only (the console and website also have a light theme). Umami keeps
-its light and dark switch, and there is no way to force dark without JavaScript, so both modes
-render the same dark palette: the semantic tokens are
-identical, and in light mode the neutral ramp is reversed so the rules that use a light step
-directly still land on dark values.
+Both of Umami's modes are themed. Dark mode takes the brand's dark theme and light mode its light
+theme, so the dashboard matches the console whichever mode the viewer's switch or system setting
+picks. Each mode has its own `--vs-*` values and its own neutral ramp, generated from
+`packages/brand/src/tokens.ts`. In light mode the charts keep Umami's own light colours, which
+are drawn for a white card.
 
 ## Consequences
 

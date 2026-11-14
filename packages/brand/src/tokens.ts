@@ -62,13 +62,13 @@ export const palette = {
   // status and data steps for a light surface, each at least 4.5:1 (text)
   // or 3:1 (marks) on white
   light: {
-    success: "#1d7a4b",
+    success: "#1a6a42",
     successSoft: "#e4f2ea",
     successLine: "#b5dbc5",
-    warning: "#8f5c00",
+    warning: "#80530a",
     warningSoft: "#fbf1dd",
     warningLine: "#ebd09c",
-    critical: "#bf3a2f",
+    critical: "#ab3328",
     criticalSoft: "#fbe8e5",
     criticalLine: "#efbdb6",
     criticalSolid: "#c4372c",

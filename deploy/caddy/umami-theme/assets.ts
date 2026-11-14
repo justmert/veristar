@@ -165,10 +165,26 @@ want(join(site, "safari-pinned-tab.svg"), readFileSync(join(veristar, "brand", "
 
 // wcag 2.2 aa on the brand tokens: [foreground, background, minimum ratio]
 const theme = readFileSync(join(veristar, "theme.css"), "utf8");
-const tokens = new Map<string, string>();
-for (const m of theme.matchAll(/(--vs-[a-z0-9-]+):\s*(#[0-9A-Fa-f]{6});/g)) {
-  if (m[1] && m[2]) tokens.set(m[1], m[2]);
+// each mode's --vs-* block: dark on html:root, light on
+// html:root[data-theme="light"]; light inherits what it does not redefine
+function block(selector: string): Map<string, string> {
+  const at = theme.indexOf(`${selector} {`);
+  const out = new Map<string, string>();
+  if (at < 0) {
+    problems.push(`theme.css has no ${selector} block`);
+    return out;
+  }
+  const body = theme.slice(at, theme.indexOf("}", at));
+  for (const m of body.matchAll(/(--vs-[a-z0-9-]+):\s*(#[0-9A-Fa-f]{6});/g)) {
+    if (m[1] && m[2]) out.set(m[1], m[2]);
+  }
+  return out;
 }
+const dark = block("html:root");
+const modes = [
+  { name: "dark", tokens: dark },
+  { name: "light", tokens: new Map([...dark, ...block('html:root[data-theme="light"]')]) },
+];
 function luminance(hex: string): number {
   const c = [1, 3, 5].map((i) => Number.parseInt(hex.slice(i, i + 2), 16) / 255);
   const [r, g, b] = c.map((v) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
@@ -198,15 +214,18 @@ pairs.push(["--vs-primary-foreground", "--vs-primary", 4.5]);
 pairs.push(["--vs-primary-foreground", "--vs-primary-hover", 4.5]);
 // zen's danger button: the solid red with white on it
 pairs.push(["--vs-destructive-foreground", "--vs-destructive-solid", 4.5]);
-for (const [fg, bg, min] of pairs) {
-  const a = tokens.get(fg);
-  const b = tokens.get(bg);
-  if (!a || !b) {
-    problems.push(`theme.css does not define ${a ? bg : fg}`);
-    continue;
+for (const { name, tokens } of modes) {
+  for (const [fg, bg, min] of pairs) {
+    const a = tokens.get(fg);
+    const b = tokens.get(bg);
+    if (!a || !b) {
+      problems.push(`theme.css does not define ${a ? bg : fg}`);
+      continue;
+    }
+    const r = ratio(a, b);
+    if (r < min)
+      problems.push(`${name}: ${fg} ${a} on ${bg} ${b} is ${r.toFixed(2)}:1, below ${min}:1`);
   }
-  const r = ratio(a, b);
-  if (r < min) problems.push(`${fg} ${a} on ${bg} ${b} is ${r.toFixed(2)}:1, below ${min}:1`);
 }
 
 if (problems.length > 0) {
