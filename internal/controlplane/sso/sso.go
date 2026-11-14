@@ -175,11 +175,61 @@ func (h *Handler) redirect(r *http.Request, user uuid.UUID, siteParam string) (s
 	if !h.allow(user, now) {
 		return "", fail(CodeRateLimited, nil)
 	}
+	site, sess, err := h.siteSession(ctx, user, siteID, now)
+	if err != nil {
+		return "", err
+	}
+	websiteID := site.ID.String()
+	if view == "quarantine" {
+		if !site.QuarantineWebsiteID.Valid {
+			return "", fail(CodeProvisioningPending, nil)
+		}
+		websiteID = site.QuarantineWebsiteID.UUID.String()
+	}
 
+	q := url.Values{}
+	q.Set("token", sess.Token.Reveal())
+	q.Set("url", "/websites/"+websiteID)
+	return h.WebOrigin + "/sso?" + q.Encode(), nil
+}
+
+// Site is the part of a site a umami session was opened for.
+type Site struct {
+	ID                  uuid.UUID
+	TenantID            uuid.UUID
+	Status              string
+	QuarantineWebsiteID uuid.NullUUID
+}
+
+// SiteSession logs in to umami as the umami user of user, for a site of a
+// tenant user is a member of, exactly as the sso redirect does but without
+// its per-minute limit: the mcp tools call umami as that user and keep
+// their own limits. the error is a failure whose code FailureCode reads, or
+// an internal error.
+func (h *Handler) SiteSession(ctx context.Context, user, siteID uuid.UUID) (Site, umami.Session, error) {
+	site, sess, err := h.siteSession(ctx, user, siteID, h.Now())
+	if err != nil {
+		return Site{}, umami.Session{}, err
+	}
+	return Site{ID: site.ID, TenantID: site.TenantID, Status: site.Status, QuarantineWebsiteID: site.QuarantineWebsiteID}, sess, nil
+}
+
+// FailureCode returns the failure code of an error from SiteSession, and
+// false for an internal error.
+func FailureCode(err error) (string, bool) {
+	var f *failure
+	if errors.As(err, &f) && f.code != CodeInternal {
+		return f.code, true
+	}
+	return "", false
+}
+
+// siteSession checks the site and the membership and logs in.
+func (h *Handler) siteSession(ctx context.Context, user, siteID uuid.UUID, now time.Time) (systemq.SSOSiteRow, umami.Session, error) {
 	var site systemq.SSOSiteRow
 	var githubID int64
 	var rotatedDay int64
-	err = h.Tx(ctx, func(tx pgx.Tx) error {
+	err := h.Tx(ctx, func(tx pgx.Tx) error {
 		q := systemq.New(tx)
 		var err error
 		if site, err = q.SSOSite(ctx, siteID); err != nil {
@@ -197,33 +247,25 @@ func (h *Handler) redirect(r *http.Request, user uuid.UUID, siteParam string) (s
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		// unknown site or not a member: the same answer, so ids reveal nothing
-		return "", fail(CodeNotFound, nil)
+		return site, umami.Session{}, fail(CodeNotFound, nil)
 	}
 	if err != nil {
-		return "", fmt.Errorf("sso: read site: %w", err)
+		return site, umami.Session{}, fmt.Errorf("sso: read site: %w", err)
 	}
 	if site.TenantStatus == "removed" {
-		return "", fail(CodeNotFound, nil)
+		return site, umami.Session{}, fail(CodeNotFound, nil)
 	}
 	// a site in review (contract 5.6) is treated like a pending tenant: the
 	// reconciler made no umami website for it, so there is nothing to open
 	if site.Status == "removed" || site.Status == "pending" || !site.UmamiTeamID.Valid {
-		return "", fail(CodeProvisioningPending, nil)
+		return site, umami.Session{}, fail(CodeProvisioningPending, nil)
 	}
-	websiteID := site.ID.String()
-	if view == "quarantine" {
-		if !site.QuarantineWebsiteID.Valid {
-			return "", fail(CodeProvisioningPending, nil)
-		}
-		websiteID = site.QuarantineWebsiteID.UUID.String()
-	}
-
 	sess, err := h.login(ctx, user.String(), provision.Username(githubID), now, rotatedDay)
 	if err != nil {
-		return "", err
+		return site, umami.Session{}, err
 	}
 	if sess.User.ID != user.String() {
-		return "", fmt.Errorf("sso: umami user %s belongs to id %s", provision.Username(githubID), sess.User.ID)
+		return site, umami.Session{}, fmt.Errorf("sso: umami user %s belongs to id %s", provision.Username(githubID), sess.User.ID)
 	}
 	// the reconciler adds the membership; until it has, the dashboard
 	// would only show refusals
@@ -233,13 +275,9 @@ func (h *Handler) redirect(r *http.Request, user uuid.UUID, siteParam string) (s
 		member = member || t.ID == team
 	}
 	if !member {
-		return "", fail(CodeProvisioningPending, nil)
+		return site, umami.Session{}, fail(CodeProvisioningPending, nil)
 	}
-
-	q := url.Values{}
-	q.Set("token", sess.Token.Reveal())
-	q.Set("url", "/websites/"+websiteID)
-	return h.WebOrigin + "/sso?" + q.Encode(), nil
+	return site, sess, nil
 }
 
 // login logs in with the derived password of today. until the umami-rotate

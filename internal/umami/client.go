@@ -122,6 +122,16 @@ func (c *Client) do(ctx context.Context, op, method, path string, token Token, i
 
 // doHeaders is do with extra request headers. only /api/send needs them.
 func (c *Client) doHeaders(ctx context.Context, op, method, path string, token Token, hdr http.Header, in, out any) error {
+	return c.send(ctx, op, method, path, token, hdr, in, out, maxBody)
+}
+
+// doLimit is do without a body and with its own answer size limit; an
+// answer above it is an error rather than a truncated document.
+func (c *Client) doLimit(ctx context.Context, op, method, path string, token Token, limit int64, out any) error {
+	return c.send(ctx, op, method, path, token, nil, nil, out, limit)
+}
+
+func (c *Client) send(ctx context.Context, op, method, path string, token Token, hdr http.Header, in, out any, limit int64) error {
 	var body io.Reader
 	if in != nil {
 		b, err := json.Marshal(in)
@@ -152,7 +162,7 @@ func (c *Client) doHeaders(ctx context.Context, op, method, path string, token T
 		return fmt.Errorf("umami %s: %w", op, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxBody))
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
 	if err != nil {
 		return fmt.Errorf("umami %s: read response: %w", op, err)
 	}
@@ -172,6 +182,9 @@ func (c *Client) doHeaders(ctx context.Context, op, method, path string, token T
 	}
 	if out == nil {
 		return nil
+	}
+	if int64(len(raw)) > limit {
+		return fmt.Errorf("umami %s: response larger than %d bytes", op, limit)
 	}
 	if err := json.Unmarshal(raw, out); err != nil {
 		return fmt.Errorf("umami %s: decode response (http %d): %w", op, resp.StatusCode, err)

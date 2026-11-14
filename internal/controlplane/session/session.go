@@ -175,3 +175,12 @@ func MustUser(ctx context.Context) (User, error) {
 	}
 	return u, nil
 }
+
+// WithUser returns ctx carrying u as the signed-in user, for requests that
+// authenticate without a session cookie: the mcp server puts the user its
+// credential acts as here before it calls the same read handlers as the
+// console, so membership and operator checks stay the console's own. the
+// caller must have read u from cp.users for this request.
+func WithUser(ctx context.Context, u User) context.Context {
+	return context.WithValue(ctx, userKey{}, u)
+}
