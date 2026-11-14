@@ -139,9 +139,15 @@ services:
     ports:
       - "127.0.0.1:{{ core_haproxy_stats_port }}:{{ core_haproxy_stats_port }}"
 {% if core_runs_postgres %}
+    # started, not healthy: haproxy routes to the leader wherever it runs,
+    # so it must not wait for this node's member. on 2026-11-14 a replica that
+    # needed 25 minutes to catch up after a reboot held haproxy back through
+    # sa-core-start.service, and every service of the node that reaches the
+    # database through it (umami, jobs, metricswriter, the control plane)
+    # stayed down, web. answering 502 from that node
     depends_on:
       postgres:
-        condition: service_healthy
+        condition: service_started
 {% endif %}
 
   # umami process 1 also serves the ui, the read api for caddy and the admin
