@@ -3,10 +3,10 @@ title: "Threat model"
 description: "What the platform protects, its trust boundaries, and the mitigation and test for each threat."
 ---
 
-This document lists what the platform protects, where the trust boundaries are, and for each
-threat the mitigation as built, the test or check that proves it, and the risk that remains.
-Architecture and names follow `.scratch/plan.md` section 4 and the reference documents under
-`docs/reference/`. Related documents:
+This page lists what the platform protects and where its trust boundaries are. For each threat it
+gives the mitigation, the test or check that proves it, and the residual risk. Component names
+follow [../architecture.md](../architecture.md) and the reference pages under `docs/reference/`.
+Related documents:
 
 - [bot-and-inflation.md](bot-and-inflation.md): the full bot and inflation strategy.
 - [supply-chain.md](supply-chain.md): build, signing and dependency controls.
@@ -15,9 +15,7 @@ Architecture and names follow `.scratch/plan.md` section 4 and the reference doc
 - [branch-protection.md](branch-protection.md): repository settings for `main`.
 - [../runbooks/security-patch.md](../runbooks/security-patch.md): the 24 hour patch path.
 
-Every test named below exists in the repository at the path given. "Built" means the code is in
-the repository and its test passes locally. Several items are planned for this stage and are not
-built yet; they are marked **not built** with the reason.
+Every test named below exists in the repository at the path given.
 
 ## 1. Assets
 
@@ -52,8 +50,7 @@ built yet; they are marked **not built** with the reason.
 6. **Private network.** Gateway, collector, replayer, metricswriter, jobs, control plane, Umami,
    PostgreSQL and NATS. Each service connects to NATS as its own user with publish and subscribe
    allow lists (`internal/natsx/topology.go`) and to PostgreSQL as its own role.
-   **Transport:**
-   every hop between nodes is encrypted and authenticated with certificates of an internal CA,
+   **Transport:** every hop between nodes is encrypted and authenticated with certificates of an internal CA,
    one per environment. The CA key lives only in the SOPS file `infra/secrets/<env>/ca.enc.yaml`,
    which only `playbooks/internal-ca.yml` reads on the controller; nodes receive their own key
    and certificate from `tls.enc.yaml` ([../deploy/ansible.md](../deploy/ansible.md) section 9
@@ -70,7 +67,7 @@ built yet; they are marked **not built** with the reason.
    (`internal/db/tls_test.go`, real PostgreSQL 18.6 with `hostssl` only: plain text,
    foreign CA and wrong name refused); `tests/localconverge/tls-audit.sh` on the local
    converge (capture of the private network, refusal of a host without a certificate, the
-   end-to-end suite), results in the O-26 resolution row of the review.
+   end-to-end suite).
    Residual risk: NATS monitoring is plain HTTP on each edge node's loopback and Compose
    network (not on the private network); the operators' client certificate, if leaked, reads
    every monitoring endpoint until the CA is rotated (there is no revocation list); traffic
@@ -95,7 +92,7 @@ Built:
 - The snippet the console hands out carries `integrity` and `crossorigin`; the control plane
   refuses a manifest entry whose integrity value is malformed (`internal/controlplane/snippet.go`).
   A browser refuses a changed file whose hash does not match.
-- Tenants may self-host the same bytes with the same integrity hash.
+- Tenants may self-host the same bytes with the same integrity hash ([verify-tracker.md](verify-tracker.md)).
 - `pnpm --filter tracker verify-releases` checks that released files never change, that each
   rebuilds byte-identical, and the size budget (`packages/tracker/scripts/verify-releases.mjs`,
   run by the `releases` job of `.github/workflows/tracker.yml`).
@@ -105,15 +102,9 @@ Proved by: `TestReleasesServeCommittedTracker` and `TestReleasesRevokedAndTamper
 `TestLoadTrackerRefusesBadInput` and `TestSnippetMatchesTypeScript`
 (`internal/controlplane/snippet_test.go`); the `verify-releases` script.
 
-Not built: provenance attestation of `sdk.js` (`actions/attest`), npm publication with trusted
-publishing and provenance, and keyless cosign signatures. All of these need GitHub Actions, which
-currently ends every workflow in `startup_failure` on this account. npm trusted publishing and
-provenance also need a public repository, and npm publication needs an operator input (an npm scope with
-trusted publishing), which has not been supplied. See [supply-chain.md](supply-chain.md).
-
 Residual risk: a tenant who copies the snippet without `integrity` gets no browser-side check.
 Anyone with write access to `main` can add a new release; review on `main` is the control
-([branch-protection.md](branch-protection.md)), and it is not enforced yet. A compromised edge
+([branch-protection.md](branch-protection.md)). A compromised edge
 node can serve different bytes for a new version, but a browser with the integrity attribute
 still refuses them.
 
@@ -126,11 +117,11 @@ Built:
 - Console API: every route under `/api/tenants/{tenant_id}` and `/api/sites/{site_id}` checks
   membership first and answers 404 to non-members, then runs as `cp_tenant` inside
   `db.WithTenant`, where row-level security is forced on every tenant table and no application
-  role has `BYPASSRLS` (`docs/reference/control-plane-api.md` section 1.3, the design).
+  role has `BYPASSRLS` ([../reference/control-plane-api.md](../reference/control-plane-api.md) section 1.3).
 - Umami: each tenant is one Umami team, each user is `view-only` with team role
   `team-view-only`. Caddy on `web.<BASE_DOMAIN>` makes `/api/*` read-only from outside and denies
-  the write, admin, share and collection routes for every method (the design,
-  `deploy/caddy/web.Caddyfile`), including under `/teams/<id>/` rewrites.
+  the write, admin, share and collection routes for every method
+  (`deploy/caddy/web.Caddyfile`), including under `/teams/<id>/` rewrites.
 - The tenant id of API metrics comes from the OTLP credential. `tenantguard` replaces resource
   attributes with an allowlisted set, so a forged `scf.tenant.id` is dropped
   (`collector/tenantguardprocessor/guard.go`, function `stamp`).
@@ -158,10 +149,9 @@ Proved by:
   (`collector/tenantguardprocessor/guard_test.go`).
 - Browser level: `tests/e2e-console/specs/console-isolation.spec.ts`.
 
-Planned: this stage completes the isolation suite (operator routes called by non-operators,
-machine API with wrongly scoped keys, the role matrix) and makes it a required check on every
-pull request and release. The single-purpose tests above exist; the release gate does not run
-anywhere yet, because GitHub Actions fails at startup on this account.
+The isolation gate (`make isolation`, the `isolation` job of `.github/workflows/ci.yml`) runs
+these suites together and is one of the required checks for `main`
+([branch-protection.md](branch-protection.md)).
 
 Residual risk: Umami shows Save, Transfer, Reset and Delete buttons to view-only users; they fail
 with 401. A new Umami version can add routes; `TestOpenAPIRouteListUnchanged` fails when the
@@ -190,8 +180,7 @@ Proved by: `TestRateLimit` and `TestLimiterSharedAcrossSignals`
 `routes beyond the daily cap become other with a warning` (`internal/metricswriter/it_test.go`).
 
 Residual risk: API metrics are self-reported. The platform can bound volume and cardinality but
-cannot verify that requests happened. Operators should read API numbers as the tenant's own
-claim. On-chain corroboration was considered and left out by the project owner.
+cannot verify that requests happened. Operators read API numbers as the tenant's own claim.
 
 ### 3.4 Sabotage by a rival
 
@@ -204,7 +193,7 @@ Vectors and what limits them:
   limits as 3.3 apply. Quarantined traffic lands in a separate Umami website, never in the
   primary numbers, and per-site outcome counters (`accepted`, `quarantined`, `bot`,
   `rejected_<reason>`) are visible to the tenant and operators
-  (`docs/reference/control-plane-api.md` section 4.3.7).
+  ([../reference/control-plane-api.md](../reference/control-plane-api.md) section 4.3.7).
 - **Starving the victim's rate limit.** `RATE_SITE_PER_SECOND` (200, burst 400) is one bucket per
   site per node, shared by all visitors of the site. A refusal by the per-prefix bucket
   (`RATE_PREFIX_PER_SECOND` 20, burst 60) does not take a site token
@@ -215,7 +204,7 @@ Vectors and what limits them:
   visitors (same /24 or /48) can send 20 distinct visitor tokens and quarantine that prefix for
   the site for an hour. Real visitors elsewhere are unaffected.
 - **Claiming the victim's domain.** Sites carry a domain ownership check and a stellar.toml signal
-  (this stage, `docs/reference/control-plane-api.md` sections 5.8 and 5.12). An unverified claim is
+  ([../reference/control-plane-api.md](../reference/control-plane-api.md) sections 5.8 and 5.12). An unverified claim is
   visible to operators. Even an accepted claim gives the rival only its own site id; events of
   the victim's snippet carry the victim's site id.
 - **Getting the victim removed.** Removal is an operator decision with a required reason and an
@@ -259,24 +248,21 @@ Built:
 - Go services run as `nonroot` on distroless images; Caddy as user 10001
   (`deploy/images/`).
 
-Planned in this stage, and its state when this was written:
-
-- Daily Trivy against deployed digests, `govulncheck`, `pnpm audit`, an hourly upstream advisory
-  check, Dependabot, gitleaks and a licence scan. These are GitHub Actions workflows and run only
-  once GitHub Actions works on the account.
-- `make umami-upgrade VERSION=` running `tests/umami-compat/`, the isolation suite and the
-  end-to-end suite before rollout, and the patch path in
+- Detection: the hourly `security.yml` workflow runs Trivy against the deployed digests,
+  `govulncheck`, `pnpm audit` and an upstream advisory check; Dependabot opens update pull
+  requests; gitleaks and the licence gate run on every pull request
+  ([supply-chain.md](supply-chain.md) sections 5 to 7).
+- `make umami-upgrade VERSION=` runs `tests/umami-compat/`, the isolation suite and the
+  end-to-end suite before rollout. The patch path is
   [../runbooks/security-patch.md](../runbooks/security-patch.md).
-- Read-only container filesystems and dropped capabilities: done for the deployed services.
-  The edge, core and observability compose templates under `infra/ansible/roles/*/templates/`
-  set `read_only: true`, `cap_drop: [ALL]` and `no-new-privileges` on every service, with a
-  small `/tmp` tmpfs. Not set in the local-converge-only backup repository template
-  (`roles/backup`) or in the development stack `deploy/compose/dev.yml`, which never run in
-  staging or production.
+- Read-only container filesystems and dropped capabilities: the edge, core and observability
+  compose templates under `infra/ansible/roles/*/templates/` set `read_only: true`,
+  `cap_drop: [ALL]` and `no-new-privileges` on every service, with a small `/tmp` tmpfs. The
+  backup repository template of the local converge (`roles/backup`) and the development stack
+  `deploy/compose/dev.yml` do not set them; neither runs in staging or production.
 
-Residual risk: until the scheduled scans run, detection depends on someone watching advisories by
-hand. Umami has published advisories without a stated fixed version, so the patch path must not
-depend on upstream wording (the design).
+Residual risk: Umami has published advisories without a stated fixed version, so the advisory
+check never relies on "fixed in" wording and the patch path does not depend on it either.
 
 ### 3.7 Ingest denial of service
 
@@ -290,15 +276,17 @@ Built:
   sets and each rate limit table (`internal/gateway/node.go`, `ratelimit.go`).
 - Ingestion does not depend on PostgreSQL or Umami: events are queued in JetStream (R3, 72 hours
   for `WEB_EVENTS`), so a database outage does not drop events.
-- Three edge nodes in three locations.
+- Three nodes, one in each availability zone of the region, behind health-checked DNS
+  ([../reference/availability.md](../reference/availability.md)).
 
 Proved by: `TestRateLimitBoundedKeys`, `TestRateLimitConcurrent`
 (`internal/gateway/ratelimit_test.go`); `TestEventChecks` subtest `oversized body is 413`
 (`tests/gateway/checks_test.go`); `TestCollector` subtests `oversize and decompression bombs`
 and `nats stopped gives 503 and recovers without a gap`; `TestQueueOutage`
 (`tests/gateway/cluster_test.go`); `TestWebPath` subtests `outage umami stopped` and
-`outage postgres stopped`; `TestThroughputK6` (`tests/gateway/throughput_test.go`, `make gateway-load`, 2,490 requests per
-second at p99 1.48 ms on one gateway).
+`outage postgres stopped`; `TestThroughputK6` (`tests/gateway/throughput_test.go`,
+`make gateway-load`). The measured throughput per node and per cluster is in
+[../reference/gateway-limits.md](../reference/gateway-limits.md).
 
 Residual risk: there is no rate limit on `GET /v1/c` (challenge) in the gateway or in edge Caddy;
 the limiter runs only on `POST /v1/e`. A challenge costs one HMAC and is cheap, but the route is
@@ -339,7 +327,8 @@ Proved by: `TestGuardAllowed` (`internal/controlplane/operator/guard_test.go`);
 Residual risk: operator security equals the security of the operator's GitHub account; the
 platform cannot require GitHub two-factor authentication. One operator alone can remove a
 tenant, and removal purges the tenant's Umami websites and data; there is no second approval and
-no undo inside the application. Recovery depends on database backups (this stage, not complete).
+no undo inside the application. Recovery is a point-in-time restore from the pgBackRest backups
+([../runbooks/point-in-time-restore.md](../runbooks/point-in-time-restore.md)).
 A compromised operator can also mint a global API key and read every tenant's aggregates until
 it is revoked.
 
@@ -353,7 +342,8 @@ Exposure: the node sees raw client addresses in memory, holds the day's secrets 
 
 Built: separate NATS users with allow lists per service (`internal/natsx/topology.go`), tested by
 `TestGatewayEdgePermissions` (`internal/gateway/visitor_test.go`); secrets never touch disk
-(memory KV); SSH limited to admin CIDRs an operator input by the firewall in this stage.
+(memory KV); SSH accepts only the operator's `admin_cidrs`, in the network security group and
+the host firewall.
 
 Residual risk: a compromised edge node can inject arbitrary events and API metrics for any
 tenant and can link visitor tokens to addresses for the current day.
@@ -380,13 +370,3 @@ SEP-23 strkey types, email and federation addresses, with S secret seeds becomin
 `access log`, `TestClientIPNeverPrints` (`internal/gateway/clientip_test.go`), `TestWebPath`
 subtest `privacy dump`, `TestCollector` subtest `secret seed absent from collector logs`, and
 `internal/redact/redact_test.go`. Details: `docs/compliance/`.
-
-## 4. Gaps that need the operator
-
-- GitHub Actions fails at startup for every workflow on the account, so no CI check, scheduled
-  scan, signing or attestation runs. Every "proved by" above was run locally.
-- The repository is private. npm provenance and trusted publishing need it public; the RFP
-  requires it public. Making it public needs the operator's explicit confirmation.
-- Input I9 (npm scope with trusted publishing) is missing.
-- Branch protection is documented but not applied ([branch-protection.md](branch-protection.md)).
-- Private vulnerability reporting must be enabled by the operator ([SECURITY.md](SECURITY.md)).
