@@ -91,12 +91,12 @@ The address is cut to its /24 (IPv4) or /48 (IPv6) network before the lookup:
 the last octet is zeroed, or the lower 80 bits for IPv6. A network narrower than
 that can then be answered with the country of the network that holds the
 truncated address. Measured on the 2026-11 file by `TestGeoTruncationMismatch`
-(`internal/gateway/geo_test.go`) and a standalone run during research:
+(`internal/gateway/geo_test.go`) and a standalone run:
 
 | Measure | IPv4 (/24) | IPv6 (/48) |
 |---|---|---|
 | Networks narrower than the truncation | 122,777 | 64,985 |
-| Random sample, network drawn uniformly then a random address in it (200,000 addresses, research run) | 9,773 of 84,434 differ (11.57%) | 6,748 of 115,566 differ (5.84%) |
+| Random sample, network drawn uniformly then a random address in it (200,000 addresses, standalone run) | 9,773 of 84,434 differ (11.57%) | 6,748 of 115,566 differ (5.84%) |
 | Random sample in the test (20,000 addresses, fixed seed) | 976 of 8,549 differ (11.42%) | 669 of 11,451 differ (5.84%) |
 | Exact, weighted by address space over the whole file | 3,391,023 of 3,702,258,680 addresses differ (0.0916%) | below 0.000001% |
 
@@ -137,7 +137,7 @@ not set:
 
 ```sh
 make geo-fetch
-DBIP_MMDB=.scratch/scratch/geo/dbip-country-lite.mmdb go test -race ./internal/gateway/ -run 'TestGeo'
+DBIP_MMDB=.scratch/geo/dbip-country-lite.mmdb go test -race ./internal/gateway/ -run 'TestGeo'
 ```
 
 They take networks from the file itself (two countries per family, a network
