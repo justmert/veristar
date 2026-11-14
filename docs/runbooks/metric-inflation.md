@@ -5,10 +5,11 @@ description: "Investigate a project whose numbers look higher than its real use.
 ---
 
 A project's numbers look higher than its real use: someone reports it, an operator comparing
-projects for funding doubts a jump, or the outcome counters move. What the platform can and
-cannot catch is stated in [../security/bot-and-inflation.md](../security/bot-and-inflation.md);
-read section 9 ("Limits, stated plainly") first. The checks raise the cost of forged traffic and
-make it visible; they do not prove that every counted visit was a person.
+projects for funding doubts a jump, or the outcome counters move. The checks that run on every
+event, and where their boundaries lie, are in
+[../security/bot-and-inflation.md](../security/bot-and-inflation.md) (section 9, "Boundaries of
+the checks"). The checks raise the cost of forged traffic and make it visible; this runbook turns
+that evidence into a finding.
 
 The aim of an investigation is a written finding the operators can act on: what was counted,
 what evidence points at forgery, and what was done. Deleting counted data is not an operator
@@ -138,13 +139,10 @@ by sending made-up metrics. There is no proof-of-browser equivalent.
 
 ## Exercised
 
-**Not yet exercised as an investigation.** No suspected case exists: there is no production
-traffic. this stage ran every query above against a scratch PostgreSQL 18.6 with all platform
-migrations applied (the `platform` queries) and against the development stack's Umami 3.5.0
-database (the `umami` query), with placeholders replaced by a random uuid and a date range,
-to prove they are valid against the real schemas. Results are in the table below.
+Every query above ran against the real schemas, with placeholders replaced by a random uuid and
+a date range:
 
 | Date | What ran | Result |
 |---|---|---|
-| 2026-11-13 | the seven `platform` queries on a scratch database at migration 22 (`platformctl db migrate` reported `applied 22`, `rls_coverage ok`) | every query ran without error (empty results) |
-| 2026-11-13 | the `umami` query on the development stack's Umami database, read only | ran without error |
+| 2026-11-13 | the seven `platform` queries on a scratch PostgreSQL 18.6 database at migration 22 (`platformctl db migrate` reported `applied 22`, `rls_coverage ok`) | every query ran without error (empty results) |
+| 2026-11-13 | the `umami` query on the development stack's Umami 3.5.0 database, read only | ran without error |
