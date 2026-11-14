@@ -2395,6 +2395,11 @@ Every request carries exactly one `Authorization: Bearer <credential>`:
 - an **OAuth access token**, `sa_mcpat_` plus 40 characters, from the flow of
   12.3.
 
+Operator API keys (`sa_op_`, section 9) are not accepted: 9.1 keeps them to
+the machine API, and an operator who wants the operator tools makes an
+operator-scope MCP key (12.8), which acts as that operator and ends with the
+operator's rights.
+
 Both are rows of `cp.mcp_credentials` (`kind` `key` or `oauth`) and act as
 one console user: the user who made the key or approved the grant. A
 `tenant` credential reads one tenant with that member's role; an `operator`
