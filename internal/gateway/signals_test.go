@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// user agents of the engines measured in this stage (browser-proof.md) and of
+// user agents of the engines measured in docs/reference/browser-proof.md and of
 // engines that predate fetch metadata.
 const (
 	uaChromium   = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.8078.4 Safari/537.36"

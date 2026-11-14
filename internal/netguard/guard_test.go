@@ -101,7 +101,7 @@ func TestRefusedAddresses(t *testing.T) {
 		"loopback":         {loopback},
 		"loopback-mapped":  {netip.MustParseAddr("::ffff:127.0.0.1")},
 		"private":          {netip.MustParseAddr("10.0.0.5")},
-		"private-192":      {netip.MustParseAddr("192.168.1.1")},
+		"private-192":      {netip.MustParseAddr("192.168.0.1")},
 		"cgnat":            {netip.MustParseAddr("100.64.1.1")},
 		"metadata":         {netip.MustParseAddr("169.254.169.254")},
 		"metadata-v6":      {netip.MustParseAddr("fd00:ec2::254")},

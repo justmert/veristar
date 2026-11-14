@@ -16,7 +16,7 @@ import (
 	"github.com/justmert/veristar/tests/fixtures/natsctr"
 )
 
-// the starting value from the this stage research list
+// the starting value recorded in docs/reference/gateway-limits.md
 const ipcTestThreshold = 20
 
 type ipcTestNode struct {

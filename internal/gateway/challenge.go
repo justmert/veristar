@@ -20,8 +20,7 @@ import (
 )
 
 const (
-	// ChallengeTTL is how long a challenge is valid, in server time
-	//.
+	// ChallengeTTL is how long a challenge is valid, in server time.
 	ChallengeTTL = 6 * time.Hour
 	// MaxClockSkew is how far a challenge's iat may lie ahead of this
 	// node's clock. another edge node may have issued it, and node clocks

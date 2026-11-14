@@ -23,7 +23,7 @@ const (
 	// CanaryEvery is how often the readiness canary is published.
 	CanaryEvery = time.Second
 	// CanaryMaxAge is how recent the last acknowledged publish must be for
-	// /readyz. the plan asks for an acknowledgement within the last 10 s and
+	// /readyz. the design asks for an acknowledgement within the last 10 s and
 	// for /readyz to fail within 10 s of a queue outage; the last ack can be
 	// up to CanaryEvery older than the outage, and a probe takes up to the
 	// ops handler's 2 s timeout, so 7 s keeps both inside 10 s.

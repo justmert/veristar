@@ -22,8 +22,8 @@ const dbipType = "DBIP-Country-Lite"
 // iso 3166-1 country, so it is reported as unknown.
 const dbipUnknown = "ZZ"
 
-// Geo looks up the country of a client address in the local db-ip file
-//. only the truncated network is looked up.
+// Geo looks up the country of a client address in the local db-ip file.
+// only the truncated network is looked up.
 type Geo struct {
 	path string
 

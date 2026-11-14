@@ -8,7 +8,7 @@ import (
 )
 
 // fetch metadata the tracker's requests carry in every engine measured in
-// this stage (docs/reference/browser-proof.md, request behaviour): a fetch
+// docs/reference/browser-proof.md (, request behaviour): a fetch
 // from a tenant page to in.<BASE_DOMAIN> is cross-site, or same-site when
 // the tenant shares the base domain, in cors mode with an empty destination.
 var (

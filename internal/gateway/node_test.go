@@ -46,7 +46,7 @@ func nodeDBIP(t *testing.T) string {
 	t.Helper()
 	p := os.Getenv("DBIP_MMDB")
 	if p == "" {
-		p = ".scratch/scratch/geo/dbip-country-lite.mmdb"
+		p = ".scratch/geo/dbip-country-lite.mmdb"
 	}
 	if !filepath.IsAbs(p) {
 		p = filepath.Join(natsctr.RepoRoot(t), p)
@@ -174,7 +174,7 @@ func post(t *testing.T, c *gwclient.Client, e gwclient.Event, extra http.Header)
 	return status
 }
 
-// W-2: events refused after the proof check (here a missing user agent) do
+// events refused after the proof check (here a missing user agent) do
 // not use up the proof's allowance; only queued events count.
 func TestRefusedEventsKeepTheProofAllowance(t *testing.T) {
 	e := startNode(t, map[string]string{"PROOF_REPLAY_LIMIT": "3"})
@@ -195,7 +195,7 @@ func TestRefusedEventsKeepTheProofAllowance(t *testing.T) {
 	require.Equal(t, http.StatusForbidden, post(t, c, gwclient.Pageview(s.ID, s.Host, "/", p), nil))
 }
 
-// W-11: the queued hostname is the host of the checked Origin, whatever the
+// the queued hostname is the host of the checked Origin, whatever the
 // body says.
 func TestHostnameComesFromTheOrigin(t *testing.T) {
 	e := startNode(t, nil)
@@ -206,7 +206,7 @@ func TestHostnameComesFromTheOrigin(t *testing.T) {
 	require.Equal(t, "shop.example", e.lastQueued(t).Hostname)
 }
 
-// W-10: an event that names a revoked tracker release is refused with 410,
+// an event that names a revoked tracker release is refused with 410,
 // the answer sdk.js of that release gets; other releases and events without
 // a release name pass.
 func TestRevokedReleaseEventsAreRefused(t *testing.T) {
@@ -229,7 +229,7 @@ func TestRevokedReleaseEventsAreRefused(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, post(t, c, ev, nil))
 }
 
-// W-6: one visitor (one address and one user agent) past
+// one visitor (one address and one user agent) past
 // VISITOR_EVENTS_PER_HOUR goes to the quarantine band.
 func TestOneVisitorsVolumeIsQuarantined(t *testing.T) {
 	e := startNode(t, map[string]string{"VISITOR_EVENTS_PER_HOUR": "5"})
@@ -250,7 +250,7 @@ func TestOneVisitorsVolumeIsQuarantined(t *testing.T) {
 	require.Equal(t, events.BandPrimary, e.lastQueued(t).Band)
 }
 
-// W-1: event data umami cannot store is refused at the door.
+// event data umami cannot store is refused at the door.
 func TestUnstorableDataIsRefused(t *testing.T) {
 	e := startNode(t, nil)
 	s := e.putSite(t, "https://shop.example")

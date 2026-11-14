@@ -36,8 +36,7 @@ func (e *ParseError) Unwrap() error { return e.Kind }
 
 func malformed(reason string) error { return &ParseError{Kind: ErrMalformed, Reason: reason} }
 
-// Proof is the challenge the tracker echoes plus the nonce it found
-//.
+// Proof is the challenge the tracker echoes plus the nonce it found.
 type Proof struct {
 	IAT   int64
 	Salt  [proofSaltBytes]byte

@@ -311,7 +311,7 @@ func (s *Server) event(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleEvent runs the checks of the design step 6 in order: body size
+// handleEvent runs the event checks in order: body size
 // and schema, site exists and is active, Sec-GPC, a revoked tracker release,
 // Origin, challenge tag, age and work, replay limit, fetch metadata, rate
 // limits. an event that passes is enriched (visitor token, country, band),

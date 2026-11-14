@@ -8,7 +8,7 @@ import (
 	"unicode/utf16"
 )
 
-// limits from this stage of the plan. lengths are in utf-16 code units, as
+// field limits of the wire format. lengths are in utf-16 code units, as
 // javascript counts string length and the tracker cuts fields
 // (docs/reference/wire-v1.md); the body size is in bytes.
 const (

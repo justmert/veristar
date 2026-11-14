@@ -333,7 +333,7 @@ func BenchmarkStringWorstCase(b *testing.B) {
 	}
 }
 
-// W-5: the work per input stays linear and small. every strkey decode
+// the work per input stays linear and small. every strkey decode
 // attempt allocates, so the allocation count bounds the decode attempts
 // without timing the host: before the fix "PA" x 4000 tried 16 signed
 // payload lengths at each of 4000 positions.

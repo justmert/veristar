@@ -19,7 +19,7 @@ const (
 	sanSite = "8f6b1c3e-2a4d-4e5f-9a7b-0c1d2e3f4a5b"
 )
 
-// the sanitization case of the this stage verification list: a url with a
+// the sanitization case: a url with a
 // G-address, a contract id, a secret seed and an email query parameter, a
 // title with an M-address and event data with a G-address, parsed from a
 // real wire body and checked against the WebEvent contract afterwards.

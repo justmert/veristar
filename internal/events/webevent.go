@@ -65,7 +65,7 @@ func canonicalUUID(s string) (uuid.UUID, bool) {
 	return u, err == nil && u.String() == s
 }
 
-// Validate checks every field against the this stage limits.
+// Validate checks every field against the field limits.
 func (e *WebEvent) Validate() error {
 	id, ok := canonicalUUID(e.ID)
 	if !ok || id.Version() != 7 {
