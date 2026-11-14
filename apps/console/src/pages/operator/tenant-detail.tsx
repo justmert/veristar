@@ -188,7 +188,7 @@ export function TenantDetail({ detail }: { detail: OperatorTenantDetail }) {
 
         <aside className="flex min-w-0 flex-col gap-4 xl:sticky xl:top-4">
           <Box id="evidence-h" title="Evidence">
-            <EvidenceList items={evidenceOf(detail)} />
+            <EvidenceList items={evidenceOf(detail)} stacked />
           </Box>
           <Box id="answers-h" title="Enrollment answers">
             <dl className="flex flex-col gap-3">

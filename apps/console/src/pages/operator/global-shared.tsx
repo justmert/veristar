@@ -232,7 +232,7 @@ export function InlineSelect({
 }) {
   const id = useId();
   return (
-    <span className="flex items-center gap-1.5">
+    <span className="flex min-w-0 gap-1.5 max-sm:flex-col sm:items-center">
       <label htmlFor={id} className="text-caption whitespace-nowrap text-fg-3">
         {label}
       </label>
@@ -240,7 +240,7 @@ export function InlineSelect({
         id={id}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="max-lg:h-(--vs-control-touch)"
+        className="[&>select]:h-(--vs-control-sm) [&>select]:text-small max-lg:[&>select]:h-(--vs-control-touch)"
       >
         {children}
       </NativeSelect>
@@ -287,7 +287,7 @@ export function FiltersPanel({
           onChange={setSearch}
           onSubmit={() => onChange({ ...filters, q: search })}
           placeholder="Project name or slug"
-          className="w-full sm:w-72"
+          className="w-full sm:w-80"
         />
         <fieldset className="flex flex-wrap items-center gap-1.5">
           <legend className="sr-only">Status</legend>
@@ -298,7 +298,7 @@ export function FiltersPanel({
           ))}
         </fieldset>
       </div>
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+      <div className="grid grid-cols-2 gap-x-3 gap-y-2 sm:flex sm:flex-wrap sm:items-center sm:gap-x-4">
         {(Object.keys(TRI_TEXT) as TriKey[]).map((k) => (
           <InlineSelect
             key={k}
@@ -343,7 +343,7 @@ function DayInput({
 }) {
   const id = useId();
   return (
-    <span className="flex items-center gap-1.5">
+    <span className="flex min-w-0 gap-1.5 max-sm:flex-col sm:items-center">
       <label htmlFor={id} className="text-caption whitespace-nowrap text-fg-3">
         {label}
       </label>
@@ -352,7 +352,7 @@ function DayInput({
         type="date"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="h-(--vs-control-sm) w-38 max-lg:h-(--vs-control-touch)"
+        className="h-(--vs-control-sm) sm:w-38 max-lg:h-(--vs-control-touch)"
       />
     </span>
   );

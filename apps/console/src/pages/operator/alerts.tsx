@@ -1,5 +1,5 @@
 import { type UseQueryResult, useQuery } from "@tanstack/react-query";
-import { cn } from "cn";
+import { cn } from "@veristar/brand/cn";
 import {
   BookOpen,
   CircleAlert,
@@ -105,7 +105,9 @@ export function LiveCheck({ alerts }: { alerts: UseQueryResult<OperatorAlerts> }
     return (
       <span className="flex items-center gap-1.5 text-caption text-fg-3">
         <StatusDot tone="critical" />
-        Not answering
+        {alerts.error instanceof ApiError && alerts.error.code === "alert_source_not_configured"
+          ? "No alert source"
+          : "Not answering"}
       </span>
     );
   return (

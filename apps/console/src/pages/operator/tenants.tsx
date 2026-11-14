@@ -92,7 +92,7 @@ export function TenantsPage() {
             onChange={setSearch}
             onSubmit={() => update({ q: search })}
             placeholder="Name, address, website or site domain"
-            className="w-full sm:w-80"
+            className="w-full sm:w-64"
           />
           <fieldset className="flex flex-wrap items-center gap-1.5">
             <legend className="sr-only">Status</legend>

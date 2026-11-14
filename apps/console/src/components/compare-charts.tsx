@@ -5,8 +5,8 @@
 // order the comparison names them. the dash pattern repeats the slot, so no
 // line depends on its colour alone, and every chart has a table view.
 
-import { durationMs } from "@veristar/brand/motion";
 import { cn } from "@veristar/brand/cn";
+import { durationMs } from "@veristar/brand/motion";
 import { useReducedMotion } from "motion/react";
 import {
   CartesianGrid,
@@ -60,7 +60,7 @@ export function SeriesLine({ slot, className }: { slot: number; className?: stri
 }
 
 const HEIGHT = 180;
-const MARGIN = { top: 8, right: 8, bottom: 0, left: 0 };
+const MARGIN = { top: 8, right: 20, bottom: 0, left: 0 };
 const AXIS = { fontSize: 11, fill: "var(--vs-fg-3)", fontFamily: "var(--vs-font-mono)" };
 
 // a value of one project on one day: a number, null for no value (a gap),

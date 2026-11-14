@@ -285,8 +285,14 @@ test("the operator filters to verified projects, sorts by visitors and compares 
   const page = op.page;
   const [a, b, c, d] = ["A", "B", "C", "D"].map(project) as [Project, Project, Project, Project];
   await page.goto(`${APP}/operator`);
+  // the sidebar picks the place, its tabs pick the view
   await page
     .getByRole("navigation", { name: "Operator" })
+    .getByRole("link", { name: "Projects" })
+    .click();
+  await page.waitForURL(`${APP}/operator/tenants`);
+  await page
+    .getByRole("navigation", { name: "Operator sections" })
     .getByRole("link", { name: "Global web" })
     .click();
   await page.waitForURL(`${APP}/operator/web`);
@@ -328,11 +334,12 @@ test("the operator filters to verified projects, sorts by visitors and compares 
   await expect(compared.getByRole("listitem")).toHaveCount(3);
   await expect(compared).toContainText(a.tenant.name);
 
+  // one row per compared project in the order of the comparison
   const webTotals = page.getByRole("region", { name: "Web totals" });
-  await expect(webTotals.locator("tr[data-metric='Visitors'] td")).toHaveText(["3", "2", "1"]);
-  await expect(webTotals.locator("tr[data-metric='Page views'] td")).toHaveText(["3", "6", "1"]);
+  await expect(webTotals.locator("td[data-metric='Visitors']")).toHaveText(["3", "2", "1"]);
+  await expect(webTotals.locator("td[data-metric='Page views']")).toHaveText(["3", "6", "1"]);
   const apiTotals = page.getByRole("region", { name: "API totals" });
-  await expect(apiTotals.locator("tr[data-metric='Requests'] td")).toHaveText(["4", "8", "2"]);
+  await expect(apiTotals.locator("td[data-metric='Requests']")).toHaveText(["4", "8", "2"]);
   for (const title of ["Page views", "Visitors", "Requests", "p95 latency"])
     await expect(page.getByRole("heading", { name: title, exact: true })).toBeVisible();
   await expect(page.getByRole("region", { name: "Devices" })).toBeVisible();
@@ -375,7 +382,7 @@ test("the pages work at phone width", async () => {
             .filter(
               (e) =>
                 !e.closest(
-                  "[aria-label='Global web table'], [aria-label='Global API table'], [aria-label='Web totals'], [aria-label='API totals'], nav[aria-label='Operator']",
+                  "[aria-label='Global web table'], [aria-label='Global API table'], [aria-label='Web totals'], [aria-label='API totals'], nav[aria-label='Operator sections']",
                 ),
             )
             .slice(0, 5)
