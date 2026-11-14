@@ -13,6 +13,8 @@ describe("cn with the brand scale", () => {
     expect(cn("text-fg-2", "text-critical")).toBe("text-critical");
   });
   it("merges radius and shadow tokens", () => {
-    expect(cn("rounded-md shadow-overlay", "rounded-lg shadow-dialog")).toBe("rounded-lg shadow-dialog");
+    expect(cn("rounded-md shadow-overlay", "rounded-lg shadow-dialog")).toBe(
+      "rounded-lg shadow-dialog",
+    );
   });
 });
