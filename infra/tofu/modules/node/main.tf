@@ -93,6 +93,12 @@ variable "protect" {
   type        = bool
 }
 
+variable "accelerated_networking" {
+  description = "sr-iov accelerated networking on the nic; the size must support it"
+  type        = bool
+  default     = true
+}
+
 variable "tags" {
   type = map(string)
 }
@@ -135,6 +141,12 @@ resource "azurerm_network_interface" "this" {
   resource_group_name = var.resource_group_name
   location            = var.location
   tags                = local.tags
+  # accelerated networking (sr-iov): packets bypass the host's virtual
+  # switch and the vm's synthetic nic. without it a converged node spent
+  # 15 % of its cpu in softirq and 21 % in the kernel at 800 events a second
+  # (docs/reference/gateway-limits.md, "capacity"). the Basv2 sizes support
+  # it; changing it on an existing nic needs the vm deallocated
+  accelerated_networking_enabled = var.accelerated_networking
 
   ip_configuration {
     name                          = "primary"
