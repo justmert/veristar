@@ -1,8 +1,9 @@
-# every input without a default is supplied by the operator (section 3 of the
-# plan); there are deliberately no stand-in values.
+# every input without a default is supplied by the operator in
+# terraform.tfvars (docs/deploy/prerequisites.md); there are deliberately no
+# stand-in values.
 
 variable "base_domain" {
-  description = "BASE_DOMAIN, an operator input"
+  description = "BASE_DOMAIN"
   type        = string
 
   validation {
@@ -12,7 +13,7 @@ variable "base_domain" {
 }
 
 variable "admin_cidrs" {
-  description = "admin source ranges allowed to reach ssh, an operator input"
+  description = "admin source ranges allowed to reach ssh"
   type        = list(string)
 
   validation {
@@ -37,7 +38,7 @@ variable "admin_ssh_public_keys" {
 }
 
 variable "subscription_id" {
-  description = "azure subscription id, an operator input"
+  description = "azure subscription id"
   type        = string
 
   validation {
@@ -52,7 +53,7 @@ variable "state_resource_group" {
 }
 
 variable "state_storage_account" {
-  description = "state storage account, created by make state-bootstrap an operator input"
+  description = "state storage account, created by make state-bootstrap"
   type        = string
 
   validation {

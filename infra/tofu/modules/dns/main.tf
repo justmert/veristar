@@ -1,4 +1,4 @@
-# records in the existing cloudflare zone of BASE_DOMAIN an operator input. the
+# records in the existing cloudflare zone of BASE_DOMAIN. the
 # zone itself belongs to the registrar account and is only looked up here.
 # every record is dns only: the gateway needs the client's own address, and
 # a proxy in front of the collect path would replace it.
@@ -12,7 +12,7 @@ terraform {
 }
 
 variable "base_domain" {
-  description = "zone apex an operator input"
+  description = "zone apex"
   type        = string
 }
 
