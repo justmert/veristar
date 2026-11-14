@@ -96,6 +96,13 @@ postgresql:
     archive_mode: "on"
     archive_command: "{{ core_archive_command }}"
     archive_timeout: "{{ core_archive_timeout }}"
+  # a replica that was off while the leader recycled the wal it needs (a
+  # power-off during heavy writes, the accelerated networking change of
+  # 2026-11-14) fetches that wal from the pgbackrest repository instead of
+  # retrying the leader forever with "requested WAL segment ... has already
+  # been removed"; pg_rewind (use_pg_rewind) then follows a new timeline
+  recovery_conf:
+    restore_command: "pgbackrest --stanza=sa archive-get %f \"%p\""
   # hostssl only: a tcp connection that did not negotiate tls matches no
   # line and is refused, wherever it comes from
   pg_hba:
