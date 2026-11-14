@@ -25,16 +25,17 @@ Alert: `DBIPFileOld` fires when the file in use was built more than 45 days ago
    ```
    fetch-dbip: downloading https://download.db-ip.com/free/dbip-country-lite-<YYYY-MM>.mmdb.gz
    dbipcheck: ok, built <YYYY-MM>-01T..Z
-   fetch-dbip: wrote .../.scratch/scratch/geo/dbip-country-lite.mmdb (<YYYY-MM>)
+   fetch-dbip: wrote .../.scratch/geo/dbip-country-lite.mmdb (<YYYY-MM>)
    ```
 
    Before DB-IP has published the month, `curl` reports `404` and the target fails; nothing is
-   written. Never take another month silently: pass the previous month explicitly if you must.
+   written. The script never falls back to another month on its own: to use the previous month,
+   pass it explicitly.
 
 2. **Run the geo tests against it** (they fail if the truncation error rate rises above 0.5%):
 
    ```sh
-   DBIP_MMDB=.scratch/scratch/geo/dbip-country-lite.mmdb go test -race -count=1 -run TestGeo ./internal/gateway/
+   DBIP_MMDB=.scratch/geo/dbip-country-lite.mmdb go test -race -count=1 -run TestGeo ./internal/gateway/
    ```
 
    Expected: `ok  github.com/justmert/veristar/internal/gateway`.
@@ -45,8 +46,10 @@ Alert: `DBIPFileOld` fires when the file in use was built more than 45 days ago
    published, and roll it out:
 
    ```sh
-   make staging-deploy ROLLING=1 SA_IMAGE_TAG=<release> SA_RELEASE_MANIFEST=<release-images.json>
+   make <env>-deploy ROLLING=1 SA_IMAGE_TAG=<release> SA_RELEASE_MANIFEST=<release-images.json>
    ```
+
+   `<env>` is `staging` or `production`.
 
    For a local or test image, `docker build -f deploy/images/gateway.Dockerfile --build-arg DBIP_MONTH=<YYYY-MM> .`
    (or `make gateway-up`, which passes the current month).
@@ -66,10 +69,7 @@ the normal one.
 
 | Date | What ran | Result | Source |
 |---|---|---|---|
-| 2026-11-12 | this stage: first fetch, file shape and truncation measured | 2026-11 file, 1,410,667 networks; truncation error 0.0916% of IPv4 addresses | [../reference/geo.md](../reference/geo.md) |
-| 2026-11-13 | this stage, steps 1 and 2 locally: `make geo-fetch GEO_MONTH=2026-11`, then the geo tests | `dbipcheck: ok, built 2026-11-01T02:47:39Z`, file written with month `2026-11`; `go test -run TestGeo` ok in 8.5 s | this page |
-| 2026-11-13 | this stage: `scripts/fetch-dbip.sh <dir> 2026-12` before December's publication | `curl: (22) The requested URL returned error: 404`, exit 22, nothing written | this page |
-| 2026-11-13 | this stage: `SIGHUP` reload on a local gateway (with the tracker revocation rehearsal) | `geo file and revoked tracker list reloaded` logged; a broken file left the previous state in use | [tracker-release.md](tracker-release.md) |
-
-Not yet exercised: step 3 through the release workflow (GitHub Actions fails at start-up on the
-account) and step 4 on a deployed node.
+| 2026-11-12 | First fetch; file shape and truncation error measured | 2026-11 file, 1,410,667 networks; truncation error 0.0916% of IPv4 addresses | [../reference/geo.md](../reference/geo.md) |
+| 2026-11-13 | Steps 1 and 2 locally: `make geo-fetch GEO_MONTH=2026-11`, then the geo tests | `dbipcheck: ok, built 2026-11-01T02:47:39Z`, file written with month `2026-11`; `go test -run TestGeo` ok in 8.5 s | this page |
+| 2026-11-13 | `scripts/fetch-dbip.sh <dir> 2026-12` before December's publication | `curl: (22) The requested URL returned error: 404`, exit 22, nothing written | this page |
+| 2026-11-13 | `SIGHUP` reload on a local gateway | `geo file and revoked tracker list reloaded` logged; a broken file left the previous state in use | [tracker-release.md](tracker-release.md) |

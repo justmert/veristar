@@ -3,13 +3,14 @@ title: "Erasure requests"
 description: "What an operator does when a data subject or a tenant asks for data to be erased."
 ---
 
-What an operator does when a data subject or a tenant asks for data to be erased. The statement
-of what can be erased and why is [../compliance/erasure.md](../compliance/erasure.md); the API is
-[../reference/control-plane-api.md](../reference/control-plane-api.md) section 10. Erasure is
-done by the project's **owner** in the console (Privacy page) or with
-`POST /api/tenants/{tenant_id}/erasure`. Operators do not have a route that erases a project's
-web data for it, on purpose: the service does not know visitors, and only the project can
-identify the site and session concerned.
+What an operator does when a data subject or a tenant asks for data to be erased. What can be
+erased and why is the [erasure statement](../compliance/erasure.md); the HTTP routes are section 10
+of the [control plane API reference](../reference/control-plane-api.md).
+
+The project's **owner** runs erasure, in the console on the project's Privacy page or with
+`POST /api/tenants/{tenant_id}/erasure`. Operators have no route that erases a project's web data
+for it: the service does not know visitors, and only the project can identify the site and
+session concerned.
 
 ## Who asks, and what to do
 
@@ -46,8 +47,8 @@ identify the site and session concerned.
    affected days. `reaggregated_at` is set once the jobs task `erasure-followup` has re-read the
    operator aggregates for those days, so the global views stop counting the erased visits.
 
-5. **If a request stays `running`**, the control plane process that ran it probably stopped.
-   `erasure-followup` marks such a run failed after 2 minutes without a heartbeat. File it again:
+5. **If a request stays `running`**, the control plane process that ran it stopped before it
+   finished. `erasure-followup` marks such a run failed after 2 minutes without a heartbeat. File it again:
    for `visitor_today` the token existed only in that process.
 
 6. **Answer the data subject** through the tenant. Data deleted here stays in database backups
@@ -58,7 +59,7 @@ identify the site and session concerned.
 ## Operator checks
 
 The records keep no address, user agent or visitor token. To see requests across projects, on
-the database leader ([overview.md](overview.md)):
+the database leader (the [runbooks overview](overview.md) shows how to connect):
 
 ```sql
 select id, tenant_id, site_id, kind, status, outcome, requested_at, completed_at, reaggregated_at
@@ -67,10 +68,6 @@ from cp.erasure_requests order by requested_at desc limit 20;
 
 ## Exercised
 
-| Date | What ran | Result | Source |
-|---|---|---|---|
-| this stage | Erasure suite and the console privacy page | three kinds pass, live e2e 3/3 | plan status, this stage |
-| 2026-11-13 | this stage: `go test -race -run TestErasure ./internal/controlplane/erasure/` (real PostgreSQL, NATS and Umami, the gateway's visitor code, the replayer and the jobs follow-up) | 7 of 7 subtests pass in 27.4 s: `validation and roles`, `visitor today`, `queued event and dlq`, `next day`, `session`, `site reset`, `no residue` | this page |
-
-Not yet exercised by an owner on a deployed environment: no staging exists. The legal wording
-is pending an operator input.
+| Date | What ran | Result |
+|---|---|---|
+| 2026-11-13 | `go test -race -run TestErasure ./internal/controlplane/erasure/` against real PostgreSQL, NATS and Umami, with the gateway's visitor code, the replayer and the jobs follow-up | 7 of 7 subtests pass in 27.4 s: `validation and roles`, `visitor today`, `queued event and dlq`, `next day`, `session`, `site reset`, `no residue` |
