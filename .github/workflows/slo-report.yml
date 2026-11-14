@@ -1,6 +1,6 @@
 name: slo-report
 
-# the design: gatus keeps raw probe results for about a week and hourly
+# gatus keeps raw probe results for about a week and hourly
 # uptime for only 30 days, shorter than a month, so each day's raw results
 # are copied into docs/slo/data/ on the branch slo/<YYYY-MM>. every run also
 # collects the earlier days of the last six that are still missing, so a
@@ -29,7 +29,7 @@ jobs:
   collect:
     runs-on: ubuntu-24.04
     env:
-      # the status page host follows BASE_DOMAIN an operator input
+      # the status page host follows BASE_DOMAIN
       STATUS_BASE_URL: ${{ vars.STATUS_BASE_URL }}
       GH_TOKEN: ${{ github.token }}
       INPUT_DAY: ${{ inputs.day }}
@@ -37,7 +37,7 @@ jobs:
       - name: require the status page url
         run: |
           if [ -z "$STATUS_BASE_URL" ]; then
-            echo "repository variable STATUS_BASE_URL is not set (https://status.<BASE_DOMAIN>, an operator input" >&2
+            echo "repository variable STATUS_BASE_URL is not set (https://status.<BASE_DOMAIN>)" >&2
             exit 1
           fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

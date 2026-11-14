@@ -1,7 +1,6 @@
 name: release-tracker
 
-# publishes one tracker release (plan phases 3, 14 and 18;
-# docs/security/verify-tracker.md). a tag tracker-v<x.y.z> names a version
+# publishes one tracker release (docs/security/verify-tracker.md). a tag tracker-v<x.y.z> names a version
 # that is already committed under packages/tracker/releases/. the workflow
 #   1. proves the release: immutability against the previous commit, a
 #      byte-identical rebuild of sdk.js on this runner, and an npm package
@@ -13,7 +12,7 @@ name: release-tracker
 #      adds provenance itself, so no npm token exists anywhere
 #   4. creates the github release carrying the manifest, sdk.js and tarball
 #
-# repository variable NPM_PACKAGE an operator input: the scoped package name whose
+# repository variable NPM_PACKAGE (the scoped package name whose
 # trusted publisher is this repository and this workflow file) is required;
 # the publish job stops when it is missing instead of choosing a name.
 on:
@@ -78,11 +77,11 @@ jobs:
           node-version: 26.13.1
           registry-url: https://registry.npmjs.org
       - run: pnpm install --frozen-lockfile
-      - name: npm package name an operator input
+      - name: npm package name
         env:
           NPM_PACKAGE: ${{ vars.NPM_PACKAGE }}
         run: |
-          test -n "$NPM_PACKAGE" || { echo "repository variable NPM_PACKAGE is not set an operator input" >&2; exit 1; }
+          test -n "$NPM_PACKAGE" || { echo "repository variable NPM_PACKAGE is not set" >&2; exit 1; }
           # trusted publishing needs npm 11.5.1 or newer
           node -e 'const [a,b,c]=process.argv[1].split(".").map(Number); process.exit(a>11||(a===11&&(b>5||(b===5&&c>=1)))?0:1)' "$(npm --version)" ||
             { echo "npm $(npm --version) cannot use trusted publishing" >&2; exit 1; }

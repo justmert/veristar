@@ -1,6 +1,6 @@
 name: security
 
-# hourly security detection (the design, docs/runbooks/security-patch.md),
+# hourly security detection (docs/runbooks/security-patch.md),
 # so that finding a problem never uses up the 24 hour patch window:
 #   - upstream advisories for the pinned umami (and the next and react it
 #     ships), nats, caddy, etcd, the collector modules and postgresql
@@ -8,7 +8,7 @@ name: security
 #     newest image release, and the upstream digests in vars/pins.yml
 #   - govulncheck on every go module, pnpm audit on the workspace
 # every finding opens one labelled issue (security-finding) and the run sends
-# one alert to ALERT_WEBHOOK_URL an operator input.
+# one alert to ALERT_WEBHOOK_URL (a discord webhook).
 on:
   schedule:
     - cron: "23 * * * *"
@@ -87,7 +87,7 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
-      # govulncheck v1.9.0; go install verifies it against
+      # govulncheck v1.9.0, pinned; go install verifies it against
       # the checksum database
       - run: go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
       - run: |

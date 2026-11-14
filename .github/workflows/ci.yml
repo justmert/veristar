@@ -98,7 +98,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: make image CMD=platformctl
 
-  # secrets in the whole history, not only the change (the design)
+  # secrets in the whole history, not only the change
   gitleaks:
     runs-on: ubuntu-24.04
     steps:
@@ -133,7 +133,7 @@ jobs:
           name: licence-report
           path: licence-report/
 
-  # the tenant isolation gate (the design): required on every pull request
+  # the tenant isolation gate: required on every pull request
   # and for every release
   isolation:
     runs-on: ubuntu-24.04

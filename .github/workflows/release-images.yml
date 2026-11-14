@@ -1,7 +1,7 @@
 name: release-images
 
 # builds, scans, signs and attests every platform image for a release tag
-# (the design, docs/security/supply-chain.md). each image is pushed to
+# (docs/security/supply-chain.md). each image is pushed to
 # ghcr, then gated: syft sbom, trivy fails on a critical or high finding that
 # has a fix. only an image that passed is signed with a keyless cosign
 # signature (fulcio certificate for this workflow's oidc identity, logged in
