@@ -22,14 +22,16 @@ Conventions are in [overview.md](overview.md).
 | `WEB_DLQ` | 7 days | dead-lettered events expire |
 | `API_DLQ` | 30 days | dead-lettered batches expire |
 
-Measured drain rates on the local stand-in topology after the this stage tuning
+Drain rates measured on the local test topology
 ([../reference/drills/2026-11-13.md](../reference/drills/2026-11-13.md)): about **280 web
-events/s** with one Umami process and about **1,417 OTLP requests/s**. The core role now runs
-several Umami processes per node (`core_umami_processes`, 4 by default) to raise the web rate; its
-defaults file records the per-count measurements, and the rate on real servers is not measured.
-The expected peak is 50 web events/s and 116 OTLP requests/s, so even at 280/s a backlog of one
-hour at the expected peak drains in roughly 15 minutes. These rates come from a shared host and
-are not a measurement of staging.
+events/s** with one Umami process and about **1,417 OTLP requests/s**. Each core node runs
+several Umami processes to raise the web rate (`core_umami_processes`, 2 on the
+`Standard_B2as_v2` nodes); the per-count measurements are recorded in
+`infra/ansible/roles/core/defaults/main.yml`. The 1x load profile (`tests/load/profiles.env`)
+is 50 web events/s and 116 API requests/s, so a one-hour backlog at that profile drains within
+about 15 minutes even at 280 web events/s. The measured
+ingestion capacity of a production node is in
+[../reference/gateway-limits.md](../reference/gateway-limits.md).
 
 ## Backlog
 
@@ -90,7 +92,7 @@ are not a measurement of staging.
    The probe is a read, so it passes while Umami cannot write (a full data disk, a database
    connection that went to a read-only node, lock or statement timeouts on `website_event`,
    Prisma's pool exhausted). The replayer recognises that case from the sends themselves
-   (review, `internal/replayer/writefault.go`): when within one minute at least 3 distinct
+   (`internal/replayer/writefault.go`): when within one minute at least 3 distinct
    visitors had a send fail on a process whose checks passed, and they are at least as many as
    the sends that process stored, the process counts as unable to write. Failures then do not
    count against the event and nothing is dead-lettered; the events are retried at most every
@@ -120,7 +122,7 @@ message id.
 2. **List the messages.** `platformctl dlq list` prints one line per message: DLQ sequence,
    time it was dead-lettered, key (site id for `web`, tenant id for `api`), origin stream,
    sequence and subject, payload size and reason. It never prints the payload, which is a full
-   event. Run platformctl as in [README.md](overview.md#running-platformctl-on-a-core-node) and
+   event. Run platformctl as in [overview.md](overview.md#running-platformctl-on-a-core-node) and
    replace its last words with:
 
    ```sh
@@ -191,11 +193,8 @@ message id.
 
 | Date | What ran | Result | Source |
 |---|---|---|---|
-| 2026-11-13 | this stage load run A at 10x, then drain | 0 acknowledged events lost; backlog empty 1,101 s after the run (bound 600 s): fail on drain time; consumer tuning made from it | [../reference/drills/2026-11-13.md](../reference/drills/2026-11-13.md) |
+| 2026-11-13 | Load run A at 10x on the local test topology, then drain | 0 acknowledged events lost; backlog empty 1,101 s after the run; the consumer settings above were tuned from it | [../reference/drills/2026-11-13.md](../reference/drills/2026-11-13.md) |
 | 2026-11-13 | Alert fire-drills: replayer, writer and jobs stopped, 5,100 web events and 5,100 OTLP requests queued, then started | QueueOldestMessageTooOld, ReplayerLagHigh, MetricsWriterLagHigh, ReplayerNotConsuming fired and resolved after the consumers drained the queue | [alerts.md](alerts.md), fire-drills |
-| 2026-11-13 | Alert fire-drill: one message on `dlq.web.drill`, then purged with the test drill tool | DLQNotEmpty fired and resolved | [alerts.md](alerts.md), fire-drills |
+| 2026-11-13 | Alert fire-drill: one message on `dlq.web.drill`, then purged | DLQNotEmpty fired and resolved | [alerts.md](alerts.md), fire-drills |
 | 2026-11-13 | `platformctl dlq list`, `replay` (range, reason, crash rerun, failing again), `purge`, refusals, with the production NATS users and permissions | pass (`go test -run TestDLQ ./cmd/platformctl/`, real NATS server) | `cmd/platformctl/dlq_test.go` |
-| 2026-11-13 | this stage: step 1 against the development stack's NATS (`127.0.0.1:8222`) | the command printed every stream with its counts (`WEB_DLQ 0`, `API_DLQ 0`, `WEB_EVENTS 0`) | this page |
-
-Not yet exercised on staging. The purge in the fire-drill used `tests/observability/drill`, a
-test tool, before `platformctl dlq` existed.
+| 2026-11-13 | Step 1 against the development stack's NATS (`127.0.0.1:8222`) | the command printed every stream with its counts (`WEB_DLQ 0`, `API_DLQ 0`, `WEB_EVENTS 0`) | this page |
