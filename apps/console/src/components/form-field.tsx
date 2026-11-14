@@ -1,6 +1,8 @@
+import { cn } from "@veristar/brand/cn";
+import { ChevronDown } from "lucide-react";
 import { type ReactNode, useId } from "react";
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
+import { controlClass, Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
 type Common = {
@@ -26,7 +28,7 @@ function Label({ text, optional, htmlFor }: { text: string; optional?: boolean; 
   return (
     <FieldLabel htmlFor={htmlFor}>
       {text}
-      {optional ? <span className="font-normal text-muted-foreground">(optional)</span> : null}
+      {optional ? <span className="font-normal text-fg-3">(optional)</span> : null}
     </FieldLabel>
   );
 }
@@ -85,7 +87,7 @@ export function SelectField({
   error,
   children,
   ...select
-}: Common & Omit<React.ComponentProps<"select">, "id">) {
+}: Common & Omit<React.ComponentProps<"select">, "id" | "size">) {
   const ids = useIds();
   return (
     <Field data-invalid={error ? true : undefined}>
@@ -104,11 +106,33 @@ export function SelectField({
   );
 }
 
-export function NativeSelect({ className, ...props }: React.ComponentProps<"select">) {
+// a native select drawn like the other controls, with its own chevron.
+// `bare` drops the border and fill, for a select that sits inside a
+// labelled box of its own (the filter bars).
+export function NativeSelect({
+  className,
+  size = "md",
+  bare = false,
+  ...props
+}: Omit<React.ComponentProps<"select">, "size"> & { size?: "sm" | "md"; bare?: boolean }) {
   return (
-    <select
-      className={`h-8 rounded-lg border border-input bg-card px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/40 aria-invalid:border-destructive disabled:opacity-50 ${className ?? ""}`}
-      {...props}
-    />
+    <span className={`relative inline-flex min-w-0 ${className ?? ""}`}>
+      <select
+        className={cn(
+          controlClass,
+          "w-full appearance-none pr-8",
+          size === "sm"
+            ? "h-(--vs-control-sm) text-small max-lg:h-(--vs-control-touch)"
+            : "h-(--vs-control)",
+          bare &&
+            "h-full border-0 bg-transparent pl-1.5 hover:border-0 focus:outline-none focus-visible:outline-none",
+        )}
+        {...props}
+      />
+      <ChevronDown
+        aria-hidden
+        className="pointer-events-none absolute top-1/2 right-2.5 size-4 -translate-y-1/2 text-fg-3"
+      />
+    </span>
   );
 }

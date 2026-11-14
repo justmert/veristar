@@ -19,6 +19,23 @@ if (!("ResizeObserver" in globalThis)) {
   };
 }
 
+// jsdom has no IntersectionObserver either; charts draw in when they come
+// into view (useRevealOnce). in the test dom nothing ever comes into view,
+// so a chart keeps its table view and its title, which is what tests read.
+if (!("IntersectionObserver" in globalThis)) {
+  globalThis.IntersectionObserver = class {
+    readonly root = null;
+    readonly rootMargin = "";
+    readonly thresholds = [];
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+    takeRecords() {
+      return [];
+    }
+  } as unknown as typeof IntersectionObserver;
+}
+
 // jsdom has no showModal or close on <dialog>. every supported browser has
 // them; this fills the test dom with the open attribute and the close event
 // the console relies on.

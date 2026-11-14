@@ -203,8 +203,18 @@ async function rows(p: Page) {
   );
 }
 
+// the range control is a radio group with the presets' short names
 async function pickRange(p: Page, label: string) {
-  await p.getByRole("group", { name: "Range" }).getByText(label, { exact: true }).click();
+  await p
+    .getByRole("radiogroup", { name: "Range" })
+    .getByRole("radio", { name: label, exact: true })
+    .click();
+}
+
+// the value of the requests tile, exactly as shown (it counts to a new value
+// on change, so the expectation retries until it settles)
+function requestsValue(p: Page, n: number) {
+  return p.locator('[data-tile="Requests"]').getByText(n.toLocaleString("en"), { exact: true });
 }
 
 test.beforeAll(async ({ browser }) => {
@@ -252,17 +262,19 @@ test("the tenant sees its own endpoints with the numbers that were sent", async 
   await page.goto(`${APP}/projects/${tenant.id}`);
   await page
     .getByRole("navigation", { name: "Project" })
-    .getByRole("link", { name: "API traffic" })
+    .getByRole("link", { name: "API", exact: true })
     .click();
   await page.waitForURL(`${APP}/projects/${tenant.id}/api/traffic`);
+  // the place's tabs mark the traffic page as current
+  await expect(
+    page.getByRole("navigation", { name: "API" }).getByRole("link", { name: "Traffic" }),
+  ).toHaveAttribute("aria-current", "page");
   // exact: the project is named "API traffic <run>", and its name is the page's h1
   await expect(page.getByRole("heading", { name: "API traffic", exact: true })).toBeVisible();
 
-  await pickRange(page, "1 hour");
+  await pickRange(page, "1h");
   await page.waitForURL(/range=1h/);
-  await expect(page.locator('[data-tile="Requests"] dd').first()).toHaveText(
-    (sentFor(PAYMENTS) + sentFor(LEDGER)).toLocaleString("en"),
-  );
+  await expect(requestsValue(page, sentFor(PAYMENTS) + sentFor(LEDGER))).toBeVisible();
 
   const services = page.getByRole("list", { name: "Services" });
   await expect(services.getByRole("listitem")).toHaveCount(2);
@@ -367,9 +379,7 @@ test("the routes table sorts by a column and reverses", async () => {
 test("filters scope every number to a service, a method and a route", async () => {
   await page.getByLabel("Service", { exact: true }).selectOption({ label: PAYMENTS });
   await page.waitForURL(new RegExp(`service=${PAYMENTS}`));
-  await expect(page.locator('[data-tile="Requests"] dd').first()).toHaveText(
-    sentFor(PAYMENTS).toLocaleString("en"),
-  );
+  await expect(requestsValue(page, sentFor(PAYMENTS))).toBeVisible();
   await expect.poll(async () => (await rows(page)).every((x) => x.service === PAYMENTS)).toBe(true);
 
   await page.getByLabel("Method", { exact: true }).selectOption("POST");
@@ -382,9 +392,7 @@ test("filters scope every number to a service, a method and a route", async () =
   const posted =
     (sent.get(key(PAYMENTS, "POST", "/accounts", 201)) ?? 0) +
     (sent.get(key(PAYMENTS, "POST", "/accounts", 400)) ?? 0);
-  await expect(page.locator('[data-tile="Requests"] dd').first()).toHaveText(
-    posted.toLocaleString("en"),
-  );
+  await expect(requestsValue(page, posted)).toBeVisible();
   await expect(page.getByRole("list", { name: "Active filters" })).toContainText(
     "Route: /accounts",
   );
@@ -398,30 +406,24 @@ test("filters scope every number to a service, a method and a route", async () =
 
   await page.getByRole("button", { name: "Clear filters" }).click();
   await expect(page.getByRole("list", { name: "Active filters" })).toHaveCount(0);
-  await expect(page.locator('[data-tile="Requests"] dd').first()).toHaveText(
-    (sentFor(PAYMENTS) + sentFor(LEDGER)).toLocaleString("en"),
-  );
+  await expect(requestsValue(page, sentFor(PAYMENTS) + sentFor(LEDGER))).toBeVisible();
 });
 
 test("ranges switch between minute, hour and day data", async () => {
   // hourly rows come from the rollup, which runs every 5 minutes
   test.setTimeout(600_000);
   await waitExact(ctx, tenant.id, [PAYMENTS, LEDGER], "24h", 420_000);
-  await pickRange(page, "24 hours");
+  await pickRange(page, "24h");
   await page.waitForURL(/range=24h/);
   await expect(page.getByText(", per hour", { exact: false })).toBeVisible();
-  await expect(page.locator('[data-tile="Requests"] dd').first()).toHaveText(
-    (sentFor(PAYMENTS) + sentFor(LEDGER)).toLocaleString("en"),
-  );
+  await expect(requestsValue(page, sentFor(PAYMENTS) + sentFor(LEDGER))).toBeVisible();
 
   // daily rows of the same rollup
   await waitExact(ctx, tenant.id, [PAYMENTS, LEDGER], "90d", 420_000);
-  await pickRange(page, "90 days");
+  await pickRange(page, "90d");
   await page.waitForURL(/range=90d/);
   await expect(page.getByText(", per day", { exact: false })).toBeVisible();
-  await expect(page.locator('[data-tile="Requests"] dd').first()).toHaveText(
-    (sentFor(PAYMENTS) + sentFor(LEDGER)).toLocaleString("en"),
-  );
+  await expect(requestsValue(page, sentFor(PAYMENTS) + sentFor(LEDGER))).toBeVisible();
 
   // a custom range of the last two hours is minute data again
   await pickRange(page, "Custom");
@@ -433,15 +435,13 @@ test("ranges switch between minute, hour and day data", async () => {
   await form.getByRole("button", { name: "Apply range" }).click();
   await page.waitForURL(/range=custom/);
   await expect(page.getByText(", per minute", { exact: false })).toBeVisible();
-  await expect(page.locator('[data-tile="Requests"] dd').first()).toHaveText(
-    (sentFor(PAYMENTS) + sentFor(LEDGER)).toLocaleString("en"),
-  );
+  await expect(requestsValue(page, sentFor(PAYMENTS) + sentFor(LEDGER))).toBeVisible();
   await page.screenshot({ path: join(shots, "custom-range.png"), fullPage: true });
 });
 
 test("the page works at phone width", async () => {
   await page.setViewportSize({ width: 375, height: 800 });
-  await pickRange(page, "1 hour");
+  await pickRange(page, "1h");
   await page.waitForURL(/range=1h/);
   await expect(page.getByRole("list", { name: "Services" })).toBeVisible();
   // nothing but the routes table scrolls sideways; on failure the message
@@ -453,7 +453,12 @@ test("the page works at phone width", async () => {
         if (document.documentElement.scrollWidth <= w) return [];
         return [...document.querySelectorAll("body *")]
           .filter((e) => e.getBoundingClientRect().right > w + 1)
-          .filter((e) => !e.closest("[aria-label='Routes table'], nav[aria-label='Project']"))
+          .filter(
+            (e) =>
+              !e.closest(
+                "[aria-label='Routes table'], nav[aria-label='Project'], [role='radiogroup'][aria-label='Range']",
+              ),
+          )
           .slice(0, 5)
           .map((e) => `${e.tagName.toLowerCase()}.${e.getAttribute("class") ?? ""}`);
       }),

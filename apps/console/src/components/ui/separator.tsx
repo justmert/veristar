@@ -1,4 +1,4 @@
-import { cn } from "cn";
+import { cn } from "@veristar/brand/cn";
 import { Separator as SeparatorPrimitive } from "radix-ui";
 import type * as React from "react";
 
@@ -14,7 +14,7 @@ function Separator({
       decorative={decorative}
       orientation={orientation}
       className={cn(
-        "shrink-0 bg-border data-horizontal:h-px data-horizontal:w-full data-vertical:w-px data-vertical:self-stretch",
+        "shrink-0 bg-line data-[orientation=horizontal]:h-px data-[orientation=horizontal]:w-full data-[orientation=vertical]:w-px data-[orientation=vertical]:self-stretch",
         className,
       )}
       {...props}

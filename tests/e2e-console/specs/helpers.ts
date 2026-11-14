@@ -45,7 +45,7 @@ export function manifest(): Release[] {
 // returns once the browser is back on a console page
 export async function signIn(page: Page, user: GitHubUser, returnTo = "/"): Promise<void> {
   await page.goto(`${APP}/sign-in?return_to=${encodeURIComponent(returnTo)}`);
-  await page.getByRole("link", { name: "Sign in with GitHub" }).click();
+  await page.getByRole("link", { name: "Continue with GitHub" }).click();
   await page.waitForURL(`${OAUTH}/login/oauth/authorize?**`);
   await expect(page.locator("#fixture-banner")).toContainText("TEST-ONLY");
   await page.fill("#fixture-user-id", String(user.id));
@@ -257,9 +257,9 @@ export async function openDashboard(page: Page, tenantId: string, site: Site): P
   const deadline = Date.now() + 120_000;
   for (;;) {
     await page.goto(`${APP}/projects/${tenantId}`);
-    // each site is an article named by its heading
-    const card = page.getByRole("article", { name: site.name, exact: true });
-    await card.getByRole("link", { name: "Open web dashboard" }).click();
+    // each site is a row of the overview's sites table, found by its domain
+    const row = page.getByRole("row").filter({ hasText: site.domain });
+    await row.getByRole("link", { name: "Open web dashboard" }).click();
     await page.waitForURL((u) => u.origin === WEB || u.pathname === "/sso-error", {
       timeout: 30_000,
     });

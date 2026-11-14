@@ -146,7 +146,7 @@ describe("operator alerts page", () => {
     expect(host.textContent).not.toContain("All clear");
 
     // the nav badge counts the alerts and the banner names the critical one
-    const nav = host.querySelector("nav[aria-label=Operator]") as HTMLElement;
+    const nav = host.querySelector('nav[aria-label="Operator sections"]') as HTMLElement;
     const link = [...nav.querySelectorAll("a")].find((a) => a.textContent?.startsWith("Alerts"));
     expect(link?.textContent).toBe("Alerts2 alerts firing");
     expect(host.textContent).toContain("A critical alert is firing.");
@@ -213,7 +213,7 @@ describe("operator alerts page", () => {
     await waitFor(() => expect(host.textContent).toContain("Alert source unreachable"));
     expect(host.textContent).not.toContain("All clear");
     expect(host.querySelector("[data-alert]")).toBeNull();
-    const nav = host.querySelector("nav[aria-label=Operator]") as HTMLElement;
+    const nav = host.querySelector('nav[aria-label="Operator sections"]') as HTMLElement;
     expect(nav.textContent).toContain("alert source unreachable");
   });
 

@@ -1,13 +1,23 @@
 import { useInfiniteQuery, useMutation, useQuery } from "@tanstack/react-query";
-import { Eraser } from "lucide-react";
+import { cn } from "@veristar/brand/cn";
+import { fade } from "@veristar/brand/motion";
+import { Check, Clock, Eraser, Minus, X } from "lucide-react";
+import { motion } from "motion/react";
 import { type FormEvent, useEffect, useState } from "react";
 import { ApiError } from "@/api/client";
 import { api, type ErasureInput } from "@/api/endpoints";
 import { erasureListQuery, erasureRequestQuery, keys, sitesQuery } from "@/api/queries";
 import type { ErasureKind, ErasureRequest, Site } from "@/api/schemas";
+import { ChoiceCard } from "@/components/choice-card";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { ErrorPanel, FormMessage, Loading } from "@/components/error-panel";
+import { ErrorPanel, FormMessage, Loading, StateBlock } from "@/components/error-panel";
 import { SelectField, TextAreaField, TextField } from "@/components/form-field";
+import { Stagger, StaggerItem } from "@/components/motion";
+import { projectTabs } from "@/components/nav/nav-items";
+import { NavTabs } from "@/components/nav/nav-tabs";
+import { Notice } from "@/components/notice";
+import { PageHeader, Panel } from "@/components/panel";
+import { StatusDot, type Tone } from "@/components/status";
 import { Button } from "@/components/ui/button";
 import {
   confirmDomainField,
@@ -138,34 +148,62 @@ export function PrivacyPage() {
   const { tenant, isOwner } = useProject();
   const sites = useQuery(sitesQuery(tenant.id));
 
-  if (sites.isPending) return <Loading label="Loading the privacy page" />;
-  if (sites.error) return <ErrorPanel error={sites.error} onRetry={() => sites.refetch()} />;
-  const all = sites.data;
-  const live = all.filter((s) => s.status !== "removed");
-
   return (
-    <div className="space-y-10">
-      <section className="space-y-4">
-        <h2 className="text-xl font-semibold tracking-tight">Privacy</h2>
-        <p className="max-w-prose text-sm text-muted-foreground">
-          Your project is the controller of its visitors' data. When a visitor asks you to erase
-          their data, request it here. Every request is recorded below and in the audit log.
-        </p>
-        {live.length === 0 ? (
-          <p className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
-            This project has no sites, so it holds no web data to erase.
-          </p>
-        ) : isOwner ? (
-          <ErasureForm tenantId={tenant.id} sites={live} />
-        ) : (
-          <p className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
-            Only owners of this project can request erasure. You can follow every request in the
-            history below.
-          </p>
-        )}
-      </section>
+    <div className="flex flex-col gap-6">
+      <PageHeader title="Settings" />
+      <NavTabs label="Settings" items={projectTabs(tenant.id, "settings") ?? []} />
+      {sites.isPending ? (
+        <Loading label="Loading the privacy page" />
+      ) : sites.error ? (
+        <ErrorPanel error={sites.error} onRetry={() => sites.refetch()} />
+      ) : (
+        <PrivacyBody tenantId={tenant.id} isOwner={isOwner} all={sites.data} />
+      )}
+    </div>
+  );
+}
 
-      <History tenantId={tenant.id} sites={all} />
+function PrivacyBody({
+  tenantId,
+  isOwner,
+  all,
+}: {
+  tenantId: string;
+  isOwner: boolean;
+  all: Site[];
+}) {
+  const live = all.filter((s) => s.status !== "removed");
+  return (
+    <div className="grid animate-rise-in items-start gap-8 xl:grid-cols-[minmax(0,1fr)_20rem]">
+      <div className="flex min-w-0 max-w-[52rem] flex-col gap-6">
+        <section aria-labelledby="privacy-h" className="flex flex-col gap-4">
+          <h2 id="privacy-h" className="sr-only">
+            Privacy
+          </h2>
+          <p className="max-w-prose text-body text-fg-2">
+            Your project is the controller of its visitors' data. When a visitor asks you to erase
+            their data, request it here. Every request is recorded below and in the audit log.
+          </p>
+          {live.length === 0 ? (
+            <StateBlock
+              kind="empty"
+              icon={<Eraser aria-hidden strokeWidth={1.75} />}
+              title="Nothing to erase"
+            >
+              This project has no sites, so it holds no web data to erase.
+            </StateBlock>
+          ) : isOwner ? (
+            <ErasureForm tenantId={tenantId} sites={live} />
+          ) : (
+            <Notice tone="info" title="Owners request erasure">
+              Only owners of this project can request erasure. You can follow every request in the
+              history below.
+            </Notice>
+          )}
+        </section>
+
+        <History tenantId={tenantId} sites={all} />
+      </div>
 
       <Explanation />
     </div>
@@ -223,137 +261,169 @@ function ErasureForm({ tenantId, sites }: { tenantId: string; sites: Site[] }) {
   const fieldError = Object.keys(serverErasureErrors(send.error)).length > 0;
   const special = erasureErrorText(send.error);
   const today = utcToday(new Date());
+  const kinds: { kind: ErasureKind; hint: string }[] = [
+    {
+      kind: "visitor_today",
+      hint: `Everything one visitor did on this site today, ${formatDate(`${today}T00:00:00Z`)} (UTC). You need the visitor's IP address and browser user agent.`,
+    },
+    {
+      kind: "session",
+      hint: "One session from the web dashboard, at any time during the retention period. You need its session id.",
+    },
+    {
+      kind: "site_reset",
+      hint: "Every event and session of this site, in both dashboards, and its aggregates. The site keeps collecting new visits.",
+    },
+  ];
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-4">
       <form
         noValidate
         autoComplete="off"
         onSubmit={submit}
         aria-label="Request erasure"
-        className="space-y-5 rounded-xl border bg-card p-5 sm:p-6"
+        className="flex flex-col rounded-xl border border-line bg-raised"
       >
-        <h3 className="font-semibold">Request erasure</h3>
-
-        <SelectField
-          label="Site"
-          name="site"
-          value={values.siteId}
-          onChange={(e) => change({ siteId: e.target.value, confirmDomain: "" })}
-          error={errors.siteId}
-        >
-          {sites.length > 1 ? <option value="">Choose a site</option> : null}
-          {sites.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name} ({s.domain})
-            </option>
-          ))}
-        </SelectField>
-
-        <fieldset className="space-y-2">
-          <legend className="mb-2 text-sm font-medium">What to erase</legend>
-          <KindOption
-            kind="visitor_today"
-            current={values.kind}
-            onChange={(kind) => change({ kind })}
-            hint={`Everything one visitor did on this site today, ${formatDate(`${today}T00:00:00Z`)} (UTC). You need the visitor's IP address and browser user agent.`}
-          />
-          <KindOption
-            kind="session"
-            current={values.kind}
-            onChange={(kind) => change({ kind })}
-            hint="One session from the web dashboard, at any time during the retention period. You need its session id."
-          />
-          <KindOption
-            kind="site_reset"
-            current={values.kind}
-            onChange={(kind) => change({ kind })}
-            hint="Every event and session of this site, in both dashboards, and its aggregates. The site keeps collecting new visits."
-          />
-        </fieldset>
-
-        {values.kind === "visitor_today" ? (
-          <div className="space-y-4">
-            <TextField
-              label="Visitor's IP address"
-              name="erasure-ip"
-              autoComplete="off"
-              autoCapitalize="none"
-              spellCheck={false}
-              inputMode="text"
-              placeholder="203.0.113.7"
-              hint="IPv4 or IPv6, as the visitor's browser used it today."
-              value={values.ip}
-              onChange={(e) => change({ ip: e.target.value })}
-              error={errors.ip}
-            />
-            <TextAreaField
-              label="Visitor's user agent"
-              name="erasure-user-agent"
-              rows={3}
-              className="font-mono text-xs"
-              autoComplete="off"
-              autoCapitalize="none"
-              spellCheck={false}
-              placeholder="Mozilla/5.0 (X11; Linux x86_64) ..."
-              hint="Exactly as the visitor's browser sends it. Both values are sent once to compute the visitor's token and are not stored by the service or by this page."
-              value={values.userAgent}
-              onChange={(e) => change({ userAgent: e.target.value })}
-              error={errors.userAgent}
-            />
+        <h3 className="border-b border-line px-4 py-3.5 text-title text-fg sm:px-5">
+          Request erasure
+        </h3>
+        <div className="flex flex-col gap-5 p-4 sm:p-5">
+          <div className="max-w-[24rem]">
+            <SelectField
+              label="Site"
+              name="site"
+              className="w-full max-lg:h-(--vs-control-touch)"
+              value={values.siteId}
+              onChange={(e) => change({ siteId: e.target.value, confirmDomain: "" })}
+              error={errors.siteId}
+            >
+              {sites.length > 1 ? <option value="">Choose a site</option> : null}
+              {sites.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name} ({s.domain})
+                </option>
+              ))}
+            </SelectField>
           </div>
-        ) : null}
 
-        {values.kind === "session" ? (
-          <TextField
-            label="Session id"
-            name="erasure-session"
-            autoComplete="off"
-            autoCapitalize="none"
-            spellCheck={false}
-            className="font-mono"
-            placeholder="2f1c7a9e-5b3d-4c8e-9a1f-6d0b2e4c8a7f"
-            hint="Open the web dashboard, find the session on its Sessions page and copy the id from the page address."
-            value={values.sessionId}
-            onChange={(e) => change({ sessionId: e.target.value })}
-            error={errors.sessionId}
-          />
-        ) : null}
+          <fieldset className="flex flex-col gap-2">
+            <legend className="pb-2 text-small font-medium text-fg">What to erase</legend>
+            <div className="grid gap-2 md:grid-cols-3">
+              {kinds.map((k) => (
+                <ChoiceCard
+                  key={k.kind}
+                  name="erasure-kind"
+                  value={k.kind}
+                  checked={values.kind === k.kind}
+                  onChange={() => change({ kind: k.kind })}
+                  title={KIND_LABEL[k.kind]}
+                  description={k.hint}
+                />
+              ))}
+            </div>
+          </fieldset>
 
-        {values.kind === "site_reset" ? (
-          <TextField
-            label="Type the site's domain to confirm"
-            name="erasure-confirm-domain"
-            autoComplete="off"
-            autoCapitalize="none"
-            spellCheck={false}
-            placeholder={site?.domain ?? "example.org"}
-            hint={
-              site
-                ? `All web data of ${site.domain} is deleted. This cannot be undone.`
-                : "Choose a site first."
-            }
-            value={values.confirmDomain}
-            onChange={(e) => change({ confirmDomain: e.target.value })}
-            error={errors.confirmDomain}
-          />
-        ) : null}
-
-        <div className="flex flex-wrap items-center gap-3">
-          <Button
-            type="submit"
-            variant={values.kind === "site_reset" ? "destructive" : "default"}
-            disabled={send.isPending}
+          {/* the fields of the chosen kind fade in; no exit wait, so they are
+              there at once for the keyboard */}
+          <motion.div
+            key={values.kind}
+            initial={fade.initial}
+            animate={fade.animate}
+            className="flex flex-col gap-4"
           >
-            <Eraser aria-hidden />
-            {send.isPending
-              ? "Sending"
-              : values.kind === "site_reset"
-                ? "Reset site data"
-                : "Request erasure"}
-          </Button>
+            {values.kind === "visitor_today" ? (
+              <>
+                <TextField
+                  label="Visitor's IP address"
+                  name="erasure-ip"
+                  autoComplete="off"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  inputMode="text"
+                  className="font-mono max-lg:h-(--vs-control-touch)"
+                  placeholder="203.0.113.7"
+                  hint="IPv4 or IPv6, as the visitor's browser used it today."
+                  value={values.ip}
+                  onChange={(e) => change({ ip: e.target.value })}
+                  error={errors.ip}
+                />
+                <TextAreaField
+                  label="Visitor's user agent"
+                  name="erasure-user-agent"
+                  rows={3}
+                  className="font-mono text-small"
+                  autoComplete="off"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  placeholder="Mozilla/5.0 (X11; Linux x86_64) ..."
+                  hint="Exactly as the visitor's browser sends it. Both values are sent once to compute the visitor's token and are not stored by the service or by this page."
+                  value={values.userAgent}
+                  onChange={(e) => change({ userAgent: e.target.value })}
+                  error={errors.userAgent}
+                />
+              </>
+            ) : null}
+
+            {values.kind === "session" ? (
+              <TextField
+                label="Session id"
+                name="erasure-session"
+                autoComplete="off"
+                autoCapitalize="none"
+                spellCheck={false}
+                className="font-mono max-lg:h-(--vs-control-touch)"
+                placeholder="2f1c7a9e-5b3d-4c8e-9a1f-6d0b2e4c8a7f"
+                hint="Open the web dashboard, find the session on its Sessions page and copy the id from the page address."
+                value={values.sessionId}
+                onChange={(e) => change({ sessionId: e.target.value })}
+                error={errors.sessionId}
+              />
+            ) : null}
+
+            {values.kind === "site_reset" ? (
+              <TextField
+                label="Type the site's domain to confirm"
+                name="erasure-confirm-domain"
+                autoComplete="off"
+                autoCapitalize="none"
+                spellCheck={false}
+                className="font-mono max-lg:h-(--vs-control-touch)"
+                placeholder={site?.domain ?? "example.org"}
+                hint={
+                  site
+                    ? `All web data of ${site.domain} is deleted. This cannot be undone.`
+                    : "Choose a site first."
+                }
+                value={values.confirmDomain}
+                onChange={(e) => change({ confirmDomain: e.target.value })}
+                error={errors.confirmDomain}
+              />
+            ) : null}
+          </motion.div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              type="submit"
+              variant={values.kind === "site_reset" ? "destructive" : "default"}
+              pending={send.isPending}
+              className="max-lg:h-(--vs-control-touch)"
+            >
+              {send.isPending ? null : <Eraser aria-hidden />}
+              {send.isPending
+                ? "Sending"
+                : values.kind === "site_reset"
+                  ? "Reset site data"
+                  : "Request erasure"}
+            </Button>
+            <span className="text-small text-fg-3">Erasure cannot be undone.</span>
+          </div>
           {confirming ? null : special ? (
-            <p role="alert" className="text-sm text-destructive">
+            <p
+              role="alert"
+              className="flex animate-fade-in items-start gap-2 rounded-md border border-critical-line bg-critical-soft px-2.5 py-2 text-small text-fg"
+            >
+              <X aria-hidden className="mt-0.5 size-3.5 shrink-0 text-critical" />
               {special}
             </p>
           ) : (
@@ -383,42 +453,6 @@ function ErasureForm({ tenantId, sites }: { tenantId: string; sites: Site[] }) {
   );
 }
 
-function KindOption({
-  kind,
-  current,
-  onChange,
-  hint,
-}: {
-  kind: ErasureKind;
-  current: ErasureKind;
-  onChange: (k: ErasureKind) => void;
-  hint: string;
-}) {
-  const id = `erasure-kind-${kind}`;
-  return (
-    <div className="flex items-start gap-3 rounded-lg border p-3 has-checked:border-primary has-checked:bg-primary/5">
-      <input
-        id={id}
-        type="radio"
-        name="erasure-kind"
-        value={kind}
-        checked={current === kind}
-        onChange={() => onChange(kind)}
-        aria-describedby={`${id}-hint`}
-        className="mt-1 size-4 accent-primary"
-      />
-      <div>
-        <label htmlFor={id} className="text-sm font-medium">
-          {KIND_LABEL[kind]}
-        </label>
-        <p id={`${id}-hint`} className="text-sm text-muted-foreground">
-          {hint}
-        </p>
-      </div>
-    </div>
-  );
-}
-
 // the request just sent, followed until the control plane finishes it
 function LastRequest({
   tenantId,
@@ -437,24 +471,36 @@ function LastRequest({
       void queryClient.invalidateQueries({ queryKey: keys.erasure(tenantId) });
   }, [status, tenantId]);
   if (q.error) return <ErrorPanel error={q.error} onRetry={() => q.refetch()} />;
-  if (!q.data) return <Loading label="Reading the request" />;
+  if (!q.data) return <Loading label="Reading the request" rows={1} />;
   const r = q.data;
+  const summary = requestSummary(r);
+  const tone = SUMMARY[summary]?.tone ?? "info";
   return (
     <section
       aria-label="Latest erasure request"
       aria-live="polite"
-      className={`rounded-lg border p-4 text-sm ${r.status === "failed" ? "border-destructive/40 bg-destructive/5" : r.status === "done" ? "border-good/40 bg-good/8" : "border-primary/30 bg-primary/5"}`}
+      className={cn(
+        "flex animate-rise-in items-start gap-3 rounded-lg border bg-raised p-4 text-body",
+        r.status === "failed"
+          ? "border-critical-line"
+          : r.status === "done"
+            ? "border-success-line"
+            : "border-line-strong",
+      )}
     >
-      <p className="font-medium">
-        {r.status === "running"
-          ? `${KIND_LABEL[r.kind]} on ${site?.domain ?? "the site"}: running`
-          : `${KIND_LABEL[r.kind]} on ${site?.domain ?? "the site"}: ${requestSummary(r).toLowerCase()}`}
-      </p>
-      <p className="mt-1 text-muted-foreground">
-        {r.status === "running"
-          ? "The request waits until every event of this site that was queued before it has been stored, then deletes. This usually takes seconds."
-          : (r.message ?? r.error ?? "")}
-      </p>
+      <StatusDot tone={tone} live={summary === "Running"} className="mt-2" />
+      <div className="flex min-w-0 flex-col gap-1">
+        <p className="font-medium text-fg">
+          {r.status === "running"
+            ? `${KIND_LABEL[r.kind]} on ${site?.domain ?? "the site"}: running`
+            : `${KIND_LABEL[r.kind]} on ${site?.domain ?? "the site"}: ${summary.toLowerCase()}`}
+        </p>
+        <p className="text-small text-fg-2">
+          {r.status === "running"
+            ? "The request waits until every event of this site that was queued before it has been stored, then deletes. This usually takes seconds."
+            : (r.message ?? r.error ?? "")}
+        </p>
+      </div>
     </section>
   );
 }
@@ -463,38 +509,48 @@ function History({ tenantId, sites }: { tenantId: string; sites: Site[] }) {
   const list = useInfiniteQuery(erasureListQuery(tenantId));
   const names = new Map(sites.map((s) => [s.id, s.domain]));
   return (
-    <section className="space-y-4" aria-labelledby="erasure-history">
-      <h2 id="erasure-history" className="text-xl font-semibold tracking-tight">
+    <section
+      aria-labelledby="erasure-history"
+      className="flex flex-col rounded-xl border border-line bg-raised"
+    >
+      <h2
+        id="erasure-history"
+        className="border-b border-line px-4 py-3.5 text-title text-fg sm:px-5"
+      >
         Request history
       </h2>
       {list.isPending ? (
-        <Loading label="Loading the request history" />
+        <Loading label="Loading the request history" className="px-4 sm:px-5" />
       ) : list.error ? (
-        <ErrorPanel error={list.error} onRetry={() => list.refetch()} />
+        <div className="p-4">
+          <ErrorPanel error={list.error} onRetry={() => list.refetch()} />
+        </div>
       ) : (
         <>
           {list.data.pages[0]?.items.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No erasure was requested yet.</p>
+            <p className="px-4 py-6 text-small text-fg-2 sm:px-5">No erasure was requested yet.</p>
           ) : (
-            <ul className="divide-y overflow-hidden rounded-xl border bg-card">
+            <Stagger as="ol" className="divide-y divide-line-subtle">
               {list.data.pages
                 .flatMap((p) => p.items)
                 .map((r) => (
-                  <li key={r.id}>
+                  <StaggerItem as="li" key={r.id}>
                     <HistoryRow r={r} domain={names.get(r.site_id) ?? "a deleted site"} />
-                  </li>
+                  </StaggerItem>
                 ))}
-            </ul>
+            </Stagger>
           )}
           {list.hasNextPage ? (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => list.fetchNextPage()}
-              disabled={list.isFetchingNextPage}
-            >
-              {list.isFetchingNextPage ? "Loading" : "Show older requests"}
-            </Button>
+            <div className="border-t border-line px-4 py-3 sm:px-5">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => list.fetchNextPage()}
+                pending={list.isFetchingNextPage}
+              >
+                {list.isFetchingNextPage ? "Loading" : "Show older requests"}
+              </Button>
+            </div>
           ) : null}
         </>
       )}
@@ -502,15 +558,16 @@ function History({ tenantId, sites }: { tenantId: string; sites: Site[] }) {
   );
 }
 
-const SUMMARY_TONE: Record<string, string> = {
-  Running: "bg-primary/10 text-primary ring-primary/30",
-  Erased: "bg-good/12 text-good ring-good/30",
-  "Nothing found": "bg-muted text-muted-foreground ring-border",
-  Failed: "bg-destructive/10 text-destructive ring-destructive/30",
+const SUMMARY: Record<string, { tone: Tone; icon: React.ReactNode; text: string }> = {
+  Running: { tone: "info", icon: <Clock aria-hidden />, text: "text-fg" },
+  Erased: { tone: "success", icon: <Check aria-hidden />, text: "text-success" },
+  "Nothing found": { tone: "info", icon: <Minus aria-hidden />, text: "text-fg-2" },
+  Failed: { tone: "critical", icon: <X aria-hidden />, text: "text-critical" },
 };
 
 export function HistoryRow({ r, domain }: { r: ErasureRequest; domain: string }) {
   const summary = requestSummary(r);
+  const look = SUMMARY[summary];
   const target =
     r.kind === "visitor_today"
       ? `visitor of ${r.day ? formatDate(`${r.day}T00:00:00Z`) : "the day"} (UTC)`
@@ -518,83 +575,92 @@ export function HistoryRow({ r, domain }: { r: ErasureRequest; domain: string })
         ? `session ${r.session_id ?? ""}`
         : "all web data";
   return (
-    <div className="space-y-1 p-4 text-sm sm:p-5">
-      <div className="flex flex-wrap items-center gap-2">
-        <p className="font-medium">
+    <div className="grid gap-x-4 gap-y-1.5 px-4 py-3 text-small sm:grid-cols-[7.5rem_minmax(0,1fr)] sm:px-5">
+      <span
+        className={cn(
+          "flex items-center gap-1.5 font-medium [&_svg]:size-3.5",
+          look?.text ?? "text-fg-2",
+        )}
+      >
+        {summary === "Running" ? <StatusDot tone="info" live /> : look?.icon}
+        {summary}
+      </span>
+      <div className="flex min-w-0 flex-col gap-1">
+        <p className="font-medium text-fg">
           {KIND_LABEL[r.kind]}: {domain}
         </p>
-        <span
-          className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${SUMMARY_TONE[summary] ?? ""}`}
-        >
-          <span aria-hidden className="size-1.5 rounded-full bg-current" />
-          {summary}
-        </span>
-      </div>
-      <p className="text-muted-foreground">
-        <span className="break-all">{target}</span>, requested {formatDateTimeUtc(r.requested_at)}
-        {r.completed_at ? `, finished ${formatDateTimeUtc(r.completed_at)}` : ""}
-      </p>
-      {r.message ? <p>{r.message}</p> : null}
-      {r.error ? <p className="text-destructive">{r.error}</p> : null}
-      {r.status !== "running" ? (
-        <p className="text-muted-foreground">
-          Deleted {formatCount(r.sessions_deleted)} session(s), {formatCount(r.events_deleted)}{" "}
-          event(s) and {formatCount(r.dlq_messages_deleted)} undeliverable queued message(s).
-          {r.affected_from
-            ? r.reaggregated_at
-              ? ` Daily aggregates were recomputed ${formatDateTimeUtc(r.reaggregated_at)}.`
-              : " Daily aggregates are being recomputed."
-            : ""}
+        <p className="text-fg-3">
+          <span className="break-all">{target}</span>, requested{" "}
+          <span className="tabular">{formatDateTimeUtc(r.requested_at)}</span>
+          {r.completed_at ? `, finished ${formatDateTimeUtc(r.completed_at)}` : ""}
         </p>
-      ) : null}
+        {r.message ? <p className="text-fg-2">{r.message}</p> : null}
+        {r.error ? <p className="text-critical">{r.error}</p> : null}
+        {r.status !== "running" ? (
+          <p className="text-fg-3">
+            Deleted <span className="tabular">{formatCount(r.sessions_deleted)}</span> session(s),{" "}
+            <span className="tabular">{formatCount(r.events_deleted)}</span> event(s) and{" "}
+            <span className="tabular">{formatCount(r.dlq_messages_deleted)}</span> undeliverable
+            queued message(s).
+            {r.affected_from
+              ? r.reaggregated_at
+                ? ` Daily aggregates were recomputed ${formatDateTimeUtc(r.reaggregated_at)}.`
+                : " Daily aggregates are being recomputed."
+              : ""}
+          </p>
+        ) : null}
+      </div>
     </div>
   );
 }
 
 function Explanation() {
   return (
-    <section className="max-w-prose space-y-4 text-sm" aria-labelledby="erasure-explained">
-      <h2 id="erasure-explained" className="text-xl font-semibold tracking-tight">
-        What can and cannot be erased
-      </h2>
-      <p className="text-muted-foreground">
-        The service never stores an IP address. A visitor is known only by a token computed from the
-        IP address, the user agent, the site and a secret that exists in memory for one UTC day.
-      </p>
-      <dl className="space-y-3">
-        <div>
-          <dt className="font-medium">One visitor, today</dt>
-          <dd className="text-muted-foreground">
-            Works only on the UTC day of the visit. On that day the service can compute the
-            visitor's token again from the IP address and user agent you enter, and delete their
-            sessions and events. At midnight UTC the day's secret is destroyed. After that nobody,
-            including the operators, can tell which stored session belongs to which person, so a
-            request for an earlier day finds nothing and says so.
-          </dd>
+    <aside aria-labelledby="erasure-explained" className="flex min-w-0 flex-col gap-4">
+      <Panel title={<span id="erasure-explained">What can and cannot be erased</span>}>
+        <div className="flex flex-col gap-3 text-small text-fg-2">
+          <p>
+            The service never stores an IP address. A visitor is known only by a token computed from
+            the IP address, the user agent, the site and a secret that exists in memory for one UTC
+            day.
+          </p>
+          <dl className="flex flex-col gap-3">
+            <div className="flex flex-col gap-0.5">
+              <dt className="font-medium text-fg">One visitor, today</dt>
+              <dd>
+                Works only on the UTC day of the visit. On that day the service can compute the
+                visitor's token again from the IP address and user agent you enter, and delete their
+                sessions and events. At midnight UTC the day's secret is destroyed. After that
+                nobody, including the operators, can tell which stored session belongs to which
+                person, so a request for an earlier day finds nothing and says so.
+              </dd>
+            </div>
+            <div className="flex flex-col gap-0.5">
+              <dt className="font-medium text-fg">One session</dt>
+              <dd>
+                Works for as long as raw data is kept. If the visitor can point to a visit (for
+                example by its time and pages), find it on the dashboard's Sessions page and erase
+                it by its id.
+              </dd>
+            </div>
+            <div className="flex flex-col gap-0.5">
+              <dt className="font-medium text-fg">Whole site</dt>
+              <dd>
+                Deletes every event and session of the site in both dashboards and its aggregates,
+                at any time. Use it when a visitor cannot be identified by either of the other two,
+                or when personal data reached a page address, title or event by mistake.
+              </dd>
+            </div>
+          </dl>
+          <p>
+            Every request first waits until events of the site that were queued before it are
+            stored, so none of them reappear afterwards. Afterwards the affected days of the
+            aggregate figures are recomputed. Data in backups stays there until the backups expire.
+            API metrics hold no visitor data and are not affected. The full description is in the
+            service's erasure documentation (docs/compliance/erasure.md).
+          </p>
         </div>
-        <div>
-          <dt className="font-medium">One session</dt>
-          <dd className="text-muted-foreground">
-            Works for as long as raw data is kept. If the visitor can point to a visit (for example
-            by its time and pages), find it on the dashboard's Sessions page and erase it by its id.
-          </dd>
-        </div>
-        <div>
-          <dt className="font-medium">Whole site</dt>
-          <dd className="text-muted-foreground">
-            Deletes every event and session of the site in both dashboards and its aggregates, at
-            any time. Use it when a visitor cannot be identified by either of the other two, or when
-            personal data reached a page address, title or event by mistake.
-          </dd>
-        </div>
-      </dl>
-      <p className="text-muted-foreground">
-        Every request first waits until events of the site that were queued before it are stored, so
-        none of them reappear afterwards. Afterwards the affected days of the aggregate figures are
-        recomputed. Data in backups stays there until the backups expire. API metrics hold no
-        visitor data and are not affected. The full description is in the service's erasure
-        documentation (docs/compliance/erasure.md).
-      </p>
-    </section>
+      </Panel>
+    </aside>
   );
 }

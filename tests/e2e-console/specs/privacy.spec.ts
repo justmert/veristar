@@ -115,8 +115,11 @@ async function latest(): Promise<ErasureRow> {
 async function privacyPage(): Promise<Page> {
   const page = await owner.newPage();
   await page.goto(`${APP}/projects/${tenant.id}/privacy`);
-  // exact: the project is named "Privacy project <host>", and its name is the page's h1
-  await expect(page.getByRole("heading", { name: "Privacy", exact: true })).toBeVisible();
+  // the privacy tab of the project's settings place is the current page
+  await expect(page.getByRole("heading", { name: "Settings", level: 1 })).toBeVisible();
+  await expect(
+    page.getByRole("navigation", { name: "Settings" }).getByRole("link", { name: "Privacy" }),
+  ).toHaveAttribute("aria-current", "page");
   return page;
 }
 
@@ -173,7 +176,9 @@ test("the privacy page erases one session by its id and leaves the other", async
   await page.screenshot({ path: join(shots, "01-privacy.png"), fullPage: true });
 
   const form = page.getByRole("form", { name: "Request erasure" });
-  await form.getByLabel("One session").check();
+  // the kind is a radio card; a person clicks the card's title
+  await form.getByText("One session", { exact: true }).click();
+  await expect(form.getByRole("radio", { name: "One session" })).toBeChecked();
   await form.getByLabel("Session id").fill(erased);
   const sent = page.waitForResponse(
     (r) => r.request().method() === "POST" && r.url() === `${APP}/api/tenants/${tenant.id}/erasure`,
@@ -208,7 +213,9 @@ test("the privacy page erases one session by its id and leaves the other", async
 test("the privacy page resets the whole site after the domain is typed and confirmed", async () => {
   const page = await privacyPage();
   const form = page.getByRole("form", { name: "Request erasure" });
-  await form.getByLabel("Whole site").check();
+  // the kind is a radio card; a person clicks the card's title
+  await form.getByText("Whole site", { exact: true }).click();
+  await expect(form.getByRole("radio", { name: "Whole site" })).toBeChecked();
   await form.getByLabel("Type the site's domain to confirm").fill(`x${host}`);
   await form.getByRole("button", { name: "Reset site data" }).click();
   await expect(form.getByText(`Type ${host} exactly.`)).toBeVisible();

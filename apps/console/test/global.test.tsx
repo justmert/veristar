@@ -255,7 +255,7 @@ describe("global web view", () => {
     const host = await renderRoutes(operatorRoutes, "/operator/web");
     await waitFor(() => expect(host.textContent).toContain("Stellar DEX"));
     for (const id of [c.TENANT_ID, f.TENANT_B]) {
-      const box = rowOf(host, id).querySelector<HTMLInputElement>("input[type=checkbox]");
+      const box = rowOf(host, id).querySelector<HTMLElement>("[role=checkbox]");
       if (!box) throw new Error("no checkbox");
       await click(box);
     }
@@ -304,10 +304,13 @@ describe("comparison", () => {
       `/api/operator/web/compare?tenants=${encodeURIComponent(`${c.TENANT_ID},${f.TENANT_B}`)}&breakdown_limit=10`,
       `/api/operator/api/compare?tenants=${encodeURIComponent(`${c.TENANT_ID},${f.TENANT_B}`)}`,
     ]);
+    // one row per compared project, one cell per metric
     const web = host.querySelector("section[aria-label='Web totals']");
-    expect(web?.querySelector("tr[data-metric='Visitors']")?.textContent).toBe("Visitors180");
+    const visitors = [...(web?.querySelectorAll("td[data-metric='Visitors']") ?? [])];
+    expect(visitors.map((td) => td.textContent)).toEqual(["18", "0"]);
     const api = host.querySelector("section[aria-label='API totals']");
-    expect(api?.querySelector("tr[data-metric='p99']")?.textContent).toContain(">10 s");
+    const p99 = [...(api?.querySelectorAll("td[data-metric='p99']") ?? [])];
+    expect(p99.map((td) => td.textContent).join(" ")).toContain(">10 s");
     expect(host.textContent).toContain("not read");
     expect(host.textContent).toContain("github.com");
     expect(host.textContent).toContain("13 more");
@@ -382,6 +385,10 @@ describe("api keys", () => {
 
     await type(byLabel(host, "Name") as HTMLInputElement, "warehouse");
     await click(byRole(host, "button", "Create key"));
+    // the one-time secret is masked until it is revealed
+    await waitFor(() => byRole(host, "button", "Copy key"));
+    expect(host.querySelector('[aria-label="Secret hidden"]')).toBeTruthy();
+    await click(host.querySelector('[aria-label="Show the secret"]') as HTMLElement);
     await waitFor(() => expect(host.textContent).toContain(f.KEY_PLAIN));
     const post = calls.find((x) => x.method === "POST");
     expect(post).toMatchObject({
@@ -393,7 +400,10 @@ describe("api keys", () => {
     expect(byRole(host, "button", "Copy key")).toBeTruthy();
 
     // once dismissed, the key is not shown again
-    await click(byRole(host, "button", "I have copied the key"));
+    // done stays disabled until the operator says the key is stored
+    expect(byRole(host, "button", "Done").hasAttribute("disabled")).toBe(true);
+    await click(host.querySelector('[role="checkbox"]') as HTMLElement);
+    await click(byRole(host, "button", "Done"));
     await waitFor(() => expect(host.textContent).toContain("sa_op_Ab3x..."));
     expect(host.textContent).not.toContain(f.KEY_PLAIN);
 

@@ -118,22 +118,33 @@ test("the operator switches enrollment to approval after a confirmation", async 
   );
   expect(before.status).toBe(200);
   const page = op.page;
-  await page.goto(`${APP}/`);
-  await page.getByRole("link", { name: "Operator", exact: true }).click();
-  await page.getByRole("link", { name: "Settings" }).click();
+  await page.goto(`${APP}/operator`);
+  await page
+    .getByRole("navigation", { name: "Operator" })
+    .getByRole("link", { name: "Admin" })
+    .click();
+  await page
+    .getByRole("navigation", { name: "Operator sections" })
+    .getByRole("link", { name: "Settings" })
+    .click();
+  // the enrollment mode is a radio group; change setting asks for confirmation
+  const mode = page.getByRole("region", { name: "Enrollment mode" });
   if (before.body.mode === "approval") {
     // a previous attempt switched already; go through the dialog both ways
-    await page.getByRole("button", { name: "Switch to open" }).click();
+    await mode.getByRole("radio", { name: "Open" }).check();
+    await mode.getByRole("button", { name: "Change setting" }).click();
     await page.getByRole("dialog").getByRole("button", { name: "Switch mode" }).click();
     await expect(page.getByText("Current mode: Open")).toBeVisible();
   }
-  await page.getByRole("button", { name: "Switch to approval required" }).click();
+  await mode.getByRole("radio", { name: "Approval required" }).check();
+  await mode.getByRole("button", { name: "Change setting" }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toContainText("new enrollments only");
   // cancelling changes nothing
   await dialog.getByRole("button", { name: "Cancel" }).click();
   await expect(page.getByText("Current mode: Open")).toBeVisible();
-  await page.getByRole("button", { name: "Switch to approval required" }).click();
+  await mode.getByRole("radio", { name: "Approval required" }).check();
+  await mode.getByRole("button", { name: "Change setting" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Switch mode" }).click();
   await expect(page.getByText("Current mode: Approval required")).toBeVisible();
   const after = await api<{ mode: string }>(
@@ -154,7 +165,14 @@ test("a new project waits in the review queue and the operator approves it", asy
 
   const page = op.page;
   await page.goto(`${APP}/operator`);
-  await page.getByRole("link").filter({ hasText: tenant.name }).click();
+  // the review workspace: pick the project in the queue, its evidence and
+  // the decision show beside it, the project page holds every action
+  const queue = page.getByRole("region", { name: /^Review queue/ });
+  await queue.getByRole("button").filter({ hasText: tenant.name }).click();
+  const review = page.getByRole("region", { name: `Review ${tenant.name}` });
+  await expect(review.getByRole("list", { name: "Evidence" })).toBeVisible();
+  await expect(review.getByRole("radiogroup", { name: "Decision" })).toBeVisible();
+  await review.getByRole("link", { name: "Open project page" }).click();
   await page.waitForURL(`${APP}/operator/tenants/${tenant.id}`);
   // enrollment answers and the site with its evidence
   await expect(page.getByText("Soroban contracts on testnet", { exact: true })).toBeVisible();
@@ -202,7 +220,8 @@ test("resume returns the project to active", async () => {
   expect(t.body.status).toBe("active");
   expect(t.body.status_reason).toBeNull();
   await owner.page.goto(`${APP}/projects/${tenant.id}`);
-  await expect(owner.page.getByRole("heading", { name: tenant.name })).toBeVisible();
+  // the project page rendered (the sidebar names the project; the page has its own h1)
+  await expect(owner.page.getByRole("heading", { level: 1 })).toBeVisible();
   await expect(owner.page.getByText("This project is suspended")).toHaveCount(0);
 });
 

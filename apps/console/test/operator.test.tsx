@@ -3,6 +3,7 @@ import { auditPath, type TenantListQuery, tenantListPath } from "@/api/endpoints
 import { tenantAction } from "@/api/schemas";
 import { AuditPage, auditSummary, dayToUtc } from "@/pages/operator/audit";
 import { OperatorLayout } from "@/pages/operator/layout";
+import { ReviewQueuePage } from "@/pages/operator/review";
 import { SettingsPage } from "@/pages/operator/settings";
 import { TenantDetailPage } from "@/pages/operator/tenant-detail";
 import { queryFromParams, TenantsPage } from "@/pages/operator/tenants";
@@ -60,7 +61,13 @@ describe("operator area guard", () => {
       "/operator",
     );
     await waitFor(() => expect(host.textContent).toContain("queue"));
-    expect(host.textContent).toContain("Audit log");
+    // the place header and its tabs; the sidebar of the shell picks the place
+    expect(host.querySelector("h1")?.textContent).toBe("Attention");
+    const tabs = host.querySelector('nav[aria-label="Operator sections"]') as HTMLElement;
+    expect([...tabs.querySelectorAll("a")].map((a) => a.textContent)).toEqual([
+      "Review queue",
+      "Alerts",
+    ]);
   });
 });
 
@@ -202,8 +209,10 @@ describe("operator project list", () => {
     );
     await waitFor(() => expect(host.textContent).toContain("Stellar DEX"));
     expect(calls[0]?.url).toBe("/api/operator/tenants?sort=created_at&order=desc&limit=50");
-    const pending = [...host.querySelectorAll("label")].find((l) => l.textContent === "Pending");
-    await click(pending?.querySelector("input") as HTMLElement);
+    const status = host.querySelector("fieldset") as HTMLElement;
+    const pending = byRole(status, "button", "Pending");
+    await click(pending);
+    await waitFor(() => expect(pending.getAttribute("aria-pressed")).toBe("true"));
     await waitFor(() => expect(calls).toHaveLength(2));
     expect(calls[1]?.url).toContain("status=pending");
     await type(byLabel(host, "Search"), "dex");
@@ -225,9 +234,19 @@ describe("enrollment mode switch", () => {
       { status: 200, body: { mode: "approval" } },
     ]);
     const host = await renderRoutes([{ path: "/", element: <SettingsPage /> }], "/");
-    await waitFor(() => byRole(host, "button", "Switch to approval required"));
+    await waitFor(() => byLabel(host, "Approval required"));
     expect(host.textContent).toContain("Current mode: Open");
-    await click(byRole(host, "button", "Switch to approval required"));
+    // the change button is live only once another option is chosen
+    const change = () =>
+      byRole(
+        host.querySelector("[aria-labelledby=mode-h]") as HTMLElement,
+        "button",
+        "Change setting",
+      );
+    expect(change().hasAttribute("disabled")).toBe(true);
+    await click(byLabel(host, "Approval required") as HTMLElement);
+    expect(change().hasAttribute("disabled")).toBe(false);
+    await click(change());
     const dialog = dialogOpen(host) as HTMLElement;
     expect(dialog.textContent).toContain("new enrollments only");
     expect(calls).toHaveLength(2);
@@ -245,8 +264,15 @@ describe("enrollment mode switch", () => {
       { status: 200, body: { keep: true } },
     ]);
     const host = await renderRoutes([{ path: "/", element: <SettingsPage /> }], "/");
-    await waitFor(() => byRole(host, "button", "Switch to open"));
-    await click(byRole(host, "button", "Switch to open"));
+    await waitFor(() => byLabel(host, "Open"));
+    await click(byLabel(host, "Open") as HTMLElement);
+    await click(
+      byRole(
+        host.querySelector("[aria-labelledby=mode-h]") as HTMLElement,
+        "button",
+        "Change setting",
+      ),
+    );
     await click(byRole(dialogOpen(host) as HTMLElement, "button", "Cancel"));
     expect(dialogOpen(host)).toBeUndefined();
     expect(calls).toHaveLength(2);
@@ -295,4 +321,55 @@ describe("audit log", () => {
 
 it("knows every lifecycle action of contract 5.5", () => {
   expect(tenantAction.options).toEqual(["approve", "reject", "suspend", "resume", "remove"]);
+});
+
+describe("review workspace", () => {
+  const noAlerts = {
+    checked_at: "2026-11-13T12:00:00Z",
+    watchdog_firing: true,
+    sources: [{ address: "10.0.1.4:9093", reachable: true, watchdog_firing: true, error: null }],
+    alerts: [],
+  };
+  const pendingDetail = {
+    ...f.operatorDetailBody,
+    tenant: { ...f.operatorDetailBody.tenant, status: "pending" },
+    allowed_actions: ["approve", "reject", "remove"],
+  };
+
+  it("shows the queue, the evidence and rejects with a required reason", async () => {
+    const calls = stubFetch([
+      { status: 200, body: noAlerts },
+      {
+        status: 200,
+        body: { items: [{ ...f.operatorSummaryBody, status: "pending" }], next_cursor: null },
+      },
+      { status: 200, body: pendingDetail },
+      { status: 200, body: { ...f.operatorSummaryBody, status: "rejected" } },
+    ]);
+    const host = await renderRoutes(
+      [{ path: "/operator", element: <ReviewQueuePage /> }],
+      "/operator",
+    );
+    await waitFor(() => expect(host.textContent).toContain("Soroban AMM on mainnet"));
+    expect(calls[1]?.url).toBe(
+      "/api/operator/tenants?review=true&sort=created_at&order=asc&limit=50",
+    );
+    expect(host.textContent).toContain("No alert needs action.");
+    expect(host.querySelector("ul[aria-label=Evidence]")?.textContent).toContain(
+      "1 of 2 not a valid id",
+    );
+
+    const reject = [...host.querySelectorAll("[role=radio]")].find((r) =>
+      r.textContent?.includes("Reject"),
+    ) as HTMLElement;
+    await click(reject);
+    await click(byRole(host, "button", "Reject projectCtrl Enter"));
+    expect(calls).toHaveLength(3);
+    expect(host.textContent).toContain("Required.");
+    await type(byLabel(host, "Reason"), " Not on Stellar ");
+    await click(byRole(host, "button", "Reject projectCtrl Enter"));
+    await waitFor(() => expect(calls).toHaveLength(4));
+    expect(calls[3]?.url).toBe(`/api/operator/tenants/${f.TENANT_ID}/reject`);
+    expect(calls[3]?.body).toEqual({ reason: "Not on Stellar" });
+  });
 });
