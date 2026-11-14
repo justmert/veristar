@@ -90,7 +90,7 @@ Keys of `tofu.enc.env` (`CLOUDFLARE_API_TOKEN`; Azure uses the operator's `az lo
 `sops --config infra/secrets/.sops.yaml edit infra/secrets/<env>/tofu.enc.env`, run
 `make <env>-plan` to prove the new value works (expected: `No changes.`), and revoke the old
 one at the provider. `TF_VAR_state_passphrase` needs OpenTofu's `fallback` key provider for one
-apply ([../deploy/opentofu.md](../deploy/opentofu.md) section 3.5).
+apply ([state backend](../deploy/opentofu.md#state-backend)).
 
 ## Procedures for the extra steps
 

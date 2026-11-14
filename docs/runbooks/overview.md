@@ -67,8 +67,7 @@ Every server has one login, `ops`, reachable over SSH from the admin address ran
 the `core` group, so a runbook step for "an edge node" or "a core node" runs on any of them.
 `<env>-restore-1` exists only during a restore.
 
-Private addresses follow a fixed scheme ([../deploy/opentofu.md](../deploy/opentofu.md)
-section 2):
+Private addresses follow a fixed scheme ([../deploy/opentofu.md](../deploy/opentofu.md#layout)):
 
 | Node | staging | production |
 |---|---|---|
