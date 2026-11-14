@@ -34,6 +34,14 @@
       ansible.builtin.meta: end_host
       when: not reboot_flag.stat.exists and not (reboot_all | default(false) | bool)
 
+    # a converged node is in both groups. the core play reboots it once, after
+    # handing over the patroni leader; rebooting it here as well would take
+    # the leader down without a switchover, and its caddy lives in the core
+    # project, so the edge health check below could not run
+    - name: Leave a converged node to the core play
+      ansible.builtin.meta: end_host
+      when: inventory_hostname in groups['core']
+
     - name: Drain the node
       ansible.builtin.include_tasks: tasks/drain.yml
       vars:
@@ -116,6 +124,18 @@
       retries: 150
       delay: 2
       changed_when: false
+
+    # on a converged node the same caddy also carries in. and otlp., so the
+    # gateway must be ready before the node takes events again
+    - name: Wait for the gateway behind caddy on a converged node
+      ansible.builtin.command:
+        argv: [docker, compose, --project-directory, /opt/veristar/core, exec, -T, caddy, wget, -q, -O, /dev/null, "http://gateway:9090/readyz"]
+      register: reboot_gateway_health
+      until: reboot_gateway_health.rc == 0
+      retries: 90
+      delay: 2
+      changed_when: false
+      when: inventory_hostname in groups['edge']
 
     - name: Undrain the node
       ansible.builtin.include_tasks: tasks/undrain.yml
