@@ -175,6 +175,16 @@
 - name: Apply config reloads now
   ansible.builtin.meta: flush_handlers
 
+# web.Caddyfile serves the theme of umami's dashboard from /srv/umami-theme
+# and links its stylesheet into every page (docs/adr/0004); the console image
+# carries the directory. an image without it would leave every dashboard
+# page linking a stylesheet that answers 404, so the deploy stops instead
+- name: Check that caddy holds the umami dashboard theme
+  ansible.builtin.command:
+    argv: [docker, compose, --project-directory, "{{ core_dir }}", exec, -T, caddy, test, -f, /srv/umami-theme/_veristar/theme.css]
+  when: core_stage != 'infra'
+  changed_when: false
+
 # bootstrap.dcs applies only when the cluster is created; afterwards the
 # live settings are kept equal to core_patroni_dcs through the rest api
 - name: Read the patroni cluster settings

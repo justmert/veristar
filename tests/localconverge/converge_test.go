@@ -250,6 +250,30 @@ func TestConvergedStack(t *testing.T) {
 		t.Logf("umami website_event paths: %s", paths)
 	})
 
+	// the console image carries the umami dashboard theme (docs/adr/0004);
+	// the core caddy serves it and links it into umami's html
+	t.Run("umami dashboard theme through the core caddy", func(t *testing.T) {
+		hc := &http.Client{Transport: transport(core.Public), Timeout: 30 * time.Second}
+		get := func(path string) (*http.Response, []byte) {
+			resp, err := hc.Get("https://" + inv.All.Vars.Hostnames["web"] + path)
+			require.NoError(t, err)
+			defer resp.Body.Close()
+			b, err := io.ReadAll(resp.Body)
+			require.NoError(t, err)
+			return resp, b
+		}
+		for _, f := range []string{"_veristar/theme.css", "_veristar/fonts/geist.css", "favicon.ico", "site.webmanifest"} {
+			want, err := os.ReadFile("../../deploy/caddy/umami-theme/site/" + f)
+			require.NoError(t, err)
+			resp, got := get("/" + f)
+			require.Equal(t, http.StatusOK, resp.StatusCode, f)
+			require.Equal(t, want, got, "%s differs from the repository's theme", f)
+		}
+		resp, page := get("/websites/" + site.ID)
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+		require.Equal(t, 1, strings.Count(string(page), `<link rel="stylesheet" href="/_veristar/theme.css"></head>`))
+	})
+
 	t.Run("otlp metrics through every edge node into the platform database", func(t *testing.T) {
 		var tok struct {
 			Token string `json:"token"`
