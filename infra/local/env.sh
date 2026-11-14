@@ -1,7 +1,7 @@
 # shared settings of the local converge scripts (docs/deploy/local-converge.md).
 # every name carries the sa-lc prefix so cleanup can find what was created.
 LC_PREFIX=sa-lc
-LC_STATE="$root/.scratch/scratch/local-converge"
+LC_STATE="$root/.scratch/local-converge"
 LC_PUBLIC_NET=sa-lc-public
 LC_PUBLIC_SUBNET=172.31.99.0/24
 LC_PUBLIC_GATEWAY=172.31.99.1

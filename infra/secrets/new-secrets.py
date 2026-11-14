@@ -6,11 +6,11 @@
         > infra/secrets/<env>/secrets.enc.yaml
 
 docs/deploy/secrets.md describes the whole procedure. every value here is
-random and generated on the spot. values that come from the operator (inputs I2
-and I6) are never generated: they are taken from the environment variables
-named below and left out when unset, and the ansible secrets role then
-refuses to converge a node that needs a missing one. so the file never holds
-a placeholder that looks like a credential.
+random and generated on the spot. values issued by a provider (the github
+oauth app, the cloudflare token) are never generated: they are taken from
+the environment variables named below and left out when unset, and the
+ansible secrets role then refuses to converge a node that needs a missing
+one. so the file never holds a placeholder that looks like a credential.
 
 nats needs a bcrypt hash per user for the server and the plain password for
 the client; both are generated together here, because a hash computed during
@@ -26,17 +26,17 @@ import yaml
 
 NATS_USERS = ["gateway", "collector", "replayer", "metricswriter", "jobs", "controlplane", "platformctl"]
 
-# owner inputs: variable name in this script's environment -> key in the file
+# provider-issued values: variable name in this script's environment -> key in the file
 INPUTS = {
-    "SA_GITHUB_CLIENT_ID": "github_client_id",  # I2
-    "SA_GITHUB_CLIENT_SECRET": "github_client_secret",  # I2
-    "SA_CLOUDFLARE_API_TOKEN": "cloudflare_api_token",  # I6, caddy dns-01
+    "SA_GITHUB_CLIENT_ID": "github_client_id",  # github oauth app
+    "SA_GITHUB_CLIENT_SECRET": "github_client_secret",  # github oauth app
+    "SA_CLOUDFLARE_API_TOKEN": "cloudflare_api_token",  # caddy dns-01
     # the local converge's s3 stand-in only; azure backups use the core
     # nodes' managed identity and have no key
     "SA_OBJECT_STORAGE_ACCESS_KEY": "object_storage_access_key",
     "SA_OBJECT_STORAGE_SECRET_KEY": "object_storage_secret_key",
-    "SA_ALERTMANAGER_DISCORD_WEBHOOK_URL": "alertmanager_discord_webhook_url",  # I8, alerts
-    "SA_GATUS_DISCORD_WEBHOOK_URL": "gatus_discord_webhook_url",  # I8, status page alerts
+    "SA_ALERTMANAGER_DISCORD_WEBHOOK_URL": "alertmanager_discord_webhook_url",  # alerts
+    "SA_GATUS_DISCORD_WEBHOOK_URL": "gatus_discord_webhook_url",  # status page alerts
     # while the repository is private: a classic token with read:packages
     # only, with which every node pulls the platform images from ghcr.io
     "SA_GHCR_PULL_TOKEN": "ghcr_pull_token",
@@ -89,7 +89,7 @@ def main() -> int:
         "nats_password_hashes": {u: bcrypt_hash(p) for u, p in nats.items()},
         "nats_route_password": route,
         "nats_route_password_hash": bcrypt_hash(route),
-        # monitoring (roles/observability, the design)
+        # monitoring (roles/observability)
         "grafana_admin_password": hexkey(24),
         "postgres_exporter_password": hexkey(24),
         # prometheus on the core nodes reads the probe node's metrics with it

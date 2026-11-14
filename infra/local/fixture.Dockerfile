@@ -1,5 +1,5 @@
 # TEST-ONLY: the github oauth fixture (tests/fixtures/githuboauth) as an image
-# for the local converge, which has no github oauth app an operator input. it is
+# for the local converge, which has no github oauth app. it is
 # built only by infra/local/up.sh and never pushed for an environment.
 FROM golang:1.27.4-trixie@sha256:b54b2639de8c1bfe538ec5ffc45f29b1932235ac5f6d63c059853646677112d9 AS build
 WORKDIR /src

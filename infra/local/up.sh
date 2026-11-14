@@ -5,7 +5,7 @@
 # containers standing in for 3 edge, 2 core and 1 backup server, each with
 # its own docker engine storage. then generates the
 # throwaway ssh key, age identity, sops-encrypted secrets and the inventory.
-# everything generated lives under .scratch/scratch/local-converge.
+# everything generated lives under .scratch/local-converge.
 set -eu
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
