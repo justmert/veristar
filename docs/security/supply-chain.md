@@ -3,17 +3,17 @@ title: "Supply chain"
 description: "How images and the tracker are built, gated, signed, verified and kept up to date."
 ---
 
-How the platform's images and the tracker are built, gated, signed, verified and kept up to date
-(the design). Status on 2026-11-13 is stated at the end of every section, because two parts of
-the design cannot run yet.
+This page describes how the platform's images and the tracker are built, gated, signed, verified
+and kept up to date. Production runs release `v0.2.1`, whose images are signed with cosign
+(section 2.1) and verified before any node pulls them (section 3).
 
 ## 1. What is protected
 
 | Artifact | Built by | Gated by | Signed or attested | Verified by |
 |---|---|---|---|---|
-| Platform images (gateway, collector, caddy, console, controlplane, replayer, metricswriter, jobs, platformctl, prober, postgres-ha) | `.github/workflows/release-images.yml` on a tag `v*` | syft SBOM, Trivy (fixable critical or high fails) | cosign keyless signature, build provenance and SBOM attestations (`actions/attest`) | `infra/ansible/playbooks/verify-release.yml`, imported first by `site.yml`, `deploy.yml`, `rotate-all.yml` and `restore.yml`, before any node pulls |
-| `sdk.js` (tracker) | `packages/tracker/build.mjs`, committed under `releases/<version>/` | immutability, byte-identical rebuild, size (`verify-releases`) | build provenance attestation | tenants: SRI hash in the snippet, `gh attestation verify` ([verify-tracker.md](verify-tracker.md)) |
-| npm package of the tracker | `packages/tracker/scripts/pack.mjs` in `release-tracker.yml` on a tag `tracker-v*` | packs to the same bytes twice, installs and type-checks in a consumer | npm provenance (trusted publishing) and a build provenance attestation | `npm audit signatures`, the npm package page |
+| Platform images (gateway, collector, caddy, console, controlplane, replayer, metricswriter, jobs, platformctl, prober, postgres-ha) | `.github/workflows/release-images.yml` on a tag `v*`, or `scripts/supply-chain/release-workstation.sh` (section 2.1) | syft SBOM, Trivy (fixable critical or high fails) | cosign signature and SBOM attestation with the release key (key mode, production); or a keyless signature with build provenance and SBOM attestations (keyless mode, section 3) | `infra/ansible/playbooks/verify-release.yml`, imported first by `site.yml`, `deploy.yml`, `rotate-all.yml` and `restore.yml`, before any node pulls |
+| `sdk.js` (tracker) | `packages/tracker/build.mjs`, committed under `releases/<version>/` | immutability, byte-identical rebuild, size (`verify-releases`) | build provenance attestation by `release-tracker.yml` | tenants: the SRI hash in the snippet and a byte-identical rebuild ([verify-tracker.md](verify-tracker.md)) |
+| npm package of the tracker | `packages/tracker/scripts/pack.mjs` in `release-tracker.yml` on a tag `tracker-v*` | packs to the same bytes twice, installs and type-checks in a consumer | npm provenance (trusted publishing) and a build provenance attestation | `npm audit signatures` |
 | Upstream images (Umami, NATS, etcd, HAProxy, the observability images) | upstream | pinned by tag and index digest in `infra/ansible/vars/pins.yml` and the observability role defaults; the deploy refuses an upstream reference without a digest | upstream | digest pin |
 
 Tool versions: cosign 3.1.4, syft 1.57.1, Trivy 0.76.2, gitleaks 8.30.1,
@@ -30,35 +30,38 @@ For each image, in `.github/actions/release-image/action.yml`:
 2. `scripts/supply-chain/scan-image.sh <repo>@<digest>`: an SPDX SBOM with syft, the full Trivy
    report as JSON, then the gate: Trivy with `--severity CRITICAL,HIGH --ignore-unfixed
    --exit-code 1`. Unfixed findings are recorded but do not fail the release, because only an
-   upstream fix or a mitigation can address them (see the runbook).
-3. Only an image that passed the gate is signed: `cosign sign --yes <repo>@<digest>`. Keyless: a
-   short-lived Fulcio certificate issued to this workflow's GitHub OIDC identity, recorded in the
-   Rekor transparency log. No signing key exists anywhere.
-4. `actions/attest` v4.2.2 writes a build provenance attestation and an SBOM attestation for the
-   digest and pushes both to the registry.
+   upstream fix or a mitigation can address them ([../runbooks/security-patch.md](../runbooks/security-patch.md)).
+3. Only an image that passed the gate is signed, in the signing mode of the repository variable
+   `SIGNING_MODE` (`key` when unset; section 3):
+   - key mode: `cosign sign --key env://COSIGN_PRIVATE_KEY --tlog-upload=false`, and
+     `cosign attest --type spdxjson` for the SBOM, with the release key;
+   - keyless mode: `cosign sign --yes <repo>@<digest>` with a short-lived Fulcio certificate issued
+     to the workflow's GitHub OIDC identity and recorded in the Rekor transparency log, then
+     `actions/attest` v4.2.2 writes a build provenance attestation and an SBOM attestation.
 
 An image that failed the gate stays in the registry unsigned. The deploy refuses unsigned digests,
 so such an image cannot be deployed.
 
 The last job writes `release-images.json` (schema 1: release tag, and per image the repository,
 tag and digest; `scripts/supply-chain/release-manifest.py` refuses a set of names other than the
-expected eleven), verifies every digest again with the deploy's identity, attests the file, and
-attaches it to the GitHub release.
+expected eleven), verifies every digest again the way the deploy does, and attaches the file to
+the GitHub release (in keyless mode it also attests the file).
 
-### 2.1 Release from a workstation (while GitHub Actions is off)
+### 2.1 Release from a workstation
 
-Owner rule of 2026-11-14: no GitHub Actions while the repository is private, because the minutes
-cost money; every workflow is disabled. A release is then built and signed on the controller
-or an operator workstation, with the same gate and the same key as the workflow's key mode (section 3).
-Release `v0.1.0` was built by `release-images.yml` before the rule; `v0.2.0` and `v0.2.1` were made
-on a workstation (below). The steps, run from a clean checkout of the tag:
+A release can also be built and signed on a workstation, with the same gate and the same key as
+the workflow's key mode (section 3). `scripts/supply-chain/release-workstation.sh <tag> <work dir>`
+runs every step below; it refuses a checkout that is not exactly at the tag or that has local
+changes. Release `v0.1.0` was built by `release-images.yml`; `v0.2.0` and `v0.2.1` were built on a
+workstation. The steps, run from a clean checkout of the tag:
 
 1. **Build and push** each image of the matrix in `release-images.yml` with the same Dockerfile,
    context and build arguments (`VERSION=<tag>`, `DBIP_MONTH` from the tag's commit month,
    `CMD=` for the Go services, `CADDY_IMAGE=<caddy repo>@<digest>` for the console, the
    `<PG_VERSION>-<tag>` tag for `postgres-ha`): `docker buildx build --push --provenance=false
    --sbom=false -t ghcr.io/justmert/veristar/<name>:<tag> ...`, signed in to `ghcr.io` with a
-   token of `justmert` that has `write:packages`, kept out of the repository and revoked after.
+   token of the release account that has `write:packages` (`GH_TOKEN`), kept out of the
+   repository.
 2. **Gate** each pushed digest with `scripts/supply-chain/scan-image.sh <repo>@<digest> <dir>`
    (syft SBOM, Trivy fails on a fixable critical or high finding); stop at the first failure.
 3. **Sign and attest** with the SOPS copy of the release key, never written to disk in plain
@@ -69,22 +72,19 @@ on a workstation (below). The steps, run from a clean checkout of the tag:
    (one `{"name","repo","tag","digest"}` file per image, as the workflow's artifacts), verify
    every digest with `cosign verify --key infra/ansible/vars/release-cosign.pub
    --insecure-ignore-tlog=true`, and attach `release-images.json` to the GitHub release
-   (`GH_TOKEN=$(gh auth token --user justmert) gh release create <tag> release-images.json`).
+   (`gh release create <tag> release-images.json`).
 
 The deploy verifies a workstation release exactly like a workflow release: the key, the
-manifest and the registry digests are the same. What it cannot show is where the build ran;
-the release notes name the machine.
+manifest and the registry digests are the same.
 
-**First workstation release: `v0.2.0` (2026-11-14).** Built by
-`scripts/supply-chain/release-workstation.sh v0.2.0 <work dir>` on the controller from a clean
-worktree at the tag (commit `df4c830` on `main`, with the MCP server, migration 00030 and the Umami
-theme), with `GH_TOKEN` of `justmert` holding `write:packages`. The script did every step above in
-9 min 36 s: eleven images built and pushed, each gated by `scan-image.sh` (syft 1.57.1,
+**Release `v0.2.0` (2026-11-14).** Built by
+`scripts/supply-chain/release-workstation.sh v0.2.0 <work dir>` from a clean worktree at the tag
+(commit `df4c830` on `main`, with the MCP server, migration 00030 and the Umami theme). The
+script ran every step above in 9 min 36 s: eleven images built and pushed, each gated by `scan-image.sh` (syft 1.57.1,
 Trivy 0.76.2; no image had a fixable critical or high finding), signed and SBOM-attested with the
 release key read from the SOPS file into the process's environment only (`env://`), no
 transparency log; then `release-images.json` written, every digest verified with
 `infra/ansible/vars/release-cosign.pub`, and the file attached to the GitHub release `v0.2.0`.
-No workflow ran: every workflow of the repository is disabled.
 
 | Image | Tag | Digest |
 |---|---|---|
@@ -100,9 +100,8 @@ No workflow ran: every workflow of the repository is disabled.
 | `prober` | `v0.2.0` | `sha256:b5e3f5a5e99945dc954a04d6e21696517c7b8a1f9635893c1ec6984ac12b79f8` |
 | `replayer` | `v0.2.0` | `sha256:b89d0ef67613e0dc8914160a5e3b4d13a28678de4aa75fe6af9f87432d1a8a9a` |
 
-**Second workstation release: `v0.2.1` (2026-11-14).** Built the same way by
-`scripts/supply-chain/release-workstation.sh v0.2.1 <work dir>` on the controller from a clean
-worktree at the tag (commit `14f7bf5` on `main`: the restore command and HAProxy start fixes,
+**Release `v0.2.1` (2026-11-14), the release production runs.** Built the same way by
+`scripts/supply-chain/release-workstation.sh v0.2.1 <work dir>` from a clean worktree at the tag (commit `14f7bf5` on `main`: the restore command and HAProxy start fixes,
 `platformctl probe-tenant rotate-otlp-token`, the event route without an access log, GOGC 200 and
 adaptive goroutine stacks for Caddy and the gateway, and the probe scrape and watchdog wiring) in
 8 min 44 s: eleven images gated by `scan-image.sh` (no fixable critical or high finding), signed
@@ -131,9 +130,7 @@ before it touched a node.
 
 `site.yml` (first converge and node replacement), `deploy.yml` (rolling deploy), `rotate-all.yml`
 and `restore.yml` all start with `playbooks/verify-release.yml`, whose first play runs
-`infra/ansible/playbooks/tasks/verify-images.yml` on the controller (; before
-2026-11-13 only `deploy.yml` did, so the documented first converge pulled by tag). The local
-converge is the one exception, refused for any other environment: its images come unsigned from
+`infra/ansible/playbooks/tasks/verify-images.yml` on the controller. The local converge is the one exception, refused for any other environment: its images come unsigned from
 its throwaway registry, and the play says so instead of verifying.
 
 ```
@@ -147,21 +144,19 @@ The run stops before any node is touched when:
   `platform_images`;
 - an upstream image in `vars/pins.yml` is not pinned by digest;
 - `cosign verify` fails for any digest in the signature mode of `vars/signing.yml`:
-  - `key` (production since 2026-11-13, while the repository is private): the committed public key
+  - `key` (the production mode): the committed public key
     `infra/ansible/vars/release-cosign.pub`, with `--insecure-ignore-tlog`. This covers an unsigned
     digest and a signature by any other key;
-  - `keyless` (once the repository is public): identity
+  - `keyless`: identity
     `https://github.com/justmert/veristar/.github/workflows/release-images.yml@refs/tags/<release>`
     and issuer `https://token.actions.githubusercontent.com`. This covers an unsigned digest and a
     signature from any other workflow, branch, tag or repository;
 - the release tag in the registry now points to a digest other than the manifest's.
 
-### Key mode while the repository is private (operator decision of 2026-11-13)
+### Signing modes
 
-The repository stays private for now. Two parts of the keyless path need it public: GitHub
-artifact attestations (`actions/attest`) are not available for a private repository of a user
-account, and a keyless signature writes the image name and digest to the public Rekor log. So
-`release-images.yml` runs with `SIGNING_MODE=key` (repository variable, `key` when unset):
+`infra/ansible/vars/signing.yml` sets `sa_signature_mode: key`, and `release-images.yml` signs in
+the mode of the repository variable `SIGNING_MODE` (`key` when unset). The two modes:
 
 | Step | Key mode | Keyless mode |
 |---|---|---|
@@ -172,26 +167,28 @@ account, and a keyless signature writes the image name and digest to the public 
 | Build provenance attestation | not produced | `actions/attest` |
 | Manifest check before publishing | `cosign verify --key infra/ansible/vars/release-cosign.pub --insecure-ignore-tlog` | identity and issuer as above |
 
-What key mode gives up, stated plainly: no transparency log, so a signature made with a stolen
-key would not be visible to anyone watching Rekor; and no build provenance. The private key
-lives only in the two Actions secrets and, as a recovery copy, in the production SOPS file
+In key mode the deploy trusts exactly one key, the committed public half
+`infra/ansible/vars/release-cosign.pub`. Signatures are not written to a transparency log, and
+no build provenance attestation is produced. The private key is held in the Actions secrets
+`COSIGN_PRIVATE_KEY` and `COSIGN_PASSWORD` and in the production SOPS file
 (`cosign_private_key`, `cosign_password`); rotation is in
 [../runbooks/secret-rotation.md](../runbooks/secret-rotation.md).
 
-The packages on `ghcr.io` are private with the repository. Every node signs in with a classic
-token that has `read:packages` only (`ghcr_pull_token`, `sa_registry_login` in the inventory,
-`roles/secrets/tasks/registry.yml`, credential at `/root/.docker/config.json`, 0600), and the
-controller gives cosign the same token through a docker config made for the run only
+When the registry packages need a sign-in, every node signs in to `ghcr.io` with a classic token
+that has `read:packages` only (`ghcr_pull_token`, `sa_registry_login` in the inventory,
+`roles/secrets/tasks/registry.yml`, credential at `/root/.docker/config.json`, mode 0600). The
+controller gives cosign the same token through a docker config made for that run only
 (`playbooks/tasks/registry-auth.yml`).
 
-**Switching to keyless when the repository is public:** set the repository variable
-`SIGNING_MODE=keyless` and `sa_signature_mode: keyless` in `infra/ansible/vars/signing.yml`, cut a
-new release, deploy it; then set `sa_registry_login: ""`, delete the pull token and the release
-key secrets.
+**Switching to keyless mode.** GitHub artifact attestations need a public repository (or GitHub
+Enterprise Cloud), and a keyless signature writes the image name and digest to the public Rekor
+log. To switch, set the repository variable `SIGNING_MODE=keyless` and
+`sa_signature_mode: keyless` in `infra/ansible/vars/signing.yml`, cut a new release and deploy it.
+With public packages, then set `sa_registry_login: ""` and delete the pull token.
 
-Release `v0.1.0` (2026-11-13) is the first release in key mode: all eleven images built, passed
-the gate, were signed and attested with the release key, and the manifest job verified each
-digest with the public key before attaching `release-images.json`.
+Release `v0.1.0` (2026-11-13) was the first release in key mode: all eleven images were built,
+passed the gate and were signed and attested with the release key, and the manifest job verified
+each digest with the public key before it attached `release-images.json`.
 
 The next play sets `platform_images` on every node to the verified `repo:tag@digest` references.
 Host facts outrank play variables, so the roles (including the imported bootstrap play) pull exactly
@@ -206,17 +203,12 @@ production signing design. Result on 2026-11-13: 10 of 10 cases pass (signed rel
 digests; unsigned digest, foreign key, other build under the release tag, moved tag, other release,
 other registry, incomplete manifest, missing manifest, test mode outside tests: all refused).
 
-**Status.** Key mode ran for real with release `v0.1.0` on 2026-11-13 (release workflow and
-the deploy's verification, section "Key mode"). Keyless signing has not run yet: it waits for
-the repository to be public, since artifact attestations for a private repository need GitHub
-Enterprise Cloud. The probe
-node's own images (the `prober` and the custom Caddy, from the observability role) are verified the
+**Probe images.** The probe node's own images (the `prober` and the custom Caddy, from the observability role) are verified the
 same way: the manifest must name the `prober` (it is in `platform_images`), the pin play sets
 `platform_images` on the probe too, and the observability role names its `prober` and `caddy`
 through `platform_images`. The role also refuses a probe node whose `prober` or `caddy` is not
 pinned by digest outside the local converge, so a run that skipped the check stops. The probe
-converge has not completed on the local converge yet (`make ops-local`). The probe bundle of
-`docs/deploy/probe.md` uses the same check: `playbooks/probe-bundle.yml` imports
+bundle of [../deploy/probe.md](../deploy/probe.md) uses the same check: `playbooks/probe-bundle.yml` imports
 `verify-release.yml` and refuses a prober not pinned by digest.
 
 ## 4. Tracker release (`release-tracker.yml`)
@@ -229,13 +221,9 @@ an empty consumer, works with no `__SDK_VERSION__` define (the published ESM car
 type-checks, and carries `sdk.js` byte for byte. The `publish` job attests `sdk.js` and the tarball,
 then runs `npm publish` with trusted publishing: npm exchanges the job's OIDC token for a
 short-lived publish credential and attaches provenance itself. It then creates the GitHub release
-with `sdk.js`, the manifest and the tarball.
-
-**Status.** Built; the package build and its tests pass locally (5 of 5 in `pack.test.ts`, run with
-a test-only scope `@sa-local-test`). Blocked: an operator input (the npm scope with this repository and
-workflow registered as trusted publisher; set as repository variable `NPM_PACKAGE`), GitHub
-Actions on the account, and a public repository (npm provenance and trusted publishing require it).
-The control plane still refuses `TRACKER_NPM_PACKAGE` until the package is published.
+with `sdk.js`, the manifest and the tarball. The package name is the repository variable
+`NPM_PACKAGE`, a scoped name whose trusted publisher on npm is this repository and workflow file;
+the publish job stops when the variable is not set.
 
 ## 5. Detection (`security.yml`, hourly)
 
@@ -243,15 +231,16 @@ The control plane still refuses `TRACKER_NPM_PACKAGE` until the package is publi
   `umami-software/umami` not listed in `docs/security/advisories-reviewed.json`, any newer Umami
   release, GitHub advisory database matches for Next.js, React and React DOM at the exact versions
   in the pinned Umami's `pnpm-lock.yaml`, for nats-server, Caddy, etcd and the collector modules at
-  our pins, and a newer PostgreSQL minor of the pinned major. It never reads "fixed in" wording,
+  the pinned versions, and a newer PostgreSQL minor of the pinned major. It never reads "fixed in" wording,
   because Umami has published advisories without a fixed version. A source that cannot be read
   fails the job; it is never treated as clean.
 - Trivy on the digests a deploy uses: the platform images of the newest `release-images.json` and
   every upstream digest pin.
 - `govulncheck` on both Go modules, `pnpm audit` on the workspace.
 - Every finding opens one issue labelled `security-finding` (an open issue for the same id is not
-  repeated) and the run posts one alert to `ALERT_WEBHOOK_URL` an operator input. Without I8 the run ends
-  red after filing the issues, so GitHub's own failure notice still reaches the maintainers.
+  repeated), and the run posts one alert to `ALERT_WEBHOOK_URL`, the optional Discord webhook.
+  Without the webhook the run ends red after filing the issues, so GitHub's own failure notice
+  reaches the maintainers.
 
 Dependabot (`.github/dependabot.yml`) opens update pull requests for Go, npm, Dockerfiles,
 compose files, GitHub Actions, OpenTofu providers, the Python and Rust examples and the Ansible
@@ -300,18 +289,17 @@ Three checks keep the shipped section honest instead of trusting `package.json`:
   as testcontainers are listed as not shipped.
 
 Packages whose licence trivy did not find on disk are looked up in the npm, PyPI or crates.io
-registry. Our own modules (the root module, the collector distribution and the example roots) are
+registry. The project's own modules (the root module, the collector distribution and the example roots) are
 reported separately as own code under the repository's Apache-2.0 licence.
 
 **Not covered by this gate.** The Caddy binary (built by xcaddy inside
 `deploy/images/caddy.Dockerfile` with two plugins) and the operating system packages of the base
 images (distroless, Alpine in the Caddy image, Debian in `postgres-ha`) are not part of these
-graphs. The image SBOMs from `scan-image.sh` list them; checking their licences is a separate step
-that does not exist yet.
+graphs. The image SBOMs from `scan-image.sh` list them.
 
 **Why the Wallets Kit packages are allowlisted.** `@creit.tech/stellar-wallets-kit` 2.7.1 and 2.8.0
-are installed only as devDependencies of `packages/tracker` (`swk-2.7.1`, `swk-2.8.0`, so the phase
-14 adapter tests run the real kit) and as a dependency of the example app
+are installed only as devDependencies of `packages/tracker` (`swk-2.7.1`, `swk-2.8.0`, so the
+wallets kit adapter tests run the real kit) and as a dependency of the example app
 `examples/wallets-kit-spa`, a sample for tenants that is also a test target and is never deployed.
 The lockfile graph shows no other path to them. Checked on 2026-11-13: esbuild's input list for
 `sdk.js` and for the npm entry points contains only `src/` and `releases/` files; the packed npm
@@ -328,9 +316,8 @@ dependencies. Tenants who add the kit to their own sites take it from npm under 
 The other allowlisted packages are data, not code: `caniuse-lite` (CC-BY-4.0, browser support data
 for build tools; it reaches the console importer only through the shadcn CLI and is not bundled),
 `mdn-data` (CC0-1.0, CSS reference data for test and example tooling) and `webpki-root-certs`
-(CDLA-Permissive-2.0, root certificates in the Rust example app). Before 2026-11-13 these three were
-exceptions that applied wherever the package appeared; they are now accepted only while not
-shipped.
+(CDLA-Permissive-2.0, root certificates in the Rust example app). All three are accepted only while
+they are not shipped.
 
 **Changing the allowlist.** Add or update an entry in `not_shipped_allowlist` with the exact
 version and the licence string the report printed, a reason that says why the package is not
@@ -359,11 +346,11 @@ A version bump of an allowlisted package fails the gate until the entry is revie
 
 Every fixable critical or high finding of the upstream images, rechecked on 2026-11-13 with
 Trivy 0.76.2 (`--scanners vuln`, registry images by digest, one at a time). For each image the
-registry was checked for a release that fixes it (the design pin policy: a younger minor line
-is taken when it carries a security fix). Where no release fixes a Go finding, the image's binary
+registry was checked for a release that fixes it (the pin policy takes a younger minor line when it
+carries a security fix). Where no release fixes a Go finding, the image's binary
 was checked with `govulncheck -mode=binary` (v1.9.0, database of 2026-11-11), which reports
 whether the vulnerable symbols are compiled into the binary at all. No critical finding exists in
-any upstream image. Nothing here was run against production, which does not exist yet.
+any upstream image.
 
 **Bumped (each rescanned after the change):**
 
@@ -380,7 +367,7 @@ Pins moved together in `infra/ansible/vars/pins.yml`, the observability role def
 | Image | Finding | Why it is accepted, and when to revisit |
 |---|---|---|
 | Umami 3.5.0 (newest release; 3.5.0 is the newest tag on GHCR) | `undici` 6.28.0: CVE-2026-109383 (TLS options dropped), CVE-2026-109869, CVE-2026-19534, CVE-2026-87018 (client-side denial of service) | All four are in undici's HTTP client. Umami makes no outbound request in this deployment: `PRIVATE_MODE`, `DISABLE_TELEMETRY` and `DISABLE_UPDATES` are set, and `TestWebPath` checks no egress from boot and during a UI session (`threat-model.md`). Inbound requests are served by Next.js, not undici. Revisit at the next Umami release through `make umami-upgrade`. |
-| etcd 3.6.16 (newest 3.6 release) | `golang.org/x/net` CVE-2026-78661 (HTML parser denial of service, GO-2026-6860); the symbol is in the binary | etcd's client and peer ports are published on the private address only, the firewall accepts the private network only, and the only client is Patroni. No etcd API takes HTML. The 3.7 line is not used until Patroni support is confirmed. Revisit at 3.6.17. |
+| etcd 3.6.16 (newest 3.6 release) | `golang.org/x/net` CVE-2026-78661 (HTML parser denial of service, GO-2026-6860); the symbol is in the binary | etcd's client and peer ports are published on the private address only, the firewall accepts the private network only, and the only client is Patroni. No etcd API takes HTML. Revisit at 3.6.17. |
 | Prometheus 3.15.1, Alertmanager 0.34.2 | `golang.org/x/net` CVE-2026-78661 | govulncheck: module present, vulnerable symbols not in either binary. The younger lines (Prometheus 3.16.0, Alertmanager 0.35.0, scanned) carry the same finding, so a bump would not fix it. |
 | node_exporter 1.12.1 (newest) | 16 high: Go 1.26.5 standard library (CVE-2026-111943, -33818, -39821, -46600, -56853, -56858, -56859, -56860, -56862, -78667, -78669, -97031), `x/net` CVE-2026-78661 and -78669, `x/crypto` CVE-2026-56854, `x/text` CVE-2026-56851 | govulncheck: the `x/net/html`, `x/crypto`, `x/text`, CVE-2026-46600 and CVE-2026-78667 symbols are not in the binary. The rest are present and are denial of service in the HTTP server, TLS and parsers, or an x509 client issue. The exporter listens on the private address only (`--web.listen-address`), the firewall drops everything else, it has no TLS configuration and makes no outbound TLS connection, and only Prometheus scrapes it. An attacker must already be on the private network. Revisit at the next node_exporter release. |
 | postgres_exporter 0.20.1 (newest) | 19 high: Go 1.26.4 standard library (CVE-2026-111943, -33818, -39821, -39822, -46600, -56853, -56858, -56859, -56860, -56862, -78667, -78669, -97031), `x/net` CVE-2026-46600, -78661 and -78669, `x/crypto` CVE-2026-56854, `x/text` CVE-2026-56851 and -56852 | govulncheck: the `x/net/html`, `x/crypto`, `x/text`, CVE-2026-39821, -39822, -56859 and -78667 symbols are not in the binary. The rest are present. The exporter is on the private address of the PostgreSQL hosts only, scraped by Prometheus, and connects only to PostgreSQL through HAProxy on the private network as a role that holds `pg_monitor` and nothing else (`tasks/core.yml`). Revisit at the next release. |
@@ -390,4 +377,4 @@ Pins moved together in `infra/ansible/vars/pins.yml`, the observability role def
 
 The hourly `security.yml` workflow keeps filing these findings until a fixed release exists. A
 fixable high finding that is not in this table has no recorded decision and is handled under the
-24-hour rule (`docs/runbooks/security-patch.md`).
+24-hour rule ([../runbooks/security-patch.md](../runbooks/security-patch.md)).
