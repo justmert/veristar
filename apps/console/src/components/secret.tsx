@@ -1,7 +1,7 @@
 import { fade } from "@veristar/brand/motion";
 import { Eye, EyeOff, KeyRound } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useId, useState } from "react";
 import { CopyButton } from "@/components/copy-button";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -29,10 +29,10 @@ export function OneTimeSecret({
 }) {
   const [shown, setShown] = useState(false);
   const [stored, setStored] = useState(false);
+  const storedId = useId();
   const masked = `${value.slice(0, Math.min(8, value.indexOf("_", 3) + 1 || 4))}${"•".repeat(24)}`;
   return (
-    <div
-      role="region"
+    <section
       aria-label="New secret"
       className="flex animate-rise-in flex-col gap-3 rounded-lg border border-success-line bg-raised p-4"
     >
@@ -73,15 +73,21 @@ export function OneTimeSecret({
       {children}
       {onDone ? (
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <label className="flex items-center gap-2 text-small text-fg-2">
-            <Checkbox checked={stored} onCheckedChange={(c) => setStored(c === true)} />I stored it
-            somewhere safe. It is not shown again.
-          </label>
+          <span className="flex items-center gap-2">
+            <Checkbox
+              id={storedId}
+              checked={stored}
+              onCheckedChange={(c) => setStored(c === true)}
+            />
+            <label htmlFor={storedId} className="text-small text-fg-2">
+              I stored it somewhere safe. It is not shown again.
+            </label>
+          </span>
           <Button type="button" variant="outline" size="sm" disabled={!stored} onClick={onDone}>
             {doneLabel}
           </Button>
         </div>
       ) : null}
-    </div>
+    </section>
   );
 }
