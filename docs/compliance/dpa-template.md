@@ -46,7 +46,8 @@ The operator takes the measures in `dpia.md` section 5.
 
 The tenant gives general authorisation for the sub-processors in
 `subprocessors.md`. The operator announces an intended addition or replacement
-in the repository's changelog and in the console before it takes effect, so
+in the repository's changelog
+([CHANGELOG.md](https://github.com/justmert/veristar/blob/main/CHANGELOG.md)) and in the console before it takes effect, so
 the tenant can object; if the objection cannot be resolved, the tenant may
 leave the service and have its data deleted under clause 9. The operator imposes on each sub-processor the same
 data protection obligations as in these terms and remains liable for it.

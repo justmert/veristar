@@ -81,6 +81,10 @@ tests/               end-to-end, isolation, load, ad-block, privacy, drill and o
 docs/                everything above in prose
 ```
 
+## Changes
+
+What each release changed: [CHANGELOG.md](CHANGELOG.md).
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
