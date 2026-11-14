@@ -31,7 +31,7 @@ operator. The RFP sets the frame (RFP 3.4):
 | Domain `BASE_DOMAIN` an operator input, `veristar.app`, at Cloudflare Registrar) | ideally registered to SCF from day one, which makes this step a permission change | registrar transfer, or permanent redirect (section 5) |
 | Azure subscription (VMs, virtual network, Traffic Manager, Blob Storage with backups) | an operator input | rebuild in the new operator's subscription from `infra/tofu`, then data migration; or a subscription transfer to the new operator's tenant |
 | DNS records in the Cloudflare zone | an operator input | recreated from `infra/tofu/modules/dns` with the new operator's token; the zone moves with the domain |
-| Probe (prober and Gatus as a container bundle) | the operator's own server | rendered again from `playbooks/probe-bundle.yml` on the new operator's server ([../deploy/probe.md](../deploy/probe.md)) |
+| Probe (prober, Gatus and the SLO collector as a Compose bundle, `status.veristar.app`) | the operator's Azure VM in East US | rendered again from `playbooks/probe-bundle.yml` on the new operator's server ([../deploy/probe.md](../deploy/probe.md)) |
 | Secrets (`infra/secrets/<env>/secrets.enc.yaml`, SOPS with age) | encrypted to the age keys in `infra/secrets/recipients/<env>.txt` an operator input | new operator's keys added, then every value rotated, then the old keys removed (section 4) |
 | GitHub OAuth apps for console sign-in an operator input | owned by the proposer | new apps under the new owner, new client ids and secrets |
 | Operator list `OPERATOR_GITHUB_IDS` an operator input | SCF's operators | unchanged unless SCF changes it |

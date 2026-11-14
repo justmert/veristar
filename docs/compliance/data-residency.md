@@ -27,7 +27,7 @@ so every service has one member in each zone.
 | OpenTofu state of the infrastructure, encrypted with the state passphrase. Holds resource settings and addresses; never analytics data | Sweden (Azure Sweden Central, storage account `veristarprodstate`, created before the region decision) | Microsoft Azure |
 | Health-checked DNS failover | Azure Traffic Manager, a global DNS service. Sees DNS queries for the service's hostnames and checks the nodes' health endpoint; never analytics data | Microsoft Azure |
 | Authoritative DNS and domain registration | Cloudflare's DNS network, DNS only (no proxy: traffic goes straight to Azure). Sees DNS queries for the service's hostnames; never analytics data | Cloudflare |
-| External prober and public status page | a separate Azure VM in East US (United States), outside the production deployment and its region ([../deploy/probe.md](../deploy/probe.md)). Holds no analytics data: it probes the public endpoints with its own synthetic traffic for the internal probe tenant and keeps the check results | Microsoft Azure |
+| External prober and public status page | a separate Azure VM in East US (United States), outside the production deployment and its region ([../deploy/probe.md](../deploy/probe.md)). Holds no analytics data: it probes the public endpoints with its own synthetic traffic for the internal probe tenant and keeps the check results and the daily SLO result files | Microsoft Azure |
 | Console sign-in | GitHub OAuth | GitHub, Inc. (United States). Receives only the sign-in of console users; never visitor or API client data |
 
 ## What leaves the EU
@@ -37,7 +37,9 @@ so every service has one member in each zone.
   above.
 - **The external prober.** The prober in East US sends synthetic events for
   the internal probe tenant and reads that tenant's own aggregates back. No
-  visitor's or tenant's data reaches it.
+  visitor's or tenant's data reaches it. Its status page at
+  `status.veristar.app` shows check results only; Cloudflare serves its DNS
+  record without a proxy.
 - **Console sign-in.** Console users authenticate with GitHub. GitHub sees that
   a user signs in to the service. The control plane stores the numeric GitHub
   id and login only. This concerns tenant staff, not end users.

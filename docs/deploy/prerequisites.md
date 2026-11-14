@@ -18,7 +18,7 @@ repository substitutes a made-up value for one.
 | I4 | `BASE_DOMAIN`, registered, its zone active in Cloudflare DNS | `base_domain` in `infra/tofu/envs/<env>/terraform.tfvars`; `STATUS_BASE_URL` repository variable (`https://status.<an operator input>`) for the SLO workflow | DNS, certificates, every hostname | supplied 2026-11-13: `veristar.app`, registered at Cloudflare Registrar, zone active in Cloudflare |
 | I5 | Azure subscription, with an `az login` of a user who may create resources in it | `subscription_id`, `state_resource_group`, `state_storage_account`, `backup_storage_account`, `server_image_version` in `terraform.tfvars` (`node_vm_size` defaults to `Standard_B2as_v2`; `location` is `denmarkeast` for production) | every Azure step; backups use the nodes' managed identity, so there is no storage key | supplied 2026-11-13: one subscription, signed in with `az login` on an operator workstation; vCPU quota checked (section "Azure subscription" below) |
 | I6 | Cloudflare API token limited to the zone of `<an operator input>`, permissions `Zone:Zone:Read` and `Zone:DNS:Edit` | `CLOUDFLARE_API_TOKEN` in `infra/secrets/<env>/tofu.enc.env` (OpenTofu's records); `cloudflare_api_token` in `secrets.enc.yaml` (from `SA_CLOUDFLARE_API_TOKEN`, Caddy DNS-01) | DNS records, Caddy DNS-01 certificates | supplied 2026-11-13: one token, active, scoped to `veristar.app` |
-| I7 | no longer an input: the probe runs as a container on a host the operator already runs ([probe.md](probe.md)) | | | not needed |
+| I7 | no longer an input: the probe runs as a Compose project on the operator's existing Azure VM in East US ([probe.md](probe.md)) | | | not needed |
 | I8 | Discord webhook URL for alerts | `alertmanager_discord_webhook_url`, `gatus_discord_webhook_url` in `secrets.enc.yaml`, added with `sops edit` | Alertmanager, Gatus | optional (operator decision of 2026-11-13): production runs without it, the console Alerts page is the alert channel; adding it later is one sops key ([../runbooks/alerts.md](../runbooks/alerts.md), "Adding a receiver") |
 | I9 | npm scope with trusted publishing for the repository | `release-tracker.yml` | publishing the tracker package; not needed to deploy | missing |
 | I10 | Legal review of the compliance statements | `docs/compliance/` | publishing the statements as final (production launch); not needed to deploy staging | pending |
@@ -54,8 +54,8 @@ check them again before ordering.
 | GitHub | the repository, the release workflow, the platform images on `ghcr.io` (private while the repository is) | I1 |
 | Cloudflare | registrar and DNS for `<an operator input>`, DNS only (no proxy) | I4, I6 |
 
-The probe runs on a host outside Azure that the operator already operates ([probe.md](probe.md));
-it adds no provider.
+The probe runs on an Azure VM in East US that the operator already operates, outside the
+production region and resource group ([probe.md](probe.md)); it adds no provider.
 
 **Region.** On 2026-11-13 the subscription's SKU list (`Microsoft.Compute/skus`) offered
 `Standard_B2as_v2` in all three zones only in Sweden Central and Denmark East among the EU

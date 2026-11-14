@@ -103,10 +103,11 @@ sections 3 and 5). Expected outputs quoted from those runs say so.
     `/opt/veristar/core`): a new jobs leader runs every task at once, including the
     reconcile that provisions the probe's Umami websites and registry entries.
 
-11. **Probe.** The prober runs on its own host outside the environment (for production a
-    separate Azure VM in East US), in the inventory's `probe` group with its own public address.
-    `site.yml`'s "Probe" play gives it Caddy for `status.<an operator input>`, Gatus, the prober and the
-    Alertmanager watchdog ([probe.md](probe.md)). It needs the probe tenant's values of step 10
+11. **Probe.** The prober runs on its own host outside the environment. Either a dedicated
+    host in the inventory's `probe` group with its own public address, which `site.yml`'s
+    "Probe" play gives Caddy for `status.<an operator input>`, Gatus, the prober and the Alertmanager
+    watchdog; or, as for production, the Compose bundle of `playbooks/probe-bundle.yml` on a
+    shared host with an edge Caddy (a separate Azure VM in East US, [probe.md](probe.md)). It needs the probe tenant's values of step 10
     in the SOPS file. Expected: `https://status.<an operator input>/` answers and every measure of
     probe.md section 4 receives results every 30 s. `make ops-local` exercises the same play
     locally.

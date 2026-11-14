@@ -327,9 +327,10 @@ Action when Gatus or the console reports it missing: check the core nodes
 ([database-failover.md](database-failover.md) if both are down), then
 `docker compose ps` in `/opt/veristar/observability` on each core
 node. Never silence `Watchdog` in Alertmanager: a silence stops the heartbeat
-and Gatus alerts after 5 minutes. Without a probe host in the inventory (the
-probe bundle of docs/deploy/probe.md has no public listener) the route goes
-to a receiver with no target, so nothing outside watches it.
+and Gatus alerts after 5 minutes. Without a probe node in the inventory and
+without `observability_probe_external` (the probe bundle of
+docs/deploy/probe.md, section 7) the route goes to a receiver with no
+target, so nothing outside watches it.
 
 ## Probe
 

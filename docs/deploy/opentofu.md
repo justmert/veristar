@@ -67,8 +67,10 @@ This section is the agreement with the Ansible side. Change it only together.
 - Groups are always `edge` and `core`, which both list the same three converged nodes (tier
   `node`, operator decision of 2026-11-13), `probe` and `restore` (0 or 1 host,
   present only while `restore_enabled`, section 4). The group keys are always present. The
-  probe runs outside Azure as a container ([probe.md](probe.md)), so OpenTofu leaves `probe`
-  empty; the key stays so playbooks that name the group keep working.
+  probe runs as a Compose project on a separate host in Azure East US ([probe.md](probe.md)),
+  outside this state, so OpenTofu leaves `probe` empty; the key stays so playbooks that name
+  the group keep working. Its one record here is the DNS-only A record `status.` (`a_records`
+  of module `dns`).
 - Inventory host names equal the VM names: `<env>-<tier>-<index>`, index from 1.
   Every node runs a Patroni member; index 1 is the one that initialises the cluster.
 - Values written as `<I4>` and `<I13>` above are the real inputs once supplied; the

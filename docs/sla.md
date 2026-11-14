@@ -129,7 +129,8 @@ fire-drills 16 alerts fired and resolved and 3 more fired for real without a dri
 role runs on every node: Prometheus has 43 active targets, all `up`. Firing alerts are shown on
 the console's operator Alerts page ([operators/alerts.md](operators/alerts.md)), the platform's
 alert channel; no push receiver is configured an operator input, operator decision). The probe host in
-Azure East US with the public status page is being set up ([deploy/probe.md](deploy/probe.md)).
+Azure East US runs the prober and the public status page `status.veristar.app` since 2026-11-14
+([deploy/probe.md](deploy/probe.md)).
 
 ### Patching
 
