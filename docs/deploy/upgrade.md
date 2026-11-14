@@ -4,15 +4,14 @@ sidebarTitle: "Upgrade"
 description: "Release a new version and roll it out one node at a time, with signatures checked first."
 ---
 
-A new version of the platform is a release tag; rolling it out is `deploy.yml`, one node at a
+A new version of the platform is a release tag. You roll it out with `deploy.yml`, one node at a
 time, with every image's signature checked first. Upstream images (Umami, NATS, etcd, HAProxy,
 observability) change only when their pin in `infra/ansible/vars/pins.yml` changes, which is a
 code change released the same way.
 
-**Status:** the rolling deploy ran on the local converge with a new image tag (this stage:
-edge 1, 2, 3, then core 1, each gated on its port-80 answer; [local-converge.md](local-converge.md)
-section 3) and its signature check ran in `make supplychain-it` with a test-only key. The this stage
-rolling-deploy-under-load drill was not run. Nothing has run against staging.
+Production rolls out releases this way: release `v0.2.1` reached all three nodes with
+`failed=0` and two planned Patroni switchovers
+([../reference/drills/2026-11-13-azure.md](../reference/drills/2026-11-13-azure.md)).
 
 ## Steps
 
@@ -24,9 +23,10 @@ rolling-deploy-under-load drill was not run. Nothing has run against staging.
    ([../runbooks/dbip-update.md](../runbooks/dbip-update.md)), PostgreSQL
    ([../runbooks/security-patch.md](../runbooks/security-patch.md) section 4).
 
-2. **Tag the release** `v<release>`. `release-images.yml` builds, scans (Trivy fails on fixable
-   critical or high), signs keyless and attests every image, and attaches `release-images.json`
-   to the GitHub release. Download that file.
+2. **Tag the release** `v<release>`. `release-images.yml` builds and scans every image (Trivy
+   fails on fixable critical or high findings), signs and attests it, and attaches
+   `release-images.json` to the GitHub release. Download that file. The signing modes and the
+   workstation release path are in [../security/supply-chain.md](../security/supply-chain.md).
 
 3. **Check out the release** in your working copy (the playbooks and `pins.yml` are read from
    it), then roll out to staging:
@@ -42,8 +42,8 @@ rolling-deploy-under-load drill was not run. Nothing has run against staging.
    synchronous replica before a node's postgres image changes. Any failure stops the run with the
    remaining nodes untouched.
 
-   Expected: `PLAY RECAP` with `failed=0`. Ingestion should see no failed requests; that has not
-   been measured (this stage drill not run).
+   Expected: `PLAY RECAP` with `failed=0`. A rolling deploy of all three production nodes took
+   29 min 25 s.
 
 4. **Verify** with [verification.md](verification.md), then watch the alerts for an hour.
 
