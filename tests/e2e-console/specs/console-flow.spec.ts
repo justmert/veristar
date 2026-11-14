@@ -101,18 +101,21 @@ test("sign in, enroll, add a site and copy the snippet", async ({ browserName })
   const created = page.waitForResponse(
     (r) => r.request().method() === "POST" && r.url() === `${APP}/api/tenants/${tenant.id}/sites`,
   );
-  await form.getByRole("button", { name: "Add site" }).click();
+  await form.getByRole("button", { name: "Add and set up" }).click();
   expect((await created).status()).toBe(201);
   const sites = await api<{ items: Site[] }>(context, "GET", `/api/tenants/${tenant.id}/sites`);
   expect(sites.body.items).toHaveLength(1);
   site = sites.body.items[0] as Site;
   expect(site).toMatchObject({ domain: TENANT_HOST, origins: [TENANT_ORIGIN], status: "active" });
 
-  // snippet page: the tag, the integrity shown, and the copy button
+  // adding a site leads to its setup; the snippet url is its install step:
+  // the tag, the integrity shown, and the copy button
+  await page.waitForURL(`${APP}/projects/${tenant.id}/sites/${site.id}/snippet`);
   await page.goto(`${APP}/projects/${tenant.id}/sites/${site.id}/snippet`);
-  await expect(
-    page.getByRole("heading", { name: `Tracking snippet for ${site.name}` }),
-  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: `Set up ${site.name}` })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Install the tracker" })).toBeVisible();
+  // the pinned script, integrity and site id sit under a disclosure
+  await page.getByText("Version and what the tag pins").click();
   const newest = manifest().at(-1);
   expect(newest).toBeTruthy();
   const shown = (await page.locator("pre code").first().innerText()).trim();

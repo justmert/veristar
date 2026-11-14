@@ -110,7 +110,7 @@ describe("add site form", () => {
     await type(byLabel(host, "Domain"), "Example.org");
     await click(byRole(host, "button", "Use https://example.org"));
     expect(byLabel(host, "Allowed origins").value).toBe("https://example.org");
-    await click(byRole(host, "button", "Add site"));
+    await click(byRole(host, "button", "Add and set up"));
     await waitFor(() => expect(done).toBe(true));
     expect(calls[0]?.url).toBe(`/api/tenants/${f.TENANT_ID}/sites`);
     expect(calls[0]?.body).toEqual({
@@ -128,7 +128,7 @@ describe("add site form", () => {
     await type(byLabel(host, "Name"), "Docs");
     await type(byLabel(host, "Domain"), "example.org");
     await type(byLabel(host, "Allowed origins"), "https://example.org\nhttps://other.net");
-    await click(byRole(host, "button", "Add site"));
+    await click(byRole(host, "button", "Add and set up"));
     expect(calls).toHaveLength(0);
     expect(errorOf(host, "Allowed origins")).toBe(
       "https://other.net: The host must be the site's domain or one of its subdomains.",
@@ -143,7 +143,7 @@ describe("add site form", () => {
     await type(byLabel(host, "Name"), "Docs");
     await type(byLabel(host, "Domain"), "example.org");
     await type(byLabel(host, "Allowed origins"), "https://example.org\nhttps://www.example.org");
-    await click(byRole(host, "button", "Add site"));
+    await click(byRole(host, "button", "Add and set up"));
     await waitFor(() =>
       expect(errorOf(host, "Allowed origins")).toBe(
         "https://www.example.org: Enter only scheme and host, like https://example.org, with no path.",
