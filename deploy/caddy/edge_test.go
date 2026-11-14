@@ -233,6 +233,22 @@ func TestEdgeAccessLogHasNoClientIdentity(t *testing.T) {
 	require.Equal(t, ua, h.Get("User-Agent"), "the gateway still needs the user agent")
 	t.Logf("caddy saw the client as %s", remote)
 
+	// the event route (POST /v1/e) is not access-logged at all (log_skip in
+	// edge.Caddyfile): it still reaches the gateway with the same headers
+	event, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://"+endpoint+"/v1/e?probe=EdgeEventProbe",
+		strings.NewReader(`{"v":1}`))
+	require.NoError(t, err)
+	event.Host = "in.edge.test"
+	event.Header.Set("User-Agent", ua)
+	event.Header.Set("X-Forwarded-For", spoofed)
+	resp, err := client.Do(event)
+	require.NoError(t, err)
+	_ = resp.Body.Close()
+	require.Equal(t, http.StatusNoContent, resp.StatusCode)
+	ev := up.last()
+	require.Equal(t, remote.String(), ev.Get("X-Edge-Client-Ip"), "the event route sets the client address like the others")
+	require.Empty(t, ev.Values("X-Forwarded-For"))
+
 	// a request for a host this file does not serve goes to caddy's default
 	// logger; it must be filtered the same way
 	unmapped, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://"+endpoint+"/unmapped-probe", nil)
@@ -241,7 +257,7 @@ func TestEdgeAccessLogHasNoClientIdentity(t *testing.T) {
 	unmapped.Header.Set("User-Agent", ua)
 	unmapped.Header.Set("X-Forwarded-For", spoofed)
 	unmapped.Header.Set("Referer", referer)
-	resp, err := client.Do(unmapped)
+	resp, err = client.Do(unmapped)
 	require.NoError(t, err)
 	_ = resp.Body.Close()
 
@@ -263,6 +279,7 @@ func TestEdgeAccessLogHasNoClientIdentity(t *testing.T) {
 		}
 		return access != "" && other != ""
 	}, 10*time.Second, 100*time.Millisecond, "no access log line: %s", all)
+	require.NotContains(t, all, "EdgeEventProbe", "the event route must not be access-logged")
 	for _, line := range []string{access, other} {
 		var entry map[string]any
 		require.NoError(t, json.Unmarshal([]byte(line), &entry), line)

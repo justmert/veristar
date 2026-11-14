@@ -66,8 +66,36 @@ in.{$BASE_DOMAIN} {
 	tls {$EDGE_TLS}
 	import edge_log
 
+	# the event route is the hot path: one request per page view or event,
+	# up to thousands a second per node. its access log line (json encoding
+	# through the filter, a write, docker's log copy) cost about a quarter of
+	# caddy's cpu in the profile of 2026-11-14
+	# (docs/reference/gateway-limits.md, "capacity"), and it holds nothing
+	# the gateway's own counters and caddy's metrics do not. so it is not
+	# logged at all; the challenge route, the tracker files and every
+	# refusal path of other routes still are, filtered as above
+	@event {
+		method POST
+		path /v1/e
+	}
+	log_skip @event
+
 	reverse_proxy {
 		to {$GATEWAY_UPSTREAM}
+		# keep enough idle connections to the gateway for every request in
+		# flight. with caddy's default of 32 idle connections per host, a
+		# burst with more requests in flight closed the extra connections
+		# after each answer and opened new ones for the next, so the node
+		# spent its cpu on tcp setup and teardown exactly when it was busiest
+		# (persistConn.close in the profile of 2026-11-14,
+		# docs/reference/gateway-limits.md, "capacity")
+		transport http {
+			# below the gateway's 60 s idle timeout (internal/obs/server.go), so
+			# caddy never reuses a connection the gateway is closing
+			keepalive 50s
+			keepalive_idle_conns 1024
+			keepalive_idle_conns_per_host 1024
+		}
 		# the gateway reads the client address from this one header only.
 		# set replaces whatever a client sent under the same name, and caddy
 		# trusts no proxy in front of it, so client_ip is the tcp peer.

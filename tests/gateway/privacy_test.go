@@ -59,9 +59,14 @@ func TestNoAddressAnywhere(t *testing.T) {
 
 	gwLogs := logs(t, g.Name)
 	caddyLogs := logs(t, caddy)
-	// the caddy log scan only means something if requests were logged
-	if n := strings.Count(caddyLogs, `"uri":"/v1/e"`); n < 5 {
-		t.Fatalf("caddy logged %d event requests, want at least 5:\n%s", n, caddyLogs)
+	// the caddy log scan only means something if requests were logged: the
+	// challenge requests are; the event route is never access-logged
+	// (log_skip in deploy/caddy/edge.Caddyfile)
+	if n := strings.Count(caddyLogs, `"uri":"/v1/c?`); n < 1 {
+		t.Fatalf("caddy logged %d challenge requests, want at least 1:\n%s", n, caddyLogs)
+	}
+	if n := strings.Count(caddyLogs, `"uri":"/v1/e"`); n != 0 {
+		t.Fatalf("caddy logged %d event requests, want none:\n%s", n, caddyLogs)
 	}
 	scans := map[string]string{"gateway log": gwLogs, "caddy log": caddyLogs, "gateway metrics": string(metrics)}
 	for i, q := range got {
