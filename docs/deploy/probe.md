@@ -203,6 +203,10 @@ page already serves both metrics paths behind the probe metrics token (checked o
 Until then the probe's alerts are Gatus's red checks on the status page; with an operator input unset
 there is no push receiver either way.
 
+Production has it on since 2026-11-14 (release `v0.2.1`): both jobs `up`, `monitoring_watchdog`
+green ([../reference/drills/2026-11-13-azure.md](../reference/drills/2026-11-13-azure.md),
+"Release v0.2.1 rollout and gateway capacity").
+
 ## 8. What was checked (2026-11-14)
 
 The deployment record is in
@@ -212,3 +216,25 @@ The deployment record is in
 Encrypt certificate; all 28 checks green with real end-to-end successes; a deliberate failure of
 the `docs` check turned red and back; the other sites on the host answered with the same status
 codes and certificates before and after the edge reload.
+
+## 9. Rotate the probe tenant's OTLP token
+
+`platformctl probe-tenant rotate-otlp-token` revokes the old token in the same transaction that
+creates the new one, and the control plane writes both to the token registry within seconds, so
+the prober fails its OTLP checks until it runs with the new value. Have every step ready before
+you rotate:
+
+1. On the core node that holds the Patroni leader, run the release's `platformctl` with the
+   flags of [bootstrap.md](bootstrap.md) step 10 and the argument `probe-tenant
+   rotate-otlp-token`. It prints `otlp_token=` once and `revoked=` with the number of revoked
+   tokens. Keep the value in a shell variable; do not print it.
+2. Write it into the SOPS file as `probe_otlp_token`
+   (`sops set --value-stdin infra/secrets/production/secrets.enc.yaml '["probe_otlp_token"]'`
+   with the JSON-encoded value on standard input).
+3. Render the bundle (section 2) and copy only `prober.env` to `/opt/veristar-probe/prober.env`
+   on the host, mode 0600, over SSH standard input.
+4. Recreate the prober so it reads the new file:
+   `docker compose up -d prober` in `/opt/veristar-probe`. `docker compose restart prober` is
+   not enough: a restart keeps the environment the container was created with.
+
+Expected: `probe_otlp-metric` and `slo_ingestion` are green at the next 30 s round.

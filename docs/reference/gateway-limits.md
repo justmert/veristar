@@ -107,7 +107,7 @@ cap it.
 | k6 2.3.0 (`TestThroughputK6`, `make gateway-load`, docker image, gateway container directly) | constant arrival 2,500 req/s for 30 s | 74,723 requests, 2,490.6 req/s, 0 failed, every one queued; latency median 0.23 ms, p95 0.42 ms, p99 1.48 ms, max 246 ms. A second run with the host under load from other jobs (load average about 30): 2,499.1 req/s, p99 5.73 ms. During a load average near 50 one run crossed the 50 ms p99 threshold (81 ms), so the measurement needs a host that is not shared with other heavy work. |
 | `go test -bench EventPath -benchtime 20000x` (in-process `gateway.Node`, loopback http, same nats) | 20 concurrent closed-loop clients, 400 sites | 20,000 requests, 4,214 req/s, every one 202; latency p50 3.27 ms, p99 22.67 ms (client, gateway and nats share the 10 cores) |
 
-Target: at least 2,000 req/s with p99 under 50 ms on one instance. Met by both.
+Target for one gateway instance on its own: at least 2,000 req/s with p99 under 50 ms. Met by both.
 
 `make gateway-load` is a manual target and not part of `make gateway-it` or the nightly e2e
 workflow. On GitHub's standard runner for private repositories (2 vCPUs, 7 GB) k6, the gateway and
@@ -115,15 +115,93 @@ NATS share two cores; two runs there sent 2,400 and 2,221 req/s with p99 174 ms 
 (e2e runs 43437576423 and 43454017432), which measures the runner, not the gateway. Run it on a host
 with cores to spare for k6 before a release that touches the event path.
 
-On a production node (`Standard_B2as_v2`, 2 vCPUs, converged: Caddy with TLS, the gateway, NATS
-and the core services share them), measured on 2026-11-14 through the node's Caddy with the
-same profile: p99 51.4 ms at 500 req/s, 92 ms at 800, 198 ms at 1,200, and at 2,500 offered the
-node reached 863 req/s with p99 2,134 ms, CPU-bound mostly in Caddy. The target above is not met
-on that size. The expected peak (50 a second) and its 10x burst (500 a second) are within what
-one node serves, and three nodes share them
-([drills/2026-11-13-azure.md](drills/2026-11-13-azure.md), "Gateway load on one node").
 Under saturation (160 concurrent clients) the in-process node reached 7,721 req/s
 with p99 79.8 ms, so latency at the target rate comes from queueing, not the path.
+
+A production node shares its two vCPUs with TLS, NATS and the core services; what it supports
+is in "Capacity" below.
+
+## Capacity
+
+**Supported rate: about 700 events a second per node at p99 50 ms, about 2,100 a second across
+the three production nodes.** The expected peak of the availability statement is 50 events a
+second, so the cluster has about 40 times headroom against it, and one node alone serves the
+10x burst (500 a second) at p99 under 50 ms. The cluster figure is three times the per-node
+measurement: Traffic Manager spreads `in.veristar.app` over the three nodes, and each node's
+gateway queues on its own NATS server. Each `WEB_EVENTS` message is also stored on the two other
+servers (R3), so at the full cluster rate every node carries the replicas of the other nodes'
+events as well; the single-node runs carried only the replicas of their own.
+
+One production node (`Standard_B2as_v2`, 2 vCPUs, 8 GB, converged: Caddy with TLS, the gateway,
+NATS with R3 file streams, PostgreSQL, Umami and the observability stack share the two vCPUs),
+measured through the node's Caddy with the `make gateway-load` profile: k6 2.3.0 on a
+workstation outside the region, `in.veristar.app` mapped to `production-node-2`, proofs solved beforehand, the probe
+site, `RATE_SITE_*` and `RATE_PREFIX_*` raised to 10,000 a second for the runs and restored
+after. Latency is node-side: Caddy's `caddy_http_request_duration_seconds` histogram for 202
+answers on the event route, read before and after each 30 s run,
+p99 interpolated inside its bucket. Client latency adds
+the 58 ms round trip.
+
+| Offered rate | Before: release `v0.2.0` | After: release `v0.2.1` |
+|---|---|---|
+| 500/s | p99 46.3 ms | 499/s achieved, p99 about 45 ms (99.50 % within 50 ms) |
+| 600/s | | 599/s, p99 about 55 ms (98.91 %) |
+| 700/s | | 699/s, p99 about 50 ms (99.00 %) |
+| 800/s | p99 98.5 ms | 795/s, p99 about 68 ms (98.52 %) |
+| 1,200/s | p99 1,259 ms | 1,179/s, p99 about 193 ms (85.03 %) |
+| 2,500/s | 829/s achieved, p99 2,497 ms | **1,665/s** achieved, p99 about 496 ms |
+
+Every request of every run was answered 202 (0.00 to 0.01 % client errors, all timeouts).
+**About 700 a second per node at p99 50 ms** (was about 500), and the
+saturated rate went from 829 to 1,665 a second.
+
+What changed between the two columns:
+
+- the event route `POST /v1/e` writes no access log line (`log_skip` in
+  `deploy/caddy/edge.Caddyfile`): the JSON encoding through the filter, the write and Docker's
+  log copy were about a quarter of Caddy's CPU, and `dockerd` with `containerd-shim` another
+  14 % of a core at 1,200 a second;
+- Caddy keeps up to 1,024 idle connections to the gateway (default 32), so a burst no longer
+  opens and closes a TCP connection per request;
+- Caddy and the gateway run with `GOGC=200` and `GODEBUG=adaptivestackstart=1`
+  (`sa_ingest_gogc`, `infra/ansible/vars/pins.yml`);
+- accelerated networking on the three NICs (`infra/tofu/modules/node`).
+
+None of them changes what is checked, logged elsewhere or stored: 202 still follows the
+JetStream acknowledgement of the R3 stream, and every other route keeps its filtered log.
+
+The after runs were made with the replayer's leadership on another node. In a first pass the
+replayer on the measured node was delivering the backlog of earlier runs to Umami (one test
+visitor, so one event at a time, about 70 a second), which took about a third of a vCPU in NATS,
+Umami, the replayer and PostgreSQL and gave p99 74 ms at 500, 87 at 800, 234 at 1,200 and
+1,037/s achieved at 2,500. A real node also hosts its share of that delivery work, so the
+numbers above are the ingest path alone.
+
+CPU of the node at 1,200 a second (`perf record -a`, whole node; `/proc/stat`: user 49 %,
+system 19 %, softirq 16 %, idle 14 %):
+
+| Process | Share of both vCPUs | Of it in the kernel |
+|---|---|---|
+| Caddy (TLS, HTTP/2, the proxy to the gateway) | 31 % | 11 % |
+| NATS (TLS client and route connections, R3 replication, file store) | 22 % | 13 % |
+| gateway | 20 % | 7 % |
+| everything else (PostgreSQL, Prometheus, etcd, Docker) | 16 % | |
+| idle | 11 % | |
+
+The remaining cost is spread thin: no single function in the kernel profile is above 1.1 %
+(`nft_do_chain`), and most of the kernel time is TCP sends of small TLS records on the
+client, Caddy to gateway and NATS connections. The gateway's own histogram at 800 a second has
+97.2 % of events within 25 ms and 99.6 % within 50 ms, so the tail is CPU contention on two
+vCPUs shared by three busy processes, not one slow step. TLS between the containers and the R3
+acknowledgement before 202 stay: they are what keeps the path private and durable.
+
+**Scaling.** The rate grows with nodes (each one adds its own Caddy, gateway and NATS server)
+and with vCPUs per node. The runs bound the CPU an event costs at 1.15 ms of vCPU at saturation
+(1,665 a second on both vCPUs) and 2.2 ms all in at 700 a second, including the fixed load of the
+other services; on two vCPUs p99 stayed at 50 ms up to about 77 % busy. By those figures a node
+with 8 dedicated vCPUs (`Standard_D8as_v6`) serves at least 2,800 a second at p99 under 50 ms
+(extrapolated, not measured). `Standard_B2as_v2` is burstable: sustained load above its baseline
+uses CPU credits, so the runs above show its burst rate.
 
 ## Dropped stats
 
