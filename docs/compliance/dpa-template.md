@@ -81,7 +81,6 @@ another format: the tenant can read its own dashboards before it leaves.
 
 The operator makes available the documents in `docs/compliance/` and the
 source code of the whole service (the repository `github.com/justmert/veristar`), and allows for and
-
 contributes to audits by the tenant or an auditor it mandates, on reasonable
 notice.
 

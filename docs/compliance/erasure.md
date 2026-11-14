@@ -140,7 +140,6 @@ agents used, and finds none.
   backup storage deletes previous blob versions 35 days after they were
   replaced ([../deploy/backups.md](../deploy/backups.md)).
 
-
 ## 6. Tenant exit
 
 When an operator removes a project, the purge deletes its Umami team and
