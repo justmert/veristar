@@ -37,8 +37,6 @@ Related pages:
   the pgBackRest stanza and WAL archiving.
 - [probe.md](probe.md): the external prober and the public status page, which run on a separate
   virtual machine in Azure East US.
-- the verification page: the checks an environment passes before
-  it takes its first real project.
 - [local-converge.md](local-converge.md): the same Ansible roles against Debian 13 containers on
   one machine, for testing role changes without a cloud account.
 
