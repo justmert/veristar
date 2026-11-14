@@ -8,8 +8,8 @@ the past onto a **fresh** node, from the pgBackRest repository, without touching
 cluster. Use it after data was destroyed by mistake or by an attacker, or to inspect old state.
 Code: `infra/ansible/playbooks/restore.yml`, `infra/ansible/roles/backup`.
 
-What the repository holds: a full backup every Sunday 01:00 UTC, a differential every other day
-at 01:00 UTC, `verify` plus `check` daily at 05:30 UTC, and continuous WAL archiving
+What the repository holds: a full backup every Sunday 01:00 UTC, a differential Monday to
+Saturday at 01:00 UTC, `verify` plus `check` daily at 05:30 UTC, and continuous WAL archiving
 (`archive_timeout` 60 s). Retention: four full backups and the differentials of the last seven
 days, so any point from the oldest full backup to the newest archived WAL can be reached.
 Backups are encrypted with `pgbackrest_cipher_pass` from the SOPS file. In staging and
@@ -36,11 +36,12 @@ production the repository is Azure Blob Storage (`backup_repo_mode: azure`,
    ```
 
 3. **Provide a fresh node.** `restore.yml` runs on the hosts of the inventory group `restore`.
-   Set `restore_enabled = true` (and `restore_location` if needed) in
-   `infra/tofu/envs/staging/terraform.tfvars`, then `make staging-plan` and
-   `make staging-apply`. OpenTofu creates `staging-restore-1`, a core-sized Debian 13 server on
-   the private network at `.41` of its location, and the regenerated inventory lists it in
-   `restore` (checked by `inventory_with_restore` in `tests/infra/staging.tftest.hcl`).
+   Set `restore_enabled = true` (and `restore_zone`, `1` to `3`, if needed) in
+   `infra/tofu/envs/<env>/terraform.tfvars`, then `make <env>-plan` and `make <env>-apply`.
+   OpenTofu creates `<env>-restore-1`, a core-sized Debian 13 server on the private network at
+   `.41` of its zone, and the regenerated inventory lists it in `restore` (checked by
+   `inventory_with_restore` in `tests/infra/*.tftest.hcl`). Then issue its internal TLS
+   certificate with `make internal-ca ENV=<env>`.
 
    The playbook refuses a node that already holds a restore volume.
 
@@ -48,10 +49,12 @@ production the repository is Azure Blob Storage (`backup_repo_mode: azure`,
 
    ```sh
    cd infra/ansible && ~/.local/share/veristar/ansible-venv/bin/ansible-playbook \
-     -i inventories/staging/ playbooks/restore.yml -e "restore_target='<YYYY-MM-DD HH:MM:SS+00>'"
+     -i inventories/<env>/ playbooks/restore.yml \
+     -e sa_image_tag=<release> -e sa_release_manifest=<release-images.json> \
+     -e "restore_target='<YYYY-MM-DD HH:MM:SS+00>'"
    ```
 
-   It applies the base and secrets roles, writes the pgBackRest settings, restores the stanza
+   It verifies the release, applies the base and secrets roles, writes the pgBackRest settings, restores the stanza
    with `--type=time --target-action=promote`, starts a standalone PostgreSQL with archiving off,
    and waits until recovery has promoted. Expected last task:
    `restored to <target> on <private address>:5432`.
@@ -82,12 +85,6 @@ restore; re-run those erasure requests ([erasure-requests.md](erasure-requests.m
 
 ## Exercised
 
-**Not yet exercised.** `restore.yml` and `tests/drills/pitr.sh` are written but were not run:
-the this stage drills stopped when the shared host became unusable
-([../reference/drills/2026-11-13.md](../reference/drills/2026-11-13.md)). What did run: on the
-local converge, `stanza-create` and `check` succeeded against the posix repository on the backup
-node, and the timers exist (same record, "Topology checks"). The Azure repository is exercised
-by the first staging converge. In this stage this
-could not be executed: it needs Patroni, pgBackRest and a repository node, which is the
-multi-node topology the shared host may not run. It must be executed on staging, with recovery
-time and loss window recorded, before production.
+| Date | What ran | Result | Source |
+|---|---|---|---|
+| 2026-11-13 | Production: steps 1 to 5 and 7. `production-restore-1` in zone 3, target time one minute before a forced WAL switch on the leader | `pgbackrest info` `status: ok`; the restore promoted, the play took 2 min 43 s; `pg_is_in_recovery()` false, `platform` and `umami` present, newest `cp.audit_log` row the same as on the running cluster and before the target; the node removed with `5 destroyed` | [../reference/drills/2026-11-13-azure.md](../reference/drills/2026-11-13-azure.md), "Restore" |
