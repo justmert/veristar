@@ -36,7 +36,7 @@ variable "zones" {
 }
 
 variable "admin_cidrs" {
-  description = "source ranges allowed to reach ssh an operator input"
+  description = "source ranges allowed to reach ssh"
   type        = list(string)
 
   validation {

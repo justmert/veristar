@@ -57,5 +57,5 @@ provider "azurerm" {
   features {}
 }
 
-# reads CLOUDFLARE_API_TOKEN from the environment (sops, an operator input
+# reads CLOUDFLARE_API_TOKEN from the environment (the env's sops dotenv)
 provider "cloudflare" {}

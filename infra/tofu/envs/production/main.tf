@@ -17,7 +17,7 @@ locals {
     "3" = 3
   }
 
-  # three converged nodes, one per zone (operator decision of 2026-11-13,
+  # three converged nodes, one per zone (decided 2026-11-13,
   # docs/reference/availability.md): every node runs the edge and the core
   # roles, so every service, the nats cluster, the etcd store and the
   # patroni cluster have one member in each zone. while restore_enabled, the
