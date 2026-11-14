@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="152" height="32" viewBox="0 0 152 32" role="img" aria-label="Veristar">
+  <title>Veristar</title>
+  <circle cx="16" cy="17" r="11" fill="none" stroke="#EEEDE8" stroke-width="2.4"/>
+  <path d="M16 6v22" fill="none" stroke="#EEEDE8" stroke-width="2.4"/>
+  <path d="M16 1.5 L17.3 4.7 L20.5 6 L17.3 7.3 L16 10.5 L14.7 7.3 L11.5 6 L14.7 4.7 Z" fill="#FF7A3D"/>
+  <text x="36" y="23.5" font-family="Geist, 'Helvetica Neue', Arial, sans-serif" font-size="21" font-weight="600" letter-spacing="-0.6" fill="#EEEDE8">Veristar</text>
+</svg>
