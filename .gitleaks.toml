@@ -1,4 +1,4 @@
-# gitleaks configuration (the design): the default rules, plus one
+# gitleaks configuration: the default rules, plus one
 # reviewed allowlist. env file examples in the docs show each secret as an
 # angle-bracket placeholder (UMAMI_USER_PASSWORD_KEY=<umami user password key>),
 # which the generic-api-key rule takes for a key. a fingerprint in

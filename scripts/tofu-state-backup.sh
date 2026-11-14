@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# lists and restores earlier versions of an environment's opentofu state
-#. the state account
+# lists and restores earlier versions of an environment's opentofu state,
+# so a bad apply or a corrupted state can be rolled back. the state account
 # that scripts/tofu-state-bootstrap.sh creates has blob versioning and soft
 # delete, so every state write keeps the one before it as a version; no
 # separate copy is needed.
@@ -22,7 +22,7 @@ case "$env_name" in
 esac
 
 tfvars="infra/tofu/envs/$env_name/terraform.tfvars"
-[[ -f "$tfvars" ]] || { echo "$tfvars is missing an operator input" >&2; exit 1; }
+[[ -f "$tfvars" ]] || { echo "$tfvars is missing (copy terraform.tfvars.example)" >&2; exit 1; }
 
 # the same plain `key = "value"` reader as scripts/tofu-state-bootstrap.sh
 read_var() {

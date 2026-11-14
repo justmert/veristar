@@ -3,7 +3,8 @@
 # guid) so it can never be mistaken for a real input. the ssh key is a
 # real ed25519 public key (azure decodes it) whose private half was
 # discarded when it was made. real inputs go to
-# infra/tofu/envs/<env>/terraform.tfvars once supplied.
+# infra/tofu/envs/<env>/terraform.tfvars (gitignored, see
+# terraform.tfvars.example).
 base_domain            = "example.org"
 admin_cidrs            = ["192.0.2.0/24", "198.51.100.7/32", "2001:db8:ad::/48"]
 admin_ssh_public_keys  = ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIClgOUZeOGVIOwaYJYyBuzERYrzstkS/+N/r/wQLJo7Q fixture-private-key-discarded"]
