@@ -9,12 +9,12 @@ The browser tracker `sdk.js` is released as immutable files:
 A released file never changes; a fix is a new version. `packages/tracker/releases/revoked.json`
 is the only mutable file. The gateway serves `GET /v/<version>/sdk.js` from the copy baked into
 its image and answers **410** for a revoked version; the control plane, from its own baked copy,
-refuses to show a snippet for one (`tracker_version_revoked`). How tenants check a file:
-[../security/verify-tracker.md](../security/verify-tracker.md).
+refuses to show a snippet for one (`tracker_version_revoked`). How tenants check a file is
+described in [verifying the tracker](../security/verify-tracker.md).
 
 ## Release a new version
 
-Needs Node 26.13.1 and pnpm 12.18.0.
+You need Node 26.13.1 and pnpm 12.18.0 (the versions `package.json` pins).
 
 1. Set `version` in `packages/tracker/package.json` to the new version. The release script
    refuses anything else.
@@ -40,10 +40,11 @@ Needs Node 26.13.1 and pnpm 12.18.0.
 4. Run the tracker's tests and the browser suites that pin a version: `pnpm --filter tracker test`,
    then `make gateway-it` and `make webpath` (see the Makefile for their prerequisites).
 
-5. Commit, merge, and tag `tracker-v<x.y.z>`. `release-tracker.yml` checks that the tag names
-   the newest committed release and publishes it (attestation and npm publication wait for the
-   GitHub Actions account issue and an operator input; [../security/verify-tracker.md](../security/verify-tracker.md)
-   sections 3 and 6).
+5. Commit, merge, and tag `tracker-v<x.y.z>`. The workflow `release-tracker.yml` checks that the
+   tag names the newest committed release and rebuilds `sdk.js` byte for byte, attests `sdk.js`
+   and the npm package with build provenance, publishes the package to npm through trusted
+   publishing (no npm token exists; the npm scope must trust this repository's workflow), and
+   creates a GitHub release.
 
 6. Ship the files: the gateway and control plane images copy `packages/tracker/releases`, so tag
    a platform release and roll it out (`make <env>-deploy ROLLING=1 ...`). Until then the new
@@ -90,10 +91,8 @@ that sends more than the wire format allows, or a doubt about how a file was bui
 
 | Date | What ran | Result | Source |
 |---|---|---|---|
-| 2026-11-12 | Releases 1.0.0 and 1.1.0 made with `pnpm --filter tracker release`; 1.1.0 rebuilt byte-identical in a clean Node container | released; immutability and rebuild checks pass | plan status, phases 3 and 14 |
-| 2026-11-13 | this stage: `pnpm --filter tracker verify-releases` | `releases verified against HEAD` | this page |
-| 2026-11-13 | this stage: revocation on a local gateway (`dist/bin/gateway` on the development stack's NATS, `TRACKER_RELEASE_DIR` pointing at a scratch copy of `packages/tracker/releases`): 1.0.0 added to `revoked.json`, `SIGHUP` | before: 1.0.0 200, 1.1.0 200; after `SIGHUP`: 1.0.0 **410**, 1.1.0 200; a broken `revoked.json` plus `SIGHUP` logged `reload failed, previous geo file and revoked list stay in use` and 1.0.0 stayed 410 | this page |
-| 2026-11-13 | this stage: `go test -run TestReleases ./internal/gateway/` | `TestReleasesServeCommittedTracker` and `TestReleasesRevokedAndTampered` pass | this page |
-
-Not yet exercised: a release or revocation rolled out through images to staging or production,
-and the tag workflow (GitHub Actions fails at start-up on the account, plan status this stage).
+| 2026-11-12 | Releases 1.0.0 and 1.1.0 made with `pnpm --filter tracker release`; 1.1.0 rebuilt byte-identical in a clean Node container | released; immutability and rebuild checks pass | `packages/tracker/releases/manifest.json` |
+| 2026-11-13 | `pnpm --filter tracker verify-releases` | `releases verified against HEAD` | this page |
+| 2026-11-13 | Revocation on a local gateway (`dist/bin/gateway` on the development stack's NATS, `TRACKER_RELEASE_DIR` pointing at a scratch copy of `packages/tracker/releases`): 1.0.0 added to `revoked.json`, then `SIGHUP` | before: 1.0.0 200, 1.1.0 200; after `SIGHUP`: 1.0.0 **410**, 1.1.0 200; a broken `revoked.json` plus `SIGHUP` logged `reload failed, previous geo file and revoked list stay in use` and 1.0.0 stayed 410 | this page |
+| 2026-11-13 | `go test -run TestReleases ./internal/gateway/` | `TestReleasesServeCommittedTracker` and `TestReleasesRevokedAndTampered` pass | this page |
+| 2026-11-13 | Production serves `https://in.veristar.app/v/1.2.0/sdk.js` from the release images | SHA-384 equal to version 1.2.0 in `manifest.json` | [../reference/drills/2026-11-13-azure.md](../reference/drills/2026-11-13-azure.md), "Checks" |
