@@ -1,0 +1,60 @@
+---
+# renders the nats liveness settings of the edge and core roles for
+# render_test.go: the route section of nats.conf.j2 and the NATS_URL lists
+# the services get (roles/edge and roles/core tasks/peers.yml).
+#   ansible-playbook -i inventory.yml render.yml -e layout=node|split -e out=<dir>
+- name: Render the nats settings of one layout
+  hosts: "{{ 'node' if (layout | default('node')) == 'node' else 'split_edge:split_core' }}"
+  connection: local
+  gather_facts: false
+  vars:
+    roles_dir: "{{ playbook_dir }}/../../infra/ansible/roles"
+    edge_hosts: "{{ groups['node'] if layout == 'node' else groups['split_edge'] }}"
+    core_hosts: "{{ groups['node'] if layout == 'node' else groups['split_core'] }}"
+    # placeholders: the template only interpolates them
+    sa_secrets:
+      nats_route_password: route-secret
+      nats_route_password_hash: route-hash
+  tasks:
+    - name: Map the layout to the edge and core groups
+      ansible.builtin.add_host:
+        name: "{{ item.0 }}"
+        groups: "{{ item.1 }}"
+      loop: "{{ (edge_hosts | product(['edge'])) + (core_hosts | product(['core'])) }}"
+      run_once: true
+      changed_when: false
+
+    - name: Create the output directory
+      ansible.builtin.file:
+        path: "{{ out }}/{{ inventory_hostname }}"
+        state: directory
+        mode: "0755"
+
+    - name: Run the edge facts
+      ansible.builtin.include_role:
+        name: edge
+        tasks_from: peers.yml
+        # the role defaults stay visible to the template tasks below
+        public: true
+      when: inventory_hostname in groups['edge']
+
+    - name: Run the core facts
+      ansible.builtin.include_role:
+        name: core
+        tasks_from: peers.yml
+        # the role defaults stay visible to the template tasks below
+        public: true
+      when: inventory_hostname in groups['core']
+
+    - name: Render the nats server config
+      ansible.builtin.template:
+        src: "{{ roles_dir }}/edge/templates/nats.conf.j2"
+        dest: "{{ out }}/{{ inventory_hostname }}/nats.conf"
+        mode: "0644"
+      when: inventory_hostname in groups['edge']
+
+    - name: Write the nats urls of the services
+      ansible.builtin.copy:
+        content: "{{ {'edge': edge_nats_urls | default(''), 'core': core_nats_urls | default('')} | to_json }}"
+        dest: "{{ out }}/{{ inventory_hostname }}/urls.json"
+        mode: "0644"

@@ -28,18 +28,7 @@
       core_api_minute_retention_days of at least 8
 
 - name: Name the core peers
-  vars:
-    core_nats_first: "{{ groups['core'].index(inventory_hostname) % (groups['edge'] | length) }}"
-  ansible.builtin.set_fact:
-    # a converged node's services use only the server on their own node, for
-    # the reason in roles/edge (edge_nats_urls); a core-only node lists every
-    # edge server, starting at a different one per core index (the clients
-    # keep the order, natsx.Options)
-    core_nats_urls: >-
-      {{ ('tls://' ~ sa_private_ip ~ ':4222') if core_node else
-         ((groups['edge'][core_nats_first | int:] + groups['edge'][:core_nats_first | int])
-          | map('extract', hostvars, 'sa_private_ip') | map('regex_replace', '^(.*)$', 'tls://\1:4222') | join(',')) }}
-    core_runs_postgres: "{{ inventory_hostname in core_postgres_hosts }}"
+  ansible.builtin.import_tasks: peers.yml
 
 - name: Create the core directories
   ansible.builtin.file:

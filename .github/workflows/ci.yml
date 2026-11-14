@@ -193,8 +193,13 @@ jobs:
       - run: |
           scripts/supply-chain/install-tools.sh "$RUNNER_TEMP/bin" uv
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
       - run: make ansible-venv
       - run: make ansible-lint
+      # the nats liveness settings of the rendered role files (tests/natsconf)
+      - run: make ansible-render-test
 
   # alert and recording rules: syntax, then the promtool unit tests, with
   # the promtool of the prometheus pin
