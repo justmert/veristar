@@ -62,8 +62,8 @@ func (g *guard) admit(ctx context.Context, items int) (tenant, token string, err
 	return tenant, token, nil
 }
 
-// resourceHash identifies an emitting process for the metrics writer (phase
-// 9): sha-256 over the original resource attributes in key order, each as
+// resourceHash identifies an emitting process for the metrics writer:
+// sha-256 over the original resource attributes in key order, each as
 // key, type and value. the value encoding is pdata's AsString, which is
 // stable for every type.
 func resourceHash(attrs pcommon.Map) string {
