@@ -4,34 +4,40 @@ description: "Where each kind of data is processed and stored in the production 
 ---
 
 > **Status: draft, pending legal review an operator input.** Not legal advice. Last
-> updated 2026-11-13. This is the explicit residency declaration the RFP asks
+> updated 2026-11-14. This is the explicit residency declaration the RFP asks
 > for.
 
 ## Declaration
 
 This declaration describes the production deployment defined in
-`.scratch/plan.md` (hosting choices in section 5) and built in phases 15 and
-16. **As of this draft no production deployment exists**, so nothing below is
-yet observed in a running system. this stage must make the deployment match this
-text, or this text must change before it is published.
+`infra/tofu/envs/production` and `infra/ansible`, applied and converged on
+2026-11-13 ([../reference/drills/2026-11-13-azure.md](../reference/drills/2026-11-13-azure.md)).
+The locations below are the ones the running deployment uses.
 
-All analytics data is hosted in Microsoft Azure, region Sweden Central (EU), spread
-over the region's three availability zones.
+All analytics data is hosted in Microsoft Azure, region Denmark East
+(`denmarkeast`, EU), on three converged nodes, one in each of the region's
+availability zones 1, 2 and 3. Every node runs the ingestion edge and the core,
+so every service has one member in each zone.
 
 | What | Where | Provider |
 |---|---|---|
-| Ingestion edge: Caddy, gateway, OTLP collector, NATS (queues and memory buckets) | Sweden (Azure Sweden Central, availability zones 1, 2 and 3) | Microsoft Azure |
-| Core: PostgreSQL (both databases), Umami, control plane, replayer, metrics writer, jobs, console | Sweden (Azure Sweden Central, availability zones 1 and 2) | Microsoft Azure |
-| Backups of PostgreSQL, encrypted by pgBackRest before upload | Sweden (Azure Sweden Central, zone-redundant Blob Storage) | Microsoft Azure |
+| Ingestion edge: Caddy, gateway, OTLP collector, NATS (queues and memory buckets) | Denmark (Azure Denmark East, availability zones 1, 2 and 3, one node each) | Microsoft Azure |
+| Core: PostgreSQL under Patroni (both databases, three members: leader, synchronous standby, replica), Umami, control plane, replayer, metrics writer, jobs, console | Denmark (Azure Denmark East, availability zones 1, 2 and 3, on the same three nodes) | Microsoft Azure |
+| Backups of PostgreSQL, encrypted by pgBackRest before upload | Denmark (Azure Denmark East, zone-redundant Blob Storage, account `veristarprodbackups`) | Microsoft Azure |
+| OpenTofu state of the infrastructure, encrypted with the state passphrase. Holds resource settings and addresses; never analytics data | Sweden (Azure Sweden Central, storage account `veristarprodstate`, created before the region decision) | Microsoft Azure |
 | Health-checked DNS failover | Azure Traffic Manager, a global DNS service. Sees DNS queries for the service's hostnames and checks the nodes' health endpoint; never analytics data | Microsoft Azure |
 | Authoritative DNS and domain registration | Cloudflare's DNS network, DNS only (no proxy: traffic goes straight to Azure). Sees DNS queries for the service's hostnames; never analytics data | Cloudflare |
-| External prober | a server run by the operator outside Azure. Holds no analytics data: it probes public endpoints with its own synthetic traffic | operator |
+| External prober and public status page | a separate Azure VM in East US (United States), outside the production deployment and its region ([../deploy/probe.md](../deploy/probe.md)). Holds no analytics data: it probes the public endpoints with its own synthetic traffic for the internal probe tenant and keeps the check results | Microsoft Azure |
 | Console sign-in | GitHub OAuth | GitHub, Inc. (United States). Receives only the sign-in of console users; never visitor or API client data |
 
 ## What leaves the EU
 
 - **Analytics data: nothing.** Web events, sessions, aggregates and API
-  metrics are processed and stored only in the locations above.
+  metrics are processed and stored only in Azure Denmark East, in the rows
+  above.
+- **The external prober.** The prober in East US sends synthetic events for
+  the internal probe tenant and reads that tenant's own aggregates back. No
+  visitor's or tenant's data reaches it.
 - **Console sign-in.** Console users authenticate with GitHub. GitHub sees that
   a user signs in to the service. The control plane stores the numeric GitHub
   id and login only. This concerns tenant staff, not end users.

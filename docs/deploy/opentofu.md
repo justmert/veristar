@@ -174,8 +174,9 @@ replica's node over 21 containers; the largest were Grafana 275 to 299 MiB, Post
 79 MiB. With `shared_buffers` filled, the NATS store at its cap and the second Umami process,
 a node needs about 4 GB before the page cache, which rules out the 4 GB sizes and leaves room
 for the cache in 8 GB. `Standard_B2as_v2` is the cheapest B-series size with 8 GB
-(`Standard_B4als_v2` has the same memory with 4 vCPUs at 0.138 USD an hour in Sweden Central,
-against 0.0778).
+(`Standard_B4als_v2` has the same memory with 4 vCPUs at 0.138 USD an hour against 0.0778, both
+Sweden Central list prices, since the price list publishes none for these sizes in Denmark
+East on 2026-11-13).
 
 ## 3. Research findings (pinned versions, read 2026-11-13)
 
@@ -259,6 +260,9 @@ override used in place of the not yet existing state account. Inputs: `base_doma
 Cloudflare provider used the zone-scoped token of an operator input read-only; the zone lookup returned
 the `veristar.app` zone, which held no records.
 
+This plan predates the three-node layout: it was the earlier layout of three edge and two core
+VMs, kept here as the record of that run.
+
 | Environment | Result |
 |---|---|
 | production | `Plan: 66 to add, 0 to change, 0 to destroy.` |
@@ -308,8 +312,8 @@ Azure suggested `Standard_D2lds_v5` or `Standard_D2ls_v5` for the edge size and
 `Standard_D2ads_v5` or `Standard_D2s_v5` for the core size. Pay-as-you-go prices in
 `swedencentral` on 2026-11-13 (USD per hour): `Standard_B2als_v2` 0.0389, `Standard_B2as_v2`
 0.0778, `Standard_D2als_v6` 0.086, `Standard_D2ls_v5` 0.091, `Standard_D2as_v5` 0.092,
-`Standard_D2as_v6` 0.097, `Standard_D2s_v5` 0.102. The sizes are the variables `edge_vm_size`
-and `core_vm_size`.
+`Standard_D2as_v6` 0.097, `Standard_D2s_v5` 0.102. Those sizes were the variables `edge_vm_size`
+and `core_vm_size` of that layout; the three-node layout has one size, `node_vm_size`.
 
 **Second attempt, Denmark East with three nodes (2026-11-13).** the operator approved a region
 move and the three-node layout. Test VMs of `Standard_B2as_v2` (created in a temporary resource
@@ -368,10 +372,9 @@ after the restore.
 
 | What | Needs |
 |---|---|
-| Admin SSH ranges and keys | I13, I15 |
-| SOPS file with the passphrase and the Cloudflare token | I14 (recipients) |
+| Staging: admin SSH ranges and keys, `terraform.tfvars` | I13, I15 (production's are supplied) |
+| Staging: SOPS file with the passphrase and the Cloudflare token | I14 (production's exists) |
 | `backup_lock_state = "Locked"` for production (irreversible; [backups.md](backups.md) section 1) | operator decision after the first verified backup week |
-| The five VMs | regional capacity for `Standard_B2als_v2` and `Standard_B2as_v2` (section 3.8): a retry later or an operator decision on other sizes |
 
 ## 6. Procedure, step by step
 

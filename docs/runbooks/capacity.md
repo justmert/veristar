@@ -7,17 +7,23 @@ Adding resources before a limit is reached, or removing them when they are not u
 numbers behind the sizing are in [../reference/capacity.md](../reference/capacity.md) (API metric
 storage) and [../reference/drills/2026-11-13.md](../reference/drills/2026-11-13.md) (drain rates);
 the availability effects of the topology are in
-[../reference/availability.md](../reference/availability.md).
+[../reference/availability.md](../reference/availability.md). Staging and production run three
+converged nodes, one per availability zone of the region (production: Azure Denmark East), each
+running the edge and the core roles on one VM size, `node_vm_size` (`Standard_B2as_v2`). Below,
+"edge nodes" and "core nodes" are the inventory groups: on a converged node both apply. The
+measured gateway load on one production node is in
+[../reference/drills/2026-11-13-azure.md](../reference/drills/2026-11-13-azure.md), "Gateway load
+on one node".
 
 ## Signals
 
 | Signal | Where | Usual change |
 |---|---|---|
 | `DiskUsageHigh` (above 80% for 10 minutes) | any node | find what grew, then a larger server type or volume |
-| `ReplicationLagHigh`, slow dashboards, high CPU on the leader | core nodes | larger core server type, PostgreSQL parameters |
+| `ReplicationLagHigh`, slow dashboards, high CPU on the leader | core nodes | larger `node_vm_size`, PostgreSQL parameters |
 | `ReplayerLagHigh` that drains slower than it grows | core nodes | more Umami capacity (see the note on Umami below) |
-| `MetricsWriterLagHigh` | core nodes | `METRICSWRITER_BATCH`, larger core server type |
-| Gateway or collector latency, `429` from rate limits for legitimate tenants | edge nodes | larger edge server type, `edge_gateway_env` and `edge_collector_env` limits |
+| `MetricsWriterLagHigh` | core nodes | `METRICSWRITER_BATCH`, larger `node_vm_size` |
+| Gateway or collector latency, `429` from rate limits for legitimate tenants | edge nodes | larger `node_vm_size`, `edge_gateway_env` and `edge_collector_env` limits |
 | JetStream store close to `max_file_store` or `max_memory_store` | edge nodes | `edge_nats_max_file_store` (20G) and `edge_nats_max_memory_store` (512M), and a larger disk |
 | `ReplayerVisitStateNearlyFull` or `ReplayerVisitStateFull`, replayer logs "visit_state is full" | edge nodes, replayer | `natsx.VisitStateMaxBytes` (384 MiB) with `edge_nats_max_memory_store`, see below |
 
@@ -33,7 +39,7 @@ until keys expire. `ReplayerVisitStateNearlyFull` fires above 80 % and `Replayer
 when writes are skipped (`TestFullVisitStateKeepsDelivering`, `internal/replayer`). One key takes 74 bytes in the store (measured by
 `TestVisitStateLeavesRoomForEdgeSecrets`, `internal/natsx`), so the cap holds about 5 million
 delivered events a day, fewer with many distinct visitors. Above about 4 million events a day,
-raise `edge_nats_max_memory_store` on a larger edge server type and `VisitStateMaxBytes` with
+raise `edge_nats_max_memory_store` on a larger `node_vm_size` and `VisitStateMaxBytes` with
 it, keeping a quarter of the store free (the test checks that ratio), then run
 `platformctl nats apply`, which updates the bucket's limit in place.
 
@@ -58,10 +64,11 @@ it, keeping a quarter of the store free (the test checks that ratio), then run
 
 ## Change a VM size
 
-1. Set `edge_vm_size` or `core_vm_size` in `infra/tofu/envs/<env>/terraform.tfvars`. Check the
-   size is offered in every zone the tier uses and that the family's vCPU quota fits:
-   `az vm list-skus -l swedencentral --size <size> -o table` and
-   `az vm list-usage -l swedencentral -o table`.
+1. Set `node_vm_size` in `infra/tofu/envs/<env>/terraform.tfvars`; it sizes the three nodes and
+   the restore node. Check the size is offered in zones 1, 2 and 3 and that the family's vCPU
+   quota fits (production region `denmarkeast`):
+   `az vm list-skus -l denmarkeast --size <size> -o table` and
+   `az vm list-usage -l denmarkeast -o table`.
 2. Plan and read it:
 
    ```sh
@@ -72,10 +79,10 @@ it, keeping a quarter of the store free (the test checks that ratio), then run
    restarts it. A replacement (`-/+`) would build a new server; do not apply a plan that
    replaces servers you meant to resize. Production servers have delete and rebuild protection.
 3. Drain the node first if the change restarts it ([edge-node-failure.md](edge-node-failure.md)
-   step 2; on a core node holding the Patroni leader, switch it over first,
+   step 2; on the node holding the Patroni leader, switch it over first,
    [database-failover.md](database-failover.md)). Change one node at a time by applying while
    only that node's change is in the plan, or accept that `make staging-apply` changes every
-   node of a tier and do it in a quiet hour.
+   node and do it in a quiet hour.
 4. `make staging-apply`, then `make staging-deploy SA_IMAGE_TAG=<current release> SA_RELEASE_MANIFEST=<release-images.json>` so Ansible
    checks the node again, then undrain.
 
@@ -90,11 +97,11 @@ out with `make <env>-deploy ROLLING=1 SA_IMAGE_TAG=<current release> SA_RELEASE_
 
 **Umami.** One Umami process is one Node.js process and drained about 280 events/s in the
 this stage load run, below the 500/s of the 10x profile. The core role therefore runs
-`core_umami_processes` Umami processes per core node (4 by default: `umami` and `umami-2` to
-`umami-4`), and the replayer spreads visitors over all of them (`UMAMI_URL` lists each). The
+`core_umami_processes` Umami processes per core node (2 on the 2-vCPU `Standard_B2as_v2`
+node: `umami` and `umami-2`; the role's comment explains why not 4), and the replayer spreads visitors over all of them (`UMAMI_URL` lists each). The
 reasoning and the per-count measurements are in the comment above `core_umami_processes` in
 `infra/ansible/roles/core/defaults/main.yml`. To raise web drain, raise that count (it must stay
-at most `REPLAYER_WORKERS`, 128) and give the core nodes the cores for it; each idle process holds
+at most `REPLAYER_WORKERS`, 128) and give the nodes the cores for it; each idle process holds
 about 115 MB.
 
 ## Exercised

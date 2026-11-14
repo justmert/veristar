@@ -257,8 +257,9 @@ That is a product change for the operator to decide; it is not built.
   the stream, but its bytes can stay in a JetStream file block until the block
   is compacted or expires (at most 72 hours). Erasure deletes `WEB_DLQ`
   messages with secure delete, which overwrites them.
-- **No production deployment yet.** Phases 15 and 16 build the hosting and
-  backups. `data-residency.md` states what they must satisfy.
+- **Production hosting.** Production runs in Azure Denmark East (EU) on
+  three converged nodes since 2026-11-13; `data-residency.md` states where
+  each kind of data is processed and stored.
 
 ## 10. AI clients (MCP)
 

@@ -23,10 +23,11 @@ The tenant terms say the same (`docs/compliance/terms.md` section 7).
 
 ## How availability is measured
 
-The `prober` runs outside Azure, on a server of the operator, so an outage of the platform
+The `prober` runs on its own machine (Azure East US), outside the production deployment and its region, so an outage of the platform
 cannot also take down its measurement ([deploy/probe.md](deploy/probe.md)). Every 30 seconds it
 pushes one result per measure to Gatus beside it (`docs/reference/observability.md`,
-Measures), and an uptime monitor alerts the operator on each measure.
+Measures), which keeps the history and publishes it on the status page,
+`status.<BASE_DOMAIN>`.
 
 - **Ingestion** (`slo_ingestion`) is available in an interval when both answered: the gateway
   accepted the probe's web event with 202, and the collector accepted its OTLP metric with
@@ -66,40 +67,48 @@ patched production. The internal target is 8 hours, leaving 16 hours of margin.
 
 ## Hosting for the service window
 
-The providers (Microsoft Azure, region Sweden Central, and Cloudflare DNS), the monthly cost per
-environment (about 261 USD for production pay as you go, or about 179 USD with 1-year reserved
-VMs, read 2026-11-13) and the billing requirements for the 12 months of hosting are in
+The providers (Microsoft Azure, region Denmark East, and Cloudflare DNS), the monthly cost per
+environment (about 229 USD fixed for production pay as you go, or about 159 USD with 1-year
+reserved VMs, read 2026-11-13) and the billing requirements for the 12 months of hosting are in
 [deploy/prerequisites.md](deploy/prerequisites.md), "Hosting". Who holds the accounts and pays is
 an open question to SCF and is not decided.
 
 ## What stands behind the targets today
 
-As of 2026-11-13. No production or staging environment exists yet. The domain (`veristar.app`),
-the Azure subscription and the Cloudflare token are supplied, and `tofu plan` ran against them;
-the first apply follows review. The targets are designed for, not yet demonstrated.
+As of 2026-11-14. Production runs in Azure Denmark East on three converged nodes, one in each of
+availability zones 1, 2 and 3, since 2026-11-13; the converge, the checks and the recovery
+drills are in [reference/drills/2026-11-13-azure.md](reference/drills/2026-11-13-azure.md).
 
 ### Availability
 
 The availability statement with the arithmetic is
-[reference/availability.md](reference/availability.md). The design keeps ingestion separate
-from everything that can be slow or down: three edge nodes in three Azure availability zones
-accept events and metrics into a replicated queue (NATS JetStream, three replicas) and answer without
-touching PostgreSQL or Umami. The queue holds web events for 72 hours, so a full outage of the
-core tier costs the dashboards, not ingestion.
+[reference/availability.md](reference/availability.md). Every node runs the ingestion edge and
+the core: Caddy, the gateway and the collector accept events and metrics into a replicated
+queue (NATS JetStream, three replicas, one per zone) and answer without touching PostgreSQL or
+Umami. The queue holds web events for 72 hours, so a full outage of the database or of Umami
+costs the dashboards, not ingestion. PostgreSQL runs as three Patroni members, one per zone.
 
-Windows that follow from the configuration, not from measurement:
+Windows that follow from the configuration:
 
 | Failure | Ingestion | Dashboards |
 |---|---|---|
-| One edge node or zone lost | requests to it fail until Traffic Manager drops it: probe every 10 s, three failures, 10 s answer TTL, up to about 45 s; a browser that cannot connect tries the next address of the same answer | none, unless the zone holds a core node |
-| One core node lost | none | up to about 130 s for clients of that address (30 s probing) |
+| One node or zone lost | requests to it fail until Traffic Manager drops it: probe every 10 s, three failures, 10 s answer TTL, up to about 45 s; a browser that cannot connect tries the next address of the same answer | up to about 130 s for clients of that address (30 s probing) |
 | Database leader lost | none | at most about 40 s until promotion |
-| Whole core tier down | none, queued for up to 72 h | down for the whole outage |
+| Database or Umami down on every node | none, queued for up to 72 h | down for the whole outage |
 | Full NATS restart | refused (503) until the queue has quorum again; visitors of that day counted again | none |
 
-With those windows the 99.99% ingestion budget of 259 s a month absorbs five edge losses a
-month, and the 99.90% dashboard budget of 2,592 s absorbs 19 core node losses, 64 database
-failovers or one 43-minute core outage. The staging drills measure the real windows.
+With those windows the 99.99% ingestion budget of 259 s a month absorbs five node losses a
+month, and the 99.90% dashboard budget of 2,592 s absorbs 19 node losses, 64 database
+failovers or one 43-minute database outage.
+
+Measured on production ([reference/drills/2026-11-13-azure.md](reference/drills/2026-11-13-azure.md)):
+
+| Drill | Result |
+|---|---|
+| Node powered off for 300 s, 4 page views a second with HTTP keep-alive (after the NATS liveness fix) | 3,341 events sent, 3,341 acknowledged, none answered 503, none lost; the node left the `in` answer 41.8 s after the power-off; the two other nodes stayed in the answer throughout |
+| Database leader powered off | writes resumed through HAProxy 30.3 s after the power-off, on the new leader; the newest committed row was present; the old leader streamed again as a replica 64 s after its start |
+| Point-in-time restore on a separate restore node | promoted at the target time, both databases present, the newest row matching the running cluster |
+| Gateway load on one node (`Standard_B2as_v2`) | p99 51.4 ms at 500 events a second, 198 ms at 1,200 a second; at 2,500 offered the node reached 863 a second. The expected peak is 50 a second and its 10x burst 500, spread over three nodes |
 
 ### Dependencies
 
@@ -108,39 +117,26 @@ on": one Azure region with three availability zones (the loss of any one zone is
 Traffic Manager and Cloudflare for DNS failover, resolver caching (MultiValue answers carry
 every healthy address), the port-80 check that sees no TLS failure (the prober checks every
 node's certificate and `CertificateExpiringSoon` fires 14 days ahead), the web event drain rate
-of two Umami processes per core node (bursts queue and drain after), two database nodes, and
+of two Umami processes per node (bursts queue and drain after), three database members, and
 billing.
-
-### What was and was not drilled
-
-The drills of the design ran on 2026-11-13 on a local stand-in (six Debian 13 nodes on one
-host, location delays simulated), not on staging. The record is
-[reference/drills/2026-11-13.md](reference/drills/2026-11-13.md).
-
-| Drill | Result |
-|---|---|
-| Load at 10 times the expected peak | ran: 149,995 of 149,995 web events and 347,988 OTLP exports acknowledged, none lost; gateway p99 126 ms, collector p99 81 ms. **Failed** its drain bound: the backlog took 1,101 s to empty against 600 s. Consumer settings were raised since; the web path is still limited by one Umami process |
-| Second load run | invalid: the shared host was saturated |
-| Edge node loss | invalid: the host froze for about 104 s at the moment of the power-off. It found a real defect (a NATS container not restarted after power-on); a fix is in place and not yet re-verified |
-| NATS member loss, database leader loss, whole core tier down, location partition, full NATS restart, point-in-time restore, certificate renewal, rolling deploy under load, clock skew detection | **not run** |
-
-Measured on staging, which needs the first apply: Traffic Manager removal timing, backups on
-Azure Blob Storage, latency between availability zones, and ACME certificate issuance through
-Cloudflare DNS.
 
 ### Monitoring
 
 38 alert rules (plus 5 recording rules) with promtool tests, the prober, the status page and
 the SLO report were built and verified on a local test stack (the design). In the alert
 fire-drills 16 alerts fired and resolved and 3 more fired for real without a drill
-([runbooks/alerts.md](runbooks/alerts.md), "Fire-drills"). The observability role is applied
-by `site.yml` on the edge and core nodes. Not yet done: delivery of alerts to the real
-receiver (Discord webhook, an operator input and the probe bundle with its uptime monitors on the
-operator's server.
+([runbooks/alerts.md](runbooks/alerts.md), "Fire-drills"). On production the observability
+role runs on every node: Prometheus has 43 active targets, all `up`. Firing alerts are shown on
+the console's operator Alerts page ([operators/alerts.md](operators/alerts.md)), the platform's
+alert channel; no push receiver is configured an operator input, operator decision). The probe host in
+Azure East US with the public status page is being set up ([deploy/probe.md](deploy/probe.md)).
 
 ### Patching
 
 A full upgrade of Umami from 3.4.1 to 3.5.0 was rehearsed on 2026-11-13: from the detection
 to every test gate green took 3 h 18 min ([runbooks/security-patch.md](runbooks/security-patch.md)
-section 7). The rollout to staging and production was not rehearsed, because neither exists,
-and keyless signing of releases cannot run while GitHub Actions fails on the account.
+section 7). The rolling deploy to production ran on 2026-11-14 (`deploy.yml`, 29 min 25 s,
+`failed=0` on every node). While the repository is private,
+GitHub Actions is off by operator decision: a release is built and signed on a workstation with
+the same key ([security/supply-chain.md](security/supply-chain.md) section 2.1), and the hourly
+`security.yml` scan runs once the repository is public.

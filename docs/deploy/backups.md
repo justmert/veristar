@@ -13,15 +13,16 @@ every step after that; nothing is done by hand. Code: `infra/ansible/roles/stora
 
 ## 1. The storage account
 
-One storage account per environment (`backup_storage_account` in `terraform.tfvars`) in Azure
-Sweden Central, with container `pgbackrest`. Each environment writes under its own path
+One storage account per environment (`backup_storage_account` in `terraform.tfvars`) in the
+environment's region, Azure Denmark East for production (`veristarprodbackups`), with container
+`pgbackrest`. Each environment writes under its own path
 (`/<environment>`, or `/<environment>-g<n>` after a disaster recovery).
 
 | Setting | Value | Why |
 |---|---|---|
 | Redundancy | ZRS: three copies in three availability zones | the repository outlives the loss of a zone |
 | Access | Entra ID only: account keys and shared access signatures are off | no storage key exists that could leak |
-| Who writes | the managed identity `<env>-core` of the core and restore nodes, role Storage Blob Data Contributor on the container | pgBackRest signs in with `repo1-azure-key-type=auto` |
+| Who writes | the managed identity `<env>-node` of the three nodes and the restore node, role Storage Blob Data Contributor on the container | pgBackRest signs in with `repo1-azure-key-type=auto` |
 | Network | default deny; the environment's three subnets (service endpoint) and the IPv4 admin ranges an operator input | |
 | Blob versioning | on | a delete or overwrite keeps the previous version |
 | Immutability | version-level, time-based: every version is immutable for 7 days after it was written; `Unlocked` until the operator locks it (`backup_lock_state`) | not even a subscription owner can delete a protected version early once the policy is `Locked` |
@@ -68,7 +69,7 @@ four-week retention alone (Blob Storage ZRS hot, 0.023 USD per GB a month,
 | Backup storage (`roles/storage`, on the controller) | reads the storage account back through the az CLI: ZRS, no account keys, network default deny, versioning, immutability of 7 days, the lifecycle rule, the container | stops before any database node archives when a protection is missing |
 | Core infrastructure | Patroni starts PostgreSQL with `archive_mode = on` and an **empty** `archive_command` | PostgreSQL keeps every WAL segment and archives nothing, instead of failing each segment against a repository without a stanza |
 | WAL archiving (`core/tasks/archive.yml`) | the Patroni leader runs `pgbackrest stanza-create`; every database node gets the marker `/etc/veristar/pgbackrest/stanza-ready` and the real `archive_command`; Patroni reloads; `pgbackrest check` proves a fresh segment reaches the container | the stanza exists before archiving is switched on; the kept WAL is archived at once |
-| Core services | the backup timers (`sa-pgbackrest-{full,diff,verify}`) on both core nodes; only the leader runs them | |
+| Core services | the backup timers (`sa-pgbackrest-{full,diff,verify}`) on every node with a database member (all three nodes in staging and production); only the leader runs them | |
 
 Every step is idempotent: a second converge reports no change (`stanza-create` on an existing,
 matching stanza says so and changes nothing).
