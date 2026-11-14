@@ -1,6 +1,6 @@
 // Package sloreport turns the probe results the prober pushes to gatus into
 // daily raw files (docs/slo/data/YYYY-MM-DD.json) and a monthly report
-// (docs/slo/YYYY-MM.md), the design.
+// (docs/slo/YYYY-MM.md).
 //
 // gatus 5.37.0 keeps a fixed number of raw results per endpoint and hourly
 // uptime for only 30 days, which is shorter than a 31-day month, so the raw

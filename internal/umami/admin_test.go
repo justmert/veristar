@@ -113,7 +113,7 @@ func TestLiveLifecycle(t *testing.T) {
 	}
 
 	// an admin password change makes the old token useless (tokens carry a
-	// hash of the password), which is the daily rotation in the design
+	// hash of the password), which is what the daily rotation relies on
 	old, err := c.Login(ctx, name, pw)
 	if err != nil {
 		t.Fatal(err)

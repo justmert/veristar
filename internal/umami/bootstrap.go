@@ -93,8 +93,8 @@ func verify(ctx context.Context, c *Client, password string) error {
 
 // RotateAdmin replaces the admin password previous with next and proves
 // previous is refused afterwards. it is safe to run repeatedly: when next
-// is already in place and previous refused, it changes nothing. it is the
-// credential rotation of the design and the re-keying of an environment
+// is already in place and previous refused, it changes nothing. it serves
+// the credential rotation and the re-keying of an environment
 // that imported another environment's umami database.
 func RotateAdmin(ctx context.Context, c *Client, previous, next string) (Outcome, error) {
 	if previous == next {

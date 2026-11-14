@@ -17,7 +17,7 @@ import (
 	"github.com/justmert/veristar/tests/fixtures/natsctr"
 )
 
-// W-12: visit_state shares each node's memory store with edge_secrets. it
+// visit_state shares each node's memory store with edge_secrets. it
 // grows with every delivered event (a sent.<event id> key for 24 hours), so
 // it is capped below the store, and edge_secrets, which every ingest needs,
 // always has room.

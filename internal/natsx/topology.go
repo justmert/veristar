@@ -102,8 +102,8 @@ var RetryBackoff = []time.Duration{time.Second, 5 * time.Second, 30 * time.Secon
 // store (edge_nats_max_memory_store, 512 MiB) with edge_secrets. without a
 // cap a busy day filled the store, and the gateways could no longer create
 // the next day's secrets, which stops all ingestion. with it a full bucket
-// refuses replayer writes only; the replayer skips them and keeps delivering
-//, ingestion goes on, and docs/runbooks/capacity.md says when to
+// refuses replayer writes only; the replayer skips them and keeps delivering,
+// ingestion goes on, and docs/runbooks/capacity.md says when to
 // raise both numbers.
 const VisitStateMaxBytes = 384 << 20
 
@@ -195,8 +195,8 @@ func Topology(replicas int) (Spec, error) {
 	}, nil
 }
 
-// User is one service's nats user with its subject allow lists. this stage
-// issues the credentials and renders these into the server configuration
+// User is one service's nats user with its subject allow lists. the
+// deployment issues the credentials and renders these into the server configuration
 // with RenderAuthorization.
 type User struct {
 	Name      string
@@ -342,7 +342,7 @@ func Users() []User {
 			kvWrite(BucketRegistrySites),
 			kvWrite(BucketRegistryOTLP),
 		),
-		// erasure (the design) runs in the control plane: it asks the
+		// erasure runs in the control plane: it asks the
 		// gateways for a visitor token, waits until the replayer has taken
 		// a site's queued events (stream info and per-subject reads of
 		// WEB_EVENTS), finds and removes visit records and deletes matching

@@ -203,7 +203,7 @@ func (p *Prober) Cycle(ctx context.Context) {
 
 func (p *Prober) pipeline(ctx context.Context) {
 	// ingestion: an interval is available when the gateway answered 202
-	// and the collector answered success (the design)
+	// and the collector answered success
 	sentAt := p.now()
 	webD, webErr := p.timed(ctx, p.sendWebEvent)
 	if webErr == nil {

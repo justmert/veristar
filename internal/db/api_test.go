@@ -431,7 +431,7 @@ func TestAPIPartitionAndRetentionQueries(t *testing.T) {
 	}
 }
 
-//: the security definer functions that give cp_operator
+// the security definer functions that give cp_operator
 // hour and day grain rows return only the tenants their caller names, so a
 // query that forgets the tenant join can no longer read every tenant (the
 // internal probe tenant included). no call returns all tenants at once.

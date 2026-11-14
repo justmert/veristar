@@ -1,4 +1,4 @@
-// Package prober is the outside view of the platform (the design). from
+// Package prober is the outside view of the platform. from
 // the probe node it sends a real web event through the tracker protocol and
 // a real otlp metric with a probe token, reads both back through the machine
 // api, checks the console, the umami host, the tracker files and every node's
@@ -32,10 +32,10 @@ type Config struct {
 	// Timeout bounds one request.
 	Timeout time.Duration
 	// FreshnessMaxDelay is how long an accepted event may take to show in
-	// the machine api (the design: 10 minutes).
+	// the machine api (10 minutes).
 	FreshnessMaxDelay time.Duration
 	// CertMinValidity fails a node check whose certificate expires sooner
-	// (the design: 14 days).
+	// (14 days).
 	CertMinValidity time.Duration
 
 	IngestURL  *url.URL

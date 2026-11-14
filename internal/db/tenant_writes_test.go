@@ -45,7 +45,7 @@ func tenantStmtAs(t *testing.T, user uuid.UUID, stmts ...string) error {
 	return nil
 }
 
-//: row-level security keeps cp_tenant inside its own
+// row-level security keeps cp_tenant inside its own
 // tenant; these limits keep a handler bug inside what tenant handlers are
 // meant to write.
 func TestTenantWriteLimits(t *testing.T) {
@@ -98,7 +98,7 @@ func TestTenantWriteLimits(t *testing.T) {
 	require.NoError(t, err)
 }
 
-//, second resolution: member rows change only through an
+// member rows change only through an
 // owner of the tenant, except that a member may remove itself.
 func TestTenantMemberWritesNeedAnOwner(t *testing.T) {
 	ctx := context.Background()
@@ -125,7 +125,7 @@ func TestTenantMemberWritesNeedAnOwner(t *testing.T) {
 	})
 	m, o := member.String(), outsider.String()
 
-	// the operator manages members
+	// the owner manages members
 	require.NoError(t, tenantStmt(t, `update cp.tenant_members set role = 'owner' where user_id = '`+m+`'`))
 	require.NoError(t, tenantStmt(t, `insert into cp.tenant_members (tenant_id, user_id, role) values ('`+seed.tenantA.String()+`', '`+o+`', 'member')`))
 	require.NoError(t, tenantStmt(t, `delete from cp.tenant_members where user_id = '`+m+`'`))
@@ -137,9 +137,9 @@ func TestTenantMemberWritesNeedAnOwner(t *testing.T) {
 		stmt string
 	}{
 		"a member promotes itself":    {member, `update cp.tenant_members set role = 'owner' where user_id = '` + m + `'`},
-		"a member demotes the operator":  {member, `update cp.tenant_members set role = 'member' where user_id = '` + seed.userA.String() + `'`},
+		"a member demotes the owner":  {member, `update cp.tenant_members set role = 'member' where user_id = '` + seed.userA.String() + `'`},
 		"a member adds someone":       {member, `insert into cp.tenant_members (tenant_id, user_id, role) values ('` + seed.tenantA.String() + `', '` + o + `', 'owner')`},
-		"a member removes the operator":  {member, `delete from cp.tenant_members where user_id = '` + seed.userA.String() + `'`},
+		"a member removes the owner":  {member, `delete from cp.tenant_members where user_id = '` + seed.userA.String() + `'`},
 		"no session user":             {uuid.Nil, `update cp.tenant_members set role = 'member' where user_id = '` + m + `'`},
 		"an outsider as session user": {outsider, `delete from cp.tenant_members where user_id = '` + m + `'`},
 	} {
