@@ -75,14 +75,14 @@ func (w website) out() siteOut {
 
 // webTotals are umami's /stats numbers with the dashboard's own formulas.
 type webTotals struct {
-	Pageviews               int64    `json:"pageviews"`
-	Visitors                int64    `json:"visitors"`
-	Visits                  int64    `json:"visits"`
-	Bounces                 int64    `json:"bounces"`
-	TotalTimeSeconds        int64    `json:"totaltime_seconds"`
-	BounceRate              *float64 `json:"bounce_rate"`
-	AverageVisitSeconds     *float64 `json:"average_visit_seconds"`
-	PageviewsPerVisit       *float64 `json:"pageviews_per_visit"`
+	Pageviews           int64    `json:"pageviews"`
+	Visitors            int64    `json:"visitors"`
+	Visits              int64    `json:"visits"`
+	Bounces             int64    `json:"bounces"`
+	TotalTimeSeconds    int64    `json:"totaltime_seconds"`
+	BounceRate          *float64 `json:"bounce_rate"`
+	AverageVisitSeconds *float64 `json:"average_visit_seconds"`
+	PageviewsPerVisit   *float64 `json:"pageviews_per_visit"`
 }
 
 type statsRaw struct {

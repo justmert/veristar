@@ -108,10 +108,10 @@ type Server struct {
 	now      func() time.Time
 	version  string
 
-	limiter  *limiter
-	inflight *inflight
-	webCache *webCache
-	metrics  *metrics
+	limiter    *limiter
+	inflight   *inflight
+	webCache   *webCache
+	metrics    *metrics
 	register   *bucket
 	registerMu sync.Mutex
 	sealKey    []byte
@@ -166,7 +166,7 @@ func New(c Config) (*Server, error) {
 		issuer: c.Issuer, resource: c.Issuer + Path, log: c.Log, now: c.Now, version: c.Version,
 		// the sdk logs every stateless request's session at info; only its
 		// warnings and errors reach the service log
-		sdkLog: slog.New(warnOnly{c.Log.Handler()}),
+		sdkLog:   slog.New(warnOnly{c.Log.Handler()}),
 		limiter:  newLimiter(c.Rate, float64(c.Burst)),
 		inflight: &inflight{n: map[uuid.UUID]int{}},
 		webCache: newWebCache(),

@@ -42,7 +42,7 @@ const (
 	ProtectedResourceMetadataPath   = "/.well-known/oauth-protected-resource"
 	AuthorizationServerMetadataPath = "/.well-known/oauth-authorization-server"
 	AuthorizePath                   = "/oauth/authorize"
-	TokenPath                       = "/oauth/token"
+	TokenPath                       = "/oauth/token" //nolint:gosec // a path, not a credential
 	RegisterPath                    = "/oauth/register"
 	RevokePath                      = "/oauth/revoke"
 	// ConsentPath is the console page that shows the consent screen
@@ -180,18 +180,18 @@ func (s *Server) serverMetadata(w http.ResponseWriter, _ *http.Request) {
 	// protected resource document (rfc 8414 section 3)
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	writeOAuthJSON(w, http.StatusOK, map[string]any{
-		"issuer":                                s.issuer,
-		"authorization_endpoint":                s.issuer + AuthorizePath,
-		"token_endpoint":                        s.issuer + TokenPath,
-		"registration_endpoint":                 s.issuer + RegisterPath,
-		"revocation_endpoint":                   s.issuer + RevokePath,
-		"scopes_supported":                      []string{Scope},
-		"response_types_supported":              []string{"code"},
-		"response_modes_supported":              []string{"query"},
-		"grant_types_supported":                 []string{"authorization_code", "refresh_token"},
-		"token_endpoint_auth_methods_supported": []string{"none"},
-		"revocation_endpoint_auth_methods_supported": []string{"none"},
-		"code_challenge_methods_supported":           []string{"S256"},
+		"issuer":                                         s.issuer,
+		"authorization_endpoint":                         s.issuer + AuthorizePath,
+		"token_endpoint":                                 s.issuer + TokenPath,
+		"registration_endpoint":                          s.issuer + RegisterPath,
+		"revocation_endpoint":                            s.issuer + RevokePath,
+		"scopes_supported":                               []string{Scope},
+		"response_types_supported":                       []string{"code"},
+		"response_modes_supported":                       []string{"query"},
+		"grant_types_supported":                          []string{"authorization_code", "refresh_token"},
+		"token_endpoint_auth_methods_supported":          []string{"none"},
+		"revocation_endpoint_auth_methods_supported":     []string{"none"},
+		"code_challenge_methods_supported":               []string{"S256"},
 		"authorization_response_iss_parameter_supported": true,
 		"client_id_metadata_document_supported":          false,
 		"service_documentation":                          s.issuer + "/docs/guides/mcp",
@@ -253,6 +253,7 @@ func (s *Server) consentError(w http.ResponseWriter, r *http.Request, code, desc
 func (s *Server) redirectError(w http.ResponseWriter, r *http.Request, redirectURI, state, code, description string) {
 	s.metrics.oauth.WithLabelValues("authorize", code).Inc()
 	w.Header().Set("Referrer-Policy", "no-referrer")
+	//nolint:gosec // redirectURI is exactly one the registered client gave at registration
 	http.Redirect(w, r, s.callbackURL(redirectURI, url.Values{"error": {code}, "error_description": {description}}, state), http.StatusSeeOther)
 }
 

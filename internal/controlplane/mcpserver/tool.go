@@ -15,7 +15,6 @@ import (
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/jackc/pgx/v5"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-
 )
 
 // toolError is a refusal a model can act on: a stable code from contract
@@ -259,4 +258,3 @@ func readError(rec *recorder) error {
 	}
 	return fmt.Errorf("mcpserver: read answered %d %s", rec.status, env.Error.Code)
 }
-

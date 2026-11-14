@@ -59,6 +59,7 @@ type CreatedKey struct {
 	Key string `json:"key"`
 }
 
+//nolint:gosec // column names of a query, not a credential
 const credentialSelect = `select c.id, c.kind, c.scope, c.tenant_id, c.name, c.prefix, c.client_id, c.user_id, u.github_login,
 	c.created_at, c.expires_at, c.revoked_at, c.revoked_reason, c.last_seen_at
 	from cp.mcp_credentials c left join cp.users u on u.id = c.user_id`

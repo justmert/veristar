@@ -3,6 +3,7 @@ package mcpserver
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/url"
 	"strconv"
 	"time"
@@ -336,7 +337,10 @@ func (s *Server) addAPITools(srv *mcp.Server) {
 		if err != nil {
 			return nil, err
 		}
-		m := out.(map[string]any)
+		m, ok := out.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("mcpserver: routes answer of type %T", out)
+		}
 		m["sorted_by"] = sort
 		return m, nil
 	})

@@ -24,9 +24,9 @@ const (
 	// KeyPrefix starts an mcp access key made in the console.
 	KeyPrefix = "sa_mcp_"
 	// AccessTokenPrefix starts an oauth access token.
-	AccessTokenPrefix = "sa_mcpat_"
+	AccessTokenPrefix = "sa_mcpat_" //nolint:gosec // a prefix, not a credential
 	// RefreshTokenPrefix starts an oauth refresh token.
-	RefreshTokenPrefix = "sa_mcprt_"
+	RefreshTokenPrefix = "sa_mcprt_" //nolint:gosec // a prefix, not a credential
 	// codePrefix starts an authorization code.
 	codePrefix = "sa_mcpac_"
 	// clientPrefix starts a registered client id, which is public.

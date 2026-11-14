@@ -106,14 +106,14 @@ func pagePatch(props map[string]*jsonschema.Schema, sorts ...string) {
 
 // projectFilters are the project filters of contract 8.2
 type projectFilters struct {
-	Status        []string `json:"status,omitempty" jsonschema:"only projects in these statuses"`
-	Verified      *bool    `json:"verified,omitempty" jsonschema:"only projects with (true) or without (false) a verified domain"`
-	StellarToml   *bool    `json:"stellar_toml,omitempty" jsonschema:"only projects with (true) or without (false) a stellar.toml naming the site"`
-	HasWebData    *bool    `json:"has_web_data,omitempty" jsonschema:"only projects with (true) or without (false) page views in the range"`
-	HasAPIData    *bool    `json:"has_api_data,omitempty" jsonschema:"only projects with (true) or without (false) API requests in the range"`
-	EnrolledFrom  string   `json:"enrolled_from,omitempty" jsonschema:"only projects enrolled on or after this UTC day"`
-	EnrolledTo    string   `json:"enrolled_to,omitempty" jsonschema:"only projects enrolled on or before this UTC day"`
-	Search        string   `json:"q,omitempty" jsonschema:"case-insensitive text in the project name or slug, 1 to 100 characters"`
+	Status       []string `json:"status,omitempty" jsonschema:"only projects in these statuses"`
+	Verified     *bool    `json:"verified,omitempty" jsonschema:"only projects with (true) or without (false) a verified domain"`
+	StellarToml  *bool    `json:"stellar_toml,omitempty" jsonschema:"only projects with (true) or without (false) a stellar.toml naming the site"`
+	HasWebData   *bool    `json:"has_web_data,omitempty" jsonschema:"only projects with (true) or without (false) page views in the range"`
+	HasAPIData   *bool    `json:"has_api_data,omitempty" jsonschema:"only projects with (true) or without (false) API requests in the range"`
+	EnrolledFrom string   `json:"enrolled_from,omitempty" jsonschema:"only projects enrolled on or after this UTC day"`
+	EnrolledTo   string   `json:"enrolled_to,omitempty" jsonschema:"only projects enrolled on or before this UTC day"`
+	Search       string   `json:"q,omitempty" jsonschema:"case-insensitive text in the project name or slug, 1 to 100 characters"`
 }
 
 func (f projectFilters) values(q url.Values) error {
@@ -176,7 +176,7 @@ func (s *Server) addOperatorTools(srv *mcp.Server) {
 		maxLen(props, "q", 100)
 	}, func(ctx context.Context, p Principal, in tenantsIn) (any, error) {
 		q := url.Values{}
-		if err := in.pageIn.values(q); err != nil {
+		if err := in.values(q); err != nil {
 			return nil, err
 		}
 		if err := statusList(q, in.Status); err != nil {
@@ -285,7 +285,7 @@ func (s *Server) addOperatorTools(srv *mcp.Server) {
 			return nil, err
 		}
 		q := url.Values{"tenants": {ids}}
-		if err := in.dayRangeIn.values(q); err != nil {
+		if err := in.values(q); err != nil {
 			return nil, err
 		}
 		if in.BreakdownLimit != 0 {
@@ -319,7 +319,7 @@ func (s *Server) addOperatorTools(srv *mcp.Server) {
 			return nil, err
 		}
 		q := url.Values{"tenants": {ids}}
-		if err := in.dayRangeIn.values(q); err != nil {
+		if err := in.values(q); err != nil {
 			return nil, err
 		}
 		if in.ServiceOrder != "" {

@@ -72,9 +72,11 @@ type credentialRow struct {
 	TenantStatus *string
 }
 
+//nolint:gosec // column names of a query, not a credential
 const credentialColumns = `c.id, c.kind, c.scope, c.tenant_id, c.user_id, c.resource, c.expires_at, c.revoked_at,
 	u.github_id, u.github_login, u.is_operator, m.role, t.status`
 
+//nolint:gosec // joins of a query, not a credential
 const credentialJoins = `
 	join cp.users u on u.id = c.user_id
 	left join cp.tenant_members m on m.tenant_id = c.tenant_id and m.user_id = c.user_id

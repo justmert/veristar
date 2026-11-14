@@ -145,12 +145,12 @@ func (s *Server) umamiRead(ctx context.Context, p Principal, w website, sub stri
 		if err != nil {
 			var ae *umami.APIError
 			if errors.As(err, &ae) {
-				switch {
-				case ae.Status == 404:
+				switch ae.Status {
+				case 404:
 					return &toolError{Code: outcomeNotFound, Message: "umami does not know this report for the site"}
-				case ae.Status == 400:
+				case 400:
 					return &toolError{Code: outcomeInvalid, Message: "umami refused the parameters: " + ae.Message}
-				case ae.Status == 401 || ae.Status == 403:
+				case 401, 403:
 					return &toolError{Code: outcomeForbidden, Message: "umami refused access to this site for this user"}
 				}
 			}
