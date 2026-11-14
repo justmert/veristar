@@ -74,7 +74,7 @@ does not see TLS, so a node with a broken certificate stays in DNS until you dra
    `CertificateExpiringSoon` resolves at the prober's next run.
 
 6. **Caddy cannot write its storage** (`permission denied` under `/data`): the volume was created
-   by an older root image. Fix the ownership as in [security-patch.md](security-patch.md)
+   by an older root image. Fix the file ownership as in [security-patch.md](security-patch.md)
    section 6.
 
 ## Exercised

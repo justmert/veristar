@@ -58,7 +58,7 @@ The page also watches the alerting itself:
 
 - **Alerting pipeline down**: the always-firing `Watchdog` is missing from
   Alertmanager. Prometheus is not evaluating rules or cannot reach
-  Alertmanager, so alerts that should fire may be missing. Follow
+  Alertmanager, so firing conditions can go unreported. Follow
   [Watchdog](#watchdog).
 - **Alert source unreachable**: no Alertmanager member answered the control
   plane. The page then shows no list at all, never "all clear". Check
@@ -274,7 +274,7 @@ leading`); to run it by hand, stop `jobs` on every core node first
 The API rollup found pending hours whose minute partition was already
 dropped by retention (`jobs_api_rollup_orphaned_marks_total` rose within the
 last hour). The hourly rows of those hours were kept as they were and can no
-longer be recomputed from minute data, so they may miss late points.
+longer be recomputed from minute data, so they can miss late points.
 Action: check that `core_api_minute_retention_days` is at least 8 (the role
 refuses less) and that the rollup is not far behind (`jobs` logs, `task
 failed` for `api-rollup`, `jobs_api_rollup_last_batch_hours`). The jobs log
@@ -355,7 +355,7 @@ Action: check the core nodes' Caddy and the control plane.
 
 ### ProbeNodeCheckFailing
 A node fails by its own address: TLS handshake, certificate for the host, or
-HTTP below 500. The hostname may still work through the other nodes.
+HTTP below 500. The hostname can still work through the other nodes.
 Action: as EdgeNodeNotReady or CertificateExpiringSoon for that node.
 
 ## Fire-drills
