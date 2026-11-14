@@ -5,9 +5,9 @@ description: "Replace each secret of an environment, and what users notice while
 
 How to replace each secret of an environment, what changes for users while you do, and what
 Ansible applies by itself. The secrets live in `infra/secrets/<env>/secrets.enc.yaml` (platform)
-and `infra/secrets/<env>/tofu.enc.env` (OpenTofu), both SOPS files encrypted to the age keys of
-`<an operator input>` ([../deploy/secrets.md](../deploy/secrets.md)). Conventions are in
-[overview.md](overview.md).
+and `infra/secrets/<env>/tofu.enc.env` (OpenTofu), both SOPS files encrypted to the environment's
+age recipients in `infra/secrets/recipients/<env>.txt` ([secrets](../deploy/secrets.md)). The
+conventions shared by every runbook are in the [runbooks overview](overview.md).
 
 Rotate when a value may have been exposed (a node compromised, a file or identity leaked, a
 person with access left), when a provider forces it, or on a schedule the operators set.
@@ -18,15 +18,15 @@ Rotating everything in a file is the answer to a leaked file or identity.
 To replace every value of a file (a leaked file or identity, a person with access leaving, a
 handover), use `infra/secrets/rotate-secrets.py <env>` and `playbooks/rotate-all.yml`: they apply
 every step of the table below in the right order and prove each previous credential is refused
-([../handover/rebuild.md](../handover/rebuild.md) section 7). The rest of this page is for
+([rebuild and data migration](../handover/rebuild.md), section 7). The rest of this page is for
 replacing one value.
 
 ## The general pattern
 
-1. **Edit the value** in the SOPS file on the controller:
+1. **Edit the value** in the SOPS file on the controller (`<env>` is `staging` or `production`):
 
    ```sh
-   sops --config infra/secrets/.sops.yaml edit infra/secrets/staging/secrets.enc.yaml
+   sops --config infra/secrets/.sops.yaml edit infra/secrets/<env>/secrets.enc.yaml
    ```
 
    Generate random values the way `infra/secrets/new-secrets.py` does (24 random bytes as hex
@@ -40,7 +40,7 @@ replacing one value.
 2. **Apply** with a converge at the release that runs now:
 
    ```sh
-   make staging-deploy SA_IMAGE_TAG=<current release> SA_RELEASE_MANIFEST=<release-images.json>
+   make <env>-deploy SA_IMAGE_TAG=<current release> SA_RELEASE_MANIFEST=<release-images.json>
    ```
 
    `site.yml` rewrites the env files in `/etc/veristar/env/`, the NATS and Patroni
@@ -71,12 +71,12 @@ replacing one value.
 | `umami_app_secret` | Umami (`APP_SECRET`) | env file only | Umami derives session ids from it: visits in progress split and returning visitors of the day count again; Umami tokens are invalidated. Recreate `umami` on every core node |
 | `postgres_superuser_password`, `postgres_replication_password`, `patroni_restapi_password` | Patroni, bootstrap, observability | `patroni.yml` only | change the role in PostgreSQL first (below), converge, then reload Patroni |
 | `pgbackrest_cipher_pass` | pgBackRest repository encryption | n/a | **cannot be rotated in place**: the repository is encrypted with it. A new value needs a new, empty repository (new bucket or path), a new full backup, and keeping the old repository and value until its backups expire |
-| `github_client_id`, `github_client_secret` | control plane sign-in (`<an operator input>`) | yes (env file) | create a new client secret in the GitHub OAuth App settings, converge, recreate `controlplane`, then delete the old secret in GitHub |
-| `cloudflare_api_token` | Caddy DNS-01 (`<an operator input>`) | yes (`caddy.env`) | create a new token with the same permissions (`Zone:Zone:Read`, `Zone:DNS:Edit` on the zone), converge, recreate `caddy` on every node, then delete the old token in Cloudflare; update `CLOUDFLARE_API_TOKEN` in `tofu.enc.env` too if the same token serves OpenTofu |
+| `github_client_id`, `github_client_secret` | control plane sign-in (the GitHub OAuth App) | yes (env file) | create a new client secret in the GitHub OAuth App settings, converge, recreate `controlplane`, then delete the old secret in GitHub |
+| `cloudflare_api_token` | Caddy DNS-01 (the Cloudflare API token) | yes (`caddy.env`) | create a new token with the same permissions (`Zone:Zone:Read`, `Zone:DNS:Edit` on the zone), converge, recreate `caddy` on every node, then delete the old token in Cloudflare; update `CLOUDFLARE_API_TOKEN` in `tofu.enc.env` too if the same token serves OpenTofu |
 | `object_storage_access_key`, `object_storage_secret_key` | the local converge's S3 stand-in only | n/a | Azure backups use the core nodes' managed identity: there is no storage key to rotate. Revoking access is removing the role assignment (`infra/tofu/modules/backup-storage`) |
-| `alertmanager_discord_webhook_url`, `gatus_discord_webhook_url` | Alertmanager, Gatus (`<an operator input>`, optional) | Alertmanager: yes (observability play of `site.yml`); Gatus: render the probe bundle again and restart it ([../deploy/probe.md](../deploy/probe.md)) | create a new webhook in Discord, delete the old one. Without the key there is no receiver ([alerts.md](alerts.md), "Adding a receiver") |
-| `ghcr_pull_token` | every node and the controller pull the private platform images from `ghcr.io` with it (`sa_registry_login` in the inventory's `group_vars/all.yml`) | yes: the `secrets` role signs each node in again when the stored credential differs (`roles/secrets/tasks/registry.yml`), and the controller writes it into a temporary docker config for the signature check | a classic GitHub token of `justmert` with the single scope `read:packages`. GitHub shows its expiry date on the token's settings page; create the new token before that date, put it in with `sops edit`, run `site.yml` (or `deploy.yml`), then delete the old token in GitHub. Once the repository and its packages are public, set `sa_registry_login: ""`, delete the token in GitHub and remove the key; `docker logout ghcr.io` on each node removes the stored credential |
-| `cosign_private_key`, `cosign_password` | recovery copy of the release key pair; the release workflow reads the GitHub Actions secrets `COSIGN_PRIVATE_KEY` and `COSIGN_PASSWORD` | n/a | a new pair: `cosign generate-key-pair` with a new password, set both Actions secrets (`GH_TOKEN=$(gh auth token --user justmert) gh secret set ...`), put both into the sops file, commit the new public key as `infra/ansible/vars/release-cosign.pub`, cut a new release and deploy it. Releases signed with the old key no longer verify, so roll back only to releases signed after the change |
+| `alertmanager_discord_webhook_url`, `gatus_discord_webhook_url` | Alertmanager, Gatus (optional Discord receiver) | Alertmanager: yes (observability play of `site.yml`); Gatus: render the probe bundle again and restart it ([../deploy/probe.md](../deploy/probe.md)) | create a new webhook in Discord, delete the old one. Without the key there is no receiver ([alerts.md](alerts.md), "Adding a receiver") |
+| `ghcr_pull_token` | every node and the controller sign in to `ghcr.io` with it to pull the platform images when `sa_registry_login` is set in the inventory's `group_vars/all.yml` | yes: the `secrets` role signs each node in again when the stored credential differs (`roles/secrets/tasks/registry.yml`), and the controller writes it into a temporary docker config for the signature check | a classic GitHub token of the account named in `sa_registry_login_user`, with the single scope `read:packages`. GitHub shows its expiry date on the token's settings page; create the new token before that date, put it in with `sops edit`, run `site.yml` (or `deploy.yml`), then delete the old token in GitHub. When the image packages are public, no token is needed: set `sa_registry_login: ""`, delete the token in GitHub and remove the key; `docker logout ghcr.io` on each node removes the stored credential |
+| `cosign_private_key`, `cosign_password` | recovery copy of the release key pair; the release workflow reads the GitHub Actions secrets `COSIGN_PRIVATE_KEY` and `COSIGN_PASSWORD` | n/a | a new pair: `cosign generate-key-pair` with a new password, set both Actions secrets (`gh secret set COSIGN_PRIVATE_KEY` and `gh secret set COSIGN_PASSWORD`), put both into the sops file, commit the new public key as `infra/ansible/vars/release-cosign.pub`, cut a new release and deploy it. Releases signed with the old key no longer verify, so roll back only to releases signed after the change |
 | `grafana_admin_password`, `postgres_exporter_password` | Grafana, postgres_exporter on the core nodes | yes (observability play; the exporter's `sa_monitor` role password is set through HAProxy at each run) | recreate `grafana` and the exporter if they did not restart |
 | `probe_metrics_token`, `gatus_external_token` | the probe node's Caddy and Gatus, Prometheus scraping the prober | core side yes; probe side: render the probe bundle again and restart it | |
 | `probe_otlp_token`, `probe_machine_api_key`, `probe_site_id` | the prober | render the probe bundle again and restart it | create a new OTLP token for the internal probe tenant and a new scoped operator key, write them to the file, apply, then revoke the old ones |
@@ -87,8 +87,8 @@ The certificates of the private network are not in `secrets.enc.yaml`: they live
 
 Keys of `tofu.enc.env` (`CLOUDFLARE_API_TOKEN`; Azure uses the operator's `az login`, which
 `az logout` ends) are only used on the controller: edit with
-`sops --config infra/secrets/.sops.yaml edit infra/secrets/staging/tofu.enc.env`, run
-`make staging-plan` to prove the new value works (expected: `No changes.`), and revoke the old
+`sops --config infra/secrets/.sops.yaml edit infra/secrets/<env>/tofu.enc.env`, run
+`make <env>-plan` to prove the new value works (expected: `No changes.`), and revoke the old
 one at the provider. `TF_VAR_state_passphrase` needs OpenTofu's `fallback` key provider for one
 apply ([../deploy/opentofu.md](../deploy/opentofu.md) section 3.5).
 
@@ -160,7 +160,7 @@ and recreate `controlplane` and `jobs` on every core node.
 
 After the converge and the recreation of `controlplane` and `jobs`, Umami still holds today's
 passwords derived from the old key, and `umami-rotate` skips a day it already recorded. Clear the
-record and run the task once ([overview.md](overview.md), "Running a jobs task by hand"):
+record and run the task once (the [runbooks overview](overview.md), "Running a jobs task by hand"):
 
 ```sql
 delete from cp.settings where key = 'umami_password_day';
@@ -175,8 +175,7 @@ console's SSO.
 
 ## Internal CA and node certificates
 
-Every link between nodes is TLS with certificates of one internal CA per environment (finding
-O-26 of the review notes). The files:
+Every link between nodes is TLS with certificates of one internal CA per environment. The files:
 
 | File | Holds | Read by |
 |---|---|---|
@@ -200,8 +199,8 @@ the relay, the exporters, Prometheus, Alertmanager and the services on each node
 due; also after adding a node or changing a private address):
 
 ```sh
-make internal-ca ENV=staging
-make staging-deploy ROLLING=1 SA_IMAGE_TAG=<running release> SA_RELEASE_MANIFEST=<its release-images.json>
+make internal-ca ENV=<env>
+make <env>-deploy ROLLING=1 SA_IMAGE_TAG=<running release> SA_RELEASE_MANIFEST=<its release-images.json>
 ```
 
 Expected: `N certificate(s) issued, ca unchanged`, then every node healthy in turn. Peers keep
@@ -210,12 +209,12 @@ working through the rollout because the CA is unchanged.
 **Rotate the CA** (the CA key may have been exposed, or before it expires). Two converges, so no
 link ever meets a certificate its peer does not trust:
 
-1. `make internal-ca ENV=staging CA_ROTATE=new`: a new CA signs every node certificate again;
+1. `make internal-ca ENV=<env> CA_ROTATE=new`: a new CA signs every node certificate again;
    the old CA certificate moves to `previous_ca_certs` and stays in `ca_bundle`. Expected:
    `N certificate(s) issued, ca new, 1 retired ca(s) still trusted`.
-2. Roll it out (`make staging-deploy ROLLING=1 ...`). During the rollout, nodes with old
+2. Roll it out (`make <env>-deploy ROLLING=1 ...`). During the rollout, nodes with old
    certificates and nodes with new ones trust each other through the bundle.
-3. `make internal-ca ENV=staging CA_ROTATE=retire`: drops the retired CAs from the bundle
+3. `make internal-ca ENV=<env> CA_ROTATE=retire`: drops the retired CAs from the bundle
    (`ca unchanged, 0 retired ca(s) still trusted`), and roll out again.
 
 If the old CA key was exposed, do step 3 straight after step 2: until then a certificate the
@@ -233,20 +232,14 @@ Patroni or NATS monitoring through an SSH tunnel, and delete it afterwards:
 umask 077; mkdir -p ~/sa-tls
 for k in ca_bundle:ca.crt operator.cert:client.crt operator.key:client.key; do
   sops decrypt --extract "$(echo "${k%%:*}" | sed 's/\./"]["/; s/^/["/; s/$/"]/')" \
-    infra/secrets/staging/tls.enc.yaml > ~/sa-tls/"${k#*:}"
+    infra/secrets/<env>/tls.enc.yaml > ~/sa-tls/"${k#*:}"
 done
 ```
 
 ## Exercised
 
-| Date | What ran | Result | Source |
-|---|---|---|---|
-| 2026-11-13 | this stage: platform role rotation path on a scratch PostgreSQL 18.6 (`platformctl db migrate`, `db roles` with one password, then `db roles` with a new one, logins tried over TCP) | `application role logins set and verified` both times; after rotation the old password was refused (`password authentication failed for user "cp_system"`), the new one logged in | this page |
-| 2026-11-13 | this stage: the Umami admin password command above, on a throwaway Umami 3.5.0 | seeded to first: `change password 200`; first to second: `change password 200`; old password `login 401`, new password `login 200` | this page |
-
-| 2026-11-13 | O-26: `make internal-ca ENV=local` on the local converge's inventory, first run then second run | first run: CA and 8 certificates issued; second run `0 certificate(s) issued, ca unchanged`, `changed=0` | this page |
-
-Not yet exercised: any rotation through `site.yml` on deployed nodes (no staging), the NATS,
-Patroni, Umami key and `APP_SECRET` rotations, and the provider keys. The this stage drills and the
-local converge never rotated a value. These need staging; the multi-node topology may not run on
-the shared host.
+| Date | What ran | Result |
+|---|---|---|
+| 2026-11-13 | The platform role rotation path on a scratch PostgreSQL 18.6 (`platformctl db migrate`, `db roles` with one password, then `db roles` with a new one, logins tried over TCP) | `application role logins set and verified` both times; after rotation the old password was refused (`password authentication failed for user "cp_system"`), the new one logged in |
+| 2026-11-13 | The Umami admin password command above, on a throwaway Umami 3.5.0 | seeded to first: `change password 200`; first to second: `change password 200`; old password `login 401`, new password `login 200` |
+| 2026-11-13 | `make internal-ca ENV=local` on the local converge's inventory, first run then second run | first run: CA and 8 certificates issued; second run `0 certificate(s) issued, ca unchanged`, `changed=0` |
