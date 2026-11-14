@@ -71,9 +71,14 @@ export type Roles = {
   "fg-disabled": string;
   "on-accent": string; // text on the accent fill
   "on-critical": string; // text on the destructive fill
-  // the one primary action and the focus ring; never a status
+  // the one primary action; never a status. `accent` is the fill under
+  // `on-accent` text; `accent-text` is the accent drawn on a dark surface
+  // (links, markers, the focus ring, the mark's star), which needs a lighter
+  // step than a fill does
   accent: string;
   "accent-hover": string;
+  "accent-pressed": string;
+  "accent-text": string;
   "accent-soft": string; // the focus halo
   // status, always shown with an icon and a word
   success: string;
@@ -120,6 +125,8 @@ export const themes = {
     "on-critical": p.red[950],
     accent: p.orange[500],
     "accent-hover": p.orange[400],
+    "accent-pressed": p.orange[400],
+    "accent-text": p.orange[500],
     "accent-soft": "rgb(255 122 61 / 0.25)",
     success: p.green[500],
     "success-soft": p.green[950],
@@ -164,7 +171,7 @@ export const type = {
   body: { size: "14px", line: "20px", weight: 400, tracking: "0" },
   title: { size: "16px", line: "24px", weight: 600, tracking: "0" },
   section: { size: "20px", line: "28px", weight: 600, tracking: "-0.01em" },
-  page: { size: "24px", line: "32px", weight: 600, tracking: "-0.02em" },
+  page: { size: "28px", line: "36px", weight: 600, tracking: "-0.025em" },
   metric: { size: "28px", line: "36px", weight: 500, tracking: "-0.02em" },
   h1: { size: "32px", line: "40px", weight: 600, tracking: "-0.03em" },
   display: { size: "48px", line: "52px", weight: 600, tracking: "-0.035em" },
@@ -214,7 +221,7 @@ export const motion = {
 
 export const layout = {
   sidebar: "248px",
-  content: "1200px", // widest content column of the console
+  content: "1440px", // widest content column of the console, centred in the space beside the sidebar
   prose: "720px", // terms, docs-like reading width
   dialog: "552px", // 520 px panel plus the 16 px gutter on each side
   "dialog-sm": "472px",

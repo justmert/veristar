@@ -268,7 +268,7 @@ export function SitesTable({ sites, actions }: { sites: Site[]; actions?: ReactN
                   <TableCell>
                     <div className="flex items-center justify-end gap-1">
                       {event === "waiting" || event === "refused" ? (
-                        <Button asChild variant="ghost" size="sm" className="text-accent">
+                        <Button asChild variant="ghost" size="sm" className="text-accent-text">
                           <Link to={snippetPath(s)}>Continue setup</Link>
                         </Button>
                       ) : null}

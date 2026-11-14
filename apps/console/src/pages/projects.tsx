@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import { cn } from "@veristar/brand/cn";
 import {
   ChevronRight,
@@ -11,7 +11,8 @@ import {
 } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Link } from "react-router";
-import { meQuery } from "@/api/queries";
+import type { ApiFilters } from "@/api/endpoints";
+import { apiOverviewQuery, ingestMonthQuery, meQuery, sitesQuery } from "@/api/queries";
 import type { MeTenant, RemovedTenant } from "@/api/schemas";
 import { ErrorPanel, Loading, StateBlock } from "@/components/error-panel";
 import { Stagger, StaggerItem } from "@/components/motion";
@@ -19,6 +20,8 @@ import { Notice } from "@/components/notice";
 import { PageHeader } from "@/components/panel";
 import { StatusPill, type Tone, toneText } from "@/components/status";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { formatCount } from "@/lib/format";
 
 export function ProjectsPage() {
   const me = useQuery(meQuery);
@@ -27,7 +30,7 @@ export function ProjectsPage() {
   const tenants = me.data.tenants;
 
   return (
-    <section className="flex max-w-[58rem] flex-col gap-5">
+    <section className="flex flex-col gap-6">
       <PageHeader
         title="Your projects"
         description="A project is one team. It holds its websites and the people who manage them."
@@ -63,12 +66,26 @@ export function ProjectsPage() {
           project's members page.
         </StateBlock>
       ) : (
-        <Stagger as="ul" className="overflow-hidden rounded-lg border border-line bg-raised">
+        <Stagger as="ul" className="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-3">
           {tenants.map((t) => (
-            <StaggerItem as="li" key={t.id} className="border-b border-line-subtle last:border-b-0">
-              <ProjectRow tenant={t} />
+            <StaggerItem as="li" key={t.id} className="flex">
+              <ProjectCard tenant={t} />
             </StaggerItem>
           ))}
+          <StaggerItem as="li" className="flex">
+            <Link
+              to="/projects/new"
+              className="flex min-h-48 w-full flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-line-strong text-fg-2 transition-colors duration-(--vs-duration-press) hover:border-fg-3 hover:bg-raised hover:text-fg focus-ring"
+            >
+              <span className="flex size-10 items-center justify-center rounded-lg border border-line-strong">
+                <Plus aria-hidden className="size-5" />
+              </span>
+              <span className="text-body font-medium">Enroll another project</span>
+              <span className="max-w-64 text-center text-small text-fg-3">
+                One project per team. Its sites, members and API keys live inside it.
+              </span>
+            </Link>
+          </StaggerItem>
         </Stagger>
       )}
     </section>
@@ -107,44 +124,109 @@ function nextStep(t: MeTenant): { text: string; tone: Tone | null; icon: ReactNo
   return { text: t.slug, tone: null, icon: null };
 }
 
-function ProjectRow({ tenant: t }: { tenant: MeTenant }) {
+const NO_FILTERS: ApiFilters = { service: null, route: null, method: null };
+
+// one project as a card: who it is, what waits on the person, and the last
+// 30 days in numbers, read from the same queries the overview uses (so
+// opening the project shows them from the cache)
+function ProjectCard({ tenant: t }: { tenant: MeTenant }) {
   const next = nextStep(t);
+  const sites = useQuery(sitesQuery(t.id));
+  const list = sites.data ?? [];
+  const month = useQueries({ queries: list.map((s) => ingestMonthQuery(s.id)) });
+  const api = useQuery(apiOverviewQuery(t.id, { range: "30d" }, NO_FILTERS));
+  const verified = list.filter((s) => s.verification === "verified").length;
+  const monthDone = month.every((m) => !m.isPending);
+  const accepted = month.reduce((n, m) => n + (m.data?.totals.accepted ?? 0), 0);
+  const requests = api.data?.current.summary.requests ?? null;
+
   return (
     <Link
       to={`/projects/${t.id}`}
-      className="group grid grid-cols-[2.25rem_minmax(0,1fr)_1rem] items-center gap-x-3.5 px-4 py-3.5 transition-colors duration-(--vs-duration-press) hover:bg-hover focus-ring focus-visible:-outline-offset-2 sm:grid-cols-[2.25rem_minmax(0,1fr)_auto_1rem]"
+      className="group flex w-full flex-col rounded-lg border border-line bg-raised transition duration-(--vs-duration-reveal) ease-standard hover:border-line-strong hover:bg-hover focus-ring"
     >
-      <span
-        aria-hidden
-        className="flex size-9 items-center justify-center rounded-md bg-selected text-small font-semibold text-fg uppercase"
-      >
-        {t.name.slice(0, 1)}
-      </span>
-      <span className="flex min-w-0 flex-col gap-0.5">
-        <span className="truncate text-title font-medium text-fg">{t.name}</span>
+      <div className="flex items-start gap-3.5 p-5 pb-4">
+        <span
+          aria-hidden
+          className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-selected text-title text-fg uppercase"
+        >
+          {t.name.slice(0, 1)}
+        </span>
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className="truncate text-title text-fg">{t.name}</span>
+          <span className="truncate text-small text-fg-3">{t.slug}</span>
+        </span>
+        <span className="flex shrink-0 flex-col items-end gap-1.5">
+          <StatusPill status={t.status} />
+          <span className="text-caption font-normal text-fg-3">{ROLE[t.role]}</span>
+        </span>
+      </div>
+      {next.tone ? (
         <span
           className={cn(
-            "flex min-w-0 items-center gap-1.5 text-small [&_svg]:size-3.5 [&_svg]:shrink-0",
-            next.tone ? toneText(next.tone) : "text-fg-3",
+            "mx-5 mb-4 flex min-w-0 items-center gap-2 rounded-md border border-line bg-sunken px-3 py-2 text-small [&_svg]:size-3.5 [&_svg]:shrink-0",
+            toneText(next.tone),
           )}
         >
           {next.icon}
           <span className="truncate">{next.text}</span>
         </span>
-        <span className="mt-1 flex items-center gap-2 text-caption font-normal text-fg-2 sm:hidden">
-          <StatusPill status={t.status} />
-          {ROLE[t.role]}
-        </span>
+      ) : null}
+      <dl className="mt-auto grid grid-cols-3 border-t border-line-subtle">
+        <Metric label="Sites" pending={sites.isPending} failed={sites.isError}>
+          {list.length}
+          {list.length > 0 ? (
+            <span className="ml-1.5 font-sans text-caption font-normal text-fg-3">
+              {verified} verified
+            </span>
+          ) : null}
+        </Metric>
+        <Metric
+          label="Web events, 30d"
+          pending={sites.isPending || !monthDone}
+          failed={sites.isError || month.some((m) => m.isError)}
+        >
+          {list.length === 0 ? "none" : formatCount(accepted)}
+        </Metric>
+        <Metric label="API requests, 30d" pending={api.isPending} failed={api.isError}>
+          {requests === null || requests === 0 ? "none" : formatCount(requests)}
+        </Metric>
+      </dl>
+      <span className="flex items-center justify-between border-t border-line-subtle px-5 py-3 text-small text-fg-2 transition-colors duration-(--vs-duration-press) group-hover:text-fg">
+        Open project
+        <ChevronRight
+          aria-hidden
+          className="size-4 transition-transform duration-(--vs-duration-press) group-hover:translate-x-0.5"
+        />
       </span>
-      <span className="hidden flex-col items-end gap-1 text-caption font-normal text-fg-2 sm:flex">
-        <StatusPill status={t.status} />
-        {ROLE[t.role]}
-      </span>
-      <ChevronRight
-        aria-hidden
-        className="size-4 text-fg-3 transition-transform duration-(--vs-duration-press) group-hover:translate-x-0.5 group-hover:text-fg-2"
-      />
     </Link>
+  );
+}
+
+function Metric({
+  label,
+  pending,
+  failed,
+  children,
+}: {
+  label: string;
+  pending: boolean;
+  failed: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex min-w-0 flex-col gap-1 border-r border-line-subtle px-5 py-3.5 last:border-r-0">
+      <dt className="truncate text-caption font-normal text-fg-3">{label}</dt>
+      <dd className="flex items-baseline font-mono text-title font-medium text-fg tabular">
+        {pending ? (
+          <Skeleton className="h-5 w-12" />
+        ) : failed ? (
+          <span className="text-fg-3">n/a</span>
+        ) : (
+          children
+        )}
+      </dd>
+    </div>
   );
 }
 

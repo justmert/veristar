@@ -28,7 +28,7 @@ function PathSwitch({ value, onChange }: { value: Path; onChange: (p: Path) => v
         return (
           <label
             key={p}
-            className={`relative flex h-8 cursor-pointer items-center rounded-sm px-2.5 text-small transition-colors duration-(--vs-duration-press) ease-standard has-focus-visible:outline-2 has-focus-visible:outline-accent has-focus-visible:outline-offset-2 max-sm:h-(--vs-control-touch) ${on ? "text-fg" : "text-fg-2 hover:text-fg"}`}
+            className={`relative flex h-8 cursor-pointer items-center rounded-sm px-2.5 text-small transition-colors duration-(--vs-duration-press) ease-standard has-focus-visible:outline-2 has-focus-visible:outline-accent-text has-focus-visible:outline-offset-2 max-sm:h-(--vs-control-touch) ${on ? "text-fg" : "text-fg-2 hover:text-fg"}`}
           >
             <input
               type="radio"
