@@ -401,9 +401,11 @@ test("an api key is created, read with from a client without a session, and revo
   await form.getByLabel("Name").fill(name);
   await form.getByLabel("Expires after (days)").fill("7");
   await form.getByRole("button", { name: "Create key" }).click();
-  const shown = page.getByTestId("new-api-key");
+  // the one-time secret is masked until it is revealed
+  const shown = page.getByRole("region", { name: "New secret" });
   await expect(shown).toBeVisible();
-  const key = (await shown.textContent()) ?? "";
+  await shown.getByRole("button", { name: "Show the secret" }).click();
+  const key = (await shown.locator("code").first().textContent())?.trim() ?? "";
   expect(key).toMatch(/^sa_op_[0-9A-Za-z]{40}$/);
   await expect(page.getByRole("button", { name: "Copy key" })).toBeVisible();
 
@@ -427,8 +429,10 @@ test("an api key is created, read with from a client without a session, and revo
     expect(cookieOnly.status()).toBe(401);
 
     // the key is shown once: after dismissing, only its prefix remains
-    await page.getByRole("button", { name: "I have copied the key" }).click();
-    await expect(page.getByTestId("new-api-key")).toHaveCount(0);
+    await expect(shown.getByRole("button", { name: "Done" })).toBeDisabled();
+    await shown.getByRole("checkbox").check();
+    await shown.getByRole("button", { name: "Done" }).click();
+    await expect(shown).toHaveCount(0);
     const row = page.getByRole("listitem", { name: `Key ${name}` });
     await expect(row).toContainText(key.slice(0, 10));
     await expect(page.getByText(key)).toHaveCount(0);

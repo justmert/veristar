@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { KeyRound } from "lucide-react";
+import { KeyRound, ShieldCheck } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { ApiError } from "@/api/client";
 import {
@@ -15,14 +15,19 @@ import {
   REVOKED_REASON,
   tenantMcpQuery,
 } from "@/api/mcp";
+import { CodeBlock, CopyField } from "@/components/code-block";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { CopyButton } from "@/components/copy-button";
-import { ErrorPanel, FormMessage, Loading } from "@/components/error-panel";
+import { ErrorPanel, FormMessage, Loading, StateBlock } from "@/components/error-panel";
 import { TextField } from "@/components/form-field";
+import { Stagger, StaggerItem } from "@/components/motion";
+import { Notice } from "@/components/notice";
+import { PageHeader, Panel } from "@/components/panel";
+import { OneTimeSecret } from "@/components/secret";
+import { Pill, type Tone } from "@/components/status";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatDateTimeUtc } from "@/lib/format";
-import { Notice, useProject } from "./project-layout";
+import { useProject } from "./project-layout";
 
 // the project's "AI / MCP" page (contract 12.8, docs/onboarding/mcp.mdx):
 // access keys for AI clients, the connector url for oauth clients, and the
@@ -69,56 +74,89 @@ export function McpPage() {
   const canCreate = tenant.status === "active" || tenant.status === "pending";
 
   return (
-    <div className="space-y-8">
-      <header>
-        <h2 className="text-xl font-semibold tracking-tight">AI assistants (MCP)</h2>
-        <p className="mt-1 max-w-prose text-muted-foreground">
-          Ask Claude, ChatGPT, Cursor or any client of the Model Context Protocol about this
-          project's web and API analytics. Every tool is read-only. A connection acts as the person
-          who made it and reads this project only; it stops working when that person leaves the
-          project, and when the project is suspended or removed.
-        </p>
-      </header>
+    <div className="flex max-w-[60rem] flex-col gap-6">
+      <PageHeader
+        title="AI assistants (MCP)"
+        description="Ask Claude, ChatGPT, Cursor or any client of the Model Context Protocol about this project's web and API analytics. A connection acts as the person who made it and reads this project only."
+      />
+      <ul aria-label="What a connection can do" className="-mt-2 flex flex-wrap gap-2">
+        {[
+          "Every tool is read-only",
+          "This project only",
+          "Ends when its person leaves or the project is suspended or removed",
+        ].map((t) => (
+          <li
+            key={t}
+            className="inline-flex min-h-6 items-center gap-1.5 rounded-full border border-line px-2.5 py-0.5 text-caption text-fg-2"
+          >
+            <ShieldCheck aria-hidden className="size-3.5 shrink-0 text-success" />
+            {t}
+          </li>
+        ))}
+      </ul>
 
-      <Connect created={created} />
+      <div className="flex animate-rise-in flex-col gap-6">
+        <Connect created={created} />
 
-      {created ? (
-        <CreatedKeyPanel created={created} onDone={() => setCreated(null)} />
-      ) : canCreate ? (
-        <McpKeyCreateForm
-          label="Create an access key"
-          create={(b) => mcpApi.createTenantKey(tenant.id, b)}
-          onCreated={(k) => {
-            qc.invalidateQueries({ queryKey: mcpKeys.tenant(tenant.id) });
-            setCreated(k);
-          }}
-        />
-      ) : (
-        <Notice tone="warn">
-          <p className="font-medium">No new keys while the project is {tenant.status}</p>
-        </Notice>
-      )}
+        {created ? (
+          <CreatedKeyPanel created={created} onDone={() => setCreated(null)} />
+        ) : canCreate ? (
+          <McpKeyCreateForm
+            label="Create an access key"
+            create={(b) => mcpApi.createTenantKey(tenant.id, b)}
+            onCreated={(k) => {
+              qc.invalidateQueries({ queryKey: mcpKeys.tenant(tenant.id) });
+              setCreated(k);
+            }}
+          />
+        ) : (
+          <Notice tone="warning" title={`No new keys while the project is ${tenant.status}`} />
+        )}
 
-      <section aria-labelledby="mcp-list" className="space-y-3">
-        <h3 id="mcp-list" className="font-semibold">
-          Keys and connections
-        </h3>
-        <p className="max-w-prose text-sm text-muted-foreground">
-          Access keys made on this page and connectors approved through sign-in. Members can revoke
-          their own; owners can revoke any.
-        </p>
-        {list.isPending ? <Loading label="Loading keys" /> : null}
-        {list.error ? <ErrorPanel error={list.error} onRetry={() => list.refetch()} /> : null}
-        {list.data ? (
-          <CredentialList
-            items={list.data}
+        <Panel
+          aria-labelledby="mcp-list"
+          title={<span id="mcp-list">Keys and connections</span>}
+          description="Access keys made on this page and connectors approved through sign-in. Members can revoke their own; owners can revoke any."
+          flush
+        >
+          <CredentialSection
+            list={list}
             canRevoke={(c) => isOwner || c.user_id === me.user.id}
             revoke={(c) => mcpApi.revokeTenantCredential(tenant.id, c.id)}
             invalidate={() => qc.invalidateQueries({ queryKey: mcpKeys.tenant(tenant.id) })}
           />
-        ) : null}
-      </section>
+        </Panel>
+      </div>
     </div>
+  );
+}
+
+// the list states inside a flush panel: loading, error, empty, rows
+export function CredentialSection({
+  list,
+  canRevoke,
+  revoke,
+  invalidate,
+}: {
+  list: { isPending: boolean; error: unknown; data?: McpCredential[]; refetch: () => unknown };
+  canRevoke: (c: McpCredential) => boolean;
+  revoke: (c: McpCredential) => Promise<void>;
+  invalidate: () => void;
+}) {
+  if (list.isPending) return <Loading label="Loading keys" className="px-4 pb-4 sm:px-5" />;
+  if (list.error)
+    return (
+      <div className="px-4 pb-4 sm:px-5">
+        <ErrorPanel error={list.error} onRetry={() => list.refetch()} />
+      </div>
+    );
+  return (
+    <CredentialList
+      items={list.data ?? []}
+      canRevoke={canRevoke}
+      revoke={revoke}
+      invalidate={invalidate}
+    />
   );
 }
 
@@ -127,64 +165,59 @@ export function Connect({ created }: { created: McpCredentialCreated | null }) {
   const origin = window.location.origin;
   const s = clientSnippets(origin, created?.key ?? null);
   return (
-    <section
+    <Panel
       aria-labelledby="mcp-connect"
-      className="space-y-3 rounded-xl border bg-card p-4 sm:p-5"
+      title={<span id="mcp-connect">Connect a client</span>}
+      actions={
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="shrink-0 text-caption text-fg-3">Server URL</span>
+          <CopyField value={mcpEndpoint(origin)} label="URL" className="min-w-0 max-w-full" />
+        </div>
+      }
     >
-      <h3 id="mcp-connect" className="font-semibold">
-        Connect a client
-      </h3>
-      <div className="flex flex-wrap items-center gap-2 text-sm">
-        <span className="text-muted-foreground">Server URL</span>
-        <code className="rounded-md border bg-muted px-2 py-1 font-mono text-xs break-all">
-          {mcpEndpoint(origin)}
-        </code>
-        <CopyButton text={mcpEndpoint(origin)} label="Copy URL" />
-      </div>
       <Tabs defaultValue="connector">
-        <TabsList className="flex-wrap">
+        <TabsList className="max-w-full flex-wrap">
           <TabsTrigger value="connector">Claude and ChatGPT</TabsTrigger>
           <TabsTrigger value="claude-code">Claude Code</TabsTrigger>
           <TabsTrigger value="cursor">Cursor</TabsTrigger>
         </TabsList>
-        <TabsContent value="connector" className="space-y-2 pt-3 text-sm">
-          <p className="max-w-prose text-muted-foreground">
+        <TabsContent value="connector" className="flex animate-rise-in flex-col gap-3">
+          <p className="max-w-prose text-small text-fg-2">
             In claude.ai or Claude Desktop open Settings, Connectors, Add custom connector; in
             ChatGPT open Settings, Connectors, Create. Paste the server URL and leave the client
             credentials empty. The client opens this console, you sign in with GitHub, choose the
             project and approve. No key is needed.
           </p>
-          <Snippet text={s.connectorUrl} label="Copy connector URL" />
+          <CodeBlock code={s.connectorUrl} label="Connector URL" copyLabel="Copy connector URL" />
         </TabsContent>
-        <TabsContent value="claude-code" className="space-y-2 pt-3 text-sm">
-          <p className="text-muted-foreground">With an access key from this page:</p>
-          <Snippet text={s.claudeCode} label="Copy command" />
-          <p className="text-muted-foreground">Or sign in through the browser instead of a key:</p>
-          <Snippet text={s.claudeCodeOAuth} label="Copy command" />
+        <TabsContent value="claude-code" className="flex animate-rise-in flex-col gap-3">
+          <CodeBlock
+            code={s.claudeCode}
+            label="With an access key from this page"
+            copyLabel="Copy command"
+            wrap
+          />
+          <CodeBlock
+            code={s.claudeCodeOAuth}
+            label="Or sign in through the browser instead of a key"
+            copyLabel="Copy command"
+            wrap
+          />
         </TabsContent>
-        <TabsContent value="cursor" className="space-y-2 pt-3 text-sm">
-          <p className="text-muted-foreground">
-            Add to <code className="font-mono">.cursor/mcp.json</code> or the global{" "}
-            <code className="font-mono">~/.cursor/mcp.json</code>:
+        <TabsContent value="cursor" className="flex animate-rise-in flex-col gap-3">
+          <p className="text-small text-fg-2">
+            Add to <code className="font-mono text-fg">.cursor/mcp.json</code> or the global{" "}
+            <code className="font-mono text-fg">~/.cursor/mcp.json</code>:
           </p>
-          <Snippet text={s.cursor} label="Copy configuration" />
+          <CodeBlock code={s.cursor} label="mcp.json" copyLabel="Copy configuration" />
         </TabsContent>
       </Tabs>
       {created ? null : (
-        <p className="text-xs text-muted-foreground">
+        <p className="mt-3 text-caption text-fg-3">
           Create a key below and the snippets fill it in.
         </p>
       )}
-    </section>
-  );
-}
-
-function Snippet({ text, label }: { text: string; label: string }) {
-  return (
-    <div className="space-y-2">
-      <pre className="overflow-x-auto rounded-lg border bg-muted p-3 font-mono text-xs">{text}</pre>
-      <CopyButton text={text} label={label} />
-    </div>
+    </Panel>
   );
 }
 
@@ -218,14 +251,16 @@ export function McpKeyCreateForm({
       aria-label={label}
       onSubmit={submit}
       noValidate
-      className="space-y-4 rounded-xl border bg-card p-4 sm:p-5"
+      className="flex flex-col gap-3 rounded-xl border border-line bg-raised p-4 sm:px-5"
     >
-      <h3 className="font-semibold">{label}</h3>
-      <div className="grid gap-4 sm:grid-cols-2">
+      <h2 className="text-title text-fg">{label}</h2>
+      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_11rem_auto] sm:items-start">
         <TextField
           label="Name"
           hint="Where the key is used, for example laptop or Cursor."
+          placeholder="laptop"
           maxLength={100}
+          className="max-lg:h-(--vs-control-touch)"
           value={form.name}
           error={errors.name}
           onChange={(e) => setForm({ ...form, name: e.target.value })}
@@ -237,18 +272,24 @@ export function McpKeyCreateForm({
           inputMode="numeric"
           min={1}
           max={MCP_KEY_MAX_DAYS}
+          className="tabular max-lg:h-(--vs-control-touch)"
           value={form.days}
           error={errors.days}
           onChange={(e) => setForm({ ...form, days: e.target.value })}
         />
+        <Button
+          type="submit"
+          variant="outline"
+          className="sm:mt-6.5 max-lg:h-(--vs-control-touch)"
+          pending={m.isPending}
+        >
+          {m.isPending ? null : <KeyRound aria-hidden />}
+          {m.isPending ? "Creating" : "Create key"}
+        </Button>
       </div>
       {m.error && Object.keys(serverErrors(m.error)).length === 0 ? (
         <FormMessage error={m.error} />
       ) : null}
-      <Button type="submit" disabled={m.isPending}>
-        <KeyRound aria-hidden />
-        {m.isPending ? "Creating" : "Create key"}
-      </Button>
     </form>
   );
 }
@@ -261,36 +302,24 @@ export function CreatedKeyPanel({
   onDone: () => void;
 }) {
   return (
-    <section
-      aria-label="New access key"
-      className="space-y-3 rounded-xl border border-primary/40 bg-card p-4 sm:p-5"
-    >
-      <h3 className="font-semibold">Key {created.name} created</h3>
-      <p className="text-sm text-muted-foreground">
-        Copy the key now. It is shown only once; only its hash is stored. It expires{" "}
-        {created.expires_at ? formatDateTimeUtc(created.expires_at) : "never"}. The snippets above
-        now hold it.
-      </p>
-      <div className="flex flex-wrap items-center gap-2">
-        <code
-          data-testid="new-mcp-key"
-          className="min-w-0 rounded-lg border bg-muted px-3 py-2 font-mono text-sm break-all"
-        >
-          {created.key}
-        </code>
-        <CopyButton text={created.key} label="Copy key" />
-      </div>
-      <Button variant="outline" onClick={onDone}>
-        I have copied the key
-      </Button>
+    <section aria-label="New access key">
+      <OneTimeSecret
+        value={created.key}
+        title={`Copy the key now: ${created.name}`}
+        description={`It is shown only once; only its hash is stored. It expires ${
+          created.expires_at ? formatDateTimeUtc(created.expires_at) : "never"
+        }. The snippets above now hold it.`}
+        onDone={onDone}
+        copyLabel="Copy key"
+      />
     </section>
   );
 }
 
-const STATUS_STYLE: Record<McpCredential["status"], string> = {
-  active: "border-good/40 bg-good/10",
-  expired: "bg-muted text-muted-foreground",
-  revoked: "border-destructive/40 bg-destructive/5",
+const STATUS: Record<McpCredential["status"], { tone: Tone; text: string }> = {
+  active: { tone: "success", text: "Active" },
+  expired: { tone: "info", text: "Expired" },
+  revoked: { tone: "critical", text: "Revoked" },
 };
 
 export function CredentialList({
@@ -306,14 +335,21 @@ export function CredentialList({
 }) {
   if (items.length === 0)
     return (
-      <p className="rounded-xl border border-dashed bg-card p-6 text-muted-foreground">
-        No key or connection yet.
-      </p>
+      <div className="px-4 pb-4 sm:px-5">
+        <StateBlock
+          kind="empty"
+          icon={<KeyRound aria-hidden strokeWidth={1.75} />}
+          title="No key or connection yet."
+        >
+          Create an access key above, or connect a client through sign-in.
+        </StateBlock>
+      </div>
     );
   return (
-    <ul
+    <Stagger
+      as="ul"
       aria-label="MCP keys and connections"
-      className="divide-y overflow-hidden rounded-xl border bg-card"
+      className="divide-y divide-line-subtle border-t border-line"
     >
       {items.map((c) => (
         <CredentialRow
@@ -324,7 +360,7 @@ export function CredentialList({
           invalidate={invalidate}
         />
       ))}
-    </ul>
+    </Stagger>
   );
 }
 
@@ -348,39 +384,39 @@ function CredentialRow({
     },
   });
   const kind = c.kind === "key" ? "Access key" : "Connector";
+  const st = STATUS[c.status];
   return (
-    <li
-      className="space-y-2 px-4 py-4 sm:px-5"
+    <StaggerItem
+      as="li"
+      className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 transition-colors duration-(--vs-duration-press) ease-standard hover:bg-hover sm:px-5"
       data-credential-id={c.id}
       aria-label={`${kind} ${c.name}`}
     >
-      <div className="flex flex-wrap items-center gap-2">
-        <p className="font-medium">{c.name}</p>
-        <span className="rounded-full border px-2 py-0.5 text-xs">{kind}</span>
-        <span
-          className={`rounded-full border px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[c.status]}`}
-        >
-          {c.status === "active" ? "Active" : c.status === "expired" ? "Expired" : "Revoked"}
-        </span>
-        {c.prefix ? (
-          <code className="font-mono text-xs text-muted-foreground">{c.prefix}...</code>
-        ) : null}
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-caption text-fg-3">{kind}</span>
+          <span className="min-w-0 truncate text-body font-medium text-fg">{c.name}</span>
+          <Pill tone={st.tone}>{st.text}</Pill>
+          {c.prefix ? (
+            <code className="font-mono text-caption text-fg-3">{c.prefix}...</code>
+          ) : null}
+        </div>
+        <p className="text-caption font-normal text-fg-3">
+          {c.github_login ? `Acts as ${c.github_login}. ` : ""}Created{" "}
+          {formatDateTimeUtc(c.created_at)}.{" "}
+          {c.revoked_at
+            ? `Revoked ${formatDateTimeUtc(c.revoked_at)}${c.revoked_reason ? `: ${REVOKED_REASON[c.revoked_reason] ?? c.revoked_reason}` : ""}.`
+            : c.expires_at
+              ? `${c.status === "expired" ? "Expired" : "Expires"} ${formatDateTimeUtc(c.expires_at)}.`
+              : "Stays valid while the client refreshes it."}{" "}
+          {c.last_seen_at ? `Last used ${formatDateTimeUtc(c.last_seen_at)}.` : "Never used."}
+        </p>
       </div>
-      <p className="text-xs text-muted-foreground">
-        {c.github_login ? `Acts as ${c.github_login}. ` : ""}Created{" "}
-        {formatDateTimeUtc(c.created_at)}.{" "}
-        {c.revoked_at
-          ? `Revoked ${formatDateTimeUtc(c.revoked_at)}${c.revoked_reason ? `: ${REVOKED_REASON[c.revoked_reason] ?? c.revoked_reason}` : ""}.`
-          : c.expires_at
-            ? `${c.status === "expired" ? "Expired" : "Expires"} ${formatDateTimeUtc(c.expires_at)}.`
-            : "Stays valid while the client refreshes it."}{" "}
-        {c.last_seen_at ? `Last used ${formatDateTimeUtc(c.last_seen_at)}.` : "Never used."}
-      </p>
       {c.status === "active" && canRevoke ? (
         <Button
           variant="outline"
           size="sm"
-          className="text-destructive"
+          className="text-critical max-lg:h-(--vs-control-touch)"
           onClick={() => setConfirm(true)}
         >
           Revoke
@@ -400,6 +436,6 @@ function CredentialRow({
         error={m.error}
         onConfirm={() => m.mutate()}
       />
-    </li>
+    </StaggerItem>
   );
 }

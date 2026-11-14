@@ -225,9 +225,19 @@ describe("enrollment mode switch", () => {
       { status: 200, body: { mode: "approval" } },
     ]);
     const host = await renderRoutes([{ path: "/", element: <SettingsPage /> }], "/");
-    await waitFor(() => byRole(host, "button", "Switch to approval required"));
+    await waitFor(() => byLabel(host, "Approval required"));
     expect(host.textContent).toContain("Current mode: Open");
-    await click(byRole(host, "button", "Switch to approval required"));
+    // the change button is live only once another option is chosen
+    const change = () =>
+      byRole(
+        host.querySelector("[aria-labelledby=mode-h]") as HTMLElement,
+        "button",
+        "Change setting",
+      );
+    expect(change().hasAttribute("disabled")).toBe(true);
+    await click(byLabel(host, "Approval required") as HTMLElement);
+    expect(change().hasAttribute("disabled")).toBe(false);
+    await click(change());
     const dialog = dialogOpen(host) as HTMLElement;
     expect(dialog.textContent).toContain("new enrollments only");
     expect(calls).toHaveLength(2);
@@ -245,8 +255,15 @@ describe("enrollment mode switch", () => {
       { status: 200, body: { keep: true } },
     ]);
     const host = await renderRoutes([{ path: "/", element: <SettingsPage /> }], "/");
-    await waitFor(() => byRole(host, "button", "Switch to open"));
-    await click(byRole(host, "button", "Switch to open"));
+    await waitFor(() => byLabel(host, "Open"));
+    await click(byLabel(host, "Open") as HTMLElement);
+    await click(
+      byRole(
+        host.querySelector("[aria-labelledby=mode-h]") as HTMLElement,
+        "button",
+        "Change setting",
+      ),
+    );
     await click(byRole(dialogOpen(host) as HTMLElement, "button", "Cancel"));
     expect(dialogOpen(host)).toBeUndefined();
     expect(calls).toHaveLength(2);

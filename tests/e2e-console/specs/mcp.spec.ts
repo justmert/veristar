@@ -42,7 +42,7 @@ test("a member makes an access key on the AI page, uses it and revokes it", asyn
   await signIn(page, newUser("mcp-key"));
   const tenant = await enrollApi(context, "MCP E2E Key");
   await projectPage(page, tenant.id);
-  await expect(page.getByRole("link", { name: "AI / MCP" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "AI assistants" }).first()).toBeVisible();
   await expect(page.getByText(`${APP}/mcp`).first()).toBeVisible();
 
   // field rules before anything is sent
@@ -51,9 +51,11 @@ test("a member makes an access key on the AI page, uses it and revokes it", asyn
 
   await page.getByLabel("Name").fill("e2e laptop");
   await page.getByRole("button", { name: "Create key" }).click();
-  const shown = page.getByTestId("new-mcp-key");
+  // the one-time secret is masked until it is revealed
+  const shown = page.getByRole("region", { name: "New secret" });
   await expect(shown).toBeVisible();
-  const key = (await shown.textContent())?.trim() ?? "";
+  await shown.getByRole("button", { name: "Show the secret" }).click();
+  const key = (await shown.locator("code").textContent())?.trim() ?? "";
   expect(key).toMatch(/^sa_mcp_[0-9A-Za-z]{40}$/);
   // the snippets now hold the key
   await page.getByRole("tab", { name: "Claude Code" }).click();
@@ -62,7 +64,10 @@ test("a member makes an access key on the AI page, uses it and revokes it", asyn
   ).toContainText(key);
   await page.getByRole("tab", { name: "Cursor" }).click();
   await expect(page.locator("pre").filter({ hasText: "mcpServers" })).toContainText(key);
-  await page.getByRole("button", { name: "I have copied the key" }).click();
+  // done stays disabled until the person says the key is stored
+  await expect(shown.getByRole("button", { name: "Done" })).toBeDisabled();
+  await shown.getByRole("checkbox").check();
+  await shown.getByRole("button", { name: "Done" }).click();
   await expect(shown).toHaveCount(0);
 
   // the list shows the prefix, never the key

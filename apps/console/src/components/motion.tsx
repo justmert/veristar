@@ -1,5 +1,5 @@
-import { animate, MotionConfig, motion, useInView } from "motion/react";
 import { arrival, page, stagger, transition } from "@veristar/brand/motion";
+import { animate, MotionConfig, motion, useInView } from "motion/react";
 import { type ReactNode, useEffect, useRef } from "react";
 
 // people who ask for reduced motion keep opacity changes only
@@ -25,14 +25,17 @@ export function Stagger({
   children,
   className,
   as = "div",
+  ...rest
 }: {
   children: ReactNode;
   className?: string;
   as?: "div" | "ul" | "ol" | "tbody";
+  // accessible names and data attributes pass through to the element
+  "aria-label"?: string;
 }) {
   const C = motion[as];
   return (
-    <C initial="initial" animate="animate" variants={stagger} className={className}>
+    <C initial="initial" animate="animate" variants={stagger} className={className} {...rest}>
       {children}
     </C>
   );
@@ -42,14 +45,18 @@ export function StaggerItem({
   children,
   className,
   as = "div",
+  ...rest
 }: {
   children: ReactNode;
   className?: string;
   as?: "div" | "li" | "tr";
+  // accessible names and data attributes pass through to the element
+  "aria-label"?: string;
+  [data: `data-${string}`]: string | undefined;
 }) {
   const C = motion[as];
   return (
-    <C variants={{ initial: page.initial, animate: page.animate }} className={className}>
+    <C variants={{ initial: page.initial, animate: page.animate }} className={className} {...rest}>
       {children}
     </C>
   );

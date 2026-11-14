@@ -121,19 +121,24 @@ test("the operator switches enrollment to approval after a confirmation", async 
   await page.goto(`${APP}/`);
   await page.getByRole("link", { name: "Operator", exact: true }).click();
   await page.getByRole("link", { name: "Settings" }).click();
+  // the enrollment mode is a radio group; change setting asks for confirmation
+  const mode = page.getByRole("region", { name: "Enrollment mode" });
   if (before.body.mode === "approval") {
     // a previous attempt switched already; go through the dialog both ways
-    await page.getByRole("button", { name: "Switch to open" }).click();
+    await mode.getByRole("radio", { name: "Open" }).check();
+    await mode.getByRole("button", { name: "Change setting" }).click();
     await page.getByRole("dialog").getByRole("button", { name: "Switch mode" }).click();
     await expect(page.getByText("Current mode: Open")).toBeVisible();
   }
-  await page.getByRole("button", { name: "Switch to approval required" }).click();
+  await mode.getByRole("radio", { name: "Approval required" }).check();
+  await mode.getByRole("button", { name: "Change setting" }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toContainText("new enrollments only");
   // cancelling changes nothing
   await dialog.getByRole("button", { name: "Cancel" }).click();
   await expect(page.getByText("Current mode: Open")).toBeVisible();
-  await page.getByRole("button", { name: "Switch to approval required" }).click();
+  await mode.getByRole("radio", { name: "Approval required" }).check();
+  await mode.getByRole("button", { name: "Change setting" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Switch mode" }).click();
   await expect(page.getByText("Current mode: Approval required")).toBeVisible();
   const after = await api<{ mode: string }>(
