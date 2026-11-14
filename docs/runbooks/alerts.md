@@ -31,14 +31,12 @@ and links each one to its section below. The operator tabs carry the number
 of firing alerts, and every operator page shows a banner while an alert of
 severity `page` fires. Details: [the operator guide](../operators/alerts.md).
 
-That page is the alert channel. Alertmanager pushes nothing anywhere unless
-a push channel is configured: with an operator input set it sends each group of alert
-name and node to Discord, with a resolved message when the condition ends,
-and the probe's Gatus sends its own messages for the status page checks and
-the prober's results. Without I8 nobody is notified, so someone has to look
-at the page. Production runs without I8 (operator decision of 2026-11-13):
-Prometheus evaluates every rule, Alertmanager holds every alert and the
-page, Grafana and the status page show them.
+That page is the alert channel. Prometheus evaluates every rule,
+Alertmanager holds every alert, and the Alerts page, Grafana and the status
+page show them. A Discord receiver is optional: with a webhook configured,
+Alertmanager also sends each group of alert name and node to Discord, with a
+resolved message when the condition ends, and the probe's Gatus sends its own
+messages for the status page checks and the prober's results.
 
 ### Adding a receiver
 
@@ -117,7 +115,7 @@ as required by CC BY 4.0.
 A node serves a certificate for one of its hosts that expires within 14
 days, read by the prober over a connection to the node's own address.
 Action: check Caddy's log on that node for ACME errors (DNS-01 through
-Cloudflare, an operator input.
+Cloudflare, with the environment's Cloudflare API token).
 `sudo docker compose exec caddy caddy reload --config /etc/caddy/Caddyfile`
 after fixing the cause; a node that cannot renew is drained. Full steps:
 [certificates.md](certificates.md).
@@ -126,8 +124,9 @@ after fixing the cause; a node that cannot renew is drained. Full steps:
 Points went to the overflow route or service of a tenant in the last 15
 minutes: the tenant has more than 300 routes or 50 services in a UTC day.
 Action: none urgent. Find the tenant in `metricswriter` logs and tell them
-their routes are not normalised (docs/onboarding). The overflow keeps the
-totals right.
+their routes are not normalised
+([what gets dropped](../onboarding/api/what-gets-dropped.md)). The overflow
+keeps the totals right.
 
 ## Queues
 
@@ -227,7 +226,8 @@ Action: on the leader's node, `sudo docker compose exec postgres pgbackrest
 and the last run (`journalctl -u sa-pgbackrest-diff.service`); run a backup
 by hand with `sudo docker compose exec postgres pgbackrest --stanza=sa
 --type=full backup` and fix the schedule. If the run failed on a refused
-delete of an interrupted backup, see docs/deploy/backups.md section 1.
+delete of an interrupted backup, see
+[the storage account](../deploy/backups.md#1-the-storage-account).
 
 ### WALArchivingFailing
 WAL archiving failed in the last 15 minutes, or the primary archived nothing
@@ -316,21 +316,24 @@ drains, hands over the Patroni leader and reboots one node at a time
 ### Watchdog
 Always firing, by design. Alertmanager sends it every minute to the probe's
 Gatus (external endpoint `monitoring_watchdog`, through the probe's Caddy,
-which accepts that push only from the core nodes' addresses). Gatus alerts to
-Discord when no push arrived for 5 minutes: then both Prometheus servers,
-both Alertmanagers or the whole core tier are down, or the core tier cannot
-reach the probe, and no other alert can be sent from inside.
+which accepts that push only from the core nodes' addresses). When no push
+arrived for 5 minutes, the status page shows the `watchdog` check of the
+`monitoring` group as failed, and Gatus alerts to Discord when a receiver is
+configured. Then both Prometheus servers, both Alertmanagers or the whole
+core tier are down, or the core tier cannot reach the probe, and no other
+alert can be sent from inside.
 The console's Alerts page uses the same signal: while no Alertmanager
 member holds `Watchdog`, it shows "Alerting pipeline down" instead of the
 all-clear, with or without a probe.
-Action when Gatus or the console reports it missing: check the core nodes
+Action when the status page or the console reports it missing: check the core nodes
 ([database-failover.md](database-failover.md) if both are down), then
 `docker compose ps` in `/opt/veristar/observability` on each core
 node. Never silence `Watchdog` in Alertmanager: a silence stops the heartbeat
-and Gatus alerts after 5 minutes. Without a probe node in the inventory and
-without `observability_probe_external` (the probe bundle of
-docs/deploy/probe.md, section 7) the route goes to a receiver with no
-target, so nothing outside watches it.
+and Gatus marks the check failed after 5 minutes. The heartbeat goes to the
+probe of a `probe` inventory group or to the external probe bundle
+(`observability_probe_external`,
+[Prometheus and the Alertmanager watchdog](../deploy/probe.md#7-prometheus-and-the-alertmanager-watchdog));
+an environment with neither sends it to a receiver with no target.
 
 ## Probe
 
@@ -358,12 +361,12 @@ Action: as EdgeNodeNotReady or CertificateExpiringSoon for that node.
 ## Fire-drills
 
 Run on the local test stack (`tests/observability/up.sh`, then
-`tests/observability/drill.sh <drill>`), with the test receiver standing in
-for Discord. Each drill causes the condition for real and waits for the
-firing and the resolved message. Results of 2026-11-13 below; "fired" and "resolved" are the times the
-test receiver got the Alertmanager or Gatus message. The drills were cut
-short when the shared host became overloaded, so the last group was not run.
-The staging drill with real Discord delivery waits for an operator input.
+`tests/observability/drill.sh <drill>`), with a test receiver in place of
+Discord. Each drill causes the condition for real and waits for the firing
+and the resolved message. The results below are from 2026-11-13; "fired" and
+"resolved" are the times the test receiver got the Alertmanager or Gatus
+message. Alerts without a drill result are covered by the `promtool` rule
+tests in `rules/tests/`.
 
 | Alert | Drill | Result |
 |---|---|---|
@@ -371,14 +374,15 @@ The staging drill with real Discord delivery waits for an operator input.
 | CertificateExpiringSoon, Gatus `edge-2 in.p17.test` | serve a 7-day certificate on edge-2 | fired 01:34:48, resolved 01:39:48 |
 | DLQNotEmpty | publish one message to `dlq.web.drill`, then purge | fired 01:40:29, resolved 01:45:25 |
 | EtcdMembersDown, EtcdNoLeader | stop two of three etcd members | fired 01:47:20, resolved 01:52:20 |
-| NATSServerDown | stop one NATS server | fired 02:13:44, resolved 02:18:40 (first run timed out: the rule read `gnatsd_healthz_status`, which the exporter drops when the server is unreachable; fixed) |
+| NATSServerDown | stop one NATS server | fired 02:13:44, resolved 02:18:40 |
 | ProbeFreshnessFailing, Gatus `freshness web` | stop replayer, metrics writer and jobs | web freshness failed after 62 s and API freshness after 92 s (limit 45 s locally) while ingestion, console, Umami host and machine API checks stayed up; resolved 01:44:05 |
 | ReplayerNotConsuming, MetricsWriterNotConsuming, ServiceDown | same | fired, resolved 01:45:11 |
 | QueueOldestMessageTooOld | same | fired 01:36:27, resolved 01:46:28 |
 | ReplayerLagHigh, MetricsWriterLagHigh | same, plus 5,100 web events and 5,100 OTLP requests | fired by 01:43:44, resolved 01:48:41 |
 | WebAggregationStale, UmamiPasswordRotationNotRun | same (no jobs leader) | fired by 01:43:44, resolved 01:48:41 |
-| DiskUsageHigh | none needed: the test host's root filesystem is 94% full | fires for real; resolution only in promtool tests |
-| PatroniNoLeader, BackupTooOld | none possible: no Patroni or pgBackRest in the test stack | fire for real (absent); resolution only in promtool tests |
-| CardinalityCapHit | 310 routes in one request | not fired: the routes were numeric and normalised into one; the drill now uses letters and was not rerun |
-| WALArchivingFailing, UmamiHeartbeatFailing, ProbeDashboardFailing, NATSQuorumLost, ProbeIngestionFailing, IngestWebErrorRatioHigh, IngestOTLPErrorRatioHigh, VisitorSecretMissing | drills `wal`, `umami`, `nats-quorum` | not run: stopped for the shared host's load; promtool tests only |
-| DBIPFileOld, ReplicationLagHigh | no older DB-IP file and no replica locally | promtool tests only |
+| DiskUsageHigh | none needed: the test host's root filesystem was 94% full | fired for real; resolution checked in the `promtool` tests |
+| PatroniNoLeader, BackupTooOld | none: the test stack has no Patroni or pgBackRest | fired for real (absent series); resolution checked in the `promtool` tests |
+
+On production, Prometheus loads every rule and the only alert firing in normal
+operation is `Watchdog`
+([production checks](../reference/drills/2026-11-13-azure.md#checks)).
