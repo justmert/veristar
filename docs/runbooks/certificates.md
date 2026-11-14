@@ -5,11 +5,13 @@ description: "Diagnose and fix certificate issuance and renewal on edge and core
 ---
 
 Every node's Caddy gets its own certificates from Let's Encrypt with the ACME DNS-01 challenge
-in the Cloudflare zone (`caddy-dns/cloudflare`, token `cloudflare_api_token` from `<an operator input>`),
-for the hostnames it serves: edge nodes `in.` and `otlp.<an operator input>`, core nodes `app.` and
-`web.<an operator input>`, and a probe host in the inventory `status.<an operator input>`. DNS-01 is used because every node serves the same names, so an HTTP
-or TLS-ALPN challenge could land on another node ([../deploy/ansible.md](../deploy/ansible.md)
-section 3). Certificates live in the node's `caddydata` volume under `/data/caddy/certificates/`.
+in the Cloudflare zone (`caddy-dns/cloudflare`, with the environment's Cloudflare API token
+`cloudflare_api_token`), for the hostnames it serves: `in.<BASE_DOMAIN>` and
+`otlp.<BASE_DOMAIN>` on the edge tier, `app.<BASE_DOMAIN>` and `web.<BASE_DOMAIN>` on the core
+tier, and `status.<BASE_DOMAIN>` on a probe host in the inventory. DNS-01 is used because every
+node serves the same names, so an HTTP or TLS-ALPN challenge could land on another node ([../deploy/ansible.md](../deploy/ansible.md)
+section 3). The external probe bundle on its own host gets `status.<BASE_DOMAIN>` with HTTP-01
+instead ([../deploy/probe.md](../deploy/probe.md)). Certificates live in the node's `caddydata` volume under `/data/caddy/certificates/`.
 The zone's CAA record allows only `letsencrypt.org` and forbids wildcards.
 
 Alerts that lead here: `CertificateExpiringSoon` (a node serves a certificate that expires
@@ -22,7 +24,7 @@ does not see TLS, so a node with a broken certificate stays in DNS until you dra
 1. **See what the node serves**, from the controller or the probe:
 
    ```sh
-   echo | openssl s_client -connect <node public address>:443 -servername in.<an operator input> 2>/dev/null \
+   echo | openssl s_client -connect <node public address>:443 -servername in.<BASE_DOMAIN> 2>/dev/null \
      | openssl x509 -noout -subject -issuer -dates -serial
    ```
 
@@ -48,7 +50,7 @@ does not see TLS, so a node with a broken certificate stays in DNS until you dra
      Fix it as in [secret-rotation.md](secret-rotation.md), which rewrites
      `/etc/veristar/env/caddy.env`.
    - **CAA or zone delegation**: the domain's name servers must be Cloudflare's and the CAA must
-     allow `letsencrypt.org`. `dig +short CAA <an operator input>` and `dig +short NS <an operator input>`.
+     allow `letsencrypt.org`. `dig +short CAA <BASE_DOMAIN>` and `dig +short NS <BASE_DOMAIN>`.
    - **Let's Encrypt rate limits**: the log says so and when to retry. Do not loop restarts.
    - **Clock**: ACME fails with a skewed clock. `chronyc tracking` on the node; the base role
      checks the offset at every converge.
@@ -60,8 +62,8 @@ does not see TLS, so a node with a broken certificate stays in DNS until you dra
    ```
 
    If Caddy does not retry by itself, force a fresh issuance by removing the stored certificates
-   and restarting Caddy (this is what the this stage renewal drill does; the node keeps serving
-   nothing on 443 until the new certificate arrives, so drain it first):
+   and restarting Caddy (the renewal drill `tests/drills/cert-renewal.sh` does the same). The node
+   serves nothing on 443 until the new certificate arrives, so drain it first:
 
    ```sh
    sudo docker compose exec -T caddy sh -c 'rm -rf /data/caddy/certificates/*'
@@ -79,10 +81,6 @@ does not see TLS, so a node with a broken certificate stays in DNS until you dra
 
 | Date | What ran | Result | Source |
 |---|---|---|---|
+| 2026-11-13 | Production converge: issuance through Let's Encrypt and Cloudflare DNS-01 on all three nodes | Let's Encrypt certificates for `in`, `otlp`, `app` and `web` on every node, valid until 2027-02-11 | [../reference/drills/2026-11-13-azure.md](../reference/drills/2026-11-13-azure.md#checks) |
+| 2026-11-14 | External probe host: issuance for `status.veristar.app` through HTTP-01 | Let's Encrypt certificate for `status.veristar.app`, valid to 2027-02-12 | [../reference/drills/2026-11-13-azure.md](../reference/drills/2026-11-13-azure.md), "External probe and status page" |
 | 2026-11-13 | Alert fire-drill: a 7-day certificate served on edge-2 of the observability test stack | CertificateExpiringSoon and the Gatus check for that node fired at 01:34:48 and resolved at 01:39:48 after the normal certificate was back | [alerts.md](alerts.md), fire-drills |
-
-Not yet exercised: issuance and renewal through Let's Encrypt and Cloudflare (first staging converge
-do not exist; the local converge uses Caddy's internal CA), and the forced renewal of step 4,
-whose drill (`tests/drills/cert-renewal.sh`) was not run because the shared host stopped the
-this stage drills ([../reference/drills/2026-11-13.md](../reference/drills/2026-11-13.md)). The
-multi-node topology may not run on the shared host, so this stage could not run it either.
