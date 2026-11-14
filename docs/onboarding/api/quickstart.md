@@ -71,15 +71,16 @@ optionally gzip or zstd compressed) and OTLP over gRPC, both on port 443.
 
 ## 4. Make sure requests carry a route
 
-Requests are grouped by `http.route`, the route template such as `/accounts/{id}`. Most framework
-instrumentations set it; [http-route.md](http-route.md) shows how for each example and what happens
-without it.
+Requests are grouped by `http.route`, the route template such as `/accounts/{id}`. In all four
+examples the framework instrumentation sets it. [http-route.md](http-route.md) shows who sets it in
+each example, how to set it yourself and what happens without it.
 
 ## 5. See the data
 
 Deploy, send some requests, and open the project's **API traffic** page in the console. Request
 counts, status codes and latency appear per service and route. Metrics arrive at the SDK's export
-interval (60 seconds by default in most SDKs; the examples use 10 seconds), so allow a minute.
+interval (the OpenTelemetry default is 60 seconds; the examples use 10 seconds), so allow a
+minute.
 
 If nothing appears, see [troubleshooting.md](troubleshooting.md).
 

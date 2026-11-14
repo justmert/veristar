@@ -67,7 +67,7 @@ A `data-umami-event` attribute in a template sends an event when the element is 
 </button>
 ```
 
-From a component's code, call `window.umami?.track()`; the visitor may block the tracker, so the
+From a component's code, call `window.umami?.track()`; the visitor can block the tracker, so the
 call is optional:
 
 {/* include examples/vue-spa/src/pages/Home.vue region=track */}

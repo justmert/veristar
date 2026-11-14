@@ -72,13 +72,13 @@ The first load is server rendered and is one pageview. `<Link>` navigations happ
 with `history.pushState`, which the tracker watches, so each is one pageview; back and forward
 too.
 
-**Known limitation.** Right after a back or forward navigation, the App Router rewrites the
-current history entry with `history.replaceState`, before the tracker's 300 ms delay for that
-pageview has passed. The pageview is counted for the right page, but its referrer becomes the page
-itself instead of the page the visitor came from. Referrers inside your own site are not stored
-anyway (they are sent as paths and dropped by the gateway), so the dashboards are not affected;
-only a `data-before-send` hook that reads the referrer would see it. The browser test checks the
-referrer only for forward navigations on this example for that reason.
+Right after a back or forward navigation, the App Router calls `history.replaceState` with the
+current URL. Tracker 1.2.0 and newer ignore a call that does not change the URL, so the pageview
+keeps the previous page as its referrer. With 1.0.0 and 1.1.0 the referrer of that pageview becomes
+the page itself. The dashboards show the same numbers either way, because the gateway drops
+referrers inside your own site (they arrive as paths); only a `data-before-send` hook that reads the
+referrer sees the difference. The example pins 1.1.0, so its browser test checks the referrer on
+forward navigations.
 
 ## Custom events
 

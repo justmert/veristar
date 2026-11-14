@@ -51,7 +51,7 @@ declare global {
 }
 ```
 
-and call it with optional chaining, because the visitor may block the tracker:
+and call it with optional chaining, because the visitor can block the tracker:
 
 {/* include examples/vite-react-spa/src/main.tsx region=track */}
 ```tsx

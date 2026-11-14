@@ -20,7 +20,7 @@ website and a short description. Depending on how the operators run the service,
 active at once or waits for an operator's review; the console shows which. Sites can be added
 while a project waits, but they receive data only once it is active.
 
-Everyone who should see the dashboards is added under **Members** of the project.
+Add everyone who needs to see the dashboards under the project's **Members**.
 
 ## 2. Add a site
 
@@ -41,7 +41,8 @@ count towards yours.
 
 ## 3. Copy the tag
 
-Choose **Snippet** next to the site. The console shows the tag for the newest tracker version:
+Choose **Snippet** next to the site. The console shows the tag for the newest tracker version.
+The guides use version 1.1.0, which looks like this:
 
 {/* snippet version=1.1.0 */}
 ```html
@@ -69,14 +70,14 @@ Put the tag in the `<head>` of every page, once. Where that is depends on your f
 Client-side route changes (`history.pushState`, `replaceState`, back and forward) are counted by
 the tracker on its own. No router hook is needed.
 
-If you prefer to bundle the tracker with your app, see [npm.md](npm.md). If your site sends a
+To bundle the tracker with your app instead, see [npm.md](npm.md). If your site sends a
 `Content-Security-Policy` header, read [content-security-policy.md](content-security-policy.md)
 first, or the browser will block the tracker.
 
 ## 5. Check that it works
 
-Open your site with the browser's developer tools on the Network tab and load a page. You should
-see three requests to the gateway:
+Open your site with the browser's developer tools on the Network tab and load a page. The Network
+tab shows three requests to the gateway:
 
 | Request | Answer | What it is |
 |---|---|---|
@@ -124,7 +125,7 @@ Countries come from the DB-IP country database:
 ## Privacy duties of your site
 
 You are the controller of your visitors' data; the service processes it for you. Whether your site
-may start the tracker without asking the visitor first depends on the countries you serve:
+can start the tracker without asking the visitor first depends on the countries you serve:
 [`docs/compliance/jurisdictions.md`](../../compliance/jurisdictions.md) gives the current
 assessment, and [consent.md](consent.md) shows how to start the tracker only after consent. In
 every jurisdiction:
@@ -147,7 +148,7 @@ applies.
 | `data-exclude-search="true"` | send paths without the query string |
 | `data-exclude-hash="true"` | never send `#/` routes either |
 | `data-do-not-track="true"` | also honour the older Do Not Track setting |
-| `data-before-send` | the name of a global function that may change or drop each event before it is sent |
+| `data-before-send` | the name of a global function that can change or drop each event before it is sent |
 | `data-wallets-kit="true"` | count Stellar Wallets Kit events, version 1.1.0 and newer ([wallets-kit.md](wallets-kit.md)) |
 
 Umami's `data-tag`, `identify()`, distinct ids, web vitals and error capture do not exist in this

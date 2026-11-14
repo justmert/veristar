@@ -25,8 +25,8 @@ With the example values from the [quickstart](quickstart.md), the line becomes:
 <script defer src="https://in.analytics.example/v/1.1.0/sdk.js" integrity="sha384-lxlitLtIMAeT/K3ieev+MeMGxZe7oceuWLOy8GZAjK7TMKS2Uh9UPmfGLBczUPsq" crossorigin="anonymous" data-website-id="3f6a0c2e-9b1d-4e7a-8c5f-1d2e3f4a5b6c"></script>
 ```
 
-A static site generator usually has one head template or base layout that every page uses. Put
-the tag there, outside any helper that escapes HTML, and check one generated page to see that it
+If your static site generator has a head template or base layout that every page uses, put the
+tag there, outside any helper that escapes HTML, and check one generated page to see that it
 came out unchanged.
 
 Pages without the tag are not counted. Each full page load is one pageview. A jump to an anchor on

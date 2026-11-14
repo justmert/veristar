@@ -53,14 +53,13 @@ then `/mcp` in Claude Code and choose to authenticate. Your browser opens the co
 Open **Settings**, **Connectors**, **Add custom connector**. Paste
 `https://app.analytics.example/mcp` as the URL and leave the OAuth client id and secret empty. Claude
 registers itself, opens the consent page, you sign in with GitHub, choose the project and
-approve. Organizations on Team and Enterprise plans add the connector in the organization
-settings first.
+approve.
 
 ### ChatGPT
 
 In **Settings**, **Connectors**, create a connector with the URL
 `https://app.analytics.example/mcp` and OAuth authentication. ChatGPT registers itself and opens the
-consent page, as above. Custom connectors are available on the plans OpenAI lists for them.
+consent page, as above.
 
 ### Cursor
 
@@ -91,16 +90,16 @@ that are active or in review can be chosen.
 
 ## Example questions
 
-- "How many visitors did we have last week compared with the week before?"
+- "How many visitors did the site have last week compared with the week before?"
 - "Which pages and referrers brought the most traffic this month?"
-- "Which countries and devices do our visitors use?"
+- "Which countries and devices do the visitors use?"
 - "How many people are on the site right now?"
 - "How often was the `connect-wallet` event fired per day, and with which wallets?"
 - "Of the visitors who opened /pricing, how many reached /signup within an hour?"
 - "What do visitors do after the home page?"
 - "Which API routes had the most 5xx errors in the last 7 days, and what is their p95 latency?"
-- "Show our API request rate per hour for the last day."
-- "Are there ingest warnings for our API data?"
+- "Show the API request rate per hour for the last day."
+- "Are there ingest warnings for the API data?"
 
 ## Tools
 
@@ -125,6 +124,6 @@ or `quarantine` (events the gateway flagged as likely automated). Dates are ISO 
 
 ## Limits
 
-Each credential may make 5 requests per second (burst 30) and run 4 tool calls at once; one call
-may take 30 seconds and return 512 KiB. A larger question needs a shorter range, a filter or a
-lower `limit`.
+Each credential can make 5 requests per second (burst 30) on each control plane instance and run 4
+tool calls at once. One call runs for at most 30 seconds and returns at most 512 KiB. For a larger
+question, use a shorter range, a filter or a lower `limit`.

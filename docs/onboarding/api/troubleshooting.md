@@ -26,14 +26,14 @@ same empty request to tell a working token from a refused one.)
 |---|---|---|---|---|
 | 200 | OK | stored | nothing | nothing |
 | 401 | `Unauthenticated` | no token, a malformed one, an unknown or revoked one, or the project is suspended or removed | drops the batch, logs an export error | check `PLATFORM_OTLP_TOKEN` and that it is sent only as `Authorization: Bearer ...`; create a new token in the console if needed |
-| 429 | `ResourceExhausted` | the project sent more requests or data points per second than its rate limit | retries with backoff | usually nothing; if it persists, send fewer, larger requests (a larger batch size for traces) and keep the metric export interval at 60 seconds or less (see "Export interval" below) |
+| 429 | `ResourceExhausted` | the project sent more requests or data points per second than its rate limit | retries with backoff | nothing for a short burst; if it persists, send fewer, larger requests (a larger batch size for traces) and keep the metric export interval at 60 seconds or less (see "Export interval" below) |
 | 502, 503 | `Unavailable` | the platform is restarting or briefly cannot store data | retries | nothing; the data arrives when it recovers |
 | 400 or 413 | `ResourceExhausted` | the request is larger than 4 MiB, before or after decompression | drops the batch | lower the SDK's batch size |
 | 404 | | the path is not `/v1/metrics`, `/v1/traces` or `/v1/logs` | drops the batch | see "Endpoint URL" below |
 
-The current rate limit is 50 requests per second (bursts up to 100) and 50,000 data points, spans
-and log records per second (bursts up to 200,000) per project, on each of the three edge nodes.
-A normal export interval stays far below it.
+The rate limit is 50 requests per second (bursts up to 100) and 50,000 data points, spans and log
+records per second (bursts up to 200,000) per project, on each ingest node. An export interval of
+60 seconds stays far below it.
 
 ## Export interval
 
@@ -43,7 +43,7 @@ request, and it delays your numbers.
 
 The platform counts cumulative metrics from the difference between two exports. When it sees a
 process for the first time and that process has been running for more than 120 seconds, the
-first export is taken as a starting point and counts nothing, because it may hold days of
+first export is taken as a starting point and counts nothing, because it can hold days of
 history. With an interval above 120 seconds every process looks like that at its first export.
 The platform then decides at the second export: if the process was younger than two intervals
 at its first one, the first interval is counted in full at the second export, one interval
@@ -62,8 +62,8 @@ Work through these in order:
    `/v1/traces`. Some SDK options take only the base and add the path themselves; the standard
    `OTEL_EXPORTER_OTLP_ENDPOINT` variable does, `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` does not.
    A doubled or missing `/v1/metrics` ends in 404.
-4. **Wait for an export.** Metrics leave the SDK once per export interval, 60 seconds by default
-   in most SDKs. An app that exits before its first interval exports nothing unless it shuts the
+4. **Wait for an export.** Metrics leave the SDK once per export interval. The OpenTelemetry
+   default is 60 seconds. An app that exits before its first interval exports nothing unless it shuts the
    SDK down cleanly; the language guides show how.
 5. **Your SDK's own errors.** Every SDK logs failed exports. The examples print them to standard
    error; look there for 401, 404 or TLS errors.
