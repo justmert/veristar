@@ -44,6 +44,11 @@ const (
 	// a machine metrics route: only a valid operator api key, within its
 	// scope (contract 9.3)
 	kindMachine
+	// the mcp endpoint and its oauth server (contract 12): bearer or no
+	// credential, no session. TestMCP runs every tool across tenants; the
+	// gate checks that each refuses a request without a credential or a
+	// session cookie in place of one
+	kindMCP
 	// a route that names no tenant: sign-in, the session's own user, the
 	// terms, and the tenant list and enrollment, which act on the caller
 	// only. covered by TestConsole (Unauthenticated, Enrollment,
@@ -64,7 +69,7 @@ func (r route) key() string { return r.method + " " + strings.SplitN(r.path, "?"
 
 // gateIDs fills a route's parameters.
 type gateIDs struct {
-	tenant, user, invite, site, token, request, key string
+	tenant, user, invite, site, token, request, key, credential string
 	// domain is the site's domain, for bodies that must repeat it
 	domain string
 }
@@ -73,6 +78,7 @@ func (r route) fill(ids gateIDs) string {
 	return strings.NewReplacer(
 		"{tenant_id}", ids.tenant, "{user_id}", ids.user, "{invite_id}", ids.invite,
 		"{site_id}", ids.site, "{token_id}", ids.token, "{request_id}", ids.request, "{key_id}", ids.key,
+		"{credential_id}", ids.credential,
 	).Replace(r.path)
 }
 
@@ -165,6 +171,28 @@ func catalogue(terms string) []route {
 	add(kindOperator, http.MethodGet, op+"/api-keys/{key_id}", nil)
 	add(kindOperator, http.MethodGet, op+"/api-keys/{key_id}/usage", nil)
 	add(kindOperator, http.MethodDelete, op+"/api-keys/{key_id}", nil)
+	// operator mcp credentials (contract 12.8)
+	add(kindOperator, http.MethodPost, op+"/mcp-credentials", fixed(map[string]any{"name": "intruder"}))
+	add(kindOperator, http.MethodGet, op+"/mcp-credentials", nil)
+	add(kindOperator, http.MethodDelete, op+"/mcp-credentials/{credential_id}", nil)
+
+	// mcp access keys of a project and the consent page (contract 12.8);
+	// the consent routes act on the caller's own memberships only
+	add(kindTenant, http.MethodPost, tp+"/mcp-credentials", fixed(map[string]any{"name": "intruder"}))
+	add(kindTenant, http.MethodGet, tp+"/mcp-credentials", nil)
+	add(kindTenant, http.MethodDelete, tp+"/mcp-credentials/{credential_id}", nil)
+	for _, a := range []string{"inspect", "approve", "deny"} {
+		add(kindOwn, http.MethodPost, "/api/mcp/authorize/"+a, nil)
+	}
+	// the mcp endpoint, oauth endpoints and discovery documents
+	add(kindMCP, http.MethodPost, "/mcp/", nil)
+	add(kindMCP, http.MethodGet, "/oauth/authorize", nil)
+	add(kindMCP, http.MethodPost, "/oauth/token", nil)
+	add(kindMCP, http.MethodPost, "/oauth/register", nil)
+	add(kindMCP, http.MethodPost, "/oauth/revoke", nil)
+	add(kindMCP, http.MethodGet, "/.well-known/oauth-protected-resource", nil)
+	add(kindMCP, http.MethodGet, "/.well-known/oauth-protected-resource/mcp", nil)
+	add(kindMCP, http.MethodGet, "/.well-known/oauth-authorization-server", nil)
 
 	// machine metrics api (this stage)
 	for _, p := range []string{"/tenants", "/web/daily", "/web/dimensions", "/web/hourly", "/api/daily", "/api/routes/daily", "/api/hourly", "/openapi.yaml"} {
@@ -200,18 +228,19 @@ type gateWorld struct {
 	inviteA        string
 	tokenA         string // id
 	tokenAPlain    string // the otlp token itself
+	credentialA    string // id of alice's mcp access key
 	requestA       string
 	slugA, nameA   string
 }
 
 func (w *gateWorld) aIDs() gateIDs {
 	return gateIDs{tenant: w.ta.String(), user: w.alice.userID.String(), invite: w.inviteA, site: w.sa.String(),
-		token: w.tokenA, request: w.requestA, domain: w.domainA}
+		token: w.tokenA, request: w.requestA, domain: w.domainA, credential: w.credentialA}
 }
 
 // markers are strings only tenant a's data holds.
 func (w *gateWorld) markers() []string {
-	return []string{w.ta.String(), w.sa.String(), w.domainA, w.slugA, w.nameA, w.inviteA, w.tokenA, w.requestA}
+	return []string{w.ta.String(), w.sa.String(), w.domainA, w.slugA, w.nameA, w.inviteA, w.tokenA, w.requestA, w.credentialA}
 }
 
 func (w *gateWorld) leaked(body []byte) []string {
@@ -255,6 +284,8 @@ func (e *env) gateWorld(t *testing.T) *gateWorld {
 	w.tokenA = r.json(t)["id"].(string)
 	w.tokenAPlain = r.json(t)["token"].(string)
 	require.True(t, strings.HasPrefix(w.tokenAPlain, "sa_otlp_"))
+
+	w.credentialA, _ = w.alice.mcpKey(t, w.ta, "gate")
 
 	// a finished erasure request of site a, written as the control plane
 	// writes one at the end of a run; a real run needs the gateway and the
@@ -304,6 +335,9 @@ func (e *env) snapshot(t *testing.T, w *gateWorld) map[string]string {
 		{"erasure_requests", `select coalesce(json_agg(x order by x.id)::text, '') from cp.erasure_requests x where x.tenant_id in ($1, $2)`, ab},
 		{"tenant_removals", `select coalesce(json_agg(x order by x.tenant_id)::text, '') from cp.tenant_removals x where x.tenant_id in ($1, $2)`, ab},
 		{"settings", `select coalesce(json_agg(x order by x.key)::text, '') from cp.settings x`, nil},
+		// last_seen_at moves with every accepted mcp request, by design
+		{"mcp_credentials", `select coalesce(json_agg(json_build_array(x.id, x.tenant_id, x.user_id, x.name, x.expires_at, x.revoked_at) order by x.id)::text, '')
+			from cp.mcp_credentials x`, nil},
 		// last_used_at moves with every accepted machine request, by design
 		{"operator_keys", `select coalesce(json_agg(json_build_array(x.id, x.name, x.scope, x.scope_tenant_id, x.expires_at, x.revoked_at) order by x.id)::text, '')
 			from cp.operator_api_keys x`, nil},
@@ -351,6 +385,55 @@ func TestIsolationGate(t *testing.T) {
 	t.Run("TenantRoutesCrossTenant", func(t *testing.T) { testTenantRoutes(t, e, w, cat) })
 	t.Run("OperatorRoutesNonOperator", func(t *testing.T) { testOperatorRoutes(t, e, w, cat) })
 	t.Run("MachineAPIScope", func(t *testing.T) { testMachineAPI(t, e, w, cat) })
+	t.Run("MCPRoutes", func(t *testing.T) { testMCPRoutes(t, e, w, cat) })
+}
+
+// testMCPRoutes: the mcp endpoint refuses every request without a bearer
+// credential, a console session included, and bob's key never reaches
+// tenant a through any tool that takes a site id. the oauth endpoints and
+// documents need no credential by design; their rules are in TestMCP.
+func testMCPRoutes(t *testing.T, e *env, w *gateWorld, cat []route) {
+	_, keyB := w.bob.mcpKey(t, w.tb, "gate-b")
+	before := e.snapshot(t, w)
+	n := 0
+	for _, r := range cat {
+		if r.kind != kindMCP || r.path != "/mcp/" {
+			continue
+		}
+		for _, c := range []*client{e.anonymous(t), w.bob, w.op} {
+			// the client's cookie jar sends its session; no Origin, which the
+			// endpoint refuses before it looks at any credential
+			req, err := http.NewRequest(http.MethodPost, e.srv.URL+"/mcp",
+				strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}`))
+			require.NoError(t, err)
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Accept", "application/json, text/event-stream")
+			res, err := c.hc.Do(req)
+			require.NoError(t, err)
+			body, err := io.ReadAll(res.Body)
+			_ = res.Body.Close()
+			require.NoError(t, err)
+			require.Equal(t, http.StatusUnauthorized, res.StatusCode, "%s: %s", c.login, body)
+			require.Empty(t, w.leaked(body))
+			n++
+		}
+	}
+	cs := e.mustConnect(t, keyB)
+	for _, tool := range []string{"get_site", "get_web_stats", "get_web_traffic", "get_web_realtime", "get_event_stats",
+		"get_sessions", "get_session_stats", "list_funnels", "run_journey", "run_retention", "get_goals"} {
+		res := call(t, cs, tool, map[string]any{"site_id": w.sa.String()})
+		require.Equal(t, "not_found", res.code, "%s: %s", tool, res.raw)
+		require.Empty(t, w.leaked([]byte(res.raw)), "%s: %s", tool, res.raw)
+		n++
+	}
+	for _, tool := range []string{"list_projects", "list_sites", "list_api_services", "list_api_routes"} {
+		res := call(t, cs, tool, nil)
+		require.False(t, res.isError, "%s: %s", tool, res.raw)
+		require.Empty(t, w.leaked([]byte(res.raw)), "%s: %s", tool, res.raw)
+		n++
+	}
+	requireUnchanged(t, before, e.snapshot(t, w), "an mcp request")
+	t.Logf("%d mcp requests: no credential or a session refused, bob's key never read tenant a", n)
 }
 
 // every route the real router serves has a case, and every case names a
@@ -387,8 +470,8 @@ func testRouteCoverage(t *testing.T, e *env, cat []route) {
 	for _, r := range cat {
 		counts[r.kind]++
 	}
-	t.Logf("%d routes walked, all covered: %d tenant, %d sso, %d operator, %d machine, %d without a tenant",
-		len(got), counts[kindTenant], counts[kindSSO], counts[kindOperator], counts[kindMachine], counts[kindOwn])
+	t.Logf("%d routes walked, all covered: %d tenant, %d sso, %d operator, %d machine, %d mcp, %d without a tenant",
+		len(got), counts[kindTenant], counts[kindSSO], counts[kindOperator], counts[kindMachine], counts[kindMCP], counts[kindOwn])
 }
 
 func testTenantRoutes(t *testing.T, e *env, w *gateWorld, cat []route) {
@@ -400,11 +483,11 @@ func testTenantRoutes(t *testing.T, e *env, w *gateWorld, cat []route) {
 		ids  gateIDs
 	}{
 		{"real", a},
-		{"guessed", gateIDs{tenant: guess, user: guess, invite: guess, site: guess, token: guess, request: guess, domain: w.domainA}},
-		{"malformed", gateIDs{tenant: "not-a-uuid", user: "1", invite: "..", site: "%2e%2e", token: "x'or'1", request: strings.ToUpper(w.requestA), domain: w.domainA}},
+		{"guessed", gateIDs{tenant: guess, user: guess, invite: guess, site: guess, token: guess, request: guess, domain: w.domainA, credential: guess}},
+		{"malformed", gateIDs{tenant: "not-a-uuid", user: "1", invite: "..", site: "%2e%2e", token: "x'or'1", request: strings.ToUpper(w.requestA), domain: w.domainA, credential: "x"}},
 		// bob's own tenant with tenant a's members, invite, site, token and
 		// erasure request
-		{"mixed", gateIDs{tenant: w.tb.String(), user: a.user, invite: a.invite, site: a.site, token: a.token, request: a.request, domain: w.domainA}},
+		{"mixed", gateIDs{tenant: w.tb.String(), user: a.user, invite: a.invite, site: a.site, token: a.token, request: a.request, domain: w.domainA, credential: a.credential}},
 	}
 	sent := 0
 	for _, c := range cases {

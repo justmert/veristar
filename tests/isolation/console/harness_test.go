@@ -34,6 +34,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2"
 
@@ -46,6 +47,7 @@ import (
 	"github.com/justmert/veristar/internal/controlplane/erasure"
 	"github.com/justmert/veristar/internal/controlplane/ingest"
 	"github.com/justmert/veristar/internal/controlplane/lifecycle"
+	"github.com/justmert/veristar/internal/controlplane/mcpserver"
 	"github.com/justmert/veristar/internal/controlplane/members"
 	"github.com/justmert/veristar/internal/controlplane/operator"
 	"github.com/justmert/veristar/internal/controlplane/otlptokens"
@@ -94,6 +96,8 @@ type env struct {
 	// checks runs the stellar.toml fetch after a site is created; Wait
 	// lets a test compare site rows once those writes are done
 	checks *domaincheck.Routes
+	// mcp is the mcp server, for its resource uri
+	mcp *mcpserver.Server
 }
 
 func repoRoot(t *testing.T) string {
@@ -285,6 +289,23 @@ func start(t *testing.T) *env {
 
 	memberRoutes, err := members.NewRoutes(scope, users)
 	require.NoError(t, err)
+	// the mcp server (contract 12), wired as cmd/controlplane wires it
+	e.mcp, err = mcpserver.New(mcpserver.Config{
+		DB:    e.conn,
+		Guard: guard,
+		Reads: []mcpserver.Routes{
+			tenants.NewRoutes(scope), sites.NewRoutes(scope), metricRoutes,
+			controlplane.RoutesFunc(guard.Mount(review, global)),
+		},
+		Sessions: ssoH,
+		Umami:    e.umami.Client,
+		Issuer:   e.srv.URL,
+		StateKey: random32(t),
+		Log:      log,
+		Registry: prometheus.NewRegistry(),
+		Version:  "test",
+	})
+	require.NoError(t, err)
 	api = controlplane.NewHandler(controlplane.Options{
 		Log:           log,
 		ConsoleOrigin: e.srv.URL,
@@ -302,9 +323,17 @@ func start(t *testing.T) *env {
 			erasureRoutes,
 			snippet,
 			controlplane.RoutesFunc(func(r chi.Router) { r.Method(http.MethodGet, ssoPath, ssoH) }),
-			controlplane.RoutesFunc(guard.Mount(modeRoutes, keepRoutes, auditRoutes, actions, review, global, apiKeys)),
+			e.mcp.TenantRoutes(scope),
+			e.mcp.ConsentRoutes(),
+			controlplane.RoutesFunc(guard.Mount(modeRoutes, keepRoutes, auditRoutes, actions, review, global, apiKeys,
+				e.mcp.OperatorRoutes())),
 		},
-		Mounts: []controlplane.Mount{{Path: operator.MachinePath, Handler: machine.Handler()}},
+		Mounts: []controlplane.Mount{
+			{Path: operator.MachinePath, Handler: machine.Handler()},
+			{Path: mcpserver.Path, Handler: e.mcp.Handler()},
+			{Path: "/oauth", Handler: e.mcp.OAuthHandler()},
+			{Path: "/.well-known", Handler: e.mcp.MetadataHandler()},
+		},
 	})
 	routes, ok := api.(chi.Routes)
 	require.True(t, ok, "the api handler is a chi router")

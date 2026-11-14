@@ -324,7 +324,8 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request) {
 	}
 	if sc := q.Get("scope"); sc != "" {
 		for _, v := range strings.Fields(sc) {
-			if v != Scope {
+			// offline_access asks for a refresh token, which every grant gets
+			if v != Scope && v != "offline_access" {
 				s.redirectError(w, r, redirect, state, "invalid_scope", "the only scope is "+Scope)
 				return
 			}
