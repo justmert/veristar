@@ -100,4 +100,4 @@ gateway on 2026-11-13 ([../runbooks/tracker-release.md](../runbooks/tracker-rele
 
 11. **Monitoring:** Prometheus targets all `UP` and no alert firing other than those explained
     by missing inputs (for example `BackupTooOld` before the first backup). Once the probe
-    bundle runs ([probe.md](probe.md)), every uptime monitor of it is up.
+    host runs ([probe.md](probe.md)), every measure on `status.<an operator input>` is up.

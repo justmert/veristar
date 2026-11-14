@@ -1,15 +1,23 @@
 ---
-title: "Disaster recovery: both database nodes or the database lost"
+title: "Disaster recovery: the database cluster lost"
 sidebarTitle: "Disaster recovery"
-description: "Bring the platform back when both core nodes or the database cluster are lost."
+description: "Bring the platform back when the database cluster is lost."
 ---
 
-Brings the platform back after both core nodes, or the PostgreSQL cluster on them, are gone:
-a destroyed location pair, an operator mistake that dropped data on the leader and its
-synchronous replica alike, or ransomware on both nodes. Finding O-4 of
+Brings the platform back after the PostgreSQL cluster is gone: an operator mistake that dropped
+data on every member alike, ransomware on the database nodes, or the loss of the nodes holding
+the members. Finding O-4 of
 the review notes. Ingestion does not stop meanwhile: the edge tier keeps
 accepting events into JetStream (`WEB_EVENTS` 72 hours, `API_METRICS` 7 days), and they are
 delivered once the core tier is back.
+
+> **Layout.** Staging and production run three converged nodes: every node holds a Patroni
+> member and also the edge services and a NATS member. Steps 1 and 9 act on the core compose
+> project (`/opt/veristar/core`) only and apply as written. Step 5 was written for the split
+> layout, where the core nodes held only the database and its services: replacing a converged
+> node's VM also replaces its edge services and its NATS member, which hold the queued events,
+> so that step is not yet adapted to the converged layout. Steps 2 and 3 (restore node,
+> `restore.yml`) ran on production on 2026-11-13.
 
 The path chains pieces that exist and are tested on their own:
 
@@ -61,7 +69,7 @@ Data loss window: what was not yet archived when the database was lost, at most
    ```
 
 5. **Replace the core nodes**:
-   `tofu ... plan -replace=module.node["<env>-core-1"].azurerm_linux_virtual_machine.this` (and core-2), as in
+   `tofu ... plan -replace=module.node["<env>-core-1"].azurerm_linux_virtual_machine.this` (and core-2) in the split layout, as in
    [edge-node-failure.md](edge-node-failure.md) step 1, then `make <env>-apply`.
 
 6. **Remove the old cluster from etcd**, so the new nodes bootstrap a new cluster instead of
@@ -85,7 +93,7 @@ Data loss window: what was not yet archived when the database was lost, at most
    WAL archiving on and starts the services.
 
 9. **Import and verify** with the services on the core nodes stopped
-   (`sudo docker compose stop umami controlplane replayer metricswriter jobs` on both):
+   (`sudo docker compose stop umami controlplane replayer metricswriter jobs` on each):
 
    ```sh
    make migrate-import MIGRATE_ENV=<new leader env file> MIGRATE_DIR=<directory of step 4>
@@ -110,7 +118,7 @@ Record the recovery time (from step 2 to step 9) and the data loss window
 | Date | What ran | Result | Source |
 |---|---|---|---|
 | 2026-11-13 | the restore node in the OpenTofu inventory (step 2) against mocked providers | `make tofu-check`: `inventory_with_restore` passes for staging and production | `tests/infra/*.tftest.hcl` |
+| 2026-11-13 | steps 2 and 3 on production: `production-restore-1` created, `restore.yml` restored to a target time and promoted, then the node removed | `pg_is_in_recovery()` false, both databases present, newest `cp.audit_log` row equal to the running cluster's; 5 resources destroyed afterwards | [../reference/drills/2026-11-13-azure.md](../reference/drills/2026-11-13-azure.md), "Restore" |
 
-Not yet exercised: the whole chain on staging (needs the first apply), and steps 3 to 10 on the
-local converge. The local point-in-time drill (`tests/drills/pitr.sh`) covers step 3 only and has
+Not yet exercised: the whole chain, and steps 4 to 10 on any environment. The local point-in-time drill (`tests/drills/pitr.sh`) covers step 3 only and has
 not been run either (the design).

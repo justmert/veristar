@@ -16,7 +16,7 @@ it and take it down. Follow the pages in this order:
 | 5 | [bootstrap.md](bootstrap.md) | first converge of a new environment, first sign-in, the probe tenant |
 | 6 | [verification.md](verification.md) | checks that prove the environment works |
 | | [backups.md](backups.md) | the backup storage account (ZRS, versioning, immutability), the stanza and WAL archiving |
-| | [probe.md](probe.md) | the prober outside Azure, beside the operator's uptime monitor |
+| | [probe.md](probe.md) | the prober and the public status page on a separate host in Azure East US |
 | 7 | [upgrade.md](upgrade.md) | releasing and rolling out a new version |
 | 8 | [teardown.md](teardown.md) | removing an environment |
 

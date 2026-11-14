@@ -1,18 +1,20 @@
 ---
 title: "Database failover and replica rebuild"
 sidebarTitle: "Database failover"
-description: "Patroni failover between the core nodes and rebuilding a replica."
+description: "Patroni failover between the database members and rebuilding a replica."
 ---
 
-PostgreSQL runs under Patroni on both core nodes: one leader, one synchronous replica, the
-leader key in etcd on the three edge nodes. HAProxy on each core node sends port 5000 to whichever
+PostgreSQL runs under Patroni with three members, one on each converged node of staging and
+production (one per availability zone): one leader, one synchronous standby and one
+asynchronous replica, the leader key in etcd, which also has a member on each node. HAProxy on
+each node sends port 5000 to whichever
 member answers `/primary` on Patroni's REST port 8008. Settings (`core_patroni_dcs` in
 `infra/ansible/roles/core/defaults/main.yml`): `ttl` 30 s, `loop_wait` 10 s,
 `synchronous_mode` on, `synchronous_mode_strict` off, `maximum_lag_on_failover` 1 MiB,
 `failsafe_mode` on. The cluster is named `sa-<env>` (`sa-staging`, `sa-production`).
 
 **etcd down is not a database outage.** With `failsafe_mode`, a leader that loses etcd quorum
-(`EtcdNoLeader`, two edge nodes down, the edge tier cut off from the core tier) stays primary as
+(`EtcdNoLeader`, two nodes down or cut off) stays primary as
 long as it reaches every member listed in Patroni's `/failsafe` through the REST API; no
 failover can happen meanwhile. Restore etcd first ([edge-node-failure.md](edge-node-failure.md)
 step 4); the database keeps serving.
@@ -28,7 +30,7 @@ plane, the writer and jobs stop while no leader exists. The configured window is
 
 ## Automatic failover: check it happened
 
-1. On either core node:
+1. On any node:
 
    ```sh
    cd /opt/veristar/core && sudo docker compose exec postgres patronictl -c /etc/patroni/patroni.yml list
@@ -37,7 +39,7 @@ plane, the writer and jobs stop while no leader exists. The configured window is
    Expected after a leader loss: the former replica shows `Leader` and `running`, the lost
    member is missing or `stopped`. Timeline (`TL`) is one higher than before.
 
-2. Check HAProxy routes to it: on each core node,
+2. Check HAProxy routes to it: on each node,
 
    ```sh
    sudo docker compose exec postgres psql -h haproxy -p 5000 -U postgres -d postgres -tAc 'select pg_is_in_recovery()'
@@ -48,12 +50,13 @@ plane, the writer and jobs stop while no leader exists. The configured window is
    automatic failover (no `Leader` for more than a minute), check etcd first: Patroni cannot
    take the leader key without two etcd members ([edge-node-failure.md](edge-node-failure.md)).
 
-3. Check the services reconnected: `sudo docker compose ps` on both core nodes, the
+3. Check the services reconnected: `sudo docker compose ps` on every node, the
    `ServiceDown` and `UmamiHeartbeatFailing` alerts resolve, and the console loads.
 
-While only one member runs, the leader commits alone (synchronous mode is not strict). A second
-failure in that time loses what only the leader had, back to the last archived WAL
-(`archive_timeout` 60 s). Bring the other member back promptly.
+With one member down the leader still has a synchronous standby. While only the leader runs, it
+commits alone (synchronous mode is not strict); a further failure in that time loses what only
+the leader had, back to the last archived WAL (`archive_timeout` 60 s). Bring the lost members
+back promptly.
 
 ## Planned switchover
 
@@ -66,7 +69,7 @@ sudo docker compose exec postgres patronictl -c /etc/patroni/patroni.yml switcho
   --leader <current leader name> --candidate <replica name> --force
 ```
 
-Names are the inventory names (`staging-core-1`, `staging-core-2`). The candidate must be the
+Names are the inventory names (`production-node-1` to `-3`). The candidate must be the
 `Sync Standby` in `streaming` state. Expected: the list shows the candidate as `Leader` within
 a few seconds and no committed transaction is lost.
 
@@ -91,21 +94,25 @@ recover, `start failed` in the list).
 
 3. Confirm the replica is synchronous again: the list shows `Sync Standby`.
 
-## A lost core node
+## A lost node
 
 Replace the server with OpenTofu as in [edge-node-failure.md](edge-node-failure.md) ("A node
-that is gone for good", with `module.node["staging-core-<n>"]`), then
+that is gone for good", with `module.node["<env>-node-<n>"]`), then
 `make staging-deploy SA_IMAGE_TAG=<release tag> SA_RELEASE_MANIFEST=<release-images.json>`. Patroni on the new node finds the cluster in
 etcd and creates a replica from the leader.
 
 ## Exercised
 
-**Not yet exercised.** The this stage database-leader drill (`tests/drills/db-leader.sh`) is
-written but was not run: the shared host stopped being usable before it
-([../reference/drills/2026-11-13.md](../reference/drills/2026-11-13.md)). The switchover task
-of `deploy.yml` has not run either, because the rolling-deploy drill did not run. What has run:
-the local converge with two core nodes showed core 2 `Leader` and core 1 `Sync Standby`,
-`streaming`, lag 0 (same record, "Topology checks"). In this stage the steps could not be executed:
-the development stack has a single PostgreSQL without Patroni, and the multi-node topology may
-not run on the shared host. This runbook must be executed on staging (inputs I5, I13, I14, I15)
-before it is relied on.
+**Automatic failover, on production (2026-11-13).** The leader `production-node-2` was powered
+off; `production-node-3` became leader on timeline 2 without action, writes through HAProxy
+resumed 30.3 s after the power-off, the newest committed row from before it was present, and
+the old leader streamed again as a replica with lag 0 64 s after its start
+([../reference/drills/2026-11-13-azure.md](../reference/drills/2026-11-13-azure.md), "Database
+leader loss"). The production converge showed one `Leader`, one `Sync Standby` and one
+`Replica`, both `streaming` with lag 0.
+
+Not yet exercised on a running environment: the planned switchover by hand and the replica
+rebuild. The rolling `deploy.yml` of 2026-11-14 ran on production with `failed=0`; the drill
+record does not state whether its switchover task fired. Earlier, the local converge showed
+core 2 `Leader` and core 1 `Sync Standby`, `streaming`, lag 0
+([../reference/drills/2026-11-13.md](../reference/drills/2026-11-13.md), "Topology checks").

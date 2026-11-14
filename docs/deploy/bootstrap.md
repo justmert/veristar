@@ -22,8 +22,9 @@ sections 3 and 5). Expected outputs quoted from those runs say so.
 
 2. **Infrastructure.** Follow [opentofu.md](opentofu.md) section 6: `terraform.tfvars`,
    `make state-bootstrap ENV=staging`, `make staging-plan`, `make staging-apply`.
-   Check: `infra/ansible/inventories/staging/hosts.json` exists with three edge and two core
-   hosts, and `ssh ops@<edge 1 address> true` succeeds.
+   Check: `infra/ansible/inventories/staging/hosts.json` exists with the three converged nodes
+   (`staging-node-1` to `-3`, each in the `edge` and the `core` group), and
+   `ssh ops@<node 1 address> true` succeeds.
 
 3. **DNS.** Check that Cloudflare answers and points at Traffic Manager:
 
@@ -33,7 +34,7 @@ sections 3 and 5). Expected outputs quoted from those runs say so.
    ```
 
    Expected: Cloudflare's name servers, then the CNAME to
-   `<domain>-<env>-in.trafficmanager.net` followed by the three edge addresses. Before the first
+   `<domain>-<env>-in.trafficmanager.net` followed by the three node addresses. Before the first
    converge no node answers port 80, so every endpoint is `Degraded` and Traffic Manager returns
    all of them, which is its documented behaviour when every endpoint fails.
 
@@ -44,8 +45,10 @@ sections 3 and 5). Expected outputs quoted from those runs say so.
 5. **Release.** A tag `v<release>` on the commit to deploy runs `release-images.yml`, which builds,
    scans, signs and attests the eleven platform images and attaches `release-images.json`
    ([../security/supply-chain.md](../security/supply-chain.md)). Download `release-images.json`
-   from the release. (GitHub Actions fails at start-up on the operator's account today; until that is
-   fixed no signed release exists.)
+   from the release. While the repository is private GitHub Actions is off by operator decision;
+   a release is then built and signed on a workstation with the same key
+   ([../security/supply-chain.md](../security/supply-chain.md) section 2.1). Release `v0.1.0`
+   exists and runs in production.
 
 6. **First converge:**
 
@@ -57,7 +60,8 @@ sections 3 and 5). Expected outputs quoted from those runs say so.
    hardening, host firewall, chrony with an offset check, Docker at its pins) and the secrets role
    on every node; NATS and etcd on the edge nodes; postgres-ha (Patroni) and HAProxy on the core
    nodes; the pgBackRest settings and schedules; `bootstrap.yml` on the Patroni leader; the edge
-   and core services; the observability role on edge and core nodes.
+   and core services; the observability role on edge and core nodes. On the three converged
+   nodes of staging and production every node is in both groups, so each step runs on all three.
 
    `bootstrap.yml` (once, idempotent on every later run): checks `sa_operator_github_ids`
    an operator input, waits for a writable leader, creates the Umami role and database and the platform
@@ -95,16 +99,16 @@ sections 3 and 5). Expected outputs quoted from those runs say so.
     `site_id`, `otlp_token` and `machine_api_key` into the SOPS file as `probe_site_id`,
     `probe_otlp_token` and `probe_machine_api_key`
     (`sops --config infra/secrets/.sops.yaml edit infra/secrets/staging/secrets.enc.yaml`). Then
-    restart `jobs` on both core nodes (`sudo docker compose restart jobs` in
+    restart `jobs` on every node (`sudo docker compose restart jobs` in
     `/opt/veristar/core`): a new jobs leader runs every task at once, including the
     reconcile that provisions the probe's Umami websites and registry entries.
 
-11. **Probe.** The prober runs outside Azure as a container, on the probe host beside
-    an uptime monitor: render the bundle and follow [probe.md](probe.md). It needs the probe
-    tenant's values of step 10 in the SOPS file. Expected: every uptime monitor of probe.md
-    section 4 is up within a few minutes. A probe host in the inventory's `probe` group (with
-    its own public address) would instead get `site.yml`'s "Probe" play, with Caddy for
-    `status.<an operator input>` and the Alertmanager watchdog; `make ops-local` exercises that variant
+11. **Probe.** The prober runs on its own host outside the environment (for production a
+    separate Azure VM in East US), in the inventory's `probe` group with its own public address.
+    `site.yml`'s "Probe" play gives it Caddy for `status.<an operator input>`, Gatus, the prober and the
+    Alertmanager watchdog ([probe.md](probe.md)). It needs the probe tenant's values of step 10
+    in the SOPS file. Expected: `https://status.<an operator input>/` answers and every measure of
+    probe.md section 4 receives results every 30 s. `make ops-local` exercises the same play
     locally.
 
 12. **SLO collection.** Set the repository variable `STATUS_BASE_URL` to `https://status.<an operator input>`

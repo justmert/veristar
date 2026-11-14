@@ -152,7 +152,7 @@ themselves.
 
 ### ReplayerNotConsuming, MetricsWriterNotConsuming
 No instance holds the consumer's lock for 2 minutes, or none is scraped.
-Action: `docker compose ps` on both core nodes; start the service. If both
+Action: `docker compose ps` on every core node; start the service. If all
 run, check the `locks` bucket and NATS.
 
 ### ReplayerUmamiProcessIdle
@@ -267,7 +267,7 @@ leader reports it for 15 minutes. Yesterday's Umami tokens stay valid.
 Action: jobs logs for `umami-rotate`. Once the cause is fixed, restart the
 jobs daemon (`sudo docker compose restart jobs`) so its leader runs the task.
 `jobs run umami-rotate` refuses while a daemon leads (`a jobs daemon is
-leading`); to run it by hand, stop `jobs` on both core nodes first
+leading`); to run it by hand, stop `jobs` on every core node first
 ([overview.md](overview.md), "Running a jobs task by hand").
 
 ### APIRollupOrphanedMarks

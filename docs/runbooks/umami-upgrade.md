@@ -85,14 +85,14 @@ plus the rollback.
 
 Use it when the new version misbehaves in a way a fix-forward cannot address in time.
 
-1. **Stop delivery into Umami** on both core nodes, so nothing more is written to the database
+1. **Stop delivery into Umami** on every core node, so nothing more is written to the database
    you are about to replace. Accepted events wait in `WEB_EVENTS` (72 hours):
 
    ```sh
    cd /opt/veristar/core && sudo docker compose stop replayer umami umami-2 umami-3 umami-4
    ```
 
-   Run it on both core nodes. The list names every Umami process: `umami` plus `umami-2` up to
+   Run it on every core node. The list names every Umami process: `umami` plus `umami-2` up to
    `umami-<core_umami_processes>` (4 by default; `sudo docker compose ps` shows them). Tenant web
    dashboards are down from here until step 5.
 

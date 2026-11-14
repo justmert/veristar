@@ -256,39 +256,39 @@ are in `db/migrations` and the design as summarised above.
 ```mermaid
 flowchart LR
   dns["Cloudflare DNS, CNAME to<br/>Azure Traffic Manager (health checks)"]
-  subgraph e["Edge nodes, Azure zones 1, 2, 3"]
-    e1["edge 1"]
-    e2["edge 2"]
-    e3["edge 3"]
-  end
-  subgraph c["Core nodes, Azure zones 1, 2"]
-    c1["core 1<br/>Patroni member, HAProxy"]
-    c2["core 2<br/>Patroni member, HAProxy"]
+  subgraph n["Converged nodes, Azure Denmark East, zones 1, 2, 3"]
+    n1["node 1<br/>edge, core, Patroni member, HAProxy"]
+    n2["node 2<br/>edge, core, Patroni member, HAProxy"]
+    n3["node 3<br/>edge, core, Patroni member, HAProxy"]
   end
   s3[("Azure Blob Storage, ZRS<br/>pgBackRest repository")]
-  p["probe outside Azure<br/>prober, Gatus, uptime monitor"]
-  dns --> e1 & e2 & e3
-  dns --> c1 & c2
-  e1 <-- "NATS and etcd clusters" --> e2
-  e2 <-- "NATS and etcd clusters" --> e3
-  c1 <-- "streaming replication, synchronous mode" --> c2
-  c1 & c2 -- "WAL archive, backups from the leader" --> s3
-  p -- "probes every 30 s" --> e1 & c1
+  p["probe, Azure East US<br/>prober, Gatus, status page"]
+  dns --> n1 & n2 & n3
+  n1 <-- "NATS, etcd, streaming replication" --> n2
+  n2 <-- "NATS, etcd, streaming replication" --> n3
+  n1 & n2 & n3 -- "WAL archive, backups from the leader" --> s3
+  p -- "probes every 30 s" --> n1 & n2 & n3
 ```
 
-- One NATS cluster and one etcd cluster span the three edge nodes. Patroni uses etcd for its
-  leader key; HAProxy on each core node routes to the current leader.
-- `replayer`, `metricswriter` and `jobs` run on both core nodes with one active instance each,
+- Staging and production run three converged nodes, one per availability zone: every node is in
+  the edge and the core inventory groups and runs every service
+  ([reference/availability.md](reference/availability.md)). The local converge also runs the
+  older split layout of three edge and two core nodes ([deploy/local-converge.md](deploy/local-converge.md)).
+- One NATS cluster and one etcd cluster have one member on each node. Patroni (three members:
+  leader, synchronous standby, replica) uses etcd for its leader key; HAProxy on each node
+  routes to the current leader.
+- `replayer`, `metricswriter` and `jobs` run on every node with one active instance each,
   chosen by leader locks in NATS. `metricswriter` and `jobs` write the lock revision into every
   transaction and abort if a newer leader wrote, so a paused former leader cannot write.
 - Backups: pgBackRest on the database nodes archives WAL and takes scheduled full and
   differential backups from the Patroni leader to object storage. The local converge uses a
   separate repository node instead, because object storage does not exist there
   ([deploy/local-converge.md](deploy/local-converge.md)).
-- Monitoring: Prometheus, Alertmanager and Grafana on the core nodes, the prober and Gatus on
-  the probe node ([reference/observability.md](reference/observability.md),
-  [runbooks/alerts.md](runbooks/alerts.md)). The observability role is built and tested on a
-  local stack and is not yet applied by `site.yml`.
+- Monitoring: Prometheus, Alertmanager and Grafana on the nodes, the prober and Gatus on the
+  probe host ([reference/observability.md](reference/observability.md),
+  [runbooks/alerts.md](runbooks/alerts.md)). `site.yml` applies the observability role on every
+  node; firing alerts are shown on the console's operator Alerts page
+  ([operators/alerts.md](operators/alerts.md)).
 - Measured and configured failure windows, single points of failure and drill results:
   [reference/availability.md](reference/availability.md), [sla.md](sla.md).
 

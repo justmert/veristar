@@ -60,15 +60,15 @@ replacing one value.
 
 | Key in `secrets.enc.yaml` | Used by | Applied by `site.yml` | Extra steps and effect |
 |---|---|---|---|
-| `platform_db_cp_system_password`, `platform_db_cp_tenant_password`, `platform_db_cp_operator_password`, `platform_db_metrics_writer_password`, `platform_db_jobs_password` | control plane, writer, jobs | yes: `platformctl db roles` sets each login, then the env files | the old password stops working at once, so the services fail to connect until they run with the new env file: do it in a quiet hour and recreate `controlplane`, `metricswriter`, `jobs` on both core nodes right after |
+| `platform_db_cp_system_password`, `platform_db_cp_tenant_password`, `platform_db_cp_operator_password`, `platform_db_metrics_writer_password`, `platform_db_jobs_password` | control plane, writer, jobs | yes: `platformctl db roles` sets each login, then the env files | the old password stops working at once, so the services fail to connect until they run with the new env file: do it in a quiet hour and recreate `controlplane`, `metricswriter`, `jobs` on every core node right after |
 | `umami_db_jobs_retention_password` | `jobs retain-web` timer | yes: `platformctl db umami-retention-role` | none |
 | `nats_passwords.<user>` with `nats_password_hashes.<user>` | that service's NATS login | yes: NATS config and env files, NATS reload | change the password and its bcrypt hash together (below). The service is refused by NATS between the NATS reload and its own restart in the same run; rotate one user at a time. For `gateway` and `collector` that is an ingestion gap on each edge node in turn |
 | `nats_route_password` with `nats_route_password_hash` | NATS cluster routes | yes | routes reconnect after every server has reloaded; rotate when all three edge nodes are healthy |
 | `oauth_state_key` | control plane, sign-in state | yes (env file) | sign-ins in progress fail once and must be started again |
 | `umami_user_password_key` | control plane, jobs: every Umami user's daily password | env files only | after the converge, make Umami follow the new key at once (below); until then SSO into Umami fails |
 | `umami_admin_password` | control plane, jobs, platformctl: the Umami admin service account | env files only | change it in Umami first (below), then converge |
-| `umami_db_password` | Umami | env file only | change the role's password on the leader first (below), then converge and recreate `umami` on both core nodes |
-| `umami_app_secret` | Umami (`APP_SECRET`) | env file only | Umami derives session ids from it: visits in progress split and returning visitors of the day count again; Umami tokens are invalidated. Recreate `umami` on both core nodes |
+| `umami_db_password` | Umami | env file only | change the role's password on the leader first (below), then converge and recreate `umami` on every core node |
+| `umami_app_secret` | Umami (`APP_SECRET`) | env file only | Umami derives session ids from it: visits in progress split and returning visitors of the day count again; Umami tokens are invalidated. Recreate `umami` on every core node |
 | `postgres_superuser_password`, `postgres_replication_password`, `patroni_restapi_password` | Patroni, bootstrap, observability | `patroni.yml` only | change the role in PostgreSQL first (below), converge, then reload Patroni |
 | `pgbackrest_cipher_pass` | pgBackRest repository encryption | n/a | **cannot be rotated in place**: the repository is encrypted with it. A new value needs a new, empty repository (new bucket or path), a new full backup, and keeping the old repository and value until its backups expire |
 | `github_client_id`, `github_client_secret` | control plane sign-in (`<an operator input>`) | yes (env file) | create a new client secret in the GitHub OAuth App settings, converge, recreate `controlplane`, then delete the old secret in GitHub |
@@ -121,8 +121,8 @@ cd /opt/veristar/core && sudo docker compose exec postgres psql -U postgres -d p
 ```
 
 (`postgres` for the superuser, `replicator` for replication.) Then put the same value in the SOPS
-file and converge. For the superuser and replication passwords also reload Patroni on both core
-nodes after the converge, which is what the core role's handler does:
+file and converge. For the superuser and replication passwords also reload Patroni on every core
+node after the converge, which is what the core role's handler does:
 
 ```sh
 sudo docker compose kill --signal HUP postgres
@@ -154,7 +154,7 @@ unset OLD_PW NEW_PW
 ```
 
 Expected: `change password 200`. Then write the new value to `umami_admin_password`, converge,
-and recreate `controlplane` and `jobs` on both core nodes.
+and recreate `controlplane` and `jobs` on every core node.
 
 ### The Umami user password key
 

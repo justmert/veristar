@@ -132,7 +132,7 @@ message id.
    The columns come from the headers `Sa-Dlq-Reason`, `Sa-Dlq-Subject`, `Sa-Dlq-Stream` and
    `Sa-Dlq-Stream-Seq` (`internal/natsx/publish.go`). The service logs say the same per message
    (`docker compose logs replayer | grep 'moved to the dlq'`, and `metricswriter` with
-   `moved to the dead-letter stream`, on both core nodes).
+   `moved to the dead-letter stream`, on every core node).
 
 3. **Fix the cause.** A reason that names a malformed event or batch is a client or code bug: open
    an issue with the reason and the stream sequence. A reason that names Umami (for example a

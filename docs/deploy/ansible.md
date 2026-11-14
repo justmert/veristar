@@ -17,7 +17,7 @@ inputs listed in section 6.
 | Docker Engine, Compose | `5:29.9.3-1~debian.13~trixie`, `5.6.1-1~debian.13~trixie` | Docker's trixie apt repo; key fingerprint 9DC8 5822 9FC7 DD38 854A E2D8 8D81 803C 0EBF CD88 is checked |
 | Patroni, pgBackRest | `4.1.5-2.pgdg13+1`, `2.60.0-1.pgdg13+1` | PGDG trixie, installed into `postgres:18.7-trixie` without moving `postgresql-18` (the build checks it) |
 | SOPS, age | 3.13.3, 1.3.2 | SHA-256 against the release checksums file (SOPS) and GitHub's asset digest (age) |
-| Caddy | 2.11.9 with `caddy-dns/cloudflare` v0.2.4 | `caddy.Dockerfile` compiles against 2.11.9 and `caddy validate` accepts `dns cloudflare` for every assembled node config (2026-11-13); no certificate issued yet |
+| Caddy | 2.11.9 with `caddy-dns/cloudflare` v0.2.4 | `caddy.Dockerfile` compiles against 2.11.9 and `caddy validate` accepts `dns cloudflare` for every assembled node config (2026-11-13); production holds Let's Encrypt certificates for `in`, `otlp`, `app` and `web` on every node ([../reference/drills/2026-11-13-azure.md](../reference/drills/2026-11-13-azure.md)) |
 
 Findings that changed the build:
 
@@ -73,8 +73,9 @@ accepting single-tier `edge` and `core` nodes, which the local converge's defaul
   network and the authorization block rendered by `platformctl nats auth-config` from
   `internal/natsx` (so the deployed permissions are the tested ones). etcd: one member
   per edge node, peers and clients on the private network.
-- **core**: Compose project `/opt/veristar/core` with postgres-ha (Patroni, on
-  `core[0]` only in this phase, DCS etcd3 on the edge nodes), HAProxy routing port 5000
+- **core**: Compose project `/opt/veristar/core` with postgres-ha (Patroni, one
+  member per core-group node, three on the converged nodes of production; DCS etcd3 on the edge
+  nodes), HAProxy routing port 5000
   to the member whose Patroni REST answers `/primary` with 200, Umami (the design
   environment), control plane, replayer, metricswriter, jobs and Caddy with the console.
 - **storage** (on the controller): reads the Azure backup storage account back through the
@@ -164,9 +165,10 @@ the ports published there, since it arrives on the same interface.
 
 ## 7. Not in this stream
 
-- `jobs retain-web` (this stage) must run once a day; no timer is deployed for it yet.
-- The second core node, Patroni replication, pgBackRest repositories and the backup
-  bucket (`storage` role) are this stage work.
+- (Done since.) `jobs retain-web` (this stage) runs from a systemd timer of the core role
+  (`roles/core/tasks/retain_web.yml`).
+- (Done since, this stage.) Further core nodes, Patroni replication (three members in
+  production), pgBackRest repositories and the backup storage (`storage` role).
 - Every link between nodes is TLS with certificates of an
   internal CA: section 9.
 

@@ -40,8 +40,10 @@ such as a tenant id, are written as `<tenant id>`. Nothing in angle brackets is 
 | [slo-report.md](slo-report.md) | 2026-11-13 | this stage collection, this stage report rerun |
 | [alerts.md](alerts.md) | 2026-11-13, 16 fired and resolved, 3 fired only, of 38 alerts | alert fire-drills |
 
-No runbook has been run against staging or production: neither exists yet (the first apply
-waits for review and for inputs I13, I14 and I15). The plan requires every runbook to be executed on staging before this stage is
+Production exists since 2026-11-13; its drills (node loss, database leader loss,
+point-in-time restore, rolling deploy) are in
+[../reference/drills/2026-11-13-azure.md](../reference/drills/2026-11-13-azure.md). Staging does
+not exist yet. The plan requires every runbook to be executed on staging before this stage is
 done; that requirement is still open, so the documentation phase is not done by
 its own condition until staging exists.
 
@@ -52,25 +54,28 @@ its own condition until staging exists.
 Every server has one login, `ops`, reachable over SSH from the admin address ranges
 (`<an operator input>`) with the keys of `<an operator input>`. Node names and addresses are in
 `infra/ansible/inventories/<env>/hosts.json` (written by `make <env>-apply`). Names are
-`<env>-edge-1` to `-3` and `<env>-core-1`, `-2`.
+`<env>-node-1` to `-3`: three converged nodes, one per availability zone, each in the `edge` and
+the `core` group, so a runbook step for "an edge node" or "a core node" runs on any of them.
+`<env>-restore-1` exists only during a restore.
 
 Private addresses follow a fixed scheme ([../deploy/opentofu.md](../deploy/opentofu.md)
 section 2):
 
 | Node | staging | production |
 |---|---|---|
-| edge 1 (zone 1) | 10.20.1.11 | 10.10.1.11 |
-| edge 2 (zone 2) | 10.20.2.12 | 10.10.2.12 |
-| edge 3 (zone 3) | 10.20.3.13 | 10.10.3.13 |
-| core 1 (zone 1) | 10.20.1.21 | 10.10.1.21 |
-| core 2 (zone 2) | 10.20.2.22 | 10.10.2.22 |
+| node 1 (zone 1) | 10.20.1.11 | 10.10.1.11 |
+| node 2 (zone 2) | 10.20.2.12 | 10.10.2.12 |
+| node 3 (zone 3) | 10.20.3.13 | 10.10.3.13 |
+| restore 1 (`restore_zone`, only during a restore) | 10.20.`<zone>`.41 | 10.10.`<zone>`.41 |
+
+Every node has both compose projects below.
 
 ### Compose projects
 
 | Tier | Directory | Services |
 |---|---|---|
 | edge | `/opt/veristar/edge` | `caddy`, `gateway`, `collector`, `nats`, `etcd` |
-| core | `/opt/veristar/core` | `postgres`, `haproxy`, `umami` (and `umami-2` up to `umami-<core_umami_processes>`, 4 by default), `controlplane`, `replayer`, `metricswriter`, `jobs`, `caddy` |
+| core | `/opt/veristar/core` | `postgres`, `haproxy`, `umami` (and `umami-2` up to `umami-<core_umami_processes>`, 2 on the `Standard_B2as_v2` nodes), `controlplane`, `replayer`, `metricswriter`, `jobs`, `caddy` |
 
 Every compose command below runs in that directory with `sudo`, for example:
 
@@ -130,7 +135,7 @@ nodes and then run, on one of them:
 cd /opt/veristar/core && sudo docker compose run --rm --no-deps jobs run <task>
 ```
 
-Start `jobs` again on both nodes afterwards (`sudo docker compose start jobs`).
+Start `jobs` again on every core node afterwards (`sudo docker compose start jobs`).
 
 ### NATS state without a NATS client
 
@@ -153,5 +158,6 @@ ssh -L 9090:127.0.0.1:9090 -L 3000:127.0.0.1:3000 ops@<core node public address>
 ```
 
 Then `http://127.0.0.1:9090` and `http://127.0.0.1:3000`. `site.yml` applies the observability
-role to the edge and core nodes as its last play. The probe node (status page, Gatus, prober) is
-not converged by any playbook yet: it has no private address, so the base role refuses it.
+role to the edge and core nodes as its last play. The probe host (status page, Gatus, prober), in
+the inventory's `probe` group with a public address only, is converged by the play `Probe`
+([../deploy/probe.md](../deploy/probe.md)).

@@ -17,8 +17,9 @@ Conventions (node names, addresses, compose directories) are in [overview.md](ov
 - NATS keeps every stream at three replicas; two of three servers keep publishing. etcd keeps
   Patroni's leader key with two of three members.
 - The configured window for clients pinned to a dead address is up to about 45 s
-  ([../reference/availability.md](../reference/availability.md)); the staging drill measures
-  it. `az network traffic-manager endpoint list -g veristar-<env> --profile-name
+  ([../reference/availability.md](../reference/availability.md)); on production a powered-off
+  node left the `in` answer after 41.9 s and 41.8 s in two runs
+  ([../reference/drills/2026-11-13-azure.md](../reference/drills/2026-11-13-azure.md)). `az network traffic-manager endpoint list -g veristar-<env> --profile-name
   <domain>-<env>-in --type externalEndpoints -o table` shows each node's monitor status.
 
 ## Steps
@@ -105,7 +106,7 @@ stays valid:
 
    ```sh
    sops exec-env infra/secrets/staging/tofu.enc.env \
-     'tofu -chdir=infra/tofu/envs/staging plan -input=false -replace=module.node["staging-edge-2"].azurerm_linux_virtual_machine.this -out=tfplan'
+     'tofu -chdir=infra/tofu/envs/staging plan -input=false -replace=module.node["staging-node-2"].azurerm_linux_virtual_machine.this -out=tfplan'
    ```
 
    Expected: `Plan: 1 to add, 0 to change, 1 to destroy.` with only that VM. Production VMs
@@ -140,11 +141,10 @@ stays valid:
 |---|---|---|---|
 | 2026-11-12 | Local converge: collector stopped on edge 1, then started; NATS stopped on edges 2 and 3 | port 80 turned 503 and back to 308; with two NATS servers down edge 1 answered 503 (`stream ... is not current`) | [../deploy/local-converge.md](../deploy/local-converge.md) section 3 |
 | 2026-11-13 | Alert fire-drill: gateway of edge-2 stopped | EdgeNodeNotReady and ProbeNodeCheckFailing fired and resolved; the `in` hostname check and ingestion stayed up | [alerts.md](alerts.md), fire-drills |
+| 2026-11-13, 2026-11-14 | Production: a converged node powered off for 300 s, three runs, the last under 4 page views a second after the NATS liveness fix | Traffic Manager removed the node from `in` after 41.8 to 41.9 s; last run 3,341 of 3,341 events acknowledged, none answered 503, none lost; in the second and third runs every container ran again after power-on without a hand start | [../reference/drills/2026-11-13-azure.md](../reference/drills/2026-11-13-azure.md), "Node loss" |
 | 2026-11-13 | this stage drill: edge 2 powered off under load | invalid: the shared host froze for about 104 s at the power-off; finding: edge 2's NATS stayed `Exited (255)` after power-on, which led to `sa-edge-start.service` (not yet re-verified by a power-off) | [../reference/drills/2026-11-13.md](../reference/drills/2026-11-13.md) |
 
 Not yet exercised: the automatic etcd rejoin of step 4 (`make ops-local` steps `rebuild-edge3`
 and `etcd` drive it, but the run of 2026-11-13 was stopped before them, see the O-6 resolution
 in the review notes), the manual drain and undrain of steps 2 and 5 by hand (the same flag file was
-used by `deploy.yml` in the local converge), removal by Traffic Manager, and the
-replacement of a lost node (both need staging). The multi-node topology cannot
-run on the shared development host, so none of this was repeated in this stage.
+used by `deploy.yml` in the local converge), and the replacement of a lost node.

@@ -36,8 +36,8 @@ Confirm the id with the person through a channel other than the request itself.
    make staging-deploy SA_IMAGE_TAG=<current release> SA_RELEASE_MANIFEST=<release-images.json>
    ```
 
-   The core compose file changes (`OPERATOR_GITHUB_IDS`), so `controlplane` is recreated on both
-   core nodes. At start it syncs the flag for every user; each changed user gets an audit row
+   The core compose file changes (`OPERATOR_GITHUB_IDS`), so `controlplane` is recreated on every
+   core node. At start it syncs the flag for every user; each changed user gets an audit row
    `user.operator_sync` (actor `system:startup`).
 3. The person signs in to `https://app.<an operator input>/`. The operator area appears in the console.
    If they had never signed in before, their user row is created at that sign-in with the flag set.
