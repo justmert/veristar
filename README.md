@@ -24,19 +24,23 @@ it rather than a fork: [docs/adr](docs/adr).
 
 ## Status
 
-Built and tested locally; not yet deployed. As of 2026-11-13:
+Built, tested and running in production. As of 2026-11-14:
 
 - Every application component, the console, the tracker, the infrastructure code, the
   monitoring stack and the release pipeline exist, with automated tests that pass locally.
-- No staging or production environment exists. Creating them waits on inputs from the operator
-  and SCF: the domain, the cloud, DNS and probe accounts, the GitHub OAuth apps, the alert
-  receiver, and legal review of the compliance statements.
-- The recovery drills are incomplete: only the load drill produced valid numbers
-  ([docs/reference/drills/2026-11-13.md](docs/reference/drills/2026-11-13.md)).
-- GitHub Actions fails at startup on the owning account, so every workflow in
-  `.github/workflows` has been run locally, not on GitHub.
-- The repository is private until the operator makes it public, which the RFP requires before
-  launch.
+- Production runs in Azure Denmark East (EU) on three converged nodes, one in each
+  availability zone: every node runs the ingestion edge and the core, PostgreSQL runs as three
+  Patroni members, and backups go to zone-redundant Blob Storage in the same region. Release
+  `v0.1.0` was converged on 2026-11-13; node loss, database leader loss and point-in-time
+  restore were drilled there
+  ([docs/reference/drills/2026-11-13-azure.md](docs/reference/drills/2026-11-13-azure.md)).
+- Firing alerts are shown on the console's operator Alerts page; the external probe and the
+  public status page are being set up on a separate Azure host in East US.
+- GitHub Actions is off while the repository is private (operator decision); every test runs
+  locally. The scheduled workflows run on GitHub once the repository is public, which the RFP
+  requires before launch.
+- Still waiting on the operator and SCF: the public repository, legal review of the compliance
+  statements, the participating SCF projects and the video.
 
 What the targets rest on and what was and was not verified: [docs/sla.md](docs/sla.md).
 
