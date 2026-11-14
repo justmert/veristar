@@ -279,7 +279,7 @@ run covers them.
 `gitleaks` (whole history, reviewed fingerprints in `.gitleaksignore`), `licences`
 (`scripts/supply-chain/licences.py`, see section 7), `isolation` (`make isolation`) and
 `supplychain` (`make supplychain-it`), next to the existing build, lint, test and tracker checks.
-[branch-protection.md](branch-protection.md) lists the required checks.
+[branch-protection.md](branch-protection.md) lists every check and when it runs.
 
 ## 7. Licences
 

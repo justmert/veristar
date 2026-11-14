@@ -103,8 +103,8 @@ Proved by: `TestReleasesServeCommittedTracker` and `TestReleasesRevokedAndTamper
 (`internal/controlplane/snippet_test.go`); the `verify-releases` script.
 
 Residual risk: a tenant who copies the snippet without `integrity` gets no browser-side check.
-Anyone with write access to `main` can add a new release; review on `main` is the control
-([branch-protection.md](branch-protection.md)). A compromised edge
+Write access to `main` is the control over new releases, and every push to `main` runs the
+release and supply-chain checks ([branch-protection.md](branch-protection.md)). A compromised edge
 node can serve different bytes for a new version, but a browser with the integrity attribute
 still refuses them.
 
@@ -150,7 +150,7 @@ Proved by:
 - Browser level: `tests/e2e-console/specs/console-isolation.spec.ts`.
 
 The isolation gate (`make isolation`, the `isolation` job of `.github/workflows/ci.yml`) runs
-these suites together and is one of the required checks for `main`
+these suites together on every push to `main` and every pull request
 ([branch-protection.md](branch-protection.md)).
 
 Residual risk: Umami shows Save, Transfer, Reset and Delete buttons to view-only users; they fail

@@ -93,8 +93,8 @@ the arrangement meets these requirements:
 
 - Each provider bills the account holder monthly, by card or invoice, and suspends unpaid
   accounts. A failed payment is a single point of failure
-  ([../reference/availability.md](../reference/availability.md)), so one person receives the
-  providers' billing alerts and a second person can pay.
+  ([../reference/availability.md](../reference/availability.md)), so the account holder
+  receives the providers' billing alerts.
 - The domain is renewed for the whole service window plus the handover, with automatic renewal
   on.
 - Every provider account has at least two administrators, so one person's absence cannot lock

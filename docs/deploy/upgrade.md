@@ -15,7 +15,7 @@ Production rolls out releases this way: release `v0.2.2` reached all three nodes
 
 ## Steps
 
-1. **Prepare the change.** Merge to `main` with the required checks green. For changes that touch
+1. **Prepare the change.** Merge to `main` with the checks green. For changes that touch
    a specific component, also follow its runbook first:
    Umami ([../runbooks/umami-upgrade.md](../runbooks/umami-upgrade.md)), collector
    ([../runbooks/collector-upgrade.md](../runbooks/collector-upgrade.md)), tracker

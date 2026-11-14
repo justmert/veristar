@@ -85,7 +85,7 @@ Suites that start real services, run when the change touches their area:
 suite above, plus `db-it`, `local-converge` and `rotate-local`, each night and on demand, one
 matrix job per suite.
 
-The required checks for pull requests are listed in
+The checks that run on every push and pull request are listed in
 [docs/security/branch-protection.md](docs/security/branch-protection.md).
 
 ## Conventions
