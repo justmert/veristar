@@ -75,11 +75,17 @@ development stack.
   ([src/app/Providers.tsx line 49](https://github.com/umami-software/umami/blob/v3.5.0/src/app/Providers.tsx#L49)),
   so the first visit of a browser whose system is set to light shows light mode.
 
-**Charts are not CSS.** Bar and line charts are Chart.js canvases. Their colours come from
-constants compiled into Umami's JavaScript: one blue for both modes and grey grid and tick
-colours per mode
-([src/lib/constants.ts lines 242 to 270](https://github.com/umami-software/umami/blob/v3.5.0/src/lib/constants.ts#L242-L270),
-[src/lib/colors.ts line 60](https://github.com/umami-software/umami/blob/v3.5.0/src/lib/colors.ts#L60)).
+**Charts are not CSS.** Bar and line charts are Chart.js canvases
+([src/components/charts/Chart.tsx line 174](https://github.com/umami-software/umami/blob/v3.5.0/src/components/charts/Chart.tsx#L174)).
+Their colours are JavaScript strings, not CSS variables: `THEME_COLORS` holds one blue
+(`#2680eb`) for both modes and grey grid and tick colours per mode, and `CHART_COLORS` the
+categorical palette
+([src/lib/constants.ts lines 242 to 270](https://github.com/umami-software/umami/blob/v3.5.0/src/lib/constants.ts#L242-L270)).
+`getThemeColors` turns that blue into the dataset colours with `colord`
+([src/lib/colors.ts lines 60 to 84](https://github.com/umami-software/umami/blob/v3.5.0/src/lib/colors.ts#L60-L84)),
+and the charts spread them into each Chart.js dataset, for example the visitors and views series
+([src/components/metrics/PageviewsChart.tsx lines 25 and 31 to 50](https://github.com/umami-software/umami/blob/v3.5.0/src/components/metrics/PageviewsChart.tsx#L25-L50)).
+Chart.js paints them onto the canvas, where no stylesheet reaches.
 The world map is SVG with its fill written as a presentation attribute
 ([src/components/metrics/WorldMap.tsx lines 41 to 93](https://github.com/umami-software/umami/blob/v3.5.0/src/components/metrics/WorldMap.tsx#L41-L93)),
 which a stylesheet can override.
@@ -98,6 +104,20 @@ before `</body>` with the `replace-response` plugin, on GET answers with an HTML
 only, and the live tests prove the node survives React's hydration and client-side navigation
 (`tests/caddy-web/specs/attribution.spec.ts`). React 19 skips unknown tags in `<head>` and
 `<body>` when it hydrates.
+
+**The sidebar mark and name.** The navigation header renders Umami's logo, an inline SVG with
+the viewBox `0 0 428 389.11` that no other icon uses
+([src/components/svg/Logo.tsx](https://github.com/umami-software/umami/blob/v3.5.0/src/components/svg/Logo.tsx)),
+inside an icon span followed by a text span holding "umami"
+([src/app/(main)/SideNav.tsx lines 100 to 104](https://github.com/umami-software/umami/blob/v3.5.0/src/app/(main)/SideNav.tsx#L100-L104),
+the same in `MobileNav.tsx`;
+[src/components/common/IconLabel.tsx](https://github.com/umami-software/umami/blob/v3.5.0/src/components/common/IconLabel.tsx)).
+
+**The delta chips.** The up and down percentages under each metric take their ground from
+zen's status variables, `--zen-status-success-bg` and `--zen-status-error-bg`, through an
+inline style
+([src/components/metrics/ChangeLabel.tsx lines 5 to 18](https://github.com/umami-software/umami/blob/v3.5.0/src/components/metrics/ChangeLabel.tsx#L5-L18)).
+They are therefore CSS-reachable.
 
 **Static assets.** The HTML links `/favicon.ico`, `/apple-touch-icon.png`,
 `/favicon-32x32.png`, `/favicon-16x16.png`, `/site.webmanifest` and `/safari-pinned-tab.svg`;
@@ -131,8 +151,9 @@ Fonts are self-hosted next to the stylesheet. No script, no image change.
   font. `TestWebPath`'s egress check is unaffected.
 - **Upgrade fragility.** The theme depends on names, not on code: 46 `--zen-*`
   properties, three Tailwind radius properties, the classes `bg-primary`, `bg-status-error`
-  and `text-white`, the `data-theme` attribute, two map fill constants, `</head>` and the icon
-  paths. `tests/umami-compat/theme_test.go` checks all of them against the running image and
+  and `text-white`, the `data-theme` attribute, two map fill constants, the logo's viewBox and
+  the structure around it, the chips' status variables, the `| Umami` title, `</head>` and
+  the icon paths. `tests/umami-compat/theme_test.go` checks all of them against the running image and
   checks that the theme was reviewed for that exact Umami version, so `make umami-upgrade`
   stops on a rename instead of shipping a half-themed dashboard. If a name does slip through,
   the failure mode is cosmetic: that part of the page falls back to Umami's own style.
@@ -141,22 +162,36 @@ Fonts are self-hosted next to the stylesheet. No script, no image change.
   `pnpm check`. It ships inside the console image, so a rebuild from the monorepo reproduces
   it. Removing it is two edits to `web.Caddyfile`
   ([operators guide](../operators/umami-dashboard-theme.md)).
-- **RFP fit.** Umami stays the official image, and its name and logo stay in the dashboard's
-  navigation and in the page title, so the dashboard still says what it is built upon.
+- **RFP fit.** Umami stays the official image. The sidebar shows the Veristar mark and name,
+  and Umami stays credited in the title of every page (`Overview | Umami`), which the theme
+  does not touch: the dashboard still says what it is built upon. Umami shows no footer or
+  "powered by" line inside the app that could carry the credit instead; its preferences page
+  shows only the bare version number. `theme_test.go` fails if the title loses the credit.
+- **Sidebar.** The stylesheet hides Umami's logo SVG and draws `brand/mark.svg` as the icon
+  span's background, and hides the word "umami" (no size, not visible, so screen readers skip
+  it) while the span's `::after` shows and reads "Veristar" in Geist 600 with -0.03em tracking.
+  The selectors are the viewBox and the "icon span, then text span" structure; `theme_test.go`
+  checks the viewBox in Umami's JavaScript, and `tests/umami-compat/specs/ui.spec.ts` checks the
+  rendered structure and the word "umami" in a real browser.
+- **Delta chips.** `--zen-status-*-bg` are set to the neutral muted surface (`--vs-muted`), so
+  the chips show their status by text and arrow colour only, never by a tinted fill.
+  `theme.spec.ts` asserts the computed ground and colours.
 
 Limits, all visible in the screenshots:
 
-- Chart series keep Umami's blue and its categorical palette; they are compiled constants.
+- Chart series keep Umami's blue and its categorical palette, an accepted known limit: they
+  are JavaScript constants painted on canvas (see Findings), so the brand mapping of the primary
+  series to ink `#EEEDE8` and comparisons to `#8E8C84` and `#6E6C65` cannot be applied without
+  patching Umami. A CSS filter on the canvas could shift the hue but not map colours exactly,
+  and would distort every series at once, so it is not used for that.
 - Light mode draws charts with Umami's light grid colours. The stylesheet inverts light-mode
   canvases and turns their hue back, which gives dark grid lines on the dark card; series
   colours are then close to, not exactly, the dark-mode ones.
-- The page title keeps the `| Umami` suffix. Next.js sets the title again on every
-  client-side navigation from the RSC payload, which a rewrite of the HTML does not reach.
+- The page title keeps the `| Umami` suffix, on purpose as the credit, and because Next.js
+  sets the title again on every client-side navigation from the RSC payload, which a rewrite of
+  the HTML does not reach.
 - The `theme-color` and tile colour meta tags keep Umami's values (they colour the browser
   chrome on some phones). Changing them would mean rewriting attributes that React hydrates.
-- The navigation shows Umami's logo and the word "umami". That is text and inline SVG inside
-  React's tree; a stylesheet could only hide it and paint something else over it, and keeping
-  it is the honest label for a dashboard that is Umami.
 
 ### (c) A fork or a custom image
 

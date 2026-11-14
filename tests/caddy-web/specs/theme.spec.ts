@@ -68,6 +68,54 @@ async function expectTheme(page: Page, where: string) {
   expect(s.primary, `${where}: primary`).toBe("#ff7a3d");
 }
 
+// the sidebar shows the veristar mark and wordmark in place of umami's, and
+// the delta chips show their status by text and icon colour on the neutral
+// muted ground, never on a tinted fill
+async function expectBrand(page: Page, where: string) {
+  const b = await page.evaluate(() => {
+    const svg = document.querySelector('svg[viewBox="0 0 428 389.11"]');
+    const icon = svg?.parentElement;
+    const text = icon?.nextElementSibling;
+    if (!svg || !icon || !text) return null;
+    const after = getComputedStyle(text, "::after");
+    return {
+      svg: getComputedStyle(svg).visibility,
+      mark: getComputedStyle(icon).backgroundImage,
+      text: getComputedStyle(text).visibility,
+      textSize: getComputedStyle(text).fontSize,
+      word: after.content,
+      wordVisible: after.visibility,
+      wordWeight: after.fontWeight,
+      wordSpacing: after.letterSpacing,
+      wordColor: after.color,
+    };
+  });
+  expect(b, `${where}: umami's logo element`).not.toBeNull();
+  expect(b?.svg, `${where}: umami's mark hidden`).toBe("hidden");
+  expect(b?.mark, `${where}: veristar mark`).toMatch(/\/_veristar\/brand\/mark\.svg/);
+  expect([b?.text, b?.textSize], `${where}: "umami" hidden`).toEqual(["hidden", "0px"]);
+  expect(b?.word, `${where}: wordmark`).toBe('"Veristar"');
+  expect(b?.wordVisible).toBe("visible");
+  expect(b?.wordWeight).toBe("600");
+  expect(b?.wordSpacing).toBe("-0.42px");
+  expect(b?.wordColor).toBe(foreground);
+}
+
+async function expectChips(page: Page, where: string) {
+  const chips = await page
+    .locator('[style*="var(--zen-status-success-bg)"], [style*="var(--zen-status-error-bg)"]')
+    .evaluateAll((els) =>
+      els.map((e) => [getComputedStyle(e).backgroundColor, getComputedStyle(e).color]),
+    );
+  expect(chips.length, `${where}: delta chips`).toBeGreaterThan(0);
+  for (const [ground, colour] of chips) {
+    expect(ground, `${where}: chip ground is the muted surface`).toBe("rgb(35, 35, 32)");
+    expect(["rgb(63, 178, 127)", "rgb(249, 112, 102)"], `${where}: status colour`).toContain(
+      colour,
+    );
+  }
+}
+
 async function expectContrast(page: Page, where: string) {
   const r = await new AxeBuilder({ page }).withRules(["color-contrast"]).analyze();
   const found = r.violations.flatMap((v) =>
@@ -125,6 +173,8 @@ for (const scheme of ["dark", "light"] as const) {
       );
       await page.waitForLoadState("networkidle");
       await expectTheme(page, "overview");
+      await expectBrand(page, "overview");
+      await expectChips(page, "overview");
       await expectContrast(page, "overview");
       await shot("01-overview");
 
@@ -161,10 +211,21 @@ for (const scheme of ["dark", "light"] as const) {
           await page.goto(path);
           await page.waitForLoadState("networkidle");
           await expectTheme(page, name);
+          await expectBrand(page, name);
           await expectContrast(page, name);
         });
         await shot(name);
       }
+
+      // phone width: umami's mobile header carries the same mark and name
+      await page.setViewportSize({ width: 390, height: 844 });
+      await step(page, network, async () => {
+        await page.goto(`/websites/${website}`);
+        await page.waitForLoadState("networkidle");
+        await expectBrand(page, "phone width");
+        await expectContrast(page, "phone width");
+      });
+      await shot("10-phone");
 
       // every icon umami's head links is one the web caddy answers from the
       // theme; the go side (webTheme in deploy/caddy/web_live_test.go)

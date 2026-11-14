@@ -19,10 +19,14 @@ the official, unmodified image. The Veristar look comes from the web Caddy in fr
 The brand is dark only. Umami still offers its light and dark switch; both render the same dark
 palette.
 
-What stays Umami's: chart series colours (Umami's blue and its categorical palette), the Umami
-logo and name in the navigation, the `| Umami` suffix of the page title, and the browser
-chrome colour on some phones. ADR 0004 explains why each one cannot change without patching
-Umami.
+The sidebar shows the Veristar mark and the name "Veristar" in place of Umami's (a stylesheet
+swap, no script), and the up and down chips under each metric show their status by text colour
+on the neutral surface.
+
+What stays Umami's: chart series colours (Umami's blue and its categorical palette, painted on
+canvas from Umami's JavaScript), the `| Umami` suffix of every page title, which is where the
+dashboard credits Umami, and the browser chrome colour on some phones. ADR 0004 explains why
+each one stays.
 
 ## Where the files are
 

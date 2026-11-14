@@ -113,6 +113,12 @@ func TestThemeNamesStillExist(t *testing.T) {
 		t.Error("umami's own html names /_veristar/, which the web caddy reserves")
 	}
 
+	// umami stays credited in the title of every page (adr 0004), which the
+	// theme leaves alone
+	if !regexp.MustCompile(`<title>[^<]*\| Umami</title>`).MatchString(page) {
+		t.Error("umami's page title no longer ends in \"| Umami\"; adr 0004 relies on it as the visible credit")
+	}
+
 	// umami's css, as the page links it
 	var css strings.Builder
 	for _, m := range regexp.MustCompile(`<link rel="stylesheet" href="(/_next/static/[^"]+\.css)"`).FindAllStringSubmatch(page, -1) {
@@ -164,6 +170,11 @@ func TestThemeNamesStillExist(t *testing.T) {
 		`line:"#d9d9d9"`, `fill:"#f9f9f9"`, `fill:"#191919"`,
 		// the danger button whose text colour theme.css changes
 		`bg-status-error text-white`,
+		// umami's logo, which theme.css swaps for the veristar mark
+		// (src/components/svg/Logo.tsx), and the delta chips' grounds
+		// (src/components/metrics/ChangeLabel.tsx)
+		`viewBox:"0 0 428 389.11"`,
+		`background:"var(--zen-status-success-bg)"`, `background:"var(--zen-status-error-bg)"`,
 	} {
 		if !strings.Contains(js.String(), s) {
 			t.Errorf("umami's javascript no longer has %q, which theme.css builds on", s)

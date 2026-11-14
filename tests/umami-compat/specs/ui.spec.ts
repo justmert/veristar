@@ -181,6 +181,37 @@ test("view-only team member through sso", async ({ page }) => {
     await expectSevenMetrics(page, "01-websites-id-overview");
     await shot(page, "01-websites-id-overview");
 
+    // the dashboard theme (docs/adr/0004, theme.css) swaps umami's mark and
+    // name in the sidebar by structure: the logo is the only svg with this
+    // viewbox, inside an icon span whose next sibling holds the word "umami",
+    // and the delta chips take their ground from zen's status variables.
+    // a change here means theme.css needs a review
+    const brand = await page.evaluate(() => {
+      const logos = [...document.querySelectorAll('svg[viewBox="0 0 428 389.11"]')];
+      return logos.map((svg) => {
+        const icon = svg.parentElement;
+        return {
+          iconTag: icon?.tagName,
+          onlyChild: icon?.children.length === 1,
+          nextTag: icon?.nextElementSibling?.tagName,
+          nextText: icon?.nextElementSibling?.textContent,
+        };
+      });
+    });
+    expect(brand.length, "umami's logo in the sidebar").toBeGreaterThan(0);
+    for (const b of brand) {
+      expect(b, "logo structure theme.css relies on").toEqual({
+        iconTag: "SPAN",
+        onlyChild: true,
+        nextTag: "SPAN",
+        nextText: "umami",
+      });
+    }
+    const chips = await page
+      .locator('[style*="var(--zen-status-success-bg)"], [style*="var(--zen-status-error-bg)"]')
+      .count();
+    expect(chips, "delta chips grounded on zen's status variables").toBeGreaterThan(0);
+
     // does /sso stay in history? the navigation api lists the same-origin
     // entries of this tab. umami's sso page calls router.push, not replace
     // (src/app/sso/SSOPage.tsx), so the entry with the token is expected to stay.

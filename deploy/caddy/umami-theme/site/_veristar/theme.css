@@ -150,6 +150,35 @@ html:root body {
   font-variant-numeric: tabular-nums;
 }
 
+/* the sidebar and mobile header: umami's mark and the word "umami" become the
+   veristar mark and wordmark. umami renders them as an inline svg (its only
+   svg with this viewbox, src/components/svg/Logo.tsx) in an icon span,
+   followed by a text span (src/app/(main)/SideNav.tsx and MobileNav.tsx,
+   IconLabel). the svg is hidden and the icon span draws mark.svg instead;
+   the text span keeps no visible or spoken text of its own, and its ::after
+   shows and reads "Veristar". umami stays credited in every page title
+   ("| Umami"), which this file does not touch. tests/umami-compat checks the
+   viewbox, the structure and the title */
+html:root span:has(> svg[viewBox="0 0 428 389.11"]) {
+  width: 1.25rem;
+  height: 1.25rem;
+  background: url("brand/mark.svg") center / contain no-repeat;
+}
+html:root svg[viewBox="0 0 428 389.11"] {
+  visibility: hidden;
+}
+html:root span:has(> svg[viewBox="0 0 428 389.11"]) + span {
+  font-size: 0;
+  visibility: hidden;
+}
+html:root span:has(> svg[viewBox="0 0 428 389.11"]) + span::after {
+  content: "Veristar";
+  visibility: visible;
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+
 /* zen's primary button has no hover colour of its own (it dims); the brand
    names one */
 html:root .bg-primary:hover {
