@@ -412,6 +412,8 @@ test("an api key is created, read with from a client without a session, and revo
   const shown = page.getByRole("region", { name: "New secret" });
   await expect(shown).toBeVisible();
   await shown.getByRole("button", { name: "Show the secret" }).click();
+  // the masked text crossfades out before the key fades in
+  await expect(shown.locator("code").first()).toHaveText(/^sa_op_[0-9A-Za-z]{40}$/);
   const key = (await shown.locator("code").first().textContent())?.trim() ?? "";
   expect(key).toMatch(/^sa_op_[0-9A-Za-z]{40}$/);
   await expect(page.getByRole("button", { name: "Copy key" })).toBeVisible();
