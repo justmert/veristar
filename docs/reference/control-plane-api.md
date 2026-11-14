@@ -165,6 +165,8 @@ redirect instead) has this body:
 - `message`: English text for people. Its wording can change between releases.
 - `fields`: present only for 422; maps a JSON path (`name`, `origins[1]`,
   `enrollment.stellar_ids[0]`) to a field code from 2.5.
+- `tenants`: present only for 409 `sole_owner` (4.1.6); a list of
+  `{"id", "name"}` of the projects that block the request.
 - `request_id`: also sent as response header `X-Request-Id`, and logged.
 
 ### 2.3 Lists and pagination
@@ -203,6 +205,7 @@ List routes answer:
 | 409 | `already_member` | invite or add for a user who is a member |
 | 409 | `invite_exists` | an open invite for that GitHub account exists (`invites_tenant_github_idx`) |
 | 409 | `last_owner` | removing or demoting the last owner |
+| 409 | `sole_owner` | an account deletion while the account is the only owner of a tenant that is not `removed`; the envelope lists those tenants in `tenants` (4.1.6) |
 | 409 | `site_removed` | change to a site with `status = 'removed'` |
 | 409 | `terms_version_mismatch` | accepted version is not the current one |
 | 409 | `invalid_transition` | lifecycle action not allowed from the current status (5.5) |
@@ -351,7 +354,7 @@ Every mutation writes one `cp.audit_log` row in the same transaction as the chan
 - `detail`: JSON with the changed fields (old and new values for updates). Never a
   token, cookie, password or secret.
 
-Sign-in, tenants and sites (section 4): `user.sign_in`, `user.sign_out`, `tenant.create`, `tenant.update`,
+Sign-in, tenants and sites (section 4): `user.sign_in`, `user.sign_out`, `account.delete`, `tenant.create`, `tenant.update`,
 `tenant.terms_accept`, `member.add`, `member.role_change`, `member.remove`,
 `invite.create`, `invite.revoke`, `invite.resolve`, `site.create`, `site.update`,
 `site.delete`, `provision.team_create`, `provision.website_create`,
@@ -505,6 +508,52 @@ Public.
 
 Served from `docs/compliance/terms.md`, embedded in the binary at build time. The
 version is the value of the file's front matter `version`.
+
+#### 4.1.6 `DELETE /api/me`
+
+Session, CSRF rules apply. Body: none. Deletes the caller's own console
+account. **204**, with the session cookie expired.
+
+Refused with **409 `sole_owner`** while the caller is the only owner of a tenant
+whose status is not `removed`; the error envelope lists those tenants in
+`tenants` (2.2), ordered by name. Nothing changes then. The caller makes another
+member an owner (4.2.5), or asks the operators to remove the tenant (5.5), and
+repeats the request.
+
+Otherwise, in one `cp_system` transaction that first locks the caller's user row,
+the rows of every tenant the caller belongs to and those tenants' owner rows:
+
+1. Every membership of the caller is deleted. The membership trigger of
+   migration `00030` revokes the caller's MCP credentials for each tenant
+   (`mcp_credential.revoke`, reason `member_removed`).
+2. Every invite addressed to the caller's GitHub account id is deleted.
+3. The caller's MCP credentials and OAuth codes (section 12) are deleted, with
+   their tokens.
+4. Every session of the caller is deleted, in every browser.
+5. The `cp.users` row is emptied (migration `00031`): `github_id` becomes `0`,
+   `github_login` the empty string, `is_operator` false, `last_login_at` null,
+   and `deleted_at` is set. The row keeps its `id`, which tenants, sites,
+   tokens, keys, erasure requests, removals and audit rows name as their
+   creator or actor.
+6. The caller's Umami user (`gh-<github id>`) is deleted, which ends every Umami
+   token the caller held. If Umami does not answer, the transaction rolls back
+   and the request answers 503 `unavailable`; nothing is deleted.
+7. One audit row `account.delete` is written: actor and target `user:<id>`,
+   detail with the memberships removed (`tenant_id` and `role` each), the
+   counts of invites, MCP credentials and sessions deleted, `was_operator` and
+   `umami_user_deleted`. It names no GitHub id or login.
+
+After the commit a reconcile run is queued for every tenant the caller left.
+Audit rows written before the deletion stay unchanged (the log is
+append-only); they name the caller by `user:<id>`, and `actor_login` in 5.9 is
+`null` for that id from now on. A later sign-in with the same GitHub account
+creates a new user with a new id, no memberships and no invites.
+`is_operator` of the new user follows `OPERATOR_GITHUB_IDS` as at every
+sign-in (5.1), so an operator whose GitHub id stays in that setting is an
+operator again after signing in; removing the id from the setting is what ends
+operator access for good.
+
+401 without a session.
 
 ### 4.2 Tenants
 
@@ -944,6 +993,8 @@ Operator. **200**:
   `account`, `muxed_account` or `contract`).
 - `members` excludes nothing; operators see logins to contact a project. Read
   under `cp_system`.
+- `created_by` and `approved_by` are `null` when that account was deleted
+  (4.1.6).
 - `ingest` sums `cp.web_ingest_hourly` over all the tenant's sites for the last 24
   full hours and 30 full days (UTC), non-zero outcomes only.
 - `removal`: `null`, or for a removed tenant
@@ -1138,7 +1189,8 @@ Operator. List envelope of AuditEntry, ordered by `(at desc, id desc)`, under
 ```
 
 - `id` is the `cp.audit_log` identity (a number). `actor_login` is the
-  `github_login` for `user:` actors, else `null`.
+  `github_login` for `user:` actors, else `null`. It is also `null` for the
+  actor of a deleted account (4.1.6).
 - Query filters, all optional and combined with AND: `tenant_id` (rows whose
   `target` is `tenant:<id>` or whose `detail.tenant_id` is `<id>`), `target`
   (exact), `action` (exact, or a prefix ending in `.`, such as `tenant.`),
