@@ -134,6 +134,18 @@ holds a Patroni leader or is in DNS. A kernel or libc fix therefore applies only
   turns it into `node_reboot_required`, and the `HostRebootRequired` alert fires after 12 hours
   ([alerts.md](alerts.md#hostrebootrequired)), which leaves half of the 24-hour target for the
   reboot. For a critical kernel CVE, reboot without waiting for the alert.
+- **Install the fix on every node first.** Each node's daily upgrade runs at its own time of
+  day and installs only what its package lists held then, so one node can miss a kernel the
+  others already have. On every node:
+
+  ```sh
+  sudo apt-get update -qq && sudo unattended-upgrade --dry-run -v | grep 'Packages that will be upgraded'
+  sudo unattended-upgrade
+  ```
+
+  Expected: the dry run lists the fixed package (for a kernel, `linux-image-cloud-amd64`), or
+  nothing when the node has it already, and `/var/run/reboot-required` exists on each node
+  that installed it.
 - **Reboot, one node at a time:**
 
   ```sh
@@ -149,6 +161,15 @@ holds a Patroni leader or is in DNS. A kernel or libc fix therefore applies only
   the next node starts. Any failure stops the run with the other nodes untouched.
 - **Check:** `node_reboot_required` is 0 on every node in Prometheus, and
   `uname -r` on each node shows the new kernel.
+- **Afterwards:** when the `probe` and `slo` checks of the status page stay red while every node
+  and host check is green, the prober still holds connections to a node from before its reboot.
+  Restart it on the probe host: `docker restart veristar-probe-prober`.
+
+### Exercised
+
+| Date | What ran | Result |
+|---|---|---|
+| 2026-11-14 | Production: `reboot.yml` on all three converged nodes, release `v0.2.1`, under 4 page views a second for 40 minutes | `failed=0` on every node in 14 min 47 s; three planned switchovers, each within 7 s; each node out of rotation 4 min 12 s to 5 min 16 s and back 1 min 23 s to 2 min 27 s after its shutdown; 9,305 of 9,352 events acknowledged and **0 acknowledged events lost**, 46 refused with 503 by drained nodes still holding the client's keep-alive connection at their shutdown. Node 3 missed the new kernel (fixed above with the install step), and the prober needed a restart ([drill record](../reference/drills/2026-11-13-azure.md), "Rolling reboot under event load") |
 
 ## 7. Rehearsal record
 
