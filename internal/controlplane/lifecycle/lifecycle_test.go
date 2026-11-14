@@ -10,7 +10,7 @@ import (
 	"github.com/justmert/veristar/internal/controlplane/httpx"
 )
 
-// the transition table of the reference docs 4.1, every status and action
+// the transition table (control-plane-api.md 5.5), every status and action
 func TestTransitions(t *testing.T) {
 	want := map[string]map[Action]string{
 		StatusPending:   {Approve: StatusActive, Reject: StatusRejected, Remove: StatusRemoved},

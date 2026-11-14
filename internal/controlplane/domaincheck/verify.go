@@ -20,7 +20,8 @@ const (
 	MethodFile = "file"
 )
 
-// where and what the tenant publishes (the reference docs 4.4)
+// where and what the tenant publishes (docs/reference/control-plane-api.md
+// section 5.8)
 const (
 	DNSLabel     = "_veristar."
 	TXTPrefix    = "veristar-verify="

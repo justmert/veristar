@@ -24,7 +24,8 @@ const userIDKey = "user_id"
 
 // Store is an scs.CtxStore over cp.sessions. pgxstore cannot be used: its
 // sql is fixed to a token text column, while cp.sessions keeps only the
-// 32-byte sha-256 of the token and a user_id column (the reference docs 3.1).
+// 32-byte sha-256 of the token and a user_id column, so a
+// database leak exposes no usable session token.
 //
 // the manager must run with HashTokenInStore, so the "token" this store
 // receives is base64url(sha256(cookie value)); the store decodes it back to

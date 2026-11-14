@@ -20,7 +20,7 @@ import (
 // the sep-1 location and size cap. they equal the constants of the sdk's
 // clients/stellartoml package (a test asserts it); that package is not
 // imported because it drags a second toml library and testify/mock into
-// the binary (the reference docs 2.2).
+// the binary.
 const (
 	StellarTomlPath    = "/.well-known/stellar.toml"
 	StellarTomlMaxSize = 100 * 1024

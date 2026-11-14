@@ -39,8 +39,9 @@ const (
 	failRateLimited       = "rate_limited"
 )
 
-// the /user api version is pinned because its end date is known
-// (the reference docs 1.4)
+// the /user api version is pinned so a new github default cannot change
+// the answer; github keeps a version for at least 24 months after its
+// successor ships
 const githubAPIVersion = "2022-11-28"
 
 // githubTimeout bounds each call to github, so a slow github cannot hold
@@ -117,7 +118,7 @@ func New(cfg Config, d *db.DB, s *session.Manager) (*Handler, error) {
 			Endpoint:     cfg.Endpoints.OAuth,
 			RedirectURL:  cfg.RedirectURL,
 			// no scopes: the public /user answer has id and login, which is
-			// all the platform stores (the reference docs 1.3)
+			// all the platform stores
 		},
 		apiBase:   strings.TrimSuffix(cfg.Endpoints.APIBase, "/"),
 		sealer:    sl,
