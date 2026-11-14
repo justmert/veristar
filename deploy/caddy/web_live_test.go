@@ -376,7 +376,7 @@ func webAllowedReads(t *testing.T, l *liveWeb) {
 	requireWebHeaders(t, r, "website page")
 }
 
-// the design: /sso only same-site, only towards /websites/, never cached.
+// /sso only same-site, only towards /websites/, never cached.
 func webSSORules(t *testing.T, l *liveWeb) {
 	tok := l.token
 	l.token = umami.Token{}
@@ -634,7 +634,7 @@ func itoa(n int64) string { return strconv.FormatInt(n, 10) }
 
 // the tenant dashboard in chromium through caddy (tests/caddy-web): overview
 // metrics, pageviews, referrers, countries, devices and browsers, with no
-// request refused. screenshots go to .scratch/scratch/caddy-web.
+// request refused. screenshots go to .scratch/caddy-web.
 func webDashboardInBrowser(t *testing.T, l *liveWeb) {
 	pnpm, err := exec.LookPath("pnpm")
 	require.NoError(t, err, "the browser check needs pnpm with the playwright browsers installed")

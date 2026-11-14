@@ -24,7 +24,7 @@ RUN go mod download && go mod verify
 COPY cmd ./cmd
 COPY internal ./internal
 COPY docs/compliance ./docs/compliance
-# the machine api (this stage) embeds its openapi document
+# the machine api embeds its openapi document
 COPY docs/reference/openapi ./docs/reference/openapi
 
 # TAGS stays empty for every environment's image, which signs in with github

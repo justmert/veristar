@@ -52,18 +52,19 @@ put PLATFORM_DB_JOBS_PASSWORD "$(rand 24)"
 put NATS_URL nats://127.0.0.1:4222
 put NATS_REPLICAS 1
 
-# control plane (this stage). both keys are 32 random bytes in standard base64.
+# control plane. both keys are 32 random bytes in standard base64.
 # OAUTH_STATE_KEY seals the sign-in cookie; UMAMI_USER_PASSWORD_KEY derives the
 # daily umami passwords and is shared by the control plane and jobs.
 rand_b64() { head -c "$1" /dev/urandom | base64 | tr -d '\n'; }
 put OAUTH_STATE_KEY "$(rand_b64 32)"
 put UMAMI_USER_PASSWORD_KEY "$(rand_b64 32)"
-# api metric retention (this stage, docs/reference/api-storage.md): minute rows
+# api metric retention (docs/reference/api-storage.md): minute rows
 # 30 days, hourly rows 36 months. jobs refuses an hourly value below 24.
 put API_MINUTE_RETENTION_DAYS 30
 put API_HOURLY_RETENTION_MONTHS 36
 
-# GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET an operator input, the dev oauth app with
+# GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET (the dev github oauth app with
 # callback http://localhost:8085/api/auth/github/callback) and
-# OPERATOR_GITHUB_IDS an operator input are not generated: add them to this file by
-# hand. the controlplane service refuses to start without them.
+# OPERATOR_GITHUB_IDS (numeric github ids of the operators) are not
+# generated: add them to this file by hand. the controlplane service
+# refuses to start without them.

@@ -1,11 +1,11 @@
-# postgresql under patroni with pgbackrest (the design, this stage).
+# postgresql under patroni with pgbackrest for the core nodes.
 #   docker build -f deploy/images/postgres-ha.Dockerfile -t veristar/postgres-ha:18.7-4.1.5 deploy/images
 # the build context is unused.
 #
 # PG_BASE is the one place the postgresql version is chosen. it is 18.7
 # (postgresql-18 18.7-1.pgdg13+2), which fixes 52 cves including
 # CVE-2026-120154 (insert ... on conflict reading rows despite row-level
-# security); the design switching is: new PG_BASE (tag and index
+# security). switching is: new PG_BASE (tag and index
 # digest), new PG_VERSION, postgres_version in infra/ansible/vars/pins.yml,
 # rebuild.
 #

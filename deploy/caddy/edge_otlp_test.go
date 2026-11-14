@@ -26,7 +26,7 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
-// the otlp site (this stage) proxies to the two collector listeners, health
+// the otlp site proxies to the two collector listeners, health
 // checks the collector, and logs through the filtered site logger
 // (TestEdgeCaddyfileValidates checks the filter and that each collector
 // variable is required).

@@ -1,8 +1,8 @@
 # caddy 2.11.9 with the two plugins the platform needs:
 #   github.com/caddyserver/replace-response  injects the db-ip attribution
-#       link into umami's html on web.<BASE_DOMAIN> (the reference docs section 5)
+#       link into umami's html on web.<BASE_DOMAIN> (docs/reference/the reference docs section 5)
 #   github.com/caddy-dns/cloudflare          dns-01 challenges in the cloudflare
-#       zone of BASE_DOMAIN (this stage). v0.2.4 (2026-03-23) is the newest
+#       zone of BASE_DOMAIN on deployed nodes. v0.2.4 (2026-03-23) is the newest
 #       release; it built against 2.11.9 on 2026-11-13 and resolves
 #       libdns/cloudflare v0.2.2 and libdns v1.1.1
 #
@@ -23,7 +23,7 @@ RUN xcaddy build v2.11.9 --output /out/caddy \
       --with github.com/caddy-dns/cloudflare@v0.2.4 \
       # caddy 2.11.9 requires golang.org/x/net v0.60.0, which has fixable high
       # findings (CVE-2026-78661 and others, trivy 2026-11-13); v0.62.0 is the
-      # the design pin. remove this line once a caddy release requires it.
+      # pinned version. remove this line once a caddy release requires it.
       --replace golang.org/x/net=golang.org/x/net@v0.62.0
 
 FROM caddy:2.11.9@sha256:e40b94d0a43b5ff69cb20568d73f10c70703df7b0ffc2298eb3d723cdc9d0bd1
