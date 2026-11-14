@@ -53,6 +53,13 @@ var tenantTables = []tenantTable{
 	}},
 	{name: "cp.web_ingest_hourly", key: "tenant_id"},
 	{name: "cp.tenant_removals", key: "tenant_id", denied: true},
+	// mcp access keys (00030): a member creates keys that act as itself
+	{name: "cp.mcp_credentials", key: "tenant_id", insert: func(tenant, user, _ uuid.UUID) (string, []any) {
+		return `insert into cp.mcp_credentials (kind, scope, tenant_id, user_id, name, prefix, hash, resource, expires_at)
+		        values ('key', 'tenant', $1, $2, 'new', 'sa_mcp_n', sha256($3::bytea), 'https://app.example.org/mcp',
+		                now() + interval '1 day')`, []any{tenant, user, []byte(uuid.NewString())}
+	}},
+	{name: "cp.mcp_oauth_codes", key: "tenant_id", denied: true},
 
 	// api (this stage): cp_tenant reads its metrics and warnings, and has no
 	// right at all on the writer's bookkeeping

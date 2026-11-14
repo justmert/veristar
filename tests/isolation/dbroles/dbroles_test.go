@@ -384,6 +384,14 @@ func seed(t *testing.T, c *pgx.Conn) (side, side) {
 			  values ($1, $2, 'session', $3, gen_random_uuid())`, []any{s.tenant, s.site, s.user}},
 			{`insert into cp.web_ingest_hourly (site_id, tenant_id, hour, outcome, count)
 			  values ($1, $2, date_trunc('hour', now()), 'accepted', 5)`, []any{s.site, s.tenant}},
+			{`insert into cp.mcp_credentials (kind, scope, tenant_id, user_id, name, prefix, hash, resource, expires_at)
+			  values ('key', 'tenant', $1, $2, 'gate', $3, sha256($4::bytea), 'https://app.example.org/mcp', now() + interval '1 day')`,
+				[]any{s.tenant, s.user, fmt.Sprintf("sa_mcp_g%d", i), []byte(fmt.Sprintf("gate-mcp-%d", i))}},
+			{`insert into cp.mcp_oauth_clients (id, client_name, redirect_uris) values ($1, 'gate', '{https://client.example.org/cb}')`,
+				[]any{fmt.Sprintf("mcpc_%032d", i)}},
+			{`insert into cp.mcp_oauth_codes (hash, client_id, user_id, scope, tenant_id, redirect_uri, code_challenge, resource, expires_at)
+			  values (sha256($1::bytea), $2, $3, 'tenant', $4, 'https://client.example.org/cb', $5, 'https://app.example.org/mcp', now() + interval '1 minute')`,
+				[]any{[]byte(fmt.Sprintf("gate-code-%d", i)), fmt.Sprintf("mcpc_%032d", i), s.user, s.tenant, strings.Repeat("a", 43)}},
 			{`insert into cp.tenant_removals (tenant_id, requested_by, reason, keep_aggregates)
 			  values ($1, $2, 'gate seed', false)`, []any{s.tenant, s.user}},
 			{`insert into api.metrics_minute (tenant_id, bucket_start, service, method, route, status_code, source, counts, sum, count)

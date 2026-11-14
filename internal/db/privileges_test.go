@@ -150,6 +150,13 @@ func TestSchemaDatabaseAndFunctionRights(t *testing.T) {
 		// (00028, review)
 		"cp.app_user_id()":         {pdb.RoleCPTenant},
 		"cp.tenant_member_guard()": nil,
+		// mcp credentials (00030): the cp_tenant guard and the revocation
+		// triggers; no role calls them directly
+		"cp.tenant_mcp_credential_guard()":            nil,
+		"cp.mcp_revoke_matching(uuid,uuid,text,text)": nil,
+		"cp.mcp_revoke_member()":                      nil,
+		"cp.mcp_revoke_tenant()":                      nil,
+		"cp.mcp_revoke_operator()":                    nil,
 
 		"api.add_buckets(bigint[],bigint[])": {pdb.RoleCPTenant, pdb.RoleCPOperator, pdb.RoleMetricsWriter, pdb.RoleJobs},
 		"api.sum_buckets(bigint[])":          {pdb.RoleCPTenant, pdb.RoleCPOperator, pdb.RoleJobs},

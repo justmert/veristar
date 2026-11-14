@@ -52,6 +52,15 @@ var Want = map[string]map[db.Role]string{
 		db.RoleCPSystem:   "rawd",
 		db.RoleCPOperator: "r w(last_used_at)",
 	},
+	// mcp credentials (00030): the console's key routes create and revoke
+	// under cp_tenant, everything else runs under cp_system
+	"cp.mcp_oauth_clients": {db.RoleCPSystem: "rawd"},
+	"cp.mcp_credentials": {
+		db.RoleCPSystem: "rawd",
+		db.RoleCPTenant: "ra w(revoked_at,revoked_reason)",
+	},
+	"cp.mcp_oauth_codes":  {db.RoleCPSystem: "rawd"},
+	"cp.mcp_oauth_tokens": {db.RoleCPSystem: "rawd"},
 	"cp.api_key_usage_hourly": {db.RoleCPSystem: "rawd", db.RoleCPOperator: "raw"},
 	"cp.settings":             {db.RoleCPSystem: "rawd", db.RoleCPOperator: "r"},
 	"cp.audit_log":            {db.RoleCPSystem: "ra", db.RoleCPTenant: "a"},
