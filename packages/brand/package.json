@@ -1,0 +1,29 @@
+{
+  "name": "@veristar/brand",
+  "private": true,
+  "type": "module",
+  "description": "veristar brand tokens, tailwind theme, motion presets and the mark",
+  "exports": {
+    "./index.css": "./src/index.css",
+    "./tokens": "./src/tokens.ts",
+    "./motion": "./src/motion.ts",
+    "./mark": "./src/mark.tsx"
+  },
+  "scripts": {
+    "generate": "node scripts/generate.ts",
+    "check": "tsc -p tsconfig.json && node scripts/generate.ts --check && node scripts/check-usage.ts"
+  },
+  "dependencies": {
+    "@fontsource-variable/geist": "catalog:",
+    "@fontsource-variable/geist-mono": "catalog:"
+  },
+  "peerDependencies": {
+    "react": "*"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "react": "catalog:",
+    "typescript": "catalog:"
+  }
+}

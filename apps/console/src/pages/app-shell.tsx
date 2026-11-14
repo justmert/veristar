@@ -1,16 +1,24 @@
+import { Mark } from "@veristar/brand/mark";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { LogOut } from "lucide-react";
-import { Link, Outlet, useNavigate } from "react-router";
+import { Menu as MenuIcon, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Link, Outlet, useLocation, useNavigate } from "react-router";
 import { api } from "@/api/endpoints";
 import { meQuery } from "@/api/queries";
 import { FormMessage } from "@/components/error-panel";
-import { Mark } from "@/components/mark";
+import { PageMotion } from "@/components/motion";
+import { Sidebar } from "@/components/nav/sidebar";
 import { Button } from "@/components/ui/button";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { queryClient } from "@/query-client";
 
+// the signed-in frame: the sidebar on a wide screen, a top bar with a drawer
+// on a phone, and the page, which settles in when the route changes
 export function AppShell() {
   const me = useQuery(meQuery);
   const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const [drawer, setDrawer] = useState(false);
   const signOut = useMutation({
     mutationFn: api.logout,
     onSuccess: () => {
@@ -19,60 +27,111 @@ export function AppShell() {
     },
   });
 
+  // a navigation closes the drawer and starts the page at its top
+  // biome-ignore lint/correctness/useExhaustiveDependencies: runs on every route change
+  useEffect(() => {
+    setDrawer(false);
+    window.scrollTo({ top: 0 });
+  }, [pathname]);
+
+  if (!me.data) return null;
+  const side = (
+    <Sidebar me={me.data} onSignOut={() => signOut.mutate()} onNavigate={() => setDrawer(false)} />
+  );
+
   return (
-    <div className="flex min-h-dvh flex-col">
-      <a
-        href="#main"
-        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-3 focus:z-50 focus:rounded-md focus:bg-card focus:px-3 focus:py-2"
-      >
-        Skip to content
-      </a>
-      <header className="border-b bg-card/70 backdrop-blur supports-[backdrop-filter]:bg-card/60">
-        <div className="mx-auto flex h-14 max-w-6xl items-center gap-3 px-4 sm:px-6">
-          <Link to="/" className="flex items-center gap-2 rounded-md font-semibold tracking-tight">
-            <Mark className="size-6 text-primary" />
-            <span>Veristar</span>
+    <TooltipProvider>
+      <div className="min-h-dvh lg:grid lg:grid-cols-[var(--vs-sidebar)_minmax(0,1fr)]">
+        <a
+          href="#main"
+          className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-4 focus:z-50 focus:rounded-md focus:bg-overlay focus:px-3 focus:py-2 focus:shadow-overlay"
+        >
+          Skip to content
+        </a>
+        <aside className="sticky top-0 hidden h-dvh border-r border-line bg-ground lg:block">
+          {side}
+        </aside>
+
+        <header className="sticky top-0 z-30 flex h-(--vs-header) items-center gap-2 border-b border-line bg-ground px-2 lg:hidden">
+          <Button
+            variant="ghost"
+            size="icon-lg"
+            aria-label="Open navigation"
+            aria-expanded={drawer}
+            onClick={() => setDrawer(true)}
+          >
+            <MenuIcon aria-hidden />
+          </Button>
+          <Link
+            to="/"
+            className="flex items-center gap-2 rounded-md px-1 py-1 focus-ring"
+            aria-label="Veristar, your projects"
+          >
+            <Mark className="size-5" />
+            <span className="text-title tracking-tight">Veristar</span>
           </Link>
-          <div className="ml-auto flex items-center gap-2 text-sm">
-            {me.data?.user.is_operator ? (
-              <Button asChild variant="ghost" size="sm">
-                <Link to="/operator">Operator</Link>
-              </Button>
-            ) : null}
-            {me.data ? (
-              <span className="hidden text-muted-foreground sm:inline">
-                Signed in as{" "}
-                <span className="font-medium text-foreground">{me.data.user.github_login}</span>
-              </span>
-            ) : null}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => signOut.mutate()}
-              disabled={signOut.isPending}
-            >
-              <LogOut aria-hidden />
-              Sign out
-            </Button>
-          </div>
+        </header>
+        <Drawer open={drawer} onClose={() => setDrawer(false)}>
+          {side}
+        </Drawer>
+
+        <div className="flex min-w-0 flex-col">
+          {signOut.error ? (
+            <div className="px-4 pt-4 sm:px-8">
+              <FormMessage error={signOut.error} />
+            </div>
+          ) : null}
+          <main id="main" className="w-full max-w-content flex-1 px-4 pt-6 pb-16 sm:px-8 sm:pt-7">
+            <PageMotion key={pathname}>
+              <Outlet />
+            </PageMotion>
+          </main>
         </div>
-        {signOut.error ? (
-          <div className="mx-auto max-w-6xl px-4 pb-2 sm:px-6">
-            <FormMessage error={signOut.error} />
-          </div>
-        ) : null}
-      </header>
-      <main id="main" className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-6">
-        <Outlet />
-      </main>
-      <footer className="border-t">
-        <div className="mx-auto flex max-w-6xl flex-wrap gap-x-4 gap-y-1 px-4 py-4 text-xs text-muted-foreground sm:px-6">
-          <Link to="/terms" className="hover:text-foreground">
-            Terms
-          </Link>
-          <span>No fees, no ads, no cookies on your visitors.</span>
-        </div>
-      </footer>
-    </div>
+      </div>
+    </TooltipProvider>
+  );
+}
+
+// the phone navigation: the same sidebar in a native modal dialog that
+// slides in from the left edge
+function Drawer({
+  open,
+  onClose,
+  children,
+}: {
+  open: boolean;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  const ref = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const d = ref.current;
+    if (!d) return;
+    if (open && !d.open) d.showModal();
+    if (!open && d.open) d.close();
+  }, [open]);
+  return (
+    <dialog
+      ref={ref}
+      aria-label="Navigation"
+      onClose={onClose}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      className="drawer-motion m-0 h-dvh max-h-dvh w-(--vs-sidebar) max-w-[85vw] border-r border-line bg-ground p-0 text-fg lg:hidden"
+    >
+      <div className="relative h-full">
+        <Button
+          variant="ghost"
+          size="icon-lg"
+          aria-label="Close navigation"
+          className="absolute top-2 right-2"
+          onClick={onClose}
+        >
+          <X aria-hidden />
+        </Button>
+        {children}
+      </div>
+    </dialog>
   );
 }

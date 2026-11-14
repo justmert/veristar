@@ -5,7 +5,7 @@ import { Link } from "react-router";
 import { type ConsentRequest, mcpApi, mcpKeys } from "@/api/mcp";
 import { meQuery } from "@/api/queries";
 import { ErrorPanel, FormMessage, Loading } from "@/components/error-panel";
-import { Mark } from "@/components/mark";
+import { Mark } from "@veristar/brand/mark";
 import { Button } from "@/components/ui/button";
 
 // the oauth consent screen of the mcp authorization flow (contract 12.3).

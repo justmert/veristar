@@ -61,7 +61,7 @@ export const router = createBrowserRouter([
     element: <AppShell />,
     // shown while the session check of the first page load runs
     hydrateFallbackElement: (
-      <p role="status" className="p-8 text-sm text-muted-foreground">
+      <p role="status" className="p-8 text-body text-fg-2">
         Loading the console
       </p>
     ),

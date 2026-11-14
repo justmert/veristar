@@ -1,6 +1,6 @@
 import { Link, useSearchParams } from "react-router";
 import { webDashboardUrl } from "@/api/endpoints";
-import { Mark } from "@/components/mark";
+import { Mark } from "@veristar/brand/mark";
 import { Button } from "@/components/ui/button";
 
 // failure codes of the dashboard sign-in redirect (contract 4.4.1)
