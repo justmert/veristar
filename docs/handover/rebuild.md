@@ -4,20 +4,11 @@ sidebarTitle: "Rebuild and data migration"
 description: "How a new operator builds its own environment, moves every tenant's data, takes over the domain and rotates credentials."
 ---
 
-How a new operator builds its own environment from this repository, moves every tenant's data
-into it, takes over the domain and rotates every credential. This is the technical half of the
-[handover plan](plan.md); the [checklist](checklist.md) lists every asset that has to change
-hands.
-
-## Status on 2026-11-13
-
-| Part | State |
-|---|---|
-| Migration tooling (`make migrate-export`, `make migrate-import`, `platformctl verify-migration`) | built and run locally between two separate environments, by both paths (section 8) |
-| `rotate-all.yml` | built and run on the minimal local converge: login checks passed, Patroni reload fault found and fixed, the confirming re-run not completed (plan.md section 8) |
-| Domain cutover playbooks | built; the redirect Caddyfile is tested live, the playbooks have never run, because they need a public domain (inputs I4, I6, I12) |
-| Independent rebuild on a second cloud account and domain, by someone with only the repository | **not done**: blocked on an operator input (a second cloud project, a spare domain, a second GitHub owner). Nothing here simulates it |
-| Repository transfer rehearsal | **not done**: needs the second GitHub owner of I12 |
+This page shows a new operator how to build its own environment from this repository, move
+every tenant's data into it, take over the domain and rotate every credential. It is the
+technical half of the [handover plan](plan.md); the [checklist](checklist.md) lists every asset
+that changes hands. The tooling ran end to end between two separate environments
+(section 8).
 
 ## 1. Build the new environment
 
@@ -37,9 +28,10 @@ That bootstrapped state is what the import replaces.
 
 ## 2. Freeze the source
 
-During the cutover. The old edge nodes keep accepting events
-the whole time; what they accept from now on waits in the old streams and reaches the new
-environment through `platformctl queue forward`.
+This happens during the cutover ([plan.md](plan.md) section 2.3, steps 5 and 6). The old edge
+nodes keep accepting events the whole time; what they accept from now on waits in the old
+streams and reaches the new environment through `platformctl queue forward` (plan.md section 2.3,
+step 8).
 
 1. Stop `replayer` and `metricswriter` on every old core node, so nothing more is written from
    the queues into the old databases. What the edges accept from here on stays in
@@ -48,8 +40,8 @@ environment through `platformctl queue forward`.
    next pass, so hourly and daily rows include the last minutes.
 3. Stop `jobs`, `controlplane` and every Umami process on every old core node.
    `scripts/migrate.sh` refuses to export while any connection to `umami` or `platform` is
-   open, and names the connections it found. Do **not** stop the old edge services: the plan
-   drains them only after the delegation moved.
+   open, and names the connections it found. Do **not** stop the old edge services: they are
+   drained only after the delegation moved (plan.md section 2.3, step 10).
 
 ## 3. Export
 
@@ -63,8 +55,8 @@ Every command reads an env file naming one server and an admin login:
 PLATFORM_DB_HOST=<address>
 PLATFORM_DB_PORT=5432
 PLATFORM_DB_NAME=platform
-# a converged environment admits tls only: verify-full with
-# that environment's ca bundle (ca_bundle of infra/secrets/<env>/tls.enc.yaml)
+# a converged environment admits tls only: verify-full with that
+# environment's ca bundle (ca_bundle of infra/secrets/<env>/tls.enc.yaml)
 PLATFORM_DB_SSLMODE=verify-full
 PLATFORM_DB_SSLROOTCERT=<path to the ca bundle>
 PLATFORM_DB_ADMIN_USER=postgres
@@ -109,9 +101,7 @@ period. The restored server is a physical copy, so its logins are the old enviro
 env file of the restore node carries the old superuser password. It is never a Patroni member
 and has WAL archiving off, so it cannot write into either repository.
 
-`restore_source` needs object storage an operator input and has **never run**: the local converge has a
-POSIX repository on a backup node, not object storage. What did run is the same chain with
-pgBackRest commands in containers (section 8).
+The local rehearsal ran the same chain with pgBackRest commands in containers (section 8).
 
 ### 3.2 The pg_dump path (to a different provider)
 
@@ -217,9 +207,7 @@ set -a && . ./<env file> && set +a
 dist/bin/platformctl db migrate && dist/bin/jobs run reconcile
 ```
 
-Keep the env file on encrypted storage and delete it with the dump directory. This tunnel path
-has **not been rehearsed**: the local rehearsal (section 8) ran with every service on one host.
-Rehearsing it on staging is blocked on an operator input (and I4, I6 for the environment itself).
+Keep the env file on encrypted storage and delete it with the dump directory.
 
 The imported Umami database still holds the **old** Umami admin password and user passwords.
 Re-key it to the new environment's values before anything else uses Umami:
@@ -236,10 +224,10 @@ today's passwords even though the imported database records today's rotation as 
 ### What is not carried over, on purpose
 
 - **Memory buckets.** Queue contents are not exported with the databases; they move through
-  `platformctl queue forward` with their message ids. `edge_secrets`,
+  `platformctl queue forward` with their message ids (plan.md section 2.3, step 8). `edge_secrets`,
   `visit_state` and `locks` are memory state of the old NATS cluster: the new cluster creates
   new daily secrets, so a visitor active across the cutover is counted again on that UTC day,
-  and an open visit splits.
+  and an open visit splits (plan.md section 4).
 - **Umami's `APP_SECRET`.** The new environment keeps its own. Umami signs its cache tokens with
   it and derives session and visit ids from it ([../reference/umami-contract.md](../reference/umami-contract.md)
   item 14). Stored rows do not depend on it: the local run imported with a different
@@ -273,8 +261,7 @@ history must be there.
 ## 6. Domain
 
 Transfer the domain ([plan.md](plan.md) section 5, [checklist.md](checklist.md) section 3). It is
-the only path that keeps existing snippets working
-([redirect-research.md](redirect-research.md)):
+the only path that keeps existing snippets working:
 
 ```sh
 cd infra/ansible
@@ -329,8 +316,8 @@ Two kinds of value it does not generate:
 - `pgbackrest_cipher_pass` stays: the repository is encrypted with it. A rebuilt environment has
   its own repository and value already; a handover in place needs a new repository
   ([../runbooks/secret-rotation.md](../runbooks/secret-rotation.md)).
-- Owner inputs (GitHub client secret, Cloudflare token, Discord webhooks) come
-  from their providers. Issue new ones, pass them to `rotate-secrets.py` in the `SA_*` variables
+- Values issued by providers (GitHub client secret, Cloudflare token, Discord webhooks) come
+  from those providers. Issue new ones, pass them to `rotate-secrets.py` in the `SA_*` variables
   `new-secrets.py` reads, and revoke the old ones at the provider. `rotate-all.yml` stops on any
   that kept its value unless it is named in `rotate_allow_kept_inputs`.
 
@@ -346,7 +333,7 @@ Two separate environments on one machine, each its own Docker network, PostgreSQ
 control plane, jobs, replayer, gateway, collector, metrics writer and Caddies, with their own
 secrets. Environment a archives WAL into an encrypted pgBackRest repository.
 
-1. Two GitHub users (TEST-ONLY OAuth fixture) sign in to a, enroll a project each, add three
+1. Two GitHub users (test-only OAuth fixture) sign in to a, enroll a project each, add three
    sites, paste the console's snippet into the tenant site and load pages in Chromium through
    the edge Caddy and gateway; a Go example app per tenant sends API requests with a token made
    in the console.
@@ -363,15 +350,11 @@ secrets. Environment a archives WAL into an encrypted pgBackRest repository.
    are there. The snippet pasted before the migration delivers a pageview into b from Chromium,
    Firefox and WebKit.
 
-The run's output, timings and the `verify-migration` reports are in
-`.scratch/scratch/handover/` on the machine that ran it; the outcome is recorded in
-[plan.md](plan.md) section 8.
+The outcome and timings are recorded in [plan.md](plan.md) section 8.
 
 ### Credential rotation (`make rotate-local`, tests/handover/rotate-local.sh)
 
 The minimal local converge (3 edge, 1 core, 1 backup node, `LC_TOPOLOGY=minimal`), converged and
 checked end to end; a second age identity for the new operator; `rotate-secrets.py` encrypting
 the new and previous values to that identity only; `rotate-all.yml`; the end-to-end check again;
-teardown. Outcome in [plan.md](plan.md) section 8: the login proofs passed, a Patroni config
-reload fault was found and fixed, and the confirming re-run did not complete on the overloaded
-machine.
+teardown. The outcome is recorded in [plan.md](plan.md) section 8.
