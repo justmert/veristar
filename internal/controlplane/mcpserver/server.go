@@ -104,6 +104,7 @@ type Server struct {
 	issuer   string
 	resource string
 	log      *slog.Logger
+	sdkLog   *slog.Logger
 	now      func() time.Time
 	version  string
 
@@ -163,6 +164,9 @@ func New(c Config) (*Server, error) {
 	s := &Server{
 		db: c.DB, guard: c.Guard, reads: reads, sessions: c.Sessions, umami: c.Umami,
 		issuer: c.Issuer, resource: c.Issuer + Path, log: c.Log, now: c.Now, version: c.Version,
+		// the sdk logs every stateless request's session at info; only its
+		// warnings and errors reach the service log
+		sdkLog: slog.New(warnOnly{c.Log.Handler()}),
 		limiter:  newLimiter(c.Rate, float64(c.Burst)),
 		inflight: &inflight{n: map[uuid.UUID]int{}},
 		webCache: newWebCache(),
@@ -189,7 +193,7 @@ func New(c Config) (*Server, error) {
 		Stateless:           true,
 		JSONResponse:        true,
 		MaxRequestBodyBytes: maxRequestBytes,
-		Logger:              c.Log,
+		Logger:              s.sdkLog,
 	})
 	return s, nil
 }
@@ -200,7 +204,7 @@ func (s *Server) Resource() string { return s.resource }
 
 func (s *Server) newMCPServer(instructions string) *mcp.Server {
 	return mcp.NewServer(&mcp.Implementation{Name: "veristar", Title: "Veristar analytics", Version: s.version},
-		&mcp.ServerOptions{Instructions: instructions, Logger: s.log})
+		&mcp.ServerOptions{Instructions: instructions, Logger: s.sdkLog})
 }
 
 // getOnly keeps the in-process reads to GET: the tools never change state,
@@ -377,3 +381,14 @@ func newMetrics(reg prometheus.Registerer) (*metrics, error) {
 
 // trimmed is s without surrounding space, for names.
 func trimmed(s string) string { return strings.TrimSpace(s) }
+
+// warnOnly passes records of level warn and above.
+type warnOnly struct{ slog.Handler }
+
+func (w warnOnly) Enabled(ctx context.Context, l slog.Level) bool {
+	return l >= slog.LevelWarn && w.Handler.Enabled(ctx, l)
+}
+
+func (w warnOnly) WithAttrs(a []slog.Attr) slog.Handler { return warnOnly{w.Handler.WithAttrs(a)} }
+
+func (w warnOnly) WithGroup(n string) slog.Handler { return warnOnly{w.Handler.WithGroup(n)} }

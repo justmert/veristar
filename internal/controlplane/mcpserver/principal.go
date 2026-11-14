@@ -197,7 +197,7 @@ func (s *Server) admit(c credentialRow, now time.Time) (Principal, error) {
 func (s *Server) touch(ctx context.Context, id uuid.UUID, now time.Time) error {
 	err := s.db.WithSystem(ctx, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, `update cp.mcp_credentials set last_seen_at = $2
-			where id = $1 and (last_seen_at is null or last_seen_at < $2 - interval '1 minute')`, id, now)
+			where id = $1 and (last_seen_at is null or last_seen_at < $2::timestamptz - interval '1 minute')`, id, now)
 		return err
 	})
 	if err != nil {

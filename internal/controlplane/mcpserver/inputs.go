@@ -43,7 +43,7 @@ func parseInstant(name, v string, end bool) (time.Time, error) {
 // the 7 days ending now; to may not lie more than a day ahead, from not
 // before 2000, and the span is at most 366 days.
 func webRange(from, to string, now time.Time) (time.Time, time.Time, error) {
-	end := now
+	end := now.Truncate(time.Millisecond)
 	var err error
 	if to != "" {
 		if end, err = parseInstant("to", to, true); err != nil {

@@ -11,11 +11,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/jackc/pgx/v5"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/justmert/veristar/internal/controlplane/httpx"
 )
 
 // toolError is a refusal a model can act on: a stable code from contract
@@ -212,7 +212,10 @@ func (s *Server) read(ctx context.Context, p Principal, path string, q url.Value
 		return fmt.Errorf("mcpserver: tenant principal asked for %s", path)
 	}
 	u := &url.URL{Path: path, RawQuery: q.Encode()}
-	req, err := http.NewRequestWithContext(sessionUser(ctx, p), http.MethodGet, u.String(), nil)
+	// a fresh chi routing context: the one of the outer /mcp request would
+	// make the read router route on that request's path
+	rctx := context.WithValue(sessionUser(ctx, p), chi.RouteCtxKey, (*chi.Context)(nil))
+	req, err := http.NewRequestWithContext(rctx, http.MethodGet, u.String(), nil)
 	if err != nil {
 		return fmt.Errorf("mcpserver: read %s: %w", path, err)
 	}
@@ -257,4 +260,3 @@ func readError(rec *recorder) error {
 	return fmt.Errorf("mcpserver: read answered %d %s", rec.status, env.Error.Code)
 }
 
-var _ = httpx.CodeNotFound
