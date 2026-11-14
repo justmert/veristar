@@ -1,11 +1,6 @@
 # files under docs/ that the mintlify site does not publish. readme files are
 # skipped by mintlify itself.
 slo/
-# working files that are not part of the repository
-audit/
-the adoption report
-reference/phase*-research.md
-handover/redirect-research.md
 # go packages that embed documents for the binaries
 *.go
 # data files read by the security gates
