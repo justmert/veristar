@@ -186,7 +186,7 @@ message id.
    ([erasure-requests.md](erasure-requests.md)); a replayed event that erasure should cover is
    back on `WEB_EVENTS`, where erasure waits for the replayer as for any queued event.
 
-`platformctl` may publish to `web.events.*` and `api.metrics.*` for this (its NATS user in
+`platformctl` is allowed to publish to `web.events.*` and `api.metrics.*` for this (its NATS user in
 `internal/natsx/topology.go`); no service user gained a permission.
 
 ## Exercised
