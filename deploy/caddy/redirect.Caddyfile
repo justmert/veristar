@@ -5,8 +5,8 @@
 # here by the local gateway, so a page whose snippet names the old host
 # still loads the exact bytes its integrity hash names.
 #
-# docs/handover/redirect-research.md found that this does not keep an
-# existing snippet working in any engine: the redirected challenge and
+# a browser test of every engine (tests/e2e/redirect) found that this does
+# not keep an existing snippet working in any engine: the redirected challenge and
 # event requests reach the new gateway with Origin: null, which it refuses.
 # the transfer path is the safe one; this file exists for the case the
 # domain cannot be transferred, and for what still benefits from it

@@ -1,6 +1,6 @@
 # caddy 2.11.9 with the two plugins the platform needs:
 #   github.com/caddyserver/replace-response  injects the db-ip attribution
-#       link into umami's html on web.<BASE_DOMAIN> (docs/reference/the reference docs section 5)
+#       link into umami's html on web.<BASE_DOMAIN> (docs/reference/geo.md)
 #   github.com/caddy-dns/cloudflare          dns-01 challenges in the cloudflare
 #       zone of BASE_DOMAIN on deployed nodes. v0.2.4 (2026-03-23) is the newest
 #       release; it built against 2.11.9 on 2026-11-13 and resolves

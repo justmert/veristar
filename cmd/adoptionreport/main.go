@@ -1,13 +1,13 @@
 // Command adoptionreport writes the adoption evidence of the rfp's live proof
 // (rfp section 5) from the machine metrics api, so no number in
 // the evidence is typed by hand. for each tenant id it reads the machine api
-// with an operator key and writes the adoption reportYYYY-MM-DD.md with
+// with an operator key and writes .scratch/adoption/evidence-YYYY-MM-DD.md with
 // the consecutive utc days that carry accepted, proof-checked page views, the
 // seven web metrics of rfp 3.2 and the api volume, status codes, p50 and p95.
 //
 //	adoptionreport -api https://app.<BASE_DOMAIN>/api/metrics/v1 -tenants <id>,<id>
 //	               [-from YYYY-MM-DD] [-to YYYY-MM-DD] [-min-days 14]
-//	               [-out docs/adoption] [-raw <dir>] [-force] [-now RFC3339]
+//	               [-out .scratch/adoption] [-raw <dir>] [-force] [-now RFC3339]
 //
 // the key comes from SA_OPERATOR_KEY, never from a flag, so it stays out of
 // shell history and process lists. -raw keeps every response body beside an
@@ -85,7 +85,7 @@ func run(ctx context.Context, args []string, getenv func(string) string, stdout,
 	fromFlag := fs.String("from", "", "first utc day (default: 29 days before -to)")
 	toFlag := fs.String("to", "", "last utc day (default: yesterday, the last complete utc day)")
 	minDays := fs.Int("min-days", defaultMinDays, "consecutive days with accepted page views a web project needs")
-	outDir := fs.String("out", filepath.Join("docs", "adoption"), "directory the evidence file is written to")
+	outDir := fs.String("out", filepath.Join(".scratch", "adoption"), "directory the evidence file is written to")
 	rawDir := fs.String("raw", "", "directory to keep every response body and an index of the requests in")
 	force := fs.Bool("force", false, "replace an evidence file of the same day")
 	nowFlag := fs.String("now", "", "RFC 3339 time to write the report at instead of the current time")

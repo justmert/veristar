@@ -1,4 +1,4 @@
--- sign-in, sessions and /api/me (control plane stream a). cp_system, because
+-- sign-in, sessions and /api/me for the console. cp_system, because
 -- these run before any tenant is known.
 
 -- name: SignInUser :one

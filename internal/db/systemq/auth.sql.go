@@ -252,7 +252,7 @@ type SignInUserParams struct {
 	IsOperator  bool
 }
 
-// sign-in, sessions and /api/me (control plane stream a). cp_system, because
+// sign-in, sessions and /api/me for the console. cp_system, because
 // these run before any tenant is known.
 // the numeric github id is the identity, the login can change. is_operator
 // follows OPERATOR_GITHUB_IDS at every sign-in, so removing an id from the
