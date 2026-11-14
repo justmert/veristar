@@ -153,7 +153,7 @@ test("a connector is approved on the consent page after a github sign-in", async
   // and comes back to itself with the request kept
   await page.goto(authorize.toString());
   await page.waitForURL(`${APP}/sign-in?**`);
-  await page.getByRole("link", { name: "Sign in with GitHub" }).click();
+  await page.getByRole("link", { name: "Continue with GitHub" }).click();
   await page.fill("#fixture-user-id", String(user.id));
   await page.fill("#fixture-login", user.login);
   await page.click("#fixture-authorize");

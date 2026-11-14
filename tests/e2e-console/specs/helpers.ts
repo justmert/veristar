@@ -45,7 +45,7 @@ export function manifest(): Release[] {
 // returns once the browser is back on a console page
 export async function signIn(page: Page, user: GitHubUser, returnTo = "/"): Promise<void> {
   await page.goto(`${APP}/sign-in?return_to=${encodeURIComponent(returnTo)}`);
-  await page.getByRole("link", { name: "Sign in with GitHub" }).click();
+  await page.getByRole("link", { name: "Continue with GitHub" }).click();
   await page.waitForURL(`${OAUTH}/login/oauth/authorize?**`);
   await expect(page.locator("#fixture-banner")).toContainText("TEST-ONLY");
   await page.fill("#fixture-user-id", String(user.id));

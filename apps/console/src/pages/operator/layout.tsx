@@ -4,6 +4,7 @@ import { Link, NavLink, Outlet, useLocation } from "react-router";
 import { meQuery, operatorAlertsQuery } from "@/api/queries";
 import { ErrorPanel, Loading } from "@/components/error-panel";
 import { criticalCount } from "@/lib/alerts";
+import { OperatorsOnlyPage } from "@/pages/not-found";
 
 const ALERTS_PATH = "/operator/alerts";
 
@@ -138,13 +139,5 @@ function CriticalBanner({ count, linked }: { count: number; linked: boolean }) {
 }
 
 export function OperatorsOnly() {
-  return (
-    <section className="max-w-xl">
-      <h1 className="text-3xl font-semibold tracking-tight">Operators only</h1>
-      <p className="mt-2 text-muted-foreground">
-        This area is for operators of the service. Your GitHub account is not on the operator list.
-        If it was added recently, sign out and sign in again.
-      </p>
-    </section>
-  );
+  return <OperatorsOnlyPage />;
 }

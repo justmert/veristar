@@ -59,7 +59,7 @@ export function McpConsentPage() {
 
   return (
     <PublicFrame center={false} className="items-center">
-      <div className="w-full max-w-lg">
+      <div className="w-full max-w-dialog-sm">
         {error ? (
           <Stop
             tone="critical"

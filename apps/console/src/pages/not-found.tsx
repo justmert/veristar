@@ -33,7 +33,7 @@ export function StopPage({
   return (
     <section
       className={cn(
-        "flex min-h-80 max-w-2xl animate-rise-in flex-col justify-center gap-4 rounded-lg border border-line px-6 py-10 sm:px-10 sm:py-12",
+        "flex min-h-80 max-w-prose animate-rise-in flex-col justify-center gap-4 rounded-lg border border-line px-6 py-10 sm:px-10 sm:py-12",
         className,
       )}
     >
