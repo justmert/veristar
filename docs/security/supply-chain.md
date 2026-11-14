@@ -75,6 +75,15 @@ The deploy verifies a workstation release exactly like a workflow release: the k
 manifest and the registry digests are the same. What it cannot show is where the build ran;
 the release notes name the machine.
 
+Status on 2026-11-14: not run yet. The NATS fix of that day (section "NATS route liveness" of
+[../reference/drills/2026-11-13-azure.md](../reference/drills/2026-11-13-azure.md)) went out
+through Ansible alone and needed no image. The matching client change in `internal/natsx`
+(5 s pings, the configured server order) ships with the next release. Step 1 needs a token of
+`justmert` with `write:packages`: the GitHub CLI login on the controller carries `repo`,
+`workflow`, `read:org` and `gist` only, and the pull token has `read:packages` only, so the
+owner adds that scope (`gh auth refresh -s write:packages`) or creates a short-lived token for
+the release.
+
 ## 3. Deploy-time verification (every playbook that pulls images)
 
 `site.yml` (first converge and node replacement), `deploy.yml` (rolling deploy), `rotate-all.yml`
