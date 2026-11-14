@@ -3,53 +3,45 @@ title: "Support"
 description: "How tenants and everyone else get help, and the response and resolution targets the operator commits to."
 ---
 
-How tenants and anyone else get help with the service, and the targets the operator commits
-to (RFP 3.4). The operational targets for availability and security patching are in
-[sla.md](sla.md).
+You get help with Veristar through the repository's public GitHub issue tracker. This page explains
+which form to use, the response and resolution targets, and how the targets are tracked. The
+targets for availability and security patching are on [Service targets](sla.md).
 
 ## The channel: the public issue tracker
 
-Support runs on the repository's GitHub issue tracker,
-`https://github.com/justmert/veristar/issues`. The RFP states that a public issue
-tracker is sufficient and that no on-call rotation or other public support channel is
-required. There is none: no chat, no email address, no phone.
+Support runs on the issue tracker at
+[github.com/justmert/veristar/issues](https://github.com/justmert/veristar/issues). It is the only
+support channel: there is no chat, email address or phone line.
 
-One exception, for security: vulnerabilities are reported privately through GitHub private
-vulnerability reporting, never in a public issue ([security/SECURITY.md](security/SECURITY.md)).
+Security vulnerabilities are the one exception. Report them privately through GitHub private
+vulnerability reporting, never in a public issue ([security policy](security/SECURITY.md)).
 
-Current state, stated plainly: the repository is private until the operator confirms making it
-public (plan an operator input, so today only people with access to it can open issues. The tracker
-becomes the public support channel when the repository is made public, which must happen
-before production launch.
-
-Who answers: during the 12-month service window, the proposer, who must host the system and
-provide user support for that time (RFP 3.4). After handover,
-the community-appointed operator ([handover/plan.md](handover/plan.md)). The wording of the
-support commitment and where tenants are told about it are an open question for SCF (plan
-section 27); the terms already point to the tracker (`docs/compliance/terms.md` section 10).
+The operator of the service answers issues: the team that runs it during the 12-month service
+window, and the community-appointed operator after a handover ([handover plan](handover/plan.md)).
+The tenant terms point to the same tracker ([terms](compliance/terms.md#10-contact)).
 
 ## Opening an issue
 
-New issues start from one of the forms in `.github/ISSUE_TEMPLATE/` (blank issues are
-turned off):
+Every new issue starts from one of the forms in `.github/ISSUE_TEMPLATE/`. Blank issues are turned
+off.
 
-| Form | For | Label |
+| Form | Use it for | Label |
 |---|---|---|
 | Bug report | something that does not work as documented | `bug` |
 | Tenant support | onboarding, dashboards, tokens, enrollment, members, domain verification | `support` |
-| Erasure request help | a project owner whose erasure request in the console failed or is unclear | `erasure` |
-| Report a security vulnerability (link) | opens GitHub private vulnerability reporting | none, private |
+| Erasure request help | an erasure request in the console that failed or whose result is unclear | `erasure` |
+| Report a security vulnerability (link) | opens GitHub private vulnerability reporting | none, the report is private |
 
-Every form warns that the tracker is public and asks for no tokens, keys, cookies, IP
-addresses, user agents or session ids. Projects are named by their slug.
+Every form reminds you that the tracker is public and asks you not to paste tokens, keys, cookies,
+IP addresses, user agents or session ids. Name your project by its slug.
 
-Erasure is self-service: a project owner erases data on the project's Privacy page
-([compliance/erasure.md](compliance/erasure.md)). A visitor of a tenant's website asks that
-website, which is the controller. Requests that reach the maintainers are forwarded to the
-tenant (`docs/compliance/dpa-template.md` section 7).
+Erasure is self-service: a project owner erases data on the project's **Privacy** page
+([erasure](compliance/erasure.md)). A visitor of a tenant's website asks that website, which is the
+controller of the data. Requests that reach the maintainers are forwarded to the tenant
+(section 7 of the [DPA template](compliance/dpa-template.md)).
 
-GitHub adds a form's label only if the label already exists in the repository. `bug` is one
-of GitHub's default labels; the other two are created once by a maintainer:
+GitHub applies a form's label only if the label exists in the repository. `bug` is one of GitHub's
+default labels. A maintainer creates the other two once:
 
 ```sh
 gh label create support --description "Help for an enrolled project" --color 0e8a16
@@ -63,75 +55,71 @@ gh label create erasure --description "Help with an erasure request" --color 531
 | Response | within **5 business days** | the issue is opened | the first comment by a maintainer |
 | Resolution | within **10 business days** | the issue is opened | the issue is closed |
 
-- **Business days** are Monday to Friday in UTC. Holidays count as business days unless they
-  are listed in the repository variable `SUPPORT_HOLIDAYS` (comma-separated `YYYY-MM-DD`).
-  None is listed today.
-- **A maintainer** is an account GitHub marks as the repository owner, an organisation member
+- **Business days** are Monday to Friday in UTC. A holiday counts as a business day unless it is
+  listed in the repository variable `SUPPORT_HOLIDAYS` (comma-separated `YYYY-MM-DD` dates).
+- **A maintainer** is an account that GitHub marks as the repository owner, an organisation member
   or a collaborator on the issue or comment (`author_association` `OWNER`, `MEMBER` or
-  `COLLABORATOR`), plus any login in the repository variable `SUPPORT_MAINTAINERS`. Bot
-  comments never count. The issue's author never answers their own issue.
-- **Support issues** are open issues that are not pull requests, not opened by a bot and not
-  opened by a maintainer. Issues filed by the hourly security workflow (`security-finding`,
-  opened by `github-actions[bot]`) follow the 24-hour patch target in [sla.md](sla.md)
-  instead, and issues maintainers open for their own work are not tickets.
-- A limit is crossed at the exact moment the business time since the issue was opened
-  reaches it. A response at or after the limit is late. A reopened issue keeps its original
-  opening time.
-- "Resolved" means closed by a maintainer with an answer, a fix, or a stated reason why no
-  change will be made. Closing an issue is the resolution event the tooling measures.
+  `COLLABORATOR`), plus any login listed in the repository variable `SUPPORT_MAINTAINERS`. Bot
+  comments never count, and an issue's author never answers their own issue.
+- **Support issues** are open issues that are not pull requests, not opened by a bot and not opened
+  by a maintainer. Issues that the hourly security workflow files (label `security-finding`, opened
+  by `github-actions[bot]`) follow the 24-hour patch target on [Service targets](sla.md) instead.
+  Issues that maintainers open for their own work are not support issues.
+- A target is missed at the exact moment the business time since the issue was opened reaches it.
+  A response at or after that moment is late. A reopened issue keeps its original opening time.
+- **Resolved** means closed by a maintainer with an answer, a fix, or a stated reason why nothing
+  will change. Closing the issue is the event the tooling measures.
 
-## How the targets are watched
+## How the targets are tracked
 
-The scheduled workflow `.github/workflows/issue-age.yml` runs every hour and calls
-`cmd/issueage`, which reads every open issue and its comments through the GitHub REST API and
-labels support issues:
+The workflow `.github/workflows/issue-age.yml` runs every hour and calls `cmd/issueage`. The tool
+reads every open issue and its comments through the GitHub REST API and labels support issues:
 
-| Label | When |
+| Label | Applied when |
 |---|---|
-| `support: response due` | no maintainer response, 4 business days or more since opening |
+| `support: response due` | no maintainer response, 4 or more business days since opening |
 | `support: response overdue` | 5 business days passed without a response, or the response came later |
-| `support: resolution due` | open 9 business days or more |
-| `support: resolution overdue` | open 10 business days or more |
+| `support: resolution due` | open for 9 or more business days |
+| `support: resolution overdue` | open for 10 or more business days |
 
-The "due" labels are removed when they no longer apply (a response arrives, or the "overdue"
-label replaces them). The "overdue" labels are never removed by the tool, so closed issues
-keep the record of a missed target. The tool creates the four labels the first time it needs
-them, and writes a table of every open support issue with its deadlines to the workflow run's
-summary. Because it runs hourly, a label can appear up to one hour after the exact crossing.
+The tool removes a "due" label once it no longer applies: a response arrives, or the matching
+"overdue" label replaces it. It never removes an "overdue" label, so a closed issue keeps the record
+of a missed target. The tool creates the four labels the first time it needs them and writes a table
+of every open support issue with its deadlines to the workflow run's summary. Because it runs
+hourly, a label appears up to one hour after the exact deadline.
 
-Maintainers filter on these labels (`label:"support: response due"`) to see what needs
-attention. A monthly count of missed targets is the number of issues closed that month with
-an "overdue" label.
+To see what needs attention, filter the issue list on a label, for example
+`label:"support: response due"`. The number of missed targets in a month is the number of issues
+closed that month with an "overdue" label.
 
-Run it by hand, without changing anything:
+### Run the tool by hand
+
+Without `-apply`, the tool reports and changes nothing:
 
 ```sh
 GITHUB_TOKEN=$(gh auth token) go run ./cmd/issueage -repo justmert/veristar
 ```
 
-Add `-apply` to change labels, `-now 2026-11-20T09:00:00Z` to assess at another time, and see
-`go run ./cmd/issueage -h` for the other flags.
+Add `-apply` to change labels, or `-now 2026-11-20T09:00:00Z` to assess the issues at another time.
+`go run ./cmd/issueage -h` lists the other flags.
 
-### What was verified
+### How the tool is tested
 
-- The rule that each label appears exactly when an issue crosses 4, 5, 9 and 10 business days
-  (and not one second earlier), across weekends and holidays, is tested in
-  `cmd/issueage/age_test.go`.
-- The full run (listing with cursor pagination, comments, label creation, adding and removing
-  labels, the report) is tested against GitHub REST API answers recorded on 2026-11-13, in
-  `cmd/issueage/github_test.go`. That test also checks that pull requests, bot issues,
-  maintainers' own issues and bot comments are ignored, and that the token is never sent to a
-  host other than the API.
-- A dry run against the real GitHub API on 2026-11-13 read this repository (no open issues)
-  and a public repository with 116 open support issues over two pages, and reported each.
-- The workflow itself has **not** run on GitHub: every workflow on this account ends in
-  `startup_failure` (plan, this stage status). It needs the operator to fix GitHub Actions for the
-  account.
+- `cmd/issueage/age_test.go` checks that each label appears exactly when an issue crosses 4, 5, 9
+  and 10 business days, and not one second earlier, across weekends and holidays.
+- `cmd/issueage/github_test.go` runs the full flow against recorded GitHub REST API answers: listing
+  with cursor pagination, comments, label creation, adding and removing labels, and the report. It
+  also checks that pull requests, bot issues, maintainers' own issues and bot comments are ignored,
+  and that the token is sent to the API host only.
 
-## What support does not cover
+## What support covers
 
-- Problems inside a tenant's own website or application beyond integrating the snippet or the
-  OpenTelemetry export.
-- Custom path normalization rules for a tenant: the rule set is fixed by design, and tenants
-  set `http.route` in their own middleware for finer control (RFP 3.3).
-- Any charge: the service is free to tenants, SCF and everyone else (RFP 3.1).
+- Integrating the tracker snippet and the OpenTelemetry export, as described in the
+  [onboarding guides](onboarding/overview.md).
+- Problems with the console, the dashboards, tokens, enrollment, members and domain verification.
+- Bugs in the service.
+
+Path normalization rules are the same for every project. To group requests more finely, set
+`http.route` in your own middleware ([Setting http.route](onboarding/api/http-route.md)).
+
+Support, like the service itself, is free of charge ([terms](compliance/terms.md#2-no-fees)).
