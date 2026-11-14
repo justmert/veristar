@@ -3,11 +3,11 @@ title: "API metrics capacity"
 description: "Measured storage cost of API metric rows, extrapolated to the retention horizons."
 ---
 
-this stage measurement of what API metric rows cost in PostgreSQL, and the
-extrapolation to the retention horizons: minute rows for 30 days
-(`API_MINUTE_RETENTION_DAYS`), hourly rows for 36 months
-(`API_HOURLY_RETENTION_MONTHS`), daily rows forever. Table shapes are in
-`docs/reference/api-storage.md`.
+What API metric rows cost in PostgreSQL, measured, and the extrapolation to the
+retention horizons: minute rows for 30 days (`API_MINUTE_RETENTION_DAYS`), hourly
+rows for 36 months (`API_HOURLY_RETENTION_MONTHS`), daily rows forever. The table
+shapes are in [api-storage.md](api-storage.md). Gateway throughput is in
+[gateway-limits.md](gateway-limits.md).
 
 ## How the numbers are measured
 
@@ -20,7 +20,7 @@ extrapolation to the retention horizons: minute rows for 30 days
 - Against a running database: `jobs capacity` prints the same figures as JSON,
   with only the `PLATFORM_DB_*` keys of the jobs role set. Run `vacuum` on the
   three tables first, or dead tuples left by the writer's upserts count as
-  bytes. The this stage volume run uses this command after its queue drains.
+  bytes. The volume run below uses this command after its queue drains.
 - Test: `go test -v -run TestMeasure ./internal/jobs/apicapacity/` writes real
   rows into a fresh PostgreSQL 18.6 with the platform migrations, rolls them up
   with the real `api-rollup` task, vacuums, and logs the figures below.
@@ -50,7 +50,7 @@ most of the rest.
 
 ## Extrapolation
 
-Steady state from the plan's sizing (this stage): 2,000 active series, each
+Steady state of the design sizing: 2,000 active series, each
 reporting every minute, so 2,000 × 1,440 = 2.88 million minute rows per day,
 48,000 hourly rows and 2,000 daily rows per day. A month is the mean Gregorian
 month (30.44 days).
@@ -64,12 +64,13 @@ month (30.44 days).
 
 The totals scale linearly with the number of series that report in a minute,
 not with the number of requests: a series writes one minute row whether it
-served one request or a thousand. The RFP's 1,000,000 requests per day average
+served one request or a thousand. 1,000,000 requests per day average
 about 700 per minute, which can touch at most 700 series in any minute, so 2,000
 series reporting every minute is an upper bound for that volume unless request
 counts are spread over far more routes, services and status codes. The daily
 caps (300 routes and 50 services per tenant per UTC day) bound the worst case
-per tenant.
+per tenant (`METRICSWRITER_ROUTE_CAP` and `METRICSWRITER_SERVICE_CAP`); routes
+and services beyond them are stored as `Other`.
 
 The 24-month floor of `API_HOURLY_RETENTION_MONTHS` would hold 35.1 million
 hourly rows, 17.2 GiB at the same rate.
@@ -82,8 +83,8 @@ status codes each, 2,400 series), recorded by the pinned Go SDK over 20
 minutes, exported every 10 s (half delta, half cumulative, HTTP and gRPC)
 through the built `scf-otelcol`, stored by the built `metricswriter` (batch
 256), rolled up with `jobs run api-rollup`, then vacuumed and measured with
-`jobs capacity`. The host is shared: its load average was 19.3 at the start,
-up to 23.8 during the run and 6.1 at the end, on 10 CPUs.
+`jobs capacity`. The host had 10 CPUs and other load: its load average was
+19.3 at the start, up to 23.8 during the run and 6.1 at the end.
 
 | Result | Value |
 |---|---|
@@ -105,7 +106,5 @@ bound.
 
 ## Re-measuring
 
-Re-run the measurement after any change to the metric table shapes, and after
-the this stage volume run (1,000,000 requests across 10 tenants and 30 services
-within 60 minutes) with `jobs capacity`, and replace the tables above with the
-new figures and their date.
+Re-run the measurement and `make api-volume` after any change to the metric
+table shapes, and replace the tables above with the new figures and their date.
