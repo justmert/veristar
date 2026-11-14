@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "veristar": {
+      "url": "https://app.analytics.example/mcp",
+      "headers": {
+        "Authorization": "Bearer sa_mcp_..."
+      }
+    }
+  }
+}

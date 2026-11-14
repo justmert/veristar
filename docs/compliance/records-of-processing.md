@@ -19,7 +19,7 @@ description: "The records of processing activities for the service."
 | Categories of processing | collection of web page views and custom events through the tracker; country lookup; daily visitor token computation; queueing; storage and reporting in Umami; daily aggregates for the operator view; collection of HTTP server metrics and spans from tenant applications, reduction to request counts and latency histograms, storage and reporting; erasure on request |
 | Categories of data subjects | visitors of tenant websites; clients of tenant APIs (only as anonymous request counts and latencies) |
 | Categories of personal data | for web visitors, held in memory only: IP address and user agent. Stored: daily visitor token as part of Umami's session id, browser, operating system, device type, screen size, language, country, page path with allowlisted query, referrer scheme and host, page title, event names and event data. For API clients: none at the level of a person; only tenant, service, normalized route, method, status and latency buckets |
-| Recipients | the tenant's members (its own dashboards); SCF operators (aggregates only, see `privacy-strategy.md` section 1); sub-processors in `subprocessors.md` |
+| Recipients | the tenant's members (its own dashboards, and the AI clients they connect through the MCP server, `privacy-strategy.md` section 10); SCF operators (aggregates only, see `privacy-strategy.md` section 1); sub-processors in `subprocessors.md` |
 | Transfers to third countries | none for analytics data (`data-residency.md`) |
 | Retention | `privacy-strategy.md` section 4 |
 | Security measures | `dpia.md` section 5 |
@@ -31,7 +31,7 @@ description: "The records of processing activities for the service."
 | Controller | the service operator |
 | Purpose | sign-in to the console, membership of projects, audit of changes |
 | Data subjects | tenant staff and operators who sign in |
-| Personal data | numeric GitHub user id, GitHub login, project memberships and roles, session token hashes, audit log entries naming the user id |
+| Personal data | numeric GitHub user id, GitHub login, project memberships and roles, session token hashes, MCP credential hashes with their names and last use, audit log entries naming the user id (MCP tool calls included, without their answers) |
 | Legal basis | to be decided by counsel (performance of the service terms is the working assumption) |
 | Recipients | GitHub, Inc. for the sign-in itself (`subprocessors.md`) |
 | Transfers | the sign-in passes through GitHub in the United States |

@@ -26,6 +26,7 @@ such as a tenant id, are written as `<tenant id>`. Nothing in angle brackets is 
 | [collector-upgrade.md](collector-upgrade.md) | 2026-11-13, build and gate only | this stage, local |
 | [tracker-release.md](tracker-release.md) | 2026-11-13 (revocation) | this stage, local gateway |
 | [operator-key-revocation.md](operator-key-revocation.md) | 2026-11-13, API path | this stage, `TestMachineAPI` |
+| [mcp-access.md](mcp-access.md) (revoke and review AI clients) | 2026-11-14, API path | `TestMCP`, `TestIsolationGate/MCPRoutes` |
 | [tenant-removal.md](tenant-removal.md) (suspension and removal) | 2026-11-13, API path | this stage, `TestLifecycle` |
 | [erasure-requests.md](erasure-requests.md) | 2026-11-13, API path | this stage, `TestErasure` |
 | [metric-inflation.md](metric-inflation.md) | 2026-11-13, queries only | this stage, scratch database |
@@ -37,7 +38,7 @@ such as a tenant id, are written as `<tenant id>`. Nothing in angle brackets is 
 | [operators.md](operators.md) | 2026-11-13, sync path | this stage, `TestSyncFlags`, `TestOperatorFlag`, `TestLifecycle` |
 | [capacity.md](capacity.md) | 2026-11-13, measurement only | this stage, `TestMeasure` |
 | [slo-report.md](slo-report.md) | 2026-11-13 | this stage collection, this stage report rerun |
-| [alerts.md](alerts.md) | 2026-11-13, 16 fired and resolved, 3 fired only, of 37 alerts | alert fire-drills |
+| [alerts.md](alerts.md) | 2026-11-13, 16 fired and resolved, 3 fired only, of 38 alerts | alert fire-drills |
 
 No runbook has been run against staging or production: neither exists yet (the first apply
 waits for review and for inputs I13, I14 and I15). The plan requires every runbook to be executed on staging before this stage is

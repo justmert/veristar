@@ -259,3 +259,40 @@ That is a product change for the operator to decide; it is not built.
   messages with secure delete, which overwrites them.
 - **No production deployment yet.** Phases 15 and 16 build the hosting and
   backups. `data-residency.md` states what they must satisfy.
+
+## 10. AI clients (MCP)
+
+Tenant members and operators can connect an AI client to the MCP server
+(`docs/security/mcp.md`, contract section 12). This adds no new data and no
+new store; it is another way for the same people to read what the console
+already shows them.
+
+- **Who receives data.** The AI client a member or operator connects, and the
+  vendor that runs it (Anthropic for Claude, OpenAI for ChatGPT, Anysphere for
+  Cursor), receives the tool answers that person asks for. The member chose
+  the client and approved the connection; the vendor processes the answers
+  under the member's or the tenant's own terms with that vendor, not as a
+  sub-processor of the service. The service sends nothing to a client that
+  was not asked for in a tool call.
+- **What a project connection can receive.** Exactly what the project's
+  members see in the console and in Umami: aggregates and rankings of page
+  views, visitors, referrers, countries, devices, browsers and events; event
+  data the tenant's own site sent; Umami's session list (browser, operating
+  system, device, screen, language, country, region and city as Umami holds
+  them, page and event counts, first and last activity, and the session id
+  derived from the daily visitor token); and API request counts, status codes
+  and latency buckets. No IP address or user agent exists in any store, so
+  none can be returned.
+- **What an operator connection can receive.** The operator views' daily
+  aggregates and project metadata (section 1): never sessions or raw events.
+- **Read-only.** No tool changes, exports in bulk or deletes data. Results are
+  capped at 512 KiB per call and paged.
+- **Revocation.** A connection ends when its member leaves the project, the
+  project is suspended or removed, the operator loses operator rights, or the
+  member revokes it on the project's AI page. Data a client already received
+  stays with that client and its vendor; tenants decide whether to connect a
+  client with that in mind, as for any export from their dashboard.
+- **Records kept.** For each credential: its hash, name, user, project,
+  creation, expiry, last use and revocation. For each tool call: an audit row
+  with the tool, outcome, duration, user and project, never the arguments or
+  the answer.
