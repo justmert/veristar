@@ -4,16 +4,16 @@ sidebarTitle: "AI assistants (MCP)"
 description: "Give an AI client the global view: search projects, rank them and compare them, read-only."
 ---
 
-The MCP server at `https://app.<BASE_DOMAIN>/mcp` also serves the operator view. An operator
-credential gives an AI client the same daily aggregates as the **Global web**, **Global API** and
-**Compare** pages, and the project list and detail of the review pages. It reads, it never acts:
-no tool approves, suspends or removes anything. Projects connect with the guide in
-[`docs/onboarding/mcp.md`](../onboarding/mcp.md); the contract is section 12 of
-[`docs/reference/control-plane-api.md`](../reference/control-plane-api.md).
+The MCP server at `https://app.<BASE_DOMAIN>/mcp` (production: `https://app.veristar.app/mcp`)
+also serves the operator view. An operator credential gives an AI client the same daily
+aggregates as the **Global web**, **Global API** and **Compare** pages, and the project list and
+detail of the review pages. It reads and never acts: no tool approves, suspends or removes
+anything. Projects connect with the [project guide](../onboarding/mcp.md); the protocol details
+are section 12 of the [control plane API reference](../reference/control-plane-api.md).
 
 ## Getting a credential
 
-- **Operator key.** Open **Operator**, **AI / MCP**, and create a key. It acts as you, is shown
+- **Operator key.** Open **Operator**, then **Admin**, **AI / MCP**, and create a key. It acts as you, is shown
   once, and expires after 90 days by default (at most 365). Any operator can revoke any operator
   key on that page.
 - **Connector.** Add the server URL to claude.ai, Claude Desktop, ChatGPT or Cursor as for a
@@ -51,6 +51,6 @@ Sessions and raw events are never part of the operator view.
 
 Every tool call writes an audit row (`mcp.tool_call`) with the tool, the credential, the user, the
 duration and the outcome, never the answer; the **Audit log** page shows them. Each credential may
-make 5 requests per second (burst 30) per control plane instance and run 4 calls at once. Revoke a
-key or connection that should not exist with the runbook
-[`docs/runbooks/mcp-access.md`](../runbooks/mcp-access.md).
+make 5 requests per second (burst 30) per control plane instance and run 4 calls at once. To
+revoke a key or connection that should not exist, or to investigate failing calls, follow the
+runbook [MCP access](../runbooks/mcp-access.md).

@@ -3,10 +3,10 @@ title: "What the numbers mean"
 description: "Bands, daily-unique visitors and span-derived API data, and how they shape cross-project comparisons."
 ---
 
-Three properties of the data change how cross-project numbers should be read: bands,
-daily-unique visitors, and span-derived API data. Each follows from a privacy or design
-choice, not from a defect. Sources: `docs/reference/web-metrics.md`,
-`docs/reference/control-plane-api.md` sections 7.3 and 8, and the design
+Three properties of the data shape how you compare projects: bands, daily-unique visitors, and
+span-derived API data. Each follows from a privacy or design choice. The full definitions are in
+[web metrics](../reference/web-metrics.md) and sections 7.3 and 8 of the
+[control plane API reference](../reference/control-plane-api.md).
 
 ## Bands: primary and quarantine
 
@@ -16,7 +16,7 @@ Every site has two web dashboards: the **primary band** and the **quarantine ban
   keyed with a secret that changes daily), how many distinct visitors it sees within a
   sliding hour. From the event that brings that count to the threshold (`IPCLUSTER_THRESHOLD`,
   default 20) onward, events from that range go to the quarantine band for the rest of the
-  window. The three gateways share these counts, so the threshold holds across them.
+  window. Every gateway shares these counts through NATS, so the threshold holds across nodes.
 - Quarantine is a separate band, never a deletion. It is shown next to the primary numbers in
   the global views (quarantined page views, visitors and share) and the project sees it in its
   own quarantine dashboard.
@@ -31,7 +31,7 @@ The rejected share is separate: requests the gateway refused (missing or wrong p
 an origin the site did not register, replayed proofs, rate limits, and browsers that send
 Global Privacy Control, which are dropped by design). Rejected requests never reach any band.
 
-What the checks can and cannot catch is in `docs/security/bot-and-inflation.md`. In short:
+What the checks catch is in [bot and inflation defences](../security/bot-and-inflation.md). In short:
 naive server-side posts are rejected, and many identities from one network are quarantined,
 but a determined actor with a real browser on many residential addresses passes every check.
 
@@ -63,7 +63,7 @@ affected by the daily rule.
 
 - A visit ends after more than 30 minutes without an event, with one exception that comes
   from Umami: two events in the same UTC hour stay in one visit even with a longer gap
-  (`docs/reference/web-metrics.md`, the visit rule).
+  (the visit rule in [web metrics](../reference/web-metrics.md)).
 - Bounce rate is visits with exactly one page view and no custom event, over all visits.
 - Visit duration is the time between the first and last page view of a visit. The time spent
   on the last page is never measured, so a visit of one page has duration 0.
@@ -85,8 +85,8 @@ traces" badge.
 
 How to read it: request counts from traces are a lower bound when traces are sampled, so a
 project that exports only traces can look smaller than it is, and its counts are not
-comparable with a project that exports metrics. Ask such a project to add metric export (the API onboarding
-guides in `docs/onboarding/` show how) before comparing request volumes.
+comparable with a project that exports metrics. Ask such a project to add metric export (the
+[API quickstart](../onboarding/api/quickstart.md) shows how) before comparing request volumes.
 
 Two more flags in the API numbers:
 
