@@ -40,161 +40,161 @@
       "package": "@creit.tech/xbull-wallet-connect",
       "version": "0.4.0",
       "licence": "none",
-      "reason": "xBull wallet connector module of the kit; its registry metadata declares no licence; transitive dependency of @creit.tech/stellar-wallets-kit 2.7.1 and 2.8.0, which this repository installs only as devDependencies of packages/tracker (swk-2.7.1, swk-2.8.0, for the this stage adapter tests that run the real kit) and as a dependency of the example app examples/wallets-kit-spa (a sample for tenants, used as a test target, never deployed). not in sdk.js, the npm package (no dependencies, bundles src/ only), the console bundle or any image (checked 2026-11-13). the licence is not osi approved, and this project neither bundles nor redistributes the package; tenants who use the kit take it from npm under its own terms.",
+      "reason": "xBull wallet connector module of the kit; its registry metadata declares no licence; transitive dependency of @creit.tech/stellar-wallets-kit 2.7.1 and 2.8.0, which this repository installs only as devDependencies of packages/tracker (swk-2.7.1, swk-2.8.0, for the wallets kit adapter tests that run the real kit) and as a dependency of the example app examples/wallets-kit-spa (a sample for tenants, used as a test target, never deployed). not in sdk.js, the npm package (no dependencies, bundles src/ only), the console bundle or any image (checked 2026-11-13). the licence is not osi approved, and this project neither bundles nor redistributes the package; tenants who use the kit take it from npm under its own terms.",
       "reviewed": "2026-11-13"
     },
     {
       "package": "@hot-wallet/sdk",
       "version": "1.0.11",
       "licence": "none",
-      "reason": "HOT wallet module of the kit; its registry metadata declares no licence; transitive dependency of @creit.tech/stellar-wallets-kit 2.7.1 and 2.8.0, which this repository installs only as devDependencies of packages/tracker (swk-2.7.1, swk-2.8.0, for the this stage adapter tests that run the real kit) and as a dependency of the example app examples/wallets-kit-spa (a sample for tenants, used as a test target, never deployed). not in sdk.js, the npm package (no dependencies, bundles src/ only), the console bundle or any image (checked 2026-11-13). the licence is not osi approved, and this project neither bundles nor redistributes the package; tenants who use the kit take it from npm under its own terms.",
+      "reason": "HOT wallet module of the kit; its registry metadata declares no licence; transitive dependency of @creit.tech/stellar-wallets-kit 2.7.1 and 2.8.0, which this repository installs only as devDependencies of packages/tracker (swk-2.7.1, swk-2.8.0, for the wallets kit adapter tests that run the real kit) and as a dependency of the example app examples/wallets-kit-spa (a sample for tenants, used as a test target, never deployed). not in sdk.js, the npm package (no dependencies, bundles src/ only), the console bundle or any image (checked 2026-11-13). the licence is not osi approved, and this project neither bundles nor redistributes the package; tenants who use the kit take it from npm under its own terms.",
       "reviewed": "2026-11-13"
     },
     {
       "package": "@near-wallet-selector/core",
       "version": "8.10.2",
       "licence": "none",
-      "reason": "NEAR wallet selector, pulled in by the kit's HOT wallet module; its registry metadata declares no licence; transitive dependency of @creit.tech/stellar-wallets-kit 2.7.1 and 2.8.0, which this repository installs only as devDependencies of packages/tracker (swk-2.7.1, swk-2.8.0, for the this stage adapter tests that run the real kit) and as a dependency of the example app examples/wallets-kit-spa (a sample for tenants, used as a test target, never deployed). not in sdk.js, the npm package (no dependencies, bundles src/ only), the console bundle or any image (checked 2026-11-13). the licence is not osi approved, and this project neither bundles nor redistributes the package; tenants who use the kit take it from npm under its own terms.",
+      "reason": "NEAR wallet selector, pulled in by the kit's HOT wallet module; its registry metadata declares no licence; transitive dependency of @creit.tech/stellar-wallets-kit 2.7.1 and 2.8.0, which this repository installs only as devDependencies of packages/tracker (swk-2.7.1, swk-2.8.0, for the wallets kit adapter tests that run the real kit) and as a dependency of the example app examples/wallets-kit-spa (a sample for tenants, used as a test target, never deployed). not in sdk.js, the npm package (no dependencies, bundles src/ only), the console bundle or any image (checked 2026-11-13). the licence is not osi approved, and this project neither bundles nor redistributes the package; tenants who use the kit take it from npm under its own terms.",
       "reviewed": "2026-11-13"
     },
     {
       "package": "@reown/appkit",
       "version": "1.8.21",
       "licence": "(SEE LICENSE IN LICENSE.md)",
-      "reason": "Reown AppKit, the kit's WalletConnect modal; transitive dependency of @creit.tech/stellar-wallets-kit 2.7.1 and 2.8.0, which this repository installs only as devDependencies of packages/tracker (swk-2.7.1, swk-2.8.0, for the this stage adapter tests that run the real kit) and as a dependency of the example app examples/wallets-kit-spa (a sample for tenants, used as a test target, never deployed). not in sdk.js, the npm package (no dependencies, bundles src/ only), the console bundle or any image (checked 2026-11-13). the licence is not osi approved, and this project neither bundles nor redistributes the package; tenants who use the kit take it from npm under its own terms.",
+      "reason": "Reown AppKit, the kit's WalletConnect modal; transitive dependency of @creit.tech/stellar-wallets-kit 2.7.1 and 2.8.0, which this repository installs only as devDependencies of packages/tracker (swk-2.7.1, swk-2.8.0, for the wallets kit adapter tests that run the real kit) and as a dependency of the example app examples/wallets-kit-spa (a sample for tenants, used as a test target, never deployed). not in sdk.js, the npm package (no dependencies, bundles src/ only), the console bundle or any image (checked 2026-11-13). the licence is not osi approved, and this project neither bundles nor redistributes the package; tenants who use the kit take it from npm under its own terms.",
       "reviewed": "2026-11-13"
     },
     {
       "package": "@reown/appkit-common",
       "version": "1.8.21",
       "licence": "(SEE LICENSE IN LICENSE.md)",
-      "reason": "shared code of Reown AppKit; transitive dependency of @creit.tech/stellar-wallets-kit 2.7.1 and 2.8.0, which this repository installs only as devDependencies of packages/tracker (swk-2.7.1, swk-2.8.0, for the this stage adapter tests that run the real kit) and as a dependency of the example app examples/wallets-kit-spa (a sample for tenants, used as a test target, never deployed). not in sdk.js, the npm package (no dependencies, bundles src/ only), the console bundle or any image (checked 2026-11-13). the licence is not osi approved, and this project neither bundles nor redistributes the package; tenants who use the kit take it from npm under its own terms.",
+      "reason": "shared code of Reown AppKit; transitive dependency of @creit.tech/stellar-wallets-kit 2.7.1 and 2.8.0, which this repository installs only as devDependencies of packages/tracker (swk-2.7.1, swk-2.8.0, for the wallets kit adapter tests that run the real kit) and as a dependency of the example app examples/wallets-kit-spa (a sample for tenants, used as a test target, never deployed). not in sdk.js, the npm package (no dependencies, bundles src/ only), the console bundle or any image (checked 2026-11-13). the licence is not osi approved, and this project neither bundles nor redistributes the package; tenants who use the kit take it from npm under its own terms.",
       "reviewed": "2026-11-13"
     },
     {
       "package": "@reown/appkit-controllers",
       "version": "1.8.21",
       "licence": "(SEE LICENSE IN LICENSE.md)",
-      "reason": "state controllers of Reown AppKit; transitive dependency of @creit.tech/stellar-wallets-kit 2.7.1 and 2.8.0, which this repository installs only as devDependencies of packages/tracker (swk-2.7.1, swk-2.8.0, for the this stage adapter tests that run the real kit) and as a dependency of the example app examples/wallets-kit-spa (a sample for tenants, used as a test target, never deployed). not in sdk.js, the npm package (no dependencies, bundles src/ only), the console bundle or any image (checked 2026-11-13). the licence is not osi approved, and this project neither bundles nor redistributes the package; tenants who use the kit take it from npm under its own terms.",
+      "reason": "state controllers of Reown AppKit; transitive dependency of @creit.tech/stellar-wallets-kit 2.7.1 and 2.8.0, which this repository installs only as devDependencies of packages/tracker (swk-2.7.1, swk-2.8.0, for the wallets kit adapter tests that run the real kit) and as a dependency of the example app examples/wallets-kit-spa (a sample for tenants, used as a test target, never deployed). not in sdk.js, the npm package (no dependencies, bundles src/ only), the console bundle or any image (checked 2026-11-13). the licence is not osi approved, and this project neither bundles nor redistributes the package; tenants who use the kit take it from npm under its own terms.",
       "reviewed": "2026-11-13"
     },
     {
       "package": "@reown/appkit-pay",
       "version": "1.8.21",
       "licence": "(SEE LICENSE IN LICENSE.md)",
-      "reason": "payment module of Reown AppKit; transitive dependency of @creit.tech/stellar-wallets-kit 2.7.1 and 2.8.0, which this repository installs only as devDependencies of packages/tracker (swk-2.7.1, swk-2.8.0, for the this stage adapter tests that run the real kit) and as a dependency of the example app examples/wallets-kit-spa (a sample for tenants, used as a test target, never deployed). not in sdk.js, the npm package (no dependencies, bundles src/ only), the console bundle or any image (checked 2026-11-13). the licence is not osi approved, and this project neither bundles nor redistributes the package; tenants who use the kit take it from npm under its own terms.",
+      "reason": "payment module of Reown AppKit; transitive dependency of @creit.tech/stellar-wallets-kit 2.7.1 and 2.8.0, which this repository installs only as devDependencies of packages/tracker (swk-2.7.1, swk-2.8.0, for the wallets kit adapter tests that run the real kit) and as a dependency of the example app examples/wallets-kit-spa (a sample for tenants, used as a test target, never deployed). not in sdk.js, the npm package (no dependencies, bundles src/ only), the console bundle or any image (checked 2026-11-13). the licence is not osi approved, and this project neither bundles nor redistributes the package; tenants who use the kit take it from npm under its own terms.",
       "reviewed": "2026-11-13"
     },
     {
       "package": "@reown/appkit-polyfills",
       "version": "1.8.21",
       "licence": "(SEE LICENSE IN LICENSE.md)",
-      "reason": "browser polyfills of Reown AppKit; transitive dependency of @creit.tech/stellar-wallets-kit 2.7.1 and 2.8.0, which this repository installs only as devDependencies of packages/tracker (swk-2.7.1, swk-2.8.0, for the this stage adapter tests that run the real kit) and as a dependency of the example app examples/wallets-kit-spa (a sample for tenants, used as a test target, never deployed). not in sdk.js, the npm package (no dependencies, bundles src/ only), the console bundle or any image (checked 2026-11-13). the licence is not osi approved, and this project neither bundles nor redistributes the package; tenants who use the kit take it from npm under its own terms.",
+      "reason": "browser polyfills of Reown AppKit; transitive dependency of @creit.tech/stellar-wallets-kit 2.7.1 and 2.8.0, which this repository installs only as devDependencies of packages/tracker (swk-2.7.1, swk-2.8.0, for the wallets kit adapter tests that run the real kit) and as a dependency of the example app examples/wallets-kit-spa (a sample for tenants, used as a test target, never deployed). not in sdk.js, the npm package (no dependencies, bundles src/ only), the console bundle or any image (checked 2026-11-13). the licence is not osi approved, and this project neither bundles nor redistributes the package; tenants who use the kit take it from npm under its own terms.",
       "reviewed": "2026-11-13"
     },
     {
       "package": "@reown/appkit-scaffold-ui",
       "version": "1.8.21",
       "licence": "(SEE LICENSE IN LICENSE.md)",
-      "reason": "modal scaffold of Reown AppKit; transitive dependency of @creit.tech/stellar-wallets-kit 2.7.1 and 2.8.0, which this repository installs only as devDependencies of packages/tracker (swk-2.7.1, swk-2.8.0, for the this stage adapter tests that run the real kit) and as a dependency of the example app examples/wallets-kit-spa (a sample for tenants, used as a test target, never deployed). not in sdk.js, the npm package (no dependencies, bundles src/ only), the console bundle or any image (checked 2026-11-13). the licence is not osi approved, and this project neither bundles nor redistributes the package; tenants who use the kit take it from npm under its own terms.",
+      "reason": "modal scaffold of Reown AppKit; transitive dependency of @creit.tech/stellar-wallets-kit 2.7.1 and 2.8.0, which this repository installs only as devDependencies of packages/tracker (swk-2.7.1, swk-2.8.0, for the wallets kit adapter tests that run the real kit) and as a dependency of the example app examples/wallets-kit-spa (a sample for tenants, used as a test target, never deployed). not in sdk.js, the npm package (no dependencies, bundles src/ only), the console bundle or any image (checked 2026-11-13). the licence is not osi approved, and this project neither bundles nor redistributes the package; tenants who use the kit take it from npm under its own terms.",
       "reviewed": "2026-11-13"
     },
     {
       "package": "@reown/appkit-ui",
       "version": "1.8.21",
       "licence": "(SEE LICENSE IN LICENSE.md)",
-      "reason": "ui components of Reown AppKit; transitive dependency of @creit.tech/stellar-wallets-kit 2.7.1 and 2.8.0, which this repository installs only as devDependencies of packages/tracker (swk-2.7.1, swk-2.8.0, for the this stage adapter tests that run the real kit) and as a dependency of the example app examples/wallets-kit-spa (a sample for tenants, used as a test target, never deployed). not in sdk.js, the npm package (no dependencies, bundles src/ only), the console bundle or any image (checked 2026-11-13). the licence is not osi approved, and this project neither bundles nor redistributes the package; tenants who use the kit take it from npm under its own terms.",
+      "reason": "ui components of Reown AppKit; transitive dependency of @creit.tech/stellar-wallets-kit 2.7.1 and 2.8.0, which this repository installs only as devDependencies of packages/tracker (swk-2.7.1, swk-2.8.0, for the wallets kit adapter tests that run the real kit) and as a dependency of the example app examples/wallets-kit-spa (a sample for tenants, used as a test target, never deployed). not in sdk.js, the npm package (no dependencies, bundles src/ only), the console bundle or any image (checked 2026-11-13). the licence is not osi approved, and this project neither bundles nor redistributes the package; tenants who use the kit take it from npm under its own terms.",
       "reviewed": "2026-11-13"
     },
     {
       "package": "@reown/appkit-utils",
       "version": "1.8.21",
       "licence": "(SEE LICENSE IN LICENSE.md)",
-      "reason": "utilities of Reown AppKit; transitive dependency of @creit.tech/stellar-wallets-kit 2.7.1 and 2.8.0, which this repository installs only as devDependencies of packages/tracker (swk-2.7.1, swk-2.8.0, for the this stage adapter tests that run the real kit) and as a dependency of the example app examples/wallets-kit-spa (a sample for tenants, used as a test target, never deployed). not in sdk.js, the npm package (no dependencies, bundles src/ only), the console bundle or any image (checked 2026-11-13). the licence is not osi approved, and this project neither bundles nor redistributes the package; tenants who use the kit take it from npm under its own terms.",
+      "reason": "utilities of Reown AppKit; transitive dependency of @creit.tech/stellar-wallets-kit 2.7.1 and 2.8.0, which this repository installs only as devDependencies of packages/tracker (swk-2.7.1, swk-2.8.0, for the wallets kit adapter tests that run the real kit) and as a dependency of the example app examples/wallets-kit-spa (a sample for tenants, used as a test target, never deployed). not in sdk.js, the npm package (no dependencies, bundles src/ only), the console bundle or any image (checked 2026-11-13). the licence is not osi approved, and this project neither bundles nor redistributes the package; tenants who use the kit take it from npm under its own terms.",
       "reviewed": "2026-11-13"
     },
     {
       "package": "@reown/appkit-wallet",
       "version": "1.8.21",
       "licence": "(SEE LICENSE IN LICENSE.md)",
-      "reason": "wallet bridge of Reown AppKit; transitive dependency of @creit.tech/stellar-wallets-kit 2.7.1 and 2.8.0, which this repository installs only as devDependencies of packages/tracker (swk-2.7.1, swk-2.8.0, for the this stage adapter tests that run the real kit) and as a dependency of the example app examples/wallets-kit-spa (a sample for tenants, used as a test target, never deployed). not in sdk.js, the npm package (no dependencies, bundles src/ only), the console bundle or any image (checked 2026-11-13). the licence is not osi approved, and this project neither bundles nor redistributes the package; tenants who use the kit take it from npm under its own terms.",
+      "reason": "wallet bridge of Reown AppKit; transitive dependency of @creit.tech/stellar-wallets-kit 2.7.1 and 2.8.0, which this repository installs only as devDependencies of packages/tracker (swk-2.7.1, swk-2.8.0, for the wallets kit adapter tests that run the real kit) and as a dependency of the example app examples/wallets-kit-spa (a sample for tenants, used as a test target, never deployed). not in sdk.js, the npm package (no dependencies, bundles src/ only), the console bundle or any image (checked 2026-11-13). the licence is not osi approved, and this project neither bundles nor redistributes the package; tenants who use the kit take it from npm under its own terms.",
       "reviewed": "2026-11-13"
     },
     {
       "package": "@trezor/crypto-utils",
       "version": "10.0.0-beta.1",
       "licence": "(SEE LICENSE IN LICENSE.md)",
-      "reason": "crypto helpers of the kit's Trezor module (@trezor/connect-web); transitive dependency of @creit.tech/stellar-wallets-kit 2.7.1 and 2.8.0, which this repository installs only as devDependencies of packages/tracker (swk-2.7.1, swk-2.8.0, for the this stage adapter tests that run the real kit) and as a dependency of the example app examples/wallets-kit-spa (a sample for tenants, used as a test target, never deployed). not in sdk.js, the npm package (no dependencies, bundles src/ only), the console bundle or any image (checked 2026-11-13). the licence is not osi approved, and this project neither bundles nor redistributes the package; tenants who use the kit take it from npm under its own terms.",
+      "reason": "crypto helpers of the kit's Trezor module (@trezor/connect-web); transitive dependency of @creit.tech/stellar-wallets-kit 2.7.1 and 2.8.0, which this repository installs only as devDependencies of packages/tracker (swk-2.7.1, swk-2.8.0, for the wallets kit adapter tests that run the real kit) and as a dependency of the example app examples/wallets-kit-spa (a sample for tenants, used as a test target, never deployed). not in sdk.js, the npm package (no dependencies, bundles src/ only), the console bundle or any image (checked 2026-11-13). the licence is not osi approved, and this project neither bundles nor redistributes the package; tenants who use the kit take it from npm under its own terms.",
       "reviewed": "2026-11-13"
     },
     {
       "package": "@walletconnect/core",
       "version": "2.23.0",
       "licence": "(SEE LICENSE IN LICENSE.md)",
-      "reason": "WalletConnect protocol core, used by the kit's WalletConnect module; transitive dependency of @creit.tech/stellar-wallets-kit 2.7.1 and 2.8.0, which this repository installs only as devDependencies of packages/tracker (swk-2.7.1, swk-2.8.0, for the this stage adapter tests that run the real kit) and as a dependency of the example app examples/wallets-kit-spa (a sample for tenants, used as a test target, never deployed). not in sdk.js, the npm package (no dependencies, bundles src/ only), the console bundle or any image (checked 2026-11-13). the licence is not osi approved, and this project neither bundles nor redistributes the package; tenants who use the kit take it from npm under its own terms.",
+      "reason": "WalletConnect protocol core, used by the kit's WalletConnect module; transitive dependency of @creit.tech/stellar-wallets-kit 2.7.1 and 2.8.0, which this repository installs only as devDependencies of packages/tracker (swk-2.7.1, swk-2.8.0, for the wallets kit adapter tests that run the real kit) and as a dependency of the example app examples/wallets-kit-spa (a sample for tenants, used as a test target, never deployed). not in sdk.js, the npm package (no dependencies, bundles src/ only), the console bundle or any image (checked 2026-11-13). the licence is not osi approved, and this project neither bundles nor redistributes the package; tenants who use the kit take it from npm under its own terms.",
       "reviewed": "2026-11-13"
     },
     {
       "package": "@walletconnect/core",
       "version": "2.23.7",
       "licence": "(SEE LICENSE IN LICENSE.md)",
-      "reason": "WalletConnect protocol core, used by the kit's WalletConnect module; transitive dependency of @creit.tech/stellar-wallets-kit 2.7.1 and 2.8.0, which this repository installs only as devDependencies of packages/tracker (swk-2.7.1, swk-2.8.0, for the this stage adapter tests that run the real kit) and as a dependency of the example app examples/wallets-kit-spa (a sample for tenants, used as a test target, never deployed). not in sdk.js, the npm package (no dependencies, bundles src/ only), the console bundle or any image (checked 2026-11-13). the licence is not osi approved, and this project neither bundles nor redistributes the package; tenants who use the kit take it from npm under its own terms.",
+      "reason": "WalletConnect protocol core, used by the kit's WalletConnect module; transitive dependency of @creit.tech/stellar-wallets-kit 2.7.1 and 2.8.0, which this repository installs only as devDependencies of packages/tracker (swk-2.7.1, swk-2.8.0, for the wallets kit adapter tests that run the real kit) and as a dependency of the example app examples/wallets-kit-spa (a sample for tenants, used as a test target, never deployed). not in sdk.js, the npm package (no dependencies, bundles src/ only), the console bundle or any image (checked 2026-11-13). the licence is not osi approved, and this project neither bundles nor redistributes the package; tenants who use the kit take it from npm under its own terms.",
       "reviewed": "2026-11-13"
     },
     {
       "package": "@walletconnect/sign-client",
       "version": "2.23.0",
       "licence": "(SEE LICENSE IN LICENSE.md)",
-      "reason": "WalletConnect sign client, used by the kit's WalletConnect module; transitive dependency of @creit.tech/stellar-wallets-kit 2.7.1 and 2.8.0, which this repository installs only as devDependencies of packages/tracker (swk-2.7.1, swk-2.8.0, for the this stage adapter tests that run the real kit) and as a dependency of the example app examples/wallets-kit-spa (a sample for tenants, used as a test target, never deployed). not in sdk.js, the npm package (no dependencies, bundles src/ only), the console bundle or any image (checked 2026-11-13). the licence is not osi approved, and this project neither bundles nor redistributes the package; tenants who use the kit take it from npm under its own terms.",
+      "reason": "WalletConnect sign client, used by the kit's WalletConnect module; transitive dependency of @creit.tech/stellar-wallets-kit 2.7.1 and 2.8.0, which this repository installs only as devDependencies of packages/tracker (swk-2.7.1, swk-2.8.0, for the wallets kit adapter tests that run the real kit) and as a dependency of the example app examples/wallets-kit-spa (a sample for tenants, used as a test target, never deployed). not in sdk.js, the npm package (no dependencies, bundles src/ only), the console bundle or any image (checked 2026-11-13). the licence is not osi approved, and this project neither bundles nor redistributes the package; tenants who use the kit take it from npm under its own terms.",
       "reviewed": "2026-11-13"
     },
     {
       "package": "@walletconnect/sign-client",
       "version": "2.23.7",
       "licence": "(SEE LICENSE IN LICENSE.md)",
-      "reason": "WalletConnect sign client, used by the kit's WalletConnect module; transitive dependency of @creit.tech/stellar-wallets-kit 2.7.1 and 2.8.0, which this repository installs only as devDependencies of packages/tracker (swk-2.7.1, swk-2.8.0, for the this stage adapter tests that run the real kit) and as a dependency of the example app examples/wallets-kit-spa (a sample for tenants, used as a test target, never deployed). not in sdk.js, the npm package (no dependencies, bundles src/ only), the console bundle or any image (checked 2026-11-13). the licence is not osi approved, and this project neither bundles nor redistributes the package; tenants who use the kit take it from npm under its own terms.",
+      "reason": "WalletConnect sign client, used by the kit's WalletConnect module; transitive dependency of @creit.tech/stellar-wallets-kit 2.7.1 and 2.8.0, which this repository installs only as devDependencies of packages/tracker (swk-2.7.1, swk-2.8.0, for the wallets kit adapter tests that run the real kit) and as a dependency of the example app examples/wallets-kit-spa (a sample for tenants, used as a test target, never deployed). not in sdk.js, the npm package (no dependencies, bundles src/ only), the console bundle or any image (checked 2026-11-13). the licence is not osi approved, and this project neither bundles nor redistributes the package; tenants who use the kit take it from npm under its own terms.",
       "reviewed": "2026-11-13"
     },
     {
       "package": "@walletconnect/types",
       "version": "2.23.0",
       "licence": "(SEE LICENSE IN LICENSE.md)",
-      "reason": "WalletConnect type package, used by the kit's WalletConnect module; transitive dependency of @creit.tech/stellar-wallets-kit 2.7.1 and 2.8.0, which this repository installs only as devDependencies of packages/tracker (swk-2.7.1, swk-2.8.0, for the this stage adapter tests that run the real kit) and as a dependency of the example app examples/wallets-kit-spa (a sample for tenants, used as a test target, never deployed). not in sdk.js, the npm package (no dependencies, bundles src/ only), the console bundle or any image (checked 2026-11-13). the licence is not osi approved, and this project neither bundles nor redistributes the package; tenants who use the kit take it from npm under its own terms.",
+      "reason": "WalletConnect type package, used by the kit's WalletConnect module; transitive dependency of @creit.tech/stellar-wallets-kit 2.7.1 and 2.8.0, which this repository installs only as devDependencies of packages/tracker (swk-2.7.1, swk-2.8.0, for the wallets kit adapter tests that run the real kit) and as a dependency of the example app examples/wallets-kit-spa (a sample for tenants, used as a test target, never deployed). not in sdk.js, the npm package (no dependencies, bundles src/ only), the console bundle or any image (checked 2026-11-13). the licence is not osi approved, and this project neither bundles nor redistributes the package; tenants who use the kit take it from npm under its own terms.",
       "reviewed": "2026-11-13"
     },
     {
       "package": "@walletconnect/types",
       "version": "2.23.7",
       "licence": "(SEE LICENSE IN LICENSE.md)",
-      "reason": "WalletConnect type package, used by the kit's WalletConnect module; transitive dependency of @creit.tech/stellar-wallets-kit 2.7.1 and 2.8.0, which this repository installs only as devDependencies of packages/tracker (swk-2.7.1, swk-2.8.0, for the this stage adapter tests that run the real kit) and as a dependency of the example app examples/wallets-kit-spa (a sample for tenants, used as a test target, never deployed). not in sdk.js, the npm package (no dependencies, bundles src/ only), the console bundle or any image (checked 2026-11-13). the licence is not osi approved, and this project neither bundles nor redistributes the package; tenants who use the kit take it from npm under its own terms.",
+      "reason": "WalletConnect type package, used by the kit's WalletConnect module; transitive dependency of @creit.tech/stellar-wallets-kit 2.7.1 and 2.8.0, which this repository installs only as devDependencies of packages/tracker (swk-2.7.1, swk-2.8.0, for the wallets kit adapter tests that run the real kit) and as a dependency of the example app examples/wallets-kit-spa (a sample for tenants, used as a test target, never deployed). not in sdk.js, the npm package (no dependencies, bundles src/ only), the console bundle or any image (checked 2026-11-13). the licence is not osi approved, and this project neither bundles nor redistributes the package; tenants who use the kit take it from npm under its own terms.",
       "reviewed": "2026-11-13"
     },
     {
       "package": "@walletconnect/types",
       "version": "2.23.9",
       "licence": "(SEE LICENSE IN LICENSE.md)",
-      "reason": "WalletConnect type package, used by the kit's WalletConnect module; transitive dependency of @creit.tech/stellar-wallets-kit 2.7.1 and 2.8.0, which this repository installs only as devDependencies of packages/tracker (swk-2.7.1, swk-2.8.0, for the this stage adapter tests that run the real kit) and as a dependency of the example app examples/wallets-kit-spa (a sample for tenants, used as a test target, never deployed). not in sdk.js, the npm package (no dependencies, bundles src/ only), the console bundle or any image (checked 2026-11-13). the licence is not osi approved, and this project neither bundles nor redistributes the package; tenants who use the kit take it from npm under its own terms.",
+      "reason": "WalletConnect type package, used by the kit's WalletConnect module; transitive dependency of @creit.tech/stellar-wallets-kit 2.7.1 and 2.8.0, which this repository installs only as devDependencies of packages/tracker (swk-2.7.1, swk-2.8.0, for the wallets kit adapter tests that run the real kit) and as a dependency of the example app examples/wallets-kit-spa (a sample for tenants, used as a test target, never deployed). not in sdk.js, the npm package (no dependencies, bundles src/ only), the console bundle or any image (checked 2026-11-13). the licence is not osi approved, and this project neither bundles nor redistributes the package; tenants who use the kit take it from npm under its own terms.",
       "reviewed": "2026-11-13"
     },
     {
       "package": "@walletconnect/universal-provider",
       "version": "2.23.7",
       "licence": "(SEE LICENSE IN LICENSE.md)",
-      "reason": "WalletConnect provider used by Reown AppKit; transitive dependency of @creit.tech/stellar-wallets-kit 2.7.1 and 2.8.0, which this repository installs only as devDependencies of packages/tracker (swk-2.7.1, swk-2.8.0, for the this stage adapter tests that run the real kit) and as a dependency of the example app examples/wallets-kit-spa (a sample for tenants, used as a test target, never deployed). not in sdk.js, the npm package (no dependencies, bundles src/ only), the console bundle or any image (checked 2026-11-13). the licence is not osi approved, and this project neither bundles nor redistributes the package; tenants who use the kit take it from npm under its own terms.",
+      "reason": "WalletConnect provider used by Reown AppKit; transitive dependency of @creit.tech/stellar-wallets-kit 2.7.1 and 2.8.0, which this repository installs only as devDependencies of packages/tracker (swk-2.7.1, swk-2.8.0, for the wallets kit adapter tests that run the real kit) and as a dependency of the example app examples/wallets-kit-spa (a sample for tenants, used as a test target, never deployed). not in sdk.js, the npm package (no dependencies, bundles src/ only), the console bundle or any image (checked 2026-11-13). the licence is not osi approved, and this project neither bundles nor redistributes the package; tenants who use the kit take it from npm under its own terms.",
       "reviewed": "2026-11-13"
     },
     {
       "package": "@walletconnect/utils",
       "version": "2.23.0",
       "licence": "(SEE LICENSE IN LICENSE.md)",
-      "reason": "WalletConnect utilities, used by the kit's WalletConnect module; transitive dependency of @creit.tech/stellar-wallets-kit 2.7.1 and 2.8.0, which this repository installs only as devDependencies of packages/tracker (swk-2.7.1, swk-2.8.0, for the this stage adapter tests that run the real kit) and as a dependency of the example app examples/wallets-kit-spa (a sample for tenants, used as a test target, never deployed). not in sdk.js, the npm package (no dependencies, bundles src/ only), the console bundle or any image (checked 2026-11-13). the licence is not osi approved, and this project neither bundles nor redistributes the package; tenants who use the kit take it from npm under its own terms.",
+      "reason": "WalletConnect utilities, used by the kit's WalletConnect module; transitive dependency of @creit.tech/stellar-wallets-kit 2.7.1 and 2.8.0, which this repository installs only as devDependencies of packages/tracker (swk-2.7.1, swk-2.8.0, for the wallets kit adapter tests that run the real kit) and as a dependency of the example app examples/wallets-kit-spa (a sample for tenants, used as a test target, never deployed). not in sdk.js, the npm package (no dependencies, bundles src/ only), the console bundle or any image (checked 2026-11-13). the licence is not osi approved, and this project neither bundles nor redistributes the package; tenants who use the kit take it from npm under its own terms.",
       "reviewed": "2026-11-13"
     },
     {
       "package": "@walletconnect/utils",
       "version": "2.23.7",
       "licence": "(SEE LICENSE IN LICENSE.md)",
-      "reason": "WalletConnect utilities, used by the kit's WalletConnect module; transitive dependency of @creit.tech/stellar-wallets-kit 2.7.1 and 2.8.0, which this repository installs only as devDependencies of packages/tracker (swk-2.7.1, swk-2.8.0, for the this stage adapter tests that run the real kit) and as a dependency of the example app examples/wallets-kit-spa (a sample for tenants, used as a test target, never deployed). not in sdk.js, the npm package (no dependencies, bundles src/ only), the console bundle or any image (checked 2026-11-13). the licence is not osi approved, and this project neither bundles nor redistributes the package; tenants who use the kit take it from npm under its own terms.",
+      "reason": "WalletConnect utilities, used by the kit's WalletConnect module; transitive dependency of @creit.tech/stellar-wallets-kit 2.7.1 and 2.8.0, which this repository installs only as devDependencies of packages/tracker (swk-2.7.1, swk-2.8.0, for the wallets kit adapter tests that run the real kit) and as a dependency of the example app examples/wallets-kit-spa (a sample for tenants, used as a test target, never deployed). not in sdk.js, the npm package (no dependencies, bundles src/ only), the console bundle or any image (checked 2026-11-13). the licence is not osi approved, and this project neither bundles nor redistributes the package; tenants who use the kit take it from npm under its own terms.",
       "reviewed": "2026-11-13"
     },
     {
@@ -208,7 +208,7 @@
       "package": "eyes",
       "version": "0.1.8",
       "licence": "none",
-      "reason": "debug output helper pulled in by the kit's Trezor or NEAR dependency chain; its registry metadata declares no licence; transitive dependency of @creit.tech/stellar-wallets-kit 2.7.1 and 2.8.0, which this repository installs only as devDependencies of packages/tracker (swk-2.7.1, swk-2.8.0, for the this stage adapter tests that run the real kit) and as a dependency of the example app examples/wallets-kit-spa (a sample for tenants, used as a test target, never deployed). not in sdk.js, the npm package (no dependencies, bundles src/ only), the console bundle or any image (checked 2026-11-13). the licence is not osi approved, and this project neither bundles nor redistributes the package; tenants who use the kit take it from npm under its own terms.",
+      "reason": "debug output helper pulled in by the kit's Trezor or NEAR dependency chain; its registry metadata declares no licence; transitive dependency of @creit.tech/stellar-wallets-kit 2.7.1 and 2.8.0, which this repository installs only as devDependencies of packages/tracker (swk-2.7.1, swk-2.8.0, for the wallets kit adapter tests that run the real kit) and as a dependency of the example app examples/wallets-kit-spa (a sample for tenants, used as a test target, never deployed). not in sdk.js, the npm package (no dependencies, bundles src/ only), the console bundle or any image (checked 2026-11-13). the licence is not osi approved, and this project neither bundles nor redistributes the package; tenants who use the kit take it from npm under its own terms.",
       "reviewed": "2026-11-13"
     },
     {
@@ -229,7 +229,7 @@
       "package": "text-encoding-utf-8",
       "version": "1.0.2",
       "licence": "none",
-      "reason": "text encoding polyfill pulled in by the kit's NEAR dependency chain; its registry metadata declares no licence; transitive dependency of @creit.tech/stellar-wallets-kit 2.7.1 and 2.8.0, which this repository installs only as devDependencies of packages/tracker (swk-2.7.1, swk-2.8.0, for the this stage adapter tests that run the real kit) and as a dependency of the example app examples/wallets-kit-spa (a sample for tenants, used as a test target, never deployed). not in sdk.js, the npm package (no dependencies, bundles src/ only), the console bundle or any image (checked 2026-11-13). the licence is not osi approved, and this project neither bundles nor redistributes the package; tenants who use the kit take it from npm under its own terms.",
+      "reason": "text encoding polyfill pulled in by the kit's NEAR dependency chain; its registry metadata declares no licence; transitive dependency of @creit.tech/stellar-wallets-kit 2.7.1 and 2.8.0, which this repository installs only as devDependencies of packages/tracker (swk-2.7.1, swk-2.8.0, for the wallets kit adapter tests that run the real kit) and as a dependency of the example app examples/wallets-kit-spa (a sample for tenants, used as a test target, never deployed). not in sdk.js, the npm package (no dependencies, bundles src/ only), the console bundle or any image (checked 2026-11-13). the licence is not osi approved, and this project neither bundles nor redistributes the package; tenants who use the kit take it from npm under its own terms.",
       "reviewed": "2026-11-13"
     },
     {
