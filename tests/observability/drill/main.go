@@ -47,7 +47,7 @@ import (
 	"github.com/justmert/veristar/internal/histo"
 )
 
-const app = "https://app.p17.test"
+const app = "https://app.obs.test"
 
 func main() {
 	if len(os.Args) < 2 {
@@ -224,7 +224,7 @@ func views(c *http.Client, probe string) error {
 	if resp.StatusCode != http.StatusNotFound {
 		return fmt.Errorf("tenant detail of the probe tenant answered %d, want 404", resp.StatusCode)
 	}
-	body := `{"name":"p17 drill all tenants","scope":"metrics:read","expires_in_days":1}`
+	body := `{"name":"obs drill all tenants","scope":"metrics:read","expires_in_days":1}`
 	resp, b, err := do(c, http.MethodPost, app+"/api/operator/api-keys", strings.NewReader(body), map[string]string{
 		"Content-Type": "application/json", "X-Requested-With": "sa-console", "Origin": app,
 	})
@@ -298,7 +298,7 @@ func routes(c *http.Client, token string, n int) error {
 	if err != nil {
 		return err
 	}
-	resp, rb, err := do(c, http.MethodPost, "https://otlp.p17.test/v1/metrics", bytes.NewReader(b), map[string]string{
+	resp, rb, err := do(c, http.MethodPost, "https://otlp.obs.test/v1/metrics", bytes.NewReader(b), map[string]string{
 		"Content-Type": "application/x-protobuf", "Authorization": "Bearer " + token,
 	})
 	if err != nil {

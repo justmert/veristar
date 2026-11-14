@@ -8,13 +8,13 @@
 #         dlq cardinality wal
 set -eu
 root="$(cd "$(dirname "$0")/../.." && pwd)"
-P17="$root/.scratch/p17"
-export P17
+OBS="$root/.scratch/obs"
+export OBS
 compose() { docker compose -f "$root/tests/observability/compose.yml" "$@" >/dev/null 2>&1; }
-tool() { docker run --rm --network sa-p17 --user 65534:65534 -v "$P17:/p17:ro" \
-	--add-host in.p17.test:172.30.17.21 --add-host otlp.p17.test:172.30.17.21 --add-host app.p17.test:172.30.17.31 \
-	debian:trixie /p17/bin/drill "$@"; }
-probe() { sed -n "s/^$1=//p" "$P17/env/probe-tenant.out"; }
+tool() { docker run --rm --network sa-obs --user 65534:65534 -v "$OBS:/obs:ro" \
+	--add-host in.obs.test:172.30.17.21 --add-host otlp.obs.test:172.30.17.21 --add-host app.obs.test:172.30.17.31 \
+	debian:trixie /obs/bin/drill "$@"; }
+probe() { sed -n "s/^$1=//p" "$OBS/env/probe-tenant.out"; }
 now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 log() { echo "$(date -u +%H:%M:%S) $*"; }
 
@@ -64,8 +64,8 @@ drill_pipeline() {
 		[ $(($(date +%s) - s0)) -gt 300 ] && { log "freshness did not fail within 300 s"; return 1; }
 	done
 	log "while stopped: ingestion=$(check slo_ingestion) console=$(check probe_console) web host=$(check probe_web-host) machine api=$(check probe_machine-api) in host gatus=$(curl -s '127.0.0.1:18080/api/v1/endpoints/hosts_in-host/statuses?pageSize=1' | python3 -c 'import json,sys; print(json.load(sys.stdin)["results"][-1]["success"])')"
-	tool events -ca /p17/certs/ca.crt -site "$(probe site_id)" -origin https://probe.p17.test -n 5100 &
-	tool otlp -ca /p17/certs/ca.crt -token "$(probe otlp_token)" -n 5100
+	tool events -ca /obs/certs/ca.crt -site "$(probe site_id)" -origin https://probe.obs.test -n 5100 &
+	tool otlp -ca /obs/certs/ca.crt -token "$(probe otlp_token)" -n 5100
 	wait
 	wait_msg FIRING ProbeFreshnessFailing "$t0" 300
 	wait_msg FIRING ReplayerNotConsuming "$t0" 300
@@ -143,31 +143,31 @@ drill_edge_node() {
 	compose stop gateway-2
 	wait_msg FIRING EdgeNodeNotReady "$t0" 400
 	wait_msg FIRING ProbeNodeCheckFailing "$t0" 400
-	wait_msg FIRING "edge-2 in.p17.test" "$t0" 300 gatus
+	wait_msg FIRING "edge-2 in.obs.test" "$t0" 300 gatus
 	log "while edge-2 is down: in host gatus=$(curl -s '127.0.0.1:18080/api/v1/endpoints/hosts_in-host/statuses?pageSize=1' | python3 -c 'import json,sys; print(json.load(sys.stdin)["results"][-1]["success"])') ingestion=$(check slo_ingestion)"
 	t1=$(now)
 	compose start gateway-2
 	wait_msg RESOLVED EdgeNodeNotReady "$t1" 600
 	wait_msg RESOLVED ProbeNodeCheckFailing "$t1" 600
-	wait_msg RESOLVED "edge-2 in.p17.test" "$t1" 600 gatus
+	wait_msg RESOLVED "edge-2 in.obs.test" "$t1" 600 gatus
 }
 
 drill_certificate() {
 	# edge-2 serves a certificate valid for 7 days; the dns provider would
 	# still list the node, the tls check by address does not
 	t0=$(now)
-	cp "$P17/certs/edge-2.crt" "$P17/certs/edge-2.crt.good"
-	cp "$P17/certs/edge-2.key" "$P17/certs/edge-2.key.good"
-	sh "$root/tests/observability/certs.sh" "$P17/certs" edge-2 7 in.p17.test otlp.p17.test
+	cp "$OBS/certs/edge-2.crt" "$OBS/certs/edge-2.crt.good"
+	cp "$OBS/certs/edge-2.key" "$OBS/certs/edge-2.key.good"
+	sh "$root/tests/observability/certs.sh" "$OBS/certs" edge-2 7 in.obs.test otlp.obs.test
 	compose restart caddy-edge-2
 	wait_msg FIRING CertificateExpiringSoon "$t0" 300
-	wait_msg FIRING "edge-2 in.p17.test" "$t0" 300 gatus
+	wait_msg FIRING "edge-2 in.obs.test" "$t0" 300 gatus
 	t1=$(now)
-	mv "$P17/certs/edge-2.crt.good" "$P17/certs/edge-2.crt"
-	mv "$P17/certs/edge-2.key.good" "$P17/certs/edge-2.key"
+	mv "$OBS/certs/edge-2.crt.good" "$OBS/certs/edge-2.crt"
+	mv "$OBS/certs/edge-2.key.good" "$OBS/certs/edge-2.key"
 	compose restart caddy-edge-2
 	wait_msg RESOLVED CertificateExpiringSoon "$t1" 600
-	wait_msg RESOLVED "edge-2 in.p17.test" "$t1" 600 gatus
+	wait_msg RESOLVED "edge-2 in.obs.test" "$t1" 600 gatus
 }
 
 drill_dlq() {
@@ -184,16 +184,16 @@ drill_cardinality() {
 	# tenant and day, so the rest go to the overflow route. it resolves when
 	# the 15 minute window has passed.
 	t0=$(now)
-	tool routes -ca /p17/certs/ca.crt -token "$(probe otlp_token)" -n 310
+	tool routes -ca /obs/certs/ca.crt -token "$(probe otlp_token)" -n 310
 	wait_msg FIRING CardinalityCapHit "$t0" 300
 	wait_msg RESOLVED CardinalityCapHit "$t0" 1500
 }
 
 drill_wal() {
 	t0=$(now)
-	docker exec sa-p17-postgres-1 psql -U postgres -qc "alter system set archive_command = '/bin/false'" -c "select pg_reload_conf()" -c "select pg_switch_wal()" >/dev/null
+	docker exec sa-obs-postgres-1 psql -U postgres -qc "alter system set archive_command = '/bin/false'" -c "select pg_reload_conf()" -c "select pg_switch_wal()" >/dev/null
 	wait_msg FIRING WALArchivingFailing "$t0" 400
-	docker exec sa-p17-postgres-1 psql -U postgres -qc "alter system set archive_command = '/bin/true'" -c "select pg_reload_conf()" >/dev/null
+	docker exec sa-obs-postgres-1 psql -U postgres -qc "alter system set archive_command = '/bin/true'" -c "select pg_reload_conf()" >/dev/null
 	wait_msg RESOLVED WALArchivingFailing "$t0" 1800
 }
 
