@@ -10,7 +10,7 @@ x-defaults: &defaults
   labels:
     sa.tls: "{{ secrets_tls_fingerprint }}"
 {% endif %}
-  # container hardening (the design): the root filesystem is read-only, so
+  # container hardening: the root filesystem is read-only, so
   # services write only to their volumes and a small /tmp; no capabilities;
   # no privilege gain through setuid binaries or file capabilities
   read_only: true
@@ -84,7 +84,7 @@ services:
       - {{ observability_conf_dir }}/prometheus:/etc/prometheus:ro
       - {{ sa_tls_dir }}/nobody:/etc/sa-tls:ro
       - prometheus:/prometheus
-    # loopback only: operators use an ssh tunnel (the design)
+    # loopback only: operators use an ssh tunnel
     ports: ["127.0.0.1:9090:9090"]
 {% if observability_probe_extra_hosts is defined %}
     # local converge only: the platform names resolve nowhere else

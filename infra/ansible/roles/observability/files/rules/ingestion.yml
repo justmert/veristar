@@ -1,5 +1,5 @@
 ---
-# alert rules, ingestion and edge (the design). thresholds and the action
+# alert rules, ingestion and edge. thresholds and the action
 # for each alert are in docs/runbooks/alerts.md; promtool tests are in
 # rules/tests/. severity page means act now, ticket means within a day.
 groups:

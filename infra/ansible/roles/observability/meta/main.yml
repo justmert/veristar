@@ -1,7 +1,7 @@
 ---
 galaxy_info:
   author: veristar
-  description: monitoring, alerting, status page and probe (the design)
+  description: monitoring, alerting, status page and probe
   license: Apache-2.0
   min_ansible_version: "2.21"
   platforms:

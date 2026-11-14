@@ -1,5 +1,5 @@
 ---
-# alert rules, nodes, platform services, jobs and the probe (the design)
+# alert rules, nodes, platform services, jobs and the probe
 groups:
   - name: platform
     rules:

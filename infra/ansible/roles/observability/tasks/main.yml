@@ -1,6 +1,6 @@
 ---
-# the design. inputs from the sops secrets (secrets role):
-#   alertmanager_discord_webhook_url, gatus_discord_webhook_url  an operator input,
+# monitoring of every node. inputs from the sops secrets (secrets role):
+#   alertmanager_discord_webhook_url, gatus_discord_webhook_url
 #                       optional: without it alerts are not delivered
 #   grafana_admin_password, postgres_exporter_password,
 #   probe_metrics_token, gatus_external_token

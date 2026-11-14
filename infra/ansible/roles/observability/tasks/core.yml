@@ -51,7 +51,7 @@
     mode: "0400"
   notify: Reload alertmanager
 
-- name: Write the discord webhook url an operator input
+- name: Write the discord webhook url
   ansible.builtin.copy:
     content: "{{ observability_webhook_alertmanager }}"
     dest: "{{ observability_conf_dir }}/alertmanager/discord-webhook-url"
