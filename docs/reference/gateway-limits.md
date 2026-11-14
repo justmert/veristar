@@ -35,16 +35,16 @@ the visitor volume table and each rate limit table.
 Each limit is per node. With three edge nodes, a site can send three times the
 site rate, and a captured proof can be replayed three times the replay limit.
 
-Acceptance criterion, met on 2026-11-12: no event of the this stage and this stage
-browser suites was refused, rate limited or quarantined against the real gateway
+Acceptance criterion, met on 2026-11-12: no event of the browser test suites
+was refused, rate limited or quarantined against the real gateway
 (`TestBrowserMatrix` in `tests/gateway`).
 
 | Date | Key | Change | Reason |
 |---|---|---|---|
-| 2026-11-12 | all | starting values | the design |
-| 2026-11-13 | `VISITOR_EVENTS_PER_HOUR` | new, 600 | review: same-ip skepticism counts distinct visitor tokens only, so one address and one user agent could send at the prefix rate into the primary band; ten events a minute on average is far above a person's use of one site |
-| 2026-11-13 | `PROOF_REPLAY_LIMIT` | counts queued events only | review: refused events used up a proof that a single-page app keeps for the whole tab (`TestRefusedEventsKeepTheProofAllowance` in `internal/gateway`) |
-| 2026-11-13 | `RATE_SITE_*`, `RATE_PREFIX_*` | also applied to `GET /v1/c`, in separate buckets | this stage: the challenge route had no limit, so one client could request challenges without bound; checked after the origin and fetch metadata checks, so refused requests take no token (`TestChallengeRateLimits` in `tests/gateway`) |
+| 2026-11-12 | all | starting values | first version of the gateway |
+| 2026-11-13 | `VISITOR_EVENTS_PER_HOUR` | new, 600 | same-IP skepticism counts distinct visitor tokens only, so one address and one user agent could send at the prefix rate into the primary band; ten events a minute on average is far above a person's use of one site |
+| 2026-11-13 | `PROOF_REPLAY_LIMIT` | counts queued events only | refused events used up a proof that a single-page app keeps for the whole tab (`TestRefusedEventsKeepTheProofAllowance` in `internal/gateway`) |
+| 2026-11-13 | `RATE_SITE_*`, `RATE_PREFIX_*` | also applied to `GET /v1/c`, in separate buckets | the challenge route had no limit, so one client could request challenges without bound; checked after the origin and fetch metadata checks, so refused requests take no token (`TestChallengeRateLimits` in `tests/gateway`) |
 
 ## Responses
 
@@ -95,7 +95,7 @@ Measured 2026-11-12 (`tests/recovery`), times after NATS was healthy again:
 
 ## Throughput
 
-Measured 2026-11-12 on the controller (Intel Core Ultra 5 225, 10 cores), one
+Measured 2026-11-12 on a host (Intel Core Ultra 5 225, 10 cores), one
 gateway, one NATS server with file storage, all in Docker on one machine. Every
 request is a full `POST /v1/e`: parse, proof, origin, rate limits, visitor token,
 country, ip-cluster, sanitization and a JetStream publish waited for. Traffic is
