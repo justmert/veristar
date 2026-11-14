@@ -70,7 +70,7 @@ series reporting every minute is an upper bound for that volume unless request
 counts are spread over far more routes, services and status codes. The daily
 caps (300 routes and 50 services per tenant per UTC day) bound the worst case
 per tenant (`METRICSWRITER_ROUTE_CAP` and `METRICSWRITER_SERVICE_CAP`); routes
-and services beyond them are stored as `Other`.
+and services beyond them are stored as `{other}`.
 
 The 24-month floor of `API_HOURLY_RETENTION_MONTHS` would hold 35.1 million
 hourly rows, 17.2 GiB at the same rate.
