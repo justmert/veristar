@@ -53,7 +53,7 @@ runs:
         REPO: ${{ github.repository }}
         TAG: ${{ github.ref_name }}
       run: |
-        # ghcr names must be lower case; the operator may not be
+        # ghcr names must be lower case; the repository owner may not be
         repo="ghcr.io/${REPO,,}/${NAME}"
         tag="$TAG"
         # postgres-ha carries its postgresql version first, matching

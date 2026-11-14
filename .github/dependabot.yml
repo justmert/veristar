@@ -1,9 +1,10 @@
-# dependency update pull requests (the design). every pull request runs the
+# dependency update pull requests. every pull request runs the
 # ci gates, including the isolation suite, before review. security updates
 # are not grouped, so each one can be merged on its own inside the 24 hour
 # window; routine version updates are grouped per ecosystem to keep the
-# queue reviewable. versions still follow the pin policy of the design,
-# so a reviewer may close an update that is too young.
+# queue reviewable. versions still follow the pin policy (a minor line
+# younger than 30 days is skipped unless it carries a security fix), so a
+# reviewer may close an update that is too young.
 #
 # umami is deliberately not updated here: its digest moves only through
 # `make umami-upgrade VERSION=` (docs/runbooks/security-patch.md), which runs

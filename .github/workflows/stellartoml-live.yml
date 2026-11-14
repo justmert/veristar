@@ -1,7 +1,7 @@
 name: stellartoml-live
 
 # fetches and parses a real ecosystem domain's stellar.toml through the
-# production request-forgery guard (the design). it depends on a third
+# production request-forgery guard. it depends on a third
 # party site, so it runs on a schedule and by hand, never on push or pull
 # request, and never gates ci.
 on:

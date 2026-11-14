@@ -134,7 +134,7 @@ jobs:
           make "${{ matrix.suite }}"
 
       # docs/deploy/local-converge.md section 2: the test receiver stands in
-      # for the discord webhook an operator input that the observability play needs
+      # for the discord alert webhook that the observability play needs
       - if: matrix.suite == 'local-converge'
         run: |
           make local-converge-up
