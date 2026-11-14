@@ -88,7 +88,7 @@ func (q *Queries) OperatorTenantMembers(ctx context.Context, tenantID uuid.UUID)
 
 const operatorUserRef = `-- name: OperatorUserRef :one
 
-select id, github_id, github_login from cp.users where id = $1
+select id, github_id, github_login from cp.users where id = $1 and deleted_at is null
 `
 
 type OperatorUserRefRow struct {
@@ -99,6 +99,7 @@ type OperatorUserRefRow struct {
 
 // operator tenant detail parts that cp_operator may not read (control-plane-api
 // 5.1 and 5.4): users and members, as cp_system.
+// no row for a deleted account: the detail names no one then
 func (q *Queries) OperatorUserRef(ctx context.Context, id uuid.UUID) (OperatorUserRefRow, error) {
 	row := q.db.QueryRow(ctx, operatorUserRef, id)
 	var i OperatorUserRefRow

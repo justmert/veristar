@@ -46,6 +46,9 @@ func testUnauthenticated(t *testing.T, e *env) {
 		require.Equal(t, http.StatusUnauthorized, r.status, p)
 		require.Equal(t, "unauthenticated", r.code(t), p)
 	}
+	r := c.call(t, http.MethodDelete, "/api/me", nil)
+	require.Equal(t, http.StatusUnauthorized, r.status)
+	require.Equal(t, "unauthenticated", r.code(t))
 }
 
 // strkeyOf encodes 32 random bytes as a strkey of the given type.

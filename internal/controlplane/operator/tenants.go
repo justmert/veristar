@@ -421,6 +421,10 @@ func userRef(ctx context.Context, q *systemq.Queries, id uuid.NullUUID) (*UserRe
 		return nil, nil
 	}
 	u, err := q.OperatorUserRef(ctx, id.UUID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		// the account was deleted (contract 4.1.6); its row names no one
+		return nil, nil
+	}
 	if err != nil {
 		return nil, err
 	}

@@ -113,6 +113,17 @@ func (m *Manager) SignOut(ctx context.Context, inTx func(pgx.Tx) error) error {
 	return nil
 }
 
+// Destroy clears the request's session values and makes Load expire the
+// cookie, for a request that deleted the session rows itself in its own
+// transaction (account deletion). the store's delete then finds no row,
+// which is not an error.
+func (m *Manager) Destroy(ctx context.Context) error {
+	if err := m.scs.Destroy(ctx); err != nil {
+		return fmt.Errorf("session: destroy: %w", err)
+	}
+	return nil
+}
+
 // UserID returns the user id stored in the session, if any.
 func (m *Manager) UserID(ctx context.Context) (uuid.UUID, bool) {
 	s := m.scs.GetString(ctx, userIDKey)

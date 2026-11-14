@@ -4,7 +4,7 @@
 -- github sign-in: the numeric github id is the identity, the login can change
 insert into cp.users (github_id, github_login, last_login_at)
 values (@github_id, @github_login, now())
-on conflict (github_id) do update
+on conflict (github_id) where deleted_at is null do update
   set github_login = excluded.github_login, last_login_at = excluded.last_login_at
 returning *;
 

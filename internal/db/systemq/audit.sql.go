@@ -16,7 +16,7 @@ select a.id, a.at, a.actor, a.action, a.target, a.detail,
        u.github_login as actor_login
 from cp.audit_log a
 left join cp.users u
-  on a.actor like 'user:%' and u.id::text = substr(a.actor, 6)
+  on a.actor like 'user:%' and u.id::text = substr(a.actor, 6) and u.deleted_at is null
 where ($1::text is null
        or a.target = 'tenant:' || $1::text
        or a.detail ->> 'tenant_id' = $1::text)

@@ -10,6 +10,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -18,6 +19,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -29,6 +31,7 @@ import (
 
 	"github.com/justmert/veristar/internal/config"
 	"github.com/justmert/veristar/internal/controlplane"
+	"github.com/justmert/veristar/internal/controlplane/account"
 	"github.com/justmert/veristar/internal/controlplane/auth"
 	"github.com/justmert/veristar/internal/controlplane/lifecycle"
 	"github.com/justmert/veristar/internal/controlplane/members"
@@ -39,6 +42,7 @@ import (
 	"github.com/justmert/veristar/internal/controlplane/terms"
 	pdb "github.com/justmert/veristar/internal/db"
 	"github.com/justmert/veristar/internal/db/dbtest"
+	"github.com/justmert/veristar/internal/umami"
 	"github.com/justmert/veristar/tests/fixtures/githuboauth"
 )
 
@@ -56,6 +60,72 @@ type Options struct {
 	Reconciler tenants.Reconciler
 	// Operators are github ids with operator rights.
 	Operators map[int64]bool
+	// Umami is what account deletion deletes the umami user with. nil uses
+	// an in-memory Users, available as Env.Umami.
+	Umami account.UmamiUsers
+}
+
+// Users is an in-memory stand-in for the umami users api, for tests that
+// do not run umami. it holds the ids added with Add and records deletes.
+type Users struct {
+	mu      sync.Mutex
+	users   map[string]bool
+	deleted []string
+	// Fail, when set, is returned by every call.
+	Fail error
+}
+
+// Add makes a user with that id exist.
+func (u *Users) Add(id string) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if u.users == nil {
+		u.users = map[string]bool{}
+	}
+	u.users[id] = true
+}
+
+// Has reports whether the user exists.
+func (u *Users) Has(id string) bool {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return u.users[id]
+}
+
+// Deleted returns the ids deleted so far, in order.
+func (u *Users) Deleted() []string {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return append([]string(nil), u.deleted...)
+}
+
+// GetUser reports whether the user exists.
+func (u *Users) GetUser(_ context.Context, id string) (umami.User, bool, error) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if u.Fail != nil {
+		return umami.User{}, false, u.Fail
+	}
+	if !u.users[id] {
+		return umami.User{}, false, nil
+	}
+	return umami.User{ID: id}, true, nil
+}
+
+// DeleteUser deletes an existing user; an unknown id is an error, as umami
+// answers 500 for it.
+func (u *Users) DeleteUser(_ context.Context, id string) error {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if u.Fail != nil {
+		return u.Fail
+	}
+	if !u.users[id] {
+		return errors.New("umami delete user: unknown id " + id)
+	}
+	delete(u.users, id)
+	u.deleted = append(u.deleted, id)
+	return nil
 }
 
 // Env is a running console api.
@@ -67,7 +137,9 @@ type Env struct {
 	Fixture *httptest.Server
 	OAuth   *githuboauth.Server
 	Terms   string
-	nextGH  atomic.Int64
+	// Umami is the in-memory umami users when Options.Umami was nil
+	Umami  *Users
+	nextGH atomic.Int64
 }
 
 func random32(t testing.TB) []byte {
@@ -138,11 +210,20 @@ func Start(t testing.TB, o Options) *Env {
 	require.NoError(t, err)
 	memberRoutes, err := members.NewRoutes(e.Scope, users)
 	require.NoError(t, err)
+	um := o.Umami
+	if um == nil {
+		e.Umami = &Users{}
+		um = e.Umami
+	}
+	accountRoutes, err := account.NewRoutes(account.Config{
+		DB: o.DB, Sessions: sessions, Umami: um, Reconcile: e.Scope.Reconcile,
+	})
+	require.NoError(t, err)
 	h := controlplane.NewHandler(controlplane.Options{
 		Log: log, ConsoleOrigin: e.Srv.URL, Sessions: sessions,
 		Public: []controlplane.Routes{controlplane.RoutesFunc(ah.Public)},
 		Private: []controlplane.Routes{
-			controlplane.RoutesFunc(ah.Private), tenants.NewRoutes(e.Scope), memberRoutes, sites.NewRoutes(e.Scope),
+			controlplane.RoutesFunc(ah.Private), accountRoutes, tenants.NewRoutes(e.Scope), memberRoutes, sites.NewRoutes(e.Scope),
 			controlplane.RoutesFunc(guard.Mount(mode, actions)),
 		},
 	})

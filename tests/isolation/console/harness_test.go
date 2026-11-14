@@ -41,6 +41,7 @@ import (
 	"github.com/justmert/veristar/db"
 	"github.com/justmert/veristar/internal/config"
 	"github.com/justmert/veristar/internal/controlplane"
+	"github.com/justmert/veristar/internal/controlplane/account"
 	"github.com/justmert/veristar/internal/controlplane/apimetrics"
 	"github.com/justmert/veristar/internal/controlplane/auth"
 	"github.com/justmert/veristar/internal/controlplane/domaincheck"
@@ -306,6 +307,10 @@ func start(t *testing.T) *env {
 		Version:  "test",
 	})
 	require.NoError(t, err)
+	accountRoutes, err := account.NewRoutes(account.Config{
+		DB: e.conn, Sessions: sessions, Umami: e.umami.Admin, Reconcile: scope.Reconcile,
+	})
+	require.NoError(t, err)
 	api = controlplane.NewHandler(controlplane.Options{
 		Log:           log,
 		ConsoleOrigin: e.srv.URL,
@@ -313,6 +318,7 @@ func start(t *testing.T) *env {
 		Public:        []controlplane.Routes{controlplane.RoutesFunc(ah.Public), controlplane.RoutesFunc(terms.Routes)},
 		Private: []controlplane.Routes{
 			controlplane.RoutesFunc(ah.Private),
+			accountRoutes,
 			tenants.NewRoutes(scope),
 			memberRoutes,
 			sites.NewRoutes(scope).OnCreate(checks),

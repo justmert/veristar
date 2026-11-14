@@ -36,6 +36,8 @@ const (
 	ErasureRequest  = "erasure.request"
 	ErasureComplete = "erasure.complete"
 	ErasureFail     = "erasure.fail"
+	// a person deleted their own console account (contract 4.1.6)
+	AccountDelete = "account.delete"
 )
 
 // ErasureTarget names an erasure request.

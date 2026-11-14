@@ -26,6 +26,7 @@ import (
 	"github.com/justmert/veristar/internal/alertmanager"
 	"github.com/justmert/veristar/internal/config"
 	"github.com/justmert/veristar/internal/controlplane"
+	"github.com/justmert/veristar/internal/controlplane/account"
 	"github.com/justmert/veristar/internal/controlplane/apimetrics"
 	"github.com/justmert/veristar/internal/controlplane/auth"
 	"github.com/justmert/veristar/internal/controlplane/domaincheck"
@@ -356,6 +357,14 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 		return err
 	}
 
+	// a person deletes their own account (contract 4.1.6)
+	accountRoutes, err := account.NewRoutes(account.Config{
+		DB: d, Sessions: sessions, Umami: admin, Reconcile: scope.Reconcile,
+	})
+	if err != nil {
+		return err
+	}
+
 	api := controlplane.NewHandler(controlplane.Options{
 		Log:           log,
 		ConsoleOrigin: cfg.ConsoleOrigin,
@@ -363,6 +372,7 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 		Public:        []controlplane.Routes{controlplane.RoutesFunc(authH.Public), controlplane.RoutesFunc(terms.Routes)},
 		Private: []controlplane.Routes{
 			controlplane.RoutesFunc(authH.Private),
+			accountRoutes,
 			tenants.NewRoutes(scope),
 			memberRoutes,
 			sites.NewRoutes(scope).OnCreate(checks),

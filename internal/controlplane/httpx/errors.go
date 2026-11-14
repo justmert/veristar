@@ -55,6 +55,9 @@ const (
 	// configured (contract 11.2)
 	CodeAlertSourceUnreachable   = "alert_source_unreachable"
 	CodeAlertSourceNotConfigured = "alert_source_not_configured"
+	// an account deletion while the account is the only owner of a project
+	// that is not removed (contract 4.1.6)
+	CodeSoleOwner = "sole_owner"
 )
 
 // defaultUnavailableRetryIn is the Retry-After of a 503 when the caller does
@@ -92,6 +95,15 @@ type Error struct {
 	Fields  map[string]string
 	// RetryAfter, when positive, is sent as the Retry-After header (429, 503).
 	RetryAfter time.Duration
+	// Tenants is set only for sole_owner: the projects that block the
+	// deletion, so the person knows where to hand over ownership
+	Tenants []TenantRef
+}
+
+// TenantRef names a tenant in an error envelope.
+type TenantRef struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
 }
 
 func (e *Error) Error() string {
@@ -168,6 +180,7 @@ type envelopeError struct {
 	Code      string            `json:"code"`
 	Message   string            `json:"message"`
 	Fields    map[string]string `json:"fields,omitempty"`
+	Tenants   []TenantRef       `json:"tenants,omitempty"`
 	RequestID string            `json:"request_id"`
 }
 
@@ -198,10 +211,15 @@ func WriteError(w http.ResponseWriter, r *http.Request, err error) {
 	if e.Status == http.StatusUnprocessableEntity {
 		fields = e.Fields
 	}
+	var tenants []TenantRef
+	if e.Code == CodeSoleOwner {
+		tenants = e.Tenants
+	}
 	WriteJSON(w, e.Status, envelope{Error: envelopeError{
 		Code:      e.Code,
 		Message:   e.Message,
 		Fields:    fields,
+		Tenants:   tenants,
 		RequestID: RequestID(r.Context()),
 	}})
 }

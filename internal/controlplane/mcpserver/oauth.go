@@ -558,7 +558,7 @@ func (s *Server) stillAllowed(ctx context.Context, tx pgx.Tx, user uuid.UUID, sc
 		from cp.users u
 		left join cp.tenant_members m on m.user_id = u.id and m.tenant_id = $2
 		left join cp.tenants t on t.id = $2
-		where u.id = $1`, user, tenant).Scan(&gh, &isOp, &role, &status)
+		where u.id = $1 and u.deleted_at is null`, user, tenant).Scan(&gh, &isOp, &role, &status)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return invalidGrant("the user no longer exists")
 	}

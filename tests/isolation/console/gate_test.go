@@ -52,8 +52,8 @@ const (
 	// a route that names no tenant: sign-in, the session's own user, the
 	// terms, and the tenant list and enrollment, which act on the caller
 	// only. covered by TestConsole (Unauthenticated, Enrollment,
-	// TenantListAndPatch, Terms); here the gate checks that bob's tenant
-	// list never holds tenant a
+	// TenantListAndPatch, Terms) and TestAccountDeletion; here the gate
+	// checks that bob's tenant list never holds tenant a
 	kindOwn
 )
 
@@ -98,7 +98,8 @@ func catalogue(terms string) []route {
 	// names no tenant
 	for _, r := range []struct{ m, p string }{
 		{http.MethodGet, "/api/auth/github/start"}, {http.MethodGet, "/api/auth/github/callback"},
-		{http.MethodPost, "/api/auth/logout"}, {http.MethodGet, "/api/me"}, {http.MethodGet, "/api/terms"},
+		{http.MethodPost, "/api/auth/logout"}, {http.MethodGet, "/api/me"}, {http.MethodDelete, "/api/me"},
+		{http.MethodGet, "/api/terms"},
 		{http.MethodGet, "/api/tenants"}, {http.MethodPost, "/api/tenants"},
 	} {
 		add(kindOwn, r.m, r.p, nil)
