@@ -1047,7 +1047,7 @@ Writes the setting under `cp_system`, audit `settings.enrollment_mode` (target
 **Resubmission.** `PUT /api/tenants/{tenant_id}/enrollment`: session, owner,
 tenant `rejected` (else 409 `invalid_transition`). Body: `enrollment` (required,
 rules of 3.2), `name` and `description` (optional). Runs under `cp_system` after
-the operator check (cp_tenant has no right on `status` or `enrollment_answers`, on
+the check that the caller is an owner (cp_tenant has no right on `status` or `enrollment_answers`, on
 purpose), with `where status = 'rejected'` in the update. Sets
 `enrollment_answers`, the optional fields, `status = 'pending'`,
 `status_reason = null`, `status_changed_at = now()`. Audit `tenant.resubmit`
