@@ -322,7 +322,7 @@ func TestCollector(t *testing.T) {
 		}
 	})
 
-	// review and A-7: an sdk that retries a trace export (its ack timed
+	// an sdk that retries a trace export (its ack timed
 	// out, the collector answered 503 after jetstream stored the publish)
 	// sends the same spans again. the derived points must be queued once,
 	// in the minute the spans ended in, not the minute they arrived.

@@ -37,7 +37,7 @@ var Want = map[string]map[db.Role]string{
 	// role only, and a trigger lets only an owner change members (00028, C-6)
 	"cp.tenant_members": {db.RoleCPSystem: "rawd", db.RoleCPTenant: "rad w(role)"},
 	"cp.invites":        {db.RoleCPSystem: "rawd", db.RoleCPTenant: "rawd"},
-	// cp_tenant updates only what its handlers write (00024, review);
+	// cp_tenant updates only what its handlers write (migration 00024);
 	// the verification columns are written under cp_system (00028)
 	"cp.sites": {
 		db.RoleCPSystem: "rawd",

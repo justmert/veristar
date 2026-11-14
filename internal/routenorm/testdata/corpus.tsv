@@ -327,7 +327,7 @@ a/b	/a/b	-
 /orders/42/items/7?expand=true#top	/orders/{id}/items/{id}	-
 /graphql	/graphql	-
 /health/live	/health/live	-
-# rule set version 2 additions (functional review and A-11): escapes that
+# rule set version 2 additions: escapes that
 # decode to invalid utf-8 or control characters, digits inside a segment,
 # free text, and the bound on the whole route.
 /a/%FF/b	/a/{invalid}/b	-
