@@ -3,10 +3,11 @@ title: "Privacy strategy"
 description: "How the platform minimises personal data: what is held in memory, queued and stored, and for how long."
 ---
 
-> **Status: draft, pending legal review an operator input.** Not legal advice. Last
-> updated 2026-11-13. Legal statements cite `sources.md` (S1 to S11); technical
-> statements point to the code or test that shows them. A statement that is
-> neither sourced nor tested does not belong here.
+How the service keeps personal data to a minimum: what it holds in memory,
+queues and stores, for how long, and which controls tenants have. Legal
+statements cite the legal sources register (`sources.md`); technical statements
+point to the code or test that shows them. This page is not legal advice. Last
+updated 2026-11-14.
 
 ## 1. Roles
 
@@ -18,13 +19,13 @@ description: "How the platform minimises personal data: what is held in memory, 
   `dpa-template.md` (GDPR Art. 28, S10).
 - **SCF operators** see aggregates only: the global views and the machine API
   read `agg.*`, `api.metrics_hourly`, `api.metrics_daily` and counters, never
-  raw events, sessions or Umami (the design and 4.8; role `cp_operator`, tested in
+  raw events, sessions or Umami (role `cp_operator`, tested in
   `internal/db/boundaries_test.go`).
-- Open question for counsel (the design): whether SCF's evaluative use of
-  cross-tenant aggregates is reuse "for the provider's own account". CNIL's
-  self-assessment tool lists that as excluded unless the data was effectively
-  anonymised first (S2). The aggregates are counts per site and day, not
-  rounded; whether they are anonymous in the CNIL sense is not settled here.
+- CNIL's self-assessment tool excludes reuse of the data "for the provider's
+  own account" unless the data was effectively anonymised first (S2). The
+  operators' aggregates are exact counts per site and day, not rounded, and
+  this page makes no claim that they are anonymous in the CNIL sense. That is
+  why France is "not as built" in `jurisdictions.md`.
 
 ## 2. Data inventory per component
 
@@ -38,7 +39,7 @@ file-backed stream. "Stored" means PostgreSQL.
 | Gateway | client address (in `X-Edge-Client-Ip` from Caddy) | memory | the request. It is truncated to /24 (IPv4) or /48 (IPv6) for the country lookup and is never logged, queued or stored (`internal/gateway/clientip.go`, `docs/reference/geo.md`) |
 | Gateway | daily visitor secret, daily IP-cluster secret, daily proof key | `edge_secrets`, memory bucket | until the next UTC midnight (per-key TTL), then gone; gateways zero their copies at midnight (`internal/gateway/visitor.go`) |
 | Gateway | IP-cluster sets: keyed HMAC of the truncated network, visitor tokens | memory | a sliding hour |
-| `WEB_EVENTS` | accepted event: site, band, visitor token, user agent (cut to the this stage limit), country code, hostname, path with allowlisted query, referrer scheme and host, title, screen, language, event name and data | queued | until the replayer delivers it, at most 72 hours |
+| `WEB_EVENTS` | accepted event: site, band, visitor token, user agent (cut to 500 UTF-16 code units), country code, hostname, path with allowlisted query, referrer scheme and host, title, screen, language, event name and data | queued | until the replayer delivers it, at most 72 hours |
 | `WEB_DLQ` | events Umami refused permanently, same fields | queued | at most 7 days; erasure deletes matching messages |
 | `visit_state` | per site and visitor token: Umami session id, cache token, last event time; duplicate-guard keys | memory bucket | 24 hours after the last write |
 | Umami (`umami` database) | `session` (browser, OS, device, screen, language, country), `website_event` (time, path, query, referrer domain, title, event name, hostname; the referrer path is always `/` and its query empty, section 7), `event_data` | stored | `WEB_RAW_RETENTION_MONTHS`, default 25 (section 4) |
@@ -70,8 +71,8 @@ service log, the Caddy logs and every container volume for them.
 5. After midnight nobody can recompute a token of the previous day, so stored
    sessions cannot be linked back to an address and user agent. The CJEU held
    in C-413/23 P that pseudonymised data is personal data for whoever can
-   re-identify it (S8). Applying that to a destroyed salt is our inference,
-   recorded in S8 for counsel. During the day the token is computable by the
+   re-identify it (S8). That nobody can re-identify a token once its salt is
+   destroyed is an inference, recorded as such in S8. During the day the token is computable by the
    gateways, which is why same-day erasure exists (section 6).
 
 Consequences, stated in the tenant docs: visitors are unique per UTC day; a
@@ -100,16 +101,17 @@ left and their `session_data` and `session_link` rows. It reads
 the 27 migrations of the pinned Umami 3.5.0 image with their checksums, and
 the columns it uses exist (tested in `internal/jobs/retainweb/retainweb_test.go`).
 The role `jobs_retention` has select and delete on those tables and select on
-`_prisma_migrations`, nothing else (same test). It is not scheduled by the jobs
-daemon; deployments run it once a day (this stage adds the timer).
+`_prisma_migrations`, nothing else (same test). It runs outside the jobs
+daemon: the core role installs a systemd timer (`retain-web.timer`) that runs
+it once a day.
 
 Raw retention bounds what a tenant dashboard covers: with the default of 25
 months, Umami shows 24 full months.
 
 ## 5. Umami features that are off, and how
 
-Umami 3.5.0 has no global switch for these features (the design, correction
-8), so they are disabled by not shipping their client code and by blocking
+Umami 3.5.0 has no global switch for these features, so they are disabled by
+not shipping their client code and by blocking
 their routes:
 
 | Feature | How it is off |
@@ -119,7 +121,7 @@ their routes:
 | Links, pixels, shares, boards | `/api/links*`, `/api/pixels*`, `/api/share*`, `/api/boards*`, `/share/*`, `/q/*`, `/p/*` are denied for every method |
 | Direct collection | `/api/send`, `/api/batch`, `/api/record` are denied publicly; only the replayer reaches them |
 | Region and city | the gateway never looks them up; Umami receives only a country header with the constant address |
-| Telemetry, update checks, favicon lookups | `PRIVATE_MODE=1`, `DISABLE_TELEMETRY=1`, `DISABLE_UPDATES=1` |
+| Telemetry, update checks, favicon lookups | `PRIVATE_MODE=1`, `DISABLE_TELEMETRY=1`, `DISABLE_UPDATES=1` (outbound traffic tested in `tests/webpath/egress_test.go`) |
 
 The deny list lives in `deploy/caddy/web.Caddyfile` and
 `docs/reference/umami-contract.md`.
@@ -212,54 +214,39 @@ conditions of the exemption are those of délibération 2020-091 art. 5 (S2).
 | No filter combination isolates a user | none named | Umami's filters and Sessions page can show one visitor's pages of a day | no (section 9) |
 | No tracking of a single user's navigation | session replay disabled | replay is off (section 5), but the Sessions page lists one session's page views | replay: yes; the criterion as a whole: no |
 
-### Decision on rounding to ten: documented limitation
-
-Three options were weighed: a display rule for every tenant, a per-tenant
-"CNIL mode", and a documented limitation. The service takes the third, for
-these reasons:
+### Why reports are not rounded to ten
 
 1. **Where tenants see numbers.** Every tenant web report is Umami's own UI,
-   read API and CSV export, run from the official image unmodified (plan
-   section 1, the design). The console shows tenants no web counts. Rounding
-   there would change nothing a tenant sees. Rounding in Umami would mean
-   patching the image or rewriting every JSON and CSV answer of dozens of
-   report routes in the web proxy, which the project ruled out by running
-   Umami unmodified.
+   read API and CSV export, run from the official image unmodified
+   ([ADR 0002](../adr/0002-overlay-not-fork.md)). The console shows tenants
+   no web counts, so rounding there would change nothing a tenant sees.
+   Rounding in Umami would mean patching the image or rewriting every JSON and
+   CSV answer of dozens of report routes in the web proxy.
 2. **Rounding alone would not meet the criterion.** The criterion is that
    every report is anonymous for any combination of filters, and the next
    row asks that no single user's navigation can be followed. Umami's
    Sessions and realtime pages show the pages of one visitor's day to a
    `team-view-only` member (`docs/reference/umami-contract.md`, item 10).
-   A rounded overview next to those pages is still not anonymous output, so
-   a "CNIL mode" that only rounded would invite a claim the system does not
-   satisfy. Blocking those pages would also remove the session ids a tenant
-   needs for session erasure (`erasure.md`).
-3. **No false claim.** France therefore stays "not as built"
-   (`jurisdictions.md`): tenants with French visitors use consent mode until
-   counsel decides otherwise. No anonymity analysis has been made, and none
-   is claimed.
+   A rounded overview next to those pages is still not anonymous output.
+   Blocking those pages would also remove the session ids a tenant needs for
+   session erasure (`erasure.md`).
+3. **No overstated claim.** France therefore stays "not as built"
+   (`jurisdictions.md`): tenants with French visitors use consent mode unless
+   their counsel decides otherwise. No anonymity analysis is claimed.
 
-What would close it: a tenant view built from rounded aggregates with the
-Sessions, realtime and filter views withheld, with a written WP29 analysis.
-That is a product change for the operator to decide; it is not built.
-
-## 9. Known gaps
+## 9. Limits
 
 - **Exact counts and single-visitor views.** Section 8: no rounding, and
   Umami's Sessions page shows one visitor's pages of a day.
-- **UTM parameters.** Off by default since 2026-11-13: the gateway drops
-  them unless the site's owner turns on `collect_utm` (section 7), which moves
-  the default to CNIL's recommended measure. A site that turns it on no
-  longer meets that measure; the console says so next to the switch. Sites
-  that existed before the setting start with it off.
+- **UTM parameters.** Off by default: the gateway drops them unless the
+  site's owner turns on `collect_utm` (section 7), which keeps the default at
+  CNIL's recommended measure. A site that turns it on no longer meets that
+  measure; the console says so next to the switch.
 - **Erasure race.** See `erasure.md`, "Limits".
 - **NATS file blocks.** An acknowledged `WEB_EVENTS` message is removed from
   the stream, but its bytes can stay in a JetStream file block until the block
   is compacted or expires (at most 72 hours). Erasure deletes `WEB_DLQ`
   messages with secure delete, which overwrites them.
-- **Production hosting.** Production runs in Azure Denmark East (EU) on
-  three converged nodes since 2026-11-13; `data-residency.md` states where
-  each kind of data is processed and stored.
 
 ## 10. AI clients (MCP)
 
@@ -269,8 +256,7 @@ new store; it is another way for the same people to read what the console
 already shows them.
 
 - **Who receives data.** The AI client a member or operator connects, and the
-  vendor that runs it (Anthropic for Claude, OpenAI for ChatGPT, Anysphere for
-  Cursor), receives the tool answers that person asks for. The member chose
+  vendor that runs it, receives the tool answers that person asks for. The member chose
   the client and approved the connection; the vendor processes the answers
   under the member's or the tenant's own terms with that vendor, not as a
   sub-processor of the service. The service sends nothing to a client that
