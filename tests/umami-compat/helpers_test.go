@@ -1,8 +1,8 @@
 //go:build umamicompat
 
 // Package umamicompat holds the checks that pin the umami behaviours the
-// platform depends on (the design to 4.9). they run against a live
-// umami with the environment of section 4.9 (make umami-compat) and are the
+// platform depends on (docs/reference/umami-contract.md). they run against a live umami
+// with the environment of deploy/compose/dev.yml (make umami-compat) and are the
 // gate for every umami upgrade. each test creates its own team and website
 // and deletes them when it ends.
 package umamicompat

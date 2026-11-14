@@ -1,7 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 import { PROXY_PORT } from "./fixture/env.ts";
 
-// this stage end-to-end flows (the design verification): sign-in through the
+// console end-to-end flows: sign-in through the
 // test-only github oauth fixture, enrollment, sites, snippet, traffic through
 // the real gateway, the umami dashboard through sso, isolation, sso
 // hardening and session security. the go test stack_test.go (make

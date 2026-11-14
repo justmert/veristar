@@ -9,7 +9,7 @@ package gatewayit
 // generator (the reference run used 10 cores). github's standard runner for
 // private repositories has 2 vcpus, where k6 alone takes about one of them;
 // two runs there gave p99 174 ms and 222 ms (e2e runs 43437576423 and
-// 43454017432, the review notes). run it with make gateway-load.
+// 43454017432). run it with make gateway-load.
 
 import (
 	"encoding/json"
@@ -28,7 +28,7 @@ const (
 	k6Rate         = 2500
 	k6Duration     = 30 * time.Second
 	loadP99Ceiling = 50 * time.Millisecond
-	// the pinned load tool of the design
+	// the pinned load tool
 	k6Image = "grafana/k6:2.3.0@sha256:2dd4756ec6e14e62778916e1eb850108e4b499304c02df56760fa0bdb0fba0b8"
 )
 

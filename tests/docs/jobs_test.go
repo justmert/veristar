@@ -16,8 +16,7 @@ var (
 // TestJobsRunTasksExist checks every `jobs run <task>` a document names
 // against the task names the jobs packages register. a wrong name fails
 // with unknown task at the moment an operator needs it, for example during
-// the handover freeze (ops review). the audit reports quote the wrong
-// name on purpose and are skipped.
+// the handover freeze.
 func TestJobsRunTasksExist(t *testing.T) {
 	root := repoRoot(t)
 	tasks := map[string]bool{}
@@ -40,9 +39,6 @@ func TestJobsRunTasksExist(t *testing.T) {
 		t.Fatal("no TaskName constants found under internal/jobs")
 	}
 	for _, f := range markdownFiles(t, root) {
-		if strings.Contains(rel(root, f), "docs/review/") {
-			continue
-		}
 		for _, m := range jobsRunRe.FindAllStringSubmatch(read(t, f), -1) {
 			// the make target's placeholder, not a task
 			if m[1] == "task" {

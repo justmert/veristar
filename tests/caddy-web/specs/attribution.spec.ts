@@ -3,11 +3,11 @@ import { expect, type Page, test } from "@playwright/test";
 // db-ip's country lite licence asks for a link back on every page that shows
 // results from the database. umami runs unmodified, so the web caddy adds
 // "IP Geolocation by DB-IP" before </body> of every html answer
-// (deploy/caddy/web.Caddyfile, the reference docs section 5). this checks that
+// (deploy/caddy/web.Caddyfile). this checks that
 // the link is on every tenant dashboard page, exactly once, after full loads
 // and after umami's client-side navigation, which never reloads the document.
-// if react dropped the node, this is the test that fails, and the plan says
-// to stop and report instead of switching approach silently.
+// if react dropped the node, this is the test that fails, and the injection
+// approach has to be reconsidered rather than worked around silently.
 
 const port = process.env.WEB_PORT ?? "";
 const domain = process.env.WEB_DOMAIN ?? "";

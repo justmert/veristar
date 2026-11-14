@@ -1,4 +1,4 @@
-// browser scenarios of the this stage web path suite. each test only drives the
+// browser scenarios of the web path suite. each test only drives the
 // browser and checks that the real gateway answered every event with 202;
 // what umami stored is checked by the go test (tests/webpath), which selects
 // a scenario with --grep on its tag and passes parameters as WEBPATH_* env.

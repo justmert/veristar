@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-// the design verification, "sso hardening" and "token life" (two tabs):
+// sso hardening and token life (two tabs):
 // /sso on web.<BASE_DOMAIN> is refused cross-site and for a url outside
 // /websites/, its responses carry Cache-Control: no-store and
 // Referrer-Policy: no-referrer; the console's sso route refuses a cross-site

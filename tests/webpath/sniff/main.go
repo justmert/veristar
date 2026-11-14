@@ -1,6 +1,6 @@
 //go:build linux
 
-// Command sniff is a test-only packet logger for the this stage egress check
+// Command sniff is a test-only packet logger for the web path egress check
 // (tests/webpath). it runs as a sidecar in the umami container's network
 // namespace (docker run --network container:<umami>) with CAP_NET_RAW and
 // reads every packet on every interface of that namespace through an

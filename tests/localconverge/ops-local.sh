@@ -1,25 +1,24 @@
 #!/bin/sh
-# the operations checks of the review notes on the minimal
-# local converge (make ops-local). builds 3 edge nodes, 1 core node, the s3
+# operations checks on the minimal local converge (make ops-local). builds 3 edge nodes, 1 core node, the s3
 # object storage stand-in (LC_BACKUP=s3) and the probe node (LC_PROBE=1),
 # then proves:
-#   O-2  site.yml's storage role creates the backup bucket with versioning
+#   -    site.yml's storage role creates the backup bucket with versioning
 #        and a compliance-mode default retention; a second run changes
 #        nothing; the database node's own s3 key cannot delete a locked
 #        object version
-#   O-1  in object storage mode the patroni leader creates the stanza before
+#   -    in object storage mode the patroni leader creates the stanza before
 #        archive_command is set, wal reaches the bucket (pgbackrest check,
 #        pg_stat_archiver), the scheduled full backup runs and is listed
 #   -    a second converge reports changed=0 on every node
-#   O-11 with etcd stopped on all three edge nodes the leader stays primary
+#   -    with etcd stopped on all three edge nodes the leader stays primary
 #        and writable (patroni failsafe mode)
-#   O-6  edge-3 destroyed and rebuilt with empty disks rejoins etcd: three
+#   -    edge-3 destroyed and rebuilt with empty disks rejoins etcd: three
 #        started members, edge-3 recorded as existing
-#   O-3  site.yml converges the probe node (public network only): caddy,
+#   -    site.yml converges the probe node (public network only): caddy,
 #        gatus and the prober run, the prober's pushes arrive
-#   O-15 alertmanager's watchdog push reaches the probe's gatus
+#   -    alertmanager's watchdog push reaches the probe's gatus
 # then removes everything (KEEP=1 keeps it). logs and timings go to
-# .scratch/scratch/ops-local/. refuses to start at a load average of 20 or
+# .scratch/ops-local/. refuses to start at a load average of 20 or
 # more, because the host is shared.
 set -eu
 
@@ -27,7 +26,7 @@ root="$(cd "$(dirname "$0")/../.." && pwd)"
 export LC_TOPOLOGY=minimal LC_BACKUP=s3 LC_PROBE=1
 venv="${ANSIBLE_VENV:-$HOME/.local/share/veristar/ansible-venv}"
 tools="$HOME/.local/share/veristar/tools"
-out="$root/.scratch/scratch/ops-local"
+out="$root/.scratch/ops-local"
 mkdir -p "$out"
 : >"$out/times.txt"
 . "$root/infra/local/env.sh"

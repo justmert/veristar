@@ -74,7 +74,7 @@ func runSetup(ctx context.Context, args []string) (any, error) {
 			"name": fmt.Sprintf("Drill %s %02d", st.Suffix, i),
 			"enrollment": map[string]any{
 				"website":       fmt.Sprintf("https://t%02d-%s.%s", i, st.Suffix, st.Domain),
-				"stellar_usage": "this stage drill load",
+				"stellar_usage": "failure drill load",
 			},
 			"accepted_terms_version": curTerms,
 		}, &t)

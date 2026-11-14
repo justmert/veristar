@@ -1,18 +1,18 @@
 #!/bin/sh
-# brings up the this stage local TEST STACK (compose.yml): builds the platform
+# brings up the observability local TEST STACK (compose.yml): builds the platform
 # binaries, creates test certificates and secrets under
-# .scratch/scratch/p17, renders the observability role's templates with
+# .scratch/p17, renders the observability role's templates with
 # render.yml, starts everything, signs in as the fixture operator, creates
 # the probe tenant with platformctl and starts the prober.
 #   tests/observability/up.sh      start or update
 #   tests/observability/down.sh    remove containers, volumes and images
 set -eu
 root="$(cd "$(dirname "$0")/../.." && pwd)"
-P17="$root/.scratch/scratch/p17"
+P17="$root/.scratch/p17"
 export P17
 cd "$root/tests/observability"
 export PATH="$HOME/.local/go1.27.4/bin:$HOME/.local/bin:$PATH"
-ansible_playbook="$root/.scratch/scratch/ansible-venv/bin/ansible-playbook"
+ansible_playbook="$root/.scratch/ansible-venv/bin/ansible-playbook"
 compose() { docker compose -f "$root/tests/observability/compose.yml" "$@"; }
 
 mkdir -p "$P17/bin" "$P17/env" "$P17/conf" "$P17/certs"

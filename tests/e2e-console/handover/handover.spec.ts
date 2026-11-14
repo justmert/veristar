@@ -1,4 +1,4 @@
-// the design handover rehearsal, browser half (tests/handover runs it).
+// handover rehearsal (docs/handover/rebuild.md), browser half (tests/handover runs it).
 //   @populate  environment a: two github users sign in, enroll a project
 //              each, add sites, paste the console's snippet into the tenant
 //              site and load pages through the real gateway, and send api

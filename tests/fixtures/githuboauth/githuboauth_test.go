@@ -42,8 +42,9 @@ func newFixture(t *testing.T) (*Server, *httptest.Server, *clock) {
 	return s, ts, c
 }
 
-// oauthConfig mirrors the control plane's client setup from
-// docs/reference/the reference docs section 2: auth style in params, no scopes.
+// oauthConfig mirrors the control plane's client setup: auth style in
+// params, because github documents client_id and client_secret as
+// parameters, and no scopes, because the public profile needs none.
 func oauthConfig(base string) *oauth2.Config {
 	return &oauth2.Config{
 		ClientID:     testClientID,

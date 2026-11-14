@@ -3,7 +3,7 @@
 package handover
 
 // the containers of one environment. adapted from tests/e2e-console's
-// stack (this stage), with what a migration needs on top: a source database
+// stack, with what a migration needs on top: a source database
 // that archives wal into a pgbackrest repository, services that can be
 // stopped and started again around an import, and env files in the shape
 // scripts/migrate.sh and platformctl verify-migration read.
@@ -374,7 +374,7 @@ func (s *Stack) EnvFile(t testing.TB) string {
 	return p
 }
 
-// StartUmami runs umami with the environment of the design and, on a
+// StartUmami runs umami with the environment of deploy/compose/dev.yml and, on a
 // fresh database, replaces the seeded admin password.
 func (s *Stack) StartUmami(t testing.TB, bootstrap bool) {
 	t.Helper()

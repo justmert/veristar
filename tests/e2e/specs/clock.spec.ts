@@ -1,6 +1,6 @@
 // a visitor whose system clock is two days ahead is still counted: the
 // challenge time comes from the server and the client timestamp is never
-// trusted
+// trusted (docs/reference/browser-proof.md)
 import { expect, test } from "@playwright/test";
 import { siteByKey } from "../sites.ts";
 import { expectContract, expectPageviews, resetFixture, trackerReady } from "./helpers.ts";

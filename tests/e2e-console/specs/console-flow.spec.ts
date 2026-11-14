@@ -1,4 +1,4 @@
-// the design verification, "end-to-end" and "snippet": sign in through the
+// console flow end to end, with the snippet: sign in through the
 // oauth fixture, enroll a project, add a site, take the snippet from the
 // snippet page and paste it into the example site, generate browser traffic
 // through the real gateway, click "Open web dashboard" and see the site's
@@ -84,7 +84,7 @@ test("sign in, enroll, add a site and copy the snippet", async ({ browserName })
   await page.getByLabel("Website").fill("https://example.org");
   await page
     .getByLabel("How does the project use Stellar?")
-    .fill("Payments on testnet, measured by this stage e2e");
+    .fill("Payments on testnet, measured by the console e2e");
   await page.getByRole("checkbox").check();
   await shot(page, "02-enroll");
   await page.getByRole("button", { name: "Enroll project" }).click();

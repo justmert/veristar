@@ -1,4 +1,4 @@
-// Command drill is a TEST FIXTURE of the this stage local stack
+// Command drill is a TEST FIXTURE of the observability local stack
 // (tests/observability). it runs inside the stack's network:
 //
 //	drill signin -ca <ca>        signs in as the fixture operator (github id

@@ -1,6 +1,6 @@
 //go:build webpath
 
-// Package webpath holds the this stage end-to-end suite of the web path: real
+// Package webpath holds the end-to-end suite of the web path: real
 // browsers (tests/e2e in its real-gateway mode) on the example sites, the
 // edge caddy, the gateway image, nats, the replayer image, umami and its
 // postgresql, all in containers this suite owns, so services can be stopped
@@ -40,7 +40,7 @@ import (
 const (
 	gatewayImage  = "veristar/gateway:webpath"
 	replayerImage = "veristar/replayer:webpath"
-	// pinned in the design, the same digests the gateway tests use
+	// pinned by digest, the same digests the gateway tests use
 	caddyImage  = "caddy:2.11.9@sha256:e40b94d0a43b5ff69cb20568d73f10c70703df7b0ffc2298eb3d723cdc9d0bd1"
 	staticImage = "gcr.io/distroless/static-debian13:nonroot@sha256:25ac8f0c3b2334a9eb05452266bd4697864a8c8ef0ef71e5e6480d7f92868329"
 
@@ -317,7 +317,7 @@ func (s *Stack) StartNATS(t testing.TB) {
 }
 
 // StartUmami runs postgresql with the dev init script and umami with the
-// environment of the design (as deploy/compose/dev.yml), then rotates
+// environment of deploy/compose/dev.yml, then rotates
 // the seeded admin password.
 func (s *Stack) StartUmami(t testing.TB) {
 	t.Helper()
@@ -427,7 +427,7 @@ func (s *Stack) StartEdge(t testing.TB) {
 		"--network-alias", gatewayHost,
 		"-v", filepath.Join(repoRoot(), "deploy", "caddy", "edge.Caddyfile") + ":/etc/caddy/Caddyfile:ro",
 		"-e", "BASE_DOMAIN=" + edgeDomain, "-e", "GATEWAY_UPSTREAM=edge-1:8080", "-e", "EDGE_TLS=internal",
-		// the this stage otlp site of edge.Caddyfile needs its upstreams set or
+		// the otlp site of edge.Caddyfile needs its upstreams set or
 		// caddy refuses the config. the web path has no collector, so they
 		// name a host that does not exist; nothing here calls otlp.<domain>.
 		"-e", "COLLECTOR_GRPC_UPSTREAM=no-collector:4317", "-e", "COLLECTOR_HTTP_UPSTREAM=no-collector:4318",

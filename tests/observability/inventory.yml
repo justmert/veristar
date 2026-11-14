@@ -1,4 +1,4 @@
-# TEST INVENTORY for render.yml: the nodes of the this stage local test stack
+# TEST INVENTORY for render.yml: the nodes of the observability local test stack
 # (compose.yml). addresses are the stack's container addresses.
 all:
   vars:
@@ -12,7 +12,7 @@ all:
     # minutes of stopping the replayer or the metrics writer
     observability_probe_freshness_max_delay: 45s
     # this stack runs the rendered configs in plain compose containers
-    # without the internal ca; the role itself refuses false
+    # without the internal ca; the role itself refuses false outside tests
     observability_tls: false
     # no patroni here; postgres runs as one plain container
     observability_patroni_hosts: []

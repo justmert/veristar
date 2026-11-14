@@ -1,13 +1,12 @@
 //go:build consolee2e
 
-// Package consolee2e runs the this stage browser flows (the design
-// verification) against real services in containers this test owns:
-// postgresql with the platform migrations, nats with the topology, umami
+// Package consolee2e runs the console browser flows against real services in
+// containers this test owns: postgresql with the platform migrations, nats with the topology, umami
 // (bootstrapped), the control plane built with the oauthfixture tag and
 // pointed at the TEST-ONLY github oauth fixture (tests/fixtures/githuboauth),
 // the replayer, the gateway image behind the edge caddy, the web caddy in
 // front of umami and the console's static build behind the app caddy. for
-// the api analytics flows (this stage) the stack adds the collector image and
+// the api analytics flows the stack adds the collector image and
 // the metricswriter behind otlp.<base domain> on the same edge caddy, a
 // stock collector as the tenants' own backend, and a loopback control api
 // that starts the go example app with a token the spec created. the
@@ -451,7 +450,7 @@ func (s *Stack) startUmami(t testing.TB, dbPW string) {
 	umamiImage, _ := umamictr.Images(t)
 	name := "sa-ce-umami-" + s.ID
 	port := freePort(t)
-	// environment of the design, as deploy/compose/dev.yml
+	// the umami environment of deploy/compose/dev.yml
 	s.run(t, name, append([]string{"--network-alias", "umami", "-p", "127.0.0.1:" + port + ":3000"},
 		envOpts(map[string]string{
 			"DATABASE_URL":       "postgresql://umami_app:" + dbPW + "@postgres:5432/umami",
@@ -559,7 +558,7 @@ func (s *Stack) StartControlPlane(t testing.TB) {
 		"GITHUB_REDIRECT_URL":   "https://app." + baseDomain + "/api/auth/github/callback",
 		"OAUTH_STATE_KEY":       key32(),
 		"OAUTH_FIXTURE_URL":     "http://" + oauthHost + ":" + oauthPort,
-		// an id no test user takes; this stage flows run as tenants
+		// an id no test user takes; the tenant flows run as tenants
 		"OPERATOR_GITHUB_IDS": "1",
 	} {
 		env[k] = v
@@ -815,7 +814,7 @@ var siteID = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4
 // fetches https://<domain>/.well-known/veristar.txt through
 // internal/netguard, which refuses the private and loopback addresses every
 // host of this offline stack resolves to, and no dns server here can hold
-// the txt record. the global views (this stage) only read the result.
+// the txt record. the global views only read the result.
 func (s *Stack) verifySite(id string) error {
 	if !siteID.MatchString(id) {
 		return fmt.Errorf("bad site id %q", id)
@@ -964,7 +963,7 @@ func waitTLS(t testing.TB, addr, host, path string) {
 }
 
 func outDir() string {
-	dir := filepath.Join(repoRoot(), "resources", "scratch", "console-e2e")
+	dir := filepath.Join(repoRoot(), ".scratch", "console-e2e")
 	_ = os.MkdirAll(dir, 0o755)
 	return dir
 }

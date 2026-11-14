@@ -1,6 +1,5 @@
 #!/bin/sh
-# rotate-all.yml against the local converge (the design; make
-# rotate-local). builds the minimal topology (3 edge, 1 core, 1 backup
+# rotate-all.yml against the local converge (make rotate-local). builds the minimal topology (3 edge, 1 core, 1 backup
 # node), converges it, puts traffic and a console user through it, then:
 #   1. a second age identity stands in for the new operator; the first one
 #      is the original operator's, which is removed
@@ -10,15 +9,15 @@
 #      refused and the removed identity opens neither file
 #   4. the local converge end-to-end check passes on the rotated system
 # then removes everything (KEEP=1 keeps it). logs and timings go to
-# .scratch/scratch/rotate-local/.
+# .scratch/rotate-local/.
 set -eu
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 export LC_TOPOLOGY=minimal
 venv="${ANSIBLE_VENV:-$HOME/.local/share/veristar/ansible-venv}"
 tools="$HOME/.local/share/veristar/tools"
-out="$root/.scratch/scratch/rotate-local"
-state="$root/.scratch/scratch/local-converge"
+out="$root/.scratch/rotate-local"
+state="$root/.scratch/local-converge"
 mkdir -p "$out"
 : >"$out/times.txt"
 

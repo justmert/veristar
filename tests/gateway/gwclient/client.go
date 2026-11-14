@@ -1,5 +1,5 @@
 // Package gwclient is a scripted, non-browser client of the collect gateway,
-// used only by the this stage tests in tests/gateway and by the probe they run
+// used only by the gateway tests in tests/gateway and by the probe they run
 // inside docker. it fetches a challenge, solves the proof in go and posts
 // wire v1 events with whatever headers the caller forges. that such a client
 // is accepted is the documented limitation of the proof

@@ -1,4 +1,4 @@
-// Command drillctl drives the this stage drills against the local converge
+// Command drillctl drives the failure drills against the local converge
 // (docs/reference/drills/2026-11-13.md): it creates the drill tenants, runs
 // the load profiles of tests/load with a ledger of every acknowledged event,
 // checks the ledger against umami and the platform database, probes the

@@ -1,12 +1,12 @@
 //go:build enrollmentit
 
-// Package enrollmentit verifies the enrollment mode of the design
+// Package enrollmentit verifies the enrollment mode
 // (control-plane-api 5.7) end to end: the control plane routes in process
 // with the real sign-in (github oauth fixture), the real reconciler, real
 // postgresql, real nats, a real umami, and the real gateway and replayer
 // binaries built from cmd/. run it with
 //
-//	DBIP_MMDB=.scratch/scratch/geo/dbip-country-lite.mmdb \
+//	DBIP_MMDB=.scratch/geo/dbip-country-lite.mmdb \
 //	  go test -tags enrollmentit -race -count=1 -v ./tests/enrollment/
 //
 // DBIP_MMDB is the db-ip country file the gateway needs (make geo-fetch).
@@ -439,7 +439,7 @@ func (c *client) tenant(t *testing.T, id uuid.UUID) map[string]any {
 // status and body. without a challenge for site, proof is attached instead:
 // a well formed proof solved for another site, because the gateway parses
 // the proof as part of the schema check, which comes before the site check
-//.
+// (docs/reference/wire-v1.md).
 func (e *env) send(t *testing.T, site uuid.UUID, domain, path string, proof *gwclient.Proof) (int, string, int, string) {
 	t.Helper()
 	ctx := t.Context()

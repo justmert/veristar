@@ -1,5 +1,5 @@
 #!/bin/sh
-# TEST FIXTURE: a private ca and one leaf per node for the this stage local
+# TEST FIXTURE: a private ca and one leaf per node for the observability local
 # stack (tests/observability). caddy's own internal ca issues 12 hour
 # certificates, which the 14 day certificate alert would always flag, so the
 # stack uses these 90 day certificates instead; drill-cert.sh swaps one node

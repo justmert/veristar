@@ -1,7 +1,7 @@
 #!/bin/sh
 # the restart drill for the start-at-boot unit of the edge and core roles
 # (roles/{edge,core}/tasks/start_unit.yml, docs/reference/drills/2026-11-13.md).
-# one local debian 13 systemd node from the this stage tooling (infra/local),
+# one local debian 13 systemd node from the local converge tooling (infra/local),
 # converged with the base role and the edge role's unit, runs a test-only
 # compose project (start-unit/compose.yml). then:
 #   1. power-off: the node container is killed (no shutdown), then started;
@@ -15,7 +15,7 @@
 #   3. control: the same with the unit disabled (systemctl disable); the container must stay
 #      down, which shows that step 2 measured the unit and not docker
 # everything it created is removed at the end, also on failure. raw output
-# goes to .scratch/scratch/drills/start-unit/.
+# goes to .scratch/drills/start-unit/.
 #
 # START_UNIT_TIMEOUT=90s puts systemd's default oneshot timeout back with a
 # drop-in, to show what the unit's TimeoutStartSec prevents: step 2 must then
@@ -25,7 +25,7 @@ root="$(cd "$(dirname "$0")/../.." && pwd)"
 . "$root/infra/local/env.sh"
 . "$root/infra/local/lib.sh"
 ANSIBLE_BIN="${ANSIBLE_VENV:-$HOME/.local/share/veristar/ansible-venv}/bin"
-OUT="$root/.scratch/scratch/drills/start-unit"
+OUT="$root/.scratch/drills/start-unit"
 NODE=sa-lc-edge-1 LOC=fsn1 PUB=172.31.99.12 PRIV=10.99.1.12
 PROJECT=/opt/veristar/edge
 mkdir -p "$OUT"

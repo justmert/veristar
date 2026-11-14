@@ -15,7 +15,7 @@
 // run it with the dev stack up and a db-ip file fetched (make geo-fetch):
 //
 //	set -a && . deploy/compose/.env.dev && set +a
-//	UMAMI_IT_URL=$UMAMI_URL DBIP_MMDB=$PWD/.scratch/scratch/geo/dbip-country-lite.mmdb \
+//	UMAMI_IT_URL=$UMAMI_URL DBIP_MMDB=$PWD/.scratch/geo/dbip-country-lite.mmdb \
 //	  go test -tags recoveryit -race -count=1 -v -timeout 30m ./tests/recovery/
 package recoveryit
 

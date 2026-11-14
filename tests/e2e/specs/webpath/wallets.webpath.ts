@@ -1,4 +1,4 @@
-// browser half of the this stage suite (tests/webpath wallets_test.go). the
+// browser half of the wallets kit suite (tests/webpath wallets_test.go). the
 // wallets kit example runs the real kit with the test wallet module, against
 // the real gateway. each test drives one capture mode and checks what the
 // browser sent; the go test checks the queue and what umami stored.

@@ -1,7 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 import { PROXY_PORT } from "./fixture/env.ts";
 
-// the design handover rehearsal. tests/handover (make handover-it) starts
+// handover rehearsal (docs/handover/rebuild.md). tests/handover (make handover-it) starts
 // the two environments and runs one phase at a time with --grep: populate
 // environment a, then after the migration the history and cutover checks
 // against environment b behind the same names.

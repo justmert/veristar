@@ -1,8 +1,8 @@
 // Package pins checks that the production image pins held in ansible
 // variables equal the one-line dockerfiles under deploy/images/upstream,
-// which exist only so dependabot can propose updates for them (the review
-// O-17). a dependabot pull request moves the dockerfile; this test stays red
-// until the ansible pin is moved with it.
+// which exist only so dependabot can propose updates for them. a dependabot
+// pull request moves the dockerfile; this test stays red until the ansible
+// pin is moved with it.
 package pins
 
 import (

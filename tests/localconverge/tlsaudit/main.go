@@ -1,7 +1,7 @@
 // Command tlsaudit reads packet captures of the local converge's private
 // network (tests/localconverge/tls-audit.sh) and reports every tcp flow and
-// udp datagram that carries readable protocol data instead of tls (finding
-// O-26 of the review notes).
+// udp datagram that carries readable protocol data instead of tls: every
+// private endpoint must speak tls with client certificates.
 //
 //	tlsaudit -markers <file> <capture.pcap>...
 //

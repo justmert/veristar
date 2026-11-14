@@ -1,4 +1,4 @@
-// behaviours the this stage onboarding guides promise and the other specs do
+// behaviours the onboarding guides promise and the other specs do
 // not cover: deferred start for consent, a self-hosted sdk.js, the content
 // security policy of docs/onboarding/web/content-security-policy.md, and an
 // external referrer kept on the first pageview of every example site

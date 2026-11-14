@@ -1,6 +1,6 @@
 //go:build apivolume
 
-// Package apivolume is the this stage volume run: 1,000,000 requests across 10
+// Package apivolume is the api pipeline volume run: 1,000,000 requests across 10
 // tenants and 30 services, recorded by the pinned opentelemetry go sdk and
 // exported through the built scf-otelcol to a real nats server (production
 // permissions), stored by the built metricswriter in a real postgresql, then

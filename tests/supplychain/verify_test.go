@@ -2,7 +2,7 @@
 
 // Package supplychain proves the deploy-time image verification of
 // infra/ansible/playbooks/deploy.yml (playbooks/tasks/verify-images.yml)
-// against a real registry and real cosign signatures (the design).
+// against a real registry and real cosign signatures (docs/security/supply-chain.md).
 //
 // TEST-ONLY SIGNING: production images are signed keyless by
 // release-images.yml with github's oidc identity, which cannot run outside
@@ -81,7 +81,7 @@ func freePort(t *testing.T) int {
 
 func setup(t *testing.T) *world {
 	out := must(t, "", nil, "cosign", "version")
-	require.Contains(t, out, "v3.1.4", "cosign 3.1.4 is required")
+	require.Contains(t, out, "v3.1.4", "cosign 3.1.4 is the pinned version")
 	w := &world{t: t, dir: t.TempDir(), tag: "v0.0.0-supplychain-test"}
 	port := freePort(t)
 	name := fmt.Sprintf("sa-supplychain-registry-%d", port)

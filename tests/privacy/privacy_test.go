@@ -1,6 +1,6 @@
 //go:build privacy
 
-// Package privacy is the system-wide privacy audit of the design. it runs
+// Package privacy is the system-wide privacy audit. it runs
 // the web and api pipelines in containers it owns (postgresql with both
 // databases, nats with file storage, umami, the gateway image behind the edge
 // caddy, the replayer, the collector image and the metricswriter), sends real

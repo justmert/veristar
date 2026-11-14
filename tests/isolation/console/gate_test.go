@@ -25,7 +25,7 @@ import (
 	"github.com/justmert/veristar/internal/controlplane/operator"
 )
 
-// the console part of the isolation gate (the design): every route the
+// the console part of the tenant isolation gate: every route the
 // control plane serves has a case here, and the coverage check walks the
 // real router, so a route added without a case turns the gate red.
 
@@ -124,16 +124,16 @@ func catalogue(terms string) []route {
 	add(kindTenant, http.MethodGet, tp+"/sites/{site_id}", nil)
 	add(kindTenant, http.MethodPatch, tp+"/sites/{site_id}", fixed(map[string]any{"origins": []string{"https://intruder.example.org"}}))
 	add(kindTenant, http.MethodDelete, tp+"/sites/{site_id}", nil)
-	// otlp tokens (this stage)
+	// otlp tokens
 	add(kindTenant, http.MethodPost, tp+"/otlp-tokens", fixed(map[string]any{"name": "intruder", "environment": "production"}))
 	add(kindTenant, http.MethodGet, tp+"/otlp-tokens", nil)
 	add(kindTenant, http.MethodGet, tp+"/otlp-tokens/{token_id}", nil)
 	add(kindTenant, http.MethodDelete, tp+"/otlp-tokens/{token_id}", nil)
-	// api metrics (this stage)
+	// api metrics
 	for _, m := range []string{"overview", "timeseries", "routes", "status", "services", "warnings"} {
 		add(kindTenant, http.MethodGet, tp+"/api-metrics/"+m, nil)
 	}
-	// erasure (this stage): the body names the site and repeats its domain,
+	// erasure: the body names the site and repeats its domain,
 	// so for the real ids it is exactly the request that resets site a
 	add(kindTenant, http.MethodPost, tp+"/erasure", func(ids gateIDs) any {
 		return map[string]any{"kind": "site_reset", "site_id": ids.site, "confirm_domain": ids.domain}
@@ -147,7 +147,7 @@ func catalogue(terms string) []route {
 	add(kindTenant, http.MethodPost, sp+"/verify", fixed(map[string]any{}))
 	add(kindSSO, http.MethodGet, "/api/sso/umami?site={site_id}", nil)
 
-	// operator area (phases 7, 11, 12)
+	// operator area
 	op := "/api/operator"
 	reason := fixed(map[string]any{"reason": "isolation gate"})
 	add(kindOperator, http.MethodGet, op+"/settings/enrollment-mode", nil)
@@ -194,7 +194,7 @@ func catalogue(terms string) []route {
 	add(kindMCP, http.MethodGet, "/.well-known/oauth-protected-resource/mcp", nil)
 	add(kindMCP, http.MethodGet, "/.well-known/oauth-authorization-server", nil)
 
-	// machine metrics api (this stage)
+	// machine metrics api
 	for _, p := range []string{"/tenants", "/web/daily", "/web/dimensions", "/web/hourly", "/api/daily", "/api/routes/daily", "/api/hourly", "/openapi.yaml"} {
 		add(kindMachine, http.MethodGet, operator.MachinePath+p, nil)
 	}

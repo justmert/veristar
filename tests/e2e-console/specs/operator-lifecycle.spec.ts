@@ -1,4 +1,4 @@
-// the design verification, "end-to-end (playwright)" and "authorization":
+// operator governance end to end, with its authorization:
 // an operator switches enrollment to approval, reviews a pending project in
 // the console, approves, suspends, resumes and removes it, each with a reason
 // and a confirmation, and the project's owner sees every status with the
@@ -190,7 +190,7 @@ test("a new project waits in the review queue and the operator approves it", asy
   await expect(owner.page.getByText("Waiting for review")).toHaveCount(0);
 });
 
-test("suspend needs a reason, which the operator then sees", async () => {
+test("suspend needs a reason, which the tenant owner then sees", async () => {
   const page = op.page;
   const actions = page.getByRole("region", { name: "Actions" });
   await actions.getByRole("button", { name: "Suspend" }).click();

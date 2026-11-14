@@ -1,7 +1,7 @@
 //go:build handover
 
 // Package handover rehearses the data side of a handover on this machine
-// (the design, docs/handover/rebuild.md): environment a is populated
+// (docs/handover/rebuild.md): environment a is populated
 // through the real pipeline (browsers through the edge caddy, gateway, nats
 // and replayer into umami; an instrumented example app through the
 // collector and metrics writer into postgresql; tenants signing in through
@@ -10,12 +10,12 @@
 // scripts/migrate.sh, and a direct pg_dump of the stopped source.
 // platformctl verify-migration must report equality after each. then the
 // same github users sign in to b and see their history, and after the names
-// are pointed at b (the domain transfer path, the only one
-// docs/handover/redirect-research.md found safe) the old snippet delivers
+// are pointed at b (the domain transfer path: a redirect would reach the
+// gateway with origin null, which it refuses) the old snippet delivers
 // events into b in chromium, firefox and webkit.
 //
 // it does not rehearse the independent rebuild on another cloud account and
-// domain, which needs an operator input. run it with `make handover-it`.
+// domain, which needs both to exist. run it with `make handover-it`.
 package handover
 
 import (
@@ -51,7 +51,7 @@ func repoRoot() string {
 }
 
 func outDir() string {
-	dir := filepath.Join(repoRoot(), "resources", "scratch", "handover")
+	dir := filepath.Join(repoRoot(), ".scratch", "handover")
 	_ = os.MkdirAll(dir, 0o755)
 	return dir
 }

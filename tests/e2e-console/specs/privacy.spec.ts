@@ -1,6 +1,6 @@
-// the design, "erasure by session id and site reset", through the console's
+// erasure by session id and site reset, through the console's
 // privacy page against the real stack: two visitors browse a tenant site
-// through the gateway, the operator erases one of them by the umami session id
+// through the gateway, the tenant owner erases one of them by the umami session id
 // from the dashboard and then resets the whole site, and umami's own read
 // api (with the tenant's sso token, through the web caddy) shows exactly
 // what is left after each step.

@@ -1,6 +1,6 @@
 //go:build otelapps || apipath
 
-// package otelapps proves the this stage example apps dual-export complete
+// package otelapps proves the otel example apps dual-export complete
 // metrics and traces. each case starts deploy/compose/examples.yml with one
 // app and the two stock collectors, drives the app with the fixed load plan,
 // stops the app so its sdk flushes, and compares what the tenant backend and

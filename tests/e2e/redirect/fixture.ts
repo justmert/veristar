@@ -1,5 +1,5 @@
 // test fixture only, not product code. research harness for the redirect path of
-// a domain handover (the design, docs/handover/redirect-research.md). it starts
+// a domain handover. it starts
 // the same proxy and tls pattern as tests/e2e/fixture, with these names:
 //   OLD_HOST       answers 308 to NEW_HOST for every path, with
 //                  access-control-allow-origin: * on the redirect itself

@@ -1,6 +1,6 @@
 //go:build localconverge
 
-// Package localconverge runs the this stage and this stage end-to-end paths against
+// Package localconverge runs the web path and api path end to end against
 // the stack that infra/ansible converged on the local topology
 // (docs/deploy/local-converge.md): sign-in through the core caddy and the
 // test-only oauth fixture, a tenant and a site created through the console
@@ -11,7 +11,7 @@
 //	  go test -tags localconverge -count=1 -v ./tests/localconverge/
 //
 // the event client is the scripted gwclient (it solves the proof in go), not
-// a browser; the browser matrices of phases 3 to 5 stay with their own suites.
+// a browser; the browser matrices stay with their own suites.
 package localconverge
 
 import (

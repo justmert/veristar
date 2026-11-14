@@ -802,7 +802,7 @@ func testMCPRevocation(t *testing.T, e *env) {
 	e.mustConnect(t, memberKey)
 	e.mustConnect(t, tok["access_token"].(string))
 
-	// a member revokes only its own keys; the operator any
+	// a member revokes only its own keys; the tenant owner any
 	r := member.call(t, http.MethodGet, tp+"/mcp-credentials", nil)
 	var ownerKeyID string
 	for _, it := range r.json(t)["items"].([]any) {

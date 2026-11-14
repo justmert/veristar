@@ -1,17 +1,17 @@
 import { defineConfig, devices } from "@playwright/test";
 import { PORTS } from "../../sites.ts";
 
-// browser half of the this stage web path suite (tests/webpath, make webpath).
+// browser half of the web path suite (tests/webpath, make webpath).
 // the go test starts the fixture in its real-gateway mode and the example
 // servers once for the whole run, then calls playwright many times with this
 // config, so there is no webServer here. the scenario files end in
-// .webpath.ts, which the this stage config (testMatch *.spec.ts) never picks up.
+// .webpath.ts, which the browser matrix config (testMatch *.spec.ts) never picks up.
 
 const proxy = { server: `http://127.0.0.1:${PORTS.proxy}` };
 const scenarios = /webpath\/scenarios\.webpath\.ts$/;
 
 export default defineConfig({
-  // the parent directory, so the chromium project can also re-run the this stage
+  // the parent directory, so the chromium project can also re-run the matrix's
   // custom event spec through the real gateway
   testDir: "..",
   workers: 1,
@@ -33,7 +33,7 @@ export default defineConfig({
     // other two engines
     { name: "chromium-mobile", use: { ...devices["Pixel 7"], proxy }, testMatch: scenarios },
     { name: "webkit-mobile", use: { ...devices["iPhone 15"], proxy }, testMatch: scenarios },
-    // this stage: the wallets kit example (tests/webpath wallets_test.go)
+    // the wallets kit example (tests/webpath wallets_test.go)
     {
       name: "wallets",
       use: { ...devices["Desktop Chrome"], proxy },

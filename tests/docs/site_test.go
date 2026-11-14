@@ -16,12 +16,9 @@ import (
 // without front matter or outside the navigation fails here first.
 
 // hiddenPages are published but deliberately left out of the navigation:
-// research records and drill results that public pages link to as evidence.
-// the audits and slo reports are not published at all (docs/.mintignore).
+// drill results that public pages link to as evidence. the slo reports are
+// not published at all (docs/.mintignore).
 var hiddenPages = []string{
-	"handover/redirect-research",
-	"reference/the reference docs",
-	"reference/the reference docs",
 	"reference/drills/",
 }
 

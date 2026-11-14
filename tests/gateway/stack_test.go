@@ -1,6 +1,6 @@
 //go:build gatewayit
 
-// Package gatewayit holds the this stage verification tests of the collect
+// Package gatewayit holds the verification tests of the collect
 // gateway. they run the real gateway image (deploy/images/gateway.Dockerfile),
 // real nats, the edge caddy (deploy/caddy/edge.Caddyfile) and real browsers
 // (tests/e2e in its real-gateway mode), so they sit behind the build tag

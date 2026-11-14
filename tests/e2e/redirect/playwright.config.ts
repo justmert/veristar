@@ -1,4 +1,7 @@
-// redirect research for the domain handover (docs/handover/redirect-research.md).
+// redirect research for the domain handover: can a 308 from the old gateway
+// name to the new one keep existing tenant snippets working? it cannot: the
+// redirected requests reach the gateway with origin null, which the gateway
+// refuses, so a handover transfers the domain instead (docs/handover/plan.md).
 // run with `pnpm --filter @veristar/e2e redirect`. kept apart from the
 // main matrix (testDir ./specs) because it answers a research question rather
 // than gating a release, and it uses its own ports.

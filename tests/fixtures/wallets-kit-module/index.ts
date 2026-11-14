@@ -3,13 +3,13 @@
 // browser wallet extension with a fixed testnet account, so the real kit runs
 // its own code paths (auth modal, selected module, address and network
 // signals, localStorage, disconnect) and fires its real events without an
-// extension in the test browser. it signs nothing: the this stage flows never
+// extension in the test browser. it signs nothing: the wallets kit flows never
 // sign, and a call that would sign throws so a test that tries is loud.
 //
 // it has no runtime imports, so it works with every kit version under test
 // (2.7.1 and 2.8.0) and needs no resolution from the importing package.
 
-// a randomly generated public key with no funds on any network. every this stage
+// a randomly generated public key with no funds on any network. every wallets kit
 // test asserts that this exact string reaches no request body, no queued
 // message and no umami table.
 export const TEST_WALLET_ADDRESS = "GCB634SLKV5N4COK4FICWJADNTFWIHTWWM34BFPLACL6YSQVLY5ZWOQN";
