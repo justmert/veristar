@@ -53,7 +53,7 @@ Every test named below exists in the repository at the path given.
    **Transport:** every hop between nodes is encrypted and authenticated with certificates of an internal CA,
    one per environment. The CA key lives only in the SOPS file `infra/secrets/<env>/ca.enc.yaml`,
    which only `playbooks/internal-ca.yml` reads on the controller; nodes receive their own key
-   and certificate from `tls.enc.yaml` ([../deploy/ansible.md](../deploy/ansible.md) section 9
+   and certificate from `tls.enc.yaml` ([../deploy/ansible.md](../deploy/ansible.md) section 6
    lists every link). NATS client connections are TLS 1.3 from the first byte; NATS routes,
    etcd peers and clients, the Patroni REST API, pgBackRest, the metrics relay, the exporters
    and Alertmanager (web and gossip) require a client certificate of the internal CA;

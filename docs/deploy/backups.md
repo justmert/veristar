@@ -110,4 +110,4 @@ restore node promoted at its target
 converge itself proves the identity can write: `pgbackrest check` in `archive.yml` fails the run
 if it cannot, and the verify timer runs every day. `make ops-local` runs the stanza, archiving,
 backup, delete refusal and `--repo-target-time` steps on the local converge, against an S3 object
-storage stand-in ([local-converge.md](local-converge.md) section 7).
+storage stand-in (`LC_BACKUP=s3`, [local-converge.md](local-converge.md) section 3).
