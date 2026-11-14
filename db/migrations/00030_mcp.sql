@@ -105,7 +105,7 @@ alter table cp.mcp_oauth_codes force row level security;
 create policy mcp_credentials_tenant on cp.mcp_credentials for all to cp_tenant
   using (tenant_id = cp.current_tenant_id()) with check (tenant_id = cp.current_tenant_id());
 create policy mcp_credentials_system on cp.mcp_credentials for all to cp_system using (true) with check (true);
--- the revocation triggers below run with the operator's rights
+-- the revocation triggers below run with platform_owner's rights
 create policy mcp_credentials_revoke_read on cp.mcp_credentials for select to platform_owner using (true);
 create policy mcp_credentials_revoke on cp.mcp_credentials for update to platform_owner using (true) with check (true);
 

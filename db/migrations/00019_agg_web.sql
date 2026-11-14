@@ -1,4 +1,4 @@
--- web aggregates for the operator view (the design, schema agg). the jobs
+-- web aggregates for the operator view (schema agg). the jobs
 -- task aggregate-web reads umami's own /stats and /metrics routes for each
 -- active site, band and utc day and replaces that day's rows here, so the
 -- numbers operators see are the numbers tenants see in umami.
@@ -17,7 +17,7 @@ create table agg.web_daily (
   tenant_id  uuid not null,
   day        date not null,
   -- primary is the site's own umami website, quarantine its second website
-  --
+  -- (docs/reference/umami-contract.md item 14)
   band       text not null check (band in ('primary', 'quarantine')),
   pageviews  bigint not null check (pageviews >= 0),
   visitors   bigint not null check (visitors >= 0),
@@ -78,7 +78,7 @@ grant select (id, status) on cp.tenants to jobs;
 create policy tenants_jobs_status on cp.tenants for select to jobs using (true);
 
 -- the purge runs as the function's owner under forced row-level security,
--- so the operator gets delete and select policies on the two tables it purges
+-- so platform_owner gets delete and select policies on the two tables it purges
 create policy web_daily_purge on agg.web_daily for delete to platform_owner using (true);
 create policy web_daily_dim_purge on agg.web_daily_dim for delete to platform_owner using (true);
 create policy web_daily_purge_read on agg.web_daily for select to platform_owner using (true);

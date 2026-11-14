@@ -1,4 +1,4 @@
--- aggregate-web (the design): replaces one site's rows for a utc day and
+-- aggregate-web: replaces one site's rows for a utc day and
 -- band with what umami's /stats and /metrics returned. run in the fenced
 -- jobs transaction (scheduler.Leader.Tx).
 

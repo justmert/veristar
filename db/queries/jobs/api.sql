@@ -1,4 +1,4 @@
--- api metrics queries for the jobs role (the design): rollups,
+-- api metrics queries for the jobs role: rollups,
 -- partitions and retention. every transaction that runs them also advances
 -- the jobs fence through natsx.CheckFence. table shapes:
 -- docs/reference/api-storage.md.
@@ -84,8 +84,7 @@ where tenant_id = @tenant_id and bucket_start = sqlc.arg(day)::timestamptz;
 -- one daily row per dimension from the hourly rows of the utc day starting
 -- at day. run it after the hours of that day were recomputed. the day is 24
 -- hours, not interval '1 day': on timestamptz that is calendar arithmetic in
--- the session time zone and gives 23 or 25 hours on a daylight saving day
---.
+-- the session time zone and gives 23 or 25 hours on a daylight saving day.
 insert into api.metrics_daily (tenant_id, bucket_start, service, method, route, status_code,
                                source, counts, sum, count, lossy)
 select h.tenant_id, sqlc.arg(day)::timestamptz, h.service, h.method, h.route, h.status_code, h.source,
@@ -130,7 +129,7 @@ delete from api.ingest_dedup where applied_at < @cutoff::timestamptz;
 delete from api.series_state where last_seen_at < @cutoff::timestamptz;
 
 -- name: EvictIdleSeriesStates :one
--- bounds the stored streams of each tenant (review, migration 00029)
+-- bounds the stored streams of each tenant (migration 00029)
 select api.evict_idle_series_states(@idle_before::timestamptz, @max_stored::bigint)::bigint as evicted;
 
 -- name: PruneResourceSeen :execrows

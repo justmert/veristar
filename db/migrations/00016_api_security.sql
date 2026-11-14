@@ -1,10 +1,10 @@
--- rights, row-level security and partition management for the api schema
---. follows the rules of 00003: forced row-level security
+-- rights, row-level security and partition management for the api schema.
+-- follows the rules of 00003: forced row-level security
 -- and exactly one cp_tenant policy on every table with a tenant_id, no policy
 -- for public, and a policy of its own for every other role that reads rows.
 --
 -- partitions are created and dropped at runtime by the jobs role through the
--- security definer functions below, because only the operator of a partitioned
+-- security definer functions below, because only the owning role of a partitioned
 -- table may add or remove its partitions. every partition gets the same
 -- forced row-level security and cp_tenant policy, and no right for any
 -- application role: reads and writes go through the parent, whose rights and
@@ -12,7 +12,7 @@
 
 -- +goose Up
 
--- cp_tenant reads its own api metrics (this stage dashboard)
+-- cp_tenant reads its own api metrics (the tenant api dashboard)
 grant usage on schema api to cp_tenant;
 
 alter table api.metrics_minute enable row level security;
@@ -101,7 +101,7 @@ grant execute on function api.histogram_quantile(double precision, bigint[]) to 
 
 -- +goose StatementBegin
 -- gives a new partition the rules of the parent. called only by the
--- security definer functions below, so it runs as the operator; never granted.
+-- security definer functions below, so it runs as platform_owner; never granted.
 create function api.protect_partition(part text) returns void
 language plpgsql
 set search_path = pg_catalog, pg_temp
@@ -196,7 +196,7 @@ $$;
 
 -- +goose StatementBegin
 -- drops the hourly partition of one utc month. returns false when there is
--- none. the design keeps hourly data at least 24 months; the retention job
+-- none. hourly data is kept at least 24 months; the retention job
 -- enforces that bound on its configuration before it calls this.
 create function api.drop_hourly_partition(month date) returns boolean
 language plpgsql security definer

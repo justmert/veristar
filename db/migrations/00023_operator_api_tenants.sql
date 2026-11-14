@@ -1,4 +1,4 @@
---: api.operator_hourly and api.operator_daily of 00022
+-- api.operator_hourly and api.operator_daily of 00022
 -- returned the rows of every tenant, the internal probe tenant included,
 -- and relied on each caller to join its own tenant set. they now take that
 -- set as an argument and return rows of the named tenants only, so a query

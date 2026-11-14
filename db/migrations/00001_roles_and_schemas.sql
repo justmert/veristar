@@ -52,10 +52,10 @@ grant usage on schema agg to cp_operator, jobs;
 -- default can only add rights, never remove the built-in public grant.
 alter default privileges revoke execute on functions from public;
 
--- api and agg tables arrive in later phases. these defaults give each role
--- its section 4.7 rights on them without a grant per table. cp_operator gets
+-- api and agg tables arrive in later migrations. these defaults give each
+-- role its rights on them without a grant per table. cp_operator gets
 -- nothing in api by default, because minute-level tables must stay hidden
--- from it; this stage grants it the hourly and daily tables one by one.
+-- from it; 00016 grants it the hourly and daily tables one by one.
 -- select is included with insert and update because postgresql requires it
 -- for the where clause of an update and for insert ... on conflict do update.
 alter default privileges in schema agg grant select on tables to cp_operator;

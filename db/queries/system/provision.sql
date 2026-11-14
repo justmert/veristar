@@ -1,5 +1,5 @@
 -- queries for the provisioning reconciler, sso and the umami password
--- rotation (the design, stream c). all run as cp_system.
+-- rotation. all run as cp_system.
 
 -- name: ProvisionLockTenant :one
 -- one reconcile per tenant at a time: the row lock is held for the whole run,

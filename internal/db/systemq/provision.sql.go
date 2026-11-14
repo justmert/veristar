@@ -23,7 +23,7 @@ type ProvisionLockTenantRow struct {
 }
 
 // queries for the provisioning reconciler, sso and the umami password
-// rotation (the design, stream c). all run as cp_system.
+// rotation. all run as cp_system.
 // one reconcile per tenant at a time: the row lock is held for the whole run,
 // across the umami calls, so the control plane and the jobs task never create
 // the same team or website twice

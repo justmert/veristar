@@ -52,7 +52,7 @@ returning user_id, role, created_at;
 delete from cp.tenant_members where user_id = @user_id;
 
 -- name: LockTenantOwners :many
--- row locks on the owners, so two concurrent demotions or removals cannot
+-- row locks on the operator memberships, so two concurrent demotions or removals cannot
 -- both see a second owner and leave the tenant with none
 select user_id from cp.tenant_members where role = 'owner' for update;
 

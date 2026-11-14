@@ -1,7 +1,6 @@
--- fixes from the review of the api metrics path
---.
+-- three fixes to the api metrics path.
 --
--- A-2: the rollup must never recompute an hour while a writer transaction
+-- first, the rollup must never recompute an hour while a writer transaction
 -- that writes minute rows into it is still open; such a transaction's rows
 -- are invisible to the rollup, and the mark it finds already present gives
 -- no row lock, so its requests were lost from the hourly and daily rows for
@@ -12,12 +11,12 @@
 -- this one function, so they can never disagree on it. a hash collision
 -- between two hours only makes the rollup skip an hour until its next run.
 --
--- A-5: a cumulative stream whose first point became a baseline remembers
+-- second, a cumulative stream whose first point became a baseline remembers
 -- that, so its second point can tell from the export cadence whether the
 -- process had only just started, and then counts in full instead of losing
 -- the first export interval.
 --
--- A-12: a histogram whose source buckets are much wider than the canonical
+-- third, a histogram whose source buckets are much wider than the canonical
 -- ones puts requests into a canonical bucket far above their real latency.
 -- such requests are counted under their own warning kind.
 

@@ -99,7 +99,7 @@ const lockAggTenant = `-- name: LockAggTenant :exec
 select pg_advisory_xact_lock_shared(hashtextextended('agg.tenant:' || $1::text, 0))
 `
 
-// aggregate-web (the design): replaces one site's rows for a utc day and
+// aggregate-web: replaces one site's rows for a utc day and
 // band with what umami's /stats and /metrics returned. run in the fenced
 // jobs transaction (scheduler.Leader.Tx).
 // shared with every other aggregate-web write of the tenant, exclusive in

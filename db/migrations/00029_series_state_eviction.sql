@@ -1,4 +1,4 @@
---: the writer's per-tenant stream cap counted every
+-- the writer's per-tenant stream cap counted every
 -- api.series_state row kept for 7 idle days, so a tenant whose processes
 -- restart often (deploys, autoscaling, worker recycling) reached it with
 -- streams that were long dead, and every new stream was then refused for up

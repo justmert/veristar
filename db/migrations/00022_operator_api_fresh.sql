@@ -1,13 +1,12 @@
--- operator reads of api metrics (this stage global views, this stage machine
--- api) with the freshness rule of control-plane-api 7.2: an hour still
+-- operator reads of api metrics (global views and the machine api) with the freshness rule of control-plane-api 7.2: an hour still
 -- marked in api.rollup_pending has stale hourly and daily rows until the next
 -- api-rollup run, so those hours are computed from api.metrics_minute.
 --
--- cp_operator may not read api.metrics_minute (the design: operators see only
--- hourly and daily aggregates). these two security definer functions are
+-- cp_operator may not read api.metrics_minute (operators see only hourly
+-- and daily aggregates). these two security definer functions are
 -- its only way to them: they return rows at hour or day grain, the same
 -- shape and the same numbers the rollup will write, never a minute row.
--- they read through the operator's select policies of 00017. rows of one hour
+-- they read through platform_owner's select policies of 00017. rows of one hour
 -- come either from api.metrics_hourly or from minutes, never both: the
 -- rollup removes a mark in the transaction that replaces that hour's rows,
 -- and each call reads marks and rows in one snapshot.

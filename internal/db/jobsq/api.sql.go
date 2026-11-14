@@ -29,7 +29,7 @@ type ClaimRollupHoursRow struct {
 	Hour     time.Time
 }
 
-// api metrics queries for the jobs role (the design): rollups,
+// api metrics queries for the jobs role: rollups,
 // partitions and retention. every transaction that runs them also advances
 // the jobs fence through natsx.CheckFence. table shapes:
 // docs/reference/api-storage.md.
@@ -150,7 +150,7 @@ type EvictIdleSeriesStatesParams struct {
 	MaxStored  int64
 }
 
-// bounds the stored streams of each tenant (review, migration 00029)
+// bounds the stored streams of each tenant (migration 00029)
 func (q *Queries) EvictIdleSeriesStates(ctx context.Context, arg EvictIdleSeriesStatesParams) (int64, error) {
 	row := q.db.QueryRow(ctx, evictIdleSeriesStates, arg.IdleBefore, arg.MaxStored)
 	var evicted int64
@@ -357,8 +357,7 @@ type RollupDayParams struct {
 // one daily row per dimension from the hourly rows of the utc day starting
 // at day. run it after the hours of that day were recomputed. the day is 24
 // hours, not interval '1 day': on timestamptz that is calendar arithmetic in
-// the session time zone and gives 23 or 25 hours on a daylight saving day
-//.
+// the session time zone and gives 23 or 25 hours on a daylight saving day.
 func (q *Queries) RollupDay(ctx context.Context, arg RollupDayParams) (int64, error) {
 	result, err := q.db.Exec(ctx, rollupDay, arg.Day, arg.TenantID)
 	if err != nil {

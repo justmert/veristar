@@ -16,7 +16,7 @@ const operatorRemovalKeepAggregates = `-- name: OperatorRemovalKeepAggregates :o
 select value from cp.settings where key = 'removal_keep_aggregates'
 `
 
-// operator reads of the design stream a, as cp_operator.
+// operator reads of tenant lifecycle state, as cp_operator.
 func (q *Queries) OperatorRemovalKeepAggregates(ctx context.Context) ([]byte, error) {
 	row := q.db.QueryRow(ctx, operatorRemovalKeepAggregates)
 	var value []byte

@@ -1,6 +1,6 @@
--- tenant lifecycle actions, sites in review and the removal purge (plan
--- this stage stream a, control-plane-api 5.5, 5.6 and 5.13). all run as
--- cp_system: operator actions are cp_system work.
+-- tenant lifecycle actions, sites in review and the removal purge
+-- (control-plane-api 5.5, 5.6 and 5.13). all run as cp_system: operator
+-- actions are cp_system work.
 
 -- name: LifecycleLockTenant :one
 -- the row lock serialises an action with the reconciler, which holds the

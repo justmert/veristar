@@ -1,4 +1,4 @@
--- removal progress of a tenant (the design, control-plane-api 5.5). the
+-- removal progress of a tenant (control-plane-api 5.5). the
 -- operator's remove action inserts the row in the same transaction as the
 -- status change; the purge runner in the reconciler fills steps store by
 -- store, so a crash or a failing store resumes where it stopped, and a store

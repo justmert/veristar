@@ -72,7 +72,7 @@ type FindUserByGitHubIDRow struct {
 	CreatedAt   time.Time
 }
 
-// the account the operator named, resolved from the login through github
+// the account the inviting owner named, resolved from the login through github
 // first: a stored login can be stale after a rename, the id cannot
 func (q *Queries) FindUserByGitHubID(ctx context.Context, githubID int64) (FindUserByGitHubIDRow, error) {
 	row := q.db.QueryRow(ctx, findUserByGitHubID, githubID)

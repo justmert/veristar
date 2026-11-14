@@ -1,7 +1,7 @@
 -- initial settings and fence rows.
 --
 -- the application roles may update a fence row but not create one, so the row
--- for every fenced worker exists from the
+-- for every fenced worker (metricswriter and jobs) exists from the
 -- start. revision 0 is below any nats kv revision, so the first leader wins.
 
 -- +goose Up
