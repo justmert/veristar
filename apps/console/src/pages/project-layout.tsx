@@ -1,31 +1,22 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { NavLink, Outlet, useOutletContext, useParams } from "react-router";
+import { CirclePause, CircleX, Clock, FileText, LoaderCircle } from "lucide-react";
+import { Link, Outlet, useOutletContext, useParams } from "react-router";
 import { api } from "@/api/endpoints";
 import { keys, meQuery, tenantQuery } from "@/api/queries";
 import type { Me, Tenant } from "@/api/schemas";
 import { ErrorPanel, FormMessage, Loading } from "@/components/error-panel";
-import { StatusPill } from "@/components/status";
+import { Notice as ToneNotice } from "@/components/notice";
 import { Button } from "@/components/ui/button";
 import { isNotFound } from "@/lib/errors";
 import { ResubmitForm } from "@/pages/resubmit";
 import { queryClient } from "@/query-client";
-import { NotFoundPage } from "./not-found";
+import { NotFoundPage, ProjectsButton, StopPage } from "./not-found";
 
 export type ProjectContext = { tenant: Tenant; me: Me; isOwner: boolean; termsCurrent: boolean };
 
 export function useProject(): ProjectContext {
   return useOutletContext<ProjectContext>();
 }
-
-const NAV = [
-  { to: "", label: "Overview", end: true },
-  { to: "sites", label: "Sites", end: false },
-  { to: "api/traffic", label: "API traffic", end: true },
-  { to: "api", label: "API setup", end: true },
-  { to: "members", label: "Members", end: true },
-  { to: "ai", label: "AI / MCP", end: true },
-  { to: "privacy", label: "Privacy", end: true },
-];
 
 export function ProjectLayout() {
   const { tenantId = "" } = useParams();
@@ -55,52 +46,27 @@ export function ProjectLayout() {
     termsCurrent: t.accepted_terms_version === current,
   };
 
+  // the shell's sidebar names the project and navigates it; this frame only
+  // puts the notice that applies above the page
+  const terms = ctx.termsCurrent ? null : (
+    <TermsNotice tenant={t} version={current} isOwner={ctx.isOwner} />
+  );
+  const status = <StatusNotice tenant={t} isOwner={ctx.isOwner} />;
+
   return (
-    <div>
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <h1 className="min-w-0 truncate text-3xl font-semibold tracking-tight">{t.name}</h1>
-        <StatusPill status={t.status} />
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-3 empty:hidden">
+        {status}
+        {terms}
       </div>
-      <p className="mt-1 text-sm text-muted-foreground">
-        {t.slug}, you are {ctx.isOwner ? "an owner" : "a member"}
-      </p>
-
-      <nav aria-label="Project" className="mt-6 border-b">
-        <ul className="-mb-px flex gap-1 overflow-x-auto">
-          {NAV.map((n) => (
-            <li key={n.label}>
-              <NavLink
-                to={n.to ? `/projects/${t.id}/${n.to}` : `/projects/${t.id}`}
-                end={n.end}
-                className={({ isActive }) =>
-                  `inline-block border-b-2 px-3 py-2 text-sm font-medium whitespace-nowrap ${
-                    isActive
-                      ? "border-primary text-foreground"
-                      : "border-transparent text-muted-foreground hover:text-foreground"
-                  }`
-                }
-              >
-                {n.label}
-              </NavLink>
-            </li>
-          ))}
-        </ul>
-      </nav>
-
-      <div className="mt-6 space-y-3">
-        <StatusNotice tenant={t} isOwner={ctx.isOwner} />
-        {ctx.termsCurrent ? null : (
-          <TermsNotice tenant={t} version={current} isOwner={ctx.isOwner} />
-        )}
-      </div>
-
-      <div className="mt-6">
-        <Outlet context={ctx} />
-      </div>
+      <Outlet context={ctx} />
     </div>
   );
 }
 
+// the older notice api that some pages still import; it draws the shared
+// notice so every project page looks the same
+const LEGACY_TONE = { warn: "warning", bad: "critical", info: "info" } as const;
 export function Notice({
   tone,
   children,
@@ -108,80 +74,74 @@ export function Notice({
   tone: "warn" | "bad" | "info";
   children: React.ReactNode;
 }) {
-  const cls =
-    tone === "bad"
-      ? "border-destructive/40 bg-destructive/5"
-      : tone === "warn"
-        ? "border-warn/40 bg-warn/8"
-        : "border-primary/30 bg-primary/5";
-  return <div className={`rounded-lg border p-4 text-sm ${cls}`}>{children}</div>;
+  return <ToneNotice tone={LEGACY_TONE[tone]}>{children}</ToneNotice>;
 }
 
 export function RemovedNotice({ name, reason }: { name: string; reason: string | null }) {
   return (
-    <section className="max-w-2xl">
-      <h1 className="text-3xl font-semibold tracking-tight">{name}</h1>
-      <div className="mt-6">
-        <Notice tone="bad">
-          <p className="font-medium">This project was removed by an operator</p>
-          <p className="mt-1 text-muted-foreground">
-            Its sites no longer accept traffic and its dashboards were deleted.
-          </p>
-          {reason ? <p className="mt-1 text-muted-foreground">Reason given: {reason}</p> : null}
-        </Notice>
-      </div>
-    </section>
+    <StopPage
+      icon={<CircleX aria-hidden />}
+      tone="critical"
+      title="This project was removed by an operator"
+      actions={<ProjectsButton />}
+    >
+      <p>
+        <span className="font-medium text-fg">{name}</span>: its sites no longer accept traffic and
+        its dashboards were deleted.
+      </p>
+      {reason ? <p>Reason given: {reason}</p> : null}
+    </StopPage>
   );
 }
 
 export function StatusNotice({ tenant, isOwner }: { tenant: Tenant; isOwner: boolean }) {
-  const reason = tenant.status_reason ? (
-    <p className="mt-1 text-muted-foreground">Reason given: {tenant.status_reason}</p>
-  ) : null;
+  const reason = tenant.status_reason ? ` Reason given: ${tenant.status_reason}` : "";
   switch (tenant.status) {
     case "pending":
       return (
-        <Notice tone="warn">
-          <p className="font-medium">Waiting for review</p>
-          <p className="mt-1 text-muted-foreground">
-            Operators review new projects before their sites receive traffic. You can add sites and
-            members now.
-          </p>
-        </Notice>
+        <ToneNotice
+          tone="warning"
+          icon={<Clock aria-hidden />}
+          title="Waiting for review"
+          actions={
+            <Button asChild variant="outline" size="sm" className="max-sm:h-(--vs-control-touch)">
+              <Link to={`/projects/${tenant.id}/sites`}>Add a site</Link>
+            </Button>
+          }
+        >
+          Operators review new projects before their sites receive traffic. You can add sites and
+          members now.
+        </ToneNotice>
       );
     case "rejected":
-      return (
-        <Notice tone="bad">
-          <p className="font-medium">Enrollment was not approved</p>
-          {reason}
-          {isOwner ? (
-            <ResubmitForm tenant={tenant} />
-          ) : (
-            <p className="mt-1 text-muted-foreground">
-              An owner of this project can change the answers and submit them again.
-            </p>
-          )}
-        </Notice>
+      return isOwner ? (
+        <ResubmitForm tenant={tenant} />
+      ) : (
+        <ToneNotice tone="critical" title="Enrollment was not approved">
+          {reason ? `${reason.trim()} ` : ""}An owner of this project can change the answers and
+          submit them again.
+        </ToneNotice>
       );
     case "suspended":
       return (
-        <Notice tone="bad">
-          <p className="font-medium">This project is suspended</p>
-          <p className="mt-1 text-muted-foreground">
-            New events from its sites are refused. Its dashboards stay readable.
-          </p>
-          {reason}
-        </Notice>
+        <ToneNotice
+          tone="info"
+          icon={<CirclePause aria-hidden />}
+          title="This project is suspended"
+        >
+          New events from its sites are refused. Its dashboards stay readable.{reason}
+        </ToneNotice>
       );
     default:
       if (tenant.provisioning === "pending")
         return (
-          <Notice tone="info">
-            <p className="font-medium">Setting up the dashboards</p>
-            <p className="mt-1 text-muted-foreground">
-              This takes about a minute. Web dashboards open once it is done.
-            </p>
-          </Notice>
+          <ToneNotice
+            tone="info"
+            icon={<LoaderCircle aria-hidden className="animate-spin" />}
+            title="Setting up the dashboards"
+          >
+            This takes about a minute. Web dashboards open once it is done.
+          </ToneNotice>
         );
       return null;
   }
@@ -206,30 +166,44 @@ function TermsNotice({
       await queryClient.invalidateQueries({ queryKey: keys.me });
     },
   });
+  const read = (
+    <a
+      href="/terms"
+      target="_blank"
+      rel="noopener"
+      className="rounded-sm text-small text-fg-2 underline decoration-line-strong underline-offset-2 transition-colors duration-(--vs-duration-press) hover:text-fg focus-ring max-sm:py-2"
+    >
+      Read the terms
+    </a>
+  );
   return (
-    <Notice tone="warn">
-      <p className="font-medium">The terms of the service changed</p>
-      <p className="mt-1 text-muted-foreground">
-        Until an owner accepts version {version}, this project can be viewed but not changed.{" "}
-        <a
-          href="/terms"
-          target="_blank"
-          rel="noopener"
-          className="text-primary underline underline-offset-2"
-        >
-          Read the terms
-        </a>
-      </p>
-      {isOwner ? (
-        <div className="mt-3 flex flex-wrap items-center gap-3">
-          <Button size="sm" onClick={() => accept.mutate()} disabled={accept.isPending}>
-            Accept version {version}
-          </Button>
-          <FormMessage error={accept.error} />
-        </div>
-      ) : (
-        <p className="mt-1 text-muted-foreground">Ask an owner of this project to accept them.</p>
-      )}
-    </Notice>
+    <ToneNotice
+      tone="warning"
+      icon={<FileText aria-hidden />}
+      title="The terms of the service changed"
+      actions={
+        isOwner ? (
+          <>
+            {read}
+            <Button
+              size="sm"
+              onClick={() => accept.mutate()}
+              disabled={accept.isPending}
+              pending={accept.isPending}
+              className="max-sm:h-(--vs-control-touch)"
+            >
+              Accept version {version}
+            </Button>
+          </>
+        ) : (
+          read
+        )
+      }
+    >
+      {isOwner
+        ? `Until an owner accepts version ${version}, this project can be viewed but not changed.`
+        : `Until an owner accepts version ${version}, this project can be viewed but not changed. Ask an owner of this project to accept them.`}
+      <FormMessage error={accept.error} className="mt-2" />
+    </ToneNotice>
   );
 }

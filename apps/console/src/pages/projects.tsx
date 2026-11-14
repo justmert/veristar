@@ -1,11 +1,23 @@
 import { useQuery } from "@tanstack/react-query";
-import { ChevronRight, Plus } from "lucide-react";
-import { useState } from "react";
+import { cn } from "cn";
+import {
+  ChevronRight,
+  CirclePause,
+  CircleX,
+  Clock,
+  FileText,
+  FolderPlus,
+  Plus,
+} from "lucide-react";
+import { type ReactNode, useState } from "react";
 import { Link } from "react-router";
 import { meQuery } from "@/api/queries";
-import type { RemovedTenant } from "@/api/schemas";
-import { ErrorPanel, Loading } from "@/components/error-panel";
-import { StatusPill } from "@/components/status";
+import type { MeTenant, RemovedTenant } from "@/api/schemas";
+import { ErrorPanel, Loading, StateBlock } from "@/components/error-panel";
+import { Stagger, StaggerItem } from "@/components/motion";
+import { Notice } from "@/components/notice";
+import { PageHeader } from "@/components/panel";
+import { StatusPill, type Tone, toneText } from "@/components/status";
 import { Button } from "@/components/ui/button";
 
 export function ProjectsPage() {
@@ -15,61 +27,124 @@ export function ProjectsPage() {
   const tenants = me.data.tenants;
 
   return (
-    <section>
+    <section className="flex max-w-4xl flex-col gap-5">
+      <PageHeader
+        title="Your projects"
+        description="A project is one team. It holds its websites and the people who manage them."
+        actions={
+          tenants.length > 0 ? (
+            <Button asChild className="max-sm:h-(--vs-control-touch)">
+              <Link to="/projects/new">
+                <Plus aria-hidden />
+                Enroll a project
+              </Link>
+            </Button>
+          ) : null
+        }
+      />
       <RemovedNotices removed={me.data.removed_tenants} />
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-semibold tracking-tight">Your projects</h1>
-          <p className="mt-1 text-muted-foreground">
-            A project is one team. It holds its websites and the people who manage them.
-          </p>
-        </div>
-        <Button asChild>
-          <Link to="/projects/new">
-            <Plus aria-hidden />
-            Enroll a project
-          </Link>
-        </Button>
-      </div>
 
       {tenants.length === 0 ? (
-        <div className="mt-10 rounded-xl border border-dashed bg-card p-8">
-          <h2 className="text-lg font-semibold">No projects yet</h2>
-          <p className="mt-1 max-w-prose text-muted-foreground">
-            Enroll your Stellar project to get a tracking snippet for its website and a private
-            dashboard. If a teammate already enrolled it, ask them to add your GitHub username on
-            the project's members page.
-          </p>
-          <Button asChild className="mt-5">
-            <Link to="/projects/new">Enroll a project</Link>
-          </Button>
-        </div>
-      ) : (
-        <ul className="mt-8 divide-y overflow-hidden rounded-xl border bg-card">
-          {tenants.map((t) => (
-            <li key={t.id}>
-              <Link
-                to={`/projects/${t.id}`}
-                className="group flex items-center gap-4 px-4 py-4 hover:bg-muted/60 focus-visible:bg-muted/60 sm:px-5"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium">{t.name}</p>
-                  <p className="truncate text-sm text-muted-foreground">
-                    {t.slug}, you are {t.role === "owner" ? "an owner" : "a member"}
-                    {t.terms_current ? "" : ", new terms to accept"}
-                  </p>
-                </div>
-                <StatusPill status={t.status} />
-                <ChevronRight
-                  aria-hidden
-                  className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5"
-                />
+        <StateBlock
+          kind="empty"
+          icon={<FolderPlus aria-hidden strokeWidth={1.75} />}
+          title="Enroll your first project"
+          action={
+            <Button asChild className="max-sm:h-(--vs-control-touch)">
+              <Link to="/projects/new">
+                <Plus aria-hidden />
+                Enroll a project
               </Link>
-            </li>
+            </Button>
+          }
+        >
+          Enroll your Stellar project to get a tracking snippet for its website and a private
+          dashboard. If a teammate already enrolled it, ask them to add your GitHub username on the
+          project's members page.
+        </StateBlock>
+      ) : (
+        <Stagger as="ul" className="overflow-hidden rounded-lg border border-line bg-raised">
+          {tenants.map((t) => (
+            <StaggerItem as="li" key={t.id} className="border-b border-line-subtle last:border-b-0">
+              <ProjectRow tenant={t} />
+            </StaggerItem>
           ))}
-        </ul>
+        </Stagger>
       )}
     </section>
+  );
+}
+
+const ROLE: Record<MeTenant["role"], string> = { owner: "Owner", member: "Member" };
+
+// the one thing that waits on the person for this project, from what
+// /api/me says about it; an active project with current terms shows its
+// address instead
+function nextStep(t: MeTenant): { text: string; tone: Tone | null; icon: ReactNode } {
+  const owner = t.role === "owner";
+  if (t.status === "rejected")
+    return {
+      text: owner
+        ? "Not approved: edit the answers and resubmit"
+        : "Not approved: an owner can edit the answers and resubmit",
+      tone: "critical",
+      icon: <CircleX aria-hidden />,
+    };
+  if (!t.terms_current)
+    return {
+      text: owner ? "New terms to accept" : "New terms: ask an owner to accept them",
+      tone: "warning",
+      icon: <FileText aria-hidden />,
+    };
+  if (t.status === "pending")
+    return { text: "Waiting for operator review", tone: "info", icon: <Clock aria-hidden /> };
+  if (t.status === "suspended")
+    return {
+      text: "Suspended: new events are refused",
+      tone: "info",
+      icon: <CirclePause aria-hidden />,
+    };
+  return { text: t.slug, tone: null, icon: null };
+}
+
+function ProjectRow({ tenant: t }: { tenant: MeTenant }) {
+  const next = nextStep(t);
+  return (
+    <Link
+      to={`/projects/${t.id}`}
+      className="group grid grid-cols-[2.25rem_minmax(0,1fr)_1rem] items-center gap-x-3.5 px-4 py-3.5 transition-colors duration-(--vs-duration-press) hover:bg-hover focus-ring focus-visible:-outline-offset-2 sm:grid-cols-[2.25rem_minmax(0,1fr)_auto_1rem]"
+    >
+      <span
+        aria-hidden
+        className="flex size-9 items-center justify-center rounded-md bg-selected text-small font-semibold text-fg uppercase"
+      >
+        {t.name.slice(0, 1)}
+      </span>
+      <span className="flex min-w-0 flex-col gap-0.5">
+        <span className="truncate text-title font-medium text-fg">{t.name}</span>
+        <span
+          className={cn(
+            "flex min-w-0 items-center gap-1.5 text-small [&_svg]:size-3.5 [&_svg]:shrink-0",
+            next.tone ? toneText(next.tone) : "text-fg-3",
+          )}
+        >
+          {next.icon}
+          <span className="truncate">{next.text}</span>
+        </span>
+        <span className="mt-1 flex items-center gap-2 text-caption font-normal text-fg-2 sm:hidden">
+          <StatusPill status={t.status} />
+          {ROLE[t.role]}
+        </span>
+      </span>
+      <span className="hidden flex-col items-end gap-1 text-caption font-normal text-fg-2 sm:flex">
+        <StatusPill status={t.status} />
+        {ROLE[t.role]}
+      </span>
+      <ChevronRight
+        aria-hidden
+        className="size-4 text-fg-3 transition-transform duration-(--vs-duration-press) group-hover:translate-x-0.5 group-hover:text-fg-2"
+      />
+    </Link>
   );
 }
 
@@ -101,33 +176,31 @@ export function RemovedNotices({ removed }: { removed: RemovedTenant[] }) {
   const shown = removed.filter((r) => !seen.has(`${r.id}@${r.status_changed_at}`));
   if (shown.length === 0) return null;
   return (
-    <ul className="mb-8 space-y-3" aria-label="Removed projects">
+    <ul className="flex flex-col gap-3" aria-label="Removed projects">
       {shown.map((r) => (
-        <li
-          key={r.id}
-          role="status"
-          className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-sm"
-        >
-          <p className="font-medium">{r.name} was removed by an operator</p>
-          <p className="mt-1 text-muted-foreground">
-            Its sites no longer accept traffic and its dashboards were deleted.
-          </p>
-          {r.status_reason ? (
-            <p className="mt-1 text-muted-foreground">Reason given: {r.status_reason}</p>
-          ) : null}
-          <Button
-            variant="outline"
-            size="sm"
-            className="mt-3"
-            onClick={() => {
-              const next = new Set(seen);
-              next.add(`${r.id}@${r.status_changed_at}`);
-              markSeen(next);
-              setSeen(next);
-            }}
+        <li key={r.id}>
+          <Notice
+            tone="critical"
+            title={`${r.name} was removed by an operator`}
+            actions={
+              <Button
+                variant="ghost"
+                size="sm"
+                className="max-sm:h-(--vs-control-touch)"
+                onClick={() => {
+                  const next = new Set(seen);
+                  next.add(`${r.id}@${r.status_changed_at}`);
+                  markSeen(next);
+                  setSeen(next);
+                }}
+              >
+                Dismiss
+              </Button>
+            }
           >
-            Dismiss
-          </Button>
+            Its sites no longer accept traffic and its dashboards were deleted.
+            {r.status_reason ? ` Reason given: ${r.status_reason}` : null}
+          </Notice>
         </li>
       ))}
     </ul>
