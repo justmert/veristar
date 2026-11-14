@@ -16,8 +16,8 @@ the official, unmodified image. The Veristar look comes from the web Caddy in fr
 - Fonts (Inter and JetBrains Mono) are served from the same host. Nothing is fetched from another
   host.
 
-The brand is dark only. Umami still offers its light and dark switch; both render the same dark
-palette.
+The dashboard theme is dark only, although the console and the website also have a light theme.
+Umami still offers its light and dark switch; both render the same dark palette.
 
 The sidebar shows the Veristar mark and the name "Veristar" in place of Umami's (a stylesheet
 swap, no script), and the up and down chips under each metric show their status by text colour

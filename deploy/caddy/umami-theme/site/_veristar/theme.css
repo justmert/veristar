@@ -14,7 +14,9 @@
  * javascript (src/lib/constants.ts THEME_COLORS and CHART_COLORS), so no
  * stylesheet can recolour them; the adr lists what stays umami's.
  *
- * the brand is dark only. umami keeps its light and dark switch, so both
+ * this theme is dark only (the console and the website also have a light
+ * theme, which this file does not carry). umami keeps its light and dark
+ * switch, so both
  * modes get the same dark palette: the semantic tokens below are identical
  * for every mode, and in light mode the neutral ramp is reversed, so the few
  * rules that use a light step directly (skeletons, scroll bars) still land
