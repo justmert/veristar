@@ -3,6 +3,7 @@
 //
 //	sloreport collect -gatus <base url> -day YYYY-MM-DD -out docs/slo/data [-page-size 20160] [-until RFC3339]
 //	sloreport report -month YYYY-MM -data docs/slo/data -out docs/slo [-through YYYY-MM-DD]
+//	sloreport watch -gatus <base url> -out <data dir> [-days 6] [-every 1h] [-page-size 20160]
 package main
 
 import (
@@ -23,6 +24,7 @@ import (
 const usage = `usage:
   sloreport collect -gatus <base url> -day YYYY-MM-DD -out docs/slo/data [-page-size 20160] [-until RFC3339]
   sloreport report -month YYYY-MM -data docs/slo/data -out docs/slo [-through YYYY-MM-DD]
+  sloreport watch -gatus <base url> -out <data dir> [-days 6] [-every 1h] [-page-size 20160]
 `
 
 func main() {
@@ -43,6 +45,8 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, now func(
 		err = collect(ctx, args[1:], stdout, stderr, now)
 	case "report":
 		err = report(args[1:], stdout, stderr)
+	case "watch":
+		err = watch(ctx, args[1:], stdout, stderr, now)
 	case "help", "-h", "--help":
 		_, _ = fmt.Fprint(stdout, usage)
 		return 0
@@ -100,6 +104,75 @@ func collect(ctx context.Context, args []string, stdout, stderr io.Writer, now f
 	}
 	_, _ = fmt.Fprintf(stdout, "wrote %s\n", path)
 	return nil
+}
+
+// watch runs beside the probe's gatus (docs/deploy/probe.md) and collects
+// every ended day of the last -days days that has no file yet, at start and
+// then every -every. gatus keeps about a week of raw results, so -days must
+// stay below that; a day that fails (gatus down, results trimmed) is tried
+// again on the next round instead of stopping the loop.
+func watch(ctx context.Context, args []string, stdout, stderr io.Writer, now func() time.Time) error {
+	fs := flag.NewFlagSet("watch", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	base := fs.String("gatus", "", "gatus base url, for example https://status.<BASE_DOMAIN>")
+	out := fs.String("out", "", "data directory")
+	days := fs.Int("days", 6, "how many ended days back to look for a missing file; below gatus's one week")
+	every := fs.Duration("every", time.Hour, "time between rounds")
+	size := fs.Int("page-size", sloreport.DefaultPageSize, "page size; must equal the gatus maximum-number-of-results")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *base == "" || *out == "" || *days < 1 || *days > 6 || *every < time.Minute || fs.NArg() != 0 {
+		fs.Usage()
+		return errUsage
+	}
+	c := &sloreport.Collector{Base: *base, PageSize: *size, HTTP: &http.Client{Timeout: 2 * time.Minute}, Now: now}
+	t := time.NewTicker(*every)
+	defer t.Stop()
+	for {
+		watchRound(ctx, c, *out, *days, stdout, stderr)
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-t.C:
+		}
+	}
+}
+
+// watchRound collects the oldest missing day first, so a long outage of
+// the collector loses the days gatus is about to drop last
+func watchRound(ctx context.Context, c *sloreport.Collector, out string, days int, stdout, stderr io.Writer) {
+	today := c.Now().UTC().Truncate(24 * time.Hour)
+	for i := days; i >= 1; i-- {
+		d := today.AddDate(0, 0, -i)
+		if _, err := os.Stat(sloreport.DataPath(out, d)); err == nil {
+			continue
+		}
+		got, err := c.Collect(ctx, d)
+		if err == nil && empty(got) {
+			// a day before the probe started, or one the probe missed
+			// completely: no file, so the report lists it as missing
+			// rather than as a measured day without results
+			continue
+		}
+		if err == nil {
+			var path string
+			if path, err = sloreport.WriteDay(out, got); err == nil {
+				_, _ = fmt.Fprintf(stdout, "wrote %s\n", path)
+				continue
+			}
+		}
+		_, _ = fmt.Fprintf(stderr, "sloreport watch: %s: %v\n", d.Format("2006-01-02"), err)
+	}
+}
+
+func empty(d sloreport.Day) bool {
+	for _, rs := range d.Endpoints {
+		if len(rs) > 0 {
+			return false
+		}
+	}
+	return true
 }
 
 func report(args []string, stdout, stderr io.Writer) error {
