@@ -152,6 +152,8 @@ job_ansible() {
 	rm -rf "$ANSIBLE_VENV"
 	make ansible-venv
 	make ansible-lint
+	# the nats liveness settings of the rendered role files (tests/natsconf)
+	make ansible-render-test
 }
 
 job_promtool() {
