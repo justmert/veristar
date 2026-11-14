@@ -245,7 +245,7 @@ func (s *Scope) InTenant(ctx context.Context, a Access, fn func(pgx.Tx) error) e
 		}
 		// the session user, so the database holds tenant writes to what
 		// that user may do: audit rows name exactly this user, and member
-		// changes need an owner (migration 00028, review)
+		// changes need an owner (migration 00028)
 		if _, err := tx.Exec(ctx, `select set_config('app.user_id', $1, true)`, a.User.ID.String()); err != nil {
 			return fmt.Errorf("tenants: set session user: %w", err)
 		}

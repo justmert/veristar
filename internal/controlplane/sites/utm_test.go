@@ -18,7 +18,7 @@ import (
 )
 
 // contract 4.3: collect_utm is a site setting that is off on a new site and
-// that the site's owners change with the site edit route (review: a
+// that the site's owners change with the site edit route (a
 // member gets 403 owner_required). a change starts
 // a reconcile, which publishes it to the gateway (provision live test); an
 // unchanged value does not. the change is audited.

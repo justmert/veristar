@@ -17,7 +17,7 @@ import (
 
 // the tenant list and the web routes of the machine api (contract 9.4 to
 // 9.7). web daily numbers are sums of agg.web_daily and agg.web_daily_dim,
-// the rows the operator views of this stage read, so both always agree.
+// the rows the operator views read, so both always agree.
 
 // MachineTenant is one item of GET /tenants.
 type MachineTenant struct {
@@ -308,7 +308,7 @@ type hourSite struct {
 }
 
 // webHourly reads umami live, through the control plane's service account,
-// for the hours nothing has aggregated yet (the design; the this stage
+// for the hours nothing has aggregated yet (the
 // prober checks freshness with it). only /stats sums leave this handler.
 func (m *Machine) webHourly(w http.ResponseWriter, r *http.Request) error {
 	q := r.URL.Query()

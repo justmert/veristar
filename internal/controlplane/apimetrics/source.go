@@ -20,8 +20,8 @@ type Source struct {
 	SpanDataIgnored bool   `json:"span_data_ignored"`
 }
 
-// Choose is the per-service rule of the design, shared by phases 10, 11 and
-// 12: metric rows count every request, span rows undercount when traces are
+// Choose is the per-service source rule, shared by the tenant dashboard,
+// the operator views and the machine api: metric rows count every request, span rows undercount when traces are
 // sampled, so metric rows win whenever a service has any in the range. the
 // two are never added together.
 func Choose(service string, hasMetric, hasSpan bool) Source {

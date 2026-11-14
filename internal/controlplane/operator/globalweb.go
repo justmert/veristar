@@ -28,7 +28,7 @@ var webSorts = map[string]string{
 // webDims are the breakdowns of the web views, in contract order.
 var webDims = []string{"referrer", "country", "device", "browser", "os"}
 
-// listTopDims are the breakdowns a list row carries (the design: top
+// listTopDims are the breakdowns a list row carries (top
 // referrers, countries, devices and browsers).
 var listTopDims = []string{"referrer", "country", "device", "browser"}
 

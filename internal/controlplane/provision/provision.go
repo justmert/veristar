@@ -1,5 +1,5 @@
 // Package provision keeps umami and the site registry in step with the cp
-// tables (the design, section 4.8). it is a reconciler, not a set of inline
+// tables. it is a reconciler, not a set of inline
 // calls: the desired state is what cp.tenants, cp.tenant_members, cp.users
 // and cp.sites say, the actual state is umami (one team per tenant, a primary
 // and a quarantine website per site, one view-only user per console user,
@@ -45,7 +45,7 @@ const (
 	ActionMembershipRemove = "provision.membership_remove"
 	ActionRegistryPut      = "provision.registry_put"
 	ActionRegistryDelete   = "provision.registry_delete"
-	// this stage: a registry_otlp entry written to match the cp tables
+	// a registry_otlp entry written to match the cp tables
 	ActionOTLPRegistryPut = "provision.otlp_registry_put"
 )
 
@@ -247,7 +247,7 @@ func (s *run) reconcile(ctx context.Context) error {
 	return nil
 }
 
-// removedTenant runs the removal purge (the design, contract 5.5) in
+// removedTenant runs the removal purge (contract 5.5) in
 // the run's transaction, which holds the tenant row lock: the registry keys,
 // the umami websites, team and orphaned users, and the ingest aggregates,
 // store by store. a store that fails is retried on the next run; stores
@@ -310,7 +310,7 @@ func (s *run) team(ctx context.Context) (string, error) {
 	adopted := false
 	switch len(found) {
 	case 0:
-		// an empty owner makes the admin service account the operator
+		// an empty owner makes the admin service account the owner
 		t, _, err := s.r.Admin.CreateTeam(ctx, name, "")
 		if err != nil {
 			return "", err

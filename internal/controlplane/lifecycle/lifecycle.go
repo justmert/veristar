@@ -1,4 +1,4 @@
-// Package lifecycle is the tenant lifecycle of the design
+// Package lifecycle is the tenant lifecycle
 // (control-plane-api 5.5 and 5.6): the transition table, the operator
 // actions approve, reject, suspend, resume and remove on tenants, approve
 // and reject on sites in review, and the removal purge that deletes a

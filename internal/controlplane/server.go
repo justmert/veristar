@@ -1,5 +1,5 @@
-// Package controlplane wires the control plane api (the design,
-// docs/reference/control-plane-api.md): one chi router under /api with the
+// Package controlplane wires the control plane api
+// (docs/reference/control-plane-api.md): one chi router under /api with the
 // shared middleware, and the route groups of each feature package.
 package controlplane
 
@@ -39,7 +39,7 @@ type Options struct {
 	Private []Routes
 	// Mounts are handlers served beside /api rather than inside it: none of
 	// the api middleware runs for them, so no session is ever loaded. the
-	// machine metrics api (the design) is one; it authenticates by key.
+	// machine metrics api is one; it authenticates by key.
 	Mounts []Mount
 }
 

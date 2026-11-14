@@ -272,7 +272,7 @@ func (e *env) key(t *testing.T, plain string) (registry.OTLPToken, bool) {
 }
 
 // eventuallyStatus waits for the asynchronous reconcile the request
-// started; 5 seconds is the collector's refusal bound of the design.
+// started; 5 seconds is the collector's refusal bound.
 func (e *env) eventuallyStatus(t *testing.T, plain, want string) {
 	t.Helper()
 	require.Eventually(t, func() bool {
@@ -309,7 +309,7 @@ func TestOTLPTokens(t *testing.T) {
 	require.Equal(t, "active", status)
 	var plains []string
 
-	// create: shown once in the the design format, published active
+	// create: shown once in the sa_otlp_ format, published active
 	prod := owner.createToken(t, tenant, "Production API", "production")
 	plains = append(plains, prod.plain)
 	require.Regexp(t, tokenRe, prod.plain)

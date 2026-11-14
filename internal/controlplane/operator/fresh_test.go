@@ -21,7 +21,7 @@ import (
 )
 
 // freshChosen is the independent expectation: the tenant's minute rows of
-// [$2, $3) after the source rule of the design, read past row-level security
+// [$2, $3) after the source rule (metric rows win over span rows), read past row-level security
 const freshChosen = `with r as (
   select * from api.metrics_minute where tenant_id = $1 and bucket_start >= $2 and bucket_start < $3
 ), svc as (

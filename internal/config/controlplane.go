@@ -11,8 +11,7 @@ import (
 
 // ControlPlane is what the control plane needs besides the database pools
 // (internal/db LoadPoolConfig) and nats (LoadNATS). the keys are those of
-// docs/reference/control-plane-api.md section 4.5, plus OPERATOR_GITHUB_IDS
-// (plan an operator input.
+// docs/reference/control-plane-api.md section 4.5, plus OPERATOR_GITHUB_IDS.
 type ControlPlane struct {
 	// Addr is the api listener; OpsAddr serves /healthz, /readyz, /metrics.
 	Addr    string
@@ -38,7 +37,7 @@ type ControlPlane struct {
 	UmamiUserPasswordKey Key32
 
 	TrackerReleaseDir string
-	// TrackerNPMPackage is empty until the tracker is published (this stage).
+	// TrackerNPMPackage is empty until the tracker is published.
 	TrackerNPMPackage string
 }
 

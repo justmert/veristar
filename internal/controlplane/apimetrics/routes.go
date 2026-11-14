@@ -1,5 +1,5 @@
 // Package apimetrics serves a tenant's api metrics (control-plane-api
-// section 7, the design): overview, timeseries, routes, status, services
+// section 7): overview, timeseries, routes, status, services
 // and warnings under /api/tenants/{tenant_id}/api-metrics/. every query runs
 // under cp_tenant through db.WithTenant, so row-level security limits it to
 // the tenant even if a handler named the wrong one.

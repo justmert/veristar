@@ -11,8 +11,7 @@ import (
 	"time"
 )
 
-// sign-in limits (contract 4.1.1 and 4.1.2 step 4 and
-// N-2). each client has its own bucket, so one client running out cannot
+// sign-in limits (contract 4.1.1 and 4.1.2 step 4). each client has its own bucket, so one client running out cannot
 // lock anyone else out; a global bucket per control plane instance stays as
 // a ceiling, sized well above what clients within their own limits produce
 // together, so it only bounds the load a large distributed flood puts on
@@ -44,8 +43,8 @@ const (
 	ExchangeReserveBurst         = 10
 )
 
-// IPv6ClientPrefix is the ipv6 prefix length that keys one client (audit
-// N-2). /48 is the largest assignment one end site normally gets (ripe-690
+// IPv6ClientPrefix is the ipv6 prefix length that keys one client.
+// /48 is the largest assignment one end site normally gets (ripe-690
 // recommends /48 or /56 per site, hosting providers route a /48 to one
 // customer, and tunnel brokers hand a free /48 to anyone who signs up).
 // keyed by /56 or /64, one such holder would get 256 or 65,536 buckets of

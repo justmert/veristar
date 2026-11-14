@@ -1,5 +1,5 @@
 // Package sso serves GET /api/sso/umami (docs/reference/control-plane-api.md
-// 4.4.1, the design): it checks that the signed-in user is a member of the
+// 4.4.1): it checks that the signed-in user is a member of the
 // site's tenant, logs in to umami on the private network as that user's
 // umami user with the derived password of the day, and sends the browser to
 // umami's /sso page with the token. it never sets a password, so a second

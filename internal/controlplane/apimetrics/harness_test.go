@@ -39,7 +39,7 @@ import (
 // AddIngestWarning) as the metrics_writer role, exactly the statements its
 // batch transaction sends after the delta step; hourly and daily rows come
 // from the real api-rollup task under a real jobs leader lock. the collector
-// and the delta engine in front of AddMinute are covered by the this stage
+// and the delta engine in front of AddMinute are covered by the
 // exactness suite (internal/metricswriter); driving them here would add a
 // collector process per test without touching any code under test.
 

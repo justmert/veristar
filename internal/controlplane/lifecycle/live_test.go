@@ -511,8 +511,8 @@ func testApproveReject(t *testing.T, e *env, op *client) {
 	require.Equal(t, http.StatusConflict, r.status, "a repeat writes nothing")
 	require.Equal(t, 1, e.count(t, `select count(*) from cp.audit_log where action = 'tenant.reject' and target = $1`, "tenant:"+tenant.String()))
 
-	// resubmission is the operator's route of stream b; until it lands the
-	// tenant goes back to pending the way that route does it
+	// resubmission is the tenant owner's route; this test sets the tenant
+	// back to pending the way that route does it
 	e.superuser(t, func(c *pgx.Conn) {
 		_, err := c.Exec(context.Background(),
 			`update cp.tenants set status = 'pending', status_reason = null where id = $1 and status = 'rejected'`, tenant)
@@ -801,7 +801,7 @@ func testSitesInReview(t *testing.T, e *env, op *client) {
 	tenant, _ := next.enroll(t, "Next Project")
 	a, _ := next.addSite(t, tenant, "shop.review.example.org")
 	b, _ := next.addSite(t, tenant, "other-review.example.org")
-	// the review rule at site creation is stream b's (sites/); the state it
+	// the review rule at site creation lives in sites/; the state it
 	// produces is set here so the operator routes are tested on their own
 	e.superuser(t, func(c *pgx.Conn) {
 		_, err := c.Exec(context.Background(), `update cp.sites set status = 'pending' where id = any($1)`, []uuid.UUID{a, b})

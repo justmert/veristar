@@ -1,5 +1,5 @@
-// Package erasure is the tenant-triggered erasure workflow (the design,
-// control-plane-api section 10). a project owner asks to erase one visitor's
+// Package erasure is the tenant-triggered erasure workflow
+// (control-plane-api section 10). a project owner asks to erase one visitor's
 // visit of today, one umami session or every web record of a site. the
 // route checks the request, records it in cp.erasure_requests and answers
 // 202; a run in this process then waits until the replayer has taken every

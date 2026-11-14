@@ -223,14 +223,14 @@ type SnippetRoutes struct {
 
 // NewSnippetRoutes returns the route. npmPackage is TRACKER_NPM_PACKAGE.
 // the shape of the npm answer (in particular its import line) is defined
-// only when the package is published in this stage, so a configured package
+// only once the package is published on npm, so a configured package
 // name is refused here instead of answering with a guessed import.
 func NewSnippetRoutes(scope *tenants.Scope, tracker *Tracker, npmPackage string) (*SnippetRoutes, error) {
 	if scope == nil || tracker == nil {
 		return nil, errors.New("controlplane: snippet route needs a scope and a tracker")
 	}
 	if npmPackage != "" {
-		return nil, errors.New("controlplane: TRACKER_NPM_PACKAGE is set, but the npm snippet is defined only once the tracker is published (this stage)")
+		return nil, errors.New("controlplane: TRACKER_NPM_PACKAGE is set, but the npm snippet is defined only once the tracker is published on npm")
 	}
 	return &SnippetRoutes{scope: scope, tracker: tracker}, nil
 }

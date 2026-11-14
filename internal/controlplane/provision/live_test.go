@@ -95,7 +95,7 @@ func start(t *testing.T) *env {
 	}
 
 	// the sso route behind the real console session middleware. /test-sign-in
-	// stands in for the github callback (stream a), which ends in the same
+	// stands in for the github callback, which ends in the same
 	// SignIn call.
 	sm := session.New(d)
 	h := &sso.Handler{
@@ -174,7 +174,7 @@ func (e *env) site(t *testing.T, tenant uuid.UUID, domain string) site {
 	e.sys(t, func(tx pgx.Tx) error {
 		_, err := tx.Exec(t.Context(), `
 			insert into cp.sites (id, tenant_id, name, domain, origins, quarantine_website_id, status, verify_token)
-			values ($1, $2, 'Marketing', $3, $4, $5, 'active', 'unused-in-this stage')`,
+			values ($1, $2, 'Marketing', $3, $4, $5, 'active', 'unused-in-this-test')`,
 			s.id, tenant, domain, []string{"https://" + domain}, s.quarantine)
 		return err
 	})
@@ -476,7 +476,7 @@ func TestProvisioningLive(t *testing.T) {
 		require.Equal(t, http.StatusUnauthorized, status)
 	})
 
-	//: a site in review (contract 5.6) has no umami
+	// a site in review (contract 5.6) has no umami
 	// website the user may open, so sso answers provisioning_pending
 	// instead of sending the browser to an umami error page. the tenant is
 	// active and its team and the membership exist, as for a reviewed site.
@@ -586,7 +586,7 @@ func TestProvisioningLive(t *testing.T) {
 			require.ErrorIs(t, err, umami.ErrUnauthorized, "website %s", id)
 		}
 		require.Equal(t, sso.CodeNotFound, e.ssoFailure(t, otherCookie, "site="+s.id.String(), "same-origin"))
-		// the operator keeps access
+		// the owner keeps access
 		_, err = e.stats(t, e.ssoToken(t, ownerCookie, s), s.id)
 		require.NoError(t, err)
 	})

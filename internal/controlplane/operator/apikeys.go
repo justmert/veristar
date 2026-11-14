@@ -17,12 +17,12 @@ import (
 	"github.com/justmert/veristar/internal/db"
 )
 
-// operator api key management (the design, contract 9.2). every route is
+// operator api key management (contract 9.2). every route is
 // behind the operator guard. writes, and the reads that name the creating
 // user, run as cp_system, which owns the key table's full rights (contract
 // 5.1: operator actions run as cp_system).
 
-// audit actions and target of contract 3.3 (this stage)
+// audit actions and target of contract 3.3
 const (
 	ActionAPIKeyCreate = "operator_api_key.create"
 	ActionAPIKeyRevoke = "operator_api_key.revoke"
@@ -41,7 +41,7 @@ const (
 	dbScopeTenant = "tenant"
 )
 
-// key lifetime in days (the design): 90 by default, at most 365, a
+// key lifetime in days: 90 by default, at most 365, a
 // limit beyond the rfp so that a forgotten key cannot live forever.
 const (
 	DefaultKeyDays = 90
@@ -55,7 +55,7 @@ const (
 )
 
 // FieldUnknownTenant is the 422 field code of a tenant_id that names no
-// tenant, or a removed one (contract 2.5, this stage).
+// tenant, or a removed one (contract 2.5).
 const FieldUnknownTenant = "unknown_tenant"
 
 // key statuses, derived from revoked_at and expires_at
@@ -209,7 +209,7 @@ func (h *APIKeys) create(w http.ResponseWriter, r *http.Request) error {
 		if tenant != nil {
 			// a key for a tenant that does not exist would read nothing, and
 			// one for a removed tenant only purged data; both are refused.
-			// internal tenants are allowed: the probe's key is one (this stage).
+			// internal tenants are allowed: the probe's key is one.
 			var status string
 			err := tx.QueryRow(ctx, `select status from cp.tenants where id = $1`, *tenant).Scan(&status)
 			if errors.Is(err, pgx.ErrNoRows) || (err == nil && status == "removed") {

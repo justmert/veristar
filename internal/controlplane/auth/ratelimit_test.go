@@ -98,7 +98,7 @@ func TestUsedStates(t *testing.T) {
 	require.True(t, fresh)
 }
 
-// review: one holder of an ipv6 /48 (a hosting customer, a tunnel
+// one holder of an ipv6 /48 (a hosting customer, a tunnel
 // broker's free allocation) cycles through its /56 and /64 subnets as fast
 // as it likes. it gets one client bucket, so it neither drains the global
 // ceiling nor stops a person elsewhere from starting a sign-in.
@@ -122,7 +122,7 @@ func TestOneIPv6SiteCannotDrainTheCeiling(t *testing.T) {
 	}
 }
 
-// review: a flood from 150 keys (150 ipv4 addresses or ipv6 /48s), each
+// a flood from 150 keys (150 ipv4 addresses or ipv6 /48s), each
 // at its own client rate, asks for 75 starts a second and so keeps the
 // global ceiling of 50 a second empty. people who had been idle still
 // start: the reserve serves only clients whose own bucket was full, and the

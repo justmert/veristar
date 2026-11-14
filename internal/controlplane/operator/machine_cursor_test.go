@@ -36,7 +36,7 @@ func requireBadCursor(t *testing.T, err error) {
 	require.Equal(t, httpx.CodeInvalidCursor, e.Code)
 }
 
-//: the range a cursor carries is checked again on every
+// the range a cursor carries is checked again on every
 // page, so editing f or t cannot skip MaxRangeDays, maxAPIHours or the
 // not-in-the-future rule of the first page.
 func TestMachineCursorRangeIsCheckedOnEveryPage(t *testing.T) {

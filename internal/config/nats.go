@@ -14,7 +14,8 @@ type NATS struct {
 	// Replicas is the replica count `platformctl nats apply` gives every
 	// stream and bucket: 1 for the single dev server, 3 elsewhere.
 	Replicas int
-	// User and Password are the per-service credentials issued in this stage.
+	// User and Password are the per-service credentials the deployment issues
+	// (infra/ansible).
 	// both are empty only on the dev server, which runs without auth.
 	User     string
 	Password Secret
