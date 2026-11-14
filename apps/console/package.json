@@ -10,7 +10,6 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@fontsource-variable/geist": "catalog:",
     "@tanstack/react-query": "catalog:",
     "@veristar/brand": "workspace:*",
     "class-variance-authority": "catalog:",

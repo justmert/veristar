@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { cn } from "@veristar/brand/cn";
 import { Mark } from "@veristar/brand/mark";
 import { transition } from "@veristar/brand/motion";
+import { type ThemeChoice, useTheme } from "@veristar/brand/theme";
 import {
   Activity,
   BookOpen,
@@ -10,8 +11,11 @@ import {
   Ellipsis,
   FolderOpen,
   LogOut,
+  Monitor,
+  Moon,
   Plus,
   ScrollText,
+  Sun,
 } from "lucide-react";
 import { LayoutGroup, motion } from "motion/react";
 import { type ReactNode, useId } from "react";
@@ -24,6 +28,8 @@ import {
   MenuContent,
   MenuItem,
   MenuLabel,
+  MenuRadioGroup,
+  MenuRadioItem,
   MenuSeparator,
   MenuTrigger,
 } from "@/components/ui/menu";
@@ -65,6 +71,7 @@ export function Sidebar({
   // the desktop sidebar and the phone drawer are two instances; each needs
   // its own group, or their current-item markers would crossfade
   const group = useId();
+  const theme = useTheme();
   return (
     <LayoutGroup id={group}>
       <div className="flex h-full flex-col gap-3.5 px-2.5 py-3.5">
@@ -149,6 +156,25 @@ export function Sidebar({
               className="w-(--radix-dropdown-menu-trigger-width)"
             >
               <MenuLabel>Signed in as {me.user.github_login}</MenuLabel>
+              <MenuSeparator />
+              <MenuLabel>Theme</MenuLabel>
+              <MenuRadioGroup
+                value={theme.choice}
+                onValueChange={(v) => theme.setChoice(v as ThemeChoice)}
+              >
+                <MenuRadioItem value="system">
+                  <Monitor aria-hidden />
+                  System
+                </MenuRadioItem>
+                <MenuRadioItem value="light">
+                  <Sun aria-hidden />
+                  Light
+                </MenuRadioItem>
+                <MenuRadioItem value="dark">
+                  <Moon aria-hidden />
+                  Dark
+                </MenuRadioItem>
+              </MenuRadioGroup>
               <MenuSeparator />
               <MenuItem onSelect={onSignOut}>
                 <LogOut aria-hidden />

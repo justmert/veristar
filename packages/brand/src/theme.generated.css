@@ -55,6 +55,8 @@
   --color-series-focus: var(--vs-series-focus);
   --color-grid: var(--vs-grid);
   --color-axis: var(--vs-axis);
+  --color-shadow-soft: var(--vs-shadow-soft);
+  --color-shadow-strong: var(--vs-shadow-strong);
   --font-sans: var(--vs-font-sans);
   --font-mono: var(--vs-font-mono);
   --text-axis: var(--vs-text-axis);

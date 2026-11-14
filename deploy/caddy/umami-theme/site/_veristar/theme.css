@@ -32,7 +32,7 @@
  * change the brand there.
  */
 
-@import url("fonts/geist.css");
+@import url("fonts/fonts.css");
 
 /* brand tokens, the only values to edit when the brand changes */
 html:root {
@@ -47,16 +47,18 @@ html:root {
   --vs-foreground: #eeede8;
   --vs-muted-foreground: #a6a49c;
   --vs-disabled-foreground: #6e6c65;
-  --vs-primary: #ff7a3d;
-  --vs-primary-hover: #ff9b6b;
-  --vs-primary-foreground: #1a0a02;
-  --vs-ring: #ff7a3d;
+  --vs-primary: #b5482e;
+  --vs-primary-hover: #a13f28;
+  --vs-primary-foreground: #ffffff;
+  --vs-primary-text: #f29a80;
+  --vs-ring: #f29a80;
   --vs-success: #3fb27f;
   --vs-warning: #e0a54a;
   --vs-destructive: #f97066;
-  --vs-destructive-solid: #e5484d;
-  --vs-font-sans: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
-  --vs-font-mono: "Geist Mono Variable", ui-monospace, "SF Mono", monospace;
+  --vs-destructive-solid: #c93a36;
+  --vs-destructive-foreground: #ffffff;
+  --vs-font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  --vs-font-mono: "JetBrains Mono Variable", ui-monospace, "SF Mono", monospace;
   --vs-radius-control: 0.375rem;
   --vs-radius-card: 0.625rem;
   --vs-radius-overlay: 0.75rem;
@@ -187,13 +189,33 @@ html:root .bg-primary:hover {
   background-color: var(--vs-primary-hover);
 }
 
-/* zen's danger button is "bg-status-error text-white". the solid red takes
-   the page ink, because white on it stays under 4.5:1 */
+/* zen's danger button is "bg-status-error text-white": the solid red with
+   white on it, at 4.5:1 or more */
 html:root .bg-status-error {
   background-color: var(--vs-destructive-solid);
 }
 html:root .bg-status-error.text-white {
-  color: var(--vs-background);
+  color: var(--vs-destructive-foreground);
+}
+
+/* zen draws text, strokes, outlines and active marks in the primary too. the
+   deep accent carries white text as a fill but is too dark to read as text
+   on a dark surface, so those take the accent's text step */
+html:root .text-primary,
+html:root .hover\:text-primary:hover,
+html:root .focus\:text-primary:focus,
+html:root .active\:text-primary:active {
+  color: var(--vs-primary-text);
+}
+html:root .stroke-primary {
+  stroke: var(--vs-primary-text);
+}
+html:root .border-primary,
+html:root .data-active\:border-primary[data-active] {
+  border-color: var(--vs-primary-text);
+}
+html:root .focus-visible\:ring-primary:focus-visible {
+  --tw-ring-color: var(--vs-ring);
 }
 
 /* the world map: countries without visitors take umami's map fill, written

@@ -74,6 +74,22 @@ function roleBlock(name: ThemeName) {
     const sel = name === defaultTheme ? `:root,\n[data-theme="${name}"]` : `[data-theme="${name}"]`;
     out.push(`${sel} {`, roleBlock(name), "}", "");
   }
+  // without a data-theme attribute (before the console's theme script runs,
+  // or on the website) a light operating system gets the light theme
+  if ("light" in themes) {
+    const inner = roleBlock("light" as ThemeName)
+      .split("\n")
+      .map((l) => `  ${l}`)
+      .join("\n");
+    out.push(
+      "@media (prefers-color-scheme: light) {",
+      "  :root:not([data-theme]) {",
+      inner,
+      "  }",
+      "}",
+      "",
+    );
+  }
   want(join(src, "tokens.css"), out.join("\n"));
 }
 
@@ -136,17 +152,19 @@ function roleBlock(name: ThemeName) {
     primary: t.accent,
     "primary-hover": t["accent-hover"],
     "primary-foreground": t["on-accent"],
-    ring: t.accent,
+    "primary-text": t["accent-text"],
+    ring: t["accent-text"],
     success: t.success,
     warning: t.warning,
     destructive: t.critical,
     "destructive-solid": t["critical-solid"],
+    "destructive-foreground": t["on-critical"],
     "font-sans": font.sans,
     "font-mono": font.mono,
     "radius-control": "0.375rem",
     "radius-card": "0.625rem",
     "radius-overlay": "0.75rem",
-    "shadow-floating": shadow.overlay,
+    "shadow-floating": shadow.overlay.replace("var(--vs-shadow-soft)", t["shadow-soft"]),
   };
   if (radius.md !== "6px" || radius.lg !== "10px" || radius.xl !== "12px") {
     throw new Error("umami radius tokens are written in rem; update them with radius md, lg, xl");
@@ -163,22 +181,71 @@ function roleBlock(name: ThemeName) {
   want(path, cur.slice(0, start + open.length) + block + cur.slice(end));
 }
 
-// the docs (mintlify) take the accent and the ground; edited in place so the
-// rest of docs.json keeps its formatting
+// the docs (mintlify) take the accent and both grounds; edited in place so
+// the rest of docs.json keeps its formatting. mintlify's "light" colour is
+// the one it draws on the dark theme and "dark" the one on the light theme.
 {
-  const t: Roles = themes.dark;
+  const d: Roles = themes.dark;
+  const l: Roles = themes.light;
   const path = join(repo, "docs/docs.json");
   let text = readFileSync(path, "utf8");
   const up = (v: string) => v.toUpperCase();
   text = text.replace(
     /("colors":\s*\{\s*"primary":\s*")[^"]*(",\s*"light":\s*")[^"]*(",\s*"dark":\s*")[^"]*(")/,
-    `$1${up(t.accent)}$2${up(t.accent)}$3${up(t.accent)}$4`,
+    `$1${up(d.accent)}$2${up(d["accent-text"])}$3${up(l["accent-text"])}$4`,
   );
   text = text.replace(
-    /("background":\s*\{\s*"color":\s*\{\s*"dark":\s*")[^"]*(")/,
-    `$1${up(t.ground)}$2`,
+    /("background":\s*\{\s*"color":\s*\{)[^}]*(\})/,
+    `$1\n      "light": "${up(l.ground)}",\n      "dark": "${up(d.ground)}"\n    $2`,
   );
   want(path, text);
+}
+
+// the mark as svg files: the favicons (one dark tile everywhere), the umami
+// sidebar mark and the docs logo for each theme
+{
+  const d: Roles = themes.dark;
+  const l: Roles = themes.light;
+  const star = "M16 1.5 L17.3 4.7 L20.5 6 L17.3 7.3 L16 10.5 L14.7 7.3 L11.5 6 L14.7 4.7 Z";
+  const up = (v: string) => v.toUpperCase();
+  const mark = (ink: string, accent: string) =>
+    `  <circle cx="16" cy="17" r="11" fill="none" stroke="${up(ink)}" stroke-width="2.4"/>\n` +
+    `  <path d="M16 6v22" fill="none" stroke="${up(ink)}" stroke-width="2.4"/>\n` +
+    `  <path d="${star}" fill="${up(accent)}"/>\n`;
+  const head =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">\n';
+  const favicon =
+    `${head}  <title>Veristar</title>\n` +
+    `  <rect width="32" height="32" rx="8" fill="${up(d.ground)}"/>\n` +
+    `${mark(d.fg, d["accent-text"])}</svg>\n`;
+  for (const f of [
+    "apps/console/public/favicon.svg",
+    "apps/site/public/favicon.svg",
+    "docs/favicon.svg",
+    "deploy/caddy/umami-theme/site/_veristar/brand/favicon.svg",
+  ]) {
+    want(join(repo, f), favicon);
+  }
+  want(
+    join(repo, "deploy/caddy/umami-theme/site/_veristar/brand/mark.svg"),
+    `${head}  <title>Veristar</title>\n${mark(d.fg, d["accent-text"])}</svg>\n`,
+  );
+  const logo = (t: Roles) =>
+    '<svg xmlns="http://www.w3.org/2000/svg" width="152" height="32" viewBox="0 0 152 32" role="img" aria-label="Veristar">\n' +
+    "  <title>Veristar</title>\n" +
+    mark(t.fg, t["accent-text"]) +
+    `  <text x="36" y="23.5" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="21" font-weight="600" letter-spacing="-0.6" fill="${up(t.fg)}">Veristar</text>\n` +
+    "</svg>\n";
+  want(join(repo, "docs/logo/veristar.svg"), logo(d));
+  want(join(repo, "docs/logo/veristar-light.svg"), logo(l));
+}
+
+// the theme boot script, copied into each app's public folder
+{
+  const boot = readFileSync(join(src, "theme-boot.js"), "utf8");
+  for (const f of ["apps/console/public/theme.js", "apps/site/public/theme.js"]) {
+    want(join(repo, f), boot);
+  }
 }
 
 if (problems.length) {

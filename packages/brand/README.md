@@ -44,12 +44,17 @@ Components name roles, never values: `bg-raised`, `text-fg-2`, `border-line-stro
 
 ## Specification
 
-**Theme.** Dark only. The `<html>` element carries `data-theme="dark"`.
+**Themes.** Dark (the default) and light. `theme-boot.js` (copied to each app as `/theme.js` and
+loaded in `<head>`) sets `data-theme` on `<html>` before the first paint, from the person's saved
+choice or the operating system; `src/theme.ts` (`useTheme`) changes it, and the console offers
+System, Light and Dark in the account menu. Without `data-theme`, a light operating system gets
+the light theme through `prefers-color-scheme`. The values below are the dark theme; the light
+theme in `tokens.ts` maps the same roles onto a warm paper ground (#F6F5F2) with white cards.
 
 **Surfaces**, deepest to highest: `sunken` #121211 (inputs, code), `ground` #151514 (page),
 `raised` #1C1C1A (cards, tables), `overlay` #22221F (menus, tooltips, dialogs), with `hover`
 #252522, `selected` #2A2A27, `muted` #232320 (skeletons) and a 60% `scrim` behind dialogs.
-Raised surfaces have a border and no shadow; overlays add `shadow-overlay`, dialogs `shadow-dialog`.
+Raised surfaces have a border and no shadow; overlays add `shadow-overlay`, dialogs `shadow-dialog`. A shadow's colour is the theme's `shadow-soft` or `shadow-strong` role.
 
 **Lines.** `line` #2E2D29 by default, `line-strong` #3D3C37 for controls and the chart
 baseline, `line-subtle` #252522 for row rules and the chart grid.
@@ -57,20 +62,24 @@ baseline, `line-subtle` #252522 for row rules and the chart grid.
 **Text.** `fg` #EEEDE8, `fg-2` #A6A49C, `fg-3` #918F86, `fg-disabled` #6E6C65. Every pair with
 the surfaces passes WCAG 2.2 AA (checked by the Umami theme's asset script).
 
-**Accent.** `accent` #FF7A3D with `on-accent` #1A0A02: the single primary action per screen and
-the focus ring. Never a status.
+**Accent.** Terracotta: `accent` #B5482E with white `on-accent` (5.3:1), `accent-hover` #A13F28,
+`accent-pressed` #8A3622. It fills the single primary action per screen and is never a status.
+`accent-text` (#F29A80 on dark, #A13F28 on light) is the accent drawn on a surface: links, tab
+markers, the focus ring and the star in the mark.
 
 **Status**, always with an icon and a word: `success` #3FB27F (verified, received, active),
 `warning` #E0A54A (pending, quarantined, 4xx), `critical` #F97066 (failed, rejected, 5xx,
 paging alert), `info` = `fg-2` (neutral, suspended). Each has a `-soft` fill and a `-line`
-border. Destructive buttons use `critical-solid` #E5484D with `on-critical` #1A0505.
+border. Destructive buttons use `critical-solid` #C93A36 with white `on-critical`.
 
 **Data series**, in this fixed order: #3987E5 blue, #D55181 magenta, #9085E9 violet, #199E70
 aqua, #C98500 ochre. Validated on the raised surface: worst adjacent CVD ΔE 8.4, normal vision
-19.7, each at least 3:1. One series is always blue. The previous period is `series-prev`
+19.7, each at least 3:1. The light theme steps the same hues for a white card (#2A6FD6, #C23F78,
+#6E5ED6, #14876A, #A66B00: worst adjacent CVD ΔE 9.5, normal vision 17.5). One series is always
+blue. The previous period is `series-prev`
 #6E6C65, dashed. Status colours are never series colours.
 
-**Type.** Geist for text, Geist Mono for numbers, keys and code only.
+**Type.** Inter (variable, with its optical size axis) for text, JetBrains Mono for numbers, keys and code only. Both SIL OFL, self-hosted from fontsource.
 
 | Step | Size / line | Weight | Use |
 |---|---|---|---|
@@ -108,13 +117,12 @@ With reduced motion only opacity changes remain.
 Edit `src/tokens.ts`, run `generate`, commit the derived files with it. Nothing else changes:
 components only name roles.
 
-## Adding a light theme
+## Adding a theme
 
-1. Add `light` to `themes` in `src/tokens.ts` with the same role keys (TypeScript fails on a
-   missing role) and `light: "light"` to `colorScheme`.
-2. Run `generate`. `tokens.css` gains a `[data-theme="light"]` block.
-3. Set `data-theme="light"` on `<html>` where the light theme should apply (a toggle, or the
-   `prefers-color-scheme` media query in the app's entry).
+1. Add it to `themes` in `src/tokens.ts` with the same role keys (TypeScript fails on a missing
+   role) and its `colorScheme`.
+2. Run `generate`. `tokens.css` gains a `[data-theme="<name>"]` block.
+3. Offer it in `src/theme.ts` and `src/theme-boot.js`.
 
 Components need no change. Check the new roles with the dataviz palette validator for the series
 and with the Umami theme's contrast check for text pairs.
