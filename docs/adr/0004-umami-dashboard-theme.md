@@ -12,7 +12,7 @@ description: "How web.<BASE_DOMAIN> shows Umami's dashboard in Veristar's colour
 Tenants read their web analytics in Umami's own dashboard on `web.<BASE_DOMAIN>`, which they
 reach from the console through SSO. The console and the public site carry the
 Veristar brand; the dashboard looked like stock Umami. The question was whether the dashboard
-can take the Veristar brand without breaking the RFP or the platform's own guarantees:
+can take the Veristar brand without breaking the Stellar Community Fund request for proposals (RFP) or the platform's own guarantees:
 
 - RFP section 2: the platform is "built upon either Umami or GoatCounter".
 - RFP section 3.4: infrastructure "can be rebuilt from the open-source monorepo", and a
@@ -99,7 +99,7 @@ per request in the Docker image
 host, fonts from the same host and images from the same host are all allowed without any
 change to that policy.
 
-**The web Caddy already rewrites Umami's HTML.** Since this stage it adds the DB-IP attribution
+**The web Caddy already rewrites Umami's HTML.** It adds the DB-IP attribution
 before `</body>` with the `replace-response` plugin, on GET answers with an HTML content type
 only, and the live tests prove the node survives React's hydration and client-side navigation
 (`tests/caddy-web/specs/attribution.spec.ts`). React 19 skips unknown tags in `<head>` and
@@ -177,10 +177,9 @@ Fonts are self-hosted next to the stylesheet. No script, no image change.
   the chips show their status by text and arrow colour only, never by a tinted fill.
   `theme.spec.ts` asserts the computed ground and colours.
 
-Limits, all visible in the screenshots:
+Limits:
 
-- Chart series keep Umami's blue and its categorical palette, an accepted known limit: they
-  are JavaScript constants painted on canvas (see Findings), so the brand mapping of the primary
+- Chart series keep Umami's blue and its categorical palette: they are JavaScript constants painted on canvas (see Findings), so the brand mapping of the primary
   series to ink `#EEEDE8` and comparisons to `#8E8C84` and `#6E6C65` cannot be applied without
   patching Umami. A CSS filter on the canvas could shift the hue but not map colours exactly,
   and would distort every series at once, so it is not used for that.
@@ -196,12 +195,12 @@ Limits, all visible in the screenshots:
 ### (c) A fork or a custom image
 
 Rejected. It would give full control of colours, charts and titles, but every Umami release
-(3.5.0 alone carried a list of security fixes) would become a rebase and an image build of our
+(3.5.0 alone carried a list of security fixes) would become a rebase and an image build of its
 own before it could ship, which works against the 24-hour patch target of RFP 3.4 and against
 ADR 0002. A future operator would have to maintain the fork as well. The image's signatures
-and SBOM would be ours instead of upstream's.
+and SBOM would be the project's instead of upstream's.
 
-### (d) A web dashboard of our own in the console
+### (d) A separate web dashboard in the console
 
 Only as a comparison. The console could draw web analytics from Umami's read API (as it
 already does for operator views), fully on-brand. It would mean rebuilding Umami's overview,
