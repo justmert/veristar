@@ -4,8 +4,8 @@ sidebarTitle: "OTLP collector"
 description: "What the OTLP collector accepts and publishes, and the upstream behaviour its configuration rests on."
 ---
 
-this stage reference. What the collector accepts, what it publishes, and the
-facts about the pinned upstream components that the configuration rests on.
+What the OTLP collector accepts, what it publishes, and the facts about the
+pinned upstream components that its configuration rests on.
 Everything below was read from the sources at collector core v0.165.0 /
 v1.71.0 and contrib v0.165.1 (module cache, 2026-11-12) and is exercised by
 `make collector-it` unless marked otherwise.
@@ -37,13 +37,13 @@ logs:          otlp -> memory_limiter -> tenantguard -> nop
 enter a separate pipeline after the connector. There is no trace exporter and
 no batch processor anywhere.
 
-## Research findings
+## Upstream behaviour
 
 ### Component names
 
 Snake case is current: `memory_limiter`, `signal_to_metrics` (deprecated
 alias `signaltometrics`), `health_check` (not `healthcheck`), `transform`,
-`nop`, `otlp`. The plan's "healthcheck" means the `health_check` extension.
+`nop`, `otlp`.
 
 ### Server authenticator
 
@@ -92,7 +92,8 @@ bounds, attributes, removal of its instance attribute). Facts relied on:
 
 - One aggregation per `ConsumeTraces` call, delta temporality, no state.
 - Histogram value `Seconds(span.end_time - span.start_time)`, explicit
-  `buckets` set to the canonical layout.
+  `buckets` set to the canonical layout ([api-storage.md](api-storage.md),
+  "Histogram contract").
 - `attributes` without `optional` makes the attribute required; the method
   is required, route, status and error type are optional.
 - `include_resource_attributes` is an include list; the five `scf`/service
@@ -102,9 +103,9 @@ bounds, attributes, removal of its instance attribute). Facts relied on:
 - Data point timestamps are the collector's processing time, not the span
   end time, there is no start time, and points come out in Go map order.
   tenantguard's stamps fix both (`scf.span.minute`, `scf.batch.id`); see
-  "For this stage" below.
-- Count is one per span (no `AdjustedCount()`), so sampled traces undercount,
-  as the design states.
+  "Span-derived points carry the span end minute" below.
+- Count is one per span (no `AdjustedCount()`), so sampled traces count only
+  the sampled spans.
 
 ### transform
 
@@ -150,10 +151,10 @@ lines, relative to `dist.output_path`). `path` is per component and emits one
 `replace` per component; three components of one module would emit the same
 replace three times, so the single `replaces` entry is used instead.
 
-**Decision: the custom components live in the root module.** the design says
-one Go module, the components import `internal/registry`, `internal/natsx`,
+**Decision: the custom components live in the root module.** The repository
+is one Go module, the components import `internal/registry`, `internal/natsx`,
 `internal/redact`, `internal/routenorm` and `internal/obs`, and the
-metricswriter (this stage) needs the same `pdata` v1.71.0 in the root module
+metrics writer needs the same `pdata` v1.71.0 in the root module
 anyway. Because the generated module replaces the root module with this
 checkout, the root go.mod takes part in version selection: it pins the
 collector core modules at v1.71.0 / v0.165.0, and ocb's strict check then
@@ -164,7 +165,7 @@ root (nats.go, otel, grpc) without any check noticing. The cost of the
 chosen layout is a larger root go.mod (collector packages and their
 dependencies).
 
-Two consequences found while building the image:
+Three consequences found while building the image:
 
 - ocb creates only the last directory of `output_path` (`mkdir`), so
   `dist/` must exist.
@@ -181,8 +182,7 @@ cannot be fetched over the network.
 ### Upstream alternatives checked
 
 - **nats exporter** (`exporter/natsexporter` v0.165.1): stability
-  *development*, no distribution. Correction to the plan: at v0.165.1 it
-  **does** have a `jetstream` option (acknowledged publish, optional
+  *development*, no distribution. At v0.165.1 it has a `jetstream` option (acknowledged publish, optional
   `publish_timeout`). It still sets no `Nats-Msg-Id` and no expected stream,
   so a retried export would be stored twice, and its subject is an OTTL
   expression rather than a value checked against the tenant. The custom
@@ -194,8 +194,7 @@ cannot be fetched over the network.
 ### SEP-23 strkeys
 
 From SEP-23 v1.4.0 and `internal/redact`: G, C, L, S, T, X 56 characters,
-B 58, M and W 69, P variable. Correction to the plan: the shortest valid
-signed payload (4-byte payload) is **69** characters, not 56; the longest
+B 58, M and W 69, P variable. The shortest valid signed payload (4-byte payload) is **69** characters, not 56; the longest
 (64-byte payload) is 165. Alphabet `A-Z2-7`. The corpus uses every valid
 SEP-23 vector plus the S, T and X vectors of go-stellar-sdk v0.8.0 (the SEP
 lists none for those three), and the SEP's invalid vectors.
@@ -247,13 +246,13 @@ an unready health endpoint turns requests into 503 until it recovers, the
 OTLP access lines are filtered, and nothing Caddy wrote contains the user
 agent or the forwarded address.
 
-### The RFP's `http.client.duration`
+### Request duration metrics
 
-`http.client.duration` is the deprecated client-side metric. The plan reads
-the requirement as server request duration: `http.server.request.duration`
-(stable, seconds) and the legacy `http.server.duration` (usually
-milliseconds), which is what is implemented. **Confirmation from SCF is
-still open**; nothing here asked SCF.
+The collector stores server request duration: `http.server.request.duration`
+(stable, seconds) and the legacy `http.server.duration` (milliseconds or
+seconds). `http.client.duration` is the deprecated client-side metric of the
+HTTP semantic conventions and measures outgoing calls, not the API's own
+requests, so it is not one of the kept metrics (see "tenantguard" below).
 
 ## Behaviour
 
@@ -281,7 +280,7 @@ still open**; nothing here asked SCF.
   attributes (sorted keys, type and value). Then the resource is reduced to
   `service.name` (redacted; invalid UTF-8 and control characters replaced
   with U+FFFD, then cut to at most 128 bytes on a rune boundary, so the
-  value is always storable; review), `scf.tenant.id` and
+  value is always storable), `scf.tenant.id` and
   `scf.token.id` from the credential, the hash, and `scf.flags` (bit 1: a
   secret seed was redacted). Forged `scf.*` or `tenant.id` attributes are
   dropped with everything else.
@@ -296,8 +295,7 @@ still open**; nothing here asked SCF.
   records every request under both names, and after `transform/tenant`
   scales and renames the legacy one both would be stored. When a scope
   holds a kept stable metric, its legacy metrics are dropped. A legacy
-  metric in another scope comes from another library and is kept (audit
-  A-4).
+  metric in another scope comes from another library and is kept.
 - Data point attributes: `http.request.method` (from `http.method`;
   upper-cased first, as semconv allows for instrumentation that treats
   methods case-insensitively; values outside the semconv set
@@ -307,7 +305,7 @@ still open**; nothing here asked SCF.
   `http.response.status_code` (from `http.status_code`, int or string,
   100 to 599), `error.type` (redacted; longer than 64 bytes or not storable
   text becomes `_OTHER`). Nothing else.
-- Route normalization rule set 2 (review and A-11) adds to rule set 1: a
+- Route normalization rule set 2 adds to rule set 1: a
   segment that decodes to invalid UTF-8 or a control character becomes
   `{invalid}`; every run of digits between separators (`- _ . , ~ : + ; =`)
   becomes `{id}` (`order-12345`, `123.json`, `42,43`, `-5`, `1.5`); a
@@ -342,8 +340,7 @@ still open**; nothing here asked SCF.
   window and by the writer's `api.ingest_dedup` (8 days). For tenant
   metrics the payload is the same bytes. For spans the connector aggregates
   the retry again at another moment and in another map order, so the
-  payload differs; the batch id is what makes the message id equal (audit
-  A-3). Two different exports differ at least in their span ids, so they
+  payload differs; the batch id is what makes the message id equal. Two different exports differ at least in their span ids, so they
   never share an id.
 - The NATS reconnect buffer is off (`ReconnectBufSize(-1)`): while
   disconnected a publish fails at once instead of being flushed into the
@@ -352,7 +349,7 @@ still open**; nothing here asked SCF.
 - Connects as the `collector` NATS user (publish `api.metrics.*`, watch
   `registry_otlp`); the suite runs NATS with the real permission set.
 
-## For this stage: span-derived points carry the span end minute
+## Span-derived points carry the span end minute
 
 Every `scf.http.server.request.duration.from_spans` data point has
 `time_unix_nano` set to the start of the UTC minute its spans ended in, and
@@ -361,8 +358,7 @@ set and end minute per received payload: `scf.span.minute` is one of the
 connector's point attributes, so spans of different minutes become
 different points. Spans an SDK held back (batching, retries, a collector
 restart) land in the minute the requests ended, as tenant metrics
-(`http.server.request.duration`) keep the SDK's own timestamps (review;
-before, the connector's processing time was used). The time comes from the
+(`http.server.request.duration`) keep the SDK's own timestamps. The time comes from the
 client's clock, like a tenant metric's; a point more than 10 minutes in the
 future or older than 7 days is refused by the writer.
 
@@ -370,7 +366,7 @@ future or older than 7 days is refused by the writer.
 
 | Setting | Source |
 |---|---|
-| HTTP body 4 MiB, gRPC message 4 MiB | the design |
+| HTTP body 4 MiB, gRPC message 4 MiB | fixed in `otelcol.yaml` |
 | `memory_limiter` `limit_mib`, `spike_limit_mib` | env, dev 512 / 128 |
 | rate limits | env, dev 50 req/s burst 100, 50,000 items/s burst 200,000 per tenant and node |
 | `publish_timeout` | 5 s |
@@ -394,7 +390,3 @@ exactly once, a collector restart under load through the edge Caddy with no
 record lost, oversize and decompression-bomb requests, a fresh secret seed
 in a URL that appears in no queued byte and no collector log line, and a
 final scan of every queued message for names, attributes and marker strings.
-
-Not covered here (the design items owned elsewhere): the four example apps
-under k6, dual export to a stand-in tenant backend, the control plane token
-endpoints and console page, and suspension through the this stage lifecycle.
