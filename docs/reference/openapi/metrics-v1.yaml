@@ -4,7 +4,7 @@ info:
   version: 1.0.0
   summary: Read-only aggregate web and API metrics for downstream machine consumers.
   description: |
-    The contract of `/api/metrics/v1/` (the design,
+    The contract of `/api/metrics/v1/` (rules around it:
     docs/reference/control-plane-api.md section 9). Every request carries an
     operator API key as `Authorization: Bearer sa_op_<40 base62 characters>`.
     Console session cookies are never accepted here, and keys are accepted
@@ -27,7 +27,7 @@ info:
       is 400 `invalid_cursor`. The range a cursor carries is checked again on
       every page with the limits of a first page; a cursor that breaks them
       is 400 `invalid_cursor`.
-    * Each key may make 10 requests per second per control plane instance
+    * Each key can make 10 requests per second per control plane instance
       (token bucket, burst 20). Above that the answer is 429 `rate_limited`
       with `Retry-After` in seconds.
     * Percentiles come from summed histogram buckets and are never averaged.
