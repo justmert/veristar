@@ -96,4 +96,4 @@ The steps this runbook relies on are exercised in their own runbooks:
 | 2026-11-13 | tracker version revocation on a local gateway | [tracker-release.md](tracker-release.md) |
 | 2026-11-13 | operator key revocation through `TestMachineAPI` | [operator-key-revocation.md](operator-key-revocation.md) |
 | 2026-11-13 | rotation of the platform role passwords | [secret-rotation.md](secret-rotation.md) |
-| 2026-11-13 | a node drained, powered off and replaced in DNS on production | [edge-node-failure.md](edge-node-failure.md) |
+| 2026-11-13 | a node powered off on production and left out of DNS by Traffic Manager | [edge-node-failure.md](edge-node-failure.md) |
