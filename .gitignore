@@ -1,5 +1,7 @@
-# internal notes, plan and scratch files
-.scratch/
+# local working files: notes, and the output of test runs, drills and
+# local converges (.scratch)
+resources/
+.scratch
 
 # javascript
 node_modules/
@@ -27,7 +29,10 @@ test-results/
 .env.*
 !.env.example
 
-# opentofu state and working directories
+# opentofu state and working directories. terraform.tfvars holds the
+# operator's own addresses, keys and account names; each env tracks a
+# terraform.tfvars.example instead
+infra/tofu/envs/*/terraform.tfvars
 *.tfstate
 *.tfstate.*
 .terraform/
@@ -51,7 +56,7 @@ infra/ansible/inventories/*/hosts.json
 infra/ansible/inventories/*/hosts.json.tmp
 
 # the local converge's generated secrets (encrypted to a throwaway key under
-# .scratch/scratch), never a real environment's
+# .scratch), never a real environment's
 infra/secrets/local/
 packages/tracker/npm/
 
@@ -68,4 +73,3 @@ __pycache__/
 /prober
 /metricswriter
 /collector/scf-otelcol
-
