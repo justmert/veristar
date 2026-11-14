@@ -1,6 +1,6 @@
 # runs the express example on the pinned node image.
 #   docker build -t otel-node-express examples/otel-node-express
-# base image pinned by tag and index digest.
+# base image pinned by tag and index digest, so a rebuild is reproducible.
 
 FROM node:26.13.1-trixie-slim@sha256:e6bedef217677b276c591795e169840edd9096dbf13f29df8ef8d1856b8820bc
 

@@ -1,7 +1,7 @@
 // the npm package build (scripts/pack.mjs): the published esm entry must work
 // without a bundler define, ship working declarations, carry the immutable
 // sdk.js and pack to the same bytes twice. the package name here is a
-// test-only scope, because the real one is an operator input and does not exist yet.
+// test-only scope, because the real scope is set by the release workflow.
 
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -104,8 +104,8 @@ describe("npm package", () => {
   });
 
   it("refuses a missing or unscoped package name and an unreleased version", async () => {
-    await expect(pack(undefined, version, join(work, "c"))).rejects.toThrow(/I9/);
-    await expect(pack("tracker", version, join(work, "c"))).rejects.toThrow(/I9/);
+    await expect(pack(undefined, version, join(work, "c"))).rejects.toThrow(/scoped npm name/);
+    await expect(pack("tracker", version, join(work, "c"))).rejects.toThrow(/scoped npm name/);
     await expect(pack(NAME, "9.9.9", join(work, "c"))).rejects.toThrow(/not a released version/);
   });
 });

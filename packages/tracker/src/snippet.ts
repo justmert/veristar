@@ -1,6 +1,7 @@
 // builds the script tag tenants paste into their pages. the control plane
-// builds the same bytes in go; this stage tests the two for byte equality, so the
-// attribute order and quoting here are part of the contract.
+// builds the same bytes in go; internal/controlplane/snippet_test.go checks
+// the two for byte equality, so the attribute order and quoting here are
+// part of the contract.
 
 import manifest from "../releases/manifest.json" with { type: "json" };
 import revoked from "../releases/revoked.json" with { type: "json" };

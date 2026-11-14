@@ -228,8 +228,8 @@ export const targets = [
   { value: "5 days", title: "Support response", detail: "Target, in business days" },
 ];
 
-// docs/handover/plan.md (window, shadow period, assets) and
-// .scratch/rfp.md section 3.4
+// docs/handover/plan.md (window, shadow period, assets), following the
+// handover terms of the scf request for proposals
 export const handover = [
   { when: "Month 0", what: "The 12-month service window starts with the final tranche." },
   {

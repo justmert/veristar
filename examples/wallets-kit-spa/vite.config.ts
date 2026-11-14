@@ -11,7 +11,7 @@ import { defineConfig, type Plugin } from "vite";
 //
 // `vite build --mode wallettest` builds the same pages with the test wallet
 // module from tests/fixtures/wallets-kit-module instead of the real wallet
-// modules, for the this stage browser tests. a normal build never contains it.
+// modules, for the wallets kit browser tests. a normal build never contains it.
 
 function required(name: string): string {
   const value = process.env[name];
