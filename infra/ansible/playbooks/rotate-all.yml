@@ -229,16 +229,24 @@
              + (rotate_services.stdout_lines | reject('in', ['postgres', 'haproxy', 'pgbackrest', 'volume-owners']) | list) }}
       changed_when: true
 
+    # grafana is in the observability project, not the core one: listing the
+    # core services never shows it, and the reset was skipped (drill 2026-11-14)
+    - name: List the observability services
+      ansible.builtin.command:
+        argv: [docker, compose, --project-directory, /opt/veristar/observability, config, --services]
+      register: rotate_observability_services
+      changed_when: false
+
     # GF_SECURITY_ADMIN_PASSWORD applies only when grafana creates its
     # database, so the stored password is set through grafana's own cli
     - name: Reset grafana's stored admin password
       ansible.builtin.command:
-        argv: [docker, compose, --project-directory, /opt/veristar/core, exec, -T, grafana,
+        argv: [docker, compose, --project-directory, /opt/veristar/observability, exec, -T, grafana,
                grafana, cli, admin, reset-admin-password, --password-from-stdin]
         stdin: "{{ sa_secrets.grafana_admin_password }}"
       changed_when: true
       no_log: true
-      when: "'grafana' in rotate_services.stdout_lines"
+      when: "'grafana' in rotate_observability_services.stdout_lines"
 
 - name: Set every umami user's password from the new key
   hosts: patroni_leader
