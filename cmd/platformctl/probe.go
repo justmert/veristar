@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"slices"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -51,7 +52,7 @@ type ProbeTenant struct {
 }
 
 func runProbeTenant(ctx context.Context, args []string, env *config.Env, stdout io.Writer) error {
-	if len(args) == 1 && args[0] == "rotate-otlp-token" {
+	if slices.Equal(args, []string{"rotate-otlp-token"}) {
 		poolCfg, err := pdb.LoadPoolConfig(env, pdb.RoleCPSystem)
 		if err != nil {
 			return err
