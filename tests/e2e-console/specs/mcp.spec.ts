@@ -55,6 +55,8 @@ test("a member makes an access key on the AI page, uses it and revokes it", asyn
   const shown = page.getByRole("region", { name: "New secret" });
   await expect(shown).toBeVisible();
   await shown.getByRole("button", { name: "Show the secret" }).click();
+  // the masked text crossfades out before the key fades in
+  await expect(shown.locator("code")).toHaveText(/^sa_mcp_[0-9A-Za-z]{40}$/);
   const key = (await shown.locator("code").textContent())?.trim() ?? "";
   expect(key).toMatch(/^sa_mcp_[0-9A-Za-z]{40}$/);
   // the snippets now hold the key
