@@ -3,11 +3,11 @@ title: "Web metrics"
 description: "How each of the seven web metrics is produced, and how visitors and visits are counted."
 ---
 
-How each of the seven web metrics the RFP requires (page views, unique visitors, referrers,
-session duration, bounce rate, country, device and browser) is produced from Umami's tables
+How each of the seven web metrics (page views, unique visitors, referrers, session duration,
+bounce rate, country, device and browser) is produced from Umami's tables
 and read routes, and the two rules that decide how visitors and visits are counted on this
 platform. Umami facts below are read from tag `v3.5.0` (paths relative to its `src/`) and
-confirmed by the end-to-end suite `tests/webpath` (`make webpath`, the design).
+confirmed by the end-to-end suite `tests/webpath` (`make webpath`).
 
 ## Where the data comes from
 
@@ -36,7 +36,7 @@ All read routes take `startAt` and `endAt` in unix milliseconds and count only e
 `created_at` is in that range. "Pageview events" are rows with `event_type` 1; custom events
 (`event_type` 2) never count as views and never make a visit.
 
-| RFP metric | Umami field and route | Definition in Umami (`queries/sql/...`) |
+| Metric | Umami field and route | Definition in Umami (`queries/sql/...`) |
 |---|---|---|
 | Page views | `pageviews` of `GET /api/websites/<id>/stats`; per bucket `GET /pageviews?unit=` | number of pageview events (`getWebsiteStats.ts`, `sum(c)`) |
 | Unique visitors | `visitors` of `/stats` | `count(distinct session_id)` over pageview events. On this platform a session is one visitor per UTC day (see the daily rule below). |
@@ -49,7 +49,7 @@ All read routes take `startAt` and `endAt` in unix milliseconds and count only e
 
 The metrics bar of the overview page shows Visitors, Visits, Views, Bounce rate and Visit
 duration; the Sources, Location and Environment panels show referrers, countries, and
-browsers, OS and devices (`docs/reference/umami-contract.md` item 11).
+browsers, OS and devices ([umami-contract.md](umami-contract.md) item 11).
 
 ## Unique visitors are unique per UTC day
 
@@ -121,7 +121,7 @@ primary numbers.
   event accepted in the same second as a reset, or a backlog accepted before it and replayed
   after it, is stored but never shown.
 
-## Daily aggregates (this stage)
+## Daily aggregates
 
 The operator views read `agg.web_daily` and `agg.web_daily_dim`, which the
 jobs task `aggregate-web` (`internal/jobs/aggregateweb`) fills from Umami's
@@ -133,8 +133,7 @@ aggregate-web --from <day> --to <day>` reads any range again. Each site day
 replaces its rows in one fenced transaction, so re-running changes nothing
 and a backfill restores deleted rows.
 
-The research items of the design were measured on 2026-11-12 against the
-dev Umami (the pinned 3.5.0 image, events sent through `/api/send` the way
+The answers below were measured on 2026-11-12 against the dev Umami (the pinned 3.5.0 image, events sent through `/api/send` the way
 the replayer sends them, three UTC days, six visitors, a bot, a custom event,
 own-host and `www.` referrers, an event at exactly 00:00:00) and are asserted
 by `TestAggregateWeb` (`internal/jobs/aggregateweb`) on every run.
@@ -150,7 +149,7 @@ by `TestAggregateWeb` (`internal/jobs/aggregateweb`) on every run.
 | Unknown website | `/stats` and `/metrics` of a website id that does not exist answer 200 with zeros for the admin. The task therefore checks that both websites of a site exist before it reads, and reports a missing one as an error rather than storing a day without traffic. | `canViewWebsite` passes for an admin |
 | `type=url` | Not a type in 3.5.0 (400); `path` and `fullPath` replaced it. The operator views do not use paths. | `lib/constants.ts` |
 
-Consequences for the operator views (`docs/reference/control-plane-api.md`
+Consequences for the operator views ([control-plane-api.md](control-plane-api.md)
 section 8):
 
 - Visitors, visits, bounces and total time over a range are sums of daily
