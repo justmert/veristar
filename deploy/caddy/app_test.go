@@ -142,6 +142,7 @@ func TestAppCaddyfileValidates(t *testing.T) {
 type controlPlaneDouble struct {
 	mu      sync.Mutex
 	headers []http.Header
+	paths   []string
 }
 
 const ssoToken = "umami-token-must-not-be-logged"
@@ -149,12 +150,22 @@ const ssoToken = "umami-token-must-not-be-logged"
 func (c *controlPlaneDouble) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	c.mu.Lock()
 	c.headers = append(c.headers, r.Header.Clone())
+	c.paths = append(c.paths, r.Method+" "+r.URL.Path)
 	c.mu.Unlock()
 	w.Header().Set("Set-Cookie", "sa_session=cookie-must-not-be-logged; Path=/; HttpOnly; Secure")
 	w.Header().Set("Location", "https://web.sa.test/sso?token="+ssoToken+"&url=/websites/x")
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	w.WriteHeader(http.StatusFound)
+}
+
+func (c *controlPlaneDouble) lastPath() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if len(c.paths) == 0 {
+		return ""
+	}
+	return c.paths[len(c.paths)-1]
 }
 
 func (c *controlPlaneDouble) last() http.Header {
@@ -297,6 +308,32 @@ func TestAppCaddyServesConsoleAndApi(t *testing.T) {
 	require.NoError(t, err, "caddy sends a bare address")
 	require.Equal(t, "sa_session=request-cookie-must-not-be-logged", h.Get("Cookie"), "the session cookie must reach the control plane")
 
+	// the mcp endpoint, the oauth paths and the discovery documents go to
+	// the control plane (contract 12); the consent page is a console route
+	for _, p := range []string{"/mcp", "/oauth/authorize", "/oauth/token", "/oauth/register", "/oauth/revoke",
+		"/.well-known/oauth-protected-resource", "/.well-known/oauth-protected-resource/mcp",
+		"/.well-known/oauth-authorization-server"} {
+		method := http.MethodGet
+		if p == "/mcp" || p == "/oauth/token" || p == "/oauth/register" || p == "/oauth/revoke" {
+			method = http.MethodPost
+		}
+		req, err := http.NewRequestWithContext(ctx, method, "https://"+endpoint+p, nil)
+		require.NoError(t, err)
+		req.Host = "app.sa.test"
+		req.Header.Set("Authorization", "Bearer sa_mcp_token-must-not-be-logged")
+		res, err := client.Do(req)
+		require.NoError(t, err)
+		_ = res.Body.Close()
+		require.Equal(t, method+" "+p, cp.lastPath(), "%s did not reach the control plane", p)
+		require.Equal(t, "Bearer sa_mcp_token-must-not-be-logged", cp.last().Get("Authorization"))
+		require.Empty(t, cp.last().Values("X-Sa-Client-Addr"))
+	}
+	resp, body = get("/ai/consent?request=x")
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Equal(t, shell, body)
+	_, _ = get("/.well-known/security.txt")
+	require.NotEqual(t, "GET /.well-known/security.txt", cp.lastPath(), "only the oauth documents leave the console")
+
 	// caddy's own error, the control plane gone, still carries the headers
 	require.NoError(t, srv.Close())
 	resp, _ = get("/api/me")
@@ -312,11 +349,11 @@ func TestAppCaddyServesConsoleAndApi(t *testing.T) {
 		b, err := io.ReadAll(logs)
 		require.NoError(t, err)
 		all = string(b)
-		return strings.Count(all, `"logger":"http.log.access`) >= 5
+		return strings.Count(all, `"logger":"http.log.access`) >= 15
 	}, 10*time.Second, 100*time.Millisecond, "no access log lines: %s", all)
 	for _, secret := range []string{
 		ua, "AppLogProbe", "198.51.100.77", "198.51.100.88", "request-cookie-must-not-be-logged",
-		"cookie-must-not-be-logged", ssoToken, "probe-site",
+		"cookie-must-not-be-logged", ssoToken, "probe-site", "token-must-not-be-logged",
 	} {
 		require.NotContains(t, all, secret)
 	}

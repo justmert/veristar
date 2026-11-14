@@ -121,6 +121,24 @@ app.{$BASE_DOMAIN} {
 		}
 	}
 
+	# the mcp endpoint, its oauth authorization server and the two discovery
+	# documents (contract 12) are served by the control plane beside /api.
+	# they authenticate by bearer credential or not at all and never read the
+	# session cookie; the access log deletes Authorization with every other
+	# header. the consent page itself (/ai/consent) is a console route.
+	@mcp path /mcp /oauth/* /.well-known/oauth-protected-resource /.well-known/oauth-protected-resource/* /.well-known/oauth-authorization-server
+	handle @mcp {
+		reverse_proxy {
+			to {$CONTROLPLANE_UPSTREAM}
+			header_up -X-Forwarded-For
+			header_up -X-Real-Ip
+			header_up -Forwarded
+			# the registration limit is global; no client address is sent
+			header_up -X-Sa-Client-Addr
+			header_up -X-Middleware-Subrequest
+		}
+	}
+
 	handle {
 		# a single argument is the path, so an empty CONSOLE_ROOT leaves root
 		# without one and fails validation
