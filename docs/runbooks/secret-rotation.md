@@ -77,7 +77,7 @@ replacing one value.
 | `alertmanager_discord_webhook_url`, `gatus_discord_webhook_url` | Alertmanager, Gatus (optional Discord receiver) | Alertmanager: yes (observability play of `site.yml`); Gatus: render the probe bundle again and restart it ([../deploy/probe.md](../deploy/probe.md)) | create a new webhook in Discord, delete the old one. Without the key there is no receiver ([alerts.md](alerts.md), "Adding a receiver") |
 | `ghcr_pull_token` | every node and the controller sign in to `ghcr.io` with it to pull the platform images when `sa_registry_login` is set in the inventory's `group_vars/all.yml` | yes: the `secrets` role signs each node in again when the stored credential differs (`roles/secrets/tasks/registry.yml`), and the controller writes it into a temporary docker config for the signature check | a classic GitHub token of the account named in `sa_registry_login_user`, with the single scope `read:packages`. GitHub shows its expiry date on the token's settings page; create the new token before that date, put it in with `sops edit`, run `site.yml` (or `deploy.yml`), then delete the old token in GitHub. When the image packages are public, no token is needed: set `sa_registry_login: ""`, delete the token in GitHub and remove the key; `docker logout ghcr.io` on each node removes the stored credential |
 | `cosign_private_key`, `cosign_password` | recovery copy of the release key pair; the release workflow reads the GitHub Actions secrets `COSIGN_PRIVATE_KEY` and `COSIGN_PASSWORD` | n/a | a new pair: `cosign generate-key-pair` with a new password, set both Actions secrets (`gh secret set COSIGN_PRIVATE_KEY` and `gh secret set COSIGN_PASSWORD`), put both into the sops file, commit the new public key as `infra/ansible/vars/release-cosign.pub`, cut a new release and deploy it. Releases signed with the old key no longer verify, so roll back only to releases signed after the change |
-| `grafana_admin_password`, `postgres_exporter_password` | Grafana, postgres_exporter on the core nodes | yes (observability play; the exporter's `sa_monitor` role password is set through HAProxy at each run) | recreate `grafana` and the exporter if they did not restart |
+| `grafana_admin_password`, `postgres_exporter_password` | Grafana, postgres_exporter on the core nodes | yes (observability play; the exporter's `sa_monitor` role password is set through HAProxy at each run) | recreate `grafana` and the exporter if they did not restart. Grafana reads `GF_SECURITY_ADMIN_PASSWORD` only when it creates its database, and its database is on the persistent `grafana` volume, so on every core node also set the stored password (below, "The Grafana admin password") |
 | `probe_metrics_token`, `gatus_external_token` | the probe node's Caddy and Gatus, Prometheus scraping the prober | core side yes; probe side: render the probe bundle again and restart it | |
 | `probe_otlp_token`, `probe_machine_api_key`, `probe_site_id` | the prober | render the probe bundle again and restart it | create a new OTLP token for the internal probe tenant and a new scoped operator key, write them to the file, apply, then revoke the old ones |
 
@@ -89,8 +89,30 @@ Keys of `tofu.enc.env` (`CLOUDFLARE_API_TOKEN`; Azure uses the operator's `az lo
 `az logout` ends) are only used on the controller: edit with
 `sops --config infra/secrets/.sops.yaml edit infra/secrets/<env>/tofu.enc.env`, run
 `make <env>-plan` to prove the new value works (expected: `No changes.`), and revoke the old
-one at the provider. `TF_VAR_state_passphrase` needs OpenTofu's `fallback` key provider for one
-apply ([state backend](../deploy/opentofu.md#state-backend)).
+one at the provider.
+
+`TF_VAR_state_passphrase` encrypts the state and every plan file through the `pbkdf2` key
+provider and the `aes_gcm` method in the `encryption` block of
+`infra/tofu/envs/<env>/versions.tf`, with `enforced = true`. The `pbkdf2` provider takes one
+passphrase, so a new value needs a temporary rollover in that block, as described in
+[OpenTofu's key and method rollover](https://opentofu.org/docs/language/state/encryption/):
+
+1. Add a second variable for the old passphrase, a second `pbkdf2` key provider and a second
+   `aes_gcm` method built from it. Keep the names of the existing provider and method: the
+   state metadata refers to them.
+2. Point `state` and `plan` at the method of the new passphrase, and give each a
+   `fallback { method = <the old method> }` block. OpenTofu reads with the fallback when the new
+   method fails and always writes with the new one.
+3. Put the new value in `tofu.enc.env`, pass the old one to the new variable for this run only,
+   and run `make <env>-apply`. Expected: the apply writes the state encrypted with the new
+   passphrase.
+4. Remove the fallback, the old provider, method and variable, delete any plan file saved
+   before the change, and run `make <env>-plan`. Expected: `No changes.` with no fallback in
+   the configuration.
+
+Earlier state versions kept by blob versioning stay encrypted with the old passphrase
+([state backend](../deploy/opentofu.md#state-backend)); keep the old value until those versions
+expire.
 
 ## Procedures for the extra steps
 
@@ -155,6 +177,22 @@ unset OLD_PW NEW_PW
 
 Expected: `change password 200`. Then write the new value to `umami_admin_password`, converge,
 and recreate `controlplane` and `jobs` on every core node.
+
+### The Grafana admin password
+
+After the converge, set the stored password from the SOPS file on every core node. The value
+travels over SSH standard input and never appears on a command line:
+
+```sh
+sops --config infra/secrets/.sops.yaml decrypt --extract '["grafana_admin_password"]' \
+  infra/secrets/<env>/secrets.enc.yaml |
+  ssh ops@<node> 'cd /opt/veristar/core && sudo docker compose exec -T grafana \
+    grafana cli admin reset-admin-password --password-from-stdin'
+```
+
+Expected: `Admin password changed successfully`. Check it with a login through Grafana's API on
+the node (`curl -u admin:<new password> http://127.0.0.1:3000/api/user` answers 200, the old
+password 401).
 
 ### The Umami user password key
 
