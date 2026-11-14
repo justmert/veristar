@@ -213,6 +213,12 @@ run "dns" {
     condition     = jsonencode(sort([for r in values(module.dns.records) : r.value if r.type == "CAA"])) == jsonencode([";", "letsencrypt.org"])
     error_message = "caa must allow only let's encrypt and forbid wildcards"
   }
+
+  # the status page is served by the probe host, not by the nodes
+  assert {
+    condition     = { for k, r in module.dns.records : k => r.value if r.type == "A" } == { "status/A" = "20.106.204.221" }
+    error_message = "status must be one dns-only a record to the probe host"
+  }
 }
 
 run "inventory_without_restore" {
