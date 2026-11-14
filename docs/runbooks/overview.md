@@ -158,6 +158,6 @@ ssh -L 9090:127.0.0.1:9090 -L 3000:127.0.0.1:3000 ops@<core node public address>
 ```
 
 Then `http://127.0.0.1:9090` and `http://127.0.0.1:3000`. `site.yml` applies the observability
-role to the edge and core nodes as its last play. The probe host (status page, Gatus, prober), in
-the inventory's `probe` group with a public address only, is converged by the play `Probe`
-([../deploy/probe.md](../deploy/probe.md)).
+role to the edge and core nodes as its last play. A probe host (status page, Gatus, prober) in
+the inventory's `probe` group is converged by the play `Probe`; production's probe is the
+Compose bundle on a separate host in Azure East US ([../deploy/probe.md](../deploy/probe.md)).
