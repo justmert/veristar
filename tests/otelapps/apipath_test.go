@@ -1,6 +1,6 @@
 //go:build apipath
 
-// TestAPIPath is the this stage integration verification with the four example
+// TestAPIPath is the api path integration verification with the four example
 // apps: each app exports with PLATFORM_OTLP_ENDPOINT pointed at the real
 // scf-otelcol behind the real edge caddy (otlp.<base domain>), with real
 // nats and a token created through the real control plane api, and the
@@ -48,7 +48,7 @@ const (
 	registryDeadline = 5 * time.Second
 )
 
-// canonical bucket bounds in seconds
+// canonical bucket bounds in seconds (docs/reference/api-storage.md)
 var canonicalBounds = []float64{0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1, 2.5, 5, 7.5, 10}
 
 var apiModes = []string{"cumulative-explicit", "traces-only", "exponential", "legacy-semconv"}
@@ -556,7 +556,7 @@ func (s *apiStack) checkSuspension(t *testing.T, owner *user, tenantID string) {
 	op := s.signIn(t, operatorGitHubID, "sa-operator")
 
 	start := time.Now()
-	if code, body := op.call(t, http.MethodPost, "/api/operator/tenants/"+tenantID+"/suspend", map[string]any{"reason": "this stage api path check"}, nil); code != http.StatusOK {
+	if code, body := op.call(t, http.MethodPost, "/api/operator/tenants/"+tenantID+"/suspend", map[string]any{"reason": "api path check"}, nil); code != http.StatusOK {
 		t.Fatalf("suspend: %d %s", code, body)
 	}
 	returned := time.Since(start)

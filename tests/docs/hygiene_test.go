@@ -12,7 +12,7 @@ import (
 // TestNoTrackedBuildOutput fails when a file that .gitignore excludes is
 // still tracked, such as a compiled binary, a wheel or python bytecode. they
 // are opaque to review and to the licence gate, and running the scripts
-// rewrites them (ops review). a tracked file already deleted from the
+// rewrites them. a tracked file already deleted from the
 // working tree is a removal waiting for its commit and is not reported.
 func TestNoTrackedBuildOutput(t *testing.T) {
 	root := repoRoot(t)

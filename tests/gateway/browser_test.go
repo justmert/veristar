@@ -27,7 +27,7 @@ var exampleSites = []struct{ id, origin string }{
 	{"0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e08", "https://next.sa-tenant.example"},
 }
 
-// TestBrowserMatrix runs the whole this stage browser matrix (chromium, firefox,
+// TestBrowserMatrix runs the whole browser matrix (chromium, firefox,
 // webkit, firefox with gpc; seven example sites) against the real gateway
 // image behind the edge caddy and real nats, then checks that every event
 // the gateway answered with 202 is exactly one WebEvent on WEB_EVENTS with

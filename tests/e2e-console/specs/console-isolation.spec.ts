@@ -1,4 +1,4 @@
-// the design verification, "isolation, console api" and "isolation, umami":
+// tenant isolation in the console api and in umami:
 // a second user in a second tenant gets 404 for every tenant-scoped route of
 // the first tenant, also with guessed ids; removing a member takes access
 // away on the next request; after sso as user b, umami returns no data of

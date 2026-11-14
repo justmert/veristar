@@ -1,4 +1,4 @@
-# TEST STACK for the design, local only (tests/observability/up.sh). it
+# TEST STACK for the observability stack, local only (tests/observability/up.sh). it
 # runs the real services (gateway, collector, replayer, metrics writer,
 # control plane, jobs, umami, postgresql, a three-server nats cluster, three
 # etcd members, caddy with the assembled edge and core caddyfiles) and the
@@ -8,8 +8,8 @@
 # bound to a node's private address in production.
 #
 # what is not real here: the probe runs on this machine, not on a host
-# outside the platform, and alerts go to the labelled test receiver, not discord
-# an operator input. there is no patroni, pgbackrest or postgres replica.
+# outside the platform, and alerts go to the labelled test receiver, not discord.
+# there is no patroni, pgbackrest or postgres replica.
 name: sa-p17
 
 x-go: &go
@@ -193,7 +193,7 @@ services:
     volumes: &gw-vol
       - ${P17}/bin:/bin-sa:ro
       - ../../packages/tracker/releases:/releases:ro
-      - ../../.scratch/scratch/geo:/geo:ro
+      - ../../.scratch/geo:/geo:ro
   gateway-2:
     <<: *go
     command: [/bin-sa/gateway]
@@ -252,7 +252,7 @@ services:
   jobs-1: {<<: *go, command: [/bin-sa/jobs, daemon]}
   jobs-2: {<<: *go, command: [/bin-sa/jobs, daemon]}
   # TEST-ONLY github oauth stand-in (tests/fixtures/githuboauth), as in the
-  # console e2e suite; an operator input is not used here
+  # console e2e suite; no real github oauth app is used here
   oauth-fixture:
     <<: *go
     command: [/bin-sa/githuboauth-fixture, -listen=0.0.0.0:8099, -client-id=p17-fixture-client, -client-secret=p17-fixture-secret, -redirect-url=https://app.p17.test/api/auth/github/callback]
@@ -332,7 +332,7 @@ services:
     volumes: ["${P17}/bin:/bin-sa:ro", "../../packages/tracker/releases:/releases:ro", "${P17}/certs/ca.crt:/etc/prober/ca.crt:ro"]
     extra_hosts: *probe-hosts
     ports: ["127.0.0.1:19300:9090"]
-  # TEST FIXTURE standing in for the discord webhook an operator input
+  # TEST FIXTURE standing in for the discord webhook
   receiver:
     <<: *go
     env_file: []

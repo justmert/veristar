@@ -1,4 +1,4 @@
-// the design, end to end: a tenant creates a token, two copies of the go
+// api traffic dashboard, end to end: a tenant creates a token, two copies of the go
 // example app send real requests' telemetry through the edge caddy, the
 // collector, nats and the metricswriter (one exports metrics and traces,
 // one traces only), and a second tenant's app sends traffic of its own. in

@@ -2,7 +2,7 @@
 # full nats restart mid-day: all three nats servers restart at once under a
 # web load from a fixed set of visitors (each site's five user agents from
 # one address). the memory buckets empty, so the day's visitor secret is new
-# afterwards: the same visitors are counted again and
+# afterwards (docs/reference/umami-contract.md): the same visitors are counted again and
 # their open visits split. the drill counts both, and checks that no
 # acknowledged event is lost.
 . "$(dirname "$0")/lib.sh"

@@ -1,4 +1,4 @@
-// test fixture only, not product code. two listeners for the this stage browser
+// test fixture only, not product code. two listeners for the console browser
 // suite, started by global-setup.ts:
 //
 //   proxy  (127.0.0.1:CE2E_PROXY_PORT)  every browser uses it as its http proxy.

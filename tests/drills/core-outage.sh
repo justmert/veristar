@@ -3,7 +3,7 @@
 # powered on again; ingestion must answer without a single error while they
 # are down, and afterwards the backlog must drain with exact counts.
 #
-# duration: the plan asks for two hours. this drill runs CORE_OUTAGE_MINUTES
+# duration: the scenario is a two hour core outage. this drill runs CORE_OUTAGE_MINUTES
 # (default 12) at ten times the expected peak, which queues the same number
 # of events as two hours at the expected peak (500/s x 720 s = 50/s x 7200 s
 # = 360,000 web events, and 1,160/s x 720 s = 116/s x 7200 s = 835,200 api

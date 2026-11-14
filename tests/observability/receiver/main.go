@@ -1,7 +1,7 @@
 // Command receiver is a TEST FIXTURE, not a discord stand-in for production:
-// a local webhook endpoint for the this stage fire-drills. alertmanager's
+// a local webhook endpoint for the observability fire-drills. alertmanager's
 // discord_configs and gatus's discord provider post to it exactly as they
-// would post to a discord webhook an operator input is not available), and it keeps
+// would post to a discord webhook (no real webhook is used in tests), and it keeps
 // every body so a drill can show that an alert arrived and resolved.
 //
 //	POST /webhook/<source>  stores the json body, answers 204 like discord

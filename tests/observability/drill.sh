@@ -1,14 +1,14 @@
 #!/bin/sh
-# fire-drills of the design on the local TEST STACK (up.sh first). each
+# alert fire-drills on the local TEST STACK (up.sh first). each
 # drill causes one condition for real, waits until the alert reaches the
-# test receiver (the stand-in for discord, an operator input, undoes the cause and
+# test receiver (the stand-in for discord), undoes the cause and
 # waits for the resolved message.
 #   tests/observability/drill.sh <drill>...
 # drills: pipeline nats-quorum nats-server etcd umami edge-node certificate
 #         dlq cardinality wal
 set -eu
 root="$(cd "$(dirname "$0")/../.." && pwd)"
-P17="$root/.scratch/scratch/p17"
+P17="$root/.scratch/p17"
 export P17
 compose() { docker compose -f "$root/tests/observability/compose.yml" "$@" >/dev/null 2>&1; }
 tool() { docker run --rm --network sa-p17 --user 65534:65534 -v "$P17:/p17:ro" \

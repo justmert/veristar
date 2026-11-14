@@ -41,9 +41,9 @@ const amWebConfig = `tls_server_config:
   min_version: TLS13
 `
 
-// no push channel: the deployment this stack stands for has an operator input unset,
-// so alerts are seen in the console only. a receiver without configurations
-// is alertmanager's documented way to deliver nowhere.
+// no push channel: the deployment this stack stands for has no discord
+// webhook configured, so alerts are seen in the console only. a receiver
+// without configurations is alertmanager's documented way to deliver nowhere.
 const amConfig = `route:
   receiver: console-only
 receivers:

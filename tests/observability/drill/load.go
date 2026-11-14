@@ -167,7 +167,7 @@ func dlq(natsURL, action string) error {
 	defer cancel()
 	switch action {
 	case "publish":
-		_, err = js.Publish(ctx, "dlq.web.drill", []byte(`{"drill":"this stage DLQNotEmpty"}`))
+		_, err = js.Publish(ctx, "dlq.web.drill", []byte(`{"drill":"DLQNotEmpty"}`))
 	case "purge":
 		var s jetstream.Stream
 		if s, err = js.Stream(ctx, "WEB_DLQ"); err == nil {

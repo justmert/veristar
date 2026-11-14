@@ -1,4 +1,4 @@
-// the design, console part: a tenant opens "API analytics", creates an
+// otlp tokens, console part: a tenant opens "API analytics", creates an
 // otlp token through the real control plane, sees the plaintext once and
 // copies it, finds it listed by prefix only, and revokes it after a
 // confirmation. the control plane's answers are checked through the same

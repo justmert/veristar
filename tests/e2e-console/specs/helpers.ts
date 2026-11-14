@@ -1,4 +1,4 @@
-// shared steps of the this stage flows. everything goes through the real
+// shared steps of the console flows. everything goes through the real
 // console, control plane, oauth fixture and caddies; nothing here answers on
 // behalf of a product service.
 import { randomInt } from "node:crypto";
@@ -125,7 +125,7 @@ export async function termsVersion(ctx: BrowserContext): Promise<string> {
 export async function enrollApi(ctx: BrowserContext, name: string): Promise<Tenant> {
   const r = await api<Tenant>(ctx, "POST", "/api/tenants", {
     name,
-    description: "this stage e2e",
+    description: "console e2e",
     enrollment: { website: "https://example.org", stellar_usage: "Soroban contracts on testnet" },
     accepted_terms_version: await termsVersion(ctx),
   });

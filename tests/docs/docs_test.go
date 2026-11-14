@@ -1,4 +1,4 @@
-// Package docs checks the documentation set (the design): every relative
+// Package docs checks the documentation set: every relative
 // link resolves, and every code block a guide includes from examples/ is
 // byte for byte the code the examples run, so guides and tested code cannot
 // drift.
@@ -490,7 +490,7 @@ func TestIncludedSnippets(t *testing.T) {
 	t.Logf("%d included blocks checked", total)
 }
 
-// TestOnboardingCodeIsIncluded keeps the rule of the design: code in the
+// TestOnboardingCodeIsIncluded keeps the documentation rule that code in the
 // onboarding guides comes from examples/ or the tag generator, never typed
 // into the page. only shell commands (sh) and plain text output (text) may
 // stand without a directive.

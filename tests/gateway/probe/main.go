@@ -1,4 +1,4 @@
-// Command probe is a test-only client that the this stage privacy test runs in
+// Command probe is a test-only client that the gateway privacy test runs in
 // a container with a fixed address on a dedicated docker network. it reaches
 // the gateway only through caddy, so its address arrives as caddy's real tcp
 // peer, then posts pageviews with a solved proof.

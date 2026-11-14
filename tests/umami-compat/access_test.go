@@ -20,7 +20,7 @@ import (
 	"github.com/justmert/veristar/internal/umami"
 )
 
-// the design: DISABLE_LOGIN=1 blocks the /login page and leaves
+// DISABLE_LOGIN=1 blocks the /login page and leaves
 // POST /api/auth/login working.
 func TestDisableLoginBlocksOnlyThePage(t *testing.T) {
 	e := setup(t)
@@ -47,7 +47,7 @@ type viewer struct {
 }
 
 // viewOnly creates a user with global role view-only, adds it to teamID as
-// team-view-only and logs it in, which is the mapping in the design.
+// team-view-only and logs it in, which is how the control plane maps a tenant member.
 func (e *env) viewOnly(t *testing.T, teamID string) viewer {
 	t.Helper()
 	name := "compat-" + uuid.NewString()[:12]
@@ -71,7 +71,7 @@ func (e *env) viewOnly(t *testing.T, teamID string) viewer {
 	return viewer{userID: u.ID, token: s.Token}
 }
 
-// the design: a view-only user with team-view-only reads every rfp metric of a
+// a view-only user with team-view-only reads every rfp metric of a
 // team website and can change nothing.
 func TestViewOnlyTeamMemberReadsButCannotChange(t *testing.T) {
 	e := setup(t)
@@ -166,7 +166,7 @@ func TestViewOnlyCannotReadOtherTeam(t *testing.T) {
 }
 
 // the route list of the running image must equal the reviewed list in
-// testdata. a difference means the deny list in the design and the caddy
+// testdata. a difference means the deny list of deploy/caddy/web.Caddyfile and the caddy
 // configuration must be reviewed before the upgrade.
 func TestOpenAPIRouteListUnchanged(t *testing.T) {
 	e := setup(t)

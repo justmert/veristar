@@ -22,7 +22,7 @@ import (
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 )
 
-// caddyImage is caddy 2.11.9 by the digest pinned in the design, the
+// caddyImage is caddy 2.11.9 by its pinned digest, the
 // same image deploy/caddy's tests run edge.Caddyfile with.
 const caddyImage = "caddy:2.11.9@sha256:e40b94d0a43b5ff69cb20568d73f10c70703df7b0ffc2298eb3d723cdc9d0bd1"
 

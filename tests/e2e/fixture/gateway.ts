@@ -1,7 +1,7 @@
 // test fixture only, not product code. the real gateway is the go service built
-// in this stage (cmd/gateway, internal/gateway). this module implements the gateway
-// side of the web event contract in the design so the browser matrix can
-// run against real browsers before that service exists: it serves the immutable
+// from cmd/gateway and internal/gateway. this module implements the gateway side
+// of the web event contract (docs/reference/wire-v1.md) so the browser matrix can
+// run against real browsers without that service: it serves the immutable
 // tracker files, answers the challenge, checks events in the documented order
 // and records every request it sees for the tests to inspect.
 //
@@ -334,7 +334,7 @@ const WIRE_KEYS = new Set([
 const SDK_VERSION_RE = /^(0|[1-9][0-9]{0,5})\.(0|[1-9][0-9]{0,5})\.(0|[1-9][0-9]{0,5})$/;
 const PROOF_KEYS = new Set(["iat", "salt", "bits", "tag", "nonce"]);
 
-// wire format v1 from the design item 4. returns an error string or null.
+// wire format v1 (docs/reference/wire-v1.md). returns an error string or null.
 export function validateWire(x: unknown): string | null {
   if (typeof x !== "object" || x === null || Array.isArray(x)) return "not an object";
   const o = x as Record<string, unknown>;

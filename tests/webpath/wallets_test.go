@@ -25,7 +25,7 @@ import (
 	"github.com/justmert/veristar/tests/gateway/gwclient"
 )
 
-// the this stage example of tests/e2e/sites.ts (WALLET_SITE)
+// the wallets kit example of tests/e2e/sites.ts (WALLET_SITE)
 var siteWallets = exampleSite{"wallets-kit-spa", "wk.sa-tenant.example", "0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e05", "@veristar/example-wallets-kit-spa", 47105}
 
 // TEST_WALLET_ADDRESS of tests/fixtures/wallets-kit-module, the account the
@@ -33,7 +33,7 @@ var siteWallets = exampleSite{"wallets-kit-spa", "wk.sa-tenant.example", "0b6f2a
 // and no umami table.
 const testWalletAddress = "GCB634SLKV5N4COK4FICWJADNTFWIHTWWM34BFPLACL6YSQVLY5ZWOQN"
 
-// TestWalletsKit is the end-to-end part of the design: the wallets kit
+// TestWalletsKit is the end-to-end check of the wallets kit capture: the wallets kit
 // example in chromium, in both capture modes (script tag and npm package),
 // through caddy, the gateway, nats, the replayer and umami. run it alone with
 // `go test -tags webpath -run TestWalletsKit ./tests/webpath/`.

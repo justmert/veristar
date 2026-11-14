@@ -1,4 +1,4 @@
-// the design verification, "session security": sign-in through the oauth
+// session security: sign-in through the oauth
 // fixture with pkce s256, state and no scope; cookie flags; state-changing
 // requests without the custom header or with a foreign origin are refused,
 // also when a real foreign page tries them; sign-out ends the session.

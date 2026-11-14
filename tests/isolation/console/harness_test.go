@@ -1,8 +1,8 @@
 //go:build isolation
 
 // Package consoleisolation tests the control plane api over real https,
-// real postgresql, real nats and a real umami (the design, isolation
-// tests for the console api, completed as the this stage isolation gate).
+// real postgresql, real nats and a real umami: the console api part of the
+// tenant isolation gate.
 // start wires every route group the way cmd/controlplane/main.go does, with
 // the production constructors: the private session routes, the operator
 // area behind its guard and the machine metrics api mount. users sign in

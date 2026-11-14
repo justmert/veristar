@@ -12,7 +12,7 @@ const base = (process.env.UMAMI_IT_URL ?? "").replace(/\/$/, "");
 const adminPassword = process.env.UMAMI_ADMIN_PASSWORD ?? "";
 const here = dirname(fileURLToPath(import.meta.url));
 // screenshots are research output, kept in the gitignored scratch area
-const shots = resolve(here, "../../../.scratch/scratch/umami-ui");
+const shots = resolve(here, "../../../.scratch/umami-ui");
 const chromeUA =
   "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36";
 

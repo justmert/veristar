@@ -1,5 +1,5 @@
-// Package ci checks the ci tooling that cannot run on github yet (the review
-// O-7 and O-27): that scripts/ci-local.sh covers every job and make step of
+// Package ci checks the local ci tooling that stands in for github actions
+// until the workflows run there: that scripts/ci-local.sh covers every job and make step of
 // .github/workflows/ci.yml, and that the slo collection picks exactly the
 // days that are missing on origin.
 package ci

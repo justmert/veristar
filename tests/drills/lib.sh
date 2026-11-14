@@ -1,13 +1,13 @@
-# shared helpers of the this stage drills (docs/reference/drills/2026-11-13.md).
+# shared helpers of the failure drills (docs/reference/drills/2026-11-13.md).
 # every drill runs against the local converge (docs/deploy/local-converge.md)
-# and writes its raw results under .scratch/scratch/drills/<drill>/.
+# and writes its raw results under .scratch/drills/<drill>/.
 set -eu
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 . "$root/infra/local/env.sh"
 . "$root/infra/local/lib.sh"
 . "$root/tests/load/profiles.env"
 INV="$root/infra/ansible/inventories/local/hosts.json"
-DRILLS="$root/.scratch/scratch/drills"
+DRILLS="$root/.scratch/drills"
 STATE="$DRILLS/state.json"
 GO="${GO:-go}"
 ANSIBLE_BIN="${ANSIBLE_VENV:-$HOME/.local/share/veristar/ansible-venv}/bin"
@@ -27,7 +27,7 @@ export SA_DRILL_PG_PASSWORD
 # the operators' client certificate and the ca bundle of the internal ca
 # (infra/ansible/playbooks/internal-ca.yml): every private endpoint the
 # drills read (patroni, nats monitoring through the relay, postgresql) is
-# tls with client certificates since. kept 0600 under the
+# tls with client certificates only. kept 0600 under the
 # drills' scratch directory for the length of the run.
 SA_DRILL_TLS_DIR="$DRILLS/tls"
 (

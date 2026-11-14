@@ -4,7 +4,8 @@
 // production binaries are built without that tag.
 //
 // it implements the three github endpoints the control plane uses, with the
-// behaviour documented by github (docs/reference/the reference docs section 1):
+// behaviour github documents for oauth apps
+// (https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps):
 //
 //	GET  /login/oauth/authorize     consent page; the test chooses the user
 //	POST /login/oauth/authorize     the consent decision, redirects with code or error
@@ -62,7 +63,7 @@ type Config struct {
 	ClientID     string
 	ClientSecret string
 	// RedirectURL is the registered callback url. github compares a sent
-	// redirect_uri with it; wildcard matching is off an operator input.
+	// redirect_uri with it; the oauth app registers one exact callback url.
 	RedirectURL string
 	// Now is the clock; nil means time.Now. tests move it to expire codes.
 	Now func() time.Time

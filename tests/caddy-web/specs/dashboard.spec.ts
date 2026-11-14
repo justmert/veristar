@@ -4,8 +4,8 @@ import { fileURLToPath } from "node:url";
 import { expect, type Page, test } from "@playwright/test";
 
 // a view-only tenant opens its website dashboard through the web caddy the way
-// the console sends it there: a same-site page links to /sso. every
-// request the ui makes goes through caddy's allowlist and deny list,
+// the console sends it there: a same-site page links to /sso. every request
+// the ui makes goes through caddy's allowlist and deny list (web.Caddyfile),
 // and none of them may be refused.
 
 const port = process.env.WEB_PORT ?? "";
@@ -17,7 +17,7 @@ const web = `https://web.${domain}:${port}`;
 const app = `https://app.${domain}:${port}`;
 const here = dirname(fileURLToPath(import.meta.url));
 // screenshots are verification output, kept in the gitignored scratch area
-const shots = resolve(here, "../../../.scratch/scratch/caddy-web");
+const shots = resolve(here, "../../../.scratch/caddy-web");
 
 async function shot(page: Page, name: string) {
   await page.screenshot({ path: `${shots}/${name}.png`, fullPage: true });
@@ -146,7 +146,7 @@ test("tenant dashboard through the web caddy", async ({ page, context }) => {
     `${JSON.stringify({ statuses, failed, refused, errors, retries, networkChanged }, null, 2)}\n`,
   );
   // umami's layout always loads /telemetry.js (src/app/(main)/App.tsx). the
-  // the design deny list refuses it on purpose; with DISABLE_TELEMETRY umami
+  // web caddy's deny list refuses it on purpose; with DISABLE_TELEMETRY umami
   // would only answer an empty comment, so the page loses nothing.
   expect(
     refused.filter((r) => r !== "GET /telemetry.js"),

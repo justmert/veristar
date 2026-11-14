@@ -1,4 +1,4 @@
-// shared table of the redirect research harness (docs/handover/redirect-research.md).
+// shared table of the redirect research harness.
 // the ports are a range of their own so this harness can run next to the main
 // browser matrix of tests/e2e, which holds 47080, 47443 and 47090.
 

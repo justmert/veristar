@@ -49,7 +49,7 @@ func alertRules(t *testing.T, root string) []alertRule {
 // TestAlertRunbookAnchors keeps every alert's runbook link working: the
 // alert carries one, the document exists, and the anchor is a heading or an
 // explicit <a id> in it. a broken anchor sends the person on call to the top
-// of a long page in the middle of an incident (ops review).
+// of a long page in the middle of an incident.
 func TestAlertRunbookAnchors(t *testing.T) {
 	root := repoRoot(t)
 	docs := map[string]map[string]bool{}
@@ -81,7 +81,7 @@ func TestAlertRunbookAnchors(t *testing.T) {
 
 // TestAlertCountStated checks the alert count the documents state against
 // the rule files, so adding or removing an alert fails here until the
-// documents say the new number (ops review). recording rules are not
+// documents say the new number. recording rules are not
 // alerts and are not counted.
 func TestAlertCountStated(t *testing.T) {
 	root := repoRoot(t)

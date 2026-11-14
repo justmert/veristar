@@ -1,4 +1,4 @@
-// plan phases 11 and 12, end to end. four projects get real browser traffic
+// operator global views and api keys, end to end. four projects get real browser traffic
 // through the tracker, the gateway, the replayer and umami, and real api
 // traffic through the example app, the collector and the metricswriter; the
 // jobs daemon aggregates both. an operator then filters the global web view

@@ -1,9 +1,8 @@
 //go:build isolation
 
-// Package umamiisolation checks tenant isolation inside umami (the design,
-// isolation tests first part). two teams, two websites and two view-only
-// users are provisioned the way the control plane does it, then
-// user b calls every operation of umami's openapi contract with team a's ids,
+// Package umamiisolation checks tenant isolation inside umami. two teams, two
+// websites and two view-only users are provisioned the way the control plane
+// does it, then user b calls every operation of umami's openapi contract with team a's ids,
 // once on the private network and once through the web caddy, and must never
 // get team a's data or change it.
 package umamiisolation
@@ -169,7 +168,7 @@ type entity struct {
 	Slug string `json:"slug"`
 }
 
-// provision builds the two tenants the way the design maps them, then fills
+// provision builds the two tenants the way the control plane maps them, then fills
 // team a with every kind of entity a route can name, so a leak shows up as
 // one of team a's markers.
 func provision(t *testing.T) *world {
@@ -674,7 +673,7 @@ func (w *world) control(t *testing.T, o op) int {
 	path := w.fill(t, o.template) + w.query(o)
 	if o.String() == "GET /api/auth/subscription" {
 		// past the permission check this route reads the billing account
-		// from redis. REDIS_URL is unset, and the call never
+		// from redis. REDIS_URL is unset (deploy/compose/dev.yml), and the call never
 		// answers. b's denial comes before that point, so it still counts.
 		c, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()

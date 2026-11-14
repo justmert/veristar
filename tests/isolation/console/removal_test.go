@@ -14,7 +14,7 @@ import (
 	"github.com/justmert/veristar/internal/controlplane/lifecycle"
 )
 
-// a tenant removed through the real operator action (the design) answers
+// a tenant removed through the real operator action answers
 // 404 to every former member on every tenant route, owner included, while
 // its row, member rows and audit trail stay
 func TestRemovedTenantIsGoneForFormerMembers(t *testing.T) {

@@ -2,7 +2,7 @@
 
 // Package collector_test runs the built scf-otelcol binary against a real
 // nats server with the production user permissions, and drives it with the
-// pinned opentelemetry go sdk exporters (the design verification). run it
+// pinned opentelemetry go sdk exporters. run it
 // with `make collector-it`, which builds the binary first.
 package collector_test
 

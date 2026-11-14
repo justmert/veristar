@@ -1,5 +1,5 @@
 #!/bin/sh
-# on the local converge
+# private network encryption check on the local converge
 # (docs/deploy/local-converge.md): after `make local-converge`, proves that
 #   1. the private network carries no readable protocol: tcpdump sidecars on
 #      the three location bridges capture every packet of 10.99.0.0/16 while
@@ -12,14 +12,14 @@
 #   3. the end-to-end path still works (tests/localconverge, the same run
 #      as 1).
 # everything it creates is named sa-lc-*; results go to
-# .scratch/scratch/tls-audit/<utc time>/. the endpoints it tries exist in
+# .scratch/tls-audit/<utc time>/. the endpoints it tries exist in
 # both topologies (LC_TOPOLOGY=minimal has one core node, 10.99.1.22).
 set -eu
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 . "$root/infra/local/env.sh"
 . "$root/infra/local/lib.sh"
 GO="${GO:-go}"
-out="$root/.scratch/scratch/tls-audit/$(date -u +%Y%m%dT%H%M%SZ)"
+out="$root/.scratch/tls-audit/$(date -u +%Y%m%dT%H%M%SZ)"
 mkdir -p "$out"
 chmod 700 "$out"
 sops="$HOME/.local/share/veristar/tools/sops-3.13.3"

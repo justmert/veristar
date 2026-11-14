@@ -1,9 +1,9 @@
 //go:build isolation
 
-// Package dbroles is the database part of the isolation gate (plan phase
-// 18, "database role matrix from this stage"). internal/db's TestGrantMatrix
+// Package dbroles is the database part of the tenant isolation gate: the
+// database role matrix. internal/db's TestGrantMatrix
 // reads the grants from the catalog; this test does not trust the catalog:
-// every application role of the design runs real select, insert, update,
+// every application role runs real select, insert, update,
 // delete and truncate statements against every relation in cp, api and agg,
 // and what postgresql lets through must equal the shared matrix in
 // tests/fixtures/rolematrix. it then checks, again by running statements,

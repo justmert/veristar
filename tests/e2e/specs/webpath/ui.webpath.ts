@@ -1,5 +1,5 @@
 // a tenant's dashboard session in the umami ui, for the egress check of the
-// this stage web path suite. the go test captures every packet of the umami
+// web path suite. the go test captures every packet of the umami
 // container meanwhile; this side records every request the page makes to a
 // host other than umami, which must stay empty as well.
 import { writeFileSync } from "node:fs";

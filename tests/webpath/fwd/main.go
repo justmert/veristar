@@ -1,4 +1,4 @@
-// Command fwd is a test-only tcp forwarder for the this stage web path suite
+// Command fwd is a test-only tcp forwarder for the web path suite
 // (tests/webpath). it runs in a container attached to docker networks whose
 // subnets are db-ip ranges of real countries, and passes the browsers' tls
 // connections through to the edge caddy on one of those networks. caddy then

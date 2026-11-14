@@ -1,4 +1,4 @@
-// Package rolematrix is the expected rights matrix of the design for every
+// Package rolematrix is the expected database rights matrix for every
 // relation in the cp, api and agg schemas of the platform database. it is a
 // test fixture: internal/db's catalog test (TestGrantMatrix) compares the
 // grants postgresql reports with it, and the behavioural gate in
@@ -76,7 +76,7 @@ var Want = map[string]map[db.Role]string{
 	"cp.operator_sites":  {db.RoleCPSystem: "r", db.RoleCPOperator: "r"},
 	"cp.tenant_removals": {db.RoleCPSystem: "rawd", db.RoleCPOperator: "r"},
 
-	// api (this stage). partitions carry no rights at all; internal/db checks
+	// api. partitions carry no rights at all; internal/db checks
 	// them on their own in TestPartitionRights.
 	"api.metrics_minute": {db.RoleCPTenant: "r", db.RoleMetricsWriter: "raw", db.RoleJobs: "rawd"},
 	"api.metrics_hourly": {db.RoleCPTenant: "r", db.RoleCPOperator: "r", db.RoleJobs: "rawd"},
@@ -91,7 +91,7 @@ var Want = map[string]map[db.Role]string{
 	// cp_tenant reads its own pending hours (00021, control-plane-api 7.2)
 	"api.rollup_pending": {db.RoleCPTenant: "r", db.RoleMetricsWriter: "raw", db.RoleJobs: "rawd"},
 
-	// agg (this stage): read by operators, written by aggregate-web
+	// agg: read by operators, written by aggregate-web
 	"agg.web_daily":     {db.RoleCPOperator: "r", db.RoleJobs: "rawd"},
 	"agg.web_daily_dim": {db.RoleCPOperator: "r", db.RoleJobs: "rawd"},
 }

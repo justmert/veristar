@@ -1,4 +1,4 @@
-// Command probe is the web client of the this stage privacy audit
+// Command probe is the web client of the system-wide privacy audit
 // (tests/privacy). it runs in a container with a marker address on its own
 // docker network and reaches the gateway only through the edge caddy, with
 // the fetch metadata a browser's tracker fetch carries, so the gateway's

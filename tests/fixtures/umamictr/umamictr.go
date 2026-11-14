@@ -1,6 +1,6 @@
 // Package umamictr starts a private umami with its own postgresql in docker
-// for tests: the images pinned in deploy/compose/dev.yml, the environment of
-// the design and the dev init script, on a dedicated docker network, so
+// for tests: the images pinned in deploy/compose/dev.yml, the umami
+// environment of that file and the dev init script, on a dedicated docker network, so
 // a test never touches the shared dev stack. the seeded admin password is
 // replaced with a random one through umami.Bootstrap. only *_test.go files
 // import it.
@@ -162,7 +162,7 @@ func Start(t testing.TB) *Stack {
 		t.Fatalf("umamictr: postgres: %v", err)
 	}
 
-	// environment of the design, as in deploy/compose/dev.yml.
+	// the umami environment of deploy/compose/dev.yml.
 	// REDIS_URL, CLICKHOUSE_URL, KAFKA_URL, CLOUD_MODE, MCP_ENABLED,
 	// DISABLE_BOT_CHECK and SKIP_LOCATION_HEADERS stay unset on purpose.
 	um, err := testcontainers.Run(ctx, umamiImage,
@@ -222,7 +222,7 @@ func Start(t testing.TB) *Stack {
 		Postgres: pg, PostgresHost: pgHost, PostgresPort: int(pgPort.Num()), PostgresPassword: superPassword}
 }
 
-// CaddyImage is caddy 2.11.9 by the digest pinned in the design: the
+// CaddyImage is caddy 2.11.9 by its pinned digest: the
 // final stage of deploy/images/caddy.Dockerfile. the deploy/caddy tests check
 // that the dockerfile builds on it.
 const CaddyImage = "caddy:2.11.9@sha256:e40b94d0a43b5ff69cb20568d73f10c70703df7b0ffc2298eb3d723cdc9d0bd1"
@@ -397,7 +397,7 @@ func canonical(path string) string {
 var userReads = regexp.MustCompile(`^/api/users/[^/]+/(teams|websites)/?$`)
 
 // DeniedPath reports whether web.<BASE_DOMAIN> must refuse path for every
-// method: the deny list of the design, written out a second time in go,
+// method: the deny list of deploy/caddy/web.Caddyfile, written out a second time in go,
 // independently of the caddyfile's regular expression. /compat, the target of
 // umami's legacy report rewrites, and /api/auth/subscription, which hangs
 // without redis, are covered as well. /api/users* is denied except the two
@@ -431,8 +431,8 @@ func DeniedPath(path string) bool {
 }
 
 // RefusedAtEdge reports whether web.<BASE_DOMAIN> must answer 403 to method
-// on path: a denied path, or a method outside the allowlist on /api/* (plan
-// 4.9: GET, HEAD and OPTIONS, plus POST to /api/auth/verify and
+// on path: a denied path, or a method outside the allowlist on /api/*
+// (deploy/caddy/web.Caddyfile: GET, HEAD and OPTIONS, plus POST to /api/auth/verify and
 // /api/auth/logout).
 func RefusedAtEdge(method, path string) bool {
 	if DeniedPath(path) {

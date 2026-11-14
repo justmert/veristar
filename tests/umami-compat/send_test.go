@@ -12,7 +12,7 @@ import (
 	"github.com/justmert/veristar/internal/umami"
 )
 
-// the design step 12: timestamp in seconds sets the time of the event and of a
+// timestamp in seconds sets the time of the event and of a
 // new session, so a replayed backlog lands in its original buckets.
 func TestTimestampSecondsStored(t *testing.T) {
 	e := setup(t)
@@ -67,7 +67,7 @@ func TestTimestampSecondsStored(t *testing.T) {
 	}
 }
 
-// the design step 13: with ENABLE_CLIENT_SALT=1 the salt splits sessions, and
+// with ENABLE_CLIENT_SALT=1 the salt splits sessions, and
 // the same salt, user agent and website give one session.
 func TestClientSaltSplitsSessions(t *testing.T) {
 	e := setup(t)
@@ -88,7 +88,7 @@ func TestClientSaltSplitsSessions(t *testing.T) {
 	}
 }
 
-// the design step 12: the constant TEST-NET-1 address with cf-ipcountry stores
+// the constant TEST-NET-1 address with cf-ipcountry stores
 // that country and no region or city.
 func TestCountryHeaderWithTestNetAddress(t *testing.T) {
 	e := setup(t)
@@ -101,8 +101,8 @@ func TestCountryHeaderWithTestNetAddress(t *testing.T) {
 	}
 }
 
-// the design stop rule: with no country header, 192.0.2.1 must give 200
-// and a null country. a 500 here invalidates section 4.4.
+// stop rule: with no country header, 192.0.2.1 must give 200 and a null
+// country. a 500 here invalidates the replayer's design (docs/reference/umami-contract.md).
 func TestNoCountryHeaderStoresNullCountry(t *testing.T) {
 	e := setup(t)
 	_, w := e.site(t)
@@ -111,7 +111,7 @@ func TestNoCountryHeaderStoresNullCountry(t *testing.T) {
 		umami.EdgeClientIPHeader: umami.EdgeClientIP,
 	}, map[string]any{"type": "event", "payload": pageview(w, time.Now(), "geo-none")})
 	if code != http.StatusOK {
-		t.Fatalf("STOP: the design depends on this. /api/send answered %d %s", code, body)
+		t.Fatalf("STOP: the replayer design depends on this. /api/send answered %d %s", code, body)
 	}
 	p := e.sessions(t, w)
 	if p.Count != 1 {
@@ -174,7 +174,7 @@ func TestBotUserAgentStoresNothing(t *testing.T) {
 	}
 }
 
-// the design step 15: the cache token keeps the visit across utc hours; without
+// the cache token keeps the visit across utc hours; without
 // it the visit id is derived from the session and the utc hour of the event.
 func TestVisitIDCacheAndHourRule(t *testing.T) {
 	e := setup(t)

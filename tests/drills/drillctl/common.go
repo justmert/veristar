@@ -218,8 +218,8 @@ func httpGet(ctx context.Context, hc *http.Client, u string) (*http.Response, er
 
 // privateTransport presents the operators' client certificate and trusts
 // only the internal ca, for the private endpoints (patroni, nats monitoring
-// through the relay), which are tls with client certificates since finding
-// O-26. the drill scripts decrypt the files into SA_DRILL_TLS_DIR
+// through the relay), which take only tls with client certificates. the
+// drill scripts decrypt the files into SA_DRILL_TLS_DIR
 // (tests/drills/lib.sh). plain http urls (caddy's port 80) still work.
 func privateTransport() (*http.Transport, error) {
 	dir := os.Getenv("SA_DRILL_TLS_DIR")

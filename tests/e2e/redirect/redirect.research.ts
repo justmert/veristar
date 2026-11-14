@@ -1,4 +1,4 @@
-// the two questions of the design for the redirect path of a handover, asked
+// the two open questions about the redirect path of a handover, asked
 // of every engine with the exact tenant snippet:
 //   a. does a script loaded through a cross-origin 308 still pass its integrity check?
 //   b. does a fetch post with keepalive follow a cross-origin 308 with its body?

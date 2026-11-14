@@ -44,7 +44,7 @@ func (su *suite) sites(ss ...exampleSite) map[string][]string {
 	return out
 }
 
-// TestWebPath runs every verification item of the design that needs the
+// TestWebPath runs every web path check that needs the
 // whole chain, in one stack, in a fixed order. the second static visit has
 // to come more than 30 minutes and at least one utc hour after the first, so
 // the other checks run in between.
@@ -141,7 +141,7 @@ func playwrightTotals(out string) map[string]int {
 	return m
 }
 
-// customEventRerun re-runs the this stage chromium custom event case
+// customEventRerun re-runs the browser matrix's chromium custom event case
 // (specs/events.spec.ts, one data-umami-event click and one umami.track()
 // call per site) 20 times through the real gateway, then checks that umami
 // stored every event.
