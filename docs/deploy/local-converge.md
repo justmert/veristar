@@ -4,182 +4,60 @@ sidebarTitle: "Local converge"
 description: "Run the same Ansible roles against Debian 13 containers on one machine."
 ---
 
-Status: first version (this stage, stream b). The real servers, domain and credentials
-(inputs I2 to I6, I13, I14) do not exist yet, so the roles are verified against a local
-stand-in for the staging topology: 3 edge nodes and 1 core node. This page records the
-choice, how to run it, and what it does and does not prove.
+The local converge runs the production Ansible playbooks against Debian 13 systemd containers on
+one machine. Use it to test a change to a role, a playbook or an image before it reaches a cloud
+environment: it needs no cloud account, no domain and no real credentials.
 
-## 1. The choice
+## 1. Requirements
 
-The machine that runs it is an unprivileged container with Docker 29.3.1 and no nested
-virtualisation. Options considered:
-
-| Option | Verdict |
-|---|---|
-| VMs (QEMU, Vagrant, Multipass) | Not available: no `/dev/kvm` inside the container. |
-| Nested container or systemd-nspawn | Needs privileges the container does not grant. |
-| Ansible `community.docker.docker` connection into plain containers | Skips SSH, so SSH hardening, `AllowUsers` and the firewall's SSH rule are never exercised. Rejected as less faithful. |
-| **Debian 13 systemd containers, privileged inside the container, reached over SSH** | **Chosen.** |
-
-Each node is `infra/local/node.Dockerfile`: `debian:trixie` (pinned by digest) with
-systemd as PID 1, OpenSSH, sudo and Python, plus an `ops` user whose key is installed at
-start, which is what cloud-init does on an Azure Debian 13 VM
-(docs/deploy/opentofu.md section 1). Nothing the roles configure is preinstalled:
-Docker Engine and Compose come from Docker's apt repository at their pins, chrony,
-nftables and unattended-upgrades from Debian.
-
-- `--privileged` gives the node the capabilities Docker, nftables and systemd need.
-  They stay inside the container's user namespace, so the node cannot change the host clock
-  or anything outside the container.
-- `/var/lib/docker` and `/var/lib/containerd` are volumes per node, because overlayfs
-  cannot be stacked on the container's own overlay root (the first attempt failed with
-  `mount ... overlay ... invalid argument`).
-- Two Docker networks stand in for the cloud networks: `sa-lc-public`
-  (172.31.99.0/24, default route, `gw-priority=1`) and `sa-lc-private` (10.99.0.0/16,
-  addresses `.11+index` edge and `.21+index` core per location subnet, as in
-  opentofu.md section 2).
-- A `registry:3.0.0` container (pinned by digest) on the public network plays the
-  repository host's registry. `infra/local/build-images.sh` builds every image from
-  `deploy/images` and pushes it there; the nodes pull from it.
-- Ansible connects as `ops` over SSH with a throwaway key. The controller's address
-  (172.31.99.1) is the only admin CIDR.
+A Linux host with Docker Engine and Compose ([prerequisites.md](prerequisites.md), "Controller
+tools") and the Ansible venv from `make ansible-venv`. No virtualization is needed: the nodes
+are containers, so the local converge also runs on a host without `/dev/kvm` or nested
+virtualization.
 
 ## 2. Running it
 
 ```sh
 make ansible-venv                      # uv venv with requirements.txt, then sops and age
-make local-converge-up                 # networks, registry, 4 nodes, secrets, inventory
+make local-converge-up                 # networks, registry, nodes, secrets, inventory, internal CA
 make local-converge-images             # build and push every platform image
-make local-converge                    # site.yml; run it twice, the second run changes nothing
-make local-converge-e2e                # this stage and 8 paths through the converged stack
+make local-converge                    # site.yml; run it twice to check idempotency
+make local-converge-e2e                # web and API paths through the converged stack
 make local-converge-down               # removes containers, volumes, networks, images, state
 ```
 
 `make local-converge-up` also issues the internal CA and node certificates
-(`make internal-ca ENV=local`, [ansible.md](ansible.md) section 9). After a converge,
-`tests/localconverge/tls-audit.sh` captures the private network with tcpdump sidecars while the
-end-to-end suite runs, checks that no flow carries readable protocol data or any secret of the
-environment, and tries every private endpoint from a host without a certificate.
-On 2026-11-13 the full six-node topology exhausted this machine's memory alongside other work
-(load above 900); the audit ran on `LC_TOPOLOGY=minimal` with `-e core_umami_processes=1`.
+(`make internal-ca ENV=local`, [ansible.md](ansible.md) section 6).
 
-`LC_TOPOLOGY=node` before `local-converge-up` builds the production layout: three converged
-nodes `sa-lc-node-1` to `-3`, one per location, each in the `edge` and the `core` group, plus
-the backup node. Run on 2026-11-13 with release `v0.1.0`'s code and
-`ANSIBLE_EXTRA="-e core_umami_processes=1"`: the first `make local-converge` ended with
-`failed=0` on every node (`ok=238 changed=51` on node 1, `ok=190 changed=44` on nodes 2 and 3,
-`changed=10` on the backup node); `patronictl list` showed node 1 `Leader`, node 2 `Sync
-Standby` and node 3 `Replica`, both `streaming` with lag 0; port 80 of every node answered 308
-at `/` and at `/core`. The second run ended with `failed=0` and `changed=2` per node, both in
-"Start the edge services": the one-shot `volume-owners` container runs at every `compose up`.
-Idle memory after the first run, `docker stats`: 1,012 MiB on node 1 and 941 MiB on node 2
-(21 containers each).
-
-`LC_TOPOLOGY=minimal` before `local-converge-up` leaves out the second core node (3 edge, 1 core,
-1 backup node), the smallest set the roles converge; `make rotate-local` uses it for the
-credential rotation run (the design).
-
-Since 2026-11-13 `site.yml` ends with the `observability` play (this stage) on every edge
-and core node. It needs somewhere to send alerts: the Discord webhook an operator input does not
-exist locally, so pass the address of the test receiver instead, and run that receiver
-on the controller, where its log shows every Alertmanager message:
+`site.yml` ends with the `observability` play on every edge and core node. To see every message
+Alertmanager would push, run the test receiver on the controller and pass its address:
 
 ```sh
 go run ./tests/observability/receiver -listen 172.31.99.1:8099 &
 make local-converge ANSIBLE_EXTRA='-e observability_test_webhook_base=http://172.31.99.1:8099'
 ```
 
-Without one of the two the play stops at its input check and names both.
+The play accepts `observability_test_webhook_base` in the local environment only.
 
-Everything generated stays under `.scratch/scratch/local-converge/` (SSH key, known
-hosts, age identity, logs), `infra/secrets/local/` and
-`infra/ansible/inventories/local/hosts.json`, all gitignored. The local secrets are
-random values from `infra/secrets/new-secrets.py`, encrypted with SOPS to a throwaway
-age identity; they are local-only and are deleted by `local-converge-down`.
+Everything generated stays under `.scratch/local-converge/` (SSH key, known hosts, age identity,
+logs), `infra/secrets/local/` and `infra/ansible/inventories/local/hosts.json`, all gitignored.
+The local secrets are random values from `infra/secrets/new-secrets.py`, encrypted with SOPS to
+a throwaway age identity, and `local-converge-down` deletes them.
 
-The inventory `up.sh` writes has exactly the shape of the OpenTofu output
-(opentofu.md section 1) with `sa_environment: local`, `sa_provider: local` and the base
-domain `sa-local.test` (the reserved `.test` TLD). Local-only settings are in
-`infra/ansible/inventories/local/group_vars/all.yml`, each with its reason.
+## 3. Topologies and switches
 
-## 3. What was verified (2026-11-12)
+Set these variables before `make local-converge-up` (read by `infra/local/env.sh`, `up.sh` and
+`down.sh`):
 
-- `ansible-lint` (production profile) and `yamllint -s` pass. `deploy/caddy/assemble_test.go`
-  validates the assembled node configs with `SA_TLS` cloudflare, cloudflare-delegated and
-  internal on the custom
-  Caddy build and refuses an unset or unknown value.
-- `site.yml` converged the four nodes from fresh containers, and the next run reported
-  `changed=0` on every node (section 5 has the recap).
-- Every service ran on every node: on each edge node Caddy, gateway, collector, NATS and
-  etcd; on the core node postgres-ha (Patroni leader, PostgreSQL 18.6), HAProxy, Umami,
-  control plane, replayer, metricswriter, jobs, Caddy with the console, and the oauth
-  fixture.
-- NATS: three members, one meta leader, the 10 streams and 6 consumers of
-  `platformctl nats apply` at R3. etcd: three members at 3.6.16, one leader.
-- Port 80 on every node answered 308 (healthy) for any Host header. Stopping the
-  collector on edge 1 turned edge 1 to 503 and back to 308 once it was restarted.
-  Stopping NATS on edges 2 and 3 turned edge 1 to 503 (its NATS reported
-  `stream ... is not current`). Stopping Umami turned the core node to 503.
-- From an address on the public network that is not an admin CIDR: 80 and 443 open on
-  every node; 22, 4222, 6222, 8222, 2379, 9090, 5432, 8008, 3000, 5000 and 8085 closed.
-- Clock check: every node within 5 ms of NTP (`chronyc tracking`).
-- `deploy.yml` with a new image tag recreated the services one node at a time (edge 1, 2,
-  3, then core 1), each gated on its port-80 answer before the next.
-- `tests/localconverge` (build tag `localconverge`): sign-in through the core Caddy and
-  the fixture as an operator, tenant and site created through the console API, one
-  pageview through each edge node's Caddy and gateway, all three stored by Umami
-  (`website_event` paths `/converge/sa-lc-edge-1..3`), an OTLP token created through the
-  API and one delta histogram of 5 requests sent through each edge node's collector,
-  15 requests from 3 services in `api.metrics_minute`.
+| Setting | Nodes |
+|---|---|
+| default | 3 edge nodes, 2 core nodes, 1 backup node |
+| `LC_TOPOLOGY=node` | the production layout: 3 converged nodes `sa-lc-node-1` to `-3`, each in the `edge` and the `core` group, plus the backup node |
+| `LC_TOPOLOGY=minimal` | 3 edge nodes, 1 core node, 1 backup node: the smallest set the roles converge, used by `make rotate-local` |
+| `LC_BACKUP=s3` | replaces the backup node with `sa-lc-s3`, an S3 object storage stand-in (SeaweedFS 4.52, TLS with a private CA, host-style addressing under `s3.sa-local.test`) |
+| `LC_PROBE=1` | adds `sa-lc-probe-1` on the public network only, as a probe host outside the platform's network; `site.yml`'s probe play converges it |
 
-## 4. Limits: what this does not prove
-
-- **Not real servers, network or DNS.** No network security group, no Azure NAT of the public
-  address (the local nodes hold theirs on an interface), no latency between zones, no Traffic
-  Manager health checks. Hostnames are mapped by the test client.
-- **No public TLS.** Caddy uses its local CA (`sa_tls: internal`); DNS-01 through
-  `caddy-dns/cloudflare` is configured (`sa_tls: cloudflare`), compiles and validates, but has
-  not issued a certificate yet: that happens at the first staging converge.
-- **Clock.** The nodes share this machine's kernel clock and may not set it, so chronyd
-  runs with `-x` (measure, do not steer). The offset check runs for real; clock steering
-  does not.
-- **No GitHub.** Sign-in goes to the test-only oauth fixture (`tests/fixtures/githuboauth`),
-  through a control plane image built with `TAGS=oauthfixture` that exists only in the
-  local registry. The fixture listens on port 8099 of the core node, which the local
-  inventory opens; no other environment may set `core_oauth_fixture` (the core role
-  refuses). Real sign-in is blocked on I2, operator ids on I3 (the local operator is
-  fixture user 1001).
-- **PostgreSQL 18.7**, the same image as every other environment.
-- **Two core nodes since this stage** (section 6); this stage ran one.
-- **Scripted events, not browsers.** The web path check uses `tests/gateway/gwclient`,
-  which solves the proof in Go. The browser matrices stay with the this stage to 5 suites,
-  which start their own stacks and were not re-pointed at this one.
-- **Mutable local tag.** The local images are tagged `lc`; a rebuild under the same tag
-  is not pulled again (`pull: missing`). Real releases use immutable tags.
-
-## 5. Converge record
-
-Fresh nodes (images already in the local registry), 2026-11-13. First converge 177 s,
-second 47 s, then `make local-converge-e2e`:
-
-```
-run 1: sa-lc-core-1 ok=91 changed=40 failed=0 | sa-lc-edge-1 ok=74 changed=32 | edge-2, edge-3 ok=67 changed=32
-run 2: sa-lc-core-1 ok=82 changed=0  failed=0 | sa-lc-edge-1 ok=69 changed=0  | edge-2, edge-3 ok=62 changed=0
---- PASS: TestConvergedStack (5.31s)
-    --- PASS: TestConvergedStack/web_path_through_every_edge_node_into_umami (3.15s)
-    --- PASS: TestConvergedStack/otlp_metrics_through_every_edge_node_into_the_platform_database (2.11s)
-```
-
-An earlier fresh run failed once on edge 3 when quay.io answered one pull of the pinned
-etcd digest with `not found` (the same digest pulled on the other nodes). Image pulls are
-now a separate task retried five times; every other compose failure still fails the node.
-
-## 6. this stage topology: locations, latency, backups
-
-this stage (high availability and drills) extends the topology to the shape of plan
-section 4.1 plus a backup node:
-
-| Node | Location | Private | Runs |
+| Node | Location | Private address | Runs |
 |---|---|---|---|
 | `sa-lc-edge-1` | fsn1 | 10.99.1.12 | caddy, gateway, collector, nats, etcd |
 | `sa-lc-edge-2` | nbg1 | 10.99.2.13 | same |
@@ -189,59 +67,116 @@ section 4.1 plus a backup node:
 | `sa-lc-backup-1` | hel1 | 10.99.3.31 | pgbackrest repository (posix) |
 | `sa-lc-restore-1` | fsn1 | 10.99.1.41 | created only by the restore drill, removed after it |
 
-- **Locations are separate Docker networks** (`sa-lc-fsn1`, `sa-lc-nbg1`,
-  `sa-lc-hel1`). A router container (`sa-lc-router`, `infra/local/lib.sh`) joins
-  them; each node gets the route `10.99.0.0/16 via 10.99.<loc>.254` at every
-  start (`node-init.sh`), as a cloud private network would hand it out. Docker
-  drops packets routed between its bridges unless the source bridge is trusted, so
-  each location network trusts the other two (`trusted_host_interfaces`).
-- **Latency.** `tc netem` on the router delays what it sends into each location:
-  1.5 ms toward fsn1 and nbg1, 11.5 ms toward hel1, 0.3 ms jitter. Round trips are
-  therefore about 3 ms fsn1 to nbg1 and 23 ms to hel1 (measured with TCP connects:
-  4.8 ms and 24.3 ms including the handshake). The local network names keep the labels of the
-  first hosting plan; they stand for three separate zones. These numbers are assumptions, not
-  measurements of Azure's network between availability zones, which the first staging drill
-  measures.
-- **Partition.** `lc_partition <location>` takes the router's interface into that
-  location down, cutting it off the private network in both directions while its
-  public addresses stay reachable; `lc_heal` restores it.
-- **Backups.** No Azure storage exists locally, so the pgbackrest repository is
-  a posix repository on `sa-lc-backup-1` in hel1, a location with no database node,
-  reached over pgbackrest's TLS protocol with the node certificates of the internal CA
-  (`make internal-ca ENV=local`, which `make local-converge-up` runs). This is a stand-in, not an
-  equivalent: object storage is not a server pgbackrest talks to, has its own
-  durability and latency. Staging and production use `backup_repo_mode: azure` (the
-  default), which this machine cannot run: it needs the Azure instance metadata service for
-  the managed identity.
-- **Power off** in the drills is `docker kill` of a node container: no clean
-  shutdown of anything inside. Power on is `docker start`, which boots systemd and
-  Docker again; compose restarts the services (`restart: unless-stopped`).
+In the `node` topology, `sa-lc-node-1` to `-3` take the edge nodes' addresses and run both
+columns of services.
 
-## 7. Object storage stand-in, probe node and `make ops-local`
+`make ops-local` (`tests/localconverge/ops-local.sh`) runs the operations checks on
+`LC_TOPOLOGY=minimal LC_BACKUP=s3 LC_PROBE=1`: backup bucket, stanza and WAL archiving in `s3`
+mode, a full backup, delete refusal and `--repo-target-time`, idempotency, Patroni failsafe with
+etcd stopped, the etcd rejoin of a rebuilt edge node, the probe and the watchdog push, then tears
+down. It refuses to start at a load average of 20 or more and waits before each
+step until the load is below 20 (ten minutes at most). `LC_SRC` builds the images from another
+checkout (for example `git archive HEAD` unpacked elsewhere) when the working tree is mid-change.
 
-Two switches of `infra/local/env.sh`, read by `up.sh` and `down.sh`:
+## 4. How it stands in for a cloud environment
 
-- `LC_BACKUP=s3` replaces `sa-lc-backup-1` with `sa-lc-s3` (hel1, `10.99.3.35`), SeaweedFS 4.52
-  serving S3 over TLS with a private CA, host-style addressing under `s3.sa-local.test`. The
-  inventory then carries `backup_repo_mode: s3` and an `sa_object_storage` with the endpoint,
-  region and bucket plus two local-only keys, `storage_host` and `ca_file`. The roles accept
-  the `s3` mode in the local converge only. It exercises the stanza, archiving and backup flow
-  over an object store protocol, not Azure itself ([backups.md](backups.md) section 5).
-- `LC_PROBE=1` adds `sa-lc-probe-1` on the public network only (`172.31.99.51`), as the
-  a probe host outside the platform's network would. `site.yml`'s probe play converges it.
+Each node is `infra/local/node.Dockerfile`: `debian:trixie` (pinned by digest) with systemd as
+PID 1, OpenSSH, sudo and Python, plus an `ops` user whose key is installed at start, which is
+what cloud-init does on an Azure Debian 13 VM ([opentofu.md](opentofu.md#inventory-contract-opentofu-to-ansible)).
+Nothing the roles configure is preinstalled: Docker Engine and Compose come from Docker's apt
+repository at their pins, chrony, nftables and unattended-upgrades from Debian. Ansible connects
+over SSH, so SSH hardening, `AllowUsers` and the firewall's SSH rule all run as they do on a VM.
 
-`make ops-local` (`tests/localconverge/ops-local.sh`) runs the operations checks of
-the review notes on `LC_TOPOLOGY=minimal LC_BACKUP=s3 LC_PROBE=1`: backup
-bucket, stanza and WAL archiving in `s3` mode, a full backup, delete refusal and
-`--repo-target-time`, idempotency, Patroni failsafe with etcd stopped,
-the etcd rejoin of a rebuilt edge node, the probe and the watchdog push, then tears down. It
-refuses to start at a load average of 20 or more and waits before each step until the load is
-below 20 (ten minutes at most). `LC_SRC` builds the images from another checkout (for example
-`git archive HEAD` unpacked elsewhere) when the working tree is mid-change.
+- **Privileges.** The node containers run with `--privileged`, which gives them the
+  capabilities Docker, nftables and systemd need. `/var/lib/docker` and `/var/lib/containerd`
+  are volumes per node, because overlayfs cannot be stacked on the container's own overlay root.
+- **Networks.** `sa-lc-public` (172.31.99.0/24, default route) stands in for the internet side.
+  The private network 10.99.0.0/16 is split into one Docker network per location (`sa-lc-fsn1`,
+  `sa-lc-nbg1`, `sa-lc-hel1`), joined by a router container (`sa-lc-router`,
+  `infra/local/lib.sh`). Each node gets the route `10.99.0.0/16 via 10.99.<loc>.254` at every
+  start (`node-init.sh`), as a cloud private network hands it out. The location names stand for
+  three separate zones.
+- **Latency.** `tc netem` on the router delays what it sends into each location: 1.5 ms toward
+  fsn1 and nbg1, 11.5 ms toward hel1, 0.3 ms jitter. Round trips are about 3 ms between fsn1 and
+  nbg1 and 23 ms to hel1.
+- **Partition.** `lc_partition <location>` takes the router's interface into that location down,
+  cutting it off the private network in both directions while its public addresses stay
+  reachable; `lc_heal` restores it.
+- **Registry.** A `registry:3.0.0` container (pinned by digest) on the public network plays the
+  image registry. `infra/local/build-images.sh` builds every image from `deploy/images` and
+  pushes it there; the nodes pull from it. The local images carry the mutable tag `lc`, and a
+  rebuild under the same tag is not pulled again (`pull: missing`); releases use immutable tags.
+- **Inventory.** `up.sh` writes an inventory with exactly the shape of the OpenTofu output, with
+  `sa_environment: local`, `sa_provider: local` and the base domain `sa-local.test` (the reserved
+  `.test` TLD). The controller's address (172.31.99.1) is the only admin CIDR. Local-only
+  settings are in `infra/ansible/inventories/local/group_vars/all.yml`, each with its reason.
+- **TLS.** Caddy uses its local CA (`sa_tls: internal`). `deploy/caddy/assemble_test.go`
+  validates the assembled node configs with `SA_TLS` set to `cloudflare`,
+  `cloudflare-delegated` and `internal` on the custom Caddy build.
+- **Sign-in.** The control plane signs in against the test-only OAuth fixture
+  (`tests/fixtures/githuboauth`), through an image built with `TAGS=oauthfixture` that exists
+  only in the local registry. The fixture listens on port 8099 of the core node, which the local
+  inventory opens; the core role refuses `core_oauth_fixture` in any other environment. The local
+  operator is fixture user 1001.
+- **Backups.** The default repository is a posix repository on `sa-lc-backup-1`, in a location
+  with no database node, reached over pgBackRest's TLS protocol with the node certificates of the
+  internal CA. `LC_BACKUP=s3` exercises the object store protocol instead. Cloud environments use
+  `backup_repo_mode: azure` (the default), which needs the Azure instance metadata service for
+  the managed identity ([backups.md](backups.md)).
+- **Clock.** The nodes share the host's kernel clock and may not set it, so chronyd runs with
+  `-x` (measure, do not steer). The offset check runs for real.
+- **Power off** in the drills is `docker kill` of a node container, with no clean shutdown of
+  anything inside. Power on is `docker start`, which boots systemd and Docker again; compose
+  restarts the services (`restart: unless-stopped`).
 
-Run record, 2026-11-13: steps `up`, `images`, `converge` (247 s, `failed=0` on every node),
-`bucket` and `archiving` passed. The run stopped during `backup` when the shared host's load
-average rose above 600, and was torn down. Three later attempts lost their node containers
-within seconds to `docker rm -f` from outside the run (Docker events show `kill` signal 9 and
-`destroy` of every `sa-lc` container, newest first, which no script in this repository does),
-so the remaining steps have not completed yet.
+The cloud parts that only a cloud environment exercises (network security groups, Azure's NAT of
+the public address, Traffic Manager, Let's Encrypt issuance by DNS-01, GitHub sign-in) are covered
+by the production record ([../reference/drills/2026-11-13-azure.md](../reference/drills/2026-11-13-azure.md)).
+
+## 5. Converge records
+
+**Default topology, 2026-11-12 and 2026-11-13.** `site.yml` converged the nodes from fresh
+containers, and the next run reported `changed=0` on every node:
+
+```
+run 1: sa-lc-core-1 ok=91 changed=40 failed=0 | sa-lc-edge-1 ok=74 changed=32 | edge-2, edge-3 ok=67 changed=32
+run 2: sa-lc-core-1 ok=82 changed=0  failed=0 | sa-lc-edge-1 ok=69 changed=0  | edge-2, edge-3 ok=62 changed=0
+--- PASS: TestConvergedStack (5.31s)
+    --- PASS: TestConvergedStack/web_path_through_every_edge_node_into_umami (3.15s)
+    --- PASS: TestConvergedStack/otlp_metrics_through_every_edge_node_into_the_platform_database (2.11s)
+```
+
+The first converge took 177 s and the second 47 s, with images already in the local registry.
+The checks around it:
+
+- Every service ran on every node. NATS had three members, one meta leader, and the 10 streams
+  and 6 consumers of `platformctl nats apply` at R3; etcd had three members at 3.6.16.
+- Port 80 on every node answered 308 for any Host header. Stopping the collector on edge 1
+  turned edge 1 to 503 and back to 308 once it was restarted; stopping NATS on edges 2 and 3
+  turned edge 1 to 503 (`stream ... is not current`); stopping Umami turned the core node to 503.
+- From a public address that is not an admin CIDR, 80 and 443 were open on every node and 22,
+  4222, 6222, 8222, 2379, 9090, 5432, 8008, 3000, 5000 and 8085 closed.
+- Every node was within 5 ms of NTP (`chronyc tracking`).
+- `deploy.yml` with a new image tag recreated the services one node at a time (edge 1, 2, 3,
+  then core 1), each gated on its port-80 answer.
+- `tests/localconverge` (build tag `localconverge`) signed in as an operator, created a tenant
+  and a site through the console API, sent one pageview through each edge node's Caddy and
+  gateway into Umami, created an OTLP token and sent 5 requests through each edge node's
+  collector into `api.metrics_minute`.
+
+Image pulls run as a separate task retried five times, because a registry can answer a single
+pull of a pinned digest with `not found`; every other compose failure fails the node.
+
+**Production layout (`LC_TOPOLOGY=node`), 2026-11-13.** With release `v0.1.0`'s code and
+`ANSIBLE_EXTRA="-e core_umami_processes=1"`, the first `make local-converge` ended with
+`failed=0` on every node (`ok=238 changed=51` on node 1, `ok=190 changed=44` on nodes 2 and 3);
+`patronictl list` showed node 1 `Leader`, node 2 `Sync Standby` and node 3 `Replica`, both
+standbys `streaming` with lag 0; port 80 of every node answered 308 at `/` and at `/core`. The
+second run ended with `failed=0` and `changed=2` per node, both in "Start the edge services":
+the one-shot `volume-owners` container runs at every `compose up`. Idle memory after the first
+run (`docker stats`): 1,012 MiB on node 1 and 941 MiB on node 2, 21 containers each.
+
+**Private network transport.** `tests/localconverge/tls-audit.sh` captures the private network
+with tcpdump sidecars while the end-to-end suite runs, checks that no flow carries readable
+protocol data or any secret of the environment, and tries every private endpoint from a host
+without a certificate. It ran on `LC_TOPOLOGY=minimal` with `-e core_umami_processes=1`.
