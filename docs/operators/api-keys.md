@@ -6,17 +6,17 @@ description: "Give a downstream machine read access to aggregate metrics through
 
 Operator API keys give a downstream machine (a data warehouse job, a report
 script, the monitoring prober) read access to aggregate metrics through the
-machine API at `https://app.<BASE_DOMAIN>/api/metrics/v1/`. The contract is
-`docs/reference/openapi/metrics-v1.yaml`; the rules around it are section 9 of
-`docs/reference/control-plane-api.md`.
+machine API at `https://app.<BASE_DOMAIN>/api/metrics/v1/`. The routes and fields are in the
+Metrics API reference (`docs/reference/openapi/metrics-v1.yaml`); the authentication and limit
+rules are section 9 of the [control plane API reference](../reference/control-plane-api.md).
 
 ## Defaults and limits
 
 | Setting | Value | Why |
 |---|---|---|
 | Scope | `metrics:read`, for every tenant or for one tenant | read-only aggregates; a one-tenant key for a consumer that needs only one project |
-| Lifetime | 90 days by default, at most 365 | a forgotten key stops working on its own; the 365-day cap goes beyond the RFP |
-| Rate | 10 requests per second per key and control plane instance, burst 20 | with two control plane instances behind the load balancer a key can reach up to twice that |
+| Lifetime | 90 days by default, at most 365 | a forgotten key stops working on its own |
+| Rate | 10 requests per second per key and control plane instance, burst 20 | each control plane instance keeps its own count, so on a three-node deployment a key can reach up to three times that |
 | Page size | 500 items, the default and the maximum | |
 | Day ranges | at most 366 days per request | |
 | Hour ranges | at most 744 hours for `/api/hourly`, 24 for `/web/hourly` | `/web/hourly` reads Umami live for every site, band and hour |

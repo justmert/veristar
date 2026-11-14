@@ -3,15 +3,15 @@ title: "Reading the global views"
 description: "Compare every enrolled project on the core web and API metrics."
 ---
 
-The global views compare every enrolled project on the RFP's core metrics, for funding and
-ecosystem-visibility decisions (RFP 3.2 and 3.3). They read daily aggregates only, never raw
-events or sessions. The contract is `docs/reference/control-plane-api.md` section 8. What the
-numbers mean, and where they can mislead, is in [reading-the-numbers.md](reading-the-numbers.md);
-read it before drawing conclusions.
+The global views compare every enrolled project on the core web and API metrics, for funding and
+ecosystem-visibility decisions. They read daily aggregates only, never raw events or sessions.
+What the numbers mean, and how to compare projects fairly, is in
+[reading-the-numbers.md](reading-the-numbers.md); read it before drawing conclusions. The HTTP
+routes are section 8 of the [control plane API reference](../reference/control-plane-api.md).
 
 ## Range
 
-Every view has a range of whole UTC days, both ends included: presets of 7, 30, 90 and 365
+Every view covers a range of whole UTC days, both ends included: presets of 7, 30, 90 and 365
 days ending today, or **Custom** with a from and to day. The longest range is 366 days. Today
 is included and holds what the hourly aggregation has read so far, so today's numbers grow
 during the day. Without a choice the range is the last 30 days.

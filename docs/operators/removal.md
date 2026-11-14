@@ -3,17 +3,18 @@ title: "Removing a project"
 description: "Remove a project that is not part of the Stellar ecosystem."
 ---
 
-Operators remove projects that are not part of the Stellar ecosystem (RFP 3.1). Removal is
-final: there is no restore. Suspension ([review-and-enrollment.md](review-and-enrollment.md))
-is the reversible alternative while a question is being cleared up.
+Operators remove projects that are not part of the Stellar ecosystem. Removal is final: there is
+no restore. Suspension ([review-and-enrollment.md](review-and-enrollment.md)) is the reversible
+alternative while you clear up a question.
 
-The step-by-step runbook, with the SQL to follow a removal and what to do when a purge step
-keeps failing, is [../runbooks/tenant-removal.md](../runbooks/tenant-removal.md). The
-contract is `docs/reference/control-plane-api.md` sections 5.5, 5.13 and 8.7.
+This page is the console task. The runbook [Tenant suspension and removal](../runbooks/tenant-removal.md)
+has the database queries to follow a removal and the steps to take when a purge step keeps
+failing. The HTTP routes are sections 5.5, 5.13 and 8.7 of the
+[control plane API reference](../reference/control-plane-api.md).
 
 ## How to remove
 
-On the **Projects** tab open the project and choose **Remove**, or call
+On the **Projects** tab, open the project and choose **Remove**, or call
 `POST /api/operator/tenants/{tenant_id}/remove` with `{"reason": "..."}`. The reason is
 required. The project's former members see it once as a notice when they next open the
 console.
@@ -50,9 +51,9 @@ removed from then on keeps its anonymous daily counts (web aggregates, gateway o
 counts, hourly and daily API data) in the tables the global views and the metrics API read.
 Raw web data, the web dashboards and per-minute API data are deleted either way.
 
-- The default is **delete**. Whether SCF wants removed projects' aggregates kept is an open
-  question. Record SCF's answer there and
-  set the setting to match.
+- The default is **delete**. Through the API the setting is
+  `PUT /api/operator/settings/removal-keep-aggregates` with `{"keep": true}` or
+  `{"keep": false}`.
 - The value is copied into each removal when it starts, so changing it never changes a removal
   in progress.
 - Every change is audited as `settings.removal_keep_aggregates`.

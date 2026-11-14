@@ -3,14 +3,14 @@ title: "Review and enrollment modes"
 description: "Self-service enrollment, approval-required enrollment and project review."
 ---
 
-The RFP asks for self-service enrollment open to any project built on Stellar, for operators
-to be able to remove projects that are not part of the ecosystem, and for a later switch to
-approval-required enrollment (RFP 3.1). All three exist. The contract is
-`docs/reference/control-plane-api.md` sections 4.2.1 and 5.
+Any project built on Stellar can enroll itself. Operators review projects, remove those that are
+not part of the ecosystem, and can switch enrollment to approval-required at any time. This page
+covers the review queue, the actions on projects and sites, and the enrollment modes. The HTTP
+routes are sections 4.2.1 and 5 of the [control plane API reference](../reference/control-plane-api.md).
 
 ## Enrollment modes
 
-The mode is on the operator **Settings** tab, under **Enrollment mode**, or through
+The mode is on the operator **Admin**, **Settings** tab, under **Enrollment mode**, or through
 `GET` and `PUT /api/operator/settings/enrollment-mode` with `{"mode": "open"}` or
 `{"mode": "approval"}`.
 
@@ -28,7 +28,7 @@ The mode is on the operator **Settings** tab, under **Enrollment mode**, or thro
 
 Enrollment itself asks the project for its website, how it uses Stellar, optional Stellar
 account or contract ids and an optional SCF round link, and the acceptance of the current
-terms (`docs/compliance/terms.md`). A user can create at most 10 projects per day.
+terms ([terms of service](../compliance/terms.md)). A user can create at most 10 projects per day.
 
 ## The review queue
 
@@ -50,19 +50,18 @@ Two signals help to judge whether a project is built on Stellar. Neither decides
 and neither gates ingestion.
 
 - **Domain verification.** The project proves control of a site's domain with a DNS TXT
-  record or a file under `/.well-known/` (contract 5.8). A site shows `verified`,
+  record or a file under `/.well-known/` (section 5.8 of the control plane API reference). A site shows `verified`,
   `unverified` (with the last error) or `unchecked`. The `jobs` task `verify-domains`
   re-checks every site daily.
 - **stellar.toml.** The service fetches `https://<domain>/.well-known/stellar.toml` at site
   creation and daily, and shows whether it was found, the network passphrase it names, how
   many accounts and currencies it lists and whether their keys are valid strkeys
-  (contract 5.12). No free text from the file is stored or shown.
+  (section 5.12). No free text from the file is stored or shown.
 
 The enrollment's Stellar ids are re-checked when the project is opened and shown with their
 type (account, muxed account, contract) and whether they are valid.
 
-Which source defines "built on Stellar" is an open question for SCF. Until
-it is answered, the decision is the operator's judgement on this evidence.
+The decision whether a project is built on Stellar is the operator's judgement on this evidence.
 
 ## Actions on a project
 
