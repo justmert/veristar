@@ -137,10 +137,6 @@
               "operators/alerts",
               "operators/umami-dashboard-theme"
             ]
-          },
-          {
-            "group": "Live proof of adoption",
-            "pages": ["the adoption report", "the adoption report"]
           }
         ]
       },
