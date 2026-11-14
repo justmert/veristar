@@ -27,10 +27,10 @@
   --vs-text-section-line: 28px;
   --vs-text-section-weight: 600;
   --vs-text-section-tracking: -0.01em;
-  --vs-text-page: 24px;
-  --vs-text-page-line: 32px;
+  --vs-text-page: 28px;
+  --vs-text-page-line: 36px;
   --vs-text-page-weight: 600;
-  --vs-text-page-tracking: -0.02em;
+  --vs-text-page-tracking: -0.025em;
   --vs-text-metric: 28px;
   --vs-text-metric-line: 36px;
   --vs-text-metric-weight: 500;
@@ -64,7 +64,7 @@
   --vs-ease-exit: cubic-bezier(0.4, 0, 1, 1);
   --vs-motion-distance: 4px;
   --vs-sidebar: 248px;
-  --vs-content: 1200px;
+  --vs-content: 1440px;
   --vs-prose: 720px;
   --vs-dialog: 552px;
   --vs-dialog-sm: 472px;
@@ -98,6 +98,8 @@
   --vs-on-critical: #1a0505;
   --vs-accent: #ff7a3d;
   --vs-accent-hover: #ff9b6b;
+  --vs-accent-pressed: #ff9b6b;
+  --vs-accent-text: #ff7a3d;
   --vs-accent-soft: rgb(255 122 61 / 0.25);
   --vs-success: #3fb27f;
   --vs-success-soft: #0e2a1c;

@@ -32,6 +32,8 @@
   --color-on-critical: var(--vs-on-critical);
   --color-accent: var(--vs-accent);
   --color-accent-hover: var(--vs-accent-hover);
+  --color-accent-pressed: var(--vs-accent-pressed);
+  --color-accent-text: var(--vs-accent-text);
   --color-accent-soft: var(--vs-accent-soft);
   --color-success: var(--vs-success);
   --color-success-soft: var(--vs-success-soft);

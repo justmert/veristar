@@ -96,7 +96,7 @@ export function Sidebar({
             <Item
               item={{
                 key: "new",
-                label: "Register a project",
+                label: "Enroll a project",
                 to: "/projects/new",
                 icon: Plus,
                 match: () => true,
@@ -135,7 +135,7 @@ export function Sidebar({
                 type="button"
                 className="mt-1 flex items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-fg transition-colors duration-(--vs-duration-press) hover:bg-hover focus-ring aria-expanded:bg-selected"
               >
-                <span className="flex size-6.5 shrink-0 items-center justify-center rounded-full bg-selected text-axis font-semibold uppercase">
+                <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-line-strong text-caption font-semibold text-fg uppercase">
                   {me.user.github_login.slice(0, 2)}
                 </span>
                 <span className="min-w-0 flex-1 truncate text-small">{me.user.github_login}</span>
@@ -234,7 +234,7 @@ function ProjectSection({
             }}
           >
             <Plus aria-hidden />
-            Register a project
+            Enroll a project
           </MenuItem>
         </MenuContent>
       </Menu>
@@ -264,7 +264,7 @@ function OperatorSection({
   const failed = inOperator && alerts.error !== null;
   return (
     <nav aria-label="Operator" className="flex flex-col gap-px">
-      <span className="px-2.5 py-1.5 text-caption text-fg-3">OPERATOR</span>
+      <span className="px-2.5 pt-2 pb-1.5 text-caption tracking-wide text-fg-2">OPERATOR</span>
       {OPERATOR_NAV.map((n) => (
         <Item
           key={n.key}

@@ -8,7 +8,7 @@ function Checkbox({ className, ...props }: React.ComponentProps<typeof CheckboxP
     <CheckboxPrimitive.Root
       data-slot="checkbox"
       className={cn(
-        "peer relative flex size-4 shrink-0 items-center justify-center rounded-sm border border-line-strong bg-sunken text-on-accent transition duration-(--vs-duration-press) ease-standard after:absolute after:-inset-x-3 after:-inset-y-2 hover:border-fg-3 focus-ring disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-critical data-[state=checked]:border-accent data-[state=checked]:bg-accent",
+        "peer relative flex size-4 shrink-0 items-center justify-center rounded-sm border border-line-strong bg-sunken text-on-accent transition duration-(--vs-duration-press) ease-standard after:absolute after:-inset-x-3 after:-inset-y-2 hover:border-fg-3 focus-ring disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-critical data-[state=checked]:border-accent-text data-[state=checked]:bg-accent",
         className,
       )}
       {...props}

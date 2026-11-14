@@ -28,9 +28,12 @@ export function AppShell() {
   });
 
   // a navigation closes the drawer and starts the page at its top
+  // focus moves to the new page's content: a screen reader announces the
+  // page, and the link that was clicked does not keep a focus ring
   useEffect(() => {
     setDrawer(false);
     window.scrollTo({ top: 0 });
+    document.getElementById("main")?.focus({ preventScroll: true });
   }, [pathname]);
 
   if (!me.data) return null;
@@ -80,7 +83,11 @@ export function AppShell() {
               <FormMessage error={signOut.error} />
             </div>
           ) : null}
-          <main id="main" className="w-full max-w-content flex-1 px-4 pt-6 pb-16 sm:px-8 sm:pt-7">
+          <main
+            id="main"
+            tabIndex={-1}
+            className="mx-auto w-full max-w-content flex-1 px-4 pt-6 pb-16 outline-none sm:px-8 sm:pt-8 xl:px-10"
+          >
             <PageMotion key={pathname}>
               <Outlet />
             </PageMotion>

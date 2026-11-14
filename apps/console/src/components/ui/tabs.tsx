@@ -101,7 +101,7 @@ function TabsTrigger({
           aria-hidden
           className={
             line
-              ? "absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-accent"
+              ? "absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-accent-text"
               : "absolute inset-0 rounded-sm bg-selected"
           }
         />

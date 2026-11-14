@@ -32,7 +32,7 @@
     color: var(--vs-fg);
   }
   :focus-visible {
-    outline: 2px solid var(--vs-accent);
+    outline: 2px solid var(--vs-accent-text);
     outline-offset: 2px;
   }
   ::placeholder {
@@ -130,7 +130,7 @@
   /* a changed value flashes its text once */
   @keyframes vs-flash {
     from {
-      color: var(--vs-accent);
+      color: var(--vs-accent-text);
     }
   }
 }
@@ -142,7 +142,7 @@
 /* the focus halo every control shares: accent border plus a soft ring */
 @utility focus-ring {
   &:focus-visible {
-    outline: 2px solid var(--vs-accent);
+    outline: 2px solid var(--vs-accent-text);
     outline-offset: 2px;
   }
 }
@@ -151,7 +151,7 @@
   &:focus {
     outline: 3px solid var(--vs-accent-soft);
     outline-offset: 0;
-    border-color: var(--vs-accent);
+    border-color: var(--vs-accent-text);
   }
 }
 
