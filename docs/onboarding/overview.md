@@ -4,8 +4,8 @@ sidebarTitle: "Overview"
 description: "Guides for adding web analytics to a site and API analytics to a backend, with code taken from tested examples."
 ---
 
-Guides for teams that want web analytics for a site, API analytics for a backend, or both. Start
-with the quickstart for your kind of project, then open the guide for your framework.
+These guides show you how to add web analytics to a site, API analytics to a backend, or both.
+Start with the quickstart for your kind of project, then open the guide for your framework.
 
 Every code block in these guides is copied from a working example under [`examples/`](https://github.com/justmert/veristar/tree/main/examples)
 by a test (`make docs-check`), so the guides show exactly the code the test suites run. Examples use
@@ -47,20 +47,21 @@ console shows the real values of the service you use.
 | [What gets dropped](api/what-gets-dropped.md) | which of your data the platform keeps and which it discards |
 | [Troubleshooting](api/troubleshooting.md) | no data, refused requests, odd numbers |
 
-## Verification status
+## How the guides are tested
 
-The web guides for static HTML, Vite and React, Vue, Astro, SvelteKit, React Router and Next.js, the
-consent, self-hosting, content security policy and custom event guides are backed by example sites
-that run in the browser test matrix (`tests/e2e`: Chromium, Firefox and WebKit) against a test
-gateway. The Wallets Kit guide is backed by `TestWalletsKit` in `tests/webpath`, which runs the full
-chain into Umami. The API guides are backed by `tests/otelapps`, which runs the four example apps
-and the fan-out collector against stock collectors, and by `tests/otelapps` with the `apipath` tag,
-which runs the apps against the real platform collector.
+Each guide is backed by an example that runs in the test suites:
 
-None of the guides has yet been followed on a production site. That happens in this stage of the
-project plan, with three web projects and one API project.
+- The static HTML, Vite and React, Vue, Astro, SvelteKit, React Router and Next.js guides, and the
+  consent, self-hosting, content security policy and custom event guides, are backed by example
+  sites that run in the browser test matrix (`tests/e2e`: Chromium, Firefox and WebKit) against a
+  test gateway.
+- The Wallets Kit guide is backed by `TestWalletsKit` in `tests/webpath`, which runs the full chain
+  into Umami.
+- The API guides are backed by `tests/otelapps`, which runs the four example apps and the fan-out
+  collector against stock collectors, and, with the `apipath` build tag, against the platform's own
+  collector.
 
 ## Help
 
-Questions and problems go to the project's public issue tracker; [support.md](../support.md)
-describes the forms and the response times.
+Ask questions and report problems on the public issue tracker. [Support](../support.md) describes
+the forms and the response times.
