@@ -3,8 +3,8 @@ title: "Availability statement"
 description: "The availability targets, the failover behaviour they rest on, and what has been measured."
 ---
 
-Targets (RFP 3.4): ingestion 99.99%, dashboards 99.90%. This page shows how the Azure design
-meets them: the arithmetic, the failover windows the configuration sets, and what each failure
+Veristar targets 99.99% availability for ingestion and 99.90% for the dashboards
+([../sla.md](../sla.md)). This page shows how the Azure design meets them: the arithmetic, the failover windows the configuration sets, and what each failure
 costs. The windows below follow from the configuration (`infra/tofu/modules/failover`,
 Patroni, NATS). The production drills measured the node loss and the leader loss:
 [drills/2026-11-13-azure.md](drills/2026-11-13-azure.md) (one node's address left the `in`
@@ -22,7 +22,7 @@ A 30-day month has 30 x 24 x 60 = 43,200 minutes.
 
 ## How the design meets the targets
 
-Production runs on three converged nodes (operator decision of 2026-11-13), one in each
+Production runs on three converged nodes, one in each
 availability zone of Azure Denmark East. Each node runs every service: Caddy, the collect
 gateway and the OTLP collector, a NATS JetStream server, an etcd member, a Patroni member with
 PostgreSQL, HAProxy, Umami, the control plane, the replayer, the metrics writer, the jobs
@@ -48,7 +48,8 @@ member in every zone.
   of three) and a synchronous copy of every commit.
 - **Backups in three zones.** pgBackRest writes to zone-redundant Blob Storage
   ([../deploy/backups.md](../deploy/backups.md)).
-- **Measured from outside.** The prober runs outside Azure and checks ingestion and the
+- **Measured from outside.** The prober runs on a separate virtual machine in Azure East US,
+  outside the production region, and checks ingestion and the
   dashboards every 30 s ([../deploy/probe.md](../deploy/probe.md)).
 
 ## Windows per failure
@@ -98,17 +99,17 @@ contention add time, which the production drills measure.
   node in DNS. The prober checks each node's certificate by its own address, and the
   `CertificateExpiringSoon` alert fires 14 days before expiry.
 - **Web event drain rate.** Each node runs `core_umami_processes` (2) Umami processes, one
-  per vCPU; the replayer spreads visitors over them. Scaled from the local measurements, two
+  per vCPU; the replayer spreads visitors over them. Scaled from the local measurements
+  ([drills/2026-11-13.md](drills/2026-11-13.md), "Web drain with several Umami processes"), two
   processes drain about 420 events a second, far above the expected peak (50 a second) and
   below the 10x burst profile (500 a second): a burst queues in JetStream and drains after it,
-  so ingestion stays up and the dashboards catch up. The rate on the real node size is measured
-  by a load drill on production.
+  so ingestion stays up and the dashboards catch up.
 - **Three database members.** With one member down the leader still has a synchronous
   standby; only with two members down does the leader run alone, and a further failure in that
   time loses what only the leader had, back to the last archived WAL (`archive_timeout` 60 s).
 - **Shared nodes.** Every service of a node shares its 2 vCPUs and 8 GB, so a node that is
   overloaded by one service is slow for all of them. Traffic Manager takes a node whose health
-  fails out of both profiles; [../deploy/opentofu.md](../deploy/opentofu.md) section 2 states
+  fails out of both profiles; [../deploy/opentofu.md](../deploy/opentofu.md) ("Why `Standard_B2as_v2`") states
   the memory budget the size rests on.
 - **Billing.** A suspended subscription stops everything; [../deploy/prerequisites.md](../deploy/prerequisites.md)
-  ("Account holder, billing and renewal") sets the payment requirements.
+  ("Account holders") sets the payment requirements.
