@@ -31,6 +31,12 @@ variable "cnames" {
   type        = map(string)
 }
 
+variable "a_records" {
+  description = "label to an ipv4 address, for names served outside the platform's nodes (the status page)"
+  type        = map(string)
+  default     = {}
+}
+
 variable "caa_issuers" {
   description = "certificate authorities allowed to issue for the zone"
   type        = list(string)
@@ -56,6 +62,21 @@ resource "cloudflare_dns_record" "cname" {
   ttl     = var.ttl
   proxied = false
   comment = "managed by opentofu; health-checked by azure traffic manager"
+}
+
+# a name served by a host outside the platform, such as the status page on
+# the probe host (docs/deploy/probe.md); dns only, so that host's caddy gets
+# its own certificate
+resource "cloudflare_dns_record" "a" {
+  for_each = var.a_records
+
+  zone_id = local.zone_id
+  name    = "${each.key}.${var.base_domain}"
+  type    = "A"
+  content = each.value
+  ttl     = var.ttl
+  proxied = false
+  comment = "managed by opentofu"
 }
 
 resource "cloudflare_dns_record" "caa_issue" {
@@ -100,10 +121,15 @@ output "hostnames" {
   value = { for label in keys(var.cnames) : label => "${label}.${var.base_domain}" }
 }
 
+output "a_hostnames" {
+  value = { for label in keys(var.a_records) : label => "${label}.${var.base_domain}" }
+}
+
 output "records" {
   description = "every record by key, for review and tests"
   value = merge(
     { for k, r in cloudflare_dns_record.cname : "${k}/CNAME" => { type = r.type, value = r.content, proxied = r.proxied } },
+    { for k, r in cloudflare_dns_record.a : "${k}/A" => { type = r.type, value = r.content, proxied = r.proxied } },
     { for k, r in cloudflare_dns_record.caa_issue : "@/CAA/issue/${k}" => { type = r.type, value = r.data.value, proxied = false } },
     { "@/CAA/issuewild" = { type = "CAA", value = cloudflare_dns_record.caa_issuewild.data.value, proxied = false } },
   )

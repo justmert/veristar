@@ -149,6 +149,10 @@ module "dns" {
   cnames = module.failover.fqdns
   # caddy gets every certificate from let's encrypt by dns-01
   caa_issuers = ["letsencrypt.org"]
+  # the public status page on the probe host in azure east us, outside the
+  # platform's own nodes and region (docs/deploy/probe.md); that host's edge
+  # caddy gets the certificate by http-01, which the caa issuer allows
+  a_records = { status = "192.0.2.10" }
 }
 
 module "inventory" {
@@ -156,9 +160,8 @@ module "inventory" {
 
   environment = local.environment
   base_domain = var.base_domain
-  # status. is the public status page (docs/deploy/probe.md); its record is
-  # added where the page is published
-  hostnames            = merge(module.dns.hostnames, { status = "status.${var.base_domain}" })
+  # status. is the public status page on the probe host (docs/deploy/probe.md)
+  hostnames            = merge(module.dns.hostnames, module.dns.a_hostnames)
   private_network_cidr = module.network.ip_range
   admin_cidrs          = var.admin_cidrs
   admin_user           = local.admin_user
