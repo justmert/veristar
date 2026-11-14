@@ -1,0 +1,186 @@
+import { existsSync, mkdirSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import AxeBuilder from "@axe-core/playwright";
+import { expect, type Page, test } from "@playwright/test";
+
+// the veristar theme on umami's dashboard (docs/adr/0004): a view-only tenant
+// opens its dashboard through the web caddy, once with the system set to dark
+// and once to light. both must render the same dark brand, with geist from
+// the same host, no csp refusal, no request to another host and every text
+// at wcag aa contrast (axe's color-contrast rule on the rendered pages).
+// screenshots of both modes go to .scratch/design/umami for review.
+
+const port = process.env.WEB_PORT ?? "";
+const domain = process.env.WEB_DOMAIN ?? "";
+const token = process.env.WEB_TOKEN ?? "";
+const website = process.env.WEB_WEBSITE ?? "";
+const team = process.env.WEB_TEAM ?? "";
+const web = `https://web.${domain}:${port}`;
+const app = `https://app.${domain}:${port}`;
+const here = dirname(fileURLToPath(import.meta.url));
+const theme = resolve(here, "../../../deploy/caddy/umami-theme/site");
+// design review output, kept in the gitignored resources area
+const shots = resolve(here, "../../../.scratch/design/umami");
+
+// the brand tokens of theme.css as the browser reports them
+const background = "rgb(21, 21, 20)";
+const foreground = "rgb(238, 237, 232)";
+
+// chromium aborts requests in flight with ERR_NETWORK_CHANGED when the host's
+// interfaces change, which other docker work on a shared machine causes (the
+// same handling as dashboard.spec.ts). a step that failed while such aborts
+// happened is run again; any other failure fails the test.
+async function step(page: Page, counter: { n: number }, fn: () => Promise<void>) {
+  for (let attempt = 1; ; attempt++) {
+    const before = counter.n;
+    try {
+      await fn();
+      return;
+    } catch (e) {
+      if (counter.n === before || attempt >= 5) throw e;
+      await page.reload();
+    }
+  }
+}
+
+async function expectTheme(page: Page, where: string) {
+  await expect(page.locator('link[href="/_veristar/theme.css"]'), `${where}: one link`).toHaveCount(
+    1,
+  );
+  const s = await page.evaluate(async () => {
+    await document.fonts.ready;
+    const body = getComputedStyle(document.body);
+    return {
+      background: body.backgroundColor,
+      color: body.color,
+      font: body.fontFamily,
+      scheme: getComputedStyle(document.documentElement).colorScheme,
+      geist: document.fonts.check('16px "Geist Variable"'),
+      primary: getComputedStyle(document.documentElement).getPropertyValue("--zen-primary").trim(),
+    };
+  });
+  expect(s.background, `${where}: page ground`).toBe(background);
+  expect(s.color, `${where}: ink`).toBe(foreground);
+  expect(s.font, `${where}: font`).toMatch(/^"Geist Variable"/);
+  expect(s.scheme, `${where}: color-scheme`).toBe("dark");
+  expect(s.geist, `${where}: geist loaded`).toBe(true);
+  expect(s.primary, `${where}: primary`).toBe("#ff7a3d");
+}
+
+async function expectContrast(page: Page, where: string) {
+  const r = await new AxeBuilder({ page }).withRules(["color-contrast"]).analyze();
+  const found = r.violations.flatMap((v) =>
+    v.nodes.map((n) => `${n.target.join(" ")}: ${n.failureSummary?.replace(/\s+/g, " ")}`),
+  );
+  expect(found, `${where}: color-contrast`).toEqual([]);
+  expect(r.passes.length + r.incomplete.length, `${where}: axe checked text`).toBeGreaterThan(0);
+}
+
+for (const scheme of ["dark", "light"] as const) {
+  test.describe(`system set to ${scheme}`, () => {
+    test.use({ colorScheme: scheme });
+
+    test(`brand theme with the system in ${scheme} mode`, async ({ page, context }) => {
+      mkdirSync(shots, { recursive: true });
+      const shot = (name: string) =>
+        page.screenshot({ path: `${shots}/${scheme}-${name}.png`, fullPage: true });
+      const errors: string[] = [];
+      const foreign: string[] = [];
+      const network = { n: 0 };
+      page.on("pageerror", (e) => errors.push(e.message));
+      page.on("console", (m) => {
+        if (/content security policy/i.test(m.text())) errors.push(m.text());
+      });
+      page.on("requestfailed", (r) => {
+        if (r.failure()?.errorText.includes("ERR_NETWORK_CHANGED")) network.n++;
+      });
+      page.on("request", (r) => {
+        const u = new URL(r.url());
+        if (u.protocol.startsWith("http") && u.hostname !== `web.${domain}`) {
+          if (u.hostname !== `app.${domain}`) foreign.push(r.url());
+        }
+      });
+
+      // sso as in dashboard.spec.ts: a same-site page on app.<domain> links
+      // to /sso
+      const sso = `${web}/sso?token=${encodeURIComponent(token)}&url=${encodeURIComponent(`/websites/${website}`)}`;
+      await context.route(`${app}/**`, (r) =>
+        r.fulfill({
+          contentType: "text/html",
+          body: `<a id="go" href="${sso}">open dashboard</a>`,
+        }),
+      );
+      await step(page, network, async () => {
+        await page.goto(`${app}/console`);
+        await page.click("#go");
+        await page.waitForURL(`**/websites/${website}`, { timeout: 30_000 });
+        await expect(page.getByText("Visitors", { exact: true }).first()).toBeVisible({
+          timeout: 30_000,
+        });
+      });
+      // zen picked the mode from the system setting, so both modes are covered
+      expect(await page.evaluate(() => document.documentElement.getAttribute("data-theme"))).toBe(
+        scheme,
+      );
+      await page.waitForLoadState("networkidle");
+      await expectTheme(page, "overview");
+      await expectContrast(page, "overview");
+      await shot("01-overview");
+
+      // the date range menu: a floating layer on the popover surface
+      await page
+        .getByRole("combobox")
+        .filter({ hasText: /last 24 hours/i })
+        .click();
+      await expect(page.getByRole("listbox").or(page.getByRole("menu")).first()).toBeVisible();
+      // the menu fades in; the check and the shot need it settled
+      await page.evaluate(() => Promise.all(document.getAnimations().map((a) => a.finished)));
+      await expectContrast(page, "range menu");
+      await page.screenshot({ path: `${shots}/${scheme}-02-range-menu.png` });
+      await page.keyboard.press("Escape");
+
+      // client-side navigation keeps the link: next.js swaps the page, not
+      // the document
+      await page.locator(`a[href*="/websites/${website}/realtime"]`).first().click();
+      await page.waitForURL(`**/websites/${website}/realtime`, { timeout: 30_000 });
+      await page.waitForLoadState("networkidle");
+      await expectTheme(page, "realtime after client-side navigation");
+      await expectContrast(page, "realtime");
+      await shot("03-realtime");
+
+      for (const [name, path] of [
+        ["04-sessions", `/websites/${website}/sessions`],
+        ["05-events", `/websites/${website}/events`],
+        ["06-breakdown", `/websites/${website}/breakdown`],
+        ["07-team-websites", `/teams/${team}/websites`],
+        ["08-settings-teams", "/settings/teams"],
+        ["09-preferences", "/settings/preferences"],
+      ] as const) {
+        await step(page, network, async () => {
+          await page.goto(path);
+          await page.waitForLoadState("networkidle");
+          await expectTheme(page, name);
+          await expectContrast(page, name);
+        });
+        await shot(name);
+      }
+
+      // every icon umami's head links is one the web caddy answers from the
+      // theme; the go side (webTheme in deploy/caddy/web_live_test.go)
+      // compares each of those answers with the theme's file byte for byte
+      const icons = await page
+        .locator(
+          'link[rel="icon"], link[rel="apple-touch-icon"], link[rel="manifest"], link[rel="mask-icon"]',
+        )
+        .evaluateAll((ls) => ls.map((l) => l.getAttribute("href") ?? ""));
+      expect(icons.length).toBeGreaterThan(0);
+      for (const icon of icons) {
+        expect(existsSync(`${theme}${icon}`), `${icon} is a theme file`).toBe(true);
+      }
+
+      expect(errors, "page errors and csp refusals").toEqual([]);
+      expect(foreign, "requests to other hosts").toEqual([]);
+    });
+  });
+}

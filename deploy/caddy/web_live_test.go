@@ -144,6 +144,7 @@ func TestWebCaddyLive(t *testing.T) {
 	t.Run("allowed reads", func(t *testing.T) { webAllowedReads(t, l) })
 	t.Run("sso rules", func(t *testing.T) { webSSORules(t, l) })
 	t.Run("login redirect", func(t *testing.T) { webLoginRedirect(t, l) })
+	t.Run("umami theme", func(t *testing.T) { webTheme(t, l) })
 	t.Run("dashboard in a browser", func(t *testing.T) { webDashboardInBrowser(t, l) })
 	// last, so the log holds every request made above
 	t.Run("access log", func(t *testing.T) { webAccessLogHasNoClientIdentity(t, l) })
@@ -527,6 +528,101 @@ func webAccessLogHasNoClientIdentity(t *testing.T, l *liveWeb) {
 	for _, line := range access {
 		require.False(t, ipv4.MatchString(line), "address in access line: %s", line)
 	}
+}
+
+// the theme of docs/adr/0004: every file of deploy/caddy/umami-theme/site
+// comes from caddy at its path, byte for byte, for GET and HEAD only, and
+// umami's html links the stylesheet once, after its own, with umami's csp
+// left as umami sent it.
+func webTheme(t *testing.T, l *liveWeb) {
+	dir := umamictr.ThemeDir(t)
+	var files []string
+	require.NoError(t, filepath.WalkDir(dir, func(p string, d os.DirEntry, err error) error {
+		if err == nil && !d.IsDir() {
+			rel, rerr := filepath.Rel(dir, p)
+			files = append(files, "/"+filepath.ToSlash(rel))
+			return rerr
+		}
+		return err
+	}))
+	require.Greater(t, len(files), 20)
+	tok := l.token
+	l.token = umami.Token{}
+	defer func() { l.token = tok }()
+	for _, f := range files {
+		want, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(f)))
+		require.NoError(t, err)
+		r := l.do(t, http.MethodGet, f, nil, "")
+		require.Equal(t, http.StatusOK, r.status, f)
+		require.Equal(t, string(want), r.body, "%s is not the theme's file", f)
+		require.Equal(t, "no-cache", r.header.Get("Cache-Control"), f)
+		require.Equal(t, "nosniff", r.header.Get("X-Content-Type-Options"), f)
+		require.Equal(t, "default-src 'none'; frame-ancestors 'none'", r.header.Get("Content-Security-Policy"), f)
+		requireWebHeaders(t, r, f)
+		require.Equal(t, http.StatusOK, l.do(t, http.MethodHead, f, nil, "").status, "HEAD %s", f)
+		for _, m := range []string{http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodOptions} {
+			require.Equal(t, http.StatusMethodNotAllowed, l.do(t, m, f, nil, "{}").status, "%s %s", m, f)
+		}
+	}
+	for _, ct := range [][2]string{
+		{"/_veristar/theme.css", "text/css"},
+		{"/_veristar/fonts/geist-latin-wght-normal.woff2", "font/woff2"},
+		{"/favicon.ico", "image/vnd.microsoft.icon"},
+		{"/favicon-32x32.png", "image/png"},
+		{"/site.webmanifest", "application/manifest+json"},
+		{"/safari-pinned-tab.svg", "image/svg+xml"},
+	} {
+		got := l.do(t, http.MethodGet, ct[0], nil, "").header.Get("Content-Type")
+		require.True(t, strings.HasPrefix(got, ct[1]), "%s answered %s", ct[0], got)
+	}
+	// caddy shadows umami's own icon: what umami would answer differs
+	code, umamiIcon := l.direct(t, http.MethodGet, "/favicon.ico")
+	require.Equal(t, http.StatusOK, code)
+	require.NotEqual(t, umamiIcon, l.do(t, http.MethodGet, "/favicon.ico", nil, "").body)
+	// a theme path without a file stops at caddy
+	for _, p := range []string{"/_veristar/missing.css", "/_veristar/", "/_veristar/fonts/"} {
+		r := l.do(t, http.MethodGet, p, nil, "")
+		require.Equal(t, http.StatusNotFound, r.status, p)
+		require.Empty(t, r.header.Get("X-Powered-By"), "%s reached umami", p)
+	}
+
+	l.token = tok
+	const link = `<link rel="stylesheet" href="/_veristar/theme.css">`
+	for _, p := range []string{"/websites/" + l.website, "/websites/" + l.website + "/realtime", "/settings/teams"} {
+		r := l.do(t, http.MethodGet, p, nil, "")
+		require.Equal(t, http.StatusOK, r.status, p)
+		require.Equal(t, 1, strings.Count(r.body, link), "%s: one theme link", p)
+		require.Equal(t, 1, strings.Count(r.body, "</head>"), p)
+		at := strings.Index(r.body, link)
+		require.Equal(t, strings.Index(r.body, "</head>"), at+len(link), "%s: the link ends the head", p)
+		last := strings.LastIndex(r.body[:at], `rel="stylesheet"`)
+		require.GreaterOrEqual(t, last, 0, "%s: umami's stylesheets come first", p)
+		// the csp is umami's own, and it allows a same-origin stylesheet
+		csp := r.header.Get("Content-Security-Policy")
+		require.Equal(t, umamiCSP(t, l, p), csp, p)
+		require.Contains(t, csp, "style-src 'self'", p)
+		require.Contains(t, csp, "default-src 'self'", p)
+	}
+	// json and scripts are not rewritten
+	r := l.do(t, http.MethodGet, "/api/websites/"+l.website, nil, "")
+	require.Equal(t, http.StatusOK, r.status)
+	require.NotContains(t, r.body, "_veristar")
+}
+
+// umamiCSP is the csp header umami itself sends for path on the private network.
+func umamiCSP(t *testing.T, l *liveWeb, path string) string {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, l.s.URL.String()+path, nil)
+	require.NoError(t, err)
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, resp.Body)
+	csp := resp.Header.Get("Content-Security-Policy")
+	require.NotEmpty(t, csp, "umami sends a csp for %s", path)
+	return csp
 }
 
 func hexByte(b byte) string {
