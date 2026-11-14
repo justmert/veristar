@@ -13,8 +13,8 @@
 # (deploy/caddy/redirect.Caddyfile). the old zone must point app. and web.
 # at the edge nodes as well (infra/tofu, record sets); this play checks it.
 #
-# THIS DOES NOT KEEP EXISTING SNIPPETS WORKING. docs/handover/redirect-research.md
-# measured it in chromium, firefox and webkit: the redirected challenge and
+# THIS DOES NOT KEEP EXISTING SNIPPETS WORKING. measured in chromium, firefox
+# and webkit (tests/e2e/redirect): the redirected challenge and
 # event requests reach the new gateway with Origin: null, which it refuses,
 # and otlp exporters drop the authorization header on a redirect to another
 # host. cutover_redirect_breaks_snippets=true states that this was read.
@@ -34,9 +34,9 @@
           - cutover_new_domain != sa_base_domain
         fail_msg: >-
           set cutover_new_domain to the new BASE_DOMAIN and
-          cutover_redirect_breaks_snippets=true after reading
-          docs/handover/redirect-research.md: existing snippets stop
-          delivering events on this path
+          cutover_redirect_breaks_snippets=true after reading the header
+          of this playbook: existing snippets stop delivering events on
+          this path
 
     - name: Resolve the old app. and web. names
       ansible.builtin.command:
