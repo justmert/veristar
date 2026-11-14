@@ -23,6 +23,7 @@ flowchart LR
     member["Project member"]
     op["SCF operator"]
     machine["Machine consumer"]
+    ai["AI client (MCP)"]
   end
 
   subgraph edge["Edge tier: 3 nodes, 3 availability zones"]
@@ -73,6 +74,7 @@ flowchart LR
   member --> ccaddy
   op --> ccaddy
   machine -- "/api/metrics/v1/, Bearer sa_op_" --> ccaddy
+  ai -- "/mcp, Bearer sa_mcp_ or OAuth" --> ccaddy
   ccaddy --> console
   ccaddy --> cp
   ccaddy -- "web. host, read-only allowlist" --> umami
@@ -88,7 +90,7 @@ flowchart LR
 |---|---|---|---|
 | `in.<BASE_DOMAIN>` | tracker files, challenge `GET /v1/c`, events `POST /v1/e` | edge | `deploy/caddy/edge.Caddyfile`, `internal/gateway` |
 | `otlp.<BASE_DOMAIN>` | OTLP gRPC on 443 and OTLP HTTP `/v1/metrics`, `/v1/traces`, `/v1/logs` | edge | `collector/` |
-| `app.<BASE_DOMAIN>` | the console, the control plane API under `/api`, the metrics API under `/api/metrics/v1/` | core | `deploy/caddy/app.Caddyfile`, `apps/console`, `internal/controlplane` |
+| `app.<BASE_DOMAIN>` | the console, the control plane API under `/api`, the metrics API under `/api/metrics/v1/`, the MCP server at `/mcp` with its OAuth paths | core | `deploy/caddy/app.Caddyfile`, `apps/console`, `internal/controlplane` |
 | `web.<BASE_DOMAIN>` | Umami's dashboard UI and read API, behind an allowlist | core | `deploy/caddy/web.Caddyfile`, [reference/umami-contract.md](reference/umami-contract.md) |
 | `status.<BASE_DOMAIN>` | Gatus status page | probe | `infra/ansible/roles/observability` |
 
@@ -225,6 +227,10 @@ flowchart TB
   `/api/metrics/v1/`, which has no session handling at all
   ([operators/api-keys.md](operators/api-keys.md),
   [reference/openapi/metrics-v1.yaml](reference/openapi/metrics-v1.yaml)).
+- **AI clients** connect to the MCP server at `/mcp` with an access key or an OAuth
+  connection that acts as one console user, read-only, through the same read routes and
+  checks as the console ([onboarding/mcp.md](onboarding/mcp.md),
+  [security/mcp.md](security/mcp.md)).
 - Full HTTP contract: [reference/control-plane-api.md](reference/control-plane-api.md).
 
 ## Queues and stores
