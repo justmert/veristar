@@ -369,7 +369,7 @@ test("the pages work at phone width", async () => {
     "/operator/api-keys",
   ]) {
     await page.goto(`${APP}${path}`);
-    await expect(page.getByRole("heading", { level: 2 })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 2 }).first()).toBeVisible();
     await page.waitForLoadState("networkidle");
     // only the scrollable tables and the operator tabs may be wider
     await expect
