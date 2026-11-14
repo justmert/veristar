@@ -164,7 +164,7 @@ export function errorBody(code: string, fields?: Record<string, string>) {
   };
 }
 
-// ---- this stage, contract section 5 ----
+// ---- contract section 5 ----
 
 export const OPERATOR_ID = "0193a6f6-4444-7e66-bf77-a88b99caadbb";
 export const REMOVED_TENANT_ID = "0193a6f7-5555-7f77-8a88-b99caadbbecc";
@@ -228,7 +228,7 @@ export const stellarTomlNotFound = {
   currencies_total: 0,
 };
 
-// 5.10 site with the this stage fields filled
+// 5.10 site with the verification, review and stellar.toml fields filled
 export const siteVerifiedBody = {
   ...siteBody,
   verification: "verified",
@@ -616,7 +616,7 @@ export const apiWarningsNoneBody = {
   days: [],
 };
 
-// ---- this stage, contract section 10 ----
+// ---- contract section 10 ----
 export const ERASURE_ID = "0193a6fa-6666-7a88-9b99-caadbbeccfdd";
 export const SESSION_ID = "2f1c7a9e-5b3d-4c8e-9a1f-6d0b2e4c8a7f";
 

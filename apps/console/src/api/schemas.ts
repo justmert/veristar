@@ -174,7 +174,7 @@ export const stellarToml = z.object({
 });
 export type StellarToml = z.infer<typeof stellarToml>;
 
-// 3.1 site, with the this stage fields of 5.10
+// 3.1 site, including the verification, review and stellar.toml fields of 5.10
 export const site = z.object({
   id,
   tenant_id: id,
@@ -389,7 +389,7 @@ export const otlpToken = z.object({
 export type OtlpToken = z.infer<typeof otlpToken>;
 export const otlpTokenPage = page(otlpToken);
 
-// the design: sa_otlp_ and 40 base62 characters
+// sa_otlp_ and 40 base62 characters, so a leaked token is recognisable by its prefix
 export const otlpTokenCreated = otlpToken.extend({
   token: z.string().regex(/^sa_otlp_[0-9A-Za-z]{40}$/),
 });
@@ -592,7 +592,7 @@ export const apiWarnings = z.object({
 });
 export type ApiWarnings = z.infer<typeof apiWarnings>;
 
-// ---- this stage: global web and api views (contract section 8)
+// ---- global web and api views (contract section 8)
 
 const count = z.number().int().nonnegative();
 const share01 = z.number().min(0).max(1).nullable();
@@ -842,7 +842,7 @@ export const apiCompare = z
   .refine(aligned, { message: "series not aligned with days" });
 export type ApiCompare = z.infer<typeof apiCompare>;
 
-// ---- this stage: operator api keys (contract 9.2 and 9.11)
+// ---- operator api keys (contract 9.2 and 9.11)
 
 export const apiKeyStatus = z.enum(["active", "expired", "revoked"]);
 export type ApiKeyStatus = z.infer<typeof apiKeyStatus>;
@@ -862,7 +862,7 @@ export const apiKey = z.object({
 export type ApiKey = z.infer<typeof apiKey>;
 export const apiKeyPage = page(apiKey);
 
-// the design: sa_op_ and 40 base62 characters, shown once
+// sa_op_ and 40 base62 characters, shown once because the server keeps only a hash
 export const apiKeyCreated = apiKey.extend({ key: z.string().regex(/^sa_op_[0-9A-Za-z]{40}$/) });
 export type ApiKeyCreated = z.infer<typeof apiKeyCreated>;
 

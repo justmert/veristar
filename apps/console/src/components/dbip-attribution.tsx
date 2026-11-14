@@ -1,8 +1,8 @@
 import { cn } from "@veristar/brand/cn";
 
 // db-ip's lite licence (cc by 4.0) makes a link back a condition of use on
-// every page that displays or uses its results (docs/reference/the reference docs
-// section 5). pages with country data, and pages that open the web
+// every page that displays or uses its results (docs/reference/geo.md, licence
+// and attribution). pages with country data, and pages that open the web
 // dashboards, which show countries, render this.
 export function DbIpAttribution({ className }: { className?: string }) {
   return (

@@ -44,7 +44,7 @@ export function useNow(everyMs: number): number {
 }
 
 // contract 11: the live alerts of alertmanager. this page is where alerts
-// show when no push channel an operator input is configured.
+// show when no push channel (the optional discord webhook) is configured.
 export function AlertsPage() {
   const alerts = useQuery(operatorAlertsQuery);
   const now = useNow(15_000);

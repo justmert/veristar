@@ -117,7 +117,7 @@ describe("api metrics schemas accept the contract's shapes (section 7)", () => {
 });
 
 describe("api metrics formats and url state", () => {
-  it("never shows the open bucket as a number", () => {
+  it("never shows the open-ended top bucket as a number", () => {
     expect(formatPercentile(">10 s")).toBe(">10 s");
     expect(formatPercentile(null)).toBeNull();
     expect(formatPercentile(0.042)).toBe("42 ms");

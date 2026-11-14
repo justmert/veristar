@@ -1,6 +1,6 @@
 // per-language setup instructions for api analytics, built from the example
 // apps in examples/otel-*. vite includes the files as text at build time, so
-// what a tenant reads is the code the this stage tests run (tests/otelapps),
+// what a tenant reads is the code the example app tests run (tests/otelapps),
 // never a retyped copy. source files mark the parts shown here with a
 // "docs:start <name>" and "docs:end <name>" comment pair; readmes give the
 // prose and the environment table.
@@ -242,7 +242,8 @@ export function otelGuides(): OtelGuide[] {
   ];
 }
 
-// otlp.<BASE_DOMAIN> next to the console's app.<BASE_DOMAIN>.
+// otlp.<BASE_DOMAIN> next to the console's app.<BASE_DOMAIN>, the host layout
+// every deployment uses.
 // null when the console is served from another host name, because the
 // endpoint cannot be derived then and guessing one would mislead.
 export function otlpEndpoint(hostname: string): string | null {
