@@ -3,9 +3,11 @@ package prober
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"sync"
 	"time"
@@ -100,12 +102,10 @@ func New(cfg Config, log *slog.Logger, reg prometheus.Registerer) (*Prober, erro
 	if err != nil {
 		return nil, err
 	}
-	def, ok := http.DefaultTransport.(*http.Transport)
-	if !ok {
-		return nil, errors.New("prober: http.DefaultTransport is not an *http.Transport")
+	tr, err := newTransport(cfg.Roots, cfg.Timeout, h2SendPingTimeout, h2PingTimeout)
+	if err != nil {
+		return nil, err
 	}
-	tr := def.Clone()
-	tr.TLSClientConfig = &tls.Config{RootCAs: cfg.Roots, MinVersion: tls.VersionTLS12}
 	p := &Prober{
 		cfg: cfg, log: log, m: m, clock: time.Now,
 		http:  &http.Client{Transport: tr, Timeout: cfg.Timeout},
@@ -119,6 +119,35 @@ func New(cfg Config, log *slog.Logger, reg prometheus.Registerer) (*Prober, erro
 		m.runs.WithLabelValues(k, "fail")
 	}
 	return p, nil
+}
+
+// health check timings for reused http/2 connections. a peer that vanishes
+// without a fin or rst (a rebooted node) leaves the connection open while
+// tcp retransmits for minutes, and every check would queue onto it. a ping
+// after this much read silence, unanswered within the ping timeout, closes
+// the connection so the next request dials fresh.
+const (
+	h2SendPingTimeout = 15 * time.Second
+	h2PingTimeout     = 5 * time.Second
+)
+
+// newTransport clones the default transport and bounds every phase of a
+// request, so no stage can wait longer than one check is allowed to take.
+func newTransport(roots *x509.CertPool, timeout, sendPing, ping time.Duration) (*http.Transport, error) {
+	def, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		return nil, errors.New("prober: http.DefaultTransport is not an *http.Transport")
+	}
+	tr := def.Clone()
+	tr.TLSClientConfig = &tls.Config{RootCAs: roots, MinVersion: tls.VersionTLS12}
+	tr.DialContext = (&net.Dialer{Timeout: timeout, KeepAlive: 15 * time.Second}).DialContext
+	tr.TLSHandshakeTimeout = timeout
+	tr.ResponseHeaderTimeout = timeout
+	// the stdlib http/2 config replaces x/net/http2 ConfigureTransports since
+	// go 1.24; ForceAttemptHTTP2 stays on from the clone, so h2 is negotiated
+	// even with the custom tls config.
+	tr.HTTP2 = &http.HTTP2Config{SendPingTimeout: sendPing, PingTimeout: ping, WriteByteTimeout: timeout}
+	return tr, nil
 }
 
 func (p *Prober) keys() []string {
