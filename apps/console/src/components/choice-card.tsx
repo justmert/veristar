@@ -30,7 +30,7 @@ export function ChoiceCard({
     <label
       htmlFor={`${id}-r`}
       className={cn(
-        "flex min-w-0 cursor-pointer flex-col gap-1 rounded-lg border border-line bg-raised p-3 transition-colors duration-(--vs-duration-reveal) ease-standard hover:border-line-strong has-checked:border-accent has-checked:bg-selected has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-accent has-disabled:cursor-not-allowed has-disabled:opacity-50",
+        "flex min-w-0 cursor-pointer flex-col gap-1 rounded-lg border border-line bg-raised p-3 transition-colors duration-(--vs-duration-reveal) ease-standard hover:border-line-strong has-checked:border-accent-text has-checked:bg-selected has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-accent-text has-disabled:cursor-not-allowed has-disabled:opacity-50",
         className,
       )}
     >
@@ -53,7 +53,7 @@ export function ChoiceCard({
           />
           <span
             aria-hidden
-            className="pointer-events-none flex size-3.5 items-center justify-center rounded-full border border-line-strong transition-colors duration-(--vs-duration-press) ease-standard peer-checked:border-accent peer-checked:[&>span]:bg-accent"
+            className="pointer-events-none flex size-3.5 items-center justify-center rounded-full border border-line-strong transition-colors duration-(--vs-duration-press) ease-standard peer-checked:border-accent-text peer-checked:[&>span]:bg-accent"
           >
             <span className="size-1.5 rounded-full bg-transparent" />
           </span>

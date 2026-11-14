@@ -22,7 +22,7 @@ export function Mark({
     >
       <circle cx="16" cy="17" r="11" stroke="currentColor" strokeWidth="2.4" />
       <path d="M16 6v22" stroke="currentColor" strokeWidth="2.4" />
-      <path d={MARK_STAR} className={mono ? "fill-current" : "fill-accent"} />
+      <path d={MARK_STAR} className={mono ? "fill-current" : "fill-accent-text"} />
     </svg>
   );
 }

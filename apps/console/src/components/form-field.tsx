@@ -120,7 +120,9 @@ export function NativeSelect({
       <select
         className={cn(
           controlClass,
-          "w-full appearance-none pr-8",
+          // a select matches :read-only, which the shared control style
+          // gives a raised fill meant for read-only inputs
+          "w-full appearance-none pr-8 read-only:bg-sunken",
           size === "sm"
             ? "h-(--vs-control-sm) text-small max-lg:h-(--vs-control-touch)"
             : "h-(--vs-control)",

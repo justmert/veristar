@@ -8,7 +8,7 @@
 //
 // it runs the console's own vite config into a temporary directory, so dist/
 // is not touched. css packages (tailwindcss, tw-animate-css, shadcn's css,
-// the geist font) are compiled by the tailwind plugin and are not modules of
+// the brand fonts) are compiled by the tailwind plugin and are not modules of
 // the graph; docs/security/licence-policy.json names them instead.
 
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";

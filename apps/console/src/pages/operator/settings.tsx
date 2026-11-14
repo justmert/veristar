@@ -25,7 +25,7 @@ const MODE_TEXT: Record<EnrollmentMode, { name: string; detail: string }> = {
 // with its own section header
 export function SettingsPage() {
   return (
-    <div className="flex max-w-[56rem] animate-rise-in flex-col gap-8">
+    <div className="flex max-w-prose animate-rise-in flex-col gap-8">
       <header className="flex flex-col gap-1">
         <h2 className="text-section text-fg">Settings</h2>
         <p className="max-w-prose text-body text-fg-2">

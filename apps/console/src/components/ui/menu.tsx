@@ -1,4 +1,5 @@
 import { cn } from "@veristar/brand/cn";
+import { Check } from "lucide-react";
 import { DropdownMenu as M } from "radix-ui";
 import type * as React from "react";
 
@@ -63,4 +64,37 @@ function MenuSeparator({ className, ...props }: React.ComponentProps<typeof M.Se
   return <M.Separator className={cn("-mx-1 my-1 h-px bg-line", className)} {...props} />;
 }
 
-export { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger };
+const MenuRadioGroup = M.RadioGroup;
+
+// a choice among a few inside a menu; the check shows the current one
+function MenuRadioItem({
+  className,
+  children,
+  ...props
+}: React.ComponentProps<typeof M.RadioItem>) {
+  return (
+    <M.RadioItem
+      className={cn(
+        "flex h-8 cursor-pointer select-none items-center gap-2.5 rounded-sm px-2 text-body outline-none transition-colors duration-(--vs-duration-press) data-[highlighted]:bg-hover [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-fg-3",
+        className,
+      )}
+      {...props}
+    >
+      {children}
+      <M.ItemIndicator className="ml-auto">
+        <Check aria-hidden className="text-fg-2" />
+      </M.ItemIndicator>
+    </M.RadioItem>
+  );
+}
+
+export {
+  Menu,
+  MenuContent,
+  MenuItem,
+  MenuLabel,
+  MenuRadioGroup,
+  MenuRadioItem,
+  MenuSeparator,
+  MenuTrigger,
+};

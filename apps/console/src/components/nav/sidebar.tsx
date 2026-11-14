@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { cn } from "@veristar/brand/cn";
 import { Mark } from "@veristar/brand/mark";
 import { transition } from "@veristar/brand/motion";
+import { type ThemeChoice, useTheme } from "@veristar/brand/theme";
 import {
   Activity,
   BookOpen,
@@ -10,8 +11,11 @@ import {
   Ellipsis,
   FolderOpen,
   LogOut,
+  Monitor,
+  Moon,
   Plus,
   ScrollText,
+  Sun,
 } from "lucide-react";
 import { LayoutGroup, motion } from "motion/react";
 import { type ReactNode, useId } from "react";
@@ -24,6 +28,8 @@ import {
   MenuContent,
   MenuItem,
   MenuLabel,
+  MenuRadioGroup,
+  MenuRadioItem,
   MenuSeparator,
   MenuTrigger,
 } from "@/components/ui/menu";
@@ -65,6 +71,7 @@ export function Sidebar({
   // the desktop sidebar and the phone drawer are two instances; each needs
   // its own group, or their current-item markers would crossfade
   const group = useId();
+  const theme = useTheme();
   return (
     <LayoutGroup id={group}>
       <div className="flex h-full flex-col gap-3.5 px-2.5 py-3.5">
@@ -96,7 +103,7 @@ export function Sidebar({
             <Item
               item={{
                 key: "new",
-                label: "Register a project",
+                label: "Enroll a project",
                 to: "/projects/new",
                 icon: Plus,
                 match: () => true,
@@ -135,7 +142,7 @@ export function Sidebar({
                 type="button"
                 className="mt-1 flex items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-fg transition-colors duration-(--vs-duration-press) hover:bg-hover focus-ring aria-expanded:bg-selected"
               >
-                <span className="flex size-6.5 shrink-0 items-center justify-center rounded-full bg-selected text-axis font-semibold uppercase">
+                <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-line-strong text-caption font-semibold text-fg uppercase">
                   {me.user.github_login.slice(0, 2)}
                 </span>
                 <span className="min-w-0 flex-1 truncate text-small">{me.user.github_login}</span>
@@ -149,6 +156,25 @@ export function Sidebar({
               className="w-(--radix-dropdown-menu-trigger-width)"
             >
               <MenuLabel>Signed in as {me.user.github_login}</MenuLabel>
+              <MenuSeparator />
+              <MenuLabel>Theme</MenuLabel>
+              <MenuRadioGroup
+                value={theme.choice}
+                onValueChange={(v) => theme.setChoice(v as ThemeChoice)}
+              >
+                <MenuRadioItem value="system">
+                  <Monitor aria-hidden />
+                  System
+                </MenuRadioItem>
+                <MenuRadioItem value="light">
+                  <Sun aria-hidden />
+                  Light
+                </MenuRadioItem>
+                <MenuRadioItem value="dark">
+                  <Moon aria-hidden />
+                  Dark
+                </MenuRadioItem>
+              </MenuRadioGroup>
               <MenuSeparator />
               <MenuItem onSelect={onSignOut}>
                 <LogOut aria-hidden />
@@ -234,7 +260,7 @@ function ProjectSection({
             }}
           >
             <Plus aria-hidden />
-            Register a project
+            Enroll a project
           </MenuItem>
         </MenuContent>
       </Menu>
@@ -264,7 +290,7 @@ function OperatorSection({
   const failed = inOperator && alerts.error !== null;
   return (
     <nav aria-label="Operator" className="flex flex-col gap-px">
-      <span className="px-2.5 py-1.5 text-caption text-fg-3">OPERATOR</span>
+      <span className="px-2.5 pt-2 pb-1.5 text-caption tracking-wide text-fg-2">OPERATOR</span>
       {OPERATOR_NAV.map((n) => (
         <Item
           key={n.key}

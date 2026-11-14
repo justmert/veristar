@@ -12,7 +12,7 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-accent text-on-accent hover:bg-accent-hover",
+        default: "bg-accent text-on-accent hover:bg-accent-hover active:bg-accent-pressed",
         outline:
           "border-line-strong bg-transparent text-fg hover:bg-hover active:bg-selected aria-expanded:bg-selected",
         secondary: "bg-selected text-fg hover:bg-hover",

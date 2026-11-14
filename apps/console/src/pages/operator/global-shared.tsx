@@ -209,7 +209,7 @@ export function FilterChip({
       className={cn(
         "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full border px-2.5 text-caption font-medium transition-colors duration-(--vs-duration-press) ease-standard focus-ring max-lg:h-9",
         on
-          ? "border-accent bg-selected text-fg"
+          ? "border-accent-text bg-selected text-fg"
           : "border-line-strong text-fg-2 hover:bg-hover hover:text-fg",
       )}
     >

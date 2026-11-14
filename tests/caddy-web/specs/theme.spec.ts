@@ -6,7 +6,8 @@ import { expect, type Page, test } from "@playwright/test";
 
 // the veristar theme on umami's dashboard (docs/adr/0004): a view-only tenant
 // opens its dashboard through the web caddy, once with the system set to dark
-// and once to light. both must render the same dark brand, with geist from
+// and once to light. dark mode must render the brand's dark theme and light
+// mode its light theme, with inter from
 // the same host, no csp refusal, no request to another host and every text
 // at wcag aa contrast (axe's color-contrast rule on the rendered pages).
 // screenshots of both modes go to .scratch/design/umami for review.
@@ -23,9 +24,23 @@ const theme = resolve(here, "../../../deploy/caddy/umami-theme/site");
 // design review screenshots, in the gitignored .scratch directory
 const shots = resolve(here, "../../../.scratch/design/umami");
 
-// the brand tokens of theme.css as the browser reports them
-const background = "rgb(21, 21, 20)";
-const foreground = "rgb(238, 237, 232)";
+// the brand tokens of theme.css per mode, as the browser reports them
+const PALETTE = {
+  dark: {
+    background: "rgb(21, 21, 20)",
+    foreground: "rgb(238, 237, 232)",
+    muted: "rgb(35, 35, 32)",
+    status: ["rgb(63, 178, 127)", "rgb(249, 112, 102)"],
+  },
+  light: {
+    background: "rgb(246, 245, 242)",
+    foreground: "rgb(26, 25, 23)",
+    muted: "rgb(235, 233, 228)",
+    status: ["rgb(26, 106, 66)", "rgb(171, 51, 40)"],
+  },
+} as const;
+type Mode = keyof typeof PALETTE;
+let mode: Mode = "dark";
 
 // chromium aborts requests in flight with ERR_NETWORK_CHANGED when the host's
 // interfaces change, which other docker work on a shared machine causes (the
@@ -56,16 +71,16 @@ async function expectTheme(page: Page, where: string) {
       color: body.color,
       font: body.fontFamily,
       scheme: getComputedStyle(document.documentElement).colorScheme,
-      geist: document.fonts.check('16px "Geist Variable"'),
+      inter: document.fonts.check('16px "Inter Variable"'),
       primary: getComputedStyle(document.documentElement).getPropertyValue("--zen-primary").trim(),
     };
   });
-  expect(s.background, `${where}: page ground`).toBe(background);
-  expect(s.color, `${where}: ink`).toBe(foreground);
-  expect(s.font, `${where}: font`).toMatch(/^"Geist Variable"/);
-  expect(s.scheme, `${where}: color-scheme`).toBe("dark");
-  expect(s.geist, `${where}: geist loaded`).toBe(true);
-  expect(s.primary, `${where}: primary`).toBe("#ff7a3d");
+  expect(s.background, `${where}: page ground`).toBe(PALETTE[mode].background);
+  expect(s.color, `${where}: ink`).toBe(PALETTE[mode].foreground);
+  expect(s.font, `${where}: font`).toMatch(/^"Inter Variable"/);
+  expect(s.scheme, `${where}: color-scheme`).toBe(mode);
+  expect(s.inter, `${where}: inter loaded`).toBe(true);
+  expect(s.primary, `${where}: primary`).toBe("#b5482e");
 }
 
 // the sidebar shows the veristar mark and wordmark in place of umami's, and
@@ -92,13 +107,15 @@ async function expectBrand(page: Page, where: string) {
   });
   expect(b, `${where}: umami's logo element`).not.toBeNull();
   expect(b?.svg, `${where}: umami's mark hidden`).toBe("hidden");
-  expect(b?.mark, `${where}: veristar mark`).toMatch(/\/_veristar\/brand\/mark\.svg/);
+  expect(b?.mark, `${where}: veristar mark`).toMatch(
+    mode === "light" ? /\/_veristar\/brand\/mark-light\.svg/ : /\/_veristar\/brand\/mark\.svg/,
+  );
   expect([b?.text, b?.textSize], `${where}: "umami" hidden`).toEqual(["hidden", "0px"]);
   expect(b?.word, `${where}: wordmark`).toBe('"Veristar"');
   expect(b?.wordVisible).toBe("visible");
   expect(b?.wordWeight).toBe("600");
   expect(b?.wordSpacing).toBe("-0.42px");
-  expect(b?.wordColor).toBe(foreground);
+  expect(b?.wordColor).toBe(PALETTE[mode].foreground);
 }
 
 async function expectChips(page: Page, where: string) {
@@ -109,10 +126,8 @@ async function expectChips(page: Page, where: string) {
     );
   expect(chips.length, `${where}: delta chips`).toBeGreaterThan(0);
   for (const [ground, colour] of chips) {
-    expect(ground, `${where}: chip ground is the muted surface`).toBe("rgb(35, 35, 32)");
-    expect(["rgb(63, 178, 127)", "rgb(249, 112, 102)"], `${where}: status colour`).toContain(
-      colour,
-    );
+    expect(ground, `${where}: chip ground is the muted surface`).toBe(PALETTE[mode].muted);
+    expect([...PALETTE[mode].status], `${where}: status colour`).toContain(colour);
   }
 }
 
@@ -128,6 +143,9 @@ async function expectContrast(page: Page, where: string) {
 for (const scheme of ["dark", "light"] as const) {
   test.describe(`system set to ${scheme}`, () => {
     test.use({ colorScheme: scheme });
+    test.beforeEach(() => {
+      mode = scheme;
+    });
 
     test(`brand theme with the system in ${scheme} mode`, async ({ page, context }) => {
       mkdirSync(shots, { recursive: true });

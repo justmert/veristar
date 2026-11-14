@@ -262,7 +262,7 @@ func TestConvergedStack(t *testing.T) {
 			require.NoError(t, err)
 			return resp, b
 		}
-		for _, f := range []string{"_veristar/theme.css", "_veristar/fonts/geist.css", "favicon.ico", "site.webmanifest"} {
+		for _, f := range []string{"_veristar/theme.css", "_veristar/fonts/fonts.css", "favicon.ico", "site.webmanifest"} {
 			want, err := os.ReadFile("../../deploy/caddy/umami-theme/site/" + f)
 			require.NoError(t, err)
 			resp, got := get("/" + f)

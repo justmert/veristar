@@ -14,11 +14,11 @@
  * javascript (src/lib/constants.ts THEME_COLORS and CHART_COLORS), so no
  * stylesheet can recolour them; the adr lists what stays umami's.
  *
- * the brand is dark only. umami keeps its light and dark switch, so both
- * modes get the same dark palette: the semantic tokens below are identical
- * for every mode, and in light mode the neutral ramp is reversed, so the few
- * rules that use a light step directly (skeletons, scroll bars) still land
- * on dark values.
+ * both of umami's modes are themed: dark mode takes the brand's dark theme
+ * and light mode its light theme (packages/brand/src/tokens.ts). umami's
+ * switch, or the system setting it follows, picks the mode; the semantic
+ * tokens below read the --vs-* values of whichever mode is on, and each mode
+ * has its own neutral ramp.
  *
  * selectors carry one more class or attribute than zen's own (:root,
  * [data-theme=dark], .dark, [data-theme=light], [data-palette=*]), so this
@@ -27,14 +27,16 @@
  * umami-version: 3.5.0
  * pinned to that version: tests/umami-compat fails when an umami upgrade
  * removes a property, class or attribute named here, so a rename can never
- * silently drop the theme. the --vs-* block is generated from
+ * silently drop the theme. the two generated regions (the --vs-* values
+ * and the neutral ramps of both modes) come from
  * packages/brand/src/tokens.ts (pnpm --filter @veristar/brand generate);
  * change the brand there.
  */
 
-@import url("fonts/geist.css");
+@import url("fonts/fonts.css");
 
-/* brand tokens, the only values to edit when the brand changes */
+/* generated brand tokens: start */
+/* the brand's dark theme, umami's dark mode and the default */
 html:root {
   --vs-background: #151514;
   --vs-card: #1c1c1a;
@@ -47,21 +49,50 @@ html:root {
   --vs-foreground: #eeede8;
   --vs-muted-foreground: #a6a49c;
   --vs-disabled-foreground: #6e6c65;
-  --vs-primary: #ff7a3d;
-  --vs-primary-hover: #ff9b6b;
-  --vs-primary-foreground: #1a0a02;
-  --vs-ring: #ff7a3d;
+  --vs-primary: #b5482e;
+  --vs-primary-hover: #a13f28;
+  --vs-primary-foreground: #ffffff;
+  --vs-primary-text: #f29a80;
+  --vs-ring: #f29a80;
   --vs-success: #3fb27f;
   --vs-warning: #e0a54a;
   --vs-destructive: #f97066;
-  --vs-destructive-solid: #e5484d;
-  --vs-font-sans: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
-  --vs-font-mono: "Geist Mono Variable", ui-monospace, "SF Mono", monospace;
+  --vs-destructive-solid: #c93a36;
+  --vs-destructive-foreground: #ffffff;
+  --vs-shadow-floating: 0 8px 24px rgb(0 0 0 / 0.32);
+  --vs-font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  --vs-font-mono: "JetBrains Mono Variable", ui-monospace, "SF Mono", monospace;
   --vs-radius-control: 0.375rem;
   --vs-radius-card: 0.625rem;
   --vs-radius-overlay: 0.75rem;
-  --vs-shadow-floating: 0 8px 24px rgb(0 0 0 / 0.32);
 }
+
+/* the brand's light theme, umami's light mode */
+html:root[data-theme="light"] {
+  --vs-background: #f6f5f2;
+  --vs-card: #ffffff;
+  --vs-popover: #ffffff;
+  --vs-muted: #ebe9e4;
+  --vs-accent: #ebe9e4;
+  --vs-selected: #e5e3dd;
+  --vs-border: #e3e1db;
+  --vs-input: #c4c1b9;
+  --vs-foreground: #1a1917;
+  --vs-muted-foreground: #57554e;
+  --vs-disabled-foreground: #a3a099;
+  --vs-primary: #b5482e;
+  --vs-primary-hover: #a13f28;
+  --vs-primary-foreground: #ffffff;
+  --vs-primary-text: #a13f28;
+  --vs-ring: #a13f28;
+  --vs-success: #1a6a42;
+  --vs-warning: #80530a;
+  --vs-destructive: #ab3328;
+  --vs-destructive-solid: #c4372c;
+  --vs-destructive-foreground: #ffffff;
+  --vs-shadow-floating: 0 8px 24px rgb(26 25 23 / 0.1);
+}
+/* generated brand tokens: end */
 
 /* zen's semantic tokens, the same in every mode */
 html:root,
@@ -113,8 +144,8 @@ html:root.dark,
   --radius-xl: var(--vs-radius-overlay);
 }
 
-/* the warm neutral ramp. 50, 200, 300, 400, 600, 700, 800, 900 and 950 are
-   brand values; 100 and 500 sit halfway between their neighbours */
+/* generated ramps: start */
+/* zen's neutral ramp in dark mode, light to dark */
 html:root,
 [data-theme="dark"][data-theme="dark"],
 .dark.dark {
@@ -131,20 +162,24 @@ html:root,
   --zen-palette-950: #151514;
 }
 
-/* light mode: the same ramp, reversed */
+/* light mode: its own ramp and colour scheme. html:root[data-theme] outranks
+   the colour scheme the semantic block above sets for every mode */
+html:root[data-theme="light"],
 [data-theme="light"][data-theme="light"] {
-  --zen-palette-50: #151514;
-  --zen-palette-100: #1c1c1a;
-  --zen-palette-200: #232320;
-  --zen-palette-300: #2e2d29;
-  --zen-palette-400: #3d3c37;
-  --zen-palette-500: #56544e;
-  --zen-palette-600: #6e6c65;
-  --zen-palette-700: #8e8c84;
-  --zen-palette-800: #a6a49c;
-  --zen-palette-900: #cac8c2;
-  --zen-palette-950: #eeede8;
+  color-scheme: light;
+  --zen-palette-50: #ffffff;
+  --zen-palette-100: #f6f5f2;
+  --zen-palette-200: #efeee9;
+  --zen-palette-300: #e5e3dd;
+  --zen-palette-400: #c4c1b9;
+  --zen-palette-500: #a3a099;
+  --zen-palette-600: #6b6961;
+  --zen-palette-700: #57554e;
+  --zen-palette-800: #3b3a35;
+  --zen-palette-900: #2a2925;
+  --zen-palette-950: #1a1917;
 }
+/* generated ramps: end */
 
 /* umami's global.css sets html and body to --zen-font-family; numbers line
    up in tables and metric cards */
@@ -165,6 +200,9 @@ html:root span:has(> svg[viewBox="0 0 428 389.11"]) {
   width: 1.25rem;
   height: 1.25rem;
   background: url("brand/mark.svg") center / contain no-repeat;
+}
+html:root[data-theme="light"] span:has(> svg[viewBox="0 0 428 389.11"]) {
+  background-image: url("brand/mark-light.svg");
 }
 html:root svg[viewBox="0 0 428 389.11"] {
   visibility: hidden;
@@ -187,13 +225,33 @@ html:root .bg-primary:hover {
   background-color: var(--vs-primary-hover);
 }
 
-/* zen's danger button is "bg-status-error text-white". the solid red takes
-   the page ink, because white on it stays under 4.5:1 */
+/* zen's danger button is "bg-status-error text-white": the solid red with
+   white on it, at 4.5:1 or more */
 html:root .bg-status-error {
   background-color: var(--vs-destructive-solid);
 }
 html:root .bg-status-error.text-white {
-  color: var(--vs-background);
+  color: var(--vs-destructive-foreground);
+}
+
+/* zen draws text, strokes, outlines and active marks in the primary too. the
+   deep accent carries white text as a fill but is too dark to read as text
+   on a dark surface, so those take the accent's text step */
+html:root .text-primary,
+html:root .hover\:text-primary:hover,
+html:root .focus\:text-primary:focus,
+html:root .active\:text-primary:active {
+  color: var(--vs-primary-text);
+}
+html:root .stroke-primary {
+  stroke: var(--vs-primary-text);
+}
+html:root .border-primary,
+html:root .data-active\:border-primary[data-active] {
+  border-color: var(--vs-primary-text);
+}
+html:root .focus-visible\:ring-primary:focus-visible {
+  --tw-ring-color: var(--vs-ring);
 }
 
 /* the world map: countries without visitors take umami's map fill, written
@@ -215,13 +273,3 @@ html:root a[href="https://db-ip.com"] {
   font-family: var(--vs-font-sans) !important;
 }
 /* biome-ignore-end lint/complexity/noImportantStyles: only !important beats an inline style */
-
-/* charts are chart.js canvases painted with umami's compiled colours, which
-   in light mode are near-white grid lines (#d9d9d9) and grey ticks (#838383)
-   meant for a white card. inverting the light-mode canvas and turning the hue
-   back half a circle gives dark grid lines and light ticks on this dark card
-   while series keep roughly their hue, close to what dark mode paints. dark
-   mode canvases are left alone */
-[data-theme="light"][data-theme="light"] canvas {
-  filter: invert(1) hue-rotate(180deg);
-}

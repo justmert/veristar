@@ -8,15 +8,16 @@
     "./tokens": "./src/tokens.ts",
     "./motion": "./src/motion.ts",
     "./mark": "./src/mark.tsx",
-    "./cn": "./src/cn.ts"
+    "./cn": "./src/cn.ts",
+    "./theme": "./src/theme.ts"
   },
   "scripts": {
     "generate": "node scripts/generate.ts",
     "check": "tsc -p tsconfig.json && node scripts/generate.ts --check && node scripts/check-usage.ts"
   },
   "dependencies": {
-    "@fontsource-variable/geist": "catalog:",
-    "@fontsource-variable/geist-mono": "catalog:",
+    "@fontsource-variable/inter": "catalog:",
+    "@fontsource-variable/jetbrains-mono": "catalog:",
     "cn": "catalog:"
   },
   "peerDependencies": {
