@@ -20,7 +20,7 @@ infra/secrets/
   rotate-secrets.py          generates new values for a rotation
   <env>/secrets.enc.yaml     the platform's secrets (Ansible), SOPS-encrypted yaml
   <env>/ca.enc.yaml          the internal CA of the private network (controller only)
-  <env>/tls.enc.yaml         the CA bundle and one key and certificate per node (ansible.md section 9)
+  <env>/tls.enc.yaml         the CA bundle and one key and certificate per node (ansible.md section 6)
   <env>/tofu.enc.env         OpenTofu's credentials (opentofu.md, "Secrets handed to OpenTofu")
 ```
 
@@ -183,7 +183,7 @@ controller tools of [prerequisites.md](prerequisites.md) with `sops` and `age-ke
 
    Expected: `N certificate(s) issued, ca new, 0 retired ca(s) still trusted`, one certificate
    per edge, core, backup and restore node plus the operators' one, and two new files,
-   `infra/secrets/staging/ca.enc.yaml` and `tls.enc.yaml` ([ansible.md](ansible.md) section 9).
+   `infra/secrets/staging/ca.enc.yaml` and `tls.enc.yaml` ([ansible.md](ansible.md) section 6).
    The `secrets` role refuses to converge a node without them.
 
 8. **Commit** `infra/secrets/.sops.yaml`, the recipients list and the encrypted files.
