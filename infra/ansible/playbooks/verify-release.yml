@@ -1,7 +1,7 @@
 ---
-# deploy-time image verification (the design) shared by every playbook
+# deploy-time image verification shared by every playbook
 # that pulls platform images: site.yml, deploy.yml, rotate-all.yml and
-# restore.yml. before any
+# restore.yml, so no node ever runs an unverified image. before any
 # node is touched, every platform image of the release must pass
 # tasks/verify-images.yml on the controller; then every node uses the
 # verified repo:tag@digest references instead of the tag alone.

@@ -1,6 +1,6 @@
 ---
-# the internal certificate authority of the private network ( of
-# the review notes). runs on the controller only and
+# the internal certificate authority of the private network, so traffic
+# between nodes is mutual tls and never plain text. runs on the controller only and
 # touches no node:
 #
 #   infra/secrets/<env>/ca.enc.yaml   the ca key and certificate, and the

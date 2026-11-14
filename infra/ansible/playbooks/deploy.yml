@@ -1,18 +1,18 @@
 ---
-# rolling deploy of a new image tag (plan phases 15 and 16): edge nodes one
-# at a time, then core nodes one at a time. each node is drained first: its
-# port 80 answers 503, so the dns monitor removes it while https keeps
-# serving the clients that still have its address; after the drain wait the
-# node pulls, recreates what changed and must be healthy before the drain
-# flag is removed and port 80 answers 308 again. a core node that holds the
-# patroni leader hands it to the synchronous replica before its postgres is
-# recreated. any failure stops the run with the remaining nodes untouched.
+# rolling deploy of a new image tag: edge nodes one at a time, then core nodes
+# one at a time. each node is drained first: its port 80 answers 503, so the dns
+# monitor removes it while https keeps serving the clients that still have its
+# address; after the drain wait the node pulls, recreates what changed and must
+# be healthy before the drain flag is removed and port 80 answers 308 again. a
+# core node that holds the patroni leader hands it to the synchronous replica
+# before its postgres is recreated. any failure stops the run with the remaining
+# nodes untouched.
 #
 #   ansible-playbook -i inventories/<env>/ playbooks/deploy.yml -e sa_image_tag=<release>
 #
-# images (this stage): nothing is pulled until every platform image of the
-# release passed playbooks/tasks/verify-images.yml on the controller. the
-# nodes then pull by the verified digest, never by tag alone.
+# images: nothing is pulled until every platform image of the release passed
+# playbooks/tasks/verify-images.yml on the controller. the nodes then pull by
+# the verified digest, never by tag alone.
 #
 #   ... playbooks/deploy.yml -e sa_image_tag=<release> -e sa_release_manifest=<release-images.json>
 #
@@ -80,12 +80,12 @@
         drain_dir: /etc/veristar/drain
 
 # the observability role's own images (prober and caddy on the probe node,
-# an operator input and its configs move with the release too. verify-release.yml
-# pinned platform_images, and with it observability_images.prober and
-# .caddy, to the verified digests. one node at a time: the
-# relay and the exporters restart only where their config changed, so
-# ingestion is not touched. the probe's os baseline and docker come from
-# site.yml's probe play.
+# docs/deploy/probe.md) and its configs move with the release too.
+# verify-release.yml pinned platform_images, and with it
+# observability_images.prober and .caddy, to the verified digests, so these
+# never pull by tag alone. one node at a time: the relay and the exporters
+# restart only where their config changed, so ingestion is not touched. the
+# probe's os baseline and docker come from site.yml's probe play.
 - name: Deploy the observability of every node
   hosts: edge:core:probe
   become: true

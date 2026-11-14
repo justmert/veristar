@@ -1,7 +1,7 @@
 ---
-# domain cutover by transfer (the design, docs/handover/plan.md section
-# 5): the names do not change, so every tenant snippet, integrity hash and
-# otlp endpoint keeps working. docs/handover/redirect-research.md found this
+# domain cutover by transfer (docs/handover/plan.md section 5): the names
+# do not change, so every tenant snippet, integrity hash and otlp endpoint
+# keeps working. docs/handover/redirect-research.md found this
 # the only path that keeps existing integrations. run it against the NEW
 # environment's inventory, twice:
 #

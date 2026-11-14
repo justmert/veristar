@@ -8,7 +8,7 @@ sa_image_registry: 172.31.99.5:5000/sa
 sa_image_tag: lc
 base_docker_insecure_registries: ["172.31.99.5:5000"]
 
-# no domain an operator input and no cloudflare token an operator input: caddy issues from its
+# no domain and no cloudflare token: caddy issues from its
 # local ca, and the names under the reserved .test tld resolve only where a
 # test maps them to the node addresses
 sa_tls: internal
@@ -17,7 +17,7 @@ sa_tls: internal
 # may not set; chronyd measures the offset (-x) and the check still applies
 base_chrony_control_clock: false
 
-# no github oauth app an operator input and no operator ids an operator input: sign-in
+# no github oauth app and no operator ids: sign-in
 # goes to the test-only fixture, where a test signs in as user 1001
 core_oauth_fixture: true
 core_oauth_fixture_image: "{{ sa_image_registry }}/oauth-fixture:{{ sa_image_tag }}"
@@ -26,7 +26,7 @@ sa_operator_github_ids: "1001"
 base_public_tcp_ports: "{{ [80, 443] + ([core_oauth_fixture_port | default(8099)] if sa_tier in ['core', 'node'] else []) }}"
 
 # the controller decrypts with the throwaway identity up.sh created
-secrets_age_keyfile: "{{ playbook_dir }}/../../../.scratch/scratch/local-converge/age.key"
+secrets_age_keyfile: "{{ playbook_dir }}/../../../.scratch/local-converge/age.key"
 
 # smaller than a real node: four nodes share one machine
 # memory jetstream must hold visit_state's cap (internal/natsx
@@ -51,7 +51,7 @@ core_postgres_parameters:
 
 # the throwaway admin key and known hosts of the local nodes. the implicit
 # localhost of the controller plays reads these too and has no inventory_dir
-local_converge_state: "{{ inventory_dir | default(playbook_dir ~ '/../inventories/local') }}/../../../../.scratch/scratch/local-converge"
+local_converge_state: "{{ inventory_dir | default(playbook_dir ~ '/../inventories/local') }}/../../../../.scratch/local-converge"
 ansible_ssh_private_key_file: "{{ local_converge_state }}/id_ed25519"
 ansible_ssh_common_args: "-o UserKnownHostsFile={{ local_converge_state }}/known_hosts"
 

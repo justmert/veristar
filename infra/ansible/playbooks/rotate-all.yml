@@ -1,6 +1,6 @@
 ---
-# rotates every credential of an environment and proves the previous ones
-# are refused (the design, docs/handover/checklist.md section 4):
+# rotates every credential of an environment and proves the previous ones are
+# refused (docs/handover/checklist.md section 4):
 #
 #   infra/secrets/rotate-secrets.py <env>        # new values, previous kept aside
 #   ansible-playbook -i inventories/<env>/ playbooks/rotate-all.yml \
@@ -12,7 +12,7 @@
 # order matters, because a login changed in one place and not yet in the
 # other is a refused service:
 #   1. checks: every generated value changed, except the backup cipher
-#      passphrase, which cannot change in place; owner inputs without a new
+#      passphrase, which cannot change in place; provider-issued values without a new
 #      value are listed; a removed age identity opens neither file
 #   2. on the patroni leader: the umami admin password (through umami, while
 #      umami still reaches its database), then the superuser, replication and
@@ -75,7 +75,7 @@
       loop: "{{ rotate_kept_keys }}"
       run_once: true
 
-    - name: List the operator inputs that were not rotated
+    - name: List the provider-issued secrets that were not rotated
       ansible.builtin.set_fact:
         rotate_inputs_kept: >-
           {%- set kept = [] -%}
@@ -85,7 +85,7 @@
       run_once: true
       no_log: true
 
-    - name: Refuse owner inputs that were not rotated unless named
+    - name: Refuse provider-issued secrets that were not rotated unless named
       ansible.builtin.assert:
         that:
           - rotate_inputs_kept | difference(rotate_allow_kept_inputs | default([])) | length == 0
@@ -470,7 +470,7 @@
         msg: >-
           the github oauth client secret was not checked: this environment
           signs in through the test-only fixture (core_oauth_fixture) and has
-          no github app an operator input
+          no github app
       when: hostvars[groups['core'][0]].core_oauth_fixture | default(false)
 
     # github answers incorrect_client_credentials for a wrong secret and

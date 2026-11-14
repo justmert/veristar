@@ -1,6 +1,6 @@
 ---
-# domain cutover by permanent redirect (the design, docs/handover/plan.md
-# section 5), for when the old domain cannot be transferred. run it against
+# domain cutover by permanent redirect (docs/handover/plan.md section 5),
+# for when the old domain cannot be transferred. run it against
 # the OLD environment's inventory once the new environment serves its own
 # domain:
 #

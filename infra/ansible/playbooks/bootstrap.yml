@@ -1,6 +1,6 @@
 ---
-# one-time and repeatable setup that needs the running infrastructure (plan
-# this stage): the umami and platform databases, platform migrations and role
+# one-time and repeatable setup that needs the running infrastructure: the
+# umami and platform databases, platform migrations and role
 # logins, the umami admin password and retention role, the nats topology,
 # and the operator ids. every step is idempotent and reports a change only
 # when it made one.
@@ -62,14 +62,14 @@
   roles:
     - secrets
   tasks:
-    # OPERATOR_GITHUB_IDS an operator input is applied by the control plane at
+    # OPERATOR_GITHUB_IDS is applied by the control plane at
     # start (operator.SyncFlags); bootstrap only refuses to go on without it
-    - name: Require the operator github ids an operator input
+    - name: Require the operator github ids
       ansible.builtin.assert:
         that:
           - sa_operator_github_ids is defined
           - (sa_operator_github_ids | string) is match('^[0-9]+(,[0-9]+)*$')
-        fail_msg: sa_operator_github_ids must list the numeric github ids of the scf operators an operator input
+        fail_msg: sa_operator_github_ids must list the numeric github ids of the scf operators
 
     - name: Wait for the patroni leader to accept writes
       ansible.builtin.command:

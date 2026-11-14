@@ -1,9 +1,8 @@
 ---
-# deploy-time signature verification (the design,
-# docs/security/supply-chain.md). runs on the controller before any node is
-# touched. input: the release manifest that release-images.yml attached to
-# the github release (release-images.json), passed as sa_release_manifest.
-# every platform image must
+# deploy-time signature verification (docs/security/supply-chain.md). runs on
+# the controller before any node is touched. input: the release manifest that
+# release-images.yml attached to the github release (release-images.json),
+# passed as sa_release_manifest. every platform image must
 #   - belong to sa_image_registry and to the release named by sa_image_tag
 #   - carry a valid cosign signature for its digest from the release
 #     workflow's identity (keyless: fulcio certificate issued to

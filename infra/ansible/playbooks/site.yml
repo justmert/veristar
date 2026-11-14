@@ -1,5 +1,5 @@
 ---
-# converges everything (plan phases 15 to 17): os baseline and secrets on
+# converges everything: os baseline and secrets on
 # every node, the edge and core infrastructure, the backup repository, the
 # bootstrap, the services, then the monitoring of edge and core.
 # a second run reports no changes.
@@ -93,7 +93,7 @@
   roles:
     - core
 
-# the design: node_exporter and the metrics relay on every edge and core
+# monitoring: node_exporter and the metrics relay on every edge and core
 # node; prometheus, alertmanager, grafana and the exporters on the core
 # nodes. after the services, because the relay joins the edge and core
 # compose networks and the postgres_exporter role is created through the
