@@ -56,6 +56,5 @@ shows high residual risk must consult their authority before use (Art. 36).
 - Signed release images, dependency gates and the 24-hour patch procedure
   (`../security/supply-chain.md`, `../runbooks/security-patch.md`).
 - Backups encrypted by pgBackRest (AES-256) before upload, with point-in-time restore exercised on production
-
   (`../deploy/backups.md`, `../reference/drills/2026-11-13-azure.md`).
 
