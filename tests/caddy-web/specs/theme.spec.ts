@@ -20,7 +20,7 @@ const web = `https://web.${domain}:${port}`;
 const app = `https://app.${domain}:${port}`;
 const here = dirname(fileURLToPath(import.meta.url));
 const theme = resolve(here, "../../../deploy/caddy/umami-theme/site");
-// design review output, kept in the gitignored resources area
+// design review screenshots, in the gitignored .scratch directory
 const shots = resolve(here, "../../../.scratch/design/umami");
 
 // the brand tokens of theme.css as the browser reports them
