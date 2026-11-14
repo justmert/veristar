@@ -137,7 +137,7 @@ type webDay struct {
 }
 
 // accepted is the evidence rule: the gateway accepts an event only after its
-// challenge proof verified, and the replayer stores it in
+// challenge proof verified (docs/reference/browser-proof.md), and the replayer stores it in
 // the primary or the quarantine band. a day counts when the primary band has
 // page views; quarantined traffic is reported beside it but never counted.
 func (d webDay) accepted() bool { return d.Present && d.Primary.Pageviews > 0 }

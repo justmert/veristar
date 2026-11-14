@@ -1,5 +1,5 @@
 // Command adoptionreport writes the adoption evidence of the rfp's live proof
-// (rfp section 5, the design) from the machine metrics api, so no number in
+// (rfp section 5) from the machine metrics api, so no number in
 // the evidence is typed by hand. for each tenant id it reads the machine api
 // with an operator key and writes the adoption reportYYYY-MM-DD.md with
 // the consecutive utc days that carry accepted, proof-checked page views, the
@@ -31,7 +31,7 @@ import (
 	"time"
 )
 
-// the default beyond-rfp evidence threshold of the design
+// the default evidence threshold, a bar set beyond what the rfp asks
 const defaultMinDays = 14
 
 // dayLayout is the contract's Day

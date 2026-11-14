@@ -1,5 +1,5 @@
 #!/bin/sh
-# sbom and vulnerability gate for one container image (the design). the
+# sbom and vulnerability gate for one container image. the
 # release workflow, the hourly security workflow and local runs all call this
 # script, so the policy lives in one place:
 #   - syft writes an spdx json sbom of the image

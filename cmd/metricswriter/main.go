@@ -1,5 +1,5 @@
 // Command metricswriter stores the metric batches on API_METRICS as exact
-// minute rows in the api schema (the design, this stage). it
+// minute rows in the api schema (docs/reference/api-storage.md). it
 // runs on both core nodes; only the holder of the metricswriter lock
 // consumes, and every transaction is fenced. /healthz, /readyz and /metrics
 // are on a private ops port.

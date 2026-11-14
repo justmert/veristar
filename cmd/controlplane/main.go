@@ -1,5 +1,5 @@
-// Command controlplane serves the console api under /api (the design,
-// docs/reference/control-plane-api.md). /healthz, /readyz and /metrics are on
+// Command controlplane serves the console api under /api
+// (docs/reference/control-plane-api.md). /healthz, /readyz and /metrics are on
 // a separate private ops port.
 package main
 
@@ -266,7 +266,7 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	// this stage global web and api views, aggregate tables only
+	// operator global web and api views, aggregate tables only
 	global, err := operator.NewGlobal(d)
 	if err != nil {
 		return err
@@ -275,7 +275,7 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	// this stage: operators manage keys in the console; machines read with
+	// machine api: operators manage keys in the console; machines read with
 	// them at /api/metrics/v1, which is mounted beside the session api
 	apiKeys, err := operator.NewAPIKeys(d)
 	if err != nil {
@@ -290,7 +290,7 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 		return err
 	}
 
-	// this stage erasure: runs started by requests finish before the pools close
+	// erasure: runs started by requests finish before the pools close
 	eraser, err := erasure.New(erasure.Config{
 		DB: d, NC: nc, Umami: admin, QueueWait: erasureCfg.QueueWait, Now: time.Now, Log: log,
 	})
@@ -470,7 +470,7 @@ func readiness(d *db.DB, nc *nats.Conn) []obs.Check {
 	return checks
 }
 
-// coreHealth is the composite health of a core node (the design), served
+// coreHealth is the composite health of a core node, served
 // on the ops port as /corez and by caddy on port 80 for the dns monitor: the
 // readiness checks, the database behind haproxy is the writable leader, and
 // umami answers its heartbeat. a ping alone would also pass on a replica that

@@ -1,8 +1,7 @@
 #!/bin/sh
-# runs the jobs of .github/workflows/ci.yml on this machine (ops review):
-# no workflow has run on github yet (the account's actions fail at start-up
-# and the repository is private), so this is how the same gates are run
-# until they do. it is not a substitute for a recorded run on github.
+# runs the jobs of .github/workflows/ci.yml on this machine, so the same
+# gates can be run before a push or without github actions. it is not a
+# substitute for a recorded run on github.
 #
 #   scripts/ci-local.sh [job...]      default: every job, in ci.yml order
 #
@@ -79,13 +78,13 @@ job_go() {
 	make lint GOLANGCI_LINT="$tools/golangci-lint"
 	make docs-check
 	make geo-fetch
-	DBIP_MMDB=.scratch/scratch/geo/dbip-country-lite.mmdb make test
+	DBIP_MMDB=.scratch/geo/dbip-country-lite.mmdb make test
 }
 
 job_containers() {
 	heavy containers
 	make geo-fetch
-	DBIP_MMDB=.scratch/scratch/geo/dbip-country-lite.mmdb make test-containers
+	DBIP_MMDB=.scratch/geo/dbip-country-lite.mmdb make test-containers
 }
 
 job_js() {

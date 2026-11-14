@@ -1,4 +1,4 @@
-// Command prober is the outside view of the platform (the design). it runs
+// Command prober is the outside view of the platform. it runs
 // on the probe node, off the main provider, beside gatus: every interval it
 // sends a real web event and a real otlp metric for the internal probe
 // tenant, reads them back through the machine api, checks the console, the

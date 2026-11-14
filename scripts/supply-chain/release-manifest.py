@@ -1,5 +1,5 @@
 """writes release-images.json from the per-image digest records of
-release-images.yml (the design). deploy.yml reads this file and deploys
+release-images.yml. deploy.yml reads this file and deploys
 each platform image by digest after verifying its signature.
 
     python3 scripts/supply-chain/release-manifest.py <digest dir> <release tag>

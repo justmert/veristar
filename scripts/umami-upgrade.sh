@@ -1,19 +1,18 @@
 #!/bin/sh
-# make umami-upgrade VERSION=<x.y.z> (the design,
-# docs/runbooks/security-patch.md). moves the umami pin to the index digest
+# make umami-upgrade VERSION=<x.y.z> (docs/runbooks/security-patch.md). moves the umami pin to the index digest
 # the registry serves for that version today, then runs every gate that
 # depends on umami, in order, and stops at the first red one:
 #
 #   1. the dev stack recreated on the new image (umami migrates the database
 #      it already holds, as production would) and umami-bootstrap
-#   2. tests/umami-compat: the this stage behaviour checks, api and ui. its
+#   2. tests/umami-compat: the umami behaviour checks, api and ui. its
 #      reviewed route list names the umami version, so a new version stays red
 #      until a person has reviewed the new openapi contract
 #   3. the isolation gate (make isolation)
 #   4. the end-to-end suites: console-e2e and webpath
 #
 # each step and the total are timed and written to
-# .scratch/scratch/umami-upgrade/<utc time>.log. the files are edited in
+# .scratch/umami-upgrade/<utc time>.log. the files are edited in
 # place; review the diff and commit it only when every gate passed.
 #
 # SKIP_E2E is not offered: the patch path is only as fast as its slowest gate,
@@ -33,8 +32,8 @@ esac
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
-mkdir -p .scratch/scratch/umami-upgrade
-log=".scratch/scratch/umami-upgrade/$(date -u +%Y%m%dT%H%M%SZ)-$VERSION.log"
+mkdir -p .scratch/umami-upgrade
+log=".scratch/umami-upgrade/$(date -u +%Y%m%dT%H%M%SZ)-$VERSION.log"
 start=$(date +%s)
 
 say() { echo "$(date -u +%H:%M:%S) $*" | tee -a "$log"; }

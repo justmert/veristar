@@ -1,5 +1,5 @@
 #!/bin/sh
-# the licence gate (the design, docs/security/supply-chain.md section 7).
+# the licence gate (docs/security/supply-chain.md section 7).
 # ci.yml's licences job and local runs both call this script, so the steps
 # that feed scripts/supply-chain/licences.py live in one place:
 #   - go modules downloaded, so trivy reads their licences from the cache

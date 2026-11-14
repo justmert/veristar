@@ -1,5 +1,4 @@
-// Command gateway is the collect gateway behind in.<BASE_DOMAIN> (plan
-// section 4.4, this stage). it serves the immutable tracker files, issues
+// Command gateway is the collect gateway behind in.<BASE_DOMAIN>. it serves the immutable tracker files, issues
 // challenges, checks and enriches web events and queues them in jetstream.
 // the public listener is reached only through the local caddy; /healthz,
 // /readyz and /metrics are on a separate private port.
@@ -159,7 +158,7 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 	return errors.Join(serveErr, <-loopDone)
 }
 
-// edgeHealth is the composite health of an edge node (the design). both
+// edgeHealth is the composite health of an edge node. both
 // urls are optional so the dev stack and the tests run without them, but a
 // node without them answers 503: an edge node that cannot vouch for its
 // collector and its nats server must not stay in dns.

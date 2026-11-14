@@ -93,7 +93,7 @@ func runNATSWith(ctx context.Context, args []string, env *config.Env, log *slog.
 // credential, only its hash.
 var bcryptHash = regexp.MustCompile(`^\$2[abxy]?\$\d\d\$[./A-Za-z0-9]{53}$`)
 
-// natsAuthConfig renders the authorization block of the design from
+// natsAuthConfig renders the nats authorization block from
 // the users in internal/natsx/topology.go and one bcrypt hash per user, so
 // the deployed server config and the permissions the code was tested with
 // cannot drift apart. the ansible edge role feeds it from the sops file.
