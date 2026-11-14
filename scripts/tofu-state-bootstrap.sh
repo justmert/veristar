@@ -3,7 +3,7 @@
 # group, a storage account (zone-redundant, entra id only, blob versioning,
 # 35 days of soft delete) and the tfstate container. run once, before the
 # first `tofu init`, by `make state-bootstrap ENV=<env>` with an az cli
-# login (`az login`) on the subscription of an operator input.
+# login (`az login`) on the subscription named in terraform.tfvars.
 #
 # the state account lives outside the environment's resource group, so a
 # `make <env>-destroy` never removes the state it runs on. the backend locks
@@ -22,7 +22,7 @@ esac
 
 tfvars="infra/tofu/envs/$env_name/terraform.tfvars"
 if [[ ! -f "$tfvars" ]]; then
-  echo "$tfvars is missing: it needs subscription_id, state_resource_group and state_storage_account an operator input" >&2
+  echo "$tfvars is missing: it needs subscription_id, state_resource_group and state_storage_account (copy terraform.tfvars.example)" >&2
   exit 1
 fi
 

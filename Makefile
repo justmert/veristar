@@ -81,15 +81,15 @@ test-containers:
 
 # downloads the db-ip country file the geo tests and the gateway image use.
 # GEO_MONTH (YYYY-MM) defaults to the current utc month. the tests find the
-# file through DBIP_MMDB=.scratch/scratch/geo/dbip-country-lite.mmdb
+# file through DBIP_MMDB=.scratch/geo/dbip-country-lite.mmdb
 geo-fetch:
-	sh scripts/fetch-dbip.sh .scratch/scratch/geo $(GEO_MONTH)
+	sh scripts/fetch-dbip.sh .scratch/geo $(GEO_MONTH)
 
 # runs the live tests against the dev stack; needs make dev-up and umami-bootstrap
 test-integration:
 	@set -a && . ./$(DEV_ENV) && set +a && UMAMI_IT_URL=$$UMAMI_URL $(GO) test -race -count=1 ./internal/umami/...
 
-# the umami upgrade gate (plan phases 5 and 18): api checks in go, then the
+# the umami upgrade gate: api checks in go, then the
 # ui checks in playwright, both against the dev stack after umami-bootstrap
 umami-compat:
 	@set -a && . ./$(DEV_ENV) && set +a && UMAMI_IT_URL=$$UMAMI_URL \
@@ -109,7 +109,7 @@ fmt:
 tidy:
 	$(GO) mod tidy
 
-# documentation checks (the design): every relative link in docs/ and the
+# documentation checks: every relative link in docs/ and the
 # root and example readmes resolves, and every code block a guide includes
 # from examples/ equals its source. docs-update rewrites the included blocks
 # from their sources after an example changed.
@@ -168,7 +168,7 @@ gateway-up: dev-env
 		curl -fsS http://127.0.0.1:9090/readyz && exit 0; sleep 1; done; \
 		echo "gateway not ready on 127.0.0.1:9090/readyz" >&2; exit 1
 
-# this stage verification: real gateway image, nats, caddy and browsers
+# gateway verification: real gateway image, nats, caddy and browsers
 # (tests/gateway, build tag gatewayit). needs docker, pnpm with the
 # playwright browsers, and DBIP_MMDB pointing at a fetched file (geo-fetch).
 gateway-it:
@@ -182,12 +182,12 @@ gateway-it:
 gateway-load:
 	DBIP_MONTH=$(DBIP_MONTH) $(GO) test -tags 'gatewayit gatewayload' -count=1 -timeout 30m -v -run '^TestThroughputK6$$' ./tests/gateway/
 
-# web.<BASE_DOMAIN> caddy: caddy validate with the pinned
+# web.<BASE_DOMAIN> caddy (docs/reference/umami-contract.md): caddy validate with the pinned
 # image, then real requests through caddy in front of a private umami and
 # postgres started from the dev.yml digests (build tag caddyweb), including the
 # tenant dashboard in chromium (tests/caddy-web script test:live, which the go
 # test runs; needs pnpm with the playwright browsers). screenshots land in
-# .scratch/scratch/caddy-web.
+# .scratch/caddy-web.
 .PHONY: test-caddy-web isolation-umami
 test-caddy-web:
 	$(GO) test -race -count=1 -run 'TestWebCaddyfileValidates' ./deploy/caddy/
@@ -199,7 +199,7 @@ test-caddy-web:
 isolation-umami:
 	$(GO) test -tags isolation -race -count=1 -timeout 20m -v ./tests/isolation/umami/
 
-# the whole tenant isolation gate (the design), required on every pull
+# the whole tenant isolation gate, required on every pull
 # request and for every release. one target, so a gate cannot be half run:
 # tests/isolation/... (build tag isolation) is umami cross-team through the
 # web caddy, every console, operator and machine api route against the real
@@ -215,7 +215,7 @@ isolation:
 	$(GO) test -tags caddyweb -race -count=1 -timeout 20m -v \
 		-run 'TestWebCaddyLive/(deny_list|api_method_allowlist|sso_rules)$$' ./deploy/caddy/
 
-# this stage end-to-end web path (tests/webpath, build tag webpath): real
+# end-to-end web path (tests/webpath, build tag webpath): real
 # browsers on the example sites through the edge caddy, gateway, nats,
 # replayer and umami, all in containers the test owns (images from the
 # dev.yml digests), so umami, postgresql and replayers can be stopped and
@@ -226,22 +226,22 @@ isolation:
 webpath:
 	DBIP_MONTH=$(DBIP_MONTH) $(GO) test -tags webpath -count=1 -timeout 120m -v ./tests/webpath/
 
-# this stage browser flows (tests/e2e-console, build tag consolee2e): sign-in
+# console browser flows (tests/e2e-console, build tag consolee2e): sign-in
 # through the TEST-ONLY github oauth fixture, enrollment, sites, snippet,
 # traffic through the real gateway, umami through sso, isolation, sso
-# hardening, session security, and the this stage api traffic dashboard on
+# hardening, session security, and the api traffic dashboard on
 # real telemetry of the go example app. the control plane is built with the
 # oauthfixture tag; postgresql, nats, umami, the replayer, the gateway and
 # collector images, the metricswriter, a stock collector as the tenant's own
 # backend and the edge, web and app caddies run in containers the test owns. needs
 # docker, node 26 with pnpm and the playwright browsers. screenshots and, on
-# failure, container logs land in .scratch/scratch/console-e2e.
+# failure, container logs land in .scratch/console-e2e.
 # CONSOLE_E2E_ARGS passes extra playwright arguments (for example --grep).
 .PHONY: console-e2e
 console-e2e:
 	DBIP_MONTH=$(DBIP_MONTH) $(GO) test -tags consolee2e -count=1 -timeout 60m -v ./tests/e2e-console/
 
-# this stage otlp collector. collector-build generates and compiles the
+# otlp collector. collector-build generates and compiles the
 # scf-otelcol distribution with the pinned ocb 0.165.0 and strict version
 # checking (dist/scf-otelcol/scf-otelcol); collector-it runs the binary
 # against a real nats server with the production user permissions, driven
@@ -257,7 +257,7 @@ collector-build:
 collector-it: collector-build
 	$(GO) test -tags collectorit -race -count=1 -p 2 -timeout 20m -v ./tests/collector/
 
-# this stage api path (tests/otelapps, build tag apipath): the four example apps
+# api path (tests/otelapps, build tag apipath): the four example apps
 # export through the edge caddy (otlp.<BASE_DOMAIN>) to the built
 # scf-otelcol with real nats, with tokens created through the control plane
 # binary (oauthfixture build) on postgresql and umami. checks what reaches
@@ -267,7 +267,7 @@ collector-it: collector-build
 apipath: collector-build
 	$(GO) test -tags apipath -count=1 -timeout 90m -run TestAPIPath -v ./tests/otelapps/
 
-# this stage metrics writer. metricswriter-up runs it on the dev stack (needs
+# metrics writer. metricswriter-up runs it on the dev stack (needs
 # dev-up, platformctl nats apply, db-migrate and db-roles); the image has no
 # shell, so readiness is polled on the loopback ops port. metricswriter-it is
 # the exactness suite: the built scf-otelcol and metricswriter binaries with
@@ -286,7 +286,7 @@ metricswriter-it: collector-build
 test-metricswriter:
 	$(GO) test -race -count=1 ./internal/metricswriter/ ./cmd/metricswriter/
 
-# this stage volume run (tests/apivolume, build tag apivolume): 1,000,000
+# api volume run (tests/apivolume, build tag apivolume): 1,000,000
 # requests across 10 tenants and 30 services through the built scf-otelcol,
 # metricswriter and jobs binaries with real nats and postgresql. loads
 # .env.dev only for the umami keys `jobs run` reads. VOLUME_MINUTES (1 to 60,
@@ -296,7 +296,7 @@ api-volume: collector-build
 	@set -a && . ./$(DEV_ENV) && set +a && \
 		$(GO) test -tags apivolume -count=1 -timeout 120m -v ./tests/apivolume/
 
-# this stage system-wide privacy audit (tests/privacy, build tag privacy): web
+# system-wide privacy audit (tests/privacy, build tag privacy): web
 # and api traffic from marker addresses on their own docker networks through
 # the edge caddy, then both databases, every jetstream stream and kv bucket,
 # every service and caddy log and every file the containers wrote are
@@ -306,9 +306,9 @@ privacy:
 	DBIP_MONTH=$(DBIP_MONTH) $(GO) test -tags privacy -count=1 -timeout 30m -v ./tests/privacy/
 
 # the db-ip country file the gateway needs in the suites below (make geo-fetch)
-DBIP_MMDB ?= $(CURDIR)/.scratch/scratch/geo/dbip-country-lite.mmdb
+DBIP_MMDB ?= $(CURDIR)/.scratch/geo/dbip-country-lite.mmdb
 
-# this stage enrollment modes (tests/enrollment, build tag enrollmentit): the
+# enrollment modes (tests/enrollment, build tag enrollmentit): the
 # control plane routes in process with the oauth fixture, the reconciler,
 # real postgresql, nats and umami, and the gateway and replayer binaries.
 # needs docker and the db-ip file.
@@ -316,7 +316,7 @@ DBIP_MMDB ?= $(CURDIR)/.scratch/scratch/geo/dbip-country-lite.mmdb
 enrollment-it:
 	DBIP_MMDB=$(DBIP_MMDB) $(GO) test -tags enrollmentit -race -count=1 -timeout 30m -v ./tests/enrollment/
 
-# this stage example apps (tests/otelapps, build tag otelapps): each app
+# otel example apps (tests/otelapps, build tag otelapps): each app
 # dual-exports through deploy/compose/examples.yml to a stock collector as
 # the tenant backend and a platform stand-in, and both copies must equal the
 # load plan; TestCollectorFanout checks the tenant collector guide's config.
@@ -334,12 +334,12 @@ recovery-it:
 	@set -a && . ./$(DEV_ENV) && set +a && UMAMI_IT_URL=$$UMAMI_URL DBIP_MMDB=$(DBIP_MMDB) \
 		$(GO) test -tags recoveryit -race -count=1 -timeout 30m -v ./tests/recovery/
 
-# this stage opentofu (infra/tofu, docs/deploy/opentofu.md). azure is reached
-# through the operator's az cli login an operator input; the cloudflare api token
-# an operator input and the state passphrase come only from the env's sops dotenv
-# file; non-secret inputs from infra/tofu/envs/<env>/terraform.tfvars. both
-# files are missing until the operator supplies inputs I4, I5, I6, I13 and I14,
-# and the targets stop with the name of what is missing instead of guessing.
+# opentofu (infra/tofu, docs/deploy/opentofu.md). azure is reached through
+# the operator's az cli login; the cloudflare api token and the state
+# passphrase come only from the env's sops dotenv file; non-secret inputs from
+# infra/tofu/envs/<env>/terraform.tfvars, which is gitignored and copied from
+# terraform.tfvars.example next to it. the targets stop with the name of what
+# is missing instead of guessing.
 TOFU     ?= tofu
 SOPS     ?= sops
 TOFU_DIR := infra/tofu/envs
@@ -347,8 +347,8 @@ TOFU_DIR := infra/tofu/envs
 export TF_PLUGIN_CACHE_DIR ?= $(HOME)/.cache/opentofu/plugins
 
 define tofu_env
-	@test -f $(TOFU_DIR)/$(1)/terraform.tfvars || { echo "$(TOFU_DIR)/$(1)/terraform.tfvars is missing (inputs I4, I5, I13)" >&2; exit 1; }
-	@test -f infra/secrets/$(1)/tofu.enc.env || { echo "infra/secrets/$(1)/tofu.enc.env is missing (inputs I6, I14)" >&2; exit 1; }
+	@test -f $(TOFU_DIR)/$(1)/terraform.tfvars || { echo "$(TOFU_DIR)/$(1)/terraform.tfvars is missing: copy terraform.tfvars.example next to it and fill it in" >&2; exit 1; }
+	@test -f infra/secrets/$(1)/tofu.enc.env || { echo "infra/secrets/$(1)/tofu.enc.env is missing: it holds the cloudflare api token and the state passphrase (docs/deploy/secrets.md)" >&2; exit 1; }
 	@mkdir -p $(TF_PLUGIN_CACHE_DIR)
 	$(SOPS) exec-env infra/secrets/$(1)/tofu.enc.env '$(2)'
 endef
@@ -411,7 +411,7 @@ tofu-check:
 			-filter=../../../../tests/infra/$$e.tftest.hcl || exit 1; \
 	done
 
-# ansible (this stage stream b, docs/deploy/ansible.md). the controller tools
+# ansible (docs/deploy/ansible.md). the controller tools
 # live in their own venv, made with uv from infra/ansible/requirements.txt.
 # staging-deploy and production-deploy converge every node (site.yml) at the
 # release SA_IMAGE_TAG; ROLLING=1 runs deploy.yml instead, one node at a time
@@ -439,7 +439,7 @@ ansible-render-test:
 staging-deploy production-deploy: %-deploy:
 	@test -f infra/ansible/inventories/$*/hosts.json || { echo "no inventory: run make $*-apply first" >&2; exit 1; }
 	@test -n "$(SA_IMAGE_TAG)" || { echo "set SA_IMAGE_TAG to the release to deploy" >&2; exit 1; }
-	@test -f "$(SA_RELEASE_MANIFEST)" || { echo "set SA_RELEASE_MANIFEST=<release-images.json of the release>: site.yml and deploy.yml both verify the image signatures first (this stage, playbooks/verify-release.yml)" >&2; exit 1; }
+	@test -f "$(SA_RELEASE_MANIFEST)" || { echo "set SA_RELEASE_MANIFEST=<release-images.json of the release>: site.yml and deploy.yml both verify the image signatures first (playbooks/verify-release.yml)" >&2; exit 1; }
 	cd infra/ansible && $(ANSIBLE_BIN)/ansible-playbook -i inventories/$*/ \
 		playbooks/$(if $(ROLLING),deploy.yml,site.yml) -e sa_image_tag=$(SA_IMAGE_TAG) \
 		-e sa_release_manifest=$(abspath $(SA_RELEASE_MANIFEST)) $(ANSIBLE_EXTRA)
@@ -451,7 +451,8 @@ local-converge-up:
 	ANSIBLE_VENV=$(ANSIBLE_VENV) infra/local/up.sh
 	$(MAKE) internal-ca ENV=local
 
-# the internal ca of the private network: issues what is
+# the internal ca of the private network, so that every service on it
+# speaks tls with verified certificates: issues what is
 # missing or due into infra/secrets/<ENV>/ca.enc.yaml and tls.enc.yaml on
 # this machine only. CA_ROTATE=new or retire rotates the ca
 # (docs/runbooks/secret-rotation.md, "internal ca")
@@ -477,7 +478,7 @@ local-converge-e2e:
 local-converge-down:
 	infra/local/down.sh
 
-# the umami patch path (the design, docs/runbooks/security-patch.md): pins
+# the umami patch path (docs/runbooks/security-patch.md): pins
 # umami VERSION by the digest the registry serves now, then runs the dev stack
 # migration, umami-compat, the isolation gate and the end-to-end suites,
 # timed, stopping at the first failure. needs everything those targets need.
@@ -485,7 +486,7 @@ local-converge-down:
 umami-upgrade:
 	VERSION=$(VERSION) scripts/umami-upgrade.sh
 
-# deploy-time image verification (the design, tests/supplychain): the
+# deploy-time image verification (tests/supplychain): the
 # verification tasks of deploy.yml against a real registry and real cosign
 # signatures made with a TEST-ONLY ephemeral key. needs docker, cosign 3.1.4
 # and the ansible venv.
@@ -493,8 +494,7 @@ umami-upgrade:
 supplychain-it:
 	$(GO) test -tags supplychain -count=1 -v ./tests/supplychain/
 
-# data migration between two environments (the design,
-# docs/handover/rebuild.md section 5). MIGRATE_ENV is an env file naming the
+# data migration between two environments (docs/handover/rebuild.md). MIGRATE_ENV is an env file naming the
 # server and its admin login (scripts/migrate.sh), MIGRATE_DIR the dump
 # directory. METHOD=pgbackrest first restores the source's backup set
 # RESTORE_SET onto the restore node of inventory ENV (restore.yml, with
@@ -527,7 +527,7 @@ verify-migration: build
 	@test -n "$(SOURCE_ENV)" -a -n "$(TARGET_ENV)" || { echo "usage: make verify-migration SOURCE_ENV=<env file> TARGET_ENV=<env file>" >&2; exit 2; }
 	$(BIN_DIR)/platformctl verify-migration --source $(SOURCE_ENV) --target $(TARGET_ENV)
 
-# the design local rehearsal (tests/handover, build tag handover):
+# handover local rehearsal (tests/handover, build tag handover):
 # environment a populated through the real pipeline, migrated into a
 # separate environment b by the pgbackrest and the pg_dump paths, checked
 # with verify-migration, signed in to through the oauth fixture, and the old
@@ -544,8 +544,7 @@ handover-it:
 rotate-local:
 	ANSIBLE_VENV=$(ANSIBLE_VENV) tests/handover/rotate-local.sh
 
-# the operations checks of the review notes on the minimal
-# local converge with the s3 stand-in and the probe node
+# the operations checks on the minimal local converge with the s3 stand-in and the probe node
 # (tests/localconverge/ops-local.sh): bucket with object lock, stanza and wal
 # archiving in object storage mode, patroni failsafe, etcd rejoin of a
 # rebuilt edge node, the probe and the watchdog. then teardown (KEEP=1 keeps it)
@@ -553,7 +552,7 @@ rotate-local:
 ops-local:
 	ANSIBLE_VENV=$(ANSIBLE_VENV) tests/localconverge/ops-local.sh
 
-# repository checks that need only a pinned binary (ops review, O-10).
+# repository checks that need only a pinned binary.
 # scripts/supply-chain/install-tools.sh installs each at its pin with its
 # checksum; the ci jobs of the same names run exactly these targets.
 GITLEAKS   ?= gitleaks
@@ -575,8 +574,8 @@ actionlint:
 	$(ACTIONLINT) .github/workflows/*.yml
 
 # the jobs of .github/workflows/ci.yml on this machine, with the same make
-# targets (scripts/ci-local.sh), for as long as no workflow can run on
-# github (ops review). CI_JOBS picks jobs, default all; jobs that start
+# targets (scripts/ci-local.sh), for running the pipeline without
+# github. CI_JOBS picks jobs, default all; jobs that start
 # container stacks refuse to start while the load average is at or above
 # CI_LOCAL_MAX_LOAD (default 20), since the host is shared.
 ci-local:

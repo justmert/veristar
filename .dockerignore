@@ -3,6 +3,7 @@
 # gateway image also needs packages/tracker/releases.
 .git
 resources
+.scratch
 **/node_modules
 **/dist
 **/test-results

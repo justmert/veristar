@@ -9,8 +9,6 @@
     "ignoreUnknown": true,
     "includes": [
       "**",
-      "!.claude",
-      "!resources",
       "!**/dist",
       "!**/coverage",
       "!packages/tracker/releases",

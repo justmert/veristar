@@ -1,4 +1,4 @@
-# gitleaks findings reviewed on 2026-11-13 (the design). every one is a
+# gitleaks findings reviewed on 2026-11-13. every one is a
 # test fixture or a false positive: umami migration names, made-up test
 # passwords and tokens, a public stellar G key, and stripe's published
 # documentation key in the route normalization corpus. a new finding is not
@@ -16,7 +16,7 @@ b439dc543b99cbf92a7808a9ad2e71c957366fbf:tests/fixtures/stellartoml/valid.toml:g
 9a4a2137fc16dc14c148573619f09eaa6ba6e336:cmd/controlplane/main_test.go:generic-api-key:125
 9a4a2137fc16dc14c148573619f09eaa6ba6e336:internal/config/controlplane_test.go:generic-api-key:24
 5a2e870f9fd0a6b698775a9ce500806b6c490c7d:internal/config/config_test.go:generic-api-key:75
-# reviewed 2026-11-13 (ops review), each read at its commit:
+# reviewed 2026-11-13, each read at its commit:
 # a made-up operator key of the sa_op_ shape (sequential digits and letters)
 # that the adoptionreport tests send to their own canned test servers
 cf1cfce506982637c3ea2389cbb226d5fff3042a:cmd/adoptionreport/main_test.go:generic-api-key:32
@@ -26,7 +26,7 @@ cf1cfce506982637c3ea2389cbb226d5fff3042a:cmd/adoptionreport/main_test.go:generic
 # the literal p17-fixture-secret that the observability test stack hands to
 # the test-only github oauth fixture container; no real oauth app exists
 15e5ba26e80a37da4325c71f0208e33d19b322d0:tests/observability/up.sh:generic-api-key:75
-# reviewed 2026-11-13 (the review), each read at its commit:
+# reviewed 2026-11-13, each read at its commit:
 # a fixed made-up token id uuid stamped on a test batch; token ids are
 # public row ids, never credentials
 bc09545f82bb0fadb14c5c0c6086610495f65424:collector/jetstreamexporter/exporter_test.go:generic-api-key:242
