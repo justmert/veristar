@@ -91,7 +91,7 @@ flowchart LR
 | `in.<BASE_DOMAIN>` | tracker files, challenge `GET /v1/c`, events `POST /v1/e` | edge | `deploy/caddy/edge.Caddyfile`, `internal/gateway` |
 | `otlp.<BASE_DOMAIN>` | OTLP gRPC on 443 and OTLP HTTP `/v1/metrics`, `/v1/traces`, `/v1/logs` | edge | `collector/` |
 | `app.<BASE_DOMAIN>` | the console, the control plane API under `/api`, the metrics API under `/api/metrics/v1/`, the MCP server at `/mcp` with its OAuth paths | core | `deploy/caddy/app.Caddyfile`, `apps/console`, `internal/controlplane` |
-| `web.<BASE_DOMAIN>` | Umami's dashboard UI and read API, behind an allowlist | core | `deploy/caddy/web.Caddyfile`, [reference/umami-contract.md](reference/umami-contract.md) |
+| `web.<BASE_DOMAIN>` | Umami's dashboard UI and read API, behind an allowlist, in the Veristar theme ([ADR 0004](adr/0004-umami-dashboard-theme.md)) | core | `deploy/caddy/web.Caddyfile`, `deploy/caddy/umami-theme`, [reference/umami-contract.md](reference/umami-contract.md) |
 | `status.<BASE_DOMAIN>` | Gatus status page | probe | `infra/ansible/roles/observability` |
 
 No host name or path uses a word that ad-block filter lists penalise (analytics, track,

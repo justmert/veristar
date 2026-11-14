@@ -101,3 +101,14 @@ Findings that extend the list in the design:
   route is on the deny list.
 - `GET /api/websites/<id>/export` returns a zip of aggregate CSVs (events, pages, referrers,
   browsers, os, devices, countries) to any member; no raw rows.
+
+## Dashboard theme
+
+The web Caddy themes Umami's dashboard without changing the image
+([ADR 0004](../adr/0004-umami-dashboard-theme.md)). It relies on names, not code: the `--zen-*`
+custom properties and three Tailwind radius properties of `@umami/react-zen`, the classes
+`bg-primary`, `bg-status-error` and `text-white`, the `data-theme` attribute and `dark` class zen
+writes on `<html>`, the map and chart colours of `src/lib/constants.ts`, a single `</head>` in
+every HTML page, and the icon paths of `src/app/layout.tsx`, `public/site.webmanifest` and
+`public/browserconfig.xml`. `tests/umami-compat/theme_test.go` checks each of them against the
+running image, and the version the theme was reviewed for against the image's version.

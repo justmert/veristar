@@ -31,6 +31,24 @@ plus the rollback.
    reviewed its OpenAPI routes against the Caddy deny list and updated
    `tests/umami-compat/testdata/openapi-routes.txt`. Commit the diff only when every gate passed.
 
+   It also stays red until the dashboard theme
+   ([ADR 0004](../adr/0004-umami-dashboard-theme.md)) has been reviewed for the new version:
+   `TestThemeReviewedForThisVersion` compares the `umami-version:` line of
+   `deploy/caddy/umami-theme/site/_veristar/theme.css` with the image, and
+   `TestThemeNamesStillExist` lists every name the theme relies on that the new image no
+   longer has. To review:
+
+   - For each name `TestThemeNamesStillExist` reports, find its replacement in the new
+     `@umami/react-zen` styles or Umami's source and update `theme.css` (custom properties,
+     classes, the map and chart colours), or the `@theme` path list in
+     `deploy/caddy/web.Caddyfile` and the theme's files (icon paths).
+   - Run `make test-caddy-web` and look at the screenshots in `.scratch/design/umami/`, dark
+     and light. The axe colour-contrast check in that suite must pass on the new version.
+   - Move the `umami-version:` line to the new version.
+
+   A missed rename is cosmetic only (that part of the page falls back to Umami's own style);
+   it never affects the deny list, SSO or data.
+
 2. **Release.** Merge, tag `v<release>`; `release-images.yml` builds, scans and signs the
    platform images and attaches `release-images.json`. Umami itself is an upstream image and is
    pulled by its pinned digest.

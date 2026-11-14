@@ -50,7 +50,12 @@
           },
           {
             "group": "Design decisions",
-            "pages": ["adr/0001-base-platform", "adr/0002-overlay-not-fork", "adr/0003-licensing"]
+            "pages": [
+              "adr/0001-base-platform",
+              "adr/0002-overlay-not-fork",
+              "adr/0003-licensing",
+              "adr/0004-umami-dashboard-theme"
+            ]
           }
         ]
       },
@@ -120,7 +125,8 @@
               "operators/reading-the-numbers",
               "operators/api-keys",
               "operators/mcp",
-              "operators/alerts"
+              "operators/alerts",
+              "operators/umami-dashboard-theme"
             ]
           },
           {
