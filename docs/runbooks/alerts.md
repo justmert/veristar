@@ -292,6 +292,18 @@ Action: confirm the next pass cleared it (the counter stops rising, the alert
 resolves within the hour), then open an issue with the jobs log lines of the
 pass (tenants and hours) and recent metrics writer restarts or errors.
 
+### MCPToolFailuresHigh
+More than a fifth of the MCP tool calls on a control plane failed on the
+server side for 15 minutes: `internal`, `unavailable` (Umami or the database)
+or `timeout` outcomes of `controlplane_mcp_tool_calls_total`, with at least
+one such failure in about three minutes. Bad input from a client never
+counts. AI clients get an error result for those calls; nothing else is
+affected.
+Action: the control plane log lines `mcp tool failed` name the tool and the
+error; `UmamiHeartbeatFailing` or a database alert at the same time is the
+usual cause, and fixing it clears this one. Without one, follow
+[mcp-access.md](mcp-access.md), "Investigating failing calls".
+
 ### HostRebootRequired
 Installed updates (a kernel or libc fix from unattended upgrades) have waited
 12 hours for a reboot on this node (`/var/run/reboot-required`, written to

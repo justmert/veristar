@@ -110,6 +110,24 @@ groups:
           summary: "the api rollup on {{ $labels.node }} found hourly rows that disagreed with their minute rows"
           runbook: docs/runbooks/alerts.md#apirollupdriftedhours
 
+      # mcp tool calls that fail on the server side (contract 12.7): an
+      # internal error, umami or the database unavailable, or the call
+      # timeout. a client's bad input (invalid_input, not_found) never
+      # counts. the floor of one failing call in about three minutes keeps a
+      # single failure on an idle server from paging anyone.
+      - alert: MCPToolFailuresHigh
+        expr: |
+          (
+            sum by (node) (rate(controlplane_mcp_tool_calls_total{outcome=~"internal|unavailable|timeout"}[15m]))
+              / sum by (node) (rate(controlplane_mcp_tool_calls_total[15m]))
+          ) > 0.2
+          and sum by (node) (rate(controlplane_mcp_tool_calls_total{outcome=~"internal|unavailable|timeout"}[15m])) > 0.005
+        for: 15m
+        labels: {severity: ticket}
+        annotations:
+          summary: "{{ $value | humanizePercentage }} of mcp tool calls on {{ $labels.node }} fail on the server"
+          runbook: docs/runbooks/alerts.md#mcptoolfailureshigh
+
   # always firing. alertmanager sends it to the probe's gatus every minute
   # (alertmanager.yml, route heartbeat), and gatus alerts from outside the
   # main provider when it stops: both prometheus servers, both alertmanagers

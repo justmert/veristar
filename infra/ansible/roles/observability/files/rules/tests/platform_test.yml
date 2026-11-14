@@ -189,3 +189,26 @@ tests:
       # an hour after the last increase the window no longer holds it
       - eval_time: 100m
         alertname: APIRollupOrphanedMarks
+  - name: mcp tool failures
+    interval: 1m
+    input_series:
+      # one call a minute succeeds throughout; failures start at minute 10
+      - series: 'controlplane_mcp_tool_calls_total{job="controlplane",node="core-1",tool="get_web_stats",outcome="ok"}'
+        values: '0+1x60'
+      - series: 'controlplane_mcp_tool_calls_total{job="controlplane",node="core-1",tool="get_web_stats",outcome="unavailable"}'
+        values: '0x10 0+1x50'
+      # bad input is the client's, never an alert
+      - series: 'controlplane_mcp_tool_calls_total{job="controlplane",node="core-2",tool="get_site",outcome="invalid_input"}'
+        values: '0+5x60'
+      - series: 'controlplane_mcp_tool_calls_total{job="controlplane",node="core-2",tool="get_site",outcome="ok"}'
+        values: '0+1x60'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: MCPToolFailuresHigh
+      - eval_time: 45m
+        alertname: MCPToolFailuresHigh
+        exp_alerts:
+          - exp_labels: {severity: ticket, node: core-1}
+            exp_annotations:
+              summary: "50% of mcp tool calls on core-1 fail on the server"
+              runbook: docs/runbooks/alerts.md#mcptoolfailureshigh

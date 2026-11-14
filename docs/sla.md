@@ -130,7 +130,7 @@ Cloudflare DNS.
 
 ### Monitoring
 
-37 alert rules (plus 5 recording rules) with promtool tests, the prober, the status page and
+38 alert rules (plus 5 recording rules) with promtool tests, the prober, the status page and
 the SLO report were built and verified on a local test stack (the design). In the alert
 fire-drills 16 alerts fired and resolved and 3 more fired for real without a drill
 ([runbooks/alerts.md](runbooks/alerts.md), "Fire-drills"). The observability role is applied
