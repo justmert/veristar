@@ -1,4 +1,4 @@
-import { CircleAlert, FileText, Shield } from "lucide-react";
+import { CircleAlert, CircleCheck, FileText, Shield } from "lucide-react";
 import { Link, useSearchParams } from "react-router";
 import { signInUrl } from "@/api/endpoints";
 import { PublicFrame } from "@/components/public-frame";
@@ -29,6 +29,8 @@ export function SignInPage() {
   const code = params.get("error");
   const message = code ? (SIGN_IN_ERRORS[code] ?? SIGN_IN_ERRORS.internal) : null;
   const returnTo = safeReturnTo(params.get("return_to"));
+  // set by the account page after DELETE /api/me (contract 4.1.6)
+  const deleted = !message && params.get("deleted") === "1";
 
   return (
     <PublicFrame>
@@ -47,6 +49,15 @@ export function SignInPage() {
           >
             <CircleAlert aria-hidden className="mt-0.5 size-4 shrink-0 text-critical" />
             {message}
+          </p>
+        ) : null}
+        {deleted ? (
+          <p
+            role="status"
+            className="flex animate-fade-in items-start gap-2.5 rounded-lg border border-line bg-raised px-3.5 py-3 text-body text-fg"
+          >
+            <CircleCheck aria-hidden className="mt-0.5 size-4 shrink-0 text-success" />
+            Your account was deleted. Signing in again creates a new, empty account.
           </p>
         ) : null}
 

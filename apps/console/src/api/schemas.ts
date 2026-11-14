@@ -437,6 +437,8 @@ export const errorEnvelope = z.object({
     code: z.string().min(1),
     message: z.string(),
     fields: z.record(z.string(), z.string()).optional(),
+    // sole_owner only (4.1.6): the projects that block an account deletion
+    tenants: z.array(z.object({ id, name: z.string() })).optional(),
     request_id: z.string(),
   }),
 });

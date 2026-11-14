@@ -18,6 +18,7 @@ export function ConfirmDialog({
   error,
   onConfirm,
   tone = "destructive",
+  confirmDisabled = false,
   children,
 }: {
   open: boolean;
@@ -32,6 +33,9 @@ export function ConfirmDialog({
   onConfirm: () => void;
   // a change that is easy to undo (a setting) is not drawn as destructive
   tone?: "destructive" | "primary";
+  // keeps the confirm button off until the body's own check passes, such as
+  // a typed confirmation
+  confirmDisabled?: boolean;
   children?: ReactNode;
 }) {
   return (
@@ -49,6 +53,7 @@ export function ConfirmDialog({
           <Button
             variant={tone === "destructive" ? "destructive" : "default"}
             pending={pending}
+            disabled={confirmDisabled}
             onClick={onConfirm}
           >
             {pending ? pendingLabel : confirmLabel}

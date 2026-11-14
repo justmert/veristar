@@ -201,6 +201,7 @@ export const api = {
   me: (signal?: AbortSignal) => request("GET", "/me", me, undefined, signal),
   terms: (signal?: AbortSignal) => request("GET", "/terms", terms, undefined, signal),
   logout: () => requestNoContent("POST", "/auth/logout"),
+  deleteAccount: () => requestNoContent("DELETE", "/me"),
 
   tenant: (tenantId: string, signal?: AbortSignal) =>
     request("GET", `/tenants/${enc(tenantId)}`, tenant, undefined, signal),

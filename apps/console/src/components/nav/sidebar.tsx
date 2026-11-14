@@ -16,6 +16,7 @@ import {
   Plus,
   ScrollText,
   Sun,
+  UserRound,
 } from "lucide-react";
 import { LayoutGroup, motion } from "motion/react";
 import { type ReactNode, useId } from "react";
@@ -66,6 +67,7 @@ export function Sidebar({
   onNavigate?: () => void;
 }) {
   const area = useArea();
+  const navigate = useNavigate();
   const docs = siblingUrl(window.location.hostname, "docs");
   const status = siblingUrl(window.location.hostname, "status");
   // the desktop sidebar and the phone drawer are two instances; each needs
@@ -156,6 +158,15 @@ export function Sidebar({
               className="w-(--radix-dropdown-menu-trigger-width)"
             >
               <MenuLabel>Signed in as {me.user.github_login}</MenuLabel>
+              <MenuItem
+                onSelect={() => {
+                  onNavigate?.();
+                  navigate("/account");
+                }}
+              >
+                <UserRound aria-hidden />
+                Account
+              </MenuItem>
               <MenuSeparator />
               <MenuLabel>Theme</MenuLabel>
               <MenuRadioGroup
