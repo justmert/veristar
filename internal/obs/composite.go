@@ -12,7 +12,7 @@ import (
 
 // CompositeHandler answers 200 when every check passes and 503 naming the
 // first failing one. it backs the port-80 node health that the dns monitor
-// reads (the design): one answer for the whole node, so a node whose
+// reads: one answer for the whole node, so a node whose
 // gateway, collector or local nats is unhealthy is taken out of dns.
 // missing names configuration that the node needs before it may count as
 // healthy; while it is non-empty the handler answers 503, so a node that was

@@ -1,5 +1,5 @@
-// Package rotationcheck proves a credential rotation (the design,
-// rotate-all.yml): every previous credential is refused by the system that
+// Package rotationcheck proves a credential rotation
+// (infra/ansible/playbooks/rotate-all.yml): every previous credential is refused by the system that
 // used to accept it, and every new one is accepted. a refusal counts only
 // when the system said the credential was wrong; a connection that fails
 // for any other reason (no route, a pg_hba rule, a timeout) is reported as

@@ -15,7 +15,7 @@ import (
 // Role is a postgresql role an application connects as.
 type Role string
 
-// application roles from the design. none of them has bypassrls.
+// application roles (docs/architecture.md). none of them has bypassrls.
 const (
 	RoleCPSystem      Role = "cp_system"
 	RoleCPTenant      Role = "cp_tenant"
@@ -149,7 +149,7 @@ type PoolConfig struct {
 
 // Only returns the configuration for one of its roles, with that role's
 // pool size, so a service can open a second, separate pool for the same
-// role (the control plane's reconciler, review).
+// role (the control plane's reconciler).
 func (c PoolConfig) Only(r Role, maxConns int32) (PoolConfig, error) {
 	for _, l := range c.Roles {
 		if Role(l.User) == r {

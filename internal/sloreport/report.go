@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-// objectives of the design. freshness has none: it is reported next to
+// availability objectives (docs/slo). freshness has none: it is reported next to
 // the two objectives because it counts against the pipeline, not ingestion.
 var objectives = map[string]float64{
 	KeyIngestion: 99.99,

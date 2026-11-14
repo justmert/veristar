@@ -1,5 +1,5 @@
 // Package migration compares a source and a target environment after a data
-// migration (the design): row counts of every table in both databases,
+// migration: row counts of every table in both databases,
 // per-tenant daily web and api aggregates, and umami's own /stats for a
 // sample of sites and days. a snapshot is read from each side, then the two
 // are compared key by key, so a difference names exactly what moved wrong.

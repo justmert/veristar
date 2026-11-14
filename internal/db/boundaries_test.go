@@ -79,7 +79,7 @@ func TestOperatorBoundaries(t *testing.T) {
 	_, err = attempt(t, pdb.RoleCPOperator, nil, `update cp.tenants set status = 'active'`)
 	requireDenied(t, err, "operator changing tenants")
 
-	// this stage: aggregates of every tenant, read only; never minutes or
+	// aggregates of every tenant, read only; never minutes or
 	// writer state, never another database
 	for _, rel := range []string{"agg.web_daily", "agg.web_daily_dim", "api.metrics_hourly", "api.metrics_daily"} {
 		n, err := count(t, pdb.RoleCPOperator, nil, `select count(*) from `+rel)

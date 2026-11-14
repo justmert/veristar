@@ -114,7 +114,7 @@ func seedAPIRows(tx pgx.Tx) error {
 			{`insert into api.ingest_dedup (msg_id, tenant_id) values ($1, $2)`, []any{fmt.Sprintf("seed-%d", i), tenant}},
 			{`insert into api.route_registry (tenant_id, day, service, route) values ($1, current_date, 'svc', '/a')`, []any{tenant}},
 			{`insert into api.rollup_pending (tenant_id, hour) values ($1, date_trunc('hour', now(), 'UTC'))`, []any{tenant}},
-			// agg (this stage); jobs writes these too
+			// agg; jobs writes these too
 			{`insert into agg.web_daily (site_id, tenant_id, day, band, pageviews, visitors, visits, bounces, totaltime)
 			  values ($1, $2, current_date, 'primary', 5, 2, 3, 1, 40)`, []any{uuid.New(), tenant}},
 			{`insert into agg.web_daily_dim (site_id, tenant_id, day, band, dimension, key, value)

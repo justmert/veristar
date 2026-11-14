@@ -61,7 +61,7 @@ var tenantTables = []tenantTable{
 	}},
 	{name: "cp.mcp_oauth_codes", key: "tenant_id", denied: true},
 
-	// api (this stage): cp_tenant reads its metrics and warnings, and has no
+	// api: cp_tenant reads its metrics and warnings, and has no
 	// right at all on the writer's bookkeeping
 	{name: "api.metrics_minute", key: "tenant_id"},
 	{name: "api.metrics_hourly", key: "tenant_id"},
@@ -73,7 +73,7 @@ var tenantTables = []tenantTable{
 	{name: "api.route_registry", key: "tenant_id", denied: true},
 	// read-only since 00021: hourly and daily answers read pending hours
 	{name: "api.rollup_pending", key: "tenant_id"},
-	// agg (this stage): operators only; cp_tenant has no usage on the schema
+	// agg: operators only; cp_tenant has no usage on the schema
 	{name: "agg.web_daily", key: "tenant_id", denied: true},
 	{name: "agg.web_daily_dim", key: "tenant_id", denied: true},
 }
