@@ -1,5 +1,5 @@
 import { Mark } from "@veristar/brand/mark";
-import { cn } from "cn";
+import { cn } from "@veristar/brand/cn";
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { siblingUrl } from "@/lib/hosts";

@@ -1,4 +1,4 @@
-import { cn } from "cn";
+import { cn } from "@veristar/brand/cn";
 import { DropdownMenu as M } from "radix-ui";
 import type * as React from "react";
 

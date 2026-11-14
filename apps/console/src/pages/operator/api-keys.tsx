@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { cn } from "cn";
+import { cn } from "@veristar/brand/cn";
 import { KeyRound } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { ApiError } from "@/api/client";

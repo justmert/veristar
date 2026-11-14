@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { fade, stagger } from "@veristar/brand/motion";
-import { cn } from "cn";
+import { cn } from "@veristar/brand/cn";
 import {
   ArrowDown,
   ArrowUp,

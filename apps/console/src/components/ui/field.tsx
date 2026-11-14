@@ -1,4 +1,4 @@
-import { cn } from "cn";
+import { cn } from "@veristar/brand/cn";
 import type * as React from "react";
 import { Label } from "./label";
 

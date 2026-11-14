@@ -1,5 +1,5 @@
 import { cva, type VariantProps } from "class-variance-authority";
-import { cn } from "cn";
+import { cn } from "@veristar/brand/cn";
 import { LoaderCircle } from "lucide-react";
 import { Slot } from "radix-ui";
 import type * as React from "react";

@@ -1,4 +1,4 @@
-import { cn } from "cn";
+import { cn } from "@veristar/brand/cn";
 import type { ReactNode } from "react";
 
 // the page title row: what the page answers, one line of context, and the

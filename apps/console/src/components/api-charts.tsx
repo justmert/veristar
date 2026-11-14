@@ -6,7 +6,7 @@
 // colour.
 
 import { fade, transition } from "@veristar/brand/motion";
-import { cn } from "cn";
+import { cn } from "@veristar/brand/cn";
 import { Table2 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { type ReactNode, useId, useRef, useState } from "react";

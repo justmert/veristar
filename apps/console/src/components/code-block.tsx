@@ -1,4 +1,4 @@
-import { cn } from "cn";
+import { cn } from "@veristar/brand/cn";
 import type { ReactNode } from "react";
 import { CopyButton } from "@/components/copy-button";
 

@@ -1,4 +1,4 @@
-import { cn } from "cn";
+import { cn } from "@veristar/brand/cn";
 import { CircleAlert, RotateCcw } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";

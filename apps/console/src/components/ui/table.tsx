@@ -1,4 +1,4 @@
-import { cn } from "cn";
+import { cn } from "@veristar/brand/cn";
 import type * as React from "react";
 
 // compact rows (36 px) for working tables; the header sticks inside its

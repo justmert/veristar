@@ -1,5 +1,5 @@
 import { type UseQueryResult, useMutation, useQuery } from "@tanstack/react-query";
-import { cn } from "cn";
+import { cn } from "@veristar/brand/cn";
 import { UserPlus } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { useNavigate } from "react-router";

@@ -3,7 +3,7 @@
 // 8.1 and 8.2), sortable column headers with a magnitude bar on the sort
 // column, the selection for the comparison and the explanatory notes.
 
-import { cn } from "cn";
+import { cn } from "@veristar/brand/cn";
 import { ArrowDown, ArrowUp, ArrowUpDown, Columns2, Search, X } from "lucide-react";
 import { type FormEvent, type ReactNode, useEffect, useId, useState } from "react";
 import { Link } from "react-router";
