@@ -83,18 +83,16 @@ Conventions (node names, addresses, compose directories) are in [overview.md](ov
 
    Expected: `308`. Traffic Manager adds the address back after its next successful probe.
 
-6. **Check the cluster** from a core node:
+6. **Check the cluster** on the node:
 
    ```sh
-   curl -s 'http://10.20.1.11:8222/jsz?streams=true' | head -c 600; echo
+   curl -s 'http://127.0.0.1:8222/jsz?streams=true' | head -c 600; echo
+   curl -s http://127.0.0.1:8222/healthz; echo
    ```
 
-   (production: `10.10.1.11`). Expected: a `"meta_cluster"` object with a `"leader"` and three
-   replicas, all current. The node's own `/healthz` answers `{"status":"ok"}`:
-
-   ```sh
-   curl -s http://<node private address>:8222/healthz; echo
-   ```
+   Expected: a `"meta_cluster"` object with a `"leader"` and the other two peers current, and
+   `{"status":"ok"}` from `/healthz`. From another node, read the same port through the
+   monitoring relay as in [overview.md](overview.md#nats-state-without-a-nats-client).
 
 ## A node that is gone for good
 
@@ -128,7 +126,9 @@ stays valid:
    from any edge node that three members are `started` and healthy:
 
    ```sh
-   cd /opt/veristar/edge && sudo docker compose exec etcd etcdctl --endpoints=http://127.0.0.1:2379 member list -w table
+   cd /opt/veristar/edge && sudo docker compose exec etcd etcdctl --endpoints=https://127.0.0.1:2379 \
+     --cacert=/etc/etcd/tls/ca.crt --cert=/etc/etcd/tls/node.crt --key=/etc/etcd/tls/node.key \
+     member list -w table
    ```
 
    If the converge failed between the member add and the start, converge again: the unstarted
@@ -141,10 +141,5 @@ stays valid:
 |---|---|---|---|
 | 2026-11-12 | Local converge: collector stopped on edge 1, then started; NATS stopped on edges 2 and 3 | port 80 turned 503 and back to 308; with two NATS servers down edge 1 answered 503 (`stream ... is not current`) | [../deploy/local-converge.md](../deploy/local-converge.md) section 3 |
 | 2026-11-13 | Alert fire-drill: gateway of edge-2 stopped | EdgeNodeNotReady and ProbeNodeCheckFailing fired and resolved; the `in` hostname check and ingestion stayed up | [alerts.md](alerts.md), fire-drills |
-| 2026-11-13, 2026-11-14 | Production: a converged node powered off for 300 s, three runs, the last under 4 page views a second after the NATS liveness fix | Traffic Manager removed the node from `in` after 41.8 to 41.9 s; last run 3,341 of 3,341 events acknowledged, none answered 503, none lost; in the second and third runs every container ran again after power-on without a hand start | [../reference/drills/2026-11-13-azure.md](../reference/drills/2026-11-13-azure.md), "Node loss" |
-| 2026-11-13 | this stage drill: edge 2 powered off under load | invalid: the shared host froze for about 104 s at the power-off; finding: edge 2's NATS stayed `Exited (255)` after power-on, which led to `sa-edge-start.service` (not yet re-verified by a power-off) | [../reference/drills/2026-11-13.md](../reference/drills/2026-11-13.md) |
-
-Not yet exercised: the automatic etcd rejoin of step 4 (`make ops-local` steps `rebuild-edge3`
-and `etcd` drive it, but the run of 2026-11-13 was stopped before them, see the O-6 resolution
-in the review notes), the manual drain and undrain of steps 2 and 5 by hand (the same flag file was
-used by `deploy.yml` in the local converge), and the replacement of a lost node.
+| 2026-11-13, 2026-11-14 | Production: a converged node powered off for 300 s, three runs, the last under 4 page views a second | Traffic Manager removed the node from `in` after 41.8 to 41.9 s; last run 3,341 of 3,341 events acknowledged, none answered 503, none lost; in the second and third runs every container ran again after power-on without a manual start (`sa-edge-start.service`) | [../reference/drills/2026-11-13-azure.md](../reference/drills/2026-11-13-azure.md), "Node loss" |
+| 2026-11-14 | Production: rolling `deploy.yml` of release `v0.2.1` | every node drained with the flag file of step 2, updated and put back; no drain flag left | [../reference/drills/2026-11-13-azure.md](../reference/drills/2026-11-13-azure.md), "Release v0.2.1 rollout and gateway capacity" |
