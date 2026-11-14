@@ -242,14 +242,13 @@ export function countryName(code: string): string {
 }
 
 // one fixed categorical slot per compared project, in the order the
-// comparison names them (validated with the dataviz palette validator in
-// both modes; index.css)
+// comparison names them: the data palette series-1 to series-5 of the brand
 export const COMPARE_COLORS = [
-  "var(--chart-1)",
-  "var(--chart-2)",
-  "var(--chart-3)",
-  "var(--chart-4)",
-  "var(--chart-5)",
+  "var(--vs-series-1)",
+  "var(--vs-series-2)",
+  "var(--vs-series-3)",
+  "var(--vs-series-4)",
+  "var(--vs-series-5)",
 ];
 
 const dayFmt = new Intl.DateTimeFormat("en", { dateStyle: "medium", timeZone: "UTC" });

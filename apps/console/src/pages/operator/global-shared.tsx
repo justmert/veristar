@@ -1,13 +1,19 @@
-// controls shared by the global web view, the global api view and the
-// comparison: day range, project filters (contract 8.1 and 8.2), sortable
-// column headers, the selection for the comparison and the explanatory notes.
+// controls shared by the operator project tables (the project list, global
+// web, global api) and the comparison: day range, project filters (contract
+// 8.1 and 8.2), sortable column headers with a magnitude bar on the sort
+// column, the selection for the comparison and the explanatory notes.
 
-import { ArrowDown, ArrowUp, ArrowUpDown, Columns2, X } from "lucide-react";
-import { type FormEvent, type ReactNode, useEffect, useState } from "react";
+import { cn } from "cn";
+import { ArrowDown, ArrowUp, ArrowUpDown, Columns2, Search, X } from "lucide-react";
+import { type FormEvent, type ReactNode, useEffect, useId, useState } from "react";
 import { Link } from "react-router";
 import { type TenantStatus, tenantStatus } from "@/api/schemas";
-import { SelectField, TextField } from "@/components/form-field";
+import { SERIES_BG } from "@/components/compare-charts";
+import { NativeSelect, TextField } from "@/components/form-field";
+import { Segmented } from "@/components/segmented";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import {
   activeFilterCount,
   compareSearch,
@@ -34,14 +40,18 @@ export const STATUS_TEXT: Record<TenantStatus, string> = {
 
 // ---- day range
 
+type RangeChoice = `${(typeof RANGE_PRESETS)[number]}` | "custom";
+
 // presets of the last n utc days, and a custom pair of days. resolved is
-// the range the server answered for, which is what the buttons reflect
+// the range the server answered for, which is what the control reflects
 export function RangeControl({
   resolved,
   onChange,
+  className,
 }: {
   resolved: DayRange | null;
   onChange: (r: DayRange) => void;
+  className?: string;
 }) {
   const now = new Date();
   const active = resolved ? presetOf(resolved.from, resolved.to, now) : null;
@@ -55,6 +65,11 @@ export function RangeControl({
     if (rf && rt) setDraft({ from: rf, to: rt });
   }, [rf, rt]);
 
+  const value: RangeChoice =
+    custom || (resolved !== null && active === null)
+      ? "custom"
+      : (`${active ?? 30}` as RangeChoice);
+
   function submit(e: FormEvent) {
     e.preventDefault();
     const v = validateDays(draft, new Date());
@@ -64,42 +79,37 @@ export function RangeControl({
   }
 
   return (
-    <div className="space-y-3">
-      <fieldset className="flex flex-wrap items-center gap-2">
-        <legend className="float-left mr-2 text-sm font-medium">Range</legend>
-        <div className="flex flex-wrap gap-1">
-          {RANGE_PRESETS.map((n) => (
-            <Button
-              key={n}
-              type="button"
-              size="sm"
-              variant={active === n && !custom ? "default" : "outline"}
-              aria-pressed={active === n && !custom}
-              onClick={() => {
-                setCustom(false);
-                onChange(lastDays(n, new Date()));
-              }}
-            >
-              {n} days
-            </Button>
-          ))}
-          <Button
-            type="button"
-            size="sm"
-            variant={custom || (resolved !== null && active === null) ? "default" : "outline"}
-            aria-pressed={custom || (resolved !== null && active === null)}
-            onClick={() => setCustom(true)}
-          >
-            Custom
-          </Button>
-        </div>
-      </fieldset>
+    <div className={cn("flex flex-col gap-2", className)}>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <Segmented<RangeChoice>
+          label="Range"
+          value={value}
+          options={[
+            ...RANGE_PRESETS.map((n) => ({ value: `${n}` as RangeChoice, label: `${n} days` })),
+            { value: "custom", label: "Custom" },
+          ]}
+          onChange={(v) => {
+            if (v === "custom") {
+              setCustom(true);
+              return;
+            }
+            setCustom(false);
+            onChange(lastDays(Number(v), new Date()));
+          }}
+        />
+        {resolved ? (
+          <span className="text-caption text-fg-3" aria-live="polite">
+            {formatDayRange(resolved.from, resolved.to)}. Today counts what the hourly aggregation
+            has read so far.
+          </span>
+        ) : null}
+      </div>
       {custom ? (
         <form
           aria-label="Custom range"
           onSubmit={submit}
           noValidate
-          className="flex flex-wrap items-end gap-3"
+          className="flex animate-reveal-in flex-wrap items-end gap-3"
         >
           <div className="w-40">
             <TextField
@@ -124,13 +134,117 @@ export function RangeControl({
           </Button>
         </form>
       ) : null}
-      {resolved ? (
-        <p className="text-sm text-muted-foreground" aria-live="polite">
-          {formatDayRange(resolved.from, resolved.to)}. Today counts what the hourly aggregation has
-          read so far.
-        </p>
-      ) : null}
     </div>
+  );
+}
+
+// ---- toolbar pieces
+
+// a search box with its submit button; the label is read, not shown, since
+// the icon and placeholder say what it is
+export function SearchBox({
+  value,
+  onChange,
+  onSubmit,
+  placeholder,
+  className,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  onSubmit: () => void;
+  placeholder: string;
+  className?: string;
+}) {
+  const id = useId();
+  return (
+    <form
+      aria-label="Search projects"
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSubmit();
+      }}
+      className={cn("flex min-w-0 items-center gap-1.5", className)}
+    >
+      <label htmlFor={id} className="sr-only">
+        Search
+      </label>
+      <div className="relative min-w-0 flex-1">
+        <Search
+          aria-hidden
+          className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-fg-3"
+        />
+        <Input
+          id={id}
+          type="search"
+          name="q"
+          maxLength={100}
+          placeholder={placeholder}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="h-(--vs-control-sm) pl-8 max-lg:h-(--vs-control-touch)"
+        />
+      </div>
+      <Button type="submit" variant="outline" size="sm" className="max-lg:h-(--vs-control-touch)">
+        Search
+      </Button>
+    </form>
+  );
+}
+
+// a filter that is on or off, drawn as a chip; several can be on
+export function FilterChip({
+  on,
+  onToggle,
+  children,
+}: {
+  on: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={on}
+      onClick={onToggle}
+      className={cn(
+        "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full border px-2.5 text-caption font-medium transition-colors duration-(--vs-duration-press) ease-standard focus-ring max-lg:h-9",
+        on
+          ? "border-accent bg-selected text-fg"
+          : "border-line-strong text-fg-2 hover:bg-hover hover:text-fg",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+// a native select with its label in front, for a toolbar row
+export function InlineSelect({
+  label,
+  value,
+  onChange,
+  children,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  children: ReactNode;
+}) {
+  const id = useId();
+  return (
+    <span className="flex items-center gap-1.5">
+      <label htmlFor={id} className="text-caption whitespace-nowrap text-fg-3">
+        {label}
+      </label>
+      <NativeSelect
+        id={id}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="max-lg:h-(--vs-control-touch)"
+      >
+        {children}
+      </NativeSelect>
+    </span>
   );
 }
 
@@ -143,6 +257,8 @@ const TRI_TEXT: Record<TriKey, { label: string; yes: string; no: string }> = {
   has_api_data: { label: "API data", yes: "Has requests", no: "No requests" },
 };
 
+// every filter of contract 8.2 in one toolbar: search, the status chips, the
+// evidence and data selects and the enrollment days
 export function FiltersPanel({
   filters,
   onChange,
@@ -164,79 +280,49 @@ export function FiltersPanel({
   }
 
   return (
-    <div className="space-y-4">
-      <form
-        aria-label="Search projects"
-        onSubmit={(e) => {
-          e.preventDefault();
-          onChange({ ...filters, q: search });
-        }}
-        className="flex flex-wrap items-end gap-2"
-      >
-        <div className="min-w-0 flex-1 basis-56">
-          <TextField
-            label="Search"
-            type="search"
-            maxLength={100}
-            placeholder="Project name or slug"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
-        <Button type="submit" variant="outline">
-          Search
-        </Button>
-      </form>
-
-      <fieldset className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-        <legend className="mb-1 font-medium">Status</legend>
-        {tenantStatus.options.map((s) => (
-          <label key={s} className="flex items-center gap-1.5">
-            <input
-              type="checkbox"
-              className="size-4 accent-primary"
-              checked={filters.statuses.includes(s)}
-              onChange={() => toggle(s)}
-            />
-            {STATUS_TEXT[s]}
-          </label>
-        ))}
-      </fieldset>
-
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="flex flex-col gap-2.5">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <SearchBox
+          value={search}
+          onChange={setSearch}
+          onSubmit={() => onChange({ ...filters, q: search })}
+          placeholder="Project name or slug"
+          className="w-full sm:w-72"
+        />
+        <fieldset className="flex flex-wrap items-center gap-1.5">
+          <legend className="sr-only">Status</legend>
+          {tenantStatus.options.map((s) => (
+            <FilterChip key={s} on={filters.statuses.includes(s)} onToggle={() => toggle(s)}>
+              {STATUS_TEXT[s]}
+            </FilterChip>
+          ))}
+        </fieldset>
+      </div>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         {(Object.keys(TRI_TEXT) as TriKey[]).map((k) => (
-          <SelectField
+          <InlineSelect
             key={k}
             label={TRI_TEXT[k].label}
             value={filters[k]}
-            onChange={(e) => onChange({ ...filters, [k]: e.target.value as Tri })}
+            onChange={(v) => onChange({ ...filters, [k]: v as Tri })}
           >
             <option value="">Any</option>
             <option value="true">{TRI_TEXT[k].yes}</option>
             <option value="false">{TRI_TEXT[k].no}</option>
-          </SelectField>
+          </InlineSelect>
         ))}
-      </div>
-
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="w-40">
-          <TextField
-            label="Enrolled from"
-            type="date"
-            value={filters.enrolled_from}
-            onChange={(e) => onChange({ ...filters, enrolled_from: e.target.value })}
-          />
-        </div>
-        <div className="w-40">
-          <TextField
-            label="Enrolled to"
-            type="date"
-            value={filters.enrolled_to}
-            onChange={(e) => onChange({ ...filters, enrolled_to: e.target.value })}
-          />
-        </div>
+        <DayInput
+          label="Enrolled from"
+          value={filters.enrolled_from}
+          onChange={(v) => onChange({ ...filters, enrolled_from: v })}
+        />
+        <DayInput
+          label="Enrolled to"
+          value={filters.enrolled_to}
+          onChange={(v) => onChange({ ...filters, enrolled_to: v })}
+        />
         {n > 0 ? (
-          <Button type="button" variant="ghost" onClick={() => onChange(EMPTY_FILTERS)}>
+          <Button type="button" variant="ghost" size="sm" onClick={() => onChange(EMPTY_FILTERS)}>
             <X aria-hidden />
             Clear filters ({n})
           </Button>
@@ -246,7 +332,65 @@ export function FiltersPanel({
   );
 }
 
-// ---- sortable headers
+function DayInput({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const id = useId();
+  return (
+    <span className="flex items-center gap-1.5">
+      <label htmlFor={id} className="text-caption whitespace-nowrap text-fg-3">
+        {label}
+      </label>
+      <Input
+        id={id}
+        type="date"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="h-(--vs-control-sm) w-38 max-lg:h-(--vs-control-touch)"
+      />
+    </span>
+  );
+}
+
+// ---- table pieces
+
+// the scroll box of a project table: the header sticks while the rows scroll,
+// and it scrolls sideways on a phone inside its panel
+export function TableScroll({
+  label,
+  dim,
+  children,
+}: {
+  label: string;
+  dim?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <section
+      aria-label={label}
+      // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable region needs focus (wcag 2.1.1)
+      tabIndex={0}
+      className={cn(
+        "relative max-h-[70dvh] overflow-auto transition-opacity duration-(--vs-duration-change) ease-standard focus-ring",
+        dim && "opacity-60",
+      )}
+    >
+      {children}
+    </section>
+  );
+}
+
+export const TH =
+  "sticky top-0 z-10 h-9 border-b border-line bg-raised px-3 text-left align-middle text-caption font-medium whitespace-nowrap text-fg-3";
+export const TD = "h-11 border-b border-line-subtle px-3 align-middle";
+export const ROW =
+  "transition-colors duration-(--vs-duration-press) ease-standard hover:bg-hover data-[state=selected]:bg-selected";
 
 export function SortHeader<S extends string>({
   label,
@@ -255,6 +399,7 @@ export function SortHeader<S extends string>({
   order,
   numeric,
   onSort,
+  className,
 }: {
   label: string;
   sort: S;
@@ -262,45 +407,92 @@ export function SortHeader<S extends string>({
   order: "asc" | "desc";
   numeric?: boolean;
   onSort: (s: S) => void;
+  className?: string;
 }) {
   const on = current === sort;
   return (
     <th
       scope="col"
       aria-sort={on ? (order === "asc" ? "ascending" : "descending") : "none"}
-      className={`px-2 py-1 font-medium whitespace-nowrap ${numeric ? "text-right" : ""}`}
+      className={cn(TH, numeric && "text-right", on && "text-fg", className)}
     >
       <button
         type="button"
         onClick={() => onSort(sort)}
-        className={`inline-flex items-center gap-1 rounded px-1 py-1 hover:text-foreground ${on ? "text-foreground" : ""}`}
+        className={cn(
+          "-mx-1 inline-flex items-center gap-1 rounded-sm px-1 py-1 transition-colors duration-(--vs-duration-press) ease-standard hover:text-fg focus-ring",
+          on ? "text-fg" : "",
+        )}
       >
         {label}
         {on ? (
           order === "asc" ? (
-            <ArrowUp aria-hidden className="size-3.5" />
+            <ArrowUp aria-hidden className="size-3" />
           ) : (
-            <ArrowDown aria-hidden className="size-3.5" />
+            <ArrowDown aria-hidden className="size-3" />
           )
         ) : (
-          <ArrowUpDown aria-hidden className="size-3.5 opacity-50" />
+          <ArrowUpDown aria-hidden className="size-3 text-fg-disabled" />
         )}
       </button>
     </th>
   );
 }
 
+// a number with a bar of its size against the largest loaded value, drawn
+// only on the column the table is sorted by, so the long tail shows at once
+export function MagnitudeCell({
+  children,
+  value,
+  max,
+  on,
+}: {
+  children: ReactNode;
+  value: number | null;
+  max: number;
+  on: boolean;
+}) {
+  if (!on) return <Num>{children}</Num>;
+  const w = value === null || max <= 0 ? 0 : Math.max(1, (value / max) * 100);
+  return (
+    <td className={cn(TD, "font-mono text-small text-fg tabular")}>
+      <span className="flex items-center justify-end gap-2.5">
+        <span className="h-1.5 w-20 overflow-hidden rounded-full bg-line-subtle max-md:hidden">
+          <span
+            className="block h-full rounded-full bg-series-1 transition-[width] duration-(--vs-duration-change) ease-standard"
+            // the width is data; react writes it through the cssom
+            style={{ width: `${w}%` }}
+          />
+        </span>
+        <span className="whitespace-nowrap">{children}</span>
+      </span>
+    </td>
+  );
+}
+
 export function Missing() {
   return (
     <>
-      <span aria-hidden>-</span>
+      <span aria-hidden className="text-fg-3">
+        -
+      </span>
       <span className="sr-only">none</span>
     </>
   );
 }
 
-export function Num({ children }: { children: ReactNode }) {
-  return <td className="tabular px-3 py-2 text-right whitespace-nowrap">{children}</td>;
+export function Num({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <td
+      className={cn(
+        TD,
+        "text-right font-mono text-small whitespace-nowrap text-fg-2 tabular",
+        className,
+      )}
+    >
+      {children}
+    </td>
+  );
 }
 
 export function orMissing(v: string | null): ReactNode {
@@ -314,6 +506,7 @@ export type Selection = { id: string; name: string }[];
 export function useSelection() {
   const [sel, setSel] = useState<Selection>([]);
   const has = (id: string) => sel.some((s) => s.id === id);
+  const slot = (id: string) => sel.findIndex((s) => s.id === id);
   const toggle = (id: string, name: string) =>
     setSel((cur) =>
       cur.some((s) => s.id === id)
@@ -322,7 +515,18 @@ export function useSelection() {
           ? cur
           : [...cur, { id, name }],
     );
-  return { sel, has, toggle, clear: () => setSel([]), full: sel.length >= MAX_COMPARE };
+  return { sel, has, slot, toggle, clear: () => setSel([]), full: sel.length >= MAX_COMPARE };
+}
+
+// a selected project takes the series colour it will have in the comparison
+export function SeriesSwatch({ slot, className }: { slot: number; className?: string }) {
+  if (slot < 0) return null;
+  return (
+    <span
+      aria-hidden
+      className={cn("inline-block size-2 shrink-0 rounded-bar", SERIES_BG[slot], className)}
+    />
+  );
 }
 
 export function SelectCell({
@@ -336,14 +540,12 @@ export function SelectCell({
 }) {
   const checked = selection.has(id);
   return (
-    <td className="py-2 pr-1 pl-4 sm:pl-5">
-      <input
-        type="checkbox"
-        className="size-4 accent-primary"
+    <td className={cn(TD, "w-10 pr-0 pl-4")}>
+      <Checkbox
         aria-label={`Compare ${name}`}
         checked={checked}
         disabled={!checked && selection.full}
-        onChange={() => selection.toggle(id, name)}
+        onCheckedChange={() => selection.toggle(id, name)}
       />
     </td>
   );
@@ -360,25 +562,33 @@ export function CompareBar({
   return (
     <section
       aria-label="Comparison"
-      className="flex flex-wrap items-center gap-2 rounded-xl border bg-card p-3 text-sm sm:px-5"
+      className={cn(
+        "flex flex-wrap items-center gap-2 border-b border-line px-4 py-2 text-small transition-colors duration-(--vs-duration-change) ease-standard",
+        sel.length > 0 ? "bg-overlay" : "",
+      )}
     >
-      <p className="text-muted-foreground">
-        {sel.length === 0
-          ? `Select up to ${MAX_COMPARE} projects to compare them side by side.`
-          : `${sel.length} of ${MAX_COMPARE} selected:`}
+      <p className="text-fg-2">
+        {sel.length === 0 ? (
+          `Select up to ${MAX_COMPARE} projects to compare them side by side.`
+        ) : (
+          <>
+            <span className="font-mono text-fg">{sel.length}</span> of {MAX_COMPARE} selected:
+          </>
+        )}
       </p>
       {sel.length > 0 ? (
         <ul aria-label="Selected projects" className="flex flex-wrap gap-1.5">
-          {sel.map((s) => (
-            <li key={s.id}>
+          {sel.map((s, i) => (
+            <li key={s.id} className="animate-reveal-in">
               <button
                 type="button"
                 onClick={() => selection.toggle(s.id, s.name)}
                 aria-label={`Remove ${s.name} from the comparison`}
-                className="inline-flex max-w-56 items-center gap-1 rounded-full border bg-muted px-2.5 py-0.5"
+                className="inline-flex h-7 max-w-56 items-center gap-1.5 rounded-full border border-line-strong pr-1.5 pl-2 text-caption text-fg transition-colors duration-(--vs-duration-press) ease-standard hover:bg-hover focus-ring"
               >
+                <SeriesSwatch slot={i} />
                 <span className="truncate">{s.name}</span>
-                <X aria-hidden className="size-3.5 shrink-0" />
+                <X aria-hidden className="size-3.5 shrink-0 text-fg-3" />
               </button>
             </li>
           ))}
@@ -391,7 +601,7 @@ export function CompareBar({
           </Button>
         ) : null}
         {sel.length > 0 ? (
-          <Button asChild size="sm">
+          <Button asChild size="sm" className="max-lg:h-(--vs-control-touch)">
             <Link
               to={`/operator/compare?${compareSearch(
                 sel.map((s) => s.id),
@@ -426,12 +636,9 @@ export const AGGREGATE_NOTE =
 
 export function Notes({ items, children }: { items: string[]; children?: ReactNode }) {
   return (
-    <aside
-      aria-label="About these numbers"
-      className="rounded-xl border bg-card p-4 text-sm sm:p-5"
-    >
-      <h3 className="font-semibold">About these numbers</h3>
-      <ul className="mt-2 list-disc space-y-1.5 pl-5 text-muted-foreground">
+    <aside aria-label="About these numbers" className="flex flex-col gap-2 text-caption">
+      <h3 className="text-small font-medium text-fg-2">About these numbers</h3>
+      <ul className="flex max-w-prose flex-col gap-1.5 text-fg-3">
         {items.map((t) => (
           <li key={t}>{t}</li>
         ))}

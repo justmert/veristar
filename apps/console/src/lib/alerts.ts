@@ -6,9 +6,14 @@ import type { FiringAlert } from "@/api/schemas";
 // the severities of the alert rules (infra/ansible/roles/observability/
 // files/rules): page means act now, ticket within a working day. page is
 // the critical one, which the banner on every operator page counts.
-const KNOWN: Record<string, { label: string; hint: string; rank: number }> = {
-  page: { label: "Page", hint: "act now", rank: 0 },
-  ticket: { label: "Ticket", hint: "act within a working day", rank: 1 },
+const KNOWN: Record<string, { label: string; hint: string; word: string; rank: number }> = {
+  page: { label: "Page", hint: "act now", word: "Act now", rank: 0 },
+  ticket: {
+    label: "Ticket",
+    hint: "act within a working day",
+    word: "Within a working day",
+    rank: 1,
+  },
 };
 
 export const CRITICAL_SEVERITY = "page";
@@ -44,6 +49,21 @@ export function groupBySeverity(alerts: FiringAlert[]): SeverityGroup[] {
   return [...groups.values()].sort(
     (x, y) => rank(x.key) - rank(y.key) || x.key.localeCompare(y.key),
   );
+}
+
+// how an alert item says its urgency: the severity in words, with the tone
+// of its icon. a held back or not yet processed alert says that instead,
+// because its severity is not what the operator acts on
+export type AlertTone = "critical" | "warning" | "muted";
+
+export function alertUrgency(a: FiringAlert): { word: string; tone: AlertTone } {
+  if (a.state === "suppressed")
+    return { word: a.inhibited_by.length > 0 ? "Inhibited" : "Suppressed", tone: "muted" };
+  if (a.state === "unprocessed") return { word: "Just received", tone: "muted" };
+  if (a.severity === CRITICAL_SEVERITY) return { word: KNOWN.page?.word ?? "", tone: "critical" };
+  const known = a.severity ? KNOWN[a.severity] : undefined;
+  if (known) return { word: known.word, tone: "warning" };
+  return { word: a.severity ?? "No severity", tone: "warning" };
 }
 
 export function criticalCount(alerts: FiringAlert[]): number {

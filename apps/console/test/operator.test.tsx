@@ -60,7 +60,13 @@ describe("operator area guard", () => {
       "/operator",
     );
     await waitFor(() => expect(host.textContent).toContain("queue"));
-    expect(host.textContent).toContain("Audit log");
+    // the place header and its tabs; the sidebar of the shell picks the place
+    expect(host.querySelector("h1")?.textContent).toBe("Attention");
+    const tabs = host.querySelector('nav[aria-label="Operator sections"]') as HTMLElement;
+    expect([...tabs.querySelectorAll("a")].map((a) => a.textContent)).toEqual([
+      "Review queue",
+      "Alerts",
+    ]);
   });
 });
 
@@ -202,8 +208,10 @@ describe("operator project list", () => {
     );
     await waitFor(() => expect(host.textContent).toContain("Stellar DEX"));
     expect(calls[0]?.url).toBe("/api/operator/tenants?sort=created_at&order=desc&limit=50");
-    const pending = [...host.querySelectorAll("label")].find((l) => l.textContent === "Pending");
-    await click(pending?.querySelector("input") as HTMLElement);
+    const status = host.querySelector("fieldset") as HTMLElement;
+    const pending = byRole(status, "button", "Pending");
+    await click(pending);
+    await waitFor(() => expect(pending.getAttribute("aria-pressed")).toBe("true"));
     await waitFor(() => expect(calls).toHaveLength(2));
     expect(calls[1]?.url).toContain("status=pending");
     await type(byLabel(host, "Search"), "dex");
