@@ -99,7 +99,7 @@ recovery drills ([local drill record](../reference/drills/2026-11-13.md)) before
 
 ## 5. Release and roll out (target: 4 hours)
 
-1. Merge the pull request (all required checks green, one review).
+1. Merge the change to `main` with all checks green.
 2. Tag `v<release>` and build the release: `release-images.yml`, or the workstation release
    ([supply chain](../security/supply-chain.md), section 2.1), builds, scans and signs every image
    and produces `release-images.json`.
