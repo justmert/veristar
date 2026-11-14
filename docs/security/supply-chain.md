@@ -75,14 +75,30 @@ The deploy verifies a workstation release exactly like a workflow release: the k
 manifest and the registry digests are the same. What it cannot show is where the build ran;
 the release notes name the machine.
 
-Status on 2026-11-14: not run yet. The NATS fix of that day (section "NATS route liveness" of
-[../reference/drills/2026-11-13-azure.md](../reference/drills/2026-11-13-azure.md)) went out
-through Ansible alone and needed no image. The matching client change in `internal/natsx`
-(5 s pings, the configured server order) ships with the next release. Step 1 needs a token of
-`justmert` with `write:packages`: the GitHub CLI login on the controller carries `repo`,
-`workflow`, `read:org` and `gist` only, and the pull token has `read:packages` only, so the
-owner adds that scope (`gh auth refresh -s write:packages`) or creates a short-lived token for
-the release.
+**First workstation release: `v0.2.0` (2026-11-14).** Built by
+`scripts/supply-chain/release-workstation.sh v0.2.0 <work dir>` on the controller from a clean
+worktree at the tag (commit `df4c830` on `main`, with the MCP server, migration 00030 and the Umami
+theme), with `GH_TOKEN` of `justmert` holding `write:packages`. The script did every step above in
+9 min 36 s: eleven images built and pushed, each gated by `scan-image.sh` (syft 1.57.1,
+Trivy 0.76.2; no image had a fixable critical or high finding), signed and SBOM-attested with the
+release key read from the SOPS file into the process's environment only (`env://`), no
+transparency log; then `release-images.json` written, every digest verified with
+`infra/ansible/vars/release-cosign.pub`, and the file attached to the GitHub release `v0.2.0`.
+No workflow ran: every workflow of the repository is disabled.
+
+| Image | Tag | Digest |
+|---|---|---|
+| `caddy` | `v0.2.0` | `sha256:5318e90aad4e2cbc0fc7a37c34e11cfc48ae7cb5d4caa44a4ae276ce5e733c87` |
+| `collector` | `v0.2.0` | `sha256:dc9d7a2fe726c281766eff1b2cb81ac70b650177b3206fa59e8f73c3d7af3157` |
+| `console` | `v0.2.0` | `sha256:f6da6cd2462d6eae94c49fdb96935527098fd2ecea93c7d3a2759503b31d2b7b` |
+| `controlplane` | `v0.2.0` | `sha256:d30e7f1aad5a1cd28801019c02b8afeba7cfd83de153a2abeddaf2326a7e4432` |
+| `gateway` | `v0.2.0` | `sha256:f42f571d7c2ca008d1ac23c88a4fe19853de2fcf3a392d4ef678a6944fdcd32f` |
+| `jobs` | `v0.2.0` | `sha256:9591fb62d92c22920605fab247832ae1611605d1df0ebd9f3fb84a39aae7babf` |
+| `metricswriter` | `v0.2.0` | `sha256:44952f03a3a3aff106e505614daca2998f970c8dc61bb9fad3f63144905d33c4` |
+| `platformctl` | `v0.2.0` | `sha256:517c687501cddc4161fa3cb51061fa412a75d1601f244c7370d613a203418d38` |
+| `postgres-ha` | `18.7-v0.2.0` | `sha256:ac80c5ba3ca0ab798bfc5d40a00da5cb84fa09fdf0457d06d5f9ed158cddd6e5` |
+| `prober` | `v0.2.0` | `sha256:b5e3f5a5e99945dc954a04d6e21696517c7b8a1f9635893c1ec6984ac12b79f8` |
+| `replayer` | `v0.2.0` | `sha256:b89d0ef67613e0dc8914160a5e3b4d13a28678de4aa75fe6af9f87432d1a8a9a` |
 
 ## 3. Deploy-time verification (every playbook that pulls images)
 
