@@ -15,8 +15,8 @@ defaults
 # runs end to end to postgresql, which names "haproxy" in its certificate
 # (sslmode verify-full against the host the services dial). the health
 # checks are https to patroni's rest api with this node's client
-# certificate, checking patroni's certificate against the member's name
-#; check-ssl does not turn on tls for the traffic itself.
+# certificate, checking patroni's certificate against the member's name;
+# check-ssl does not turn on tls for the traffic itself.
 listen primary
     bind *:5000
     option httpchk GET /primary

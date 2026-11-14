@@ -1,5 +1,5 @@
 # managed by ansible (infra/ansible/roles/edge). one member of the edge nats
-# cluster (the design); routes run over the private network.
+# cluster (docs/architecture.md); routes run over the private network.
 server_name: "{{ inventory_hostname }}"
 listen: "0.0.0.0:4222"
 # monitoring stays plain http inside the node: compose publishes it on the

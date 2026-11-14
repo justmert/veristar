@@ -1,5 +1,5 @@
 ---
-# the raw web retention job of the design as a systemd timer: `jobs
+# the raw web retention job as a systemd timer: `jobs
 # retain-web` deletes umami rows older than WEB_RAW_RETENTION_MONTHS as the
 # jobs_retention role, which may read and delete those tables and nothing
 # else (internal/jobs/retainweb). it uses the jobs image and env file in a

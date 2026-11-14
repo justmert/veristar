@@ -4,9 +4,10 @@ scope: "sa-{{ sa_environment }}"
 namespace: /veristar/
 name: "{{ inventory_hostname }}"
 
-# every link is tls with the node certificate of the internal ca (finding
-# O-26). the certificates are mounted at /etc/patroni-tls by the compose
-# project (owned by the postgres user, as postgresql requires of a key).
+# every link is tls with the node certificate of the internal ca, so
+# nothing crosses the private network in plain text. the certificates are
+# mounted at /etc/patroni-tls by the compose project (owned by the postgres
+# user, as postgresql requires of a key).
 restapi:
   listen: 0.0.0.0:8008
   connect_address: "{{ sa_private_ip }}:8008"

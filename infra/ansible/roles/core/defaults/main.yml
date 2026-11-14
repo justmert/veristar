@@ -6,7 +6,7 @@ core_conf_dir: /etc/veristar/core
 # haproxy and the services reach the database from it
 core_compose_subnet: 172.29.10.0/24
 
-# every core node runs a patroni member (the design): one leader, one
+# every core node runs a patroni member: one leader, one
 # synchronous replica, etcd on the edge nodes as the consensus store
 core_postgres_hosts: "{{ groups['core'] }}"
 
@@ -29,7 +29,7 @@ core_patroni_dcs:
   # rejoin etcd) demotes itself although both database nodes are fine. with
   # it, the leader stays primary as long as it reaches every member listed
   # in /failsafe through the rest api, so an edge-side failure no longer
-  # stops the dashboards and the pipeline.
+  # stops the dashboards and the pipeline (patroni 3.0+).
   failsafe_mode: true
 
 # wal archiving to the pgbackrest repository. archive_timeout bounds how old
@@ -37,7 +37,7 @@ core_patroni_dcs:
 # database nodes are lost at once (docs/reference/availability.md)
 core_archive_timeout: 60
 
-# the retain-web systemd timer (the design): `jobs retain-web` as the
+# the retain-web systemd timer: `jobs retain-web` as the
 # jobs_retention role once a day. two runs at once are safe (cmd/jobs), and
 # each core node runs at its own minute so one node down still runs it.
 core_retain_web_hour: 3
@@ -74,11 +74,11 @@ core_api_hourly_retention_months: 36
 # member there for the operator alerts page.
 core_alertmanager_port: 9093
 
-# each event costs the replayer several confirmed round trips to nats
-# (duplicate guard, visit state, ack), whose leaders can sit in another
-# location. with 16 lanes this stage measured about 80 events a second against
-# a 500 per second load; lanes run in parallel per visitor, so 128 lanes
-# (the in-flight bound stays under the consumer's max ack pending of 1000)
+# each event costs the replayer several confirmed round trips to nats (duplicate
+# guard, visit state, ack), whose leaders can sit in another location. with 16
+# lanes the 2026-11-13 load drill measured about 80 events a second against a
+# 500 per second load; lanes run in parallel per visitor, so 128 lanes (the
+# in-flight bound stays under the consumer's max ack pending of 1000)
 core_replayer_env:
   REPLAYER_WORKERS: "128"
   REPLAYER_MAX_IN_FLIGHT: "900"
@@ -89,7 +89,7 @@ core_metricswriter_env:
   METRICSWRITER_SERVICE_CAP: "50"
 
 # umami processes per core node. one umami process is one node.js process
-# and drained about 280 events a second in the this stage load drill, below the
+# and drained about 280 events a second in the 2026-11-13 load drill, below the
 # 500 a second of the 10x profile. the replayer spreads visitors over all of
 # them by its lane hash. measured on one host with each process capped at
 # one core (internal/replayer TestDrainRateByUmamiProcesses,
@@ -108,8 +108,8 @@ core_metricswriter_env:
 # that is far above the 1x profile (50/s) and below the 10x burst profile
 # (500/s): a burst queues in jetstream and drains after it, which keeps
 # ingestion up and delays the dashboards (docs/reference/availability.md).
-# the rate on this node size has not been measured yet; this stage's load
-# drill on staging measures it.
+# the rate on this node size has not been measured yet; the load drill on
+# staging measures it.
 core_umami_processes: 2
 
 # local converge only: sign in through the test-only github oauth fixture

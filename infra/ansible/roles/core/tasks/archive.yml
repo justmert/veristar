@@ -1,5 +1,5 @@
 ---
-# wal archiving. runs on
+# wal archiving, so point-in-time recovery has the wal it needs. runs on
 # the core nodes after the database is up (site.yml, play "WAL archiving"):
 #   1. the stanza exists in the repository: in object storage mode the
 #      patroni leader creates it here; in the local converge's posix-host

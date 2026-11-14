@@ -1,8 +1,8 @@
-# managed by ansible (infra/ansible/roles/core). core tier of the design
-# 4.1. only caddy binds the public address; postgresql and patroni bind the
-# private one (replication, haproxy on the other core node); everything else
-# stays on this project's network. secrets come from the root-only env files
-# of the secrets role.
+# managed by ansible (infra/ansible/roles/core). core tier of
+# docs/architecture.md. only caddy binds the public address; postgresql and
+# patroni bind the private one (replication, haproxy on the other core node);
+# everything else stays on this project's network. secrets come from the
+# root-only env files of the secrets role.
 name: veristar-core
 
 x-defaults: &defaults
@@ -11,7 +11,7 @@ x-defaults: &defaults
   # bundle changes the label and so recreates every container reading them
   labels:
     sa.tls: "{{ secrets_tls_fingerprint }}"
-  # container hardening (the design): the root filesystem is read-only, so
+  # container hardening: the root filesystem is read-only, so
   # services write only to their volumes and a small /tmp (patroni's pgpass,
   # pgbackrest's locks, caddy's temporary truststore); no capabilities; no
   # privilege gain through setuid binaries or file capabilities. every image
@@ -42,7 +42,7 @@ x-nats: &nats
   NATS_TLS_CA: /etc/sa-tls/ca.crt
   NATS_REPLICAS: "3"
 
-# review: docker can forward a published ipv6 port into a container only
+# docker can forward a published ipv6 port into a container only
 # through docker-proxy when the container has no ipv6 address, and caddy then
 # sees the bridge gateway (one ipv4 address) as the peer of every ipv6
 # visitor, so every per-client limit and the visitor token collapse into one
@@ -160,7 +160,7 @@ services:
     env_file: [{{ secrets_env_dir }}/umami.env]
     volumes:
       - {{ sa_tls_dir }}/ca:/etc/sa-tls:ro
-    # the design; REDIS_URL, CLICKHOUSE_URL, KAFKA_URL, CLOUD_MODE,
+    # umami runs on postgresql alone; REDIS_URL, CLICKHOUSE_URL, KAFKA_URL, CLOUD_MODE,
     # MCP_ENABLED, DISABLE_BOT_CHECK and SKIP_LOCATION_HEADERS stay unset
     environment:
       CLIENT_IP_HEADER: x-edge-client-ip

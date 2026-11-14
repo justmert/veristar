@@ -1,7 +1,6 @@
 ---
-# etcd membership of this edge node ( of
-# the review notes, plan audit backlog "etcd member rejoin
-# when an edge node is rebuilt"). etcd's rule: a member that lost its data
+# etcd membership of this edge node, so a rebuilt edge node rejoins the
+# etcd cluster. etcd's rule: a member that lost its data
 # directory cannot start again as itself. it must be removed from the
 # cluster, added again, and started with --initial-cluster-state=existing.
 #

@@ -1,6 +1,6 @@
 ---
-# leader-lock fencing assumes the servers' clocks agree within 15 s (plan
-# this stage). chrony keeps them on ntp, and the converge stops if a node is
+# leader-lock fencing assumes the servers' clocks agree within 15 s, the
+# lock ttl. chrony keeps them on ntp, and the converge stops if a node is
 # not synchronised within base_time_max_offset_seconds.
 - name: Remove systemd-timesyncd, which would fight chrony
   ansible.builtin.apt:
