@@ -4,9 +4,10 @@ sidebarTitle: "Ansible"
 description: "The Ansible roles, playbooks and images that configure every node."
 ---
 
-Status: first version (this stage, stream b). Verified on the local converge
-(docs/deploy/local-converge.md); not yet run against staging, which is blocked on the
-inputs listed in section 6.
+Ansible configures every node of an environment: the operating system, the firewall, the
+secrets, the platform services and monitoring. This page lists the pinned versions, the images,
+the roles and playbooks, the firewall and the transport security of the private network, and
+ends with the procedure for a converge.
 
 ## 1. Pins (checked 2026-11-12)
 
@@ -19,24 +20,24 @@ inputs listed in section 6.
 | SOPS, age | 3.13.3, 1.3.2 | SHA-256 against the release checksums file (SOPS) and GitHub's asset digest (age) |
 | Caddy | 2.11.9 with `caddy-dns/cloudflare` v0.2.4 | `caddy.Dockerfile` compiles against 2.11.9 and `caddy validate` accepts `dns cloudflare` for every assembled node config (2026-11-13); production holds Let's Encrypt certificates for `in`, `otlp`, `app` and `web` on every node ([../reference/drills/2026-11-13-azure.md](../reference/drills/2026-11-13-azure.md)) |
 
-Findings that changed the build:
+Build notes:
 
 - Patroni's Debian package satisfies its store dependency with Consul when installed
   without recommends, which leaves only `consul` and `kubernetes` usable. The image
   installs `python3-etcd` explicitly and imports `patroni.dcs.etcd3` at build time.
 - Node 26 no longer ships corepack; the console image installs pnpm 12.18.0 with npm.
-- `go-service.Dockerfile` now copies `db/` (platformctl embeds the migrations) and
-  `controlplane.Dockerfile` copies `docs/reference/openapi` (this stage embeds it) and the
-  tracker releases (`TRACKER_RELEASE_DIR=/releases`).
+- `go-service.Dockerfile` copies `db/` (platformctl embeds the migrations), and
+  `controlplane.Dockerfile` copies `docs/reference/openapi` (the control plane embeds the metrics
+  API contract) and the tracker releases (`TRACKER_RELEASE_DIR=/releases`).
 
 ## 2. Images
 
 | Image | Dockerfile | Note |
 |---|---|---|
 | `postgres-ha` | `deploy/images/postgres-ha.Dockerfile` | `PG_BASE` is the one place the PostgreSQL version is chosen; tag is `<pg version>-<release>` |
-| `caddy` | `caddy.Dockerfile` (unchanged) | edge nodes |
+| `caddy` | `caddy.Dockerfile` | edge nodes |
 | `console` | `console.Dockerfile` | `caddy` plus the console build at `/srv/console`; core nodes |
-| `gateway`, `collector`, `controlplane`, `replayer`, `metricswriter`, `jobs`, `platformctl` | existing | |
+| `gateway`, `collector`, `controlplane`, `replayer`, `metricswriter`, `jobs`, `platformctl`, `prober` | `go-service.Dockerfile`, `controlplane.Dockerfile`, `collector.Dockerfile` | |
 
 Names: `{{ sa_image_registry }}/<name>:{{ sa_image_tag }}`. Upstream images (NATS, etcd,
 HAProxy, Umami) are pinned by digest in `infra/ansible/vars/pins.yml`.
@@ -50,7 +51,7 @@ HAProxy, Umami) are pinned by digest in `infra/ansible/vars/pins.yml`.
 ## 3. Roles
 
 **Converged nodes (tier `node`).** Production runs three nodes that are each in the `edge` and the
-`core` group (operator decision of 2026-11-13, [../reference/availability.md](../reference/availability.md)).
+`core` group ([../reference/availability.md](../reference/availability.md)).
 Both roles run on such a node with their own Compose projects; the edge project then has no
 Caddy, and the core project's Caddy (the console image) serves `in.`, `otlp.`, `app.` and `web.`
 from one config (`assemble.sh node`), joins the edge project's network to reach the gateway
@@ -67,7 +68,7 @@ accepting single-tier `edge` and `core` nodes, which the local converge's defaul
   inside the 15 s that lock fencing assumes); Docker Engine and Compose at their pins,
   held, with a `local` log driver and `live-restore`.
 - **secrets**: SOPS and age on the controller, decryption on the controller, root-only
-  env files on the nodes (docs/deploy/secrets.md).
+  env files on the nodes ([secrets.md](secrets.md)).
 - **edge**: Compose project `/opt/veristar/edge` with Caddy, gateway, collector,
   NATS and etcd. NATS: one cluster `sa-<env>` with authenticated routes over the private
   network and the authorization block rendered by `platformctl nats auth-config` from
@@ -76,8 +77,7 @@ accepting single-tier `edge` and `core` nodes, which the local converge's defaul
 - **core**: Compose project `/opt/veristar/core` with postgres-ha (Patroni, one
   member per core-group node, three on the converged nodes of production; DCS etcd3 on the edge
   nodes), HAProxy routing port 5000
-  to the member whose Patroni REST answers `/primary` with 200, Umami (the design
-  environment), control plane, replayer, metricswriter, jobs and Caddy with the console.
+  to the member whose Patroni REST answers `/primary` with 200, Umami, control plane, replayer, metricswriter, jobs and Caddy with the console.
 - **storage** (on the controller): reads the Azure backup storage account back through the
   az CLI (ZRS, no account keys, versioning, immutability, lifecycle, container) and stops when
   a protection is missing ([backups.md](backups.md)). In the local converge's `s3` mode it
@@ -94,7 +94,7 @@ accepting single-tier `edge` and `core` nodes, which the local converge's defaul
 Table `inet sa_host`, loaded by its own unit `sa-firewall.service` (Debian's
 `nftables.service` flushes the whole ruleset on stop, which would remove Docker's rules).
 Input: loopback, established, the private network from its CIDR, ICMP, TCP 80 and 443
-and UDP 443 on the public interface, TCP 22 from the admin CIDRs, and this node's
+and UDP 443 on the public interface, TCP 22 from `admin_cidrs`, and this node's
 containers reaching ports it publishes on itself. Forward (before Docker's chains):
 from the public interface only established traffic and DNAT to 80 and 443. Private
 services also bind only the private address, so they never listen publicly at all.
@@ -105,8 +105,8 @@ Caddy is the only container that sees the visitor's address, and it hands that a
 the gateway (`X-Edge-Client-Ip`: visitor token, country, per-prefix limits) and to the
 control plane (`X-Sa-Client-Addr`: sign-in limits). Docker forwards a published IPv6 port
 into a container with no IPv6 address through `docker-proxy`, so Caddy then sees the
-bridge gateway, one IPv4 address, as the peer of every IPv6 visitor (review, confirmed
-with the shipped edge Caddyfile on Docker 29.3.1: an IPv6 client was seen as `172.31.0.1`).
+bridge gateway, one IPv4 address, as the peer of every IPv6 visitor (with a plain layout on
+Docker 29.3.1, an IPv6 client is seen as `172.31.0.1`).
 Both compose files therefore attach Caddy, and only Caddy, to a second network `public`
 that is IPv6-only (`enable_ipv4: false`, a unique local /64 from `edge_public6_subnet`
 and `core_public6_subnet`). Docker picks the gateway endpoint per address family, so IPv6
@@ -119,7 +119,7 @@ in `deploy/caddy` reproduces both layouts.
 
 ## 5. Playbooks
 
-- `site.yml`: `verify-release.yml` (image signatures, section 8), base and secrets
+- `site.yml`: `verify-release.yml` (image signatures, [../security/supply-chain.md](../security/supply-chain.md) section 3), base and secrets
   everywhere, the backup bucket (storage role), NATS and etcd (a rebuilt edge node rejoins
   etcd, `roles/edge/tasks/etcd.yml`), postgres-ha and HAProxy, WAL archiving
   (`roles/core/tasks/archive.yml`), `bootstrap.yml`, all edge and core services, the
@@ -128,7 +128,7 @@ in `deploy/caddy` reproduces both layouts.
   `restore.yml`; verifies the release manifest and pins every node to the verified digests.
 - `reboot.yml`: rolling host reboot for kernel and libc fixes
   ([../runbooks/security-patch.md](../runbooks/security-patch.md) section 6a).
-- `bootstrap.yml` (core[0]): checks I3, waits for a writable leader, creates the Umami
+- `bootstrap.yml` (core[0]): checks `sa_operator_github_ids`, waits for a writable leader, creates the Umami
   role and database and the platform database, `platformctl db migrate`, `db roles`,
   starts Umami (which migrates itself), `umami bootstrap`, `db umami-retention-role`,
   `nats apply`. Each step reports a change only when it made one.
@@ -152,27 +152,7 @@ and 443 on the private address (`sa_public_bind_ipv4` in the environment's
 `group_vars/all.yml`), and the host firewall's forward chain lets the private network reach
 the ports published there, since it arrives on the same interface.
 
-## 6. Blocked on inputs
-
-| What | Input |
-|---|---|
-| Any staging or production converge (no servers, no inventory) | I5 (via the OpenTofu stream) |
-| Hostnames and certificates, `sa_tls: cloudflare` issuing by DNS-01 | I4, I6 (both supplied; first issuance at the first converge) |
-| Control plane sign-in (`github_client_id`, `github_client_secret`) | I2 |
-| `sa_operator_github_ids` | I3 |
-| SSH rule of the firewall (`sa_admin_cidrs`) | I13 |
-| `.sops.yaml` rules and every `secrets.enc.yaml` | I14 |
-
-## 7. Not in this stream
-
-- (Done since.) `jobs retain-web` (this stage) runs from a systemd timer of the core role
-  (`roles/core/tasks/retain_web.yml`).
-- (Done since, this stage.) Further core nodes, Patroni replication (three members in
-  production), pgBackRest repositories and the backup storage (`storage` role).
-- Every link between nodes is TLS with certificates of an
-  internal CA: section 9.
-
-## 9. Transport security on the private network
+## 6. Transport security on the private network
 
 `playbooks/internal-ca.yml` (`make internal-ca ENV=<env>`, before the first converge and
 after any inventory change) keeps one CA per environment in `infra/secrets/<env>/ca.enc.yaml`,
@@ -204,14 +184,14 @@ NATS client refuses a server without TLS. There is no fallback to plain text any
 Each container that reads a certificate carries the label `sa.tls` (hash of the node certificate
 and the CA bundle), so a reissue recreates exactly those containers at the next converge.
 
-**Existing clusters.** No staging or production environment had been converged when this was
-built, so the roles do not migrate a running etcd from `http` to `https` peer URLs (etcd keeps the
-advertised peer URLs of an existing member); converge an environment with TLS from the start.
+**New clusters only.** The roles do not migrate a running etcd from `http` to `https` peer URLs
+(etcd keeps the advertised peer URLs of an existing member), so every environment is converged
+with TLS from the start.
 
-## 8. Procedure, step by step
+## 7. Procedure, step by step
 
 Staging is shown. Needs [prerequisites.md](prerequisites.md), the SOPS files of
-[secrets.md](secrets.md) section 5, the inventory from [opentofu.md](opentofu.md) section 6,
+[secrets.md](secrets.md) section 5, the inventory from [opentofu.md](opentofu.md#procedure),
 `cosign` on `PATH` and your age identity in `~/.config/sops/age/keys.txt` (or
 `SOPS_AGE_KEY_FILE`). Steps 1 to 3 are the first converge; [bootstrap.md](bootstrap.md) walks
 through it with the checks around it.
@@ -220,10 +200,10 @@ through it with the checks around it.
    `infra/ansible/inventories/staging/group_vars/all.yml`, beside the generated `hosts.json`:
 
    ```yaml
-   # images of the release workflow for repository <an operator input>
-   sa_image_registry: ghcr.io/justmert/veristar
-   # numeric github ids of the scf operators an operator input, comma separated
-   sa_operator_github_ids: "<an operator input>"
+   # images of the release workflow of your repository
+   sa_image_registry: ghcr.io/<owner>/veristar
+   # numeric github ids of the scf operators, comma separated
+   sa_operator_github_ids: "<operator github ids>"
    ```
 
 2. **Converge** at a release tag (`v<release>`, whose images `release-images.yml` built and
@@ -235,9 +215,7 @@ through it with the checks around it.
 
    This runs `site.yml`: base and secrets on every node, NATS and etcd, postgres-ha and HAProxy,
    the backup settings, `bootstrap.yml`, the edge and core services, then the observability role.
-   Expected: a `PLAY RECAP` with `failed=0` and `unreachable=0` for every node. For comparison,
-   the local converge's first run reported `ok=91 changed=40 failed=0` on the core node and
-   `changed=32` on each edge node ([local-converge.md](local-converge.md) section 5). The guards
+   Expected: a `PLAY RECAP` with `failed=0` and `unreachable=0` for every node. The guards
    print `no inventory: run make staging-apply first` and
    `set SA_IMAGE_TAG to the release to deploy` when their inputs are missing.
 
@@ -246,8 +224,10 @@ through it with the checks around it.
    and the nodes pull the verified digests, exactly as the rolling deploy does
    ([../security/supply-chain.md](../security/supply-chain.md) section 3).
 
-3. **Run it again.** Expected: `changed=0` on every node (the local converge's second run:
-   `ok=82 changed=0 failed=0` on the core node).
+3. **Run it again.** Expected: `failed=0` on every node. "Start the edge services" reports a
+   change on every run, because the one-shot `volume-owners` container runs at every
+   `compose up`; the production record lists the other changes a second run can show
+   ([../reference/drills/2026-11-13-azure.md](../reference/drills/2026-11-13-azure.md)).
 
 4. **Later rollouts** use the rolling deploy with signature verification
    ([upgrade.md](upgrade.md)):
@@ -256,13 +236,7 @@ through it with the checks around it.
    make staging-deploy ROLLING=1 SA_IMAGE_TAG=<release> SA_RELEASE_MANIFEST=<path to release-images.json>
    ```
 
-   Without the manifest it stops with
-   `ROLLING=1 needs SA_RELEASE_MANIFEST=<release-images.json of the release> (this stage signature check)`.
+   Without the manifest it stops and asks for `SA_RELEASE_MANIFEST`.
 
-5. **Lint** after changing a role: `make ansible-lint` (passed on 2026-11-13 with the production
-   profile, 0 failures).
-
-Steps 2 and 3 ran only against the local converge (`make local-converge`, same playbook,
-inventory `inventories/local/`); step 4's signature check ran in `make supplychain-it` with a
-test-only key. No cloud converge has run yet: production waits for its VMs
-([opentofu.md](opentofu.md) section 3.8) and for a signed release (section 5).
+5. **Lint** after changing a role: `make ansible-lint`. Expected: the production profile passes
+   with 0 failures.
