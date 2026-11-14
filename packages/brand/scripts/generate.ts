@@ -174,7 +174,10 @@ function roleBlock(name: ThemeName) {
     /("colors":\s*\{\s*"primary":\s*")[^"]*(",\s*"light":\s*")[^"]*(",\s*"dark":\s*")[^"]*(")/,
     `$1${up(t.accent)}$2${up(t.accent)}$3${up(t.accent)}$4`,
   );
-  text = text.replace(/("background":\s*\{\s*"color":\s*\{\s*"dark":\s*")[^"]*(")/, `$1${up(t.ground)}$2`);
+  text = text.replace(
+    /("background":\s*\{\s*"color":\s*\{\s*"dark":\s*")[^"]*(")/,
+    `$1${up(t.ground)}$2`,
+  );
   want(path, text);
 }
 
