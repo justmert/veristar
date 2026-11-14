@@ -8,11 +8,12 @@ description: "The open-source licence of the repository and of the infrastructur
 
 ## Context
 
-RFP section 3.1 says: "All application and infrastructure code must be released
+The Stellar Community Fund request for proposals (RFP), section 3.1, says: "All application and infrastructure code must be released
 under an OSI-approved open-source license", and the whole solution, including
 infrastructure as code, must live in one open-source monorepo.
 
-Umami is not forked (ADR 0002), so its licence does not dictate ours. The one
+Umami is not forked ([ADR 0002](0002-overlay-not-fork.md)), so its licence does not
+dictate the licence of this repository. The one
 exception is the browser tracker in `packages/tracker`, whose source is derived
 from Umami's tracker. Umami is MIT licensed, with the notice
 "Copyright (c) 2022 Umami Software, Inc. \<hello@umami.is\>"
@@ -40,7 +41,7 @@ OSI approved.
   unmodified text from https://www.apache.org/licenses/LICENSE-2.0.txt. Apache-2.0
   is OSI approved and includes an explicit patent grant.
 - `packages/tracker` is licensed under the MIT License and carries its own
-  `LICENSE` file with Umami's copyright notice retained, plus a line for our own
+  `LICENSE` file with Umami's copyright notice retained, plus a line for the Veristar
   changes. `NOTICE` at the root records this.
 - Infrastructure code targets OpenTofu, not Terraform, so that the tool a future
   operator needs is itself open source under an OSI-approved licence.
@@ -63,7 +64,7 @@ OSI approved.
 
 ## Sources
 
-- RFP section 3.1 (internal, `.scratch/rfp.md`).
+- RFP section 3.1.
 - Apache License 2.0: https://www.apache.org/licenses/LICENSE-2.0.txt
 - Umami LICENSE at v3.5.0: https://github.com/umami-software/umami/blob/v3.5.0/LICENSE
 - HashiCorp, "HashiCorp adopts Business Source License", 10 August 2023:

@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping. This page covers the toolchain, the checks a change must pass, and the
+This page covers the toolchain, the checks a change must pass, and the
 conventions of the repository. Security problems are not reported here: use private
 vulnerability reporting ([docs/security/SECURITY.md](docs/security/SECURITY.md)).
 
@@ -58,8 +58,8 @@ pnpm test                     # vitest suites
 test-containers` runs the others, one package at a time (`-p 1`), and needs Docker.
 `scripts/go-test-packages.sh` derives the split from each package's test imports, so a new
 container test lands in `test-containers` without a build tag. The gateway geo tests need the
-DB-IP country file: `make geo-fetch`, then
-`DBIP_MMDB=.scratch/scratch/geo/dbip-country-lite.mmdb make test-containers`.
+DB-IP country file: run `make geo-fetch`, which prints the path of the file it writes, then
+`DBIP_MMDB=<that path> make test-containers`.
 
 Suites that start real services, run when the change touches their area:
 

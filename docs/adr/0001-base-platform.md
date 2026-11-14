@@ -9,8 +9,8 @@ description: "Why Veristar builds its web analytics on Umami."
 
 ## Context
 
-The RFP requires the platform to be built on either Umami or GoatCounter, and the
-choice has to be justified. The web side must report page views, unique visitors,
+The Stellar Community Fund request for proposals (RFP) behind Veristar requires the
+platform to be built on either Umami or GoatCounter, and the choice has to be justified. The web side must report page views, unique visitors,
 referrers, session duration, bounce rate, country, and device and browser, for
 each tenant and across tenants. The whole solution must be released under an
 OSI-approved licence.
@@ -48,8 +48,8 @@ whether it bounced. A search of the v2.7.0 source tree for "bounce" finds nothin
 and the only mention of time on page is a changelog note that raw page views are
 "still stored for some future purposes (such as "time on page")"
 ([CHANGELOG.md](https://github.com/arp242/goatcounter/blob/v2.7.0/CHANGELOG.md)).
-Building on GoatCounter would mean adding session tracking to it ourselves, which
-is the hardest part of the metric set.
+Building on GoatCounter would mean adding session tracking to it, which is the
+hardest part of the metric set.
 
 ### Licence
 
@@ -77,8 +77,7 @@ It has teams (`Team`, `TeamUser` models) and these roles: global `admin`, `user`
 `view-only`, and team roles `team-owner`, `team-manager`, `team-member`,
 `team-view-only`
 ([`ROLES` in `src/lib/constants.ts`](https://github.com/umami-software/umami/blob/v3.5.0/src/lib/constants.ts)).
-That maps directly onto one team per tenant with read-only members (see plan
-section 4.8).
+That maps directly onto one team per tenant with read-only members.
 
 ### Maintenance and security
 
@@ -114,11 +113,11 @@ Good:
 - Bounce rate and visit duration come from Umami's own queries, so they do not
   have to be invented and defended.
 - Umami's teams and view-only roles carry tenant isolation for web dashboards.
-- MIT allows us to derive our tracker from Umami's and keep the rest of the
-  repository under Apache-2.0.
+- MIT allows the Veristar tracker to derive from Umami's while the rest of the
+  repository stays under Apache-2.0.
 - Web data and API metrics share one PostgreSQL cluster.
 
-Costs and counterpoints, stated honestly:
+Costs:
 
 - Umami is a much larger dependency. v3.5.0 declares 62 runtime and 31
   development npm dependencies, including Next.js 16.4.2 and React 19
@@ -133,7 +132,7 @@ Costs and counterpoints, stated honestly:
   to 19.2.0. Running Umami means tracking Next.js and React advisories and
   rebuilding on their fixes.
 - The roughly monthly release cadence means regular upgrade work, and each
-  release has to be reviewed against the routes and settings we depend on.
+  release has to be reviewed against the routes and settings the platform depends on.
 - Umami's collect route trusts every caller. In
   [`src/app/api/send/route.ts`](https://github.com/umami-software/umami/blob/v3.5.0/src/app/api/send/route.ts)
   the request is parsed with `skipAuth: true`, and the payload schema
@@ -143,7 +142,7 @@ Costs and counterpoints, stated honestly:
   `isbot` user-agent check and the `IGNORE_IP` list. Exposed to the internet, it
   would let anyone post events for any site with any IP. This is why the platform
   puts its own gateway in front and never exposes Umami's collect routes
-.
+  ([ADR 0002](0002-overlay-not-fork.md)).
 
 ## Sources
 
