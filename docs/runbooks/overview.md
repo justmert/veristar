@@ -4,55 +4,64 @@ sidebarTitle: "Overview"
 description: "One runbook per operational task, and the conventions every runbook shares."
 ---
 
-One runbook per operational task. Each one says what it is for, the numbered steps, how to
-tell it worked, and when and where it was last exercised. "Exercised" means the steps (or the
-exact code path they drive) were run for real and the result is recorded with its date and
-source. Where nothing ran, the runbook says **not yet exercised** and why.
+One runbook per operational task. Each runbook states when to use it, the numbered steps, how
+to tell each step worked, and a record of where and when its steps ran.
 
-Plan inputs are written as `<an operator input>` and so on (the design; the list is in
-[../deploy/prerequisites.md](../deploy/prerequisites.md)). Values you look up at the time,
-such as a tenant id, are written as `<tenant id>`. Nothing in angle brackets is a real value.
+Placeholders are written in angle brackets: `<BASE_DOMAIN>` for the environment's domain
+(production: `veristar.app`), `<env>` for `staging` or `production`, and values you look up at
+the time, such as `<tenant id>`. Nothing in angle brackets is a real value. The values an
+environment is built from are listed in [../deploy/prerequisites.md](../deploy/prerequisites.md).
 
 ## Index
 
-| Runbook | Last exercised | Where |
-|---|---|---|
-| [edge-node-failure.md](edge-node-failure.md) | 2026-11-12 and 2026-11-13, in part | local converge, alert fire-drills |
-| [queue-backlog-and-dlq.md](queue-backlog-and-dlq.md) | 2026-11-13, in part | this stage load run, alert fire-drills, dev stack |
-| [database-failover.md](database-failover.md) | not yet exercised | needs the multi-node topology |
-| [point-in-time-restore.md](point-in-time-restore.md) | not yet exercised | needs the multi-node topology and a backup repository |
-| [disaster-recovery.md](disaster-recovery.md) (both database nodes lost) | not yet exercised; the restore node's inventory shape is tested | `make tofu-check`; the chain needs staging |
-| [umami-upgrade.md](umami-upgrade.md) | 2026-11-13 (upgrade and rollback) | this stage patch rehearsal, this stage rollback rehearsal |
-| [collector-upgrade.md](collector-upgrade.md) | 2026-11-13, build and gate only | this stage, local |
-| [tracker-release.md](tracker-release.md) | 2026-11-13 (revocation) | this stage, local gateway |
-| [operator-key-revocation.md](operator-key-revocation.md) | 2026-11-13, API path | this stage, `TestMachineAPI` |
-| [mcp-access.md](mcp-access.md) (revoke and review AI clients) | 2026-11-14, API path | `TestMCP`, `TestIsolationGate/MCPRoutes` |
-| [tenant-removal.md](tenant-removal.md) (suspension and removal) | 2026-11-13, API path | this stage, `TestLifecycle` |
-| [erasure-requests.md](erasure-requests.md) | 2026-11-13, API path | this stage, `TestErasure` |
-| [metric-inflation.md](metric-inflation.md) | 2026-11-13, queries only | this stage, scratch database |
-| [security-incident.md](security-incident.md) | not yet exercised as a whole | parts rehearsed in this stage |
-| [security-patch.md](security-patch.md) | 2026-11-13 | this stage patch rehearsal |
-| [certificates.md](certificates.md) | 2026-11-13, expiry alert only | alert fire-drill |
-| [dbip-update.md](dbip-update.md) | 2026-11-13 | this stage, local |
-| [secret-rotation.md](secret-rotation.md) | 2026-11-13, platform role passwords only | this stage, scratch database |
-| [operators.md](operators.md) | 2026-11-13, sync path | this stage, `TestSyncFlags`, `TestOperatorFlag`, `TestLifecycle` |
-| [capacity.md](capacity.md) | 2026-11-13, measurement only | this stage, `TestMeasure` |
-| [slo-report.md](slo-report.md) | 2026-11-13 | this stage collection, this stage report rerun |
-| [alerts.md](alerts.md) | 2026-11-13, 16 fired and resolved, 3 fired only, of 38 alerts | alert fire-drills |
+### Incidents
 
-Production exists since 2026-11-13; its drills (node loss, database leader loss,
-point-in-time restore, rolling deploy) are in
-[../reference/drills/2026-11-13-azure.md](../reference/drills/2026-11-13-azure.md). Staging does
-not exist yet. The plan requires every runbook to be executed on staging before this stage is
-done; that requirement is still open, so the documentation phase is not done by
-its own condition until staging exists.
+| Runbook | Use it when |
+|---|---|
+| [alerts.md](alerts.md) | an alert fires: the meaning and first action of each of 38 alerts |
+| [edge-node-failure.md](edge-node-failure.md) | a node's gateway, collector, NATS server or etcd member answers badly or not at all, or a VM is lost |
+| [database-failover.md](database-failover.md) | the PostgreSQL leader changed or is missing, or a replica needs a rebuild |
+| [disaster-recovery.md](disaster-recovery.md) | no database member holds good data and the cluster is rebuilt from backups |
+| [point-in-time-restore.md](point-in-time-restore.md) | data was destroyed and you need the database as it was at a past moment |
+| [queue-backlog-and-dlq.md](queue-backlog-and-dlq.md) | a queue grows or a dead-letter queue holds messages |
+| [certificates.md](certificates.md) | a node serves an expiring, expired or wrong certificate |
+| [security-incident.md](security-incident.md) | something suggests an attack or a breach |
+| [metric-inflation.md](metric-inflation.md) | a project's numbers look higher than its real use |
+
+### Routine operations
+
+| Runbook | Use it when |
+|---|---|
+| [capacity.md](capacity.md) | adding or removing resources |
+| [security-patch.md](security-patch.md) | a critical or high vulnerability needs a patch within 24 hours |
+| [secret-rotation.md](secret-rotation.md) | rotating a credential on schedule or after an exposure |
+| [collector-upgrade.md](collector-upgrade.md) | upgrading the OpenTelemetry Collector |
+| [umami-upgrade.md](umami-upgrade.md) | upgrading Umami, or rolling an upgrade back |
+| [tracker-release.md](tracker-release.md) | releasing or revoking a tracker version |
+| [dbip-update.md](dbip-update.md) | loading the monthly DB-IP country file |
+| [slo-report.md](slo-report.md) | producing the monthly service level report |
+
+### People and projects
+
+| Runbook | Use it when |
+|---|---|
+| [operators.md](operators.md) | adding or removing an operator |
+| [operator-key-revocation.md](operator-key-revocation.md) | an operator API key must stop working |
+| [mcp-access.md](mcp-access.md) | revoking an AI client's access or investigating its tool calls |
+| [tenant-removal.md](tenant-removal.md) | suspending, resuming or removing a project |
+| [erasure-requests.md](erasure-requests.md) | handling a right-to-erasure request |
+
+The production drills (node loss, database leader loss, point-in-time restore, rolling deploy)
+are recorded in [../reference/drills/2026-11-13-azure.md](../reference/drills/2026-11-13-azure.md),
+and the drills on the local test topology in
+[../reference/drills/2026-11-13.md](../reference/drills/2026-11-13.md).
 
 ## Conventions used in every runbook
 
 ### Reaching the nodes
 
 Every server has one login, `ops`, reachable over SSH from the admin address ranges
-(`<an operator input>`) with the keys of `<an operator input>`. Node names and addresses are in
+(`admin_cidrs`) with the admin SSH public keys (`admin_ssh_public_keys`). Node names and addresses are in
 `infra/ansible/inventories/<env>/hosts.json` (written by `make <env>-apply`). Names are
 `<env>-node-1` to `-3`: three converged nodes, one per availability zone, each in the `edge` and
 the `core` group, so a runbook step for "an edge node" or "a core node" runs on any of them.
@@ -121,7 +130,7 @@ sudo docker run --rm --network veristar-core_default \
 ```
 
 The image name is `<sa_image_registry>/platformctl:<tag>`; `ghcr.io/justmert/veristar`
-is where `release-images.yml` publishes for repository `<an operator input>`.
+is where `release-images.yml` publishes for the repository `github.com/justmert/veristar`.
 
 ### Running a jobs task by hand
 
@@ -159,5 +168,5 @@ ssh -L 9090:127.0.0.1:9090 -L 3000:127.0.0.1:3000 ops@<core node public address>
 
 Then `http://127.0.0.1:9090` and `http://127.0.0.1:3000`. `site.yml` applies the observability
 role to the edge and core nodes as its last play. A probe host (status page, Gatus, prober) in
-the inventory's `probe` group is converged by the play `Probe`; production's probe is the
-Compose bundle on a separate host in Azure East US ([../deploy/probe.md](../deploy/probe.md)).
+the inventory's `probe` group is converged by the play `Probe`; production's probe is a
+Compose bundle on a separate virtual machine in Azure East US ([../deploy/probe.md](../deploy/probe.md)).
