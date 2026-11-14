@@ -4,24 +4,21 @@ sidebarTitle: "Teardown"
 description: "Remove an environment's servers, network, addresses and DNS, with protection for production."
 ---
 
-Removes an environment's VMs, network, addresses, Traffic Manager profiles and DNS records.
-Staging is meant to be rebuilt (this stage drills, this stage rehearsal); production carries delete
-locks so it cannot be destroyed by one command.
-
-**Status:** never run against a cloud account. The local converge has its own teardown,
-`make local-converge-down`, which ran on 2026-11-13 after the this stage drills
-([local-converge.md](local-converge.md) section 2).
+This page removes an environment's VMs, network, addresses, Traffic Manager profiles and DNS
+records. Staging has no delete locks, so you can destroy and rebuild it freely. Production carries
+delete locks, so no single command destroys it. The local converge has its own teardown,
+`make local-converge-down` ([local-converge.md](local-converge.md)).
 
 ## Before you start
 
 - **Data.** Destroying the servers destroys both databases (Umami and platform), the NATS
   streams with anything still queued, and every Caddy certificate. The destroy targets keep the
-  backup storage account, the core identity and the environment's resource group
+  backup storage account, the node identity that writes to it and the environment's resource group
   (`-exclude`, see the Makefile), so backups survive, encrypted with `pgbackrest_cipher_pass`
   from the SOPS file. Keep that file and at least one recipient's identity as long as you keep
   backups. The OpenTofu state account is never touched by a destroy.
-- **Queues.** If tenants send data, drain first: stop sending is not in your hands, so announce
-  the shutdown, wait until `WEB_EVENTS` and `API_METRICS` are empty
+- **Queues.** If tenants send data, drain first. Tenants decide when they stop sending, so
+  announce the shutdown, wait until `WEB_EVENTS` and `API_METRICS` are empty
   ([../runbooks/queue-backlog-and-dlq.md](../runbooks/queue-backlog-and-dlq.md)), and take a last
   backup:
 
@@ -64,13 +61,13 @@ locks so it cannot be destroyed by one command.
    make production-destroy CONFIRM=production
    ```
 
-3. Then as staging steps 2 and 3. For a handover rather than a shutdown, follow the handover plan
-   instead (`docs/handover/`): the repository, the domain and the data move, nothing is destroyed.
+3. Then follow staging steps 2 and 3. For a handover rather than a shutdown, follow the
+   [handover plan](../handover/plan.md) instead: the repository, the domain and the data move, and
+   nothing is destroyed.
 
 ## Accounts
 
-After the last environment is gone, revoke what the operator inputs granted: remove the operators'
-role assignments on the Azure subscription and, if nothing else uses it, cancel it; delete
-the Cloudflare API tokens, the Discord webhook,
-the GitHub OAuth Apps, and remove the age recipients only once nothing encrypted to them
-is still needed.
+After the last environment is gone, revoke the access you granted for it: remove the operators'
+role assignments on the Azure subscription and, if nothing else uses it, cancel the subscription;
+delete the Cloudflare API tokens, the Discord webhook, the GitHub OAuth Apps and the registry pull
+token; and remove the age recipients only once nothing encrypted to them is still needed.
