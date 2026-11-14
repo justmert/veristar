@@ -185,7 +185,7 @@ Date checked: 2026-11-12. Confidence: high (guide text, Law 7499, Regulation, ad
 - Paras 111 and 112: for the information obligation, identifiability "must be assessed at the time of collection of the data" and from the controller's point of view.
 - Operative part: sets aside the General Court judgment of 26 April 2023 (T-557/20), refers the case back to the General Court, reserves costs.
 
-**Inference (not the Court's).** For a salted hash of IP and user agent: while the operator holds or can recompute the salt, the operator can re-identify in the relevant sense, so the hashes are personal data for the operator. Once a random salt is destroyed and cannot be recomputed by anyone, the argument for treating stored hashes as non-personal relative to the operator becomes stronger, but under paras 111 and 112 the controller's obligations at collection time (while the salt existed) still apply. 
+**Inference (not the Court's).** For a salted hash of IP and user agent: while the operator holds or can recompute the salt, the operator can re-identify in the relevant sense, so the hashes are personal data for the operator. Once a random salt is destroyed and cannot be recomputed by anyone, the argument for treating stored hashes as non-personal relative to the operator becomes stronger, but under paras 111 and 112 the controller's obligations at collection time (while the salt existed) still apply.
 
 **Sources.**
 - https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=CELEX:62023CJ0413
@@ -362,7 +362,7 @@ Date checked: 2026-11-13. Confidence: high. Status: confirmed.
 **Not confirmed.** The statute was read in the consolidated text published by the Ministry of Transport and Communications (last amendment listed ДВ бр. 99 of 21 November 2025); it was not checked on parliament.bg or the State Gazette. The CPDP does not define "анонимизиран" for this purpose.
 
 **Sources.**
-- https://www.mtc.government.bg/sites/default/files/documents/2026-01/Закон за електронната търговия.pdf
+- https://www.mtc.government.bg/sites/default/files/documents/2026-01/Закон%20за%20електронната%20търговия.pdf
 - https://cpdp.bg/специфични-насоки-за-различни-сектор/
 
 Date checked: 2026-11-13. Confidence: medium. Status: partly confirmed (statute and CPDP text read; the two are inconsistent, and the anonymity condition is undefined).
@@ -428,7 +428,7 @@ Date checked: 2026-11-13. Confidence: high. Status: confirmed.
 **Sources.**
 - https://www.retsinformation.dk/eli/lta/2011/1148
 - https://digst.dk/tilsyn/sporingsteknologiomraadet/cookievejledningen/
-- https://www.datatilsynet.dk/Media/638829899950476628/Fællesvejledning med DIGST - Cookie og lignende teknologier.pdf
+- https://www.datatilsynet.dk/Media/638829899950476628/Fællesvejledning%20med%20DIGST%20-%20Cookie%20og%20lignende%20teknologier.pdf
 
 Date checked: 2026-11-13. Confidence: high. Status: confirmed.
 
