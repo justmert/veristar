@@ -1,15 +1,15 @@
---: an invite stored only a github login and was
+-- an invite stored only a github login and was
 -- resolved for whoever signed in next with that login. github logins can be
 -- renamed and the freed name taken by another person, so an owner invite
 -- could hand a tenant to a stranger. from here on an invite holds the
 -- numeric github account id the control plane resolved from the login when
--- the operator sent it (GET /users/{login}); sign-in resolves invites by that
+-- the tenant owner sent it (GET /users/{login}); sign-in resolves invites by that
 -- id only. github_login stays, for display.
 --
 -- open invites made before this migration carry no id and cannot be bound
 -- to an account after the fact, so they are revoked here, each with an
--- invite.revoke audit row (actor system:migration), and the operator sends
--- them again. the release notes and contract 4.2.5 say so.
+-- invite.revoke audit row (actor system:migration), and the tenant owner
+-- sends them again. the release notes and contract 4.2.5 say so.
 
 -- +goose Up
 alter table cp.invites add column github_id bigint check (github_id > 0);

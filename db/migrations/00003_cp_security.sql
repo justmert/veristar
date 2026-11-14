@@ -35,8 +35,8 @@ end
 $$;
 -- +goose StatementEnd
 
--- grants already keep application roles out; the triggers also stop the operator
--- and superusers from rewriting history by accident
+-- grants already keep application roles out; the triggers also stop the table
+-- owner and superusers from rewriting history by accident
 create trigger audit_log_no_change before update or delete on cp.audit_log
   for each row execute function cp.audit_log_append_only();
 create trigger audit_log_no_truncate before truncate on cp.audit_log
@@ -132,7 +132,7 @@ create policy tenants_operator on cp.tenants for select to cp_operator using (tr
 create policy web_ingest_hourly_operator on cp.web_ingest_hourly for select to cp_operator using (true);
 
 -- platform_owner reads sites only so that cp.operator_sites, which runs with
--- the operator's rights under forced row-level security, returns rows
+-- its owner's rights under forced row-level security, returns rows
 create policy sites_operator_view on cp.sites for select to platform_owner using (true);
 
 -- metrics_writer: finds a token by id and stamps last_seen_at, nothing more

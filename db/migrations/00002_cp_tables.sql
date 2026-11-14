@@ -1,4 +1,4 @@
--- control plane tables (the design). rights and row-level security follow
+-- control plane tables. rights and row-level security follow
 -- in 00003, so that every grant sits in one file that can be read as a whole.
 
 -- +goose Up
@@ -31,7 +31,7 @@ create table cp.tenants (
   description            text not null default '',
   status                 text not null default 'pending'
                          check (status in ('pending', 'active', 'rejected', 'suspended', 'removed')),
-  -- the monitoring probe tenant (this stage), hidden from operator views
+  -- the monitoring probe tenant, hidden from operator views
   is_internal            boolean not null default false,
   enrollment_answers     jsonb not null default '{}'::jsonb check (jsonb_typeof(enrollment_answers) = 'object'),
   accepted_terms_version text,
@@ -67,6 +67,7 @@ create unique index invites_tenant_login_idx on cp.invites (tenant_id, lower(git
 create index invites_login_idx on cp.invites (lower(github_login));
 
 -- id equals the primary umami website id
+-- (docs/reference/umami-contract.md item 14)
 create table cp.sites (
   id                      uuid primary key,
   tenant_id               uuid not null references cp.tenants (id),
@@ -148,7 +149,7 @@ create table cp.audit_log (
 );
 create index audit_log_at_idx on cp.audit_log (at);
 
--- never holds an ip address or user agent (the design)
+-- never holds an ip address or user agent
 create table cp.erasure_requests (
   id                   uuid primary key default uuidv7(),
   tenant_id            uuid not null references cp.tenants (id),

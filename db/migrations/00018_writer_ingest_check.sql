@@ -1,5 +1,5 @@
 -- the metrics writer refuses queued API_METRICS messages of a removed tenant
--- or a revoked token (the design with the this stage purge), so a message
+-- or a revoked token, so a message
 -- still queued when a tenant is purged writes no row afterwards. the writer
 -- reads the two status columns it needs and nothing else: column grants keep
 -- every other column (names, hashes, answers) out of its reach, as before.

@@ -39,7 +39,7 @@ order by t.created_at, t.id
 limit @row_limit;
 
 -- name: FindUserByGitHubID :one
--- the account the operator named, resolved from the login through github
+-- the account the inviting owner named, resolved from the login through github
 -- first: a stored login can be stale after a rename, the id cannot
 select id, github_id, github_login, created_at
 from cp.users

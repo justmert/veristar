@@ -1,4 +1,4 @@
--- api metrics queries for metrics_writer (the design). every transaction
+-- api metrics queries for metrics_writer. every transaction
 -- that runs them also advances the metricswriter fence through
 -- natsx.CheckFence. table shapes: docs/reference/api-storage.md.
 
@@ -34,7 +34,7 @@ on conflict (tenant_id, series_hash, start_unix_nano) do update
 
 -- name: CountActiveSeriesStates :one
 -- the streams of a tenant the writer stored a point of since active_since,
--- for the per-tenant stream cap (audits A-6, N-4). streams of processes that
+-- for the per-tenant stream cap. streams of processes that
 -- ended or restarted stop counting once they are idle that long, so normal
 -- process churn never reaches the cap; their rows stay for late data until
 -- api-retention removes them.
@@ -74,8 +74,8 @@ on conflict (tenant_id, bucket_start, service, method, route, status_code, sourc
 -- takes the shared lock of a (tenant, utc hour) for this transaction. the
 -- writer takes it before it writes minute rows into the hour; the rollup
 -- skips an hour whose lock it cannot take exclusively, so it never
--- recomputes an hour from minutes a writer has not committed yet (audit
--- A-2). writers share the lock, so they never wait for each other.
+-- recomputes an hour from minutes a writer has not committed yet.
+-- writers share the lock, so they never wait for each other.
 select pg_advisory_xact_lock_shared(api.rollup_lock_key(@tenant_id, @hour::timestamptz));
 
 -- name: MarkRollupPending :batchexec

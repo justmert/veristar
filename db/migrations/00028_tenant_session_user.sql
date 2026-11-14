@@ -1,4 +1,4 @@
---, second resolution. 00024 narrowed cp_tenant, but left
+-- a second step after 00024. 00024 narrowed cp_tenant, but left
 -- three gaps a handler bug could still use:
 --
 -- - verify_method, verified_at, last_verify_at, last_verify_error,

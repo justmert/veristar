@@ -18,7 +18,7 @@ select exists (
 )::boolean as pending
 `
 
-// api retention queries for the jobs role (the design), beside api.sql.
+// api retention queries for the jobs role, beside api.sql.
 // whether any hour of the utc day starting at day_start still waits for the
 // rollup. its minute partition must not be dropped before the rollup has
 // read it, or the hour's rollup would have nothing to recompute from. 24

@@ -1,11 +1,11 @@
--- tenant purge for the api schema (the design, contract 5.5 and 5.13).
+-- tenant purge for the api schema (control-plane-api 5.5 and 5.13).
 -- the purge runs in the reconciler's cp_system transaction, in the control
 -- plane and in the jobs daemon, so the deletes commit with the step record.
 -- cp_system has no right in api (00016); instead it may call one security
 -- definer function that deletes the rows of a tenant that is already
 -- removed, and nothing else.
 --
--- every api table forces row-level security, which binds the operator too, so
+-- every api table forces row-level security, which binds the table owner too, so
 -- the function's owner gets a delete-only policy on each table it purges.
 -- no application role is platform_owner, so these policies open nothing to
 -- them.
@@ -19,7 +19,7 @@ create policy resource_seen_purge on api.resource_seen for delete to platform_ow
 create policy route_registry_purge on api.route_registry for delete to platform_owner using (true);
 create policy ingest_warnings_purge on api.ingest_warnings for delete to platform_owner using (true);
 create policy rollup_pending_purge on api.rollup_pending for delete to platform_owner using (true);
--- a delete with a where clause reads the rows it matches, so the operator needs
+-- a delete with a where clause reads the rows it matches, so platform_owner needs
 -- select visibility as well; it is limited to the same tables
 create policy metrics_minute_purge_read on api.metrics_minute for select to platform_owner using (true);
 create policy metrics_hourly_purge_read on api.metrics_hourly for select to platform_owner using (true);
@@ -29,7 +29,7 @@ create policy resource_seen_purge_read on api.resource_seen for select to platfo
 create policy route_registry_purge_read on api.route_registry for select to platform_owner using (true);
 create policy ingest_warnings_purge_read on api.ingest_warnings for select to platform_owner using (true);
 create policy rollup_pending_purge_read on api.rollup_pending for select to platform_owner using (true);
--- the function checks the tenant's status; the operator sees removed tenants
+-- the function checks the tenant's status; platform_owner sees removed tenants
 -- only, which is all that check needs
 create policy tenants_purge_read on cp.tenants for select to platform_owner using (status = 'removed');
 

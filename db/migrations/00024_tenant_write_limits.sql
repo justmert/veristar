@@ -1,4 +1,4 @@
---: cp_tenant held update on every column of cp.sites and
+-- cp_tenant held update on every column of cp.sites and
 -- cp.otlp_tokens and could append audit rows with any actor. row-level
 -- security keeps those writes inside the caller's tenant, but one handler
 -- bug could still let a tenant re-activate a site an operator put in

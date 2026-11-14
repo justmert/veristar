@@ -1,4 +1,4 @@
--- api metrics storage (the design, sections 4.5 and 4.11). rights,
+-- api metrics storage. rights,
 -- row-level security and the partition functions follow in 00016, so that
 -- every grant of the api schema sits in one file. docs/reference/api-storage.md
 -- describes every table for the writer and the jobs.
@@ -200,7 +200,7 @@ create table api.series_state (
 create index series_state_last_seen_idx on api.series_state (last_seen_at);
 
 -- resources (scf.resource.hash) the writer has followed, for the first-point
--- rule of this stage
+-- rule of the metrics writer
 create table api.resource_seen (
   tenant_id       uuid not null,
   resource_hash   bytea not null check (octet_length(resource_hash) = 32),

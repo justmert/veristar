@@ -6,8 +6,8 @@
 -- +goose Up
 alter table cp.sites add column status_reason text;
 
--- the view runs with the operator's rights under forced row-level security, so
--- the operator needs a read policy on cp.tenants for the removed-tenant check,
+-- the view runs with its owner's rights under forced row-level security, so
+-- platform_owner needs a read policy on cp.tenants for the removed-tenant check,
 -- like sites_operator_view in 00003
 create policy tenants_operator_view on cp.tenants for select to platform_owner using (true);
 

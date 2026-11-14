@@ -1,4 +1,4 @@
--- operator reads of the design stream a, as cp_operator.
+-- operator reads of tenant lifecycle state, as cp_operator.
 
 -- name: OperatorRemovalKeepAggregates :one
 select value from cp.settings where key = 'removal_keep_aggregates';

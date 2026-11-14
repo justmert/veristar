@@ -1,4 +1,4 @@
--- erasure requests (the design, control-plane-api section 10). the table
+-- erasure requests (control-plane-api section 10). the table
 -- exists since 00002; this adds what the workflow records about each run.
 -- it still never holds an ip address, a user agent or a visitor token: those
 -- live in control plane memory for the run only.

@@ -1,4 +1,4 @@
--- api retention queries for the jobs role (the design), beside api.sql.
+-- api retention queries for the jobs role, beside api.sql.
 
 -- name: RollupPendingInDay :one
 -- whether any hour of the utc day starting at day_start still waits for the
