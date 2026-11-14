@@ -80,13 +80,36 @@ it, keeping a quarter of the store free (the test checks that ratio), then run
    restarts it. A replacement (`-/+`) would build a new server; do not apply a plan that
    replaces servers you meant to resize. Production servers have delete and rebuild protection.
 3. Drain the node first if the change restarts it ([edge-node-failure.md](edge-node-failure.md)
-   step 2; on the node holding the Patroni leader, switch it over first,
-   [database-failover.md](database-failover.md)). Change one node at a time by applying while
-   only that node's change is in the plan, or accept that `make <env>-apply` changes every
-   node and do it in a quiet hour.
-4. `make <env>-apply`, then
-   `make <env>-deploy SA_IMAGE_TAG=<current release> SA_RELEASE_MANIFEST=<release-images.json>`
-   so Ansible checks the node again, then undrain.
+   step 2, with the 150 s wait of a converged node; on the node holding the Patroni leader,
+   switch it over first, [database-failover.md](database-failover.md)). Change one node at a
+   time with a targeted plan and apply of that node, or accept that `make <env>-apply` changes
+   every node and do it in a quiet hour. A targeted change of one node:
+
+   ```sh
+   sops exec-env infra/secrets/<env>/tofu.enc.env "tofu -chdir=infra/tofu/envs/<env> plan \
+     -var node_vm_size=<size> -target='module.node[\"<env>-node-<n>\"]' -out=resize.tfplan"
+   sops exec-env infra/secrets/<env>/tofu.enc.env "tofu -chdir=infra/tofu/envs/<env> apply resize.tfplan"
+   ```
+
+   Expected: the plan shows `Plan: 0 to add, 1 to change, 0 to destroy.` with only `size`
+   changing; the apply reports `Modifications complete` after about a minute, by which time the
+   node has restarted on the new size, and its gateway starts about 50 s after the boot. When every node has the new size, set
+   `node_vm_size` in `terraform.tfvars` so `make <env>-plan` shows `No changes.` again.
+4. Check the node, undrain it, then converge. On the node,
+   `sudo docker exec veristar-core-caddy-1 wget -qO- http://gateway:9090/edgez` answers
+   `healthy`, `patronictl list` shows its member `streaming` with lag 0, and its NATS server
+   is current ([edge-node-failure.md](edge-node-failure.md) step 6). Then remove the drain flag
+   as in step 5 there (port 80 answers 308) and run the converge so Ansible checks every node:
+
+   ```sh
+   make <env>-deploy SA_IMAGE_TAG=<current release> SA_RELEASE_MANIFEST=<release-images.json>
+   ```
+
+   Expected: `failed=0` on every node. Run it after the undrain: `site.yml` waits for each
+   node's composite health on port 80, which a drained node answers with 503, so it stops at
+   "Wait for this node's composite health on port 80". A rolling deploy limited to the node
+   (`ROLLING=1`, `--limit <env>-node-<n>,localhost`) stops as well, at "Find the patroni
+   leader", because the limit leaves out the leader's node.
 
 ## Change a limit or a tunable
 
