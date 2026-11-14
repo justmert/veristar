@@ -1,26 +1,40 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
+import { cn } from "cn";
+import { SearchX } from "lucide-react";
 import { Link, useSearchParams } from "react-router";
 import { apiProjectsQuery } from "@/api/queries";
 import { type ApiProject, type ApiSort, apiSort } from "@/api/schemas";
-import { ErrorPanel, Loading } from "@/components/error-panel";
-import { SelectField } from "@/components/form-field";
+import { ErrorPanel, Loading, StateBlock } from "@/components/error-panel";
 import { StatusPill } from "@/components/status";
 import { Button } from "@/components/ui/button";
 import { formatRate } from "@/lib/api-metrics";
 import { formatCount } from "@/lib/format";
-import { firstOrder, formatPct, type ListState, readListState, writeListState } from "@/lib/global";
+import {
+  EMPTY_FILTERS,
+  firstOrder,
+  formatPct,
+  type ListState,
+  readListState,
+  writeListState,
+} from "@/lib/global";
 import { SPAN_NOTE } from "@/pages/api-traffic";
 import {
   AGGREGATE_NOTE,
   CompareBar,
   FiltersPanel,
+  InlineSelect,
+  MagnitudeCell,
   Missing,
   Notes,
-  Num,
   orMissing,
   RangeControl,
+  ROW,
   SelectCell,
+  SeriesSwatch,
   SortHeader,
+  TableScroll,
+  TD,
+  TH,
   useSelection,
 } from "./global-shared";
 
@@ -43,15 +57,18 @@ const SORT_TEXT: Record<ApiSort, string> = {
   routes: "Routes",
 };
 
-const COLUMNS: { sort: ApiSort; label: string }[] = [
-  { sort: "requests", label: "Requests" },
-  { sort: "rate_4xx", label: "4xx rate" },
-  { sort: "rate_5xx", label: "5xx rate" },
-  { sort: "p50", label: "p50" },
-  { sort: "p95", label: "p95" },
-  { sort: "p99", label: "p99" },
-  { sort: "services", label: "Services" },
-  { sort: "routes", label: "Routes" },
+// a percentile above 10 s is measured against the 10 s bound for its bar
+const pctSize = (s: number | null, over: boolean) => (over ? 10 : s);
+
+const COLUMNS: { sort: ApiSort; label: string; size: (p: ApiProject) => number | null }[] = [
+  { sort: "requests", label: "Requests", size: (p) => p.requests },
+  { sort: "rate_4xx", label: "4xx rate", size: (p) => p.rate_4xx },
+  { sort: "rate_5xx", label: "5xx rate", size: (p) => p.rate_5xx },
+  { sort: "p50", label: "p50", size: (p) => pctSize(p.p50_seconds, p.p50_over_10s) },
+  { sort: "p95", label: "p95", size: (p) => pctSize(p.p95_seconds, p.p95_over_10s) },
+  { sort: "p99", label: "p99", size: (p) => pctSize(p.p99_seconds, p.p99_over_10s) },
+  { sort: "services", label: "Services", size: (p) => p.services },
+  { sort: "routes", label: "Routes", size: (p) => p.routes },
 ];
 
 export const SOURCE_TEXT = {
@@ -75,6 +92,9 @@ export function GlobalApiPage() {
   const selection = useSelection();
   const first = list.data?.pages[0];
   const resolved = first ? { from: first.from, to: first.to } : null;
+  const items = list.data?.pages.flatMap((p) => p.items) ?? [];
+  const sized = COLUMNS.find((c) => c.sort === state.sort);
+  const max = sized ? Math.max(0, ...items.map((p) => sized.size(p) ?? 0)) : 0;
 
   const sortBy = (sort: ApiSort) =>
     set({
@@ -84,73 +104,80 @@ export function GlobalApiPage() {
     });
 
   return (
-    <section className="space-y-5">
-      <header>
-        <h2 className="text-xl font-semibold tracking-tight">Global API</h2>
-        <p className="mt-1 max-w-prose text-sm text-muted-foreground">
+    <section aria-labelledby="global-api-h" className="flex flex-col gap-4">
+      <div className="flex flex-col gap-1">
+        <h2 id="global-api-h" className="text-section text-fg">
+          Global API
+        </h2>
+        <p className="max-w-prose text-small text-fg-2">
           API traffic of every enrolled project over a range of UTC days. Sort by requests to find
           the lowest and highest usage projects, and select projects to compare them side by side.
         </p>
-      </header>
-
-      <div className="space-y-5 rounded-xl border bg-card p-4 sm:p-5">
-        <RangeControl resolved={resolved} onChange={(range) => set({ ...state, range })} />
-        <FiltersPanel filters={state.filters} onChange={(filters) => set({ ...state, filters })} />
-        <div className="flex flex-wrap gap-3">
-          <SelectField
-            label="Sort by"
-            value={state.sort}
-            onChange={(e) => {
-              const sort = e.target.value as ApiSort;
-              set({ ...state, sort, order: firstOrder(sort) });
-            }}
-          >
-            {apiSort.options.map((s) => (
-              <option key={s} value={s}>
-                {SORT_TEXT[s]}
-              </option>
-            ))}
-          </SelectField>
-          <SelectField
-            label="Order"
-            value={state.order}
-            onChange={(e) => set({ ...state, order: e.target.value as "asc" | "desc" })}
-          >
-            <option value="desc">Largest first</option>
-            <option value="asc">Smallest first</option>
-          </SelectField>
-        </div>
       </div>
 
-      <CompareBar selection={selection} range={resolved} />
+      <RangeControl resolved={resolved} onChange={(range) => set({ ...state, range })} />
 
-      {list.isPending ? <Loading label="Loading projects" /> : null}
-      {list.error ? <ErrorPanel error={list.error} onRetry={() => list.refetch()} /> : null}
-      {list.data ? (
-        <section aria-labelledby="global-api-table" className="rounded-xl border bg-card">
-          <div className="flex flex-wrap items-baseline justify-between gap-2 p-4 pb-2 sm:px-5">
-            <h3 id="global-api-table" className="font-semibold">
-              Projects
-            </h3>
-            <p className="text-xs text-muted-foreground" aria-live="polite">
-              {formatCount(first?.total ?? 0)} {first?.total === 1 ? "project" : "projects"} match
-            </p>
-          </div>
-          {first?.total === 0 ? (
-            <p className="px-4 pb-5 text-muted-foreground sm:px-5">
-              No project matches these filters.
-            </p>
-          ) : (
-            <section
-              aria-label="Global API table"
-              // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable region needs focus (wcag 2.1.1)
-              tabIndex={0}
-              className={`relative overflow-x-auto transition-opacity ${list.isPlaceholderData ? "opacity-60" : ""}`}
+      <div className="flex min-w-0 flex-col overflow-hidden rounded-lg border border-line bg-raised">
+        <div className="flex flex-col gap-2.5 border-b border-line px-4 py-3">
+          <FiltersPanel
+            filters={state.filters}
+            onChange={(filters) => set({ ...state, filters })}
+          />
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <InlineSelect
+              label="Sort by"
+              value={state.sort}
+              onChange={(v) => {
+                const sort = v as ApiSort;
+                set({ ...state, sort, order: firstOrder(sort) });
+              }}
             >
-              <table className="w-full min-w-[64rem] text-left text-sm">
-                <thead className="border-y bg-muted/50 text-xs text-muted-foreground">
+              {apiSort.options.map((s) => (
+                <option key={s} value={s}>
+                  {SORT_TEXT[s]}
+                </option>
+              ))}
+            </InlineSelect>
+            <InlineSelect
+              label="Order"
+              value={state.order}
+              onChange={(v) => set({ ...state, order: v as "asc" | "desc" })}
+            >
+              <option value="desc">Largest first</option>
+              <option value="asc">Smallest first</option>
+            </InlineSelect>
+          </div>
+        </div>
+
+        <CompareBar selection={selection} range={resolved} />
+
+        {list.isPending ? <Loading label="Loading projects" className="px-4" rows={6} /> : null}
+        {list.error ? (
+          <ErrorPanel error={list.error} onRetry={() => list.refetch()} className="m-4" />
+        ) : null}
+        {list.data ? (
+          first?.total === 0 ? (
+            <StateBlock
+              kind="empty"
+              icon={<SearchX aria-hidden />}
+              title="No project matches these filters"
+              className="m-4"
+              action={
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => set({ ...state, filters: EMPTY_FILTERS })}
+                >
+                  Clear filters
+                </Button>
+              }
+            />
+          ) : (
+            <TableScroll label="Global API table" dim={list.isPlaceholderData}>
+              <table className="w-full min-w-[64rem] border-separate border-spacing-0 text-left text-small tabular">
+                <thead>
                   <tr>
-                    <th scope="col" className="py-1 pr-1 pl-4 sm:pl-5">
+                    <th scope="col" className={`${TH} w-10 pl-4`}>
                       <span className="sr-only">Select</span>
                     </th>
                     <SortHeader
@@ -171,35 +198,45 @@ export function GlobalApiPage() {
                         onSort={sortBy}
                       />
                     ))}
-                    <th scope="col" className="px-3 py-1 pr-4 font-medium sm:pr-5">
+                    <th scope="col" className={`${TH} pr-4`}>
                       Data source
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y">
-                  {list.data.pages
-                    .flatMap((p) => p.items)
-                    .map((p) => (
-                      <ApiRow key={p.tenant.id} p={p} selection={selection} />
-                    ))}
+                <tbody className="[&>tr:last-child>*]:border-0">
+                  {items.map((p) => (
+                    <ApiRow
+                      key={p.tenant.id}
+                      p={p}
+                      selection={selection}
+                      sort={state.sort}
+                      max={max}
+                    />
+                  ))}
                 </tbody>
               </table>
-            </section>
-          )}
-          {list.hasNextPage ? (
-            <div className="border-t p-3 sm:px-5">
+            </TableScroll>
+          )
+        ) : null}
+
+        {list.data && first?.total !== 0 ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line px-4 py-2.5">
+            <p className="text-caption text-fg-3" aria-live="polite">
+              {formatCount(first?.total ?? 0)} {first?.total === 1 ? "project" : "projects"} match
+            </p>
+            {list.hasNextPage ? (
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => list.fetchNextPage()}
-                disabled={list.isFetchingNextPage}
+                pending={list.isFetchingNextPage}
               >
                 {list.isFetchingNextPage ? "Loading" : "Load more"}
               </Button>
-            </div>
-          ) : null}
-        </section>
-      ) : null}
+            ) : null}
+          </div>
+        ) : null}
+      </div>
 
       <Notes items={API_NOTES} />
     </section>
@@ -220,8 +257,15 @@ export function SourceBadge({
   return (
     <span
       title={traces ? SPAN_NOTE : undefined}
-      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium whitespace-nowrap ${traces ? "border-warn/50 bg-warn/10" : "bg-muted"}`}
+      className={cn(
+        "inline-flex h-6 items-center gap-1.5 rounded-full border px-2 text-caption font-medium whitespace-nowrap text-fg",
+        traces ? "border-warning-line" : "border-line-strong",
+      )}
     >
+      <span
+        aria-hidden
+        className={cn("size-1.5 rounded-full", traces ? "bg-warning" : "bg-fg-3")}
+      />
       {SOURCE_TEXT[source]}
       {source === "mixed" && spanServices !== undefined && services !== undefined
         ? ` (${spanServices} of ${services} from traces)`
@@ -230,42 +274,69 @@ export function SourceBadge({
   );
 }
 
-function ApiRow({ p, selection }: { p: ApiProject; selection: ReturnType<typeof useSelection> }) {
+function ApiRow({
+  p,
+  selection,
+  sort,
+  max,
+}: {
+  p: ApiProject;
+  selection: ReturnType<typeof useSelection>;
+  sort: ApiSort;
+  max: number;
+}) {
   const t = p.tenant;
+  const slot = selection.slot(t.id);
   const rate = (r: number | null, n: number) => {
     const v = formatRate(r);
     return v === null ? <Missing /> : <span title={`${formatCount(n)} requests`}>{v}</span>;
   };
+  const cell = (s: ApiSort, v: number | null, children: React.ReactNode) => (
+    <MagnitudeCell on={sort === s} value={v} max={max}>
+      {children}
+    </MagnitudeCell>
+  );
   return (
-    <tr data-tenant={t.id}>
+    <tr data-tenant={t.id} data-state={slot >= 0 ? "selected" : undefined} className={ROW}>
       <SelectCell id={t.id} name={t.name} selection={selection} />
-      <th scope="row" className="max-w-[16rem] px-2 py-2 text-left font-normal">
-        <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+      <th scope="row" className={`${TD} max-w-64 text-left font-normal`}>
+        <span className="flex min-w-0 items-center gap-2">
+          <SeriesSwatch slot={slot} />
           <Link
             to={`/operator/compare?tenants=${t.id}`}
-            className="font-medium underline-offset-2 hover:underline"
+            className="truncate rounded-sm text-body font-medium text-fg underline-offset-4 hover:underline focus-ring"
           >
             {t.name}
           </Link>
-          <StatusPill status={t.status} />
+          {t.status !== "active" ? <StatusPill status={t.status} /> : null}
         </span>
         {p.lossy ? (
-          <span className="mt-0.5 block text-xs text-muted-foreground">
+          <span className="mt-0.5 block text-caption text-fg-3">
             Some latency buckets are approximate
           </span>
         ) : null}
       </th>
-      <Num>
-        <span data-col="requests">{formatCount(p.requests)}</span>
-      </Num>
-      <Num>{rate(p.rate_4xx, p.requests_4xx)}</Num>
-      <Num>{rate(p.rate_5xx, p.requests_5xx)}</Num>
-      <Num>{orMissing(formatPct(p.p50_seconds, p.p50_over_10s))}</Num>
-      <Num>{orMissing(formatPct(p.p95_seconds, p.p95_over_10s))}</Num>
-      <Num>{orMissing(formatPct(p.p99_seconds, p.p99_over_10s))}</Num>
-      <Num>{formatCount(p.services)}</Num>
-      <Num>{formatCount(p.routes)}</Num>
-      <td className="px-3 py-2 pr-4 sm:pr-5">
+      {cell("requests", p.requests, <span data-col="requests">{formatCount(p.requests)}</span>)}
+      {cell("rate_4xx", p.rate_4xx, rate(p.rate_4xx, p.requests_4xx))}
+      {cell("rate_5xx", p.rate_5xx, rate(p.rate_5xx, p.requests_5xx))}
+      {cell(
+        "p50",
+        pctSize(p.p50_seconds, p.p50_over_10s),
+        orMissing(formatPct(p.p50_seconds, p.p50_over_10s)),
+      )}
+      {cell(
+        "p95",
+        pctSize(p.p95_seconds, p.p95_over_10s),
+        orMissing(formatPct(p.p95_seconds, p.p95_over_10s)),
+      )}
+      {cell(
+        "p99",
+        pctSize(p.p99_seconds, p.p99_over_10s),
+        orMissing(formatPct(p.p99_seconds, p.p99_over_10s)),
+      )}
+      {cell("services", p.services, formatCount(p.services))}
+      {cell("routes", p.routes, formatCount(p.routes))}
+      <td className={`${TD} pr-4`}>
         <SourceBadge source={p.source} spanServices={p.span_services} services={p.services} />
       </td>
     </tr>

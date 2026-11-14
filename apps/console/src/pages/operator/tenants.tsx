@@ -1,13 +1,15 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { type FormEvent, useState } from "react";
+import { SearchX } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router";
 import type { TenantListQuery } from "@/api/endpoints";
 import { operatorTenantsQuery } from "@/api/queries";
 import { type TenantStatus, tenantStatus } from "@/api/schemas";
-import { ErrorPanel, Loading } from "@/components/error-panel";
-import { SelectField, TextField } from "@/components/form-field";
+import { ErrorPanel, Loading, StateBlock } from "@/components/error-panel";
 import { Button } from "@/components/ui/button";
-import { TenantList } from "./tenant-table";
+import { formatCount } from "@/lib/format";
+import { FilterChip, InlineSelect, SearchBox, TableScroll } from "./global-shared";
+import { TenantTable } from "./tenant-table";
 
 const STATUS_TEXT: Record<TenantStatus, string> = {
   pending: "Pending",
@@ -58,117 +60,120 @@ export function TenantsPage() {
   const [params, setParams] = useSearchParams();
   const q = queryFromParams(params);
   const [search, setSearch] = useState(q.q);
+  useEffect(() => setSearch(q.q), [q.q]);
   const list = useInfiniteQuery(operatorTenantsQuery(q));
+  const items = list.data?.pages.flatMap((p) => p.items) ?? [];
+  const filtered = q.status.length > 0 || q.review || q.q.trim() !== "";
 
   const update = (next: Partial<TenantListQuery>) =>
     setParams(paramsFromQuery({ ...q, ...next }), { replace: true });
-
-  function submitSearch(e: FormEvent) {
-    e.preventDefault();
-    update({ q: search });
-  }
 
   function toggleStatus(s: TenantStatus) {
     update({ status: q.status.includes(s) ? q.status.filter((x) => x !== s) : [...q.status, s] });
   }
 
+  // a header click flips the order of the current sort, or starts a new one
+  // in its natural order: names a to z, dates newest first
+  function sortBy(s: TenantListQuery["sort"]) {
+    if (s === q.sort) update({ order: q.order === "asc" ? "desc" : "asc" });
+    else update({ sort: s, order: s === "name" ? "asc" : "desc" });
+  }
+
   return (
-    <section className="space-y-5">
-      <h2 className="text-xl font-semibold tracking-tight">Projects</h2>
+    <section aria-labelledby="projects-h" className="flex flex-col gap-4">
+      <h2 id="projects-h" className="text-section text-fg">
+        Projects
+      </h2>
 
-      <div className="space-y-4 rounded-xl border bg-card p-4 sm:p-5">
-        <form
-          aria-label="Search projects"
-          onSubmit={submitSearch}
-          className="flex flex-wrap items-end gap-2"
-        >
-          <div className="min-w-60 flex-1">
-            <TextField
-              label="Search"
-              type="search"
-              name="q"
-              maxLength={100}
-              placeholder="Name, address, website or site domain"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-          <Button type="submit" variant="outline">
-            Search
-          </Button>
-        </form>
-
-        <fieldset className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-          <legend className="mb-1 font-medium">Status</legend>
-          {tenantStatus.options.map((s) => (
-            <label key={s} className="flex items-center gap-1.5">
-              <input
-                type="checkbox"
-                className="size-4 accent-primary"
-                checked={q.status.includes(s)}
-                onChange={() => toggleStatus(s)}
-              />
-              {STATUS_TEXT[s]}
-            </label>
-          ))}
-          <label className="flex items-center gap-1.5">
-            <input
-              type="checkbox"
-              className="size-4 accent-primary"
-              checked={q.review}
-              onChange={() => update({ review: !q.review })}
-            />
-            Needs review
-          </label>
-        </fieldset>
-
-        <div className="flex flex-wrap gap-4 text-sm">
-          <SelectField
-            label="Sort by"
-            value={q.sort}
-            onChange={(e) => update({ sort: e.target.value as TenantListQuery["sort"] })}
-          >
-            {SORTS.map((s) => (
-              <option key={s} value={s}>
-                {SORT_TEXT[s]}
-              </option>
+      <div className="flex min-w-0 flex-col overflow-hidden rounded-lg border border-line bg-raised">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2.5 border-b border-line px-4 py-3">
+          <SearchBox
+            value={search}
+            onChange={setSearch}
+            onSubmit={() => update({ q: search })}
+            placeholder="Name, address, website or site domain"
+            className="w-full sm:w-80"
+          />
+          <fieldset className="flex flex-wrap items-center gap-1.5">
+            <legend className="sr-only">Status</legend>
+            {tenantStatus.options.map((s) => (
+              <FilterChip key={s} on={q.status.includes(s)} onToggle={() => toggleStatus(s)}>
+                {STATUS_TEXT[s]}
+              </FilterChip>
             ))}
-          </SelectField>
-          <SelectField
-            label="Order"
-            value={q.order}
-            onChange={(e) => update({ order: e.target.value as TenantListQuery["order"] })}
-          >
-            <option value="desc">{q.sort === "name" ? "Z to A" : "Newest first"}</option>
-            <option value="asc">{q.sort === "name" ? "A to Z" : "Oldest first"}</option>
-          </SelectField>
-        </div>
-      </div>
-
-      {list.isPending ? (
-        <Loading label="Loading projects" />
-      ) : list.error ? (
-        <ErrorPanel error={list.error} onRetry={() => list.refetch()} />
-      ) : (
-        <>
-          {list.data.pages[0]?.items.length === 0 ? (
-            <p className="rounded-xl border border-dashed bg-card p-6 text-muted-foreground">
-              No project matches these filters.
-            </p>
-          ) : (
-            <TenantList items={list.data.pages.flatMap((p) => p.items)} />
-          )}
-          {list.hasNextPage ? (
-            <Button
-              variant="outline"
-              onClick={() => list.fetchNextPage()}
-              disabled={list.isFetchingNextPage}
+            <FilterChip on={q.review} onToggle={() => update({ review: !q.review })}>
+              Needs review
+            </FilterChip>
+          </fieldset>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 lg:ml-auto">
+            <InlineSelect
+              label="Sort by"
+              value={q.sort}
+              onChange={(v) => update({ sort: v as TenantListQuery["sort"] })}
             >
-              {list.isFetchingNextPage ? "Loading" : "Load more"}
-            </Button>
-          ) : null}
-        </>
-      )}
+              {SORTS.map((s) => (
+                <option key={s} value={s}>
+                  {SORT_TEXT[s]}
+                </option>
+              ))}
+            </InlineSelect>
+            <InlineSelect
+              label="Order"
+              value={q.order}
+              onChange={(v) => update({ order: v as TenantListQuery["order"] })}
+            >
+              <option value="desc">{q.sort === "name" ? "Z to A" : "Newest first"}</option>
+              <option value="asc">{q.sort === "name" ? "A to Z" : "Oldest first"}</option>
+            </InlineSelect>
+          </div>
+        </div>
+
+        {list.isPending ? (
+          <Loading label="Loading projects" className="px-4" rows={6} />
+        ) : list.error ? (
+          <ErrorPanel error={list.error} onRetry={() => list.refetch()} className="m-4" />
+        ) : items.length === 0 ? (
+          <StateBlock
+            kind="empty"
+            icon={<SearchX aria-hidden />}
+            title="No project matches these filters"
+            className="m-4"
+            action={
+              filtered ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => update({ status: [], review: false, q: "" })}
+                >
+                  Clear filters
+                </Button>
+              ) : null
+            }
+          />
+        ) : (
+          <>
+            <TableScroll label="Projects table" dim={list.isPlaceholderData}>
+              <TenantTable items={items} sort={q.sort} order={q.order} onSort={sortBy} />
+            </TableScroll>
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line px-4 py-2.5">
+              <p className="text-caption text-fg-3" aria-live="polite">
+                {formatCount(items.length)} {items.length === 1 ? "project" : "projects"} shown
+                {list.hasNextPage ? ", more to load" : ""}
+              </p>
+              {list.hasNextPage ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => list.fetchNextPage()}
+                  pending={list.isFetchingNextPage}
+                >
+                  {list.isFetchingNextPage ? "Loading" : "Load more"}
+                </Button>
+              ) : null}
+            </div>
+          </>
+        )}
+      </div>
     </section>
   );
 }

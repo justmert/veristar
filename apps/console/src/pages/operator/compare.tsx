@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft } from "lucide-react";
+import { Columns2, Plus, X } from "lucide-react";
 import { Link, useSearchParams } from "react-router";
 import { apiCompareQuery, webCompareQuery } from "@/api/queries";
 import type {
@@ -12,21 +12,28 @@ import type {
   WebDimension,
 } from "@/api/schemas";
 import type { Series } from "@/components/api-charts";
-import { CompareChart, type CompareValue } from "@/components/compare-charts";
+import {
+  CompareChart,
+  type CompareValue,
+  SERIES_BG,
+  SERIES_COLOR,
+  SeriesLine,
+} from "@/components/compare-charts";
 import { DbIpAttribution } from "@/components/dbip-attribution";
-import { ErrorPanel, Loading } from "@/components/error-panel";
-import { StatusPill } from "@/components/status";
+import { ErrorPanel, Loading, StateBlock } from "@/components/error-panel";
+import { Stagger, StaggerItem } from "@/components/motion";
+import { StatusDot, statusTone } from "@/components/status";
 import { Button } from "@/components/ui/button";
 import { formatRate, formatSeconds, OPEN_BUCKET } from "@/lib/api-metrics";
 import { formatCount } from "@/lib/format";
 import {
-  COMPARE_COLORS,
   compareSearch,
   countryName,
   type DayRange,
   formatDuration,
   formatPct,
   formatShare,
+  MAX_COMPARE,
   readCompare,
 } from "@/lib/global";
 import { API_NOTES, SourceBadge } from "./global-api";
@@ -51,7 +58,7 @@ function seriesOf(tenants: TenantRef[]): Series[] {
   return tenants.map((t, i) => ({
     key: t.id,
     label: t.name,
-    color: COMPARE_COLORS[i] ?? "var(--chart-none)",
+    color: SERIES_COLOR[i] ?? "var(--vs-fg-3)",
   }));
 }
 
@@ -70,73 +77,112 @@ export function ComparePage() {
 
   if (tenants.length === 0) {
     return (
-      <section className="space-y-3">
-        <h2 className="text-xl font-semibold tracking-tight">Compare projects</h2>
-        <p className="text-muted-foreground">
-          No project is selected. Select up to five projects in{" "}
-          <Link className="underline underline-offset-2" to="/operator/web">
-            Global web
-          </Link>{" "}
-          or{" "}
-          <Link className="underline underline-offset-2" to="/operator/api">
-            Global API
-          </Link>{" "}
-          and choose Compare.
-        </p>
+      <section aria-labelledby="compare-h" className="flex flex-col gap-4">
+        <h2 id="compare-h" className="text-section text-fg">
+          Compare projects
+        </h2>
+        <StateBlock
+          kind="empty"
+          icon={<Columns2 aria-hidden />}
+          title="No project is selected"
+          action={
+            <div className="flex flex-wrap justify-center gap-2">
+              <Button asChild variant="outline" size="sm">
+                <Link to="/operator/web">Global web</Link>
+              </Button>
+              <Button asChild variant="outline" size="sm">
+                <Link to="/operator/api">Global API</Link>
+              </Button>
+            </div>
+          }
+        >
+          Select up to five projects in Global web or Global API and choose Compare.
+        </StateBlock>
       </section>
     );
   }
 
   const resolved = web.data ? { from: web.data.from, to: web.data.to } : null;
   const refs = web.data?.projects.map((p) => p.tenant) ?? apiq.data?.projects.map((p) => p.tenant);
+  const remove = (id: string) =>
+    setParams(
+      compareSearch(
+        tenants.filter((t) => t !== id),
+        resolved ?? range,
+      ),
+      { replace: true },
+    );
 
   return (
-    <section className="space-y-6">
-      <header className="space-y-3">
-        <Button asChild variant="ghost" size="sm" className="-ml-2">
-          <Link to="/operator/web">
-            <ArrowLeft aria-hidden />
-            Global web
-          </Link>
-        </Button>
-        <h2 className="text-xl font-semibold tracking-tight">
-          {tenants.length === 1 ? "Project aggregates" : "Compare projects"}
-        </h2>
+    <section aria-labelledby="compare-h" className="flex flex-col gap-6">
+      <h2 id="compare-h" className="text-section text-fg">
+        {tenants.length === 1 ? "Project aggregates" : "Compare projects"}
+      </h2>
+
+      {/* the compared projects and the range stay in view while the charts scroll */}
+      <div className="sticky top-0 z-20 -mx-4 flex flex-wrap items-center gap-2 border-b border-line bg-ground px-4 py-2.5 max-lg:top-(--vs-header) sm:-mx-8 sm:px-8">
+        <span className="text-small text-fg-3">Compared projects</span>
         {refs ? (
           <ul aria-label="Compared projects" className="flex flex-wrap gap-2">
             {refs.map((t, i) => (
               <li
                 key={t.id}
-                className="inline-flex items-center gap-2 rounded-full border bg-card px-3 py-1 text-sm"
+                className="inline-flex h-8 max-w-64 animate-reveal-in items-center gap-2 rounded-md border border-line-strong pr-1 pl-2.5 text-small text-fg"
               >
-                <svg aria-hidden width="10" height="10" className="shrink-0">
-                  <rect width="10" height="10" rx="2" fill={COMPARE_COLORS[i]} />
-                </svg>
-                <span className="font-medium">{t.name}</span>
-                <StatusPill status={t.status} />
+                <SeriesLine slot={i} />
+                <span className="truncate font-medium">{t.name}</span>
+                <span className="inline-flex items-center gap-1 text-caption text-fg-3">
+                  <StatusDot tone={statusTone(t.status)} />
+                  <span className="max-sm:sr-only">{t.status}</span>
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-xs"
+                  aria-label={`Remove ${t.name} from the comparison`}
+                  onClick={() => remove(t.id)}
+                >
+                  <X aria-hidden />
+                </Button>
               </li>
             ))}
           </ul>
         ) : null}
-      </header>
-
-      <div className="rounded-xl border bg-card p-4 sm:p-5">
-        <RangeControl resolved={resolved} onChange={setRange} />
+        {tenants.length < MAX_COMPARE ? (
+          <Button
+            asChild
+            variant="outline"
+            size="sm"
+            className="border-dashed text-fg-2 max-lg:h-(--vs-control-touch)"
+          >
+            <Link to="/operator/web">
+              <Plus aria-hidden />
+              Add a project
+            </Link>
+          </Button>
+        ) : null}
+        <RangeControl resolved={resolved} onChange={setRange} className="lg:ml-auto" />
       </div>
 
-      <section aria-labelledby="compare-web" className="space-y-4">
-        <h3 id="compare-web" className="text-lg font-semibold tracking-tight">
-          Web
-        </h3>
+      <section aria-labelledby="compare-web" className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <h2 id="compare-web" className="text-section text-fg">
+            Web
+          </h2>
+          <span className="text-small text-fg-3">Per UTC day, from project aggregates</span>
+        </div>
         {web.isPending ? <Loading label="Loading web numbers" /> : null}
         {web.error ? <ErrorPanel error={web.error} onRetry={() => web.refetch()} /> : null}
         {web.data ? <WebSection data={web.data} /> : null}
       </section>
 
-      <section aria-labelledby="compare-api" className="space-y-4">
-        <h3 id="compare-api" className="text-lg font-semibold tracking-tight">
-          API
-        </h3>
+      <section aria-labelledby="compare-api" className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <h2 id="compare-api" className="text-section text-fg">
+            API
+          </h2>
+          <span className="text-small text-fg-3">Every service, per UTC day</span>
+        </div>
         {apiq.isPending ? <Loading label="Loading API numbers" /> : null}
         {apiq.error ? <ErrorPanel error={apiq.error} onRetry={() => apiq.refetch()} /> : null}
         {apiq.data ? <ApiSection data={apiq.data} /> : null}
@@ -151,7 +197,7 @@ export function ComparePage() {
           AGGREGATE_NOTE,
         ]}
       >
-        <DbIpAttribution className="mt-3" />
+        <DbIpAttribution className="mt-1" />
       </Notes>
     </section>
   );
@@ -167,8 +213,7 @@ function WebSection({ data }: { data: WebCompare }) {
   const fmtCount = (v: number | "open") => (v === "open" ? OPEN_BUCKET : formatCount(v));
   return (
     <>
-      <WebTotalsTable data={data} />
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-3 lg:grid-cols-2">
         <CompareChart
           kind="count"
           title="Page views"
@@ -179,6 +224,7 @@ function WebSection({ data }: { data: WebCompare }) {
           format={fmtCount}
           axisFormat={compact}
           missingText="not read"
+          gapLabel="not read"
         />
         <CompareChart
           kind="count"
@@ -190,6 +236,7 @@ function WebSection({ data }: { data: WebCompare }) {
           format={fmtCount}
           axisFormat={compact}
           missingText="not read"
+          gapLabel="not read"
         />
         <CompareChart
           kind="share"
@@ -212,6 +259,7 @@ function WebSection({ data }: { data: WebCompare }) {
           axisFormat={(v) => formatDuration(v) ?? ""}
         />
       </div>
+      <WebTotalsTable data={data} />
       {DIMENSIONS.map((d) => (
         <BreakdownRow
           key={d.dim}
@@ -225,7 +273,7 @@ function WebSection({ data }: { data: WebCompare }) {
 }
 
 function WebTotalsTable({ data }: { data: WebCompare }) {
-  const rows: {
+  const cols: {
     label: string;
     value: (t: WebCompare["projects"][number]["totals"]) => string | null;
   }[] = [
@@ -240,58 +288,75 @@ function WebTotalsTable({ data }: { data: WebCompare }) {
   return (
     <TotalsTable
       label="Web totals"
-      tenants={data.projects.map((p) => p.tenant)}
-      rows={rows.map((r) => ({
-        label: r.label,
-        cells: data.projects.map((p) => r.value(p.totals)),
+      metrics={cols.map((c) => c.label)}
+      rows={data.projects.map((p) => ({
+        tenant: p.tenant,
+        cells: cols.map((c) => c.value(p.totals)),
       }))}
     />
   );
 }
 
-// the range totals: one column per project, so the numbers sit side by side
+// the range totals: one row per project in its series slot, one column per
+// metric, so a column reads down across the projects
 function TotalsTable({
   label,
-  tenants,
+  metrics,
   rows,
 }: {
   label: string;
-  tenants: TenantRef[];
-  rows: { label: string; cells: (string | null)[] }[];
+  metrics: string[];
+  rows: { tenant: TenantRef; cells: (string | null)[] }[];
 }) {
   return (
     <section
       aria-label={label}
       // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable region needs focus (wcag 2.1.1)
       tabIndex={0}
-      className="relative overflow-x-auto rounded-xl border bg-card"
+      className="relative overflow-x-auto rounded-lg border border-line bg-raised focus-ring"
     >
-      <table className="w-full text-left text-sm">
-        <thead className="border-b bg-muted/50 text-xs text-muted-foreground">
+      <table className="w-full text-left text-small tabular">
+        <thead>
           <tr>
-            <th scope="col" className="px-4 py-2 font-medium sm:px-5">
-              <span className="sr-only">Metric</span>
+            <th
+              scope="col"
+              className="h-9 border-b border-line px-4 text-caption font-medium text-fg-3"
+            >
+              Project
             </th>
-            {tenants.map((t, i) => (
-              <th key={t.id} scope="col" className="px-3 py-2 text-right font-medium">
-                <span className="inline-flex items-center gap-1.5">
-                  <svg aria-hidden width="8" height="8" className="shrink-0">
-                    <rect width="8" height="8" rx="2" fill={COMPARE_COLORS[i]} />
-                  </svg>
-                  {t.name}
-                </span>
+            {metrics.map((m) => (
+              <th
+                key={m}
+                scope="col"
+                className="h-9 border-b border-line px-3 text-right text-caption font-medium whitespace-nowrap text-fg-3 last:pr-4"
+              >
+                {m}
               </th>
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y">
-          {rows.map((r) => (
-            <tr key={r.label} data-metric={r.label}>
-              <th scope="row" className="px-4 py-2 font-normal whitespace-nowrap sm:px-5">
-                {r.label}
+        <tbody>
+          {rows.map((r, i) => (
+            <tr
+              key={r.tenant.id}
+              data-tenant={r.tenant.id}
+              className="transition-colors duration-(--vs-duration-press) ease-standard hover:bg-hover [&:last-child>*]:border-0"
+            >
+              <th
+                scope="row"
+                className="h-10 border-b border-line-subtle px-4 font-medium whitespace-nowrap text-fg"
+              >
+                <span className="inline-flex items-center gap-2">
+                  <SeriesLine slot={i} />
+                  {r.tenant.name}
+                </span>
               </th>
-              {r.cells.map((c, i) => (
-                <td key={i} className="tabular px-3 py-2 text-right whitespace-nowrap">
+              {r.cells.map((c, j) => (
+                <td
+                  key={metrics[j]}
+                  data-metric={metrics[j]}
+                  className="border-b border-line-subtle px-3 text-right font-mono whitespace-nowrap text-fg last:pr-4"
+                >
                   {c === null ? <Missing /> : c}
                 </td>
               ))}
@@ -320,45 +385,47 @@ function BreakdownRow({
   projects: { tenant: TenantRef; b: Breakdown }[];
 }) {
   return (
-    <section aria-label={label} className="rounded-xl border bg-card p-4 sm:p-5">
-      <h4 className="font-semibold">{label}</h4>
-      <p className="mt-0.5 text-sm text-muted-foreground">
-        Top values over the range, counted in daily visitors.
-        {dim === "referrer"
-          ? " Only other sites count; visits from a project's own pages do not."
-          : ""}
-      </p>
-      <div className="mt-3 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+    <section
+      aria-label={label}
+      className="flex flex-col gap-3 rounded-lg border border-line bg-raised px-4 py-4"
+    >
+      <div className="flex flex-col gap-0.5">
+        <h3 className="text-title text-fg">{label}</h3>
+        <p className="text-caption text-fg-3">
+          Top values over the range, counted in daily visitors.
+          {dim === "referrer"
+            ? " Only other sites count; visits from a project's own pages do not."
+            : ""}
+        </p>
+      </div>
+      <Stagger className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
         {projects.map(({ tenant, b }, i) => {
           const max = Math.max(1, ...b.items.map((x) => x.value));
           return (
-            <div key={tenant.id} className="min-w-0">
-              <p className="flex items-center gap-1.5 text-sm font-medium">
-                <svg aria-hidden width="8" height="8" className="shrink-0">
-                  <rect width="8" height="8" rx="2" fill={COMPARE_COLORS[i]} />
-                </svg>
+            <StaggerItem key={tenant.id} className="min-w-0">
+              <p className="flex items-center gap-1.5 text-small font-medium text-fg">
+                <SeriesLine slot={i} />
                 <span className="truncate">{tenant.name}</span>
               </p>
               {b.items.length === 0 ? (
-                <p className="mt-1 text-sm text-muted-foreground">None in this range.</p>
+                <p className="mt-1 text-small text-fg-3">None in this range.</p>
               ) : (
-                <ul className="mt-2 space-y-1.5" aria-label={`${label} of ${tenant.name}`}>
+                <ul className="mt-2 flex flex-col gap-2" aria-label={`${label} of ${tenant.name}`}>
                   {b.items.map((x) => (
-                    <li key={x.key} className="text-sm">
+                    <li key={x.key} className="text-small">
                       <div className="flex items-baseline justify-between gap-2">
-                        <span className="min-w-0 truncate" title={keyText(dim, x.key)}>
+                        <span className="min-w-0 truncate text-fg-2" title={keyText(dim, x.key)}>
                           {keyText(dim, x.key)}
                         </span>
-                        <span className="tabular shrink-0 font-medium">{formatCount(x.value)}</span>
+                        <span className="shrink-0 font-mono text-fg tabular">
+                          {formatCount(x.value)}
+                        </span>
                       </div>
-                      <div className="mt-0.5 h-1.5 rounded-full bg-muted">
+                      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-line-subtle">
                         <div
-                          className="h-full rounded-full"
-                          // widths and colours are data; react writes them through the cssom
-                          style={{
-                            width: `${(x.value / max) * 100}%`,
-                            background: COMPARE_COLORS[i],
-                          }}
+                          className={`h-full rounded-full ${SERIES_BG[i] ?? "bg-fg-3"}`}
+                          // the width is data; react writes it through the cssom
+                          style={{ width: `${(x.value / max) * 100}%` }}
                         />
                       </div>
                     </li>
@@ -366,14 +433,14 @@ function BreakdownRow({
                 </ul>
               )}
               {b.total_keys > b.items.length ? (
-                <p className="mt-1.5 text-xs text-muted-foreground">
+                <p className="mt-1.5 text-caption text-fg-3">
                   {formatCount(b.total_keys - b.items.length)} more
                 </p>
               ) : null}
-            </div>
+            </StaggerItem>
           );
         })}
-      </div>
+      </Stagger>
     </section>
   );
 }
@@ -391,8 +458,7 @@ function ApiSection({ data }: { data: ApiCompare }) {
   const rate = (k: "rate_4xx" | "rate_5xx") => (s: number, d: number) => point(s, d)?.[k] ?? null;
   return (
     <>
-      <ApiTotalsTable data={data} />
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-3 lg:grid-cols-2">
         <CompareChart
           kind="count"
           title="Requests"
@@ -437,11 +503,14 @@ function ApiSection({ data }: { data: ApiCompare }) {
           axisFormat={pctAxis}
         />
       </div>
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      <ApiTotalsTable data={data} />
+      <Stagger className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {data.projects.map((p, i) => (
-          <ServicesCard key={p.tenant.id} project={p} color={COMPARE_COLORS[i] ?? ""} />
+          <StaggerItem key={p.tenant.id} className="min-w-0">
+            <ServicesCard project={p} slot={i} />
+          </StaggerItem>
         ))}
-      </div>
+      </Stagger>
     </>
   );
 }
@@ -451,7 +520,7 @@ function pctText(n: ApiNumbers, k: "p50" | "p95" | "p99"): string | null {
 }
 
 function ApiTotalsTable({ data }: { data: ApiCompare }) {
-  const rows: { label: string; value: (t: ApiCompareProject["totals"]) => string | null }[] = [
+  const cols: { label: string; value: (t: ApiCompareProject["totals"]) => string | null }[] = [
     { label: "Requests", value: (t) => formatCount(t.requests) },
     { label: "4xx rate", value: (t) => formatRate(t.rate_4xx) },
     { label: "5xx rate", value: (t) => formatRate(t.rate_5xx) },
@@ -464,45 +533,45 @@ function ApiTotalsTable({ data }: { data: ApiCompare }) {
   return (
     <TotalsTable
       label="API totals"
-      tenants={data.projects.map((p) => p.tenant)}
-      rows={rows.map((r) => ({
-        label: r.label,
-        cells: data.projects.map((p) => r.value(p.totals)),
+      metrics={cols.map((c) => c.label)}
+      rows={data.projects.map((p) => ({
+        tenant: p.tenant,
+        cells: cols.map((c) => c.value(p.totals)),
       }))}
     />
   );
 }
 
-function ServicesCard({ project, color }: { project: ApiCompareProject; color: string }) {
+function ServicesCard({ project, slot }: { project: ApiCompareProject; slot: number }) {
   const t = project.totals;
   return (
     <section
       aria-label={`Services of ${project.tenant.name}`}
-      className="min-w-0 rounded-xl border bg-card p-4"
+      className="flex h-full min-w-0 flex-col gap-2 rounded-lg border border-line bg-raised px-4 py-3.5"
     >
-      <p className="flex items-center gap-1.5 font-medium">
-        <svg aria-hidden width="8" height="8" className="shrink-0">
-          <rect width="8" height="8" rx="2" fill={color} />
-        </svg>
+      <p className="flex items-center gap-1.5 text-body font-medium text-fg">
+        <SeriesLine slot={slot} />
         <span className="truncate">{project.tenant.name}</span>
       </p>
-      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-2 text-caption text-fg-3">
         <SourceBadge source={t.source} spanServices={t.span_services} services={t.services} />
         {t.lossy ? <span>some latency buckets are approximate</span> : null}
       </div>
       {project.services.length === 0 ? (
-        <p className="mt-2 text-sm text-muted-foreground">No requests in this range.</p>
+        <p className="text-small text-fg-3">No requests in this range.</p>
       ) : (
-        <ul className="mt-2 divide-y text-sm">
+        <ul className="flex flex-col text-small">
           {project.services.map((s) => (
-            <li key={s.service} className="py-1.5">
+            <li key={s.service} className="border-b border-line-subtle py-1.5 last:border-0">
               <div className="flex items-baseline justify-between gap-2">
-                <span className="min-w-0 truncate font-mono text-xs">
+                <span className="min-w-0 truncate font-mono text-caption text-fg">
                   {s.service === "" ? "(no service name)" : s.service}
                 </span>
-                <span className="tabular shrink-0 font-medium">{formatCount(s.requests)}</span>
+                <span className="shrink-0 font-mono text-fg tabular">
+                  {formatCount(s.requests)}
+                </span>
               </div>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-caption text-fg-3">
                 {formatCount(s.routes)} {s.routes === 1 ? "route" : "routes"}, 5xx{" "}
                 {formatRate(s.rate_5xx) ?? "-"}, p95 {pctText(s, "p95") ?? "-"}
                 {s.source === "span" ? ", from traces" : ""}
