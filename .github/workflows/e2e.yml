@@ -86,7 +86,7 @@ jobs:
             timeout: 120
             ansible: true
     env:
-      DBIP_MMDB: ${{ github.workspace }}/.scratch/scratch/geo/dbip-country-lite.mmdb
+      DBIP_MMDB: ${{ github.workspace }}/.scratch/geo/dbip-country-lite.mmdb
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # the suites build platform images and start whole stacks; the runner
@@ -128,7 +128,7 @@ jobs:
       # (WEBPATH_LOGS), which the artifact step below uploads
       - if: matrix.suite != 'local-converge'
         env:
-          WEBPATH_LOGS: ${{ github.workspace }}/.scratch/scratch/webpath-logs
+          WEBPATH_LOGS: ${{ github.workspace }}/.scratch/webpath-logs
         run: |
           mkdir -p "$WEBPATH_LOGS"
           make "${{ matrix.suite }}"
@@ -149,10 +149,12 @@ jobs:
         with:
           name: logs-${{ matrix.suite }}
           path: |
-            .scratch/scratch/**/*.log
+            .scratch/**/*.log
             tests/**/test-results/
             !**/node_modules/**
           if-no-files-found: ignore
+          # .scratch is a dot directory, which upload-artifact skips by default
+          include-hidden-files: true
           retention-days: 14
       - if: failure() && matrix.devstack
         run: docker compose --env-file deploy/compose/.env.dev -f deploy/compose/dev.yml logs --tail 200
