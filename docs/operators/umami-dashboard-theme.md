@@ -69,7 +69,7 @@ setting in the inventory.
    under WCAG 2.2 AA (4.5:1 for text, 3:1 for the focus ring). `make test-caddy-web` serves the
    theme through the real web Caddy in front of a real Umami, checks every file, the CSP and the
    deny list, runs axe's colour-contrast rule on the dashboard with the system in dark and in
-   light mode, and saves screenshots of both to `.scratch/design/umami/`.
+   light mode, and saves a screenshot of each for review.
 4. **Ship** with a normal release (`release-images.yml`, then the rolling deploy). Browsers
    revalidate the theme files on every load (`Cache-Control: no-cache`), so the new theme shows
    at the next page load.

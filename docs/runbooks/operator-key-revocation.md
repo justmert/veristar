@@ -5,19 +5,20 @@ description: "Revoke an operator API key and confirm that it no longer works."
 ---
 
 Operator API keys (`sa_op_` plus 40 characters) give machine read access to the metrics API
-(`/api/metrics/v1/...` on `app.<an operator input>`), either to every tenant or to one. They are stored
+(`/api/metrics/v1/...` on `app.<BASE_DOMAIN>`), either to every tenant or to one. They are stored
 only as SHA-256 hashes, expire after at most 365 days, and nothing caches a key, so revocation
-takes effect on the next request. Contract: [../reference/control-plane-api.md](../reference/control-plane-api.md)
-sections 9.2 and 9.3. Day-to-day use: [../operators/api-keys.md](../operators/api-keys.md).
+takes effect on the next request. Creating and using keys is the operator guide page
+[Operator API keys](../operators/api-keys.md); the HTTP routes are sections 9.2 and 9.3 of the
+[control plane API reference](../reference/control-plane-api.md).
 
 Revoke a key when it leaked (seen in a log, a repository, a ticket), when the system that used it
 is retired, or when the person who created it leaves and the key's purpose is unclear.
 
 ## Steps
 
-1. **Find the key.** In the console operator area open **API keys**, or list them (an operator's
-   console session cookie and its CSRF rules apply, [../reference/control-plane-api.md](../reference/control-plane-api.md)
-   section 1.2):
+1. **Find the key.** In the console operator area open **Admin**, **API keys**, or list the keys
+   through the API with an operator's console session (its cookie and CSRF rules are section 1.2
+   of the control plane API reference):
 
    `GET /api/operator/api-keys`
 
@@ -52,9 +53,6 @@ until a new key is created and written to the SOPS file ([secret-rotation.md](se
 
 ## Exercised
 
-| Date | What ran | Result | Source |
-|---|---|---|---|
-| this stage | Console keys page end-to-end test | passes | plan status, this stage |
-| 2026-11-13 | this stage: `go test -race -run 'TestMachineAPI$' ./internal/controlplane/operator/` (real PostgreSQL, NATS and Umami containers; the same routes this runbook calls) | 13 of 13 subtests pass, among them `operators manage keys and nobody else does`, `a revoked key is refused on the very next request`, `an expired key is refused` and `no plaintext key is stored anywhere` | this page |
-
-Not yet exercised by a person through the console of a deployed environment: no staging exists.
+| Date | What ran | Result |
+|---|---|---|
+| 2026-11-13 | `go test -race -run 'TestMachineAPI$' ./internal/controlplane/operator/` against real PostgreSQL, NATS and Umami containers, through the same routes this runbook calls | 13 of 13 subtests pass, among them `operators manage keys and nobody else does`, `a revoked key is refused on the very next request`, `an expired key is refused` and `no plaintext key is stored anywhere` |
