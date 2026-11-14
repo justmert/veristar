@@ -22,7 +22,7 @@ import (
 	"github.com/justmert/veristar/tests/fixtures/natsctr"
 )
 
-// newToken returns a token in the the design format.
+// newToken returns a token in the otlp token format.
 func newToken(t *testing.T) string {
 	t.Helper()
 	const alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"

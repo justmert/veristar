@@ -31,7 +31,7 @@ const (
 	AttrTokenID  = "token_id"
 )
 
-// tokenRe is the otlp token format. anything else is
+// tokenRe is the otlp token format (sa_otlp_ and 40 base62 characters). anything else is
 // refused before hashing, so arbitrary header values never reach the lookup.
 var tokenRe = regexp.MustCompile(`^sa_otlp_[0-9A-Za-z]{40}$`)
 

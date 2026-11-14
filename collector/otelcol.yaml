@@ -1,4 +1,4 @@
-# scf-otelcol configuration (the design and this stage). every
+# scf-otelcol configuration (docs/reference/collector.md). every
 # value that differs per environment is a required environment variable;
 # an unset one leaves an empty value that fails validation, so the collector
 # refuses to start instead of running with a guess.
@@ -70,7 +70,7 @@ processors:
     idle_bucket_ttl: 10m
 
   # tenant metrics after tenantguard: legacy milliseconds to seconds and
-  # exponential histograms to the canonical explicit buckets,
+  # exponential histograms to the canonical explicit buckets (docs/reference/api-storage.md),
   # marked scf.lossy. a statement that fails leaves the metric unchanged;
   # the jetstream exporter then drops anything that is not an explicit
   # histogram in seconds and logs it, so nothing wrong is published.
@@ -102,7 +102,7 @@ processors:
 
 connectors:
   # alpha at v0.165.1 and stateless: one delta histogram per payload. used
-  # because the version is pinned and the this stage tests cover its output.
+  # because the version is pinned and the collector tests cover its output.
   # it stamps points with the moment it runs and emits them in map order,
   # so the minute and the message id come from tenantguard's stamps below.
   signal_to_metrics:
@@ -174,7 +174,7 @@ service:
     logs:
       level: info
       encoding: json
-    # the collector's own metrics for prometheus (the design). the port
+    # the collector's own metrics for prometheus. the port
     # is not published by any compose file; only the node's metrics relay
     # on the private network reaches it. no attribute carries tenant data.
     metrics:
