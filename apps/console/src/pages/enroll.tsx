@@ -6,6 +6,7 @@ import { api, type EnrollmentInput } from "@/api/endpoints";
 import { keys, meQuery } from "@/api/queries";
 import { ErrorPanel, FormMessage, Loading } from "@/components/error-panel";
 import { TextAreaField, TextField } from "@/components/form-field";
+import { PageHeader } from "@/components/panel";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import * as v from "@/lib/validate";
@@ -176,156 +177,238 @@ export function EnrollForm({ termsVersion }: { termsVersion: string }) {
       ? enroll.error
       : null;
 
+  const errorCount = Object.keys(errors).length;
+  const legend = "px-1.5 text-caption tracking-wide text-fg-3 uppercase";
+  const fieldset =
+    "flex min-w-0 flex-col gap-4 rounded-lg border border-line bg-raised px-4 pt-2 pb-5 sm:px-5";
+
   return (
-    <section className="max-w-2xl">
-      <Link to="/" className="text-sm text-muted-foreground hover:text-foreground">
-        Your projects
-      </Link>
-      <h1 className="mt-2 text-3xl font-semibold tracking-tight">Enroll a project</h1>
-      <p className="mt-2 text-muted-foreground">
-        Tell us about the project. Operators of this service read these answers to keep it for the
-        Stellar ecosystem.
-      </p>
+    <section className="flex flex-col gap-6">
+      <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-small text-fg-2">
+        <Link
+          to="/"
+          className="rounded-sm transition-colors duration-(--vs-duration-press) hover:text-fg focus-ring"
+        >
+          Your projects
+        </Link>
+        <span aria-hidden>/</span>
+        <span className="text-fg">Enroll</span>
+      </nav>
+      <div className="grid items-start gap-10 xl:grid-cols-[minmax(0,42rem)_minmax(0,17rem)]">
+        <div className="flex min-w-0 flex-col gap-6">
+          <PageHeader
+            title="Enroll a project"
+            description="Tell us about the project. Operators of this service read these answers to keep it for the Stellar ecosystem."
+          />
 
-      <form
-        ref={formRef}
-        noValidate
-        onSubmit={submit}
-        className="mt-8 space-y-8"
-        aria-label="Enroll a project"
-      >
-        <fieldset className="space-y-5 rounded-xl border bg-card p-5 sm:p-6 [&>legend+*]:clear-both">
-          <legend className="float-left mb-4 w-full text-base font-semibold tracking-tight">
-            The project
-          </legend>
-          <TextField
-            label="Project name"
-            name="name"
-            autoComplete="organization"
-            maxLength={100}
-            value={values.name}
-            onChange={set("name")}
-            error={errors.name}
-            required
-          />
-          <TextField
-            label="Project address"
-            name="slug"
-            optional
-            hint="Lowercase letters, digits and hyphens. Leave empty to derive it from the name."
-            autoCapitalize="none"
-            spellCheck={false}
-            maxLength={63}
-            value={values.slug}
-            onChange={set("slug")}
-            error={errors.slug}
-          />
-          <TextAreaField
-            label="Description"
-            name="description"
-            optional
-            rows={3}
-            maxLength={1000}
-            value={values.description}
-            onChange={set("description")}
-            error={errors.description}
-          />
-          <TextField
-            label="Website"
-            name="website"
-            type="url"
-            inputMode="url"
-            placeholder="https://"
-            autoCapitalize="none"
-            spellCheck={false}
-            value={values.website}
-            onChange={set("website")}
-            error={errors.website}
-            required
-          />
-        </fieldset>
+          <form
+            ref={formRef}
+            noValidate
+            onSubmit={submit}
+            className="flex flex-col gap-6"
+            aria-label="Enroll a project"
+          >
+            <fieldset className={fieldset}>
+              <legend className={legend}>The project</legend>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <TextField
+                  label="Project name"
+                  name="name"
+                  autoComplete="organization"
+                  maxLength={100}
+                  value={values.name}
+                  onChange={set("name")}
+                  error={errors.name}
+                  required
+                />
+                <TextField
+                  label="Project address"
+                  name="slug"
+                  optional
+                  hint="Lowercase letters, digits and hyphens. Leave empty to derive it from the name."
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  className="font-mono"
+                  maxLength={63}
+                  value={values.slug}
+                  onChange={set("slug")}
+                  error={errors.slug}
+                />
+              </div>
+              <TextField
+                label="Website"
+                name="website"
+                type="url"
+                inputMode="url"
+                placeholder="https://"
+                autoCapitalize="none"
+                spellCheck={false}
+                value={values.website}
+                onChange={set("website")}
+                error={errors.website}
+                required
+              />
+              <TextAreaField
+                label="Description"
+                name="description"
+                optional
+                rows={2}
+                maxLength={1000}
+                value={values.description}
+                onChange={set("description")}
+                error={errors.description}
+              />
+            </fieldset>
 
-        <fieldset className="space-y-5 rounded-xl border bg-card p-5 sm:p-6 [&>legend+*]:clear-both">
-          <legend className="float-left mb-4 w-full text-base font-semibold tracking-tight">
-            Its place in the Stellar ecosystem
-          </legend>
-          <TextAreaField
-            label="How does the project use Stellar?"
-            name="stellar_usage"
-            rows={4}
-            maxLength={2000}
-            hint="For example: a Soroban lending protocol on mainnet, or a wallet for Stellar accounts."
-            value={values.stellarUsage}
-            onChange={set("stellarUsage")}
-            error={errors.stellarUsage}
-            required
-          />
-          <TextAreaField
-            label="Account or contract ids"
-            name="stellar_ids"
-            optional
-            rows={3}
-            hint="Up to 20 ids starting with G, M or C, one per line."
-            className="font-mono text-xs"
-            autoCapitalize="characters"
-            spellCheck={false}
-            value={values.stellarIds}
-            onChange={set("stellarIds")}
-            error={errors.stellarIds}
-          />
-          <TextField
-            label="Stellar Community Fund round"
-            name="scf_round_url"
-            optional
-            type="url"
-            inputMode="url"
-            placeholder="https://"
-            hint="A link to the project's SCF submission, if it has one."
-            autoCapitalize="none"
-            spellCheck={false}
-            value={values.scfRoundUrl}
-            onChange={set("scfRoundUrl")}
-            error={errors.scfRoundUrl}
-          />
-        </fieldset>
+            <fieldset className={fieldset}>
+              <legend className={legend}>Evidence for reviewers</legend>
+              <TextAreaField
+                label="How does the project use Stellar?"
+                name="stellar_usage"
+                rows={4}
+                maxLength={2000}
+                hint={
+                  <span className="flex justify-between gap-4">
+                    <span>
+                      For example: a Soroban lending protocol on mainnet, or a wallet for Stellar
+                      accounts.
+                    </span>
+                    <span className="shrink-0 font-mono tabular text-fg-3">
+                      {values.stellarUsage.length} / 2000
+                    </span>
+                  </span>
+                }
+                value={values.stellarUsage}
+                onChange={set("stellarUsage")}
+                error={errors.stellarUsage}
+                required
+              />
+              <TextAreaField
+                label="Account or contract ids"
+                name="stellar_ids"
+                optional
+                rows={3}
+                hint="Up to 20 ids starting with G, M or C, one per line."
+                className="font-mono text-small"
+                autoCapitalize="characters"
+                spellCheck={false}
+                value={values.stellarIds}
+                onChange={set("stellarIds")}
+                error={errors.stellarIds}
+              />
+              <TextField
+                label="Stellar Community Fund round"
+                name="scf_round_url"
+                optional
+                type="url"
+                inputMode="url"
+                placeholder="https://"
+                hint="A link to the project's SCF submission, if it has one."
+                autoCapitalize="none"
+                spellCheck={false}
+                value={values.scfRoundUrl}
+                onChange={set("scfRoundUrl")}
+                error={errors.scfRoundUrl}
+              />
+            </fieldset>
 
-        <div className="space-y-2">
-          <div className="flex items-start gap-3">
-            <Checkbox
-              id={termsId}
-              checked={values.termsAccepted}
-              onCheckedChange={(c) => setValues((s) => ({ ...s, termsAccepted: c === true }))}
-              aria-invalid={errors.termsAccepted ? true : undefined}
-              aria-describedby={errors.termsAccepted ? `${termsId}-e` : undefined}
-              className="mt-0.5"
-            />
-            <label htmlFor={termsId} className="text-sm leading-snug">
-              I accept the{" "}
-              <a
-                href="/terms"
-                target="_blank"
-                rel="noopener"
-                className="text-primary underline underline-offset-2"
+            <div className="flex flex-col gap-2">
+              <div className="flex items-start gap-3">
+                <Checkbox
+                  id={termsId}
+                  checked={values.termsAccepted}
+                  onCheckedChange={(c) => setValues((s) => ({ ...s, termsAccepted: c === true }))}
+                  aria-invalid={errors.termsAccepted ? true : undefined}
+                  aria-describedby={errors.termsAccepted ? `${termsId}-e` : undefined}
+                  className="mt-0.5"
+                />
+                <label htmlFor={termsId} className="text-body text-fg">
+                  I accept the{" "}
+                  <a
+                    href="/terms"
+                    target="_blank"
+                    rel="noopener"
+                    className="rounded-sm underline decoration-line-strong underline-offset-2 transition-colors duration-(--vs-duration-press) hover:decoration-fg focus-ring"
+                  >
+                    terms of the service
+                  </a>{" "}
+                  (version <span className="font-mono text-small">{termsVersion}</span>) for this
+                  project.
+                </label>
+              </div>
+              {errors.termsAccepted ? (
+                <p
+                  id={`${termsId}-e`}
+                  role="alert"
+                  className="animate-fade-in pl-7 text-caption font-normal text-critical"
+                >
+                  {errors.termsAccepted}
+                </p>
+              ) : null}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-3">
+              <Button
+                type="submit"
+                pending={enroll.isPending}
+                disabled={enroll.isPending}
+                className="max-sm:h-(--vs-control-touch) max-sm:flex-1"
               >
-                terms of the service
-              </a>{" "}
-              (version {termsVersion}) for this project.
-            </label>
-          </div>
-          {errors.termsAccepted ? (
-            <p id={`${termsId}-e`} role="alert" className="pl-7 text-sm text-destructive">
-              {errors.termsAccepted}
-            </p>
-          ) : null}
+                {enroll.isPending ? "Enrolling" : "Enroll project"}
+              </Button>
+              <Button asChild variant="ghost" className="max-sm:h-(--vs-control-touch)">
+                <Link to="/">Cancel</Link>
+              </Button>
+              {errorCount > 0 ? (
+                <span className="text-caption font-normal text-critical sm:ml-auto">
+                  {errorCount === 1
+                    ? "1 field needs attention"
+                    : `${errorCount} fields need attention`}
+                </span>
+              ) : null}
+              {otherError ? <FormMessage error={otherError} className="w-full" /> : null}
+            </div>
+          </form>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          <Button type="submit" size="lg" className="px-4" disabled={enroll.isPending}>
-            {enroll.isPending ? "Enrolling" : "Enroll project"}
-          </Button>
-          <FormMessage error={otherError} />
-        </div>
-      </form>
+        <aside aria-labelledby={`${termsId}-after`} className="flex flex-col xl:pt-24">
+          <h2
+            id={`${termsId}-after`}
+            className="pb-2 text-caption tracking-wide text-fg-3 uppercase"
+          >
+            After you enroll
+          </h2>
+          <ol className="flex flex-col">
+            {AFTER.map((step, i) => (
+              <li
+                key={step.title}
+                className="grid grid-cols-[1.5rem_minmax(0,1fr)] gap-2.5 border-t border-line py-3"
+              >
+                <span className="pt-0.5 font-mono text-caption font-normal text-fg-3">{i + 1}</span>
+                <span className="flex flex-col gap-0.5">
+                  <span className="text-body font-medium text-fg">{step.title}</span>
+                  <span className="text-small text-fg-2">{step.text}</span>
+                </span>
+              </li>
+            ))}
+          </ol>
+        </aside>
+      </div>
     </section>
   );
 }
+
+// what happens next, as the console does it: a pending project waits for
+// review (when the service asks for approval), sites come next, the api is
+// optional
+const AFTER = [
+  {
+    title: "Operator review",
+    text: "When the service asks for approval, operators read the answers. You can add sites and members meanwhile.",
+  },
+  { title: "Add your website", text: "Each site gets a tracking snippet to install." },
+  {
+    title: "Connect your API",
+    text: "Optional: send API metrics with an OpenTelemetry exporter and a token.",
+  },
+];

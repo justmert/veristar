@@ -1,24 +1,32 @@
 import { useQuery } from "@tanstack/react-query";
-import { CircleAlert } from "lucide-react";
-import { Link, NavLink, Outlet, useLocation } from "react-router";
+import { Link, Outlet, useLocation } from "react-router";
 import { meQuery, operatorAlertsQuery } from "@/api/queries";
 import { ErrorPanel, Loading } from "@/components/error-panel";
+import { OPERATOR_NAV, OPERATOR_TABS } from "@/components/nav/nav-items";
+import { NavTabs } from "@/components/nav/nav-tabs";
+import { Notice } from "@/components/notice";
+import { PageHeader } from "@/components/panel";
+import { Button } from "@/components/ui/button";
 import { criticalCount } from "@/lib/alerts";
+import { OperatorsOnlyPage } from "@/pages/not-found";
 
 const ALERTS_PATH = "/operator/alerts";
 
-const NAV = [
-  { to: "/operator", label: "Review queue", end: true },
-  { to: ALERTS_PATH, label: "Alerts", end: true },
-  { to: "/operator/tenants", label: "Projects", end: false },
-  { to: "/operator/web", label: "Global web", end: true },
-  { to: "/operator/api", label: "Global API", end: true },
-  { to: "/operator/compare", label: "Compare", end: true },
-  { to: "/operator/api-keys", label: "API keys", end: true },
-  { to: "/operator/ai", label: "AI / MCP", end: true },
-  { to: "/operator/audit", label: "Audit log", end: true },
-  { to: "/operator/settings", label: "Settings", end: true },
-];
+// the place header of every operator route: the sidebar picks the place, the
+// header names it and the tabs pick the view inside it. pages under it start
+// with their own h2.
+const PLACE_TEXT: Record<string, string> = {
+  attention: "Projects waiting for a decision and the platform's firing alerts.",
+  projects:
+    "Every enrolled project with its status, and its web and API numbers over a range of UTC days.",
+  compare: "Web and API numbers of selected projects side by side, per UTC day.",
+  admin:
+    "Enrollment, API keys for machine access, AI assistant connections and the audit log of every operator action.",
+};
+
+// one label for the tabs of every place, so tests and assistive technology
+// find them the same way on every operator page
+export const OPERATOR_TABS_LABEL = "Operator sections";
 
 // the operator area. the control plane enforces operator rights on every
 // route (contract 5.1); this check only keeps the pages away from people who
@@ -31,6 +39,11 @@ export function OperatorLayout() {
   return <OperatorArea />;
 }
 
+function placeOf(pathname: string) {
+  const rest = pathname.replace(/^\/operator\/?/, "");
+  return OPERATOR_NAV.find((n) => n.match(rest)) ?? OPERATOR_NAV[0];
+}
+
 // mounted for operators only, so a tenant's browser never asks for alerts
 function OperatorArea() {
   const alerts = useQuery(operatorAlertsQuery);
@@ -39,45 +52,36 @@ function OperatorArea() {
   // banner then say the source is unreachable instead of showing old numbers
   const current = alerts.error ? undefined : alerts.data;
   const critical = current ? criticalCount(current.alerts) : 0;
+  const place = placeOf(pathname);
+  const tabs = place ? OPERATOR_TABS[place.key] : undefined;
 
   return (
-    <div>
-      <h1 className="text-3xl font-semibold tracking-tight">Operator</h1>
-      <p className="mt-1 text-sm text-muted-foreground">
-        Review projects, change their status and the enrollment mode, watch the platform's alerts,
-        compare web and API numbers across projects, and manage API keys for machine access. Every
-        action is recorded in the audit log.
-      </p>
+    <div className="flex flex-col gap-5">
+      <PageHeader
+        title={place?.label ?? "Operator"}
+        description={place ? PLACE_TEXT[place.key] : undefined}
+      />
       {critical > 0 ? <CriticalBanner count={critical} linked={pathname !== ALERTS_PATH} /> : null}
-      <nav aria-label="Operator" className="mt-6 border-b">
-        <ul className="-mb-px flex gap-1 overflow-x-auto">
-          {NAV.map((n) => (
-            <li key={n.to}>
-              <NavLink
-                to={n.to}
-                end={n.end}
-                className={({ isActive }) =>
-                  `inline-flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium whitespace-nowrap ${
-                    isActive
-                      ? "border-primary text-foreground"
-                      : "border-transparent text-muted-foreground hover:text-foreground"
-                  }`
+      {tabs ? (
+        <NavTabs
+          label={OPERATOR_TABS_LABEL}
+          items={tabs.map((t) =>
+            t.to === ALERTS_PATH
+              ? {
+                  ...t,
+                  badge: (
+                    <AlertsBadge
+                      count={current?.alerts.length ?? null}
+                      critical={critical}
+                      failed={alerts.error !== null}
+                    />
+                  ),
                 }
-              >
-                {n.label}
-                {n.to === ALERTS_PATH ? (
-                  <AlertsBadge
-                    count={current?.alerts.length ?? null}
-                    critical={critical}
-                    failed={alerts.error !== null}
-                  />
-                ) : null}
-              </NavLink>
-            </li>
-          ))}
-        </ul>
-      </nav>
-      <div className="mt-6">
+              : t,
+          )}
+        />
+      ) : null}
+      <div className="min-w-0">
         <Outlet />
       </div>
     </div>
@@ -98,7 +102,7 @@ function AlertsBadge({
   if (failed) {
     return (
       <span
-        className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive/10 px-1.5 text-xs font-semibold text-destructive"
+        className="inline-flex h-5 min-w-5 items-center justify-center rounded-full border border-critical-line bg-critical-soft px-1.5 font-mono text-axis font-medium text-critical"
         title="Alert source unreachable"
       >
         !<span className="sr-only">, alert source unreachable</span>
@@ -108,9 +112,11 @@ function AlertsBadge({
   if (count === null || count === 0) return null;
   return (
     <span
-      className={`inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-xs font-semibold tabular-nums ${
-        critical > 0 ? "bg-destructive text-white" : "bg-muted text-foreground"
-      }`}
+      className={
+        critical > 0
+          ? "inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-critical-solid px-1.5 font-mono text-axis font-medium text-on-critical tabular"
+          : "inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-selected px-1.5 font-mono text-axis font-medium text-fg tabular"
+      }
     >
       {count}
       <span className="sr-only">{count === 1 ? " alert firing" : " alerts firing"}</span>
@@ -120,31 +126,23 @@ function AlertsBadge({
 
 function CriticalBanner({ count, linked }: { count: number; linked: boolean }) {
   return (
-    <div
+    <Notice
+      tone="critical"
       role="alert"
-      className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-destructive/40 bg-destructive/5 px-4 py-2.5 text-sm"
+      title={count === 1 ? "A critical alert is firing." : `${count} critical alerts are firing.`}
+      actions={
+        linked ? (
+          <Button asChild variant="outline" size="sm" className="max-lg:h-(--vs-control-touch)">
+            <Link to={ALERTS_PATH}>Open alerts</Link>
+          </Button>
+        ) : null
+      }
     >
-      <CircleAlert aria-hidden className="size-4 shrink-0 text-destructive" />
-      <span className="font-medium text-destructive">
-        {count === 1 ? "A critical alert is firing." : `${count} critical alerts are firing.`}
-      </span>
-      {linked ? (
-        <Link to={ALERTS_PATH} className="underline">
-          Open alerts
-        </Link>
-      ) : null}
-    </div>
+      A page severity alert means act now.
+    </Notice>
   );
 }
 
 export function OperatorsOnly() {
-  return (
-    <section className="max-w-xl">
-      <h1 className="text-3xl font-semibold tracking-tight">Operators only</h1>
-      <p className="mt-2 text-muted-foreground">
-        This area is for operators of the service. Your GitHub account is not on the operator list.
-        If it was added recently, sign out and sign in again.
-      </p>
-    </section>
-  );
+  return <OperatorsOnlyPage />;
 }

@@ -25,7 +25,7 @@ test("sign-in sends pkce s256, state and no scope; cookies carry the documented 
   await resetFixture();
   const user = newUser("sess");
   await page.goto(`${APP}/sign-in`);
-  await page.getByRole("link", { name: "Sign in with GitHub" }).click();
+  await page.getByRole("link", { name: "Continue with GitHub" }).click();
   await page.waitForURL(`${OAUTH}/login/oauth/authorize?**`);
 
   // while the browser is at github, only the sealed oauth cookie exists, and
@@ -224,7 +224,7 @@ test("callback refuses a foreign state and a cancelled consent", async ({ page }
   await expect(page.getByRole("alert")).toBeVisible();
 
   await page.goto(`${APP}/sign-in`);
-  await page.getByRole("link", { name: "Sign in with GitHub" }).click();
+  await page.getByRole("link", { name: "Continue with GitHub" }).click();
   await page.waitForURL(`${OAUTH}/login/oauth/authorize?**`);
   await page.click("#fixture-cancel");
   await page.waitForURL(`${APP}/sign-in?error=access_denied`);

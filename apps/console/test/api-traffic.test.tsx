@@ -11,6 +11,7 @@ import {
   apiWarnings,
   type Tenant,
 } from "@/api/schemas";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import {
   formatPercentile,
   formatRate,
@@ -26,6 +27,22 @@ import {
 import { ApiTrafficPage, IGNORED_NOTE } from "@/pages/api-traffic";
 import * as f from "./fixtures/contract";
 import { byLabel, click, renderRoutes, type, waitFor } from "./helpers";
+
+// jsdom has no IntersectionObserver; the charts draw in once they are in
+// view. every supported browser has it, so this only fills the test dom.
+if (!("IntersectionObserver" in globalThis)) {
+  globalThis.IntersectionObserver = class {
+    readonly root = null;
+    readonly rootMargin = "";
+    readonly thresholds = [];
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+    takeRecords() {
+      return [];
+    }
+  } as unknown as typeof IntersectionObserver;
+}
 
 describe("api metrics schemas accept the contract's shapes (section 7)", () => {
   it.each([
@@ -228,7 +245,12 @@ function routes() {
   return [
     {
       path: "/projects/:tenantId",
-      element: <Outlet context={ctx} />,
+      // the shell provides the tooltip layer in the app
+      element: (
+        <TooltipProvider>
+          <Outlet context={ctx} />
+        </TooltipProvider>
+      ),
       children: [
         { path: "api/traffic", element: <ApiTrafficPage /> },
         { path: "api", element: <p>setup page</p> },
@@ -249,9 +271,13 @@ function tile(host: HTMLElement, label: string): string {
   return text(host.querySelector(`[data-tile="${label}"]`));
 }
 
-function radio(host: HTMLElement, value: string): HTMLInputElement {
-  const el = host.querySelector<HTMLInputElement>(`input[name=api-range][value="${value}"]`);
-  if (!el) throw new Error(`no range ${value}`);
+// the range is a radio group of buttons, named by their short labels
+function radio(host: HTMLElement, label: string): HTMLButtonElement {
+  const group = host.querySelector('[role="radiogroup"][aria-label="Range"]');
+  const el = [...(group?.querySelectorAll<HTMLButtonElement>('[role="radio"]') ?? [])].find(
+    (b) => text(b) === label,
+  );
+  if (!el) throw new Error(`no range ${label}`);
   return el;
 }
 
@@ -287,12 +313,13 @@ describe("api traffic page", () => {
     await waitFor(() => expect(tile(host, "p99")).toContain(">10 s"));
     expect(tile(host, "Requests")).toContain("1,200");
     expect(tile(host, "Requests")).toContain("+20%");
-    expect(tile(host, "Requests")).toContain("previous: 1,000");
+    expect(tile(host, "Requests")).toContain("Previous range: 1,000");
     expect(tile(host, "4xx rate")).toContain("2.5%");
     expect(tile(host, "4xx rate")).toContain("30 client errors");
-    expect(tile(host, "4xx rate")).toContain("up+0.5 pt");
+    // the sign says the direction in text, beside the arrow and its colour
+    expect(tile(host, "4xx rate")).toContain("+0.5 pt");
     expect(tile(host, "5xx rate")).toContain("0.17%");
-    expect(tile(host, "5xx rate")).toContain("down");
+    expect(tile(host, "5xx rate")).toMatch(/-\d[\d.]* pt/);
     expect(tile(host, "p50")).toContain("42 ms");
     expect(tile(host, "p95")).toContain("310 ms");
     expect(tile(host, "p99")).toContain("was 900 ms");
@@ -368,8 +395,17 @@ describe("api traffic page", () => {
     await waitFor(() => expect(host.querySelector("[data-route]")).not.toBeNull());
     await click(radio(host, "7d"));
     await waitFor(() => expect(net.last("routes")?.searchParams.get("range")).toBe("7d"));
-    for (const k of ["services", "warnings", "overview", "timeseries", "status"])
+    for (const k of ["services", "warnings", "overview", "status"])
       expect(net.last(k)?.searchParams.get("range")).toBe("7d");
+    // the timeseries is asked twice per range: once for it, and once as a
+    // custom range for the previous period the overview names (the dashed line)
+    await waitFor(() =>
+      expect(
+        net.calls.some(
+          (u) => u.pathname.endsWith("/timeseries") && u.searchParams.get("range") === "7d",
+        ),
+      ).toBe(true),
+    );
   });
 
   it("sorts the routes table by a column, then reverses it", async () => {
@@ -453,7 +489,7 @@ describe("api traffic page", () => {
     const net = serve(full);
     const host = await renderRoutes(routes(), path);
     await waitFor(() => expect(host.querySelector("[data-route]")).not.toBeNull());
-    await click(radio(host, "custom"));
+    await click(radio(host, "Custom"));
     const form = host.querySelector<HTMLFormElement>('form[aria-label="Custom range"]');
     if (!form) throw new Error("no custom range form");
     await type(byLabel(host, "From (UTC)") as HTMLInputElement, "2026-11-05T00:00");
@@ -471,7 +507,20 @@ describe("api traffic page", () => {
   it("lists every bucket in the chart tables, the open bucket as >10 s", async () => {
     serve(full);
     const host = await renderRoutes(routes(), path);
+    // the p95 tile drives the chart to latency; its card shows the table
+    await waitFor(() =>
+      expect(host.querySelector('[data-tile="p95"] button[aria-pressed]')).not.toBeNull(),
+    );
+    const p95 = host.querySelector<HTMLButtonElement>('[data-tile="p95"] button[aria-pressed]');
+    if (!p95) throw new Error("no p95 tile");
+    await click(p95);
     await waitFor(() => expect(host.textContent).toContain("Latency"));
+    const card = () =>
+      [...host.querySelectorAll("section")].find((s) => text(s.querySelector("h3")) === "Latency");
+    const toggle = card()?.querySelector<HTMLButtonElement>('button[aria-label="Show as table"]');
+    if (!toggle) throw new Error("no table toggle");
+    await click(toggle);
+    await waitFor(() => expect(card()?.querySelector("tbody tr")).not.toBeNull());
     const latency = [...host.querySelectorAll("section")].find(
       (s) => text(s.querySelector("h3")) === "Latency",
     );

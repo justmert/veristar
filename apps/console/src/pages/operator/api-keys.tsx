@@ -1,14 +1,20 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { cn } from "@veristar/brand/cn";
 import { KeyRound } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { ApiError } from "@/api/client";
 import { type ApiKeyInput, globalApi } from "@/api/endpoints";
 import { apiKeysQuery, apiKeyUsageQuery, keys, keyTenantsQuery } from "@/api/queries";
 import type { ApiKey, ApiKeyCreated, ApiKeyStatus } from "@/api/schemas";
+import { ChoiceCard } from "@/components/choice-card";
+import { CodeBlock } from "@/components/code-block";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { CopyButton } from "@/components/copy-button";
-import { ErrorPanel, FormMessage, Loading } from "@/components/error-panel";
+import { ErrorPanel, FormMessage, Loading, StateBlock } from "@/components/error-panel";
 import { SelectField, TextField } from "@/components/form-field";
+import { Stagger, StaggerItem } from "@/components/motion";
+import { Panel } from "@/components/panel";
+import { OneTimeSecret } from "@/components/secret";
+import { Pill, type Tone } from "@/components/status";
 import { Button } from "@/components/ui/button";
 import { formatCount, formatDateTimeUtc, formatHourUtc } from "@/lib/format";
 import { formatDay } from "@/lib/global";
@@ -17,10 +23,10 @@ import { formatDay } from "@/lib/global";
 export const DEFAULT_EXPIRY_DAYS = 90;
 export const MAX_EXPIRY_DAYS = 365;
 
-const STATUS_STYLE: Record<ApiKeyStatus, string> = {
-  active: "border-good/40 bg-good/10",
-  expired: "bg-muted text-muted-foreground",
-  revoked: "border-destructive/40 bg-destructive/5",
+const STATUS_TONE: Record<ApiKeyStatus, Tone> = {
+  active: "success",
+  expired: "info",
+  revoked: "critical",
 };
 
 const STATUS_TEXT: Record<ApiKeyStatus, string> = {
@@ -75,6 +81,8 @@ function serverFieldErrors(err: unknown): Partial<Record<keyof KeyForm, string>>
   return out;
 }
 
+// the operator layout draws the place header and its tabs; this page starts
+// with its own section header
 export function ApiKeysPage() {
   const list = useQuery(apiKeysQuery);
   const tenants = useQuery(keyTenantsQuery);
@@ -82,13 +90,18 @@ export function ApiKeysPage() {
   const names = new Map((tenants.data ?? []).map((t) => [t.id, t.name]));
 
   return (
-    <section className="space-y-6">
-      <header>
-        <h2 className="text-xl font-semibold tracking-tight">API keys</h2>
-        <p className="mt-1 max-w-prose text-sm text-muted-foreground">
+    <section
+      aria-labelledby="keys-h"
+      className="flex max-w-[62.5rem] animate-rise-in flex-col gap-6"
+    >
+      <header className="flex flex-col gap-1">
+        <h2 id="keys-h" className="text-section text-fg">
+          API keys
+        </h2>
+        <p className="max-w-prose text-body text-fg-2">
           Keys give a machine (a warehouse job, a report script, the monitoring prober) read access
-          to aggregate metrics under <code className="font-mono">/api/metrics/v1/</code>. A key
-          works nowhere else, and a console session does not work there. Each key may make 10
+          to aggregate metrics under <code className="font-mono text-fg">/api/metrics/v1/</code>. A
+          key works nowhere else, and a console session does not work there. Each key may make 10
           requests per second.
         </p>
       </header>
@@ -107,21 +120,29 @@ export function ApiKeysPage() {
         />
       )}
 
-      <section aria-labelledby="keys-list" className="space-y-3">
-        <h3 id="keys-list" className="font-semibold">
-          Keys
-        </h3>
-        {list.isPending ? <Loading label="Loading keys" /> : null}
-        {list.error ? <ErrorPanel error={list.error} onRetry={() => list.refetch()} /> : null}
+      <Panel aria-labelledby="keys-list" title={<span id="keys-list">Keys</span>} flush>
+        {list.isPending ? <Loading label="Loading keys" className="px-4 pb-4 sm:px-5" /> : null}
+        {list.error ? (
+          <div className="px-4 pb-4 sm:px-5">
+            <ErrorPanel error={list.error} onRetry={() => list.refetch()} />
+          </div>
+        ) : null}
         {list.data ? (
           list.data.length === 0 ? (
-            <p className="rounded-xl border border-dashed bg-card p-6 text-muted-foreground">
-              No key has been created yet.
-            </p>
+            <div className="px-4 pb-4 sm:px-5">
+              <StateBlock
+                kind="empty"
+                icon={<KeyRound aria-hidden strokeWidth={1.75} />}
+                title="No key has been created yet."
+              >
+                Create a key above for a machine that reads the metrics API.
+              </StateBlock>
+            </div>
           ) : (
-            <ul
+            <Stagger
+              as="ul"
               aria-label="API keys"
-              className="divide-y overflow-hidden rounded-xl border bg-card"
+              className="divide-y divide-line-subtle border-t border-line"
             >
               {list.data.map((k) => (
                 <KeyRow
@@ -130,10 +151,10 @@ export function ApiKeysPage() {
                   tenantName={k.tenant_id ? (names.get(k.tenant_id) ?? null) : null}
                 />
               ))}
-            </ul>
+            </Stagger>
           )
         ) : null}
-      </section>
+      </Panel>
     </section>
   );
 }
@@ -176,14 +197,16 @@ function CreateKeyForm({
       aria-label="Create an API key"
       onSubmit={submit}
       noValidate
-      className="space-y-4 rounded-xl border bg-card p-4 sm:p-5"
+      className="flex flex-col gap-4 rounded-xl border border-line bg-raised p-4 sm:px-5"
     >
-      <h3 className="font-semibold">Create a key</h3>
-      <div className="grid gap-4 sm:grid-cols-2">
+      <h3 className="text-title text-fg">Create a key</h3>
+      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_11rem]">
         <TextField
           label="Name"
           hint="Who or what uses the key, for example warehouse."
+          placeholder="warehouse"
           maxLength={100}
+          className="max-lg:h-(--vs-control-touch)"
           value={form.name}
           error={errors.name}
           onChange={(e) => setForm({ ...form, name: e.target.value })}
@@ -195,40 +218,40 @@ function CreateKeyForm({
           inputMode="numeric"
           min={1}
           max={MAX_EXPIRY_DAYS}
+          className="tabular max-lg:h-(--vs-control-touch)"
           value={form.days}
           error={errors.days}
           onChange={(e) => setForm({ ...form, days: e.target.value })}
         />
       </div>
-      <fieldset className="space-y-2 text-sm">
-        <legend className="mb-1 font-medium">Scope: read metrics of</legend>
-        <label className="flex items-center gap-2">
-          <input
-            type="radio"
+      <fieldset className="flex flex-col gap-2">
+        <legend className="pb-2 text-small font-medium text-fg">Scope: read metrics of</legend>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <ChoiceCard
             name="scope"
-            className="size-4 accent-primary"
+            value="all"
             checked={form.scope === "all"}
             onChange={() => setForm({ ...form, scope: "all" })}
+            title="All projects"
+            description="The aggregate metrics of every project."
           />
-          All projects
-        </label>
-        <label className="flex items-center gap-2">
-          <input
-            type="radio"
+          <ChoiceCard
             name="scope"
-            className="size-4 accent-primary"
+            value="tenant"
             checked={form.scope === "tenant"}
             onChange={() => setForm({ ...form, scope: "tenant" })}
+            title="One project"
+            description="Only the project chosen below."
           />
-          One project
-        </label>
+        </div>
       </fieldset>
       {form.scope === "tenant" ? (
-        <div className="max-w-md">
+        <div className="flex max-w-md animate-rise-in flex-col gap-2">
           <SelectField
             label="Project"
             value={form.tenantId}
             error={errors.tenantId}
+            className="w-full max-lg:h-(--vs-control-touch)"
             onChange={(e) => setForm({ ...form, tenantId: e.target.value })}
           >
             <option value="">Choose a project</option>
@@ -244,10 +267,17 @@ function CreateKeyForm({
       {create.error && Object.keys(serverFieldErrors(create.error)).length === 0 ? (
         <FormMessage error={create.error} />
       ) : null}
-      <Button type="submit" disabled={create.isPending}>
-        <KeyRound aria-hidden />
-        {create.isPending ? "Creating" : "Create key"}
-      </Button>
+      <div>
+        <Button
+          type="submit"
+          variant="outline"
+          pending={create.isPending}
+          className="max-lg:h-(--vs-control-touch)"
+        >
+          {create.isPending ? null : <KeyRound aria-hidden />}
+          {create.isPending ? "Creating" : "Create key"}
+        </Button>
+      </div>
     </form>
   );
 }
@@ -264,36 +294,23 @@ function CreatedKey({
   const origin = window.location.origin;
   const curl = `curl -H "Authorization: Bearer ${created.key}" \\\n  "${origin}/api/metrics/v1/tenants"`;
   return (
-    <section
-      aria-label="New key"
-      className="space-y-3 rounded-xl border border-primary/40 bg-card p-4 sm:p-5"
-    >
-      <h3 className="font-semibold">Key {created.name} created</h3>
-      <p className="text-sm text-muted-foreground">
-        Copy the key now. It is shown only once; only its hash is stored. It reads{" "}
-        {created.tenant_id ? `the project ${tenantName ?? created.tenant_id}` : "every project"} and
-        expires {formatDateTimeUtc(created.expires_at)}.
-      </p>
-      <div className="flex flex-wrap items-center gap-2">
-        <code
-          data-testid="new-api-key"
-          className="min-w-0 rounded-lg border bg-muted px-3 py-2 font-mono text-sm break-all"
-        >
-          {created.key}
-        </code>
-        <CopyButton text={created.key} label="Copy key" />
-      </div>
-      <details className="text-sm">
-        <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
-          Try it with curl
-        </summary>
-        <pre className="mt-2 overflow-x-auto rounded-lg border bg-muted p-3 font-mono text-xs">
-          {curl}
-        </pre>
-      </details>
-      <Button variant="outline" onClick={onDone}>
-        I have copied the key
-      </Button>
+    <section aria-label="New key">
+      <OneTimeSecret
+        value={created.key}
+        title={`Copy the key now: ${created.name}`}
+        description={`It is shown only once; only its hash is stored. It reads ${
+          created.tenant_id ? `the project ${tenantName ?? created.tenant_id}` : "every project"
+        } and expires ${formatDateTimeUtc(created.expires_at)}.`}
+        copyLabel="Copy key"
+        onDone={onDone}
+      >
+        <details className="group text-small">
+          <summary className="w-fit cursor-pointer rounded-sm text-fg-2 transition-colors duration-(--vs-duration-press) ease-standard hover:text-fg focus-ring">
+            Try it with curl
+          </summary>
+          <CodeBlock code={curl} label="curl" copyLabel="Copy command" wrap className="mt-2" />
+        </details>
+      </OneTimeSecret>
     </section>
   );
 }
@@ -310,43 +327,49 @@ function KeyRow({ k, tenantName }: { k: ApiKey; tenantName: string | null }) {
     },
   });
   return (
-    <li className="space-y-2 px-4 py-4 sm:px-5" data-key-id={k.id} aria-label={`Key ${k.name}`}>
-      <div className="flex flex-wrap items-center gap-2">
-        <p className="font-medium">{k.name}</p>
-        <span
-          className={`rounded-full border px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[k.status]}`}
-        >
-          {STATUS_TEXT[k.status]}
-        </span>
-        <code className="font-mono text-xs text-muted-foreground">{k.prefix}...</code>
-      </div>
-      <p className="text-xs text-muted-foreground">
-        Reads {k.tenant_id ? `one project: ${tenantName ?? k.tenant_id}` : "every project"}. Created{" "}
-        {formatDateTimeUtc(k.created_at)}.{" "}
-        {k.revoked_at
-          ? `Revoked ${formatDateTimeUtc(k.revoked_at)}.`
-          : `${k.status === "expired" ? "Expired" : "Expires"} ${formatDateTimeUtc(k.expires_at)}.`}{" "}
-        {k.last_used_at ? `Last used ${formatDateTimeUtc(k.last_used_at)}.` : "Never used."}
-      </p>
-      <div className="flex flex-wrap gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          aria-expanded={showUsage}
-          onClick={() => setShowUsage((v) => !v)}
-        >
-          {showUsage ? "Hide usage" : "Usage"}
-        </Button>
-        {k.status !== "revoked" ? (
+    <StaggerItem
+      as="li"
+      className="flex flex-col gap-3 px-4 py-3 transition-colors duration-(--vs-duration-press) ease-standard hover:bg-hover sm:px-5"
+      data-key-id={k.id}
+      aria-label={`Key ${k.name}`}
+    >
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="min-w-0 truncate text-body font-medium text-fg">{k.name}</span>
+            <Pill tone={STATUS_TONE[k.status]}>{STATUS_TEXT[k.status]}</Pill>
+            <code className="font-mono text-caption text-fg-3">{k.prefix}...</code>
+          </div>
+          <p className="text-caption font-normal text-fg-3">
+            Reads {k.tenant_id ? `one project: ${tenantName ?? k.tenant_id}` : "every project"}.
+            Created {formatDateTimeUtc(k.created_at)}.{" "}
+            {k.revoked_at
+              ? `Revoked ${formatDateTimeUtc(k.revoked_at)}.`
+              : `${k.status === "expired" ? "Expired" : "Expires"} ${formatDateTimeUtc(k.expires_at)}.`}{" "}
+            {k.last_used_at ? `Last used ${formatDateTimeUtc(k.last_used_at)}.` : "Never used."}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
           <Button
             variant="outline"
             size="sm"
-            className="text-destructive"
-            onClick={() => setConfirm(true)}
+            aria-expanded={showUsage}
+            className={cn("max-lg:h-(--vs-control-touch)", showUsage && "bg-selected")}
+            onClick={() => setShowUsage((v) => !v)}
           >
-            Revoke
+            {showUsage ? "Hide usage" : "Usage"}
           </Button>
-        ) : null}
+          {k.status !== "revoked" ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-critical max-lg:h-(--vs-control-touch)"
+              onClick={() => setConfirm(true)}
+            >
+              Revoke
+            </Button>
+          ) : null}
+        </div>
       </div>
       {showUsage ? <Usage id={k.id} /> : null}
       <ConfirmDialog
@@ -363,52 +386,79 @@ function KeyRow({ k, tenantName }: { k: ApiKey; tenantName: string | null }) {
         error={revoke.error}
         onConfirm={() => revoke.mutate()}
       />
-    </li>
+    </StaggerItem>
   );
 }
 
 function Usage({ id }: { id: string }) {
   const u = useQuery(apiKeyUsageQuery(id));
-  if (u.isPending) return <Loading label="Loading usage" />;
+  if (u.isPending) return <Loading label="Loading usage" rows={2} />;
   if (u.error) return <ErrorPanel error={u.error} onRetry={() => u.refetch()} />;
   const d = u.data;
   return (
-    <section className="space-y-2 rounded-lg border p-3 text-sm" aria-label="Usage">
-      <p>
-        {formatDay(d.from)} to {formatDay(d.to)} (UTC):{" "}
-        <span className="tabular font-medium" data-usage="requests">
-          {formatCount(d.totals.requests)}
-        </span>{" "}
-        {d.totals.requests === 1 ? "request" : "requests"},{" "}
-        <span className="tabular font-medium" data-usage="rejected">
-          {formatCount(d.totals.rejected)}
-        </span>{" "}
-        refused (revoked or expired, over the rate limit, or outside the key's scope).
-      </p>
+    <section
+      className="flex animate-rise-in flex-col overflow-hidden rounded-lg border border-line bg-sunken text-small"
+      aria-label="Usage"
+    >
+      <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1 border-b border-line px-3 py-2.5">
+        <span className="text-fg-3">
+          {formatDay(d.from)} to {formatDay(d.to)} (UTC)
+        </span>
+        <span className="text-fg-2">
+          <span className="font-mono font-medium text-fg tabular" data-usage="requests">
+            {formatCount(d.totals.requests)}
+          </span>{" "}
+          {d.totals.requests === 1 ? "request" : "requests"}
+        </span>
+        <span className="text-fg-2">
+          <span
+            className={cn(
+              "font-mono font-medium tabular",
+              d.totals.rejected > 0 ? "text-warning" : "text-fg",
+            )}
+            data-usage="rejected"
+          >
+            {formatCount(d.totals.rejected)}
+          </span>{" "}
+          refused (revoked or expired, over the rate limit, or outside the key's scope)
+        </span>
+      </div>
       {d.hours.length > 0 ? (
-        <div className="max-h-60 overflow-auto rounded-lg border">
-          <table className="w-full text-left text-sm">
-            <thead className="sticky top-0 bg-muted text-xs text-muted-foreground">
+        <div className="max-h-60 overflow-auto">
+          <table className="w-full border-separate border-spacing-0 text-left text-caption">
+            <thead className="sticky top-0 bg-sunken text-fg-3">
               <tr>
-                <th scope="col" className="px-3 py-1.5 font-medium">
-                  Hour
+                <th scope="col" className="border-b border-line px-3 py-1.5 font-medium">
+                  Hour (UTC)
                 </th>
-                <th scope="col" className="px-3 py-1.5 text-right font-medium">
+                <th scope="col" className="border-b border-line px-3 py-1.5 text-right font-medium">
                   Requests
                 </th>
-                <th scope="col" className="px-3 py-1.5 text-right font-medium">
+                <th scope="col" className="border-b border-line px-3 py-1.5 text-right font-medium">
                   Refused
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y">
+            <tbody>
               {d.hours.map((h) => (
-                <tr key={h.hour}>
-                  <th scope="row" className="px-3 py-1 font-normal whitespace-nowrap">
+                <tr key={h.hour} className="hover:bg-hover">
+                  <th
+                    scope="row"
+                    className="border-b border-line-subtle px-3 py-1 font-normal whitespace-nowrap text-fg-2"
+                  >
                     {formatDay(h.hour.slice(0, 10))}, {formatHourUtc(h.hour)}
                   </th>
-                  <td className="tabular px-3 py-1 text-right">{formatCount(h.requests)}</td>
-                  <td className="tabular px-3 py-1 text-right">{formatCount(h.rejected)}</td>
+                  <td className="border-b border-line-subtle px-3 py-1 text-right font-mono text-fg tabular">
+                    {formatCount(h.requests)}
+                  </td>
+                  <td
+                    className={cn(
+                      "border-b border-line-subtle px-3 py-1 text-right font-mono tabular",
+                      h.rejected > 0 ? "text-warning" : "text-fg-3",
+                    )}
+                  >
+                    {formatCount(h.rejected)}
+                  </td>
                 </tr>
               ))}
             </tbody>

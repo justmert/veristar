@@ -1,15 +1,18 @@
 import { useQuery } from "@tanstack/react-query";
+import { cn } from "@veristar/brand/cn";
+import { fade, stagger } from "@veristar/brand/motion";
 import {
-  AlertTriangle,
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
   ChevronLeft,
   ChevronRight,
   Filter,
-  Settings2,
+  Search,
+  Server,
   X,
 } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
 import { type FormEvent, type ReactNode, useEffect, useId, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import type { ApiRangeQuery } from "@/api/endpoints";
@@ -23,6 +26,7 @@ import {
 } from "@/api/queries";
 import type {
   ApiOverview,
+  ApiPoint,
   ApiRange,
   ApiRouteItem,
   ApiRouteSort,
@@ -33,14 +37,26 @@ import type {
   WarningKind,
 } from "@/api/schemas";
 import {
+  alignPrevious,
   ErrorChart,
   LatencyChart,
+  PlotSkeleton,
   StatusClassBar,
   share,
   VolumeChart,
 } from "@/components/api-charts";
-import { ErrorPanel, Loading } from "@/components/error-panel";
+import { ErrorPanel, Loading, StateBlock } from "@/components/error-panel";
+import { NativeSelect } from "@/components/form-field";
+import { StaggerItem } from "@/components/motion";
+import { projectTabs } from "@/components/nav/nav-items";
+import { NavTabs } from "@/components/nav/nav-tabs";
+import { Notice } from "@/components/notice";
+import { PageHeader, Panel } from "@/components/panel";
+import { Segmented } from "@/components/segmented";
+import { Sparkline, StatTile, type Trend } from "@/components/stat-tile";
+import { Pill } from "@/components/status";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   type Change,
   type DashboardState,
@@ -50,9 +66,11 @@ import {
   formatRate,
   localInputToUtc,
   METHODS,
+  OPEN_BUCKET_CEILING,
   PAGE_SIZE,
   PRESETS,
   percentileChange,
+  plotPercentile,
   RESOLUTION_LABEL,
   RESOLUTION_NOTE,
   rateChange,
@@ -64,7 +82,7 @@ import {
   writeState,
 } from "@/lib/api-metrics";
 import { formatCount, formatDate } from "@/lib/format";
-import { Notice, useProject } from "./project-layout";
+import { useProject } from "./project-layout";
 
 // contract 7.3: the one line shown with every trace-derived badge
 export const SPAN_NOTE =
@@ -86,22 +104,14 @@ export function ApiTrafficPage() {
   const warnings = useQuery(apiWarningsQuery(tenant.id, state.range));
 
   return (
-    <div className="space-y-6">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-xl font-semibold tracking-tight">API traffic</h2>
-          <p className="mt-1 max-w-prose text-sm text-muted-foreground">
-            Requests, errors and latency of your HTTP API, per normalized route. Times are UTC;
-            hourly and daily numbers are updated every few minutes.
-          </p>
-        </div>
-        <Button asChild variant="outline" size="sm">
-          <Link to={`/projects/${tenant.id}/api`}>
-            <Settings2 aria-hidden />
-            Setup and tokens
-          </Link>
-        </Button>
-      </header>
+    <div className="flex flex-col gap-5">
+      <div className="flex flex-col gap-4">
+        <PageHeader
+          title="API traffic"
+          description="Requests, errors and latency of your HTTP API, per normalized route. Times are UTC; hourly and daily numbers are updated every few minutes."
+        />
+        <NavTabs label="API" items={projectTabs(tenant.id, "api") ?? []} />
+      </div>
 
       <Controls
         state={state}
@@ -124,7 +134,9 @@ export function ApiTrafficPage() {
       {services.isPending ? <Loading label="Loading API traffic" /> : null}
       {services.data ? (
         <>
-          <RangeNotes range={services.data.range} />
+          {services.data.range.resolution_note ? (
+            <Notice tone="info">{RESOLUTION_NOTE[services.data.range.resolution_note]}</Notice>
+          ) : null}
           {warnings.data ? <WarningBanners warnings={warnings.data} /> : null}
           {services.data.items.length === 0 ? (
             <EmptyState tenantId={tenant.id} range={services.data.range} />
@@ -144,21 +156,24 @@ export function ApiTrafficPage() {
 
 function EmptyState({ tenantId, range }: { tenantId: string; range: ApiRange }) {
   return (
-    <div className="rounded-xl border border-dashed bg-card p-6 sm:p-8">
-      <h3 className="font-semibold">No API requests in this range</h3>
-      <p className="mt-1 max-w-prose text-muted-foreground">
-        Nothing arrived from your services between {formatRange(range)}. Hourly and daily numbers
-        are updated every few minutes; the 1 hour range shows the newest minutes. If your app does
-        not send data yet, create a token and add the second exporter described on the setup page.
-      </p>
-      <Button asChild className="mt-4">
-        <Link to={`/projects/${tenantId}/api`}>Set up API analytics</Link>
-      </Button>
-    </div>
+    <StateBlock
+      kind="empty"
+      icon={<Server aria-hidden strokeWidth={1.75} />}
+      title="No API requests in this range"
+      action={
+        <Button asChild>
+          <Link to={`/projects/${tenantId}/api`}>Set up API analytics</Link>
+        </Button>
+      }
+    >
+      Nothing arrived from your services between {formatRange(range)}. Hourly and daily numbers are
+      updated every few minutes; the 1 hour range shows the newest minutes. If your app does not
+      send data yet, create a token and add the second exporter described on the Connect tab.
+    </StateBlock>
   );
 }
 
-// ---- controls: range presets, custom range and filters, one row above
+// ---- controls: range, custom range and filters in one row above
 // everything they scope
 
 function Controls({
@@ -189,41 +204,43 @@ function Controls({
   const selected = custom ? "custom" : state.range.range;
 
   return (
-    <div className="space-y-4 rounded-xl border bg-card p-4 sm:p-5">
-      <fieldset>
-        <legend className="text-sm font-medium">Range</legend>
-        <div className="mt-2 flex flex-wrap gap-1.5">
-          {[
-            ...PRESETS.map((p) => ({ value: p.value as string, label: p.label })),
-            { value: "custom", label: "Custom" },
-          ].map((o) => (
-            <label key={o.value} className="cursor-pointer">
-              <input
-                type="radio"
-                name="api-range"
-                value={o.value}
-                checked={selected === o.value}
-                onChange={() => choose(o.value)}
-                className="peer sr-only"
-              />
-              <span className="inline-flex h-8 items-center rounded-md border px-3 text-sm peer-checked:border-primary peer-checked:bg-primary peer-checked:text-primary-foreground peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ring hover:bg-muted peer-checked:hover:bg-primary">
-                {o.label}
-              </span>
-            </label>
-          ))}
-        </div>
-      </fieldset>
-
-      {custom ? (
-        <CustomRange
-          key={state.range.range === "custom" ? `${state.range.from}|${state.range.to}` : "new"}
-          current={state.range}
-          resolved={range}
-          onApply={(r) => set({ ...state, range: r })}
-        />
+    <div className="flex flex-col gap-3">
+      <Filters
+        state={state}
+        set={set}
+        services={services}
+        range={
+          <Segmented
+            label="Range"
+            value={selected}
+            onChange={choose}
+            options={[
+              ...PRESETS.map((p) => ({ value: p.value as string, label: p.value })),
+              { value: "custom", label: "Custom" },
+            ]}
+            hint={range ? RESOLUTION_LABEL[range.resolution] : undefined}
+            className="max-w-full overflow-x-auto"
+          />
+        }
+      />
+      <AnimatePresence initial={false}>
+        {custom ? (
+          <motion.div key="custom" {...fade}>
+            <CustomRange
+              key={state.range.range === "custom" ? `${state.range.from}|${state.range.to}` : "new"}
+              current={state.range}
+              resolved={range}
+              onApply={(r) => set({ ...state, range: r })}
+            />
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+      {range ? (
+        <p className="text-small text-fg-2">
+          <span className="font-medium text-fg">{formatRange(range)}</span>,{" "}
+          {RESOLUTION_LABEL[range.resolution]}
+        </p>
       ) : null}
-
-      <Filters state={state} set={set} services={services} />
     </div>
   );
 }
@@ -264,50 +281,50 @@ function CustomRange({
       noValidate
       onSubmit={submit}
       aria-label="Custom range"
-      className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-start"
+      className="grid gap-3 rounded-lg border border-line bg-raised p-4 sm:grid-cols-[1fr_1fr_auto] sm:items-start"
     >
-      <div className="space-y-1">
-        <label htmlFor={fromId} className="text-sm font-medium">
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor={fromId} className="text-small font-medium text-fg">
           From (UTC)
         </label>
-        <input
+        <Input
           id={fromId}
           type="datetime-local"
           value={from}
           onChange={(e) => setFrom(e.target.value)}
           aria-invalid={errors.from ? true : undefined}
           aria-describedby={errors.from ? `${fromId}-err` : undefined}
-          className="h-9 w-full rounded-md border border-input bg-transparent px-2 text-sm"
+          className="font-mono max-lg:h-(--vs-control-touch)"
         />
         {errors.from ? (
-          <p id={`${fromId}-err`} className="text-sm text-destructive">
+          <p id={`${fromId}-err`} className="text-small text-critical">
             {errors.from}
           </p>
         ) : null}
       </div>
-      <div className="space-y-1">
-        <label htmlFor={toId} className="text-sm font-medium">
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor={toId} className="text-small font-medium text-fg">
           To (UTC)
         </label>
-        <input
+        <Input
           id={toId}
           type="datetime-local"
           value={to}
           onChange={(e) => setTo(e.target.value)}
           aria-invalid={errors.to ? true : undefined}
           aria-describedby={errors.to ? `${toId}-err` : undefined}
-          className="h-9 w-full rounded-md border border-input bg-transparent px-2 text-sm"
+          className="font-mono max-lg:h-(--vs-control-touch)"
         />
         {errors.to ? (
-          <p id={`${toId}-err`} className="text-sm text-destructive">
+          <p id={`${toId}-err`} className="text-small text-critical">
             {errors.to}
           </p>
         ) : null}
       </div>
-      <Button type="submit" className="sm:mt-6">
+      <Button type="submit" className="max-lg:h-(--vs-control-touch) sm:mt-6.5">
         Apply range
       </Button>
-      <p className="text-xs text-muted-foreground sm:col-span-3">
+      <p className="text-caption font-normal text-fg-3 sm:col-span-3">
         Up to 6 hours is shown per minute, up to 31 days per hour, longer ranges per day. The start
         and end move out to whole buckets.
       </p>
@@ -321,20 +338,53 @@ const ALL = "all";
 const opt = (v: string) => `v:${v}`;
 const unopt = (v: string) => (v === ALL ? null : v.slice(2));
 
+// a compact select with its name inside the control's frame, as the board's
+// filter buttons; a native select works on phones and with every reader
+function FilterSelect({
+  label,
+  value,
+  onChange,
+  children,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  children: ReactNode;
+}) {
+  const id = useId();
+  return (
+    <div className="flex h-(--vs-control-sm) items-center rounded-md border border-line-strong bg-sunken pl-2.5 transition-colors duration-(--vs-duration-reveal) ease-standard focus-within:border-fg-disabled hover:border-fg-disabled max-lg:h-(--vs-control-touch)">
+      <label htmlFor={id} className="text-small whitespace-nowrap text-fg-3">
+        {label}
+      </label>
+      <NativeSelect
+        id={id}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        size="sm"
+        bare
+        className="h-full max-w-48"
+      >
+        {children}
+      </NativeSelect>
+    </div>
+  );
+}
+
 function Filters({
   state,
   set,
   services,
+  range,
 }: {
   state: DashboardState;
   set: (s: DashboardState) => void;
   services: ApiServiceItem[];
+  range: ReactNode;
 }) {
   const f = state.filters;
   const [route, setRoute] = useState(f.route ?? "");
   useEffect(() => setRoute(f.route ?? ""), [f.route]);
-  const serviceId = useId();
-  const methodId = useId();
   const routeId = useId();
   const names = services.map((s) => s.service);
   // a filtered service with no data in this range still shows as chosen
@@ -349,78 +399,80 @@ function Filters({
   const active = f.service !== null || f.route !== null || f.method !== null;
 
   return (
-    <div className="space-y-3">
-      <div className="grid gap-3 sm:grid-cols-[minmax(0,14rem)_minmax(0,9rem)_minmax(0,1fr)]">
-        <div className="space-y-1">
-          <label htmlFor={serviceId} className="text-sm font-medium">
-            Service
-          </label>
-          <select
-            id={serviceId}
-            value={f.service === null ? ALL : opt(f.service)}
-            onChange={(e) => set({ ...state, filters: { ...f, service: unopt(e.target.value) } })}
-            className="h-9 w-full rounded-md border border-input bg-card px-2 text-sm"
-          >
-            <option value={ALL}>All services</option>
-            {names.map((n) => {
-              const s = services.find((x) => x.service === n);
-              return (
-                <option key={n} value={opt(n)}>
-                  {n === "" ? "(no service name)" : n}
-                  {s?.source === "span" ? " (from traces)" : ""}
-                </option>
-              );
-            })}
-          </select>
-        </div>
-        <div className="space-y-1">
-          <label htmlFor={methodId} className="text-sm font-medium">
-            Method
-          </label>
-          <select
-            id={methodId}
-            value={f.method === null ? ALL : opt(f.method)}
-            onChange={(e) => set({ ...state, filters: { ...f, method: unopt(e.target.value) } })}
-            className="h-9 w-full rounded-md border border-input bg-card px-2 text-sm"
-          >
-            <option value={ALL}>All methods</option>
-            {[
-              ...METHODS,
-              ...(f.method !== null && !METHODS.includes(f.method) ? [f.method] : []),
-            ].map((m) => (
-              <option key={m} value={opt(m)}>
-                {m === "_OTHER" ? "Other (_OTHER)" : m}
+    <div className="flex flex-col gap-2.5">
+      <div className="flex flex-wrap items-center gap-2">
+        {range}
+        <FilterSelect
+          label="Service"
+          value={f.service === null ? ALL : opt(f.service)}
+          onChange={(v) => set({ ...state, filters: { ...f, service: unopt(v) } })}
+        >
+          <option value={ALL}>All services</option>
+          {names.map((n) => {
+            const s = services.find((x) => x.service === n);
+            return (
+              <option key={n} value={opt(n)}>
+                {n === "" ? "(no service name)" : n}
+                {s?.source === "span" ? " (from traces)" : ""}
               </option>
-            ))}
-          </select>
-        </div>
-        <form onSubmit={submitRoute} aria-label="Route filter" className="space-y-1">
-          <label htmlFor={routeId} className="text-sm font-medium">
+            );
+          })}
+        </FilterSelect>
+        <FilterSelect
+          label="Method"
+          value={f.method === null ? ALL : opt(f.method)}
+          onChange={(v) => set({ ...state, filters: { ...f, method: unopt(v) } })}
+        >
+          <option value={ALL}>All methods</option>
+          {[
+            ...METHODS,
+            ...(f.method !== null && !METHODS.includes(f.method) ? [f.method] : []),
+          ].map((m) => (
+            <option key={m} value={opt(m)}>
+              {m === "_OTHER" ? "Other (_OTHER)" : m}
+            </option>
+          ))}
+        </FilterSelect>
+        <form
+          onSubmit={submitRoute}
+          aria-label="Route filter"
+          className="flex min-w-0 flex-1 basis-64 items-center gap-1.5"
+        >
+          <label htmlFor={routeId} className="sr-only">
             Route
           </label>
-          <div className="flex gap-2">
+          <div className="flex h-(--vs-control-sm) min-w-0 flex-1 items-center gap-2 rounded-md border border-line-strong bg-sunken px-2.5 transition-colors duration-(--vs-duration-reveal) ease-standard focus-within:border-fg-disabled hover:border-fg-disabled max-lg:h-(--vs-control-touch)">
+            <Search aria-hidden className="size-3.5 shrink-0 text-fg-3" />
             <input
               id={routeId}
               value={route}
               onChange={(e) => setRoute(e.target.value)}
-              placeholder="/v1/accounts/{id}"
+              placeholder="Route, like /v1/accounts/{id}"
               autoComplete="off"
               spellCheck={false}
               maxLength={1024}
-              className="h-9 min-w-0 flex-1 rounded-md border border-input bg-transparent px-2 font-mono text-sm"
+              className="h-full min-w-0 flex-1 bg-transparent font-mono text-caption font-normal text-fg outline-none placeholder:text-fg-3"
             />
-            <Button type="submit" variant="outline">
-              Apply
-            </Button>
           </div>
+          <Button
+            type="submit"
+            variant="outline"
+            size="sm"
+            className="max-lg:h-(--vs-control-touch)"
+          >
+            Apply
+          </Button>
         </form>
       </div>
-      <p className="text-xs text-muted-foreground">
+      <p className="text-caption font-normal text-fg-3">
         Routes match exactly, as normalized (placeholders like {"{id}"}). Pick one from the routes
         table below with its filter button.
       </p>
       {active ? (
-        <ul aria-label="Active filters" className="flex flex-wrap gap-2">
+        <ul
+          aria-label="Active filters"
+          className="flex animate-fade-in flex-wrap items-center gap-2"
+        >
           {(
             [
               ["service", "Service"],
@@ -430,13 +482,14 @@ function Filters({
           ).map(([k, label]) =>
             f[k] === null ? null : (
               <li key={k}>
-                <span className="inline-flex items-center gap-1 rounded-full border bg-muted py-0.5 pr-1 pl-2.5 text-xs">
-                  {label}: <span className="font-mono">{f[k] === "" ? "(empty)" : f[k]}</span>
+                <span className="inline-flex h-7 items-center gap-1 rounded-full border border-line-strong bg-raised pr-1 pl-2.5 text-caption font-normal text-fg-2">
+                  {label}:{" "}
+                  <span className="font-mono text-fg">{f[k] === "" ? "(empty)" : f[k]}</span>
                   <button
                     type="button"
                     aria-label={`Remove the ${label.toLowerCase()} filter`}
                     onClick={() => set({ ...state, filters: { ...f, [k]: null } })}
-                    className="rounded-full p-0.5 hover:bg-background"
+                    className="rounded-full p-1 text-fg-3 transition-colors duration-(--vs-duration-press) ease-standard hover:bg-hover hover:text-fg focus-ring"
                   >
                     <X aria-hidden className="size-3.5" />
                   </button>
@@ -445,15 +498,15 @@ function Filters({
             ),
           )}
           <li>
-            <button
-              type="button"
+            <Button
+              variant="link"
+              size="xs"
               onClick={() =>
                 set({ ...state, filters: { service: null, route: null, method: null } })
               }
-              className="text-xs text-primary underline underline-offset-2"
             >
               Clear filters
-            </button>
+            </Button>
           </li>
         </ul>
       ) : null}
@@ -461,21 +514,7 @@ function Filters({
   );
 }
 
-// ---- notes about the range and the data's sources
-
-function RangeNotes({ range }: { range: ApiRange }) {
-  return (
-    <div className="space-y-3">
-      <p className="text-sm text-muted-foreground">
-        <span className="font-medium text-foreground">{formatRange(range)}</span>,{" "}
-        {RESOLUTION_LABEL[range.resolution]}
-      </p>
-      {range.resolution_note ? (
-        <Notice tone="info">{RESOLUTION_NOTE[range.resolution_note]}</Notice>
-      ) : null}
-    </div>
-  );
-}
+// ---- warnings about the data's sources
 
 const WARNING_TEXT: Record<WarningKind, { title: string; body: string }> = {
   span_derived: {
@@ -504,29 +543,19 @@ export function WarningBanners({ warnings }: { warnings: ApiWarnings }) {
   const shown = warnings.totals.filter((t) => t.count > 0);
   if (shown.length === 0) return null;
   return (
-    <section aria-label="Ingest warnings" className="space-y-2">
+    <section aria-label="Ingest warnings" className="flex flex-col gap-2">
       {shown.map((t) => (
-        <div
-          key={t.kind}
-          data-warning={t.kind}
-          className={`flex gap-3 rounded-lg border p-4 text-sm ${
-            t.kind === "secret_in_path"
-              ? "border-destructive/40 bg-destructive/5"
-              : "border-warn/40 bg-warn/8"
-          }`}
-        >
-          <AlertTriangle
-            aria-hidden
-            className={`mt-0.5 size-4 shrink-0 ${t.kind === "secret_in_path" ? "text-destructive" : "text-warn"}`}
-          />
-          <div>
-            <p className="font-medium">{WARNING_TEXT[t.kind].title}</p>
-            <p className="mt-1 text-muted-foreground">{WARNING_TEXT[t.kind].body}</p>
-            <p className="mt-1 text-xs text-muted-foreground">
+        <div key={t.kind} data-warning={t.kind}>
+          <Notice
+            tone={t.kind === "secret_in_path" ? "critical" : "warning"}
+            title={WARNING_TEXT[t.kind].title}
+          >
+            <p>{WARNING_TEXT[t.kind].body}</p>
+            <p className="mt-1 text-caption font-normal text-fg-3">
               {formatCount(t.count)} {t.count === 1 ? "time" : "times"} in this range
               {t.last_day ? `, last on ${formatDate(`${t.last_day}T00:00:00Z`)}` : ""}
             </p>
-          </div>
+          </Notice>
         </div>
       ))}
     </section>
@@ -539,25 +568,19 @@ function serviceName(s: string): string {
 
 export function TracesBadge({ id }: { id?: string }) {
   return (
-    <span
-      title={SPAN_NOTE}
-      aria-describedby={id}
-      className="inline-flex shrink-0 items-center rounded-full border border-warn/50 bg-warn/10 px-2 py-0.5 text-xs font-medium whitespace-nowrap text-foreground"
-    >
-      From traces
+    <span title={SPAN_NOTE} aria-describedby={id} className="inline-flex">
+      <Pill tone="warning">From traces</Pill>
     </span>
   );
 }
 
 function ApproxBadge() {
-  return (
-    <span className="rounded-full bg-muted px-1.5 py-0.5 text-[0.7rem] font-medium text-muted-foreground">
-      approximate
-    </span>
-  );
+  return <Pill tone="info">Approximate</Pill>;
 }
 
 // ---- the dashboard proper
+
+type Metric = "requests" | "4xx" | "5xx" | "p95";
 
 function Dashboard({
   tenantId,
@@ -573,44 +596,87 @@ function Dashboard({
   const overview = useQuery(apiOverviewQuery(tenantId, state.range, state.filters));
   const series = useQuery(apiTimeseriesQuery(tenantId, state.range, state.filters));
   const status = useQuery(apiStatusQuery(tenantId, state.range, state.filters));
+  // the previous period, bucket by bucket, for the dashed line: the same
+  // timeseries route asked for the previous range the overview names
+  const prevRange =
+    overview.data && !overview.isPlaceholderData ? overview.data.previous.range : null;
+  const prevQuery = useQuery({
+    ...apiTimeseriesQuery(
+      tenantId,
+      prevRange ? { range: "custom", from: prevRange.from, to: prevRange.to } : state.range,
+      state.filters,
+    ),
+    enabled: prevRange !== null,
+  });
+  const prevData =
+    prevRange && prevQuery.data && prevQuery.data.range.from === prevRange.from
+      ? prevQuery.data
+      : null;
+  const previous =
+    series.data && prevData ? alignPrevious(series.data.points, series.data.range, prevData) : null;
+
+  const [metric, setMetric] = useState<Metric>("requests");
+  const [showPrev, setShowPrev] = useState(true);
+  const togglePrev = () => setShowPrev((v) => !v);
 
   return (
-    <div className="space-y-6">
-      <ServicesSection services={services} />
-
+    <div className="flex flex-col gap-5">
       {overview.error ? (
         <ErrorPanel error={overview.error} onRetry={() => overview.refetch()} />
-      ) : overview.data ? (
-        <OverviewTiles overview={overview.data} dim={overview.isPlaceholderData} />
       ) : (
-        <Loading label="Loading the summary" />
+        <OverviewTiles
+          overview={overview.data ?? null}
+          dim={overview.isPlaceholderData}
+          points={series.data?.points ?? null}
+          previous={previous}
+          metric={metric}
+          onMetric={setMetric}
+        />
       )}
 
       {series.error ? (
         <ErrorPanel error={series.error} onRetry={() => series.refetch()} />
       ) : series.data ? (
-        <div className="grid gap-4 lg:grid-cols-2">
-          <VolumeChart
-            range={series.data.range}
-            points={series.data.points}
-            dim={series.isPlaceholderData}
-          />
-          <ErrorChart
-            range={series.data.range}
-            points={series.data.points}
-            dim={series.isPlaceholderData}
-          />
-          <div className="min-w-0 lg:col-span-2">
-            <LatencyChart
-              range={series.data.range}
-              points={series.data.points}
-              dim={series.isPlaceholderData}
-            />
-          </div>
-        </div>
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div key={metric === "4xx" || metric === "5xx" ? "errors" : metric} {...fade}>
+            {metric === "requests" ? (
+              <VolumeChart
+                range={series.data.range}
+                points={series.data.points}
+                dim={series.isPlaceholderData}
+                previous={previous}
+                showPrevious={showPrev}
+                onTogglePrevious={togglePrev}
+              />
+            ) : metric === "p95" ? (
+              <LatencyChart
+                range={series.data.range}
+                points={series.data.points}
+                dim={series.isPlaceholderData}
+                previous={previous}
+                showPrevious={showPrev}
+                onTogglePrevious={togglePrev}
+              />
+            ) : (
+              <ErrorChart
+                range={series.data.range}
+                points={series.data.points}
+                dim={series.isPlaceholderData}
+                previous={previous}
+                showPrevious={showPrev}
+                onTogglePrevious={togglePrev}
+                focus={metric}
+              />
+            )}
+          </motion.div>
+        </AnimatePresence>
       ) : (
-        <Loading label="Loading the charts" />
+        <Panel title="Requests">
+          <PlotSkeleton label="Loading the charts" />
+        </Panel>
       )}
+
+      <RoutesSection tenantId={tenantId} state={state} set={set} />
 
       {status.error ? (
         <ErrorPanel error={status.error} onRetry={() => status.refetch()} />
@@ -620,7 +686,7 @@ function Dashboard({
         <Loading label="Loading status codes" />
       )}
 
-      <RoutesSection tenantId={tenantId} state={state} set={set} />
+      <ServicesSection services={services} />
     </div>
   );
 }
@@ -628,109 +694,57 @@ function Dashboard({
 function ServicesSection({ services }: { services: ApiServiceItem[] }) {
   const noteId = useId();
   const anySpan = services.some((s) => s.source === "span");
+  const max = Math.max(1, ...services.map((s) => s.requests));
   return (
-    <section aria-labelledby={`${noteId}-h`} className="rounded-xl border bg-card p-4 sm:p-5">
-      <h3 id={`${noteId}-h`} className="font-semibold">
-        Services
-      </h3>
-      <ul aria-label="Services" className="mt-3 divide-y">
+    <Panel title="Services" flush>
+      <motion.ul
+        aria-label="Services"
+        initial="initial"
+        animate="animate"
+        variants={stagger}
+        className="divide-y divide-line-subtle border-t border-line"
+      >
         {services.map((s) => (
-          <li key={s.service} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2 text-sm">
-            <span className="min-w-0 flex-1 truncate font-medium">{serviceName(s.service)}</span>
+          <StaggerItem
+            as="li"
+            key={s.service}
+            className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-2.5 sm:px-5"
+          >
+            <span className="min-w-0 flex-1 truncate text-body font-medium text-fg">
+              {serviceName(s.service)}
+            </span>
             {s.source === "span" ? <TracesBadge id={noteId} /> : null}
             {s.lossy ? <ApproxBadge /> : null}
-            <span className="tabular text-muted-foreground">
-              {formatCount(s.requests)} {s.requests === 1 ? "request" : "requests"}
+            <span className="flex items-center gap-2.5">
+              <span
+                aria-hidden
+                className="hidden h-1.5 w-24 overflow-hidden rounded-bar bg-hover sm:block"
+              >
+                <span
+                  className="block h-full rounded-bar bg-series-1"
+                  // the bar is the service's share of the busiest one: data
+                  style={{ width: `${(s.requests / max) * 100}%` }}
+                />
+              </span>
+              <span className="font-mono text-small text-fg-2">
+                {formatCount(s.requests)} {s.requests === 1 ? "request" : "requests"}
+              </span>
             </span>
             {s.span_data_ignored ? (
-              <span className="basis-full text-xs text-muted-foreground">{IGNORED_NOTE}</span>
+              <span className="basis-full text-caption font-normal text-fg-3">{IGNORED_NOTE}</span>
             ) : null}
-          </li>
+          </StaggerItem>
         ))}
-      </ul>
+      </motion.ul>
       {anySpan ? (
-        <p id={noteId} className="mt-2 text-xs text-muted-foreground">
+        <p
+          id={noteId}
+          className="border-t border-line px-4 py-3 text-caption font-normal text-fg-3 sm:px-5"
+        >
           From traces: {SPAN_NOTE}
         </p>
       ) : null}
-    </section>
-  );
-}
-
-function OverviewTiles({ overview, dim }: { overview: ApiOverview; dim: boolean }) {
-  const cur = overview.current.summary;
-  const prev = overview.previous.summary;
-  const pctTile = (k: "p50" | "p95" | "p99") => ({
-    label: k,
-    value: percentileText(cur[k]),
-    approximate: cur.lossy && cur[k] !== null,
-    previous: percentileText(prev[k]),
-    change: percentileChange(cur[k], prev[k]),
-    upIsBad: true,
-  });
-  const tiles = [
-    {
-      label: "Requests",
-      value: formatCount(cur.requests),
-      approximate: false,
-      previous: formatCount(prev.requests),
-      change: relativeChange(cur.requests, prev.requests),
-      upIsBad: null,
-    },
-    {
-      label: "4xx rate",
-      value: formatRate(cur.rate_4xx) ?? "No requests",
-      sub: `${formatCount(cur.errors_4xx)} client errors`,
-      approximate: false,
-      previous: formatRate(prev.rate_4xx) ?? "no requests",
-      change: rateChange(cur.rate_4xx, prev.rate_4xx),
-      upIsBad: true,
-    },
-    {
-      label: "5xx rate",
-      value: formatRate(cur.rate_5xx) ?? "No requests",
-      sub: `${formatCount(cur.errors_5xx)} server errors`,
-      approximate: false,
-      previous: formatRate(prev.rate_5xx) ?? "no requests",
-      change: rateChange(cur.rate_5xx, prev.rate_5xx),
-      upIsBad: true,
-    },
-    pctTile("p50"),
-    pctTile("p95"),
-    pctTile("p99"),
-  ];
-  return (
-    <section
-      aria-labelledby="api-summary"
-      className={`transition-opacity ${dim ? "opacity-60" : ""}`}
-    >
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <h3 id="api-summary" className="font-semibold">
-          Summary
-        </h3>
-        <p className="text-xs text-muted-foreground">
-          Compared with the previous range of equal length, {formatRange(overview.previous.range)}
-        </p>
-      </div>
-      <dl className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
-        {tiles.map((t) => (
-          <div key={t.label} data-tile={t.label} className="rounded-xl border bg-card p-3 sm:p-4">
-            <dt className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              {t.label}
-              {t.approximate ? <ApproxBadge /> : null}
-            </dt>
-            <dd className="mt-1 text-2xl font-semibold tracking-tight">{t.value}</dd>
-            {"sub" in t && t.sub ? (
-              <dd className="text-xs text-muted-foreground">{t.sub}</dd>
-            ) : null}
-            <dd className="mt-1.5 text-xs text-muted-foreground">
-              <ChangeLine change={t.change} upIsBad={t.upIsBad} />
-              <span className="block">previous: {t.previous}</span>
-            </dd>
-          </div>
-        ))}
-      </dl>
-    </section>
+    </Panel>
   );
 }
 
@@ -738,20 +752,164 @@ function percentileText(p: Percentile): string {
   return formatPercentile(p) ?? "No requests";
 }
 
-// direction is said in words as well as by the arrow and its colour
-function ChangeLine({ change, upIsBad }: { change: Change; upIsBad: boolean | null }) {
-  if (change.direction === null)
-    return change.text ? <span className="block">{change.text}</span> : null;
-  if (change.direction === "same") return <span className="block">{change.text}</span>;
-  const bad = upIsBad === null ? null : (change.direction === "up") === upIsBad;
-  const tone = bad === null ? "text-foreground" : bad ? "text-destructive" : "text-good";
-  const Icon = change.direction === "up" ? ArrowUp : ArrowDown;
+function trend(change: Change, upIsBad: boolean | null): Trend | null {
+  if (change.direction === null || !change.text) return null;
+  const direction = change.direction === "same" ? "flat" : change.direction;
+  const good = upIsBad === null || direction === "flat" ? null : (direction === "up") !== upIsBad;
+  return { text: change.text, direction, good, period: "previous range" };
+}
+
+// a line under a tile. a change with nothing to compare against has no
+// arrow, so it is said in words here
+function Note({ children }: { children: ReactNode }) {
+  return <span className="text-caption font-normal text-fg-3">{children}</span>;
+}
+
+function OverviewTiles({
+  overview,
+  dim,
+  points,
+  previous,
+  metric,
+  onMetric,
+}: {
+  overview: ApiOverview | null;
+  dim: boolean;
+  points: ApiPoint[] | null;
+  previous: (ApiPoint | null)[] | null;
+  metric: Metric;
+  onMetric: (m: Metric) => void;
+}) {
+  const spark = (v: (p: ApiPoint) => number | null, label: string) =>
+    points && points.length > 1 ? (
+      <Sparkline
+        label={label}
+        values={points.map((p) => v(p) ?? 0)}
+        previous={previous ? previous.map((q) => (q ? (v(q) ?? 0) : 0)) : undefined}
+      />
+    ) : null;
+
+  if (!overview)
+    return (
+      <section aria-label="Summary" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {["Requests", "4xx rate", "5xx rate", "p95 latency"].map((l) => (
+          <StatTile key={l} label={l} value="" state="loading" />
+        ))}
+      </section>
+    );
+
+  const cur = overview.current.summary;
+  const prev = overview.previous.summary;
+  const rate = (r: number) => formatRate(r) ?? "";
+  const reqChange = relativeChange(cur.requests, prev.requests);
+  const p95Change = percentileChange(cur.p95, prev.p95);
+  const words = (c: Change) => (c.direction === null && c.text ? <Note>{c.text}</Note> : null);
+  const pct = (k: "p50" | "p99") => {
+    const c = percentileChange(cur[k], prev[k]);
+    return (
+      <span
+        data-tile={k}
+        className="flex flex-wrap items-baseline gap-x-1.5 text-caption font-normal"
+      >
+        <span className="text-fg-3">{k}</span>
+        <span className="font-mono text-fg">{percentileText(cur[k])}</span>
+        {c.text && c.direction !== null ? <span className="text-fg-3">{c.text}</span> : null}
+      </span>
+    );
+  };
+
   return (
-    <span className={`flex items-center gap-1 font-medium ${tone}`}>
-      <Icon aria-hidden className="size-3.5" />
-      <span className="sr-only">{change.direction === "up" ? "up" : "down"}</span>
-      {change.text}
-    </span>
+    <section
+      aria-labelledby="api-summary"
+      className={cn(
+        "flex flex-col gap-2.5 transition-opacity duration-(--vs-duration-change) ease-standard",
+        dim && "opacity-60",
+      )}
+    >
+      <h2 id="api-summary" className="sr-only">
+        Summary
+      </h2>
+      <p className="text-caption font-normal text-fg-3">
+        Compared with the previous range of equal length, {formatRange(overview.previous.range)}.
+        Select a figure to chart it.
+      </p>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div data-tile="Requests" className="flex min-w-0">
+          <StatTile
+            className="flex-1"
+            label="Requests"
+            value={formatCount(cur.requests)}
+            numeric={cur.requests}
+            format={(n) => formatCount(Math.round(n))}
+            trend={trend(reqChange, null)}
+            pressed={metric === "requests"}
+            onPress={() => onMetric("requests")}
+            spark={spark((p) => p.requests, "Requests per bucket, with the previous period")}
+            footer={
+              <span className="flex flex-col">
+                {words(reqChange) ?? <Note>Previous range: {formatCount(prev.requests)}</Note>}
+              </span>
+            }
+          />
+        </div>
+        {(["4xx", "5xx"] as const).map((k) => {
+          const r = k === "4xx" ? cur.rate_4xx : cur.rate_5xx;
+          const pr = k === "4xx" ? prev.rate_4xx : prev.rate_5xx;
+          const n = k === "4xx" ? cur.errors_4xx : cur.errors_5xx;
+          const c = rateChange(r, pr);
+          return (
+            <div key={k} data-tile={`${k} rate`} className="flex min-w-0">
+              <StatTile
+                className="flex-1"
+                label={`${k} rate`}
+                hint={`Share of requests answered with a ${k} status`}
+                value={formatRate(r) ?? "No requests"}
+                numeric={r ?? undefined}
+                format={rate}
+                trend={trend(c, true)}
+                pressed={metric === k}
+                onPress={() => onMetric(k)}
+                spark={spark(
+                  (p) => (k === "4xx" ? p.rate_4xx : p.rate_5xx),
+                  `${k} rate per bucket, with the previous period`,
+                )}
+                footer={
+                  <span className="flex flex-col">
+                    <Note>
+                      {formatCount(n)} {k === "4xx" ? "client errors" : "server errors"}
+                    </Note>
+                    {words(c) ?? <Note>Previous range: {formatRate(pr) ?? "no requests"}</Note>}
+                  </span>
+                }
+              />
+            </div>
+          );
+        })}
+        <div data-tile="p95" className="flex min-w-0">
+          <StatTile
+            className="flex-1"
+            label="p95 latency"
+            hint="95 of 100 requests were faster than this"
+            value={percentileText(cur.p95)}
+            trend={trend(p95Change, true)}
+            pressed={metric === "p95"}
+            onPress={() => onMetric("p95")}
+            spark={spark((p) => {
+              const v = plotPercentile(p.p95);
+              return v === null ? null : Math.min(v, OPEN_BUCKET_CEILING);
+            }, "p95 latency per bucket, with the previous period")}
+            footer={
+              <span className="flex flex-col gap-0.5">
+                {words(p95Change) ?? <Note>Previous range: {percentileText(prev.p95)}</Note>}
+                {pct("p50")}
+                {pct("p99")}
+                {cur.lossy ? <Note>Percentiles are approximate</Note> : null}
+              </span>
+            }
+          />
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -760,56 +918,57 @@ function StatusSection({ status, dim }: { status: ApiStatus; dim: boolean }) {
   return (
     <section
       aria-labelledby="api-status"
-      className={`grid gap-4 transition-opacity lg:grid-cols-2 ${dim ? "opacity-60" : ""}`}
+      className={cn(
+        "grid gap-4 transition-opacity duration-(--vs-duration-change) ease-standard lg:grid-cols-2",
+        dim && "opacity-60",
+      )}
     >
-      <h3 id="api-status" className="sr-only">
+      <h2 id="api-status" className="sr-only">
         Status codes
-      </h3>
-      <div className="rounded-xl border bg-card p-4 sm:p-5">
-        <h4 className="font-semibold">By status class</h4>
-        <p className="mt-0.5 mb-3 text-sm text-muted-foreground">
-          {formatCount(status.requests)} requests in the range.
-        </p>
+      </h2>
+      <Panel
+        title="By status class"
+        description={`${formatCount(status.requests)} requests in the range.`}
+      >
         <StatusClassBar status={status} />
-      </div>
-      <div className="rounded-xl border bg-card p-4 sm:p-5">
-        <h4 className="font-semibold">By status code</h4>
+      </Panel>
+      <Panel title="By status code" flush>
         {status.codes.length === 0 ? (
-          <p className="mt-2 text-sm text-muted-foreground">No requests in the range.</p>
+          <p className="px-4 pb-4 text-small text-fg-2 sm:px-5">No requests in the range.</p>
         ) : (
-          <div className="relative mt-3 max-h-80 overflow-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="text-xs text-muted-foreground">
-                <tr>
-                  <th scope="col" className="py-1.5 pr-3 font-medium">
+          <div className="relative max-h-80 overflow-auto">
+            <table className="w-full text-left text-small">
+              <thead className="text-caption text-fg-2">
+                <tr className="border-y border-line">
+                  <th scope="col" className="h-9 pr-3 pl-4 font-medium sm:pl-5">
                     Code
                   </th>
-                  <th scope="col" className="w-full py-1.5 pr-3 font-medium">
+                  <th scope="col" className="w-full pr-3 font-medium">
                     <span className="sr-only">Share bar</span>
                   </th>
-                  <th scope="col" className="py-1.5 pr-3 text-right font-medium">
+                  <th scope="col" className="pr-3 text-right font-medium">
                     Requests
                   </th>
-                  <th scope="col" className="py-1.5 text-right font-medium">
+                  <th scope="col" className="pr-4 text-right font-medium sm:pr-5">
                     Share
                   </th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-line-subtle">
                 {status.codes.map((c) => (
-                  <tr key={c.status_code} data-code={c.status_code}>
-                    <th scope="row" className="tabular py-1.5 pr-3 font-medium">
+                  <tr key={c.status_code} data-code={c.status_code} className="hover:bg-hover">
+                    <th scope="row" className="h-9 pr-3 pl-4 font-mono font-medium text-fg sm:pl-5">
                       {c.status_code === 0 ? "none" : c.status_code}
                     </th>
-                    <td className="py-1.5 pr-3" aria-hidden>
+                    <td className="pr-3" aria-hidden>
                       <div
-                        className={`h-2 rounded-full ${CODE_BAR[c.class]}`}
+                        className={cn("h-1.5 rounded-bar", CODE_BAR[c.class])}
                         // the bar's length is the value, so it is data, not a class
                         style={{ width: `${Math.max(1, (c.requests / max) * 100)}%` }}
                       />
                     </td>
-                    <td className="tabular py-1.5 pr-3 text-right">{formatCount(c.requests)}</td>
-                    <td className="tabular py-1.5 text-right text-muted-foreground">
+                    <td className="pr-3 text-right font-mono text-fg">{formatCount(c.requests)}</td>
+                    <td className="pr-4 text-right font-mono text-fg-3 sm:pr-5">
                       {share(c.requests, status.requests)}
                     </td>
                   </tr>
@@ -818,18 +977,18 @@ function StatusSection({ status, dim }: { status: ApiStatus; dim: boolean }) {
             </table>
           </div>
         )}
-      </div>
+      </Panel>
     </section>
   );
 }
 
 const CODE_BAR: Record<ApiStatus["codes"][number]["class"], string> = {
-  "1xx": "bg-chart-1xx",
-  "2xx": "bg-chart-1",
-  "3xx": "bg-chart-3xx",
-  "4xx": "bg-chart-4xx",
-  "5xx": "bg-chart-5xx",
-  unknown: "bg-chart-none",
+  "1xx": "bg-series-3",
+  "2xx": "bg-series-1",
+  "3xx": "bg-series-4",
+  "4xx": "bg-warning",
+  "5xx": "bg-critical",
+  unknown: "bg-series-prev",
 };
 
 // ---- routes table
@@ -843,6 +1002,28 @@ const COLUMNS: { sort: ApiRouteSort; label: string; numeric: boolean }[] = [
   { sort: "p95", label: "p95", numeric: true },
   { sort: "p99", label: "p99", numeric: true },
 ];
+
+// the page's most failing and slowest routes are marked in their rows, so
+// the one to look at stands out without reading every number
+function standouts(items: ApiRouteItem[]) {
+  const num = (p: Percentile) => plotPercentile(p) ?? -1;
+  let failing: ApiRouteItem | null = null;
+  let slow: ApiRouteItem | null = null;
+  for (const r of items) {
+    const f = r.rate_5xx ?? 0;
+    if (f > 0 && (!failing || f > (failing.rate_5xx ?? 0))) failing = r;
+    if (num(r.p95) > 0 && (!slow || num(r.p95) > num(slow.p95))) slow = r;
+  }
+  // a mark only means something when one route stands apart from the rest
+  const top = slow ? num(slow.p95) : -1;
+  const unique = items.filter((r) => num(r.p95) === top).length === 1;
+  const topFail = failing?.rate_5xx ?? 0;
+  const uniqueFail = items.filter((r) => (r.rate_5xx ?? 0) === topFail).length === 1;
+  return {
+    failing: uniqueFail ? failing : null,
+    slow: items.length > 1 && unique ? slow : null,
+  };
+}
 
 function RoutesSection({
   tenantId,
@@ -879,28 +1060,34 @@ function RoutesSection({
   const data = routes.data;
   const first = page * PAGE_SIZE + 1;
   const last = data ? page * PAGE_SIZE + data.items.length : 0;
+  const max = data ? Math.max(1, ...data.items.map((r) => r.requests)) : 1;
+  const marks = data ? standouts(data.items) : { failing: null, slow: null };
+  const sortLabel = COLUMNS.find((c) => c.sort === state.sort)?.label ?? state.sort;
 
   return (
-    <section aria-labelledby="api-routes" className="rounded-xl border bg-card">
-      <div className="flex flex-wrap items-baseline justify-between gap-2 p-4 pb-2 sm:px-5">
-        <h3 id="api-routes" className="font-semibold">
+    <section
+      aria-labelledby="api-routes"
+      className="flex min-w-0 flex-col rounded-lg border border-line bg-raised"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 sm:px-5">
+        <h2 id="api-routes" className="text-title text-fg">
           Routes
-        </h3>
+        </h2>
         {data ? (
-          <p className="text-xs text-muted-foreground" aria-live="polite">
+          <p className="text-caption font-normal text-fg-3" aria-live="polite">
             {data.total === 0
               ? "No routes match"
-              : `${formatCount(first)} to ${formatCount(last)} of ${formatCount(data.total)}`}
+              : `${formatCount(first)} to ${formatCount(last)} of ${formatCount(data.total)}, sorted by ${sortLabel}`}
           </p>
         ) : null}
       </div>
       {routes.error ? (
-        <div className="p-4 sm:px-5">
+        <div className="px-4 pb-4 sm:px-5">
           <ErrorPanel error={routes.error} onRetry={() => routes.refetch()} />
         </div>
       ) : null}
       {routes.isPending ? (
-        <div className="px-4 sm:px-5">
+        <div className="px-4 pb-4 sm:px-5">
           <Loading label="Loading routes" />
         </div>
       ) : null}
@@ -912,11 +1099,14 @@ function RoutesSection({
           // header text inside it, or it widens the page on a phone
           // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable region needs focus (wcag 2.1.1)
           tabIndex={0}
-          className={`relative overflow-x-auto transition-opacity ${routes.isPlaceholderData ? "opacity-60" : ""}`}
+          className={cn(
+            "relative overflow-x-auto transition-opacity duration-(--vs-duration-change) ease-standard focus-ring",
+            routes.isPlaceholderData && "opacity-60",
+          )}
         >
-          <table className="w-full min-w-[46rem] text-left text-sm">
-            <thead className="border-y bg-muted/50 text-xs text-muted-foreground">
-              <tr>
+          <table className="w-full min-w-[58rem] text-left text-small">
+            <thead className="text-caption text-fg-2">
+              <tr className="border-y border-line">
                 {COLUMNS.map((c) => {
                   const on = state.sort === c.sort;
                   return (
@@ -924,12 +1114,20 @@ function RoutesSection({
                       key={c.sort}
                       scope="col"
                       aria-sort={on ? (state.order === "asc" ? "ascending" : "descending") : "none"}
-                      className={`px-2 py-1 font-medium ${c.numeric ? "text-right" : ""} ${c.sort === "route" ? "pl-4 sm:pl-5" : ""}`}
+                      className={cn(
+                        "h-9 px-2 font-medium",
+                        c.numeric && "text-right",
+                        c.sort === "route" && "pl-3 sm:pl-4",
+                        c.sort === "requests" && "w-56",
+                      )}
                     >
                       <button
                         type="button"
                         onClick={() => sortBy(c.sort)}
-                        className={`inline-flex items-center gap-1 rounded px-1 py-1 hover:text-foreground ${on ? "text-foreground" : ""}`}
+                        className={cn(
+                          "inline-flex items-center gap-1 rounded-sm px-1 py-1 transition-colors duration-(--vs-duration-press) ease-standard hover:text-fg focus-ring",
+                          on && "text-fg",
+                        )}
                       >
                         {c.label}
                         {on ? (
@@ -939,22 +1137,25 @@ function RoutesSection({
                             <ArrowDown aria-hidden className="size-3.5" />
                           )
                         ) : (
-                          <ArrowUpDown aria-hidden className="size-3.5 opacity-50" />
+                          <ArrowUpDown aria-hidden className="size-3.5 text-fg-3" />
                         )}
                       </button>
                     </th>
                   );
                 })}
-                <th scope="col" className="px-2 py-1 pr-4 sm:pr-5">
+                <th scope="col" className="px-2 pr-4 sm:pr-5">
                   <span className="sr-only">Filter</span>
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y">
+            <tbody className="divide-y divide-line-subtle">
               {data.items.map((r) => (
                 <RouteRow
                   key={`${r.service}\u0000${r.method}\u0000${r.route}`}
                   item={r}
+                  max={max}
+                  failing={marks.failing === r}
+                  slow={marks.slow === r}
                   onFilter={() =>
                     set({
                       ...state,
@@ -968,7 +1169,10 @@ function RoutesSection({
         </section>
       ) : null}
       {data && (page > 0 || data.next_cursor !== null) ? (
-        <nav aria-label="Routes pages" className="flex justify-end gap-2 border-t p-3 sm:px-5">
+        <nav
+          aria-label="Routes pages"
+          className="flex justify-end gap-2 border-t border-line px-4 py-3 sm:px-5"
+        >
           <Button
             variant="outline"
             size="sm"
@@ -996,8 +1200,12 @@ function RoutesSection({
   );
 }
 
-function Cell({ children }: { children: ReactNode }) {
-  return <td className="tabular px-3 py-2 text-right whitespace-nowrap">{children}</td>;
+function Cell({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <td className={cn("px-3 text-right font-mono whitespace-nowrap", className ?? "text-fg-2")}>
+      {children}
+    </td>
+  );
 }
 
 function Missing() {
@@ -1009,7 +1217,19 @@ function Missing() {
   );
 }
 
-function RouteRow({ item, onFilter }: { item: ApiRouteItem; onFilter: () => void }) {
+function RouteRow({
+  item,
+  max,
+  failing,
+  slow,
+  onFilter,
+}: {
+  item: ApiRouteItem;
+  max: number;
+  failing: boolean;
+  slow: boolean;
+  onFilter: () => void;
+}) {
   const pct = (p: Percentile) => {
     const t = formatPercentile(p);
     return t === null ? <Missing /> : t;
@@ -1019,29 +1239,55 @@ function RouteRow({ item, onFilter }: { item: ApiRouteItem; onFilter: () => void
     return t === null ? <Missing /> : <span title={`${formatCount(n)} requests`}>{t}</span>;
   };
   return (
-    <tr data-route={item.route} data-service={item.service} data-method={item.method}>
-      <th scope="row" className="max-w-[24rem] py-2 pr-3 pl-4 text-left font-normal sm:pl-5">
+    <tr
+      data-route={item.route}
+      data-service={item.service}
+      data-method={item.method}
+      className="transition-colors duration-(--vs-duration-press) ease-standard hover:bg-hover"
+    >
+      <th scope="row" className="max-w-[26rem] py-2.5 pr-3 pl-4 text-left font-normal sm:pl-5">
         <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">{item.method}</span>
-          <span className="font-mono break-all">{item.route}</span>
+          <span className="w-12 shrink-0 font-mono text-axis text-fg-2">{item.method}</span>
+          <span className="font-mono break-all text-fg">{item.route}</span>
+          {failing ? <Pill tone="critical">Most 5xx</Pill> : null}
+          {slow ? <Pill tone="warning">Slowest p95</Pill> : null}
         </span>
-        <span className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        <span className="mt-1 flex flex-wrap items-center gap-2 pl-14 text-caption font-normal text-fg-3">
           {serviceName(item.service)}
           {item.source === "span" ? <TracesBadge /> : null}
           {item.lossy ? <ApproxBadge /> : null}
         </span>
       </th>
-      <Cell>{formatCount(item.requests)}</Cell>
-      <Cell>{rate(item.rate_4xx, item.errors_4xx)}</Cell>
-      <Cell>{rate(item.rate_5xx, item.errors_5xx)}</Cell>
+      <td className="px-3">
+        <span className="flex items-center gap-2.5">
+          <span className="w-16 shrink-0 text-right font-mono text-fg">
+            {formatCount(item.requests)}
+          </span>
+          <span aria-hidden className="h-1.5 min-w-8 flex-1 overflow-hidden rounded-bar bg-hover">
+            <span
+              className="block h-full rounded-bar bg-series-1"
+              // the row's share of the busiest route on this page: data, so it
+              // cannot be a class
+              style={{ width: `${(item.requests / max) * 100}%` }}
+            />
+          </span>
+        </span>
+      </td>
+      <Cell className={(item.rate_4xx ?? 0) >= 0.05 ? "text-warning" : undefined}>
+        {rate(item.rate_4xx, item.errors_4xx)}
+      </Cell>
+      <Cell className={(item.rate_5xx ?? 0) > 0 ? "text-critical" : undefined}>
+        {rate(item.rate_5xx, item.errors_5xx)}
+      </Cell>
       <Cell>{pct(item.p50)}</Cell>
-      <Cell>{pct(item.p95)}</Cell>
+      <Cell className={slow ? "text-warning" : "text-fg"}>{pct(item.p95)}</Cell>
       <Cell>{pct(item.p99)}</Cell>
       <td className="py-2 pr-4 pl-2 text-right sm:pr-5">
         <Button
           variant="ghost"
-          size="sm"
+          size="icon-sm"
           aria-label={`Filter to ${item.method} ${item.route} of ${serviceName(item.service)}`}
+          title="Filter to this route"
           onClick={onFilter}
         >
           <Filter aria-hidden />

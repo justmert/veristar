@@ -285,8 +285,14 @@ test("the operator filters to verified projects, sorts by visitors and compares 
   const page = op.page;
   const [a, b, c, d] = ["A", "B", "C", "D"].map(project) as [Project, Project, Project, Project];
   await page.goto(`${APP}/operator`);
+  // the sidebar picks the place, its tabs pick the view
   await page
     .getByRole("navigation", { name: "Operator" })
+    .getByRole("link", { name: "Projects" })
+    .click();
+  await page.waitForURL(`${APP}/operator/tenants`);
+  await page
+    .getByRole("navigation", { name: "Operator sections" })
     .getByRole("link", { name: "Global web" })
     .click();
   await page.waitForURL(`${APP}/operator/web`);
@@ -328,11 +334,12 @@ test("the operator filters to verified projects, sorts by visitors and compares 
   await expect(compared.getByRole("listitem")).toHaveCount(3);
   await expect(compared).toContainText(a.tenant.name);
 
+  // one row per compared project in the order of the comparison
   const webTotals = page.getByRole("region", { name: "Web totals" });
-  await expect(webTotals.locator("tr[data-metric='Visitors'] td")).toHaveText(["3", "2", "1"]);
-  await expect(webTotals.locator("tr[data-metric='Page views'] td")).toHaveText(["3", "6", "1"]);
+  await expect(webTotals.locator("td[data-metric='Visitors']")).toHaveText(["3", "2", "1"]);
+  await expect(webTotals.locator("td[data-metric='Page views']")).toHaveText(["3", "6", "1"]);
   const apiTotals = page.getByRole("region", { name: "API totals" });
-  await expect(apiTotals.locator("tr[data-metric='Requests'] td")).toHaveText(["4", "8", "2"]);
+  await expect(apiTotals.locator("td[data-metric='Requests']")).toHaveText(["4", "8", "2"]);
   for (const title of ["Page views", "Visitors", "Requests", "p95 latency"])
     await expect(page.getByRole("heading", { name: title, exact: true })).toBeVisible();
   await expect(page.getByRole("region", { name: "Devices" })).toBeVisible();
@@ -362,7 +369,7 @@ test("the pages work at phone width", async () => {
     "/operator/api-keys",
   ]) {
     await page.goto(`${APP}${path}`);
-    await expect(page.getByRole("heading", { level: 2 })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 2 }).first()).toBeVisible();
     await page.waitForLoadState("networkidle");
     // only the scrollable tables and the operator tabs may be wider
     await expect
@@ -375,7 +382,7 @@ test("the pages work at phone width", async () => {
             .filter(
               (e) =>
                 !e.closest(
-                  "[aria-label='Global web table'], [aria-label='Global API table'], [aria-label='Web totals'], [aria-label='API totals'], nav[aria-label='Operator']",
+                  "[aria-label='Global web table'], [aria-label='Global API table'], [aria-label='Web totals'], [aria-label='API totals'], nav[aria-label='Operator sections']",
                 ),
             )
             .slice(0, 5)
@@ -401,9 +408,13 @@ test("an api key is created, read with from a client without a session, and revo
   await form.getByLabel("Name").fill(name);
   await form.getByLabel("Expires after (days)").fill("7");
   await form.getByRole("button", { name: "Create key" }).click();
-  const shown = page.getByTestId("new-api-key");
+  // the one-time secret is masked until it is revealed
+  const shown = page.getByRole("region", { name: "New secret" });
   await expect(shown).toBeVisible();
-  const key = (await shown.textContent()) ?? "";
+  await shown.getByRole("button", { name: "Show the secret" }).click();
+  // the masked text crossfades out before the key fades in
+  await expect(shown.locator("code").first()).toHaveText(/^sa_op_[0-9A-Za-z]{40}$/);
+  const key = (await shown.locator("code").first().textContent())?.trim() ?? "";
   expect(key).toMatch(/^sa_op_[0-9A-Za-z]{40}$/);
   await expect(page.getByRole("button", { name: "Copy key" })).toBeVisible();
 
@@ -427,8 +438,10 @@ test("an api key is created, read with from a client without a session, and revo
     expect(cookieOnly.status()).toBe(401);
 
     // the key is shown once: after dismissing, only its prefix remains
-    await page.getByRole("button", { name: "I have copied the key" }).click();
-    await expect(page.getByTestId("new-api-key")).toHaveCount(0);
+    await expect(shown.getByRole("button", { name: "Done" })).toBeDisabled();
+    await shown.getByRole("checkbox").check();
+    await shown.getByRole("button", { name: "Done" }).click();
+    await expect(shown).toHaveCount(0);
     const row = page.getByRole("listitem", { name: `Key ${name}` });
     await expect(row).toContainText(key.slice(0, 10));
     await expect(page.getByText(key)).toHaveCount(0);

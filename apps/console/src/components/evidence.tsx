@@ -1,14 +1,18 @@
+import { cn } from "@veristar/brand/cn";
+import { Check, CircleAlert, Minus } from "lucide-react";
+import type { ReactNode } from "react";
 import type { StellarToml, Verification, VerifyMethod } from "@/api/schemas";
-import { formatDate } from "@/lib/format";
+import { Pill, type Tone } from "@/components/status";
+import { formatDate, formatDateTimeUtc } from "@/lib/format";
 
 // domain verification (contract 5.8) and the stellar.toml signal (5.12),
 // shown the same way to members on their sites and to operators in review.
 // both are evidence only: neither decides anything on its own.
 
-const VERIFY_TONE: Record<Verification, string> = {
-  verified: "bg-good/12 text-good ring-good/30",
-  unverified: "bg-warn/12 text-warn ring-warn/30",
-  unchecked: "bg-muted text-muted-foreground ring-border",
+const VERIFY_TONE: Record<Verification, Tone> = {
+  verified: "success",
+  unverified: "warning",
+  unchecked: "info",
 };
 
 const VERIFY_TEXT: Record<Verification, string> = {
@@ -17,14 +21,17 @@ const VERIFY_TEXT: Record<Verification, string> = {
   unchecked: "Domain not checked yet",
 };
 
-export function VerificationPill({ verification }: { verification: Verification }) {
+export function VerificationPill({
+  verification,
+  live,
+}: {
+  verification: Verification;
+  live?: boolean;
+}) {
   return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${VERIFY_TONE[verification]}`}
-    >
-      <span aria-hidden className="size-1.5 rounded-full bg-current" />
+    <Pill tone={VERIFY_TONE[verification]} live={live}>
       {VERIFY_TEXT[verification]}
-    </span>
+    </Pill>
   );
 }
 
@@ -47,6 +54,28 @@ export function verifyErrorText(code: string): string {
   return VERIFY_ERRORS[code] ?? `The check failed (${code}).`;
 }
 
+// what a person can do about each failure, in the words of the record table
+const VERIFY_ADVICE: Record<string, string> = {
+  dns_no_record:
+    "Add the record at the name shown. DNS changes can take a few minutes to appear, sometimes longer.",
+  dns_mismatch: "Check that the value is copied whole, without quotes or extra spaces.",
+  dns_error: "The domain's DNS servers did not answer the lookup. Try again in a few minutes.",
+  file_not_found: "Upload the file at exactly the address shown, so it is served with status 200.",
+  file_mismatch: "The file must contain only the content shown, with no other text.",
+  file_too_large: "The file must contain only the content shown, with no other text.",
+  refused_address:
+    "The checker only contacts public addresses. The DNS record works for a site that is not public.",
+  redirect_refused: "Serve the file from the domain itself, without a redirect to another host.",
+  tls_error:
+    "The file check needs a valid HTTPS certificate on the domain. The DNS record works without one.",
+  timeout: "The domain did not answer within 15 seconds. Try again, or use the other method.",
+  fetch_error: "Try again in a few minutes, or use the other method.",
+};
+
+export function verifyAdvice(code: string): string | null {
+  return VERIFY_ADVICE[code] ?? null;
+}
+
 const METHOD_TEXT: Record<VerifyMethod, string> = { dns: "DNS TXT record", file: "file" };
 
 export function VerificationDetail({
@@ -63,17 +92,20 @@ export function VerificationDetail({
   lastVerifyError: string | null;
 }) {
   return (
-    <div className="space-y-1 text-sm">
+    <div className="flex flex-col items-start gap-1.5 text-small">
       <VerificationPill verification={verification} />
       {verifiedAt && verifyMethod ? (
-        <p className="text-muted-foreground">
+        <p className="text-fg-2">
           Last verified {formatDate(verifiedAt)} by {METHOD_TEXT[verifyMethod]}.
         </p>
       ) : null}
-      {lastVerifyAt ? (
-        <p className="text-muted-foreground">Last checked {formatDate(lastVerifyAt)}.</p>
+      {lastVerifyAt ? <p className="text-fg-2">Last checked {formatDate(lastVerifyAt)}.</p> : null}
+      {lastVerifyError ? (
+        <p className="flex items-start gap-1.5 text-fg">
+          <CircleAlert aria-hidden className="mt-0.5 size-3.5 shrink-0 text-warning" />
+          {verifyErrorText(lastVerifyError)}
+        </p>
       ) : null}
-      {lastVerifyError ? <p className="text-warn">{verifyErrorText(lastVerifyError)}</p> : null}
     </div>
   );
 }
@@ -94,87 +126,143 @@ const NETWORK_TEXT: Record<NonNullable<StellarToml["network"]>, string> = {
   other: "Another network",
 };
 
+type Mark = "ok" | "warn" | "none";
+
+const MARK_ICON: Record<Mark, ReactNode> = {
+  ok: <Check aria-hidden className="size-3.5 text-success" strokeWidth={2.5} />,
+  warn: <CircleAlert aria-hidden className="size-3.5 text-warning" />,
+  none: <Minus aria-hidden className="size-3.5 text-fg-3" />,
+};
+
+// one checklist row; the icon repeats what the words already say
+function EvidenceRow({
+  mark,
+  label,
+  children,
+}: {
+  mark: Mark;
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="grid grid-cols-[1rem_minmax(0,8rem)_minmax(0,1fr)] items-start gap-x-2 py-1.5">
+      <span className="mt-0.5 flex">{MARK_ICON[mark]}</span>
+      <dt className="text-fg-2">{label}</dt>
+      <dd className="min-w-0 break-words text-fg">{children}</dd>
+    </div>
+  );
+}
+
+// stellar.toml is fetched by the service, so it reads as evidence rows with
+// no button: each row says what was found
 export function StellarTomlSummary({
   toml,
   checkedAt,
   domain,
+  className,
 }: {
   toml: StellarToml | null;
   checkedAt: string | null;
   domain: string;
+  className?: string;
 }) {
   const where = `https://${domain}/.well-known/stellar.toml`;
+  const head = (
+    <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+      <span className="text-body font-medium text-fg">stellar.toml</span>
+      <span className="text-caption font-normal text-fg-3">
+        {checkedAt
+          ? `Checked after setup and daily, last ${formatDateTimeUtc(checkedAt)}`
+          : "Checked after setup and daily"}
+      </span>
+    </div>
+  );
   if (!toml) {
     return (
-      <p className="text-sm text-muted-foreground">
-        stellar.toml not checked yet. It is fetched from {where} shortly after the site is added and
-        once a day.
-      </p>
+      <div className={cn("flex flex-col gap-1.5 text-small", className)}>
+        {head}
+        <p className="text-fg-2">
+          Not checked yet. It is fetched from <span className="break-all font-mono">{where}</span>{" "}
+          shortly after the site is added and once a day.
+        </p>
+      </div>
     );
   }
   const found = toml.status === "found";
   const currencies = toml.currencies ?? [];
+  const invalidCurrencies = currencies.filter((c) => !c.valid).length;
+  const accounts = toml.accounts_count ?? 0;
+  const total = toml.currencies_total ?? 0;
   return (
-    <div className="space-y-2 text-sm">
-      <p>
-        <span className="font-medium">stellar.toml: </span>
-        {TOML_STATUS[toml.status]}
-        {toml.http_status !== null && !found ? ` (HTTP ${toml.http_status})` : ""}
-        {toml.error ? ` (${toml.error})` : ""}
-        {checkedAt ? (
-          <span className="text-muted-foreground">, checked {formatDate(checkedAt)}</span>
+    <div className={cn("flex flex-col gap-1.5 text-small", className)}>
+      {head}
+      <dl className="flex flex-col divide-y divide-line-subtle">
+        <EvidenceRow mark={found ? "ok" : "warn"} label="File">
+          {TOML_STATUS[toml.status]}
+          {toml.http_status !== null && !found ? ` (HTTP ${toml.http_status})` : ""}
+          {toml.error ? ` (${toml.error})` : ""}
+          {found ? null : <span className="block break-all text-fg-3">{where}</span>}
+        </EvidenceRow>
+        {found ? (
+          <>
+            <EvidenceRow mark={toml.network ? "ok" : "none"} label="Network">
+              {toml.network ? NETWORK_TEXT[toml.network] : "Not stated"}
+            </EvidenceRow>
+            <EvidenceRow mark={toml.version ? "ok" : "none"} label="Version">
+              {toml.version ?? "Not stated"}
+            </EvidenceRow>
+            <EvidenceRow
+              mark={accounts === 0 ? "none" : (toml.accounts_valid ?? 0) < accounts ? "warn" : "ok"}
+              label="Accounts"
+            >
+              {accounts} listed, {toml.accounts_valid ?? 0} valid
+            </EvidenceRow>
+            <EvidenceRow
+              mark={toml.signing_key_present ? (toml.signing_key_valid ? "ok" : "warn") : "none"}
+              label="Signing key"
+            >
+              {toml.signing_key_present
+                ? toml.signing_key_valid
+                  ? "Present and valid"
+                  : "Present, not a valid key"
+                : "None"}
+            </EvidenceRow>
+            <EvidenceRow
+              mark={toml.org_url ? (toml.org_url_same_domain ? "ok" : "warn") : "none"}
+              label="Organization URL"
+            >
+              <span className="break-all">{toml.org_url ?? "None"}</span>
+              {toml.org_url
+                ? toml.org_url_same_domain
+                  ? " (same domain)"
+                  : " (another domain)"
+                : ""}
+            </EvidenceRow>
+            <EvidenceRow
+              mark={total === 0 ? "none" : invalidCurrencies > 0 ? "warn" : "ok"}
+              label="Currencies"
+            >
+              {total}
+              {total > currencies.length ? `, first ${currencies.length} shown` : ""}
+              {invalidCurrencies > 0 ? `, ${invalidCurrencies} not valid` : ""}
+            </EvidenceRow>
+          </>
         ) : null}
-      </p>
-      {found ? (
-        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
-          <dt className="text-muted-foreground">Network</dt>
-          <dd>{toml.network ? NETWORK_TEXT[toml.network] : "Not stated"}</dd>
-          <dt className="text-muted-foreground">Version</dt>
-          <dd>{toml.version ?? "Not stated"}</dd>
-          <dt className="text-muted-foreground">Accounts</dt>
-          <dd>
-            {toml.accounts_count ?? 0} listed, {toml.accounts_valid ?? 0} valid
-          </dd>
-          <dt className="text-muted-foreground">Signing key</dt>
-          <dd>
-            {toml.signing_key_present
-              ? toml.signing_key_valid
-                ? "Present and valid"
-                : "Present, not a valid key"
-              : "None"}
-          </dd>
-          <dt className="text-muted-foreground">Organization URL</dt>
-          <dd className="break-all">
-            {toml.org_url ?? "None"}
-            {toml.org_url
-              ? toml.org_url_same_domain
-                ? " (same domain)"
-                : " (another domain)"
-              : ""}
-          </dd>
-          <dt className="text-muted-foreground">Currencies</dt>
-          <dd>
-            {toml.currencies_total ?? 0}
-            {(toml.currencies_total ?? 0) > currencies.length
-              ? `, first ${currencies.length} shown`
-              : ""}
-          </dd>
-        </dl>
-      ) : null}
+      </dl>
       {found && currencies.length > 0 ? (
-        <ul className="space-y-1" aria-label="Currencies in stellar.toml">
+        <ul aria-label="Currencies in stellar.toml" className="flex flex-col gap-1 pl-6">
           {currencies.map((c, i) => (
             <li
               // codes repeat across issuers, so the position keeps keys unique;
               // the list never reorders
               key={`${i}-${c.code}`}
-              className="flex flex-wrap items-baseline gap-x-2 font-mono text-xs"
+              className="flex flex-wrap items-baseline gap-x-2 text-caption font-normal"
             >
-              <span className="font-sans font-medium">{c.code}</span>
-              <span className="break-all text-muted-foreground">
+              <span className="font-medium text-fg">{c.code}</span>
+              <span className="min-w-0 break-all font-mono text-fg-3">
                 {c.issuer ?? c.contract ?? "no issuer or contract"}
               </span>
-              {c.valid ? null : <span className="font-sans text-warn">not valid</span>}
+              {c.valid ? null : <span className="text-warning">not valid</span>}
             </li>
           ))}
         </ul>

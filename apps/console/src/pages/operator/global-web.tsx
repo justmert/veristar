@@ -1,15 +1,16 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
+import { SearchX } from "lucide-react";
 import { Link, useSearchParams } from "react-router";
 import { webProjectsQuery } from "@/api/queries";
 import { type WebProject, type WebSort, webSort } from "@/api/schemas";
 import { DbIpAttribution } from "@/components/dbip-attribution";
-import { ErrorPanel, Loading } from "@/components/error-panel";
-import { SelectField } from "@/components/form-field";
+import { ErrorPanel, Loading, StateBlock } from "@/components/error-panel";
 import { StatusPill } from "@/components/status";
 import { Button } from "@/components/ui/button";
 import { formatCount } from "@/lib/format";
 import {
   countryName,
+  EMPTY_FILTERS,
   firstOrder,
   formatDuration,
   formatShare,
@@ -21,15 +22,21 @@ import {
   AGGREGATE_NOTE,
   CompareBar,
   FiltersPanel,
+  InlineSelect,
+  MagnitudeCell,
   Missing,
   Notes,
-  Num,
   orMissing,
   QUARANTINE_NOTE,
   RangeControl,
   REJECTED_NOTE,
+  ROW,
   SelectCell,
+  SeriesSwatch,
   SortHeader,
+  TableScroll,
+  TD,
+  TH,
   useSelection,
   VISITORS_NOTE,
 } from "./global-shared";
@@ -59,14 +66,16 @@ const SORT_TEXT: Record<WebSort, string> = {
   rejected_share: "Rejected share",
 };
 
-const COLUMNS: { sort: WebSort; label: string }[] = [
-  { sort: "pageviews", label: "Page views" },
-  { sort: "visitors", label: "Visitors" },
-  { sort: "visits", label: "Visits" },
-  { sort: "bounce_rate", label: "Bounce rate" },
-  { sort: "avg_visit_duration", label: "Avg. visit" },
-  { sort: "quarantine_share", label: "Quarantined" },
-  { sort: "rejected_share", label: "Rejected" },
+// the columns; `size` is what the magnitude bar measures when the table
+// is sorted by the column
+const COLUMNS: { sort: WebSort; label: string; size: (p: WebProject) => number | null }[] = [
+  { sort: "pageviews", label: "Page views", size: (p) => p.pageviews },
+  { sort: "visitors", label: "Visitors", size: (p) => p.visitors },
+  { sort: "visits", label: "Visits", size: (p) => p.visits },
+  { sort: "bounce_rate", label: "Bounce rate", size: (p) => p.bounce_rate },
+  { sort: "avg_visit_duration", label: "Avg. visit", size: (p) => p.avg_visit_duration },
+  { sort: "quarantine_share", label: "Quarantined", size: (p) => p.quarantine_share },
+  { sort: "rejected_share", label: "Rejected", size: (p) => p.rejected_share },
 ];
 
 export function GlobalWebPage() {
@@ -78,6 +87,9 @@ export function GlobalWebPage() {
   const selection = useSelection();
   const first = list.data?.pages[0];
   const resolved = first ? { from: first.from, to: first.to } : null;
+  const items = list.data?.pages.flatMap((p) => p.items) ?? [];
+  const sized = COLUMNS.find((c) => c.sort === state.sort);
+  const max = sized ? Math.max(0, ...items.map((p) => sized.size(p) ?? 0)) : 0;
 
   const sortBy = (sort: WebSort) =>
     set({
@@ -87,73 +99,80 @@ export function GlobalWebPage() {
     });
 
   return (
-    <section className="space-y-5">
-      <header>
-        <h2 className="text-xl font-semibold tracking-tight">Global web</h2>
-        <p className="mt-1 max-w-prose text-sm text-muted-foreground">
+    <section aria-labelledby="global-web-h" className="flex flex-col gap-4">
+      <div className="flex flex-col gap-1">
+        <h2 id="global-web-h" className="text-section text-fg">
+          Global web
+        </h2>
+        <p className="max-w-prose text-small text-fg-2">
           Web numbers of every enrolled project over a range of UTC days, from the daily aggregates.
           Filter, sort any column, and select projects to compare them side by side.
         </p>
-      </header>
-
-      <div className="space-y-5 rounded-xl border bg-card p-4 sm:p-5">
-        <RangeControl resolved={resolved} onChange={(range) => set({ ...state, range })} />
-        <FiltersPanel filters={state.filters} onChange={(filters) => set({ ...state, filters })} />
-        <div className="flex flex-wrap gap-3">
-          <SelectField
-            label="Sort by"
-            value={state.sort}
-            onChange={(e) => {
-              const sort = e.target.value as WebSort;
-              set({ ...state, sort, order: firstOrder(sort) });
-            }}
-          >
-            {webSort.options.map((s) => (
-              <option key={s} value={s}>
-                {SORT_TEXT[s]}
-              </option>
-            ))}
-          </SelectField>
-          <SelectField
-            label="Order"
-            value={state.order}
-            onChange={(e) => set({ ...state, order: e.target.value as "asc" | "desc" })}
-          >
-            <option value="desc">Largest first</option>
-            <option value="asc">Smallest first</option>
-          </SelectField>
-        </div>
       </div>
 
-      <CompareBar selection={selection} range={resolved} />
+      <RangeControl resolved={resolved} onChange={(range) => set({ ...state, range })} />
 
-      {list.isPending ? <Loading label="Loading projects" /> : null}
-      {list.error ? <ErrorPanel error={list.error} onRetry={() => list.refetch()} /> : null}
-      {list.data ? (
-        <section aria-labelledby="global-web-table" className="rounded-xl border bg-card">
-          <div className="flex flex-wrap items-baseline justify-between gap-2 p-4 pb-2 sm:px-5">
-            <h3 id="global-web-table" className="font-semibold">
-              Projects
-            </h3>
-            <p className="text-xs text-muted-foreground" aria-live="polite">
-              {formatCount(first?.total ?? 0)} {first?.total === 1 ? "project" : "projects"} match
-            </p>
-          </div>
-          {first?.total === 0 ? (
-            <p className="px-4 pb-5 text-muted-foreground sm:px-5">
-              No project matches these filters.
-            </p>
-          ) : (
-            <section
-              aria-label="Global web table"
-              // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable region needs focus (wcag 2.1.1)
-              tabIndex={0}
-              className={`relative overflow-x-auto transition-opacity ${list.isPlaceholderData ? "opacity-60" : ""}`}
+      <div className="flex min-w-0 flex-col overflow-hidden rounded-lg border border-line bg-raised">
+        <div className="flex flex-col gap-2.5 border-b border-line px-4 py-3">
+          <FiltersPanel
+            filters={state.filters}
+            onChange={(filters) => set({ ...state, filters })}
+          />
+          <div className="grid grid-cols-2 gap-x-3 gap-y-2 sm:flex sm:flex-wrap sm:items-center sm:gap-x-4">
+            <InlineSelect
+              label="Sort by"
+              value={state.sort}
+              onChange={(v) => {
+                const sort = v as WebSort;
+                set({ ...state, sort, order: firstOrder(sort) });
+              }}
             >
-              <table className="w-full min-w-[64rem] text-left text-sm">
-                <thead className="border-y bg-muted/50 text-xs text-muted-foreground">
+              {webSort.options.map((s) => (
+                <option key={s} value={s}>
+                  {SORT_TEXT[s]}
+                </option>
+              ))}
+            </InlineSelect>
+            <InlineSelect
+              label="Order"
+              value={state.order}
+              onChange={(v) => set({ ...state, order: v as "asc" | "desc" })}
+            >
+              <option value="desc">Largest first</option>
+              <option value="asc">Smallest first</option>
+            </InlineSelect>
+          </div>
+        </div>
+
+        <CompareBar selection={selection} range={resolved} />
+
+        {list.isPending ? <Loading label="Loading projects" className="px-4" rows={6} /> : null}
+        {list.error ? (
+          <ErrorPanel error={list.error} onRetry={() => list.refetch()} className="m-4" />
+        ) : null}
+        {list.data ? (
+          first?.total === 0 ? (
+            <StateBlock
+              kind="empty"
+              icon={<SearchX aria-hidden />}
+              title="No project matches these filters"
+              className="m-4"
+              action={
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => set({ ...state, filters: EMPTY_FILTERS })}
+                >
+                  Clear filters
+                </Button>
+              }
+            />
+          ) : (
+            <TableScroll label="Global web table" dim={list.isPlaceholderData}>
+              <table className="w-full min-w-[64rem] border-separate border-spacing-0 text-left text-small tabular">
+                <thead>
                   <tr>
-                    <th scope="col" className="py-1 pr-1 pl-4 sm:pl-5">
+                    <th scope="col" className={`${TH} w-10 pl-4`}>
                       <span className="sr-only">Select</span>
                     </th>
                     <SortHeader
@@ -174,83 +193,114 @@ export function GlobalWebPage() {
                         onSort={sortBy}
                       />
                     ))}
-                    <th scope="col" className="px-3 py-1 pr-4 font-medium sm:pr-5">
+                    <th scope="col" className={`${TH} pr-4`}>
                       Top countries
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y">
-                  {list.data.pages
-                    .flatMap((p) => p.items)
-                    .map((p) => (
-                      <WebRow key={p.tenant.id} p={p} selection={selection} />
-                    ))}
+                <tbody className="[&>tr:last-child>*]:border-0">
+                  {items.map((p) => (
+                    <WebRow
+                      key={p.tenant.id}
+                      p={p}
+                      selection={selection}
+                      sort={state.sort}
+                      max={max}
+                    />
+                  ))}
                 </tbody>
               </table>
-            </section>
-          )}
-          {list.hasNextPage ? (
-            <div className="border-t p-3 sm:px-5">
+            </TableScroll>
+          )
+        ) : null}
+
+        {list.data && first?.total !== 0 ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line px-4 py-2.5">
+            <p className="text-caption text-fg-3" aria-live="polite">
+              {formatCount(first?.total ?? 0)} {first?.total === 1 ? "project" : "projects"} match
+            </p>
+            {list.hasNextPage ? (
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => list.fetchNextPage()}
-                disabled={list.isFetchingNextPage}
+                pending={list.isFetchingNextPage}
               >
                 {list.isFetchingNextPage ? "Loading" : "Load more"}
               </Button>
-            </div>
-          ) : null}
-        </section>
-      ) : null}
+            ) : null}
+          </div>
+        ) : null}
+      </div>
 
       <Notes items={[VISITORS_NOTE, QUARANTINE_NOTE, REJECTED_NOTE, AGGREGATE_NOTE]}>
-        <DbIpAttribution className="mt-3" />
+        <DbIpAttribution className="mt-1" />
       </Notes>
     </section>
   );
 }
 
-function WebRow({ p, selection }: { p: WebProject; selection: ReturnType<typeof useSelection> }) {
+function WebRow({
+  p,
+  selection,
+  sort,
+  max,
+}: {
+  p: WebProject;
+  selection: ReturnType<typeof useSelection>;
+  sort: WebSort;
+  max: number;
+}) {
   const t = p.tenant;
+  const slot = selection.slot(t.id);
+  const cell = (s: WebSort, v: number | null, children: React.ReactNode) => (
+    <MagnitudeCell on={sort === s} value={v} max={max}>
+      {children}
+    </MagnitudeCell>
+  );
   return (
-    <tr data-tenant={t.id}>
+    <tr data-tenant={t.id} data-state={slot >= 0 ? "selected" : undefined} className={ROW}>
       <SelectCell id={t.id} name={t.name} selection={selection} />
-      <th scope="row" className="max-w-[16rem] px-2 py-2 text-left font-normal">
-        <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+      <th scope="row" className={`${TD} min-w-48 max-w-64 text-left font-normal`}>
+        <span className="flex min-w-0 items-center gap-2">
+          <SeriesSwatch slot={slot} />
           <Link
             to={`/operator/compare?tenants=${t.id}`}
-            className="font-medium underline-offset-2 hover:underline"
+            className="truncate rounded-sm text-body font-medium text-fg underline-offset-4 hover:underline focus-ring"
           >
             {t.name}
           </Link>
-          <StatusPill status={t.status} />
+          {t.status !== "active" ? <StatusPill status={t.status} /> : null}
         </span>
-        <span className="mt-0.5 block text-xs text-muted-foreground">
+        <span className="mt-0.5 block text-caption text-fg-3">
           {p.sites} {p.sites === 1 ? "site" : "sites"}, {p.sites_verified} verified,{" "}
           {p.sites_with_stellar_toml} with stellar.toml
         </span>
       </th>
-      <Num>
-        <span data-col="pageviews">{formatCount(p.pageviews)}</span>
-      </Num>
-      <Num>
-        <span data-col="visitors">{formatCount(p.visitors)}</span>
-      </Num>
-      <Num>{formatCount(p.visits)}</Num>
-      <Num>{orMissing(formatShare(p.bounce_rate))}</Num>
-      <Num>{orMissing(formatDuration(p.avg_visit_duration))}</Num>
-      <Num>
-        {p.quarantine_share === null ? (
+      {cell("pageviews", p.pageviews, <span data-col="pageviews">{formatCount(p.pageviews)}</span>)}
+      {cell("visitors", p.visitors, <span data-col="visitors">{formatCount(p.visitors)}</span>)}
+      {cell("visits", p.visits, formatCount(p.visits))}
+      {cell("bounce_rate", p.bounce_rate, orMissing(formatShare(p.bounce_rate)))}
+      {cell(
+        "avg_visit_duration",
+        p.avg_visit_duration,
+        orMissing(formatDuration(p.avg_visit_duration)),
+      )}
+      {cell(
+        "quarantine_share",
+        p.quarantine_share,
+        p.quarantine_share === null ? (
           <Missing />
         ) : (
           <span title={`${formatCount(p.quarantine_pageviews)} quarantined page views`}>
             {formatShare(p.quarantine_share)}
           </span>
-        )}
-      </Num>
-      <Num>
-        {p.rejected_share === null ? (
+        ),
+      )}
+      {cell(
+        "rejected_share",
+        p.rejected_share,
+        p.rejected_share === null ? (
           <Missing />
         ) : (
           <span
@@ -258,17 +308,17 @@ function WebRow({ p, selection }: { p: WebProject; selection: ReturnType<typeof 
           >
             {formatShare(p.rejected_share)}
           </span>
-        )}
-      </Num>
-      <td className="px-3 py-2 pr-4 text-xs sm:pr-5">
+        ),
+      )}
+      <td className={`${TD} pr-4 text-caption`}>
         {p.top.country.length === 0 ? (
           <Missing />
         ) : (
-          <ul className="space-y-0.5">
+          <ul className="flex flex-col gap-0.5">
             {p.top.country.slice(0, 3).map((c) => (
-              <li key={c.key} className="whitespace-nowrap">
+              <li key={c.key} className="whitespace-nowrap text-fg-2">
                 {countryName(c.key)}{" "}
-                <span className="tabular text-muted-foreground">{formatCount(c.value)}</span>
+                <span className="font-mono text-fg-3 tabular">{formatCount(c.value)}</span>
               </li>
             ))}
           </ul>

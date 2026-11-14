@@ -1,3 +1,4 @@
+import { Mark } from "@veristar/brand/mark";
 import { createBrowserRouter, type LoaderFunctionArgs, redirect } from "react-router";
 import { ApiError } from "@/api/client";
 import { meQuery } from "@/api/queries";
@@ -33,6 +34,20 @@ import { TermsPage } from "@/pages/terms";
 import { VerifyPage } from "@/pages/verify";
 import { queryClient } from "@/query-client";
 
+// the first paint while the session check runs: the mark breathing in the
+// middle of the ground, so a slow network shows the console is on its way
+function ConsoleLoading() {
+  return (
+    <div
+      role="status"
+      className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-ground text-fg"
+    >
+      <Mark className="size-10 animate-skeleton" />
+      <span className="animate-fade-in text-small text-fg-2">Loading the console</span>
+    </div>
+  );
+}
+
 // every signed-in page needs /api/me first; without a session the browser
 // goes to sign-in and comes back to the page it asked for
 async function requireSession({ request }: LoaderFunctionArgs) {
@@ -60,11 +75,7 @@ export const router = createBrowserRouter([
     loader: requireSession,
     element: <AppShell />,
     // shown while the session check of the first page load runs
-    hydrateFallbackElement: (
-      <p role="status" className="p-8 text-sm text-muted-foreground">
-        Loading the console
-      </p>
-    ),
+    hydrateFallbackElement: <ConsoleLoading />,
     errorElement: <RouteErrorPage />,
     children: [
       { index: true, element: <ProjectsPage /> },

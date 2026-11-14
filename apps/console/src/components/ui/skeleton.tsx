@@ -1,10 +1,12 @@
-import { cn } from "cn";
+import { cn } from "@veristar/brand/cn";
 
+// a placeholder in the shape of what is coming; it breathes, it never spins
 function Skeleton({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="skeleton"
-      className={cn("animate-pulse rounded-md bg-muted", className)}
+      aria-hidden
+      className={cn("animate-skeleton rounded-sm bg-muted", className)}
       {...props}
     />
   );
