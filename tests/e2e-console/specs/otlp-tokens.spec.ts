@@ -52,12 +52,18 @@ test.afterAll(async () => {
 
 test("the api analytics page shows the endpoint, the guides and what is kept", async () => {
   await page.goto(`${APP}/projects/${tenant.id}`);
+  // the sidebar's API place opens on traffic; its Connect tab is the setup page
   await page
     .getByRole("navigation", { name: "Project" })
-    .getByRole("link", { name: "API setup" })
+    .getByRole("link", { name: "API", exact: true })
+    .click();
+  await page.waitForURL(`${APP}/projects/${tenant.id}/api/traffic`);
+  await page
+    .getByRole("navigation", { name: "API" })
+    .getByRole("link", { name: "Connect" })
     .click();
   await page.waitForURL(`${APP}/projects/${tenant.id}/api`);
-  await expect(page.getByRole("heading", { name: "API analytics setup" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Connect your API" })).toBeVisible();
   await expect(page.getByText(`https://otlp.${BASE_DOMAIN}`, { exact: true })).toBeVisible();
   await expect(page.getByText("Only HTTP server request duration is kept")).toBeVisible();
   await expect(page.getByText("Your own backend keeps the full data")).toBeVisible();
@@ -93,9 +99,13 @@ test("a token is created through the control plane and shown once", async () => 
   expect(plain).toMatch(/^sa_otlp_[0-9A-Za-z]{40}$/);
   expect(body.prefix).toBe(plain.slice(0, 12));
 
-  const panel = page.getByRole("region", { name: "New token" });
-  await expect(panel.getByTestId("new-token")).toHaveText(plain);
-  await panel.getByRole("button", { name: "Copy token" }).click();
+  // the one-time secret is masked until it is shown on purpose
+  const panel = page.getByRole("region", { name: "New secret" });
+  await expect(panel).toContainText("Token Payments API was created");
+  await expect(panel).not.toContainText(plain);
+  await panel.getByRole("button", { name: "Show the secret" }).click();
+  await expect(panel.locator("code")).toHaveText(plain);
+  await panel.getByRole("button", { name: "Copy", exact: true }).click();
   await expect(panel.getByRole("button", { name: "Copied" })).toBeVisible();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(plain);
   await page.screenshot({ path: join(shots, "created.png"), fullPage: true });
@@ -106,7 +116,11 @@ test("a token is created through the control plane and shown once", async () => 
   await expect(list.getByText(`${body.prefix}...`)).toBeVisible();
   await expect(list).not.toContainText(plain);
 
-  await panel.getByRole("button", { name: "I stored the token" }).click();
+  // done stays disabled until the person confirms they stored it
+  const done = panel.getByRole("button", { name: "Done" });
+  await expect(done).toBeDisabled();
+  await panel.getByRole("checkbox").click();
+  await done.click();
   await expect(page.getByText(plain)).toHaveCount(0);
   // a reload shows the token again only as its prefix
   await page.reload();

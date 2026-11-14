@@ -67,6 +67,12 @@ describe("api analytics setup page (contract section 6)", () => {
     await type(byLabel(host, "Token name"), "  Production API ");
     await type(byLabel(host, "Environment"), "production");
     await click(byRole(host, "button", "Create token"));
+    // the secret is masked until it is shown on purpose
+    await waitFor(() => expect(host.querySelector('[aria-label="New secret"]')).not.toBeNull());
+    expect(host.textContent).not.toContain(f.OTLP_PLAIN);
+    const show = host.querySelector<HTMLButtonElement>('button[aria-label="Show the secret"]');
+    if (!show) throw new Error("no show button");
+    await click(show);
     await waitFor(() => expect(host.textContent).toContain(f.OTLP_PLAIN));
     expect(calls[1]?.method).toBe("POST");
     expect(calls[1]?.url).toBe(`/api/tenants/${f.TENANT_ID}/otlp-tokens`);
@@ -74,8 +80,15 @@ describe("api analytics setup page (contract section 6)", () => {
     expect(calls[1]?.body).toEqual({ name: "Production API", environment: "production" });
     expect(host.textContent).toContain("It is shown only this once");
     expect(byLabel(host, "Token name").value).toBe("");
-    await click(byRole(host, "button", "I stored the token"));
-    expect(host.textContent).not.toContain(f.OTLP_PLAIN);
+    // done stays disabled until the person says they stored it
+    const done = byRole(host, "button", "Done") as HTMLButtonElement;
+    expect(done.disabled).toBe(true);
+    const stored = host.querySelector<HTMLElement>('[aria-label="New secret"] [role="checkbox"]');
+    if (!stored) throw new Error("no stored checkbox");
+    await click(stored);
+    expect(done.disabled).toBe(false);
+    await click(done);
+    await waitFor(() => expect(host.textContent).not.toContain(f.OTLP_PLAIN));
   });
 
   it("leaves an empty environment out of the body", async () => {
