@@ -45,6 +45,36 @@ tag and digest; `scripts/supply-chain/release-manifest.py` refuses a set of name
 expected eleven), verifies every digest again with the deploy's identity, attests the file, and
 attaches it to the GitHub release.
 
+### 2.1 Release from a workstation (while GitHub Actions is off)
+
+Owner rule of 2026-11-14: no GitHub Actions while the repository is private, because the minutes
+cost money; every workflow is disabled. A release is then built and signed on the controller
+or an operator workstation, with the same gate and the same key as the workflow's key mode (section 3).
+Release `v0.1.0` was built by `release-images.yml` before the rule; no release has been made on a
+workstation yet. The steps, run from a clean checkout of the tag:
+
+1. **Build and push** each image of the matrix in `release-images.yml` with the same Dockerfile,
+   context and build arguments (`VERSION=<tag>`, `DBIP_MONTH` from the tag's commit month,
+   `CMD=` for the Go services, `CADDY_IMAGE=<caddy repo>@<digest>` for the console, the
+   `<PG_VERSION>-<tag>` tag for `postgres-ha`): `docker buildx build --push --provenance=false
+   --sbom=false -t ghcr.io/justmert/veristar/<name>:<tag> ...`, signed in to `ghcr.io` with a
+   token of `justmert` that has `write:packages`, kept out of the repository and revoked after.
+2. **Gate** each pushed digest with `scripts/supply-chain/scan-image.sh <repo>@<digest> <dir>`
+   (syft SBOM, Trivy fails on a fixable critical or high finding); stop at the first failure.
+3. **Sign and attest** with the SOPS copy of the release key, never written to disk in plain
+   text:
+   `sops exec-env infra/secrets/production/secrets.enc.yaml 'COSIGN_PRIVATE_KEY="$cosign_private_key" COSIGN_PASSWORD="$cosign_password" cosign sign --yes --key env://COSIGN_PRIVATE_KEY --use-signing-config=false --tlog-upload=false <repo>@<digest>'`,
+   and `cosign attest` with `--type spdxjson --predicate <sbom>` the same way.
+4. **Write the manifest** with `scripts/supply-chain/release-manifest.py <digest dir> <tag>`
+   (one `{"name","repo","tag","digest"}` file per image, as the workflow's artifacts), verify
+   every digest with `cosign verify --key infra/ansible/vars/release-cosign.pub
+   --insecure-ignore-tlog=true`, and attach `release-images.json` to the GitHub release
+   (`GH_TOKEN=$(gh auth token --user justmert) gh release create <tag> release-images.json`).
+
+The deploy verifies a workstation release exactly like a workflow release: the key, the
+manifest and the registry digests are the same. What it cannot show is where the build ran;
+the release notes name the machine.
+
 ## 3. Deploy-time verification (every playbook that pulls images)
 
 `site.yml` (first converge and node replacement), `deploy.yml` (rolling deploy), `rotate-all.yml`
