@@ -50,8 +50,8 @@ attaches it to the GitHub release.
 Owner rule of 2026-11-14: no GitHub Actions while the repository is private, because the minutes
 cost money; every workflow is disabled. A release is then built and signed on the controller
 or an operator workstation, with the same gate and the same key as the workflow's key mode (section 3).
-Release `v0.1.0` was built by `release-images.yml` before the rule; no release has been made on a
-workstation yet. The steps, run from a clean checkout of the tag:
+Release `v0.1.0` was built by `release-images.yml` before the rule; `v0.2.0` and `v0.2.1` were made
+on a workstation (below). The steps, run from a clean checkout of the tag:
 
 1. **Build and push** each image of the matrix in `release-images.yml` with the same Dockerfile,
    context and build arguments (`VERSION=<tag>`, `DBIP_MONTH` from the tag's commit month,
@@ -99,6 +99,33 @@ No workflow ran: every workflow of the repository is disabled.
 | `postgres-ha` | `18.7-v0.2.0` | `sha256:ac80c5ba3ca0ab798bfc5d40a00da5cb84fa09fdf0457d06d5f9ed158cddd6e5` |
 | `prober` | `v0.2.0` | `sha256:b5e3f5a5e99945dc954a04d6e21696517c7b8a1f9635893c1ec6984ac12b79f8` |
 | `replayer` | `v0.2.0` | `sha256:b89d0ef67613e0dc8914160a5e3b4d13a28678de4aa75fe6af9f87432d1a8a9a` |
+
+**Second workstation release: `v0.2.1` (2026-11-14).** Built the same way by
+`scripts/supply-chain/release-workstation.sh v0.2.1 <work dir>` on the controller from a clean
+worktree at the tag (commit `14f7bf5` on `main`: the restore command and HAProxy start fixes,
+`platformctl probe-tenant rotate-otlp-token`, the event route without an access log, GOGC 200 and
+adaptive goroutine stacks for Caddy and the gateway, and the probe scrape and watchdog wiring) in
+8 min 44 s: eleven images gated by `scan-image.sh` (no fixable critical or high finding), signed
+and SBOM-attested with the release key from the SOPS file, `release-images.json` verified with
+`infra/ansible/vars/release-cosign.pub` and attached to the GitHub release `v0.2.1`. The builds
+are reproducible: `caddy`, `collector`, `console` and `postgres-ha` have no source change since
+`v0.2.0` and came out with the same digests (the Caddyfile and the GOGC settings are rendered by
+Ansible, not baked into the image). `deploy.yml` verified every digest with the release key
+before it touched a node.
+
+| Image | Tag | Digest |
+|---|---|---|
+| `caddy` | `v0.2.1` | `sha256:5318e90aad4e2cbc0fc7a37c34e11cfc48ae7cb5d4caa44a4ae276ce5e733c87` (same as `v0.2.0`) |
+| `collector` | `v0.2.1` | `sha256:dc9d7a2fe726c281766eff1b2cb81ac70b650177b3206fa59e8f73c3d7af3157` (same as `v0.2.0`) |
+| `console` | `v0.2.1` | `sha256:f6da6cd2462d6eae94c49fdb96935527098fd2ecea93c7d3a2759503b31d2b7b` (same as `v0.2.0`) |
+| `controlplane` | `v0.2.1` | `sha256:22b9b90af6aa1ecdd195cff099b1dbffda001b84a30242cac54060cb0fcc071c` |
+| `gateway` | `v0.2.1` | `sha256:1aef0aab6423d6c8190d47d13c776351630a1e62a87eec7fe5aa7252ee9652b5` |
+| `jobs` | `v0.2.1` | `sha256:bb29d16b9077ce34e6ba89c5f222e28565cb6f25273c6d9d57261d6c082b073e` |
+| `metricswriter` | `v0.2.1` | `sha256:e3342f9e559b4ad6d6fba86526cf94c3d79bf85fcb8211eb0a83c4bdd3d1d469` |
+| `platformctl` | `v0.2.1` | `sha256:84f5069367fb35f9dbebe149fec0c9c97b3eaa4382b93e2f394d8c16d943e322` |
+| `postgres-ha` | `18.7-v0.2.1` | `sha256:ac80c5ba3ca0ab798bfc5d40a00da5cb84fa09fdf0457d06d5f9ed158cddd6e5` (same as `v0.2.0`) |
+| `prober` | `v0.2.1` | `sha256:63c87826ade03405133351c2487806d6c086c6a02c5659cce620aac20917d9b3` |
+| `replayer` | `v0.2.1` | `sha256:6b996c7f140c7b677b0ee29b08f5f948f81874bdbbb4ac16210a752224af66e6` |
 
 ## 3. Deploy-time verification (every playbook that pulls images)
 
