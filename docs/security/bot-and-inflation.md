@@ -3,18 +3,17 @@ title: "Bot and inflation strategy"
 description: "How the platform detects and limits bot traffic and artificial metric inflation."
 ---
 
-RFP section 3.2 asks for "a concrete strategy for detecting/mitigating bot traffic and
-artificial metric inflation (at minimum: distinguish real browser JS execution from pure
-server-side posts, and treat multiple distinct fingerprints from the same IP with skepticism)"
-that builds on the base project's existing bot detection. This document is that strategy, as
-built. Parameter names and values are the real ones from the code
-(`internal/config/gateway.go`, `internal/gateway/`) and the deployed defaults
-(`infra/ansible/roles/edge/defaults/main.yml`, `deploy/compose/dev.yml`), recorded in
-`docs/reference/gateway-limits.md`.
+This page describes how the platform detects and limits bot traffic and artificial metric
+inflation. It builds on Umami's own bot detection, tells real browser JavaScript execution apart
+from plain server-side posts, and treats many distinct visitor fingerprints from one address with
+skepticism. Parameter names and values come from the code (`internal/config/gateway.go`,
+`internal/gateway/`) and the deployed defaults (`infra/ansible/roles/edge/defaults/main.yml`,
+`deploy/compose/dev.yml`), and are listed in
+[../reference/gateway-limits.md](../reference/gateway-limits.md).
 
-The short version: the layers below raise the cost of forged traffic, catch naive server-side
-posts and keep suspicious bursts out of the primary numbers. They do not prove that a browser ran
-the page, and they do not stop a determined actor. Section 9 says exactly where they stop.
+In short: the layers below raise the cost of forged traffic, refuse naive server-side posts and
+keep suspicious bursts out of the primary numbers. Section 9 states the boundaries of each layer,
+so you know what the numbers can and cannot tell you.
 
 ## 1. Where the checks run
 
@@ -52,9 +51,9 @@ After the gateway, the replayer delivers the event to Umami with the visitor's o
 
 ## 2. Umami's `isbot` on the original user agent
 
-The RFP asks to build on the base project's bot detection. Umami 3.5.0 runs `isbot` on the
-`User-Agent` of `POST /api/send`; a bot answers `200 {"beep":"boop"}` and stores nothing. The
-replayer forwards the visitor's original `User-Agent` header unchanged, and
+Umami 3.5.0 runs `isbot` on the `User-Agent` of `POST /api/send`; for a bot it answers
+`200 {"beep":"boop"}` and stores nothing. The replayer forwards the visitor's original
+`User-Agent` header unchanged, and
 Umami is deployed without `DISABLE_BOT_CHECK` (`infra/ansible/roles/core/templates/compose.yml.j2`,
 `deploy/compose/dev.yml`). A bot answer is counted as `bot` on `EDGE_STATS` and in
 `replayer_outcomes_total{outcome="bot"}`, so tenants and operators see how many events were
@@ -70,7 +69,8 @@ user agent is not caught by it.
 
 ## 3. Server-issued challenge and proof
 
-Full detail and measurements: `docs/reference/browser-proof.md` and `docs/reference/wire-v1.md`.
+Full detail and measurements: [../reference/browser-proof.md](../reference/browser-proof.md) and
+[../reference/wire-v1.md](../reference/wire-v1.md).
 
 - Once per page load the tracker calls `GET /v1/c?w=<site id>`. The gateway answers
   `{w, iat, salt, bits, tag}`: `iat` is server time, `salt` 16 random bytes, `bits` the current
@@ -88,9 +88,9 @@ Full detail and measurements: `docs/reference/browser-proof.md` and `docs/refere
   from the server, difficulty can be raised without a tracker release.
 
 What this distinguishes: a request without a valid proof did not go through the challenge flow,
-so a plain HTTP client posting a JSON body is refused. That is the RFP's minimum, "distinguish
-real browser JS execution from pure server-side posts", met for naive posts. Section 9 says why
-it is not proof of browser execution.
+so a plain HTTP client that posts a JSON body is refused. This separates browser JavaScript
+execution from plain server-side posts. Section 9 covers clients that run the challenge flow
+themselves.
 
 Proved by: `TestChallengeRoundTrip`, `TestKeyRotationOverlap`, `TestKeyLost`, `TestKeyTTL`
 (`internal/gateway/challenge_test.go`); `TestTrackerVectorBytes`, `TestTrackerVectorsVerify`,
@@ -136,8 +136,6 @@ Proved by: `TestReplayLimit` (`internal/gateway/proof_test.go`) and `TestEventCh
 
 ## 6. Same-IP skepticism and quarantine bands
 
-This is the RFP's "treat multiple distinct fingerprints from the same IP with skepticism".
-
 - **Fingerprint.** The visitor token is
   `vt = hex(HMAC-SHA256(daily_secret, site_id || 0x00 || ip || 0x00 || user_agent))`. Distinct
   user agents from one address, or distinct addresses in one prefix, give distinct tokens.
@@ -175,8 +173,9 @@ Many real people share one address or one /24:
 When more than 20 distinct visitor tokens reach one site from one such prefix in an hour, real
 visitors are quarantined too. This is expected and accepted: quarantine is a separate band shown
 next to the primary data, never deletion, so the tenant and operators can still see and judge
-those visits. A popular site with much mobile traffic should expect a non-zero quarantine band.
-Change `IPCLUSTER_THRESHOLD` only with a recorded reason in `docs/reference/gateway-limits.md`.
+those visits. A popular site with a lot of mobile traffic sees a quarantine band above zero.
+Change `IPCLUSTER_THRESHOLD` only with a recorded reason in
+[../reference/gateway-limits.md](../reference/gateway-limits.md).
 
 ### One visitor's volume
 
@@ -204,14 +203,14 @@ Over either: 429. A refusal by the prefix bucket does not take a site token. Eac
 most 200,000 buckets. Limits are per node, so a site can send three times the site rate across
 three edge nodes. `GET /v1/c` has its own buckets at the same rates, checked after the origin
 and fetch metadata checks, so fetching challenges never uses up the event budget and refused
-challenge requests take no token (`docs/reference/gateway-limits.md`, change of 2026-11-13;
+challenge requests take no token ([../reference/gateway-limits.md](../reference/gateway-limits.md);
 `TestChallengeRateLimits` in `tests/gateway`).
 
 Proved by: `TestRateLimitPrefixBurstAndRefill`, `TestRateLimitSite`,
 `TestRateLimitPrefixRefusalKeepsSiteTokens`, `TestRateLimitClockBackwards`,
 `TestRateLimitBoundedKeys`, `TestRateLimitConfig`, `TestRateLimitConcurrent`
-(`internal/gateway/ratelimit_test.go`). Acceptance: no event of the this stage and this stage browser
-suites was refused, rate limited or quarantined (`TestBrowserMatrix`, `tests/gateway`).
+(`internal/gateway/ratelimit_test.go`). Acceptance: no event of the browser test suites is
+refused, rate limited or quarantined (`TestBrowserMatrix`, `tests/gateway`).
 
 ## 8. Visibility
 
@@ -223,7 +222,7 @@ Every outcome is counted per site on `EDGE_STATS` and stored hourly (`cp.web_ing
 `quarantined` or `rejected_replay` is the signal that someone is forging traffic. A Sec-GPC drop is counted as `rejected_gpc`; it is a
 privacy choice, not a sign of forgery.
 
-## 9. Limits, stated plainly
+## 9. Boundaries of the checks
 
 - **The proof does not prove browser execution.** A scripted non-browser client can fetch a
   challenge, solve 12 bits in milliseconds, and forge `Origin`, `Sec-Fetch-Site`,
@@ -231,7 +230,7 @@ privacy choice, not a sign of forgery.
   is tested on purpose: `TestEventChecks` subtest
   `scripted client with forged headers is accepted` (`tests/gateway/checks_test.go`) posts from a
   Go client and expects 202. The proof raises the cost of forged traffic and catches naive server
-  posts. It cannot stop a determined actor.
+  posts; a determined actor with a scripted client gets through it.
 - **Real browsers on residential proxies pass every layer.** A headless or real browser with an
   ordinary user agent runs the real tracker, so the proof, `Origin` and fetch metadata are
   genuine; `isbot` does not match; and spreading the traffic over many residential addresses in
@@ -250,13 +249,9 @@ privacy choice, not a sign of forgery.
 - **API metrics are self-reported.** OTLP data comes from the tenant's own servers; the collector
   can rate limit and cap cardinality but cannot verify that requests happened
   ([threat-model.md](threat-model.md) section 3.3).
-- **No first-party proxy.** A tenant must not proxy events through its own server: every event
-  would then be a server-side post from one address, which the proof and same-IP checks treat as
-  suspicious.
+- **No first-party proxy.** Tenants send events straight from the browser. Proxying them through
+  the tenant's own server turns every event into a server-side post from one address, which the
+  proof and same-IP checks treat as suspicious.
 
-Measures considered and left out by the project owner: on-chain corroboration through Hubble and
-traffic plausibility flags.
-
-The result meets the RFP's minimum by raising cost and making manipulation visible. It is not a
-guarantee that every counted visit was a person, and operators comparing projects for funding
-should read the numbers with the quarantine band and the outcome counters beside them.
+Together the layers raise the cost of manipulation and make it visible. When you compare projects,
+read the primary numbers together with the quarantine band and the outcome counters.
