@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # converges the pgbackrest backup bucket of one environment through the s3
-# api (the design, role storage): the bucket exists, was created with
+# api (role storage): the bucket exists, was created with
 # object lock, has versioning enabled and carries a default retention of
 # LOCK_MODE for LOCK_DAYS days. run by roles/storage on the controller.
 #

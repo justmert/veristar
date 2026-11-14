@@ -16,12 +16,12 @@
       # the metrics writer accepts points as old as API_METRICS keeps
       # messages (7 days), so their minute partitions must still exist; one
       # more day covers the utc day boundary (internal/config
-      # MinMinuteRetentionDays, review). jobs refuses less at start,
+      # MinMinuteRetentionDays). jobs refuses less at start,
       # this stops the converge before that
       - core_api_minute_retention_days | int >= 8
       - core_umami_processes | int <= core_replayer_env.REPLAYER_WORKERS | int
     fail_msg: >-
-      core needs the secrets role first, OPERATOR_GITHUB_IDS an operator input as
+      core needs the secrets role first, OPERATOR_GITHUB_IDS as
       sa_operator_github_ids, acme dns-01 outside the local converge, the
       oauth fixture only in the local converge, between 1 and
       REPLAYER_WORKERS umami processes (core_umami_processes), and

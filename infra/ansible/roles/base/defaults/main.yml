@@ -1,6 +1,6 @@
 ---
 # time sync. fencing of the leader locks assumes server clocks agree within
-# the 15 s lock ttl (the design); each node must be within
+# the 15 s lock ttl; each node must be within
 # base_time_max_offset_seconds of ntp, so any two agree within twice that.
 base_time_max_offset_seconds: 1.0
 base_time_sync_wait_seconds: 120

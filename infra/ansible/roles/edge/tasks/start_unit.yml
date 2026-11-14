@@ -1,6 +1,6 @@
 ---
 # docker's restart policy does not retry a container whose start failed
-# while the daemon came up. after an unclean power-off in the this stage edge
+# while the daemon came up. after an unclean power-off in the edge
 # loss drill the nats container stayed exited that way, so a oneshot unit
 # starts every existing container of the project once docker is up. start
 # never recreates anything, so it cannot apply a half-written change.

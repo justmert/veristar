@@ -1,5 +1,5 @@
 ---
-# pgbackrest (the design). one stanza holds the cluster's backups and wal.
+# pgbackrest. one stanza holds the cluster's backups and wal.
 backup_stanza: sa
 
 # where the repository lives:
@@ -45,7 +45,7 @@ backup_jobs:
 
 # the repository a database or restore node reads and writes: this
 # environment's own by default. restore.yml points them at another
-# environment's repository for a migration (the design).
+# environment's repository for a migration.
 backup_repo_environment: "{{ sa_environment }}"
 # a database rebuilt after a total loss is a new postgresql cluster (new
 # system id), which the old stanza refuses. the disaster recovery runbook

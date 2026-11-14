@@ -7,7 +7,7 @@
       - sa_tier == 'backup'
       - backup_repo_mode == 'posix-host'
       - sa_environment == 'local'
-    fail_msg: a repository node exists only in the local converge; staging and production use object storage an operator input
+    fail_msg: a repository node exists only in the local converge; staging and production use object storage
 
 - name: Set up pgbackrest tls
   ansible.builtin.include_tasks: tls.yml

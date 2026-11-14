@@ -1,9 +1,9 @@
-# managed by ansible (infra/ansible/roles/edge). edge tier of the design
-# 4.1: caddy, gateway, collector, one nats server and one etcd member. on a
-# converged node (sa_tier node) the core project's caddy serves the edge
-# sites too and joins this project's network, so this one has no caddy.
-# private ports bind to the private address only; caddy alone binds the
-# public one. secrets come from the root-only env files of the secrets role.
+# managed by ansible (infra/ansible/roles/edge). edge tier of
+# docs/architecture.md: caddy, gateway, collector, one nats server and one etcd
+# member. on a converged node (sa_tier node) the core project's caddy serves the
+# edge sites too and joins this project's network, so this one has no caddy.
+# private ports bind to the private address only; caddy alone binds the public
+# one. secrets come from the root-only env files of the secrets role.
 name: veristar-edge
 
 x-defaults: &defaults
@@ -12,7 +12,7 @@ x-defaults: &defaults
   # bundle changes the label and so recreates every container reading them
   labels:
     sa.tls: "{{ secrets_tls_fingerprint }}"
-  # container hardening (the design): the root filesystem is read-only, so
+  # container hardening: the root filesystem is read-only, so
   # services write only to their volumes and a small /tmp; no capabilities;
   # no privilege gain through setuid binaries or file capabilities
   read_only: true
@@ -82,10 +82,10 @@ services:
       volume-owners:
         condition: service_completed_successfully
     # etcd stores patroni's leader key; one member per edge node, peers and
-    # clients on the private network. both are mutual
+    # clients on the private network (docs/architecture.md). both are mutual
     # tls with the node certificate: a peer or client without a certificate
     # of the internal ca is refused in the handshake, before any request
-    #. prometheus reads /metrics the same way.
+    # prometheus reads /metrics the same way.
     command:
       - etcd
       - --name={{ inventory_hostname }}
@@ -209,7 +209,7 @@ services:
 {% endif %}
 {% if not edge_shares_node %}
 
-# review: docker can forward a published ipv6 port into a container only
+# docker can forward a published ipv6 port into a container only
 # through docker-proxy when the container has no ipv6 address, and caddy then
 # sees the bridge gateway (one ipv4 address) as the peer of every ipv6
 # visitor, so every per-client limit and the visitor token collapse into one

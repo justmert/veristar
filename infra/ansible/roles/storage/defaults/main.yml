@@ -1,6 +1,6 @@
 ---
-# the pgbackrest repository (the design of
-# the review notes). runs on the controller.
+# the pgbackrest repository, which outlives every node. runs on the
+# controller.
 #
 # azure (staging and production): infra/tofu/modules/backup-storage creates
 # the storage account and container; this role reads them back through the
