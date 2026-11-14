@@ -3,32 +3,46 @@ title: "Monthly SLO report"
 description: "Produce the monthly SLO report from the probe's measurements."
 ---
 
-The platform's targets are 99.99% ingestion and 99.90% dashboards (RFP 3.4). They are measured
-from outside by the probe: every 30 s the prober sends a web event and an OTLP metric and checks
-the console, the Umami host and the machine API, and pushes the results to Gatus on
-`status.<an operator input>` as `slo_ingestion`, `slo_dashboard`, `slo_freshness-web` and
-`slo_freshness-api` ([../reference/observability.md](../reference/observability.md), "Measures").
-Gatus keeps raw results for only about a week (20,160 per endpoint) and hourly uptime for 30
-days, which is shorter than a month. So `cmd/sloreport` copies each day's raw results into
-`docs/slo/data/<YYYY-MM-DD>.json` and writes the month's report from those files to
-`docs/slo/<YYYY-MM>.md`.
+The platform's targets are 99.99% ingestion and 99.90% dashboards ([service targets](../sla.md)).
+The external probe measures them from outside: every 30 s the prober sends a web event and an OTLP
+metric, checks the console, the Umami host and the machine API, and pushes the results to Gatus on
+`status.<BASE_DOMAIN>` (production: `https://status.veristar.app`) as `slo_ingestion`,
+`slo_dashboard`, `slo_freshness-web` and `slo_freshness-api`
+([observability](../reference/observability.md), "Measures"). Gatus keeps raw results for about a
+week (20,160 per endpoint) and hourly uptime for 30 days, which is shorter than a month. So
+`cmd/sloreport` copies each day's raw results into `docs/slo/data/<YYYY-MM-DD>.json` and writes the
+month's report from those files to `docs/slo/<YYYY-MM>.md`.
 
-## Normal operation (automatic)
+## Daily collection
 
-The workflow `.github/workflows/slo-report.yml` runs every day at 00:30 UTC:
+Each ended UTC day is collected while Gatus still holds it, in one of two ways.
 
-1. collects yesterday with `go run ./cmd/sloreport collect -gatus "$STATUS_BASE_URL" -day <day> -out docs/slo/data`
-   and commits it to the branch `slo/<YYYY-MM>`;
-2. on the day after a month's last day, writes the report with
-   `go run ./cmd/sloreport report -month <YYYY-MM> -data docs/slo/data -out docs/slo`, commits it and
-   opens a pull request `slo report <YYYY-MM>` to `main`.
+**On the probe host.** The probe's Compose project runs `sloreport watch`
+(`veristar-probe-sloreport`). Every hour it writes each of the last six ended UTC days that has
+results and no file yet to `/opt/veristar-probe/slo-data/<YYYY-MM-DD>.json`
+([probe setup](../deploy/probe.md), section 6). Production collects its days this way. Before
+writing the report, copy the files into the repository:
 
-It needs the repository variable `STATUS_BASE_URL` (`https://status.<an operator input>`); without it the
-first step fails with `repository variable STATUS_BASE_URL is not set`.
+```sh
+ssh <probe host> 'tar -C /opt/veristar-probe/slo-data -cf - .' | tar -C docs/slo/data -xf -
+```
+
+**With the GitHub workflow.** `.github/workflows/slo-report.yml` runs every day at 00:30 UTC:
+
+1. it collects yesterday, and any of the last six days still missing, with
+   `go run ./cmd/sloreport collect -gatus "$STATUS_BASE_URL" -day <day> -out docs/slo/data` and
+   commits the files to the branch `slo/<YYYY-MM>`;
+2. on the day after a month's last day, it writes the report with
+   `go run ./cmd/sloreport report -month <YYYY-MM> -data docs/slo/data -out docs/slo`, commits it
+   and opens a pull request `slo report <YYYY-MM>` to `main`.
+
+The workflow needs the repository variable `STATUS_BASE_URL` (`https://status.<BASE_DOMAIN>`);
+without it the first step fails with `repository variable STATUS_BASE_URL is not set`.
 
 ## Each month (operator)
 
-1. **Review the pull request.** The report states the covered range, partial days, probe gaps,
+1. **Write or review the report.** With the workflow, review its pull request; with the probe
+   host's files, write the report as in [By hand](#by-hand). The report states the covered range, partial days, probe gaps,
    missing days, and per measure the results, availability, verdict against the objective,
    coverage and downtime budget used, then every incident (a run of failed results) with its first
    error. Missing days count as unmeasured, never as available.
@@ -38,13 +52,13 @@ first step fails with `repository variable STATUS_BASE_URL is not set`.
    availability number. Investigate a coverage below 99%.
 4. **Merge.** The report is public in the repository.
 
-## By hand (when the workflow did not run)
+## By hand
 
-The days must be collected while Gatus still holds them (about a week):
+To collect a day yourself, do it while Gatus still holds it (about a week):
 
 ```sh
 make build
-dist/bin/sloreport collect -gatus https://status.<an operator input> -day <YYYY-MM-DD> -out docs/slo/data
+dist/bin/sloreport collect -gatus https://status.<BASE_DOMAIN> -day <YYYY-MM-DD> -out docs/slo/data
 ```
 
 `-page-size` defaults to 20160, which must equal `observability_gatus_max_results` in the
@@ -58,14 +72,7 @@ Expected: `wrote docs/slo/<YYYY-MM>.md`. `-through <YYYY-MM-DD>` writes a partia
 
 ## Exercised
 
-| Date | What ran | Result | Source |
-|---|---|---|---|
-| 2026-11-13 | this stage: `sloreport collect` against the Gatus of the local observability test stack (`tests/observability`), then `sloreport report` for 2026-11 | report written; its numbers matched a manual calculation from the raw results (plan status, this stage) | plan status, this stage |
-| 2026-11-13 | this stage: the report step again from the this stage data (`dist/bin/sloreport report -month 2026-11 -data <this stage data> -out <scratch> -through 2026-11-13`) | `wrote .../2026-11.md`, identical to the this stage report (empty diff); ingestion 236 results, 227 successes, 96.1864%; dashboard 238 results, 95.3782%; from a test stack disturbed by the alert drills and host load, with 12 missing days | this page |
-
-The test-stack numbers are not availability figures of the platform. Production's status page
-`https://status.veristar.app` runs since 2026-11-14 ([../deploy/probe.md](../deploy/probe.md)).
-While GitHub Actions is off, the daily step runs on the probe host instead of the workflow:
-`sloreport watch` writes each ended day to `/opt/veristar-probe/slo-data/`, and the operator
-copies those files into `docs/slo/data` before writing the report (probe.md section 6). Not yet
-exercised: a full month from those files, and the scheduled workflow.
+| Date | What ran | Result |
+|---|---|---|
+| 2026-11-13 | `sloreport collect` against the Gatus of the local observability test stack (`tests/observability`), then `sloreport report -month 2026-11 -through 2026-11-13` | report written; its numbers matched a manual calculation from the raw results, and a second run from the same data produced an identical report |
+| 2026-11-14 | `sloreport watch` started on the production probe host, reading `https://status.veristar.app` | the collector reaches the status page; the first file is `2026-11-14.json`, a partial day from 15:18 UTC ([drill record](../reference/drills/2026-11-13-azure.md), "External probe and status page") |
