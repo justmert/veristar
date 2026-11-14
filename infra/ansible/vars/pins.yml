@@ -83,3 +83,9 @@ sa_tls_curl: >-
   --cacert /etc/veristar/tls/root/ca.crt
   --cert /etc/veristar/tls/root/node.crt
   --key /etc/veristar/tls/root/node.key
+
+# go runtime of the ingest hot path (caddy and the gateway): a collection at
+# every 200 % heap growth instead of 100 %. both hold a few hundred MiB at
+# most at 2,500 events a second (docs/reference/gateway-limits.md,
+# "capacity"), well inside a node's memory
+sa_ingest_gogc: 200

@@ -141,6 +141,10 @@ services:
       EDGE_HEALTH_COLLECTOR_URL: http://collector:13133/
       EDGE_HEALTH_NATS_URL: http://nats:8222/healthz
       TZ: UTC
+      # the ingest hot path (docs/reference/gateway-limits.md, "capacity"):
+      # fewer garbage collections and no repeated stack growth per request
+      GOGC: "{{ sa_ingest_gogc }}"
+      GODEBUG: adaptivestackstart=1
 {% for k, v in edge_gateway_env.items() %}
       {{ k }}: "{{ v }}"
 {% endfor %}
@@ -180,6 +184,8 @@ services:
       COLLECTOR_HEALTH_UPSTREAM: collector:13133
       NODE_HEALTH_UPSTREAM: gateway:9090
       NODE_HEALTH_PATH: /edgez
+      GOGC: "{{ sa_ingest_gogc }}"
+      GODEBUG: adaptivestackstart=1
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       # deploy.yml's drain flag (deploy/caddy/assemble.sh)

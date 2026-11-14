@@ -296,6 +296,10 @@ services:
       CONTROLPLANE_UPSTREAM: controlplane:8085
       CONSOLE_ROOT: /srv/console
       UMAMI_UPSTREAM: umami:3000
+      # caddy carries the ingest hot path on a converged node
+      # (docs/reference/gateway-limits.md, "capacity")
+      GOGC: "{{ sa_ingest_gogc }}"
+      GODEBUG: adaptivestackstart=1
 {% if core_node %}
       # port 80: "/" is the edge health (in. and otlp.), "/core" this
       # project's (app. and web.); deploy/caddy/assemble.sh, tier node
