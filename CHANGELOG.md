@@ -16,9 +16,12 @@ here, before they take effect, as the processing terms require
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-11-14
+
 ### Added
 
-- Console accounts can be deleted by their owner in the account area. Deletion
+- Console accounts can be deleted by their owner in the account area, through
+  `DELETE /api/me` (migration 00031). Deletion
   removes the account's GitHub id, login and avatar, its project memberships
   with their web dashboard access, its sessions, MCP access keys and OAuth
   tokens, and the invites addressed to it; it is refused while the account is
@@ -42,11 +45,24 @@ here, before they take effect, as the processing terms require
 - The documentation was rewritten for public readers: onboarding guides with
   the npm package build steps and measured limits, the support page, the
   deploy pages, every runbook and the compliance pages.
+- `reboot.yml` reboots a converged node once, in the core play after the
+  PostgreSQL leader handover, and waits for its gateway before it undrains
+  the node.
 
 ### Fixed
 
 - A planned PostgreSQL switchover finds its candidate: Patroni presents a
   client certificate on its calls to the other members.
+- The external prober health-checks its reused HTTP/2 connections with pings
+  and bounds dialing, the TLS handshake and the response headers with its
+  request timeout. After a node reboots, its checks recover on their own
+  instead of staying red until the prober restarts.
+- `rotate-all.yml` resets the stored Grafana admin password in the
+  observability project, where Grafana runs.
+- Runbook and documentation fixes: the NATS and etcd checks of the edge node
+  runbook, the wait after draining a node that is also in the app and web
+  answers, the targeted plan for resizing one node, the remote `az` login for
+  the converge during a secret rotation, and stale section references.
 
 ## [0.2.1] - 2026-11-14
 
@@ -191,7 +207,8 @@ How to check a file against its release:
   starts tracking on `umami.start()`, the server-issued proof of work, and a
   byte-identical rebuild of every committed release.
 
-[Unreleased]: https://github.com/justmert/veristar/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/justmert/veristar/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/justmert/veristar/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/justmert/veristar/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/justmert/veristar/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/justmert/veristar/releases/tag/v0.1.0
