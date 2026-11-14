@@ -163,6 +163,21 @@ function roleBlock(name: ThemeName) {
   want(path, cur.slice(0, start + open.length) + block + cur.slice(end));
 }
 
+// the docs (mintlify) take the accent and the ground; edited in place so the
+// rest of docs.json keeps its formatting
+{
+  const t: Roles = themes.dark;
+  const path = join(repo, "docs/docs.json");
+  let text = readFileSync(path, "utf8");
+  const up = (v: string) => v.toUpperCase();
+  text = text.replace(
+    /("colors":\s*\{\s*"primary":\s*")[^"]*(",\s*"light":\s*")[^"]*(",\s*"dark":\s*")[^"]*(")/,
+    `$1${up(t.accent)}$2${up(t.accent)}$3${up(t.accent)}$4`,
+  );
+  text = text.replace(/("background":\s*\{\s*"color":\s*\{\s*"dark":\s*")[^"]*(")/, `$1${up(t.ground)}$2`);
+  want(path, text);
+}
+
 if (problems.length) {
   for (const p of problems) console.error(p);
   process.exit(1);
