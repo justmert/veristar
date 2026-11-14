@@ -23,6 +23,7 @@ cf1cfce506982637c3ea2389cbb226d5fff3042a:cmd/adoptionreport/main_test.go:generic
 # not a secret: the value is the sops key name alertmanager_discord_webhook_url
 # in the map from environment variable names to secret file keys
 2c764eb0f25b4481b07a025a8e5c9da17721d572:infra/secrets/new-secrets.py:discord-client-secret:36
+cb58020d198da429565d0109974a91a236765a7e:infra/secrets/new-secrets.py:discord-client-secret:38
 # the literal fixture client secret that the observability test stack hands to
 # the test-only github oauth fixture container; no real oauth app exists
 15e5ba26e80a37da4325c71f0208e33d19b322d0:tests/observability/up.sh:generic-api-key:75
