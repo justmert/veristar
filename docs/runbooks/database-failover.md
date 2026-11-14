@@ -26,7 +26,9 @@ Alerts that lead here: `PatroniNoLeader`, `ReplicationLagHigh`, `EtcdNoLeader`,
 Ingestion does not depend on the database: gateways and collectors keep answering and the queues
 hold the work ([queue-backlog-and-dlq.md](queue-backlog-and-dlq.md)). Dashboards, the control
 plane, the writer and jobs stop while no leader exists. The configured window is at most about
-40 s (TTL plus one loop); it has not been measured.
+40 s (TTL plus one loop); on production, writes resumed 30.3 s after the leader was powered off
+([../reference/drills/2026-11-13-azure.md](../reference/drills/2026-11-13-azure.md), "Database
+leader loss").
 
 ## Automatic failover: check it happened
 
@@ -83,7 +85,9 @@ recover, `start failed` in the list).
    replica by itself.
 
 2. If it does not, have Patroni rebuild it from the leader (this deletes the replica's data
-   directory):
+   directory). A replica that fell behind the leader's WAL retention fetches the missing
+   segments from the pgBackRest repository (`restore_command` in `patroni.yml`), so it usually
+   catches up without this step:
 
    ```sh
    sudo docker compose exec postgres patronictl -c /etc/patroni/patroni.yml reinit sa-staging <replica name> --force
@@ -103,16 +107,8 @@ etcd and creates a replica from the leader.
 
 ## Exercised
 
-**Automatic failover, on production (2026-11-13).** The leader `production-node-2` was powered
-off; `production-node-3` became leader on timeline 2 without action, writes through HAProxy
-resumed 30.3 s after the power-off, the newest committed row from before it was present, and
-the old leader streamed again as a replica with lag 0 64 s after its start
-([../reference/drills/2026-11-13-azure.md](../reference/drills/2026-11-13-azure.md), "Database
-leader loss"). The production converge showed one `Leader`, one `Sync Standby` and one
-`Replica`, both `streaming` with lag 0.
-
-Not yet exercised on a running environment: the planned switchover by hand and the replica
-rebuild. The rolling `deploy.yml` of 2026-11-14 ran on production with `failed=0`; the drill
-record does not state whether its switchover task fired. Earlier, the local converge showed
-core 2 `Leader` and core 1 `Sync Standby`, `streaming`, lag 0
-([../reference/drills/2026-11-13.md](../reference/drills/2026-11-13.md), "Topology checks").
+| Date | What ran | Result | Source |
+|---|---|---|---|
+| 2026-11-13 | Production: automatic failover, the leader `production-node-2` powered off | `production-node-3` became leader on timeline 2 without action; writes through HAProxy resumed 30.3 s after the power-off; the newest committed row from before it was present; the old leader streamed again as a replica with lag 0 64 s after its start | [../reference/drills/2026-11-13-azure.md](../reference/drills/2026-11-13-azure.md), "Database leader loss" |
+| 2026-11-14 | Production: replica rebuild of `production-node-3` through the Patroni REST API (`POST /reinitialize`) after it stopped in recovery | the member rebuilt from the leader and the node served again | [../reference/drills/2026-11-13-azure.md](../reference/drills/2026-11-13-azure.md), "Rollout incident: web.veristar.app 502 on node 3" |
+| 2026-11-14 | Production: planned switchovers of the rolling `deploy.yml`, release `v0.2.1` | both ran (leader node 2 to node 3, then node 3 to node 1), `failed=0` on every node | [../reference/drills/2026-11-13-azure.md](../reference/drills/2026-11-13-azure.md), "Release v0.2.1 rollout and gateway capacity" |
