@@ -133,6 +133,19 @@ func testCtx(t *testing.T, d time.Duration) context.Context {
 	return ctx
 }
 
+// pastHour returns a whole utc hour at least back before now, moved earlier
+// when needed so that events in the following span stay inside one utc day.
+// umami salts the session id with the event's day, so a span across midnight
+// gives the visitor a second session and the tests would count two.
+func pastHour(back, span time.Duration) time.Time {
+	h := time.Now().UTC().Truncate(time.Hour).Add(-back)
+	if end := h.Add(span); end.YearDay() != h.YearDay() {
+		midnight := time.Date(end.Year(), end.Month(), end.Day(), 0, 0, 0, 0, time.UTC)
+		h = midnight.Add(-span).Truncate(time.Hour)
+	}
+	return h
+}
+
 func newVT(t *testing.T) string {
 	t.Helper()
 	b := make([]byte, 32)
