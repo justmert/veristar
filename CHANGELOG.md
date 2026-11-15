@@ -24,6 +24,10 @@ here, before they take effect, as the processing terms require
   without signing in, because the image packages are public. A deploy signs
   every node out of the registry and removes the stored pull token; the token
   is now needed only for private packages.
+- Releases are signed keyless by `release-images.yml` with the workflow's
+  GitHub identity, logged in Rekor, with build provenance and SBOM
+  attestations. Deploys verify that identity at the release tag instead of the
+  release key.
 
 ### Security
 
