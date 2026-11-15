@@ -264,7 +264,9 @@ func TestOutage(t *testing.T) {
 	run := func(t *testing.T, stop, start func(), down string) {
 		s := newSite(t, stack.Admin)
 		const n = 500
-		base := time.Now().UTC().Add(-3 * time.Hour).Truncate(time.Minute)
+		// the 58 minutes of events inside one utc day, so umami counts each
+		// visitor once (pastHour)
+		base := pastHour(3*time.Hour, time.Hour)
 		want := map[time.Time]int64{}
 		vts := make([]string, 50)
 		for i := range vts {
