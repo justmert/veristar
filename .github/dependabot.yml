@@ -21,7 +21,12 @@ updates:
         patterns: ["*"]
 
   - package-ecosystem: npm
-    # the pnpm workspace (apps, packages, examples, tests) has one lockfile
+    # the pnpm workspace (apps, packages, examples, tests) has one lockfile.
+    # its security updates end without a pull request: the updater runs node
+    # 24 against engines node 26 with engineStrict, and it never writes pnpm
+    # overrides for a transitive package. no option here changes either, so
+    # the alerts are patched by hand (docs/runbooks/security-patch.md,
+    # section 4, npm packages)
     directories: ["/", "/examples/otel-node-express"]
     schedule: { interval: weekly, day: monday }
     groups:

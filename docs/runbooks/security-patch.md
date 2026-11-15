@@ -17,7 +17,7 @@ the whole path, detection to production, is **8 hours**, which leaves 16 hours o
 | Fixable critical or high in a deployed digest | `security.yml`, Trivy on `release-images.json` and the upstream pins | same |
 | Called Go vulnerability, npm advisory | `security.yml`, govulncheck and `pnpm audit` | same |
 | Private report | GitHub private vulnerability reporting ([SECURITY.md](../security/SECURITY.md)) | security advisory draft |
-| Dependency update | Dependabot | pull request |
+| Dependency update, advisory on a dependency | Dependabot | pull request; for the pnpm workspace an alert only (section 4, npm packages) |
 
 The clock starts when the first signal is filed, not when someone reads it.
 
@@ -85,6 +85,48 @@ go forward, so the rollback is a database restore).
 
 Bump the dependency (`go get`, `pnpm update`, a base image digest), run `make test`, `make test-containers`, `make isolation`
 and the image scan (`scripts/supply-chain/scan-image.sh <image> <dir>` on a local build).
+
+### npm packages (Dependabot alerts on `pnpm-lock.yaml`)
+
+Dependabot raises the alert, but its security update pull request does not complete for this
+workspace, so you patch by hand. Two limits of the Dependabot updater cause this, and
+`.github/dependabot.yml` has no setting for either:
+
+- The updater runs its own Node 24. The workspace requires Node 26.13.1 with `engineStrict: true`,
+  so `pnpm install --lockfile-only` stops with `ERR_PNPM_UNSUPPORTED_ENGINE` before it changes
+  the lockfile.
+- For a transitive package whose parent pins an older major, the updater runs only
+  `pnpm update <package>`, which stays inside the parent's range, and it never writes
+  `overrides`. It reports `security_update_not_possible`.
+
+Patch it yourself:
+
+1. List the alerts and trace each package to the workspace project that pulls it in:
+
+   ```sh
+   gh api 'repos/justmert/veristar/dependabot/alerts?state=open'
+   pnpm why -r <package>
+   ```
+
+   Note whether the path ends in a shipped artifact (the console, the site, the tracker, an
+   image) or only in tests, tooling or `examples/`.
+2. Pick the fixed version from the registry (`npm view <package> time`); it must be older than
+   `minimumReleaseAge`.
+   - A direct dependency: move its entry in the `catalog` of `pnpm-workspace.yaml`.
+   - A transitive dependency: prefer a parent release that no longer needs the package. Otherwise
+     add an entry to `overrides` in `pnpm-workspace.yaml`, with the advisory ids in a comment, and
+     check from the parent's code that the new version keeps the interface it calls.
+3. Run `pnpm install`, `pnpm check`, `pnpm test` and the builds of the console, the site and the
+   tracker. A changed console bundle or image is a platform release (section 5).
+4. When no fixed version exists, read the advisory and decide from the code whether the
+   vulnerable function runs on untrusted input. Replace or remove the package, or dismiss the
+   alert with the reason and the evidence:
+
+   ```sh
+   gh api -X PATCH repos/justmert/veristar/dependabot/alerts/<number> \
+     -f state=dismissed -f dismissed_reason=<not_used|inaccurate|tolerable_risk> \
+     -f dismissed_comment='<where the package is used and why the vulnerable path does not run>'
+   ```
 
 ### Upstream images other than Umami
 
