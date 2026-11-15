@@ -332,10 +332,10 @@ The lockfile graph shows no other path to them. Checked on 2026-11-13: esbuild's
 package (`@sa-local-test/tracker` 1.1.0) has no dependency fields, no bare imports and no kit
 code; the console bundle contains none of the kit's packages and no `walletconnect`, `reown`,
 `creit.tech`, `xbull` or `trezor` string; the SBOMs of all 12 platform images list none of them. The
-kit pulls in 26 lockfile entries the gate reports as non-OSI (25 distinct versions): 19 Reown and
+kit pulls in 25 lockfile entries the gate reports as non-OSI (24 distinct versions): 19 Reown and
 WalletConnect versions and `@trezor/crypto-utils` under "SEE LICENSE IN LICENSE.md" (not an OSI
-licence), and five with no licence in their registry metadata (`@creit.tech/xbull-wallet-connect`,
-`@hot-wallet/sdk`, `@near-wallet-selector/core`, `eyes`, `text-encoding-utf-8`). The project
+licence), and four with no licence in their registry metadata (`@creit.tech/xbull-wallet-connect`,
+`@hot-wallet/sdk`, `@near-wallet-selector/core`, `text-encoding-utf-8`). The project
 does not bundle or redistribute any of them, so they are allowlisted as test and example
 dependencies. Tenants who add the kit to their own sites take it from npm under its own terms.
 
