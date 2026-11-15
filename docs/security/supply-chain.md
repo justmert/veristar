@@ -315,7 +315,8 @@ Three checks keep the shipped section honest instead of trusting `package.json`:
   as testcontainers are listed as not shipped.
 
 Packages whose licence trivy did not find on disk are looked up in the npm, PyPI or crates.io
-registry. The project's own modules (the root module, the collector distribution and the example roots) are
+registry, and Go modules in deps.dev, which reads the licence from the module zip. Trivy 0.76.2 does
+not classify the MIT-0 text of `github.com/segmentio/asm`, for example. The project's own modules (the root module, the collector distribution and the example roots) are
 reported separately as own code under the repository's Apache-2.0 licence.
 
 **Not covered by this gate.** The Caddy binary (built by xcaddy inside

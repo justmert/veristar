@@ -29,7 +29,7 @@ in exactly one of two sections, using docs/security/licence-policy.json:
   also fails, so the allowlist cannot go stale silently.
 
 a package without a licence on disk is looked up in its registry (npm, pypi,
-crates.io); a lookup that fails stops the scan. a package that cannot be
+crates.io, deps.dev for go modules); a lookup that fails stops the scan. a package that cannot be
 placed in either section fails the scan.
 """
 
@@ -104,6 +104,12 @@ def registry_licence(kind, name, version):
         return info.get("license") or None
     if kind == "cargo":
         return fetch(f"https://crates.io/api/v1/crates/{name}/{version}")["version"].get("license")
+    if kind == "gomod":
+        # trivy's classifier misses some licence texts on disk (mit-0, for
+        # one). deps.dev holds the spdx ids it read from the module zip
+        mod = urllib.parse.quote(name, safe="")
+        lics = fetch(f"https://api.deps.dev/v3/systems/go/packages/{mod}/versions/{version}").get("licenses") or []
+        return " AND ".join(lics) if lics else None
     return None
 
 
