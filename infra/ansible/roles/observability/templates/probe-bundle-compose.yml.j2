@@ -16,6 +16,10 @@ name: {{ probe_bundle_project }}
 x-defaults: &defaults
   restart: unless-stopped
   read_only: true
+  # the writable /tmp of a read-only container. gatus's sqlite needs a
+  # temporary directory once a query spills to a temporary file; without
+  # one the statuses api answers "disk I/O error (6410)" (SQLITE_IOERR_GETTEMPPATH)
+  tmpfs: ["/tmp:size=64m"]
   security_opt: ["no-new-privileges:true"]
   cap_drop: [ALL]
   logging:
