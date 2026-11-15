@@ -19,12 +19,13 @@ sa_image_registry: ghcr.io/justmert/veristar
 # 37740842 is justmert
 sa_operator_github_ids: "37740842"
 
-# while the packages on ghcr.io are private (the repository is private),
-# every node and the controller sign in with the read:packages token (sops
-# key ghcr_pull_token, docs/runbooks/secret-rotation.md). set to "" once
-# the packages are public: then nothing signs in.
-sa_registry_login: ghcr.io
-sa_registry_login_user: justmert
+# the packages on ghcr.io are public, so nodes and the controller pull
+# without signing in, and the secrets role removes a stored credential.
+# for private packages, set the registry (ghcr.io) and the token's account
+# here and add the read:packages token as ghcr_pull_token to the sops file
+# (docs/runbooks/secret-rotation.md)
+sa_registry_login: ""
+sa_registry_login_user: ""
 
 # the probe's status page also checks the documentation site, which is
 # hosted apart from the platform (docs/deploy/probe.md)
