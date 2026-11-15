@@ -205,13 +205,6 @@
       "reviewed": "2026-11-13"
     },
     {
-      "package": "eyes",
-      "version": "0.1.8",
-      "licence": "none",
-      "reason": "debug output helper pulled in by the kit's Trezor or NEAR dependency chain; its registry metadata declares no licence; transitive dependency of @creit.tech/stellar-wallets-kit 2.7.1 and 2.8.0, which this repository installs only as devDependencies of packages/tracker (swk-2.7.1, swk-2.8.0, for the wallets kit adapter tests that run the real kit) and as a dependency of the example app examples/wallets-kit-spa (a sample for tenants, used as a test target, never deployed). not in sdk.js, the npm package (no dependencies, bundles src/ only), the console bundle or any image (checked 2026-11-13). the licence is not osi approved, and this project neither bundles nor redistributes the package; tenants who use the kit take it from npm under its own terms.",
-      "reviewed": "2026-11-13"
-    },
-    {
       "package": "mdn-data",
       "version": "2.0.28",
       "licence": "(CC0-1.0)",
