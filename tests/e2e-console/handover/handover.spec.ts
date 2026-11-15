@@ -162,7 +162,8 @@ async function stats(
   day: string,
 ) {
   const token = captureSsoToken(page);
-  await openDashboard(page, tenantId, { id: site.id, name: site.name } as Site);
+  // openDashboard finds the site's row by its domain, so the domain is required
+  await openDashboard(page, tenantId, { id: site.id, name: site.name, domain: site.host } as Site);
   const start = Date.parse(`${day}T00:00:00Z`);
   const r = await umamiGet(
     ctx,
