@@ -37,7 +37,8 @@ upstream wording: an unreviewed advisory is a finding by itself, and the operato
 4. Write the decision in the issue: exposed or not, mitigation, upgrade target, and who does it.
 5. For an Umami repository advisory, add its id with the decision to
    `docs/security/advisories-reviewed.json` in the patch pull request, so the hourly check stops
-   reporting it.
+   reporting it. For an upstream image finding without a fixed release, record it as in
+   section 4, upstream images other than Umami.
 
 ## 3. Immediate mitigations (target: within the first hour, when exposed)
 
@@ -132,6 +133,15 @@ Patch it yourself:
 
 Move the tag and digest in `infra/ansible/vars/pins.yml` (and `deploy/compose/dev.yml` where
 present), resolved from the registry, and run the suites that start that image.
+
+When no release fixes a finding, check whether the vulnerable code is in the image at all
+(`govulncheck -mode=binary` on the extracted binary for a Go finding) and whether the platform
+exposes it. Record the decision in two places in one pull request: the reasoning in
+[supply-chain.md section 8.1](../security/supply-chain.md), and an entry in
+`docs/security/advisories-reviewed.json` under `upstream_image_findings` with the exact image tag
+and the findings as `<id> <package>`, the way the issue lists them. The hourly report then stops
+filing those findings and closes the image's issue once nothing undecided is left. A new tag of
+the image is triaged again, because the entry names the old one.
 
 ### PostgreSQL
 

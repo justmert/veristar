@@ -5,7 +5,8 @@
     python3 scripts/supply-chain/findings-from.py pnpm-audit <pnpm audit --json output> > f.json
 
 trivy: critical and high findings with a fixed version only (the release gate's
-policy). govulncheck: vulnerabilities with a call path into our code
+policy), one per vulnerability and package, with the image named so the
+report groups them per image. govulncheck: vulnerabilities with a call path into our code
 (symbol level), which are the ones govulncheck itself fails on. pnpm audit:
 high and critical advisories. finding ids are stable across runs, so an open
 issue is not opened again every hour.
@@ -16,19 +17,30 @@ import sys
 
 
 def trivy(ref, path):
+    # one finding per vulnerability and package: an image that ships the
+    # same module in several binaries (grafana's bundled plugins) reports it
+    # once, with every installed version
     doc = json.load(open(path))
-    out = []
+    image = ref.split("@")[0]
+    found = {}
     for res in doc.get("Results") or []:
         for v in res.get("Vulnerabilities") or []:
             if v.get("Severity") in ("CRITICAL", "HIGH") and v.get("FixedVersion"):
-                out.append({
-                    "id": f"{v['VulnerabilityID']} {v['PkgName']} in {ref.split('@')[0]}",
-                    "source": f"trivy {res.get('Target', '')}",
-                    "subject": v["PkgName"], "pinned": v.get("InstalledVersion", ""),
-                    "severity": v["Severity"].lower(),
-                    "summary": f"{v.get('Title', '')} fixed in {v['FixedVersion']} ({ref})",
-                    "url": v.get("PrimaryURL", ""),
+                key = f"{v['VulnerabilityID']} {v['PkgName']}"
+                f = found.setdefault(key, {
+                    "id": f"{key} in {image}", "image": image, "ref": ref, "finding": key,
+                    "source": "trivy", "subject": v["PkgName"], "versions": set(),
+                    "severity": v["Severity"].lower(), "title": v.get("Title", ""),
+                    "fixed": v["FixedVersion"], "url": v.get("PrimaryURL", ""),
                 })
+                f["versions"].add(v.get("InstalledVersion", ""))
+                if v["Severity"] == "CRITICAL":
+                    f["severity"] = "critical"
+    out = []
+    for f in found.values():
+        f["pinned"] = ", ".join(sorted(f.pop("versions")))
+        f["summary"] = f"{f.pop('title')} fixed in {f.pop('fixed')} ({ref})"
+        out.append(f)
     return out
 
 

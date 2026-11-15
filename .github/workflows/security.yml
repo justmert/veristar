@@ -7,8 +7,10 @@ name: security
 #   - trivy against the digests a deploy uses: release-images.json of the
 #     newest image release, and the upstream digests in vars/pins.yml
 #   - govulncheck on every go module, pnpm audit on the workspace
-# every finding opens one labelled issue (security-finding) and the run sends
-# one alert to ALERT_WEBHOOK_URL (a discord webhook).
+# findings land in labelled issues (security-finding): one per image, edited
+# in place, and one per other finding. image findings with a recorded
+# decision (docs/security/advisories-reviewed.json) are not filed. the run
+# sends one alert to ALERT_WEBHOOK_URL (a discord webhook) for what is new.
 on:
   schedule:
     - cron: "23 * * * *"
@@ -75,6 +77,9 @@ jobs:
             f="scan/$(printf '%s' "$ref" | tr '/:@' '___').trivy.json"
             python3 -I scripts/supply-chain/findings-from.py trivy "$ref" "$f" > "findings/$(basename "$f")"
           done < refs.txt
+          # the images this run scanned: the report closes an image issue
+          # only for an image named here
+          cp refs.txt findings/scanned-images.txt
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: findings-images
@@ -140,7 +145,7 @@ jobs:
       - env:
           GH_TOKEN: ${{ github.token }}
           ALERT_WEBHOOK_URL: ${{ secrets.ALERT_WEBHOOK_URL }}
-        run: python3 -I scripts/supply-chain/report-findings.py findings
+        run: python3 -I scripts/supply-chain/report-findings.py findings --scanned findings/scanned-images.txt
       - if: needs.advisories.result != 'success' || needs.images.result != 'success' || needs.go.result != 'success' || needs.npm.result != 'success'
         run: |
           echo "a detection job failed; its sources were not checked this hour" >&2
