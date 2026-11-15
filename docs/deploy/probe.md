@@ -98,8 +98,8 @@ tar -C .scratch/probe-bundle/<env> -cf - . | ssh <probe host> '
   sudo install -d -o 8080 -g 8080 -m 0700 /opt/veristar-probe/gatus-data'
 ```
 
-The SSH user on the host owns the bundle directory; its uid matches `probe_bundle_uid`. If the
-image registry requires sign-in (`sa_registry_login` and `sa_registry_login_user` in the
+The SSH user on the host owns the bundle directory; its uid matches `probe_bundle_uid`. Public
+image packages need no sign-in; skip the next step. If the image registry requires sign-in (`sa_registry_login` and `sa_registry_login_user` in the
 inventory's `group_vars/all.yml`), log the host in with the read-only pull token from the SOPS
 file, through standard input:
 
