@@ -649,7 +649,16 @@ func testIsolation(t *testing.T, e *env) {
 	require.Equal(t, http.StatusCreated, r.status)
 	inviteA := r.json(t)["invite"].(map[string]any)["id"].(string)
 	before := alice.call(t, http.MethodGet, "/api/tenants/"+ta.String()+"/members", nil).body
-	beforeSite := alice.call(t, http.MethodGet, "/api/tenants/"+ta.String()+"/sites/"+sa.String(), nil).body
+	// the control plane fetches the new site's stellar.toml after the create
+	// response and stores the result on the site; the snapshot waits for it,
+	// so the comparison below sees only what bob's requests could change
+	sitePath := "/api/tenants/" + ta.String() + "/sites/" + sa.String()
+	var beforeSite []byte
+	require.Eventually(t, func() bool {
+		r := alice.call(t, http.MethodGet, sitePath, nil)
+		beforeSite = r.body
+		return r.status == http.StatusOK && r.json(t)["stellar_toml_checked_at"] != nil
+	}, time.Minute, 200*time.Millisecond, "stellar.toml check of site a")
 
 	guess := uuid.NewString()
 	cases := map[string][]string{
@@ -677,7 +686,7 @@ func testIsolation(t *testing.T, e *env) {
 
 	// nothing of tenant a changed
 	require.Equal(t, string(before), string(alice.call(t, http.MethodGet, "/api/tenants/"+ta.String()+"/members", nil).body))
-	require.Equal(t, string(beforeSite), string(alice.call(t, http.MethodGet, "/api/tenants/"+ta.String()+"/sites/"+sa.String(), nil).body))
+	require.Equal(t, string(beforeSite), string(alice.call(t, http.MethodGet, sitePath, nil).body))
 	list := bob.call(t, http.MethodGet, "/api/tenants", nil).json(t)["items"].([]any)
 	require.Len(t, list, 1)
 	require.Equal(t, tb.String(), list[0].(map[string]any)["id"])
