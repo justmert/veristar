@@ -267,10 +267,19 @@ the publish job stops when the variable is not set.
 - Trivy on the digests a deploy uses: the platform images of the newest `release-images.json` and
   every upstream digest pin.
 - `govulncheck` on both Go modules, `pnpm audit` on the workspace.
-- Every finding opens one issue labelled `security-finding` (an open issue for the same id is not
-  repeated), and the run posts one alert to `ALERT_WEBHOOK_URL`, the optional Discord webhook.
-  Without the webhook the run ends red after filing the issues, so GitHub's own failure notice
-  reaches the maintainers.
+- `scripts/supply-chain/report-findings.py` files what is left in issues labelled
+  `security-finding`:
+  - Image findings that `docs/security/advisories-reviewed.json` lists under
+    `upstream_image_findings` for the image's exact tag carry a recorded decision (section 8.1)
+    and are not filed.
+  - The remaining findings of one image share one issue, edited in place every hour. A finding
+    that several binaries of the image report (Grafana's bundled plugins) appears once. When an
+    image the run scanned has nothing undecided left, its issue is closed with a comment; when
+    the image scan job fails, no issue is closed.
+  - Every other finding (an advisory, govulncheck, `pnpm audit`) gets its own issue, keyed by its id.
+- The run posts one alert to `ALERT_WEBHOOK_URL`, the optional Discord webhook, naming only the
+  findings no issue listed before. Without the webhook the run ends red after filing the issues, so
+  GitHub's own failure notice reaches the maintainers.
 
 Dependabot (`.github/dependabot.yml`) opens update pull requests for Go, npm, Dockerfiles,
 compose files, GitHub Actions, OpenTofu providers, the Python and Rust examples and the Ansible
@@ -406,6 +415,44 @@ Pins moved together in `infra/ansible/vars/pins.yml`, the observability role def
 | Gatus 5.38.0 | `go-jose` CVE-2026-116587 (JWK parsing), `klauspost/compress` CVE-2026-63209, `x/image` CVE-2026-46603, `x/net` CVE-2026-78661 and CVE-2026-78669 (HTTP/2 SETTINGS) | govulncheck: the `x/image` and `x/net/html` symbols are not in the binary. `go-jose` is used only by Gatus's OIDC login, which `gatus.yml` does not configure. Gatus's port is not published: only the probe node's Caddy reaches it on the compose network, and Caddy speaks HTTP/1.1 to it, so no outside client can send it HTTP/2 frames; its own checks call only the platform's hosts. Revisit at 5.39. |
 | prometheus-nats-exporter 0.20.3 (newest) | Alpine `musl` CVE-2026-107891 (`regcomp`), `zlib` CVE-2026-85091 | The exporter is a statically linked Go binary (go1.27.3), so it loads neither library. Only the image's `/entrypoint.sh` runs under BusyBox `sh` (linked to musl) to `exec` the exporter, with no regular expression and no input from outside. Revisit at the next release. |
 
-The hourly `security.yml` workflow keeps filing these findings until a fixed release exists. A
-fixable high finding that is not in this table has no recorded decision and is handled under the
-24-hour rule ([../runbooks/security-patch.md](../runbooks/security-patch.md)).
+Each row is also an entry under `upstream_image_findings` in
+[advisories-reviewed.json](advisories-reviewed.json), with the image tag and the findings, so the
+hourly `security.yml` workflow does not file them. A fixable high finding that is not listed there
+has no recorded decision: the workflow files it, and it is handled under the 24-hour rule
+([../runbooks/security-patch.md](../runbooks/security-patch.md)).
+
+**Rechecked on 2026-11-15.** The hourly workflow reported the findings of the table above, 58
+distinct ones across nine images, and no other fixable critical or high finding in any upstream
+image or in the platform images of the newest release. No newer release fixes any of them. The
+candidates, scanned with Trivy 0.76.2:
+
+| Candidate | Result |
+|---|---|
+| Grafana 13.3.1 | The same 10 findings as 13.2.6, in the same bundled plugin binaries |
+| etcd 3.7.3 | The same `golang.org/x/net` CVE-2026-78661 as 3.6.16. The minor jump would need a Patroni compatibility check and fixes nothing |
+| Prometheus 3.16.0, Alertmanager 0.35.0 | The same `golang.org/x/net` CVE-2026-78661 |
+| Gatus, node_exporter, postgres_exporter, prometheus-nats-exporter, Umami | No release newer than the pin |
+
+`govulncheck -mode=binary` (v1.9.0, database of 2026-11-11) on the binaries extracted from the
+pinned digests gives the same answer as above: CVE-2026-78661 is a symbol finding in etcd and a
+module-only finding in Prometheus, Alertmanager, node_exporter, postgres_exporter and Gatus; the
+module-only findings of node_exporter and postgres_exporter are the ones the table names.
+
+**Umami repository advisory GHSA-vhf9-rcmp-v5fc (critical, published 2026-11-13).** An SQL
+injection in Umami's legacy reports API: `POST /api/reports/*` copies `filters[*].paramName` from
+the body into the SQL text, and a share token from `GET /api/share/<slug>` is enough to call it.
+The advisory names versions up to 3.4.0 and no patched version. The pinned 3.5.0 is not affected,
+and the route is not reachable from the internet:
+
+- 3.5.0 contains upstream commit `4fa9769519`, which derives the placeholder name from the
+  validated filter key (`src/lib/params.ts`).
+- `web.Caddyfile` refuses `/api/share*` and `/compat/*` for every method, and every write method
+  on `/api/*` except token verification and logout.
+- `TestWebCaddyLive`, subtest `reports api sql injection` (`make test-caddy-web`), proves both
+  against the pinned image. Caddy refuses the share route and all ten report routes under every
+  spelling Umami routes to the same handler. On the private network, the advisory's payloads run
+  as plain filters: a division by zero answers 200 and a 4 second `pg_sleep` returns at once.
+  The same payloads against Umami 3.4.0 answer 500 (`division by zero`) and take 4 seconds.
+
+No upgrade and no new deny rule is needed. The decision is the advisory's entry in
+`advisories-reviewed.json`.
