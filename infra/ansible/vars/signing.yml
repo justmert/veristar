@@ -4,13 +4,14 @@
 # every image verifies in the mode below.
 sa_signing_repository: justmert/veristar
 
-# key: the release key pair (decided 2026-11-13, while the
-# repository is private). release-images.yml signs with the private key
-# (github actions secret COSIGN_PRIVATE_KEY, a recovery copy in the
-# production sops file) and uploads nothing to the public rekor log;
-# release-cosign.pub beside this file is the public half.
-# keyless: github's oidc identity of release-images.yml at the tag, through
-# fulcio and rekor; the mode once the repository is public (set the
-# repository variable SIGNING_MODE=keyless and this value together).
-sa_signature_mode: key
+# keyless (since release v0.2.3, the repository is public): github's oidc
+# identity of release-images.yml at the tag, through fulcio and rekor. the
+# repository variable SIGNING_MODE=keyless makes the workflow sign this way;
+# the two change together.
+# key: the release key pair, the mode while the repository was private
+# (releases v0.1.0 to v0.2.2). the private key stays in the production sops
+# file for a workstation release (docs/security/supply-chain.md section 2.1);
+# release-cosign.pub beside this file is the public half. a deploy of such a
+# release needs -e sa_signature_mode=key.
+sa_signature_mode: keyless
 sa_signature_key: "{{ playbook_dir }}/../vars/release-cosign.pub"
