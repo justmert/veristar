@@ -16,6 +16,16 @@ here, before they take effect, as the processing terms require
 
 ## [Unreleased]
 
+### Security
+
+- Umami advisory GHSA-vhf9-rcmp-v5fc (SQL injection in the legacy reports
+  API) does not affect the pinned Umami 3.5.0, and the web Caddy refuses its
+  routes. A test against the real Caddy and Umami stack proves both
+  ([docs/security/supply-chain.md](docs/security/supply-chain.md), section 8.1).
+- The hourly security workflow files one issue per image, updated in place,
+  lists each finding once, and skips findings that carry a recorded decision
+  in `docs/security/advisories-reviewed.json`.
+
 ## [0.2.3] - 2026-11-15
 
 ### Changed
