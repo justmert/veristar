@@ -74,8 +74,9 @@ on a workstation. The steps, run from a clean checkout of the tag:
    --insecure-ignore-tlog=true`, and attach `release-images.json` to the GitHub release
    (`gh release create <tag> release-images.json`).
 
-The deploy verifies a workstation release exactly like a workflow release: the key, the
-manifest and the registry digests are the same.
+The deploy verifies a workstation release like a key-mode workflow release: the key, the
+manifest and the registry digests are the same. Production verifies in keyless mode since
+`v0.2.3`, so deploy a workstation release with `ANSIBLE_EXTRA='-e sa_signature_mode=key'`.
 
 **Release `v0.2.0` (2026-11-14).** Built by
 `scripts/supply-chain/release-workstation.sh v0.2.0 <work dir>` from a clean worktree at the tag
@@ -170,10 +171,10 @@ The run stops before any node is touched when:
   `platform_images`;
 - an upstream image in `vars/pins.yml` is not pinned by digest;
 - `cosign verify` fails for any digest in the signature mode of `vars/signing.yml`:
-  - `key` (the production mode): the committed public key
+  - `key` (releases `v0.1.0` to `v0.2.2`): the committed public key
     `infra/ansible/vars/release-cosign.pub`, with `--insecure-ignore-tlog`. This covers an unsigned
     digest and a signature by any other key;
-  - `keyless`: identity
+  - `keyless` (the production mode since `v0.2.3`): identity
     `https://github.com/justmert/veristar/.github/workflows/release-images.yml@refs/tags/<release>`
     and issuer `https://token.actions.githubusercontent.com`. This covers an unsigned digest and a
     signature from any other workflow, branch, tag or repository;
@@ -181,8 +182,9 @@ The run stops before any node is touched when:
 
 ### Signing modes
 
-`infra/ansible/vars/signing.yml` sets `sa_signature_mode: key`, and `release-images.yml` signs in
-the mode of the repository variable `SIGNING_MODE` (`key` when unset). The two modes:
+`infra/ansible/vars/signing.yml` sets `sa_signature_mode: keyless`, and `release-images.yml` signs in
+the mode of the repository variable `SIGNING_MODE` (`key` when unset; set to `keyless` since release
+`v0.2.3`). The two modes:
 
 | Step | Key mode | Keyless mode |
 |---|---|---|
@@ -212,7 +214,7 @@ Enterprise Cloud), and a keyless signature writes the image name and digest to t
 log. To switch, set the repository variable `SIGNING_MODE=keyless` and
 `sa_signature_mode: keyless` in `infra/ansible/vars/signing.yml`, cut a new release and deploy it.
 With public packages, then set `sa_registry_login: ""`, deploy (the `secrets` role signs every node
-out of the registry), and delete the pull token.
+out of the registry), and delete the pull token. Release `v0.2.3` made both switches.
 
 Release `v0.1.0` (2026-11-13) was the first release in key mode: all eleven images were built,
 passed the gate and were signed and attested with the release key, and the manifest job verified
