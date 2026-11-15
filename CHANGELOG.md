@@ -16,6 +16,23 @@ here, before they take effect, as the processing terms require
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-11-15
+
+### Changed
+
+- Nodes and the deploy controller pull the platform images from `ghcr.io`
+  without signing in, because the image packages are public. A deploy signs
+  every node out of the registry and removes the stored pull token; the token
+  is now needed only for private packages.
+
+### Security
+
+- Moved past the npm advisories GHSA-mrhx-c7xc-m3w5 (zod), GHSA-528h-pc64-c93x,
+  GHSA-mjw6-4jj6-33hc and GHSA-hqr4-qq8f-hg3x (stream-json),
+  GHSA-w5hq-g745-h8pq (uuid), GHSA-mh32-jxcr-mh9f and GHSA-r3h5-4585-7x3w
+  (astro). All of them were in test dependencies and example apps only; the
+  console, the website, the tracker and the images are unchanged by it.
+
 ## [0.2.2] - 2026-11-14
 
 ### Added
@@ -207,7 +224,8 @@ How to check a file against its release:
   starts tracking on `umami.start()`, the server-issued proof of work, and a
   byte-identical rebuild of every committed release.
 
-[Unreleased]: https://github.com/justmert/veristar/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/justmert/veristar/compare/v0.2.3...HEAD
+[0.2.3]: https://github.com/justmert/veristar/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/justmert/veristar/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/justmert/veristar/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/justmert/veristar/compare/v0.1.0...v0.2.0
