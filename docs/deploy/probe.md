@@ -39,7 +39,8 @@ No container of the project publishes a port. The host's edge Caddy owns ports 8
 the certificate from Let's Encrypt (HTTP-01) and reaches `veristar-probe-gatus` and
 `veristar-probe-prober` by name over the host's external Docker network `edge`. The prober and
 the collector reach Gatus over the project's own network. Every container runs with a read-only
-root file system, no capabilities, `no-new-privileges` and a memory limit.
+root file system and a 64 MiB `/tmp` tmpfs (Gatus's SQLite needs a temporary directory), no
+capabilities, `no-new-privileges` and a memory limit.
 
 The playbook variables `probe_bundle_edge_network` (default `edge`), `probe_bundle_site_file`
 (`veristar.caddy`) and `probe_bundle_uid` (`1000`, the uid that writes `slo-data/`) match the bundle to
