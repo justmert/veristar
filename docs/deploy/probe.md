@@ -98,23 +98,19 @@ tar -C .scratch/probe-bundle/<env> -cf - . | ssh <probe host> '
   sudo install -d -o 8080 -g 8080 -m 0700 /opt/veristar-probe/gatus-data'
 ```
 
-The SSH user on the host owns the bundle directory; its uid matches `probe_bundle_uid`. Public
-image packages need no sign-in; skip the next step. If the image registry requires sign-in (`sa_registry_login` and `sa_registry_login_user` in the
-inventory's `group_vars/all.yml`), log the host in with the read-only pull token from the SOPS
-file, through standard input:
+The SSH user on the host owns the bundle directory; its uid matches `probe_bundle_uid`. The image
+packages are public, so the host pulls without signing in to the registry. A host that signed in
+under an earlier version of this procedure still holds that credential in
+`/opt/veristar-probe/.docker`; remove it:
 
 ```sh
-sops --config infra/secrets/.sops.yaml decrypt --extract '["ghcr_pull_token"]' \
-  infra/secrets/<env>/secrets.enc.yaml \
-  | ssh <probe host> 'install -d -m 0700 /opt/veristar-probe/.docker &&
-      DOCKER_CONFIG=/opt/veristar-probe/.docker docker login <sa_registry_login> -u <sa_registry_login_user> --password-stdin'
+ssh <probe host> 'rm -rf /opt/veristar-probe/.docker'
 ```
 
 Start the project:
 
 ```sh
-ssh <probe host> 'cd /opt/veristar-probe &&
-  DOCKER_CONFIG=/opt/veristar-probe/.docker docker compose pull && docker compose up -d'
+ssh <probe host> 'cd /opt/veristar-probe && docker compose pull && docker compose up -d'
 ```
 
 Then add the site file to the edge Caddy. Validate before you reload, and remove the file if
