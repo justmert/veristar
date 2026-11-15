@@ -11,6 +11,7 @@ on:
   schedule:
     - cron: "23 1 * * *"
   # a single failed suite is rerun from the run page (re-run failed jobs)
+  # on demand: gh api -X POST repos/justmert/veristar/actions/workflows/e2e.yml/dispatches -f ref=main
   workflow_dispatch:
 
 permissions:

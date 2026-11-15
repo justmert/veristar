@@ -12,6 +12,7 @@ name: security
 on:
   schedule:
     - cron: "23 * * * *"
+  # on demand: gh api -X POST repos/justmert/veristar/actions/workflows/security.yml/dispatches -f ref=main
   workflow_dispatch:
 
 permissions:
