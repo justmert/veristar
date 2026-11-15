@@ -1,5 +1,5 @@
 {
-  "note": "umami repository advisories that were triaged against the pinned umami (docs/runbooks/security-patch.md). scripts/supply-chain/advisories.py reports every published advisory not listed here. add an entry only after triage, with the decision.",
+  "note": "triaged upstream findings (docs/runbooks/security-patch.md). umami_repository_advisories: umami repository advisories triaged against the pinned umami; scripts/supply-chain/advisories.py reports every published advisory not listed. upstream_image_findings: fixable critical and high trivy findings of an upstream image at an exact tag, as \"<id> <package>\"; scripts/supply-chain/report-findings.py files only the findings of an image that are not listed for its pinned tag, so a new tag is triaged again. add an entry only after triage, with the decision; the evidence is in docs/security/supply-chain.md section 8.1.",
   "umami_repository_advisories": [
     {
       "id": "GHSA-8www-cffh-4q98",
@@ -10,6 +10,152 @@
       "id": "GHSA-3xx8-742v-m4mq",
       "reviewed": "2026-11-13",
       "decision": "published 2026-06-30, before 3.5.0 (2026-11-12) was pinned. listed so the check reports only new advisories."
+    },
+    {
+      "id": "GHSA-vhf9-rcmp-v5fc",
+      "reviewed": "2026-11-15",
+      "decision": "sql injection in the reports api (POST /api/reports/*) through filters[*].paramName, unauthenticated with a share token from GET /api/share/<slug>; advisory range <= 3.4.0, no patched version stated. the pinned 3.5.0 carries the fix (upstream commit 4fa9769519, src/lib/params.ts derives the placeholder name from the validated key). not reachable from the internet either: web.Caddyfile refuses /api/share*, /compat/* and every write method on /api/*. TestWebCaddyLive 'reports api sql injection' proves both against the pinned image: caddy refuses the routes, and on the private network the advisory's payloads run as plain filters (200, no division by zero, no sleep), while umami 3.4.0 answers the same payloads with a database error and a 4 second delay. no upgrade or deny rule needed."
+    }
+  ],
+  "upstream_image_findings": [
+    {
+      "image": "ghcr.io/umami-software/umami:3.5.0",
+      "findings": [
+        "CVE-2026-109383 undici",
+        "CVE-2026-109869 undici",
+        "CVE-2026-19534 undici",
+        "CVE-2026-87018 undici"
+      ],
+      "reviewed": "2026-11-13",
+      "rechecked": "2026-11-15",
+      "decision": "undici http client findings only. umami makes no outbound request here (PRIVATE_MODE, DISABLE_TELEMETRY, DISABLE_UPDATES; TestWebPath checks no egress), and inbound requests are served by next.js, not undici. no newer umami release exists.",
+      "revisit": "the next umami release, through make umami-upgrade"
+    },
+    {
+      "image": "grafana/grafana:13.2.6",
+      "findings": [
+        "CVE-2026-111943 stdlib",
+        "CVE-2026-21728 github.com/grafana/tempo",
+        "CVE-2026-28377 github.com/grafana/tempo",
+        "CVE-2026-78661 golang.org/x/net",
+        "CVE-2026-78667 stdlib",
+        "CVE-2026-78669 golang.org/x/net",
+        "CVE-2026-78669 stdlib",
+        "CVE-2026-97031 stdlib"
+      ],
+      "reviewed": "2026-11-13",
+      "rechecked": "2026-11-15",
+      "decision": "every finding is in a bundled data source plugin binary under data/plugins-bundled. the only provisioned data source is prometheus, grafana listens on 127.0.0.1 only, sign-up and anonymous access are off. 13.3.1, the newest release, carries the same findings.",
+      "revisit": "13.2.7, or a 13.x release without these findings"
+    },
+    {
+      "image": "natsio/prometheus-nats-exporter:0.20.3",
+      "findings": [
+        "CVE-2026-107891 musl",
+        "CVE-2026-107891 musl-utils",
+        "CVE-2026-85091 zlib"
+      ],
+      "reviewed": "2026-11-13",
+      "rechecked": "2026-11-15",
+      "decision": "alpine musl and zlib packages; the exporter is a statically linked go binary that loads neither, and the entrypoint shell takes no outside input. newest release.",
+      "revisit": "the next release"
+    },
+    {
+      "image": "prom/alertmanager:v0.34.2",
+      "findings": [
+        "CVE-2026-78661 golang.org/x/net"
+      ],
+      "reviewed": "2026-11-13",
+      "rechecked": "2026-11-15",
+      "decision": "govulncheck -mode=binary: the x/net/html symbols are not in the binary. 0.35.0 carries the same finding.",
+      "revisit": "a release built with golang.org/x/net 0.62.0"
+    },
+    {
+      "image": "prom/node-exporter:v1.12.1",
+      "findings": [
+        "CVE-2026-111943 stdlib",
+        "CVE-2026-33818 stdlib",
+        "CVE-2026-39821 stdlib",
+        "CVE-2026-46600 stdlib",
+        "CVE-2026-56851 golang.org/x/text",
+        "CVE-2026-56853 stdlib",
+        "CVE-2026-56854 golang.org/x/crypto",
+        "CVE-2026-56858 stdlib",
+        "CVE-2026-56859 stdlib",
+        "CVE-2026-56860 stdlib",
+        "CVE-2026-56862 stdlib",
+        "CVE-2026-78661 golang.org/x/net",
+        "CVE-2026-78667 stdlib",
+        "CVE-2026-78669 golang.org/x/net",
+        "CVE-2026-78669 stdlib",
+        "CVE-2026-97031 stdlib"
+      ],
+      "reviewed": "2026-11-13",
+      "rechecked": "2026-11-15",
+      "decision": "govulncheck -mode=binary: x/net/html, x/crypto, x/text, CVE-2026-46600 and CVE-2026-78667 are not in the binary; the rest are denial of service in the http server, tls and parsers or an x509 client issue. the exporter listens on the private address only, without tls, and only prometheus scrapes it. newest release.",
+      "revisit": "the next node_exporter release"
+    },
+    {
+      "image": "prom/prometheus:v3.15.1",
+      "findings": [
+        "CVE-2026-78661 golang.org/x/net"
+      ],
+      "reviewed": "2026-11-13",
+      "rechecked": "2026-11-15",
+      "decision": "govulncheck -mode=binary: the x/net/html symbols are not in the binary. 3.16.0 carries the same finding.",
+      "revisit": "a release built with golang.org/x/net 0.62.0"
+    },
+    {
+      "image": "prometheuscommunity/postgres-exporter:v0.20.1",
+      "findings": [
+        "CVE-2026-111943 stdlib",
+        "CVE-2026-33818 stdlib",
+        "CVE-2026-39821 stdlib",
+        "CVE-2026-39822 stdlib",
+        "CVE-2026-46600 golang.org/x/net",
+        "CVE-2026-46600 stdlib",
+        "CVE-2026-56851 golang.org/x/text",
+        "CVE-2026-56852 golang.org/x/text",
+        "CVE-2026-56853 stdlib",
+        "CVE-2026-56854 golang.org/x/crypto",
+        "CVE-2026-56858 stdlib",
+        "CVE-2026-56859 stdlib",
+        "CVE-2026-56860 stdlib",
+        "CVE-2026-56862 stdlib",
+        "CVE-2026-78661 golang.org/x/net",
+        "CVE-2026-78667 stdlib",
+        "CVE-2026-78669 golang.org/x/net",
+        "CVE-2026-78669 stdlib",
+        "CVE-2026-97031 stdlib"
+      ],
+      "reviewed": "2026-11-13",
+      "rechecked": "2026-11-15",
+      "decision": "govulncheck -mode=binary: x/net/html, x/crypto, x/text, CVE-2026-39821, -39822, -56859 and -78667 are not in the binary. the exporter is on the private address of the postgresql hosts only, scraped by prometheus, and connects only to postgresql as a pg_monitor role. newest release.",
+      "revisit": "the next release"
+    },
+    {
+      "image": "quay.io/coreos/etcd:v3.6.16",
+      "findings": [
+        "CVE-2026-78661 golang.org/x/net"
+      ],
+      "reviewed": "2026-11-13",
+      "rechecked": "2026-11-15",
+      "decision": "x/net html parser denial of service; the symbol is in the binary but no etcd api takes html. etcd ports are on the private address only, firewalled to the private network, and patroni is the only client. 3.7.3, the newest release, carries the same finding, so the minor jump would not fix it.",
+      "revisit": "3.6.17, or a release built with golang.org/x/net 0.62.0"
+    },
+    {
+      "image": "twinproduction/gatus:v5.38.0",
+      "findings": [
+        "CVE-2026-116587 github.com/go-jose/go-jose/v4",
+        "CVE-2026-46603 golang.org/x/image",
+        "CVE-2026-63209 github.com/klauspost/compress",
+        "CVE-2026-78661 golang.org/x/net",
+        "CVE-2026-78669 golang.org/x/net"
+      ],
+      "reviewed": "2026-11-13",
+      "rechecked": "2026-11-15",
+      "decision": "govulncheck -mode=binary: the x/image and x/net/html symbols are not in the binary. go-jose is used only by the oidc login, which gatus.yml does not configure. the gatus port is not published; only the probe caddy reaches it over http/1.1, so no outside client sends it http/2 frames. newest release.",
+      "revisit": "5.39"
     }
   ]
 }
