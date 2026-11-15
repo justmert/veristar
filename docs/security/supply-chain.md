@@ -200,7 +200,8 @@ no build provenance attestation is produced. The private key is held in the Acti
 (`cosign_private_key`, `cosign_password`); rotation is in
 [../runbooks/secret-rotation.md](../runbooks/secret-rotation.md).
 
-When the registry packages need a sign-in, every node signs in to `ghcr.io` with a classic token
+The production packages are public, so nodes and the controller pull without signing in
+(`sa_registry_login: ""`). When the registry packages need a sign-in, every node signs in to `ghcr.io` with a classic token
 that has `read:packages` only (`ghcr_pull_token`, `sa_registry_login` in the inventory,
 `roles/secrets/tasks/registry.yml`, credential at `/root/.docker/config.json`, mode 0600). The
 controller gives cosign the same token through a docker config made for that run only
@@ -210,7 +211,8 @@ controller gives cosign the same token through a docker config made for that run
 Enterprise Cloud), and a keyless signature writes the image name and digest to the public Rekor
 log. To switch, set the repository variable `SIGNING_MODE=keyless` and
 `sa_signature_mode: keyless` in `infra/ansible/vars/signing.yml`, cut a new release and deploy it.
-With public packages, then set `sa_registry_login: ""` and delete the pull token.
+With public packages, then set `sa_registry_login: ""`, deploy (the `secrets` role signs every node
+out of the registry), and delete the pull token.
 
 Release `v0.1.0` (2026-11-13) was the first release in key mode: all eleven images were built,
 passed the gate and were signed and attested with the release key, and the manifest job verified
