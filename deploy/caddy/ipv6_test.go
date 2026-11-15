@@ -28,10 +28,29 @@ type composeNetwork struct {
 
 var jinjaExpr = regexp.MustCompile(`\{\{.*?\}\}`)
 
+// jinjaList matches an expression that builds a list from literals, such as
+// the core caddy's networks: {{ ['default', 'public'] + (['edge'] if core_node else []) }}
+var (
+	jinjaList    = regexp.MustCompile(`\{\{\s*\[.*?\}\}`)
+	jinjaLiteral = regexp.MustCompile(`'([^']*)'`)
+)
+
+// listOfLiterals turns a list expression into a yaml flow list of every
+// string literal in it. for the networks above that is the union of both
+// branches, which is what a converged node (every production node) joins.
+func listOfLiterals(expr string) string {
+	var names []string
+	for _, m := range jinjaLiteral.FindAllStringSubmatch(expr, -1) {
+		names = append(names, m[1])
+	}
+	return "[" + strings.Join(names, ", ") + "]"
+}
+
 // templateBlock returns the lines of a compose template from the line equal
 // to start up to the next line indented at most as deep, with jinja
-// statements and merge keys dropped and every expression replaced by a plain word; the
-// tested keys hold no expression that matters to docker's forwarding.
+// statements and merge keys dropped, a list built from literals replaced by
+// those literals and every other expression replaced by a plain word; the
+// tested keys hold no other expression that matters to docker's forwarding.
 func templateBlock(t *testing.T, text, start string) string {
 	t.Helper()
 	lines := strings.Split(text, "\n")
@@ -54,6 +73,7 @@ func templateBlock(t *testing.T, text, start string) string {
 		if trimmed != "" && !strings.HasPrefix(trimmed, "#") && len(l)-len(strings.TrimLeft(l, " ")) <= depth {
 			break
 		}
+		l = jinjaList.ReplaceAllStringFunc(l, listOfLiterals)
 		out = append(out, strings.TrimPrefix(jinjaExpr.ReplaceAllString(l, "x"), strings.Repeat(" ", depth)))
 	}
 	return strings.Join(out, "\n")
