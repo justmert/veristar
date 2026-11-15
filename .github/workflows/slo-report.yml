@@ -11,6 +11,7 @@ name: slo-report
 on:
   schedule:
     - cron: "30 0 * * *"
+  # on demand: gh api -X POST repos/justmert/veristar/actions/workflows/slo-report.yml/dispatches -f ref=main
   workflow_dispatch:
     inputs:
       day:
