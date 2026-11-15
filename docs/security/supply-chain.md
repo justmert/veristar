@@ -53,7 +53,7 @@ A release can also be built and signed on a workstation, with the same gate and 
 the workflow's key mode (section 3). `scripts/supply-chain/release-workstation.sh <tag> <work dir>`
 runs every step below; it refuses a checkout that is not exactly at the tag or that has local
 changes. Release `v0.1.0` was built by `release-images.yml`; `v0.2.0`, `v0.2.1` and `v0.2.2` were built
-on a workstation. The steps, run from a clean checkout of the tag:
+on a workstation; `v0.2.3` was built by `release-images.yml` in keyless mode. The steps, run from a clean checkout of the tag:
 
 1. **Build and push** each image of the matrix in `release-images.yml` with the same Dockerfile,
    context and build arguments (`VERSION=<tag>`, `DBIP_MONTH` from the tag's commit month,
@@ -128,7 +128,7 @@ before it touched a node.
 | `prober` | `v0.2.1` | `sha256:63c87826ade03405133351c2487806d6c086c6a02c5659cce620aac20917d9b3` |
 | `replayer` | `v0.2.1` | `sha256:6b996c7f140c7b677b0ee29b08f5f948f81874bdbbb4ac16210a752224af66e6` |
 
-**Release `v0.2.2` (2026-11-14), the release production runs.** Built the same way by
+**Release `v0.2.2` (2026-11-14).** Built the same way by
 `scripts/supply-chain/release-workstation.sh v0.2.2 <work dir>` from a clean worktree at the tag
 (commit `e57b724` on `main`. Since `v0.2.1` it adds the console redesign with the light theme,
 account deletion with `DELETE /api/me` and migration 00031, the Umami theme's light mode, and the
@@ -152,6 +152,33 @@ touched a node.
 | `postgres-ha` | `18.7-v0.2.2` | `sha256:ac80c5ba3ca0ab798bfc5d40a00da5cb84fa09fdf0457d06d5f9ed158cddd6e5` (same as `v0.2.0`) |
 | `prober` | `v0.2.2` | `sha256:b80c2df685a5edbe6d82a64d141b91349b4c2799c52a31385be5f994d624d5dd` |
 | `replayer` | `v0.2.2` | `sha256:75bf539d3b794ab7b29db45008efe24ee0377897f03d63ef4f37aa73d3af2458` |
+
+**Release `v0.2.3` (2026-11-15), the release production runs.** The first release after the
+repository became public, built by `release-images.yml` on the tag push (tag `v0.2.3` at commit
+`5be16fb` on `main`) in keyless mode, from 02:14:41 to 02:20:43 UTC: eleven images gated by
+`scan-image.sh` (no fixable critical or high finding), signed with the workflow's Fulcio
+certificate and logged in Rekor, with build provenance and SBOM attestations; the manifest job
+verified every digest with the identity
+`https://github.com/justmert/veristar/.github/workflows/release-images.yml@refs/tags/v0.2.3` and
+attached `release-images.json`. The packages are public: every digest verified from a docker
+configuration without credentials. Since `v0.2.2` it adds the anonymous image pulls with the
+registry sign-out of every node, keyless verification in `vars/signing.yml`, and the npm advisory
+fixes in test and example dependencies, which leave the console, website and tracker bundles
+byte-identical.
+
+| Image | Tag | Digest |
+|---|---|---|
+| `caddy` | `v0.2.3` | `sha256:36d14aa5273787ce7ac503fec870a6ed7a1f8b9c4f3e35a0d8effac5b3427ea1` |
+| `collector` | `v0.2.3` | `sha256:e0e4e7ae34b0d7515ad1f659d4c445d811463d7ae7d5f0bacd44738b5282a6ce` |
+| `console` | `v0.2.3` | `sha256:2a8fc19953f7ce14bfa7a55f1378a78f26f6988721c72c1ed275924a26ebdd14` |
+| `controlplane` | `v0.2.3` | `sha256:44c0a3c40937e73a127c6d53bb0dbc147a137804bea924cb51c826a69eb0dfd3` |
+| `gateway` | `v0.2.3` | `sha256:f05994378e8361135244180bf754dc04dee77fa30e170aa95e8cff186bb3f288` |
+| `jobs` | `v0.2.3` | `sha256:732fe21fe7efcdf1fe3473533568e01e009389ecfdbc5303ae38fa521ccb8e2b` |
+| `metricswriter` | `v0.2.3` | `sha256:12e4de0e5c4e839ea1b0d075406dedce8d17afa84be6716875a4cf3f46de5a08` |
+| `platformctl` | `v0.2.3` | `sha256:a9db7c36747bb53ffcc991a964a59ba5701fc09a4aa13f1b5560a215bcd96587` |
+| `postgres-ha` | `18.7-v0.2.3` | `sha256:d07c1cbaf0709571bf4d185d2f43ed0c9f4629da8e4de4ccef511d815f3ac84a` |
+| `prober` | `v0.2.3` | `sha256:8712c6a2c1da43b52a797824719b3a54fea151adeb61703671abf4313c151ae8` |
+| `replayer` | `v0.2.3` | `sha256:f2830f57443201b2543a03207ee2ddec08183f366b16bb6c28fb0b416f8cdac4` |
 
 ## 3. Deploy-time verification (every playbook that pulls images)
 
