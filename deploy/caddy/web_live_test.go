@@ -141,6 +141,7 @@ func TestWebCaddyLive(t *testing.T) {
 	l := startLiveWeb(t)
 	t.Run("deny list", func(t *testing.T) { webDenyList(t, l) })
 	t.Run("api method allowlist", func(t *testing.T) { webAPIMethodAllowlist(t, l) })
+	t.Run("reports api sql injection", func(t *testing.T) { webReportsInjection(t, l) })
 	t.Run("allowed reads", func(t *testing.T) { webAllowedReads(t, l) })
 	t.Run("sso rules", func(t *testing.T) { webSSORules(t, l) })
 	t.Run("login redirect", func(t *testing.T) { webLoginRedirect(t, l) })
@@ -319,6 +320,78 @@ func webAPIMethodAllowlist(t *testing.T, l *liveWeb) {
 	require.NoError(t, json.Unmarshal([]byte(r.body), &me))
 	require.Equal(t, l.userID, me.ID)
 	requireWebHeaders(t, r, "verify")
+}
+
+// GHSA-vhf9-rcmp-v5fc: umami up to 3.4.0 copied filters[*].paramName from the
+// body of POST /api/reports/* into the sql text, and a share token from GET
+// /api/share/<slug> was enough to call it. two layers keep it out: caddy
+// refuses the share route and every write method on /api/* and /compat/*,
+// and the pinned umami derives the placeholder name from the filter key
+// (upstream commit 4fa9769519), which the private-network requests below
+// prove against the running image.
+func webReportsInjection(t *testing.T, l *liveWeb) {
+	payload := func(paramName string) string {
+		b, err := json.Marshal(map[string]any{
+			"websiteId": l.website,
+			"type":      "breakdown",
+			"parameters": map[string]any{
+				"startDate": "2020-01-01T00:00:00.000Z", "endDate": "2030-01-01T00:00:00.000Z",
+				"fields": []string{"path"},
+			},
+			"filters": map[string]any{
+				"entry": map[string]any{"name": "entry", "value": "x", "operator": "c", "paramName": paramName},
+			},
+		})
+		require.NoError(t, err)
+		return string(b)
+	}
+	sleep := payload("p}} or 1=(select 1 from pg_sleep(4)) --")
+
+	// through caddy: the token route, then every report route under every
+	// spelling umami routes to the same handler
+	shareHdr := map[string]string{"x-umami-share-token": "t0ken", "x-umami-share-context": "1"}
+	for _, p := range []string{"/api/share/someslug1", "/teams/" + l.teamID + "/api/share/someslug1", "/API/SHARE/someslug1"} {
+		for _, m := range []string{http.MethodGet, http.MethodHead} {
+			requireCaddyRefusal(t, l.do(t, m, p, nil, ""), m, p)
+		}
+	}
+	reports := []string{"breakdown", "attribution", "funnel", "goal", "heatmap", "journey", "performance", "retention", "revenue", "utm"}
+	for _, r := range reports {
+		for _, p := range []string{
+			"/api/reports/" + r, "/api/reports/" + r + "/", "/API/Reports/" + r,
+			"/teams/" + l.teamID + "/api/reports/" + r, "/compat/api/reports/" + r, "/api/%72eports/" + r,
+		} {
+			for _, m := range []string{http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete} {
+				requireCaddyRefusal(t, l.do(t, m, p, shareHdr, sleep), m, p)
+			}
+		}
+	}
+
+	// on the private network, with the view-only member's token: the pinned
+	// umami ignores the client's paramName. an injected expression would
+	// raise division by zero (500) or hold the answer for the sleep
+	post := func(body string) (int, string, time.Duration) {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, l.s.URL.String()+"/api/reports/breakdown", strings.NewReader(body))
+		require.NoError(t, err)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+l.token.Reveal())
+		start := time.Now()
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		b, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		return resp.StatusCode, string(b), time.Since(start)
+	}
+	code, body, _ := post(payload("p}} or 1/0=1 --"))
+	require.Equal(t, http.StatusOK, code, "division by zero payload: %.300s", body)
+	var rows []any
+	require.NoError(t, json.Unmarshal([]byte(body), &rows), "breakdown answers an array: %.300s", body)
+	code, body, took := post(sleep)
+	require.Equal(t, http.StatusOK, code, "sleep payload: %.300s", body)
+	require.Less(t, took, 3*time.Second, "the sleep payload ran in the database")
 }
 
 // the reads a tenant dashboard makes (docs/reference/umami-contract.md) work
