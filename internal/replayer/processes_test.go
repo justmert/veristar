@@ -36,8 +36,9 @@ func TestUmamiProcessesAgreeOnSessionAndVisit(t *testing.T) {
 		t.Fatal(err)
 	}
 	vt := newVT(t)
-	// two hours back, so every timestamp below lies in the past
-	h := time.Now().UTC().Truncate(time.Hour).Add(-2 * time.Hour)
+	// two hours back, so every timestamp below lies in the past, and the
+	// five events (135 minutes) inside one utc day
+	h := pastHour(2*time.Hour, 135*time.Minute)
 	send := func(c *umami.Client, at time.Time, path, cache string) umami.SendResult {
 		t.Helper()
 		res, err := c.Send(testCtx(t, time.Minute), umami.SendRequest{
@@ -97,7 +98,8 @@ func TestReplayerSpreadsVisitorsOverUmamiProcesses(t *testing.T) {
 	st := startUmamiProcesses(t, 2, nil)
 	env := startNATS(t)
 	s := newSite(t, st.Admin)
-	h := time.Now().UTC().Truncate(time.Hour).Add(-4 * time.Hour)
+	// the three events of a visitor span 140 minutes inside one utc day
+	h := pastHour(4*time.Hour, 140*time.Minute)
 	var evs []*events.WebEvent
 	for i := range visitors {
 		vt := newVT(t)
