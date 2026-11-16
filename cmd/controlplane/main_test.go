@@ -36,7 +36,7 @@ func TestServeNamesEveryMissingKey(t *testing.T) {
 	code := run(context.Background(), nil, config.FromMap(nil), &stdout, &stderr)
 	require.Equal(t, 1, code)
 	for _, k := range []string{
-		"CONTROLPLANE_ADDR", "CONTROLPLANE_OPS_ADDR", "CONSOLE_ORIGIN", "INGEST_ORIGIN", "WEB_ORIGIN",
+		"CONTROLPLANE_ADDR", "CONTROLPLANE_OPS_ADDR", "CONSOLE_ORIGIN", "INGEST_ORIGIN",
 		"GITHUB_CLIENT_ID", "GITHUB_CLIENT_SECRET", "GITHUB_REDIRECT_URL", "OAUTH_STATE_KEY",
 		"OPERATOR_GITHUB_IDS", "REPORT_SIGNING_SEED", "REPORT_SIGNING_KEY", "UMAMI_URL", "UMAMI_ADMIN_PASSWORD", "UMAMI_USER_PASSWORD_KEY",
 		"TRACKER_RELEASE_DIR", "NATS_URL", "PLATFORM_DB_HOST", "PLATFORM_DB_CP_SYSTEM_PASSWORD",
@@ -118,7 +118,6 @@ func TestServeStartsAndStops(t *testing.T) {
 		"CONTROLPLANE_OPS_ADDR":       ops,
 		"CONSOLE_ORIGIN":              "http://" + addr,
 		"INGEST_ORIGIN":               "http://127.0.0.1:8080",
-		"WEB_ORIGIN":                  "http://127.0.0.1:3000",
 		"GITHUB_CLIENT_ID":            "Iv1.cmdtest",
 		"GITHUB_CLIENT_SECRET":        "cmd-test-secret",
 		"GITHUB_REDIRECT_URL":         "http://" + addr + "/api/auth/github/callback",
