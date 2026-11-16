@@ -244,10 +244,13 @@ export function TenantDetail({ detail }: { detail: OperatorTenantDetail }) {
             <ul className="flex flex-col gap-1.5 text-small">
               {detail.members.map((m) => (
                 <li
-                  key={m.github_id ?? m.stellar_address ?? m.display_name}
+                  key={m.github_id ?? m.stellar_address ?? m.passkey_address ?? m.display_name}
                   className="flex flex-wrap items-baseline gap-x-2"
                 >
-                  <span className="font-medium text-fg" title={m.stellar_address ?? undefined}>
+                  <span
+                    className="font-medium text-fg"
+                    title={m.stellar_address ?? m.passkey_address ?? undefined}
+                  >
                     {m.display_name}
                   </span>
                   <span className="text-fg-3">

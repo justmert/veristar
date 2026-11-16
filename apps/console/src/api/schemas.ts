@@ -29,13 +29,22 @@ export type SiteStatus = z.infer<typeof siteStatus>;
 // the checksum too.
 export const stellarAddress = z.string().regex(/^G[A-Z2-7]{55}$/);
 
-// how a person signs in (4.1.8): a github account, a stellar account, or
-// both. display_name is the github login, or the short address of a
-// wallet-only account.
+// a soropass passkey account (4.1.9): a contract address, C and 55 base32
+// characters
+export const passkeyAddress = z.string().regex(/^C[A-Z2-7]{55}$/);
+
+// what an invite or a member form names a stellar person by: a wallet's
+// G-address or a passkey account's C-address
+export const personAddress = z.string().regex(/^[GC][A-Z2-7]{55}$/);
+
+// how a person signs in (4.1.8): a github account, a stellar wallet, a
+// passkey, or any of them linked. display_name is the github login, or the
+// short address of an account without one.
 const identityFields = {
   github_id: z.number().int().positive().nullable(),
   github_login: z.string().min(1).nullable(),
   stellar_address: stellarAddress.nullable(),
+  passkey_address: passkeyAddress.nullable(),
   display_name: z.string(),
 };
 
@@ -132,9 +141,14 @@ export const member = z.object({
 });
 export type Member = z.infer<typeof member>;
 
+// an invite names a github account or a stellar address, which is a
+// wallet's G-address or a passkey account's C-address
 export const invite = z.object({
   id,
-  ...identityFields,
+  github_id: z.number().int().positive().nullable(),
+  github_login: z.string().min(1).nullable(),
+  stellar_address: personAddress.nullable(),
+  display_name: z.string(),
   role,
   created_by: id,
   created_at: time,
@@ -1071,3 +1085,12 @@ export const walletChallenge = z.object({
 export type WalletChallenge = z.infer<typeof walletChallenge>;
 
 export const walletVerified = z.object({ return_to: z.string() });
+
+// 4.1.9 passkey challenge; the verification answers walletVerified's shape
+export const passkeyChallenge = z.object({
+  challenge: z.string().min(1),
+  rp_id: z.string().min(1),
+  timeout_ms: z.number().int().positive(),
+  expires_at: time,
+});
+export type PasskeyChallenge = z.infer<typeof passkeyChallenge>;
