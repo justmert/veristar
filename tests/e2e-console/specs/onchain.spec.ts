@@ -180,7 +180,7 @@ test("an operator sees the column, exports the rows on screen and reads the deta
     const page = await ctx.newPage();
     await signIn(page, OPERATOR);
     await page.goto(`${APP}/operator/web?q=${encodeURIComponent(`On-chain ${run}`)}`);
-    await expect(page.getByRole("columnheader", { name: "On-chain" })).toBeVisible();
+    await expect(page.getByRole("columnheader", { name: "On-chain", exact: true })).toBeVisible();
     const row = page.locator(`tr[data-tenant="${tenant.id}"]`);
     await expect(row.locator("[data-col=onchain]")).toContainText("0/1 verified");
 
