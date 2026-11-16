@@ -73,6 +73,11 @@ A new route adds its error codes to section 2.4 and its audit actions to section
   `Path=/api`, `Max-Age=300`. Value: AES-256-GCM sealed (key `OAUTH_STATE_KEY`,
   additional data `sa_stellar/v1`) JSON `{nonce, address, purpose, user_id,
   return_to, exp}`. Every verification clears it.
+- **Passkey challenge cookie.** `sa_passkey`, only between a passkey challenge
+  and its verification (4.1.9): the attributes of `sa_stellar`. Value:
+  AES-256-GCM sealed (key `OAUTH_STATE_KEY`, additional data `sa_passkey/v1`)
+  JSON `{challenge, purpose, user_id, return_to, exp}`. Every verification
+  clears it.
 - A route marked **session** answers 401 `unauthenticated` without a valid session.
   A route marked **public** needs none.
 
@@ -206,17 +211,18 @@ List routes answer:
 | 403 | `owner_required` | the action needs role `owner` |
 | 403 | `terms_not_accepted` | the tenant has not accepted the current terms version (4.2.6) |
 | 403 | `operator_required` | an `/api/operator` route without operator rights (5.1) |
-| 403 | `challenge_invalid` | a signed wallet challenge that does not verify: no `sa_stellar` cookie, a challenge of another console, another network, another account, another purpose or another session, or a signature that is not the account's (4.1.7) |
-| 403 | `challenge_expired` | the wallet challenge is older than 5 minutes (4.1.7) |
-| 403 | `challenge_used` | the wallet challenge was verified before (4.1.7) |
+| 403 | `challenge_invalid` | a signed wallet challenge that does not verify: no `sa_stellar` cookie, a challenge of another console, another network, another account, another purpose or another session, or a signature that is not the account's (4.1.7); or a passkey answer that does not verify: no `sa_passkey` cookie, another challenge, origin, relying party, purpose or session, no user verification, or a signature that is not the passkey's key (4.1.9) |
+| 403 | `challenge_expired` | the wallet or passkey challenge is older than 5 minutes (4.1.7, 4.1.9) |
+| 403 | `challenge_used` | the wallet or passkey challenge was verified before (4.1.7, 4.1.9) |
+| 403 | `passkey_unknown` | a passkey answer without a public key names a credential that no live account holds (4.1.9) |
 | 403 | `scope_forbidden` | a machine API key scoped to one tenant names another tenant (9.3) |
 | 404 | `not_found` | unknown id, malformed id, or not a member |
 | 405 | `method_not_allowed` | method not defined for the path |
 | 409 | `slug_taken` | `cp.tenants.slug` already exists |
 | 409 | `already_member` | invite or add for a user who is a member |
-| 409 | `invite_exists` | an open invite for that GitHub account or Stellar address exists (`invites_tenant_github_idx`, `invites_tenant_stellar_idx`) |
-| 409 | `identity_in_use` | linking a GitHub account or Stellar address that signs in to another account (4.1.8) |
-| 409 | `identity_already_linked` | linking a GitHub account or Stellar address to an account that already has one of that kind (4.1.8) |
+| 409 | `invite_exists` | an open invite for that GitHub account or Stellar address (G or C) exists (`invites_tenant_github_idx`, `invites_tenant_stellar_idx`) |
+| 409 | `identity_in_use` | linking a GitHub account, Stellar address or passkey that signs in to another account (4.1.8), or a new passkey whose credential id another account holds (4.1.9) |
+| 409 | `identity_already_linked` | linking a GitHub account, Stellar address or passkey to an account that already has one of that kind (4.1.8) |
 | 409 | `last_sign_in_method` | unlinking the only sign-in method of an account (4.1.8) |
 | 409 | `last_owner` | removing or demoting the last owner |
 | 409 | `sole_owner` | an account deletion while the account is the only owner of a tenant that is not `removed`; the envelope lists those tenants in `tenants` (4.1.6) |
@@ -261,20 +267,27 @@ List routes answer:
   "github_id": 1234567,
   "github_login": "octocat",
   "stellar_address": null,
+  "passkey_address": null,
   "display_name": "octocat",
   "is_operator": false
 }
 ```
 
-An account signs in with GitHub, with a Stellar wallet, or with both (4.1.8).
-`github_id` and `github_login` are `null` for a wallet-only account;
-`stellar_address` (a G-address) is `null` for a GitHub-only one. `display_name`
-is the GitHub login, or the first and last four characters of the address with
-an ellipsis between (`GCB6…WOQN`) for a wallet-only account.
+An account signs in with GitHub, with a Stellar wallet, with a passkey, or with
+several of them linked (4.1.8). Each identity is `null` when the account does
+not hold it: `github_id` and `github_login`; `stellar_address`, the G-address of
+a wallet (4.1.7); `passkey_address`, the C-address of the soropass account of a
+passkey (4.1.9). `display_name` is the GitHub login, or the first and last four
+characters of an address with an ellipsis between (`GCB6…WOQN`), the wallet's
+before the passkey's, for an account without GitHub.
+
+The Member object carries the same identity fields. The Invite object carries
+`github_id`, `github_login`, `stellar_address` and `display_name`; its
+`stellar_address` is a G-address or a C-address (4.2.5).
 
 `is_operator` is set at every sign-in, link and unlink from `OPERATOR_GITHUB_IDS`
-and `OPERATOR_STELLAR_ADDRESSES` (4.5): true when the account's GitHub id or
-Stellar address is listed, false otherwise, so removing an entry takes effect
+and `OPERATOR_STELLAR_ADDRESSES` (4.5): true when the account's GitHub id,
+Stellar address or passkey address is listed, false otherwise, so removing an entry takes effect
 at that person's next sign-in. The operator routes of section 5 build on it.
 
 **Tenant** (`cp.tenants` plus the caller's role):
@@ -550,7 +563,7 @@ Session.
 ```json
 {
   "user": { "id": "uuid", "github_id": 1234567, "github_login": "octocat", "stellar_address": null,
-            "display_name": "octocat", "is_operator": false },
+            "passkey_address": null, "display_name": "octocat", "is_operator": false },
   "tenants": [
     { "id": "uuid", "slug": "stellar-dex", "name": "Stellar DEX", "status": "active", "role": "owner",
       "accepted_terms_version": "2026-11-12-draft.1", "terms_current": true }
@@ -591,13 +604,14 @@ the rows of every tenant the caller belongs to and those tenants' owner rows:
 1. Every membership of the caller is deleted. The membership trigger of
    migration `00030` revokes the caller's MCP credentials for each tenant
    (`mcp_credential.revoke`, reason `member_removed`).
-2. Every invite addressed to the caller's GitHub account id or Stellar address
-   is deleted.
+2. Every invite addressed to the caller's GitHub account id, Stellar address or
+   passkey address is deleted.
 3. The caller's MCP credentials and OAuth codes (section 12) are deleted, with
    their tokens.
 4. Every session of the caller is deleted, in every browser.
 5. The `cp.users` row is emptied (migrations `00031` and `00034`): `github_id`,
-   `github_login`, `stellar_address` and `umami_username` become null,
+   `github_login`, `stellar_address`, `passkey_address`, `passkey_credential_id`,
+   `passkey_public_key` and `umami_username` become null,
    `is_operator` false, `last_login_at` null, and `deleted_at` is set. The row keeps its `id`, which tenants, sites,
    tokens, keys, erasure requests, removals and audit rows name as their
    creator or actor.
@@ -607,13 +621,16 @@ the rows of every tenant the caller belongs to and those tenants' owner rows:
 7. One audit row `account.delete` is written: actor and target `user:<id>`,
    detail with the memberships removed (`tenant_id` and `role` each), the
    counts of invites, MCP credentials and sessions deleted, `was_operator` and
-   `umami_user_deleted`. It names no GitHub id, login or Stellar address.
+   `umami_user_deleted`. It names no GitHub id, login, Stellar address or
+   passkey.
 
 After the commit a reconcile run is queued for every tenant the caller left.
 Audit rows written before the deletion stay unchanged (the log is
 append-only); they name the caller by `user:<id>`, and `actor_login` in 5.9 is
 `null` for that id from now on. A later sign-in with the same GitHub account
-or wallet creates a new user with a new id, no memberships and no invites.
+or wallet creates a new user with a new id, no memberships and no invites. The
+deleted account's passkey answers 403 `passkey_unknown` from then on; a new
+passkey creates a new user.
 `is_operator` of the new user follows `OPERATOR_GITHUB_IDS` and
 `OPERATOR_STELLAR_ADDRESSES` as at every sign-in (5.1), so an operator whose
 GitHub id or address stays in those settings is an operator again after signing
@@ -699,9 +716,10 @@ migration `00034`; the name is stored in `cp.users.umami_username`, which SSO
 
 #### 4.1.8 Linked sign-in methods
 
-An account holds at most one GitHub identity and one Stellar identity. Linking
-needs both proofs in one browser session: the session proves the account, and
-the GitHub flow or a signed wallet challenge proves the identity being added.
+An account holds at most one GitHub identity, one Stellar identity and one
+passkey. Linking needs both proofs in one browser session: the session proves
+the account, and the GitHub flow, a signed wallet challenge or a passkey answer
+proves the identity being added.
 
 - **Link a wallet.** Session, CSRF rules apply.
   `POST /api/me/identities/stellar/challenge` with `{"address": "G..."}` works
@@ -719,16 +737,145 @@ the GitHub flow or a signed wallet challenge proves the identity being added.
   to `/account?linked=github`, or to `/account?link_error=<code>` with one of
   `identity_in_use`, `identity_already_linked`, `state_mismatch`, the GitHub
   failure codes of 4.1.2 and `internal`.
-- A successful link sets the operator flag from both identities, turns open
+- **Link a passkey.** Session, CSRF rules apply.
+  `POST /api/me/identities/passkey/challenge` with `{}` works as the sign-in
+  challenge of 4.1.9 with purpose `link` and the session's user id sealed into
+  `sa_passkey`; 409 `identity_already_linked` when the account has a passkey,
+  422 when the body holds `return_to`. `POST /api/me/identities/passkey` with
+  the answer of 4.1.9 runs its steps 1 to 6 for purpose `link`, requires the
+  challenge's user id to be the session's (`challenge_invalid`), marks the
+  challenge used and sets the three passkey columns. **204**. 409
+  `identity_in_use` when another live account holds the address or the
+  credential id. The console creates a new passkey for a link; a passkey that
+  another account already holds answers `identity_in_use`.
+- A successful link sets the operator flag from every identity, turns open
   invites for the new identity into memberships, and writes `user.identity_link`
   (detail: the kind and the linked identity).
-- **Unlink.** `DELETE /api/me/identities/github` and
-  `DELETE /api/me/identities/stellar`: session, CSRF rules apply. **204**; 404
+- **Unlink.** `DELETE /api/me/identities/github`,
+  `DELETE /api/me/identities/stellar` and `DELETE /api/me/identities/passkey`:
+  session, CSRF rules apply. **204**; 404
   `not_found` when the account has no identity of that kind; 409
   `last_sign_in_method` when it is the only one. The operator flag follows the
-  remaining identity; audit `user.identity_unlink` (detail: the kind only).
-  The account's sessions stay. Signing in with the unlinked identity afterwards
-  creates a new account.
+  remaining identities; audit `user.identity_unlink` (detail: the kind only).
+  The account's sessions stay. Signing in with an unlinked GitHub account or
+  wallet afterwards creates a new account; an unlinked passkey answers 403
+  `passkey_unknown`, because its public key is no longer stored.
+
+#### 4.1.9 Passkey sign-in: `POST /api/auth/passkey/challenge` and `POST /api/auth/passkey/verify`
+
+Public, CSRF rules apply (1.2). A person proves control of a
+[soropass](https://docs.soropass.dev/docs) passkey: a WebAuthn credential whose
+ES256 (P-256) key is the founding signer of a soropass smart account, a Stellar
+contract account. The console runs the ceremonies with `@soropass/core`
+(`registerPasskey` and `browserWebAuthnClient`, `apps/console/src/lib/passkey`);
+the control plane verifies the WebAuthn assertion with the checks soropass's
+`verifyClientDataJSON`, `verifyRpIdHash` and `verifyAssertionSignature` define
+and the soropass account contract applies on-chain
+(`internal/controlplane/passkey`). Soropass defines no server sign-in protocol
+of its own and no SEP-45 flow, so the assertion over a challenge of this
+console is the proof.
+
+The relying party is the console: its id is the host of `CONSOLE_ORIGIN`
+without a port, and `CONSOLE_ORIGIN` is the only accepted origin.
+
+The identity is the passkey's account address, a C-address: the address the
+soropass AccountFactory on the public network
+(`CCCNRWMICVEMMUSBI7DL3IKB566QEOOQOLVDOAM5SLFDZ2KGUSRR3JVF`, the default of
+`@soropass/core` 0.3.1) deploys the account at, which the control plane
+computes as `deriveAccountAddress` does: the contract id of the factory with
+salt SHA-256(UTF-8 of the base64url credential id ‖ the 65-byte SEC-1 public
+key) for the public network passphrase. The address is bound to both, so no
+other key can hold an account at it. The control plane does not deploy the
+account and calls no Stellar service.
+
+`POST /api/auth/passkey/challenge`, body `{"return_to": "/projects"}` (optional,
+cleaned as in 4.1.1). It sets the `sa_passkey` cookie (1.1) with a 32-byte
+random challenge, purpose `sign_in`, `return_to` and the expiry, 5 minutes
+ahead. **200**:
+
+```json
+{ "challenge": "q2Vy7oZ2yq1mJ8u0Yb4tU0c0qkqQm2m5h3G8n9w6m2E", "rp_id": "app.example.org",
+  "timeout_ms": 120000, "expires_at": "2026-11-16T10:05:00Z" }
+```
+
+`challenge` is base64url. Rate limited with the buckets and reserve of 4.1.1
+(429 `rate_limited`).
+
+The console asks the browser for an assertion with `rpId` = `rp_id`, the
+challenge, and user verification `required`:
+
+- **A new passkey.** The console first creates the passkey with soropass's
+  `registerPasskey` (ES256 only, a discoverable credential, user verification
+  required, attestation `none`), then asks for the assertion with that
+  credential only. Registration answers carry no signature, so the control
+  plane learns the key from the console and accepts it only together with an
+  assertion that the key signed.
+- **A known passkey.** The console asks for a discoverable credential; the
+  browser offers the passkeys it holds for the console.
+
+`POST /api/auth/passkey/verify`, body, every byte field base64url without
+padding:
+
+```json
+{ "credential_id": "AQID...", "authenticator_data": "SZYN...", "client_data_json": "eyJ0...",
+  "signature": "MEUC...", "public_key": "BB8U..." }
+```
+
+`public_key` is the 65-byte SEC-1 key of a new passkey and is omitted for a
+known one. Each field is required except `public_key`: 422 `required`,
+`invalid_format` (not base64url, or a credential id over 1023 bytes),
+`too_long` (authenticator data over 1024 bytes, client data over 4096, a
+signature over 80), `invalid_value` (a key that is not an uncompressed P-256
+point). Then, each refusal answering 403 with the code named and the
+`sa_passkey` cookie cleared whatever happens:
+
+1. The request takes a token from the exchange buckets of 4.1.2 step 4
+   (429 `rate_limited`).
+2. The `sa_passkey` cookie opens and names purpose `sign_in`
+   (`challenge_invalid`), and is not expired (`challenge_expired`).
+3. Without `public_key`, the key is the one stored for `credential_id` on a
+   live account; none: `passkey_unknown`.
+4. `client_data_json` is JSON with `type` `webauthn.get`, `challenge` equal to
+   the cookie's (constant-time compare), `origin` equal to `CONSOLE_ORIGIN` and
+   no `crossOrigin` true (`challenge_invalid`).
+5. `authenticator_data` holds at least 37 bytes, its first 32 are SHA-256 of
+   the relying party id, and its flags carry user present and user verified
+   (`challenge_invalid`). The soropass account contract requires user
+   verification at signing time, so the console requires it too. The
+   signature counter is not checked: synced passkeys report 0.
+6. The DER `signature` is ECDSA P-256 over
+   SHA-256(`authenticator_data` ‖ SHA-256(`client_data_json`)) by the key
+   (`challenge_invalid`). The control plane derives the account address.
+7. Under `cp_system`, in one transaction: SHA-256 of `passkey:` and the
+   challenge is inserted into `cp.wallet_challenges_used` with the expiry, an
+   existing row answering `challenge_used`; `cp.users` is upserted by
+   `passkey_address` with the credential id and the key (`SignInPasskeyUser`;
+   a credential id that another live account holds answers 409
+   `identity_in_use`); the operator flag is set from every identity (5.1);
+   open invites for the account's addresses or GitHub id become memberships
+   (audit `invite.resolve`); audit `user.sign_in` with detail
+   `{"method": "passkey", "passkey_address", "is_operator"}`.
+8. Reconcile runs for each tenant joined. The session token is renewed and the
+   user stored. **200** `{"return_to": "/projects"}`.
+
+A passkey-only account's `display_name` is its short address (3.1). Its Umami
+user is named `u-<account id>`, as in 4.1.7.
+
+`cp.users` stores `passkey_address`, `passkey_credential_id` and
+`passkey_public_key`, all three or none (migration `00037`), with live-row
+unique indexes on the address and the credential id. `cp_tenant` reads
+`passkey_address` only, for member lists.
+
+A passkey belongs to its relying party: a passkey created on another site,
+including another soropass application, is not offered by the browser on the
+console and cannot sign in.
+
+**Use for later passkey checks.** `passkey.RelyingParty.Verify` with a fresh
+challenge and the account's stored `passkey_public_key` is the one WebAuthn
+verification of the control plane. A later step that asks a signed-in person
+to confirm with their passkey (an operator step-up, for example) issues its
+own challenge with a purpose of its own in `sa_passkey` and calls it, so the
+console keeps one WebAuthn approach and one stored credential per account.
 
 ### 4.2 Tenants
 
@@ -793,8 +940,8 @@ columns `cp_tenant` may update (`00003_cp_security.sql`). Editing
 { "members": [Member, ...], "invites": [Invite, ...] }
 ```
 
-Members ordered by `github_login`, or by the address for a wallet-only
-member, invites by `created_at`. Expired invites are
+Members ordered by `github_login`, or by the wallet address, then the passkey
+address, for a member without GitHub, invites by `created_at`. Expired invites are
 not listed. Not paginated (bounded by the limits below).
 
 `POST /api/tenants/{tenant_id}/members`: session, owner.
@@ -803,7 +950,7 @@ not listed. Not paginated (bounded by the limits below).
 { "github_login": "someone", "role": "member" }
 ```
 
-or, for a person who signs in with a Stellar wallet,
+or, for a person who signs in with a Stellar wallet or a passkey,
 
 ```json
 { "stellar_address": "GCB634SLKV5N4COK4FICWJADNTFWIHTWWM34BFPLACL6YSQVLY5ZWOQN", "role": "member" }
@@ -811,11 +958,13 @@ or, for a person who signs in with a Stellar wallet,
 
 Exactly one of `github_login` and `stellar_address` is given (422
 `invalid_value` on `stellar_address` for both, `required` on `github_login` for
-neither). An address must be an account id with a valid checksum (422
+neither). An address is an account id (G-address) of a wallet or the account
+address (C-address) of a passkey (4.1.9), with a valid checksum (422
 `invalid_strkey`). An address names the account that signs in with it: an
 existing account is added at once (`member.add`), anyone else gets an invite
 bound to the address (`invite.create`, detail includes `stellar_address`) that
-their first wallet sign-in with that address resolves (4.1.7 step 6). The rest
+their first wallet sign-in with a G-address (4.1.7 step 6) or passkey sign-in
+with a C-address (4.1.9 step 7) resolves. The rest
 of this section describes the GitHub case; limits and errors apply to both.
 
 - The login is first resolved to the GitHub account that holds it now:
@@ -1032,8 +1181,8 @@ the key.
 | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | yes | the GitHub OAuth App of the environment |
 | `GITHUB_REDIRECT_URL` | yes | `<CONSOLE_ORIGIN>/api/auth/github/callback`, checked at startup |
 | `OPERATOR_GITHUB_IDS` | yes | comma separated numeric GitHub user ids of the operators, at least one; sets `is_operator` at sign-in |
-| `OPERATOR_STELLAR_ADDRESSES` | no | comma separated Stellar account ids (G-addresses, checksum checked) of operators who sign in with a wallet; empty when unset |
-| `OAUTH_STATE_KEY` | yes | 32 bytes, base64; seals `sa_oauth` and `sa_stellar`, and derives the key that signs wallet challenges (4.1.7) |
+| `OPERATOR_STELLAR_ADDRESSES` | no | comma separated Stellar addresses of operators, checksum checked: account ids (G-addresses) of operators who sign in with a wallet, and passkey account addresses (C-addresses, 4.1.9) of operators who sign in with a passkey; empty when unset |
+| `OAUTH_STATE_KEY` | yes | 32 bytes, base64; seals `sa_oauth`, `sa_stellar` and `sa_passkey`, and derives the key that signs wallet challenges (4.1.7) |
 | `REPORT_SIGNING_SEED` | yes | the Stellar secret seed (`S...`) that signs usage reports (20.2) |
 | `REPORT_SIGNING_KEY` | yes | the published account id (`G...`) of that seed; the process refuses to start when the seed does not derive it |
 | `REPORT_SIGNING_RETIRED_KEYS` | no | comma separated account ids of earlier report keys, newest first; their reports still verify (20.2) |
@@ -1059,14 +1208,16 @@ from migrations `00010_tenant_removals.sql` (`cp.tenant_removals`) and
 
 - `cp.users.is_operator` is set from `OPERATOR_GITHUB_IDS` and
   `OPERATOR_STELLAR_ADDRESSES` at every sign-in, link and unlink (4.1.2,
-  4.1.7, 4.1.8) and once at control plane start: one statement under
-  `cp_system` sets it to true for live rows whose `github_id` or
-  `stellar_address` is listed and false for every other live row. Each changed user gets one audit row `user.operator_sync` (actor
+  4.1.7, 4.1.8, 4.1.9) and once at control plane start: one statement under
+  `cp_system` sets it to true for live rows whose `github_id`,
+  `stellar_address` or `passkey_address` is listed and false for every other live row. Each changed user gets one audit row `user.operator_sync` (actor
   `system:startup`, target `user:<id>`, detail `{"is_operator": {"old", "new"}}`).
 - Every route under `/api/operator/` is **session** and **operator**: the session
   user must have `cp.users.is_operator = true` (read per request) and a
-  `github_id` in the loaded `OPERATOR_GITHUB_IDS` or a `stellar_address` in the
-  loaded `OPERATOR_STELLAR_ADDRESSES`. Otherwise **403
+  `github_id` in the loaded `OPERATOR_GITHUB_IDS` or a `stellar_address` or
+  `passkey_address` in the loaded `OPERATOR_STELLAR_ADDRESSES`. The MCP
+  operator scope (section 12) checks the same at every request and token
+  grant. Otherwise **403
   `operator_required`**, for every method and for unknown ids alike. Removing an id
   takes effect at that person's next sign-in or the next control plane start,
   whichever comes first.
