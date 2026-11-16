@@ -567,6 +567,13 @@ func TestNoMarkerAddressAnywhere(t *testing.T) {
 		logs, _ := exec.Command("docker", "logs", "--tail", "40", "sa-pv-replayer-"+s.id).CombinedOutput()
 		return "umami holds " + stored + " events; replayer log tail:\n" + string(logs)
 	})
+	// the probe's two loads of the tracker file are on EDGE_STATS as the
+	// site's coverage counters once the gateway flushed (every 10 s), so the
+	// jetstream scan below covers them
+	waitFor(t, time.Minute, "coverage counters on EDGE_STATS", func() bool {
+		d := s.natsDump(t)
+		return strings.Contains(d, `"outcome":"script_requests"`) && strings.Contains(d, `"outcome":"script_gpc"`)
+	}, func() string { return "" })
 	// postgres writes everything to its files before the file scan
 	mustDocker(t, "exec", pg, "psql", "-U", "postgres", "-tAc", "checkpoint")
 
