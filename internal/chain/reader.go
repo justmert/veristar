@@ -371,13 +371,14 @@ const MaxInitiatorTransactions = 10000
 // have had; the next run reads it again.
 func (r *Reader) withInitiators(ctx context.Context, ds []Day, by map[int64]*tally) ([]Day, error) {
 	for i := range ds {
-		t, ok := by[ds[i].Day.Unix()]
+		d := &ds[i]
+		t, ok := by[d.Day.Unix()]
 		if !ok {
 			continue
 		}
 		if len(t.txOps) > MaxInitiatorTransactions {
-			ds[i].Initiators = nil
-			ds[i].InitiatorsMissing = CodeDayTooLarge
+			d.Initiators = nil
+			d.InitiatorsMissing = CodeDayTooLarge
 			continue
 		}
 		hashes := make([]string, 0, len(t.txOps))
@@ -399,7 +400,7 @@ func (r *Reader) withInitiators(ctx context.Context, ds []Day, by map[int64]*tal
 				set[src] = struct{}{}
 			}
 		}
-		ds[i].Initiators = sortedKeys(set)
+		d.Initiators = sortedKeys(set)
 	}
 	return ds, nil
 }
