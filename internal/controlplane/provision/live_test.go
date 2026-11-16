@@ -1,7 +1,6 @@
 package provision_test
 
 import (
-	"context"
 	"crypto/rand"
 	"errors"
 	"io"
@@ -395,7 +394,7 @@ func TestProvisioningLive(t *testing.T) {
 	t.Run("the integrity baseline reaches the registry entry as the scale", func(t *testing.T) {
 		c, err := e.pg.Superuser(ctx, "platform")
 		require.NoError(t, err)
-		defer func() { _ = c.Close(context.Background()) }()
+		defer func() { _ = c.Close(ctx) }()
 		grade := func(day time.Time, baseline int64) {
 			_, err := c.Exec(ctx, `insert into agg.web_integrity_daily (site_id, tenant_id, day, rule_version, grade, closed,
 			    events, quarantined, proof_failures, net_access, net_organisation, net_hosting, net_anonymiser, net_unknown,

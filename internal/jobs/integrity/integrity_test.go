@@ -3,6 +3,7 @@ package integrity_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"testing"
 	"time"
@@ -138,7 +139,7 @@ func TestGrader(t *testing.T) {
 			err := tx.QueryRow(ctx, `select grade, closed, events, networks, baseline_visitors, baseline_days, reasons, visitors, net_hosting
 			  from agg.web_integrity_daily where site_id = $1 and day = $2`, site, day).
 				Scan(&r.Grade, &r.Closed, &r.Events, &r.Networks, &r.Baseline, &r.BaseDays, &reasons, &r.Visitors, &r.NetHosting)
-			if err == pgx.ErrNoRows {
+			if errors.Is(err, pgx.ErrNoRows) {
 				return nil
 			}
 			found = true
