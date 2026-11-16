@@ -11,6 +11,9 @@
       # handover cutover (docs/handover/plan.md section 2.3)
       - sa_tls != 'cloudflare-delegated' or (sa_acme_challenge_domain | default('')) is match('^[a-z0-9_.-]+\\.[a-z]+$')
       - sa_operator_github_ids is defined and (sa_operator_github_ids | string | length) > 0
+      # empty, or comma separated stellar account ids (the control plane
+      # also checks each checksum)
+      - (sa_operator_stellar_addresses | default('') | string) is match('^(G[A-Z2-7]{55}(,G[A-Z2-7]{55})*)?$')
       - not core_oauth_fixture or sa_environment == 'local'
       - core_umami_processes | int >= 1
       # the metrics writer accepts points as old as API_METRICS keeps
@@ -22,7 +25,8 @@
       - core_umami_processes | int <= core_replayer_env.REPLAYER_WORKERS | int
     fail_msg: >-
       core needs the secrets role first, OPERATOR_GITHUB_IDS as
-      sa_operator_github_ids, acme dns-01 outside the local converge, the
+      sa_operator_github_ids, sa_operator_stellar_addresses empty or a comma
+      separated list of G-addresses, acme dns-01 outside the local converge, the
       oauth fixture only in the local converge, between 1 and
       REPLAYER_WORKERS umami processes (core_umami_processes), and
       core_api_minute_retention_days of at least 8

@@ -212,6 +212,9 @@ services:
       WEB_ORIGIN: https://{{ sa_hostnames.web }}
       GITHUB_REDIRECT_URL: https://{{ sa_hostnames.app }}/api/auth/github/callback
       OPERATOR_GITHUB_IDS: "{{ sa_operator_github_ids }}"
+      # stellar accounts of operators who sign in with a wallet; empty when
+      # the inventory lists none
+      OPERATOR_STELLAR_ADDRESSES: "{{ sa_operator_stellar_addresses | default('') }}"
       UMAMI_URL: http://umami:3000
       API_MINUTE_RETENTION_DAYS: "{{ core_api_minute_retention_days }}"
       API_HOURLY_RETENTION_MONTHS: "{{ core_api_hourly_retention_months }}"
@@ -222,6 +225,9 @@ services:
       ALERTMANAGER_TLS_CA: /etc/sa-alertmanager-tls/ca.crt
       ALERTMANAGER_TLS_CERT: /etc/sa-alertmanager-tls/node.crt
       ALERTMANAGER_TLS_KEY: /etc/sa-alertmanager-tls/node.key
+{% for k, v in core_stellar_env.items() %}
+      {{ k }}: "{{ v }}"
+{% endfor %}
 {% if core_oauth_fixture %}
       # local converge only (asserted above): the test-only oauth fixture
       OAUTH_FIXTURE_URL: http://{{ sa_public_ipv4 }}:{{ core_oauth_fixture_port }}
@@ -286,6 +292,9 @@ services:
       UMAMI_DB_NAME: umami
       API_MINUTE_RETENTION_DAYS: "{{ core_api_minute_retention_days }}"
       API_HOURLY_RETENTION_MONTHS: "{{ core_api_hourly_retention_months }}"
+{% for k, v in core_stellar_env.items() %}
+      {{ k }}: "{{ v }}"
+{% endfor %}
       TZ: UTC
 
   caddy:

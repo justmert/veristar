@@ -68,6 +68,16 @@ core_postgres_parameters:
 core_api_minute_retention_days: 30
 core_api_hourly_retention_months: 36
 
+# the ledger apis of the on-chain witness, for the control plane and the
+# jobs process (docs/reference/onchain-sources.md): the code's own defaults,
+# sdf's horizon and a public mainnet stellar rpc. both processes reach the
+# two hosts over outbound https
+core_stellar_env:
+  STELLAR_HORIZON_URL: https://horizon.stellar.org
+  STELLAR_RPC_URL: https://mainnet.sorobanrpc.com
+  STELLAR_HORIZON_RPS: "0.8"
+  STELLAR_RPC_RPS: "2"
+
 # the alertmanager port of the observability role
 # (observability_alertmanager_port), repeated here because role defaults are
 # not visible across plays. the control plane reads the live alerts of every

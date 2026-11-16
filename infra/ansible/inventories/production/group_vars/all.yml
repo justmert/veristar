@@ -19,6 +19,10 @@ sa_image_registry: ghcr.io/justmert/veristar
 # 37740842 is justmert
 sa_operator_github_ids: "37740842"
 
+# stellar accounts (G-addresses) of operators who sign in with a wallet,
+# comma separated (OPERATOR_STELLAR_ADDRESSES); none is configured
+sa_operator_stellar_addresses: ""
+
 # the packages on ghcr.io are public, so nodes and the controller pull
 # without signing in, and the secrets role removes a stored credential.
 # for private packages, set the registry (ghcr.io) and the token's account
