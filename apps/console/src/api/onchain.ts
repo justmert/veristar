@@ -222,7 +222,16 @@ export const scfView = z.object({
   ),
   api_series: z.array(z.object({ day, requests: count })),
   onchain_series: z.array(onchainDayTotal),
-  integrity: z.unknown().optional(),
+  // 17.3 the integrity grade of the project's row
+  integrity: z
+    .object({
+      grade: z.enum(["A", "B", "C"]).nullable(),
+      graded_days: count,
+      days_a: count,
+      days_b: count,
+      days_c: count,
+    })
+    .optional(),
 });
 export type SCFView = z.infer<typeof scfView>;
 
