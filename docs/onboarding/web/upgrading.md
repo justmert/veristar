@@ -19,11 +19,12 @@ released file is never rebuilt or replaced. Released so far:
 | 1.0.0 | the first release |
 | 1.1.0 | Stellar Wallets Kit capture with `data-wallets-kit="true"` ([wallets-kit.md](wallets-kit.md)) |
 | 1.2.0 | long single-page sessions keep sending (a new challenge after 40 events, and once more after a "proof used up" answer; 1.0.0 and 1.1.0 lose events after the 50th per page load and node); back and forward in Next.js keep the previous page as referrer; event data Umami cannot store is refused in the browser with a clear error (numbers from 1e15, revenue from 1e14 with a currency, dates before year 1, names starting with `=`, `+`, `-` or `@`); Wallets Kit storage is never read for a visitor with Global Privacy Control or the opt-out flag, even after `umami.start()`; every event names its release, so events of a revoked release are refused |
+| 1.3.0 | counts only pages a person can see: a prerendered page counts when it is activated, a page opened in a background tab when it is first shown, a page restored from the back/forward cache counts again, and single-page navigation keeps counting; events of a page inside a frame say so, and a page left without ever being shown sends a never-visible notice instead of a page view (both feed the [integrity grade](../../security/bot-and-inflation.md)); screen size, language and page title are no longer read or sent, and `data-send-title="true"` sends the title for a site that wants it |
 
 ## Steps
 
 1. Open the site's **Snippet** page in the console and choose the new version in **Tracker
-   version**. The newest is marked. The page shows the new tag, its release date and its size.
+   version**. The recommended version, the newest, is marked. The page shows the new tag, its release date and its size.
 2. Replace the whole tag on your pages with the new one. Both `src` and `integrity` change; copying
    only one of them makes the browser refuse the file. Keep any attributes you added yourself
    (`data-auto-track`, `data-domains` and so on).

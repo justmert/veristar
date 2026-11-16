@@ -3482,8 +3482,9 @@ operators read every project's under `cp_operator`; both get the same report.
 
 ```json
 {
-  "tenant_id": "uuid", "from": "2026-11-01", "to": "2026-11-30", "rule_version": 1,
+  "tenant_id": "uuid", "from": "2026-11-01", "to": "2026-11-30", "rule_version": 2,
   "grade": "B", "graded_days": 30, "days_a": 22, "days_b": 6, "days_c": 2,
+  "coverage": { "script_requests": 4200, "gpc_requests": 504, "unmeasured_share": 0.12 },
   "reasons": [
     { "code": "hosting_share", "level": "C", "days": 8,
       "text": "A large share of events came from hosting networks or anonymisers." }
@@ -3492,9 +3493,10 @@ operators read every project's under `cp_operator`; both get the same report.
     {
       "site_id": "uuid",
       "grade": "B", "graded_days": 30, "days_a": 22, "days_b": 6, "days_c": 2, "reasons": ["RangeReason"],
+      "coverage": "Coverage",
       "days": [
         {
-          "day": "2026-11-30", "grade": "C", "closed": false, "rule_version": 1,
+          "day": "2026-11-30", "grade": "C", "closed": false, "rule_version": 2,
           "reasons": [
             { "code": "hosting_share", "level": "C", "value": 0.62, "limit": 0.5,
               "text": "62% of events came from hosting networks or anonymisers (limit 50%). ..." }
@@ -3504,8 +3506,11 @@ operators read every project's under `cp_operator`; both get the same report.
             "visitors": 610, "pageviews": 1500, "baseline_visitors": 590, "baseline_days": 28,
             "net": { "access": 600, "organisation": 50, "hosting": 1100, "anonymiser": 40, "unknown": 50 },
             "hosting_share": 0.6195652173913043, "quarantine_share": 0.06521739130434782,
-            "proof_pass_rate": 0.9813333333333333
-          }
+            "proof_pass_rate": 0.9813333333333333,
+            "signal_views": 1400, "framed": 14, "never_visible": 60,
+            "framed_share": 0.01, "never_visible_share": 0.0410958904109589
+          },
+          "coverage": { "script_requests": 140, "gpc_requests": 17, "unmeasured_share": 0.12142857142857143 }
         }
       ]
     }
@@ -3516,7 +3521,10 @@ operators read every project's under `cp_operator`; both get the same report.
 - `grade` of a day is `null` when it had fewer than 50 accepted events; its
   only reason is `too_little_traffic` with level `none`.
 - Reason codes: `hosting_share`, `quarantine_share`, `few_networks`, `spike`,
-  `proof_failures`, `page_volume`, `too_little_traffic`. `level` is the grade
+  `framed_share` and `never_visible_share` (rule version 2), `proof_failures`,
+  `page_volume`, `too_little_traffic`. `rule_version` of a day is the version
+  that graded it; the report's `rule_version` is the version the jobs apply
+  now. `level` is the grade
   the reason caps the day at (`B`, `C`) or `none`. `value` and `limit` are the
   observed figure and the threshold it crossed (a share from 0 to 1, a count
   or a factor). `text` is the plain language form; the same text reaches the
@@ -3530,6 +3538,12 @@ operators read every project's under `cp_operator`; both get the same report.
 - `evidence.net` counts accepted events per network class; `networks` is the
   number of distinct autonomous systems. Neither holds an address or a
   network number.
+- `evidence.signal_views`, `framed` and `never_visible` are the page signals
+  of tracker 1.3.0 (page views of releases that report them, the framed part,
+  never-visible notices); `framed_share` and `never_visible_share` are their
+  shares, `null` without a report. Days graded before rule version 2 read 0.
+- `coverage` (17.5) is the estimate of visits not measured because of privacy
+  signals, for the report's range, each site's range and each day.
 
 ### 17.2 `GET /api/tenants/{tenant_id}/integrity`
 
@@ -3552,6 +3566,8 @@ last in both orders). Each project of 8.4 carries `integrity` with the range
 grade and its reasons.
 
 ### 17.4 Machine API and exports
+
+The coverage object of 17.5 travels with the grade in each item below.
 
 - `GET /api/metrics/v1/web/integrity` (9.3 rules): parameters `tenant`,
   `from`, `to`, `integrity_at_or_below`, `limit`, `cursor`. One item per
@@ -3581,6 +3597,37 @@ new issue on the **Integrity appeal** form of the public tracker
 (code, level and day count) and `rule_version` filled in from 17.2, and no
 personal or visitor data. Operators answer and decide on the issue; the
 stored grade does not change.
+
+### 17.5 Coverage: visits not measured because of privacy signals
+
+Visitors whose browser sends Global Privacy Control are not measured, by
+design. The gateway counts, per site and UTC day, the requests for the tracker
+file a browser made to run it and the part that carried `Sec-GPC: 1`,
+attributed to the site by the page origin of the `Referer` header
+([../compliance/privacy-strategy.md](../compliance/privacy-strategy.md)
+section 6, with the method and its accuracy limits). The jobs task
+`edgestats` stores them in `agg.web_coverage_daily`, under row-level security
+like the grades.
+
+**Coverage**:
+
+```json
+{ "script_requests": 4200, "gpc_requests": 504, "unmeasured_share": 0.12 }
+```
+
+`unmeasured_share` is `gpc_requests / script_requests`, `null` below 100
+requests. Where it appears:
+
+- the Report of 17.1 (range, site and day), so 17.2 and 17.3, the project's
+  overview, the operator's project detail and the MCP tools of 17.4;
+- each row of 8.3 as `coverage`, sortable with `sort=unmeasured_share`
+  (projects without a share last in both orders), and each project of 8.4;
+- `web.coverage` of what SCF sees (16.3);
+- each `GET /api/metrics/v1/web/daily` item (the tenant's sites on that day)
+  and each `GET /api/metrics/v1/web/integrity` item (that site and day);
+- the CSV exports: `script_requests`, `gpc_requests` and `unmeasured_share`
+  per row of the web project export, per project and day of the web compare
+  export, and per day of the project overview export.
 
 ---
 
