@@ -300,13 +300,16 @@ export interface WireEvent {
   v: 1;
   sv?: string;
   w: string;
-  t: "pv" | "ev";
+  // nv: a page left unseen (1.3.0), with no u or r
+  t: "pv" | "ev" | "nv";
   h: string;
-  u: string;
-  r: string;
-  ti: string;
-  s: string;
-  l: string;
+  u?: string;
+  r?: string;
+  // optional from 1.3.0, which sends them only when the site asks
+  ti?: string;
+  s?: string;
+  l?: string;
+  fr?: boolean;
   n?: string;
   d?: Record<string, unknown>;
   ts: number;
@@ -324,6 +327,7 @@ const WIRE_KEYS = new Set([
   "ti",
   "s",
   "l",
+  "fr",
   "n",
   "d",
   "ts",
@@ -346,13 +350,25 @@ export function validateWire(x: unknown): string | null {
   )
     return "sv";
   if (typeof o.w !== "string" || !SITE_ID_RE.test(o.w)) return "w";
-  if (o.t !== "pv" && o.t !== "ev") return "t";
-  for (const k of ["h", "u", "r", "ti", "l"] as const) {
-    if (typeof o[k] !== "string") return k;
+  if (o.t !== "pv" && o.t !== "ev" && o.t !== "nv") return "t";
+  if (typeof o.h !== "string") return "h";
+  if (o.t === "nv") {
+    for (const k of ["u", "r", "ti", "s", "l", "n", "d"] as const) {
+      if (o[k] !== undefined) return `${k} is not part of a never-visible notice`;
+    }
+  } else {
+    for (const k of ["u", "r"] as const) if (typeof o[k] !== "string") return k;
   }
-  if (typeof o.s !== "string" || !/^\d+x\d+$/.test(o.s)) return "s";
+  // title, screen and language are optional since 1.3.0
+  for (const k of ["ti", "l"] as const) {
+    if (o[k] !== undefined && typeof o[k] !== "string") return k;
+  }
+  if (o.s !== undefined && (typeof o.s !== "string" || !/^\d+x\d+$/.test(o.s))) return "s";
+  if (o.fr !== undefined && typeof o.fr !== "boolean") return "fr";
   if (typeof o.ts !== "number" || !Number.isFinite(o.ts)) return "ts";
-  if (o.t === "pv") {
+  if (o.t === "nv") {
+    // nothing more: the notice carries no page
+  } else if (o.t === "pv") {
     if (o.n !== undefined || o.d !== undefined) return "n and d are for ev only";
   } else {
     if (typeof o.n !== "string" || o.n.length === 0) return "n";

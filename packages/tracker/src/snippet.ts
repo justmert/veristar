@@ -23,10 +23,17 @@ export type SnippetOptions = {
   // adds data-wallets-kit="true" (stellar wallets kit capture, an opt-in).
   // without it the tag is byte for byte the one the control plane builds.
   walletsKit?: boolean;
+  // adds data-send-title="true": from 1.3.0 the page title is sent only when
+  // the site asks for it
+  sendTitle?: boolean;
 };
 
 // first release that reads data-wallets-kit
 export const WALLETS_KIT_SINCE = "1.1.0";
+
+// first release that reads data-send-title. older releases always send the
+// title, so the attribute would change nothing there
+export const SEND_TITLE_SINCE = "1.3.0";
 
 function compareVersions(a: string, b: string): number {
   const pa = a.split(".").map(Number);
@@ -49,7 +56,13 @@ export function scriptUrl(origin: string, version: string): string {
   return `${origin}/v/${version}/sdk.js`;
 }
 
-export function snippet({ siteId, version, origin, walletsKit }: SnippetOptions): string {
+export function snippet({
+  siteId,
+  version,
+  origin,
+  walletsKit,
+  sendTitle,
+}: SnippetOptions): string {
   // values are checked instead of html-escaped: every accepted value consists
   // of characters that need no escaping inside a double-quoted attribute
   if (!UUID.test(siteId)) throw new Error(`site id ${siteId} is not a lowercase uuid`);
@@ -69,6 +82,12 @@ export function snippet({ siteId, version, origin, walletsKit }: SnippetOptions)
     throw new Error(
       `tracker version ${version} has no wallets kit capture; use ${WALLETS_KIT_SINCE} or newer`,
     );
-  const optIn = walletsKit === true ? ' data-wallets-kit="true"' : "";
+  if (sendTitle === true && compareVersions(version, SEND_TITLE_SINCE) < 0)
+    throw new Error(
+      `tracker version ${version} always sends the title; data-send-title needs ${SEND_TITLE_SINCE} or newer`,
+    );
+  const optIn =
+    (walletsKit === true ? ' data-wallets-kit="true"' : "") +
+    (sendTitle === true ? ' data-send-title="true"' : "");
   return `<script defer src="${scriptUrl(origin, version)}" integrity="${entry.integrity}" crossorigin="anonymous" data-website-id="${siteId}"${optIn}></script>`;
 }

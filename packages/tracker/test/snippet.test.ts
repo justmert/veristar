@@ -43,6 +43,17 @@ describe("snippet", () => {
     expect(() => snippet({ ...ok, version: "1.0.0", walletsKit: true })).toThrow(/1\.1\.0/);
   });
 
+  it("adds the title opt-in only when asked, and only from 1.3.0", () => {
+    const v13 = manifest.versions.find((v) => v.version === "1.3.0");
+    expect(v13).toBeDefined();
+    const ok = { siteId: SITE, version: "1.3.0", origin: "https://in.sa-test.example" };
+    expect(snippet({ ...ok, sendTitle: true, walletsKit: true })).toBe(
+      `<script defer src="https://in.sa-test.example/v/1.3.0/sdk.js" integrity="${v13?.integrity}" crossorigin="anonymous" data-website-id="${SITE}" data-wallets-kit="true" data-send-title="true"></script>`,
+    );
+    // 1.2.0 sends the title anyway; the attribute would promise a choice it ignores
+    expect(() => snippet({ ...ok, version: "1.2.0", sendTitle: true })).toThrow(/1\.3\.0/);
+  });
+
   it("1.0.0 is not revoked", () => {
     expect(isRevoked("1.0.0")).toBe(false);
   });
