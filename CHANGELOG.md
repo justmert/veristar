@@ -114,6 +114,39 @@ here, before they take effect, as the processing terms require
   operators read the appeal and decide
   ([docs/security/bot-and-inflation.md](docs/security/bot-and-inflation.md)
   section 9).
+- Tracker 1.3.0 is the release the console recommends, and the snippet page
+  offers "Send the page title" (`data-send-title="true"`) from it. Older
+  versions keep working unchanged.
+- The gateway accepts the 1.3.0 page signals: `fr` on events of a framed
+  page and the never-visible notice (`t: "nv"`), which passes every check of
+  an event and is counted, never queued. Wire format 1 stays: every new field
+  is optional ([docs/reference/wire-v1.md](docs/reference/wire-v1.md)).
+- Integrity rule version 2 adds `framed_share` (B at 25%, C at 50% of the
+  page views that report signals) and `never_visible_share` (B at 30%). Both
+  can only lower a grade; version 1 is still applied as written, so stored
+  grades reproduce from their inputs. The report shows the signal counts and
+  shares in each day's evidence.
+- An estimate of the visits not measured because of privacy signals: the
+  gateway counts, per site and UTC day, the requests for the tracker file
+  and the part with `Sec-GPC: 1`, attributing each request to a site by the
+  page origin in the `Referer` header. The share is on the project's
+  overview, in "What SCF sees", as a sortable column of the operators' global
+  web view, in the compare answer, the CSV exports, the machine API and the
+  MCP tools, from 100 requests on. The method and its accuracy limits are in
+  [docs/compliance/privacy-strategy.md](docs/compliance/privacy-strategy.md),
+  section 6.
+- Database migration `00037_web_signals_coverage`: `cp.web_signals_daily`,
+  `agg.web_coverage_daily` and three signal columns of
+  `agg.web_integrity_daily`, under row-level security.
+
+### Changed
+
+- The core tier must be upgraded before the edge tier again: older jobs
+  daemons refuse the new `signal_<name>` and `script_<name>` counters on
+  `EDGE_STATS`, and older gateways refuse the events of tracker 1.3.0.
+- `release-tracker.yml` packs and publishes the npm package only when the
+  repository variable `NPM_PACKAGE` is set, and otherwise releases and
+  attests `sdk.js` alone with a notice in the log.
 
 ## [0.3.0] - 2026-11-16
 
@@ -432,6 +465,19 @@ and pinned by its SRI hash, listed in
 [packages/tracker/releases/manifest.json](packages/tracker/releases/manifest.json).
 How to check a file against its release:
 [docs/security/verify-tracker.md](docs/security/verify-tracker.md).
+
+### Tracker 1.3.0 - 2026-11-16
+
+- Counts only pages a person can see: a prerendered page on activation, a
+  page loaded in a background tab when it is first shown, a restore from the
+  back/forward cache again, and single-page navigation as before.
+- Marks every event of a page inside a frame with `fr: true`, and sends a
+  never-visible notice for a page left without ever being shown.
+- Reads neither the screen size nor the browser language, and sends the page
+  title only with `data-send-title="true"`. Browser, operating system and
+  device come from the user agent; desktop browsers are `desktop`, no longer
+  split into `laptop` by screen width.
+- 9,615 bytes, 4,348 gzip (1.2.0: 8,743 and 4,058, +7.1% gzip).
 
 ### Tracker 1.2.0 - 2026-11-13
 
