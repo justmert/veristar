@@ -1,7 +1,8 @@
 ---
 # the backup schedules as systemd timers: weekly full, daily differential,
 # daily verification. on the repository node (posix-host) they run there; in
-# s3 mode both core nodes carry them and only the patroni leader runs them.
+# azure and s3 mode every database node carries them and only the patroni
+# leader runs them (templates/backup.service.j2, ExecCondition).
 - name: Write the backup units
   ansible.builtin.template:
     src: "backup.{{ unit[1] }}.j2"

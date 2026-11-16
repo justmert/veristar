@@ -6,9 +6,14 @@ Requires=docker.service
 
 [Service]
 Type=oneshot
-{% if backup_repo_mode == 's3' %}
-# both core nodes carry the timer; only the patroni leader runs it
-ExecCondition=/usr/bin/curl -fsS -o /dev/null {{ sa_tls_curl }} https://{{ sa_private_ip }}:8008/primary
+{% if backup_repo_mode in ['azure', 's3'] %}
+# every database node carries the timer and the leader moves between them
+# (switchovers, reboots), so only the patroni leader runs the job. patroni's
+# /primary answers 200 on the leader and 503 on a replica: 503 exits 1, which
+# systemd records as a skipped run, not a failure. any other answer (patroni
+# down, a tls error) exits 255 and fails the unit, because then no node may
+# be taking the backup.
+ExecCondition=/bin/sh -c 'c=$$(/usr/bin/curl -sS -o /dev/null -w %%{http_code} {{ sa_tls_curl | trim }} https://{{ sa_private_ip }}:8008/primary); case "$$c" in 200) exit 0 ;; 503) exit 1 ;; *) echo "patroni /primary answered $$c" >&2; exit 255 ;; esac'
 {% endif %}
 {% for c in item.commands %}
 ExecStart=/usr/bin/docker compose --project-directory {{ backup_compose_dir }} exec -T {{ backup_compose_service }} pgbackrest --stanza={{ backup_stanza }} {{ c }}
