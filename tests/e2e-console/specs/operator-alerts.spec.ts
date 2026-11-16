@@ -10,7 +10,7 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { BrowserContext, Page } from "@playwright/test";
 import { APP, APPS_CTL, OUT } from "../fixture/env.ts";
-import { api, type GitHubUser, newUser, signIn } from "./helpers.ts";
+import { api, type GitHubUser, newUser, operatorStepUp, signIn } from "./helpers.ts";
 import { expect, test } from "./test.ts";
 
 test.describe.configure({ mode: "serial" });
@@ -93,6 +93,7 @@ test.beforeAll(async ({ browser }) => {
   op = { ctx: octx, page: await octx.newPage() };
   op.page.on("pageerror", (e) => problems.push(`pageerror: ${e.message}`));
   await signIn(op.page, OPERATOR);
+  await operatorStepUp(op.page, OPERATOR);
   const me = await api<{ user: { is_operator: boolean } }>(op.ctx, "GET", "/api/me");
   expect(me.body.user.is_operator, "github id 1 must be an operator").toBe(true);
 

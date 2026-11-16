@@ -2,7 +2,7 @@
 // console, control plane, oauth fixture and caddies; nothing here answers on
 // behalf of a product service.
 import { randomInt } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type APIResponse, type BrowserContext, expect, type Page } from "@playwright/test";
@@ -11,6 +11,7 @@ import {
   INGEST,
   OAUTH,
   OAUTH_CTL,
+  OUT,
   SITE_CTL_PORT,
   TENANT_DOMAIN,
   WEB,
@@ -286,4 +287,84 @@ export async function ssoFromConsole(page: Page, siteId: string, view = "primary
     location.href = u;
   }, `${APP}/api/sso/umami?site=${siteId}&view=${view}`);
   await page.waitForURL((u) => u.origin === WEB || u.pathname === "/sso-error");
+}
+
+// registers a login with the oauth fixture, which then answers github's
+// public users api for it, as github does for every account
+export async function registerGitHub(user: GitHubUser): Promise<void> {
+  const r = await fetch(`${OAUTH_CTL}/_fixture/users`, {
+    method: "POST",
+    body: JSON.stringify({ id: user.id, login: user.login }),
+  });
+  expect(r.status, await r.text()).toBeLessThan(300);
+}
+
+interface VirtualCredential {
+  credentialId: string;
+  isResidentCredential: boolean;
+  rpId?: string;
+  privateKey: string;
+  userHandle?: string;
+  signCount: number;
+}
+
+// the virtual credential of each github id the specs step up with, kept
+// across specs and retries, because the stack's control plane holds the
+// public key the first spec registered
+function credentialFile(user: GitHubUser): string {
+  return resolve(OUT, `passkey-${user.id}.json`);
+}
+
+// gives the page a chromium virtual authenticator (devtools webauthn
+// domain): a usb security key with a pin, that answers every prompt
+// without a touch. the credential of an earlier spec is put back on it.
+export async function virtualAuthenticator(page: Page, user: GitHubUser) {
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("WebAuthn.enable", { enableUI: false });
+  const { authenticatorId } = await cdp.send("WebAuthn.addVirtualAuthenticator", {
+    options: {
+      protocol: "ctap2",
+      transport: "usb",
+      hasResidentKey: true,
+      hasUserVerification: true,
+      isUserVerified: true,
+      automaticPresenceSimulation: true,
+    },
+  });
+  if (existsSync(credentialFile(user))) {
+    const credential = JSON.parse(readFileSync(credentialFile(user), "utf8")) as VirtualCredential;
+    await cdp.send("WebAuthn.addCredential", { authenticatorId, credential });
+  }
+  return {
+    cdp,
+    authenticatorId,
+    // stores the credential with its current signature counter, so the next
+    // spec's authenticator counts on from it
+    save: async () => {
+      const { credentials } = (await cdp.send("WebAuthn.getCredentials", { authenticatorId })) as {
+        credentials: VirtualCredential[];
+      };
+      if (credentials.length > 0)
+        writeFileSync(credentialFile(user), JSON.stringify(credentials[0]));
+    },
+  };
+}
+
+// steps an operator's browser up (contract 5.15): the first spec registers
+// the operator's passkey inside the enrollment window the start of the
+// control plane opened; every later one confirms with it
+export async function operatorStepUp(page: Page, user: GitHubUser): Promise<void> {
+  const auth = await virtualAuthenticator(page, user);
+  await page.goto(`${APP}/operator`);
+  const register = page.getByRole("button", { name: "Register" });
+  const confirm = page.getByRole("button", { name: "Use passkey or security key" });
+  await expect(register.or(confirm)).toBeVisible();
+  if (await register.isVisible()) {
+    await page.getByLabel("Name").fill("e2e security key");
+    await register.click();
+  } else {
+    await confirm.click();
+  }
+  await expect(page.getByRole("navigation", { name: "Operator sections" })).toBeVisible();
+  await auth.save();
 }

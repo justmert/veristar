@@ -12,7 +12,15 @@
 // in the go tests of internal/chain and internal/controlplane/onchain.
 import type { BrowserContext, Page } from "@playwright/test";
 import { APP } from "../fixture/env.ts";
-import { api, enrollApi, type GitHubUser, newUser, signIn, type Tenant } from "./helpers.ts";
+import {
+  api,
+  enrollApi,
+  type GitHubUser,
+  newUser,
+  operatorStepUp,
+  signIn,
+  type Tenant,
+} from "./helpers.ts";
 import { expect, test } from "./test.ts";
 
 test.describe.configure({ mode: "serial" });
@@ -179,6 +187,7 @@ test("an operator sees the column, exports the rows on screen and reads the deta
   try {
     const page = await ctx.newPage();
     await signIn(page, OPERATOR);
+    await operatorStepUp(page, OPERATOR);
     await page.goto(`${APP}/operator/web?q=${encodeURIComponent(`On-chain ${run}`)}`);
     await expect(page.getByRole("columnheader", { name: "On-chain", exact: true })).toBeVisible();
     const row = page.locator(`tr[data-tenant="${tenant.id}"]`);

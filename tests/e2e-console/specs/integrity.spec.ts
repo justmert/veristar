@@ -22,6 +22,7 @@ import {
   enrollApi,
   type GitHubUser,
   newUser,
+  operatorStepUp,
   pasteSnippet,
   type Site,
   signIn,
@@ -128,6 +129,7 @@ test.beforeAll(async ({ browser }) => {
     if (m.type() === "error") problems.push(`console: ${m.text()}`);
   });
   await signIn(op.page, OPERATOR);
+  await operatorStepUp(op.page, OPERATOR);
 
   const tctx = await browser.newContext();
   owner = { ctx: tctx, page: await tctx.newPage() };

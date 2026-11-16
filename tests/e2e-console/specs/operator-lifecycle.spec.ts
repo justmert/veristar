@@ -14,6 +14,7 @@ import {
   enrollApi,
   type GitHubUser,
   newUser,
+  operatorStepUp,
   type Site,
   signIn,
   type Tenant,
@@ -40,6 +41,7 @@ test.beforeAll(async ({ browser }) => {
   const octx = await browser.newContext();
   op = { ctx: octx, page: await octx.newPage() };
   await signIn(op.page, OPERATOR);
+  await operatorStepUp(op.page, OPERATOR);
   const me = await api<{ user: { is_operator: boolean } }>(op.ctx, "GET", "/api/me");
   expect(me.body.user.is_operator, "github id 1 must be an operator").toBe(true);
 
