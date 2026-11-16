@@ -324,7 +324,15 @@ func TestProvisioningLive(t *testing.T) {
 			require.NoError(t, err)
 			require.True(t, ok)
 			require.Equal(t, umami.RoleViewOnly, got.Role)
-			require.True(t, strings.HasPrefix(got.Username, "gh-"))
+			// the reconciler named the new umami user after the account and
+			// stored the name for sso (00034)
+			require.Equal(t, provision.Username(u), got.Username)
+			var stored *string
+			e.sys(t, func(tx pgx.Tx) error {
+				return tx.QueryRow(t.Context(), `select umami_username from cp.users where id = $1`, u).Scan(&stored)
+			})
+			require.NotNil(t, stored)
+			require.Equal(t, provision.Username(u), *stored)
 		}
 		_, ok, err = e.um.Admin.GetUser(ctx, outsider.String())
 		require.NoError(t, err)

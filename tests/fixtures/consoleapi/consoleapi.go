@@ -26,6 +26,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/stellar/go-stellar-sdk/keypair"
+	"github.com/stellar/go-stellar-sdk/network"
+	"github.com/stellar/go-stellar-sdk/txnbuild"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2"
 
@@ -277,6 +280,47 @@ func (e *Env) SignIn(t testing.TB, ghID int64, login string) *Client {
 	require.Equal(t, http.StatusSeeOther, res.StatusCode)
 	require.Equal(t, "/", res.Header.Get("Location"), "sign-in failed")
 	return c
+}
+
+// SignInWallet runs the real wallet sign-in (contract 4.1.7) for kp: it asks
+// for a challenge, signs it on the public network as a wallet would and
+// verifies it.
+func (e *Env) SignInWallet(t testing.TB, kp *keypair.Full) *Client {
+	t.Helper()
+	jar, err := cookiejar.New(nil)
+	require.NoError(t, err)
+	hc := *e.Srv.Client()
+	hc.Jar = jar
+	hc.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	c := &Client{e: e, hc: &hc}
+	c.SignInWalletAgain(t, kp)
+	return c
+}
+
+// SignInWalletAgain signs this browser in with kp's wallet.
+func (c *Client) SignInWalletAgain(t testing.TB, kp *keypair.Full) {
+	t.Helper()
+	r := c.Call(t, http.MethodPost, "/api/auth/stellar/challenge", map[string]any{"address": kp.Address()})
+	require.Equal(t, http.StatusOK, r.Status, string(r.Body))
+	r = c.Call(t, http.MethodPost, "/api/auth/stellar/verify", map[string]any{
+		"transaction": SignChallenge(t, r.JSON(t)["transaction"].(string), kp),
+	})
+	require.Equal(t, http.StatusOK, r.Status, "wallet sign-in failed: %s", r.Body)
+}
+
+// SignChallenge signs a challenge transaction with kp on the public network,
+// as a wallet does.
+func SignChallenge(t testing.TB, xdr string, kp *keypair.Full) string {
+	t.Helper()
+	gtx, err := txnbuild.TransactionFromXDR(xdr)
+	require.NoError(t, err)
+	tx, ok := gtx.Transaction()
+	require.True(t, ok)
+	tx, err = tx.Sign(network.PublicNetworkPassphrase, kp)
+	require.NoError(t, err)
+	out, err := tx.Base64()
+	require.NoError(t, err)
+	return out
 }
 
 func newRequest(t testing.TB, method, target string, body io.Reader) *http.Request {

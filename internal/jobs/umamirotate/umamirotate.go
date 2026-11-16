@@ -13,11 +13,11 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/justmert/veristar/internal/controlplane/provision"
 	"github.com/justmert/veristar/internal/db/systemq"
 	"github.com/justmert/veristar/internal/umami"
 )
@@ -36,10 +36,6 @@ const (
 	Actor  = "system:umami-rotate"
 	Action = "umami.password_rotate"
 )
-
-// userPrefix marks the umami users the platform made (gh-<github id>). the
-// admin service account and anything else are never touched.
-const userPrefix = "gh-"
 
 // TxFunc runs fn in one fenced cp_system transaction (scheduler.Leader.SystemTx).
 type TxFunc func(ctx context.Context, fn func(pgx.Tx) error) error
@@ -93,7 +89,9 @@ func (r *Rotator) Rotate(ctx context.Context, tx TxFunc) (Result, error) {
 	}
 	n := 0
 	for _, u := range users {
-		if !strings.HasPrefix(u.Username, userPrefix) || u.Role == umami.RoleAdmin {
+		// only the users the platform made (provision.IsPlatformUsername); the
+		// admin service account and anything else are never touched
+		if !provision.IsPlatformUsername(u.Username) || u.Role == umami.RoleAdmin {
 			continue
 		}
 		pw, err := r.Key.Password(u.ID, today)

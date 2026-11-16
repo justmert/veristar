@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -97,6 +98,14 @@ func TeamName(tenantID uuid.UUID) string { return "t-" + tenantID.String() }
 // account it creates. accounts whose umami user was made before migration
 // 00034 keep the gh-<github id> name stored in cp.users.umami_username.
 func Username(userID uuid.UUID) string { return "u-" + userID.String() }
+
+// IsPlatformUsername reports whether an umami user name is one the platform
+// gives console accounts: u-<account id>, or gh-<github id> from before
+// migration 00034. the admin service account and anything made outside the
+// platform carry neither prefix.
+func IsPlatformUsername(name string) bool {
+	return strings.HasPrefix(name, "u-") || strings.HasPrefix(name, "gh-")
+}
 
 // umami limits website names to 100 characters
 const websiteNameMax = 100

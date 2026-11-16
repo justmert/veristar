@@ -19,6 +19,7 @@ import (
 	"github.com/nats-io/nats.go"
 
 	"github.com/justmert/veristar/internal/config"
+	"github.com/justmert/veristar/internal/controlplane/provision"
 	"github.com/justmert/veristar/internal/umami"
 )
 
@@ -64,7 +65,7 @@ type Umami struct {
 	Admin      Pair   `json:"admin"`
 	UserKeyOld string `json:"user_key_old"`
 	UserKeyNew string `json:"user_key_new"`
-	// SampleUsers is how many console users (gh-<id>) are tried
+	// SampleUsers is how many console users (provision.IsPlatformUsername) are tried
 	SampleUsers int `json:"sample_users"`
 }
 
@@ -241,7 +242,7 @@ func Run(ctx context.Context, s Spec, now time.Time) ([]Result, error) {
 			day := umami.EpochDay(now)
 			tried := 0
 			for _, x := range users {
-				if !strings.HasPrefix(x.Username, "gh-") || tried == u.SampleUsers {
+				if !provision.IsPlatformUsername(x.Username) || tried == u.SampleUsers {
 					continue
 				}
 				tried++
