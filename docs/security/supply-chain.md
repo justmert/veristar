@@ -53,7 +53,7 @@ A release can also be built and signed on a workstation, with the same gate and 
 the workflow's key mode (section 3). `scripts/supply-chain/release-workstation.sh <tag> <work dir>`
 runs every step below; it refuses a checkout that is not exactly at the tag or that has local
 changes. Release `v0.1.0` was built by `release-images.yml`; `v0.2.0`, `v0.2.1` and `v0.2.2` were built
-on a workstation; `v0.2.3` was built by `release-images.yml` in keyless mode. The steps, run from a clean checkout of the tag:
+on a workstation; `v0.2.3` and `v0.3.0` were built by `release-images.yml` in keyless mode. The steps, run from a clean checkout of the tag:
 
 1. **Build and push** each image of the matrix in `release-images.yml` with the same Dockerfile,
    context and build arguments (`VERSION=<tag>`, `DBIP_MONTH` from the tag's commit month,
@@ -153,7 +153,7 @@ touched a node.
 | `prober` | `v0.2.2` | `sha256:b80c2df685a5edbe6d82a64d141b91349b4c2799c52a31385be5f994d624d5dd` |
 | `replayer` | `v0.2.2` | `sha256:75bf539d3b794ab7b29db45008efe24ee0377897f03d63ef4f37aa73d3af2458` |
 
-**Release `v0.2.3` (2026-11-15), the release production runs.** The first release after the
+**Release `v0.2.3` (2026-11-15).** The first release after the
 repository became public, built by `release-images.yml` on the tag push (tag `v0.2.3` at commit
 `5be16fb` on `main`) in keyless mode, from 02:14:41 to 02:20:43 UTC: eleven images gated by
 `scan-image.sh` (no fixable critical or high finding), signed with the workflow's Fulcio
@@ -179,6 +179,35 @@ byte-identical.
 | `postgres-ha` | `18.7-v0.2.3` | `sha256:d07c1cbaf0709571bf4d185d2f43ed0c9f4629da8e4de4ccef511d815f3ac84a` |
 | `prober` | `v0.2.3` | `sha256:8712c6a2c1da43b52a797824719b3a54fea151adeb61703671abf4313c151ae8` |
 | `replayer` | `v0.2.3` | `sha256:f2830f57443201b2543a03207ee2ddec08183f366b16bb6c28fb0b416f8cdac4` |
+
+**Release `v0.3.0` (2026-11-16), the release production runs.** Built by `release-images.yml` on
+the tag push (tag `v0.3.0` at commit `3ee7cc6` on `main`) in keyless mode, from 19:02:22 to
+19:08:39 UTC: eleven images gated by `scan-image.sh` (no fixable critical or high finding), signed
+with the workflow's Fulcio certificate and logged in Rekor, with build provenance and SBOM
+attestations; the manifest job verified every digest with the identity
+`https://github.com/justmert/veristar/.github/workflows/release-images.yml@refs/tags/v0.3.0` and
+attached `release-images.json` (SHA-256
+`4e5742af77f89e82d1544036b24b64acdb79a330e28acb57e1bed0dba768d87b`). Every digest verified again
+with `cosign verify` and that identity from a docker configuration without credentials, and
+`gh attestation verify` confirmed the manifest's SLSA provenance from the same workflow at the tag.
+Since `v0.2.3` it adds the integrity grade with the network data in the gateway image (DB-IP ASN
+Lite, ipverse as-metadata categories and Tor exits of the month, with `NETWORK-ATTRIBUTION.txt`
+beside `DBIP-ATTRIBUTION.txt` in `/geo`), the on-chain witness, CSV exports, "What SCF sees" and
+wallet sign-in, with migrations 00032, 00033 and 00034.
+
+| Image | Tag | Digest |
+|---|---|---|
+| `caddy` | `v0.3.0` | `sha256:5e3ce7875b36805cfde1f7a37b22460d4f653cbf29bf3631a4bb2b8a3898f3ba` |
+| `collector` | `v0.3.0` | `sha256:d95b9ba7e9b7b4cae039d3a6f6805f7fa37e3cae755f9275ddfa03969584c207` |
+| `console` | `v0.3.0` | `sha256:d8b94014902ec824b8732d9772f1288eb1c30248768b4a19dd3303325d88345e` |
+| `controlplane` | `v0.3.0` | `sha256:cfc0e93b68936e2057042956b1b1655526063a7ce42a740b974dbe4c5491ae0f` |
+| `gateway` | `v0.3.0` | `sha256:941c50f5005f2ef2388bd8310e0f4d6f95c65ab44f2f3394a27a98fb7369ef9a` |
+| `jobs` | `v0.3.0` | `sha256:fbd2d02b55f216f6d1c2c62163c829895d44d0ef93d630387d36e6dadb0c58a6` |
+| `metricswriter` | `v0.3.0` | `sha256:7ef04f70b2583ad6d31800426bf88936ced5df1161226531584ab5d49439ae02` |
+| `platformctl` | `v0.3.0` | `sha256:defd6ce425bc24658d9adef43cc1961efa94e8bd070eef969469b24be2338819` |
+| `postgres-ha` | `18.7-v0.3.0` | `sha256:e82df61b6232de628e95367a8a152946cc021cb5699eb4af5ceb795661d00e76` |
+| `prober` | `v0.3.0` | `sha256:dfc127a00f1f6169c07808f9e58f3ac0e2e6c40f6810989e34001be5d6ecf277` |
+| `replayer` | `v0.3.0` | `sha256:a471b3b135c5ed2caa32a431cbdbd54a30ef7e34e7b4e59ee9515681ff035156` |
 
 ## 3. Deploy-time verification (every playbook that pulls images)
 
