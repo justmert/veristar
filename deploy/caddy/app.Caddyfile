@@ -126,7 +126,10 @@ app.{$BASE_DOMAIN} {
 	# they authenticate by bearer credential or not at all and never read the
 	# session cookie; the access log deletes Authorization with every other
 	# header. the consent page itself (/ai/consent) is a console route.
-	@mcp path /mcp /oauth/* /.well-known/oauth-protected-resource /.well-known/oauth-protected-resource/* /.well-known/oauth-authorization-server
+	# the stellar.toml of the console host (contract 20.2) lists the usage
+	# report signing keys; the control plane writes it from the key it signs
+	# with, so the published key and the signing key cannot drift apart
+	@mcp path /mcp /oauth/* /.well-known/oauth-protected-resource /.well-known/oauth-protected-resource/* /.well-known/oauth-authorization-server /.well-known/stellar.toml
 	handle @mcp {
 		reverse_proxy {
 			to {$CONTROLPLANE_UPSTREAM}

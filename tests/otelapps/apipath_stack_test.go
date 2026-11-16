@@ -30,6 +30,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
+	"github.com/stellar/go-stellar-sdk/keypair"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 
 	"github.com/justmert/veristar/db"
@@ -266,6 +267,7 @@ func startAPIStack(t *testing.T) *apiStack {
 	goBuild(t, root, cpBin, "./cmd/controlplane", "oauthfixture")
 	ports := freeAddrs(t, 5)
 	s.cpURL = "http://127.0.0.1:" + ports[0]
+	reportKey := keypair.MustRandom()
 	env := []string{
 		"CONTROLPLANE_ADDR=127.0.0.1:" + ports[0],
 		"CONTROLPLANE_OPS_ADDR=127.0.0.1:" + ports[1],
@@ -276,6 +278,8 @@ func startAPIStack(t *testing.T) *apiStack {
 		"GITHUB_CLIENT_SECRET=" + oauthSecret,
 		"GITHUB_REDIRECT_URL=" + callback,
 		"OAUTH_STATE_KEY=" + key32(t),
+		"REPORT_SIGNING_SEED=" + reportKey.Seed(),
+		"REPORT_SIGNING_KEY=" + reportKey.Address(),
 		"OAUTH_FIXTURE_URL=" + s.fixture.URL,
 		"OPERATOR_GITHUB_IDS=" + strconv.Itoa(operatorGitHubID),
 		"UMAMI_URL=" + um.URL.String(),

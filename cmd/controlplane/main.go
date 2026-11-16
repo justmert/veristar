@@ -42,6 +42,7 @@ import (
 	"github.com/justmert/veristar/internal/controlplane/operator"
 	"github.com/justmert/veristar/internal/controlplane/otlptokens"
 	"github.com/justmert/veristar/internal/controlplane/provision"
+	"github.com/justmert/veristar/internal/controlplane/reports"
 	"github.com/justmert/veristar/internal/controlplane/session"
 	"github.com/justmert/veristar/internal/controlplane/sites"
 	"github.com/justmert/veristar/internal/controlplane/sso"
@@ -134,6 +135,8 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 	amCfg, _ := config.LoadAlertmanager(env)
 	// ledger apis of the on-chain proofs (contract 15.4)
 	stellarCfg, _ := config.LoadStellar(env)
+	// the usage report key (contract 20.2)
+	reportKey, _ := config.LoadReportSigning(env)
 	cfg, err := config.LoadControlPlane(env)
 	if err != nil {
 		return err
@@ -338,6 +341,13 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	// signed usage reports (contract 20)
+	reportRoutes, err := reports.New(reports.Config{
+		Scope: scope, DB: d, Signing: reportKey, ConsoleOrigin: cfg.ConsoleOrigin, Platform: buildVersion(), Now: time.Now,
+	})
+	if err != nil {
+		return err
+	}
 
 	// erasure: runs started by requests finish before the pools close
 	eraser, err := erasure.New(erasure.Config{
@@ -418,7 +428,8 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 		Log:           log,
 		ConsoleOrigin: cfg.ConsoleOrigin,
 		Sessions:      sessions,
-		Public:        []controlplane.Routes{controlplane.RoutesFunc(authH.Public), controlplane.RoutesFunc(terms.Routes)},
+		Public: []controlplane.Routes{controlplane.RoutesFunc(authH.Public), controlplane.RoutesFunc(terms.Routes),
+			controlplane.RoutesFunc(reportRoutes.Public)},
 		Private: []controlplane.Routes{
 			controlplane.RoutesFunc(authH.Private),
 			accountRoutes,
@@ -435,6 +446,7 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 			overviewExport,
 			scfView,
 			tenantCohort,
+			controlplane.RoutesFunc(reportRoutes.Private),
 			// behind RequireUser like every private group; sso answers its own
 			// failures with a redirect, but an anonymous request gets 401
 			controlplane.RoutesFunc(func(r chi.Router) { r.Method(http.MethodGet, ssoPath, ssoH) }),
@@ -453,6 +465,8 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 			{Path: mcpserver.Path, Handler: mcpSrv.Handler()},
 			{Path: "/oauth", Handler: mcpSrv.OAuthHandler()},
 			{Path: "/.well-known", Handler: mcpSrv.MetadataHandler()},
+			// the report keys for sep-1 readers (contract 20.2)
+			{Path: reports.StellarTOMLPath, Handler: reportRoutes.StellarTOMLHandler()},
 		},
 	})
 
@@ -462,7 +476,7 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 
 	log.Info("controlplane started", "version", buildVersion(), "addr", cfg.Addr, "ops_addr", cfg.OpsAddr,
 		"console_origin", cfg.ConsoleOrigin, "terms_version", tm.Version, "operators", len(cfg.OperatorGitHubIDs),
-		"wallet_operators", len(cfg.OperatorStellarAddresses))
+		"wallet_operators", len(cfg.OperatorStellarAddresses), "report_key", reportKey.Address)
 
 	opsCtx, stopOps := context.WithCancel(ctx)
 	defer stopOps()

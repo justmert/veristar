@@ -130,8 +130,8 @@ var Want = map[string]map[db.Role]string{
 	// signed usage reports (00036): a member stores and revokes its
 	// project's reports; the public route reads one and counts its views
 	"cp.usage_reports": {
-		db.RoleCPSystem: "r w(last_viewed_at,view_count)",
-		db.RoleCPTenant: "r a(body,created_by,id,period_from,period_to,signature,signer,tenant_id) w(revoked_at,revoked_by)",
+		db.RoleCPSystem:   "r w(last_viewed_at,view_count)",
+		db.RoleCPTenant:   "r a(body,created_by,id,period_from,period_to,signature,signer,tenant_id) w(revoked_at,revoked_by)",
 		db.RoleCPOperator: "r",
 	},
 }

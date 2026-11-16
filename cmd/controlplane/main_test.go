@@ -17,6 +17,7 @@ import (
 
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
+	"github.com/stellar/go-stellar-sdk/keypair"
 	"github.com/stretchr/testify/require"
 
 	"github.com/justmert/veristar/db"
@@ -37,7 +38,7 @@ func TestServeNamesEveryMissingKey(t *testing.T) {
 	for _, k := range []string{
 		"CONTROLPLANE_ADDR", "CONTROLPLANE_OPS_ADDR", "CONSOLE_ORIGIN", "INGEST_ORIGIN", "WEB_ORIGIN",
 		"GITHUB_CLIENT_ID", "GITHUB_CLIENT_SECRET", "GITHUB_REDIRECT_URL", "OAUTH_STATE_KEY",
-		"OPERATOR_GITHUB_IDS", "UMAMI_URL", "UMAMI_ADMIN_PASSWORD", "UMAMI_USER_PASSWORD_KEY",
+		"OPERATOR_GITHUB_IDS", "REPORT_SIGNING_SEED", "REPORT_SIGNING_KEY", "UMAMI_URL", "UMAMI_ADMIN_PASSWORD", "UMAMI_USER_PASSWORD_KEY",
 		"TRACKER_RELEASE_DIR", "NATS_URL", "PLATFORM_DB_HOST", "PLATFORM_DB_CP_SYSTEM_PASSWORD",
 		"PLATFORM_DB_CP_TENANT_PASSWORD", "PLATFORM_DB_CP_OPERATOR_PASSWORD",
 		"API_MINUTE_RETENTION_DAYS", "API_HOURLY_RETENTION_MONTHS",
@@ -110,6 +111,7 @@ func TestServeStartsAndStops(t *testing.T) {
 
 	addr, ops := freeAddr(t), freeAddr(t)
 	key := base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{7}, 32))
+	reportKey := keypair.MustRandom()
 	values := pg.EnvFor("platform")
 	for k, v := range map[string]string{
 		"CONTROLPLANE_ADDR":           addr,
@@ -121,6 +123,8 @@ func TestServeStartsAndStops(t *testing.T) {
 		"GITHUB_CLIENT_SECRET":        "cmd-test-secret",
 		"GITHUB_REDIRECT_URL":         "http://" + addr + "/api/auth/github/callback",
 		"OAUTH_STATE_KEY":             key,
+		"REPORT_SIGNING_SEED":         reportKey.Seed(),
+		"REPORT_SIGNING_KEY":          reportKey.Address(),
 		"OAUTH_FIXTURE_URL":           "http://127.0.0.1:1",
 		"OPERATOR_GITHUB_IDS":         "1",
 		"UMAMI_URL":                   "http://127.0.0.1:3000",

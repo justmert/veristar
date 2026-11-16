@@ -87,8 +87,8 @@ type SCFViewAnswer struct {
 	Onchain         *onchain.Summary `json:"onchain"`
 	// the integrity grade of the project's row in the global web view
 	// (contract 17.3), present when the views list the project
-	Integrity     *IntegrityGrade    `json:"integrity,omitempty"`
-	LinkTwoWay    bool               `json:"link_two_way"`
+	Integrity  *IntegrityGrade `json:"integrity,omitempty"`
+	LinkTwoWay bool            `json:"link_two_way"`
 	// the project's cohort record, the cohort its percentiles come from
 	// (contract 19.3) and its row's cohort, growth and percentiles
 	Cohort           CohortRecord      `json:"cohort"`
@@ -154,6 +154,102 @@ func noFilter(rg dayRange) listQuery {
 	return listQuery{Range: rg, Filter: projectFilter{Statuses: []string{}}, Limit: 1}
 }
 
+// LoadSCFView reads the "what scf sees" answer of one project over
+// [from, to] inside a cp_operator transaction whose snapshot the caller
+// set. usage reports read their numbers through it, so a report and the
+// view show the same figures for the same range.
+func LoadSCFView(ctx context.Context, tx pgx.Tx, id uuid.UUID, from, to, now time.Time) (SCFViewAnswer, error) {
+	rg := dayRange{From: from, To: to}
+	out := SCFViewAnswer{From: rg.From.Format(time.DateOnly), To: rg.To.Format(time.DateOnly), Days: dayStrings(rg)}
+	if err := loadSCF(ctx, tx, id, rg, now, &out); err != nil {
+		return out, fmt.Errorf("operator: scf view: %w", err)
+	}
+	if out.RulesMet == nil {
+		out.RulesMet = []SCFRule{}
+	}
+	if out.WebSeries == nil {
+		out.WebSeries = []WebPoint{}
+		out.APISeries = []APIPoint{}
+		out.OnchainSeries = []onchain.DayTotal{}
+	}
+	return out, nil
+}
+
+func loadSCF(ctx context.Context, tx pgx.Tx, id uuid.UUID, rg dayRange, now time.Time, out *SCFViewAnswer) error {
+	cohort, err := readCohort(ctx, tx, id)
+	if err != nil {
+		return err
+	}
+	out.Cohort = cohort
+	lq := noFilter(rg)
+	var pc PercentileCohort
+	lq.Filter.Cohort, pc = ownCohortFilter(cohort)
+	args := lq.args()
+	args["tenant"] = id
+	p, err := scanWebRow(tx.QueryRow(ctx, webListCTE+webRowSelect+` where id = @tenant`, args))
+	if errors.Is(err, pgx.ErrNoRows) {
+		// the operator views do not list this project
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("web row: %w", err)
+	}
+	t, sc, grade, cmp := p.Tenant, p.SiteCounts, p.Integrity, p.Comparison
+	out.HasWebData, out.HasAPIData = p.HasWebData, p.HasAPIData
+	web := SCFWebRow{
+		Pageviews: p.Pageviews, Visitors: p.Visitors, Visits: p.Visits, Bounces: p.Bounces, Totaltime: p.Totaltime,
+		BounceRate: p.BounceRate, AvgVisitDuration: p.AvgVisitDuration, QuarantinePageviews: p.QuarantinePageviews,
+		QuarantineVisitors: p.QuarantineVisitors, QuarantineShare: p.QuarantineShare, IngestRequests: p.IngestRequests,
+		IngestRejected: p.IngestRejected, RejectedShare: p.RejectedShare,
+	}
+	out.InOperatorViews, out.Tenant, out.Sites, out.Web, out.Integrity = true, &t, &sc, &web, &grade
+	out.PercentileCohort, out.Comparison = &pc, &cmp
+	if out.RulesMet, err = RulesMet(ctx, tx, id, utcDay(now)); err != nil {
+		return err
+	}
+	var api SCFAPIRow
+	var p50, p95, p99 *float64
+	err = tx.QueryRow(ctx, apiListCTE+`
+		select requests, requests_4xx, requests_5xx, rate_4xx, rate_5xx, p50, p95, p99,
+		       services, routes, span_services, lossy
+		from y where id = @tenant`, args).Scan(&api.Requests, &api.Requests4xx, &api.Requests5xx, &api.Rate4xx, &api.Rate5xx,
+		&p50, &p95, &p99, &api.Services, &api.Routes, &api.SpanServices, &api.Lossy)
+	if err != nil {
+		return fmt.Errorf("api row: %w", err)
+	}
+	api.Percentiles = newPercentiles(p50, p95, p99)
+	api.Source = source(api.Services, api.SpanServices)
+	out.API = &api
+
+	ids := []uuid.UUID{id}
+	series, _, err := webSeries(ctx, tx, ids, rg)
+	if err != nil {
+		return err
+	}
+	out.WebSeries = series[id]
+	apiS, err := apiSeries(ctx, tx, pgx.NamedArgs{"ids": ids, "from_at": rg.From, "to_end": rg.end()}, rg)
+	if err != nil {
+		return err
+	}
+	out.APISeries = apiS[id]
+	if out.APISeries == nil {
+		out.APISeries = emptyAPISeries(rg)
+	}
+	chainOf, err := compareOnchain(ctx, tx, ids, rg, now)
+	if err != nil {
+		return err
+	}
+	s := chainOf[id].Totals
+	out.Onchain = &s
+	out.OnchainSeries = chainOf[id].Series
+	view, err := onchain.Load(ctx, tx, onchain.OperatorSites, id, rg.onchain(), utcDay(now))
+	if err != nil {
+		return err
+	}
+	out.LinkTwoWay = view.Link.TwoWay
+	return nil
+}
+
 func (v *SCFView) get(w http.ResponseWriter, r *http.Request) error {
 	a, err := v.scope.Tenant(r, "tenant_id")
 	if err != nil {
@@ -165,95 +261,16 @@ func (v *SCFView) get(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	ctx := r.Context()
-	id := a.TenantID
-	out := SCFViewAnswer{From: rg.From.Format(time.DateOnly), To: rg.To.Format(time.DateOnly), Days: dayStrings(rg)}
+	var out SCFViewAnswer
 	err = v.db.WithOperator(ctx, func(tx pgx.Tx) error {
 		if err := snapshot(ctx, tx); err != nil {
 			return err
 		}
-		cohort, err := readCohort(ctx, tx, id)
-		if err != nil {
-			return err
-		}
-		out.Cohort = cohort
-		lq := noFilter(rg)
-		var pc PercentileCohort
-		lq.Filter.Cohort, pc = ownCohortFilter(cohort)
-		args := lq.args()
-		args["tenant"] = id
-		p, err := scanWebRow(tx.QueryRow(ctx, webListCTE+webRowSelect+` where id = @tenant`, args))
-		if errors.Is(err, pgx.ErrNoRows) {
-			// the operator views do not list this project
-			return nil
-		}
-		if err != nil {
-			return fmt.Errorf("web row: %w", err)
-		}
-		t, sc, grade, cmp := p.Tenant, p.SiteCounts, p.Integrity, p.Comparison
-		out.HasWebData, out.HasAPIData = p.HasWebData, p.HasAPIData
-		web := SCFWebRow{
-			Pageviews: p.Pageviews, Visitors: p.Visitors, Visits: p.Visits, Bounces: p.Bounces, Totaltime: p.Totaltime,
-			BounceRate: p.BounceRate, AvgVisitDuration: p.AvgVisitDuration, QuarantinePageviews: p.QuarantinePageviews,
-			QuarantineVisitors: p.QuarantineVisitors, QuarantineShare: p.QuarantineShare, IngestRequests: p.IngestRequests,
-			IngestRejected: p.IngestRejected, RejectedShare: p.RejectedShare,
-		}
-		out.InOperatorViews, out.Tenant, out.Sites, out.Web, out.Integrity = true, &t, &sc, &web, &grade
-		out.PercentileCohort, out.Comparison = &pc, &cmp
-		if out.RulesMet, err = RulesMet(ctx, tx, id, utcDay(now)); err != nil {
-			return err
-		}
-		var api SCFAPIRow
-		var p50, p95, p99 *float64
-		err = tx.QueryRow(ctx, apiListCTE+`
-			select requests, requests_4xx, requests_5xx, rate_4xx, rate_5xx, p50, p95, p99,
-			       services, routes, span_services, lossy
-			from y where id = @tenant`, args).Scan(&api.Requests, &api.Requests4xx, &api.Requests5xx, &api.Rate4xx, &api.Rate5xx,
-			&p50, &p95, &p99, &api.Services, &api.Routes, &api.SpanServices, &api.Lossy)
-		if err != nil {
-			return fmt.Errorf("api row: %w", err)
-		}
-		api.Percentiles = newPercentiles(p50, p95, p99)
-		api.Source = source(api.Services, api.SpanServices)
-		out.API = &api
-
-		ids := []uuid.UUID{id}
-		series, _, err := webSeries(ctx, tx, ids, rg)
-		if err != nil {
-			return err
-		}
-		out.WebSeries = series[id]
-		apiS, err := apiSeries(ctx, tx, pgx.NamedArgs{"ids": ids, "from_at": rg.From, "to_end": rg.end()}, rg)
-		if err != nil {
-			return err
-		}
-		out.APISeries = apiS[id]
-		if out.APISeries == nil {
-			out.APISeries = emptyAPISeries(rg)
-		}
-		chainOf, err := compareOnchain(ctx, tx, ids, rg, now)
-		if err != nil {
-			return err
-		}
-		s := chainOf[id].Totals
-		out.Onchain = &s
-		out.OnchainSeries = chainOf[id].Series
-		view, err := onchain.Load(ctx, tx, onchain.OperatorSites, id, rg.onchain(), utcDay(now))
-		if err != nil {
-			return err
-		}
-		out.LinkTwoWay = view.Link.TwoWay
-		return nil
+		out, err = LoadSCFView(ctx, tx, a.TenantID, rg.From, rg.To, now)
+		return err
 	})
 	if err != nil {
-		return fmt.Errorf("operator: scf view: %w", err)
-	}
-	if out.RulesMet == nil {
-		out.RulesMet = []SCFRule{}
-	}
-	if out.WebSeries == nil {
-		out.WebSeries = []WebPoint{}
-		out.APISeries = []APIPoint{}
-		out.OnchainSeries = []onchain.DayTotal{}
+		return err
 	}
 	httpx.WriteJSON(w, http.StatusOK, out)
 	return nil

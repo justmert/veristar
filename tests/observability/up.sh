@@ -49,6 +49,10 @@ GATUS_TOKEN=$(rand 24)
 METRICS_TOKEN=$(rand 24)
 EOF
 fi
+# the usage report key pair; added to a base.env of an earlier run too
+if ! grep -q '^REPORT_SIGNING_SEED=' "$OBS/env/base.env"; then
+	"$OBS/bin/platformctl" report keygen --env >>"$OBS/env/base.env"
+fi
 . "$OBS/env/base.env"
 cat >"$OBS/env/stack.env" <<EOF
 TZ=UTC
@@ -71,6 +75,8 @@ UMAMI_URL=http://umami:3000
 UMAMI_ADMIN_PASSWORD=$UMAMI_ADMIN
 UMAMI_USER_PASSWORD_KEY=$PW_KEY
 OAUTH_STATE_KEY=$STATE_KEY
+REPORT_SIGNING_SEED=$REPORT_SIGNING_SEED
+REPORT_SIGNING_KEY=$REPORT_SIGNING_KEY
 GITHUB_CLIENT_ID=obs-fixture-client
 GITHUB_CLIENT_SECRET=obs-fixture-secret
 GITHUB_REDIRECT_URL=https://app.obs.test/api/auth/github/callback
@@ -118,6 +124,7 @@ write_secrets() {
 		echo "sa_secrets:"
 		echo "  probe_metrics_token: \"$METRICS_TOKEN\""
 		echo "  gatus_external_token: \"$GATUS_TOKEN\""
+		echo "  report_signing_key: \"$REPORT_SIGNING_KEY\""
 		if [ -f "$OBS/env/probe-tenant.out" ]; then
 			sed -n 's/^site_id=\(.*\)/  probe_site_id: "\1"/p; s/^otlp_token=\(.*\)/  probe_otlp_token: "\1"/p; s/^machine_api_key=\(.*\)/  probe_machine_api_key: "\1"/p' "$OBS/env/probe-tenant.out"
 		fi

@@ -36,6 +36,7 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/oschwald/maxminddb-golang/v2"
+	"github.com/stellar/go-stellar-sdk/keypair"
 
 	"github.com/justmert/veristar/internal/natsx"
 	"github.com/justmert/veristar/internal/umami"
@@ -518,6 +519,7 @@ func (s *Stack) StartControlPlane(t testing.TB) {
 		s.UserKey = key32()
 	}
 	env := s.common()
+	reportKey := keypair.MustRandom()
 	for k, v := range map[string]string{
 		"CONTROLPLANE_ADDR":     "0.0.0.0:8081",
 		"CONTROLPLANE_OPS_ADDR": "0.0.0.0:9090",
@@ -528,8 +530,11 @@ func (s *Stack) StartControlPlane(t testing.TB) {
 		"GITHUB_CLIENT_SECRET":  s.OAuthSecret,
 		"GITHUB_REDIRECT_URL":   "https://app." + baseDomain + "/api/auth/github/callback",
 		"OAUTH_STATE_KEY":       key32(),
-		"OAUTH_FIXTURE_URL":     "http://" + oauthHost + ":" + oauthPort,
-		"OPERATOR_GITHUB_IDS":   "1",
+		// the usage report key of this stack (contract 20.2)
+		"REPORT_SIGNING_SEED": reportKey.Seed(),
+		"REPORT_SIGNING_KEY":  reportKey.Address(),
+		"OAUTH_FIXTURE_URL":   "http://" + oauthHost + ":" + oauthPort,
+		"OPERATOR_GITHUB_IDS": "1",
 	} {
 		env[k] = v
 	}
