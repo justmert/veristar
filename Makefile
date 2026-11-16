@@ -445,7 +445,7 @@ ansible-lint:
 # and checks them (tests/natsconf); needs the ansible venv, no host
 .PHONY: ansible-render-test
 ansible-render-test:
-	ANSIBLE_VENV=$(ANSIBLE_VENV) $(GO) test -tags ansiblerender -count=1 ./tests/natsconf/
+	ANSIBLE_VENV=$(ANSIBLE_VENV) $(GO) test -tags ansiblerender -count=1 ./tests/natsconf/ ./tests/systemdunits/
 
 staging-deploy production-deploy: %-deploy:
 	@test -f infra/ansible/inventories/$*/hosts.json || { echo "no inventory: run make $*-apply first" >&2; exit 1; }
