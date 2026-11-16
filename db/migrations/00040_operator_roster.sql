@@ -135,12 +135,15 @@ create trigger operators_sync_flags after insert or update or delete on cp.opera
   for each row execute function cp.operators_sync_flags();
 
 -- +goose StatementBegin
+-- a statement that changed no row (an update that matched nothing, for
+-- example) changes nothing the rule guards, so it is not checked
 create function cp.operators_last_admin() returns trigger
 language plpgsql
 set search_path = pg_catalog, pg_temp
 as $$
 begin
-  if not exists (select 1 from cp.operators where role = 'operator_admin' and status = 'active') then
+  if exists (select 1 from changed)
+     and not exists (select 1 from cp.operators where role = 'operator_admin' and status = 'active') then
     raise exception 'the roster must keep at least one active operator admin'
       using errcode = 'integrity_constraint_violation', constraint = 'operators_last_admin';
   end if;
@@ -148,7 +151,13 @@ begin
 end
 $$;
 -- +goose StatementEnd
-create trigger operators_last_admin after update or delete on cp.operators
+-- a trigger with a transition table names one event, so update and delete
+-- get one each
+create trigger operators_last_admin_update after update on cp.operators
+  referencing old table as changed
+  for each statement execute function cp.operators_last_admin();
+create trigger operators_last_admin_delete after delete on cp.operators
+  referencing old table as changed
   for each statement execute function cp.operators_last_admin();
 
 -- 00030 fired the mcp revoke only on an update that names is_operator.
@@ -182,7 +191,8 @@ grant select, insert, update, delete on cp.operators, cp.operator_passkeys to cp
 drop trigger users_mcp_revoke on cp.users;
 create trigger users_mcp_revoke after update of is_operator on cp.users
   for each row execute function cp.mcp_revoke_operator();
-drop trigger operators_last_admin on cp.operators;
+drop trigger operators_last_admin_delete on cp.operators;
+drop trigger operators_last_admin_update on cp.operators;
 drop function cp.operators_last_admin();
 drop trigger operators_sync_flags on cp.operators;
 drop function cp.operators_sync_flags();

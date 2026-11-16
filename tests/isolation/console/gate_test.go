@@ -823,7 +823,11 @@ func testOperatorRoutes(t *testing.T, e *env, w *gateWorld, cat []route) {
 		if r.kind != kindOperator {
 			continue
 		}
-		ids := gateIDs{tenant: w.ta.String(), site: w.sa.String(), key: keyID, entry: entry}
+		// every parameter is filled, so each request reaches a route
+		guess := uuid.NewString()
+		ids := gateIDs{tenant: w.ta.String(), site: w.sa.String(), key: keyID, entry: entry, credential: guess,
+			report: guess, rule: w.ruleID, passkey: guess, chain: guess, invite: guess, user: guess, token: guess,
+			request: guess}
 		var body any
 		if r.body != nil {
 			body = r.body(ids)
