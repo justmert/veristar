@@ -1,9 +1,7 @@
 # the core node's caddy: the custom caddy build (caddy.Dockerfile) with the
 # console single-page app at /srv/console, which deploy/caddy/app.Caddyfile
-# serves as CONSOLE_ROOT, and the theme of umami's dashboard at
-# /srv/umami-theme, which deploy/caddy/web.Caddyfile serves (docs/adr/0004).
-# shipping them in one image makes a release and the caddy that serves it one
-# atomic deploy.
+# serves as CONSOLE_ROOT. shipping them in one image makes a release and the
+# caddy that serves it one atomic deploy.
 #   docker build -f deploy/images/console.Dockerfile \
 #     --build-arg CADDY_IMAGE=veristar/caddy:2.11.9 -t veristar/console:dev .
 # CADDY_IMAGE is required: it names the caddy.Dockerfile build to extend.
@@ -24,7 +22,3 @@ RUN pnpm install --frozen-lockfile --filter "@veristar/console..." \
 
 FROM ${CADDY_IMAGE}
 COPY --from=build /src/apps/console/dist /srv/console
-# committed files, checked by `pnpm check` (deploy/caddy/umami-theme/assets.ts);
-# the test stops the build when the stylesheet web.Caddyfile links is missing
-COPY deploy/caddy/umami-theme/site /srv/umami-theme
-RUN test -f /srv/umami-theme/_veristar/theme.css

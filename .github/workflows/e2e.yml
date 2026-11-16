@@ -38,12 +38,10 @@ jobs:
             timeout: 75
             browsers: true
             geo: true
-          - suite: test-caddy-web
+          - suite: test-caddy-closed
             timeout: 30
-            browsers: true
           - suite: umami-compat
             timeout: 30
-            browsers: true
             devstack: true
           - suite: webpath
             timeout: 130

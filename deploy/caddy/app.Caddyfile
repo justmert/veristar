@@ -46,8 +46,8 @@
 	# address are deleted, and so are all request headers, because they carry
 	# the session cookie and the user agent besides any forwarding header.
 	# the query is cut from the uri. response headers go too: Set-Cookie
-	# carries the session, and the sso redirect's Location carries the umami
-	# token (contract 4.4.1).
+	# carries the session, and a sign-in redirect's Location carries the
+	# sealed oauth state (contract 4.1.1).
 	log {
 		output stdout
 		format filter {
@@ -66,8 +66,8 @@
 	# react applies style props through the cssom, which style-src does not
 	# govern. no frames, no plugins, no foreign connections; links to github
 	# and db-ip are plain navigations, which the csp does not restrict.
-	# referrer-policy is a default only: the sso redirect carries a token in
-	# its Location and sets no-referrer itself, which must win.
+	# referrer-policy is a default only: a redirect that carries a credential
+	# in its Location sets no-referrer itself, which must win.
 	header {
 		Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
 		Strict-Transport-Security "max-age=63072000; includeSubDomains"

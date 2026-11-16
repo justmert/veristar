@@ -10,7 +10,7 @@
 # event requests reach the new gateway with Origin: null, which it refuses.
 # the transfer path is the safe one; this file exists for the case the
 # domain cannot be transferred, and for what still benefits from it
-# (people opening the console or the web dashboards by the old name).
+# (people opening the console by the old name).
 #
 # environment, all required:
 #   OLD_DOMAIN        the domain being left
@@ -69,9 +69,4 @@ otlp.{$OLD_DOMAIN} {
 app.{$OLD_DOMAIN} {
 	tls {$EDGE_TLS}
 	import moved app
-}
-
-web.{$OLD_DOMAIN} {
-	tls {$EDGE_TLS}
-	import moved web
 }

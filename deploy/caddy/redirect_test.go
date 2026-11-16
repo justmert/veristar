@@ -131,7 +131,6 @@ func TestRedirectCaddyLive(t *testing.T) {
 		{"in.old.test", "/v1/c?w=abc", "https://in.new.test/v1/c?w=abc"},
 		{"otlp.old.test", "/v1/metrics", "https://otlp.new.test/v1/metrics"},
 		{"app.old.test", "/projects?x=1", "https://app.new.test/projects?x=1"},
-		{"web.old.test", "/websites/1", "https://web.new.test/websites/1"},
 	} {
 		a := get(tc.host, tc.path)
 		require.Equal(t, http.StatusPermanentRedirect, a.status, tc.host)

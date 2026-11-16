@@ -9,10 +9,8 @@ package umamictr
 import (
 	"context"
 	"crypto/rand"
-	"crypto/tls"
 	"encoding/hex"
 	"io"
-	"net/http"
 	"net/netip"
 	"net/url"
 	"os"
@@ -20,12 +18,10 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
-	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	mobycontainer "github.com/moby/moby/api/types/container"
 	mobynet "github.com/moby/moby/api/types/network"
 	"github.com/testcontainers/testcontainers-go"
 	tcnetwork "github.com/testcontainers/testcontainers-go/network"
@@ -227,132 +223,40 @@ func Start(t testing.TB) *Stack {
 // that the dockerfile builds on it.
 const CaddyImage = "caddy:2.11.9@sha256:e40b94d0a43b5ff69cb20568d73f10c70703df7b0ffc2298eb3d723cdc9d0bd1"
 
-// WebCaddyTag names the image built from deploy/images/caddy.Dockerfile: caddy
-// with the replace-response plugin, which web.Caddyfile needs for the db-ip
-// attribution. stock caddy refuses that file.
-const WebCaddyTag = "veristar/caddy:2.11.9-test"
+// PlatformCaddyTag names the image built from deploy/images/caddy.Dockerfile:
+// caddy with the cloudflare dns plugin, which the assembled node configs
+// name. stock caddy refuses them.
+const PlatformCaddyTag = "veristar/caddy:2.11.9-test"
 
 var (
-	webImageOnce sync.Once
-	webImageErr  error
-	webImageOut  string
+	caddyImageOnce sync.Once
+	caddyImageErr  error
+	caddyImageOut  string
 )
 
-// WebCaddyImage builds deploy/images/caddy.Dockerfile once per test process
+// PlatformCaddyImage builds deploy/images/caddy.Dockerfile once per test process
 // and returns its tag. docker's layer cache makes later builds take seconds;
 // the first one compiles caddy.
-func WebCaddyImage(t testing.TB) string {
+func PlatformCaddyImage(t testing.TB) string {
 	t.Helper()
 	root := repoRoot(t)
-	webImageOnce.Do(func() {
+	caddyImageOnce.Do(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
 		defer cancel()
 		//nolint:gosec // fixed arguments: the repository's own dockerfile and tag
 		cmd := exec.CommandContext(ctx, "docker", "build", "--quiet",
 			"-f", filepath.Join(root, "deploy", "images", "caddy.Dockerfile"),
-			"-t", WebCaddyTag, filepath.Join(root, "deploy", "images"))
+			"-t", PlatformCaddyTag, filepath.Join(root, "deploy", "images"))
 		out, err := cmd.CombinedOutput()
 		if err != nil {
-			webImageErr = err
-			webImageOut = string(out)
+			caddyImageErr = err
+			caddyImageOut = string(out)
 		}
 	})
-	if webImageErr != nil {
-		t.Fatalf("umamictr: build %s: %v\n%s", WebCaddyTag, webImageErr, webImageOut)
+	if caddyImageErr != nil {
+		t.Fatalf("umamictr: build %s: %v\n%s", PlatformCaddyTag, caddyImageErr, caddyImageOut)
 	}
-	return WebCaddyTag
-}
-
-// ThemeRoot is where web.Caddyfile serves the umami theme from.
-const ThemeRoot = "/srv/umami-theme"
-
-// ThemeDir is the theme's source directory in the repository.
-func ThemeDir(t testing.TB) string {
-	t.Helper()
-	return filepath.Join(repoRoot(t), "deploy", "caddy", "umami-theme", "site")
-}
-
-// WebDomain is BASE_DOMAIN for the web caddy; the site is web.WebDomain.
-const WebDomain = "umami.test"
-
-// Web is a caddy running deploy/caddy/web.Caddyfile in front of a Stack: the
-// public view of web.<BASE_DOMAIN>.
-type Web struct {
-	// Base is https://127.0.0.1:<port>; every request needs Host set to Host.
-	Base      string
-	Host      string
-	HTTP      *http.Client
-	Container *testcontainers.DockerContainer
-}
-
-// StartWeb runs the web caddy on the stack's network with tls from caddy's
-// local ca, and returns once it answers over tls.
-func StartWeb(t testing.TB, s *Stack) *Web {
-	t.Helper()
-	ctx := context.Background()
-	c, err := testcontainers.Run(ctx, WebCaddyImage(t),
-		testcontainers.WithEnv(map[string]string{
-			"BASE_DOMAIN":    WebDomain,
-			"UMAMI_UPSTREAM": UpstreamAddr,
-			"WEB_TLS":        "internal",
-		}),
-		testcontainers.WithFiles(testcontainers.ContainerFile{
-			HostFilePath:      filepath.Join(repoRoot(t), "deploy", "caddy", "web.Caddyfile"),
-			ContainerFilePath: "/etc/caddy/Caddyfile",
-			FileMode:          0o644,
-		}),
-		// the umami theme web.Caddyfile serves (docs/adr/0004), which the
-		// console image holds at the same path in production
-		testcontainers.WithHostConfigModifier(func(hc *mobycontainer.HostConfig) {
-			hc.Binds = append(hc.Binds, ThemeDir(t)+":"+ThemeRoot+":ro")
-		}),
-		testcontainers.WithExposedPorts("443/tcp"),
-		tcnetwork.WithNetwork([]string{"web"}, s.Network),
-		testcontainers.WithWaitStrategy(wait.ForLog("serving initial configuration").WithStartupTimeout(time.Minute)),
-	)
-	testcontainers.CleanupContainer(t, c)
-	if err != nil {
-		t.Fatalf("umamictr: web caddy: %v", err)
-	}
-	endpoint, err := c.PortEndpoint(ctx, "443/tcp", "")
-	if err != nil {
-		t.Fatalf("umamictr: web caddy endpoint: %v", err)
-	}
-	w := &Web{
-		Base: "https://" + endpoint,
-		Host: "web." + WebDomain,
-		HTTP: &http.Client{
-			Timeout: 30 * time.Second,
-			// redirects are part of what the tests check
-			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
-			Transport: &http.Transport{
-				// caddy's local ca signs the certificate; the tests check
-				// routing and headers, not the chain
-				TLSClientConfig: &tls.Config{ServerName: "web." + WebDomain, InsecureSkipVerify: true}, //nolint:gosec // test-only client for caddy's internal ca
-			},
-		},
-		Container: c,
-	}
-	deadline := time.Now().Add(30 * time.Second)
-	for {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, w.Base+"/api/heartbeat", nil)
-		if err != nil {
-			t.Fatalf("umamictr: %v", err)
-		}
-		req.Host = w.Host
-		resp, err := w.HTTP.Do(req)
-		if err == nil {
-			_, _ = io.Copy(io.Discard, resp.Body)
-			_ = resp.Body.Close()
-			if resp.StatusCode == http.StatusOK {
-				return w
-			}
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("umamictr: web caddy does not proxy /api/heartbeat: %v", err)
-		}
-		time.Sleep(250 * time.Millisecond)
-	}
+	return PlatformCaddyTag
 }
 
 // Logs returns everything the container wrote so far.
@@ -368,89 +272,4 @@ func Logs(t testing.TB, c *testcontainers.DockerContainer) string {
 		t.Fatalf("umamictr: logs: %v", err)
 	}
 	return string(b)
-}
-
-// canonical is the route umami serves for path: lower case, without the
-// query and without leading /teams/<id> segments, which umami's
-// next.config.ts rewrites away.
-func canonical(path string) string {
-	p := strings.ToLower(path)
-	if i := strings.IndexByte(p, '?'); i >= 0 {
-		p = p[:i]
-	}
-	for {
-		rest, ok := strings.CutPrefix(p, "/teams/")
-		if !ok {
-			break
-		}
-		i := strings.IndexByte(rest, '/')
-		if i < 0 {
-			break
-		}
-		p = rest[i:]
-	}
-	return p
-}
-
-// userReads are the two /api/users routes the dashboard reads for its team
-// and website switchers. umami answers them only about the caller.
-var userReads = regexp.MustCompile(`^/api/users/[^/]+/(teams|websites)/?$`)
-
-// DeniedPath reports whether web.<BASE_DOMAIN> must refuse path for every
-// method: the deny list of deploy/caddy/web.Caddyfile, written out a second time in go,
-// independently of the caddyfile's regular expression. /compat, the target of
-// umami's legacy report rewrites, and /api/auth/subscription, which hangs
-// without redis, are covered as well. /api/users* is denied except the two
-// reads in userReads, which RefusedAtEdge allows for GET and HEAD only.
-func DeniedPath(path string) bool {
-	p := canonical(path)
-	if strings.HasPrefix(p, "/api/users") && !userReads.MatchString(p) {
-		return true
-	}
-	exact := []string{
-		"/api/send", "/api/batch", "/api/record", "/api/auth/login", "/api/auth/sso", "/api/auth/subscription",
-		"/api/me/password", "/api/teams/join", "/api/scripts/telemetry", "/telemetry.js",
-		"/openapi.json", "/script.js", "/recorder.js",
-	}
-	for _, e := range exact {
-		if p == e || strings.HasPrefix(p, e+"/") {
-			return true
-		}
-	}
-	for _, pre := range []string{"/api/admin", "/api/me/api-keys", "/api/share", "/api/links", "/api/pixels", "/api/boards", "/mcp"} {
-		if strings.HasPrefix(p, pre) {
-			return true
-		}
-	}
-	for _, dir := range []string{"/share", "/q", "/p", "/compat"} {
-		if p == dir || strings.HasPrefix(p, dir+"/") {
-			return true
-		}
-	}
-	return strings.HasPrefix(p, "/api/2fa") && p != "/api/2fa/status"
-}
-
-// RefusedAtEdge reports whether web.<BASE_DOMAIN> must answer 403 to method
-// on path: a denied path, or a method outside the allowlist on /api/*
-// (deploy/caddy/web.Caddyfile: GET, HEAD and OPTIONS, plus POST to /api/auth/verify and
-// /api/auth/logout).
-func RefusedAtEdge(method, path string) bool {
-	if DeniedPath(path) {
-		return true
-	}
-	p := canonical(path)
-	// these two allow only reads, and caddy refuses OPTIONS on them as well
-	if userReads.MatchString(p) || p == "/api/2fa/status" || p == "/api/2fa/status/" {
-		return method != http.MethodGet && method != http.MethodHead
-	}
-	if p != "/api" && !strings.HasPrefix(p, "/api/") {
-		return false
-	}
-	switch method {
-	case http.MethodGet, http.MethodHead, http.MethodOptions:
-		return false
-	case http.MethodPost:
-		return p != "/api/auth/verify" && p != "/api/auth/logout"
-	}
-	return true
 }

@@ -71,7 +71,7 @@ Suites that start real services, run when the change touches their area:
 | `make collector-it`, `make apipath` | the OTLP collector and the API path |
 | `make privacy` | the privacy audit: no address or user agent anywhere it must not be |
 | `make umami-compat` | Umami behaviour the platform depends on; required for an Umami upgrade |
-| `make test-caddy-web` | the Umami host's allowlist and deny list |
+| `make test-caddy-closed` | no public Caddy site reaches Umami |
 | `make gateway-it` | the collect gateway image with NATS, Caddy and browsers |
 | `make metricswriter-it`, `make api-volume` | metrics writer exactness and the 1,000,000 request volume run |
 | `make enrollment-it` | enrollment modes end to end |
