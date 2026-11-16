@@ -60,6 +60,13 @@ put OAUTH_STATE_KEY "$(rand_b64 32)"
 put UMAMI_USER_PASSWORD_KEY "$(rand_b64 32)"
 # api metric retention (docs/reference/api-storage.md): minute rows
 # 30 days, hourly rows 36 months. jobs refuses an hourly value below 24.
+# the usage report signing key pair (docs/reference/usage-reports.md): a
+# stellar seed and its account id, made together by platformctl
+if ! has REPORT_SIGNING_SEED; then
+  root=$(cd "$(dirname "$0")/../.." && pwd)
+  (cd "$root" && "${GO:-go}" run ./cmd/platformctl report keygen --env) >>"$env_file"
+  echo "added REPORT_SIGNING_SEED and REPORT_SIGNING_KEY to $env_file"
+fi
 put API_MINUTE_RETENTION_DAYS 30
 put API_HOURLY_RETENTION_MONTHS 36
 

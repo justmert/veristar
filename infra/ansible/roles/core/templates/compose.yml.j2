@@ -215,6 +215,9 @@ services:
       # stellar accounts of operators who sign in with a wallet; empty when
       # the inventory lists none
       OPERATOR_STELLAR_ADDRESSES: "{{ sa_operator_stellar_addresses | default('') }}"
+      # earlier usage report keys whose reports still verify, newest first
+      # (docs/runbooks/secret-rotation.md); empty until the first rotation
+      REPORT_SIGNING_RETIRED_KEYS: "{{ sa_report_signing_retired_keys | default('') }}"
       UMAMI_URL: http://umami:3000
       API_MINUTE_RETENTION_DAYS: "{{ core_api_minute_retention_days }}"
       API_HOURLY_RETENTION_MONTHS: "{{ core_api_hourly_retention_months }}"

@@ -26,6 +26,9 @@ two kinds of value are not generated here:
 - pgbackrest_cipher_pass is kept: the backup repository is encrypted with it
   and cannot be re-keyed in place (docs/runbooks/secret-rotation.md). a new
   environment built for a handover has its own repository and value.
+  report_signing_seed and report_signing_key are kept too: the key's
+  account id is published and named by every report already shared, so it
+  is replaced on its own with a retirement step (the same runbook).
 - provider-issued values (github oauth, azure, cloudflare, discord) come
   from their providers. a new value is taken from the same SA_* variables
   new-secrets.py reads; a value without one keeps its value, and
@@ -50,7 +53,10 @@ _spec = importlib.util.spec_from_file_location(
 new_secrets = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(new_secrets)
 
-KEPT = {"pgbackrest_cipher_pass"}
+# the report key pair is published: every report already shared names its
+# key, so a new pair is a deliberate step of its own
+# (docs/runbooks/secret-rotation.md, "The usage report signing key")
+KEPT = {"pgbackrest_cipher_pass", "report_signing_seed", "report_signing_key"}
 
 
 def sops(args, stdin=None):

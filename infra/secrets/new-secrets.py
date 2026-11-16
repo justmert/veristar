@@ -55,6 +55,38 @@ def b64key(n: int) -> str:
     return base64.b64encode(secrets.token_bytes(n)).decode()
 
 
+def _crc16_xmodem(data: bytes) -> int:
+    crc = 0
+    for byte in data:
+        crc ^= byte << 8
+        for _ in range(8):
+            crc = ((crc << 1) ^ 0x1021) if crc & 0x8000 else (crc << 1)
+            crc &= 0xFFFF
+    return crc
+
+
+def _strkey(version: int, raw: bytes) -> str:
+    # stellar strkey (sep-23): version byte, payload, crc16-xmodem little
+    # endian, base32 without padding
+    import base64
+
+    body = bytes([version]) + raw
+    return base64.b32encode(body + _crc16_xmodem(body).to_bytes(2, "little")).decode().rstrip("=")
+
+
+def report_keypair() -> tuple[str, str]:
+    """the usage report signing key (docs/reference/usage-reports.md): a
+    stellar ed25519 seed (S...) and its account id (G...). the account id is
+    published; the control plane refuses to start when the seed does not
+    derive it. cryptography comes with ansible-core in the controller venv."""
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+
+    seed = secrets.token_bytes(32)
+    pub = Ed25519PrivateKey.from_private_bytes(seed).public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
+    return _strkey(18 << 3, seed), _strkey(6 << 3, pub)
+
+
 def bcrypt_hash(pw: str) -> str:
     # nats-server accepts $2a$ hashes; cost 11 matches the nats tooling default
     return bcrypt.hashpw(pw.encode(), bcrypt.gensalt(rounds=11, prefix=b"2a")).decode()
@@ -65,6 +97,7 @@ def main() -> int:
         print("usage: new-secrets.py local|staging|production", file=sys.stderr)
         return 2
     nats = {u: hexkey(24) for u in NATS_USERS}
+    report_seed, report_key = report_keypair()
     route = hexkey(24)
     doc = {
         "sa_secrets_environment": sys.argv[1],
@@ -95,6 +128,11 @@ def main() -> int:
         # prometheus on the core nodes reads the probe node's metrics with it
         "probe_metrics_token": hexkey(32),
         "gatus_external_token": hexkey(32),
+        # usage reports are signed with this key (sep-53); report_signing_key
+        # is its public account id, published on the status page and in
+        # stellar.toml
+        "report_signing_seed": report_seed,
+        "report_signing_key": report_key,
     }
     for var, key in INPUTS.items():
         v = os.environ.get(var, "")

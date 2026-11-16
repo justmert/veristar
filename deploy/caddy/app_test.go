@@ -309,10 +309,11 @@ func TestAppCaddyServesConsoleAndApi(t *testing.T) {
 	require.Equal(t, "sa_session=request-cookie-must-not-be-logged", h.Get("Cookie"), "the session cookie must reach the control plane")
 
 	// the mcp endpoint, the oauth paths and the discovery documents go to
-	// the control plane (contract 12); the consent page is a console route
+	// the control plane (contract 12), and so does the stellar.toml of the
+	// report keys (contract 20.2); the consent page is a console route
 	for _, p := range []string{"/mcp", "/oauth/authorize", "/oauth/token", "/oauth/register", "/oauth/revoke",
 		"/.well-known/oauth-protected-resource", "/.well-known/oauth-protected-resource/mcp",
-		"/.well-known/oauth-authorization-server"} {
+		"/.well-known/oauth-authorization-server", "/.well-known/stellar.toml"} {
 		method := http.MethodGet
 		if p == "/mcp" || p == "/oauth/token" || p == "/oauth/register" || p == "/oauth/revoke" {
 			method = http.MethodPost
@@ -332,7 +333,7 @@ func TestAppCaddyServesConsoleAndApi(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	require.Equal(t, shell, body)
 	_, _ = get("/.well-known/security.txt")
-	require.NotEqual(t, "GET /.well-known/security.txt", cp.lastPath(), "only the oauth documents leave the console")
+	require.NotEqual(t, "GET /.well-known/security.txt", cp.lastPath(), "only the oauth documents and stellar.toml leave the console")
 
 	// caddy's own error, the control plane gone, still carries the headers
 	require.NoError(t, srv.Close())

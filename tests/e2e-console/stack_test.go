@@ -45,6 +45,7 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/oschwald/maxminddb-golang/v2"
+	"github.com/stellar/go-stellar-sdk/keypair"
 
 	"github.com/justmert/veristar/internal/gateway"
 	"github.com/justmert/veristar/internal/integrity"
@@ -583,6 +584,7 @@ func (s *Stack) StartControlPlane(t testing.TB) {
 	t.Helper()
 	userKey := key32()
 	env := s.common(userKey)
+	reportKey := keypair.MustRandom()
 	for k, v := range map[string]string{
 		"CONTROLPLANE_ADDR":     "0.0.0.0:8081",
 		"CONTROLPLANE_OPS_ADDR": "0.0.0.0:9090",
@@ -593,7 +595,10 @@ func (s *Stack) StartControlPlane(t testing.TB) {
 		"GITHUB_CLIENT_SECRET":  s.OAuthSecret,
 		"GITHUB_REDIRECT_URL":   "https://app." + baseDomain + "/api/auth/github/callback",
 		"OAUTH_STATE_KEY":       key32(),
-		"OAUTH_FIXTURE_URL":     "http://" + oauthHost + ":" + oauthPort,
+		// the usage report key of this stack (contract 20.2)
+		"REPORT_SIGNING_SEED": reportKey.Seed(),
+		"REPORT_SIGNING_KEY":  reportKey.Address(),
+		"OAUTH_FIXTURE_URL":   "http://" + oauthHost + ":" + oauthPort,
 		// an id no test user takes; the tenant flows run as tenants
 		"OPERATOR_GITHUB_IDS": "1",
 	} {

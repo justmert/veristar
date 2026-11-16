@@ -184,6 +184,8 @@ services:
       GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
       GITHUB_REDIRECT_URL: http://localhost:8085/api/auth/github/callback
       OAUTH_STATE_KEY: ${OAUTH_STATE_KEY:?run make dev-env}
+      REPORT_SIGNING_SEED: ${REPORT_SIGNING_SEED:?run make dev-env}
+      REPORT_SIGNING_KEY: ${REPORT_SIGNING_KEY:?run make dev-env}
       OPERATOR_GITHUB_IDS: ${OPERATOR_GITHUB_IDS:-}
       UMAMI_URL: http://umami:3000
       UMAMI_ADMIN_PASSWORD: ${UMAMI_ADMIN_PASSWORD:?run make dev-env}

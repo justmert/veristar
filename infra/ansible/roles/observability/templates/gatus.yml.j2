@@ -19,7 +19,10 @@ storage:
   maximum-number-of-events: 500
 ui:
   title: "Veristar status"
-  description: "Availability of Veristar's public endpoints, measured from outside every 30 seconds."
+  # the usage report signing key is published here beside the stellar.toml
+  # of the console host (control-plane-api 20.2), so a reader can compare
+  # the two places
+  description: "Availability of Veristar's public endpoints, measured from outside every 30 seconds. Usage reports are signed with the Stellar key {{ sa_secrets.report_signing_key }}."
   header: "Veristar status"
   dashboard-heading: "Veristar status"
   dashboard-subheading: "Ingestion, OTLP, the console and the dashboards, checked end to end from outside the platform"
@@ -29,6 +32,9 @@ ui:
     default: "/_veristar/brand/favicon.svg"
     size16x16: "/_veristar/brand/favicon.svg"
     size32x32: "/_veristar/brand/favicon.svg"
+  buttons:
+    - name: "Report signing key"
+      link: "https://{{ sa_hostnames.app }}/.well-known/stellar.toml"
   dark-mode: true
   # the brand is dark only, so both of gatus's modes get the same palette
   # (the tokens of deploy/caddy/umami-theme/site/_veristar/theme.css as the

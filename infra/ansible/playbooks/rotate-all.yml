@@ -41,8 +41,9 @@
   vars_files: [../vars/pins.yml]
   vars:
     rotate_previous_file: "{{ playbook_dir }}/../../secrets/{{ sa_environment }}/secrets.previous.enc.yaml"
-    # the value that encrypts existing backups (docs/runbooks/secret-rotation.md)
-    rotate_kept_keys: [pgbackrest_cipher_pass]
+    # the value that encrypts existing backups, and the published usage
+    # report key pair (docs/runbooks/secret-rotation.md)
+    rotate_kept_keys: [pgbackrest_cipher_pass, report_signing_seed, report_signing_key]
   roles:
     # loads the new values; the env files it writes are read by a service
     # only when it is recreated, which happens after step 2
@@ -70,7 +71,7 @@
       ansible.builtin.assert:
         that:
           - rotate_previous[item] == sa_secrets[item]
-        fail_msg: "{{ item }} changed, but the existing backup repository is encrypted with it"
+        fail_msg: "{{ item }} changed, but it is kept: the backup repository is encrypted with it, or reports already shared name it"
         quiet: true
       loop: "{{ rotate_kept_keys }}"
       run_once: true
