@@ -1777,7 +1777,7 @@ Every operator reads the roster; operator admins change it. Every change takes a
 | `POST /api/operator/roster/{entry_id}/reset-passkeys` | step-up, admin | `{reason}` | `RosterEntry`; `operator.passkeys_reset` |
 | `POST /api/operator/roster/{entry_id}/remove` | step-up, admin | `{reason}` | **204**; `operator.remove` |
 
-`RosterEntry` is `{id, kind ("github" or "stellar"), github_id, github_login, stellar_address, role,
+`RosterEntry` is `{id, kind ("github", "stellar" for a G-address or "passkey" for a C-address), github_id, github_login, stellar_address, role,
 status, status_reason, bootstrap, enrollment_until, created_at, updated_at, account}`. `bootstrap`
 is true for an identity in `OPERATOR_GITHUB_IDS` or `OPERATOR_STELLAR_ADDRESSES`. `account` is the
 live console account holding the identity, `{user_id, display_name, last_login_at, passkeys}`, or
