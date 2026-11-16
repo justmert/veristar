@@ -186,13 +186,46 @@ func setup() (int, error) {
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return 0, fmt.Errorf("go build platformctl: %w\n%s", err, out)
 	}
-	// the console's static build, served by the app caddy
+	// the production build first: it must hold no trace of the
+	// deterministic wallet test signer
 	cmd = exec.Command("pnpm", "--filter", "@veristar/console", "build")
 	cmd.Dir = repoRoot()
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return 0, fmt.Errorf("console build: %w\n%s", err, out)
 	}
+	if err := noTestSigner(filepath.Join(repoRoot(), "apps", "console", "dist", "assets")); err != nil {
+		return 0, err
+	}
+	// the console's static build served by the app caddy: the same build
+	// with the test signer, so the wallet specs sign in without an extension
+	cmd = exec.Command("pnpm", "--filter", "@veristar/console", "build")
+	cmd.Dir = repoRoot()
+	cmd.Env = append(os.Environ(), "VITE_STELLAR_TEST_SIGNER=1")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return 0, fmt.Errorf("console build with the test signer: %w\n%s", err, out)
+	}
 	return -1, nil
+}
+
+// testSignerID is the product id of apps/console/src/lib/stellar-wallet/test-signer.ts
+const testSignerID = "veristar-test-signer"
+
+// noTestSigner fails when a production asset holds the test signer.
+func noTestSigner(assets string) error {
+	files, err := os.ReadDir(assets)
+	if err != nil {
+		return err
+	}
+	for _, f := range files {
+		b, err := os.ReadFile(filepath.Join(assets, f.Name()))
+		if err != nil {
+			return err
+		}
+		if bytes.Contains(b, []byte(testSignerID)) {
+			return fmt.Errorf("the production console build holds the test signer in %s", f.Name())
+		}
+	}
+	return nil
 }
 
 func randHex(n int) string {

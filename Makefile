@@ -244,6 +244,14 @@ webpath:
 console-e2e:
 	DBIP_MONTH=$(DBIP_MONTH) $(GO) test -tags consolee2e -count=1 -timeout 60m -v ./tests/e2e-console/
 
+# the console's csp against the stellar wallets kit, in chromium, firefox and
+# webkit (tests/e2e-console/csp): the kit's own modal, the console's picker in
+# the production build, and no test signer in that build. needs no stack.
+.PHONY: console-csp
+console-csp:
+	pnpm --filter @veristar/console build
+	pnpm --filter @veristar/e2e-console exec playwright test --config csp.config.ts
+
 # otlp collector. collector-build generates and compiles the
 # scf-otelcol distribution with the pinned ocb 0.165.0 and strict version
 # checking (dist/scf-otelcol/scf-otelcol); collector-it runs the binary
