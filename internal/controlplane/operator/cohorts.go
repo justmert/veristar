@@ -371,8 +371,6 @@ func (h *Cohorts) dismiss(w http.ResponseWriter, r *http.Request) error {
 // CodeNoProposal is the 409 of a confirm or dismiss without a proposal.
 const CodeNoProposal = "no_proposal"
 
-func ctx(r *http.Request) context.Context { return r.Context() }
-
 // userOf turns an audit actor "user:<uuid>" back into the user id.
 func userOf(actor string) uuid.UUID {
 	return uuid.MustParse(actor[len("user:"):])
@@ -412,10 +410,11 @@ func (h *TenantCohort) get(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
+	ctx := r.Context()
 	var out CohortRecord
-	err = h.scope.InTenant(r.Context(), a, func(tx pgx.Tx) error {
+	err = h.scope.InTenant(ctx, a, func(tx pgx.Tx) error {
 		var err error
-		out, err = readCohort(r.Context(), tx, a.TenantID)
+		out, err = readCohort(ctx, tx, a.TenantID)
 		return err
 	})
 	if err != nil {

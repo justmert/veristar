@@ -186,6 +186,11 @@ func TestSchemaDatabaseAndFunctionRights(t *testing.T) {
 		// the chain purge (00032); the enrollment trigger runs as its owner
 		"agg.purge_chain(uuid,boolean)":  {pdb.RoleCPSystem},
 		"cp.chain_ids_from_enrollment()": nil,
+		// cohort proposals and usage reports (00035, 00036): two guards, and
+		// the report purge of a removed tenant
+		"cp.tenant_cohort_proposal_guard()": nil,
+		"cp.usage_report_guard()":           nil,
+		"cp.purge_usage_reports(uuid)":      {pdb.RoleCPSystem},
 	}
 	var names []string
 	for _, f := range fns {

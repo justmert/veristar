@@ -134,8 +134,6 @@ func (f *cohortFixture) audit(t *testing.T, action string) []map[string]any {
 	return out
 }
 
-func ptr[T any](v T) *T { return &v }
-
 func TestCohortsGrowthAndPercentiles(t *testing.T) {
 	f := newCohortFixture(t)
 	// range 2026-11-01..2026-11-10 against 2026-10-22..2026-10-31

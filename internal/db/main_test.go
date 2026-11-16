@@ -86,7 +86,31 @@ func setup(ctx context.Context) error {
 	if err := conn.WithSystem(ctx, seedRows); err != nil {
 		return err
 	}
+	if err := seedReports(ctx); err != nil {
+		return err
+	}
 	return conn.WithRole(ctx, pdb.RoleJobs, seedAPIRows)
+}
+
+// seedReports gives each tenant one signed usage report, stored under
+// cp_tenant by its owner as the report route stores it (00036): cp_system
+// may not insert reports
+func seedReports(ctx context.Context) error {
+	for i, p := range []struct{ tenant, user uuid.UUID }{{seed.tenantA, seed.userA}, {seed.tenantB, seed.userB}} {
+		err := conn.WithTenant(ctx, p.tenant, func(tx pgx.Tx) error {
+			if _, err := tx.Exec(ctx, `select set_config('app.user_id', $1, true)`, p.user.String()); err != nil {
+				return err
+			}
+			_, err := tx.Exec(ctx, `insert into cp.usage_reports (id, tenant_id, period_from, period_to, body, signature, signer, created_by)
+				values ($1, $2, current_date - 1, current_date - 1, '{}', $3, $4, $5)`,
+				strings.Repeat(string(rune('a'+i)), 26), p.tenant, strings.Repeat("A", 86)+"==", "G"+strings.Repeat("A", 55), p.user)
+			return err
+		})
+		if err != nil {
+			return fmt.Errorf("seed usage report: %w", err)
+		}
+	}
+	return nil
 }
 
 // seedAPIRows gives each tenant one row in every api table, written as jobs,
@@ -212,6 +236,8 @@ func seedRows(tx pgx.Tx) error {
 				[]any{[]byte(fmt.Sprintf("mcp-code-%d", p.n)), fmt.Sprintf("mcpc_%032d", p.n), p.user, p.tenant, strings.Repeat("a", 43)}},
 			{`insert into cp.chain_ids (tenant_id, strkey, kind, added_by) values ($1, $2, 'account', 'console')`,
 				[]any{p.tenant, seedStrkey(p.n)}},
+			{`insert into cp.tenant_cohorts (tenant_id, program, round, confirmed_by, confirmed_at)
+			  values ($1, 'Build Award', $2, $3, now())`, []any{p.tenant, fmt.Sprintf("SCF #%d", p.n), p.user}},
 			{`insert into cp.sessions (token_hash, user_id, data, expiry)
 			  values (sha256($1::bytea), $2, '\x00', now() + interval '1 day')`, []any{[]byte(fmt.Sprintf("session-%d", p.n)), p.user}},
 		}

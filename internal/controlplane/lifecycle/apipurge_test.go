@@ -175,5 +175,5 @@ func TestPurgersIncludeAPI(t *testing.T) {
 	for _, p := range purgers {
 		names = append(names, p.Name())
 	}
-	require.Equal(t, []string{"registry", "otlp_tokens", "umami", "web_ingest", "api", "agg", "chain"}, names)
+	require.Equal(t, []string{"registry", "otlp_tokens", "umami", "web_ingest", "api", "agg", "chain", "reports"}, names)
 }

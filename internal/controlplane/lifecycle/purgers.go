@@ -23,12 +23,14 @@ const (
 	PurgerAgg = "agg"
 	// PurgerChain is the purger of the on-chain read state and counts
 	PurgerChain = "chain"
+	// PurgerReports is the purger of the signed usage reports
+	PurgerReports = "reports"
 )
 
 // Purgers returns the purgers of every store, in the order of contract 5.5:
 // registry (web ingestion stops), otlp_tokens (api ingestion stops), then
 // umami, then cp.web_ingest_hourly, then the api schema, then the agg
-// schema, then the on-chain rows.
+// schema, then the on-chain rows, then the signed usage reports.
 func Purgers(reg *registry.Publisher, admin *umami.Admin) ([]Purger, error) {
 	if reg == nil || admin == nil {
 		return nil, errors.New("lifecycle: purgers need the registry publisher and the umami admin")
@@ -41,6 +43,7 @@ func Purgers(reg *registry.Publisher, admin *umami.Admin) ([]Purger, error) {
 		APIPurger{},
 		AggPurger{},
 		ChainPurger{},
+		ReportsPurger{},
 	}, nil
 }
 
@@ -309,4 +312,22 @@ func (ChainPurger) Purge(ctx context.Context, r Removal) (map[string]any, error)
 		return nil, &RecordError{fmt.Errorf("chain rows: %w", err)}
 	}
 	return map[string]any{"rows_deleted": deleted, "keep_aggregates": r.KeepAggregates}, nil
+}
+
+// ReportsPurger deletes the tenant's signed usage reports (contract 20).
+// they are copies of aggregates made for sharing; a removed project's links
+// already answer 404, and the purge removes the stored reports too, whatever
+// keep_aggregates says.
+type ReportsPurger struct{}
+
+// Name is the step key.
+func (ReportsPurger) Name() string { return PurgerReports }
+
+// Purge deletes in the run's transaction through cp.purge_usage_reports.
+func (ReportsPurger) Purge(ctx context.Context, r Removal) (map[string]any, error) {
+	var n int64
+	if err := r.Tx.QueryRow(ctx, `select cp.purge_usage_reports($1)`, r.TenantID).Scan(&n); err != nil {
+		return nil, &RecordError{fmt.Errorf("usage reports: %w", err)}
+	}
+	return map[string]any{"reports_deleted": n}, nil
 }
