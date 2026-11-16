@@ -179,7 +179,6 @@ services:
       CONTROLPLANE_OPS_ADDR: 0.0.0.0:9090
       CONSOLE_ORIGIN: http://localhost:8085
       INGEST_ORIGIN: http://localhost:8080
-      WEB_ORIGIN: http://localhost:3000
       GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
       GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
       GITHUB_REDIRECT_URL: http://localhost:8085/api/auth/github/callback

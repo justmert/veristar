@@ -166,8 +166,10 @@ func TestViewOnlyCannotReadOtherTeam(t *testing.T) {
 }
 
 // the route list of the running image must equal the reviewed list in
-// testdata. a difference means the deny list of deploy/caddy/web.Caddyfile and the caddy
-// configuration must be reviewed before the upgrade.
+// testdata. a difference means the new routes must be reviewed before the
+// upgrade: the isolation gate (tests/isolation/umami) classifies every one,
+// and the control plane's read allowlist (internal/umami/read.go) names the
+// few it calls.
 func TestOpenAPIRouteListUnchanged(t *testing.T) {
 	e := setup(t)
 	req, err := http.NewRequestWithContext(ctx(t), http.MethodGet, e.base.String()+"/openapi.json", nil)
