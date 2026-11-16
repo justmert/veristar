@@ -3,7 +3,7 @@
 //
 //   proxy  (127.0.0.1:CE2E_PROXY_PORT)  every browser uses it as its http proxy.
 //          it is how the test hostnames resolve in all three engines: CONNECT
-//          to app., web. and in.<BASE_DOMAIN> is tunnelled to the published
+//          to app. and in.<BASE_DOMAIN> is tunnelled to the published
 //          tls port of the matching caddy container (the browser does tls
 //          with caddy itself, so fetch metadata, cookies and redirects are the
 //          real ones), plain http to the oauth fixture host is forwarded to its

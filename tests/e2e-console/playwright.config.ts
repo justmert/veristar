@@ -3,8 +3,8 @@ import { PROXY_PORT } from "./fixture/env.ts";
 
 // console end-to-end flows: sign-in through the
 // test-only github oauth fixture, enrollment, sites, snippet, traffic through
-// the real gateway, the umami dashboard through sso, isolation, sso
-// hardening and session security. the go test stack_test.go (make
+// the real gateway, the console's web dashboard, isolation and session
+// security. the go test stack_test.go (make
 // console-e2e) starts the real services in containers and runs this suite.
 
 const proxy = { server: `http://127.0.0.1:${PROXY_PORT}` };

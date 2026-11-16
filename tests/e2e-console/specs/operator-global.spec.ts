@@ -31,6 +31,7 @@ import {
   uniqueHost,
   waitProvisioned,
   waitRegistered,
+  webGet,
 } from "./helpers.ts";
 import { expect, test } from "./test.ts";
 
@@ -240,6 +241,19 @@ test.beforeAll(async ({ browser }) => {
     }
   }
   expect(got, "operator web numbers equal the browser traffic sent").toEqual(wantWeb);
+  // each project's own web dashboard reads the same aggregates for the same
+  // 30 utc days, so the owner sees exactly the operators' numbers
+  for (const p of projects) {
+    const s = await webGet<{ current: { totals: { visitors: number; pageviews: number } } }>(
+      owner.ctx,
+      p.tenant.id,
+      "summary",
+    );
+    expect(s.status, JSON.stringify(s.body)).toBe(200);
+    expect([s.body.current.totals.visitors, s.body.current.totals.pageviews], p.label).toEqual(
+      got[p.tenant.id],
+    );
+  }
 
   // daily api rows follow with the rollup every 5 minutes
   const wantApi = Object.fromEntries(projects.map((p) => [p.tenant.id, p.requests]));

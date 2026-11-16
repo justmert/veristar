@@ -72,7 +72,7 @@ test("sign-in sends pkce s256, state and no scope; cookies carry the documented 
     secure: true,
     sameSite: "Lax",
     path: "/",
-    // host-only: no Domain attribute, so web. and in. never receive it
+    // host-only: no Domain attribute, so a sibling host such as in. never receives it
     domain: new URL(APP).hostname,
   });
   expect(session?.value).toMatch(/^[A-Za-z0-9_-]{43}$/);
@@ -138,11 +138,12 @@ test("state-changing requests need X-Requested-With and the console origin", asy
   expect(foreign.status).toBe(403);
   expect(foreign.body).toMatchObject({ error: { code: "origin_mismatch" } });
 
-  const webOrigin = await api(context, "POST", "/api/tenants", body, {
-    Origin: APP.replace("app.", "web."),
+  // a sibling host of the same registered domain is another origin too
+  const sibling = await api(context, "POST", "/api/tenants", body, {
+    Origin: APP.replace("app.", "in."),
   });
-  expect(webOrigin.status).toBe(403);
-  expect(webOrigin.body).toMatchObject({ error: { code: "origin_mismatch" } });
+  expect(sibling.status).toBe(403);
+  expect(sibling.body).toMatchObject({ error: { code: "origin_mismatch" } });
 
   const logoutNoHeader = await api(context, "POST", "/api/auth/logout", undefined, {
     "X-Requested-With": "",

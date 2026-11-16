@@ -8,13 +8,13 @@ import { fileURLToPath } from "node:url";
 import { type APIResponse, type BrowserContext, expect, type Page } from "@playwright/test";
 import {
   APP,
+  APPS_CTL,
   INGEST,
   OAUTH,
   OAUTH_CTL,
   OUT,
   SITE_CTL_PORT,
   TENANT_DOMAIN,
-  WEB,
 } from "../fixture/env.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -214,33 +214,32 @@ export async function resetFixture(): Promise<void> {
   expect((await fetch(`${OAUTH_CTL}/_fixture/reset`, { method: "POST" })).status).toBe(200);
 }
 
-// the umami token from the /sso hop of an sso navigation. the caller starts
-// listening before the navigation.
-export function captureSsoToken(page: Page): Promise<string> {
-  return new Promise((ok) => {
-    const on = (req: { url(): string }) => {
-      const u = new URL(req.url());
-      if (u.origin === WEB && u.pathname === "/sso") {
-        page.off("request", on);
-        ok(u.searchParams.get("token") ?? "");
-      }
-    };
-    page.on("request", on);
-  });
+// makes the jobs daemon run its hourly aggregate-web task now
+// (stack_test.go restartJobs)
+export async function restartJobs(): Promise<void> {
+  const r = await fetch(`${APPS_CTL}/jobs/restart`, { method: "POST" });
+  expect(r.status, await r.text()).toBe(204);
 }
 
-// calls umami's read api through the web caddy with a tenant's token
-export async function umamiGet(
+// a web dashboard route of a project (contract 18), as the signed-in member
+export function webGet<T = unknown>(
   ctx: BrowserContext,
-  token: string,
-  path: string,
-): Promise<ApiResult> {
-  return result(
-    await ctx.request.get(`${WEB}${path}`, {
-      headers: { authorization: `Bearer ${token}` },
-      maxRedirects: 0,
-    }),
-  );
+  tenantId: string,
+  route: string,
+): Promise<ApiResult<T>> {
+  return api<T>(ctx, "GET", `/api/tenants/${tenantId}/web/${route}`);
+}
+
+// the engine routes answer 409 provisioning_pending until the reconciler
+// has made the member's umami user and membership; a member tries again a
+// little later, as this does
+export async function waitWebReady(ctx: BrowserContext, tenantId: string, siteId: string) {
+  await expect
+    .poll(async () => (await webGet(ctx, tenantId, `realtime?site=${siteId}`)).status, {
+      timeout: 120_000,
+      intervals: [1000, 2000, 5000],
+    })
+    .toBe(200);
 }
 
 export function uniqueHost(label: string): string {
@@ -249,44 +248,14 @@ export function uniqueHost(label: string): string {
 
 export const NOT_FOUND = { error: expect.objectContaining({ code: "not_found" }) };
 
-// opens the web dashboard of a site the way a tenant does: the project
-// overview's "Open web dashboard" link for that site. the reconciler may
-// still be creating the user's umami membership; the control plane then
-// sends the browser to /sso-error?code=provisioning_pending (contract
-// 4.4.1), and a tenant tries again a little later, as this does.
+// opens the web dashboard of a site the way a tenant does: the analytics
+// link of its row in the project overview's sites table
 export async function openDashboard(page: Page, tenantId: string, site: Site): Promise<void> {
-  const deadline = Date.now() + 120_000;
-  for (;;) {
-    await page.goto(`${APP}/projects/${tenantId}`);
-    // each site is a row of the overview's sites table, found by its domain
-    const row = page.getByRole("row").filter({ hasText: site.domain });
-    await row.getByRole("link", { name: "Open web dashboard" }).click();
-    await page.waitForURL((u) => u.origin === WEB || u.pathname === "/sso-error", {
-      timeout: 30_000,
-    });
-    const u = new URL(page.url());
-    if (u.origin === WEB) {
-      await page.waitForURL(`${WEB}/websites/${site.id}**`);
-      return;
-    }
-    const code = u.searchParams.get("code");
-    if (code !== "provisioning_pending" || Date.now() > deadline) {
-      throw new Error(`sso for site ${site.id} ended at ${u.pathname} with code ${code}`);
-    }
-    await page.waitForTimeout(2_000);
-  }
-}
-
-// starts sso the way a console link does: a navigation initiated by a
-// console page, so fetch metadata says same-origin and, after the redirect,
-// same-site. a navigation typed into the address bar arrives at web.
-// cross-site after the redirect and is refused by the web caddy, as it should.
-export async function ssoFromConsole(page: Page, siteId: string, view = "primary"): Promise<void> {
-  await page.goto(`${APP}/`);
-  await page.evaluate((u) => {
-    location.href = u;
-  }, `${APP}/api/sso/umami?site=${siteId}&view=${view}`);
-  await page.waitForURL((u) => u.origin === WEB || u.pathname === "/sso-error");
+  await page.goto(`${APP}/projects/${tenantId}`);
+  const row = page.getByRole("row").filter({ hasText: site.domain });
+  await row.getByRole("link", { name: `Web analytics of ${site.name}` }).click();
+  await page.waitForURL(`${APP}/projects/${tenantId}/web?site=${site.id}`);
+  await expect(page.getByRole("heading", { name: "Web analytics" })).toBeVisible();
 }
 
 // registers a login with the oauth fixture, which then answers github's

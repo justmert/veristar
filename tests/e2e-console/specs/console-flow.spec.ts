@@ -1,28 +1,29 @@
 // console flow end to end, with the snippet: sign in through the
 // oauth fixture, enroll a project, add a site, take the snippet from the
 // snippet page and paste it into the example site, generate browser traffic
-// through the real gateway, click "Open web dashboard" and see the site's
-// pageviews in umami with the seven rfp metrics for a selected time range.
+// through the real gateway, open the console's web dashboard and see the
+// site's page views with the seven rfp metrics for a selected time range.
 // the snippet's integrity equals the manifest value, and the tag loads and
 // executes.
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { type BrowserContext, devices, type Page } from "@playwright/test";
-import { APP, INGEST, OUT, REFERRER_HOST, REFERRER_ORIGIN, WEB } from "../fixture/env.ts";
+import { APP, INGEST, OUT, REFERRER_HOST, REFERRER_ORIGIN } from "../fixture/env.ts";
 import {
   api,
-  captureSsoToken,
   manifest,
   newUser,
   openDashboard,
   pasteSnippet,
+  restartJobs,
   type Site,
   signIn,
   type Tenant,
-  umamiGet,
   uniqueHost,
   waitProvisioned,
   waitRegistered,
+  waitWebReady,
+  webGet,
 } from "./helpers.ts";
 import { expect, test } from "./test.ts";
 
@@ -249,10 +250,10 @@ test("the pasted snippet loads, verifies and sends traffic through the gateway",
   }
 });
 
-test("open web dashboard shows the site's pageviews with the seven metrics for a selected range", async () => {
+test("the console's web dashboard shows the site's seven metrics for a selected range", async () => {
   const context = owner;
   const page = await owner.newPage();
-  // the console overview links into umami and carries the db-ip attribution
+  // the console overview carries the db-ip attribution
   await page.goto(`${APP}/projects/${tenant.id}`);
   await expect(page.getByRole("link", { name: "IP Geolocation by DB-IP" })).toHaveAttribute(
     "href",
@@ -260,88 +261,141 @@ test("open web dashboard shows the site's pageviews with the seven metrics for a
   );
   await shot(page, "05-overview");
 
-  const tokenP = captureSsoToken(page);
-  await openDashboard(page, tenant.id, site);
-  await page.waitForURL(`${WEB}/websites/${site.id}**`);
-  const token = await tokenP;
-
-  // the numbers, read with the tenant's own token through the web caddy:
-  // 3 views, 2 visitors, 2 visits, 1 bounce, a duration of at least the
-  // pause. the replayer delivers within seconds; poll until it has.
-  const day = new Date();
-  day.setUTCHours(0, 0, 0, 0);
-  const range = `startAt=${day.getTime()}&endAt=${day.getTime() + 86_400_000 - 1}`;
-  type Stats = Record<string, number | { value: number }>;
-  const val = (s: Stats, k: string) => {
-    const v = s[k];
-    return typeof v === "number" ? v : (v?.value ?? Number.NaN);
-  };
+  // the hours of today come from the engine as soon as the replayer
+  // delivered: 3 views by 2 visitors
+  await waitWebReady(context, tenant.id, site.id);
+  const today = new Date().toISOString().slice(0, 10);
+  type Hourly = { points: { pageviews: number; visitors: number }[] };
   await expect
     .poll(
-      async () =>
-        val(
-          (await umamiGet(context, token, `/api/websites/${site.id}/stats?${range}`)).body as Stats,
-          "pageviews",
-        ),
-      {
-        timeout: 120_000,
-        intervals: [1000, 2000, 5000],
+      async () => {
+        const r = await webGet<Hourly>(context, tenant.id, `hourly?site=${site.id}&day=${today}`);
+        return r.body.points.reduce((a, p) => a + p.pageviews, 0);
       },
+      { timeout: 120_000, intervals: [1000, 2000, 5000] },
     )
     .toBe(3);
-  const stats = (await umamiGet(context, token, `/api/websites/${site.id}/stats?${range}`))
-    .body as Stats;
-  expect(val(stats, "visitors")).toBe(2);
-  expect(val(stats, "visits")).toBe(2);
-  expect(val(stats, "bounces")).toBe(1);
-  expect(val(stats, "totaltime")).toBeGreaterThanOrEqual(8);
-  const metric = async (type: string) =>
-    (await umamiGet(context, token, `/api/websites/${site.id}/metrics?${range}&type=${type}`))
-      .body as {
-      x: string;
-      y: number;
-    }[];
-  expect((await metric("referrer")).map((m) => m.x)).toContain(REFERRER_HOST);
-  expect(await metric("country")).toEqual([{ x: "DE", y: 2 }]);
-  expect((await metric("browser")).map((m) => m.x)).toContain("chrome");
-  // umami names a 1280 px wide desktop screen "laptop"
-  expect((await metric("device")).map((m) => m.x).sort()).toEqual(["laptop", "mobile"]);
 
-  // the same in the ui, for the range picked in umami's date filter
-  await page.reload();
-  // umami's date filter is a react-aria select: a listbox trigger whose text
-  // is the current range
-  const dateFilter = page
-    .locator('button[aria-haspopup="listbox"]')
-    .filter({ visible: true })
-    .filter({ hasText: /^(Last 24 hours|Today)$/ });
-  await expect(dateFilter).toHaveText("Last 24 hours", { timeout: 30_000 });
-  await dateFilter.click();
-  await page.getByRole("option", { name: "Today", exact: true }).click();
-  await expect(dateFilter).toHaveText("Today");
-  const bar = async (label: string) => {
-    const el = page.getByText(label, { exact: true }).first();
-    await expect(el).toBeVisible();
-    return el;
+  // the totals are the daily aggregates the operator views read; the jobs
+  // daemon reads umami when it starts, so it is restarted until they hold
+  // every view
+  type Totals = {
+    pageviews: number;
+    visitors: number;
+    visits: number;
+    bounces: number;
+    totaltime: number;
+    bounce_rate: number | null;
   };
-  for (const label of ["Visitors", "Visits", "Views", "Bounce rate", "Visit duration"])
-    await bar(label);
-  await expect(page.getByText("50%", { exact: true }).first()).toBeVisible();
+  type Summary = { current: { totals: Totals }; read_at: string | null; source: string };
+  const summary = async () =>
+    (await webGet<Summary>(context, tenant.id, `summary?site=${site.id}&from=${today}&to=${today}`))
+      .body;
+  let s = await summary();
+  for (let attempt = 0; attempt < 6 && s.current.totals.pageviews !== 3; attempt++) {
+    await restartJobs();
+    const deadline = Date.now() + 60_000;
+    while (Date.now() < deadline) {
+      s = await summary();
+      if (s.current.totals.pageviews === 3) break;
+      await new Promise((r) => setTimeout(r, 3_000));
+    }
+  }
+  expect(s.source).toBe("aggregate");
+  expect(s.current.totals).toMatchObject({ pageviews: 3, visitors: 2, visits: 2, bounces: 1 });
+  expect(s.current.totals.totaltime).toBeGreaterThanOrEqual(8);
+  expect(s.current.totals.bounce_rate).toBe(0.5);
+  expect(s.read_at).not.toBeNull();
+
+  type Breakdown = { items: { key: string; value: number }[]; source: string };
+  const dim = async (d: string) =>
+    (
+      await webGet<Breakdown>(
+        context,
+        tenant.id,
+        `breakdown?site=${site.id}&from=${today}&to=${today}&dimension=${d}`,
+      )
+    ).body;
+  expect((await dim("referrer")).items.map((i) => i.key)).toContain(REFERRER_HOST);
+  expect((await dim("country")).items).toEqual([{ key: "DE", value: 2 }]);
+  expect((await dim("browser")).items.map((i) => i.key)).toContain("chrome");
+  // umami names a 1280 px wide desktop screen "laptop"
+  expect((await dim("device")).items.map((i) => i.key).sort()).toEqual(["laptop", "mobile"]);
+  const pages = await dim("page");
+  expect(pages.source).toBe("engine");
+  expect(pages.items.length).toBeGreaterThan(0);
+
+  // the same numbers in the dashboard, reached from the overview's site row
+  await openDashboard(page, tenant.id, site);
+  await page
+    .getByRole("radiogroup", { name: "Range" })
+    .getByRole("radio", { name: "Today" })
+    .click();
+  await expect(page).toHaveURL(/range=today/);
+  const totals = page.getByRole("region", { name: "Totals" });
+  for (const [label, value] of [
+    ["Page views", "3"],
+    ["Unique visitors", "2"],
+    ["Visits", "2"],
+    ["Bounce rate", "50.0%"],
+  ] as const) {
+    await expect(totals.getByText(label, { exact: true })).toBeVisible();
+    await expect(totals.getByText(value, { exact: true }).first()).toBeVisible();
+  }
+  await expect(totals.getByText("Visit duration", { exact: true })).toBeVisible();
+  await expect(page.getByText("Page views per hour")).toBeVisible();
+  await expect(page.getByLabel("Right now")).toBeVisible();
   await shot(page, "06-dashboard-top");
+
   for (const [heading, value] of [
     ["Sources", REFERRER_HOST],
-    ["Location", "Germany"],
-    ["Environment", "Chrome"],
+    ["Countries", "Germany"],
+    ["Environment", "chrome"],
   ] as const) {
-    await page.getByRole("heading", { name: heading }).scrollIntoViewIfNeeded();
-    await expect(page.getByText(value, { exact: true }).first()).toBeVisible();
+    const panel = page
+      .locator("section")
+      .filter({ has: page.getByRole("heading", { name: heading }) });
+    await panel.scrollIntoViewIfNeeded();
+    await expect(panel.getByText(value, { exact: true }).first()).toBeVisible();
   }
-  await page.getByRole("tab", { name: "Devices" }).click();
-  await expect(page.getByText("Laptop", { exact: true }).first()).toBeVisible();
-  await expect(page.getByText("Mobile", { exact: true }).first()).toBeVisible();
+  const env = page
+    .locator("section")
+    .filter({ has: page.getByRole("heading", { name: "Environment" }) });
+  await env.getByRole("radio", { name: "Devices" }).click();
+  await expect(env.getByText("Laptop", { exact: true })).toBeVisible();
+  await expect(env.getByText("Mobile", { exact: true })).toBeVisible();
   await shot(page, "07-dashboard-panels");
 
-  // umami's pages carry the db-ip link too (the web caddy injects it)
+  // a longer range is drawn per day from the aggregates, against the
+  // previous period
+  await page
+    .getByRole("radiogroup", { name: "Range" })
+    .getByRole("radio", { name: "7 days" })
+    .click();
+  await expect(page).toHaveURL(/range=7/);
+  await expect(page.getByText("Page views per day")).toBeVisible();
+  // a custom range is checked before it is asked for
+  await page
+    .getByRole("radiogroup", { name: "Range" })
+    .getByRole("radio", { name: "Custom" })
+    .click();
+  await page.getByLabel("From (UTC day)").fill("2026-01-10");
+  await page.getByLabel("To (UTC day)").fill("2026-01-01");
+  await page.getByRole("button", { name: "Apply range" }).click();
+  await expect(page.getByText("End on or after the start.")).toBeVisible();
+  await page.getByLabel("To (UTC day)").fill(today);
+  await page.getByLabel("From (UTC day)").fill(today);
+  await page.getByRole("button", { name: "Apply range" }).click();
+  await expect(page).toHaveURL(new RegExp(`from=${today}&to=${today}`));
+  // the quarantined traffic of the site is its own view
+  await page
+    .getByRole("radiogroup", { name: "Traffic" })
+    .getByRole("radio", { name: "Quarantined" })
+    .click();
+  await expect(page).toHaveURL(/band=quarantine/);
+  await expect(page.getByLabel("Right now")).toHaveCount(0);
+
+  // the dashboard carries the db-ip link, once
   await expect(page.getByRole("link", { name: "IP Geolocation by DB-IP" })).toHaveCount(1);
-  writeFileSync(join(shots, "stats.json"), `${JSON.stringify(stats, null, 2)}\n`);
+  writeFileSync(join(shots, "stats.json"), `${JSON.stringify(s, null, 2)}\n`);
 });

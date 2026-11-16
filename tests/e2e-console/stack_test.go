@@ -4,8 +4,9 @@
 // containers this test owns: postgresql with the platform migrations, nats with the topology, umami
 // (bootstrapped), the control plane built with the oauthfixture tag and
 // pointed at the TEST-ONLY github oauth fixture (tests/fixtures/githuboauth),
-// the replayer, the gateway image behind the edge caddy, the web caddy in
-// front of umami and the console's static build behind the app caddy. for
+// the replayer, the gateway image behind the edge caddy and the console's
+// static build behind the app caddy; umami stays on the private network, as
+// in production. for
 // the api analytics flows the stack adds the collector image and
 // the metricswriter behind otlp.<base domain> on the same edge caddy, a
 // stock collector as the tenants' own backend, and a loopback control api
@@ -65,9 +66,6 @@ const (
 	// the stock collector of deploy/compose/examples.yml, standing in for a
 	// tenant's own observability backend
 	tenantBackendImage = "otel/opentelemetry-collector-contrib:0.165.0@sha256:e40d61f10c9a617cca1ffd1be4d7e2b3a4b0f0001798ff07e58cabe82e618cea"
-	// caddy with the replace-response plugin (deploy/images/caddy.Dockerfile),
-	// which the web caddy needs for the db-ip attribution
-	caddyPluginImage = "veristar/caddy:2.11.9"
 	staticImage      = "gcr.io/distroless/static-debian13:nonroot@sha256:25ac8f0c3b2334a9eb05452266bd4697864a8c8ef0ef71e5e6480d7f92868329"
 	// the oauth fixture's host as the browser and the control plane see it.
 	// plain http: the control plane trusts only the system roots, and the
@@ -134,7 +132,6 @@ func setup() (int, error) {
 	}
 	builds := [][]string{
 		gatewayimage.BuildArgs(month, gatewayImage),
-		{"build", "-q", "-f", "deploy/images/caddy.Dockerfile", "-t", caddyPluginImage, "deploy/images"},
 		{"build", "-q", "-f", "deploy/images/collector.Dockerfile", "-t", collectorImage, "."},
 		{"build", "-q", "-t", exampleImage, "examples/otel-go-nethttp"},
 	}
@@ -590,7 +587,6 @@ func (s *Stack) StartControlPlane(t testing.TB) {
 		"CONTROLPLANE_OPS_ADDR": "0.0.0.0:9090",
 		"CONSOLE_ORIGIN":        "https://app." + baseDomain,
 		"INGEST_ORIGIN":         "https://in." + baseDomain,
-		"WEB_ORIGIN":            "https://web." + baseDomain,
 		"GITHUB_CLIENT_ID":      oauthClientID,
 		"GITHUB_CLIENT_SECRET":  s.OAuthSecret,
 		"GITHUB_REDIRECT_URL":   "https://app." + baseDomain + "/api/auth/github/callback",
@@ -950,22 +946,6 @@ func (s *Stack) AppsControl(t testing.TB) string {
 	return "http://" + l.Addr().String()
 }
 
-// StartWeb runs deploy/caddy/web.Caddyfile in front of umami, on the caddy
-// build with the attribution plugin.
-func (s *Stack) StartWeb(t testing.TB) {
-	t.Helper()
-	port := freePort(t)
-	s.run(t, "sa-ce-web-"+s.ID, []string{
-		"-p", "127.0.0.1:" + port + ":443",
-		"-v", filepath.Join(repoRoot(), "deploy", "caddy", "web.Caddyfile") + ":/etc/caddy/Caddyfile:ro",
-		// the theme web.Caddyfile serves, which the console image holds in production
-		"-v", filepath.Join(repoRoot(), "deploy", "caddy", "umami-theme", "site") + ":/srv/umami-theme:ro",
-		"-e", "BASE_DOMAIN=" + baseDomain, "-e", "UMAMI_UPSTREAM=" + umamictr.UpstreamAddr, "-e", "WEB_TLS=internal",
-	}, caddyPluginImage)
-	s.Routes["web."+baseDomain+":443"] = "127.0.0.1:" + port
-	waitTLS(t, "127.0.0.1:"+port, "web."+baseDomain, "/api/heartbeat")
-}
-
 // StartApp runs deploy/caddy/app.Caddyfile with the console's static build
 // and the control plane behind /api.
 func (s *Stack) StartApp(t testing.TB) {
@@ -1096,7 +1076,6 @@ func TestConsoleFlows(t *testing.T) {
 	s.StartMetricsWriter(t)
 	s.StartTenantBackend(t)
 	s.StartEdge(t)
-	s.StartWeb(t)
 	s.StartApp(t)
 	appsCtl := s.AppsControl(t)
 
