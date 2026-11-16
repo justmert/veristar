@@ -1,4 +1,5 @@
 import { ApiError, ResponseShapeError } from "@/api/client";
+import { PasskeyError } from "@/lib/passkey/errors";
 import { WalletError } from "@/lib/stellar-wallet";
 
 // people-facing text for an error thrown by the api client. codes come from
@@ -54,6 +55,12 @@ export function errorText(err: unknown): string {
       case "unavailable":
       case "provisioning_pending":
         return `The service is temporarily unavailable. Try again${err.retryAfter ? ` in ${err.retryAfter} s` : " shortly"}.${ref}`;
+      case "passkey_unknown":
+        return "No account signs in with this passkey. It was removed from its account, or the account was deleted. Create a new passkey to start a new account.";
+      case "challenge_expired":
+        return "The sign-in request expired. Start again.";
+      case "challenge_used":
+        return "This sign-in request was already used. Start again.";
       case "csrf_header_missing":
       case "origin_mismatch":
         return `The request was refused as cross-site (${err.code}).${ref}`;
@@ -74,6 +81,16 @@ export function errorText(err: unknown): string {
         return "This wallet cannot sign this kind of request. Choose another wallet.";
       default:
         return `The wallet reported an error: ${err.message}`;
+    }
+  }
+  if (err instanceof PasskeyError) {
+    switch (err.code) {
+      case "cancelled":
+        return "The passkey prompt was closed. Nothing was shared.";
+      case "unsupported":
+        return "This browser or device cannot make a passkey this console accepts (ES256 with a PIN or biometric check). Try another device or browser.";
+      default:
+        return `The passkey reported an error: ${err.message}`;
     }
   }
   if (err instanceof TypeError)

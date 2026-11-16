@@ -40,6 +40,7 @@ import {
   operatorTenantSummary,
   otlpTokenCreated,
   otlpTokenPage,
+  passkeyChallenge,
   type Role,
   type Site,
   site,
@@ -73,6 +74,16 @@ export type EnrollmentInput = {
   accepted_terms_version: string;
   // 19.1 an optional cohort proposal
   cohort?: { program?: string; round?: string; category?: string; award_date?: string };
+};
+
+// 4.1.9 a webauthn.get answer, every byte field base64url. public_key is
+// sent only for a passkey created just now, which no account holds yet
+export type PasskeyAnswer = {
+  credential_id: string;
+  authenticator_data: string;
+  client_data_json: string;
+  signature: string;
+  public_key?: string;
 };
 
 export type SiteInput = { name: string; domain: string; origins: string[] };
@@ -220,8 +231,18 @@ export const api = {
     request("POST", "/me/identities/stellar/challenge", walletChallenge, { address }),
   linkWallet: (transaction: string) =>
     requestNoContent("POST", "/me/identities/stellar", { transaction }),
-  unlinkIdentity: (kind: "github" | "stellar") =>
+  unlinkIdentity: (kind: "github" | "stellar" | "passkey") =>
     requestNoContent("DELETE", `/me/identities/${kind}`),
+
+  // 4.1.9 passkey sign-in and linking
+  passkeyChallenge: (returnTo: string) =>
+    request("POST", "/auth/passkey/challenge", passkeyChallenge, { return_to: returnTo }),
+  passkeyVerify: (answer: PasskeyAnswer) =>
+    request("POST", "/auth/passkey/verify", walletVerified, answer),
+  linkPasskeyChallenge: () =>
+    request("POST", "/me/identities/passkey/challenge", passkeyChallenge, {}),
+  linkPasskey: (answer: PasskeyAnswer) =>
+    requestNoContent("POST", "/me/identities/passkey", answer),
 
   tenant: (tenantId: string, signal?: AbortSignal) =>
     request("GET", `/tenants/${enc(tenantId)}`, tenant, undefined, signal),

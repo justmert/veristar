@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CircleCheck, CircleX, Wallet } from "lucide-react";
+import { CircleCheck, CircleX, KeyRound, Wallet } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { ApiError } from "@/api/client";
@@ -11,13 +11,14 @@ import { FormMessage } from "@/components/error-panel";
 import { TextField } from "@/components/form-field";
 import { GitHubMark } from "@/components/github-mark";
 import { PageHeader, Panel } from "@/components/panel";
+import { PasskeyDialog } from "@/components/passkey-dialog";
 import { Button } from "@/components/ui/button";
 import { WalletPicker } from "@/components/wallet-picker";
 import { connectWallet, shortAddress, signTransaction } from "@/lib/stellar-wallet";
 import { queryClient } from "@/query-client";
 
 // the typed confirmation of an account deletion: the github login, or the
-// whole stellar address of a wallet-only account, exactly, so a stray click
+// whole address of a wallet or passkey account without one, exactly, so a stray click
 // or a paste of something else cannot delete an account
 export function confirmsLogin(typed: string, login: string): boolean {
   return typed.trim() === login;
@@ -25,7 +26,7 @@ export function confirmsLogin(typed: string, login: string): boolean {
 
 // what the deletion dialog asks to type
 export function confirmationText(me: Me): string {
-  return me.user.github_login ?? me.user.stellar_address ?? me.user.id;
+  return me.user.github_login ?? me.user.stellar_address ?? me.user.passkey_address ?? me.user.id;
 }
 
 // failure codes of the github link flow (contract 4.1.8), sent back as
@@ -93,11 +94,14 @@ function SignInMethods({ me }: { me: Me }) {
   const linkError = params.get("link_error");
   const linked = params.get("linked");
   const [picker, setPicker] = useState(false);
-  const [unlinking, setUnlinking] = useState<"github" | "stellar" | null>(null);
+  const [passkey, setPasskey] = useState(false);
+  const [unlinking, setUnlinking] = useState<"github" | "stellar" | "passkey" | null>(null);
   // the provider's client, so the refreshed account shows wherever it is read
   const qc = useQueryClient();
-  const { github_login, github_id, stellar_address } = me.user;
-  const both = github_login !== null && stellar_address !== null;
+  const { github_login, github_id, stellar_address, passkey_address } = me.user;
+  // a method can go while another one remains
+  const both =
+    [github_login, stellar_address, passkey_address].filter((m) => m !== null).length > 1;
 
   const unlink = useMutation({
     mutationFn: api.unlinkIdentity,
@@ -212,8 +216,63 @@ function SignInMethods({ me }: { me: Me }) {
               )
             }
           />
+          <MethodRow
+            icon={<KeyRound aria-hidden />}
+            name="Passkey"
+            detail={
+              passkey_address !== null ? (
+                <span className="font-mono" title={passkey_address}>
+                  {shortAddress(passkey_address)}
+                </span>
+              ) : (
+                "Not linked"
+              )
+            }
+            action={
+              passkey_address !== null ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={!both}
+                  title={both ? undefined : "Link another method before you unlink this one"}
+                  onClick={() => {
+                    unlink.reset();
+                    setUnlinking("passkey");
+                  }}
+                >
+                  Unlink
+                </Button>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    clearNotice();
+                    setPasskey(true);
+                  }}
+                >
+                  Add a passkey
+                </Button>
+              )
+            }
+          />
         </ul>
       </div>
+
+      <PasskeyDialog
+        open={passkey}
+        onOpenChange={setPasskey}
+        mode="link"
+        title="Add a passkey"
+        description="Create a passkey for this account. It signs you in with Face ID, Touch ID, Windows Hello or a security key, and its key controls a soropass smart account on Stellar."
+        userName={me.user.display_name}
+        challenge={api.linkPasskeyChallenge}
+        verify={async (answer) => {
+          await api.linkPasskey(answer);
+          await qc.invalidateQueries({ queryKey: meQuery.queryKey });
+          setPasskey(false);
+        }}
+      />
 
       <WalletPicker
         open={picker}
@@ -239,11 +298,19 @@ function SignInMethods({ me }: { me: Me }) {
         onOpenChange={(o) => {
           if (!o) setUnlinking(null);
         }}
-        title={unlinking === "github" ? "Unlink GitHub?" : "Unlink your Stellar wallet?"}
+        title={
+          unlinking === "github"
+            ? "Unlink GitHub?"
+            : unlinking === "passkey"
+              ? "Unlink your passkey?"
+              : "Unlink your Stellar wallet?"
+        }
         description={
           unlinking === "github"
             ? "You can no longer sign in to this account with GitHub. Signing in with GitHub afterwards creates a new, empty account."
-            : "You can no longer sign in to this account with this wallet. Signing in with it afterwards creates a new, empty account."
+            : unlinking === "passkey"
+              ? "You can no longer sign in to this account with this passkey. To sign in with a passkey again, add a new one; the old passkey stays on your device until you delete it there."
+              : "You can no longer sign in to this account with this wallet. Signing in with it afterwards creates a new, empty account."
         }
         cancelLabel="Keep it"
         confirmLabel="Unlink"
@@ -289,14 +356,15 @@ function DeleteAccount({ me }: { me: Me }) {
           </li>
           <li>Your sessions, AI access keys and AI client connections end.</li>
           <li>
-            Open invites addressed to your GitHub account or your Stellar address are deleted.
+            Open invites addressed to your GitHub account, your Stellar address or your passkey
+            account address are deleted.
           </li>
           <li>
-            Your GitHub id and login and your Stellar address are removed from the account. The
-            audit log keeps its entries, which name you by an account id; see the privacy notice for
-            what they hold.
+            Your GitHub id and login, your Stellar address and your passkey (its address, credential
+            id and public key) are removed from the account. The audit log keeps its entries, which
+            name you by an account id; see the privacy notice for what they hold.
           </li>
-          <li>Signing in again later, with either method, creates a new, empty account.</li>
+          <li>Signing in again later, with any method, creates a new, empty account.</li>
         </ul>
 
         {blocked.length > 0 ? (

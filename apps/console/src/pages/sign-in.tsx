@@ -1,9 +1,10 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { CircleAlert, CircleCheck, FileText, Shield, Wallet } from "lucide-react";
+import { CircleAlert, CircleCheck, FileText, KeyRound, Shield, Wallet } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { api, signInUrl } from "@/api/endpoints";
 import { GitHubMark } from "@/components/github-mark";
+import { PasskeyDialog } from "@/components/passkey-dialog";
 import { PublicFrame } from "@/components/public-frame";
 import { Button } from "@/components/ui/button";
 import { WalletPicker } from "@/components/wallet-picker";
@@ -47,6 +48,7 @@ export function SignInPage() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const [picker, setPicker] = useState(false);
+  const [passkey, setPasskey] = useState(false);
   const qc = useQueryClient();
   const code = params.get("error");
   const message = code ? (SIGN_IN_ERRORS[code] ?? SIGN_IN_ERRORS.internal) : null;
@@ -100,6 +102,16 @@ export function SignInPage() {
             <Wallet aria-hidden className="size-4.5" />
             Continue with a Stellar wallet
           </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="lg"
+            className="w-full"
+            onClick={() => setPasskey(true)}
+          >
+            <KeyRound aria-hidden className="size-4.5" />
+            Continue with a passkey
+          </Button>
         </div>
 
         <WalletPicker
@@ -117,6 +129,22 @@ export function SignInPage() {
           }}
         />
 
+        <PasskeyDialog
+          open={passkey}
+          onOpenChange={setPasskey}
+          mode="sign_in"
+          title="Continue with a passkey"
+          description="A passkey signs you in with Face ID, Touch ID, Windows Hello or a security key. It is a soropass passkey: its key also controls a Stellar smart account, whose address names your console account."
+          userName="Veristar account"
+          challenge={() => api.passkeyChallenge(returnTo)}
+          verify={async (answer) => {
+            const v = await api.passkeyVerify(answer);
+            qc.clear();
+            setPasskey(false);
+            navigate(safeReturnTo(v.return_to), { replace: true });
+          }}
+        />
+
         <ul className="flex flex-col gap-2 text-small text-fg-2">
           <li className="flex gap-2">
             <Shield aria-hidden className="mt-0.5 size-3.5 shrink-0 text-fg-3" />
@@ -125,6 +153,11 @@ export function SignInPage() {
           <li className="flex gap-2">
             <Wallet aria-hidden className="mt-0.5 size-3.5 shrink-0 text-fg-3" />A wallet shares
             your public Stellar address. The signature moves no funds.
+          </li>
+          <li className="flex gap-2">
+            <KeyRound aria-hidden className="mt-0.5 size-3.5 shrink-0 text-fg-3" />A passkey shares
+            its public key and its smart account address. Your fingerprint or face never leaves the
+            device.
           </li>
           <li className="flex gap-2">
             <FileText aria-hidden className="mt-0.5 size-3.5 shrink-0 text-fg-3" />

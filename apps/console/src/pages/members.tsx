@@ -24,12 +24,13 @@ export type AddMemberValues = { login: string; role: Role };
 export type AddMemberErrors = Partial<Record<keyof AddMemberValues, string>>;
 
 // the one field takes a github username or a stellar address (contract
-// 4.2.5): a G-address names a stellar account, anything else a github login
+// 4.2.5): a G-address names a wallet account, a C-address a passkey account
+// (4.1.9), anything else a github login
 export function memberIdentity(
   input: string,
 ): { github_login: string } | { stellar_address: string } {
   const t = input.trim().replace(/^@/, "");
-  return /^G[A-Z2-7]{55}$/.test(t) ? { stellar_address: t } : { github_login: t };
+  return /^[GC][A-Z2-7]{55}$/.test(t) ? { stellar_address: t } : { github_login: t };
 }
 
 export function validateAddMember(values: AddMemberValues): AddMemberErrors {
@@ -61,7 +62,8 @@ export function addResultText(r: AddMemberResult): string {
 }
 
 // a person in a list: the github profile link of a github account, or the
-// short address of a wallet-only one with the whole address on hover
+// short address of a wallet or passkey account without one, with the whole
+// address on hover
 function PersonName({
   githubLogin,
   address,
@@ -256,8 +258,8 @@ export function AddMemberForm({ tenantId }: { tenantId: string }) {
           autoComplete="off"
           spellCheck={false}
           maxLength={56}
-          placeholder="octocat or G…"
-          hint="Someone without an account yet gets an invite and joins at first sign-in with that GitHub account or wallet."
+          placeholder="octocat, G… or C…"
+          hint="A G… address names a wallet, a C… address a passkey account. Someone without an account yet gets an invite and joins at first sign-in with that GitHub account, wallet or passkey."
           className="max-lg:h-(--vs-control-touch)"
           value={values.login}
           onChange={(e) => setValues((s) => ({ ...s, login: e.target.value }))}
@@ -350,7 +352,7 @@ function MemberRow({
           <span className="min-w-0 truncate font-medium text-fg">
             <PersonName
               githubLogin={member.github_login}
-              address={member.stellar_address}
+              address={member.stellar_address ?? member.passkey_address}
               name={member.display_name}
             />
             {isSelf ? <span className="font-normal text-fg-3"> (you)</span> : null}
