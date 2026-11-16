@@ -49,6 +49,38 @@ func TestSEP53Vectors(t *testing.T) {
 	require.Error(t, VerifySEP53("CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M", "x", "y"))
 }
 
+// the binary vector of sep-53 1.0.0 and signing: SignSEP53 reproduces
+// every published signature, and VerifySEP53Bytes accepts them
+func TestSEP53SignVectors(t *testing.T) {
+	kp := keypair.MustParseFull(sepSeed)
+	require.Equal(t, sepAccount, kp.Address())
+	binary, err := base64.StdEncoding.DecodeString("2zZDP1sa1BVBfLP7TeeMk3sUbaxAkUhBhDiNdrksaFo=")
+	require.NoError(t, err)
+	for _, v := range []struct {
+		msg []byte
+		b64 string
+		hex string
+	}{
+		{[]byte("Hello, World!"), "fO5dbYhXUhBMhe6kId/cuVq/AfEnHRHEvsP8vXh03M1uLpi5e46yO2Q8rEBzu3feXQewcQE5GArp88u6ePK6BA==",
+			"7cee5d6d885752104c85eea421dfdcb95abf01f1271d11c4bec3fcbd7874dccd6e2e98b97b8eb23b643cac4073bb77de5d07b0710139180ae9f3cbba78f2ba04"},
+		{[]byte("こんにちは、世界！"), "CDU265Xs8y3OWbB/56H9jPgUss5G9A0qFuTqH2zs2YDgTm+++dIfmAEceFqB7bhfN3am59lCtDXrCtwH2k1GBA==",
+			"083536eb95ecf32dce59b07fe7a1fd8cf814b2ce46f40d2a16e4ea1f6cecd980e04e6fbef9d21f98011c785a81edb85f3776a6e7d942b435eb0adc07da4d4604"},
+		{binary, "VA1+7hefNwv2NKScH6n+Sljj15kLAge+M2wE7fzFOf+L0MMbssA1mwfJZRyyrhBORQRle10X1Dxpx+UOI4EbDQ==",
+			"540d7eee179f370bf634a49c1fa9fe4a58e3d7990b0207be336c04edfcc539ff8bd0c31bb2c0359b07c9651cb2ae104e4504657b5d17d43c69c7e50e23811b0d"},
+	} {
+		sig, err := SignSEP53(kp, v.msg)
+		require.NoError(t, err)
+		require.Equal(t, v.b64, sig)
+		require.NoError(t, VerifySEP53Bytes(sepAccount, v.msg, v.b64))
+		require.NoError(t, VerifySEP53Bytes(sepAccount, v.msg, v.hex))
+		flipped := append([]byte{}, v.msg...)
+		flipped[0] ^= 1
+		require.ErrorIs(t, VerifySEP53Bytes(sepAccount, flipped, v.b64), ErrBadSignature)
+	}
+	_, err = SignSEP53(nil, []byte("x"))
+	require.Error(t, err)
+}
+
 func accountAddress(t *testing.T, g string) xdr.ScAddress {
 	t.Helper()
 	var id xdr.AccountId

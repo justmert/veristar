@@ -3,6 +3,7 @@ package db_test
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -89,6 +90,30 @@ var tenantTables = []tenantTable{
 	{name: "agg.web_integrity_daily", key: "tenant_id"},
 	{name: "cp.web_evidence_daily", key: "tenant_id", denied: true},
 	{name: "cp.web_networks_daily", key: "tenant_id", denied: true},
+	// cohorts (00035): a member proposes its own project's cohort
+	{name: "cp.tenant_cohorts", key: "tenant_id", insert: func(tenant, user, _ uuid.UUID) (string, []any) {
+		return `insert into cp.tenant_cohorts (tenant_id, proposed_program, proposed_by, proposed_at)
+		        values ($1, 'Build Award', $2, now())
+		        on conflict (tenant_id) do update set proposed_program = excluded.proposed_program,
+		          proposed_by = excluded.proposed_by, proposed_at = excluded.proposed_at`, []any{tenant, user}
+	}},
+	// signed usage reports (00036): a member stores its own project's reports
+	{name: "cp.usage_reports", key: "tenant_id", insert: func(tenant, user, _ uuid.UUID) (string, []any) {
+		return `insert into cp.usage_reports (id, tenant_id, period_from, period_to, body, signature, signer, created_by)
+		        values ($1, $2, current_date, current_date, '{}', $3, $4, $5)`,
+			[]any{randomReportID(), tenant, strings.Repeat("A", 86) + "==", "G" + strings.Repeat("A", 55), user}
+	}},
+}
+
+// randomReportID is a string of the shape cp.usage_reports checks
+func randomReportID() string {
+	const alphabet = "abcdefghijklmnopqrstuvwxyz234567"
+	a := uuid.New()
+	b := make([]byte, 26)
+	for i := range b {
+		b[i] = alphabet[int(a[i%16]+byte(i))%len(alphabet)]
+	}
+	return string(b)
 }
 
 // randomContract is a string of the strkey shape cp.chain_ids checks

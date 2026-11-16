@@ -115,6 +115,25 @@ var Want = map[string]map[db.Role]string{
 	"agg.web_integrity_daily": {db.RoleCPTenant: "r", db.RoleCPOperator: "r", db.RoleJobs: "rawd"},
 	"cp.web_evidence_daily":   {db.RoleCPSystem: "rawd", db.RoleJobs: "rawd"},
 	"cp.web_networks_daily":   {db.RoleCPSystem: "rawd", db.RoleJobs: "rawd"},
+
+	// cohorts and threshold rules (00035): a member writes its own
+	// project's proposal, operators confirm and keep the rules under
+	// cp_system and read both under cp_operator
+	"cp.tenant_cohorts": {
+		db.RoleCPSystem: "rawd",
+		db.RoleCPTenant: "r a(proposed_at,proposed_award_date,proposed_by,proposed_category,proposed_program," +
+			"proposed_round,tenant_id,updated_at) w(proposed_at,proposed_award_date,proposed_by,proposed_category," +
+			"proposed_program,proposed_round,updated_at)",
+		db.RoleCPOperator: "r",
+	},
+	"cp.threshold_rules": {db.RoleCPSystem: "rawd", db.RoleCPOperator: "r"},
+	// signed usage reports (00036): a member stores and revokes its
+	// project's reports; the public route reads one and counts its views
+	"cp.usage_reports": {
+		db.RoleCPSystem: "r w(last_viewed_at,view_count)",
+		db.RoleCPTenant: "r a(body,created_by,id,period_from,period_to,signature,signer,tenant_id) w(revoked_at,revoked_by)",
+		db.RoleCPOperator: "r",
+	},
 }
 
 // Right is one privilege: its acl letter and its sql name.
