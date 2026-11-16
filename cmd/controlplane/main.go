@@ -14,12 +14,9 @@ import (
 	"os"
 	"os/signal"
 	"runtime/debug"
-	"strings"
 	"syscall"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 
@@ -45,10 +42,11 @@ import (
 	"github.com/justmert/veristar/internal/controlplane/reports"
 	"github.com/justmert/veristar/internal/controlplane/session"
 	"github.com/justmert/veristar/internal/controlplane/sites"
-	"github.com/justmert/veristar/internal/controlplane/sso"
 	"github.com/justmert/veristar/internal/controlplane/stepup"
 	"github.com/justmert/veristar/internal/controlplane/tenants"
 	"github.com/justmert/veristar/internal/controlplane/terms"
+	"github.com/justmert/veristar/internal/controlplane/umamiread"
+	"github.com/justmert/veristar/internal/controlplane/webdash"
 	"github.com/justmert/veristar/internal/db"
 	"github.com/justmert/veristar/internal/natsx"
 	"github.com/justmert/veristar/internal/netguard"
@@ -66,7 +64,7 @@ serve (the default) runs the api until SIGINT or SIGTERM.
 
 environment: the keys of docs/reference/control-plane-api.md section 4.5:
 CONTROLPLANE_ADDR, CONTROLPLANE_OPS_ADDR, CONSOLE_ORIGIN, INGEST_ORIGIN,
-WEB_ORIGIN, GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, GITHUB_REDIRECT_URL,
+GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, GITHUB_REDIRECT_URL,
 OAUTH_STATE_KEY, OPERATOR_GITHUB_IDS, UMAMI_URL, UMAMI_ADMIN_PASSWORD,
 UMAMI_USER_PASSWORD_KEY, TRACKER_RELEASE_DIR, TRACKER_NPM_PACKAGE (optional),
 NATS_URL, NATS_REPLICAS, NATS_USER and NATS_PASSWORD (when the server
@@ -389,23 +387,19 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	ssoH := &sso.Handler{
-		Tx:        d.WithSystem,
-		Umami:     umamiClient,
-		Key:       pwKey,
-		WebOrigin: cfg.WebOrigin,
-		UserID: func(r *http.Request) (uuid.UUID, bool) {
-			u, ok := session.CurrentUser(r.Context())
-			return u.ID, ok
-		},
-		Now: time.Now,
-	}
-	if err := ssoH.Check(); err != nil {
+	// web analytics are read from umami as the member's own umami user,
+	// for the console's web dashboard and the mcp web tools alike
+	umamiSessions := &umamiread.Sessions{Tx: d.WithSystem, Umami: umamiClient, Key: pwKey, Now: time.Now}
+	if err := umamiSessions.Check(); err != nil {
 		return err
 	}
-	ssoPath, ok := strings.CutPrefix(sso.Path, "/api")
-	if !ok {
-		return fmt.Errorf("sso path %s is not under /api", sso.Path)
+	webReader, err := umamiread.NewReader(umamiSessions, umamiClient, time.Now)
+	if err != nil {
+		return err
+	}
+	webRoutes, err := webdash.NewRoutes(scope, webReader, time.Now)
+	if err != nil {
+		return err
 	}
 
 	// the mcp server (contract 12): its tools call the console's read
@@ -419,8 +413,7 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 			tenantCohort,
 			controlplane.RoutesFunc(guard.Mount(review, global, onchainOperator, cohortRoutes, ruleRoutes)),
 		},
-		Sessions: ssoH,
-		Umami:    umamiClient,
+		Web:      webReader,
 		Issuer:   cfg.ConsoleOrigin,
 		StateKey: cfg.OAuthStateKey.Reveal(),
 		Log:      log,
@@ -462,9 +455,7 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 			scfView,
 			tenantCohort,
 			controlplane.RoutesFunc(reportRoutes.Private),
-			// behind RequireUser like every private group; sso answers its own
-			// failures with a redirect, but an anonymous request gets 401
-			controlplane.RoutesFunc(func(r chi.Router) { r.Method(http.MethodGet, ssoPath, ssoH) }),
+			webRoutes,
 			// /api/operator: 403 operator_required for everyone else (5.1)
 			// mcp access keys and the oauth consent page (contract 12.8)
 			mcpSrv.TenantRoutes(scope),

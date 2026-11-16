@@ -79,10 +79,10 @@ var tenantTables = []tenantTable{
 		return `insert into cp.chain_ids (tenant_id, strkey, kind, added_by) values ($1, $2, 'contract', 'console')`,
 			[]any{tenant, randomContract()}
 	}},
-	// agg: cp_tenant reads its own web and chain rows (00032) and writes
-	// none; the dimensions stay operators only
+	// agg: cp_tenant reads its own web and chain rows (00032) and its own
+	// breakdowns (00035) and writes none
 	{name: "agg.web_daily", key: "tenant_id"},
-	{name: "agg.web_daily_dim", key: "tenant_id", denied: true},
+	{name: "agg.web_daily_dim", key: "tenant_id"},
 	{name: "agg.chain_daily", key: "tenant_id"},
 	{name: "agg.chain_reads", key: "tenant_id"},
 	// weekly active accounts (00038): a project reads its own weeks, never
