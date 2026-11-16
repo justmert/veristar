@@ -25,7 +25,7 @@ var OverviewHeader = []string{
 	"day",
 	"web_pageviews", "web_visitors", "web_visits", "web_bounces", "web_totaltime_seconds",
 	"web_quarantine_pageviews",
-	"api_requests", "api_errors_4xx", "api_errors_5xx",
+	"api_requests", "api_errors_4xx", "api_errors_5xx", "api_infrastructure_requests",
 	"onchain_ids_read", "onchain_operations", "onchain_transactions",
 	"integrity_grade",
 	"script_requests", "gpc_requests", "unmeasured_share",
@@ -159,7 +159,7 @@ func (o *Overview) overview(w http.ResponseWriter, r *http.Request) error {
 		// the api series has no row for a day without requests; a day the
 		// writer has no data for is a zero there, as on the api traffic page
 		p := api[day]
-		row = append(row, Int(p.Requests), Int(p.Errors4xx), Int(p.Errors5xx))
+		row = append(row, Int(p.Requests), Int(p.Errors4xx), Int(p.Errors5xx), Int(p.InfrastructureRequests))
 		c := chain[day]
 		row = append(row, Int(c.IDsRead), IntPtr(c.Operations), IntPtr(c.Transactions))
 		row = append(row, StrPtr(grades[integrityview.DayKey{Tenant: a.TenantID, Day: day}].Grade))

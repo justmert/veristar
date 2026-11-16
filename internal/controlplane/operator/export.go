@@ -269,13 +269,14 @@ func percentileCells(p Percentiles) []string {
 var numbersHeader = []string{
 	"requests", "requests_4xx", "requests_5xx", "rate_4xx", "rate_5xx",
 	"p50_seconds", "p50_over_10s", "p95_seconds", "p95_over_10s", "p99_seconds", "p99_over_10s",
+	"infrastructure_requests",
 }
 
 func numbersCells(n APINumbers) []string {
 	return cat([]string{
 		exports.Int(n.Requests), exports.Int(n.Requests4xx), exports.Int(n.Requests5xx),
 		exports.Float(n.Rate4xx), exports.Float(n.Rate5xx),
-	}, percentileCells(n.Percentiles))
+	}, percentileCells(n.Percentiles), []string{exports.Int(n.InfrastructureRequests)})
 }
 
 func (e *Exports) apiProjects(w http.ResponseWriter, r *http.Request) error {

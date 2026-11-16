@@ -15,7 +15,7 @@ select count(*)::bigint
 from (
   select distinct service, method, route
   from (
-  select service, method, route, status_code, source, counts, count, lossy, bucket_start
+  select service, method, route, status_code, source, traffic_class, counts, count, lossy, bucket_start
   from api.metrics_minute
   where $1::text = 'minute'
     and bucket_start >= $2::timestamptz and bucket_start < $3::timestamptz
@@ -24,7 +24,7 @@ from (
     and ($6::text is null or route = $6::text)
     and ($7::text is null or method = $7::text)
   union all
-  select service, method, route, status_code, source, counts, count, lossy, bucket_start
+  select service, method, route, status_code, source, traffic_class, counts, count, lossy, bucket_start
   from api.metrics_hourly h
   where $1::text = 'hour'
     and h.bucket_start >= $2::timestamptz and h.bucket_start < $3::timestamptz
@@ -34,7 +34,7 @@ from (
     and ($6::text is null or route = $6::text)
     and ($7::text is null or method = $7::text)
   union all
-  select service, method, route, status_code, source, counts, count, lossy, p.hour as bucket_start
+  select service, method, route, status_code, source, traffic_class, counts, count, lossy, p.hour as bucket_start
   from api.rollup_pending p
   join api.metrics_minute m
     on m.tenant_id = p.tenant_id and m.bucket_start >= p.hour and m.bucket_start < p.hour + interval '1 hour'
@@ -45,7 +45,7 @@ from (
     and ($6::text is null or route = $6::text)
     and ($7::text is null or method = $7::text)
   union all
-  select service, method, route, status_code, source, counts, count, lossy, bucket_start
+  select service, method, route, status_code, source, traffic_class, counts, count, lossy, bucket_start
   from api.metrics_daily d
   where $1::text = 'day'
     and d.bucket_start >= $2::timestamptz and d.bucket_start < $3::timestamptz
@@ -56,7 +56,7 @@ from (
     and ($6::text is null or route = $6::text)
     and ($7::text is null or method = $7::text)
   union all
-  select service, method, route, status_code, source, counts, count, lossy, pd.day as bucket_start
+  select service, method, route, status_code, source, traffic_class, counts, count, lossy, pd.day as bucket_start
   from (select distinct tenant_id, date_trunc('day', hour, 'UTC') as day
         from api.rollup_pending
         where $1::text = 'day' and hour >= $2::timestamptz and hour < $3::timestamptz) pd
@@ -68,7 +68,7 @@ from (
     and ($6::text is null or route = $6::text)
     and ($7::text is null or method = $7::text)
   union all
-  select service, method, route, status_code, source, counts, count, lossy, date_trunc('day', p.hour, 'UTC') as bucket_start
+  select service, method, route, status_code, source, traffic_class, counts, count, lossy, date_trunc('day', p.hour, 'UTC') as bucket_start
   from api.rollup_pending p
   join api.metrics_minute m
     on m.tenant_id = p.tenant_id and m.bucket_start >= p.hour and m.bucket_start < p.hour + interval '1 hour'
@@ -112,15 +112,19 @@ const aPIMetricRoutes = `-- name: APIMetricRoutes :many
 with g as (
   select service, method, route,
          min(source)::text as source,
-         coalesce(sum(count), 0)::bigint as requests,
-         coalesce(sum(count) filter (where status_code between 400 and 499), 0)::bigint as errors_4xx,
-         coalesce(sum(count) filter (where status_code between 500 and 599), 0)::bigint as errors_5xx,
-         coalesce(bool_or(lossy), false)::boolean as lossy,
-         case when sum(count) > 0 then api.histogram_quantile(0.5, api.sum_buckets(counts)) end as p50,
-         case when sum(count) > 0 then api.histogram_quantile(0.95, api.sum_buckets(counts)) end as p95,
-         case when sum(count) > 0 then api.histogram_quantile(0.99, api.sum_buckets(counts)) end as p99
+         coalesce(sum(count) filter (where traffic_class = 'app'), 0)::bigint as requests,
+         coalesce(sum(count) filter (where traffic_class = 'app' and status_code between 400 and 499), 0)::bigint as errors_4xx,
+         coalesce(sum(count) filter (where traffic_class = 'app' and status_code between 500 and 599), 0)::bigint as errors_5xx,
+         coalesce(sum(count) filter (where traffic_class <> 'app'), 0)::bigint as infrastructure_requests,
+         coalesce(bool_or(lossy) filter (where traffic_class = 'app'), false)::boolean as lossy,
+         case when sum(count) filter (where traffic_class = 'app') > 0
+           then api.histogram_quantile(0.5, api.sum_buckets(counts) filter (where traffic_class = 'app')) end as p50,
+         case when sum(count) filter (where traffic_class = 'app') > 0
+           then api.histogram_quantile(0.95, api.sum_buckets(counts) filter (where traffic_class = 'app')) end as p95,
+         case when sum(count) filter (where traffic_class = 'app') > 0
+           then api.histogram_quantile(0.99, api.sum_buckets(counts) filter (where traffic_class = 'app')) end as p99
   from (
-  select service, method, route, status_code, source, counts, count, lossy, bucket_start
+  select service, method, route, status_code, source, traffic_class, counts, count, lossy, bucket_start
   from api.metrics_minute
   where $5::text = 'minute'
     and bucket_start >= $6::timestamptz and bucket_start < $7::timestamptz
@@ -129,7 +133,7 @@ with g as (
     and ($10::text is null or route = $10::text)
     and ($11::text is null or method = $11::text)
   union all
-  select service, method, route, status_code, source, counts, count, lossy, bucket_start
+  select service, method, route, status_code, source, traffic_class, counts, count, lossy, bucket_start
   from api.metrics_hourly h
   where $5::text = 'hour'
     and h.bucket_start >= $6::timestamptz and h.bucket_start < $7::timestamptz
@@ -139,7 +143,7 @@ with g as (
     and ($10::text is null or route = $10::text)
     and ($11::text is null or method = $11::text)
   union all
-  select service, method, route, status_code, source, counts, count, lossy, p.hour as bucket_start
+  select service, method, route, status_code, source, traffic_class, counts, count, lossy, p.hour as bucket_start
   from api.rollup_pending p
   join api.metrics_minute m
     on m.tenant_id = p.tenant_id and m.bucket_start >= p.hour and m.bucket_start < p.hour + interval '1 hour'
@@ -150,7 +154,7 @@ with g as (
     and ($10::text is null or route = $10::text)
     and ($11::text is null or method = $11::text)
   union all
-  select service, method, route, status_code, source, counts, count, lossy, bucket_start
+  select service, method, route, status_code, source, traffic_class, counts, count, lossy, bucket_start
   from api.metrics_daily d
   where $5::text = 'day'
     and d.bucket_start >= $6::timestamptz and d.bucket_start < $7::timestamptz
@@ -161,7 +165,7 @@ with g as (
     and ($10::text is null or route = $10::text)
     and ($11::text is null or method = $11::text)
   union all
-  select service, method, route, status_code, source, counts, count, lossy, pd.day as bucket_start
+  select service, method, route, status_code, source, traffic_class, counts, count, lossy, pd.day as bucket_start
   from (select distinct tenant_id, date_trunc('day', hour, 'UTC') as day
         from api.rollup_pending
         where $5::text = 'day' and hour >= $6::timestamptz and hour < $7::timestamptz) pd
@@ -173,7 +177,7 @@ with g as (
     and ($10::text is null or route = $10::text)
     and ($11::text is null or method = $11::text)
   union all
-  select service, method, route, status_code, source, counts, count, lossy, date_trunc('day', p.hour, 'UTC') as bucket_start
+  select service, method, route, status_code, source, traffic_class, counts, count, lossy, date_trunc('day', p.hour, 'UTC') as bucket_start
   from api.rollup_pending p
   join api.metrics_minute m
     on m.tenant_id = p.tenant_id and m.bucket_start >= p.hour and m.bucket_start < p.hour + interval '1 hour'
@@ -186,12 +190,13 @@ with g as (
   ) r
   group by service, method, route
 ), p as (
-  select g.service, g.method, g.route, g.source, g.requests, g.errors_4xx, g.errors_5xx, g.lossy, g.p50, g.p95, g.p99,
+  select g.service, g.method, g.route, g.source, g.requests, g.errors_4xx, g.errors_5xx, g.infrastructure_requests, g.lossy, g.p50, g.p95, g.p99,
          (errors_4xx::float8 / nullif(requests, 0))::float8 as rate_4xx,
          (errors_5xx::float8 / nullif(requests, 0))::float8 as rate_5xx
   from g
 )
-select service, method, route, source, requests, errors_4xx, errors_5xx, lossy, p50, p95, p99
+select service, method, route, source, requests, errors_4xx, errors_5xx, infrastructure_requests,
+       lossy, p50, p95, p99
 from p
 order by
   case when $1::text = 'requests' and not $2::boolean then requests end asc nulls last,
@@ -232,17 +237,18 @@ type APIMetricRoutesParams struct {
 }
 
 type APIMetricRoutesRow struct {
-	Service   string
-	Method    string
-	Route     string
-	Source    string
-	Requests  int64
-	Errors4xx int64
-	Errors5xx int64
-	Lossy     bool
-	P50       interface{}
-	P95       interface{}
-	P99       interface{}
+	Service                string
+	Method                 string
+	Route                  string
+	Source                 string
+	Requests               int64
+	Errors4xx              int64
+	Errors5xx              int64
+	InfrastructureRequests int64
+	Lossy                  bool
+	P50                    interface{}
+	P95                    interface{}
+	P99                    interface{}
 }
 
 // one row per service, method and route, sorted by @sort_key and paged by
@@ -277,6 +283,7 @@ func (q *Queries) APIMetricRoutes(ctx context.Context, arg APIMetricRoutesParams
 			&i.Requests,
 			&i.Errors4xx,
 			&i.Errors5xx,
+			&i.InfrastructureRequests,
 			&i.Lossy,
 			&i.P50,
 			&i.P95,
@@ -294,17 +301,18 @@ func (q *Queries) APIMetricRoutes(ctx context.Context, arg APIMetricRoutesParams
 
 const aPIMetricServiceTotals = `-- name: APIMetricServiceTotals :many
 select service,
-       coalesce(sum(count), 0)::bigint as requests,
-       coalesce(bool_or(lossy), false)::boolean as lossy
+       coalesce(sum(count) filter (where traffic_class = 'app'), 0)::bigint as requests,
+       coalesce(sum(count) filter (where traffic_class <> 'app'), 0)::bigint as infrastructure_requests,
+       coalesce(bool_or(lossy) filter (where traffic_class = 'app'), false)::boolean as lossy
 from (
-  select service, method, route, status_code, source, counts, count, lossy, bucket_start
+  select service, method, route, status_code, source, traffic_class, counts, count, lossy, bucket_start
   from api.metrics_minute
   where $1::text = 'minute'
     and bucket_start >= $2::timestamptz and bucket_start < $3::timestamptz
     and ((source = 'metric' and service = any($4::text[]))
          or (source = 'span' and service = any($5::text[])))
   union all
-  select service, method, route, status_code, source, counts, count, lossy, bucket_start
+  select service, method, route, status_code, source, traffic_class, counts, count, lossy, bucket_start
   from api.metrics_hourly h
   where $1::text = 'hour'
     and h.bucket_start >= $2::timestamptz and h.bucket_start < $3::timestamptz
@@ -312,7 +320,7 @@ from (
     and ((source = 'metric' and service = any($4::text[]))
          or (source = 'span' and service = any($5::text[])))
   union all
-  select service, method, route, status_code, source, counts, count, lossy, p.hour as bucket_start
+  select service, method, route, status_code, source, traffic_class, counts, count, lossy, p.hour as bucket_start
   from api.rollup_pending p
   join api.metrics_minute m
     on m.tenant_id = p.tenant_id and m.bucket_start >= p.hour and m.bucket_start < p.hour + interval '1 hour'
@@ -321,7 +329,7 @@ from (
     and ((source = 'metric' and service = any($4::text[]))
          or (source = 'span' and service = any($5::text[])))
   union all
-  select service, method, route, status_code, source, counts, count, lossy, bucket_start
+  select service, method, route, status_code, source, traffic_class, counts, count, lossy, bucket_start
   from api.metrics_daily d
   where $1::text = 'day'
     and d.bucket_start >= $2::timestamptz and d.bucket_start < $3::timestamptz
@@ -330,7 +338,7 @@ from (
     and ((source = 'metric' and service = any($4::text[]))
          or (source = 'span' and service = any($5::text[])))
   union all
-  select service, method, route, status_code, source, counts, count, lossy, pd.day as bucket_start
+  select service, method, route, status_code, source, traffic_class, counts, count, lossy, pd.day as bucket_start
   from (select distinct tenant_id, date_trunc('day', hour, 'UTC') as day
         from api.rollup_pending
         where $1::text = 'day' and hour >= $2::timestamptz and hour < $3::timestamptz) pd
@@ -340,7 +348,7 @@ from (
     and ((source = 'metric' and service = any($4::text[]))
          or (source = 'span' and service = any($5::text[])))
   union all
-  select service, method, route, status_code, source, counts, count, lossy, date_trunc('day', p.hour, 'UTC') as bucket_start
+  select service, method, route, status_code, source, traffic_class, counts, count, lossy, date_trunc('day', p.hour, 'UTC') as bucket_start
   from api.rollup_pending p
   join api.metrics_minute m
     on m.tenant_id = p.tenant_id and m.bucket_start >= p.hour and m.bucket_start < p.hour + interval '1 hour'
@@ -362,12 +370,14 @@ type APIMetricServiceTotalsParams struct {
 }
 
 type APIMetricServiceTotalsRow struct {
-	Service  string
-	Requests int64
-	Lossy    bool
+	Service                string
+	Requests               int64
+	InfrastructureRequests int64
+	Lossy                  bool
 }
 
-// requests and lossy per service over its selected source
+// application and infrastructure requests and lossy per service over its
+// selected source
 func (q *Queries) APIMetricServiceTotals(ctx context.Context, arg APIMetricServiceTotalsParams) ([]APIMetricServiceTotalsRow, error) {
 	rows, err := q.db.Query(ctx, aPIMetricServiceTotals,
 		arg.Resolution,
@@ -383,7 +393,12 @@ func (q *Queries) APIMetricServiceTotals(ctx context.Context, arg APIMetricServi
 	items := []APIMetricServiceTotalsRow{}
 	for rows.Next() {
 		var i APIMetricServiceTotalsRow
-		if err := rows.Scan(&i.Service, &i.Requests, &i.Lossy); err != nil {
+		if err := rows.Scan(
+			&i.Service,
+			&i.Requests,
+			&i.InfrastructureRequests,
+			&i.Lossy,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -472,6 +487,11 @@ type APIMetricSourcesRow struct {
 // every row on cp.current_tenant_id(), so a handler that set the wrong tenant
 // in db.WithTenant reads that tenant's rows or none, never a mix.
 //
+// traffic_class (00035) splits application requests from cors preflights,
+// health routes and probes. requests, error counts, lossy and the
+// percentiles cover traffic_class = 'app' only; infrastructure_requests
+// counts the rest, so the headline never includes a load balancer's checks.
+//
 // @metric_services and @span_services come from APIMetricSources (source.go):
 // each service appears in exactly one of them, so metric and span rows of a
 // service are never added together.
@@ -504,9 +524,11 @@ func (q *Queries) APIMetricSources(ctx context.Context, arg APIMetricSourcesPara
 }
 
 const aPIMetricStatusCodes = `-- name: APIMetricStatusCodes :many
-select status_code, sum(count)::bigint as requests
+select status_code,
+       coalesce(sum(count) filter (where traffic_class = 'app'), 0)::bigint as requests,
+       coalesce(sum(count) filter (where traffic_class <> 'app'), 0)::bigint as infrastructure_requests
 from (
-  select service, method, route, status_code, source, counts, count, lossy, bucket_start
+  select service, method, route, status_code, source, traffic_class, counts, count, lossy, bucket_start
   from api.metrics_minute
   where $1::text = 'minute'
     and bucket_start >= $2::timestamptz and bucket_start < $3::timestamptz
@@ -515,7 +537,7 @@ from (
     and ($6::text is null or route = $6::text)
     and ($7::text is null or method = $7::text)
   union all
-  select service, method, route, status_code, source, counts, count, lossy, bucket_start
+  select service, method, route, status_code, source, traffic_class, counts, count, lossy, bucket_start
   from api.metrics_hourly h
   where $1::text = 'hour'
     and h.bucket_start >= $2::timestamptz and h.bucket_start < $3::timestamptz
@@ -525,7 +547,7 @@ from (
     and ($6::text is null or route = $6::text)
     and ($7::text is null or method = $7::text)
   union all
-  select service, method, route, status_code, source, counts, count, lossy, p.hour as bucket_start
+  select service, method, route, status_code, source, traffic_class, counts, count, lossy, p.hour as bucket_start
   from api.rollup_pending p
   join api.metrics_minute m
     on m.tenant_id = p.tenant_id and m.bucket_start >= p.hour and m.bucket_start < p.hour + interval '1 hour'
@@ -536,7 +558,7 @@ from (
     and ($6::text is null or route = $6::text)
     and ($7::text is null or method = $7::text)
   union all
-  select service, method, route, status_code, source, counts, count, lossy, bucket_start
+  select service, method, route, status_code, source, traffic_class, counts, count, lossy, bucket_start
   from api.metrics_daily d
   where $1::text = 'day'
     and d.bucket_start >= $2::timestamptz and d.bucket_start < $3::timestamptz
@@ -547,7 +569,7 @@ from (
     and ($6::text is null or route = $6::text)
     and ($7::text is null or method = $7::text)
   union all
-  select service, method, route, status_code, source, counts, count, lossy, pd.day as bucket_start
+  select service, method, route, status_code, source, traffic_class, counts, count, lossy, pd.day as bucket_start
   from (select distinct tenant_id, date_trunc('day', hour, 'UTC') as day
         from api.rollup_pending
         where $1::text = 'day' and hour >= $2::timestamptz and hour < $3::timestamptz) pd
@@ -559,7 +581,7 @@ from (
     and ($6::text is null or route = $6::text)
     and ($7::text is null or method = $7::text)
   union all
-  select service, method, route, status_code, source, counts, count, lossy, date_trunc('day', p.hour, 'UTC') as bucket_start
+  select service, method, route, status_code, source, traffic_class, counts, count, lossy, date_trunc('day', p.hour, 'UTC') as bucket_start
   from api.rollup_pending p
   join api.metrics_minute m
     on m.tenant_id = p.tenant_id and m.bucket_start >= p.hour and m.bucket_start < p.hour + interval '1 hour'
@@ -586,10 +608,13 @@ type APIMetricStatusCodesParams struct {
 }
 
 type APIMetricStatusCodesRow struct {
-	StatusCode int16
-	Requests   int64
+	StatusCode             int16
+	Requests               int64
+	InfrastructureRequests int64
 }
 
+// application requests per code, and the infrastructure requests the
+// handler reports beside them
 func (q *Queries) APIMetricStatusCodes(ctx context.Context, arg APIMetricStatusCodesParams) ([]APIMetricStatusCodesRow, error) {
 	rows, err := q.db.Query(ctx, aPIMetricStatusCodes,
 		arg.Resolution,
@@ -607,7 +632,7 @@ func (q *Queries) APIMetricStatusCodes(ctx context.Context, arg APIMetricStatusC
 	items := []APIMetricStatusCodesRow{}
 	for rows.Next() {
 		var i APIMetricStatusCodesRow
-		if err := rows.Scan(&i.StatusCode, &i.Requests); err != nil {
+		if err := rows.Scan(&i.StatusCode, &i.Requests, &i.InfrastructureRequests); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -619,15 +644,19 @@ func (q *Queries) APIMetricStatusCodes(ctx context.Context, arg APIMetricStatusC
 }
 
 const aPIMetricSummary = `-- name: APIMetricSummary :one
-select coalesce(sum(count), 0)::bigint as requests,
-       coalesce(sum(count) filter (where status_code between 400 and 499), 0)::bigint as errors_4xx,
-       coalesce(sum(count) filter (where status_code between 500 and 599), 0)::bigint as errors_5xx,
-       coalesce(bool_or(lossy), false)::boolean as lossy,
-       case when sum(count) > 0 then api.histogram_quantile(0.5, api.sum_buckets(counts)) end as p50,
-       case when sum(count) > 0 then api.histogram_quantile(0.95, api.sum_buckets(counts)) end as p95,
-       case when sum(count) > 0 then api.histogram_quantile(0.99, api.sum_buckets(counts)) end as p99
+select coalesce(sum(count) filter (where traffic_class = 'app'), 0)::bigint as requests,
+       coalesce(sum(count) filter (where traffic_class = 'app' and status_code between 400 and 499), 0)::bigint as errors_4xx,
+       coalesce(sum(count) filter (where traffic_class = 'app' and status_code between 500 and 599), 0)::bigint as errors_5xx,
+       coalesce(sum(count) filter (where traffic_class <> 'app'), 0)::bigint as infrastructure_requests,
+       coalesce(bool_or(lossy) filter (where traffic_class = 'app'), false)::boolean as lossy,
+       case when sum(count) filter (where traffic_class = 'app') > 0
+         then api.histogram_quantile(0.5, api.sum_buckets(counts) filter (where traffic_class = 'app')) end as p50,
+       case when sum(count) filter (where traffic_class = 'app') > 0
+         then api.histogram_quantile(0.95, api.sum_buckets(counts) filter (where traffic_class = 'app')) end as p95,
+       case when sum(count) filter (where traffic_class = 'app') > 0
+         then api.histogram_quantile(0.99, api.sum_buckets(counts) filter (where traffic_class = 'app')) end as p99
 from (
-  select service, method, route, status_code, source, counts, count, lossy, bucket_start
+  select service, method, route, status_code, source, traffic_class, counts, count, lossy, bucket_start
   from api.metrics_minute
   where $1::text = 'minute'
     and bucket_start >= $2::timestamptz and bucket_start < $3::timestamptz
@@ -636,7 +665,7 @@ from (
     and ($6::text is null or route = $6::text)
     and ($7::text is null or method = $7::text)
   union all
-  select service, method, route, status_code, source, counts, count, lossy, bucket_start
+  select service, method, route, status_code, source, traffic_class, counts, count, lossy, bucket_start
   from api.metrics_hourly h
   where $1::text = 'hour'
     and h.bucket_start >= $2::timestamptz and h.bucket_start < $3::timestamptz
@@ -646,7 +675,7 @@ from (
     and ($6::text is null or route = $6::text)
     and ($7::text is null or method = $7::text)
   union all
-  select service, method, route, status_code, source, counts, count, lossy, p.hour as bucket_start
+  select service, method, route, status_code, source, traffic_class, counts, count, lossy, p.hour as bucket_start
   from api.rollup_pending p
   join api.metrics_minute m
     on m.tenant_id = p.tenant_id and m.bucket_start >= p.hour and m.bucket_start < p.hour + interval '1 hour'
@@ -657,7 +686,7 @@ from (
     and ($6::text is null or route = $6::text)
     and ($7::text is null or method = $7::text)
   union all
-  select service, method, route, status_code, source, counts, count, lossy, bucket_start
+  select service, method, route, status_code, source, traffic_class, counts, count, lossy, bucket_start
   from api.metrics_daily d
   where $1::text = 'day'
     and d.bucket_start >= $2::timestamptz and d.bucket_start < $3::timestamptz
@@ -668,7 +697,7 @@ from (
     and ($6::text is null or route = $6::text)
     and ($7::text is null or method = $7::text)
   union all
-  select service, method, route, status_code, source, counts, count, lossy, pd.day as bucket_start
+  select service, method, route, status_code, source, traffic_class, counts, count, lossy, pd.day as bucket_start
   from (select distinct tenant_id, date_trunc('day', hour, 'UTC') as day
         from api.rollup_pending
         where $1::text = 'day' and hour >= $2::timestamptz and hour < $3::timestamptz) pd
@@ -680,7 +709,7 @@ from (
     and ($6::text is null or route = $6::text)
     and ($7::text is null or method = $7::text)
   union all
-  select service, method, route, status_code, source, counts, count, lossy, date_trunc('day', p.hour, 'UTC') as bucket_start
+  select service, method, route, status_code, source, traffic_class, counts, count, lossy, date_trunc('day', p.hour, 'UTC') as bucket_start
   from api.rollup_pending p
   join api.metrics_minute m
     on m.tenant_id = p.tenant_id and m.bucket_start >= p.hour and m.bucket_start < p.hour + interval '1 hour'
@@ -704,13 +733,14 @@ type APIMetricSummaryParams struct {
 }
 
 type APIMetricSummaryRow struct {
-	Requests  int64
-	Errors4xx int64
-	Errors5xx int64
-	Lossy     bool
-	P50       interface{}
-	P95       interface{}
-	P99       interface{}
+	Requests               int64
+	Errors4xx              int64
+	Errors5xx              int64
+	InfrastructureRequests int64
+	Lossy                  bool
+	P50                    interface{}
+	P95                    interface{}
+	P99                    interface{}
 }
 
 // percentiles of summed bucket arrays, never averages of percentiles
@@ -729,6 +759,7 @@ func (q *Queries) APIMetricSummary(ctx context.Context, arg APIMetricSummaryPara
 		&i.Requests,
 		&i.Errors4xx,
 		&i.Errors5xx,
+		&i.InfrastructureRequests,
 		&i.Lossy,
 		&i.P50,
 		&i.P95,
@@ -739,15 +770,19 @@ func (q *Queries) APIMetricSummary(ctx context.Context, arg APIMetricSummaryPara
 
 const aPIMetricTimeseries = `-- name: APIMetricTimeseries :many
 select bucket_start,
-       coalesce(sum(count), 0)::bigint as requests,
-       coalesce(sum(count) filter (where status_code between 400 and 499), 0)::bigint as errors_4xx,
-       coalesce(sum(count) filter (where status_code between 500 and 599), 0)::bigint as errors_5xx,
-       coalesce(bool_or(lossy), false)::boolean as lossy,
-       case when sum(count) > 0 then api.histogram_quantile(0.5, api.sum_buckets(counts)) end as p50,
-       case when sum(count) > 0 then api.histogram_quantile(0.95, api.sum_buckets(counts)) end as p95,
-       case when sum(count) > 0 then api.histogram_quantile(0.99, api.sum_buckets(counts)) end as p99
+       coalesce(sum(count) filter (where traffic_class = 'app'), 0)::bigint as requests,
+       coalesce(sum(count) filter (where traffic_class = 'app' and status_code between 400 and 499), 0)::bigint as errors_4xx,
+       coalesce(sum(count) filter (where traffic_class = 'app' and status_code between 500 and 599), 0)::bigint as errors_5xx,
+       coalesce(sum(count) filter (where traffic_class <> 'app'), 0)::bigint as infrastructure_requests,
+       coalesce(bool_or(lossy) filter (where traffic_class = 'app'), false)::boolean as lossy,
+       case when sum(count) filter (where traffic_class = 'app') > 0
+         then api.histogram_quantile(0.5, api.sum_buckets(counts) filter (where traffic_class = 'app')) end as p50,
+       case when sum(count) filter (where traffic_class = 'app') > 0
+         then api.histogram_quantile(0.95, api.sum_buckets(counts) filter (where traffic_class = 'app')) end as p95,
+       case when sum(count) filter (where traffic_class = 'app') > 0
+         then api.histogram_quantile(0.99, api.sum_buckets(counts) filter (where traffic_class = 'app')) end as p99
 from (
-  select service, method, route, status_code, source, counts, count, lossy, bucket_start
+  select service, method, route, status_code, source, traffic_class, counts, count, lossy, bucket_start
   from api.metrics_minute
   where $1::text = 'minute'
     and bucket_start >= $2::timestamptz and bucket_start < $3::timestamptz
@@ -756,7 +791,7 @@ from (
     and ($6::text is null or route = $6::text)
     and ($7::text is null or method = $7::text)
   union all
-  select service, method, route, status_code, source, counts, count, lossy, bucket_start
+  select service, method, route, status_code, source, traffic_class, counts, count, lossy, bucket_start
   from api.metrics_hourly h
   where $1::text = 'hour'
     and h.bucket_start >= $2::timestamptz and h.bucket_start < $3::timestamptz
@@ -766,7 +801,7 @@ from (
     and ($6::text is null or route = $6::text)
     and ($7::text is null or method = $7::text)
   union all
-  select service, method, route, status_code, source, counts, count, lossy, p.hour as bucket_start
+  select service, method, route, status_code, source, traffic_class, counts, count, lossy, p.hour as bucket_start
   from api.rollup_pending p
   join api.metrics_minute m
     on m.tenant_id = p.tenant_id and m.bucket_start >= p.hour and m.bucket_start < p.hour + interval '1 hour'
@@ -777,7 +812,7 @@ from (
     and ($6::text is null or route = $6::text)
     and ($7::text is null or method = $7::text)
   union all
-  select service, method, route, status_code, source, counts, count, lossy, bucket_start
+  select service, method, route, status_code, source, traffic_class, counts, count, lossy, bucket_start
   from api.metrics_daily d
   where $1::text = 'day'
     and d.bucket_start >= $2::timestamptz and d.bucket_start < $3::timestamptz
@@ -788,7 +823,7 @@ from (
     and ($6::text is null or route = $6::text)
     and ($7::text is null or method = $7::text)
   union all
-  select service, method, route, status_code, source, counts, count, lossy, pd.day as bucket_start
+  select service, method, route, status_code, source, traffic_class, counts, count, lossy, pd.day as bucket_start
   from (select distinct tenant_id, date_trunc('day', hour, 'UTC') as day
         from api.rollup_pending
         where $1::text = 'day' and hour >= $2::timestamptz and hour < $3::timestamptz) pd
@@ -800,7 +835,7 @@ from (
     and ($6::text is null or route = $6::text)
     and ($7::text is null or method = $7::text)
   union all
-  select service, method, route, status_code, source, counts, count, lossy, date_trunc('day', p.hour, 'UTC') as bucket_start
+  select service, method, route, status_code, source, traffic_class, counts, count, lossy, date_trunc('day', p.hour, 'UTC') as bucket_start
   from api.rollup_pending p
   join api.metrics_minute m
     on m.tenant_id = p.tenant_id and m.bucket_start >= p.hour and m.bucket_start < p.hour + interval '1 hour'
@@ -826,14 +861,15 @@ type APIMetricTimeseriesParams struct {
 }
 
 type APIMetricTimeseriesRow struct {
-	BucketStart time.Time
-	Requests    int64
-	Errors4xx   int64
-	Errors5xx   int64
-	Lossy       bool
-	P50         interface{}
-	P95         interface{}
-	P99         interface{}
+	BucketStart            time.Time
+	Requests               int64
+	Errors4xx              int64
+	Errors5xx              int64
+	InfrastructureRequests int64
+	Lossy                  bool
+	P50                    interface{}
+	P95                    interface{}
+	P99                    interface{}
 }
 
 // one row per time bucket with data; the handler adds the empty buckets
@@ -859,6 +895,7 @@ func (q *Queries) APIMetricTimeseries(ctx context.Context, arg APIMetricTimeseri
 			&i.Requests,
 			&i.Errors4xx,
 			&i.Errors5xx,
+			&i.InfrastructureRequests,
 			&i.Lossy,
 			&i.P50,
 			&i.P95,
@@ -903,6 +940,32 @@ func (q *Queries) APIMetricWarnings(ctx context.Context, arg APIMetricWarningsPa
 	for rows.Next() {
 		var i APIMetricWarningsRow
 		if err := rows.Scan(&i.Day, &i.Kind, &i.Count); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const trafficClassRules = `-- name: TrafficClassRules :many
+select version, applied_from from api.traffic_class_rules order by version
+`
+
+// when each traffic class rule set took effect; rows before the first one
+// hold every request as application traffic
+func (q *Queries) TrafficClassRules(ctx context.Context) ([]ApiTrafficClassRule, error) {
+	rows, err := q.db.Query(ctx, trafficClassRules)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ApiTrafficClassRule{}
+	for rows.Next() {
+		var i ApiTrafficClassRule
+		if err := rows.Scan(&i.Version, &i.AppliedFrom); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

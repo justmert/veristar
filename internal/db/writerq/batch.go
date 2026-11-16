@@ -20,10 +20,10 @@ var (
 
 const addMinute = `-- name: AddMinute :batchexec
 insert into api.metrics_minute (tenant_id, bucket_start, service, method, route, status_code,
-                                source, counts, sum, count, lossy)
+                                source, traffic_class, counts, sum, count, lossy)
 values ($1, $2::timestamptz, $3, $4, $5, $6,
-        $7, $8::bigint[], $9, $10, $11)
-on conflict (tenant_id, bucket_start, service, method, route, status_code, source) do update
+        $7, $8, $9::bigint[], $10, $11, $12)
+on conflict (tenant_id, bucket_start, service, method, route, status_code, source, traffic_class) do update
   set counts = api.add_buckets(api.metrics_minute.counts, excluded.counts),
       sum = api.metrics_minute.sum + excluded.sum,
       count = api.metrics_minute.count + excluded.count,
@@ -37,20 +37,22 @@ type AddMinuteBatchResults struct {
 }
 
 type AddMinuteParams struct {
-	TenantID    uuid.UUID
-	BucketStart time.Time
-	Service     string
-	Method      string
-	Route       string
-	StatusCode  int16
-	Source      string
-	Counts      []int64
-	Sum         float64
-	Count       int64
-	Lossy       bool
+	TenantID     uuid.UUID
+	BucketStart  time.Time
+	Service      string
+	Method       string
+	Route        string
+	StatusCode   int16
+	Source       string
+	TrafficClass string
+	Counts       []int64
+	Sum          float64
+	Count        int64
+	Lossy        bool
 }
 
-// adds one delta histogram to its minute row. bucket_start must be the start
+// adds one delta histogram to its minute row. traffic_class is app or the
+// infrastructure class the collector marked (00035). bucket_start must be the start
 // of a utc minute and counts must have 15 buckets that sum to count; the
 // table's checks refuse anything else. a minute with no partition fails with
 // sqlstate 23514 (no partition of relation found for row).
@@ -65,6 +67,7 @@ func (q *Queries) AddMinute(ctx context.Context, arg []AddMinuteParams) *AddMinu
 			a.Route,
 			a.StatusCode,
 			a.Source,
+			a.TrafficClass,
 			a.Counts,
 			a.Sum,
 			a.Count,

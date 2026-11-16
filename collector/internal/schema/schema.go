@@ -54,6 +54,19 @@ const (
 	// jetstream exporter makes it the point's time and removes it. it
 	// never leaves the collector.
 	AttrSpanMinute = "scf.span.minute"
+	// AttrTrafficClass is the internal/trafficclass class of a point or
+	// span: preflight, health or probe. tenantguard sets it and leaves it
+	// out for application traffic, so the streams of application requests
+	// keep the identity they had before the classifier existed.
+	AttrTrafficClass = "scf.traffic.class"
+)
+
+// user agent attributes read by tenantguard for the traffic class and
+// never published
+const (
+	AttrUserAgent       = "user_agent.original"
+	LegacyUserAgent     = "http.user_agent"
+	AttrSyntheticUAType = "user_agent.synthetic.type"
 )
 
 // legacy names (semconv before v1.21 http stabilization) mapped by tenantguard
@@ -72,6 +85,7 @@ var ResourceAllowed = map[string]bool{
 // PointAllowed lists the data point attributes that may be published.
 var PointAllowed = map[string]bool{
 	AttrMethod: true, AttrRoute: true, AttrStatusCode: true, AttrErrorType: true, AttrLossy: true,
+	AttrTrafficClass: true,
 }
 
 // PublishedMetrics lists the metric names that may be published.

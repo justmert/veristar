@@ -215,9 +215,9 @@ func loadSCF(ctx context.Context, tx pgx.Tx, id uuid.UUID, rg dayRange, now time
 	var p50, p95, p99 *float64
 	err = tx.QueryRow(ctx, apiListCTE+`
 		select requests, requests_4xx, requests_5xx, rate_4xx, rate_5xx, p50, p95, p99,
-		       services, routes, span_services, lossy
+		       services, routes, span_services, lossy, infrastructure_requests
 		from y where id = @tenant`, args).Scan(&api.Requests, &api.Requests4xx, &api.Requests5xx, &api.Rate4xx, &api.Rate5xx,
-		&p50, &p95, &p99, &api.Services, &api.Routes, &api.SpanServices, &api.Lossy)
+		&p50, &p95, &p99, &api.Services, &api.Routes, &api.SpanServices, &api.Lossy, &api.InfrastructureRequests)
 	if err != nil {
 		return fmt.Errorf("api row: %w", err)
 	}

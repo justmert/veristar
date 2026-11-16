@@ -909,7 +909,22 @@ function OverviewTiles({
           />
         </div>
       </div>
+      <InfrastructureNote overview={overview} />
     </section>
+  );
+}
+
+// infrastructure requests stay out of every figure above; this line says
+// how many there were and since when they are counted apart
+function InfrastructureNote({ overview }: { overview: ApiOverview }) {
+  const n = overview.current.summary.infrastructure_requests;
+  const from = overview.traffic_classes.applied_from;
+  return (
+    <p data-testid="infrastructure-requests" className="text-caption font-normal text-fg-3">
+      {formatCount(n)} infrastructure {n === 1 ? "request" : "requests"} (CORS preflights, health
+      and probe routes, known health checkers) are not part of these figures.
+      {from ? ` They are counted apart from ${formatDate(from)} on.` : null}
+    </p>
   );
 }
 
@@ -1256,6 +1271,11 @@ function RouteRow({
           {serviceName(item.service)}
           {item.source === "span" ? <TracesBadge /> : null}
           {item.lossy ? <ApproxBadge /> : null}
+          {item.infrastructure_requests > 0 ? (
+            <span title="CORS preflights, health and probe routes and known health checkers, not counted in requests">
+              {formatCount(item.infrastructure_requests)} infrastructure
+            </span>
+          ) : null}
         </span>
       </th>
       <td className="px-3">

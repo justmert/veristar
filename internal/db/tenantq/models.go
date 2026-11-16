@@ -10,6 +10,11 @@ import (
 	"github.com/google/uuid"
 )
 
+type ApiTrafficClassRule struct {
+	Version     int32
+	AppliedFrom time.Time
+}
+
 type CpErasureRequest struct {
 	ID                 uuid.UUID
 	TenantID           uuid.UUID

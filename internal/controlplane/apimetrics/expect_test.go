@@ -74,21 +74,27 @@ func pct(v *float64) apimetrics.Percentile {
 	}
 }
 
-// the summary columns over s, rates divided in sql
-const summaryCols = `coalesce(sum(count), 0)::bigint,
-  coalesce(sum(count) filter (where status_code / 100 = 4), 0)::bigint,
-  coalesce(sum(count) filter (where status_code / 100 = 5), 0)::bigint,
-  coalesce(sum(count) filter (where status_code / 100 = 4), 0)::float8 / nullif(sum(count), 0)::float8,
-  coalesce(sum(count) filter (where status_code / 100 = 5), 0)::float8 / nullif(sum(count), 0)::float8,
-  api.histogram_quantile(0.5, api.sum_buckets(counts)),
-  api.histogram_quantile(0.95, api.sum_buckets(counts)),
-  api.histogram_quantile(0.99, api.sum_buckets(counts)),
-  coalesce(bool_or(lossy), false)`
+// the summary columns over s, rates divided in sql. application rows are
+// picked with case expressions rather than the filter clauses the queries
+// under test use, then the infrastructure requests come last.
+const summaryCols = `coalesce(sum(case when traffic_class = 'app' then count end), 0)::bigint as requests,
+  coalesce(sum(case when traffic_class = 'app' and status_code / 100 = 4 then count end), 0)::bigint as e4,
+  coalesce(sum(case when traffic_class = 'app' and status_code / 100 = 5 then count end), 0)::bigint as e5,
+  coalesce(sum(case when traffic_class = 'app' and status_code / 100 = 4 then count end), 0)::float8
+    / nullif(sum(case when traffic_class = 'app' then count end), 0)::float8 as r4,
+  coalesce(sum(case when traffic_class = 'app' and status_code / 100 = 5 then count end), 0)::float8
+    / nullif(sum(case when traffic_class = 'app' then count end), 0)::float8 as r5,
+  api.histogram_quantile(0.5, api.sum_buckets(case when traffic_class = 'app' then counts end)) as p50,
+  api.histogram_quantile(0.95, api.sum_buckets(case when traffic_class = 'app' then counts end)) as p95,
+  api.histogram_quantile(0.99, api.sum_buckets(case when traffic_class = 'app' then counts end)) as p99,
+  coalesce(bool_or(case when traffic_class = 'app' then lossy end), false) as lossy,
+  coalesce(sum(case when traffic_class <> 'app' then count end), 0)::bigint as infra`
 
 func scanSummary(row pgx.Row, extra ...any) (apimetrics.Summary, error) {
 	var s apimetrics.Summary
 	var p50, p95, p99 *float64
-	dest := append(extra, &s.Requests, &s.Errors4xx, &s.Errors5xx, &s.Rate4xx, &s.Rate5xx, &p50, &p95, &p99, &s.Lossy)
+	dest := append(extra, &s.Requests, &s.Errors4xx, &s.Errors5xx, &s.Rate4xx, &s.Rate5xx, &p50, &p95, &p99, &s.Lossy,
+		&s.InfrastructureRequests)
 	if err := row.Scan(dest...); err != nil {
 		return s, err
 	}
@@ -152,19 +158,10 @@ func (e *env) expRoutes(t *testing.T, q query, orderBy string) []apimetrics.Rout
 	t.Helper()
 	sql := fmt.Sprintf(selected, table(t, q.rng.Resolution)) + `
 , g as (
-  select service, method, route, min(source) as source,
-    coalesce(sum(count), 0)::bigint as requests,
-    coalesce(sum(count) filter (where status_code / 100 = 4), 0)::bigint as e4,
-    coalesce(sum(count) filter (where status_code / 100 = 5), 0)::bigint as e5,
-    coalesce(sum(count) filter (where status_code / 100 = 4), 0)::float8 / nullif(sum(count), 0)::float8 as r4,
-    coalesce(sum(count) filter (where status_code / 100 = 5), 0)::float8 / nullif(sum(count), 0)::float8 as r5,
-    api.histogram_quantile(0.5, api.sum_buckets(counts)) as p50,
-    api.histogram_quantile(0.95, api.sum_buckets(counts)) as p95,
-    api.histogram_quantile(0.99, api.sum_buckets(counts)) as p99,
-    coalesce(bool_or(lossy), false) as lossy
+  select service, method, route, min(source) as source, ` + summaryCols + `
   from s group by service, method, route
 )
-select service, method, route, source, requests, e4, e5, r4, r5, p50, p95, p99, lossy from g order by ` + orderBy
+select * from g order by ` + orderBy
 	rows, err := e.su.Query(t.Context(), sql, q.args()...)
 	require.NoError(t, err)
 	out := []apimetrics.RouteItem{}
@@ -186,12 +183,12 @@ func (e *env) expStatus(t *testing.T, q query) (int64, []apimetrics.ClassCount, 
   when status_code between 300 and 399 then '3xx' when status_code between 400 and 499 then '4xx'
   when status_code between 500 and 599 then '5xx' else 'unknown' end`
 	var total int64
-	require.NoError(t, e.su.QueryRow(t.Context(), fmt.Sprintf(selected, tbl)+`select coalesce(sum(count), 0)::bigint from s`,
-		q.args()...).Scan(&total))
+	require.NoError(t, e.su.QueryRow(t.Context(), fmt.Sprintf(selected, tbl)+`select coalesce(sum(count), 0)::bigint from s
+where traffic_class = 'app'`, q.args()...).Scan(&total))
 	rows, err := e.su.Query(t.Context(), fmt.Sprintf(selected, tbl)+`
 select k.class, coalesce(sum(s.count), 0)::bigint
 from unnest(array['1xx', '2xx', '3xx', '4xx', '5xx', 'unknown']) with ordinality k(class, n)
-left join s on `+cls+` = k.class
+left join s on `+cls+` = k.class and s.traffic_class = 'app'
 group by k.class, k.n order by k.n`, q.args()...)
 	require.NoError(t, err)
 	classes := []apimetrics.ClassCount{}
@@ -202,7 +199,8 @@ group by k.class, k.n order by k.n`, q.args()...)
 	}
 	require.NoError(t, rows.Err())
 	rows, err = e.su.Query(t.Context(), fmt.Sprintf(selected, tbl)+`
-select status_code, `+cls+`, sum(count)::bigint from s group by status_code having sum(count) > 0 order by status_code`, q.args()...)
+select status_code, `+cls+`, sum(count)::bigint from s where traffic_class = 'app'
+group by status_code having sum(count) > 0 order by status_code`, q.args()...)
 	require.NoError(t, err)
 	codes := []apimetrics.CodeCount{}
 	for rows.Next() {
@@ -217,14 +215,18 @@ select status_code, `+cls+`, sum(count)::bigint from s group by status_code havi
 func (e *env) expServices(t *testing.T, q query) []apimetrics.ServiceItem {
 	t.Helper()
 	rows, err := e.su.Query(t.Context(), fmt.Sprintf(selected, table(t, q.rng.Resolution))+`
-select c.service, c.src, c.ignored, sum(s.count)::bigint, bool_or(s.lossy)
+select c.service, c.src, c.ignored,
+       coalesce(sum(case when s.traffic_class = 'app' then s.count end), 0)::bigint,
+       coalesce(sum(case when s.traffic_class <> 'app' then s.count end), 0)::bigint,
+       coalesce(bool_or(case when s.traffic_class = 'app' then s.lossy end), false)
 from chosen c join s on s.service = c.service
 group by c.service, c.src, c.ignored order by c.service`, q.args()...)
 	require.NoError(t, err)
 	out := []apimetrics.ServiceItem{}
 	for rows.Next() {
 		var it apimetrics.ServiceItem
-		require.NoError(t, rows.Scan(&it.Service, &it.Source.Source, &it.SpanDataIgnored, &it.Requests, &it.Lossy))
+		require.NoError(t, rows.Scan(&it.Service, &it.Source.Source, &it.SpanDataIgnored, &it.Requests,
+			&it.InfrastructureRequests, &it.Lossy))
 		out = append(out, it)
 	}
 	require.NoError(t, rows.Err())

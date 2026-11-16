@@ -324,6 +324,10 @@ describe("api traffic page", () => {
     expect(tile(host, "p95")).toContain("310 ms");
     expect(tile(host, "p99")).toContain("was 900 ms");
     expect(host.textContent).toContain("Compared with the previous range of equal length");
+    // infrastructure requests stay out of the tiles and are named apart
+    const infra = text(host.querySelector('[data-testid="infrastructure-requests"]'));
+    expect(infra).toContain("8,640 infrastructure requests");
+    expect(infra).toContain("counted apart from Nov 16, 2026");
   });
 
   it("shows a banner for each warning kind with a count, and none for the others", async () => {

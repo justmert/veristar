@@ -213,6 +213,8 @@ type point struct {
 	source  string
 	counts  [15]int64
 	lossy   bool
+	// class is the traffic class; "" is app
+	class string
 }
 
 type warning struct {
@@ -266,10 +268,14 @@ func (e *env) writeMinutes(t *testing.T, points []point, warnings []warning) {
 			for _, v := range p.counts {
 				total += v
 			}
+			class := p.class
+			if class == "" {
+				class = "app"
+			}
 			mins = append(mins, writerq.AddMinuteParams{
 				TenantID: p.tenant, BucketStart: p.at, Service: p.service, Method: p.method, Route: p.route,
-				StatusCode: p.status, Source: p.source, Counts: p.counts[:], Sum: float64(total) * 0.01,
-				Count: total, Lossy: p.lossy,
+				StatusCode: p.status, Source: p.source, TrafficClass: class, Counts: p.counts[:],
+				Sum: float64(total) * 0.01, Count: total, Lossy: p.lossy,
 			})
 			marks = append(marks, writerq.MarkRollupPendingParams{TenantID: p.tenant, BucketStart: p.at})
 		}

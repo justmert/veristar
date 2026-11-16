@@ -510,13 +510,22 @@ export const apiSummary = z.object({
   p95: percentile,
   p99: percentile,
   lossy: z.boolean(),
+  // cors preflights, health routes and probes, left out of every field above
+  infrastructure_requests: nonneg,
 });
 export type ApiSummary = z.infer<typeof apiSummary>;
 
 const apiPeriod = z.object({ range: apiRange, sources: z.array(apiSource), summary: apiSummary });
 
 // 7.5
-export const apiOverview = z.object({ current: apiPeriod, previous: apiPeriod });
+export const apiOverview = z.object({
+  current: apiPeriod,
+  previous: apiPeriod,
+  traffic_classes: z.object({
+    rule_set_version: z.number().int().positive(),
+    applied_from: time.nullable(),
+  }),
+});
 export type ApiOverview = z.infer<typeof apiOverview>;
 
 // 7.6
@@ -566,6 +575,7 @@ export const apiStatus = z.object({
   range: apiRange,
   sources: z.array(apiSource),
   requests: nonneg,
+  infrastructure_requests: nonneg,
   // always these six, in this order
   classes: z.tuple([
     z.object({ class: z.literal("1xx"), requests: nonneg }),
@@ -586,7 +596,11 @@ export const apiStatus = z.object({
 export type ApiStatus = z.infer<typeof apiStatus>;
 
 // 7.9
-export const apiServiceItem = apiSource.extend({ requests: nonneg, lossy: z.boolean() });
+export const apiServiceItem = apiSource.extend({
+  requests: nonneg,
+  infrastructure_requests: nonneg,
+  lossy: z.boolean(),
+});
 export type ApiServiceItem = z.infer<typeof apiServiceItem>;
 export const apiServices = z.object({ range: apiRange, items: z.array(apiServiceItem) });
 export type ApiServices = z.infer<typeof apiServices>;
@@ -864,6 +878,7 @@ const apiNumbers = {
   rate_4xx: share01,
   rate_5xx: share01,
   ...percentiles,
+  infrastructure_requests: count,
 };
 export type ApiNumbers = {
   requests: number;
@@ -877,6 +892,7 @@ export type ApiNumbers = {
   p95_over_10s: boolean;
   p99_seconds: number | null;
   p99_over_10s: boolean;
+  infrastructure_requests: number;
 };
 
 export const projectSource = z.enum(["metric", "span", "mixed"]).nullable();

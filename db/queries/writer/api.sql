@@ -56,15 +56,16 @@ on conflict (tenant_id, resource_hash, start_unix_nano) do update
   set last_seen_at = greatest(api.resource_seen.last_seen_at, excluded.last_seen_at);
 
 -- name: AddMinute :batchexec
--- adds one delta histogram to its minute row. bucket_start must be the start
+-- adds one delta histogram to its minute row. traffic_class is app or the
+-- infrastructure class the collector marked (00035). bucket_start must be the start
 -- of a utc minute and counts must have 15 buckets that sum to count; the
 -- table's checks refuse anything else. a minute with no partition fails with
 -- sqlstate 23514 (no partition of relation found for row).
 insert into api.metrics_minute (tenant_id, bucket_start, service, method, route, status_code,
-                                source, counts, sum, count, lossy)
+                                source, traffic_class, counts, sum, count, lossy)
 values (@tenant_id, @bucket_start::timestamptz, @service, @method, @route, @status_code,
-        @source, @counts::bigint[], @sum, @count, @lossy)
-on conflict (tenant_id, bucket_start, service, method, route, status_code, source) do update
+        @source, @traffic_class, @counts::bigint[], @sum, @count, @lossy)
+on conflict (tenant_id, bucket_start, service, method, route, status_code, source, traffic_class) do update
   set counts = api.add_buckets(api.metrics_minute.counts, excluded.counts),
       sum = api.metrics_minute.sum + excluded.sum,
       count = api.metrics_minute.count + excluded.count,

@@ -66,6 +66,7 @@ type rowKey struct {
 	route   string
 	status  int16
 	source  string
+	class   string
 }
 
 type row struct {
@@ -282,6 +283,7 @@ func (w *Writer) applyTx(ctx context.Context, tx pgx.Tx, items []*item) (*result
 			k := rowKey{
 				tenant: it.tenant, minute: at.UTC().Truncate(time.Minute).Unix(),
 				service: d.Service, method: d.Method, route: d.Route, status: d.Status, source: d.Source,
+				class: d.Class,
 			}
 			r := rows[k]
 			if r == nil {
@@ -544,8 +546,10 @@ func sortRowKeys(keys []rowKey) {
 			return compareStrings(a.route, b.route)
 		case a.status != b.status:
 			return int(a.status) - int(b.status)
+		case a.source != b.source:
+			return compareStrings(a.source, b.source)
 		}
-		return compareStrings(a.source, b.source)
+		return compareStrings(a.class, b.class)
 	})
 }
 
@@ -607,7 +611,7 @@ func writeRows(ctx context.Context, tx pgx.Tx, q *writerq.Queries, rows map[rowK
 		start := time.Unix(k.minute, 0).UTC()
 		params = append(params, writerq.AddMinuteParams{
 			TenantID: k.tenant, BucketStart: start, Service: k.service, Method: k.method, Route: k.route,
-			StatusCode: k.status, Source: k.source, Counts: toInt64(r.counts), Sum: r.sum,
+			StatusCode: k.status, Source: k.source, TrafficClass: k.class, Counts: toInt64(r.counts), Sum: r.sum,
 			Count: int64(r.count), Lossy: r.lossy, //nolint:gosec // as in toInt64
 		})
 	}
