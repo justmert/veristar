@@ -17,6 +17,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stellar/go-stellar-sdk/keypair"
 	"github.com/stellar/go-stellar-sdk/strkey"
+	"github.com/stellar/go-stellar-sdk/xdr"
 	"github.com/stretchr/testify/require"
 
 	"github.com/justmert/veristar/internal/chain"
@@ -39,6 +40,8 @@ type ledgers struct {
 	events   []map[string]any
 	// horizonDown answers 503 to every operations request
 	horizonDown atomic.Bool
+	// envelopes of getTransaction by hash
+	envelopes map[string]string
 }
 
 func (l *ledgers) closeOf(seq int64) time.Time {
@@ -74,13 +77,32 @@ func (l *ledgers) horizon(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+type rpcReq struct {
+	ID     int64          `json:"id"`
+	Method string         `json:"method"`
+	Params map[string]any `json:"params"`
+}
+
 func (l *ledgers) rpc(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		ID     int64          `json:"id"`
-		Method string         `json:"method"`
-		Params map[string]any `json:"params"`
+	var raw json.RawMessage
+	_ = json.NewDecoder(r.Body).Decode(&raw)
+	if len(raw) > 0 && raw[0] == '[' {
+		var reqs []rpcReq
+		_ = json.Unmarshal(raw, &reqs)
+		out := []map[string]any{}
+		for _, q := range reqs {
+			h, _ := q.Params["hash"].(string)
+			res := map[string]any{"status": "NOT_FOUND", "txHash": h}
+			if env, ok := l.envelopes[h]; ok {
+				res = map[string]any{"status": "SUCCESS", "txHash": h, "envelopeXdr": env}
+			}
+			out = append(out, map[string]any{"jsonrpc": "2.0", "id": q.ID, "result": res})
+		}
+		_ = json.NewEncoder(w).Encode(out)
+		return
 	}
-	_ = json.NewDecoder(r.Body).Decode(&req)
+	var req rpcReq
+	_ = json.Unmarshal(raw, &req)
 	// the server keeps the last 7 days
 	oldest := l.latest - 7*perDay
 	var result any
@@ -152,6 +174,7 @@ func TestRun(t *testing.T) {
 	// yesterday: one; today: one that is not complete yet
 	op(day(1)+5, 1, "h2", map[string]any{"source_account": peer, "from": peer, "to": account})
 	op(day(0)+5, 1, "h3", map[string]any{"source_account": account})
+	l.envelopes = map[string]string{"e1": envelope(t, peer)}
 	l.events = []map[string]any{
 		{"ledger": day(2) + 3, "ledgerClosedAt": l.closeOf(day(2) + 3).Format(time.RFC3339), "contractId": contract,
 			"txHash": "e1", "operationIndex": 0, "topic": []string{}},
@@ -278,4 +301,19 @@ func TestRun(t *testing.T) {
 	res, err = task.Run(ctx, tx)
 	require.NoError(t, err)
 	require.Equal(t, 1, res.IDs, "the account of tenant a; its contract was read the run before")
+}
+
+// envelope is a one-operation transaction from source.
+func envelope(t *testing.T, source string) string {
+	t.Helper()
+	var src xdr.MuxedAccount
+	require.NoError(t, src.SetAddress(source))
+	env := xdr.TransactionEnvelope{Type: xdr.EnvelopeTypeEnvelopeTypeTx, V1: &xdr.TransactionV1Envelope{Tx: xdr.Transaction{
+		SourceAccount: src, Fee: 100, SeqNum: 1,
+		Cond:       xdr.Preconditions{Type: xdr.PreconditionTypePrecondNone},
+		Operations: []xdr.Operation{{Body: xdr.OperationBody{Type: xdr.OperationTypeInflation}}},
+	}}}
+	s, err := xdr.MarshalBase64(env)
+	require.NoError(t, err)
+	return s
 }
