@@ -277,8 +277,8 @@ func TestRosterRoutes(t *testing.T) {
 	require.Equal(t, http.StatusOK, st)
 
 	// a passkey reset deletes the keys and opens a window
-	superExec(t, pg, `insert into cp.operator_passkeys (user_id, credential_id, credential, name)
-		values ($1, '\x00112233445566778899aabbccddeeff', '{}', 'k')`, plainOpID)
+	superExec(t, pg, `insert into cp.operator_passkeys (user_id, credential_id, public_key, name)
+		values ($1, 'AQIDBAUGBwgJCgsMDQ4PEA', decode('04' || repeat('11', 64), 'hex'), 'k')`, plainOpID)
 	st, m = admin.do(t, http.MethodPost, "/roster/"+plainRow+"/reset-passkeys", map[string]any{"reason": reason})
 	require.Equal(t, http.StatusOK, st, m)
 	require.NotNil(t, m["enrollment_until"])
