@@ -21,6 +21,7 @@ import {
 } from "@/components/compare-charts";
 import { DbIpAttribution } from "@/components/dbip-attribution";
 import { ErrorPanel, Loading, StateBlock } from "@/components/error-panel";
+import { CompareIntegrity } from "@/components/integrity";
 import { Stagger, StaggerItem } from "@/components/motion";
 import { StatusDot, statusTone } from "@/components/status";
 import { Button } from "@/components/ui/button";
@@ -259,6 +260,7 @@ function WebSection({ data }: { data: WebCompare }) {
           axisFormat={(v) => formatDuration(v) ?? ""}
         />
       </div>
+      <CompareIntegrity projects={data.projects} />
       <WebTotalsTable data={data} />
       {DIMENSIONS.map((d) => (
         <BreakdownRow

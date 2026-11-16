@@ -26,6 +26,7 @@ import {
   erasureRequest,
   erasureRequestPage,
   ingest,
+  integrityReport,
   keepAggregates,
   me,
   member,
@@ -471,6 +472,26 @@ export const globalApi = {
     } while (cursor !== null);
     return out;
   },
+};
+
+// 17.2 and 17.3 the integrity report of one project over a range of utc days
+function dayRangeParams(r: DayRange): [string, string][] {
+  const out: [string, string][] = [];
+  if (r.from) out.push(["from", r.from]);
+  if (r.to) out.push(["to", r.to]);
+  return out;
+}
+
+export function integrityPath(scope: "tenant" | "operator", tenantId: string, r: DayRange): string {
+  if (scope === "tenant") {
+    return `/tenants/${enc(tenantId)}/integrity${exactQuery(dayRangeParams(r))}`;
+  }
+  return `/operator/web/integrity${exactQuery([["tenant", tenantId], ...dayRangeParams(r)])}`;
+}
+
+export const integrityApi = {
+  report: (scope: "tenant" | "operator", tenantId: string, r: DayRange, signal?: AbortSignal) =>
+    request("GET", integrityPath(scope, tenantId, r), integrityReport, undefined, signal),
 };
 
 // browser navigations, not fetch calls (contract 4.1.1 and 4.4.1)

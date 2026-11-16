@@ -7,6 +7,7 @@ import { operatorTenantQuery } from "@/api/queries";
 import type { OperatorSite, OperatorTenantDetail, TenantAction } from "@/api/schemas";
 import { ErrorPanel, Loading } from "@/components/error-panel";
 import { StellarTomlSummary, VerificationDetail } from "@/components/evidence";
+import { IntegrityReportView } from "@/components/integrity";
 import { Stagger, StaggerItem } from "@/components/motion";
 import { Fact } from "@/components/panel";
 import { ReasonDialog } from "@/components/reason-dialog";
@@ -135,6 +136,13 @@ export function TenantDetail({ detail }: { detail: OperatorTenantDetail }) {
       </div>
 
       <IngestTiles detail={detail} />
+
+      <IntegrityReportView
+        scope="operator"
+        tenantId={t.id}
+        range={{ from: "", to: "" }}
+        siteNames={Object.fromEntries(detail.sites.map((s) => [s.id, s.domain]))}
+      />
 
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_22rem]">
         <div className="flex min-w-0 flex-col gap-6">

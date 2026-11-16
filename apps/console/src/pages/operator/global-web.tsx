@@ -5,11 +5,13 @@ import { webProjectsQuery } from "@/api/queries";
 import { type WebProject, type WebSort, webSort } from "@/api/schemas";
 import { DbIpAttribution } from "@/components/dbip-attribution";
 import { ErrorPanel, Loading, StateBlock } from "@/components/error-panel";
+import { IntegrityCell } from "@/components/integrity";
 import { StatusPill } from "@/components/status";
 import { Button } from "@/components/ui/button";
 import { formatCount } from "@/lib/format";
 import {
   countryName,
+  type DayRange,
   EMPTY_FILTERS,
   firstOrder,
   formatDuration,
@@ -64,6 +66,7 @@ const SORT_TEXT: Record<WebSort, string> = {
   ingest_requests: "Gateway requests",
   ingest_rejected: "Rejected requests",
   rejected_share: "Rejected share",
+  integrity: "Integrity grade",
 };
 
 // the columns; `size` is what the magnitude bar measures when the table
@@ -182,6 +185,13 @@ export function GlobalWebPage() {
                       order={state.order}
                       onSort={sortBy}
                     />
+                    <SortHeader
+                      label="Integrity"
+                      sort="integrity"
+                      current={state.sort}
+                      order={state.order}
+                      onSort={sortBy}
+                    />
                     {COLUMNS.map((c) => (
                       <SortHeader
                         key={c.sort}
@@ -206,6 +216,7 @@ export function GlobalWebPage() {
                       selection={selection}
                       sort={state.sort}
                       max={max}
+                      range={resolved ?? state.range}
                     />
                   ))}
                 </tbody>
@@ -245,11 +256,13 @@ function WebRow({
   selection,
   sort,
   max,
+  range,
 }: {
   p: WebProject;
   selection: ReturnType<typeof useSelection>;
   sort: WebSort;
   max: number;
+  range: DayRange;
 }) {
   const t = p.tenant;
   const slot = selection.slot(t.id);
@@ -277,6 +290,9 @@ function WebRow({
           {p.sites_with_stellar_toml} with stellar.toml
         </span>
       </th>
+      <td className={TD}>
+        <IntegrityCell tenant={t} integrity={p.integrity} range={range} />
+      </td>
       {cell("pageviews", p.pageviews, <span data-col="pageviews">{formatCount(p.pageviews)}</span>)}
       {cell("visitors", p.visitors, <span data-col="visitors">{formatCount(p.visitors)}</span>)}
       {cell("visits", p.visits, formatCount(p.visits))}
