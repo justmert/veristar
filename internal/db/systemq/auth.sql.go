@@ -399,7 +399,7 @@ where id = $1 and deleted_at is null
 returning id, github_id, github_login, is_operator, created_at, last_login_at, deleted_at, stellar_address, umami_username, passkey_address, passkey_credential_id, passkey_public_key
 `
 
-// is_operator follows the roster (cp.operators, 00040) from both
+// is_operator follows the roster (cp.operators, 00041) from both
 // identities of the row. the users_operator_flag trigger already keeps it
 // so on every identity change; this statement returns the row with the
 // flag for the sign-in, link and unlink audit details.
@@ -509,7 +509,7 @@ type SignInUserParams struct {
 // sign-in, sessions and /api/me for the console. cp_system, because
 // these run before any tenant is known.
 // the numeric github id is the identity, the login can change. is_operator
-// comes from the roster through the users_operator_flag trigger (00040). a
+// comes from the roster through the users_operator_flag trigger (00041). a
 // deleted account's emptied row never matches (00031), so signing in again
 // after deleting the account makes a new row.
 func (q *Queries) SignInUser(ctx context.Context, arg SignInUserParams) (CpUser, error) {

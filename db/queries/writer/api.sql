@@ -57,7 +57,7 @@ on conflict (tenant_id, resource_hash, start_unix_nano) do update
 
 -- name: AddMinute :batchexec
 -- adds one delta histogram to its minute row. traffic_class is app or the
--- infrastructure class the collector marked (00039). bucket_start must be the start
+-- infrastructure class the collector marked (00040). bucket_start must be the start
 -- of a utc minute and counts must have 15 buckets that sum to count; the
 -- table's checks refuse anything else. a minute with no partition fails with
 -- sqlstate 23514 (no partition of relation found for row).

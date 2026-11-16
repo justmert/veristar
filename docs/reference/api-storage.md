@@ -65,7 +65,7 @@ have the same shape:
 | `route` | text | `http.route`, `{other}` above the cap, `''` when absent, at most 1024 bytes |
 | `status_code` | smallint | `http.response.status_code`, `0` when absent, else 100 to 599 |
 | `source` | text | `metric` (`http.server.request.duration`) or `span` (`scf.http.server.request.duration.from_spans`) |
-| `traffic_class` | text | `app`, or `preflight`, `health` or `probe` from the point's `scf.traffic.class` ([collector.md](collector.md), "Traffic classes"); `app` for every row written before migration `00039` |
+| `traffic_class` | text | `app`, or `preflight`, `health` or `probe` from the point's `scf.traffic.class` ([collector.md](collector.md), "Traffic classes"); `app` for every row written before migration `00040` |
 | `counts` | bigint[] | 15 canonical buckets, none null or negative |
 | `sum` | double precision | sum of observed values in seconds |
 | `count` | bigint | must equal the sum of `counts` (checked) |
@@ -81,7 +81,7 @@ rows of any set of classes merge with `api.sum_buckets` exactly as rows of diffe
 and the rollups keep one row per class. The headline numbers of the console, the operator views,
 the exports, the machine API and the MCP tools read `traffic_class = 'app'` rows only, and report
 the other rows as `infrastructure_requests`. `api.traffic_class_rules` holds one row per rule set
-version with the time it took effect (`applied_from`); version 1 took effect when migration `00039`
+version with the time it took effect (`applied_from`); version 1 took effect when migration `00040`
 ran. `api.operator_hourly` and `api.operator_daily` return the column.
 
 Span-derived points carry the start of the UTC minute their spans ended in

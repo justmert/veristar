@@ -8,7 +8,7 @@
 // internal/controlplane/passkey verifies (passkey.RelyingParty.Verify). the
 // console runs every ceremony with the same @soropass/core helpers as sign-in
 // (apps/console/src/lib/passkey). an account steps up with its sign-in
-// passkey and with the passkeys it adds here (cp.operator_passkeys, 00040).
+// passkey and with the passkeys it adds here (cp.operator_passkeys, 00041).
 //
 // the package has three parts other code builds on:
 //

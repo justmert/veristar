@@ -10,7 +10,7 @@ func id(n int64) *int64     { return &n }
 func addr(s string) *string { return &s }
 
 // the guard trusts the flag alone: the database derives it from the roster
-// in the transaction that changes the roster (00040), and RequireUser reads
+// in the transaction that changes the roster (00041), and RequireUser reads
 // it on every request. roster_test covers the derivation.
 func TestGuardAllowed(t *testing.T) {
 	g := &Guard{}
