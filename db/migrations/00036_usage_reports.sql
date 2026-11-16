@@ -69,11 +69,14 @@ set search_path = pg_catalog, pg_temp
 as $$
 begin
   if tg_op = 'INSERT' then
-    if current_user = 'cp_tenant'
-       and (new.created_by is distinct from cp.app_user_id() or new.revoked_at is not null
-            or new.view_count <> 0 or new.last_viewed_at is not null) then
-      raise exception 'cp_tenant may only store a new report by the session user'
-        using errcode = 'insufficient_privilege';
+    -- nested, so cp.app_user_id() runs only as cp_tenant, the one role
+    -- allowed to execute it
+    if current_user = 'cp_tenant' then
+      if new.created_by is distinct from cp.app_user_id() or new.revoked_at is not null
+         or new.view_count <> 0 or new.last_viewed_at is not null then
+        raise exception 'cp_tenant may only store a new report by the session user'
+          using errcode = 'insufficient_privilege';
+      end if;
     end if;
     return new;
   end if;
@@ -90,10 +93,11 @@ begin
       raise exception 'a revoked report link stays revoked'
         using errcode = 'insufficient_privilege';
     end if;
-    if current_user = 'cp_tenant' and new.revoked_by is distinct from cp.app_user_id()
-       and old.revoked_at is null then
-      raise exception 'cp_tenant revocations must name the session user'
-        using errcode = 'insufficient_privilege';
+    if current_user = 'cp_tenant' then
+      if new.revoked_by is distinct from cp.app_user_id() then
+        raise exception 'cp_tenant revocations must name the session user'
+          using errcode = 'insufficient_privilege';
+      end if;
     end if;
   end if;
   return new;
