@@ -3103,7 +3103,7 @@ hashes until the week closes (15.8).
   `last_error_at`, and for accounts `home_domain` and `account_exists` from
   the account's ledger entry.
 
-- `agg.chain_weeks` and `agg.chain_week_members` (migration 00037): the
+- `agg.chain_weeks` and `agg.chain_week_members` (migration 00038): the
   weekly active accounts of 15.8.
 
 `agg.chain_daily` and `agg.chain_reads` are readable by `cp_tenant` (own
@@ -3589,7 +3589,7 @@ stored grade does not change.
 SCF decides by program, round, category and award date. SCF publishes no
 machine-readable directory of its awards, so a project proposes its cohort
 and an operator confirms it; only confirmed values place a project in a
-cohort. The values live in `cp.tenant_cohorts` (migration 00037): the
+cohort. The values live in `cp.tenant_cohorts` (migration 00038): the
 project writes only the proposal columns under `cp_tenant`, operators write
 the confirmed columns under `cp_system`, operators read under `cp_operator`.
 
