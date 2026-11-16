@@ -395,8 +395,11 @@ describe("what scf sees (contract 16.3)", () => {
   });
 
   it("renders the integrity grade when the field arrives", async () => {
-    const host = await render(<IntegritySlot value={{ grade: "A" }} />);
-    expect(host.querySelector("[data-testid=integrity-grade]")?.textContent).toBe("A");
+    const host = await render(
+      <IntegritySlot value={{ grade: "B", graded_days: 8, days_a: 5, days_b: 3, days_c: 0 }} />,
+    );
+    expect(host.querySelector("[data-testid=integrity-grade]")?.textContent).toBe("B");
+    expect(host.textContent).toContain("8 graded site days: 5 A, 3 B, 0 C");
     const empty = await render(<IntegritySlot value={undefined} />);
     expect(empty.textContent).toBe("");
   });
@@ -431,6 +434,7 @@ describe("operator on-chain column and exports (contract 15.7 and 16.1)", () => 
       ingest_rejected: 0,
       rejected_share: 0,
       top: { referrer: [], country: [], device: [], browser: [] },
+      integrity: { grade: "A", graded_days: 3, days_a: 3, days_b: 0, days_c: 0 },
       onchain: scfBody.onchain,
     });
     expect(row.onchain?.operations).toBe(12);

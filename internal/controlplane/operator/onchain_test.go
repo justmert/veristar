@@ -255,6 +255,7 @@ func TestSCFView(t *testing.T) {
 		IngestRejected: web.IngestRejected, RejectedShare: web.RejectedShare,
 	}, *got.Web)
 	require.Equal(t, web.SiteCounts, *got.Sites)
+	require.Equal(t, web.Integrity, *got.Integrity)
 	require.Equal(t, web.Onchain, *got.Onchain)
 	code, body = call(t, f.h, "/api/operator/api/projects?"+rq+"&limit=200")
 	require.Equal(t, http.StatusOK, code)

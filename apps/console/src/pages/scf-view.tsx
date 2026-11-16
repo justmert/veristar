@@ -52,23 +52,26 @@ export function SCFViewPage() {
 
 // the integrity grade slot: it renders only when the control plane sends
 // the field, and shows exactly what it sends
-export function IntegritySlot({ value }: { value: unknown }) {
-  if (value === undefined || value === null) return null;
-  const grade =
-    typeof value === "object" &&
-    value !== null &&
-    "grade" in value &&
-    typeof value.grade === "string"
-      ? value.grade
-      : typeof value === "string"
-        ? value
-        : null;
-  if (grade === null) return null;
+export function IntegritySlot({ value }: { value: SCFView["integrity"] }) {
+  if (!value) return null;
   return (
-    <Panel title="Integrity grade" description="The grade the operator views show for this range.">
-      <span className="text-page text-fg" data-testid="integrity-grade">
-        {grade}
-      </span>
+    <Panel
+      title="Integrity grade"
+      description="The grade of your project's row in the operators' Global web view for this range."
+    >
+      {value.grade === null ? (
+        <p className="text-body text-fg-2">No site day of this range has a grade yet.</p>
+      ) : (
+        <div className="flex flex-col gap-1">
+          <span className="text-page text-fg" data-testid="integrity-grade">
+            {value.grade}
+          </span>
+          <span className="text-small text-fg-2">
+            {value.graded_days} graded site days: {value.days_a} A, {value.days_b} B, {value.days_c}{" "}
+            C
+          </span>
+        </div>
+      )}
     </Panel>
   );
 }

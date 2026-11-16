@@ -84,6 +84,9 @@ type SCFViewAnswer struct {
 	Web             *SCFWebRow         `json:"web"`
 	API             *SCFAPIRow         `json:"api"`
 	Onchain         *onchain.Summary   `json:"onchain"`
+	// the integrity grade of the project's row in the global web view
+	// (contract 17.3), present when the views list the project
+	Integrity *IntegrityGrade `json:"integrity,omitempty"`
 	LinkTwoWay      bool               `json:"link_two_way"`
 	WebSeries       []WebPoint         `json:"web_series"`
 	APISeries       []APIPoint         `json:"api_series"`
@@ -119,16 +122,17 @@ func (v *SCFView) get(w http.ResponseWriter, r *http.Request) error {
 		var sc SiteCounts
 		var web SCFWebRow
 		var at time.Time
+		var grade IntegrityGrade
 		err := tx.QueryRow(ctx, webListCTE+`
 			select id, slug, name, status, created_at, sites, sites_verified, sites_with_stellar_toml,
 			       has_web_data, has_api_data, pageviews, visitors, visits, bounces, totaltime,
 			       bounce_rate, avg_visit_duration, quarantine_pageviews, quarantine_visitors, quarantine_share,
-			       ingest_requests, ingest_rejected, rejected_share
+			       ingest_requests, ingest_rejected, rejected_share, days_a, days_b, days_c
 			from y where id = @tenant`, args).Scan(&t.ID, &t.Slug, &t.Name, &t.Status, &at,
 			&sc.Sites, &sc.SitesVerified, &sc.SitesWithStellarToml, &out.HasWebData, &out.HasAPIData,
 			&web.Pageviews, &web.Visitors, &web.Visits, &web.Bounces, &web.Totaltime,
 			&web.BounceRate, &web.AvgVisitDuration, &web.QuarantinePageviews, &web.QuarantineVisitors, &web.QuarantineShare,
-			&web.IngestRequests, &web.IngestRejected, &web.RejectedShare)
+			&web.IngestRequests, &web.IngestRejected, &web.RejectedShare, &grade.DaysA, &grade.DaysB, &grade.DaysC)
 		if errors.Is(err, pgx.ErrNoRows) {
 			// the operator views do not list this project
 			return nil
@@ -137,7 +141,8 @@ func (v *SCFView) get(w http.ResponseWriter, r *http.Request) error {
 			return fmt.Errorf("web row: %w", err)
 		}
 		t.CreatedAt = httpx.Timestamp(at)
-		out.InOperatorViews, out.Tenant, out.Sites, out.Web = true, &t, &sc, &web
+		grade.derive()
+		out.InOperatorViews, out.Tenant, out.Sites, out.Web, out.Integrity = true, &t, &sc, &web, &grade
 		var api SCFAPIRow
 		var p50, p95, p99 *float64
 		err = tx.QueryRow(ctx, apiListCTE+`
