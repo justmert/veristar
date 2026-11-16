@@ -34,6 +34,25 @@ select unnest(@site_ids::uuid[]), unnest(@tenant_ids::uuid[]), @day::date,
 on conflict (site_id, day, class) do update
   set count = cp.web_evidence_daily.count + excluded.count;
 
+-- name: AddSignalCounts :exec
+-- adds one message's page signal counters (integrity.Signals) to their
+-- daily rows, like AddEvidenceCounts
+insert into cp.web_signals_daily (site_id, tenant_id, day, signal, count)
+select unnest(@site_ids::uuid[]), unnest(@tenant_ids::uuid[]), @day::date,
+       unnest(@signals::text[]), unnest(@counts::bigint[])
+on conflict (site_id, day, signal) do update
+  set count = cp.web_signals_daily.count + excluded.count;
+
+-- name: AddCoverageCounts :exec
+-- adds one message's tracker file counters to the sites' daily coverage rows.
+-- parallel arrays, each site once
+insert into agg.web_coverage_daily (site_id, tenant_id, day, script_requests, gpc_requests)
+select unnest(@site_ids::uuid[]), unnest(@tenant_ids::uuid[]), @day::date,
+       unnest(@script_requests::bigint[]), unnest(@gpc_requests::bigint[])
+on conflict (site_id, day) do update
+  set script_requests = agg.web_coverage_daily.script_requests + excluded.script_requests,
+      gpc_requests = agg.web_coverage_daily.gpc_requests + excluded.gpc_requests;
+
 -- name: AddNetworkSightings :exec
 -- records the networks one message reports. a network that another node, or
 -- a redelivery, reported before is already in the set

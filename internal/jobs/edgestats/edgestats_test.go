@@ -156,6 +156,54 @@ func TestEdgeStats(t *testing.T) {
 		require.Equal(t, int64(2), networks, "a network two nodes report counts once")
 	})
 
+	t.Run("page signals and coverage counters go to their daily tables", func(t *testing.T) {
+		before := jobstest.Totals(t, e.db)
+		e.publish(t, "edge-1", 160, map[string]int64{
+			"accepted": 3, "signal_views": 3, "signal_framed": 1, "signal_never_visible": 2,
+			"script_requests": 10, "script_gpc": 2,
+		})
+		// the gpc part can arrive in a later window than its requests
+		e.publish(t, "edge-2", 160, map[string]int64{"script_gpc": 1})
+		e.publish(t, "edge-2", 161, map[string]int64{"script_requests": 5})
+		n, err := e.drainer.Drain(t.Context(), e.leader.Tx)
+		require.NoError(t, err)
+		require.Equal(t, 3, n)
+		after := jobstest.Totals(t, e.db)
+		require.Equal(t, before[e.site.String()+"/accepted"]+3, after[e.site.String()+"/accepted"])
+		for k := range after {
+			require.NotContains(t, k, "signal_", "a page signal must not become a request outcome")
+			require.NotContains(t, k, "script_", "a script counter must not become a request outcome")
+		}
+		var views, framed, nv, requests, gpc int64
+		var tenant uuid.UUID
+		err = e.db.WithRole(t.Context(), pdb.RoleJobs, func(tx pgx.Tx) error {
+			if err := tx.QueryRow(t.Context(), `select
+			    coalesce(sum(count) filter (where signal = 'signal_views'), 0),
+			    coalesce(sum(count) filter (where signal = 'signal_framed'), 0),
+			    coalesce(sum(count) filter (where signal = 'signal_never_visible'), 0)
+			  from cp.web_signals_daily where site_id = $1`, e.site).Scan(&views, &framed, &nv); err != nil {
+				return err
+			}
+			return tx.QueryRow(t.Context(), `select tenant_id, script_requests, gpc_requests
+			  from agg.web_coverage_daily where site_id = $1`, e.site).Scan(&tenant, &requests, &gpc)
+		})
+		require.NoError(t, err)
+		require.Equal(t, []int64{3, 1, 2}, []int64{views, framed, nv})
+		require.Equal(t, e.tenant, tenant)
+		require.Equal(t, int64(15), requests)
+		require.Equal(t, int64(3), gpc)
+	})
+
+	t.Run("an unknown page signal or script counter is refused", func(t *testing.T) {
+		for i, outcome := range []string{"signal_hovered", "script_dnt"} {
+			e.publish(t, "edge-4", 170+uint64(i), map[string]int64{outcome: 1})
+			msg := e.fetchOne(t)
+			err := e.drainer.Handle(t.Context(), e.leader.Tx, msg)
+			require.True(t, natsx.IsPermanent(err), "%s: %v", outcome, err)
+			require.NoError(t, msg.Ack())
+		}
+	})
+
 	t.Run("a redelivered message is not counted twice", func(t *testing.T) {
 		before := e.total(t, "accepted")
 		e.publish(t, "edge-1", 200, map[string]int64{"accepted": 4})

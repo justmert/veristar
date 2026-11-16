@@ -159,6 +159,10 @@ func seedAPIRows(tx pgx.Tx) error {
 				[]any{uuid.New(), tenant}},
 			{`insert into cp.web_networks_daily (site_id, tenant_id, day, network) values ($1, $2, current_date, '00000000000000aa')`,
 				[]any{uuid.New(), tenant}},
+			{`insert into cp.web_signals_daily (site_id, tenant_id, day, signal, count) values ($1, $2, current_date, 'signal_views', 5)`,
+				[]any{uuid.New(), tenant}},
+			{`insert into agg.web_coverage_daily (site_id, tenant_id, day, script_requests, gpc_requests) values ($1, $2, current_date, 200, 20)`,
+				[]any{uuid.New(), tenant}},
 		}
 		for _, s := range stmts {
 			if _, err := tx.Exec(ctx, s.sql, s.args...); err != nil {

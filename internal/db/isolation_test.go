@@ -94,6 +94,10 @@ var tenantTables = []tenantTable{
 	{name: "agg.web_integrity_daily", key: "tenant_id"},
 	{name: "cp.web_evidence_daily", key: "tenant_id", denied: true},
 	{name: "cp.web_networks_daily", key: "tenant_id", denied: true},
+	// page signals and coverage (00037): a project reads its own coverage;
+	// the signal rows behind its grades are jobs' only
+	{name: "agg.web_coverage_daily", key: "tenant_id"},
+	{name: "cp.web_signals_daily", key: "tenant_id", denied: true},
 	// cohorts (00035): a member proposes its own project's cohort
 	{name: "cp.tenant_cohorts", key: "tenant_id", insert: func(tenant, user, _ uuid.UUID) (string, []any) {
 		return `insert into cp.tenant_cohorts (tenant_id, proposed_program, proposed_by, proposed_at)

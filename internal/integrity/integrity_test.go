@@ -172,3 +172,97 @@ func TestRangeText(t *testing.T) {
 		}
 	}
 }
+
+// rule version 2 adds the page signals of tracker 1.3.0; they can only lower
+// a grade, and version 1 ignores them, so a stored version 1 grade is
+// reproduced exactly from its inputs.
+func TestGradeSignalRules(t *testing.T) {
+	signals := func(views, framed, nv int64) func(*Inputs) {
+		return func(in *Inputs) { in.SignalViews, in.Framed, in.NeverVisible = views, framed, nv }
+	}
+	for _, tc := range []struct {
+		name   string
+		edit   func(*Inputs)
+		v1, v2 string
+		want2  []string
+	}{
+		{"no signals reported", func(*Inputs) {}, GradeA, GradeA, nil},
+		{"few framed views stay A", signals(800, 100, 50), GradeA, GradeA, nil},
+		{"framed share B", signals(800, 200, 0), GradeA, GradeB, []string{"framed_share:B"}},
+		{"framed share C", signals(800, 700, 0), GradeA, GradeC, []string{"framed_share:C"}},
+		{"framed share needs a base", signals(40, 40, 0), GradeA, GradeA, nil},
+		{"never visible B", signals(600, 0, 300), GradeA, GradeB, []string{"never_visible_share:B"}},
+		{"never visible below the limit", signals(800, 0, 200), GradeA, GradeA, nil},
+		{"never visible needs a base", signals(10, 0, 30), GradeA, GradeA, nil},
+		{"signals cannot raise a grade", func(in *Inputs) { in.Quarantined = 400; in.SignalViews = 900 }, GradeC, GradeC, []string{"quarantine_share:C"}},
+		{"worst of both", func(in *Inputs) { in.Networks = 2; in.SignalViews, in.Framed = 800, 700 }, GradeB, GradeC, []string{"framed_share:C", "few_networks:B"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			in := clean()
+			tc.edit(&in)
+			r1, err := GradeVersion(1, in)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if r1.Grade != tc.v1 {
+				t.Fatalf("version 1 grade %q, want %q (%v)", r1.Grade, tc.v1, codes(r1))
+			}
+			for _, r := range r1.Reasons {
+				if r.Code == ReasonFramedShare || r.Code == ReasonNeverVisibleShare {
+					t.Fatalf("version 1 applied a version 2 rule: %v", codes(r1))
+				}
+			}
+			r2, err := GradeVersion(2, in)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if r2.Grade != tc.v2 {
+				t.Fatalf("version 2 grade %q, want %q (%v)", r2.Grade, tc.v2, codes(r2))
+			}
+			got := map[string]bool{}
+			for _, c := range codes(r2) {
+				got[c] = true
+			}
+			for _, w := range tc.want2 {
+				if !got[w] {
+					t.Fatalf("version 2 reasons %v lack %s", codes(r2), w)
+				}
+			}
+			if Rank(r2.Grade) < Rank(r1.Grade) {
+				t.Fatalf("version 2 raised %s to %s", r1.Grade, r2.Grade)
+			}
+			for _, r := range r2.Reasons {
+				if r.Text() == r.Code {
+					t.Fatalf("reason %s has no text", r.Code)
+				}
+				if RangeText(r.Code) == r.Code {
+					t.Fatalf("reason %s has no range text", r.Code)
+				}
+			}
+		})
+	}
+}
+
+func TestRuleVersions(t *testing.T) {
+	if RuleVersions[len(RuleVersions)-1] != RuleVersion {
+		t.Fatalf("RuleVersion %d is not the newest of %v", RuleVersion, RuleVersions)
+	}
+	if _, err := GradeVersion(0, clean()); err == nil {
+		t.Fatal("version 0 graded")
+	}
+	if _, err := GradeVersion(RuleVersion+1, clean()); err == nil {
+		t.Fatal("a future version graded")
+	}
+	if Grade(clean()).Grade != GradeA {
+		t.Fatal("Grade does not apply the current version")
+	}
+}
+
+func TestReportsSignals(t *testing.T) {
+	for v, want := range map[string]bool{"": false, "1.0.0": false, "1.2.0": false, "1.2.9": false,
+		"1.3.0": true, "1.3.1": true, "1.10.0": true, "2.0.0": true, "x.y.z": false, "1.3": false} {
+		if got := ReportsSignals(v); got != want {
+			t.Errorf("ReportsSignals(%q) = %v, want %v", v, got, want)
+		}
+	}
+}
