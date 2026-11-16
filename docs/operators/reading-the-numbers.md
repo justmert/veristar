@@ -6,9 +6,17 @@ description: "Bands, daily-unique visitors and span-derived API data, and how th
 Start with the **integrity grade**: every project carries an A, B or C grade over the range you
 look at, with the reasons that set it, computed from what the platform's edge observes (the
 class of each visitor's network, distinct networks, the quarantine band, proof failures and the
-site's own baseline). Sort the global web table by it, and open the reasons panel before you
-rely on a project's numbers. The project sees the same grade and reasons on its own overview.
+site's own baseline). Sort the global web table by it, filter it to **C** or **B and below** to
+find the projects to look at first, and open the reasons panel before you rely on a project's
+numbers. The project sees the same grade and reasons on its own overview.
 The rules are in [bot and inflation defences](../security/bot-and-inflation.md) section 9.
+
+The grade is automatic; you decide what it means for a project. A project that disagrees with its
+grade opens an **Integrity appeal** issue from its console, prefilled with its slug, sites, period,
+grades, reason codes and rule set version. Read the appeal next to the reasons panel of the same
+range, answer on the issue, and record your decision there. The stored grade does not change; when
+an appeal shows that a rule misreads a kind of traffic, the fix is a new rule set version
+([appealing a grade](../security/bot-and-inflation.md#appealing-a-grade)).
 
 Three properties of the data shape how you compare projects: bands, daily-unique visitors, and
 span-derived API data. Each follows from a privacy or design choice. The full definitions are in

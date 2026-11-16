@@ -78,6 +78,27 @@ test("an owner declares an account and gets a challenge to prove it", async () =
   await page.goto(`${APP}/projects/${tenant.id}`);
   await expect(page.getByRole("heading", { name: "On-chain" })).toBeVisible();
   await expect(page.getByText("0 of 1")).toBeVisible();
+
+  // weekly active accounts: the project has no verified id and the task
+  // has not counted a week of it, so every iso week of the range shows its
+  // reason and none is a zero
+  const weekly = await api<{
+    totals: { weekly_active_accounts: { average: number | null; weeks_missing: number } };
+    weeks: { week: string; active_accounts: number | null; missing: string | null }[];
+  }>(owner.ctx, "GET", `/api/tenants/${tenant.id}/onchain`);
+  expect(weekly.body.weeks.length).toBeGreaterThanOrEqual(3);
+  for (const w of weekly.body.weeks) {
+    expect(w.week).toMatch(/^\d{4}-W\d{2}$/);
+    expect(w.active_accounts).toBeNull();
+    expect(w.missing).not.toBeNull();
+  }
+  expect(weekly.body.totals.weekly_active_accounts.average).toBeNull();
+  expect(weekly.body.totals.weekly_active_accounts.weeks_missing).toBe(weekly.body.weeks.length);
+  await expect(page.getByRole("heading", { name: "Weekly active accounts" })).toBeVisible();
+  const weeks = page.getByRole("list", { name: "Weekly active accounts per ISO week" });
+  await expect(weeks.locator("[data-week]")).toHaveCount(weekly.body.weeks.length);
+  await expect(weeks.locator("[data-week]").first()).toContainText("No count.");
+  await expect(page.getByTestId("waa-summary")).toContainText("No complete week counted");
 });
 
 test("what scf sees and the overview export answer for the project", async () => {
@@ -85,6 +106,7 @@ test("what scf sees and the overview export answer for the project", async () =>
   await page.goto(`${APP}/projects/${tenant.id}/scf-view`);
   await expect(page.getByRole("heading", { name: "What SCF sees" })).toBeVisible();
   await expect(page.getByText("The project's on-chain column.")).toBeVisible();
+  await expect(page.getByText("Weekly active accounts", { exact: true })).toBeVisible();
   const href = await page.getByRole("link", { name: "Export CSV" }).getAttribute("href");
   expect(href).toMatch(new RegExp(`^/api/tenants/${tenant.id}/overview\\.csv\\?from=`));
 
@@ -170,6 +192,8 @@ test("an operator sees the column, exports the rows on screen and reads the deta
     const lines = (await r.text()).trim().split("\n");
     expect(lines).toHaveLength(2);
     expect(lines[0]).toContain("onchain_operations");
+    expect(lines[0]).toContain("onchain_weekly_active_accounts_average");
+    expect(lines[0]).toContain("onchain_weeks_missing");
     expect(lines[1]?.startsWith(tenant.id)).toBe(true);
 
     // the export wrote an audit row with the query it answered

@@ -12,7 +12,7 @@ each source, what it gives, and its limits, as checked on 2026-11-16.
 | Key | Default | Used for |
 |---|---|---|
 | `STELLAR_HORIZON_URL` | `https://horizon.stellar.org` | account operations, account records (home domain, data entries), transactions of deployer proofs, ledger close times |
-| `STELLAR_RPC_URL` | `https://mainnet.sorobanrpc.com` | contract events (`getEvents`), contract instances (`getLedgerEntries`), ledger close times (`getLedgers`), the retention window (`getHealth`) |
+| `STELLAR_RPC_URL` | `https://mainnet.sorobanrpc.com` | contract events (`getEvents`), the envelopes of their transactions (`getTransaction`), contract instances (`getLedgerEntries`), ledger close times (`getLedgers`), the retention window (`getHealth`) |
 | `STELLAR_HORIZON_RPS` | `0.8` | requests per second to Horizon |
 | `STELLAR_RPC_RPS` | `2` | requests per second to Stellar RPC |
 
@@ -43,6 +43,41 @@ per-contract endpoint, and full history needs an indexer (the Hubble dataset on 
 querier pays for, or a full-archive RPC server scanned in full). The witness therefore reads
 contract events from the RPC window and stores each day once it is complete, so a contract's
 history grows from the day it is declared. A contract that emits no events shows no activity.
+
+## Weekly active accounts
+
+The SCF Growth Hack official rules rank projects on the increase of their Weekly Active Accounts
+(WAA) and define: "An active account means the account that initiated at least one operation"
+([SCF handbook, Growth Hack official rules, section Top 5 Projects Selection](https://stellar.gitbook.io/scf-handbook/supporting-programs/growth-hack/official-rules)).
+The same rules average the weekly counts over the campaign's four weeks.
+
+The witness applies this definition to a project's footprint: the WAA of an ISO week (Monday to
+Sunday, UTC) is the number of distinct `G` accounts that initiated at least one successful
+operation involving one of the project's verified accounts or contracts that week.
+
+| Kind | Initiator of an operation | Source |
+|---|---|---|
+| Account | the operation's `source_account`; Horizon fills it with the transaction's source when the operation names none, and gives the base `G` account of a muxed source | the same `/accounts/{id}/operations` pages as the daily counts |
+| Contract | the source of each operation with an event of the contract, or the transaction's source when the operation names none; for a fee bump, the inner transaction's source, never the fee payer | `getTransaction` for every transaction with such an event, 50 calls per JSON-RPC batch request |
+
+- **Read while the source holds it.** A day's initiators are read with its counts, in the hourly
+  run after the day ends. Public RPC servers keep about seven days, so every contract day is read
+  well inside the window; a day stored before its initiators were read is read again while its
+  week is open.
+- **Counted without keeping addresses.** While a week is open, the platform holds a random 32-byte
+  key for the project and week, and stores HMAC-SHA256(key, account) for each initiating account,
+  never the address. The hashes let the count span seven days and several ids, so an account
+  active on Monday and Friday, or on two of the project's contracts, counts once. When the week
+  closes, the platform stores the count, deletes the hashes and drops the key. Ledger addresses
+  are public; the hashes keep the design minimal all the same.
+- **Missing, never zero.** A week counts only when each verified id has all seven days read with
+  their initiators. A contract day with more than 10,000 distinct transactions to look up keeps
+  its daily counts and leaves its week without a count (`day_over_read_cap`); so does a day the
+  source no longer holds (`before_source_history`). An unfinished week waits at most 7 days after
+  its Sunday for failed reads to succeed, then closes with the reason.
+- **What counts.** The project's own accounts count when they initiate operations. A relayed or
+  sponsored contract invocation counts the account that submitted the operation. A contract that
+  emits no events has no operations through this source and adds no initiators.
 
 ## How a day is read
 
@@ -78,6 +113,15 @@ The run of 2026-11-16 (UTC) recorded:
 | A quiet contract `CDPK...Q5ZT` found among recent events, 2026-11-15 | 23,897 operations, 8,422 transactions, 47 counterparties |
 | USDC issuer account, 2026-11-15 | 3 operations, 3 transactions, 1 counterparty |
 | Admin of the USDC asset contract | key `Admin`, address `CCPL...R4D5W` |
+
+The run of 2026-11-16 (UTC) after the weekly active accounts were added read the initiators too:
+
+| Check | Result |
+|---|---|
+| RPC window at `mainnet.sorobanrpc.com` | ledgers 65,394,518 to 65,515,377; first whole day 2026-11-10 |
+| A quiet contract `CABF...BFOX` found among recent events, 2026-11-15 | 2,021 operations, 1,388 transactions; 1,388 envelopes read through batched `getTransaction`, 1 distinct initiator |
+| USDC issuer account, 2026-11-15 | 3 operations, 1 distinct initiator |
+| USDC issuer account, ISO week 2026-W46 (2026-11-09 to 2026-11-15) | 136 operations, 8 distinct initiators |
 
 An earlier run of the same day found that a server can drop its oldest ledger between `getHealth`
 and the next request; the reader's 100-ledger margin above comes from that run.

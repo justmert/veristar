@@ -2173,6 +2173,7 @@ Both project lists take these filters; all given filters must hold.
 | `q` | 1 to 100 characters | case-insensitive substring of `name` or `slug` |
 | `program`, `round`, `category` | 1 to 80 characters | exactly the confirmed cohort value of 19.1 |
 | `award_from`, `award_to` | `yyyy-mm-dd` | confirmed award date on or after, on or before |
+| `integrity_at_or_below` | `A`, `B`, `C` (web list only) | the range grade of 17.3 is this grade or worse: `C` matches C, `B` matches B and C, `A` every graded project; a project without a graded day never matches |
 
 - `sort` is any column the route lists, `order` is `asc` or `desc`
   (default `desc`). Projects without a value for the sort column (a rate
@@ -2188,8 +2189,9 @@ Both project lists take these filters; all given filters must hold.
   committed can repeat or skip a project whose numbers changed.
 - 400 `invalid_query` for an unknown status, sort or order, a boolean other
   than `true` or `false`, a malformed date, `enrolled_to` before
-  `enrolled_from`, `award_to` before `award_from`, or `q` or a cohort value
-  out of range.
+  `enrolled_from`, `award_to` before `award_from`, `q` or a cohort value
+  out of range, an `integrity_at_or_below` other than `A`, `B` or `C`, or
+  `integrity_at_or_below` on the API list.
 - Both lists also sort by the change and percentile columns of 19.2:
   `visitors_growth`, `pageviews_growth`, `requests_growth`,
   `error_rate_change`, `onchain_operations_growth` and
@@ -3076,8 +3078,10 @@ No new key: the issuer is `CONSOLE_ORIGIN` and the seal key is derived from
 A project declares the Stellar accounts (`G...`) and Soroban contracts
 (`C...`) it operates, proves that it controls them, and gets their daily
 ledger activity next to its web and API usage. Ledger data is public. The
-platform stores the declared ids, the proofs and three daily counts per id;
-it stores no counterparty address and no transaction.
+platform stores the declared ids, the proofs, three daily counts per id and
+one weekly count per project; it stores no counterparty address and no
+transaction, and keeps the accounts behind a weekly count only as keyed
+hashes until the week closes (15.8).
 
 ### 15.1 Tables
 
@@ -3099,10 +3103,16 @@ it stores no counterparty address and no transaction.
   `last_error_at`, and for accounts `home_domain` and `account_exists` from
   the account's ledger entry.
 
-Both agg tables are readable by `cp_tenant` (own rows, row-level security),
-`cp_operator` and `jobs` (writes). The purge step `chain` of 5.5 deletes the
-read state of a removed tenant and, unless `removal_keep_aggregates`, its
-daily counts, through `agg.purge_chain(tenant, keep_aggregates)`.
+- `agg.chain_weeks` and `agg.chain_week_members` (migration 00037): the
+  weekly active accounts of 15.8.
+
+`agg.chain_daily` and `agg.chain_reads` are readable by `cp_tenant` (own
+rows, row-level security), `cp_operator` and `jobs` (writes).
+`agg.chain_weeks` is readable the same way without its `hash_key` column;
+`agg.chain_week_members` is the jobs task's alone. The purge step `chain` of
+5.5 deletes the read state, the week members and the open weeks of a removed
+tenant and, unless `removal_keep_aggregates`, its daily counts and closed
+weeks, through `agg.purge_chain(tenant, keep_aggregates)`.
 
 ### 15.2 Sources and what the counts mean
 
@@ -3141,7 +3151,9 @@ days, `to` not after today (400 `invalid_query` otherwise).
   "from": "2026-10-18", "to": "2026-11-16", "days": ["2026-10-18", "..."],
   "sources": { "accounts": "horizon", "contracts": "rpc_events", "account_backfill_days": 90 },
   "totals": { "ids": 2, "ids_verified": 1, "accounts": 1, "contracts": 1,
-              "operations": 412, "transactions": 180, "days_missing": 9 },
+              "operations": 412, "transactions": 180, "days_missing": 9,
+              "weekly_active_accounts": { "average": 37.5, "latest": 41,
+                                          "weeks_counted": 2, "weeks_missing": 1 } },
   "ids": [
     {
       "id": "uuid", "strkey": "G...", "kind": "account", "added_by": "enrollment",
@@ -3161,6 +3173,12 @@ days, `to` not after today (400 `invalid_query` otherwise).
       ]
     }
   ],
+  "weeks": [
+    { "week": "2026-W44", "from": "2026-10-26", "to": "2026-11-01", "active_accounts": 34, "missing": null },
+    { "week": "2026-W45", "from": "2026-11-02", "to": "2026-11-08", "active_accounts": null,
+      "missing": "day_over_read_cap" },
+    { "week": "2026-W46", "from": "2026-11-09", "to": "2026-11-15", "active_accounts": 41, "missing": null }
+  ],
   "link": { "two_way": true, "sites": ["LinkSite, 15.5"] }
 }
 ```
@@ -3176,6 +3194,8 @@ days, `to` not after today (400 `invalid_query` otherwise).
 - `totals.days_missing` counts id-days without a row, today included.
 - `verification.status` is `verified` once a proof held; a later failed
   attempt keeps it and sets `last_error`.
+- `weeks` lists the ISO weeks that lie whole inside the range, with their
+  weekly active accounts (15.8); `totals.weekly_active_accounts` sums them.
 
 **`POST /api/tenants/{tenant_id}/onchain/ids`** `{"strkey": "G..."}`: declares
 an account or a contract. Any member, terms accepted (403
@@ -3276,22 +3296,68 @@ marked failed in the scheduler metrics. Metric:
 - `GET /api/operator/web/projects` and `GET /api/operator/api/projects`: every
   row carries `onchain` (**Summary**: `ids`, `ids_verified`, `operations`,
   `transactions` over the range, `days_missing` (id-days of the range before
-  today without a row) and `ids_failing` (ids whose last read failed)). The
-  column is not a sort key.
+  today without a row), `ids_failing` (ids whose last read failed) and
+  `weekly_active_accounts` (15.8)). The column is not a sort key.
 - `GET /api/operator/web/compare` and `GET /api/operator/api/compare`: every
-  project carries `onchain`: `totals` (Summary) and `series`, one point per day
+  project carries `onchain`: `totals` (Summary), `series`, one point per day
   of the range: `ids_read` and the summed `operations` and `transactions`,
-  both `null` on a day no id has a row for.
+  both `null` on a day no id has a row for, and `weeks`, the weeks of 15.8
+  that lie whole inside the range.
 - `GET /api/operator/tenants/{tenant_id}/onchain?from=&to=`: the view of 15.3
   for one project, read as `cp_operator` over `cp.operator_sites`; 404 for an
   unknown or internal tenant.
 - Machine API (section 9, `docs/reference/openapi/metrics-v1.yaml`):
   `GET /api/metrics/v1/onchain/ids` (declared ids with proof and read state,
   keyset by tenant and strkey) and `GET /api/metrics/v1/onchain/daily`
-  (stored daily rows of declared ids, keyset by tenant, strkey and day), with
+  (stored daily rows of declared ids, keyset by tenant, strkey and day) and
+  `GET /api/metrics/v1/onchain/weekly` (one item per tenant and ISO week whose
+  Monday lies in the range: `tenant_id`, `week`, `from`, `to`,
+  `active_accounts`, `missing`, `closed_at`; keyset by tenant and week), with
   the `tenant`, `from`, `to`, `limit` and `cursor` rules of section 9.
 - MCP (section 12): tenant tools `get_onchain_activity` (15.3) and
-  `get_scf_view` (16.3), operator tool `get_tenant_onchain`.
+  `get_scf_view` (16.3), operator tool `get_tenant_onchain`; all carry the
+  weekly active accounts.
+
+### 15.8 Weekly active accounts
+
+The SCF Growth Hack official rules define an active account as "the account
+that initiated at least one operation" in a week
+([SCF handbook, Growth Hack official rules, Top 5 Projects Selection](https://stellar.gitbook.io/scf-handbook/supporting-programs/growth-hack/official-rules)).
+For a project, `active_accounts` of an ISO week (Monday to Sunday, UTC) is the
+number of distinct G accounts that initiated at least one successful
+operation involving one of the project's **verified** ids that week:
+
+| Kind | Initiators of a day |
+|---|---|
+| account | the `source_account` of each operation `GET /accounts/{id}/operations` returns; Horizon fills it with the transaction's source when the operation names none, and with the base G account of a muxed source |
+| contract | for each operation with an event of the contract (15.2), the operation's source, or the transaction's when it names none, read from the envelope through `getTransaction` (JSON-RPC batches of 50); for a fee bump, the inner transaction's; a muxed source counts as its G account |
+
+- The task `chain-activity` (15.6) reads a day's initiators together with its
+  counts, once the day is over, so contract days are read while Stellar RPC
+  still holds them. A day stored before its initiators were read is read
+  again while its week is open.
+- While a week is open, `agg.chain_weeks` holds a random 32-byte key for the
+  project and week, and `agg.chain_week_members` holds
+  HMAC-SHA256(key, account) per id and initiating account, so the distinct
+  count spans days and ids without storing an address. When the week closes
+  the task stores `active_accounts`, deletes the members and drops the key.
+- A week closes on the first run after its Sunday at which every verified
+  id has all seven days with their initiators; the count is over the members
+  of the ids verified at that moment. It closes as missing at once when a
+  day can never be read whole, and at the latest 7 days after its Sunday.
+- `agg.chain_daily.initiators` records per day: `read`,
+  `day_over_read_cap` (a contract day with more than 10,000 distinct
+  transactions to look up; the day's counts stay) or `before_source_history`.
+- A week without a count has `active_accounts` `null` and a `missing`
+  reason, never 0: `week_not_complete` (the week is not over),
+  `not_read_yet` (over, still reading), `no_verified_ids`,
+  `day_over_read_cap`, `before_source_history` (an id's source started
+  after the week's Monday, or a day is outside what the source holds),
+  `week_not_counted` (the week ended before the task counted the project),
+  or an id's last read error.
+- **WeeklyActive** of a range: `average` (mean of the counted weeks that lie
+  whole inside the range, `null` when none), `latest` (the last counted
+  week), `weeks_counted` and `weeks_missing`.
 
 ## 16. Exports and "What SCF sees"
 
@@ -3326,8 +3392,14 @@ charset=utf-8` as an attachment, streamed, one header row:
 - The list exports read with the list's own SQL in one repeatable-read
   snapshot, and add the on-chain summary columns `onchain_ids`,
   `onchain_ids_verified`, `onchain_operations`, `onchain_transactions`,
-  `onchain_days_missing` and `onchain_ids_failing`. The compare exports add
-  `onchain_ids_read`, `onchain_operations` and `onchain_transactions` per day.
+  `onchain_days_missing`, `onchain_ids_failing`,
+  `onchain_weekly_active_accounts_average`,
+  `onchain_weekly_active_accounts_latest`, `onchain_weeks_counted` and
+  `onchain_weeks_missing` (15.8). The compare exports add `onchain_ids_read`,
+  `onchain_operations` and `onchain_transactions` per day, and the ISO week
+  of the day with its count or reason (`onchain_week`,
+  `onchain_week_active_accounts`, `onchain_week_missing`), empty for a day
+  of a week that is not whole inside the range.
 - A value that is not known (a ratio without a denominator, a day not read) is
   an empty cell, never 0. A text cell that a spreadsheet would read as a
   formula (starting with `=`, `+`, `-`, `@`, tab or carriage return) gets a
@@ -3482,9 +3554,11 @@ grade and its reasons.
 ### 17.4 Machine API and exports
 
 - `GET /api/metrics/v1/web/integrity` (9.3 rules): parameters `tenant`,
-  `from`, `to`, `limit`, `cursor`. One item per tenant, site and day of
-  `agg.web_integrity_daily`: `tenant_id`, `site_id` and the day object of
-  17.1. Ordered by tenant, site and day.
+  `from`, `to`, `integrity_at_or_below`, `limit`, `cursor`. One item per
+  tenant, site and day of `agg.web_integrity_daily`: `tenant_id`, `site_id`
+  and the day object of 17.1. Ordered by tenant, site and day.
+  `integrity_at_or_below` (`A`, `B` or `C`) keeps the site days graded that
+  grade or worse; a day without a grade never matches.
 - Every `GET /api/metrics/v1/web/daily` item carries `integrity`: the range
   grade of the tenant's sites on that day, the same on both bands' items.
 - The CSV exports carry the grade: `integrity_grade`, `integrity_days_a`,
@@ -3493,7 +3567,20 @@ grade and its reasons.
   per day of the project overview export.
 - MCP: the project tool `get_web_integrity` reads 17.2, the operator tool
   `get_tenant_integrity` reads 17.3; `get_global_web_overview` accepts
-  `sort` `integrity`.
+  `sort` `integrity` and the filter `integrity_at_or_below`.
+- The web project list (8.2), its CSV export and the MCP overview filter on
+  the range grade with `integrity_at_or_below`.
+
+### 17.5 Appeals
+
+The grade is computed by the rules of 17.1 and stored per site and day; no
+route sets or edits it. The project overview and "What SCF sees" link to a
+new issue on the **Integrity appeal** form of the public tracker
+(`.github/ISSUE_TEMPLATE/integrity-appeal.yml`), with the fields `project`
+(slug), `period`, `grade`, `sites` (domain and grade per site), `reasons`
+(code, level and day count) and `rule_version` filled in from 17.2, and no
+personal or visitor data. Operators answer and decide on the issue; the
+stored grade does not change.
 
 ---
 
@@ -3502,7 +3589,7 @@ grade and its reasons.
 SCF decides by program, round, category and award date. SCF publishes no
 machine-readable directory of its awards, so a project proposes its cohort
 and an operator confirms it; only confirmed values place a project in a
-cohort. The values live in `cp.tenant_cohorts` (migration 00035): the
+cohort. The values live in `cp.tenant_cohorts` (migration 00037): the
 project writes only the proposal columns under `cp_tenant`, operators write
 the confirmed columns under `cp_system`, operators read under `cp_operator`.
 

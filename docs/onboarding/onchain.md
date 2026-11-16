@@ -31,6 +31,20 @@ events for about seven days, so a contract's history starts at most a week befor
 a contract that emits no events shows no activity. The [sources page](../reference/onchain-sources.md)
 lists every limit.
 
+### Weekly active accounts
+
+The on-chain panel of your overview and **What SCF sees** show your project's **weekly active
+accounts**, by the SCF Growth Hack definition: an active account is "the account that initiated at
+least one operation" in the week. Veristar counts the distinct accounts that initiated at least one
+successful operation involving your **verified** accounts or contracts in each ISO week (Monday to
+Sunday, UTC). An account counts once a week, however many of your ids it used.
+
+Only verified ids count, so prove control of your ids to get a count. A week shows its number once
+it is over and every verified id has all seven days read; until then, or when a day could not be
+read whole, it shows the reason instead of a number, never zero. The
+[sources page](../reference/onchain-sources.md#weekly-active-accounts) explains how each kind of id
+is read.
+
 ## Add an account or a contract
 
 The ids you gave at enrollment are already listed. To add another:
@@ -102,14 +116,18 @@ within a day. A contract you list as a `[[CURRENCIES]]` `contract` shows as name
 ## What SCF sees
 
 **What SCF sees** shows the figures the SCF operator views show about your project for the same
-range, from the same queries: your project's row in Global web and Global API, its integrity grade,
-its on-chain column, and their daily series. **Export CSV** downloads your overview's daily numbers
+range, from the same queries: your project's row in Global web and Global API, its integrity grade
+with the **Appeal this grade** link, its on-chain column with the weekly active accounts, and their
+daily series. **Export CSV** downloads your overview's daily numbers
 (web, API and on-chain) for the range. The [overview guide](overview.md) explains each web and API
 number.
 
 ## What is stored
 
 Ledger data is public. Veristar stores the ids you declare, the proof of each (method and time, and
-the transaction hash or storage key a contract proof used), each account's home domain, and three
-counts per id and day. It stores no counterparty address, no transaction and no signature. The
+the transaction hash or storage key a contract proof used), each account's home domain, three
+counts per id and day, and one count of weekly active accounts per week. It stores no counterparty
+address, no transaction and no signature. While a week is open, the accounts behind its count are
+held only as keyed hashes under a key that exists for that week; both are deleted when the week
+closes. The
 requests to the ledger APIs carry the public ids only.

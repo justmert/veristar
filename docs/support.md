@@ -30,6 +30,7 @@ off.
 | Bug report | something that does not work as documented | `bug` |
 | Tenant support | onboarding, dashboards, tokens, enrollment, members, domain verification | `support` |
 | Erasure request help | an erasure request in the console that failed or whose result is unclear | `erasure` |
+| Integrity appeal | asking an operator to review your project's integrity grade; the console's **Appeal this grade** link fills it in | `integrity-appeal` |
 | Report a security vulnerability (link) | opens GitHub private vulnerability reporting | none, the report is private |
 
 Every form reminds you that the tracker is public and asks you not to paste tokens, keys, cookies,
@@ -41,11 +42,12 @@ controller of the data. Requests that reach the maintainers are forwarded to the
 (section 7 of the [DPA template](compliance/dpa-template.md)).
 
 GitHub applies a form's label only if the label exists in the repository. `bug` is one of GitHub's
-default labels. A maintainer creates the other two once:
+default labels. A maintainer creates the other three once:
 
 ```sh
 gh label create support --description "Help for an enrolled project" --color 0e8a16
 gh label create erasure --description "Help with an erasure request" --color 5319e7
+gh label create integrity-appeal --description "Review of an integrity grade" --color fbca04
 ```
 
 ## Targets
