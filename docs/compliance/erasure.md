@@ -152,8 +152,8 @@ web data deleted while it stays enrolled uses `site_reset` per site.
 You delete your own console account on the console's **Account** page (the
 account menu at the bottom of the sidebar, then **Account**, `/account`), or
 with `DELETE /api/me` (contract section 4.1.6). You confirm by typing your
-GitHub login, or your whole Stellar address for an account that signs in only
-with a wallet. Tested in `internal/controlplane/account`,
+GitHub login, or, for an account without GitHub, your whole Stellar address
+(wallet) or your whole passkey account address. Tested in `internal/controlplane/account`,
 `tests/isolation/console/account_test.go` and
 `tests/e2e-console/specs/account.spec.ts`.
 
@@ -166,19 +166,21 @@ The deletion runs in one transaction and:
 - removes you from every project, which revokes your MCP credentials for those
   projects; the reconciler then brings each project's Umami team in line;
 - deletes your MCP access keys, AI client connections and their tokens, your
-  sessions in every browser, and the invites addressed to your GitHub account
-  or your Stellar address;
+  sessions in every browser, and the invites addressed to your GitHub account,
+  your Stellar address or your passkey account address;
 - deletes your Umami user, which ends every dashboard token you held. If Umami
   cannot be reached, nothing is deleted and the console asks you to try again;
-- removes your GitHub id and login, your Stellar address and your Umami user
-  name from your account record. The record keeps
+- removes your GitHub id and login, your Stellar address, your passkey (its
+  credential id, public key and account address) and your Umami user name
+  from your account record. The record keeps
   only a random account id, so projects, sites, tokens and audit rows that name
   you as their creator or actor stay consistent;
 - writes one `account.delete` audit row that names you by that account id only.
 
 The audit log is append-only and keeps the rows written before the deletion.
 They name you by the account id. Some of them also hold your GitHub login or
-your Stellar address in their detail as it was at the time, for example
+your Stellar address or passkey account address in their detail as it was at
+the time, for example
 `user.sign_in`, `user.identity_link` and the `member.add` row of the project
 that added you.
 
@@ -188,7 +190,8 @@ service use them; revoke them on the **API keys** page before you delete the
 account if they should stop.
 
 Signing in with the same GitHub account or wallet later creates a new, empty
-account. For an operator, the new account is an operator again while its GitHub
+account. A deleted account's passkey no longer signs in; create a new passkey
+to start a new account. For an operator, the new account is an operator again while its GitHub
 id is in `OPERATOR_GITHUB_IDS` or its address in `OPERATOR_STELLAR_ADDRESSES`;
 take the entry out of that setting to end operator access.
 

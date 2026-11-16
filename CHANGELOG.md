@@ -70,6 +70,23 @@ here, before they take effect, as the processing terms require
   ([docs/runbooks/secret-rotation.md](docs/runbooks/secret-rotation.md)).
 - The removal purge deletes a removed project's usage reports (step
   `reports`).
+- Passkey sign-in: **Continue with a passkey** on the sign-in page creates a
+  [soropass](https://docs.soropass.dev/docs) passkey or signs in with one the
+  browser holds. A soropass passkey's ES256 key is the signer of a Stellar
+  smart account, and the account's contract address (C-address), derived from
+  the credential id and the key the way the soropass AccountFactory on the
+  public network deploys it, names the console account. The console runs the
+  ceremonies with `@soropass/core` 0.3.1; the control plane verifies the
+  WebAuthn assertion over a challenge of its own, bound to the console origin
+  and relying party, with user verification, a five minute expiry and single
+  use (`POST /api/auth/passkey/challenge` and `/verify`, contract 4.1.9). The
+  page runs under the unchanged content security policy.
+- A passkey links to and unlinks from an account like GitHub and a wallet
+  (`/api/me/identities/passkey`); the last sign-in method stays. Owners invite
+  a passkey account by its C-address, `OPERATOR_STELLAR_ADDRESSES` takes
+  C-addresses of passkey operators, and deleting an account removes its
+  passkey. Migration `00037` adds `passkey_address`, `passkey_credential_id`
+  and `passkey_public_key` to `cp.users`; tenants read the address only.
 
 ## [0.3.0] - 2026-11-16
 
