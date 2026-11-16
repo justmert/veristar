@@ -3,7 +3,7 @@
 
 -- name: SignInUser :one
 -- the numeric github id is the identity, the login can change. is_operator
--- comes from the roster through the users_operator_flag trigger (00038). a
+-- comes from the roster through the users_operator_flag trigger (00039). a
 -- deleted account's emptied row never matches (00031), so signing in again
 -- after deleting the account makes a new row.
 insert into cp.users (github_id, github_login, last_login_at)
@@ -40,7 +40,7 @@ select id, passkey_address, passkey_public_key from cp.users
 where passkey_credential_id = @passkey_credential_id and deleted_at is null;
 
 -- name: SetOperatorFlag :one
--- is_operator follows the roster (cp.operators, 00038) from both
+-- is_operator follows the roster (cp.operators, 00039) from both
 -- identities of the row. the users_operator_flag trigger already keeps it
 -- so on every identity change; this statement returns the row with the
 -- flag for the sign-in, link and unlink audit details.
