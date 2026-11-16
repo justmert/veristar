@@ -5,7 +5,6 @@ import { ArrowLeft, ArrowRight, Check, CircleAlert, ExternalLink } from "lucide-
 import { AnimatePresence, motion } from "motion/react";
 import { type ReactNode, useId, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
-import { webDashboardUrl } from "@/api/endpoints";
 import { ingestDayQuery, ingestMonthQuery, sitesQuery, snippetQuery } from "@/api/queries";
 import type { Ingest, Site, Snippet } from "@/api/schemas";
 import { CodeBlock, CopyField } from "@/components/code-block";
@@ -20,6 +19,7 @@ import { isNotFound } from "@/lib/errors";
 import { formatBytes, formatCount, formatDate } from "@/lib/format";
 import { outcomeHint, rejectionRows } from "@/lib/outcomes";
 import { CONSENT_START, readsTitleChoice, snippetGuides } from "@/lib/snippet-guides";
+import { webPath } from "@/lib/web-dashboard";
 import { NotFoundPage } from "./not-found";
 import { useProject } from "./project-layout";
 import { type FirstEvent, firstEvent, sitePath, snippetPath, verifyPath } from "./sites";
@@ -603,10 +603,7 @@ function FirstEventState({
                   size="sm"
                   className="max-lg:h-(--vs-control-touch)"
                 >
-                  <a href={webDashboardUrl(site.id, "primary")}>
-                    Open web dashboard
-                    <ExternalLink aria-hidden />
-                  </a>
+                  <Link to={webPath(site.tenant_id, site.id)}>Open web analytics</Link>
                 </Button>
               </div>
             ) : null}

@@ -1,7 +1,7 @@
 import { useQueries, useQuery } from "@tanstack/react-query";
-import { ArrowRight, ChevronRight, ExternalLink, Globe } from "lucide-react";
+import { ArrowRight, ChevronRight, Globe } from "lucide-react";
 import { Link, useSearchParams } from "react-router";
-import { type ApiFilters, webDashboardUrl } from "@/api/endpoints";
+import type { ApiFilters } from "@/api/endpoints";
 import { apiOverviewQuery, ingestMonthQuery, sitesQuery } from "@/api/queries";
 import type { ApiOverview, Ingest, Site } from "@/api/schemas";
 import { DbIpAttribution } from "@/components/dbip-attribution";
@@ -22,6 +22,7 @@ import {
 } from "@/components/web-charts";
 import { formatPercentile, percentileChange, relativeChange } from "@/lib/api-metrics";
 import { formatCount } from "@/lib/format";
+import { webPath } from "@/lib/web-dashboard";
 import { useProject } from "./project-layout";
 import { AddSiteButton, firstEvent, SitesTable, setupDone, snippetPath } from "./sites";
 
@@ -78,14 +79,12 @@ export function OverviewPage() {
                 }}
                 hint={range === "24h" ? "per hour" : "per day"}
               />
-              {only ? (
-                <Button asChild className="max-lg:h-(--vs-control-touch)">
-                  <a href={webDashboardUrl(only.id, "primary")}>
-                    Open web dashboard
-                    <ExternalLink aria-hidden />
-                  </a>
-                </Button>
-              ) : null}
+              <Button asChild className="max-lg:h-(--vs-control-touch)">
+                <Link to={webPath(tenant.id, only?.id)}>
+                  Web analytics
+                  <ArrowRight aria-hidden />
+                </Link>
+              </Button>
             </>
           ) : null
         }

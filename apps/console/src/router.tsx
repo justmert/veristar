@@ -36,9 +36,9 @@ import { SCFViewPage } from "@/pages/scf-view";
 import { SignInPage } from "@/pages/sign-in";
 import { SitesPage } from "@/pages/sites";
 import { SnippetPage } from "@/pages/snippet";
-import { SsoErrorPage } from "@/pages/sso-error";
 import { TermsPage } from "@/pages/terms";
 import { VerifyPage } from "@/pages/verify";
+import { WebPage } from "@/pages/web";
 import { queryClient } from "@/query-client";
 
 // the first paint while the session check runs: the mark breathing in the
@@ -72,7 +72,6 @@ async function requireSession({ request }: LoaderFunctionArgs) {
 export const router = createBrowserRouter([
   { path: "/sign-in", element: <SignInPage />, errorElement: <RouteErrorPage /> },
   { path: "/terms", element: <TermsPage />, errorElement: <RouteErrorPage /> },
-  { path: "/sso-error", element: <SsoErrorPage />, errorElement: <RouteErrorPage /> },
   // a shared signed report: public, no session (contract 20.5)
   { path: "/r/:reportId", element: <PublicReportPage />, errorElement: <RouteErrorPage /> },
   // the mcp oauth consent screen; it signs the person in itself, so the
@@ -95,6 +94,7 @@ export const router = createBrowserRouter([
         element: <ProjectLayout />,
         children: [
           { index: true, element: <OverviewPage /> },
+          { path: "web", element: <WebPage /> },
           { path: "sites", element: <SitesPage /> },
           { path: "sites/:siteId/snippet", element: <SnippetPage /> },
           { path: "sites/:siteId/verify", element: <VerifyPage /> },

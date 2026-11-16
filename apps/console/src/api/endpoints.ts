@@ -536,7 +536,7 @@ export const integrityApi = {
     request("GET", integrityPath(scope, tenantId, r), integrityReport, undefined, signal),
 };
 
-// browser navigations, not fetch calls (contract 4.1.1 and 4.4.1)
+// browser navigations, not fetch calls (contract 4.1.1)
 export function signInUrl(returnTo: string): string {
   return `/api/auth/github/start?return_to=${enc(returnTo)}`;
 }
@@ -544,8 +544,4 @@ export function signInUrl(returnTo: string): string {
 // links github to the signed-in account (4.1.8); the flow returns to /account
 export function linkGitHubUrl(): string {
   return "/api/auth/github/start?link=1";
-}
-
-export function webDashboardUrl(siteId: string, view: "primary" | "quarantine"): string {
-  return `/api/sso/umami?site=${enc(siteId)}${view === "quarantine" ? "&view=quarantine" : ""}`;
 }
