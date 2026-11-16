@@ -134,6 +134,10 @@ core_stage: services
 # the observability relay) and /stats (loopback, ssh tunnel only)
 core_haproxy_stats_port: 8404
 
+# umami's ui on the node's loopback (umami process 1 only), reached by a
+# platform administrator over an ssh tunnel; no public site serves umami
+core_umami_admin_port: 3300
+
 # where deploy.yml puts the drain flag; caddy answers 503 on port 80 while it
 # exists, which takes the node out of dns (deploy/caddy/assemble.sh)
 core_drain_dir: /etc/veristar/drain

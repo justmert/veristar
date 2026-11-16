@@ -7,11 +7,11 @@
 #   ansible-playbook -i inventories/<old env>/ playbooks/cutover-redirect.yml \
 #     -e cutover_new_domain=<new BASE_DOMAIN> -e cutover_redirect_breaks_snippets=true
 #
-# every old edge node then answers app., web., in. and otlp. of the old
+# every old edge node then answers app., in. and otlp. of the old
 # domain with a 308 to the same name, path and query under the new domain,
 # and keeps serving the pinned tracker files from its own gateway
-# (deploy/caddy/redirect.Caddyfile). the old zone must point app. and web.
-# at the edge nodes as well (infra/tofu, record sets); this play checks it.
+# (deploy/caddy/redirect.Caddyfile). the old zone must point app. at the
+# edge nodes as well (infra/tofu, record sets); this play checks it.
 #
 # THIS DOES NOT KEEP EXISTING SNIPPETS WORKING. measured in chromium, firefox
 # and webkit (tests/e2e/redirect): the redirected challenge and
@@ -38,10 +38,10 @@
           of this playbook: existing snippets stop delivering events on
           this path
 
-    - name: Resolve the old app. and web. names
+    - name: Resolve the old app. name
       ansible.builtin.command:
         argv: [dig, +short, "{{ sa_hostnames[item] }}", A]
-      loop: [app, web]
+      loop: [app]
       register: cutover_old_names
       changed_when: false
       delegate_to: localhost
@@ -49,7 +49,7 @@
       run_once: true
       when: sa_environment != 'local'
 
-    - name: Require the old app. and web. names on the edge nodes
+    - name: Require the old app. name on the edge nodes
       ansible.builtin.assert:
         that:
           - (item.stdout_lines | sort) == (groups['edge'] | map('extract', hostvars, 'sa_public_ipv4') | sort)
@@ -102,7 +102,7 @@
         follow_redirects: none
         status_code: [308]
         validate_certs: "{{ sa_tls != 'internal' }}"
-      loop: [in, otlp, app, web]
+      loop: [in, otlp, app]
       register: cutover_redirects
       failed_when: >-
         cutover_redirects.status != 308

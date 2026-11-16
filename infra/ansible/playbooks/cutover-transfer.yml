@@ -34,7 +34,6 @@
       in: "{{ cutover_edge }}"
       otlp: "{{ cutover_edge }}"
       app: "{{ cutover_core }}"
-      web: "{{ cutover_core }}"
     cutover_releases: "{{ (lookup('file', playbook_dir ~ '/../../../packages/tracker/releases/manifest.json') | from_json).versions }}"
   tasks:
     - name: Require the stage and the new nameservers
@@ -124,7 +123,7 @@
         label: "{{ item.0.item.version | default('') }}"
       when: cutover_stage == 'verify'
 
-    - name: Require the console, the web dashboards and the otlp endpoint over the new names
+    - name: Require the console and the otlp endpoint over the new names
       ansible.builtin.uri:
         url: "{{ item.url }}"
         method: "{{ item.method }}"
@@ -133,7 +132,6 @@
         follow_redirects: none
       loop:
         - {url: "https://{{ cutover_hosts.app }}/", method: GET, status: [200]}
-        - {url: "https://{{ cutover_hosts.web }}/api/heartbeat", method: GET, status: [200]}
         # no token: the collector refuses it, which proves the route reaches it
         - {url: "https://{{ cutover_hosts.otlp }}/v1/metrics", method: POST, status: [401]}
       when: cutover_stage == 'verify'

@@ -159,7 +159,7 @@
       "id": 4,
       "type": "stat",
       "title": "dashboard availability, 30 days",
-      "description": "share of probe intervals in which the console, the umami host and an authenticated machine api call all answered. objective 99.90%.",
+      "description": "share of probe intervals in which the console and an authenticated machine api call both answered. objective 99.90%.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"

@@ -144,15 +144,16 @@ services:
     # needed 25 minutes to catch up after a reboot held haproxy back through
     # sa-core-start.service, and every service of the node that reaches the
     # database through it (umami, jobs, metricswriter, the control plane)
-    # stayed down, web. answering 502 from that node
+    # stayed down, app. answering 502 from that node
     depends_on:
       postgres:
         condition: service_started
 {% endif %}
 
-  # umami process 1 also serves the ui, the read api for caddy and the admin
-  # api for the control plane and jobs; bootstrap starts it alone, so it runs
-  # umami's migrations before any other process exists
+  # umami process 1 also serves the read and admin api for the control plane
+  # and jobs; bootstrap starts it alone, so it runs umami's migrations before
+  # any other process exists. no caddy site proxies to umami: it is reachable
+  # from the private network only
   umami: &umami
     <<: *defaults
     image: {{ upstream_images.umami }}
@@ -160,6 +161,12 @@ services:
     env_file: [{{ secrets_env_dir }}/umami.env]
     volumes:
       - {{ sa_tls_dir }}/ca:/etc/sa-tls:ro
+    # umami's own ui on the node's loopback only, for a platform administrator
+    # over an ssh tunnel (ssh -L {{ core_umami_admin_port }}:127.0.0.1:{{ core_umami_admin_port }});
+    # tenants and operators read web analytics in the console, and no caddy
+    # site proxies to umami
+    ports:
+      - "127.0.0.1:{{ core_umami_admin_port }}:3000"
     # umami runs on postgresql alone; REDIS_URL, CLICKHOUSE_URL, KAFKA_URL, CLOUD_MODE,
     # MCP_ENABLED, DISABLE_BOT_CHECK and SKIP_LOCATION_HEADERS stay unset
     environment:
@@ -186,6 +193,8 @@ services:
   # healthy, so it never races it on a migration.
   umami-{{ i }}:
     <<: *umami
+    # process 1 alone holds the loopback port of the ui
+    ports: []
     depends_on:
       umami:
         condition: service_healthy
@@ -209,7 +218,6 @@ services:
       CONTROLPLANE_OPS_ADDR: 0.0.0.0:9090
       CONSOLE_ORIGIN: https://{{ sa_hostnames.app }}
       INGEST_ORIGIN: https://{{ sa_hostnames.in }}
-      WEB_ORIGIN: https://{{ sa_hostnames.web }}
       GITHUB_REDIRECT_URL: https://{{ sa_hostnames.app }}/api/auth/github/callback
       # the bootstrap of the operator roster: every start makes these
       # identities active operator admins. everyone else is added on the
@@ -307,7 +315,7 @@ services:
     <<: *defaults
     # the custom caddy build with the console's static files at /srv/console
     image: {{ platform_images.console }}
-    depends_on: [controlplane, umami]
+    depends_on: [controlplane]
     # both networks: see the public network above
     networks: {{ ['default', 'public'] + (['edge'] if core_node else []) }}
     env_file: [{{ secrets_env_dir }}/caddy.env]
@@ -316,14 +324,13 @@ services:
       BASE_DOMAIN: "{{ sa_base_domain }}"
       CONTROLPLANE_UPSTREAM: controlplane:8085
       CONSOLE_ROOT: /srv/console
-      UMAMI_UPSTREAM: umami:3000
       # caddy carries the ingest hot path on a converged node
       # (docs/reference/gateway-limits.md, "capacity")
       GOGC: "{{ sa_ingest_gogc }}"
       GODEBUG: adaptivestackstart=1
 {% if core_node %}
-      # port 80: "/" is the edge health (in. and otlp.), "/core" this
-      # project's (app. and web.); deploy/caddy/assemble.sh, tier node
+      # port 80: "/" is the edge health (in. and otlp.), "/core" the
+      # console's (app.); deploy/caddy/assemble.sh, tier node
       GATEWAY_UPSTREAM: gateway:8080
       COLLECTOR_GRPC_UPSTREAM: collector:4317
       COLLECTOR_HTTP_UPSTREAM: collector:4318
