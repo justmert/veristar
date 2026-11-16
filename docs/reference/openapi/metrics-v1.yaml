@@ -1158,7 +1158,7 @@ components:
     APINumbers:
       type: object
       required: [requests, requests_4xx, requests_5xx, rate_4xx, rate_5xx, p50_seconds, p50_over_10s,
-                 p95_seconds, p95_over_10s, p99_seconds, p99_over_10s, lossy]
+                 p95_seconds, p95_over_10s, p99_seconds, p99_over_10s, lossy, infrastructure_requests]
       properties:
         requests:
           $ref: '#/components/schemas/Count'
@@ -1188,12 +1188,17 @@ components:
         lossy:
           type: boolean
           description: Some row was re-bucketed inexactly, so percentiles are approximate.
+        infrastructure_requests:
+          $ref: '#/components/schemas/Count'
+          description: >-
+            CORS preflights, health and probe routes and requests from known health checkers.
+            Every other number of the item leaves them out.
     APIDaily:
       type: object
       additionalProperties: false
       required: [tenant_id, day, services, span_services, source, requests, requests_4xx, requests_5xx,
                  rate_4xx, rate_5xx, p50_seconds, p50_over_10s, p95_seconds, p95_over_10s, p99_seconds,
-                 p99_over_10s, lossy]
+                 p99_over_10s, lossy, infrastructure_requests]
       allOf:
         - $ref: '#/components/schemas/APINumbers'
       properties:
@@ -1222,6 +1227,7 @@ components:
         p99_seconds: true
         p99_over_10s: true
         lossy: true
+        infrastructure_requests: true
     APIDailyList:
       type: object
       additionalProperties: false
@@ -1242,7 +1248,7 @@ components:
       additionalProperties: false
       required: [tenant_id, day, service, method, route, source, requests, requests_4xx, requests_5xx,
                  rate_4xx, rate_5xx, p50_seconds, p50_over_10s, p95_seconds, p95_over_10s, p99_seconds,
-                 p99_over_10s, lossy]
+                 p99_over_10s, lossy, infrastructure_requests]
       allOf:
         - $ref: '#/components/schemas/APINumbers'
       properties:
@@ -1272,6 +1278,7 @@ components:
         p99_seconds: true
         p99_over_10s: true
         lossy: true
+        infrastructure_requests: true
     APIRouteDailyList:
       type: object
       additionalProperties: false
@@ -1292,7 +1299,7 @@ components:
       additionalProperties: false
       required: [tenant_id, hour, services, span_services, source, requests, requests_4xx, requests_5xx,
                  rate_4xx, rate_5xx, p50_seconds, p50_over_10s, p95_seconds, p95_over_10s, p99_seconds,
-                 p99_over_10s, lossy]
+                 p99_over_10s, lossy, infrastructure_requests]
       allOf:
         - $ref: '#/components/schemas/APINumbers'
       properties:
@@ -1319,6 +1326,7 @@ components:
         p99_seconds: true
         p99_over_10s: true
         lossy: true
+        infrastructure_requests: true
     APIHourlyList:
       type: object
       additionalProperties: false
