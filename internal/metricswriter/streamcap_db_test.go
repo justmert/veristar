@@ -62,7 +62,7 @@ func TestStreamCapCountsOnlyActiveStreams(t *testing.T) {
 				Point: Point{Tenant: tenant.String(), ResourceHash: fmt.Sprintf("%064x", g+1), Metric: metricDuration,
 					Attrs: []Attr{{attrRoute, fmt.Sprintf("/r%d", r)}}, Temporality: Cumulative,
 					Start: at.Add(-10 * time.Second).UnixNano(), Time: at.UnixNano(), Count: 1, Sum: 0.02, Counts: counts},
-				TokenID: token, Source: SourceMetric, Service: "api", Method: "GET", Route: fmt.Sprintf("/r%d", r), Status: 200,
+				TokenID: token, Source: SourceMetric, Service: "api", Method: "GET", Route: fmt.Sprintf("/r%d", r), Status: 200, Class: "app",
 			})
 		}
 		return &item{id: uuid.NewString(), tenant: tenant, meta: &jetstream.MsgMetadata{Timestamp: at.Add(time.Second)},

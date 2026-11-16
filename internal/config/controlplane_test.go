@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 )
 
 func controlPlaneEnv() map[string]string {
@@ -56,6 +57,16 @@ func TestLoadControlPlane(t *testing.T) {
 		!c.OperatorStellarAddresses["CBH2J5X4WBV2KT6NSUE47DRFBUHTVJOBJTBGGNELJ2DZXTDB3AYRAXAO"] {
 		t.Fatalf("passkey operators: %v %v", err, c.OperatorStellarAddresses)
 	}
+	if c.OperatorStepUpMaxAge != DefaultStepUpMaxAge || c.OperatorEnrollWindow != DefaultEnrollWindow {
+		t.Fatalf("step-up defaults: %v %v", c.OperatorStepUpMaxAge, c.OperatorEnrollWindow)
+	}
+	env = controlPlaneEnv()
+	env["OPERATOR_STEP_UP_MAX_AGE"] = "30m"
+	env["OPERATOR_ENROLL_WINDOW"] = "72h"
+	if c, err = LoadControlPlane(FromMap(env)); err != nil || c.OperatorStepUpMaxAge != 30*time.Minute ||
+		c.OperatorEnrollWindow != 72*time.Hour {
+		t.Fatalf("step-up settings: %v %v %v", err, c.OperatorStepUpMaxAge, c.OperatorEnrollWindow)
+	}
 	env = controlPlaneEnv()
 	env["TRACKER_NPM_PACKAGE"] = "tracker"
 	if c, err = LoadControlPlane(FromMap(env)); err != nil || c.TrackerNPMPackage != "tracker" {
@@ -74,16 +85,20 @@ func TestLoadControlPlaneRefuses(t *testing.T) {
 		"bad passkey operator": {"OPERATOR_STELLAR_ADDRESSES", "CBH2J5X4WBV2KT6NSUE47DRFBUHTVJOBJTBGGNELJ2DZXTDB3AYRAXAA"},
 		"muxed wallet operator": {"OPERATOR_STELLAR_ADDRESSES",
 			"MA7QYNF7SOWQ3GLR2BGMZEHXAVIRZA4KVWLTJJFC7MGXUA74P7UJUAAAAAAAAAAAAGZFQ"},
-		"short state key":      {"OAUTH_STATE_KEY", base64.StdEncoding.EncodeToString([]byte("short"))},
-		"state key not base64": {"OAUTH_STATE_KEY", "not base64!"},
-		"origin with path":     {"CONSOLE_ORIGIN", "https://app.example.org/x"},
-		"origin with slash":    {"CONSOLE_ORIGIN", "https://app.example.org/"},
-		"origin uppercase":     {"CONSOLE_ORIGIN", "https://App.example.org"},
-		"redirect elsewhere":   {"GITHUB_REDIRECT_URL", "https://evil.example.org/api/auth/github/callback"},
-		"redirect wrong path":  {"GITHUB_REDIRECT_URL", "https://app.example.org/callback"},
-		"same ops addr":        {"CONTROLPLANE_OPS_ADDR", "0.0.0.0:8085"},
-		"missing client id":    {"GITHUB_CLIENT_ID", ""},
-		"missing user pw key":  {"UMAMI_USER_PASSWORD_KEY", ""},
+		"short state key":        {"OAUTH_STATE_KEY", base64.StdEncoding.EncodeToString([]byte("short"))},
+		"state key not base64":   {"OAUTH_STATE_KEY", "not base64!"},
+		"origin with path":       {"CONSOLE_ORIGIN", "https://app.example.org/x"},
+		"origin with slash":      {"CONSOLE_ORIGIN", "https://app.example.org/"},
+		"origin uppercase":       {"CONSOLE_ORIGIN", "https://App.example.org"},
+		"redirect elsewhere":     {"GITHUB_REDIRECT_URL", "https://evil.example.org/api/auth/github/callback"},
+		"redirect wrong path":    {"GITHUB_REDIRECT_URL", "https://app.example.org/callback"},
+		"same ops addr":          {"CONTROLPLANE_OPS_ADDR", "0.0.0.0:8085"},
+		"missing client id":      {"GITHUB_CLIENT_ID", ""},
+		"missing user pw key":    {"UMAMI_USER_PASSWORD_KEY", ""},
+		"step-up too long":       {"OPERATOR_STEP_UP_MAX_AGE", "48h"},
+		"step-up too short":      {"OPERATOR_STEP_UP_MAX_AGE", "1m"},
+		"step-up not duration":   {"OPERATOR_STEP_UP_MAX_AGE", "twelve hours"},
+		"enroll window too long": {"OPERATOR_ENROLL_WINDOW", "200h"},
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {

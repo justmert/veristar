@@ -62,6 +62,7 @@ values ($1, $2, 'api', 'GET', '/a', 200, 'metric', '{1,0,0,0,0,0,0,0,0,0,0,0,0,0
 	counts[0] = 5
 	rows := map[rowKey]*row{{
 		tenant: tenant, minute: hour.Add(58 * time.Minute).Unix(), service: "api", method: "GET", route: "/a", status: 200, source: SourceMetric,
+		class: "app",
 	}: {count: 5, sum: 0.005, counts: counts, points: 1}}
 	var during apirollup.Result
 	require.NoError(t, writer.WithRole(t.Context(), pdb.RoleMetricsWriter, func(tx pgx.Tx) error {
