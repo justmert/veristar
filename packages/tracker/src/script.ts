@@ -36,5 +36,6 @@ import { type BeforeSend, createTracker, type Payload } from "./index.ts";
     domains: (attr("domains") || "").split(","),
     beforeSend,
     walletsKit: attr("wallets-kit") === "true",
+    sendTitle: attr("send-title") === "true",
   });
 })(window);

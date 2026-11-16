@@ -273,6 +273,8 @@ describe("data-wallets-kit through createTracker", () => {
   function page(gpc = false): Window & typeof globalThis {
     const dom = new JSDOM("<!doctype html><title>dapp</title>", {
       url: "https://dapp.example/",
+      // a visible page, so a started tracker sends its pageview (1.3.0)
+      pretendToBeVisual: true,
       beforeParse(w) {
         w.fetch = fetch;
         Object.defineProperty(w, "crypto", { value: globalThis.crypto, configurable: true });

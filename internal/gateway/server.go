@@ -13,6 +13,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 
+	"github.com/justmert/veristar/internal/coverage"
 	"github.com/justmert/veristar/internal/events"
 	"github.com/justmert/veristar/internal/integrity"
 	"github.com/justmert/veristar/internal/registry"
@@ -49,6 +50,9 @@ type ServerConfig struct {
 	Stats            *Stats
 	Publisher        *Publisher
 	Releases         *Releases
+	// Scripts attributes tracker file requests to a site for the two
+	// coverage counters (internal/coverage).
+	Scripts *ScriptAttribution
 	// MaxBody is GATEWAY_MAX_BODY, at most events.MaxBody.
 	MaxBody    int
 	Log        *slog.Logger
@@ -84,7 +88,7 @@ type Server struct {
 func NewServer(c ServerConfig) (*Server, error) {
 	if c.Sites == nil || c.Challenger == nil || c.Proofs == nil || c.Signals == nil || c.ClientIP == nil ||
 		c.Geo == nil || c.Network == nil || c.Sightings == nil || c.Visitor == nil || c.Cluster == nil || c.Volume == nil || c.Limiter == nil || c.ChallengeLimiter == nil || c.Stats == nil ||
-		c.Publisher == nil || c.Releases == nil || c.Log == nil || c.Registerer == nil || c.Now == nil {
+		c.Publisher == nil || c.Releases == nil || c.Scripts == nil || c.Log == nil || c.Registerer == nil || c.Now == nil {
 		return nil, errors.New("gateway: ServerConfig is missing a dependency")
 	}
 	if c.MaxBody < 1 || c.MaxBody > events.MaxBody {
@@ -188,6 +192,30 @@ func (s *Server) tracker(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write(body)
 	}
 	s.observe(routeTracker, "served", start)
+	s.countScript(r)
+}
+
+// countScript adds a served tracker file to the coverage counters of the
+// site it was requested for: every request, and the ones that carried global
+// privacy control. a browser with the signal on loads the file but the
+// tracker then sends nothing, so these two counters are the only trace of
+// the visits that are not measured.
+func (s *Server) countScript(r *http.Request) {
+	if r.Method != http.MethodGet || !ScriptCountable(r.Header) {
+		return
+	}
+	site, ok := s.c.Scripts.Site(r.Header)
+	if !ok {
+		return
+	}
+	if err := s.c.Stats.Count(site, coverage.ScriptRequests); err != nil {
+		s.c.Log.Error("script request not counted", "error", err.Error())
+	}
+	if SendsGPC(r.Header) {
+		if err := s.c.Stats.Count(site, coverage.ScriptGPC); err != nil {
+			s.c.Log.Error("script request with gpc not counted", "error", err.Error())
+		}
+	}
 }
 
 // challenge answers GET /v1/c?w=<site id> for an active site, from one of
@@ -296,6 +324,9 @@ type verdict struct {
 	// today; both are counted on EDGE_STATS beside the outcome
 	class   integrity.NetClass
 	network string
+	// signals are the page signal outcomes of an accepted page view or a
+	// never-visible notice (integrity.Signals)
+	signals []string
 }
 
 func refused(r Reason, site string) verdict {
@@ -327,6 +358,11 @@ func (s *Server) event(w http.ResponseWriter, r *http.Request) {
 	if v.network != "" {
 		if err := s.c.Stats.Count(v.site, integrity.NetworkPrefix+v.network); err != nil {
 			s.c.Log.Error("network sighting not counted", "error", err.Error())
+		}
+	}
+	for _, sig := range v.signals {
+		if err := s.c.Stats.Count(v.site, sig); err != nil {
+			s.c.Log.Error("page signal not counted", "signal", sig, "error", err.Error())
 		}
 	}
 }
@@ -408,6 +444,15 @@ func (s *Server) checkEvent(ctx context.Context, r *http.Request, used **events.
 	}
 	if s.c.Limiter.Allow(site.ID, pk) != RateAllowed {
 		return refused(ReasonRateLimited, site.ID)
+	}
+	if wire.Type == events.TypeNeverVisible {
+		// the notice passed every check an event passes, so it cannot be
+		// sent for a site from anywhere but its own pages, and costs a proof
+		// like an event. it is counted and never queued: there is no page
+		// view to store. the integrity grade reads it as a share of the
+		// site's page views, so a flood of notices can only lower the
+		// site's own grade.
+		return verdict{status: http.StatusAccepted, outcome: integrity.SignalNeverVisible, site: site.ID}
 	}
 
 	// every browser sends a user agent; the visitor token needs one
@@ -508,5 +553,14 @@ func (s *Server) checkEvent(ctx context.Context, r *http.Request, used **events.
 	if networkKey != "" && s.c.Sightings.First(site.ID, s.c.Now().UTC().Format(time.DateOnly), networkKey) {
 		network = networkKey
 	}
-	return verdict{status: http.StatusAccepted, outcome: outcome, site: site.ID, class: class, network: network}
+	v := verdict{status: http.StatusAccepted, outcome: outcome, site: site.ID, class: class, network: network}
+	// the framed share is taken of the page views of trackers that can
+	// report a frame, so older releases on the same site do not dilute it
+	if wire.Type == events.TypePageview && integrity.ReportsSignals(wire.SDKVersion) {
+		v.signals = append(v.signals, integrity.SignalViews)
+		if wire.Framed {
+			v.signals = append(v.signals, integrity.SignalFramed)
+		}
+	}
+	return v
 }

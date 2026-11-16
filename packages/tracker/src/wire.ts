@@ -47,7 +47,11 @@ export const STALE_PROOF_REASONS: readonly string[] = [
   "rejected_challenge_tag",
 ];
 
-export type EventType = "pv" | "ev";
+// pv pageview, ev custom event, nv never visible: the page was hidden from
+// load until it was left, so no pageview was counted. an nv notice carries no
+// url and is never stored as an event; the gateway only counts it per site
+// and day for the integrity grade.
+export type EventType = "pv" | "ev" | "nv";
 
 // flat object only: nested values are refused by the gateway
 export type WireScalar = string | number | boolean;
@@ -78,11 +82,16 @@ export type WireEvent = {
   w: string;
   t: EventType;
   h: string;
-  u: string;
-  r: string;
-  ti: string;
-  s: string;
-  l: string;
+  // u and r are absent on an nv notice only
+  u?: string;
+  r?: string;
+  // title, screen and language are sent from 1.3.0 only when the site asks
+  // for them (data-send-title, or a before-send hook that sets them)
+  ti?: string;
+  s?: string;
+  l?: string;
+  // true when the page runs inside a frame (from 1.3.0); absent otherwise
+  fr?: true;
   n?: string;
   d?: WireData;
   ts: number;

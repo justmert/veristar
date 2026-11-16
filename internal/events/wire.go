@@ -58,7 +58,10 @@ type Wire struct {
 	Title      string
 	Screen     string
 	Language   string
-	Name       string
+	// Framed is true when the page runs inside a frame (field fr, tracker
+	// 1.3.0 on)
+	Framed bool
+	Name   string
 	// Data holds string, json.Number and bool values only.
 	Data map[string]any
 	// ClientTS is informational only and never trusted.
@@ -83,7 +86,9 @@ var lowerHex = regexp.MustCompile(`^[0-9a-f]+$`)
 
 // ParseWire parses and validates one wire format v1 body. it refuses
 // unknown, duplicate and null fields, values of the wrong type, trailing
-// data and anything over the limits.
+// data and anything over the limits. ti, s and l are optional since tracker
+// 1.3.0, which sends them only when the site asks; fr and the nv type are
+// additions of the same release that older trackers never send.
 func ParseWire(body []byte) (*Wire, error) {
 	if len(body) > MaxBody {
 		return nil, &ParseError{Kind: ErrBodyTooLarge, Reason: "body_too_large"}
@@ -103,7 +108,7 @@ func ParseWire(body []byte) (*Wire, error) {
 
 	var w Wire
 	known := map[string]bool{"v": true, "sv": true, "w": true, "t": true, "h": true, "u": true, "r": true, "ti": true,
-		"s": true, "l": true, "n": true, "d": true, "ts": true, "p": true}
+		"s": true, "l": true, "fr": true, "n": true, "d": true, "ts": true, "p": true}
 	for k := range raw {
 		if !known[k] {
 			return nil, malformed("unknown_field")
@@ -131,7 +136,7 @@ func ParseWire(body []byte) (*Wire, error) {
 	if w.Type, err = stringField(raw, "t", true, 2, true); err != nil {
 		return nil, err
 	}
-	if w.Type != TypePageview && w.Type != TypeEvent {
+	if w.Type != TypePageview && w.Type != TypeEvent && w.Type != TypeNeverVisible {
 		return nil, malformed("invalid_type")
 	}
 	if w.Hostname, err = stringField(raw, "h", true, MaxHostname, true); err != nil {
@@ -140,26 +145,45 @@ func ParseWire(body []byte) (*Wire, error) {
 	if !validHostname(w.Hostname) {
 		return nil, malformed("invalid_hostname")
 	}
-	if w.URL, err = stringField(raw, "u", true, MaxURL, true); err != nil {
+	if w.Type == TypeNeverVisible {
+		// a notice says only that a page of the site was left unseen: no
+		// page, referrer, device field or event content
+		for _, k := range []string{"u", "r", "ti", "s", "l", "n", "d"} {
+			if _, ok := raw[k]; ok {
+				return nil, malformed("page_fields_on_notice")
+			}
+		}
+	} else {
+		if w.URL, err = stringField(raw, "u", true, MaxURL, true); err != nil {
+			return nil, err
+		}
+		if w.URL == "" || w.URL[0] != '/' {
+			return nil, malformed("invalid_url")
+		}
+		if w.Referrer, err = stringField(raw, "r", true, MaxReferrer, false); err != nil {
+			return nil, err
+		}
+	}
+	if w.Title, err = stringField(raw, "ti", false, MaxTitle, false); err != nil {
 		return nil, err
 	}
-	if w.URL == "" || w.URL[0] != '/' {
-		return nil, malformed("invalid_url")
-	}
-	if w.Referrer, err = stringField(raw, "r", true, MaxReferrer, false); err != nil {
-		return nil, err
-	}
-	if w.Title, err = stringField(raw, "ti", true, MaxTitle, false); err != nil {
-		return nil, err
-	}
-	if w.Screen, err = stringField(raw, "s", true, MaxScreen, true); err != nil {
+	if w.Screen, err = stringField(raw, "s", false, MaxScreen, true); err != nil {
 		return nil, err
 	}
 	if w.Screen != "" && !screenRe.MatchString(w.Screen) {
 		return nil, malformed("invalid_screen")
 	}
-	if w.Language, err = stringField(raw, "l", true, MaxLanguage, true); err != nil {
+	if w.Language, err = stringField(raw, "l", false, MaxLanguage, true); err != nil {
 		return nil, err
+	}
+	if b, ok := raw["fr"]; ok {
+		switch string(b) {
+		case "true":
+			w.Framed = true
+		case "false":
+		default:
+			return nil, malformed("invalid_framed")
+		}
 	}
 	if w.Language != "" && !languageRe.MatchString(w.Language) {
 		return nil, malformed("invalid_language")
@@ -193,7 +217,7 @@ func ParseWire(body []byte) (*Wire, error) {
 				return nil, err
 			}
 		}
-	default:
+	case TypePageview:
 		if hasName || hasData {
 			return nil, malformed("event_fields_on_pageview")
 		}
