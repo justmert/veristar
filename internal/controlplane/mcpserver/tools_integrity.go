@@ -15,9 +15,12 @@ import (
 const integrityDescription = "The integrity grade of web traffic over whole UTC days: A, B or C per site and day " +
 	"with the reasons that lowered it, computed by the platform from what its edge observes (the network class of " +
 	"each visitor's network, the distinct networks, the proof of work, the quarantine band) and checked against the " +
-	"site's own baseline. The tracker on the page can only lower a grade, never raise it. The range grade is C when " +
+	"site's own baseline. The tracker on the page can only lower a grade, never raise it: from tracker 1.3.0 the page " +
+	"also reports views inside a frame and loads that were never visible. The range grade is C when " +
 	"at least a quarter of the graded site days are C, B when at least a quarter are B or C, A otherwise. Days with " +
-	"too little traffic carry no grade."
+	"too little traffic carry no grade. The report also carries coverage per project, site and day: requests for the " +
+	"tracker file and the part that carried Global Privacy Control, whose share (unmeasured_share, null below 100 " +
+	"requests) estimates the visits that are not measured because the browser asks not to be tracked."
 
 func (s *Server) addIntegrityTenantTools(srv *mcp.Server) {
 	addTool(s, srv, &mcp.Tool{

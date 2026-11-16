@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/justmert/veristar/internal/controlplane/coverageview"
 	"github.com/justmert/veristar/internal/controlplane/httpx"
 	"github.com/justmert/veristar/internal/controlplane/integrityview"
 	"github.com/justmert/veristar/internal/controlplane/onchain"
@@ -25,7 +26,7 @@ var webSorts = withGrowthSorts(map[string]string{
 	"quarantine_pageviews": "quarantine_pageviews", "quarantine_visitors": "quarantine_visitors",
 	"quarantine_share": "quarantine_share", "ingest_requests": "ingest_requests",
 	"ingest_rejected": "ingest_rejected", "rejected_share": "rejected_share",
-	"integrity": "integrity_rank",
+	"integrity": "integrity_rank", "unmeasured_share": "unmeasured_share",
 })
 
 // webDims are the breakdowns of the web views, in contract order.
@@ -64,6 +65,11 @@ ig as (
   where g.day between @from_day::date and @to_day::date
   group by g.tenant_id
 ),
+cv as (
+  -- tracker file requests and their global privacy control part over the
+  -- range (agg.web_coverage_daily)
+` + coverageview.TenantSQL + `
+),
 x as (
   select t.id, t.slug, t.name, t.status, t.created_at,
          coalesce(s.sites, 0) as sites, coalesce(s.sites_verified, 0) as sites_verified,
@@ -76,13 +82,15 @@ x as (
          coalesce(w.pageviews, 0) > 0 as has_web_data,
          coalesce(ap.has_api, false) as has_api_data,
          coalesce(i.requests, 0) as ingest_requests, coalesce(i.rejected, 0) as ingest_rejected,
-         coalesce(ig.days_a, 0) as days_a, coalesce(ig.days_b, 0) as days_b, coalesce(ig.days_c, 0) as days_c,` + kpiCols + `
+         coalesce(ig.days_a, 0) as days_a, coalesce(ig.days_b, 0) as days_b, coalesce(ig.days_c, 0) as days_c,
+         coalesce(cv.script_requests, 0) as script_requests, coalesce(cv.gpc_requests, 0) as gpc_requests,` + kpiCols + `
   from t
   left join s on s.tenant_id = t.id
   left join w on w.tenant_id = t.id
   left join ap on ap.tenant_id = t.id
   left join i on i.tenant_id = t.id
-  left join ig on ig.tenant_id = t.id` + kpiJoins + `
+  left join ig on ig.tenant_id = t.id
+  left join cv on cv.tenant_id = t.id` + kpiJoins + `
 ),
 y as (
   select x.*,
@@ -91,7 +99,8 @@ y as (
          case when pageviews + quarantine_pageviews > 0
               then quarantine_pageviews::double precision / (pageviews + quarantine_pageviews) end as quarantine_share,
          case when ingest_requests > 0 then ingest_rejected::double precision / ingest_requests end as rejected_share,
-         ` + integritySQL + ` as integrity_rank
+         ` + integritySQL + ` as integrity_rank,
+         ` + coverageview.ShareSQL + ` as unmeasured_share
   from x
   where ` + derivedFilter + `
     and (@integrity_min::int is null or ` + integritySQL + ` >= @integrity_min::int)
@@ -101,9 +110,11 @@ y as (
 type WebProject struct {
 	Tenant TenantRef `json:"tenant"`
 	SiteCounts
-	HasWebData          bool                  `json:"has_web_data"`
-	HasAPIData          bool                  `json:"has_api_data"`
-	Integrity           IntegrityGrade        `json:"integrity"`
+	HasWebData bool           `json:"has_web_data"`
+	HasAPIData bool           `json:"has_api_data"`
+	Integrity  IntegrityGrade `json:"integrity"`
+	// Coverage estimates the visits not measured because of privacy signals
+	Coverage            coverageview.Estimate `json:"coverage"`
 	Pageviews           int64                 `json:"pageviews"`
 	Visitors            int64                 `json:"visitors"`
 	Visits              int64                 `json:"visits"`
@@ -129,7 +140,8 @@ const webRowSelect = `
 			select id, slug, name, status, created_at, sites, sites_verified, sites_with_stellar_toml,
 			       has_web_data, has_api_data, pageviews, visitors, visits, bounces, totaltime,
 			       bounce_rate, avg_visit_duration, quarantine_pageviews, quarantine_visitors, quarantine_share,
-			       ingest_requests, ingest_rejected, rejected_share, days_a, days_b, days_c,` + kpiSelect + `
+			       ingest_requests, ingest_rejected, rejected_share, days_a, days_b, days_c,
+			       script_requests, gpc_requests,` + kpiSelect + `
 			from y`
 
 // scanWebRow reads one row of webRowSelect.
@@ -142,9 +154,11 @@ func scanWebRow(row pgx.Row) (WebProject, error) {
 		&p.Pageviews, &p.Visitors, &p.Visits, &p.Bounces, &p.Totaltime,
 		&p.BounceRate, &p.AvgVisitDuration, &p.QuarantinePageviews, &p.QuarantineVisitors, &p.QuarantineShare,
 		&p.IngestRequests, &p.IngestRejected, &p.RejectedShare,
-		&p.Integrity.DaysA, &p.Integrity.DaysB, &p.Integrity.DaysC}, k.dest()...)...)
+		&p.Integrity.DaysA, &p.Integrity.DaysB, &p.Integrity.DaysC,
+		&p.Coverage.ScriptRequests, &p.Coverage.GPCRequests}, k.dest()...)...)
 	p.Tenant.CreatedAt = httpx.Timestamp(at)
 	p.Integrity.derive()
+	p.Coverage = coverageview.Of(p.Coverage.ScriptRequests, p.Coverage.GPCRequests)
 	p.Comparison = k.comparison()
 	return p, err
 }
@@ -314,8 +328,10 @@ type Breakdown struct {
 
 // WebCompareProject is one project of GET /api/operator/web/compare.
 type WebCompareProject struct {
-	Tenant     TenantRef             `json:"tenant"`
-	Integrity  integrityview.Summary `json:"integrity"`
+	Tenant    TenantRef             `json:"tenant"`
+	Integrity integrityview.Summary `json:"integrity"`
+	// Coverage estimates the visits not measured because of privacy signals
+	Coverage   coverageview.Estimate `json:"coverage"`
 	Totals     WebTotals             `json:"totals"`
 	Series     []WebPoint            `json:"series"`
 	Breakdowns map[string]Breakdown  `json:"breakdowns"`
@@ -401,6 +417,7 @@ func (g *Global) webCompare(w http.ResponseWriter, r *http.Request) error {
 			}
 			p.Totals.QuarantineVisitors = quarantineVisitors[t.ID]
 			p.Integrity = grades[t.ID].Summary
+			p.Coverage = grades[t.ID].Coverage
 			p.Totals.derive()
 			b := tops[t.ID]
 			for _, d := range webDims {

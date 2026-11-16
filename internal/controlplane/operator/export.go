@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/justmert/veristar/internal/controlplane/audit"
+	"github.com/justmert/veristar/internal/controlplane/coverageview"
 	"github.com/justmert/veristar/internal/controlplane/exports"
 	"github.com/justmert/veristar/internal/controlplane/httpx"
 	"github.com/justmert/veristar/internal/controlplane/integrityview"
@@ -151,6 +152,14 @@ func comparisonCells(c Comparison) []string {
 	return out
 }
 
+// coverageHeader and coverageCells are the estimate of unmeasured visits of
+// a row (contract 17.5)
+var coverageHeader = []string{"script_requests", "gpc_requests", "unmeasured_share"}
+
+func coverageCells(c coverageview.Estimate) []string {
+	return []string{exports.Int(c.ScriptRequests), exports.Int(c.GPCRequests), exports.Float(c.UnmeasuredShare)}
+}
+
 var tenantHeader = []string{
 	"tenant_id", "slug", "name", "status", "created_at", "sites", "sites_verified", "sites_with_stellar_toml",
 	"has_web_data", "has_api_data",
@@ -208,7 +217,7 @@ func (e *Exports) webProjects(w http.ResponseWriter, r *http.Request) error {
 	cw, err := exports.NewWriter(w, exports.FileName("veristar-web-projects", lq.Range.From.Format(time.DateOnly), lq.Range.To.Format(time.DateOnly)), cat(tenantHeader, []string{
 		"pageviews", "visitors", "visits", "bounces", "totaltime_seconds", "bounce_rate", "avg_visit_duration_seconds",
 		"quarantine_pageviews", "quarantine_visitors", "quarantine_share", "ingest_requests", "ingest_rejected", "rejected_share",
-	}, integrityHeader, summaryHeader, comparisonHeader))
+	}, integrityHeader, coverageHeader, summaryHeader, comparisonHeader))
 	if err != nil {
 		panic(http.ErrAbortHandler)
 	}
@@ -218,7 +227,7 @@ func (e *Exports) webProjects(w http.ResponseWriter, r *http.Request) error {
 			exports.Float(p.BounceRate), exports.Float(p.AvgVisitDuration), exports.Int(p.QuarantinePageviews),
 			exports.Int(p.QuarantineVisitors), exports.Float(p.QuarantineShare), exports.Int(p.IngestRequests),
 			exports.Int(p.IngestRejected), exports.Float(p.RejectedShare),
-		}, integrityCells(p.Integrity), summaryCells(p.Onchain), comparisonCells(p.Comparison))...); err != nil {
+		}, integrityCells(p.Integrity), coverageCells(p.Coverage), summaryCells(p.Onchain), comparisonCells(p.Comparison))...); err != nil {
 			panic(http.ErrAbortHandler)
 		}
 	}
@@ -368,6 +377,7 @@ func (e *Exports) webCompare(w http.ResponseWriter, r *http.Request) error {
 	var chainOf map[uuid.UUID]CompareOnchain
 	var grades map[integrityview.DayKey]integrityview.Summary
 	var cohorts map[uuid.UUID]Cohort
+	var cov coverageview.Counts
 	err = e.g.db.WithOperator(ctx, func(tx pgx.Tx) error {
 		if err := snapshot(ctx, tx); err != nil {
 			return err
@@ -385,6 +395,9 @@ func (e *Exports) webCompare(w http.ResponseWriter, r *http.Request) error {
 		if cohorts, err = loadCohorts(ctx, tx, ids); err != nil {
 			return err
 		}
+		if cov, err = coverageview.Load(ctx, tx, ids, rg.From, rg.To); err != nil {
+			return err
+		}
 		chainOf, err = compareOnchain(ctx, tx, ids, rg, e.g.now())
 		return err
 	})
@@ -398,7 +411,7 @@ func (e *Exports) webCompare(w http.ResponseWriter, r *http.Request) error {
 	cw, err := exports.NewWriter(w, exports.FileName("veristar-web-compare", rg.From.Format(time.DateOnly), rg.To.Format(time.DateOnly)), cat(compareTenantHeader, []string{
 		"aggregated", "pageviews", "visitors", "visits", "bounces", "totaltime_seconds", "bounce_rate",
 		"avg_visit_duration_seconds", "quarantine_pageviews", "integrity_grade",
-	}, compareChainHeader, compareCohortHeader))
+	}, coverageHeader, compareChainHeader, compareCohortHeader))
 	if err != nil {
 		panic(http.ErrAbortHandler)
 	}
@@ -410,7 +423,7 @@ func (e *Exports) webCompare(w http.ResponseWriter, r *http.Request) error {
 				exports.IntPtr(p.Bounces), exports.IntPtr(p.Totaltime), exports.Float(p.BounceRate), exports.Float(p.AvgVisitDuration),
 				exports.IntPtr(p.QuarantinePageviews),
 				exports.StrPtr(grades[integrityview.DayKey{Tenant: t.ID, Day: p.Day}].Grade),
-			}, chainCells(chainSeries[i], chainOf[t.ID].Weeks), compareCohortCells(cohorts[t.ID], p.Day))...); err != nil {
+			}, coverageCells(cov.TenantDay(t.ID, p.Day)), chainCells(chainSeries[i], chainOf[t.ID].Weeks), compareCohortCells(cohorts[t.ID], p.Day))...); err != nil {
 				panic(http.ErrAbortHandler)
 			}
 		}

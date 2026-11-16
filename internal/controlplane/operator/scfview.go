@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/justmert/veristar/internal/controlplane/coverageview"
 	"github.com/justmert/veristar/internal/controlplane/httpx"
 	"github.com/justmert/veristar/internal/controlplane/onchain"
 	"github.com/justmert/veristar/internal/controlplane/tenants"
@@ -58,6 +59,9 @@ type SCFWebRow struct {
 	IngestRequests      int64    `json:"ingest_requests"`
 	IngestRejected      int64    `json:"ingest_rejected"`
 	RejectedShare       *float64 `json:"rejected_share"`
+	// Coverage estimates the visits not measured because of privacy
+	// signals, the column of the global web view (contract 17.5)
+	Coverage coverageview.Estimate `json:"coverage"`
 }
 
 // SCFAPIRow is the project's row of the global api view.
@@ -200,7 +204,7 @@ func loadSCF(ctx context.Context, tx pgx.Tx, id uuid.UUID, rg dayRange, now time
 		Pageviews: p.Pageviews, Visitors: p.Visitors, Visits: p.Visits, Bounces: p.Bounces, Totaltime: p.Totaltime,
 		BounceRate: p.BounceRate, AvgVisitDuration: p.AvgVisitDuration, QuarantinePageviews: p.QuarantinePageviews,
 		QuarantineVisitors: p.QuarantineVisitors, QuarantineShare: p.QuarantineShare, IngestRequests: p.IngestRequests,
-		IngestRejected: p.IngestRejected, RejectedShare: p.RejectedShare,
+		IngestRejected: p.IngestRejected, RejectedShare: p.RejectedShare, Coverage: p.Coverage,
 	}
 	out.InOperatorViews, out.Tenant, out.Sites, out.Web, out.Integrity = true, &t, &sc, &web, &grade
 	out.PercentileCohort, out.Comparison = &pc, &cmp

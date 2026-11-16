@@ -28,7 +28,8 @@ How to work:
 	`each, with the qualifying days and the integrity grade as evidence.
 
 Integrity: every row of get_global_web_overview and compare_tenants_web carries the project's integrity grade (A, B ` +
-	`or C) over the range; get_tenant_integrity gives the reasons per site and day.
+	`or C) over the range and its coverage (the estimated share of visits not measured because of privacy signals, ` +
+	`sort unmeasured_share); get_tenant_integrity gives the reasons and the coverage per site and day.
 
 Ranges are whole UTC days (from, to, both included, at most 366 days, default the 30 days ending today). The views ` +
 	`read daily aggregates only, never sessions. API latency percentiles are estimated from histogram buckets.`
@@ -261,7 +262,7 @@ func (s *Server) addOperatorTools(srv *mcp.Server) {
 		Title: "Web metrics of every project",
 		Description: "Ranks every project on its web metrics over whole UTC days: page views, visitors, visits, " +
 			"bounces and bounce rate, visit duration, quarantined (likely automated) traffic, gateway rejections, the " +
-			"integrity grade and " +
+			"integrity grade, the estimated share of visits not measured because of privacy signals and " +
 			"the top referrers, countries, devices and browsers, and an onchain summary with the weekly active " +
 			"accounts. Every row also carries its SCF cohort and five key " +
 			"metrics (visitors, page views, requests, error rate, on-chain operations) with the change against the " +
@@ -274,7 +275,7 @@ func (s *Server) addOperatorTools(srv *mcp.Server) {
 		pagePatch(props, append([]string{"name", "status", "created_at", "sites", "sites_verified", "sites_with_stellar_toml",
 			"pageviews", "visitors", "visits", "bounces", "totaltime", "bounce_rate", "avg_visit_duration",
 			"quarantine_pageviews", "quarantine_visitors", "quarantine_share", "ingest_requests", "ingest_rejected",
-			"rejected_share", "integrity"}, growthSorts...)...)
+			"rejected_share", "integrity", "unmeasured_share"}, growthSorts...)...)
 		enum(props, "integrity_at_or_below", "A", "B", "C")
 	}, func(ctx context.Context, p Principal, in webProjectsIn) (any, error) {
 		q := url.Values{}

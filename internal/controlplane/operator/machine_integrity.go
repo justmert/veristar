@@ -10,13 +10,14 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/justmert/veristar/internal/controlplane/coverageview"
 	"github.com/justmert/veristar/internal/controlplane/httpx"
 	"github.com/justmert/veristar/internal/controlplane/integrityview"
 	"github.com/justmert/veristar/internal/integrity"
 )
 
-// attachDayIntegrity sets the integrity of every /web/daily item from the
-// grades of the tenant's sites on that day.
+// attachDayIntegrity sets the integrity and the coverage of every
+// /web/daily item from the tenant's sites on that day.
 func attachDayIntegrity(ctx context.Context, tx pgx.Tx, items []MachineWebDay, from, to time.Time) error {
 	var tenants []uuid.UUID
 	for _, it := range items {
@@ -28,6 +29,10 @@ func attachDayIntegrity(ctx context.Context, tx pgx.Tx, items []MachineWebDay, f
 	if err != nil {
 		return err
 	}
+	cov, err := coverageview.Load(ctx, tx, tenants, from, to)
+	if err != nil {
+		return err
+	}
 	empty := integrityview.SummaryOf(integrity.Combine(nil))
 	for i := range items {
 		s, ok := byDay[integrityview.DayKey{Tenant: items[i].TenantID, Day: items[i].Day}]
@@ -35,6 +40,7 @@ func attachDayIntegrity(ctx context.Context, tx pgx.Tx, items []MachineWebDay, f
 			s = empty
 		}
 		items[i].Integrity = s
+		items[i].Coverage = cov.TenantDay(items[i].TenantID, items[i].Day)
 	}
 	return nil
 }
