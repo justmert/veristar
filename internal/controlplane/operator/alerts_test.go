@@ -20,6 +20,7 @@ import (
 
 	"github.com/justmert/veristar/internal/alertmanager"
 	"github.com/justmert/veristar/internal/controlplane"
+	"github.com/justmert/veristar/internal/controlplane/identity"
 	"github.com/justmert/veristar/internal/controlplane/session"
 )
 
@@ -308,7 +309,7 @@ func TestAlertsNeedAnOperator(t *testing.T) {
 	require.NoError(t, err)
 
 	sessions := session.New(d)
-	guard, err := NewGuard(map[int64]bool{7: true})
+	guard, err := NewGuard(identity.Operators{GitHub: map[int64]bool{7: true}})
 	require.NoError(t, err)
 	routes := NewAlerts(client(t, amURL), time.Now)
 	var api atomic.Pointer[http.Handler]

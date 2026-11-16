@@ -7,24 +7,29 @@ How the service keeps personal data to a minimum: what it holds in memory,
 queues and stores, for how long, and which controls tenants have. Legal
 statements cite the legal sources register (`sources.md`); technical statements
 point to the code or test that shows them. This page is not legal advice. Last
-updated 2026-11-14.
+updated 2026-11-16.
 
 ## 1. Roles
 
 - Each **tenant** (an enrolled project) is the **controller** of the data of its
   website visitors and API clients.
-- The **service operator** (today SCF, after handover the community operator)
-  is the tenant's **processor**. It processes that data only to provide the
-  service, under the terms in `terms.md` and the processing terms in
-  `dpa-template.md` (GDPR Art. 28, S10).
-- **SCF operators** see aggregates only: the global views and the machine API
-  read `agg.*`, `api.metrics_hourly`, `api.metrics_daily` and counters, never
-  raw events, sessions or Umami (role `cp_operator`, tested in
+- The **hosting operator**, the party that runs the service and hosts its data,
+  is each tenant's **processor**. It processes that data only to provide the
+  service, on the tenant's documented instructions, under the terms in
+  `terms.md` and the processing terms in `dpa-template.md` (GDPR Art. 28(3)(a),
+  S10).
+- **SCF** does not run the service. Each tenant, by accepting `terms.md`
+  section 1.1 at enrollment, instructs the hosting operator to make aggregate
+  statistics about its project available to SCF. They come from the same
+  sources as the operator's global views and machine API: `agg.*`,
+  `api.metrics_hourly`, `api.metrics_daily` and counters, never raw events,
+  sessions or Umami (role `cp_operator`, tested in
   `internal/db/boundaries_test.go`).
 - CNIL's self-assessment tool excludes reuse of the data "for the provider's
   own account" unless the data was effectively anonymised first (S2). The
-  operators' aggregates are exact counts per site and day, not rounded, and
-  this page makes no claim that they are anonymous in the CNIL sense. That is
+  aggregates, including those SCF receives, are exact counts per site and day,
+  not rounded, and this page makes no claim that they are anonymous in the CNIL
+  sense. That is
   why France is "not as built" in `jurisdictions.md`.
 
 ## 2. Data inventory per component
@@ -52,7 +57,8 @@ file-backed stream. "Stored" means PostgreSQL.
 | OTLP collector | tenant metrics and spans; logs are accepted and discarded | memory | the request; spans become duration histograms and are dropped (`collector/`) |
 | `API_METRICS` | filtered metric batches: tenant, service, normalized route, method, status class and code, histogram buckets | queued | until stored, at most 7 days |
 | `api.*` | one-minute, hourly and daily rows of the same dimensions | stored | minutes `API_MINUTE_RETENTION_DAYS`, hours `API_HOURLY_RETENTION_MONTHS` (at least 24), days as long as the tenant exists |
-| Control plane (`cp.*`) | GitHub numeric id and login of console users, session token hashes, tenants, sites, OTLP token hashes, audit log, erasure requests | stored | while the account or tenant exists; the audit log is append-only |
+| Control plane (`cp.*`) | GitHub numeric id and login, and the Stellar account address of a wallet sign-in, of console users; session token hashes; tenants, sites, OTLP token hashes, audit log, erasure requests | stored | while the account or tenant exists; the audit log is append-only |
+| Control plane (`cp.wallet_challenges_used`) | SHA-256 of the nonce of each used wallet sign-in challenge, with its expiry; no address and no account | stored | until the challenge expires (at most five minutes); the next wallet verification after that deletes it |
 
 No component stores an IP address or an autonomous system number. The privacy audit test (`tests/privacy/`)
 sends real web and API traffic from marker addresses on a dedicated Docker

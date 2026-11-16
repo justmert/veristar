@@ -26,6 +26,7 @@ import (
 
 	"github.com/justmert/veristar/docs/reference/openapi"
 	"github.com/justmert/veristar/internal/controlplane"
+	"github.com/justmert/veristar/internal/controlplane/identity"
 	"github.com/justmert/veristar/internal/controlplane/session"
 	"github.com/justmert/veristar/internal/jobs/jobstest"
 	"github.com/justmert/veristar/internal/umami"
@@ -65,7 +66,7 @@ func newMachineEnv(t *testing.T) *machineEnv {
 
 	d := f.g.db
 	sessions := session.New(d)
-	guard, err := NewGuard(map[int64]bool{7: true})
+	guard, err := NewGuard(identity.Operators{GitHub: map[int64]bool{7: true}})
 	require.NoError(t, err)
 	keys, err := NewAPIKeys(d)
 	require.NoError(t, err)

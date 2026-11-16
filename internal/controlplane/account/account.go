@@ -154,7 +154,9 @@ func Delete(ctx context.Context, d *db.DB, um UmamiUsers, userID uuid.UUID) (Res
 			res.Tenants = append(res.Tenants, m.TenantID)
 			roles = append(roles, map[string]any{"tenant_id": m.TenantID.String(), "role": m.Role})
 		}
-		if res.InvitesDeleted, err = q.AccountDeleteInvites(ctx, u.GithubID); err != nil {
+		if res.InvitesDeleted, err = q.AccountDeleteInvites(ctx, systemq.AccountDeleteInvitesParams{
+			GithubID: u.GithubID, StellarAddress: u.StellarAddress,
+		}); err != nil {
 			return fmt.Errorf("account: invites: %w", err)
 		}
 		if _, err := q.AccountDeleteMCPCodes(ctx, userID); err != nil {
@@ -171,8 +173,8 @@ func Delete(ctx context.Context, d *db.DB, um UmamiUsers, userID uuid.UUID) (Res
 		}
 		res.WasOperator = u.IsOperator
 
-		// the umami user is named gh-<github id>; deleting it removes that
-		// name and ends every umami token the person holds
+		// the umami user carries the account's umami_username; deleting it
+		// removes that name and ends every umami token the person holds
 		id := userID.String()
 		_, ok, err := um.GetUser(ctx, id)
 		if err != nil {
@@ -185,8 +187,8 @@ func Delete(ctx context.Context, d *db.DB, um UmamiUsers, userID uuid.UUID) (Res
 			res.UmamiUserDeleted = true
 		}
 
-		// the detail names no github id or login: the row it describes no
-		// longer holds them
+		// the detail names no github id, login or address: the row it
+		// describes no longer holds them
 		if err := audit.InSystem(ctx, tx, audit.Entry{
 			Actor: audit.User(userID), Action: audit.AccountDelete, Target: audit.UserTarget(userID),
 			Detail: map[string]any{

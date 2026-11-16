@@ -17,6 +17,7 @@ import (
 	"github.com/stellar/go-stellar-sdk/strkey"
 
 	"github.com/justmert/veristar/internal/controlplane/httpx"
+	"github.com/justmert/veristar/internal/controlplane/identity"
 	"github.com/justmert/veristar/internal/controlplane/lifecycle"
 	"github.com/justmert/veristar/internal/db"
 	"github.com/justmert/veristar/internal/db/operatorq"
@@ -196,11 +197,14 @@ func (h *Tenants) list(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-// UserRef is a user as the detail names it.
+// UserRef is a user as the detail names it. github_id and github_login are
+// null for a wallet-only account, stellar_address for a github-only one.
 type UserRef struct {
-	ID          uuid.UUID `json:"id"`
-	GitHubID    int64     `json:"github_id"`
-	GitHubLogin string    `json:"github_login"`
+	ID             uuid.UUID `json:"id"`
+	GitHubID       *int64    `json:"github_id"`
+	GitHubLogin    *string   `json:"github_login"`
+	StellarAddress *string   `json:"stellar_address"`
+	DisplayName    string    `json:"display_name"`
 }
 
 // DetailTenant is the tenant object of contract 5.4.
@@ -230,10 +234,12 @@ type StellarID struct {
 
 // DetailMember is one member of the tenant.
 type DetailMember struct {
-	GitHubID    int64           `json:"github_id"`
-	GitHubLogin string          `json:"github_login"`
-	Role        string          `json:"role"`
-	CreatedAt   httpx.Timestamp `json:"created_at"`
+	GitHubID       *int64          `json:"github_id"`
+	GitHubLogin    *string         `json:"github_login"`
+	StellarAddress *string         `json:"stellar_address"`
+	DisplayName    string          `json:"display_name"`
+	Role           string          `json:"role"`
+	CreatedAt      httpx.Timestamp `json:"created_at"`
 }
 
 // Ingest holds the outcome sums of the last 24 full hours and 30 full days.
@@ -380,7 +386,9 @@ func (h *Tenants) detail(w http.ResponseWriter, r *http.Request) error {
 		out.Members = make([]DetailMember, 0, len(members))
 		for _, m := range members {
 			out.Members = append(out.Members, DetailMember{
-				GitHubID: m.GithubID, GitHubLogin: m.GithubLogin, Role: m.Role, CreatedAt: httpx.Timestamp(m.CreatedAt),
+				GitHubID: m.GithubID, GitHubLogin: m.GithubLogin, StellarAddress: m.StellarAddress,
+				DisplayName: identity.DisplayName(m.GithubLogin, m.StellarAddress),
+				Role:        m.Role, CreatedAt: httpx.Timestamp(m.CreatedAt),
 			})
 		}
 		tid := id.String()
@@ -428,7 +436,10 @@ func userRef(ctx context.Context, q *systemq.Queries, id uuid.NullUUID) (*UserRe
 	if err != nil {
 		return nil, err
 	}
-	return &UserRef{ID: u.ID, GitHubID: u.GithubID, GitHubLogin: u.GithubLogin}, nil
+	return &UserRef{
+		ID: u.ID, GitHubID: u.GithubID, GitHubLogin: u.GithubLogin, StellarAddress: u.StellarAddress,
+		DisplayName: identity.DisplayName(u.GithubLogin, u.StellarAddress),
+	}, nil
 }
 
 func operatorSite(s operatorq.OperatorTenantSitesRow) lifecycle.OperatorSite {

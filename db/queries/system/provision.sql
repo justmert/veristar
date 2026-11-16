@@ -12,11 +12,17 @@ update cp.tenants set umami_team_id = @umami_team_id, updated_at = now() where i
 
 -- name: ProvisionMembers :many
 -- the users of a tenant who need an umami user and team membership
-select u.id, u.github_id
+select u.id, u.umami_username
 from cp.tenant_members m
 join cp.users u on u.id = m.user_id
 where m.tenant_id = @tenant_id
 order by u.id;
+
+-- name: ProvisionSetUmamiUsername :exec
+-- the name the reconciler gives a new umami user, stored before the user is
+-- created so sso logs in with the same name (00034)
+update cp.users set umami_username = @umami_username
+where id = @id and umami_username is null;
 
 -- name: ProvisionSites :many
 select id, name, domain, origins, quarantine_website_id, status, collect_utm
@@ -36,8 +42,9 @@ join cp.tenants t on t.id = s.tenant_id
 where s.id = @id;
 
 -- name: SSOMember :one
--- the caller's github id when the caller is a member of the tenant
-select u.github_id
+-- the caller's umami user name when the caller is a member of the tenant;
+-- null until the reconciler has made the umami user
+select u.umami_username
 from cp.tenant_members m
 join cp.users u on u.id = m.user_id
 where m.tenant_id = @tenant_id and m.user_id = @user_id;

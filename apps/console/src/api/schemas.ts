@@ -23,11 +23,24 @@ export type Role = z.infer<typeof role>;
 export const siteStatus = z.enum(["pending", "active", "suspended", "removed"]);
 export type SiteStatus = z.infer<typeof siteStatus>;
 
+// a stellar account id: G and 55 base32 characters. the control plane checks
+// the checksum too.
+export const stellarAddress = z.string().regex(/^G[A-Z2-7]{55}$/);
+
+// how a person signs in (4.1.8): a github account, a stellar account, or
+// both. display_name is the github login, or the short address of a
+// wallet-only account.
+const identityFields = {
+  github_id: z.number().int().positive().nullable(),
+  github_login: z.string().min(1).nullable(),
+  stellar_address: stellarAddress.nullable(),
+  display_name: z.string(),
+};
+
 // 3.1 user
 export const user = z.object({
   id,
-  github_id: z.number().int().positive(),
-  github_login: z.string().min(1),
+  ...identityFields,
   is_operator: z.boolean(),
 });
 export type User = z.infer<typeof user>;
@@ -111,8 +124,7 @@ export const tenantPage = page(tenant);
 // 3.1 member and invite
 export const member = z.object({
   user_id: id,
-  github_id: z.number().int().positive(),
-  github_login: z.string().min(1),
+  ...identityFields,
   role,
   created_at: time,
 });
@@ -120,8 +132,7 @@ export type Member = z.infer<typeof member>;
 
 export const invite = z.object({
   id,
-  github_id: z.number().int().positive(),
-  github_login: z.string().min(1),
+  ...identityFields,
   role,
   created_by: id,
   created_at: time,
@@ -300,8 +311,7 @@ export type TenantAction = z.infer<typeof tenantAction>;
 
 const userRef = z.object({
   id,
-  github_id: z.number().int().positive(),
-  github_login: z.string().min(1),
+  ...identityFields,
 });
 
 // 5.9
@@ -345,8 +355,7 @@ export const operatorTenantDetail = z.object({
   ),
   members: z.array(
     z.object({
-      github_id: z.number().int().positive(),
-      github_login: z.string().min(1),
+      ...identityFields,
       role,
       created_at: time,
     }),
@@ -1007,3 +1016,13 @@ export const erasureRequest = z.object({
 export type ErasureRequest = z.infer<typeof erasureRequest>;
 export const erasureRequestPage = page(erasureRequest);
 export type ErasureRequestPage = z.infer<typeof erasureRequestPage>;
+
+// 4.1.7 wallet challenge and verification
+export const walletChallenge = z.object({
+  transaction: z.string().min(1),
+  network_passphrase: z.string().min(1),
+  expires_at: time,
+});
+export type WalletChallenge = z.infer<typeof walletChallenge>;
+
+export const walletVerified = z.object({ return_to: z.string() });

@@ -46,6 +46,7 @@ import (
 	"github.com/justmert/veristar/internal/controlplane/auth"
 	"github.com/justmert/veristar/internal/controlplane/domaincheck"
 	"github.com/justmert/veristar/internal/controlplane/erasure"
+	"github.com/justmert/veristar/internal/controlplane/identity"
 	"github.com/justmert/veristar/internal/controlplane/ingest"
 	"github.com/justmert/veristar/internal/controlplane/lifecycle"
 	"github.com/justmert/veristar/internal/controlplane/mcpserver"
@@ -204,12 +205,13 @@ func start(t *testing.T) *env {
 	operators := map[int64]bool{operatorGHID: true}
 	ah, err := auth.New(auth.Config{
 		// as in cmd/controlplane: invites resolved at sign-in reconcile at once
-		Reconcile:    scope.Reconcile,
-		ClientID:     "console-test",
-		ClientSecret: config.FromMap(map[string]string{"S": "console-test-secret"}).Secret("S", 1),
-		RedirectURL:  callback,
-		StateKey:     random32(t),
-		Operators:    operators,
+		Reconcile:     scope.Reconcile,
+		ClientID:      "console-test",
+		ClientSecret:  config.FromMap(map[string]string{"S": "console-test-secret"}).Secret("S", 1),
+		RedirectURL:   callback,
+		StateKey:      random32(t),
+		Operators:     identity.Operators{GitHub: operators},
+		ConsoleOrigin: e.srv.URL,
 		Endpoints: auth.Endpoints{
 			OAuth: oauth2.Endpoint{
 				AuthURL:   e.fixture.URL + "/login/oauth/authorize",
@@ -236,7 +238,7 @@ func start(t *testing.T) *env {
 	require.NoError(t, err)
 	erasureCfg, err := config.LoadErasure(settings)
 	require.NoError(t, err)
-	guard, err := operator.NewGuard(operators)
+	guard, err := operator.NewGuard(identity.Operators{GitHub: operators})
 	require.NoError(t, err)
 	ng, err := netguard.New(net.DefaultResolver)
 	require.NoError(t, err)

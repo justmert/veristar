@@ -60,27 +60,57 @@ func (q *Queries) EnrollTenant(ctx context.Context, arg EnrollTenantParams) (CpT
 }
 
 const findUserByGitHubID = `-- name: FindUserByGitHubID :one
-select id, github_id, github_login, created_at
+select id, github_id, github_login, stellar_address, created_at
 from cp.users
-where github_id = $1
+where github_id = $1 and deleted_at is null
 `
 
 type FindUserByGitHubIDRow struct {
-	ID          uuid.UUID
-	GithubID    int64
-	GithubLogin string
-	CreatedAt   time.Time
+	ID             uuid.UUID
+	GithubID       *int64
+	GithubLogin    *string
+	StellarAddress *string
+	CreatedAt      time.Time
 }
 
 // the account the inviting owner named, resolved from the login through github
 // first: a stored login can be stale after a rename, the id cannot
-func (q *Queries) FindUserByGitHubID(ctx context.Context, githubID int64) (FindUserByGitHubIDRow, error) {
+func (q *Queries) FindUserByGitHubID(ctx context.Context, githubID *int64) (FindUserByGitHubIDRow, error) {
 	row := q.db.QueryRow(ctx, findUserByGitHubID, githubID)
 	var i FindUserByGitHubIDRow
 	err := row.Scan(
 		&i.ID,
 		&i.GithubID,
 		&i.GithubLogin,
+		&i.StellarAddress,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const findUserByStellarAddress = `-- name: FindUserByStellarAddress :one
+select id, github_id, github_login, stellar_address, created_at
+from cp.users
+where stellar_address = $1 and deleted_at is null
+`
+
+type FindUserByStellarAddressRow struct {
+	ID             uuid.UUID
+	GithubID       *int64
+	GithubLogin    *string
+	StellarAddress *string
+	CreatedAt      time.Time
+}
+
+// the account the inviting owner named by its G-address
+func (q *Queries) FindUserByStellarAddress(ctx context.Context, stellarAddress *string) (FindUserByStellarAddressRow, error) {
+	row := q.db.QueryRow(ctx, findUserByStellarAddress, stellarAddress)
+	var i FindUserByStellarAddressRow
+	err := row.Scan(
+		&i.ID,
+		&i.GithubID,
+		&i.GithubLogin,
+		&i.StellarAddress,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -217,8 +247,8 @@ where github_id = $2 and github_login <> $1
 `
 
 type RefreshUserLoginParams struct {
-	GithubLogin string
-	GithubID    int64
+	GithubLogin *string
+	GithubID    *int64
 }
 
 // the login github reported for the account just now; member lists show

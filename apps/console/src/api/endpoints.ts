@@ -52,6 +52,8 @@ import {
   terms,
   type VerifyMethod,
   type WebSort,
+  walletChallenge,
+  walletVerified,
   webCompare,
   webProjectPage,
 } from "./schemas";
@@ -204,6 +206,21 @@ export const api = {
   logout: () => requestNoContent("POST", "/auth/logout"),
   deleteAccount: () => requestNoContent("DELETE", "/me"),
 
+  // 4.1.7 wallet sign-in and 4.1.8 linked sign-in methods
+  walletChallenge: (address: string, returnTo: string) =>
+    request("POST", "/auth/stellar/challenge", walletChallenge, {
+      address,
+      return_to: returnTo,
+    }),
+  walletVerify: (transaction: string) =>
+    request("POST", "/auth/stellar/verify", walletVerified, { transaction }),
+  linkWalletChallenge: (address: string) =>
+    request("POST", "/me/identities/stellar/challenge", walletChallenge, { address }),
+  linkWallet: (transaction: string) =>
+    requestNoContent("POST", "/me/identities/stellar", { transaction }),
+  unlinkIdentity: (kind: "github" | "stellar") =>
+    requestNoContent("DELETE", `/me/identities/${kind}`),
+
   tenant: (tenantId: string, signal?: AbortSignal) =>
     request("GET", `/tenants/${enc(tenantId)}`, tenant, undefined, signal),
   createTenant: (body: EnrollmentInput) => request("POST", "/tenants", tenant, body),
@@ -214,8 +231,10 @@ export const api = {
 
   members: (tenantId: string, signal?: AbortSignal) =>
     request("GET", `/tenants/${enc(tenantId)}/members`, members, undefined, signal),
-  addMember: (tenantId: string, body: { github_login: string; role: Role }) =>
-    request("POST", `/tenants/${enc(tenantId)}/members`, addMemberResult, body),
+  addMember: (
+    tenantId: string,
+    body: { github_login: string; role: Role } | { stellar_address: string; role: Role },
+  ) => request("POST", `/tenants/${enc(tenantId)}/members`, addMemberResult, body),
   setMemberRole: (tenantId: string, userId: string, role: Role) =>
     request("PATCH", `/tenants/${enc(tenantId)}/members/${enc(userId)}`, member, { role }),
   removeMember: (tenantId: string, userId: string) =>
@@ -497,6 +516,11 @@ export const integrityApi = {
 // browser navigations, not fetch calls (contract 4.1.1 and 4.4.1)
 export function signInUrl(returnTo: string): string {
   return `/api/auth/github/start?return_to=${enc(returnTo)}`;
+}
+
+// links github to the signed-in account (4.1.8); the flow returns to /account
+export function linkGitHubUrl(): string {
+  return "/api/auth/github/start?link=1";
 }
 
 export function webDashboardUrl(siteId: string, view: "primary" | "quarantine"): string {

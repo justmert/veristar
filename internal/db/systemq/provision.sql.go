@@ -35,7 +35,7 @@ func (q *Queries) ProvisionLockTenant(ctx context.Context, id uuid.UUID) (Provis
 }
 
 const provisionMembers = `-- name: ProvisionMembers :many
-select u.id, u.github_id
+select u.id, u.umami_username
 from cp.tenant_members m
 join cp.users u on u.id = m.user_id
 where m.tenant_id = $1
@@ -43,8 +43,8 @@ order by u.id
 `
 
 type ProvisionMembersRow struct {
-	ID       uuid.UUID
-	GithubID int64
+	ID            uuid.UUID
+	UmamiUsername *string
 }
 
 // the users of a tenant who need an umami user and team membership
@@ -57,7 +57,7 @@ func (q *Queries) ProvisionMembers(ctx context.Context, tenantID uuid.UUID) ([]P
 	items := []ProvisionMembersRow{}
 	for rows.Next() {
 		var i ProvisionMembersRow
-		if err := rows.Scan(&i.ID, &i.GithubID); err != nil {
+		if err := rows.Scan(&i.ID, &i.UmamiUsername); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -79,6 +79,23 @@ type ProvisionSetTeamParams struct {
 
 func (q *Queries) ProvisionSetTeam(ctx context.Context, arg ProvisionSetTeamParams) error {
 	_, err := q.db.Exec(ctx, provisionSetTeam, arg.UmamiTeamID, arg.ID)
+	return err
+}
+
+const provisionSetUmamiUsername = `-- name: ProvisionSetUmamiUsername :exec
+update cp.users set umami_username = $1
+where id = $2 and umami_username is null
+`
+
+type ProvisionSetUmamiUsernameParams struct {
+	UmamiUsername *string
+	ID            uuid.UUID
+}
+
+// the name the reconciler gives a new umami user, stored before the user is
+// created so sso logs in with the same name (00034)
+func (q *Queries) ProvisionSetUmamiUsername(ctx context.Context, arg ProvisionSetUmamiUsernameParams) error {
+	_, err := q.db.Exec(ctx, provisionSetUmamiUsername, arg.UmamiUsername, arg.ID)
 	return err
 }
 
@@ -185,7 +202,7 @@ func (q *Queries) ProvisionTenantIDs(ctx context.Context) ([]uuid.UUID, error) {
 }
 
 const sSOMember = `-- name: SSOMember :one
-select u.github_id
+select u.umami_username
 from cp.tenant_members m
 join cp.users u on u.id = m.user_id
 where m.tenant_id = $1 and m.user_id = $2
@@ -196,12 +213,13 @@ type SSOMemberParams struct {
 	UserID   uuid.UUID
 }
 
-// the caller's github id when the caller is a member of the tenant
-func (q *Queries) SSOMember(ctx context.Context, arg SSOMemberParams) (int64, error) {
+// the caller's umami user name when the caller is a member of the tenant;
+// null until the reconciler has made the umami user
+func (q *Queries) SSOMember(ctx context.Context, arg SSOMemberParams) (*string, error) {
 	row := q.db.QueryRow(ctx, sSOMember, arg.TenantID, arg.UserID)
-	var github_id int64
-	err := row.Scan(&github_id)
-	return github_id, err
+	var umami_username *string
+	err := row.Scan(&umami_username)
+	return umami_username, err
 }
 
 const sSOSite = `-- name: SSOSite :one

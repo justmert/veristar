@@ -27,6 +27,7 @@ import (
 	"github.com/justmert/veristar/internal/config"
 	"github.com/justmert/veristar/internal/controlplane"
 	"github.com/justmert/veristar/internal/controlplane/auth"
+	"github.com/justmert/veristar/internal/controlplane/identity"
 	"github.com/justmert/veristar/internal/controlplane/session"
 	"github.com/justmert/veristar/internal/controlplane/terms"
 	"github.com/justmert/veristar/internal/db/systemq"
@@ -47,6 +48,7 @@ type env struct {
 	origin  string
 	fixture *githuboauth.Server
 	fx      *httptest.Server
+	h       *auth.Handler
 
 	mu         sync.Mutex
 	reconciled []uuid.UUID
@@ -94,6 +96,18 @@ func (b *handlerBox) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func newEnv(t *testing.T, operators ...int64) *env {
 	t.Helper()
+	return newEnvWith(t, envOptions{operators: operators})
+}
+
+// envOptions are the settings a test may change.
+type envOptions struct {
+	operators        []int64
+	stellarOperators []string
+}
+
+func newEnvWith(t *testing.T, o envOptions) *env {
+	t.Helper()
+	operators := o.operators
 	box := &handlerBox{}
 	cp := httptest.NewUnstartedServer(box)
 	cp.StartTLS()
@@ -109,6 +123,10 @@ func newEnv(t *testing.T, operators ...int64) *env {
 	for _, id := range operators {
 		ops[id] = true
 	}
+	stellarOps := map[string]bool{}
+	for _, a := range o.stellarOperators {
+		stellarOps[a] = true
+	}
 	key := make([]byte, 32)
 	for i := range key {
 		key[i] = byte(i + 1)
@@ -121,11 +139,12 @@ func newEnv(t *testing.T, operators ...int64) *env {
 			e.reconciled = append(e.reconciled, tenantID)
 			e.mu.Unlock()
 		},
-		ClientID:     clientID,
-		ClientSecret: secret(t, clientSecret),
-		RedirectURL:  cp.URL + callbackPath,
-		StateKey:     key,
-		Operators:    ops,
+		ClientID:      clientID,
+		ClientSecret:  secret(t, clientSecret),
+		RedirectURL:   cp.URL + callbackPath,
+		StateKey:      key,
+		Operators:     identity.Operators{GitHub: ops, Stellar: stellarOps},
+		ConsoleOrigin: cp.URL,
 		Endpoints: auth.Endpoints{
 			OAuth:   oauthEndpoint(fx.URL),
 			APIBase: fx.URL,
@@ -139,7 +158,7 @@ func newEnv(t *testing.T, operators ...int64) *env {
 		Public:        []controlplane.Routes{controlplane.RoutesFunc(h.Public), controlplane.RoutesFunc(terms.Routes)},
 		Private:       []controlplane.Routes{controlplane.RoutesFunc(h.Private)},
 	}))
-	e.cp, e.origin, e.fixture, e.fx = cp, cp.URL, fixture, fx
+	e.cp, e.origin, e.fixture, e.fx, e.h = cp, cp.URL, fixture, fx, h
 	return e
 }
 
@@ -161,7 +180,10 @@ type browser struct {
 func (e *env) browser(t *testing.T) *browser {
 	jar, err := cookiejar.New(nil)
 	require.NoError(t, err)
-	c := e.cp.Client()
+	// a copy: httptest hands out one shared client, and each browser needs
+	// a jar of its own
+	cl := *e.cp.Client()
+	c := &cl
 	c.Jar = jar
 	c.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	return &browser{t: t, e: e, c: c, jar: jar}
@@ -359,8 +381,10 @@ func TestSignInRoundTrip(t *testing.T) {
 	require.Equal(t, http.StatusOK, me.StatusCode)
 	got := decode[auth.Me](t, me)
 	require.Equal(t, uid.UUID, got.User.ID)
-	require.Equal(t, id, got.User.GitHubID)
-	require.Equal(t, login, got.User.GitHubLogin)
+	require.Equal(t, &id, got.User.GitHubID)
+	require.Equal(t, &login, got.User.GitHubLogin)
+	require.Nil(t, got.User.StellarAddress)
+	require.Equal(t, login, got.User.DisplayName)
 	require.False(t, got.User.IsOperator)
 	require.Empty(t, got.Tenants)
 	require.NotNil(t, got.Tenants, "tenants is an empty list, not null")
@@ -388,7 +412,7 @@ func TestSignInRoundTrip(t *testing.T) {
 	require.Equal(t, "/", res.Header.Get("Location"))
 	got2 := decode[auth.Me](t, b2.get(e.origin+"/api/me"))
 	require.Equal(t, got.User.ID, got2.User.ID)
-	require.Equal(t, login+"-renamed", got2.User.GitHubLogin)
+	require.Equal(t, ptr(login+"-renamed"), got2.User.GitHubLogin)
 }
 
 func TestSessionCookieFlags(t *testing.T) {
@@ -552,7 +576,7 @@ func TestSignInResolvesInvites(t *testing.T) {
 	ownerGH := newGitHubID()
 	err := conn.WithSystem(ctx, func(tx pgx.Tx) error {
 		q := systemq.New(tx)
-		owner, err := q.SignInUser(ctx, systemq.SignInUserParams{GithubID: ownerGH, GithubLogin: "owner-" + strconv.FormatInt(ownerGH, 10)})
+		owner, err := q.SignInUser(ctx, systemq.SignInUserParams{GithubID: &ownerGH, GithubLogin: ptr("owner-" + strconv.FormatInt(ownerGH, 10))})
 		if err != nil {
 			return err
 		}
@@ -858,3 +882,5 @@ func TestCallbackStateIsSingleUse(t *testing.T) {
 	require.Equal(t, http.StatusSeeOther, res.StatusCode)
 	require.Equal(t, "/", res.Header.Get("Location"))
 }
+
+func ptr[T any](v T) *T { return &v }

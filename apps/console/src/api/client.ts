@@ -128,13 +128,20 @@ export async function request<S extends z.ZodType>(
   return parsed.data;
 }
 
-// for routes that answer 204 without a body (delete, logout)
-export async function requestNoContent(method: Method, path: string): Promise<void> {
+// for routes that answer 204 without a body (delete, logout, linking a
+// wallet)
+export async function requestNoContent(
+  method: Method,
+  path: string,
+  body?: unknown,
+): Promise<void> {
   const headers: Record<string, string> = { Accept: "application/json" };
   if (MUTATING.has(method)) headers["X-Requested-With"] = "sa-console";
+  if (body !== undefined) headers["Content-Type"] = "application/json; charset=utf-8";
   const res = await fetch(`${API_BASE}${path}`, {
     method,
     headers,
+    body: body === undefined ? undefined : JSON.stringify(body),
     credentials: "same-origin",
     cache: "no-store",
     redirect: "error",

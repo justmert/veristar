@@ -402,7 +402,7 @@ function CredentialRow({
           ) : null}
         </div>
         <p className="text-caption font-normal text-fg-3">
-          {c.github_login ? `Acts as ${c.github_login}. ` : ""}Created{" "}
+          {c.display_name ? `Acts as ${c.display_name}. ` : ""}Created{" "}
           {formatDateTimeUtc(c.created_at)}.{" "}
           {c.revoked_at
             ? `Revoked ${formatDateTimeUtc(c.revoked_at)}${c.revoked_reason ? `: ${REVOKED_REASON[c.revoked_reason] ?? c.revoked_reason}` : ""}.`

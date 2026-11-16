@@ -28,13 +28,13 @@ insert into cp.audit_log (actor, action, target, detail)
 values (@actor, @action, @target, @detail);
 
 -- name: ListTenantMembers :many
-select m.user_id, u.github_id, u.github_login, m.role, m.created_at
+select m.user_id, u.github_id, u.github_login, u.stellar_address, m.role, m.created_at
 from cp.tenant_members m
 join cp.users u on u.id = m.user_id
-order by lower(u.github_login), m.user_id;
+order by lower(coalesce(u.github_login, u.stellar_address)), m.user_id;
 
 -- name: GetTenantMember :one
-select m.user_id, u.github_id, u.github_login, m.role, m.created_at
+select m.user_id, u.github_id, u.github_login, u.stellar_address, m.role, m.created_at
 from cp.tenant_members m
 join cp.users u on u.id = m.user_id
 where m.user_id = @user_id;
@@ -64,12 +64,20 @@ select (select count(*) from cp.tenant_members)
      + (select count(*) from cp.invites where expires_at > now()) as total;
 
 -- name: DeleteExpiredInvitesForAccount :execrows
--- an expired invite still holds its slot in invites_tenant_github_idx
-delete from cp.invites where github_id = @github_id and expires_at <= now();
+-- an expired invite still holds its slot in invites_tenant_github_idx or
+-- invites_tenant_stellar_idx. a null parameter matches nothing.
+delete from cp.invites
+where (github_id = sqlc.narg(github_id)::bigint or stellar_address = sqlc.narg(stellar_address)::text)
+  and expires_at <= now();
 
 -- name: CreateInvite :one
 insert into cp.invites (tenant_id, github_id, github_login, role, created_by, expires_at)
 values (cp.current_tenant_id(), @github_id, @github_login, @role, @created_by, @expires_at)
+returning *;
+
+-- name: CreateStellarInvite :one
+insert into cp.invites (tenant_id, stellar_address, role, created_by, expires_at)
+values (cp.current_tenant_id(), @stellar_address, @role, @created_by, @expires_at)
 returning *;
 
 -- name: DeleteInvite :one

@@ -19,7 +19,6 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/justmert/veristar/internal/controlplane/httpx"
-	"github.com/justmert/veristar/internal/controlplane/provision"
 	"github.com/justmert/veristar/internal/db/systemq"
 	"github.com/justmert/veristar/internal/umami"
 )
@@ -227,7 +226,7 @@ func FailureCode(err error) (string, bool) {
 // siteSession checks the site and the membership and logs in.
 func (h *Handler) siteSession(ctx context.Context, user, siteID uuid.UUID, now time.Time) (systemq.SSOSiteRow, umami.Session, error) {
 	var site systemq.SSOSiteRow
-	var githubID int64
+	var username *string
 	var rotatedDay int64
 	err := h.Tx(ctx, func(tx pgx.Tx) error {
 		q := systemq.New(tx)
@@ -235,7 +234,7 @@ func (h *Handler) siteSession(ctx context.Context, user, siteID uuid.UUID, now t
 		if site, err = q.SSOSite(ctx, siteID); err != nil {
 			return err
 		}
-		if githubID, err = q.SSOMember(ctx, systemq.SSOMemberParams{TenantID: site.TenantID, UserID: user}); err != nil {
+		if username, err = q.SSOMember(ctx, systemq.SSOMemberParams{TenantID: site.TenantID, UserID: user}); err != nil {
 			return err
 		}
 		rotatedDay, err = q.UmamiPasswordDay(ctx)
@@ -260,12 +259,17 @@ func (h *Handler) siteSession(ctx context.Context, user, siteID uuid.UUID, now t
 	if site.Status == "removed" || site.Status == "pending" || !site.UmamiTeamID.Valid {
 		return site, umami.Session{}, fail(CodeProvisioningPending, nil)
 	}
-	sess, err := h.login(ctx, user.String(), provision.Username(githubID), now, rotatedDay)
+	// the reconciler names the umami user when it first creates it; until
+	// then there is no user to log in as
+	if username == nil {
+		return site, umami.Session{}, fail(CodeProvisioningPending, nil)
+	}
+	sess, err := h.login(ctx, user.String(), *username, now, rotatedDay)
 	if err != nil {
 		return site, umami.Session{}, err
 	}
 	if sess.User.ID != user.String() {
-		return site, umami.Session{}, fmt.Errorf("sso: umami user %s belongs to id %s", provision.Username(githubID), sess.User.ID)
+		return site, umami.Session{}, fmt.Errorf("sso: umami user %s belongs to id %s", *username, sess.User.ID)
 	}
 	// the reconciler adds the membership; until it has, the dashboard
 	// would only show refusals

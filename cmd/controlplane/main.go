@@ -33,6 +33,7 @@ import (
 	"github.com/justmert/veristar/internal/controlplane/domaincheck"
 	"github.com/justmert/veristar/internal/controlplane/erasure"
 	"github.com/justmert/veristar/internal/controlplane/exports"
+	"github.com/justmert/veristar/internal/controlplane/identity"
 	"github.com/justmert/veristar/internal/controlplane/ingest"
 	"github.com/justmert/veristar/internal/controlplane/lifecycle"
 	"github.com/justmert/veristar/internal/controlplane/mcpserver"
@@ -197,8 +198,10 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 		return err
 	}
 
-	// operator flags follow OPERATOR_GITHUB_IDS from this start on (5.1)
-	changed, err := operator.SyncFlags(ctx, d, cfg.OperatorGitHubIDs)
+	// operator flags follow OPERATOR_GITHUB_IDS and OPERATOR_STELLAR_ADDRESSES
+	// from this start on (5.1)
+	operators := identity.Operators{GitHub: cfg.OperatorGitHubIDs, Stellar: cfg.OperatorStellarAddresses}
+	changed, err := operator.SyncFlags(ctx, d, operators)
 	if err != nil {
 		return err
 	}
@@ -217,13 +220,14 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 
 	sessions := session.New(d)
 	authH, err := auth.New(auth.Config{
-		ClientID:     cfg.GitHubClientID,
-		ClientSecret: cfg.GitHubClientSecret,
-		RedirectURL:  cfg.GitHubRedirectURL,
-		StateKey:     cfg.OAuthStateKey.Reveal(),
-		Operators:    cfg.OperatorGitHubIDs,
-		Endpoints:    endpoints,
-		Reconcile:    scope.Reconcile,
+		ClientID:      cfg.GitHubClientID,
+		ClientSecret:  cfg.GitHubClientSecret,
+		RedirectURL:   cfg.GitHubRedirectURL,
+		StateKey:      cfg.OAuthStateKey.Reveal(),
+		Operators:     operators,
+		ConsoleOrigin: cfg.ConsoleOrigin,
+		Endpoints:     endpoints,
+		Reconcile:     scope.Reconcile,
 	}, d, sessions)
 	if err != nil {
 		return err
@@ -240,7 +244,7 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	guard, err := operator.NewGuard(cfg.OperatorGitHubIDs)
+	guard, err := operator.NewGuard(operators)
 	if err != nil {
 		return err
 	}
@@ -442,7 +446,8 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 	ops.Handle("/", obs.NewOpsHandler(reg, log, readiness(d, nc)...))
 
 	log.Info("controlplane started", "version", buildVersion(), "addr", cfg.Addr, "ops_addr", cfg.OpsAddr,
-		"console_origin", cfg.ConsoleOrigin, "terms_version", tm.Version, "operators", len(cfg.OperatorGitHubIDs))
+		"console_origin", cfg.ConsoleOrigin, "terms_version", tm.Version, "operators", len(cfg.OperatorGitHubIDs),
+		"wallet_operators", len(cfg.OperatorStellarAddresses))
 
 	opsCtx, stopOps := context.WithCancel(ctx)
 	defer stopOps()

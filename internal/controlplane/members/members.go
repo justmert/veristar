@@ -1,7 +1,8 @@
 // Package members serves the member and invite routes
-// (control-plane-api 4.2.5). people are added by github login: a login that
-// has signed in before becomes a member at once, any other login gets an
-// invite that sign-in resolves (contract 4.1.2 step 6).
+// (control-plane-api 4.2.5). people are added by github login or by stellar
+// address: an account that has signed in before becomes a member at once,
+// anyone else gets an invite that their first sign-in with that identity
+// resolves (contract 4.1.2 step 6, 4.1.7).
 package members
 
 import (
@@ -18,6 +19,7 @@ import (
 	"github.com/justmert/veristar/internal/controlplane/audit"
 	"github.com/justmert/veristar/internal/controlplane/auth"
 	"github.com/justmert/veristar/internal/controlplane/httpx"
+	"github.com/justmert/veristar/internal/controlplane/identity"
 	"github.com/justmert/veristar/internal/controlplane/tenants"
 	"github.com/justmert/veristar/internal/db/systemq"
 	"github.com/justmert/veristar/internal/db/tenantq"
@@ -36,29 +38,46 @@ var githubLoginRe = regexp.MustCompile(`^[A-Za-z0-9](?:-?[A-Za-z0-9]){0,38}$`)
 // ValidLogin reports whether s is a syntactically valid github login.
 func ValidLogin(s string) bool { return len(s) <= 39 && githubLoginRe.MatchString(s) }
 
-// Member is the member object of contract 3.1.
+// Member is the member object of contract 3.1. github_id and github_login
+// are null for a wallet-only account, stellar_address for a github-only one.
 type Member struct {
-	UserID      uuid.UUID       `json:"user_id"`
-	GitHubID    int64           `json:"github_id"`
-	GitHubLogin string          `json:"github_login"`
-	Role        string          `json:"role"`
-	CreatedAt   httpx.Timestamp `json:"created_at"`
+	UserID         uuid.UUID       `json:"user_id"`
+	GitHubID       *int64          `json:"github_id"`
+	GitHubLogin    *string         `json:"github_login"`
+	StellarAddress *string         `json:"stellar_address"`
+	DisplayName    string          `json:"display_name"`
+	Role           string          `json:"role"`
+	CreatedAt      httpx.Timestamp `json:"created_at"`
 }
 
-// Invite is the invite object of contract 3.1.
+func newMember(userID uuid.UUID, gh *int64, login, address *string, role string, at time.Time) Member {
+	return Member{
+		UserID: userID, GitHubID: gh, GitHubLogin: login, StellarAddress: address,
+		DisplayName: identity.DisplayName(login, address), Role: role, CreatedAt: httpx.Timestamp(at),
+	}
+}
+
+// Invite is the invite object of contract 3.1: it names a github account
+// (github_id and github_login) or a stellar account (stellar_address).
 type Invite struct {
-	ID          uuid.UUID       `json:"id"`
-	GitHubID    int64           `json:"github_id"`
-	GitHubLogin string          `json:"github_login"`
-	Role        string          `json:"role"`
-	CreatedBy   uuid.UUID       `json:"created_by"`
-	CreatedAt   httpx.Timestamp `json:"created_at"`
-	ExpiresAt   httpx.Timestamp `json:"expires_at"`
+	ID             uuid.UUID       `json:"id"`
+	GitHubID       *int64          `json:"github_id"`
+	GitHubLogin    *string         `json:"github_login"`
+	StellarAddress *string         `json:"stellar_address"`
+	DisplayName    string          `json:"display_name"`
+	Role           string          `json:"role"`
+	CreatedBy      uuid.UUID       `json:"created_by"`
+	CreatedAt      httpx.Timestamp `json:"created_at"`
+	ExpiresAt      httpx.Timestamp `json:"expires_at"`
 }
 
 func toInvite(i tenantq.CpInvite) Invite {
-	return Invite{ID: i.ID, GitHubID: i.GithubID, GitHubLogin: i.GithubLogin, Role: i.Role, CreatedBy: i.CreatedBy,
-		CreatedAt: httpx.Timestamp(i.CreatedAt), ExpiresAt: httpx.Timestamp(i.ExpiresAt)}
+	return Invite{
+		ID: i.ID, GitHubID: i.GithubID, GitHubLogin: i.GithubLogin, StellarAddress: i.StellarAddress,
+		DisplayName: identity.DisplayName(i.GithubLogin, i.StellarAddress),
+		Role:        i.Role, CreatedBy: i.CreatedBy,
+		CreatedAt: httpx.Timestamp(i.CreatedAt), ExpiresAt: httpx.Timestamp(i.ExpiresAt),
+	}
 }
 
 // UserLookup resolves a github login to its account (auth.UserLookup).
@@ -109,8 +128,7 @@ func (h *Routes) list(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 		for _, m := range ms {
-			out.Members = append(out.Members, Member{UserID: m.UserID, GitHubID: m.GithubID,
-				GitHubLogin: m.GithubLogin, Role: m.Role, CreatedAt: httpx.Timestamp(m.CreatedAt)})
+			out.Members = append(out.Members, newMember(m.UserID, m.GithubID, m.GithubLogin, m.StellarAddress, m.Role, m.CreatedAt))
 		}
 		is, err := q.ListOpenInvites(ctx)
 		if err != nil {
@@ -128,8 +146,9 @@ func (h *Routes) list(w http.ResponseWriter, r *http.Request) error {
 }
 
 type addBody struct {
-	GitHubLogin *string `json:"github_login"`
-	Role        *string `json:"role"`
+	GitHubLogin    *string `json:"github_login"`
+	StellarAddress *string `json:"stellar_address"`
+	Role           *string `json:"role"`
 }
 
 type addResult struct {
@@ -144,6 +163,25 @@ func checkRole(f *tenants.Fields, role *string) {
 	} else if *role != tenants.RoleOwner && *role != tenants.RoleMember {
 		f.Add("role", httpx.FieldInvalidRole)
 	}
+}
+
+// person is the identity an owner names in an add: a github account,
+// resolved from the login, or a stellar account. user is its console
+// account when one exists.
+type person struct {
+	field       string
+	name        string
+	githubID    *int64
+	githubLogin *string
+	address     *string
+	user        *existing
+}
+
+type existing struct {
+	ID             uuid.UUID
+	GithubID       *int64
+	GithubLogin    *string
+	StellarAddress *string
 }
 
 func (h *Routes) add(w http.ResponseWriter, r *http.Request) error {
@@ -163,10 +201,16 @@ func (h *Routes) add(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	var f tenants.Fields
-	if b.GitHubLogin == nil {
+	switch {
+	case b.GitHubLogin != nil && b.StellarAddress != nil:
+		// one person per request; naming two identities is ambiguous
+		f.Add("stellar_address", httpx.FieldInvalidValue)
+	case b.GitHubLogin == nil && b.StellarAddress == nil:
 		f.Add("github_login", httpx.FieldRequired)
-	} else if !ValidLogin(*b.GitHubLogin) {
+	case b.GitHubLogin != nil && !ValidLogin(*b.GitHubLogin):
 		f.Add("github_login", httpx.FieldInvalidGitHubLogin)
+	case b.StellarAddress != nil && !identity.ValidAddress(*b.StellarAddress):
+		f.Add("stellar_address", httpx.FieldInvalidStrkey)
 	}
 	checkRole(&f, b.Role)
 	if err := f.Err(); err != nil {
@@ -174,39 +218,12 @@ func (h *Routes) add(w http.ResponseWriter, r *http.Request) error {
 	}
 	role := *b.Role
 
-	// the login is resolved to the github account that holds it now, and
-	// the member or invite is bound to that account's id: a login can be renamed and the freed name taken by someone
-	// else, the id never changes hands
-	gh, err := h.users.Lookup(ctx, *b.GitHubLogin)
-	if errors.Is(err, auth.ErrGitHubUserNotFound) {
-		return httpx.Validation("no github user has that login",
-			map[string]string{"github_login": httpx.FieldUnknownGitHubLogin})
-	}
-	if err != nil {
-		httpx.Logger(ctx).Warn("github user lookup failed", "error", err.Error())
-		return httpx.Unavailable("github could not be reached to look up the login; try again")
-	}
-	login := gh.Login
-
-	// cp.users is global, not tenant data, and a person who is not yet a
-	// member is invisible under cp_tenant, so the lookup runs as cp_system
-	var user *systemq.FindUserByGitHubIDRow
-	if err := h.s.DB().WithSystem(ctx, func(tx pgx.Tx) error {
-		q := systemq.New(tx)
-		u, err := q.FindUserByGitHubID(ctx, gh.ID)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil
-		}
-		if err != nil {
+	var p person
+	if b.GitHubLogin != nil {
+		if p, err = h.githubPerson(ctx, *b.GitHubLogin); err != nil {
 			return err
 		}
-		if err := q.RefreshUserLogin(ctx, systemq.RefreshUserLoginParams{GithubLogin: gh.Login, GithubID: gh.ID}); err != nil {
-			return err
-		}
-		u.GithubLogin = gh.Login
-		user = &u
-		return nil
-	}); err != nil {
+	} else if p, err = h.stellarPerson(ctx, *b.StellarAddress); err != nil {
 		return err
 	}
 
@@ -216,14 +233,16 @@ func (h *Routes) add(w http.ResponseWriter, r *http.Request) error {
 		if err := tenants.LockTenant(ctx, tx, &a); err != nil {
 			return err
 		}
-		if user != nil {
-			if _, err := q.GetTenantMember(ctx, user.ID); err == nil {
-				return httpx.Conflict(httpx.CodeAlreadyMember, user.GithubLogin+" is already a member")
+		if p.user != nil {
+			if _, err := q.GetTenantMember(ctx, p.user.ID); err == nil {
+				return httpx.Conflict(httpx.CodeAlreadyMember, p.name+" is already a member")
 			} else if !errors.Is(err, pgx.ErrNoRows) {
 				return err
 			}
 		}
-		if _, err := q.DeleteExpiredInvitesForAccount(ctx, gh.ID); err != nil {
+		if _, err := q.DeleteExpiredInvitesForAccount(ctx, tenantq.DeleteExpiredInvitesForAccountParams{
+			GithubID: p.githubID, StellarAddress: p.address,
+		}); err != nil {
 			return err
 		}
 		total, err := q.CountMembersAndOpenInvites(ctx)
@@ -232,26 +251,40 @@ func (h *Routes) add(w http.ResponseWriter, r *http.Request) error {
 		}
 		if total >= maxMembersAndInvites {
 			return httpx.Validation("a project has at most 50 members and open invites",
-				map[string]string{"github_login": httpx.FieldTooMany})
+				map[string]string{p.field: httpx.FieldTooMany})
 		}
-		if user != nil {
-			m, err := q.InsertTenantMember(ctx, tenantq.InsertTenantMemberParams{UserID: user.ID, Role: role})
+		if u := p.user; u != nil {
+			m, err := q.InsertTenantMember(ctx, tenantq.InsertTenantMemberParams{UserID: u.ID, Role: role})
 			if err != nil {
 				return err
 			}
-			res = addResult{Kind: "member", Member: &Member{UserID: m.UserID, GitHubID: user.GithubID,
-				GitHubLogin: user.GithubLogin, Role: m.Role, CreatedAt: httpx.Timestamp(m.CreatedAt)}}
+			mem := newMember(m.UserID, u.GithubID, u.GithubLogin, u.StellarAddress, m.Role, m.CreatedAt)
+			res = addResult{Kind: "member", Member: &mem}
 			return audit.InTenant(ctx, tx, audit.Entry{
-				Actor: audit.User(a.User.ID), Action: audit.MemberAdd, Target: audit.UserTarget(user.ID),
-				Detail: map[string]any{"tenant_id": a.TenantID, "github_login": user.GithubLogin, "role": role},
+				Actor: audit.User(a.User.ID), Action: audit.MemberAdd, Target: audit.UserTarget(u.ID),
+				Detail: map[string]any{"tenant_id": a.TenantID, p.field: p.name, "role": role},
 			})
 		}
-		inv, err := q.CreateInvite(ctx, tenantq.CreateInviteParams{
-			GithubID: gh.ID, GithubLogin: login, Role: role, CreatedBy: a.User.ID, ExpiresAt: time.Now().Add(inviteLifetime),
-		})
+		var inv tenantq.CpInvite
+		index := "invites_tenant_github_idx"
+		detail := map[string]any{"tenant_id": a.TenantID, "role": role}
+		if p.githubID != nil {
+			inv, err = q.CreateInvite(ctx, tenantq.CreateInviteParams{
+				GithubID: p.githubID, GithubLogin: p.githubLogin, Role: role, CreatedBy: a.User.ID,
+				ExpiresAt: time.Now().Add(inviteLifetime),
+			})
+			detail["github_id"], detail["github_login"] = *p.githubID, *p.githubLogin
+		} else {
+			index = "invites_tenant_stellar_idx"
+			inv, err = q.CreateStellarInvite(ctx, tenantq.CreateStellarInviteParams{
+				StellarAddress: p.address, Role: role, CreatedBy: a.User.ID,
+				ExpiresAt: time.Now().Add(inviteLifetime),
+			})
+			detail["stellar_address"] = *p.address
+		}
 		if err != nil {
-			if tenants.IsUnique(err, "invites_tenant_github_idx") {
-				return httpx.Conflict(httpx.CodeInviteExists, "an open invite for "+login+" exists")
+			if tenants.IsUnique(err, index) {
+				return httpx.Conflict(httpx.CodeInviteExists, "an open invite for "+p.name+" exists")
 			}
 			return err
 		}
@@ -259,7 +292,7 @@ func (h *Routes) add(w http.ResponseWriter, r *http.Request) error {
 		res = addResult{Kind: "invite", Invite: &v}
 		return audit.InTenant(ctx, tx, audit.Entry{
 			Actor: audit.User(a.User.ID), Action: audit.InviteCreate, Target: audit.InviteTarget(inv.ID),
-			Detail: map[string]any{"tenant_id": a.TenantID, "github_id": gh.ID, "github_login": login, "role": role},
+			Detail: detail,
 		})
 	})
 	if err != nil {
@@ -272,6 +305,59 @@ func (h *Routes) add(w http.ResponseWriter, r *http.Request) error {
 	}
 	httpx.Created(w, "/api/tenants/"+a.TenantID.String()+"/invites/"+res.Invite.ID.String(), res)
 	return nil
+}
+
+// githubPerson resolves a login to the github account that holds it now;
+// the member or invite is bound to that account's id: a login can be
+// renamed and the freed name taken by someone else, the id never changes
+// hands.
+func (h *Routes) githubPerson(ctx context.Context, login string) (person, error) {
+	gh, err := h.users.Lookup(ctx, login)
+	if errors.Is(err, auth.ErrGitHubUserNotFound) {
+		return person{}, httpx.Validation("no github user has that login",
+			map[string]string{"github_login": httpx.FieldUnknownGitHubLogin})
+	}
+	if err != nil {
+		httpx.Logger(ctx).Warn("github user lookup failed", "error", err.Error())
+		return person{}, httpx.Unavailable("github could not be reached to look up the login; try again")
+	}
+	p := person{field: "github_login", name: gh.Login, githubID: &gh.ID, githubLogin: &gh.Login}
+	// cp.users is global, not tenant data, and a person who is not yet a
+	// member is invisible under cp_tenant, so the lookup runs as cp_system
+	err = h.s.DB().WithSystem(ctx, func(tx pgx.Tx) error {
+		q := systemq.New(tx)
+		u, err := q.FindUserByGitHubID(ctx, &gh.ID)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if err := q.RefreshUserLogin(ctx, systemq.RefreshUserLoginParams{GithubLogin: &gh.Login, GithubID: &gh.ID}); err != nil {
+			return err
+		}
+		p.user = &existing{ID: u.ID, GithubID: u.GithubID, GithubLogin: &gh.Login, StellarAddress: u.StellarAddress}
+		return nil
+	})
+	return p, err
+}
+
+// stellarPerson finds the console account of an address, if any. the
+// address is checked for its strkey checksum already.
+func (h *Routes) stellarPerson(ctx context.Context, address string) (person, error) {
+	p := person{field: "stellar_address", name: identity.ShortAddress(address), address: &address}
+	err := h.s.DB().WithSystem(ctx, func(tx pgx.Tx) error {
+		u, err := systemq.New(tx).FindUserByStellarAddress(ctx, &address)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		p.user = &existing{ID: u.ID, GithubID: u.GithubID, GithubLogin: u.GithubLogin, StellarAddress: u.StellarAddress}
+		return nil
+	})
+	return p, err
 }
 
 type roleBody struct {
@@ -317,7 +403,7 @@ func (h *Routes) setRole(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
-		out = Member{UserID: m.UserID, GitHubID: m.GithubID, GitHubLogin: m.GithubLogin, Role: m.Role, CreatedAt: httpx.Timestamp(m.CreatedAt)}
+		out = newMember(m.UserID, m.GithubID, m.GithubLogin, m.StellarAddress, m.Role, m.CreatedAt)
 		if m.Role == *b.Role {
 			return nil
 		}
@@ -379,7 +465,8 @@ func (h *Routes) remove(w http.ResponseWriter, r *http.Request) error {
 		}
 		return audit.InTenant(ctx, tx, audit.Entry{
 			Actor: audit.User(a.User.ID), Action: audit.MemberRemove, Target: audit.UserTarget(userID),
-			Detail: map[string]any{"tenant_id": a.TenantID, "github_login": m.GithubLogin, "role": m.Role},
+			Detail: map[string]any{"tenant_id": a.TenantID, "github_login": m.GithubLogin,
+				"stellar_address": m.StellarAddress, "role": m.Role},
 		})
 	})
 	if err != nil {
@@ -416,7 +503,8 @@ func (h *Routes) revoke(w http.ResponseWriter, r *http.Request) error {
 		}
 		return audit.InTenant(ctx, tx, audit.Entry{
 			Actor: audit.User(a.User.ID), Action: audit.InviteRevoke, Target: audit.InviteTarget(inviteID),
-			Detail: map[string]any{"tenant_id": a.TenantID, "github_login": inv.GithubLogin, "role": inv.Role},
+			Detail: map[string]any{"tenant_id": a.TenantID, "github_login": inv.GithubLogin,
+				"stellar_address": inv.StellarAddress, "role": inv.Role},
 		})
 	})
 	if err != nil {

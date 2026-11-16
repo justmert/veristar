@@ -41,9 +41,15 @@ limit @row_limit;
 -- name: FindUserByGitHubID :one
 -- the account the inviting owner named, resolved from the login through github
 -- first: a stored login can be stale after a rename, the id cannot
-select id, github_id, github_login, created_at
+select id, github_id, github_login, stellar_address, created_at
 from cp.users
-where github_id = @github_id;
+where github_id = @github_id and deleted_at is null;
+
+-- name: FindUserByStellarAddress :one
+-- the account the inviting owner named by its G-address
+select id, github_id, github_login, stellar_address, created_at
+from cp.users
+where stellar_address = @stellar_address and deleted_at is null;
 
 -- name: RefreshUserLogin :exec
 -- the login github reported for the account just now; member lists show

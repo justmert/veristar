@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/justmert/veristar/internal/controlplane/httpx"
+	"github.com/justmert/veristar/internal/controlplane/identity"
 	"github.com/justmert/veristar/internal/db"
 	"github.com/justmert/veristar/internal/db/systemq"
 )
@@ -25,12 +26,27 @@ const (
 )
 
 // User is the signed-in user of a request, read from cp.users on every
-// request so a changed login or operator flag applies at once.
+// request so a changed login, a linked or unlinked identity or a changed
+// operator flag applies at once. an account has a github identity, a
+// stellar identity or both (contract 4.1.8); the absent one is nil.
 type User struct {
-	ID          uuid.UUID
-	GitHubID    int64
-	GitHubLogin string
-	IsOperator  bool
+	ID             uuid.UUID
+	GitHubID       *int64
+	GitHubLogin    *string
+	StellarAddress *string
+	IsOperator     bool
+}
+
+// DisplayName is the github login, or the short address of a wallet-only
+// account.
+func (u User) DisplayName() string { return identity.DisplayName(u.GitHubLogin, u.StellarAddress) }
+
+// FromRow builds the User of a cp.users row.
+func FromRow(u systemq.CpUser) User {
+	return User{
+		ID: u.ID, GitHubID: u.GithubID, GitHubLogin: u.GithubLogin,
+		StellarAddress: u.StellarAddress, IsOperator: u.IsOperator,
+	}
 }
 
 // Manager holds the scs session manager and the database it reads users from.
@@ -163,9 +179,7 @@ func (m *Manager) RequireUser(next http.Handler) http.Handler {
 		if err != nil {
 			return fmt.Errorf("session: load user: %w", err)
 		}
-		ctx = context.WithValue(ctx, userKey{}, User{
-			ID: u.ID, GitHubID: u.GithubID, GitHubLogin: u.GithubLogin, IsOperator: u.IsOperator,
-		})
+		ctx = context.WithValue(ctx, userKey{}, FromRow(u))
 		next.ServeHTTP(w, r.WithContext(ctx))
 		return nil
 	})

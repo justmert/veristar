@@ -25,6 +25,7 @@ import (
 	"github.com/justmert/veristar/internal/config"
 	"github.com/justmert/veristar/internal/controlplane"
 	"github.com/justmert/veristar/internal/controlplane/auth"
+	"github.com/justmert/veristar/internal/controlplane/identity"
 	"github.com/justmert/veristar/internal/controlplane/lifecycle"
 	"github.com/justmert/veristar/internal/controlplane/members"
 	"github.com/justmert/veristar/internal/controlplane/operator"
@@ -131,12 +132,13 @@ func (e *env) build(t *testing.T, operators ...int64) {
 	}
 	log := slog.New(slog.DiscardHandler)
 	ah, err := auth.New(auth.Config{
-		Reconcile:    e.scope.Reconcile,
-		ClientID:     "lifecycle-test",
-		ClientSecret: config.FromMap(map[string]string{"S": "lifecycle-test-secret"}).Secret("S", 1),
-		RedirectURL:  e.srv.URL + "/api/auth/github/callback",
-		StateKey:     e.stateKey,
-		Operators:    ids,
+		Reconcile:     e.scope.Reconcile,
+		ClientID:      "lifecycle-test",
+		ClientSecret:  config.FromMap(map[string]string{"S": "lifecycle-test-secret"}).Secret("S", 1),
+		RedirectURL:   e.srv.URL + "/api/auth/github/callback",
+		StateKey:      e.stateKey,
+		Operators:     identity.Operators{GitHub: ids},
+		ConsoleOrigin: e.srv.URL,
 		Endpoints: auth.Endpoints{
 			OAuth: oauth2.Endpoint{
 				AuthURL:   e.fixture.URL + "/login/oauth/authorize",
@@ -153,7 +155,7 @@ func (e *env) build(t *testing.T, operators ...int64) {
 		Endpoints:    auth.Endpoints{APIBase: e.fixture.URL},
 	})
 	require.NoError(t, err)
-	guard, err := operator.NewGuard(ids)
+	guard, err := operator.NewGuard(identity.Operators{GitHub: ids})
 	require.NoError(t, err)
 	mode, err := operator.NewEnrollmentMode(e.d)
 	require.NoError(t, err)

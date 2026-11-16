@@ -4,7 +4,7 @@
 -- name: AccountLockUser :one
 -- the account row, locked so two deletions of one account run one after
 -- the other and the second sees the first's result
-select id, github_id, is_operator, deleted_at from cp.users where id = @id for update;
+select id, github_id, stellar_address, is_operator, deleted_at from cp.users where id = @id for update;
 
 -- name: AccountLockTenants :many
 -- every tenant the account belongs to, locked in id order. a reconcile run
@@ -42,9 +42,11 @@ delete from cp.tenant_members where user_id = @user_id
 returning tenant_id, role;
 
 -- name: AccountDeleteInvites :execrows
--- open and expired invites addressed to the account's github id: they hold
--- its login, and the person can be invited again after signing in anew
-delete from cp.invites where github_id = @github_id;
+-- open and expired invites addressed to the account's github id or stellar
+-- address: they name the person, who can be invited again after signing in
+-- anew. a null parameter matches nothing.
+delete from cp.invites
+where github_id = sqlc.narg(github_id)::bigint or stellar_address = sqlc.narg(stellar_address)::text;
 
 -- name: AccountDeleteMCPCodes :execrows
 delete from cp.mcp_oauth_codes where user_id = @user_id;
@@ -57,9 +59,10 @@ delete from cp.mcp_credentials where user_id = @user_id;
 delete from cp.sessions where user_id = @user_id::uuid;
 
 -- name: AccountEmpty :exec
--- clears what identifies the person (00031). is_operator goes to false in
+-- clears what identifies the person (00031, 00034). is_operator goes to false in
 -- the same statement, which fires users_mcp_revoke for any operator
 -- credential left
 update cp.users
-set github_id = 0, github_login = '', is_operator = false, last_login_at = null, deleted_at = now()
+set github_id = null, github_login = null, stellar_address = null, umami_username = null,
+    is_operator = false, last_login_at = null, deleted_at = now()
 where id = @id and deleted_at is null;
