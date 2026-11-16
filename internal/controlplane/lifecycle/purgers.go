@@ -21,12 +21,14 @@ const (
 	PurgerAPI = "api"
 	// PurgerAgg is the purger of the agg schema
 	PurgerAgg = "agg"
+	// PurgerChain is the purger of the on-chain read state and counts
+	PurgerChain = "chain"
 )
 
 // Purgers returns the purgers of every store, in the order of contract 5.5:
 // registry (web ingestion stops), otlp_tokens (api ingestion stops), then
 // umami, then cp.web_ingest_hourly, then the api schema, then the agg
-// schema.
+// schema, then the on-chain rows.
 func Purgers(reg *registry.Publisher, admin *umami.Admin) ([]Purger, error) {
 	if reg == nil || admin == nil {
 		return nil, errors.New("lifecycle: purgers need the registry publisher and the umami admin")
@@ -38,6 +40,7 @@ func Purgers(reg *registry.Publisher, admin *umami.Admin) ([]Purger, error) {
 		WebIngestPurger{},
 		APIPurger{},
 		AggPurger{},
+		ChainPurger{},
 	}, nil
 }
 
@@ -265,4 +268,34 @@ func (AggPurger) Purge(ctx context.Context, r Removal) (map[string]any, error) {
 		deleted[row.TableName] = row.RowsDeleted
 	}
 	return map[string]any{"rows_deleted": deleted}, nil
+}
+
+// ChainPurger deletes the read state of the tenant's ledger ids, and the
+// daily counts unless keep_aggregates. the ledger data itself is public;
+// what goes is the platform's record of which project declared it.
+type ChainPurger struct{}
+
+// Name is the step key.
+func (ChainPurger) Name() string { return PurgerChain }
+
+// Purge deletes in the run's transaction through agg.purge_chain.
+func (ChainPurger) Purge(ctx context.Context, r Removal) (map[string]any, error) {
+	rows, err := r.Tx.Query(ctx, `select table_name, rows_deleted from agg.purge_chain($1, $2)`, r.TenantID, r.KeepAggregates)
+	if err != nil {
+		return nil, &RecordError{fmt.Errorf("chain rows: %w", err)}
+	}
+	defer rows.Close()
+	deleted := map[string]int64{}
+	for rows.Next() {
+		var name string
+		var n int64
+		if err := rows.Scan(&name, &n); err != nil {
+			return nil, &RecordError{fmt.Errorf("chain rows: %w", err)}
+		}
+		deleted[name] = n
+	}
+	if err := rows.Err(); err != nil {
+		return nil, &RecordError{fmt.Errorf("chain rows: %w", err)}
+	}
+	return map[string]any{"rows_deleted": deleted, "keep_aggregates": r.KeepAggregates}, nil
 }

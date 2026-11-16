@@ -28,6 +28,7 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/prometheus/client_golang/prometheus"
 
+	"github.com/justmert/veristar/internal/chain"
 	"github.com/justmert/veristar/internal/config"
 	"github.com/justmert/veristar/internal/controlplane/domaincheck"
 	"github.com/justmert/veristar/internal/controlplane/provision"
@@ -37,6 +38,7 @@ import (
 	"github.com/justmert/veristar/internal/jobs/apipartition"
 	"github.com/justmert/veristar/internal/jobs/apiretention"
 	"github.com/justmert/veristar/internal/jobs/apirollup"
+	"github.com/justmert/veristar/internal/jobs/chainactivity"
 	"github.com/justmert/veristar/internal/jobs/edgestats"
 	"github.com/justmert/veristar/internal/jobs/erasurefollowup"
 	"github.com/justmert/veristar/internal/jobs/reconcile"
@@ -65,7 +67,7 @@ commands:
                     ` + reconcile.TaskName + `, ` + umamirotate.TaskName + `, ` + sessionprune.TaskName + `,
                     ` + verifydomains.TaskName + `, ` + apirollup.TaskName + `, ` + apipartition.TaskName + `,
                     ` + apiretention.TaskName + `, ` + aggregateweb.TaskName + `,
-                    ` + erasurefollowup.TaskName + `)
+                    ` + erasurefollowup.TaskName + `, ` + chainactivity.TaskName + `)
   run ` + aggregateweb.TaskName + ` --from <yyyy-mm-dd> --to <yyyy-mm-dd>
                     read the web aggregates of every active site again for
                     each utc day of the range, both days included
@@ -93,7 +95,9 @@ PLATFORM_DB_SSLMODE, PLATFORM_DB_SSLROOTCERT (verify-full only) with the
 optional PLATFORM_DB_SSLCERT and PLATFORM_DB_SSLKEY, PLATFORM_DB_JOBS_PASSWORD, PLATFORM_DB_CP_SYSTEM_PASSWORD
 (reconcile and umami-rotate run control plane logic as cp_system), UMAMI_URL,
 UMAMI_ADMIN_PASSWORD, UMAMI_USER_PASSWORD_KEY, API_MINUTE_RETENTION_DAYS,
-API_HOURLY_RETENTION_MONTHS (at least 24), and JOBS_OPS_ADDR for daemon.
+API_HOURLY_RETENTION_MONTHS (at least 24), the optional STELLAR_HORIZON_URL,
+STELLAR_RPC_URL, STELLAR_HORIZON_RPS and STELLAR_RPC_RPS (ledger apis of
+chain-activity), and JOBS_OPS_ADDR for daemon.
 `
 
 func main() {
@@ -248,12 +252,13 @@ func open(ctx context.Context, env *config.Env, log *slog.Logger, opsAddr bool) 
 	umamiCfg, umamiErr := config.LoadUmamiAdmin(env)
 	pwKey := env.UmamiUserPasswordKey()
 	apiRet, apiRetErr := config.LoadAPIRetention(env)
+	stellarCfg, stellarErr := config.LoadStellar(env)
 	var addr string
 	if opsAddr {
 		addr = env.String("JOBS_OPS_ADDR")
 	}
 	// one error naming every missing key, as config promises
-	if err := errors.Join(natsErr, dbErr, umamiErr, apiRetErr, env.Err()); err != nil {
+	if err := errors.Join(natsErr, dbErr, umamiErr, apiRetErr, stellarErr, env.Err()); err != nil {
 		return nil, "", err
 	}
 	key, err := umami.NewPasswordKey(pwKey.Reveal())
@@ -443,6 +448,23 @@ func open(ctx context.Context, env *config.Env, log *slog.Logger, opsAddr bool) 
 		_, err := followup.Run(ctx, l.Tx, l.SystemTx)
 		return err
 	}
+	// ledger activity of the declared accounts and contracts; a fresh
+	// reader per run keeps its ledger lookups to that run
+	chainTask, err := chainactivity.New(func() (*chain.Reader, error) {
+		h, r, err := chain.Sources(stellarCfg)
+		if err != nil {
+			return nil, err
+		}
+		return chain.NewReader(h, r)
+	}, time.Now, log, reg)
+	if err != nil {
+		closeAll()
+		return nil, "", err
+	}
+	readChain := func(ctx context.Context, l *scheduler.Leader) error {
+		_, err := chainTask.Run(ctx, l.Tx)
+		return err
+	}
 	tasks := []scheduler.Task{{
 		Name: edgestats.TaskName,
 		Run: func(ctx context.Context, l *scheduler.Leader) error {
@@ -503,6 +525,11 @@ func open(ctx context.Context, env *config.Env, log *slog.Logger, opsAddr bool) 
 		Every: erasurefollowup.Every,
 		Run:   followErasure,
 		Once:  followErasure,
+	}, {
+		Name:  chainactivity.TaskName,
+		Every: chainactivity.Every,
+		Run:   readChain,
+		Once:  readChain,
 	}}
 	return &deps{
 		nc:      nc,

@@ -119,6 +119,10 @@ func seedAPIRows(tx pgx.Tx) error {
 			  values ($1, $2, current_date, 'primary', 5, 2, 3, 1, 40)`, []any{uuid.New(), tenant}},
 			{`insert into agg.web_daily_dim (site_id, tenant_id, day, band, dimension, key, value)
 			  values ($1, $2, current_date, 'primary', 'country', 'DE', 2)`, []any{uuid.New(), tenant}},
+			{`insert into agg.chain_daily (tenant_id, strkey, day, source, operations, transactions, counterparties)
+			  values ($1, $2, current_date, 'horizon', 3, 2, 1)`, []any{tenant, seedStrkey(i)}},
+			{`insert into agg.chain_reads (tenant_id, strkey, covered_from, covered_to, last_attempt_at, last_success_at)
+			  values ($1, $2, current_date, current_date, now(), now())`, []any{tenant, seedStrkey(i)}},
 		}
 		for _, s := range stmts {
 			if _, err := tx.Exec(ctx, s.sql, s.args...); err != nil {
@@ -127,6 +131,11 @@ func seedAPIRows(tx pgx.Tx) error {
 		}
 	}
 	return nil
+}
+
+// seedStrkey is a g account id of the seed, unique per index
+func seedStrkey(i int) string {
+	return "G" + strings.Repeat("A", 54) + string(rune('A'+i))
 }
 
 // seedRows gives each of two tenants one row in every tenant table, written
@@ -193,6 +202,8 @@ func seedRows(tx pgx.Tx) error {
 			{`insert into cp.mcp_oauth_codes (hash, client_id, user_id, scope, tenant_id, redirect_uri, code_challenge, resource, expires_at)
 			  values (sha256($1::bytea), $2, $3, 'tenant', $4, 'https://client.example.org/cb', $5, 'https://app.example.org/mcp', now() + interval '1 minute')`,
 				[]any{[]byte(fmt.Sprintf("mcp-code-%d", p.n)), fmt.Sprintf("mcpc_%032d", p.n), p.user, p.tenant, strings.Repeat("a", 43)}},
+			{`insert into cp.chain_ids (tenant_id, strkey, kind, added_by) values ($1, $2, 'account', 'console')`,
+				[]any{p.tenant, seedStrkey(p.n)}},
 			{`insert into cp.sessions (token_hash, user_id, data, expiry)
 			  values (sha256($1::bytea), $2, '\x00', now() + interval '1 day')`, []any{[]byte(fmt.Sprintf("session-%d", p.n)), p.user}},
 		}
