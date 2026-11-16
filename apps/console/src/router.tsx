@@ -11,6 +11,7 @@ import { McpPage } from "@/pages/mcp";
 import { McpConsentPage } from "@/pages/mcp-consent";
 import { MembersPage } from "@/pages/members";
 import { NotFoundPage, RouteErrorPage } from "@/pages/not-found";
+import { OnchainPage } from "@/pages/onchain";
 import { AlertsPage } from "@/pages/operator/alerts";
 import { ApiKeysPage } from "@/pages/operator/api-keys";
 import { AuditPage } from "@/pages/operator/audit";
@@ -27,6 +28,7 @@ import { OverviewPage } from "@/pages/overview";
 import { PrivacyPage } from "@/pages/privacy";
 import { ProjectLayout } from "@/pages/project-layout";
 import { ProjectsPage } from "@/pages/projects";
+import { SCFViewPage } from "@/pages/scf-view";
 import { SignInPage } from "@/pages/sign-in";
 import { SitesPage } from "@/pages/sites";
 import { SnippetPage } from "@/pages/snippet";
@@ -95,6 +97,8 @@ export const router = createBrowserRouter([
           { path: "api", element: <ApiSetupPage /> },
           { path: "api/traffic", element: <ApiTrafficPage /> },
           { path: "ai", element: <McpPage /> },
+          { path: "onchain", element: <OnchainPage /> },
+          { path: "scf-view", element: <SCFViewPage /> },
         ],
       },
       {

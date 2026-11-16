@@ -19,6 +19,7 @@ import { outcomeLabel } from "@/lib/outcomes";
 import { NotFoundPage } from "../not-found";
 import { AuditEntries } from "./audit";
 import { EvidenceList, evidenceOf, refreshOperator } from "./decision";
+import { TenantOnchainSection } from "./onchain-parts";
 
 type ActionSpec = {
   label: string;
@@ -177,6 +178,8 @@ export function TenantDetail({ detail }: { detail: OperatorTenantDetail }) {
               <Counts title="Last 30 full days (UTC)" counts={detail.ingest.last_30d} />
             </div>
           </Box>
+
+          <TenantOnchainSection tenantId={t.id} />
 
           <section aria-labelledby="audit-h" className="flex flex-col gap-3">
             <div className="flex flex-wrap items-baseline justify-between gap-2">

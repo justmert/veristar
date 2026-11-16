@@ -318,6 +318,7 @@ func testMCPIsolation(t *testing.T, e *env, alice, bob *client, ta, tb, sa, sb u
 		{"get_api_timeseries", map[string]any{"range": "7d"}}, {"get_api_status_codes", map[string]any{"range": "7d"}},
 		{"list_api_routes", map[string]any{"range": "7d"}}, {"get_api_top_error_routes", map[string]any{"range": "7d"}},
 		{"get_api_warnings", map[string]any{"range": "7d"}},
+		{"get_onchain_activity", nil}, {"get_scf_view", nil},
 		// a filter naming tenant b's service matches nothing of tenant a
 		{"get_api_overview", map[string]any{"range": "7d", "service": "beta-secret-svc"}},
 	} {
@@ -480,6 +481,7 @@ func testMCPOperator(t *testing.T, e *env, alice *client, ta, tb uuid.UUID) {
 		{"get_global_api_overview", map[string]any{"sort": "requests", "order": "desc"}},
 		{"compare_tenants_web", map[string]any{"tenant_ids": []string{ta.String(), tb.String()}}},
 		{"compare_tenants_api", map[string]any{"tenant_ids": []string{ta.String(), tb.String()}}},
+		{"get_tenant_onchain", map[string]any{"tenant_id": ta.String()}},
 	} {
 		r := call(t, cs, c.name, c.args)
 		require.False(t, r.isError, "%s: %s", c.name, r.raw)

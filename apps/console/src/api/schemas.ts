@@ -4,6 +4,7 @@
 // must not break an older console. a missing or mistyped field does fail.
 
 import { z } from "zod";
+import { compareOnchain, onchainSummary } from "./onchain-schemas";
 
 // zod compiles object parsers with new Function unless told not to. the csp
 // of deploy/caddy/app.Caddyfile has no 'unsafe-eval', so the compile (and
@@ -750,6 +751,8 @@ export const webProject = z.object({
     device: z.array(keyValue),
     browser: z.array(keyValue),
   }),
+  // 15.7 the on-chain column
+  onchain: onchainSummary.optional(),
 });
 export type WebProject = z.infer<typeof webProject>;
 
@@ -834,7 +837,14 @@ const apiShape = {
 };
 
 // 8.5 one row of the global api list
-export const apiProject = z.object({ tenant: tenantRef, ...siteFacts, ...apiNumbers, ...apiShape });
+export const apiProject = z.object({
+  tenant: tenantRef,
+  ...siteFacts,
+  ...apiNumbers,
+  ...apiShape,
+  // 15.7 the on-chain column
+  onchain: onchainSummary.optional(),
+});
 export type ApiProject = z.infer<typeof apiProject>;
 export const apiProjectPage = globalPage(apiProject);
 export type ApiProjectPage = z.infer<typeof apiProjectPage>;
@@ -899,6 +909,7 @@ export const webCompareProject = z.object({
     browser: breakdown,
     os: breakdown,
   }),
+  onchain: compareOnchain.optional(),
 });
 export type WebCompareProject = z.infer<typeof webCompareProject>;
 
@@ -937,6 +948,7 @@ export const apiCompareProject = z.object({
   totals: z.object({ ...apiNumbers, ...apiShape }),
   series: z.array(apiComparePoint),
   services: z.array(apiCompareService),
+  onchain: compareOnchain.optional(),
 });
 export type ApiCompareProject = z.infer<typeof apiCompareProject>;
 export const apiCompare = z

@@ -69,7 +69,7 @@ func (r route) key() string { return r.method + " " + strings.SplitN(r.path, "?"
 
 // gateIDs fills a route's parameters.
 type gateIDs struct {
-	tenant, user, invite, site, token, request, key, credential string
+	tenant, user, invite, site, token, request, key, credential, chain string
 	// domain is the site's domain, for bodies that must repeat it
 	domain string
 }
@@ -78,7 +78,7 @@ func (r route) fill(ids gateIDs) string {
 	return strings.NewReplacer(
 		"{tenant_id}", ids.tenant, "{user_id}", ids.user, "{invite_id}", ids.invite,
 		"{site_id}", ids.site, "{token_id}", ids.token, "{request_id}", ids.request, "{key_id}", ids.key,
-		"{credential_id}", ids.credential,
+		"{credential_id}", ids.credential, "{chain_id}", ids.chain,
 	).Replace(r.path)
 }
 
@@ -147,6 +147,17 @@ func catalogue(terms string) []route {
 	add(kindTenant, http.MethodPost, tp+"/erasure", func(ids gateIDs) any {
 		return map[string]any{"kind": "site_reset", "site_id": ids.site, "confirm_domain": ids.domain}
 	})
+	// the on-chain witness, the overview export and the scf view (contract
+	// 15 and 16); the add body names an account no project declared
+	add(kindTenant, http.MethodGet, tp+"/onchain", nil)
+	add(kindTenant, http.MethodPost, tp+"/onchain/ids", fixed(map[string]any{"strkey": gateFreshAccount}))
+	add(kindTenant, http.MethodDelete, tp+"/onchain/ids/{chain_id}", nil)
+	add(kindTenant, http.MethodPost, tp+"/onchain/ids/{chain_id}/challenge", nil)
+	add(kindTenant, http.MethodPost, tp+"/onchain/ids/{chain_id}/verify", fixed(map[string]any{
+		"method": "sep53", "signature": "c2lnbmF0dXJl",
+	}))
+	add(kindTenant, http.MethodGet, tp+"/overview.csv", nil)
+	add(kindTenant, http.MethodGet, tp+"/scf-view", nil)
 	add(kindTenant, http.MethodGet, tp+"/erasure", nil)
 	add(kindTenant, http.MethodGet, tp+"/erasure/{request_id}", nil)
 	// site routes
@@ -176,6 +187,11 @@ func catalogue(terms string) []route {
 	add(kindOperator, http.MethodGet, op+"/web/integrity?tenant={tenant_id}", nil)
 	add(kindOperator, http.MethodGet, op+"/api/projects", nil)
 	add(kindOperator, http.MethodGet, op+"/api/compare?tenants={tenant_id}", nil)
+	add(kindOperator, http.MethodGet, op+"/tenants/{tenant_id}/onchain", nil)
+	add(kindOperator, http.MethodGet, op+"/web/projects.csv", nil)
+	add(kindOperator, http.MethodGet, op+"/api/projects.csv", nil)
+	add(kindOperator, http.MethodGet, op+"/web/compare.csv?tenants={tenant_id}", nil)
+	add(kindOperator, http.MethodGet, op+"/api/compare.csv?tenants={tenant_id}", nil)
 	add(kindOperator, http.MethodPost, op+"/api-keys", fixed(map[string]any{"name": "intruder", "scope": "metrics:read"}))
 	add(kindOperator, http.MethodGet, op+"/api-keys", nil)
 	add(kindOperator, http.MethodGet, op+"/api-keys/{key_id}", nil)
@@ -205,11 +221,19 @@ func catalogue(terms string) []route {
 	add(kindMCP, http.MethodGet, "/.well-known/oauth-authorization-server", nil)
 
 	// machine metrics api
-	for _, p := range []string{"/tenants", "/web/daily", "/web/dimensions", "/web/hourly", "/web/integrity", "/api/daily", "/api/routes/daily", "/api/hourly", "/openapi.yaml"} {
+	for _, p := range []string{"/tenants", "/web/daily", "/web/dimensions", "/web/hourly", "/web/integrity", "/api/daily", "/api/routes/daily",
+		"/api/hourly", "/onchain/ids", "/onchain/daily", "/openapi.yaml"} {
 		add(kindMachine, http.MethodGet, operator.MachinePath+p, nil)
 	}
 	return out
 }
+
+// the accounts of the gate: tenant a declares the first; the add case
+// names the second, which no project declares
+const (
+	gateAccountA     = "GDWQ7YV27AVTL25BDOLZD6E44VCQLCEBJXBOOWA2R3VLKCUIZHSXZLDE"
+	gateFreshAccount = "GABZATVFOHSGTZNO2VUY2JDXW3R76URMFO2MUQVXBRBIDRCJXBEZG5QH"
+)
 
 // walked returns "METHOD /path" for every route the router serves.
 func walked(t *testing.T, r chi.Routes) []string {
@@ -239,18 +263,21 @@ type gateWorld struct {
 	tokenA         string // id
 	tokenAPlain    string // the otlp token itself
 	credentialA    string // id of alice's mcp access key
+	chainA         string // id of alice's declared account
+	chainKeyA      string // its strkey
 	requestA       string
 	slugA, nameA   string
 }
 
 func (w *gateWorld) aIDs() gateIDs {
 	return gateIDs{tenant: w.ta.String(), user: w.alice.userID.String(), invite: w.inviteA, site: w.sa.String(),
-		token: w.tokenA, request: w.requestA, domain: w.domainA, credential: w.credentialA}
+		token: w.tokenA, request: w.requestA, domain: w.domainA, credential: w.credentialA, chain: w.chainA}
 }
 
 // markers are strings only tenant a's data holds.
 func (w *gateWorld) markers() []string {
-	return []string{w.ta.String(), w.sa.String(), w.domainA, w.slugA, w.nameA, w.inviteA, w.tokenA, w.requestA, w.credentialA}
+	return []string{w.ta.String(), w.sa.String(), w.domainA, w.slugA, w.nameA, w.inviteA, w.tokenA, w.requestA, w.credentialA,
+		w.chainA, w.chainKeyA}
 }
 
 func (w *gateWorld) leaked(body []byte) []string {
@@ -296,6 +323,20 @@ func (e *env) gateWorld(t *testing.T) *gateWorld {
 	require.True(t, strings.HasPrefix(w.tokenAPlain, "sa_otlp_"))
 
 	w.credentialA, _ = w.alice.mcpKey(t, w.ta, "gate")
+
+	// a declared account of tenant a, with ledger activity and a read state
+	w.chainKeyA = gateAccountA
+	r = w.alice.call(t, http.MethodPost, "/api/tenants/"+w.ta.String()+"/onchain/ids", map[string]any{"strkey": w.chainKeyA})
+	require.Equal(t, http.StatusCreated, r.status, string(r.body))
+	w.chainA = r.json(t)["id"].(string)
+	e.superuser(t, func(c *pgx.Conn) {
+		_, err := c.Exec(context.Background(), `insert into agg.chain_daily (tenant_id, strkey, day, source, operations, transactions, counterparties)
+			values ($1, $2, current_date - 1, 'horizon', 7, 3, 2)`, w.ta, w.chainKeyA)
+		require.NoError(t, err)
+		_, err = c.Exec(context.Background(), `insert into agg.chain_reads (tenant_id, strkey, covered_from, covered_to, last_attempt_at, home_domain)
+			values ($1, $2, current_date - 1, current_date - 1, now(), $3)`, w.ta, w.chainKeyA, w.domainA)
+		require.NoError(t, err)
+	})
 
 	// a finished erasure request of site a, written as the control plane
 	// writes one at the end of a run; a real run needs the gateway and the
@@ -351,8 +392,10 @@ func (e *env) snapshot(t *testing.T, w *gateWorld) map[string]string {
 		// last_used_at moves with every accepted machine request, by design
 		{"operator_keys", `select coalesce(json_agg(json_build_array(x.id, x.name, x.scope, x.scope_tenant_id, x.expires_at, x.revoked_at) order by x.id)::text, '')
 			from cp.operator_api_keys x`, nil},
-		{"audit_tenant_a", `select count(*)::text from cp.audit_log x where x.target in ('tenant:' || $1, 'site:' || $2)`,
-			[]any{w.ta.String(), w.sa.String()}},
+		{"chain_ids", `select coalesce(json_agg(x order by x.id)::text, '') from cp.chain_ids x where x.tenant_id in ($1, $2)`, ab},
+		{"chain_daily", `select coalesce(json_agg(x order by x.tenant_id, x.strkey, x.day)::text, '') from agg.chain_daily x where x.tenant_id in ($1, $2)`, ab},
+		{"audit_tenant_a", `select count(*)::text from cp.audit_log x where x.target in ('tenant:' || $1, 'site:' || $2, 'chain_id:' || $3)`,
+			[]any{w.ta.String(), w.sa.String(), w.chainA}},
 		{"audit_bob", `select count(*)::text from cp.audit_log x where x.actor = 'user:' || $1`, []any{w.bob.userID.String()}},
 	}
 	e.superuser(t, func(c *pgx.Conn) {
