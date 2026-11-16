@@ -467,7 +467,7 @@ describe("operator step-up", () => {
       },
     ]);
     const host = await renderRoutes(area, "/operator");
-    await waitFor(() => expect(host.textContent).toContain("Use passkey or security key"));
+    await waitFor(() => expect(host.textContent).toContain("Use your passkey"));
     expect(host.textContent).not.toContain("queue");
     // nothing of the area is asked for before the step-up
     expect(calls.map((c) => c.url)).toEqual(["/api/me", "/api/operator/step-up"]);
@@ -488,7 +488,7 @@ describe("operator step-up", () => {
       },
     ]);
     const host = await renderRoutes(area, "/operator");
-    await waitFor(() => expect(host.textContent).toContain("Register a passkey or security key"));
+    await waitFor(() => expect(host.textContent).toContain("Register a passkey"));
     expect(host.textContent).toContain("Nov 17, 2026");
   });
 
@@ -523,7 +523,7 @@ describe("operator step-up", () => {
     ]);
     const host = await renderRoutes(area, "/operator");
     await waitFor(() =>
-      expect(host.textContent).toContain("This browser cannot use passkeys or security keys."),
+      expect(host.textContent).toContain("This browser cannot use passkeys."),
     );
   });
 });

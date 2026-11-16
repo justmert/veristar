@@ -4,6 +4,8 @@
 import { queryOptions } from "@tanstack/react-query";
 import { z } from "zod";
 import { request, requestNoContent } from "./client";
+import type { PasskeyAnswer } from "./endpoints";
+import { passkeyChallenge } from "./schemas";
 
 const time = z.iso.datetime();
 const enc = encodeURIComponent;
@@ -14,6 +16,7 @@ export const stepUpStatus = z.object({
   expires_at: time.nullable(),
   max_age_seconds: z.number().int().positive(),
   passkeys: z.number().int().nonnegative().optional(),
+  sign_in_passkey: z.boolean().optional(),
   enrollment: z.enum(["open", "sign_in_required", "closed"]).optional(),
   enrollment_until: time.nullable().optional(),
 });
@@ -24,38 +27,15 @@ export const passkey = z.object({
   name: z.string(),
   created_at: time,
   last_used_at: time.nullable(),
-  backup_eligible: z.boolean(),
 });
 export type Passkey = z.infer<typeof passkey>;
-
-const descriptor = z.object({
-  id: z.string(),
-  type: z.string(),
-  transports: z.array(z.string()).optional(),
-});
-
-// the options are passed to the browser as they came; only the fields the
-// translation in lib/webauthn reads are checked
-export const creationOptions = z.looseObject({
-  publicKey: z.looseObject({
-    challenge: z.string().min(16),
-    user: z.looseObject({ id: z.string().min(1), name: z.string(), displayName: z.string() }),
-    excludeCredentials: z.array(descriptor).optional(),
-  }),
-});
-export const requestOptions = z.looseObject({
-  publicKey: z.looseObject({
-    challenge: z.string().min(16),
-    allowCredentials: z.array(descriptor).optional(),
-  }),
-});
 
 export const rosterRole = z.enum(["operator", "operator_admin"]);
 export type RosterRole = z.infer<typeof rosterRole>;
 
 export const rosterEntry = z.object({
   id: z.uuid(),
-  kind: z.enum(["github", "stellar"]),
+  kind: z.enum(["github", "stellar", "passkey"]),
   github_id: z.number().int().positive().nullable(),
   github_login: z.string().nullable(),
   stellar_address: z.string().nullable(),
@@ -82,14 +62,19 @@ export type RosterAction = "suspend" | "resume" | "remove" | "reset-passkeys";
 export const operatorsApi = {
   stepUpStatus: (signal?: AbortSignal) =>
     request("GET", "/operator/step-up", stepUpStatus, undefined, signal),
-  stepUpOptions: () => request("POST", "/operator/step-up/options", requestOptions, {}),
-  stepUp: (credential: unknown) =>
-    request("POST", "/operator/step-up", stepUpStatus, { credential }),
+  stepUpChallenge: () => request("POST", "/operator/step-up/challenge", passkeyChallenge, {}),
+  stepUp: (answer: PasskeyAnswer) => request("POST", "/operator/step-up", stepUpStatus, answer),
   passkeys: (signal?: AbortSignal) =>
-    request("GET", "/operator/passkeys", z.object({ items: z.array(passkey) }), undefined, signal),
-  passkeyOptions: () => request("POST", "/operator/passkeys/options", creationOptions, {}),
-  addPasskey: (name: string, credential: unknown) =>
-    request("POST", "/operator/passkeys", passkey, { name, credential }),
+    request(
+      "GET",
+      "/operator/passkeys",
+      z.object({ items: z.array(passkey), sign_in_passkey: z.boolean() }),
+      undefined,
+      signal,
+    ),
+  passkeyChallenge: () => request("POST", "/operator/passkeys/challenge", passkeyChallenge, {}),
+  addPasskey: (name: string, answer: PasskeyAnswer) =>
+    request("POST", "/operator/passkeys", passkey, { name, ...answer }),
   deletePasskey: (id: string) => requestNoContent("DELETE", `/operator/passkeys/${enc(id)}`),
   roster: (signal?: AbortSignal) =>
     request(

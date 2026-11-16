@@ -1,40 +1,77 @@
-import { useMutation } from "@tanstack/react-query";
 import { KeyRound } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { Link } from "react-router";
 import { operatorKeys, operatorsApi, type StepUpStatus } from "@/api/operators";
 import { keys } from "@/api/queries";
-import { FormMessage } from "@/components/error-panel";
 import { TextField } from "@/components/form-field";
 import { Notice } from "@/components/notice";
 import { Panel } from "@/components/panel";
+import { PasskeyDialog } from "@/components/passkey-dialog";
 import { Button } from "@/components/ui/button";
 import { formatDateTimeUtc } from "@/lib/format";
-import { createPasskey, getAssertion, webauthnAvailable } from "@/lib/webauthn";
+import { passkeysAvailable } from "@/lib/passkey";
 import { queryClient } from "@/query-client";
 
-// after a step-up or a first passkey the operator area loads again with
-// the new session
-async function steppedUp(s?: StepUpStatus) {
+// after a step-up or a new passkey the operator area loads again with the
+// new session
+export async function steppedUp(s?: StepUpStatus) {
   if (s) queryClient.setQueryData(operatorKeys.stepUp, s);
   await queryClient.invalidateQueries({ queryKey: operatorKeys.stepUp });
   await queryClient.invalidateQueries({ queryKey: keys.operator });
 }
 
-export async function registerPasskey(name: string) {
-  const options = await operatorsApi.passkeyOptions();
-  const credential = await createPasskey(options);
-  return operatorsApi.addPasskey(name, credential);
+function lasting(seconds: number): string {
+  if (seconds < 3600) return `${Math.round(seconds / 60)} minutes`;
+  const h = Math.round(seconds / 3600);
+  return h === 1 ? "1 hour" : `${h} hours`;
 }
 
-// the operator area asks for a passkey or security key before it shows
-// anything (contract 5.15). the control plane enforces it on every route;
-// this panel is how the person answers.
-export function StepUpGate({ status }: { status: StepUpStatus }) {
-  if (!webauthnAvailable())
+// AddPasskeyDialog registers a passkey for the step-up (contract 5.15) with
+// the console's one passkey dialog: create the passkey, then confirm it once
+// over a challenge of the step-up, which proves the key and records the
+// step-up. name is what the operators page lists it as.
+export function AddPasskeyDialog({
+  open,
+  onOpenChange,
+  name,
+  userName,
+  onAdded,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  name: string;
+  userName: string;
+  onAdded?: () => void;
+}) {
+  return (
+    <PasskeyDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      mode="link"
+      title="Add a passkey"
+      description="Create a passkey on this device or a security key, then confirm it once."
+      userName={userName}
+      challenge={() => operatorsApi.passkeyChallenge()}
+      verify={async (answer) => {
+        await operatorsApi.addPasskey(name, answer);
+        await steppedUp();
+        onOpenChange(false);
+        onAdded?.();
+      }}
+    />
+  );
+}
+
+// the operator area asks for a passkey before it shows anything (contract
+// 5.15). the control plane enforces it on every route; this panel is how the
+// person answers. userName is what the browser's passkey list shows for a
+// passkey created here.
+export function StepUpGate({ status, userName }: { status: StepUpStatus; userName: string }) {
+  if (!passkeysAvailable())
     return (
-      <Notice tone="critical" title="This browser cannot use passkeys or security keys.">
-        The operator area needs one. Open the console in a current browser over HTTPS.
+      <Notice tone="critical" title="This browser cannot use passkeys.">
+        The operator area needs one. Open the console in a current version of Chrome, Edge, Firefox
+        or Safari.
       </Notice>
     );
   return (
@@ -42,7 +79,7 @@ export function StepUpGate({ status }: { status: StepUpStatus }) {
       {(status.passkeys ?? 0) > 0 ? (
         <ConfirmPanel maxAgeSeconds={status.max_age_seconds} />
       ) : status.enrollment === "open" ? (
-        <EnrollPanel until={status.enrollment_until ?? null} />
+        <EnrollPanel until={status.enrollment_until ?? null} userName={userName} />
       ) : status.enrollment === "sign_in_required" ? (
         <Notice
           tone="warning"
@@ -66,21 +103,8 @@ export function StepUpGate({ status }: { status: StepUpStatus }) {
   );
 }
 
-function lasting(seconds: number): string {
-  if (seconds < 3600) return `${Math.round(seconds / 60)} minutes`;
-  const h = Math.round(seconds / 3600);
-  return h === 1 ? "1 hour" : `${h} hours`;
-}
-
 function ConfirmPanel({ maxAgeSeconds }: { maxAgeSeconds: number }) {
-  const m = useMutation({
-    mutationFn: async () => {
-      const options = await operatorsApi.stepUpOptions();
-      const credential = await getAssertion(options);
-      return operatorsApi.stepUp(credential);
-    },
-    onSuccess: steppedUp,
-  });
+  const [open, setOpen] = useState(false);
   return (
     <Panel
       title={
@@ -89,27 +113,32 @@ function ConfirmPanel({ maxAgeSeconds }: { maxAgeSeconds: number }) {
           Confirm it is you
         </span>
       }
-      description={`The operator area needs your passkey or security key. The confirmation lasts ${lasting(maxAgeSeconds)} in this browser session.`}
+      description={`The operator area needs your passkey. The confirmation lasts ${lasting(maxAgeSeconds)} in this browser session.`}
     >
-      <div className="flex flex-col gap-3">
-        <div>
-          <Button onClick={() => m.mutate()} pending={m.isPending}>
-            {m.isPending ? "Waiting for your passkey" : "Use passkey or security key"}
-          </Button>
-        </div>
-        <FormMessage error={m.error} />
+      <div>
+        <Button onClick={() => setOpen(true)}>Use your passkey</Button>
       </div>
+      <PasskeyDialog
+        open={open}
+        onOpenChange={setOpen}
+        mode="confirm"
+        title="Confirm with your passkey"
+        userName=""
+        challenge={() => operatorsApi.stepUpChallenge()}
+        verify={async (answer) => {
+          const s = await operatorsApi.stepUp(answer);
+          await steppedUp(s);
+          setOpen(false);
+        }}
+      />
     </Panel>
   );
 }
 
-function EnrollPanel({ until }: { until: string | null }) {
-  const [name, setName] = useState("Security key");
+function EnrollPanel({ until, userName }: { until: string | null; userName: string }) {
+  const [name, setName] = useState("Passkey");
   const [nameError, setNameError] = useState<string | null>(null);
-  const m = useMutation({
-    mutationFn: (n: string) => registerPasskey(n),
-    onSuccess: () => steppedUp(),
-  });
+  const [open, setOpen] = useState(false);
   function submit(e: FormEvent) {
     e.preventDefault();
     const n = name.trim();
@@ -118,21 +147,21 @@ function EnrollPanel({ until }: { until: string | null }) {
       return;
     }
     setNameError(null);
-    m.mutate(n);
+    setOpen(true);
   }
   return (
     <Panel
       title={
         <span className="flex items-center gap-2">
           <KeyRound aria-hidden className="size-4 text-fg-2" />
-          Register a passkey or security key
+          Register a passkey
         </span>
       }
       description={
         <>
-          The operator area needs a second factor on top of your sign-in. Register your first one
-          now{until ? `, before ${formatDateTimeUtc(until)}` : ""}. Later ones need a confirmation
-          with this one.
+          The operator area needs a passkey on top of your sign-in. Register your first one now
+          {until ? `, before ${formatDateTimeUtc(until)}` : ""}. Later ones need a confirmation with
+          this one.
         </>
       }
     >
@@ -140,19 +169,17 @@ function EnrollPanel({ until }: { until: string | null }) {
         <TextField
           label="Name"
           name="passkey-name"
-          hint="So you can tell your keys apart, for example the device or the key's label."
+          hint="So you can tell your passkeys apart, for example the device or the security key's label."
           value={name}
           maxLength={64}
           onChange={(e) => setName(e.target.value)}
           error={nameError}
         />
         <div>
-          <Button type="submit" pending={m.isPending}>
-            {m.isPending ? "Waiting for your passkey" : "Register"}
-          </Button>
+          <Button type="submit">Register</Button>
         </div>
-        <FormMessage error={m.error} />
       </form>
+      <AddPasskeyDialog open={open} onOpenChange={setOpen} name={name.trim()} userName={userName} />
     </Panel>
   );
 }

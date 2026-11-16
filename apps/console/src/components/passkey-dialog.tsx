@@ -24,7 +24,9 @@ import { answerChallenge, createPasskey, type NewPasskey, passkeysAvailable } fr
 //
 // sign_in offers the passkey the browser holds for this console and the
 // creation of a new one; link offers creation only, because a passkey the
-// console already knows belongs to another account.
+// console already knows belongs to another account; confirm offers the
+// passkeys the browser holds only, for a step-up of the signed-in account
+// (contract 5.15).
 //
 // a challenge is fetched when the dialog opens, and again after every
 // verification, which spends it.
@@ -40,7 +42,7 @@ export function PasskeyDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  mode: "sign_in" | "link";
+  mode: "sign_in" | "link" | "confirm";
   title: ReactNode;
   description?: ReactNode;
   // what the browser's passkey list shows for a passkey created here
@@ -143,7 +145,7 @@ export function PasskeyDialog({
           </div>
         ) : (
           <div className="flex flex-col gap-2">
-            {mode === "sign_in" ? (
+            {mode !== "link" ? (
               <Button
                 type="button"
                 className="w-full"
@@ -152,19 +154,21 @@ export function PasskeyDialog({
                 onClick={() => answer("use")}
               >
                 <KeyRound aria-hidden />
-                Sign in with your passkey
+                {mode === "confirm" ? "Confirm with your passkey" : "Sign in with your passkey"}
               </Button>
             ) : null}
-            <Button
-              type="button"
-              variant={mode === "sign_in" ? "outline" : "default"}
-              className="w-full"
-              pending={pending === "create"}
-              disabled={!ready}
-              onClick={create}
-            >
-              {mode === "sign_in" ? "Create a new passkey" : "Create a passkey"}
-            </Button>
+            {mode !== "confirm" ? (
+              <Button
+                type="button"
+                variant={mode === "sign_in" ? "outline" : "default"}
+                className="w-full"
+                pending={pending === "create"}
+                disabled={!ready}
+                onClick={create}
+              >
+                {mode === "sign_in" ? "Create a new passkey" : "Create a passkey"}
+              </Button>
+            ) : null}
           </div>
         )}
         {error ? <FormMessage error={error} /> : null}
