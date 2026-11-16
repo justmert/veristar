@@ -441,7 +441,8 @@ var ruleDailyCTE = map[string]string{
   group by w.tenant_id, w.day
 )`,
 	MetricRequests: `rr as (
-  select m.tenant_id, m.service, m.source, m.count, (m.bucket_start at time zone 'UTC')::date as day
+  select m.tenant_id, m.service, m.source, m.count, (m.bucket_start at time zone 'UTC')::date as day,
+         m.traffic_class
   from api.operator_daily(@from_at::timestamptz, @to_end::timestamptz, array(select id from t)) m
 ),
 rs as (
@@ -449,7 +450,7 @@ rs as (
   from rr group by tenant_id, service
 ),
 d as (
-  select rr.tenant_id, rr.day, sum(rr.count)::bigint as v
+  select rr.tenant_id, rr.day, coalesce(sum(rr.count) filter (where rr.traffic_class = 'app'), 0)::bigint as v
   from rr join rs on rs.tenant_id = rr.tenant_id and rs.service = rr.service and rs.source = rr.source
   group by rr.tenant_id, rr.day
 )`,

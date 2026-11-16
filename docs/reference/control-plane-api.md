@@ -3835,8 +3835,8 @@ Every row of 8.3 and 8.5 carries:
 - `cohort` is the confirmed cohort, every field `null` without one.
 - The five key metrics: `visitors` (primary-band visitors, the verified
   count of 8.3), `pageviews` (primary band), `requests` and `error_rate`
-  (requests answered 500 to 599 over requests) with the source rule of 8.5,
-  and `onchain_operations` (15.7). `value` is the range, `previous` the range
+  (requests answered 500 to 599 over requests) with the source rule of 8.5
+  and without infrastructure requests (7.4), and `onchain_operations` (15.7). `value` is the range, `previous` the range
   of equal length that ends the day before `from`.
 - `change` is `(value - previous) / previous` for the four counts and
   `value - previous` for the error rate; `null` when `previous` is 0 or
@@ -3879,7 +3879,7 @@ least `min_days` days with `metric` at or above `min_per_day`, and, when
 `min_grade` is set, an integrity grade (17) over those months of at least
 `min_grade` (A is best). `metric` is `visitors` (primary band, summed over
 the project's sites per day), `requests` (the source rule of 8.5 over the
-window) or `onchain_operations`. Limits: `min_per_day` 1 to 10^12,
+window, infrastructure requests left out as in 7.4) or `onchain_operations`. Limits: `min_per_day` 1 to 10^12,
 `min_days` 1 to 28, `months` 1 to 12, at most 200 rules. `cohort` limits the
 evaluation to projects confirmed in it; its fields are optional.
 

@@ -121,7 +121,8 @@ kw as (
   group by d.tenant_id
 ),
 kr as (
-  select m.tenant_id, m.service, m.source, m.status_code, m.count, m.bucket_start >= @from_at::timestamptz as cur
+  select m.tenant_id, m.service, m.source, m.status_code, m.count, m.bucket_start >= @from_at::timestamptz as cur,
+         m.traffic_class = 'app' as app
   from api.operator_daily(@prev_from_at::timestamptz, @to_end::timestamptz, array(select id from pop)) m
 ),
 ks as (
@@ -131,10 +132,11 @@ ks as (
 ),
 ka as (
   select kr.tenant_id,
-         coalesce(sum(kr.count) filter (where kr.cur), 0)::bigint as requests,
-         coalesce(sum(kr.count) filter (where kr.cur and kr.status_code between 500 and 599), 0)::bigint as requests_5xx,
-         coalesce(sum(kr.count) filter (where not kr.cur), 0)::bigint as prev_requests,
-         coalesce(sum(kr.count) filter (where not kr.cur and kr.status_code between 500 and 599), 0)::bigint
+         coalesce(sum(kr.count) filter (where kr.app and kr.cur), 0)::bigint as requests,
+         coalesce(sum(kr.count) filter (where kr.app and kr.cur and kr.status_code between 500 and 599), 0)::bigint
+           as requests_5xx,
+         coalesce(sum(kr.count) filter (where kr.app and not kr.cur), 0)::bigint as prev_requests,
+         coalesce(sum(kr.count) filter (where kr.app and not kr.cur and kr.status_code between 500 and 599), 0)::bigint
            as prev_requests_5xx
   from kr
   join ks on ks.tenant_id = kr.tenant_id and ks.service = kr.service and ks.cur = kr.cur and ks.source = kr.source
