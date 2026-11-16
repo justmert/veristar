@@ -447,6 +447,9 @@ paths:
         Every saved threshold rule (control-plane-api 19.4), oldest first.
         At most 200 rules exist, so the list has no pages. Any key may read
         the rules; a scoped key evaluates them for its own tenant only.
+        `tenant` is checked like on every route and does not narrow the list.
+      parameters:
+        - $ref: '#/components/parameters/tenant'
       responses:
         '200':
           description: Every rule.
@@ -461,6 +464,10 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
         '429':
           $ref: '#/components/responses/RateLimited'
         '500':

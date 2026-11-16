@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+
+	"github.com/go-chi/chi/v5"
 )
 
 // StellarTOMLPath is where sep-1 places a domain's stellar.toml.
@@ -37,26 +39,16 @@ func (h *Routes) StellarTOML() string {
 	return b.String()
 }
 
-// StellarTOMLHandler serves StellarTOML at StellarTOMLPath with the cors
-// header sep-1 requires and a text/plain type, so browsers show it.
-func (h *Routes) StellarTOMLHandler() http.Handler {
+// WellKnown registers stellar.toml on a router mounted at /.well-known.
+// it answers with the cors header sep-1 requires and a text/plain type, so
+// browsers show it.
+func (h *Routes) WellKnown(r chi.Router) {
 	body := []byte(h.StellarTOML())
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != StellarTOMLPath {
-			http.NotFound(w, r)
-			return
-		}
-		if r.Method != http.MethodGet && r.Method != http.MethodHead {
-			w.Header().Set("Allow", "GET, HEAD")
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
+	r.Method(http.MethodGet, strings.TrimPrefix(StellarTOMLPath, "/.well-known"), http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.Header().Set("Cache-Control", "public, max-age=300")
 		w.WriteHeader(http.StatusOK)
-		if r.Method == http.MethodGet {
-			_, _ = w.Write(body)
-		}
-	})
+		_, _ = w.Write(body)
+	}))
 }
