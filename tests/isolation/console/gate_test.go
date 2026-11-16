@@ -902,7 +902,7 @@ func testMachineAPI(t *testing.T, e *env, w *gateWorld, cat []route) {
 			dataRoutes = append(dataRoutes, r.fill(gateIDs{rule: w.ruleID}))
 		}
 	}
-	require.Len(t, dataRoutes, 12)
+	require.Len(t, dataRoutes, 13)
 	sent := 0
 	refused := func(r machineResp, status int, code, what string) {
 		t.Helper()
