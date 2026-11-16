@@ -1,8 +1,8 @@
 // Package prober is the outside view of the platform. from
 // the probe node it sends a real web event through the tracker protocol and
 // a real otlp metric with a probe token, reads both back through the machine
-// api, checks the console, the umami host, the tracker files and every node's
-// tls, and pushes each result to gatus external endpoints and to prometheus.
+// api, checks the console, the tracker files and every node's tls, and
+// pushes each result to gatus external endpoints and to prometheus.
 package prober
 
 import (
@@ -41,7 +41,6 @@ type Config struct {
 	IngestURL  *url.URL
 	OTLPURL    *url.URL
 	ConsoleURL *url.URL
-	WebURL     *url.URL
 	// MachineURL is the base of the machine api, ending in /api/metrics/v1.
 	MachineURL *url.URL
 	MachineKey config.Secret
@@ -73,7 +72,6 @@ func Load(e *config.Env) (Config, error) {
 		IngestURL:         e.URL("PROBER_INGEST_URL"),
 		OTLPURL:           e.URL("PROBER_OTLP_URL"),
 		ConsoleURL:        e.URL("PROBER_CONSOLE_URL"),
-		WebURL:            e.URL("PROBER_WEB_URL"),
 		MachineURL:        e.URL("PROBER_MACHINE_API_URL"),
 		MachineKey:        e.Secret("PROBER_MACHINE_API_KEY", 46),
 		SiteID:            e.String("PROBER_SITE_ID"),

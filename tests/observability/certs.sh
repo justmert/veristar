@@ -34,5 +34,5 @@ if [ $# -ge 4 ]; then
 	exit 0
 fi
 for n in edge-1 edge-2 edge-3; do leaf "$n" 90 in.obs.test otlp.obs.test; done
-for n in core-1 core-2; do leaf "$n" 90 app.obs.test web.obs.test; done
+for n in core-1 core-2; do leaf "$n" 90 app.obs.test; done
 leaf probe-1 90 status.obs.test

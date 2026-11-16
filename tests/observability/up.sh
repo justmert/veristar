@@ -86,7 +86,6 @@ CONTROLPLANE_ADDR=0.0.0.0:8085
 CONTROLPLANE_OPS_ADDR=0.0.0.0:9090
 CONSOLE_ORIGIN=https://app.obs.test
 INGEST_ORIGIN=https://in.obs.test
-WEB_ORIGIN=https://web.obs.test
 TRACKER_RELEASE_DIR=/releases
 API_MINUTE_RETENTION_DAYS=30
 API_HOURLY_RETENTION_MONTHS=36
@@ -142,7 +141,7 @@ snippet='(sa_tls_files) {
 }
 '
 { printf '%s\n' "$snippet"; sh "$root/deploy/caddy/assemble.sh" edge "$root/deploy/caddy/edge.Caddyfile"; } >"$OBS/conf/edge.Caddyfile"
-{ printf '%s\n' "$snippet"; sh "$root/deploy/caddy/assemble.sh" core "$root/deploy/caddy/app.Caddyfile" "$root/deploy/caddy/web.Caddyfile"; } >"$OBS/conf/core.Caddyfile"
+{ printf '%s\n' "$snippet"; sh "$root/deploy/caddy/assemble.sh" core "$root/deploy/caddy/app.Caddyfile"; } >"$OBS/conf/core.Caddyfile"
 
 render() { ANSIBLE_ROLES_PATH="$root/infra/ansible/roles" "$ansible_playbook" -i inventory.yml render.yml -e "obs=$OBS" -e "observability_repo_root=$root" >"$OBS/render.log" 2>&1 || { cat "$OBS/render.log"; exit 1; }; }
 echo "== render"

@@ -31,7 +31,6 @@ var (
 	KeyWebEvent      = GatusKey(groupProbe, "web event")
 	KeyOTLPMetric    = GatusKey(groupProbe, "otlp metric")
 	KeyConsole       = GatusKey(groupProbe, "console")
-	KeyWebHost       = GatusKey(groupProbe, "web host")
 	KeyMachineAPI    = GatusKey(groupProbe, "machine api")
 	KeyTrackerFiles  = GatusKey(groupProbe, "tracker integrity")
 	errNotMeasured   = errors.New("not measured")
@@ -152,7 +151,7 @@ func newTransport(roots *x509.CertPool, timeout, sendPing, ping time.Duration) (
 
 func (p *Prober) keys() []string {
 	k := []string{KeyIngestion, KeyDashboard, KeyFreshnessWeb, KeyFreshnessAPI, KeyWebEvent, KeyOTLPMetric,
-		KeyConsole, KeyWebHost, KeyMachineAPI, KeyTrackerFiles}
+		KeyConsole, KeyMachineAPI, KeyTrackerFiles}
 	for _, n := range p.cfg.Nodes {
 		for _, h := range n.Hosts {
 			k = append(k, NodeKey(n.Name, h))
@@ -252,14 +251,12 @@ func (p *Prober) pipeline(ctx context.Context) {
 	webRead, webReadErr := p.freshness(ctx, &p.web, KeyFreshnessWeb, "web", p.webVisible)
 	_, _ = p.freshness(ctx, &p.api, KeyFreshnessAPI, "api", p.apiVisible)
 
-	// dashboard availability: console, umami host and an authenticated
-	// machine api call, the /web/hourly read above
+	// dashboard availability: the console and an authenticated machine api
+	// call, the /web/hourly read above, which reads umami live
 	conD, conErr := p.timed(ctx, func(c context.Context) error { return p.getOK(c, p.cfg.ConsoleURL.String()) })
 	p.result(ctx, KeyConsole, conErr, conD)
-	webHostD, webHostErr := p.timed(ctx, func(c context.Context) error { return p.getOK(c, p.cfg.WebURL.String()) })
-	p.result(ctx, KeyWebHost, webHostErr, webHostD)
 	p.result(ctx, KeyMachineAPI, webReadErr, webRead)
-	p.result(ctx, KeyDashboard, errors.Join(conErr, webHostErr, webReadErr), conD+webHostD+webRead)
+	p.result(ctx, KeyDashboard, errors.Join(conErr, webReadErr), conD+webRead)
 }
 
 // freshness reads the visible count and judges it. it returns the read's

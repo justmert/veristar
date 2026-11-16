@@ -2,7 +2,7 @@
 // on the probe node, off the main provider, beside gatus: every interval it
 // sends a real web event and a real otlp metric for the internal probe
 // tenant, reads them back through the machine api, checks the console, the
-// umami host, the tracker files and every node's tls, and pushes each result
+// tracker files and every node's tls, and pushes each result
 // to gatus external endpoints. /healthz, /readyz and /metrics are on
 // PROBER_OPS_ADDR.
 package main
@@ -32,7 +32,7 @@ serve (the default) probes until SIGINT or SIGTERM.
 
 environment: PROBER_OPS_ADDR, PROBER_INTERVAL (30s), PROBER_TIMEOUT,
 PROBER_FRESHNESS_MAX_DELAY (10m), PROBER_CERT_MIN_VALIDITY (336h),
-PROBER_INGEST_URL, PROBER_OTLP_URL, PROBER_CONSOLE_URL, PROBER_WEB_URL,
+PROBER_INGEST_URL, PROBER_OTLP_URL, PROBER_CONSOLE_URL,
 PROBER_MACHINE_API_URL (ending in /api/metrics/v1), PROBER_MACHINE_API_KEY
 (scoped to the probe tenant), PROBER_SITE_ID, PROBER_SITE_ORIGIN,
 PROBER_USER_AGENT (a browser user agent: umami drops bots), PROBER_OTLP_TOKEN,
