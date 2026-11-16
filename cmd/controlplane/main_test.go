@@ -161,7 +161,7 @@ func TestServeStartsAndStops(t *testing.T) {
 
 	// every tenant-scoped route is mounted and needs a session
 	for _, p := range []string{"/api/me", "/api/tenants", "/api/sites/" + "00000000-0000-7000-8000-000000000001" + "/snippet",
-		"/api/sso/umami?site=x", "/api/operator/tenants", "/api/sites/00000000-0000-7000-8000-000000000001/verification"} {
+		"/api/tenants/00000000-0000-7000-8000-000000000002/web/summary", "/api/operator/tenants", "/api/sites/00000000-0000-7000-8000-000000000001/verification"} {
 		res, err := get("http://" + addr + p)
 		require.NoError(t, err)
 		_ = res.Body.Close()
