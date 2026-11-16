@@ -188,7 +188,8 @@ func reportKeygen(args []string, stdout io.Writer) error {
 		return err
 	}
 	dir := args[0]
-	if err := os.Mkdir(dir, 0o700); err != nil {
+	if err := os.Mkdir(dir, 0o700); err != nil { //nolint:gosec // the operator names the directory
+
 		return fmt.Errorf("the directory must not exist yet: %w", err)
 	}
 	for name, v := range map[string]string{"report_signing_seed.json": kp.Seed(), "report_signing_key.json": kp.Address()} {
@@ -196,7 +197,8 @@ func reportKeygen(args []string, stdout io.Writer) error {
 		if err != nil {
 			return err
 		}
-		if err := os.WriteFile(filepath.Join(dir, name), b, 0o600); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, name), b, 0o600); err != nil { //nolint:gosec // inside the directory the operator named
+
 			return err
 		}
 	}

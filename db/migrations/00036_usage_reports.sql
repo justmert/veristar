@@ -104,10 +104,48 @@ begin
 end
 $$;
 -- +goose StatementEnd
+revoke all on function cp.usage_report_guard() from public;
 create trigger usage_reports_guard before insert or update on cp.usage_reports
   for each row execute function cp.usage_report_guard();
 
+-- the removal purge deletes a removed tenant's reports through the
+-- function below; it runs with platform_owner's rights
+create policy usage_reports_purge on cp.usage_reports for delete to platform_owner using (true);
+create policy usage_reports_purge_read on cp.usage_reports for select to platform_owner using (true);
+
+-- +goose StatementBegin
+-- deletes a removed tenant's usage reports and returns how many went. a
+-- shared link of a removed tenant already answers 404; the purge removes the
+-- stored reports as well. cp_system has no delete right on the table, so a
+-- handler can never delete a report of a tenant that is not removed.
+create function cp.purge_usage_reports(tenant uuid)
+returns bigint
+language plpgsql security definer
+set search_path = pg_catalog, pg_temp
+as $$
+declare
+  n bigint;
+begin
+  if tenant is null then
+    raise exception 'cp.purge_usage_reports: tenant is required'
+      using errcode = 'null_value_not_allowed';
+  end if;
+  if not exists (select 1 from cp.tenants t where t.id = tenant and t.status = 'removed') then
+    raise exception 'cp.purge_usage_reports: tenant % is not removed', tenant
+      using errcode = 'object_not_in_prerequisite_state';
+  end if;
+  delete from cp.usage_reports r where r.tenant_id = tenant;
+  get diagnostics n = row_count;
+  return n;
+end
+$$;
+-- +goose StatementEnd
+revoke all on function cp.purge_usage_reports(uuid) from public;
+grant execute on function cp.purge_usage_reports(uuid) to cp_system;
+
 -- +goose Down
+revoke execute on function cp.purge_usage_reports(uuid) from cp_system;
+drop function cp.purge_usage_reports(uuid);
 drop trigger usage_reports_guard on cp.usage_reports;
 drop function cp.usage_report_guard();
 drop table cp.usage_reports;

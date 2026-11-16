@@ -111,6 +111,7 @@ begin
 end
 $$;
 -- +goose StatementEnd
+revoke all on function cp.tenant_cohort_proposal_guard() from public;
 create trigger tenant_cohorts_proposal_guard before insert or update on cp.tenant_cohorts
   for each row execute function cp.tenant_cohort_proposal_guard();
 

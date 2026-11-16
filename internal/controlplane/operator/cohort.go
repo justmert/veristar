@@ -29,11 +29,6 @@ type cohortFilter struct {
 	AwardTo   *time.Time `json:"award_to"`
 }
 
-// any reports whether a cohort filter is set.
-func (c cohortFilter) any() bool {
-	return c.Program != nil || c.Round != nil || c.Category != nil || c.AwardFrom != nil || c.AwardTo != nil
-}
-
 func parseCohortText(q url.Values, key string) (*string, error) {
 	v, ok, err := oneValue(q, key)
 	if err != nil || !ok {
