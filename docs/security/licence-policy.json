@@ -14,13 +14,6 @@
           "@creit.tech/stellar-wallets-kit": "the console imports the kit's module api and a fixed list of its wallet modules (apps/console/src/lib/stellar-wallet/modules.ts), never its walletconnect, hot, near, trezor or xbull connectors. the kit counts as shipped; each package below it counts as shipped exactly when the real console bundle (apps/console/scripts/bundle-packages.mjs) contains it, and the rest of its tree is recorded as not shipped"
         }
       },
-      "deploy/caddy/umami-theme": {
-        "artifact": "the umami dashboard theme in the console image at /srv/umami-theme (deploy/images/console.Dockerfile, docs/adr/0004-umami-dashboard-theme.md). assets.ts copies the woff2 files and the licence of the two font packages into site/; nothing else of the importer is shipped",
-        "also_bundled": {
-          "@fontsource-variable/inter": "its upright woff2 files and LICENSE are copied into site/_veristar/fonts",
-          "@fontsource-variable/jetbrains-mono": "its upright woff2 files and LICENSE are copied into site/_veristar/fonts"
-        }
-      },
       "packages/tracker": {
         "artifact": "sdk.js and the npm package. both builds refuse any input outside src/ and releases/ (ownInputsOnly in packages/tracker/build.mjs), and the packed package.json declares no dependencies"
       }

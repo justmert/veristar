@@ -15,7 +15,8 @@ This page states its security model; the privacy side is in
   router that passes `GET` only, so no tool can reach a write route even through a bug.
 - Web tools call Umami through an allowlist of read routes of one website
   (`internal/umami/read.go`); any other path is refused before a request is made.
-- Umami's own MCP endpoint and its API key routes stay disabled and blocked by the web Caddy.
+- Umami's own MCP endpoint stays disabled (`MCP_ENABLED` unset), and no public host serves
+  Umami, so neither it nor Umami's API key routes are reachable from the internet.
   Their keys would live in Umami, outside the revocation rules below.
 
 ## Credentials

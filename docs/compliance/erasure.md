@@ -24,7 +24,7 @@ suspension or by terms the project has not accepted yet. There are three kinds.
 | Kind | The project owner supplies | What is deleted | When it works |
 |---|---|---|---|
 | `visitor_today` | the site, the data subject's IP address and user agent | that visitor's Umami sessions on both bands of the site for the current UTC day, with all their events; the visitor's undeliverable messages in `WEB_DLQ`; the visitor's record in `visit_state` | only during the UTC day of the visit |
-| `session` | the site and an Umami session id from the dashboard | that session and all its events; while the session's visit record still exists (24 hours after its last event), also the visitor's `WEB_DLQ` messages and the record | during the whole raw retention period |
+| `session` | the site and an Umami session id, found with the session finder on the Privacy page (contract section 18.7) | that session and all its events; while the session's visit record still exists (24 hours after its last event), also the visitor's `WEB_DLQ` messages and the record | during the whole raw retention period |
 | `site_reset` | the site and its domain, typed again as confirmation | every event and session of both Umami websites of the site (Umami's reset), every `WEB_DLQ` message and visit record of the site, and every aggregate row of the site | at any time |
 
 After each kind the jobs task `erasure-followup` reads the affected UTC days of

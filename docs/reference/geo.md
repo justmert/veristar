@@ -58,10 +58,11 @@ What this project does about it:
 
 - `scripts/fetch-dbip.sh` writes `DBIP-ATTRIBUTION.txt` next to the database.
   The gateway image ships that file beside the database.
-- Every page that shows country data must carry the link above: the console
-  pages with country breakdowns, the operator dashboards and the public docs.
-  Umami's own dashboard is run unmodified, so the console page that links into
-  it and the tenant onboarding guide carry the attribution for it.
+- Every page that shows country data must carry the link above: the console's
+  web dashboard and other pages with country breakdowns, the operator
+  dashboards and the public docs. Umami's own interface has no public host
+  ([ADR 0005](../adr/0005-umami-as-engine-only.md)), so no page outside the
+  console and the docs shows country results.
 - The database is used unmodified. CC BY 4.0 does not restrict commercial use
   or require share-alike.
 

@@ -3,8 +3,12 @@ title: "Umami contract"
 description: "What the platform relies on in Umami, checked automatically against the pinned image."
 ---
 
-What the platform relies on in Umami, confirmed by running the pinned image. The checks
-are automated and form the upgrade gate (`make umami-compat`).
+What the platform relies on in Umami, confirmed by running the pinned image. Umami is the
+engine only: the replayer stores events through its collection route and the control plane
+and jobs read and manage it through its REST API on the private network. Its interface has no
+public host and no project uses it ([ADR 0005](../adr/0005-umami-as-engine-only.md)), so this
+contract covers the API and the stored data, not the interface. The checks are automated and
+form the upgrade gate (`make umami-compat`).
 
 - Image: `ghcr.io/umami-software/umami:3.5.0@sha256:b64f40400d77bcadd39cf5c62a1e368c99524ca442024f96e1133355a19a5dbc`
 - Source read alongside: tag `v3.5.0`, commit `d3c62a805beda8643cb468924dda38617fb4c286`. File paths
@@ -12,8 +16,8 @@ are automated and form the upgrade gate (`make umami-compat`).
 - Environment under test: `deploy/compose/dev.yml`, including
   `CLIENT_IP_HEADER=x-edge-client-ip`, `ENABLE_CLIENT_SALT=1`, `SALT_ROTATION=daily`,
   `DISABLE_LOGIN=1`.
-- Checks: `tests/umami-compat/*_test.go` (Go, build tag `umamicompat`) and
-  `tests/umami-compat/specs/ui.spec.ts` (Playwright, Chromium). Verified 2026-11-12.
+- Checks: `tests/umami-compat/*_test.go` (Go, build tag `umamicompat`). Verified 2026-11-12;
+  the interface checks of earlier versions were retired with ADR 0005.
 
 ## Results
 
@@ -27,14 +31,15 @@ are automated and form the upgrade gate (`make umami-compat`).
 | 6 | Bot user agent? | 200, body exactly `{"beep":"boop"}`, no session, no pageview (Googlebot, bingbot). | `TestBotUserAgentStoresNothing` | `isbot` check in `route.ts` |
 | 7 | Visit id and `x-umami-cache`? | With the cache token the visit and session are kept, also across UTC hours. Without it the visit id is derived from session and UTC hour: two events 45 minutes apart in one hour share a visit, an event in the next hour starts a new one. A cache token of another website is ignored. | `TestVisitIDCacheAndHourRule`, `TestCacheTokenBoundToWebsite` | `resolveCollectionSession`: `visitSalt = hash(startOfHour(createdAt))`, expiry skipped when `historical` |
 | 8 | `DISABLE_LOGIN=1`? | `GET /login` is 403; `POST /api/auth/login` still works. | `TestDisableLoginBlocksOnlyThePage` | `docker/proxy.ts` `disableLogin` |
-| 9 | UI path of a team website | `/websites/<id>` renders the full overview for a team member. Umami's own navigation inside a team uses `/teams/<teamId>/websites/<id>`, which `next.config.ts` rewrites to `/websites/<id>`; both show all seven metrics. The personal list `/websites` is empty for this role; team websites are listed at `/teams/<teamId>/websites`. The control plane's SSO target `/websites/<id>` works. | `ui.spec.ts` | `next.config.ts` rewrite `/teams/:teamId/:path*`, `src/components/hooks/useNavigation.ts` `renderUrl` |
-| 10 | What can a `view-only` user with `team-view-only` open? | Overview, events, sessions, realtime, compare, breakdown and the other report pages of the team website; team settings (read-only member list, "Leave" button); the website settings page and `/admin/users` render their frame, but every write is refused by the API (401). The UI still shows Save, Add (share), Transfer, Reset and Delete buttons; pressing Save shows "Unauthorized" and changes nothing. | `ui.spec.ts`, `TestViewOnlyTeamMemberReadsButCannotChange` | `src/lib/constants.ts` `ROLE_PERMISSIONS` (`view-only` and `team-view-only` are empty) |
-| 11 | Are all seven web metrics visible to that role? | Yes, on the overview: Visitors, Visits, Views, Bounce rate, Visit duration in the metrics bar; Referrers (Sources panel), Countries (Location panel), Browsers, OS and Devices (Environment panel). Via the API the role reads `/stats`, `/metrics` and `/pageviews` of its team's websites and gets 401 for other teams. | `ui.spec.ts`, `TestViewOnlyTeamMemberReadsButCannotChange`, `TestViewOnlyCannotReadOtherTeam` | `src/app/(main)/websites/[websiteId]/WebsiteMetricsBar.tsx`, `WebsitePanels.tsx` |
-| 12 | Does `/sso` replace the history entry? | **No.** `SSOPage` calls `router.push(url)`. After SSO the tab history holds `/sso?token=<token>&url=...` followed by the target. Pressing Back lands on `/sso`, which stores the token again and pushes the target. | `ui.spec.ts` (Navigation API entries) | `src/app/sso/SSOPage.tsx` |
+| 10 | What can a `view-only` user with `team-view-only` do through the API? | Read the routes of its team's websites; every write is refused (401). The web dashboard and the MCP tools read as this user. | `TestViewOnlyTeamMemberReadsButCannotChange` | `src/lib/constants.ts` `ROLE_PERMISSIONS` (`view-only` and `team-view-only` are empty) |
+| 11 | Does that role read all seven web metrics, and only for its team? | Yes: `/stats`, `/metrics` and `/pageviews` of its team's websites, and 401 for other teams. This is the second isolation check of the web dashboard ([control-plane-api.md](control-plane-api.md) 18.7). | `TestViewOnlyTeamMemberReadsButCannotChange`, `TestViewOnlyCannotReadOtherTeam` | `src/permissions` `canViewWebsite` |
 | 13 | Route list | 141 paths, 186 operations in `/openapi.json` of the image, pinned in `tests/umami-compat/testdata/openapi-routes.txt`. | `TestOpenAPIRouteListUnchanged` | `/app/public/openapi.json` in the image, generated by `scripts/generate-openapi.ts` |
 | 14 | Do several umami processes on one database agree on session and visit ids? | Yes, when they share `DATABASE_URL` and `APP_SECRET`. The session id is `uuid(website, ip, userAgent, hash(salt of the event's day, client salt), distinctId)` and the visit id `uuid(sessionId, hash(start of the event's utc hour))`; `uuid` hashes with `secret() = hash(APP_SECRET)`. The salt follows the event `timestamp`, not the clock (`SALT_ROTATION=daily`). The cache token is a jwt signed with the same secret, so a token from one process is accepted by another. Sessions are written with `on conflict (session_id) do nothing`. Without Redis nothing is cached in a process. Verified 2026-11-13: two processes gave the same session and visit for the same visitor, process 2 continued process 1's visit across an hour with process 1's token, and umami counted 1 visitor, 2 visits, 5 views. | `TestUmamiProcessesAgreeOnSessionAndVisit`, `TestReplayerSpreadsVisitorsOverUmamiProcesses` (`internal/replayer`) | `src/lib/collection-session.ts` `resolveCollectionSession`, `src/lib/crypto.ts` `secret`, `uuid`, `getSalt`, `src/lib/jwt.ts`, `src/queries/sql/sessions/createSession.ts`, `src/lib/load.ts` |
 | 15 | What event data and names can umami store? | Numbers of 1e15 or more in absolute value, revenue of 1e14 or more with a currency, and names starting with `=`, `+`, `-` or `@` are answered 400 (`request-schema.ts`). A string in umami's date format dated before year 1 is answered **500 after the `website_event` row was inserted** (postgres 22008 on `event_data.date_value`, `numeric(19,4)` and `timestamptz(6)` in `prisma/schema.prisma`). Tracker and gateway refuse all of these; the cases are `packages/tracker/test/vectors/storable-v1.json`. | `TestStorableVectorsAgainstUmami` (`internal/replayer`) | `src/app/api/send/request-schema.ts`, `src/queries/sql/events/saveEvent.ts`, `saveEventData.ts`, `src/lib/data.ts` |
 | 16 | Does `/api/heartbeat` cover the database? | **No.** It answers `{"ok":true}` without a query, also while postgres is down. A send for a website id that does not exist reaches the database: 400 "Website not found." when it is up, 500 when it is down. The replayer uses both (`umami.Client.Healthy`). | `TestOutage/postgres_stopped`, `TestPoisonEventDoesNotStallOtherSites` (`internal/replayer`) | `src/app/api/heartbeat/route.ts`, `src/lib/load.ts` `fetchWebsite` |
+
+Items 9 and 12 covered Umami's interface and were retired with ADR 0005; the other numbers
+stay, because other pages cite them.
 
 ## Request and response shapes used by `internal/umami`
 
@@ -67,47 +72,27 @@ are automated and form the upgrade gate (`make umami-compat`).
   then returns the error. **Deleting an unknown user, team or website, or resetting an unknown
   website, answers 500 with an empty body**, so callers check existence instead of retrying deletes.
 
-## Deny list for `web.<BASE_DOMAIN>`
+## Reads of the web dashboard
 
-The dashboard of a view-only tenant uses only these calls (recorded by `ui.spec.ts` across the
-overview, sessions, events, realtime, compare, settings and team pages):
-`POST /api/auth/verify` and `GET` on `/api/heartbeat`, `/api/2fa/status`, `/api/realtime/<id>`,
-`/api/teams/<id>`, `/api/teams/<id>/users`, `/api/teams/<id>/websites`, `/api/users/<id>/teams`,
-`/api/users/<id>/websites`, `/api/websites/charts` and the read routes under `/api/websites/<id>`.
+The console's web dashboard and the MCP web tools read, as the member's own Umami user, only
+the website read routes `internal/umami.ReadWebsite` allows (`/stats`, `/metrics`,
+`/pageviews`, `/active` and the report reads of the MCP tools); any other route is refused
+before a request is made. The dashboard uses `/metrics` with types `path`, `entry`, `exit`,
+`event` and `utm*`, `/pageviews` with units `hour` and `minute` in `UTC`, and `/active`, which
+answers `{"visitors": n}`: distinct sessions with an event in the last 5 minutes
+(`src/queries/sql/getActiveVisitors.ts`). `TestWebDashboardParity`
+(`internal/controlplane/webdash`) compares every figure against these routes.
 
-The web Caddy (`deploy/caddy/web.Caddyfile`) refuses every other Umami route from outside. Four
-findings shaped its rules; the numbers are the ones its comments cite:
-
-1. `POST /api/me/api-keys` **succeeds for a view-only user** and returns an Umami API key, so
-   `/api/me/api-keys` is denied for every method.
-2. `/api/2fa/*` is denied except `GET /api/2fa/status`: a tenant enabling 2FA on its Umami user
-   would break control-plane SSO (login then returns `requiresTwoFactor`).
-3. Routes tenants do not need are denied for every method: `/openapi.json` (served publicly
-   otherwise), `/telemetry.js` and `/api/scripts/telemetry`, `/api/auth/sso`,
-   `/api/auth/subscription` (waits for Redis, which is not configured), `/api/teams/join`,
-   `/api/links*`, `/api/pixels*`, `/api/boards*`, and `/compat/*` (Umami's legacy report routes,
-   which take `POST` outside `/api/*`).
-4. From outside, `/api/*` is read-only: only `GET`, `HEAD` and `OPTIONS`, plus
-   `POST /api/auth/verify` and `POST /api/auth/logout`, which the UI needs. This covers write
-   routes such as `/api/websites/*/transfer` and `/api/websites/*/reset`, and any write route a
-   later Umami version adds. Write routes stay reachable on the private network for the control
-   plane. `deploy/caddy/web_live_test.go` checks the rules against a running Caddy.
+Two findings of the earlier public interface still apply to any Umami user and stay relevant
+should a host ever serve Umami again: `POST /api/me/api-keys` succeeds for a view-only user and
+returns an Umami API key, and enabling 2FA on a platform user makes its login answer
+`requiresTwoFactor`, which the control plane refuses. No public host serves Umami, so neither
+is reachable by a project; `make test-caddy-closed` fails when an internet-facing Caddy site
+refers to Umami.
 
 ## Other observations
 
-- The UI offers "Join team" in settings; `/api/teams/join` with an access code adds the caller to
-  that team. The code is hidden from `team-view-only` members (`GET /api/teams/<id>`), and the
-  route is on the deny list.
+- `/api/teams/join` with an access code adds the caller to that team. The code is hidden from
+  `team-view-only` members (`GET /api/teams/<id>`), and no project can call the route.
 - `GET /api/websites/<id>/export` returns a zip of aggregate CSVs (events, pages, referrers,
   browsers, os, devices, countries) to any member; no raw rows.
-
-## Dashboard theme
-
-The web Caddy themes Umami's dashboard without changing the image
-([ADR 0004](../adr/0004-umami-dashboard-theme.md)). It relies on names, not code: the `--zen-*`
-custom properties and three Tailwind radius properties of `@umami/react-zen`, the classes
-`bg-primary`, `bg-status-error` and `text-white`, the `data-theme` attribute and `dark` class zen
-writes on `<html>`, the map and chart colours of `src/lib/constants.ts`, a single `</head>` in
-every HTML page, and the icon paths of `src/app/layout.tsx`, `public/site.webmanifest` and
-`public/browserconfig.xml`. `tests/umami-compat/theme_test.go` checks each of them against the
-running image, and the version the theme was reviewed for against the image's version.

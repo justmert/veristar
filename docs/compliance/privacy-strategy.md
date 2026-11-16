@@ -145,20 +145,22 @@ months, Umami shows 24 full months.
 ## 5. Umami features that are off, and how
 
 Umami 3.5.0 has no global switch for these features, so they are disabled by
-not shipping their client code and by blocking
-their routes:
+not shipping their client code and by keeping their routes off the internet.
+No public host serves Umami at all ([ADR 0005](../adr/0005-umami-as-engine-only.md)):
+it is reachable on the private network only, and its interface on a node's
+loopback for platform administrators over SSH.
 
 | Feature | How it is off |
 |---|---|
-| Session replay, heatmaps, web vitals, error tracking | the tracker (`packages/tracker`) contains no recorder, heatmap, vitals or error code; `/recorder.js` and `/script.js` are denied on `web.<BASE_DOMAIN>`; Umami's collect routes are reachable only on the private network |
+| Session replay, heatmaps, web vitals, error tracking | the tracker (`packages/tracker`) contains no recorder, heatmap, vitals or error code; no public host serves `/recorder.js`, `/script.js` or Umami's collect routes; they are reachable only on the private network |
 | Identify and distinct ids | the tracker has no identify call; the wire format has no id field (`docs/reference/wire-v1.md`) |
-| Links, pixels, shares, boards | `/api/links*`, `/api/pixels*`, `/api/share*`, `/api/boards*`, `/share/*`, `/q/*`, `/p/*` are denied for every method |
-| Direct collection | `/api/send`, `/api/batch`, `/api/record` are denied publicly; only the replayer reaches them |
+| Links, pixels, shares, boards | no public host serves Umami, so `/api/links*`, `/api/pixels*`, `/api/share*`, `/api/boards*`, `/share/*`, `/q/*` and `/p/*` have no path from the internet; no project holds an Umami login |
+| Direct collection | `/api/send`, `/api/batch`, `/api/record` are reachable on the private network only; the replayer is their only caller |
 | Region and city | the gateway never looks them up; Umami receives only a country header with the constant address |
 | Telemetry, update checks, favicon lookups | `PRIVATE_MODE=1`, `DISABLE_TELEMETRY=1`, `DISABLE_UPDATES=1` (outbound traffic tested in `tests/webpath/egress_test.go`) |
 
-The deny list lives in `deploy/caddy/web.Caddyfile` and
-`docs/reference/umami-contract.md`.
+`make test-caddy-closed` fails when an internet-facing Caddy site refers to Umami; what the
+platform reads from Umami is in `docs/reference/umami-contract.md`.
 
 ## 6. Objection and consent controls for tenants
 
@@ -305,34 +307,34 @@ conditions of the exemption are those of délibération 2020-091 art. 5 (S2).
 |---|---|---|---|
 | No import of outside data | referrer, if collected, limited to the host | the gateway keeps only `scheme://host` of the referrer before queueing (section 7); the referrers metric is unchanged, since it always listed hosts | yes, by the recommended measure |
 | No import of outside data | no collection of UTM or campaign identifiers in URLs | by default the gateway drops every query parameter, UTM and `ref` included (section 7). A site owner can turn on `collect_utm` for one site; the gateway then keeps `utm_*` and `ref` for that site only, and Umami reports them | yes by default, by the recommended measure; no for a site that turns `collect_utm` on |
-| All reports and exports contain only anonymous statistics | aggregation and presentation rounded to the nearest ten, or a documented anonymity analysis (WP29) | exact counts in Umami's dashboards, read API and exports | no (section 9) |
-| No filter combination isolates a user | none named | Umami's filters and Sessions page can show one visitor's pages of a day | no (section 9) |
-| No tracking of a single user's navigation | session replay disabled | replay is off (section 5), but the Sessions page lists one session's page views | replay: yes; the criterion as a whole: no |
+| All reports and exports contain only anonymous statistics | aggregation and presentation rounded to the nearest ten, or a documented anonymity analysis (WP29) | exact counts in the console's web dashboard, the operator views, the machine API and the MCP tools | no (section 9) |
+| No filter combination isolates a user | none named | the console's dashboard filters by site and band only, but its session finder (contract 18.7) lists single sessions with their times, country and device, and the MCP web tools take Umami's filters and its session list, which can show one visitor's pages of a day | no (section 9) |
+| No tracking of a single user's navigation | session replay disabled | replay is off (section 5) and the console has no session page, but the MCP tools `get_sessions` and its companions list one session's page views | replay: yes; the criterion as a whole: no |
 
 ### Why reports are not rounded to ten
 
-1. **Where tenants see numbers.** Every tenant web report is Umami's own UI,
-   read API and CSV export, run from the official image unmodified
-   ([ADR 0002](../adr/0002-overlay-not-fork.md)). The console shows tenants
-   no web counts, so rounding there would change nothing a tenant sees.
-   Rounding in Umami would mean patching the image or rewriting every JSON and
-   CSV answer of dozens of report routes in the web proxy.
+1. **Where tenants see numbers.** A tenant reads its web numbers in the
+   console's web dashboard (control-plane-api.md section 18) and through the
+   MCP tools. The dashboard shows the exact counts of the daily aggregates, the
+   same numbers the operator views and the machine API carry, so a project and
+   an operator never read two versions of one figure.
 2. **Rounding alone would not meet the criterion.** The criterion is that
    every report is anonymous for any combination of filters, and the next
-   row asks that no single user's navigation can be followed. Umami's
-   Sessions and realtime pages show the pages of one visitor's day to a
-   `team-view-only` member (`docs/reference/umami-contract.md`, item 10).
-   A rounded overview next to those pages is still not anonymous output.
-   Blocking those pages would also remove the session ids a tenant needs for
-   session erasure (`erasure.md`).
+   row asks that no single user's navigation can be followed. The MCP web
+   tools read Umami's session list as the member's `team-view-only` user
+   (`docs/reference/umami-contract.md`, item 10), which shows the pages of
+   one visitor's day, and the console's session finder lists single
+   sessions. A rounded overview next to those lists is still not anonymous
+   output. Removing the lists would also remove the session ids a tenant
+   needs for session erasure (`erasure.md`).
 3. **No overstated claim.** France therefore stays "not as built"
    (`jurisdictions.md`): tenants with French visitors use consent mode unless
    their counsel decides otherwise. No anonymity analysis is claimed.
 
 ## 9. Limits
 
-- **Exact counts and single-visitor views.** Section 8: no rounding, and
-  Umami's Sessions page shows one visitor's pages of a day.
+- **Exact counts and single-visitor views.** Section 8: no rounding, and the
+  MCP tools' session list shows one visitor's pages of a day.
 - **UTM parameters.** Off by default: the gateway drops them unless the
   site's owner turns on `collect_utm` (section 7), which keeps the default at
   CNIL's recommended measure. A site that turns it on no longer meets that
@@ -347,8 +349,8 @@ conditions of the exemption are those of délibération 2020-091 art. 5 (S2).
 
 Tenant members and operators can connect an AI client to the MCP server
 (`docs/security/mcp.md`, contract section 12). This adds no new data and no
-new store; it is another way for the same people to read what the console
-already shows them.
+new store; it is another way for the same people to read their own project's
+data, including Umami reports the console does not show.
 
 - **Who receives data.** The AI client a member or operator connects, and the
   vendor that runs it, receives the tool answers that person asks for. The member chose
@@ -356,8 +358,8 @@ already shows them.
   under the member's or the tenant's own terms with that vendor, not as a
   sub-processor of the service. The service sends nothing to a client that
   was not asked for in a tool call.
-- **What a project connection can receive.** Exactly what the project's
-  members see in the console and in Umami: aggregates and rankings of page
+- **What a project connection can receive.** What the project's members see
+  in the console, and the Umami reports the console does not show: aggregates and rankings of page
   views, visitors, referrers, countries, devices, browsers and events; event
   data the tenant's own site sent; Umami's session list (browser, operating
   system, device, screen, language, country, region and city as Umami holds

@@ -46,7 +46,7 @@ SCF, so that SCF can follow the projects it funds and the ecosystem as a whole.
   devices, browsers and operating systems; per API service, hourly and daily
   request counts, status classes and latency histograms.
 - What SCF does not receive: raw events, sessions, visitor tokens, page-level
-  event data, the Umami dashboards, or the console accounts of the tenant's
+  event data, the project's web dashboard, or the console accounts of the tenant's
   members. No row SCF receives describes one visitor or one API client.
 - The instruction lasts as long as the project is enrolled. It ends when the
   project is removed; the aggregates then follow section 6.
