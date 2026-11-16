@@ -319,8 +319,9 @@ test("the console's web dashboard shows the site's seven metrics for a selected 
   expect((await dim("referrer")).items.map((i) => i.key)).toContain(REFERRER_HOST);
   expect((await dim("country")).items).toEqual([{ key: "DE", value: 2 }]);
   expect((await dim("browser")).items.map((i) => i.key)).toContain("chrome");
-  // umami names a 1280 px wide desktop screen "laptop"
-  expect((await dim("device")).items.map((i) => i.key).sort()).toEqual(["laptop", "mobile"]);
+  // tracker 1.3 sends no screen size, so umami names a desktop user agent
+  // "desktop" rather than splitting it into laptop and desktop by width
+  expect((await dim("device")).items.map((i) => i.key).sort()).toEqual(["desktop", "mobile"]);
   const pages = await dim("page");
   expect(pages.source).toBe("engine");
   expect(pages.items.length).toBeGreaterThan(0);
@@ -362,7 +363,7 @@ test("the console's web dashboard shows the site's seven metrics for a selected 
     .locator("section")
     .filter({ has: page.getByRole("heading", { name: "Environment" }) });
   await env.getByRole("radio", { name: "Devices" }).click();
-  await expect(env.getByText("Laptop", { exact: true })).toBeVisible();
+  await expect(env.getByText("Desktop", { exact: true })).toBeVisible();
   await expect(env.getByText("Mobile", { exact: true })).toBeVisible();
   await shot(page, "07-dashboard-panels");
 
