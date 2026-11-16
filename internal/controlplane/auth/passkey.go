@@ -283,8 +283,9 @@ func (h *Handler) verifyPasskey(w http.ResponseWriter, r *http.Request, purpose 
 	var stored string
 	if pub == nil {
 		// a passkey the console knows: its stored key checks the assertion
-		err := h.db.WithSystem(r.Context(), func(tx pgx.Tx) error {
-			row, err := systemq.New(tx).FindPasskey(r.Context(), &credID)
+		ctx := r.Context()
+		err := h.db.WithSystem(ctx, func(tx pgx.Tx) error {
+			row, err := systemq.New(tx).FindPasskey(ctx, &credID)
 			if err != nil {
 				return err
 			}
