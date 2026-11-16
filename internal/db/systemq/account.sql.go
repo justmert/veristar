@@ -106,7 +106,7 @@ type AccountDeleteRosterParams struct {
 	PasskeyAddress *string
 }
 
-// the roster rows of the account's identities (00039): a deleted account
+// the roster rows of the account's identities (00040): a deleted account
 // is no operator. operators_last_admin refuses the delete when it would
 // leave no active operator admin.
 func (q *Queries) AccountDeleteRoster(ctx context.Context, arg AccountDeleteRosterParams) ([]uuid.UUID, error) {

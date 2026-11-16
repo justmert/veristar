@@ -158,14 +158,14 @@ here, before they take effect, as the processing terms require
   count as `infrastructure_requests`. The rule set is hard-coded and
   versioned, version 1, with a golden corpus
   ([docs/reference/collector.md](docs/reference/collector.md), "Traffic
-  classes"). Migration 00038 adds `traffic_class` to the three API metric
+  classes"). Migration 00039 adds `traffic_class` to the three API metric
   tables and `api.traffic_class_rules`.
 - The operator roster lives in the database and is managed on the console's
   new Operators page. Operator admins add operators by GitHub login or Stellar
   address, suspend, resume, promote, demote and remove them, and reset their
   passkeys; every change takes a reason and is audited. The roster always
   keeps one active operator admin
-  ([docs/operators/roster.md](docs/operators/roster.md)). Migration 00039.
+  ([docs/operators/roster.md](docs/operators/roster.md)). Migration 00040.
 - The operator area needs a passkey: a step-up recorded on the session, valid
   for 12 hours by default. It uses the passkeys and the verification of
   passkey sign-in; an operator who signs in with a passkey confirms with it,
@@ -187,11 +187,11 @@ here, before they take effect, as the processing terms require
 
 ### Upgrade notes
 
-- Infrastructure requests are counted apart from the moment migration 00038
+- Infrastructure requests are counted apart from the moment migration 00039
   runs (`traffic_classes.applied_from` in the overview answer). Data stored
   before keeps every request as application traffic, as it was counted then;
   a range that spans the upgrade compares numbers counted both ways.
-- The rolling deploy runs migration 00038 first, then the core nodes, then
+- The rolling deploy runs migration 00039 first, then the core nodes, then
   the edge nodes. Between the migration and the new metrics writer, the
   writer of the earlier release cannot store minute rows (the table's key
   changed); its messages wait in `API_METRICS` and are applied by the new

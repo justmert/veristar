@@ -1,4 +1,4 @@
--- operator passkeys (00039) and the account's sign-in passkey (00037), read
+-- operator passkeys (00040) and the account's sign-in passkey (00037), read
 -- and written by the stepup package as cp_system.
 
 -- name: ListPasskeys :many
