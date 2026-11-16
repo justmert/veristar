@@ -104,7 +104,7 @@ type AccountDeleteRosterParams struct {
 	StellarAddress *string
 }
 
-// the roster rows of the account's identities (00036): a deleted account
+// the roster rows of the account's identities (00038): a deleted account
 // is no operator. operators_last_admin refuses the delete when it would
 // leave no active operator admin.
 func (q *Queries) AccountDeleteRoster(ctx context.Context, arg AccountDeleteRosterParams) ([]uuid.UUID, error) {

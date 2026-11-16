@@ -25,7 +25,7 @@ var Want = map[string]map[db.Role]string{
 		db.RoleCPTenant: "r(github_id,github_login,id,passkey_address,stellar_address)",
 	},
 	"cp.sessions": {db.RoleCPSystem: "rawd"},
-	// the operator roster and the operators' passkeys (00036): the guard,
+	// the operator roster and the operators' passkeys (00038): the guard,
 	// the step-up, the operators page and the bootstrap all run as cp_system
 	"cp.operators":         {db.RoleCPSystem: "rawd"},
 	"cp.operator_passkeys": {db.RoleCPSystem: "rawd"},
@@ -88,7 +88,7 @@ var Want = map[string]map[db.Role]string{
 	"api.metrics_hourly": {db.RoleCPTenant: "r", db.RoleCPOperator: "r", db.RoleJobs: "rawd"},
 	"api.metrics_daily":  {db.RoleCPTenant: "r", db.RoleCPOperator: "r", db.RoleJobs: "rawd"},
 	"api.series_state":   {db.RoleMetricsWriter: "raw", db.RoleJobs: "rawd"},
-	// when each traffic class rule set took effect (00035), read by every
+	// when each traffic class rule set took effect (00037), read by every
 	// role that shows api numbers
 	"api.traffic_class_rules": {db.RoleCPSystem: "r", db.RoleCPTenant: "r", db.RoleCPOperator: "r"},
 	"api.resource_seen":       {db.RoleMetricsWriter: "raw", db.RoleJobs: "rawd"},

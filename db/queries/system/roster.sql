@@ -1,4 +1,4 @@
--- the operator roster (00036) as cp_system: the guard, the operators page,
+-- the operator roster (00038) as cp_system: the guard, the operators page,
 -- the startup bootstrap and the step-up enrollment window.
 
 -- name: RosterEntriesForUser :many

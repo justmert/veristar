@@ -487,7 +487,7 @@ type APIMetricSourcesRow struct {
 // every row on cp.current_tenant_id(), so a handler that set the wrong tenant
 // in db.WithTenant reads that tenant's rows or none, never a mix.
 //
-// traffic_class (00035) splits application requests from cors preflights,
+// traffic_class (00037) splits application requests from cors preflights,
 // health routes and probes. requests, error counts, lossy and the
 // percentiles cover traffic_class = 'app' only; infrastructure_requests
 // counts the rest, so the headline never includes a load balancer's checks.

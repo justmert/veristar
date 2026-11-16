@@ -70,7 +70,7 @@ set github_id = null, github_login = null, stellar_address = null, umami_usernam
 where id = @id and deleted_at is null;
 
 -- name: AccountDeleteRoster :many
--- the roster rows of the account's identities (00036): a deleted account
+-- the roster rows of the account's identities (00038): a deleted account
 -- is no operator. operators_last_admin refuses the delete when it would
 -- leave no active operator admin.
 delete from cp.operators

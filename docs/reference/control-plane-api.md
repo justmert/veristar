@@ -1224,7 +1224,7 @@ from migrations `00010_tenant_removals.sql` (`cp.tenant_removals`) and
 
 ### 5.1 Operator identity
 
-- The operator roster is the table `cp.operators` (migration `00036_operator_roster.sql`). Each row
+- The operator roster is the table `cp.operators` (migration `00038_operator_roster.sql`). Each row
   names one identity, a GitHub account id or a Stellar address (a wallet's G-address or a passkey's
   C-address, 4.1.9), with a role (`operator` or
   `operator_admin`) and a status (`active` or `suspended`). Operator admins manage it in the console
@@ -2050,7 +2050,7 @@ aggregate is restricted to the selected source of each service.
 
 ### 7.4 Numbers
 
-Every row carries a traffic class (`traffic_class`, migration `00035`): `app`, or one of the
+Every row carries a traffic class (`traffic_class`, migration `00037`): `app`, or one of the
 infrastructure classes `preflight`, `health` and `probe` that the collector assigns
 ([collector reference](collector.md), "Traffic classes"). Every number below except
 `infrastructure_requests` covers rows of class `app` only, so health checks, readiness probes and
@@ -2100,7 +2100,7 @@ range of equal length: `previous.from = from − (to − from)`,
 ```
 
 `traffic_classes.applied_from` is when the deployment's first traffic class rule set took effect
-(the time migration `00035` ran). Rows written before it hold every request as `app`, as they were
+(the time migration `00037` ran). Rows written before it hold every request as `app`, as they were
 counted then.
 
 ### 7.6 `GET .../api-metrics/timeseries`
