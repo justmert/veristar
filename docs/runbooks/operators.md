@@ -9,8 +9,8 @@ manage it on the console's **Operators** page ([Operators and passkeys](../opera
 `cp.users.is_operator` follows the roster in the database, so a change takes effect at the
 person's next request (section 5.1 of the
 [control plane API reference](../reference/control-plane-api.md)). Operators get no Umami access
-and are not members of any project. Every operator confirms the operator area with a passkey or
-security key (section 5.15).
+and are not members of any project. Every operator confirms the operator area with a passkey
+(section 5.15).
 
 ## The deploy settings are the bootstrap
 
@@ -92,8 +92,10 @@ they are a member of. Their earlier operator actions stay in the audit log.
 ## Lockout recovery
 
 **An operator lost every passkey.** An operator admin selects **Reset passkeys** on the person's
-row. Their passkeys are deleted, their sessions end and a new 24-hour window opens. The person signs
-in again and registers a new passkey.
+row. The passkeys they added for the operator area are deleted, their sessions end and a new 24-hour
+window opens. The person signs in again and registers a new passkey. A sign-in passkey is one of the
+account's identities and stays; if it is the lost one, the person unlinks it on the **Account** page
+after signing in another way.
 
 **No operator admin can open the operator area** (every admin lost their passkeys, left, or is
 unreachable):
@@ -101,8 +103,9 @@ unreachable):
 1. Put the GitHub id of the person who takes over in `sa_operator_github_ids`, or keep the one that
    is there, and converge as in "Add an operator". The start makes the identity an active operator
    admin again, even if it was suspended or demoted.
-2. If that person's account still holds passkeys they no longer have, delete them on the database
-   leader, as the `platform` database owner:
+2. If that person's account still holds passkeys they no longer have, delete the ones added for
+   the operator area on the database leader, as the `platform` database owner (a lost sign-in
+   passkey is unlinked on the **Account** page once the person signs in with GitHub or a wallet):
 
    ```sql
    begin;

@@ -1,6 +1,6 @@
 ---
 title: "Operators and passkeys"
-description: "Manage the operator roster in the console and confirm the operator area with a passkey or security key."
+description: "Manage the operator roster in the console and confirm the operator area with a passkey."
 ---
 
 The operator roster lists the people who hold the operator view. Operator admins manage it on the
@@ -59,22 +59,23 @@ account deletion of the last one.
 
 ## Passkeys
 
-The operator area asks for a passkey or security key when you open it, and again after
-`OPERATOR_STEP_UP_MAX_AGE` (12 hours by default) in the same session. The browser shows its own prompt;
-touch the key or confirm with the device.
+The operator area asks for a passkey when you open it, and again after
+`OPERATOR_STEP_UP_MAX_AGE` (12 hours by default) in the same session. The console uses the same
+passkeys as passkey sign-in: a passkey on your phone or computer, or a security key with a PIN. The
+browser shows its own prompt; confirm with your fingerprint, face, screen lock or the key's PIN.
 
-- **Your first passkey**: the operator area shows **Register a passkey or security key** while your
-  enrollment window is open. Give the key a name, select **Register** and follow the browser's
-  prompt. The registration also confirms the session.
-- **More passkeys**: on the Operators page, under **Your passkeys**, enter a name and select
-  **Add a passkey**. Keep at least two, for example a security key and a phone, so a lost key does
-  not lock you out.
-- **Delete a passkey**: select **Delete** next to it. The last one cannot be deleted.
+- **If you sign in with a passkey**, that passkey also confirms the operator area. Select **Use
+  your passkey**, then **Confirm with your passkey**.
+- **Your first passkey**: if your account has none, the operator area shows **Register a passkey**
+  while your enrollment window is open. Give it a name, select **Register**, then **Create a
+  passkey** and **Confirm with your passkey**. The registration also confirms the session.
+- **More passkeys**: on the Operators page, under **Your passkeys**, enter a name and select **Add a
+  passkey**. Keep at least two, for example your phone and a security key, so a lost one does not
+  lock you out.
+- **Delete a passkey**: select **Delete** next to it. The account always keeps one. Your sign-in
+  passkey is listed but managed on the **Account** page.
 - A passkey is bound to the console's address. It does not work on another site, so a look-alike
   page cannot use it.
-
-Passkeys that a platform syncs between devices are listed as **synced passkey**, keys bound to one
-device as **device-bound key**. Both are accepted.
 
 ## What needs the confirmation
 
@@ -87,7 +88,7 @@ confirmed area, and which an operator revokes there.
 
 | Situation | Recovery |
 |---|---|
-| An operator lost every passkey | An operator admin selects **Reset passkeys** on their row; the person registers a new one within the window |
+| An operator lost every passkey | An operator admin selects **Reset passkeys** on their row; the passkeys they added are deleted and the person registers a new one within the window. A lost sign-in passkey is unlinked on the Account page from another sign-in method |
 | Every operator admin lost their passkeys, or no admin is reachable | The hosting party puts an identity in `OPERATOR_GITHUB_IDS` and restarts the control plane; see the runbook |
 | The last admin is suspended or removed in the database by hand | The control plane refuses the change; the constraint keeps one active admin |
 
