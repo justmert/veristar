@@ -47,7 +47,9 @@ alter table api.traffic_class_rules enable row level security;
 alter table api.traffic_class_rules force row level security;
 create policy traffic_class_rules_read on api.traffic_class_rules for select
   to cp_tenant, cp_operator, cp_system using (true);
-revoke all on api.traffic_class_rules from public;
+-- the api schema's default privileges give the writer and the jobs role
+-- every new table; neither needs this one
+revoke all on api.traffic_class_rules from public, metrics_writer, jobs;
 grant select on api.traffic_class_rules to cp_tenant, cp_operator, cp_system;
 
 drop function api.operator_daily(timestamptz, timestamptz, uuid[]);

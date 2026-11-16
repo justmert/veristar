@@ -402,7 +402,7 @@ func start(t *testing.T) *env {
 	return e
 }
 
-// stepUp gives an operator's session its passkey step-up (contract 5.11)
+// stepUp gives an operator's session its passkey step-up (contract 5.15)
 func (c *client) stepUp(t *testing.T) {
 	t.Helper()
 	c.e.keys.StepUp(t, c.userID, stepuptest.Origin(c.e.srv.URL), func(method, path string, body any) (int, []byte) {

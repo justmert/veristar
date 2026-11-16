@@ -17,24 +17,24 @@ members of any project and have no access to a project's own web dashboard.
 | [reading-the-numbers.md](reading-the-numbers.md) | What bands, daily-unique visitors and span-derived API data mean, and how to compare projects fairly |
 | [api-keys.md](api-keys.md) | Keys for machine consumers of the metrics API: create, use, revoke, usage |
 | [mcp.md](mcp.md) | Connecting an AI client to the operator view through the MCP server |
+| [roster.md](roster.md) | The Operators page: roles, adding and removing operators, passkeys, and lockout recovery |
 | [alerts.md](alerts.md) | The Alerts page: the platform's live alerts, the count badge and critical banner, and what the page shows when alerting itself is broken |
 
 ## Becoming an operator
 
-An operator is a GitHub account whose numeric id is listed in the control plane setting
-`OPERATOR_GITHUB_IDS`. A deployment sets it through the Ansible variable `sa_operator_github_ids`,
-a comma-separated list of numbers such as `1234567,7654321`. Adding and removing ids is the
-runbook [Adding and removing operators](../runbooks/operators.md).
+An operator is a person on the operator roster, with a GitHub account or a Stellar wallet. Operator
+admins add and remove operators on the **Operators** page; [roster.md](roster.md) covers the page
+and the passkeys every operator registers.
 
-- The control plane reads the list at start and at every sign-in. Adding an id takes effect when
-  that person next signs in. Removing an id takes effect at that person's next sign-in or the next
-  control plane start, whichever comes first.
-- Every change of operator status is in the audit log as `user.operator_sync`.
+- The identities in the deploy settings `OPERATOR_GITHUB_IDS` and `OPERATOR_STELLAR_ADDRESSES` are
+  operator admins at every start of the control plane. They are how the first operators get in,
+  and how the hosting party restores access after a lockout
+  ([Adding and removing operators](../runbooks/operators.md)).
+- The operator area asks for your passkey or security key when you open it, and again after 12 hours.
 - Operators see an **Operator** area in the console. Anyone else who opens `/operator` sees
   "Operators only", and the control plane answers every operator route with
   `403 operator_required`, whatever the console shows.
-
-The numeric id of a GitHub account is the `id` field of `https://api.github.com/users/<login>`.
+- A suspended or removed operator loses the operator view at their next request.
 
 ## The operator area
 
@@ -51,6 +51,7 @@ sidebar, each with tabs:
 | Projects | Rules | Saved threshold rules and the projects that meet them ([threshold-rules.md](threshold-rules.md)) |
 | Compare | | Up to five projects side by side, web and API |
 | Admin | Settings | Enrollment mode, and whether removed projects keep their aggregates |
+| Admin | Operators | The operator roster and your passkeys ([roster.md](roster.md)) |
 | Admin | API keys | Keys for machine access to the metrics API ([api-keys.md](api-keys.md)) |
 | Admin | AI / MCP | Operator keys for AI clients ([mcp.md](mcp.md)) |
 | Admin | Audit log | Every recorded change, filterable by project, action, actor, target and time |

@@ -395,7 +395,7 @@ func (c *Client) Do(ctx context.Context, method, path string, body any) (Resp, e
 
 // Call is Do that fails the test on a transport error.
 // StepUp gives this browser's operator session its passkey step-up
-// (contract 5.11) with a software authenticator.
+// (contract 5.15) with a software authenticator.
 func (c *Client) StepUp(t testing.TB) {
 	t.Helper()
 	me := c.Call(t, http.MethodGet, "/api/me", nil)

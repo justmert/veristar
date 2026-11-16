@@ -29,7 +29,7 @@ const (
 // maxNameLen bounds a passkey's name, in characters
 const maxNameLen = 64
 
-// Routes registers the step-up and passkey routes (contract 5.11) under the
+// Routes registers the step-up and passkey routes (contract 5.15) under the
 // guarded /api/operator router. they sit outside Require: they are how a
 // session gets its step-up, and each route that changes passkeys checks the
 // step-up, or the enrollment window, itself.

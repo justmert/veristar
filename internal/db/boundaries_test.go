@@ -24,6 +24,7 @@ var cpRelations = []string{
 	"cp.otlp_tokens", "cp.operator_api_keys", "cp.api_key_usage_hourly", "cp.settings",
 	"cp.audit_log", "cp.erasure_requests", "cp.web_ingest_hourly", "cp.stats_dedup",
 	"cp.leader_fence", "cp.operator_sites", "cp.tenant_removals", "cp.chain_ids",
+	"cp.operators", "cp.operator_passkeys",
 }
 
 func TestOperatorBoundaries(t *testing.T) {

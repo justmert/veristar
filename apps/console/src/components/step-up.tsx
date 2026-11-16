@@ -28,7 +28,7 @@ export async function registerPasskey(name: string) {
 }
 
 // the operator area asks for a passkey or security key before it shows
-// anything (contract 5.11). the control plane enforces it on every route;
+// anything (contract 5.15). the control plane enforces it on every route;
 // this panel is how the person answers.
 export function StepUpGate({ status }: { status: StepUpStatus }) {
   if (!webauthnAvailable())

@@ -81,7 +81,7 @@ const (
 	CodePasskeyRequired  = "passkey_required"
 	CodeLastPasskey      = "last_passkey"
 	CodeEnrollmentClosed = "enrollment_closed"
-	// the operator roster (contract 5.12): a change only operator admins may
+	// the operator roster (contract 5.16): a change only operator admins may
 	// make, a change that would leave no active operator admin, a row the
 	// deploy settings keep, an identity already on the roster
 	CodeOperatorAdminRequired = "operator_admin_required"

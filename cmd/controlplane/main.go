@@ -249,7 +249,7 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	// the passkey step-up of the operator area (contract 5.11)
+	// the passkey step-up of the operator area (contract 5.15)
 	stepUp, err := stepup.New(stepup.Config{
 		ConsoleOrigin: cfg.ConsoleOrigin, MaxAge: cfg.OperatorStepUpMaxAge, EnrollWindow: cfg.OperatorEnrollWindow,
 	}, d, sessions)

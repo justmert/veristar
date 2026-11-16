@@ -205,12 +205,17 @@ List routes answer:
 | 400 | `invalid_body` | not JSON, wrong JSON type, unknown field |
 | 400 | `invalid_query` | a query parameter is malformed |
 | 400 | `invalid_cursor` | see 2.3 |
+| 400 | `ceremony_expired` | a passkey answer without matching options of this session, after they expired or were used (5.15) |
+| 400 | `step_up_failed` | a passkey answer that does not verify (5.15) |
 | 401 | `unauthenticated` | no session, expired session |
+| 401 | `step_up_required` | an `/api/operator` route without a recent passkey step-up on the session (5.1, 5.15); the session itself stays valid |
+| 401 | `enrollment_closed` | a first passkey from a session whose sign-in is older than the enrollment window (5.15) |
 | 403 | `csrf_header_missing` | see 1.2 |
 | 403 | `origin_mismatch` | see 1.2 |
 | 403 | `owner_required` | the action needs role `owner` |
 | 403 | `terms_not_accepted` | the tenant has not accepted the current terms version (4.2.6) |
 | 403 | `operator_required` | an `/api/operator` route without operator rights (5.1) |
+| 403 | `operator_admin_required` | a roster change by an operator who is not an operator admin (5.16) |
 | 403 | `challenge_invalid` | a signed wallet challenge that does not verify: no `sa_stellar` cookie, a challenge of another console, another network, another account, another purpose or another session, or a signature that is not the account's (4.1.7); or a passkey answer that does not verify: no `sa_passkey` cookie, another challenge, origin, relying party, purpose or session, no user verification, or a signature that is not the passkey's key (4.1.9) |
 | 403 | `challenge_expired` | the wallet or passkey challenge is older than 5 minutes (4.1.7, 4.1.9) |
 | 403 | `challenge_used` | the wallet or passkey challenge was verified before (4.1.7, 4.1.9) |
@@ -225,6 +230,11 @@ List routes answer:
 | 409 | `identity_already_linked` | linking a GitHub account, Stellar address or passkey to an account that already has one of that kind (4.1.8) |
 | 409 | `last_sign_in_method` | unlinking the only sign-in method of an account (4.1.8) |
 | 409 | `last_owner` | removing or demoting the last owner |
+| 409 | `passkey_required` | a step-up of an account without a passkey (5.15) |
+| 409 | `last_passkey` | deleting the last passkey of an account (5.15) |
+| 409 | `last_operator_admin` | a roster change or account deletion that would leave no active operator admin (5.16, 4.1.6) |
+| 409 | `bootstrap_operator` | suspending, removing or demoting a roster row that the deploy settings ensure (5.16) |
+| 409 | `operator_exists` | adding an identity that is on the roster already (5.16) |
 | 409 | `sole_owner` | an account deletion while the account is the only owner of a tenant that is not `removed`; the envelope lists those tenants in `tenants` (4.1.6) |
 | 409 | `site_removed` | change to a site with `status = 'removed'` |
 | 409 | `terms_version_mismatch` | accepted version is not the current one |
@@ -285,10 +295,10 @@ The Member object carries the same identity fields. The Invite object carries
 `github_id`, `github_login`, `stellar_address` and `display_name`; its
 `stellar_address` is a G-address or a C-address (4.2.5).
 
-`is_operator` is set at every sign-in, link and unlink from `OPERATOR_GITHUB_IDS`
-and `OPERATOR_STELLAR_ADDRESSES` (4.5): true when the account's GitHub id,
-Stellar address or passkey address is listed, false otherwise, so removing an entry takes effect
-at that person's next sign-in. The operator routes of section 5 build on it.
+`is_operator` is true when the account's GitHub id, Stellar address or passkey
+address names an active row of the operator roster (5.1). The database keeps it
+so whenever the account or the roster changes, so a suspension or removal takes
+effect at the person's next request. The operator routes of section 5 build on it.
 
 **Tenant** (`cp.tenants` plus the caller's role):
 
@@ -415,8 +425,11 @@ Operator governance (section 5): `user.operator_sync`, `settings.enrollment_mode
 `settings.removal_keep_aggregates`, `tenant.approve`, `tenant.reject`,
 `tenant.resubmit`, `tenant.suspend`, `tenant.resume`, `tenant.remove`,
 `site.review_queue`, `site.approve`, `site.reject`, `purge.step`,
-`purge.complete`, `site.verify`, `site.stellar_toml`. Actors added:
-`system:startup` (operator sync), `system:verify-domains`, `system:purge`.
+`purge.complete`, `site.verify`, `site.stellar_toml`, `operator.bootstrap`,
+`operator.add`, `operator.suspend`, `operator.resume`, `operator.role_change`,
+`operator.passkeys_reset`, `operator.remove`, `operator.step_up`,
+`operator.passkey_add`, `operator.passkey_delete`. Actors added:
+`system:startup` (roster bootstrap and operator sync), `system:verify-domains`, `system:purge`.
 Every operator action of section 5 carries `reason` in `detail` when one was given,
 and every row about one tenant carries `detail.tenant_id`, which the audit
 filter of 5.9 uses.
@@ -596,7 +609,9 @@ Refused with **409 `sole_owner`** while the caller is the only owner of a tenant
 whose status is not `removed`; the error envelope lists those tenants in
 `tenants` (2.2), ordered by name. Nothing changes then. The caller makes another
 member an owner (4.2.5), or asks the operators to remove the tenant (5.5), and
-repeats the request.
+repeats the request. The last active operator admin of the roster gets **409
+`last_operator_admin`** and changes nothing; another operator becomes an admin
+first (5.16).
 
 Otherwise, in one `cp_system` transaction that first locks the caller's user row,
 the rows of every tenant the caller belongs to and those tenants' owner rows:
@@ -608,7 +623,9 @@ the rows of every tenant the caller belongs to and those tenants' owner rows:
    passkey address is deleted.
 3. The caller's MCP credentials and OAuth codes (section 12) are deleted, with
    their tokens.
-4. Every session of the caller is deleted, in every browser.
+4. The roster rows of the caller's GitHub account id and Stellar address (5.1)
+   and the caller's passkeys (5.15) are deleted, then every session of the
+   caller, in every browser.
 5. The `cp.users` row is emptied (migrations `00031` and `00034`): `github_id`,
    `github_login`, `stellar_address`, `passkey_address`, `passkey_credential_id`,
    `passkey_public_key` and `umami_username` become null,
@@ -620,9 +637,9 @@ the rows of every tenant the caller belongs to and those tenants' owner rows:
    and the request answers 503 `unavailable`; nothing is deleted.
 7. One audit row `account.delete` is written: actor and target `user:<id>`,
    detail with the memberships removed (`tenant_id` and `role` each), the
-   counts of invites, MCP credentials and sessions deleted, `was_operator` and
-   `umami_user_deleted`. It names no GitHub id, login, Stellar address or
-   passkey.
+   counts of invites, MCP credentials and sessions deleted, `was_operator`,
+   `roster_removed`, `passkeys_deleted` and `umami_user_deleted`. It names no
+   GitHub id, login, Stellar address or passkey.
 
 After the commit a reconcile run is queued for every tenant the caller left.
 Audit rows written before the deletion stay unchanged (the log is
@@ -630,11 +647,10 @@ append-only); they name the caller by `user:<id>`, and `actor_login` in 5.9 is
 `null` for that id from now on. A later sign-in with the same GitHub account
 or wallet creates a new user with a new id, no memberships and no invites. The
 deleted account's passkey answers 403 `passkey_unknown` from then on; a new
-passkey creates a new user.
-`is_operator` of the new user follows `OPERATOR_GITHUB_IDS` and
-`OPERATOR_STELLAR_ADDRESSES` as at every sign-in (5.1), so an operator whose
-GitHub id or address stays in those settings is an operator again after signing
-in; removing the entry is what ends operator access for good.
+passkey creates a new user. The new user is no operator: the deletion removed
+the roster rows. An identity in `OPERATOR_GITHUB_IDS` or
+`OPERATOR_STELLAR_ADDRESSES` gets its row back at the next control plane start
+(5.1).
 
 401 without a session.
 
@@ -1180,8 +1196,10 @@ the key.
 | `WEB_ORIGIN` | yes | `https://web.<BASE_DOMAIN>` for SSO redirects |
 | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | yes | the GitHub OAuth App of the environment |
 | `GITHUB_REDIRECT_URL` | yes | `<CONSOLE_ORIGIN>/api/auth/github/callback`, checked at startup |
-| `OPERATOR_GITHUB_IDS` | yes | comma separated numeric GitHub user ids of the operators, at least one; sets `is_operator` at sign-in |
-| `OPERATOR_STELLAR_ADDRESSES` | no | comma separated Stellar addresses of operators, checksum checked: account ids (G-addresses) of operators who sign in with a wallet, and passkey account addresses (C-addresses, 4.1.9) of operators who sign in with a passkey; empty when unset |
+| `OPERATOR_GITHUB_IDS` | yes | comma separated numeric GitHub user ids, at least one; each is ensured as an active operator admin of the roster at every start (5.1) |
+| `OPERATOR_STELLAR_ADDRESSES` | no | comma separated Stellar addresses, checksum checked, ensured like `OPERATOR_GITHUB_IDS`: account ids (G-addresses) of operators who sign in with a wallet, and passkey account addresses (C-addresses, 4.1.9) of operators who sign in with a passkey; empty when unset |
+| `OPERATOR_STEP_UP_MAX_AGE` | no | how long a passkey step-up opens the operator area (5.15); default `12h`, `5m` to `24h` |
+| `OPERATOR_ENROLL_WINDOW` | no | how long a first passkey may be registered without a step-up (5.15); default `24h`, `10m` to `168h` |
 | `OAUTH_STATE_KEY` | yes | 32 bytes, base64; seals `sa_oauth`, `sa_stellar` and `sa_passkey`, and derives the key that signs wallet challenges (4.1.7) |
 | `REPORT_SIGNING_SEED` | yes | the Stellar secret seed (`S...`) that signs usage reports (20.2) |
 | `REPORT_SIGNING_KEY` | yes | the published account id (`G...`) of that seed; the process refuses to start when the seed does not derive it |
@@ -1206,21 +1224,33 @@ from migrations `00010_tenant_removals.sql` (`cp.tenant_removals`) and
 
 ### 5.1 Operator identity
 
-- `cp.users.is_operator` is set from `OPERATOR_GITHUB_IDS` and
-  `OPERATOR_STELLAR_ADDRESSES` at every sign-in, link and unlink (4.1.2,
-  4.1.7, 4.1.8, 4.1.9) and once at control plane start: one statement under
-  `cp_system` sets it to true for live rows whose `github_id`,
-  `stellar_address` or `passkey_address` is listed and false for every other live row. Each changed user gets one audit row `user.operator_sync` (actor
-  `system:startup`, target `user:<id>`, detail `{"is_operator": {"old", "new"}}`).
-- Every route under `/api/operator/` is **session** and **operator**: the session
-  user must have `cp.users.is_operator = true` (read per request) and a
-  `github_id` in the loaded `OPERATOR_GITHUB_IDS` or a `stellar_address` or
-  `passkey_address` in the loaded `OPERATOR_STELLAR_ADDRESSES`. The MCP
-  operator scope (section 12) checks the same at every request and token
-  grant. Otherwise **403
-  `operator_required`**, for every method and for unknown ids alike. Removing an id
-  takes effect at that person's next sign-in or the next control plane start,
-  whichever comes first.
+- The operator roster is the table `cp.operators` (migration `00036_operator_roster.sql`). Each row
+  names one identity, a GitHub account id or a Stellar address (a wallet's G-address or a passkey's
+  C-address, 4.1.9), with a role (`operator` or
+  `operator_admin`) and a status (`active` or `suspended`). Operator admins manage it in the console
+  (5.16).
+- `cp.users.is_operator` is derived from the roster in the database: it is true for a live account
+  that holds an identity of an active row. The trigger `users_operator_flag` computes it whenever a
+  `cp.users` row is written, and `operators_sync_flags` recomputes it for the matching accounts in
+  the transaction that changes a roster row. Nothing else writes it. A flag that turns false ends
+  the person's operator MCP credentials in the same transaction (12.8).
+- At every start the control plane bootstraps the roster from `OPERATOR_GITHUB_IDS` and
+  `OPERATOR_STELLAR_ADDRESSES`: each listed identity becomes an active `operator_admin` row
+  (audit `operator.bootstrap`, actor `system:startup`, target `operator:<id>`, written only when the
+  row was inserted or changed), each listed identity whose account holds no passkey gets a
+  first-passkey window (5.15), and every live account's flag is recomputed (audit
+  `user.operator_sync`, detail `{"is_operator": {"old", "new"}}`, for each account that changed).
+  The settings only add: an identity taken out of them keeps its row until an operator admin
+  removes it. The control plane refuses to start when the roster has no active operator admin
+  afterwards.
+- Every route under `/api/operator/` is **session** and **operator**: the session user must have
+  `cp.users.is_operator = true`, read per request. Otherwise **403 `operator_required`**, for every
+  method and for unknown ids alike. A suspended or removed operator is refused at their next
+  request.
+- Every route under `/api/operator/` except those of 5.15 also needs a **passkey step-up** on the
+  session younger than `OPERATOR_STEP_UP_MAX_AGE`. Otherwise **401 `step_up_required`**. A request
+  authenticated by an MCP credential (12) has no console session and needs no step-up; the machine
+  API (9) is not under `/api/operator/`.
 - CSRF rules (1.2) apply unchanged. The tenant-scoping rules of 1.3 do not apply
   to operator routes: an operator sees every tenant except `is_internal` ones,
   which answer 404 on operator routes.
@@ -1657,9 +1687,95 @@ and new). **200** `{"keep": ...}`.
 
 Required: `PLATFORM_DB_CP_OPERATOR_PASSWORD`, because operator reads run as
 `cp_operator` (5.1). `OPERATOR_GITHUB_IDS` and `OPERATOR_STELLAR_ADDRESSES`
-(4.5) also drive the startup sync of 5.1. The `jobs` task `verify-domains` needs no key of its own;
+(4.5) bootstrap the roster at start (5.1). `OPERATOR_STEP_UP_MAX_AGE` and
+`OPERATOR_ENROLL_WINDOW` (4.5) set the step-up of 5.15. The `jobs` task `verify-domains` needs no key of its own;
 the request-forgery guard has no configuration key that could allow private
 addresses (tests use a `_test.go` hook only).
+
+### 5.15 Passkey step-up
+
+The operator area needs a second factor on top of the sign-in: a WebAuthn credential (a passkey or
+a security key) registered to the console account. Proving one records a step-up on the session.
+The routes below sit behind the operator check of 5.1 and not behind the step-up, because they are
+how a session gets one. Ceremony state lives in the session and is used once; options and
+responses carry binary fields as base64url strings, as the WebAuthn JSON forms do. The relying
+party id is the host of `CONSOLE_ORIGIN` and the only accepted origin is `CONSOLE_ORIGIN`. User
+verification is preferred, attestation is not requested.
+
+| Route | Needs | Answer |
+|---|---|---|
+| `GET /api/operator/step-up` | operator | `StepUpStatus` |
+| `POST /api/operator/step-up/options` | operator | `{"publicKey": PublicKeyCredentialRequestOptions}`; **409 `passkey_required`** without a passkey |
+| `POST /api/operator/step-up` | the options of this session | `StepUpStatus`; body `{"credential": PublicKeyCredential}` |
+| `GET /api/operator/passkeys` | step-up | `{"items": [Passkey]}` |
+| `POST /api/operator/passkeys/options` | step-up, or an open enrollment window | `{"publicKey": PublicKeyCredentialCreationOptions}` |
+| `POST /api/operator/passkeys` | step-up, or an open enrollment window | **201** `Passkey`; body `{"name": 1 to 64 characters, "credential": PublicKeyCredential}` |
+| `DELETE /api/operator/passkeys/{passkey_id}` | step-up | **204**; **409 `last_passkey`** for the account's last passkey |
+
+`StepUpStatus` is `{stepped_up, stepped_up_at, expires_at, max_age_seconds, passkeys, enrollment,
+enrollment_until}`. `POST /api/operator/step-up` answers without `passkeys`, `enrollment` and
+`enrollment_until`. `enrollment` is `open` (a first passkey may be registered without a step-up
+until `enrollment_until`), `sign_in_required` (a window is open, but this session's sign-in is
+older than it) or `closed`. `Passkey` is `{id, name, created_at, last_used_at, backup_eligible}`;
+`backup_eligible` is the authenticator's flag, true for a passkey that a platform syncs between
+devices.
+
+- **Step-up.** A verified assertion renews the session token, stores the time and the account id on
+  the session (`operator_step_up_at`, `operator_step_up_user`) and writes `operator.step_up`. The
+  step-up counts for `OPERATOR_STEP_UP_MAX_AGE` (default `12h`, `5m` to `24h`). An assertion whose
+  signature counter did not increase is refused as a possible clone.
+- **First passkey.** A roster row gets an enrollment window of `OPERATOR_ENROLL_WINDOW` (default
+  `24h`, `10m` to `168h`) when an admin adds it, when an admin resets its passkeys, and at start for
+  a bootstrap row whose account holds no passkey. Inside the window, an account without a passkey
+  may register one without a step-up, from a session whose sign-in happened after the window
+  opened; an older session gets **401 `enrollment_closed`**. The first registration closes the
+  window and records a step-up. Later registrations need a step-up.
+- **Errors.** **400 `ceremony_expired`**: no options of this session to verify against, they expired
+  (5 minutes) or they were used. **400 `step_up_failed`**: the response does not verify (wrong key,
+  wrong origin, wrong challenge, replayed counter).
+- **Audit.** `operator.step_up`, `operator.passkey_add` (detail `passkey_id`, `name`, `enrollment`,
+  `backup_eligible`) and `operator.passkey_delete`, actor and target the account.
+- **Other step-up checks.** Approving an MCP authorization request with the operator scope (12.8)
+  also needs a fresh step-up, and answers 401 `step_up_required` otherwise. The credential it issues
+  then works without one.
+
+### 5.16 Operator roster
+
+Every operator reads the roster; operator admins change it. Every change takes a `reason` of 1 to
+500 characters, runs in one `cp_system` transaction and writes an audit row with the reason, actor
+`user:<id>`, target `operator:<id>`.
+
+| Route | Needs | Body | Answer |
+|---|---|---|---|
+| `GET /api/operator/roster` | step-up | | `{"items": [RosterEntry]}` |
+| `POST /api/operator/roster` | step-up, admin | `{github_login or stellar_address, role, reason}` | **201** `RosterEntry`; audit `operator.add` |
+| `POST /api/operator/roster/{entry_id}/suspend` | step-up, admin | `{reason}` | `RosterEntry`; `operator.suspend` |
+| `POST /api/operator/roster/{entry_id}/resume` | step-up, admin | `{reason}` | `RosterEntry`; `operator.resume` |
+| `POST /api/operator/roster/{entry_id}/role` | step-up, admin | `{role, reason}` | `RosterEntry`; `operator.role_change` |
+| `POST /api/operator/roster/{entry_id}/reset-passkeys` | step-up, admin | `{reason}` | `RosterEntry`; `operator.passkeys_reset` |
+| `POST /api/operator/roster/{entry_id}/remove` | step-up, admin | `{reason}` | **204**; `operator.remove` |
+
+`RosterEntry` is `{id, kind ("github" or "stellar"), github_id, github_login, stellar_address, role,
+status, status_reason, bootstrap, enrollment_until, created_at, updated_at, account}`. `bootstrap`
+is true for an identity in `OPERATOR_GITHUB_IDS` or `OPERATOR_STELLAR_ADDRESSES`. `account` is the
+live console account holding the identity, `{user_id, display_name, last_login_at, passkeys}`, or
+null before its first sign-in. A GitHub login is resolved to its account id through GitHub's users
+API at add time, as for members (4.2.5); the row is bound to the id.
+
+- **403 `operator_admin_required`**: a change by an operator without an active `operator_admin`
+  row.
+- **409 `last_operator_admin`**: the change would leave no active operator admin. The constraint
+  trigger `operators_last_admin` refuses such a change whatever statement makes it.
+- **409 `bootstrap_operator`**: a suspension, removal or demotion of a bootstrap row; the next start
+  would undo it. Take the identity out of the settings first.
+- **409 `operator_exists`**: the identity is on the roster already. **409 `invalid_transition`**: a
+  suspension of a suspended row, a resumption of an active one, or a role the row holds already.
+- **Effects.** A suspension and a removal turn the flag off at once (5.1), which also revokes the
+  person's operator MCP credentials, and end every console session of the account. A removal also
+  deletes the account's passkeys unless another active row keeps it an operator. A passkey reset
+  deletes every passkey of the account, ends its sessions and opens a new enrollment window.
+- **Account deletion (4.1.6)** removes the roster rows of the account's identities and its passkeys.
+  The last active operator admin gets **409 `last_operator_admin`** instead.
 
 ---
 
@@ -1934,7 +2050,14 @@ aggregate is restricted to the selected source of each service.
 
 ### 7.4 Numbers
 
-- `requests`: `sum(count)` of the selected rows.
+Every row carries a traffic class (`traffic_class`, migration `00035`): `app`, or one of the
+infrastructure classes `preflight`, `health` and `probe` that the collector assigns
+([collector reference](collector.md), "Traffic classes"). Every number below except
+`infrastructure_requests` covers rows of class `app` only, so health checks, readiness probes and
+CORS preflights never inflate the volume, the error rates or the latency percentiles.
+
+- `requests`: `sum(count)` of the selected `app` rows.
+- `infrastructure_requests`: `sum(count)` of the selected rows of the other classes.
 - `errors_4xx`: requests with `status_code` 400 to 499; `errors_5xx`: 500 to
   599. `status_code` 0 means the point had no status attribute; it counts in
   `requests` and in class `unknown`, never as an error.
@@ -1956,7 +2079,8 @@ aggregate is restricted to the selected source of each service.
 {
   "requests": 1200, "errors_4xx": 30, "errors_5xx": 2,
   "rate_4xx": 0.025, "rate_5xx": 0.0016666666666666668,
-  "p50": 0.042, "p95": 0.31, "p99": ">10 s", "lossy": false
+  "p50": 0.042, "p95": 0.31, "p99": ">10 s", "lossy": false,
+  "infrastructure_requests": 8640
 }
 ```
 
@@ -1970,9 +2094,14 @@ range of equal length: `previous.from = from − (to − from)`,
 ```json
 {
   "current":  { "range": { ... }, "sources": [ ... ], "summary": { ... } },
-  "previous": { "range": { ... }, "sources": [ ... ], "summary": { ... } }
+  "previous": { "range": { ... }, "sources": [ ... ], "summary": { ... } },
+  "traffic_classes": { "rule_set_version": 1, "applied_from": "2026-11-16T09:00:00Z" }
 }
 ```
+
+`traffic_classes.applied_from` is when the deployment's first traffic class rule set took effect
+(the time migration `00035` ran). Rows written before it hold every request as `app`, as they were
+counted then.
 
 ### 7.6 `GET .../api-metrics/timeseries`
 
@@ -1987,7 +2116,8 @@ points (a 24-month range has 730 or 731).
   "sources": [ ... ],
   "points": [
     { "at": "2026-11-12T09:00:00Z", "requests": 52, "errors_4xx": 1, "errors_5xx": 0,
-      "rate_4xx": 0.019230769230769232, "rate_5xx": 0, "p50": 0.031, "p95": 0.2, "p99": 0.48, "lossy": false }
+      "rate_4xx": 0.019230769230769232, "rate_5xx": 0, "p50": 0.031, "p95": 0.2, "p99": 0.48, "lossy": false,
+      "infrastructure_requests": 360 }
   ]
 }
 ```
@@ -1997,7 +2127,9 @@ Each point's percentiles come from the bucket arrays of that time bucket only.
 ### 7.7 `GET .../api-metrics/routes`
 
 Parameters: range, filters, `sort`, `order`, `limit`, `cursor`. One item per
-service, method and route with at least one selected row.
+service, method and route with at least one selected row. A route that only infrastructure
+requests reached, such as `GET /healthz`, is listed with `requests` 0 and its
+`infrastructure_requests`.
 
 - `sort`: `requests` (default), `errors_4xx`, `errors_5xx`, `rate_4xx`,
   `rate_5xx`, `p50`, `p95`, `p99`, `route` (orders by service, method, route).
@@ -2019,7 +2151,7 @@ service, method and route with at least one selected row.
   "items": [
     { "service": "payments-api", "method": "GET", "route": "/v1/accounts/{id}", "source": "metric",
       "requests": 930, "errors_4xx": 12, "errors_5xx": 0, "rate_4xx": 0.012903225806451613, "rate_5xx": 0,
-      "p50": 0.04, "p95": 0.3, "p99": 0.9, "lossy": false }
+      "p50": 0.04, "p95": 0.3, "p99": 0.9, "lossy": false, "infrastructure_requests": 0 }
   ],
   "next_cursor": null
 }
@@ -2034,6 +2166,7 @@ Parameters: range and filters.
   "range": { ... },
   "sources": [ ... ],
   "requests": 1200,
+  "infrastructure_requests": 8640,
   "classes": [
     { "class": "1xx", "requests": 0 }, { "class": "2xx", "requests": 1150 },
     { "class": "3xx", "requests": 18 }, { "class": "4xx", "requests": 30 },
@@ -2046,7 +2179,8 @@ Parameters: range and filters.
 ```
 
 - `classes`: always these six, in this order; `unknown` is `status_code` 0.
-- `codes`: every status code with requests, ascending.
+- `codes`: every status code with `app` requests, ascending. `requests`, `classes` and `codes`
+  leave infrastructure requests out; `infrastructure_requests` counts them.
 
 ### 7.9 `GET .../api-metrics/services`
 
@@ -2060,7 +2194,7 @@ empty `items` is the console's empty state, which links to the OTLP token page
   "range": { ... },
   "items": [
     { "service": "payments-api", "source": "metric", "span_data_ignored": false,
-      "requests": 1200, "lossy": false }
+      "requests": 1200, "infrastructure_requests": 8640, "lossy": false }
   ]
 }
 ```
@@ -2319,13 +2453,18 @@ than through `apimetrics.Select`, which is tenant-scoped. Item:
   "p50_seconds": 0.041, "p50_over_10s": false,
   "p95_seconds": 0.62, "p95_over_10s": false,
   "p99_seconds": null, "p99_over_10s": true,
-  "services": 3, "routes": 41, "span_services": 1, "source": "mixed", "lossy": false
+  "services": 3, "routes": 41, "span_services": 1, "source": "mixed", "lossy": false,
+  "infrastructure_requests": 260000
 }
 ```
 
-- `requests` is the sum of `count`; `requests_4xx` and `requests_5xx` count
-  status codes 400 to 499 and 500 to 599 (rows without a status code count
-  only in `requests`). Rates are `null` without requests.
+- `requests` is the sum of `count` over rows of traffic class `app` (7.4);
+  `requests_4xx` and `requests_5xx` count status codes 400 to 499 and 500 to
+  599 (rows without a status code count only in `requests`). Rates are `null`
+  without requests. `infrastructure_requests` counts the rows of the other
+  classes, which no other number of the item includes. Every API number of
+  8.6, section 9, the exports of 16 and the views of 16.3 follows the same
+  rule, and each carries its own `infrastructure_requests`.
 - Percentiles use `api.histogram_quantile` over the summed buckets of the
   chosen rows, never averaged. A percentile in the open bucket
   above 10 s has `*_seconds: null` and `*_over_10s: true`; without requests
@@ -2564,7 +2703,7 @@ range (7.3; metric rows when the service has any, otherwise span rows). One
 item per tenant and day with rows: `services`, `span_services`, `source`
 (`metric`, `span` or `mixed`), the numbers of 8.5 (`requests`,
 `requests_4xx`, `requests_5xx`, `rate_4xx`, `rate_5xx`, `p50_seconds`,
-`p50_over_10s`, ... `p99_over_10s`) and `lossy`. Equal to the daily series of
+`p50_over_10s`, ... `p99_over_10s`, `infrastructure_requests`) and `lossy`. Equal to the daily series of
 8.6 for the same range; with `service`, to that service's numbers of 8.6.
 
 ### 9.9 `GET /api/routes/daily`
@@ -2866,7 +3005,7 @@ and the tenant status. Refused with 401 and
 | issued for another resource URI (12.3 audience) | `... another resource` |
 | tenant credential whose user is not a member any more | `... no longer a member` |
 | tenant status `suspended`, `rejected` or `removed` | `the project of this credential is <status>` |
-| operator credential whose user lost the operator flag or left `OPERATOR_GITHUB_IDS` | `... no longer an operator` |
+| operator credential whose user lost the operator flag (suspended or removed from the roster) | `... no longer an operator` |
 
 **Automatic revocation.** Triggers of migration 00030 set `revoked_at` and
 `revoked_reason` and write one audit row per credential in the transaction of
@@ -3404,6 +3543,8 @@ charset=utf-8` as an attachment, streamed, one header row:
   an empty cell, never 0. A text cell that a spreadsheet would read as a
   formula (starting with `=`, `+`, `-`, `@`, tab or carriage return) gets a
   leading apostrophe.
+- The API exports end their numbers with an `infrastructure_requests` column
+  (7.4).
 - Every export writes one `export.csv` audit row (3.3) with the query it
   answered.
 
@@ -3415,7 +3556,7 @@ security keys every table on the caller's tenant:
 
 `day, web_pageviews, web_visitors, web_visits, web_bounces,
 web_totaltime_seconds, web_quarantine_pageviews, api_requests,
-api_errors_4xx, api_errors_5xx, onchain_ids_read, onchain_operations,
+api_errors_4xx, api_errors_5xx, api_infrastructure_requests, onchain_ids_read, onchain_operations,
 onchain_transactions, integrity_grade`
 
 The web columns are the project's `agg.web_daily` rows, summed over its sites

@@ -41,7 +41,7 @@ export function OperatorLayout() {
   return <SteppedUp />;
 }
 
-// every operator route needs a recent passkey step-up (contract 5.11); the
+// every operator route needs a recent passkey step-up (contract 5.15); the
 // area is drawn only once the session holds one
 function SteppedUp() {
   const s = useQuery(stepUpQuery);

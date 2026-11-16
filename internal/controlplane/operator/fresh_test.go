@@ -79,7 +79,7 @@ func TestOperatorAPIFreshness(t *testing.T) {
 			counts := make([]int64, 15)
 			counts[p.bucket] = p.n
 			mins = append(mins, writerq.AddMinuteParams{TenantID: tenant, BucketStart: p.at, Service: p.service,
-				Method: "GET", Route: p.route, StatusCode: p.status, Source: p.src, Counts: counts,
+				Method: "GET", Route: p.route, StatusCode: p.status, Source: p.src, TrafficClass: "app", Counts: counts,
 				Sum: float64(p.n) * 0.1, Count: p.n})
 			marks = append(marks, writerq.MarkRollupPendingParams{TenantID: tenant, BucketStart: p.at})
 		}

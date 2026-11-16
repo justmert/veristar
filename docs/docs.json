@@ -138,6 +138,7 @@
             "group": "Operator guide",
             "pages": [
               "operators/overview",
+              "operators/roster",
               "operators/review-and-enrollment",
               "operators/removal",
               "operators/global-views",

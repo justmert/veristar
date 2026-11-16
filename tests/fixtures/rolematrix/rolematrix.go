@@ -25,6 +25,10 @@ var Want = map[string]map[db.Role]string{
 		db.RoleCPTenant: "r(github_id,github_login,id,passkey_address,stellar_address)",
 	},
 	"cp.sessions": {db.RoleCPSystem: "rawd"},
+	// the operator roster and the operators' passkeys (00036): the guard,
+	// the step-up, the operators page and the bootstrap all run as cp_system
+	"cp.operators":         {db.RoleCPSystem: "rawd"},
+	"cp.operator_passkeys": {db.RoleCPSystem: "rawd"},
 	// used wallet sign-in challenges (00034): written and pruned by sign-in
 	"cp.wallet_challenges_used": {db.RoleCPSystem: "rad"},
 	"cp.tenants": {
@@ -84,9 +88,12 @@ var Want = map[string]map[db.Role]string{
 	"api.metrics_hourly": {db.RoleCPTenant: "r", db.RoleCPOperator: "r", db.RoleJobs: "rawd"},
 	"api.metrics_daily":  {db.RoleCPTenant: "r", db.RoleCPOperator: "r", db.RoleJobs: "rawd"},
 	"api.series_state":   {db.RoleMetricsWriter: "raw", db.RoleJobs: "rawd"},
-	"api.resource_seen":  {db.RoleMetricsWriter: "raw", db.RoleJobs: "rawd"},
-	"api.ingest_dedup":   {db.RoleMetricsWriter: "raw", db.RoleJobs: "rawd"},
-	"api.route_registry": {db.RoleMetricsWriter: "raw", db.RoleJobs: "rawd"},
+	// when each traffic class rule set took effect (00035), read by every
+	// role that shows api numbers
+	"api.traffic_class_rules": {db.RoleCPSystem: "r", db.RoleCPTenant: "r", db.RoleCPOperator: "r"},
+	"api.resource_seen":       {db.RoleMetricsWriter: "raw", db.RoleJobs: "rawd"},
+	"api.ingest_dedup":        {db.RoleMetricsWriter: "raw", db.RoleJobs: "rawd"},
+	"api.route_registry":      {db.RoleMetricsWriter: "raw", db.RoleJobs: "rawd"},
 	"api.ingest_warnings": {
 		db.RoleCPTenant: "r", db.RoleMetricsWriter: "raw", db.RoleJobs: "rawd",
 	},

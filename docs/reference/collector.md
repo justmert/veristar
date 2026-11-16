@@ -21,6 +21,7 @@ v1.71.0 and contrib v0.165.1 (module cache, 2026-11-12) and is exercised by
 | `collector/jetstreamexporter` | `jetstream`: publish per tenant to `API_METRICS` |
 | `collector/internal/schema` | names of every field that may leave the collector |
 | `internal/routenorm` | route normalization rule set, corpus in `testdata/corpus.tsv` |
+| `internal/trafficclass` | traffic class rule set (preflights, health routes, probes), corpus in `testdata/corpus.tsv` |
 | `deploy/images/collector.Dockerfile` | image build |
 | `tests/collector` | integration suite (build tag `collectorit`) |
 
@@ -304,7 +305,8 @@ requests, so it is not one of the kept metrics (see "tenantguard" below).
   from `url.path` or legacy `http.target` when absent),
   `http.response.status_code` (from `http.status_code`, int or string,
   100 to 599), `error.type` (redacted; longer than 64 bytes or not storable
-  text becomes `_OTHER`). Nothing else.
+  text becomes `_OTHER`), and `scf.traffic.class` for infrastructure traffic
+  (see "Traffic classes" below). Nothing else.
 - Route normalization rule set 2 adds to rule set 1: a
   segment that decodes to invalid UTF-8 or a control character becomes
   `{invalid}`; every run of digits between separators (`- _ . , ~ : + ; =`)
@@ -349,6 +351,92 @@ requests, so it is not one of the kept metrics (see "tenantguard" below).
 - Connects as the `collector` NATS user (publish `api.metrics.*`, watch
   `registry_otlp`); the suite runs NATS with the real permission set.
 
+## Traffic classes
+
+Load balancer health checks, Kubernetes probes, uptime monitors and CORS preflights reach a service
+as ordinary HTTP requests, so a service that answers its own load balancer every few seconds would
+look busier, and usually faster, than its users make it. `tenantguard` classifies every data point
+and every server span with `internal/trafficclass` while it still holds the original attributes,
+then drops the user agent with everything else that is not published. Infrastructure traffic gets
+the point attribute `scf.traffic.class`; application traffic gets none, so its streams keep the
+identity they had before the classifier existed. The connector copies the attribute onto the
+span-derived points, the writer stores it as the `traffic_class` column
+([api-storage.md](api-storage.md)), and every headline number leaves those rows out
+([control-plane-api.md](control-plane-api.md) 7.4).
+
+The rule set is hard-coded and versioned like the route normalizer: no tenant setting changes it,
+so every project is classified the same way. Rule set version 1 applies these rules in order to the
+upper-cased method, the route after `internal/routenorm` and the user agent:
+
+1. **`preflight`**: every `OPTIONS` request.
+2. **`health`**: a route made of up to three prefix segments and a health name, optionally followed
+   by one check segment. Matching ignores case and trailing slashes.
+   - Health names: `health`, `healthz`, `_health`, `__health`, `healthcheck`, `health-check`,
+     `health_check`, `livez`, `readyz`, `startupz`, `liveness_check`, `readiness_check`, `ping`,
+     `_ping`, `status`, `_status`, `heartbeat`, `metrics`; `healthy` and `ready` right after `-`;
+     `prometheus` right after `actuator`.
+   - Prefix segments: `api`, `apis`, `rest`, a version such as `v1`, `v2beta` or `v3alpha`,
+     `actuator`, `management`, `manage`, `admin`, `q`, `_ah`, `-`, `_`, `internal`, `_internal`,
+     `system`, `sys`, `ops`, `monitoring`, `monitor`, `.well-known`.
+   - Check segments: `live`, `liveness`, `ready`, `readiness`, `started`, `startup`, `ping`,
+     `check`, `all`.
+3. **`probe`**: a user agent of a health checker or uptime monitor, or a
+   `user_agent.synthetic.type` of `test`.
+   - Matched at the start of the user agent: `ELB-HealthChecker/`, `kube-probe/`, `GoogleHC`,
+     `Envoy/HC`, `Consul Health Check`, `Nomad/`, `GoogleStackdriverMonitoring-UptimeChecks`,
+     `Edge Health Probe`, `Uptime-Kuma/`, `Datadog/Synthetics`, `Better Stack Better Uptime Bot`,
+     `Better Uptime Bot`.
+   - Matched as a token inside a browser-like user agent: `UptimeRobot/`,
+     `Cloudflare-Healthchecks/`, `Cloudflare-Traffic-Manager/`, `(StatusCake)`,
+     `DatadogSynthetics`.
+   - The exact user agent `AlwaysOn`, Azure App Service's warm-up request.
+4. **`app`**: everything else.
+
+The conventions behind the lists:
+
+| Source | Paths or user agent |
+|---|---|
+| [Kubernetes API health endpoints](https://kubernetes.io/docs/reference/using-api/health-checks/) | `/livez`, `/readyz`, `/healthz`, `/livez/<check>`; kubelet probes send `kube-probe/<major>.<minor>` ([source](https://github.com/kubernetes/kubernetes/blob/master/pkg/probe/http/request.go)) |
+| [Spring Boot Actuator](https://docs.spring.io/spring-boot/reference/actuator/endpoints.html) | `/actuator/health`, `/actuator/health/liveness`, `/actuator/health/readiness`, `/actuator/prometheus` |
+| [Quarkus SmallRye Health](https://quarkus.io/guides/smallrye-health) | `/q/health`, `/q/health/live`, `/q/health/ready`, `/q/health/started` |
+| [MicroProfile Health 4.0](https://download.eclipse.org/microprofile/microprofile-health-4.0/microprofile-health-spec-4.0.html) | `/health`, `/health/live`, `/health/ready`, `/health/started` |
+| [ASP.NET Core health checks](https://learn.microsoft.com/en-us/aspnet/core/host-and-deploy/health-checks) | `/healthz`, `/healthz/ready`, `/healthz/live` |
+| [App Engine flexible app.yaml](https://docs.cloud.google.com/appengine/docs/flexible/reference/app-yaml) | `/_ah/health`, `/liveness_check`, `/readiness_check` |
+| [Prometheus management API](https://prometheus.io/docs/prometheus/latest/management_api/) | `/-/healthy`, `/-/ready`; scrapes read `/metrics` |
+| [Traefik ping](https://doc.traefik.io/traefik/reference/install-configuration/observability/healthcheck/) | `/ping` |
+| [AWS Application Load Balancer](https://docs.aws.amazon.com/elasticloadbalancing/latest/application/lambda-functions.html) | `ELB-HealthChecker/2.0` |
+| [Google Cloud health checks](https://docs.cloud.google.com/apigee/docs/api-platform/debug/health-check) | `GoogleHC` |
+| [Envoy active health checking](https://github.com/envoyproxy/envoy/blob/main/source/common/http/headers.h) | `Envoy/HC` |
+| [Consul HTTP checks](https://github.com/hashicorp/consul/blob/main/agent/checks/check.go) | `Consul Health Check` |
+| [Nomad service checks](https://github.com/hashicorp/nomad/blob/main/helper/useragent/useragent.go) | `Nomad/<version>` |
+| [Cloud Monitoring uptime checks](https://docs.cloud.google.com/monitoring/uptime-checks/using-uptime-checks) | `GoogleStackdriverMonitoring-UptimeChecks(https://cloud.google.com/monitoring)` |
+| [Cloudflare crawlers](https://developers.cloudflare.com/fundamentals/reference/cloudflare-site-crawling/) | `Cloudflare-Healthchecks/1.0`, `Cloudflare-Traffic-Manager/1.0` |
+| [Azure Front Door health probes](https://learn.microsoft.com/en-us/azure/frontdoor/health-probes) | `Edge Health Probe` |
+| [Uptime Kuma](https://github.com/louislam/uptime-kuma/blob/master/server/uptime-kuma-server.ts) | `Uptime-Kuma/<version>` |
+| [UptimeRobot](https://help.uptimerobot.com/en/articles/11358489-what-is-the-uptimerobot-user-agent-string) | `UptimeRobot/2.0` |
+| [Better Stack](https://betterstack.com/docs/uptime/frequently-asked-questions) | `Better Stack Better Uptime Bot`, `Better Uptime Bot` |
+| [Datadog Synthetics](https://docs.datadoghq.com/synthetics/guide/identify_synthetics_bots/) | `Datadog/Synthetics`, `DatadogSynthetics` |
+| [StatusCake](https://www.statuscake.com/kb/knowledge-base/testing-websites-using-incapsula/) | `(StatusCake)` |
+| [Azure App Service Always On](https://devblogs.microsoft.com/premier-developer/404-response-code-caused-by-app-services-alwayson-feature/) | `AlwaysOn` |
+
+What the instrumentation records decides which rules can apply:
+
+- **Routes and methods** are on every point, so rules 1 and 2 classify metrics and spans alike.
+- **The user agent** (`user_agent.original`) is a recommended attribute of HTTP server spans in the
+  semantic conventions and the Go, Node.js, Python and Java instrumentations record it there. The
+  `http.server.request.duration` metric does not carry it
+  ([HTTP metrics](https://github.com/open-telemetry/semantic-conventions/blob/v1.45.0/docs/http/http-metrics.md)),
+  so rule 3 classifies span-derived points by user agent, and metric points only through
+  `user_agent.synthetic.type`, an opt-in attribute of the metric that the Python ASGI and WSGI
+  instrumentations set from the user agent by default.
+- A probe that sends a custom user agent to an application route is application traffic: nothing
+  in the request tells it apart.
+
+The rule set is tested with a golden corpus of more than 150 requests
+(`internal/trafficclass/testdata/corpus.tsv`), each run through `internal/routenorm` first as
+`tenantguard` does. A change of a rule raises `trafficclass.Version`, adds its row to
+`api.traffic_class_rules` in a migration, and leaves stored rows as they were classified.
+
 ## Span-derived points carry the span end minute
 
 Every `scf.http.server.request.duration.from_spans` data point has
@@ -378,7 +466,7 @@ future or older than 7 days is refused by the writer.
 ```
 make collector-build    # ocb with strict versioning
 make collector-it       # binary + real NATS + Go otlpmetrichttp/grpc v1.47.0
-go test -race ./internal/routenorm/ ./collector/... ./deploy/caddy/
+go test -race ./internal/routenorm/ ./internal/trafficclass/ ./collector/... ./deploy/caddy/
 ```
 
 The suite covers HTTP cumulative and gRPC delta exports, the legacy
