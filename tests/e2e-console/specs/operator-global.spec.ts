@@ -334,7 +334,7 @@ test("the operator filters to verified projects, sorts by visitors and compares 
     .locator("tbody tr[data-tenant] [data-col=visitors]")
     .allTextContents();
   expect(visitors).toEqual(["3", "2", "1"]);
-  await expect(page.getByRole("columnheader", { name: "Visitors" })).toHaveAttribute(
+  await expect(page.getByRole("columnheader", { name: "Visitors", exact: true })).toHaveAttribute(
     "aria-sort",
     "descending",
   );
