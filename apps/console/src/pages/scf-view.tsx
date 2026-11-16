@@ -260,6 +260,7 @@ function SCFRows({ v }: { v: SCFView }) {
       {web ? (
         <Panel
           title="Visits not measured"
+          aria-label="Visits not measured"
           description="Visitors with Global Privacy Control are not measured, by design. This is the estimated share of them for this range."
         >
           <CoverageNote coverage={web.coverage} />
