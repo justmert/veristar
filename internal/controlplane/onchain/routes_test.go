@@ -514,7 +514,8 @@ func TestOnchainRoutes(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, exports.OverviewHeader, recs[0])
 	require.Len(t, recs, 4)
-	require.Equal(t, []string{today.AddDate(0, 0, -2).Format(time.DateOnly), "", "", "", "", "", "", "0", "0", "0", "1", "4", "2"}, recs[1])
+	require.Equal(t, []string{today.AddDate(0, 0, -2).Format(time.DateOnly), "", "", "", "", "", "", "0", "0", "0", "1", "4", "2"},
+		recs[1][:13])
 	var exportsAudited int
 	e.sys(t, func(tx pgx.Tx) error {
 		return tx.QueryRow(t.Context(), `select count(*) from cp.audit_log where action = 'export.csv' and target = $1`,

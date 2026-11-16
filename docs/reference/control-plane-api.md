@@ -3141,12 +3141,13 @@ security keys every table on the caller's tenant:
 `day, web_pageviews, web_visitors, web_visits, web_bounces,
 web_totaltime_seconds, web_quarantine_pageviews, api_requests,
 api_errors_4xx, api_errors_5xx, onchain_ids_read, onchain_operations,
-onchain_transactions`
+onchain_transactions, integrity_grade`
 
 The web columns are the project's `agg.web_daily` rows, summed over its sites
 (empty on a day not aggregated yet); the API columns are the daily series of
 7.6 (0 on a day without requests, as on the API traffic page); the on-chain
-columns are as in 16.1. It writes one `export.csv` audit row.
+columns are as in 16.1, and `integrity_grade` is the day's grade of 17. It
+writes one `export.csv` audit row.
 
 ### 16.3 What SCF sees
 
