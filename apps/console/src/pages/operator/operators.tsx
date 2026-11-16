@@ -306,7 +306,7 @@ function AddOperator() {
   return (
     <Panel
       title="Add an operator"
-      description="The person signs in with this identity, then registers a passkey within 24 hours of being added. An operator admin can reset passkeys to open a new window."
+      description="The person signs in with this identity, then registers a passkey within the enrollment window that opens now (24 hours unless the deployment sets another length). An operator admin can reset passkeys to open a new window."
     >
       <form onSubmit={submit} className="grid max-w-prose gap-3" noValidate>
         <SelectField
