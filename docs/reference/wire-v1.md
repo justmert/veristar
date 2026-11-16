@@ -15,6 +15,11 @@ same change in the other and in this page.
 | `GET /v1/c?w=<site id>` | a proof-of-work challenge for one page load |
 | `POST /v1/e` | one event |
 
+A request for `sdk.js` names no site. The gateway attributes it to a site from the page's origin in
+the `Referer` header and counts it, and counts it again when it carries `Sec-GPC: 1`, for the
+estimate of visits not measured because of privacy signals
+([../compliance/privacy-strategy.md](../compliance/privacy-strategy.md), section 6).
+
 Both `/v1/c` and `/v1/e` are CORS simple requests: the tracker sends no custom headers and uses
 `credentials: 'omit'`, so the browser sends no preflight and no cookies. The gateway answers both
 with `Access-Control-Allow-Origin` (the request's origin when it is registered for the site).
@@ -71,13 +76,14 @@ sent with `fetch` and `keepalive: true`.
 | `v` | integer | yes | | always `1` |
 | `sv` | string | no | 20 | tracker release as `x.y.z`, sent from 1.2.0 on; the gateway answers 410 when it names a revoked release |
 | `w` | string | yes | | site id |
-| `t` | string | yes | | `pv` pageview or `ev` custom event |
+| `t` | string | yes | | `pv` pageview, `ev` custom event or `nv` never-visible notice (1.3.0 on, see below) |
 | `h` | string | yes | 100 | hostname of the page; the gateway replaces it with the host of the checked `Origin` header, so a page can report only its own host |
-| `u` | string | yes | 500 | path and query of the page, plus a route fragment (see below) |
-| `r` | string | yes | 500 | referrer: full url for another origin, path for the same origin, empty if none; the gateway keeps only scheme and host (see Referrer below) |
-| `ti` | string | yes | 500 | document title |
-| `s` | string | yes | 11 | screen as `WxH` |
-| `l` | string | yes | 35 | `navigator.language` |
+| `u` | string | `pv` and `ev` | 500 | path and query of the page, plus a route fragment (see below) |
+| `r` | string | `pv` and `ev` | 500 | referrer: full url for another origin, path for the same origin, empty if none; the gateway keeps only scheme and host (see Referrer below) |
+| `ti` | string | no | 500 | document title; releases before 1.3.0 always send it, 1.3.0 only with `data-send-title="true"` |
+| `s` | string | no | 11 | screen as `WxH`; releases before 1.3.0 always send it, 1.3.0 never reads it |
+| `l` | string | no | 35 | `navigator.language`; releases before 1.3.0 always send it, 1.3.0 never reads it |
+| `fr` | boolean | no | | `true` when the page runs inside a frame, sent from 1.3.0 on every event of such a page; absent at top level |
 | `n` | string | `ev` only | 50 | event name |
 | `d` | object | optional, `ev` only | 16 keys | event data, see below |
 | `ts` | integer | yes | | client clock in epoch ms, informational, never trusted |
@@ -120,7 +126,7 @@ the same way. In
 that case `umami.track()` returns a rejected promise and nothing is sent, so the mistake shows in
 the site's console instead of disappearing.
 
-Example:
+Example of an event from a release before 1.3.0:
 
 ```json
 {"v":1,"w":"8f6b1c3e-2a4d-4e5f-9a7b-0c1d2e3f4a5b","t":"ev","h":"site.example","u":"/pricing?plan=pro",
@@ -132,6 +138,40 @@ Example:
 All events of one page load carry the same proof. What the proof shows and what it costs is in
 [browser-proof.md](browser-proof.md); the order of the gateway's checks is in
 [../security/bot-and-inflation.md](../security/bot-and-inflation.md), "Where the checks run".
+
+## Pages a person can see (1.3.0)
+
+Release 1.3.0 sends the automatic pageview only for a page a person can see, and reports two page
+signals. The rules, all in `packages/tracker/src/index.ts`:
+
+| Situation | What 1.3.0 sends |
+|---|---|
+| The page is prerendered (`document.prerendering`) | nothing, and no challenge request, until the `prerenderingchange` event; then the pageview |
+| The page loads in a background tab (`document.visibilityState` is `hidden`) | the challenge only; the pageview when the page first becomes visible (`visibilitychange`) |
+| The page is shown, hidden and shown again | one pageview: the same page |
+| The page is restored from the back/forward cache (`pageshow` with `persisted`) | one more pageview, once the page is visible |
+| A single-page app changes its route (`pushState`, `replaceState`, `popstate`) | one pageview per route, as before; routes changed while the tab is hidden count as one pageview of the route the person then sees |
+| The page is left (`pagehide`) without ever having been visible | one `nv` notice, if the proof for it was already solved |
+| The page runs inside a frame | `fr: true` on every event |
+
+`umami.track()` is unchanged: it sends what the site asks for, visible or not.
+
+**Never-visible notice.** `{"v":1,"sv":"1.3.0","w":"<site id>","t":"nv","h":"<host>","ts":...,"p":{...}}`,
+plus `fr` when framed. It carries no `u`, `r`, `ti`, `s`, `l`, `n` or `d`; the gateway refuses a
+notice with any of them (`page_fields_on_notice`). The notice passes every check an event passes,
+including the origin and the proof, and is sent during `pagehide` with `keepalive`, so only a proof
+the page already holds can be used: a page closed within moments of loading may send none, and the
+count is a lower bound. The gateway answers 202, counts the notice for the site and never queues it.
+
+**What the gateway does with the signals.** For each accepted pageview of a release that reports
+signals (`sv` 1.3.0 or newer) it counts `signal_views`, and `signal_framed` when `fr` is true;
+each accepted notice counts `signal_never_visible`. The counts are per site and UTC day on
+`EDGE_STATS` and are inputs of integrity rule version 2, where they can only lower a grade
+([../security/bot-and-inflation.md](../security/bot-and-inflation.md), section "Page signals").
+
+The wire format stays version 1: every field 1.3.0 adds is optional, and the gateway accepts the
+bodies of every earlier release unchanged. A gateway older than 1.3.0 refuses `fr` and `nv` as
+unknown, which is why the gateway ships before the console offers 1.3.0.
 
 ## Consent-gated start
 

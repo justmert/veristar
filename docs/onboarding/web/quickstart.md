@@ -150,6 +150,7 @@ applies.
 | `data-do-not-track="true"` | also honour the older Do Not Track setting |
 | `data-before-send` | the name of a global function that can change or drop each event before it is sent |
 | `data-wallets-kit="true"` | count Stellar Wallets Kit events, version 1.1.0 and newer ([wallets-kit.md](wallets-kit.md)) |
+| `data-send-title="true"` | send the page title with each event, version 1.3.0 and newer; earlier versions always send it. Without it, 1.3.0 sends the path and referrer only |
 
 Umami's `data-tag`, `identify()`, distinct ids, web vitals and error capture do not exist in this
 tracker.

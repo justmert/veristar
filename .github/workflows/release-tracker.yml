@@ -13,8 +13,10 @@ name: release-tracker
 #   4. creates the github release carrying the manifest, sdk.js and tarball
 #
 # repository variable NPM_PACKAGE (the scoped package name whose
-# trusted publisher is this repository and this workflow file) is required;
-# the publish job stops when it is missing instead of choosing a name.
+# trusted publisher is this repository and this workflow file) turns on the
+# npm steps. without it the npm package is neither packed nor published, the
+# job says so in its log, and sdk.js is still attested and released; a name
+# is never chosen for it.
 on:
   push:
     tags: ["tracker-v*"]
@@ -78,15 +80,22 @@ jobs:
           registry-url: https://registry.npmjs.org
       - run: pnpm install --frozen-lockfile
       - name: npm package name
+        id: npm
         env:
           NPM_PACKAGE: ${{ vars.NPM_PACKAGE }}
         run: |
-          test -n "$NPM_PACKAGE" || { echo "repository variable NPM_PACKAGE is not set" >&2; exit 1; }
+          if [ -z "$NPM_PACKAGE" ]; then
+            echo "::notice::repository variable NPM_PACKAGE is not set: the npm package is not packed or published for this release"
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "publish=true" >> "$GITHUB_OUTPUT"
           # trusted publishing needs npm 11.5.1 or newer
           node -e 'const [a,b,c]=process.argv[1].split(".").map(Number); process.exit(a>11||(a===11&&(b>5||(b===5&&c>=1)))?0:1)' "$(npm --version)" ||
             { echo "npm $(npm --version) cannot use trusted publishing" >&2; exit 1; }
       - name: pack
         id: pack
+        if: steps.npm.outputs.publish == 'true'
         env:
           NPM_PACKAGE: ${{ vars.NPM_PACKAGE }}
           VERSION: ${{ needs.prove.outputs.version }}
@@ -97,12 +106,14 @@ jobs:
           echo "dir=packages/tracker/$(node -p 'require("./pack.json").dir')" >> "$GITHUB_OUTPUT"
       - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
+          # the tarball line is empty when no npm package was packed
           subject-path: |
             packages/tracker/releases/${{ needs.prove.outputs.version }}/sdk.js
             ${{ steps.pack.outputs.tarball }}
       # no NODE_AUTH_TOKEN: npm uses the oidc token of this job. provenance
       # is attached automatically for a public repository
       - name: npm publish (trusted publishing)
+        if: steps.npm.outputs.publish == 'true'
         working-directory: ${{ steps.pack.outputs.dir }}
         run: npm publish --access public
       - name: github release
@@ -112,6 +123,7 @@ jobs:
           VERSION: ${{ needs.prove.outputs.version }}
           TARBALL: ${{ steps.pack.outputs.tarball }}
         run: |
+          # shellcheck disable=SC2086 # an empty TARBALL adds no argument
           gh release create "$TAG" --verify-tag --title "tracker $VERSION" \
             --notes "sdk.js $VERSION. verify it with docs/security/verify-tracker.md." \
-            "packages/tracker/releases/$VERSION/sdk.js" packages/tracker/releases/manifest.json "$TARBALL"
+            "packages/tracker/releases/$VERSION/sdk.js" packages/tracker/releases/manifest.json $TARBALL

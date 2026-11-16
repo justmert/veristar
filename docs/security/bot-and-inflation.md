@@ -32,10 +32,11 @@ prove:
 | Class | What it is | Who can fabricate it |
 |---|---|---|
 | **Platform-observed** | What the ingestion edge sees for itself: the network of each connection and its class, distinct networks, the proof of work, arrival volume, the quarantine and refusal counters | Only someone who pays for real distinct network endpoints and runs the challenge for each event |
-| **Page-reported** | What the tracker says: path, referrer, title, custom events, and therefore page views, bounces and visit duration | The tenant, because the tenant controls its page |
+| **Page-reported** | What the tracker says: path, referrer, title, custom events, and therefore page views, bounces and visit duration; from tracker 1.3.0 also whether a page runs inside a frame and whether a load was left without being visible | The tenant, because the tenant controls its page |
 
-The grade uses platform-observed evidence. Page-reported numbers enter only as a reason that can
-lower a grade (rule `page_volume`, section 9), never as one that raises it. Visitors are counted
+The grade uses platform-observed evidence. Page-reported numbers enter only as reasons that can
+lower a grade (rules `page_volume`, `framed_share` and `never_visible_share`, section 9), never
+as one that raises it. Visitors are counted
 on the gateway's own visitor token, derived from the connection, so a page can add page views for
 a real visitor but cannot add visitors.
 
@@ -254,9 +255,10 @@ and the three days before it, the window `aggregate-web` reads again, from:
 | Accepted, quarantined and proof-failed requests | `cp.web_ingest_hourly` | platform-observed |
 | Primary visitors, and their median over up to 28 earlier days | `agg.web_daily` | platform-observed |
 | Primary page views | `agg.web_daily` | page-reported, can only lower |
+| Page views of trackers that report page signals, the framed part, never-visible notices | `cp.web_signals_daily` | page-reported, can only lower (rule version 2) |
 
-Rule version 1 (`internal/integrity/grade.go`) starts every day at A. Each rule can only lower the
-grade:
+Rule version 2 (`internal/integrity/grade.go`), applied since tracker 1.3.0, starts every day at
+A. Each rule can only lower the grade:
 
 | Code | Lowers to | When |
 |---|---|---|
@@ -266,7 +268,27 @@ grade:
 | `spike` | B | at least 100 visitors and 10 times the baseline median, with 7 or more baseline days |
 | `proof_failures` | B | half or more of the challenge-backed requests failed their proof |
 | `page_volume` | B | the page reports 50 or more page views per visitor |
+| `framed_share` | B / C | from 50 page views of trackers that report signals, 25% / 50% of them inside a frame (version 2) |
+| `never_visible_share` | B | from 50 page views and notices together, 30% of them are loads left without being visible (version 2) |
 
+Rule version 1 is the same set without the last two rules. `GradeVersion` still applies it, so a
+day graded under version 1 is reproduced exactly from its stored inputs; version 1 does not read
+the signal columns, which hold 0 for days graded before them.
+
+**Page signals.** A page loaded in a hidden frame on an unrelated, busy site has the tenant's
+origin, so it passes the origin check and every later one. Tracker 1.3.0 reports the frame
+truthfully: every event of a framed page carries `fr: true`, and a page that is left before it was
+ever visible sends a never-visible notice instead of a page view
+([../reference/wire-v1.md](../reference/wire-v1.md), "Pages a person can see"). The gateway
+counts, per site and UTC day, the accepted page views of releases that report signals
+(`signal_views`), the framed part (`signal_framed`) and the accepted notices
+(`signal_never_visible`). The framed share is taken of `signal_views` only, so pages still on an
+older release neither dilute nor raise it. A site built to be embedded shows a steady framed share
+and its reason explains the grade; a frame used to inflate a site shows nearly all views framed.
+The signals are the page's own claims: leaving them out (an older release, a modified copy) only
+removes a reason, and sending more of them only lowers the site's own grade. A notice needs the
+site's origin and a solved proof like any event, so it cannot be sent for another site from
+outside its pages.
 A day with fewer than 50 accepted events has no grade; its reason `too_little_traffic` says so.
 The thresholds leave room for real audiences: Safari users behind iCloud Private Relay and people
 on company VPNs arrive from hosting networks, so a share of hosting traffic is normal and only a
@@ -321,6 +343,9 @@ evaluations as they were graded.
 
 Proved by: `TestGradeRules`, `TestPageReportedNeverRaises`, `TestCombine`
 (`internal/integrity/integrity_test.go`); `TestGrader` (`internal/jobs/integrity`);
+`TestGradeSignalRules`, `TestRuleVersions` (`internal/integrity/integrity_test.go`);
+`TestPageSignalsOfTracker13` (`internal/gateway/signals_node_test.go`); `TestPageSignals`
+(`tests/webpath/signals_test.go`, Chromium, Firefox and WebKit through the real gateway);
 `TestIntegrityViews`, `TestIntegrityRankSQL` (`internal/controlplane/operator/integrity_test.go`);
 `TestMachineAPI` subtest `integrity rows page in key order and daily rows carry the day's grade`
 (`internal/controlplane/operator/machine_test.go`).
@@ -331,9 +356,12 @@ Every outcome is counted per site on `EDGE_STATS` and stored hourly (`cp.web_ing
 `accepted`, `quarantined`, `bot`, `dlq` and `rejected_<reason>` (full list in
 `internal/gateway/reasons.go`). Tenants see them under `GET /api/sites/{site_id}/ingest`;
 operators see them in the tenant detail. The evidence counters (`evidence_net_<class>`,
-`network_<key>`) travel on the same stream into their own daily tables and never mix with these
-outcomes. A Sec-GPC drop is counted as `rejected_gpc`; it is a privacy choice, not a sign of
-forgery.
+`network_<key>`, `signal_<name>`) and the tracker file counters of the coverage estimate
+(`script_requests`, `script_gpc`) travel on the same stream into their own daily tables and never
+mix with these outcomes. A Sec-GPC drop is counted as `rejected_gpc`; it is a privacy choice, not a sign of
+forgery. The visits a privacy signal keeps out of the numbers are estimated per site from the
+requests for the tracker file ([../compliance/privacy-strategy.md](../compliance/privacy-strategy.md),
+section 6), so a reviewer comparing projects knows the size of the gap.
 
 ## 11. What the grade establishes
 
@@ -345,7 +373,7 @@ forgery.
   visit. No technique tells them apart from organic visitors; conversion into corroborated use
   does, which is why the grade sits next to the project's on-chain activity in the operator
   views.
-- **The TLS handshake is not an input of rule version 1.** The edge terminates TLS in Caddy, which
+- **The TLS handshake is not an input of rule versions 1 and 2.** The edge terminates TLS in Caddy, which
   does not expose the ClientHello to the gateway; a handshake check against the claimed browser
   family becomes a new rule version when a maintained way to pass it exists.
 - **Thresholds are per node where the counters are per node.** Replay and per-visitor volume are

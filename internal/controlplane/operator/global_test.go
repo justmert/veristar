@@ -358,6 +358,8 @@ func webSortValue(p WebProject, sort string) sortVal {
 			return sortVal{null: true}
 		}
 		return intv(int64(integrity.Rank(*p.Integrity.Grade)))
+	case "unmeasured_share":
+		return num(p.Coverage.UnmeasuredShare)
 	}
 	if v, ok := kpiSortValue(p.Comparison, sort); ok {
 		return v

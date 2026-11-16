@@ -44,15 +44,19 @@ file-backed stream. "Stored" means PostgreSQL.
 | Gateway | client address (in `X-Edge-Client-Ip` from Caddy) | memory | the request. It is truncated to /24 (IPv4) or /48 (IPv6) for the country and autonomous system lookups, compared whole against the Tor exit list, and is never logged, queued or stored (`internal/gateway/clientip.go`, `internal/gateway/network.go`, `docs/reference/geo.md`) |
 | Gateway | network class of the event (`access`, `organisation`, `hosting`, `anonymiser`, `unknown`) and, per site and UTC day, the network as an HMAC of its autonomous system number under the daily IP-cluster secret, cut to 64 bits | memory, then counted on `EDGE_STATS` | the request; the class leaves only as a per-site count, the network key once per site and day; the autonomous system number itself never leaves the gateway |
 | Gateway | networks reported per site and day, as keys | memory | the UTC day, in a bounded table |
+| Gateway | `Referer` and `Sec-GPC` headers of a request for `sdk.js` | memory | the request. The `Referer` is reduced to its origin, matched against the registered origins of the active sites and dropped; only the site it names leaves the request, as one count, and one more count when `Sec-GPC: 1` was sent (section 6, "Measuring what is not measured") |
+| Gateway | page signals of tracker 1.3.0: a page view's frame flag, a never-visible notice | memory, then counted on `EDGE_STATS` | the request; only per-site counts leave it |
 | Gateway | daily visitor secret, daily IP-cluster secret, daily proof key | `edge_secrets`, memory bucket | until the next UTC midnight (per-key TTL), then gone; gateways zero their copies at midnight (`internal/gateway/visitor.go`) |
 | Gateway | IP-cluster sets: keyed HMAC of the truncated network, visitor tokens | memory | a sliding hour |
-| `WEB_EVENTS` | accepted event: site, band, visitor token, user agent (cut to 500 UTF-16 code units), country code, hostname, path with allowlisted query, referrer scheme and host, title, screen, language, event name and data | queued | until the replayer delivers it, at most 72 hours |
+| `WEB_EVENTS` | accepted event: site, band, visitor token, user agent (cut to 500 UTF-16 code units), country code, hostname, path with allowlisted query, referrer scheme and host, title, screen, language, event name and data. Tracker 1.3.0 sends no screen and no language, and a title only when the site sets `data-send-title="true"`, so those fields stay empty for its events | queued | until the replayer delivers it, at most 72 hours |
 | `WEB_DLQ` | events Umami refused permanently, same fields | queued | at most 7 days; erasure deletes matching messages |
 | `visit_state` | per site and visitor token: Umami session id, cache token, last event time; duplicate-guard keys | memory bucket | 24 hours after the last write |
 | Umami (`umami` database) | `session` (browser, OS, device, screen, language, country), `website_event` (time, path, query, referrer domain, title, event name, hostname; the referrer path is always `/` and its query empty, section 7), `event_data` | stored | `WEB_RAW_RETENTION_MONTHS`, default 25 (section 4) |
 | `agg.web_daily`, `agg.web_daily_dim` | per site, band and UTC day: page views, visitors, visits, bounces, total time; ranked referrers, countries, devices, browsers, OSes | stored | as long as the site exists; removal follows `removal_keep_aggregates` |
 | `cp.web_evidence_daily` | per site and UTC day: accepted events per network class | stored | as long as the site exists; removal follows `removal_keep_aggregates` |
 | `cp.web_networks_daily` | per site and UTC day: the network keys reported by the gateways, for the distinct network count | stored | until the day leaves the regrade window (four days), then deleted by the `integrity` task; deleted in every removal purge |
+| `cp.web_signals_daily` | per site and UTC day: page views of trackers that report page signals, the framed part, never-visible notices | stored | as long as the site exists; removal follows `removal_keep_aggregates` |
+| `agg.web_coverage_daily` | per site and UTC day: requests for the tracker file, and the part that carried `Sec-GPC: 1` | stored | as long as the site exists; removal follows `removal_keep_aggregates` |
 | `agg.web_integrity_daily` | per site and UTC day: the integrity grade, its reasons and the counts it was computed from (events per class, distinct networks, quarantined and proof-failed requests, visitors, page views, baseline) | stored | as long as the site exists; removal follows `removal_keep_aggregates` |
 | OTLP collector | tenant metrics and spans; logs are accepted and discarded | memory | the request; spans become duration histograms and are dropped (`collector/`) |
 | `API_METRICS` | filtered metric batches: tenant, service, normalized route, method, status class and code, histogram buckets | queued | until stored, at most 7 days |
@@ -197,6 +201,67 @@ The deny list lives in `deploy/caddy/web.Caddyfile` and
   tenant that turns it on must include it in its own assessment.
 - **Do Not Track.** With `data-do-not-track="true"` the tracker also honours
   the browser's Do Not Track setting.
+- **What the tracker reads from the page and the browser (1.3.0).** The
+  page's URL, the referrer, the hostname, whether the page runs inside a
+  frame, and the page's visibility and prerendering state, which decide when
+  the pageview is sent. It does not read the screen size or the browser
+  language, and reads `document.title` only when the site sets
+  `data-send-title="true"`. Browser, operating system and device class are
+  derived from the `User-Agent` request header the browser sends with every
+  request: Umami 3.5.0 parses it (`getDevice` in `src/lib/detect.ts`) into
+  mobile, tablet, desktop and the other device types of `ua-parser-js`. The
+  screen width served one purpose there, splitting desktop user agents into
+  `laptop` (up to 1920 pixels wide) and `desktop`; without it, 1.3.0 events
+  of a desktop browser are `desktop`, so a site that moves to 1.3.0 sees its
+  `laptop` share move to `desktop`. The device breakdown stays complete:
+  every event gets a device class. The low-entropy client hints a browser
+  sends without opt-in (`Sec-CH-UA`, `Sec-CH-UA-Mobile`,
+  `Sec-CH-UA-Platform`, Chromium-based browsers only) carry the same mobile
+  signal as the user agent's `Mobile` token, so the edge derives nothing
+  from them; the hints that would add a form factor (`Sec-CH-UA-Form-Factors`,
+  `Sec-CH-UA-Model`) need the site to opt in with `Accept-CH` and are not
+  used.
+- **Measuring what is not measured.** A visitor with Global Privacy Control
+  (Brave, DuckDuckGo, Firefox private windows), the opt-out flag or an
+  honoured Do Not Track is not measured, by design. For Global Privacy
+  Control the gap is estimated per site and UTC day:
+
+  - **What is counted.** Every request for `GET /v/<version>/sdk.js` that a
+    browser made to run the script (`Sec-Fetch-Dest: script`), and the part
+    of them that carried `Sec-GPC: 1`. Two counters per site and day
+    (`agg.web_coverage_daily`), nothing else. No address, no token, no user
+    agent and no referrer is kept.
+  - **How a request is attributed to a site.** The script URL is the same
+    for every site, so the gateway reads the `Referer` header, which browsers
+    send for the script request under the default referrer policy
+    (`strict-origin-when-cross-origin`, the page's origin), reduces it to its
+    origin and matches it against the registered origins of the active
+    sites, with the same rules as the `Origin` check of events, including
+    `*.` patterns (`internal/gateway/coverage.go`). The request is counted
+    only when exactly one active site matches.
+  - **The estimate.** The share of `Sec-GPC` requests in all counted
+    requests, shown from 100 requests in the range on: "about X% of visits
+    are not measured because of privacy signals". Below 100 the counts are
+    shown and the share is not.
+  - **Accuracy limits.** The file is served with a one-year immutable cache
+    and browsers partition their cache by site, so a browser requests it
+    once per site until its cache is cleared: the counters measure browsers
+    that loaded the file, not visits. A private window starts with an empty
+    cache each time, so browsers that clear their cache often (Firefox
+    private windows, privacy-focused setups) are counted more often than
+    others, which tends to overstate the share. Pages with
+    `Referrer-Policy: no-referrer`, a self-hosted copy of `sdk.js`, an origin
+    two active sites registered, and browsers that send no fetch metadata
+    (Safari before 16.4) are not counted. The opt-out flag and Do Not Track
+    live in the browser, not in the request, so they are not part of the
+    estimate. Automated clients that fetch the script like a browser are
+    counted. Read the share as the order of magnitude of the gap, not as an
+    exact figure.
+
+  The estimate is on the project's overview, in "What SCF sees", in the
+  operators' global web view as a column, in the CSV exports, in the
+  machine API and in the MCP tools ([../reference/control-plane-api.md](../reference/control-plane-api.md),
+  section 17.5).
 - **Deferred start.** With `data-auto-track="false"` the tracker loads, sends
   nothing and fetches no challenge until the site calls `umami.start()`, for
   example after consent (`docs/reference/wire-v1.md`).
