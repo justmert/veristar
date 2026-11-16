@@ -18,9 +18,12 @@ refuses to run without it or with anything other than digits and commas.
 
 An operator who signs in with a Stellar wallet instead is listed by account id (G-address) in
 `OPERATOR_STELLAR_ADDRESSES`, the Ansible variable `sa_operator_stellar_addresses` in the same
-file: a comma-separated string, empty when no wallet operator exists. The core role refuses
-anything other than G-addresses and commas, and the control plane checks each checksum at start.
-You add and remove a wallet operator with the steps below, editing that variable instead.
+file: a comma-separated string, empty when no wallet or passkey operator exists. An operator who
+signs in with a passkey is listed in the same variable by the passkey account address
+(C-address) that the console shows on their **Account** page. The core role refuses anything other
+than G-addresses, C-addresses and commas, and the control plane checks each checksum at start.
+You add and remove a wallet or passkey operator with the steps below, editing that variable
+instead.
 
 ## Find the numeric id
 
