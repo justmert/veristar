@@ -40,6 +40,25 @@ type webDaily struct {
 	Visits    int64  `json:"visits"`
 	Bounces   int64  `json:"bounces"`
 	Totaltime int64  `json:"totaltime"`
+	// the integrity grade of the tenant's sites on the day (control plane
+	// api 17.4); decoded so the strict decoder accepts the field
+	Integrity integritySummary `json:"integrity"`
+}
+
+type integritySummary struct {
+	Grade      *string       `json:"grade"`
+	GradedDays int64         `json:"graded_days"`
+	DaysA      int64         `json:"days_a"`
+	DaysB      int64         `json:"days_b"`
+	DaysC      int64         `json:"days_c"`
+	Reasons    []rangeReason `json:"reasons"`
+}
+
+type rangeReason struct {
+	Code  string `json:"code"`
+	Level string `json:"level"`
+	Days  int64  `json:"days"`
+	Text  string `json:"text"`
 }
 
 type webDailyList struct {
