@@ -107,6 +107,12 @@ var Want = map[string]map[db.Role]string{
 	// tenant (its own rows) and operators
 	"agg.chain_daily": {db.RoleCPTenant: "r", db.RoleCPOperator: "r", db.RoleJobs: "rawd"},
 	"agg.chain_reads": {db.RoleCPTenant: "r", db.RoleCPOperator: "r", db.RoleJobs: "rawd"},
+	// integrity (00033): the grades are read by the tenant (its own rows)
+	// and operators; edgestats and integrity write the evidence and network
+	// rows behind them, and cp_system deletes those in a purge
+	"agg.web_integrity_daily": {db.RoleCPTenant: "r", db.RoleCPOperator: "r", db.RoleJobs: "rawd"},
+	"cp.web_evidence_daily":   {db.RoleCPSystem: "rawd", db.RoleJobs: "rawd"},
+	"cp.web_networks_daily":   {db.RoleCPSystem: "rawd", db.RoleJobs: "rawd"},
 }
 
 // Right is one privilege: its acl letter and its sql name.

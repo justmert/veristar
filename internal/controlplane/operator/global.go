@@ -58,6 +58,7 @@ func NewGlobal(d *db.DB) (*Global, error) {
 func (g *Global) Routes(r chi.Router) {
 	r.Method(http.MethodGet, "/web/projects", httpx.HandlerFunc(g.webProjects))
 	r.Method(http.MethodGet, "/web/compare", httpx.HandlerFunc(g.webCompare))
+	r.Method(http.MethodGet, "/web/integrity", httpx.HandlerFunc(g.webIntegrity))
 	r.Method(http.MethodGet, "/api/projects", httpx.HandlerFunc(g.apiProjects))
 	r.Method(http.MethodGet, "/api/compare", httpx.HandlerFunc(g.apiCompare))
 }

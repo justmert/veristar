@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/justmert/veristar/internal/controlplane/httpx"
+	"github.com/justmert/veristar/internal/controlplane/integrityview"
 	"github.com/justmert/veristar/internal/controlplane/onchain"
 )
 
@@ -24,6 +25,7 @@ var webSorts = map[string]string{
 	"quarantine_pageviews": "quarantine_pageviews", "quarantine_visitors": "quarantine_visitors",
 	"quarantine_share": "quarantine_share", "ingest_requests": "ingest_requests",
 	"ingest_rejected": "ingest_rejected", "rejected_share": "rejected_share",
+	"integrity": "integrity_rank",
 }
 
 // webDims are the breakdowns of the web views, in contract order.
@@ -51,6 +53,17 @@ i as (
   where h.hour >= @from_at::timestamptz and h.hour < @to_end::timestamptz
   group by h.tenant_id
 ),
+ig as (
+  -- site days per grade over the range (agg.web_integrity_daily)
+  select g.tenant_id,
+         count(*) filter (where g.grade = 'A')::bigint as days_a,
+         count(*) filter (where g.grade = 'B')::bigint as days_b,
+         count(*) filter (where g.grade = 'C')::bigint as days_c
+  from agg.web_integrity_daily g
+  join t on t.id = g.tenant_id
+  where g.day between @from_day::date and @to_day::date
+  group by g.tenant_id
+),
 x as (
   select t.id, t.slug, t.name, t.status, t.created_at,
          coalesce(s.sites, 0) as sites, coalesce(s.sites_verified, 0) as sites_verified,
@@ -62,12 +75,14 @@ x as (
          coalesce(w.quarantine_visitors, 0) as quarantine_visitors,
          coalesce(w.pageviews, 0) > 0 as has_web_data,
          coalesce(ap.has_api, false) as has_api_data,
-         coalesce(i.requests, 0) as ingest_requests, coalesce(i.rejected, 0) as ingest_rejected
+         coalesce(i.requests, 0) as ingest_requests, coalesce(i.rejected, 0) as ingest_rejected,
+         coalesce(ig.days_a, 0) as days_a, coalesce(ig.days_b, 0) as days_b, coalesce(ig.days_c, 0) as days_c
   from t
   left join s on s.tenant_id = t.id
   left join w on w.tenant_id = t.id
   left join ap on ap.tenant_id = t.id
   left join i on i.tenant_id = t.id
+  left join ig on ig.tenant_id = t.id
 ),
 y as (
   select x.*,
@@ -75,7 +90,8 @@ y as (
          case when visits > 0 then totaltime::double precision / visits end as avg_visit_duration,
          case when pageviews + quarantine_pageviews > 0
               then quarantine_pageviews::double precision / (pageviews + quarantine_pageviews) end as quarantine_share,
-         case when ingest_requests > 0 then ingest_rejected::double precision / ingest_requests end as rejected_share
+         case when ingest_requests > 0 then ingest_rejected::double precision / ingest_requests end as rejected_share,
+         ` + integritySQL + ` as integrity_rank
   from x
   where ` + derivedFilter + `
 )`
@@ -86,6 +102,7 @@ type WebProject struct {
 	SiteCounts
 	HasWebData          bool                  `json:"has_web_data"`
 	HasAPIData          bool                  `json:"has_api_data"`
+	Integrity           IntegrityGrade        `json:"integrity"`
 	Pageviews           int64                 `json:"pageviews"`
 	Visitors            int64                 `json:"visitors"`
 	Visits              int64                 `json:"visits"`
@@ -131,7 +148,7 @@ func (g *Global) webProjects(w http.ResponseWriter, r *http.Request) error {
 			select id, slug, name, status, created_at, sites, sites_verified, sites_with_stellar_toml,
 			       has_web_data, has_api_data, pageviews, visitors, visits, bounces, totaltime,
 			       bounce_rate, avg_visit_duration, quarantine_pageviews, quarantine_visitors, quarantine_share,
-			       ingest_requests, ingest_rejected, rejected_share
+			       ingest_requests, ingest_rejected, rejected_share, days_a, days_b, days_c
 			from y`+lq.orderBy(webSorts)+` limit @row_limit offset @row_offset`, args)
 		if err != nil {
 			return fmt.Errorf("page: %w", err)
@@ -143,8 +160,10 @@ func (g *Global) webProjects(w http.ResponseWriter, r *http.Request) error {
 				&p.Sites, &p.SitesVerified, &p.SitesWithStellarToml, &p.HasWebData, &p.HasAPIData,
 				&p.Pageviews, &p.Visitors, &p.Visits, &p.Bounces, &p.Totaltime,
 				&p.BounceRate, &p.AvgVisitDuration, &p.QuarantinePageviews, &p.QuarantineVisitors, &p.QuarantineShare,
-				&p.IngestRequests, &p.IngestRejected, &p.RejectedShare)
+				&p.IngestRequests, &p.IngestRejected, &p.RejectedShare,
+				&p.Integrity.DaysA, &p.Integrity.DaysB, &p.Integrity.DaysC)
 			p.Tenant.CreatedAt = httpx.Timestamp(at)
+			p.Integrity.derive()
 			return p, err
 		})
 		if err != nil {
@@ -284,11 +303,12 @@ type Breakdown struct {
 
 // WebCompareProject is one project of GET /api/operator/web/compare.
 type WebCompareProject struct {
-	Tenant     TenantRef            `json:"tenant"`
-	Totals     WebTotals            `json:"totals"`
-	Series     []WebPoint           `json:"series"`
-	Breakdowns map[string]Breakdown `json:"breakdowns"`
-	Onchain    CompareOnchain       `json:"onchain"`
+	Tenant     TenantRef             `json:"tenant"`
+	Integrity  integrityview.Summary `json:"integrity"`
+	Totals     WebTotals             `json:"totals"`
+	Series     []WebPoint            `json:"series"`
+	Breakdowns map[string]Breakdown  `json:"breakdowns"`
+	Onchain    CompareOnchain        `json:"onchain"`
 }
 
 // WebCompare is the answer of GET /api/operator/web/compare (contract 8.4).
@@ -340,6 +360,10 @@ func (g *Global) webCompare(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
+		grades, err := integrityview.Load(ctx, tx, ids, rg.From, rg.To)
+		if err != nil {
+			return err
+		}
 		chainOf, err := compareOnchain(ctx, tx, ids, rg, g.now())
 		if err != nil {
 			return err
@@ -358,6 +382,7 @@ func (g *Global) webCompare(w http.ResponseWriter, r *http.Request) error {
 				p.Totals.QuarantinePageviews += *pt.QuarantinePageviews
 			}
 			p.Totals.QuarantineVisitors = quarantineVisitors[t.ID]
+			p.Integrity = grades[t.ID].Summary
 			p.Totals.derive()
 			b := tops[t.ID]
 			for _, d := range webDims {

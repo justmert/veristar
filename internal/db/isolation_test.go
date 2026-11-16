@@ -84,6 +84,11 @@ var tenantTables = []tenantTable{
 	{name: "agg.web_daily_dim", key: "tenant_id", denied: true},
 	{name: "agg.chain_daily", key: "tenant_id"},
 	{name: "agg.chain_reads", key: "tenant_id"},
+	// integrity (00033): a project reads its own grades; the evidence and
+	// network rows behind them are jobs' only
+	{name: "agg.web_integrity_daily", key: "tenant_id"},
+	{name: "cp.web_evidence_daily", key: "tenant_id", denied: true},
+	{name: "cp.web_networks_daily", key: "tenant_id", denied: true},
 }
 
 // randomContract is a string of the strkey shape cp.chain_ids checks

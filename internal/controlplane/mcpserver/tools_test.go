@@ -52,6 +52,10 @@ func TestToolSets(t *testing.T) {
 		require.True(t, on[want], want)
 		require.False(t, tn[want], "operator tool %s in the tenant set", want)
 	}
+	// the integrity report, the same for the project and for operators
+	require.True(t, tn["get_web_integrity"])
+	require.True(t, on["get_tenant_integrity"])
+	require.False(t, tn["get_tenant_integrity"], "operator tool in the tenant set")
 	for name := range tn {
 		require.False(t, on[name], "tenant tool %s in the operator set", name)
 	}

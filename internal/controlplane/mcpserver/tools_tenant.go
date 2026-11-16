@@ -26,6 +26,9 @@ How to work:
 4. On-chain and review: get_onchain_activity for the declared Stellar accounts and contracts, and get_scf_view for ` +
 	`the figures SCF reviewers see about the project.
 
+Integrity: get_web_integrity returns the integrity grade (A, B or C) of the project's web traffic per site and day ` +
+	`with its reasons, the same report SCF operators see.
+
 Dates are ISO 8601: a date such as 2026-11-01 (UTC) or a timestamp with a zone. Web views count visitors without cookies ` +
 	`and rotate visitor ids daily, so unique visitors over several days are an upper bound of distinct people. API latency ` +
 	`percentiles are estimated from histogram buckets.`
@@ -98,6 +101,7 @@ func (s *Server) addTenantTools(srv *mcp.Server) {
 
 	s.addWebTools(srv)
 	s.addAPITools(srv)
+	s.addIntegrityTenantTools(srv)
 	s.addOnchainTenantTools(srv)
 }
 

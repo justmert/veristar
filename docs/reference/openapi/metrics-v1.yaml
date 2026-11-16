@@ -151,6 +151,43 @@ paths:
           $ref: '#/components/responses/RateLimited'
         '500':
           $ref: '#/components/responses/Internal'
+  /web/integrity:
+    get:
+      operationId: webIntegrity
+      summary: Integrity grade per tenant, site and UTC day
+      description: |
+        Rows of `agg.web_integrity_daily`: the grade of one site and day (A,
+        B, C, or `null` with too little traffic), the reasons with their
+        figures and plain language text, and the platform-observed evidence
+        they rest on. Ordered by tenant, site and day.
+      parameters:
+        - $ref: '#/components/parameters/tenant'
+        - $ref: '#/components/parameters/fromDay'
+        - $ref: '#/components/parameters/toDay'
+        - $ref: '#/components/parameters/limit'
+        - $ref: '#/components/parameters/cursor'
+      responses:
+        '200':
+          description: One page of site days.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebIntegrityList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/Internal'
   /web/hourly:
     get:
       operationId: webHourly
@@ -684,7 +721,7 @@ components:
     WebDaily:
       type: object
       additionalProperties: false
-      required: [tenant_id, day, band, sites, pageviews, visitors, visits, bounces, totaltime]
+      required: [tenant_id, day, band, sites, pageviews, visitors, visits, bounces, totaltime, integrity]
       allOf:
         - $ref: '#/components/schemas/WebTotals'
       properties:
@@ -694,6 +731,10 @@ components:
           $ref: '#/components/schemas/Day'
         band:
           $ref: '#/components/schemas/Band'
+        integrity:
+          description: The grade of the tenant's sites on the day, the same on both bands' items.
+          allOf:
+            - $ref: '#/components/schemas/IntegritySummary'
         sites: true
         pageviews: true
         visitors: true
@@ -747,6 +788,158 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/WebDimension'
+        next_cursor:
+          $ref: '#/components/schemas/Cursor'
+    Grade:
+      description: Integrity grade, A best. `null` when no day was graded.
+      type: [string, 'null']
+      enum: [A, B, C, null]
+    IntegrityRangeReason:
+      type: object
+      additionalProperties: false
+      required: [code, level, days, text]
+      properties:
+        code:
+          type: string
+          enum: [hosting_share, quarantine_share, few_networks, spike, proof_failures, page_volume, too_little_traffic]
+        level:
+          type: string
+          enum: [B, C, none]
+        days:
+          type: integer
+          minimum: 1
+        text:
+          type: string
+    IntegritySummary:
+      description: |
+        The grade over several site days: C when at least a quarter of the
+        graded site days are C, B when at least a quarter are B or C, A
+        otherwise.
+      type: object
+      additionalProperties: false
+      required: [grade, graded_days, days_a, days_b, days_c, reasons]
+      properties:
+        grade:
+          $ref: '#/components/schemas/Grade'
+        graded_days:
+          $ref: '#/components/schemas/Count'
+        days_a:
+          $ref: '#/components/schemas/Count'
+        days_b:
+          $ref: '#/components/schemas/Count'
+        days_c:
+          $ref: '#/components/schemas/Count'
+        reasons:
+          type: array
+          items:
+            $ref: '#/components/schemas/IntegrityRangeReason'
+    IntegrityReason:
+      type: object
+      additionalProperties: false
+      required: [code, level, value, limit, text]
+      properties:
+        code:
+          type: string
+          enum: [hosting_share, quarantine_share, few_networks, spike, proof_failures, page_volume, too_little_traffic]
+        level:
+          type: string
+          enum: [B, C, none]
+        value:
+          type: number
+        limit:
+          type: number
+        text:
+          type: string
+    Share:
+      type: [number, 'null']
+      minimum: 0
+      maximum: 1
+    IntegrityEvidence:
+      type: object
+      additionalProperties: false
+      required: [events, quarantined, proof_failures, networks, visitors, pageviews, baseline_visitors,
+                 baseline_days, net, hosting_share, quarantine_share, proof_pass_rate]
+      properties:
+        events:
+          $ref: '#/components/schemas/Count'
+        quarantined:
+          $ref: '#/components/schemas/Count'
+        proof_failures:
+          $ref: '#/components/schemas/Count'
+        networks:
+          description: Distinct autonomous systems the site's accepted events came from.
+          allOf:
+            - $ref: '#/components/schemas/Count'
+        visitors:
+          $ref: '#/components/schemas/Count'
+        pageviews:
+          $ref: '#/components/schemas/Count'
+        baseline_visitors:
+          type: [integer, 'null']
+          minimum: 0
+        baseline_days:
+          type: integer
+          minimum: 0
+          maximum: 28
+        net:
+          type: object
+          additionalProperties: false
+          required: [access, organisation, hosting, anonymiser, unknown]
+          properties:
+            access:
+              $ref: '#/components/schemas/Count'
+            organisation:
+              $ref: '#/components/schemas/Count'
+            hosting:
+              $ref: '#/components/schemas/Count'
+            anonymiser:
+              $ref: '#/components/schemas/Count'
+            unknown:
+              $ref: '#/components/schemas/Count'
+        hosting_share:
+          $ref: '#/components/schemas/Share'
+        quarantine_share:
+          $ref: '#/components/schemas/Share'
+        proof_pass_rate:
+          $ref: '#/components/schemas/Share'
+    WebIntegrity:
+      type: object
+      additionalProperties: false
+      required: [tenant_id, site_id, day, grade, closed, rule_version, reasons, evidence]
+      properties:
+        tenant_id:
+          $ref: '#/components/schemas/ID'
+        site_id:
+          $ref: '#/components/schemas/ID'
+        day:
+          $ref: '#/components/schemas/Day'
+        grade:
+          $ref: '#/components/schemas/Grade'
+        closed:
+          description: The UTC day has ended.
+          type: boolean
+        rule_version:
+          type: integer
+          minimum: 1
+        reasons:
+          type: array
+          items:
+            $ref: '#/components/schemas/IntegrityReason'
+        evidence:
+          $ref: '#/components/schemas/IntegrityEvidence'
+    WebIntegrityList:
+      type: object
+      additionalProperties: false
+      required: [from, to, items, next_cursor]
+      properties:
+        from:
+          $ref: '#/components/schemas/Day'
+        to:
+          $ref: '#/components/schemas/Day'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/WebIntegrity'
         next_cursor:
           $ref: '#/components/schemas/Cursor'
     WebHour:

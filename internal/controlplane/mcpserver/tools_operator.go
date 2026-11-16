@@ -24,6 +24,9 @@ How to work:
 4. get_tenant_onchain returns one project's declared Stellar accounts and contracts, their proofs and daily ledger ` +
 	`activity; the overviews and compares carry an onchain summary per project.
 
+Integrity: every row of get_global_web_overview and compare_tenants_web carries the project's integrity grade (A, B ` +
+	`or C) over the range; get_tenant_integrity gives the reasons per site and day.
+
 Ranges are whole UTC days (from, to, both included, at most 366 days, default the 30 days ending today). The views ` +
 	`read daily aggregates only, never sessions. API latency percentiles are estimated from histogram buckets.`
 
@@ -221,7 +224,8 @@ func (s *Server) addOperatorTools(srv *mcp.Server) {
 		Name:  "get_global_web_overview",
 		Title: "Web metrics of every project",
 		Description: "Ranks every project on its web metrics over whole UTC days: page views, visitors, visits, " +
-			"bounces and bounce rate, visit duration, quarantined (likely automated) traffic, gateway rejections and " +
+			"bounces and bounce rate, visit duration, quarantined (likely automated) traffic, gateway rejections, the " +
+			"integrity grade and " +
 			"the top referrers, countries, devices and browsers. Sort by any metric to find the most or least used " +
 			"projects; filter by status, verification, stellar.toml or data presence.",
 	}, func(props map[string]*jsonschema.Schema) {
@@ -229,7 +233,7 @@ func (s *Server) addOperatorTools(srv *mcp.Server) {
 		pagePatch(props, "name", "status", "created_at", "sites", "sites_verified", "sites_with_stellar_toml",
 			"pageviews", "visitors", "visits", "bounces", "totaltime", "bounce_rate", "avg_visit_duration",
 			"quarantine_pageviews", "quarantine_visitors", "quarantine_share", "ingest_requests", "ingest_rejected",
-			"rejected_share")
+			"rejected_share", "integrity")
 	}, func(ctx context.Context, p Principal, in webProjectsIn) (any, error) {
 		q := url.Values{}
 		for _, f := range []func(url.Values) error{in.dayRangeIn.values, in.projectFilters.values, in.pageIn.values} {
@@ -329,5 +333,6 @@ func (s *Server) addOperatorTools(srv *mcp.Server) {
 		}
 		return s.operatorRead(ctx, p, "/api/compare", q)
 	})
+	s.addIntegrityOperatorTools(srv)
 	s.addOnchainOperatorTools(srv)
 }

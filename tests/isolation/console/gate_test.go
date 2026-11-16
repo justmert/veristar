@@ -123,6 +123,8 @@ func catalogue(terms string) []route {
 	}))
 	add(kindTenant, http.MethodGet, tp+"/sites", nil)
 	add(kindTenant, http.MethodGet, tp+"/sites/{site_id}", nil)
+	// integrity grade (contract 17.2)
+	add(kindTenant, http.MethodGet, tp+"/integrity", nil)
 	add(kindTenant, http.MethodPatch, tp+"/sites/{site_id}", fixed(map[string]any{"origins": []string{"https://intruder.example.org"}}))
 	add(kindTenant, http.MethodDelete, tp+"/sites/{site_id}", nil)
 	// otlp tokens
@@ -165,6 +167,7 @@ func catalogue(terms string) []route {
 	add(kindOperator, http.MethodGet, op+"/tenants/{tenant_id}", nil)
 	add(kindOperator, http.MethodGet, op+"/web/projects", nil)
 	add(kindOperator, http.MethodGet, op+"/web/compare?tenants={tenant_id}", nil)
+	add(kindOperator, http.MethodGet, op+"/web/integrity?tenant={tenant_id}", nil)
 	add(kindOperator, http.MethodGet, op+"/api/projects", nil)
 	add(kindOperator, http.MethodGet, op+"/api/compare?tenants={tenant_id}", nil)
 	add(kindOperator, http.MethodPost, op+"/api-keys", fixed(map[string]any{"name": "intruder", "scope": "metrics:read"}))
@@ -196,7 +199,7 @@ func catalogue(terms string) []route {
 	add(kindMCP, http.MethodGet, "/.well-known/oauth-authorization-server", nil)
 
 	// machine metrics api
-	for _, p := range []string{"/tenants", "/web/daily", "/web/dimensions", "/web/hourly", "/api/daily", "/api/routes/daily", "/api/hourly", "/openapi.yaml"} {
+	for _, p := range []string{"/tenants", "/web/daily", "/web/dimensions", "/web/hourly", "/web/integrity", "/api/daily", "/api/routes/daily", "/api/hourly", "/openapi.yaml"} {
 		add(kindMachine, http.MethodGet, operator.MachinePath+p, nil)
 	}
 	return out
@@ -689,6 +692,10 @@ func testMachineAPI(t *testing.T, e *env, w *gateWorld, cat []route) {
 				 values ($1, $2, current_date, 'primary', 5, 2, 3, 1, 40)`,
 				`insert into agg.web_daily_dim (site_id, tenant_id, day, band, dimension, key, value)
 				 values ($1, $2, current_date, 'primary', 'country', 'DE', 2)`,
+				`insert into agg.web_integrity_daily (site_id, tenant_id, day, rule_version, grade, closed, events,
+				   quarantined, proof_failures, net_access, net_organisation, net_hosting, net_anonymiser, net_unknown,
+				   networks, visitors, pageviews, baseline_visitors, baseline_days, reasons)
+				 values ($1, $2, current_date, 1, 'A', false, 60, 0, 0, 60, 0, 0, 0, 0, 3, 2, 5, null, 0, '[]')`,
 			} {
 				_, err := c.Exec(context.Background(), q, site, tn)
 				require.NoError(t, err)
@@ -713,7 +720,7 @@ func testMachineAPI(t *testing.T, e *env, w *gateWorld, cat []route) {
 			dataRoutes = append(dataRoutes, r.path)
 		}
 	}
-	require.Len(t, dataRoutes, 7)
+	require.Len(t, dataRoutes, 8)
 	sent := 0
 	refused := func(r machineResp, status int, code, what string) {
 		t.Helper()
