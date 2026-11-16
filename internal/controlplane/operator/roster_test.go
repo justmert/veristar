@@ -241,7 +241,7 @@ func TestRosterRoutes(t *testing.T) {
 	require.Equal(t, http.StatusConflict, st)
 	require.Equal(t, "operator_exists", errCode(m))
 	st, m = admin.do(t, http.MethodPost, "/roster", map[string]any{"github_login": "nobody-here", "role": "operator", "reason": reason})
-	require.Equal(t, http.StatusUnprocessableEntity, st)
+	require.Equal(t, http.StatusUnprocessableEntity, st, m)
 	st, _ = admin.do(t, http.MethodPost, "/roster", map[string]any{"stellar_address": walletOp, "role": "operator"})
 	require.Equal(t, http.StatusUnprocessableEntity, st, "a change without a reason")
 

@@ -49,7 +49,7 @@ func LoadAccount(ctx context.Context, tx pgx.Tx, u session.User) (Account, []Pas
 	acc := Account{User: u, Credentials: make([]webauthn.Credential, 0, len(rows))}
 	list := make([]Passkey, 0, len(rows))
 	for _, r := range rows {
-		p, c, err := passkeyOf(systemq.CpOperatorPasskey(r))
+		p, c, err := passkeyOf(r)
 		if err != nil {
 			return Account{}, nil, err
 		}
