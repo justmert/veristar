@@ -23,7 +23,3 @@ func (c *Client) Verify(ctx context.Context, token Token) (User, error) {
 	}
 	return out, nil
 }
-
-// NewToken wraps a raw token obtained outside this client, such as the one
-// in an sso redirect, so it can be passed to the calls that take a Token.
-func NewToken(raw string) Token { return Token{v: raw} }

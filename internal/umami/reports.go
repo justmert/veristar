@@ -176,7 +176,7 @@ func pageviewsPath(websiteID string, q PageviewsQuery) (string, error) {
 
 // the read routes also exist on Client with an explicit token, for callers
 // that act as a tenant's view-only user rather than the admin (isolation
-// tests, the sso flow).
+// tests, member sessions).
 
 // Stats calls GET /api/websites/<id>/stats with token.
 func (c *Client) Stats(ctx context.Context, token Token, websiteID string, r Range) (Stats, error) {

@@ -15,7 +15,6 @@ func controlPlaneEnv() map[string]string {
 		"CONTROLPLANE_OPS_ADDR":   "127.0.0.1:9095",
 		"CONSOLE_ORIGIN":          "https://app.example.org",
 		"INGEST_ORIGIN":           "https://in.example.org",
-		"WEB_ORIGIN":              "https://web.example.org",
 		"GITHUB_CLIENT_ID":        "Iv1.abc",
 		"GITHUB_CLIENT_SECRET":    "client-secret-value",
 		"GITHUB_REDIRECT_URL":     "https://app.example.org/api/auth/github/callback",

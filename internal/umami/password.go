@@ -43,7 +43,7 @@ func EpochDay(t time.Time) int64 {
 // unpadded. the separator keeps an id and a day from ever forming the same
 // input as another pair. the result has 43 characters, inside umami's 8 to
 // 255 limit. only the umami-rotate task sets it and provisioning sets it
-// once at user creation; sso only logs in with it.
+// once at user creation; member sessions only log in with it.
 func (p PasswordKey) Password(userID string, day int64) (string, error) {
 	if p.Empty() {
 		return "", errors.New("umami password: no key")

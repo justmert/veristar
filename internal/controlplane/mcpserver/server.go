@@ -20,9 +20,8 @@ import (
 	"github.com/justmert/veristar/internal/controlplane/httpx"
 	"github.com/justmert/veristar/internal/controlplane/operator"
 	"github.com/justmert/veristar/internal/controlplane/session"
-	"github.com/justmert/veristar/internal/controlplane/sso"
+	"github.com/justmert/veristar/internal/controlplane/umamiread"
 	"github.com/justmert/veristar/internal/db"
-	"github.com/justmert/veristar/internal/umami"
 )
 
 // Path is where the mcp endpoint is served, beside /api. Caddy on
@@ -55,17 +54,6 @@ type Routes interface {
 	Routes(r chi.Router)
 }
 
-// SiteSessions opens a umami session as a user for a site of a tenant the
-// user is a member of. *sso.Handler implements it.
-type SiteSessions interface {
-	SiteSession(ctx context.Context, user, siteID uuid.UUID) (sso.Site, umami.Session, error)
-}
-
-// WebsiteReader reads a website route as a user. *umami.Client implements it.
-type WebsiteReader interface {
-	ReadWebsite(ctx context.Context, token umami.Token, websiteID, sub string, q url.Values, out any) error
-}
-
 // Config are the parts of the server. every field is required except Now,
 // Rate and Burst.
 type Config struct {
@@ -76,9 +64,9 @@ type Config struct {
 	// tenant, site and api metrics groups, and the operator area mounted
 	// behind its guard. only GET requests ever reach them.
 	Reads []Routes
-	// Sessions and Umami serve the web analytics tools.
-	Sessions SiteSessions
-	Umami    WebsiteReader
+	// Web reads umami as the principal's own umami user for the web
+	// analytics tools; the console's web dashboard shares it.
+	Web *umamiread.Reader
 	// Issuer is the console origin, https://app.<BASE_DOMAIN>: the oauth
 	// issuer, and the resource uri is Issuer + Path.
 	Issuer string
@@ -99,8 +87,7 @@ type Server struct {
 	db       *db.DB
 	guard    *operator.Guard
 	reads    http.Handler
-	sessions SiteSessions
-	umami    WebsiteReader
+	web      *umamiread.Reader
 	issuer   string
 	resource string
 	log      *slog.Logger
@@ -110,7 +97,6 @@ type Server struct {
 
 	limiter    *limiter
 	inflight   *inflight
-	webCache   *webCache
 	metrics    *metrics
 	register   *bucket
 	registerMu sync.Mutex
@@ -123,9 +109,9 @@ type Server struct {
 
 // New checks the configuration and builds both tool sets.
 func New(c Config) (*Server, error) {
-	if c.DB == nil || c.Guard == nil || len(c.Reads) == 0 || c.Sessions == nil || c.Umami == nil ||
+	if c.DB == nil || c.Guard == nil || len(c.Reads) == 0 || c.Web == nil ||
 		c.Log == nil || c.Registry == nil {
-		return nil, errors.New("mcpserver: database, guard, read routes, umami sessions, umami reader, log and registry are required")
+		return nil, errors.New("mcpserver: database, guard, read routes, umami reader, log and registry are required")
 	}
 	u, err := url.Parse(c.Issuer)
 	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" || u.Path != "" || u.RawQuery != "" {
@@ -162,14 +148,13 @@ func New(c Config) (*Server, error) {
 		g.Routes(reads)
 	}
 	s := &Server{
-		db: c.DB, guard: c.Guard, reads: reads, sessions: c.Sessions, umami: c.Umami,
+		db: c.DB, guard: c.Guard, reads: reads, web: c.Web,
 		issuer: c.Issuer, resource: c.Issuer + Path, log: c.Log, now: c.Now, version: c.Version,
 		// the sdk logs every stateless request's session at info; only its
 		// warnings and errors reach the service log
 		sdkLog:   slog.New(warnOnly{c.Log.Handler()}),
 		limiter:  newLimiter(c.Rate, float64(c.Burst)),
 		inflight: &inflight{n: map[uuid.UUID]int{}},
-		webCache: newWebCache(),
 		metrics:  m,
 		register: newBucket(registerRate, registerBurst, c.Now()),
 		sealKey:  key,

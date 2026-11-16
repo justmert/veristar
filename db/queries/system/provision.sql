@@ -1,4 +1,4 @@
--- queries for the provisioning reconciler, sso and the umami password
+-- queries for the provisioning reconciler, member umami sessions and the umami password
 -- rotation. all run as cp_system.
 
 -- name: ProvisionLockTenant :one
@@ -20,7 +20,7 @@ order by u.id;
 
 -- name: ProvisionSetUmamiUsername :exec
 -- the name the reconciler gives a new umami user, stored before the user is
--- created so sso logs in with the same name (00034)
+-- created so member sessions log in with the same name (00034)
 update cp.users set umami_username = @umami_username
 where id = @id and umami_username is null;
 
@@ -34,14 +34,14 @@ order by id;
 -- every tenant, for the periodic reconcile of all tenants
 select id from cp.tenants order by id;
 
--- name: SSOSite :one
--- the site an sso request names, with what the membership check needs
+-- name: MemberSite :one
+-- the site a member's umami read names, with what the membership check needs
 select s.id, s.tenant_id, s.status, s.quarantine_website_id, t.status as tenant_status, t.umami_team_id
 from cp.sites s
 join cp.tenants t on t.id = s.tenant_id
 where s.id = @id;
 
--- name: SSOMember :one
+-- name: MemberUmamiUser :one
 -- the caller's umami user name when the caller is a member of the tenant;
 -- null until the reconciler has made the umami user
 select u.umami_username

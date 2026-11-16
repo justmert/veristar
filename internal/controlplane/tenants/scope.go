@@ -184,8 +184,7 @@ func (s *Scope) Site(r *http.Request, param string) (Access, uuid.UUID, error) {
 	return s.SiteByID(r.Context(), siteID)
 }
 
-// SiteByID is Site for an id that did not come from a path parameter (the
-// sso route takes it from the query).
+// SiteByID is Site for an id that did not come from a path parameter.
 func (s *Scope) SiteByID(ctx context.Context, siteID uuid.UUID) (Access, uuid.UUID, error) {
 	if _, err := session.MustUser(ctx); err != nil {
 		return Access{}, uuid.Nil, err

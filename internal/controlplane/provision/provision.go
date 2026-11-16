@@ -370,7 +370,7 @@ func (s *run) users(ctx context.Context, members []systemq.ProvisionMembersRow) 
 			want = *m.UmamiUsername
 		} else {
 			want = Username(m.ID)
-			// stored before the umami call, so sso reads the name the user is
+			// stored before the umami call, so member sessions read the name the user is
 			// created with. a failed create leaves it stored, which is
 			// harmless: the next run creates the user under the same name.
 			// a failed statement leaves the transaction unusable, so it is
