@@ -13,12 +13,12 @@ Database names are those of the migrations in `db/migrations/`
 response field maps to a column, the field has the column's name.
 
 Sections 1 to 3 hold the conventions every route follows: transport,
-authentication, errors, shared objects and the audit log. Sections 4 to 12 hold
+authentication, errors, shared objects and the audit log. Sections 4 to 18 hold
 the routes by area:
 
 | Section | Area |
 |---|---|
-| 4 | sign-in, tenants, members, sites, snippet, ingest counts, SSO to Umami |
+| 4 | sign-in, tenants, members, sites, snippet, ingest counts |
 | 5 | operator governance: review, enrollment modes, suspension, removal, domain checks |
 | 6 | OTLP tokens |
 | 7 | a tenant's API metrics |
@@ -30,6 +30,7 @@ the routes by area:
 | 15 | the on-chain witness: declared accounts and contracts, their proofs, daily ledger activity and the two-way stellar.toml link |
 | 16 | CSV exports and "What SCF sees" |
 | 17 | the integrity grade of web traffic |
+| 18 | a project's web dashboard: totals, days, breakdowns, hours and visitors right now |
 
 A new route adds its error codes to section 2.4 and its audit actions to section
 3.3. The meaning of an existing field never changes.
@@ -56,7 +57,7 @@ A new route adds its error codes to section 2.4 and its audit actions to section
 
 - **Session cookie.** Name `sa_session`. Value: 32 random bytes, base64url, made by
   `scs`. Attributes: `HttpOnly`, `Secure`, `SameSite=Lax`, `Path=/`, no `Domain`
-  (host-only, so the cookie never reaches `web.` or `in.<BASE_DOMAIN>`). Persistent,
+  (host-only, so the cookie never reaches `in.` or `otlp.<BASE_DOMAIN>`). Persistent,
   absolute lifetime 7 days, idle timeout 24 hours. The database holds only the
   SHA-256 of the value (`cp.sessions.token_hash`, 32 bytes) and the user
   (`cp.sessions.user_id`). The session store is the project's own `scs` store
@@ -94,9 +95,9 @@ Every request with method `POST`, `PUT`, `PATCH` or `DELETE` must carry both:
 2. `Origin` equal to `CONSOLE_ORIGIN` (`https://app.<BASE_DOMAIN>`; dev
    `http://localhost:8085`). Missing or different: 403 `origin_mismatch`.
 
-`GET` and `HEAD` never change state. The only `GET` routes with side effects outside
-the database are the two browser redirects (`/api/auth/github/start` and
-`/api/sso/umami`), covered in their sections.
+`GET` and `HEAD` never change state. The only `GET` route with side effects outside
+the database is the browser redirect `/api/auth/github/start`, covered in its
+section.
 
 ### 1.3 Tenant scoping
 
@@ -250,7 +251,8 @@ List routes answer:
 | 429 | `rate_limited` | per-client, per-session or per-route limit; `Retry-After` header set |
 | 500 | `internal` | anything unexpected; details only in the log |
 | 503 | `unavailable` | database, NATS, Umami or GitHub unreachable, or a tenant request that waited longer than its 5 second lock timeout for the tenant row (a reconcile or an operator action holds it; 1.3); `Retry-After` set |
-| 503 | `provisioning_pending` | SSO before the reconciler created the Umami objects; `Retry-After` set |
+| 409 | `provisioning_pending` | a web dashboard read from Umami (18.9) before the reconciler created the member's Umami user or team membership |
+| 503 | `provisioning_pending` | an erasure (10.2) before the reconciler created the site's Umami websites; `Retry-After` set |
 | 503 | `alert_source_unreachable` | no Alertmanager member answered the operator alerts route (11.2) |
 | 503 | `alert_source_not_configured` | the operator alerts route on a control plane without `ALERTMANAGER_URLS` (11.2) |
 
@@ -486,7 +488,7 @@ Operator API keys (section 9): `operator_api_key.create`,
 
 ---
 
-## 4. Sign-in, tenants, members, sites, snippet, ingest, SSO
+## 4. Sign-in, tenants, members, sites, snippet, ingest
 
 ### 4.1 Auth
 
@@ -727,8 +729,8 @@ cookie cleared whatever happens:
 
 A wallet-only account's `display_name` is its short address (3.1). Its Umami
 user is named `u-<account id>`, like every account the reconciler creates after
-migration `00034`; the name is stored in `cp.users.umami_username`, which SSO
-(4.4.1) logs in with.
+migration `00034`; the name is stored in `cp.users.umami_username`, which the
+member's Umami reads (18.8) log in with.
 
 #### 4.1.8 Linked sign-in methods
 
@@ -1143,45 +1145,17 @@ hours), `bucket` (`hour` default, or `day` in UTC). Range at most 31 days for
 - Rows are written by the `jobs` task `edgestats` and lag by up to one fold
   interval; the console says "updated every few minutes".
 
-### 4.4 SSO to Umami
+### 4.4 Web dashboard
 
-#### 4.4.1 `GET /api/sso/umami`
+A project's web dashboard is a console page over the routes of section 18.
+Umami's own interface is not reachable from the internet; the control plane
+reads Umami on the private network
+([ADR 0005](../adr/0005-umami-as-engine-only.md)).
 
-Session, member of the site's tenant. Browser navigation from a console link.
-
-Query: `site` (site id, required), `view` (`primary` default, or `quarantine`).
-
-- Requires `Sec-Fetch-Site` `same-origin` or `none` when the header is present;
-  otherwise failure `cross_site`.
-- The site must not be `removed` or `pending` (in review, 5.6: the reconciler
-  creates no Umami website for it); the tenant's Umami user and team membership
-  must exist (reconciler done). Otherwise failure `provisioning_pending`.
-- Logs in to Umami on the private network (`POST /api/auth/login`) as the
-  member's `cp.users.umami_username` (`u-<account id>` for accounts provisioned
-  after migration `00034`, `gh-<github_id>` for earlier ones; failure
-  `provisioning_pending` while it is unset) with that user's derived password
-  for the current UTC day. It never
-  sets a password.
-- **302** to `https://web.<BASE_DOMAIN>/sso?token=<token>&url=/websites/<id>` where
-  `<id>` is the site id for `primary` and `quarantine_website_id` for `quarantine`.
-  Response headers: `Cache-Control: no-store`, `Referrer-Policy: no-referrer`.
-- The token is never logged. Caddy on `app.` cuts the query from its access log;
-  the response `Location` header is removed from logs as well.
-- Failure: **303** to `/sso-error?code=<code>&site=<site_id>`, code one of
-  `not_found`, `cross_site`, `provisioning_pending`, `umami_unavailable`, `internal`.
-- Rate limit: 30 per user per minute; over it the failure code is `rate_limited`.
-- **Removed members.** Reconcile removes the Umami team membership of a removed
-  member at once, but it does not change that user's password, so an Umami token
-  the person already holds still passes `/api/auth/verify` until the next daily
-  `umami-rotate`. Every request for the tenant's websites with that token is refused
-  with 401 from the moment the membership is gone, so no data is reachable; only the
-  token itself stays syntactically valid for at most about a day.
-
-Attribution: every console page that links into Umami carries
-`<a href="https://db-ip.com">IP Geolocation by DB-IP</a>`, and every HTML page
-Caddy serves on `web.<BASE_DOMAIN>` carries it too. The DB-IP Lite licence asks
-for a link back to DB-IP on every page that displays or uses results from the
-database, and an Umami page is a separate page on its own host.
+Attribution: every console page that shows country results carries
+`<a href="https://db-ip.com">IP Geolocation by DB-IP</a>`, as the DB-IP Lite
+licence asks for a link back to DB-IP on every page that displays or uses
+results from the database.
 
 ### 4.5 Configuration keys (control plane)
 
@@ -1194,7 +1168,6 @@ the key.
 | `CONTROLPLANE_OPS_ADDR` | yes | `/healthz`, `/readyz`, `/metrics` |
 | `CONSOLE_ORIGIN` | yes | exact `Origin` accepted on state changes (1.2) |
 | `INGEST_ORIGIN` | yes | `https://in.<BASE_DOMAIN>` for snippets |
-| `WEB_ORIGIN` | yes | `https://web.<BASE_DOMAIN>` for SSO redirects |
 | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | yes | the GitHub OAuth App of the environment |
 | `GITHUB_REDIRECT_URL` | yes | `<CONSOLE_ORIGIN>/api/auth/github/callback`, checked at startup |
 | `OPERATOR_GITHUB_IDS` | yes | comma separated numeric GitHub user ids, at least one; each is ensured as an active operator admin of the roster at every start (5.1) |
@@ -1403,7 +1376,7 @@ asynchronously. **200** OperatorTenantSummary in the new state.
 |---|---|---|---|---|
 | `.../tenants/{tenant_id}/approve` | `pending` | `active` | optional | `approved_by` = operator; every `pending` site of the tenant becomes `active`; `status_reason` cleared |
 | `.../tenants/{tenant_id}/reject` | `pending` | `rejected` | required | nothing was provisioned (5.7) |
-| `.../tenants/{tenant_id}/suspend` | `active` | `suspended` | required | registry entries switch to `suspended`; Umami dashboards stay readable |
+| `.../tenants/{tenant_id}/suspend` | `active` | `suspended` | required | registry entries switch to `suspended`; the web dashboard stays readable |
 | `.../tenants/{tenant_id}/resume` | `suspended` | `active` | optional | registry entries switch back to `active`; `status_reason` cleared |
 | `.../tenants/{tenant_id}/remove` | any except `removed` | `removed` | required | see below |
 
@@ -1477,7 +1450,8 @@ Writes the setting under `cp_system`, audit `settings.enrollment_mode` (target
   next enrollment without a restart and never changes existing tenants.
 - `pending` and `rejected` tenants: the reconciler creates nothing in Umami and
   publishes nothing to `registry_sites`, so the gateway answers
-  `rejected_unknown_site` for their sites. SSO answers `provisioning_pending`.
+  `rejected_unknown_site` for their sites. The Umami reads of section 18 answer
+  `provisioning_pending`.
   Owners can still add, edit and delete sites and manage members while
   `pending` or `rejected`.
 
@@ -2803,7 +2777,9 @@ in [Right to erasure](../compliance/erasure.md); this section is the contract. C
   show it as is.
 - `day`: `visitor_today` only, the UTC day whose secret produced the token (the
   gateways' day, not the client's).
-- `session_id`: `session` only, the Umami session id supplied.
+- `session_id`: `session` only, the Umami session id supplied. A member finds
+  it with the session list of 18.7, which the Privacy page's session finder
+  shows.
 - `affected_from`, `affected_to`: UTC days whose aggregates the jobs task reads
   again; null when nothing was deleted. `reaggregated_at` is set when that is done.
 - `error` (only when `failed`): why; counts still show what was deleted before
@@ -2982,7 +2958,7 @@ connectors) can read a project's web and API analytics, and operators the
 global view. Code: `internal/controlplane/mcpserver`, migration
 `00030_mcp.sql`. Guides: [AI assistants](../onboarding/mcp.md) for projects
 and [AI assistants for operators](../operators/mcp.md). Umami's own MCP endpoint stays off and
-blocked by the web Caddy (`/mcp`, `api/me/api-keys`): its keys live outside
+no public host serves Umami, so neither it nor `api/me/api-keys` is reachable from the internet: its keys would live outside
 the control plane, which could then not revoke them on the events of 12.2.
 
 ### 12.1 Transport
@@ -3109,9 +3085,9 @@ security, exactly as for the console. Only `GET` reaches them.
 | `list_sites`, `get_site` | 4.3.2, 4.3.3 |
 
 **12.4.2 Web analytics tools** read Umami's REST API on the private network as
-the credential user's own Umami user, the login of the SSO route (4.4.1,
-daily derived password, a 5 minute login cache per user and site, a 401 drops
-the entry). A `site_id` from the client is first read through 4.3.3 as the
+the credential user's own Umami user, through the same reader as the web
+dashboard (18.8: daily derived password, a 5 minute login cache per user and
+site shared with the console, a 401 logs in once more). A `site_id` from the client is first read through 4.3.3 as the
 principal, which answers only for a site of the credential's tenant; only
 then is the Umami website id derived from it (`view` `primary` is the site
 id, `quarantine` its `quarantine_website_id`). Saved funnel and goal ids are
@@ -4028,3 +4004,272 @@ aggregates of one project only. The member routes follow 1.3: a member of
 another project gets 404 for every report id. The isolation gate
 (`tests/isolation/console`) covers every route of this section.
 
+## 18. Web dashboard
+
+A project's web dashboard in the console reads four routes under
+`/api/tenants/{tenant_id}/web/`. They answer the seven web metrics of the
+platform (page views, unique visitors, referrers, visit duration, bounce rate,
+country, device and browser) for the whole project or one of its sites, with
+breakdowns, the hours of one day and the visitors right now. A fifth route lists one
+site's sessions of a day for the erasure of one session (18.7). Each number
+has one source (18.2). Umami's own interface is closed to projects
+([ADR 0005](../adr/0005-umami-as-engine-only.md)); the control plane reads
+Umami on the private network.
+
+Every route takes these optional parameters, each at most once; any other
+parameter is 400 `invalid_query`:
+
+- `site`: a site id (lowercase UUID) of the tenant. Without it the answer
+  covers the whole project.
+- `band`: `primary` (default), the site's counted traffic, or `quarantine`,
+  the traffic the gateway quarantined as likely automated
+  ([web-metrics.md](web-metrics.md), Bands). Not on 18.6.
+
+Route 18.7 requires `site` and takes `day` instead of a range.
+
+### 18.1 Range
+
+`from` and `to` are UTC days (`2026-11-01`), both included, the unit of the
+daily aggregates and of the operator views (8.1). Without `to` the range ends
+today; without `from` it holds 30 days. `to` after today, `to` before `from`
+and more than 400 days are 400 `invalid_query`.
+
+The previous period is the range of the same number of days that ends the day
+before `from`. Umami is asked for a day as `[00:00:00.000, 23:59:59.999]` UTC,
+because its routes include both ends and the next midnight would count an
+event at exactly 00:00:00 twice.
+
+Today is a range like any other: the aggregates of today are those the hourly
+`aggregate-web` run has read so far (`read_at` in 18.3).
+
+### 18.2 Where each number comes from
+
+| Figure | Source | Unit |
+|---|---|---|
+| Page views, unique visitors, visits, bounces, total time, bounce rate, average visit duration, per day and over the range (18.3) | `agg.web_daily`, under `cp_tenant` | sums of the daily rows |
+| Referrers, countries, browsers, operating systems, devices (`referrer`, `country`, `browser`, `os`, `device` of 18.4) | `agg.web_daily_dim`, under `cp_tenant` | visitors |
+| Pages, entry pages, exit pages (`page`, `entry_page`, `exit_page`) | Umami `/metrics` (`path`, `entry`, `exit`) | visitors |
+| Custom events (`event`) | Umami `/metrics` (`event`) | events |
+| UTM values (`utm_source`, `utm_medium`, `utm_campaign`, `utm_content`, `utm_term`) | Umami `/metrics` (`utmSource` and the others) | visitors |
+| Page views and visitors per hour of one day (18.5) | Umami `/pageviews` with `unit` `hour`, `timezone` `UTC` | page views; visitors are distinct sessions per hour |
+| Visitors right now and page views per minute (18.6) | Umami `/active` and `/pageviews` with `unit` `minute` | visitors in the last 5 minutes |
+| One site's sessions of a day (18.7) | Umami `/sessions` | sessions |
+
+- The aggregates are the rows the operator views (8) and the machine API (9)
+  read, filled from Umami's own `/stats` and `/metrics` by the jobs task
+  `aggregate-web`, so the project and an operator see the same numbers for the
+  same days. Visitors over a range are the sum of daily visitors, which equals
+  Umami's answer for the range ([web-metrics.md](web-metrics.md)).
+- Umami is read for what the aggregates do not hold: breakdowns that are not
+  stored per day, hours and the last minutes. It is read over the whole range
+  in one call per site, as the member's own Umami user (18.8).
+- A project figure is the sum of its sites. One person on two sites of a
+  project counts on both, as Umami counts per website.
+- A page belongs to one site, so `page`, `entry_page` and `exit_page` keep the
+  values of different sites apart: each item carries `site_id`, and `/` of
+  two sites is two items.
+- UTM values exist only for sites that collect them (`collect_utm`, 4.3.4).
+  Asking one site that does not collect them is 400 `invalid_query`; for the
+  project the answer covers the sites that do.
+- Umami reads cover live sites only. A deleted site has no Umami website left
+  and a site in review never had one (5.6), so they are not read. Their
+  aggregate rows stay in the project's totals, as in the operator views.
+- `unit` `visitors` counts Umami's `count(distinct session_id)`: a visitor of
+  one UTC day. A visitor can carry two values of one dimension in a day (two
+  referrers), so the values of a breakdown can add up to more than the
+  visitors of the range.
+
+### 18.3 `GET /api/tenants/{tenant_id}/web/summary`
+
+Member (1.3). Query `from`, `to`, `site`, `band`. **200**:
+
+```json
+{
+  "band": "primary",
+  "site": null,
+  "sites": [{ "id": "uuid", "name": "Docs", "domain": "docs.example.org", "status": "active" }],
+  "current": {
+    "range": { "from": "2026-11-01", "to": "2026-11-30", "days": 30 },
+    "totals": {
+      "pageviews": 1500, "visitors": 610, "visits": 700, "bounces": 280, "totaltime": 84000,
+      "bounce_rate": 0.4, "avg_visit_duration": 120, "aggregated_days": 30
+    },
+    "series": [
+      { "day": "2026-11-01", "aggregated": true, "pageviews": 50, "visitors": 20, "visits": 23,
+        "bounces": 9, "totaltime": 2700, "bounce_rate": 0.391, "avg_visit_duration": 117.4 }
+    ]
+  },
+  "previous": { "range": {}, "totals": {}, "series": [] },
+  "other_band": { "band": "quarantine", "pageviews": 120, "visitors": 30 },
+  "quarantine_share": 0.074,
+  "read_at": "2026-11-30T14:05:00Z",
+  "source": "aggregate"
+}
+```
+
+- `site` is the selected site, `null` for the project. `sites` lists every
+  site of the project, deleted ones included.
+- `totals` are the sums of the days; `bounce_rate` is `bounces / visits` and
+  `avg_visit_duration` is `totaltime / visits` in seconds, the formulas of
+  Umami's dashboard, both `null` without visits. `aggregated_days` counts the
+  days with at least one row.
+- `series` holds every day of the range. A day without any row of the
+  selection has `aggregated` `false` and `null` numbers: not read yet, never
+  an invented zero.
+- `previous` has the same shape for the previous period (18.1).
+- `other_band` is the other band's page views and visitors over the current
+  range. `quarantine_share` is quarantined page views over all page views of
+  the range, the operator views' `quarantine_share`; `null` without page views.
+- `read_at` is when the aggregation last read a day of the range; `null` when
+  no day has a row.
+
+### 18.4 `GET /api/tenants/{tenant_id}/web/breakdown`
+
+Member. Query `dimension` (required), `from`, `to`, `site`, `band`, `limit`
+(1 to 100, default 10). `dimension` is one of `referrer`, `country`,
+`browser`, `os`, `device`, `page`, `entry_page`, `exit_page`, `event`,
+`utm_source`, `utm_medium`, `utm_campaign`, `utm_content`, `utm_term`. **200**:
+
+```json
+{
+  "dimension": "page", "band": "primary",
+  "range": { "from": "2026-11-01", "to": "2026-11-30", "days": 30 },
+  "source": "engine", "unit": "visitors",
+  "items": [{ "key": "/pricing", "value": 120, "site_id": "uuid" }],
+  "total_keys": 48,
+  "sites": [{ "id": "uuid", "name": "Docs", "domain": "docs.example.org", "status": "active" }]
+}
+```
+
+- `source` is `aggregate` or `engine` (18.2); `unit` is `visitors` or
+  `events`.
+- `items` are ordered by `value`, largest first, ties by `key` and then by
+  site; `limit` of them. `total_keys` counts every distinct value of the
+  range, so `items` holds all of them when `total_keys` is not above `limit`.
+- `site_id` is present on the items of `page`, `entry_page` and `exit_page`.
+- Country keys are ISO 3166-1 alpha-2 codes; empty values are never listed.
+- `sites` are the sites an engine read covered; `null` for an aggregate read,
+  which covers every row of the selection.
+- The engine read takes each site's whole ranking in one answer, doubling its
+  limit from 1,000 while a page comes back full; a site with more than 64,000
+  values in the range is 400 `invalid_query`, asking for a shorter range.
+
+### 18.5 `GET /api/tenants/{tenant_id}/web/hourly`
+
+Member. Query `day` (a UTC day, default today, not after today), `site`,
+`band`. **200** `{ "day", "band", "source": "engine", "sites": [...],
+"points": [{ "at", "pageviews", "visitors" }] }` with 24 points, one per UTC
+hour from 00:00, empty hours included. The page views of a day's hours add up
+to the day's page views in Umami, which the aggregates hold after the next
+hourly read.
+
+### 18.6 `GET /api/tenants/{tenant_id}/web/realtime`
+
+Member. Query `site`. Primary band only. **200**:
+
+```json
+{
+  "at": "2026-11-30T14:07:12Z", "source": "engine", "visitors": 7,
+  "sites": [{ "site": { "id": "uuid", "name": "Docs", "domain": "docs.example.org", "status": "active" }, "visitors": 7 }],
+  "minutes": [{ "at": "2026-11-30T13:38:00Z", "pageviews": 2, "visitors": 1 }]
+}
+```
+
+`visitors` are the distinct visitors of the last 5 minutes per site, summed
+over the sites. `minutes` holds the last 30 minutes; the last one is the
+current minute and still filling. The console asks every 30 seconds.
+
+### 18.7 `GET /api/tenants/{tenant_id}/web/sessions`
+
+Member. Query `site` (required), `day` (a UTC day, default today, not after
+today), `band`, `page` (1 to 1000, default 1). Lists the sessions of one site
+and UTC day, newest first, 50 a page, so a member can find the session id the
+erasure of one session takes (10.2). The console's privacy page uses it in its
+session finder. **200**:
+
+```json
+{
+  "day": "2026-11-30", "band": "primary",
+  "site": { "id": "uuid", "name": "Docs", "domain": "docs.example.org", "status": "active" },
+  "source": "engine", "page": 1, "page_size": 50, "total": 132,
+  "items": [
+    { "id": "uuid", "first_at": "2026-11-30T09:12:04Z", "last_at": "2026-11-30T09:20:41Z",
+      "visits": 1, "views": 4, "country": "DE", "browser": "chrome", "os": "Linux", "device": "laptop" }
+  ]
+}
+```
+
+- A session is one visitor on one site and UTC day
+  ([web-metrics.md](web-metrics.md)). `id` is Umami's session id; `visits`
+  and `views` are its visits and page views; `country`, `browser`, `os` and
+  `device` are Umami's values, empty when unknown. No item holds an address,
+  a user agent or a path.
+- `total` counts the sessions of the day. A deleted site, a site in review and
+  a site without a quarantine website for `band` `quarantine` answer an empty
+  list.
+- Read from Umami's `/sessions` as the member's own Umami user (18.8), and
+  counted against the engine limit of 18.9.
+
+### 18.8 Isolation
+
+A read passes four checks, each enough on its own to refuse another
+project's data:
+
+1. Membership: the signed-in user must be a member of the tenant in the path
+   (1.3), read on every request; otherwise 404 `not_found`, whatever the
+   query holds.
+2. Row-level security: the sites and the aggregates are read under
+   `cp_tenant`, so only the tenant's own rows exist for the query. The
+   policies came with the web aggregates; the read grants with the on-chain
+   migration (`agg.web_daily`) and with the migration that grants `cp_tenant`
+   read on `agg.web_daily_dim`.
+3. The `site` parameter is resolved among the tenant's own sites only; a site
+   of another project is 404 `not_found`, the same answer as an unknown id.
+4. Umami: the engine reads log in as the member's own Umami user (a
+   `view-only` user in the project's team with a daily derived password),
+   never as the admin, and only for one of the site's two websites. Umami's
+   own team check then refuses any website outside the project's team.
+
+The tenant isolation gate (`make isolation`) sends every route of this
+section with real, guessed, malformed and mixed ids as a member of another
+project and requires 404 and no change.
+
+### 18.9 Errors and limits
+
+- 400 `invalid_query`: an unknown or repeated parameter, a bad day, range,
+  band, site id, dimension, limit or page, `sessions` without `site`, UTM of a site that does not collect it,
+  more than 64,000 values (18.4).
+- 404 `not_found`: not a member, or a site that is not the tenant's.
+- 409 `provisioning_pending`: an engine read before the reconciler created the
+  member's Umami user or team membership. The aggregate routes answer.
+- 429 `rate_limited` with `Retry-After`: more than 120 engine requests
+  (`breakdown` of an engine dimension, `hourly`, `realtime`, `sessions`) by
+  one member in a minute. The aggregate reads are not limited.
+- 503 `unavailable` with `Retry-After`: Umami is unreachable or answered 5xx.
+
+### 18.10 Parity with Umami
+
+`TestWebDashboardParity` (`internal/controlplane/webdash`) runs the routes
+against a real PostgreSQL, NATS and Umami. The reconciler creates two
+projects, their teams, websites, users and memberships; ten days of traffic go
+to both bands of every site through `/api/send` as the replayer sends them;
+the real `aggregate-web` task fills the aggregates. For the project, one site
+and the quarantine band of each, it requires:
+
+- the summary totals of a five day range and of its previous period, and
+  every day of the series, to equal Umami's `/stats` for the same websites and
+  days, read as the admin;
+- bounce rate, average visit duration and quarantine share to equal their
+  formulas;
+- every value of every dimension of 18.4 to equal Umami's `/metrics` for the
+  range, summed over the sites, with `total_keys` equal to the number of
+  values;
+- the hours of two days to equal Umami's `/pageviews`, and their page views to
+  add up to the day's total;
+- the visitors right now to equal Umami's `/active`.
+- the sessions of a day, for both bands of a site, to equal Umami's
+  `/sessions` for that site and day.
+
+It also checks the isolation answers of 18.8, the refusals of 18.9, a site in
+review left out of engine reads, and a member without a Umami user who gets
+409 from the engine routes and the aggregate figures from 18.3.
