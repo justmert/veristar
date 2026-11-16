@@ -100,6 +100,12 @@ func catalogue(terms string) []route {
 		{http.MethodGet, "/api/auth/github/start"}, {http.MethodGet, "/api/auth/github/callback"},
 		{http.MethodPost, "/api/auth/logout"}, {http.MethodGet, "/api/me"}, {http.MethodDelete, "/api/me"},
 		{http.MethodGet, "/api/terms"},
+		// wallet sign-in and linked sign-in methods (contract 4.1.7, 4.1.8):
+		// they act on the caller's own account only. covered by
+		// TestWalletIsolation
+		{http.MethodPost, "/api/auth/stellar/challenge"}, {http.MethodPost, "/api/auth/stellar/verify"},
+		{http.MethodPost, "/api/me/identities/stellar/challenge"}, {http.MethodPost, "/api/me/identities/stellar"},
+		{http.MethodDelete, "/api/me/identities/stellar"}, {http.MethodDelete, "/api/me/identities/github"},
 		{http.MethodGet, "/api/tenants"}, {http.MethodPost, "/api/tenants"},
 	} {
 		add(kindOwn, r.m, r.p, nil)

@@ -66,6 +66,11 @@ A new route adds its error codes to section 2.4 and its audit actions to section
   `SameSite=Lax`, `Path=/api/auth/github/callback`, `Max-Age=600`. Value: AES-256-GCM
   sealed (key `OAUTH_STATE_KEY`) JSON `{state, verifier, return_to, exp}`. No database
   row is written for a visitor who has not signed in.
+- **Wallet challenge cookie.** `sa_stellar`, only between a wallet challenge and
+  its verification (4.1.7, 4.1.8): `HttpOnly`, `Secure`, `SameSite=Strict`,
+  `Path=/api`, `Max-Age=300`. Value: AES-256-GCM sealed (key `OAUTH_STATE_KEY`,
+  additional data `sa_stellar/v1`) JSON `{nonce, address, purpose, user_id,
+  return_to, exp}`. Every verification clears it.
 - A route marked **session** answers 401 `unauthenticated` without a valid session.
   A route marked **public** needs none.
 
@@ -199,12 +204,18 @@ List routes answer:
 | 403 | `owner_required` | the action needs role `owner` |
 | 403 | `terms_not_accepted` | the tenant has not accepted the current terms version (4.2.6) |
 | 403 | `operator_required` | an `/api/operator` route without operator rights (5.1) |
+| 403 | `challenge_invalid` | a signed wallet challenge that does not verify: no `sa_stellar` cookie, a challenge of another console, another network, another account, another purpose or another session, or a signature that is not the account's (4.1.7) |
+| 403 | `challenge_expired` | the wallet challenge is older than 5 minutes (4.1.7) |
+| 403 | `challenge_used` | the wallet challenge was verified before (4.1.7) |
 | 403 | `scope_forbidden` | a machine API key scoped to one tenant names another tenant (9.3) |
 | 404 | `not_found` | unknown id, malformed id, or not a member |
 | 405 | `method_not_allowed` | method not defined for the path |
 | 409 | `slug_taken` | `cp.tenants.slug` already exists |
 | 409 | `already_member` | invite or add for a user who is a member |
-| 409 | `invite_exists` | an open invite for that GitHub account exists (`invites_tenant_github_idx`) |
+| 409 | `invite_exists` | an open invite for that GitHub account or Stellar address exists (`invites_tenant_github_idx`, `invites_tenant_stellar_idx`) |
+| 409 | `identity_in_use` | linking a GitHub account or Stellar address that signs in to another account (4.1.8) |
+| 409 | `identity_already_linked` | linking a GitHub account or Stellar address to an account that already has one of that kind (4.1.8) |
+| 409 | `last_sign_in_method` | unlinking the only sign-in method of an account (4.1.8) |
 | 409 | `last_owner` | removing or demoting the last owner |
 | 409 | `sole_owner` | an account deletion while the account is the only owner of a tenant that is not `removed`; the envelope lists those tenants in `tenants` (4.1.6) |
 | 409 | `site_removed` | change to a site with `status = 'removed'` |
@@ -243,11 +254,25 @@ List routes answer:
 **User** (`cp.users`):
 
 ```json
-{ "id": "uuid", "github_id": 1234567, "github_login": "octocat", "is_operator": false }
+{
+  "id": "uuid",
+  "github_id": 1234567,
+  "github_login": "octocat",
+  "stellar_address": null,
+  "display_name": "octocat",
+  "is_operator": false
+}
 ```
 
-`is_operator` is set at every sign-in from `OPERATOR_GITHUB_IDS` (4.5): true when the
-user's numeric GitHub id is listed, false otherwise, so removing an id takes effect
+An account signs in with GitHub, with a Stellar wallet, or with both (4.1.8).
+`github_id` and `github_login` are `null` for a wallet-only account;
+`stellar_address` (a G-address) is `null` for a GitHub-only one. `display_name`
+is the GitHub login, or the first and last four characters of the address with
+an ellipsis between (`GCB6…WOQN`) for a wallet-only account.
+
+`is_operator` is set at every sign-in, link and unlink from `OPERATOR_GITHUB_IDS`
+and `OPERATOR_STELLAR_ADDRESSES` (4.5): true when the account's GitHub id or
+Stellar address is listed, false otherwise, so removing an entry takes effect
 at that person's next sign-in. The operator routes of section 5 build on it.
 
 **Tenant** (`cp.tenants` plus the caller's role):
@@ -283,17 +308,23 @@ at that person's next sign-in. The operator routes of section 5 build on it.
 **Member** (`cp.tenant_members` joined with `cp.users`):
 
 ```json
-{ "user_id": "uuid", "github_id": 1234567, "github_login": "octocat", "role": "member", "created_at": "..." }
+{ "user_id": "uuid", "github_id": 1234567, "github_login": "octocat", "stellar_address": null,
+  "display_name": "octocat", "role": "member", "created_at": "..." }
 ```
+
+The identity fields follow User.
 
 **Invite** (`cp.invites`):
 
 ```json
-{ "id": "uuid", "github_id": 7654321, "github_login": "someone", "role": "member", "created_by": "uuid", "created_at": "...", "expires_at": "..." }
+{ "id": "uuid", "github_id": 7654321, "github_login": "someone", "stellar_address": null,
+  "display_name": "someone", "role": "member", "created_by": "uuid", "created_at": "...", "expires_at": "..." }
 ```
 
-`github_id` is the GitHub account the invite is bound to; `github_login` is
-that account's login when the invite was made, for display (4.2.5).
+An invite names either a GitHub account or a Stellar account. `github_id` is
+the GitHub account the invite is bound to; `github_login` is that account's
+login when the invite was made, for display (4.2.5). `stellar_address` is the
+G-address of an invite by address; the other two fields are then `null`.
 
 **Site** (`cp.sites`):
 
@@ -486,7 +517,8 @@ Session.
 
 ```json
 {
-  "user": { "id": "uuid", "github_id": 1234567, "github_login": "octocat", "is_operator": false },
+  "user": { "id": "uuid", "github_id": 1234567, "github_login": "octocat", "stellar_address": null,
+            "display_name": "octocat", "is_operator": false },
   "tenants": [
     { "id": "uuid", "slug": "stellar-dex", "name": "Stellar DEX", "status": "active", "role": "owner",
       "accepted_terms_version": "2026-11-12-draft.1", "terms_current": true }
@@ -527,34 +559,144 @@ the rows of every tenant the caller belongs to and those tenants' owner rows:
 1. Every membership of the caller is deleted. The membership trigger of
    migration `00030` revokes the caller's MCP credentials for each tenant
    (`mcp_credential.revoke`, reason `member_removed`).
-2. Every invite addressed to the caller's GitHub account id is deleted.
+2. Every invite addressed to the caller's GitHub account id or Stellar address
+   is deleted.
 3. The caller's MCP credentials and OAuth codes (section 12) are deleted, with
    their tokens.
 4. Every session of the caller is deleted, in every browser.
-5. The `cp.users` row is emptied (migration `00031`): `github_id` becomes `0`,
-   `github_login` the empty string, `is_operator` false, `last_login_at` null,
-   and `deleted_at` is set. The row keeps its `id`, which tenants, sites,
+5. The `cp.users` row is emptied (migrations `00031` and `00034`): `github_id`,
+   `github_login`, `stellar_address` and `umami_username` become null,
+   `is_operator` false, `last_login_at` null, and `deleted_at` is set. The row keeps its `id`, which tenants, sites,
    tokens, keys, erasure requests, removals and audit rows name as their
    creator or actor.
-6. The caller's Umami user (`gh-<github id>`) is deleted, which ends every Umami
+6. The caller's Umami user (named by `cp.users.umami_username`) is deleted, which ends every Umami
    token the caller held. If Umami does not answer, the transaction rolls back
    and the request answers 503 `unavailable`; nothing is deleted.
 7. One audit row `account.delete` is written: actor and target `user:<id>`,
    detail with the memberships removed (`tenant_id` and `role` each), the
    counts of invites, MCP credentials and sessions deleted, `was_operator` and
-   `umami_user_deleted`. It names no GitHub id or login.
+   `umami_user_deleted`. It names no GitHub id, login or Stellar address.
 
 After the commit a reconcile run is queued for every tenant the caller left.
 Audit rows written before the deletion stay unchanged (the log is
 append-only); they name the caller by `user:<id>`, and `actor_login` in 5.9 is
 `null` for that id from now on. A later sign-in with the same GitHub account
-creates a new user with a new id, no memberships and no invites.
-`is_operator` of the new user follows `OPERATOR_GITHUB_IDS` as at every
-sign-in (5.1), so an operator whose GitHub id stays in that setting is an
-operator again after signing in; removing the id from the setting is what ends
-operator access for good.
+or wallet creates a new user with a new id, no memberships and no invites.
+`is_operator` of the new user follows `OPERATOR_GITHUB_IDS` and
+`OPERATOR_STELLAR_ADDRESSES` as at every sign-in (5.1), so an operator whose
+GitHub id or address stays in those settings is an operator again after signing
+in; removing the entry is what ends operator access for good.
 
 401 without a session.
+
+#### 4.1.7 Wallet sign-in: `POST /api/auth/stellar/challenge` and `POST /api/auth/stellar/verify`
+
+Public, CSRF rules apply (1.2). A person proves control of a Stellar account
+with a [SEP-10](https://github.com/stellar/stellar-protocol/blob/master/ecosystem/sep-0010.md)
+challenge transaction that their wallet signs. SEP-10 is used rather than
+SEP-53 message signing because every wallet the console offers signs
+transactions, while some cannot sign messages. The console drives the wallet
+through the Stellar Wallets Kit's module API (`apps/console/src/lib/stellar-wallet`).
+
+`POST /api/auth/stellar/challenge`, body:
+
+```json
+{ "address": "GCB634SLKV5N4COK4FICWJADNTFWIHTWWM34BFPLACL6YSQVLY5ZWOQN", "return_to": "/projects" }
+```
+
+- `address` is required and must be an account id (G-address) with a valid
+  strkey checksum: 422 `invalid_strkey` otherwise. Muxed (M...) addresses are
+  refused. `return_to` is optional and cleaned as in 4.1.1.
+- The control plane builds the challenge with the Go Stellar SDK
+  (`github.com/stellar/go-stellar-sdk/txnbuild.BuildChallengeTx`): source the
+  server account, sequence 0, time bounds of 5 minutes, a first
+  `manage_data` operation named `<console host> auth` with the client account
+  as source and a 48-byte random nonce (base64) as value, and a
+  `web_auth_domain` operation holding the console host (the host of
+  `CONSOLE_ORIGIN`). It is signed by the server key for the public network
+  (`Public Global Stellar Network ; September 2015`). The server key is derived
+  from `OAUTH_STATE_KEY` with HKDF-SHA256 under its own label, so no extra
+  setting holds it.
+- It sets the `sa_stellar` cookie (1.1) with the nonce, the address, purpose
+  `sign_in`, `return_to` and the expiry.
+- **200**:
+
+```json
+{ "transaction": "AAAAAgAAAAA...", "network_passphrase": "Public Global Stellar Network ; September 2015",
+  "expires_at": "2026-11-16T10:05:00Z" }
+```
+
+- Rate limited per client and per instance with the same buckets and reserve
+  as 4.1.1: 429 `rate_limited` with `Retry-After`.
+
+`POST /api/auth/stellar/verify`, body `{"transaction": "<signed envelope, base64 XDR>"}`.
+Steps, each refusal answering 403 with the code named, and the `sa_stellar`
+cookie cleared whatever happens:
+
+1. The request takes a token from the exchange buckets of 4.1.2 step 4
+   (429 `rate_limited`).
+2. The `sa_stellar` cookie opens and names purpose `sign_in`
+   (`challenge_invalid`), and is not expired (`challenge_expired`).
+3. `txnbuild.ReadChallengeTx` with the server account, the public network
+   passphrase and the console host as web auth domain and home domain: the
+   envelope is a challenge of this console, inside its time bounds and signed by
+   the server (`challenge_invalid`). A challenge that carries a memo or names a
+   muxed account is refused.
+4. The client account equals the cookie's address and the first operation's
+   nonce equals the cookie's nonce (constant-time compare): `challenge_invalid`.
+5. `txnbuild.VerifyChallengeTxSigners` with the client account as the only
+   signer: the account's own key signed the transaction hash for the public
+   network (`challenge_invalid`). A co-signer of a multisig account does not
+   prove the account; its master key must sign.
+6. Under `cp_system`, in one transaction: the SHA-256 of the nonce is inserted
+   into `cp.wallet_challenges_used` with the challenge's expiry, and an
+   existing row answers `challenge_used`, so a challenge verifies once across
+   every control plane instance (expired rows are deleted in the same step);
+   `cp.users` is upserted by `stellar_address` (`SignInStellarUser`); the
+   operator flag is set from both identities (5.1); open invites for the
+   account's address or GitHub id become memberships (audit `invite.resolve`);
+   audit `user.sign_in` with detail `{"method": "stellar", "stellar_address", "is_operator"}`.
+7. Reconcile runs for each tenant joined. The session token is renewed and the
+   user stored. **200** `{"return_to": "/projects"}`; the console then opens
+   that path.
+
+A wallet-only account's `display_name` is its short address (3.1). Its Umami
+user is named `u-<account id>`, like every account the reconciler creates after
+migration `00034`; the name is stored in `cp.users.umami_username`, which SSO
+(4.4.1) logs in with.
+
+#### 4.1.8 Linked sign-in methods
+
+An account holds at most one GitHub identity and one Stellar identity. Linking
+needs both proofs in one browser session: the session proves the account, and
+the GitHub flow or a signed wallet challenge proves the identity being added.
+
+- **Link a wallet.** Session, CSRF rules apply.
+  `POST /api/me/identities/stellar/challenge` with `{"address": "G..."}` works
+  as the sign-in challenge of 4.1.7 with purpose `link` and the session's user
+  id sealed into `sa_stellar`; 409 `identity_already_linked` when the account
+  has an address. `POST /api/me/identities/stellar` with
+  `{"transaction": "..."}` runs steps 1 to 5 of 4.1.7 for purpose `link`,
+  requires the challenge's user id to be the session's (`challenge_invalid`),
+  marks the challenge used and sets `stellar_address`. **204**. 409
+  `identity_in_use` when another live account holds the address.
+- **Link GitHub.** `GET /api/auth/github/start?link=1`: session (401 without
+  one). The flow of 4.1.1 and 4.1.2 runs with the session's user id sealed into
+  `sa_oauth`; the callback requires the session to still hold that user and
+  sets `github_id` and `github_login` instead of signing in. It answers **303**
+  to `/account?linked=github`, or to `/account?link_error=<code>` with one of
+  `identity_in_use`, `identity_already_linked`, `state_mismatch`, the GitHub
+  failure codes of 4.1.2 and `internal`.
+- A successful link sets the operator flag from both identities, turns open
+  invites for the new identity into memberships, and writes `user.identity_link`
+  (detail: the kind and the linked identity).
+- **Unlink.** `DELETE /api/me/identities/github` and
+  `DELETE /api/me/identities/stellar`: session, CSRF rules apply. **204**; 404
+  `not_found` when the account has no identity of that kind; 409
+  `last_sign_in_method` when it is the only one. The operator flag follows the
+  remaining identity; audit `user.identity_unlink` (detail: the kind only).
+  The account's sessions stay. Signing in with the unlinked identity afterwards
+  creates a new account.
 
 ### 4.2 Tenants
 
@@ -615,7 +757,8 @@ columns `cp_tenant` may update (`00003_cp_security.sql`). Editing
 { "members": [Member, ...], "invites": [Invite, ...] }
 ```
 
-Members ordered by `github_login`, invites by `created_at`. Expired invites are
+Members ordered by `github_login`, or by the address for a wallet-only
+member, invites by `created_at`. Expired invites are
 not listed. Not paginated (bounded by the limits below).
 
 `POST /api/tenants/{tenant_id}/members`: session, owner.
@@ -623,6 +766,21 @@ not listed. Not paginated (bounded by the limits below).
 ```json
 { "github_login": "someone", "role": "member" }
 ```
+
+or, for a person who signs in with a Stellar wallet,
+
+```json
+{ "stellar_address": "GCB634SLKV5N4COK4FICWJADNTFWIHTWWM34BFPLACL6YSQVLY5ZWOQN", "role": "member" }
+```
+
+Exactly one of `github_login` and `stellar_address` is given (422
+`invalid_value` on `stellar_address` for both, `required` on `github_login` for
+neither). An address must be an account id with a valid checksum (422
+`invalid_strkey`). An address names the account that signs in with it: an
+existing account is added at once (`member.add`), anyone else gets an invite
+bound to the address (`invite.create`, detail includes `stellar_address`) that
+their first wallet sign-in with that address resolves (4.1.7 step 6). The rest
+of this section describes the GitHub case; limits and errors apply to both.
 
 - The login is first resolved to the GitHub account that holds it now:
   `GET https://api.github.com/users/{login}` with the OAuth app's client id and
@@ -796,8 +954,11 @@ Query: `site` (site id, required), `view` (`primary` default, or `quarantine`).
 - The site must not be `removed` or `pending` (in review, 5.6: the reconciler
   creates no Umami website for it); the tenant's Umami user and team membership
   must exist (reconciler done). Otherwise failure `provisioning_pending`.
-- Logs in to Umami on the private network (`POST /api/auth/login`) as `gh-<github_id>`
-  with that user's derived password for the current UTC day. It never
+- Logs in to Umami on the private network (`POST /api/auth/login`) as the
+  member's `cp.users.umami_username` (`u-<account id>` for accounts provisioned
+  after migration `00034`, `gh-<github_id>` for earlier ones; failure
+  `provisioning_pending` while it is unset) with that user's derived password
+  for the current UTC day. It never
   sets a password.
 - **302** to `https://web.<BASE_DOMAIN>/sso?token=<token>&url=/websites/<id>` where
   `<id>` is the site id for `primary` and `quarantine_website_id` for `quarantine`.
@@ -835,7 +996,8 @@ the key.
 | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | yes | the GitHub OAuth App of the environment |
 | `GITHUB_REDIRECT_URL` | yes | `<CONSOLE_ORIGIN>/api/auth/github/callback`, checked at startup |
 | `OPERATOR_GITHUB_IDS` | yes | comma separated numeric GitHub user ids of the operators, at least one; sets `is_operator` at sign-in |
-| `OAUTH_STATE_KEY` | yes | 32 bytes, base64; seals `sa_oauth` |
+| `OPERATOR_STELLAR_ADDRESSES` | no | comma separated Stellar account ids (G-addresses, checksum checked) of operators who sign in with a wallet; empty when unset |
+| `OAUTH_STATE_KEY` | yes | 32 bytes, base64; seals `sa_oauth` and `sa_stellar`, and derives the key that signs wallet challenges (4.1.7) |
 | `UMAMI_URL`, `UMAMI_ADMIN_PASSWORD` | yes | Umami's address on the private network and its admin password |
 | `UMAMI_USER_PASSWORD_KEY` | yes | 32 bytes, base64; derives daily Umami passwords; shared with `jobs` |
 | `TRACKER_RELEASE_DIR` | yes | holds `manifest.json` and `revoked.json` |
@@ -856,14 +1018,16 @@ from migrations `00010_tenant_removals.sql` (`cp.tenant_removals`) and
 
 ### 5.1 Operator identity
 
-- `cp.users.is_operator` is set from `OPERATOR_GITHUB_IDS` at every sign-in
-  (4.1.2, unchanged) and once at control plane start: one statement under
-  `cp_system` sets it to true for listed `github_id` values and false for every
-  other row. Each changed user gets one audit row `user.operator_sync` (actor
+- `cp.users.is_operator` is set from `OPERATOR_GITHUB_IDS` and
+  `OPERATOR_STELLAR_ADDRESSES` at every sign-in, link and unlink (4.1.2,
+  4.1.7, 4.1.8) and once at control plane start: one statement under
+  `cp_system` sets it to true for live rows whose `github_id` or
+  `stellar_address` is listed and false for every other live row. Each changed user gets one audit row `user.operator_sync` (actor
   `system:startup`, target `user:<id>`, detail `{"is_operator": {"old", "new"}}`).
 - Every route under `/api/operator/` is **session** and **operator**: the session
   user must have `cp.users.is_operator = true` (read per request) and a
-  `github_id` in the loaded `OPERATOR_GITHUB_IDS`. Otherwise **403
+  `github_id` in the loaded `OPERATOR_GITHUB_IDS` or a `stellar_address` in the
+  loaded `OPERATOR_STELLAR_ADDRESSES`. Otherwise **403
   `operator_required`**, for every method and for unknown ids alike. Removing an id
   takes effect at that person's next sign-in or the next control plane start,
   whichever comes first.
@@ -1298,8 +1462,8 @@ and new). **200** `{"keep": ...}`.
 ### 5.14 Configuration keys
 
 Required: `PLATFORM_DB_CP_OPERATOR_PASSWORD`, because operator reads run as
-`cp_operator` (5.1). `OPERATOR_GITHUB_IDS` (4.5) also drives the startup sync of
-5.1. The `jobs` task `verify-domains` needs no key of its own;
+`cp_operator` (5.1). `OPERATOR_GITHUB_IDS` and `OPERATOR_STELLAR_ADDRESSES`
+(4.5) also drive the startup sync of 5.1. The `jobs` task `verify-domains` needs no key of its own;
 the request-forgery guard has no configuration key that could allow private
 addresses (tests use a `_test.go` hook only).
 

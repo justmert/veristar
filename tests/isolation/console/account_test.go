@@ -67,10 +67,10 @@ func TestAccountDeletion(t *testing.T) {
 	// the reconcile runs of both former projects finish without making bob again
 	time.Sleep(3 * time.Second)
 	require.False(t, exists(bob))
-	var gh int64
+	var gh *int64
 	e.superuser(t, func(c *pgx.Conn) {
 		require.NoError(t, c.QueryRow(ctx, `select github_id from cp.users where id = $1`, bob.userID).Scan(&gh))
 	})
-	require.Zero(t, gh)
+	require.Nil(t, gh)
 	require.Equal(t, 1, e.auditCount(t, "account.delete", "user:"+bob.userID.String()))
 }
