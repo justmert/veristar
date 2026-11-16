@@ -53,7 +53,7 @@ func (s *Server) addIntegrityOperatorTools(srv *mcp.Server) {
 			return nil, err
 		}
 		q := url.Values{}
-		if err := x.dayRangeIn.values(q); err != nil {
+		if err := x.values(q); err != nil {
 			return nil, err
 		}
 		q.Set("tenant", id.String())

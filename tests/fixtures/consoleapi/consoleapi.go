@@ -302,8 +302,10 @@ func (c *Client) SignInWalletAgain(t testing.TB, kp *keypair.Full) {
 	t.Helper()
 	r := c.Call(t, http.MethodPost, "/api/auth/stellar/challenge", map[string]any{"address": kp.Address()})
 	require.Equal(t, http.StatusOK, r.Status, string(r.Body))
+	challenge, ok := r.JSON(t)["transaction"].(string)
+	require.True(t, ok, "challenge without a transaction: %s", r.Body)
 	r = c.Call(t, http.MethodPost, "/api/auth/stellar/verify", map[string]any{
-		"transaction": SignChallenge(t, r.JSON(t)["transaction"].(string), kp),
+		"transaction": SignChallenge(t, challenge, kp),
 	})
 	require.Equal(t, http.StatusOK, r.Status, "wallet sign-in failed: %s", r.Body)
 }
