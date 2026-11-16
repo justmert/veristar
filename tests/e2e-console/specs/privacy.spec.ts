@@ -1,9 +1,9 @@
 // erasure by session id and site reset, through the console's
 // privacy page against the real stack: two visitors browse a tenant site
-// through the gateway, the tenant owner erases one of them by the umami session id
-// from the dashboard and then resets the whole site, and umami's own read
-// api (with the tenant's sso token, through the web caddy) shows exactly
-// what is left after each step.
+// through the gateway, the tenant owner finds one of them in the form's
+// session list and erases it by its id, then resets the whole site, and the
+// figures, read through the console's web dashboard as the owner, show
+// exactly what is left after each step.
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { type BrowserContext, devices, type Page } from "@playwright/test";
@@ -11,18 +11,17 @@ import { APP, INGEST, OUT } from "../fixture/env.ts";
 import {
   addSiteApi,
   api,
-  captureSsoToken,
   enrollApi,
   newUser,
-  openDashboard,
   pasteSnippet,
   type Site,
   signIn,
   type Tenant,
-  umamiGet,
   uniqueHost,
   waitProvisioned,
   waitRegistered,
+  waitWebReady,
+  webGet,
 } from "./helpers.ts";
 import { expect, test } from "./test.ts";
 
@@ -35,7 +34,6 @@ let owner: BrowserContext;
 let tenant: Tenant;
 let site: Site;
 let host = "";
-let token = "";
 // umami session ids of the two visitors
 let erased = "";
 let kept = "";
@@ -62,35 +60,34 @@ test.afterAll(async () => {
 });
 
 function today(): string {
-  const d = new Date();
-  d.setUTCHours(0, 0, 0, 0);
-  return `startAt=${d.getTime()}&endAt=${d.getTime() + 86_400_000 - 1}`;
+  return new Date().toISOString().slice(0, 10);
 }
 
-// umami's session list of the site for today, read as the tenant: each
-// session's id and its number of pageviews
+// the site's sessions of today as the console's web dashboard lists them
+// for the erasure of one session: each session's id and its page views
 async function sessionViews(): Promise<Map<string, number>> {
-  const r = await umamiGet(
+  const r = await webGet<{ items: { id: string; views: number }[] }>(
     owner,
-    token,
-    `/api/websites/${site.id}/sessions?${today()}&pageSize=100`,
+    tenant.id,
+    `sessions?site=${site.id}&day=${today()}`,
   );
   expect(r.status, JSON.stringify(r.body)).toBe(200);
-  const body = r.body as { data?: { id?: unknown; views?: unknown }[] };
-  if (!Array.isArray(body.data))
-    throw new Error(`umami sessions answer: ${JSON.stringify(r.body)}`);
-  return new Map(body.data.map((s) => [String(s.id), Number(s.views)]));
+  return new Map(r.body.items.map((s) => [s.id, s.views]));
 }
 
 async function sessions(): Promise<string[]> {
   return [...(await sessionViews()).keys()];
 }
 
+// today's page views of the site, per hour from the engine, added up
 async function pageviews(): Promise<number> {
-  const r = await umamiGet(owner, token, `/api/websites/${site.id}/stats?${today()}`);
+  const r = await webGet<{ points: { pageviews: number }[] }>(
+    owner,
+    tenant.id,
+    `hourly?site=${site.id}&day=${today()}`,
+  );
   expect(r.status).toBe(200);
-  const v = (r.body as Record<string, number | { value: number }>).pageviews;
-  return typeof v === "number" ? v : (v?.value ?? Number.NaN);
+  return r.body.points.reduce((a, p) => a + p.pageviews, 0);
 }
 
 // one visit from a fresh browser context, waiting for the gateway's 202
@@ -151,10 +148,7 @@ test("two visitors reach umami through the gateway", async ({ browser }) => {
     await phone.close();
   }
 
-  const tokenP = captureSsoToken(page);
-  await openDashboard(page, tenant.id, site);
-  token = await tokenP;
-  expect(token).not.toBe("");
+  await waitWebReady(owner, tenant.id, site.id);
   await expect.poll(pageviews, { timeout: 120_000, intervals: [1000, 2000, 5000] }).toBe(3);
   await expect.poll(async () => (await sessions()).length, { timeout: 60_000 }).toBe(2);
 
@@ -179,7 +173,14 @@ test("the privacy page erases one session by its id and leaves the other", async
   // the kind is a radio card; a person clicks the card's title
   await form.getByText("One session", { exact: true }).click();
   await expect(form.getByRole("radio", { name: "One session" })).toBeChecked();
-  await form.getByLabel("Session id").fill(erased);
+  // the owner finds the desktop visitor's session, the one with two page
+  // views, in the form's list of today's sessions
+  await form
+    .getByRole("list", { name: "Sessions" })
+    .getByRole("button")
+    .filter({ hasText: "2 page views" })
+    .click();
+  await expect(form.getByLabel("Session id")).toHaveValue(erased);
   const sent = page.waitForResponse(
     (r) => r.request().method() === "POST" && r.url() === `${APP}/api/tenants/${tenant.id}/erasure`,
   );
@@ -202,7 +203,7 @@ test("the privacy page erases one session by its id and leaves the other", async
   await expect(history.getByText(`One session: ${host}`)).toBeVisible();
   await expect(history.getByText(/Deleted 1 session\(s\), 2 event\(s\)/)).toBeVisible();
 
-  // umami: the erased session and its pageviews are gone, the other stays
+  // the erased session and its page views are gone, the other stays
   const left = await sessions();
   expect(left).not.toContain(erased);
   expect(left).toEqual([kept]);

@@ -1,27 +1,27 @@
-// tenant isolation in the console api and in umami:
+// tenant isolation in the console api and its web dashboard:
 // a second user in a second tenant gets 404 for every tenant-scoped route of
-// the first tenant, also with guessed ids; removing a member takes access
-// away on the next request; after sso as user b, umami returns no data of
-// tenant a, and a removed member's umami token stops working after
-// reconciliation.
+// the first tenant, also with guessed ids and with the first tenant's site
+// inside the second tenant's own dashboard; removing a member takes access
+// away on the next request. umami's own team check is the isolation gate's
+// umami suite (tests/isolation/umami).
 import { randomUUID } from "node:crypto";
 import type { BrowserContext } from "@playwright/test";
-import { APP, WEB } from "../fixture/env.ts";
+import { APP } from "../fixture/env.ts";
 import {
   addSiteApi,
   api,
-  captureSsoToken,
   enrollApi,
   type GitHubUser,
+  NOT_FOUND,
   newUser,
   type Site,
   signIn,
-  ssoFromConsole,
   type Tenant,
   termsVersion,
-  umamiGet,
   uniqueHost,
   waitProvisioned,
+  waitWebReady,
+  webGet,
 } from "./helpers.ts";
 import { expect, test } from "./test.ts";
 
@@ -129,60 +129,47 @@ test("user b gets 404 on every route of tenant a, also with guessed ids", async 
   expect(sA.body).toMatchObject({ name: a.site.name, status: "active" });
 });
 
-test("sso for a foreign site goes to the error page, not to umami", async () => {
-  const page = await b.ctx.newPage();
-  let reachedWeb = false;
-  page.on("request", (r) => {
-    if (r.url().startsWith(WEB)) reachedWeb = true;
-  });
-  await ssoFromConsole(page, a.site.id);
-  expect(page.url()).toContain(`${APP}/sso-error?`);
-  expect(new URL(page.url()).searchParams.get("code")).toBe("not_found");
-  expect(reachedWeb).toBe(false);
-  await page.close();
-});
-
-test("after sso as b, umami returns no data of tenant a", async () => {
-  const page = await b.ctx.newPage();
-  const token = captureSsoToken(page);
-  await ssoFromConsole(page, b.site.id);
-  await page.waitForURL(`${WEB}/websites/${b.site.id}**`);
-  const tb = await token;
-  expect(tb).not.toBe("");
-  // b's own website works with this token
-  expect((await umamiGet(b.ctx, tb, `/api/websites/${b.site.id}`)).status).toBe(200);
-
-  const now = Date.now();
-  const range = `startAt=${now - 86_400_000}&endAt=${now}`;
-  const leaks: string[] = [];
-  for (const id of [a.site.id, a.site.quarantine_website_id]) {
+test("the web dashboard of another project answers not found, page and api alike", async () => {
+  const routes = [
+    "summary",
+    "breakdown?dimension=page",
+    "breakdown?dimension=country",
+    "hourly",
+    "realtime",
+  ];
+  for (const r of routes) {
+    const sep = r.includes("?") ? "&" : "?";
+    // a's project, and a's site inside b's own project
     for (const path of [
-      `/api/websites/${id}`,
-      `/api/websites/${id}/stats?${range}`,
-      `/api/websites/${id}/pageviews?${range}&unit=hour&timezone=UTC`,
-      `/api/websites/${id}/metrics?${range}&type=url`,
-      `/api/websites/${id}/metrics?${range}&type=referrer`,
-      `/api/websites/${id}/metrics?${range}&type=country`,
-      `/api/websites/${id}/sessions?${range}`,
-      `/api/websites/${id}/events?${range}`,
-      `/api/websites/${id}/active`,
-      `/api/websites/${id}/daterange`,
+      `/api/tenants/${a.tenant.id}/web/${r}`,
+      `/api/tenants/${a.tenant.id}/web/${r}${sep}site=${a.site.id}`,
+      `/api/tenants/${b.tenant.id}/web/${r}${sep}site=${a.site.id}`,
+      `/api/tenants/${randomUUID()}/web/${r}`,
     ]) {
-      const r = await umamiGet(b.ctx, tb, path);
-      if (![401, 403, 404].includes(r.status))
-        leaks.push(`${path}: ${r.status} ${JSON.stringify(r.body).slice(0, 120)}`);
+      const res = await api(b.ctx, "GET", path);
+      expect(res.status, path).toBe(404);
+      expect(res.body, path).toEqual(NOT_FOUND);
     }
   }
-  expect(leaks, "umami routes that answered tenant a's data to user b").toEqual([]);
-
-  // the ui shows nothing of a's website either
-  await page.goto(`${WEB}/websites/${a.site.id}`);
-  await page.waitForLoadState("networkidle");
+  // b's own dashboard answers, and lists only b's site
+  await waitWebReady(b.ctx, b.tenant.id, b.site.id);
+  const own = await webGet<{ sites: { id: string }[] }>(b.ctx, b.tenant.id, "summary");
+  expect(own.status).toBe(200);
+  expect(own.body.sites.map((x) => x.id)).toEqual([b.site.id]);
+  const page = await b.ctx.newPage();
+  await page.goto(`${APP}/projects/${a.tenant.id}/web`);
   await expect(page.getByText(a.site.name, { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Web analytics" })).toHaveCount(0);
   await page.close();
 });
 
-test("a removed member loses console access at once and umami access after reconciliation", async () => {
+test("the removed sso route answers not found and hands out no umami token", async () => {
+  const res = await api(b.ctx, "GET", `/api/sso/umami?site=${b.site.id}`);
+  expect(res.status).toBe(404);
+  expect(res.body).toEqual(NOT_FOUND);
+});
+
+test("a removed member loses console and web dashboard access at once", async () => {
   // a adds b as a member: b now sees tenant a
   const add = await api<{ kind: string; member: { user_id: string } }>(
     a.ctx,
@@ -201,25 +188,8 @@ test("a removed member loses console access at once and umami access after recon
   expect(del.status).toBe(403);
   expect(del.body).toMatchObject({ error: { code: "owner_required" } });
 
-  // b opens a's dashboard once the reconciler added b to a's umami team
-  const page = await b.ctx.newPage();
-  await page.goto(`${APP}/`);
-  let tb = "";
-  await expect
-    .poll(
-      async () => {
-        const token = captureSsoToken(page);
-        await ssoFromConsole(page, a.site.id);
-        if (page.url().startsWith(`${APP}/sso-error`))
-          return new URL(page.url()).searchParams.get("code");
-        await page.waitForURL(`${WEB}/websites/${a.site.id}**`);
-        tb = await token;
-        return "ok";
-      },
-      { timeout: 90_000, intervals: [1000, 2000, 3000] },
-    )
-    .toBe("ok");
-  expect((await umamiGet(b.ctx, tb, `/api/websites/${a.site.id}`)).status).toBe(200);
+  // b reads a's dashboard once the reconciler added b to a's umami team
+  await waitWebReady(b.ctx, a.tenant.id, a.site.id);
 
   // a removes b: the next console request is refused
   const rm = await api(a.ctx, "DELETE", `/api/tenants/${a.tenant.id}/members/${b.userId}`);
@@ -228,22 +198,10 @@ test("a removed member loses console access at once and umami access after recon
   expect(after.status).toBe(404);
   expect((await api(b.ctx, "GET", `/api/sites/${a.site.id}/snippet`)).status).toBe(404);
 
-  // and the token b got for a's website stops working once the reconciler
-  // removed the team membership
-  await expect
-    .poll(async () => (await umamiGet(b.ctx, tb, `/api/websites/${a.site.id}`)).status, {
-      timeout: 90_000,
-      intervals: [1000, 2000, 3000],
-    })
-    .not.toBe(200);
-  const now = Date.now();
-  const stats = await umamiGet(
-    b.ctx,
-    tb,
-    `/api/websites/${a.site.id}/stats?startAt=${now - 86_400_000}&endAt=${now}`,
-  );
-  expect([401, 403, 404]).toContain(stats.status);
-  // b's own website still works with the same token: only a's access ended
-  expect((await umamiGet(b.ctx, tb, `/api/websites/${b.site.id}`)).status).toBe(200);
-  await page.close();
+  // and every web dashboard route of a is closed to b at once
+  for (const r of ["summary", "realtime", `hourly?site=${a.site.id}`]) {
+    expect((await webGet(b.ctx, a.tenant.id, r)).status, r).toBe(404);
+  }
+  // b's own dashboard still answers: only a's access ended
+  expect((await webGet(b.ctx, b.tenant.id, "realtime")).status).toBe(200);
 });

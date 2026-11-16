@@ -10,11 +10,10 @@
 //              the migration still delivers a pageview, in every engine
 import { readFileSync, writeFileSync } from "node:fs";
 import type { BrowserContext, Page } from "@playwright/test";
-import { APP, APPS_CTL, INGEST, WEB } from "../fixture/env.ts";
+import { APP, APPS_CTL, INGEST } from "../fixture/env.ts";
 import {
   addSiteApi,
   api,
-  captureSsoToken,
   enrollApi,
   type GitHubUser,
   newUser,
@@ -23,10 +22,11 @@ import {
   type Site,
   signIn,
   type Tenant,
-  umamiGet,
   uniqueHost,
   waitProvisioned,
   waitRegistered,
+  waitWebReady,
+  webGet,
 } from "../specs/helpers.ts";
 import { expect, test } from "../specs/test.ts";
 
@@ -154,6 +154,9 @@ function readState(): State {
   return JSON.parse(readFileSync(statePath(), "utf8")) as State;
 }
 
+// a site's page views of a utc day, read live from umami b through the
+// console's web dashboard as the tenant, after the tenant opened that
+// dashboard from the overview
 async function stats(
   ctx: BrowserContext,
   page: Page,
@@ -161,17 +164,16 @@ async function stats(
   site: SiteState,
   day: string,
 ) {
-  const token = captureSsoToken(page);
   // openDashboard finds the site's row by its domain, so the domain is required
   await openDashboard(page, tenantId, { id: site.id, name: site.name, domain: site.host } as Site);
-  const start = Date.parse(`${day}T00:00:00Z`);
-  const r = await umamiGet(
+  await waitWebReady(ctx, tenantId, site.id);
+  const r = await webGet<{ points: { pageviews: number }[] }>(
     ctx,
-    await token,
-    `/api/websites/${site.id}/stats?startAt=${start}&endAt=${start + 86_400_000 - 1}`,
+    tenantId,
+    `hourly?site=${site.id}&day=${day}`,
   );
   expect(r.status, JSON.stringify(r.body)).toBe(200);
-  return r.body as { pageviews: number };
+  return { pageviews: r.body.points.reduce((n, p) => n + p.pageviews, 0) };
 }
 
 test("@history the same users see their history in environment b", async ({ browser }) => {
@@ -200,7 +202,7 @@ test("@history the same users see their history in environment b", async ({ brow
     for (const s of t.sites) {
       const st = await stats(ctx, page, t.id, s, state.day);
       expect(st.pageviews, `pageviews of ${s.host} in umami b`).toBe(s.pageviews);
-      expect(new URL(page.url()).origin).toBe(WEB);
+      expect(new URL(page.url()).pathname).toBe(`/projects/${t.id}/web`);
     }
     await ctx.close();
   }

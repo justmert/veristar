@@ -2,23 +2,22 @@
 // the only owner of a project is refused and sees the project named with a
 // link to its members; once another member owns it, the typed confirmation
 // deletes the account, signs the browser out, takes the person out of every
-// project and ends the umami token they held for a dashboard at once.
+// project and closes the web dashboard with the session.
 import type { BrowserContext } from "@playwright/test";
-import { APP, WEB } from "../fixture/env.ts";
+import { APP } from "../fixture/env.ts";
 import {
   addSiteApi,
   api,
-  captureSsoToken,
   enrollApi,
   type GitHubUser,
   newUser,
   type Site,
   signIn,
-  ssoFromConsole,
   type Tenant,
-  umamiGet,
   uniqueHost,
   waitProvisioned,
+  waitWebReady,
+  webGet,
 } from "./helpers.ts";
 import { expect, test } from "./test.ts";
 
@@ -30,7 +29,6 @@ let user: GitHubUser;
 let shared: Tenant;
 let site: Site;
 let own: Tenant;
-let token = "";
 
 test.beforeAll(async ({ browser }) => {
   owner = await browser.newContext();
@@ -61,22 +59,9 @@ test("a member of a project opens its web dashboard", async () => {
   expect(add.body.kind).toBe("member");
   own = await enrollApi(person, `acct own ${user.login}`);
 
-  // the reconciler adds the person to the shared project's umami team
-  await expect
-    .poll(
-      async () => {
-        const t = captureSsoToken(page);
-        await ssoFromConsole(page, site.id);
-        if (page.url().startsWith(`${APP}/sso-error`))
-          return new URL(page.url()).searchParams.get("code");
-        await page.waitForURL(`${WEB}/websites/${site.id}**`);
-        token = await t;
-        return "ok";
-      },
-      { timeout: 90_000, intervals: [1000, 2000, 3000] },
-    )
-    .toBe("ok");
-  expect((await umamiGet(person, token, `/api/websites/${site.id}`)).status).toBe(200);
+  // the reconciler adds the person to the shared project's umami team, so
+  // the shared project's web dashboard reads umami as the person
+  await waitWebReady(person, shared.id, site.id);
   await page.close();
 });
 
@@ -137,10 +122,8 @@ test("with a second owner the account is deleted and signed out everywhere", asy
   expect((await person.cookies(APP)).find((c) => c.name === "sa_session")).toBeUndefined();
   expect((await api(person, "GET", "/api/me")).status).toBe(401);
 
-  // the umami user is deleted before the answer, so the dashboard token ends now
-  expect([401, 403, 404]).toContain(
-    (await umamiGet(person, token, `/api/websites/${site.id}`)).status,
-  );
+  // the web dashboard is closed with the session
+  expect((await webGet(person, shared.id, "realtime")).status).toBe(401);
 
   // the owners keep their projects, without the person among the members
   const members = await api<{ members: { github_login: string }[] }>(

@@ -18,7 +18,6 @@ function port(name: string): number {
 
 export const BASE_DOMAIN = required("CE2E_BASE_DOMAIN");
 export const APP = `https://app.${BASE_DOMAIN}`;
-export const WEB = `https://web.${BASE_DOMAIN}`;
 export const INGEST = `https://in.${BASE_DOMAIN}`;
 // the github oauth fixture as the browser and the control plane reach it
 export const OAUTH = required("CE2E_OAUTH_URL");
@@ -54,7 +53,7 @@ export function isTenantHost(host: string): boolean {
 }
 export const REFERRER_HOST = "news.sa-referrer.example";
 export const REFERRER_ORIGIN = `https://${REFERRER_HOST}`;
-// a foreign site for cross-site checks (csrf, sso hardening)
+// a foreign site for cross-site checks (csrf)
 export const EVIL_HOST = "evil.sa-attacker.example";
 export const EVIL_ORIGIN = `https://${EVIL_HOST}`;
 export const LOCAL_HOSTS = [`*.${TENANT_DOMAIN}`, REFERRER_HOST, EVIL_HOST];

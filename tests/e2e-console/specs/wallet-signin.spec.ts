@@ -3,12 +3,12 @@
 // built with VITE_STELLAR_TEST_SIGNER=1 for this suite (stack_test.go), which
 // adds a deterministic test signer to the wallet picker; the production build
 // is checked to hold none before that build is made. the flows: sign in with
-// the wallet, join a project by address and open its dashboard through sso,
+// the wallet, join a project by address and open its web dashboard,
 // approve an mcp connector on the consent page as a wallet user, and link a
 // github account that then signs in to the same account.
 import { createHash, randomBytes } from "node:crypto";
 import type { BrowserContext, Page } from "@playwright/test";
-import { APP, OAUTH, WEB } from "../fixture/env.ts";
+import { APP, OAUTH } from "../fixture/env.ts";
 import {
   addSiteApi,
   api,
@@ -16,10 +16,10 @@ import {
   newUser,
   type Site,
   signIn,
-  ssoFromConsole,
   type Tenant,
   uniqueHost,
   waitProvisioned,
+  waitWebReady,
 } from "./helpers.ts";
 import { expect, test } from "./test.ts";
 
@@ -110,18 +110,11 @@ test("a wallet member joins a project by address and opens its dashboard", async
   // the reconciler makes the wallet account's umami user and team membership
   const page = await wallet.newPage();
   await watchCSP(page);
-  await expect
-    .poll(
-      async () => {
-        await ssoFromConsole(page, site.id);
-        if (page.url().startsWith(`${APP}/sso-error`))
-          return new URL(page.url()).searchParams.get("code");
-        await page.waitForURL(`${WEB}/websites/${site.id}**`);
-        return "ok";
-      },
-      { timeout: 90_000, intervals: [1000, 2000, 3000] },
-    )
-    .toBe("ok");
+  await waitWebReady(wallet, shared.id, site.id);
+  // and the shared project's web dashboard opens in the console
+  await page.goto(`${APP}/projects/${shared.id}/web?site=${site.id}`);
+  await expect(page.getByRole("heading", { name: "Web analytics" })).toBeVisible();
+  await expect(page.getByLabel("Right now")).toBeVisible();
 
   // the owner's member list shows the short address
   const op2 = await owner.newPage();
