@@ -18,7 +18,7 @@ import { SelectField, TextField } from "@/components/form-field";
 import { Panel } from "@/components/panel";
 import { ReasonDialog } from "@/components/reason-dialog";
 import { Pill } from "@/components/status";
-import { registerPasskey } from "@/components/step-up";
+import { AddPasskeyDialog } from "@/components/step-up";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -78,7 +78,7 @@ export function OperatorsPage() {
       </header>
       <RosterSection items={items} admin={admin} me={me.data.user} />
       {admin ? <AddOperator /> : null}
-      <PasskeySection />
+      <PasskeySection userName={me.data.user.display_name} />
     </div>
   );
 }
@@ -164,7 +164,11 @@ function RosterSection({ items, admin, me }: { items: RosterEntry[]; admin: bool
                   <span className="flex flex-wrap items-center gap-2">
                     <span className="font-mono text-fg">{identity(e)}</span>
                     <span className="text-caption text-fg-3">
-                      {e.kind === "github" ? "GitHub" : "Stellar wallet"}
+                      {e.kind === "github"
+                        ? "GitHub"
+                        : e.kind === "passkey"
+                          ? "Passkey"
+                          : "Stellar wallet"}
                     </span>
                     {e.bootstrap ? <Pill tone="info">Deploy settings</Pill> : null}
                     {mine(e, me) ? <Pill tone="info">You</Pill> : null}
@@ -316,10 +320,15 @@ function AddOperator() {
           onChange={(e) => setKind(e.target.value as "github" | "stellar")}
         >
           <option value="github">GitHub</option>
-          <option value="stellar">Stellar wallet</option>
+          <option value="stellar">Stellar wallet or passkey</option>
         </SelectField>
         <TextField
           label={kind === "github" ? "GitHub login" : "Stellar address"}
+          hint={
+            kind === "github"
+              ? undefined
+              : "A wallet's G-address, or the C-address of a passkey account from the person's Account page."
+          }
           name="identity"
           value={value}
           onChange={(e) => setValue(e.target.value)}
@@ -361,17 +370,11 @@ function AddOperator() {
   );
 }
 
-function PasskeySection() {
+function PasskeySection({ userName }: { userName: string }) {
   const list = useQuery(passkeysQuery);
   const [name, setName] = useState("");
+  const [adding, setAdding] = useState(false);
   const [deleting, setDeleting] = useState<Passkey | null>(null);
-  const add = useMutation({
-    mutationFn: (n: string) => registerPasskey(n),
-    onSuccess: () => {
-      setName("");
-      refresh();
-    },
-  });
   const del = useMutation({
     mutationFn: (id: string) => operatorsApi.deletePasskey(id),
     onSuccess: () => {
@@ -382,7 +385,7 @@ function PasskeySection() {
   return (
     <Panel
       title="Your passkeys"
-      description="The passkeys and security keys that open the operator area for you. Keep at least two, so a lost key does not lock you out."
+      description="The passkeys that open the operator area for you, beside the passkey you sign in with if you have one. Keep at least two, so a lost one does not lock you out."
     >
       <div className="flex flex-col gap-4">
         {list.isPending ? (
@@ -391,6 +394,15 @@ function PasskeySection() {
           <ErrorPanel error={list.error} onRetry={() => list.refetch()} />
         ) : (
           <ul className="flex flex-col divide-y divide-line">
+            {list.data.sign_in_passkey ? (
+              <li data-passkey="sign-in" className="flex flex-col py-2">
+                <span className="text-fg">Your sign-in passkey</span>
+                <span className="text-caption text-fg-3">
+                  The passkey this account signs in with also confirms the operator area. It is
+                  managed on the Account page.
+                </span>
+              </li>
+            ) : null}
             {list.data.items.map((p) => (
               <li
                 key={p.id}
@@ -402,7 +414,6 @@ function PasskeySection() {
                   <span className="text-caption text-fg-3">
                     Added {formatDateTimeUtc(p.created_at)}
                     {p.last_used_at ? `, last used ${formatDateTimeUtc(p.last_used_at)}` : ""}
-                    {p.backup_eligible ? ", synced passkey" : ", device-bound key"}
                   </span>
                 </span>
                 <Button size="sm" variant="outline" onClick={() => setDeleting(p)}>
@@ -417,7 +428,7 @@ function PasskeySection() {
           noValidate
           onSubmit={(e) => {
             e.preventDefault();
-            if (name.trim()) add.mutate(name.trim());
+            if (name.trim()) setAdding(true);
           }}
         >
           <TextField
@@ -427,11 +438,20 @@ function PasskeySection() {
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
-          <Button type="submit" pending={add.isPending} disabled={name.trim() === ""}>
-            {add.isPending ? "Waiting for your passkey" : "Add a passkey"}
+          <Button type="submit" disabled={name.trim() === ""}>
+            Add a passkey
           </Button>
         </form>
-        <FormMessage error={add.error} />
+        <AddPasskeyDialog
+          open={adding}
+          onOpenChange={setAdding}
+          name={name.trim()}
+          userName={userName}
+          onAdded={() => {
+            setName("");
+            refresh();
+          }}
+        />
       </div>
       <ConfirmDialog
         open={deleting !== null}

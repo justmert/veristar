@@ -1,12 +1,10 @@
 import { ApiError, ResponseShapeError } from "@/api/client";
 import { PasskeyError } from "@/lib/passkey/errors";
 import { WalletError } from "@/lib/stellar-wallet";
-import { PasskeyCancelled } from "@/lib/webauthn";
 
 // people-facing text for an error thrown by the api client. codes come from
 // contract 2.4; the request id is shown so a report can be traced in the logs.
 export function errorText(err: unknown): string {
-  if (err instanceof PasskeyCancelled) return "The passkey prompt was closed. Try again.";
   if (err instanceof ApiError) {
     const ref = err.requestId ? ` Reference ${err.requestId}.` : "";
     switch (err.code) {

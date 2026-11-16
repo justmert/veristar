@@ -38,16 +38,16 @@ export function OperatorLayout() {
   if (me.isPending) return <Loading label="Loading" />;
   if (me.error) return <ErrorPanel error={me.error} onRetry={() => me.refetch()} />;
   if (!me.data.user.is_operator) return <OperatorsOnly />;
-  return <SteppedUp />;
+  return <SteppedUp userName={me.data.user.display_name} />;
 }
 
 // every operator route needs a recent passkey step-up (contract 5.15); the
 // area is drawn only once the session holds one
-function SteppedUp() {
+function SteppedUp({ userName }: { userName: string }) {
   const s = useQuery(stepUpQuery);
   if (s.isPending) return <Loading label="Loading" />;
   if (s.error) return <ErrorPanel error={s.error} onRetry={() => s.refetch()} />;
-  if (!s.data.stepped_up) return <StepUpGate status={s.data} />;
+  if (!s.data.stepped_up) return <StepUpGate status={s.data} userName={userName} />;
   return <OperatorArea />;
 }
 

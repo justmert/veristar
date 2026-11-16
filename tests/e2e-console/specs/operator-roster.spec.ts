@@ -55,7 +55,7 @@ test("an operator session without a step-up is refused with step_up_required", a
   await page.goto(`${APP}/operator`);
   await expect(
     page
-      .getByRole("button", { name: "Use passkey or security key" })
+      .getByRole("button", { name: "Use your passkey" })
       .or(page.getByRole("button", { name: "Register" })),
   ).toBeVisible();
   expect(new URL(page.url()).pathname).toBe("/operator");
@@ -90,11 +90,12 @@ test("the admin adds an operator who registers a first passkey", async ({ browse
   await signIn(second.page, secondUser);
   const auth = await virtualAuthenticator(second.page, secondUser);
   await second.page.goto(`${APP}/operator`);
-  await expect(
-    second.page.getByRole("heading", { name: "Register a passkey or security key" }),
-  ).toBeVisible();
+  await expect(second.page.getByText("Register a passkey", { exact: true })).toBeVisible();
   await second.page.getByLabel("Name").fill("review key");
   await second.page.getByRole("button", { name: "Register" }).click();
+  const dialog = second.page.getByTestId("passkey-dialog");
+  await dialog.getByRole("button", { name: "Create a passkey" }).click();
+  await dialog.getByRole("button", { name: "Confirm with your passkey" }).click();
   await expect(second.page.getByRole("navigation", { name: "Operator sections" })).toBeVisible();
   await auth.save();
   // a plain operator reads the roster but cannot change it
@@ -148,7 +149,7 @@ test("a tenant gets 403 on every roster and passkey route", async ({ browser }) 
     ["GET", "/api/operator/roster", undefined],
     ["POST", "/api/operator/roster", { github_login: "x", role: "operator", reason: "x" }],
     ["GET", "/api/operator/step-up", undefined],
-    ["POST", "/api/operator/passkeys/options", {}],
+    ["POST", "/api/operator/passkeys/challenge", {}],
   ] as const) {
     const r = await api<{ error: { code: string } }>(ctx, method, path, body);
     expect(r.status, `${method} ${path}`).toBe(403);

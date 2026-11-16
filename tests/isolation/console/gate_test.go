@@ -251,11 +251,11 @@ func catalogue(terms string) []route {
 	add(kindOperator, http.MethodPost, op+"/roster/{entry_id}/role", fixed(map[string]any{"role": "operator", "reason": "isolation gate"}))
 	// the step-up and the passkeys (contract 5.15)
 	add(kindStepUp, http.MethodGet, op+"/step-up", nil)
-	add(kindStepUp, http.MethodPost, op+"/step-up/options", fixed(map[string]any{}))
-	add(kindStepUp, http.MethodPost, op+"/step-up", fixed(map[string]any{"credential": map[string]any{}}))
+	add(kindStepUp, http.MethodPost, op+"/step-up/challenge", fixed(map[string]any{}))
+	add(kindStepUp, http.MethodPost, op+"/step-up", fixed(map[string]any{"credential_id": "AQID"}))
 	add(kindStepUp, http.MethodGet, op+"/passkeys", nil)
-	add(kindStepUp, http.MethodPost, op+"/passkeys/options", fixed(map[string]any{}))
-	add(kindStepUp, http.MethodPost, op+"/passkeys", fixed(map[string]any{"name": "intruder", "credential": map[string]any{}}))
+	add(kindStepUp, http.MethodPost, op+"/passkeys/challenge", fixed(map[string]any{}))
+	add(kindStepUp, http.MethodPost, op+"/passkeys", fixed(map[string]any{"name": "intruder", "credential_id": "AQID"}))
 	add(kindStepUp, http.MethodDelete, op+"/passkeys/{passkey_id}", nil)
 
 	// mcp access keys of a project and the consent page (contract 12.8);
@@ -843,7 +843,7 @@ func testOperatorRoutes(t *testing.T, e *env, w *gateWorld, cat []route) {
 		{http.MethodGet, "/api/operator/step-up", http.StatusOK, ""},
 		{http.MethodGet, "/api/operator/passkeys", http.StatusUnauthorized, "step_up_required"},
 		{http.MethodDelete, "/api/operator/passkeys/" + uuid.NewString(), http.StatusUnauthorized, "step_up_required"},
-		{http.MethodPost, "/api/operator/passkeys/options", http.StatusUnauthorized, "step_up_required"},
+		{http.MethodPost, "/api/operator/passkeys/challenge", http.StatusUnauthorized, "step_up_required"},
 	} {
 		var body any
 		if c.m == http.MethodPost {

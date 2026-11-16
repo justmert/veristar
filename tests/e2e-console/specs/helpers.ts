@@ -357,14 +357,17 @@ export async function operatorStepUp(page: Page, user: GitHubUser): Promise<void
   const auth = await virtualAuthenticator(page, user);
   await page.goto(`${APP}/operator`);
   const register = page.getByRole("button", { name: "Register" });
-  const confirm = page.getByRole("button", { name: "Use passkey or security key" });
+  const confirm = page.getByRole("button", { name: "Use your passkey" });
   await expect(register.or(confirm)).toBeVisible();
+  const dialog = page.getByTestId("passkey-dialog");
   if (await register.isVisible()) {
     await page.getByLabel("Name").fill("e2e security key");
     await register.click();
+    await dialog.getByRole("button", { name: "Create a passkey" }).click();
   } else {
     await confirm.click();
   }
+  await dialog.getByRole("button", { name: "Confirm with your passkey" }).click();
   await expect(page.getByRole("navigation", { name: "Operator sections" })).toBeVisible();
   await auth.save();
 }
