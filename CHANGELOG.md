@@ -166,10 +166,12 @@ here, before they take effect, as the processing terms require
   passkeys; every change takes a reason and is audited. The roster always
   keeps one active operator admin
   ([docs/operators/roster.md](docs/operators/roster.md)). Migration 00039.
-- The operator area needs a passkey or security key: a WebAuthn step-up
-  recorded on the session, valid for 12 hours by default. Operators register
-  one or more keys; the first one inside a 24-hour enrollment window. Machine
-  API keys and operator MCP credentials work without it.
+- The operator area needs a passkey: a step-up recorded on the session, valid
+  for 12 hours by default. It uses the passkeys and the verification of
+  passkey sign-in; an operator who signs in with a passkey confirms with it,
+  and every operator can add more passkeys, the first one inside a 24-hour
+  enrollment window. Machine API keys and operator MCP credentials work
+  without it.
 - The console's API traffic page names the infrastructure requests the
   figures leave out, and the routes list marks routes that only
   infrastructure requests reached.

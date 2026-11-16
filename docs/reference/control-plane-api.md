@@ -888,10 +888,11 @@ console and cannot sign in.
 
 **Use for later passkey checks.** `passkey.RelyingParty.Verify` with a fresh
 challenge and the account's stored `passkey_public_key` is the one WebAuthn
-verification of the control plane. A later step that asks a signed-in person
-to confirm with their passkey (an operator step-up, for example) issues its
-own challenge with a purpose of its own in `sa_passkey` and calls it, so the
-console keeps one WebAuthn approach and one stored credential per account.
+verification of the control plane. The operator step-up (5.15) issues its own
+challenge with a purpose of its own, kept in the console session because the
+person is signed in, and calls it with the sign-in passkey's key or the key of
+a passkey added for the step-up; the console runs those ceremonies with the
+same `@soropass/core` helpers.
 
 ### 4.2 Tenants
 
@@ -1694,47 +1695,68 @@ addresses (tests use a `_test.go` hook only).
 
 ### 5.15 Passkey step-up
 
-The operator area needs a second factor on top of the sign-in: a WebAuthn credential (a passkey or
-a security key) registered to the console account. Proving one records a step-up on the session.
+The operator area needs a second factor on top of the sign-in: a passkey of the console account,
+proven within `OPERATOR_STEP_UP_MAX_AGE`. Proving one records a step-up on the session. A passkey
+here is what passkey sign-in uses (4.1.9): an ES256 WebAuthn credential that the console creates
+and uses with `@soropass/core`, whose base64url credential id and 65-byte SEC-1 key the control
+plane stores, and whose assertions `passkey.RelyingParty.Verify` checks
+(`internal/controlplane/passkey`): the console origin, the relying party, the challenge, user
+present and user verified, and the ES256 signature. An account steps up with its sign-in passkey,
+if it has one, and with the passkeys it adds here (`cp.operator_passkeys`, migration
+`00039_operator_roster.sql`). A security key works when it holds a PIN, because user
+verification is required.
+
 The routes below sit behind the operator check of 5.1 and not behind the step-up, because they are
-how a session gets one. Ceremony state lives in the session and is used once; options and
-responses carry binary fields as base64url strings, as the WebAuthn JSON forms do. The relying
-party id is the host of `CONSOLE_ORIGIN` and the only accepted origin is `CONSOLE_ORIGIN`. User
-verification is preferred, attestation is not requested.
+how a session gets one. A challenge route answers in the form of 4.1.9
+(`{challenge, rp_id, timeout_ms, expires_at}`), and every answer carries the fields of 4.1.9's
+verify body (`credential_id`, `authenticator_data`, `client_data_json`, `signature`, base64url
+without padding, with the same limits and 422 field codes).
 
 | Route | Needs | Answer |
 |---|---|---|
 | `GET /api/operator/step-up` | operator | `StepUpStatus` |
-| `POST /api/operator/step-up/options` | operator | `{"publicKey": PublicKeyCredentialRequestOptions}`; **409 `passkey_required`** without a passkey |
-| `POST /api/operator/step-up` | the options of this session | `StepUpStatus`; body `{"credential": PublicKeyCredential}` |
-| `GET /api/operator/passkeys` | step-up | `{"items": [Passkey]}` |
-| `POST /api/operator/passkeys/options` | step-up, or an open enrollment window | `{"publicKey": PublicKeyCredentialCreationOptions}` |
-| `POST /api/operator/passkeys` | step-up, or an open enrollment window | **201** `Passkey`; body `{"name": 1 to 64 characters, "credential": PublicKeyCredential}` |
-| `DELETE /api/operator/passkeys/{passkey_id}` | step-up | **204**; **409 `last_passkey`** for the account's last passkey |
+| `POST /api/operator/step-up/challenge` | operator | a challenge of purpose `step_up`; **409 `passkey_required`** without a passkey |
+| `POST /api/operator/step-up` | the challenge of this session | `StepUpStatus`; body an answer of one of the account's passkeys |
+| `GET /api/operator/passkeys` | step-up | `{"items": [Passkey], "sign_in_passkey": bool}` |
+| `POST /api/operator/passkeys/challenge` | step-up, or an open enrollment window | a challenge of purpose `register` |
+| `POST /api/operator/passkeys` | step-up, or an open enrollment window | **201** `Passkey`; body `{"name": 1 to 64 characters, "public_key"}` and the answer of the new passkey |
+| `DELETE /api/operator/passkeys/{passkey_id}` | step-up | **204**; **409 `last_passkey`** when the account would keep no passkey |
 
-`StepUpStatus` is `{stepped_up, stepped_up_at, expires_at, max_age_seconds, passkeys, enrollment,
-enrollment_until}`. `POST /api/operator/step-up` answers without `passkeys`, `enrollment` and
-`enrollment_until`. `enrollment` is `open` (a first passkey may be registered without a step-up
-until `enrollment_until`), `sign_in_required` (a window is open, but this session's sign-in is
-older than it) or `closed`. `Passkey` is `{id, name, created_at, last_used_at, backup_eligible}`;
-`backup_eligible` is the authenticator's flag, true for a passkey that a platform syncs between
-devices.
+`StepUpStatus` is `{stepped_up, stepped_up_at, expires_at, max_age_seconds, passkeys,
+sign_in_passkey, enrollment, enrollment_until}`; `passkeys` counts the added passkeys and the
+sign-in passkey. `POST /api/operator/step-up` answers without the last four. `enrollment` is
+`open` (a first passkey may be registered without a step-up until `enrollment_until`),
+`sign_in_required` (a window is open, but this session's sign-in is older than it) or `closed`.
+`Passkey` is `{id, name, created_at, last_used_at}`. The sign-in passkey is not listed and not
+deleted here; it belongs to the account's identities (4.1.8).
 
-- **Step-up.** A verified assertion renews the session token, stores the time and the account id on
-  the session (`operator_step_up_at`, `operator_step_up_user`) and writes `operator.step_up`. The
-  step-up counts for `OPERATOR_STEP_UP_MAX_AGE` (default `12h`, `5m` to `24h`). An assertion whose
-  signature counter did not increase is refused as a possible clone.
+- **Challenges.** A challenge is 32 random bytes with a purpose, the account and a 5-minute expiry,
+  kept in the console session and removed when an answer is checked. The transaction that accepts
+  an answer stores SHA-256 of `operator-passkey:` and the challenge in
+  `cp.wallet_challenges_used`, so a challenge is accepted once even across parallel requests of one
+  session. **400 `ceremony_expired`**: no challenge of that purpose in this session, it expired, or
+  it was used.
+- **Step-up.** The answer names a credential of the account; its stored key checks it. A verified
+  answer renews the session token, stores the time and the account id on the session
+  (`operator_step_up_at`, `operator_step_up_user`) and writes `operator.step_up`. The step-up counts
+  for `OPERATOR_STEP_UP_MAX_AGE` (default `12h`, `5m` to `24h`). **400 `step_up_failed`**: the
+  answer does not verify (another account's passkey, another origin or relying party, another
+  challenge, no user verification, a wrong signature). The signature counter is not checked:
+  synced passkeys report 0.
+- **New passkeys.** The console creates the passkey, then answers the `register` challenge with it
+  and sends its key. A registration answer carries no signature, so the key is stored only when it
+  signed the challenge (**400 `step_up_failed`** otherwise); a credential id already stored answers
+  422 `duplicate`. The registration records a step-up, so the person does not touch the passkey
+  twice.
 - **First passkey.** A roster row gets an enrollment window of `OPERATOR_ENROLL_WINDOW` (default
   `24h`, `10m` to `168h`) when an admin adds it, when an admin resets its passkeys, and at start for
   a bootstrap row whose account holds no passkey. Inside the window, an account without a passkey
   may register one without a step-up, from a session whose sign-in happened after the window
   opened; an older session gets **401 `enrollment_closed`**. The first registration closes the
-  window and records a step-up. Later registrations need a step-up.
-- **Errors.** **400 `ceremony_expired`**: no options of this session to verify against, they expired
-  (5 minutes) or they were used. **400 `step_up_failed`**: the response does not verify (wrong key,
-  wrong origin, wrong challenge, replayed counter).
-- **Audit.** `operator.step_up`, `operator.passkey_add` (detail `passkey_id`, `name`, `enrollment`,
-  `backup_eligible`) and `operator.passkey_delete`, actor and target the account.
+  window. Later registrations need a step-up.
+- **Audit.** `operator.step_up` (detail `max_age_seconds`, `sign_in_passkey`),
+  `operator.passkey_add` (detail `passkey_id`, `name`, `enrollment`) and `operator.passkey_delete`,
+  actor and target the account.
 - **Other step-up checks.** Approving an MCP authorization request with the operator scope (12.8)
   also needs a fresh step-up, and answers 401 `step_up_required` otherwise. The credential it issues
   then works without one.
@@ -1773,7 +1795,8 @@ API at add time, as for members (4.2.5); the row is bound to the id.
 - **Effects.** A suspension and a removal turn the flag off at once (5.1), which also revokes the
   person's operator MCP credentials, and end every console session of the account. A removal also
   deletes the account's passkeys unless another active row keeps it an operator. A passkey reset
-  deletes every passkey of the account, ends its sessions and opens a new enrollment window.
+  deletes every passkey the account added for the step-up, ends its sessions and opens a new
+  enrollment window. A sign-in passkey stays: it is one of the account's identities (4.1.8).
 - **Account deletion (4.1.6)** removes the roster rows of the account's identities and its passkeys.
   The last active operator admin gets **409 `last_operator_admin`** instead.
 

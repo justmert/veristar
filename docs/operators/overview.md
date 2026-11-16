@@ -30,7 +30,7 @@ and the passkeys every operator registers.
   operator admins at every start of the control plane. They are how the first operators get in,
   and how the hosting party restores access after a lockout
   ([Adding and removing operators](../runbooks/operators.md)).
-- The operator area asks for your passkey or security key when you open it, and again after 12 hours.
+- The operator area asks for your passkey when you open it, and again after 12 hours.
 - Operators see an **Operator** area in the console. Anyone else who opens `/operator` sees
   "Operators only", and the control plane answers every operator route with
   `403 operator_required`, whatever the console shows.

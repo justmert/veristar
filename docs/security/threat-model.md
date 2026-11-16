@@ -316,12 +316,14 @@ Built:
   roster by database triggers in the transaction that changes either side, and read per request;
   anything else is 403 `operator_required`. A suspension or removal takes effect at the person's
   next request, ends their console sessions and revokes their operator MCP credentials.
-- The operator area needs a WebAuthn assertion (a passkey or a security key) recorded on the
-  session within `OPERATOR_STEP_UP_MAX_AGE` (12 hours by default); otherwise 401
-  `step_up_required`. A stolen session cookie or a taken-over GitHub account alone does not open
-  the area. The credential is bound to the console origin, so a look-alike site cannot relay it.
-  A step-up renews the session token. The ceremony state is single use, and an authenticator
-  whose signature counter goes backwards is refused.
+- The operator area needs a passkey assertion recorded on the session within
+  `OPERATOR_STEP_UP_MAX_AGE` (12 hours by default); otherwise 401 `step_up_required`. A stolen
+  session cookie or a taken-over GitHub account alone does not open the area. The step-up uses
+  the passkey verification of passkey sign-in (`internal/controlplane/passkey`): the assertion must
+  name the console's relying party and origin, so a look-alike site cannot relay it, must sign a
+  challenge the console issued for this session and purpose, and must carry user verification. A
+  step-up renews the session token, and a challenge is accepted once (it is removed from the
+  session and its hash stored in `cp.wallet_challenges_used`).
 - A first passkey can be registered without a step-up only inside an enrollment window
   (`OPERATOR_ENROLL_WINDOW`, 24 hours by default) that an admin's addition or reset, or the start of
   the control plane for a deploy-settings identity without a passkey, opens; only from a session
@@ -347,7 +349,9 @@ Proved by: `TestStepUp` (`internal/controlplane/stepup/stepup_test.go`); `TestRo
 Chromium virtual authenticator.
 
 Residual risk: a synced passkey is as safe as the platform account that syncs it; an operator
-who wants a key that never leaves one device registers a security key. Inside an open enrollment
+who wants a key that never leaves one device registers a security key with a PIN. A new
+passkey's key is trusted because it signs the console's challenge; no attestation ties it to an
+authenticator model. Inside an open enrollment
 window, a person who takes over the operator's GitHub account and signs in first registers the
 first passkey; the window is short, the registration is audited, and the Operators page shows the
 passkey count of every row. One operator alone can remove a tenant, and removal purges the
