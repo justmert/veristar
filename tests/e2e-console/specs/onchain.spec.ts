@@ -93,13 +93,29 @@ test("what scf sees and the overview export answer for the project", async () =>
   expect(r.headers()["content-type"]).toBe("text/csv; charset=utf-8");
   expect(r.headers()["content-disposition"]).toContain("attachment");
   const lines = (await r.text()).trim().split("\n");
-  expect(lines[0]).toBe(
-    "day,web_pageviews,web_visitors,web_visits,web_bounces,web_totaltime_seconds,web_quarantine_pageviews," +
-      "api_requests,api_errors_4xx,api_errors_5xx,onchain_ids_read,onchain_operations,onchain_transactions",
-  );
+  const header = lines[0]?.split(",") ?? [];
+  expect(header.slice(0, 13)).toEqual([
+    "day",
+    "web_pageviews",
+    "web_visitors",
+    "web_visits",
+    "web_bounces",
+    "web_totaltime_seconds",
+    "web_quarantine_pageviews",
+    "api_requests",
+    "api_errors_4xx",
+    "api_errors_5xx",
+    "onchain_ids_read",
+    "onchain_operations",
+    "onchain_transactions",
+  ]);
   // one row per utc day of the range; an unread signal is empty, not zero
   expect(lines.length).toBe(31);
-  expect(lines[1]?.split(",").slice(-3)).toEqual(["0", "", ""]);
+  const first = lines[1]?.split(",") ?? [];
+  const col = (name: string) => first[header.indexOf(name)];
+  expect([col("onchain_ids_read"), col("onchain_operations"), col("onchain_transactions")]).toEqual(
+    ["0", "", ""],
+  );
 });
 
 test("another project's member sees none of it", async ({ browser }) => {
