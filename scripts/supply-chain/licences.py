@@ -20,7 +20,11 @@ in exactly one of two sections, using docs/security/licence-policy.json:
   `dependencies` and `optionalDependencies` from a shipped workspace importer
   in pnpm-lock.yaml (plus the bundled dev packages the policy names). any
   licence that is not osi approved fails. there are no exceptions in this
-  section. every package of the real console bundle must be in it.
+  section. every package of the real console bundle must be in it. a
+  dependency the policy lists under bundle_only (a library of which the
+  console imports some modules) counts as shipped itself, and the packages
+  below it count as shipped exactly when the real console bundle contains
+  them; the rest of its tree is recorded as not shipped.
 - not shipped: dev, test, example and tooling dependencies. they are listed
   with the importers that pull them in. a non-osi licence fails unless the
   policy's allowlist has an entry for that exact name, version and licence
@@ -267,11 +271,14 @@ def resolve(name, version):
     return f"{name}@{version}"
 
 
-def pnpm_reach(importers, snapshots):
+def pnpm_reach(importers, snapshots, bundle):
     """returns {(name, version): {"shipped": set(labels), "other": set(labels)}}.
     a shipped importer contributes its runtime groups, plus the dev packages
     the policy names as bundled; every other group, and every group of a
-    not-shipped importer, is recorded as not shipped with its label."""
+    not-shipped importer, is recorded as not shipped with its label. below a
+    bundle_only package of a shipped importer, a package is shipped exactly
+    when bundle, the (name, version) pairs of the real console bundle, holds
+    it."""
     policy = json.loads(POLICY.read_text())
     shipped_importers = policy["shipped"]["pnpm_importers"]
     for imp, spec in shipped_importers.items():
@@ -280,12 +287,17 @@ def pnpm_reach(importers, snapshots):
         for n in spec.get("also_bundled", {}):
             if n not in importers[imp].get("devDependencies", {}):
                 raise ValueError(f"{imp}: also_bundled {n} is not one of its devDependencies")
+        for n in spec.get("bundle_only", {}):
+            if n not in importers[imp].get("dependencies", {}):
+                raise ValueError(f"{imp}: bundle_only {n} is not one of its dependencies")
     reach = {}
 
-    def walk(start, imp_dir, label, shipped, files_only):
-        seen, stack = set(), list(start.items())
+    def walk(start, imp_dir, label, shipped, files_only, bundle_only=()):
+        # an entry is (name, version spec, gated): gated entries sit below a
+        # bundle_only package and are shipped only when the bundle has them
+        seen, stack = set(), [(n, v, False) for n, v in start.items()]
         while stack:
-            n, v = stack.pop()
+            n, v, gated = stack.pop()
             if v.startswith("link:"):
                 # a workspace package: follow its runtime dependencies
                 target = posixpath.normpath(posixpath.join(imp_dir, v[5:]))
@@ -295,22 +307,26 @@ def pnpm_reach(importers, snapshots):
                 if target not in importers:
                     raise ValueError(f"{label}: link {v} resolves to unknown importer {target}")
                 for g in ("dependencies", "optionalDependencies"):
-                    stack.extend(importers[target].get(g, {}).items())
+                    stack.extend((dn, dv, gated) for dn, dv in importers[target].get(g, {}).items())
                 continue
             key = resolve(n, v)
-            if key in seen:
+            if (key, gated) in seen:
                 continue
-            seen.add(key)
+            seen.add((key, gated))
             if key not in snapshots:
                 raise ValueError(f"{label}: {key} has no snapshot in pnpm-lock.yaml")
             name = base(key)[0]
             r = reach.setdefault(base(key), {"shipped": set(), "other": set()})
-            (r["shipped"] if shipped else r["other"]).add(label)
+            if shipped and gated and base(key) not in bundle:
+                r["other"].add(f"{label} (below bundle_only, not in the console bundle)")
+            else:
+                (r["shipped"] if shipped else r["other"]).add(label)
             if shipped and name in files_only:
                 # only a file of this package is bundled; its own
                 # dependencies are recorded below as not shipped
                 continue
-            stack.extend(snapshots[key].items())
+            below = gated or (shipped and name in bundle_only)
+            stack.extend((dn, dv, below) for dn, dv in snapshots[key].items())
 
     for imp, groups in importers.items():
         spec = shipped_importers.get(imp)
@@ -321,7 +337,7 @@ def pnpm_reach(importers, snapshots):
                 continue
             files_only = spec.get("files_only", {})
             if runtime:
-                walk(deps, imp, f"{imp} {g}", True, files_only)
+                walk(deps, imp, f"{imp} {g}", True, files_only, spec.get("bundle_only", {}))
                 walk(deps, imp, f"{imp} {g} (not bundled)", False, {})
             else:
                 bundled = {n: v for n, v in deps.items() if n in spec.get("also_bundled", {})}
@@ -397,9 +413,14 @@ def main(argv):
         if not a.get("reason", "").strip() or not a.get("licence"):
             print(f"allowlist entry {a['package']}@{a['version']} has no licence or reason", file=sys.stderr)
             return 2
+    bundle = [line.strip() for line in Path(opts["--console-bundle"]).read_text().splitlines() if line.strip()]
+    if not bundle:
+        print("console bundle list is empty", file=sys.stderr)
+        return 2
+    bundle_keys = {(item.rpartition("@")[0], item.rpartition("@")[2]) for item in bundle}
     try:
         importers, snapshots = parse_pnpm_lock(ROOT / "pnpm-lock.yaml")
-        pnpm = pnpm_reach(importers, snapshots)
+        pnpm = pnpm_reach(importers, snapshots, bundle_keys)
         gomods = go_shipped()
     except ValueError as e:
         print(f"cannot classify dependencies: {e}", file=sys.stderr)
@@ -473,10 +494,6 @@ def main(argv):
     # every package the console bundle really contains must be in the shipped
     # section, so the lockfile model above cannot under-report
     shipped_keys = {(r["package"], r["version"]) for r in shipped if r["target"] == "pnpm-lock.yaml"}
-    bundle = [line.strip() for line in Path(opts["--console-bundle"]).read_text().splitlines() if line.strip()]
-    if not bundle:
-        print("console bundle list is empty", file=sys.stderr)
-        return 2
     missing = []
     for item in bundle:
         n, _, v = item.rpartition("@")
