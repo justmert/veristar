@@ -7,6 +7,7 @@ import type { ApiOverview, Ingest, Site } from "@/api/schemas";
 import { DbIpAttribution } from "@/components/dbip-attribution";
 import { ErrorPanel, Loading, StateBlock } from "@/components/error-panel";
 import { IntegrityReportView } from "@/components/integrity";
+import { ProjectOnchainSection } from "@/components/onchain";
 import { PageHeader } from "@/components/panel";
 import { Segmented } from "@/components/segmented";
 import { StatTile, type Trend } from "@/components/stat-tile";
@@ -112,6 +113,7 @@ export function OverviewPage() {
           intro="The integrity grade of your web traffic over the last 30 UTC days, with the reasons behind it. This is exactly the report SCF operators see for your project."
         />
       ) : null}
+      <ProjectOnchainSection tenantId={tenant.id} days={range === "24h" ? 2 : 30} />
 
       <div className="flex flex-col gap-1">
         {live.length > 0 ? (

@@ -46,6 +46,7 @@ import {
   RangeControl,
   VISITORS_NOTE,
 } from "./global-shared";
+import { CompareOnchainSection, ExportCompareButton } from "./onchain-parts";
 
 const DIMENSIONS: { dim: WebDimension; label: string }[] = [
   { dim: "referrer", label: "Referrers" },
@@ -171,6 +172,11 @@ export function ComparePage() {
             Web
           </h2>
           <span className="text-small text-fg-3">Per UTC day, from project aggregates</span>
+          <span className="ml-auto">
+            <ExportCompareButton view="web" tenants={tenants} resolved={resolved}>
+              Export web CSV
+            </ExportCompareButton>
+          </span>
         </div>
         {web.isPending ? <Loading label="Loading web numbers" /> : null}
         {web.error ? <ErrorPanel error={web.error} onRetry={() => web.refetch()} /> : null}
@@ -183,11 +189,18 @@ export function ComparePage() {
             API
           </h2>
           <span className="text-small text-fg-3">Every service, per UTC day</span>
+          <span className="ml-auto">
+            <ExportCompareButton view="api" tenants={tenants} resolved={resolved}>
+              Export API CSV
+            </ExportCompareButton>
+          </span>
         </div>
         {apiq.isPending ? <Loading label="Loading API numbers" /> : null}
         {apiq.error ? <ErrorPanel error={apiq.error} onRetry={() => apiq.refetch()} /> : null}
         {apiq.data ? <ApiSection data={apiq.data} /> : null}
       </section>
+
+      {web.data ? <CompareOnchainSection projects={web.data.projects} /> : null}
 
       <Notes
         items={[

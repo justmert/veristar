@@ -42,6 +42,7 @@ import {
   useSelection,
   VISITORS_NOTE,
 } from "./global-shared";
+import { ExportListButton, OnchainCell, OnchainHeader } from "./onchain-parts";
 
 const DEFAULT_SORT: WebSort = "pageviews";
 
@@ -203,6 +204,7 @@ export function GlobalWebPage() {
                         onSort={sortBy}
                       />
                     ))}
+                    <OnchainHeader />
                     <th scope="col" className={`${TH} pr-4`}>
                       Top countries
                     </th>
@@ -230,6 +232,7 @@ export function GlobalWebPage() {
             <p className="text-caption text-fg-3" aria-live="polite">
               {formatCount(first?.total ?? 0)} {first?.total === 1 ? "project" : "projects"} match
             </p>
+            <ExportListButton view="web" state={state} resolved={resolved} rows={items.length} />
             {list.hasNextPage ? (
               <Button
                 variant="outline"
@@ -326,6 +329,7 @@ function WebRow({
           </span>
         ),
       )}
+      <OnchainCell s={p.onchain} />
       <td className={`${TD} pr-4 text-caption`}>
         {p.top.country.length === 0 ? (
           <Missing />

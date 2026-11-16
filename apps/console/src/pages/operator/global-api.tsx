@@ -37,6 +37,7 @@ import {
   TH,
   useSelection,
 } from "./global-shared";
+import { ExportListButton, OnchainCell, OnchainHeader } from "./onchain-parts";
 
 const DEFAULT_SORT: ApiSort = "requests";
 
@@ -198,6 +199,7 @@ export function GlobalApiPage() {
                         onSort={sortBy}
                       />
                     ))}
+                    <OnchainHeader />
                     <th scope="col" className={`${TH} pr-4`}>
                       Data source
                     </th>
@@ -224,6 +226,7 @@ export function GlobalApiPage() {
             <p className="text-caption text-fg-3" aria-live="polite">
               {formatCount(first?.total ?? 0)} {first?.total === 1 ? "project" : "projects"} match
             </p>
+            <ExportListButton view="api" state={state} resolved={resolved} rows={items.length} />
             {list.hasNextPage ? (
               <Button
                 variant="outline"
@@ -336,6 +339,7 @@ function ApiRow({
       )}
       {cell("services", p.services, formatCount(p.services))}
       {cell("routes", p.routes, formatCount(p.routes))}
+      <OnchainCell s={p.onchain} />
       <td className={`${TD} pr-4`}>
         <SourceBadge source={p.source} spanServices={p.span_services} services={p.services} />
       </td>

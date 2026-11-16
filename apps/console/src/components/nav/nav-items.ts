@@ -1,6 +1,7 @@
 import {
   Activity,
   BarChart3,
+  Blocks,
   Bot,
   FolderKanban,
   LayoutGrid,
@@ -20,7 +21,7 @@ export type NavItem = {
   match: (rest: string) => boolean;
 };
 
-// the project area, four places (system v2 C-Nav). sites live on the
+// the project area, five places (system v2 C-Nav). sites live on the
 // overview; members and privacy are settings.
 export function projectNav(id: string): NavItem[] {
   const base = `/projects/${id}`;
@@ -38,6 +39,13 @@ export function projectNav(id: string): NavItem[] {
       to: `${base}/api/traffic`,
       icon: Server,
       match: (r) => r.startsWith("api"),
+    },
+    {
+      key: "onchain",
+      label: "On-chain",
+      to: `${base}/onchain`,
+      icon: Blocks,
+      match: (r) => r.startsWith("onchain") || r.startsWith("scf-view"),
     },
     {
       key: "ai",
@@ -94,6 +102,11 @@ export function projectTabs(id: string, place: string) {
     return [
       { to: `${base}/api/traffic`, label: "Traffic" },
       { to: `${base}/api`, label: "Connect" },
+    ];
+  if (place === "onchain")
+    return [
+      { to: `${base}/onchain`, label: "Accounts and contracts" },
+      { to: `${base}/scf-view`, label: "What SCF sees" },
     ];
   if (place === "settings")
     return [

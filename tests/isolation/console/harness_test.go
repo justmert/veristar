@@ -39,6 +39,7 @@ import (
 	"golang.org/x/oauth2"
 
 	"github.com/justmert/veristar/db"
+	"github.com/justmert/veristar/internal/chain"
 	"github.com/justmert/veristar/internal/config"
 	"github.com/justmert/veristar/internal/controlplane"
 	"github.com/justmert/veristar/internal/controlplane/account"
@@ -46,11 +47,13 @@ import (
 	"github.com/justmert/veristar/internal/controlplane/auth"
 	"github.com/justmert/veristar/internal/controlplane/domaincheck"
 	"github.com/justmert/veristar/internal/controlplane/erasure"
+	"github.com/justmert/veristar/internal/controlplane/exports"
 	"github.com/justmert/veristar/internal/controlplane/identity"
 	"github.com/justmert/veristar/internal/controlplane/ingest"
 	"github.com/justmert/veristar/internal/controlplane/lifecycle"
 	"github.com/justmert/veristar/internal/controlplane/mcpserver"
 	"github.com/justmert/veristar/internal/controlplane/members"
+	"github.com/justmert/veristar/internal/controlplane/onchain"
 	"github.com/justmert/veristar/internal/controlplane/operator"
 	"github.com/justmert/veristar/internal/controlplane/otlptokens"
 	"github.com/justmert/veristar/internal/controlplane/provision"
@@ -292,13 +295,34 @@ func start(t *testing.T) *env {
 
 	memberRoutes, err := members.NewRoutes(scope, users)
 	require.NoError(t, err)
+	// the on-chain witness and the exports (contract 15 and 16) against a
+	// ledger api that knows no account: the gate's refusals come before
+	// any ledger read
+	ledger := httptest.NewServer(http.NotFoundHandler())
+	t.Cleanup(ledger.Close)
+	stellarCfg, err := config.LoadStellar(config.FromMap(map[string]string{
+		"STELLAR_HORIZON_URL": ledger.URL, "STELLAR_RPC_URL": ledger.URL,
+	}))
+	require.NoError(t, err)
+	horizon, rpc, err := chain.Sources(stellarCfg)
+	require.NoError(t, err)
+	onchainRoutes, err := onchain.NewRoutes(scope, horizon, rpc, time.Now)
+	require.NoError(t, err)
+	onchainOperator, err := operator.NewOnchain(e.conn, time.Now)
+	require.NoError(t, err)
+	operatorExports, err := operator.NewExports(global)
+	require.NoError(t, err)
+	overviewExport, err := exports.NewOverview(scope, time.Now)
+	require.NoError(t, err)
+	scfView, err := operator.NewSCFView(scope, e.conn, time.Now)
+	require.NoError(t, err)
 	// the mcp server (contract 12), wired as cmd/controlplane wires it
 	e.mcp, err = mcpserver.New(mcpserver.Config{
 		DB:    e.conn,
 		Guard: guard,
 		Reads: []mcpserver.Routes{
-			tenants.NewRoutes(scope), sites.NewRoutes(scope), metricRoutes,
-			controlplane.RoutesFunc(guard.Mount(review, global)),
+			tenants.NewRoutes(scope), sites.NewRoutes(scope), metricRoutes, onchainRoutes, scfView,
+			controlplane.RoutesFunc(guard.Mount(review, global, onchainOperator)),
 		},
 		Sessions: ssoH,
 		Umami:    e.umami.Client,
@@ -330,11 +354,14 @@ func start(t *testing.T) *env {
 			metricRoutes,
 			erasureRoutes,
 			snippet,
+			onchainRoutes,
+			overviewExport,
+			scfView,
 			controlplane.RoutesFunc(func(r chi.Router) { r.Method(http.MethodGet, ssoPath, ssoH) }),
 			e.mcp.TenantRoutes(scope),
 			e.mcp.ConsentRoutes(),
 			controlplane.RoutesFunc(guard.Mount(modeRoutes, keepRoutes, auditRoutes, actions, review, global, apiKeys,
-				e.mcp.OperatorRoutes())),
+				e.mcp.OperatorRoutes(), onchainOperator, operatorExports)),
 		},
 		Mounts: []controlplane.Mount{
 			{Path: operator.MachinePath, Handler: machine.Handler()},
