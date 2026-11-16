@@ -878,6 +878,9 @@ func testMachineAPI(t *testing.T, e *env, w *gateWorld, cat []route) {
 				   quarantined, proof_failures, net_access, net_organisation, net_hosting, net_anonymiser, net_unknown,
 				   networks, visitors, pageviews, baseline_visitors, baseline_days, reasons)
 				 values ($1, $2, current_date, 1, 'A', false, 60, 0, 0, 60, 0, 0, 0, 0, 3, 2, 5, null, 0, '[]')`,
+				// coverage rides on the integrity and daily answers (17.5)
+				`insert into agg.web_coverage_daily (site_id, tenant_id, day, script_requests, gpc_requests)
+				 values ($1, $2, current_date, 200, 20)`,
 			} {
 				_, err := c.Exec(context.Background(), q, site, tn)
 				require.NoError(t, err)
