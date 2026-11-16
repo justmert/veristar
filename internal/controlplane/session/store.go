@@ -22,6 +22,11 @@ import (
 // string so the gob codec needs no type registration.
 const userIDKey = "user_id"
 
+// signedInAtKey holds the unix second of the sign-in that started the
+// session, for checks that need a recent sign-in (the stepup package's
+// enrollment window).
+const signedInAtKey = "signed_in_at"
+
 // Store is an scs.CtxStore over cp.sessions. pgxstore cannot be used: its
 // sql is fixed to a token text column, while cp.sessions keeps only the
 // 32-byte sha-256 of the token and a user_id column, so a

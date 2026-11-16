@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/alexedwards/scs/v2"
@@ -99,6 +100,47 @@ func (m *Manager) SignIn(ctx context.Context, userID uuid.UUID) error {
 		return fmt.Errorf("session: renew token: %w", err)
 	}
 	m.scs.Put(ctx, userIDKey, userID.String())
+	m.scs.Put(ctx, signedInAtKey, strconv.FormatInt(time.Now().Unix(), 10))
+	return nil
+}
+
+// SignedInAt is when the session's sign-in happened; false for a session
+// without one.
+func (m *Manager) SignedInAt(ctx context.Context) (time.Time, bool) {
+	n, err := strconv.ParseInt(m.scs.GetString(ctx, signedInAtKey), 10, 64)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return time.Unix(n, 0), true
+}
+
+// Value reads a string the request's session holds under key, "" when
+// there is none. other packages keep their own state in the session
+// through Value, SetValue and RemoveValue (the stepup package's ceremony
+// state and step-up time); the keys are theirs to choose and must not be
+// userIDKey or signedInAtKey.
+func (m *Manager) Value(ctx context.Context, key string) string {
+	return m.scs.GetString(ctx, key)
+}
+
+// SetValue stores a string in the request's session. Load writes it with
+// the response.
+func (m *Manager) SetValue(ctx context.Context, key, value string) {
+	m.scs.Put(ctx, key, value)
+}
+
+// RemoveValue removes a value from the request's session.
+func (m *Manager) RemoveValue(ctx context.Context, key string) {
+	m.scs.Remove(ctx, key)
+}
+
+// Renew gives the session a new token and keeps its values, for a
+// privilege change inside a session (a step-up), so a token seen before
+// the change is worth nothing after it.
+func (m *Manager) Renew(ctx context.Context) error {
+	if err := m.scs.RenewToken(ctx); err != nil {
+		return fmt.Errorf("session: renew token: %w", err)
+	}
 	return nil
 }
 
@@ -210,5 +252,15 @@ func MustUser(ctx context.Context) (User, error) {
 // console, so membership and operator checks stay the console's own. the
 // caller must have read u from cp.users for this request.
 func WithUser(ctx context.Context, u User) context.Context {
-	return context.WithValue(ctx, userKey{}, u)
+	return context.WithValue(context.WithValue(ctx, userKey{}, u), credentialKey{}, true)
+}
+
+type credentialKey struct{}
+
+// ViaCredential reports whether the request's user came from WithUser (an
+// mcp credential) rather than a console session. a console step-up does not
+// apply to such a request: it has no session to record one on.
+func ViaCredential(ctx context.Context) bool {
+	v, _ := ctx.Value(credentialKey{}).(bool)
+	return v
 }
