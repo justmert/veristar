@@ -53,10 +53,14 @@ Patroni REST password, Umami database password, `APP_SECRET` and admin password,
 five platform role passwords, one NATS password per service user with its bcrypt hash,
 and the NATS route password with its hash, and for monitoring the Grafana admin
 password, the `postgres_exporter` password, the probe metrics token and the Gatus
-external-endpoint token. The hashes are generated once with the passwords, so the NATS
-server config does not change on every converge. A file made before the monitoring keys
-existed is refused by the `secrets` role, naming the missing key; add each with
-`sops edit` and a value from `openssl rand -hex 32`.
+external-endpoint token, and the usage report signing key pair (`report_signing_seed`, a
+Stellar secret seed, and `report_signing_key`, its public account id; generated with the
+`cryptography` package that ansible-core brings into the controller venv). The hashes are
+generated once with the passwords, so the NATS server config does not change on every
+converge. A file made before the monitoring keys existed is refused by the `secrets` role,
+naming the missing key; add each with `sops edit` and a value from `openssl rand -hex 32`. A
+file made before the report key existed gets the pair from `platformctl report keygen`, written
+with `sops set --value-file` ([secret rotation](../runbooks/secret-rotation.md#the-usage-report-signing-key)).
 
 Values you provide (read from the environment of `new-secrets.py`, never generated, left out
 when unset; [prerequisites.md](prerequisites.md) describes each):

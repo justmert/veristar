@@ -35,7 +35,8 @@ quarantined.
 Each row also carries the top five referrers, countries, devices and browsers over the range.
 
 Filters (all must hold): status, name or slug, domain verified, stellar.toml found, has web
-data in the range, has API data in the range, enrollment date range. Sort by any column,
+data in the range, has API data in the range, enrollment date range, and the cohort filters
+(below). Sort by any column,
 largest or smallest first; projects without a value for the sort column (a rate with no
 visits) come last either way.
 
@@ -54,6 +55,55 @@ One row per project.
 Sorting by requests in each direction finds the highest and lowest usage projects. Percentiles
 are never averaged across services or days; they are computed from bucket counts summed over
 exactly what the row covers.
+
+## Growth and percentiles
+
+Both tables carry five key metrics for every project: verified visitors (the primary band's
+visitors), page views, requests, error rate (requests answered 500 to 599 over all requests) and
+on-chain operations. For each one you see:
+
+- **Change**: the value against the previous period of equal length, the days just before the
+  range. For the four counts it is relative (`+50%` means one and a half times the previous
+  period); for the error rate it is the difference in percentage points. A project without a
+  previous value shows no change rather than an infinite one.
+- **Percentile**: the share of the cohort's projects, among those with a value, whose value is at
+  or below this project's. 100th means the largest value in the cohort. A project with no page
+  views, no requests or no on-chain operations has no percentile for that metric. For the error
+  rate, a higher percentile is a higher error rate.
+
+Sort by any change to find the fastest growing projects, or by any percentile. The percentiles
+come from the daily aggregates in SQL, in one snapshot with the rest of the table.
+
+## Cohorts
+
+SCF decides by program, round, category and award date, so every project carries those four
+values. SCF publishes no machine-readable directory of its awards, so they come from two sides:
+
+1. A project proposes them, at enrollment or later on its "What SCF sees" page.
+2. You confirm the proposal on the project's detail page, edit it before confirming, set the
+   values yourself, or dismiss the proposal. Only confirmed values count.
+
+Every proposal, confirmation, change and dismissal is in the audit log with the old and new
+values. Pending proposals are listed at the top of the project detail and in `GET
+/api/operator/cohorts`.
+
+The cohort filters (program, round, category, award date from and to) narrow both tables and set
+the population of the percentiles: with **Build Award** and **SCF #38** selected, every
+percentile is computed among the active and suspended projects confirmed in that program and
+round. The other filters never move a percentile: searching for one project still shows its place
+in the whole cohort. Without a cohort filter the population is every active and suspended
+project.
+
+## Award dates on the charts
+
+A project's confirmed award date is drawn as a vertical line on the compare charts and on the
+project's own charts, so growth after funding is visible at a glance. The compare CSV marks every
+day on or after the award date in its `after_award` column.
+
+## Threshold rules
+
+A rule states a traction threshold once, and the console lists the projects that meet it with
+the evidence. See [threshold rules](threshold-rules.md).
 
 ## Compare
 
@@ -81,7 +131,13 @@ Web numbers are copied from Umami's own answers once an hour, for today and the 
 before. API numbers come from the rolled-up hours and days, and hours not yet rolled up are
 computed from their minutes, so API answers do not wait for the rollup.
 
+## Exports
+
+Every table and comparison exports as CSV with the columns on screen, including the cohort, the
+previous values, the changes and the percentiles. The project sees its own row, cohort,
+percentiles and the rules it meets on its "What SCF sees" page, so nothing here is hidden scoring.
+
 ## The same numbers for machines
 
 The metrics API (`/api/metrics/v1/`, [api-keys.md](api-keys.md)) returns the same daily
-numbers as these views for downstream consumers.
+numbers as these views for downstream consumers, and the saved rules with their matches.

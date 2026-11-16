@@ -57,6 +57,10 @@ What each route returns:
   rates and p50, p95, p99 per tenant (and per route), the same numbers as the
   global API view. Data derived from sampled traces is marked with
   `source: span`.
+- `/rules`, `/rules/{rule_id}/matches`: the saved threshold rules and the
+  tenants that meet one, with the qualifying days and the integrity grade
+  ([threshold-rules.md](threshold-rules.md)). A key scoped to one tenant
+  evaluates that tenant only.
 
 Visitors are unique per UTC day and site, so visitors over several days are
 the sum of the daily numbers.

@@ -35,6 +35,8 @@ of an operator reads that one project only and never the operator tools.
 | `get_global_api_overview` | Global API: requests, 4xx and 5xx rates, p50, p95 and p99, services and routes per project |
 | `compare_tenants_web`, `compare_tenants_api` | Compare: up to five projects side by side with a point per UTC day |
 | `get_tenant_integrity` | the Integrity panel: one project's integrity grade over the range, with its reasons per site and day; `get_global_web_overview` carries each project's grade and sorts by it |
+| `list_cohorts` | the cohort filters: the confirmed programs, rounds and categories with their project counts, and the proposals waiting for you; both overviews filter by cohort and carry each project's change against the previous period and percentile in the cohort |
+| `list_threshold_rules`, `get_threshold_rule_matches` | Rules: the saved traction rules, and the projects that meet one with their qualifying days and integrity grade |
 
 Ranges are whole UTC days, both included, at most 366 days, the 30 days ending today by default.
 Sessions and raw events are never part of the operator view.
@@ -43,6 +45,8 @@ Sessions and raw events are never part of the operator view.
 
 - "Which ten projects had the most visitors in the last 30 days, and which had none?"
 - "List projects in review, and those with a verified domain but no web traffic."
+- "Which Build Award projects of SCF #38 grew their verified visitors fastest this month?"
+- "Which projects meet the rule 'steady web traction', and on which days?"
 - "Compare the API traffic of these three projects over the last quarter, with their busiest
   services."
 - "Which projects have a high share of quarantined or rejected web events?"

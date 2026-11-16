@@ -118,6 +118,10 @@
             "pages": ["onboarding/onchain"]
           },
           {
+            "group": "Reports",
+            "pages": ["onboarding/signed-reports"]
+          },
+          {
             "group": "AI assistants",
             "pages": ["onboarding/mcp"]
           },
@@ -137,6 +141,7 @@
               "operators/review-and-enrollment",
               "operators/removal",
               "operators/global-views",
+              "operators/threshold-rules",
               "operators/onchain-and-exports",
               "operators/reading-the-numbers",
               "operators/api-keys",
@@ -221,7 +226,12 @@
         "groups": [
           {
             "group": "Wire format and APIs",
-            "pages": ["reference/wire-v1", "reference/browser-proof", "reference/control-plane-api"]
+            "pages": [
+              "reference/wire-v1",
+              "reference/browser-proof",
+              "reference/control-plane-api",
+              "reference/usage-reports"
+            ]
           },
           {
             "group": "Metrics API",

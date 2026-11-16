@@ -58,6 +58,8 @@ file-backed stream. "Stored" means PostgreSQL.
 | `API_METRICS` | filtered metric batches: tenant, service, normalized route, method, status class and code, histogram buckets | queued | until stored, at most 7 days |
 | `api.*` | one-minute, hourly and daily rows of the same dimensions | stored | minutes `API_MINUTE_RETENTION_DAYS`, hours `API_HOURLY_RETENTION_MONTHS` (at least 24), days as long as the tenant exists |
 | Control plane (`cp.*`) | GitHub numeric id and login, and the Stellar account address of a wallet sign-in, of console users; session token hashes; tenants, sites, OTLP token hashes, audit log, erasure requests | stored | while the account or tenant exists; the audit log is append-only |
+| Control plane (`cp.tenant_cohorts`, `cp.threshold_rules`) | a project's SCF program, round, category and award date, confirmed and proposed, with the user ids of who proposed and confirmed them; the operators' saved threshold rules | stored | while the tenant exists; rules until an operator deletes them |
+| Control plane (`cp.usage_reports`) | signed usage reports: the canonical report (project aggregates, grade, cohort and percentiles), its signature, the user id of the member who created or revoked it, a view count and the time of the last view | stored | while the tenant exists; a revoked link answers no one; removal of the tenant deletes them |
 | Control plane (`cp.wallet_challenges_used`) | SHA-256 of the nonce of each used wallet sign-in challenge, with its expiry; no address and no account | stored | until the challenge expires (at most five minutes); the next wallet verification after that deletes it |
 
 No component stores an IP address or an autonomous system number. The privacy audit test (`tests/privacy/`)
@@ -120,6 +122,7 @@ day replaces the day's secrets, so visitors seen before it count again.
 | `api.metrics_minute` | `API_MINUTE_RETENTION_DAYS` | `jobs` task `api-retention` |
 | `api.metrics_hourly` | `API_HOURLY_RETENTION_MONTHS`, at least 24 | `jobs` task `api-retention` |
 | Control plane sessions | 7 days absolute, 24 hours idle | `jobs` task `session-prune` |
+| `cp.usage_reports` | while the tenant exists | deleted with the tenant row; a removed tenant's links answer 404 at once |
 
 `jobs retain-web` deletes Umami `website_event`, `event_data` and the disabled
 features' per-event tables by `created_at`, then sessions that have no event
@@ -336,4 +339,30 @@ unless `removal_keep_aggregates`, its daily counts.
 Requests to the ledger APIs carry public ids only, never data about an end
 user of a project, so the API providers receive no personal data and are not
 sub-processors.
+
+## 12. Signed usage reports and cohorts
+
+A member of a project can create a signed usage report of the project
+(contract section 20) and share it by link. A report holds aggregates only:
+project totals and daily sums of web, API and on-chain activity, the integrity
+grade and its reasons, the project's cohort and its percentiles in it, and the
+method versions. No visitor token, address, user agent, session, event, route
+of a single request, counterparty or member of the project is in a report;
+the generation reads the same aggregate tables the operator views read, and
+the report's format admits nothing else (`internal/controlplane/reports`).
+
+The link is a 128-bit random id. Opening it needs no account and stores no
+trait of the reader: the view count increases and an audit row with the actor
+`public` is written, nothing else. The project revokes a link at any time;
+removing the project makes every link answer 404 at once. A shared report is a
+copy in the hands of whoever received the file; revoking the link does not
+recall a downloaded file, and the project decides whom it gives a link to.
+
+The cohort of a project (program, round, category and award date) is
+business data of the project, not personal data. The user id of the member who
+proposed it and of the operator who confirmed it is kept for the audit, like
+every other change in the console.
+
+The report signing key signs reports only. It is a Stellar key that holds no
+funds and signs no transaction; its public account id is published.
 

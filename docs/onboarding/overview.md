@@ -50,6 +50,12 @@ To sign in with GitHub or a Stellar wallet, and to link both to one account, see
 | [What gets dropped](api/what-gets-dropped.md) | which of your data the platform keeps and which it discards |
 | [Troubleshooting](api/troubleshooting.md) | no data, refused requests, odd numbers |
 
+## Reports
+
+| Guide | For |
+|---|---|
+| [Share a signed report](signed-reports.md) | a signed, shareable report of your usage for an SCF submission, verifiable by anyone |
+
 ## How the guides are tested
 
 Each guide is backed by an example that runs in the test suites:

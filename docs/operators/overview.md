@@ -12,7 +12,8 @@ members of any project and have no access to a project's own web dashboard.
 |---|---|
 | [review-and-enrollment.md](review-and-enrollment.md) | The review queue, approving and rejecting projects and sites, suspending and resuming, and the switch between open and approval-required enrollment |
 | [removal.md](removal.md) | Removing a project that is not part of the ecosystem, what is deleted, and the setting that keeps or deletes its aggregates |
-| [global-views.md](global-views.md) | The Global web, Global API and Compare pages: ranges, filters, sorting and side-by-side comparison |
+| [global-views.md](global-views.md) | The Global web, Global API and Compare pages: ranges, filters, sorting, growth, cohorts, percentiles and side-by-side comparison |
+| [threshold-rules.md](threshold-rules.md) | Saved traction rules and the projects that meet them, with the evidence |
 | [reading-the-numbers.md](reading-the-numbers.md) | What bands, daily-unique visitors and span-derived API data mean, and how to compare projects fairly |
 | [api-keys.md](api-keys.md) | Keys for machine consumers of the metrics API: create, use, revoke, usage |
 | [mcp.md](mcp.md) | Connecting an AI client to the operator view through the MCP server |
