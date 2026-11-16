@@ -128,6 +128,8 @@ type ProjectTotals struct {
 	Operations   int64 `json:"operations"`
 	Transactions int64 `json:"transactions"`
 	DaysMissing  int   `json:"days_missing"`
+	// weekly active accounts over the iso weeks of the range
+	WeeklyActive WeeklyActive `json:"weekly_active_accounts"`
 }
 
 // Sources names the ledger apis behind the numbers (contract 15.2).
@@ -146,7 +148,10 @@ type View struct {
 	Sources Sources       `json:"sources"`
 	Totals  ProjectTotals `json:"totals"`
 	IDs     []ID          `json:"ids"`
-	Link    Link          `json:"link"`
+	// the iso weeks whole inside the range, with their weekly active
+	// accounts
+	Weeks []Week `json:"weeks"`
+	Link  Link   `json:"link"`
 }
 
 // DefaultSources are the sources of the stored rows.
@@ -309,6 +314,12 @@ func Load(ctx context.Context, tx pgx.Tx, sites string, tenant uuid.UUID, rg Ran
 		v.Totals.DaysMissing += x.Totals.DaysMissing
 		v.IDs = append(v.IDs, x)
 	}
+	weeks, err := Weeks(ctx, tx, []uuid.UUID{tenant}, rg, today)
+	if err != nil {
+		return v, err
+	}
+	v.Weeks = weeks[tenant]
+	v.Totals.WeeklyActive = SumWeeks(v.Weeks)
 	link, err := loadLink(ctx, tx, sites, tenant, ids)
 	if err != nil {
 		return v, err
@@ -328,14 +339,20 @@ type Summary struct {
 	DaysMissing int64 `json:"days_missing"`
 	// ids whose last read failed
 	IDsFailing int64 `json:"ids_failing"`
+	// weekly active accounts over the iso weeks of the range
+	WeeklyActive WeeklyActive `json:"weekly_active_accounts"`
 }
 
 // Summaries reads the on-chain summary of every tenant in tenants over rg.
 // a tenant without ids gets a zero summary.
 func Summaries(ctx context.Context, tx pgx.Tx, tenants []uuid.UUID, rg Range, today time.Time) (map[uuid.UUID]Summary, error) {
 	out := make(map[uuid.UUID]Summary, len(tenants))
+	weeks, err := Weeks(ctx, tx, tenants, rg, today)
+	if err != nil {
+		return nil, err
+	}
 	for _, id := range tenants {
-		out[id] = Summary{}
+		out[id] = Summary{WeeklyActive: SumWeeks(weeks[id])}
 	}
 	if len(tenants) == 0 {
 		return out, nil
@@ -382,6 +399,7 @@ func Summaries(ctx context.Context, tx pgx.Tx, tenants []uuid.UUID, rg Range, to
 		if err := rows.Scan(&id, &s.IDs, &s.IDsVerified, &s.Operations, &s.Transactions, &s.DaysMissing, &s.IDsFailing); err != nil {
 			return nil, fmt.Errorf("onchain: summaries: %w", err)
 		}
+		s.WeeklyActive = out[id].WeeklyActive
 		out[id] = s
 	}
 	return out, rows.Err()
@@ -442,4 +460,127 @@ func DailyTotals(ctx context.Context, tx pgx.Tx, tenants []uuid.UUID, rg Range) 
 // kinds lists the strkeys of rows of one kind.
 func kinds(rows []idRow, kind string) []idRow {
 	return slices.DeleteFunc(slices.Clone(rows), func(r idRow) bool { return r.Kind != kind })
+}
+
+// reasons a week has no weekly active accounts, next to the ones the
+// chain-activity task stores when it closes a week (no_verified_ids,
+// not_read_yet, day_over_read_cap, before_source_history and read errors)
+const (
+	MissingWeekNotComplete = "week_not_complete"
+	MissingWeekNotCounted  = "week_not_counted"
+)
+
+// Week is one iso week (utc) of a project's weekly active accounts: the
+// distinct accounts that initiated at least one operation involving the
+// project's verified accounts and contracts. a week without a count has
+// the reason in Missing; a stored zero is a real zero.
+type Week struct {
+	// Week is the iso week, such as 2026-W46
+	Week           string  `json:"week"`
+	From           string  `json:"from"`
+	To             string  `json:"to"`
+	ActiveAccounts *int64  `json:"active_accounts"`
+	Missing        *string `json:"missing"`
+}
+
+// WeeklyActive sums the weeks of a range: the mean of the counted weeks,
+// as the scf growth hack averages weekly active accounts, and how many
+// weeks are counted and missing. Average is null when no week is counted.
+type WeeklyActive struct {
+	Average      *float64 `json:"average"`
+	Latest       *int64   `json:"latest"`
+	WeeksCounted int      `json:"weeks_counted"`
+	WeeksMissing int      `json:"weeks_missing"`
+}
+
+// WeekLabel is the iso week of a monday, such as 2026-W46.
+func WeekLabel(monday time.Time) string {
+	y, w := monday.ISOWeek()
+	return fmt.Sprintf("%d-W%02d", y, w)
+}
+
+// RangeWeeks lists the mondays of the iso weeks that lie whole inside rg.
+func RangeWeeks(rg Range) []time.Time {
+	m := rg.From.AddDate(0, 0, (8-int(rg.From.Weekday()))%7)
+	var out []time.Time
+	for ; !m.AddDate(0, 0, 6).After(rg.To); m = m.AddDate(0, 0, 7) {
+		out = append(out, m)
+	}
+	return out
+}
+
+// Weeks reads the weekly active accounts of every tenant for the iso weeks
+// whole inside rg. today is the current utc day; a week that ends today or
+// later is not complete.
+func Weeks(ctx context.Context, tx pgx.Tx, tenants []uuid.UUID, rg Range, today time.Time) (map[uuid.UUID][]Week, error) {
+	mondays := RangeWeeks(rg)
+	out := make(map[uuid.UUID][]Week, len(tenants))
+	for _, id := range tenants {
+		ws := make([]Week, len(mondays))
+		for i, m := range mondays {
+			reason := MissingWeekNotCounted
+			if !m.AddDate(0, 0, 6).Before(today) {
+				reason = MissingWeekNotComplete
+			}
+			ws[i] = Week{Week: WeekLabel(m), From: m.Format(time.DateOnly), To: m.AddDate(0, 0, 6).Format(time.DateOnly), Missing: &reason}
+		}
+		out[id] = ws
+	}
+	if len(tenants) == 0 || len(mondays) == 0 {
+		return out, nil
+	}
+	rows, err := tx.Query(ctx, `
+		select tenant_id, week, active_accounts, missing, closed_at is not null
+		from agg.chain_weeks
+		where tenant_id = any($1::uuid[]) and week between $2::date and $3::date`,
+		tenants, mondays[0], mondays[len(mondays)-1])
+	if err != nil {
+		return nil, fmt.Errorf("onchain: weeks: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id uuid.UUID
+		var week time.Time
+		var n *int64
+		var missing *string
+		var closed bool
+		if err := rows.Scan(&id, &week, &n, &missing, &closed); err != nil {
+			return nil, fmt.Errorf("onchain: weeks: %w", err)
+		}
+		i := int(week.Sub(mondays[0]).Hours() / 24 / 7)
+		ws := out[id]
+		if i < 0 || i >= len(ws) {
+			return nil, fmt.Errorf("onchain: week %s outside the range", week.Format(time.DateOnly))
+		}
+		switch {
+		case closed:
+			ws[i].ActiveAccounts, ws[i].Missing = n, missing
+		case week.AddDate(0, 0, 6).Before(today):
+			// over, and still waiting for days that failed to read
+			r := chainactivity.MissingNotReadYet
+			ws[i].Missing = &r
+		}
+	}
+	return out, rows.Err()
+}
+
+// SumWeeks is the WeeklyActive of a list of weeks.
+func SumWeeks(ws []Week) WeeklyActive {
+	var out WeeklyActive
+	var sum int64
+	for _, w := range ws {
+		if w.ActiveAccounts == nil {
+			out.WeeksMissing++
+			continue
+		}
+		out.WeeksCounted++
+		sum += *w.ActiveAccounts
+		v := *w.ActiveAccounts
+		out.Latest = &v
+	}
+	if out.WeeksCounted > 0 {
+		avg := float64(sum) / float64(out.WeeksCounted)
+		out.Average = &avg
+	}
+	return out
 }

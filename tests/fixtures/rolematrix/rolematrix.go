@@ -109,6 +109,13 @@ var Want = map[string]map[db.Role]string{
 	// tenant (its own rows) and operators
 	"agg.chain_daily": {db.RoleCPTenant: "r", db.RoleCPOperator: "r", db.RoleJobs: "rawd"},
 	"agg.chain_reads": {db.RoleCPTenant: "r", db.RoleCPOperator: "r", db.RoleJobs: "rawd"},
+	// the weeks without their key column; the keyed hashes are jobs' only
+	"agg.chain_weeks": {
+		db.RoleCPTenant:   "r(active_accounts,closed_at,created_at,missing,tenant_id,week)",
+		db.RoleCPOperator: "r(active_accounts,closed_at,created_at,missing,tenant_id,week)",
+		db.RoleJobs:       "rawd",
+	},
+	"agg.chain_week_members": {db.RoleJobs: "rawd"},
 	// integrity (00033): the grades are read by the tenant (its own rows)
 	// and operators; edgestats and integrity write the evidence and network
 	// rows behind them, and cp_system deletes those in a purge

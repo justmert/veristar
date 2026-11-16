@@ -27,6 +27,8 @@ func (d dayRange) onchain() onchain.Range { return onchain.Range{From: d.From, T
 type CompareOnchain struct {
 	Totals onchain.Summary    `json:"totals"`
 	Series []onchain.DayTotal `json:"series"`
+	// weekly active accounts per iso week whole inside the range
+	Weeks []onchain.Week `json:"weeks"`
 }
 
 func compareOnchain(ctx context.Context, tx pgx.Tx, ids []uuid.UUID, rg dayRange, now time.Time) (map[uuid.UUID]CompareOnchain, error) {
@@ -38,9 +40,13 @@ func compareOnchain(ctx context.Context, tx pgx.Tx, ids []uuid.UUID, rg dayRange
 	if err != nil {
 		return nil, err
 	}
+	weeks, err := onchain.Weeks(ctx, tx, ids, rg.onchain(), utcDay(now))
+	if err != nil {
+		return nil, err
+	}
 	out := make(map[uuid.UUID]CompareOnchain, len(ids))
 	for _, id := range ids {
-		out[id] = CompareOnchain{Totals: sums[id], Series: series[id]}
+		out[id] = CompareOnchain{Totals: sums[id], Series: series[id], Weeks: weeks[id]}
 	}
 	return out, nil
 }
