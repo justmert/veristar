@@ -310,3 +310,30 @@ already shows them.
   creation, expiry, last use and revocation. For each tool call: an audit row
   with the tool, outcome, duration, user and project, never the arguments or
   the answer.
+
+## 11. On-chain activity
+
+A project can declare the Stellar accounts and Soroban contracts it operates
+(contract section 15). Ledger data is public: every Horizon or Stellar RPC
+client reads the same records. Veristar stores:
+
+- the declared ids, their kind and when they were declared;
+- the proof of control of each: the method, when it held, the verified account
+  a contract was proven through, and the transaction hash or storage key a
+  contract proof read. A pending challenge holds a random nonce for 30
+  minutes. No signature is stored;
+- per id, the account's home domain and the read state of the daily job;
+- per id and UTC day, three counts: operations, transactions and distinct
+  counterparties.
+
+No counterparty address, transaction, amount or memo is stored, so no store
+holds a list of who interacted with a project. An id can belong to a person
+(a wallet); it is declared by the project's own members, it is public on the
+ledger already, and it is shown to the project's members and to operators only.
+Removing an id hides its rows; removing the project deletes its read state and,
+unless `removal_keep_aggregates`, its daily counts.
+
+Requests to the ledger APIs carry public ids only, never data about an end
+user of a project, so the API providers receive no personal data and are not
+sub-processors.
+

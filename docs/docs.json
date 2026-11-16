@@ -114,6 +114,10 @@
             ]
           },
           {
+            "group": "On-chain",
+            "pages": ["onboarding/onchain"]
+          },
+          {
             "group": "AI assistants",
             "pages": ["onboarding/mcp"]
           },
@@ -133,6 +137,7 @@
               "operators/review-and-enrollment",
               "operators/removal",
               "operators/global-views",
+              "operators/onchain-and-exports",
               "operators/reading-the-numbers",
               "operators/api-keys",
               "operators/mcp",
@@ -233,6 +238,7 @@
               "reference/collector",
               "reference/api-storage",
               "reference/geo",
+              "reference/onchain-sources",
               "reference/umami-contract"
             ]
           }

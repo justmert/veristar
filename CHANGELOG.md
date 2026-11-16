@@ -18,6 +18,39 @@ here, before they take effect, as the processing terms require
 
 ### Added
 
+- On-chain witness: a project declares the Stellar accounts and Soroban
+  contracts it operates (the G and C ids of its enrollment answers are copied
+  in), proves control of each, and gets their daily operations, transactions
+  and distinct counterparties next to its web and API usage. Accounts are read
+  from Horizon, contracts from the events they emit through Stellar RPC, by the
+  hourly jobs task `chain-activity`, which paces its requests and backs off on
+  429 and 5xx. A day it could not read is stored as missing with its reason,
+  never as zero. Accounts are proven by a SEP-53 signed message from a wallet
+  or a `veristar` data entry; contracts through a verified account that their
+  instance storage names as admin or owner, or that deployed them, checked by
+  recomputing the contract id. The view also checks the two-way SEP-1 link:
+  the verified domain's stellar.toml lists the account in `ACCOUNTS` with
+  `ORG_URL` on the domain, and the account's home domain is the domain
+  ([docs/onboarding/onchain.md](docs/onboarding/onchain.md),
+  [docs/reference/onchain-sources.md](docs/reference/onchain-sources.md),
+  [docs/reference/control-plane-api.md](docs/reference/control-plane-api.md)
+  section 15). Migration 00032.
+- The operator views show an on-chain column in Global web and Global API, an
+  on-chain section in Compare and in the project detail, and the machine API
+  serves `/api/metrics/v1/onchain/ids` and `/api/metrics/v1/onchain/daily`.
+  MCP tools `get_onchain_activity`, `get_scf_view` and `get_tenant_onchain`
+  ([docs/operators/onchain-and-exports.md](docs/operators/onchain-and-exports.md)).
+- CSV exports: Global web, Global API and both compare views export exactly
+  the rows, range, filters and order on screen, and a project exports its
+  overview's daily web, API and on-chain numbers. The server streams each file
+  through the role and row-level security of the view it mirrors, and writes
+  an `export.csv` audit row (section 16).
+- **What SCF sees**: each project reads its own row of the operator views,
+  its integrity grade and on-chain summary, computed by the operator views'
+  queries for the same range (section 16.3).
+- The stellar.toml signal keeps the valid accounts of `ACCOUNTS` (at most 50)
+  as `accounts`.
+
 - Wallet sign-in: the console's sign-in page offers **Continue with a Stellar
   wallet** next to GitHub. The wallet signs a SEP-10 challenge for the public
   network that is bound to the console's host, expires after five minutes and
@@ -89,6 +122,13 @@ here, before they take effect, as the processing terms require
   in its registry entry.
 
 ### Upgrade notes
+
+- Optional configuration of the on-chain witness, for the control plane and
+  the jobs process: `STELLAR_HORIZON_URL` (default
+  `https://horizon.stellar.org`), `STELLAR_RPC_URL` (default
+  `https://mainnet.sorobanrpc.com`), `STELLAR_HORIZON_RPS` (default 0.8) and
+  `STELLAR_RPC_RPS` (default 2). Both processes need outbound HTTPS to the two
+  hosts. Removal now runs a `chain` purge step after `agg`.
 
 - Roll out the jobs and the control plane before the gateways. The gateways
   now send evidence counters on `EDGE_STATS` that an older jobs daemon refuses
