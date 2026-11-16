@@ -21,7 +21,7 @@ import (
 // Prefix is the path of the operator area under /api.
 const Prefix = "/operator"
 
-// roles of the roster (00040)
+// roles of the roster (00041)
 const (
 	RoleOperator      = "operator"
 	RoleOperatorAdmin = "operator_admin"
@@ -36,7 +36,7 @@ type Routes interface {
 
 // Guard decides who is an operator (contract 5.1): the account's
 // cp.users.is_operator, which the database derives from the active rows of
-// the roster (cp.operators, 00040) in the transaction that changes them, and
+// the roster (cp.operators, 00041) in the transaction that changes them, and
 // read on every request by session.RequireUser. a suspended or removed
 // operator is refused at the next request.
 type Guard struct {
