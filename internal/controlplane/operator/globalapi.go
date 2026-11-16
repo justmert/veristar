@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/justmert/veristar/internal/controlplane/httpx"
+	"github.com/justmert/veristar/internal/controlplane/onchain"
 )
 
 const apiProjectsRoute = "operator-api-projects"
@@ -160,6 +161,8 @@ type APIProject struct {
 	SpanServices int64   `json:"span_services"`
 	Source       *string `json:"source"`
 	Lossy        bool    `json:"lossy"`
+	// the on-chain column (contract 15.7)
+	Onchain onchain.Summary `json:"onchain"`
 }
 
 func (g *Global) apiProjects(w http.ResponseWriter, r *http.Request) error {
@@ -207,6 +210,17 @@ func (g *Global) apiProjects(w http.ResponseWriter, r *http.Request) error {
 			items = items[:lq.Limit]
 			out.NextCursor = lq.nextCursor(apiProjectsRoute, lq.Offset+lq.Limit)
 		}
+		ids := make([]uuid.UUID, len(items))
+		for i, p := range items {
+			ids[i] = p.Tenant.ID
+		}
+		chainSums, err := onchain.Summaries(ctx, tx, ids, lq.Range.onchain(), utcDay(g.now()))
+		if err != nil {
+			return err
+		}
+		for i := range items {
+			items[i].Onchain = chainSums[items[i].Tenant.ID]
+		}
 		out.Items = items
 		return nil
 	})
@@ -245,10 +259,11 @@ type APITotals struct {
 
 // APICompareProject is one project of GET /api/operator/api/compare.
 type APICompareProject struct {
-	Tenant   TenantRef    `json:"tenant"`
-	Totals   APITotals    `json:"totals"`
-	Series   []APIPoint   `json:"series"`
-	Services []APIService `json:"services"`
+	Tenant   TenantRef      `json:"tenant"`
+	Totals   APITotals      `json:"totals"`
+	Series   []APIPoint     `json:"series"`
+	Services []APIService   `json:"services"`
+	Onchain  CompareOnchain `json:"onchain"`
 }
 
 // APICompare is the answer of GET /api/operator/api/compare (contract 8.6).
@@ -304,8 +319,12 @@ func (g *Global) apiCompare(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
+		chainOf, err := compareOnchain(ctx, tx, ids, rg, g.now())
+		if err != nil {
+			return err
+		}
 		for _, t := range tenants {
-			p := APICompareProject{Tenant: t, Totals: totals[t.ID], Series: series[t.ID], Services: services[t.ID]}
+			p := APICompareProject{Tenant: t, Totals: totals[t.ID], Series: series[t.ID], Services: services[t.ID], Onchain: chainOf[t.ID]}
 			if p.Services == nil {
 				p.Services = []APIService{}
 			}

@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/justmert/veristar/internal/controlplane/httpx"
+	"github.com/justmert/veristar/internal/controlplane/onchain"
 )
 
 const webProjectsRoute = "operator-web-projects"
@@ -99,6 +100,8 @@ type WebProject struct {
 	IngestRejected      int64                 `json:"ingest_rejected"`
 	RejectedShare       *float64              `json:"rejected_share"`
 	Top                 map[string][]KeyValue `json:"top"`
+	// the on-chain column (contract 15.7)
+	Onchain onchain.Summary `json:"onchain"`
 }
 
 // KeyValue is one value of a breakdown: umami's x and the sum of its daily y.
@@ -161,6 +164,13 @@ func (g *Global) webProjects(w http.ResponseWriter, r *http.Request) error {
 		}
 		for i := range items {
 			items[i].Top = tops[items[i].Tenant.ID].items
+		}
+		chainSums, err := onchain.Summaries(ctx, tx, ids, lq.Range.onchain(), utcDay(g.now()))
+		if err != nil {
+			return err
+		}
+		for i := range items {
+			items[i].Onchain = chainSums[items[i].Tenant.ID]
 		}
 		out.Items = items
 		return nil
@@ -278,6 +288,7 @@ type WebCompareProject struct {
 	Totals     WebTotals            `json:"totals"`
 	Series     []WebPoint           `json:"series"`
 	Breakdowns map[string]Breakdown `json:"breakdowns"`
+	Onchain    CompareOnchain       `json:"onchain"`
 }
 
 // WebCompare is the answer of GET /api/operator/web/compare (contract 8.4).
@@ -329,8 +340,12 @@ func (g *Global) webCompare(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
+		chainOf, err := compareOnchain(ctx, tx, ids, rg, g.now())
+		if err != nil {
+			return err
+		}
 		for _, t := range tenants {
-			p := WebCompareProject{Tenant: t, Series: series[t.ID], Breakdowns: map[string]Breakdown{}}
+			p := WebCompareProject{Tenant: t, Series: series[t.ID], Breakdowns: map[string]Breakdown{}, Onchain: chainOf[t.ID]}
 			for _, pt := range p.Series {
 				if !pt.Aggregated {
 					continue

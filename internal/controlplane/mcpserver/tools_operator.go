@@ -21,6 +21,8 @@ How to work:
 	`visitors, visits, bounce rate, visit duration, top referrers, countries, devices, browsers) or API metrics ` +
 	`(requests, error rates, latency percentiles, services, routes), with filters, sorting and pages.
 3. compare_tenants_web and compare_tenants_api put up to five projects side by side with daily series.
+4. get_tenant_onchain returns one project's declared Stellar accounts and contracts, their proofs and daily ledger ` +
+	`activity; the overviews and compares carry an onchain summary per project.
 
 Ranges are whole UTC days (from, to, both included, at most 366 days, default the 30 days ending today). The views ` +
 	`read daily aggregates only, never sessions. API latency percentiles are estimated from histogram buckets.`
@@ -327,4 +329,5 @@ func (s *Server) addOperatorTools(srv *mcp.Server) {
 		}
 		return s.operatorRead(ctx, p, "/api/compare", q)
 	})
+	s.addOnchainOperatorTools(srv)
 }

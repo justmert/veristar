@@ -24,6 +24,7 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 
 	"github.com/justmert/veristar/internal/alertmanager"
+	"github.com/justmert/veristar/internal/chain"
 	"github.com/justmert/veristar/internal/config"
 	"github.com/justmert/veristar/internal/controlplane"
 	"github.com/justmert/veristar/internal/controlplane/account"
@@ -31,10 +32,12 @@ import (
 	"github.com/justmert/veristar/internal/controlplane/auth"
 	"github.com/justmert/veristar/internal/controlplane/domaincheck"
 	"github.com/justmert/veristar/internal/controlplane/erasure"
+	"github.com/justmert/veristar/internal/controlplane/exports"
 	"github.com/justmert/veristar/internal/controlplane/ingest"
 	"github.com/justmert/veristar/internal/controlplane/lifecycle"
 	"github.com/justmert/veristar/internal/controlplane/mcpserver"
 	"github.com/justmert/veristar/internal/controlplane/members"
+	"github.com/justmert/veristar/internal/controlplane/onchain"
 	"github.com/justmert/veristar/internal/controlplane/operator"
 	"github.com/justmert/veristar/internal/controlplane/otlptokens"
 	"github.com/justmert/veristar/internal/controlplane/provision"
@@ -128,6 +131,8 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 	retention, _ := config.LoadAPIRetention(env)
 	erasureCfg, _ := config.LoadErasure(env)
 	amCfg, _ := config.LoadAlertmanager(env)
+	// ledger apis of the on-chain proofs (contract 15.4)
+	stellarCfg, _ := config.LoadStellar(env)
 	cfg, err := config.LoadControlPlane(env)
 	if err != nil {
 		return err
@@ -290,6 +295,32 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	// the on-chain witness (contract 15) and the exports and scf view
+	// (contract 16)
+	horizon, rpc, err := chain.Sources(stellarCfg)
+	if err != nil {
+		return err
+	}
+	onchainRoutes, err := onchain.NewRoutes(scope, horizon, rpc, time.Now)
+	if err != nil {
+		return err
+	}
+	onchainOperator, err := operator.NewOnchain(d, time.Now)
+	if err != nil {
+		return err
+	}
+	operatorExports, err := operator.NewExports(global)
+	if err != nil {
+		return err
+	}
+	overviewExport, err := exports.NewOverview(scope, time.Now)
+	if err != nil {
+		return err
+	}
+	scfView, err := operator.NewSCFView(scope, d, time.Now)
+	if err != nil {
+		return err
+	}
 
 	// erasure: runs started by requests finish before the pools close
 	eraser, err := erasure.New(erasure.Config{
@@ -342,8 +373,8 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 		DB:    d,
 		Guard: guard,
 		Reads: []mcpserver.Routes{
-			tenants.NewRoutes(scope), sites.NewRoutes(scope), metricRoutes,
-			controlplane.RoutesFunc(guard.Mount(review, global)),
+			tenants.NewRoutes(scope), sites.NewRoutes(scope), metricRoutes, onchainRoutes, scfView,
+			controlplane.RoutesFunc(guard.Mount(review, global, onchainOperator)),
 		},
 		Sessions: ssoH,
 		Umami:    umamiClient,
@@ -382,6 +413,9 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 			metricRoutes,
 			erasureRoutes,
 			snippets,
+			onchainRoutes,
+			overviewExport,
+			scfView,
 			// behind RequireUser like every private group; sso answers its own
 			// failures with a redirect, but an anonymous request gets 401
 			controlplane.RoutesFunc(func(r chi.Router) { r.Method(http.MethodGet, ssoPath, ssoH) }),
@@ -390,7 +424,7 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 			mcpSrv.TenantRoutes(scope),
 			mcpSrv.ConsentRoutes(),
 			controlplane.RoutesFunc(guard.Mount(modeRoutes, keepRoutes, auditRoutes, actions, review, global, apiKeys, alertRoutes,
-				mcpSrv.OperatorRoutes())),
+				mcpSrv.OperatorRoutes(), onchainOperator, operatorExports)),
 		},
 		// keys only: no session middleware runs there (contract 9.1); the
 		// mcp endpoint and its oauth server authenticate by bearer
