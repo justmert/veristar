@@ -51,8 +51,8 @@ type CpOperator struct {
 type CpOperatorPasskey struct {
 	ID           uuid.UUID
 	UserID       uuid.UUID
-	CredentialID []byte
-	Credential   []byte
+	CredentialID string
+	PublicKey    []byte
 	Name         string
 	CreatedAt    time.Time
 	LastUsedAt   *time.Time

@@ -8,7 +8,6 @@ package stepuptest
 import (
 	"encoding/json"
 	"net/http"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -22,12 +21,10 @@ import (
 	"github.com/justmert/veristar/tests/fixtures/webauthnsoft"
 )
 
-// Origin is the console origin of a test server for the relying party.
-// webauthn refuses an ip address as relying party id, so httptest's
-// 127.0.0.1 is named localhost; the step-up compares origins only, not the
-// address the request came in on.
+// Origin is the console origin of a test server, which the relying party
+// checks answers against.
 func Origin(srvURL string) string {
-	return strings.Replace(srvURL, "127.0.0.1", "localhost", 1)
+	return srvURL
 }
 
 // Guard bootstraps the roster with ops, as cmd/controlplane does at start,
@@ -38,7 +35,7 @@ func Guard(t testing.TB, d *db.DB, sessions stepup.Sessions, srvURL string, ops 
 	if _, err := operator.Bootstrap(t.Context(), d, ops, time.Hour, time.Now()); err != nil {
 		t.Fatal(err)
 	}
-	s, err := stepup.New(stepup.Config{ConsoleOrigin: Origin(srvURL), MaxAge: time.Hour, EnrollWindow: time.Hour}, d, sessions)
+	s, err := stepup.New(stepup.Config{ConsoleOrigin: srvURL, MaxAge: time.Hour, EnrollWindow: time.Hour}, d, sessions)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,30 +73,32 @@ func (k *Keys) StepUp(t testing.TB, user uuid.UUID, origin string, call Call) {
 		if key, err = webauthnsoft.New(); err != nil {
 			t.Fatal(err)
 		}
-		st, opts := call(http.MethodPost, "/api/operator/passkeys/options", map[string]any{})
+		st, c := call(http.MethodPost, "/api/operator/passkeys/challenge", map[string]any{})
 		if st != http.StatusOK {
-			t.Fatalf("passkey options: %d %s", st, opts)
+			t.Fatalf("passkey challenge: %d %s", st, c)
 		}
-		cred, err := key.Register(opts, origin)
+		answer, err := key.Answer(c, origin)
 		if err != nil {
 			t.Fatal(err)
 		}
-		st, b := call(http.MethodPost, "/api/operator/passkeys", map[string]any{"name": "test key", "credential": cred})
+		answer["name"] = "test key"
+		answer["public_key"] = key.PublicKey()
+		st, b := call(http.MethodPost, "/api/operator/passkeys", answer)
 		if st != http.StatusCreated {
 			t.Fatalf("register passkey: %d %s", st, b)
 		}
 		k.keys[user] = key
 		return
 	}
-	st, opts := call(http.MethodPost, "/api/operator/step-up/options", map[string]any{})
+	st, c := call(http.MethodPost, "/api/operator/step-up/challenge", map[string]any{})
 	if st != http.StatusOK {
-		t.Fatalf("step-up options: %d %s", st, opts)
+		t.Fatalf("step-up challenge: %d %s", st, c)
 	}
-	cred, err := key.Assert(opts, origin)
+	answer, err := key.Answer(c, origin)
 	if err != nil {
 		t.Fatal(err)
 	}
-	st, b := call(http.MethodPost, "/api/operator/step-up", map[string]any{"credential": cred})
+	st, b := call(http.MethodPost, "/api/operator/step-up", answer)
 	if st != http.StatusOK {
 		t.Fatalf("step-up: %d %s", st, b)
 	}

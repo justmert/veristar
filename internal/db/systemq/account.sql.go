@@ -96,19 +96,21 @@ const accountDeleteRoster = `-- name: AccountDeleteRoster :many
 delete from cp.operators
 where ($1::bigint is not null and github_id = $1::bigint)
    or ($2::text is not null and stellar_address = $2::text)
+   or ($3::text is not null and stellar_address = $3::text)
 returning id
 `
 
 type AccountDeleteRosterParams struct {
 	GithubID       *int64
 	StellarAddress *string
+	PasskeyAddress *string
 }
 
 // the roster rows of the account's identities (00039): a deleted account
 // is no operator. operators_last_admin refuses the delete when it would
 // leave no active operator admin.
 func (q *Queries) AccountDeleteRoster(ctx context.Context, arg AccountDeleteRosterParams) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, accountDeleteRoster, arg.GithubID, arg.StellarAddress)
+	rows, err := q.db.Query(ctx, accountDeleteRoster, arg.GithubID, arg.StellarAddress, arg.PasskeyAddress)
 	if err != nil {
 		return nil, err
 	}

@@ -74,7 +74,7 @@ func (g *Guard) Admin(ctx context.Context, u session.User) (bool, error) {
 	var admin bool
 	err := g.db.WithSystem(ctx, func(tx pgx.Tx) error {
 		rows, err := systemq.New(tx).RosterEntriesForUser(ctx, systemq.RosterEntriesForUserParams{
-			GithubID: u.GitHubID, StellarAddress: u.StellarAddress,
+			GithubID: u.GitHubID, StellarAddress: u.StellarAddress, PasskeyAddress: u.PasskeyAddress,
 		})
 		for _, o := range rows {
 			admin = admin || (o.Status == "active" && o.Role == RoleOperatorAdmin)

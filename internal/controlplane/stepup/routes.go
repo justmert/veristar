@@ -2,7 +2,6 @@ package stepup
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -10,8 +9,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/justmert/veristar/internal/controlplane/audit"
 	"github.com/justmert/veristar/internal/controlplane/httpx"
@@ -35,10 +34,10 @@ const maxNameLen = 64
 // step-up, or the enrollment window, itself.
 func (s *Service) Routes(r chi.Router) {
 	r.Method(http.MethodGet, "/step-up", httpx.HandlerFunc(s.status))
-	r.Method(http.MethodPost, "/step-up/options", httpx.HandlerFunc(s.assertOptions))
-	r.Method(http.MethodPost, "/step-up", httpx.HandlerFunc(s.assert))
+	r.Method(http.MethodPost, "/step-up/challenge", httpx.HandlerFunc(s.stepUpChallenge))
+	r.Method(http.MethodPost, "/step-up", httpx.HandlerFunc(s.stepUp))
 	r.Method(http.MethodGet, "/passkeys", httpx.HandlerFunc(s.list))
-	r.Method(http.MethodPost, "/passkeys/options", httpx.HandlerFunc(s.registerOptions))
+	r.Method(http.MethodPost, "/passkeys/challenge", httpx.HandlerFunc(s.registerChallenge))
 	r.Method(http.MethodPost, "/passkeys", httpx.HandlerFunc(s.register))
 	r.Method(http.MethodDelete, "/passkeys/{passkey_id}", httpx.HandlerFunc(s.remove))
 }
@@ -49,7 +48,10 @@ type Status struct {
 	SteppedUpAt   *httpx.Timestamp `json:"stepped_up_at"`
 	ExpiresAt     *httpx.Timestamp `json:"expires_at"`
 	MaxAgeSeconds int64            `json:"max_age_seconds"`
-	Passkeys      int64            `json:"passkeys"`
+	// Passkeys counts the credentials that can step up: the added passkeys
+	// and the sign-in passkey
+	Passkeys      int64 `json:"passkeys"`
+	SignInPasskey bool  `json:"sign_in_passkey"`
 	// Enrollment says whether a first passkey may be registered without a
 	// step-up: open (until EnrollmentUntil), sign_in_required (the window
 	// is open but this session's sign-in is older than it), or closed
@@ -65,17 +67,17 @@ const (
 )
 
 // enrollment decides whether u may register a first passkey without a
-// step-up: the account has no passkey, a roster row of one of its
-// identities is active with an open window, and the session's sign-in
-// happened inside that window. the last rule means a session that existed
-// before the window opened (a copied cookie, a forgotten browser) cannot
-// enroll; only a fresh sign-in can.
-func (s *Service) enrollment(ctx context.Context, tx pgx.Tx, u session.User, passkeys int64) (string, *time.Time, error) {
-	if passkeys > 0 {
+// step-up: the account has no credential that can step up, a roster row of
+// one of its identities is active with an open window, and the session's
+// sign-in happened inside that window. the last rule means a session that
+// existed before the window opened (a copied cookie, a forgotten browser)
+// cannot enroll; only a fresh sign-in can.
+func (s *Service) enrollment(ctx context.Context, tx pgx.Tx, u session.User, credentials int64) (string, *time.Time, error) {
+	if credentials > 0 {
 		return EnrollmentClosed, nil, nil
 	}
 	rows, err := systemq.New(tx).RosterEntriesForUser(ctx, systemq.RosterEntriesForUserParams{
-		GithubID: u.GitHubID, StellarAddress: u.StellarAddress,
+		GithubID: u.GitHubID, StellarAddress: u.StellarAddress, PasskeyAddress: u.PasskeyAddress,
 	})
 	if err != nil {
 		return "", nil, err
@@ -110,12 +112,12 @@ func (s *Service) status(w http.ResponseWriter, r *http.Request) error {
 		out.SteppedUp, out.SteppedUpAt, out.ExpiresAt = true, ts(at), ts(at.Add(s.maxAge))
 	}
 	err = s.db.WithSystem(ctx, func(tx pgx.Tx) error {
-		n, err := systemq.New(tx).CountPasskeys(ctx, u.ID)
+		k, err := LoadKeys(ctx, tx, u.ID)
 		if err != nil {
 			return err
 		}
-		out.Passkeys = n
-		state, until, err := s.enrollment(ctx, tx, u, n)
+		out.Passkeys, out.SignInPasskey = k.Count(), k.SignIn
+		state, until, err := s.enrollment(ctx, tx, u, k.Count())
 		if err != nil {
 			return err
 		}
@@ -132,70 +134,101 @@ func (s *Service) status(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-func (s *Service) assertOptions(w http.ResponseWriter, r *http.Request) error {
+func (s *Service) stepUpChallenge(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	u, err := session.MustUser(ctx)
 	if err != nil {
 		return err
 	}
-	var acc Account
+	var k Keys
 	if err := s.db.WithSystem(ctx, func(tx pgx.Tx) error {
-		acc, _, err = LoadAccount(ctx, tx, u)
+		k, err = LoadKeys(ctx, tx, u.ID)
 		return err
 	}); err != nil {
 		return err
 	}
-	opts, err := s.BeginAssertion(ctx, acc)
+	if k.Count() == 0 {
+		return httpx.Conflict(httpx.CodePasskeyRequired, "register a passkey first")
+	}
+	c, err := s.IssueChallenge(ctx, u.ID, PurposeStepUp)
 	if err != nil {
 		return err
 	}
-	httpx.WriteJSON(w, http.StatusOK, opts)
+	httpx.WriteJSON(w, http.StatusOK, c)
 	return nil
 }
 
-// credentialBody is the browser's PublicKeyCredential json, passed on to
-// the webauthn library as it came
-type credentialBody struct {
-	Credential json.RawMessage `json:"credential"`
+// use marks a verified challenge used in the caller's transaction, as
+// passkey sign-in does; a second use is a replay
+func (s *Service) use(ctx context.Context, q *systemq.Queries, challenge string) error {
+	n, err := q.UseWalletChallenge(ctx, systemq.UseWalletChallengeParams{
+		NonceHash: usedHash(challenge), ExpiresAt: s.now().Add(challengeTTL),
+	})
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return errNoCeremony
+	}
+	return nil
 }
 
-func (s *Service) assert(w http.ResponseWriter, r *http.Request) error {
+func (s *Service) stepUp(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	u, err := session.MustUser(ctx)
 	if err != nil {
 		return err
 	}
-	var b credentialBody
-	if err := httpx.DecodeJSON(r, &b); err != nil {
+	var a Answer
+	if err := httpx.DecodeJSON(r, &a); err != nil {
 		return err
 	}
-	if len(b.Credential) == 0 {
-		return httpx.Validation("credential is required", map[string]string{"credential": httpx.FieldRequired})
+	challenge, err := s.takeChallenge(ctx, u.ID, PurposeStepUp)
+	if err != nil {
+		return err
+	}
+	fields := map[string]string{}
+	as, credID, _ := a.decoded(fields, false)
+	if len(fields) > 0 {
+		return httpx.Validation("the passkey answer is incomplete or malformed", fields)
 	}
 	var at time.Time
+	recorded := false
 	err = s.db.WithSystem(ctx, func(tx pgx.Tx) error {
-		acc, _, err := LoadAccount(ctx, tx, u)
+		q := systemq.New(tx)
+		k, err := LoadKeys(ctx, tx, u.ID)
 		if err != nil {
 			return err
 		}
-		cred, err := s.FinishAssertion(ctx, acc, b.Credential)
-		if err != nil {
+		pub, ok := k.byID[credID]
+		if !ok {
+			return failed(ctx, errors.New("the credential is not a passkey of this account"))
+		}
+		if err := s.rp.Verify(as, challenge, pub); err != nil {
+			return failed(ctx, err)
+		}
+		if err := s.use(ctx, q, challenge); err != nil {
 			return err
 		}
-		if err := TouchPasskey(ctx, tx, u.ID, cred); err != nil {
+		if _, err := q.TouchPasskey(ctx, systemq.TouchPasskeyParams{UserID: u.ID, CredentialID: credID}); err != nil {
 			return err
 		}
 		if at, err = s.Record(ctx, u.ID); err != nil {
 			return err
 		}
+		recorded = true
 		return audit.InSystem(ctx, tx, audit.Entry{
 			Actor: audit.User(u.ID), Action: ActionStepUp, Target: audit.UserTarget(u.ID),
-			Detail: map[string]any{"max_age_seconds": int64(s.maxAge / time.Second)},
+			Detail: map[string]any{"max_age_seconds": int64(s.maxAge / time.Second), "sign_in_passkey": credID == k.signInID},
 		})
 	})
 	if err != nil {
-		// a failed transaction must not leave a step-up in the session
-		s.Clear(ctx)
+		// a transaction that failed after the step-up was recorded must not
+		// leave it in the session; a refused answer leaves an earlier step-up
+		// as it was
+		if recorded {
+			s.Clear(ctx)
+		}
 		return err
 	}
 	httpx.WriteJSON(w, http.StatusOK, Status{
@@ -203,6 +236,11 @@ func (s *Service) assert(w http.ResponseWriter, r *http.Request) error {
 		MaxAgeSeconds: int64(s.maxAge / time.Second),
 	})
 	return nil
+}
+
+func isUnique(err error) bool {
+	var pg *pgconn.PgError
+	return errors.As(err, &pg) && pg.Code == "23505"
 }
 
 func (s *Service) list(w http.ResponseWriter, r *http.Request) error {
@@ -214,24 +252,24 @@ func (s *Service) list(w http.ResponseWriter, r *http.Request) error {
 	if ok, _ := s.Fresh(ctx, u.ID); !ok {
 		return StepUpRequired()
 	}
-	var list []Passkey
+	var k Keys
 	if err := s.db.WithSystem(ctx, func(tx pgx.Tx) error {
-		_, list, err = LoadAccount(ctx, tx, u)
+		k, err = LoadKeys(ctx, tx, u.ID)
 		return err
 	}); err != nil {
 		return err
 	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{"items": list})
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"items": k.Added, "sign_in_passkey": k.SignIn})
 	return nil
 }
 
 // mayRegister answers whether the request may add a passkey, and whether
 // it does so through the enrollment window.
-func (s *Service) mayRegister(ctx context.Context, tx pgx.Tx, u session.User, passkeys int64) (bool, error) {
+func (s *Service) mayRegister(ctx context.Context, tx pgx.Tx, u session.User, credentials int64) (bool, error) {
 	if ok, _ := s.Fresh(ctx, u.ID); ok {
 		return false, nil
 	}
-	state, _, err := s.enrollment(ctx, tx, u, passkeys)
+	state, _, err := s.enrollment(ctx, tx, u, credentials)
 	if err != nil {
 		return false, err
 	}
@@ -245,34 +283,33 @@ func (s *Service) mayRegister(ctx context.Context, tx pgx.Tx, u session.User, pa
 	return false, StepUpRequired()
 }
 
-func (s *Service) registerOptions(w http.ResponseWriter, r *http.Request) error {
+func (s *Service) registerChallenge(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	u, err := session.MustUser(ctx)
 	if err != nil {
 		return err
 	}
-	var acc Account
 	if err := s.db.WithSystem(ctx, func(tx pgx.Tx) error {
-		acc, _, err = LoadAccount(ctx, tx, u)
+		k, err := LoadKeys(ctx, tx, u.ID)
 		if err != nil {
 			return err
 		}
-		_, err = s.mayRegister(ctx, tx, u, int64(len(acc.Credentials)))
+		_, err = s.mayRegister(ctx, tx, u, k.Count())
 		return err
 	}); err != nil {
 		return err
 	}
-	opts, err := s.BeginRegistration(ctx, acc)
+	c, err := s.IssueChallenge(ctx, u.ID, PurposeRegister)
 	if err != nil {
 		return err
 	}
-	httpx.WriteJSON(w, http.StatusOK, opts)
+	httpx.WriteJSON(w, http.StatusOK, c)
 	return nil
 }
 
 type registerBody struct {
-	Name       string          `json:"name"`
-	Credential json.RawMessage `json:"credential"`
+	Name string `json:"name"`
+	Answer
 }
 
 func (s *Service) register(w http.ResponseWriter, r *http.Request) error {
@@ -285,6 +322,10 @@ func (s *Service) register(w http.ResponseWriter, r *http.Request) error {
 	if err := httpx.DecodeJSON(r, &b); err != nil {
 		return err
 	}
+	challenge, err := s.takeChallenge(ctx, u.ID, PurposeRegister)
+	if err != nil {
+		return err
+	}
 	name := strings.TrimSpace(b.Name)
 	fields := map[string]string{}
 	switch {
@@ -295,11 +336,15 @@ func (s *Service) register(w http.ResponseWriter, r *http.Request) error {
 	case strings.ContainsFunc(name, func(c rune) bool { return c < 0x20 || c == 0x7f }):
 		fields["name"] = httpx.FieldInvalidFormat
 	}
-	if len(b.Credential) == 0 {
-		fields["credential"] = httpx.FieldRequired
-	}
+	as, credID, pub := b.decoded(fields, true)
 	if len(fields) > 0 {
-		return httpx.Validation("the passkey needs a name and a credential", fields)
+		return httpx.Validation("the passkey needs a name and a complete answer", fields)
+	}
+	// the new key must have signed this console's challenge: a
+	// registration answer carries no signature, so the key is trusted only
+	// once it signs
+	if err := s.rp.Verify(as, challenge, pub); err != nil {
+		return failed(ctx, err)
 	}
 	var out Passkey
 	recorded := false
@@ -310,38 +355,44 @@ func (s *Service) register(w http.ResponseWriter, r *http.Request) error {
 		if _, err := q.LockUserPasskeys(ctx, u.ID); err != nil {
 			return err
 		}
-		acc, _, err := LoadAccount(ctx, tx, u)
+		k, err := LoadKeys(ctx, tx, u.ID)
 		if err != nil {
 			return err
 		}
-		viaEnrollment, err := s.mayRegister(ctx, tx, u, int64(len(acc.Credentials)))
+		viaEnrollment, err := s.mayRegister(ctx, tx, u, k.Count())
 		if err != nil {
 			return err
 		}
-		cred, err := s.FinishRegistration(ctx, acc, b.Credential)
-		if err != nil {
+		if _, dup := k.byID[credID]; dup {
+			return httpx.Validation("this passkey is registered already", map[string]string{"credential_id": httpx.FieldDuplicate})
+		}
+		if err := s.use(ctx, q, challenge); err != nil {
 			return err
 		}
-		if out, err = AddPasskey(ctx, tx, u.ID, name, cred); err != nil {
+		if out, err = AddPasskey(ctx, tx, u.ID, name, credID, pub); err != nil {
+			if isUnique(err) {
+				return httpx.Validation("this passkey is registered to another account",
+					map[string]string{"credential_id": httpx.FieldDuplicate})
+			}
 			return err
 		}
 		if viaEnrollment {
 			if _, err := q.CloseEnrollment(ctx, systemq.CloseEnrollmentParams{
-				GithubID: u.GitHubID, StellarAddress: u.StellarAddress,
+				GithubID: u.GitHubID, StellarAddress: u.StellarAddress, PasskeyAddress: u.PasskeyAddress,
 			}); err != nil {
 				return err
 			}
-			// the new credential was just proven present; it counts as the
-			// first step-up, so the person does not touch it twice
-			if _, err := s.Record(ctx, u.ID); err != nil {
-				return err
-			}
-			recorded = true
 		}
+		// the new passkey has just signed a challenge with user
+		// verification; it counts as the step-up, so the person does not
+		// touch it twice
+		if _, err := s.Record(ctx, u.ID); err != nil {
+			return err
+		}
+		recorded = true
 		return audit.InSystem(ctx, tx, audit.Entry{
 			Actor: audit.User(u.ID), Action: ActionPasskeyAdd, Target: audit.UserTarget(u.ID),
-			Detail: map[string]any{"passkey_id": out.ID.String(), "name": name, "enrollment": viaEnrollment,
-				"backup_eligible": out.BackupEligible},
+			Detail: map[string]any{"passkey_id": out.ID.String(), "name": name, "enrollment": viaEnrollment},
 		})
 	})
 	if err != nil {
@@ -369,14 +420,21 @@ func (s *Service) remove(w http.ResponseWriter, r *http.Request) error {
 	}
 	err = s.db.WithSystem(ctx, func(tx pgx.Tx) error {
 		q := systemq.New(tx)
-		ids, err := q.LockUserPasskeys(ctx, u.ID)
+		if _, err := q.LockUserPasskeys(ctx, u.ID); err != nil {
+			return err
+		}
+		k, err := LoadKeys(ctx, tx, u.ID)
 		if err != nil {
 			return err
 		}
-		if !containsID(ids, id) {
+		found := false
+		for _, p := range k.Added {
+			found = found || p.ID == id
+		}
+		if !found {
 			return httpx.NotFound()
 		}
-		if len(ids) == 1 {
+		if k.Count() == 1 {
 			return httpx.Conflict(httpx.CodeLastPasskey,
 				"register another passkey before you delete your last one")
 		}
@@ -397,13 +455,4 @@ func (s *Service) remove(w http.ResponseWriter, r *http.Request) error {
 	}
 	w.WriteHeader(http.StatusNoContent)
 	return nil
-}
-
-func containsID(ids []uuid.UUID, id uuid.UUID) bool {
-	for _, x := range ids {
-		if x == id {
-			return true
-		}
-	}
-	return false
 }

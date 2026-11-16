@@ -12,15 +12,15 @@ import (
 )
 
 const addPasskey = `-- name: AddPasskey :one
-insert into cp.operator_passkeys (user_id, credential_id, credential, name)
+insert into cp.operator_passkeys (user_id, credential_id, public_key, name)
 values ($1, $2, $3, $4)
-returning id, user_id, credential_id, credential, name, created_at, last_used_at
+returning id, user_id, credential_id, public_key, name, created_at, last_used_at
 `
 
 type AddPasskeyParams struct {
 	UserID       uuid.UUID
-	CredentialID []byte
-	Credential   []byte
+	CredentialID string
+	PublicKey    []byte
 	Name         string
 }
 
@@ -29,7 +29,7 @@ func (q *Queries) AddPasskey(ctx context.Context, arg AddPasskeyParams) (CpOpera
 	row := q.db.QueryRow(ctx, addPasskey,
 		arg.UserID,
 		arg.CredentialID,
-		arg.Credential,
+		arg.PublicKey,
 		arg.Name,
 	)
 	var i CpOperatorPasskey
@@ -37,7 +37,7 @@ func (q *Queries) AddPasskey(ctx context.Context, arg AddPasskeyParams) (CpOpera
 		&i.ID,
 		&i.UserID,
 		&i.CredentialID,
-		&i.Credential,
+		&i.PublicKey,
 		&i.Name,
 		&i.CreatedAt,
 		&i.LastUsedAt,
@@ -83,7 +83,8 @@ const deleteUserPasskeys = `-- name: DeleteUserPasskeys :execrows
 delete from cp.operator_passkeys where user_id = $1
 `
 
-// every passkey of an account: a roster reset, a removal, an account deletion
+// every added passkey of an account: a roster reset, a removal, an account
+// deletion. the sign-in passkey goes with the account's identity, not here
 func (q *Queries) DeleteUserPasskeys(ctx context.Context, userID uuid.UUID) (int64, error) {
 	result, err := q.db.Exec(ctx, deleteUserPasskeys, userID)
 	if err != nil {
@@ -94,14 +95,14 @@ func (q *Queries) DeleteUserPasskeys(ctx context.Context, userID uuid.UUID) (int
 
 const listPasskeys = `-- name: ListPasskeys :many
 
-select id, user_id, credential_id, credential, name, created_at, last_used_at
+select id, user_id, credential_id, public_key, name, created_at, last_used_at
 from cp.operator_passkeys
 where user_id = $1
 order by created_at, id
 `
 
-// operator passkeys (00039), read and written by the stepup package as
-// cp_system.
+// operator passkeys (00039) and the account's sign-in passkey (00037), read
+// and written by the stepup package as cp_system.
 func (q *Queries) ListPasskeys(ctx context.Context, userID uuid.UUID) ([]CpOperatorPasskey, error) {
 	rows, err := q.db.Query(ctx, listPasskeys, userID)
 	if err != nil {
@@ -115,7 +116,7 @@ func (q *Queries) ListPasskeys(ctx context.Context, userID uuid.UUID) ([]CpOpera
 			&i.ID,
 			&i.UserID,
 			&i.CredentialID,
-			&i.Credential,
+			&i.PublicKey,
 			&i.Name,
 			&i.CreatedAt,
 			&i.LastUsedAt,
@@ -134,8 +135,8 @@ const lockUserPasskeys = `-- name: LockUserPasskeys :many
 select id from cp.operator_passkeys where user_id = $1 for update
 `
 
-// the passkeys of an account, locked, so the last one cannot be deleted by
-// two requests at once
+// the added passkeys of an account, locked, so the last one cannot be
+// deleted by two requests at once
 func (q *Queries) LockUserPasskeys(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
 	rows, err := q.db.Query(ctx, lockUserPasskeys, userID)
 	if err != nil {
@@ -156,22 +157,40 @@ func (q *Queries) LockUserPasskeys(ctx context.Context, userID uuid.UUID) ([]uui
 	return items, nil
 }
 
+const signInPasskey = `-- name: SignInPasskey :one
+select passkey_credential_id, passkey_public_key, passkey_address
+from cp.users
+where id = $1 and deleted_at is null
+`
+
+type SignInPasskeyRow struct {
+	PasskeyCredentialID *string
+	PasskeyPublicKey    []byte
+	PasskeyAddress      *string
+}
+
+// the account's sign-in passkey (4.1.9), which also serves the step-up;
+// both columns are null for an account without one
+func (q *Queries) SignInPasskey(ctx context.Context, id uuid.UUID) (SignInPasskeyRow, error) {
+	row := q.db.QueryRow(ctx, signInPasskey, id)
+	var i SignInPasskeyRow
+	err := row.Scan(&i.PasskeyCredentialID, &i.PasskeyPublicKey, &i.PasskeyAddress)
+	return i, err
+}
+
 const touchPasskey = `-- name: TouchPasskey :execrows
 update cp.operator_passkeys
-set credential = $1, last_used_at = now()
-where user_id = $2 and credential_id = $3
+set last_used_at = now()
+where user_id = $1 and credential_id = $2
 `
 
 type TouchPasskeyParams struct {
-	Credential   []byte
 	UserID       uuid.UUID
-	CredentialID []byte
+	CredentialID string
 }
 
-// stores the credential record after an assertion: the sign count and the
-// backup state the authenticator reported
 func (q *Queries) TouchPasskey(ctx context.Context, arg TouchPasskeyParams) (int64, error) {
-	result, err := q.db.Exec(ctx, touchPasskey, arg.Credential, arg.UserID, arg.CredentialID)
+	result, err := q.db.Exec(ctx, touchPasskey, arg.UserID, arg.CredentialID)
 	if err != nil {
 		return 0, err
 	}

@@ -76,4 +76,5 @@ where id = @id and deleted_at is null;
 delete from cp.operators
 where (sqlc.narg(github_id)::bigint is not null and github_id = sqlc.narg(github_id)::bigint)
    or (sqlc.narg(stellar_address)::text is not null and stellar_address = sqlc.narg(stellar_address)::text)
+   or (sqlc.narg(passkey_address)::text is not null and stellar_address = sqlc.narg(passkey_address)::text)
 returning id;

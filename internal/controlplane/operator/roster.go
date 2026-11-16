@@ -19,6 +19,7 @@ import (
 	"github.com/justmert/veristar/internal/controlplane/httpx"
 	"github.com/justmert/veristar/internal/controlplane/identity"
 	"github.com/justmert/veristar/internal/controlplane/members"
+	"github.com/justmert/veristar/internal/controlplane/passkey"
 	"github.com/justmert/veristar/internal/controlplane/session"
 	"github.com/justmert/veristar/internal/controlplane/tenants"
 	"github.com/justmert/veristar/internal/db"
@@ -113,7 +114,9 @@ type RosterAccount struct {
 
 // RosterEntry is one row of GET /api/operator/roster.
 type RosterEntry struct {
-	ID              uuid.UUID        `json:"id"`
+	ID uuid.UUID `json:"id"`
+	// Kind is github, stellar (a wallet's G-address) or passkey (a passkey
+	// account's C-address)
 	Kind            string           `json:"kind"`
 	GitHubID        *int64           `json:"github_id"`
 	GitHubLogin     *string          `json:"github_login"`
@@ -139,7 +142,11 @@ func (ro *Roster) entry(o systemq.CpOperator) RosterEntry {
 		CreatedAt: httpx.Timestamp(o.CreatedAt), UpdatedAt: httpx.Timestamp(o.UpdatedAt), Kind: "github",
 	}
 	if o.StellarAddress != nil {
+		// a G-address names a wallet, a C-address a passkey account (00037)
 		e.Kind = "stellar"
+		if strings.HasPrefix(*o.StellarAddress, "C") {
+			e.Kind = "passkey"
+		}
 	}
 	if o.EnrollUntil != nil && ro.now().Before(*o.EnrollUntil) {
 		t := httpx.Timestamp(*o.EnrollUntil)
@@ -166,7 +173,7 @@ func (ro *Roster) list(w http.ResponseWriter, r *http.Request) error {
 			})
 			if row.UserID.Valid {
 				a := &RosterAccount{UserID: row.UserID.UUID, Passkeys: row.Passkeys,
-					DisplayName: identity.DisplayName(row.AccountGithubLogin, row.StellarAddress)}
+					DisplayName: identity.DisplayName(row.AccountGithubLogin, row.StellarAddress, nil)}
 				if row.LastLoginAt != nil {
 					t := httpx.Timestamp(*row.LastLoginAt)
 					a.LastLoginAt = &t
@@ -223,7 +230,8 @@ func (ro *Roster) add(w http.ResponseWriter, r *http.Request) error {
 		f.Add("github_login", httpx.FieldRequired)
 	case b.GitHubLogin != nil && !members.ValidLogin(strings.TrimSpace(*b.GitHubLogin)):
 		f.Add("github_login", httpx.FieldInvalidGitHubLogin)
-	case b.StellarAddress != nil && !identity.ValidAddress(strings.TrimSpace(*b.StellarAddress)):
+	case b.StellarAddress != nil && !identity.ValidAddress(strings.TrimSpace(*b.StellarAddress)) &&
+		!passkey.ValidContractAddress(strings.TrimSpace(*b.StellarAddress)):
 		f.Add("stellar_address", httpx.FieldInvalidStrkey)
 	}
 	if err := f.Err(); err != nil {

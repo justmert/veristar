@@ -44,7 +44,7 @@ where passkey_credential_id = @passkey_credential_id and deleted_at is null;
 -- identities of the row. the users_operator_flag trigger already keeps it
 -- so on every identity change; this statement returns the row with the
 -- flag for the sign-in, link and unlink audit details.
-update cp.users set is_operator = cp.roster_active(github_id, stellar_address)
+update cp.users set is_operator = cp.roster_active(github_id, stellar_address, passkey_address)
 where id = @id and deleted_at is null
 returning *;
 

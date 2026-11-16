@@ -2,7 +2,9 @@
 -- section 5.1).
 --
 -- cp.operators holds one row per operator identity: a github account id or
--- a stellar address, never both, with a role (operator or operator_admin)
+-- a stellar address, never both. the address is a wallet's G-address or a
+-- passkey account's C-address (00037), the two forms
+-- OPERATOR_STELLAR_ADDRESSES takes, with a role (operator or operator_admin)
 -- and a status (active or suspended). operator admins manage the rows in
 -- the console; OPERATOR_GITHUB_IDS and OPERATOR_STELLAR_ADDRESSES only
 -- ensure, at every start, that the listed identities are active operator
@@ -24,17 +26,18 @@
 -- passkey, and a row whose passkeys an admin reset get a window; the first
 -- registration closes it.
 --
--- cp.operator_passkeys holds the webauthn credentials of operator accounts.
--- credential is the go-webauthn credential record as json (public key,
--- sign count, flags, transports); credential_id repeats its id for the
--- unique index.
+-- cp.operator_passkeys holds the passkeys an operator account adds for the
+-- step-up beside its sign-in passkey (00037): the base64url credential id
+-- and the 65-byte sec-1 p-256 key, the same two values cp.users keeps for a
+-- sign-in passkey, checked with the same package (internal/controlplane/
+-- passkey). no signature counter is kept: synced passkeys report 0.
 
 -- +goose Up
 create table cp.operators (
   id               uuid primary key default uuidv7(),
   github_id        bigint check (github_id > 0),
   github_login     text check (octet_length(github_login) between 1 and 64),
-  stellar_address  text check (stellar_address ~ '^G[A-Z2-7]{55}$'),
+  stellar_address  text check (stellar_address ~ '^[GC][A-Z2-7]{55}$'),
   role             text not null check (role in ('operator', 'operator_admin')),
   status           text not null default 'active' check (status in ('active', 'suspended')),
   status_reason    text check (octet_length(status_reason) between 1 and 500),
@@ -54,8 +57,9 @@ create unique index operators_stellar_address_idx on cp.operators (stellar_addre
 create table cp.operator_passkeys (
   id            uuid primary key default uuidv7(),
   user_id       uuid not null references cp.users (id) on delete cascade,
-  credential_id bytea not null unique check (octet_length(credential_id) between 16 and 1023),
-  credential    jsonb not null,
+  credential_id text not null unique
+                check (credential_id ~ '^[A-Za-z0-9_-]+$' and length(credential_id) <= 1364),
+  public_key    bytea not null check (octet_length(public_key) = 65 and get_byte(public_key, 0) = 4),
   name          text not null check (octet_length(name) between 1 and 64),
   created_at    timestamptz not null default now(),
   last_used_at  timestamptz
@@ -66,18 +70,20 @@ create index operator_passkeys_user_idx on cp.operator_passkeys (user_id);
 -- whether an account with these identities is an active operator. security
 -- definer, so a migration that updates cp.users as platform_owner computes
 -- the same flag as the control plane does
-create function cp.roster_active(gh bigint, addr text) returns boolean
+create function cp.roster_active(gh bigint, addr text, pk text) returns boolean
 language sql stable security definer
 set search_path = pg_catalog, pg_temp
 as $$
   select exists (
     select 1 from cp.operators o
     where o.status = 'active'
-      and ((gh is not null and o.github_id = gh) or (addr is not null and o.stellar_address = addr)))
+      and ((gh is not null and o.github_id = gh)
+        or (addr is not null and o.stellar_address = addr)
+        or (pk is not null and o.stellar_address = pk)))
 $$;
 -- +goose StatementEnd
-revoke all on function cp.roster_active(bigint, text) from public;
-grant execute on function cp.roster_active(bigint, text) to cp_system;
+revoke all on function cp.roster_active(bigint, text, text) from public;
+grant execute on function cp.roster_active(bigint, text, text) to cp_system;
 
 -- +goose StatementBegin
 create function cp.users_operator_flag() returns trigger
@@ -85,12 +91,14 @@ language plpgsql
 set search_path = pg_catalog, pg_temp
 as $$
 begin
-  new.is_operator := new.deleted_at is null and cp.roster_active(new.github_id, new.stellar_address);
+  new.is_operator := new.deleted_at is null
+    and cp.roster_active(new.github_id, new.stellar_address, new.passkey_address);
   return new;
 end
 $$;
 -- +goose StatementEnd
-create trigger users_operator_flag before insert or update of github_id, stellar_address, is_operator, deleted_at
+create trigger users_operator_flag before insert or update of github_id, stellar_address, passkey_address,
+  is_operator, deleted_at
   on cp.users for each row execute function cp.users_operator_flag();
 
 -- +goose StatementBegin
@@ -115,10 +123,10 @@ begin
     addrs := addrs || new.stellar_address;
   end if;
   update cp.users u
-  set is_operator = cp.roster_active(u.github_id, u.stellar_address)
+  set is_operator = cp.roster_active(u.github_id, u.stellar_address, u.passkey_address)
   where u.deleted_at is null
-    and (u.github_id = any(ghs) or u.stellar_address = any(addrs))
-    and u.is_operator is distinct from cp.roster_active(u.github_id, u.stellar_address);
+    and (u.github_id = any(ghs) or u.stellar_address = any(addrs) or u.passkey_address = any(addrs))
+    and u.is_operator is distinct from cp.roster_active(u.github_id, u.stellar_address, u.passkey_address);
   return null;
 end
 $$;
@@ -180,6 +188,6 @@ drop trigger operators_sync_flags on cp.operators;
 drop function cp.operators_sync_flags();
 drop trigger users_operator_flag on cp.users;
 drop function cp.users_operator_flag();
-drop function cp.roster_active(bigint, text);
+drop function cp.roster_active(bigint, text, text);
 drop table cp.operator_passkeys;
 drop table cp.operators;
