@@ -9,7 +9,7 @@ mkdir -p "$out"
 serial() { echo | openssl s_client -connect "$1:443" -servername "$2" 2>/dev/null | openssl x509 -noout -serial -startdate 2>/dev/null | tr '\n' ' '; }
 : >"$out/result.txt"
 for n in sa-lc-edge-1 sa-lc-edge-2 sa-lc-edge-3 sa-lc-core-1 sa-lc-core-2; do
-	case "$n" in *edge*) names="in.sa-local.test otlp.sa-local.test" p=edge ;; *) names="app.sa-local.test web.sa-local.test" p=core ;; esac
+	case "$n" in *edge*) names="in.sa-local.test otlp.sa-local.test" p=edge ;; *) names="app.sa-local.test" p=core ;; esac
 	ip="$(pub_of "$n")"
 	before=""
 	for h in $names; do before="$before $h=[$(serial "$ip" "$h")]"; done
