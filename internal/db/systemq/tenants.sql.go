@@ -60,7 +60,7 @@ func (q *Queries) EnrollTenant(ctx context.Context, arg EnrollTenantParams) (CpT
 }
 
 const findUserByGitHubID = `-- name: FindUserByGitHubID :one
-select id, github_id, github_login, stellar_address, created_at
+select id, github_id, github_login, stellar_address, passkey_address, created_at
 from cp.users
 where github_id = $1 and deleted_at is null
 `
@@ -70,6 +70,7 @@ type FindUserByGitHubIDRow struct {
 	GithubID       *int64
 	GithubLogin    *string
 	StellarAddress *string
+	PasskeyAddress *string
 	CreatedAt      time.Time
 }
 
@@ -83,13 +84,44 @@ func (q *Queries) FindUserByGitHubID(ctx context.Context, githubID *int64) (Find
 		&i.GithubID,
 		&i.GithubLogin,
 		&i.StellarAddress,
+		&i.PasskeyAddress,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const findUserByPasskeyAddress = `-- name: FindUserByPasskeyAddress :one
+select id, github_id, github_login, stellar_address, passkey_address, created_at
+from cp.users
+where passkey_address = $1 and deleted_at is null
+`
+
+type FindUserByPasskeyAddressRow struct {
+	ID             uuid.UUID
+	GithubID       *int64
+	GithubLogin    *string
+	StellarAddress *string
+	PasskeyAddress *string
+	CreatedAt      time.Time
+}
+
+// the account the inviting owner named by its soropass C-address
+func (q *Queries) FindUserByPasskeyAddress(ctx context.Context, passkeyAddress *string) (FindUserByPasskeyAddressRow, error) {
+	row := q.db.QueryRow(ctx, findUserByPasskeyAddress, passkeyAddress)
+	var i FindUserByPasskeyAddressRow
+	err := row.Scan(
+		&i.ID,
+		&i.GithubID,
+		&i.GithubLogin,
+		&i.StellarAddress,
+		&i.PasskeyAddress,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const findUserByStellarAddress = `-- name: FindUserByStellarAddress :one
-select id, github_id, github_login, stellar_address, created_at
+select id, github_id, github_login, stellar_address, passkey_address, created_at
 from cp.users
 where stellar_address = $1 and deleted_at is null
 `
@@ -99,6 +131,7 @@ type FindUserByStellarAddressRow struct {
 	GithubID       *int64
 	GithubLogin    *string
 	StellarAddress *string
+	PasskeyAddress *string
 	CreatedAt      time.Time
 }
 
@@ -111,6 +144,7 @@ func (q *Queries) FindUserByStellarAddress(ctx context.Context, stellarAddress *
 		&i.GithubID,
 		&i.GithubLogin,
 		&i.StellarAddress,
+		&i.PasskeyAddress,
 		&i.CreatedAt,
 	)
 	return i, err

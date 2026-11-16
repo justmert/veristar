@@ -52,13 +52,16 @@ type CpTenant struct {
 }
 
 type CpUser struct {
-	ID             uuid.UUID
-	GithubID       *int64
-	GithubLogin    *string
-	IsOperator     bool
-	CreatedAt      time.Time
-	LastLoginAt    *time.Time
-	DeletedAt      *time.Time
-	StellarAddress *string
-	UmamiUsername  *string
+	ID                  uuid.UUID
+	GithubID            *int64
+	GithubLogin         *string
+	IsOperator          bool
+	CreatedAt           time.Time
+	LastLoginAt         *time.Time
+	DeletedAt           *time.Time
+	StellarAddress      *string
+	UmamiUsername       *string
+	PasskeyAddress      *string
+	PasskeyCredentialID *string
+	PasskeyPublicKey    []byte
 }

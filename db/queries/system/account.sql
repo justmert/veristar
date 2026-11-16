@@ -4,7 +4,7 @@
 -- name: AccountLockUser :one
 -- the account row, locked so two deletions of one account run one after
 -- the other and the second sees the first's result
-select id, github_id, stellar_address, is_operator, deleted_at from cp.users where id = @id for update;
+select id, github_id, stellar_address, passkey_address, is_operator, deleted_at from cp.users where id = @id for update;
 
 -- name: AccountLockTenants :many
 -- every tenant the account belongs to, locked in id order. a reconcile run
@@ -46,7 +46,8 @@ returning tenant_id, role;
 -- address: they name the person, who can be invited again after signing in
 -- anew. a null parameter matches nothing.
 delete from cp.invites
-where github_id = sqlc.narg(github_id)::bigint or stellar_address = sqlc.narg(stellar_address)::text;
+where github_id = sqlc.narg(github_id)::bigint or stellar_address = sqlc.narg(stellar_address)::text
+   or stellar_address = sqlc.narg(passkey_address)::text;
 
 -- name: AccountDeleteMCPCodes :execrows
 delete from cp.mcp_oauth_codes where user_id = @user_id;
@@ -64,5 +65,6 @@ delete from cp.sessions where user_id = @user_id::uuid;
 -- credential left
 update cp.users
 set github_id = null, github_login = null, stellar_address = null, umami_username = null,
+    passkey_address = null, passkey_credential_id = null, passkey_public_key = null,
     is_operator = false, last_login_at = null, deleted_at = now()
 where id = @id and deleted_at is null;

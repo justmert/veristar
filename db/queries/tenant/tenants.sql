@@ -28,13 +28,13 @@ insert into cp.audit_log (actor, action, target, detail)
 values (@actor, @action, @target, @detail);
 
 -- name: ListTenantMembers :many
-select m.user_id, u.github_id, u.github_login, u.stellar_address, m.role, m.created_at
+select m.user_id, u.github_id, u.github_login, u.stellar_address, u.passkey_address, m.role, m.created_at
 from cp.tenant_members m
 join cp.users u on u.id = m.user_id
-order by lower(coalesce(u.github_login, u.stellar_address)), m.user_id;
+order by lower(coalesce(u.github_login, u.stellar_address, u.passkey_address)), m.user_id;
 
 -- name: GetTenantMember :one
-select m.user_id, u.github_id, u.github_login, u.stellar_address, m.role, m.created_at
+select m.user_id, u.github_id, u.github_login, u.stellar_address, u.passkey_address, m.role, m.created_at
 from cp.tenant_members m
 join cp.users u on u.id = m.user_id
 where m.user_id = @user_id;

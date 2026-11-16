@@ -109,14 +109,14 @@ func (h *Handler) link(ctx context.Context, uid uuid.UUID, kind string,
 			return fmt.Errorf("link %s: %w", kind, err)
 		}
 		u, err = q.SetOperatorFlag(ctx, systemq.SetOperatorFlagParams{
-			IsOperator: h.operators.Is(u.GithubID, u.StellarAddress), ID: u.ID,
+			IsOperator: h.operators.Is(u.GithubID, u.StellarAddress, u.PasskeyAddress), ID: u.ID,
 		})
 		if err != nil {
 			return fmt.Errorf("operator flag: %w", err)
 		}
 		actor := "user:" + u.ID.String()
 		resolved, err := q.ResolveInvites(ctx, systemq.ResolveInvitesParams{
-			GithubID: u.GithubID, StellarAddress: u.StellarAddress, UserID: u.ID,
+			GithubID: u.GithubID, StellarAddress: u.StellarAddress, PasskeyAddress: u.PasskeyAddress, UserID: u.ID,
 		})
 		if err != nil {
 			return fmt.Errorf("resolve invites: %w", err)
@@ -178,7 +178,7 @@ func (h *Handler) unlink(w http.ResponseWriter, r *http.Request, kind string, ha
 			return fmt.Errorf("unlink %s: %w", kind, err)
 		}
 		row, err = q.SetOperatorFlag(ctx, systemq.SetOperatorFlagParams{
-			IsOperator: h.operators.Is(row.GithubID, row.StellarAddress), ID: row.ID,
+			IsOperator: h.operators.Is(row.GithubID, row.StellarAddress, row.PasskeyAddress), ID: row.ID,
 		})
 		if err != nil {
 			return fmt.Errorf("operator flag: %w", err)

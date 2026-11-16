@@ -68,6 +68,7 @@ type credentialRow struct {
 	GitHubID       *int64
 	GitHubLogin    *string
 	StellarAddress *string
+	PasskeyAddress *string
 	IsOperator     bool
 	Role           *string
 	TenantStatus   *string
@@ -75,7 +76,7 @@ type credentialRow struct {
 
 //nolint:gosec // column names of a query, not a credential
 const credentialColumns = `c.id, c.kind, c.scope, c.tenant_id, c.user_id, c.resource, c.expires_at, c.revoked_at,
-	u.github_id, u.github_login, u.stellar_address, u.is_operator, m.role, t.status`
+	u.github_id, u.github_login, u.stellar_address, u.passkey_address, u.is_operator, m.role, t.status`
 
 //nolint:gosec // joins of a query, not a credential
 const credentialJoins = `
@@ -86,7 +87,7 @@ const credentialJoins = `
 func scanCredential(row pgx.Row, hash *[]byte) (credentialRow, error) {
 	var c credentialRow
 	err := row.Scan(hash, &c.ID, &c.Kind, &c.Scope, &c.TenantID, &c.UserID, &c.Resource, &c.ExpiresAt, &c.RevokedAt,
-		&c.GitHubID, &c.GitHubLogin, &c.StellarAddress, &c.IsOperator, &c.Role, &c.TenantStatus)
+		&c.GitHubID, &c.GitHubLogin, &c.StellarAddress, &c.PasskeyAddress, &c.IsOperator, &c.Role, &c.TenantStatus)
 	c.Hash = *hash
 	return c, err
 }
@@ -176,7 +177,7 @@ func (s *Server) admit(c credentialRow, now time.Time) (Principal, error) {
 		CredentialID: c.ID, Kind: c.Kind, Scope: c.Scope,
 		User: session.User{
 			ID: c.UserID, GitHubID: c.GitHubID, GitHubLogin: c.GitHubLogin,
-			StellarAddress: c.StellarAddress, IsOperator: c.IsOperator,
+			StellarAddress: c.StellarAddress, PasskeyAddress: c.PasskeyAddress, IsOperator: c.IsOperator,
 		},
 	}
 	switch c.Scope {

@@ -155,7 +155,7 @@ func Delete(ctx context.Context, d *db.DB, um UmamiUsers, userID uuid.UUID) (Res
 			roles = append(roles, map[string]any{"tenant_id": m.TenantID.String(), "role": m.Role})
 		}
 		if res.InvitesDeleted, err = q.AccountDeleteInvites(ctx, systemq.AccountDeleteInvitesParams{
-			GithubID: u.GithubID, StellarAddress: u.StellarAddress,
+			GithubID: u.GithubID, StellarAddress: u.StellarAddress, PasskeyAddress: u.PasskeyAddress,
 		}); err != nil {
 			return fmt.Errorf("account: invites: %w", err)
 		}

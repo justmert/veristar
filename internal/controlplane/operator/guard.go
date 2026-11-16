@@ -48,13 +48,13 @@ func NewGuard(ops identity.Operators) (*Guard, error) {
 }
 
 // Allowed reports whether u may use the operator routes: cp.users.is_operator
-// (read on every request by session.RequireUser) and a github id or stellar
-// address of the account in the lists this process loaded. both are needed,
+// (read on every request by session.RequireUser) and a github id, stellar
+// address or passkey address of the account in the lists this process loaded. both are needed,
 // so an entry removed from a list stops working at the next start even
 // before that person signs in again, and a stale flag alone never grants
 // access.
 func (g *Guard) Allowed(u session.User) bool {
-	return u.IsOperator && g.ops.Is(u.GitHubID, u.StellarAddress)
+	return u.IsOperator && g.ops.Is(u.GitHubID, u.StellarAddress, u.PasskeyAddress)
 }
 
 // Require answers 403 operator_required unless the signed-in user is an

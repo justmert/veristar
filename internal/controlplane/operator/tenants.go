@@ -197,13 +197,14 @@ func (h *Tenants) list(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-// UserRef is a user as the detail names it. github_id and github_login are
-// null for a wallet-only account, stellar_address for a github-only one.
+// UserRef is a user as the detail names it. each identity is null when the
+// account does not hold it.
 type UserRef struct {
 	ID             uuid.UUID `json:"id"`
 	GitHubID       *int64    `json:"github_id"`
 	GitHubLogin    *string   `json:"github_login"`
 	StellarAddress *string   `json:"stellar_address"`
+	PasskeyAddress *string   `json:"passkey_address"`
 	DisplayName    string    `json:"display_name"`
 }
 
@@ -237,6 +238,7 @@ type DetailMember struct {
 	GitHubID       *int64          `json:"github_id"`
 	GitHubLogin    *string         `json:"github_login"`
 	StellarAddress *string         `json:"stellar_address"`
+	PasskeyAddress *string         `json:"passkey_address"`
 	DisplayName    string          `json:"display_name"`
 	Role           string          `json:"role"`
 	CreatedAt      httpx.Timestamp `json:"created_at"`
@@ -387,8 +389,9 @@ func (h *Tenants) detail(w http.ResponseWriter, r *http.Request) error {
 		for _, m := range members {
 			out.Members = append(out.Members, DetailMember{
 				GitHubID: m.GithubID, GitHubLogin: m.GithubLogin, StellarAddress: m.StellarAddress,
-				DisplayName: identity.DisplayName(m.GithubLogin, m.StellarAddress),
-				Role:        m.Role, CreatedAt: httpx.Timestamp(m.CreatedAt),
+				PasskeyAddress: m.PasskeyAddress,
+				DisplayName:    identity.DisplayName(m.GithubLogin, m.StellarAddress, m.PasskeyAddress),
+				Role:           m.Role, CreatedAt: httpx.Timestamp(m.CreatedAt),
 			})
 		}
 		tid := id.String()
@@ -438,7 +441,8 @@ func userRef(ctx context.Context, q *systemq.Queries, id uuid.NullUUID) (*UserRe
 	}
 	return &UserRef{
 		ID: u.ID, GitHubID: u.GithubID, GitHubLogin: u.GithubLogin, StellarAddress: u.StellarAddress,
-		DisplayName: identity.DisplayName(u.GithubLogin, u.StellarAddress),
+		PasskeyAddress: u.PasskeyAddress,
+		DisplayName:    identity.DisplayName(u.GithubLogin, u.StellarAddress, u.PasskeyAddress),
 	}, nil
 }
 

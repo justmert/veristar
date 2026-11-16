@@ -557,14 +557,14 @@ func (s *Server) exchangeCode(ctx context.Context, c client, f url.Values) (toke
 // so a grant is never issued or refreshed for a user who lost access.
 func (s *Server) stillAllowed(ctx context.Context, tx pgx.Tx, user uuid.UUID, scope string, tenant uuid.NullUUID) error {
 	var gh *int64
-	var address *string
+	var address, passkey *string
 	var isOp bool
 	var role, status *string
-	err := tx.QueryRow(ctx, `select u.github_id, u.stellar_address, u.is_operator, m.role, t.status
+	err := tx.QueryRow(ctx, `select u.github_id, u.stellar_address, u.passkey_address, u.is_operator, m.role, t.status
 		from cp.users u
 		left join cp.tenant_members m on m.user_id = u.id and m.tenant_id = $2
 		left join cp.tenants t on t.id = $2
-		where u.id = $1 and u.deleted_at is null`, user, tenant).Scan(&gh, &address, &isOp, &role, &status)
+		where u.id = $1 and u.deleted_at is null`, user, tenant).Scan(&gh, &address, &passkey, &isOp, &role, &status)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return invalidGrant("the user no longer exists")
 	}
@@ -577,7 +577,7 @@ func (s *Server) stillAllowed(ctx context.Context, tx pgx.Tx, user uuid.UUID, sc
 			return invalidGrant("the user no longer has access to the project")
 		}
 	case ScopeOperator:
-		if !s.guard.Allowed(session.User{ID: user, GitHubID: gh, StellarAddress: address, IsOperator: isOp}) {
+		if !s.guard.Allowed(session.User{ID: user, GitHubID: gh, StellarAddress: address, PasskeyAddress: passkey, IsOperator: isOp}) {
 			return invalidGrant("the user is no longer an operator")
 		}
 	default:

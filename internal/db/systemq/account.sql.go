@@ -15,18 +15,20 @@ import (
 const accountDeleteInvites = `-- name: AccountDeleteInvites :execrows
 delete from cp.invites
 where github_id = $1::bigint or stellar_address = $2::text
+   or stellar_address = $3::text
 `
 
 type AccountDeleteInvitesParams struct {
 	GithubID       *int64
 	StellarAddress *string
+	PasskeyAddress *string
 }
 
 // open and expired invites addressed to the account's github id or stellar
 // address: they name the person, who can be invited again after signing in
 // anew. a null parameter matches nothing.
 func (q *Queries) AccountDeleteInvites(ctx context.Context, arg AccountDeleteInvitesParams) (int64, error) {
-	result, err := q.db.Exec(ctx, accountDeleteInvites, arg.GithubID, arg.StellarAddress)
+	result, err := q.db.Exec(ctx, accountDeleteInvites, arg.GithubID, arg.StellarAddress, arg.PasskeyAddress)
 	if err != nil {
 		return 0, err
 	}
@@ -105,6 +107,7 @@ func (q *Queries) AccountDeleteSessions(ctx context.Context, userID uuid.UUID) (
 const accountEmpty = `-- name: AccountEmpty :exec
 update cp.users
 set github_id = null, github_login = null, stellar_address = null, umami_username = null,
+    passkey_address = null, passkey_credential_id = null, passkey_public_key = null,
     is_operator = false, last_login_at = null, deleted_at = now()
 where id = $1 and deleted_at is null
 `
@@ -165,13 +168,14 @@ func (q *Queries) AccountLockTenants(ctx context.Context, userID uuid.UUID) ([]u
 
 const accountLockUser = `-- name: AccountLockUser :one
 
-select id, github_id, stellar_address, is_operator, deleted_at from cp.users where id = $1 for update
+select id, github_id, stellar_address, passkey_address, is_operator, deleted_at from cp.users where id = $1 for update
 `
 
 type AccountLockUserRow struct {
 	ID             uuid.UUID
 	GithubID       *int64
 	StellarAddress *string
+	PasskeyAddress *string
 	IsOperator     bool
 	DeletedAt      *time.Time
 }
@@ -187,6 +191,7 @@ func (q *Queries) AccountLockUser(ctx context.Context, id uuid.UUID) (AccountLoc
 		&i.ID,
 		&i.GithubID,
 		&i.StellarAddress,
+		&i.PasskeyAddress,
 		&i.IsOperator,
 		&i.DeletedAt,
 	)

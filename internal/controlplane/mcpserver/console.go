@@ -46,8 +46,8 @@ type Credential struct {
 	ClientID    *string    `json:"client_id"`
 	UserID      uuid.UUID  `json:"user_id"`
 	GitHubLogin *string    `json:"github_login"`
-	// DisplayName is the github login or the short stellar address of the
-	// creating account; null once that account is deleted
+	// DisplayName is the github login or the short stellar or passkey
+	// address of the creating account; null once that account is deleted
 	DisplayName   *string          `json:"display_name"`
 	Status        string           `json:"status"`
 	CreatedAt     httpx.Timestamp  `json:"created_at"`
@@ -65,7 +65,7 @@ type CreatedKey struct {
 
 //nolint:gosec // column names of a query, not a credential
 const credentialSelect = `select c.id, c.kind, c.scope, c.tenant_id, c.name, c.prefix, c.client_id, c.user_id, u.github_login,
-	u.stellar_address, c.created_at, c.expires_at, c.revoked_at, c.revoked_reason, c.last_seen_at
+	u.stellar_address, u.passkey_address, c.created_at, c.expires_at, c.revoked_at, c.revoked_reason, c.last_seen_at
 	from cp.mcp_credentials c left join cp.users u on u.id = c.user_id`
 
 func scanCredentialRow(row pgx.Row, now time.Time) (Credential, error) {
@@ -73,12 +73,12 @@ func scanCredentialRow(row pgx.Row, now time.Time) (Credential, error) {
 	var tenant uuid.NullUUID
 	var created time.Time
 	var expires, revoked, seen *time.Time
-	var address *string
+	var address, passkey *string
 	if err := row.Scan(&c.ID, &c.Kind, &c.Scope, &tenant, &c.Name, &c.Prefix, &c.ClientID, &c.UserID, &c.GitHubLogin,
-		&address, &created, &expires, &revoked, &c.RevokedReason, &seen); err != nil {
+		&address, &passkey, &created, &expires, &revoked, &c.RevokedReason, &seen); err != nil {
 		return Credential{}, err
 	}
-	if n := identity.DisplayName(c.GitHubLogin, address); n != "" {
+	if n := identity.DisplayName(c.GitHubLogin, address, passkey); n != "" {
 		c.DisplayName = &n
 	}
 	if tenant.Valid {

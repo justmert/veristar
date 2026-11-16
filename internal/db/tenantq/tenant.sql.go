@@ -137,10 +137,10 @@ func (q *Queries) GetTenant(ctx context.Context) (CpTenant, error) {
 }
 
 const listMembers = `-- name: ListMembers :many
-select m.user_id, m.role, u.github_id, u.github_login, u.stellar_address
+select m.user_id, m.role, u.github_id, u.github_login, u.stellar_address, u.passkey_address
 from cp.tenant_members m
 join cp.users u on u.id = m.user_id
-order by coalesce(u.github_login, u.stellar_address)
+order by coalesce(u.github_login, u.stellar_address, u.passkey_address)
 `
 
 type ListMembersRow struct {
@@ -149,6 +149,7 @@ type ListMembersRow struct {
 	GithubID       *int64
 	GithubLogin    *string
 	StellarAddress *string
+	PasskeyAddress *string
 }
 
 func (q *Queries) ListMembers(ctx context.Context) ([]ListMembersRow, error) {
@@ -166,6 +167,7 @@ func (q *Queries) ListMembers(ctx context.Context) ([]ListMembersRow, error) {
 			&i.GithubID,
 			&i.GithubLogin,
 			&i.StellarAddress,
+			&i.PasskeyAddress,
 		); err != nil {
 			return nil, err
 		}
