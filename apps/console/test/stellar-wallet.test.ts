@@ -149,3 +149,40 @@ describe("test signer", () => {
     expect(kp.verifyMessage("Hello, World!", raw)).toBe(true);
   });
 });
+
+describe("xbull extension module", () => {
+  afterEach(() => {
+    delete (window as unknown as { xBullSDK?: unknown }).xBullSDK;
+  });
+
+  it("is unavailable without the extension and calls the injected api with it", async () => {
+    const { XBullExtensionModule } = await vi.importActual<
+      typeof import("@/lib/stellar-wallet/modules")
+    >("@/lib/stellar-wallet/modules");
+    const m = new XBullExtensionModule();
+    expect(await m.isAvailable()).toBe(false);
+    await expect(m.getAddress()).rejects.toThrow("not installed");
+
+    const calls: unknown[] = [];
+    (globalThis as unknown as { window: Record<string, unknown> }).window ??= {};
+    (window as unknown as { xBullSDK: unknown }).xBullSDK = {
+      getAddress: async () => ({ address: OTHER }),
+      signTransaction: async (p: unknown) => {
+        calls.push(p);
+        return { signedTxXdr: "SIGNED" };
+      },
+      signMessage: async () => ({ error: { code: -1, message: "User rejected the request" } }),
+    };
+    expect(await m.isAvailable()).toBe(true);
+    expect(await m.getAddress()).toEqual({ address: OTHER });
+    const signed = await m.signTransaction("XDR", {
+      address: OTHER,
+      networkPassphrase: Networks.PUBLIC,
+    });
+    expect(signed).toEqual({ signedTxXdr: "SIGNED", signerAddress: OTHER });
+    expect(calls).toEqual([
+      { xdr: "XDR", opts: { address: OTHER, networkPassphrase: Networks.PUBLIC } },
+    ]);
+    await expect(m.signMessage("hi")).rejects.toMatchObject({ code: -1 });
+  });
+});

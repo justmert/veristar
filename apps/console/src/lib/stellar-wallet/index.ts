@@ -10,7 +10,9 @@
 // console component instead (components/wallet-picker.tsx).
 //
 // the wallet list is the kit modules that work under the console's security
-// headers: wallets that a browser extension injects into the page. wallets
+// headers: wallets that a browser extension injects into the page. xbull is
+// a console module on the extension's own api (modules.ts), because the
+// kit's xbull module bundles an agpl-3.0 library. wallets
 // that need a cross-origin popup (albedo, xbull's web wallet, ghostsig), a
 // websocket relay (walletconnect), an iframe (trezor) or webusb (ledger) are
 // left out, because cross-origin-opener-policy same-origin, connect-src
