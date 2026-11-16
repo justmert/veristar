@@ -603,4 +603,3 @@ func adminToken(t *testing.T, e *env) umami.Token {
 	require.NoError(t, err)
 	return s.Token
 }
-
