@@ -77,6 +77,7 @@ func (h *Routes) Routes(r chi.Router) {
 	r.Method(http.MethodPatch, "/tenants/{tenant_id}", httpx.HandlerFunc(h.patch))
 	r.Method(http.MethodPost, "/tenants/{tenant_id}/terms", httpx.HandlerFunc(h.acceptTerms))
 	r.Method(http.MethodPut, "/tenants/{tenant_id}/enrollment", httpx.HandlerFunc(h.resubmit))
+	r.Method(http.MethodGet, "/tenants/{tenant_id}/integrity", httpx.HandlerFunc(h.integrity))
 }
 
 // enrollment is the enrollment object, stored as enrollment_answers. the

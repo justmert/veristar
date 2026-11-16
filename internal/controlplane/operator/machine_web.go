@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/justmert/veristar/internal/controlplane/httpx"
+	"github.com/justmert/veristar/internal/controlplane/integrityview"
 	"github.com/justmert/veristar/internal/umami"
 )
 
@@ -119,12 +120,15 @@ type MachineWebTotals struct {
 	Totaltime int64 `json:"totaltime"`
 }
 
-// MachineWebDay is one item of GET /web/daily.
+// MachineWebDay is one item of GET /web/daily. Integrity is the grade of
+// the tenant's sites on that day (contract 17.4), the same on both bands'
+// items.
 type MachineWebDay struct {
 	TenantID uuid.UUID `json:"tenant_id"`
 	Day      string    `json:"day"`
 	Band     string    `json:"band"`
 	MachineWebTotals
+	Integrity integrityview.Summary `json:"integrity"`
 }
 
 var webDayKeys = keyset{cols: []string{"z.tenant_id", "z.day", "z.band"}, casts: []string{"uuid", "date", "text"}}
@@ -184,6 +188,9 @@ func (m *Machine) webDaily(w http.ResponseWriter, r *http.Request) error {
 			items = items[:p.Limit]
 			l := items[len(items)-1]
 			out.NextCursor = p.next([]string{l.TenantID.String(), l.Day, l.Band}, out.From, out.To)
+		}
+		if err := attachDayIntegrity(ctx, tx, items, rg.From, rg.To); err != nil {
+			return err
 		}
 		out.Items = items
 		return nil

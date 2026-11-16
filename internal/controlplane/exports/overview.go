@@ -12,6 +12,7 @@ import (
 	"github.com/justmert/veristar/internal/controlplane/apimetrics"
 	"github.com/justmert/veristar/internal/controlplane/audit"
 	"github.com/justmert/veristar/internal/controlplane/httpx"
+	"github.com/justmert/veristar/internal/controlplane/integrityview"
 	"github.com/justmert/veristar/internal/controlplane/onchain"
 	"github.com/justmert/veristar/internal/controlplane/tenants"
 	"github.com/justmert/veristar/internal/db/tenantq"
@@ -25,6 +26,7 @@ var OverviewHeader = []string{
 	"web_quarantine_pageviews",
 	"api_requests", "api_errors_4xx", "api_errors_5xx",
 	"onchain_ids_read", "onchain_operations", "onchain_transactions",
+	"integrity_grade",
 }
 
 // Overview serves GET /api/tenants/{tenant_id}/overview.csv.
@@ -69,6 +71,7 @@ func (o *Overview) overview(w http.ResponseWriter, r *http.Request) error {
 	web := map[string]webDay{}
 	api := map[string]tenantq.APIMetricTimeseriesRow{}
 	var chain map[string]onchain.DayTotal
+	var grades map[integrityview.DayKey]integrityview.Summary
 	err = o.scope.InTenant(ctx, a, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, `
 			select day, coalesce(sum(pageviews) filter (where band = 'primary'), 0)::bigint,
@@ -118,6 +121,11 @@ func (o *Overview) overview(w http.ResponseWriter, r *http.Request) error {
 		for _, p := range totals[a.TenantID] {
 			chain[p.Day] = p
 		}
+		// the integrity grade of the project's sites per day, the same the
+		// operator exports carry
+		if grades, err = integrityview.ByTenantDay(ctx, tx, []uuid.UUID{a.TenantID}, rg.From, rg.To); err != nil {
+			return err
+		}
 		return audit.InTenant(ctx, tx, audit.Entry{
 			Actor: audit.User(a.User.ID), Action: ActionExport, Target: audit.TenantTarget(a.TenantID),
 			Detail: map[string]any{
@@ -147,6 +155,7 @@ func (o *Overview) overview(w http.ResponseWriter, r *http.Request) error {
 		row = append(row, Int(p.Requests), Int(p.Errors4xx), Int(p.Errors5xx))
 		c := chain[day]
 		row = append(row, Int(c.IDsRead), IntPtr(c.Operations), IntPtr(c.Transactions))
+		row = append(row, StrPtr(grades[integrityview.DayKey{Tenant: a.TenantID, Day: day}].Grade))
 		if err := cw.Row(row...); err != nil {
 			panic(http.ErrAbortHandler)
 		}

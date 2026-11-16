@@ -100,6 +100,7 @@ func (m *Machine) Handler() http.Handler {
 	r.Method(http.MethodGet, "/web/daily", httpx.HandlerFunc(m.webDaily))
 	r.Method(http.MethodGet, "/web/dimensions", httpx.HandlerFunc(m.webDimensions))
 	r.Method(http.MethodGet, "/web/hourly", httpx.HandlerFunc(m.webHourly))
+	r.Method(http.MethodGet, "/web/integrity", httpx.HandlerFunc(m.webIntegrity))
 	r.Method(http.MethodGet, "/api/daily", httpx.HandlerFunc(m.apiDaily))
 	r.Method(http.MethodGet, "/api/routes/daily", httpx.HandlerFunc(m.apiRoutesDaily))
 	r.Method(http.MethodGet, "/api/hourly", httpx.HandlerFunc(m.apiHourly))

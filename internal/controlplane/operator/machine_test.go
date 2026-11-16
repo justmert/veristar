@@ -291,6 +291,7 @@ func TestMachineAPI(t *testing.T) {
 		}
 	}
 
+	seedIntegrity(t, f)
 	global := e.createKey(t, `{"name":"warehouse","scope":"metrics:read"}`)
 	require.Nil(t, global.TenantID)
 	require.Equal(t, KeyActive, global.Status)
@@ -306,12 +307,52 @@ func TestMachineAPI(t *testing.T) {
 	hourly := e.createKey(t, fmt.Sprintf(`{"name":"hourly","scope":"metrics:read","tenant_id":%q}`, e.hourly))
 	visible := []uuid.UUID{ids["aurora"], ids["borealis"], ids["comet"], ids["dune"], ids["eclipse"], ids["flare"], e.hourly}
 
+	t.Run("integrity rows page in key order and daily rows carry the day's grade", func(t *testing.T) {
+		items := list[MachineWebIntegrity](t, e, global.Key, "/web/integrity?"+rq, 4)
+		// three projects with one graded site each over ten days, and
+		// aurora's ungraded second site day
+		require.Len(t, items, 31)
+		for i := 1; i < len(items); i++ {
+			a, b := items[i-1], items[i]
+			key := func(x MachineWebIntegrity) string { return x.TenantID.String() + x.SiteID.String() + x.Day.Day }
+			require.Less(t, key(a), key(b), "ordered by tenant, site and day")
+		}
+		for _, it := range items {
+			if it.TenantID == ids["borealis"] && it.Day.Day == today.Format(time.DateOnly) {
+				require.Equal(t, "C", *it.Grade)
+				require.Equal(t, "quarantine_share", it.Reasons[0].Code)
+				require.NotEmpty(t, it.Reasons[0].Text)
+			}
+		}
+		days := decode[MachineRangeList[MachineWebDay]](t, e.get(t, global.Key, "/web/daily?band=primary&tenant="+ids["flare"].String()+"&"+rq, http.StatusOK).body)
+		var graded int
+		for _, d := range days.Items {
+			if d.Integrity.Grade == nil {
+				continue
+			}
+			graded++
+			day, err := time.Parse(time.DateOnly, d.Day)
+			require.NoError(t, err)
+			want := "A"
+			if !day.Before(today.AddDate(0, 0, -2)) {
+				want = "B"
+			}
+			require.Equal(t, want, *d.Integrity.Grade, d.Day)
+		}
+		require.Equal(t, fixtureDays, graded)
+		// a key scoped to aurora reads only aurora's rows
+		for _, it := range list[MachineWebIntegrity](t, e, aurora.Key, "/web/integrity?"+rq, 5) {
+			require.Equal(t, ids["aurora"], it.TenantID)
+		}
+	})
+
 	t.Run("every route answers as the document says", func(t *testing.T) {
 		paths := []string{
 			"/tenants",
 			"/web/daily?" + rq, "/web/daily?band=quarantine&tenant=" + ids["aurora"].String(),
 			"/web/dimensions?" + rq, "/web/dimensions?dimension=country&band=primary&" + rq,
 			"/web/hourly?tenant=" + e.hourly.String(),
+			"/web/integrity?" + rq, "/web/integrity?tenant=" + ids["flare"].String() + "&" + rq,
 			"/api/daily?" + rq, "/api/daily?service=api&" + rq, "/api/daily?service=&" + rq,
 			"/api/routes/daily?" + rq, "/api/routes/daily?service=worker&tenant=" + ids["flare"].String(),
 			"/api/hourly", "/api/hourly?service=worker&from=" + url.QueryEscape(httpTime(hour.Add(-5*time.Hour))),
@@ -319,7 +360,7 @@ func TestMachineAPI(t *testing.T) {
 		for _, p := range paths {
 			e.get(t, global.Key, p, http.StatusOK)
 		}
-		for _, p := range []string{"/tenants", "/web/daily", "/web/dimensions", "/api/daily", "/api/routes/daily", "/api/hourly"} {
+		for _, p := range []string{"/tenants", "/web/daily", "/web/dimensions", "/web/integrity", "/api/daily", "/api/routes/daily", "/api/hourly"} {
 			e.get(t, aurora.Key, p, http.StatusOK)
 		}
 		e.get(t, hourly.Key, "/web/hourly", http.StatusOK)

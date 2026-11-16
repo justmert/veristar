@@ -20,6 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/justmert/veristar/internal/db/dbtest"
+	"github.com/justmert/veristar/internal/integrity"
 )
 
 // globalFixture is a platform database holding web aggregates, edge
@@ -352,6 +353,11 @@ func webSortValue(p WebProject, sort string) sortVal {
 		return intv(p.IngestRejected)
 	case "rejected_share":
 		return num(p.RejectedShare)
+	case "integrity":
+		if p.Integrity.Grade == nil {
+			return sortVal{null: true}
+		}
+		return intv(int64(integrity.Rank(*p.Integrity.Grade)))
 	}
 	panic("unknown web sort " + sort)
 }

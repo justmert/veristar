@@ -181,9 +181,11 @@ func TestSchemaDatabaseAndFunctionRights(t *testing.T) {
 		"api.operator_hourly(timestamp with time zone,timestamp with time zone,uuid[])": {pdb.RoleCPOperator},
 		"api.operator_daily(timestamp with time zone,timestamp with time zone,uuid[])":  {pdb.RoleCPOperator},
 		"agg.purge_tenant(uuid)": {pdb.RoleCPSystem},
+		// the reconciler's way to the integrity baselines (00033)
+		"agg.site_baselines(uuid)": {pdb.RoleCPSystem},
 		// the chain purge (00032); the enrollment trigger runs as its owner
-		"agg.purge_chain(uuid,boolean)": {pdb.RoleCPSystem},
-		"cp.chain_ids_from_enrollment()":       nil,
+		"agg.purge_chain(uuid,boolean)":  {pdb.RoleCPSystem},
+		"cp.chain_ids_from_enrollment()": nil,
 	}
 	var names []string
 	for _, f := range fns {

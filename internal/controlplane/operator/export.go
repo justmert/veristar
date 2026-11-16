@@ -16,6 +16,7 @@ import (
 	"github.com/justmert/veristar/internal/controlplane/audit"
 	"github.com/justmert/veristar/internal/controlplane/exports"
 	"github.com/justmert/veristar/internal/controlplane/httpx"
+	"github.com/justmert/veristar/internal/controlplane/integrityview"
 	"github.com/justmert/veristar/internal/controlplane/onchain"
 	"github.com/justmert/veristar/internal/controlplane/session"
 )
@@ -113,6 +114,14 @@ func summaryCells(s onchain.Summary) []string {
 	}
 }
 
+// integrityHeader and integrityCells are the integrity grade of a list
+// row over the range (contract 17.3)
+var integrityHeader = []string{"integrity_grade", "integrity_days_a", "integrity_days_b", "integrity_days_c"}
+
+func integrityCells(g IntegrityGrade) []string {
+	return []string{exports.StrPtr(g.Grade), exports.Int(g.DaysA), exports.Int(g.DaysB), exports.Int(g.DaysC)}
+}
+
 var tenantHeader = []string{
 	"tenant_id", "slug", "name", "status", "created_at", "sites", "sites_verified", "sites_with_stellar_toml",
 	"has_web_data", "has_api_data",
@@ -154,7 +163,7 @@ func (e *Exports) webProjects(w http.ResponseWriter, r *http.Request) error {
 			select id, slug, name, status, created_at, sites, sites_verified, sites_with_stellar_toml,
 			       has_web_data, has_api_data, pageviews, visitors, visits, bounces, totaltime,
 			       bounce_rate, avg_visit_duration, quarantine_pageviews, quarantine_visitors, quarantine_share,
-			       ingest_requests, ingest_rejected, rejected_share
+			       ingest_requests, ingest_rejected, rejected_share, days_a, days_b, days_c
 			from y`+lq.orderBy(webSorts)+` limit @row_limit offset 0`, rowArgs(lq))
 		if err != nil {
 			return err
@@ -166,8 +175,10 @@ func (e *Exports) webProjects(w http.ResponseWriter, r *http.Request) error {
 				&p.Sites, &p.SitesVerified, &p.SitesWithStellarToml, &p.HasWebData, &p.HasAPIData,
 				&p.Pageviews, &p.Visitors, &p.Visits, &p.Bounces, &p.Totaltime,
 				&p.BounceRate, &p.AvgVisitDuration, &p.QuarantinePageviews, &p.QuarantineVisitors, &p.QuarantineShare,
-				&p.IngestRequests, &p.IngestRejected, &p.RejectedShare)
+				&p.IngestRequests, &p.IngestRejected, &p.RejectedShare,
+				&p.Integrity.DaysA, &p.Integrity.DaysB, &p.Integrity.DaysC)
 			p.Tenant.CreatedAt = httpx.Timestamp(at)
+			p.Integrity.derive()
 			return p, err
 		})
 		if err != nil {
@@ -185,7 +196,7 @@ func (e *Exports) webProjects(w http.ResponseWriter, r *http.Request) error {
 	cw, err := exports.NewWriter(w, exports.FileName("veristar-web-projects", lq.Range.From.Format(time.DateOnly), lq.Range.To.Format(time.DateOnly)), cat(tenantHeader, []string{
 		"pageviews", "visitors", "visits", "bounces", "totaltime_seconds", "bounce_rate", "avg_visit_duration_seconds",
 		"quarantine_pageviews", "quarantine_visitors", "quarantine_share", "ingest_requests", "ingest_rejected", "rejected_share",
-	}, summaryHeader))
+	}, integrityHeader, summaryHeader))
 	if err != nil {
 		panic(http.ErrAbortHandler)
 	}
@@ -195,7 +206,7 @@ func (e *Exports) webProjects(w http.ResponseWriter, r *http.Request) error {
 			exports.Float(p.BounceRate), exports.Float(p.AvgVisitDuration), exports.Int(p.QuarantinePageviews),
 			exports.Int(p.QuarantineVisitors), exports.Float(p.QuarantineShare), exports.Int(p.IngestRequests),
 			exports.Int(p.IngestRejected), exports.Float(p.RejectedShare),
-		}, summaryCells(p.Onchain))...); err != nil {
+		}, integrityCells(p.Integrity), summaryCells(p.Onchain))...); err != nil {
 			panic(http.ErrAbortHandler)
 		}
 	}
@@ -335,6 +346,7 @@ func (e *Exports) webCompare(w http.ResponseWriter, r *http.Request) error {
 	var tenants []TenantRef
 	var series map[uuid.UUID][]WebPoint
 	var chainOf map[uuid.UUID]CompareOnchain
+	var grades map[integrityview.DayKey]integrityview.Summary
 	err = e.g.db.WithOperator(ctx, func(tx pgx.Tx) error {
 		if err := snapshot(ctx, tx); err != nil {
 			return err
@@ -344,6 +356,9 @@ func (e *Exports) webCompare(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 		if series, _, err = webSeries(ctx, tx, ids, rg); err != nil {
+			return err
+		}
+		if grades, err = integrityview.ByTenantDay(ctx, tx, ids, rg.From, rg.To); err != nil {
 			return err
 		}
 		chainOf, err = compareOnchain(ctx, tx, ids, rg, e.g.now())
@@ -358,7 +373,7 @@ func (e *Exports) webCompare(w http.ResponseWriter, r *http.Request) error {
 	}
 	cw, err := exports.NewWriter(w, exports.FileName("veristar-web-compare", rg.From.Format(time.DateOnly), rg.To.Format(time.DateOnly)), cat(compareTenantHeader, []string{
 		"aggregated", "pageviews", "visitors", "visits", "bounces", "totaltime_seconds", "bounce_rate",
-		"avg_visit_duration_seconds", "quarantine_pageviews",
+		"avg_visit_duration_seconds", "quarantine_pageviews", "integrity_grade",
 	}, compareChainHeader))
 	if err != nil {
 		panic(http.ErrAbortHandler)
@@ -370,6 +385,7 @@ func (e *Exports) webCompare(w http.ResponseWriter, r *http.Request) error {
 				exports.Bool(p.Aggregated), exports.IntPtr(p.Pageviews), exports.IntPtr(p.Visitors), exports.IntPtr(p.Visits),
 				exports.IntPtr(p.Bounces), exports.IntPtr(p.Totaltime), exports.Float(p.BounceRate), exports.Float(p.AvgVisitDuration),
 				exports.IntPtr(p.QuarantinePageviews),
+				exports.StrPtr(grades[integrityview.DayKey{Tenant: t.ID, Day: p.Day}].Grade),
 			}, chainCells(chainSeries[i]))...); err != nil {
 				panic(http.ErrAbortHandler)
 			}
