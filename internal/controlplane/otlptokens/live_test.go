@@ -42,6 +42,7 @@ import (
 	"github.com/justmert/veristar/internal/registry"
 	"github.com/justmert/veristar/internal/umami"
 	"github.com/justmert/veristar/tests/fixtures/githuboauth"
+	"github.com/justmert/veristar/tests/fixtures/stepuptest"
 	"github.com/justmert/veristar/tests/fixtures/umamictr"
 )
 
@@ -116,7 +117,6 @@ func start(t *testing.T, operatorGH int64) *env {
 		ClientSecret:  config.FromMap(map[string]string{"S": "otlp-test-secret"}).Secret("S", 1),
 		RedirectURL:   e.srv.URL + "/api/auth/github/callback",
 		StateKey:      random32(t),
-		Operators:     identity.Operators{GitHub: ops},
 		ConsoleOrigin: e.srv.URL,
 		Endpoints: auth.Endpoints{
 			OAuth: oauth2.Endpoint{
@@ -128,8 +128,7 @@ func start(t *testing.T, operatorGH int64) *env {
 		},
 	}, e.d, sessions)
 	require.NoError(t, err)
-	guard, err := operator.NewGuard(identity.Operators{GitHub: ops})
-	require.NoError(t, err)
+	_, guard := stepuptest.Guard(t, e.d, sessions, e.srv.URL, identity.Operators{GitHub: ops})
 	mode, err := operator.NewEnrollmentMode(e.d)
 	require.NoError(t, err)
 	actions, err := lifecycle.NewActions(e.d, scope.Reconcile)
@@ -306,6 +305,11 @@ func TestOTLPTokens(t *testing.T) {
 	opGH := int64(699_999)
 	e := start(t, opGH)
 	op := e.signIn(t, opGH, "scf-operator")
+	var keys stepuptest.Keys
+	keys.StepUpMe(t, stepuptest.Origin(e.srv.URL), func(method, path string, body any) (int, []byte) {
+		r := op.call(t, method, path, body)
+		return r.status, r.body
+	})
 	owner := e.signIn(t, e.newGH(), "otlp-owner")
 	tenant, status := owner.enroll(t, "OTLP Project")
 	require.Equal(t, "active", status)

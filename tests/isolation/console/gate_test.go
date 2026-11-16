@@ -41,6 +41,10 @@ const (
 	kindSSO
 	// an /api/operator route: 403 operator_required for a non-operator
 	kindOperator
+	// a step-up or passkey route of the operator area (contract 5.11):
+	// 403 operator_required for a non-operator; an operator reaches it
+	// without a step-up, because it is how a session gets one
+	kindStepUp
 	// a machine metrics route: only a valid operator api key, within its
 	// scope (contract 9.3)
 	kindMachine
@@ -73,7 +77,7 @@ func (r route) key() string { return r.method + " " + strings.SplitN(r.path, "?"
 
 // gateIDs fills a route's parameters.
 type gateIDs struct {
-	tenant, user, invite, site, token, request, key, credential, chain, report, rule string
+	tenant, user, invite, site, token, request, key, credential, chain, report, rule, entry, passkey string
 	// domain is the site's domain, for bodies that must repeat it
 	domain string
 }
@@ -83,6 +87,7 @@ func (r route) fill(ids gateIDs) string {
 		"{tenant_id}", ids.tenant, "{user_id}", ids.user, "{invite_id}", ids.invite,
 		"{site_id}", ids.site, "{token_id}", ids.token, "{request_id}", ids.request, "{key_id}", ids.key,
 		"{credential_id}", ids.credential, "{chain_id}", ids.chain, "{report_id}", ids.report, "{rule_id}", ids.rule,
+		"{entry_id}", ids.entry, "{passkey_id}", ids.passkey,
 	).Replace(r.path)
 }
 
@@ -236,6 +241,22 @@ func catalogue(terms string) []route {
 	add(kindOperator, http.MethodDelete, op+"/rules/{rule_id}", nil)
 	add(kindOperator, http.MethodGet, op+"/rules/{rule_id}/matches", nil)
 	add(kindOperator, http.MethodGet, op+"/rules/{rule_id}/matches.csv", nil)
+	// the operator roster (contract 5.12)
+	add(kindOperator, http.MethodGet, op+"/roster", nil)
+	add(kindOperator, http.MethodPost, op+"/roster", fixed(map[string]any{
+		"github_login": "intruder-friend", "role": "operator_admin", "reason": "isolation gate"}))
+	for _, a := range []string{"suspend", "resume", "remove", "reset-passkeys"} {
+		add(kindOperator, http.MethodPost, op+"/roster/{entry_id}/"+a, reason)
+	}
+	add(kindOperator, http.MethodPost, op+"/roster/{entry_id}/role", fixed(map[string]any{"role": "operator", "reason": "isolation gate"}))
+	// the step-up and the passkeys (contract 5.11)
+	add(kindStepUp, http.MethodGet, op+"/step-up", nil)
+	add(kindStepUp, http.MethodPost, op+"/step-up/options", fixed(map[string]any{}))
+	add(kindStepUp, http.MethodPost, op+"/step-up", fixed(map[string]any{"credential": map[string]any{}}))
+	add(kindStepUp, http.MethodGet, op+"/passkeys", nil)
+	add(kindStepUp, http.MethodPost, op+"/passkeys/options", fixed(map[string]any{}))
+	add(kindStepUp, http.MethodPost, op+"/passkeys", fixed(map[string]any{"name": "intruder", "credential": map[string]any{}}))
+	add(kindStepUp, http.MethodDelete, op+"/passkeys/{passkey_id}", nil)
 
 	// mcp access keys of a project and the consent page (contract 12.8);
 	// the consent routes act on the caller's own memberships only
@@ -293,20 +314,22 @@ func walked(t *testing.T, r chi.Routes) []string {
 // one of every entity a route can name, bob owns tenant b, and an operator.
 type gateWorld struct {
 	alice, bob, op *client
-	ta, tb         uuid.UUID
-	sa, sb         uuid.UUID
-	domainA        string
-	inviteA        string
-	tokenA         string // id
-	tokenAPlain    string // the otlp token itself
-	credentialA    string // id of alice's mcp access key
-	chainA         string // id of alice's declared account
-	chainKeyA      string // its strkey
-	requestA       string
-	reportA        string // id of a signed usage report of tenant a
-	reportB        string // and of tenant b
-	ruleID         string // a threshold rule tenant a meets
-	slugA, nameA   string
+	// opFresh is a second session of the operator that never stepped up
+	opFresh      *client
+	ta, tb       uuid.UUID
+	sa, sb       uuid.UUID
+	domainA      string
+	inviteA      string
+	tokenA       string // id
+	tokenAPlain  string // the otlp token itself
+	credentialA  string // id of alice's mcp access key
+	chainA       string // id of alice's declared account
+	chainKeyA    string // its strkey
+	requestA     string
+	reportA      string // id of a signed usage report of tenant a
+	reportB      string // and of tenant b
+	ruleID       string // a threshold rule tenant a meets
+	slugA, nameA string
 }
 
 func (w *gateWorld) aIDs() gateIDs {
@@ -335,6 +358,8 @@ func (e *env) gateWorld(t *testing.T) *gateWorld {
 	t.Helper()
 	w := &gateWorld{domainA: "a-gate.example.org", nameA: "Gate Tenant Alpha"}
 	w.op = e.signInAs(t, operatorGHID, "gate-operator")
+	w.op.stepUp(t)
+	w.opFresh = e.signInAs(t, operatorGHID, "gate-operator")
 	w.alice = e.signIn(t, "gate-alice")
 	w.bob = e.signIn(t, "gate-bob")
 
@@ -453,6 +478,8 @@ func (e *env) snapshot(t *testing.T, w *gateWorld) map[string]string {
 		{"erasure_requests", `select coalesce(json_agg(x order by x.id)::text, '') from cp.erasure_requests x where x.tenant_id in ($1, $2)`, ab},
 		{"tenant_removals", `select coalesce(json_agg(x order by x.tenant_id)::text, '') from cp.tenant_removals x where x.tenant_id in ($1, $2)`, ab},
 		{"settings", `select coalesce(json_agg(x order by x.key)::text, '') from cp.settings x`, nil},
+		{"roster", `select coalesce(json_agg(x order by x.id)::text, '') from cp.operators x`, nil},
+		{"passkeys", `select coalesce(json_agg(json_build_array(x.id, x.user_id, x.name) order by x.id)::text, '') from cp.operator_passkeys x`, nil},
 		// last_seen_at moves with every accepted mcp request, by design
 		{"mcp_credentials", `select coalesce(json_agg(json_build_array(x.id, x.tenant_id, x.user_id, x.name, x.expires_at, x.revoked_at) order by x.id)::text, '')
 			from cp.mcp_credentials x`, nil},
@@ -653,8 +680,9 @@ func testRouteCoverage(t *testing.T, e *env, cat []route) {
 	for _, r := range cat {
 		counts[r.kind]++
 	}
-	t.Logf("%d routes walked, all covered: %d tenant, %d sso, %d operator, %d machine, %d mcp, %d without a tenant",
-		len(got), counts[kindTenant], counts[kindSSO], counts[kindOperator], counts[kindMachine], counts[kindMCP], counts[kindOwn])
+	t.Logf("%d routes walked, all covered: %d tenant, %d sso, %d operator, %d step-up, %d machine, %d mcp, %d without a tenant",
+		len(got), counts[kindTenant], counts[kindSSO], counts[kindOperator], counts[kindStepUp], counts[kindMachine], counts[kindMCP],
+		counts[kindOwn])
 }
 
 func testTenantRoutes(t *testing.T, e *env, w *gateWorld, cat []route) {
@@ -757,7 +785,7 @@ func testOperatorRoutes(t *testing.T, e *env, w *gateWorld, cat []route) {
 	}
 	anon := e.anonymous(t)
 	for _, r := range cat {
-		if r.kind != kindOperator {
+		if r.kind != kindOperator && r.kind != kindStepUp {
 			continue
 		}
 		for _, ids := range idsets {
@@ -787,16 +815,73 @@ func testOperatorRoutes(t *testing.T, e *env, w *gateWorld, cat []route) {
 	}
 	requireUnchanged(t, before, e.snapshot(t, w), "a non-operator request")
 
+	// an operator session without a recent passkey step-up gets 401
+	// step_up_required on every route of the area except the step-up and
+	// passkey routes, and changes nothing
+	entry := rosterEntryOf(t, w.op, operatorGHID)
+	for _, r := range cat {
+		if r.kind != kindOperator {
+			continue
+		}
+		ids := gateIDs{tenant: w.ta.String(), site: w.sa.String(), key: keyID, entry: entry}
+		var body any
+		if r.body != nil {
+			body = r.body(ids)
+		}
+		res := w.opFresh.call(t, r.method, r.fill(ids), body)
+		require.Equal(t, http.StatusUnauthorized, res.status, "%s %s without step-up: %s", r.method, r.fill(ids), res.body)
+		require.Equal(t, "step_up_required", res.code(t))
+		sent++
+	}
+	// the step-up status answers, the passkey list and a deletion need the
+	// step-up, and a registration needs it once the window closed
+	for _, c := range []struct {
+		m, p   string
+		status int
+		code   string
+	}{
+		{http.MethodGet, "/api/operator/step-up", http.StatusOK, ""},
+		{http.MethodGet, "/api/operator/passkeys", http.StatusUnauthorized, "step_up_required"},
+		{http.MethodDelete, "/api/operator/passkeys/" + uuid.NewString(), http.StatusUnauthorized, "step_up_required"},
+		{http.MethodPost, "/api/operator/passkeys/options", http.StatusUnauthorized, "step_up_required"},
+	} {
+		var body any
+		if c.m == http.MethodPost {
+			body = map[string]any{}
+		}
+		res := w.opFresh.call(t, c.m, c.p, body)
+		require.Equal(t, c.status, res.status, "%s %s without step-up: %s", c.m, c.p, res.body)
+		if c.code != "" {
+			require.Equal(t, c.code, res.code(t))
+		}
+	}
+	requireUnchanged(t, before, e.snapshot(t, w), "an operator request without a step-up")
+
 	// control: the operator reaches every read, so the 403s above came from
 	// the guard and not from a missing route
 	for _, r := range cat {
-		if r.kind == kindOperator && r.method == http.MethodGet {
+		if (r.kind == kindOperator || r.kind == kindStepUp) && r.method == http.MethodGet {
 			p := r.fill(gateIDs{tenant: w.ta.String(), key: keyID, rule: w.ruleID})
 			res := w.op.call(t, r.method, p, nil)
 			require.Equal(t, http.StatusOK, res.status, "control: operator %s: %s", p, res.body)
 		}
 	}
 	t.Logf("%d non-operator requests refused with 403 operator_required, nothing changed", sent)
+}
+
+// rosterEntryOf is the id of the roster row of a github id
+func rosterEntryOf(t *testing.T, op *client, gh int64) string {
+	t.Helper()
+	r := op.call(t, http.MethodGet, "/api/operator/roster", nil)
+	require.Equal(t, http.StatusOK, r.status, string(r.body))
+	for _, it := range r.json(t)["items"].([]any) {
+		m := it.(map[string]any)
+		if id, ok := m["github_id"].(float64); ok && int64(id) == gh {
+			return m["id"].(string)
+		}
+	}
+	t.Fatalf("no roster row for github id %d", gh)
+	return ""
 }
 
 type machineResp struct {

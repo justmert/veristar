@@ -72,6 +72,7 @@ import (
 	"github.com/justmert/veristar/internal/umami"
 	"github.com/justmert/veristar/tests/fixtures/githuboauth"
 	"github.com/justmert/veristar/tests/fixtures/natsctr"
+	"github.com/justmert/veristar/tests/fixtures/stepuptest"
 	"github.com/justmert/veristar/tests/fixtures/umamictr"
 )
 
@@ -105,6 +106,8 @@ type env struct {
 	checks *domaincheck.Routes
 	// mcp is the mcp server, for its resource uri
 	mcp *mcpserver.Server
+	// keys are the operators' software authenticators
+	keys stepuptest.Keys
 }
 
 func repoRoot(t *testing.T) string {
@@ -215,7 +218,6 @@ func start(t *testing.T) *env {
 		ClientSecret:  config.FromMap(map[string]string{"S": "console-test-secret"}).Secret("S", 1),
 		RedirectURL:   callback,
 		StateKey:      random32(t),
-		Operators:     identity.Operators{GitHub: operators},
 		ConsoleOrigin: e.srv.URL,
 		Endpoints: auth.Endpoints{
 			OAuth: oauth2.Endpoint{
@@ -243,7 +245,10 @@ func start(t *testing.T) *env {
 	require.NoError(t, err)
 	erasureCfg, err := config.LoadErasure(settings)
 	require.NoError(t, err)
-	guard, err := operator.NewGuard(identity.Operators{GitHub: operators})
+	_, guard := stepuptest.Guard(t, e.conn, sessions, e.srv.URL, identity.Operators{GitHub: operators})
+	roster, err := operator.NewRoster(operator.RosterConfig{
+		DB: e.conn, Guard: guard, Lookup: users, Bootstrap: identity.Operators{GitHub: operators}, EnrollWindow: time.Hour,
+	})
 	require.NoError(t, err)
 	ng, err := netguard.New(net.DefaultResolver)
 	require.NoError(t, err)
@@ -382,7 +387,7 @@ func start(t *testing.T) *env {
 			e.mcp.TenantRoutes(scope),
 			e.mcp.ConsentRoutes(),
 			controlplane.RoutesFunc(guard.Mount(modeRoutes, keepRoutes, auditRoutes, actions, review, global, apiKeys,
-				e.mcp.OperatorRoutes(), onchainOperator, operatorExports, cohortRoutes, ruleRoutes)),
+				e.mcp.OperatorRoutes(), onchainOperator, operatorExports, cohortRoutes, ruleRoutes, roster)),
 		},
 		Mounts: []controlplane.Mount{
 			{Path: operator.MachinePath, Handler: machine.Handler()},
@@ -395,6 +400,15 @@ func start(t *testing.T) *env {
 	require.True(t, ok, "the api handler is a chi router")
 	e.router = routes
 	return e
+}
+
+// stepUp gives an operator's session its passkey step-up (contract 5.11)
+func (c *client) stepUp(t *testing.T) {
+	t.Helper()
+	c.e.keys.StepUp(t, c.userID, stepuptest.Origin(c.e.srv.URL), func(method, path string, body any) (int, []byte) {
+		r := c.call(t, method, path, body)
+		return r.status, r.body
+	})
 }
 
 // client is one browser: a cookie jar, no automatic redirects.

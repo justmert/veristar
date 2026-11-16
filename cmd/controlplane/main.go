@@ -46,6 +46,7 @@ import (
 	"github.com/justmert/veristar/internal/controlplane/session"
 	"github.com/justmert/veristar/internal/controlplane/sites"
 	"github.com/justmert/veristar/internal/controlplane/sso"
+	"github.com/justmert/veristar/internal/controlplane/stepup"
 	"github.com/justmert/veristar/internal/controlplane/tenants"
 	"github.com/justmert/veristar/internal/controlplane/terms"
 	"github.com/justmert/veristar/internal/db"
@@ -201,14 +202,16 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 		return err
 	}
 
-	// operator flags follow OPERATOR_GITHUB_IDS and OPERATOR_STELLAR_ADDRESSES
-	// from this start on (5.1)
+	// OPERATOR_GITHUB_IDS and OPERATOR_STELLAR_ADDRESSES bootstrap the
+	// roster: at every start each listed identity is an active operator
+	// admin, and every account's operator flag is recomputed (5.1)
 	operators := identity.Operators{GitHub: cfg.OperatorGitHubIDs, Stellar: cfg.OperatorStellarAddresses}
-	changed, err := operator.SyncFlags(ctx, d, operators)
+	boot, err := operator.Bootstrap(ctx, d, operators, cfg.OperatorEnrollWindow, time.Now())
 	if err != nil {
 		return err
 	}
-	log.Info("operator flags synced", "changed", changed)
+	log.Info("operator roster bootstrapped", "ensured", boot.Ensured, "changed", boot.Changed,
+		"flags_changed", boot.FlagsChanged, "enrollment_windows", boot.Windows, "active_admins", boot.ActiveAdmins)
 
 	rec := &provision.Reconciler{
 		Admin: admin, Registry: publisher, Key: pwKey, Tx: recDB.WithSystem, Now: time.Now, Log: log,
@@ -227,7 +230,6 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 		ClientSecret:  cfg.GitHubClientSecret,
 		RedirectURL:   cfg.GitHubRedirectURL,
 		StateKey:      cfg.OAuthStateKey.Reveal(),
-		Operators:     operators,
 		ConsoleOrigin: cfg.ConsoleOrigin,
 		Endpoints:     endpoints,
 		Reconcile:     scope.Reconcile,
@@ -247,7 +249,20 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	guard, err := operator.NewGuard(operators)
+	// the passkey step-up of the operator area (contract 5.11)
+	stepUp, err := stepup.New(stepup.Config{
+		ConsoleOrigin: cfg.ConsoleOrigin, MaxAge: cfg.OperatorStepUpMaxAge, EnrollWindow: cfg.OperatorEnrollWindow,
+	}, d, sessions)
+	if err != nil {
+		return err
+	}
+	guard, err := operator.NewGuard(d, stepUp)
+	if err != nil {
+		return err
+	}
+	roster, err := operator.NewRoster(operator.RosterConfig{
+		DB: d, Guard: guard, Lookup: users, Bootstrap: operators, EnrollWindow: cfg.OperatorEnrollWindow,
+	})
 	if err != nil {
 		return err
 	}
@@ -455,7 +470,7 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 			mcpSrv.TenantRoutes(scope),
 			mcpSrv.ConsentRoutes(),
 			controlplane.RoutesFunc(guard.Mount(modeRoutes, keepRoutes, auditRoutes, actions, review, global, apiKeys, alertRoutes,
-				mcpSrv.OperatorRoutes(), onchainOperator, operatorExports, cohortRoutes, ruleRoutes)),
+				mcpSrv.OperatorRoutes(), onchainOperator, operatorExports, cohortRoutes, ruleRoutes, roster)),
 		},
 		// keys only: no session middleware runs there (contract 9.1); the
 		// mcp endpoint and its oauth server authenticate by bearer

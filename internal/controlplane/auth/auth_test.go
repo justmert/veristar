@@ -28,6 +28,7 @@ import (
 	"github.com/justmert/veristar/internal/controlplane"
 	"github.com/justmert/veristar/internal/controlplane/auth"
 	"github.com/justmert/veristar/internal/controlplane/identity"
+	"github.com/justmert/veristar/internal/controlplane/operator"
 	"github.com/justmert/veristar/internal/controlplane/session"
 	"github.com/justmert/veristar/internal/controlplane/terms"
 	"github.com/justmert/veristar/internal/db/systemq"
@@ -131,6 +132,13 @@ func newEnvWith(t *testing.T, o envOptions) *env {
 	for i := range key {
 		key[i] = byte(i + 1)
 	}
+	// OPERATOR_GITHUB_IDS and OPERATOR_STELLAR_ADDRESSES bootstrap the
+	// roster at start, as in cmd/controlplane
+	if len(ops)+len(stellarOps) > 0 {
+		_, err := operator.Bootstrap(context.Background(), conn,
+			identity.Operators{GitHub: ops, Stellar: stellarOps}, time.Hour, time.Now())
+		require.NoError(t, err)
+	}
 	sessions := session.New(conn)
 	e := &env{}
 	h, err := auth.New(auth.Config{
@@ -143,7 +151,6 @@ func newEnvWith(t *testing.T, o envOptions) *env {
 		ClientSecret:  secret(t, clientSecret),
 		RedirectURL:   cp.URL + callbackPath,
 		StateKey:      key,
-		Operators:     identity.Operators{GitHub: ops, Stellar: stellarOps},
 		ConsoleOrigin: cp.URL,
 		Endpoints: auth.Endpoints{
 			OAuth:   oauthEndpoint(fx.URL),
@@ -559,11 +566,29 @@ func TestOperatorFlag(t *testing.T) {
 	require.Equal(t, http.StatusSeeOther, b.signIn(op, "operator-user", "").StatusCode)
 	require.True(t, decode[auth.Me](t, b.get(e.origin+"/api/me")).User.IsOperator)
 
-	// removed from OPERATOR_GITHUB_IDS: the next sign-in clears the flag
-	e2 := newEnv(t)
-	b2 := e2.browser(t)
+	// suspended on the roster: the flag clears in the same transaction, so
+	// the next request of the live session sees it
+	suspendRoster(t, &op, nil)
+	require.False(t, decode[auth.Me](t, b.get(e.origin+"/api/me")).User.IsOperator)
+	// and a new sign-in does not bring it back
+	b2 := e.browser(t)
 	require.Equal(t, http.StatusSeeOther, b2.signIn(op, "operator-user", "").StatusCode)
-	require.False(t, decode[auth.Me](t, b2.get(e2.origin+"/api/me")).User.IsOperator)
+	require.False(t, decode[auth.Me](t, b2.get(e.origin+"/api/me")).User.IsOperator)
+}
+
+// suspendRoster suspends the roster row of an identity, beside a spare
+// active admin so the roster keeps one
+func suspendRoster(t *testing.T, gh *int64, addr *string) {
+	t.Helper()
+	require.NoError(t, conn.WithSystem(context.Background(), func(tx pgx.Tx) error {
+		if _, err := tx.Exec(context.Background(), `insert into cp.operators (github_id, role) values ($1, 'operator_admin')`,
+			newGitHubID()); err != nil {
+			return err
+		}
+		_, err := tx.Exec(context.Background(), `update cp.operators set status = 'suspended', status_reason = 'test'
+			where github_id = $1 or stellar_address = $2`, gh, addr)
+		return err
+	}))
 }
 
 func TestSignInResolvesInvites(t *testing.T) {

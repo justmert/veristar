@@ -18,6 +18,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/justmert/veristar/internal/controlplane/account"
+	"github.com/justmert/veristar/internal/controlplane/identity"
+	"github.com/justmert/veristar/internal/controlplane/operator"
 	"github.com/justmert/veristar/internal/controlplane/tenants"
 	pdb "github.com/justmert/veristar/internal/db"
 	"github.com/justmert/veristar/internal/jobs/jobstest"
@@ -317,14 +319,35 @@ func TestDeleteAccount(t *testing.T) {
 		require.Equal(t, 1, e.Count(t, `select count(*) from cp.users where id = $1 and github_id is null and deleted_at is not null`, oldID))
 	})
 
-	t.Run("an operator loses the flag, and the allowlist grants it to a new account at the next sign-in", func(t *testing.T) {
+	t.Run("the last operator admin cannot delete the account; another can, and leaves the roster", func(t *testing.T) {
 		op, opID := e.personWithID(t, operatorGH, "acct-operator")
 		require.Equal(t, true, op.Call(t, http.MethodGet, "/api/me", nil).JSON(t)["user"].(map[string]any)["is_operator"])
+		op.StepUp(t)
+		r := op.Call(t, http.MethodDelete, "/api/me", nil)
+		require.Equal(t, http.StatusConflict, r.Status, string(r.Body))
+		require.Equal(t, "last_operator_admin", r.Code(t))
+		require.Equal(t, 1, e.Count(t, `select count(*) from cp.users where id = $1 and is_operator and deleted_at is null`, opID))
+
+		// with a second admin on the roster the deletion goes through: the
+		// roster row, the passkeys and the flag go with the account
+		spare := e.NewGitHubID()
+		e.Superuser(t, func(c *pgx.Conn) {
+			_, err := c.Exec(context.Background(), `insert into cp.operators (github_id, role) values ($1, 'operator_admin')`, spare)
+			require.NoError(t, err)
+		})
 		require.Equal(t, http.StatusNoContent, op.Call(t, http.MethodDelete, "/api/me", nil).Status)
 		require.Equal(t, 1, e.Count(t, `select count(*) from cp.users where id = $1 and not is_operator`, opID))
+		require.Zero(t, e.Count(t, `select count(*) from cp.operators where github_id = $1`, operatorGH))
+		require.Zero(t, e.Count(t, `select count(*) from cp.operator_passkeys where user_id = $1`, opID))
 
+		// signing in again makes a new account that is no operator; only a
+		// start that lists the id in OPERATOR_GITHUB_IDS brings the row back
 		again := e.SignIn(t, operatorGH, "acct-operator")
 		require.NotEqual(t, opID, e.userID(t, operatorGH))
+		require.Equal(t, false, again.Call(t, http.MethodGet, "/api/me", nil).JSON(t)["user"].(map[string]any)["is_operator"])
+		_, err := operator.Bootstrap(t.Context(), e.DB, identity.Operators{GitHub: map[int64]bool{operatorGH: true}},
+			time.Hour, time.Now())
+		require.NoError(t, err)
 		require.Equal(t, true, again.Call(t, http.MethodGet, "/api/me", nil).JSON(t)["user"].(map[string]any)["is_operator"])
 	})
 

@@ -26,7 +26,6 @@ import (
 
 	"github.com/justmert/veristar/docs/reference/openapi"
 	"github.com/justmert/veristar/internal/controlplane"
-	"github.com/justmert/veristar/internal/controlplane/identity"
 	"github.com/justmert/veristar/internal/controlplane/session"
 	"github.com/justmert/veristar/internal/jobs/jobstest"
 	"github.com/justmert/veristar/internal/umami"
@@ -61,13 +60,12 @@ func newMachineEnv(t *testing.T) *machineEnv {
 	e := &machineEnv{f: f, um: um, opID: uuid.Must(uuid.NewV7())}
 	e.hourly, e.hourlySites = jobstest.NewWebTenant(t, f.pg, um, js, "Hourly", 2)
 	plainID := uuid.Must(uuid.NewV7())
+	rosterAdmin(t, f.pg, 7)
 	superExec(t, f.pg, `insert into cp.users (id, github_id, github_login, is_operator) values ($1, 7, 'op', true), ($2, 8, 'plain', false)`,
 		e.opID, plainID)
 
 	d := f.g.db
 	sessions := session.New(d)
-	guard, err := NewGuard(identity.Operators{GitHub: map[int64]bool{7: true}})
-	require.NoError(t, err)
 	keys, err := NewAPIKeys(d)
 	require.NoError(t, err)
 	log := slog.New(slog.DiscardHandler)
@@ -84,6 +82,7 @@ func newMachineEnv(t *testing.T) *machineEnv {
 	}))
 	e.srv.StartTLS()
 	t.Cleanup(e.srv.Close)
+	guard, stepUp := testGuard(t, d, sessions, e.srv.URL)
 	h := controlplane.NewHandler(controlplane.Options{
 		Log: log, ConsoleOrigin: e.srv.URL, Sessions: sessions,
 		// a sign-in shortcut for the test: the session is the real one,
@@ -91,6 +90,10 @@ func newMachineEnv(t *testing.T) *machineEnv {
 		Public: []controlplane.Routes{controlplane.RoutesFunc(func(r chi.Router) {
 			r.Get("/test-sign-in/{id}", func(w http.ResponseWriter, r *http.Request) {
 				if err := sessions.SignIn(r.Context(), uuid.MustParse(chi.URLParam(r, "id"))); err != nil {
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
+				if _, err := stepUp.Record(r.Context(), uuid.MustParse(chi.URLParam(r, "id"))); err != nil {
 					http.Error(w, err.Error(), http.StatusInternalServerError)
 					return
 				}

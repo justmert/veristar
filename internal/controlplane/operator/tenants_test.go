@@ -13,12 +13,10 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
 	"github.com/justmert/veristar/db"
 	"github.com/justmert/veristar/internal/controlplane/httpx"
-	"github.com/justmert/veristar/internal/controlplane/identity"
 	pdb "github.com/justmert/veristar/internal/db"
 	"github.com/justmert/veristar/internal/db/dbtest"
 )
@@ -205,63 +203,4 @@ func TestOperatorTenantsListAndDetail(t *testing.T) {
 		code, _ = call(t, r, "/api/operator/tenants/"+id)
 		require.Equal(t, http.StatusNotFound, code, id)
 	}
-}
-
-func TestSyncFlags(t *testing.T) {
-	d, pg := reviewDB(t)
-	superExec(t, pg, `insert into cp.users (github_id, github_login, is_operator) values
-		(1, 'stays-op', true), (2, 'loses-op', true), (3, 'gains-op', false), (4, 'never', false)`)
-	n, err := SyncFlags(t.Context(), d, identity.Operators{GitHub: map[int64]bool{1: true, 3: true}})
-	require.NoError(t, err)
-	require.Equal(t, 2, n)
-
-	c, err := pg.Superuser(t.Context(), "platform")
-	require.NoError(t, err)
-	defer func() { _ = c.Close(context.Background()) }()
-	rows, err := c.Query(t.Context(), `select github_login from cp.users where is_operator order by github_id`)
-	require.NoError(t, err)
-	ops, err := pgx.CollectRows(rows, pgx.RowTo[string])
-	require.NoError(t, err)
-	require.Equal(t, []string{"stays-op", "gains-op"}, ops)
-
-	rows, err = c.Query(t.Context(), `select a.actor, u.github_login, a.detail::text from cp.audit_log a
-		join cp.users u on 'user:' || u.id::text = a.target where a.action = $1 order by u.github_id`, ActionOperatorSync)
-	require.NoError(t, err)
-	type row struct{ actor, login, detail string }
-	got, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (row, error) {
-		var x row
-		return x, r.Scan(&x.actor, &x.login, &x.detail)
-	})
-	require.NoError(t, err)
-	require.Len(t, got, 2)
-	require.Equal(t, row{ActorStartup, "loses-op", `{"is_operator": {"new": false, "old": true}}`}, got[0])
-	require.Equal(t, row{ActorStartup, "gains-op", `{"is_operator": {"new": true, "old": false}}`}, got[1])
-
-	// a second start with the same list changes nothing and audits nothing
-	n, err = SyncFlags(t.Context(), d, identity.Operators{GitHub: map[int64]bool{1: true, 3: true}})
-	require.NoError(t, err)
-	require.Zero(t, n)
-}
-
-// wallet operators (OPERATOR_STELLAR_ADDRESSES) follow the same startup sync,
-// and a listed address makes an account an operator whatever its github id
-func TestSyncFlagsStellar(t *testing.T) {
-	d, pg := reviewDB(t)
-	const listed = "GCB634SLKV5N4COK4FICWJADNTFWIHTWWM34BFPLACL6YSQVLY5ZWOQN"
-	const other = "GBRPYHIL2CI3FNQ4BXLFMNDLFJUNPU2HY3ZMFSHONUCEOASW7QC7OX2H"
-	superExec(t, pg, `insert into cp.users (github_id, github_login, stellar_address, is_operator) values
-		(null, null, '`+listed+`', false), (null, null, '`+other+`', true), (11, 'gh-only', null, false)`)
-	n, err := SyncFlags(t.Context(), d, identity.Operators{
-		GitHub: map[int64]bool{11: true}, Stellar: map[string]bool{listed: true},
-	})
-	require.NoError(t, err)
-	require.Equal(t, 3, n)
-	c, err := pg.Superuser(t.Context(), "platform")
-	require.NoError(t, err)
-	defer func() { _ = c.Close(context.Background()) }()
-	rows, err := c.Query(t.Context(), `select coalesce(github_login, stellar_address) from cp.users where is_operator order by 1`)
-	require.NoError(t, err)
-	ops, err := pgx.CollectRows(rows, pgx.RowTo[string])
-	require.NoError(t, err)
-	require.ElementsMatch(t, []string{listed, "gh-only"}, ops)
 }

@@ -60,6 +60,7 @@ import (
 	"github.com/justmert/veristar/internal/umami"
 	"github.com/justmert/veristar/tests/fixtures/githuboauth"
 	"github.com/justmert/veristar/tests/fixtures/natsctr"
+	"github.com/justmert/veristar/tests/fixtures/stepuptest"
 	"github.com/justmert/veristar/tests/fixtures/umamictr"
 	"github.com/justmert/veristar/tests/gateway/gwclient"
 )
@@ -106,6 +107,7 @@ func TestMain(m *testing.M) {
 }
 
 type env struct {
+	keys    stepuptest.Keys
 	srv     *httptest.Server
 	fixture *httptest.Server
 	pg      *dbtest.Postgres
@@ -276,7 +278,6 @@ func start(t *testing.T) *env {
 		ClientSecret:  config.FromMap(map[string]string{"S": "enroll-test-secret"}).Secret("S", 1),
 		RedirectURL:   callback,
 		StateKey:      random32(t),
-		Operators:     identity.Operators{GitHub: operators},
 		ConsoleOrigin: e.srv.URL,
 		Endpoints: auth.Endpoints{
 			OAuth: oauth2.Endpoint{
@@ -288,8 +289,7 @@ func start(t *testing.T) *env {
 		},
 	}, conn, sessions)
 	require.NoError(t, err)
-	guard, err := operator.NewGuard(identity.Operators{GitHub: operators})
-	require.NoError(t, err)
+	_, guard := stepuptest.Guard(t, conn, sessions, e.srv.URL, identity.Operators{GitHub: operators})
 	mode, err := operator.NewEnrollmentMode(conn)
 	require.NoError(t, err)
 	actions, err := lifecycle.NewActions(conn, e.scope.Reconcile)
@@ -375,6 +375,15 @@ func (r resp) code(t *testing.T) string {
 	e, ok := r.json(t)["error"].(map[string]any)
 	require.True(t, ok, "no error envelope in %s", r.body)
 	return e["code"].(string)
+}
+
+// stepUp gives an operator's session its passkey step-up
+func (e *env) stepUp(t *testing.T, c *client) {
+	t.Helper()
+	e.keys.StepUp(t, c.userID, stepuptest.Origin(e.srv.URL), func(method, path string, body any) (int, []byte) {
+		r := c.call(t, method, path, body)
+		return r.status, r.body
+	})
 }
 
 func (c *client) call(t *testing.T, method, path string, body any) resp {
@@ -588,6 +597,7 @@ func TestEnrollmentMode(t *testing.T) {
 	e := start(t)
 	ctx := t.Context()
 	op := e.signIn(t, operatorGHID, "enroll-operator")
+	e.stepUp(t, op)
 	owner := e.newUser(t, "enroll-owner")
 	other := e.newUser(t, "enroll-other")
 

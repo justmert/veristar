@@ -307,12 +307,10 @@ func TestWalletOperator(t *testing.T) {
 	require.Equal(t, http.StatusOK, b.walletSignIn(kp).StatusCode)
 	require.True(t, b.me().User.IsOperator)
 
-	// another console without the address in its list clears the flag at
-	// the next sign-in
-	e2 := newEnv(t)
-	b2 := e2.browser(t)
-	require.Equal(t, http.StatusOK, b2.walletSignIn(kp).StatusCode)
-	require.False(t, b2.me().User.IsOperator)
+	// a suspended roster row clears the flag at once
+	addr := kp.Address()
+	suspendRoster(t, nil, &addr)
+	require.False(t, b.me().User.IsOperator)
 }
 
 func TestWalletInviteResolved(t *testing.T) {

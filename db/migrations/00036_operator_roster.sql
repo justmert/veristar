@@ -95,9 +95,11 @@ create trigger users_operator_flag before insert or update of github_id, stellar
 
 -- +goose StatementBegin
 -- recomputes the flag of every live account holding an identity of the
--- changed row, before and after the change
+-- changed row, before and after the change. it runs with the rights of
+-- the role that changed the roster (cp_system), whose policies reach
+-- cp.users; platform_owner has none there under forced row-level security
 create function cp.operators_sync_flags() returns trigger
-language plpgsql security definer
+language plpgsql
 set search_path = pg_catalog, pg_temp
 as $$
 declare
@@ -126,7 +128,7 @@ create trigger operators_sync_flags after insert or update or delete on cp.opera
 
 -- +goose StatementBegin
 create function cp.operators_last_admin() returns trigger
-language plpgsql security definer
+language plpgsql
 set search_path = pg_catalog, pg_temp
 as $$
 begin
@@ -140,6 +142,14 @@ $$;
 -- +goose StatementEnd
 create trigger operators_last_admin after update or delete on cp.operators
   for each statement execute function cp.operators_last_admin();
+
+-- 00030 fired the mcp revoke only on an update that names is_operator.
+-- the flag now also changes in users_operator_flag when an identity is
+-- linked or unlinked, so the revoke fires on every update that turns it off
+drop trigger users_mcp_revoke on cp.users;
+create trigger users_mcp_revoke after update on cp.users
+  for each row when (old.is_operator and not new.is_operator)
+  execute function cp.mcp_revoke_operator();
 
 alter table cp.operators enable row level security;
 alter table cp.operators force row level security;
@@ -161,6 +171,9 @@ grant select, insert, update, delete on cp.operators, cp.operator_passkeys to cp
 -- the flags of existing accounts follow the empty roster until the first
 -- start of the control plane bootstraps it; that start recomputes them
 -- +goose Down
+drop trigger users_mcp_revoke on cp.users;
+create trigger users_mcp_revoke after update of is_operator on cp.users
+  for each row execute function cp.mcp_revoke_operator();
 drop trigger operators_last_admin on cp.operators;
 drop function cp.operators_last_admin();
 drop trigger operators_sync_flags on cp.operators;
