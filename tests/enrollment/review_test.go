@@ -64,6 +64,7 @@ func TestRemovedDomainReview(t *testing.T) {
 	e := start(t)
 	ctx := t.Context()
 	op := e.signIn(t, operatorGHID, "review-operator")
+	e.stepUp(t, op)
 	gone := e.newUser(t, "review-gone")
 	again := e.newUser(t, "review-again")
 	self := e.newUser(t, "review-self")
@@ -182,6 +183,7 @@ func TestRemovedDomainReview(t *testing.T) {
 func TestResubmitAfterRejection(t *testing.T) {
 	e := start(t)
 	op := e.signIn(t, operatorGHID, "resubmit-operator")
+	e.stepUp(t, op)
 	owner := e.newUser(t, "resubmit-owner")
 	r := op.call(t, http.MethodPut, "/api/operator/settings/enrollment-mode", map[string]any{"mode": "approval"})
 	require.Equal(t, http.StatusOK, r.status, string(r.body))
