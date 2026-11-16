@@ -300,6 +300,7 @@ catalogs:
 overrides:
   zod@<4.6.6: 4.6.7
   jayson@4: 5.0.0
+  '@lobstrco/signer-extension-api@2.0.0': 3.0.0
 
 importers:
 
@@ -1631,8 +1632,9 @@ packages:
   '@lit/reactive-element@2.1.2':
     resolution: {integrity: sha512-pbCDiVMnne1lYUIaYNN5wrwQXDtHaYtg7YEFPeW+hws6U47WeFvISGUWekPGKWOP1ygrs0ef0o1VJMk1exos5A==}
 
-  '@lobstrco/signer-extension-api@2.0.0':
-    resolution: {integrity: sha512-jwlVyzMFF296iaNgMWn1lu+EU6BeUD4mgPurEsy8EygYNCrjA8igLpsDlXhfvXhst9tX5w4wRuTDX+FZtpfCug==}
+  '@lobstrco/signer-extension-api@3.0.0':
+    resolution: {integrity: sha512-jtA3/pqouaKUZo9V4/SZ6l/9sJK9nzDCd4v2cR9VFDbXLQhJie/2kZd8uP0XL//V8g70DX4h/gWrKbBdZHaK8w==}
+    engines: {node: '>=18.0.0'}
 
   '@metamask/connect-stellar@0.3.0':
     resolution: {integrity: sha512-c5FloCdbfzxneQeSFrdk02/wZy6VwK6jAAPaCeDhhBMwL+A9uyFg0x1WU93chbBz+ENIHWqSwYmSkdS9rGu4Fw==}
@@ -6856,7 +6858,7 @@ snapshots:
       '@ledgerhq/hw-app-str': 7.2.8
       '@ledgerhq/hw-transport': 6.31.12
       '@ledgerhq/hw-transport-webusb': 6.29.12
-      '@lobstrco/signer-extension-api': 2.0.0
+      '@lobstrco/signer-extension-api': 3.0.0
       '@metamask/connect-stellar': 0.3.0
       '@preact/signals': 2.9.0(preact@10.29.8)
       '@reown/appkit': 1.8.21(@types/react@19.3.0)(bufferutil@4.2.0)(debug@4.4.3)(immer@11.2.10)(react@19.3.1)(typescript@7.0.2)(use-sync-external-store@1.7.0(react@19.3.1))(utf-8-validate@6.0.6)(zod@4.6.7)
@@ -6919,7 +6921,7 @@ snapshots:
       '@ledgerhq/hw-app-str': 7.2.8
       '@ledgerhq/hw-transport': 6.31.12
       '@ledgerhq/hw-transport-webusb': 6.29.12
-      '@lobstrco/signer-extension-api': 2.0.0
+      '@lobstrco/signer-extension-api': 3.0.0
       '@metamask/connect-stellar': 0.3.0
       '@preact/signals': 2.9.0(preact@10.29.8)
       '@reown/appkit': 1.8.21(@types/react@19.3.0)(bufferutil@4.2.0)(debug@4.4.3)(immer@11.2.10)(react@19.3.1)(typescript@7.0.2)(use-sync-external-store@1.7.0(react@19.3.1))(utf-8-validate@6.0.6)(zod@4.6.7)
@@ -7361,7 +7363,7 @@ snapshots:
     dependencies:
       '@lit-labs/ssr-dom-shim': 1.6.0
 
-  '@lobstrco/signer-extension-api@2.0.0': {}
+  '@lobstrco/signer-extension-api@3.0.0': {}
 
   '@metamask/connect-stellar@0.3.0':
     dependencies:

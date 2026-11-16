@@ -92,8 +92,10 @@ test("a person signs in with a stellar wallet", async () => {
 
 test("a wallet member joins a project by address and opens its dashboard", async () => {
   const op = await owner.newPage();
-  await signIn(op, newUser("wallet-owner"));
-  shared = await enrollApi(owner, "Wallet shared project");
+  const ownerUser = newUser("wallet-owner");
+  await signIn(op, ownerUser);
+  // unique per attempt: a retried serial group runs this again
+  shared = await enrollApi(owner, `Wallet shared ${ownerUser.login}`);
   site = await addSiteApi(owner, shared.id, uniqueHost("wallet"));
   await waitProvisioned(owner, shared.id);
   await op.close();
@@ -124,7 +126,7 @@ test("a wallet member joins a project by address and opens its dashboard", async
   // the owner's member list shows the short address
   const op2 = await owner.newPage();
   await op2.goto(`${APP}/projects/${shared.id}/members`);
-  await expect(op2.getByText(me.display_name)).toBeVisible();
+  await expect(op2.getByText(me.display_name, { exact: true })).toBeVisible();
   await op2.close();
   await page.close();
 });
@@ -176,8 +178,8 @@ test("a wallet user approves an mcp connector on the consent page", async ({ bro
   await expect(
     page.getByRole("heading", { name: "Connect Wallet connector to Veristar" }),
   ).toBeVisible();
-  await expect(page.getByText(me.display_name)).toBeVisible();
-  await page.getByRole("radio", { name: /Wallet shared project/ }).check();
+  await expect(page.getByText(me.display_name, { exact: true })).toBeVisible();
+  await page.getByRole("radio", { name: new RegExp(shared.name) }).check();
   await page.getByRole("button", { name: "Approve" }).click();
   await expect.poll(() => callback?.toString() ?? "").toContain("code=");
   const tok = await ctx.request.post(asm.token_endpoint, {

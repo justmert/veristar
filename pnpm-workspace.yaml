@@ -68,6 +68,12 @@ overrides:
   # GHSA-hqr4-qq8f-hg3x) and uuid 8 (GHSA-w5hq-g745-h8pq). @solana/web3.js
   # uses only jayson/lib/client/browser, whose interface 5.0.0 keeps
   "jayson@4": 5.0.0
+  # @lobstrco/signer-extension-api 2.0.0, which the wallets kit's lobstr
+  # module pins, is gpl-3.0 and is bundled into the console. 3.0.0 is
+  # apache-2.0 and keeps the four calls the module makes (getPublicKey,
+  # isConnected, signTransaction, signMessage) with the same arguments; its
+  # new network option defaults to stellar
+  "@lobstrco/signer-extension-api@2.0.0": 3.0.0
 
 # exact versions only, the pin policy does not allow ranges
 saveExact: true

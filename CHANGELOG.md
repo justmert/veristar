@@ -37,6 +37,10 @@ here, before they take effect, as the processing terms require
 - A shared wallet helper for console pages
   (`apps/console/src/lib/stellar-wallet` and `components/wallet-picker.tsx`):
   wallet list, connect, transaction signing and SEP-53 message signing.
+  Every package it puts in the console bundle carries a permissive licence:
+  `@lobstrco/signer-extension-api` is moved from 2.0.0 (GPL-3.0), which the
+  kit pins, to 3.0.0 (Apache-2.0), and xBull is reached through its
+  extension's own API instead of the kit's AGPL-3.0 connector library.
 
 - Integrity grade of web traffic: every site gets an A, B or C grade per UTC
   day with the reasons that set it, computed by the new jobs task `integrity`
