@@ -9,6 +9,7 @@ import { PORTS } from "../../sites.ts";
 
 const proxy = { server: `http://127.0.0.1:${PORTS.proxy}` };
 const scenarios = /webpath\/scenarios\.webpath\.ts$/;
+const signals = /webpath\/signals\.webpath\.ts$/;
 
 export default defineConfig({
   // the parent directory, so the chromium project can also re-run the matrix's
@@ -33,6 +34,36 @@ export default defineConfig({
     // other two engines
     { name: "chromium-mobile", use: { ...devices["Pixel 7"], proxy }, testMatch: scenarios },
     { name: "webkit-mobile", use: { ...devices["iPhone 15"], proxy }, testMatch: scenarios },
+    // tracker 1.3.0 counting rules and page signals (tests/webpath
+    // signals_test.go). the back/forward cache is on, which playwright turns
+    // off by default: chromium in its full build (the headless shell has no
+    // cache) without the switch that disables it, firefox with the cache
+    // kept in the parent process
+    {
+      name: "signals-chromium",
+      use: {
+        ...devices["Desktop Chrome"],
+        proxy,
+        channel: "chromium",
+        launchOptions: { ignoreDefaultArgs: ["--disable-back-forward-cache"] },
+      },
+      testMatch: signals,
+    },
+    {
+      name: "signals-firefox",
+      use: {
+        ...devices["Desktop Firefox"],
+        proxy,
+        launchOptions: {
+          firefoxUserPrefs: {
+            "browser.sessionhistory.max_total_viewers": 8,
+            "fission.bfcacheInParent": true,
+          },
+        },
+      },
+      testMatch: signals,
+    },
+    { name: "signals-webkit", use: { ...devices["Desktop Safari"], proxy }, testMatch: signals },
     // the wallets kit example (tests/webpath wallets_test.go)
     {
       name: "wallets",
