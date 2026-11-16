@@ -69,8 +69,9 @@ func TestPasskeyIsolation(t *testing.T) {
 	}, time.Minute, 200*time.Millisecond, "the reconciler never made the passkey account's umami user")
 	require.Equal(t, http.StatusOK, p.call(t, http.MethodGet, "/api/tenants/"+ta.String()+"/sites/"+sa.String(), nil).status)
 
-	// alice's link challenge, copied with its cookie into the passkey
-	// account's session, is refused: it was issued to her session
+	// alice's link challenge, copied with its cookie into another passkey
+	// account's session and into a github account's session, is refused:
+	// it was issued to her session
 	r = alice.call(t, http.MethodPost, "/api/me/identities/passkey/challenge", map[string]any{})
 	require.Equal(t, http.StatusOK, r.status, string(r.body))
 	ch := r.json(t)
@@ -82,8 +83,8 @@ func TestPasskeyIsolation(t *testing.T) {
 	b.hc.Jar.SetCookies(u, []*http.Cookie{{Name: "sa_passkey", Value: ck.Value, Path: "/api"}})
 	r = b.call(t, http.MethodPost, "/api/me/identities/passkey",
 		consoleapi.NewPasskey(t).Answer(t, ch["challenge"].(string), ch["rp_id"].(string), e.srv.URL, true))
-	require.Equal(t, http.StatusConflict, r.status, string(r.body))
-	require.Equal(t, "identity_already_linked", r.code(t))
+	require.Equal(t, http.StatusForbidden, r.status, string(r.body))
+	require.Equal(t, "challenge_invalid", r.code(t))
 	// a github account holding the copied cookie: the challenge names alice
 	carol := e.signIn(t, "pi-carol")
 	carol.hc.Jar.SetCookies(u, []*http.Cookie{{Name: "sa_passkey", Value: ck.Value, Path: "/api"}})
