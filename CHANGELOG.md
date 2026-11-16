@@ -138,6 +138,27 @@ here, before they take effect, as the processing terms require
 - Database migration `00039_web_signals_coverage`: `cp.web_signals_daily`,
   `agg.web_coverage_daily` and three signal columns of
   `agg.web_integrity_daily`, under row-level security.
+- Web dashboard in the console. Each project has a **Web** page with page
+  views, unique visitors, visits, bounce rate and visit duration for today, 7,
+  30 or 90 days or any range of UTC days, each against the previous period;
+  daily and hourly charts; breakdowns by page, entry and exit page, referrer,
+  country, browser, operating system, device, custom event and UTM value (for
+  sites that collect UTM); the visitors right now; the counted and the
+  quarantined band; the integrity grade and the on-chain panel of the range.
+  For the whole project or one site.
+- Control plane routes under `/api/tenants/{tenant_id}/web/`: `summary`,
+  `breakdown`, `hourly`, `realtime` and `sessions`
+  ([docs/reference/control-plane-api.md](docs/reference/control-plane-api.md),
+  section 18). Totals, days and the referrer, country, browser, OS and device
+  breakdowns come from the daily aggregates operators read; the rest is read
+  from Umami on the private network as the member's own Umami user. Engine
+  reads are limited to 120 a minute per member.
+- The Privacy page's session finder lists one site's sessions of a day, so an
+  owner finds the session id for the erasure of one session in the console.
+- `TestWebDashboardParity` compares every dashboard figure with Umami's own
+  answer for the same websites and range.
+- `make test-caddy-closed` fails when an internet-facing Caddy site refers to
+  Umami.
 
 ### Changed
 
@@ -189,6 +210,40 @@ here, before they take effect, as the processing terms require
   operator admin removes them on the Operators page.
 - Deleting your account removes you from the roster and deletes your
   passkeys. The last active operator admin cannot delete their account.
+- Umami is the engine only: it stores the events and computes the metrics,
+  and its interface is closed to projects
+  ([ADR 0005](docs/adr/0005-umami-as-engine-only.md), which supersedes ADR
+  0004). Platform administrators reach Umami's interface over an SSH tunnel to
+  a core node's loopback, `127.0.0.1:3300`
+  ([docs/operators/umami-admin-access.md](docs/operators/umami-admin-access.md)).
+- The MCP web tools read Umami through the same reader as the web dashboard,
+  sharing its login cache.
+- The dashboard availability check of the prober is the console plus the
+  machine API read.
+- `make umami-compat` checks Umami's API and data contract only.
+- Members read the web aggregates of their own project under row-level
+  security: a migration grants `cp_tenant` read on `agg.web_daily_dim`.
+
+### Removed
+
+- `GET /api/sso/umami` and the console's `/sso-error` page.
+- The `web.<BASE_DOMAIN>` host: its DNS record, Traffic Manager profile,
+  Caddy site (`deploy/caddy/web.Caddyfile`) and certificate.
+- The Veristar theme of Umami's interface (`deploy/caddy/umami-theme`), its
+  tests and the replace-response Caddy plugin it needed.
+- The control plane setting `WEB_ORIGIN` and the prober setting
+  `PROBER_WEB_URL` with its `web host` check.
+- `make test-caddy-web`.
+
+### Security
+
+- Umami's Next.js application, its session tokens and its share and report
+  routes have no path from the internet. No session token travels in a URL any
+  more: the control plane holds a member's Umami token in memory for at most
+  5 minutes and never sends it to a browser.
+- Every web dashboard read passes the membership check, row-level security,
+  a site check among the project's own sites, and, for Umami reads, Umami's
+  own team check as a second gate. The isolation gate covers all five routes.
 
 ### Upgrade notes
 
@@ -213,6 +268,17 @@ here, before they take effect, as the processing terms require
   ([docs/runbooks/operators.md](docs/runbooks/operators.md)).
 - Optional settings: `OPERATOR_STEP_UP_MAX_AGE` (default `12h`) and
   `OPERATOR_ENROLL_WINDOW` (default `24h`).
+- Run the database migrations (`00035_tenant_web_dimensions.sql`) before the
+  new control plane starts; the rolling `deploy.yml` does this in its
+  bootstrap step.
+- Deploy the release, then apply OpenTofu for each environment. The plan
+  destroys the Traffic Manager profile `web`, its three external endpoints
+  (`web/0` to `web/2`) and the Cloudflare CNAME `web`; nothing else changes.
+- Remove `WEB_ORIGIN` from the control plane environment and `PROBER_WEB_URL`
+  from the prober environment if you set them by hand; the templates no longer
+  write them.
+- Links and bookmarks to `web.<BASE_DOMAIN>` stop working. Members find their
+  web dashboard under **Web** in each project in the console.
 
 ## [0.3.0] - 2026-11-16
 
