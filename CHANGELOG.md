@@ -16,6 +16,8 @@ here, before they take effect, as the processing terms require
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-16
+
 ### Added
 
 - On-chain witness: a project declares the Stellar accounts and Soroban
@@ -128,11 +130,16 @@ here, before they take effect, as the processing terms require
   `https://horizon.stellar.org`), `STELLAR_RPC_URL` (default
   `https://mainnet.sorobanrpc.com`), `STELLAR_HORIZON_RPS` (default 0.8) and
   `STELLAR_RPC_RPS` (default 2). Both processes need outbound HTTPS to the two
-  hosts. Removal now runs a `chain` purge step after `agg`.
+  hosts. Removal now runs a `chain` purge step after `agg`. The core role
+  passes the defaults to both (`core_stellar_env`).
+- The optional Ansible variable `sa_operator_stellar_addresses` sets
+  `OPERATOR_STELLAR_ADDRESSES`; empty, the default, means no wallet operator.
 
 - Roll out the jobs and the control plane before the gateways. The gateways
   now send evidence counters on `EDGE_STATS` that an older jobs daemon refuses
-  as malformed.
+  as malformed. The rolling `deploy.yml` now runs the bootstrap first, then
+  the core nodes, then the edge nodes
+  ([docs/deploy/upgrade.md](docs/deploy/upgrade.md)).
 
 ### Security
 
@@ -356,7 +363,8 @@ How to check a file against its release:
   starts tracking on `umami.start()`, the server-issued proof of work, and a
   byte-identical rebuild of every committed release.
 
-[Unreleased]: https://github.com/justmert/veristar/compare/v0.2.3...HEAD
+[Unreleased]: https://github.com/justmert/veristar/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/justmert/veristar/compare/v0.2.3...v0.3.0
 [0.2.3]: https://github.com/justmert/veristar/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/justmert/veristar/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/justmert/veristar/compare/v0.2.0...v0.2.1
