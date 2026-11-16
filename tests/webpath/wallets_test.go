@@ -8,9 +8,11 @@ import (
 	"encoding/json"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -166,7 +168,10 @@ func TestWalletsKit(t *testing.T) {
 		}
 	})
 
-	t.Run("dashboard of a view-only member", func(t *testing.T) {
+	// what a tenant's view-only member reads: the console's web dashboard
+	// reads umami's event ranking as that member's own umami user, so the
+	// same read is made here directly, with the member's token
+	t.Run("event ranking of a view-only member", func(t *testing.T) {
 		ctx := context.Background()
 		pw := secret()
 		u, err := s.Admin.CreateUser(ctx, umami.NewUser{Username: "gh-wallets-" + s.ID, Password: pw, Role: "view-only"})
@@ -180,14 +185,27 @@ func TestWalletsKit(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		b.MustRun(t, []string{"wallets-ui"}, "@wallets-ui",
-			"WEBPATH_UMAMI_URL="+s.UmamiURL.String(), "WEBPATH_UMAMI_TOKEN="+sess.Token.Reveal(),
-			"WEBPATH_WEBSITE="+siteWallets.ID)
-		if keep := os.Getenv("WEBPATH_LOGS"); keep != "" {
-			for _, f := range []string{"ui-wallet-events.png", "ui-wallet-events.txt"} {
-				if data, err := os.ReadFile(filepath.Join(b.OutDir, f)); err == nil {
-					_ = os.WriteFile(filepath.Join(keep, f), data, 0o644)
-				}
+		var rows []struct {
+			X string `json:"x"`
+		}
+		q := url.Values{}
+		r := today()
+		q.Set("startAt", strconv.FormatInt(r.Start.UnixMilli(), 10))
+		q.Set("endAt", strconv.FormatInt(r.End.UnixMilli(), 10))
+		q.Set("type", "event")
+		if err := s.Client.ReadWebsite(ctx, sess.Token, siteWallets.ID, "/metrics", q, &rows); err != nil {
+			t.Fatal(err)
+		}
+		got := map[string]bool{}
+		for _, row := range rows {
+			got[row.X] = true
+			if strings.Contains(row.X, testWalletAddress) {
+				t.Errorf("an event name carries the test address: %s", row.X)
+			}
+		}
+		for _, name := range []string{"wallet_selected", "wallet_connected", "wallet_disconnected", "seed-check"} {
+			if !got[name] {
+				t.Errorf("event %s is not in the member's event ranking: %v", name, got)
 			}
 		}
 	})

@@ -2,14 +2,10 @@
 // wallets kit example runs the real kit with the test wallet module, against
 // the real gateway. each test drives one capture mode and checks what the
 // browser sent; the go test checks the queue and what umami stored.
-import { appendFileSync, writeFileSync } from "node:fs";
+import { appendFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
-import {
-  TEST_WALLET_ADDRESS,
-  TEST_WALLET_ID,
-  TEST_WALLET_NAME,
-} from "../../../fixtures/wallets-kit-module/index.ts";
+import { TEST_WALLET_ID, TEST_WALLET_NAME } from "../../../fixtures/wallets-kit-module/index.ts";
 import { WALLET_SITE as site } from "../../sites.ts";
 import {
   customEvents,
@@ -134,21 +130,3 @@ for (const { mode, path, network } of MODES) {
     await expectContract(site);
   });
 }
-
-// what a tenant's view-only member sees in umami: the custom and wallet
-// events on the website's events page
-test("wallet events in the umami dashboard @wallets-ui", async ({ page }) => {
-  const base = env("WEBPATH_UMAMI_URL").replace(/\/$/, "");
-  const website = env("WEBPATH_WEBSITE");
-  await page.goto(
-    `${base}/sso?token=${encodeURIComponent(env("WEBPATH_UMAMI_TOKEN"))}&url=${encodeURIComponent(`/websites/${website}/events`)}`,
-  );
-  await page.waitForURL(`**/websites/${website}/events`);
-  for (const name of ["wallet_selected", "wallet_connected", "wallet_disconnected", "seed-check"]) {
-    await expect(page.getByText(name, { exact: true }).first()).toBeVisible({ timeout: 30_000 });
-  }
-  await page.screenshot({ path: join(env("WEBPATH_OUT"), "ui-wallet-events.png"), fullPage: true });
-  const text = await page.locator("body").innerText();
-  writeFileSync(join(env("WEBPATH_OUT"), "ui-wallet-events.txt"), text);
-  expect(text).not.toContain(TEST_WALLET_ADDRESS);
-});

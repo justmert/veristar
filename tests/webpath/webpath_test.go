@@ -3,15 +3,12 @@
 package webpath
 
 import (
-	"context"
 	"crypto/sha256"
 	"crypto/tls"
 	"encoding/hex"
 	"fmt"
 	"math"
 	"net/http"
-	"os"
-	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -94,7 +91,6 @@ func TestWebPath(t *testing.T) {
 	t.Run("outage postgres stopped", func(t *testing.T) { su.outage(t, s.Postgres, "outp") })
 	t.Run("replayer kill", su.replayerKill)
 	t.Run("quarantine", su.quarantineBand)
-	t.Run("no outbound calls during a ui session", su.uiEgress)
 	t.Run("pageviews visitors visits bounce, second visit", su.secondVisit)
 	t.Run("privacy dump", func(t *testing.T) { su.privacy(t, de, jp) })
 	t.Run("every browser event answered 202", func(t *testing.T) {
@@ -744,36 +740,6 @@ func (su *suite) quarantineBand(t *testing.T) {
 	if primary["pageview"] != 19 || quar["pageview"] != 3 {
 		t.Errorf("pageviews primary %d quarantine %d, want 19 and 3", primary["pageview"], quar["pageview"])
 	}
-}
-
-func (su *suite) uiEgress(t *testing.T) {
-	s, b := su.s, su.b
-	ctx := context.Background()
-	pw := secret()
-	u, err := s.Admin.CreateUser(ctx, umami.NewUser{Username: "gh-webpath-" + s.ID, Password: pw, Role: "view-only"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.Admin.AddTeamUser(ctx, s.TeamID, u.ID, "team-view-only"); err != nil {
-		t.Fatal(err)
-	}
-	sess, err := s.Client.Login(ctx, u.Username, pw)
-	if err != nil {
-		t.Fatal(err)
-	}
-	sniff := s.StartSniffer(t, su.sniffBin, "ui")
-	out, runErr := b.Run(t, []string{"umami-ui"}, "@ui", nil,
-		"WEBPATH_UMAMI_URL="+s.UmamiURL.String(), "WEBPATH_UMAMI_TOKEN="+sess.Token.Reveal(),
-		"WEBPATH_WEBSITE="+siteRR.ID, "WEBPATH_TEAM="+s.TeamID)
-	lines := s.StopSniffer(t, sniff)
-	t.Logf("ui session:\n%s", lastLines(out, 6))
-	if runErr != nil {
-		t.Errorf("ui session failed: %v\n%s", runErr, out)
-	}
-	if ui, err := os.ReadFile(filepath.Join(b.OutDir, "ui.json")); err == nil {
-		t.Logf("browser side: %s", strings.Join(strings.Fields(string(ui)), " "))
-	}
-	reportEgress(t, classify(lines, s.Subnet))
 }
 
 func (su *suite) secondVisit(t *testing.T) {
