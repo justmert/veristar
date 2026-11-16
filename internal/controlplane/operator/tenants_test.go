@@ -242,3 +242,26 @@ func TestSyncFlags(t *testing.T) {
 	require.NoError(t, err)
 	require.Zero(t, n)
 }
+
+// wallet operators (OPERATOR_STELLAR_ADDRESSES) follow the same startup sync,
+// and a listed address makes an account an operator whatever its github id
+func TestSyncFlagsStellar(t *testing.T) {
+	d, pg := reviewDB(t)
+	const listed = "GCB634SLKV5N4COK4FICWJADNTFWIHTWWM34BFPLACL6YSQVLY5ZWOQN"
+	const other = "GBRPYHIL2CI3FNQ4BXLFMNDLFJUNPU2HY3ZMFSHONUCEOASW7QC7OX2H"
+	superExec(t, pg, `insert into cp.users (github_id, github_login, stellar_address, is_operator) values
+		(null, null, '`+listed+`', false), (null, null, '`+other+`', true), (11, 'gh-only', null, false)`)
+	n, err := SyncFlags(t.Context(), d, identity.Operators{
+		GitHub: map[int64]bool{11: true}, Stellar: map[string]bool{listed: true},
+	})
+	require.NoError(t, err)
+	require.Equal(t, 3, n)
+	c, err := pg.Superuser(t.Context(), "platform")
+	require.NoError(t, err)
+	defer func() { _ = c.Close(context.Background()) }()
+	rows, err := c.Query(t.Context(), `select coalesce(github_login, stellar_address) from cp.users where is_operator order by 1`)
+	require.NoError(t, err)
+	ops, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{listed, "gh-only"}, ops)
+}

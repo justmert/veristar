@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/stellar/go-stellar-sdk/keypair"
 	"github.com/stretchr/testify/require"
 
 	"github.com/justmert/veristar/internal/controlplane/account"
@@ -231,15 +232,18 @@ func TestDeleteAccount(t *testing.T) {
 
 		// the account row keeps its id and nothing that names the person
 		e.Superuser(t, func(c *pgx.Conn) {
-			var gh int64
-			var login string
+			var gh *int64
+			var login, address, umamiName *string
 			var op bool
 			var last, deleted *time.Time
 			require.NoError(t, c.QueryRow(context.Background(),
-				`select github_id, github_login, is_operator, last_login_at, deleted_at from cp.users where id = $1`,
-				bobID).Scan(&gh, &login, &op, &last, &deleted))
-			require.Zero(t, gh)
-			require.Empty(t, login)
+				`select github_id, github_login, stellar_address, umami_username, is_operator, last_login_at, deleted_at
+				from cp.users where id = $1`,
+				bobID).Scan(&gh, &login, &address, &umamiName, &op, &last, &deleted))
+			require.Nil(t, gh)
+			require.Nil(t, login)
+			require.Nil(t, address)
+			require.Nil(t, umamiName)
 			require.False(t, op)
 			require.Nil(t, last)
 			require.NotNil(t, deleted)
@@ -310,7 +314,7 @@ func TestDeleteAccount(t *testing.T) {
 		me := again.Call(t, http.MethodGet, "/api/me", nil)
 		require.Equal(t, http.StatusOK, me.Status)
 		require.Empty(t, me.JSON(t)["tenants"])
-		require.Equal(t, 1, e.Count(t, `select count(*) from cp.users where id = $1 and github_id = 0`, oldID))
+		require.Equal(t, 1, e.Count(t, `select count(*) from cp.users where id = $1 and github_id is null and deleted_at is not null`, oldID))
 	})
 
 	t.Run("an operator loses the flag, and the allowlist grants it to a new account at the next sign-in", func(t *testing.T) {
@@ -385,15 +389,22 @@ func TestDeleteRequiresTheConsoleHeaders(t *testing.T) {
 	require.Equal(t, http.StatusOK, p.Call(t, http.MethodGet, "/api/me", nil).Status)
 }
 
-// migration 00031: a row is either a live github account or fully emptied
+// migrations 00031 and 00034: a live row names a github account, a stellar
+// account or both, and an emptied row names nothing
 func TestUserRowIsLiveOrEmptied(t *testing.T) {
 	e := start(t)
 	_, id := e.person(t, "acct-shape")
+	const addr = "GCB634SLKV5N4COK4FICWJADNTFWIHTWWM34BFPLACL6YSQVLY5ZWOQN"
 	for _, stmt := range []string{
 		`update cp.users set github_id = 0 where id = $1`,
 		`update cp.users set github_login = '' where id = $1`,
+		`update cp.users set github_id = null where id = $1`,
+		`update cp.users set github_id = null, github_login = null where id = $1`,
+		`update cp.users set stellar_address = 'GABC' where id = $1`,
 		`update cp.users set deleted_at = now() where id = $1`,
-		`update cp.users set github_id = 0, github_login = '', deleted_at = now() where id = $1`,
+		`update cp.users set github_id = null, github_login = null, deleted_at = now() where id = $1`,
+		`update cp.users set github_id = null, github_login = null, stellar_address = '` + addr + `',
+			is_operator = false, last_login_at = null, deleted_at = now() where id = $1`,
 	} {
 		e.Superuser(t, func(c *pgx.Conn) {
 			_, err := c.Exec(context.Background(), stmt, id)
@@ -401,8 +412,61 @@ func TestUserRowIsLiveOrEmptied(t *testing.T) {
 		})
 	}
 	e.Superuser(t, func(c *pgx.Conn) {
-		_, err := c.Exec(context.Background(), `update cp.users set github_id = 0, github_login = '', is_operator = false,
+		// a wallet-only row is live
+		_, err := c.Exec(context.Background(), `update cp.users set github_id = null, github_login = null,
+			stellar_address = '`+addr+`' where id = $1`, id)
+		require.NoError(t, err)
+		_, err = c.Exec(context.Background(), `update cp.users set github_id = null, github_login = null,
+			stellar_address = null, umami_username = null, is_operator = false,
 			last_login_at = null, deleted_at = now() where id = $1`, id)
 		require.NoError(t, err)
 	})
+}
+
+// a wallet account (contract 4.1.7) is deleted the same way: its address,
+// the invites addressed to it and its umami name are gone, and the same
+// wallet signs in to a new, empty account afterwards
+func TestDeleteWalletAccount(t *testing.T) {
+	e := start(t)
+	kp, err := keypair.Random()
+	require.NoError(t, err)
+	w := e.SignInWallet(t, kp)
+	me := w.Call(t, http.MethodGet, "/api/me", nil).JSON(t)["user"].(map[string]any)
+	require.Equal(t, kp.Address(), me["stellar_address"])
+	oldID := uuid.MustParse(me["id"].(string))
+
+	// an open invite for the address in another project, and a membership
+	owner, _ := e.person(t, "acct-wallet-owner")
+	tenant, _ := owner.Enroll(t, "Wallet Project")
+	other, _ := owner.Enroll(t, "Wallet Other")
+	r := owner.Call(t, http.MethodPost, "/api/tenants/"+tenant.String()+"/members",
+		map[string]any{"stellar_address": kp.Address(), "role": "member"})
+	require.Equal(t, http.StatusCreated, r.Status, string(r.Body))
+	require.Equal(t, "member", r.JSON(t)["kind"])
+	kp2, err := keypair.Random()
+	require.NoError(t, err)
+	r = owner.Call(t, http.MethodPost, "/api/tenants/"+other.String()+"/members",
+		map[string]any{"stellar_address": kp2.Address(), "role": "member"})
+	require.Equal(t, http.StatusCreated, r.Status, string(r.Body))
+	require.Equal(t, "invite", r.JSON(t)["kind"])
+	// the invite for kp2 is someone else's; one for kp itself
+	e.Superuser(t, func(c *pgx.Conn) {
+		_, err := c.Exec(context.Background(), `insert into cp.invites (tenant_id, stellar_address, role, created_by, expires_at)
+			select $1, $2, 'member', created_by, now() + interval '1 day' from cp.tenants where id = $1`, other, kp.Address())
+		require.NoError(t, err)
+		_, err = c.Exec(context.Background(), `update cp.users set umami_username = 'u-' || id::text where id = $1`, oldID)
+		require.NoError(t, err)
+	})
+
+	require.Equal(t, http.StatusNoContent, w.Call(t, http.MethodDelete, "/api/me", nil).Status)
+	require.Equal(t, 1, e.Count(t, `select count(*) from cp.users where id = $1 and stellar_address is null
+		and github_id is null and umami_username is null and deleted_at is not null`, oldID))
+	require.Zero(t, e.Count(t, `select count(*) from cp.invites where stellar_address = $1`, kp.Address()))
+	require.Equal(t, 1, e.Count(t, `select count(*) from cp.invites where stellar_address = $1`, kp2.Address()))
+	require.Zero(t, e.Count(t, `select count(*) from cp.tenant_members where user_id = $1`, oldID))
+
+	again := e.SignInWallet(t, kp)
+	me = again.Call(t, http.MethodGet, "/api/me", nil).JSON(t)["user"].(map[string]any)
+	require.NotEqual(t, oldID.String(), me["id"])
+	require.Equal(t, kp.Address(), me["stellar_address"])
 }
