@@ -395,6 +395,8 @@ func TestUserRowIsLiveOrEmptied(t *testing.T) {
 	e := start(t)
 	_, id := e.person(t, "acct-shape")
 	const addr = "GCB634SLKV5N4COK4FICWJADNTFWIHTWWM34BFPLACL6YSQVLY5ZWOQN"
+	const caddr = "CBH2J5X4WBV2KT6NSUE47DRFBUHTVJOBJTBGGNELJ2DZXTDB3AYRAXAO"
+	key64 := strings.Repeat("ab", 64)
 	for _, stmt := range []string{
 		`update cp.users set github_id = 0 where id = $1`,
 		`update cp.users set github_login = '' where id = $1`,
@@ -404,6 +406,19 @@ func TestUserRowIsLiveOrEmptied(t *testing.T) {
 		`update cp.users set deleted_at = now() where id = $1`,
 		`update cp.users set github_id = null, github_login = null, deleted_at = now() where id = $1`,
 		`update cp.users set github_id = null, github_login = null, stellar_address = '` + addr + `',
+			is_operator = false, last_login_at = null, deleted_at = now() where id = $1`,
+		// the three passkey columns come together, in their shapes, and an
+		// emptied row holds none (00037)
+		`update cp.users set passkey_address = '` + caddr + `' where id = $1`,
+		`update cp.users set passkey_address = '` + caddr + `', passkey_credential_id = 'AQID' where id = $1`,
+		`update cp.users set passkey_address = '` + addr + `', passkey_credential_id = 'AQID',
+			passkey_public_key = '\x04` + key64 + `' where id = $1`,
+		`update cp.users set passkey_address = '` + caddr + `', passkey_credential_id = 'AQ+D',
+			passkey_public_key = '\x04` + key64 + `' where id = $1`,
+		`update cp.users set passkey_address = '` + caddr + `', passkey_credential_id = 'AQID',
+			passkey_public_key = '\x05` + key64 + `' where id = $1`,
+		`update cp.users set github_id = null, github_login = null, passkey_address = '` + caddr + `',
+			passkey_credential_id = 'AQID', passkey_public_key = '\x04` + key64 + `', umami_username = null,
 			is_operator = false, last_login_at = null, deleted_at = now() where id = $1`,
 	} {
 		e.Superuser(t, func(c *pgx.Conn) {
@@ -416,8 +431,14 @@ func TestUserRowIsLiveOrEmptied(t *testing.T) {
 		_, err := c.Exec(context.Background(), `update cp.users set github_id = null, github_login = null,
 			stellar_address = '`+addr+`' where id = $1`, id)
 		require.NoError(t, err)
+		// a passkey-only row is live
+		_, err = c.Exec(context.Background(), `update cp.users set stellar_address = null,
+			passkey_address = '`+caddr+`', passkey_credential_id = 'AQID',
+			passkey_public_key = '\x04`+key64+`' where id = $1`, id)
+		require.NoError(t, err)
 		_, err = c.Exec(context.Background(), `update cp.users set github_id = null, github_login = null,
-			stellar_address = null, umami_username = null, is_operator = false,
+			stellar_address = null, passkey_address = null, passkey_credential_id = null,
+			passkey_public_key = null, umami_username = null, is_operator = false,
 			last_login_at = null, deleted_at = now() where id = $1`, id)
 		require.NoError(t, err)
 	})
@@ -469,4 +490,41 @@ func TestDeleteWalletAccount(t *testing.T) {
 	me = again.Call(t, http.MethodGet, "/api/me", nil).JSON(t)["user"].(map[string]any)
 	require.NotEqual(t, oldID.String(), me["id"])
 	require.Equal(t, kp.Address(), me["stellar_address"])
+}
+
+// a passkey account (contract 4.1.9) is deleted the same way: its address,
+// credential id and key, and the invites addressed to its C-address, are
+// gone, and the passkey signs in to nothing afterwards
+func TestDeletePasskeyAccount(t *testing.T) {
+	e := start(t)
+	pk := consoleapi.NewPasskey(t)
+	p, r := e.SignInPasskey(t, pk, true)
+	require.Equal(t, http.StatusOK, r.Status, string(r.Body))
+	me := p.Call(t, http.MethodGet, "/api/me", nil).JSON(t)["user"].(map[string]any)
+	require.Equal(t, pk.Address(t), me["passkey_address"])
+	oldID := uuid.MustParse(me["id"].(string))
+
+	owner, _ := e.person(t, "acct-passkey-owner")
+	tenant, _ := owner.Enroll(t, "Passkey Project")
+	other, _ := owner.Enroll(t, "Passkey Other")
+	r = owner.Call(t, http.MethodPost, "/api/tenants/"+tenant.String()+"/members",
+		map[string]any{"stellar_address": pk.Address(t), "role": "member"})
+	require.Equal(t, http.StatusCreated, r.Status, string(r.Body))
+	require.Equal(t, "member", r.JSON(t)["kind"])
+	e.Superuser(t, func(c *pgx.Conn) {
+		_, err := c.Exec(context.Background(), `insert into cp.invites (tenant_id, stellar_address, role, created_by, expires_at)
+			select $1, $2, 'member', created_by, now() + interval '1 day' from cp.tenants where id = $1`, other, pk.Address(t))
+		require.NoError(t, err)
+	})
+
+	require.Equal(t, http.StatusNoContent, p.Call(t, http.MethodDelete, "/api/me", nil).Status)
+	require.Equal(t, 1, e.Count(t, `select count(*) from cp.users where id = $1 and passkey_address is null
+		and passkey_credential_id is null and passkey_public_key is null and deleted_at is not null`, oldID))
+	require.Zero(t, e.Count(t, `select count(*) from cp.invites where stellar_address = $1`, pk.Address(t)))
+	require.Zero(t, e.Count(t, `select count(*) from cp.tenant_members where user_id = $1`, oldID))
+
+	// the stored key is gone, so the passkey no longer signs in
+	_, r = e.SignInPasskey(t, pk, false)
+	require.Equal(t, http.StatusForbidden, r.Status, string(r.Body))
+	require.Equal(t, "passkey_unknown", r.Code(t))
 }
