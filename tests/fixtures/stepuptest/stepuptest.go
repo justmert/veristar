@@ -99,7 +99,7 @@ func (k *Keys) StepUp(t testing.TB, user uuid.UUID, origin string, call Call) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	st, b := call(http.MethodPost, "/api/operator/step-up", map[string]any{"credential": json.RawMessage(cred)})
+	st, b := call(http.MethodPost, "/api/operator/step-up", map[string]any{"credential": cred})
 	if st != http.StatusOK {
 		t.Fatalf("step-up: %d %s", st, b)
 	}

@@ -400,7 +400,11 @@ func (c *Client) StepUp(t testing.TB) {
 	t.Helper()
 	me := c.Call(t, http.MethodGet, "/api/me", nil)
 	require.Equal(t, http.StatusOK, me.Status, string(me.Body))
-	id := uuid.MustParse(me.JSON(t)["user"].(map[string]any)["id"].(string))
+	user, ok := me.JSON(t)["user"].(map[string]any)
+	require.True(t, ok, string(me.Body))
+	idText, ok := user["id"].(string)
+	require.True(t, ok, string(me.Body))
+	id := uuid.MustParse(idText)
 	c.e.keys.StepUp(t, id, stepuptest.Origin(c.e.Srv.URL), func(method, path string, body any) (int, []byte) {
 		r := c.Call(t, method, path, body)
 		return r.Status, r.Body

@@ -79,9 +79,12 @@ func (a *Authenticator) Register(optionsJSON []byte, origin string) (json.RawMes
 		return nil, fmt.Errorf("webauthnsoft: options: %w", err)
 	}
 	a.rpID = o.PublicKey.RP.ID
-	x, y := make([]byte, 32), make([]byte, 32)
-	a.key.PublicKey.X.FillBytes(x)
-	a.key.PublicKey.Y.FillBytes(y)
+	// the uncompressed point is 0x04, then x and y of 32 bytes each
+	raw, err := a.key.PublicKey.Bytes()
+	if err != nil {
+		return nil, err
+	}
+	x, y := raw[1:33], raw[33:65]
 	cose, err := webauthncbor.Marshal(webauthncose.EC2PublicKeyData{
 		PublicKeyData: webauthncose.PublicKeyData{KeyType: int64(webauthncose.EllipticKey), Algorithm: int64(webauthncose.AlgES256)},
 		Curve:         1, XCoord: x, YCoord: y,
@@ -89,8 +92,8 @@ func (a *Authenticator) Register(optionsJSON []byte, origin string) (json.RawMes
 	if err != nil {
 		return nil, err
 	}
-	attested := make([]byte, 16) // aaguid of zeros
-	attested = binary.BigEndian.AppendUint16(attested, uint16(len(a.id)))
+	attested := make([]byte, 16)                                          // aaguid of zeros
+	attested = binary.BigEndian.AppendUint16(attested, uint16(len(a.id))) //nolint:gosec // the id is 32 bytes
 	attested = append(attested, a.id...)
 	attested = append(attested, cose...)
 	a.count = 0
