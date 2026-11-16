@@ -22,7 +22,7 @@ import (
 var Want = map[string]map[db.Role]string{
 	"cp.users": {
 		db.RoleCPSystem: "rawd",
-		db.RoleCPTenant: "r(github_id,github_login,id,stellar_address)",
+		db.RoleCPTenant: "r(github_id,github_login,id,passkey_address,stellar_address)",
 	},
 	"cp.sessions": {db.RoleCPSystem: "rawd"},
 	// used wallet sign-in challenges (00034): written and pruned by sign-in

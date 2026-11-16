@@ -63,6 +63,9 @@ const (
 	CodeChallengeInvalid = "challenge_invalid"
 	CodeChallengeExpired = "challenge_expired"
 	CodeChallengeUsed    = "challenge_used"
+	// passkey sign-in (contract 4.1.9): the assertion names a credential
+	// that no account holds, so the console has no key to check it with
+	CodePasskeyUnknown = "passkey_unknown"
 	// linking an identity that names another account, linking a second
 	// identity of a kind the account already has, or unlinking the only one
 	CodeIdentityInUse    = "identity_in_use"

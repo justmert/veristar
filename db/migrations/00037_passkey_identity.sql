@@ -44,7 +44,7 @@ alter table cp.users add constraint users_identity_check check (
     and (passkey_address is null) = (passkey_credential_id is null)
     and (passkey_address is null) = (passkey_public_key is null)
     and (passkey_address is null or (passkey_address ~ '^C[A-Z2-7]{55}$'
-      and passkey_credential_id ~ '^[A-Za-z0-9_-]{1,1364}$'
+      and passkey_credential_id ~ '^[A-Za-z0-9_-]+$' and length(passkey_credential_id) <= 1364
       and octet_length(passkey_public_key) = 65 and get_byte(passkey_public_key, 0) = 4))
     and (github_id is not null or stellar_address is not null or passkey_address is not null))
   or (deleted_at is not null

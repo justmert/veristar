@@ -110,6 +110,11 @@ func catalogue(terms string) []route {
 		{http.MethodPost, "/api/auth/stellar/challenge"}, {http.MethodPost, "/api/auth/stellar/verify"},
 		{http.MethodPost, "/api/me/identities/stellar/challenge"}, {http.MethodPost, "/api/me/identities/stellar"},
 		{http.MethodDelete, "/api/me/identities/stellar"}, {http.MethodDelete, "/api/me/identities/github"},
+		// passkey sign-in and linking (contract 4.1.9): the caller's own
+		// account only. covered by TestPasskeyIsolation
+		{http.MethodPost, "/api/auth/passkey/challenge"}, {http.MethodPost, "/api/auth/passkey/verify"},
+		{http.MethodPost, "/api/me/identities/passkey/challenge"}, {http.MethodPost, "/api/me/identities/passkey"},
+		{http.MethodDelete, "/api/me/identities/passkey"},
 		{http.MethodGet, "/api/tenants"}, {http.MethodPost, "/api/tenants"},
 	} {
 		add(kindOwn, r.m, r.p, nil)
