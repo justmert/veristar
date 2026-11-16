@@ -4,11 +4,14 @@
   "type": "module",
   "scripts": {
     "check": "tsc -p tsconfig.json",
-    "test:live": "playwright test"
+    "test:live": "playwright test",
+    "test:csp": "playwright test --config csp.config.ts"
   },
   "devDependencies": {
+    "@creit.tech/stellar-wallets-kit": "catalog:",
     "@playwright/test": "catalog:",
     "@types/node": "catalog:",
+    "esbuild": "catalog:",
     "typescript": "catalog:"
   }
 }
