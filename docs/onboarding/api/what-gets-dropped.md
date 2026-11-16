@@ -23,7 +23,8 @@ message for names and marker strings that must not be there.
 - **Every other metric**: counters, gauges, runtime and database metrics, client-side HTTP
   metrics, and your own custom metrics.
 - **Every other attribute** on the kept metrics, for example `server.address`, `url.scheme`,
-  `user_agent.original` or anything you added.
+  `user_agent.original` or anything you added. The user agent and `user_agent.synthetic.type`
+  are read once to decide the traffic class (below) and then dropped.
 - **Every other resource attribute**: host, container, cloud, process, SDK and deployment
   attributes. Attributes that claim a tenant (`scf.*`, `tenant.id`) are replaced from the token.
 - **Spans** after the request metric was derived from them: names, events, links, status messages
@@ -44,10 +45,17 @@ message for names and marker strings that must not be there.
   Data that arrives with other bounds, and every exponential histogram, is re-bucketed and its
   percentiles are marked approximate. A percentile above 10 seconds is shown as "> 10 s".
 - **Temporality** does not matter: cumulative and delta both arrive as exact per-minute counts.
+- **Traffic class**: CORS preflights (`OPTIONS`), health and probe routes such as `/healthz`,
+  `/readyz` or `/actuator/health/liveness`, and requests from known health checkers such as
+  `ELB-HealthChecker` or `kube-probe` are marked as infrastructure requests. The API traffic page
+  counts them apart and leaves them out of requests, error rates and latency, so your own load
+  balancer does not inflate your numbers. The full rule set is in the
+  [collector reference](../../reference/collector.md), "Traffic classes".
 
 ## Stored and for how long
 
-One row per minute, service, method, route, status code and source (metric or span) with the
+One row per minute, service, method, route, status code, source (metric or span) and traffic
+class with the
 bucket counts, sum and count. Minute rows are rolled up into hours and days. With the default
 settings, minute rows are kept for 30 days, hourly rows for 36 months and daily rows without a
 time limit. No request, trace, log line, address or user identifier is stored.
