@@ -63,7 +63,7 @@ drill_pipeline() {
 		[ -z "$api" ] && [ "$(check slo_freshness-api)" = 0 ] && api=$(($(date +%s) - s0)) && log "freshness api failed after ${api}s"
 		[ $(($(date +%s) - s0)) -gt 300 ] && { log "freshness did not fail within 300 s"; return 1; }
 	done
-	log "while stopped: ingestion=$(check slo_ingestion) console=$(check probe_console) web host=$(check probe_web-host) machine api=$(check probe_machine-api) in host gatus=$(curl -s '127.0.0.1:18080/api/v1/endpoints/hosts_in-host/statuses?pageSize=1' | python3 -c 'import json,sys; print(json.load(sys.stdin)["results"][-1]["success"])')"
+	log "while stopped: ingestion=$(check slo_ingestion) console=$(check probe_console) machine api=$(check probe_machine-api) in host gatus=$(curl -s '127.0.0.1:18080/api/v1/endpoints/hosts_in-host/statuses?pageSize=1' | python3 -c 'import json,sys; print(json.load(sys.stdin)["results"][-1]["success"])')"
 	tool events -ca /obs/certs/ca.crt -site "$(probe site_id)" -origin https://probe.obs.test -n 5100 &
 	tool otlp -ca /obs/certs/ca.crt -token "$(probe otlp_token)" -n 5100
 	wait
@@ -128,13 +128,13 @@ drill_umami() {
 	t0=$(now)
 	compose stop umami
 	wait_msg FIRING UmamiHeartbeatFailing "$t0" 400
+	# the machine api's /web/hourly reads umami live, so the dashboard
+	# check fails with it; umami has no public host for gatus to watch
 	wait_msg FIRING ProbeDashboardFailing "$t0" 400
-	wait_msg FIRING "umami host" "$t0" 300 gatus
 	t1=$(now)
 	compose start umami
 	wait_msg RESOLVED UmamiHeartbeatFailing "$t1" 600
 	wait_msg RESOLVED ProbeDashboardFailing "$t1" 600
-	wait_msg RESOLVED "umami host" "$t1" 600 gatus
 }
 
 drill_edge_node() {

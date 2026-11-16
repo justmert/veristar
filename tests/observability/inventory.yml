@@ -4,7 +4,7 @@ all:
   vars:
     sa_environment: local
     sa_base_domain: obs.test
-    sa_hostnames: {in: in.obs.test, otlp: otlp.obs.test, app: app.obs.test, web: web.obs.test, status: status.obs.test}
+    sa_hostnames: {in: in.obs.test, otlp: otlp.obs.test, app: app.obs.test, status: status.obs.test}
     observability_test_webhook_base: http://receiver:8099
     observability_probe_ca_file: /etc/prober/ca.crt
     observability_probe_tls: /certs/node.crt /certs/node.key
