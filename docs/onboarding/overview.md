@@ -13,6 +13,9 @@ the reserved domain `analytics.example`: the gateway is `https://in.analytics.ex
 endpoint `https://otlp.analytics.example` and the console `https://app.analytics.example`. The
 console shows the real values of the service you use.
 
+To sign in with GitHub or a Stellar wallet, and to link both to one account, see
+[Signing in](sign-in.md).
+
 ## Web analytics
 
 | Guide | For |

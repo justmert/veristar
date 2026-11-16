@@ -18,6 +18,26 @@ here, before they take effect, as the processing terms require
 
 ### Added
 
+- Wallet sign-in: the console's sign-in page offers **Continue with a Stellar
+  wallet** next to GitHub. The wallet signs a SEP-10 challenge for the public
+  network that is bound to the console's host, expires after five minutes and
+  verifies once across every control plane instance; the control plane checks
+  it with the Go Stellar SDK (`github.com/stellar/go-stellar-sdk` v0.9.0). The
+  picker is the console's own, on the Stellar Wallets Kit 2.8.0 module API, so
+  the strict content security policy holds
+  ([docs/onboarding/sign-in.md](docs/onboarding/sign-in.md),
+  [docs/reference/control-plane-api.md](docs/reference/control-plane-api.md)
+  section 4.1.7). Migration 00034.
+- Linked sign-in methods: an account links a GitHub account and a Stellar
+  wallet, each proven in the same session, and unlinks either while the other
+  remains (section 4.1.8). Owners add members and send invites by GitHub
+  username or by Stellar address. The optional setting
+  `OPERATOR_STELLAR_ADDRESSES` grants operator rights to wallet accounts,
+  beside `OPERATOR_GITHUB_IDS`.
+- A shared wallet helper for console pages
+  (`apps/console/src/lib/stellar-wallet` and `components/wallet-picker.tsx`):
+  wallet list, connect, transaction signing and SEP-53 message signing.
+
 - Integrity grade of web traffic: every site gets an A, B or C grade per UTC
   day with the reasons that set it, computed by the new jobs task `integrity`
   from evidence the platform's edge observes: the network class of each
@@ -42,6 +62,20 @@ here, before they take effect, as the processing terms require
   number is stored.
 
 ### Changed
+
+- Terms of use `2026-11-16-draft.4`: the hosting operator runs the service as
+  processor for each tenant, and SCF, which does not run the service, receives
+  aggregate statistics about each enrolled project on the tenant's instruction
+  given at enrollment (section 1.1). The processing terms, the records of
+  processing and the privacy strategy follow. Every project accepts the new
+  version at its next sign-in.
+- `/api/me`, members, invites and the operator tenant detail carry
+  `stellar_address` and `display_name`; `github_id` and `github_login` are
+  `null` for a wallet-only account. A deleted account's row now holds nulls
+  instead of `0` and an empty login.
+- New Umami users are named `u-<account id>` and the name is stored with the
+  account, so linking or unlinking GitHub never renames a dashboard user.
+  Existing `gh-<github id>` users keep their names.
 
 - The same-network threshold follows the network class and the site's size:
   `IPCLUSTER_THRESHOLD` is the floor for access networks and grows with the

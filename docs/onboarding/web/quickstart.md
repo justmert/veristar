@@ -15,7 +15,7 @@ from there, not from this page.
 
 ## 1. Enroll your project
 
-Sign in to the console with GitHub. Choose **Enroll a project** and fill in the project name, its
+Sign in to the console with GitHub or a Stellar wallet ([Signing in](../sign-in.md)). Choose **Enroll a project** and fill in the project name, its
 website and a short description. Depending on how the operators run the service, the project is
 active at once or waits for an operator's review; the console shows which. Sites can be added
 while a project waits, but they receive data only once it is active.

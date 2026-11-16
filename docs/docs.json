@@ -76,6 +76,7 @@
             "group": "Start here",
             "pages": [
               "onboarding/overview",
+              "onboarding/sign-in",
               "onboarding/web/quickstart",
               "onboarding/api/quickstart"
             ]
