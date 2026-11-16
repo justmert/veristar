@@ -16,6 +16,12 @@ The list is the Ansible variable `sa_operator_github_ids`, a comma-separated str
 ids, set per environment in `infra/ansible/inventories/<env>/group_vars/all.yml`. `bootstrap.yml`
 refuses to run without it or with anything other than digits and commas.
 
+An operator who signs in with a Stellar wallet instead is listed by account id (G-address) in
+`OPERATOR_STELLAR_ADDRESSES`, the Ansible variable `sa_operator_stellar_addresses` in the same
+file: a comma-separated string, empty when no wallet operator exists. The core role refuses
+anything other than G-addresses and commas, and the control plane checks each checksum at start.
+You add and remove a wallet operator with the steps below, editing that variable instead.
+
 ## Find the numeric id
 
 The login can change; the id cannot. Look it up from the login the person gives you:
