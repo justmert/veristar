@@ -20,7 +20,7 @@
 //     account. Require is the middleware that answers 401
 //     step_up_required otherwise. requests made with an mcp credential
 //     (session.ViaCredential) pass: they carry no session to step up.
-//   - the passkey store over cp.operator_passkeys (00038).
+//   - the passkey store over cp.operator_passkeys (00039).
 //
 // a different authenticator can feed the same step-up: anything that
 // verifies a possession factor of the signed-in account calls Record in

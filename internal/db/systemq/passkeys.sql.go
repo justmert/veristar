@@ -100,7 +100,7 @@ where user_id = $1
 order by created_at, id
 `
 
-// operator passkeys (00038), read and written by the stepup package as
+// operator passkeys (00039), read and written by the stepup package as
 // cp_system.
 func (q *Queries) ListPasskeys(ctx context.Context, userID uuid.UUID) ([]CpOperatorPasskey, error) {
 	rows, err := q.db.Query(ctx, listPasskeys, userID)
