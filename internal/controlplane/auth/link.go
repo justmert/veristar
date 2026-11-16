@@ -16,10 +16,10 @@ import (
 	"github.com/justmert/veristar/internal/db/systemq"
 )
 
-// linked sign-in methods (contract 4.1.8). an account links a second
+// linked sign-in methods (contract 4.1.8). an account links another
 // identity only with both proofs in one browser session: the session proves
-// the account, and the github flow or a signed wallet challenge proves the
-// identity being added. an account always keeps at least one identity.
+// the account, and the github flow, a signed wallet challenge or a passkey
+// assertion proves the identity being added. an account always keeps at least one identity.
 
 // accountPath is the console page that starts linking; the github link
 // flow returns there.
@@ -33,8 +33,10 @@ const (
 
 // unique indexes whose violation means the identity names another account
 const (
-	githubLiveIdx  = "users_github_id_live_idx"
-	stellarLiveIdx = "users_stellar_address_live_idx"
+	githubLiveIdx        = "users_github_id_live_idx"
+	stellarLiveIdx       = "users_stellar_address_live_idx"
+	passkeyAddressIdx    = "users_passkey_address_live_idx"
+	passkeyCredentialIdx = "users_passkey_credential_live_idx"
 )
 
 func isUnique(err error, index string) bool {
@@ -102,7 +104,8 @@ func (h *Handler) link(ctx context.Context, uid uuid.UUID, kind string,
 		case errors.Is(err, pgx.ErrNoRows):
 			return httpx.Conflict(httpx.CodeIdentityLinked,
 				"this account already has a "+kind+" sign-in; unlink it first")
-		case isUnique(err, githubLiveIdx), isUnique(err, stellarLiveIdx):
+		case isUnique(err, githubLiveIdx), isUnique(err, stellarLiveIdx),
+			isUnique(err, passkeyAddressIdx), isUnique(err, passkeyCredentialIdx):
 			return httpx.Conflict(httpx.CodeIdentityInUse,
 				"this "+kind+" identity signs in to another account; delete that account or unlink it there first")
 		case err != nil:
@@ -149,6 +152,13 @@ func (h *Handler) unlinkStellar(w http.ResponseWriter, r *http.Request) error {
 	return h.unlink(w, r, "stellar", func(u session.User) bool { return u.StellarAddress != nil },
 		func(ctx context.Context, q *systemq.Queries, id uuid.UUID) (systemq.CpUser, error) {
 			return q.UnlinkStellar(ctx, id)
+		})
+}
+
+func (h *Handler) unlinkPasskey(w http.ResponseWriter, r *http.Request) error {
+	return h.unlink(w, r, "passkey", func(u session.User) bool { return u.PasskeyAddress != nil },
+		func(ctx context.Context, q *systemq.Queries, id uuid.UUID) (systemq.CpUser, error) {
+			return q.UnlinkPasskey(ctx, id)
 		})
 }
 

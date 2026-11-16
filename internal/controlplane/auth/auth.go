@@ -1,6 +1,7 @@
 // Package auth is console sign-in (contract 4.1): the github oauth web flow
 // with state and pkce s256, wallet sign-in with a sep-10 challenge
-// (stellar.go), linking and unlinking the two (link.go), sign-out, and
+// (stellar.go), soropass passkey sign-in with a webauthn assertion
+// (passkey.go), linking and unlinking the three (link.go), sign-out, and
 // /api/me.
 package auth
 
@@ -94,6 +95,7 @@ type Handler struct {
 	used      usedStates
 	now       func() time.Time
 	stellar   *stellarAuth
+	passkey   *passkeyAuth
 }
 
 // New checks cfg and returns the handler.
@@ -124,6 +126,10 @@ func New(cfg Config, d *db.DB, s *session.Manager) (*Handler, error) {
 	if err != nil {
 		return nil, err
 	}
+	pa, err := newPasskeyAuth(cfg.ConsoleOrigin, now)
+	if err != nil {
+		return nil, err
+	}
 	return &Handler{
 		oauth: &oauth2.Config{
 			ClientID:     cfg.ClientID,
@@ -147,6 +153,7 @@ func New(cfg Config, d *db.DB, s *session.Manager) (*Handler, error) {
 			ExchangeReserveRatePerSecond, ExchangeReserveBurst, now),
 		now:     time.Now,
 		stellar: sa,
+		passkey: pa,
 	}, nil
 }
 
@@ -159,6 +166,8 @@ func (h *Handler) Public(r chi.Router) {
 	r.Method(http.MethodPost, "/auth/logout", httpx.HandlerFunc(h.logout))
 	r.Method(http.MethodPost, "/auth/stellar/challenge", httpx.HandlerFunc(h.stellarChallenge))
 	r.Method(http.MethodPost, "/auth/stellar/verify", httpx.HandlerFunc(h.stellarVerify))
+	r.Method(http.MethodPost, "/auth/passkey/challenge", httpx.HandlerFunc(h.passkeyChallenge))
+	r.Method(http.MethodPost, "/auth/passkey/verify", httpx.HandlerFunc(h.passkeyVerify))
 }
 
 // Private registers the routes behind RequireUser.
@@ -168,6 +177,9 @@ func (h *Handler) Private(r chi.Router) {
 	r.Method(http.MethodPost, "/me/identities/stellar", httpx.HandlerFunc(h.stellarLink))
 	r.Method(http.MethodDelete, "/me/identities/stellar", httpx.HandlerFunc(h.unlinkStellar))
 	r.Method(http.MethodDelete, "/me/identities/github", httpx.HandlerFunc(h.unlinkGitHub))
+	r.Method(http.MethodPost, "/me/identities/passkey/challenge", httpx.HandlerFunc(h.passkeyLinkChallenge))
+	r.Method(http.MethodPost, "/me/identities/passkey", httpx.HandlerFunc(h.passkeyLink))
+	r.Method(http.MethodDelete, "/me/identities/passkey", httpx.HandlerFunc(h.unlinkPasskey))
 }
 
 // cleanReturnTo keeps only a console path: one leading slash, not a
@@ -465,13 +477,15 @@ func (h *Handler) logout(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-// MeUser is the User object of contract 3.1. github_id and github_login are
-// null for a wallet-only account, stellar_address for a github-only one.
+// MeUser is the User object of contract 3.1. each identity is null when the
+// account does not hold it: github_id and github_login, stellar_address (a
+// wallet's G-address) and passkey_address (a soropass account's C-address).
 type MeUser struct {
 	ID             uuid.UUID `json:"id"`
 	GitHubID       *int64    `json:"github_id"`
 	GitHubLogin    *string   `json:"github_login"`
 	StellarAddress *string   `json:"stellar_address"`
+	PasskeyAddress *string   `json:"passkey_address"`
 	DisplayName    string    `json:"display_name"`
 	IsOperator     bool      `json:"is_operator"`
 }
@@ -480,7 +494,8 @@ type MeUser struct {
 func MeUserOf(u session.User) MeUser {
 	return MeUser{
 		ID: u.ID, GitHubID: u.GitHubID, GitHubLogin: u.GitHubLogin, StellarAddress: u.StellarAddress,
-		DisplayName: u.DisplayName(), IsOperator: u.IsOperator,
+		PasskeyAddress: u.PasskeyAddress,
+		DisplayName:    u.DisplayName(), IsOperator: u.IsOperator,
 	}
 }
 

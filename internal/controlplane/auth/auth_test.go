@@ -293,8 +293,9 @@ func setCookie(t *testing.T, res *resp, name string) *http.Cookie {
 
 type apiError struct {
 	Error struct {
-		Code      string `json:"code"`
-		RequestID string `json:"request_id"`
+		Code      string            `json:"code"`
+		RequestID string            `json:"request_id"`
+		Fields    map[string]string `json:"fields"`
 	} `json:"error"`
 }
 
