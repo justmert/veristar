@@ -80,7 +80,7 @@ var tenantTables = []tenantTable{
 			[]any{tenant, randomContract()}
 	}},
 	// agg: cp_tenant reads its own web and chain rows (00032) and its own
-	// breakdowns (00037) and writes none
+	// breakdowns (00038) and writes none
 	{name: "agg.web_daily", key: "tenant_id"},
 	{name: "agg.web_daily_dim", key: "tenant_id"},
 	{name: "agg.chain_daily", key: "tenant_id"},
