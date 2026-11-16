@@ -147,7 +147,7 @@ var healthNames = map[string]bool{
 	"ping": true, "_ping": true,
 	"status": true, "_status": true,
 	"heartbeat": true,
-	"metrics": true,
+	"metrics":   true,
 }
 
 // scopedNames are health names only right after one root: prometheus'
