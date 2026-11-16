@@ -325,6 +325,19 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	// cohorts and saved threshold rules (contract 19)
+	cohortRoutes, err := operator.NewCohorts(d, time.Now)
+	if err != nil {
+		return err
+	}
+	tenantCohort, err := operator.NewTenantCohort(scope, time.Now)
+	if err != nil {
+		return err
+	}
+	ruleRoutes, err := operator.NewRules(d, time.Now)
+	if err != nil {
+		return err
+	}
 
 	// erasure: runs started by requests finish before the pools close
 	eraser, err := erasure.New(erasure.Config{
@@ -378,7 +391,8 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 		Guard: guard,
 		Reads: []mcpserver.Routes{
 			tenants.NewRoutes(scope), sites.NewRoutes(scope), metricRoutes, onchainRoutes, scfView,
-			controlplane.RoutesFunc(guard.Mount(review, global, onchainOperator)),
+			tenantCohort,
+			controlplane.RoutesFunc(guard.Mount(review, global, onchainOperator, cohortRoutes, ruleRoutes)),
 		},
 		Sessions: ssoH,
 		Umami:    umamiClient,
@@ -420,6 +434,7 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 			onchainRoutes,
 			overviewExport,
 			scfView,
+			tenantCohort,
 			// behind RequireUser like every private group; sso answers its own
 			// failures with a redirect, but an anonymous request gets 401
 			controlplane.RoutesFunc(func(r chi.Router) { r.Method(http.MethodGet, ssoPath, ssoH) }),
@@ -428,7 +443,7 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 			mcpSrv.TenantRoutes(scope),
 			mcpSrv.ConsentRoutes(),
 			controlplane.RoutesFunc(guard.Mount(modeRoutes, keepRoutes, auditRoutes, actions, review, global, apiKeys, alertRoutes,
-				mcpSrv.OperatorRoutes(), onchainOperator, operatorExports)),
+				mcpSrv.OperatorRoutes(), onchainOperator, operatorExports, cohortRoutes, ruleRoutes)),
 		},
 		// keys only: no session middleware runs there (contract 9.1); the
 		// mcp endpoint and its oauth server authenticate by bearer

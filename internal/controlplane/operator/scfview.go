@@ -1,6 +1,7 @@
 package operator
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -88,9 +89,63 @@ type SCFViewAnswer struct {
 	// (contract 17.3), present when the views list the project
 	Integrity     *IntegrityGrade    `json:"integrity,omitempty"`
 	LinkTwoWay    bool               `json:"link_two_way"`
+	// the project's cohort record, the cohort its percentiles come from
+	// (contract 19.3) and its row's cohort, growth and percentiles
+	Cohort           CohortRecord      `json:"cohort"`
+	PercentileCohort *PercentileCohort `json:"percentile_cohort"`
+	Comparison       *Comparison       `json:"comparison"`
+	// the saved rules the project meets today, with the evidence
+	RulesMet      []SCFRule          `json:"rules_met"`
 	WebSeries     []WebPoint         `json:"web_series"`
 	APISeries     []APIPoint         `json:"api_series"`
 	OnchainSeries []onchain.DayTotal `json:"onchain_series"`
+}
+
+// PercentileCohort names the population of a project's percentiles in the
+// "what scf sees" view and in a usage report: the projects confirmed in its
+// program and round, or every listed project when it has no confirmed
+// cohort (both fields null).
+type PercentileCohort struct {
+	Program *string `json:"program"`
+	Round   *string `json:"round"`
+}
+
+// SCFRule is a rule the project meets and its evidence.
+type SCFRule struct {
+	Rule  Rule      `json:"rule"`
+	Match RuleMatch `json:"match"`
+}
+
+// ownCohortFilter is the percentile population of a project: its
+// confirmed program and round, or no cohort filter without one.
+func ownCohortFilter(c CohortRecord) (cohortFilter, PercentileCohort) {
+	if c.Confirmed == nil {
+		return cohortFilter{}, PercentileCohort{}
+	}
+	return cohortFilter{Program: c.Confirmed.Program, Round: c.Confirmed.Round},
+		PercentileCohort{Program: c.Confirmed.Program, Round: c.Confirmed.Round}
+}
+
+// RulesMet evaluates every saved rule for one project on asOf and keeps
+// the ones it meets.
+func RulesMet(ctx context.Context, tx pgx.Tx, id uuid.UUID, asOf time.Time) ([]SCFRule, error) {
+	rules, err := ListRules(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
+	out := []SCFRule{}
+	for _, rule := range rules {
+		m, err := EvaluateRule(ctx, tx, rule, asOf, &id)
+		if err != nil {
+			return nil, err
+		}
+		for _, it := range m.Items {
+			if it.Meets {
+				out = append(out, SCFRule{Rule: rule, Match: it})
+			}
+		}
+	}
+	return out, nil
 }
 
 // noFilter is the list query of an unfiltered list over rg: the scf view
@@ -116,23 +171,17 @@ func (v *SCFView) get(w http.ResponseWriter, r *http.Request) error {
 		if err := snapshot(ctx, tx); err != nil {
 			return err
 		}
-		args := noFilter(rg).args()
+		cohort, err := readCohort(ctx, tx, id)
+		if err != nil {
+			return err
+		}
+		out.Cohort = cohort
+		lq := noFilter(rg)
+		var pc PercentileCohort
+		lq.Filter.Cohort, pc = ownCohortFilter(cohort)
+		args := lq.args()
 		args["tenant"] = id
-		var t TenantRef
-		var sc SiteCounts
-		var web SCFWebRow
-		var at time.Time
-		var grade IntegrityGrade
-		err := tx.QueryRow(ctx, webListCTE+`
-			select id, slug, name, status, created_at, sites, sites_verified, sites_with_stellar_toml,
-			       has_web_data, has_api_data, pageviews, visitors, visits, bounces, totaltime,
-			       bounce_rate, avg_visit_duration, quarantine_pageviews, quarantine_visitors, quarantine_share,
-			       ingest_requests, ingest_rejected, rejected_share, days_a, days_b, days_c
-			from y where id = @tenant`, args).Scan(&t.ID, &t.Slug, &t.Name, &t.Status, &at,
-			&sc.Sites, &sc.SitesVerified, &sc.SitesWithStellarToml, &out.HasWebData, &out.HasAPIData,
-			&web.Pageviews, &web.Visitors, &web.Visits, &web.Bounces, &web.Totaltime,
-			&web.BounceRate, &web.AvgVisitDuration, &web.QuarantinePageviews, &web.QuarantineVisitors, &web.QuarantineShare,
-			&web.IngestRequests, &web.IngestRejected, &web.RejectedShare, &grade.DaysA, &grade.DaysB, &grade.DaysC)
+		p, err := scanWebRow(tx.QueryRow(ctx, webListCTE+webRowSelect+` where id = @tenant`, args))
 		if errors.Is(err, pgx.ErrNoRows) {
 			// the operator views do not list this project
 			return nil
@@ -140,9 +189,19 @@ func (v *SCFView) get(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return fmt.Errorf("web row: %w", err)
 		}
-		t.CreatedAt = httpx.Timestamp(at)
-		grade.derive()
+		t, sc, grade, cmp := p.Tenant, p.SiteCounts, p.Integrity, p.Comparison
+		out.HasWebData, out.HasAPIData = p.HasWebData, p.HasAPIData
+		web := SCFWebRow{
+			Pageviews: p.Pageviews, Visitors: p.Visitors, Visits: p.Visits, Bounces: p.Bounces, Totaltime: p.Totaltime,
+			BounceRate: p.BounceRate, AvgVisitDuration: p.AvgVisitDuration, QuarantinePageviews: p.QuarantinePageviews,
+			QuarantineVisitors: p.QuarantineVisitors, QuarantineShare: p.QuarantineShare, IngestRequests: p.IngestRequests,
+			IngestRejected: p.IngestRejected, RejectedShare: p.RejectedShare,
+		}
 		out.InOperatorViews, out.Tenant, out.Sites, out.Web, out.Integrity = true, &t, &sc, &web, &grade
+		out.PercentileCohort, out.Comparison = &pc, &cmp
+		if out.RulesMet, err = RulesMet(ctx, tx, id, utcDay(now)); err != nil {
+			return err
+		}
 		var api SCFAPIRow
 		var p50, p95, p99 *float64
 		err = tx.QueryRow(ctx, apiListCTE+`
@@ -187,6 +246,9 @@ func (v *SCFView) get(w http.ResponseWriter, r *http.Request) error {
 	})
 	if err != nil {
 		return fmt.Errorf("operator: scf view: %w", err)
+	}
+	if out.RulesMet == nil {
+		out.RulesMet = []SCFRule{}
 	}
 	if out.WebSeries == nil {
 		out.WebSeries = []WebPoint{}
