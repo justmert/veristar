@@ -97,6 +97,7 @@ replacing one value.
 | `grafana_admin_password`, `postgres_exporter_password` | Grafana, postgres_exporter on the core nodes | yes (observability play; the exporter's `sa_monitor` role password is set through HAProxy at each run) | recreate `grafana` and the exporter if they did not restart. Grafana reads `GF_SECURITY_ADMIN_PASSWORD` only when it creates its database, and its database is on the persistent `grafana` volume, so on every core node also set the stored password (below, "The Grafana admin password") |
 | `probe_metrics_token`, `gatus_external_token` | the probe node's Caddy and Gatus, Prometheus scraping the prober | core side yes; probe side: render the probe bundle again and restart it | |
 | `probe_otlp_token`, `probe_machine_api_key`, `probe_site_id` | the prober | render the probe bundle again and restart it | create a new OTLP token for the internal probe tenant and a new scoped operator key, write them to the file, apply, then revoke the old ones |
+| `report_signing_seed`, `report_signing_key` | the control plane (signs usage reports); the status page shows the key | yes, then render the probe bundle again | kept by `rotate-secrets.py`: every report already shared names this key. Replace it with [The usage report signing key](#the-usage-report-signing-key) |
 
 The certificates of the private network are not in `secrets.enc.yaml`: they live in
 `ca.enc.yaml` and `tls.enc.yaml` beside it and have their own section,
@@ -227,6 +228,51 @@ cd /opt/veristar/core && sudo docker compose run --rm --no-deps jobs run umami-r
 
 Every Umami session token is invalidated by the password change; users re-enter through the
 console's SSO.
+
+### The usage report signing key
+
+Usage reports are signed with `report_signing_seed`; its account id `report_signing_key` is
+published in the console host's `stellar.toml`, on the status page and in
+[signed usage reports](../reference/usage-reports.md). Replace the pair when the seed may have been
+exposed. A replaced key stays published as retired, so every report it signed still verifies.
+
+1. **Make the new pair** on the controller, in a directory that does not exist yet, on a
+   memory-backed file system:
+
+   ```sh
+   platformctl report keygen /dev/shm/report-key
+   ```
+
+   It writes `report_signing_seed.json` and `report_signing_key.json` (mode 0600) and prints only
+   the new account id.
+
+2. **Retire the current key.** Add the current account id (the `report_signing_key` value, or the
+   first entry of `ACCOUNTS` at `https://app.<BASE_DOMAIN>/.well-known/stellar.toml`) to the front
+   of `sa_report_signing_retired_keys` in `infra/ansible/inventories/<env>/group_vars/all.yml`,
+   comma separated, newest first. If the seed was exposed, say so in the security advisory: a
+   report signed by it after the exposure date cannot be trusted.
+
+3. **Write the new pair into the SOPS file** without the values passing through your shell:
+
+   ```sh
+   sops --config infra/secrets/.sops.yaml set --value-file infra/secrets/<env>/secrets.enc.yaml '["report_signing_seed"]' /dev/shm/report-key/report_signing_seed.json
+   sops --config infra/secrets/.sops.yaml set --value-file infra/secrets/<env>/secrets.enc.yaml '["report_signing_key"]' /dev/shm/report-key/report_signing_key.json
+   shred -u /dev/shm/report-key/*.json && rmdir /dev/shm/report-key
+   ```
+
+4. **Apply** with the general pattern above (`site.yml` writes `REPORT_SIGNING_SEED`,
+   `REPORT_SIGNING_KEY` and `REPORT_SIGNING_RETIRED_KEYS` and recreates `controlplane`), then render
+   the probe bundle again and restart it, so the status page shows the new key
+   ([../deploy/probe.md](../deploy/probe.md)).
+
+5. **Check** that `stellar.toml` lists the new key first and the retired one after it, that
+   `GET /api/public/report-keys` answers the same, that the status page shows the new key, and that
+   a report created now verifies with `platformctl report verify`. Update the key on
+   [signed usage reports](../reference/usage-reports.md). Commit the SOPS file and the inventory.
+
+The control plane refuses to start when `REPORT_SIGNING_KEY` is not the account of
+`REPORT_SIGNING_SEED`, so a half-applied change stops the service instead of signing with an
+unpublished key.
 
 ## Internal CA and node certificates
 

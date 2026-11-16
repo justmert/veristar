@@ -437,6 +437,22 @@ actor `user:<id>`, target `tenant:<id>` and detail `tenant_id`, `view`
 `api_compare`) and detail `view`, `query` (the query string it answered,
 without a cursor), `rows` and, for compare exports, `tenants`.
 
+Cohorts and threshold rules (section 19): `cohort.propose` (actor
+`user:<id>`, written under `cp_tenant`), `cohort.set`, `cohort.confirm`,
+`cohort.proposal_dismiss`, `rule.create`, `rule.update`, `rule.delete`
+(operator actions, written under `cp_system`). Cohort rows have target
+`tenant:<id>` and detail `tenant_id` and the old and new values; rule rows
+have target `rule:<id>` and the rule's fields (old and new for an update). A
+rule matches export is an `export.csv` row with target `operator:rule_matches`
+and detail `rule_id`, `query` and `rows`.
+
+Usage reports (section 20): `report.create` and `report.revoke` (actor
+`user:<id>`, written under `cp_tenant`) and `report.view` (actor `public`,
+written under `cp_system` for every view through the shared link). Target
+added: `report:<id>`. Detail: `tenant_id`, and `from`, `to` and `signer` on
+create. A view row holds no address, user agent or any other trait of the
+reader.
+
 Operator API keys (section 9): `operator_api_key.create`,
 `operator_api_key.revoke`. Target added: `operator_api_key:<id>`. Detail:
 `name`, `prefix` and `tenant_id` (null for a key for all tenants), plus
@@ -731,10 +747,14 @@ Session. Enrollment.
     "stellar_ids": ["GA..."],
     "scf_round_url": "https://communityfund.stellar.org/..."
   },
-  "accepted_terms_version": "2026-11-12-draft.1"
+  "accepted_terms_version": "2026-11-12-draft.1",
+  "cohort": { "program": "Build Award", "round": "SCF #38", "category": "DeFi", "award_date": "2026-10-01" }
 }
 ```
 
+- `cohort` is optional: the project's proposal of its SCF cohort (19.1), at
+  least one field, written as the proposal in the same transaction and named
+  in the `tenant.create` audit row as `cohort_proposal`.
 - `slug` and `description` optional, `enrollment.stellar_ids` and
   `enrollment.scf_round_url` optional; the rest required (3.2).
 - `accepted_terms_version` must equal the current version: else 409
@@ -1014,6 +1034,9 @@ the key.
 | `OPERATOR_GITHUB_IDS` | yes | comma separated numeric GitHub user ids of the operators, at least one; sets `is_operator` at sign-in |
 | `OPERATOR_STELLAR_ADDRESSES` | no | comma separated Stellar account ids (G-addresses, checksum checked) of operators who sign in with a wallet; empty when unset |
 | `OAUTH_STATE_KEY` | yes | 32 bytes, base64; seals `sa_oauth` and `sa_stellar`, and derives the key that signs wallet challenges (4.1.7) |
+| `REPORT_SIGNING_SEED` | yes | the Stellar secret seed (`S...`) that signs usage reports (20.2) |
+| `REPORT_SIGNING_KEY` | yes | the published account id (`G...`) of that seed; the process refuses to start when the seed does not derive it |
+| `REPORT_SIGNING_RETIRED_KEYS` | no | comma separated account ids of earlier report keys, newest first; their reports still verify (20.2) |
 | `UMAMI_URL`, `UMAMI_ADMIN_PASSWORD` | yes | Umami's address on the private network and its admin password |
 | `UMAMI_USER_PASSWORD_KEY` | yes | 32 bytes, base64; derives daily Umami passwords; shared with `jobs` |
 | `TRACKER_RELEASE_DIR` | yes | holds `manifest.json` and `revoked.json` |
@@ -1997,6 +2020,8 @@ Both project lists take these filters; all given filters must hold.
 | `has_api_data` | `true`, `false` | an `api.metrics_daily` row with requests in the range |
 | `enrolled_from`, `enrolled_to` | `yyyy-mm-dd` | `created_at` on or after the start of `enrolled_from`, before the end of `enrolled_to` (UTC) |
 | `q` | 1 to 100 characters | case-insensitive substring of `name` or `slug` |
+| `program`, `round`, `category` | 1 to 80 characters | exactly the confirmed cohort value of 19.1 |
+| `award_from`, `award_to` | `yyyy-mm-dd` | confirmed award date on or after, on or before |
 
 - `sort` is any column the route lists, `order` is `asc` or `desc`
   (default `desc`). Projects without a value for the sort column (a rate
@@ -2012,7 +2037,12 @@ Both project lists take these filters; all given filters must hold.
   committed can repeat or skip a project whose numbers changed.
 - 400 `invalid_query` for an unknown status, sort or order, a boolean other
   than `true` or `false`, a malformed date, `enrolled_to` before
-  `enrolled_from`, or `q` out of range.
+  `enrolled_from`, `award_to` before `award_from`, or `q` or a cohort value
+  out of range.
+- Both lists also sort by the change and percentile columns of 19.2:
+  `visitors_growth`, `pageviews_growth`, `requests_growth`,
+  `error_rate_change`, `onchain_operations_growth` and
+  `<metric>_percentile` for the same five metrics.
 
 Every list row and compare project carries **TenantRef**
 `{"id", "slug", "name", "status", "created_at"}`, and list rows carry the site
@@ -2402,7 +2432,14 @@ at most 31). Answer: `key_id`, `from`, `to`, `totals` `{requests, rejected}`
 and `hours`, every hour with a row in `cp.api_key_usage_hourly`:
 `{hour, requests, rejected}`.
 
-### 9.12 Configuration
+### 9.12 `GET /rules` and `GET /rules/{rule_id}/matches`
+
+The saved threshold rules and the tenants that meet one, as in 19.4. `/rules`
+takes `tenant` only to check it like every route; the rule list holds no
+tenant data. `/rules/{rule_id}/matches` takes `tenant` and `as_of`; a key
+scoped to one tenant evaluates that tenant only. Neither route has pages.
+
+### 9.13 Configuration
 
 No key of its own. The rate limit (10 per second, burst 20), page size (500),
 key lifetime (90 days default, 365 maximum) and range limits are constants of
@@ -2795,7 +2832,9 @@ revenue, so those tools would only answer zeros.
 guard of 5.1: `list_tenants` (5.3, search and filters), `get_tenant` (5.4),
 `get_global_web_overview` (8.3), `get_global_api_overview` (8.5),
 `compare_tenants_web` (8.4) and `compare_tenants_api` (8.6), with their
-filters, sorts and pages, and `get_tenant_integrity` (17.3).
+filters (the cohort filters of 19.1 included), sorts and pages,
+`get_tenant_integrity` (17.3), `list_cohorts` (19.1), `list_threshold_rules`
+and `get_threshold_rule_matches` (19.4).
 
 **12.4.5 Integrity** for a project: `get_web_integrity` (17.2).
 
@@ -3120,6 +3159,19 @@ charset=utf-8` as an attachment, streamed, one header row:
 - `rows` is 1 to 5000, default 50; the console sends the number of rows it
   shows, with the range it resolved, so the file holds exactly the rows on
   screen. `limit` and `cursor` are 400 `invalid_query`.
+- The list exports carry the cohort, change and percentile columns of 19.2:
+  `cohort_program`, `cohort_round`, `cohort_category`, `cohort_award_date`,
+  `cohort_size`, then `<metric>_value`, `<metric>_previous`,
+  `<metric>_growth` (`error_rate_change` for the error rate) and
+  `<metric>_percentile` for `visitors`, `pageviews`, `requests`,
+  `error_rate` and `onchain_operations`. The compare exports carry
+  `cohort_program`, `cohort_round`, `cohort_category`, `cohort_award_date`
+  and `after_award` (the day is on or after the award date; empty without
+  one) per row.
+- `GET /rules/{rule_id}/matches.csv` (19.4) is one row per meeting project
+  and month: the rule, the project, its cohort, its integrity grade over the
+  window, the month, its qualifying days and the days with their values as a
+  JSON array.
 - The list exports read with the list's own SQL in one repeatable-read
   snapshot, and add the on-chain summary columns `onchain_ids`,
   `onchain_ids_verified`, `onchain_operations`, `onchain_transactions`,
@@ -3168,10 +3220,21 @@ membership only; it takes no tenant list and never names another project.
   "onchain": "Summary of 15.7",
   "integrity": "the row's grade of 17.3",
   "link_two_way": true,
+  "cohort": "CohortRecord of 19.1",
+  "percentile_cohort": { "program": "Build Award", "round": "SCF #38" },
+  "comparison": "cohort, cohort_size and kpis of 19.2",
+  "rules_met": [{ "rule": "Rule of 19.4", "match": "RuleMatch of 19.4" }],
   "web_series": "the series of 8.4", "api_series": "the series of 8.6",
   "onchain_series": "the series of 15.7"
 }
 ```
+
+- `percentile_cohort` is the population of the percentiles: the projects
+  confirmed in the project's program and round, or every listed project
+  (both fields `null`) when it has no confirmed cohort. `comparison` is the
+  project's own row of 19.2 computed in that population.
+- `rules_met` holds every saved rule the project meets when the request is
+  answered (19.4), with its evidence.
 
 `in_operator_views` is false for an internal project, which the operator
 views do not list; `tenant`, `sites`, `web`, `api`, `onchain` and
@@ -3280,3 +3343,238 @@ grade and its reasons.
 - MCP: the project tool `get_web_integrity` reads 17.2, the operator tool
   `get_tenant_integrity` reads 17.3; `get_global_web_overview` accepts
   `sort` `integrity`.
+
+---
+
+## 19. Cohorts, growth, percentiles and threshold rules
+
+SCF decides by program, round, category and award date. SCF publishes no
+machine-readable directory of its awards, so a project proposes its cohort
+and an operator confirms it; only confirmed values place a project in a
+cohort. The values live in `cp.tenant_cohorts` (migration 00035): the
+project writes only the proposal columns under `cp_tenant`, operators write
+the confirmed columns under `cp_system`, operators read under `cp_operator`.
+
+### 19.1 Cohort routes
+
+**CohortRecord**:
+
+```json
+{
+  "tenant_id": "uuid",
+  "confirmed": { "program": "Build Award", "round": "SCF #38", "category": "DeFi", "award_date": "2026-10-01" },
+  "confirmed_at": "2026-11-16T09:00:00.000Z",
+  "proposal": null,
+  "proposed_at": null
+}
+```
+
+`confirmed` and `proposal` are `null` when not set; inside them any field
+may be `null`. Program, round and category are trimmed text of 1 to 80
+characters without control characters; `award_date` is a UTC day from
+2018-01-01 to today.
+
+| Route | Who | Does |
+|---|---|---|
+| `GET /api/tenants/{tenant_id}/cohort` | member | the project's CohortRecord |
+| `PUT /api/tenants/{tenant_id}/cohort/proposal` | owner | body: a cohort object with at least one field; replaces the proposal, audit `cohort.propose`; **200** CohortRecord |
+| `GET /api/operator/cohorts` | operator | the confirmed values in use with their project counts (`programs`, `rounds`, `categories`: `[{"value", "projects"}]`) and every pending proposal (`proposals`: `[{"tenant", "confirmed", "proposal", "proposed_at"}]`), removed and internal projects left out |
+| `GET /api/operator/tenants/{tenant_id}/cohort` | operator | the CohortRecord |
+| `PUT /api/operator/tenants/{tenant_id}/cohort` | operator | body: a cohort object; sets the confirmed values, an object of nulls clears them; audit `cohort.set`; **200** CohortRecord |
+| `POST /api/operator/tenants/{tenant_id}/cohort/confirm` | operator | copies the proposal into the confirmed values and clears it; audit `cohort.confirm`; 409 `no_proposal` without one |
+| `DELETE /api/operator/tenants/{tenant_id}/cohort/proposal` | operator | clears the proposal, leaves the confirmed values; audit `cohort.proposal_dismiss`; 409 `no_proposal` without one |
+
+A project also proposes its cohort at enrollment (4.2.1). Operator routes
+answer 404 `not_found` for an unknown or internal project, 422 for an invalid
+value.
+
+### 19.2 Growth and percentiles in the global views
+
+Every row of 8.3 and 8.5 carries:
+
+```json
+{
+  "cohort": { "program": "Build Award", "round": "SCF #38", "category": "DeFi", "award_date": "2026-10-01" },
+  "cohort_size": 14,
+  "kpis": {
+    "visitors":           { "value": 1200, "previous": 900, "change": 0.3333, "percentile": 0.7857 },
+    "pageviews":          { "value": 3100, "previous": 2500, "change": 0.24, "percentile": 0.7142 },
+    "requests":           { "value": 0, "previous": 0, "change": null, "percentile": null },
+    "error_rate":         { "value": null, "previous": null, "change": null, "percentile": null },
+    "onchain_operations": { "value": 52, "previous": 13, "change": 3, "percentile": 0.5 }
+  }
+}
+```
+
+- `cohort` is the confirmed cohort, every field `null` without one.
+- The five key metrics: `visitors` (primary-band visitors, the verified
+  count of 8.3), `pageviews` (primary band), `requests` and `error_rate`
+  (requests answered 500 to 599 over requests) with the source rule of 8.5,
+  and `onchain_operations` (15.7). `value` is the range, `previous` the range
+  of equal length that ends the day before `from`.
+- `change` is `(value - previous) / previous` for the four counts and
+  `value - previous` for the error rate; `null` when `previous` is 0 or
+  missing.
+- The percentile **population** is every listed project that is `active` or
+  `suspended` and matches the cohort filters (8.2) of the request, whatever
+  its other filters: a name search never moves a percentile. `cohort_size`
+  is the size of that population. A project outside it (pending, rejected,
+  removed) has metrics and percentiles of `null`.
+- `percentile` is the share of the population, among the projects with a
+  value, whose value is at or below this project's (SQL `cume_dist` over
+  the aggregates): from just above 0 to 1, where 1 is the largest value. A
+  count of 0 and an error rate without requests have no value and no
+  percentile. For the error rate, a higher percentile is a higher error
+  rate.
+- The compare projects of 8.4 and 8.6 carry `cohort`; the console draws the
+  award date on their charts.
+
+### 19.3 What a project sees
+
+"What SCF sees" (16.3) shows the project its CohortRecord, its row of 19.2
+computed in the population of its own program and round (or every listed
+project without a confirmed cohort), and the rules it meets.
+
+### 19.4 Threshold rules
+
+**Rule**:
+
+```json
+{
+  "id": "uuid", "name": "Steady web traction", "metric": "visitors",
+  "min_per_day": 100, "min_days": 10, "months": 3, "min_grade": "B",
+  "cohort": { "program": "Build Award", "round": null, "category": null },
+  "created_at": "...", "updated_at": "..."
+}
+```
+
+A rule reads: in each of the last `months` complete UTC calendar months, at
+least `min_days` days with `metric` at or above `min_per_day`, and, when
+`min_grade` is set, an integrity grade (17) over those months of at least
+`min_grade` (A is best). `metric` is `visitors` (primary band, summed over
+the project's sites per day), `requests` (the source rule of 8.5 over the
+window) or `onchain_operations`. Limits: `min_per_day` 1 to 10^12,
+`min_days` 1 to 28, `months` 1 to 12, at most 200 rules. `cohort` limits the
+evaluation to projects confirmed in it; its fields are optional.
+
+| Route | Does |
+|---|---|
+| `GET /api/operator/rules` | `{"items": [Rule]}`, oldest first |
+| `POST /api/operator/rules` | body: the rule's fields; audit `rule.create`; **201** Rule; 409 `rule_limit` beyond 200 rules |
+| `GET /api/operator/rules/{rule_id}` | the Rule |
+| `PUT /api/operator/rules/{rule_id}` | replaces every field; audit `rule.update` with old and new values; **200** Rule |
+| `DELETE /api/operator/rules/{rule_id}` | audit `rule.delete`; **204** |
+| `GET /api/operator/rules/{rule_id}/matches?as_of=` | the projects that meet it, with the evidence |
+| `GET /api/operator/rules/{rule_id}/matches.csv?as_of=` | the same as CSV (16.1) |
+
+`as_of` is a UTC day not after today, default today; the window is the
+`months` complete calendar months before its month. Every `active` or
+`suspended` listed project in the rule's cohort is evaluated:
+
+```json
+{
+  "rule": "Rule", "as_of": "2026-11-16", "from": "2026-08-01", "to": "2026-10-31",
+  "months": ["2026-08", "2026-09", "2026-10"], "evaluated": 40,
+  "items": [
+    {
+      "tenant": "TenantRef", "cohort": "Cohort of 19.2", "meets": true,
+      "integrity": { "grade": "A", "graded_days": 90, "days_a": 88, "days_b": 2, "days_c": 0 },
+      "months": [ { "month": "2026-08", "qualifying_days": 12, "days": [ { "day": "2026-08-03", "value": 140 } ] } ]
+    }
+  ]
+}
+```
+
+`items` holds the projects that meet the rule, ordered by name; `days` lists
+each qualifying day with the project's value. The machine API serves the
+same reads at `GET /api/metrics/v1/rules` and
+`GET /api/metrics/v1/rules/{rule_id}/matches` (9.3 rules; a key scoped to one
+tenant evaluates that tenant only), and MCP at `list_threshold_rules` and
+`get_threshold_rule_matches`.
+
+---
+
+## 20. Signed usage reports
+
+A member generates a report of the project for a period of closed UTC days.
+The control plane reads the same aggregates as "What SCF sees" (16.3),
+writes the report in its canonical JSON form, signs those bytes with the
+platform's report key with SEP-53 and stores both in `cp.usage_reports`
+(migration 00036). A stored report never changes: a trigger refuses any
+change of its body, signature, signer, period or author for every role. The
+format, the canonical form and offline verification are in
+[usage-reports.md](usage-reports.md).
+
+### 20.1 Member routes
+
+| Route | Who | Does |
+|---|---|---|
+| `POST /api/tenants/{tenant_id}/reports` | member, current terms | body `{"from", "to"}`; builds, signs and stores a report; audit `report.create`; **201** Detail |
+| `GET /api/tenants/{tenant_id}/reports` | member | `{"items": [Summary]}`, newest first, at most 200 |
+| `GET /api/tenants/{tenant_id}/reports/{report_id}` | member | Detail, revoked reports included |
+| `POST /api/tenants/{tenant_id}/reports/{report_id}/revoke` | member | revokes the shared link; audit `report.revoke`; a second revoke answers the same Summary and writes nothing; **200** Summary |
+
+**Summary**: `id`, `url` (`https://app.<BASE_DOMAIN>/r/<id>`), `from`, `to`,
+`signer`, `created_at`, `created_by`, `revoked_at`, `view_count`,
+`last_viewed_at`. **Detail** adds `file`, the signed file of 20.3.
+
+- The period is UTC days, both included, `to` before today (a signed number
+  never grows after signing), at most 366 days: 422 otherwise.
+- 409 `not_reportable` for a project the operator views do not list.
+- Limits: 20 reports per project per 24 hours and 60 revocations per project
+  per hour, 429 `rate_limited` with `Retry-After` beyond them.
+- The id is 128 random bits in lowercase base32 (26 characters); the link is
+  the only way to it from outside the project.
+
+### 20.2 The report key
+
+The report key is an Ed25519 Stellar key (`REPORT_SIGNING_SEED`, 4.5). Its
+account id is published in three places that must agree:
+
+- `GET https://app.<BASE_DOMAIN>/.well-known/stellar.toml`: SEP-1 `ACCOUNTS`
+  lists the current key first, then every retired key. The control plane
+  writes the file from the key it signs with, with
+  `Access-Control-Allow-Origin: *` and `text/plain`.
+- `GET /api/public/report-keys`: `{"current", "retired", "stellar_toml"}`.
+- The public status page `status.<BASE_DOMAIN>`, in its description and
+  a "Report signing key" link to the stellar.toml.
+
+`SIGNING_KEY` of SEP-1 is not used: SEP-1 reserves it for SEP-10 and SEP-45
+authentication servers. The key holds no funds and signs no transaction.
+Rotation is in the secret rotation runbook.
+
+### 20.3 Public route
+
+**`GET /api/public/reports/{report_id}`**: no session.
+
+```json
+{
+  "id": "…", "url": "https://app.<BASE_DOMAIN>/r/…", "created_at": "…",
+  "file": { "report": { "format": "veristar-usage-report", "…": "…" },
+            "signature": { "scheme": "sep-53", "signer": "G…", "value": "base64" } },
+  "keys": { "current": "G…", "retired": [], "stellar_toml": "https://app.<BASE_DOMAIN>/.well-known/stellar.toml" }
+}
+```
+
+- The removal purge of 5.5 deletes a removed project's reports in its last
+  step, `reports` (through `cp.purge_usage_reports`, which refuses a tenant
+  that is not removed); its links answer 404 from the moment of removal.
+- It reads exactly one row by id under `cp_system`. An unknown or malformed
+  id, a revoked link and a removed project all answer the same 404
+  `not_found`.
+- Every answer increments `view_count` and writes a `report.view` audit row
+  without any trait of the reader.
+- Limits: 300 views of one report per hour, and 20 requests per second
+  (burst 60) per control plane instance whatever the id; 429 `rate_limited`
+  beyond them.
+- The console page `/r/<id>` shows the report, checks the signature in the
+  browser against the published keys and offers the signed file as JSON.
+
+### 20.4 Isolation
+
+A report link answers its own report alone: the route takes no tenant, reads
+one row by its unguessable id and returns that row's body, which holds the
+aggregates of one project only. The member routes follow 1.3: a member of
+another project gets 404 for every report id. The isolation gate
+(`tests/isolation/console`) covers every route of this section.
+
