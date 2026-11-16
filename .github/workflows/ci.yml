@@ -38,7 +38,18 @@ jobs:
       # links in docs/ resolve and guide snippets equal their examples/ sources
       - run: make docs-check
       # db-ip country lite (cc by 4.0) for the gateway geo tests
-      - run: make geo-fetch
+      # the month's geo and network data, downloaded once per month and kept in
+      # the actions cache: db-ip refuses some downloads from shared runner
+      # addresses with 403, so every job fetching its own copy failed at random
+      - id: geo-month
+        run: echo "month=$(date -u +%Y-%m)" >> "$GITHUB_OUTPUT"
+      - id: geo-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .scratch/geo
+          key: geo-${{ steps.geo-month.outputs.month }}-${{ hashFiles('scripts/fetch-dbip.sh', 'scripts/fetch-network.sh', 'scripts/dbipcheck/**', 'scripts/netdata/**') }}
+      - if: steps.geo-cache.outputs.cache-hit != 'true'
+        run: make geo-fetch GEO_MONTH=${{ steps.geo-month.outputs.month }}
       - run: make test
         env:
           DBIP_MMDB: .scratch/geo/dbip-country-lite.mmdb
@@ -57,7 +68,18 @@ jobs:
       # forwarding, which differs on the runner image's older engine
       - run: scripts/ci/install-docker.sh
       # the gateway geo tests read the db-ip country file
-      - run: make geo-fetch
+      # the month's geo and network data, downloaded once per month and kept in
+      # the actions cache: db-ip refuses some downloads from shared runner
+      # addresses with 403, so every job fetching its own copy failed at random
+      - id: geo-month
+        run: echo "month=$(date -u +%Y-%m)" >> "$GITHUB_OUTPUT"
+      - id: geo-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .scratch/geo
+          key: geo-${{ steps.geo-month.outputs.month }}-${{ hashFiles('scripts/fetch-dbip.sh', 'scripts/fetch-network.sh', 'scripts/dbipcheck/**', 'scripts/netdata/**') }}
+      - if: steps.geo-cache.outputs.cache-hit != 'true'
+        run: make geo-fetch GEO_MONTH=${{ steps.geo-month.outputs.month }}
       - run: make test-containers
         env:
           DBIP_MMDB: .scratch/geo/dbip-country-lite.mmdb
