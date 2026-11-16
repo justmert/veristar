@@ -50,6 +50,12 @@ variable "admin_cidrs" {
   }
 }
 
+variable "public_ingress_open" {
+  description = "true serves tcp 80, tcp 443 and udp 443 to the internet; false limits them to admin_cidrs"
+  type        = bool
+  default     = true
+}
+
 variable "tags" {
   type = map(string)
 }
@@ -94,11 +100,16 @@ resource "azurerm_network_security_group" "public" {
 }
 
 locals {
+  # closed, only the admin ranges reach the web ports; the nodes keep
+  # running and traffic manager marks every endpoint degraded, because its
+  # health probes are refused too
+  web_sources = var.public_ingress_open ? ["Internet"] : var.admin_cidrs
+
   rules = {
     # http on port 80 is also the traffic manager health probe
-    http  = { priority = 100, protocol = "Tcp", port = "80", sources = ["Internet"], description = "http and the traffic manager health probe" }
-    https = { priority = 110, protocol = "Tcp", port = "443", sources = ["Internet"], description = "https and otlp grpc" }
-    h3    = { priority = 120, protocol = "Udp", port = "443", sources = ["Internet"], description = "http/3, caddy serves it on udp 443" }
+    http  = { priority = 100, protocol = "Tcp", port = "80", sources = local.web_sources, description = "http and the traffic manager health probe" }
+    https = { priority = 110, protocol = "Tcp", port = "443", sources = local.web_sources, description = "https and otlp grpc" }
+    h3    = { priority = 120, protocol = "Udp", port = "443", sources = local.web_sources, description = "http/3, caddy serves it on udp 443" }
     icmp  = { priority = 130, protocol = "Icmp", port = "*", sources = ["Internet"], description = "icmp, keeps path mtu discovery working" }
     ssh   = { priority = 140, protocol = "Tcp", port = "22", sources = var.admin_cidrs, description = "ssh from admin ranges only" }
   }
@@ -166,4 +177,9 @@ output "subnets" {
 
 output "public_nsg_id" {
   value = azurerm_network_security_group.public.id
+}
+
+output "inbound_sources" {
+  description = "inbound rule name to the source ranges it allows"
+  value       = { for k, r in azurerm_network_security_rule.inbound : k => r.source_address_prefix != null ? [r.source_address_prefix] : sort(tolist(r.source_address_prefixes)) }
 }

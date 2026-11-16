@@ -63,6 +63,7 @@ module "network" {
   ip_range            = local.ip_range
   zones               = local.zones
   admin_cidrs         = var.admin_cidrs
+  public_ingress_open = var.public_ingress_open
   tags                = local.tags
 }
 

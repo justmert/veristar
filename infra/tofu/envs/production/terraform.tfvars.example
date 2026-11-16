@@ -11,6 +11,9 @@ base_domain = "example.org"
 # source ranges allowed to reach ssh on the nodes; never 0.0.0.0/0
 admin_cidrs = ["203.0.113.10/32"]
 
+# false limits tcp 80, tcp 443 and udp 443 to admin_cidrs; default true
+# public_ingress_open = true
+
 # public keys installed for the admin user by cloud-init
 admin_ssh_public_keys = [
   "ssh-ed25519 AAAA... admin@workstation",

@@ -27,6 +27,12 @@ variable "admin_cidrs" {
   }
 }
 
+variable "public_ingress_open" {
+  description = "false limits tcp 80, tcp 443 and udp 443 to admin_cidrs (docs/deploy/opentofu.md)"
+  type        = bool
+  default     = true
+}
+
 variable "admin_ssh_public_keys" {
   description = "ssh public keys installed for the admin user by cloud-init"
   type        = list(string)
