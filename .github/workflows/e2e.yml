@@ -80,6 +80,7 @@ jobs:
             devenv: true
           - suite: privacy
             timeout: 40
+            geo: true
           - suite: local-converge
             timeout: 120
             ansible: true
