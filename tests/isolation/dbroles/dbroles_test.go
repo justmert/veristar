@@ -418,6 +418,14 @@ func seed(t *testing.T, c *pgx.Conn) (side, side) {
 			  values ($1, $2, current_date, 'horizon', 3, 2, 1)`, []any{s.tenant, "G"+strings.Repeat("A", 54)+string(rune('A'+i))}},
 			{`insert into agg.chain_reads (tenant_id, strkey, covered_from, covered_to, last_attempt_at)
 			  values ($1, $2, current_date, current_date, now())`, []any{s.tenant, "G"+strings.Repeat("A", 54)+string(rune('A'+i))}},
+			{`insert into agg.web_integrity_daily (site_id, tenant_id, day, rule_version, grade, closed, events, quarantined,
+			    proof_failures, net_access, net_organisation, net_hosting, net_anonymiser, net_unknown, networks, visitors,
+			    pageviews, baseline_visitors, baseline_days, reasons)
+			  values ($1, $2, current_date, 1, 'A', false, 60, 0, 0, 60, 0, 0, 0, 0, 3, 2, 5, null, 0, '[]')`, []any{s.site, s.tenant}},
+			{`insert into cp.web_evidence_daily (site_id, tenant_id, day, class, count) values ($1, $2, current_date, 'access', 5)`,
+				[]any{s.site, s.tenant}},
+			{`insert into cp.web_networks_daily (site_id, tenant_id, day, network) values ($1, $2, current_date, '00000000000000aa')`,
+				[]any{s.site, s.tenant}},
 		} {
 			_, err := c.Exec(ctx, st.sql, st.args...)
 			require.NoError(t, err, st.sql)
