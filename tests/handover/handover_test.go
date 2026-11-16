@@ -29,6 +29,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/justmert/veristar/tests/fixtures/gatewayimage"
 )
 
 const (
@@ -80,7 +82,7 @@ func setup() error {
 		return fmt.Errorf("node 26 is required on PATH: %q %w", out, err)
 	}
 	builds := [][]string{
-		{"build", "-q", "-f", "deploy/images/gateway.Dockerfile", "--build-arg", "DBIP_MONTH=" + month, "-t", gatewayImage, "."},
+		gatewayimage.BuildArgs(month, gatewayImage),
 		{"build", "-q", "-f", "deploy/images/caddy.Dockerfile", "-t", caddyPluginImage, "deploy/images"},
 		{"build", "-q", "-f", "deploy/images/collector.Dockerfile", "-t", collectorImage, "."},
 		{"build", "-q", "-f", "deploy/images/postgres-ha.Dockerfile", "-t", postgresHAImage, "deploy/images"},

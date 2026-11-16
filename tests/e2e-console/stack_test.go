@@ -50,6 +50,7 @@ import (
 	"github.com/justmert/veristar/internal/integrity"
 	"github.com/justmert/veristar/internal/natsx"
 	"github.com/justmert/veristar/internal/umami"
+	"github.com/justmert/veristar/tests/fixtures/gatewayimage"
 	"github.com/justmert/veristar/tests/fixtures/umamictr"
 )
 
@@ -131,7 +132,7 @@ func setup() (int, error) {
 		return 0, fmt.Errorf("node 26 is required on PATH (source ~/.nvm/nvm.sh && nvm use 26.13.1): %q %w", out, err)
 	}
 	builds := [][]string{
-		{"build", "-q", "-f", "deploy/images/gateway.Dockerfile", "--build-arg", "DBIP_MONTH=" + month, "-t", gatewayImage, "."},
+		gatewayimage.BuildArgs(month, gatewayImage),
 		{"build", "-q", "-f", "deploy/images/caddy.Dockerfile", "-t", caddyPluginImage, "deploy/images"},
 		{"build", "-q", "-f", "deploy/images/collector.Dockerfile", "-t", collectorImage, "."},
 		{"build", "-q", "-t", exampleImage, "examples/otel-go-nethttp"},

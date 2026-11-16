@@ -45,6 +45,7 @@ import (
 	"github.com/justmert/veristar/internal/natsx"
 	"github.com/justmert/veristar/internal/registry"
 	"github.com/justmert/veristar/internal/umami"
+	"github.com/justmert/veristar/tests/fixtures/gatewayimage"
 	"github.com/justmert/veristar/tests/fixtures/umamictr"
 )
 
@@ -82,7 +83,7 @@ func TestMain(m *testing.M) {
 		os.Exit(2)
 	}
 	for _, b := range [][]string{
-		{"build", "-q", "-f", "deploy/images/gateway.Dockerfile", "--build-arg", "DBIP_MONTH=" + month, "-t", gatewayImage, "."},
+		gatewayimage.BuildArgs(month, gatewayImage),
 		{"build", "-q", "-f", "deploy/images/collector.Dockerfile", "-t", collectorImage, "."},
 		{"build", "-q", "-t", exampleImage, "examples/otel-go-nethttp"},
 	} {

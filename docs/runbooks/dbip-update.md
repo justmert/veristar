@@ -59,7 +59,11 @@ Alert: `DBIPFileOld` fires when the file in use was built more than 45 days ago
    `<env>` is `staging` or `production`.
 
    For a local or test image, `docker build -f deploy/images/gateway.Dockerfile --build-arg DBIP_MONTH=<YYYY-MM> .`
-   (or `make gateway-up`, which passes the current month).
+   (or `make gateway-up`, which passes the current month). To build from the files that
+   `make geo-fetch` already wrote instead of downloading them again, add
+   `--build-context geo=.scratch/geo`; the build refuses files of another month and opens them
+   with the gateway's own loaders. The stack tests and `infra/local/build-images.sh` do this when
+   `GATEWAY_GEO_DIR` names that directory, as the e2e workflow does.
 
 4. **Check** a node serves the new month: `DBIPFileOld` resolves, and the gateway metrics
    `gateway_geo_build_timestamp_seconds` and `gateway_network_build_timestamp_seconds` show the

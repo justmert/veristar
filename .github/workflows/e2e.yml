@@ -30,7 +30,7 @@ jobs:
       fail-fast: false
       matrix:
         # browsers: node, pnpm and the playwright browsers; geo: the db-ip
-        # country file; devstack: make dev-up and umami-bootstrap first;
+        # country file and the network data of the month; devstack: make dev-up and umami-bootstrap first;
         # devenv: only the generated .env.dev; ansible: the controller venv
         # (uv, sops, age)
         include:
@@ -83,11 +83,16 @@ jobs:
           - suite: local-converge
             timeout: 120
             ansible: true
+            geo: true
           - suite: rotate-local
             timeout: 120
             ansible: true
+            geo: true
     env:
       DBIP_MMDB: ${{ github.workspace }}/.scratch/geo/dbip-country-lite.mmdb
+      # the gateway image builds take the month's files from the geo step
+      # below (tests/fixtures/gatewayimage, infra/local/build-images.sh)
+      GATEWAY_GEO_DIR: ${{ matrix.geo && format('{0}/.scratch/geo', github.workspace) || '' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # the suites build platform images and start whole stacks; the runner
