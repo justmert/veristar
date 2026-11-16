@@ -158,6 +158,34 @@ tests:
               summary: "always firing; its absence at the probe means the alerting pipeline is down"
               runbook: docs/runbooks/alerts.md#watchdog
 
+  - name: systemd unit failed
+    interval: 1m
+    input_series:
+      # the leader's verify unit fails at minute 30 (verify or check) and
+      # recovers at its next successful run
+      - series: 'sa_systemd_unit_failed{job="node",node="core-1",unit="sa-pgbackrest-verify.service"}'
+        values: '0x29 1x40 0x20'
+      # a replica's backup unit skipped by its ExecCondition stays 0
+      - series: 'sa_systemd_unit_failed{job="node",node="core-2",unit="sa-pgbackrest-diff.service"}'
+        values: '0x90'
+      # a start unit failed for 10 minutes until its retry succeeded
+      - series: 'sa_systemd_unit_failed{job="node",node="core-3",unit="sa-core-start.service"}'
+        values: '0x9 1x10 0x70'
+    alert_rule_test:
+      # pending since minute 30, not yet 15 minutes
+      - eval_time: 40m
+        alertname: SystemdUnitFailed
+      - eval_time: 46m
+        alertname: SystemdUnitFailed
+        exp_alerts:
+          - exp_labels: {severity: ticket, job: node, node: core-1, unit: sa-pgbackrest-verify.service}
+            exp_annotations:
+              summary: "sa-pgbackrest-verify.service failed on core-1"
+              runbook: docs/runbooks/alerts.md#systemdunitfailed
+      # resolved after the next successful run
+      - eval_time: 75m
+        alertname: SystemdUnitFailed
+
   - name: api rollup integrity
     interval: 1m
     input_series:

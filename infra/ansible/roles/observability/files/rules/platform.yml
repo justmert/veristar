@@ -92,6 +92,21 @@ groups:
           summary: "{{ $labels.node }} has installed updates that need a reboot"
           runbook: docs/runbooks/alerts.md#hostrebootrequired
 
+      # a platform unit in the failed state (sa_systemd_unit_failed, written
+      # every 5 minutes by sa-systemd-failed.timer): a backup, the leader's
+      # pgbackrest verify or check, a start-at-boot unit. BackupTooOld sees
+      # only the age of the newest backup, so a failing verify or check was
+      # not alerted before. a run skipped by its ExecCondition (the backup
+      # units on a replica) is not failed. 15 minutes leave a start unit its
+      # retries after a boot
+      - alert: SystemdUnitFailed
+        expr: sa_systemd_unit_failed == 1
+        for: 15m
+        labels: {severity: ticket}
+        annotations:
+          summary: "{{ $labels.unit }} failed on {{ $labels.node }}"
+          runbook: docs/runbooks/alerts.md#systemdunitfailed
+
       # api rollup integrity (internal/jobs/apirollup). an orphaned mark is
       # a pending hour whose minute partition was already dropped, so its
       # hourly rows can no longer be recomputed; a drifted hour had hourly
