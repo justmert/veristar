@@ -18,6 +18,14 @@ range, answer on the issue, and record your decision there. The stored grade doe
 an appeal shows that a rule misreads a kind of traffic, the fix is a new rule set version
 ([appealing a grade](../security/bot-and-inflation.md#appealing-a-grade)).
 
+Then read the **Not measured** column: the estimated share of the project's visits that are not
+measured because the visitor's browser sends Global Privacy Control (Brave, DuckDuckGo, Firefox
+private windows). These visitors are left out by design, and their share differs between
+projects: developer tools and privacy-minded audiences lose more. When you compare two projects,
+compare their counts with this gap in mind. The share appears from 100 loads of the tracker file
+in the range; the method and its limits are in the
+[privacy strategy](../compliance/privacy-strategy.md), section 6.
+
 Three properties of the data shape how you compare projects: bands, daily-unique visitors, and
 span-derived API data. Each follows from a privacy or design choice. The full definitions are in
 [web metrics](../reference/web-metrics.md) and sections 7.3 and 8 of the
