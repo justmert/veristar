@@ -20,6 +20,7 @@ import { GlobalApiPage } from "@/pages/operator/global-api";
 import { GlobalWebPage } from "@/pages/operator/global-web";
 import { OperatorLayout } from "@/pages/operator/layout";
 import { OperatorMcpPage } from "@/pages/operator/mcp";
+import { OperatorsPage } from "@/pages/operator/operators";
 import { ReviewQueuePage } from "@/pages/operator/review";
 import { RulesPage } from "@/pages/operator/rules";
 import { SettingsPage } from "@/pages/operator/settings";
@@ -123,6 +124,7 @@ export const router = createBrowserRouter([
           { path: "ai", element: <OperatorMcpPage /> },
           { path: "audit", element: <AuditPage /> },
           { path: "settings", element: <SettingsPage /> },
+          { path: "operators", element: <OperatorsPage /> },
         ],
       },
       { path: "*", element: <NotFoundPage /> },

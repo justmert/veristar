@@ -1,10 +1,12 @@
 import { ApiError, ResponseShapeError } from "@/api/client";
 import { PasskeyError } from "@/lib/passkey/errors";
 import { WalletError } from "@/lib/stellar-wallet";
+import { PasskeyCancelled } from "@/lib/webauthn";
 
 // people-facing text for an error thrown by the api client. codes come from
 // contract 2.4; the request id is shown so a report can be traced in the logs.
 export function errorText(err: unknown): string {
+  if (err instanceof PasskeyCancelled) return "The passkey prompt was closed. Try again.";
   if (err instanceof ApiError) {
     const ref = err.requestId ? ` Reference ${err.requestId}.` : "";
     switch (err.code) {
@@ -39,6 +41,26 @@ export function errorText(err: unknown): string {
         return "No Alertmanager is configured for the control plane (ALERTMANAGER_URLS), so no alerts can be shown.";
       case "operator_required":
         return "Only operators of the service can do this.";
+      case "operator_admin_required":
+        return "Only operator admins can change the roster.";
+      case "step_up_required":
+        return "Confirm with your passkey or security key to continue.";
+      case "step_up_failed":
+        return "The passkey answer could not be verified. Try again with a passkey registered to this account.";
+      case "ceremony_expired":
+        return "The passkey prompt expired. Start again.";
+      case "passkey_required":
+        return "Register a passkey or security key first.";
+      case "last_passkey":
+        return "Register another passkey before you delete your last one.";
+      case "enrollment_closed":
+        return "Sign in again to register your first passkey.";
+      case "last_operator_admin":
+        return "The roster needs at least one active operator admin. Add or promote another admin first.";
+      case "bootstrap_operator":
+        return "This operator is listed in the deploy settings (OPERATOR_GITHUB_IDS or OPERATOR_STELLAR_ADDRESSES). Take it out of the settings first.";
+      case "operator_exists":
+        return "This identity is on the roster already.";
       case "invalid_transition":
         // the message names the current status (contract 5.5), so it is shown
         return `This is not possible from the current status. ${err.message}`;

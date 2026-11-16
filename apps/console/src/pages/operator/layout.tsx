@@ -1,11 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, Outlet, useLocation } from "react-router";
+import { stepUpQuery } from "@/api/operators";
 import { meQuery, operatorAlertsQuery } from "@/api/queries";
 import { ErrorPanel, Loading } from "@/components/error-panel";
 import { OPERATOR_NAV, OPERATOR_TABS } from "@/components/nav/nav-items";
 import { NavTabs } from "@/components/nav/nav-tabs";
 import { Notice } from "@/components/notice";
 import { PageHeader } from "@/components/panel";
+import { StepUpGate } from "@/components/step-up";
 import { Button } from "@/components/ui/button";
 import { criticalCount } from "@/lib/alerts";
 import { OperatorsOnlyPage } from "@/pages/not-found";
@@ -21,7 +23,7 @@ const PLACE_TEXT: Record<string, string> = {
     "Every enrolled project with its status, and its web and API numbers over a range of UTC days.",
   compare: "Web and API numbers of selected projects side by side, per UTC day.",
   admin:
-    "Enrollment, API keys for machine access, AI assistant connections and the audit log of every operator action.",
+    "Enrollment, the operator roster and passkeys, API keys for machine access, AI assistant connections and the audit log of every operator action.",
 };
 
 // one label for the tabs of every place, so tests and assistive technology
@@ -36,6 +38,16 @@ export function OperatorLayout() {
   if (me.isPending) return <Loading label="Loading" />;
   if (me.error) return <ErrorPanel error={me.error} onRetry={() => me.refetch()} />;
   if (!me.data.user.is_operator) return <OperatorsOnly />;
+  return <SteppedUp />;
+}
+
+// every operator route needs a recent passkey step-up (contract 5.11); the
+// area is drawn only once the session holds one
+function SteppedUp() {
+  const s = useQuery(stepUpQuery);
+  if (s.isPending) return <Loading label="Loading" />;
+  if (s.error) return <ErrorPanel error={s.error} onRetry={() => s.refetch()} />;
+  if (!s.data.stepped_up) return <StepUpGate status={s.data} />;
   return <OperatorArea />;
 }
 

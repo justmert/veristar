@@ -126,11 +126,16 @@ describe("operator alerts page", () => {
   it("lists firing alerts grouped by severity with runbook links and how long they fire", async () => {
     const calls = stubFetch([
       { status: 200, body: f.operatorMeBody },
+      { status: 200, body: f.steppedUpBody },
       { status: 200, body: body({ alerts: [alert(), ticket] }) },
     ]);
     const host = await renderRoutes(alertsRoute(), "/operator/alerts");
     await waitFor(() => expect(host.textContent).toContain("ServiceDown"));
-    expect(calls.map((c) => c.url)).toEqual(["/api/me", "/api/operator/alerts"]);
+    expect(calls.map((c) => c.url)).toEqual([
+      "/api/me",
+      "/api/operator/step-up",
+      "/api/operator/alerts",
+    ]);
 
     const headings = [...host.querySelectorAll("h3")].map((h) => h.textContent);
     expect(headings).toEqual(["Page, act now (1)", "Ticket, act within a working day (1)"]);
@@ -155,6 +160,7 @@ describe("operator alerts page", () => {
   it("says all clear with the time of the check when nothing fires", async () => {
     stubFetch([
       { status: 200, body: f.operatorMeBody },
+      { status: 200, body: f.steppedUpBody },
       { status: 200, body: body() },
     ]);
     const host = await renderRoutes(alertsRoute(), "/operator/alerts");
@@ -167,6 +173,7 @@ describe("operator alerts page", () => {
   it("shows the alerting pipeline as down when the watchdog is missing, and never all clear", async () => {
     stubFetch([
       { status: 200, body: f.operatorMeBody },
+      { status: 200, body: f.steppedUpBody },
       {
         status: 200,
         body: body({ watchdog_firing: false, sources: [{ ...source, watchdog_firing: false }] }),
@@ -181,6 +188,7 @@ describe("operator alerts page", () => {
   it("names a member that did not answer", async () => {
     stubFetch([
       { status: 200, body: f.operatorMeBody },
+      { status: 200, body: f.steppedUpBody },
       {
         status: 200,
         body: body({
@@ -207,6 +215,7 @@ describe("operator alerts page", () => {
   it("shows alert source unreachable and no list when no member answers", async () => {
     stubFetch([
       { status: 200, body: f.operatorMeBody },
+      { status: 200, body: f.steppedUpBody },
       { status: 503, body: f.errorBody("alert_source_unreachable") },
     ]);
     const host = await renderRoutes(alertsRoute(), "/operator/alerts");
@@ -220,6 +229,7 @@ describe("operator alerts page", () => {
   it("says when no alert source is configured", async () => {
     stubFetch([
       { status: 200, body: f.operatorMeBody },
+      { status: 200, body: f.steppedUpBody },
       { status: 503, body: f.errorBody("alert_source_not_configured") },
     ]);
     const host = await renderRoutes(alertsRoute(), "/operator/alerts");
@@ -231,6 +241,7 @@ describe("operator alerts page", () => {
     vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
     const calls = stubFetch([
       { status: 200, body: f.operatorMeBody },
+      { status: 200, body: f.steppedUpBody },
       { status: 200, body: body() },
       { status: 200, body: body({ alerts: [ticket], checked_at: "2026-11-13T12:00:35Z" }) },
       { status: 200, body: body({ checked_at: "2026-11-13T12:00:40Z" }) },
@@ -252,6 +263,7 @@ describe("operator banner and tenants", () => {
   it("shows the critical banner on the other operator pages", async () => {
     stubFetch([
       { status: 200, body: f.operatorMeBody },
+      { status: 200, body: f.steppedUpBody },
       { status: 200, body: body({ alerts: [alert(), alert({ fingerprint: "g", name: "X" })] }) },
     ]);
     const host = await renderRoutes(alertsRoute(), "/operator");
@@ -264,6 +276,7 @@ describe("operator banner and tenants", () => {
   it("shows no banner for ticket alerts", async () => {
     stubFetch([
       { status: 200, body: f.operatorMeBody },
+      { status: 200, body: f.steppedUpBody },
       { status: 200, body: body({ alerts: [ticket] }) },
     ]);
     const host = await renderRoutes(alertsRoute(), "/operator");

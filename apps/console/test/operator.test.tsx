@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { auditPath, type TenantListQuery, tenantListPath } from "@/api/endpoints";
 import { tenantAction } from "@/api/schemas";
 import { AuditPage, auditSummary, dayToUtc } from "@/pages/operator/audit";
@@ -75,6 +75,7 @@ describe("operator area guard", () => {
     // the area polls the alerts for its nav badge and critical banner
     stubFetch([
       { status: 200, body: f.operatorMeBody },
+      { status: 200, body: f.steppedUpBody },
       {
         status: 200,
         body: {
@@ -438,5 +439,91 @@ describe("review workspace", () => {
     await waitFor(() => expect(calls).toHaveLength(4));
     expect(calls[3]?.url).toBe(`/api/operator/tenants/${f.TENANT_ID}/reject`);
     expect(calls[3]?.body).toEqual({ reason: "Not on Stellar" });
+  });
+});
+
+describe("operator step-up", () => {
+  const area = [
+    {
+      path: "/operator",
+      element: <OperatorLayout />,
+      children: [{ index: true, element: <p>queue</p> }],
+    },
+  ];
+  const notSteppedUp = {
+    stepped_up: false,
+    stepped_up_at: null,
+    expires_at: null,
+    max_age_seconds: 43200,
+  };
+
+  it("asks an operator with a passkey to confirm before the area loads", async () => {
+    vi.stubGlobal("PublicKeyCredential", class {});
+    const calls = stubFetch([
+      { status: 200, body: f.operatorMeBody },
+      {
+        status: 200,
+        body: { ...notSteppedUp, passkeys: 2, enrollment: "closed", enrollment_until: null },
+      },
+    ]);
+    const host = await renderRoutes(area, "/operator");
+    await waitFor(() => expect(host.textContent).toContain("Use passkey or security key"));
+    expect(host.textContent).not.toContain("queue");
+    // nothing of the area is asked for before the step-up
+    expect(calls.map((c) => c.url)).toEqual(["/api/me", "/api/operator/step-up"]);
+  });
+
+  it("offers the first registration inside the enrollment window", async () => {
+    vi.stubGlobal("PublicKeyCredential", class {});
+    stubFetch([
+      { status: 200, body: f.operatorMeBody },
+      {
+        status: 200,
+        body: {
+          ...notSteppedUp,
+          passkeys: 0,
+          enrollment: "open",
+          enrollment_until: "2026-11-17T09:00:00Z",
+        },
+      },
+    ]);
+    const host = await renderRoutes(area, "/operator");
+    await waitFor(() => expect(host.textContent).toContain("Register a passkey or security key"));
+    expect(host.textContent).toContain("Nov 17, 2026");
+  });
+
+  it("sends an operator whose window needs a newer sign-in to sign in again", async () => {
+    vi.stubGlobal("PublicKeyCredential", class {});
+    stubFetch([
+      { status: 200, body: f.operatorMeBody },
+      {
+        status: 200,
+        body: {
+          ...notSteppedUp,
+          passkeys: 0,
+          enrollment: "sign_in_required",
+          enrollment_until: null,
+        },
+      },
+    ]);
+    const host = await renderRoutes(area, "/operator");
+    await waitFor(() =>
+      expect(host.textContent).toContain("Sign in again to register your first passkey."),
+    );
+  });
+
+  it("says so when the browser has no webauthn", async () => {
+    vi.stubGlobal("PublicKeyCredential", undefined);
+    stubFetch([
+      { status: 200, body: f.operatorMeBody },
+      {
+        status: 200,
+        body: { ...notSteppedUp, passkeys: 1, enrollment: "closed", enrollment_until: null },
+      },
+    ]);
+    const host = await renderRoutes(area, "/operator");
+    await waitFor(() =>
+      expect(host.textContent).toContain("This browser cannot use passkeys or security keys."),
+    );
   });
 });

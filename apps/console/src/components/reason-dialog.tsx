@@ -19,6 +19,8 @@ export function ReasonDialog({
   pending,
   error,
   onConfirm,
+  hint = "The project's members see this text.",
+  maxLength = 1000,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -31,6 +33,9 @@ export function ReasonDialog({
   pending: boolean;
   error: unknown;
   onConfirm: (reason: string) => void;
+  // who reads the reason; the roster's reasons stay in the audit log
+  hint?: string;
+  maxLength?: number;
 }) {
   const [reason, setReason] = useState("");
   const [fieldError, setFieldError] = useState<string | null>(null);
@@ -78,8 +83,8 @@ export function ReasonDialog({
           name="reason"
           optional={!reasonRequired}
           rows={3}
-          maxLength={1000}
-          hint="The project's members see this text."
+          maxLength={maxLength}
+          hint={hint}
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           error={fieldError}
