@@ -5,6 +5,7 @@ import {
   Bot,
   FileSignature,
   FolderKanban,
+  Globe,
   LayoutGrid,
   type LucideIcon,
   Server,
@@ -33,6 +34,13 @@ export function projectNav(id: string): NavItem[] {
       to: base,
       icon: LayoutGrid,
       match: (r) => r === "" || r.startsWith("sites"),
+    },
+    {
+      key: "web",
+      label: "Web",
+      to: `${base}/web`,
+      icon: Globe,
+      match: (r) => r.startsWith("web"),
     },
     {
       key: "api",

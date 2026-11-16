@@ -6,7 +6,6 @@ import {
   ChevronRight,
   CircleAlert,
   Code2,
-  ExternalLink,
   Minus,
   Plus,
   ShieldCheck,
@@ -15,7 +14,7 @@ import {
 import { type FormEvent, type ReactNode, useId, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
 import { ApiError } from "@/api/client";
-import { api, type SiteInput, type SitePatch, webDashboardUrl } from "@/api/endpoints";
+import { api, type SiteInput, type SitePatch } from "@/api/endpoints";
 import { ingestMonthQuery, keys, sitesQuery } from "@/api/queries";
 import type { Ingest, Site } from "@/api/schemas";
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -51,6 +50,7 @@ import {
 import { formatCount } from "@/lib/format";
 import { outcomeHint, rejectionRows, sumRejected, sumUnclassified } from "@/lib/outcomes";
 import * as v from "@/lib/validate";
+import { webPath } from "@/lib/web-dashboard";
 import { queryClient } from "@/query-client";
 import { useProject } from "./project-layout";
 
@@ -273,10 +273,12 @@ export function SitesTable({ sites, actions }: { sites: Site[]; actions?: ReactN
                         </Button>
                       ) : null}
                       <Button asChild variant="ghost" size="sm">
-                        <a href={webDashboardUrl(s.id, "primary")} aria-label="Open web dashboard">
-                          Dashboard
-                          <ExternalLink aria-hidden className="size-3.5" />
-                        </a>
+                        <Link
+                          to={webPath(s.tenant_id, s.id)}
+                          aria-label={`Web analytics of ${s.name}`}
+                        >
+                          Analytics
+                        </Link>
                       </Button>
                     </div>
                   </TableCell>
@@ -662,14 +664,13 @@ function SitePage({
             ) : null}
             {site.quarantine_website_id ? (
               <Button asChild variant="outline">
-                <a href={webDashboardUrl(site.id, "quarantine")}>Quarantine view</a>
+                <Link to={`${webPath(site.tenant_id, site.id)}&band=quarantine`}>
+                  Quarantined traffic
+                </Link>
               </Button>
             ) : null}
             <Button asChild>
-              <a href={webDashboardUrl(site.id, "primary")}>
-                Open web dashboard
-                <ExternalLink aria-hidden />
-              </a>
+              <Link to={webPath(site.tenant_id, site.id)}>Web analytics</Link>
             </Button>
           </>
         }
