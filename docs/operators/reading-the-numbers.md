@@ -114,6 +114,12 @@ project that exports only traces can look smaller than it is, and its counts are
 comparable with a project that exports metrics. Ask such a project to add metric export (the
 [API quickstart](../onboarding/api/quickstart.md) shows how) before comparing request volumes.
 
+API numbers leave infrastructure requests out: CORS preflights, health and probe routes, and
+requests from known health checkers. Each row shows them apart as `infrastructure_requests`, so a
+project whose load balancer checks it every few seconds compares on its users' traffic alone
+([collector reference](../reference/collector.md), "Traffic classes"). Data from before the
+upgrade that introduced the split counts every request.
+
 Two more flags in the API numbers:
 
 - **Approximate percentiles** (`lossy`): the project sent histograms with other bucket bounds,
