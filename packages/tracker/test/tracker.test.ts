@@ -79,16 +79,18 @@ function browserize(window: Window & typeof globalThis, page: PageOptions) {
   }
 }
 
-function setVisibility(w: Window, visibility: "visible" | "hidden") {
+type TestWindow = Window & typeof globalThis;
+
+function setVisibility(w: TestWindow, visibility: "visible" | "hidden") {
   (pageStates.get(w) as PageState).visibility = visibility;
   w.document.dispatchEvent(new w.Event("visibilitychange"));
 }
 
-const show = (w: Window) => setVisibility(w, "visible");
-const hide = (w: Window) => setVisibility(w, "hidden");
+const show = (w: TestWindow) => setVisibility(w, "visible");
+const hide = (w: TestWindow) => setVisibility(w, "hidden");
 
 // prerender activation: the document stops prerendering and is visible
-function activate(w: Window) {
+function activate(w: TestWindow) {
   const state = pageStates.get(w) as PageState;
   state.prerendering = false;
   state.visibility = "visible";
@@ -96,11 +98,11 @@ function activate(w: Window) {
 }
 
 // leaving the page; persisted means it goes into the back/forward cache
-function leave(w: Window, persisted = false) {
+function leave(w: TestWindow, persisted = false) {
   w.dispatchEvent(new w.PageTransitionEvent("pagehide", { persisted }));
 }
 
-function restore(w: Window) {
+function restore(w: TestWindow) {
   w.dispatchEvent(new w.PageTransitionEvent("pageshow", { persisted: true }));
 }
 
