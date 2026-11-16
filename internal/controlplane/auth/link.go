@@ -35,8 +35,8 @@ const (
 const (
 	githubLiveIdx        = "users_github_id_live_idx"
 	stellarLiveIdx       = "users_stellar_address_live_idx"
-	passkeyAddressIdx    = "users_passkey_address_live_idx"
-	passkeyCredentialIdx = "users_passkey_credential_live_idx"
+	passkeyAddressIdx    = "users_passkey_address_live_idx"    //nolint:gosec // an index name, not a credential
+	passkeyCredentialIdx = "users_passkey_credential_live_idx" //nolint:gosec // an index name, not a credential
 )
 
 func isUnique(err error, index string) bool {
