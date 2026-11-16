@@ -28,15 +28,17 @@ func seedAgg(t *testing.T, tx pgx.Tx, tenant uuid.UUID) {
 		   pageviews, baseline_visitors, baseline_days, reasons)
 		 values ($1, $2, current_date, 1, null, false, 4, 0, 0, 4, 0, 0, 0, 0, 1, 2, 4, null, 0,
 		   '[{"code":"too_little_traffic","level":"none","value":4,"limit":50}]')`,
+		`insert into agg.web_coverage_daily (site_id, tenant_id, day, script_requests, gpc_requests)
+		 values ($1, $2, current_date, 120, 12)`,
 	} {
 		_, err := tx.Exec(t.Context(), s, site, tenant)
 		require.NoError(t, err)
 	}
 }
 
-func aggCounts(t *testing.T, jobs *pdb.DB, tenant uuid.UUID) [3]int {
+func aggCounts(t *testing.T, jobs *pdb.DB, tenant uuid.UUID) [4]int {
 	t.Helper()
-	var out [3]int
+	var out [4]int
 	require.NoError(t, jobs.WithRole(t.Context(), pdb.RoleJobs, func(tx pgx.Tx) error {
 		if err := tx.QueryRow(t.Context(), `select count(*) from agg.web_daily where tenant_id = $1`, tenant).Scan(&out[0]); err != nil {
 			return err
@@ -44,7 +46,10 @@ func aggCounts(t *testing.T, jobs *pdb.DB, tenant uuid.UUID) [3]int {
 		if err := tx.QueryRow(t.Context(), `select count(*) from agg.web_daily_dim where tenant_id = $1`, tenant).Scan(&out[1]); err != nil {
 			return err
 		}
-		return tx.QueryRow(t.Context(), `select count(*) from agg.web_integrity_daily where tenant_id = $1`, tenant).Scan(&out[2])
+		if err := tx.QueryRow(t.Context(), `select count(*) from agg.web_integrity_daily where tenant_id = $1`, tenant).Scan(&out[2]); err != nil {
+			return err
+		}
+		return tx.QueryRow(t.Context(), `select count(*) from agg.web_coverage_daily where tenant_id = $1`, tenant).Scan(&out[3])
 	}))
 	return out
 }
@@ -84,24 +89,24 @@ func TestAggPurger(t *testing.T) {
 			seedAgg(t, tx, id)
 			return nil
 		}))
-		require.Equal(t, [3]int{1, 1, 1}, aggCounts(t, jobs, id))
+		require.Equal(t, [4]int{1, 1, 1, 1}, aggCounts(t, jobs, id))
 	}
 
 	detail, err := purge(gone, false)
 	require.NoError(t, err)
-	require.Equal(t, map[string]int64{"web_daily": 1, "web_daily_dim": 1, "web_integrity_daily": 1}, detail["rows_deleted"])
-	require.Equal(t, [3]int{0, 0, 0}, aggCounts(t, jobs, gone))
+	require.Equal(t, map[string]int64{"web_daily": 1, "web_daily_dim": 1, "web_integrity_daily": 1, "web_coverage_daily": 1}, detail["rows_deleted"])
+	require.Equal(t, [4]int{0, 0, 0, 0}, aggCounts(t, jobs, gone))
 	_, err = purge(gone, false)
 	require.NoError(t, err, "a retried step is a no-op")
 
 	detail, err = purge(kept, true)
 	require.NoError(t, err)
 	require.Equal(t, "keep_aggregates", detail["skipped"])
-	require.Equal(t, [3]int{1, 1, 1}, aggCounts(t, jobs, kept))
+	require.Equal(t, [4]int{1, 1, 1, 1}, aggCounts(t, jobs, kept))
 
 	_, err = purge(live, false)
 	require.ErrorContains(t, err, "is not removed")
-	require.Equal(t, [3]int{1, 1, 1}, aggCounts(t, jobs, live))
+	require.Equal(t, [4]int{1, 1, 1, 1}, aggCounts(t, jobs, live))
 
 	err = sys.WithSystem(t.Context(), func(tx pgx.Tx) error {
 		_, err := tx.Exec(t.Context(), `delete from agg.web_daily where tenant_id = $1`, live)
@@ -136,5 +141,5 @@ func TestAggPurger(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("purge did not finish after the write committed")
 	}
-	require.Equal(t, [3]int{0, 0, 0}, aggCounts(t, jobs, late))
+	require.Equal(t, [4]int{0, 0, 0, 0}, aggCounts(t, jobs, late))
 }
