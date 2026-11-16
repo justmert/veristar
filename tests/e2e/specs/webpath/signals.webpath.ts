@@ -133,10 +133,17 @@ test("a restore from the back/forward cache counts again @signals", async ({
     // page.goBack() would wait for
     await page.evaluate(() => setTimeout(() => history.back(), 0));
     await expectCount(staticSite, "pv", 3);
-    const restored = await page.evaluate(
-      () => (window as unknown as { __restored?: number }).__restored,
-    );
-    expect(restored, "the home page came back from the back/forward cache").toBeDefined();
+    // firefox under playwright replaces the page's execution context on a
+    // cache restore, so the read is retried until the new context answers
+    await expect
+      .poll(
+        () =>
+          page
+            .evaluate(() => (window as unknown as { __restored?: number }).__restored)
+            .catch(() => undefined),
+        { message: "the home page came back from the back/forward cache", timeout: 10_000 },
+      )
+      .toBeDefined();
     expect((await byType(staticSite, "pv")).map((e) => e.u)).toEqual(["/", "/about.html", "/"]);
   }
   expect((await byType(staticSite, "nv")).length).toBe(0);
