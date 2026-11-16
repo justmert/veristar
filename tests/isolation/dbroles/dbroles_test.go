@@ -418,6 +418,12 @@ func seed(t *testing.T, c *pgx.Conn) (side, side) {
 			  values ($1, $2, current_date, 'horizon', 3, 2, 1)`, []any{s.tenant, "G" + strings.Repeat("A", 54) + string(rune('A'+i))}},
 			{`insert into agg.chain_reads (tenant_id, strkey, covered_from, covered_to, last_attempt_at)
 			  values ($1, $2, current_date, current_date, now())`, []any{s.tenant, "G" + strings.Repeat("A", 54) + string(rune('A'+i))}},
+			// weekly active accounts (00038): an open week and one member
+			{`insert into agg.chain_weeks (tenant_id, week, hash_key) values ($1, date_trunc('week', current_date)::date, $2)`,
+				[]any{s.tenant, make([]byte, 32)}},
+			{`insert into agg.chain_week_members (tenant_id, week, strkey, member)
+			  values ($1, date_trunc('week', current_date)::date, $2, $3)`,
+				[]any{s.tenant, "G" + strings.Repeat("A", 54) + string(rune('A'+i)), make([]byte, 32)}},
 			{`insert into agg.web_integrity_daily (site_id, tenant_id, day, rule_version, grade, closed, events, quarantined,
 			    proof_failures, net_access, net_organisation, net_hosting, net_anonymiser, net_unknown, networks, visitors,
 			    pageviews, baseline_visitors, baseline_days, reasons)
@@ -430,6 +436,12 @@ func seed(t *testing.T, c *pgx.Conn) (side, side) {
 				[]any{s.site, s.tenant}},
 			{`insert into agg.web_coverage_daily (site_id, tenant_id, day, script_requests, gpc_requests) values ($1, $2, current_date, 200, 20)`,
 				[]any{s.site, s.tenant}},
+			// cohorts (00035) and signed usage reports (00036)
+			{`insert into cp.tenant_cohorts (tenant_id, program, round, confirmed_by, confirmed_at)
+			  values ($1, 'Build Award', $2, $3, now())`, []any{s.tenant, fmt.Sprintf("SCF #%d", i), s.user}},
+			{`insert into cp.usage_reports (id, tenant_id, period_from, period_to, body, signature, signer, created_by)
+			  values ($1, $2, current_date - 1, current_date - 1, '{}', $3, $4, $5)`,
+				[]any{strings.Repeat(string(rune('a'+i)), 26), s.tenant, strings.Repeat("A", 86) + "==", "G" + strings.Repeat("A", 55), s.user}},
 		} {
 			_, err := c.Exec(ctx, st.sql, st.args...)
 			require.NoError(t, err, st.sql)
