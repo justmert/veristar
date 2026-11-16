@@ -74,7 +74,7 @@ Method versions, version 1:
 | Member | Definition |
 |---|---|
 | `web_metrics` | [web metrics](web-metrics.md): primary band, visitors unique per UTC day and site, summed over days and sites |
-| `api_metrics` | section 8 of the control plane API: metric rows over span rows per service, percentiles from summed histogram buckets |
+| `api_metrics` | section 8 of the control plane API: metric rows over span rows per service, percentiles from summed histogram buckets. Version 2 leaves infrastructure requests (CORS preflights, health and probe routes, known health checkers; section 7.4) out of every number |
 | `onchain` | section 15: Horizon operations of accounts, Stellar RPC events of contracts |
 | `cohort` | section 19: change against the previous period of equal length, `cume_dist` percentiles in the cohort |
 | `integrity_rules` | section 9 of [bot and inflation defences](../security/bot-and-inflation.md) |

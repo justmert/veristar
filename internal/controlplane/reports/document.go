@@ -36,7 +36,9 @@ const (
 	WebMetricsVersion = 1
 	// APIMetricsVersion: control-plane-api section 8, per-service metric
 	// rows over span rows, percentiles from summed histogram buckets.
-	APIMetricsVersion = 1
+	// version 2 leaves infrastructure requests out of every number
+	// (traffic class rule set 1, section 7.4).
+	APIMetricsVersion = 2
 	// OnchainVersion: control-plane-api section 15, horizon operations of
 	// accounts and rpc events of contracts.
 	OnchainVersion = 1
