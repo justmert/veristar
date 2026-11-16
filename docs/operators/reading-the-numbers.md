@@ -33,7 +33,8 @@ span-derived API data. Each follows from a privacy or design choice. The full de
 
 ## Bands: primary and quarantine
 
-Every site has two web dashboards: the **primary band** and the **quarantine band**.
+Every site has two bands, each an Umami website of its own: the **primary band** and the
+**quarantine band**.
 
 - The gateway counts, per site and per truncated address range (an IPv4 /24 or IPv6 /48,
   keyed with a secret that changes daily), how many distinct visitors it sees within a

@@ -4,7 +4,8 @@ sidebarTitle: "0004: Umami dashboard theme"
 description: "How web.<BASE_DOMAIN> shows Umami's dashboard in Veristar's colours, fonts and icons while the Umami image stays official and unmodified."
 ---
 
-- Status: accepted
+- Status: superseded by [ADR 0005](0005-umami-as-engine-only.md) on 2026-11-16. The
+  `web.` host and the theme described here are removed; this record stays as history.
 - Date: 2026-11-14
 
 ## Context
@@ -160,8 +161,8 @@ Fonts are self-hosted next to the stylesheet. No script, no image change.
 - **Handover.** The theme is one CSS file with a single block of brand values, a font and icon
   generator (`pnpm --filter @veristar/umami-theme assets`) and a check that runs in
   `pnpm check`. It ships inside the console image, so a rebuild from the monorepo reproduces
-  it. Removing it is two edits to `web.Caddyfile`
-  ([operators guide](../operators/umami-dashboard-theme.md)).
+  it. Removing it is two edits to `web.Caddyfile` (the operators guide of the time, removed
+  with ADR 0005).
 - **RFP fit.** Umami stays the official image. The sidebar shows the Veristar mark and name,
   and Umami stays credited in the title of every page (`Overview | Umami`), which the theme
   does not touch: the dashboard still says what it is built upon. Umami shows no footer or

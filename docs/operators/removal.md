@@ -32,7 +32,7 @@ Then the purge runs store by store, ingestion first and data after:
 |---|---|
 | `registry` | the gateway refuses new events for every site of the project |
 | `otlp_tokens` | every OTLP token is revoked; the collector refuses them |
-| `umami` | both web dashboards (primary and quarantine) of every site are deleted with all their raw events and sessions, then the project's dashboard team, then the dashboard accounts of members who belong to no other project |
+| `umami` | both Umami websites (primary and quarantine) of every site are deleted with all their raw events and sessions, then the project's Umami team, then the Umami users of members who belong to no other project |
 | `web_ingest` | gateway outcome counts of the project, unless aggregates are kept |
 | `api` | per-minute API data always; hourly and daily API data unless aggregates are kept |
 | `agg` | daily web aggregates, unless aggregates are kept |
@@ -49,7 +49,7 @@ their console sign-in; they lose access to the project only.
 The **Settings** tab has **Aggregates of removed projects**. When set to keep, a project
 removed from then on keeps its anonymous daily counts (web aggregates, gateway outcome
 counts, hourly and daily API data) in the tables the global views and the metrics API read.
-Raw web data, the web dashboards and per-minute API data are deleted either way.
+Raw web data, the Umami websites and per-minute API data are deleted either way.
 
 - The default is **delete**. Through the API the setting is
   `PUT /api/operator/settings/removal-keep-aggregates` with `{"keep": true}` or

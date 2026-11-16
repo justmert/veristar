@@ -6,7 +6,8 @@ description: "For the SCF operators who govern the shared service: enrollment, r
 
 Operators are the SCF people who govern the shared service: they decide who may enroll, which
 projects stay, and how projects compare. Operators see aggregate numbers only. They are not
-members of any project and have no access to a project's own web dashboard.
+members of any project and have no access to a project's own web dashboard, whose totals come
+from the same daily aggregates the operator views read.
 
 | Page | Covers |
 |---|---|

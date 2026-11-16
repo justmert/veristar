@@ -39,11 +39,11 @@ not patched. Everything else is a separate service:
   part in.
 
 Umami is configured only through its documented environment variables.
-Caddy in front of the Umami UI denies from the internet every route the
-platform does not want public, including `/api/send`, `/api/batch`,
-`/api/record`, `/api/auth/login`, user and admin routes, share routes,
-`/script.js` and `/recorder.js`. Those routes stay reachable on the private
-network for `replayer` and `controlplane`.
+No public host serves Umami ([ADR 0005](0005-umami-as-engine-only.md)): it is
+reachable on the private network only, for `replayer`, `controlplane` and
+`jobs`, and its interface on the node's loopback for platform administrators
+over an SSH tunnel. The console's web dashboard reads it through the control
+plane.
 
 ## Consequences
 
@@ -66,9 +66,10 @@ Costs:
 
 - The platform depends on Umami's HTTP API and payload shape staying compatible. Each
   upgrade has to be checked against the routes the replayer and control plane
-  call, and against the deny list. A new public route in a future Umami release
-  would be reachable until it is added to the deny list, so the deny list is
-  reviewed on every upgrade (`make test-caddy-web`, [Umami upgrade runbook](../runbooks/umami-upgrade.md)).
+  call. No public host serves Umami ([ADR 0005](0005-umami-as-engine-only.md)), so a
+  new route in a future Umami release is not reachable from the internet;
+  `make test-caddy-closed` keeps it that way and the
+  [Umami upgrade runbook](../runbooks/umami-upgrade.md) checks the API contract.
 - Some Umami behaviour has to be reproduced outside it. For example, Umami skips
   its 30-minute visit expiry when a timestamp is supplied, so the replayer keeps
   visit state itself (`visit_state`, [architecture](../architecture.md#queues-and-stores)).

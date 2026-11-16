@@ -112,7 +112,9 @@ Good:
 
 - Bounce rate and visit duration come from Umami's own queries, so they do not
   have to be invented and defended.
-- Umami's teams and view-only roles carry tenant isolation for web dashboards.
+- Umami's teams and view-only roles give the web dashboard's Umami reads a second
+  isolation check beside the control plane's own
+  ([ADR 0005](0005-umami-as-engine-only.md)).
 - MIT allows the Veristar tracker to derive from Umami's while the rest of the
   repository stays under Apache-2.0.
 - Web data and API metrics share one PostgreSQL cluster.
