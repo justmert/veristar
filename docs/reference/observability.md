@@ -14,7 +14,7 @@ names were confirmed on the local test stack (`tests/observability`).
 | Component | Endpoint | Names used |
 |---|---|---|
 | Go services | ops port `/metrics` (`internal/obs`) | `ops_ready_check{check}` (each readiness check at scrape time), `go_*`, `process_*` |
-| gateway | ops port | `gateway_responses_total{route,outcome}`, `gateway_request_duration_seconds`, `gateway_degraded_total`, `gateway_outcomes_total`, `gateway_geo_build_timestamp_seconds` |
+| gateway | ops port | `gateway_responses_total{route,outcome}`, `gateway_request_duration_seconds`, `gateway_degraded_total`, `gateway_outcomes_total` (request outcomes, and the evidence counters `evidence_net_<class>` and `network`), `gateway_geo_build_timestamp_seconds`, `gateway_network_build_timestamp_seconds` |
 | collector v0.165 | `service.telemetry.metrics` with a pull prometheus reader on 8888 | `otelcol_receiver_accepted_metric_points`, `otelcol_receiver_refused_metric_points`, `otelcol_receiver_failed_metric_points`, `otelcol_processor_incoming_items`/`outgoing_items{processor}`, `otelcol_process_*`. No `_total` suffix; the custom jetstream exporter has no exporterhelper metrics |
 | replayer | ops port | `replayer_leader`, `replayer_consumer_pending_messages`, `replayer_outcomes_total`, `replayer_send_duration_seconds`, `replayer_oldest_pending_age_seconds`, `replayer_umami_sends_total{process}` (sends answered 200 per Umami process, rule `ReplayerUmamiProcessIdle`) |
 | metrics writer | ops port | `metricswriter_leader`, `metricswriter_consumer_pending_messages`, `metricswriter_cardinality_overflow_points_total`, batch and point counters |

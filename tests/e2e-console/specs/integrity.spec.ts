@@ -8,10 +8,10 @@
 // project's member gets 404 on the project route and a non-operator 403 on
 // the operator route.
 //
-// every address in the stack is private, so the open data places none of
-// them: the events are counted in the unknown class and no network is
-// counted. two visitors with 26 page views each give 52 accepted events, so
-// the day is graded, and no rule lowers it.
+// the browsers reach the edge from one /24 of a german access network
+// (stack_test.go, countrySubnets), so every event is an access event from one
+// network. two visitors with 26 page views each give at least 52 accepted
+// events, so the day is graded, and no rule lowers it.
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { type Browser, type BrowserContext, devices, type Page } from "@playwright/test";
@@ -86,13 +86,29 @@ async function visit(browser: Browser, origin: string, i: number, pages: number)
       const body = JSON.parse(r.request().postData() ?? "{}") as { t?: string };
       if (body.t === "pv" && r.status() === 202) accepted.push(1);
     });
-    for (let n = 0; n < pages; n++) {
+    // a load whose event got no answer (chromium reports err_network_changed
+    // when the host adds a docker network) is followed by another load, so
+    // the visitor ends with at least `pages` accepted page views; the
+    // gateway's own count is what the grade is checked against below
+    for (let n = 0; accepted.length < pages; n++) {
+      expect(n, "page loads without an accepted page view").toBeLessThan(pages * 2);
+      const before = accepted.length;
       await page.goto(`${origin}/${n % 2 === 1 ? "about.html" : ""}`);
-      await expect.poll(() => accepted.length, { timeout: 30_000 }).toBe(n + 1);
+      try {
+        await expect.poll(() => accepted.length, { timeout: 15_000 }).toBe(before + 1);
+      } catch {
+        // retried with the next load
+      }
     }
   } finally {
     await ctx.close();
   }
+}
+
+function nextDay(day: string): string {
+  const d = new Date(`${day}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
 }
 
 async function ownReport(): Promise<Report> {
@@ -136,7 +152,7 @@ test.beforeAll(async ({ browser }) => {
   // with every event is there
   let report: Report | null = null;
   const graded = (r: Report | null) =>
-    r?.sites[0]?.days.some((d) => d.grade !== null && d.evidence.events === VISITORS * PAGES) ??
+    r?.sites[0]?.days.some((d) => d.grade !== null && d.evidence.events >= VISITORS * PAGES) ??
     false;
   for (let attempt = 0; attempt < 8 && !graded(report); attempt++) {
     await ctl("/jobs/restart");
@@ -162,18 +178,29 @@ test("the gateway classified every event and the job graded the day", async () =
   expect(report.sites.map((s) => s.site_id)).toEqual([site.id]);
   const day = report.sites[0]?.days.find((d) => d.grade !== null);
   if (!day) throw new Error("no graded day");
-  expect(day.grade).toBe("A");
+  expect(day.grade, JSON.stringify(day)).toBe("A");
   expect(day.reasons).toEqual([]);
-  // private addresses belong to no autonomous system: all events unknown,
-  // no network counted
+  // every event the gateway accepted is in the grade's evidence
+  const ingest = await api<{ totals: Record<string, number> }>(
+    owner.ctx,
+    "GET",
+    `/api/sites/${site.id}/ingest?bucket=day&from=${day.day}T00:00:00Z&to=${nextDay(day.day)}T00:00:00Z`,
+  );
+  expect(ingest.status).toBe(200);
+  const counted = (ingest.body.totals.accepted ?? 0) + (ingest.body.totals.quarantined ?? 0);
+  expect(day.evidence.events).toBe(counted);
+  expect(counted).toBeGreaterThanOrEqual(VISITORS * PAGES);
+  // the stack puts the browsers on one /24 of a german access network
+  // (stack_test.go, countrySubnets): every event is an access event, from one
+  // network
   expect(day.evidence.net).toEqual({
-    access: 0,
+    access: counted,
     organisation: 0,
     hosting: 0,
     anonymiser: 0,
-    unknown: VISITORS * PAGES,
+    unknown: 0,
   });
-  expect(day.evidence.networks).toBe(0);
+  expect(day.evidence.networks).toBe(1);
   expect(report.grade).toBe("A");
 });
 
