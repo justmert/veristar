@@ -12,6 +12,7 @@ import type {
   IntegritySite,
   TenantRef,
 } from "@/api/schemas";
+import { CoverageNote } from "@/components/coverage";
 import { ErrorPanel, Loading } from "@/components/error-panel";
 import { Panel } from "@/components/panel";
 import { Pill, type Tone } from "@/components/status";
@@ -243,6 +244,7 @@ export function IntegrityPanel({
         {intro ? <div className="max-w-prose text-small text-fg-2">{intro}</div> : null}
         <p className="text-small text-fg-2">{dayCountsText(report)}</p>
         <RangeReasons reasons={report.reasons} />
+        <CoverageNote coverage={report.coverage} />
         {report.sites.length > 0 ? (
           <div className="flex flex-col gap-2">
             {report.sites.map((s) => (

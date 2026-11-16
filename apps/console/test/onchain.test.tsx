@@ -367,6 +367,7 @@ const scfBody = {
     ingest_requests: 1300,
     ingest_rejected: 13,
     rejected_share: 0.01,
+    coverage: { script_requests: 1100, gpc_requests: 99, unmeasured_share: 0.09 },
   },
   api: {
     requests: 0,
@@ -484,6 +485,7 @@ describe("operator on-chain column and exports (contract 15.7 and 16.1)", () => 
       rejected_share: 0,
       top: { referrer: [], country: [], device: [], browser: [] },
       integrity: { grade: "A", graded_days: 3, days_a: 3, days_b: 0, days_c: 0 },
+      coverage: { script_requests: 0, gpc_requests: 0, unmeasured_share: null },
       onchain: scfBody.onchain,
       ...scfBody.comparison,
     });

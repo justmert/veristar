@@ -196,6 +196,12 @@ export const scfView = z.object({
       ingest_requests: count,
       ingest_rejected: count,
       rejected_share: ratio,
+      // 17.5 the estimate of visits not measured because of privacy signals
+      coverage: z.object({
+        script_requests: count,
+        gpc_requests: count,
+        unmeasured_share: ratio,
+      }),
     })
     .nullable(),
   api: z
