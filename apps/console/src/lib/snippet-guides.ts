@@ -21,11 +21,34 @@ export function consentTag(tag: string): string {
   return tag.replace(/><\/script>$/, ` ${CONSENT_ATTR}></script>`);
 }
 
+// from tracker 1.3.0 the page title is sent only when the tag asks for it.
+// older releases always send it, so the choice exists only from that version
+export const TITLE_ATTR = 'data-send-title="true"';
+export const SEND_TITLE_SINCE = "1.3.0";
+
+export function titleTag(tag: string): string {
+  return tag.replace(/><\/script>$/, ` ${TITLE_ATTR}></script>`);
+}
+
+// whether a release reads data-send-title
+export function readsTitleChoice(version: string): boolean {
+  const a = version.split(".").map(Number);
+  const b = SEND_TITLE_SINCE.split(".").map(Number);
+  for (let i = 0; i < 3; i++) {
+    if ((a[i] ?? 0) !== (b[i] ?? 0)) return (a[i] ?? 0) > (b[i] ?? 0);
+  }
+  return true;
+}
+
 // every guide carries the tag exactly as the control plane built it (contract
-// 4.3.6), or with the consent attribute added when asked; only the
+// 4.3.6), or with the consent and title attributes added when asked; only the
 // surrounding file context differs per framework
-export function snippetGuides(s: Snippet, opts: { consent?: boolean } = {}): Guide[] {
-  const tag = opts.consent ? consentTag(s.tag) : s.tag;
+export function snippetGuides(
+  s: Snippet,
+  opts: { consent?: boolean; title?: boolean } = {},
+): Guide[] {
+  let tag = opts.consent ? consentTag(s.tag) : s.tag;
+  if (opts.title && readsTitleChoice(s.version)) tag = titleTag(tag);
   const inHead = (before: string[], after: string[]) =>
     [...before, `  ${tag}`, ...after].join("\n");
   const guides: Guide[] = [

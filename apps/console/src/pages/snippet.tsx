@@ -19,7 +19,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { isNotFound } from "@/lib/errors";
 import { formatBytes, formatCount, formatDate } from "@/lib/format";
 import { outcomeHint, rejectionRows } from "@/lib/outcomes";
-import { CONSENT_START, snippetGuides } from "@/lib/snippet-guides";
+import { CONSENT_START, readsTitleChoice, snippetGuides } from "@/lib/snippet-guides";
 import { NotFoundPage } from "./not-found";
 import { useProject } from "./project-layout";
 import { type FirstEvent, firstEvent, sitePath, snippetPath, verifyPath } from "./sites";
@@ -377,9 +377,12 @@ function Install({
 }) {
   const [fw, setFw] = useState("html");
   const [consent, setConsent] = useState(false);
+  const [title, setTitle] = useState(false);
   const pickerId = useId();
   const consentId = useId();
-  const guides = snippetGuides(snippet, { consent });
+  const titleId = useId();
+  const titleChoice = readsTitleChoice(snippet.version);
+  const guides = snippetGuides(snippet, { consent, title });
   const g = guides.find((x) => x.id === fw) ?? guides[0];
   const v = snippet.versions.find((x) => x.version === snippet.version);
   if (!g) return null;
@@ -459,6 +462,29 @@ function Install({
             </div>
           )}
 
+          {npm || !titleChoice ? null : (
+            <div className="flex flex-col gap-2 rounded-lg border border-line p-3">
+              <div className="flex items-start gap-3">
+                <Checkbox
+                  id={titleId}
+                  checked={title}
+                  onCheckedChange={(c) => setTitle(c === true)}
+                  aria-describedby={`${titleId}-d`}
+                  className="mt-0.5"
+                />
+                <label htmlFor={titleId} className="text-body text-fg">
+                  Send the page title
+                </label>
+              </div>
+              <p id={`${titleId}-d`} className="pl-7 text-small text-fg-2">
+                Adds <code className="font-mono text-fg">data-send-title="true"</code> to the tag.
+                Without it the tracker sends the page's path and referrer only. No metric needs the
+                title, and a title can name a person, so turn this on only if your titles are
+                generic.
+              </p>
+            </div>
+          )}
+
           <details className="group rounded-lg border border-line text-small">
             <summary className="flex min-h-10 cursor-pointer items-center gap-2 rounded-lg px-3 text-fg-2 transition-colors hover:text-fg focus-ring">
               <ArrowRight
@@ -481,7 +507,7 @@ function Install({
                     {snippet.versions.map((ver, i) => (
                       <option key={ver.version} value={ver.version}>
                         {ver.version}
-                        {i === 0 ? " (newest)" : ""}
+                        {i === 0 ? " (recommended)" : ""}
                       </option>
                     ))}
                   </NativeSelect>
