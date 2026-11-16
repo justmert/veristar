@@ -41,7 +41,7 @@ are automated and form the upgrade gate (`make umami-compat`).
 - `POST /api/send` (no auth): body `{type:"event", payload:{website, hostname, url, referrer, title,
   screen, language, name, data, timestamp, salt}}`. 200 `{cache, sessionId, visitId}`; bot 200
   `{"beep":"boop"}`; unknown website 400. `salt` max 100 characters. A desktop user agent with a
-  screen up to 1920 wide is stored as device `laptop` (`getDevice`).
+  screen up to 1920 wide is stored as device `laptop` (`getDevice`). Tracker 1.3.0 sends no screen, so Umami classifies its events from the user agent alone: `mobile`, `tablet`, `desktop` and the other `ua-parser-js` types.
 - `POST /api/auth/login`: `{token, user}`. Every other route needs `Authorization: Bearer`.
 - `POST /api/users` `{id?, username, password(8..255), role}` with role required
   (`admin|user|view-only`); answer `{id, username, role}`. Duplicate username 400.
