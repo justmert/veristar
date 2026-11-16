@@ -7,6 +7,8 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"net/http"
+	"net/http/cookiejar"
 	"testing"
 
 	"github.com/stellar/go-stellar-sdk/network"
@@ -71,4 +73,23 @@ func (p *Passkey) Answer(t testing.TB, challenge, rpID, origin string, create bo
 		out["public_key"] = enc.EncodeToString(p.PublicKey)
 	}
 	return out
+}
+
+// SignInPasskey runs the real passkey sign-in (contract 4.1.9) for p in a
+// new browser; create sends the public key, as for a passkey created just
+// now. it returns the client and the verify answer's status.
+func (e *Env) SignInPasskey(t testing.TB, p *Passkey, create bool) (*Client, Resp) {
+	t.Helper()
+	jar, err := cookiejar.New(nil)
+	require.NoError(t, err)
+	hc := *e.Srv.Client()
+	hc.Jar = jar
+	hc.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	c := &Client{e: e, hc: &hc}
+	r := c.Call(t, http.MethodPost, "/api/auth/passkey/challenge", map[string]any{})
+	require.Equal(t, http.StatusOK, r.Status, "passkey challenge failed: %s", r.Body)
+	ch := r.JSON(t)
+	challenge, _ := ch["challenge"].(string)
+	rpID, _ := ch["rp_id"].(string)
+	return c, c.Call(t, http.MethodPost, "/api/auth/passkey/verify", p.Answer(t, challenge, rpID, e.Srv.URL, create))
 }
