@@ -27,6 +27,8 @@ the routes by area:
 | 10 | erasure |
 | 11 | operator alerts |
 | 12 | the MCP server |
+| 15 | the on-chain witness: declared accounts and contracts, their proofs, daily ledger activity and the two-way stellar.toml link |
+| 16 | CSV exports and "What SCF sees" |
 | 17 | the integrity grade of web traffic |
 
 A new route adds its error codes to section 2.4 and its audit actions to section
@@ -420,6 +422,20 @@ MCP server (section 12): `mcp_credential.create`, `mcp_credential.revoke`,
 `mcp_oauth.consent`, `mcp.tool_call`. Actors added: `mcp_credential:<id>`,
 `system:mcp-revoke`, `system:mcp-oauth`. Targets added: `mcp_credential:<id>`,
 `mcp_client:<id>`.
+
+On-chain witness (section 15): `onchain.add`, `onchain.remove` (actor
+`user:<id>`, written under `cp_tenant`), `onchain.challenge` and
+`onchain.verify` (actor `user:<id>`, written under `cp_system`, where the
+proof columns are written). Target added: `chain_id:<cp.chain_ids.id>`.
+Detail: `tenant_id`, `strkey`, `kind` or `method`, and for `onchain.verify`
+`result` (`ok` or the verify error code of 15.4). Never a signature.
+
+Exports (section 16): `export.csv` for every export. A tenant export has
+actor `user:<id>`, target `tenant:<id>` and detail `tenant_id`, `view`
+(`tenant_overview`), `from`, `to` and `rows`. An operator export has target
+`operator:<view>` (`web_projects`, `api_projects`, `web_compare`,
+`api_compare`) and detail `view`, `query` (the query string it answered,
+without a cursor), `rows` and, for compare exports, `tenants`.
 
 Operator API keys (section 9): `operator_api_key.create`,
 `operator_api_key.revoke`. Target added: `operator_api_key:<id>`. Detail:
@@ -1410,6 +1426,7 @@ body at most 102,400 bytes. Stored in `cp.sites.stellar_toml` with
   "network": "public",
   "accounts_count": 3,
   "accounts_valid": 3,
+  "accounts": ["G...", "G...", "G..."],
   "signing_key_present": true,
   "signing_key_valid": true,
   "org_url": "https://example.org",
@@ -1432,6 +1449,9 @@ body at most 102,400 bytes. Stored in `cp.sites.stellar_toml` with
   `toml_syntax`, `toml_type`), else `null`.
 - `network`: `public`, `testnet`, `futurenet` (the SDK `network` constants),
   `other` for any other passphrase, `null` when absent.
+- `accounts`: the valid G accounts of `ACCOUNTS`, at most 50 in file order. The
+  two-way link of 15.5 reads them. A site checked before this field existed
+  carries no `accounts` until its next daily check, and reads as an empty list.
 - `org_url` is `[DOCUMENTATION].ORG_URL`; `org_url_same_domain` compares its host
   with `domain` (SEP-1: the file "must be hosted on the same domain").
 - `currencies`: at most 50 entries kept, `currencies_total` is the full count.
@@ -2860,6 +2880,303 @@ Audit actions: `mcp_credential.create` (actor `user:<id>`; detail `kind`,
 No new key: the issuer is `CONSOLE_ORIGIN` and the seal key is derived from
 `OAUTH_STATE_KEY`. The limits of 12.6 are constants of
 `internal/controlplane/mcpserver`.
+
+## 15. On-chain witness
+
+A project declares the Stellar accounts (`G...`) and Soroban contracts
+(`C...`) it operates, proves that it controls them, and gets their daily
+ledger activity next to its web and API usage. Ledger data is public. The
+platform stores the declared ids, the proofs and three daily counts per id;
+it stores no counterparty address and no transaction.
+
+### 15.1 Tables
+
+- `cp.chain_ids` (migration 00032): one row per declared id and project,
+  unique on `(tenant_id, strkey)`. `kind` is `account` or `contract`,
+  `added_by` is `enrollment` or `console`. A trigger on `cp.tenants` copies the
+  G and C ids of `enrollment_answers.stellar_ids` into it at enrollment and
+  resubmission; an id the answers already held and the tenant removed in the
+  console is not copied again until the answers add it anew. M (muxed) ids
+  are not copied: their activity is the activity of their G account, which the
+  tenant adds. `cp_tenant` inserts and deletes rows of its own tenant; only
+  `cp_system` writes the challenge and proof columns.
+- `agg.chain_daily`: one row per declared id and completed UTC day that the
+  jobs task `chain-activity` read, zeros included: `operations`,
+  `transactions`, `counterparties` and `source`. A day without a row was not
+  read; it is never a zero.
+- `agg.chain_reads`: the read state per id: `covered_from` and `covered_to`
+  (first and last day with a row), `last_success_at`, `last_error` with
+  `last_error_at`, and for accounts `home_domain` and `account_exists` from
+  the account's ledger entry.
+
+Both agg tables are readable by `cp_tenant` (own rows, row-level security),
+`cp_operator` and `jobs` (writes). The purge step `chain` of 5.5 deletes the
+read state of a removed tenant and, unless `removal_keep_aggregates`, its
+daily counts, through `agg.purge_chain(tenant, keep_aggregates)`.
+
+### 15.2 Sources and what the counts mean
+
+| Kind | Source | Operations | Transactions | Counterparties |
+|---|---|---|---|---|
+| account | Horizon, `GET /accounts/{id}/operations`, successful operations only | operations that involve the account (as source or as a named party) | distinct transactions of those operations | distinct other G accounts named by them (source, from, to, funder, account, into, trustor, trustee, claimant, sponsor, seller, buyer) |
+| contract | Stellar RPC `getEvents` with a contract filter, events of successful calls | distinct (transaction, operation) pairs with an event of the contract | distinct transactions with an event of the contract | distinct G and C addresses named in the event topics, other than the contract |
+
+- `STELLAR_HORIZON_URL` (default `https://horizon.stellar.org`) and
+  `STELLAR_RPC_URL` (default `https://mainnet.sorobanrpc.com`, a provider from
+  the Stellar developer documentation's provider list) set the sources, with
+  `STELLAR_HORIZON_RPS` (default 0.8) and `STELLAR_RPC_RPS` (default 2) as the
+  request rate of each. The control plane and the jobs process read the same
+  keys.
+- Horizon of the Stellar Development Foundation keeps about one year of
+  history. The first read of an account covers the 90 days before today.
+- Stellar RPC servers keep events for a window of 120,960 ledgers, about seven
+  days. A contract's history starts with the first whole UTC day of that
+  window at its first read; days before it are `before_rpc_retention`. A
+  contract that emits no events shows no activity through this source.
+- A day is stored only when it was read whole. An id with more than 20,000
+  operations (accounts) or 50,000 events (contracts) to read in one run keeps
+  the days it completed and records `day_over_read_cap`.
+
+### 15.3 Routes for members
+
+All routes take a session (section 1) and answer 404 for a tenant the caller
+is not a member of.
+
+**`GET /api/tenants/{tenant_id}/onchain?from=&to=`**: the view. `from` and `to`
+are UTC days, both included, default the 30 days ending today, at most 366
+days, `to` not after today (400 `invalid_query` otherwise).
+
+```json
+{
+  "from": "2026-10-18", "to": "2026-11-16", "days": ["2026-10-18", "..."],
+  "sources": { "accounts": "horizon", "contracts": "rpc_events", "account_backfill_days": 90 },
+  "totals": { "ids": 2, "ids_verified": 1, "accounts": 1, "contracts": 1,
+              "operations": 412, "transactions": 180, "days_missing": 9 },
+  "ids": [
+    {
+      "id": "uuid", "strkey": "G...", "kind": "account", "added_by": "enrollment",
+      "created_at": "2026-11-12T09:00:00Z",
+      "verification": { "status": "verified", "method": "sep53", "verified_at": "...",
+                        "via": null, "detail": { "standard": "sep-53" },
+                        "last_attempt_at": "...", "last_error": null },
+      "read": { "source": "horizon", "covered_from": "2026-08-18", "covered_to": "2026-11-15",
+                "last_success_at": "...", "last_error": null, "last_error_at": null,
+                "home_domain": "example.org", "account_exists": true },
+      "totals": { "operations": 412, "transactions": 180, "peak_counterparties": 31,
+                  "days_read": 29, "days_missing": 1 },
+      "series": [
+        { "day": "2026-10-18", "operations": 12, "transactions": 5, "counterparties": 3, "missing": null },
+        { "day": "2026-11-16", "operations": null, "transactions": null, "counterparties": null,
+          "missing": "day_not_complete" }
+      ]
+    }
+  ],
+  "link": { "two_way": true, "sites": ["LinkSite, 15.5"] }
+}
+```
+
+- A point has numbers or a `missing` reason, never both: `day_not_complete`
+  (today), `before_backfill_window` (an account day before its first read
+  day), `before_rpc_retention` (a contract day before its first read day),
+  `not_read_yet`, or the id's `read.last_error` (`rate_limited`,
+  `source_unavailable`, `bad_response`, `before_source_history`,
+  `day_over_read_cap`, `account_not_found`, `not_found`).
+- Counterparties are distinct per day, so a range carries
+  `peak_counterparties`, the largest daily value, and never a sum.
+- `totals.days_missing` counts id-days without a row, today included.
+- `verification.status` is `verified` once a proof held; a later failed
+  attempt keeps it and sets `last_error`.
+
+**`POST /api/tenants/{tenant_id}/onchain/ids`** `{"strkey": "G..."}`: declares
+an account or a contract. Any member, terms accepted (403
+`terms_not_accepted`), not while the tenant is `suspended` (409
+`tenant_suspended`). 201 with the id object (the fields `id` to
+`verification` of a view item). 422 `validation_failed` with
+`fields.strkey`: `required`, `invalid_strkey` (not a valid G or C strkey; M
+is refused), `duplicate`, `too_many` (20 ids per project).
+
+**`DELETE /api/tenants/{tenant_id}/onchain/ids/{chain_id}`**: owner only (403
+`owner_required`), terms accepted, not `suspended`. 204. The id's daily rows
+stay and come back if the id is added again.
+
+### 15.4 Proof of control
+
+**`POST /api/tenants/{tenant_id}/onchain/ids/{chain_id}/challenge`** (accounts
+only, 422 for a contract): any member. A new random nonce valid for 30
+minutes replaces any earlier one.
+
+```json
+{
+  "id": "uuid", "account": "G...",
+  "message": "Veristar ownership proof\nProject: <tenant id>\nAccount: G...\nNonce: <32 hex>\nExpires: 2026-11-16T10:00:00Z",
+  "manage_data": { "name": "veristar", "value": "<32 hex>" },
+  "expires_at": "2026-11-16T10:00:00Z"
+}
+```
+
+**`POST /api/tenants/{tenant_id}/onchain/ids/{chain_id}/verify`**: any member,
+terms accepted, not `suspended`, at most 10 attempts per id and hour (429
+`rate_limited`). Body by method:
+
+| Method | Kind | Body | The proof holds when |
+|---|---|---|---|
+| `sep53` | account | `{"method": "sep53", "signature": "<base64 or hex>"}` | the signature is the account's ed25519 signature of SHA-256(`"Stellar Signed Message:\n"` + `message`), SEP-53, over the open challenge's message |
+| `manage_data` | account | `{"method": "manage_data"}` | the account's data entry `veristar` on the ledger (Horizon) equals the open challenge's nonce |
+| `contract_admin` | contract | `{"method": "contract_admin"}` | the contract's instance storage (RPC `getLedgerEntries`) holds an address under the key `Admin`, `admin`, `Owner` or `owner` (a symbol, or a one-element vector of one, as Rust enum variants such as OpenZeppelin's `Owner` are stored) that is a verified id of the same project |
+| `contract_deployer` | contract | `{"method": "contract_deployer", "tx_hash": "<64 hex>"}` | the successful transaction (Horizon) creates the contract from an address, the contract id recomputed from network, address and salt equals the declared id, and the address is a verified id of the same project |
+
+The answer is 200 with the id object in every case: a proof that does not
+hold sets `verification.last_error`: `no_challenge`, `challenge_expired`,
+`bad_signature`, `data_entry_mismatch`, `no_verified_owner`,
+`deployer_not_verified`, `contract_not_created_in_transaction`,
+`transaction_failed`, `no_admin_entry`, `admin_not_verified`, or a source code
+of 15.3. A held proof clears the challenge, so a signature works once.
+`verification.via` names the verified account a contract was proven through;
+`detail` holds `storage_key` or `tx_hash`.
+
+The proofs follow SEP-53 exactly, so any wallet that signs messages with it
+works; the console asks through the Stellar Wallets Kit. A wallet that cannot
+sign messages, or an account behind a multisig policy, uses the manage-data
+method, which any wallet or the Stellar Lab can submit.
+
+### 15.5 Two-way stellar.toml link
+
+`link.sites` has one entry per site that is not removed:
+
+```json
+{
+  "site_id": "uuid", "domain": "example.org", "verified": true,
+  "stellar_toml": "found", "org_url": "https://example.org", "org_url_matches": true,
+  "accounts": [ { "strkey": "G...", "listed_in_toml": true, "home_domain": "example.org",
+                  "home_domain_matches": true, "two_way": true } ],
+  "contracts": [ { "strkey": "C...", "listed_in_toml": false } ],
+  "two_way": true
+}
+```
+
+The link uses SEP-1 fields only and adds no key:
+
+- Domain to ledger: the stellar.toml served at the verified domain (5.12) lists
+  the account under `ACCOUNTS`, and its `[DOCUMENTATION] ORG_URL` is on that
+  domain (`org_url_matches`).
+- Ledger to domain: the account's `home_domain`, which only the account's
+  signers can set with a SetOptions operation, equals the domain.
+
+An account is `two_way` when the domain is verified (5.8) and every leg
+holds; a site and the project are `two_way` when any account is. A contract
+listed as a `[[CURRENCIES]]` `contract` is `listed_in_toml`; contracts have no
+home domain and are not part of `two_way`.
+
+### 15.6 The jobs task `chain-activity`
+
+Hourly, under the jobs lock. It reads every id of every tenant that is not
+removed whose newest stored day is older than yesterday, the longest unread
+first, at most 200 per run, and an id whose last read failed again 50
+minutes after the failure. An id declared by several projects is read once
+per run. Each id's days are written in one transaction under the tenant's
+shared advisory lock of 00019, with its read state; nothing is written for a
+removed tenant. Requests are paced per source and retried on 429 and 5xx with
+exponential backoff and jitter, never shorter than a `Retry-After`; after six
+attempts the id records `rate_limited` or `source_unavailable` and the run is
+marked failed in the scheduler metrics. Metric:
+`jobs_chain_reads_total{kind, result}`.
+
+### 15.7 Operators, the machine API and MCP
+
+- `GET /api/operator/web/projects` and `GET /api/operator/api/projects`: every
+  row carries `onchain` (**Summary**: `ids`, `ids_verified`, `operations`,
+  `transactions` over the range, `days_missing` (id-days of the range before
+  today without a row) and `ids_failing` (ids whose last read failed)). The
+  column is not a sort key.
+- `GET /api/operator/web/compare` and `GET /api/operator/api/compare`: every
+  project carries `onchain`: `totals` (Summary) and `series`, one point per day
+  of the range: `ids_read` and the summed `operations` and `transactions`,
+  both `null` on a day no id has a row for.
+- `GET /api/operator/tenants/{tenant_id}/onchain?from=&to=`: the view of 15.3
+  for one project, read as `cp_operator` over `cp.operator_sites`; 404 for an
+  unknown or internal tenant.
+- Machine API (section 9, `docs/reference/openapi/metrics-v1.yaml`):
+  `GET /api/metrics/v1/onchain/ids` (declared ids with proof and read state,
+  keyset by tenant and strkey) and `GET /api/metrics/v1/onchain/daily`
+  (stored daily rows of declared ids, keyset by tenant, strkey and day), with
+  the `tenant`, `from`, `to`, `limit` and `cursor` rules of section 9.
+- MCP (section 12): tenant tools `get_onchain_activity` (15.3) and
+  `get_scf_view` (16.3), operator tool `get_tenant_onchain`.
+
+## 16. Exports and "What SCF sees"
+
+### 16.1 Operator exports
+
+All under `/api/operator` (403 `operator_required` otherwise), `text/csv;
+charset=utf-8` as an attachment, streamed, one header row:
+
+| Route | Rows |
+|---|---|
+| `GET /web/projects.csv` | the rows of `GET /web/projects` for the same `from`, `to`, filters, `sort` and `order`, from the first row on, at most `rows` of them |
+| `GET /api/projects.csv` | the same for `GET /api/projects` |
+| `GET /web/compare.csv?tenants=&from=&to=` | one row per project and day of `GET /web/compare` |
+| `GET /api/compare.csv?tenants=&from=&to=` | one row per project and day of `GET /api/compare` |
+
+- `rows` is 1 to 5000, default 50; the console sends the number of rows it
+  shows, with the range it resolved, so the file holds exactly the rows on
+  screen. `limit` and `cursor` are 400 `invalid_query`.
+- The list exports read with the list's own SQL in one repeatable-read
+  snapshot, and add the on-chain summary columns `onchain_ids`,
+  `onchain_ids_verified`, `onchain_operations`, `onchain_transactions`,
+  `onchain_days_missing` and `onchain_ids_failing`. The compare exports add
+  `onchain_ids_read`, `onchain_operations` and `onchain_transactions` per day.
+- A value that is not known (a ratio without a denominator, a day not read) is
+  an empty cell, never 0. A text cell that a spreadsheet would read as a
+  formula (starting with `=`, `+`, `-`, `@`, tab or carriage return) gets a
+  leading apostrophe.
+- Every export writes one `export.csv` audit row (3.3) with the query it
+  answered.
+
+### 16.2 Tenant overview export
+
+**`GET /api/tenants/{tenant_id}/overview.csv?from=&to=`**: any member, range
+rules of 15.3. One row per UTC day, read under `cp_tenant`, so row-level
+security keys every table on the caller's tenant:
+
+`day, web_pageviews, web_visitors, web_visits, web_bounces,
+web_totaltime_seconds, web_quarantine_pageviews, api_requests,
+api_errors_4xx, api_errors_5xx, onchain_ids_read, onchain_operations,
+onchain_transactions`
+
+The web columns are the project's `agg.web_daily` rows, summed over its sites
+(empty on a day not aggregated yet); the API columns are the daily series of
+7.6 (0 on a day without requests, as on the API traffic page); the on-chain
+columns are as in 16.1. It writes one `export.csv` audit row.
+
+### 16.3 What SCF sees
+
+**`GET /api/tenants/{tenant_id}/scf-view?from=&to=`**: any member. The range
+rules and defaults are those of section 8, so the numbers equal what an
+operator sees for the same range. The route reads with the operator views'
+own SQL under `cp_operator`, for the tenant of the caller's verified
+membership only; it takes no tenant list and never names another project.
+
+```json
+{
+  "from": "2026-10-18", "to": "2026-11-16", "days": ["..."],
+  "in_operator_views": true,
+  "tenant": "TenantRef", "sites": { "sites": 1, "sites_verified": 1, "sites_with_stellar_toml": 1 },
+  "has_web_data": true, "has_api_data": false,
+  "web": "the project's row of 8.3 without tenant, site counts and top lists",
+  "api": "the project's row of 8.5 without tenant and site counts",
+  "onchain": "Summary of 15.7",
+  "integrity": "the row's grade of 17.3",
+  "link_two_way": true,
+  "web_series": "the series of 8.4", "api_series": "the series of 8.6",
+  "onchain_series": "the series of 15.7"
+}
+```
+
+`in_operator_views` is false for an internal project, which the operator
+views do not list; `tenant`, `sites`, `web`, `api`, `onchain` and
+`integrity` are then `null` or absent and the series empty.
+
+---
 
 ## 17. Integrity grade of web traffic
 
