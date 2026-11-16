@@ -36,7 +36,9 @@ tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
 echo "fetch-dbip: downloading $url"
-curl -fsSL --retry 3 --max-time 300 -o "$tmp/db.mmdb.gz" "$url"
+# db-ip answers some downloads from shared addresses (ci runners) with 403
+# and serves the same file a little later, so every error is retried
+curl -fsSL --retry 5 --retry-all-errors --retry-delay 20 --max-time 300 -o "$tmp/db.mmdb.gz" "$url"
 gzip -dc "$tmp/db.mmdb.gz" >"$tmp/db.mmdb"
 
 # the go checker opens the file with the same reader the gateway uses and

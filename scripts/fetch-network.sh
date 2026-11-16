@@ -50,7 +50,8 @@ trap 'rm -rf "$tmp"' EXIT
 
 asn_url="https://download.db-ip.com/free/dbip-asn-lite-${month}.mmdb.gz"
 echo "fetch-network: downloading $asn_url"
-curl -fsSL --retry 3 --max-time 300 -o "$tmp/asn.mmdb.gz" "$asn_url"
+# retried on every error, 403 included, as in fetch-dbip.sh
+curl -fsSL --retry 5 --retry-all-errors --retry-delay 20 --max-time 300 -o "$tmp/asn.mmdb.gz" "$asn_url"
 gzip -dc "$tmp/asn.mmdb.gz" >"$tmp/dbip-asn-lite.mmdb"
 
 # the as-metadata commit current on the first day of the month. the api
