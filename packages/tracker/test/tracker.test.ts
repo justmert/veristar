@@ -1,6 +1,12 @@
 import { JSDOM } from "jsdom";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createTracker, type Tracker, type TrackerOptions, VERSION } from "../src/index.ts";
+import {
+  createTracker,
+  type Payload,
+  type Tracker,
+  type TrackerOptions,
+  VERSION,
+} from "../src/index.ts";
 import { verifyNonce } from "../src/proof.ts";
 import type { WireEvent } from "../src/wire.ts";
 import {
@@ -23,7 +29,14 @@ type PageOptions = {
   gpc?: boolean;
   dnt?: string;
   optOut?: boolean;
+  // page visibility and prerendering the window starts with; tests change
+  // them with show(), hide() and activate()
+  visibility?: "visible" | "hidden";
+  prerendering?: boolean;
 };
+
+type PageState = { visibility: "visible" | "hidden"; prerendering: boolean };
+const pageStates = new WeakMap<Window, PageState>();
 
 let gw: Gateway;
 let windows: (Window & typeof globalThis)[] = [];
@@ -44,6 +57,51 @@ function browserize(window: Window & typeof globalThis, page: PageOptions) {
   Object.defineProperty(window, "crypto", { value: globalThis.crypto, configurable: true });
   if (page.gpc) Object.defineProperty(window.navigator, "globalPrivacyControl", { value: true });
   if (page.dnt) Object.defineProperty(window.navigator, "doNotTrack", { value: page.dnt });
+  const state: PageState = {
+    visibility: page.visibility ?? "visible",
+    prerendering: page.prerendering ?? false,
+  };
+  pageStates.set(window, state);
+  const doc = window.document;
+  Object.defineProperty(doc, "visibilityState", {
+    get: () => state.visibility,
+    configurable: true,
+  });
+  Object.defineProperty(doc, "hidden", {
+    get: () => state.visibility === "hidden",
+    configurable: true,
+  });
+  if (page.prerendering !== undefined) {
+    Object.defineProperty(doc, "prerendering", {
+      get: () => state.prerendering,
+      configurable: true,
+    });
+  }
+}
+
+function setVisibility(w: Window, visibility: "visible" | "hidden") {
+  (pageStates.get(w) as PageState).visibility = visibility;
+  w.document.dispatchEvent(new w.Event("visibilitychange"));
+}
+
+const show = (w: Window) => setVisibility(w, "visible");
+const hide = (w: Window) => setVisibility(w, "hidden");
+
+// prerender activation: the document stops prerendering and is visible
+function activate(w: Window) {
+  const state = pageStates.get(w) as PageState;
+  state.prerendering = false;
+  state.visibility = "visible";
+  w.document.dispatchEvent(new w.Event("prerenderingchange"));
+}
+
+// leaving the page; persisted means it goes into the back/forward cache
+function leave(w: Window, persisted = false) {
+  w.dispatchEvent(new w.PageTransitionEvent("pagehide", { persisted }));
+}
+
+function restore(w: Window) {
+  w.dispatchEvent(new w.PageTransitionEvent("pageshow", { persisted: true }));
 }
 
 function openPage(page: PageOptions = {}): Window & typeof globalThis {
@@ -82,20 +140,8 @@ describe("pageviews", () => {
     expect(req.method).toBe("POST");
     expect(req.headers["content-type"]).toBe("text/plain;charset=UTF-8");
     const e = parse(req);
-    expect(Object.keys(e).sort()).toEqual([
-      "h",
-      "l",
-      "p",
-      "r",
-      "s",
-      "sv",
-      "t",
-      "ti",
-      "ts",
-      "u",
-      "v",
-      "w",
-    ]);
+    // no title, screen or language unless the site asks (1.3.0)
+    expect(Object.keys(e).sort()).toEqual(["h", "p", "r", "sv", "t", "ts", "u", "v", "w"]);
     expect(e).toMatchObject({
       v: 1,
       w: SITE,
@@ -104,10 +150,7 @@ describe("pageviews", () => {
       // "#top" is not a route fragment, so it is not sent
       u: "/start?q=1",
       r: "https://ref.example/from?x=1",
-      ti: "Home",
-      l: "en-US",
     });
-    expect(e.s).toMatch(/^\d+x\d+$/);
     expect(Math.abs(e.ts - Date.now())).toBeLessThan(10000);
     expect(Object.keys(e.p).sort()).toEqual(["bits", "iat", "nonce", "salt", "tag"]);
     await expectValidProof(e);
@@ -451,5 +494,226 @@ describe("gateway failures", () => {
     await waitFor(() => gw.events().length === 1);
     expect(gw.challenges()).toHaveLength(2);
     expect(parse(gw.events()[0] as Recorded).n).toBe("second");
+  });
+});
+
+describe("counting only pages a person could see (1.3.0)", () => {
+  const pageviews = () =>
+    gw
+      .events()
+      .map(parse)
+      .filter((e) => e.t === "pv");
+  const notices = () =>
+    gw
+      .events()
+      .map(parse)
+      .filter((e) => e.t === "nv");
+
+  it("counts a prerendered page on activation, and fetches nothing before", async () => {
+    const w = openPage({ prerendering: true, visibility: "hidden" });
+    track(w);
+    await pause(QUIET_MS);
+    expect(gw.requests).toHaveLength(0);
+    activate(w);
+    await waitFor(() => pageviews().length === 1);
+    await pause(QUIET_MS);
+    expect(pageviews()).toHaveLength(1);
+    expect(pageviews()[0]?.u).toBe("/start?q=1");
+  });
+
+  it("sends nothing for a prerendered page that is never activated", async () => {
+    const w = openPage({ prerendering: true, visibility: "hidden" });
+    track(w);
+    await pause(QUIET_MS);
+    leave(w);
+    await pause(QUIET_MS);
+    expect(gw.requests).toHaveLength(0);
+  });
+
+  it("counts a page loaded in a background tab when it first becomes visible", async () => {
+    const w = openPage({ visibility: "hidden" });
+    track(w);
+    // the proof is fetched while hidden, so a notice could go out on close
+    await waitFor(() => gw.challenges().length === 1);
+    await pause(QUIET_MS);
+    expect(gw.events()).toHaveLength(0);
+    show(w);
+    await waitFor(() => pageviews().length === 1);
+    // hiding and showing the tab again is the same page, not a new view
+    hide(w);
+    show(w);
+    await pause(QUIET_MS);
+    expect(pageviews()).toHaveLength(1);
+    expect(gw.challenges()).toHaveLength(1);
+    await expectValidProof(pageviews()[0] as WireEvent);
+  });
+
+  it("counts a restore from the back/forward cache again", async () => {
+    const w = openPage();
+    track(w);
+    await waitFor(() => pageviews().length === 1);
+    leave(w, true);
+    restore(w);
+    await waitFor(() => pageviews().length === 2);
+    expect(pageviews().map((e) => e.u)).toEqual(["/start?q=1", "/start?q=1"]);
+    // a page that was seen sends no never-visible notice when left
+    await pause(QUIET_MS);
+    expect(notices()).toHaveLength(0);
+  });
+
+  it("waits with a hidden restore until the page is visible", async () => {
+    const w = openPage();
+    track(w);
+    await waitFor(() => pageviews().length === 1);
+    leave(w, true);
+    hide(w);
+    restore(w);
+    await pause(QUIET_MS);
+    expect(pageviews()).toHaveLength(1);
+    show(w);
+    await waitFor(() => pageviews().length === 2);
+  });
+
+  it("keeps counting history navigation, and collapses navigation while hidden", async () => {
+    const w = openPage({ url: "https://site.example/" });
+    track(w);
+    await waitFor(() => pageviews().length === 1);
+    w.history.pushState({}, "", "/a");
+    await waitFor(() => pageviews().length === 2);
+    hide(w);
+    w.history.pushState({}, "", "/b");
+    w.history.pushState({}, "", "/c");
+    await pause(QUIET_MS);
+    expect(pageviews()).toHaveLength(2);
+    show(w);
+    await waitFor(() => pageviews().length === 3);
+    await pause(QUIET_MS);
+    expect(pageviews().map((e) => e.u)).toEqual(["/", "/a", "/c"]);
+    // the page the person saw last is the referrer of the one they see
+    expect(pageviews()[2]?.r).toBe("/b");
+  });
+
+  it("sends a never-visible notice for a background page closed unseen", async () => {
+    const w = openPage({ visibility: "hidden", referrer: "https://ref.example/x" });
+    track(w);
+    await waitFor(() => gw.challenges().length === 1);
+    // the solved proof is kept, so the notice can be sent during pagehide
+    await pause(QUIET_MS);
+    leave(w);
+    await waitFor(() => notices().length === 1);
+    const n = notices()[0] as WireEvent;
+    expect(Object.keys(n).sort()).toEqual(["h", "p", "sv", "t", "ts", "v", "w"]);
+    expect(n).toMatchObject({ v: 1, w: SITE, t: "nv", h: "site.example", sv: VERSION });
+    await expectValidProof(n);
+    expect(pageviews()).toHaveLength(0);
+    const req = gw.events()[0] as Recorded;
+    expect(req.headers["content-type"]).toBe("text/plain;charset=UTF-8");
+  });
+
+  it("sends no notice when tracking is disabled or the page was seen", async () => {
+    const gpc = openPage({ visibility: "hidden", gpc: true });
+    track(gpc);
+    const seen = openPage({ visibility: "hidden" });
+    track(seen);
+    await waitFor(() => gw.challenges().length === 1);
+    show(seen);
+    await waitFor(() => pageviews().length === 1);
+    hide(seen);
+    leave(seen);
+    leave(gpc);
+    await pause(QUIET_MS);
+    expect(notices()).toHaveLength(0);
+    expect(gw.challenges()).toHaveLength(1);
+  });
+
+  it("sends no notice for a manual-only page that never started", async () => {
+    const w = openPage({ visibility: "hidden" });
+    const t = track(w, { autoTrack: false });
+    await t.track("manual");
+    leave(w);
+    await pause(QUIET_MS);
+    expect(notices()).toHaveLength(0);
+    // the public api sends what it is told, visible or not
+    expect(
+      gw
+        .events()
+        .map(parse)
+        .map((e) => e.n),
+    ).toEqual(["manual"]);
+  });
+});
+
+describe("framed pages (1.3.0)", () => {
+  it("marks every event of a page inside a frame, and none of a top-level page", async () => {
+    const top = openPage({ url: "https://host.example/", html: "<!doctype html><body></body>" });
+    const frame = top.document.createElement("iframe");
+    top.document.body.appendChild(frame);
+    const inner = frame.contentWindow as Window & typeof globalThis;
+    // the frame document is about:blank; only the frame flag matters here
+    browserize(inner, {});
+    const t = createTracker(inner, { siteId: SITE, host: gw.origin, autoTrack: false });
+    t.start();
+    await waitFor(() => gw.events().length === 1);
+    await t.track("inside");
+    await waitFor(() => gw.events().length === 2);
+    const evs = gw.events().map(parse);
+    expect(evs.map((e) => [e.t, e.fr])).toEqual([
+      ["pv", true],
+      ["ev", true],
+    ]);
+
+    const plain = openPage();
+    track(plain);
+    await waitFor(() => gw.events().length === 3);
+    expect(parse(gw.events()[2] as Recorded).fr).toBeUndefined();
+  });
+});
+
+describe("smaller footprint (1.3.0)", () => {
+  it("reads neither screen nor language, and sends the title only when asked", async () => {
+    const w = openPage();
+    const reads: string[] = [];
+    Object.defineProperty(w, "screen", {
+      get: () => {
+        reads.push("screen");
+        return { width: 1, height: 1 };
+      },
+    });
+    Object.defineProperty(w.navigator, "language", {
+      get: () => {
+        reads.push("language");
+        return "en-US";
+      },
+    });
+    track(w);
+    await waitFor(() => gw.events().length === 1);
+    const e = parse(gw.events()[0] as Recorded);
+    expect(e.ti).toBeUndefined();
+    expect(e.s).toBeUndefined();
+    expect(e.l).toBeUndefined();
+    expect(reads).toEqual([]);
+
+    const titled = openPage();
+    const t = track(titled, { sendTitle: true });
+    await waitFor(() => gw.events().length === 2);
+    expect(parse(gw.events()[1] as Recorded).ti).toBe("Home");
+    await t.track("named");
+    await waitFor(() => gw.events().length === 3);
+    expect(parse(gw.events()[2] as Recorded).ti).toBe("Home");
+  });
+
+  it("hands before-send hooks the umami payload shape with empty device fields", async () => {
+    const w = openPage();
+    let seen: Payload | undefined;
+    track(w, {
+      beforeSend: (_type, p) => {
+        seen = p;
+        return { ...p, language: "de-DE" };
+      },
+    });
+    await waitFor(() => gw.events().length === 1);
+    expect(seen).toMatchObject({ website: SITE, screen: "", language: "", title: "" });
+    // a value the site's own hook sets is the site's choice and is sent
+    expect(parse(gw.events()[0] as Recorded).l).toBe("de-DE");
   });
 });

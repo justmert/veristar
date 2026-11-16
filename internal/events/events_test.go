@@ -56,6 +56,45 @@ func TestParseValid(t *testing.T) {
 	require.Equal(t, true, ev.Data["ok"])
 }
 
+// tracker 1.3.0 sends neither title, screen nor language by default, marks
+// framed pages with fr and reports a page left unseen as an nv notice
+func TestParseTracker13(t *testing.T) {
+	w, err := events.ParseWire(body(t, func(m map[string]any) {
+		delete(m, "ti")
+		delete(m, "s")
+		delete(m, "l")
+		m["sv"] = "1.3.0"
+		m["fr"] = true
+	}))
+	require.NoError(t, err)
+	require.True(t, w.Framed)
+	require.Empty(t, w.Title)
+	require.Empty(t, w.Screen)
+	require.Empty(t, w.Language)
+
+	top, err := events.ParseWire(body(t, func(m map[string]any) { m["fr"] = false }))
+	require.NoError(t, err)
+	require.False(t, top.Framed)
+
+	nv, err := events.ParseWire(body(t, func(m map[string]any) {
+		m["t"] = "nv"
+		for _, k := range []string{"u", "r", "ti", "s", "l"} {
+			delete(m, k)
+		}
+	}))
+	require.NoError(t, err)
+	require.Equal(t, events.TypeNeverVisible, nv.Type)
+	require.Empty(t, nv.URL)
+	require.Equal(t, uint64(12345), nv.Proof.Nonce)
+
+	// a release before 1.3.0 keeps sending all three fields
+	old, err := events.ParseWire(body(t, nil))
+	require.NoError(t, err)
+	require.Equal(t, "1920x1080", old.Screen)
+	require.Equal(t, "en-US", old.Language)
+	require.Equal(t, "Docs", old.Title)
+}
+
 func TestParseRejects(t *testing.T) {
 	long := func(n int) string { return strings.Repeat("a", n) }
 	cases := map[string]struct {
@@ -114,20 +153,40 @@ func TestParseRejects(t *testing.T) {
 		"hostname ipv6 with zone":   {body(t, func(m map[string]any) { m["h"] = "[fe80::1%eth0]" }), events.ErrMalformed},
 		"hostname bad brackets":     {body(t, func(m map[string]any) { m["h"] = "[::1" }), events.ErrMalformed},
 		"missing referrer":          {body(t, func(m map[string]any) { delete(m, "r") }), events.ErrMalformed},
-		"missing title":             {body(t, func(m map[string]any) { delete(m, "ti") }), events.ErrMalformed},
-		"missing screen":            {body(t, func(m map[string]any) { delete(m, "s") }), events.ErrMalformed},
-		"missing language":          {body(t, func(m map[string]any) { delete(m, "l") }), events.ErrMalformed},
-		"missing client ts":         {body(t, func(m map[string]any) { delete(m, "ts") }), events.ErrMalformed},
-		"title over 500 utf-16":     {body(t, func(m map[string]any) { m["ti"] = strings.Repeat("\U0001F600", 251) }), events.ErrMalformed},
-		"proof nonce negative":      {body(t, func(m map[string]any) { proof(m)["nonce"] = -1 }), events.ErrMalformed},
-		"proof nonce fraction":      {body(t, func(m map[string]any) { proof(m)["nonce"] = 1.5 }), events.ErrMalformed},
-		"proof nonce unsafe":        {body(t, func(m map[string]any) { proof(m)["nonce"] = uint64(1) << 60 }), events.ErrMalformed},
-		"proof bits too high":       {body(t, func(m map[string]any) { proof(m)["bits"] = 65 }), events.ErrMalformed},
-		"proof extra field":         {body(t, func(m map[string]any) { proof(m)["x"] = 1 }), events.ErrMalformed},
-		"proof missing field":       {body(t, func(m map[string]any) { delete(proof(m), "tag") }), events.ErrMalformed},
-		"proof not object":          {body(t, func(m map[string]any) { m["p"] = "x" }), events.ErrMalformed},
-		"client ts not integer":     {body(t, func(m map[string]any) { m["ts"] = 1.25 }), events.ErrMalformed},
-		"client ts leading zero":    {[]byte(strings.Replace(string(body(t, nil)), `"ts":1762950000000`, `"ts":01`, 1)), events.ErrMalformed},
+		"framed not a boolean":      {body(t, func(m map[string]any) { m["fr"] = 1 }), events.ErrMalformed},
+		"framed as a string":        {body(t, func(m map[string]any) { m["fr"] = "true" }), events.ErrMalformed},
+		"notice with a url":         {body(t, func(m map[string]any) { m["t"] = "nv"; delete(m, "ti"); delete(m, "s"); delete(m, "l"); delete(m, "r") }), events.ErrMalformed},
+		"notice with a referrer":    {body(t, func(m map[string]any) { m["t"] = "nv"; delete(m, "u"); delete(m, "ti"); delete(m, "s"); delete(m, "l") }), events.ErrMalformed},
+		"notice with a title":       {body(t, func(m map[string]any) { m["t"] = "nv"; delete(m, "u"); delete(m, "r"); delete(m, "s"); delete(m, "l") }), events.ErrMalformed},
+		"notice with event data": {body(t, func(m map[string]any) {
+			m["t"] = "nv"
+			delete(m, "u")
+			delete(m, "r")
+			delete(m, "ti")
+			delete(m, "s")
+			delete(m, "l")
+			m["n"] = "x"
+		}), events.ErrMalformed},
+		"notice without proof": {body(t, func(m map[string]any) {
+			m["t"] = "nv"
+			delete(m, "u")
+			delete(m, "r")
+			delete(m, "ti")
+			delete(m, "s")
+			delete(m, "l")
+			delete(m, "p")
+		}), events.ErrMissingProof},
+		"missing client ts":      {body(t, func(m map[string]any) { delete(m, "ts") }), events.ErrMalformed},
+		"title over 500 utf-16":  {body(t, func(m map[string]any) { m["ti"] = strings.Repeat("\U0001F600", 251) }), events.ErrMalformed},
+		"proof nonce negative":   {body(t, func(m map[string]any) { proof(m)["nonce"] = -1 }), events.ErrMalformed},
+		"proof nonce fraction":   {body(t, func(m map[string]any) { proof(m)["nonce"] = 1.5 }), events.ErrMalformed},
+		"proof nonce unsafe":     {body(t, func(m map[string]any) { proof(m)["nonce"] = uint64(1) << 60 }), events.ErrMalformed},
+		"proof bits too high":    {body(t, func(m map[string]any) { proof(m)["bits"] = 65 }), events.ErrMalformed},
+		"proof extra field":      {body(t, func(m map[string]any) { proof(m)["x"] = 1 }), events.ErrMalformed},
+		"proof missing field":    {body(t, func(m map[string]any) { delete(proof(m), "tag") }), events.ErrMalformed},
+		"proof not object":       {body(t, func(m map[string]any) { m["p"] = "x" }), events.ErrMalformed},
+		"client ts not integer":  {body(t, func(m map[string]any) { m["ts"] = 1.25 }), events.ErrMalformed},
+		"client ts leading zero": {[]byte(strings.Replace(string(body(t, nil)), `"ts":1762950000000`, `"ts":01`, 1)), events.ErrMalformed},
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {

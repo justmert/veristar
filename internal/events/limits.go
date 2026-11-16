@@ -12,20 +12,24 @@ import (
 // javascript counts string length and the tracker cuts fields
 // (docs/reference/wire-v1.md); the body size is in bytes.
 const (
-	MaxBody          = 8 << 10
-	MaxURL           = 500
-	MaxReferrer      = 500
-	MaxTitle         = 500
-	MaxHostname      = 100
-	MaxScreen        = 11
-	MaxLanguage      = 35
-	MaxEventName     = 50
-	MaxDataKeys      = 16
-	MaxDataKey       = 50
-	MaxDataValue     = 500
-	MaxUserAgent     = 500
-	TypePageview     = "pv"
-	TypeEvent        = "ev"
+	MaxBody      = 8 << 10
+	MaxURL       = 500
+	MaxReferrer  = 500
+	MaxTitle     = 500
+	MaxHostname  = 100
+	MaxScreen    = 11
+	MaxLanguage  = 35
+	MaxEventName = 50
+	MaxDataKeys  = 16
+	MaxDataKey   = 50
+	MaxDataValue = 500
+	MaxUserAgent = 500
+	TypePageview = "pv"
+	TypeEvent    = "ev"
+	// TypeNeverVisible is the notice of a page that was hidden from load
+	// until it was left (tracker 1.3.0 on). it is counted for the integrity
+	// grade and never published as an event.
+	TypeNeverVisible = "nv"
 	BandPrimary      = "primary"
 	BandQuarantine   = "quarantine"
 	wireVersion      = 1

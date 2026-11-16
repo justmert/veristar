@@ -187,6 +187,7 @@ func NewNode(ctx context.Context, c NodeConfig) (*Node, error) {
 		Stats:            n.stats,
 		Publisher:        n.pub,
 		Releases:         n.releases,
+		Scripts:          NewScriptAttribution(n.sites, c.Now),
 		MaxBody:          g.MaxBody,
 		Log:              c.Log,
 		Registerer:       c.Registry,

@@ -12,7 +12,12 @@
 // removed; popstate is tracked; global privacy control stops all sending;
 // tracking can be started later (after consent) with start(); a proof is
 // replaced before the gateway's per-proof limit and after a 403 that says it
-// is used up, and that event is sent once more.
+// is used up, and that event is sent once more. from 1.3.0 an automatic
+// pageview waits until the page is visible and not prerendered, a page
+// restored from the back/forward cache counts again, a page hidden from load
+// until it is left sends a never-visible notice instead, every event of a
+// framed page says so, and screen, language and title are not read unless
+// the site asks for the title.
 
 import { solve } from "./proof.ts";
 import { watchWalletsKitStorage } from "./wallets-kit.ts";
@@ -101,6 +106,9 @@ export type TrackerOptions = {
   // watch the stellar wallets kit's localStorage keys and send wallet events
   // (data-wallets-kit="true"). bundler users call attachWalletsKit instead.
   walletsKit?: boolean;
+  // send document.title with each event (data-send-title="true"). off by
+  // default: no metric needs the title, and a title can name a person.
+  sendTitle?: boolean;
 };
 
 type TrackerWindow = Window &
@@ -126,7 +134,11 @@ export function createTracker(window: Window, options: TrackerOptions): Tracker 
   const excludeSearch = options.excludeSearch === true;
   const excludeHash = options.excludeHash === true;
   const domains = (options.domains ?? []).map((d) => d.trim()).filter((d) => d !== "");
-  const screen = `${win.screen.width}x${win.screen.height}`;
+  const sendTitle = options.sendTitle === true;
+  // a page inside a frame can be loaded unseen by an unrelated site, so its
+  // events say so and the gateway counts them for the integrity grade
+  const framed = top !== win;
+  const doc = document as Document & { prerendering?: boolean };
 
   let storage: Storage | undefined;
   try {
@@ -152,12 +164,15 @@ export function createTracker(window: Window, options: TrackerOptions): Tracker 
   let currentRef = document.referrer ? normalize(document.referrer) : "";
   let initialized = false;
 
+  // screen and language stay empty: the gateway and umami take browser, os
+  // and device class from the request headers, so nothing more is read from
+  // the device. the fields remain so before-send hooks keep their shape.
   const getPayload = (): Payload => ({
     website,
     hostname,
-    screen,
-    language: navigator.language,
-    title: document.title,
+    screen: "",
+    language: "",
+    title: sendTitle ? document.title : "",
     url: currentUrl,
     referrer: stripOrigin(currentRef),
   });
@@ -177,8 +192,10 @@ export function createTracker(window: Window, options: TrackerOptions): Tracker 
 
   /* challenge and proof, held in memory only */
 
-  // one challenge and the number of events that used its proof
-  type ProofSlot = { proof: Promise<Proof>; fetchedAt: number; uses: number };
+  // one challenge and the number of events that used its proof. ready holds
+  // the solved proof, so the never-visible notice can be sent synchronously
+  // while the page is being left
+  type ProofSlot = { proof: Promise<Proof>; fetchedAt: number; uses: number; ready?: Proof };
   let slot: ProofSlot | undefined;
 
   const fetchProof = async (): Promise<Proof> => {
@@ -196,18 +213,32 @@ export function createTracker(window: Window, options: TrackerOptions): Tracker 
   // takes one use of the current proof. a spa keeps one page load for as
   // long as the tab is open, so the proof is replaced after PROOF_MAX_USES
   // events, before the gateway's per-proof limit, as well as after 5 hours
-  const takeProof = (): ProofSlot => {
-    const now = win.performance.now();
-    if (!slot || now - slot.fetchedAt > CHALLENGE_REFRESH_MS || slot.uses >= PROOF_MAX_USES) {
-      const fresh: ProofSlot = { proof: fetchProof(), fetchedAt: now, uses: 0 };
-      // a failed challenge is forgotten so the next event asks again
-      fresh.proof.catch(() => {
-        if (slot === fresh) slot = undefined;
-      });
+  const usable = (s: ProofSlot | undefined): s is ProofSlot =>
+    s !== undefined &&
+    win.performance.now() - s.fetchedAt <= CHALLENGE_REFRESH_MS &&
+    s.uses < PROOF_MAX_USES;
+
+  const currentProof = (): ProofSlot => {
+    if (!usable(slot)) {
+      const fresh: ProofSlot = { proof: fetchProof(), fetchedAt: win.performance.now(), uses: 0 };
+      fresh.proof.then(
+        (p) => {
+          fresh.ready = p;
+        },
+        // a failed challenge is forgotten so the next event asks again
+        () => {
+          if (slot === fresh) slot = undefined;
+        },
+      );
       slot = fresh;
     }
-    slot.uses++;
     return slot;
+  };
+
+  const takeProof = (): ProofSlot => {
+    const s = currentProof();
+    s.uses++;
+    return s;
   };
 
   // forgets a proof the gateway called used up, unless another event has
@@ -229,12 +260,15 @@ export function createTracker(window: Window, options: TrackerOptions): Tracker 
       // applied again because before-send and track(props) can supply any url
       u: clip(`${u.pathname}${u.search}${routeFragment(u.hash, excludeHash)}`, LIMITS.url),
       r: clip(payload.referrer || "", LIMITS.referrer),
-      ti: clip(payload.title || "", LIMITS.title),
-      s: clip(payload.screen || "", LIMITS.screen),
-      l: clip(payload.language || "", LIMITS.language),
       ts: Date.now(),
       p,
     };
+    // sent only when set: by data-send-title, or by a before-send hook or
+    // track(props) call of the site's own
+    if (payload.title) event.ti = clip(payload.title, LIMITS.title);
+    if (payload.screen) event.s = clip(payload.screen, LIMITS.screen);
+    if (payload.language) event.l = clip(payload.language, LIMITS.language);
+    if (framed) event.fr = true;
     if (payload.name) {
       // umami truncates long event names; this keeps that documented behaviour
       event.n = clip(payload.name, LIMITS.eventName);
@@ -315,6 +349,93 @@ export function createTracker(window: Window, options: TrackerOptions): Tracker 
     }
   }) as TrackFunction;
 
+  /* visibility: only a page a person could see is counted */
+
+  const canSee = (): boolean => doc.prerendering !== true && doc.visibilityState === "visible";
+  // whether the current show of the page (its load, or its restore from the
+  // back/forward cache) has been visible
+  let seen = false;
+  // an automatic pageview waits here while the page is prerendered or hidden.
+  // navigations while hidden collapse into one pageview of the page the
+  // person finally sees
+  let pending = false;
+
+  const pageview = () => {
+    if (!canSee()) {
+      pending = true;
+      return;
+    }
+    seen = true;
+    pending = false;
+    void track().catch(() => undefined);
+  };
+
+  // visibilitychange and prerenderingchange: the first moment the page can be
+  // seen sends the pageview that waited
+  const onShown = () => {
+    if (!canSee()) return;
+    seen = true;
+    if (pending) pageview();
+  };
+
+  // a page loaded in a background tab gets its proof while hidden, so the
+  // never-visible notice can go out when it is closed unseen. a prerendered
+  // page fetches nothing before activation.
+  const warmProof = () => {
+    if (doc.prerendering !== true && !canSee() && !trackingDisabled()) {
+      void currentProof().proof.catch(() => undefined);
+    }
+  };
+
+  // pagehide of a show that was never visible. synchronous, because the page
+  // is going away: only a proof that is already solved can be used, so a
+  // page closed within moments of loading may send nothing. it carries no
+  // url, so no before-send hook needs to see it.
+  const neverVisible = () => {
+    if (seen || doc.prerendering === true || trackingDisabled()) return;
+    const s = slot;
+    if (!usable(s) || !s.ready) return;
+    s.uses++;
+    const event: WireEvent = {
+      v: WIRE_VERSION,
+      sv: VERSION,
+      w: website,
+      t: "nv",
+      h: clip(hostname, LIMITS.hostname),
+      ts: Date.now(),
+      p: s.ready,
+    };
+    if (framed) event.fr = true;
+    try {
+      win
+        .fetch(`${host}${EVENT_PATH}`, {
+          method: "POST",
+          keepalive: true,
+          credentials: "omit",
+          headers: { "Content-Type": EVENT_CONTENT_TYPE },
+          body: encodeEvent(event),
+        })
+        .catch(() => undefined);
+    } catch {
+      // a page that is being torn down may refuse new requests
+    }
+  };
+
+  const watchVisibility = () => {
+    if (canSee()) seen = true;
+    document.addEventListener("visibilitychange", onShown);
+    document.addEventListener("prerenderingchange", onShown);
+    win.addEventListener("pagehide", neverVisible);
+    // a restore from the back/forward cache is a new show of the page: it
+    // counts again once visible, and can end unseen like a load
+    win.addEventListener("pageshow", (e: PageTransitionEvent) => {
+      if (!e.persisted) return;
+      seen = false;
+      pageview();
+      warmProof();
+    });
+  };
+
   /* navigation */
 
   // a call for the url already current changes nothing. next.js calls
@@ -327,7 +448,7 @@ export function createTracker(window: Window, options: TrackerOptions): Tracker 
     if (next === currentUrl) return;
     currentRef = currentUrl;
     currentUrl = next;
-    setTimeout(() => void track(), DELAY_MS);
+    setTimeout(pageview, DELAY_MS);
   };
 
   const hookHistory = () => {
@@ -390,7 +511,9 @@ export function createTracker(window: Window, options: TrackerOptions): Tracker 
   const start = () => {
     if (initialized) return;
     initialized = true;
-    void track().catch(() => undefined);
+    watchVisibility();
+    pageview();
+    warmProof();
     hookHistory();
     handleClicks();
     // started with tracking, so a consent-gated site does not have the kit's
