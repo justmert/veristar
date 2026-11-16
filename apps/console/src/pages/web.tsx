@@ -372,8 +372,9 @@ function Dashboard({
           const v = metricValue(cur, t.metric);
           const chartable = !single || t.metric === "pageviews" || t.metric === "visitors";
           return (
-            <StaggerItem key={t.metric}>
+            <StaggerItem key={t.metric} className="flex">
               <StatTile
+                className="w-full"
                 label={t.label}
                 hint={t.hint}
                 value={formatMetric(t.metric, v)}
@@ -447,8 +448,11 @@ function DayChart({ summary, metric }: { summary: WebSummary; metric: WebMetric 
   const label = METRIC_TILES.find((t) => t.metric === metric)?.label ?? metric;
   const values = summary.current.series.map((p) => pointValue(p, metric) ?? 0);
   const previous = summary.previous.series.map((p) => pointValue(p, metric) ?? 0);
+  const chartState = summary.current.totals.pageviews === 0 ? "empty" : "data";
   return (
     <TimeChart
+      // a remount from empty to data gives the reveal observer the plot
+      key={chartState}
       title={`${label} per day`}
       buckets={buckets}
       series={[{ key: metric, label, tone: "series-1", values }]}
@@ -456,7 +460,7 @@ function DayChart({ summary, metric }: { summary: WebSummary; metric: WebMetric 
       previousLabel="Previous period"
       format={(n) => formatMetric(metric, n)}
       higherIsBetter={higherIsBetter(metric)}
-      state={summary.current.totals.pageviews === 0 ? "empty" : "data"}
+      state={chartState}
       emptyTitle="No page views in this range"
       emptyText="Numbers appear here within an hour of the first page view."
     />
@@ -481,13 +485,17 @@ function HourChart({ tenantId, q, metric }: { tenantId: string; q: WebQuery; met
   const pv = metric === "pageviews";
   const values = (h.data?.points ?? []).map((p) => (pv ? p.pageviews : p.visitors));
   const total = (h.data?.points ?? []).reduce((a, p) => a + p.pageviews, 0);
+  const state = h.isPending ? "loading" : h.error ? "error" : total === 0 ? "empty" : "data";
   return (
     <TimeChart
+      // the plot reveals itself once it is in view; a remount on a new state
+      // gives the observer the plot element, which loading did not render
+      key={state}
       title={`${pv ? "Page views" : "Visitors"} per hour`}
       description="Read live from the analytics engine; the totals above follow within the hour."
       buckets={buckets}
       series={[{ key: metric, label: pv ? "Page views" : "Visitors", tone: "series-1", values }]}
-      state={h.isPending ? "loading" : h.error ? "error" : total === 0 ? "empty" : "data"}
+      state={state}
       error={h.error}
       onRetry={() => h.refetch()}
       emptyTitle="No page views on this day"
