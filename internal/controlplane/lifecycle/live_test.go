@@ -670,10 +670,10 @@ func testRemove(t *testing.T, e *env, op *client) {
 	require.Equal(t, 3, e.count(t, `select count(*) from cp.tenant_members where tenant_id = $1`, tenant))
 	require.Equal(t, 1, e.count(t, `select count(*) from cp.tenant_removals where tenant_id = $1 and completed_at is not null
 		and requested_by = $2 and reason = 'not built on stellar' and keep_aggregates = false
-		and steps ?& array['registry', 'otlp_tokens', 'umami', 'web_ingest', 'api', 'agg']`, tenant, op.userID))
+		and steps ?& array['registry', 'otlp_tokens', 'umami', 'web_ingest', 'api', 'agg', 'chain']`, tenant, op.userID))
 	require.Equal(t, 1, e.count(t, `select count(*) from cp.audit_log where action = 'tenant.remove' and target = $1
 		and actor = $2 and detail->>'reason' = 'not built on stellar'`, "tenant:"+tenant.String(), "user:"+op.userID.String()))
-	require.Equal(t, 6, e.count(t, `select count(*) from cp.audit_log where action = 'purge.step' and actor = 'system:purge'
+	require.Equal(t, 7, e.count(t, `select count(*) from cp.audit_log where action = 'purge.step' and actor = 'system:purge'
 		and detail->>'tenant_id' = $1`, tenant.String()))
 	require.Equal(t, 1, e.count(t, `select count(*) from cp.audit_log where action = 'purge.complete' and detail->>'tenant_id' = $1`, tenant.String()))
 	require.Positive(t, e.count(t, `select count(*) from cp.audit_log where action = 'tenant.create' and target = $1`, "tenant:"+tenant.String()))
