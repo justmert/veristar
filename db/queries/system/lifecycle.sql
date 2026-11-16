@@ -120,3 +120,9 @@ select value from cp.settings where key = 'removal_keep_aggregates' for update;
 
 -- name: SetRemovalKeepAggregates :exec
 update cp.settings set value = to_jsonb(@keep::boolean) where key = 'removal_keep_aggregates';
+
+-- name: PurgeWebEvidence :execrows
+delete from cp.web_evidence_daily where tenant_id = @tenant_id;
+
+-- name: PurgeWebNetworks :execrows
+delete from cp.web_networks_daily where tenant_id = @tenant_id;

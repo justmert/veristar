@@ -1,5 +1,7 @@
 // Package edgestats is the jobs task that drains EDGE_STATS into
-// cp.web_ingest_hourly. each message is applied in one fenced transaction
+// cp.web_ingest_hourly, and the integrity evidence it carries into
+// cp.web_evidence_daily (events by network class) and cp.web_networks_daily
+// (networks seen per site and day). each message is applied in one fenced transaction
 // that also records its message id in cp.stats_dedup, so a message that is
 // delivered again (a crash between commit and ack, or a producer retry after
 // the stream's duplicate window) adds nothing the second time.
@@ -10,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -19,6 +22,7 @@ import (
 
 	"github.com/justmert/veristar/internal/db/jobsq"
 	"github.com/justmert/veristar/internal/events"
+	"github.com/justmert/veristar/internal/integrity"
 	"github.com/justmert/veristar/internal/natsx"
 	"github.com/justmert/veristar/internal/registry"
 )
@@ -260,8 +264,31 @@ func (d *Drainer) Handle(ctx context.Context, tx TxFunc, msg jetstream.Msg) erro
 			len(missing), meta.NumDelivered, unknownSiteRetries)
 	}
 
+	// the evidence families go to their daily tables, never into the
+	// outcome counters that tenants and operators read as requests
+	day := hour.Truncate(24 * time.Hour)
 	p := jobsq.AddIngestCountsParams{Hour: hour}
+	ev := jobsq.AddEvidenceCountsParams{Day: day}
+	nets := jobsq.AddNetworkSightingsParams{Day: day}
 	for k, n := range sums {
+		if class, ok := integrity.ParseEvidenceOutcome(k.outcome); ok {
+			ev.SiteIds = append(ev.SiteIds, k.site)
+			ev.TenantIds = append(ev.TenantIds, tenants[k.site])
+			ev.Classes = append(ev.Classes, string(class))
+			ev.Counts = append(ev.Counts, n)
+			continue
+		}
+		if integrity.IsNetworkOutcome(k.outcome) {
+			nets.SiteIds = append(nets.SiteIds, k.site)
+			nets.TenantIds = append(nets.TenantIds, tenants[k.site])
+			nets.Networks = append(nets.Networks, k.outcome[len(integrity.NetworkPrefix):])
+			continue
+		}
+		if strings.HasPrefix(k.outcome, integrity.EvidencePrefix) {
+			// an evidence class this version does not know cannot be stored
+			// as a request outcome either
+			return natsx.Permanent(fmt.Errorf("edgestats: unknown evidence outcome %q", k.outcome))
+		}
 		p.SiteIds = append(p.SiteIds, k.site)
 		p.TenantIds = append(p.TenantIds, tenants[k.site])
 		p.Outcomes = append(p.Outcomes, k.outcome)
@@ -278,11 +305,20 @@ func (d *Drainer) Handle(ctx context.Context, tx TxFunc, msg jetstream.Msg) erro
 			duplicate = true
 			return nil
 		}
-		if len(p.SiteIds) == 0 {
-			return nil
+		if len(p.SiteIds) > 0 {
+			if err := q.AddIngestCounts(ctx, p); err != nil {
+				return fmt.Errorf("edgestats: add counts: %w", err)
+			}
 		}
-		if err := q.AddIngestCounts(ctx, p); err != nil {
-			return fmt.Errorf("edgestats: add counts: %w", err)
+		if len(ev.SiteIds) > 0 {
+			if err := q.AddEvidenceCounts(ctx, ev); err != nil {
+				return fmt.Errorf("edgestats: add evidence: %w", err)
+			}
+		}
+		if len(nets.SiteIds) > 0 {
+			if err := q.AddNetworkSightings(ctx, nets); err != nil {
+				return fmt.Errorf("edgestats: add networks: %w", err)
+			}
 		}
 		return nil
 	})
@@ -296,10 +332,15 @@ func (d *Drainer) Handle(ctx context.Context, tx TxFunc, msg jetstream.Msg) erro
 	}
 	d.metrics.applied.Inc()
 	for _, s := range missing {
+		// network keys are many and daily: one label for all of them
+		outcome := s.Outcome
+		if integrity.IsNetworkOutcome(outcome) {
+			outcome = "network"
+		}
 		d.metrics.dropped.Add(float64(s.Count))
-		d.metrics.unattributed.WithLabelValues(s.Outcome).Add(float64(s.Count))
+		d.metrics.unattributed.WithLabelValues(outcome).Add(float64(s.Count))
 		d.log.Error("edge stats counter dropped, site not in the registry", "message_id", id,
-			"site_id", s.SiteID, "outcome", s.Outcome, "count", s.Count)
+			"site_id", s.SiteID, "outcome", outcome, "count", s.Count)
 	}
 	return nil
 }

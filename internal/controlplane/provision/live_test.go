@@ -1,6 +1,7 @@
 package provision_test
 
 import (
+	"context"
 	"crypto/rand"
 	"errors"
 	"io"
@@ -25,6 +26,7 @@ import (
 	"github.com/justmert/veristar/internal/controlplane/session"
 	"github.com/justmert/veristar/internal/controlplane/sso"
 	pdb "github.com/justmert/veristar/internal/db"
+	"github.com/justmert/veristar/internal/db/dbtest"
 	"github.com/justmert/veristar/internal/jobs/jobstest"
 	"github.com/justmert/veristar/internal/jobs/umamirotate"
 	"github.com/justmert/veristar/internal/natsx"
@@ -58,6 +60,7 @@ type env struct {
 	clock *clock
 	srv   *httptest.Server
 	rot   *umamirotate.Rotator
+	pg    *dbtest.Postgres
 }
 
 func start(t *testing.T) *env {
@@ -89,7 +92,7 @@ func start(t *testing.T) *env {
 	c := &clock{now: time.Now().UTC()}
 	log := slog.New(slog.DiscardHandler)
 	e := &env{
-		d: d, kv: kv, um: um, web: web, key: key, clock: c,
+		d: d, kv: kv, um: um, web: web, key: key, clock: c, pg: pg,
 		rec: &provision.Reconciler{Admin: um.Admin, Registry: pub, Key: key, Tx: d.WithSystem, Now: c.Now, Log: log},
 		rot: &umamirotate.Rotator{Admin: um.Admin, Key: key, Now: c.Now, Log: log},
 	}
@@ -377,6 +380,38 @@ func TestProvisioningLive(t *testing.T) {
 			require.NoError(t, err)
 			require.Empty(t, again)
 		}
+	})
+
+	// the integrity task's baseline reaches the gateway as the site's
+	// scale, rounded to a power of two, so day-to-day noise rewrites nothing
+	t.Run("the integrity baseline reaches the registry entry as the scale", func(t *testing.T) {
+		c, err := e.pg.Superuser(ctx, "platform")
+		require.NoError(t, err)
+		defer func() { _ = c.Close(context.Background()) }()
+		grade := func(day time.Time, baseline int64) {
+			_, err := c.Exec(ctx, `insert into agg.web_integrity_daily (site_id, tenant_id, day, rule_version, grade, closed,
+			    events, quarantined, proof_failures, net_access, net_organisation, net_hosting, net_anonymiser, net_unknown,
+			    networks, visitors, pageviews, baseline_visitors, baseline_days, reasons)
+			  values ($1, $2, $3, 1, 'A', true, 100, 0, 0, 100, 0, 0, 0, 0, 10, 50, 80, $4, 28, '[]')`,
+				s.id, tenant, day, baseline)
+			require.NoError(t, err)
+		}
+		today := time.Now().UTC().Truncate(24 * time.Hour)
+		grade(today.AddDate(0, 0, -2), 100)
+		grade(today.AddDate(0, 0, -1), 5000)
+		changes, err := e.rec.Changes(ctx, tenant)
+		require.NoError(t, err)
+		require.Equal(t, []string{provision.ActionRegistryPut}, actions(changes))
+		entry, err := e.kv.Get(ctx, s.id.String())
+		require.NoError(t, err)
+		got, err := registry.DecodeSite(s.id.String(), entry.Value())
+		require.NoError(t, err)
+		require.Equal(t, 4096, got.Scale, "the latest baseline, rounded down to a power of two")
+		// a baseline within the same power of two changes nothing
+		grade(today, 6000)
+		again, err := e.rec.Changes(ctx, tenant)
+		require.NoError(t, err)
+		require.Empty(t, again)
 	})
 
 	t.Run("a website deleted directly in umami is repaired", func(t *testing.T) {

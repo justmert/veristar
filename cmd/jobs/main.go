@@ -41,6 +41,7 @@ import (
 	"github.com/justmert/veristar/internal/jobs/chainactivity"
 	"github.com/justmert/veristar/internal/jobs/edgestats"
 	"github.com/justmert/veristar/internal/jobs/erasurefollowup"
+	"github.com/justmert/veristar/internal/jobs/integrity"
 	"github.com/justmert/veristar/internal/jobs/reconcile"
 	"github.com/justmert/veristar/internal/jobs/retainweb"
 	"github.com/justmert/veristar/internal/jobs/scheduler"
@@ -67,10 +68,13 @@ commands:
                     ` + reconcile.TaskName + `, ` + umamirotate.TaskName + `, ` + sessionprune.TaskName + `,
                     ` + verifydomains.TaskName + `, ` + apirollup.TaskName + `, ` + apipartition.TaskName + `,
                     ` + apiretention.TaskName + `, ` + aggregateweb.TaskName + `,
-                    ` + erasurefollowup.TaskName + `, ` + chainactivity.TaskName + `)
+                    ` + erasurefollowup.TaskName + `, ` + chainactivity.TaskName + `,
+                    ` + integrity.TaskName + `)
   run ` + aggregateweb.TaskName + ` --from <yyyy-mm-dd> --to <yyyy-mm-dd>
                     read the web aggregates of every active site again for
                     each utc day of the range, both days included
+  run ` + integrity.TaskName + ` --from <yyyy-mm-dd> --to <yyyy-mm-dd>
+                    grade every site again for each utc day of the range
   run ` + umamirotate.TaskName + ` --force
                     set every umami user's password for today even when
                     today's rotation is recorded; run it after
@@ -194,7 +198,7 @@ func parseRange(task string, args []string) (*dayRange, error) {
 	if len(args) == 0 {
 		return nil, nil
 	}
-	if task != aggregateweb.TaskName {
+	if task != aggregateweb.TaskName && task != integrity.TaskName {
 		return nil, fmt.Errorf("takes no arguments, got %q", strings.Join(args, " "))
 	}
 	fs := flag.NewFlagSet("jobs run "+task, flag.ContinueOnError)
@@ -232,6 +236,7 @@ type deps struct {
 	sites   *registry.Watcher[registry.Site]
 	sched   *scheduler.Scheduler
 	aggWeb  *aggregateweb.Aggregator
+	grader  *integrity.Grader
 	rotator *umamirotate.Rotator
 	reg     *prometheus.Registry
 	stop    func()
@@ -439,6 +444,16 @@ func open(ctx context.Context, env *config.Env, log *slog.Logger, opsAddr bool) 
 		_, err := aggWeb.Run(ctx, l.Tx)
 		return err
 	}
+	// grades read what aggregate-web and edgestats wrote
+	grader, err := integrity.New(sites, time.Now, log, reg)
+	if err != nil {
+		closeAll()
+		return nil, "", err
+	}
+	grade := func(ctx context.Context, l *scheduler.Leader) error {
+		_, err := grader.Run(ctx, l.Tx)
+		return err
+	}
 	followup, err := erasurefollowup.New(aggWeb, time.Now, log)
 	if err != nil {
 		closeAll()
@@ -521,6 +536,11 @@ func open(ctx context.Context, env *config.Env, log *slog.Logger, opsAddr bool) 
 		Run:   aggregate,
 		Once:  aggregate,
 	}, {
+		Name:  integrity.TaskName,
+		Every: integrity.Every,
+		Run:   grade,
+		Once:  grade,
+	}, {
 		Name:  erasurefollowup.TaskName,
 		Every: erasurefollowup.Every,
 		Run:   followErasure,
@@ -537,6 +557,7 @@ func open(ctx context.Context, env *config.Env, log *slog.Logger, opsAddr bool) 
 		db:      d,
 		sites:   sites,
 		aggWeb:  aggWeb,
+		grader:  grader,
 		rotator: rotator,
 		reg:     reg,
 		sched: &scheduler.Scheduler{
@@ -638,10 +659,17 @@ func runOnce(ctx context.Context, env *config.Env, log *slog.Logger, name string
 		// a backfill is the same task over another range, under the same
 		// lock and fence as a regular run
 		for i := range dp.sched.Tasks {
-			if dp.sched.Tasks[i].Name == aggregateweb.TaskName {
+			switch dp.sched.Tasks[i].Name {
+			case aggregateweb.TaskName:
 				dp.sched.Tasks[i].Once = func(ctx context.Context, l *scheduler.Leader) error {
 					res, err := dp.aggWeb.Backfill(ctx, l.Tx, days.from, days.to)
 					log.Info("aggregate web backfill", "sites", res.Sites, "days", res.Days, "skipped", res.Skipped)
+					return err
+				}
+			case integrity.TaskName:
+				dp.sched.Tasks[i].Once = func(ctx context.Context, l *scheduler.Leader) error {
+					res, err := dp.grader.Backfill(ctx, l.Tx, days.from, days.to)
+					log.Info("integrity backfill", "sites", res.Sites, "days", res.Days, "waiting", res.Waiting)
 					return err
 				}
 			}

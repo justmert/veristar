@@ -437,12 +437,36 @@ func (q *Queries) PurgeSites(ctx context.Context, tenantID uuid.UUID) ([]PurgeSi
 	return items, nil
 }
 
+const purgeWebEvidence = `-- name: PurgeWebEvidence :execrows
+delete from cp.web_evidence_daily where tenant_id = $1
+`
+
+func (q *Queries) PurgeWebEvidence(ctx context.Context, tenantID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, purgeWebEvidence, tenantID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const purgeWebIngest = `-- name: PurgeWebIngest :execrows
 delete from cp.web_ingest_hourly where tenant_id = $1
 `
 
 func (q *Queries) PurgeWebIngest(ctx context.Context, tenantID uuid.UUID) (int64, error) {
 	result, err := q.db.Exec(ctx, purgeWebIngest, tenantID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const purgeWebNetworks = `-- name: PurgeWebNetworks :execrows
+delete from cp.web_networks_daily where tenant_id = $1
+`
+
+func (q *Queries) PurgeWebNetworks(ctx context.Context, tenantID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, purgeWebNetworks, tenantID)
 	if err != nil {
 		return 0, err
 	}

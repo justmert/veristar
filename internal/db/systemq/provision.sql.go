@@ -82,6 +82,38 @@ func (q *Queries) ProvisionSetTeam(ctx context.Context, arg ProvisionSetTeamPara
 	return err
 }
 
+const provisionSiteBaselines = `-- name: ProvisionSiteBaselines :many
+select b.site_id::uuid as site_id, b.baseline_visitors::bigint as baseline_visitors
+from agg.site_baselines($1::uuid) as b
+`
+
+type ProvisionSiteBaselinesRow struct {
+	SiteID           uuid.UUID
+	BaselineVisitors int64
+}
+
+// the latest baseline of each site through the security definer function
+// of 00033 (cp_system has no right in agg itself)
+func (q *Queries) ProvisionSiteBaselines(ctx context.Context, tenantID uuid.UUID) ([]ProvisionSiteBaselinesRow, error) {
+	rows, err := q.db.Query(ctx, provisionSiteBaselines, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ProvisionSiteBaselinesRow{}
+	for rows.Next() {
+		var i ProvisionSiteBaselinesRow
+		if err := rows.Scan(&i.SiteID, &i.BaselineVisitors); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const provisionSites = `-- name: ProvisionSites :many
 select id, name, domain, origins, quarantine_website_id, status, collect_utm
 from cp.sites

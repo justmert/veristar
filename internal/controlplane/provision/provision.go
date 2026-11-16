@@ -29,6 +29,7 @@ import (
 	"github.com/justmert/veristar/internal/controlplane/lifecycle"
 	"github.com/justmert/veristar/internal/controlplane/otlptokens"
 	"github.com/justmert/veristar/internal/db/systemq"
+	"github.com/justmert/veristar/internal/integrity"
 	"github.com/justmert/veristar/internal/registry"
 	"github.com/justmert/veristar/internal/umami"
 )
@@ -118,6 +119,9 @@ type run struct {
 	tenant  systemq.ProvisionLockTenantRow
 	adminID string
 	changes []Change
+	// scales are the sites' typical daily visitors as registry scales
+	// (integrity.ScaleOf of the integrity task's baseline)
+	scales map[uuid.UUID]int
 }
 
 // record writes one audit row in the run's transaction.
@@ -238,6 +242,14 @@ func (s *run) reconcile(ctx context.Context) error {
 	}
 	if err := s.memberships(ctx, teamID, members); err != nil {
 		return err
+	}
+	baselines, err := s.q.ProvisionSiteBaselines(ctx, s.tenant.ID)
+	if err != nil {
+		return fmt.Errorf("provision: site baselines: %w", err)
+	}
+	s.scales = make(map[uuid.UUID]int, len(baselines))
+	for _, b := range baselines {
+		s.scales[b.SiteID] = integrity.ScaleOf(b.BaselineVisitors)
 	}
 	for _, site := range sites {
 		if err := s.site(ctx, teamID, site); err != nil {
@@ -541,6 +553,7 @@ func (s *run) registryPut(ctx context.Context, site systemq.ProvisionSitesRow) e
 		Origins:             site.Origins,
 		QuarantineWebsiteID: site.QuarantineWebsiteID.UUID.String(),
 		CollectUTM:          site.CollectUtm,
+		Scale:               s.scales[site.ID],
 	}
 	if want.Origins == nil {
 		want.Origins = []string{}
@@ -551,7 +564,7 @@ func (s *run) registryPut(ctx context.Context, site systemq.ProvisionSitesRow) e
 	}
 	if ok && have.TenantID == want.TenantID && have.Status == want.Status &&
 		have.QuarantineWebsiteID == want.QuarantineWebsiteID && slices.Equal(have.Origins, want.Origins) &&
-		have.CollectUTM == want.CollectUTM {
+		have.CollectUTM == want.CollectUTM && have.Scale == want.Scale {
 		return nil
 	}
 	if err := s.r.Registry.PutSite(ctx, want); err != nil {
@@ -559,7 +572,7 @@ func (s *run) registryPut(ctx context.Context, site systemq.ProvisionSitesRow) e
 	}
 	return s.audit(ctx, ActionRegistryPut, "site:"+want.ID, map[string]any{
 		"status": want.Status, "origins": want.Origins, "quarantine_website_id": want.QuarantineWebsiteID,
-		"collect_utm": want.CollectUTM,
+		"collect_utm": want.CollectUTM, "scale": want.Scale,
 	})
 }
 

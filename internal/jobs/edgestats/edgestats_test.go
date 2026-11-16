@@ -121,6 +121,41 @@ func TestEdgeStats(t *testing.T) {
 		require.ElementsMatch(t, []string{"edge-1.100", "edge-2.100", "edge-1.101"}, jobstest.DedupIDs(t, e.db))
 	})
 
+	t.Run("evidence goes to its own daily tables, never into the outcomes", func(t *testing.T) {
+		before := jobstest.Totals(t, e.db)
+		e.publish(t, "edge-1", 150, map[string]int64{
+			"accepted": 4, "evidence_net_access": 3, "evidence_net_hosting": 1,
+			"network_00000000000000aa": 1, "network_00000000000000bb": 1,
+		})
+		// a second node reports one of the same networks and another event
+		e.publish(t, "edge-2", 150, map[string]int64{
+			"accepted": 1, "evidence_net_access": 1, "network_00000000000000aa": 1,
+		})
+		n, err := e.drainer.Drain(t.Context(), e.leader.Tx)
+		require.NoError(t, err)
+		require.Equal(t, 2, n)
+		after := jobstest.Totals(t, e.db)
+		require.Equal(t, before[e.site.String()+"/accepted"]+5, after[e.site.String()+"/accepted"])
+		for k := range after {
+			require.NotContains(t, k, "evidence_", "evidence must not become a request outcome")
+			require.NotContains(t, k, "network_", "a network must not become a request outcome")
+		}
+		var access, hosting, networks int64
+		err = e.db.WithRole(t.Context(), pdb.RoleJobs, func(tx pgx.Tx) error {
+			if err := tx.QueryRow(t.Context(), `select
+			    coalesce(sum(count) filter (where class = 'access'), 0), coalesce(sum(count) filter (where class = 'hosting'), 0)
+			  from cp.web_evidence_daily where site_id = $1`, e.site).Scan(&access, &hosting); err != nil {
+				return err
+			}
+			return tx.QueryRow(t.Context(), `select count(*) from cp.web_networks_daily where site_id = $1 and tenant_id = $2`,
+				e.site, e.tenant).Scan(&networks)
+		})
+		require.NoError(t, err)
+		require.Equal(t, int64(4), access)
+		require.Equal(t, int64(1), hosting)
+		require.Equal(t, int64(2), networks, "a network two nodes report counts once")
+	})
+
 	t.Run("a redelivered message is not counted twice", func(t *testing.T) {
 		before := e.total(t, "accepted")
 		e.publish(t, "edge-1", 200, map[string]int64{"accepted": 4})

@@ -24,3 +24,19 @@ on conflict (site_id, hour, outcome) do update
 -- past the stream's max age, so no pruned id can be delivered again.
 delete from cp.stats_dedup
 where applied_at < @cutoff::timestamptz;
+
+-- name: AddEvidenceCounts :exec
+-- adds one message's network class counters to their daily rows, like
+-- AddIngestCounts: parallel arrays, each (site, class) once
+insert into cp.web_evidence_daily (site_id, tenant_id, day, class, count)
+select unnest(@site_ids::uuid[]), unnest(@tenant_ids::uuid[]), @day::date,
+       unnest(@classes::text[]), unnest(@counts::bigint[])
+on conflict (site_id, day, class) do update
+  set count = cp.web_evidence_daily.count + excluded.count;
+
+-- name: AddNetworkSightings :exec
+-- records the networks one message reports. a network that another node, or
+-- a redelivery, reported before is already in the set
+insert into cp.web_networks_daily (site_id, tenant_id, day, network)
+select unnest(@site_ids::uuid[]), unnest(@tenant_ids::uuid[]), @day::date, unnest(@networks::text[])
+on conflict (site_id, day, network) do nothing;
