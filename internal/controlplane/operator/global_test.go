@@ -359,6 +359,9 @@ func webSortValue(p WebProject, sort string) sortVal {
 		}
 		return intv(int64(integrity.Rank(*p.Integrity.Grade)))
 	}
+	if v, ok := kpiSortValue(p.Comparison, sort); ok {
+		return v
+	}
 	panic("unknown web sort " + sort)
 }
 
@@ -393,7 +396,27 @@ func apiSortValue(p APIProject, sort string) sortVal {
 	case "routes":
 		return intv(p.Routes)
 	}
+	if v, ok := kpiSortValue(p.Comparison, sort); ok {
+		return v
+	}
 	panic("unknown api sort " + sort)
+}
+
+// kpiSortValue is the value of a growth or percentile sort (contract 19.2)
+func kpiSortValue(c Comparison, sort string) (sortVal, bool) {
+	k := map[string]KPI{
+		"visitors": c.KPIs.Visitors, "pageviews": c.KPIs.Pageviews, "requests": c.KPIs.Requests,
+		"error_rate": c.KPIs.ErrorRate, "onchain_operations": c.KPIs.OnchainOperations,
+	}
+	for name, v := range k {
+		switch sort {
+		case name + "_growth", name + "_change":
+			return num(v.Change), true
+		case name + "_percentile":
+			return num(v.Percentile), true
+		}
+	}
+	return sortVal{}, false
 }
 
 func webID(p WebProject) uuid.UUID { return p.Tenant.ID }

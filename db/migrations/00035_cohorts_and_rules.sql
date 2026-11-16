@@ -99,9 +99,13 @@ language plpgsql
 set search_path = pg_catalog, pg_temp
 as $$
 begin
-  if current_user = 'cp_tenant' and new.proposed_by is distinct from cp.app_user_id() then
-    raise exception 'cp_tenant proposals must name the session user'
-      using errcode = 'insufficient_privilege';
+  -- nested, so cp.app_user_id() runs only as cp_tenant, the one role
+  -- allowed to execute it
+  if current_user = 'cp_tenant' then
+    if new.proposed_by is distinct from cp.app_user_id() then
+      raise exception 'cp_tenant proposals must name the session user'
+        using errcode = 'insufficient_privilege';
+    end if;
   end if;
   return new;
 end
