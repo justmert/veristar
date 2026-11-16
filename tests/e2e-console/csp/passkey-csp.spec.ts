@@ -173,7 +173,7 @@ test("passkey sign-in runs under the console's security headers", async ({ page,
     };
     expect(cd).toMatchObject({ type: "webauthn.get", challenge: CHALLENGE, origin });
     // user present and user verified
-    expect(Buffer.from(a.authenticator_data ?? "", "base64url")[32] & 0x05).toBe(0x05);
+    expect((Buffer.from(a.authenticator_data ?? "", "base64url")[32] ?? 0) & 0x05).toBe(0x05);
   }
 
   expect(errors).toEqual([]);
