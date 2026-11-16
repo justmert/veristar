@@ -10,6 +10,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@creit.tech/stellar-wallets-kit": "catalog:",
     "@tanstack/react-query": "catalog:",
     "@veristar/brand": "workspace:*",
     "class-variance-authority": "catalog:",
@@ -24,6 +25,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@stellar/stellar-sdk": "catalog:",
     "@tailwindcss/vite": "catalog:",
     "@types/node": "catalog:",
     "@types/react": "catalog:",

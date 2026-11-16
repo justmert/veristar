@@ -1,4 +1,5 @@
 import { ApiError, ResponseShapeError } from "@/api/client";
+import { WalletError } from "@/lib/stellar-wallet";
 
 // people-facing text for an error thrown by the api client. codes come from
 // contract 2.4; the request id is shown so a report can be traced in the logs.
@@ -61,6 +62,20 @@ export function errorText(err: unknown): string {
     }
   }
   if (err instanceof ResponseShapeError) return err.message;
+  if (err instanceof WalletError) {
+    switch (err.code) {
+      case "rejected":
+        return "The wallet declined the request. Nothing was signed.";
+      case "unavailable":
+        return "The wallet is not installed or is locked. Unlock it and try again.";
+      case "wrong_account":
+        return "The wallet signed with another account. Switch to the account you chose and try again.";
+      case "unsupported":
+        return "This wallet cannot sign this kind of request. Choose another wallet.";
+      default:
+        return `The wallet reported an error: ${err.message}`;
+    }
+  }
   if (err instanceof TypeError)
     return "The console could not reach the server. Check your connection.";
   return err instanceof Error ? err.message : "Something went wrong.";
