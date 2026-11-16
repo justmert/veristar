@@ -100,8 +100,9 @@ func TestSchemaDatabaseAndFunctionRights(t *testing.T) {
 		"cp": pdb.AppRoles,
 		// cp_system only to call api.purge_tenant (00017); it has no table right
 		"api": pdb.AppRoles,
-		// cp_system only to call agg.purge_tenant (00019)
-		"agg":    {pdb.RoleCPSystem, pdb.RoleCPOperator, pdb.RoleJobs},
+		// cp_system only to call agg.purge_tenant (00019); cp_tenant reads
+		// its own chain and web rows (00032)
+		"agg":    {pdb.RoleCPSystem, pdb.RoleCPTenant, pdb.RoleCPOperator, pdb.RoleJobs},
 		"public": pdb.AppRoles,
 	}
 	for schema, roles := range wantUsage {
@@ -180,6 +181,9 @@ func TestSchemaDatabaseAndFunctionRights(t *testing.T) {
 		"api.operator_hourly(timestamp with time zone,timestamp with time zone,uuid[])": {pdb.RoleCPOperator},
 		"api.operator_daily(timestamp with time zone,timestamp with time zone,uuid[])":  {pdb.RoleCPOperator},
 		"agg.purge_tenant(uuid)": {pdb.RoleCPSystem},
+		// the chain purge (00032); the enrollment trigger runs as its owner
+		"agg.purge_chain(uuid,boolean)": {pdb.RoleCPSystem},
+		"cp.chain_ids_from_enrollment()":       nil,
 	}
 	var names []string
 	for _, f := range fns {

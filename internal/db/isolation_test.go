@@ -73,9 +73,28 @@ var tenantTables = []tenantTable{
 	{name: "api.route_registry", key: "tenant_id", denied: true},
 	// read-only since 00021: hourly and daily answers read pending hours
 	{name: "api.rollup_pending", key: "tenant_id"},
-	// agg: operators only; cp_tenant has no usage on the schema
-	{name: "agg.web_daily", key: "tenant_id", denied: true},
+	// the on-chain footprint (00032): a tenant adds its own ids
+	{name: "cp.chain_ids", key: "tenant_id", insert: func(tenant, _, _ uuid.UUID) (string, []any) {
+		return `insert into cp.chain_ids (tenant_id, strkey, kind, added_by) values ($1, $2, 'contract', 'console')`,
+			[]any{tenant, randomContract()}
+	}},
+	// agg: cp_tenant reads its own web and chain rows (00032) and writes
+	// none; the dimensions stay operators only
+	{name: "agg.web_daily", key: "tenant_id"},
 	{name: "agg.web_daily_dim", key: "tenant_id", denied: true},
+	{name: "agg.chain_daily", key: "tenant_id"},
+	{name: "agg.chain_reads", key: "tenant_id"},
+}
+
+// randomContract is a string of the strkey shape cp.chain_ids checks
+func randomContract() string {
+	const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
+	b := []byte("C")
+	a, c := uuid.New(), uuid.New()
+	for _, x := range append(append(append(append([]byte{}, a[:]...), c[:]...), a[:]...), c[:]...)[:55] {
+		b = append(b, alphabet[int(x)%len(alphabet)])
+	}
+	return string(b)
 }
 
 // the isolation tests only mean something if they cover every tenant table

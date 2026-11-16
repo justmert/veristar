@@ -91,9 +91,22 @@ var Want = map[string]map[db.Role]string{
 	// cp_tenant reads its own pending hours (00021, control-plane-api 7.2)
 	"api.rollup_pending": {db.RoleCPTenant: "r", db.RoleMetricsWriter: "raw", db.RoleJobs: "rawd"},
 
-	// agg: read by operators, written by aggregate-web
-	"agg.web_daily":     {db.RoleCPOperator: "r", db.RoleJobs: "rawd"},
+	// the on-chain footprint (00032): a tenant adds and removes its own
+	// ids, cp_system writes challenges and verification, chain-activity
+	// reads the list
+	"cp.chain_ids": {
+		db.RoleCPSystem: "rawd", db.RoleCPTenant: "rd a(added_by,kind,strkey,tenant_id)",
+		db.RoleCPOperator: "r", db.RoleJobs: "r",
+	},
+
+	// agg: read by operators, written by aggregate-web; a tenant reads its
+	// own web rows for the overview export (00032)
+	"agg.web_daily":     {db.RoleCPTenant: "r", db.RoleCPOperator: "r", db.RoleJobs: "rawd"},
 	"agg.web_daily_dim": {db.RoleCPOperator: "r", db.RoleJobs: "rawd"},
+	// ledger activity (00032): written by chain-activity, read by the
+	// tenant (its own rows) and operators
+	"agg.chain_daily": {db.RoleCPTenant: "r", db.RoleCPOperator: "r", db.RoleJobs: "rawd"},
+	"agg.chain_reads": {db.RoleCPTenant: "r", db.RoleCPOperator: "r", db.RoleJobs: "rawd"},
 }
 
 // Right is one privilege: its acl letter and its sql name.
