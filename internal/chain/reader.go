@@ -193,12 +193,22 @@ func partial(from, last time.Time, by map[int64]*tally) []Day {
 	return days(from, last.AddDate(0, 0, -1), by)
 }
 
+// rpcMargin is how many ledgers (about ten minutes) above the server's
+// oldest one the reader starts.
+const rpcMargin = 100
+
 // RPCWindow returns the first whole utc day the rpc server holds events
 // for, and the server's health.
 func (r *Reader) RPCWindow(ctx context.Context) (time.Time, Health, error) {
 	h, err := r.RPC.Health(ctx)
 	if err != nil {
 		return time.Time{}, h, err
+	}
+	// the server drops its oldest ledgers continuously, so the oldest one
+	// of getHealth can be gone a moment later; reading a few minutes of
+	// ledgers above it keeps every later lookup inside the window
+	if h.LatestLedger > h.OldestLedger+rpcMargin {
+		h.OldestLedger += rpcMargin
 	}
 	at, err := r.RPC.LedgerClose(ctx, h.OldestLedger)
 	if err != nil {
