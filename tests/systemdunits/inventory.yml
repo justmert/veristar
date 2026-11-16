@@ -1,0 +1,12 @@
+---
+# test-only inventory of tests/systemdunits: one host per repository mode of
+# roles/backup. render.yml renders the backup units of each.
+all:
+  vars:
+    ansible_connection: local
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    sa_environment: test
+  hosts:
+    azure: {mode: azure, sa_private_ip: 10.10.1.11}
+    s3: {mode: s3, sa_private_ip: 10.10.1.12}
+    posix-host: {mode: posix-host, sa_private_ip: 10.10.1.13}
