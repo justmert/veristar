@@ -3,10 +3,12 @@
 // 8.1 and 8.2), sortable column headers with a magnitude bar on the sort
 // column, the selection for the comparison and the explanatory notes.
 
+import { useQuery } from "@tanstack/react-query";
 import { cn } from "@veristar/brand/cn";
 import { ArrowDown, ArrowUp, ArrowUpDown, Columns2, Search, X } from "lucide-react";
 import { type FormEvent, type ReactNode, useEffect, useId, useState } from "react";
 import { Link } from "react-router";
+import { type Cohort, type CohortValue, cohortListQuery, type Kpi } from "@/api/cohorts";
 import { type TenantStatus, tenantStatus } from "@/api/schemas";
 import { SERIES_BG } from "@/components/compare-charts";
 import { NativeSelect, TextField } from "@/components/form-field";
@@ -16,10 +18,14 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import {
   activeFilterCount,
+  COHORT_KEYS,
+  type CohortKey,
   compareSearch,
   type DayRange,
   EMPTY_FILTERS,
+  formatChange,
   formatDayRange,
+  formatPercentile,
   lastDays,
   MAX_COMPARE,
   type ProjectFilters,
@@ -316,6 +322,9 @@ export function FiltersPanel({
           value={filters.enrolled_to}
           onChange={(v) => onChange({ ...filters, enrolled_to: v })}
         />
+      </div>
+      <CohortFilters filters={filters} onChange={onChange} />
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 empty:hidden">
         {n > 0 ? (
           <Button type="button" variant="ghost" size="sm" onClick={() => onChange(EMPTY_FILTERS)}>
             <X aria-hidden />
@@ -324,6 +333,136 @@ export function FiltersPanel({
         ) : null}
       </div>
     </div>
+  );
+}
+
+const COHORT_TEXT: Record<CohortKey, string> = {
+  program: "Program",
+  round: "Round",
+  category: "Category",
+};
+
+// the cohort filters of contract 19.1: the values operators confirmed, read
+// from the cohort list. they narrow the list and set the population every
+// percentile column is computed in
+function CohortFilters({
+  filters,
+  onChange,
+}: {
+  filters: ProjectFilters;
+  onChange: (f: ProjectFilters) => void;
+}) {
+  const list = useQuery(cohortListQuery);
+  const values: Record<CohortKey, CohortValue[]> = {
+    program: list.data?.programs ?? [],
+    round: list.data?.rounds ?? [],
+    category: list.data?.categories ?? [],
+  };
+  return (
+    <fieldset className="grid grid-cols-2 gap-x-3 gap-y-2 sm:flex sm:flex-wrap sm:items-center sm:gap-x-4">
+      <legend className="sr-only">SCF cohort</legend>
+      {COHORT_KEYS.map((k) => {
+        const opts = values[k].map((v) => v.value);
+        // a value from the address that no project holds any more stays
+        // selectable, so the filter shown is the filter sent
+        if (filters[k] && !opts.includes(filters[k])) opts.unshift(filters[k]);
+        return (
+          <InlineSelect
+            key={k}
+            label={COHORT_TEXT[k]}
+            value={filters[k]}
+            onChange={(v) => onChange({ ...filters, [k]: v })}
+          >
+            <option value="">Any</option>
+            {opts.map((o) => (
+              <option key={o} value={o}>
+                {o}
+              </option>
+            ))}
+          </InlineSelect>
+        );
+      })}
+      <DayInput
+        label="Awarded from"
+        value={filters.award_from}
+        onChange={(v) => onChange({ ...filters, award_from: v })}
+      />
+      <DayInput
+        label="Awarded to"
+        value={filters.award_to}
+        onChange={(v) => onChange({ ...filters, award_to: v })}
+      />
+    </fieldset>
+  );
+}
+
+// ---- cohort and key metric cells (contract 19.2)
+
+// the sort names of the change and percentile columns, shared by both lists
+export const GROWTH_SORT_TEXT = {
+  visitors_growth: "Visitors change",
+  pageviews_growth: "Page views change",
+  requests_growth: "Requests change",
+  error_rate_change: "Error rate change",
+  onchain_operations_growth: "On-chain operations change",
+  visitors_percentile: "Visitors percentile",
+  pageviews_percentile: "Page views percentile",
+  requests_percentile: "Requests percentile",
+  error_rate_percentile: "Error rate percentile",
+  onchain_operations_percentile: "On-chain operations percentile",
+} as const;
+
+export function CohortLine({ cohort }: { cohort: Cohort }) {
+  const text = cohortText(cohort);
+  if (!text) return null;
+  return (
+    <span data-cohort className="mt-0.5 block truncate text-caption text-fg-3">
+      {text}
+      {cohort.award_date ? `, awarded ${cohort.award_date}` : ""}
+    </span>
+  );
+}
+
+// the cohort a project is confirmed in, as one short line
+export function cohortText(c: Cohort): string | null {
+  const parts = [c.program, c.round, c.category].filter((x): x is string => !!x);
+  return parts.length ? parts.join(", ") : null;
+}
+
+// a key metric's change against the previous period of equal length, with
+// its percentile in the cohort beneath. the title says what both mean.
+export function KpiCell({
+  k,
+  kind,
+  on,
+  label,
+}: {
+  k: Kpi;
+  kind: "relative" | "points";
+  on: boolean;
+  label: string;
+}) {
+  const change = formatChange(k.change, kind);
+  const pct = formatPercentile(k.percentile);
+  const title = [
+    change === null
+      ? `${label}: no previous value to compare with`
+      : `${label}: ${change} against the previous period`,
+    pct === null ? null : `${pct}: at or above ${pct.slice(1)}% of the cohort`,
+  ]
+    .filter(Boolean)
+    .join(". ");
+  return (
+    <Num className={on ? "text-fg" : undefined}>
+      <span className="flex flex-col items-end leading-tight" title={title}>
+        <span data-kpi="change">{orMissing(change)}</span>
+        {pct ? (
+          <span data-kpi="percentile" className="text-caption text-fg-3">
+            {pct} in cohort
+          </span>
+        ) : null}
+      </span>
+    </Num>
   );
 }
 
@@ -628,6 +767,9 @@ export const REJECTED_NOTE =
   "Rejected requests were refused by the gateway (invalid proof, wrong origin, rate limits, and browsers asking not to be tracked with Global Privacy Control); the share is rejected over all requests the gateway answered.";
 export const AGGREGATE_NOTE =
   "Every number here comes from daily aggregates. Web numbers are copied from Umami once an hour; API numbers from the daily rollup, refreshed every 5 minutes.";
+
+export const COHORT_NOTE =
+  "Change columns compare the range with the previous range of equal length. A percentile is the share of the cohort's projects with a value at or below this one, among active and suspended projects that match the cohort filters (all projects without them); for the error rate a higher percentile means more errors.";
 
 export function Notes({ items, children }: { items: string[]; children?: ReactNode }) {
   return (

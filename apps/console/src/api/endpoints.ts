@@ -71,6 +71,8 @@ export type EnrollmentInput = {
     scf_round_url?: string;
   };
   accepted_terms_version: string;
+  // 19.1 an optional cohort proposal
+  cohort?: { program?: string; round?: string; category?: string; award_date?: string };
 };
 
 export type SiteInput = { name: string; domain: string; origins: string[] };

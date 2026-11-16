@@ -18,6 +18,13 @@ export type ProjectFilters = {
   enrolled_from: string;
   enrolled_to: string;
   q: string;
+  // 19.1 the cohort filters; they also set the population every percentile
+  // is computed in
+  program: string;
+  round: string;
+  category: string;
+  award_from: string;
+  award_to: string;
 };
 
 // utc days yyyy-mm-dd; "" leaves the end to the server's default (8.1)
@@ -39,7 +46,15 @@ export const EMPTY_FILTERS: ProjectFilters = {
   enrolled_from: "",
   enrolled_to: "",
   q: "",
+  program: "",
+  round: "",
+  category: "",
+  award_from: "",
+  award_to: "",
 };
+
+export const COHORT_KEYS = ["program", "round", "category"] as const;
+export type CohortKey = (typeof COHORT_KEYS)[number];
 
 export const TRI_KEYS = ["verified", "stellar_toml", "has_web_data", "has_api_data"] as const;
 export type TriKey = (typeof TRI_KEYS)[number];
@@ -92,6 +107,11 @@ export function readListState<S extends string>(
       enrolled_from: day("enrolled_from"),
       enrolled_to: day("enrolled_to"),
       q: (params.get("q") ?? "").slice(0, 100),
+      program: (params.get("program") ?? "").slice(0, 80),
+      round: (params.get("round") ?? "").slice(0, 80),
+      category: (params.get("category") ?? "").slice(0, 80),
+      award_from: day("award_from"),
+      award_to: day("award_to"),
     },
     sort,
     order: o === "asc" || o === "desc" ? o : "desc",
@@ -113,6 +133,11 @@ export function listParams<S extends string>(s: ListState<S>): [string, string][
     ["enrolled_from", f.enrolled_from],
     ["enrolled_to", f.enrolled_to],
     ["q", f.q.trim()],
+    ["program", f.program],
+    ["round", f.round],
+    ["category", f.category],
+    ["award_from", f.award_from],
+    ["award_to", f.award_to],
     ["sort", s.sort],
     ["order", s.order],
   ];
@@ -135,7 +160,10 @@ export function activeFilterCount(f: ProjectFilters): number {
     TRI_KEYS.filter((k) => f[k] !== "").length +
     (f.enrolled_from ? 1 : 0) +
     (f.enrolled_to ? 1 : 0) +
-    (f.q.trim() ? 1 : 0)
+    (f.q.trim() ? 1 : 0) +
+    COHORT_KEYS.filter((k) => f[k] !== "").length +
+    (f.award_from ? 1 : 0) +
+    (f.award_to ? 1 : 0)
   );
 }
 
@@ -198,6 +226,34 @@ export function validateDays(r: DayRange, now: Date): { from?: string; to?: stri
   else if ((Date.parse(r.to) - Date.parse(r.from)) / 86_400_000 + 1 > 366)
     out.to = "A range covers at most 366 days.";
   return out;
+}
+
+// 19.2 a relative change as a signed percentage; the error rate's change is
+// absolute, in percentage points
+export function formatChange(v: number | null, kind: "relative" | "points"): string | null {
+  if (v === null) return null;
+  if (kind === "points") {
+    const pp = v * 100;
+    if (pp === 0) return "0 pp";
+    const t =
+      Math.abs(pp) < 0.01
+        ? "<0.01"
+        : Math.abs(pp)
+            .toFixed(2)
+            .replace(/\.?0+$/, "");
+    return `${pp > 0 ? "+" : "-"}${t} pp`;
+  }
+  const pct = v * 100;
+  if (pct === 0) return "0%";
+  const t = Math.abs(pct) < 0.1 ? "<0.1" : Math.abs(pct).toFixed(1).replace(/\.0$/, "");
+  return `${pct > 0 ? "+" : "-"}${t}%`;
+}
+
+// 19.3 a percentile of 0 to 1 as the share of the cohort at or below the
+// project, in whole percent
+export function formatPercentile(v: number | null): string | null {
+  if (v === null) return null;
+  return `P${Math.round(v * 100)}`;
 }
 
 // average visit duration as people read it

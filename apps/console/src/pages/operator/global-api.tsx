@@ -20,9 +20,13 @@ import {
 import { SPAN_NOTE } from "@/pages/api-traffic";
 import {
   AGGREGATE_NOTE,
+  COHORT_NOTE,
+  CohortLine,
   CompareBar,
   FiltersPanel,
+  GROWTH_SORT_TEXT,
   InlineSelect,
+  KpiCell,
   MagnitudeCell,
   Missing,
   Notes,
@@ -56,7 +60,15 @@ const SORT_TEXT: Record<ApiSort, string> = {
   p99: "p99 latency",
   services: "Services",
   routes: "Routes",
+  ...GROWTH_SORT_TEXT,
 };
+
+// the change and percentile columns of contract 19.2 this view shows; the
+// error rate is the 5xx rate and its change is in percentage points
+const API_KPIS = [
+  { sort: "requests_growth", label: "Requests change", key: "requests", kind: "relative" },
+  { sort: "error_rate_change", label: "Error rate change", key: "error_rate", kind: "points" },
+] as const;
 
 // a percentile above 10 s is measured against the 10 s bound for its bar
 const pctSize = (s: number | null, over: boolean) => (over ? 10 : s);
@@ -175,7 +187,7 @@ export function GlobalApiPage() {
             />
           ) : (
             <TableScroll label="Global API table" dim={list.isPlaceholderData}>
-              <table className="w-full min-w-[64rem] border-separate border-spacing-0 text-left text-small tabular">
+              <table className="w-full min-w-[76rem] border-separate border-spacing-0 text-left text-small tabular">
                 <thead>
                   <tr>
                     <th scope="col" className={`${TH} w-10 pl-4`}>
@@ -189,6 +201,17 @@ export function GlobalApiPage() {
                       onSort={sortBy}
                     />
                     {COLUMNS.map((c) => (
+                      <SortHeader
+                        key={c.sort}
+                        label={c.label}
+                        sort={c.sort}
+                        current={state.sort}
+                        order={state.order}
+                        numeric
+                        onSort={sortBy}
+                      />
+                    ))}
+                    {API_KPIS.map((c) => (
                       <SortHeader
                         key={c.sort}
                         label={c.label}
@@ -241,7 +264,7 @@ export function GlobalApiPage() {
         ) : null}
       </div>
 
-      <Notes items={API_NOTES} />
+      <Notes items={[...API_NOTES, COHORT_NOTE]} />
     </section>
   );
 }
@@ -318,6 +341,7 @@ function ApiRow({
             Some latency buckets are approximate
           </span>
         ) : null}
+        <CohortLine cohort={p.cohort} />
       </th>
       {cell("requests", p.requests, <span data-col="requests">{formatCount(p.requests)}</span>)}
       {cell("rate_4xx", p.rate_4xx, rate(p.rate_4xx, p.requests_4xx))}
@@ -339,6 +363,15 @@ function ApiRow({
       )}
       {cell("services", p.services, formatCount(p.services))}
       {cell("routes", p.routes, formatCount(p.routes))}
+      {API_KPIS.map((c) => (
+        <KpiCell
+          key={c.sort}
+          k={p.kpis[c.key]}
+          kind={c.kind}
+          on={sort === c.sort}
+          label={c.label}
+        />
+      ))}
       <OnchainCell s={p.onchain} />
       <td className={`${TD} pr-4`}>
         <SourceBadge source={p.source} spanServices={p.span_services} services={p.services} />

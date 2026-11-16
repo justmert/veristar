@@ -31,6 +31,49 @@ export const refC = {
   created_at: "2026-11-03T09:00:00Z",
 };
 
+// 19.2 a project confirmed in a cohort, and one without a cohort or data
+export const cohortA = {
+  program: "Build Award",
+  round: "SCF #38",
+  category: "DeFi",
+  award_date: "2026-11-11",
+};
+export const noCohort = { program: null, round: null, category: null, award_date: null };
+const noKpi = { value: null, previous: null, change: null, percentile: null };
+export const comparisonA = {
+  cohort: cohortA,
+  cohort_size: 4,
+  kpis: {
+    visitors: { value: 410, previous: 205, change: 1, percentile: 0.75 },
+    pageviews: { value: 1200, previous: 1500, change: -0.2, percentile: 0.5 },
+    requests: { value: 182000, previous: 160000, change: 0.1375, percentile: 1 },
+    error_rate: { value: 0.0005, previous: 0.0015, change: -0.001, percentile: 0.25 },
+    onchain_operations: { value: 0, previous: 0, change: null, percentile: null },
+  },
+};
+export const comparisonB = {
+  cohort: noCohort,
+  cohort_size: 4,
+  kpis: {
+    visitors: { value: 0, previous: 0, change: null, percentile: null },
+    pageviews: { value: 0, previous: 0, change: null, percentile: null },
+    requests: noKpi,
+    error_rate: noKpi,
+    onchain_operations: noKpi,
+  },
+};
+
+// 19.1 the cohort values in use and a pending proposal
+export const cohortListBody = {
+  programs: [{ value: "Build Award", projects: 3 }],
+  rounds: [
+    { value: "SCF #37", projects: 1 },
+    { value: "SCF #38", projects: 2 },
+  ],
+  categories: [{ value: "DeFi", projects: 2 }],
+  proposals: [],
+};
+
 // 8.3, the contract's example item
 export const webProjectA = {
   tenant: refA,
@@ -62,6 +105,7 @@ export const webProjectA = {
     device: [{ key: "laptop", value: 300 }],
     browser: [{ key: "chrome", value: 250 }],
   },
+  ...comparisonA,
 };
 
 // a project without visits: every ratio null
@@ -87,6 +131,7 @@ export const webProjectB = {
   rejected_share: null,
   integrity: { grade: null, graded_days: 0, days_a: 0, days_b: 0, days_c: 0 },
   top: { referrer: [], country: [], device: [], browser: [] },
+  ...comparisonB,
 };
 
 export const webProjectsBody = {
@@ -128,9 +173,11 @@ export const apiProjectA = {
   span_services: 1,
   source: "mixed",
   lossy: false,
+  ...comparisonA,
 };
 export const apiProjectB = {
   ...apiProjectA,
+  ...comparisonB,
   tenant: refB,
   requests: 0,
   requests_4xx: 0,
@@ -174,6 +221,7 @@ export const webCompareBody = {
   projects: [
     {
       tenant: refA,
+      cohort: cohortA,
       integrity: {
         grade: "C",
         graded_days: 3,
@@ -221,6 +269,7 @@ export const webCompareBody = {
     },
     {
       tenant: refB,
+      cohort: noCohort,
       integrity: { grade: null, graded_days: 0, days_a: 0, days_b: 0, days_c: 0, reasons: [] },
       totals: {
         pageviews: 0,
@@ -302,6 +351,7 @@ export const apiCompareBody = {
   projects: [
     {
       tenant: refA,
+      cohort: cohortA,
       totals: {
         ...someRequests,
         requests: 300,
@@ -335,6 +385,7 @@ export const apiCompareBody = {
     },
     {
       tenant: refB,
+      cohort: noCohort,
       totals: {
         ...noRequests,
         services: 0,

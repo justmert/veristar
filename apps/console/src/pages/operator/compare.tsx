@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Columns2, Plus, X } from "lucide-react";
 import { Link, useSearchParams } from "react-router";
+import type { Cohort } from "@/api/cohorts";
 import { apiCompareQuery, webCompareQuery } from "@/api/queries";
 import type {
   ApiCompare,
@@ -13,6 +14,7 @@ import type {
 } from "@/api/schemas";
 import type { Series } from "@/components/api-charts";
 import {
+  type ChartMarker,
   CompareChart,
   type CompareValue,
   SERIES_BG,
@@ -40,6 +42,7 @@ import {
 import { API_NOTES, SourceBadge } from "./global-api";
 import {
   AGGREGATE_NOTE,
+  cohortText,
   Missing,
   Notes,
   QUARANTINE_NOTE,
@@ -55,6 +58,16 @@ const DIMENSIONS: { dim: WebDimension; label: string }[] = [
   { dim: "browser", label: "Browsers" },
   { dim: "os", label: "Operating systems" },
 ];
+
+// the award date of each compared project that has one (contract 19.5),
+// drawn on every daily chart so growth after funding is visible
+function awardMarkers(projects: { tenant: TenantRef; cohort: Cohort }[]): ChartMarker[] {
+  return projects.flatMap((p, slot) =>
+    p.cohort.award_date
+      ? [{ day: p.cohort.award_date, slot, label: `${p.tenant.name} awarded` }]
+      : [],
+  );
+}
 
 function seriesOf(tenants: TenantRef[]): Series[] {
   return tenants.map((t, i) => ({
@@ -106,6 +119,11 @@ export function ComparePage() {
 
   const resolved = web.data ? { from: web.data.from, to: web.data.to } : null;
   const refs = web.data?.projects.map((p) => p.tenant) ?? apiq.data?.projects.map((p) => p.tenant);
+  const cohorts = web.data?.projects ?? apiq.data?.projects ?? [];
+  const cohortOf = (id: string) => {
+    const c = cohorts.find((p) => p.tenant.id === id)?.cohort;
+    return c ? cohortText(c) : null;
+  };
   const remove = (id: string) =>
     setParams(
       compareSearch(
@@ -129,10 +147,15 @@ export function ComparePage() {
             {refs.map((t, i) => (
               <li
                 key={t.id}
-                className="inline-flex h-8 max-w-64 animate-reveal-in items-center gap-2 rounded-md border border-line-strong pr-1 pl-2.5 text-small text-fg"
+                className="inline-flex h-8 max-w-96 animate-reveal-in items-center gap-2 rounded-md border border-line-strong pr-1 pl-2.5 text-small text-fg"
               >
                 <SeriesLine slot={i} />
                 <span className="truncate font-medium">{t.name}</span>
+                {cohortOf(t.id) ? (
+                  <span data-cohort className="truncate text-caption text-fg-3 max-md:hidden">
+                    {cohortOf(t.id)}
+                  </span>
+                ) : null}
                 <span className="inline-flex items-center gap-1 text-caption text-fg-3">
                   <StatusDot tone={statusTone(t.status)} />
                   <span className="max-sm:sr-only">{t.status}</span>
@@ -221,6 +244,7 @@ export function ComparePage() {
 
 function WebSection({ data }: { data: WebCompare }) {
   const series = seriesOf(data.projects.map((p) => p.tenant));
+  const markers = awardMarkers(data.projects);
   const point = (s: number, d: number) => data.projects[s]?.series[d];
   const count = (k: "pageviews" | "visitors" | "visits") => (s: number, d: number) =>
     point(s, d)?.[k] ?? null;
@@ -234,6 +258,7 @@ function WebSection({ data }: { data: WebCompare }) {
           description="Page views of the primary band per UTC day."
           days={data.days}
           series={series}
+          markers={markers}
           value={count("pageviews")}
           format={fmtCount}
           axisFormat={compact}
@@ -246,6 +271,7 @@ function WebSection({ data }: { data: WebCompare }) {
           description="Visitors per UTC day, unique within the day and site."
           days={data.days}
           series={series}
+          markers={markers}
           value={count("visitors")}
           format={fmtCount}
           axisFormat={compact}
@@ -258,6 +284,7 @@ function WebSection({ data }: { data: WebCompare }) {
           description="Visits with one page view and no event, over all visits. Gaps are days without visits."
           days={data.days}
           series={series}
+          markers={markers}
           value={(s, d) => point(s, d)?.bounce_rate ?? null}
           format={(v) => (v === "open" ? OPEN_BUCKET : (formatShare(v) ?? "-"))}
           axisFormat={pctAxis}
@@ -268,6 +295,7 @@ function WebSection({ data }: { data: WebCompare }) {
           description="Time between the first and last page view of a visit, averaged per day."
           days={data.days}
           series={series}
+          markers={markers}
           value={(s, d) => point(s, d)?.avg_visit_duration ?? null}
           format={(v) => (v === "open" ? OPEN_BUCKET : (formatDuration(v) ?? "-"))}
           axisFormat={(v) => formatDuration(v) ?? ""}
@@ -469,6 +497,7 @@ function pctValue(seconds: number | null, over: boolean): CompareValue {
 
 function ApiSection({ data }: { data: ApiCompare }) {
   const series = seriesOf(data.projects.map((p) => p.tenant));
+  const markers = awardMarkers(data.projects);
   const point = (s: number, d: number) => data.projects[s]?.series[d];
   const rate = (k: "rate_4xx" | "rate_5xx") => (s: number, d: number) => point(s, d)?.[k] ?? null;
   return (
@@ -480,6 +509,7 @@ function ApiSection({ data }: { data: ApiCompare }) {
           description="Requests per UTC day over every service."
           days={data.days}
           series={series}
+          markers={markers}
           value={(s, d) => point(s, d)?.requests ?? null}
           format={(v) => (v === "open" ? OPEN_BUCKET : formatCount(v))}
           axisFormat={compact}
@@ -490,6 +520,7 @@ function ApiSection({ data }: { data: ApiCompare }) {
           description="95th percentile of request duration per day, from summed histograms. Gaps are days without requests."
           days={data.days}
           series={series}
+          markers={markers}
           value={(s, d) => {
             const p = point(s, d);
             return p ? pctValue(p.p95_seconds, p.p95_over_10s) : null;
@@ -503,6 +534,7 @@ function ApiSection({ data }: { data: ApiCompare }) {
           description="Share of requests answered with a 4xx status. Gaps are days without requests."
           days={data.days}
           series={series}
+          markers={markers}
           value={rate("rate_4xx")}
           format={(v) => (v === "open" ? OPEN_BUCKET : (formatRate(v) ?? "-"))}
           axisFormat={pctAxis}
@@ -513,6 +545,7 @@ function ApiSection({ data }: { data: ApiCompare }) {
           description="Share of requests answered with a 5xx status. Gaps are days without requests."
           days={data.days}
           series={series}
+          markers={markers}
           value={rate("rate_5xx")}
           format={(v) => (v === "open" ? OPEN_BUCKET : (formatRate(v) ?? "-"))}
           axisFormat={pctAxis}

@@ -1,7 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { Download } from "lucide-react";
 import type { ReactNode } from "react";
+import type { Kpi, KpiKey } from "@/api/cohorts";
 import { exportPaths, type SCFView, scfViewQuery } from "@/api/onchain";
+import { OwnCohortPanel } from "@/components/cohort";
 import { ErrorPanel, Loading, StateBlock } from "@/components/error-panel";
 import { projectTabs } from "@/components/nav/nav-items";
 import { NavTabs } from "@/components/nav/nav-tabs";
@@ -10,7 +12,13 @@ import { Fact, PageHeader, Panel } from "@/components/panel";
 import { Pill } from "@/components/status";
 import { Button } from "@/components/ui/button";
 import { formatCount } from "@/lib/format";
-import { formatDuration, formatShare } from "@/lib/global";
+import {
+  formatChange,
+  formatDay,
+  formatDuration,
+  formatPercentile,
+  formatShare,
+} from "@/lib/global";
 import { useProject } from "./project-layout";
 
 const RANGE = {};
@@ -19,7 +27,7 @@ const RANGE = {};
 // read through the operator views' own queries for the same range, so the
 // numbers and ranges are the ones reviewers see. no score is added here.
 export function SCFViewPage() {
-  const { tenant } = useProject();
+  const { tenant, isOwner } = useProject();
   const q = useQuery(scfViewQuery(tenant.id, RANGE));
   if (q.isPending) return <Loading label="Loading what SCF sees" />;
   if (q.error) return <ErrorPanel error={q.error} onRetry={() => q.refetch()} />;
@@ -39,6 +47,7 @@ export function SCFViewPage() {
           </Button>
         }
       />
+      <OwnCohortPanel tenantId={tenant.id} record={v.cohort} isOwner={isOwner} />
       {!v.in_operator_views ? (
         <StateBlock kind="empty" title="Not listed in the operator views">
           This project is internal to the platform, so the SCF views do not list it.
@@ -84,13 +93,138 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
+const KPI_ROWS: { key: KpiKey; label: string; kind: "count" | "rate" }[] = [
+  { key: "visitors", label: "Visitors", kind: "count" },
+  { key: "pageviews", label: "Page views", kind: "count" },
+  { key: "requests", label: "API requests", kind: "count" },
+  { key: "error_rate", label: "API error rate (5xx)", kind: "rate" },
+  { key: "onchain_operations", label: "On-chain operations", kind: "count" },
+];
+
+function kpiValue(k: Kpi, kind: "count" | "rate", which: "value" | "previous"): string {
+  const v = k[which];
+  if (v === null) return "n/a";
+  return kind === "rate" ? (formatShare(v) ?? "n/a") : formatCount(v);
+}
+
+// 19.2 and 19.3: the project's change against the previous period and its
+// percentile in its cohort, exactly as the operator lists compute them
+function CohortPlace({ v }: { v: SCFView }) {
+  const c = v.comparison;
+  if (!c) return null;
+  const pc = v.percentile_cohort;
+  const population =
+    pc && (pc.program || pc.round)
+      ? `the projects confirmed in ${[pc.program, pc.round].filter(Boolean).join(", ")}`
+      : "every listed project, because no cohort is confirmed for yours";
+  return (
+    <Panel
+      title="Change and place in the cohort"
+      description={`Each metric over this range against the previous range of equal length, and the share of ${population} (${c.cohort_size} active or suspended) with a value at or below yours.`}
+    >
+      <table className="w-full text-left text-small tabular" aria-label="Key metrics">
+        <thead>
+          <tr className="text-caption text-fg-3">
+            <th scope="col" className="py-1.5 pr-3 font-medium">
+              Metric
+            </th>
+            <th scope="col" className="py-1.5 pr-3 text-right font-medium">
+              This range
+            </th>
+            <th scope="col" className="py-1.5 pr-3 text-right font-medium">
+              Previous range
+            </th>
+            <th scope="col" className="py-1.5 pr-3 text-right font-medium">
+              Change
+            </th>
+            <th scope="col" className="py-1.5 text-right font-medium">
+              Percentile
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {KPI_ROWS.map((r) => {
+            const k = c.kpis[r.key];
+            return (
+              <tr key={r.key} data-kpi={r.key} className="border-t border-line-subtle">
+                <th scope="row" className="py-1.5 pr-3 font-normal text-fg-2">
+                  {r.label}
+                </th>
+                <td className="py-1.5 pr-3 text-right font-mono text-fg">
+                  {kpiValue(k, r.kind, "value")}
+                </td>
+                <td className="py-1.5 pr-3 text-right font-mono text-fg-2">
+                  {kpiValue(k, r.kind, "previous")}
+                </td>
+                <td className="py-1.5 pr-3 text-right font-mono text-fg">
+                  {formatChange(k.change, r.kind === "rate" ? "points" : "relative") ?? "n/a"}
+                </td>
+                <td className="py-1.5 text-right font-mono text-fg">
+                  {formatPercentile(k.percentile) ?? "n/a"}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </Panel>
+  );
+}
+
+const METRIC_TEXT: Record<string, string> = {
+  visitors: "verified visitors",
+  requests: "API requests",
+  onchain_operations: "on-chain operations",
+};
+
+// 19.4 the operators' saved rules this project meets today, with the
+// qualifying days that meet them
+function RulesMet({ v }: { v: SCFView }) {
+  return (
+    <Panel
+      title="Rules you meet"
+      description="The traction rules SCF operators saved that your project meets today, over the complete calendar months each rule looks at."
+    >
+      {v.rules_met.length === 0 ? (
+        <p className="text-body text-fg-2">Your project meets none of the saved rules today.</p>
+      ) : (
+        <ul className="flex flex-col gap-3" aria-label="Rules you meet">
+          {v.rules_met.map(({ rule, match }) => (
+            <li key={rule.id} data-rule={rule.id} className="flex flex-col gap-1.5">
+              <span className="text-body font-medium text-fg">{rule.name}</span>
+              <span className="text-small text-fg-2">
+                {METRIC_TEXT[rule.metric] ?? rule.metric} of at least{" "}
+                {formatCount(rule.min_per_day)} a day on {rule.min_days} or more days in each of the
+                last {rule.months} {rule.months === 1 ? "month" : "months"}
+                {rule.min_grade ? `, integrity grade ${rule.min_grade} or better` : ""}.
+              </span>
+              <ul className="flex flex-wrap gap-x-4 gap-y-1 text-caption text-fg-3">
+                {match.months.map((m) => (
+                  <li key={m.month}>
+                    {m.month}: {m.qualifying_days} qualifying days
+                  </li>
+                ))}
+                <li>Integrity grade {match.integrity.grade ?? "not graded"}</li>
+              </ul>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Panel>
+  );
+}
+
 function SCFRows({ v }: { v: SCFView }) {
   const web = v.web;
   const api = v.api;
   const chain = v.onchain;
+  const award = v.comparison?.cohort.award_date ?? null;
+  const marker = award ? { day: award, label: `Award date ${formatDay(award)}` } : null;
   return (
     <>
       <IntegritySlot value={v.integrity} />
+      <CohortPlace v={v} />
+      <RulesMet v={v} />
       <Panel title="Project" description="As the operator list shows it.">
         <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           <Row label="Status">{v.tenant?.status ?? "n/a"}</Row>
@@ -122,7 +256,13 @@ function SCFRows({ v }: { v: SCFView }) {
             </Row>
           </dl>
           <div className="mt-4">
+            {marker && v.days.includes(marker.day) ? (
+              <p data-award className="mb-1.5 text-caption text-fg-3">
+                The dashed line marks your award date, {formatDay(marker.day)}.
+              </p>
+            ) : null}
             <DayStrip
+              marker={marker}
               label="Daily page views"
               points={v.web_series.map((p) => ({
                 day: p.day,
@@ -167,6 +307,7 @@ function SCFRows({ v }: { v: SCFView }) {
           </dl>
           <div className="mt-4">
             <DayStrip
+              marker={marker}
               label="Daily operations"
               points={v.onchain_series.map((p) => ({
                 day: p.day,
