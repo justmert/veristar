@@ -3,6 +3,13 @@ title: "What the numbers mean"
 description: "Bands, daily-unique visitors and span-derived API data, and how they shape cross-project comparisons."
 ---
 
+Start with the **integrity grade**: every project carries an A, B or C grade over the range you
+look at, with the reasons that set it, computed from what the platform's edge observes (the
+class of each visitor's network, distinct networks, the quarantine band, proof failures and the
+site's own baseline). Sort the global web table by it, and open the reasons panel before you
+rely on a project's numbers. The project sees the same grade and reasons on its own overview.
+The rules are in [bot and inflation defences](../security/bot-and-inflation.md) section 9.
+
 Three properties of the data shape how you compare projects: bands, daily-unique visitors, and
 span-derived API data. Each follows from a privacy or design choice. The full definitions are in
 [web metrics](../reference/web-metrics.md) and sections 7.3 and 8 of the
@@ -14,14 +21,17 @@ Every site has two web dashboards: the **primary band** and the **quarantine ban
 
 - The gateway counts, per site and per truncated address range (an IPv4 /24 or IPv6 /48,
   keyed with a secret that changes daily), how many distinct visitors it sees within a
-  sliding hour. From the event that brings that count to the threshold (`IPCLUSTER_THRESHOLD`,
-  default 20) onward, events from that range go to the quarantine band for the rest of the
-  window. Every gateway shares these counts through NATS, so the threshold holds across nodes.
+  sliding hour. From the event that brings that count to the threshold onward, events from that
+  range go to the quarantine band for the rest of the window. The threshold follows the
+  network's class and the site's size: 20 for an access network of a new site, more for a
+  popular site whose audience shares carrier addresses, and a quarter of that for hosting
+  networks and Tor exits. Every gateway shares these counts through NATS, so the threshold holds
+  across nodes.
 - Quarantine is a separate band, never a deletion. It is shown next to the primary numbers in
   the global views (quarantined page views, visitors and share) and the project sees it in its
   own quarantine dashboard.
-- Shared networks trip it too: carrier-grade NAT on mobile networks, VPN exits, offices,
-  campuses and conference Wi-Fi. A high quarantined share can be real people on such networks,
+- Shared networks can trip it too: VPN exits, offices, campuses and conference Wi-Fi, and
+  carrier-grade NAT on a site that has no baseline yet. A high quarantined share can be real people on such networks,
   or one source producing many visitor identities to inflate the numbers.
 - How to read it: compare projects on the primary band, and look at a project's quarantined
   share next to it. A project whose quarantined share is far above others' deserves a look at

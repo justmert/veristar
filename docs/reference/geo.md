@@ -1,6 +1,6 @@
 ---
-title: "Country lookup (DB-IP)"
-description: "How the gateway derives a country code with a local DB-IP database, and nothing more precise."
+title: "Country and network lookup"
+description: "How the gateway derives a country code and a network class from local open data, and nothing more precise."
 ---
 
 The gateway turns a client address into an ISO 3166-1 alpha-2 country code with
@@ -10,6 +10,31 @@ never logged, queued or stored.
 
 Code: `internal/gateway/geo.go` (lookup), `internal/gateway/clientip.go`
 (address handling), `scripts/fetch-dbip.sh` (download), `make geo-fetch`.
+
+## Network class
+
+Besides the country, the gateway classifies the network of every accepted event
+as `access`, `organisation`, `hosting`, `anonymiser` or `unknown`
+(`internal/gateway/network.go`; how the classes feed the thresholds and the
+integrity grade: [../security/bot-and-inflation.md](../security/bot-and-inflation.md)
+sections 7 to 9). It reads three files from the directory of `DBIP_MMDB`, all
+written by `scripts/fetch-network.sh` and pinned by the same month as the
+country file:
+
+| File | Source | Licence | Pin |
+|---|---|---|---|
+| `dbip-asn-lite.mmdb` | DB-IP IP to ASN Lite, `https://download.db-ip.com/free/dbip-asn-lite-YYYY-MM.mmdb.gz`, database type `DBIP-ASN-Lite (compat=GeoLite2-ASN)` | CC BY 4.0, attribution to DB-IP.com with a link on pages that use the results ([https://db-ip.com/db/download/ip-to-asn-lite](https://db-ip.com/db/download/ip-to-asn-lite), checked 2026-11-16) | the month |
+| `asn-classes.csv` | derived from `as.json` of [ipverse as-metadata](https://github.com/ipverse/as-metadata): category `isp` is `access`, `hosting` is `hosting`, `business`, `education_research` and `government_admin` are `organisation`, an unclassified system with network role `access_provider` is `access`; every other system stays unknown and is not written | CC0 1.0 (the repository's `LICENSE`, checked 2026-11-16) | the last commit at or before the first day of the month, resolved through the GitHub API and named in the attribution file |
+| `tor-exits.txt` | every `ExitAddress` of [Tor Project CollecTor](https://collector.torproject.org) `archive/exit-lists/exit-list-YYYY-MM.tar.xz` for the month before | CC0 ("Data on this site is freely available under a CC0 no copyright declaration", [metrics.torproject.org](https://metrics.torproject.org/collector.html), checked 2026-11-16) | the month before |
+
+The script writes `NETWORK-ATTRIBUTION.txt` and `network-data.month` beside
+them, and `scripts/netdata` refuses a category file that classifies fewer than
+10,000 access or 5,000 hosting systems and a set that does not place
+1.1.1.0/24 in Cloudflare's hosting network. The asn lookup uses the /24 or /48
+like the country lookup; only the Tor check compares the whole address, in
+memory. The gateway keeps only the class, and the autonomous system number as
+an HMAC under the daily secret for the distinct network count. The console
+pages that show network classes carry the DB-IP link.
 
 ## Licence and attribution
 
@@ -117,6 +142,11 @@ How to read this:
   so a future monthly file that changes this picture is noticed.
 
 ## Monthly update
+
+The network data follows the same month: `scripts/fetch-network.sh <dir>
+[YYYY-MM]` runs in the image build right after `fetch-dbip.sh`, and `SIGHUP`
+reloads it together with the country file (`Network.Reload`); when any of the
+three files does not load, the previous data stays in use.
 
 1. `scripts/fetch-dbip.sh <dir> [YYYY-MM]` downloads the month's file (default:
    the current UTC month), decompresses it, opens it with the gateway's own

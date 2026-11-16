@@ -51,6 +51,8 @@ What each route returns:
   from the daily aggregates, the same numbers as the global web view.
 - `/web/hourly`: one tenant's hourly web numbers read live from Umami,
   including the current hour.
+- `/web/integrity`: the integrity grade per tenant, site and day with its
+  reasons and evidence; every `/web/daily` item also carries the day's grade.
 - `/api/daily`, `/api/routes/daily`, `/api/hourly`: request counts, error
   rates and p50, p95, p99 per tenant (and per route), the same numbers as the
   global API view. Data derived from sampled traces is marked with

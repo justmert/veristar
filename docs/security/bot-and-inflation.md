@@ -1,34 +1,62 @@
 ---
 title: "Bot and inflation strategy"
-description: "How the platform detects and limits bot traffic and artificial metric inflation."
+description: "How the platform grades the integrity of every site's web traffic from evidence it observes itself, and how it refuses and separates bot traffic."
 ---
 
-This page describes how the platform detects and limits bot traffic and artificial metric
-inflation. It builds on Umami's own bot detection, tells real browser JavaScript execution apart
-from plain server-side posts, and treats many distinct visitor fingerprints from one address with
-skepticism. Parameter names and values come from the code (`internal/config/gateway.go`,
-`internal/gateway/`) and the deployed defaults (`infra/ansible/roles/edge/defaults/main.yml`,
-`deploy/compose/dev.yml`), and are listed in
+Every site gets an **integrity grade** for every UTC day: **A**, **B** or **C**, with the reasons
+that set it, in plain language. The grade rests on evidence the platform's own edge observes: the
+class of each visitor's network, the number of distinct networks, the proof of work, the
+quarantine band and the site's own baseline. The tenant's page cannot raise a grade; what the
+page reports can only lower it. Operators see the grade in every web view, the project sees the
+same grade and the same reasons on its own overview, and the machine API, the MCP tools and the
+exports carry it.
+
+Underneath the grade, four layers decide what each event is:
+
+1. **Refuse** naive and malformed traffic at the edge (sections 3 to 6).
+2. **Classify** the network every accepted event came from, at the edge (section 7).
+3. **Separate** crowded networks and over-active visitors into a quarantine band, with
+   thresholds that follow the network class and the site's size (section 8). Nothing is deleted.
+4. **Grade** each site and day from what the first three layers counted (section 9).
+
+Parameter names and values come from the code (`internal/config/gateway.go`,
+`internal/gateway/`, `internal/integrity/`) and the deployed defaults
+(`infra/ansible/roles/edge/defaults/main.yml`, `deploy/compose/dev.yml`), and are listed in
 [../reference/gateway-limits.md](../reference/gateway-limits.md).
 
-In short: the layers below raise the cost of forged traffic, refuse naive server-side posts and
-keep suspicious bursts out of the primary numbers. Section 9 states the boundaries of each layer,
-so you know what the numbers can and cannot tell you.
+## 1. Evidence classes
 
-## 1. Where the checks run
+Each number on a dashboard comes from one of these sources, and the source decides what it can
+prove:
+
+| Class | What it is | Who can fabricate it |
+|---|---|---|
+| **Platform-observed** | What the ingestion edge sees for itself: the network of each connection and its class, distinct networks, the proof of work, arrival volume, the quarantine and refusal counters | Only someone who pays for real distinct network endpoints and runs the challenge for each event |
+| **Page-reported** | What the tracker says: path, referrer, title, custom events, and therefore page views, bounces and visit duration | The tenant, because the tenant controls its page |
+
+The grade uses platform-observed evidence. Page-reported numbers enter only as a reason that can
+lower a grade (rule `page_volume`, section 9), never as one that raises it. Visitors are counted
+on the gateway's own visitor token, derived from the connection, so a page can add page views for
+a real visitor but cannot add visitors.
+
+## 2. Where the checks run
 
 ```
 browser ── sdk.js ── GET /v1/c (challenge) ── POST /v1/e (event) ──> edge Caddy ──> gateway
                                                                                    │
-                                     JetStream WEB_EVENTS <── checks pass ─────────┘
-                                             │
-                                          replayer ──> Umami POST /api/send (isbot runs here)
+                       network class, band, counters <──── checks pass ────────────┘
+                                │                    │
+                 EDGE_STATS (counters)       JetStream WEB_EVENTS
+                                │                    │
+              jobs: edgestats, integrity       replayer ──> Umami POST /api/send (isbot)
+                                │
+                     agg.web_integrity_daily ──> console, machine API, MCP, exports
 ```
 
-The gateway (`internal/gateway/server.go`, `handleEvent`) checks every `POST /v1/e` in this
-order, and stops at the first refusal:
+The gateway (`internal/gateway/server.go`, `checkEvent`) checks every `POST /v1/e` in this order,
+and stops at the first refusal:
 
-| # | Check | Refusal |
+| # | Check | Result |
 |---|---|---|
 | 1 | Body size (`GATEWAY_MAX_BODY`, 8192 bytes) and wire schema | 413, 400 |
 | 2 | Site exists in the registry and is `active` | 404 |
@@ -39,7 +67,8 @@ order, and stops at the first refusal:
 | 7 | Fetch metadata (`Sec-Fetch-Site`, `Sec-Fetch-Mode`, `Sec-Fetch-Dest`) | 403 |
 | 8 | Rate limits per site and per address prefix | 429 |
 | 9 | `User-Agent` present exactly once | 400 |
-| 10 | Same-IP skepticism: event goes to the quarantine band or the primary band | (never refused) |
+| 10 | Network class of the client address | (never refused) |
+| 11 | Same-network skepticism with class-aware thresholds, and the per-visitor volume bound: primary or quarantine band | (never refused) |
 
 Checks 5 and 6 are one call (`ProofVerifier.Verify`, `internal/gateway/proof.go`). The replay
 counter moves only for proofs that passed every other part of the check, so forged proofs cannot
@@ -47,27 +76,22 @@ use up a real visitor's allowance. `GET /v1/c` checks the site, `Origin` and fet
 before it issues a challenge.
 
 After the gateway, the replayer delivers the event to Umami with the visitor's original
-`User-Agent`, and Umami's own `isbot` check runs (section 2).
+`User-Agent`, and Umami's own `isbot` check runs (section 3).
 
-## 2. Umami's `isbot` on the original user agent
+## 3. Umami's `isbot` on the original user agent
 
 Umami 3.5.0 runs `isbot` on the `User-Agent` of `POST /api/send`; for a bot it answers
 `200 {"beep":"boop"}` and stores nothing. The replayer forwards the visitor's original
-`User-Agent` header unchanged, and
-Umami is deployed without `DISABLE_BOT_CHECK` (`infra/ansible/roles/core/templates/compose.yml.j2`,
-`deploy/compose/dev.yml`). A bot answer is counted as `bot` on `EDGE_STATS` and in
-`replayer_outcomes_total{outcome="bot"}`, so tenants and operators see how many events were
-dropped this way.
+`User-Agent` header unchanged, and Umami is deployed without `DISABLE_BOT_CHECK`
+(`infra/ansible/roles/core/templates/compose.yml.j2`, `deploy/compose/dev.yml`). A bot answer is
+counted as `bot` on `EDGE_STATS` and in `replayer_outcomes_total{outcome="bot"}`.
 
-Proved by: `TestBotUserAgentStoresNothing` (`tests/umami-compat/send_test.go`: Googlebot and
-bingbot store no session and no pageview) and `TestWebPath` subtest `bots`
-(`tests/webpath/webpath_test.go`: a crawler user agent through the whole chain, events answered
-202 by the gateway, counted twice as `bot`, nothing in Umami).
+Proved by: `TestBotUserAgentStoresNothing` (`tests/umami-compat/send_test.go`) and `TestWebPath`
+subtest `bots` (`tests/webpath/webpath_test.go`).
 
-Limit: `isbot` matches declared bots. A headless browser or script that sends an ordinary browser
-user agent is not caught by it.
+`isbot` matches declared bots; undeclared automation is the job of the layers below.
 
-## 3. Server-issued challenge and proof
+## 4. Server-issued challenge and proof
 
 Full detail and measurements: [../reference/browser-proof.md](../reference/browser-proof.md) and
 [../reference/wire-v1.md](../reference/wire-v1.md).
@@ -77,120 +101,50 @@ Full detail and measurements: [../reference/browser-proof.md](../reference/brows
   `PROOF_BITS`, and `tag = HMAC-SHA256(proof_key, w|iat|salt|bits)` with a daily key held in the
   memory KV bucket `edge_secrets`.
 - The tracker finds a `nonce` such that `SHA-256(w|iat|salt|nonce)` has at least `bits` leading
-  zero bits (WebCrypto, batches of 64) and attaches the proof to every event of that page load.
-  The challenge stays in page memory: no cookie, no browser storage.
-- The gateway refuses a proof older than `ChallengeTTL` (6 hours of server time), more than
-  `MaxClockSkew` (30 seconds) in the future, with `bits` above `MaxProofBits` (24), with a wrong
-  tag (which also covers a proof issued for another site, since the tag covers `w`), or with
-  too little work. The previous day's key is still accepted inside the 6 hour window.
-- `PROOF_BITS` is **12**. It is the highest tested value whose median solve time stays under
-  150 ms at a 6x CPU slowdown in Chromium, Firefox and WebKit. Because difficulty and time come
-  from the server, difficulty can be raised without a tracker release.
+  zero bits (WebCrypto) and attaches the proof to every event of that page load. The challenge
+  stays in page memory: no cookie, no browser storage.
+- The gateway refuses a proof older than `ChallengeTTL` (6 hours), more than `MaxClockSkew`
+  (30 seconds) in the future, with `bits` above `MaxProofBits` (24), with a wrong tag (which also
+  covers a proof issued for another site), or with too little work.
+- `PROOF_BITS` is **12**: the highest tested value whose median solve time stays under 150 ms at
+  a 6x CPU slowdown in Chromium, Firefox and WebKit. Difficulty comes from the server and can be
+  raised without a tracker release.
 
-What this distinguishes: a request without a valid proof did not go through the challenge flow,
-so a plain HTTP client that posts a JSON body is refused. This separates browser JavaScript
-execution from plain server-side posts. Section 9 covers clients that run the challenge flow
-themselves.
+A request without a valid proof did not go through the challenge flow, so a plain HTTP client that
+posts a JSON body is refused. Proof failures are counted per site, and their share is a grade
+input (rule `proof_failures`).
 
 Proved by: `TestChallengeRoundTrip`, `TestKeyRotationOverlap`, `TestKeyLost`, `TestKeyTTL`
 (`internal/gateway/challenge_test.go`); `TestTrackerVectorBytes`, `TestTrackerVectorsVerify`,
-`TestLeadingZeroBits` (`internal/gateway/proof_test.go`, shared vectors with the TypeScript
-tracker); `TestEventChecks` subtests `naive post without proof is 403` and `forged tag is 403`
-(`tests/gateway/checks_test.go`); `TestClocks` (`tests/gateway/clock_test.go`).
+`TestLeadingZeroBits` (`internal/gateway/proof_test.go`); `TestEventChecks` subtests
+`naive post without proof is 403` and `forged tag is 403` (`tests/gateway/checks_test.go`);
+`TestClocks` (`tests/gateway/clock_test.go`).
 
-## 4. Origin and fetch-metadata checks
+## 5. Origin and fetch-metadata checks
 
-- **Origin.** The `Origin` header must equal one of the site's registered origins (1 to 20 bare
-  origins under the site's domain, `https` only except `localhost` and `127.0.0.1` for testing).
-  Proved by `TestCheckOrigin`, `TestValidOriginPattern` (`internal/gateway/origin_test.go`) and
+- **Origin.** The `Origin` header must equal one of the site's registered origins. Proved by
+  `TestCheckOrigin`, `TestValidOriginPattern` (`internal/gateway/origin_test.go`) and
   `TestEventChecks` subtest `wrong origin is 403`.
-- **Fetch metadata.** The tracker's `fetch` (`keepalive`, `credentials: 'omit'`, `text/plain`, no
-  custom headers) produces `Sec-Fetch-Site: cross-site` (or `same-site` when the tenant shares the
-  base domain), `Sec-Fetch-Mode: cors` and `Sec-Fetch-Dest: empty` in Chromium 156, Firefox 157
+- **Fetch metadata.** The tracker's `fetch` produces `Sec-Fetch-Site: cross-site` (or
+  `same-site`), `Sec-Fetch-Mode: cors` and `Sec-Fetch-Dest: empty` in Chromium 156, Firefox 157
   and WebKit 27.2 (`tests/e2e/specs/headers.spec.ts`, recorded in `browser-proof.md`). The
   `SignalsChecker` (`internal/gateway/signals.go`) refuses any of these headers that is present
-  with another value or repeated. It refuses missing headers only when the user agent claims an
-  engine known to send all three (Chromium 80 or later, Firefox 90 or later, Safari 16.4 or
-  later) and `GATEWAY_SECURE_TRANSPORT` is `true`. Android WebViews and non-Safari iOS browsers
-  (`; wv)`, `CriOS/`, `FxiOS/`, `EdgiOS/`, `OPiOS/`) and EdgeHTML were not measured, so they are
-  never refused for missing headers. Proved by `TestSignals` and `TestSendsFetchMetadata`
-  (`internal/gateway/signals_test.go`).
+  with another value or repeated, and refuses missing headers when the user agent claims an engine
+  known to send all three (Chromium 80, Firefox 90, Safari 16.4 or later) and
+  `GATEWAY_SECURE_TRANSPORT` is `true`. Android WebViews, non-Safari iOS browsers and EdgeHTML
+  were not measured, so they are never refused for missing headers. Proved by `TestSignals` and
+  `TestSendsFetchMetadata` (`internal/gateway/signals_test.go`).
 
-These checks stop requests that come from the wrong page and naive clients that send nothing.
-They are headers, and any non-browser client can set them (section 9).
+These checks stop requests from the wrong page and naive clients. A client that sets every header
+itself passes them (`TestEventChecks` subtest `scripted client with forged headers is accepted`);
+it is then classified by its network and counted like any other event (sections 7 to 9).
 
-## 5. Replay limit
+## 6. Replay limit and rate limits
 
-A captured proof (one page load) may carry at most `PROOF_REPLAY_LIMIT` events on one node.
-The default is **50**. The count is kept per proof tag in a bounded least recently used table of
-200,000 entries per node (`replayEntries`, `internal/gateway/node.go`).
-
-- The limit is per node and in memory. With three edge nodes, one proof can be used up to
-  3 x `PROOF_REPLAY_LIMIT` (150) times in total.
-- A proof pushed out of the table by 200,000 newer ones starts counting again
-  (`internal/gateway/proof.go`, `NewProofVerifier`).
-- A gateway restart forgets the table.
-
-Proved by: `TestReplayLimit` (`internal/gateway/proof_test.go`) and `TestEventChecks` subtest
+A captured proof may carry at most `PROOF_REPLAY_LIMIT` events (**50**) on one node, counted per
+proof tag in a bounded table of 200,000 entries (`replayEntries`, `internal/gateway/node.go`).
+Proved by `TestReplayLimit` (`internal/gateway/proof_test.go`) and `TestEventChecks` subtest
 `replay past the limit is 403`.
-
-## 6. Same-IP skepticism and quarantine bands
-
-- **Fingerprint.** The visitor token is
-  `vt = hex(HMAC-SHA256(daily_secret, site_id || 0x00 || ip || 0x00 || user_agent))`. Distinct
-  user agents from one address, or distinct addresses in one prefix, give distinct tokens.
-- **Key.** Per site and per keyed hash of the truncated address (IPv4 /24, IPv6 /48) under a
-  second daily secret. The network itself is never sent or stored.
-- **Window and threshold.** `IPClusterWindow` is one hour. When the set for a key reaches
-  `IPCLUSTER_THRESHOLD` distinct tokens (default **20**), the event that brings it to 20 and every
-  later event for that key go to the quarantine band, until one window has passed since the
-  threshold was last reached (`internal/gateway/ipcluster.go`).
-- **Across nodes.** Each gateway publishes every token that is new to it on the NATS core subject
-  `edge.ipcluster` (at most `IPCLUSTER_THRESHOLD` messages per key and window) and merges what
-  peers publish, so all three nodes count the same set. At most 200,000 keys per node
-  (`clusterKeys`), least recently used evicted. Nothing is persisted.
-- **Bands.** Every site has two Umami websites: the primary (id equals the site id) and a
-  quarantine website. Quarantined events go to the quarantine website. They are never deleted
-  and never mixed into primary numbers. Tenants open the quarantine view through
-  `GET /api/sso/umami?site=<id>&view=quarantine`, and the per-site counters include
-  `quarantined`.
-
-Proved by: `TestEdgeSecretsCluster` subtests `quarantine starts at exactly the threshold across
-three gateways`, `a node publishes at most threshold tokens per key and window` and `the key
-bound evicts the least recently used set` (`internal/gateway/visitor_test.go`, implemented in
-`internal/gateway/ipcluster_test.go`); `TestWebPath` subtest `quarantine`
-(`tests/webpath/webpath_test.go`, real browsers through the whole chain).
-
-### False positives on shared addresses
-
-Many real people share one address or one /24:
-
-- **Carrier-grade NAT.** Mobile carriers and some home ISPs put thousands of subscribers behind a
-  few addresses.
-- **VPN exits** and privacy relays.
-- **Offices and campuses** behind one NAT.
-
-When more than 20 distinct visitor tokens reach one site from one such prefix in an hour, real
-visitors are quarantined too. This is expected and accepted: quarantine is a separate band shown
-next to the primary data, never deletion, so the tenant and operators can still see and judge
-those visits. A popular site with a lot of mobile traffic sees a quarantine band above zero.
-Change `IPCLUSTER_THRESHOLD` only with a recorded reason in
-[../reference/gateway-limits.md](../reference/gateway-limits.md).
-
-### One visitor's volume
-
-Same-IP skepticism counts distinct visitor tokens, so one scripted client with one address and
-one user agent stays one token and is never caught by it. A second count closes that gap: each
-gateway counts queued events per site and visitor token in a window of one hour from the
-visitor's first event. Past `VISITOR_EVENTS_PER_HOUR` (default **600**, ten a minute on
-average) every further event of that visitor in the window goes to the quarantine band and is
-counted as `quarantined` (`internal/gateway/volume.go`). The count is per node, in a bounded
-table of 200,000 visitors, and nothing is persisted; a visitor spread over three nodes can send
-three times the limit into the primary band.
-
-Proved by: `TestOneVisitorsVolumeIsQuarantined` (`internal/gateway/node_test.go`).
-
-## 7. Rate limits
 
 Token buckets in each gateway, per node (`internal/gateway/ratelimit.go`):
 
@@ -199,59 +153,186 @@ Token buckets in each gateway, per node (`internal/gateway/ratelimit.go`):
 | `RATE_SITE_PER_SECOND` / `RATE_SITE_BURST` | 200 / 400 | per site |
 | `RATE_PREFIX_PER_SECOND` / `RATE_PREFIX_BURST` | 20 / 60 | per site and keyed hash of the /24 or /48 |
 
-Over either: 429. A refusal by the prefix bucket does not take a site token. Each table holds at
-most 200,000 buckets. Limits are per node, so a site can send three times the site rate across
-three edge nodes. `GET /v1/c` has its own buckets at the same rates, checked after the origin
-and fetch metadata checks, so fetching challenges never uses up the event budget and refused
-challenge requests take no token ([../reference/gateway-limits.md](../reference/gateway-limits.md);
-`TestChallengeRateLimits` in `tests/gateway`).
+Over either: 429. `GET /v1/c` has its own buckets at the same rates. Proved by
+`TestRateLimitPrefixBurstAndRefill`, `TestRateLimitSite`,
+`TestRateLimitPrefixRefusalKeepsSiteTokens`, `TestRateLimitBoundedKeys`
+(`internal/gateway/ratelimit_test.go`) and `TestChallengeRateLimits` (`tests/gateway`).
 
-Proved by: `TestRateLimitPrefixBurstAndRefill`, `TestRateLimitSite`,
-`TestRateLimitPrefixRefusalKeepsSiteTokens`, `TestRateLimitClockBackwards`,
-`TestRateLimitBoundedKeys`, `TestRateLimitConfig`, `TestRateLimitConcurrent`
-(`internal/gateway/ratelimit_test.go`). Acceptance: no event of the browser test suites is
-refused, rate limited or quarantined (`TestBrowserMatrix`, `tests/gateway`).
+## 7. Network class, observed at the edge
 
-## 8. Visibility
+The gateway classifies the network of every accepted event from the connection's own address,
+never from anything the page sends (`internal/gateway/network.go`):
+
+| Class | Meaning | Source |
+|---|---|---|
+| `access` | residential broadband and mobile carriers | autonomous system category `isp`, or network role `access_provider` |
+| `organisation` | business, education and government networks | categories `business`, `education_research`, `government_admin` |
+| `hosting` | cloud, hosting and content networks, where most VPN, proxy and relay exits live | category `hosting` |
+| `anonymiser` | published Tor exit addresses | Tor exit lists |
+| `unknown` | everything the open data cannot place, including private ranges | none |
+
+The data is open, pinned by month and baked into the gateway image next to the country file
+(`scripts/fetch-network.sh`, [../reference/geo.md](../reference/geo.md)):
+
+- **DB-IP IP to ASN Lite** (CC BY 4.0) maps the address's /24 or /48 to its autonomous system.
+- **ipverse as-metadata** (CC0 1.0) gives each autonomous system a category and a network role,
+  from the commit current on the first day of the month.
+- **Tor Project exit lists** (CC0) give every address that exited Tor during the month before.
+
+The address is looked up in memory and then forgotten. Only the class leaves the request: it is
+counted per site as `evidence_net_<class>` on `EDGE_STATS` and stored as a daily count per site
+(`cp.web_evidence_daily`). For the distinct network count, the gateway reports each network once
+per site and UTC day as an HMAC of the autonomous system number under the gateways' daily secret,
+cut to 64 bits (`network_<key>`). The secret is held in memory only and is gone after midnight,
+so a stored key can never be linked to a network; the jobs task deletes the keys once their day is
+graded for the last time. No address and no autonomous system number is stored anywhere.
+
+Category data describes each network's primary function and is imperfect by its own account, which
+is one reason the class separates and grades, and never deletes.
+
+Proved by: `TestNetworkClassifiesFromOpenData`, `TestNetworkRefusesBrokenFiles`,
+`TestNetworkReloadKeepsDataOnFailure` (`internal/gateway/network_test.go`); `TestEdgeSecretsCluster`
+subtest `network keys are daily and differ from prefix keys` (`internal/gateway/visitor_test.go`); `TestNetworkClassAtTheEdge`
+(`tests/gateway/network_test.go`: hosting, access and Tor addresses through the real gateway
+image, with the counters on `EDGE_STATS` holding classes and keys only).
+
+## 8. Same-network skepticism and the quarantine band
+
+- **Fingerprint.** The visitor token is
+  `vt = hex(HMAC-SHA256(daily_secret, site_id || 0x00 || ip || 0x00 || user_agent))`.
+- **Key.** Per site and per keyed hash of the truncated address (IPv4 /24, IPv6 /48) under a
+  second daily secret. The network itself is never sent or stored.
+- **Threshold by network class and site size.** A hosting network legitimately carries almost no
+  visitors; a mobile carrier's address prefix legitimately carries many, because carrier-grade NAT
+  puts thousands of subscribers behind few addresses. So the threshold of distinct visitor tokens
+  per prefix and hour follows both the class and the site's typical traffic
+  (`integrity.PrefixThreshold`):
+
+  | Class | Threshold |
+  |---|---|
+  | `access`, `organisation`, `unknown` | `max(IPCLUSTER_THRESHOLD, scale / 100)` |
+  | `hosting`, `anonymiser` | `max(ceil(IPCLUSTER_THRESHOLD / 4), scale / 1000)` |
+
+  `scale` is the site's typical daily visitors (the median of up to 28 earlier days) rounded down
+  to a power of two, published to the gateways in the site's registry entry. With the default
+  `IPCLUSTER_THRESHOLD` of **20**: a new site quarantines a hosting prefix at its fifth distinct
+  visitor in an hour and an access prefix at its twentieth; a site with 8,192 typical daily
+  visitors carries 81 distinct visitors per access prefix and hour, and 8 per hosting prefix.
+  Every threshold is capped at 2,000. A popular, mobile-first site is therefore not quarantined
+  for its audience's carrier, and a burst of fake visitors cannot raise its own threshold,
+  because the scale comes from earlier days.
+- **Window.** One hour. From the event that reaches the threshold, every event for that key goes
+  to the quarantine band until one window has passed since the threshold was last reached
+  (`internal/gateway/ipcluster.go`).
+- **Across nodes.** Each gateway publishes every token that is new to it on `edge.ipcluster` and
+  merges what peers publish, so every node counts the same set and applies the threshold it
+  computes for the key.
+- **One visitor's volume.** Past `VISITOR_EVENTS_PER_HOUR` (**600**) events in an hour, every
+  further event of that visitor token goes to the quarantine band (`internal/gateway/volume.go`).
+- **Bands.** Every site has two Umami websites: the primary and a quarantine website.
+  Quarantined events go to the quarantine website; they are never deleted and never mixed into
+  primary numbers. Tenants open the quarantine view through
+  `GET /api/sso/umami?site=<id>&view=quarantine`.
+
+Proved by: `TestPrefixThreshold` and `TestScaleOf` (`internal/integrity/integrity_test.go`);
+`TestEdgeSecretsCluster` subtests `quarantine starts at exactly the threshold across three
+gateways`, `thresholds follow the network class and the site's scale` and `the key bound evicts
+the least recently used set` (`internal/gateway/visitor_test.go`); `TestNetworkClassAtTheEdge`
+(`tests/gateway/network_test.go`); `TestThreeInstances` (`tests/gateway/cluster_test.go`);
+`TestOneVisitorsVolumeIsQuarantined` (`internal/gateway/node_test.go`); `TestWebPath` subtest
+`quarantine` (`tests/webpath/webpath_test.go`).
+
+## 9. Integrity grade
+
+The jobs task `integrity` (`internal/jobs/integrity`) runs hourly. For every site it grades today
+and the three days before it, the window `aggregate-web` reads again, from:
+
+| Input | Source | Evidence class |
+|---|---|---|
+| Events by network class | `cp.web_evidence_daily` | platform-observed |
+| Distinct networks | `cp.web_networks_daily` | platform-observed |
+| Accepted, quarantined and proof-failed requests | `cp.web_ingest_hourly` | platform-observed |
+| Primary visitors, and their median over up to 28 earlier days | `agg.web_daily` | platform-observed |
+| Primary page views | `agg.web_daily` | page-reported, can only lower |
+
+Rule version 1 (`internal/integrity/grade.go`) starts every day at A. Each rule can only lower the
+grade:
+
+| Code | Lowers to | When |
+|---|---|---|
+| `hosting_share` | B / C | 25% / 50% of classified events come from hosting networks or anonymisers |
+| `quarantine_share` | B / C | 10% / 30% of accepted events went to the quarantine band |
+| `few_networks` | B | at least 100 visitors and fewer than one network per 100 visitors |
+| `spike` | B | at least 100 visitors and 10 times the baseline median, with 7 or more baseline days |
+| `proof_failures` | B | half or more of the challenge-backed requests failed their proof |
+| `page_volume` | B | the page reports 50 or more page views per visitor |
+
+A day with fewer than 50 accepted events has no grade; its reason `too_little_traffic` says so.
+The thresholds leave room for real audiences: Safari users behind iCloud Private Relay and people
+on company VPNs arrive from hosting networks, so a share of hosting traffic is normal and only a
+large share lowers the grade.
+
+**Over a range** (a month, a funding round), a project's grade combines its graded site days:
+**C** when at least a quarter of them are C, **B** when at least a quarter are B or C, **A**
+otherwise. A single bad day does not define a month, and the reasons list how many days each rule
+applied to, so a single bad day stays visible.
+
+Every stored day keeps its inputs, its reasons and the rule version that graded it
+(`agg.web_integrity_daily`), so a later change of rules is a new version and never rewrites how a
+closed evaluation was graded.
+
+Where the grade appears:
+
+- **Operators:** a sortable Integrity column in the global web table, the grade and reasons in
+  compare and in the tenant detail, `GET /api/operator/web/integrity` for one project's reasons
+  per site and day ([../reference/control-plane-api.md](../reference/control-plane-api.md)
+  section 17).
+- **The project:** the same report on its own overview (`GET /api/tenants/{tenant_id}/integrity`),
+  so builders see exactly what SCF sees.
+- **Machines:** `GET /api/metrics/v1/web/integrity` per site and day, and an `integrity` object
+  on every `/web/daily` item.
+- **MCP:** `get_web_integrity` for a project, `get_tenant_integrity` for operators; the global web
+  overview carries each project's grade and sorts by it.
+- **Exports:** `integrity_grade` columns in the web project, compare and project overview CSV
+  exports.
+
+Proved by: `TestGradeRules`, `TestPageReportedNeverRaises`, `TestCombine`
+(`internal/integrity/integrity_test.go`); `TestGrader` (`internal/jobs/integrity`);
+`TestIntegrityViews`, `TestIntegrityRankSQL` (`internal/controlplane/operator/integrity_test.go`);
+`TestMachineAPI` subtest `integrity rows page in key order and daily rows carry the day's grade`
+(`internal/controlplane/operator/machine_test.go`).
+
+## 10. Visibility
 
 Every outcome is counted per site on `EDGE_STATS` and stored hourly (`cp.web_ingest_hourly`):
-`accepted`, `quarantined`, `bot`, `dlq` and `rejected_<reason>` (for example
-`rejected_origin`, `rejected_challenge_tag`, `rejected_proof_work`, `rejected_replay`,
-`rejected_signals`, `rejected_rate_limited`; full list in `internal/gateway/reasons.go`). Tenants see them under
-`GET /api/sites/{site_id}/ingest`; operators see them in the tenant detail. A sudden rise in
-`quarantined` or `rejected_replay` is the signal that someone is forging traffic. A Sec-GPC drop is counted as `rejected_gpc`; it is a
-privacy choice, not a sign of forgery.
+`accepted`, `quarantined`, `bot`, `dlq` and `rejected_<reason>` (full list in
+`internal/gateway/reasons.go`). Tenants see them under `GET /api/sites/{site_id}/ingest`;
+operators see them in the tenant detail. The evidence counters (`evidence_net_<class>`,
+`network_<key>`) travel on the same stream into their own daily tables and never mix with these
+outcomes. A Sec-GPC drop is counted as `rejected_gpc`; it is a privacy choice, not a sign of
+forgery.
 
-## 9. Boundaries of the checks
+## 11. What the grade establishes
 
-- **The proof does not prove browser execution.** A scripted non-browser client can fetch a
-  challenge, solve 12 bits in milliseconds, and forge `Origin`, `Sec-Fetch-Site`,
-  `Sec-Fetch-Mode`, `Sec-Fetch-Dest` and `User-Agent`. The gateway then accepts its events. This
-  is tested on purpose: `TestEventChecks` subtest
-  `scripted client with forged headers is accepted` (`tests/gateway/checks_test.go`) posts from a
-  Go client and expects 202. The proof raises the cost of forged traffic and catches naive server
-  posts; a determined actor with a scripted client gets through it.
-- **Real browsers on residential proxies pass every layer.** A headless or real browser with an
-  ordinary user agent runs the real tracker, so the proof, `Origin` and fetch metadata are
-  genuine; `isbot` does not match; and spreading the traffic over many residential addresses in
-  different prefixes keeps each prefix under `IPCLUSTER_THRESHOLD` and the prefix rate limit.
-- **Replay** is per node and in memory: up to 3 x `PROOF_REPLAY_LIMIT` events per proof across
-  three nodes, more if the table evicts the entry or a gateway restarts. Only queued events
-  count; an event refused by a later check gives its use back.
-- **Volume per visitor is bounded, not stopped.** One address and one user agent can send
-  `VISITOR_EVENTS_PER_HOUR` (600) events an hour per node into the primary band, three times that
-  across three nodes, before the rest go to quarantine (section 6). Page views, custom events
-  and session duration can therefore still be raised by one client within that bound, while
-  visitors stay at 1. A client that rotates its user agent becomes several visitors and then
-  meets same-IP skepticism instead.
-- **Same-IP skepticism has false positives** on shared addresses (section 6) and false negatives
-  for traffic spread over many prefixes.
+- **Visitors from distinct access networks are the strongest web number.** Faking them means
+  paying for real distinct residential or mobile endpoints and running the challenge for every
+  event. An A grade says the traffic came from the kind and spread of networks real audiences
+  use, at the site's usual scale.
+- **Real browsers on residential connections pass every layer**, and so do real people paid to
+  visit. No technique tells them apart from organic visitors; conversion into corroborated use
+  does, which is why the grade sits next to the project's on-chain activity in the operator
+  views.
+- **The TLS handshake is not an input of rule version 1.** The edge terminates TLS in Caddy, which
+  does not expose the ClientHello to the gateway; a handshake check against the claimed browser
+  family becomes a new rule version when a maintained way to pass it exists.
+- **Thresholds are per node where the counters are per node.** Replay and per-visitor volume are
+  counted per node and in memory; same-network sets are shared across nodes.
 - **API metrics are self-reported.** OTLP data comes from the tenant's own servers; the collector
-  can rate limit and cap cardinality but cannot verify that requests happened
-  ([threat-model.md](threat-model.md) section 3.3).
-- **No first-party proxy.** Tenants send events straight from the browser. Proxying them through
-  the tenant's own server turns every event into a server-side post from one address, which the
-  proof and same-IP checks treat as suspicious.
+  rate limits and caps cardinality ([threat-model.md](threat-model.md) section 3.3). The grade
+  covers web traffic.
+- **No first-party proxy.** Proxying events through the tenant's own server turns every event
+  into a server-side post from one hosting address, which the checks classify as such.
 
-Together the layers raise the cost of manipulation and make it visible. When you compare projects,
-read the primary numbers together with the quarantine band and the outcome counters.
+When you compare projects, read the primary numbers together with the integrity grade and its
+reasons; the investigation steps are in
+[../runbooks/metric-inflation.md](../runbooks/metric-inflation.md).
