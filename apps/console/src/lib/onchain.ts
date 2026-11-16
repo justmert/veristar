@@ -2,7 +2,8 @@
 // attempt found, and how each proof works. the codes are the control
 // plane's (contract 15), so the console never guesses a cause.
 
-import type { ChainId, ChainVerifyMethod, OnchainView } from "@/api/onchain";
+import type { ChainId, ChainVerifyMethod, OnchainView, WeeklyActive } from "@/api/onchain";
+import { formatCount } from "@/lib/format";
 
 const MISSING: Record<string, string> = {
   day_not_complete: "The UTC day is not over yet",
@@ -17,6 +18,10 @@ const MISSING: Record<string, string> = {
     "More activity than one run reads; the day is left out rather than undercounted",
   account_not_found: "The account does not exist on the ledger",
   not_found: "The ledger API does not know this id",
+  week_not_complete: "The ISO week is not over yet",
+  week_not_counted: "Weekly active accounts were not counted for this week",
+  no_verified_ids:
+    "The project had no verified account or contract; only verified ones count toward weekly active accounts",
 };
 
 export function missingText(code: string): string {
@@ -78,4 +83,18 @@ export function dailyOperations(v: OnchainView): { day: string; value: number | 
     }
     return { day, value: sum };
   });
+}
+
+// the weekly active accounts of a range in one line: the scf growth hack
+// averages the weekly counts, so the mean leads and the latest week follows
+export function weeklyActiveText(w: WeeklyActive): string {
+  if (w.average === null) {
+    return w.weeks_missing > 0
+      ? `No complete week counted (${w.weeks_missing} missing)`
+      : "No complete ISO week in this range";
+  }
+  const avg = formatCount(Math.round(w.average));
+  const weeks = w.weeks_counted === 1 ? "1 week" : `${w.weeks_counted} weeks`;
+  const missing = w.weeks_missing ? `, ${w.weeks_missing} missing` : "";
+  return `${avg} a week on average over ${weeks}${missing}`;
 }

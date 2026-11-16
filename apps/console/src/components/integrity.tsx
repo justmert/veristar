@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@veristar/brand/cn";
-import { ShieldCheck } from "lucide-react";
+import { ExternalLink, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { integrityQuery, operatorTenantQuery } from "@/api/queries";
 import type {
@@ -17,6 +17,7 @@ import { Panel } from "@/components/panel";
 import { Pill, type Tone } from "@/components/status";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
+import { appealUrl } from "@/lib/appeal";
 import { formatCount, formatDate } from "@/lib/format";
 import { type DayRange, formatShare } from "@/lib/global";
 
@@ -170,18 +171,53 @@ export function NetworkAttribution({ className }: { className?: string }) {
   );
 }
 
+// what a project needs to appeal its grade: its slug and its sites'
+// domains, the only names the issue carries
+export type AppealContext = { slug: string; siteDomains: Record<string, string> };
+
+// the link that opens a prefilled appeal issue; the grade itself stays
+// automatic, operators read the appeal and decide
+export function AppealLink({
+  report,
+  appeal,
+  className,
+}: {
+  report: IntegrityReport;
+  appeal: AppealContext;
+  className?: string;
+}) {
+  if (report.grade === null) return null;
+  return (
+    <a
+      href={appealUrl(appeal.slug, report, appeal.siteDomains)}
+      target="_blank"
+      rel="noopener noreferrer"
+      data-testid="integrity-appeal"
+      className={cn(
+        "inline-flex items-center gap-1 rounded-sm text-small text-fg-2 underline decoration-line-strong underline-offset-2 transition-colors duration-(--vs-duration-press) hover:text-fg hover:decoration-fg focus-ring",
+        className,
+      )}
+    >
+      Appeal this grade
+      <ExternalLink aria-hidden className="size-3" />
+    </a>
+  );
+}
+
 // the whole report: the range grade, its reasons, and every site's days
 export function IntegrityPanel({
   report,
   siteNames,
   intro,
   title = "Integrity",
+  appeal,
   className,
 }: {
   report: IntegrityReport;
   siteNames?: Record<string, string>;
   intro?: React.ReactNode;
   title?: string;
+  appeal?: AppealContext;
   className?: string;
 }) {
   return (
@@ -193,7 +229,12 @@ export function IntegrityPanel({
         </span>
       }
       description={`UTC days ${report.from} to ${report.to}, rule set ${report.rule_version}.`}
-      actions={<GradeBadge grade={report.grade} />}
+      actions={
+        <span className="inline-flex flex-wrap items-center gap-3">
+          <GradeBadge grade={report.grade} />
+          {appeal ? <AppealLink report={report} appeal={appeal} /> : null}
+        </span>
+      }
       className={className}
       aria-label={title}
       data-integrity={report.tenant_id}
@@ -231,6 +272,7 @@ export function IntegrityReportView({
   range,
   siteNames,
   intro,
+  appeal,
   className,
 }: {
   scope: "tenant" | "operator";
@@ -238,6 +280,7 @@ export function IntegrityReportView({
   range: DayRange;
   siteNames?: Record<string, string>;
   intro?: React.ReactNode;
+  appeal?: AppealContext;
   className?: string;
 }) {
   const q = useQuery(integrityQuery(scope, tenantId, range));
@@ -246,7 +289,13 @@ export function IntegrityReportView({
     return <ErrorPanel error={q.error} onRetry={() => q.refetch()} className={className} />;
   }
   return (
-    <IntegrityPanel report={q.data} siteNames={siteNames} intro={intro} className={className} />
+    <IntegrityPanel
+      report={q.data}
+      siteNames={siteNames}
+      intro={intro}
+      appeal={appeal}
+      className={className}
+    />
   );
 }
 

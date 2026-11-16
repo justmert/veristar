@@ -25,7 +25,11 @@ export type ProjectFilters = {
   category: string;
   award_from: string;
   award_to: string;
+  // the web list only: projects graded this grade or worse ("" any grade)
+  integrity: IntegrityFilter;
 };
+
+export type IntegrityFilter = "" | "A" | "B" | "C";
 
 // utc days yyyy-mm-dd; "" leaves the end to the server's default (8.1)
 export type DayRange = { from: string; to: string };
@@ -51,6 +55,7 @@ export const EMPTY_FILTERS: ProjectFilters = {
   category: "",
   award_from: "",
   award_to: "",
+  integrity: "",
 };
 
 export const COHORT_KEYS = ["program", "round", "category"] as const;
@@ -70,6 +75,10 @@ export function isDay(v: string): boolean {
 
 function tri(v: string | null): Tri {
   return v === "true" || v === "false" ? v : "";
+}
+
+function integrityFilter(v: string | null): IntegrityFilter {
+  return v === "A" || v === "B" || v === "C" ? v : "";
 }
 
 // names sort a to z first; every number starts with the largest, which is
@@ -112,6 +121,7 @@ export function readListState<S extends string>(
       category: (params.get("category") ?? "").slice(0, 80),
       award_from: day("award_from"),
       award_to: day("award_to"),
+      integrity: integrityFilter(params.get("integrity_at_or_below")),
     },
     sort,
     order: o === "asc" || o === "desc" ? o : "desc",
@@ -138,6 +148,7 @@ export function listParams<S extends string>(s: ListState<S>): [string, string][
     ["category", f.category],
     ["award_from", f.award_from],
     ["award_to", f.award_to],
+    ["integrity_at_or_below", f.integrity],
     ["sort", s.sort],
     ["order", s.order],
   ];
@@ -163,7 +174,8 @@ export function activeFilterCount(f: ProjectFilters): number {
     (f.q.trim() ? 1 : 0) +
     COHORT_KEYS.filter((k) => f[k] !== "").length +
     (f.award_from ? 1 : 0) +
-    (f.award_to ? 1 : 0)
+    (f.award_to ? 1 : 0) +
+    (f.integrity ? 1 : 0)
   );
 }
 

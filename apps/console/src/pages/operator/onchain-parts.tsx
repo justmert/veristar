@@ -10,10 +10,11 @@ import {
 import type { TenantRef } from "@/api/schemas";
 import { SeriesLine } from "@/components/compare-charts";
 import { ErrorPanel, Loading } from "@/components/error-panel";
-import { DayStrip, IdRows, LinkStatus } from "@/components/onchain";
+import { DayStrip, IdRows, LinkStatus, WeeklyActiveList } from "@/components/onchain";
 import { Button } from "@/components/ui/button";
 import { formatCount } from "@/lib/format";
 import { type ListState, listParams } from "@/lib/global";
+import { weeklyActiveText } from "@/lib/onchain";
 import { Missing, TD, TH } from "./global-shared";
 
 // the operator's on-chain parts (contract 15.7) and the csv exports
@@ -44,6 +45,7 @@ export function OnchainCell({ s }: { s: OnchainSummary | undefined }) {
     `${formatCount(s.transactions)} transactions`,
     s.days_missing ? `${s.days_missing} id-days without data` : null,
     s.ids_failing ? `${s.ids_failing} ids failing to read` : null,
+    `weekly active accounts: ${weeklyActiveText(s.weekly_active_accounts)}`,
   ]
     .filter(Boolean)
     .join(", ");
@@ -53,6 +55,11 @@ export function OnchainCell({ s }: { s: OnchainSummary | undefined }) {
       <span className="block text-caption text-fg-3">
         {s.ids_verified}/{s.ids} verified{s.days_missing ? `, ${s.days_missing} missing` : ""}
       </span>
+      {s.weekly_active_accounts.average !== null ? (
+        <span className="block text-caption text-fg-3" data-col="waa">
+          {formatCount(Math.round(s.weekly_active_accounts.average))} active a week
+        </span>
+      ) : null}
     </td>
   );
 }
@@ -135,21 +142,28 @@ export function CompareOnchainSection({
                   <span className="text-small text-fg-2 tabular-nums">
                     {formatCount(s.totals.operations)} operations ·{" "}
                     {formatCount(s.totals.transactions)} transactions · {s.totals.ids_verified} of{" "}
-                    {s.totals.ids} verified
+                    {s.totals.ids} verified · weekly active accounts{" "}
+                    {weeklyActiveText(s.totals.weekly_active_accounts)}
                   </span>
                 ) : (
                   <span className="text-small text-fg-3">No accounts or contracts declared</span>
                 )}
               </div>
               {s && s.totals.ids > 0 ? (
-                <DayStrip
-                  label={`Daily operations of ${p.tenant.name}`}
-                  points={s.series.map((d) => ({
-                    day: d.day,
-                    value: d.operations,
-                    missing: d.operations === null ? "not_read_yet" : null,
-                  }))}
-                />
+                <>
+                  <DayStrip
+                    label={`Daily operations of ${p.tenant.name}`}
+                    points={s.series.map((d) => ({
+                      day: d.day,
+                      value: d.operations,
+                      missing: d.operations === null ? "not_read_yet" : null,
+                    }))}
+                  />
+                  <WeeklyActiveList
+                    weeks={s.weeks}
+                    label={`Weekly active accounts of ${p.tenant.name}`}
+                  />
+                </>
               ) : null}
             </li>
           );
@@ -180,8 +194,12 @@ export function TenantOnchainSection({ tenantId }: { tenantId: string }) {
             <p className="mb-3 text-small text-fg-2">
               {q.data.from} to {q.data.to}: {formatCount(q.data.totals.operations)} operations,{" "}
               {formatCount(q.data.totals.transactions)} transactions, {q.data.totals.ids_verified}{" "}
-              of {q.data.totals.ids} ids verified.
+              of {q.data.totals.ids} ids verified. Weekly active accounts:{" "}
+              {weeklyActiveText(q.data.totals.weekly_active_accounts)}.
             </p>
+            <div className="mb-4">
+              <WeeklyActiveList weeks={q.data.weeks} label="Weekly active accounts per ISO week" />
+            </div>
             <IdRows view={q.data} />
           </div>
         )

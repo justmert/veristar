@@ -133,6 +133,7 @@ export function GlobalWebPage() {
           <FiltersPanel
             filters={state.filters}
             onChange={(filters) => set({ ...state, filters })}
+            integrity
           />
           <div className="grid grid-cols-2 gap-x-3 gap-y-2 sm:flex sm:flex-wrap sm:items-center sm:gap-x-4">
             <InlineSelect

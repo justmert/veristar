@@ -110,7 +110,11 @@ export function OverviewPage() {
           tenantId={tenant.id}
           range={{ from: "", to: "" }}
           siteNames={Object.fromEntries(sites.data.map((s) => [s.id, s.name]))}
-          intro="The integrity grade of your web traffic over the last 30 UTC days, with the reasons behind it. This is exactly the report SCF operators see for your project."
+          intro="The integrity grade of your web traffic over the last 30 UTC days, with the reasons behind it. This is exactly the report SCF operators see for your project. The grade is computed automatically; if you think it is wrong, appeal it and an operator reviews the evidence."
+          appeal={{
+            slug: tenant.slug,
+            siteDomains: Object.fromEntries(sites.data.map((s) => [s.id, s.domain])),
+          }}
         />
       ) : null}
       <ProjectOnchainSection tenantId={tenant.id} days={range === "24h" ? 2 : 30} />

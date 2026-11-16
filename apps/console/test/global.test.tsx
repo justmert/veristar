@@ -78,7 +78,7 @@ describe("contract 8 and 9 schemas", () => {
 describe("list state and query strings", () => {
   it("reads every filter of 8.2 from the address and drops malformed values", () => {
     const p = new URLSearchParams(
-      "status=active,bogus,suspended&verified=true&stellar_toml=maybe&has_web_data=false&has_api_data=true&enrolled_from=2026-01-01&enrolled_to=not-a-day&q=dex&sort=visitors&order=asc&from=2026-11-01&to=2026-11-12",
+      "status=active,bogus,suspended&verified=true&stellar_toml=maybe&has_web_data=false&has_api_data=true&enrolled_from=2026-01-01&enrolled_to=not-a-day&q=dex&integrity_at_or_below=B&sort=visitors&order=asc&from=2026-11-01&to=2026-11-12",
     );
     const s = readListState(p, webSort.options, "pageviews");
     expect(s).toEqual({
@@ -97,6 +97,7 @@ describe("list state and query strings", () => {
         category: "",
         award_from: "",
         award_to: "",
+        integrity: "B",
       },
       sort: "visitors",
       order: "asc",
@@ -104,6 +105,11 @@ describe("list state and query strings", () => {
     expect(
       readListState(new URLSearchParams("sort=visitors"), apiSort.options, "requests").sort,
     ).toBe("requests");
+    // only A, B and C are grades
+    expect(
+      readListState(new URLSearchParams("integrity_at_or_below=D"), webSort.options, "pageviews")
+        .filters.integrity,
+    ).toBe("");
   });
 
   it("writes only non-default values and builds the list path with limit and cursor", () => {

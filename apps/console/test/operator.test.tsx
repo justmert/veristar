@@ -41,8 +41,10 @@ const noOnchain = {
       operations: 0,
       transactions: 0,
       days_missing: 0,
+      weekly_active_accounts: { average: null, latest: null, weeks_counted: 0, weeks_missing: 0 },
     },
     ids: [],
+    weeks: [],
     link: { two_way: false, sites: [] },
   },
 };
