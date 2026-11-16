@@ -88,7 +88,11 @@ func start(t *testing.T) *env {
 		Log: log, ConsoleOrigin: e.srv.URL, Sessions: sessions,
 		Public:  []controlplane.Routes{signIn, controlplane.RoutesFunc(e.routes.Public)},
 		Private: []controlplane.Routes{controlplane.RoutesFunc(e.routes.Private), cohort},
-		Mounts:  []controlplane.Mount{{Path: reports.StellarTOMLPath, Handler: e.routes.StellarTOMLHandler()}},
+		Mounts: []controlplane.Mount{{Path: "/.well-known", Handler: func() http.Handler {
+			r := chi.NewRouter()
+			e.routes.WellKnown(r)
+			return r
+		}()}},
 	})
 	return e
 }

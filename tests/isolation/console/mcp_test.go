@@ -482,6 +482,9 @@ func testMCPOperator(t *testing.T, e *env, alice *client, ta, tb uuid.UUID) {
 		{"compare_tenants_web", map[string]any{"tenant_ids": []string{ta.String(), tb.String()}}},
 		{"compare_tenants_api", map[string]any{"tenant_ids": []string{ta.String(), tb.String()}}},
 		{"get_tenant_onchain", map[string]any{"tenant_id": ta.String()}},
+		{"list_cohorts", nil},
+		{"list_threshold_rules", nil},
+		{"get_global_web_overview", map[string]any{"sort": "visitors_growth", "program": "Build Award"}},
 	} {
 		r := call(t, cs, c.name, c.args)
 		require.False(t, r.isError, "%s: %s", c.name, r.raw)
@@ -489,6 +492,8 @@ func testMCPOperator(t *testing.T, e *env, alice *client, ta, tb uuid.UUID) {
 	res = call(t, cs, "compare_tenants_api", map[string]any{"tenant_ids": []string{ta.String(), tb.String()}})
 	require.Contains(t, res.raw, "beta-secret-svc")
 	res = call(t, cs, "get_tenant", map[string]any{"tenant_id": uuid.NewString()})
+	require.Equal(t, "not_found", res.code)
+	res = call(t, cs, "get_threshold_rule_matches", map[string]any{"rule_id": uuid.NewString()})
 	require.Equal(t, "not_found", res.code)
 	res = call(t, cs, "compare_tenants_web", map[string]any{"tenant_ids": []string{}})
 	require.True(t, res.isError)

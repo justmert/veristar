@@ -1,7 +1,6 @@
 package operator
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -14,19 +13,26 @@ import (
 // saved rules, and the projects that meet one with the evidence. a key
 // scoped to one tenant evaluates that tenant only.
 
+// rules lists the saved rules. tenant is accepted and checked like on
+// every other route, so a key's scope answers the same everywhere; the
+// list itself holds no tenant data.
 func (m *Machine) rules(w http.ResponseWriter, r *http.Request) error {
-	if err := checkParams(r.URL.Query()); err != nil {
+	q := r.URL.Query()
+	if err := checkParams(q, "tenant"); err != nil {
 		return err
 	}
 	ctx := r.Context()
 	var out RuleList
 	err := m.db.WithOperator(ctx, func(tx pgx.Tx) error {
+		if _, err := resolveScope(ctx, tx, keyFrom(ctx), q); err != nil {
+			return err
+		}
 		var err error
 		out.Items, err = ListRules(ctx, tx)
 		return err
 	})
 	if err != nil {
-		return fmt.Errorf("operator: machine rules: %w", err)
+		return err
 	}
 	httpx.WriteJSON(w, http.StatusOK, out)
 	return nil

@@ -464,9 +464,8 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 			{Path: operator.MachinePath, Handler: machine.Handler()},
 			{Path: mcpserver.Path, Handler: mcpSrv.Handler()},
 			{Path: "/oauth", Handler: mcpSrv.OAuthHandler()},
-			{Path: "/.well-known", Handler: mcpSrv.MetadataHandler()},
-			// the report keys for sep-1 readers (contract 20.2)
-			{Path: reports.StellarTOMLPath, Handler: reportRoutes.StellarTOMLHandler()},
+			// with the stellar.toml of the report keys (contract 20.2)
+			{Path: "/.well-known", Handler: mcpSrv.MetadataHandler(reportRoutes.WellKnown)},
 		},
 	})
 

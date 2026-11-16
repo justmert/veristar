@@ -35,6 +35,7 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/stellar/go-stellar-sdk/keypair"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2"
 
@@ -57,6 +58,7 @@ import (
 	"github.com/justmert/veristar/internal/controlplane/operator"
 	"github.com/justmert/veristar/internal/controlplane/otlptokens"
 	"github.com/justmert/veristar/internal/controlplane/provision"
+	"github.com/justmert/veristar/internal/controlplane/reports"
 	"github.com/justmert/veristar/internal/controlplane/session"
 	"github.com/justmert/veristar/internal/controlplane/sites"
 	"github.com/justmert/veristar/internal/controlplane/sso"
@@ -316,13 +318,29 @@ func start(t *testing.T) *env {
 	require.NoError(t, err)
 	scfView, err := operator.NewSCFView(scope, e.conn, time.Now)
 	require.NoError(t, err)
+	// cohorts, threshold rules and signed usage reports (contract 19, 20)
+	cohortRoutes, err := operator.NewCohorts(e.conn, time.Now)
+	require.NoError(t, err)
+	tenantCohort, err := operator.NewTenantCohort(scope, time.Now)
+	require.NoError(t, err)
+	ruleRoutes, err := operator.NewRules(e.conn, time.Now)
+	require.NoError(t, err)
+	reportKey := keypair.MustRandom()
+	signing, err := config.LoadReportSigning(config.FromMap(map[string]string{
+		"REPORT_SIGNING_SEED": reportKey.Seed(), "REPORT_SIGNING_KEY": reportKey.Address(),
+	}))
+	require.NoError(t, err)
+	reportRoutes, err := reports.New(reports.Config{
+		Scope: scope, DB: e.conn, Signing: signing, ConsoleOrigin: e.srv.URL, Platform: "test", Now: time.Now,
+	})
+	require.NoError(t, err)
 	// the mcp server (contract 12), wired as cmd/controlplane wires it
 	e.mcp, err = mcpserver.New(mcpserver.Config{
 		DB:    e.conn,
 		Guard: guard,
 		Reads: []mcpserver.Routes{
-			tenants.NewRoutes(scope), sites.NewRoutes(scope), metricRoutes, onchainRoutes, scfView,
-			controlplane.RoutesFunc(guard.Mount(review, global, onchainOperator)),
+			tenants.NewRoutes(scope), sites.NewRoutes(scope), metricRoutes, onchainRoutes, scfView, tenantCohort,
+			controlplane.RoutesFunc(guard.Mount(review, global, onchainOperator, cohortRoutes, ruleRoutes)),
 		},
 		Sessions: ssoH,
 		Umami:    e.umami.Client,
@@ -341,7 +359,8 @@ func start(t *testing.T) *env {
 		Log:           log,
 		ConsoleOrigin: e.srv.URL,
 		Sessions:      sessions,
-		Public:        []controlplane.Routes{controlplane.RoutesFunc(ah.Public), controlplane.RoutesFunc(terms.Routes)},
+		Public: []controlplane.Routes{controlplane.RoutesFunc(ah.Public), controlplane.RoutesFunc(terms.Routes),
+			controlplane.RoutesFunc(reportRoutes.Public)},
 		Private: []controlplane.Routes{
 			controlplane.RoutesFunc(ah.Private),
 			accountRoutes,
@@ -357,17 +376,19 @@ func start(t *testing.T) *env {
 			onchainRoutes,
 			overviewExport,
 			scfView,
+			tenantCohort,
+			controlplane.RoutesFunc(reportRoutes.Private),
 			controlplane.RoutesFunc(func(r chi.Router) { r.Method(http.MethodGet, ssoPath, ssoH) }),
 			e.mcp.TenantRoutes(scope),
 			e.mcp.ConsentRoutes(),
 			controlplane.RoutesFunc(guard.Mount(modeRoutes, keepRoutes, auditRoutes, actions, review, global, apiKeys,
-				e.mcp.OperatorRoutes(), onchainOperator, operatorExports)),
+				e.mcp.OperatorRoutes(), onchainOperator, operatorExports, cohortRoutes, ruleRoutes)),
 		},
 		Mounts: []controlplane.Mount{
 			{Path: operator.MachinePath, Handler: machine.Handler()},
 			{Path: mcpserver.Path, Handler: e.mcp.Handler()},
 			{Path: "/oauth", Handler: e.mcp.OAuthHandler()},
-			{Path: "/.well-known", Handler: e.mcp.MetadataHandler()},
+			{Path: "/.well-known", Handler: e.mcp.MetadataHandler(reportRoutes.WellKnown)},
 		},
 	})
 	routes, ok := api.(chi.Routes)

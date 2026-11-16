@@ -55,6 +55,10 @@ const (
 	// TenantListAndPatch, Terms) and TestAccountDeletion; here the gate
 	// checks that bob's tenant list never holds tenant a
 	kindOwn
+	// a public route that needs no account: the shared report link and the
+	// report keys (contract 20.4). PublicReports checks that a link answers
+	// its own report and nothing of another tenant
+	kindPublic
 )
 
 // route is one registered route with the request its case sends. path
@@ -69,7 +73,7 @@ func (r route) key() string { return r.method + " " + strings.SplitN(r.path, "?"
 
 // gateIDs fills a route's parameters.
 type gateIDs struct {
-	tenant, user, invite, site, token, request, key, credential, chain string
+	tenant, user, invite, site, token, request, key, credential, chain, report, rule string
 	// domain is the site's domain, for bodies that must repeat it
 	domain string
 }
@@ -78,7 +82,7 @@ func (r route) fill(ids gateIDs) string {
 	return strings.NewReplacer(
 		"{tenant_id}", ids.tenant, "{user_id}", ids.user, "{invite_id}", ids.invite,
 		"{site_id}", ids.site, "{token_id}", ids.token, "{request_id}", ids.request, "{key_id}", ids.key,
-		"{credential_id}", ids.credential, "{chain_id}", ids.chain,
+		"{credential_id}", ids.credential, "{chain_id}", ids.chain, "{report_id}", ids.report, "{rule_id}", ids.rule,
 	).Replace(r.path)
 }
 
@@ -160,6 +164,18 @@ func catalogue(terms string) []route {
 	add(kindTenant, http.MethodGet, tp+"/scf-view", nil)
 	add(kindTenant, http.MethodGet, tp+"/erasure", nil)
 	add(kindTenant, http.MethodGet, tp+"/erasure/{request_id}", nil)
+	// the cohort proposal and signed usage reports (contract 19.1, 20)
+	add(kindTenant, http.MethodGet, tp+"/cohort", nil)
+	add(kindTenant, http.MethodPut, tp+"/cohort/proposal", fixed(map[string]any{"program": "Intruder Award"}))
+	add(kindTenant, http.MethodGet, tp+"/reports", nil)
+	add(kindTenant, http.MethodPost, tp+"/reports", func(gateIDs) any {
+		y := time.Now().UTC().AddDate(0, 0, -1).Format(time.DateOnly)
+		return map[string]any{"from": y, "to": y}
+	})
+	add(kindTenant, http.MethodGet, tp+"/reports/{report_id}", nil)
+	add(kindTenant, http.MethodPost, tp+"/reports/{report_id}/revoke", nil)
+	add(kindPublic, http.MethodGet, "/api/public/reports/{report_id}", nil)
+	add(kindPublic, http.MethodGet, "/api/public/report-keys", nil)
 	// site routes
 	add(kindTenant, http.MethodGet, sp+"/snippet", nil)
 	add(kindTenant, http.MethodGet, sp+"/ingest", nil)
@@ -201,6 +217,20 @@ func catalogue(terms string) []route {
 	add(kindOperator, http.MethodPost, op+"/mcp-credentials", fixed(map[string]any{"name": "intruder"}))
 	add(kindOperator, http.MethodGet, op+"/mcp-credentials", nil)
 	add(kindOperator, http.MethodDelete, op+"/mcp-credentials/{credential_id}", nil)
+	// cohorts and threshold rules (contract 19)
+	add(kindOperator, http.MethodGet, op+"/cohorts", nil)
+	add(kindOperator, http.MethodGet, op+"/tenants/{tenant_id}/cohort", nil)
+	add(kindOperator, http.MethodPut, op+"/tenants/{tenant_id}/cohort", fixed(map[string]any{"program": "Intruder Award"}))
+	add(kindOperator, http.MethodPost, op+"/tenants/{tenant_id}/cohort/confirm", nil)
+	add(kindOperator, http.MethodDelete, op+"/tenants/{tenant_id}/cohort/proposal", nil)
+	rule := fixed(map[string]any{"name": "intruder", "metric": "visitors", "min_per_day": 1, "min_days": 1, "months": 1})
+	add(kindOperator, http.MethodGet, op+"/rules", nil)
+	add(kindOperator, http.MethodPost, op+"/rules", rule)
+	add(kindOperator, http.MethodGet, op+"/rules/{rule_id}", nil)
+	add(kindOperator, http.MethodPut, op+"/rules/{rule_id}", rule)
+	add(kindOperator, http.MethodDelete, op+"/rules/{rule_id}", nil)
+	add(kindOperator, http.MethodGet, op+"/rules/{rule_id}/matches", nil)
+	add(kindOperator, http.MethodGet, op+"/rules/{rule_id}/matches.csv", nil)
 
 	// mcp access keys of a project and the consent page (contract 12.8);
 	// the consent routes act on the caller's own memberships only
@@ -219,10 +249,12 @@ func catalogue(terms string) []route {
 	add(kindMCP, http.MethodGet, "/.well-known/oauth-protected-resource", nil)
 	add(kindMCP, http.MethodGet, "/.well-known/oauth-protected-resource/mcp", nil)
 	add(kindMCP, http.MethodGet, "/.well-known/oauth-authorization-server", nil)
+	// the report keys for sep-1 readers (contract 20.2); public by design
+	add(kindPublic, http.MethodGet, "/.well-known/stellar.toml", nil)
 
 	// machine metrics api
 	for _, p := range []string{"/tenants", "/web/daily", "/web/dimensions", "/web/hourly", "/web/integrity", "/api/daily", "/api/routes/daily",
-		"/api/hourly", "/onchain/ids", "/onchain/daily", "/openapi.yaml"} {
+		"/api/hourly", "/onchain/ids", "/onchain/daily", "/rules", "/rules/{rule_id}/matches", "/openapi.yaml"} {
 		add(kindMachine, http.MethodGet, operator.MachinePath+p, nil)
 	}
 	return out
@@ -266,18 +298,22 @@ type gateWorld struct {
 	chainA         string // id of alice's declared account
 	chainKeyA      string // its strkey
 	requestA       string
+	reportA        string // id of a signed usage report of tenant a
+	reportB        string // and of tenant b
+	ruleID         string // a threshold rule tenant a meets
 	slugA, nameA   string
 }
 
 func (w *gateWorld) aIDs() gateIDs {
 	return gateIDs{tenant: w.ta.String(), user: w.alice.userID.String(), invite: w.inviteA, site: w.sa.String(),
-		token: w.tokenA, request: w.requestA, domain: w.domainA, credential: w.credentialA, chain: w.chainA}
+		token: w.tokenA, request: w.requestA, domain: w.domainA, credential: w.credentialA, chain: w.chainA,
+		report: w.reportA, rule: w.ruleID}
 }
 
 // markers are strings only tenant a's data holds.
 func (w *gateWorld) markers() []string {
 	return []string{w.ta.String(), w.sa.String(), w.domainA, w.slugA, w.nameA, w.inviteA, w.tokenA, w.requestA, w.credentialA,
-		w.chainA, w.chainKeyA}
+		w.chainA, w.chainKeyA, w.reportA}
 }
 
 func (w *gateWorld) leaked(body []byte) []string {
@@ -350,6 +386,28 @@ func (e *env) gateWorld(t *testing.T) *gateWorld {
 	r = w.alice.call(t, http.MethodGet, "/api/tenants/"+w.ta.String()+"/erasure/"+w.requestA, nil)
 	require.Equal(t, http.StatusOK, r.status, string(r.body))
 
+	// a cohort proposal and one day of visitors in the previous month for
+	// tenant a, a threshold rule it meets, and a signed report of each
+	// tenant (contract 19, 20)
+	r = w.alice.call(t, http.MethodPut, "/api/tenants/"+w.ta.String()+"/cohort/proposal", map[string]any{"program": "Gate Award"})
+	require.Equal(t, http.StatusOK, r.status, string(r.body))
+	e.superuser(t, func(c *pgx.Conn) {
+		_, err := c.Exec(context.Background(), `insert into agg.web_daily (site_id, tenant_id, day, band, pageviews, visitors, visits, bounces, totaltime)
+			values ($1, $2, date_trunc('month', current_date) - interval '1 month', 'primary', 3, 2, 2, 0, 0)`, w.sa, w.ta)
+		require.NoError(t, err)
+	})
+	r = w.op.call(t, http.MethodPost, "/api/operator/rules", map[string]any{
+		"name": "gate rule", "metric": "visitors", "min_per_day": 1, "min_days": 1, "months": 1})
+	require.Equal(t, http.StatusCreated, r.status, string(r.body))
+	w.ruleID = r.json(t)["id"].(string)
+	y := time.Now().UTC().AddDate(0, 0, -1).Format(time.DateOnly)
+	r = w.alice.call(t, http.MethodPost, "/api/tenants/"+w.ta.String()+"/reports", map[string]any{"from": y, "to": y})
+	require.Equal(t, http.StatusCreated, r.status, string(r.body))
+	w.reportA = r.json(t)["id"].(string)
+	r = w.bob.call(t, http.MethodPost, "/api/tenants/"+w.tb.String()+"/reports", map[string]any{"from": y, "to": y})
+	require.Equal(t, http.StatusCreated, r.status, string(r.body))
+	w.reportB = r.json(t)["id"].(string)
+
 	// the stellar.toml fetches site creation started have written their rows
 	e.checks.Wait()
 	// both tenants' websites exist in umami before anything is compared:
@@ -394,8 +452,13 @@ func (e *env) snapshot(t *testing.T, w *gateWorld) map[string]string {
 			from cp.operator_api_keys x`, nil},
 		{"chain_ids", `select coalesce(json_agg(x order by x.id)::text, '') from cp.chain_ids x where x.tenant_id in ($1, $2)`, ab},
 		{"chain_daily", `select coalesce(json_agg(x order by x.tenant_id, x.strkey, x.day)::text, '') from agg.chain_daily x where x.tenant_id in ($1, $2)`, ab},
-		{"audit_tenant_a", `select count(*)::text from cp.audit_log x where x.target in ('tenant:' || $1, 'site:' || $2, 'chain_id:' || $3)`,
-			[]any{w.ta.String(), w.sa.String(), w.chainA}},
+		{"tenant_cohorts", `select coalesce(json_agg(x order by x.tenant_id)::text, '') from cp.tenant_cohorts x where x.tenant_id in ($1, $2)`, ab},
+		{"threshold_rules", `select coalesce(json_agg(x order by x.id)::text, '') from cp.threshold_rules x`, nil},
+		// view_count moves with every public view, by design
+		{"usage_reports", `select coalesce(json_agg(json_build_array(x.id, x.tenant_id, x.body, x.signature, x.revoked_at) order by x.id)::text, '')
+			from cp.usage_reports x where x.tenant_id in ($1, $2)`, ab},
+		{"audit_tenant_a", `select count(*)::text from cp.audit_log x where x.target in ('tenant:' || $1, 'site:' || $2, 'chain_id:' || $3, 'report:' || $4)
+			and x.action <> 'report.view'`, []any{w.ta.String(), w.sa.String(), w.chainA, w.reportA}},
 		{"audit_bob", `select count(*)::text from cp.audit_log x where x.actor = 'user:' || $1`, []any{w.bob.userID.String()}},
 	}
 	e.superuser(t, func(c *pgx.Conn) {
@@ -439,6 +502,64 @@ func TestIsolationGate(t *testing.T) {
 	t.Run("OperatorRoutesNonOperator", func(t *testing.T) { testOperatorRoutes(t, e, w, cat) })
 	t.Run("MachineAPIScope", func(t *testing.T) { testMachineAPI(t, e, w, cat) })
 	t.Run("MCPRoutes", func(t *testing.T) { testMCPRoutes(t, e, w, cat) })
+	t.Run("PublicReports", func(t *testing.T) { testPublicRoutes(t, e, w, cat) })
+}
+
+// testPublicRoutes: a report link answers that one report, to anyone,
+// and nothing of any other tenant; an unknown, malformed or revoked link
+// is the same 404; the key documents hold no tenant data at all.
+func testPublicRoutes(t *testing.T, e *env, w *gateWorld, cat []route) {
+	var bMarkers []string
+	r := w.bob.call(t, http.MethodGet, "/api/tenants/"+w.tb.String(), nil)
+	require.Equal(t, http.StatusOK, r.status)
+	bMarkers = append(bMarkers, w.tb.String(), w.sb.String(), "b-gate.example.org", r.json(t)["slug"].(string),
+		r.json(t)["name"].(string), w.reportB)
+	leakedB := func(body []byte) []string {
+		var hit []string
+		for _, m := range bMarkers {
+			if strings.Contains(string(body), m) {
+				hit = append(hit, m)
+			}
+		}
+		return hit
+	}
+	sent := 0
+	for _, c := range []*client{e.anonymous(t), w.bob, w.op} {
+		// a's link holds a's report and nothing of tenant b
+		res := c.call(t, http.MethodGet, "/api/public/reports/"+w.reportA, nil)
+		require.Equal(t, http.StatusOK, res.status, "%s: %s", c.login, res.body)
+		require.Contains(t, string(res.body), w.ta.String())
+		require.Empty(t, leakedB(res.body), "%s: a's link: %s", c.login, res.body)
+		// b's link holds b's report and nothing of tenant a
+		res = c.call(t, http.MethodGet, "/api/public/reports/"+w.reportB, nil)
+		require.Equal(t, http.StatusOK, res.status, "%s: %s", c.login, res.body)
+		require.Empty(t, w.leaked(res.body), "%s: b's link: %s", c.login, res.body)
+		sent += 2
+		for _, id := range []string{"aaaaaaaaaaaaaaaaaaaaaaaaaa", strings.ToUpper(w.reportA), w.reportA + "a", w.ta.String(), "..", "%2e%2e"} {
+			res := c.call(t, http.MethodGet, "/api/public/reports/"+id, nil)
+			require.Equal(t, http.StatusNotFound, res.status, "%s: %s", id, res.body)
+			require.Empty(t, w.leaked(res.body))
+			require.Empty(t, leakedB(res.body))
+			sent++
+		}
+	}
+	for _, rt := range cat {
+		if rt.kind != kindPublic || strings.Contains(rt.path, "{") {
+			continue
+		}
+		res := e.anonymous(t).call(t, rt.method, rt.path, nil)
+		require.Equal(t, http.StatusOK, res.status, "%s: %s", rt.path, res.body)
+		require.Empty(t, w.leaked(res.body), rt.path)
+		require.Empty(t, leakedB(res.body), rt.path)
+		sent++
+	}
+	// a revoked link is gone for everyone, and stays so
+	r = w.bob.call(t, http.MethodPost, "/api/tenants/"+w.tb.String()+"/reports/"+w.reportB+"/revoke", nil)
+	require.Equal(t, http.StatusOK, r.status, string(r.body))
+	res := e.anonymous(t).call(t, http.MethodGet, "/api/public/reports/"+w.reportB, nil)
+	require.Equal(t, http.StatusNotFound, res.status)
+	require.Empty(t, leakedB(res.body))
+	t.Logf("%d public report requests: each link answered its own report only", sent+1)
 }
 
 // testMCPRoutes: the mcp endpoint refuses every request without a bearer
@@ -536,11 +657,14 @@ func testTenantRoutes(t *testing.T, e *env, w *gateWorld, cat []route) {
 		ids  gateIDs
 	}{
 		{"real", a},
-		{"guessed", gateIDs{tenant: guess, user: guess, invite: guess, site: guess, token: guess, request: guess, domain: w.domainA, credential: guess}},
-		{"malformed", gateIDs{tenant: "not-a-uuid", user: "1", invite: "..", site: "%2e%2e", token: "x'or'1", request: strings.ToUpper(w.requestA), domain: w.domainA, credential: "x"}},
+		{"guessed", gateIDs{tenant: guess, user: guess, invite: guess, site: guess, token: guess, request: guess, domain: w.domainA, credential: guess,
+			report: "aaaaaaaaaaaaaaaaaaaaaaaaaa"}},
+		{"malformed", gateIDs{tenant: "not-a-uuid", user: "1", invite: "..", site: "%2e%2e", token: "x'or'1", request: strings.ToUpper(w.requestA), domain: w.domainA, credential: "x",
+			report: strings.ToUpper(w.reportA)}},
 		// bob's own tenant with tenant a's members, invite, site, token and
 		// erasure request
-		{"mixed", gateIDs{tenant: w.tb.String(), user: a.user, invite: a.invite, site: a.site, token: a.token, request: a.request, domain: w.domainA, credential: a.credential}},
+		{"mixed", gateIDs{tenant: w.tb.String(), user: a.user, invite: a.invite, site: a.site, token: a.token, request: a.request, domain: w.domainA, credential: a.credential,
+			report: a.report}},
 	}
 	sent := 0
 	for _, c := range cases {
@@ -617,10 +741,10 @@ func testOperatorRoutes(t *testing.T, e *env, w *gateWorld, cat []route) {
 	before := e.snapshot(t, w)
 	sent := 0
 	idsets := []gateIDs{
-		{tenant: w.ta.String(), site: w.sa.String(), key: keyID},
+		{tenant: w.ta.String(), site: w.sa.String(), key: keyID, rule: w.ruleID},
 		// bob trying to act on his own tenant and site
-		{tenant: w.tb.String(), site: w.sb.String(), key: keyID},
-		{tenant: uuid.NewString(), site: uuid.NewString(), key: uuid.NewString()},
+		{tenant: w.tb.String(), site: w.sb.String(), key: keyID, rule: w.ruleID},
+		{tenant: uuid.NewString(), site: uuid.NewString(), key: uuid.NewString(), rule: uuid.NewString()},
 	}
 	anon := e.anonymous(t)
 	for _, r := range cat {
@@ -658,7 +782,7 @@ func testOperatorRoutes(t *testing.T, e *env, w *gateWorld, cat []route) {
 	// the guard and not from a missing route
 	for _, r := range cat {
 		if r.kind == kindOperator && r.method == http.MethodGet {
-			p := r.fill(gateIDs{tenant: w.ta.String(), key: keyID})
+			p := r.fill(gateIDs{tenant: w.ta.String(), key: keyID, rule: w.ruleID})
 			res := w.op.call(t, r.method, p, nil)
 			require.Equal(t, http.StatusOK, res.status, "control: operator %s: %s", p, res.body)
 		}
@@ -766,10 +890,10 @@ func testMachineAPI(t *testing.T, e *env, w *gateWorld, cat []route) {
 	var dataRoutes []string
 	for _, r := range cat {
 		if r.kind == kindMachine && !strings.HasSuffix(r.path, "/openapi.yaml") {
-			dataRoutes = append(dataRoutes, r.path)
+			dataRoutes = append(dataRoutes, r.fill(gateIDs{rule: w.ruleID}))
 		}
 	}
-	require.Len(t, dataRoutes, 10)
+	require.Len(t, dataRoutes, 12)
 	sent := 0
 	refused := func(r machineResp, status int, code, what string) {
 		t.Helper()
@@ -838,7 +962,8 @@ func testMachineAPI(t *testing.T, e *env, w *gateWorld, cat []route) {
 			r = w.bob.machine(t, p+"?tenant="+w.ta.String(), bearer(global))
 		}
 		require.Equal(t, http.StatusOK, r.status, "control: global key %s: %s", p, r.body)
-		if !strings.HasSuffix(p, "/web/hourly") {
+		// the hourly view reads umami live and the rule list holds no tenant
+		if !strings.HasSuffix(p, "/web/hourly") && !strings.HasSuffix(p, "/rules") {
 			require.Contains(t, string(r.body), w.ta.String(), "control: global key %s holds tenant a", p)
 		}
 		// a key for every tenant naming a tenant that does not exist

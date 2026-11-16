@@ -140,8 +140,10 @@ func (s *Server) unseal(v string) (authRequest, error) {
 }
 
 // MetadataHandler serves the two discovery documents, mounted at
-// /.well-known.
-func (s *Server) MetadataHandler() http.Handler {
+// /.well-known. extra registers other well-known documents on the same
+// router (the report keys' stellar.toml, contract 20.2), with paths
+// relative to /.well-known.
+func (s *Server) MetadataHandler(extra ...func(chi.Router)) http.Handler {
 	prm := auth.ProtectedResourceMetadataHandler(&oauthex.ProtectedResourceMetadata{
 		Resource:               s.resource,
 		AuthorizationServers:   []string{s.issuer},
@@ -159,6 +161,9 @@ func (s *Server) MetadataHandler() http.Handler {
 	r.Method(http.MethodGet, strings.TrimPrefix(ProtectedResourceMetadataPath, "/.well-known")+Path, prm)
 	r.Method(http.MethodGet, strings.TrimPrefix(ProtectedResourceMetadataPath, "/.well-known"), prm)
 	r.Get(strings.TrimPrefix(AuthorizationServerMetadataPath, "/.well-known"), s.serverMetadata)
+	for _, f := range extra {
+		f(r)
+	}
 	return r
 }
 
