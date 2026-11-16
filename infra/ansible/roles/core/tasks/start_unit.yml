@@ -8,6 +8,12 @@
 # starts a dependent (on core, umami's start period alone is 120 s), so the
 # unit gets far more than systemd's 90 s default for a oneshot; killed at
 # 90 s it would leave the dependents that docker did not start down.
+# at boot docker's restart policy races this unit: a container it restarts
+# before its own dependency is up (umami before postgres, on node 3 at
+# 2026-11-14 23:33) crash-loops for a few seconds, compose start reads that as
+# "dependency is unhealthy" and gives up, and the unit stayed failed although
+# the container was healthy 24 s later. so a failed start is retried a few
+# times before the unit is left failed.
 - name: Install the start-at-boot unit of the compose project
   ansible.builtin.copy:
     content: |
@@ -16,10 +22,14 @@
       Description=start the core compose project's containers after boot
       After=docker.service
       Requires=docker.service
+      StartLimitIntervalSec=30min
+      StartLimitBurst=6
 
       [Service]
       Type=oneshot
       TimeoutStartSec=15min
+      Restart=on-failure
+      RestartSec=20s
       ExecStart=/usr/bin/docker compose --project-directory {{ core_dir }} start
 
       [Install]
