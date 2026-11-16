@@ -9,6 +9,10 @@ The file is baked into the gateway image; the image names the month it carries
 (`/geo/dbip-country-lite.mmdb.month`). Details and the licence terms:
 [../reference/geo.md](../reference/geo.md).
 
+The same month pins the network data the gateway classifies client networks with (DB-IP ASN Lite,
+ipverse as-metadata categories, Tor exit addresses; [../reference/geo.md](../reference/geo.md),
+"Network class"). `make geo-fetch` and the image build fetch both, so this update renews both.
+
 Alert: `DBIPFileOld` fires when the file in use was built more than 45 days ago
 ([alerts.md](alerts.md)). Do the update every month, early in the month once DB-IP has published.
 
@@ -28,6 +32,9 @@ Alert: `DBIPFileOld` fires when the file in use was built more than 45 days ago
    fetch-dbip: wrote .../.scratch/geo/dbip-country-lite.mmdb (<YYYY-MM>)
    ```
 
+   The target then runs `scripts/fetch-network.sh`, which ends with
+   `fetch-network: wrote .../.scratch/geo (<YYYY-MM>, as-metadata <commit>, tor exits of <previous month>)`.
+
    Before DB-IP has published the month, `curl` reports `404` and the target fails; nothing is
    written. The script never falls back to another month on its own: to use the previous month,
    pass it explicitly.
@@ -35,7 +42,7 @@ Alert: `DBIPFileOld` fires when the file in use was built more than 45 days ago
 2. **Run the geo tests against it** (they fail if the truncation error rate rises above 0.5%):
 
    ```sh
-   DBIP_MMDB=.scratch/geo/dbip-country-lite.mmdb go test -race -count=1 -run TestGeo ./internal/gateway/
+   DBIP_MMDB=.scratch/geo/dbip-country-lite.mmdb go test -race -count=1 -run 'TestGeo|TestNetwork' ./internal/gateway/
    ```
 
    Expected: `ok  github.com/justmert/veristar/internal/gateway`.
@@ -54,10 +61,12 @@ Alert: `DBIPFileOld` fires when the file in use was built more than 45 days ago
    For a local or test image, `docker build -f deploy/images/gateway.Dockerfile --build-arg DBIP_MONTH=<YYYY-MM> .`
    (or `make gateway-up`, which passes the current month).
 
-4. **Check** a node serves the new month: `DBIPFileOld` resolves, and the gateway metric
-   `gateway_geo_build_timestamp_seconds` shows the new build time in Prometheus.
+4. **Check** a node serves the new month: `DBIPFileOld` resolves, and the gateway metrics
+   `gateway_geo_build_timestamp_seconds` and `gateway_network_build_timestamp_seconds` show the
+   new build times in Prometheus.
 
-5. **Attribution** stays as it is: the image ships `DBIP-ATTRIBUTION.txt` next to the file, and
+5. **Attribution** stays as it is: the image ships `DBIP-ATTRIBUTION.txt` and
+   `NETWORK-ATTRIBUTION.txt` next to the files, and
    the console and docs carry the DB-IP link ([../reference/geo.md](../reference/geo.md)).
 
 A running gateway can also load a replaced file without restart on `SIGHUP` (the file is replaced

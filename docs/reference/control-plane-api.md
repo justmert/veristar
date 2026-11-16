@@ -27,6 +27,7 @@ the routes by area:
 | 10 | erasure |
 | 11 | operator alerts |
 | 12 | the MCP server |
+| 17 | the integrity grade of web traffic |
 
 A new route adds its error codes to section 2.4 and its audit actions to section
 3.3. The meaning of an existing field never changes.
@@ -1847,6 +1848,7 @@ Operator. Default sort `pageviews`. Item:
   "bounce_rate": 0.4905660377358491, "avg_visit_duration": 90.94339622641509,
   "quarantine_pageviews": 40, "quarantine_visitors": 12, "quarantine_share": 0.03225806451612903,
   "ingest_requests": 1890, "ingest_rejected": 75, "rejected_share": 0.03968253968253968,
+  "integrity": { "grade": "A", "graded_days": 24, "days_a": 22, "days_b": 2, "days_c": 0 },
   "top": {
     "referrer": [ { "key": "github.com", "value": 81 } ],
     "country": [ { "key": "DE", "value": 120 } ],
@@ -1877,7 +1879,10 @@ Operator. Default sort `pageviews`. Item:
   `sites_with_stellar_toml`, `pageviews`, `visitors`, `visits`, `bounces`,
   `totaltime`, `bounce_rate`, `avg_visit_duration`, `quarantine_pageviews`,
   `quarantine_visitors`, `quarantine_share`, `ingest_requests`,
-  `ingest_rejected`, `rejected_share`.
+  `ingest_rejected`, `rejected_share`, `integrity`.
+- `integrity`: the range grade over the project's graded site days (17.1);
+  `grade` is `null` without one. Sorting by `integrity` orders A, B, C and
+  puts projects without a grade last.
 
 ### 8.4 `GET /api/operator/web/compare`
 
@@ -1915,6 +1920,7 @@ Operator. Query `tenants` (1 to 5 distinct tenant ids, comma-separated),
 
 - `projects` come in the order of `tenants`. Every `series` has one point per
   entry of `days`, so the charts align.
+- `integrity`: the project's range grade with its reasons (17.1).
 - A point is `aggregated: false`, with every number `null`, when no site of
   the project has a row for that day yet (the day was never read, for
   example before a backfill). A day the task read without traffic is
@@ -2158,7 +2164,9 @@ Parameters `tenant`, `band` (`primary` or `quarantine`, absent for both),
 `visitors`, `visits`, `bounces`, `totaltime`, and `sites`, the number of site
 rows summed. A day the aggregation task read without traffic has zeros; a day
 it never read is absent. Ordered by tenant, day, band. Summed over a range
-these equal the totals of 8.3 for the same range.
+these equal the totals of 8.3 for the same range. `integrity` is the grade of
+the tenant's sites on that day (17.4). `GET /web/integrity` lists the grades
+per site and day (17.4).
 
 ### 9.6 `GET /web/dimensions`
 
@@ -2603,7 +2611,9 @@ revenue, so those tools would only answer zeros.
 guard of 5.1: `list_tenants` (5.3, search and filters), `get_tenant` (5.4),
 `get_global_web_overview` (8.3), `get_global_api_overview` (8.5),
 `compare_tenants_web` (8.4) and `compare_tenants_api` (8.6), with their
-filters, sorts and pages.
+filters, sorts and pages, and `get_tenant_integrity` (17.3).
+
+**12.4.5 Integrity** for a project: `get_web_integrity` (17.2).
 
 No MCP resources or prompts are offered; the server's instructions tell a
 model the order to call tools in.
@@ -2686,3 +2696,105 @@ Audit actions: `mcp_credential.create` (actor `user:<id>`; detail `kind`,
 No new key: the issuer is `CONSOLE_ORIGIN` and the seal key is derived from
 `OAUTH_STATE_KEY`. The limits of 12.6 are constants of
 `internal/controlplane/mcpserver`.
+
+## 17. Integrity grade of web traffic
+
+Every site gets an integrity grade per UTC day: `A`, `B` or `C`, or none for a
+day with too little traffic, with the reasons that set it. The jobs task
+`integrity` computes it hourly for today and the three days before from
+platform-observed evidence and stores it in `agg.web_integrity_daily`. The
+rules, their inputs and thresholds are in
+[../security/bot-and-inflation.md](../security/bot-and-inflation.md) section 9.
+The project reads its own rows under `cp_tenant` with row-level security,
+operators read every project's under `cp_operator`; both get the same report.
+
+### 17.1 Objects
+
+**Report**, the answer of 17.2 and 17.3:
+
+```json
+{
+  "tenant_id": "uuid", "from": "2026-11-01", "to": "2026-11-30", "rule_version": 1,
+  "grade": "B", "graded_days": 30, "days_a": 22, "days_b": 6, "days_c": 2,
+  "reasons": [
+    { "code": "hosting_share", "level": "C", "days": 8,
+      "text": "A large share of events came from hosting networks or anonymisers." }
+  ],
+  "sites": [
+    {
+      "site_id": "uuid",
+      "grade": "B", "graded_days": 30, "days_a": 22, "days_b": 6, "days_c": 2, "reasons": ["RangeReason"],
+      "days": [
+        {
+          "day": "2026-11-30", "grade": "C", "closed": false, "rule_version": 1,
+          "reasons": [
+            { "code": "hosting_share", "level": "C", "value": 0.62, "limit": 0.5,
+              "text": "62% of events came from hosting networks or anonymisers (limit 50%). ..." }
+          ],
+          "evidence": {
+            "events": 1840, "quarantined": 120, "proof_failures": 35, "networks": 41,
+            "visitors": 610, "pageviews": 1500, "baseline_visitors": 590, "baseline_days": 28,
+            "net": { "access": 600, "organisation": 50, "hosting": 1100, "anonymiser": 40, "unknown": 50 },
+            "hosting_share": 0.6195652173913043, "quarantine_share": 0.06521739130434782,
+            "proof_pass_rate": 0.9813333333333333
+          }
+        }
+      ]
+    }
+  ]
+}
+```
+
+- `grade` of a day is `null` when it had fewer than 50 accepted events; its
+  only reason is `too_little_traffic` with level `none`.
+- Reason codes: `hosting_share`, `quarantine_share`, `few_networks`, `spike`,
+  `proof_failures`, `page_volume`, `too_little_traffic`. `level` is the grade
+  the reason caps the day at (`B`, `C`) or `none`. `value` and `limit` are the
+  observed figure and the threshold it crossed (a share from 0 to 1, a count
+  or a factor). `text` is the plain language form; the same text reaches the
+  project and operators.
+- A range grade (`grade` of a site or of the report) combines the graded site
+  days: `C` when at least a quarter of them are `C`, `B` when at least a
+  quarter are `B` or `C`, `A` otherwise, `null` without a graded day. Range
+  reasons count the days each code applied to, with the worst level.
+- `closed` is `true` once the UTC day has ended. A day is graded again while
+  the web aggregates of 8 may still change it (three days).
+- `evidence.net` counts accepted events per network class; `networks` is the
+  number of distinct autonomous systems. Neither holds an address or a
+  network number.
+
+### 17.2 `GET /api/tenants/{tenant_id}/integrity`
+
+Member (1.3). Query `from`, `to`: UTC days, both included, `to` not after
+today, at most 366 days; without `to` the range ends today, without `from`
+it holds 30 days. **200** Report of the tenant. 400 `invalid_query` for a bad
+or unknown parameter. A project without graded days gets a report with
+`grade` `null` and no sites.
+
+### 17.3 `GET /api/operator/web/integrity`
+
+Operator. Query `tenant` (required, lowercase UUID), `from`, `to` (8.1).
+**200** Report of that project. 400 `invalid_query` without `tenant` or for
+an unknown parameter; 404 `not_found` for an unknown or internal tenant.
+
+The project list of 8.3 carries the range grade of each row as
+`integrity` (`grade`, `graded_days`, `days_a`, `days_b`, `days_c`) and sorts
+by it with `sort=integrity` (A first ascending; projects without a graded day
+last in both orders). Each project of 8.4 carries `integrity` with the range
+grade and its reasons.
+
+### 17.4 Machine API and exports
+
+- `GET /api/metrics/v1/web/integrity` (9.3 rules): parameters `tenant`,
+  `from`, `to`, `limit`, `cursor`. One item per tenant, site and day of
+  `agg.web_integrity_daily`: `tenant_id`, `site_id` and the day object of
+  17.1. Ordered by tenant, site and day.
+- Every `GET /api/metrics/v1/web/daily` item carries `integrity`: the range
+  grade of the tenant's sites on that day, the same on both bands' items.
+- The CSV exports carry the grade: `integrity_grade`, `integrity_days_a`,
+  `integrity_days_b` and `integrity_days_c` per row of the web project
+  export; `integrity_grade` per project and day of the web compare export and
+  per day of the project overview export.
+- MCP: the project tool `get_web_integrity` reads 17.2, the operator tool
+  `get_tenant_integrity` reads 17.3; `get_global_web_overview` accepts
+  `sort` `integrity`.

@@ -36,7 +36,9 @@ file-backed stream. "Stored" means PostgreSQL.
 | Component | Data | Where | How long |
 |---|---|---|---|
 | Edge Caddy | client address, `User-Agent`, request line | memory | the request; access logs delete the remote address, client address, `User-Agent`, `X-Forwarded-For`, `X-Real-Ip` and `Forwarded` fields (`deploy/caddy/edge.Caddyfile`) |
-| Gateway | client address (in `X-Edge-Client-Ip` from Caddy) | memory | the request. It is truncated to /24 (IPv4) or /48 (IPv6) for the country lookup and is never logged, queued or stored (`internal/gateway/clientip.go`, `docs/reference/geo.md`) |
+| Gateway | client address (in `X-Edge-Client-Ip` from Caddy) | memory | the request. It is truncated to /24 (IPv4) or /48 (IPv6) for the country and autonomous system lookups, compared whole against the Tor exit list, and is never logged, queued or stored (`internal/gateway/clientip.go`, `internal/gateway/network.go`, `docs/reference/geo.md`) |
+| Gateway | network class of the event (`access`, `organisation`, `hosting`, `anonymiser`, `unknown`) and, per site and UTC day, the network as an HMAC of its autonomous system number under the daily IP-cluster secret, cut to 64 bits | memory, then counted on `EDGE_STATS` | the request; the class leaves only as a per-site count, the network key once per site and day; the autonomous system number itself never leaves the gateway |
+| Gateway | networks reported per site and day, as keys | memory | the UTC day, in a bounded table |
 | Gateway | daily visitor secret, daily IP-cluster secret, daily proof key | `edge_secrets`, memory bucket | until the next UTC midnight (per-key TTL), then gone; gateways zero their copies at midnight (`internal/gateway/visitor.go`) |
 | Gateway | IP-cluster sets: keyed HMAC of the truncated network, visitor tokens | memory | a sliding hour |
 | `WEB_EVENTS` | accepted event: site, band, visitor token, user agent (cut to 500 UTF-16 code units), country code, hostname, path with allowlisted query, referrer scheme and host, title, screen, language, event name and data | queued | until the replayer delivers it, at most 72 hours |
@@ -44,12 +46,15 @@ file-backed stream. "Stored" means PostgreSQL.
 | `visit_state` | per site and visitor token: Umami session id, cache token, last event time; duplicate-guard keys | memory bucket | 24 hours after the last write |
 | Umami (`umami` database) | `session` (browser, OS, device, screen, language, country), `website_event` (time, path, query, referrer domain, title, event name, hostname; the referrer path is always `/` and its query empty, section 7), `event_data` | stored | `WEB_RAW_RETENTION_MONTHS`, default 25 (section 4) |
 | `agg.web_daily`, `agg.web_daily_dim` | per site, band and UTC day: page views, visitors, visits, bounces, total time; ranked referrers, countries, devices, browsers, OSes | stored | as long as the site exists; removal follows `removal_keep_aggregates` |
+| `cp.web_evidence_daily` | per site and UTC day: accepted events per network class | stored | as long as the site exists; removal follows `removal_keep_aggregates` |
+| `cp.web_networks_daily` | per site and UTC day: the network keys reported by the gateways, for the distinct network count | stored | until the day leaves the regrade window (four days), then deleted by the `integrity` task; deleted in every removal purge |
+| `agg.web_integrity_daily` | per site and UTC day: the integrity grade, its reasons and the counts it was computed from (events per class, distinct networks, quarantined and proof-failed requests, visitors, page views, baseline) | stored | as long as the site exists; removal follows `removal_keep_aggregates` |
 | OTLP collector | tenant metrics and spans; logs are accepted and discarded | memory | the request; spans become duration histograms and are dropped (`collector/`) |
 | `API_METRICS` | filtered metric batches: tenant, service, normalized route, method, status class and code, histogram buckets | queued | until stored, at most 7 days |
 | `api.*` | one-minute, hourly and daily rows of the same dimensions | stored | minutes `API_MINUTE_RETENTION_DAYS`, hours `API_HOURLY_RETENTION_MONTHS` (at least 24), days as long as the tenant exists |
 | Control plane (`cp.*`) | GitHub numeric id and login of console users, session token hashes, tenants, sites, OTLP token hashes, audit log, erasure requests | stored | while the account or tenant exists; the audit log is append-only |
 
-No component stores an IP address. The privacy audit test (`tests/privacy/`)
+No component stores an IP address or an autonomous system number. The privacy audit test (`tests/privacy/`)
 sends real web and API traffic from marker addresses on a dedicated Docker
 network and scans both databases, every JetStream stream and KV bucket, every
 service log, the Caddy logs and every container volume for them.
@@ -61,14 +66,28 @@ service log, the Caddy logs and every container volume for them.
 2. Country: the /24 or /48 network is looked up in the local DB-IP Country
    Lite file. Only the ISO country code leaves the gateway. Region and city are
    never looked up.
-3. Visitor token: `vt = hex(HMAC-SHA256(daily_secret, site_id || 0x00 || ip ||
+3. Network class: the /24 or /48 network is looked up in the local DB-IP ASN
+   Lite file, and the autonomous system's category in the local ipverse
+   as-metadata table; the whole address is compared with the local list of
+   Tor exit addresses. Only the class leaves the request, as a count per site
+   (`evidence_net_<class>`). For the distinct network count the gateway sends
+   each network once per site and UTC day as
+   `HMAC-SHA256(daily_ipcluster_secret, "asn:" || number)`, cut to 64 bits.
+   The secret is the one of the same-network check, memory only and gone at
+   the next UTC midnight, so a stored key cannot be linked to a network
+   afterwards, and the keys are deleted once their day is graded for the last
+   time. The class and the keys describe a network shared by many people,
+   never a person; they serve fraud detection and are reduced to counts and a
+   grade per site and day (`docs/security/bot-and-inflation.md` sections 7 to
+   9).
+4. Visitor token: `vt = hex(HMAC-SHA256(daily_secret, site_id || 0x00 || ip ||
    0x00 || user_agent))`. The secret is 32 random bytes per
    UTC day, created atomically in the memory bucket `edge_secrets` with a TTL
    that ends at the next UTC midnight. No copy is written to disk.
-4. The replayer sends Umami the constant address `192.0.2.1` (TEST-NET-1) and
+5. The replayer sends Umami the constant address `192.0.2.1` (TEST-NET-1) and
    passes `vt` as Umami's client salt, so Umami's session id depends on the
    token and never on a real address.
-5. After midnight nobody can recompute a token of the previous day, so stored
+6. After midnight nobody can recompute a token of the previous day, so stored
    sessions cannot be linked back to an address and user agent. The CJEU held
    in C-413/23 P that pseudonymised data is personal data for whoever can
    re-identify it (S8). That nobody can re-identify a token once its salt is
@@ -90,6 +109,8 @@ day replaces the day's secrets, so visitors seen before it count again.
 | `WEB_DLQ` | at most 7 days | max age; erasure deletes earlier |
 | Umami raw rows | `WEB_RAW_RETENTION_MONTHS` (default 25) | `jobs retain-web` as role `jobs_retention` (`internal/jobs/retainweb`) |
 | `agg.web_daily*` | while the site exists | removal purge (`agg.purge_tenant`) |
+| `agg.web_integrity_daily`, `cp.web_evidence_daily` | while the site exists | removal purge (`agg.purge_tenant`, `lifecycle.WebIngestPurger`) |
+| `cp.web_networks_daily` | four days | `jobs` task `integrity`; removal purge |
 | `api.metrics_minute` | `API_MINUTE_RETENTION_DAYS` | `jobs` task `api-retention` |
 | `api.metrics_hourly` | `API_HOURLY_RETENTION_MONTHS`, at least 24 | `jobs` task `api-retention` |
 | Control plane sessions | 7 days absolute, 24 hours idle | `jobs` task `session-prune` |

@@ -5,22 +5,59 @@ description: "Investigate a project whose numbers look higher than its real use.
 ---
 
 A project's numbers look higher than its real use: someone reports it, an operator comparing
-projects for funding doubts a jump, or the outcome counters move. The checks that run on every
-event, and where their boundaries lie, are in
-[../security/bot-and-inflation.md](../security/bot-and-inflation.md) (section 9, "Boundaries of
-the checks"). The checks raise the cost of forged traffic and make it visible; this runbook turns
-that evidence into a finding.
-
-The aim of an investigation is a written finding the operators can act on: what was counted,
-what evidence points at forgery, and what was done. Deleting counted data is not an operator
-action; quarantine bands and counters are shown next to the numbers instead.
+projects for funding doubts a jump, or its integrity grade drops. Every site already carries an
+integrity grade per UTC day, A, B or C, with the reasons that set it, computed from what the edge
+observes ([../security/bot-and-inflation.md](../security/bot-and-inflation.md) section 9). Start
+from that report: it names the evidence, the days and the figures. This runbook takes you from the
+grade to a written finding the operators can act on: what was counted, what evidence points at
+forgery, and what was done. Deleting counted data is not an operator action; the quarantine band,
+the counters and the grade are shown next to the numbers instead.
 
 All SQL below runs on the database leader ([overview.md](overview.md)), database `platform` unless
 it says `umami`. Replace `<tenant id>`, `<site id>` and the dates.
 
 ## Web traffic
 
-1. **Outcome counters per day.** Every event the gateways saw is counted by outcome
+1. **The integrity report.** In the console, open the project in the global web view or its
+   tenant detail and read the Integrity panel: the range grade, the reasons with the number of
+   days each applied to, and each site's days with their figures. The same report is
+   `GET /api/operator/web/integrity?tenant=<tenant id>&from=<YYYY-MM-DD>&to=<YYYY-MM-DD>`, the
+   MCP tool `get_tenant_integrity`, and the rows below:
+
+   ```sql
+   select site_id, day, grade, closed, events, quarantined, proof_failures,
+     net_access, net_organisation, net_hosting, net_anonymiser, net_unknown,
+     networks, visitors, pageviews, baseline_visitors, baseline_days, reasons
+   from agg.web_integrity_daily
+   where tenant_id = '<tenant id>' and day between '<YYYY-MM-DD>' and '<YYYY-MM-DD>'
+   order by site_id, day;
+   ```
+
+   Read the reasons against the evidence: `hosting_share` with few `networks` is traffic from a
+   handful of data centres; `quarantine_share` is crowded prefixes or over-active visitors;
+   `spike` compares the day with the site's own median; `page_volume` is the page reporting far
+   more page views than visitors. A grade of A with a jump in visitors is traffic from many
+   distinct access networks: either a real audience or a forger paying for residential
+   endpoints, which the ledger activity of the project helps to tell apart.
+
+   After a backfill of the web aggregates, or to grade days outside the regular window again, run
+   `jobs run integrity --from <YYYY-MM-DD> --to <YYYY-MM-DD>` on the jobs leader.
+
+2. **Network evidence per day** while a day is still open (the network keys are deleted once the
+   day leaves the regrade window, the counts stay in the grade row):
+
+   ```sql
+   select day, class, sum(count) as events
+   from cp.web_evidence_daily
+   where site_id = '<site id>' and day between '<YYYY-MM-DD>' and '<YYYY-MM-DD>'
+   group by 1, 2 order by 1, 2;
+
+   select day, count(*) as distinct_networks
+   from cp.web_networks_daily
+   where site_id = '<site id>' group by 1 order by 1;
+   ```
+
+3. **Outcome counters per day.** Every event the gateways saw is counted by outcome
    (`accepted`, `quarantined`, `bot`, `dlq`, `rejected_<reason>`):
 
    ```sql
@@ -38,12 +75,12 @@ it says `umami`. Replace `<tenant id>`, `<site id>` and the dates.
    group by 1, 2 order by 1, 2;
    ```
 
-   Signs of forging: a rise in `quarantined` (many visitor tokens from one address prefix within
-   an hour), in `replay` (a captured proof sent again), in `bad_proof` or `bad_headers` (naive
+   Signs of forging: a rise in `quarantined` (more distinct visitor tokens from one address prefix
+   within an hour than its network class and the site's size allow), in `replay` (a captured proof sent again), in `bad_proof` or `bad_headers` (naive
    server-side posts), or `rate_limited`. A rise in `accepted` with none of these is either real
    traffic or a capable forger (real browsers, residential proxies).
 
-2. **Hourly shape.** Real traffic follows the time zones of its audience. Flat lines, exact
+4. **Hourly shape.** Real traffic follows the time zones of its audience. Flat lines, exact
    round counts, or traffic that starts and stops on the minute are suspicious:
 
    ```sql
@@ -52,7 +89,7 @@ it says `umami`. Replace `<tenant id>`, `<site id>` and the dates.
    order by hour, outcome;
    ```
 
-3. **Primary and quarantine bands side by side** (the operator aggregates read from Umami):
+5. **Primary and quarantine bands side by side** (the operator aggregates read from Umami):
 
    ```sql
    select day, band, pageviews, visitors, visits, bounces, totaltime
@@ -65,7 +102,7 @@ it says `umami`. Replace `<tenant id>`, `<site id>` and the dates.
    per visit near 1 with bounces near visits and `totaltime` near 0 is a common pattern of
    scripted pageviews.
 
-4. **Concentration.** Forged traffic tends to come from few browsers, operating systems, devices,
+6. **Concentration.** Forged traffic tends to come from few browsers, operating systems, devices,
    countries or referrers:
 
    ```sql
@@ -75,7 +112,7 @@ it says `umami`. Replace `<tenant id>`, `<site id>` and the dates.
    order by day, band, dimension, value desc;
    ```
 
-5. **Raw events, when the aggregates are not enough.** Database `umami`, both of the site's
+7. **Raw events, when the aggregates are not enough.** Database `umami`, both of the site's
    websites (the primary has the site id; the quarantine id is `cp.sites.quarantine_website_id`):
 
    ```sql
@@ -127,14 +164,17 @@ by sending made-up metrics. There is no proof-of-browser equivalent.
 - **Suspend** while the question is open ([tenant-removal.md](tenant-removal.md)): ingestion stops,
   data stays.
 - **Raise the cost for everyone** when one site is targeted by naive forging: raise `PROOF_BITS`
-  (12 today) or lower `IPCLUSTER_THRESHOLD` (20 today) in `edge_gateway_env`
+  (12 today) or lower `IPCLUSTER_THRESHOLD` (20 today, the floor of the access threshold; hosting
+  networks get a quarter of it) in `edge_gateway_env`
   (`infra/ansible/roles/edge/defaults/main.yml`, or an override of the whole map in
   `infra/ansible/inventories/<env>/group_vars/all.yml`), record the reason in
   [../reference/gateway-limits.md](../reference/gateway-limits.md), and roll out with
   `make <env>-deploy ROLLING=1 ...`. A higher `PROOF_BITS` costs every visitor's browser CPU;
-  measure first (`pnpm --filter tracker bench:proof`). A lower threshold quarantines more shared
-  addresses (carrier NAT, offices).
-- **Record the finding** with dates, the queries' output and the decision, where the operators
+  measure first (`pnpm --filter tracker bench:proof`). A lower floor quarantines more shared
+  addresses on sites without a baseline yet; sites with a baseline keep their scaled threshold.
+- **Tell the project.** The project sees the same grade and reasons on its own overview; point it
+  at the days and reasons in question.
+- **Record the finding** with dates, the integrity report, the queries' output and the decision, where the operators
   keep their review notes, and mention it when the project's numbers are compared.
 
 ## Exercised
@@ -146,3 +186,4 @@ a date range:
 |---|---|---|
 | 2026-11-13 | the seven `platform` queries on a scratch PostgreSQL 18.6 database at migration 22 (`platformctl db migrate` reported `applied 22`, `rls_coverage ok`) | every query ran without error (empty results) |
 | 2026-11-13 | the `umami` query on the development stack's Umami 3.5.0 database, read only | ran without error |
+| 2026-11-16 | the integrity, evidence and network queries on a scratch PostgreSQL 18.7 database at migration 33 | every query ran without error |

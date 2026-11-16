@@ -16,6 +16,46 @@ here, before they take effect, as the processing terms require
 
 ## [Unreleased]
 
+### Added
+
+- Integrity grade of web traffic: every site gets an A, B or C grade per UTC
+  day with the reasons that set it, computed by the new jobs task `integrity`
+  from evidence the platform's edge observes: the network class of each
+  event, the distinct networks, the quarantine band, proof-of-work failures
+  and the site's own baseline. What the page reports can only lower a grade.
+  Operators see it as a sortable column in the global web table, in compare
+  and in the tenant detail, with a reasons panel; projects see the same grade
+  and reasons on their own overview. It is served at
+  `GET /api/tenants/{tenant_id}/integrity`, `GET /api/operator/web/integrity`
+  and `GET /api/metrics/v1/web/integrity`, on every `/web/daily` item, in the
+  MCP tools `get_web_integrity` and `get_tenant_integrity`, and as
+  `integrity_grade` columns in the CSV exports
+  ([docs/security/bot-and-inflation.md](docs/security/bot-and-inflation.md)
+  section 9, [docs/reference/control-plane-api.md](docs/reference/control-plane-api.md)
+  section 17). Migration 00033.
+- Network class at the edge: the gateway classifies the network of every
+  event as access, organisation, hosting, anonymiser or unknown from open data
+  baked into its image and pinned by month: DB-IP IP to ASN Lite (CC BY 4.0),
+  ipverse as-metadata categories (CC0 1.0) and Tor exit lists (CC0)
+  ([docs/reference/geo.md](docs/reference/geo.md)). Only the class and a daily
+  keyed hash of the network leave the gateway; no address and no network
+  number is stored.
+
+### Changed
+
+- The same-network threshold follows the network class and the site's size:
+  `IPCLUSTER_THRESHOLD` is the floor for access networks and grows with the
+  site's typical daily visitors, and hosting networks and Tor exits get a
+  quarter of it. Popular and mobile-first sites are no longer quarantined for
+  their audience's carrier-grade NAT. Each site's scale reaches the gateways
+  in its registry entry.
+
+### Upgrade notes
+
+- Roll out the jobs and the control plane before the gateways. The gateways
+  now send evidence counters on `EDGE_STATS` that an older jobs daemon refuses
+  as malformed.
+
 ### Security
 
 - Umami advisory GHSA-vhf9-rcmp-v5fc (SQL injection in the legacy reports

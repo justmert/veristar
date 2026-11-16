@@ -34,6 +34,7 @@ of an operator reads that one project only and never the operator tools.
 | `get_global_web_overview` | Global web: page views, visitors, visits, bounce rate, visit duration, quarantined traffic, gateway rejections and top referrers, countries, devices and browsers per project, sortable and filtered |
 | `get_global_api_overview` | Global API: requests, 4xx and 5xx rates, p50, p95 and p99, services and routes per project |
 | `compare_tenants_web`, `compare_tenants_api` | Compare: up to five projects side by side with a point per UTC day |
+| `get_tenant_integrity` | the Integrity panel: one project's integrity grade over the range, with its reasons per site and day; `get_global_web_overview` carries each project's grade and sorts by it |
 
 Ranges are whole UTC days, both included, at most 366 days, the 30 days ending today by default.
 Sessions and raw events are never part of the operator view.

@@ -108,6 +108,7 @@ that are active or in review can be chosen.
 | Project | `list_projects`, `list_sites`, `get_site` |
 | Web analytics | `get_web_stats`, `get_web_traffic`, `get_web_metrics`, `get_web_realtime`, `get_event_stats`, `get_event_series`, `get_event_properties`, `get_sessions`, `get_session_stats`, `list_funnels`, `run_funnel`, `run_journey`, `run_retention`, `get_goals` |
 | API analytics | `list_api_services`, `get_api_overview`, `get_api_timeseries`, `get_api_status_codes`, `list_api_routes`, `get_api_top_error_routes`, `get_api_warnings` |
+| Integrity | `get_web_integrity`: your web traffic's integrity grade per site and day with its reasons, the same report SCF operators see |
 
 Web tools take a `site_id` from `list_sites` and an optional `view`: `primary` (accepted traffic)
 or `quarantine` (events the gateway flagged as likely automated). Dates are ISO 8601, such as
