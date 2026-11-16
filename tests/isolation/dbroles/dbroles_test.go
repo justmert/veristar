@@ -413,11 +413,11 @@ func seed(t *testing.T, c *pgx.Conn) (side, side) {
 			{`insert into agg.web_daily_dim (site_id, tenant_id, day, band, dimension, key, value)
 			  values ($1, $2, current_date, 'primary', 'country', 'DE', 2)`, []any{s.site, s.tenant}},
 			{`insert into cp.chain_ids (tenant_id, strkey, kind, added_by) values ($1, $2, 'account', 'console')`,
-				[]any{s.tenant, "G"+strings.Repeat("A", 54)+string(rune('A'+i))}},
+				[]any{s.tenant, "G" + strings.Repeat("A", 54) + string(rune('A'+i))}},
 			{`insert into agg.chain_daily (tenant_id, strkey, day, source, operations, transactions, counterparties)
-			  values ($1, $2, current_date, 'horizon', 3, 2, 1)`, []any{s.tenant, "G"+strings.Repeat("A", 54)+string(rune('A'+i))}},
+			  values ($1, $2, current_date, 'horizon', 3, 2, 1)`, []any{s.tenant, "G" + strings.Repeat("A", 54) + string(rune('A'+i))}},
 			{`insert into agg.chain_reads (tenant_id, strkey, covered_from, covered_to, last_attempt_at)
-			  values ($1, $2, current_date, current_date, now())`, []any{s.tenant, "G"+strings.Repeat("A", 54)+string(rune('A'+i))}},
+			  values ($1, $2, current_date, current_date, now())`, []any{s.tenant, "G" + strings.Repeat("A", 54) + string(rune('A'+i))}},
 			{`insert into agg.web_integrity_daily (site_id, tenant_id, day, rule_version, grade, closed, events, quarantined,
 			    proof_failures, net_access, net_organisation, net_hosting, net_anonymiser, net_unknown, networks, visitors,
 			    pageviews, baseline_visitors, baseline_days, reasons)

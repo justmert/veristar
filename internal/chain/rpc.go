@@ -143,7 +143,7 @@ const EventLimit = 1000
 func (c *RPC) ContractEvents(ctx context.Context, contract string, startLedger uint32, cursor string) (EventPage, error) {
 	pg := map[string]any{"limit": EventLimit}
 	params := map[string]any{
-		"filters": []map[string]any{{"type": "contract", "contractIds": []string{contract}}},
+		"filters":   []map[string]any{{"type": "contract", "contractIds": []string{contract}}},
 		"xdrFormat": "base64",
 	}
 	if cursor != "" {

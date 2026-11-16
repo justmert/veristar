@@ -73,24 +73,24 @@ type SCFAPIRow struct {
 // InOperatorViews is false for a project the operator views do not list
 // (an internal project); its rows are then null.
 type SCFViewAnswer struct {
-	From            string             `json:"from"`
-	To              string             `json:"to"`
-	Days            []string           `json:"days"`
-	InOperatorViews bool               `json:"in_operator_views"`
-	Tenant          *TenantRef         `json:"tenant"`
-	Sites           *SiteCounts        `json:"sites"`
-	HasWebData      bool               `json:"has_web_data"`
-	HasAPIData      bool               `json:"has_api_data"`
-	Web             *SCFWebRow         `json:"web"`
-	API             *SCFAPIRow         `json:"api"`
-	Onchain         *onchain.Summary   `json:"onchain"`
+	From            string           `json:"from"`
+	To              string           `json:"to"`
+	Days            []string         `json:"days"`
+	InOperatorViews bool             `json:"in_operator_views"`
+	Tenant          *TenantRef       `json:"tenant"`
+	Sites           *SiteCounts      `json:"sites"`
+	HasWebData      bool             `json:"has_web_data"`
+	HasAPIData      bool             `json:"has_api_data"`
+	Web             *SCFWebRow       `json:"web"`
+	API             *SCFAPIRow       `json:"api"`
+	Onchain         *onchain.Summary `json:"onchain"`
 	// the integrity grade of the project's row in the global web view
 	// (contract 17.3), present when the views list the project
-	Integrity *IntegrityGrade `json:"integrity,omitempty"`
-	LinkTwoWay      bool               `json:"link_two_way"`
-	WebSeries       []WebPoint         `json:"web_series"`
-	APISeries       []APIPoint         `json:"api_series"`
-	OnchainSeries   []onchain.DayTotal `json:"onchain_series"`
+	Integrity     *IntegrityGrade    `json:"integrity,omitempty"`
+	LinkTwoWay    bool               `json:"link_two_way"`
+	WebSeries     []WebPoint         `json:"web_series"`
+	APISeries     []APIPoint         `json:"api_series"`
+	OnchainSeries []onchain.DayTotal `json:"onchain_series"`
 }
 
 // noFilter is the list query of an unfiltered list over rg: the scf view

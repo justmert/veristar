@@ -247,12 +247,6 @@ func (c *client) call(t *testing.T, method, path string, body any) resp {
 	return out
 }
 
-func errCode(r resp) string {
-	e, _ := r.body["error"].(map[string]any)
-	s, _ := e["code"].(string)
-	return s
-}
-
 func field(r resp, name string) string {
 	e, _ := r.body["error"].(map[string]any)
 	f, _ := e["fields"].(map[string]any)
