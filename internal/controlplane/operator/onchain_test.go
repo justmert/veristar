@@ -207,7 +207,8 @@ func TestOnchainOperatorViews(t *testing.T) {
 		superExec(t, f.pg, `insert into agg.chain_weeks (tenant_id, week, active_accounts, closed_at) values ($1, $2, 12, now())`, aurora, counted)
 		superExec(t, f.pg, `insert into agg.chain_weeks (tenant_id, week, missing, closed_at) values ($1, $2, 'day_over_read_cap', now())`, aurora, missed)
 		superExec(t, f.pg, `insert into agg.chain_weeks (tenant_id, week, hash_key) values ($1, $2, $3)`, aurora, open, make([]byte, 32))
-		t.Cleanup(func() { superExec(t, f.pg, `delete from agg.chain_weeks where tenant_id = $1`, aurora) })
+		// a defer, not t.Cleanup: the test context is cancelled before cleanups run
+		defer superExec(t, f.pg, `delete from agg.chain_weeks where tenant_id = $1`, aurora)
 
 		code, body := get("/api/operator/tenants/" + aurora.String() + "/onchain?" + wr)
 		require.Equal(t, http.StatusOK, code, string(body))
