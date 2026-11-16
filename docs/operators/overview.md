@@ -48,6 +48,7 @@ sidebar, each with tabs:
 | Projects | Projects | Every project with search, status filter and sort; opens the project detail with its actions |
 | Projects | Global web | Web numbers of every project over a range, with filters and sort |
 | Projects | Global API | API numbers of every project over a range, with filters and sort |
+| Projects | Rules | Saved threshold rules and the projects that meet them ([threshold-rules.md](threshold-rules.md)) |
 | Compare | | Up to five projects side by side, web and API |
 | Admin | Settings | Enrollment mode, and whether removed projects keep their aggregates |
 | Admin | API keys | Keys for machine access to the metrics API ([api-keys.md](api-keys.md)) |
