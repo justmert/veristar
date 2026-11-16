@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -16,6 +17,14 @@ type Day struct {
 	Operations     int64
 	Transactions   int64
 	Counterparties int64
+	// Initiators are the distinct g accounts that initiated the day's
+	// operations (the operation's source, or the transaction's when the
+	// operation has none), sorted, for the weekly active accounts. they
+	// stay in memory: the jobs task stores only their keyed hashes.
+	Initiators []string
+	// InitiatorsMissing is the code of why Initiators could not be read
+	// whole for the day ("" when they were); the day's counts still hold
+	InitiatorsMissing string
 }
 
 // sources of agg.chain_daily
@@ -112,13 +121,18 @@ func (r *Reader) horizonLedger(ctx context.Context, day time.Time, root Root) (i
 
 // tally counts one day.
 type tally struct {
-	ops     int64
-	txs     map[string]struct{}
-	parties map[string]struct{}
+	ops        int64
+	txs        map[string]struct{}
+	parties    map[string]struct{}
+	initiators map[string]struct{}
+	// contract days: the operations of each transaction with an event,
+	// whose sources are looked up after the events are read
+	txOps map[string]map[uint32]struct{}
 }
 
 func newTally() *tally {
-	return &tally{txs: map[string]struct{}{}, parties: map[string]struct{}{}}
+	return &tally{txs: map[string]struct{}{}, parties: map[string]struct{}{}, initiators: map[string]struct{}{},
+		txOps: map[string]map[uint32]struct{}{}}
 }
 
 // days returns one Day for every day of [from, through], zeros included.
@@ -128,6 +142,7 @@ func days(from, through time.Time, by map[int64]*tally) []Day {
 		x := Day{Day: d}
 		if t, ok := by[d.Unix()]; ok {
 			x.Operations, x.Transactions, x.Counterparties = t.ops, int64(len(t.txs)), int64(len(t.parties))
+			x.Initiators = sortedKeys(t.initiators)
 		}
 		out = append(out, x)
 	}
@@ -172,6 +187,9 @@ func (r *Reader) AccountDays(ctx context.Context, account string, from, through 
 			t.txs[op.TxHash] = struct{}{}
 			for _, p := range op.Counterparties(account) {
 				t.parties[p] = struct{}{}
+			}
+			if src, ok := op.Source(); ok {
+				t.initiators[src] = struct{}{}
 			}
 			last = d
 			cursor = op.PagingToken
@@ -261,6 +279,11 @@ func cursorLedger(c string) (uint32, bool) {
 // distinct transactions, and counterparties the distinct accounts and
 // contracts named in the event topics, other than the contract itself. a
 // contract that emits no events shows no activity through this source.
+//
+// the initiators of a contract day are the source accounts of the
+// operations that emitted its events, read from each transaction's
+// envelope through getTransaction while the transaction is still in the
+// server's window.
 func (r *Reader) ContractDays(ctx context.Context, contract string, from, through time.Time, h Health) ([]Day, error) {
 	if through.Before(from) {
 		return nil, nil
@@ -276,16 +299,16 @@ func (r *Reader) ContractDays(ctx context.Context, contract string, from, throug
 	for range MaxEventPages {
 		p, err := r.RPC.ContractEvents(ctx, contract, start, cursor)
 		if err != nil {
-			return partial(from, last, by), err
+			return r.partialWithInitiators(ctx, partial(from, last, by), by, err)
 		}
 		for _, e := range p.Events {
 			at, err := time.Parse(time.RFC3339, e.LedgerClosedAt)
 			if err != nil {
-				return partial(from, last, by), fail(CodeBadResponse, "event without ledgerClosedAt")
+				return r.partialWithInitiators(ctx, partial(from, last, by), by, fail(CodeBadResponse, "event without ledgerClosedAt"))
 			}
 			d := utcDay(at)
 			if d.After(through) {
-				return days(from, through, by), nil
+				return r.withInitiators(ctx, days(from, through, by), by)
 			}
 			if d.Before(from) || (e.Successful != nil && !*e.Successful) {
 				continue
@@ -295,6 +318,10 @@ func (r *Reader) ContractDays(ctx context.Context, contract string, from, throug
 				t = newTally()
 				by[d.Unix()] = t
 			}
+			if t.txOps[e.TxHash] == nil {
+				t.txOps[e.TxHash] = map[uint32]struct{}{}
+			}
+			t.txOps[e.TxHash][e.OpIndex] = struct{}{}
 			opKey := e.TxHash + "/" + strconv.FormatUint(uint64(e.OpIndex), 10)
 			if _, seen := ops[opKey]; !seen {
 				ops[opKey] = struct{}{}
@@ -311,11 +338,76 @@ func (r *Reader) ContractDays(ctx context.Context, contract string, from, throug
 		cl, ok := cursorLedger(p.Cursor)
 		if !ok || p.Cursor == "" || cl >= p.LatestLedger {
 			if close, ok := p.LatestClose(); ok && !close.Before(through.AddDate(0, 0, 1)) {
-				return days(from, through, by), nil
+				return r.withInitiators(ctx, days(from, through, by), by)
 			}
-			return partial(from, last, by), fail(CodeUnavailable, "the rpc server's latest ledger is older than the end of %s", through.Format(time.DateOnly))
+			return r.partialWithInitiators(ctx, partial(from, last, by), by, fail(CodeUnavailable, "the rpc server's latest ledger is older than the end of %s", through.Format(time.DateOnly)))
 		}
 		cursor = p.Cursor
 	}
-	return partial(from, last, by), fail(CodeDayTooLarge, "%s has more than %d events to read in one run", contract, MaxEventPages*EventLimit)
+	return r.partialWithInitiators(ctx, partial(from, last, by), by, fail(CodeDayTooLarge, "%s has more than %d events to read in one run", contract, MaxEventPages*EventLimit))
+}
+
+func sortedKeys(m map[string]struct{}) []string {
+	if len(m) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	slices.Sort(out)
+	return out
+}
+
+// MaxInitiatorTransactions caps the transactions whose envelopes one
+// contract day reads for its initiators. a day over it keeps its counts
+// and records day_over_read_cap for its initiators, so its week shows as
+// missing and never as a partial count.
+const MaxInitiatorTransactions = 10000
+
+// withInitiators looks up the initiators of every contract day, in day
+// order. a lookup that fails returns the days before the failing one and
+// the error, so a day is never stored without the initiators it could
+// have had; the next run reads it again.
+func (r *Reader) withInitiators(ctx context.Context, ds []Day, by map[int64]*tally) ([]Day, error) {
+	for i := range ds {
+		t, ok := by[ds[i].Day.Unix()]
+		if !ok {
+			continue
+		}
+		if len(t.txOps) > MaxInitiatorTransactions {
+			ds[i].Initiators = nil
+			ds[i].InitiatorsMissing = CodeDayTooLarge
+			continue
+		}
+		hashes := make([]string, 0, len(t.txOps))
+		for h := range t.txOps {
+			hashes = append(hashes, h)
+		}
+		slices.Sort(hashes)
+		envs, err := r.RPC.Envelopes(ctx, hashes)
+		if err != nil {
+			return ds[:i], err
+		}
+		set := map[string]struct{}{}
+		for _, h := range hashes {
+			for op := range t.txOps[h] {
+				src, err := OperationSource(envs[h], op)
+				if err != nil {
+					return ds[:i], err
+				}
+				set[src] = struct{}{}
+			}
+		}
+		ds[i].Initiators = sortedKeys(set)
+	}
+	return ds, nil
+}
+
+// partialWithInitiators is withInitiators for the whole days of a read
+// that stopped early. a failed lookup only shortens the days; the read's
+// own error is the one the id records.
+func (r *Reader) partialWithInitiators(ctx context.Context, ds []Day, by map[int64]*tally, readErr error) ([]Day, error) {
+	ds, _ = r.withInitiators(ctx, ds, by)
+	return ds, readErr
 }

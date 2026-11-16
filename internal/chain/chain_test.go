@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strconv"
 	"sync/atomic"
 	"testing"
@@ -325,9 +326,9 @@ func TestAccountDays(t *testing.T) {
 	got, err := r.AccountDays(t.Context(), self, day1, day1.AddDate(0, 0, 2), root)
 	require.NoError(t, err)
 	require.Equal(t, []Day{
-		{Day: day1, Operations: 3, Transactions: 2, Counterparties: 2},
+		{Day: day1, Operations: 3, Transactions: 2, Counterparties: 2, Initiators: sorted(self, a)},
 		{Day: day1.AddDate(0, 0, 1)},
-		{Day: day1.AddDate(0, 0, 2), Operations: 1, Transactions: 1},
+		{Day: day1.AddDate(0, 0, 2), Operations: 1, Transactions: 1, Initiators: []string{self}},
 	}, got)
 
 	// a source that fails returns no day at all, never zeros
@@ -354,7 +355,7 @@ func TestAccountDaysCap(t *testing.T) {
 	got, err := r.AccountDays(t.Context(), self, day1, day1.AddDate(0, 0, 2), root)
 	require.Equal(t, CodeDayTooLarge, Code(err))
 	// day 1 is whole and kept; day 2 was not finished and is missing
-	require.Equal(t, []Day{{Day: day1, Operations: 1, Transactions: 1}}, got)
+	require.Equal(t, []Day{{Day: day1, Operations: 1, Transactions: 1, Initiators: []string{self}}}, got)
 }
 
 func TestCounterparties(t *testing.T) {
@@ -381,19 +382,46 @@ type fakeRPC struct {
 	oldest uint32
 	latest uint32
 	events []map[string]any
+	// envelopes by transaction hash for getTransaction; a hash without one
+	// answers NOT_FOUND
+	envelopes map[string]string
+	batches   atomic.Int64
 }
 
 func (f *fakeRPC) closeOf(seq uint32) time.Time {
 	return f.base.Add(time.Duration(seq) * 6 * time.Second)
 }
 
+type rpcReq struct {
+	ID     int64          `json:"id"`
+	Method string         `json:"method"`
+	Params map[string]any `json:"params"`
+}
+
 func (f *fakeRPC) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		ID     int64          `json:"id"`
-		Method string         `json:"method"`
-		Params map[string]any `json:"params"`
+	var raw json.RawMessage
+	_ = json.NewDecoder(r.Body).Decode(&raw)
+	if len(raw) > 0 && raw[0] == '[' {
+		// a batch of getTransaction calls, answered in reverse order as a
+		// server may
+		f.batches.Add(1)
+		var reqs []rpcReq
+		_ = json.Unmarshal(raw, &reqs)
+		out := make([]map[string]any, 0, len(reqs))
+		for i := len(reqs) - 1; i >= 0; i-- {
+			q := reqs[i]
+			h, _ := q.Params["hash"].(string)
+			res := map[string]any{"status": "NOT_FOUND", "txHash": h}
+			if env, ok := f.envelopes[h]; ok {
+				res = map[string]any{"status": "SUCCESS", "txHash": h, "envelopeXdr": env}
+			}
+			out = append(out, map[string]any{"jsonrpc": "2.0", "id": q.ID, "result": res})
+		}
+		_ = json.NewEncoder(w).Encode(out)
+		return
 	}
-	_ = json.NewDecoder(r.Body).Decode(&req)
+	var req rpcReq
+	_ = json.Unmarshal(raw, &req)
 	var result any
 	switch req.Method {
 	case "getHealth":
@@ -459,6 +487,12 @@ func TestContractDays(t *testing.T) {
 	ev(14400+60, "t3", 0, &no, topicAddr(t, a))
 	// day 2: nothing, day 3: after the range
 	ev(3*14400+5, "t4", 0, nil)
+	// t1 has the transaction's source; t2 is a fee bump whose inner
+	// operation names its own muxed source; t3 failed and is never looked up
+	f.envelopes = map[string]string{
+		"t1": envelope(t, a, nil, false),
+		"t2": envelope(t, keypair.MustRandom().Address(), &b, true),
+	}
 
 	r, err := NewReader(NewHorizon(testEndpoint(t, http.NotFoundHandler())), NewRPC(testEndpoint(t, f)))
 	require.NoError(t, err)
@@ -468,7 +502,86 @@ func TestContractDays(t *testing.T) {
 	got, err := r.ContractDays(t.Context(), contract, day1, day1.AddDate(0, 0, 1), h)
 	require.NoError(t, err)
 	require.Equal(t, []Day{
-		{Day: day1, Operations: 2, Transactions: 2, Counterparties: 2},
+		{Day: day1, Operations: 2, Transactions: 2, Counterparties: 2, Initiators: sorted(a, b)},
 		{Day: day1.AddDate(0, 0, 1)},
 	}, got)
+	require.Equal(t, int64(1), f.batches.Load())
+
+	// a transaction the server no longer holds stores no day at all
+	delete(f.envelopes, "t2")
+	got, err = r.ContractDays(t.Context(), contract, day1, day1.AddDate(0, 0, 1), h)
+	require.Equal(t, CodeBeforeHistory, Code(err))
+	require.Empty(t, got)
+}
+
+func sorted(xs ...string) []string {
+	out := slices.Clone(xs)
+	slices.Sort(out)
+	return out
+}
+
+// envelope builds a one-operation transaction from source. op, when set,
+// is the operation's own source, written as a muxed account; feeBump wraps
+// the transaction in a fee bump paid by another account.
+func envelope(t *testing.T, source string, op *string, feeBump bool) string {
+	t.Helper()
+	var src xdr.MuxedAccount
+	require.NoError(t, src.SetAddress(source))
+	o := xdr.Operation{Body: xdr.OperationBody{Type: xdr.OperationTypeInflation}}
+	if op != nil {
+		var id xdr.AccountId
+		require.NoError(t, id.SetAddress(*op))
+		m, err := xdr.MuxedAccountFromAccountId(id.Address(), 7)
+		require.NoError(t, err)
+		o.SourceAccount = &m
+	}
+	inner := xdr.TransactionV1Envelope{Tx: xdr.Transaction{
+		SourceAccount: src, Fee: 100, SeqNum: 1,
+		Cond:       xdr.Preconditions{Type: xdr.PreconditionTypePrecondNone},
+		Operations: []xdr.Operation{o},
+	}}
+	env := xdr.TransactionEnvelope{Type: xdr.EnvelopeTypeEnvelopeTypeTx, V1: &inner}
+	if feeBump {
+		var payer xdr.MuxedAccount
+		require.NoError(t, payer.SetAddress(keypair.MustRandom().Address()))
+		env = xdr.TransactionEnvelope{Type: xdr.EnvelopeTypeEnvelopeTypeTxFeeBump, FeeBump: &xdr.FeeBumpTransactionEnvelope{
+			Tx: xdr.FeeBumpTransaction{FeeSource: payer, Fee: 200, InnerTx: xdr.FeeBumpTransactionInnerTx{
+				Type: xdr.EnvelopeTypeEnvelopeTypeTx, V1: &inner,
+			}},
+		}}
+	}
+	s, err := xdr.MarshalBase64(env)
+	require.NoError(t, err)
+	return s
+}
+
+func TestOperationSource(t *testing.T) {
+	a, b := keypair.MustRandom().Address(), keypair.MustRandom().Address()
+	src, err := OperationSource(envelope(t, a, nil, false), 0)
+	require.NoError(t, err)
+	require.Equal(t, a, src)
+	src, err = OperationSource(envelope(t, a, &b, true), 0)
+	require.NoError(t, err)
+	require.Equal(t, b, src)
+	_, err = OperationSource(envelope(t, a, nil, false), 1)
+	require.Equal(t, CodeBadResponse, Code(err))
+	_, err = OperationSource("not xdr", 0)
+	require.Equal(t, CodeBadResponse, Code(err))
+}
+
+func TestContractInitiatorCap(t *testing.T) {
+	day1 := time.Date(2026, 11, 10, 0, 0, 0, 0, time.UTC)
+	f := &fakeRPC{base: day1.AddDate(0, 0, -1), oldest: 100, latest: 3 * 14400}
+	r, err := NewReader(NewHorizon(testEndpoint(t, http.NotFoundHandler())), NewRPC(testEndpoint(t, f)))
+	require.NoError(t, err)
+	by := map[int64]*tally{day1.Unix(): newTally()}
+	for i := range MaxInitiatorTransactions + 1 {
+		by[day1.Unix()].txOps[strconv.Itoa(i)] = map[uint32]struct{}{0: {}}
+	}
+	got, err := r.withInitiators(t.Context(), []Day{{Day: day1, Operations: 1, Transactions: 1}}, by)
+	require.NoError(t, err)
+	// the counts stay, the initiators are marked over the cap, and no
+	// transaction was looked up
+	require.Equal(t, []Day{{Day: day1, Operations: 1, Transactions: 1, InitiatorsMissing: CodeDayTooLarge}}, got)
+	require.Zero(t, f.batches.Load())
 }
