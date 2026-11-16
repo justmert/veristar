@@ -71,8 +71,32 @@ curl -fsSL --retry 3 --max-time 600 -o "$tmp/as.json" "$meta_url"
 tor_url="https://collector.torproject.org/archive/exit-lists/exit-list-${prev}.tar.xz"
 echo "fetch-network: downloading $tor_url"
 curl -fsSL --retry 3 --max-time 600 -o "$tmp/tor.tar.xz" "$tor_url"
-# every address that exited tor during the month, one per line
-tar -xJOf "$tmp/tor.tar.xz" | awk '$1 == "ExitAddress" { print $2 }' | sort -u >"$tmp/tor-exits.txt"
+# every address that exited tor during the month, one per line. python's
+# standard library reads the xz archive, because the go build image has
+# python3 but no xz binary, and a failure here stops the script instead of
+# disappearing in a pipe
+if ! command -v python3 >/dev/null 2>&1; then
+	echo "fetch-network: python3 is required to read the tor exit archive" >&2
+	exit 1
+fi
+python3 -I - "$tmp/tor.tar.xz" "$tmp/tor-exits.txt" <<'PY'
+import sys, tarfile
+src, dst = sys.argv[1], sys.argv[2]
+exits = set()
+with tarfile.open(src, "r:xz") as tar:
+    for member in tar:
+        if not member.isfile():
+            continue
+        f = tar.extractfile(member)
+        for line in f.read().decode("ascii", "replace").splitlines():
+            parts = line.split()
+            if len(parts) >= 2 and parts[0] == "ExitAddress":
+                exits.add(parts[1])
+if not exits:
+    sys.exit("fetch-network: the tor exit archive holds no ExitAddress line")
+with open(dst, "w") as out:
+    out.write("".join(a + "\n" for a in sorted(exits)))
+PY
 
 # the go checker opens the three files with the gateway's own loader
 (cd "$root" && go run ./scripts/netdata check "$tmp")
