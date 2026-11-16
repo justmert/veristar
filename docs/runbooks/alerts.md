@@ -313,6 +313,28 @@ Action: `ansible-playbook -i inventories/<env>/ playbooks/reboot.yml`, which
 drains, hands over the Patroni leader and reboots one node at a time
 ([security-patch.md](security-patch.md) section 6a).
 
+### SystemdUnitFailed
+A platform unit (`sa-*`) on this node has been in the failed state for 15
+minutes (`sa_systemd_unit_failed`, written every 5 minutes by
+`sa-systemd-failed.timer`). The `unit` label names it. The usual ones are the
+backup units on the Patroni leader (`sa-pgbackrest-full`, `-diff`, or
+`-verify`, which runs `pgbackrest verify` and then `check`) and the
+start-at-boot units (`sa-core-start`, `sa-edge-start`,
+`sa-observability-start`). On a replica the backup units skip their run
+(`Result=exec-condition`), which is not a failure; a backup unit failed on a
+replica means its leader check got neither 200 nor 503 from Patroni's
+`/primary`, so the node's Patroni API is down or refuses the node's
+certificate.
+Action: `sudo journalctl -u <unit>` for the error and `systemctl show <unit>
+-p Result`. For a backup unit on the leader, follow
+[BackupTooOld](#backuptooold): check `pgbackrest info` and run the failed
+command by hand once its cause is fixed; a failed `check` also means WAL may
+not reach the repository ([WALArchivingFailing](#walarchivingfailing)). For a
+start unit, `docker compose ps -a` in the project directory
+(`/opt/veristar/core`, `edge` or `observability`) and start what is down.
+Once fixed, `sudo systemctl reset-failed <unit>` (a later successful run also
+clears it); the alert resolves within 5 minutes.
+
 ### Watchdog
 Always firing, by design. Alertmanager sends it every minute to the probe's
 Gatus (external endpoint `monitoring_watchdog`, through the probe's Caddy,

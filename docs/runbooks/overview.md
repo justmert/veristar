@@ -18,7 +18,7 @@ environment is built from are listed in [../deploy/prerequisites.md](../deploy/p
 
 | Runbook | Use it when |
 |---|---|
-| [alerts.md](alerts.md) | an alert fires: the meaning and first action of each of 38 alerts |
+| [alerts.md](alerts.md) | an alert fires: the meaning and first action of each of 39 alerts |
 | [edge-node-failure.md](edge-node-failure.md) | a node's gateway, collector, NATS server or etcd member answers badly or not at all, or a VM is lost |
 | [database-failover.md](database-failover.md) | the PostgreSQL leader changed or is missing, or a replica needs a rebuild |
 | [disaster-recovery.md](disaster-recovery.md) | no database member holds good data and the cluster is rebuilt from backups |

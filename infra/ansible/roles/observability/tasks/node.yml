@@ -125,3 +125,70 @@
     enabled: true
     state: started
     daemon_reload: "{{ observability_reboot_units is changed }}"
+
+# a platform unit in the failed state (a backup, its verify or check, a
+# start-at-boot unit) is otherwise visible only in systemctl: in production
+# on 2026-11-15 and 16 the backup units of two replicas and a start unit
+# stayed failed for two days unnoticed. this timer writes
+# sa_systemd_unit_failed for every loaded sa-* unit for the SystemdUnitFailed
+# alert. a run skipped by its ExecCondition (the backup units on a replica)
+# leaves the unit inactive, not failed, so it counts 0.
+- name: Install the failed-units textfile writer
+  ansible.builtin.copy:
+    dest: /usr/local/sbin/sa-systemd-failed
+    content: |
+      #!/bin/sh
+      # managed by ansible (infra/ansible/roles/observability)
+      set -eu
+      f={{ observability_conf_dir }}/textfile/systemd.prom
+      # columns: unit, load, active, sub, description
+      units=$(systemctl list-units --all --plain --no-legend --no-pager 'sa-*')
+      {
+        echo '# HELP sa_systemd_unit_failed 1 when the platform unit is in the failed state; a run skipped by its ExecCondition is not failed'
+        echo '# TYPE sa_systemd_unit_failed gauge'
+        printf '%s\n' "$units" | awk 'NF >= 3 && $1 ~ /^sa-/ { printf "sa_systemd_unit_failed{unit=\"%s\"} %d\n", $1, ($3 == "failed") }'
+      } >"$f.tmp"
+      mv "$f.tmp" "$f"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the failed-units timer
+  ansible.builtin.copy:
+    dest: "/etc/systemd/system/{{ item.name }}"
+    content: "{{ item.content }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - name: sa-systemd-failed.service
+      content: |
+        # managed by ansible (infra/ansible/roles/observability)
+        [Unit]
+        Description=write sa_systemd_unit_failed for node_exporter
+
+        [Service]
+        Type=oneshot
+        ExecStart=/usr/local/sbin/sa-systemd-failed
+    - name: sa-systemd-failed.timer
+      content: |
+        # managed by ansible (infra/ansible/roles/observability)
+        [Unit]
+        Description=write sa_systemd_unit_failed every 5 minutes
+
+        [Timer]
+        OnBootSec=2min
+        OnUnitActiveSec=5min
+
+        [Install]
+        WantedBy=timers.target
+  loop_control:
+    label: "{{ item.name }}"
+  register: observability_failed_units
+
+- name: Start the failed-units timer
+  ansible.builtin.systemd_service:
+    name: sa-systemd-failed.timer
+    enabled: true
+    state: started
+    daemon_reload: "{{ observability_failed_units is changed }}"
