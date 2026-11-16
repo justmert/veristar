@@ -45,8 +45,8 @@ Who signs: the new operator for each item, SCF for section 9.
       new owner.
 - [ ] The delegation points at the new nameservers and `cutover-transfer.yml
       -e cutover_stage=verify` passes: public resolvers answer with the new nodes, every pinned
-      tracker release is served byte for byte with a valid certificate, console, web dashboards
-      and OTLP answer.
+      tracker release is served byte for byte with a valid certificate, the console and OTLP
+      answer.
 - [ ] An example page that still carries a snippet from before the cutover delivers a pageview in
       Chromium, Firefox and WebKit (the `@cutover` check of `tests/handover`, pointed at the real
       names, or by hand with the browsers' network tools).
@@ -62,7 +62,8 @@ Who signs: the new operator for each item, SCF for section 9.
       `jobs run reconcile`.
 - [ ] `platformctl umami rotate-admin` and `jobs run umami-rotate --force` ran on the new leader.
 - [ ] `make verify-migration` printed `result: source and target are equal`. Evidence: its output.
-- [ ] Two tenants confirmed they see their history in the new console and web dashboards.
+- [ ] Two tenants confirmed they see their history on the **Web** and **API** pages of the new
+      console.
 - [ ] The dump directories were deleted after verification.
 
 ## 5. Secrets and credentials

@@ -371,7 +371,7 @@ and pipeline objective, not ingestion.
 Action: check the replayer or writer alerts and Umami.
 
 ### ProbeDashboardFailing
-The console, the Umami host or the authenticated machine API call fails from
+The console or the authenticated machine API call fails from
 the probe for 2 minutes (dashboard objective, 99.90%).
 Action: check the core nodes' Caddy and the control plane.
 

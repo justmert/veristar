@@ -4,8 +4,8 @@ description: "Send named events of your own, such as a click on a sign-up button
 ---
 
 Pageviews are counted without any code beyond the script tag. On top of them you can send your own
-named events, for example a click on a sign-up button. They show up in your site's Umami dashboard
-on the **Events** page, next to the pageviews. Every example site in the browser test matrix sends
+named events, for example a click on a sign-up button. They show up in the **Custom events** panel of
+your project's **Web** page in the console, next to the pageviews. Every example site in the browser test matrix sends
 both kinds of custom event below (`tests/e2e/specs/events.spec.ts`), and `tests/webpath` follows
 them into Umami.
 
@@ -96,5 +96,7 @@ Numbers and booleans are stored unchanged.
 
 ## Where to see them
 
-Open your site from the console. In Umami, the **Events** page of the website lists every custom
-and wallet event by name. Members of your project see it read-only.
+Open **Web** in your project in the console. The **Custom events** panel lists every custom and
+wallet event by name with how many times it was sent in the range. The event data you attach
+(properties and their values) is available through the project's AI assistant connection
+([../mcp.md](../mcp.md)), whose tools read it for your sites.

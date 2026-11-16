@@ -32,8 +32,8 @@ first step before removal.
    on the gateways refuse the project's web events and the collectors refuse
    its OTLP tokens. Refusals are counted, so the project's ingest view shows
    them.
-3. The Umami dashboards stay readable for the members. Data already stored
-   stays. Members see the status and reason in the console.
+3. The project's web dashboard stays readable for the members. Data already
+   stored stays. Members see the status and reason in the console.
 4. Check it took effect:
 
    ```sql

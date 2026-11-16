@@ -27,7 +27,8 @@ session concerned.
    - `visitor_today`: the visitor gives their IP address and user agent, **the same UTC day** as
      the visit. After midnight UTC the day's secret is gone and nothing can be found; the answer
      says `nothing_found`.
-   - `session`: the project's owner finds the session in the Umami dashboard (by time and page) and gives
+   - `session`: the project's owner finds the session with the session finder on the project's
+     Privacy page (by site, UTC day, time, country and device; contract section 18.7) and gives
      its session id. Works for the whole raw retention.
    - `site_reset`: the project's owner types the site's domain again to confirm.
 

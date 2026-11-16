@@ -19,9 +19,9 @@ API analytics (from OpenTelemetry). The contract is section 12 of
   are a member of the project and stops at once when you leave it, when an owner removes you, or
   when the project is suspended, not approved or removed. Revoking it on the project's AI page
   stops it on the next request.
-- It sees what the console shows you: page views, visitors, visits, bounce rate, visit duration,
-  referrers, channels, countries, devices, browsers, custom events and their data, sessions as
-  Umami holds them, funnels, journeys, retention and goals, and your API's requests, status codes,
+- It sees what the console shows you and more of your own sites' data: page views, visitors,
+  visits, bounce rate, visit duration, referrers, channels, countries, devices, browsers, custom
+  events and their data, sessions as Umami holds them, funnels, journeys, retention and goals, and your API's requests, status codes,
   error rates and latency percentiles per service and route.
 
 ## Two ways to connect

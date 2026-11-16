@@ -161,7 +161,7 @@ This section is the agreement with the Ansible side. Change it only together.
       "sa_base_domain": "<BASE_DOMAIN>",
       "sa_hostnames": {
         "in": "in.<BASE_DOMAIN>", "otlp": "otlp.<BASE_DOMAIN>", "app": "app.<BASE_DOMAIN>",
-        "web": "web.<BASE_DOMAIN>", "status": "status.<BASE_DOMAIN>"
+        "status": "status.<BASE_DOMAIN>"
       },
       "sa_private_network_cidr": "10.20.0.0/16",
       "sa_admin_cidrs": ["<admin cidr>", "..."],
@@ -245,7 +245,7 @@ emit peer lists, so there is one source of truth.
 - Every node and the restore node carry the user-assigned managed identity `<env>-node`,
   which holds Storage Blob Data Contributor on the backup container and nothing else.
 - Traffic Manager asks `/` for `in` and `otlp` (the node's ingestion health) and `/core` for
-  `app` and `web` (its dashboard health); both answer 308 when healthy
+  `app` (its dashboard health); both answer 308 when healthy
   (`deploy/caddy/assemble.sh`, tier `node`).
 
 ### Secrets handed to OpenTofu
@@ -348,14 +348,15 @@ were compared on 2026-11-13:
 | Answer | MultiValue: all healthy addresses in every answer, so a client retries another without a new lookup | one address | one or more addresses depending on steering |
 | Price (2026-11-13) | 0.54 USD per external endpoint a month, 2.00 more with fast probing, 0.54 per million queries | 18.25 USD a month for the first five rules, 0.01 per hour for each further rule, plus data processed | not published as a price list |
 
-Traffic Manager costs about 18.48 USD a month for the twelve endpoints (four names over three
-nodes), with 10 s probing on the two ingestion names and 30 s on the dashboard names. Microsoft's
+Traffic Manager costs about 16.86 USD a month for the nine endpoints (three names over three
+nodes), with 10 s probing on the two ingestion names and 30 s on the dashboard name. No public
+name serves Umami ([ADR 0005](../adr/0005-umami-as-engine-only.md)). Microsoft's
 service level agreement for Traffic Manager states 99.99 %. Cloudflare points each hostname at its
 profile with a DNS-only CNAME (`<domain>-<env>-<label>.trafficmanager.net`).
 
 Failover time per name: an endpoint leaves the answer after three failed probes in a row
 (`tolerated_number_of_failures = 2`). For `in` and `otlp` that is 3 x 10 s, plus the 5 s timeout,
-plus up to 10 s of cached answers. For `app` and `web` it is 3 x 30 s, plus the 10 s timeout,
+plus up to 10 s of cached answers. For `app` it is 3 x 30 s, plus the 10 s timeout,
 plus up to 30 s. When every endpoint of a profile fails, Traffic Manager answers with all of them
 rather than none. The measured times on production are in
 [../reference/drills/2026-11-13-azure.md](../reference/drills/2026-11-13-azure.md).
@@ -383,7 +384,7 @@ and `tofu test` for both environments. The tests (`tests/infra`, mocked provider
 `command = apply`) render both roots from `tests/infra/sample.tfvars` and check the groups, host
 names, every host var, zones, the private address scheme, the group vars, the default VM size,
 the Traffic Manager endpoints (the three node addresses for every name, `/` for `in` and `otlp`,
-`/core` for `app` and `web`), MultiValue routing, the HTTP probe on port 80 accepting 308, 10 s
-probing for ingestion and 30 s for dashboards, one DNS-only CNAME per hostname, CAA
+`/core` for `app`), MultiValue routing, the HTTP probe on port 80 accepting 308, 10 s
+probing for ingestion and 30 s for the dashboard, one DNS-only CNAME per hostname, CAA
 (`issue letsencrypt.org`, `issuewild ;`), the restore node, and that `0.0.0.0/0` for SSH, a short
 passphrase and a floating image version are refused.

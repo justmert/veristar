@@ -90,14 +90,21 @@ If the tracker file is missing or the event answers something else, see
 
 ## 6. Open the dashboard
 
-On the project's **Overview** page, choose **Open web dashboard** next to the site. It opens the
-site's dashboard in Umami, signed in as you. New events appear within a few seconds. Members see
-the dashboard read only: Umami still shows its Save, Transfer, Reset and Delete buttons, and
-pressing one fails with "Unauthorized". Settings are changed in the console instead.
+Open **Web** in your project in the console, or choose **Analytics** next to the site on the
+**Overview** page. The dashboard shows page views, unique visitors, visits, bounce rate and visit
+duration for today, 7, 30 or 90 days or any range of UTC days you pick, each against the previous
+period, with pages, entry and exit pages, referrers, countries, browsers, operating systems,
+devices and custom events. Choose a site to see it alone, or **All sites** for the whole project.
 
-Each site has a second dashboard, **Quarantine view**. Events from one network address that shows
-many different visitors within an hour (offices, campuses, carrier networks and VPN exits, but also
-scripted traffic) go there instead of the main dashboard. They are kept apart, never deleted.
+The **Right now** strip counts the visitors of the last 5 minutes and draws the page views of the
+last 30 minutes; your first page view appears there within seconds. The totals and the daily chart
+come from the hourly aggregates, the same numbers SCF operators see, so they follow within the
+hour; the hours of today are read live.
+
+Each site keeps a second band, **Quarantined**. Events from one network address that shows many
+different visitors within an hour (offices, campuses, carrier networks and VPN exits, but also
+scripted traffic) go there instead of the counted traffic. They are kept apart, never deleted.
+Switch **Traffic** to **Quarantined** to see them.
 
 Countries come from the DB-IP country database:
 <a href='https://db-ip.com'>IP Geolocation by DB-IP</a>.
@@ -166,4 +173,4 @@ tracker.
 | `POST /v1/e` answers 403 | the page's origin is not one of the site's allowed origins; add it on the **Sites** page |
 | `POST /v1/e` answers 404 | the site id is wrong, or the site or project is not active yet |
 | `POST /v1/e` answers 429 | the site sent more than the gateway's rate limit; it recovers by itself |
-| events arrive but the dashboard stays empty | look at the quarantine view; on a shared network your own test visits can land there |
+| events arrive but the dashboard stays empty | switch **Traffic** to **Quarantined** on the **Web** page; on a shared network your own test visits can land there |

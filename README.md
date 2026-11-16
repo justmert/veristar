@@ -9,7 +9,8 @@ funding and ecosystem-visibility decisions.
   edge gateway. The gateway checks each event (a proof of work issued by the server, the
   page's origin, rate limits, a same-network check), keeps the client address in memory only
   for the request, and queues the event. A replayer delivers it to an unmodified
-  [Umami](https://umami.is) 3.5.0, which is each project's web dashboard. No cookies and no
+  [Umami](https://umami.is) 3.5.0, the engine that stores the events and computes the
+  metrics on the private network; each project reads them in the console's web dashboard. No cookies and no
   stored IP addresses; visitors are counted per UTC day with a secret that is destroyed at
   midnight. Whether a site may run it without asking for consent depends on the country, and
   a consent mode exists where it may not
