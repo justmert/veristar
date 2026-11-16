@@ -218,7 +218,11 @@ test("a prerendered page counts on activation and fetches nothing before @signal
     expect(evs[0]?.verdict.status).toBe(202);
     expect(evs[0]?.headers["sec-purpose"]).toBeUndefined();
   } finally {
+    // the profile is removed once chromium has exited, or it can still be
+    // writing to it
+    const exited = new Promise((resolve) => proc.once("exit", resolve));
     proc.kill();
-    rmSync(dir, { recursive: true, force: true });
+    await exited;
+    rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
   }
 });
