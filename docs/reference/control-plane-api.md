@@ -1225,7 +1225,7 @@ from migrations `00010_tenant_removals.sql` (`cp.tenant_removals`) and
 
 ### 5.1 Operator identity
 
-- The operator roster is the table `cp.operators` (migration `00039_operator_roster.sql`). Each row
+- The operator roster is the table `cp.operators` (migration `00040_operator_roster.sql`). Each row
   names one identity, a GitHub account id or a Stellar address (a wallet's G-address or a passkey's
   C-address, 4.1.9), with a role (`operator` or
   `operator_admin`) and a status (`active` or `suspended`). Operator admins manage it in the console
@@ -1703,7 +1703,7 @@ plane stores, and whose assertions `passkey.RelyingParty.Verify` checks
 (`internal/controlplane/passkey`): the console origin, the relying party, the challenge, user
 present and user verified, and the ES256 signature. An account steps up with its sign-in passkey,
 if it has one, and with the passkeys it adds here (`cp.operator_passkeys`, migration
-`00039_operator_roster.sql`). A security key works when it holds a PIN, because user
+`00040_operator_roster.sql`). A security key works when it holds a PIN, because user
 verification is required.
 
 The routes below sit behind the operator check of 5.1 and not behind the step-up, because they are
@@ -2073,7 +2073,7 @@ aggregate is restricted to the selected source of each service.
 
 ### 7.4 Numbers
 
-Every row carries a traffic class (`traffic_class`, migration `00038`): `app`, or one of the
+Every row carries a traffic class (`traffic_class`, migration `00039`): `app`, or one of the
 infrastructure classes `preflight`, `health` and `probe` that the collector assigns
 ([collector reference](collector.md), "Traffic classes"). Every number below except
 `infrastructure_requests` covers rows of class `app` only, so health checks, readiness probes and
@@ -2123,7 +2123,7 @@ range of equal length: `previous.from = from − (to − from)`,
 ```
 
 `traffic_classes.applied_from` is when the deployment's first traffic class rule set took effect
-(the time migration `00038` ran). Rows written before it hold every request as `app`, as they were
+(the time migration `00039` ran). Rows written before it hold every request as `app`, as they were
 counted then.
 
 ### 7.6 `GET .../api-metrics/timeseries`
