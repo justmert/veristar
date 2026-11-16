@@ -1,3 +1,4 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { CircleAlert, CircleCheck, FileText, Shield, Wallet } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
@@ -7,7 +8,6 @@ import { PublicFrame } from "@/components/public-frame";
 import { Button } from "@/components/ui/button";
 import { WalletPicker } from "@/components/wallet-picker";
 import { connectWallet, signTransaction } from "@/lib/stellar-wallet";
-import { queryClient } from "@/query-client";
 
 // failure codes of the oauth callback (contract 4.1.2)
 const SIGN_IN_ERRORS: Record<string, string> = {
@@ -47,6 +47,7 @@ export function SignInPage() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const [picker, setPicker] = useState(false);
+  const qc = useQueryClient();
   const code = params.get("error");
   const message = code ? (SIGN_IN_ERRORS[code] ?? SIGN_IN_ERRORS.internal) : null;
   const returnTo = safeReturnTo(params.get("return_to"));
@@ -110,7 +111,7 @@ export function SignInPage() {
           onPick={async (wallet) => {
             const dest = await walletSignIn(wallet.id, returnTo);
             // the session changed; nothing cached before it applies
-            queryClient.clear();
+            qc.clear();
             setPicker(false);
             navigate(dest, { replace: true });
           }}

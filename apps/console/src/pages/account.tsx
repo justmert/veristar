@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CircleCheck, CircleX, Wallet } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
@@ -94,6 +94,8 @@ function SignInMethods({ me }: { me: Me }) {
   const linked = params.get("linked");
   const [picker, setPicker] = useState(false);
   const [unlinking, setUnlinking] = useState<"github" | "stellar" | null>(null);
+  // the provider's client, so the refreshed account shows wherever it is read
+  const qc = useQueryClient();
   const { github_login, github_id, stellar_address } = me.user;
   const both = github_login !== null && stellar_address !== null;
 
@@ -101,7 +103,7 @@ function SignInMethods({ me }: { me: Me }) {
     mutationFn: api.unlinkIdentity,
     onSuccess: async () => {
       setUnlinking(null);
-      await queryClient.invalidateQueries({ queryKey: meQuery.queryKey });
+      await qc.invalidateQueries({ queryKey: meQuery.queryKey });
     },
   });
 
@@ -227,7 +229,7 @@ function SignInMethods({ me }: { me: Me }) {
             networkPassphrase: c.network_passphrase,
           });
           await api.linkWallet(signed);
-          await queryClient.invalidateQueries({ queryKey: meQuery.queryKey });
+          await qc.invalidateQueries({ queryKey: meQuery.queryKey });
           setPicker(false);
         }}
       />

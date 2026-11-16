@@ -355,8 +355,6 @@ export const operatorDetailBody = {
       github_login: "octocat",
       stellar_address: null,
       display_name: "octocat",
-      stellar_address: null,
-      display_name: "octocat",
     },
     approved_by: null,
     created_at: "2026-11-12T09:00:00Z",
@@ -371,6 +369,8 @@ export const operatorDetailBody = {
     {
       github_id: 1234567,
       github_login: "octocat",
+      stellar_address: null,
+      display_name: "octocat",
       role: "owner",
       created_at: "2026-11-12T09:00:00Z",
     },
