@@ -135,7 +135,7 @@ here, before they take effect, as the processing terms require
   MCP tools, from 100 requests on. The method and its accuracy limits are in
   [docs/compliance/privacy-strategy.md](docs/compliance/privacy-strategy.md),
   section 6.
-- Database migration `00037_web_signals_coverage`: `cp.web_signals_daily`,
+- Database migration `00039_web_signals_coverage`: `cp.web_signals_daily`,
   `agg.web_coverage_daily` and three signal columns of
   `agg.web_integrity_daily`, under row-level security.
 
