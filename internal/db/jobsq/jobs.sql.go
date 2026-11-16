@@ -12,6 +12,35 @@ import (
 	"github.com/google/uuid"
 )
 
+const addEvidenceCounts = `-- name: AddEvidenceCounts :exec
+insert into cp.web_evidence_daily (site_id, tenant_id, day, class, count)
+select unnest($1::uuid[]), unnest($2::uuid[]), $3::date,
+       unnest($4::text[]), unnest($5::bigint[])
+on conflict (site_id, day, class) do update
+  set count = cp.web_evidence_daily.count + excluded.count
+`
+
+type AddEvidenceCountsParams struct {
+	SiteIds   []uuid.UUID
+	TenantIds []uuid.UUID
+	Day       time.Time
+	Classes   []string
+	Counts    []int64
+}
+
+// adds one message's network class counters to their daily rows, like
+// AddIngestCounts: parallel arrays, each (site, class) once
+func (q *Queries) AddEvidenceCounts(ctx context.Context, arg AddEvidenceCountsParams) error {
+	_, err := q.db.Exec(ctx, addEvidenceCounts,
+		arg.SiteIds,
+		arg.TenantIds,
+		arg.Day,
+		arg.Classes,
+		arg.Counts,
+	)
+	return err
+}
+
 const addIngestCounts = `-- name: AddIngestCounts :exec
 insert into cp.web_ingest_hourly (site_id, tenant_id, hour, outcome, count)
 select unnest($1::uuid[]), unnest($2::uuid[]), $3::timestamptz,
@@ -39,6 +68,31 @@ func (q *Queries) AddIngestCounts(ctx context.Context, arg AddIngestCountsParams
 		arg.Hour,
 		arg.Outcomes,
 		arg.Counts,
+	)
+	return err
+}
+
+const addNetworkSightings = `-- name: AddNetworkSightings :exec
+insert into cp.web_networks_daily (site_id, tenant_id, day, network)
+select unnest($1::uuid[]), unnest($2::uuid[]), $3::date, unnest($4::text[])
+on conflict (site_id, day, network) do nothing
+`
+
+type AddNetworkSightingsParams struct {
+	SiteIds   []uuid.UUID
+	TenantIds []uuid.UUID
+	Day       time.Time
+	Networks  []string
+}
+
+// records the networks one message reports. a network that another node, or
+// a redelivery, reported before is already in the set
+func (q *Queries) AddNetworkSightings(ctx context.Context, arg AddNetworkSightingsParams) error {
+	_, err := q.db.Exec(ctx, addNetworkSightings,
+		arg.SiteIds,
+		arg.TenantIds,
+		arg.Day,
+		arg.Networks,
 	)
 	return err
 }

@@ -50,3 +50,9 @@ select (value #>> '{}')::bigint as day from cp.settings where key = 'umami_passw
 -- name: SetUmamiPasswordDay :exec
 insert into cp.settings (key, value) values ('umami_password_day', to_jsonb(@day::bigint))
 on conflict (key) do update set value = excluded.value;
+
+-- name: ProvisionSiteBaselines :many
+-- the latest baseline of each site through the security definer function
+-- of 00033 (cp_system has no right in agg itself)
+select b.site_id::uuid as site_id, b.baseline_visitors::bigint as baseline_visitors
+from agg.site_baselines(@tenant_id::uuid) as b;

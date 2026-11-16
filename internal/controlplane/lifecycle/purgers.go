@@ -150,8 +150,10 @@ func (p UmamiPurger) Purge(ctx context.Context, r Removal) (map[string]any, erro
 	return map[string]any{"websites_deleted": websites, "team_deleted": teamDeleted, "users_deleted": users}, nil
 }
 
-// WebIngestPurger deletes the tenant's cp.web_ingest_hourly rows, unless
-// the removal keeps aggregates (contract 5.13).
+// WebIngestPurger deletes the tenant's cp.web_ingest_hourly and
+// cp.web_evidence_daily rows, unless the removal keeps aggregates (contract
+// 5.13). the network keys of cp.web_networks_daily are no aggregate, only
+// the input of a distinct count, so they go in either case.
 type WebIngestPurger struct{}
 
 // Name is the step key.
@@ -159,14 +161,23 @@ func (WebIngestPurger) Name() string { return PurgerWebIngest }
 
 // Purge deletes in the run's transaction.
 func (WebIngestPurger) Purge(ctx context.Context, r Removal) (map[string]any, error) {
-	if r.KeepAggregates {
-		return map[string]any{"skipped": "keep_aggregates"}, nil
+	q := systemq.New(r.Tx)
+	nets, err := q.PurgeWebNetworks(ctx, r.TenantID)
+	if err != nil {
+		return nil, &RecordError{fmt.Errorf("web network rows: %w", err)}
 	}
-	n, err := systemq.New(r.Tx).PurgeWebIngest(ctx, r.TenantID)
+	if r.KeepAggregates {
+		return map[string]any{"skipped": "keep_aggregates", "network_rows_deleted": nets}, nil
+	}
+	n, err := q.PurgeWebIngest(ctx, r.TenantID)
 	if err != nil {
 		return nil, &RecordError{fmt.Errorf("web ingest rows: %w", err)}
 	}
-	return map[string]any{"rows_deleted": n}, nil
+	ev, err := q.PurgeWebEvidence(ctx, r.TenantID)
+	if err != nil {
+		return nil, &RecordError{fmt.Errorf("web evidence rows: %w", err)}
+	}
+	return map[string]any{"rows_deleted": n, "evidence_rows_deleted": ev, "network_rows_deleted": nets}, nil
 }
 
 // OTLPPurger revokes every otlp token of the tenant in cp.otlp_tokens and

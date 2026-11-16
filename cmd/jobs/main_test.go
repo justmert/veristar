@@ -267,12 +267,28 @@ func TestDaemonAndRun(t *testing.T) {
 		return tx.QueryRow(t.Context(), `select count(*) from agg.web_daily where site_id = $1`, site).Scan(&aggRows)
 	}))
 	require.Equal(t, 20, aggRows, "ten days, two bands")
+	// integrity grades the reread window from those aggregates; seven
+	// events today are too few for a grade, so each row says so
+	var gradeLog syncBuf
+	require.Equal(t, 0, run(t.Context(), []string{"run", "integrity"}, config.FromMap(envMap), io.Discard, &gradeLog), gradeLog.String())
+	require.Contains(t, gradeLog.String(), `"days":4`)
+	gradeBackfill := []string{"run", "integrity", "--from", today.AddDate(0, 0, -9).Format(time.DateOnly), "--to", today.Format(time.DateOnly)}
+	require.Equal(t, 0, run(t.Context(), gradeBackfill, config.FromMap(envMap), io.Discard, &gradeLog), gradeLog.String())
+	var graded, ungraded int
+	require.NoError(t, jobsDB.WithRole(t.Context(), pdb.RoleJobs, func(tx pgx.Tx) error {
+		return tx.QueryRow(t.Context(), `select count(*) filter (where grade is not null),
+		    count(*) filter (where grade is null and reasons @> '[{"code":"too_little_traffic"}]')
+		  from agg.web_integrity_daily where site_id = $1`, site).Scan(&graded, &ungraded)
+	}))
+	require.Equal(t, 0, graded)
+	require.Equal(t, 10, ungraded)
 	for _, bad := range [][]string{
 		{"run", "aggregate-web", "--from", "2026-11-01"},
 		{"run", "aggregate-web", "--from", "2026-11-02", "--to", "2026-11-01"},
 		{"run", "aggregate-web", "--from", "yesterday", "--to", "2026-11-01"},
 		{"run", "aggregate-web", "--from", "2026-11-01", "--to", "2026-11-01", "extra"},
 		{"run", "edgestats", "--from", "2026-11-01", "--to", "2026-11-01"},
+		{"run", "integrity", "--from", "2026-11-01"},
 	} {
 		var l syncBuf
 		require.Equal(t, 2, run(t.Context(), bad, config.FromMap(envMap), io.Discard, &l), strings.Join(bad, " "))
