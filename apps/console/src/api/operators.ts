@@ -1,4 +1,4 @@
-// the operator step-up, passkeys and roster (contract 5.11 and 5.12): their
+// the operator step-up, passkeys and roster (contract 5.15 and 5.16): their
 // schemas, calls and queries in one file
 
 import { queryOptions } from "@tanstack/react-query";

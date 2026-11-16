@@ -53,8 +53,8 @@ function mine(e: RosterEntry, u: User) {
   );
 }
 
-// the operator roster (contract 5.12) and the signed-in operator's own
-// passkeys (contract 5.11). every operator sees the roster; operator admins
+// the operator roster (contract 5.16) and the signed-in operator's own
+// passkeys (contract 5.15). every operator sees the roster; operator admins
 // change it, and every change asks for a reason that goes to the audit log
 export function OperatorsPage() {
   const me = useQuery(meQuery);

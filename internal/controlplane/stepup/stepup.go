@@ -1,5 +1,5 @@
 // Package stepup is the hardware-backed second factor of the operator area
-// (contract 5.1): webauthn passkeys and security keys registered to a console
+// (contract 5.15): webauthn passkeys and security keys registered to a console
 // account, and a step-up recorded on the console session when the person
 // proves one of them.
 //

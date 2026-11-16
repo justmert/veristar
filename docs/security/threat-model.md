@@ -307,30 +307,55 @@ An attacker takes over an operator's GitHub account or console session.
 
 What an operator can do: approve, reject, suspend, resume and remove tenants; change enrollment
 mode and the removal setting; create and revoke operator API keys; read aggregates. An operator
-cannot read raw events or Umami data and has no Umami admin.
+admin also changes the operator roster. An operator cannot read raw events or Umami data and has
+no Umami admin.
 
 Built:
 
-- Operator status needs both `cp.users.is_operator = true` (read per request) and a `github_id`
-  in `OPERATOR_GITHUB_IDS`; anything else is 403 `operator_required`. Removing an id takes effect
-  at that person's next sign-in or the next control plane start.
+- Operators are rows of the roster `cp.operators`. `cp.users.is_operator` is derived from the
+  roster by database triggers in the transaction that changes either side, and read per request;
+  anything else is 403 `operator_required`. A suspension or removal takes effect at the person's
+  next request, ends their console sessions and revokes their operator MCP credentials.
+- The operator area needs a WebAuthn assertion (a passkey or a security key) recorded on the
+  session within `OPERATOR_STEP_UP_MAX_AGE` (12 hours by default); otherwise 401
+  `step_up_required`. A stolen session cookie or a taken-over GitHub account alone does not open
+  the area. The credential is bound to the console origin, so a look-alike site cannot relay it.
+  A step-up renews the session token. The ceremony state is single use, and an authenticator
+  whose signature counter goes backwards is refused.
+- A first passkey can be registered without a step-up only inside an enrollment window
+  (`OPERATOR_ENROLL_WINDOW`, 24 hours by default) that an admin's addition or reset, or the start of
+  the control plane for a deploy-settings identity without a passkey, opens; only from a session
+  signed in after the window opened; and only while the account has no passkey. The first
+  registration closes the window. Later ones need a step-up.
+- Roster changes need the operator admin role and a step-up, carry a reason, and are audited. The
+  constraint trigger `operators_last_admin` keeps one active operator admin whatever statement
+  runs. Deploy-settings rows cannot be suspended, removed or demoted in the console.
+- Machine API keys and operator MCP credentials do not need the step-up: they authenticate with
+  their own key, scoped and revocable, which only a stepped-up operator session can create or
+  approve.
 - Every action writes an audit row; `cp_system` cannot update or delete `cp.audit_log`.
 - Actions need a reason (remove, reject, suspend) and are refused as 409 on a repeat.
-- Sign-in is GitHub OAuth only, with PKCE S256 and state, no scopes requested.
+- Sign-in is GitHub OAuth with PKCE S256 and state and no scopes requested, or a SEP-10 wallet
+  challenge.
 
-Proved by: `TestGuardAllowed` (`internal/controlplane/operator/guard_test.go`);
+Proved by: `TestStepUp` (`internal/controlplane/stepup/stepup_test.go`); `TestRosterRoutes`,
+`TestRosterDerivesOperatorFlag` and `TestBootstrap` (`internal/controlplane/operator/roster_test.go`);
 `TestGlobalRoutesNeedAnOperator` (`internal/controlplane/operator/global_umami_test.go`);
-`TestSyncFlags` (`internal/controlplane/operator/tenants_test.go`); `TestAuditLogAppendOnly`
-(`internal/db/boundaries_test.go`); `TestOperatorFlag` (`internal/controlplane/auth/`);
-`tests/e2e-console/specs/operator-lifecycle.spec.ts`.
+`TestAuditLogAppendOnly` (`internal/db/boundaries_test.go`); `TestOperatorFlag`
+(`internal/controlplane/auth/`); the isolation gate's operator routes without a step-up
+(`tests/isolation/console/gate_test.go`); `tests/e2e-console/specs/operator-roster.spec.ts` with a
+Chromium virtual authenticator.
 
-Residual risk: operator security equals the security of the operator's GitHub account; the
-platform cannot require GitHub two-factor authentication. One operator alone can remove a
-tenant, and removal purges the tenant's Umami websites and data; there is no second approval and
-no undo inside the application. Recovery is a point-in-time restore from the pgBackRest backups
+Residual risk: a synced passkey is as safe as the platform account that syncs it; an operator
+who wants a key that never leaves one device registers a security key. Inside an open enrollment
+window, a person who takes over the operator's GitHub account and signs in first registers the
+first passkey; the window is short, the registration is audited, and the Operators page shows the
+passkey count of every row. One operator alone can remove a tenant, and removal purges the
+tenant's Umami websites and data; there is no second approval and no undo inside the application.
+Recovery is a point-in-time restore from the pgBackRest backups
 ([../runbooks/point-in-time-restore.md](../runbooks/point-in-time-restore.md)).
-A compromised operator can also mint a global API key and read every tenant's aggregates until
-it is revoked.
+A compromised operator session that holds a step-up can also mint a global API key and read
+every tenant's aggregates until it is revoked.
 
 ### 3.9 Edge node compromise
 

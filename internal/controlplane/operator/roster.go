@@ -54,7 +54,7 @@ type GitHubLookup interface {
 	Lookup(ctx context.Context, login string) (auth.GitHubUser, error)
 }
 
-// Roster serves the operators page (contract 5.12): every operator lists
+// Roster serves the operators page (contract 5.16): every operator lists
 // the roster, operator admins change it.
 type Roster struct {
 	db     *db.DB

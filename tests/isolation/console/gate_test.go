@@ -41,7 +41,7 @@ const (
 	kindSSO
 	// an /api/operator route: 403 operator_required for a non-operator
 	kindOperator
-	// a step-up or passkey route of the operator area (contract 5.11):
+	// a step-up or passkey route of the operator area (contract 5.15):
 	// 403 operator_required for a non-operator; an operator reaches it
 	// without a step-up, because it is how a session gets one
 	kindStepUp
@@ -241,7 +241,7 @@ func catalogue(terms string) []route {
 	add(kindOperator, http.MethodDelete, op+"/rules/{rule_id}", nil)
 	add(kindOperator, http.MethodGet, op+"/rules/{rule_id}/matches", nil)
 	add(kindOperator, http.MethodGet, op+"/rules/{rule_id}/matches.csv", nil)
-	// the operator roster (contract 5.12)
+	// the operator roster (contract 5.16)
 	add(kindOperator, http.MethodGet, op+"/roster", nil)
 	add(kindOperator, http.MethodPost, op+"/roster", fixed(map[string]any{
 		"github_login": "intruder-friend", "role": "operator_admin", "reason": "isolation gate"}))
@@ -249,7 +249,7 @@ func catalogue(terms string) []route {
 		add(kindOperator, http.MethodPost, op+"/roster/{entry_id}/"+a, reason)
 	}
 	add(kindOperator, http.MethodPost, op+"/roster/{entry_id}/role", fixed(map[string]any{"role": "operator", "reason": "isolation gate"}))
-	// the step-up and the passkeys (contract 5.11)
+	// the step-up and the passkeys (contract 5.15)
 	add(kindStepUp, http.MethodGet, op+"/step-up", nil)
 	add(kindStepUp, http.MethodPost, op+"/step-up/options", fixed(map[string]any{}))
 	add(kindStepUp, http.MethodPost, op+"/step-up", fixed(map[string]any{"credential": map[string]any{}}))

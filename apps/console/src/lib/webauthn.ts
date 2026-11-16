@@ -1,4 +1,4 @@
-// the browser half of the operator step-up (contract 5.11): the control
+// the browser half of the operator step-up (contract 5.15): the control
 // plane sends webauthn options with binary fields as base64url strings, the
 // browser api wants ArrayBuffers, and the answer goes back as json with
 // base64url strings again. this file is that translation and nothing else;

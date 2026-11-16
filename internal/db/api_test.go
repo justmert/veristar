@@ -86,7 +86,7 @@ func TestAPIBoundaries(t *testing.T) {
 func minuteParams(tenant uuid.UUID, at time.Time, route, source string, counts histo.Counts, sum float64, lossy bool) writerq.AddMinuteParams {
 	return writerq.AddMinuteParams{
 		TenantID: tenant, BucketStart: at, Service: "checkout", Method: "POST", Route: route,
-		StatusCode: 201, Source: source, Counts: counts.Slice(), Sum: sum, Count: counts.Total(), Lossy: lossy,
+		StatusCode: 201, Source: source, TrafficClass: "app", Counts: counts.Slice(), Sum: sum, Count: counts.Total(), Lossy: lossy,
 	}
 }
 
@@ -125,6 +125,10 @@ func TestAPIWriterQueries(t *testing.T) {
 			minuteParams(tenant, minute, "/orders", "metric", c2, 30.25, true),
 			minuteParams(tenant, minute, "/orders", "span", c1, 0.5, false),
 		}).Exec))
+		// a probe of the same route is a row of its own (00035)
+		probe := minuteParams(tenant, minute, "/orders", "metric", c1, 0.5, false)
+		probe.TrafficClass = "probe"
+		require.NoError(t, execBatch(q.AddMinute(ctx, []writerq.AddMinuteParams{probe}).Exec))
 		require.NoError(t, execBatch(q.MarkRollupPending(ctx, []writerq.MarkRollupPendingParams{
 			{TenantID: tenant, BucketStart: minute}, {TenantID: tenant, BucketStart: minute.Add(time.Second)},
 		}).Exec))
@@ -178,14 +182,14 @@ func TestAPIWriterQueries(t *testing.T) {
 	var total int64
 	var lossy bool
 	require.NoError(t, c.QueryRow(ctx, `select counts, sum, count, lossy from api.metrics_minute
-		where tenant_id = $1 and source = 'metric'`, tenant).Scan(&counts, &sum, &total, &lossy))
+		where tenant_id = $1 and source = 'metric' and traffic_class = 'app'`, tenant).Scan(&counts, &sum, &total, &lossy))
 	require.Equal(t, []int64{1, 1, 2, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2}, counts, "a second point adds its buckets")
 	require.Equal(t, 30.75, sum)
 	require.Equal(t, int64(9), total)
 	require.True(t, lossy, "one lossy contribution makes the row lossy")
 	var rows, pending, warnings int64
 	require.NoError(t, c.QueryRow(ctx, `select count(*) from api.metrics_minute where tenant_id = $1`, tenant).Scan(&rows))
-	require.Equal(t, int64(2), rows, "metric and span rows stay apart")
+	require.Equal(t, int64(3), rows, "metric and span rows stay apart, and so do application and probe rows")
 	require.NoError(t, c.QueryRow(ctx, `select count(*) from api.rollup_pending where tenant_id = $1 and hour = $2`,
 		tenant, minute.Truncate(time.Hour)).Scan(&pending))
 	require.Equal(t, int64(1), pending, "both marks name the same hour")
@@ -205,6 +209,11 @@ func TestAPIWriterQueries(t *testing.T) {
 		}(), "23514"},
 		{"not the start of a minute", minuteParams(tenant, minute.Add(time.Second), "/x", "metric", c1, 1, false), "23514"},
 		{"unknown source", minuteParams(tenant, minute, "/x", "log", c1, 1, false), "23514"},
+		{"unknown traffic class", func() writerq.AddMinuteParams {
+			p := minuteParams(tenant, minute, "/x", "metric", c1, 1, false)
+			p.TrafficClass = "bot"
+			return p
+		}(), "23514"},
 		{"wrong bucket count", func() writerq.AddMinuteParams {
 			p := minuteParams(tenant, minute, "/x", "metric", c1, 1, false)
 			p.Counts = []int64{6}
@@ -231,7 +240,7 @@ func TestAPIWriterQueries(t *testing.T) {
 }
 
 type apiRow struct {
-	Service, Method, Route, Source string
+	Service, Method, Route, Source, Class string
 	Status                         int16
 	Counts                         []int64
 	Sum                            float64
@@ -242,13 +251,13 @@ type apiRow struct {
 func apiRows(t *testing.T, tx pgx.Tx, table string, tenant uuid.UUID, from, to time.Time) []apiRow {
 	t.Helper()
 	rows, err := tx.Query(context.Background(), `
-		select service, method, route, source, status_code, counts, sum, count, lossy from `+table+`
+		select service, method, route, source, traffic_class, status_code, counts, sum, count, lossy from `+table+`
 		where tenant_id = $1 and bucket_start >= $2 and bucket_start < $3
-		order by service, method, route, source, status_code, bucket_start`, tenant, from, to)
+		order by service, method, route, source, traffic_class, status_code, bucket_start`, tenant, from, to)
 	require.NoError(t, err)
 	out, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (apiRow, error) {
 		var x apiRow
-		return x, r.Scan(&x.Service, &x.Method, &x.Route, &x.Source, &x.Status, &x.Counts, &x.Sum, &x.Count, &x.Lossy)
+		return x, r.Scan(&x.Service, &x.Method, &x.Route, &x.Source, &x.Class, &x.Status, &x.Counts, &x.Sum, &x.Count, &x.Lossy)
 	})
 	require.NoError(t, err)
 	return out
@@ -272,6 +281,10 @@ func TestAPIRollupQueries(t *testing.T) {
 				minuteParams(tenant, at, "/orders", "span", histo.Counts{5: 1, 14: int64(i + 1)}, 11.5, i == 1),
 				minuteParams(tenant, at, "/items", "metric", histo.Counts{9: 4}, 3.3, false),
 			)
+			// a load balancer's probe of the same route stays a row of its own
+			probe := minuteParams(tenant, at, "/orders", "metric", histo.Counts{0: 50}, 0.2, false)
+			probe.TrafficClass = "probe"
+			ps = append(ps, probe)
 			marks = append(marks, writerq.MarkRollupPendingParams{TenantID: tenant, BucketStart: at})
 		}
 		if err := execBatch(q.AddMinute(ctx, ps).Exec); err != nil {
@@ -307,28 +320,28 @@ func TestAPIRollupQueries(t *testing.T) {
 		require.NoError(t, err)
 		n, err := q.RollupHour(ctx, jobsq.RollupHourParams{Hour: hour, TenantID: tenant})
 		require.NoError(t, err)
-		require.Equal(t, int64(3), n, "one hourly row per dimension and source")
+		require.Equal(t, int64(4), n, "one hourly row per dimension, source and traffic class")
 		_, err = q.DeleteDailyRows(ctx, jobsq.DeleteDailyRowsParams{TenantID: tenant, Day: day})
 		require.NoError(t, err)
 		n, err = q.RollupDay(ctx, jobsq.RollupDayParams{Day: day, TenantID: tenant})
 		require.NoError(t, err)
-		require.Equal(t, int64(3), n)
+		require.Equal(t, int64(4), n)
 	}
 	rollup()
 
 	minutes := apiRows(t, tx, "api.metrics_minute", tenant, hour, hour.Add(time.Hour))
 	hours := apiRows(t, tx, "api.metrics_hourly", tenant, hour, hour.Add(time.Hour))
 	days := apiRows(t, tx, "api.metrics_daily", tenant, day, day.Add(24*time.Hour))
-	require.Len(t, minutes, 6)
+	require.Len(t, minutes, 8)
 
 	// hourly rows are the sums of their minutes, dimension by dimension
-	type key struct{ route, source string }
+	type key struct{ route, source, class string }
 	want := map[key]apiRow{}
 	for _, m := range minutes {
-		k := key{m.Route, m.Source}
+		k := key{m.Route, m.Source, m.Class}
 		w, ok := want[k]
 		if !ok {
-			w = apiRow{Service: m.Service, Method: m.Method, Route: m.Route, Source: m.Source, Status: m.Status, Counts: make([]int64, histo.Buckets)}
+			w = apiRow{Service: m.Service, Method: m.Method, Route: m.Route, Source: m.Source, Class: m.Class, Status: m.Status, Counts: make([]int64, histo.Buckets)}
 		}
 		for i := range m.Counts {
 			w.Counts[i] += m.Counts[i]
@@ -340,7 +353,7 @@ func TestAPIRollupQueries(t *testing.T) {
 	}
 	require.Len(t, hours, len(want))
 	for _, h := range hours {
-		require.Equal(t, want[key{h.Route, h.Source}], h)
+		require.Equal(t, want[key{h.Route, h.Source, h.Class}], h)
 		var sqlQ float64
 		require.NoError(t, tx.QueryRow(ctx, `select api.histogram_quantile(0.95, $1)`, h.Counts).Scan(&sqlQ))
 		goQ, err := histo.Quantile(0.95, h.Counts)
