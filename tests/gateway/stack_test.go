@@ -31,6 +31,7 @@ import (
 
 	"github.com/justmert/veristar/internal/natsx"
 	"github.com/justmert/veristar/internal/registry"
+	"github.com/justmert/veristar/tests/fixtures/gatewayimage"
 	"github.com/justmert/veristar/tests/fixtures/natsctr"
 )
 
@@ -72,8 +73,7 @@ func TestMain(m *testing.M) {
 		fmt.Fprintln(os.Stderr, "gatewayit: DBIP_MONTH (YYYY-MM) is required; make gateway-it sets it")
 		os.Exit(2)
 	}
-	cmd := exec.Command("docker", "build", "-q", "-f", "deploy/images/gateway.Dockerfile",
-		"--build-arg", "DBIP_MONTH="+month, "-t", gatewayImage, ".")
+	cmd := exec.Command("docker", gatewayimage.BuildArgs(month, gatewayImage)...)
 	cmd.Dir = repoRoot()
 	if out, err := cmd.CombinedOutput(); err != nil {
 		fmt.Fprintf(os.Stderr, "gatewayit: build gateway image: %v\n%s", err, out)

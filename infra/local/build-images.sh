@@ -6,6 +6,9 @@
 #   infra/local/build-images.sh
 #
 # DBIP_MONTH defaults to the current utc month, which the gateway image names.
+# GATEWAY_GEO_DIR, when set, is a directory written by make geo-fetch: the
+# gateway build takes the month's files from it instead of downloading them
+# (deploy/images/gateway.Dockerfile, the geo build context).
 set -eu
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -27,7 +30,11 @@ build() {
 }
 
 cd "$src"
-build gateway -f deploy/images/gateway.Dockerfile --build-arg DBIP_MONTH="$month"
+if [ -n "${GATEWAY_GEO_DIR:-}" ]; then
+	build gateway -f deploy/images/gateway.Dockerfile --build-arg DBIP_MONTH="$month" --build-context geo="$GATEWAY_GEO_DIR"
+else
+	build gateway -f deploy/images/gateway.Dockerfile --build-arg DBIP_MONTH="$month"
+fi
 build collector -f deploy/images/collector.Dockerfile
 for c in replayer metricswriter jobs platformctl prober; do
 	build "$c" -f deploy/images/go-service.Dockerfile --build-arg CMD="$c"

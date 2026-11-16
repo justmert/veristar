@@ -35,6 +35,7 @@ import (
 	"github.com/justmert/veristar/internal/natsx"
 	"github.com/justmert/veristar/internal/registry"
 	"github.com/justmert/veristar/internal/umami"
+	"github.com/justmert/veristar/tests/fixtures/gatewayimage"
 )
 
 const (
@@ -81,7 +82,7 @@ func TestMain(m *testing.M) {
 		os.Exit(2)
 	}
 	builds := [][]string{
-		{"build", "-q", "-f", "deploy/images/gateway.Dockerfile", "--build-arg", "DBIP_MONTH=" + month, "-t", gatewayImage, "."},
+		gatewayimage.BuildArgs(month, gatewayImage),
 		{"build", "-q", "-f", "deploy/images/go-service.Dockerfile", "--build-arg", "CMD=replayer", "-t", replayerImage, "."},
 	}
 	for _, b := range builds {
