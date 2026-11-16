@@ -25,14 +25,52 @@ declared ids shows a dash.
 - Operations of an account count every successful operation that involves it; operations of a
   contract count the operations in which it emitted an event. Counterparties are distinct per day.
 
+The cell's last line is the project's **weekly active accounts**, averaged over the ISO weeks of
+the range that have a count (see below). Hover the cell for the full line with the weeks counted
+and missing.
+
 The column is not a sort key. Filter and sort by the web or API columns, then read it.
+
+## Read weekly active accounts
+
+Weekly active accounts (WAA) follow the definition of the SCF Growth Hack official rules: "An
+active account means the account that initiated at least one operation"
+([SCF handbook, Growth Hack official rules, Top 5 Projects Selection](https://stellar.gitbook.io/scf-handbook/supporting-programs/growth-hack/official-rules)).
+For a project, the platform counts the distinct accounts that initiated at least one successful
+operation involving the project's **verified** accounts or contracts, per ISO week (Monday to
+Sunday, UTC):
+
+- for an account, the source account of every operation that involves it;
+- for a contract, the source account of every operation in which the contract emitted an event.
+
+An account counts once a week however many of the project's ids it used. The project's own
+accounts count when they initiate operations. A relayed or sponsored invocation counts the account
+that submitted the operation. The range figure is the mean of the counted weeks, as the Growth Hack
+averages weekly counts, next to the latest counted week.
+
+A week without a count shows its reason, never 0:
+
+| Reason | Meaning |
+|---|---|
+| `week_not_complete` | the week is not over yet |
+| `not_read_yet` | the week is over and a day is still being read; the week closes once it is read whole, or 7 days after its Sunday at the latest |
+| `no_verified_ids` | the project had no verified account or contract when the week closed |
+| `day_over_read_cap` | a contract had more than 10,000 transactions with events in one day, so its initiators were not read whole |
+| `before_source_history` | a day of the week was outside what the source still holds when the project declared the id; contract events stay readable for about seven days |
+| `week_not_counted` | the week ended before the platform counted weekly active accounts for the project |
+| a read error code | the last read of an id failed, for example `rate_limited` |
+
+How the platform counts without keeping addresses is on
+[On-chain data sources](../reference/onchain-sources.md#weekly-active-accounts).
 
 ## Read a project's detail
 
 **Projects**, then a project: the **On-chain** section lists each declared id with its proof, its
 daily operations (dashed cells for missing days) and the reason for every missing day, and shows
 whether the project's stellar.toml and its accounts' home domain link the verified domain both
-ways. **Compare** adds an **On-chain** section with each project's daily operations over the range.
+ways, and the weekly active accounts of each ISO week of the range. **Compare** adds an
+**On-chain** section with each project's daily operations and weekly active accounts over the
+range.
 
 ## Export what you see
 
@@ -42,20 +80,27 @@ ways. **Compare** adds an **On-chain** section with each project's daily operati
 - **Compare**: **Export web CSV** and **Export API CSV** download one row per project and day.
 
 A value that is not known is an empty cell, never 0. Each file carries the on-chain columns, and
-each export writes an `export.csv` row to the audit log with the query it answered.
+each export writes an `export.csv` row to the audit log with the query it answered. List exports
+add `onchain_weekly_active_accounts_average`, `onchain_weekly_active_accounts_latest`,
+`onchain_weeks_counted` and `onchain_weeks_missing`; compare exports add, on every day row, the ISO
+week of the day (`onchain_week`) with its `onchain_week_active_accounts` or
+`onchain_week_missing` reason, for the weeks that lie whole inside the range.
 
 ## What projects see
 
 Each project has a **What SCF sees** page with its own row of these views, computed by the same
-queries for the same range, with its integrity grade. It sees nothing about other projects.
+queries for the same range, with its integrity grade and weekly active accounts. It sees nothing
+about other projects.
 
 ## Machine API and AI clients
 
 - The machine API serves `GET /api/metrics/v1/onchain/ids` (declared ids with proofs and read
-  state) and `GET /api/metrics/v1/onchain/daily` (the stored daily rows), with the key scopes of
-  [API keys](api-keys.md).
-- The operator MCP connection has `get_tenant_onchain`; the overviews and compares it reads carry
-  the on-chain summary per project.
+  state), `GET /api/metrics/v1/onchain/daily` (the stored daily rows) and
+  `GET /api/metrics/v1/onchain/weekly` (weekly active accounts per project and ISO week, with the
+  reason for a week without a count), with the key scopes of [API keys](api-keys.md).
+- The operator MCP connection has `get_tenant_onchain` with the weekly active accounts; the
+  overviews and compares it reads carry the on-chain summary per project, weekly active accounts
+  included.
 
 ## When reads fail
 

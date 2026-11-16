@@ -283,18 +283,41 @@ closed evaluation was graded.
 
 Where the grade appears:
 
-- **Operators:** a sortable Integrity column in the global web table, the grade and reasons in
-  compare and in the tenant detail, `GET /api/operator/web/integrity` for one project's reasons
-  per site and day ([../reference/control-plane-api.md](../reference/control-plane-api.md)
-  section 17).
+- **Operators:** a sortable Integrity column in the global web table with an Integrity filter
+  (`integrity_at_or_below`: `C` lists the projects graded C, `B` those graded B or C, `A` every
+  graded project), the grade and reasons in compare and in the tenant detail,
+  `GET /api/operator/web/integrity` for one project's reasons per site and day
+  ([../reference/control-plane-api.md](../reference/control-plane-api.md) section 17).
 - **The project:** the same report on its own overview (`GET /api/tenants/{tenant_id}/integrity`),
   so builders see exactly what SCF sees.
-- **Machines:** `GET /api/metrics/v1/web/integrity` per site and day, and an `integrity` object
-  on every `/web/daily` item.
+- **Machines:** `GET /api/metrics/v1/web/integrity` per site and day, with the same
+  `integrity_at_or_below` filter on the site day's grade, and an `integrity` object on every
+  `/web/daily` item.
 - **MCP:** `get_web_integrity` for a project, `get_tenant_integrity` for operators; the global web
-  overview carries each project's grade and sorts by it.
+  overview carries each project's grade, sorts by it and takes `integrity_at_or_below`.
 - **Exports:** `integrity_grade` columns in the web project, compare and project overview CSV
-  exports.
+  exports; the web project export takes the list's Integrity filter.
+
+### Appealing a grade
+
+The grade is automatic: the rules above compute it, and no one sets or edits it by hand. Operators
+decide what a grade means for a project. If you think your project's grade misreads your traffic,
+appeal it:
+
+1. Open your project's overview or **What SCF sees** in the console and select **Appeal this
+   grade** next to the grade. It appears whenever the range has a grade.
+2. The link opens a new issue on the **Integrity appeal** form of the public tracker, filled in
+   with your project slug, each site's domain and grade, the period, the range grade, the reason
+   codes with their day counts and the rule set version. It carries no personal data and no
+   visitor data.
+3. Add what the operator needs to know, such as a launch, a campaign or an audience on company
+   VPNs, with dates in UTC, and submit the issue.
+
+An operator reads the appeal next to the evidence of each site day and answers on the issue
+within the [support targets](../support.md). The appeal does not change the stored grade; the
+operator's decision is recorded on the issue. When an appeal shows that a rule misreads a kind of
+traffic, the fix is a new rule set version, which grades later days and leaves closed
+evaluations as they were graded.
 
 Proved by: `TestGradeRules`, `TestPageReportedNeverRaises`, `TestCombine`
 (`internal/integrity/integrity_test.go`); `TestGrader` (`internal/jobs/integrity`);

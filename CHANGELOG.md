@@ -87,6 +87,33 @@ here, before they take effect, as the processing terms require
   C-addresses of passkey operators, and deleting an account removes its
   passkey. Migration `00037` adds `passkey_address`, `passkey_credential_id`
   and `passkey_public_key` to `cp.users`; tenants read the address only.
+- Weekly active accounts by the SCF Growth Hack definition ("an active account
+  means the account that initiated at least one operation"): for each ISO week
+  in UTC, the distinct accounts that initiated an operation involving the
+  project's verified accounts or contracts. The `chain-activity` task reads
+  each day's initiating accounts with its counts, from Horizon operations for
+  accounts and from the envelopes of the event transactions through batched
+  `getTransaction` calls for contracts, while Stellar RPC still holds them. An
+  open week keeps only keyed hashes under a key held for that week; at the
+  week's close the task stores the count and deletes the hashes and the key.
+  A week that could not be read whole shows as missing with its reason, never
+  as zero. The tenant on-chain panel, the operator column, compare and tenant
+  detail, "What SCF sees", the CSV exports, the new machine route
+  `GET /api/metrics/v1/onchain/weekly` and the MCP tools carry it
+  ([docs/reference/onchain-sources.md](docs/reference/onchain-sources.md),
+  [docs/reference/control-plane-api.md](docs/reference/control-plane-api.md)
+  section 15.8). Migration 00038.
+- Integrity filter: the Global web table, its CSV export,
+  `get_global_web_overview` and `GET /api/metrics/v1/web/integrity` take
+  `integrity_at_or_below` (`C` for grade C, `B` for B and C, `A` for every
+  graded project or site day).
+- "Appeal this grade" next to the integrity grade on the project overview and
+  in "What SCF sees": it opens a new issue on the Integrity appeal form, filled
+  in with the project slug, site domains and grades, period, grade, reason
+  codes and rule set version, and no personal data. The grade stays automatic;
+  operators read the appeal and decide
+  ([docs/security/bot-and-inflation.md](docs/security/bot-and-inflation.md)
+  section 9).
 
 ## [0.3.0] - 2026-11-16
 

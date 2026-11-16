@@ -1,0 +1,59 @@
+name: Integrity appeal
+description: Ask an operator to review the integrity grade of your project's web traffic.
+title: "integrity appeal: "
+labels: ["integrity-appeal"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The grade is computed automatically from what the platform's edge observes. An operator reads this appeal next to the evidence and decides; the grade itself does not change because of an appeal. The rules are in docs/security/bot-and-inflation.md section 9.
+
+        The **Appeal this grade** link on your project's overview and on "What SCF sees" fills in every field below. This tracker is public: name your project by its slug and your sites by their domains, and do not paste tokens, API keys, session cookies, visitor IP addresses or user agents.
+  - type: input
+    id: project
+    attributes:
+      label: Project slug
+      description: As shown in the console under your project name.
+    validations:
+      required: true
+  - type: input
+    id: period
+    attributes:
+      label: Period
+      description: The UTC days the grade covers.
+    validations:
+      required: true
+  - type: input
+    id: grade
+    attributes:
+      label: Grade
+      description: A, B or C.
+    validations:
+      required: true
+  - type: textarea
+    id: sites
+    attributes:
+      label: Sites
+      description: Each site's domain and its grade over the period.
+    validations:
+      required: true
+  - type: textarea
+    id: reasons
+    attributes:
+      label: Reasons
+      description: The reason codes that set the grade, with their level and the number of days each applied to.
+    validations:
+      required: true
+  - type: input
+    id: rule_version
+    attributes:
+      label: Rule set version
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Why the grade does not fit
+      description: What the operator should know, such as a campaign, a launch, an audience on company VPNs or a known incident, with dates in UTC.
+    validations:
+      required: true

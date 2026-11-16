@@ -34,9 +34,14 @@ quarantined.
 
 Each row also carries the top five referrers, countries, devices and browsers over the range.
 
+Each row also carries the project's integrity grade (see
+[reading-the-numbers.md](reading-the-numbers.md)) and its on-chain column with weekly active
+accounts ([onchain-and-exports.md](onchain-and-exports.md)).
+
 Filters (all must hold): status, name or slug, domain verified, stellar.toml found, has web
-data in the range, has API data in the range, enrollment date range, and the cohort filters
-(below). Sort by any column,
+data in the range, has API data in the range, enrollment date range, the cohort filters
+(below), and **Integrity**: **C** lists the projects graded C over the range, **B and below**
+those graded B or C, **Graded** every project with a grade. Sort by any column,
 largest or smallest first; projects without a value for the sort column (a rate with no
 visits) come last either way.
 
