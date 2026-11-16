@@ -85,7 +85,7 @@ var tenantTables = []tenantTable{
 	{name: "agg.web_daily_dim", key: "tenant_id", denied: true},
 	{name: "agg.chain_daily", key: "tenant_id"},
 	{name: "agg.chain_reads", key: "tenant_id"},
-	// weekly active accounts (00037): a project reads its own weeks, never
+	// weekly active accounts (00038): a project reads its own weeks, never
 	// the keyed hashes of an open week
 	{name: "agg.chain_weeks", key: "tenant_id"},
 	{name: "agg.chain_week_members", key: "tenant_id", denied: true},
