@@ -197,6 +197,9 @@ catalogs:
     '@react-router/serve':
       specifier: 8.4.0
       version: 8.4.0
+    '@soropass/core':
+      specifier: 0.3.1
+      version: 0.3.1
     '@stellar/stellar-sdk':
       specifier: 17.4.0
       version: 17.4.0
@@ -318,6 +321,9 @@ importers:
       '@creit.tech/stellar-wallets-kit':
         specifier: 'catalog:'
         version: 2.8.0(@types/react@19.3.0)(bufferutil@4.2.0)(debug@4.4.3)(immer@11.2.10)(near-api-js@5.1.1)(react@19.3.1)(tslib@2.9.1)(typescript@7.0.2)(use-sync-external-store@1.7.0(react@19.3.1))(utf-8-validate@6.0.6)(zod@4.6.7)
+      '@soropass/core':
+        specifier: 'catalog:'
+        version: 0.3.1(@stellar/stellar-sdk@17.4.0(debug@4.4.3))
       '@tanstack/react-query':
         specifier: 'catalog:'
         version: 5.106.1(@types/react@19.3.0)(react@19.3.1)
@@ -3248,6 +3254,11 @@ packages:
 
   '@solana/web3.js@1.99.0':
     resolution: {integrity: sha512-QZYQ2T1z6xWisoyALPq25i/QZTsRlM02BABtAsfaQ1p8wX4SdTfxrKTRue/ZZqrhNVh5oL7T/DUFiTS9DRgxow==}
+
+  '@soropass/core@0.3.1':
+    resolution: {integrity: sha512-6DgsyNdT7ZZYOzF+W1KhScjt2d9KQD73f66l9OeZll9mioJovXg/99wsLVfsjejVh4U+T/rIckXY9LGDcbTkYw==}
+    peerDependencies:
+      '@stellar/stellar-sdk': '>=17'
 
   '@standard-schema/spec@1.1.0':
     resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
@@ -9475,6 +9486,12 @@ snapshots:
       - encoding
       - typescript
       - utf-8-validate
+
+  '@soropass/core@0.3.1(@stellar/stellar-sdk@17.4.0(debug@4.4.3))':
+    dependencies:
+      '@noble/curves': 1.9.7
+      '@noble/hashes': 1.8.0
+      '@stellar/stellar-sdk': 17.4.0(debug@4.4.3)
 
   '@standard-schema/spec@1.1.0': {}
 
