@@ -3,13 +3,14 @@
 # caddyfiles that the caddy tests check one by one:
 #
 #   assemble.sh edge   edge.Caddyfile                  > node.Caddyfile
-#   assemble.sh core   app.Caddyfile web.Caddyfile     > node.Caddyfile
+#   assemble.sh core   app.Caddyfile                   > node.Caddyfile
 #   assemble.sh redirect redirect.Caddyfile            > node.Caddyfile
-#   assemble.sh node edge.Caddyfile app.Caddyfile web.Caddyfile > node.Caddyfile
+#   assemble.sh node edge.Caddyfile app.Caddyfile   > node.Caddyfile
 #
 # node is a converged node (the three-node layout,
-# docs/reference/availability.md): one caddy serves in., otlp., app. and
-# web. its port 80 answers the edge health at every path except /core,
+# docs/reference/availability.md): one caddy serves in., otlp. and app.
+# umami has no public site: it stays on the private network for the
+# control plane, the jobs and the replayer. its port 80 answers the edge health at every path except /core,
 # which answers the core health, so traffic manager probes ingestion and
 # dashboards separately (infra/tofu/modules/failover). it reads
 # CORE_HEALTH_UPSTREAM and CORE_HEALTH_PATH beside the NODE_HEALTH_ pair.
@@ -18,11 +19,10 @@
 # (infra/ansible/playbooks/cutover-redirect.yml): the same node-level parts
 # as edge around redirect.Caddyfile.
 #
-# a core node serves app. and web. from one caddy, and caddy allows one
-# global options block per config, so each input's global block is dropped
-# and one node-level block replaces it. its default-logger filter deletes the
-# same fields as the inputs' (app and web use identical lists; edge keeps its
-# own list, which is reused unchanged).
+# caddy allows one global options block per config, so each input's global
+# block is dropped and one node-level block replaces it. its default-logger
+# filter deletes the same fields as app's (edge keeps its own list, which is
+# reused unchanged).
 #
 # the node-level parts it adds:
 #   - `tls {$EDGE_TLS}` and the like become `import sa_tls_{$SA_TLS}`, where
@@ -174,8 +174,8 @@ edge | redirect)
 	[ "$n" = 1 ] || { echo "assemble.sh: expected one global block in $1, found $n" >&2; exit 1; }
 	tmp="$(mktemp)"
 	trap 'rm -f "$tmp"' EXIT
-	# in. and otlp. each carry one tls line; the redirect file adds app. and web.
-	if [ "$tier" = edge ]; then want=2; else want=4; fi
+	# in. and otlp. each carry one tls line; the redirect file adds app.
+	if [ "$tier" = edge ]; then want=2; else want=3; fi
 	swap_tls "$1" EDGE_TLS "$want" >"$tmp"
 	header
 	awk '{ print } $0 == "{" && !done { print "\tauto_https disable_redirects"; print "\tmetrics"; done = 1 }' "$tmp"
@@ -183,12 +183,12 @@ edge | redirect)
 	;;
 core | node)
 	if [ "$tier" = node ]; then
-		[ $# -eq 3 ] || { echo "usage: assemble.sh node <edge.Caddyfile> <app.Caddyfile> <web.Caddyfile>" >&2; exit 2; }
+		[ $# -eq 2 ] || { echo "usage: assemble.sh node <edge.Caddyfile> <app.Caddyfile>" >&2; exit 2; }
 	else
-		[ $# -eq 2 ] || { echo "usage: assemble.sh core <app.Caddyfile> <web.Caddyfile>" >&2; exit 2; }
+		[ $# -eq 1 ] || { echo "usage: assemble.sh core <app.Caddyfile>" >&2; exit 2; }
 	fi
-	tmp="$(mktemp)" app="$(mktemp)" web="$(mktemp)" edge="$(mktemp)"
-	trap 'rm -f "$tmp" "$app" "$web" "$edge"' EXIT
+	tmp="$(mktemp)" app="$(mktemp)" edge="$(mktemp)"
+	trap 'rm -f "$tmp" "$app" "$edge"' EXIT
 	if [ "$tier" = node ]; then
 		# the edge sites keep their own log snippets; only their global
 		# block goes, and the core one below replaces it (it deletes the
@@ -199,8 +199,6 @@ core | node)
 	fi
 	strip_global "$1" >"$tmp"
 	swap_tls "$tmp" APP_TLS 1 >"$app"
-	strip_global "$2" >"$tmp"
-	swap_tls "$tmp" WEB_TLS 1 >"$web"
 	header
 	cat <<'EOF'
 (core_log_fields) {
@@ -227,7 +225,7 @@ core | node)
 }
 
 EOF
-	cat "$edge" "$app" "$web"
+	cat "$edge" "$app"
 	health "$tier"
 	;;
 *)

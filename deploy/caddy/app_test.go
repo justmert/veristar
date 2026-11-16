@@ -136,8 +136,8 @@ func TestAppCaddyfileValidates(t *testing.T) {
 }
 
 // controlPlaneDouble stands in for the control plane behind caddy. it records
-// request headers and answers like the sso route: a redirect carrying a
-// token in Location and a session cookie, both of which must stay out of
+// request headers and answers like the github sign-in start: a redirect
+// carrying the sealed oauth state in Location and a session cookie, both of which must stay out of
 // the access log.
 type controlPlaneDouble struct {
 	mu      sync.Mutex
@@ -145,7 +145,7 @@ type controlPlaneDouble struct {
 	paths   []string
 }
 
-const ssoToken = "umami-token-must-not-be-logged"
+const redirectState = "sealed-state-must-not-be-logged"
 
 func (c *controlPlaneDouble) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	c.mu.Lock()
@@ -153,7 +153,7 @@ func (c *controlPlaneDouble) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	c.paths = append(c.paths, r.Method+" "+r.URL.Path)
 	c.mu.Unlock()
 	w.Header().Set("Set-Cookie", "sa_session=cookie-must-not-be-logged; Path=/; HttpOnly; Secure")
-	w.Header().Set("Location", "https://web.sa.test/sso?token="+ssoToken+"&url=/websites/x")
+	w.Header().Set("Location", "https://github.com/login/oauth/authorize?client_id=x&state="+redirectState)
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	w.WriteHeader(http.StatusFound)
@@ -288,11 +288,11 @@ func TestAppCaddyServesConsoleAndApi(t *testing.T) {
 	securityHeaders(resp)
 
 	// /api goes to the control plane unchanged, with no client address
-	resp, _ = get("/api/sso/umami?site=probe-site")
+	resp, _ = get("/api/auth/github/start?return_to=probe-site")
 	require.Equal(t, http.StatusFound, resp.StatusCode)
-	require.Contains(t, resp.Header.Get("Location"), ssoToken)
+	require.Contains(t, resp.Header.Get("Location"), redirectState)
 	require.Equal(t, "no-store", resp.Header.Get("Cache-Control"))
-	// the control plane's no-referrer on the token redirect is kept
+	// the control plane's no-referrer on the state redirect is kept
 	securityHeaders(resp, "no-referrer")
 	h := cp.last()
 	require.NotNil(t, h, "the request did not reach the control plane")
@@ -354,7 +354,7 @@ func TestAppCaddyServesConsoleAndApi(t *testing.T) {
 	}, 10*time.Second, 100*time.Millisecond, "no access log lines: %s", all)
 	for _, secret := range []string{
 		ua, "AppLogProbe", "198.51.100.77", "198.51.100.88", "request-cookie-must-not-be-logged",
-		"cookie-must-not-be-logged", ssoToken, "probe-site", "token-must-not-be-logged",
+		"cookie-must-not-be-logged", redirectState, "probe-site", "token-must-not-be-logged",
 	} {
 		require.NotContains(t, all, secret)
 	}

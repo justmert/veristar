@@ -92,13 +92,12 @@ geo-fetch:
 test-integration:
 	@set -a && . ./$(DEV_ENV) && set +a && UMAMI_IT_URL=$$UMAMI_URL $(GO) test -race -count=1 ./internal/umami/...
 
-# the umami upgrade gate: api checks in go, then the
-# ui checks in playwright, both against the dev stack after umami-bootstrap
+# the umami upgrade gate: the api and data checks in go, against the dev
+# stack after umami-bootstrap. tenants never see umami's own ui, so it has
+# no checks here
 umami-compat:
 	@set -a && . ./$(DEV_ENV) && set +a && UMAMI_IT_URL=$$UMAMI_URL \
 		$(GO) test -race -count=1 -tags umamicompat -v ./tests/umami-compat/
-	@set -a && . ./$(DEV_ENV) && set +a && UMAMI_IT_URL=$$UMAMI_URL \
-		pnpm --filter @veristar/umami-compat test:live
 
 vet:
 	$(GO) vet ./...
@@ -185,38 +184,34 @@ gateway-it:
 gateway-load:
 	DBIP_MONTH=$(DBIP_MONTH) $(GO) test -tags 'gatewayit gatewayload' -count=1 -timeout 30m -v -run '^TestThroughputK6$$' ./tests/gateway/
 
-# web.<BASE_DOMAIN> caddy (docs/reference/umami-contract.md): caddy validate with the pinned
-# image, then real requests through caddy in front of a private umami and
-# postgres started from the dev.yml digests (build tag caddyweb), including the
-# tenant dashboard in chromium (tests/caddy-web script test:live, which the go
-# test runs; needs pnpm with the playwright browsers). screenshots land in
-# .scratch/caddy-web.
-.PHONY: test-caddy-web isolation-umami
-test-caddy-web:
-	$(GO) test -race -count=1 -run 'TestWebCaddyfileValidates' ./deploy/caddy/
-	$(GO) test -tags caddyweb -race -count=1 -timeout 20m -run 'TestWebCaddyLive' -v ./deploy/caddy/
+# umami has no public site: no input caddyfile and no assembled node config
+# names umami or serves a web. host, and the assembled configs adapt with the
+# pinned caddy image to json that dials no umami upstream
+# (deploy/caddy/umami_closed_test.go)
+.PHONY: test-caddy-closed isolation-umami
+test-caddy-closed:
+	$(GO) test -race -count=1 -run 'TestCaddyfilesNameNoUmami|TestAssembledConfigsReachNoUmami' -v ./deploy/caddy/
 
 # tenant isolation inside umami: user b against every operation of the
-# openapi contract with team a's ids, privately and through the web caddy
-# (build tag isolation). starts its own umami and postgres.
+# openapi contract with team a's ids, on the private network the control
+# plane reads umami through (build tag isolation). starts its own umami and
+# postgres.
 isolation-umami:
 	$(GO) test -tags isolation -race -count=1 -timeout 20m -v ./tests/isolation/umami/
 
 # the whole tenant isolation gate, required on every pull
 # request and for every release. one target, so a gate cannot be half run:
-# tests/isolation/... (build tag isolation) is umami cross-team through the
-# web caddy, every console, operator and machine api route against the real
-# router, and the behavioural database role matrix; internal/db holds the
-# catalog grant matrix and the row-level security tests; the web caddy deny
-# list and method allowlist are the edge rules the gate must notice losing.
+# tests/isolation/... (build tag isolation) is umami cross-team on the
+# private network, every console, operator and machine api route against the
+# real router, and the behavioural database role matrix; internal/db holds
+# the catalog grant matrix and the row-level security tests; the caddy check
+# proves umami stays unreachable from the internet-facing sites.
 # -p 1 keeps one suite's containers up at a time on a shared machine.
 .PHONY: isolation
 isolation:
 	$(GO) test -tags isolation -race -count=1 -p 1 -timeout 60m -v ./tests/isolation/...
 	$(GO) test -race -count=1 -v ./internal/db/
-	$(GO) test -race -count=1 -run 'TestWebCaddyfileValidates' ./deploy/caddy/
-	$(GO) test -tags caddyweb -race -count=1 -timeout 20m -v \
-		-run 'TestWebCaddyLive/(deny_list|api_method_allowlist|sso_rules)$$' ./deploy/caddy/
+	$(GO) test -race -count=1 -run 'TestCaddyfilesNameNoUmami|TestAssembledConfigsReachNoUmami' ./deploy/caddy/
 
 # end-to-end web path (tests/webpath, build tag webpath): real
 # browsers on the example sites through the edge caddy, gateway, nats,

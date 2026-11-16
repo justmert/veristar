@@ -41,9 +41,8 @@ func assemble(t *testing.T, args ...string) string {
 func nodeCaddyRun(t *testing.T, path string, env map[string]string, cmd ...string) (int, string) {
 	t.Helper()
 	ctx := context.Background()
-	// the custom build: core needs replace-response, and the cloudflare
-	// variant needs caddy-dns/cloudflare
-	c, err := testcontainers.Run(ctx, umamictr.WebCaddyImage(t),
+	// the custom build: the cloudflare variant needs caddy-dns/cloudflare
+	c, err := testcontainers.Run(ctx, umamictr.PlatformCaddyImage(t),
 		testcontainers.WithEnv(env),
 		testcontainers.WithFiles(testcontainers.ContainerFile{HostFilePath: path, ContainerFilePath: "/etc/caddy/Caddyfile", FileMode: 0o644}),
 		testcontainers.WithCmd(cmd...),
@@ -74,11 +73,8 @@ func TestAssembledNodeCaddyfiles(t *testing.T) {
 		{"redirect", []string{"redirect", "redirect.Caddyfile"}, map[string]string{
 			"OLD_DOMAIN": "old.test", "NEW_DOMAIN": "new.test", "GATEWAY_UPSTREAM": "gateway:8080",
 		}},
-		{"core", []string{"core", "app.Caddyfile", "web.Caddyfile"}, map[string]string{
-			"BASE_DOMAIN": "sa.test", "CONTROLPLANE_UPSTREAM": "controlplane:8085",
-			"CONSOLE_ROOT": "/srv/console", "UMAMI_UPSTREAM": "umami:3000",
-		}},
-		{"node", []string{"node", "edge.Caddyfile", "app.Caddyfile", "web.Caddyfile"}, nodeEnv()},
+		{"core", []string{"core", "app.Caddyfile"}, coreEnv()},
+		{"node", []string{"node", "edge.Caddyfile", "app.Caddyfile"}, nodeEnv()},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			p := assemble(t, tc.args...)
@@ -113,24 +109,32 @@ func TestAssembleRefusesUnknownInput(t *testing.T) {
 	_, file, _, ok := runtime.Caller(0)
 	require.True(t, ok)
 	dir := filepath.Dir(file)
-	err := exec.Command("sh", filepath.Join(dir, "assemble.sh"), "core",
-		filepath.Join(dir, "web.Caddyfile"), filepath.Join(dir, "web.Caddyfile")).Run()
+	err := exec.Command("sh", filepath.Join(dir, "assemble.sh"), "core", filepath.Join(dir, "edge.Caddyfile")).Run()
 	require.Error(t, err)
 	err = exec.Command("sh", filepath.Join(dir, "assemble.sh"), "edge", filepath.Join(dir, "app.Caddyfile")).Run()
 	require.Error(t, err)
 	// a converged node needs the edge file first
 	err = exec.Command("sh", filepath.Join(dir, "assemble.sh"), "node", filepath.Join(dir, "app.Caddyfile"),
-		filepath.Join(dir, "app.Caddyfile"), filepath.Join(dir, "web.Caddyfile")).Run()
+		filepath.Join(dir, "app.Caddyfile")).Run()
 	require.Error(t, err)
+}
+
+// coreEnv is the environment of the core sites: the control plane and the
+// console. umami has no public site, so no umami upstream is named
+func coreEnv() map[string]string {
+	return map[string]string{
+		"BASE_DOMAIN": "sa.test", "CONTROLPLANE_UPSTREAM": "controlplane:8085", "CONSOLE_ROOT": "/srv/console",
+	}
 }
 
 // nodeEnv is the environment of a converged node's caddy: the edge and the
 // core upstreams, and the core health beside the edge health
 func nodeEnv() map[string]string {
 	env := baseEnv()
+	for k, v := range coreEnv() {
+		env[k] = v
+	}
 	for k, v := range map[string]string{
-		"BASE_DOMAIN": "sa.test", "CONTROLPLANE_UPSTREAM": "controlplane:8085",
-		"CONSOLE_ROOT": "/srv/console", "UMAMI_UPSTREAM": "umami:3000",
 		"CORE_HEALTH_UPSTREAM": "core-health:9090", "CORE_HEALTH_PATH": "/corez",
 	} {
 		env[k] = v
@@ -149,11 +153,8 @@ func TestAssembledNodeServesMetrics(t *testing.T) {
 		env  map[string]string
 	}{
 		{"edge", []string{"edge", "edge.Caddyfile"}, baseEnv()},
-		{"core", []string{"core", "app.Caddyfile", "web.Caddyfile"}, map[string]string{
-			"BASE_DOMAIN": "sa.test", "CONTROLPLANE_UPSTREAM": "controlplane:8085",
-			"CONSOLE_ROOT": "/srv/console", "UMAMI_UPSTREAM": "umami:3000",
-		}},
-		{"node", []string{"node", "edge.Caddyfile", "app.Caddyfile", "web.Caddyfile"}, nodeEnv()},
+		{"core", []string{"core", "app.Caddyfile"}, coreEnv()},
+		{"node", []string{"node", "edge.Caddyfile", "app.Caddyfile"}, nodeEnv()},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			p := assemble(t, tc.args...)
@@ -165,7 +166,7 @@ func TestAssembledNodeServesMetrics(t *testing.T) {
 				env[k] = v
 			}
 			ctx := context.Background()
-			c, err := testcontainers.Run(ctx, umamictr.WebCaddyImage(t),
+			c, err := testcontainers.Run(ctx, umamictr.PlatformCaddyImage(t),
 				testcontainers.WithEnv(env),
 				testcontainers.WithFiles(testcontainers.ContainerFile{HostFilePath: p, ContainerFilePath: "/etc/caddy/Caddyfile", FileMode: 0o644}),
 				testcontainers.WithCmd("caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"),
