@@ -33,3 +33,7 @@ f4198d49d5b2af79b6f753fc6148528e822fb312:tests/observability/up.sh:generic-api-k
 63a892218b792a0b2448cc145980d7d17cb5152b:collector/jetstreamexporter/exporter_test.go:generic-api-key:242
 # the documentation placeholder <umami user password key> in an env example
 63a892218b792a0b2448cc145980d7d17cb5152b:docs/handover/rebuild.md:generic-api-key:188
+# reviewed 2026-11-16: a public muxed account address (an M strkey) that the
+# on-chain routes test sends to prove the ids endpoint refuses it; strkeys
+# are public ledger ids, never credentials
+8189fab071bc30c2460503df9e5c4f559dcbab22:internal/controlplane/onchain/routes_test.go:generic-api-key:374
