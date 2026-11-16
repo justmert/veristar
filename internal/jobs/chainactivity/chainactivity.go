@@ -142,7 +142,8 @@ func (t *Task) Run(ctx context.Context, tx TxFunc) (Result, error) {
 		if ctx.Err() != nil {
 			break
 		}
-		from, through := yesterday, yesterday
+		through := yesterday
+		var from time.Time
 		var w *window
 		if d.kind == "account" {
 			w = &horizon

@@ -41,7 +41,9 @@ type ledgers struct {
 	horizonDown atomic.Bool
 }
 
-func (l *ledgers) closeOf(seq int64) time.Time { return l.base.Add(time.Duration(seq) * 6 * time.Second) }
+func (l *ledgers) closeOf(seq int64) time.Time {
+	return l.base.Add(time.Duration(seq) * 6 * time.Second)
+}
 
 func (l *ledgers) horizon(w http.ResponseWriter, r *http.Request) {
 	p := r.URL.Path

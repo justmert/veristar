@@ -231,7 +231,7 @@ func backoff(attempt int, last error) time.Duration {
 	if d > maxBackoff || d <= 0 {
 		d = maxBackoff
 	}
-	d += time.Duration(rand.Int64N(int64(d/2) + 1))
+	d += time.Duration(rand.Int64N(int64(d/2) + 1)) //nolint:gosec // jitter of a retry wait, not a secret
 	var ra *retryAfter
 	if errors.As(last, &ra) && ra.wait > d {
 		d = min(ra.wait, 10*time.Minute)

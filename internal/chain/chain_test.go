@@ -226,7 +226,9 @@ type fakeHorizon struct {
 	failOps bool
 }
 
-func (f *fakeHorizon) closeOf(seq int64) time.Time { return f.base.Add(time.Duration(seq) * 6 * time.Second) }
+func (f *fakeHorizon) closeOf(seq int64) time.Time {
+	return f.base.Add(time.Duration(seq) * 6 * time.Second)
+}
 
 func (f *fakeHorizon) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
@@ -349,7 +351,9 @@ type fakeRPC struct {
 	events []map[string]any
 }
 
-func (f *fakeRPC) closeOf(seq uint32) time.Time { return f.base.Add(time.Duration(seq) * 6 * time.Second) }
+func (f *fakeRPC) closeOf(seq uint32) time.Time {
+	return f.base.Add(time.Duration(seq) * 6 * time.Second)
+}
 
 func (f *fakeRPC) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var req struct {

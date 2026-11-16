@@ -156,24 +156,24 @@ var DefaultSources = Sources{
 }
 
 type idRow struct {
-	ID             uuid.UUID
-	Strkey         string
-	Kind           string
-	AddedBy        string
-	CreatedAt      time.Time
-	Method         *string
-	VerifiedAt     *time.Time
-	Via            *string
-	Detail         []byte
-	LastVerifyAt   *time.Time
-	LastVerifyErr  *string
-	CoveredFrom    *time.Time
-	CoveredTo      *time.Time
-	LastSuccessAt  *time.Time
-	LastError      *string
-	LastErrorAt    *time.Time
-	HomeDomain     *string
-	AccountExists  *bool
+	ID            uuid.UUID
+	Strkey        string
+	Kind          string
+	AddedBy       string
+	CreatedAt     time.Time
+	Method        *string
+	VerifiedAt    *time.Time
+	Via           *string
+	Detail        []byte
+	LastVerifyAt  *time.Time
+	LastVerifyErr *string
+	CoveredFrom   *time.Time
+	CoveredTo     *time.Time
+	LastSuccessAt *time.Time
+	LastError     *string
+	LastErrorAt   *time.Time
+	HomeDomain    *string
+	AccountExists *bool
 }
 
 // loadIDs reads a tenant's declared ids with their read state, accounts

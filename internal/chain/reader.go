@@ -3,6 +3,7 @@ package chain
 import (
 	"context"
 	"errors"
+	"math"
 	"strconv"
 	"strings"
 	"sync"
@@ -226,10 +227,16 @@ func (r *Reader) rpcLedger(ctx context.Context, day time.Time, h Health) (uint32
 		return seq, nil
 	}
 	s, err := firstAtOrAfter(ctx, int64(h.OldestLedger), int64(h.LatestLedger), day, func(ctx context.Context, s int64) (time.Time, error) {
+		if s < 0 || s > math.MaxUint32 {
+			return time.Time{}, fail(CodeBadResponse, "ledger %d out of range", s)
+		}
 		return r.RPC.LedgerClose(ctx, uint32(s))
 	})
 	if err != nil {
 		return 0, err
+	}
+	if s < 0 || s > math.MaxUint32 {
+		return 0, fail(CodeBadResponse, "ledger %d out of range", s)
 	}
 	seq = uint32(s)
 	r.mu.Lock()
