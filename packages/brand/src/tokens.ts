@@ -1,6 +1,6 @@
 // the veristar brand, as data. this file is the single source of every
 // colour, type step, radius, shadow, motion value and layout size the
-// console, the website and the umami theme use. `pnpm --filter
+// console and the website use. `pnpm --filter
 // @veristar/brand generate` writes the css from it; `check` fails when a
 // committed css file no longer matches.
 //
@@ -32,10 +32,6 @@ export const palette = {
     300: "#a6a49c",
     200: "#d9d8d2",
     100: "#eeede8",
-    // in-between steps the umami theme needs for its eleven-step ramp
-    250: "#cac8c2",
-    450: "#8e8c84",
-    550: "#56544e",
   },
   // terracotta, the accent: a muted earth red that carries white text
   terracotta: { 300: "#f29a80", 500: "#b5482e", 600: "#a13f28", 700: "#8a3622" },
@@ -312,37 +308,6 @@ export const motion = {
   // the 4 px a revealed or arriving element travels
   distance: 4,
 } as const;
-
-// the eleven-step neutral ramp umami's ui reads (--zen-palette-50 to 950),
-// per theme, from lightest to darkest
-export const umamiRamp: Record<ThemeName, string[]> = {
-  dark: [
-    p.neutral[100],
-    p.neutral[250],
-    p.neutral[300],
-    p.neutral[450],
-    p.neutral[500],
-    p.neutral[550],
-    p.neutral[600],
-    p.neutral[650],
-    p.neutral[780],
-    p.neutral[850],
-    p.neutral[900],
-  ],
-  light: [
-    p.paper[0],
-    p.paper[50],
-    p.paper[100],
-    p.paper[200],
-    p.paper[300],
-    p.paper[400],
-    p.paper[600],
-    p.paper[700],
-    p.paper[800],
-    p.paper[850],
-    p.paper[900],
-  ],
-};
 
 export const layout = {
   sidebar: "248px",

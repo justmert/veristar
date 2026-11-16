@@ -13,7 +13,6 @@
       "!**/coverage",
       "!packages/tracker/releases",
       "!tests/fixtures/stellartoml",
-      "!deploy/caddy/umami-theme/site/_veristar/fonts",
       "!packages/brand/src/tokens.css",
       "!packages/brand/src/theme.generated.css",
       "!**/testdata",

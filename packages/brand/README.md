@@ -1,8 +1,8 @@
 # @veristar/brand
 
 The Veristar brand as code. Every colour, type step, radius, shadow, motion value and layout
-size used by the console (`apps/console`), the website (`apps/site`), the Umami dashboard theme
-(`deploy/caddy/umami-theme`) and the docs (`docs/docs.json`) comes from one file:
+size used by the console (`apps/console`), the website (`apps/site`), the status page mark
+(`assets/`) and the docs (`docs/docs.json`) comes from one file:
 [`src/tokens.ts`](src/tokens.ts).
 
 ## Files
@@ -16,7 +16,7 @@ size used by the console (`apps/console`), the website (`apps/site`), the Umami 
 | `src/index.css` | hand | What an app imports: fonts, tokens, theme, base |
 | `src/motion.ts` | hand | Presets for the `motion` library, built from the motion tokens |
 | `src/mark.tsx` | hand | The mark as a React component |
-| `deploy/caddy/umami-theme/site/_veristar/theme.css` (its `--vs-*` block) | `generate` | Umami's names for the same values |
+| `assets/mark.svg`, `assets/favicon.svg` | `generate` | The mark and favicon the public status page serves |
 | `docs/docs.json` (colours and background) | `generate` | Mintlify's accent and ground |
 
 ```bash
