@@ -23,6 +23,7 @@ import (
 
 	"github.com/justmert/veristar/internal/controlplane/httpx"
 	"github.com/justmert/veristar/internal/db"
+	"github.com/justmert/veristar/internal/integrity"
 )
 
 // the global web and api views (contract section 8). every
@@ -168,6 +169,9 @@ type projectFilter struct {
 	Q            *string    `json:"q"`
 	// the cohort filters (contract 19.1)
 	Cohort cohortFilter `json:"cohort"`
+	// IntegrityAtOrBelow keeps projects whose range grade is this grade or
+	// a worse one (C is the worst); only the web list has the grade
+	IntegrityAtOrBelow *string `json:"integrity_at_or_below"`
 }
 
 func parseFilter(q url.Values) (projectFilter, error) {
@@ -222,6 +226,11 @@ func parseFilter(q url.Values) (projectFilter, error) {
 	var err2 error
 	if f.Cohort, err2 = parseCohortFilter(q); err2 != nil {
 		return f, err2
+	}
+	if v, err := parseEnum(q, "integrity_at_or_below", integrity.GradeA, integrity.GradeB, integrity.GradeC); err != nil {
+		return f, err
+	} else if v != nil {
+		f.IntegrityAtOrBelow = v
 	}
 	return f, nil
 }
@@ -284,6 +293,9 @@ func (g *Global) parseList(r *http.Request, route string, sorts map[string]strin
 	}
 	if lq.Filter, err = parseFilter(q); err != nil {
 		return lq, err
+	}
+	if lq.Filter.IntegrityAtOrBelow != nil && route != webProjectsRoute {
+		return lq, httpx.BadQuery("integrity_at_or_below filters the web project list")
 	}
 	if v, ok, err := oneValue(q, "sort"); err != nil {
 		return lq, err
@@ -498,11 +510,22 @@ func (lq listQuery) args() pgx.NamedArgs {
 		"stellar_toml":    lq.Filter.StellarToml,
 		"has_web_data":    lq.Filter.HasWebData,
 		"has_api_data":    lq.Filter.HasAPIData,
+		"integrity_min":   integrityRankMin(lq.Filter.IntegrityAtOrBelow),
 		"row_limit":       lq.Limit + 1,
 		"row_offset":      lq.Offset,
 	}
 	lq.Filter.Cohort.args(a)
 	return a
+}
+
+// integrityRankMin is the lowest integrity rank a filtered project may
+// have: B or below is rank 2 (B) and 3 (C). nil keeps every project.
+func integrityRankMin(g *string) *int {
+	if g == nil {
+		return nil
+	}
+	r := integrity.Rank(*g)
+	return &r
 }
 
 // orderBy is the order clause of a list: the whitelisted sort expression,

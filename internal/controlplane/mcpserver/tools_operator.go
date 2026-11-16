@@ -254,6 +254,7 @@ func (s *Server) addOperatorTools(srv *mcp.Server) {
 		dayRangeIn
 		projectFilters
 		pageIn
+		IntegrityAtOrBelow string `json:"integrity_at_or_below,omitempty" jsonschema:"only projects whose integrity grade over the range is this grade or worse: C for C only, B for B and C, A for every graded project"`
 	}
 	addTool(s, srv, &mcp.Tool{
 		Name:  "get_global_web_overview",
@@ -261,23 +262,30 @@ func (s *Server) addOperatorTools(srv *mcp.Server) {
 		Description: "Ranks every project on its web metrics over whole UTC days: page views, visitors, visits, " +
 			"bounces and bounce rate, visit duration, quarantined (likely automated) traffic, gateway rejections, the " +
 			"integrity grade and " +
-			"the top referrers, countries, devices and browsers. Every row also carries its SCF cohort and five key " +
+			"the top referrers, countries, devices and browsers, and an onchain summary with the weekly active " +
+			"accounts. Every row also carries its SCF cohort and five key " +
 			"metrics (visitors, page views, requests, error rate, on-chain operations) with the change against the " +
 			"previous period of equal length and the percentile inside the cohort filters. Sort by any metric or " +
 			"change to find the most or least used and the fastest growing projects; filter by status, " +
-			"verification, stellar.toml, data presence or cohort.",
+			"verification, stellar.toml, data presence, cohort or integrity grade (integrity_at_or_below C lists " +
+			"the projects graded C, B those graded B or C).",
 	}, func(props map[string]*jsonschema.Schema) {
 		filtersPatch(props)
 		pagePatch(props, append([]string{"name", "status", "created_at", "sites", "sites_verified", "sites_with_stellar_toml",
 			"pageviews", "visitors", "visits", "bounces", "totaltime", "bounce_rate", "avg_visit_duration",
 			"quarantine_pageviews", "quarantine_visitors", "quarantine_share", "ingest_requests", "ingest_rejected",
 			"rejected_share", "integrity"}, growthSorts...)...)
+		enum(props, "integrity_at_or_below", "A", "B", "C")
 	}, func(ctx context.Context, p Principal, in webProjectsIn) (any, error) {
 		q := url.Values{}
 		for _, f := range []func(url.Values) error{in.dayRangeIn.values, in.projectFilters.values, in.pageIn.values} {
 			if err := f(q); err != nil {
 				return nil, err
 			}
+		}
+		// the schema's enum and the route both check the value
+		if in.IntegrityAtOrBelow != "" {
+			q.Set("integrity_at_or_below", in.IntegrityAtOrBelow)
 		}
 		return s.operatorRead(ctx, p, "/web/projects", q)
 	})
@@ -317,8 +325,8 @@ func (s *Server) addOperatorTools(srv *mcp.Server) {
 		Name:  "compare_tenants_web",
 		Title: "Compare projects (web)",
 		Description: "Puts 1 to 5 projects side by side on web metrics: totals, one point per UTC day, and " +
-			"breakdowns by referrer, country, device, browser and operating system. The same data as the console's " +
-			"compare view.",
+			"breakdowns by referrer, country, device, browser and operating system, and the on-chain activity with " +
+			"weekly active accounts per ISO week. The same data as the console's compare view.",
 	}, func(props map[string]*jsonschema.Schema) {
 		lo, hi := 1, 5
 		props["tenant_ids"].MinItems, props["tenant_ids"].MaxItems = &lo, &hi

@@ -164,6 +164,16 @@ paths:
         - $ref: '#/components/parameters/tenant'
         - $ref: '#/components/parameters/fromDay'
         - $ref: '#/components/parameters/toDay'
+        - name: integrity_at_or_below
+          in: query
+          required: false
+          description: |
+            Only site days graded this grade or worse: `C` returns the C days,
+            `B` the B and C days, `A` every graded day. Days without a grade
+            never match.
+          schema:
+            type: string
+            enum: [A, B, C]
         - $ref: '#/components/parameters/limit'
         - $ref: '#/components/parameters/cursor'
       responses:
@@ -427,6 +437,47 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/OnchainDailyList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /onchain/weekly:
+    get:
+      operationId: onchainWeekly
+      summary: Weekly active accounts per tenant and ISO week
+      description: |
+        From `agg.chain_weeks`: one item per tenant and ISO week (UTC, Monday
+        to Sunday) whose Monday lies in the range. `active_accounts` is the
+        number of distinct accounts that initiated at least one operation
+        involving the tenant's verified accounts and contracts in the week,
+        the Weekly Active Accounts definition of the SCF Growth Hack
+        official rules. A week without a count has `active_accounts` `null`
+        and the reason in `missing`; it is never a zero. Ordered by tenant
+        and week.
+      parameters:
+        - $ref: '#/components/parameters/tenant'
+        - $ref: '#/components/parameters/fromDay'
+        - $ref: '#/components/parameters/toDay'
+        - $ref: '#/components/parameters/limit'
+        - $ref: '#/components/parameters/cursor'
+      responses:
+        '200':
+          description: One page of weeks.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OnchainWeeklyList'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -1315,6 +1366,50 @@ components:
           $ref: '#/components/schemas/Count'
         counterparties:
           $ref: '#/components/schemas/Count'
+    OnchainWeekly:
+      type: object
+      additionalProperties: false
+      required: [tenant_id, week, from, to, active_accounts, missing, closed_at]
+      properties:
+        tenant_id:
+          $ref: '#/components/schemas/ID'
+        week:
+          type: string
+          description: The ISO week, such as `2026-W46`.
+          pattern: '^[0-9]{4}-W[0-9]{2}$'
+        from:
+          $ref: '#/components/schemas/Day'
+        to:
+          $ref: '#/components/schemas/Day'
+        active_accounts:
+          type: [integer, 'null']
+          minimum: 0
+        missing:
+          type: [string, 'null']
+          description: |
+            Why the week has no count: `week_not_complete` (the week is in
+            progress), `not_read_yet` (the week is over and a day is still
+            being read), `no_verified_ids`, `day_over_read_cap`,
+            `before_source_history`, or the read error of an id.
+        closed_at:
+          oneOf:
+            - $ref: '#/components/schemas/Time'
+            - type: 'null'
+    OnchainWeeklyList:
+      type: object
+      additionalProperties: false
+      required: [from, to, items, next_cursor]
+      properties:
+        from:
+          $ref: '#/components/schemas/Day'
+        to:
+          $ref: '#/components/schemas/Day'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OnchainWeekly'
+        next_cursor:
+          $ref: '#/components/schemas/Cursor'
     OnchainDailyList:
       type: object
       additionalProperties: false

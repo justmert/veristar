@@ -345,6 +345,16 @@ func TestMachineAPI(t *testing.T) {
 		for _, it := range list[MachineWebIntegrity](t, e, aurora.Key, "/web/integrity?"+rq, 5) {
 			require.Equal(t, ids["aurora"], it.TenantID)
 		}
+		// grade C and below: borealis's eight C days; B and below adds
+		// flare's three B days; ungraded days never match
+		low := list[MachineWebIntegrity](t, e, global.Key, "/web/integrity?integrity_at_or_below=C&"+rq, 3)
+		require.Len(t, low, 8)
+		for _, it := range low {
+			require.Equal(t, "C", *it.Grade)
+		}
+		require.Len(t, list[MachineWebIntegrity](t, e, global.Key, "/web/integrity?integrity_at_or_below=B&"+rq, 4), 11)
+		require.Len(t, list[MachineWebIntegrity](t, e, global.Key, "/web/integrity?integrity_at_or_below=A&"+rq, 7), 30)
+		e.get(t, global.Key, "/web/integrity?integrity_at_or_below=D&"+rq, http.StatusBadRequest)
 	})
 
 	t.Run("every route answers as the document says", func(t *testing.T) {

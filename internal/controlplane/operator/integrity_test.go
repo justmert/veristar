@@ -6,10 +6,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"github.com/justmert/veristar/internal/controlplane/integrityview"
+	"github.com/justmert/veristar/internal/controlplane/session"
 	"github.com/justmert/veristar/internal/integrity"
 )
 
@@ -78,6 +80,47 @@ func TestIntegrityViews(t *testing.T) {
 				require.Equal(t, int64(10), p.Integrity.GradedDays)
 				require.Equal(t, int64(3), p.Integrity.DaysB)
 			}
+		}
+	})
+
+	t.Run("the list filters to a grade and below", func(t *testing.T) {
+		names := func(q string) []string {
+			all, _ := collect[WebProject](t, f, "/api/operator/web/projects?"+rq+"&sort=integrity&order=asc"+q)
+			var out []string
+			for _, p := range all {
+				out = append(out, p.Tenant.Name)
+			}
+			return out
+		}
+		require.Equal(t, []string{"Borealis"}, names("&integrity_at_or_below=C"))
+		require.Equal(t, []string{"Flare", "Borealis"}, names("&integrity_at_or_below=B"))
+		// A keeps every graded project and drops the ungraded ones
+		require.Equal(t, []string{"Aurora", "Flare", "Borealis"}, names("&integrity_at_or_below=A"))
+
+		// the csv export takes the same filter
+		ex, err := NewExports(f.g)
+		require.NoError(t, err)
+		r := chi.NewRouter()
+		r.Use(func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+				next.ServeHTTP(w, req.WithContext(session.WithUser(req.Context(), session.User{ID: uuid.Must(uuid.NewV7())})))
+			})
+		})
+		r.Route("/api/operator", ex.Routes)
+		code, body := call(t, r, "/api/operator/web/projects.csv?"+rq+"&integrity_at_or_below=C&rows=50")
+		require.Equal(t, http.StatusOK, code, string(body))
+		recs := readCSV(t, body)
+		require.Len(t, recs, 2)
+		require.Equal(t, f.tenants["borealis"].String(), recs[1][0])
+
+		// a grade outside A, B and C, and the api list, refuse the filter
+		for _, path := range []string{
+			"/api/operator/web/projects?" + rq + "&integrity_at_or_below=D",
+			"/api/operator/web/projects?" + rq + "&integrity_at_or_below=c",
+			"/api/operator/api/projects?" + rq + "&integrity_at_or_below=C",
+		} {
+			code, body := f.get(t, path)
+			require.Equal(t, http.StatusBadRequest, code, "%s: %s", path, body)
 		}
 	})
 
