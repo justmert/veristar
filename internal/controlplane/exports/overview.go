@@ -11,6 +11,7 @@ import (
 
 	"github.com/justmert/veristar/internal/controlplane/apimetrics"
 	"github.com/justmert/veristar/internal/controlplane/audit"
+	"github.com/justmert/veristar/internal/controlplane/coverageview"
 	"github.com/justmert/veristar/internal/controlplane/httpx"
 	"github.com/justmert/veristar/internal/controlplane/integrityview"
 	"github.com/justmert/veristar/internal/controlplane/onchain"
@@ -27,6 +28,7 @@ var OverviewHeader = []string{
 	"api_requests", "api_errors_4xx", "api_errors_5xx",
 	"onchain_ids_read", "onchain_operations", "onchain_transactions",
 	"integrity_grade",
+	"script_requests", "gpc_requests", "unmeasured_share",
 }
 
 // Overview serves GET /api/tenants/{tenant_id}/overview.csv.
@@ -72,6 +74,7 @@ func (o *Overview) overview(w http.ResponseWriter, r *http.Request) error {
 	api := map[string]tenantq.APIMetricTimeseriesRow{}
 	var chain map[string]onchain.DayTotal
 	var grades map[integrityview.DayKey]integrityview.Summary
+	var cov coverageview.Counts
 	err = o.scope.InTenant(ctx, a, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, `
 			select day, coalesce(sum(pageviews) filter (where band = 'primary'), 0)::bigint,
@@ -126,6 +129,10 @@ func (o *Overview) overview(w http.ResponseWriter, r *http.Request) error {
 		if grades, err = integrityview.ByTenantDay(ctx, tx, []uuid.UUID{a.TenantID}, rg.From, rg.To); err != nil {
 			return err
 		}
+		// the estimate of visits not measured because of privacy signals
+		if cov, err = coverageview.Load(ctx, tx, []uuid.UUID{a.TenantID}, rg.From, rg.To); err != nil {
+			return err
+		}
 		return audit.InTenant(ctx, tx, audit.Entry{
 			Actor: audit.User(a.User.ID), Action: ActionExport, Target: audit.TenantTarget(a.TenantID),
 			Detail: map[string]any{
@@ -156,6 +163,8 @@ func (o *Overview) overview(w http.ResponseWriter, r *http.Request) error {
 		c := chain[day]
 		row = append(row, Int(c.IDsRead), IntPtr(c.Operations), IntPtr(c.Transactions))
 		row = append(row, StrPtr(grades[integrityview.DayKey{Tenant: a.TenantID, Day: day}].Grade))
+		c2 := cov.TenantDay(a.TenantID, day)
+		row = append(row, Int(c2.ScriptRequests), Int(c2.GPCRequests), Float(c2.UnmeasuredShare))
 		if err := cw.Row(row...); err != nil {
 			panic(http.ErrAbortHandler)
 		}

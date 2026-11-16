@@ -10,11 +10,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/justmert/veristar/internal/controlplane/coverageview"
 	"github.com/justmert/veristar/internal/controlplane/httpx"
 	"github.com/justmert/veristar/internal/integrity"
 )
@@ -67,6 +70,9 @@ type Day struct {
 	RuleVersion int      `json:"rule_version"`
 	Reasons     []Reason `json:"reasons"`
 	Evidence    Evidence `json:"evidence"`
+	// Coverage is the day's estimate of visits not measured because of
+	// privacy signals (coverageview)
+	Coverage coverageview.Estimate `json:"coverage"`
 }
 
 // RangeReason is one reason code over a range.
@@ -91,7 +97,9 @@ type Summary struct {
 type Site struct {
 	SiteID uuid.UUID `json:"site_id"`
 	Summary
-	Days []Day `json:"days"`
+	// Coverage sums the site's coverage over the range
+	Coverage coverageview.Estimate `json:"coverage"`
+	Days     []Day                 `json:"days"`
 }
 
 // Report is a project's integrity over a range of utc days.
@@ -101,7 +109,9 @@ type Report struct {
 	To          string    `json:"to"`
 	RuleVersion int       `json:"rule_version"`
 	Summary
-	Sites []Site `json:"sites"`
+	// Coverage sums the project's coverage over the range
+	Coverage coverageview.Estimate `json:"coverage"`
+	Sites    []Site                `json:"sites"`
 }
 
 // SummaryOf turns a combined range into its api form.
@@ -124,7 +134,8 @@ func Load(ctx context.Context, tx pgx.Tx, tenants []uuid.UUID, from, to time.Tim
 	out := make(map[uuid.UUID]*Report, len(tenants))
 	for _, id := range tenants {
 		out[id] = &Report{TenantID: id, From: from.Format(time.DateOnly), To: to.Format(time.DateOnly),
-			RuleVersion: integrity.RuleVersion, Summary: SummaryOf(integrity.Combine(nil)), Sites: []Site{}}
+			RuleVersion: integrity.RuleVersion, Summary: SummaryOf(integrity.Combine(nil)),
+			Coverage: coverageview.Of(0, 0), Sites: []Site{}}
 	}
 	if len(tenants) == 0 {
 		return out, nil
@@ -202,6 +213,29 @@ func Load(ctx context.Context, tx pgx.Tx, tenants []uuid.UUID, from, to time.Tim
 			all = append(all, a.days...)
 		}
 		rep.Summary = SummaryOf(integrity.Combine(all))
+	}
+	cov, err := coverageview.Load(ctx, tx, tenants, from, to)
+	if err != nil {
+		return nil, err
+	}
+	for tenant, rep := range out {
+		rep.Coverage = cov.Tenant(tenant)
+		// a site with tracker file requests but no graded day yet still
+		// shows its coverage
+		for _, site := range cov.Sites(tenant) {
+			if !slices.ContainsFunc(rep.Sites, func(s Site) bool { return s.SiteID == site }) {
+				rep.Sites = append(rep.Sites, Site{SiteID: site, Summary: SummaryOf(integrity.Combine(nil)), Days: []Day{}})
+			}
+		}
+		slices.SortFunc(rep.Sites, func(a, b Site) int { return strings.Compare(a.SiteID.String(), b.SiteID.String()) })
+		for i := range rep.Sites {
+			s := &rep.Sites[i]
+			s.Coverage = cov.Site(tenant, s.SiteID)
+			for j := range s.Days {
+				d := cov[coverageview.SiteDay{Tenant: tenant, Site: s.SiteID, Day: s.Days[j].Day}]
+				s.Days[j].Coverage = coverageview.Of(d.ScriptRequests, d.GPCRequests)
+			}
+		}
 	}
 	return out, nil
 }

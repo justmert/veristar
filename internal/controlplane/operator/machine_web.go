@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/justmert/veristar/internal/controlplane/coverageview"
 	"github.com/justmert/veristar/internal/controlplane/httpx"
 	"github.com/justmert/veristar/internal/controlplane/integrityview"
 	"github.com/justmert/veristar/internal/umami"
@@ -129,6 +130,10 @@ type MachineWebDay struct {
 	Band     string    `json:"band"`
 	MachineWebTotals
 	Integrity integrityview.Summary `json:"integrity"`
+	// Coverage is the tenant's estimate of visits not measured because of
+	// privacy signals on that day (contract 17.5), the same on both bands'
+	// items
+	Coverage coverageview.Estimate `json:"coverage"`
 }
 
 var webDayKeys = keyset{cols: []string{"z.tenant_id", "z.day", "z.band"}, casts: []string{"uuid", "date", "text"}}
