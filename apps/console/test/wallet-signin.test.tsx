@@ -151,16 +151,21 @@ describe("linked sign-in methods (contract 4.1.8)", () => {
     expect(calls[2]?.method).toBe("POST");
     expect(calls[2]?.body).toEqual({ transaction: "signed:AAAAchallenge" });
     // with two methods both can be unlinked
-    const buttons = [...host.querySelectorAll<HTMLButtonElement>("button")].filter(
-      (b) => b.textContent === "Unlink",
-    );
+    const buttons = [
+      ...host.querySelectorAll<HTMLButtonElement>("ul[aria-label='Sign-in methods'] button"),
+    ].filter((b) => b.textContent === "Unlink");
     expect(buttons.map((b) => b.disabled)).toEqual([false, false]);
   });
 
   it("offers github linking to a wallet-only account and unlinks the wallet", async () => {
     const both = {
       ...walletMe,
-      user: { ...walletMe.user, github_id: 1234567, github_login: "octocat", display_name: "octocat" },
+      user: {
+        ...walletMe.user,
+        github_id: 1234567,
+        github_login: "octocat",
+        display_name: "octocat",
+      },
     };
     const calls = stubFetch([
       { status: 200, body: both },
@@ -169,9 +174,9 @@ describe("linked sign-in methods (contract 4.1.8)", () => {
     ]);
     const host = await renderRoutes([{ path: "/account", element: <AccountPage /> }], "/account");
     await waitFor(() => expect(host.textContent).toContain("GCB6…WOQN"));
-    const unlinks = [...host.querySelectorAll<HTMLButtonElement>("button")].filter(
-      (b) => b.textContent === "Unlink",
-    );
+    const unlinks = [
+      ...host.querySelectorAll<HTMLButtonElement>("ul[aria-label='Sign-in methods'] button"),
+    ].filter((b) => b.textContent === "Unlink");
     await click(unlinks[1] as HTMLButtonElement);
     await waitFor(() => expect(dialog().textContent).toContain("Unlink your Stellar wallet?"));
     await click(byRole(dialog(), "button", "Unlink"));
