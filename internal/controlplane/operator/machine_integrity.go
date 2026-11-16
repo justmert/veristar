@@ -51,7 +51,11 @@ var webIntegrityKeys = keyset{cols: []string{"z.tenant_id", "z.site_id", "z.day"
 
 func (m *Machine) webIntegrity(w http.ResponseWriter, r *http.Request) error {
 	q := r.URL.Query()
-	if err := checkParams(q, "tenant", "from", "to", "limit", "cursor"); err != nil {
+	if err := checkParams(q, "tenant", "from", "to", "integrity_at_or_below", "limit", "cursor"); err != nil {
+		return err
+	}
+	grade, err := parseEnum(q, "integrity_at_or_below", integrity.GradeA, integrity.GradeB, integrity.GradeC)
+	if err != nil {
 		return err
 	}
 	key := keyFrom(r.Context())
@@ -78,11 +82,14 @@ func (m *Machine) webIntegrity(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
-		args := pgx.NamedArgs{"tenant": sc.arg(), "from_day": rg.From, "to_day": rg.To}
+		args := pgx.NamedArgs{"tenant": sc.arg(), "from_day": rg.From, "to_day": rg.To, "integrity_min": integrityRankMin(grade)}
+		// a site day without a grade has no rank and never matches the filter
 		inner := `with ` + tenantScopeCTE + `
 			select i.tenant_id, i.site_id, i.day
 			from agg.web_integrity_daily i join t on t.id = i.tenant_id
-			where i.day between @from_day::date and @to_day::date`
+			where i.day between @from_day::date and @to_day::date
+			  and (@integrity_min::int is null
+			       or (case i.grade when 'A' then 1 when 'B' then 2 when 'C' then 3 end) >= @integrity_min::int)`
 		rows, err := tx.Query(ctx, webIntegrityKeys.wrap(inner, p, args), args)
 		if err != nil {
 			return err

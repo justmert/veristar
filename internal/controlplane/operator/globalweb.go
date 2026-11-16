@@ -94,6 +94,7 @@ y as (
          ` + integritySQL + ` as integrity_rank
   from x
   where ` + derivedFilter + `
+    and (@integrity_min::int is null or ` + integritySQL + ` >= @integrity_min::int)
 )`
 
 // WebProject is one row of GET /api/operator/web/projects (contract 8.3).
