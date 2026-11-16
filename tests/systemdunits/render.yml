@@ -1,0 +1,37 @@
+---
+# renders the pgbackrest systemd units of roles/backup for render_test.go,
+# one host per repository mode, with the role's real defaults and pins.
+#   ansible-playbook -i inventory.yml render.yml -e out=<dir>
+- name: Render the backup units of each repository mode
+  hosts: all
+  connection: local
+  gather_facts: false
+  vars_files: [../../infra/ansible/vars/pins.yml]
+  vars:
+    roles_dir: "{{ playbook_dir }}/../../infra/ansible/roles"
+    backup_compose_dir: /opt/veristar/core
+    backup_compose_service: postgres
+  tasks:
+    - name: Load the backup role defaults
+      ansible.builtin.include_vars:
+        file: "{{ roles_dir }}/backup/defaults/main.yml"
+
+    # include_vars outranks inventory variables, so the mode of each host is
+    # set after the defaults
+    - name: Choose the repository mode of this host
+      ansible.builtin.set_fact:
+        backup_repo_mode: "{{ mode }}"
+
+    - name: Create the output directory
+      ansible.builtin.file:
+        path: "{{ out }}/{{ inventory_hostname }}"
+        state: directory
+        mode: "0755"
+
+    - name: Render the backup service units
+      ansible.builtin.template:
+        src: "{{ roles_dir }}/backup/templates/backup.service.j2"
+        dest: >-
+          {{ out }}/{{ inventory_hostname }}/sa-pgbackrest-{{ item.name }}.service
+        mode: "0644"
+      loop: "{{ backup_jobs }}"
