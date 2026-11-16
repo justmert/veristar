@@ -145,6 +145,7 @@ func catalogue(terms string) []route {
 	add(kindTenant, http.MethodGet, tp+"/web/breakdown?dimension=page&site={site_id}", nil)
 	add(kindTenant, http.MethodGet, tp+"/web/hourly?site={site_id}", nil)
 	add(kindTenant, http.MethodGet, tp+"/web/realtime?site={site_id}", nil)
+	add(kindTenant, http.MethodGet, tp+"/web/sessions?site={site_id}", nil)
 	// integrity grade (contract 17.2)
 	add(kindTenant, http.MethodGet, tp+"/integrity", nil)
 	add(kindTenant, http.MethodPatch, tp+"/sites/{site_id}", fixed(map[string]any{"origins": []string{"https://intruder.example.org"}}))

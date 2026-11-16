@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
+	"net/url"
 	"strconv"
 	"strings"
 	"testing"
@@ -507,16 +508,52 @@ func TestWebDashboardParity(t *testing.T) {
 		require.GreaterOrEqual(t, pv, int64(2), "the two events of the last minute")
 	})
 
+	t.Run("sessions equal umami", func(t *testing.T) {
+		d := today.AddDate(0, 0, -1)
+		r := webdash.Days{From: d, To: d}.Umami()
+		tok := adminToken(t, e)
+		for _, band := range []struct {
+			arg, website string
+		}{{"", sites[0].id.String()}, {"&band=quarantine", sites[0].quarantine.String()}} {
+			var want struct {
+				Data []struct {
+					ID string `json:"id"`
+				} `json:"data"`
+				Count json.Number `json:"count"`
+			}
+			q := url.Values{"startAt": {strconv.FormatInt(r.Start.UnixMilli(), 10)}, "endAt": {strconv.FormatInt(r.End.UnixMilli(), 10)},
+				"page": {"1"}, "pageSize": {strconv.Itoa(webdash.SessionsPageSize)}}
+			require.NoError(t, e.um.Client.ReadWebsite(ctx, tok, band.website, "/sessions", q, &want))
+			var got webdash.Sessions
+			c.ok(t, base+"/sessions?site="+sites[0].id.String()+"&day="+d.Format(time.DateOnly)+band.arg, &got)
+			require.NotEmpty(t, got.Items)
+			var wantIDs, gotIDs []string
+			for _, x := range want.Data {
+				wantIDs = append(wantIDs, x.ID)
+			}
+			for _, x := range got.Items {
+				gotIDs = append(gotIDs, x.ID)
+				require.Positive(t, x.Views+x.Visits)
+				require.False(t, time.Time(x.FirstAt).After(time.Time(x.LastAt)))
+			}
+			require.Equal(t, wantIDs, gotIDs)
+			require.Equal(t, want.Count.String(), strconv.FormatInt(got.Total, 10))
+		}
+		st, code := c.fail(t, base+"/sessions")
+		require.Equal(t, http.StatusBadRequest, st)
+		require.Equal(t, httpx.CodeInvalidQuery, code)
+	})
+
 	t.Run("isolation", func(t *testing.T) {
 		oc := e.client(t, outsider)
-		for _, sub := range []string{"/summary", "/breakdown?dimension=page", "/breakdown?dimension=country", "/hourly", "/realtime"} {
+		for _, sub := range []string{"/summary", "/breakdown?dimension=page", "/breakdown?dimension=country", "/hourly", "/realtime", "/sessions?day=" + today.Format(time.DateOnly)} {
 			// another project's routes are not found
 			st, code := oc.fail(t, base+sub)
 			require.Equal(t, http.StatusNotFound, st, sub)
 			require.Equal(t, httpx.CodeNotFound, code, sub)
 			// a site of another project inside one's own project is not found
 			sep := "?"
-			if strings.HasPrefix(sub, "/breakdown") {
+			if strings.Contains(sub, "?") {
 				sep = "&"
 			}
 			st, code = oc.fail(t, "/tenants/"+otherTenant.String()+"/web"+sub+sep+"site="+sites[0].id.String())

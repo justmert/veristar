@@ -232,3 +232,46 @@ export const webRealtimeQuery = (tenantId: string, site: string | null) =>
     refetchInterval: REALTIME_POLL,
     staleTime: REALTIME_POLL / 2,
   });
+
+export const webSessions = z.object({
+  day,
+  band: webBand,
+  site: siteRef,
+  source: z.literal("engine"),
+  page: z.number().int().positive(),
+  page_size: z.number().int().positive(),
+  total: count,
+  items: z.array(
+    z.object({
+      id: z.string(),
+      first_at: z.string(),
+      last_at: z.string(),
+      visits: count,
+      views: count,
+      country: z.string(),
+      browser: z.string(),
+      os: z.string(),
+      device: z.string(),
+    }),
+  ),
+});
+export type WebSessions = z.infer<typeof webSessions>;
+
+// one site's sessions of one utc day, for the erasure of one session
+export const webSessionsQuery = (tenantId: string, site: string, d: string, page: number) =>
+  queryOptions({
+    queryKey: ["tenant", tenantId, "web", "sessions", site, d, page] as const,
+    queryFn: ({ signal }) =>
+      request(
+        "GET",
+        `/tenants/${enc(tenantId)}/web/sessions${query([
+          ["site", site],
+          ["day", d],
+          ["page", page > 1 ? String(page) : null],
+        ])}`,
+        webSessions,
+        undefined,
+        signal,
+      ),
+    placeholderData: keepPreviousData,
+  });
