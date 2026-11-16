@@ -20,9 +20,10 @@ are section 12 of the [control plane API reference](../reference/control-plane-a
   project. On the consent page, operators see an extra choice, **The operator view of every
   project**. Choose it instead of a project.
 
-Either stops working when you lose operator rights: when your GitHub id leaves
-`OPERATOR_GITHUB_IDS` and the control plane restarts, or when your operator flag is turned off
-at your next sign-in. Your operator credentials are then revoked for good. A project credential
+Either stops working when you lose operator rights: when an operator admin suspends you or removes
+you from the roster ([roster.md](roster.md)). Your operator credentials are then revoked for good.
+Approving the operator view on the consent page needs your passkey confirmation, like the operator
+area; the credential it issues then works without one. A project credential
 of an operator reads that one project only and never the operator tools.
 
 ## Tools

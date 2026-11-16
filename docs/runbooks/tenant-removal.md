@@ -10,8 +10,8 @@ operator guide, [Removing a project](../operators/removal.md). The code is
 `internal/controlplane/lifecycle`; the HTTP routes are sections 5.5, 5.11 and 5.13 of the
 [control plane API reference](../reference/control-plane-api.md).
 
-Every action is an operator route: it needs a console session of a user whose GitHub id is in
-`OPERATOR_GITHUB_IDS` ([Adding and removing operators](operators.md)). Run the SQL below on the
+Every action is an operator route: it needs a console session of an operator on the roster,
+confirmed with a passkey ([Adding and removing operators](operators.md)). Run the SQL below on the
 database leader, as described in the [runbooks overview](overview.md).
 
 ## Suspending a project

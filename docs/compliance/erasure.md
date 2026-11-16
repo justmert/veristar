@@ -191,9 +191,10 @@ account if they should stop.
 
 Signing in with the same GitHub account or wallet later creates a new, empty
 account. A deleted account's passkey no longer signs in; create a new passkey
-to start a new account. For an operator, the new account is an operator again while its GitHub
-id is in `OPERATOR_GITHUB_IDS` or its address in `OPERATOR_STELLAR_ADDRESSES`;
-take the entry out of that setting to end operator access.
+to start a new account. The deletion removes the person from the operator roster;
+an identity in `OPERATOR_GITHUB_IDS` or `OPERATOR_STELLAR_ADDRESSES` is put back
+on the roster at the next control plane start, so take it out of that setting as
+well.
 
 To stop one sign-in method without deleting the account, unlink it on the
 **Account** page (contract section 4.1.8). The GitHub id or the address leaves

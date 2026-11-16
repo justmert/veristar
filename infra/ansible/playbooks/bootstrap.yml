@@ -62,8 +62,10 @@
   roles:
     - secrets
   tasks:
-    # OPERATOR_GITHUB_IDS is applied by the control plane at
-    # start (operator.SyncFlags); bootstrap only refuses to go on without it
+    # OPERATOR_GITHUB_IDS bootstraps the operator roster at every control
+    # plane start (operator.Bootstrap): the listed ids are active operator
+    # admins and the path back in after a lockout. bootstrap only refuses
+    # to go on without it
     - name: Require the operator github ids
       ansible.builtin.assert:
         that:

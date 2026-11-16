@@ -211,6 +211,9 @@ services:
       INGEST_ORIGIN: https://{{ sa_hostnames.in }}
       WEB_ORIGIN: https://{{ sa_hostnames.web }}
       GITHUB_REDIRECT_URL: https://{{ sa_hostnames.app }}/api/auth/github/callback
+      # the bootstrap of the operator roster: every start makes these
+      # identities active operator admins. everyone else is added on the
+      # console's operators page
       OPERATOR_GITHUB_IDS: "{{ sa_operator_github_ids }}"
       # stellar accounts of operators who sign in with a wallet; empty when
       # the inventory lists none
