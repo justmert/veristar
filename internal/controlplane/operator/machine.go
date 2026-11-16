@@ -106,6 +106,8 @@ func (m *Machine) Handler() http.Handler {
 	r.Method(http.MethodGet, "/api/hourly", httpx.HandlerFunc(m.apiHourly))
 	r.Method(http.MethodGet, "/onchain/ids", httpx.HandlerFunc(m.onchainIDs))
 	r.Method(http.MethodGet, "/onchain/daily", httpx.HandlerFunc(m.onchainDaily))
+	r.Method(http.MethodGet, "/rules", httpx.HandlerFunc(m.rules))
+	r.Method(http.MethodGet, "/rules/{rule_id}/matches", httpx.HandlerFunc(m.ruleMatches))
 	r.Method(http.MethodGet, "/openapi.yaml", httpx.HandlerFunc(m.document))
 	return r
 }
