@@ -38,7 +38,17 @@ type Site struct {
 	// collecting them (docs/compliance/privacy-strategy.md section 9). an
 	// entry written before the field existed decodes as off.
 	CollectUTM bool `json:"collect_utm,omitempty"`
+	// Scale is the site's typical daily visitors, rounded down to a power of
+	// two (integrity.ScaleOf), from the integrity job's baseline. the
+	// gateway scales its same-prefix thresholds with it, so popular sites
+	// are not quarantined for carrier-grade nat. 0, also for an entry
+	// written before the field existed, means no baseline yet: the
+	// configured floor applies.
+	Scale int `json:"scale,omitempty"`
 }
+
+// MaxScale bounds Site.Scale: 2^30 daily visitors is far beyond any site.
+const MaxScale = 1 << 30
 
 // Active reports whether the gateway accepts events for the site.
 func (s Site) Active() bool { return s.Status == StatusActive }
@@ -95,6 +105,9 @@ func (s Site) Validate() error {
 		if o == "" {
 			return fmt.Errorf("registry: site %s has an empty origin", s.ID)
 		}
+	}
+	if s.Scale < 0 || s.Scale > MaxScale || (s.Scale&(s.Scale-1)) != 0 {
+		return fmt.Errorf("registry: site %s has scale %d, want 0 or a power of two up to %d", s.ID, s.Scale, MaxScale)
 	}
 	return nil
 }

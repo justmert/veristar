@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -17,6 +18,7 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 
+	"github.com/justmert/veristar/internal/integrity"
 	"github.com/justmert/veristar/internal/natsx"
 )
 
@@ -365,6 +367,26 @@ func (v *Visitor) PrefixKey(ctx context.Context, ip ClientIP) (string, error) {
 		m := hmac.New(sha256.New, secret)
 		m.Write([]byte(ip.truncated().String()))
 		out = hex.EncodeToString(m.Sum(nil))
+		return nil
+	})
+	return out, err
+}
+
+// NetworkKey is the keyed hash of an autonomous system number under the
+// day's ip-cluster secret, cut to integrity.NetworkKeyHexLen hex digits. the
+// distinct network count of a site and day is counted on these keys, so the
+// number itself never leaves the gateway, and after midnight no key can be
+// linked to a network again. the "asn:" prefix keeps the input apart from
+// the prefix strings PrefixKey hashes under the same secret.
+func (v *Visitor) NetworkKey(ctx context.Context, asn uint32) (string, error) {
+	if asn == 0 {
+		return "", errors.New("gateway: network key without an autonomous system")
+	}
+	var out string
+	err := v.withSecrets(ctx, func(_, secret []byte) error {
+		m := hmac.New(sha256.New, secret)
+		m.Write([]byte("asn:" + strconv.FormatUint(uint64(asn), 10)))
+		out = hex.EncodeToString(m.Sum(nil))[:integrity.NetworkKeyHexLen]
 		return nil
 	})
 	return out, err

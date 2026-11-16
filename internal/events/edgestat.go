@@ -24,8 +24,11 @@ type EdgeStat struct {
 }
 
 var (
-	nodeRe    = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
-	outcomeRe = regexp.MustCompile(`^(accepted|quarantined|bot|dlq|rejected_[a-z0-9_]{1,40})$`)
+	nodeRe = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
+	// evidence_net_<class> counts accepted events by network class and
+	// network_<key> records a network seen for the site today
+	// (internal/integrity)
+	outcomeRe = regexp.MustCompile(`^(accepted|quarantined|bot|dlq|rejected_[a-z0-9_]{1,40}|evidence_net_[a-z]{1,20}|network_[0-9a-f]{16})$`)
 )
 
 // WindowSeq numbers the window that contains t. it is derived from the clock

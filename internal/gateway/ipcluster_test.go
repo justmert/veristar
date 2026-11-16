@@ -12,6 +12,7 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/stretchr/testify/require"
 
+	"github.com/justmert/veristar/internal/integrity"
 	"github.com/justmert/veristar/internal/natsx"
 	"github.com/justmert/veristar/tests/fixtures/natsctr"
 )
@@ -56,7 +57,7 @@ func testIPClusterThreeNodes(t *testing.T, cluster *natsctr.Cluster) {
 		require.NoError(t, err)
 		pk, err := n.v.PrefixKey(ctx, ip)
 		require.NoError(t, err)
-		q, err := n.c.Observe(site, pk, vt)
+		q, err := n.c.Observe(site, pk, vt, ipcTestThreshold)
 		require.NoError(t, err)
 		return q, pk
 	}
@@ -103,7 +104,7 @@ func testIPClusterThreeNodes(t *testing.T, cluster *natsctr.Cluster) {
 	require.NoError(t, err)
 	vt, err := nodes[0].v.Token(ctx, site, other, "x")
 	require.NoError(t, err)
-	q, err = nodes[0].c.Observe(site, opk, vt)
+	q, err = nodes[0].c.Observe(site, opk, vt, ipcTestThreshold)
 	require.NoError(t, err)
 	require.False(t, q)
 	require.False(t, nodes[2].c.Quarantined("e1d2c3b4-a5f6-4789-8abc-def012345678", prefix))
@@ -150,7 +151,7 @@ func testIPClusterPublishBound(t *testing.T, cluster *natsctr.Cluster) {
 	// distinct ones are published
 	for i := range 10 {
 		for range 3 {
-			_, err := c.Observe(site, prefix, ipcTestHex(fmt.Sprint("tok", i)))
+			_, err := c.Observe(site, prefix, ipcTestHex(fmt.Sprint("tok", i)), threshold)
 			require.NoError(t, err)
 		}
 	}
@@ -161,7 +162,7 @@ func testIPClusterPublishBound(t *testing.T, cluster *natsctr.Cluster) {
 
 	// in the next window the node may publish again
 	clock.Add(IPClusterWindow + time.Second)
-	_, err = c.Observe(site, prefix, ipcTestHex("tok-next"))
+	_, err = c.Observe(site, prefix, ipcTestHex("tok-next"), threshold)
 	require.NoError(t, err)
 	require.NoError(t, nc.Flush())
 	require.Eventually(t, func() bool { return got.Load() == threshold+1 }, 5*time.Second, 10*time.Millisecond)
@@ -173,10 +174,14 @@ func testIPClusterPublishBound(t *testing.T, cluster *natsctr.Cluster) {
 	require.Eventually(t, func() bool { return c.Rejected() == 2 }, 5*time.Second, 10*time.Millisecond)
 
 	// malformed observations are refused
-	_, err = c.Observe("", prefix, ipcTestHex("a"))
+	_, err = c.Observe("", prefix, ipcTestHex("a"), threshold)
 	require.Error(t, err)
-	_, err = c.Observe(site, "198.51.100.0/24", ipcTestHex("a"))
+	_, err = c.Observe(site, "198.51.100.0/24", ipcTestHex("a"), threshold)
 	require.Error(t, err)
+	_, err = c.Observe(site, prefix, ipcTestHex("a"), 0)
+	require.Error(t, err, "a threshold below 1")
+	_, err = c.Observe(site, prefix, ipcTestHex("a"), integrity.MaxPrefixThreshold+1)
+	require.Error(t, err, "a threshold above the cap")
 }
 
 func testIPClusterKeyBound(t *testing.T, cluster *natsctr.Cluster) {
@@ -188,15 +193,15 @@ func testIPClusterKeyBound(t *testing.T, cluster *natsctr.Cluster) {
 	tok := ipcTestHex("t")
 	// threshold 1: every key is quarantined by its first token
 	for _, p := range []string{"a", "b"} {
-		q, err := c.Observe("s", ipcTestHex(p), tok)
+		q, err := c.Observe("s", ipcTestHex(p), tok, 1)
 		require.NoError(t, err)
 		require.True(t, q)
 	}
 	// touch a, so b is the least recently used
 	require.True(t, c.Quarantined("s", ipcTestHex("a")))
-	_, err = c.Observe("s", ipcTestHex("a"), tok)
+	_, err = c.Observe("s", ipcTestHex("a"), tok, 1)
 	require.NoError(t, err)
-	_, err = c.Observe("s", ipcTestHex("c"), tok)
+	_, err = c.Observe("s", ipcTestHex("c"), tok, 1)
 	require.NoError(t, err)
 	require.Equal(t, 2, c.Keys())
 	require.Equal(t, uint64(1), c.Evicted())
@@ -212,4 +217,82 @@ func testIPClusterKeyBound(t *testing.T, cluster *natsctr.Cluster) {
 	require.Error(t, err)
 	_, err = NewIPCluster(nc, "", 1, 1, clock.Now)
 	require.Error(t, err)
+}
+
+// testIPClusterThresholds checks that the threshold each event brings
+// decides, that a hosting prefix is quarantined far earlier than an access
+// prefix of a large site, and that a peer's tokens count against the
+// threshold the receiving node computed.
+func testIPClusterThresholds(t *testing.T, cluster *natsctr.Cluster) {
+	ctx := t.Context()
+	clock := newVisTestClock(time.Date(2031, 5, 9, 10, 0, 0, 0, time.UTC))
+	nc1, _ := visTestConnect(t, cluster.Servers[0].URL)
+	nc2, _ := visTestConnect(t, cluster.Servers[1].URL)
+	a, err := NewIPCluster(nc1, "thr-a", 20, 100, clock.Now)
+	require.NoError(t, err)
+	b, err := NewIPCluster(nc2, "thr-b", 20, 100, clock.Now)
+	require.NoError(t, err)
+	require.NoError(t, a.Start(ctx, visTestQuiet()))
+	require.NoError(t, b.Start(ctx, visTestQuiet()))
+	require.NoError(t, nc1.Flush())
+	require.NoError(t, nc2.Flush())
+
+	site := "a7c3e1f0-2b4d-4e6f-8a9b-0c1d2e3f4a5b"
+	hosting := integrity.PrefixThreshold(20, integrity.NetHosting, 0)
+	access := integrity.PrefixThreshold(20, integrity.NetAccess, 8192)
+	require.Equal(t, 5, hosting)
+	require.Equal(t, 81, access)
+
+	// a hosting prefix: the fifth distinct visitor quarantines it
+	hp := ipcTestHex("hosting-prefix")
+	for i := range hosting {
+		q, err := a.Observe(site, hp, ipcTestHex(fmt.Sprint("h", i)), hosting)
+		require.NoError(t, err)
+		require.Equal(t, i+1 >= hosting, q, "hosting visitor %d", i+1)
+	}
+	// an access prefix of a site with 8192 typical daily visitors carries
+	// 40 distinct visitors without quarantine, where the old fixed rule of
+	// 20 would have quarantined half of them
+	ap := ipcTestHex("access-prefix")
+	for i := range 40 {
+		q, err := a.Observe(site, ap, ipcTestHex(fmt.Sprint("a", i)), access)
+		require.NoError(t, err)
+		require.False(t, q, "access visitor %d", i+1)
+	}
+	// the peer learned the 40 tokens and counts them against the threshold
+	// it computes itself: a hosting threshold there quarantines at once
+	require.NoError(t, nc1.Flush())
+	require.Eventually(t, func() bool { return b.Distinct(site, ap) >= hosting }, 5*time.Second, 5*time.Millisecond)
+	q, err := b.Observe(site, ap, ipcTestHex("late"), hosting)
+	require.NoError(t, err)
+	require.True(t, q, "a set already past a lower threshold quarantines")
+}
+
+func testNetworkKeys(t *testing.T, cluster *natsctr.Cluster) {
+	ctx := t.Context()
+	clock := newVisTestClock(time.Date(2031, 5, 10, 10, 0, 0, 0, time.UTC))
+	_, js1 := visTestConnect(t, cluster.Servers[0].URL)
+	_, js2 := visTestConnect(t, cluster.Servers[2].URL)
+	a, err := NewVisitor(visTestSecrets(t, js1), clock.Now)
+	require.NoError(t, err)
+	b, err := NewVisitor(visTestSecrets(t, js2), clock.Now)
+	require.NoError(t, err)
+
+	ka, err := a.NetworkKey(ctx, 3320)
+	require.NoError(t, err)
+	kb, err := b.NetworkKey(ctx, 3320)
+	require.NoError(t, err)
+	require.Equal(t, ka, kb, "every gateway derives the same key on the same day")
+	require.True(t, integrity.IsNetworkOutcome(integrity.NetworkPrefix+ka))
+	other, err := a.NetworkKey(ctx, 13335)
+	require.NoError(t, err)
+	require.NotEqual(t, ka, other)
+	_, err = a.NetworkKey(ctx, 0)
+	require.Error(t, err)
+
+	clock.Add(24 * time.Hour)
+	require.NoError(t, a.Rotate(ctx))
+	next, err := a.NetworkKey(ctx, 3320)
+	require.NoError(t, err)
+	require.NotEqual(t, ka, next, "a new day's key cannot be linked to the previous day's")
 }

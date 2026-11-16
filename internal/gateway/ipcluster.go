@@ -13,6 +13,7 @@ import (
 
 	"github.com/nats-io/nats.go"
 
+	"github.com/justmert/veristar/internal/integrity"
 	"github.com/justmert/veristar/internal/natsx"
 )
 
@@ -24,17 +25,22 @@ const IPClusterWindow = time.Hour
 // token that is new to it on edge.ipcluster and merges what its peers
 // publish, so every node counts the same set.
 //
-// the threshold is reached when the set holds IPCLUSTER_THRESHOLD distinct
-// tokens. from that event on, every event for the key is quarantined until
-// one window has passed since the threshold was last reached. a set never needs
-// more than threshold tokens to decide, so it stores at most that many, and
-// a node publishes at most threshold messages per key and window.
+// the threshold of a key depends on the network class of the prefix and on
+// the site's typical traffic (integrity.PrefixThreshold), with
+// IPCLUSTER_THRESHOLD as the floor of access networks. it is reached when
+// the set holds that many distinct tokens. from that event on, every event
+// for the key is quarantined until one window has passed since the
+// threshold was last reached. a set never needs more than its threshold of
+// tokens to decide, so it stores at most that many, and a node publishes at
+// most that many messages per key and window.
 type IPCluster struct {
-	nc        *nats.Conn
-	node      string
-	threshold int
-	maxKeys   int
-	now       func() time.Time
+	nc   *nats.Conn
+	node string
+	// floor is IPCLUSTER_THRESHOLD, the threshold of a set no local event
+	// has set one for yet
+	floor   int
+	maxKeys int
+	now     func() time.Time
 
 	mu   sync.Mutex
 	keys map[clusterKey]*list.Element // of *clusterSet, front is most recently used
@@ -58,6 +64,16 @@ type clusterSet struct {
 	// quarantinedUntil is set when the threshold is reached
 	quarantinedUntil time.Time
 	lastUsed         time.Time
+	// threshold is the one the latest local event computed for the key; 0
+	// until a local event arrives, when peers' tokens count against the floor
+	threshold int
+}
+
+func (s *clusterSet) limit(floor int) int {
+	if s.threshold > 0 {
+		return s.threshold
+	}
+	return floor
 }
 
 // ipClusterMsg is one token on edge.ipcluster. the prefix key is an hmac of
@@ -70,27 +86,27 @@ type ipClusterMsg struct {
 }
 
 // NewIPCluster returns a tracker. node is this gateway's id, so its own
-// messages can be told apart; threshold is IPCLUSTER_THRESHOLD; maxKeys
+// messages can be told apart; floor is IPCLUSTER_THRESHOLD; maxKeys
 // bounds the number of (site, prefix) sets held in memory.
-func NewIPCluster(nc *nats.Conn, node string, threshold, maxKeys int, now func() time.Time) (*IPCluster, error) {
+func NewIPCluster(nc *nats.Conn, node string, floor, maxKeys int, now func() time.Time) (*IPCluster, error) {
 	switch {
 	case nc == nil || now == nil:
 		return nil, errors.New("gateway: NewIPCluster needs a connection and a clock")
 	case node == "":
 		return nil, errors.New("gateway: ip-cluster node id is empty")
-	case threshold < 1:
-		return nil, fmt.Errorf("gateway: IPCLUSTER_THRESHOLD %d is below 1", threshold)
+	case floor < 1:
+		return nil, fmt.Errorf("gateway: IPCLUSTER_THRESHOLD %d is below 1", floor)
 	case maxKeys < 1:
 		return nil, fmt.Errorf("gateway: ip-cluster key bound %d is below 1", maxKeys)
 	}
 	return &IPCluster{
-		nc:        nc,
-		node:      node,
-		threshold: threshold,
-		maxKeys:   maxKeys,
-		now:       now,
-		keys:      make(map[clusterKey]*list.Element),
-		lru:       list.New(),
+		nc:      nc,
+		node:    node,
+		floor:   floor,
+		maxKeys: maxKeys,
+		now:     now,
+		keys:    make(map[clusterKey]*list.Element),
+		lru:     list.New(),
 	}, nil
 }
 
@@ -155,7 +171,7 @@ func (c *IPCluster) merge(data []byte) error {
 	defer c.mu.Unlock()
 	now := c.now()
 	s := c.setLocked(clusterKey{m.Site, m.Prefix}, now)
-	s.add(m.Token, now, c.threshold)
+	s.add(m.Token, now, s.limit(c.floor))
 	return nil
 }
 
@@ -220,19 +236,29 @@ func (s *clusterSet) add(token string, now time.Time, threshold int) bool {
 
 // Observe records that an event with visitor token vt arrived for site from
 // the network keyed by prefix (Visitor.PrefixKey), and reports whether the
-// event belongs in the quarantine band. a token new to this node is
-// published to the peers at once. a publish error is returned with the
-// band, which is still correct for this node.
-func (c *IPCluster) Observe(site, prefix, vt string) (bool, error) {
+// event belongs in the quarantine band. threshold is the key's threshold
+// (integrity.PrefixThreshold). a token new to this node is published to the
+// peers at once. a publish error is returned with the band, which is still
+// correct for this node.
+func (c *IPCluster) Observe(site, prefix, vt string, threshold int) (bool, error) {
 	if site == "" || len(site) > 64 || !isHex64(prefix) || !isHex64(vt) {
 		return false, errors.New("gateway: ip-cluster observe with a malformed site, prefix key or token")
+	}
+	if threshold < 1 || threshold > integrity.MaxPrefixThreshold {
+		return false, fmt.Errorf("gateway: ip-cluster threshold %d outside 1 to %d", threshold, integrity.MaxPrefixThreshold)
 	}
 	c.mu.Lock()
 	now := c.now()
 	s := c.setLocked(clusterKey{site, prefix}, now)
-	isNew := s.add(vt, now, c.threshold)
+	s.threshold = threshold
+	isNew := s.add(vt, now, threshold)
+	// a lower threshold than the tokens already held quarantines at once,
+	// as if the threshold had been reached now
+	if len(s.tokens) >= threshold && !s.quarantined(now) {
+		s.quarantinedUntil = now.Add(IPClusterWindow)
+	}
 	q := s.quarantined(now)
-	publish := isNew && len(s.published) < c.threshold
+	publish := isNew && len(s.published) < threshold
 	if publish {
 		s.published = append(s.published, now)
 	}
@@ -264,7 +290,7 @@ func (c *IPCluster) Quarantined(site, prefix string) bool {
 }
 
 // Distinct is how many distinct tokens this node holds for the key within
-// the window, at most the threshold.
+// the window, at most the key's threshold.
 func (c *IPCluster) Distinct(site, prefix string) int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -292,6 +318,9 @@ func (c *IPCluster) Prune() {
 		}
 	}
 }
+
+// Floor is IPCLUSTER_THRESHOLD, the floor of the access threshold.
+func (c *IPCluster) Floor() int { return c.floor }
 
 // Keys is the number of sets held in memory.
 func (c *IPCluster) Keys() int {

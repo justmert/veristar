@@ -79,11 +79,14 @@ test-containers:
 	@pkgs="$$(GO=$(GO) scripts/go-test-packages.sh containers)" && \
 		$(GO) test -race -count=1 -p 1 -timeout 90m $$pkgs
 
-# downloads the db-ip country file the geo tests and the gateway image use.
+# downloads the db-ip country file and the network data (asn, categories,
+# tor exits) the geo and network tests and the gateway image use.
 # GEO_MONTH (YYYY-MM) defaults to the current utc month. the tests find the
-# file through DBIP_MMDB=.scratch/geo/dbip-country-lite.mmdb
+# files through DBIP_MMDB=.scratch/geo/dbip-country-lite.mmdb; the network
+# files sit in the same directory
 geo-fetch:
 	sh scripts/fetch-dbip.sh .scratch/geo $(GEO_MONTH)
+	sh scripts/fetch-network.sh .scratch/geo $(GEO_MONTH)
 
 # runs the live tests against the dev stack; needs make dev-up and umami-bootstrap
 test-integration:

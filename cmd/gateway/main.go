@@ -29,7 +29,7 @@ var version = "dev"
 const usage = `usage: gateway [serve|version]
 
 serve (the default) runs the gateway until SIGINT or SIGTERM. SIGHUP reloads
-the db-ip file and the revoked tracker list.
+the db-ip file, the network data beside it and the revoked tracker list.
 
 environment: NATS_URL, NATS_REPLICAS, NATS_USER and NATS_PASSWORD (when the
 server requires auth), NATS_TLS_CA with the optional NATS_TLS_CERT and
@@ -37,6 +37,8 @@ NATS_TLS_KEY (tls only, from the first byte), GATEWAY_NODE_ID, GATEWAY_ADDR, GAT
 PROOF_BITS, PROOF_REPLAY_LIMIT, IPCLUSTER_THRESHOLD, VISITOR_EVENTS_PER_HOUR, RATE_SITE_PER_SECOND,
 RATE_SITE_BURST, RATE_PREFIX_PER_SECOND, RATE_PREFIX_BURST, GATEWAY_MAX_BODY,
 CLIENT_IP_HEADER, DBIP_MMDB, TRACKER_RELEASE_DIR, GATEWAY_SECURE_TRANSPORT.
+the network data (dbip-asn-lite.mmdb, asn-classes.csv, tor-exits.txt) is read
+from the directory of DBIP_MMDB.
 docs/reference/gateway-limits.md gives the starting values.
 
 the ops port also serves /edgez, the edge node's composite health (gateway
@@ -125,10 +127,10 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 				return
 			case <-hup:
 				if err := node.Reload(); err != nil {
-					log.Error("reload failed, previous geo file and revoked list stay in use", "error", err.Error())
+					log.Error("reload failed, the files that did not load keep their previous version", "error", err.Error())
 					continue
 				}
-				log.Info("geo file and revoked tracker list reloaded")
+				log.Info("geo file, network data and revoked tracker list reloaded")
 			}
 		}
 	}()
