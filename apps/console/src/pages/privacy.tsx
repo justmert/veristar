@@ -8,6 +8,7 @@ import { ApiError } from "@/api/client";
 import { api, type ErasureInput } from "@/api/endpoints";
 import { erasureListQuery, erasureRequestQuery, keys, sitesQuery } from "@/api/queries";
 import type { ErasureKind, ErasureRequest, Site } from "@/api/schemas";
+import { webSessionsQuery } from "@/api/web";
 import { ChoiceCard } from "@/components/choice-card";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { ErrorPanel, FormMessage, Loading, StateBlock } from "@/components/error-panel";
@@ -365,6 +366,14 @@ function ErasureForm({ tenantId, sites }: { tenantId: string; sites: Site[] }) {
               </>
             ) : null}
 
+            {values.kind === "session" && site ? (
+              <SessionFinder
+                tenantId={site.tenant_id}
+                site={site}
+                chosen={values.sessionId}
+                onChoose={(id) => change({ sessionId: id })}
+              />
+            ) : null}
             {values.kind === "session" ? (
               <TextField
                 label="Session id"
@@ -374,7 +383,7 @@ function ErasureForm({ tenantId, sites }: { tenantId: string; sites: Site[] }) {
                 spellCheck={false}
                 className="font-mono max-lg:h-(--vs-control-touch)"
                 placeholder="2f1c7a9e-5b3d-4c8e-9a1f-6d0b2e4c8a7f"
-                hint="Open the web dashboard, find the session on its Sessions page and copy the id from the page address."
+                hint="Choose the session in the list above, or paste its id."
                 value={values.sessionId}
                 onChange={(e) => change({ sessionId: e.target.value })}
                 error={errors.sessionId}
@@ -639,8 +648,8 @@ function Explanation() {
               <dt className="font-medium text-fg">One session</dt>
               <dd>
                 Works for as long as raw data is kept. If the visitor can point to a visit (for
-                example by its time and pages), find it on the dashboard's Sessions page and erase
-                it by its id.
+                example by its day, time and browser), find it in the session list of this form and
+                erase it by its id.
               </dd>
             </div>
             <div className="flex flex-col gap-0.5">
@@ -662,5 +671,103 @@ function Explanation() {
         </div>
       </Panel>
     </aside>
+  );
+}
+
+// the sessions of one site and utc day, newest first, so an owner can find
+// the visit a person describes by its time, pages and browser. read live
+// from the analytics engine; only the chosen id goes into the request.
+export function SessionFinder({
+  tenantId,
+  site,
+  chosen,
+  onChoose,
+}: {
+  tenantId: string;
+  site: Site;
+  chosen: string;
+  onChoose: (id: string) => void;
+}) {
+  const [day, setDay] = useState(utcToday(new Date()));
+  const [page, setPage] = useState(1);
+  const q = useQuery(webSessionsQuery(tenantId, site.id, day, page));
+  const pages = q.data ? Math.max(1, Math.ceil(q.data.total / q.data.page_size)) : 1;
+  return (
+    <fieldset className="flex flex-col gap-3 rounded-md border border-line p-3">
+      <legend className="px-1 text-small font-medium text-fg">Find the session</legend>
+      <div className="w-44">
+        <TextField
+          label="Day of the visit (UTC)"
+          type="date"
+          value={day}
+          max={utcToday(new Date())}
+          onChange={(e) => {
+            if (e.target.value) setDay(e.target.value);
+            setPage(1);
+          }}
+        />
+      </div>
+      {q.isPending ? (
+        <Loading label="Loading sessions" />
+      ) : q.error ? (
+        <ErrorPanel error={q.error} onRetry={() => q.refetch()} />
+      ) : q.data.items.length === 0 ? (
+        <p className="text-small text-fg-2">No sessions on this day.</p>
+      ) : (
+        <>
+          <ul aria-label="Sessions" className="flex max-h-72 flex-col gap-1 overflow-y-auto">
+            {q.data.items.map((x) => (
+              <li key={x.id}>
+                <button
+                  type="button"
+                  aria-pressed={chosen === x.id}
+                  onClick={() => onChoose(x.id)}
+                  className={cn(
+                    "flex w-full flex-wrap items-baseline gap-x-3 gap-y-0.5 rounded-sm px-2 py-1.5 text-left text-small transition-colors duration-(--vs-duration-press) hover:bg-hover focus-ring",
+                    chosen === x.id && "bg-selected",
+                  )}
+                >
+                  <span className="tabular text-fg">
+                    {formatDateTimeUtc(x.first_at)} to {formatDateTimeUtc(x.last_at)}
+                  </span>
+                  <span className="text-fg-2">
+                    {formatCount(x.views)} {x.views === 1 ? "page view" : "page views"},{" "}
+                    {[x.browser, x.os, x.device, x.country].filter(Boolean).join(", ")}
+                  </span>
+                  <span className="font-mono text-caption text-fg-3">{x.id}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+          {pages > 1 ? (
+            <div className="flex items-center justify-between text-caption text-fg-3">
+              <span>
+                Page {page} of {pages}
+              </span>
+              <span className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={page === 1}
+                  onClick={() => setPage(page - 1)}
+                >
+                  Newer
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={page >= pages}
+                  onClick={() => setPage(page + 1)}
+                >
+                  Older
+                </Button>
+              </span>
+            </div>
+          ) : null}
+        </>
+      )}
+    </fieldset>
   );
 }

@@ -10,7 +10,9 @@
 // what the aggregates do not hold (pages, entry and exit pages, custom
 // events, utm values, hours and the last minutes) is read from umami on the
 // private network as the member's own umami user (package umamiread), so
-// umami's team check guards those reads a second time.
+// umami's team check guards those reads a second time. one more engine
+// route lists a site's sessions of one day, so a member can find the session
+// id the erasure of one session takes (contract 10.2).
 package webdash
 
 import (
@@ -68,10 +70,11 @@ func (h *Routes) Routes(r chi.Router) {
 	r.Method(http.MethodGet, base+"/breakdown", httpx.HandlerFunc(h.breakdown))
 	r.Method(http.MethodGet, base+"/hourly", httpx.HandlerFunc(h.hourly))
 	r.Method(http.MethodGet, base+"/realtime", httpx.HandlerFunc(h.realtime))
+	r.Method(http.MethodGet, base+"/sessions", httpx.HandlerFunc(h.sessions))
 }
 
 // engine rate limit: umami reads cost umami a query per site, so a member
-// gets EngineLimit of them per minute across the three engine routes
+// gets EngineLimit of them per minute across the engine routes
 const (
 	EngineLimit  = 120
 	engineWindow = time.Minute

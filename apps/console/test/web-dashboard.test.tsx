@@ -1,6 +1,6 @@
 import { Outlet } from "react-router";
 import { describe, expect, it, vi } from "vitest";
-import { webBreakdown, webRealtime, webSummary } from "@/api/web";
+import { webBreakdown, webRealtime, webSessions, webSummary } from "@/api/web";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import {
   countryName,
@@ -13,10 +13,11 @@ import {
   webTrend,
   writeWebState,
 } from "@/lib/web-dashboard";
+import { SessionFinder } from "@/pages/privacy";
 import type { ProjectContext } from "@/pages/project-layout";
 import { WebPage } from "@/pages/web";
 import * as f from "./fixtures/contract";
-import { byRole, click, renderRoutes, waitFor } from "./helpers";
+import { byRole, click, render, renderRoutes, stubFetch, waitFor } from "./helpers";
 
 const NOW = new Date("2026-11-16T15:04:05Z");
 
@@ -300,5 +301,66 @@ describe("web dashboard page (contract 18)", () => {
     expect(urls.some((u) => u.includes("/web/hourly"))).toBe(true);
     // quarantined traffic has no realtime strip
     expect(urls.some((u) => u.includes("/web/realtime"))).toBe(false);
+  });
+});
+
+describe("session finder of the privacy page (contract 10.2 and 18)", () => {
+  it("lists a day's sessions and hands the chosen id to the form", async () => {
+    const body = {
+      day: "2026-11-16",
+      band: "primary",
+      site: siteRef,
+      source: "engine",
+      page: 1,
+      page_size: 50,
+      total: 2,
+      items: [
+        {
+          id: "2f1c7a9e-5b3d-4c8e-9a1f-6d0b2e4c8a7f",
+          first_at: "2026-11-16T10:00:00Z",
+          last_at: "2026-11-16T10:05:00Z",
+          visits: 1,
+          views: 3,
+          country: "DE",
+          browser: "chrome",
+          os: "Linux",
+          device: "laptop",
+        },
+        {
+          id: "3a2b7a9e-5b3d-4c8e-9a1f-6d0b2e4c8a70",
+          first_at: "2026-11-16T09:00:00Z",
+          last_at: "2026-11-16T09:00:00Z",
+          visits: 1,
+          views: 1,
+          country: "",
+          browser: "safari",
+          os: "iOS",
+          device: "mobile",
+        },
+      ],
+    };
+    expect(webSessions.parse(body).items).toHaveLength(2);
+    const calls = stubFetch([{ status: 200, body }]);
+    let chosen = "";
+    const site = { ...f.siteBody } as Parameters<typeof SessionFinder>[0]["site"];
+    const host = await render(
+      <SessionFinder
+        tenantId={f.TENANT_ID}
+        site={site}
+        chosen=""
+        onChoose={(id) => {
+          chosen = id;
+        }}
+      />,
+    );
+    await waitFor(() => expect(host.textContent).toContain("3 page views"));
+    expect(host.textContent).toContain("1 page view,");
+    expect(calls[0]?.url).toContain(`/tenants/${f.TENANT_ID}/web/sessions?site=${f.SITE_ID}&day=`);
+    const first = [...host.querySelectorAll("button")].find((b) =>
+      (b.textContent ?? "").includes("chrome"),
+    );
+    if (!first) throw new Error("no session button");
+    await click(first);
+    expect(chosen).toBe("2f1c7a9e-5b3d-4c8e-9a1f-6d0b2e4c8a7f");
   });
 });

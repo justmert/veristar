@@ -234,3 +234,117 @@ func (h *Routes) realtime(w http.ResponseWriter, r *http.Request) error {
 	httpx.WriteJSON(w, http.StatusOK, out)
 	return nil
 }
+
+// sessions page size of GET .../web/sessions
+const (
+	SessionsPageSize = 50
+	maxSessionsPage  = 1000
+)
+
+// Session is one visitor session of a day, as umami lists it: the session
+// id the erasure of one session takes (contract 10.2) and what lets a
+// member recognise the session a person describes.
+type Session struct {
+	ID      string          `json:"id"`
+	FirstAt httpx.Timestamp `json:"first_at"`
+	LastAt  httpx.Timestamp `json:"last_at"`
+	Visits  int64           `json:"visits"`
+	Views   int64           `json:"views"`
+	Country string          `json:"country"`
+	Browser string          `json:"browser"`
+	OS      string          `json:"os"`
+	Device  string          `json:"device"`
+}
+
+// Sessions is the answer of GET .../web/sessions.
+type Sessions struct {
+	Day      string    `json:"day"`
+	Band     string    `json:"band"`
+	Site     SiteRef   `json:"site"`
+	Source   string    `json:"source"`
+	Page     int       `json:"page"`
+	PageSize int       `json:"page_size"`
+	Total    int64     `json:"total"`
+	Items    []Session `json:"items"`
+}
+
+// sessions lists one site's sessions of one utc day, newest first, for the
+// erasure of one session: the privacy page needs the id a person's visit
+// was stored under, and this is where a member finds it.
+func (h *Routes) sessions(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	req, err := h.parse(r, "site", "day", "band", "page")
+	if err != nil {
+		return err
+	}
+	if req.site == nil {
+		return httpx.BadQuery("site is required")
+	}
+	today := UTCDay(h.now())
+	day := today
+	if d, ok, err := parseDay(req.q, "day"); err != nil {
+		return err
+	} else if ok {
+		day = d
+	}
+	if day.After(today) {
+		return httpx.BadQuery("day must not be after today (utc)")
+	}
+	page := 1
+	if v, ok := req.q["page"]; ok {
+		n, err := strconv.Atoi(v[0])
+		if err != nil || n < 1 || n > maxSessionsPage {
+			return httpx.BadQuery(fmt.Sprintf("page must be an integer between 1 and %d", maxSessionsPage))
+		}
+		page = n
+	}
+	out := Sessions{Day: day.Format(time.DateOnly), Band: req.band, Site: req.site.ref(), Source: SourceEngine,
+		Page: page, PageSize: SessionsPageSize, Items: []Session{}}
+	website, ok := req.site.website(req.band)
+	if !req.site.live() || !ok {
+		httpx.WriteJSON(w, http.StatusOK, out)
+		return nil
+	}
+	if err := h.engine(req); err != nil {
+		return err
+	}
+	rg := Days{From: day, To: day}.Umami()
+	q := url.Values{}
+	q.Set("startAt", strconv.FormatInt(rg.Start.UnixMilli(), 10))
+	q.Set("endAt", strconv.FormatInt(rg.End.UnixMilli(), 10))
+	q.Set("page", strconv.Itoa(page))
+	q.Set("pageSize", strconv.Itoa(SessionsPageSize))
+	var raw struct {
+		Data []struct {
+			ID      string    `json:"id"`
+			FirstAt time.Time `json:"firstAt"`
+			LastAt  time.Time `json:"lastAt"`
+			Visits  flexInt   `json:"visits"`
+			Views   flexInt   `json:"views"`
+			Country *string   `json:"country"`
+			Browser *string   `json:"browser"`
+			OS      *string   `json:"os"`
+			Device  *string   `json:"device"`
+		} `json:"data"`
+		Count flexInt `json:"count"`
+	}
+	if err := h.read(ctx, req, *req.site, website, "/sessions", q, &raw); err != nil {
+		return err
+	}
+	str := func(p *string) string {
+		if p == nil {
+			return ""
+		}
+		return *p
+	}
+	out.Total = int64(raw.Count)
+	for _, s := range raw.Data {
+		out.Items = append(out.Items, Session{
+			ID: s.ID, FirstAt: httpx.Timestamp(s.FirstAt.UTC()), LastAt: httpx.Timestamp(s.LastAt.UTC()),
+			Visits: int64(s.Visits), Views: int64(s.Views),
+			Country: str(s.Country), Browser: str(s.Browser), OS: str(s.OS), Device: str(s.Device),
+		})
+	}
+	httpx.WriteJSON(w, http.StatusOK, out)
+	return nil
+}
