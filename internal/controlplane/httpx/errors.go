@@ -71,6 +71,23 @@ const (
 	CodeIdentityInUse    = "identity_in_use"
 	CodeIdentityLinked   = "identity_already_linked"
 	CodeLastSignInMethod = "last_sign_in_method"
+	// the operator step-up (contract 5.1): 401 until a passkey assertion
+	// recorded on the session is recent enough; a ceremony whose state is
+	// gone or that does not verify; an account without a passkey; the last
+	// passkey of an account
+	CodeStepUpRequired   = "step_up_required"
+	CodeCeremonyExpired  = "ceremony_expired"
+	CodeStepUpFailed     = "step_up_failed"
+	CodePasskeyRequired  = "passkey_required"
+	CodeLastPasskey      = "last_passkey"
+	CodeEnrollmentClosed = "enrollment_closed"
+	// the operator roster (contract 5.12): a change only operator admins may
+	// make, a change that would leave no active operator admin, a row the
+	// deploy settings keep, an identity already on the roster
+	CodeOperatorAdminRequired = "operator_admin_required"
+	CodeLastOperatorAdmin     = "last_operator_admin"
+	CodeBootstrapOperator     = "bootstrap_operator"
+	CodeOperatorExists        = "operator_exists"
 )
 
 // defaultUnavailableRetryIn is the Retry-After of a 503 when the caller does

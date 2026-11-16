@@ -1,0 +1,172 @@
+-- the operator roster and the operators' passkeys (control-plane-api
+-- section 5.1).
+--
+-- cp.operators holds one row per operator identity: a github account id or
+-- a stellar address, never both, with a role (operator or operator_admin)
+-- and a status (active or suspended). operator admins manage the rows in
+-- the console; OPERATOR_GITHUB_IDS and OPERATOR_STELLAR_ADDRESSES only
+-- ensure, at every start, that the listed identities are active operator
+-- admins.
+--
+-- cp.users.is_operator is derived from the roster and never written on its
+-- own: a before trigger on cp.users computes it from the row's identities,
+-- and an after trigger on cp.operators recomputes it for every account that
+-- holds a changed identity. the update of is_operator fires
+-- users_mcp_revoke (00030), so a suspended or removed operator's mcp
+-- operator credentials end in the same transaction.
+--
+-- operators_last_admin refuses any change that leaves the roster without an
+-- active operator admin, whatever statement makes it.
+--
+-- enroll_opened_at and enroll_until bound the window in which the person
+-- behind a row may register a first passkey without a step-up (stepup
+-- package). a row added by an admin, a bootstrap row whose person has no
+-- passkey, and a row whose passkeys an admin reset get a window; the first
+-- registration closes it.
+--
+-- cp.operator_passkeys holds the webauthn credentials of operator accounts.
+-- credential is the go-webauthn credential record as json (public key,
+-- sign count, flags, transports); credential_id repeats its id for the
+-- unique index.
+
+-- +goose Up
+create table cp.operators (
+  id               uuid primary key default uuidv7(),
+  github_id        bigint check (github_id > 0),
+  github_login     text check (octet_length(github_login) between 1 and 64),
+  stellar_address  text check (stellar_address ~ '^G[A-Z2-7]{55}$'),
+  role             text not null check (role in ('operator', 'operator_admin')),
+  status           text not null default 'active' check (status in ('active', 'suspended')),
+  status_reason    text check (octet_length(status_reason) between 1 and 500),
+  enroll_opened_at timestamptz,
+  enroll_until     timestamptz,
+  created_by       uuid references cp.users (id) on delete set null,
+  created_at       timestamptz not null default now(),
+  updated_at       timestamptz not null default now(),
+  constraint operators_one_identity check ((github_id is null) <> (stellar_address is null)),
+  constraint operators_login_needs_id check (github_login is null or github_id is not null),
+  constraint operators_enroll_window check (
+    (enroll_opened_at is null) = (enroll_until is null) and (enroll_until is null or enroll_until > enroll_opened_at))
+);
+create unique index operators_github_id_idx on cp.operators (github_id) where github_id is not null;
+create unique index operators_stellar_address_idx on cp.operators (stellar_address) where stellar_address is not null;
+
+create table cp.operator_passkeys (
+  id            uuid primary key default uuidv7(),
+  user_id       uuid not null references cp.users (id) on delete cascade,
+  credential_id bytea not null unique check (octet_length(credential_id) between 16 and 1023),
+  credential    jsonb not null,
+  name          text not null check (octet_length(name) between 1 and 64),
+  created_at    timestamptz not null default now(),
+  last_used_at  timestamptz
+);
+create index operator_passkeys_user_idx on cp.operator_passkeys (user_id);
+
+-- +goose StatementBegin
+-- whether an account with these identities is an active operator. security
+-- definer, so a migration that updates cp.users as platform_owner computes
+-- the same flag as the control plane does
+create function cp.roster_active(gh bigint, addr text) returns boolean
+language sql stable security definer
+set search_path = pg_catalog, pg_temp
+as $$
+  select exists (
+    select 1 from cp.operators o
+    where o.status = 'active'
+      and ((gh is not null and o.github_id = gh) or (addr is not null and o.stellar_address = addr)))
+$$;
+-- +goose StatementEnd
+revoke all on function cp.roster_active(bigint, text) from public;
+grant execute on function cp.roster_active(bigint, text) to cp_system;
+
+-- +goose StatementBegin
+create function cp.users_operator_flag() returns trigger
+language plpgsql
+set search_path = pg_catalog, pg_temp
+as $$
+begin
+  new.is_operator := new.deleted_at is null and cp.roster_active(new.github_id, new.stellar_address);
+  return new;
+end
+$$;
+-- +goose StatementEnd
+create trigger users_operator_flag before insert or update of github_id, stellar_address, is_operator, deleted_at
+  on cp.users for each row execute function cp.users_operator_flag();
+
+-- +goose StatementBegin
+-- recomputes the flag of every live account holding an identity of the
+-- changed row, before and after the change
+create function cp.operators_sync_flags() returns trigger
+language plpgsql security definer
+set search_path = pg_catalog, pg_temp
+as $$
+declare
+  ghs bigint[] := array[]::bigint[];
+  addrs text[] := array[]::text[];
+begin
+  if tg_op in ('UPDATE', 'DELETE') then
+    ghs := ghs || old.github_id;
+    addrs := addrs || old.stellar_address;
+  end if;
+  if tg_op in ('INSERT', 'UPDATE') then
+    ghs := ghs || new.github_id;
+    addrs := addrs || new.stellar_address;
+  end if;
+  update cp.users u
+  set is_operator = cp.roster_active(u.github_id, u.stellar_address)
+  where u.deleted_at is null
+    and (u.github_id = any(ghs) or u.stellar_address = any(addrs))
+    and u.is_operator is distinct from cp.roster_active(u.github_id, u.stellar_address);
+  return null;
+end
+$$;
+-- +goose StatementEnd
+create trigger operators_sync_flags after insert or update or delete on cp.operators
+  for each row execute function cp.operators_sync_flags();
+
+-- +goose StatementBegin
+create function cp.operators_last_admin() returns trigger
+language plpgsql security definer
+set search_path = pg_catalog, pg_temp
+as $$
+begin
+  if not exists (select 1 from cp.operators where role = 'operator_admin' and status = 'active') then
+    raise exception 'the roster must keep at least one active operator admin'
+      using errcode = 'integrity_constraint_violation', constraint = 'operators_last_admin';
+  end if;
+  return null;
+end
+$$;
+-- +goose StatementEnd
+create trigger operators_last_admin after update or delete on cp.operators
+  for each statement execute function cp.operators_last_admin();
+
+alter table cp.operators enable row level security;
+alter table cp.operators force row level security;
+alter table cp.operator_passkeys enable row level security;
+alter table cp.operator_passkeys force row level security;
+
+-- the roster and the passkeys are read and written by the control plane's
+-- system role only: the guard, the step-up, the operators page and the
+-- startup bootstrap all run there. platform_owner reads the roster so the
+-- security definer functions above see its rows under forced row-level
+-- security.
+create policy operators_system on cp.operators for all to cp_system using (true) with check (true);
+create policy operators_owner_read on cp.operators for select to platform_owner using (true);
+create policy operator_passkeys_system on cp.operator_passkeys for all to cp_system using (true) with check (true);
+
+revoke all on cp.operators, cp.operator_passkeys from public;
+grant select, insert, update, delete on cp.operators, cp.operator_passkeys to cp_system;
+
+-- the flags of existing accounts follow the empty roster until the first
+-- start of the control plane bootstraps it; that start recomputes them
+-- +goose Down
+drop trigger operators_last_admin on cp.operators;
+drop function cp.operators_last_admin();
+drop trigger operators_sync_flags on cp.operators;
+drop function cp.operators_sync_flags();
+drop trigger users_operator_flag on cp.users;
+drop function cp.users_operator_flag();
+drop function cp.roster_active(bigint, text);
+drop table cp.operator_passkeys;
+drop table cp.operators;

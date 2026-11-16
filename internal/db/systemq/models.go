@@ -33,6 +33,31 @@ type CpErasureRequest struct {
 	ReaggregatedAt     *time.Time
 }
 
+type CpOperator struct {
+	ID             uuid.UUID
+	GithubID       *int64
+	GithubLogin    *string
+	StellarAddress *string
+	Role           string
+	Status         string
+	StatusReason   *string
+	EnrollOpenedAt *time.Time
+	EnrollUntil    *time.Time
+	CreatedBy      uuid.NullUUID
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+}
+
+type CpOperatorPasskey struct {
+	ID           uuid.UUID
+	UserID       uuid.UUID
+	CredentialID []byte
+	Credential   []byte
+	Name         string
+	CreatedAt    time.Time
+	LastUsedAt   *time.Time
+}
+
 type CpTenant struct {
 	ID                   uuid.UUID
 	Slug                 string
