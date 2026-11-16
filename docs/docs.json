@@ -64,7 +64,8 @@
               "adr/0001-base-platform",
               "adr/0002-overlay-not-fork",
               "adr/0003-licensing",
-              "adr/0004-umami-dashboard-theme"
+              "adr/0004-umami-dashboard-theme",
+              "adr/0005-umami-as-engine-only"
             ]
           }
         ]
@@ -148,7 +149,7 @@
               "operators/api-keys",
               "operators/mcp",
               "operators/alerts",
-              "operators/umami-dashboard-theme"
+              "operators/umami-admin-access"
             ]
           }
         ]
