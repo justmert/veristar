@@ -426,6 +426,10 @@ func seed(t *testing.T, c *pgx.Conn) (side, side) {
 				[]any{s.site, s.tenant}},
 			{`insert into cp.web_networks_daily (site_id, tenant_id, day, network) values ($1, $2, current_date, '00000000000000aa')`,
 				[]any{s.site, s.tenant}},
+			{`insert into cp.web_signals_daily (site_id, tenant_id, day, signal, count) values ($1, $2, current_date, 'signal_views', 5)`,
+				[]any{s.site, s.tenant}},
+			{`insert into agg.web_coverage_daily (site_id, tenant_id, day, script_requests, gpc_requests) values ($1, $2, current_date, 200, 20)`,
+				[]any{s.site, s.tenant}},
 		} {
 			_, err := c.Exec(ctx, st.sql, st.args...)
 			require.NoError(t, err, st.sql)

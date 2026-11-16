@@ -131,6 +131,40 @@ func (q *Queries) IntegrityOutcomes(ctx context.Context, arg IntegrityOutcomesPa
 	return i, err
 }
 
+const integritySignals = `-- name: IntegritySignals :many
+select signal, count from cp.web_signals_daily where site_id = $1 and day = $2
+`
+
+type IntegritySignalsParams struct {
+	SiteID uuid.UUID
+	Day    time.Time
+}
+
+type IntegritySignalsRow struct {
+	Signal string
+	Count  int64
+}
+
+func (q *Queries) IntegritySignals(ctx context.Context, arg IntegritySignalsParams) ([]IntegritySignalsRow, error) {
+	rows, err := q.db.Query(ctx, integritySignals, arg.SiteID, arg.Day)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []IntegritySignalsRow{}
+	for rows.Next() {
+		var i IntegritySignalsRow
+		if err := rows.Scan(&i.Signal, &i.Count); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const integrityWebDay = `-- name: IntegrityWebDay :one
 select coalesce(sum(visitors), 0)::bigint as visitors, coalesce(sum(pageviews), 0)::bigint as pageviews,
        (count(*) > 0)::boolean as ok
@@ -175,11 +209,13 @@ const upsertIntegrityDay = `-- name: UpsertIntegrityDay :exec
 insert into agg.web_integrity_daily (
   site_id, tenant_id, day, rule_version, grade, closed, events, quarantined, proof_failures,
   net_access, net_organisation, net_hosting, net_anonymiser, net_unknown, networks,
-  visitors, pageviews, baseline_visitors, baseline_days, reasons, computed_at)
+  visitors, pageviews, baseline_visitors, baseline_days, signal_views, framed, never_visible,
+  reasons, computed_at)
 values (
   $1, $2, $3, $4, $5, $6, $7, $8, $9,
   $10, $11, $12, $13, $14, $15,
-  $16, $17, $18, $19, $20, now())
+  $16, $17, $18, $19, $20, $21, $22,
+  $23, now())
 on conflict (site_id, day) do update
   set tenant_id = excluded.tenant_id, rule_version = excluded.rule_version, grade = excluded.grade,
       closed = excluded.closed, events = excluded.events, quarantined = excluded.quarantined,
@@ -188,6 +224,7 @@ on conflict (site_id, day) do update
       net_anonymiser = excluded.net_anonymiser, net_unknown = excluded.net_unknown,
       networks = excluded.networks, visitors = excluded.visitors, pageviews = excluded.pageviews,
       baseline_visitors = excluded.baseline_visitors, baseline_days = excluded.baseline_days,
+      signal_views = excluded.signal_views, framed = excluded.framed, never_visible = excluded.never_visible,
       reasons = excluded.reasons, computed_at = excluded.computed_at
 `
 
@@ -211,6 +248,9 @@ type UpsertIntegrityDayParams struct {
 	Pageviews        int64
 	BaselineVisitors *int64
 	BaselineDays     int32
+	SignalViews      int64
+	Framed           int64
+	NeverVisible     int64
 	Reasons          []byte
 }
 
@@ -235,6 +275,9 @@ func (q *Queries) UpsertIntegrityDay(ctx context.Context, arg UpsertIntegrityDay
 		arg.Pageviews,
 		arg.BaselineVisitors,
 		arg.BaselineDays,
+		arg.SignalViews,
+		arg.Framed,
+		arg.NeverVisible,
 		arg.Reasons,
 	)
 	return err

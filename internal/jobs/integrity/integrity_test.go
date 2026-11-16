@@ -54,7 +54,7 @@ func TestGrader(t *testing.T) {
 	leader, _ := jobstest.Leader(t, ns, jobs, "integrity-test")
 
 	tenant, clean, hosting, removedTenant := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
-	removedSite := uuid.Must(uuid.NewV7())
+	removedSite, framedSite := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
 	c, err := pg.Superuser(ctx, "platform")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = c.Close(context.Background()) })
@@ -116,8 +116,22 @@ func TestGrader(t *testing.T) {
 	web(removedSite, removedTenant, y, 500, 500)
 	outcome(removedSite, removedTenant, y, "accepted", 500)
 
+	// a site whose tracker 1.3.0 pages report most views framed and some
+	// loads never visible: rule version 2 lowers an otherwise clean day
+	signal := func(site, tn uuid.UUID, day time.Time, name string, n int64) {
+		exec(`insert into cp.web_signals_daily (site_id, tenant_id, day, signal, count) values ($1, $2, $3, $4, $5)`,
+			site, tn, day, name, n)
+	}
+	web(framedSite, tenant, y, 400, 900)
+	outcome(framedSite, tenant, y, "accepted", 1000)
+	evidence(framedSite, tenant, y, rules.NetAccess, 1000)
+	networks(framedSite, tenant, y, 80)
+	signal(framedSite, tenant, y, rules.SignalViews, 900)
+	signal(framedSite, tenant, y, rules.SignalFramed, 600)
+	signal(framedSite, tenant, y, rules.SignalNeverVisible, 50)
+
 	sites := fakeSites{}
-	for _, s := range []struct{ id, tn uuid.UUID }{{clean, tenant}, {hosting, tenant}, {removedSite, removedTenant}} {
+	for _, s := range []struct{ id, tn uuid.UUID }{{clean, tenant}, {hosting, tenant}, {removedSite, removedTenant}, {framedSite, tenant}} {
 		sites[s.id.String()] = registry.Site{ID: s.id.String(), TenantID: s.tn.String(), Status: registry.StatusActive,
 			Origins: []string{"https://x.example"}, QuarantineWebsiteID: uuid.NewString()}
 	}
@@ -126,7 +140,7 @@ func TestGrader(t *testing.T) {
 	require.NoError(t, err)
 	res, err := g.Run(ctx, leader.Tx)
 	require.NoError(t, err)
-	require.Equal(t, 3, res.Sites)
+	require.Equal(t, 4, res.Sites)
 	require.Equal(t, 1, res.Waiting, "the clean site's today has events but no aggregate")
 	require.Equal(t, int64(2), res.Pruned)
 
@@ -170,6 +184,20 @@ func TestGrader(t *testing.T) {
 		got = append(got, r.Code+":"+r.Level)
 	}
 	require.ElementsMatch(t, []string{"hosting_share:C", "quarantine_share:C", "few_networks:B", "spike:B"}, got)
+
+	fr, ok := read(framedSite, y)
+	require.True(t, ok)
+	require.Equal(t, rules.GradeC, *fr.Grade)
+	require.Len(t, fr.Reasons, 1)
+	require.Equal(t, rules.ReasonFramedShare, fr.Reasons[0].Code)
+	var rv int32
+	var views, framed, nv int64
+	require.NoError(t, jobs.WithRole(ctx, pdb.RoleJobs, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `select rule_version, signal_views, framed, never_visible
+		  from agg.web_integrity_daily where site_id = $1 and day = $2`, framedSite, y).Scan(&rv, &views, &framed, &nv)
+	}))
+	require.Equal(t, int32(rules.RuleVersion), rv)
+	require.Equal(t, []int64{900, 600, 50}, []int64{views, framed, nv})
 
 	// an older day without events has a row that says it is not graded
 	old, ok := read(clean, today.AddDate(0, 0, -3))

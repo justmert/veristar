@@ -124,5 +124,8 @@ update cp.settings set value = to_jsonb(@keep::boolean) where key = 'removal_kee
 -- name: PurgeWebEvidence :execrows
 delete from cp.web_evidence_daily where tenant_id = @tenant_id;
 
+-- name: PurgeWebSignals :execrows
+delete from cp.web_signals_daily where tenant_id = @tenant_id;
+
 -- name: PurgeWebNetworks :execrows
 delete from cp.web_networks_daily where tenant_id = @tenant_id;

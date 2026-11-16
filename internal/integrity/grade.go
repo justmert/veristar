@@ -6,9 +6,19 @@ import (
 	"slices"
 )
 
-// RuleVersion numbers the rule set below. a change of any threshold or rule
-// is a new version; stored grades keep the version they were computed with.
-const RuleVersion = 1
+// RuleVersion numbers the rule set the jobs apply now. a change of any
+// threshold or rule is a new version; stored grades keep the version they
+// were computed with, and GradeVersion still applies every earlier version,
+// so a stored grade can be recomputed from its stored inputs.
+//
+//	1  network classes, quarantine, proof failures, few networks, spike and
+//	   page volume
+//	2  version 1 plus the page signals of tracker 1.3.0: the framed share
+//	   and the never-visible share
+const RuleVersion = 2
+
+// RuleVersions lists every version GradeVersion applies, oldest first.
+var RuleVersions = []int{1, 2}
 
 // grades, best first. a day with too little traffic has no grade.
 const (
@@ -34,12 +44,16 @@ const (
 	ReasonFewNetworks      = "few_networks"
 	ReasonSpike            = "spike"
 	ReasonPageVolume       = "page_volume"
+	// rule version 2
+	ReasonFramedShare       = "framed_share"
+	ReasonNeverVisibleShare = "never_visible_share"
 )
 
 // ReasonCodes lists every code in display order.
 var ReasonCodes = []string{
 	ReasonHostingShare, ReasonQuarantineShare, ReasonFewNetworks, ReasonSpike,
-	ReasonProofFailures, ReasonPageVolume, ReasonTooLittleTraffic,
+	ReasonFramedShare, ReasonNeverVisibleShare, ReasonProofFailures, ReasonPageVolume,
+	ReasonTooLittleTraffic,
 }
 
 // thresholds of rule version 1
@@ -65,6 +79,23 @@ const (
 	BaselineMinDays = 7
 	// page views per visitor the page itself reports
 	pageVolumePerVisitor = 50
+)
+
+// thresholds rule version 2 adds. both shares are claims of the page, so
+// they only ever lower a grade, and they apply only from minSignalBase
+// reports on, so a handful of embeds on a quiet day sets nothing.
+const (
+	// framed share of the page views of trackers that report signals. a
+	// site meant to be embedded shows a steady share; a page loaded in a
+	// hidden frame on another site's traffic shows nearly all of its views
+	// framed
+	framedShareB = 0.25
+	framedShareC = 0.50
+	// never-visible notices as a share of the notices plus the page views
+	// that report signals: tabs opened in the background and closed unseen
+	// are ordinary, a third of all loads is not
+	neverVisibleShareB = 0.30
+	minSignalBase      = 50
 )
 
 // BaselineDays is how many days before a day its baseline covers.
@@ -97,6 +128,13 @@ type Inputs struct {
 	// BaselineDays earlier days with data; BaselineDaysUsed says how many
 	BaselineVisitors *int64
 	BaselineDaysUsed int
+	// page signals of tracker 1.3.0 on, read by rule version 2: accepted
+	// page views of trackers that report signals, the framed part of them,
+	// and the accepted never-visible notices. all three are the page's own
+	// claims
+	SignalViews  int64
+	Framed       int64
+	NeverVisible int64
 }
 
 // Classified is the number of events with a network class.
@@ -115,6 +153,16 @@ func (in Inputs) QuarantineShare() *float64 { return share(in.Quarantined, in.Ev
 
 // ProofPassRate is the share of challenge-backed requests whose proof held.
 func (in Inputs) ProofPassRate() *float64 { return share(in.Events, in.Events+in.ProofFailures) }
+
+// FramedShare is the framed share of the page views that report signals,
+// nil before any did.
+func (in Inputs) FramedShare() *float64 { return share(in.Framed, in.SignalViews) }
+
+// NeverVisibleShare is the share of never-visible notices among the notices
+// and the page views that report signals, nil before any arrived.
+func (in Inputs) NeverVisibleShare() *float64 {
+	return share(in.NeverVisible, in.NeverVisible+in.SignalViews)
+}
 
 func share(n, d int64) *float64 {
 	if d <= 0 {
@@ -152,6 +200,10 @@ func (r Reason) Text() string {
 		return fmt.Sprintf("Visitors were %sx the site's baseline (limit %sx).", factor(r.Value), factor(r.Limit))
 	case ReasonPageVolume:
 		return fmt.Sprintf("The page reported %s page views per visitor (limit %s).", factor(r.Value), factor(r.Limit))
+	case ReasonFramedShare:
+		return fmt.Sprintf("The page reported %s of its page views inside a frame (limit %s). A page framed on another site can be loaded without anyone seeing it.", pct(r.Value), pct(r.Limit))
+	case ReasonNeverVisibleShare:
+		return fmt.Sprintf("The page reported %s of its loads as never visible (limit %s): loaded and left without being shown, so they were not counted as page views.", pct(r.Value), pct(r.Limit))
 	}
 	return r.Code
 }
@@ -174,12 +226,25 @@ type Result struct {
 	Reasons []Reason `json:"reasons"`
 }
 
-// Grade applies rule version 1. it starts at A and every rule can only
-// lower it, so no input, and in particular nothing the page reports, can
-// raise a grade.
+// Grade applies the current rule version, RuleVersion.
 func Grade(in Inputs) Result {
+	r, err := GradeVersion(RuleVersion, in)
+	if err != nil {
+		// RuleVersion is always in RuleVersions; integrity_test checks it
+		panic(err)
+	}
+	return r
+}
+
+// GradeVersion applies one rule version. it starts at A and every rule can
+// only lower it, so no input, and in particular nothing the page reports,
+// can raise a grade. a version that does not exist is an error.
+func GradeVersion(version int, in Inputs) (Result, error) {
+	if !slices.Contains(RuleVersions, version) {
+		return Result{}, fmt.Errorf("integrity: rule version %d does not exist", version)
+	}
 	if in.Events < MinEvents {
-		return Result{Reasons: []Reason{{Code: ReasonTooLittleTraffic, Level: LevelNone, Value: float64(in.Events), Limit: MinEvents}}}
+		return Result{Reasons: []Reason{{Code: ReasonTooLittleTraffic, Level: LevelNone, Value: float64(in.Events), Limit: MinEvents}}}, nil
 	}
 	var rs []Reason
 	add := func(code, level string, value, limit float64) {
@@ -218,6 +283,19 @@ func Grade(in Inputs) Result {
 	if in.Visitors > 0 && in.Pageviews >= pageVolumePerVisitor*in.Visitors {
 		add(ReasonPageVolume, LevelB, float64(in.Pageviews)/float64(in.Visitors), pageVolumePerVisitor)
 	}
+	if version >= 2 {
+		if s := in.FramedShare(); s != nil && in.SignalViews >= minSignalBase {
+			switch {
+			case *s >= framedShareC:
+				add(ReasonFramedShare, LevelC, *s, framedShareC)
+			case *s >= framedShareB:
+				add(ReasonFramedShare, LevelB, *s, framedShareB)
+			}
+		}
+		if s := in.NeverVisibleShare(); s != nil && in.NeverVisible+in.SignalViews >= minSignalBase && *s >= neverVisibleShareB {
+			add(ReasonNeverVisibleShare, LevelB, *s, neverVisibleShareB)
+		}
+	}
 	g := GradeA
 	for _, r := range rs {
 		g = Worse(g, r.Level)
@@ -225,7 +303,7 @@ func Grade(in Inputs) Result {
 	if rs == nil {
 		rs = []Reason{}
 	}
-	return Result{Grade: g, Reasons: rs}
+	return Result{Grade: g, Reasons: rs}, nil
 }
 
 // Worse returns the worse of two grades; an empty grade or a level that is
@@ -353,6 +431,10 @@ func RangeText(code string) string {
 		return "Visitors rose far above the site's baseline."
 	case ReasonPageVolume:
 		return "The page reported an unusual number of page views per visitor."
+	case ReasonFramedShare:
+		return "The page reported many of its page views inside a frame."
+	case ReasonNeverVisibleShare:
+		return "The page reported many loads that were never visible."
 	}
 	return code
 }

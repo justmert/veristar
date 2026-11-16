@@ -153,8 +153,8 @@ func (p UmamiPurger) Purge(ctx context.Context, r Removal) (map[string]any, erro
 	return map[string]any{"websites_deleted": websites, "team_deleted": teamDeleted, "users_deleted": users}, nil
 }
 
-// WebIngestPurger deletes the tenant's cp.web_ingest_hourly and
-// cp.web_evidence_daily rows, unless the removal keeps aggregates (contract
+// WebIngestPurger deletes the tenant's cp.web_ingest_hourly,
+// cp.web_evidence_daily and cp.web_signals_daily rows, unless the removal keeps aggregates (contract
 // 5.13). the network keys of cp.web_networks_daily are no aggregate, only
 // the input of a distinct count, so they go in either case.
 type WebIngestPurger struct{}
@@ -180,7 +180,12 @@ func (WebIngestPurger) Purge(ctx context.Context, r Removal) (map[string]any, er
 	if err != nil {
 		return nil, &RecordError{fmt.Errorf("web evidence rows: %w", err)}
 	}
-	return map[string]any{"rows_deleted": n, "evidence_rows_deleted": ev, "network_rows_deleted": nets}, nil
+	sig, err := q.PurgeWebSignals(ctx, r.TenantID)
+	if err != nil {
+		return nil, &RecordError{fmt.Errorf("web signal rows: %w", err)}
+	}
+	return map[string]any{"rows_deleted": n, "evidence_rows_deleted": ev, "signal_rows_deleted": sig,
+		"network_rows_deleted": nets}, nil
 }
 
 // OTLPPurger revokes every otlp token of the tenant in cp.otlp_tokens and

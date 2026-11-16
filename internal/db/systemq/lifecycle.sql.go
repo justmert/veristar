@@ -473,6 +473,18 @@ func (q *Queries) PurgeWebNetworks(ctx context.Context, tenantID uuid.UUID) (int
 	return result.RowsAffected(), nil
 }
 
+const purgeWebSignals = `-- name: PurgeWebSignals :execrows
+delete from cp.web_signals_daily where tenant_id = $1
+`
+
+func (q *Queries) PurgeWebSignals(ctx context.Context, tenantID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, purgeWebSignals, tenantID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const removalKeepAggregatesForUpdate = `-- name: RemovalKeepAggregatesForUpdate :one
 select value from cp.settings where key = 'removal_keep_aggregates' for update
 `

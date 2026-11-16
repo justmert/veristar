@@ -141,6 +141,12 @@ var Want = map[string]map[db.Role]string{
 		db.RoleCPTenant:   "r a(body,created_by,id,period_from,period_to,signature,signer,tenant_id) w(revoked_at,revoked_by)",
 		db.RoleCPOperator: "r",
 	},
+	// page signals and coverage (00037): coverage is read by the tenant
+	// (its own rows) and operators and written by edgestats; the signal
+	// rows are edgestats' and integrity's, and cp_system deletes them in a
+	// purge
+	"agg.web_coverage_daily": {db.RoleCPTenant: "r", db.RoleCPOperator: "r", db.RoleJobs: "rawd"},
+	"cp.web_signals_daily":   {db.RoleCPSystem: "rawd", db.RoleJobs: "rawd"},
 }
 
 // Right is one privilege: its acl letter and its sql name.

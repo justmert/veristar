@@ -256,6 +256,7 @@ func (g *Grader) siteDay(ctx context.Context, tx TxFunc, s registry.Site, day, t
 			NetHosting: in.NetHosting, NetAnonymiser: in.NetAnonymiser, NetUnknown: in.NetUnknown,
 			Networks: in.Networks, Visitors: in.Visitors, Pageviews: in.Pageviews,
 			BaselineVisitors: in.BaselineVisitors, BaselineDays: int32(in.BaselineDaysUsed), //nolint:gosec // at most BaselineDays
+			SignalViews: in.SignalViews, Framed: in.Framed, NeverVisible: in.NeverVisible,
 			Reasons: reasons,
 		}
 		if r.Grade != "" {
@@ -307,6 +308,22 @@ func readInputs(ctx context.Context, q *jobsq.Queries, siteID uuid.UUID, day tim
 			in.NetUnknown = r.Count
 		default:
 			return in, false, fmt.Errorf("evidence: unknown class %q", r.Class)
+		}
+	}
+	sigs, err := q.IntegritySignals(ctx, jobsq.IntegritySignalsParams{SiteID: siteID, Day: day})
+	if err != nil {
+		return in, false, fmt.Errorf("signals: %w", err)
+	}
+	for _, r := range sigs {
+		switch r.Signal {
+		case rules.SignalViews:
+			in.SignalViews = r.Count
+		case rules.SignalFramed:
+			in.Framed = r.Count
+		case rules.SignalNeverVisible:
+			in.NeverVisible = r.Count
+		default:
+			return in, false, fmt.Errorf("signals: unknown signal %q", r.Signal)
 		}
 	}
 	if in.Networks, err = q.IntegrityNetworks(ctx, jobsq.IntegrityNetworksParams{SiteID: siteID, Day: day}); err != nil {

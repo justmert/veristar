@@ -1,7 +1,9 @@
 // Package edgestats is the jobs task that drains EDGE_STATS into
-// cp.web_ingest_hourly, and the integrity evidence it carries into
-// cp.web_evidence_daily (events by network class) and cp.web_networks_daily
-// (networks seen per site and day). each message is applied in one fenced transaction
+// cp.web_ingest_hourly, the integrity evidence it carries into
+// cp.web_evidence_daily (events by network class), cp.web_networks_daily
+// (networks seen per site and day) and cp.web_signals_daily (page signals of
+// tracker 1.3.0 on), and the tracker file counters into
+// agg.web_coverage_daily. each message is applied in one fenced transaction
 // that also records its message id in cp.stats_dedup, so a message that is
 // delivered again (a crash between commit and ack, or a producer retry after
 // the stream's duplicate window) adds nothing the second time.
@@ -20,6 +22,7 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/prometheus/client_golang/prometheus"
 
+	"github.com/justmert/veristar/internal/coverage"
 	"github.com/justmert/veristar/internal/db/jobsq"
 	"github.com/justmert/veristar/internal/events"
 	"github.com/justmert/veristar/internal/integrity"
@@ -270,7 +273,35 @@ func (d *Drainer) Handle(ctx context.Context, tx TxFunc, msg jetstream.Msg) erro
 	p := jobsq.AddIngestCountsParams{Hour: hour}
 	ev := jobsq.AddEvidenceCountsParams{Day: day}
 	nets := jobsq.AddNetworkSightingsParams{Day: day}
+	sigs := jobsq.AddSignalCountsParams{Day: day}
+	type scriptCounts struct{ requests, gpc int64 }
+	scripts := map[uuid.UUID]*scriptCounts{}
 	for k, n := range sums {
+		if integrity.IsSignal(k.outcome) {
+			sigs.SiteIds = append(sigs.SiteIds, k.site)
+			sigs.TenantIds = append(sigs.TenantIds, tenants[k.site])
+			sigs.Signals = append(sigs.Signals, k.outcome)
+			sigs.Counts = append(sigs.Counts, n)
+			continue
+		}
+		if coverage.IsCounter(k.outcome) {
+			c := scripts[k.site]
+			if c == nil {
+				c = &scriptCounts{}
+				scripts[k.site] = c
+			}
+			if k.outcome == coverage.ScriptRequests {
+				c.requests += n
+			} else {
+				c.gpc += n
+			}
+			continue
+		}
+		if strings.HasPrefix(k.outcome, integrity.SignalPrefix) || strings.HasPrefix(k.outcome, coverage.Prefix) {
+			// a counter this version does not know cannot be stored as a
+			// request outcome either
+			return natsx.Permanent(fmt.Errorf("edgestats: unknown counter %q", k.outcome))
+		}
 		if class, ok := integrity.ParseEvidenceOutcome(k.outcome); ok {
 			ev.SiteIds = append(ev.SiteIds, k.site)
 			ev.TenantIds = append(ev.TenantIds, tenants[k.site])
@@ -293,6 +324,13 @@ func (d *Drainer) Handle(ctx context.Context, tx TxFunc, msg jetstream.Msg) erro
 		p.TenantIds = append(p.TenantIds, tenants[k.site])
 		p.Outcomes = append(p.Outcomes, k.outcome)
 		p.Counts = append(p.Counts, n)
+	}
+	cov := jobsq.AddCoverageCountsParams{Day: day}
+	for site, c := range scripts {
+		cov.SiteIds = append(cov.SiteIds, site)
+		cov.TenantIds = append(cov.TenantIds, tenants[site])
+		cov.ScriptRequests = append(cov.ScriptRequests, c.requests)
+		cov.GpcRequests = append(cov.GpcRequests, c.gpc)
 	}
 	var duplicate bool
 	err = tx(ctx, func(tx pgx.Tx) error {
@@ -318,6 +356,16 @@ func (d *Drainer) Handle(ctx context.Context, tx TxFunc, msg jetstream.Msg) erro
 		if len(nets.SiteIds) > 0 {
 			if err := q.AddNetworkSightings(ctx, nets); err != nil {
 				return fmt.Errorf("edgestats: add networks: %w", err)
+			}
+		}
+		if len(sigs.SiteIds) > 0 {
+			if err := q.AddSignalCounts(ctx, sigs); err != nil {
+				return fmt.Errorf("edgestats: add page signals: %w", err)
+			}
+		}
+		if len(cov.SiteIds) > 0 {
+			if err := q.AddCoverageCounts(ctx, cov); err != nil {
+				return fmt.Errorf("edgestats: add coverage: %w", err)
 			}
 		}
 		return nil

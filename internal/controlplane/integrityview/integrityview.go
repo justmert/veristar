@@ -51,6 +51,12 @@ type Evidence struct {
 	HostingShare     *float64  `json:"hosting_share"`
 	QuarantineShare  *float64  `json:"quarantine_share"`
 	ProofPassRate    *float64  `json:"proof_pass_rate"`
+	// page signals of tracker 1.3.0 on, the inputs of rule version 2
+	SignalViews       int64    `json:"signal_views"`
+	Framed            int64    `json:"framed"`
+	NeverVisible      int64    `json:"never_visible"`
+	FramedShare       *float64 `json:"framed_share"`
+	NeverVisibleShare *float64 `json:"never_visible_share"`
 }
 
 // Day is one graded or ungraded site day.
@@ -126,7 +132,7 @@ func Load(ctx context.Context, tx pgx.Tx, tenants []uuid.UUID, from, to time.Tim
 	rows, err := tx.Query(ctx, `
 		select tenant_id, site_id, day, rule_version, grade, closed, events, quarantined, proof_failures,
 		       net_access, net_organisation, net_hosting, net_anonymiser, net_unknown, networks,
-		       visitors, pageviews, baseline_visitors, baseline_days, reasons
+		       visitors, pageviews, baseline_visitors, baseline_days, reasons, signal_views, framed, never_visible
 		from agg.web_integrity_daily
 		where tenant_id = any(@ids::uuid[]) and day between @from_day::date and @to_day::date
 		order by tenant_id, site_id, day`,
@@ -150,7 +156,8 @@ func Load(ctx context.Context, tx pgx.Tx, tenants []uuid.UUID, from, to time.Tim
 		var raw []byte
 		if err := rows.Scan(&tenant, &site, &day, &rv, &grade, &closed, &in.Events, &in.Quarantined, &in.ProofFailures,
 			&in.NetAccess, &in.NetOrganisation, &in.NetHosting, &in.NetAnonymiser, &in.NetUnknown, &in.Networks,
-			&in.Visitors, &in.Pageviews, &in.BaselineVisitors, &baseDays, &raw); err != nil {
+			&in.Visitors, &in.Pageviews, &in.BaselineVisitors, &baseDays, &raw,
+			&in.SignalViews, &in.Framed, &in.NeverVisible); err != nil {
 			return nil, fmt.Errorf("integrity: %w", err)
 		}
 		var rs []integrity.Reason
@@ -170,6 +177,8 @@ func Load(ctx context.Context, tx pgx.Tx, tenants []uuid.UUID, from, to time.Tim
 				Net: NetCounts{Access: in.NetAccess, Organisation: in.NetOrganisation, Hosting: in.NetHosting,
 					Anonymiser: in.NetAnonymiser, Unknown: in.NetUnknown},
 				HostingShare: in.HostingShare(), QuarantineShare: in.QuarantineShare(), ProofPassRate: in.ProofPassRate(),
+				SignalViews: in.SignalViews, Framed: in.Framed, NeverVisible: in.NeverVisible,
+				FramedShare: in.FramedShare(), NeverVisibleShare: in.NeverVisibleShare(),
 			}}
 		for _, r := range rs {
 			d.Reasons = append(d.Reasons, Reason{Code: r.Code, Level: r.Level, Value: r.Value, Limit: r.Limit, Text: r.Text()})

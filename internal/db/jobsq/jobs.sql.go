@@ -12,6 +12,36 @@ import (
 	"github.com/google/uuid"
 )
 
+const addCoverageCounts = `-- name: AddCoverageCounts :exec
+insert into agg.web_coverage_daily (site_id, tenant_id, day, script_requests, gpc_requests)
+select unnest($1::uuid[]), unnest($2::uuid[]), $3::date,
+       unnest($4::bigint[]), unnest($5::bigint[])
+on conflict (site_id, day) do update
+  set script_requests = agg.web_coverage_daily.script_requests + excluded.script_requests,
+      gpc_requests = agg.web_coverage_daily.gpc_requests + excluded.gpc_requests
+`
+
+type AddCoverageCountsParams struct {
+	SiteIds        []uuid.UUID
+	TenantIds      []uuid.UUID
+	Day            time.Time
+	ScriptRequests []int64
+	GpcRequests    []int64
+}
+
+// adds one message's tracker file counters to the sites' daily coverage rows.
+// parallel arrays, each site once
+func (q *Queries) AddCoverageCounts(ctx context.Context, arg AddCoverageCountsParams) error {
+	_, err := q.db.Exec(ctx, addCoverageCounts,
+		arg.SiteIds,
+		arg.TenantIds,
+		arg.Day,
+		arg.ScriptRequests,
+		arg.GpcRequests,
+	)
+	return err
+}
+
 const addEvidenceCounts = `-- name: AddEvidenceCounts :exec
 insert into cp.web_evidence_daily (site_id, tenant_id, day, class, count)
 select unnest($1::uuid[]), unnest($2::uuid[]), $3::date,
@@ -93,6 +123,35 @@ func (q *Queries) AddNetworkSightings(ctx context.Context, arg AddNetworkSightin
 		arg.TenantIds,
 		arg.Day,
 		arg.Networks,
+	)
+	return err
+}
+
+const addSignalCounts = `-- name: AddSignalCounts :exec
+insert into cp.web_signals_daily (site_id, tenant_id, day, signal, count)
+select unnest($1::uuid[]), unnest($2::uuid[]), $3::date,
+       unnest($4::text[]), unnest($5::bigint[])
+on conflict (site_id, day, signal) do update
+  set count = cp.web_signals_daily.count + excluded.count
+`
+
+type AddSignalCountsParams struct {
+	SiteIds   []uuid.UUID
+	TenantIds []uuid.UUID
+	Day       time.Time
+	Signals   []string
+	Counts    []int64
+}
+
+// adds one message's page signal counters (integrity.Signals) to their
+// daily rows, like AddEvidenceCounts
+func (q *Queries) AddSignalCounts(ctx context.Context, arg AddSignalCountsParams) error {
+	_, err := q.db.Exec(ctx, addSignalCounts,
+		arg.SiteIds,
+		arg.TenantIds,
+		arg.Day,
+		arg.Signals,
+		arg.Counts,
 	)
 	return err
 }
