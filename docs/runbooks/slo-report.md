@@ -5,7 +5,7 @@ description: "Produce the monthly SLO report from the probe's measurements."
 
 The platform's targets are 99.99% ingestion and 99.90% dashboards ([service targets](../sla.md)).
 The external probe measures them from outside: every 30 s the prober sends a web event and an OTLP
-metric, checks the console, the Umami host and the machine API, and pushes the results to Gatus on
+metric, checks the console and the machine API, and pushes the results to Gatus on
 `status.<BASE_DOMAIN>` (production: `https://status.veristar.app`) as `slo_ingestion`,
 `slo_dashboard`, `slo_freshness-web` and `slo_freshness-api`
 ([observability](../reference/observability.md), "Measures"). Gatus keeps raw results for about a

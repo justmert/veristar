@@ -6,8 +6,9 @@ description: "Install the prober and the public status page on a host outside th
 
 The prober (`cmd/prober`) is the outside view of the platform. Every 30 s it sends a real web
 event and a real OTLP metric for the internal probe tenant, reads them back through the machine
-API, and checks the console, the Umami host, the tracker files against the release manifest and
-every node's certificate by address. It runs outside the system it watches. Gatus, on the same
+API, and checks the console, the tracker files against the release manifest and every node's
+certificate by address. Umami has no public host to check; the machine API read covers the
+dashboard path behind the console. It runs outside the system it watches. Gatus, on the same
 host, keeps the results and serves the public status page on `status.<BASE_DOMAIN>`.
 
 You have two ways to run it ([bootstrap.md](bootstrap.md) step 11):
@@ -139,9 +140,9 @@ Only public checks and the prober's end-to-end results, by Gatus group:
 
 | Group | Checks |
 |---|---|
-| `hosts` (Gatus itself) | `in host` and `tracker file` (`in.<BASE_DOMAIN>`, the latest tracker file and its size), `otlp host` (`otlp.<BASE_DOMAIN>` refuses a request without a token with 401), `console` (`app.<BASE_DOMAIN>`), `umami host` (`web.<BASE_DOMAIN>/api/heartbeat`), `docs` (when `observability_probe_docs_url` is set); each certificate valid for at least 14 days |
+| `hosts` (Gatus itself) | `in host` and `tracker file` (`in.<BASE_DOMAIN>`, the latest tracker file and its size), `otlp host` (`otlp.<BASE_DOMAIN>` refuses a request without a token with 401), `console` (`app.<BASE_DOMAIN>`), `docs` (when `observability_probe_docs_url` is set); each certificate valid for at least 14 days |
 | `slo` (prober) | `ingestion`, `dashboard`, `freshness web`, `freshness api`: the measures of the monthly SLO report |
-| `probe` (prober) | `web event`, `otlp metric`, `console`, `web host`, `machine api`, `tracker integrity` (every served tracker file against the release manifest) |
+| `probe` (prober) | `web event`, `otlp metric`, `console`, `machine api`, `tracker integrity` (every served tracker file against the release manifest) |
 | `nodes` (prober) | each node for each host name it serves, by its address with SNI: the certificate and the answer |
 | `monitoring` | `watchdog`, the Alertmanager heartbeat (section 7) |
 

@@ -28,11 +28,11 @@ upstream wording: an unreviewed advisory is a finding by itself, and the operato
 
 1. Open the issue. Read the advisory and identify the component and its pinned version
    (`infra/ansible/vars/pins.yml`, `deploy/images/*.Dockerfile`, `go.mod`, `pnpm-lock.yaml`).
-2. Decide whether the platform is exposed. Umami's collect routes, its admin and user routes and its share,
-   link, pixel and board routes are never reachable from the internet
-   ([umami-contract.md](../reference/umami-contract.md), `deploy/caddy/web.Caddyfile`). A flaw only
-   in a route on that deny list is mitigated already; record that and still upgrade on the normal
-   path.
+2. Decide whether the platform is exposed. No public host serves Umami
+   ([ADR 0005](../adr/0005-umami-as-engine-only.md)): only the replayer, the control plane and jobs
+   reach it on the private network, the control plane only through the routes of
+   [umami-contract.md](../reference/umami-contract.md). A flaw that needs a request to Umami from
+   the internet is mitigated already; record that and still upgrade on the normal path.
 3. Severity: use the advisory's. If it has none, treat it as high until proven otherwise.
 4. Write the decision in the issue: exposed or not, mitigation, upgrade target, and who does it.
 5. For an Umami repository advisory, add its id with the decision to
@@ -45,9 +45,9 @@ upstream wording: an unreviewed advisory is a finding by itself, and the operato
 Pick the narrowest one that removes the exposure. Each one keeps ingestion running, because the
 gateways answer from NATS and do not need Umami or PostgreSQL ([architecture](../architecture.md)).
 
-- **Block a route at Caddy.** Add the path to the deny list in `deploy/caddy/web.Caddyfile` (or
-  `app.Caddyfile` for the control plane), run `make test-caddy-web`, and roll out with the
-  normal deploy. The deny-list tests prove the block.
+- **Block a route at Caddy.** Add the path to `deploy/caddy/app.Caddyfile` for the control plane,
+  run `go test ./deploy/caddy/` and `make test-caddy-closed`, and roll out with the normal
+  deploy.
 - **Take the dashboards offline, keep ingestion.** On the core nodes stop the `umami` service (and
   the `controlplane` if the flaw is there): `docker compose stop umami`. Events queue in the
   `WEB_EVENTS` stream (72 hour retention) and the replayer delivers them when Umami returns, with

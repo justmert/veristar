@@ -216,8 +216,8 @@ handover needs a new repository.
 
 Effects that tenants notice:
 
-- Rotating `UMAMI_USER_PASSWORD_KEY` changes every derived Umami password at once, so every
-  open web dashboard session ends and users re-enter through the console.
+- Rotating `UMAMI_USER_PASSWORD_KEY` changes every derived Umami password at once. Tenants notice
+  nothing: the control plane logs each member in again on the next web dashboard read.
 - Umami's `APP_SECRET`: the new environment uses its own and does not take the old one over.
   Umami signs its tokens with it and hashes session and visit ids with it; stored data does not
   depend on it (the local migration imported into an environment with a different value and

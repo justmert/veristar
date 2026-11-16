@@ -72,7 +72,7 @@ with these steps on 2026-11-13 ([../reference/drills/2026-11-13-azure.md](../ref
 
 8. **Certificates.** Each node's Caddy asks Let's Encrypt for its names through DNS-01. Check
    each node as in [../runbooks/certificates.md](../runbooks/certificates.md) step 1. Expected:
-   issuer Let's Encrypt for `in.`, `otlp.`, `app.` and `web.<BASE_DOMAIN>`.
+   issuer Let's Encrypt for `in.`, `otlp.` and `app.<BASE_DOMAIN>`.
 
 9. **First operator sign-in.** An operator listed in `sa_operator_github_ids` opens
    `https://app.<BASE_DOMAIN>/` and signs in with GitHub (the environment's OAuth App, callback `https://app.<BASE_DOMAIN>/api/auth/github/callback`).

@@ -35,7 +35,7 @@ flowchart LR
   end
 
   subgraph core["Core role: every node"]
-    ccaddy["Caddy<br/>app. and web. hosts"]
+    ccaddy["Caddy<br/>app. host"]
     console["console<br/>React static files"]
     cp["controlplane"]
     umami["Umami 3.5.0<br/>unmodified"]
@@ -77,8 +77,7 @@ flowchart LR
   ai -- "/mcp, Bearer sa_mcp_ or OAuth" --> ccaddy
   ccaddy --> console
   ccaddy --> cp
-  ccaddy -- "web. host, read-only allowlist" --> umami
-  cp -- "REST, provisioning and SSO login" --> umami
+  cp -- "REST: provisioning, and reads as the member's own Umami user" --> umami
   cp <-- "registry KV, visitor-token request" --> nats
   cp --> github
   prober -- "synthetic events, metrics and API calls" --> ecaddy
@@ -91,12 +90,14 @@ flowchart LR
 | `in.<BASE_DOMAIN>` | tracker files, challenge `GET /v1/c`, events `POST /v1/e` | edge | `deploy/caddy/edge.Caddyfile`, `internal/gateway` |
 | `otlp.<BASE_DOMAIN>` | OTLP gRPC on 443 and OTLP HTTP `/v1/metrics`, `/v1/traces`, `/v1/logs` | edge | `collector/` |
 | `app.<BASE_DOMAIN>` | the console, the control plane API under `/api`, the metrics API under `/api/metrics/v1/`, the MCP server at `/mcp` with its OAuth paths | core | `deploy/caddy/app.Caddyfile`, `apps/console`, `internal/controlplane` |
-| `web.<BASE_DOMAIN>` | Umami's dashboard UI and read API, behind an allowlist, in the Veristar theme ([ADR 0004](adr/0004-umami-dashboard-theme.md)) | core | `deploy/caddy/web.Caddyfile`, `deploy/caddy/umami-theme`, [reference/umami-contract.md](reference/umami-contract.md) |
 | `status.<BASE_DOMAIN>` | Gatus status page | probe | `infra/ansible/roles/observability` |
 
 No host name or path uses a word that ad-block filter lists penalise (analytics, track,
 collect, beacon, pixel, stats, metrics, event, data, umami); `tests/adblock` checks this
-against current lists daily. Umami's own collect routes are never reachable from the internet.
+against current lists daily. No host serves Umami: the console's web dashboard reads it through
+the control plane on the private network, and platform administrators reach its interface on a
+node's loopback over SSH ([ADR 0005](adr/0005-umami-as-engine-only.md),
+[operators/umami-admin-access.md](operators/umami-admin-access.md)).
 
 | Component | Role | Code |
 |---|---|---|
@@ -200,13 +201,14 @@ flowchart TB
 
   con -- "session cookie" --> cp
   cp -- "role cp_tenant, row-level security on app.tenant_id" --> cpschema
+  cp -- "role cp_tenant, the tenant's own web aggregates" --> aggschema
   cp -- "role cp_tenant, tenant API views" --> apischema
   cp -- "role cp_operator, read-only aggregates" --> aggschema
   cp -- "role cp_operator" --> apischema
   cp -- "role cp_system: auth, provisioning, operator actions" --> cpschema
   cp -- "reconcile: one team per tenant,<br/>two websites per site, view-only users" --> umami
   cp -- "reconcile" --> nats
-  con -- "SSO redirect with a daily token" --> umami
+  cp -- "web dashboard reads as the member's view-only user" --> umami
   umami --> umamidb
   jobs -- "Umami /stats and /metrics per site, band, day" --> umami
   jobs --> aggschema
@@ -214,7 +216,11 @@ flowchart TB
 
 - **Tenants** sign in with GitHub. Each tenant maps to one Umami team; each console user to one
   Umami user with view-only rights whose password is derived per UTC day and never stored. The
-  tenant's web dashboard is Umami itself, reached by a single sign-on redirect.
+  tenant's web dashboard is a console page: totals, days and the referrer, country and
+  environment breakdowns come from the daily aggregates operators read too; pages, events, UTM
+  values, hours and the visitors right now come from Umami, read by the control plane as the
+  member's own Umami user, so Umami's team check guards those reads a second time
+  ([reference/control-plane-api.md](reference/control-plane-api.md) section 18).
 - **Isolation**: every tenant-scoped request runs in a transaction with `app.tenant_id` set,
   under a role with row-level security forced on every tenant table. No application role can
   bypass it. The isolation gate `tests/isolation` checks every route and the role matrix in CI

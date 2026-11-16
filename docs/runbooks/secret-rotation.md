@@ -82,7 +82,7 @@ replacing one value.
 | `nats_passwords.<user>` with `nats_password_hashes.<user>` | that service's NATS login | yes: NATS config and env files, NATS reload | change the password and its bcrypt hash together (below). The service is refused by NATS between the NATS reload and its own restart in the same run; rotate one user at a time. For `gateway` and `collector` that is an ingestion gap on each edge node in turn |
 | `nats_route_password` with `nats_route_password_hash` | NATS cluster routes | yes | routes reconnect after every server has reloaded; rotate when all three edge nodes are healthy |
 | `oauth_state_key` | control plane, sign-in state | yes (env file) | sign-ins in progress fail once and must be started again |
-| `umami_user_password_key` | control plane, jobs: every Umami user's daily password | env files only | after the converge, make Umami follow the new key at once (below); until then SSO into Umami fails |
+| `umami_user_password_key` | control plane, jobs: every Umami user's daily password | env files only | after the converge, make Umami follow the new key at once (below); until then the web dashboard's Umami reads answer `provisioning_pending` |
 | `umami_admin_password` | control plane, jobs, platformctl: the Umami admin service account | env files only | change it in Umami first (below), then converge |
 | `umami_db_password` | Umami | env file only | change the role's password on the leader first (below), then converge and recreate `umami` on every core node |
 | `umami_app_secret` | Umami (`APP_SECRET`) | env file only | Umami derives session ids from it: visits in progress split and returning visitors of the day count again; Umami tokens are invalidated. Recreate `umami` on every core node |
@@ -226,8 +226,8 @@ delete from cp.settings where key = 'umami_password_day';
 cd /opt/veristar/core && sudo docker compose run --rm --no-deps jobs run umami-rotate
 ```
 
-Every Umami session token is invalidated by the password change; users re-enter through the
-console's SSO.
+Every Umami session token is invalidated by the password change; the control plane logs each
+member in again on its next read.
 
 ### The usage report signing key
 

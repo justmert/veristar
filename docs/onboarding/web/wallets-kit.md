@@ -100,9 +100,10 @@ build and install the package.
 
 ## Where to see them
 
-In Umami, the **Events** page of the website lists `wallet_selected`, `wallet_connected` and
-`wallet_disconnected` next to your [custom events](custom-events.md), with the wallet id and network
-as event data.
+The **Custom events** panel of your project's **Web** page lists `wallet_selected`,
+`wallet_connected` and `wallet_disconnected` next to your [custom events](custom-events.md). The
+wallet id and network are stored as event data, which the AI assistant tools read
+([../mcp.md](../mcp.md)).
 
 ## What the tests check
 

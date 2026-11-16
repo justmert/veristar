@@ -275,7 +275,7 @@ ansible-playbook -i inventories/<new env>/ playbooks/cutover-transfer.yml \
 `precheck` asks the new zone's nameservers directly: every name must answer with exactly the new
 nodes. `verify` asks public resolvers for the delegation and every name, fetches every pinned
 tracker release over the real name with certificate validation and compares the bytes with the
-release files, and checks the console, the web dashboards and the OTLP endpoint.
+release files, and checks the console and the OTLP endpoint.
 
 If the domain cannot be transferred, `cutover-redirect.yml` turns the old edge nodes into
 redirects to a new domain while they keep serving the tracker files. It refuses to run until

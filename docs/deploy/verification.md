@@ -26,15 +26,15 @@ in [../reference/drills/2026-11-13-azure.md](../reference/drills/2026-11-13-azur
 
    ```sh
    curl -s -o /dev/null -w '%{http_code}\n' https://app.<BASE_DOMAIN>/
-   curl -s -o /dev/null -w '%{http_code}\n' https://web.<BASE_DOMAIN>/login
    curl -fsS -o sdk.js https://in.<BASE_DOMAIN>/v/1.2.0/sdk.js && sha384sum sdk.js
-   curl -s -o /dev/null -w '%{http_code}\n' -X POST https://web.<BASE_DOMAIN>/api/send
+   dig +short web.<BASE_DOMAIN>
    ```
 
-   Expected: `200` for the console; `302` for `/login` (to `https://app.<BASE_DOMAIN>/`); the
-   SHA-384 of `sdk.js` equals the `sha384` of version 1.2.0 in
-   `packages/tracker/releases/manifest.json`; `403` for Umami's collect route, which must never be
-   reachable from outside.
+   Expected: `200` for the console; the SHA-384 of `sdk.js` equals the `sha384` of version 1.2.0
+   in `packages/tracker/releases/manifest.json`; no answer for `web.`, because no public host
+   serves Umami ([ADR 0005](../adr/0005-umami-as-engine-only.md)). On a core node,
+   `curl -s http://127.0.0.1:3300/api/heartbeat` answers `{"ok":true}` from Umami's loopback
+   port, and nothing else on the node's public address does.
 
 3. **Certificates**: [../runbooks/certificates.md](../runbooks/certificates.md) step 1 for each
    node and name. Expected: Let's Encrypt, more than 14 days left.

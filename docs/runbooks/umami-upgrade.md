@@ -28,26 +28,15 @@ plus the rollback.
    stack so Umami migrates the existing database, then runs `umami-compat`, the isolation gate,
    `console-e2e` and `webpath`, stopping at the first failure. Each step prints
    `step <name>: ok in <n> s`. A new version stays red at `umami-compat` until someone has
-   reviewed its OpenAPI routes against the Caddy deny list and updated
-   `tests/umami-compat/testdata/openapi-routes.txt`. Commit the diff only when every gate passed.
-
-   It also stays red until the dashboard theme
-   ([ADR 0004](../adr/0004-umami-dashboard-theme.md)) has been reviewed for the new version:
-   `TestThemeReviewedForThisVersion` compares the `umami-version:` line of
-   `deploy/caddy/umami-theme/site/_veristar/theme.css` with the image, and
-   `TestThemeNamesStillExist` lists every name the theme relies on that the new image no
-   longer has. To review:
-
-   - For each name `TestThemeNamesStillExist` reports, find its replacement in the new
-     `@umami/react-zen` styles or Umami's source and update `theme.css` (custom properties,
-     classes, the map and chart colours), or the `@theme` path list in
-     `deploy/caddy/web.Caddyfile` and the theme's files (icon paths).
-   - Run `make test-caddy-web` and look at the dark and light screenshots it saves. The axe
-     colour-contrast check in that suite must pass on the new version.
-   - Move the `umami-version:` line to the new version.
-
-   A missed rename is cosmetic only (that part of the page falls back to Umami's own style);
-   it never affects the deny list, SSO or data.
+   reviewed its OpenAPI routes against the API contract
+   ([umami-contract.md](../reference/umami-contract.md)) and updated
+   `tests/umami-compat/testdata/openapi-routes.txt`. Umami's interface is not reviewed: no
+   project uses it and no public host serves it
+   ([ADR 0005](../adr/0005-umami-as-engine-only.md)). The isolation gate and `console-e2e`
+   check the console's web dashboard against the new version. Run
+   `go test -count=1 ./internal/controlplane/webdash/` as well: `TestWebDashboardParity` compares
+   every dashboard figure with the new version's own answers. Commit the diff only when every
+   gate passed.
 
 2. **Release.** Merge, tag `v<release>`; `release-images.yml` builds, scans and signs the
    platform images and attaches `release-images.json`. Umami itself is an upstream image and is
@@ -79,7 +68,8 @@ plus the rollback.
    The new Umami migrates the database on its first start on the first core node.
 
 5. **Verify**: [../deploy/verification.md](../deploy/verification.md) steps for the core tier,
-   `UmamiHeartbeatFailing` stays quiet, a tenant dashboard opens through the console's SSO, and
+   `UmamiHeartbeatFailing` stays quiet, a project's **Web** page in the console shows its numbers and
+   the visitors right now, and
    `WEB_EVENTS` drains ([queue-backlog-and-dlq.md](queue-backlog-and-dlq.md)).
 
 ## Rollback

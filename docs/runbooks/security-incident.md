@@ -57,7 +57,7 @@ evidence is saved (step 3), unless the damage is ongoing.
    |---|---|
    | Tracker file in question | revoke the version ([tracker-release.md](tracker-release.md)) |
    | Leak through the dashboards or the control plane | stop `umami` and/or `controlplane` on every core node (`sudo docker compose stop umami controlplane`); events queue for 72 hours; put a notice on the status page |
-   | Route-level flaw | block the route in `deploy/caddy/web.Caddyfile` or `app.Caddyfile` ([security-patch.md](security-patch.md) section 3) |
+   | Route-level flaw | block the route in `deploy/caddy/app.Caddyfile`; Umami has no public route to block ([security-patch.md](security-patch.md) section 3) |
    | OTLP token leaked | the tenant revokes it on its token page; an operator can suspend the tenant ([tenant-removal.md](tenant-removal.md)) |
    | Operator key leaked | revoke it ([operator-key-revocation.md](operator-key-revocation.md)) |
    | Operator GitHub account taken over | an operator admin suspends the person on the Operators page, which ends their sessions and operator MCP credentials at once; reset their passkeys if a key may be lost; take the id out of `OPERATOR_GITHUB_IDS` and redeploy if it is there; revoke keys that person created ([operators.md](operators.md)) |

@@ -13,7 +13,7 @@ flowchart LR
   app["Your backend<br/>with OpenTelemetry"] --> collector["Collector"]
   gateway --> queue[("Durable queues")]
   collector --> queue
-  queue --> web["Web dashboards<br/>(Umami)"]
+  queue --> web["Web analytics engine<br/>(Umami)"]
   queue --> api["API metrics<br/>(PostgreSQL)"]
   web --> console["Console"]
   api --> console
@@ -42,11 +42,13 @@ flowchart LR
   <Step title="Events are queued, then delivered">
     Accepted events wait in a replicated queue, so ingestion keeps working even while the
     dashboards are being maintained. A replayer then delivers them to Umami, the open-source
-    analytics engine behind each project's web dashboard.
+    analytics engine that stores the events and computes the metrics. Umami is reachable on the
+    private network only.
   </Step>
   <Step title="You read your dashboard">
-    Members open their project's dashboard from the console with single sign-on and see
-    pageviews, visitors, referrers, countries, devices and more
+    Members open **Web** in their project in the console and see page views, visitors, visits,
+    bounce rate, visit duration, referrers, countries, devices, pages and custom events for any
+    range of days, against the previous period, with the visitors right now
     ([web metrics](/reference/web-metrics)).
   </Step>
 </Steps>

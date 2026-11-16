@@ -53,7 +53,7 @@ HAProxy, Umami) are pinned by digest in `infra/ansible/vars/pins.yml`.
 **Converged nodes (tier `node`).** Production runs three nodes that are each in the `edge` and the
 `core` group ([../reference/availability.md](../reference/availability.md)).
 Both roles run on such a node with their own Compose projects; the edge project then has no
-Caddy, and the core project's Caddy (the console image) serves `in.`, `otlp.`, `app.` and `web.`
+Caddy, and the core project's Caddy (the console image) serves `in.`, `otlp.` and `app.`
 from one config (`assemble.sh node`), joins the edge project's network to reach the gateway
 and the collector, and answers port 80 with the edge health at `/` and the core health at
 `/core`. Every node runs a Patroni member (three members), an etcd member and a NATS server, and

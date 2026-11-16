@@ -33,8 +33,9 @@ The measures are listed in [reference/observability.md](reference/observability.
   gateway accepted the probe's web event with 202, and the collector accepted its OTLP metric
   with 200. Both are real sends through the public endpoints, for an internal probe tenant that
   is hidden from the operator views.
-- **Dashboards** (`slo_dashboard`) is available when the console, the web dashboard host and an
-  authenticated metrics API call (`/web/hourly` with the probe's scoped key) all answered.
+- **Dashboards** (`slo_dashboard`) is available when the console and an authenticated metrics
+  API call (`/web/hourly` with the probe's scoped key, which reads Umami live) both answered.
+  The web dashboard is a console page, so the console check covers its host.
 - **Freshness** is reported separately and is not part of either percentage: probe events older
   than 10 minutes must be visible through the metrics API, for web and for API data.
 
