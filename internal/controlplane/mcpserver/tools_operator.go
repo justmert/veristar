@@ -19,10 +19,13 @@ How to work:
 	`returns one project's detail.
 2. get_global_web_overview and get_global_api_overview rank every project on the core web metrics (page views, ` +
 	`visitors, visits, bounce rate, visit duration, top referrers, countries, devices, browsers) or API metrics ` +
-	`(requests, error rates, latency percentiles, services, routes), with filters, sorting and pages.
+	`(requests, error rates, latency percentiles, services, routes), with filters, sorting and pages. Each row ` +
+	`carries the change against the previous period and the percentile inside the cohort filters (list_cohorts).
 3. compare_tenants_web and compare_tenants_api put up to five projects side by side with daily series.
 4. get_tenant_onchain returns one project's declared Stellar accounts and contracts, their proofs and daily ledger ` +
 	`activity; the overviews and compares carry an onchain summary per project.
+5. list_threshold_rules and get_threshold_rule_matches list the saved traction rules and the projects that meet ` +
+	`each, with the qualifying days and the integrity grade as evidence.
 
 Integrity: every row of get_global_web_overview and compare_tenants_web carries the project's integrity grade (A, B ` +
 	`or C) over the range; get_tenant_integrity gives the reasons per site and day.
@@ -119,6 +122,13 @@ type projectFilters struct {
 	EnrolledFrom string   `json:"enrolled_from,omitempty" jsonschema:"only projects enrolled on or after this UTC day"`
 	EnrolledTo   string   `json:"enrolled_to,omitempty" jsonschema:"only projects enrolled on or before this UTC day"`
 	Search       string   `json:"q,omitempty" jsonschema:"case-insensitive text in the project name or slug, 1 to 100 characters"`
+	// the cohort filters of contract 19.1; they also set the population
+	// the percentiles are computed in
+	Program   string `json:"program,omitempty" jsonschema:"only projects confirmed in this SCF program, exactly as list_cohorts shows it"`
+	Round     string `json:"round,omitempty" jsonschema:"only projects confirmed in this round"`
+	Category  string `json:"category,omitempty" jsonschema:"only projects confirmed in this category"`
+	AwardFrom string `json:"award_from,omitempty" jsonschema:"only projects awarded on or after this UTC day"`
+	AwardTo   string `json:"award_to,omitempty" jsonschema:"only projects awarded on or before this UTC day"`
 }
 
 func (f projectFilters) values(q url.Values) error {
@@ -146,13 +156,38 @@ func (f projectFilters) values(q url.Values) error {
 		}
 		q.Set("q", f.Search)
 	}
+	for k, v := range map[string]string{"program": f.Program, "round": f.Round, "category": f.Category} {
+		if v != "" {
+			if err := text(k, v, 320); err != nil {
+				return err
+			}
+			q.Set(k, v)
+		}
+	}
+	for k, v := range map[string]string{"award_from": f.AwardFrom, "award_to": f.AwardTo} {
+		d, err := dayOf(k, v)
+		if err != nil {
+			return err
+		}
+		if d != "" {
+			q.Set(k, d)
+		}
+	}
 	return nil
 }
 
 func filtersPatch(props map[string]*jsonschema.Schema) {
 	statusPatch(props)
 	maxLen(props, "q", 100)
+	for _, k := range []string{"program", "round", "category"} {
+		maxLen(props, k, 80)
+	}
 }
+
+// growthSorts are the change and percentile sorts of contract 19.2
+var growthSorts = []string{"visitors_growth", "pageviews_growth", "requests_growth", "error_rate_change",
+	"onchain_operations_growth", "visitors_percentile", "pageviews_percentile", "requests_percentile",
+	"error_rate_percentile", "onchain_operations_percentile"}
 
 func (s *Server) operatorRead(ctx context.Context, p Principal, path string, q url.Values) (any, error) {
 	var out json.RawMessage
@@ -226,14 +261,17 @@ func (s *Server) addOperatorTools(srv *mcp.Server) {
 		Description: "Ranks every project on its web metrics over whole UTC days: page views, visitors, visits, " +
 			"bounces and bounce rate, visit duration, quarantined (likely automated) traffic, gateway rejections, the " +
 			"integrity grade and " +
-			"the top referrers, countries, devices and browsers. Sort by any metric to find the most or least used " +
-			"projects; filter by status, verification, stellar.toml or data presence.",
+			"the top referrers, countries, devices and browsers. Every row also carries its SCF cohort and five key " +
+			"metrics (visitors, page views, requests, error rate, on-chain operations) with the change against the " +
+			"previous period of equal length and the percentile inside the cohort filters. Sort by any metric or " +
+			"change to find the most or least used and the fastest growing projects; filter by status, " +
+			"verification, stellar.toml, data presence or cohort.",
 	}, func(props map[string]*jsonschema.Schema) {
 		filtersPatch(props)
-		pagePatch(props, "name", "status", "created_at", "sites", "sites_verified", "sites_with_stellar_toml",
+		pagePatch(props, append([]string{"name", "status", "created_at", "sites", "sites_verified", "sites_with_stellar_toml",
 			"pageviews", "visitors", "visits", "bounces", "totaltime", "bounce_rate", "avg_visit_duration",
 			"quarantine_pageviews", "quarantine_visitors", "quarantine_share", "ingest_requests", "ingest_rejected",
-			"rejected_share", "integrity")
+			"rejected_share", "integrity"}, growthSorts...)...)
 	}, func(ctx context.Context, p Principal, in webProjectsIn) (any, error) {
 		q := url.Values{}
 		for _, f := range []func(url.Values) error{in.dayRangeIn.values, in.projectFilters.values, in.pageIn.values} {
@@ -254,11 +292,12 @@ func (s *Server) addOperatorTools(srv *mcp.Server) {
 		Title: "API metrics of every project",
 		Description: "Ranks every project on its API metrics over whole UTC days: requests, 4xx and 5xx errors " +
 			"and rates, latency percentiles p50, p95 and p99 (estimated from histogram buckets), services and " +
-			"routes. Sort by requests to find high and low usage services.",
+			"routes, with the same cohort, change and percentile columns as get_global_web_overview. Sort by " +
+			"requests to find high and low usage services.",
 	}, func(props map[string]*jsonschema.Schema) {
 		filtersPatch(props)
-		pagePatch(props, "name", "status", "created_at", "sites", "requests", "requests_4xx", "requests_5xx",
-			"rate_4xx", "rate_5xx", "p50", "p95", "p99", "services", "routes")
+		pagePatch(props, append([]string{"name", "status", "created_at", "sites", "requests", "requests_4xx", "requests_5xx",
+			"rate_4xx", "rate_5xx", "p50", "p95", "p99", "services", "routes"}, growthSorts...)...)
 	}, func(ctx context.Context, p Principal, in apiProjectsIn) (any, error) {
 		q := url.Values{}
 		for _, f := range []func(url.Values) error{in.dayRangeIn.values, in.projectFilters.values, in.pageIn.values} {
@@ -335,4 +374,53 @@ func (s *Server) addOperatorTools(srv *mcp.Server) {
 	})
 	s.addIntegrityOperatorTools(srv)
 	s.addOnchainOperatorTools(srv)
+	s.addCohortOperatorTools(srv)
+}
+
+// addCohortOperatorTools adds the cohort and threshold rule reads
+// (contract 19).
+func (s *Server) addCohortOperatorTools(srv *mcp.Server) {
+	type noIn struct{}
+	addTool(s, srv, &mcp.Tool{
+		Name:  "list_cohorts",
+		Title: "SCF cohorts in use",
+		Description: "The SCF programs, rounds and categories operators have confirmed for projects, with how many " +
+			"projects each holds, and the cohort proposals projects made that wait for an operator. Use the exact " +
+			"values as the program, round and category filters of the overviews.",
+	}, func(map[string]*jsonschema.Schema) {}, func(ctx context.Context, p Principal, _ noIn) (any, error) {
+		return s.operatorRead(ctx, p, "/cohorts", nil)
+	})
+	addTool(s, srv, &mcp.Tool{
+		Name:  "list_threshold_rules",
+		Title: "Saved threshold rules",
+		Description: "The traction rules operators saved: a metric (verified visitors, API requests or on-chain " +
+			"operations), a daily minimum, a number of qualifying days required in each of the last complete " +
+			"calendar months, an optional minimum integrity grade and an optional cohort.",
+	}, func(map[string]*jsonschema.Schema) {}, func(ctx context.Context, p Principal, _ noIn) (any, error) {
+		return s.operatorRead(ctx, p, "/rules", nil)
+	})
+	type matchesIn struct {
+		RuleID string `json:"rule_id" jsonschema:"rule id from list_threshold_rules"`
+		AsOf   string `json:"as_of,omitempty" jsonschema:"evaluation UTC day, default today; the window is the complete months before its month"`
+	}
+	addTool(s, srv, &mcp.Tool{
+		Name:  "get_threshold_rule_matches",
+		Title: "Projects that meet a rule",
+		Description: "Evaluates one saved rule and lists the projects that meet it, each with the evidence: the " +
+			"qualifying days and their values in every month of the window, and the integrity grade over it.",
+	}, func(props map[string]*jsonschema.Schema) { uuidFormat(props, "rule_id") }, func(ctx context.Context, p Principal, in matchesIn) (any, error) {
+		id, err := parseUUID("rule_id", in.RuleID)
+		if err != nil {
+			return nil, err
+		}
+		q := url.Values{}
+		d, err := dayOf("as_of", in.AsOf)
+		if err != nil {
+			return nil, err
+		}
+		if d != "" {
+			q.Set("as_of", d)
+		}
+		return s.operatorRead(ctx, p, "/rules/"+id.String()+"/matches", q)
+	})
 }
