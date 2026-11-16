@@ -344,8 +344,12 @@ func TestPasskeyOperator(t *testing.T) {
 	require.Equal(t, http.StatusOK, b.passkeySignIn(p, true).StatusCode)
 	require.True(t, b.me().User.IsOperator)
 
-	e2 := newEnv(t)
-	b2 := e2.browser(t)
+	// a suspended roster row clears the flag at once (5.1)
+	addr := p.address(t)
+	suspendRoster(t, nil, &addr)
+	require.False(t, b.me().User.IsOperator)
+	// and the next passkey sign-in does not bring it back
+	b2 := e.browser(t)
 	require.Equal(t, http.StatusOK, b2.passkeySignIn(p, false).StatusCode)
 	require.False(t, b2.me().User.IsOperator)
 }
