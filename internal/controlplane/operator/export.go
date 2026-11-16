@@ -122,6 +122,31 @@ func integrityCells(g IntegrityGrade) []string {
 	return []string{exports.StrPtr(g.Grade), exports.Int(g.DaysA), exports.Int(g.DaysB), exports.Int(g.DaysC)}
 }
 
+// comparisonHeader and comparisonCells are the cohort, growth and
+// percentile columns of a list row (contract 19.2)
+var comparisonHeader = func() []string {
+	out := []string{"cohort_program", "cohort_round", "cohort_category", "cohort_award_date", "cohort_size"}
+	for _, m := range []string{"visitors", "pageviews", "requests", "error_rate", "onchain_operations"} {
+		change := m + "_growth"
+		if m == "error_rate" {
+			change = m + "_change"
+		}
+		out = append(out, m+"_value", m+"_previous", change, m+"_percentile")
+	}
+	return out
+}()
+
+func comparisonCells(c Comparison) []string {
+	out := []string{
+		exports.StrPtr(c.Cohort.Program), exports.StrPtr(c.Cohort.Round), exports.StrPtr(c.Cohort.Category),
+		exports.StrPtr(c.Cohort.AwardDate), exports.Int(c.CohortSize),
+	}
+	for _, k := range []KPI{c.KPIs.Visitors, c.KPIs.Pageviews, c.KPIs.Requests, c.KPIs.ErrorRate, c.KPIs.OnchainOperations} {
+		out = append(out, exports.Float(k.Value), exports.Float(k.Previous), exports.Float(k.Change), exports.Float(k.Percentile))
+	}
+	return out
+}
+
 var tenantHeader = []string{
 	"tenant_id", "slug", "name", "status", "created_at", "sites", "sites_verified", "sites_with_stellar_toml",
 	"has_web_data", "has_api_data",
@@ -159,28 +184,11 @@ func (e *Exports) webProjects(w http.ResponseWriter, r *http.Request) error {
 		if err := snapshot(ctx, tx); err != nil {
 			return err
 		}
-		res, err := tx.Query(ctx, webListCTE+`
-			select id, slug, name, status, created_at, sites, sites_verified, sites_with_stellar_toml,
-			       has_web_data, has_api_data, pageviews, visitors, visits, bounces, totaltime,
-			       bounce_rate, avg_visit_duration, quarantine_pageviews, quarantine_visitors, quarantine_share,
-			       ingest_requests, ingest_rejected, rejected_share, days_a, days_b, days_c
-			from y`+lq.orderBy(webSorts)+` limit @row_limit offset 0`, rowArgs(lq))
+		res, err := tx.Query(ctx, webListCTE+webRowSelect+lq.orderBy(webSorts)+` limit @row_limit offset 0`, rowArgs(lq))
 		if err != nil {
 			return err
 		}
-		items, err = pgx.CollectRows(res, func(row pgx.CollectableRow) (WebProject, error) {
-			var p WebProject
-			var at time.Time
-			err := row.Scan(&p.Tenant.ID, &p.Tenant.Slug, &p.Tenant.Name, &p.Tenant.Status, &at,
-				&p.Sites, &p.SitesVerified, &p.SitesWithStellarToml, &p.HasWebData, &p.HasAPIData,
-				&p.Pageviews, &p.Visitors, &p.Visits, &p.Bounces, &p.Totaltime,
-				&p.BounceRate, &p.AvgVisitDuration, &p.QuarantinePageviews, &p.QuarantineVisitors, &p.QuarantineShare,
-				&p.IngestRequests, &p.IngestRejected, &p.RejectedShare,
-				&p.Integrity.DaysA, &p.Integrity.DaysB, &p.Integrity.DaysC)
-			p.Tenant.CreatedAt = httpx.Timestamp(at)
-			p.Integrity.derive()
-			return p, err
-		})
+		items, err = pgx.CollectRows(res, func(row pgx.CollectableRow) (WebProject, error) { return scanWebRow(row) })
 		if err != nil {
 			return err
 		}
@@ -196,7 +204,7 @@ func (e *Exports) webProjects(w http.ResponseWriter, r *http.Request) error {
 	cw, err := exports.NewWriter(w, exports.FileName("veristar-web-projects", lq.Range.From.Format(time.DateOnly), lq.Range.To.Format(time.DateOnly)), cat(tenantHeader, []string{
 		"pageviews", "visitors", "visits", "bounces", "totaltime_seconds", "bounce_rate", "avg_visit_duration_seconds",
 		"quarantine_pageviews", "quarantine_visitors", "quarantine_share", "ingest_requests", "ingest_rejected", "rejected_share",
-	}, integrityHeader, summaryHeader))
+	}, integrityHeader, summaryHeader, comparisonHeader))
 	if err != nil {
 		panic(http.ErrAbortHandler)
 	}
@@ -206,7 +214,7 @@ func (e *Exports) webProjects(w http.ResponseWriter, r *http.Request) error {
 			exports.Float(p.BounceRate), exports.Float(p.AvgVisitDuration), exports.Int(p.QuarantinePageviews),
 			exports.Int(p.QuarantineVisitors), exports.Float(p.QuarantineShare), exports.Int(p.IngestRequests),
 			exports.Int(p.IngestRejected), exports.Float(p.RejectedShare),
-		}, integrityCells(p.Integrity), summaryCells(p.Onchain))...); err != nil {
+		}, integrityCells(p.Integrity), summaryCells(p.Onchain), comparisonCells(p.Comparison))...); err != nil {
 			panic(http.ErrAbortHandler)
 		}
 	}
@@ -273,27 +281,11 @@ func (e *Exports) apiProjects(w http.ResponseWriter, r *http.Request) error {
 		if err := snapshot(ctx, tx); err != nil {
 			return err
 		}
-		res, err := tx.Query(ctx, apiListCTE+`
-			select id, slug, name, status, created_at, sites, sites_verified, sites_with_stellar_toml,
-			       has_web_data, has_api_data, requests, requests_4xx, requests_5xx, rate_4xx, rate_5xx,
-			       p50, p95, p99, services, routes, span_services, lossy
-			from y`+lq.orderBy(apiSorts)+` limit @row_limit offset 0`, rowArgs(lq))
+		res, err := tx.Query(ctx, apiListCTE+apiRowSelect+lq.orderBy(apiSorts)+` limit @row_limit offset 0`, rowArgs(lq))
 		if err != nil {
 			return err
 		}
-		items, err = pgx.CollectRows(res, func(row pgx.CollectableRow) (APIProject, error) {
-			var p APIProject
-			var at time.Time
-			var p50, p95, p99 *float64
-			err := row.Scan(&p.Tenant.ID, &p.Tenant.Slug, &p.Tenant.Name, &p.Tenant.Status, &at,
-				&p.Sites, &p.SitesVerified, &p.SitesWithStellarToml, &p.HasWebData, &p.HasAPIData,
-				&p.Requests, &p.Requests4xx, &p.Requests5xx, &p.Rate4xx, &p.Rate5xx,
-				&p50, &p95, &p99, &p.Services, &p.Routes, &p.SpanServices, &p.Lossy)
-			p.Tenant.CreatedAt = httpx.Timestamp(at)
-			p.Percentiles = newPercentiles(p50, p95, p99)
-			p.Source = source(p.Services, p.SpanServices)
-			return p, err
-		})
+		items, err = pgx.CollectRows(res, func(row pgx.CollectableRow) (APIProject, error) { return scanAPIRow(row) })
 		if err != nil {
 			return err
 		}
@@ -307,14 +299,14 @@ func (e *Exports) apiProjects(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	cw, err := exports.NewWriter(w, exports.FileName("veristar-api-projects", lq.Range.From.Format(time.DateOnly), lq.Range.To.Format(time.DateOnly)),
-		cat(tenantHeader, numbersHeader, []string{"services", "routes", "span_services", "source", "lossy"}, summaryHeader))
+		cat(tenantHeader, numbersHeader, []string{"services", "routes", "span_services", "source", "lossy"}, summaryHeader, comparisonHeader))
 	if err != nil {
 		panic(http.ErrAbortHandler)
 	}
 	for _, p := range items {
 		if err := cw.Row(cat(tenantCells(p.Tenant, p.SiteCounts, p.HasWebData, p.HasAPIData), numbersCells(p.APINumbers), []string{
 			exports.Int(p.Services), exports.Int(p.Routes), exports.Int(p.SpanServices), exports.StrPtr(p.Source), exports.Bool(p.Lossy),
-		}, summaryCells(p.Onchain))...); err != nil {
+		}, summaryCells(p.Onchain), comparisonCells(p.Comparison))...); err != nil {
 			panic(http.ErrAbortHandler)
 		}
 	}
@@ -325,6 +317,18 @@ func (e *Exports) apiProjects(w http.ResponseWriter, r *http.Request) error {
 }
 
 var compareTenantHeader = []string{"tenant_id", "slug", "name", "day"}
+
+// compareCohortHeader and compareCohortCells place a compare row in the
+// project's cohort: its award date and whether the day is on or after it
+var compareCohortHeader = []string{"cohort_program", "cohort_round", "cohort_category", "cohort_award_date", "after_award"}
+
+func compareCohortCells(c Cohort, day string) []string {
+	after := ""
+	if c.AwardDate != nil {
+		after = exports.Bool(day >= *c.AwardDate)
+	}
+	return []string{exports.StrPtr(c.Program), exports.StrPtr(c.Round), exports.StrPtr(c.Category), exports.StrPtr(c.AwardDate), after}
+}
 
 var compareChainHeader = []string{"onchain_ids_read", "onchain_operations", "onchain_transactions"}
 
@@ -347,6 +351,7 @@ func (e *Exports) webCompare(w http.ResponseWriter, r *http.Request) error {
 	var series map[uuid.UUID][]WebPoint
 	var chainOf map[uuid.UUID]CompareOnchain
 	var grades map[integrityview.DayKey]integrityview.Summary
+	var cohorts map[uuid.UUID]Cohort
 	err = e.g.db.WithOperator(ctx, func(tx pgx.Tx) error {
 		if err := snapshot(ctx, tx); err != nil {
 			return err
@@ -359,6 +364,9 @@ func (e *Exports) webCompare(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 		if grades, err = integrityview.ByTenantDay(ctx, tx, ids, rg.From, rg.To); err != nil {
+			return err
+		}
+		if cohorts, err = loadCohorts(ctx, tx, ids); err != nil {
 			return err
 		}
 		chainOf, err = compareOnchain(ctx, tx, ids, rg, e.g.now())
@@ -374,7 +382,7 @@ func (e *Exports) webCompare(w http.ResponseWriter, r *http.Request) error {
 	cw, err := exports.NewWriter(w, exports.FileName("veristar-web-compare", rg.From.Format(time.DateOnly), rg.To.Format(time.DateOnly)), cat(compareTenantHeader, []string{
 		"aggregated", "pageviews", "visitors", "visits", "bounces", "totaltime_seconds", "bounce_rate",
 		"avg_visit_duration_seconds", "quarantine_pageviews", "integrity_grade",
-	}, compareChainHeader))
+	}, compareChainHeader, compareCohortHeader))
 	if err != nil {
 		panic(http.ErrAbortHandler)
 	}
@@ -386,7 +394,7 @@ func (e *Exports) webCompare(w http.ResponseWriter, r *http.Request) error {
 				exports.IntPtr(p.Bounces), exports.IntPtr(p.Totaltime), exports.Float(p.BounceRate), exports.Float(p.AvgVisitDuration),
 				exports.IntPtr(p.QuarantinePageviews),
 				exports.StrPtr(grades[integrityview.DayKey{Tenant: t.ID, Day: p.Day}].Grade),
-			}, chainCells(chainSeries[i]))...); err != nil {
+			}, chainCells(chainSeries[i]), compareCohortCells(cohorts[t.ID], p.Day))...); err != nil {
 				panic(http.ErrAbortHandler)
 			}
 		}
@@ -411,6 +419,7 @@ func (e *Exports) apiCompare(w http.ResponseWriter, r *http.Request) error {
 	var tenants []TenantRef
 	var series map[uuid.UUID][]APIPoint
 	var chainOf map[uuid.UUID]CompareOnchain
+	var cohorts map[uuid.UUID]Cohort
 	err = e.g.db.WithOperator(ctx, func(tx pgx.Tx) error {
 		if err := snapshot(ctx, tx); err != nil {
 			return err
@@ -421,6 +430,9 @@ func (e *Exports) apiCompare(w http.ResponseWriter, r *http.Request) error {
 		}
 		args := pgx.NamedArgs{"ids": ids, "from_at": rg.From, "to_end": rg.end()}
 		if series, err = apiSeries(ctx, tx, args, rg); err != nil {
+			return err
+		}
+		if cohorts, err = loadCohorts(ctx, tx, ids); err != nil {
 			return err
 		}
 		chainOf, err = compareOnchain(ctx, tx, ids, rg, e.g.now())
@@ -434,7 +446,7 @@ func (e *Exports) apiCompare(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	cw, err := exports.NewWriter(w, exports.FileName("veristar-api-compare", rg.From.Format(time.DateOnly), rg.To.Format(time.DateOnly)),
-		cat(compareTenantHeader, numbersHeader, compareChainHeader))
+		cat(compareTenantHeader, numbersHeader, compareChainHeader, compareCohortHeader))
 	if err != nil {
 		panic(http.ErrAbortHandler)
 	}
@@ -446,7 +458,7 @@ func (e *Exports) apiCompare(w http.ResponseWriter, r *http.Request) error {
 		chainSeries := chainOf[t.ID].Series
 		for i, p := range s {
 			if err := cw.Row(cat([]string{t.ID.String(), exports.Text(t.Slug), exports.Text(t.Name), p.Day},
-				numbersCells(p.APINumbers), chainCells(chainSeries[i]))...); err != nil {
+				numbersCells(p.APINumbers), chainCells(chainSeries[i]), compareCohortCells(cohorts[t.ID], p.Day))...); err != nil {
 				panic(http.ErrAbortHandler)
 			}
 		}

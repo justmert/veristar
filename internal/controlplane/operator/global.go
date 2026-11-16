@@ -166,6 +166,8 @@ type projectFilter struct {
 	EnrolledFrom *time.Time `json:"enrolled_from"`
 	EnrolledTo   *time.Time `json:"enrolled_to"`
 	Q            *string    `json:"q"`
+	// the cohort filters (contract 19.1)
+	Cohort cohortFilter `json:"cohort"`
 }
 
 func parseFilter(q url.Values) (projectFilter, error) {
@@ -216,6 +218,10 @@ func parseFilter(q url.Values) (projectFilter, error) {
 			return f, httpx.BadQuery("q must be 1 to 100 characters")
 		}
 		f.Q = &v
+	}
+	var err2 error
+	if f.Cohort, err2 = parseCohortFilter(q); err2 != nil {
+		return f, err2
 	}
 	return f, nil
 }
@@ -404,7 +410,8 @@ func ratio(a, b int64) *float64 {
 	return &v
 }
 
-// baseCTE selects the projects of a list and the facts its filters need:
+// baseCTE selects the projects of a list and the facts its filters need
+// (with the cohort population and key metrics of kpiCTE):
 // t the non-internal tenants passing the tenant filters, s their site
 // counts (rules of contract 5.2), w their web sums over the range per band,
 // ap whether they have api rows with requests in the range. every later
@@ -413,7 +420,9 @@ const baseCTE = `
 t as (
   select t.id, t.slug, t.name, t.status, t.created_at
   from cp.tenants t
+  left join cp.tenant_cohorts co on co.tenant_id = t.id
   where not t.is_internal
+    and ` + cohortSQL + `
     and (cardinality(@statuses::text[]) = 0 or t.status = any(@statuses::text[]))
     and (@q::text is null
          or strpos(lower(t.name), lower(@q::text)) > 0
@@ -451,7 +460,7 @@ ap as (
   from api.operator_daily(@from_at::timestamptz, @to_end::timestamptz, array(select id from t)) m
   join t on t.id = m.tenant_id
   group by m.tenant_id
-)`
+),` + kpiCTE
 
 // derivedFilter applies the filters on facts computed per project. it runs
 // on a cte that has sites_verified, sites_with_stellar_toml, has_web_data
@@ -473,7 +482,10 @@ func (lq listQuery) args() pgx.NamedArgs {
 		v := lq.Filter.EnrolledTo.AddDate(0, 0, 1)
 		enrolledToEnd = &v
 	}
-	return pgx.NamedArgs{
+	prev := lq.Range.previous()
+	a := pgx.NamedArgs{
+		"prev_from_day":   prev.From,
+		"prev_from_at":    prev.From,
 		"statuses":        lq.Filter.Statuses,
 		"q":               lq.Filter.Q,
 		"enrolled_from":   enrolledFrom,
@@ -489,6 +501,8 @@ func (lq listQuery) args() pgx.NamedArgs {
 		"row_limit":       lq.Limit + 1,
 		"row_offset":      lq.Offset,
 	}
+	lq.Filter.Cohort.args(a)
+	return a
 }
 
 // orderBy is the order clause of a list: the whitelisted sort expression,

@@ -19,12 +19,12 @@ const apiProjectsRoute = "operator-api-projects"
 // apiSorts maps every sort of GET /api/operator/api/projects to its column.
 // a percentile in the open bucket is +infinity in sql and sorts above every
 // number; a project without requests has none and sorts last.
-var apiSorts = map[string]string{
+var apiSorts = withGrowthSorts(map[string]string{
 	"name": "lower(name)", "status": "status", "created_at": "created_at",
 	"sites": "sites", "requests": "requests", "requests_4xx": "requests_4xx", "requests_5xx": "requests_5xx",
 	"rate_4xx": "rate_4xx", "rate_5xx": "rate_5xx", "p50": "p50", "p95": "p95", "p99": "p99",
 	"services": "services", "routes": "routes",
-}
+})
 
 // apiChosenCTE selects the daily rows of the range that a project's
 // numbers are made of, through api.operator_daily, which also counts the
@@ -77,12 +77,12 @@ x as (
          coalesce(m.span_services, 0) as span_services, coalesce(m.lossy, false) as lossy,
          api.histogram_quantile(0.5, m.buckets) as p50,
          api.histogram_quantile(0.95, m.buckets) as p95,
-         api.histogram_quantile(0.99, m.buckets) as p99
+         api.histogram_quantile(0.99, m.buckets) as p99,` + kpiCols + `
   from t
   left join s on s.tenant_id = t.id
   left join w on w.tenant_id = t.id
   left join ap on ap.tenant_id = t.id
-  left join m on m.tenant_id = t.id
+  left join m on m.tenant_id = t.id` + kpiJoins + `
 ),
 y as (
   select x.*,
@@ -163,6 +163,32 @@ type APIProject struct {
 	Lossy        bool    `json:"lossy"`
 	// the on-chain column (contract 15.7)
 	Onchain onchain.Summary `json:"onchain"`
+	// cohort, growth and percentiles (contract 19.2)
+	Comparison
+}
+
+// apiRowSelect are the columns of an api list row, read by scanAPIRow.
+const apiRowSelect = `
+			select id, slug, name, status, created_at, sites, sites_verified, sites_with_stellar_toml,
+			       has_web_data, has_api_data, requests, requests_4xx, requests_5xx, rate_4xx, rate_5xx,
+			       p50, p95, p99, services, routes, span_services, lossy,` + kpiSelect + `
+			from y`
+
+// scanAPIRow reads one row of apiRowSelect.
+func scanAPIRow(row pgx.Row) (APIProject, error) {
+	var p APIProject
+	var at time.Time
+	var p50, p95, p99 *float64
+	var k kpiScan
+	err := row.Scan(append([]any{&p.Tenant.ID, &p.Tenant.Slug, &p.Tenant.Name, &p.Tenant.Status, &at,
+		&p.Sites, &p.SitesVerified, &p.SitesWithStellarToml, &p.HasWebData, &p.HasAPIData,
+		&p.Requests, &p.Requests4xx, &p.Requests5xx, &p.Rate4xx, &p.Rate5xx,
+		&p50, &p95, &p99, &p.Services, &p.Routes, &p.SpanServices, &p.Lossy}, k.dest()...)...)
+	p.Tenant.CreatedAt = httpx.Timestamp(at)
+	p.Percentiles = newPercentiles(p50, p95, p99)
+	p.Source = source(p.Services, p.SpanServices)
+	p.Comparison = k.comparison()
+	return p, err
 }
 
 func (g *Global) apiProjects(w http.ResponseWriter, r *http.Request) error {
@@ -182,27 +208,11 @@ func (g *Global) apiProjects(w http.ResponseWriter, r *http.Request) error {
 		if err := tx.QueryRow(ctx, apiListCTE+` select count(*) from y`, args).Scan(&out.Total); err != nil {
 			return fmt.Errorf("count: %w", err)
 		}
-		rows, err := tx.Query(ctx, apiListCTE+`
-			select id, slug, name, status, created_at, sites, sites_verified, sites_with_stellar_toml,
-			       has_web_data, has_api_data, requests, requests_4xx, requests_5xx, rate_4xx, rate_5xx,
-			       p50, p95, p99, services, routes, span_services, lossy
-			from y`+lq.orderBy(apiSorts)+` limit @row_limit offset @row_offset`, args)
+		rows, err := tx.Query(ctx, apiListCTE+apiRowSelect+lq.orderBy(apiSorts)+` limit @row_limit offset @row_offset`, args)
 		if err != nil {
 			return fmt.Errorf("page: %w", err)
 		}
-		items, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (APIProject, error) {
-			var p APIProject
-			var at time.Time
-			var p50, p95, p99 *float64
-			err := row.Scan(&p.Tenant.ID, &p.Tenant.Slug, &p.Tenant.Name, &p.Tenant.Status, &at,
-				&p.Sites, &p.SitesVerified, &p.SitesWithStellarToml, &p.HasWebData, &p.HasAPIData,
-				&p.Requests, &p.Requests4xx, &p.Requests5xx, &p.Rate4xx, &p.Rate5xx,
-				&p50, &p95, &p99, &p.Services, &p.Routes, &p.SpanServices, &p.Lossy)
-			p.Tenant.CreatedAt = httpx.Timestamp(at)
-			p.Percentiles = newPercentiles(p50, p95, p99)
-			p.Source = source(p.Services, p.SpanServices)
-			return p, err
-		})
+		items, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (APIProject, error) { return scanAPIRow(row) })
 		if err != nil {
 			return fmt.Errorf("page: %w", err)
 		}
@@ -264,6 +274,8 @@ type APICompareProject struct {
 	Series   []APIPoint     `json:"series"`
 	Services []APIService   `json:"services"`
 	Onchain  CompareOnchain `json:"onchain"`
+	// the confirmed cohort; its award date annotates the charts
+	Cohort Cohort `json:"cohort"`
 }
 
 // APICompare is the answer of GET /api/operator/api/compare (contract 8.6).
@@ -323,8 +335,13 @@ func (g *Global) apiCompare(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
+		cohorts, err := loadCohorts(ctx, tx, ids)
+		if err != nil {
+			return err
+		}
 		for _, t := range tenants {
-			p := APICompareProject{Tenant: t, Totals: totals[t.ID], Series: series[t.ID], Services: services[t.ID], Onchain: chainOf[t.ID]}
+			p := APICompareProject{Tenant: t, Totals: totals[t.ID], Series: series[t.ID], Services: services[t.ID], Onchain: chainOf[t.ID],
+				Cohort: cohorts[t.ID]}
 			if p.Services == nil {
 				p.Services = []APIService{}
 			}

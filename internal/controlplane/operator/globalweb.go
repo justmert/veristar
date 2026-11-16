@@ -17,7 +17,7 @@ import (
 const webProjectsRoute = "operator-web-projects"
 
 // webSorts maps every sort of GET /api/operator/web/projects to its column.
-var webSorts = map[string]string{
+var webSorts = withGrowthSorts(map[string]string{
 	"name": "lower(name)", "status": "status", "created_at": "created_at",
 	"sites": "sites", "sites_verified": "sites_verified", "sites_with_stellar_toml": "sites_with_stellar_toml",
 	"pageviews": "pageviews", "visitors": "visitors", "visits": "visits", "bounces": "bounces",
@@ -26,7 +26,7 @@ var webSorts = map[string]string{
 	"quarantine_share": "quarantine_share", "ingest_requests": "ingest_requests",
 	"ingest_rejected": "ingest_rejected", "rejected_share": "rejected_share",
 	"integrity": "integrity_rank",
-}
+})
 
 // webDims are the breakdowns of the web views, in contract order.
 var webDims = []string{"referrer", "country", "device", "browser", "os"}
@@ -76,13 +76,13 @@ x as (
          coalesce(w.pageviews, 0) > 0 as has_web_data,
          coalesce(ap.has_api, false) as has_api_data,
          coalesce(i.requests, 0) as ingest_requests, coalesce(i.rejected, 0) as ingest_rejected,
-         coalesce(ig.days_a, 0) as days_a, coalesce(ig.days_b, 0) as days_b, coalesce(ig.days_c, 0) as days_c
+         coalesce(ig.days_a, 0) as days_a, coalesce(ig.days_b, 0) as days_b, coalesce(ig.days_c, 0) as days_c,` + kpiCols + `
   from t
   left join s on s.tenant_id = t.id
   left join w on w.tenant_id = t.id
   left join ap on ap.tenant_id = t.id
   left join i on i.tenant_id = t.id
-  left join ig on ig.tenant_id = t.id
+  left join ig on ig.tenant_id = t.id` + kpiJoins + `
 ),
 y as (
   select x.*,
@@ -119,6 +119,33 @@ type WebProject struct {
 	Top                 map[string][]KeyValue `json:"top"`
 	// the on-chain column (contract 15.7)
 	Onchain onchain.Summary `json:"onchain"`
+	// cohort, growth and percentiles (contract 19.2)
+	Comparison
+}
+
+// webRowSelect are the columns of a web list row, read by scanWebRow.
+const webRowSelect = `
+			select id, slug, name, status, created_at, sites, sites_verified, sites_with_stellar_toml,
+			       has_web_data, has_api_data, pageviews, visitors, visits, bounces, totaltime,
+			       bounce_rate, avg_visit_duration, quarantine_pageviews, quarantine_visitors, quarantine_share,
+			       ingest_requests, ingest_rejected, rejected_share, days_a, days_b, days_c,` + kpiSelect + `
+			from y`
+
+// scanWebRow reads one row of webRowSelect.
+func scanWebRow(row pgx.Row) (WebProject, error) {
+	var p WebProject
+	var at time.Time
+	var k kpiScan
+	err := row.Scan(append([]any{&p.Tenant.ID, &p.Tenant.Slug, &p.Tenant.Name, &p.Tenant.Status, &at,
+		&p.Sites, &p.SitesVerified, &p.SitesWithStellarToml, &p.HasWebData, &p.HasAPIData,
+		&p.Pageviews, &p.Visitors, &p.Visits, &p.Bounces, &p.Totaltime,
+		&p.BounceRate, &p.AvgVisitDuration, &p.QuarantinePageviews, &p.QuarantineVisitors, &p.QuarantineShare,
+		&p.IngestRequests, &p.IngestRejected, &p.RejectedShare,
+		&p.Integrity.DaysA, &p.Integrity.DaysB, &p.Integrity.DaysC}, k.dest()...)...)
+	p.Tenant.CreatedAt = httpx.Timestamp(at)
+	p.Integrity.derive()
+	p.Comparison = k.comparison()
+	return p, err
 }
 
 // KeyValue is one value of a breakdown: umami's x and the sum of its daily y.
@@ -144,28 +171,11 @@ func (g *Global) webProjects(w http.ResponseWriter, r *http.Request) error {
 		if err := tx.QueryRow(ctx, webListCTE+` select count(*) from y`, args).Scan(&out.Total); err != nil {
 			return fmt.Errorf("count: %w", err)
 		}
-		rows, err := tx.Query(ctx, webListCTE+`
-			select id, slug, name, status, created_at, sites, sites_verified, sites_with_stellar_toml,
-			       has_web_data, has_api_data, pageviews, visitors, visits, bounces, totaltime,
-			       bounce_rate, avg_visit_duration, quarantine_pageviews, quarantine_visitors, quarantine_share,
-			       ingest_requests, ingest_rejected, rejected_share, days_a, days_b, days_c
-			from y`+lq.orderBy(webSorts)+` limit @row_limit offset @row_offset`, args)
+		rows, err := tx.Query(ctx, webListCTE+webRowSelect+lq.orderBy(webSorts)+` limit @row_limit offset @row_offset`, args)
 		if err != nil {
 			return fmt.Errorf("page: %w", err)
 		}
-		items, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (WebProject, error) {
-			var p WebProject
-			var at time.Time
-			err := row.Scan(&p.Tenant.ID, &p.Tenant.Slug, &p.Tenant.Name, &p.Tenant.Status, &at,
-				&p.Sites, &p.SitesVerified, &p.SitesWithStellarToml, &p.HasWebData, &p.HasAPIData,
-				&p.Pageviews, &p.Visitors, &p.Visits, &p.Bounces, &p.Totaltime,
-				&p.BounceRate, &p.AvgVisitDuration, &p.QuarantinePageviews, &p.QuarantineVisitors, &p.QuarantineShare,
-				&p.IngestRequests, &p.IngestRejected, &p.RejectedShare,
-				&p.Integrity.DaysA, &p.Integrity.DaysB, &p.Integrity.DaysC)
-			p.Tenant.CreatedAt = httpx.Timestamp(at)
-			p.Integrity.derive()
-			return p, err
-		})
+		items, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (WebProject, error) { return scanWebRow(row) })
 		if err != nil {
 			return fmt.Errorf("page: %w", err)
 		}
@@ -309,6 +319,8 @@ type WebCompareProject struct {
 	Series     []WebPoint            `json:"series"`
 	Breakdowns map[string]Breakdown  `json:"breakdowns"`
 	Onchain    CompareOnchain        `json:"onchain"`
+	// the confirmed cohort; its award date annotates the charts
+	Cohort Cohort `json:"cohort"`
 }
 
 // WebCompare is the answer of GET /api/operator/web/compare (contract 8.4).
@@ -368,8 +380,13 @@ func (g *Global) webCompare(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
+		cohorts, err := loadCohorts(ctx, tx, ids)
+		if err != nil {
+			return err
+		}
 		for _, t := range tenants {
-			p := WebCompareProject{Tenant: t, Series: series[t.ID], Breakdowns: map[string]Breakdown{}, Onchain: chainOf[t.ID]}
+			p := WebCompareProject{Tenant: t, Series: series[t.ID], Breakdowns: map[string]Breakdown{}, Onchain: chainOf[t.ID],
+				Cohort: cohorts[t.ID]}
 			for _, pt := range p.Series {
 				if !pt.Aggregated {
 					continue

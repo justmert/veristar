@@ -132,6 +132,8 @@ type createBody struct {
 	Description          *string     `json:"description"`
 	Enrollment           *enrollment `json:"enrollment"`
 	AcceptedTermsVersion *string     `json:"accepted_terms_version"`
+	// an optional cohort proposal (contract 19.1)
+	Cohort *CohortInput `json:"cohort"`
 }
 
 func (h *Routes) create(w http.ResponseWriter, r *http.Request) error {
@@ -166,6 +168,10 @@ func (h *Routes) create(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 	stored := checkEnrollment(&f, b.Enrollment)
+	var cohort CohortValues
+	if b.Cohort != nil {
+		cohort = CheckCohort(&f, "cohort", b.Cohort, time.Now().UTC(), false)
+	}
 	if b.AcceptedTermsVersion == nil {
 		f.Add("accepted_terms_version", httpx.FieldRequired)
 	}
@@ -215,12 +221,18 @@ func (h *Routes) create(w http.ResponseWriter, r *http.Request) error {
 		if err := q.AddTenantMember(ctx, systemq.AddTenantMemberParams{TenantID: t.ID, UserID: u.ID, Role: RoleOwner}); err != nil {
 			return err
 		}
+		detail := map[string]any{
+			"slug": t.Slug, "name": t.Name, "status": t.Status,
+			"accepted_terms_version": h.s.termsVersion, "enrollment": stored,
+		}
+		if !cohort.Empty() {
+			if err := ProposeCohort(ctx, tx, t.ID, u.ID, cohort); err != nil {
+				return err
+			}
+			detail["cohort_proposal"] = cohort.AuditDetail()
+		}
 		return audit.InSystem(ctx, tx, audit.Entry{
-			Actor: audit.User(u.ID), Action: audit.TenantCreate, Target: audit.TenantTarget(t.ID),
-			Detail: map[string]any{
-				"slug": t.Slug, "name": t.Name, "status": t.Status,
-				"accepted_terms_version": h.s.termsVersion, "enrollment": stored,
-			},
+			Actor: audit.User(u.ID), Action: audit.TenantCreate, Target: audit.TenantTarget(t.ID), Detail: detail,
 		})
 	})
 	if err != nil {
