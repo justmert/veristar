@@ -14,11 +14,13 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/justmert/veristar/internal/events"
+	"github.com/justmert/veristar/internal/integrity"
 	"github.com/justmert/veristar/internal/natsx"
 )
 
 // outcomes counted per site besides the rejected_<reason> family, whose
-// names are the Reason constants in reasons.go.
+// names are the Reason constants in reasons.go, and the evidence_net_<class>
+// and network_<key> families of the integrity package.
 const (
 	StatAccepted    = "accepted"
 	StatQuarantined = "quarantined"
@@ -44,10 +46,10 @@ const statsPublishTimeout = 5 * time.Second
 
 // outcomeRe mirrors the outcome rule of events.EdgeStat, so a bad outcome
 // fails at the call site instead of poisoning a whole window at flush time.
-var outcomeRe = regexp.MustCompile(`^(accepted|quarantined|rejected_[a-z0-9_]{1,40})$`)
+var outcomeRe = regexp.MustCompile(`^(accepted|quarantined|rejected_[a-z0-9_]{1,40}|evidence_net_[a-z]{1,20}|network_[0-9a-f]{16})$`)
 
 // ErrBadOutcome is returned by Count for an outcome EDGE_STATS would refuse.
-var ErrBadOutcome = errors.New("gateway: outcome is not accepted, quarantined or rejected_<reason>")
+var ErrBadOutcome = errors.New("gateway: outcome is not accepted, quarantined, rejected_<reason>, evidence_net_<class> or network_<key>")
 
 // ErrBadSiteID is returned by Count for a site id that is not a canonical
 // uuid. checking it here keeps one bad id from making a whole window
@@ -171,7 +173,13 @@ func (s *Stats) Count(siteID, outcome string) error {
 	s.mu.Lock()
 	s.counts[statKey{siteID, outcome}]++
 	s.mu.Unlock()
-	s.counted.WithLabelValues(outcome).Inc()
+	// network keys are many and daily, so the metric counts them under one
+	// label instead of one series per key
+	label := outcome
+	if integrity.IsNetworkOutcome(outcome) {
+		label = "network"
+	}
+	s.counted.WithLabelValues(label).Inc()
 	return nil
 }
 

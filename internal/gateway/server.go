@@ -14,6 +14,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/justmert/veristar/internal/events"
+	"github.com/justmert/veristar/internal/integrity"
 	"github.com/justmert/veristar/internal/registry"
 )
 
@@ -32,8 +33,12 @@ type ServerConfig struct {
 	Signals    *SignalsChecker
 	ClientIP   *ClientIPReader
 	Geo        *Geo
-	Visitor    *Visitor
-	Cluster    *IPCluster
+	// Network classifies the client network; Sightings keeps each node
+	// from reporting a network more than once per site and day.
+	Network   *Network
+	Sightings *NetworkSightings
+	Visitor   *Visitor
+	Cluster   *IPCluster
 	// Volume quarantines one visitor's events past VISITOR_EVENTS_PER_HOUR.
 	Volume  *VisitorVolume
 	Limiter *RateLimiter
@@ -78,7 +83,7 @@ type Server struct {
 // NewServer checks the configuration and registers the metrics.
 func NewServer(c ServerConfig) (*Server, error) {
 	if c.Sites == nil || c.Challenger == nil || c.Proofs == nil || c.Signals == nil || c.ClientIP == nil ||
-		c.Geo == nil || c.Visitor == nil || c.Cluster == nil || c.Volume == nil || c.Limiter == nil || c.ChallengeLimiter == nil || c.Stats == nil ||
+		c.Geo == nil || c.Network == nil || c.Sightings == nil || c.Visitor == nil || c.Cluster == nil || c.Volume == nil || c.Limiter == nil || c.ChallengeLimiter == nil || c.Stats == nil ||
 		c.Publisher == nil || c.Releases == nil || c.Log == nil || c.Registerer == nil || c.Now == nil {
 		return nil, errors.New("gateway: ServerConfig is missing a dependency")
 	}
@@ -98,7 +103,7 @@ func NewServer(c ServerConfig) (*Server, error) {
 		}, []string{"route"}),
 		warnings: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "gateway_degraded_total",
-			Help: "accepted events where a side step failed: geo lookup or ip-cluster gossip.",
+			Help: "accepted events where a side step failed: geo or network lookup, network key or ip-cluster gossip.",
 		}, []string{"step"}),
 	}
 	for _, m := range []prometheus.Collector{s.outcomes, s.duration, s.warnings} {
@@ -286,6 +291,11 @@ type verdict struct {
 	status  int
 	outcome string
 	site    string
+	// class is the network class of an accepted event and network its
+	// network key when this node reports the network for the first time
+	// today; both are counted on EDGE_STATS beside the outcome
+	class   integrity.NetClass
+	network string
 }
 
 func refused(r Reason, site string) verdict {
@@ -307,6 +317,16 @@ func (s *Server) event(w http.ResponseWriter, r *http.Request) {
 	if v.site != "" {
 		if err := s.c.Stats.Count(v.site, v.outcome); err != nil {
 			s.c.Log.Error("outcome not counted", "outcome", v.outcome, "error", err.Error())
+		}
+	}
+	if v.class != "" {
+		if err := s.c.Stats.Count(v.site, integrity.EvidenceOutcome(v.class)); err != nil {
+			s.c.Log.Error("network class not counted", "class", string(v.class), "error", err.Error())
+		}
+	}
+	if v.network != "" {
+		if err := s.c.Stats.Count(v.site, integrity.NetworkPrefix+v.network); err != nil {
+			s.c.Log.Error("network sighting not counted", "error", err.Error())
 		}
 	}
 }
@@ -408,7 +428,25 @@ func (s *Server) checkEvent(ctx context.Context, r *http.Request, used **events.
 		s.c.Log.Error("country lookup failed, event queued without country", "error", err.Error())
 		country = ""
 	}
-	quarantine, err := s.c.Cluster.Observe(site.ID, prefix, vt)
+	// the network class comes from the edge's own view of the connection,
+	// never from the page. a failed lookup leaves the event unknown, which
+	// gets the access threshold, so a lookup failure never quarantines
+	class, asn, err := s.c.Network.Classify(ip)
+	if err != nil {
+		s.warnings.WithLabelValues("network").Inc()
+		s.c.Log.Error("network lookup failed, event classified as unknown", "error", err.Error())
+		class, asn = integrity.NetUnknown, 0
+	}
+	var networkKey string
+	if asn != 0 {
+		if networkKey, err = s.c.Visitor.NetworkKey(ctx, asn); err != nil {
+			s.warnings.WithLabelValues("network_key").Inc()
+			s.c.Log.Error("network key unavailable, network not counted", "error", err.Error())
+			networkKey = ""
+		}
+	}
+	threshold := integrity.PrefixThreshold(s.c.Cluster.Floor(), class, site.Scale)
+	quarantine, err := s.c.Cluster.Observe(site.ID, prefix, vt, threshold)
 	if err != nil {
 		// the band is still right for this node; peers miss one token
 		s.warnings.WithLabelValues("ipcluster").Inc()
@@ -464,5 +502,11 @@ func (s *Server) checkEvent(ctx context.Context, r *http.Request, used **events.
 		s.c.Log.Error("event not queued", "error", err.Error())
 		return refused(ReasonUnavailable, site.ID)
 	}
-	return verdict{status: http.StatusAccepted, outcome: outcome, site: site.ID}
+	// the sighting is recorded only for a queued event, so a refused one
+	// never keeps a network out of the day's count
+	var network string
+	if networkKey != "" && s.c.Sightings.First(site.ID, s.c.Now().UTC().Format(time.DateOnly), networkKey) {
+		network = networkKey
+	}
+	return verdict{status: http.StatusAccepted, outcome: outcome, site: site.ID, class: class, network: network}
 }

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -25,6 +26,9 @@ const (
 	replayEntries = 200_000
 	clusterKeys   = 200_000
 	volumeKeys    = 200_000
+	// sightingKeys holds the networks reported today per site, about 100
+	// bytes each
+	sightingKeys = 500_000
 )
 
 // NodeConfig is everything one gateway process needs. cmd/gateway fills it
@@ -56,6 +60,7 @@ type Node struct {
 	stats    *Stats
 	pub      *Publisher
 	geo      *Geo
+	network  *Network
 	releases *Releases
 	public   *Server
 	ops      http.Handler
@@ -92,6 +97,21 @@ func NewNode(ctx context.Context, c NodeConfig) (*Node, error) {
 		Help: "unix build time recorded in the metadata of the db-ip country file the gateway is using.",
 	}, func() float64 { return float64(n.geo.BuildTime().Unix()) })); err != nil {
 		return nil, fmt.Errorf("gateway: register geo metric: %w", err)
+	}
+	// the network data sits beside the country file
+	// (scripts/fetch-network.sh writes both into one directory)
+	if n.network, err = OpenNetwork(filepath.Dir(g.DBIPPath)); err != nil {
+		return nil, err
+	}
+	if err := c.Registry.Register(prometheus.NewGaugeFunc(prometheus.GaugeOpts{
+		Name: "gateway_network_build_timestamp_seconds",
+		Help: "unix build time recorded in the metadata of the db-ip asn file the gateway is using.",
+	}, func() float64 { return float64(n.network.BuildTime().Unix()) })); err != nil {
+		return nil, fmt.Errorf("gateway: register network metric: %w", err)
+	}
+	sightings, err := NewNetworkSightings(sightingKeys)
+	if err != nil {
+		return nil, err
 	}
 	// edge_secrets is memory-backed and gone after a restart of a single
 	// server; the gateway recreates it itself so it never waits for an
@@ -157,6 +177,8 @@ func NewNode(ctx context.Context, c NodeConfig) (*Node, error) {
 		Signals:          NewSignalsChecker(g.SecureTransport),
 		ClientIP:         ipr,
 		Geo:              n.geo,
+		Network:          n.network,
+		Sightings:        sightings,
 		Visitor:          n.visitor,
 		Cluster:          n.cluster,
 		Volume:           volume,
@@ -193,11 +215,11 @@ func (n *Node) Stats() *Stats { return n.stats }
 // Visitor exposes the daily secrets, so a test can rotate on its clock.
 func (n *Node) Visitor() *Visitor { return n.visitor }
 
-// Reload reads the geo file and the revoked tracker list again, for the
-// monthly db-ip update and a tracker revocation. both keep their previous
-// state when the new one does not load.
+// Reload reads the geo file, the network data and the revoked tracker list
+// again, for the monthly db-ip update and a tracker revocation. each keeps
+// its previous state when the new one does not load.
 func (n *Node) Reload() error {
-	return errors.Join(n.geo.Reload(), n.releases.ReloadRevoked())
+	return errors.Join(n.geo.Reload(), n.network.Reload(), n.releases.ReloadRevoked())
 }
 
 // Run runs the background loops until ctx ends: the registry watch, daily
@@ -224,5 +246,5 @@ func (n *Node) Run(ctx context.Context) error {
 	<-ctx.Done()
 	_ = tokens.Unsubscribe()
 	wg.Wait()
-	return n.geo.Close()
+	return errors.Join(n.geo.Close(), n.network.Close())
 }

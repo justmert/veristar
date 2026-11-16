@@ -31,3 +31,25 @@ func TestSiteCollectUTM(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, got.CollectUTM)
 }
+
+// the site's scale travels the same way: absent means no baseline, and only
+// zero or a power of two within the bound is accepted.
+func TestSiteScale(t *testing.T) {
+	s := site(registry.StatusActive)
+	raw, err := json.Marshal(s)
+	require.NoError(t, err)
+	require.NotContains(t, string(raw), "scale")
+
+	s.Scale = 4096
+	raw, err = json.Marshal(s)
+	require.NoError(t, err)
+	require.Contains(t, string(raw), `"scale":4096`)
+	got, err := registry.DecodeSite(s.ID, raw)
+	require.NoError(t, err)
+	require.Equal(t, 4096, got.Scale)
+
+	for _, bad := range []int{-1, 3, 1000, registry.MaxScale * 2} {
+		s.Scale = bad
+		require.Error(t, s.Validate(), "scale %d", bad)
+	}
+}

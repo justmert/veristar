@@ -96,6 +96,12 @@ func TestEdgeSecretsCluster(t *testing.T) {
 	t.Run("the key bound evicts the least recently used set", func(t *testing.T) {
 		testIPClusterKeyBound(t, cluster)
 	})
+	t.Run("thresholds follow the network class and the site's scale", func(t *testing.T) {
+		testIPClusterThresholds(t, cluster)
+	})
+	t.Run("network keys are daily and differ from prefix keys", func(t *testing.T) {
+		testNetworkKeys(t, cluster)
+	})
 }
 
 func testVisitorRotation(t *testing.T, cluster *natsctr.Cluster) {
@@ -350,7 +356,7 @@ func TestGatewayEdgePermissions(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, ipc.Start(t.Context(), visTestQuiet()))
 	require.NoError(t, gw.Flush())
-	_, err = ipc.Observe("site", pk, vt)
+	_, err = ipc.Observe("site", pk, vt, 2)
 	require.NoError(t, err)
 	require.NoError(t, gw.Flush())
 
