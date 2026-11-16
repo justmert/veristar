@@ -40,7 +40,7 @@ export function StepUpGate({ status }: { status: StepUpStatus }) {
   return (
     <div className="mx-auto flex w-full max-w-prose animate-rise-in flex-col gap-4">
       {(status.passkeys ?? 0) > 0 ? (
-        <ConfirmPanel />
+        <ConfirmPanel maxAgeSeconds={status.max_age_seconds} />
       ) : status.enrollment === "open" ? (
         <EnrollPanel until={status.enrollment_until ?? null} />
       ) : status.enrollment === "sign_in_required" ? (
@@ -66,7 +66,13 @@ export function StepUpGate({ status }: { status: StepUpStatus }) {
   );
 }
 
-function ConfirmPanel() {
+function lasting(seconds: number): string {
+  if (seconds < 3600) return `${Math.round(seconds / 60)} minutes`;
+  const h = Math.round(seconds / 3600);
+  return h === 1 ? "1 hour" : `${h} hours`;
+}
+
+function ConfirmPanel({ maxAgeSeconds }: { maxAgeSeconds: number }) {
   const m = useMutation({
     mutationFn: async () => {
       const options = await operatorsApi.stepUpOptions();
@@ -83,7 +89,7 @@ function ConfirmPanel() {
           Confirm it is you
         </span>
       }
-      description="The operator area needs your passkey or security key. The confirmation lasts for this session for a few hours."
+      description={`The operator area needs your passkey or security key. The confirmation lasts ${lasting(maxAgeSeconds)} in this browser session.`}
     >
       <div className="flex flex-col gap-3">
         <div>
