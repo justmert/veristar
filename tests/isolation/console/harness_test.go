@@ -25,7 +25,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 
@@ -61,9 +60,10 @@ import (
 	"github.com/justmert/veristar/internal/controlplane/reports"
 	"github.com/justmert/veristar/internal/controlplane/session"
 	"github.com/justmert/veristar/internal/controlplane/sites"
-	"github.com/justmert/veristar/internal/controlplane/sso"
 	"github.com/justmert/veristar/internal/controlplane/tenants"
 	"github.com/justmert/veristar/internal/controlplane/terms"
+	"github.com/justmert/veristar/internal/controlplane/umamiread"
+	"github.com/justmert/veristar/internal/controlplane/webdash"
 	pdb "github.com/justmert/veristar/internal/db"
 	"github.com/justmert/veristar/internal/db/dbtest"
 	"github.com/justmert/veristar/internal/natsx"
@@ -77,10 +77,6 @@ import (
 )
 
 const ingestOrigin = "https://in.example.org"
-
-// webOrigin is where sso sends a browser; nothing listens there in these
-// tests, the redirect itself is what they check
-const webOrigin = "https://web.example.org"
 
 // operatorGHID is the one github id in the harness's OPERATOR_GITHUB_IDS
 const operatorGHID int64 = 4_000_001
@@ -285,20 +281,14 @@ func start(t *testing.T) *env {
 	require.NoError(t, err)
 	snippet, err := controlplane.NewSnippetRoutes(scope, e.tracker, "")
 	require.NoError(t, err)
-	ssoH := &sso.Handler{
-		Tx:        e.conn.WithSystem,
-		Umami:     e.umami.Client,
-		Key:       key,
-		WebOrigin: webOrigin,
-		UserID: func(r *http.Request) (uuid.UUID, bool) {
-			u, ok := session.CurrentUser(r.Context())
-			return u.ID, ok
-		},
-		Now: time.Now,
-	}
-	require.NoError(t, ssoH.Check())
-	ssoPath, ok := strings.CutPrefix(sso.Path, "/api")
-	require.True(t, ok)
+	// the web dashboard and the mcp web tools read umami as the member's
+	// own umami user, as cmd/controlplane wires them
+	umamiSessions := &umamiread.Sessions{Tx: e.conn.WithSystem, Umami: e.umami.Client, Key: key, Now: time.Now}
+	require.NoError(t, umamiSessions.Check())
+	webReader, err := umamiread.NewReader(umamiSessions, e.umami.Client, time.Now)
+	require.NoError(t, err)
+	webRoutes, err := webdash.NewRoutes(scope, webReader, time.Now)
+	require.NoError(t, err)
 
 	memberRoutes, err := members.NewRoutes(scope, users)
 	require.NoError(t, err)
@@ -347,8 +337,7 @@ func start(t *testing.T) *env {
 			tenants.NewRoutes(scope), sites.NewRoutes(scope), metricRoutes, onchainRoutes, scfView, tenantCohort,
 			controlplane.RoutesFunc(guard.Mount(review, global, onchainOperator, cohortRoutes, ruleRoutes)),
 		},
-		Sessions: ssoH,
-		Umami:    e.umami.Client,
+		Web:      webReader,
 		Issuer:   e.srv.URL,
 		StateKey: random32(t),
 		Log:      log,
@@ -383,7 +372,7 @@ func start(t *testing.T) *env {
 			scfView,
 			tenantCohort,
 			controlplane.RoutesFunc(reportRoutes.Private),
-			controlplane.RoutesFunc(func(r chi.Router) { r.Method(http.MethodGet, ssoPath, ssoH) }),
+			webRoutes,
 			e.mcp.TenantRoutes(scope),
 			e.mcp.ConsentRoutes(),
 			controlplane.RoutesFunc(guard.Mount(modeRoutes, keepRoutes, auditRoutes, actions, review, global, apiKeys,

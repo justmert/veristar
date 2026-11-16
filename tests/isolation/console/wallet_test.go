@@ -4,6 +4,7 @@ package consoleisolation
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/url"
 	"testing"
@@ -79,13 +80,15 @@ func TestWalletIsolation(t *testing.T) {
 	}, time.Minute, 200*time.Millisecond, "the reconciler never made the wallet account's umami user")
 	require.Equal(t, http.StatusOK, w.call(t, http.MethodGet, "/api/tenants/"+ta.String()+"/sites/"+sa.String(), nil).status)
 
-	// sso into the shared project's dashboard logs in as the stored name
+	// the shared project's web dashboard reads umami as the stored name
 	// (the site starts pending until the reconciler has made its website)
 	require.Eventually(t, func() bool {
-		res := w.call(t, http.MethodGet, "/api/sso/umami?site="+sa.String(), nil)
-		loc, err := url.Parse(res.header.Get("Location"))
-		return err == nil && res.status == http.StatusFound && loc.Host == "web.example.org"
-	}, time.Minute, 500*time.Millisecond, "sso for the wallet member never succeeded")
+		res := w.call(t, http.MethodGet, "/api/tenants/"+ta.String()+"/web/realtime?site="+sa.String(), nil)
+		var rt struct {
+			Sites []any `json:"sites"`
+		}
+		return res.status == http.StatusOK && json.Unmarshal(res.body, &rt) == nil && len(rt.Sites) == 1
+	}, time.Minute, 500*time.Millisecond, "the wallet member's umami reads never succeeded")
 
 	// alice's link challenge, copied with its cookie into the wallet's
 	// session, is refused: it was issued to her session

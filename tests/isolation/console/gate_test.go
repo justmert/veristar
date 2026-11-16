@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -36,9 +35,6 @@ const (
 	// a tenant route: a member of another tenant gets 404 not_found for
 	// real, guessed, malformed and mixed ids, and nothing changes
 	kindTenant kind = iota
-	// /api/sso/umami answers a browser navigation, so its refusal is the
-	// 303 to /sso-error with code not_found (contract 4.4.1), never a token
-	kindSSO
 	// an /api/operator route: 403 operator_required for a non-operator
 	kindOperator
 	// a step-up or passkey route of the operator area (contract 5.15):
@@ -143,6 +139,12 @@ func catalogue(terms string) []route {
 	}))
 	add(kindTenant, http.MethodGet, tp+"/sites", nil)
 	add(kindTenant, http.MethodGet, tp+"/sites/{site_id}", nil)
+	// the web dashboard (contract 18): the project, and one site of it,
+	// whose id must belong to the tenant in the path
+	add(kindTenant, http.MethodGet, tp+"/web/summary?site={site_id}", nil)
+	add(kindTenant, http.MethodGet, tp+"/web/breakdown?dimension=page&site={site_id}", nil)
+	add(kindTenant, http.MethodGet, tp+"/web/hourly?site={site_id}", nil)
+	add(kindTenant, http.MethodGet, tp+"/web/realtime?site={site_id}", nil)
 	// integrity grade (contract 17.2)
 	add(kindTenant, http.MethodGet, tp+"/integrity", nil)
 	add(kindTenant, http.MethodPatch, tp+"/sites/{site_id}", fixed(map[string]any{"origins": []string{"https://intruder.example.org"}}))
@@ -191,7 +193,6 @@ func catalogue(terms string) []route {
 	add(kindTenant, http.MethodGet, sp+"/ingest", nil)
 	add(kindTenant, http.MethodGet, sp+"/verification", nil)
 	add(kindTenant, http.MethodPost, sp+"/verify", fixed(map[string]any{}))
-	add(kindSSO, http.MethodGet, "/api/sso/umami?site={site_id}", nil)
 
 	// operator area
 	op := "/api/operator"
@@ -680,8 +681,8 @@ func testRouteCoverage(t *testing.T, e *env, cat []route) {
 	for _, r := range cat {
 		counts[r.kind]++
 	}
-	t.Logf("%d routes walked, all covered: %d tenant, %d sso, %d operator, %d step-up, %d machine, %d mcp, %d without a tenant",
-		len(got), counts[kindTenant], counts[kindSSO], counts[kindOperator], counts[kindStepUp], counts[kindMachine], counts[kindMCP],
+	t.Logf("%d routes walked, all covered: %d tenant, %d operator, %d step-up, %d machine, %d mcp, %d without a tenant",
+		len(got), counts[kindTenant], counts[kindOperator], counts[kindStepUp], counts[kindMachine], counts[kindMCP],
 		counts[kindOwn])
 }
 
@@ -706,7 +707,7 @@ func testTenantRoutes(t *testing.T, e *env, w *gateWorld, cat []route) {
 	sent := 0
 	for _, c := range cases {
 		for _, r := range cat {
-			if r.kind != kindTenant && r.kind != kindSSO {
+			if r.kind != kindTenant {
 				continue
 			}
 			path := r.fill(c.ids)
@@ -725,15 +726,6 @@ func testTenantRoutes(t *testing.T, e *env, w *gateWorld, cat []route) {
 			}
 			res := w.bob.call(t, r.method, path, body)
 			sent++
-			if r.kind == kindSSO {
-				require.Equal(t, http.StatusSeeOther, res.status, "%s: %s %s: %s", c.name, r.method, path, res.body)
-				loc, err := url.Parse(res.header.Get("Location"))
-				require.NoError(t, err)
-				require.Equal(t, "/sso-error", loc.Path, "%s: %s", c.name, path)
-				require.Equal(t, "not_found", loc.Query().Get("code"), "%s: %s", c.name, path)
-				require.NotContains(t, res.header.Get("Location"), "token", "%s: %s", c.name, path)
-				continue
-			}
 			require.Equal(t, http.StatusNotFound, res.status, "%s: %s %s: %s", c.name, r.method, path, res.body)
 			require.Equal(t, "not_found", res.code(t), "%s: %s %s", c.name, r.method, path)
 			require.Empty(t, w.leaked(res.body), "%s: %s %s: %s", c.name, r.method, path, res.body)
