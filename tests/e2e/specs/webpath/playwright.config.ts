@@ -69,20 +69,6 @@ export default defineConfig({
       name: "wallets",
       use: { ...devices["Desktop Chrome"], proxy },
       testMatch: /webpath\/wallets\.webpath\.ts$/,
-      grepInvert: /@wallets-ui/,
-    },
-    {
-      name: "wallets-ui",
-      use: { ...devices["Desktop Chrome"] },
-      testMatch: /webpath\/wallets\.webpath\.ts$/,
-      grep: /@wallets-ui/,
-    },
-    {
-      // the umami dashboard is opened directly on its loopback port, without
-      // the fixture proxy, so every request it makes is visible to the page
-      name: "umami-ui",
-      use: { ...devices["Desktop Chrome"] },
-      testMatch: /webpath\/ui\.webpath\.ts$/,
     },
   ],
 });

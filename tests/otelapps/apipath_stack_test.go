@@ -273,7 +273,6 @@ func startAPIStack(t *testing.T) *apiStack {
 		"CONTROLPLANE_OPS_ADDR=127.0.0.1:" + ports[1],
 		"CONSOLE_ORIGIN=" + appOrigin,
 		"INGEST_ORIGIN=https://in." + baseDomain,
-		"WEB_ORIGIN=https://web." + baseDomain,
 		"GITHUB_CLIENT_ID=" + oauthClient,
 		"GITHUB_CLIENT_SECRET=" + oauthSecret,
 		"GITHUB_REDIRECT_URL=" + callback,

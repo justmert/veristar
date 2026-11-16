@@ -39,7 +39,6 @@ const (
 	collectorImage     = "veristar/collector:handover"
 	exampleImage       = "veristar/otel-go-nethttp:handover"
 	postgresHAImage    = "veristar/postgres-ha:handover"
-	caddyPluginImage   = "veristar/caddy:2.11.9"
 	tenantBackendImage = "otel/opentelemetry-collector-contrib:0.165.0@sha256:e40d61f10c9a617cca1ffd1be4d7e2b3a4b0f0001798ff07e58cabe82e618cea"
 	staticImage        = "gcr.io/distroless/static-debian13:nonroot@sha256:25ac8f0c3b2334a9eb05452266bd4697864a8c8ef0ef71e5e6480d7f92868329"
 	oauthHost          = "oauth." + baseDomain
@@ -83,7 +82,6 @@ func setup() error {
 	}
 	builds := [][]string{
 		gatewayimage.BuildArgs(month, gatewayImage),
-		{"build", "-q", "-f", "deploy/images/caddy.Dockerfile", "-t", caddyPluginImage, "deploy/images"},
 		{"build", "-q", "-f", "deploy/images/collector.Dockerfile", "-t", collectorImage, "."},
 		{"build", "-q", "-f", "deploy/images/postgres-ha.Dockerfile", "-t", postgresHAImage, "deploy/images"},
 		{"build", "-q", "-t", exampleImage, "examples/otel-go-nethttp"},
@@ -280,7 +278,7 @@ func TestHandover(t *testing.T) {
 	}()
 	statePath := filepath.Join(outDir(), "state.json")
 	_ = os.Remove(statePath)
-	hosts := []string{"app." + baseDomain + ":443", "web." + baseDomain + ":443", "in." + baseDomain + ":443", oauthHost + ":" + oauthPort}
+	hosts := []string{"app." + baseDomain + ":443", "in." + baseDomain + ":443", oauthHost + ":" + oauthPort}
 	sb := newSwitchboard(t, hosts)
 
 	// environment a, the one handed over
@@ -295,7 +293,6 @@ func TestHandover(t *testing.T) {
 	a.StartMetricsWriter(t)
 	a.StartTenantBackend(t)
 	a.StartEdge(t)
-	a.StartWeb(t)
 	a.StartApp(t)
 	appsA := a.AppsControl(t)
 	sb.Point(t, a)
@@ -351,7 +348,7 @@ func TestHandover(t *testing.T) {
 		}
 		return strconv.FormatUint(n, 10)
 	}, "0")
-	a.Stop(t, a.name("replayer"), a.name("metricswriter"), a.Jobs, a.name("controlplane"), a.name("app"), a.name("web"), a.Umami)
+	a.Stop(t, a.name("replayer"), a.name("metricswriter"), a.Jobs, a.name("controlplane"), a.name("app"), a.Umami)
 	st.done("environment a drained and stopped")
 
 	// the pgbackrest path: a full backup of a, restored in the new
@@ -458,7 +455,6 @@ func TestHandover(t *testing.T) {
 	b.StartCollector(t)
 	b.StartMetricsWriter(t)
 	b.StartEdge(t)
-	b.StartWeb(t)
 	b.StartApp(t)
 	appsB := b.AppsControl(t)
 	// the transfer: the same names now lead to b

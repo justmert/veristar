@@ -525,7 +525,6 @@ func (s *Stack) StartControlPlane(t testing.TB) {
 		"CONTROLPLANE_OPS_ADDR": "0.0.0.0:9090",
 		"CONSOLE_ORIGIN":        "https://app." + baseDomain,
 		"INGEST_ORIGIN":         "https://in." + baseDomain,
-		"WEB_ORIGIN":            "https://web." + baseDomain,
 		"GITHUB_CLIENT_ID":      oauthClientID,
 		"GITHUB_CLIENT_SECRET":  s.OAuthSecret,
 		"GITHUB_REDIRECT_URL":   "https://app." + baseDomain + "/api/auth/github/callback",
@@ -787,22 +786,8 @@ func (s *Stack) AppsControl(t testing.TB) string {
 	return "http://" + l.Addr().String()
 }
 
-// StartWeb runs the web caddy in front of umami; StartApp the app caddy with
-// the console build and the control plane behind /api.
-func (s *Stack) StartWeb(t testing.TB) {
-	t.Helper()
-	port := freePort(t)
-	s.run(t, s.name("web"), []string{
-		"-p", "127.0.0.1:" + port + ":443",
-		"-v", filepath.Join(repoRoot(), "deploy", "caddy", "web.Caddyfile") + ":/etc/caddy/Caddyfile:ro",
-		// the theme web.Caddyfile serves, which the console image holds in production
-		"-v", filepath.Join(repoRoot(), "deploy", "caddy", "umami-theme", "site") + ":/srv/umami-theme:ro",
-		"-e", "BASE_DOMAIN=" + baseDomain, "-e", "UMAMI_UPSTREAM=" + umamictr.UpstreamAddr, "-e", "WEB_TLS=internal",
-	}, caddyPluginImage)
-	s.Routes["web."+baseDomain+":443"] = "127.0.0.1:" + port
-	waitTLS(t, "127.0.0.1:"+port, "web."+baseDomain, "/api/heartbeat")
-}
-
+// StartApp runs the app caddy with the console build and the control plane
+// behind /api. umami has no public site, so no caddy fronts it.
 func (s *Stack) StartApp(t testing.TB) {
 	t.Helper()
 	port := freePort(t)

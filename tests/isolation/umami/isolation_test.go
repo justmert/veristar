@@ -2,9 +2,11 @@
 
 // Package umamiisolation checks tenant isolation inside umami. two teams, two
 // websites and two view-only users are provisioned the way the control plane
-// does it, then user b calls every operation of umami's openapi contract with team a's ids,
-// once on the private network and once through the web caddy, and must never
-// get team a's data or change it.
+// does it, then user b calls every operation of umami's openapi contract with team a's ids
+// on the private network, the only place umami answers (no caddy site
+// proxies to it), and must never get team a's data or change it. the control
+// plane reads umami there as each member's own umami user, so this is the
+// second, independent wall behind the control plane's own tenant check.
 package umamiisolation
 
 import (
@@ -44,7 +46,6 @@ type member struct {
 // the team a entity it names.
 type world struct {
 	s     *umamictr.Stack
-	web   *umamictr.Web
 	admin umami.Token
 
 	teamA, teamB string
@@ -70,18 +71,17 @@ type reply struct {
 	body   string
 }
 
-// call sends one request to umami on the private network, or through the
-// web caddy when edge is set.
-func (w *world) call(t *testing.T, edge bool, tok umami.Token, method, path string, body any) reply {
+// call sends one request to umami on the private network.
+func (w *world) call(t *testing.T, tok umami.Token, method, path string, body any) reply {
 	t.Helper()
-	r, err := w.try(ctx(t), t, edge, tok, method, path, body)
+	r, err := w.try(ctx(t), t, tok, method, path, body)
 	if err != nil {
 		t.Fatalf("%s %s: %v", method, path, err)
 	}
 	return r
 }
 
-func (w *world) try(c context.Context, t *testing.T, edge bool, tok umami.Token, method, path string, body any) (reply, error) {
+func (w *world) try(c context.Context, t *testing.T, tok umami.Token, method, path string, body any) (reply, error) {
 	t.Helper()
 	var rd io.Reader
 	if body != nil {
@@ -91,16 +91,9 @@ func (w *world) try(c context.Context, t *testing.T, edge bool, tok umami.Token,
 		}
 		rd = bytes.NewReader(b)
 	}
-	base, hc := w.s.URL.String(), http.DefaultClient
-	if edge {
-		base, hc = w.web.Base, w.web.HTTP
-	}
-	req, err := http.NewRequestWithContext(c, method, base+path, rd)
+	req, err := http.NewRequestWithContext(c, method, w.s.URL.String()+path, rd)
 	if err != nil {
 		t.Fatal(err)
-	}
-	if edge {
-		req.Host = w.web.Host
 	}
 	req.Header.Set("User-Agent", chromeUA)
 	if body != nil {
@@ -109,7 +102,7 @@ func (w *world) try(c context.Context, t *testing.T, edge bool, tok umami.Token,
 	if !tok.Empty() {
 		req.Header.Set("Authorization", "Bearer "+tok.Reveal())
 	}
-	resp, err := hc.Do(req)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return reply{}, err
 	}
@@ -125,7 +118,7 @@ func (w *world) try(c context.Context, t *testing.T, edge bool, tok umami.Token,
 // and decodes the answer.
 func (w *world) adminCall(t *testing.T, tok umami.Token, method, path string, in, out any) {
 	t.Helper()
-	r := w.call(t, false, tok, method, path, in)
+	r := w.call(t, tok, method, path, in)
 	if r.status != http.StatusOK {
 		t.Fatalf("setup %s %s: http %d %s", method, path, r.status, r.body)
 	}
@@ -175,7 +168,6 @@ func provision(t *testing.T) *world {
 	t.Helper()
 	now := time.Now()
 	w := &world{s: umamictr.Start(t), start: now.Add(-2 * time.Hour), end: now.Add(2 * time.Hour)}
-	w.web = umamictr.StartWeb(t, w.s)
 	as, err := w.s.Client.Login(ctx(t), umami.SeededUsername, w.s.AdminPassword)
 	if err != nil {
 		t.Fatal(err)
@@ -459,14 +451,11 @@ const (
 	// must hold none of team a's markers
 	own
 	// the operation acts on the caller's own account and names nothing of
-	// team a; on the private network it is not sent, because it would only
-	// change user b itself. through caddy it is sent and must be refused or
-	// hold no marker.
+	// team a; it is not sent, because it would only change user b itself
 	self
 	// umami serves it without authentication by design (collection, login,
-	// public share and recorder configuration). on the private network the
-	// answer is recorded; through caddy it must be refused unless listed in
-	// publicAtEdge.
+	// public share and recorder configuration). the answer is recorded;
+	// no caddy site reaches umami, so none of these is public on the internet
 	public
 )
 
@@ -513,13 +502,6 @@ var classes = map[string]class{
 // collection routes accept events for any website without authentication.
 // they exist for the replayer on the private network.
 var collection = map[string]bool{"POST /api/send": true, "POST /api/batch": true, "POST /api/record": true}
-
-// publicAtEdge are the unauthenticated routes caddy lets through, with the
-// only answer allowed for team a's website: the recorder is disabled and
-// tenants cannot enable it, because every write is refused at the edge.
-var publicAtEdge = map[string]string{
-	"GET /api/websites/{websiteId}/recorder": `{"enabled":false}`,
-}
 
 // body returns a request body that passes the route's schema, so the
 // permission check is what answers.
@@ -587,9 +569,6 @@ func (w *world) body(o op) any {
 	return nil
 }
 
-// caddyRefusal is the body of every respond ... 403 in web.Caddyfile
-const caddyRefusal = "forbidden"
-
 func denied(status int) bool {
 	return status == http.StatusUnauthorized || status == http.StatusForbidden || status == http.StatusNotFound
 }
@@ -613,55 +592,34 @@ func classOf(o op) class {
 
 // check sends o as user b and applies its class. it returns a line for the
 // log, or fails the test.
-func (w *world) check(t *testing.T, o op, edge bool) string {
+func (w *world) check(t *testing.T, o op) string {
 	t.Helper()
 	path := w.fill(t, o.template) + w.query(o)
 	c := classOf(o)
-	where := "private"
-	if edge {
-		where = "edge"
+	if c == self {
+		return fmt.Sprintf("%s: %s not sent, acts only on the caller", o, path)
 	}
-	if !edge && c == self {
-		return fmt.Sprintf("%s %s: %s not sent, acts only on the caller", where, o, path)
+	if collection[o.String()] {
+		return fmt.Sprintf("%s: collection route, unauthenticated by design for the replayer; not sent, it would add events to team a", o)
 	}
-	if !edge && collection[o.String()] {
-		return fmt.Sprintf("%s %s: collection route, unauthenticated by design for the replayer; not sent, it would add events to team a", where, o)
+	if c == public {
+		r := w.call(t, w.b.token, o.method, path, w.body(o))
+		return fmt.Sprintf("%s: unauthenticated by design, http %d, team a markers %v", o, r.status, w.leaked(r.body))
 	}
-	if !edge && c == public {
-		r := w.call(t, false, w.b.token, o.method, path, w.body(o))
-		return fmt.Sprintf("%s %s: unauthenticated by design, http %d, team a markers %v", where, o, r.status, w.leaked(r.body))
-	}
-	r := w.call(t, edge, w.b.token, o.method, path, w.body(o))
-	if edge && umamictr.RefusedAtEdge(o.method, path) {
-		// the refusal must be caddy's own (web.Caddyfile answers "forbidden"
-		// with 403), not umami's: umami also refuses most of these for user
-		// b, so a status check alone would stay green after a deny rule was
-		// deleted and the route reached umami again
-		if r.status != http.StatusForbidden || r.body != caddyRefusal {
-			t.Errorf("%s %s %s: http %d %.300q, want caddy's own refusal: http 403 %q", where, o.method, path, r.status, r.body, caddyRefusal)
-		}
-		return ""
-	}
+	r := w.call(t, w.b.token, o.method, path, w.body(o))
 	switch c {
 	case scoped:
 		if !denied(r.status) {
-			t.Errorf("%s %s %s: user b got http %d, want 401, 403 or 404: %.300s", where, o.method, path, r.status, r.body)
+			t.Errorf("%s %s: user b got http %d, want 401, 403 or 404: %.300s", o.method, path, r.status, r.body)
 		}
-	case own, self:
+	case own:
 		if hit := w.leaked(r.body); len(hit) > 0 {
-			t.Errorf("%s %s %s: user b got team a data %v in http %d: %.300s", where, o.method, path, hit, r.status, r.body)
-		}
-	case public:
-		want, ok := publicAtEdge[o.String()]
-		if !ok {
-			t.Errorf("%s %s: unauthenticated route reachable through caddy: http %d", where, o, r.status)
-		} else if strings.TrimSpace(r.body) != want {
-			t.Errorf("%s %s %s: http %d %.300s, want %s", where, o.method, path, r.status, r.body, want)
+			t.Errorf("%s %s: user b got team a data %v in http %d: %.300s", o.method, path, hit, r.status, r.body)
 		}
 	}
 	if r.status == http.StatusBadRequest {
 		// validation runs before the permission check, so a 400 proves nothing
-		t.Errorf("%s %s %s: http 400, fix the request so the permission check answers: %.300s", where, o.method, path, r.body)
+		t.Errorf("%s %s: http 400, fix the request so the permission check answers: %.300s", o.method, path, r.body)
 	}
 	return ""
 }
@@ -677,13 +635,13 @@ func (w *world) control(t *testing.T, o op) int {
 		// answers. b's denial comes before that point, so it still counts.
 		c, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		_, err := w.try(c, t, false, w.a.token, o.method, path, nil)
+		_, err := w.try(c, t, w.a.token, o.method, path, nil)
 		if !errors.Is(err, context.DeadlineExceeded) {
 			t.Errorf("control: user a %s: expected no answer without redis, got err %v", path, err)
 		}
 		return 0
 	}
-	r := w.call(t, false, w.a.token, o.method, path, nil)
+	r := w.call(t, w.a.token, o.method, path, nil)
 	if r.status == http.StatusBadRequest || r.status >= 500 {
 		t.Errorf("control: user a %s %s: http %d: %.300s", o.method, path, r.status, r.body)
 	}
@@ -722,50 +680,37 @@ func TestUmamiTenantIsolation(t *testing.T) {
 
 	var notes []string
 	t.Run("reads", func(t *testing.T) {
-		for _, edge := range []bool{false, true} {
-			for _, o := range reads {
-				if n := w.check(t, o, edge); n != "" {
-					notes = append(notes, n)
-				}
+		for _, o := range reads {
+			if n := w.check(t, o); n != "" {
+				notes = append(notes, n)
 			}
 		}
 	})
-	// the two /api/users reads caddy lets through: with team a's user id
-	// they are scoped (checked above with every other read); with b's own id
-	// they answer, list team b and hold nothing of team a
+	// the two /api/users reads: with team a's user id they are scoped
+	// (checked above with every other read); with b's own id they answer,
+	// list team b and hold nothing of team a
 	t.Run("own user reads", func(t *testing.T) {
-		for _, edge := range []bool{false, true} {
-			for _, sub := range []string{"teams", "websites"} {
-				r := w.call(t, edge, w.b.token, http.MethodGet, "/api/users/"+w.b.id+"/"+sub, nil)
-				if r.status != http.StatusOK {
-					t.Errorf("edge=%v b reads its own %s: http %d %.300s", edge, sub, r.status, r.body)
-				}
-				if hit := w.leaked(r.body); len(hit) > 0 {
-					t.Errorf("edge=%v b's own %s holds team a data %v", edge, sub, hit)
-				}
-				// the websites read lists personal websites only, and a
-				// view-only member has none (umami-contract.md row 9)
-				if sub == "teams" && !strings.Contains(r.body, w.teamB) {
-					t.Errorf("edge=%v b's own teams do not list team b: %.300s", edge, r.body)
-				}
+		for _, sub := range []string{"teams", "websites"} {
+			r := w.call(t, w.b.token, http.MethodGet, "/api/users/"+w.b.id+"/"+sub, nil)
+			if r.status != http.StatusOK {
+				t.Errorf("b reads its own %s: http %d %.300s", sub, r.status, r.body)
+			}
+			if hit := w.leaked(r.body); len(hit) > 0 {
+				t.Errorf("b's own %s holds team a data %v", sub, hit)
+			}
+			// the websites read lists personal websites only, and a
+			// view-only member has none (umami-contract.md row 9)
+			if sub == "teams" && !strings.Contains(r.body, w.teamB) {
+				t.Errorf("b's own teams do not list team b: %.300s", r.body)
 			}
 		}
 	})
 	before := w.snapshot(t)
 	t.Run("writes", func(t *testing.T) {
-		for _, edge := range []bool{false, true} {
-			for _, o := range writes {
-				if o.String() == "POST /api/auth/logout" {
-					// last, so b's token stays valid for every other check
-					continue
-				}
-				if n := w.check(t, o, edge); n != "" {
-					notes = append(notes, n)
-				}
+		for _, o := range writes {
+			if n := w.check(t, o); n != "" {
+				notes = append(notes, n)
 			}
-		}
-		if n := w.check(t, op{http.MethodPost, "/api/auth/logout"}, true); n != "" {
-			notes = append(notes, n)
 		}
 	})
 	sort.Strings(notes)
@@ -784,7 +729,7 @@ func TestUmamiTenantIsolation(t *testing.T) {
 			t.Errorf("user a login after b's writes: %v", err)
 		}
 	})
-	t.Logf("checked %d read and %d write operations as user b, on the private network and through caddy", len(reads), len(writes))
+	t.Logf("checked %d read and %d write operations as user b on the private network", len(reads), len(writes))
 }
 
 // snapshot reads, as the admin, everything of team a that b's writes could
@@ -817,14 +762,14 @@ func (w *world) snapshot(t *testing.T) map[string]string {
 	}
 	out := map[string]string{}
 	for _, p := range paths {
-		r := w.call(t, false, w.admin, http.MethodGet, p, nil)
+		r := w.call(t, w.admin, http.MethodGet, p, nil)
 		if r.status != http.StatusOK {
 			t.Fatalf("snapshot %s: http %d %s", p, r.status, r.body)
 		}
 		out[p] = r.body
 	}
 	// a's api keys, read as a
-	r := w.call(t, false, w.a.token, http.MethodGet, "/api/me/api-keys", nil)
+	r := w.call(t, w.a.token, http.MethodGet, "/api/me/api-keys", nil)
 	if r.status != http.StatusOK {
 		t.Fatalf("snapshot api keys: http %d", r.status)
 	}
