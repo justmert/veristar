@@ -38,6 +38,10 @@ func TestParseValid(t *testing.T) {
 	require.Equal(t, "Public Global Stellar Network ; September 2015", *st.NetworkPassphrase)
 	require.Equal(t, 3, st.AccountsCount)
 	require.Equal(t, 2, st.AccountsValid)
+	require.Equal(t, []string{
+		"GDWQ7YV27AVTL25BDOLZD6E44VCQLCEBJXBOOWA2R3VLKCUIZHSXZLDE",
+		"GABZATVFOHSGTZNO2VUY2JDXW3R76URMFO2MUQVXBRBIDRCJXBEZG5QH",
+	}, st.Accounts)
 	require.True(t, st.SigningKeyPresent)
 	require.True(t, st.SigningKeyValid)
 	require.Equal(t, "https://stellar-verify.test", *st.OrgURL)

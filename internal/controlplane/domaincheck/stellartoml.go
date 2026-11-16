@@ -44,7 +44,10 @@ const (
 
 // caps on what is kept from the file, so tenant-controlled text stays short
 const (
-	maxCurrencies   = 50
+	maxCurrencies = 50
+	// the valid g accounts kept from ACCOUNTS, for the two-way link of
+	// control-plane-api 15.5
+	maxAccounts     = 50
 	maxCodeRunes    = 12
 	maxStrkeyRunes  = 56
 	maxVersionRunes = 32
@@ -71,6 +74,7 @@ type StellarToml struct {
 	Network           *string    `json:"network"`
 	AccountsCount     int        `json:"accounts_count"`
 	AccountsValid     int        `json:"accounts_valid"`
+	Accounts          []string   `json:"accounts"`
 	SigningKeyPresent bool       `json:"signing_key_present"`
 	SigningKeyValid   bool       `json:"signing_key_valid"`
 	OrgURL            *string    `json:"org_url"`
@@ -82,7 +86,7 @@ type StellarToml struct {
 func ptr[T any](v T) *T { return &v }
 
 func empty(status string, code *string, httpStatus *int) StellarToml {
-	return StellarToml{Status: status, Error: code, HTTPStatus: httpStatus, Currencies: []Currency{}}
+	return StellarToml{Status: status, Error: code, HTTPStatus: httpStatus, Accounts: []string{}, Currencies: []Currency{}}
 }
 
 // tomlFile holds the fields the signal reads. ORG_URL lives in the
@@ -155,6 +159,9 @@ func ParseStellarToml(domain string, body []byte) StellarToml {
 	for _, a := range f.Accounts {
 		if strkey.IsValidEd25519PublicKey(a) {
 			out.AccountsValid++
+			if len(out.Accounts) < maxAccounts {
+				out.Accounts = append(out.Accounts, a)
+			}
 		}
 	}
 	if f.SigningKey != nil {

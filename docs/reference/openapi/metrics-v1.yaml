@@ -325,6 +325,83 @@ paths:
           $ref: '#/components/responses/RateLimited'
         '500':
           $ref: '#/components/responses/Internal'
+  /onchain/ids:
+    get:
+      operationId: onchainIds
+      summary: Declared Stellar accounts and contracts per tenant
+      description: |
+        The accounts (G...) and Soroban contracts (C...) each project declares
+        (control-plane-api 15), with whether the project proved control of
+        each and the read state of the `chain-activity` task. `last_error`
+        names why the newest days are missing. Ordered by tenant and strkey.
+      parameters:
+        - $ref: '#/components/parameters/tenant'
+        - $ref: '#/components/parameters/limit'
+        - $ref: '#/components/parameters/cursor'
+      responses:
+        '200':
+          description: One page of declared ids.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OnchainIDList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/Internal'
+  /onchain/daily:
+    get:
+      operationId: onchainDaily
+      summary: Ledger activity per tenant, declared id and UTC day
+      description: |
+        From `agg.chain_daily`: one item per declared id and UTC day the
+        `chain-activity` task read, zeros included. A day without an item was
+        not read; it is never a zero. Accounts come from Horizon (`source`
+        `horizon`): successful operations involving the account, their
+        distinct transactions and the distinct other accounts they name.
+        Contracts come from Stellar RPC events (`source` `rpc_events`):
+        operations and transactions with an event of the contract in a
+        successful call, and the distinct addresses named in the event
+        topics. Ordered by tenant, strkey and day.
+      parameters:
+        - $ref: '#/components/parameters/tenant'
+        - $ref: '#/components/parameters/fromDay'
+        - $ref: '#/components/parameters/toDay'
+        - $ref: '#/components/parameters/limit'
+        - $ref: '#/components/parameters/cursor'
+      responses:
+        '200':
+          description: One page of daily rows.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OnchainDailyList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/Internal'
   /openapi.yaml:
     get:
       operationId: openapiDocument
@@ -888,5 +965,94 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/APIHour'
+        next_cursor:
+          $ref: '#/components/schemas/Cursor'
+    OnchainID:
+      type: object
+      additionalProperties: false
+      required: [tenant_id, strkey, kind, added_by, verified, verify_method, verified_at, covered_from,
+                 covered_to, last_success_at, last_error, home_domain]
+      properties:
+        tenant_id:
+          $ref: '#/components/schemas/ID'
+        strkey:
+          type: string
+          pattern: '^[GC][A-Z2-7]{55}$'
+        kind:
+          type: string
+          enum: [account, contract]
+        added_by:
+          type: string
+          enum: [enrollment, console]
+        verified:
+          type: boolean
+        verify_method:
+          type: [string, 'null']
+          enum: [sep53, manage_data, contract_admin, contract_deployer, null]
+        verified_at:
+          oneOf:
+            - $ref: '#/components/schemas/Time'
+            - type: 'null'
+        covered_from:
+          oneOf:
+            - $ref: '#/components/schemas/Day'
+            - type: 'null'
+        covered_to:
+          oneOf:
+            - $ref: '#/components/schemas/Day'
+            - type: 'null'
+        last_success_at:
+          oneOf:
+            - $ref: '#/components/schemas/Time'
+            - type: 'null'
+        last_error:
+          type: [string, 'null']
+        home_domain:
+          type: [string, 'null']
+    OnchainIDList:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OnchainID'
+        next_cursor:
+          $ref: '#/components/schemas/Cursor'
+    OnchainDaily:
+      type: object
+      additionalProperties: false
+      required: [tenant_id, strkey, day, source, operations, transactions, counterparties]
+      properties:
+        tenant_id:
+          $ref: '#/components/schemas/ID'
+        strkey:
+          type: string
+          pattern: '^[GC][A-Z2-7]{55}$'
+        day:
+          $ref: '#/components/schemas/Day'
+        source:
+          type: string
+          enum: [horizon, rpc_events]
+        operations:
+          $ref: '#/components/schemas/Count'
+        transactions:
+          $ref: '#/components/schemas/Count'
+        counterparties:
+          $ref: '#/components/schemas/Count'
+    OnchainDailyList:
+      type: object
+      additionalProperties: false
+      required: [from, to, items, next_cursor]
+      properties:
+        from:
+          $ref: '#/components/schemas/Day'
+        to:
+          $ref: '#/components/schemas/Day'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OnchainDaily'
         next_cursor:
           $ref: '#/components/schemas/Cursor'

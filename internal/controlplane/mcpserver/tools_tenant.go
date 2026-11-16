@@ -23,6 +23,8 @@ How to work:
 	`get_session_stats for sessions, and list_funnels, run_funnel, run_journey, run_retention and get_goals for reports.
 3. API analytics (from OpenTelemetry): list_api_services, then get_api_overview, get_api_timeseries, list_api_routes, ` +
 	`get_api_status_codes, get_api_top_error_routes and get_api_warnings.
+4. On-chain and review: get_onchain_activity for the declared Stellar accounts and contracts, and get_scf_view for ` +
+	`the figures SCF reviewers see about the project.
 
 Dates are ISO 8601: a date such as 2026-11-01 (UTC) or a timestamp with a zone. Web views count visitors without cookies ` +
 	`and rotate visitor ids daily, so unique visitors over several days are an upper bound of distinct people. API latency ` +
@@ -96,6 +98,7 @@ func (s *Server) addTenantTools(srv *mcp.Server) {
 
 	s.addWebTools(srv)
 	s.addAPITools(srv)
+	s.addOnchainTenantTools(srv)
 }
 
 // api metrics tools (contract 12.4.3): the console's routes of contract 7
