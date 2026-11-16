@@ -23,6 +23,7 @@ import {
   enrollApi,
   type GitHubUser,
   newUser,
+  operatorStepUp,
   pasteSnippet,
   type Site,
   signIn,
@@ -165,6 +166,7 @@ test.beforeAll(async ({ browser }) => {
     if (m.type() === "error") problems.push(`console: ${m.text()}`);
   });
   await signIn(op.page, OPERATOR);
+  await operatorStepUp(op.page, OPERATOR);
   const me = await api<{ user: { is_operator: boolean } }>(op.ctx, "GET", "/api/me");
   expect(me.body.user.is_operator, "github id 1 must be an operator").toBe(true);
 
