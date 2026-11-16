@@ -33,6 +33,7 @@ import (
 	"github.com/justmert/veristar/internal/controlplane"
 	"github.com/justmert/veristar/internal/controlplane/auth"
 	"github.com/justmert/veristar/internal/controlplane/erasure"
+	"github.com/justmert/veristar/internal/controlplane/identity"
 	"github.com/justmert/veristar/internal/controlplane/provision"
 	"github.com/justmert/veristar/internal/controlplane/session"
 	"github.com/justmert/veristar/internal/controlplane/tenants"
@@ -235,7 +236,7 @@ func start(t *testing.T) *env {
 	ah, err := auth.New(auth.Config{
 		Reconcile: scope.Reconcile, ClientID: "erasure-test",
 		ClientSecret: config.FromMap(map[string]string{"S": "erasure-test-secret"}).Secret("S", 1),
-		RedirectURL:  e.srv.URL + "/api/auth/github/callback", StateKey: stateKey, Operators: map[int64]bool{},
+		RedirectURL:  e.srv.URL + "/api/auth/github/callback", StateKey: stateKey, Operators: identity.Operators{}, ConsoleOrigin: e.srv.URL,
 		Endpoints: auth.Endpoints{
 			OAuth: oauth2.Endpoint{AuthURL: e.fx.URL + "/login/oauth/authorize", TokenURL: e.fx.URL + "/login/oauth/access_token",
 				AuthStyle: oauth2.AuthStyleInParams},

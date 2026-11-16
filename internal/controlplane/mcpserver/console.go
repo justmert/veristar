@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/justmert/veristar/internal/controlplane/httpx"
+	"github.com/justmert/veristar/internal/controlplane/identity"
 	"github.com/justmert/veristar/internal/controlplane/session"
 	"github.com/justmert/veristar/internal/controlplane/tenants"
 )
@@ -36,15 +37,18 @@ const CodeTooManyKeys = "too_many_keys"
 
 // Credential is the console object of contract 12.8.
 type Credential struct {
-	ID            uuid.UUID        `json:"id"`
-	Kind          string           `json:"kind"`
-	Scope         string           `json:"scope"`
-	TenantID      *uuid.UUID       `json:"tenant_id"`
-	Name          string           `json:"name"`
-	Prefix        *string          `json:"prefix"`
-	ClientID      *string          `json:"client_id"`
-	UserID        uuid.UUID        `json:"user_id"`
-	GitHubLogin   *string          `json:"github_login"`
+	ID          uuid.UUID  `json:"id"`
+	Kind        string     `json:"kind"`
+	Scope       string     `json:"scope"`
+	TenantID    *uuid.UUID `json:"tenant_id"`
+	Name        string     `json:"name"`
+	Prefix      *string    `json:"prefix"`
+	ClientID    *string    `json:"client_id"`
+	UserID      uuid.UUID  `json:"user_id"`
+	GitHubLogin *string    `json:"github_login"`
+	// DisplayName is the github login or the short stellar address of the
+	// creating account; null once that account is deleted
+	DisplayName   *string          `json:"display_name"`
 	Status        string           `json:"status"`
 	CreatedAt     httpx.Timestamp  `json:"created_at"`
 	ExpiresAt     *httpx.Timestamp `json:"expires_at"`
@@ -61,7 +65,7 @@ type CreatedKey struct {
 
 //nolint:gosec // column names of a query, not a credential
 const credentialSelect = `select c.id, c.kind, c.scope, c.tenant_id, c.name, c.prefix, c.client_id, c.user_id, u.github_login,
-	c.created_at, c.expires_at, c.revoked_at, c.revoked_reason, c.last_seen_at
+	u.stellar_address, c.created_at, c.expires_at, c.revoked_at, c.revoked_reason, c.last_seen_at
 	from cp.mcp_credentials c left join cp.users u on u.id = c.user_id`
 
 func scanCredentialRow(row pgx.Row, now time.Time) (Credential, error) {
@@ -69,9 +73,13 @@ func scanCredentialRow(row pgx.Row, now time.Time) (Credential, error) {
 	var tenant uuid.NullUUID
 	var created time.Time
 	var expires, revoked, seen *time.Time
+	var address *string
 	if err := row.Scan(&c.ID, &c.Kind, &c.Scope, &tenant, &c.Name, &c.Prefix, &c.ClientID, &c.UserID, &c.GitHubLogin,
-		&created, &expires, &revoked, &c.RevokedReason, &seen); err != nil {
+		&address, &created, &expires, &revoked, &c.RevokedReason, &seen); err != nil {
 		return Credential{}, err
+	}
+	if n := identity.DisplayName(c.GitHubLogin, address); n != "" {
+		c.DisplayName = &n
 	}
 	if tenant.Valid {
 		t := tenant.UUID

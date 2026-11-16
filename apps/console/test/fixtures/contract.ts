@@ -20,7 +20,14 @@ export const TERMS_VERSION = "2026-11-12-draft.1";
 
 // 4.1.4
 export const meBody = {
-  user: { id: USER_ID, github_id: 1234567, github_login: "octocat", is_operator: false },
+  user: {
+    id: USER_ID,
+    github_id: 1234567,
+    github_login: "octocat",
+    stellar_address: null,
+    display_name: "octocat",
+    is_operator: false,
+  },
   tenants: [
     {
       id: TENANT_ID,
@@ -69,6 +76,8 @@ export const memberBody = {
   user_id: USER_ID,
   github_id: 1234567,
   github_login: "octocat",
+  stellar_address: null,
+  display_name: "octocat",
   role: "owner",
   created_at: "2026-11-12T09:00:00Z",
 };
@@ -77,6 +86,8 @@ export const inviteBody = {
   id: INVITE_ID,
   github_id: 7654321,
   github_login: "someone",
+  stellar_address: null,
+  display_name: "someone",
   role: "member",
   created_by: USER_ID,
   created_at: "2026-11-12T09:00:00Z",
@@ -87,7 +98,13 @@ export const inviteBody = {
 export const membersBody = { members: [memberBody], invites: [inviteBody] };
 export const addMemberAsMemberBody = {
   kind: "member",
-  member: { ...memberBody, user_id: OTHER_USER_ID, github_login: "hubot", role: "member" },
+  member: {
+    ...memberBody,
+    user_id: OTHER_USER_ID,
+    github_login: "hubot",
+    display_name: "hubot",
+    role: "member",
+  },
 };
 export const addMemberAsInviteBody = { kind: "invite", invite: inviteBody };
 
@@ -184,7 +201,14 @@ export const meWithRemovedBody = {
 
 export const operatorMeBody = {
   ...meBody,
-  user: { id: OPERATOR_ID, github_id: 1, github_login: "sa-operator", is_operator: true },
+  user: {
+    id: OPERATOR_ID,
+    github_id: 1,
+    github_login: "sa-operator",
+    stellar_address: null,
+    display_name: "sa-operator",
+    is_operator: true,
+  },
   tenants: [],
 };
 
@@ -325,7 +349,15 @@ export const operatorDetailBody = {
     },
     accepted_terms_version: TERMS_VERSION,
     provisioning: "pending",
-    created_by: { id: USER_ID, github_id: 1234567, github_login: "octocat" },
+    created_by: {
+      id: USER_ID,
+      github_id: 1234567,
+      github_login: "octocat",
+      stellar_address: null,
+      display_name: "octocat",
+      stellar_address: null,
+      display_name: "octocat",
+    },
     approved_by: null,
     created_at: "2026-11-12T09:00:00Z",
     updated_at: "2026-11-12T09:00:00Z",

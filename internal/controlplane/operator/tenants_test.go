@@ -18,6 +18,7 @@ import (
 
 	"github.com/justmert/veristar/db"
 	"github.com/justmert/veristar/internal/controlplane/httpx"
+	"github.com/justmert/veristar/internal/controlplane/identity"
 	pdb "github.com/justmert/veristar/internal/db"
 	"github.com/justmert/veristar/internal/db/dbtest"
 )
@@ -210,7 +211,7 @@ func TestSyncFlags(t *testing.T) {
 	d, pg := reviewDB(t)
 	superExec(t, pg, `insert into cp.users (github_id, github_login, is_operator) values
 		(1, 'stays-op', true), (2, 'loses-op', true), (3, 'gains-op', false), (4, 'never', false)`)
-	n, err := SyncFlags(t.Context(), d, map[int64]bool{1: true, 3: true})
+	n, err := SyncFlags(t.Context(), d, identity.Operators{GitHub: map[int64]bool{1: true, 3: true}})
 	require.NoError(t, err)
 	require.Equal(t, 2, n)
 
@@ -237,7 +238,7 @@ func TestSyncFlags(t *testing.T) {
 	require.Equal(t, row{ActorStartup, "gains-op", `{"is_operator": {"new": true, "old": false}}`}, got[1])
 
 	// a second start with the same list changes nothing and audits nothing
-	n, err = SyncFlags(t.Context(), d, map[int64]bool{1: true, 3: true})
+	n, err = SyncFlags(t.Context(), d, identity.Operators{GitHub: map[int64]bool{1: true, 3: true}})
 	require.NoError(t, err)
 	require.Zero(t, n)
 }

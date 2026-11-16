@@ -145,9 +145,9 @@ export function Sidebar({
                 className="mt-1 flex items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-fg transition-colors duration-(--vs-duration-press) hover:bg-hover focus-ring aria-expanded:bg-selected"
               >
                 <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-line-strong text-caption font-semibold text-fg uppercase">
-                  {me.user.github_login.slice(0, 2)}
+                  {me.user.display_name.slice(0, 2)}
                 </span>
-                <span className="min-w-0 flex-1 truncate text-small">{me.user.github_login}</span>
+                <span className="min-w-0 flex-1 truncate text-small">{me.user.display_name}</span>
                 <Ellipsis aria-hidden className="size-3.5 text-fg-3" />
                 <span className="sr-only">, account menu</span>
               </button>
@@ -157,7 +157,7 @@ export function Sidebar({
               align="start"
               className="w-(--radix-dropdown-menu-trigger-width)"
             >
-              <MenuLabel>Signed in as {me.user.github_login}</MenuLabel>
+              <MenuLabel>Signed in as {me.user.display_name}</MenuLabel>
               <MenuItem
                 onSelect={() => {
                   onNavigate?.();

@@ -58,7 +58,7 @@ func (q *Queries) FindSession(ctx context.Context, tokenHash []byte) ([]byte, er
 }
 
 const getUser = `-- name: GetUser :one
-select id, github_id, github_login, is_operator, created_at, last_login_at, deleted_at from cp.users where id = $1 and deleted_at is null
+select id, github_id, github_login, is_operator, created_at, last_login_at, deleted_at, stellar_address, umami_username from cp.users where id = $1 and deleted_at is null
 `
 
 // a deleted account is no user: its sessions are gone, and this keeps a
@@ -74,6 +74,70 @@ func (q *Queries) GetUser(ctx context.Context, id uuid.UUID) (CpUser, error) {
 		&i.CreatedAt,
 		&i.LastLoginAt,
 		&i.DeletedAt,
+		&i.StellarAddress,
+		&i.UmamiUsername,
+	)
+	return i, err
+}
+
+const linkGitHub = `-- name: LinkGitHub :one
+update cp.users set github_id = $1, github_login = $2
+where id = $3 and deleted_at is null and github_id is null
+returning id, github_id, github_login, is_operator, created_at, last_login_at, deleted_at, stellar_address, umami_username
+`
+
+type LinkGitHubParams struct {
+	GithubID    *int64
+	GithubLogin *string
+	ID          uuid.UUID
+}
+
+// adds a github identity to an account that has none (4.1.8). a github id
+// that already names another live account fails on users_github_id_live_idx
+func (q *Queries) LinkGitHub(ctx context.Context, arg LinkGitHubParams) (CpUser, error) {
+	row := q.db.QueryRow(ctx, linkGitHub, arg.GithubID, arg.GithubLogin, arg.ID)
+	var i CpUser
+	err := row.Scan(
+		&i.ID,
+		&i.GithubID,
+		&i.GithubLogin,
+		&i.IsOperator,
+		&i.CreatedAt,
+		&i.LastLoginAt,
+		&i.DeletedAt,
+		&i.StellarAddress,
+		&i.UmamiUsername,
+	)
+	return i, err
+}
+
+const linkStellar = `-- name: LinkStellar :one
+update cp.users set stellar_address = $1
+where id = $2 and deleted_at is null and stellar_address is null
+returning id, github_id, github_login, is_operator, created_at, last_login_at, deleted_at, stellar_address, umami_username
+`
+
+type LinkStellarParams struct {
+	StellarAddress *string
+	ID             uuid.UUID
+}
+
+// adds a stellar identity to an account that has none (4.1.8). an address
+// that already names another live account fails on
+// users_stellar_address_live_idx
+func (q *Queries) LinkStellar(ctx context.Context, arg LinkStellarParams) (CpUser, error) {
+	row := q.db.QueryRow(ctx, linkStellar, arg.StellarAddress, arg.ID)
+	var i CpUser
+	err := row.Scan(
+		&i.ID,
+		&i.GithubID,
+		&i.GithubLogin,
+		&i.IsOperator,
+		&i.CreatedAt,
+		&i.LastLoginAt,
+		&i.DeletedAt,
+		&i.StellarAddress,
+		&i.UmamiUsername,
 	)
 	return i, err
 }
@@ -181,14 +245,25 @@ func (q *Queries) PruneSessions(ctx context.Context, cutoff time.Time) (int64, e
 	return result.RowsAffected(), nil
 }
 
+const pruneWalletChallenges = `-- name: PruneWalletChallenges :exec
+delete from cp.wallet_challenges_used where expires_at <= now()
+`
+
+// an expired challenge is refused by its time bounds already
+func (q *Queries) PruneWalletChallenges(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, pruneWalletChallenges)
+	return err
+}
+
 const resolveInvites = `-- name: ResolveInvites :many
 with resolved as (
   delete from cp.invites
-  where github_id = $1 and expires_at > now()
+  where (github_id = $1::bigint or stellar_address = $2::text)
+    and expires_at > now()
   returning id, tenant_id, role
 ), added as (
   insert into cp.tenant_members (tenant_id, user_id, role)
-  select tenant_id, $2::uuid, role from resolved
+  select tenant_id, $3::uuid, role from resolved
   on conflict (tenant_id, user_id) do nothing
   returning tenant_id
 )
@@ -198,8 +273,9 @@ order by r.id
 `
 
 type ResolveInvitesParams struct {
-	GithubID int64
-	UserID   uuid.UUID
+	GithubID       *int64
+	StellarAddress *string
+	UserID         uuid.UUID
 }
 
 type ResolveInvitesRow struct {
@@ -209,12 +285,13 @@ type ResolveInvitesRow struct {
 	Added    bool
 }
 
-// turns the open invites for a github account into memberships and deletes
-// them, in one statement. the account id is matched, never the login,
-// which can change hands (00025). an invite for a tenant the user already
+// turns the open invites for the account's github id or stellar address
+// into memberships and deletes them, in one statement. the github account
+// id is matched, never the login, which can change hands (00025). a null
+// parameter matches nothing. an invite for a tenant the user already
 // belongs to is consumed without changing the existing role.
 func (q *Queries) ResolveInvites(ctx context.Context, arg ResolveInvitesParams) ([]ResolveInvitesRow, error) {
-	rows, err := q.db.Query(ctx, resolveInvites, arg.GithubID, arg.UserID)
+	rows, err := q.db.Query(ctx, resolveInvites, arg.GithubID, arg.StellarAddress, arg.UserID)
 	if err != nil {
 		return nil, err
 	}
@@ -238,32 +315,22 @@ func (q *Queries) ResolveInvites(ctx context.Context, arg ResolveInvitesParams) 
 	return items, nil
 }
 
-const signInUser = `-- name: SignInUser :one
-
-insert into cp.users (github_id, github_login, is_operator, last_login_at)
-values ($1, $2, $3, now())
-on conflict (github_id) where deleted_at is null do update
-  set github_login = excluded.github_login,
-      is_operator = excluded.is_operator,
-      last_login_at = excluded.last_login_at
-returning id, github_id, github_login, is_operator, created_at, last_login_at, deleted_at
+const setOperatorFlag = `-- name: SetOperatorFlag :one
+update cp.users set is_operator = $1
+where id = $2 and deleted_at is null
+returning id, github_id, github_login, is_operator, created_at, last_login_at, deleted_at, stellar_address, umami_username
 `
 
-type SignInUserParams struct {
-	GithubID    int64
-	GithubLogin string
-	IsOperator  bool
+type SetOperatorFlagParams struct {
+	IsOperator bool
+	ID         uuid.UUID
 }
 
-// sign-in, sessions and /api/me for the console. cp_system, because
-// these run before any tenant is known.
-// the numeric github id is the identity, the login can change. is_operator
-// follows OPERATOR_GITHUB_IDS at every sign-in, so removing an id from the
-// setting takes effect at that person's next sign-in. a deleted account's
-// emptied row never matches (00031), so signing in again after deleting
-// the account makes a new row.
-func (q *Queries) SignInUser(ctx context.Context, arg SignInUserParams) (CpUser, error) {
-	row := q.db.QueryRow(ctx, signInUser, arg.GithubID, arg.GithubLogin, arg.IsOperator)
+// is_operator follows OPERATOR_GITHUB_IDS and OPERATOR_STELLAR_ADDRESSES at
+// every sign-in, link and unlink, so removing an entry takes effect at that
+// person's next sign-in (and at the next start, operator.SyncFlags)
+func (q *Queries) SetOperatorFlag(ctx context.Context, arg SetOperatorFlagParams) (CpUser, error) {
+	row := q.db.QueryRow(ctx, setOperatorFlag, arg.IsOperator, arg.ID)
 	var i CpUser
 	err := row.Scan(
 		&i.ID,
@@ -273,6 +340,141 @@ func (q *Queries) SignInUser(ctx context.Context, arg SignInUserParams) (CpUser,
 		&i.CreatedAt,
 		&i.LastLoginAt,
 		&i.DeletedAt,
+		&i.StellarAddress,
+		&i.UmamiUsername,
 	)
 	return i, err
+}
+
+const signInStellarUser = `-- name: SignInStellarUser :one
+insert into cp.users (stellar_address, last_login_at)
+values ($1, now())
+on conflict (stellar_address) where deleted_at is null and stellar_address is not null do update
+  set last_login_at = excluded.last_login_at
+returning id, github_id, github_login, is_operator, created_at, last_login_at, deleted_at, stellar_address, umami_username
+`
+
+// wallet sign-in (4.1.7): the G-address whose key signed the challenge is
+// the identity
+func (q *Queries) SignInStellarUser(ctx context.Context, stellarAddress *string) (CpUser, error) {
+	row := q.db.QueryRow(ctx, signInStellarUser, stellarAddress)
+	var i CpUser
+	err := row.Scan(
+		&i.ID,
+		&i.GithubID,
+		&i.GithubLogin,
+		&i.IsOperator,
+		&i.CreatedAt,
+		&i.LastLoginAt,
+		&i.DeletedAt,
+		&i.StellarAddress,
+		&i.UmamiUsername,
+	)
+	return i, err
+}
+
+const signInUser = `-- name: SignInUser :one
+
+insert into cp.users (github_id, github_login, last_login_at)
+values ($1, $2, now())
+on conflict (github_id) where deleted_at is null do update
+  set github_login = excluded.github_login,
+      last_login_at = excluded.last_login_at
+returning id, github_id, github_login, is_operator, created_at, last_login_at, deleted_at, stellar_address, umami_username
+`
+
+type SignInUserParams struct {
+	GithubID    *int64
+	GithubLogin *string
+}
+
+// sign-in, sessions and /api/me for the console. cp_system, because
+// these run before any tenant is known.
+// the numeric github id is the identity, the login can change. is_operator
+// is set right after by SetOperatorFlag, from both identities of the row. a
+// deleted account's emptied row never matches (00031), so signing in again
+// after deleting the account makes a new row.
+func (q *Queries) SignInUser(ctx context.Context, arg SignInUserParams) (CpUser, error) {
+	row := q.db.QueryRow(ctx, signInUser, arg.GithubID, arg.GithubLogin)
+	var i CpUser
+	err := row.Scan(
+		&i.ID,
+		&i.GithubID,
+		&i.GithubLogin,
+		&i.IsOperator,
+		&i.CreatedAt,
+		&i.LastLoginAt,
+		&i.DeletedAt,
+		&i.StellarAddress,
+		&i.UmamiUsername,
+	)
+	return i, err
+}
+
+const unlinkGitHub = `-- name: UnlinkGitHub :one
+update cp.users set github_id = null, github_login = null
+where id = $1 and deleted_at is null and github_id is not null and stellar_address is not null
+returning id, github_id, github_login, is_operator, created_at, last_login_at, deleted_at, stellar_address, umami_username
+`
+
+// removes the github identity while a stellar identity remains, so an
+// account always keeps a way to sign in
+func (q *Queries) UnlinkGitHub(ctx context.Context, id uuid.UUID) (CpUser, error) {
+	row := q.db.QueryRow(ctx, unlinkGitHub, id)
+	var i CpUser
+	err := row.Scan(
+		&i.ID,
+		&i.GithubID,
+		&i.GithubLogin,
+		&i.IsOperator,
+		&i.CreatedAt,
+		&i.LastLoginAt,
+		&i.DeletedAt,
+		&i.StellarAddress,
+		&i.UmamiUsername,
+	)
+	return i, err
+}
+
+const unlinkStellar = `-- name: UnlinkStellar :one
+update cp.users set stellar_address = null
+where id = $1 and deleted_at is null and stellar_address is not null and github_id is not null
+returning id, github_id, github_login, is_operator, created_at, last_login_at, deleted_at, stellar_address, umami_username
+`
+
+func (q *Queries) UnlinkStellar(ctx context.Context, id uuid.UUID) (CpUser, error) {
+	row := q.db.QueryRow(ctx, unlinkStellar, id)
+	var i CpUser
+	err := row.Scan(
+		&i.ID,
+		&i.GithubID,
+		&i.GithubLogin,
+		&i.IsOperator,
+		&i.CreatedAt,
+		&i.LastLoginAt,
+		&i.DeletedAt,
+		&i.StellarAddress,
+		&i.UmamiUsername,
+	)
+	return i, err
+}
+
+const useWalletChallenge = `-- name: UseWalletChallenge :execrows
+insert into cp.wallet_challenges_used (nonce_hash, expires_at)
+values ($1, $2)
+on conflict (nonce_hash) do nothing
+`
+
+type UseWalletChallengeParams struct {
+	NonceHash []byte
+	ExpiresAt time.Time
+}
+
+// 0 rows: the challenge was used before (4.1.7)
+func (q *Queries) UseWalletChallenge(ctx context.Context, arg UseWalletChallengeParams) (int64, error) {
+	result, err := q.db.Exec(ctx, useWalletChallenge, arg.NonceHash, arg.ExpiresAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }

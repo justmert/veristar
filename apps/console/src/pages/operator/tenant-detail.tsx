@@ -120,8 +120,8 @@ export function TenantDetail({ detail }: { detail: OperatorTenantDetail }) {
             <span className="font-mono">{t.slug}</span>
             <span>
               Enrolled {formatDate(t.created_at)}
-              {t.created_by ? ` by ${t.created_by.github_login}` : ""}
-              {t.approved_by ? `, approved by ${t.approved_by.github_login}` : ""}
+              {t.created_by ? ` by ${t.created_by.display_name}` : ""}
+              {t.approved_by ? `, approved by ${t.approved_by.display_name}` : ""}
             </span>
             <span>Status since {formatDateTimeUtc(t.status_changed_at)}</span>
           </p>
@@ -238,8 +238,13 @@ export function TenantDetail({ detail }: { detail: OperatorTenantDetail }) {
           <Box id="members-h" title="Members">
             <ul className="flex flex-col gap-1.5 text-small">
               {detail.members.map((m) => (
-                <li key={m.github_id} className="flex flex-wrap items-baseline gap-x-2">
-                  <span className="font-medium text-fg">{m.github_login}</span>
+                <li
+                  key={m.github_id ?? m.stellar_address ?? m.display_name}
+                  className="flex flex-wrap items-baseline gap-x-2"
+                >
+                  <span className="font-medium text-fg" title={m.stellar_address ?? undefined}>
+                    {m.display_name}
+                  </span>
                   <span className="text-fg-3">
                     {m.role}, since {formatDate(m.created_at)}
                   </span>
@@ -491,7 +496,7 @@ function Removal({ removal }: { removal: NonNullable<OperatorTenantDetail["remov
       ? null
       : typeof removal.requested_by === "string"
         ? removal.requested_by
-        : removal.requested_by.github_login;
+        : removal.requested_by.display_name;
   const steps = Object.entries(removal.steps).sort((x, y) =>
     x[1].done_at.localeCompare(y[1].done_at),
   );

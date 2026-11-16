@@ -6,10 +6,10 @@
 select * from cp.tenants where id = cp.current_tenant_id();
 
 -- name: ListMembers :many
-select m.user_id, m.role, u.github_id, u.github_login
+select m.user_id, m.role, u.github_id, u.github_login, u.stellar_address
 from cp.tenant_members m
 join cp.users u on u.id = m.user_id
-order by u.github_login;
+order by coalesce(u.github_login, u.stellar_address);
 
 -- name: CreateSite :one
 insert into cp.sites (id, tenant_id, name, domain, origins, verify_token)

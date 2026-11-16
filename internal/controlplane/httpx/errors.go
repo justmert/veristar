@@ -58,6 +58,16 @@ const (
 	// an account deletion while the account is the only owner of a project
 	// that is not removed (contract 4.1.6)
 	CodeSoleOwner = "sole_owner"
+	// wallet sign-in and linking (contract 4.1.7, 4.1.8): a signed challenge
+	// that does not verify, that expired, or that was used before
+	CodeChallengeInvalid = "challenge_invalid"
+	CodeChallengeExpired = "challenge_expired"
+	CodeChallengeUsed    = "challenge_used"
+	// linking an identity that names another account, linking a second
+	// identity of a kind the account already has, or unlinking the only one
+	CodeIdentityInUse    = "identity_in_use"
+	CodeIdentityLinked   = "identity_already_linked"
+	CodeLastSignInMethod = "last_sign_in_method"
 )
 
 // defaultUnavailableRetryIn is the Retry-After of a 503 when the caller does

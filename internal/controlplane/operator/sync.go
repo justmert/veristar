@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/justmert/veristar/internal/controlplane/audit"
+	"github.com/justmert/veristar/internal/controlplane/identity"
 	"github.com/justmert/veristar/internal/db"
 	"github.com/justmert/veristar/internal/db/systemq"
 )
@@ -17,21 +18,18 @@ const ActionOperatorSync = "user.operator_sync"
 // ActorStartup is the actor of the startup sync.
 const ActorStartup = "system:startup"
 
-// SyncFlags sets cp.users.is_operator from the loaded OPERATOR_GITHUB_IDS for
+// SyncFlags sets cp.users.is_operator from the loaded OPERATOR_GITHUB_IDS and
+// OPERATOR_STELLAR_ADDRESSES for
 // every user in one cp_system transaction and audits each changed user
 // (contract 5.1). sign-in keeps doing the same for the person signing in;
 // this covers people who do not sign in again after an id was removed. it
 // returns how many users changed.
-func SyncFlags(ctx context.Context, d *db.DB, ids map[int64]bool) (int, error) {
-	list := make([]int64, 0, len(ids))
-	for id, ok := range ids {
-		if ok {
-			list = append(list, id)
-		}
-	}
+func SyncFlags(ctx context.Context, d *db.DB, ops identity.Operators) (int, error) {
 	var n int
 	err := d.WithSystem(ctx, func(tx pgx.Tx) error {
-		rows, err := systemq.New(tx).OperatorSyncFlags(ctx, list)
+		rows, err := systemq.New(tx).OperatorSyncFlags(ctx, systemq.OperatorSyncFlagsParams{
+			OperatorIds: ops.GitHubIDs(), OperatorAddresses: ops.StellarAddresses(),
+		})
 		if err != nil {
 			return err
 		}

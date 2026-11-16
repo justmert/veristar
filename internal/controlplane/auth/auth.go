@@ -1,5 +1,7 @@
-// Package auth is console sign-in with github (contract 4.1): the oauth web
-// flow with state and pkce s256, sign-out, and /api/me.
+// Package auth is console sign-in (contract 4.1): the github oauth web flow
+// with state and pkce s256, wallet sign-in with a sep-10 challenge
+// (stellar.go), linking and unlinking the two (link.go), sign-out, and
+// /api/me.
 package auth
 
 import (
@@ -21,6 +23,7 @@ import (
 
 	"github.com/justmert/veristar/internal/config"
 	"github.com/justmert/veristar/internal/controlplane/httpx"
+	"github.com/justmert/veristar/internal/controlplane/identity"
 	"github.com/justmert/veristar/internal/controlplane/session"
 	"github.com/justmert/veristar/internal/controlplane/terms"
 	"github.com/justmert/veristar/internal/db"
@@ -58,9 +61,14 @@ type Config struct {
 	RedirectURL string
 	// StateKey seals the sa_oauth cookie.
 	StateKey []byte
-	// Operators are the github ids whose users get is_operator.
-	Operators map[int64]bool
-	Endpoints Endpoints
+	// Operators are the github ids and stellar addresses whose accounts get
+	// is_operator.
+	Operators identity.Operators
+	// ConsoleOrigin is CONSOLE_ORIGIN. its host is the web_auth_domain and
+	// home domain of wallet challenges, which binds a signed challenge to
+	// this console.
+	ConsoleOrigin string
+	Endpoints     Endpoints
 	// HTTPClient talks to github. nil uses a client with githubTimeout.
 	HTTPClient *http.Client
 	// Reconcile starts the provisioning reconciler for a tenant without
@@ -75,7 +83,7 @@ type Handler struct {
 	oauth     *oauth2.Config
 	apiBase   string
 	sealer    *sealer
-	operators map[int64]bool
+	operators identity.Operators
 	client    *http.Client
 	db        *db.DB
 	sessions  *session.Manager
@@ -85,6 +93,7 @@ type Handler struct {
 	exchanges *limiter
 	used      usedStates
 	now       func() time.Time
+	stellar   *stellarAuth
 }
 
 // New checks cfg and returns the handler.
@@ -111,6 +120,10 @@ func New(cfg Config, d *db.DB, s *session.Manager) (*Handler, error) {
 		return nil, err
 	}
 	now := time.Now()
+	sa, err := newStellarAuth(cfg.StateKey, cfg.ConsoleOrigin, now)
+	if err != nil {
+		return nil, err
+	}
 	return &Handler{
 		oauth: &oauth2.Config{
 			ClientID:     cfg.ClientID,
@@ -132,7 +145,8 @@ func New(cfg Config, d *db.DB, s *session.Manager) (*Handler, error) {
 			StartReserveRatePerSecond, StartReserveBurst, now),
 		exchanges: newLimiter(ExchangeClientRatePerSecond, ExchangeClientBurst, ExchangeRatePerSecond, ExchangeBurst,
 			ExchangeReserveRatePerSecond, ExchangeReserveBurst, now),
-		now: time.Now,
+		now:     time.Now,
+		stellar: sa,
 	}, nil
 }
 
@@ -143,11 +157,17 @@ func (h *Handler) Public(r chi.Router) {
 	// logout without a session is a 204 too (contract 4.1.3), so it is not
 	// behind RequireUser; the csrf rules still apply to it
 	r.Method(http.MethodPost, "/auth/logout", httpx.HandlerFunc(h.logout))
+	r.Method(http.MethodPost, "/auth/stellar/challenge", httpx.HandlerFunc(h.stellarChallenge))
+	r.Method(http.MethodPost, "/auth/stellar/verify", httpx.HandlerFunc(h.stellarVerify))
 }
 
 // Private registers the routes behind RequireUser.
 func (h *Handler) Private(r chi.Router) {
 	r.Method(http.MethodGet, "/me", httpx.HandlerFunc(h.me))
+	r.Method(http.MethodPost, "/me/identities/stellar/challenge", httpx.HandlerFunc(h.stellarLinkChallenge))
+	r.Method(http.MethodPost, "/me/identities/stellar", httpx.HandlerFunc(h.stellarLink))
+	r.Method(http.MethodDelete, "/me/identities/stellar", httpx.HandlerFunc(h.unlinkStellar))
+	r.Method(http.MethodDelete, "/me/identities/github", httpx.HandlerFunc(h.unlinkGitHub))
 }
 
 // cleanReturnTo keeps only a console path: one leading slash, not a
@@ -180,13 +200,25 @@ func (h *Handler) start(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	verifier := oauth2.GenerateVerifier()
-	sealed, err := h.sealer.seal(statePayload{
+	p := statePayload{
 		State:    state,
-		Verifier: verifier,
+		Verifier: oauth2.GenerateVerifier(),
 		ReturnTo: cleanReturnTo(r.URL.Query().Get("return_to")),
 		Exp:      h.now().Add(stateCookieTTL).Unix(),
-	})
+	}
+	// link=1 links github to the signed-in account (contract 4.1.8): the
+	// proof of the account is the session, the proof of the github account
+	// is this flow, both in one browser session
+	if r.URL.Query().Get("link") == "1" {
+		uid, ok := h.sessions.UserID(r.Context())
+		if !ok {
+			return httpx.Unauthenticated()
+		}
+		p.LinkUser = uid.String()
+		p.ReturnTo = accountPath
+	}
+	verifier := p.Verifier
+	sealed, err := h.sealer.seal(p)
 	if err != nil {
 		return err
 	}
@@ -275,6 +307,11 @@ func (h *Handler) callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if p.LinkUser != "" {
+		h.linkGitHubCallback(w, r, p, gh)
+		return
+	}
+
 	u, joined, err := h.signIn(r.Context(), gh)
 	if err != nil {
 		log.Error("sign-in failed", "reason", failInternal, "error", err.Error())
@@ -343,42 +380,58 @@ func (h *Handler) githubUser(ctx context.Context, accessToken string) (githubUse
 	return u, nil
 }
 
-// signIn upserts the user, resolves open invites for the github account into
+// signIn upserts the user, resolves open invites for the account into
 // memberships and writes the audit rows, in one cp_system transaction. it
 // returns the tenants the user joined.
 func (h *Handler) signIn(ctx context.Context, gh githubUser) (systemq.CpUser, []uuid.UUID, error) {
 	var u systemq.CpUser
 	var joined []uuid.UUID
 	err := h.db.WithSystem(ctx, func(tx pgx.Tx) error {
-		joined = nil
 		q := systemq.New(tx)
 		var err error
-		u, err = q.SignInUser(ctx, systemq.SignInUserParams{
-			GithubID: gh.ID, GithubLogin: gh.Login, IsOperator: h.operators[gh.ID],
-		})
+		u, err = q.SignInUser(ctx, systemq.SignInUserParams{GithubID: &gh.ID, GithubLogin: &gh.Login})
 		if err != nil {
 			return fmt.Errorf("upsert user: %w", err)
 		}
-		actor := "user:" + u.ID.String()
-		resolved, err := q.ResolveInvites(ctx, systemq.ResolveInvitesParams{GithubID: gh.ID, UserID: u.ID})
-		if err != nil {
-			return fmt.Errorf("resolve invites: %w", err)
-		}
-		for _, inv := range resolved {
-			if inv.Added {
-				joined = append(joined, inv.TenantID)
-			}
-			if err := audit(ctx, q, actor, "invite.resolve", "invite:"+inv.ID.String(), map[string]any{
-				"tenant_id": inv.TenantID.String(), "user_id": u.ID.String(), "role": inv.Role, "added": inv.Added,
-			}); err != nil {
-				return err
-			}
-		}
-		return audit(ctx, q, actor, "user.sign_in", "user:"+u.ID.String(), map[string]any{
-			"github_id": gh.ID, "github_login": gh.Login, "is_operator": u.IsOperator,
+		u, joined, err = h.afterSignIn(ctx, q, u, map[string]any{
+			"method": "github", "github_id": gh.ID, "github_login": gh.Login,
 		})
+		return err
 	})
 	return u, joined, err
+}
+
+// afterSignIn is the part of a sign-in both methods share, inside the
+// sign-in transaction: the operator flag from both identities of the row,
+// the open invites of either identity turned into memberships, and the
+// audit rows.
+func (h *Handler) afterSignIn(ctx context.Context, q *systemq.Queries, u systemq.CpUser, detail map[string]any) (systemq.CpUser, []uuid.UUID, error) {
+	u, err := q.SetOperatorFlag(ctx, systemq.SetOperatorFlagParams{
+		IsOperator: h.operators.Is(u.GithubID, u.StellarAddress), ID: u.ID,
+	})
+	if err != nil {
+		return u, nil, fmt.Errorf("operator flag: %w", err)
+	}
+	actor := "user:" + u.ID.String()
+	resolved, err := q.ResolveInvites(ctx, systemq.ResolveInvitesParams{
+		GithubID: u.GithubID, StellarAddress: u.StellarAddress, UserID: u.ID,
+	})
+	if err != nil {
+		return u, nil, fmt.Errorf("resolve invites: %w", err)
+	}
+	var joined []uuid.UUID
+	for _, inv := range resolved {
+		if inv.Added {
+			joined = append(joined, inv.TenantID)
+		}
+		if err := audit(ctx, q, actor, "invite.resolve", "invite:"+inv.ID.String(), map[string]any{
+			"tenant_id": inv.TenantID.String(), "user_id": u.ID.String(), "role": inv.Role, "added": inv.Added,
+		}); err != nil {
+			return u, nil, err
+		}
+	}
+	detail["is_operator"] = u.IsOperator
+	return u, joined, audit(ctx, q, actor, "user.sign_in", "user:"+u.ID.String(), detail)
 }
 
 func audit(ctx context.Context, q *systemq.Queries, actor, action, target string, detail map[string]any) error {
@@ -412,12 +465,23 @@ func (h *Handler) logout(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-// MeUser is the User object of contract 3.1.
+// MeUser is the User object of contract 3.1. github_id and github_login are
+// null for a wallet-only account, stellar_address for a github-only one.
 type MeUser struct {
-	ID          uuid.UUID `json:"id"`
-	GitHubID    int64     `json:"github_id"`
-	GitHubLogin string    `json:"github_login"`
-	IsOperator  bool      `json:"is_operator"`
+	ID             uuid.UUID `json:"id"`
+	GitHubID       *int64    `json:"github_id"`
+	GitHubLogin    *string   `json:"github_login"`
+	StellarAddress *string   `json:"stellar_address"`
+	DisplayName    string    `json:"display_name"`
+	IsOperator     bool      `json:"is_operator"`
+}
+
+// MeUserOf is the MeUser of a session user.
+func MeUserOf(u session.User) MeUser {
+	return MeUser{
+		ID: u.ID, GitHubID: u.GitHubID, GitHubLogin: u.GitHubLogin, StellarAddress: u.StellarAddress,
+		DisplayName: u.DisplayName(), IsOperator: u.IsOperator,
+	}
 }
 
 // MeTenant is one entry of /api/me tenants.
@@ -479,7 +543,7 @@ func (h *Handler) me(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	out := Me{
-		User:           MeUser{ID: u.ID, GitHubID: u.GitHubID, GitHubLogin: u.GitHubLogin, IsOperator: u.IsOperator},
+		User:           MeUserOf(u),
 		Tenants:        make([]MeTenant, 0, len(rows)),
 		RemovedTenants: make([]MeRemovedTenant, 0, len(removed)),
 		Terms:          MeTerms{CurrentVersion: t.Version, Status: t.Status, URL: terms.URL},

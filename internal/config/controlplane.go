@@ -7,11 +7,14 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/stellar/go-stellar-sdk/strkey"
 )
 
 // ControlPlane is what the control plane needs besides the database pools
 // (internal/db LoadPoolConfig) and nats (LoadNATS). the keys are those of
-// docs/reference/control-plane-api.md section 4.5, plus OPERATOR_GITHUB_IDS.
+// docs/reference/control-plane-api.md section 4.5, plus OPERATOR_GITHUB_IDS
+// and OPERATOR_STELLAR_ADDRESSES.
 type ControlPlane struct {
 	// Addr is the api listener; OpsAddr serves /healthz, /readyz, /metrics.
 	Addr    string
@@ -31,6 +34,9 @@ type ControlPlane struct {
 	OAuthStateKey Key32
 	// OperatorGitHubIDs are the numeric github ids of the operators.
 	OperatorGitHubIDs map[int64]bool
+	// OperatorStellarAddresses are the stellar accounts (G-addresses) of
+	// operators who sign in with a wallet. optional: empty when unset.
+	OperatorStellarAddresses map[string]bool
 
 	UmamiURL             *url.URL
 	UmamiAdminPassword   Secret
@@ -47,20 +53,21 @@ const CallbackPath = "/api/auth/github/callback"
 // LoadControlPlane reads the control plane settings.
 func LoadControlPlane(e *Env) (ControlPlane, error) {
 	c := ControlPlane{
-		Addr:                 e.ListenAddr("CONTROLPLANE_ADDR"),
-		OpsAddr:              e.ListenAddr("CONTROLPLANE_OPS_ADDR"),
-		ConsoleOrigin:        e.origin("CONSOLE_ORIGIN"),
-		IngestOrigin:         e.origin("INGEST_ORIGIN"),
-		WebOrigin:            e.origin("WEB_ORIGIN"),
-		GitHubClientID:       e.String("GITHUB_CLIENT_ID"),
-		GitHubClientSecret:   e.Secret("GITHUB_CLIENT_SECRET", 1),
-		GitHubRedirectURL:    e.String("GITHUB_REDIRECT_URL"),
-		OAuthStateKey:        e.key32("OAUTH_STATE_KEY"),
-		OperatorGitHubIDs:    e.githubIDs("OPERATOR_GITHUB_IDS"),
-		UmamiURL:             e.URL("UMAMI_URL"),
-		UmamiAdminPassword:   e.Secret("UMAMI_ADMIN_PASSWORD", minUmamiAdminPassword),
-		UmamiUserPasswordKey: e.key32("UMAMI_USER_PASSWORD_KEY"),
-		TrackerReleaseDir:    e.String("TRACKER_RELEASE_DIR"),
+		Addr:                     e.ListenAddr("CONTROLPLANE_ADDR"),
+		OpsAddr:                  e.ListenAddr("CONTROLPLANE_OPS_ADDR"),
+		ConsoleOrigin:            e.origin("CONSOLE_ORIGIN"),
+		IngestOrigin:             e.origin("INGEST_ORIGIN"),
+		WebOrigin:                e.origin("WEB_ORIGIN"),
+		GitHubClientID:           e.String("GITHUB_CLIENT_ID"),
+		GitHubClientSecret:       e.Secret("GITHUB_CLIENT_SECRET", 1),
+		GitHubRedirectURL:        e.String("GITHUB_REDIRECT_URL"),
+		OAuthStateKey:            e.key32("OAUTH_STATE_KEY"),
+		OperatorGitHubIDs:        e.githubIDs("OPERATOR_GITHUB_IDS"),
+		OperatorStellarAddresses: e.stellarAddresses("OPERATOR_STELLAR_ADDRESSES"),
+		UmamiURL:                 e.URL("UMAMI_URL"),
+		UmamiAdminPassword:       e.Secret("UMAMI_ADMIN_PASSWORD", minUmamiAdminPassword),
+		UmamiUserPasswordKey:     e.key32("UMAMI_USER_PASSWORD_KEY"),
+		TrackerReleaseDir:        e.String("TRACKER_RELEASE_DIR"),
 	}
 	if v, ok := e.raw("TRACKER_NPM_PACKAGE"); ok {
 		c.TrackerNPMPackage = v
@@ -143,6 +150,27 @@ func (e *Env) githubIDs(key string) map[int64]bool {
 			return nil
 		}
 		out[n] = true
+	}
+	return out
+}
+
+// stellarAddresses reads an optional comma separated list of stellar account
+// ids (G-addresses), each checked with its strkey checksum. unset or empty
+// is an empty list: github operators are required, wallet operators are
+// not.
+func (e *Env) stellarAddresses(key string) map[string]bool {
+	out := map[string]bool{}
+	v, ok := e.raw(key)
+	if !ok || strings.TrimSpace(v) == "" {
+		return out
+	}
+	for _, part := range strings.Split(v, ",") {
+		a := strings.TrimSpace(part)
+		if !strkey.IsValidEd25519PublicKey(a) {
+			e.fail(key, "must be a comma separated list of stellar account ids (G...)")
+			return nil
+		}
+		out[a] = true
 	}
 	return out
 }

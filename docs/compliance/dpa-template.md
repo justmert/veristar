@@ -1,12 +1,15 @@
 ---
 title: "Data processing terms (template)"
-description: "A template for the data processing terms between the operator and a tenant."
+description: "A template for the data processing terms between the hosting operator and a tenant."
 ---
 
-The data processing terms between the operator and each tenant. They follow
-GDPR Art. 28(3) clause by clause (S10) and are part of the terms of use
-(`terms.md`, section 1) that every project accepts at enrollment. This page is
-not legal advice. Last updated 2026-11-12.
+The data processing terms between the hosting operator and each tenant. They
+follow GDPR Art. 28(3) clause by clause (S10) and are part of the terms of use
+(`terms.md`, section 1) that every project accepts at enrollment. In these
+terms "the operator" is the hosting operator of `terms.md` section 1: the party
+that runs the service and hosts its data. SCF is not a party to them; it
+receives the project statistics that clause 3 describes. This page is not legal
+advice. Last updated 2026-11-16.
 
 ## 1. Subject matter, duration, nature and purpose
 
@@ -25,7 +28,11 @@ clients of the tenant; the data listed there.
 
 The tenant's instructions are its configuration of the service: its sites and
 allowed origins, its OTLP tokens, its members, the tracker options it uses and
-the erasure requests it makes. The operator processes personal data only on
+the erasure requests it makes. They also include the instruction the tenant
+gives at enrollment by accepting `terms.md` section 1.1: to make aggregate
+statistics about its project available to SCF, limited to the per site and day
+web aggregates and the hourly and daily API aggregates listed there, for as
+long as the project is enrolled. The operator processes personal data only on
 these instructions, including with regard to transfers to third countries,
 unless EU or member state law requires otherwise, in which case it informs the
 tenant first unless that law forbids it. The operator informs the tenant

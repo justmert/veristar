@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/justmert/veristar/internal/controlplane/httpx"
+	"github.com/justmert/veristar/internal/controlplane/identity"
 	"github.com/justmert/veristar/internal/controlplane/session"
 )
 
@@ -25,31 +26,35 @@ type Routes interface {
 
 // Guard decides who is an operator (contract 5.1).
 type Guard struct {
-	ids map[int64]bool
+	ops identity.Operators
 }
 
-// NewGuard takes the loaded OPERATOR_GITHUB_IDS. an empty list would make
-// the operator area unreachable without saying why, so it is refused.
-func NewGuard(ids map[int64]bool) (*Guard, error) {
-	if len(ids) == 0 {
+// NewGuard takes the loaded OPERATOR_GITHUB_IDS and
+// OPERATOR_STELLAR_ADDRESSES. an empty github list would make the operator
+// area unreachable without saying why, so it is refused; the address list
+// may be empty.
+func NewGuard(ops identity.Operators) (*Guard, error) {
+	if len(ops.GitHubIDs()) == 0 {
 		return nil, errors.New("operator: OPERATOR_GITHUB_IDS is empty")
 	}
-	cp := make(map[int64]bool, len(ids))
-	for id, ok := range ids {
-		if ok {
-			cp[id] = true
-		}
+	cp := identity.Operators{GitHub: map[int64]bool{}, Stellar: map[string]bool{}}
+	for _, id := range ops.GitHubIDs() {
+		cp.GitHub[id] = true
 	}
-	return &Guard{ids: cp}, nil
+	for _, a := range ops.StellarAddresses() {
+		cp.Stellar[a] = true
+	}
+	return &Guard{ops: cp}, nil
 }
 
 // Allowed reports whether u may use the operator routes: cp.users.is_operator
-// (read on every request by session.RequireUser) and a github id in the list
-// this process loaded. both are needed, so an id removed from the list stops
-// working at the next start even before that person signs in again, and a
-// stale flag alone never grants access.
+// (read on every request by session.RequireUser) and a github id or stellar
+// address of the account in the lists this process loaded. both are needed,
+// so an entry removed from a list stops working at the next start even
+// before that person signs in again, and a stale flag alone never grants
+// access.
 func (g *Guard) Allowed(u session.User) bool {
-	return u.IsOperator && g.ids[u.GitHubID]
+	return u.IsOperator && g.ops.Is(u.GitHubID, u.StellarAddress)
 }
 
 // Require answers 403 operator_required unless the signed-in user is an

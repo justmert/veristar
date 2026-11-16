@@ -14,20 +14,29 @@ import (
 
 const operatorSyncFlags = `-- name: OperatorSyncFlags :many
 update cp.users
-set is_operator = (github_id = any($1::bigint[]))
-where is_operator <> (github_id = any($1::bigint[]))
+set is_operator = (coalesce(github_id = any($1::bigint[]), false)
+                   or coalesce(stellar_address = any($2::text[]), false))
+where deleted_at is null
+  and is_operator <> (coalesce(github_id = any($1::bigint[]), false)
+                      or coalesce(stellar_address = any($2::text[]), false))
 returning id, is_operator
 `
+
+type OperatorSyncFlagsParams struct {
+	OperatorIds       []int64
+	OperatorAddresses []string
+}
 
 type OperatorSyncFlagsRow struct {
 	ID         uuid.UUID
 	IsOperator bool
 }
 
-// startup sync of contract 5.1: is_operator follows OPERATOR_GITHUB_IDS for
-// every user, and the changed rows come back for the audit
-func (q *Queries) OperatorSyncFlags(ctx context.Context, operatorIds []int64) ([]OperatorSyncFlagsRow, error) {
-	rows, err := q.db.Query(ctx, operatorSyncFlags, operatorIds)
+// startup sync of contract 5.1: is_operator follows OPERATOR_GITHUB_IDS and
+// OPERATOR_STELLAR_ADDRESSES for every live user, and the changed rows come
+// back for the audit. a null identity column matches no entry.
+func (q *Queries) OperatorSyncFlags(ctx context.Context, arg OperatorSyncFlagsParams) ([]OperatorSyncFlagsRow, error) {
+	rows, err := q.db.Query(ctx, operatorSyncFlags, arg.OperatorIds, arg.OperatorAddresses)
 	if err != nil {
 		return nil, err
 	}
@@ -47,18 +56,19 @@ func (q *Queries) OperatorSyncFlags(ctx context.Context, operatorIds []int64) ([
 }
 
 const operatorTenantMembers = `-- name: OperatorTenantMembers :many
-select u.github_id, u.github_login, m.role, m.created_at
+select u.github_id, u.github_login, u.stellar_address, m.role, m.created_at
 from cp.tenant_members m
 join cp.users u on u.id = m.user_id
 where m.tenant_id = $1
-order by lower(u.github_login), u.id
+order by lower(coalesce(u.github_login, u.stellar_address)), u.id
 `
 
 type OperatorTenantMembersRow struct {
-	GithubID    int64
-	GithubLogin string
-	Role        string
-	CreatedAt   time.Time
+	GithubID       *int64
+	GithubLogin    *string
+	StellarAddress *string
+	Role           string
+	CreatedAt      time.Time
 }
 
 func (q *Queries) OperatorTenantMembers(ctx context.Context, tenantID uuid.UUID) ([]OperatorTenantMembersRow, error) {
@@ -73,6 +83,7 @@ func (q *Queries) OperatorTenantMembers(ctx context.Context, tenantID uuid.UUID)
 		if err := rows.Scan(
 			&i.GithubID,
 			&i.GithubLogin,
+			&i.StellarAddress,
 			&i.Role,
 			&i.CreatedAt,
 		); err != nil {
@@ -88,13 +99,14 @@ func (q *Queries) OperatorTenantMembers(ctx context.Context, tenantID uuid.UUID)
 
 const operatorUserRef = `-- name: OperatorUserRef :one
 
-select id, github_id, github_login from cp.users where id = $1 and deleted_at is null
+select id, github_id, github_login, stellar_address from cp.users where id = $1 and deleted_at is null
 `
 
 type OperatorUserRefRow struct {
-	ID          uuid.UUID
-	GithubID    int64
-	GithubLogin string
+	ID             uuid.UUID
+	GithubID       *int64
+	GithubLogin    *string
+	StellarAddress *string
 }
 
 // operator tenant detail parts that cp_operator may not read (control-plane-api
@@ -103,7 +115,12 @@ type OperatorUserRefRow struct {
 func (q *Queries) OperatorUserRef(ctx context.Context, id uuid.UUID) (OperatorUserRefRow, error) {
 	row := q.db.QueryRow(ctx, operatorUserRef, id)
 	var i OperatorUserRefRow
-	err := row.Scan(&i.ID, &i.GithubID, &i.GithubLogin)
+	err := row.Scan(
+		&i.ID,
+		&i.GithubID,
+		&i.GithubLogin,
+		&i.StellarAddress,
+	)
 	return i, err
 }
 

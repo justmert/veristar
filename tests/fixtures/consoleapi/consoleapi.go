@@ -33,6 +33,7 @@ import (
 	"github.com/justmert/veristar/internal/controlplane"
 	"github.com/justmert/veristar/internal/controlplane/account"
 	"github.com/justmert/veristar/internal/controlplane/auth"
+	"github.com/justmert/veristar/internal/controlplane/identity"
 	"github.com/justmert/veristar/internal/controlplane/lifecycle"
 	"github.com/justmert/veristar/internal/controlplane/members"
 	"github.com/justmert/veristar/internal/controlplane/operator"
@@ -60,6 +61,8 @@ type Options struct {
 	Reconciler tenants.Reconciler
 	// Operators are github ids with operator rights.
 	Operators map[int64]bool
+	// StellarOperators are stellar addresses with operator rights.
+	StellarOperators map[string]bool
 	// Umami is what account deletion deletes the umami user with. nil uses
 	// an in-memory Users, available as Env.Umami.
 	Umami account.UmamiUsers
@@ -183,6 +186,7 @@ func Start(t testing.TB, o Options) *Env {
 		// the guard needs at least one operator; this id never signs in
 		ops = map[int64]bool{1: true}
 	}
+	operators := identity.Operators{GitHub: ops, Stellar: o.StellarOperators}
 	endpoints := auth.Endpoints{
 		OAuth: oauth2.Endpoint{
 			AuthURL:   e.Fixture.URL + "/login/oauth/authorize",
@@ -195,14 +199,14 @@ func Start(t testing.TB, o Options) *Env {
 	ah, err := auth.New(auth.Config{
 		Reconcile: e.Scope.Reconcile, ClientID: clientID, ClientSecret: secret,
 		RedirectURL: e.Srv.URL + "/api/auth/github/callback", StateKey: random32(t),
-		Operators: ops, Endpoints: endpoints,
+		Operators: operators, ConsoleOrigin: e.Srv.URL, Endpoints: endpoints,
 	}, o.DB, sessions)
 	require.NoError(t, err)
 	users, err := auth.NewUserLookup(auth.UserLookupConfig{
 		ClientID: clientID, ClientSecret: secret, Endpoints: endpoints,
 	})
 	require.NoError(t, err)
-	guard, err := operator.NewGuard(ops)
+	guard, err := operator.NewGuard(operators)
 	require.NoError(t, err)
 	mode, err := operator.NewEnrollmentMode(o.DB)
 	require.NoError(t, err)

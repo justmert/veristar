@@ -22,6 +22,8 @@ export const mcpCredential = z.object({
   client_id: z.string().nullable(),
   user_id: id,
   github_login: z.string().nullable(),
+  // the github login or short stellar address of the creating account
+  display_name: z.string().nullable(),
   status: z.enum(["active", "expired", "revoked"]),
   created_at: time,
   expires_at: time.nullable(),

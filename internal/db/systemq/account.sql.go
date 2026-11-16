@@ -13,13 +13,20 @@ import (
 )
 
 const accountDeleteInvites = `-- name: AccountDeleteInvites :execrows
-delete from cp.invites where github_id = $1
+delete from cp.invites
+where github_id = $1::bigint or stellar_address = $2::text
 `
 
-// open and expired invites addressed to the account's github id: they hold
-// its login, and the person can be invited again after signing in anew
-func (q *Queries) AccountDeleteInvites(ctx context.Context, githubID int64) (int64, error) {
-	result, err := q.db.Exec(ctx, accountDeleteInvites, githubID)
+type AccountDeleteInvitesParams struct {
+	GithubID       *int64
+	StellarAddress *string
+}
+
+// open and expired invites addressed to the account's github id or stellar
+// address: they name the person, who can be invited again after signing in
+// anew. a null parameter matches nothing.
+func (q *Queries) AccountDeleteInvites(ctx context.Context, arg AccountDeleteInvitesParams) (int64, error) {
+	result, err := q.db.Exec(ctx, accountDeleteInvites, arg.GithubID, arg.StellarAddress)
 	if err != nil {
 		return 0, err
 	}
@@ -97,11 +104,12 @@ func (q *Queries) AccountDeleteSessions(ctx context.Context, userID uuid.UUID) (
 
 const accountEmpty = `-- name: AccountEmpty :exec
 update cp.users
-set github_id = 0, github_login = '', is_operator = false, last_login_at = null, deleted_at = now()
+set github_id = null, github_login = null, stellar_address = null, umami_username = null,
+    is_operator = false, last_login_at = null, deleted_at = now()
 where id = $1 and deleted_at is null
 `
 
-// clears what identifies the person (00031). is_operator goes to false in
+// clears what identifies the person (00031, 00034). is_operator goes to false in
 // the same statement, which fires users_mcp_revoke for any operator
 // credential left
 func (q *Queries) AccountEmpty(ctx context.Context, id uuid.UUID) error {
@@ -157,14 +165,15 @@ func (q *Queries) AccountLockTenants(ctx context.Context, userID uuid.UUID) ([]u
 
 const accountLockUser = `-- name: AccountLockUser :one
 
-select id, github_id, is_operator, deleted_at from cp.users where id = $1 for update
+select id, github_id, stellar_address, is_operator, deleted_at from cp.users where id = $1 for update
 `
 
 type AccountLockUserRow struct {
-	ID         uuid.UUID
-	GithubID   int64
-	IsOperator bool
-	DeletedAt  *time.Time
+	ID             uuid.UUID
+	GithubID       *int64
+	StellarAddress *string
+	IsOperator     bool
+	DeletedAt      *time.Time
 }
 
 // console account deletion (contract 4.1.6), as cp_system: the account's
@@ -177,6 +186,7 @@ func (q *Queries) AccountLockUser(ctx context.Context, id uuid.UUID) (AccountLoc
 	err := row.Scan(
 		&i.ID,
 		&i.GithubID,
+		&i.StellarAddress,
 		&i.IsOperator,
 		&i.DeletedAt,
 	)

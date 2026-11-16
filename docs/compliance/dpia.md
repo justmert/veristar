@@ -20,7 +20,7 @@ inventory are in `privacy-strategy.md` section 2; residency in
 
 | Principle | How the design meets it | Evidence |
 |---|---|---|
-| Purpose limitation | audience measurement for the tenant; SCF sees aggregates only | `cp_operator` role rights, `internal/db/boundaries_test.go` |
+| Purpose limitation | audience measurement for the tenant; SCF receives project aggregates only, on the tenant's instruction (`terms.md` section 1.1) | `cp_operator` role rights, `internal/db/boundaries_test.go` |
 | Data minimisation | no IP stored, no region or city, query allowlist, strkey and email redaction, Umami features off, API traces and logs discarded | `privacy-strategy.md` sections 3, 5 and 7; `tests/privacy/` |
 | Storage limitation | raw web rows deleted after 25 months by default; queues and memory stores expire in hours or days | `internal/jobs/retainweb`, `privacy-strategy.md` section 4 |
 | Accuracy | not relevant to statistics; visitors are unique per UTC day by design | `privacy-strategy.md` section 3 |

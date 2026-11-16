@@ -13,6 +13,7 @@ const credential = {
   client_id: null,
   user_id: "0193a6f2-7c1e-7d40-9f55-2b1c2a5e8a12",
   github_login: "octocat",
+  display_name: "octocat",
   status: "active",
   created_at: "2026-11-14T05:00:00Z",
   expires_at: "2027-02-12T05:00:00Z",

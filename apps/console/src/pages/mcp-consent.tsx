@@ -157,7 +157,7 @@ function Signed({ request }: { request: string }) {
       </Stop>
     );
   if (!inspect.data) return null;
-  return <Consent request={request} info={inspect.data} login={me.data?.user.github_login ?? ""} />;
+  return <Consent request={request} info={inspect.data} login={me.data?.user.display_name ?? ""} />;
 }
 
 function Consent({

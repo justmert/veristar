@@ -23,8 +23,19 @@ import { useProject } from "./project-layout";
 export type AddMemberValues = { login: string; role: Role };
 export type AddMemberErrors = Partial<Record<keyof AddMemberValues, string>>;
 
+// the one field takes a github username or a stellar address (contract
+// 4.2.5): a G-address names a stellar account, anything else a github login
+export function memberIdentity(
+  input: string,
+): { github_login: string } | { stellar_address: string } {
+  const t = input.trim().replace(/^@/, "");
+  return /^G[A-Z2-7]{55}$/.test(t) ? { stellar_address: t } : { github_login: t };
+}
+
 export function validateAddMember(values: AddMemberValues): AddMemberErrors {
-  const code = v.githubLogin(values.login.trim().replace(/^@/, ""));
+  const id = memberIdentity(values.login);
+  const code =
+    "stellar_address" in id ? v.strkey(id.stellar_address) : v.githubLogin(id.github_login);
   return code ? { login: v.fieldMessage(code) } : {};
 }
 
@@ -36,7 +47,7 @@ export function serverMemberErrors(err: unknown): AddMemberErrors {
   if (err.code !== "validation_failed") return {};
   const out: AddMemberErrors = {};
   for (const [path, code] of Object.entries(err.fields)) {
-    if (path === "github_login") out.login = v.fieldMessage(code);
+    if (path === "github_login" || path === "stellar_address") out.login = v.fieldMessage(code);
     else if (path === "role") out.role = v.fieldMessage(code);
     // too_many is reported on the body as a whole
     else out.login ??= v.fieldMessage(code);
@@ -45,8 +56,37 @@ export function serverMemberErrors(err: unknown): AddMemberErrors {
 }
 
 export function addResultText(r: AddMemberResult): string {
-  if (r.kind === "member") return `${r.member.github_login} was added as ${r.member.role}.`;
-  return `${r.invite.github_login} has no account yet. They join as ${r.invite.role} when they first sign in, until ${formatDate(r.invite.expires_at)}.`;
+  if (r.kind === "member") return `${r.member.display_name} was added as ${r.member.role}.`;
+  return `${r.invite.display_name} has no account yet. They join as ${r.invite.role} when they first sign in, until ${formatDate(r.invite.expires_at)}.`;
+}
+
+// a person in a list: the github profile link of a github account, or the
+// short address of a wallet-only one with the whole address on hover
+function PersonName({
+  githubLogin,
+  address,
+  name,
+}: {
+  githubLogin: string | null;
+  address: string | null;
+  name: string;
+}) {
+  if (githubLogin !== null) {
+    return (
+      <a
+        href={`https://github.com/${encodeURIComponent(githubLogin)}`}
+        rel="noopener noreferrer"
+        className="rounded-sm hover:underline focus-ring"
+      >
+        @{githubLogin}
+      </a>
+    );
+  }
+  return (
+    <span className="font-mono" title={address ?? undefined}>
+      {name}
+    </span>
+  );
 }
 
 export function MembersPage() {
@@ -188,7 +228,7 @@ export function AddMemberForm({ tenantId }: { tenantId: string }) {
   const [errors, setErrors] = useState<AddMemberErrors>({});
   const [done, setDone] = useState<string | null>(null);
   const add = useMutation({
-    mutationFn: (body: { github_login: string; role: Role }) => api.addMember(tenantId, body),
+    mutationFn: (body: Parameters<typeof api.addMember>[1]) => api.addMember(tenantId, body),
     onSuccess: async (r) => {
       setDone(addResultText(r));
       setValues({ login: "", role: "member" });
@@ -203,21 +243,21 @@ export function AddMemberForm({ tenantId }: { tenantId: string }) {
     const found = validateAddMember(values);
     setErrors(found);
     if (Object.keys(found).length > 0) return;
-    add.mutate({ github_login: values.login.trim().replace(/^@/, ""), role: values.role });
+    add.mutate({ ...memberIdentity(values.login), role: values.role });
   }
 
   return (
     <form noValidate onSubmit={submit} aria-label="Add a member" className="flex flex-col gap-3">
       <div className="grid gap-3 @lg:grid-cols-[minmax(0,1fr)_10rem_auto] @lg:items-start">
         <TextField
-          label="GitHub username"
+          label="GitHub username or Stellar address"
           name="github_login"
           autoCapitalize="none"
           autoComplete="off"
           spellCheck={false}
-          maxLength={40}
-          placeholder="octocat"
-          hint="Someone without an account yet gets an invite and joins at first sign-in."
+          maxLength={56}
+          placeholder="octocat or G…"
+          hint="Someone without an account yet gets an invite and joins at first sign-in with that GitHub account or wallet."
           className="max-lg:h-(--vs-control-touch)"
           value={values.login}
           onChange={(e) => setValues((s) => ({ ...s, login: e.target.value }))}
@@ -306,15 +346,13 @@ function MemberRow({
     >
       <td className={cell}>
         <span className="flex min-w-0 items-center gap-2.5">
-          <Initial login={member.github_login} />
+          <Initial login={member.display_name} />
           <span className="min-w-0 truncate font-medium text-fg">
-            <a
-              href={`https://github.com/${encodeURIComponent(member.github_login)}`}
-              rel="noopener noreferrer"
-              className="rounded-sm hover:underline focus-ring"
-            >
-              @{member.github_login}
-            </a>
+            <PersonName
+              githubLogin={member.github_login}
+              address={member.stellar_address}
+              name={member.display_name}
+            />
             {isSelf ? <span className="font-normal text-fg-3"> (you)</span> : null}
           </span>
         </span>
@@ -322,7 +360,7 @@ function MemberRow({
       <td className={cell}>
         {canManage ? (
           <NativeSelect
-            aria-label={`Role of ${member.github_login}`}
+            aria-label={`Role of ${member.display_name}`}
             value={member.role}
             disabled={setRole.isPending || lastOwner}
             title={lastOwner ? "The last owner cannot be made a member" : undefined}
@@ -350,7 +388,7 @@ function MemberRow({
       <td className={cn(cell, "text-right")}>
         {(canManage || isSelf) && !lastOwner ? (
           <RemoveMember
-            login={member.github_login}
+            login={member.display_name}
             tenantName={tenantName}
             isSelf={isSelf}
             pending={remove.isPending}
@@ -432,10 +470,14 @@ function InviteRow({
   });
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 transition-colors duration-(--vs-duration-press) ease-standard hover:bg-hover">
-      <Initial login={invite.github_login} dashed />
+      <Initial login={invite.display_name} dashed />
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <p className="truncate text-body font-medium text-fg">
-          @{invite.github_login}
+          <PersonName
+            githubLogin={invite.github_login}
+            address={invite.stellar_address}
+            name={invite.display_name}
+          />
           <span className="ml-2 text-caption font-normal text-warning">Has not signed in yet</span>
         </p>
         <p className="text-small text-fg-2">

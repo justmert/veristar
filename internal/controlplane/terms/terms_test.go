@@ -10,11 +10,16 @@ import (
 func TestEmbeddedTerms(t *testing.T) {
 	tm, err := Current()
 	require.NoError(t, err)
-	require.Equal(t, "2026-11-13-draft.3", tm.Version)
+	require.Equal(t, "2026-11-16-draft.4", tm.Version)
 	require.Equal(t, "draft", tm.Status)
 	require.True(t, strings.HasPrefix(tm.Markdown, "# Terms of use"))
 	require.NotContains(t, tm.Markdown, "version:")
 	require.NotContains(t, tm.Markdown, "\u2014", "no em dash in the terms")
+	// the roles stay apart: the hosting operator is the processor, SCF
+	// receives project statistics on the tenant's instruction
+	require.Contains(t, tm.Markdown, "the hosting operator is the **processor**")
+	require.Contains(t, tm.Markdown, "### 1.1 Project statistics for SCF")
+	require.NotContains(t, tm.Markdown, "Today that is the Stellar\n  Community Fund")
 }
 
 func TestParseRefuses(t *testing.T) {

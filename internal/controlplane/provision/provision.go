@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
-	"strconv"
 	"time"
 	"unicode/utf8"
 
@@ -94,8 +93,10 @@ type Change struct {
 // umami allows 50 characters, so the id is used (38 characters).
 func TeamName(tenantID uuid.UUID) string { return "t-" + tenantID.String() }
 
-// Username is the umami user of a console user.
-func Username(githubID int64) string { return "gh-" + strconv.FormatInt(githubID, 10) }
+// Username is the name the reconciler gives the umami user of a console
+// account it creates. accounts whose umami user was made before migration
+// 00034 keep the gh-<github id> name stored in cp.users.umami_username.
+func Username(userID uuid.UUID) string { return "u-" + userID.String() }
 
 // umami limits website names to 100 characters
 const websiteNameMax = 100
@@ -348,13 +349,29 @@ func (s *run) team(ctx context.Context) (string, error) {
 }
 
 // users makes sure every member has an umami user: id equal to cp.users.id,
-// name gh-<github id>, global role view-only, and the current day's derived
+// name cp.users.umami_username (assigned here as Username(id) when the
+// account has none yet), global role view-only, and the current day's derived
 // password set once at creation. an existing user's password is
 // never touched here; only the umami-rotate task changes passwords.
 func (s *run) users(ctx context.Context, members []systemq.ProvisionMembersRow) error {
 	for _, m := range members {
 		id := m.ID.String()
-		want := Username(m.GithubID)
+		var want string
+		if m.UmamiUsername != nil {
+			want = *m.UmamiUsername
+		} else {
+			want = Username(m.ID)
+			// stored before the umami call, so sso reads the name the user is
+			// created with. a failed create leaves it stored, which is
+			// harmless: the next run creates the user under the same name.
+			// a failed statement leaves the transaction unusable, so it is
+			// returned as an auditError, which commits nothing
+			if err := s.q.ProvisionSetUmamiUsername(ctx, systemq.ProvisionSetUmamiUsernameParams{
+				UmamiUsername: &want, ID: m.ID,
+			}); err != nil {
+				return &auditError{err: fmt.Errorf("provision: store umami username: %w", err)}
+			}
+		}
 		u, ok, err := s.r.Admin.GetUser(ctx, id)
 		if err != nil {
 			return err
@@ -375,8 +392,8 @@ func (s *run) users(ctx context.Context, members []systemq.ProvisionMembersRow) 
 			continue
 		}
 		if u.Username != want {
-			// the github id is the identity and never changes, so another
-			// name under this id was made outside the platform
+			// the stored name never changes, so another name under this id
+			// was made outside the platform
 			return fmt.Errorf("provision: umami user %s is named %q, want %q", id, u.Username, want)
 		}
 		if u.Role != umami.RoleViewOnly {

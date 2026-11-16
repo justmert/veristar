@@ -40,7 +40,16 @@ func TestLoadControlPlane(t *testing.T) {
 	if got := fmt.Sprintf("%v %+v %#v", c.OAuthStateKey, c.UmamiUserPasswordKey, c.GitHubClientSecret); strings.Contains(got, "kkkk") || strings.Contains(got, "client-secret-value") {
 		t.Fatalf("a secret printed: %s", got)
 	}
+	if len(c.OperatorStellarAddresses) != 0 {
+		t.Fatalf("wallet operators without the key: %v", c.OperatorStellarAddresses)
+	}
 	env := controlPlaneEnv()
+	env["OPERATOR_STELLAR_ADDRESSES"] = " GCB634SLKV5N4COK4FICWJADNTFWIHTWWM34BFPLACL6YSQVLY5ZWOQN ,GBRPYHIL2CI3FNQ4BXLFMNDLFJUNPU2HY3ZMFSHONUCEOASW7QC7OX2H"
+	if c, err = LoadControlPlane(FromMap(env)); err != nil || len(c.OperatorStellarAddresses) != 2 ||
+		!c.OperatorStellarAddresses["GCB634SLKV5N4COK4FICWJADNTFWIHTWWM34BFPLACL6YSQVLY5ZWOQN"] {
+		t.Fatalf("wallet operators: %v %v", err, c.OperatorStellarAddresses)
+	}
+	env = controlPlaneEnv()
 	env["TRACKER_NPM_PACKAGE"] = "tracker"
 	if c, err = LoadControlPlane(FromMap(env)); err != nil || c.TrackerNPMPackage != "tracker" {
 		t.Fatalf("npm package: %v %q", err, c.TrackerNPMPackage)
@@ -51,9 +60,12 @@ func TestLoadControlPlaneRefuses(t *testing.T) {
 	cases := map[string]struct {
 		key, value string
 	}{
-		"missing operators":    {"OPERATOR_GITHUB_IDS", ""},
-		"bad operator id":      {"OPERATOR_GITHUB_IDS", "1,octocat"},
-		"zero operator id":     {"OPERATOR_GITHUB_IDS", "0"},
+		"missing operators":   {"OPERATOR_GITHUB_IDS", ""},
+		"bad operator id":     {"OPERATOR_GITHUB_IDS", "1,octocat"},
+		"zero operator id":    {"OPERATOR_GITHUB_IDS", "0"},
+		"bad wallet operator": {"OPERATOR_STELLAR_ADDRESSES", "GCB634SLKV5N4COK4FICWJADNTFWIHTWWM34BFPLACL6YSQVLY5ZWOQA"},
+		"muxed wallet operator": {"OPERATOR_STELLAR_ADDRESSES",
+			"MA7QYNF7SOWQ3GLR2BGMZEHXAVIRZA4KVWLTJJFC7MGXUA74P7UJUAAAAAAAAAAAAGZFQ"},
 		"short state key":      {"OAUTH_STATE_KEY", base64.StdEncoding.EncodeToString([]byte("short"))},
 		"state key not base64": {"OAUTH_STATE_KEY", "not base64!"},
 		"origin with path":     {"CONSOLE_ORIGIN", "https://app.example.org/x"},

@@ -31,6 +31,10 @@ type statePayload struct {
 	Verifier string `json:"verifier"`
 	ReturnTo string `json:"return_to"`
 	Exp      int64  `json:"exp"`
+	// LinkUser is set when the flow links github to the signed-in account
+	// (contract 4.1.8) instead of signing in: the account's id, which the
+	// callback requires the session to still hold
+	LinkUser string `json:"link_user,omitempty"`
 }
 
 type sealer struct{ aead cipher.AEAD }
@@ -51,7 +55,13 @@ func newSealer(key []byte) (*sealer, error) {
 }
 
 func (s *sealer) seal(p statePayload) (string, error) {
-	plain, err := json.Marshal(p)
+	return s.sealJSON(p, stateAAD)
+}
+
+// sealJSON seals v as json under aad, which binds the value to one cookie
+// and format.
+func (s *sealer) sealJSON(v any, aad []byte) (string, error) {
+	plain, err := json.Marshal(v)
 	if err != nil {
 		return "", err
 	}
@@ -59,21 +69,30 @@ func (s *sealer) seal(p statePayload) (string, error) {
 	if _, err := rand.Read(nonce); err != nil {
 		return "", err
 	}
-	out := s.aead.Seal(nonce, nonce, plain, stateAAD)
+	out := s.aead.Seal(nonce, nonce, plain, aad)
 	return base64.RawURLEncoding.EncodeToString(out), nil
 }
 
 var errBadState = errors.New("auth: oauth state cookie missing, tampered or expired")
 
-func (s *sealer) open(v string, now time.Time) (statePayload, error) {
+// openRaw opens a value sealed under aad; errBadState when it was not.
+func (s *sealer) openRaw(v string, aad []byte) ([]byte, error) {
 	raw, err := base64.RawURLEncoding.DecodeString(v)
 	if err != nil || len(raw) < s.aead.NonceSize() {
-		return statePayload{}, errBadState
+		return nil, errBadState
 	}
 	n := s.aead.NonceSize()
-	plain, err := s.aead.Open(nil, raw[:n], raw[n:], stateAAD)
+	plain, err := s.aead.Open(nil, raw[:n], raw[n:], aad)
 	if err != nil {
-		return statePayload{}, errBadState
+		return nil, errBadState
+	}
+	return plain, nil
+}
+
+func (s *sealer) open(v string, now time.Time) (statePayload, error) {
+	plain, err := s.openRaw(v, stateAAD)
+	if err != nil {
+		return statePayload{}, err
 	}
 	var p statePayload
 	if err := json.Unmarshal(plain, &p); err != nil {

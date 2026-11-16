@@ -56,25 +56,26 @@ var usableTenantStatus = map[string]bool{"active": true, "pending": true}
 
 // credentialRow is a credential with its user, membership and tenant.
 type credentialRow struct {
-	ID           uuid.UUID
-	Kind         string
-	Scope        string
-	TenantID     uuid.NullUUID
-	UserID       uuid.UUID
-	Hash         []byte
-	Resource     string
-	ExpiresAt    *time.Time
-	RevokedAt    *time.Time
-	GitHubID     int64
-	GitHubLogin  string
-	IsOperator   bool
-	Role         *string
-	TenantStatus *string
+	ID             uuid.UUID
+	Kind           string
+	Scope          string
+	TenantID       uuid.NullUUID
+	UserID         uuid.UUID
+	Hash           []byte
+	Resource       string
+	ExpiresAt      *time.Time
+	RevokedAt      *time.Time
+	GitHubID       *int64
+	GitHubLogin    *string
+	StellarAddress *string
+	IsOperator     bool
+	Role           *string
+	TenantStatus   *string
 }
 
 //nolint:gosec // column names of a query, not a credential
 const credentialColumns = `c.id, c.kind, c.scope, c.tenant_id, c.user_id, c.resource, c.expires_at, c.revoked_at,
-	u.github_id, u.github_login, u.is_operator, m.role, t.status`
+	u.github_id, u.github_login, u.stellar_address, u.is_operator, m.role, t.status`
 
 //nolint:gosec // joins of a query, not a credential
 const credentialJoins = `
@@ -85,7 +86,7 @@ const credentialJoins = `
 func scanCredential(row pgx.Row, hash *[]byte) (credentialRow, error) {
 	var c credentialRow
 	err := row.Scan(hash, &c.ID, &c.Kind, &c.Scope, &c.TenantID, &c.UserID, &c.Resource, &c.ExpiresAt, &c.RevokedAt,
-		&c.GitHubID, &c.GitHubLogin, &c.IsOperator, &c.Role, &c.TenantStatus)
+		&c.GitHubID, &c.GitHubLogin, &c.StellarAddress, &c.IsOperator, &c.Role, &c.TenantStatus)
 	c.Hash = *hash
 	return c, err
 }
@@ -173,7 +174,10 @@ func (s *Server) admit(c credentialRow, now time.Time) (Principal, error) {
 	}
 	p := Principal{
 		CredentialID: c.ID, Kind: c.Kind, Scope: c.Scope,
-		User: session.User{ID: c.UserID, GitHubID: c.GitHubID, GitHubLogin: c.GitHubLogin, IsOperator: c.IsOperator},
+		User: session.User{
+			ID: c.UserID, GitHubID: c.GitHubID, GitHubLogin: c.GitHubLogin,
+			StellarAddress: c.StellarAddress, IsOperator: c.IsOperator,
+		},
 	}
 	switch c.Scope {
 	case ScopeTenant:

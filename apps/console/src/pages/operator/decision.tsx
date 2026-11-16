@@ -379,5 +379,5 @@ export function Waiting({ since, now }: { since: string; now: number }) {
 }
 
 export function enrolledLine(t: OperatorTenantDetail["tenant"]): string {
-  return `Enrolled ${formatDate(t.created_at)}${t.created_by ? ` by ${t.created_by.github_login}` : ""}.`;
+  return `Enrolled ${formatDate(t.created_at)}${t.created_by ? ` by ${t.created_by.display_name}` : ""}.`;
 }

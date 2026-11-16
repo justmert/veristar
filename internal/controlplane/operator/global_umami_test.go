@@ -20,6 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/justmert/veristar/internal/controlplane"
+	"github.com/justmert/veristar/internal/controlplane/identity"
 	"github.com/justmert/veristar/internal/controlplane/session"
 	pdb "github.com/justmert/veristar/internal/db"
 	"github.com/justmert/veristar/internal/jobs/aggregateweb"
@@ -169,7 +170,7 @@ func TestGlobalRoutesNeedAnOperator(t *testing.T) {
 	superExec(t, pg, `insert into cp.tenants (id, slug, name, status) values ($1, 'one', 'One', 'active')`, tenant)
 
 	sessions := session.New(d)
-	guard, err := NewGuard(map[int64]bool{7: true})
+	guard, err := NewGuard(identity.Operators{GitHub: map[int64]bool{7: true}})
 	require.NoError(t, err)
 	g, err := NewGlobal(d)
 	require.NoError(t, err)

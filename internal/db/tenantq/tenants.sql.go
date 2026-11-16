@@ -57,12 +57,12 @@ func (q *Queries) CountMembersAndOpenInvites(ctx context.Context) (int32, error)
 const createInvite = `-- name: CreateInvite :one
 insert into cp.invites (tenant_id, github_id, github_login, role, created_by, expires_at)
 values (cp.current_tenant_id(), $1, $2, $3, $4, $5)
-returning id, tenant_id, github_login, role, created_by, created_at, expires_at, github_id
+returning id, tenant_id, github_login, role, created_by, created_at, expires_at, github_id, stellar_address
 `
 
 type CreateInviteParams struct {
-	GithubID    int64
-	GithubLogin string
+	GithubID    *int64
+	GithubLogin *string
 	Role        string
 	CreatedBy   uuid.UUID
 	ExpiresAt   time.Time
@@ -86,17 +86,61 @@ func (q *Queries) CreateInvite(ctx context.Context, arg CreateInviteParams) (CpI
 		&i.CreatedAt,
 		&i.ExpiresAt,
 		&i.GithubID,
+		&i.StellarAddress,
+	)
+	return i, err
+}
+
+const createStellarInvite = `-- name: CreateStellarInvite :one
+insert into cp.invites (tenant_id, stellar_address, role, created_by, expires_at)
+values (cp.current_tenant_id(), $1, $2, $3, $4)
+returning id, tenant_id, github_login, role, created_by, created_at, expires_at, github_id, stellar_address
+`
+
+type CreateStellarInviteParams struct {
+	StellarAddress *string
+	Role           string
+	CreatedBy      uuid.UUID
+	ExpiresAt      time.Time
+}
+
+func (q *Queries) CreateStellarInvite(ctx context.Context, arg CreateStellarInviteParams) (CpInvite, error) {
+	row := q.db.QueryRow(ctx, createStellarInvite,
+		arg.StellarAddress,
+		arg.Role,
+		arg.CreatedBy,
+		arg.ExpiresAt,
+	)
+	var i CpInvite
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.GithubLogin,
+		&i.Role,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.GithubID,
+		&i.StellarAddress,
 	)
 	return i, err
 }
 
 const deleteExpiredInvitesForAccount = `-- name: DeleteExpiredInvitesForAccount :execrows
-delete from cp.invites where github_id = $1 and expires_at <= now()
+delete from cp.invites
+where (github_id = $1::bigint or stellar_address = $2::text)
+  and expires_at <= now()
 `
 
-// an expired invite still holds its slot in invites_tenant_github_idx
-func (q *Queries) DeleteExpiredInvitesForAccount(ctx context.Context, githubID int64) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteExpiredInvitesForAccount, githubID)
+type DeleteExpiredInvitesForAccountParams struct {
+	GithubID       *int64
+	StellarAddress *string
+}
+
+// an expired invite still holds its slot in invites_tenant_github_idx or
+// invites_tenant_stellar_idx. a null parameter matches nothing.
+func (q *Queries) DeleteExpiredInvitesForAccount(ctx context.Context, arg DeleteExpiredInvitesForAccountParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteExpiredInvitesForAccount, arg.GithubID, arg.StellarAddress)
 	if err != nil {
 		return 0, err
 	}
@@ -104,7 +148,7 @@ func (q *Queries) DeleteExpiredInvitesForAccount(ctx context.Context, githubID i
 }
 
 const deleteInvite = `-- name: DeleteInvite :one
-delete from cp.invites where id = $1 returning id, tenant_id, github_login, role, created_by, created_at, expires_at, github_id
+delete from cp.invites where id = $1 returning id, tenant_id, github_login, role, created_by, created_at, expires_at, github_id, stellar_address
 `
 
 func (q *Queries) DeleteInvite(ctx context.Context, id uuid.UUID) (CpInvite, error) {
@@ -119,6 +163,7 @@ func (q *Queries) DeleteInvite(ctx context.Context, id uuid.UUID) (CpInvite, err
 		&i.CreatedAt,
 		&i.ExpiresAt,
 		&i.GithubID,
+		&i.StellarAddress,
 	)
 	return i, err
 }
@@ -136,18 +181,19 @@ func (q *Queries) DeleteTenantMember(ctx context.Context, userID uuid.UUID) (int
 }
 
 const getTenantMember = `-- name: GetTenantMember :one
-select m.user_id, u.github_id, u.github_login, m.role, m.created_at
+select m.user_id, u.github_id, u.github_login, u.stellar_address, m.role, m.created_at
 from cp.tenant_members m
 join cp.users u on u.id = m.user_id
 where m.user_id = $1
 `
 
 type GetTenantMemberRow struct {
-	UserID      uuid.UUID
-	GithubID    int64
-	GithubLogin string
-	Role        string
-	CreatedAt   time.Time
+	UserID         uuid.UUID
+	GithubID       *int64
+	GithubLogin    *string
+	StellarAddress *string
+	Role           string
+	CreatedAt      time.Time
 }
 
 func (q *Queries) GetTenantMember(ctx context.Context, userID uuid.UUID) (GetTenantMemberRow, error) {
@@ -157,6 +203,7 @@ func (q *Queries) GetTenantMember(ctx context.Context, userID uuid.UUID) (GetTen
 		&i.UserID,
 		&i.GithubID,
 		&i.GithubLogin,
+		&i.StellarAddress,
 		&i.Role,
 		&i.CreatedAt,
 	)
@@ -211,7 +258,7 @@ func (q *Queries) InsertTenantMember(ctx context.Context, arg InsertTenantMember
 }
 
 const listOpenInvites = `-- name: ListOpenInvites :many
-select id, tenant_id, github_login, role, created_by, created_at, expires_at, github_id from cp.invites where expires_at > now() order by created_at, id
+select id, tenant_id, github_login, role, created_by, created_at, expires_at, github_id, stellar_address from cp.invites where expires_at > now() order by created_at, id
 `
 
 func (q *Queries) ListOpenInvites(ctx context.Context) ([]CpInvite, error) {
@@ -232,6 +279,7 @@ func (q *Queries) ListOpenInvites(ctx context.Context) ([]CpInvite, error) {
 			&i.CreatedAt,
 			&i.ExpiresAt,
 			&i.GithubID,
+			&i.StellarAddress,
 		); err != nil {
 			return nil, err
 		}
@@ -244,18 +292,19 @@ func (q *Queries) ListOpenInvites(ctx context.Context) ([]CpInvite, error) {
 }
 
 const listTenantMembers = `-- name: ListTenantMembers :many
-select m.user_id, u.github_id, u.github_login, m.role, m.created_at
+select m.user_id, u.github_id, u.github_login, u.stellar_address, m.role, m.created_at
 from cp.tenant_members m
 join cp.users u on u.id = m.user_id
-order by lower(u.github_login), m.user_id
+order by lower(coalesce(u.github_login, u.stellar_address)), m.user_id
 `
 
 type ListTenantMembersRow struct {
-	UserID      uuid.UUID
-	GithubID    int64
-	GithubLogin string
-	Role        string
-	CreatedAt   time.Time
+	UserID         uuid.UUID
+	GithubID       *int64
+	GithubLogin    *string
+	StellarAddress *string
+	Role           string
+	CreatedAt      time.Time
 }
 
 func (q *Queries) ListTenantMembers(ctx context.Context) ([]ListTenantMembersRow, error) {
@@ -271,6 +320,7 @@ func (q *Queries) ListTenantMembers(ctx context.Context) ([]ListTenantMembersRow
 			&i.UserID,
 			&i.GithubID,
 			&i.GithubLogin,
+			&i.StellarAddress,
 			&i.Role,
 			&i.CreatedAt,
 		); err != nil {
