@@ -4,6 +4,11 @@
 // events for contracts, and stores one row per id and completed utc day in
 // agg.chain_daily. a day it could not read gets no row, and agg.chain_reads
 // keeps the reason, so a failure shows as missing data and never as zero.
+//
+// the same reads give each day's initiating accounts, which go into the
+// project's open iso week as keyed hashes (agg.chain_week_members); once a
+// week is over the task stores its weekly active accounts, or the reason
+// it has none, and deletes the hashes and the week's key (weeks.go).
 package chainactivity
 
 import (
@@ -69,9 +74,10 @@ func New(newReader func() (*chain.Reader, error), now func() time.Time, log *slo
 
 // Result says what one run did.
 type Result struct {
-	IDs    int
-	Days   int
-	Failed int
+	IDs         int
+	Days        int
+	Failed      int
+	WeeksClosed int
 }
 
 type due struct {
@@ -79,6 +85,8 @@ type due struct {
 	strkey    string
 	kind      string
 	coveredTo *time.Time
+	// the first day of an open week stored without its initiators
+	rereadFrom *time.Time
 }
 
 // window is a source's first whole day, read once per run.
@@ -106,25 +114,40 @@ func (t *Task) Run(ctx context.Context, tx TxFunc) (Result, error) {
 	now := t.now().UTC()
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 	yesterday := today.AddDate(0, 0, -1)
+	open := OpenFrom(today)
+	if err := t.openWeeks(ctx, tx, today); err != nil {
+		return Result{}, err
+	}
 	var list []due
 	err := tx(ctx, func(x pgx.Tx) error {
+		// an id is due when its last completed day is not read, or when a
+		// day of an open week was stored before its initiators were read
 		rows, err := x.Query(ctx, `
-			select c.tenant_id, c.strkey, c.kind, r.covered_to
+			select c.tenant_id, c.strkey, c.kind, r.covered_to,
+			       (select min(d.day) from agg.chain_daily d
+			        where d.tenant_id = c.tenant_id and d.strkey = c.strkey
+			          and d.day >= @open_from::date and d.initiators is null
+			          and not exists (select 1 from agg.chain_weeks w
+			                          where w.tenant_id = d.tenant_id and w.week = date_trunc('week', d.day)::date
+			                            and w.closed_at is not null)) as reread_from
 			from cp.chain_ids c
 			join cp.tenants t on t.id = c.tenant_id and t.status <> 'removed'
 			left join agg.chain_reads r on r.tenant_id = c.tenant_id and r.strkey = c.strkey
-			where (r.covered_to is null or r.covered_to < @yesterday::date)
-			  and (r.last_error_at is null or r.last_error_at < @retry_before::timestamptz)
-			order by r.last_attempt_at nulls first, c.created_at
-			limit @row_limit`,
-			pgx.NamedArgs{"yesterday": yesterday, "retry_before": now.Add(-retryAfter), "row_limit": batch})
+			where (r.last_error_at is null or r.last_error_at < @retry_before::timestamptz)
+			order by r.last_attempt_at nulls first, c.created_at`,
+			pgx.NamedArgs{"open_from": open, "retry_before": now.Add(-retryAfter)})
 		if err != nil {
 			return err
 		}
-		list, err = pgx.CollectRows(rows, func(r pgx.CollectableRow) (due, error) {
+		all, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (due, error) {
 			var d due
-			return d, r.Scan(&d.tenant, &d.strkey, &d.kind, &d.coveredTo)
+			return d, r.Scan(&d.tenant, &d.strkey, &d.kind, &d.coveredTo, &d.rereadFrom)
 		})
+		for _, d := range all {
+			if (d.coveredTo == nil || d.coveredTo.Before(yesterday) || d.rereadFrom != nil) && len(list) < batch {
+				list = append(list, d)
+			}
+		}
 		return err
 	})
 	if err != nil {
@@ -160,8 +183,14 @@ func (t *Task) Run(ctx context.Context, tx TxFunc) (Result, error) {
 			}
 			from = w.first
 		}
+		floor := from
 		if d.coveredTo != nil {
 			from = maxDay(from, d.coveredTo.AddDate(0, 0, 1))
+		}
+		// read again the days of open weeks that miss their initiators, as
+		// far back as the source still holds them
+		if d.rereadFrom != nil && d.rereadFrom.Before(from) {
+			from = maxDay(floor, *d.rereadFrom)
 		}
 		key := d.kind + ":" + d.strkey + ":" + from.Format(time.DateOnly)
 		r, ok := cache[key]
@@ -174,7 +203,7 @@ func (t *Task) Run(ctx context.Context, tx TxFunc) (Result, error) {
 			result = chain.Code(r.err)
 		}
 		t.reads.WithLabelValues(d.kind, result).Inc()
-		if err := t.store(ctx, tx, d, r, now); err != nil {
+		if err := t.store(ctx, tx, d, r, from, open, now); err != nil {
 			t.log.Error("chain activity write failed", "tenant_id", d.tenant.String(), "strkey", d.strkey, "error", err.Error())
 			errs = append(errs, err)
 			continue
@@ -186,7 +215,12 @@ func (t *Task) Run(ctx context.Context, tx TxFunc) (Result, error) {
 				"code", chain.Code(r.err), "error", r.err.Error(), "days", len(r.days))
 		}
 	}
-	t.log.Info("chain activity done", "ids", res.IDs, "days", res.Days, "failed", res.Failed)
+	closed, cerr := t.closeWeeks(ctx, tx, today, now)
+	res.WeeksClosed = closed
+	if cerr != nil {
+		errs = append(errs, cerr)
+	}
+	t.log.Info("chain activity done", "ids", res.IDs, "days", res.Days, "failed", res.Failed, "weeks_closed", res.WeeksClosed)
 	if err := ctx.Err(); err != nil {
 		return res, err
 	}
@@ -236,7 +270,8 @@ func (t *Task) read(ctx context.Context, reader *chain.Reader, w *window, d due,
 
 // store writes the days and the read state in one transaction, under the
 // tenant's shared advisory lock, and writes nothing for a removed tenant.
-func (t *Task) store(ctx context.Context, tx TxFunc, d due, r read, now time.Time) error {
+// the initiators of days in open weeks (from open on) go into their week.
+func (t *Task) store(ctx context.Context, tx TxFunc, d due, r read, from, open, now time.Time) error {
 	return tx(ctx, func(x pgx.Tx) error {
 		if _, err := x.Exec(ctx, `select pg_advisory_xact_lock_shared(hashtextextended('agg.tenant:' || $1::text, 0))`,
 			d.tenant.String()); err != nil {
@@ -254,14 +289,24 @@ func (t *Task) store(ctx context.Context, tx TxFunc, d due, r read, now time.Tim
 			source = chain.SourceRPCEvents
 		}
 		var first, last *time.Time
+		weeks := weekKeys{}
 		for _, day := range r.days {
+			var initiators *string
+			if !day.Day.Before(open) {
+				v, err := weeks.add(ctx, x, d.tenant, d.strkey, day)
+				if err != nil {
+					return err
+				}
+				initiators = v
+			}
 			if _, err := x.Exec(ctx, `
-				insert into agg.chain_daily (tenant_id, strkey, day, source, operations, transactions, counterparties, read_at)
-				values ($1, $2, $3, $4, $5, $6, $7, $8)
+				insert into agg.chain_daily (tenant_id, strkey, day, source, operations, transactions, counterparties, read_at, initiators)
+				values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 				on conflict (tenant_id, strkey, day) do update
 				set source = excluded.source, operations = excluded.operations, transactions = excluded.transactions,
-				    counterparties = excluded.counterparties, read_at = excluded.read_at`,
-				d.tenant, d.strkey, day.Day, source, day.Operations, day.Transactions, day.Counterparties, now); err != nil {
+				    counterparties = excluded.counterparties, read_at = excluded.read_at,
+				    initiators = coalesce(excluded.initiators, agg.chain_daily.initiators)`,
+				d.tenant, d.strkey, day.Day, source, day.Operations, day.Transactions, day.Counterparties, now, initiators); err != nil {
 				return fmt.Errorf("upsert day: %w", err)
 			}
 			if first == nil {
@@ -270,6 +315,14 @@ func (t *Task) store(ctx context.Context, tx TxFunc, d due, r read, now time.Tim
 			}
 			v := day.Day
 			last = &v
+		}
+		// days of open weeks before the read's first day are outside what the
+		// source holds now, so their initiators can no longer be read
+		if _, err := x.Exec(ctx, `
+			update agg.chain_daily set initiators = 'before_source_history'
+			where tenant_id = $1 and strkey = $2 and day >= $3 and day < $4 and initiators is null`,
+			d.tenant, d.strkey, open, from); err != nil {
+			return fmt.Errorf("mark days without initiators: %w", err)
 		}
 		var code *string
 		var success *time.Time
