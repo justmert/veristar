@@ -165,17 +165,19 @@ update cp.operators
 set enroll_opened_at = null, enroll_until = null, updated_at = now()
 where enroll_until is not null
   and (($1::bigint is not null and github_id = $1::bigint)
-    or ($2::text is not null and stellar_address = $2::text))
+    or ($2::text is not null and stellar_address = $2::text)
+    or ($3::text is not null and stellar_address = $3::text))
 `
 
 type CloseEnrollmentParams struct {
 	GithubID       *int64
 	StellarAddress *string
+	PasskeyAddress *string
 }
 
 // the first passkey of the account closes the window of every row it holds
 func (q *Queries) CloseEnrollment(ctx context.Context, arg CloseEnrollmentParams) (int64, error) {
-	result, err := q.db.Exec(ctx, closeEnrollment, arg.GithubID, arg.StellarAddress)
+	result, err := q.db.Exec(ctx, closeEnrollment, arg.GithubID, arg.StellarAddress, arg.PasskeyAddress)
 	if err != nil {
 		return 0, err
 	}
@@ -224,7 +226,8 @@ from cp.operators o
 left join cp.users u
   on u.deleted_at is null
  and ((o.github_id is not null and u.github_id = o.github_id)
-      or (o.stellar_address is not null and u.stellar_address = o.stellar_address))
+      or (o.stellar_address is not null
+          and (u.stellar_address = o.stellar_address or u.passkey_address = o.stellar_address)))
 order by o.role desc, o.created_at, o.id
 `
 
@@ -370,8 +373,9 @@ func (q *Queries) OpenEnrollment(ctx context.Context, arg OpenEnrollmentParams) 
 
 const recomputeOperatorFlags = `-- name: RecomputeOperatorFlags :many
 update cp.users u
-set is_operator = cp.roster_active(u.github_id, u.stellar_address)
-where u.deleted_at is null and u.is_operator is distinct from cp.roster_active(u.github_id, u.stellar_address)
+set is_operator = cp.roster_active(u.github_id, u.stellar_address, u.passkey_address)
+where u.deleted_at is null
+  and u.is_operator is distinct from cp.roster_active(u.github_id, u.stellar_address, u.passkey_address)
 returning u.id, u.is_operator
 `
 
@@ -407,12 +411,14 @@ const rosterEntriesForUser = `-- name: RosterEntriesForUser :many
 select id, github_id, github_login, stellar_address, role, status, status_reason, enroll_opened_at, enroll_until, created_by, created_at, updated_at from cp.operators
 where ($1::bigint is not null and github_id = $1::bigint)
    or ($2::text is not null and stellar_address = $2::text)
+   or ($3::text is not null and stellar_address = $3::text)
 order by created_at, id
 `
 
 type RosterEntriesForUserParams struct {
 	GithubID       *int64
 	StellarAddress *string
+	PasskeyAddress *string
 }
 
 // the operator roster (00039) as cp_system: the guard, the operators page,
@@ -420,7 +426,7 @@ type RosterEntriesForUserParams struct {
 // the roster rows matching an account's identities. an account can match
 // two rows, one per identity.
 func (q *Queries) RosterEntriesForUser(ctx context.Context, arg RosterEntriesForUserParams) ([]CpOperator, error) {
-	rows, err := q.db.Query(ctx, rosterEntriesForUser, arg.GithubID, arg.StellarAddress)
+	rows, err := q.db.Query(ctx, rosterEntriesForUser, arg.GithubID, arg.StellarAddress, arg.PasskeyAddress)
 	if err != nil {
 		return nil, err
 	}
@@ -458,7 +464,14 @@ select coalesce((
   join cp.users u on u.id = k.user_id
   where u.deleted_at is null
     and (($1::bigint is not null and u.github_id = $1::bigint)
-      or ($2::text is not null and u.stellar_address = $2::text))
+      or ($2::text is not null
+          and $2::text in (u.stellar_address, u.passkey_address)))
+), 0)::bigint + coalesce((
+  select count(*) from cp.users u
+  where u.deleted_at is null and u.passkey_public_key is not null
+    and (($1::bigint is not null and u.github_id = $1::bigint)
+      or ($2::text is not null
+          and $2::text in (u.stellar_address, u.passkey_address)))
 ), 0)::bigint
 `
 
@@ -467,11 +480,12 @@ type RosterIdentityPasskeysParams struct {
 	StellarAddress *string
 }
 
-// the passkeys of the live account holding a roster row's identity; 0
-// when no account holds it yet
-func (q *Queries) RosterIdentityPasskeys(ctx context.Context, arg RosterIdentityPasskeysParams) (int64, error) {
+// the step-up passkeys of the live account holding a roster row's
+// identity, its sign-in passkey (00037) included; 0 when no account holds
+// it yet
+func (q *Queries) RosterIdentityPasskeys(ctx context.Context, arg RosterIdentityPasskeysParams) (int32, error) {
 	row := q.db.QueryRow(ctx, rosterIdentityPasskeys, arg.GithubID, arg.StellarAddress)
-	var column_1 int64
+	var column_1 int32
 	err := row.Scan(&column_1)
 	return column_1, err
 }
@@ -480,7 +494,8 @@ const rosterIdentityUser = `-- name: RosterIdentityUser :one
 select id from cp.users
 where deleted_at is null
   and (($1::bigint is not null and github_id = $1::bigint)
-    or ($2::text is not null and stellar_address = $2::text))
+    or ($2::text is not null
+        and $2::text in (stellar_address, passkey_address)))
 `
 
 type RosterIdentityUserParams struct {

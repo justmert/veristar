@@ -1,8 +1,8 @@
-// Package webauthnsoft is a TEST-ONLY software authenticator: an es256 key
-// in memory that answers the console's webauthn options the way a browser
-// with a security key does (attestation "none", user present and verified).
-// it lets go tests register a passkey and step up through the real routes.
-// it is never built into a product binary.
+// Package webauthnsoft is a TEST-ONLY software passkey: an es256 key in
+// memory that answers the control plane's passkey challenges the way a
+// browser with a passkey does (user present and verified), in the answer
+// form of contract 4.1.9. it lets go tests register a passkey and step up
+// through the real routes. it is never built into a product binary.
 package webauthnsoft
 
 import (
@@ -14,9 +14,6 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
-
-	"github.com/go-webauthn/webauthn/protocol/webauthncbor"
-	"github.com/go-webauthn/webauthn/protocol/webauthncose"
 )
 
 // Authenticator holds one credential.
@@ -24,10 +21,9 @@ type Authenticator struct {
 	key   *ecdsa.PrivateKey
 	id    []byte
 	count uint32
-	rpID  string
 }
 
-// New makes an authenticator with a fresh key and credential id.
+// New makes a passkey with a fresh key and credential id.
 func New() (*Authenticator, error) {
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
@@ -42,105 +38,50 @@ func New() (*Authenticator, error) {
 
 var b64 = base64.RawURLEncoding
 
-// options is the part of the console's options a response needs
-type options struct {
-	PublicKey struct {
-		Challenge string `json:"challenge"`
-		RP        struct {
-			ID string `json:"id"`
-		} `json:"rp"`
-		RPID string `json:"rpId"`
-	} `json:"publicKey"`
-}
+// CredentialID is the base64url credential id.
+func (a *Authenticator) CredentialID() string { return b64.EncodeToString(a.id) }
 
-func (a *Authenticator) authData(rpID string, attested []byte) []byte {
-	h := sha256.Sum256([]byte(rpID))
-	flags := byte(0x01 | 0x04) // user present, user verified
-	if attested != nil {
-		flags |= 0x40
-	}
-	a.count++
-	out := append([]byte{}, h[:]...)
-	out = append(out, flags)
-	out = binary.BigEndian.AppendUint32(out, a.count)
-	return append(out, attested...)
-}
-
-func clientData(typ, challenge, origin string) []byte {
-	b, _ := json.Marshal(map[string]any{"type": typ, "challenge": challenge, "origin": origin, "crossOrigin": false})
-	return b
-}
-
-// Register answers the options of POST /api/operator/passkeys/options
-// with the PublicKeyCredential json of a new credential.
-func (a *Authenticator) Register(optionsJSON []byte, origin string) (json.RawMessage, error) {
-	var o options
-	if err := json.Unmarshal(optionsJSON, &o); err != nil {
-		return nil, fmt.Errorf("webauthnsoft: options: %w", err)
-	}
-	a.rpID = o.PublicKey.RP.ID
-	// the uncompressed point is 0x04, then x and y of 32 bytes each
+// PublicKey is the uncompressed sec-1 key, base64url.
+func (a *Authenticator) PublicKey() string {
 	raw, err := a.key.PublicKey.Bytes()
 	if err != nil {
-		return nil, err
+		panic(err)
 	}
-	x, y := raw[1:33], raw[33:65]
-	cose, err := webauthncbor.Marshal(webauthncose.EC2PublicKeyData{
-		PublicKeyData: webauthncose.PublicKeyData{KeyType: int64(webauthncose.EllipticKey), Algorithm: int64(webauthncose.AlgES256)},
-		Curve:         1, XCoord: x, YCoord: y,
-	})
-	if err != nil {
-		return nil, err
-	}
-	attested := make([]byte, 16)                                          // aaguid of zeros
-	attested = binary.BigEndian.AppendUint16(attested, uint16(len(a.id))) //nolint:gosec // the id is 32 bytes
-	attested = append(attested, a.id...)
-	attested = append(attested, cose...)
-	a.count = 0
-	auth := a.authData(a.rpID, attested)
-	att, err := webauthncbor.Marshal(map[string]any{"fmt": "none", "attStmt": map[string]any{}, "authData": auth})
-	if err != nil {
-		return nil, err
-	}
-	return json.Marshal(map[string]any{
-		"id": b64.EncodeToString(a.id), "rawId": b64.EncodeToString(a.id), "type": "public-key",
-		"response": map[string]any{
-			"clientDataJSON":    b64.EncodeToString(clientData("webauthn.create", o.PublicKey.Challenge, origin)),
-			"attestationObject": b64.EncodeToString(att),
-			"transports":        []string{"usb"},
-		},
-		"clientExtensionResults":  map[string]any{},
-		"authenticatorAttachment": "cross-platform",
-	})
+	return b64.EncodeToString(raw)
 }
 
-// Assert answers the options of POST /api/operator/step-up/options.
-func (a *Authenticator) Assert(optionsJSON []byte, origin string) (json.RawMessage, error) {
-	var o options
-	if err := json.Unmarshal(optionsJSON, &o); err != nil {
-		return nil, fmt.Errorf("webauthnsoft: options: %w", err)
+// challenge is the part of a challenge answer an assertion needs
+type challenge struct {
+	Challenge string `json:"challenge"`
+	RPID      string `json:"rp_id"`
+}
+
+// Answer signs the challenge of a challenge route (the json the route
+// answered) for origin, and returns the answer fields of 4.1.9.
+func (a *Authenticator) Answer(challengeJSON []byte, origin string) (map[string]any, error) {
+	var c challenge
+	if err := json.Unmarshal(challengeJSON, &c); err != nil {
+		return nil, fmt.Errorf("webauthnsoft: challenge: %w", err)
 	}
-	rpID := o.PublicKey.RPID
-	if rpID == "" {
-		rpID = a.rpID
+	h := sha256.Sum256([]byte(c.RPID))
+	a.count++
+	auth := append([]byte{}, h[:]...)
+	auth = append(auth, 0x01|0x04) // user present, user verified
+	auth = binary.BigEndian.AppendUint32(auth, a.count)
+	cd, err := json.Marshal(map[string]any{"type": "webauthn.get", "challenge": c.Challenge, "origin": origin, "crossOrigin": false})
+	if err != nil {
+		return nil, err
 	}
-	auth := a.authData(rpID, nil)
-	cd := clientData("webauthn.get", o.PublicKey.Challenge, origin)
-	h := sha256.Sum256(cd)
-	// es256 signs the sha-256 of authenticator data and client data hash
-	digest := sha256.Sum256(append(append([]byte{}, auth...), h[:]...))
+	cdh := sha256.Sum256(cd)
+	digest := sha256.Sum256(append(append([]byte{}, auth...), cdh[:]...))
 	sig, err := ecdsa.SignASN1(rand.Reader, a.key, digest[:])
 	if err != nil {
 		return nil, err
 	}
-	return json.Marshal(map[string]any{
-		"id": b64.EncodeToString(a.id), "rawId": b64.EncodeToString(a.id), "type": "public-key",
-		"response": map[string]any{
-			"clientDataJSON":    b64.EncodeToString(cd),
-			"authenticatorData": b64.EncodeToString(auth),
-			"signature":         b64.EncodeToString(sig),
-		},
-		"clientExtensionResults":  map[string]any{},
-		"authenticatorAttachment": "cross-platform",
-	})
+	return map[string]any{
+		"credential_id":      a.CredentialID(),
+		"authenticator_data": b64.EncodeToString(auth),
+		"client_data_json":   b64.EncodeToString(cd),
+		"signature":          b64.EncodeToString(sig),
+	}, nil
 }

@@ -1,18 +1,24 @@
-// Package stepup is the hardware-backed second factor of the operator area
-// (contract 5.15): webauthn passkeys and security keys registered to a console
-// account, and a step-up recorded on the console session when the person
-// proves one of them.
+// Package stepup is the second factor of the operator area (contract 5.15):
+// passkeys of the console account, and a step-up recorded on the console
+// session when the person proves one of them.
+//
+// it adds no webauthn code of its own. a passkey is what passkey sign-in
+// (contract 4.1.9) uses: an es256 credential whose base64url id and 65-byte
+// sec-1 key the control plane stores, and whose assertions
+// internal/controlplane/passkey verifies (passkey.RelyingParty.Verify). the
+// console runs every ceremony with the same @soropass/core helpers as sign-in
+// (apps/console/src/lib/passkey). an account steps up with its sign-in
+// passkey and with the passkeys it adds here (cp.operator_passkeys, 00039).
 //
 // the package has three parts other code builds on:
 //
-//   - ceremony helpers. BeginRegistration, FinishRegistration,
-//     BeginAssertion and FinishAssertion run the two webauthn ceremonies
-//     with github.com/go-webauthn/webauthn. Begin* returns the options the
-//     browser passes to navigator.credentials.create or .get (binary fields
-//     as base64url strings) and keeps the ceremony state in the session
-//     under keyRegister or keyAssert; Finish* takes the browser's
-//     PublicKeyCredential json, verifies it against that state, and
-//     removes the state, so each ceremony is single use.
+//   - challenges. IssueChallenge issues a 32-byte random challenge with a
+//     purpose (step_up or register), keeps it in the console session under
+//     keyChallenge, and answers it in the shape of 4.1.9's challenge.
+//     takeChallenge removes it before it is checked, so each challenge is
+//     checked once; the transaction that records the result also stores its
+//     hash in cp.wallet_challenges_used, as 4.1.9 does, so two requests of
+//     one session cannot both use it.
 //   - the session step-up field. Record stores the moment of a verified
 //     assertion and the account it was made for under KeyStepUpAt and
 //     KeyStepUpUser, after renewing the session token. Fresh reports
@@ -20,16 +26,19 @@
 //     account. Require is the middleware that answers 401
 //     step_up_required otherwise. requests made with an mcp credential
 //     (session.ViaCredential) pass: they carry no session to step up.
-//   - the passkey store over cp.operator_passkeys (00039).
+//   - the passkey store over cp.operator_passkeys and the account's sign-in
+//     passkey (store.go).
 //
-// a different authenticator can feed the same step-up: anything that
-// verifies a possession factor of the signed-in account calls Record in
-// the request that verified it, and every operator route accepts the
-// session from then on.
+// anything else that verifies a possession factor of the signed-in account
+// can call Record in the request that verified it, and every operator route
+// accepts the session from then on.
 package stepup
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -38,11 +47,10 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/go-webauthn/webauthn/protocol"
-	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/google/uuid"
 
 	"github.com/justmert/veristar/internal/controlplane/httpx"
+	"github.com/justmert/veristar/internal/controlplane/passkey"
 	"github.com/justmert/veristar/internal/controlplane/session"
 	"github.com/justmert/veristar/internal/db"
 )
@@ -52,8 +60,13 @@ import (
 const (
 	KeyStepUpAt   = "operator_step_up_at"
 	KeyStepUpUser = "operator_step_up_user"
-	keyRegister   = "webauthn_register"
-	keyAssert     = "webauthn_assert"
+	keyChallenge  = "operator_passkey_challenge"
+)
+
+// purposes of a challenge
+const (
+	PurposeStepUp   = "step_up"
+	PurposeRegister = "register"
 )
 
 // bounds of the settings
@@ -63,6 +76,18 @@ const (
 	MinEnrollWindow = 10 * time.Minute
 	MaxEnrollWindow = 7 * 24 * time.Hour
 )
+
+// a challenge lives 5 minutes and the browser waits 2 for the
+// authenticator, as for passkey sign-in (4.1.9)
+const (
+	challengeTTL     = 5 * time.Minute
+	challengeTimeout = 2 * time.Minute
+	challengeLen     = 32
+)
+
+// usedPrefix keeps the hashes of step-up challenges apart from those of
+// wallet nonces and sign-in passkey challenges in cp.wallet_challenges_used.
+const usedPrefix = "operator-passkey:"
 
 // Sessions is what the package needs of the console session;
 // *session.Manager implements it.
@@ -76,12 +101,9 @@ type Sessions interface {
 
 // Config sets the relying party and the two time limits.
 type Config struct {
-	// ConsoleOrigin is the console's https origin (http on localhost for a
-	// development stack); its host is the relying party id, so a credential
-	// works on that host only.
+	// ConsoleOrigin is CONSOLE_ORIGIN; its host is the relying party id and
+	// it is the only accepted origin, as for passkey sign-in
 	ConsoleOrigin string
-	// RPName is shown by the authenticator.
-	RPName string
 	// MaxAge is how long a step-up counts (OPERATOR_STEP_UP_MAX_AGE).
 	MaxAge time.Duration
 	// EnrollWindow is how long a person may register a first passkey
@@ -91,9 +113,9 @@ type Config struct {
 	Now func() time.Time
 }
 
-// Service runs the ceremonies and keeps the step-up.
+// Service issues challenges, verifies answers and keeps the step-up.
 type Service struct {
-	wa     *webauthn.WebAuthn
+	rp     passkey.RelyingParty
 	db     *db.DB
 	sess   Sessions
 	maxAge time.Duration
@@ -101,17 +123,14 @@ type Service struct {
 	now    func() time.Time
 }
 
-// New checks cfg and builds the relying party.
+// New checks cfg.
 func New(cfg Config, d *db.DB, s Sessions) (*Service, error) {
 	if d == nil || s == nil {
 		return nil, errors.New("stepup: database and sessions are required")
 	}
 	u, err := url.Parse(cfg.ConsoleOrigin)
-	// browsers run webauthn in secure contexts only: https, or plain http
-	// on localhost for a development stack
-	secure := u != nil && (u.Scheme == "https" || (u.Scheme == "http" && u.Hostname() == "localhost"))
-	if err != nil || !secure || u.Hostname() == "" || u.Path != "" {
-		return nil, fmt.Errorf("stepup: console origin %q is not an https origin", cfg.ConsoleOrigin)
+	if err != nil || u.Hostname() == "" || u.Path != "" {
+		return nil, fmt.Errorf("stepup: console origin %q is not an origin", cfg.ConsoleOrigin)
 	}
 	if cfg.MaxAge < MinMaxAge || cfg.MaxAge > MaxMaxAge {
 		return nil, fmt.Errorf("stepup: max age %s outside %s to %s", cfg.MaxAge, MinMaxAge, MaxMaxAge)
@@ -119,29 +138,14 @@ func New(cfg Config, d *db.DB, s Sessions) (*Service, error) {
 	if cfg.EnrollWindow < MinEnrollWindow || cfg.EnrollWindow > MaxEnrollWindow {
 		return nil, fmt.Errorf("stepup: enroll window %s outside %s to %s", cfg.EnrollWindow, MinEnrollWindow, MaxEnrollWindow)
 	}
-	name := cfg.RPName
-	if name == "" {
-		name = "Veristar"
-	}
-	wa, err := webauthn.New(&webauthn.Config{
-		RPID:          u.Hostname(),
-		RPDisplayName: name,
-		RPOrigins:     []string{u.Scheme + "://" + u.Host},
-		// the browser shows its prompt for at most five minutes; the
-		// state in the session expires with it
-		Timeouts: webauthn.TimeoutsConfig{
-			Login:        webauthn.TimeoutConfig{Enforce: true, Timeout: 5 * time.Minute, TimeoutUVD: 5 * time.Minute},
-			Registration: webauthn.TimeoutConfig{Enforce: true, Timeout: 5 * time.Minute, TimeoutUVD: 5 * time.Minute},
-		},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("stepup: relying party: %w", err)
-	}
 	now := cfg.Now
 	if now == nil {
 		now = time.Now
 	}
-	return &Service{wa: wa, db: d, sess: s, maxAge: cfg.MaxAge, window: cfg.EnrollWindow, now: now}, nil
+	return &Service{
+		rp: passkey.RelyingParty{ID: u.Hostname(), Origin: cfg.ConsoleOrigin},
+		db: d, sess: s, maxAge: cfg.MaxAge, window: cfg.EnrollWindow, now: now,
+	}, nil
 }
 
 // MaxAge is how long a step-up counts.
@@ -150,154 +154,67 @@ func (s *Service) MaxAge() time.Duration { return s.maxAge }
 // EnrollWindow is the length of a first-passkey window.
 func (s *Service) EnrollWindow() time.Duration { return s.window }
 
-// Account is a console account as the ceremonies see it. it implements
-// webauthn.User: the user handle is the account id, so a credential is
-// bound to the account and not to a github or stellar identity.
-type Account struct {
-	User        session.User
-	Credentials []webauthn.Credential
+// Challenge is the answer of a challenge route, the shape of 4.1.9's.
+type Challenge struct {
+	Challenge string          `json:"challenge"`
+	RPID      string          `json:"rp_id"`
+	TimeoutMS int64           `json:"timeout_ms"`
+	ExpiresAt httpx.Timestamp `json:"expires_at"`
 }
 
-// WebAuthnID is the 16 bytes of the account id.
-func (a Account) WebAuthnID() []byte { b := a.User.ID; return b[:] }
+type challengeState struct {
+	Challenge string `json:"challenge"`
+	Purpose   string `json:"purpose"`
+	User      string `json:"user"`
+	Exp       int64  `json:"exp"`
+}
 
-// WebAuthnName is the name the authenticator stores with the credential.
-func (a Account) WebAuthnName() string {
-	if n := a.User.DisplayName(); n != "" {
-		return n
+// IssueChallenge stores a new challenge of purpose for user in the session,
+// replacing any earlier one, and returns it.
+func (s *Service) IssueChallenge(ctx context.Context, user uuid.UUID, purpose string) (Challenge, error) {
+	b := make([]byte, challengeLen)
+	if _, err := rand.Read(b); err != nil {
+		return Challenge{}, fmt.Errorf("stepup: challenge: %w", err)
 	}
-	return a.User.ID.String()
-}
-
-// WebAuthnDisplayName is the same name.
-func (a Account) WebAuthnDisplayName() string { return a.WebAuthnName() }
-
-// WebAuthnCredentials are the account's registered credentials.
-func (a Account) WebAuthnCredentials() []webauthn.Credential { return a.Credentials }
-
-func (a Account) descriptors() []protocol.CredentialDescriptor {
-	out := make([]protocol.CredentialDescriptor, len(a.Credentials))
-	for i := range a.Credentials {
-		out[i] = a.Credentials[i].Descriptor()
+	c := base64.RawURLEncoding.EncodeToString(b)
+	exp := s.now().Add(challengeTTL)
+	st, err := json.Marshal(challengeState{Challenge: c, Purpose: purpose, User: user.String(), Exp: exp.Unix()})
+	if err != nil {
+		return Challenge{}, err
 	}
-	return out
+	s.sess.SetValue(ctx, keyChallenge, string(st))
+	return Challenge{Challenge: c, RPID: s.rp.ID, TimeoutMS: challengeTimeout.Milliseconds(), ExpiresAt: httpx.Timestamp(exp)}, nil
 }
 
-// errNoCeremony is a finish without a matching begin in this session, or
-// after the state expired.
+// errNoCeremony is an answer without a matching challenge in this session,
+// or after it expired or was used.
 var errNoCeremony = httpx.E(http.StatusBadRequest, httpx.CodeCeremonyExpired,
 	"start again: this passkey prompt is no longer valid")
 
-func (s *Service) saveState(ctx context.Context, key string, sd *webauthn.SessionData) error {
-	b, err := json.Marshal(sd)
-	if err != nil {
-		return fmt.Errorf("stepup: encode ceremony state: %w", err)
+// takeChallenge reads and removes the session's challenge, so an answer is
+// checked against it once.
+func (s *Service) takeChallenge(ctx context.Context, user uuid.UUID, purpose string) (string, error) {
+	raw := s.sess.Value(ctx, keyChallenge)
+	s.sess.RemoveValue(ctx, keyChallenge)
+	var st challengeState
+	if raw == "" || json.Unmarshal([]byte(raw), &st) != nil {
+		return "", errNoCeremony
 	}
-	s.sess.SetValue(ctx, key, string(b))
-	return nil
+	if st.Purpose != purpose || st.User != user.String() || s.now().Unix() >= st.Exp {
+		return "", errNoCeremony
+	}
+	return st.Challenge, nil
 }
 
-// takeState reads and removes the state of a ceremony, so a response can be
-// verified against it once.
-func (s *Service) takeState(ctx context.Context, key string, user uuid.UUID) (webauthn.SessionData, error) {
-	raw := s.sess.Value(ctx, key)
-	s.sess.RemoveValue(ctx, key)
-	if raw == "" {
-		return webauthn.SessionData{}, errNoCeremony
-	}
-	var sd webauthn.SessionData
-	if err := json.Unmarshal([]byte(raw), &sd); err != nil {
-		return webauthn.SessionData{}, errNoCeremony
-	}
-	if string(sd.UserID) != string(user[:]) || (!sd.Expires.IsZero() && s.now().After(sd.Expires)) {
-		return webauthn.SessionData{}, errNoCeremony
-	}
-	return sd, nil
+// usedHash is what cp.wallet_challenges_used stores for a challenge.
+func usedHash(challenge string) []byte {
+	h := sha256.Sum256([]byte(usedPrefix + challenge))
+	return h[:]
 }
 
-// BeginRegistration starts a registration for acc and keeps its state in
-// the session. the account's credentials are excluded, so one
-// authenticator is registered once.
-func (s *Service) BeginRegistration(ctx context.Context, acc Account) (*protocol.CredentialCreation, error) {
-	opts, sd, err := s.wa.BeginRegistration(acc,
-		webauthn.WithExclusions(acc.descriptors()),
-		webauthn.WithAuthenticatorSelection(protocol.AuthenticatorSelection{
-			ResidentKey:      protocol.ResidentKeyRequirementPreferred,
-			UserVerification: protocol.VerificationPreferred,
-		}),
-		webauthn.WithConveyancePreference(protocol.PreferNoAttestation),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("stepup: begin registration: %w", err)
-	}
-	if err := s.saveState(ctx, keyRegister, sd); err != nil {
-		return nil, err
-	}
-	return opts, nil
-}
-
-// FinishRegistration verifies the browser's response to the latest
-// BeginRegistration of this session. a response that does not verify is
-// 400 step_up_failed.
-func (s *Service) FinishRegistration(ctx context.Context, acc Account, response []byte) (*webauthn.Credential, error) {
-	sd, err := s.takeState(ctx, keyRegister, acc.User.ID)
-	if err != nil {
-		return nil, err
-	}
-	parsed, err := protocol.ParseCredentialCreationResponseBytes(response)
-	if err != nil {
-		return nil, failed(ctx, "parse registration", err)
-	}
-	cred, err := s.wa.CreateCredential(acc, sd, parsed)
-	if err != nil {
-		return nil, failed(ctx, "verify registration", err)
-	}
-	return cred, nil
-}
-
-// BeginAssertion starts an assertion against the account's credentials and
-// keeps its state in the session. an account without a credential is 409
-// passkey_required.
-func (s *Service) BeginAssertion(ctx context.Context, acc Account) (*protocol.CredentialAssertion, error) {
-	if len(acc.Credentials) == 0 {
-		return nil, httpx.Conflict(httpx.CodePasskeyRequired, "register a passkey or security key first")
-	}
-	opts, sd, err := s.wa.BeginLogin(acc, webauthn.WithUserVerification(protocol.VerificationPreferred))
-	if err != nil {
-		return nil, fmt.Errorf("stepup: begin assertion: %w", err)
-	}
-	if err := s.saveState(ctx, keyAssert, sd); err != nil {
-		return nil, err
-	}
-	return opts, nil
-}
-
-// FinishAssertion verifies the browser's response to the latest
-// BeginAssertion of this session and returns the credential with its new
-// sign count. an authenticator whose counter went backwards may be a
-// clone and is refused.
-func (s *Service) FinishAssertion(ctx context.Context, acc Account, response []byte) (*webauthn.Credential, error) {
-	sd, err := s.takeState(ctx, keyAssert, acc.User.ID)
-	if err != nil {
-		return nil, err
-	}
-	parsed, err := protocol.ParseCredentialRequestResponseBytes(response)
-	if err != nil {
-		return nil, failed(ctx, "parse assertion", err)
-	}
-	cred, err := s.wa.ValidateLogin(acc, sd, parsed)
-	if err != nil {
-		return nil, failed(ctx, "verify assertion", err)
-	}
-	if cred.Authenticator.CloneWarning {
-		return nil, failed(ctx, "verify assertion", errors.New("the signature counter did not increase"))
-	}
-	return cred, nil
-}
-
-func failed(ctx context.Context, what string, err error) error {
-	httpx.Logger(ctx).Info("webauthn ceremony refused", "step", what, "error", err.Error())
-	return httpx.E(http.StatusBadRequest, httpx.CodeStepUpFailed, "the passkey response could not be verified")
+func failed(ctx context.Context, err error) error {
+	httpx.Logger(ctx).Info("passkey answer refused", "error", err.Error())
+	return httpx.E(http.StatusBadRequest, httpx.CodeStepUpFailed, "the passkey answer could not be verified")
 }
 
 // Record marks the session as stepped up for userID now. the session token
@@ -339,7 +256,7 @@ func (s *Service) Fresh(ctx context.Context, userID uuid.UUID) (bool, time.Time)
 // StepUpRequired is the 401 of a route that needs a fresh step-up.
 func StepUpRequired() *httpx.Error {
 	return httpx.E(http.StatusUnauthorized, httpx.CodeStepUpRequired,
-		"confirm with your passkey or security key to use the operator area")
+		"confirm with your passkey to use the operator area")
 }
 
 // Require answers 401 step_up_required unless the session holds a fresh

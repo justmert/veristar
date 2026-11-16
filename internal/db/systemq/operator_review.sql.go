@@ -13,17 +13,18 @@ import (
 )
 
 const operatorTenantMembers = `-- name: OperatorTenantMembers :many
-select u.github_id, u.github_login, u.stellar_address, m.role, m.created_at
+select u.github_id, u.github_login, u.stellar_address, u.passkey_address, m.role, m.created_at
 from cp.tenant_members m
 join cp.users u on u.id = m.user_id
 where m.tenant_id = $1
-order by lower(coalesce(u.github_login, u.stellar_address)), u.id
+order by lower(coalesce(u.github_login, u.stellar_address, u.passkey_address)), u.id
 `
 
 type OperatorTenantMembersRow struct {
 	GithubID       *int64
 	GithubLogin    *string
 	StellarAddress *string
+	PasskeyAddress *string
 	Role           string
 	CreatedAt      time.Time
 }
@@ -41,6 +42,7 @@ func (q *Queries) OperatorTenantMembers(ctx context.Context, tenantID uuid.UUID)
 			&i.GithubID,
 			&i.GithubLogin,
 			&i.StellarAddress,
+			&i.PasskeyAddress,
 			&i.Role,
 			&i.CreatedAt,
 		); err != nil {
@@ -56,7 +58,7 @@ func (q *Queries) OperatorTenantMembers(ctx context.Context, tenantID uuid.UUID)
 
 const operatorUserRef = `-- name: OperatorUserRef :one
 
-select id, github_id, github_login, stellar_address from cp.users where id = $1 and deleted_at is null
+select id, github_id, github_login, stellar_address, passkey_address from cp.users where id = $1 and deleted_at is null
 `
 
 type OperatorUserRefRow struct {
@@ -64,6 +66,7 @@ type OperatorUserRefRow struct {
 	GithubID       *int64
 	GithubLogin    *string
 	StellarAddress *string
+	PasskeyAddress *string
 }
 
 // operator tenant detail parts that cp_operator may not read (control-plane-api
@@ -77,6 +80,7 @@ func (q *Queries) OperatorUserRef(ctx context.Context, id uuid.UUID) (OperatorUs
 		&i.GithubID,
 		&i.GithubLogin,
 		&i.StellarAddress,
+		&i.PasskeyAddress,
 	)
 	return i, err
 }

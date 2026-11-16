@@ -1,7 +1,6 @@
 package operator
 
 import (
-	"strings"
 	"testing"
 	"time"
 
@@ -18,7 +17,7 @@ import (
 func testGuard(t *testing.T, d *db.DB, sessions *session.Manager, srvURL string) (*Guard, *stepup.Service) {
 	t.Helper()
 	s, err := stepup.New(stepup.Config{
-		ConsoleOrigin: strings.Replace(srvURL, "127.0.0.1", "localhost", 1), MaxAge: time.Hour, EnrollWindow: time.Hour,
+		ConsoleOrigin: srvURL, MaxAge: time.Hour, EnrollWindow: time.Hour,
 	}, d, sessions)
 	if err != nil {
 		t.Fatal(err)

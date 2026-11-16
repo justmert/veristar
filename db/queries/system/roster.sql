@@ -7,6 +7,7 @@
 select * from cp.operators
 where (sqlc.narg(github_id)::bigint is not null and github_id = sqlc.narg(github_id)::bigint)
    or (sqlc.narg(stellar_address)::text is not null and stellar_address = sqlc.narg(stellar_address)::text)
+   or (sqlc.narg(passkey_address)::text is not null and stellar_address = sqlc.narg(passkey_address)::text)
 order by created_at, id;
 
 -- name: ListRoster :many
@@ -17,7 +18,8 @@ from cp.operators o
 left join cp.users u
   on u.deleted_at is null
  and ((o.github_id is not null and u.github_id = o.github_id)
-      or (o.stellar_address is not null and u.stellar_address = o.stellar_address))
+      or (o.stellar_address is not null
+          and (u.stellar_address = o.stellar_address or u.passkey_address = o.stellar_address)))
 order by o.role desc, o.created_at, o.id;
 
 -- name: LockRosterEntry :one
@@ -59,7 +61,8 @@ update cp.operators
 set enroll_opened_at = null, enroll_until = null, updated_at = now()
 where enroll_until is not null
   and ((sqlc.narg(github_id)::bigint is not null and github_id = sqlc.narg(github_id)::bigint)
-    or (sqlc.narg(stellar_address)::text is not null and stellar_address = sqlc.narg(stellar_address)::text));
+    or (sqlc.narg(stellar_address)::text is not null and stellar_address = sqlc.narg(stellar_address)::text)
+    or (sqlc.narg(passkey_address)::text is not null and stellar_address = sqlc.narg(passkey_address)::text));
 
 -- name: BootstrapRosterGitHub :one
 -- the startup bootstrap of one github id: an active operator admin. xmax = 0
@@ -84,14 +87,22 @@ on conflict (stellar_address) where stellar_address is not null do update
 returning *, (xmax = 0)::boolean as inserted, (updated_at = now())::boolean as touched;
 
 -- name: RosterIdentityPasskeys :one
--- the passkeys of the live account holding a roster row's identity; 0
--- when no account holds it yet
+-- the step-up passkeys of the live account holding a roster row's
+-- identity, its sign-in passkey (00037) included; 0 when no account holds
+-- it yet
 select coalesce((
   select count(*) from cp.operator_passkeys k
   join cp.users u on u.id = k.user_id
   where u.deleted_at is null
     and ((sqlc.narg(github_id)::bigint is not null and u.github_id = sqlc.narg(github_id)::bigint)
-      or (sqlc.narg(stellar_address)::text is not null and u.stellar_address = sqlc.narg(stellar_address)::text))
+      or (sqlc.narg(stellar_address)::text is not null
+          and sqlc.narg(stellar_address)::text in (u.stellar_address, u.passkey_address)))
+), 0)::bigint + coalesce((
+  select count(*) from cp.users u
+  where u.deleted_at is null and u.passkey_public_key is not null
+    and ((sqlc.narg(github_id)::bigint is not null and u.github_id = sqlc.narg(github_id)::bigint)
+      or (sqlc.narg(stellar_address)::text is not null
+          and sqlc.narg(stellar_address)::text in (u.stellar_address, u.passkey_address)))
 ), 0)::bigint;
 
 -- name: RosterIdentityUser :one
@@ -99,14 +110,16 @@ select coalesce((
 select id from cp.users
 where deleted_at is null
   and ((sqlc.narg(github_id)::bigint is not null and github_id = sqlc.narg(github_id)::bigint)
-    or (sqlc.narg(stellar_address)::text is not null and stellar_address = sqlc.narg(stellar_address)::text));
+    or (sqlc.narg(stellar_address)::text is not null
+        and sqlc.narg(stellar_address)::text in (stellar_address, passkey_address)));
 
 -- name: RecomputeOperatorFlags :many
 -- every live account whose flag disagrees with the roster, set right; the
 -- startup bootstrap audits each one
 update cp.users u
-set is_operator = cp.roster_active(u.github_id, u.stellar_address)
-where u.deleted_at is null and u.is_operator is distinct from cp.roster_active(u.github_id, u.stellar_address)
+set is_operator = cp.roster_active(u.github_id, u.stellar_address, u.passkey_address)
+where u.deleted_at is null
+  and u.is_operator is distinct from cp.roster_active(u.github_id, u.stellar_address, u.passkey_address)
 returning u.id, u.is_operator;
 
 -- name: CountActiveAdmins :one

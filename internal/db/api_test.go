@@ -241,11 +241,11 @@ func TestAPIWriterQueries(t *testing.T) {
 
 type apiRow struct {
 	Service, Method, Route, Source, Class string
-	Status                         int16
-	Counts                         []int64
-	Sum                            float64
-	Count                          int64
-	Lossy                          bool
+	Status                                int16
+	Counts                                []int64
+	Sum                                   float64
+	Count                                 int64
+	Lossy                                 bool
 }
 
 func apiRows(t *testing.T, tx pgx.Tx, table string, tenant uuid.UUID, from, to time.Time) []apiRow {

@@ -171,7 +171,7 @@ func Delete(ctx context.Context, d *db.DB, um UmamiUsers, userID uuid.UUID) (Res
 		// the roster rows go before the identities do; the account's
 		// passkeys go with them, because emptying the row does not cascade
 		roster, err := q.AccountDeleteRoster(ctx, systemq.AccountDeleteRosterParams{
-			GithubID: u.GithubID, StellarAddress: u.StellarAddress,
+			GithubID: u.GithubID, StellarAddress: u.StellarAddress, PasskeyAddress: u.PasskeyAddress,
 		})
 		var pg *pgconn.PgError
 		if errors.As(err, &pg) && pg.ConstraintName == "operators_last_admin" {

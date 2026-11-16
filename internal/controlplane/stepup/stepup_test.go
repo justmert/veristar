@@ -2,13 +2,13 @@ package stepup_test
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
@@ -27,9 +27,7 @@ import (
 )
 
 type env struct {
-	// origin is the console origin the relying party is bound to. webauthn
-	// refuses an ip address as relying party id, so the test server's
-	// 127.0.0.1 is named localhost there
+	// origin is the console origin the relying party is bound to
 	origin string
 	d      *pdb.DB
 	srv    *httptest.Server
@@ -53,7 +51,7 @@ func start(t *testing.T) *env {
 	e.srv = httptest.NewUnstartedServer(http.NotFoundHandler())
 	e.srv.StartTLS()
 	t.Cleanup(e.srv.Close)
-	e.origin = strings.Replace(e.srv.URL, "127.0.0.1", "localhost", 1)
+	e.origin = e.srv.URL
 	e.svc, err = stepup.New(stepup.Config{
 		ConsoleOrigin: e.origin, MaxAge: time.Hour, EnrollWindow: time.Hour,
 		Now: func() time.Time { return e.now },
@@ -160,24 +158,26 @@ func code(t *testing.T, b []byte) string {
 
 func (c *client) register(t *testing.T, a *webauthnsoft.Authenticator, name string) (int, []byte) {
 	t.Helper()
-	st, opts := c.call(t, http.MethodPost, "/passkeys/options", map[string]any{})
+	st, ch := c.call(t, http.MethodPost, "/passkeys/challenge", map[string]any{})
 	if st != http.StatusOK {
-		return st, opts
+		return st, ch
 	}
-	cred, err := a.Register(opts, c.e.origin)
+	answer, err := a.Answer(ch, c.e.origin)
 	require.NoError(t, err)
-	return c.call(t, http.MethodPost, "/passkeys", map[string]any{"name": name, "credential": cred})
+	answer["name"] = name
+	answer["public_key"] = a.PublicKey()
+	return c.call(t, http.MethodPost, "/passkeys", answer)
 }
 
 func (c *client) stepUp(t *testing.T, a *webauthnsoft.Authenticator) (int, []byte) {
 	t.Helper()
-	st, opts := c.call(t, http.MethodPost, "/step-up/options", map[string]any{})
+	st, ch := c.call(t, http.MethodPost, "/step-up/challenge", map[string]any{})
 	if st != http.StatusOK {
-		return st, opts
+		return st, ch
 	}
-	cred, err := a.Assert(opts, c.e.origin)
+	answer, err := a.Answer(ch, c.e.origin)
 	require.NoError(t, err)
-	return c.call(t, http.MethodPost, "/step-up", map[string]any{"credential": cred})
+	return c.call(t, http.MethodPost, "/step-up", answer)
 }
 
 func TestStepUp(t *testing.T) {
@@ -264,7 +264,7 @@ func TestStepUp(t *testing.T) {
 		require.Equal(t, "enrollment_closed", code(t, b))
 	})
 
-	t.Run("a ceremony answer is used once, and only by its own key", func(t *testing.T) {
+	t.Run("a challenge is answered once, and only by the account's own passkey", func(t *testing.T) {
 		user := e.operator(t, e.now.Add(-time.Minute))
 		c := e.signIn(t, user)
 		key, err := webauthnsoft.New()
@@ -272,33 +272,70 @@ func TestStepUp(t *testing.T) {
 		st, _ := c.register(t, key, "k")
 		require.Equal(t, http.StatusCreated, st)
 
-		st, opts := c.call(t, http.MethodPost, "/step-up/options", map[string]any{})
+		st, ch := c.call(t, http.MethodPost, "/step-up/challenge", map[string]any{})
 		require.Equal(t, http.StatusOK, st)
-		cred, err := key.Assert(opts, e.origin)
+		answer, err := key.Answer(ch, e.origin)
 		require.NoError(t, err)
-		st, _ = c.call(t, http.MethodPost, "/step-up", map[string]any{"credential": cred})
+		st, _ = c.call(t, http.MethodPost, "/step-up", answer)
 		require.Equal(t, http.StatusOK, st)
-		st, b := c.call(t, http.MethodPost, "/step-up", map[string]any{"credential": cred})
+		st, b := c.call(t, http.MethodPost, "/step-up", answer)
 		require.Equal(t, http.StatusBadRequest, st)
 		require.Equal(t, "ceremony_expired", code(t, b))
 
-		// another account's key does not verify for this account
+		// another account's passkey does not verify for this account
 		other, err := webauthnsoft.New()
 		require.NoError(t, err)
-		_, opts = c.call(t, http.MethodPost, "/step-up/options", map[string]any{})
-		forged, err := other.Assert(opts, e.origin)
+		_, ch = c.call(t, http.MethodPost, "/step-up/challenge", map[string]any{})
+		forged, err := other.Answer(ch, e.origin)
 		require.NoError(t, err)
-		st, b = c.call(t, http.MethodPost, "/step-up", map[string]any{"credential": forged})
+		st, b = c.call(t, http.MethodPost, "/step-up", forged)
 		require.Equal(t, http.StatusBadRequest, st)
 		require.Equal(t, "step_up_failed", code(t, b))
 
-		// an answer for another origin does not verify
-		_, opts = c.call(t, http.MethodPost, "/step-up/options", map[string]any{})
-		phished, err := key.Assert(opts, "https://console.example.net")
+		// an answer made for another origin does not verify
+		_, ch = c.call(t, http.MethodPost, "/step-up/challenge", map[string]any{})
+		phished, err := key.Answer(ch, "https://console.example.net")
 		require.NoError(t, err)
-		st, b = c.call(t, http.MethodPost, "/step-up", map[string]any{"credential": phished})
+		st, b = c.call(t, http.MethodPost, "/step-up", phished)
 		require.Equal(t, http.StatusBadRequest, st)
 		require.Equal(t, "step_up_failed", code(t, b))
+
+		// a registration answer must be signed by the key it registers
+		_, ch = c.call(t, http.MethodPost, "/passkeys/challenge", map[string]any{})
+		swapped, err := key.Answer(ch, e.origin)
+		require.NoError(t, err)
+		swapped["name"] = "swapped"
+		swapped["public_key"] = other.PublicKey()
+		st, b = c.call(t, http.MethodPost, "/passkeys", swapped)
+		require.Equal(t, http.StatusBadRequest, st)
+		require.Equal(t, "step_up_failed", code(t, b))
+	})
+
+	t.Run("a sign-in passkey steps up the account", func(t *testing.T) {
+		key, err := webauthnsoft.New()
+		require.NoError(t, err)
+		e.gh++
+		pub, err := base64.RawURLEncoding.DecodeString(key.PublicKey())
+		require.NoError(t, err)
+		var user uuid.UUID
+		require.NoError(t, e.d.WithSystem(t.Context(), func(tx pgx.Tx) error {
+			addr := "CBH2J5X4WBV2KT6NSUE47DRFBUHTVJOBJTBGGNELJ2DZXTDB3AYRAXAO"
+			if _, err := tx.Exec(t.Context(), `insert into cp.operators (stellar_address, role) values ($1, 'operator')`, addr); err != nil {
+				return err
+			}
+			return tx.QueryRow(t.Context(), `insert into cp.users (passkey_address, passkey_credential_id, passkey_public_key)
+				values ($1, $2, $3) returning id`, addr, key.CredentialID(), pub).Scan(&user)
+		}))
+		c := e.signIn(t, user)
+		var s stepup.Status
+		_, b := c.call(t, http.MethodGet, "/step-up", nil)
+		require.NoError(t, json.Unmarshal(b, &s))
+		require.True(t, s.SignInPasskey)
+		require.Equal(t, int64(1), s.Passkeys)
+		st, b := c.stepUp(t, key)
+		require.Equal(t, http.StatusOK, st, string(b))
+		st, _ = c.call(t, http.MethodGet, "/protected", nil)
+		require.Equal(t, http.StatusNoContent, st)
 	})
 
 	t.Run("the audit log records each ceremony", func(t *testing.T) {
