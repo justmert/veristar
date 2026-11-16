@@ -32,10 +32,10 @@ type env struct {
 	// 127.0.0.1 is named localhost there
 	origin string
 	d      *pdb.DB
-	srv *httptest.Server
-	svc *stepup.Service
-	now time.Time
-	gh  int64
+	srv    *httptest.Server
+	svc    *stepup.Service
+	now    time.Time
+	gh     int64
 }
 
 // start serves the step-up routes behind a real console session. sign-in
