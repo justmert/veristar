@@ -23,7 +23,32 @@ const sep53Prefix = "Stellar Signed Message:\n"
 
 // SEP53Hash is the 32 bytes a sep-53 signer signs for message.
 func SEP53Hash(message string) [32]byte {
-	return sha256.Sum256([]byte(sep53Prefix + message))
+	return SEP53HashBytes([]byte(message))
+}
+
+// SEP53HashBytes is SEP53Hash for a message of raw bytes: sep-53 signs the
+// byte sequence as given, so a binary message is never re-encoded.
+func SEP53HashBytes(message []byte) [32]byte {
+	h := sha256.New()
+	h.Write([]byte(sep53Prefix))
+	h.Write(message)
+	var out [32]byte
+	copy(out[:], h.Sum(nil))
+	return out
+}
+
+// SignSEP53 signs message the sep-53 way with kp and returns the 64-byte
+// signature in standard base64, the form wallets return.
+func SignSEP53(kp *keypair.Full, message []byte) (string, error) {
+	if kp == nil {
+		return "", errors.New("chain: sep-53 signing needs a key")
+	}
+	h := SEP53HashBytes(message)
+	sig, err := kp.Sign(h[:])
+	if err != nil {
+		return "", err
+	}
+	return base64.StdEncoding.EncodeToString(sig), nil
 }
 
 // ErrBadSignature is a signature that does not verify, or is not a
@@ -34,6 +59,11 @@ var ErrBadSignature = errors.New("chain: the signature does not verify for this 
 // address). wallets return the 64-byte signature base64 encoded; hex is
 // accepted too, because some wallets and the stellar cli print it so.
 func VerifySEP53(account, message, signature string) error {
+	return VerifySEP53Bytes(account, []byte(message), signature)
+}
+
+// VerifySEP53Bytes is VerifySEP53 for a message of raw bytes.
+func VerifySEP53Bytes(account string, message []byte, signature string) error {
 	if !strkey.IsValidEd25519PublicKey(account) {
 		return errors.New("chain: sep-53 needs a g account")
 	}
@@ -45,7 +75,7 @@ func VerifySEP53(account, message, signature string) error {
 	if err != nil {
 		return err
 	}
-	h := SEP53Hash(message)
+	h := SEP53HashBytes(message)
 	if kp.Verify(h[:], sig) != nil {
 		return ErrBadSignature
 	}
