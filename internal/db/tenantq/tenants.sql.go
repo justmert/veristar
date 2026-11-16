@@ -181,7 +181,7 @@ func (q *Queries) DeleteTenantMember(ctx context.Context, userID uuid.UUID) (int
 }
 
 const getTenantMember = `-- name: GetTenantMember :one
-select m.user_id, u.github_id, u.github_login, u.stellar_address, m.role, m.created_at
+select m.user_id, u.github_id, u.github_login, u.stellar_address, u.passkey_address, m.role, m.created_at
 from cp.tenant_members m
 join cp.users u on u.id = m.user_id
 where m.user_id = $1
@@ -192,6 +192,7 @@ type GetTenantMemberRow struct {
 	GithubID       *int64
 	GithubLogin    *string
 	StellarAddress *string
+	PasskeyAddress *string
 	Role           string
 	CreatedAt      time.Time
 }
@@ -204,6 +205,7 @@ func (q *Queries) GetTenantMember(ctx context.Context, userID uuid.UUID) (GetTen
 		&i.GithubID,
 		&i.GithubLogin,
 		&i.StellarAddress,
+		&i.PasskeyAddress,
 		&i.Role,
 		&i.CreatedAt,
 	)
@@ -292,10 +294,10 @@ func (q *Queries) ListOpenInvites(ctx context.Context) ([]CpInvite, error) {
 }
 
 const listTenantMembers = `-- name: ListTenantMembers :many
-select m.user_id, u.github_id, u.github_login, u.stellar_address, m.role, m.created_at
+select m.user_id, u.github_id, u.github_login, u.stellar_address, u.passkey_address, m.role, m.created_at
 from cp.tenant_members m
 join cp.users u on u.id = m.user_id
-order by lower(coalesce(u.github_login, u.stellar_address)), m.user_id
+order by lower(coalesce(u.github_login, u.stellar_address, u.passkey_address)), m.user_id
 `
 
 type ListTenantMembersRow struct {
@@ -303,6 +305,7 @@ type ListTenantMembersRow struct {
 	GithubID       *int64
 	GithubLogin    *string
 	StellarAddress *string
+	PasskeyAddress *string
 	Role           string
 	CreatedAt      time.Time
 }
@@ -321,6 +324,7 @@ func (q *Queries) ListTenantMembers(ctx context.Context) ([]ListTenantMembersRow
 			&i.GithubID,
 			&i.GithubLogin,
 			&i.StellarAddress,
+			&i.PasskeyAddress,
 			&i.Role,
 			&i.CreatedAt,
 		); err != nil {

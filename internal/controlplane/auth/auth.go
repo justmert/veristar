@@ -407,14 +407,14 @@ func (h *Handler) signIn(ctx context.Context, gh githubUser) (systemq.CpUser, []
 // audit rows.
 func (h *Handler) afterSignIn(ctx context.Context, q *systemq.Queries, u systemq.CpUser, detail map[string]any) (systemq.CpUser, []uuid.UUID, error) {
 	u, err := q.SetOperatorFlag(ctx, systemq.SetOperatorFlagParams{
-		IsOperator: h.operators.Is(u.GithubID, u.StellarAddress), ID: u.ID,
+		IsOperator: h.operators.Is(u.GithubID, u.StellarAddress, u.PasskeyAddress), ID: u.ID,
 	})
 	if err != nil {
 		return u, nil, fmt.Errorf("operator flag: %w", err)
 	}
 	actor := "user:" + u.ID.String()
 	resolved, err := q.ResolveInvites(ctx, systemq.ResolveInvitesParams{
-		GithubID: u.GithubID, StellarAddress: u.StellarAddress, UserID: u.ID,
+		GithubID: u.GithubID, StellarAddress: u.StellarAddress, PasskeyAddress: u.PasskeyAddress, UserID: u.ID,
 	})
 	if err != nil {
 		return u, nil, fmt.Errorf("resolve invites: %w", err)

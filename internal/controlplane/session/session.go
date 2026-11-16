@@ -34,18 +34,21 @@ type User struct {
 	GitHubID       *int64
 	GitHubLogin    *string
 	StellarAddress *string
+	PasskeyAddress *string
 	IsOperator     bool
 }
 
-// DisplayName is the github login, or the short address of a wallet-only
-// account.
-func (u User) DisplayName() string { return identity.DisplayName(u.GitHubLogin, u.StellarAddress) }
+// DisplayName is the github login, or the short address of a wallet or
+// passkey account without one.
+func (u User) DisplayName() string {
+	return identity.DisplayName(u.GitHubLogin, u.StellarAddress, u.PasskeyAddress)
+}
 
 // FromRow builds the User of a cp.users row.
 func FromRow(u systemq.CpUser) User {
 	return User{
 		ID: u.ID, GitHubID: u.GithubID, GitHubLogin: u.GithubLogin,
-		StellarAddress: u.StellarAddress, IsOperator: u.IsOperator,
+		StellarAddress: u.StellarAddress, PasskeyAddress: u.PasskeyAddress, IsOperator: u.IsOperator,
 	}
 }
 

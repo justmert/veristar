@@ -49,6 +49,13 @@ func TestLoadControlPlane(t *testing.T) {
 		!c.OperatorStellarAddresses["GCB634SLKV5N4COK4FICWJADNTFWIHTWWM34BFPLACL6YSQVLY5ZWOQN"] {
 		t.Fatalf("wallet operators: %v %v", err, c.OperatorStellarAddresses)
 	}
+	// a passkey operator is named by its soropass account's C-address
+	env = controlPlaneEnv()
+	env["OPERATOR_STELLAR_ADDRESSES"] = "GCB634SLKV5N4COK4FICWJADNTFWIHTWWM34BFPLACL6YSQVLY5ZWOQN,CBH2J5X4WBV2KT6NSUE47DRFBUHTVJOBJTBGGNELJ2DZXTDB3AYRAXAO"
+	if c, err = LoadControlPlane(FromMap(env)); err != nil ||
+		!c.OperatorStellarAddresses["CBH2J5X4WBV2KT6NSUE47DRFBUHTVJOBJTBGGNELJ2DZXTDB3AYRAXAO"] {
+		t.Fatalf("passkey operators: %v %v", err, c.OperatorStellarAddresses)
+	}
 	env = controlPlaneEnv()
 	env["TRACKER_NPM_PACKAGE"] = "tracker"
 	if c, err = LoadControlPlane(FromMap(env)); err != nil || c.TrackerNPMPackage != "tracker" {
@@ -60,10 +67,11 @@ func TestLoadControlPlaneRefuses(t *testing.T) {
 	cases := map[string]struct {
 		key, value string
 	}{
-		"missing operators":   {"OPERATOR_GITHUB_IDS", ""},
-		"bad operator id":     {"OPERATOR_GITHUB_IDS", "1,octocat"},
-		"zero operator id":    {"OPERATOR_GITHUB_IDS", "0"},
-		"bad wallet operator": {"OPERATOR_STELLAR_ADDRESSES", "GCB634SLKV5N4COK4FICWJADNTFWIHTWWM34BFPLACL6YSQVLY5ZWOQA"},
+		"missing operators":    {"OPERATOR_GITHUB_IDS", ""},
+		"bad operator id":      {"OPERATOR_GITHUB_IDS", "1,octocat"},
+		"zero operator id":     {"OPERATOR_GITHUB_IDS", "0"},
+		"bad wallet operator":  {"OPERATOR_STELLAR_ADDRESSES", "GCB634SLKV5N4COK4FICWJADNTFWIHTWWM34BFPLACL6YSQVLY5ZWOQA"},
+		"bad passkey operator": {"OPERATOR_STELLAR_ADDRESSES", "CBH2J5X4WBV2KT6NSUE47DRFBUHTVJOBJTBGGNELJ2DZXTDB3AYRAXAA"},
 		"muxed wallet operator": {"OPERATOR_STELLAR_ADDRESSES",
 			"MA7QYNF7SOWQ3GLR2BGMZEHXAVIRZA4KVWLTJJFC7MGXUA74P7UJUAAAAAAAAAAAAGZFQ"},
 		"short state key":      {"OAUTH_STATE_KEY", base64.StdEncoding.EncodeToString([]byte("short"))},

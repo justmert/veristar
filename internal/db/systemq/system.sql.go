@@ -116,7 +116,7 @@ insert into cp.users (github_id, github_login, last_login_at)
 values ($1::bigint, $2::text, now())
 on conflict (github_id) where deleted_at is null do update
   set github_login = excluded.github_login, last_login_at = excluded.last_login_at
-returning id, github_id, github_login, is_operator, created_at, last_login_at, deleted_at, stellar_address, umami_username
+returning id, github_id, github_login, is_operator, created_at, last_login_at, deleted_at, stellar_address, umami_username, passkey_address, passkey_credential_id, passkey_public_key
 `
 
 type UpsertUserParams struct {
@@ -139,6 +139,9 @@ func (q *Queries) UpsertUser(ctx context.Context, arg UpsertUserParams) (CpUser,
 		&i.DeletedAt,
 		&i.StellarAddress,
 		&i.UmamiUsername,
+		&i.PasskeyAddress,
+		&i.PasskeyCredentialID,
+		&i.PasskeyPublicKey,
 	)
 	return i, err
 }

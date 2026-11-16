@@ -154,10 +154,11 @@ func (e *Env) githubIDs(key string) map[int64]bool {
 	return out
 }
 
-// stellarAddresses reads an optional comma separated list of stellar account
-// ids (G-addresses), each checked with its strkey checksum. unset or empty
-// is an empty list: github operators are required, wallet operators are
-// not.
+// stellarAddresses reads an optional comma separated list of stellar
+// addresses, each checked with its strkey checksum: account ids
+// (G-addresses) of wallet accounts and contract addresses (C-addresses) of
+// soropass passkey accounts. unset or empty is an empty list: github
+// operators are required, wallet and passkey operators are not.
 func (e *Env) stellarAddresses(key string) map[string]bool {
 	out := map[string]bool{}
 	v, ok := e.raw(key)
@@ -166,8 +167,8 @@ func (e *Env) stellarAddresses(key string) map[string]bool {
 	}
 	for _, part := range strings.Split(v, ",") {
 		a := strings.TrimSpace(part)
-		if !strkey.IsValidEd25519PublicKey(a) {
-			e.fail(key, "must be a comma separated list of stellar account ids (G...)")
+		if _, cerr := strkey.Decode(strkey.VersionByteContract, a); !strkey.IsValidEd25519PublicKey(a) && cerr != nil {
+			e.fail(key, "must be a comma separated list of stellar account ids (G...) or passkey account addresses (C...)")
 			return nil
 		}
 		out[a] = true

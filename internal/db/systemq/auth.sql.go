@@ -45,6 +45,26 @@ func (q *Queries) DeleteSession(ctx context.Context, tokenHash []byte) error {
 	return err
 }
 
+const findPasskey = `-- name: FindPasskey :one
+select id, passkey_address, passkey_public_key from cp.users
+where passkey_credential_id = $1 and deleted_at is null
+`
+
+type FindPasskeyRow struct {
+	ID               uuid.UUID
+	PasskeyAddress   *string
+	PasskeyPublicKey []byte
+}
+
+// the key and address of a registered passkey, by the credential id a
+// sign-in assertion names
+func (q *Queries) FindPasskey(ctx context.Context, passkeyCredentialID *string) (FindPasskeyRow, error) {
+	row := q.db.QueryRow(ctx, findPasskey, passkeyCredentialID)
+	var i FindPasskeyRow
+	err := row.Scan(&i.ID, &i.PasskeyAddress, &i.PasskeyPublicKey)
+	return i, err
+}
+
 const findSession = `-- name: FindSession :one
 select data from cp.sessions where token_hash = $1 and expiry > now()
 `
@@ -58,7 +78,7 @@ func (q *Queries) FindSession(ctx context.Context, tokenHash []byte) ([]byte, er
 }
 
 const getUser = `-- name: GetUser :one
-select id, github_id, github_login, is_operator, created_at, last_login_at, deleted_at, stellar_address, umami_username from cp.users where id = $1 and deleted_at is null
+select id, github_id, github_login, is_operator, created_at, last_login_at, deleted_at, stellar_address, umami_username, passkey_address, passkey_credential_id, passkey_public_key from cp.users where id = $1 and deleted_at is null
 `
 
 // a deleted account is no user: its sessions are gone, and this keeps a
@@ -76,6 +96,9 @@ func (q *Queries) GetUser(ctx context.Context, id uuid.UUID) (CpUser, error) {
 		&i.DeletedAt,
 		&i.StellarAddress,
 		&i.UmamiUsername,
+		&i.PasskeyAddress,
+		&i.PasskeyCredentialID,
+		&i.PasskeyPublicKey,
 	)
 	return i, err
 }
@@ -83,7 +106,7 @@ func (q *Queries) GetUser(ctx context.Context, id uuid.UUID) (CpUser, error) {
 const linkGitHub = `-- name: LinkGitHub :one
 update cp.users set github_id = $1, github_login = $2
 where id = $3 and deleted_at is null and github_id is null
-returning id, github_id, github_login, is_operator, created_at, last_login_at, deleted_at, stellar_address, umami_username
+returning id, github_id, github_login, is_operator, created_at, last_login_at, deleted_at, stellar_address, umami_username, passkey_address, passkey_credential_id, passkey_public_key
 `
 
 type LinkGitHubParams struct {
@@ -107,6 +130,51 @@ func (q *Queries) LinkGitHub(ctx context.Context, arg LinkGitHubParams) (CpUser,
 		&i.DeletedAt,
 		&i.StellarAddress,
 		&i.UmamiUsername,
+		&i.PasskeyAddress,
+		&i.PasskeyCredentialID,
+		&i.PasskeyPublicKey,
+	)
+	return i, err
+}
+
+const linkPasskey = `-- name: LinkPasskey :one
+update cp.users set passkey_address = $1, passkey_credential_id = $2,
+  passkey_public_key = $3
+where id = $4 and deleted_at is null and passkey_address is null
+returning id, github_id, github_login, is_operator, created_at, last_login_at, deleted_at, stellar_address, umami_username, passkey_address, passkey_credential_id, passkey_public_key
+`
+
+type LinkPasskeyParams struct {
+	PasskeyAddress      *string
+	PasskeyCredentialID *string
+	PasskeyPublicKey    []byte
+	ID                  uuid.UUID
+}
+
+// adds a passkey identity to an account that has none (4.1.8). an address
+// or credential id that already names another live account fails on
+// users_passkey_address_live_idx or users_passkey_credential_live_idx
+func (q *Queries) LinkPasskey(ctx context.Context, arg LinkPasskeyParams) (CpUser, error) {
+	row := q.db.QueryRow(ctx, linkPasskey,
+		arg.PasskeyAddress,
+		arg.PasskeyCredentialID,
+		arg.PasskeyPublicKey,
+		arg.ID,
+	)
+	var i CpUser
+	err := row.Scan(
+		&i.ID,
+		&i.GithubID,
+		&i.GithubLogin,
+		&i.IsOperator,
+		&i.CreatedAt,
+		&i.LastLoginAt,
+		&i.DeletedAt,
+		&i.StellarAddress,
+		&i.UmamiUsername,
+		&i.PasskeyAddress,
+		&i.PasskeyCredentialID,
+		&i.PasskeyPublicKey,
 	)
 	return i, err
 }
@@ -114,7 +182,7 @@ func (q *Queries) LinkGitHub(ctx context.Context, arg LinkGitHubParams) (CpUser,
 const linkStellar = `-- name: LinkStellar :one
 update cp.users set stellar_address = $1
 where id = $2 and deleted_at is null and stellar_address is null
-returning id, github_id, github_login, is_operator, created_at, last_login_at, deleted_at, stellar_address, umami_username
+returning id, github_id, github_login, is_operator, created_at, last_login_at, deleted_at, stellar_address, umami_username, passkey_address, passkey_credential_id, passkey_public_key
 `
 
 type LinkStellarParams struct {
@@ -138,6 +206,9 @@ func (q *Queries) LinkStellar(ctx context.Context, arg LinkStellarParams) (CpUse
 		&i.DeletedAt,
 		&i.StellarAddress,
 		&i.UmamiUsername,
+		&i.PasskeyAddress,
+		&i.PasskeyCredentialID,
+		&i.PasskeyPublicKey,
 	)
 	return i, err
 }
@@ -258,12 +329,13 @@ func (q *Queries) PruneWalletChallenges(ctx context.Context) error {
 const resolveInvites = `-- name: ResolveInvites :many
 with resolved as (
   delete from cp.invites
-  where (github_id = $1::bigint or stellar_address = $2::text)
+  where (github_id = $1::bigint or stellar_address = $2::text
+         or stellar_address = $3::text)
     and expires_at > now()
   returning id, tenant_id, role
 ), added as (
   insert into cp.tenant_members (tenant_id, user_id, role)
-  select tenant_id, $3::uuid, role from resolved
+  select tenant_id, $4::uuid, role from resolved
   on conflict (tenant_id, user_id) do nothing
   returning tenant_id
 )
@@ -275,6 +347,7 @@ order by r.id
 type ResolveInvitesParams struct {
 	GithubID       *int64
 	StellarAddress *string
+	PasskeyAddress *string
 	UserID         uuid.UUID
 }
 
@@ -285,13 +358,18 @@ type ResolveInvitesRow struct {
 	Added    bool
 }
 
-// turns the open invites for the account's github id or stellar address
-// into memberships and deletes them, in one statement. the github account
+// turns the open invites for the account's github id, stellar address or
+// passkey address into memberships and deletes them, in one statement. the github account
 // id is matched, never the login, which can change hands (00025). a null
 // parameter matches nothing. an invite for a tenant the user already
 // belongs to is consumed without changing the existing role.
 func (q *Queries) ResolveInvites(ctx context.Context, arg ResolveInvitesParams) ([]ResolveInvitesRow, error) {
-	rows, err := q.db.Query(ctx, resolveInvites, arg.GithubID, arg.StellarAddress, arg.UserID)
+	rows, err := q.db.Query(ctx, resolveInvites,
+		arg.GithubID,
+		arg.StellarAddress,
+		arg.PasskeyAddress,
+		arg.UserID,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -318,7 +396,7 @@ func (q *Queries) ResolveInvites(ctx context.Context, arg ResolveInvitesParams) 
 const setOperatorFlag = `-- name: SetOperatorFlag :one
 update cp.users set is_operator = $1
 where id = $2 and deleted_at is null
-returning id, github_id, github_login, is_operator, created_at, last_login_at, deleted_at, stellar_address, umami_username
+returning id, github_id, github_login, is_operator, created_at, last_login_at, deleted_at, stellar_address, umami_username, passkey_address, passkey_credential_id, passkey_public_key
 `
 
 type SetOperatorFlagParams struct {
@@ -342,6 +420,47 @@ func (q *Queries) SetOperatorFlag(ctx context.Context, arg SetOperatorFlagParams
 		&i.DeletedAt,
 		&i.StellarAddress,
 		&i.UmamiUsername,
+		&i.PasskeyAddress,
+		&i.PasskeyCredentialID,
+		&i.PasskeyPublicKey,
+	)
+	return i, err
+}
+
+const signInPasskeyUser = `-- name: SignInPasskeyUser :one
+insert into cp.users (passkey_address, passkey_credential_id, passkey_public_key, last_login_at)
+values ($1, $2, $3, now())
+on conflict (passkey_address) where deleted_at is null and passkey_address is not null do update
+  set last_login_at = excluded.last_login_at
+returning id, github_id, github_login, is_operator, created_at, last_login_at, deleted_at, stellar_address, umami_username, passkey_address, passkey_credential_id, passkey_public_key
+`
+
+type SignInPasskeyUserParams struct {
+	PasskeyAddress      *string
+	PasskeyCredentialID *string
+	PasskeyPublicKey    []byte
+}
+
+// passkey sign-in (4.1.9): the soropass account address, derived from the
+// credential id and the key the assertion verified with, is the identity.
+// a credential id that already names another address fails on
+// users_passkey_credential_live_idx
+func (q *Queries) SignInPasskeyUser(ctx context.Context, arg SignInPasskeyUserParams) (CpUser, error) {
+	row := q.db.QueryRow(ctx, signInPasskeyUser, arg.PasskeyAddress, arg.PasskeyCredentialID, arg.PasskeyPublicKey)
+	var i CpUser
+	err := row.Scan(
+		&i.ID,
+		&i.GithubID,
+		&i.GithubLogin,
+		&i.IsOperator,
+		&i.CreatedAt,
+		&i.LastLoginAt,
+		&i.DeletedAt,
+		&i.StellarAddress,
+		&i.UmamiUsername,
+		&i.PasskeyAddress,
+		&i.PasskeyCredentialID,
+		&i.PasskeyPublicKey,
 	)
 	return i, err
 }
@@ -351,7 +470,7 @@ insert into cp.users (stellar_address, last_login_at)
 values ($1, now())
 on conflict (stellar_address) where deleted_at is null and stellar_address is not null do update
   set last_login_at = excluded.last_login_at
-returning id, github_id, github_login, is_operator, created_at, last_login_at, deleted_at, stellar_address, umami_username
+returning id, github_id, github_login, is_operator, created_at, last_login_at, deleted_at, stellar_address, umami_username, passkey_address, passkey_credential_id, passkey_public_key
 `
 
 // wallet sign-in (4.1.7): the G-address whose key signed the challenge is
@@ -369,6 +488,9 @@ func (q *Queries) SignInStellarUser(ctx context.Context, stellarAddress *string)
 		&i.DeletedAt,
 		&i.StellarAddress,
 		&i.UmamiUsername,
+		&i.PasskeyAddress,
+		&i.PasskeyCredentialID,
+		&i.PasskeyPublicKey,
 	)
 	return i, err
 }
@@ -380,7 +502,7 @@ values ($1, $2, now())
 on conflict (github_id) where deleted_at is null do update
   set github_login = excluded.github_login,
       last_login_at = excluded.last_login_at
-returning id, github_id, github_login, is_operator, created_at, last_login_at, deleted_at, stellar_address, umami_username
+returning id, github_id, github_login, is_operator, created_at, last_login_at, deleted_at, stellar_address, umami_username, passkey_address, passkey_credential_id, passkey_public_key
 `
 
 type SignInUserParams struct {
@@ -407,17 +529,21 @@ func (q *Queries) SignInUser(ctx context.Context, arg SignInUserParams) (CpUser,
 		&i.DeletedAt,
 		&i.StellarAddress,
 		&i.UmamiUsername,
+		&i.PasskeyAddress,
+		&i.PasskeyCredentialID,
+		&i.PasskeyPublicKey,
 	)
 	return i, err
 }
 
 const unlinkGitHub = `-- name: UnlinkGitHub :one
 update cp.users set github_id = null, github_login = null
-where id = $1 and deleted_at is null and github_id is not null and stellar_address is not null
-returning id, github_id, github_login, is_operator, created_at, last_login_at, deleted_at, stellar_address, umami_username
+where id = $1 and deleted_at is null and github_id is not null
+  and (stellar_address is not null or passkey_address is not null)
+returning id, github_id, github_login, is_operator, created_at, last_login_at, deleted_at, stellar_address, umami_username, passkey_address, passkey_credential_id, passkey_public_key
 `
 
-// removes the github identity while a stellar identity remains, so an
+// removes the github identity while another identity remains, so an
 // account always keeps a way to sign in
 func (q *Queries) UnlinkGitHub(ctx context.Context, id uuid.UUID) (CpUser, error) {
 	row := q.db.QueryRow(ctx, unlinkGitHub, id)
@@ -432,14 +558,45 @@ func (q *Queries) UnlinkGitHub(ctx context.Context, id uuid.UUID) (CpUser, error
 		&i.DeletedAt,
 		&i.StellarAddress,
 		&i.UmamiUsername,
+		&i.PasskeyAddress,
+		&i.PasskeyCredentialID,
+		&i.PasskeyPublicKey,
+	)
+	return i, err
+}
+
+const unlinkPasskey = `-- name: UnlinkPasskey :one
+update cp.users set passkey_address = null, passkey_credential_id = null, passkey_public_key = null
+where id = $1 and deleted_at is null and passkey_address is not null
+  and (github_id is not null or stellar_address is not null)
+returning id, github_id, github_login, is_operator, created_at, last_login_at, deleted_at, stellar_address, umami_username, passkey_address, passkey_credential_id, passkey_public_key
+`
+
+func (q *Queries) UnlinkPasskey(ctx context.Context, id uuid.UUID) (CpUser, error) {
+	row := q.db.QueryRow(ctx, unlinkPasskey, id)
+	var i CpUser
+	err := row.Scan(
+		&i.ID,
+		&i.GithubID,
+		&i.GithubLogin,
+		&i.IsOperator,
+		&i.CreatedAt,
+		&i.LastLoginAt,
+		&i.DeletedAt,
+		&i.StellarAddress,
+		&i.UmamiUsername,
+		&i.PasskeyAddress,
+		&i.PasskeyCredentialID,
+		&i.PasskeyPublicKey,
 	)
 	return i, err
 }
 
 const unlinkStellar = `-- name: UnlinkStellar :one
 update cp.users set stellar_address = null
-where id = $1 and deleted_at is null and stellar_address is not null and github_id is not null
-returning id, github_id, github_login, is_operator, created_at, last_login_at, deleted_at, stellar_address, umami_username
+where id = $1 and deleted_at is null and stellar_address is not null
+  and (github_id is not null or passkey_address is not null)
+returning id, github_id, github_login, is_operator, created_at, last_login_at, deleted_at, stellar_address, umami_username, passkey_address, passkey_credential_id, passkey_public_key
 `
 
 func (q *Queries) UnlinkStellar(ctx context.Context, id uuid.UUID) (CpUser, error) {
@@ -455,6 +612,9 @@ func (q *Queries) UnlinkStellar(ctx context.Context, id uuid.UUID) (CpUser, erro
 		&i.DeletedAt,
 		&i.StellarAddress,
 		&i.UmamiUsername,
+		&i.PasskeyAddress,
+		&i.PasskeyCredentialID,
+		&i.PasskeyPublicKey,
 	)
 	return i, err
 }

@@ -38,27 +38,31 @@ var githubLoginRe = regexp.MustCompile(`^[A-Za-z0-9](?:-?[A-Za-z0-9]){0,38}$`)
 // ValidLogin reports whether s is a syntactically valid github login.
 func ValidLogin(s string) bool { return len(s) <= 39 && githubLoginRe.MatchString(s) }
 
-// Member is the member object of contract 3.1. github_id and github_login
-// are null for a wallet-only account, stellar_address for a github-only one.
+// Member is the member object of contract 3.1. each identity is null when
+// the account does not hold it: github_id and github_login, stellar_address
+// (a wallet's G-address) and passkey_address (a soropass account's
+// C-address).
 type Member struct {
 	UserID         uuid.UUID       `json:"user_id"`
 	GitHubID       *int64          `json:"github_id"`
 	GitHubLogin    *string         `json:"github_login"`
 	StellarAddress *string         `json:"stellar_address"`
+	PasskeyAddress *string         `json:"passkey_address"`
 	DisplayName    string          `json:"display_name"`
 	Role           string          `json:"role"`
 	CreatedAt      httpx.Timestamp `json:"created_at"`
 }
 
-func newMember(userID uuid.UUID, gh *int64, login, address *string, role string, at time.Time) Member {
+func newMember(userID uuid.UUID, gh *int64, login, address, passkey *string, role string, at time.Time) Member {
 	return Member{
-		UserID: userID, GitHubID: gh, GitHubLogin: login, StellarAddress: address,
-		DisplayName: identity.DisplayName(login, address), Role: role, CreatedAt: httpx.Timestamp(at),
+		UserID: userID, GitHubID: gh, GitHubLogin: login, StellarAddress: address, PasskeyAddress: passkey,
+		DisplayName: identity.DisplayName(login, address, passkey), Role: role, CreatedAt: httpx.Timestamp(at),
 	}
 }
 
 // Invite is the invite object of contract 3.1: it names a github account
-// (github_id and github_login) or a stellar account (stellar_address).
+// (github_id and github_login) or a stellar address (stellar_address): a
+// wallet's G-address or a passkey account's C-address.
 type Invite struct {
 	ID             uuid.UUID       `json:"id"`
 	GitHubID       *int64          `json:"github_id"`
@@ -128,7 +132,7 @@ func (h *Routes) list(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 		for _, m := range ms {
-			out.Members = append(out.Members, newMember(m.UserID, m.GithubID, m.GithubLogin, m.StellarAddress, m.Role, m.CreatedAt))
+			out.Members = append(out.Members, newMember(m.UserID, m.GithubID, m.GithubLogin, m.StellarAddress, m.PasskeyAddress, m.Role, m.CreatedAt))
 		}
 		is, err := q.ListOpenInvites(ctx)
 		if err != nil {
@@ -182,6 +186,7 @@ type existing struct {
 	GithubID       *int64
 	GithubLogin    *string
 	StellarAddress *string
+	PasskeyAddress *string
 }
 
 func (h *Routes) add(w http.ResponseWriter, r *http.Request) error {
@@ -209,7 +214,7 @@ func (h *Routes) add(w http.ResponseWriter, r *http.Request) error {
 		f.Add("github_login", httpx.FieldRequired)
 	case b.GitHubLogin != nil && !ValidLogin(*b.GitHubLogin):
 		f.Add("github_login", httpx.FieldInvalidGitHubLogin)
-	case b.StellarAddress != nil && !identity.ValidAddress(*b.StellarAddress):
+	case b.StellarAddress != nil && !identity.ValidPersonAddress(*b.StellarAddress):
 		f.Add("stellar_address", httpx.FieldInvalidStrkey)
 	}
 	checkRole(&f, b.Role)
@@ -258,7 +263,7 @@ func (h *Routes) add(w http.ResponseWriter, r *http.Request) error {
 			if err != nil {
 				return err
 			}
-			mem := newMember(m.UserID, u.GithubID, u.GithubLogin, u.StellarAddress, m.Role, m.CreatedAt)
+			mem := newMember(m.UserID, u.GithubID, u.GithubLogin, u.StellarAddress, u.PasskeyAddress, m.Role, m.CreatedAt)
 			res = addResult{Kind: "member", Member: &mem}
 			return audit.InTenant(ctx, tx, audit.Entry{
 				Actor: audit.User(a.User.ID), Action: audit.MemberAdd, Target: audit.UserTarget(u.ID),
@@ -336,25 +341,40 @@ func (h *Routes) githubPerson(ctx context.Context, login string) (person, error)
 		if err := q.RefreshUserLogin(ctx, systemq.RefreshUserLoginParams{GithubLogin: &gh.Login, GithubID: &gh.ID}); err != nil {
 			return err
 		}
-		p.user = &existing{ID: u.ID, GithubID: u.GithubID, GithubLogin: &gh.Login, StellarAddress: u.StellarAddress}
+		p.user = &existing{ID: u.ID, GithubID: u.GithubID, GithubLogin: &gh.Login, StellarAddress: u.StellarAddress,
+			PasskeyAddress: u.PasskeyAddress}
 		return nil
 	})
 	return p, err
 }
 
-// stellarPerson finds the console account of an address, if any. the
+// stellarPerson finds the console account of an address, if any: the
+// wallet account of a G-address, the passkey account of a C-address. the
 // address is checked for its strkey checksum already.
 func (h *Routes) stellarPerson(ctx context.Context, address string) (person, error) {
 	p := person{field: "stellar_address", name: identity.ShortAddress(address), address: &address}
 	err := h.s.DB().WithSystem(ctx, func(tx pgx.Tx) error {
-		u, err := systemq.New(tx).FindUserByStellarAddress(ctx, &address)
+		q := systemq.New(tx)
+		var e existing
+		var err error
+		if identity.ValidContractAddress(address) {
+			var u systemq.FindUserByPasskeyAddressRow
+			u, err = q.FindUserByPasskeyAddress(ctx, &address)
+			e = existing{ID: u.ID, GithubID: u.GithubID, GithubLogin: u.GithubLogin,
+				StellarAddress: u.StellarAddress, PasskeyAddress: u.PasskeyAddress}
+		} else {
+			var u systemq.FindUserByStellarAddressRow
+			u, err = q.FindUserByStellarAddress(ctx, &address)
+			e = existing{ID: u.ID, GithubID: u.GithubID, GithubLogin: u.GithubLogin,
+				StellarAddress: u.StellarAddress, PasskeyAddress: u.PasskeyAddress}
+		}
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil
 		}
 		if err != nil {
 			return err
 		}
-		p.user = &existing{ID: u.ID, GithubID: u.GithubID, GithubLogin: u.GithubLogin, StellarAddress: u.StellarAddress}
+		p.user = &e
 		return nil
 	})
 	return p, err
@@ -403,7 +423,7 @@ func (h *Routes) setRole(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
-		out = newMember(m.UserID, m.GithubID, m.GithubLogin, m.StellarAddress, m.Role, m.CreatedAt)
+		out = newMember(m.UserID, m.GithubID, m.GithubLogin, m.StellarAddress, m.PasskeyAddress, m.Role, m.CreatedAt)
 		if m.Role == *b.Role {
 			return nil
 		}
@@ -466,7 +486,7 @@ func (h *Routes) remove(w http.ResponseWriter, r *http.Request) error {
 		return audit.InTenant(ctx, tx, audit.Entry{
 			Actor: audit.User(a.User.ID), Action: audit.MemberRemove, Target: audit.UserTarget(userID),
 			Detail: map[string]any{"tenant_id": a.TenantID, "github_login": m.GithubLogin,
-				"stellar_address": m.StellarAddress, "role": m.Role},
+				"stellar_address": m.StellarAddress, "passkey_address": m.PasskeyAddress, "role": m.Role},
 		})
 	})
 	if err != nil {
