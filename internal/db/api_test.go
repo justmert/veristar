@@ -125,7 +125,7 @@ func TestAPIWriterQueries(t *testing.T) {
 			minuteParams(tenant, minute, "/orders", "metric", c2, 30.25, true),
 			minuteParams(tenant, minute, "/orders", "span", c1, 0.5, false),
 		}).Exec))
-		// a probe of the same route is a row of its own (00035)
+		// a probe of the same route is a row of its own (00037)
 		probe := minuteParams(tenant, minute, "/orders", "metric", c1, 0.5, false)
 		probe.TrafficClass = "probe"
 		require.NoError(t, execBatch(q.AddMinute(ctx, []writerq.AddMinuteParams{probe}).Exec))

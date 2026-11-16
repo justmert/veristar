@@ -72,7 +72,7 @@ func Select(ctx context.Context, q *tenantq.Queries, r Range, service *string) (
 	return sel, nil
 }
 
-// trafficClasses reads the rule set in force (00035). the first version's
+// trafficClasses reads the rule set in force (00037). the first version's
 // applied_from is when infrastructure requests started to be counted apart.
 func trafficClasses(ctx context.Context, q *tenantq.Queries) (TrafficClasses, error) {
 	rows, err := q.TrafficClassRules(ctx)

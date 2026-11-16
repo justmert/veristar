@@ -158,7 +158,7 @@ func TestSchemaDatabaseAndFunctionRights(t *testing.T) {
 		"cp.mcp_revoke_member()":                      nil,
 		"cp.mcp_revoke_tenant()":                      nil,
 		"cp.mcp_revoke_operator()":                    nil,
-		// the operator roster (00036): cp_system's triggers on cp.users and
+		// the operator roster (00038): cp_system's triggers on cp.users and
 		// cp.operators call roster_active; the trigger functions themselves
 		// are called by no role
 		"cp.roster_active(bigint,text)": {pdb.RoleCPSystem},
