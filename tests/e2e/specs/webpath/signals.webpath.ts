@@ -111,11 +111,6 @@ test("a restore from the back/forward cache counts again @signals", async ({
   page,
   browserName,
 }) => {
-  await page.addInitScript(() => {
-    addEventListener("pageshow", (e) => {
-      if (e.persisted) (window as unknown as { __restored: number }).__restored = Date.now();
-    });
-  });
   await page.goto(`${staticSite.origin}/`);
   await trackerReady(page);
   await expectCount(staticSite, "pv", 1);
@@ -129,21 +124,17 @@ test("a restore from the back/forward cache counts again @signals", async ({
     await page.click("#to-about");
     await page.waitForURL(`${staticSite.origin}/about.html`);
     await expectCount(staticSite, "pv", 2);
+    expect(await challengesFor(staticSite.siteId)).toHaveLength(2);
     // history.back() from a timer: a cache restore fires no load event, which
     // page.goBack() would wait for
     await page.evaluate(() => setTimeout(() => history.back(), 0));
     await expectCount(staticSite, "pv", 3);
-    // firefox under playwright replaces the page's execution context on a
-    // cache restore, so the read is retried until the new context answers
-    await expect
-      .poll(
-        () =>
-          page
-            .evaluate(() => (window as unknown as { __restored?: number }).__restored)
-            .catch(() => undefined),
-        { message: "the home page came back from the back/forward cache", timeout: 10_000 },
-      )
-      .toBeDefined();
+    // a restored page keeps its proof in memory, so it asks for no new
+    // challenge; a page loaded again would have asked for one
+    expect(
+      await challengesFor(staticSite.siteId),
+      "the home page came back from the back/forward cache",
+    ).toHaveLength(2);
     expect((await byType(staticSite, "pv")).map((e) => e.u)).toEqual(["/", "/about.html", "/"]);
   }
   expect((await byType(staticSite, "nv")).length).toBe(0);
