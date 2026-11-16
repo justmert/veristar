@@ -3589,7 +3589,7 @@ stored grade does not change.
 SCF decides by program, round, category and award date. SCF publishes no
 machine-readable directory of its awards, so a project proposes its cohort
 and an operator confirms it; only confirmed values place a project in a
-cohort. The values live in `cp.tenant_cohorts` (migration 00038): the
+cohort. The values live in `cp.tenant_cohorts` (migration 00035): the
 project writes only the proposal columns under `cp_tenant`, operators write
 the confirmed columns under `cp_system`, operators read under `cp_operator`.
 
