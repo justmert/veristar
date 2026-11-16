@@ -147,6 +147,65 @@ here, before they take effect, as the processing terms require
 - `release-tracker.yml` packs and publishes the npm package only when the
   repository variable `NPM_PACKAGE` is set, and otherwise releases and
   attests `sdk.js` alone with a notice in the log.
+- API traffic classes: CORS preflights (every `OPTIONS` request), health and
+  probe routes (`/health`, `/healthz`, `/livez`, `/readyz`, `/ping`, `/status`,
+  `/metrics`, `/actuator/health/liveness` and the other conventions listed in
+  the collector reference) and requests from known health checkers and uptime
+  monitors (`ELB-HealthChecker`, `kube-probe`, `GoogleHC` and others) are
+  stored apart and kept out of the headline request volume, error rates and
+  latency percentiles everywhere: the API traffic page, the operator views,
+  the CSV exports, the machine API and the MCP tools. Each of them shows the
+  count as `infrastructure_requests`. The rule set is hard-coded and
+  versioned, version 1, with a golden corpus
+  ([docs/reference/collector.md](docs/reference/collector.md), "Traffic
+  classes"). Migration 00035 adds `traffic_class` to the three API metric
+  tables and `api.traffic_class_rules`.
+- The operator roster lives in the database and is managed on the console's
+  new Operators page. Operator admins add operators by GitHub login or Stellar
+  address, suspend, resume, promote, demote and remove them, and reset their
+  passkeys; every change takes a reason and is audited. The roster always
+  keeps one active operator admin
+  ([docs/operators/roster.md](docs/operators/roster.md)). Migration 00036.
+- The operator area needs a passkey or security key: a WebAuthn step-up
+  recorded on the session, valid for 12 hours by default. Operators register
+  one or more keys; the first one inside a 24-hour enrollment window. Machine
+  API keys and operator MCP credentials work without it.
+- The console's API traffic page names the infrastructure requests the
+  figures leave out, and the routes list marks routes that only
+  infrastructure requests reached.
+
+### Changed
+
+- `OPERATOR_GITHUB_IDS` and `OPERATOR_STELLAR_ADDRESSES` are the bootstrap of
+  the roster: at every start each listed identity is made an active operator
+  admin. Taking an identity out of them no longer removes the person; an
+  operator admin removes them on the Operators page.
+- Deleting your account removes you from the roster and deletes your
+  passkeys. The last active operator admin cannot delete their account.
+
+### Upgrade notes
+
+- Infrastructure requests are counted apart from the moment migration 00035
+  runs (`traffic_classes.applied_from` in the overview answer). Data stored
+  before keeps every request as application traffic, as it was counted then;
+  a range that spans the upgrade compares numbers counted both ways.
+- The rolling deploy runs migration 00035 first, then the core nodes, then
+  the edge nodes. Between the migration and the new metrics writer, the
+  writer of the earlier release cannot store minute rows (the table's key
+  changed); its messages wait in `API_METRICS` and are applied by the new
+  writer, as during any writer restart. A collector of the earlier release
+  sends no traffic class, so its requests are stored as application traffic
+  until the edge nodes run the new one.
+- At the first start after the upgrade, every identity in
+  `OPERATOR_GITHUB_IDS` and `OPERATOR_STELLAR_ADDRESSES` becomes an operator
+  admin and gets a 24-hour window to register a first passkey. Each operator
+  signs in after the upgrade, opens the operator area and registers a passkey
+  within that window; an operator admin resets the passkeys of anyone who
+  misses it. Then add the other operators on the Operators page and keep the
+  settings to the identities that are your path back in after a lockout
+  ([docs/runbooks/operators.md](docs/runbooks/operators.md)).
+- Optional settings: `OPERATOR_STEP_UP_MAX_AGE` (default `12h`) and
+  `OPERATOR_ENROLL_WINDOW` (default `24h`).
 
 ## [0.3.0] - 2026-11-16
 

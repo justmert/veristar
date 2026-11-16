@@ -27,7 +27,7 @@ proposals sets the frame:
 | Probe (prober, Gatus and the SLO collector as a Compose bundle, `status.<BASE_DOMAIN>`), on a separate virtual machine in Azure East US | rendered again from `playbooks/probe-bundle.yml` on the new operator's server ([../deploy/probe.md](../deploy/probe.md)) |
 | Secrets (`infra/secrets/<env>/secrets.enc.yaml`, SOPS with age, encrypted to `infra/secrets/recipients/<env>.txt`) | new operator's keys added, then every value rotated, then the old keys removed (section 4) |
 | GitHub OAuth Apps for console sign-in | new apps under the new owner, new client ids and secrets |
-| Operator list `OPERATOR_GITHUB_IDS` (SCF's operators) | unchanged unless SCF changes it |
+| Operator roster and the bootstrap list `OPERATOR_GITHUB_IDS` (SCF's operators) | unchanged unless SCF changes it |
 | npm scope for the tracker package | scope ownership transfer, trusted publishing reconfigured for the new repository |
 | Alert receiver (the console's operator Alerts page, plus an optional Discord webhook) | the Alerts page moves with the environment; a webhook, if used, is replaced by one the new operator owns |
 | Container images and tracker release files (`release-images.yml`, `release-tracker.yml`) | rebuilt from the repository; image paths follow the new owner |
@@ -173,8 +173,9 @@ After the cutover is confirmed working:
   every value they could read is rotated (section 4).
 - Their GitHub access to the repository, their cloud, DNS, probe and registrar access, their
   alert receiver and any operator API keys they created are removed or revoked.
-- Their GitHub id is removed from `OPERATOR_GITHUB_IDS` if it is there, and the control plane
-  is restarted so the change takes effect at once ([../operators/overview.md](../operators/overview.md)).
+- Their GitHub id is removed from `OPERATOR_GITHUB_IDS` if it is there, the control plane is
+  restarted, and an SCF operator admin removes their row from the roster, which ends their access
+  at once ([../operators/roster.md](../operators/roster.md)).
 - The old environment is torn down after the advisory tail (section 6) or when SCF says so,
   and its backups are deleted at the end of their retention. Tenants are told when.
 

@@ -102,8 +102,9 @@ Who signs: the new operator for each item, SCF for section 9.
       environment needs, and the original operator has no access to the new ones.
 - [ ] GitHub OAuth apps of every environment belong to the new owner, with the
       callback URLs of the new environment and wildcard redirect matching off.
-- [ ] `OPERATOR_GITHUB_IDS` lists exactly the people SCF names; the control plane was
-      restarted after the change ([../operators/overview.md](../operators/overview.md)).
+- [ ] The operator roster on the Operators page holds exactly the people SCF names, with SCF's own
+      operator admins, and `OPERATOR_GITHUB_IDS` lists only SCF's recovery identities; the control
+      plane was restarted after the settings change ([../operators/roster.md](../operators/roster.md)).
 - [ ] Alerts reach the new operator: the console's operator Alerts page lists them, and a Discord
       webhook, if used, belongs to the new operator and received a test alert before the old one
       was removed.

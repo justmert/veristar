@@ -60,7 +60,7 @@ evidence is saved (step 3), unless the damage is ongoing.
    | Route-level flaw | block the route in `deploy/caddy/web.Caddyfile` or `app.Caddyfile` ([security-patch.md](security-patch.md) section 3) |
    | OTLP token leaked | the tenant revokes it on its token page; an operator can suspend the tenant ([tenant-removal.md](tenant-removal.md)) |
    | Operator key leaked | revoke it ([operator-key-revocation.md](operator-key-revocation.md)) |
-   | Operator GitHub account taken over | remove the id from `OPERATOR_GITHUB_IDS` and redeploy, end every console session (below), revoke keys that person created ([operators.md](operators.md)) |
+   | Operator GitHub account taken over | an operator admin suspends the person on the Operators page, which ends their sessions and operator MCP credentials at once; reset their passkeys if a key may be lost; take the id out of `OPERATOR_GITHUB_IDS` and redeploy if it is there; revoke keys that person created ([operators.md](operators.md)) |
    | Node compromised | drain it ([edge-node-failure.md](edge-node-failure.md) step 2), then stop its services; replace the server rather than clean it; rotate every secret the node held ([secret-rotation.md](secret-rotation.md)) |
    | SOPS file or an age identity exposed | rotate every value in that environment's file ([secret-rotation.md](secret-rotation.md)) |
 
