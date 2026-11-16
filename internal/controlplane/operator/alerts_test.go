@@ -20,7 +20,6 @@ import (
 
 	"github.com/justmert/veristar/internal/alertmanager"
 	"github.com/justmert/veristar/internal/controlplane"
-	"github.com/justmert/veristar/internal/controlplane/identity"
 	"github.com/justmert/veristar/internal/controlplane/session"
 )
 
@@ -292,6 +291,7 @@ func TestAlertsNotConfigured(t *testing.T) {
 func TestAlertsNeedAnOperator(t *testing.T) {
 	d, pg := reviewDB(t)
 	operatorID, plainID := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
+	rosterAdmin(t, pg, 7)
 	superExec(t, pg, `insert into cp.users (id, github_id, github_login, is_operator) values ($1, 7, 'op', true), ($2, 8, 'plain', false)`,
 		operatorID, plainID)
 
@@ -309,8 +309,6 @@ func TestAlertsNeedAnOperator(t *testing.T) {
 	require.NoError(t, err)
 
 	sessions := session.New(d)
-	guard, err := NewGuard(identity.Operators{GitHub: map[int64]bool{7: true}})
-	require.NoError(t, err)
 	routes := NewAlerts(client(t, amURL), time.Now)
 	var api atomic.Pointer[http.Handler]
 	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -318,6 +316,7 @@ func TestAlertsNeedAnOperator(t *testing.T) {
 	}))
 	srv.StartTLS()
 	t.Cleanup(srv.Close)
+	guard, stepUp := testGuard(t, d, sessions, srv.URL)
 	h := controlplane.NewHandler(controlplane.Options{
 		Log: slog.New(slog.DiscardHandler), ConsoleOrigin: srv.URL, Sessions: sessions,
 		// a sign-in shortcut for the test: the session is the real one,
@@ -325,6 +324,10 @@ func TestAlertsNeedAnOperator(t *testing.T) {
 		Public: []controlplane.Routes{controlplane.RoutesFunc(func(r chi.Router) {
 			r.Get("/test-sign-in/{id}", func(w http.ResponseWriter, r *http.Request) {
 				if err := sessions.SignIn(r.Context(), uuid.MustParse(chi.URLParam(r, "id"))); err != nil {
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
+				if _, err := stepUp.Record(r.Context(), uuid.MustParse(chi.URLParam(r, "id"))); err != nil {
 					http.Error(w, err.Error(), http.StatusInternalServerError)
 					return
 				}

@@ -111,9 +111,7 @@ func (h *Handler) link(ctx context.Context, uid uuid.UUID, kind string,
 		case err != nil:
 			return fmt.Errorf("link %s: %w", kind, err)
 		}
-		u, err = q.SetOperatorFlag(ctx, systemq.SetOperatorFlagParams{
-			IsOperator: h.operators.Is(u.GithubID, u.StellarAddress, u.PasskeyAddress), ID: u.ID,
-		})
+		u, err = q.SetOperatorFlag(ctx, u.ID)
 		if err != nil {
 			return fmt.Errorf("operator flag: %w", err)
 		}
@@ -187,9 +185,7 @@ func (h *Handler) unlink(w http.ResponseWriter, r *http.Request, kind string, ha
 		if err != nil {
 			return fmt.Errorf("unlink %s: %w", kind, err)
 		}
-		row, err = q.SetOperatorFlag(ctx, systemq.SetOperatorFlagParams{
-			IsOperator: h.operators.Is(row.GithubID, row.StellarAddress, row.PasskeyAddress), ID: row.ID,
-		})
+		row, err = q.SetOperatorFlag(ctx, row.ID)
 		if err != nil {
 			return fmt.Errorf("operator flag: %w", err)
 		}

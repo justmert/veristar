@@ -65,7 +65,7 @@ on conflict (github_id) where github_id is not null do update
   set role = 'operator_admin', status = 'active', status_reason = null,
       updated_at = case when cp.operators.role <> 'operator_admin' or cp.operators.status <> 'active'
                         then now() else cp.operators.updated_at end
-returning id, github_id, github_login, stellar_address, role, status, status_reason, enroll_opened_at, enroll_until, created_by, created_at, updated_at, (xmax = 0)::boolean as inserted
+returning id, github_id, github_login, stellar_address, role, status, status_reason, enroll_opened_at, enroll_until, created_by, created_at, updated_at, (xmax = 0)::boolean as inserted, (updated_at = now())::boolean as touched
 `
 
 type BootstrapRosterGitHubRow struct {
@@ -82,10 +82,13 @@ type BootstrapRosterGitHubRow struct {
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 	Inserted       bool
+	Touched        bool
 }
 
 // the startup bootstrap of one github id: an active operator admin. xmax = 0
-// tells an inserted row from an updated one.
+// tells an inserted row from an updated one; touched is true when the row
+// was inserted or changed by this statement (updated_at is the
+// transaction's now() only then).
 func (q *Queries) BootstrapRosterGitHub(ctx context.Context, githubID *int64) (BootstrapRosterGitHubRow, error) {
 	row := q.db.QueryRow(ctx, bootstrapRosterGitHub, githubID)
 	var i BootstrapRosterGitHubRow
@@ -103,6 +106,7 @@ func (q *Queries) BootstrapRosterGitHub(ctx context.Context, githubID *int64) (B
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Inserted,
+		&i.Touched,
 	)
 	return i, err
 }
@@ -114,7 +118,7 @@ on conflict (stellar_address) where stellar_address is not null do update
   set role = 'operator_admin', status = 'active', status_reason = null,
       updated_at = case when cp.operators.role <> 'operator_admin' or cp.operators.status <> 'active'
                         then now() else cp.operators.updated_at end
-returning id, github_id, github_login, stellar_address, role, status, status_reason, enroll_opened_at, enroll_until, created_by, created_at, updated_at, (xmax = 0)::boolean as inserted
+returning id, github_id, github_login, stellar_address, role, status, status_reason, enroll_opened_at, enroll_until, created_by, created_at, updated_at, (xmax = 0)::boolean as inserted, (updated_at = now())::boolean as touched
 `
 
 type BootstrapRosterStellarRow struct {
@@ -131,6 +135,7 @@ type BootstrapRosterStellarRow struct {
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 	Inserted       bool
+	Touched        bool
 }
 
 func (q *Queries) BootstrapRosterStellar(ctx context.Context, stellarAddress *string) (BootstrapRosterStellarRow, error) {
@@ -150,6 +155,7 @@ func (q *Queries) BootstrapRosterStellar(ctx context.Context, stellarAddress *st
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Inserted,
+		&i.Touched,
 	)
 	return i, err
 }

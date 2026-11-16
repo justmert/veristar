@@ -24,7 +24,6 @@ import (
 
 	"github.com/justmert/veristar/internal/config"
 	"github.com/justmert/veristar/internal/controlplane/httpx"
-	"github.com/justmert/veristar/internal/controlplane/identity"
 	"github.com/justmert/veristar/internal/controlplane/session"
 	"github.com/justmert/veristar/internal/controlplane/terms"
 	"github.com/justmert/veristar/internal/db"
@@ -62,9 +61,6 @@ type Config struct {
 	RedirectURL string
 	// StateKey seals the sa_oauth cookie.
 	StateKey []byte
-	// Operators are the github ids and stellar addresses whose accounts get
-	// is_operator.
-	Operators identity.Operators
 	// ConsoleOrigin is CONSOLE_ORIGIN. its host is the web_auth_domain and
 	// home domain of wallet challenges, which binds a signed challenge to
 	// this console.
@@ -84,7 +80,6 @@ type Handler struct {
 	oauth     *oauth2.Config
 	apiBase   string
 	sealer    *sealer
-	operators identity.Operators
 	client    *http.Client
 	db        *db.DB
 	sessions  *session.Manager
@@ -141,7 +136,6 @@ func New(cfg Config, d *db.DB, s *session.Manager) (*Handler, error) {
 		},
 		apiBase:   strings.TrimSuffix(cfg.Endpoints.APIBase, "/"),
 		sealer:    sl,
-		operators: cfg.Operators,
 		client:    client,
 		db:        d,
 		sessions:  s,
@@ -418,9 +412,7 @@ func (h *Handler) signIn(ctx context.Context, gh githubUser) (systemq.CpUser, []
 // the open invites of either identity turned into memberships, and the
 // audit rows.
 func (h *Handler) afterSignIn(ctx context.Context, q *systemq.Queries, u systemq.CpUser, detail map[string]any) (systemq.CpUser, []uuid.UUID, error) {
-	u, err := q.SetOperatorFlag(ctx, systemq.SetOperatorFlagParams{
-		IsOperator: h.operators.Is(u.GithubID, u.StellarAddress, u.PasskeyAddress), ID: u.ID,
-	})
+	u, err := q.SetOperatorFlag(ctx, u.ID)
 	if err != nil {
 		return u, nil, fmt.Errorf("operator flag: %w", err)
 	}

@@ -338,6 +338,7 @@ func testMCPIsolation(t *testing.T, e *env, alice, bob *client, ta, tb, sa, sb u
 	_, err := a.CallTool(context.Background(), &mcp.CallToolParams{Name: "list_tenants", Arguments: map[string]any{}})
 	require.Error(t, err)
 	op := e.signInAs(t, operatorGHID, "mcp-operator")
+	op.stepUp(t)
 	tOp := op.enroll(t, "MCP Operator Project")
 	_, keyOp := op.mcpKey(t, tOp, "operator's tenant key")
 	opTenant := e.mustConnect(t, keyOp)
@@ -451,6 +452,7 @@ func getJSON(t *testing.T, e *env, path string, out any) {
 
 func testMCPOperator(t *testing.T, e *env, alice *client, ta, tb uuid.UUID) {
 	op := e.signInAs(t, operatorGHID, "mcp-operator")
+	op.stepUp(t)
 	// only operators reach the operator key routes
 	r := alice.call(t, http.MethodPost, "/api/operator/mcp-credentials", map[string]any{"name": "x"})
 	require.Equal(t, http.StatusForbidden, r.status)
@@ -498,7 +500,8 @@ func testMCPOperator(t *testing.T, e *env, alice *client, ta, tb uuid.UUID) {
 	res = call(t, cs, "compare_tenants_web", map[string]any{"tenant_ids": []string{}})
 	require.True(t, res.isError)
 
-	// alice cannot revoke it, the operator can; operator flag loss revokes
+	// alice cannot revoke it, the operator can; a suspension on the roster
+	// revokes
 	require.Equal(t, http.StatusForbidden, alice.call(t, http.MethodDelete, "/api/operator/mcp-credentials/"+opID, nil).status)
 	r = op.call(t, http.MethodPost, "/api/operator/mcp-credentials", map[string]any{"name": "second"})
 	require.Equal(t, http.StatusCreated, r.status)
@@ -507,13 +510,20 @@ func testMCPOperator(t *testing.T, e *env, alice *client, ta, tb uuid.UUID) {
 	_, err = e.connect(t, opKey)
 	require.Error(t, err)
 	e.superuser(t, func(c *pgx.Conn) {
-		_, err := c.Exec(context.Background(), `update cp.users set is_operator = false where id = $1`, op.userID)
+		// a spare admin keeps the roster valid while the operator is
+		// suspended; the suspension clears the flag through the roster
+		_, err := c.Exec(context.Background(), `insert into cp.operators (github_id, role) values (4999999, 'operator_admin')
+			on conflict (github_id) where github_id is not null do nothing`)
+		require.NoError(t, err)
+		_, err = c.Exec(context.Background(), `update cp.operators set status = 'suspended', status_reason = 'gate'
+			where github_id = $1`, operatorGHID)
 		require.NoError(t, err)
 		var reason string
 		require.NoError(t, c.QueryRow(context.Background(), `select revoked_reason from cp.mcp_credentials
 			where scope = 'operator' and user_id = $1 and name = 'second'`, op.userID).Scan(&reason))
 		require.Equal(t, "operator_removed", reason)
-		_, err = c.Exec(context.Background(), `update cp.users set is_operator = true where id = $1`, op.userID)
+		_, err = c.Exec(context.Background(), `update cp.operators set status = 'active', status_reason = null
+			where github_id = $1`, operatorGHID)
 		require.NoError(t, err)
 	})
 	_, err = e.connect(t, secondKey)
@@ -785,6 +795,7 @@ func testMCPOAuthFlow(t *testing.T, e *env, alice, bob *client, ta, tb uuid.UUID
 
 	// an operator grant opens the operator tools
 	op := e.signInAs(t, operatorGHID, "mcp-operator")
+	op.stepUp(t)
 	tok = e.grant(t, op, clientID, "operator", nil)
 	cs := e.mustConnect(t, tok["access_token"].(string))
 	rr := call(t, cs, "list_tenants", nil)
@@ -796,6 +807,7 @@ func testMCPOAuthFlow(t *testing.T, e *env, alice, bob *client, ta, tb uuid.UUID
 // request.
 func testMCPRevocation(t *testing.T, e *env) {
 	op := e.signInAs(t, operatorGHID, "mcp-operator")
+	op.stepUp(t)
 	owner := e.signIn(t, "rv-owner")
 	member := e.signIn(t, "rv-member")
 	tenant := owner.enroll(t, "MCP Revocation")

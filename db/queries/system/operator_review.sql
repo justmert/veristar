@@ -12,20 +12,6 @@ join cp.users u on u.id = m.user_id
 where m.tenant_id = @tenant_id
 order by lower(coalesce(u.github_login, u.stellar_address, u.passkey_address)), u.id;
 
--- name: OperatorSyncFlags :many
--- startup sync of contract 5.1: is_operator follows OPERATOR_GITHUB_IDS and
--- OPERATOR_STELLAR_ADDRESSES for every live user, and the changed rows come
--- back for the audit. a null identity column matches no entry.
-update cp.users
-set is_operator = (coalesce(github_id = any(@operator_ids::bigint[]), false)
-                   or coalesce(stellar_address = any(@operator_addresses::text[]), false)
-                   or coalesce(passkey_address = any(@operator_addresses::text[]), false))
-where deleted_at is null
-  and is_operator <> (coalesce(github_id = any(@operator_ids::bigint[]), false)
-                      or coalesce(stellar_address = any(@operator_addresses::text[]), false)
-                      or coalesce(passkey_address = any(@operator_addresses::text[]), false))
-returning id, is_operator;
-
 -- name: ReviewMatchRemovedDomain :one
 -- the review rule of contract 5.6 for a domain about to be registered: the
 -- first site of a removed tenant (other than tenant_id) whose domain equals,

@@ -92,6 +92,41 @@ func (q *Queries) AccountDeleteMemberships(ctx context.Context, userID uuid.UUID
 	return items, nil
 }
 
+const accountDeleteRoster = `-- name: AccountDeleteRoster :many
+delete from cp.operators
+where ($1::bigint is not null and github_id = $1::bigint)
+   or ($2::text is not null and stellar_address = $2::text)
+returning id
+`
+
+type AccountDeleteRosterParams struct {
+	GithubID       *int64
+	StellarAddress *string
+}
+
+// the roster rows of the account's identities (00036): a deleted account
+// is no operator. operators_last_admin refuses the delete when it would
+// leave no active operator admin.
+func (q *Queries) AccountDeleteRoster(ctx context.Context, arg AccountDeleteRosterParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, accountDeleteRoster, arg.GithubID, arg.StellarAddress)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []uuid.UUID{}
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const accountDeleteSessions = `-- name: AccountDeleteSessions :execrows
 delete from cp.sessions where user_id = $1::uuid
 `

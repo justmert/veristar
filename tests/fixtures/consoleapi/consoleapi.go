@@ -48,6 +48,7 @@ import (
 	"github.com/justmert/veristar/internal/db/dbtest"
 	"github.com/justmert/veristar/internal/umami"
 	"github.com/justmert/veristar/tests/fixtures/githuboauth"
+	"github.com/justmert/veristar/tests/fixtures/stepuptest"
 )
 
 const (
@@ -146,6 +147,8 @@ type Env struct {
 	// Umami is the in-memory umami users when Options.Umami was nil
 	Umami  *Users
 	nextGH atomic.Int64
+	// keys are the operators' software authenticators (Client.StepUp)
+	keys stepuptest.Keys
 }
 
 func random32(t testing.TB) []byte {
@@ -202,15 +205,14 @@ func Start(t testing.TB, o Options) *Env {
 	ah, err := auth.New(auth.Config{
 		Reconcile: e.Scope.Reconcile, ClientID: clientID, ClientSecret: secret,
 		RedirectURL: e.Srv.URL + "/api/auth/github/callback", StateKey: random32(t),
-		Operators: operators, ConsoleOrigin: e.Srv.URL, Endpoints: endpoints,
+		ConsoleOrigin: e.Srv.URL, Endpoints: endpoints,
 	}, o.DB, sessions)
 	require.NoError(t, err)
 	users, err := auth.NewUserLookup(auth.UserLookupConfig{
 		ClientID: clientID, ClientSecret: secret, Endpoints: endpoints,
 	})
 	require.NoError(t, err)
-	guard, err := operator.NewGuard(operators)
-	require.NoError(t, err)
+	_, guard := stepuptest.Guard(t, o.DB, sessions, e.Srv.URL, operators)
 	mode, err := operator.NewEnrollmentMode(o.DB)
 	require.NoError(t, err)
 	actions, err := lifecycle.NewActions(o.DB, e.Scope.Reconcile)
@@ -392,6 +394,19 @@ func (c *Client) Do(ctx context.Context, method, path string, body any) (Resp, e
 }
 
 // Call is Do that fails the test on a transport error.
+// StepUp gives this browser's operator session its passkey step-up
+// (contract 5.11) with a software authenticator.
+func (c *Client) StepUp(t testing.TB) {
+	t.Helper()
+	me := c.Call(t, http.MethodGet, "/api/me", nil)
+	require.Equal(t, http.StatusOK, me.Status, string(me.Body))
+	id := uuid.MustParse(me.JSON(t)["user"].(map[string]any)["id"].(string))
+	c.e.keys.StepUp(t, id, stepuptest.Origin(c.e.Srv.URL), func(method, path string, body any) (int, []byte) {
+		r := c.Call(t, method, path, body)
+		return r.Status, r.Body
+	})
+}
+
 func (c *Client) Call(t testing.TB, method, path string, body any) Resp {
 	t.Helper()
 	r, err := c.Do(context.Background(), method, path, body)

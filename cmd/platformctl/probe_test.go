@@ -39,7 +39,11 @@ func TestProbeTenantRotateOTLPToken(t *testing.T) {
 	require.ErrorContains(t, err, "no internal probe tenant")
 
 	require.NoError(t, d.WithSystem(ctx, func(tx pgx.Tx) error {
-		_, err := tx.Exec(ctx, `insert into cp.users (github_id, github_login, is_operator) values (9300001, 'probe-op', true)`)
+		// the flag follows the roster (00036), so the roster row comes first
+		if _, err := tx.Exec(ctx, `insert into cp.operators (github_id, role) values (9300001, 'operator_admin')`); err != nil {
+			return err
+		}
+		_, err := tx.Exec(ctx, `insert into cp.users (github_id, github_login) values (9300001, 'probe-op')`)
 		return err
 	}))
 	pt, err := createProbeTenant(ctx, d, 9300001, "probe.example.test", "https://probe.example.test")

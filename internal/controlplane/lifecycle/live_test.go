@@ -41,6 +41,7 @@ import (
 	"github.com/justmert/veristar/internal/registry"
 	"github.com/justmert/veristar/internal/umami"
 	"github.com/justmert/veristar/tests/fixtures/githuboauth"
+	"github.com/justmert/veristar/tests/fixtures/stepuptest"
 	"github.com/justmert/veristar/tests/fixtures/umamictr"
 )
 
@@ -63,6 +64,7 @@ type env struct {
 	opGH     int64
 	api      atomic.Pointer[http.Handler]
 	nextGHID int64
+	keys     stepuptest.Keys
 }
 
 func random32(t *testing.T) []byte {
@@ -137,7 +139,6 @@ func (e *env) build(t *testing.T, operators ...int64) {
 		ClientSecret:  config.FromMap(map[string]string{"S": "lifecycle-test-secret"}).Secret("S", 1),
 		RedirectURL:   e.srv.URL + "/api/auth/github/callback",
 		StateKey:      e.stateKey,
-		Operators:     identity.Operators{GitHub: ids},
 		ConsoleOrigin: e.srv.URL,
 		Endpoints: auth.Endpoints{
 			OAuth: oauth2.Endpoint{
@@ -155,8 +156,7 @@ func (e *env) build(t *testing.T, operators ...int64) {
 		Endpoints:    auth.Endpoints{APIBase: e.fixture.URL},
 	})
 	require.NoError(t, err)
-	guard, err := operator.NewGuard(identity.Operators{GitHub: ids})
-	require.NoError(t, err)
+	_, guard := stepuptest.Guard(t, e.d, e.sessions, e.srv.URL, identity.Operators{GitHub: ids})
 	mode, err := operator.NewEnrollmentMode(e.d)
 	require.NoError(t, err)
 	keep, err := operator.NewRemovalKeepAggregates(e.d)
@@ -317,6 +317,14 @@ func (e *env) superuser(t *testing.T, fn func(c *pgx.Conn)) {
 	fn(c)
 }
 
+func (e *env) exec(t *testing.T, query string, args ...any) {
+	t.Helper()
+	e.superuser(t, func(c *pgx.Conn) {
+		_, err := c.Exec(context.Background(), query, args...)
+		require.NoError(t, err)
+	})
+}
+
 func (e *env) count(t *testing.T, query string, args ...any) int {
 	t.Helper()
 	var n int
@@ -362,9 +370,10 @@ func TestLifecycle(t *testing.T) {
 	e.opGH = e.newGHID()
 	e.build(t, e.opGH)
 	op := e.signIn(t, e.opGH, "scf-operator")
+	e.stepUp(t, op)
 
 	t.Run("NonOperatorsGet403", func(t *testing.T) { testNonOperators(t, e) })
-	t.Run("OperatorIDRemoved", func(t *testing.T) { testOperatorIDRemoved(t, e) })
+	t.Run("OperatorSuspendedOnRoster", func(t *testing.T) { testOperatorSuspended(t, e) })
 	t.Run("ApproveAndReject", func(t *testing.T) { testApproveReject(t, e, op) })
 	t.Run("SuspendResume", func(t *testing.T) { testSuspendResume(t, e, op) })
 	t.Run("Remove", func(t *testing.T) { testRemove(t, e, op) })
@@ -428,41 +437,42 @@ func testNonOperators(t *testing.T, e *env) {
 	require.Equal(t, "active", st)
 }
 
-func testOperatorIDRemoved(t *testing.T, e *env) {
+// stepUp gives an operator's session its passkey step-up
+func (e *env) stepUp(t *testing.T, c *client) {
+	t.Helper()
+	e.keys.StepUp(t, c.userID, stepuptest.Origin(e.srv.URL), func(method, path string, body any) (int, []byte) {
+		r := c.call(t, method, path, body)
+		return r.status, r.body
+	})
+}
+
+func testOperatorSuspended(t *testing.T, e *env) {
 	gh := e.newGHID()
-	// the main operator stays listed, which also keeps the list non-empty
-	keepGH := e.opGH
-	e.build(t, gh, keepGH)
+	// the main operator stays listed, so the roster keeps an active admin
+	e.build(t, gh, e.opGH)
 	defer e.build(t, e.opGH)
 	c := e.signIn(t, gh, "leaving-operator")
 	r := c.call(t, http.MethodGet, "/api/operator/audit?limit=1", nil)
+	require.Equal(t, http.StatusUnauthorized, r.status, string(r.body))
+	require.Equal(t, "step_up_required", r.code(t))
+	e.stepUp(t, c)
+	r = c.call(t, http.MethodGet, "/api/operator/audit?limit=1", nil)
 	require.Equal(t, http.StatusOK, r.status, string(r.body))
 
-	// another control plane instance already runs without the id; the
-	// person signs in there, which clears is_operator
-	old := e.api.Load()
-	e.build(t, keepGH)
-	c2 := e.signIn(t, gh, "leaving-operator")
-	me := c2.call(t, http.MethodGet, "/api/me", nil)
-	require.Equal(t, false, me.json(t)["user"].(map[string]any)["is_operator"])
+	// a start without the id in the settings keeps the roster row: the
+	// settings only ever add
+	e.build(t, e.opGH)
+	r = c.call(t, http.MethodGet, "/api/operator/audit?limit=1", nil)
+	require.Equal(t, http.StatusOK, r.status, string(r.body))
 
-	// the instance that still lists the id refuses the old session too,
-	// because the flag is read per request
-	e.api.Store(old)
+	// a suspended row ends access at the next request of the live session,
+	// because the flag follows the roster in the same transaction and is
+	// read per request
+	e.exec(t, `update cp.operators set status = 'suspended', status_reason = 'left' where github_id = $1`, gh)
 	r = c.call(t, http.MethodGet, "/api/operator/audit?limit=1", nil)
 	require.Equal(t, http.StatusForbidden, r.status, string(r.body))
 	require.Equal(t, "operator_required", r.code(t))
-
-	// and a restart without the id ends access even before the next sign-in
-	gh2 := e.newGHID()
-	e.build(t, gh2, keepGH)
-	c3 := e.signIn(t, gh2, "restart-operator")
-	require.Equal(t, http.StatusOK, c3.call(t, http.MethodGet, "/api/operator/audit?limit=1", nil).status)
-	e.build(t, keepGH)
-	r = c3.call(t, http.MethodGet, "/api/operator/audit?limit=1", nil)
-	require.Equal(t, http.StatusForbidden, r.status)
-	require.Equal(t, 1, e.count(t, `select count(*) from cp.users where github_id = $1 and is_operator`, gh2),
-		"the flag is only cleared at sign-in or startup sync")
+	require.Equal(t, 0, e.count(t, `select count(*) from cp.users where github_id = $1 and is_operator`, gh))
 }
 
 func testApproveReject(t *testing.T, e *env, op *client) {

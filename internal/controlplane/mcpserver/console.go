@@ -17,6 +17,7 @@ import (
 	"github.com/justmert/veristar/internal/controlplane/httpx"
 	"github.com/justmert/veristar/internal/controlplane/identity"
 	"github.com/justmert/veristar/internal/controlplane/session"
+	"github.com/justmert/veristar/internal/controlplane/stepup"
 	"github.com/justmert/veristar/internal/controlplane/tenants"
 )
 
@@ -626,6 +627,12 @@ func (h *ConsentRoutes) approve(w http.ResponseWriter, r *http.Request) error {
 		}
 		if !h.s.guard.Allowed(u) {
 			return httpx.Forbidden(httpx.CodeOperatorRequired, "the operator view is for operators")
+		}
+		// granting operator access to a client is an operator action: it
+		// needs the session's passkey step-up, like the operator area. the
+		// credential it mints then works without one
+		if !h.s.guard.SteppedUp(ctx, u) {
+			return stepup.StepUpRequired()
 		}
 	default:
 		return httpx.Validation("scope must be tenant or operator", map[string]string{"scope": "invalid_value"})

@@ -4,18 +4,28 @@
 package operator
 
 import (
+	"context"
 	"errors"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/justmert/veristar/internal/controlplane/httpx"
-	"github.com/justmert/veristar/internal/controlplane/identity"
 	"github.com/justmert/veristar/internal/controlplane/session"
+	"github.com/justmert/veristar/internal/controlplane/stepup"
+	"github.com/justmert/veristar/internal/db"
+	"github.com/justmert/veristar/internal/db/systemq"
 )
 
 // Prefix is the path of the operator area under /api.
 const Prefix = "/operator"
+
+// roles of the roster (00036)
+const (
+	RoleOperator      = "operator"
+	RoleOperatorAdmin = "operator_admin"
+)
 
 // Routes is a group of operator routes. Routes is called with a router
 // mounted at /api/operator behind the guard, so a group registers paths such
@@ -24,37 +34,54 @@ type Routes interface {
 	Routes(r chi.Router)
 }
 
-// Guard decides who is an operator (contract 5.1).
+// Guard decides who is an operator (contract 5.1): the account's
+// cp.users.is_operator, which the database derives from the active rows of
+// the roster (cp.operators, 00036) in the transaction that changes them, and
+// read on every request by session.RequireUser. a suspended or removed
+// operator is refused at the next request.
 type Guard struct {
-	ops identity.Operators
+	db     *db.DB
+	stepUp *stepup.Service
 }
 
-// NewGuard takes the loaded OPERATOR_GITHUB_IDS and
-// OPERATOR_STELLAR_ADDRESSES. an empty github list would make the operator
-// area unreachable without saying why, so it is refused; the address list
-// may be empty.
-func NewGuard(ops identity.Operators) (*Guard, error) {
-	if len(ops.GitHubIDs()) == 0 {
-		return nil, errors.New("operator: OPERATOR_GITHUB_IDS is empty")
+// NewGuard needs the cp_system pool, for the roster role of a request, and
+// the step-up every console request into the area needs.
+func NewGuard(d *db.DB, s *stepup.Service) (*Guard, error) {
+	if d == nil || s == nil {
+		return nil, errors.New("operator: guard needs the database and the step-up")
 	}
-	cp := identity.Operators{GitHub: map[int64]bool{}, Stellar: map[string]bool{}}
-	for _, id := range ops.GitHubIDs() {
-		cp.GitHub[id] = true
-	}
-	for _, a := range ops.StellarAddresses() {
-		cp.Stellar[a] = true
-	}
-	return &Guard{ops: cp}, nil
+	return &Guard{db: d, stepUp: s}, nil
 }
 
-// Allowed reports whether u may use the operator routes: cp.users.is_operator
-// (read on every request by session.RequireUser) and a github id, stellar
-// address or passkey address of the account in the lists this process loaded. both are needed,
-// so an entry removed from a list stops working at the next start even
-// before that person signs in again, and a stale flag alone never grants
-// access.
+// Allowed reports whether u may use the operator routes.
 func (g *Guard) Allowed(u session.User) bool {
-	return u.IsOperator && g.ops.Is(u.GitHubID, u.StellarAddress, u.PasskeyAddress)
+	return u.IsOperator
+}
+
+// SteppedUp reports whether the request's session holds a fresh passkey
+// step-up of u, for an operator action outside the operator area (the mcp
+// consent of an operator credential).
+func (g *Guard) SteppedUp(ctx context.Context, u session.User) bool {
+	ok, _ := g.stepUp.Fresh(ctx, u.ID)
+	return ok
+}
+
+// Admin reports whether u holds an active operator admin row of the roster.
+func (g *Guard) Admin(ctx context.Context, u session.User) (bool, error) {
+	if !u.IsOperator {
+		return false, nil
+	}
+	var admin bool
+	err := g.db.WithSystem(ctx, func(tx pgx.Tx) error {
+		rows, err := systemq.New(tx).RosterEntriesForUser(ctx, systemq.RosterEntriesForUserParams{
+			GithubID: u.GitHubID, StellarAddress: u.StellarAddress,
+		})
+		for _, o := range rows {
+			admin = admin || (o.Status == "active" && o.Role == RoleOperatorAdmin)
+		}
+		return err
+	})
+	return admin, err
 }
 
 // Require answers 403 operator_required unless the signed-in user is an
@@ -74,19 +101,44 @@ func (g *Guard) Require(next http.Handler) http.Handler {
 	})
 }
 
+// RequireAdmin answers 403 operator_admin_required unless the operator holds
+// the operator admin role. it goes behind Require.
+func (g *Guard) RequireAdmin(next http.Handler) http.Handler {
+	return httpx.HandlerFunc(func(w http.ResponseWriter, r *http.Request) error {
+		u, err := session.MustUser(r.Context())
+		if err != nil {
+			return err
+		}
+		ok, err := g.Admin(r.Context(), u)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return httpx.Forbidden(httpx.CodeOperatorAdminRequired, "only operator admins can change the roster")
+		}
+		next.ServeHTTP(w, r)
+		return nil
+	})
+}
+
 // Mount returns a function that registers groups under /operator behind the
-// guard. unknown paths and methods inside the area get the guard too, so a
-// non-operator sees 403 for every request there and learns nothing about
-// which operator routes exist.
+// guard and the step-up. the step-up and passkey routes sit behind the guard
+// only: they are how a session gets its step-up. unknown paths and methods
+// inside the area get the guard too, so a non-operator sees 403 for every
+// request there and learns nothing about which operator routes exist.
 func (g *Guard) Mount(groups ...Routes) func(r chi.Router) {
 	return func(r chi.Router) {
 		r.Route(Prefix, func(sub chi.Router) {
 			sub.Use(g.Require)
 			sub.NotFound(httpx.NotFoundHandler)
 			sub.MethodNotAllowed(httpx.MethodNotAllowedHandler)
-			for _, grp := range groups {
-				grp.Routes(sub)
-			}
+			g.stepUp.Routes(sub)
+			sub.Group(func(s chi.Router) {
+				s.Use(g.stepUp.Require)
+				for _, grp := range groups {
+					grp.Routes(s)
+				}
+			})
 		})
 	}
 }

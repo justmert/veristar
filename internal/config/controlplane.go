@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/stellar/go-stellar-sdk/strkey"
 )
@@ -37,6 +38,13 @@ type ControlPlane struct {
 	// OperatorStellarAddresses are the stellar accounts (G-addresses) of
 	// operators who sign in with a wallet. optional: empty when unset.
 	OperatorStellarAddresses map[string]bool
+	// OperatorStepUpMaxAge is how long a passkey step-up opens the operator
+	// area (OPERATOR_STEP_UP_MAX_AGE, default 12h, 5m to 24h).
+	OperatorStepUpMaxAge time.Duration
+	// OperatorEnrollWindow is how long an operator may register a first
+	// passkey without a step-up after the window opened
+	// (OPERATOR_ENROLL_WINDOW, default 24h, 10m to 168h).
+	OperatorEnrollWindow time.Duration
 
 	UmamiURL             *url.URL
 	UmamiAdminPassword   Secret
@@ -45,6 +53,25 @@ type ControlPlane struct {
 	TrackerReleaseDir string
 	// TrackerNPMPackage is empty until the tracker is published.
 	TrackerNPMPackage string
+}
+
+// defaults of the operator step-up settings
+const (
+	DefaultStepUpMaxAge = 12 * time.Hour
+	DefaultEnrollWindow = 24 * time.Hour
+)
+
+// durationIn reads an optional duration within [lo, hi], def when unset.
+func (e *Env) durationIn(key string, def, lo, hi time.Duration) time.Duration {
+	if !e.Has(key) {
+		return def
+	}
+	d := e.Duration(key)
+	if d != 0 && (d < lo || d > hi) {
+		e.fail(key, "must be between "+lo.String()+" and "+hi.String())
+		return 0
+	}
+	return d
 }
 
 // CallbackPath is the path of the github callback on the console origin.
@@ -69,6 +96,8 @@ func LoadControlPlane(e *Env) (ControlPlane, error) {
 		UmamiUserPasswordKey:     e.key32("UMAMI_USER_PASSWORD_KEY"),
 		TrackerReleaseDir:        e.String("TRACKER_RELEASE_DIR"),
 	}
+	c.OperatorStepUpMaxAge = e.durationIn("OPERATOR_STEP_UP_MAX_AGE", DefaultStepUpMaxAge, 5*time.Minute, 24*time.Hour)
+	c.OperatorEnrollWindow = e.durationIn("OPERATOR_ENROLL_WINDOW", DefaultEnrollWindow, 10*time.Minute, 7*24*time.Hour)
 	if v, ok := e.raw("TRACKER_NPM_PACKAGE"); ok {
 		c.TrackerNPMPackage = v
 	}

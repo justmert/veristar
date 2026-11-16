@@ -20,7 +20,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/justmert/veristar/internal/controlplane"
-	"github.com/justmert/veristar/internal/controlplane/identity"
 	"github.com/justmert/veristar/internal/controlplane/session"
 	pdb "github.com/justmert/veristar/internal/db"
 	"github.com/justmert/veristar/internal/jobs/aggregateweb"
@@ -164,14 +163,13 @@ func addStats(a, b umami.StatsValues) umami.StatsValues {
 func TestGlobalRoutesNeedAnOperator(t *testing.T) {
 	d, pg := reviewDB(t)
 	operatorID, plainID := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
+	rosterAdmin(t, pg, 7)
 	superExec(t, pg, `insert into cp.users (id, github_id, github_login, is_operator) values ($1, 7, 'op', true), ($2, 8, 'plain', false)`,
 		operatorID, plainID)
 	tenant := uuid.Must(uuid.NewV7())
 	superExec(t, pg, `insert into cp.tenants (id, slug, name, status) values ($1, 'one', 'One', 'active')`, tenant)
 
 	sessions := session.New(d)
-	guard, err := NewGuard(identity.Operators{GitHub: map[int64]bool{7: true}})
-	require.NoError(t, err)
 	g, err := NewGlobal(d)
 	require.NoError(t, err)
 	// the console origin is the server's own url, known only once it
@@ -182,6 +180,7 @@ func TestGlobalRoutesNeedAnOperator(t *testing.T) {
 	}))
 	srv.StartTLS()
 	t.Cleanup(srv.Close)
+	guard, stepUp := testGuard(t, d, sessions, srv.URL)
 	h := controlplane.NewHandler(controlplane.Options{
 		Log: slog.New(slog.DiscardHandler), ConsoleOrigin: srv.URL, Sessions: sessions,
 		// a sign-in shortcut for the test: the session is the real one,
@@ -190,6 +189,10 @@ func TestGlobalRoutesNeedAnOperator(t *testing.T) {
 			r.Get("/test-sign-in/{id}", func(w http.ResponseWriter, r *http.Request) {
 				id := uuid.MustParse(chi.URLParam(r, "id"))
 				if err := sessions.SignIn(r.Context(), id); err != nil {
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
+				if _, err := stepUp.Record(r.Context(), id); err != nil {
 					http.Error(w, err.Error(), http.StatusInternalServerError)
 					return
 				}

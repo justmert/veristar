@@ -19,6 +19,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/justmert/veristar/internal/controlplane/audit"
 	"github.com/justmert/veristar/internal/controlplane/httpx"
@@ -73,6 +74,8 @@ type Result struct {
 	CredentialsDeleted int64
 	SessionsEnded      int64
 	WasOperator        bool
+	RosterRemoved      int64
+	PasskeysDeleted    int64
 	UmamiUserDeleted   bool
 }
 
@@ -165,6 +168,23 @@ func Delete(ctx context.Context, d *db.DB, um UmamiUsers, userID uuid.UUID) (Res
 		if res.CredentialsDeleted, err = q.AccountDeleteMCPCredentials(ctx, userID); err != nil {
 			return fmt.Errorf("account: mcp credentials: %w", err)
 		}
+		// the roster rows go before the identities do; the account's
+		// passkeys go with them, because emptying the row does not cascade
+		roster, err := q.AccountDeleteRoster(ctx, systemq.AccountDeleteRosterParams{
+			GithubID: u.GithubID, StellarAddress: u.StellarAddress,
+		})
+		var pg *pgconn.PgError
+		if errors.As(err, &pg) && pg.ConstraintName == "operators_last_admin" {
+			return httpx.Conflict(httpx.CodeLastOperatorAdmin,
+				"you are the last active operator admin; make another operator an admin first")
+		}
+		if err != nil {
+			return fmt.Errorf("account: roster: %w", err)
+		}
+		res.RosterRemoved = int64(len(roster))
+		if res.PasskeysDeleted, err = q.DeleteUserPasskeys(ctx, userID); err != nil {
+			return fmt.Errorf("account: passkeys: %w", err)
+		}
 		if res.SessionsEnded, err = q.AccountDeleteSessions(ctx, userID); err != nil {
 			return fmt.Errorf("account: sessions: %w", err)
 		}
@@ -197,6 +217,8 @@ func Delete(ctx context.Context, d *db.DB, um UmamiUsers, userID uuid.UUID) (Res
 				"credentials_deleted": res.CredentialsDeleted,
 				"sessions_ended":      res.SessionsEnded,
 				"was_operator":        res.WasOperator,
+				"roster_removed":      res.RosterRemoved,
+				"passkeys_deleted":    res.PasskeysDeleted,
 				"umami_user_deleted":  res.UmamiUserDeleted,
 			},
 		}); err != nil {

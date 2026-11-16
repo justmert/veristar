@@ -68,3 +68,12 @@ set github_id = null, github_login = null, stellar_address = null, umami_usernam
     passkey_address = null, passkey_credential_id = null, passkey_public_key = null,
     is_operator = false, last_login_at = null, deleted_at = now()
 where id = @id and deleted_at is null;
+
+-- name: AccountDeleteRoster :many
+-- the roster rows of the account's identities (00036): a deleted account
+-- is no operator. operators_last_admin refuses the delete when it would
+-- leave no active operator admin.
+delete from cp.operators
+where (sqlc.narg(github_id)::bigint is not null and github_id = sqlc.narg(github_id)::bigint)
+   or (sqlc.narg(stellar_address)::text is not null and stellar_address = sqlc.narg(stellar_address)::text)
+returning id;

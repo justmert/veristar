@@ -63,14 +63,16 @@ where enroll_until is not null
 
 -- name: BootstrapRosterGitHub :one
 -- the startup bootstrap of one github id: an active operator admin. xmax = 0
--- tells an inserted row from an updated one.
+-- tells an inserted row from an updated one; touched is true when the row
+-- was inserted or changed by this statement (updated_at is the
+-- transaction's now() only then).
 insert into cp.operators (github_id, role)
 values (@github_id, 'operator_admin')
 on conflict (github_id) where github_id is not null do update
   set role = 'operator_admin', status = 'active', status_reason = null,
       updated_at = case when cp.operators.role <> 'operator_admin' or cp.operators.status <> 'active'
                         then now() else cp.operators.updated_at end
-returning *, (xmax = 0)::boolean as inserted;
+returning *, (xmax = 0)::boolean as inserted, (updated_at = now())::boolean as touched;
 
 -- name: BootstrapRosterStellar :one
 insert into cp.operators (stellar_address, role)
@@ -79,7 +81,7 @@ on conflict (stellar_address) where stellar_address is not null do update
   set role = 'operator_admin', status = 'active', status_reason = null,
       updated_at = case when cp.operators.role <> 'operator_admin' or cp.operators.status <> 'active'
                         then now() else cp.operators.updated_at end
-returning *, (xmax = 0)::boolean as inserted;
+returning *, (xmax = 0)::boolean as inserted, (updated_at = now())::boolean as touched;
 
 -- name: RosterIdentityPasskeys :one
 -- the passkeys of the live account holding a roster row's identity; 0

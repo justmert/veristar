@@ -76,8 +76,9 @@ type Sessions interface {
 
 // Config sets the relying party and the two time limits.
 type Config struct {
-	// ConsoleOrigin is the console's https origin; its host is the relying
-	// party id, so a credential works on that host only.
+	// ConsoleOrigin is the console's https origin (http on localhost for a
+	// development stack); its host is the relying party id, so a credential
+	// works on that host only.
 	ConsoleOrigin string
 	// RPName is shown by the authenticator.
 	RPName string
@@ -106,7 +107,10 @@ func New(cfg Config, d *db.DB, s Sessions) (*Service, error) {
 		return nil, errors.New("stepup: database and sessions are required")
 	}
 	u, err := url.Parse(cfg.ConsoleOrigin)
-	if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.Path != "" {
+	// browsers run webauthn in secure contexts only: https, or plain http
+	// on localhost for a development stack
+	secure := u != nil && (u.Scheme == "https" || (u.Scheme == "http" && u.Hostname() == "localhost"))
+	if err != nil || !secure || u.Hostname() == "" || u.Path != "" {
 		return nil, fmt.Errorf("stepup: console origin %q is not an https origin", cfg.ConsoleOrigin)
 	}
 	if cfg.MaxAge < MinMaxAge || cfg.MaxAge > MaxMaxAge {
