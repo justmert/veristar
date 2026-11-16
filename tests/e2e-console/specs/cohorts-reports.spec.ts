@@ -9,7 +9,15 @@
 import { readFileSync } from "node:fs";
 import type { BrowserContext, Page } from "@playwright/test";
 import { APP } from "../fixture/env.ts";
-import { api, enrollApi, type GitHubUser, newUser, signIn, type Tenant } from "./helpers.ts";
+import {
+  api,
+  enrollApi,
+  type GitHubUser,
+  newUser,
+  operatorStepUp,
+  signIn,
+  type Tenant,
+} from "./helpers.ts";
 import { expect, test } from "./test.ts";
 
 test.describe.configure({ mode: "serial" });
@@ -43,6 +51,7 @@ test.beforeAll(async ({ browser }) => {
   op = { ctx: octx, page: await octx.newPage() };
   watch(op.page);
   await signIn(op.page, OPERATOR);
+  await operatorStepUp(op.page, OPERATOR);
   const tctx = await browser.newContext();
   owner = { ctx: tctx, page: await tctx.newPage() };
   watch(owner.page);
