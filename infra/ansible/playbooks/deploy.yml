@@ -1,6 +1,11 @@
 ---
-# rolling deploy of a new image tag: edge nodes one at a time, then core nodes
-# one at a time. each node is drained first: its port 80 answers 503, so the dns
+# rolling deploy of a new image tag: the bootstrap (migrations, nats
+# topology), then core nodes one at a time, then edge nodes one at a time.
+# the core tier goes first because the jobs and the control plane of a
+# release read everything its gateways send, while an older jobs daemon
+# refuses outcomes it does not know: from 0.3.0 on, the gateways send
+# evidence counters on EDGE_STATS (docs/deploy/upgrade.md). each node is
+# drained first: its port 80 answers 503, so the dns
 # monitor removes it while https keeps serving the clients that still have its
 # address; after the drain wait the node pulls, recreates what changed and must
 # be healthy before the drain flag is removed and port 80 answers 308 again. a
@@ -26,31 +31,7 @@
 - name: Verify the release
   ansible.builtin.import_playbook: verify-release.yml
 
-- name: Deploy edge nodes one by one
-  hosts: edge
-  become: true
-  serial: 1
-  any_errors_fatal: true
-  max_fail_percentage: 0
-  vars_files: [../vars/pins.yml]
-  vars:
-    sa_draining: true
-    deploy_drain_seconds: 120
-  pre_tasks:
-    - name: Drain the node
-      ansible.builtin.include_tasks: tasks/drain.yml
-      vars:
-        drain_dir: /etc/veristar/drain
-  roles:
-    - secrets
-    - edge
-  post_tasks:
-    - name: Undrain the node
-      ansible.builtin.include_tasks: tasks/undrain.yml
-      vars:
-        drain_dir: /etc/veristar/drain
-
-- name: Apply the nats topology of the new release
+- name: Apply the migrations and the nats topology of the new release
   ansible.builtin.import_playbook: bootstrap.yml
 
 - name: Deploy core nodes one by one
@@ -73,6 +54,30 @@
   roles:
     - secrets
     - core
+  post_tasks:
+    - name: Undrain the node
+      ansible.builtin.include_tasks: tasks/undrain.yml
+      vars:
+        drain_dir: /etc/veristar/drain
+
+- name: Deploy edge nodes one by one
+  hosts: edge
+  become: true
+  serial: 1
+  any_errors_fatal: true
+  max_fail_percentage: 0
+  vars_files: [../vars/pins.yml]
+  vars:
+    sa_draining: true
+    deploy_drain_seconds: 120
+  pre_tasks:
+    - name: Drain the node
+      ansible.builtin.include_tasks: tasks/drain.yml
+      vars:
+        drain_dir: /etc/veristar/drain
+  roles:
+    - secrets
+    - edge
   post_tasks:
     - name: Undrain the node
       ansible.builtin.include_tasks: tasks/undrain.yml
