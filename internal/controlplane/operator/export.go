@@ -105,12 +105,16 @@ func (e *Exports) auditExport(ctx context.Context, view string, q url.Values, ro
 var summaryHeader = []string{
 	"onchain_ids", "onchain_ids_verified", "onchain_operations", "onchain_transactions",
 	"onchain_days_missing", "onchain_ids_failing",
+	"onchain_weekly_active_accounts_average", "onchain_weekly_active_accounts_latest",
+	"onchain_weeks_counted", "onchain_weeks_missing",
 }
 
 func summaryCells(s onchain.Summary) []string {
+	w := s.WeeklyActive
 	return []string{
 		exports.Int(s.IDs), exports.Int(s.IDsVerified), exports.Int(s.Operations), exports.Int(s.Transactions),
 		exports.Int(s.DaysMissing), exports.Int(s.IDsFailing),
+		exports.Float(w.Average), exports.IntPtr(w.Latest), exports.Int(int64(w.WeeksCounted)), exports.Int(int64(w.WeeksMissing)),
 	}
 }
 
@@ -330,10 +334,22 @@ func compareCohortCells(c Cohort, day string) []string {
 	return []string{exports.StrPtr(c.Program), exports.StrPtr(c.Round), exports.StrPtr(c.Category), exports.StrPtr(c.AwardDate), after}
 }
 
-var compareChainHeader = []string{"onchain_ids_read", "onchain_operations", "onchain_transactions"}
+var compareChainHeader = []string{
+	"onchain_ids_read", "onchain_operations", "onchain_transactions",
+	"onchain_week", "onchain_week_active_accounts", "onchain_week_missing",
+}
 
-func chainCells(p onchain.DayTotal) []string {
-	return []string{exports.Int(p.IDsRead), exports.IntPtr(p.Operations), exports.IntPtr(p.Transactions)}
+// chainCells is a day's on-chain cells with the weekly active accounts of
+// its iso week; a day of a week that is not whole inside the range has
+// empty week cells.
+func chainCells(p onchain.DayTotal, weeks []onchain.Week) []string {
+	out := []string{exports.Int(p.IDsRead), exports.IntPtr(p.Operations), exports.IntPtr(p.Transactions), "", "", ""}
+	for _, w := range weeks {
+		if p.Day >= w.From && p.Day <= w.To {
+			out[3], out[4], out[5] = w.Week, exports.IntPtr(w.ActiveAccounts), exports.StrPtr(w.Missing)
+		}
+	}
+	return out
 }
 
 func (e *Exports) webCompare(w http.ResponseWriter, r *http.Request) error {
@@ -394,7 +410,7 @@ func (e *Exports) webCompare(w http.ResponseWriter, r *http.Request) error {
 				exports.IntPtr(p.Bounces), exports.IntPtr(p.Totaltime), exports.Float(p.BounceRate), exports.Float(p.AvgVisitDuration),
 				exports.IntPtr(p.QuarantinePageviews),
 				exports.StrPtr(grades[integrityview.DayKey{Tenant: t.ID, Day: p.Day}].Grade),
-			}, chainCells(chainSeries[i]), compareCohortCells(cohorts[t.ID], p.Day))...); err != nil {
+			}, chainCells(chainSeries[i], chainOf[t.ID].Weeks), compareCohortCells(cohorts[t.ID], p.Day))...); err != nil {
 				panic(http.ErrAbortHandler)
 			}
 		}
@@ -458,7 +474,7 @@ func (e *Exports) apiCompare(w http.ResponseWriter, r *http.Request) error {
 		chainSeries := chainOf[t.ID].Series
 		for i, p := range s {
 			if err := cw.Row(cat([]string{t.ID.String(), exports.Text(t.Slug), exports.Text(t.Name), p.Day},
-				numbersCells(p.APINumbers), chainCells(chainSeries[i]), compareCohortCells(cohorts[t.ID], p.Day))...); err != nil {
+				numbersCells(p.APINumbers), chainCells(chainSeries[i], chainOf[t.ID].Weeks), compareCohortCells(cohorts[t.ID], p.Day))...); err != nil {
 				panic(http.ErrAbortHandler)
 			}
 		}

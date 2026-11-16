@@ -259,7 +259,7 @@ func catalogue(terms string) []route {
 
 	// machine metrics api
 	for _, p := range []string{"/tenants", "/web/daily", "/web/dimensions", "/web/hourly", "/web/integrity", "/api/daily", "/api/routes/daily",
-		"/api/hourly", "/onchain/ids", "/onchain/daily", "/rules", "/rules/{rule_id}/matches", "/openapi.yaml"} {
+		"/api/hourly", "/onchain/ids", "/onchain/daily", "/onchain/weekly", "/rules", "/rules/{rule_id}/matches", "/openapi.yaml"} {
 		add(kindMachine, http.MethodGet, operator.MachinePath+p, nil)
 	}
 	return out
@@ -376,6 +376,10 @@ func (e *env) gateWorld(t *testing.T) *gateWorld {
 		require.NoError(t, err)
 		_, err = c.Exec(context.Background(), `insert into agg.chain_reads (tenant_id, strkey, covered_from, covered_to, last_attempt_at, home_domain)
 			values ($1, $2, current_date - 1, current_date - 1, now(), $3)`, w.ta, w.chainKeyA, w.domainA)
+		require.NoError(t, err)
+		// a closed week of weekly active accounts
+		_, err = c.Exec(context.Background(), `insert into agg.chain_weeks (tenant_id, week, active_accounts, closed_at)
+			values ($1, date_trunc('week', current_date - 7)::date, 5, now())`, w.ta)
 		require.NoError(t, err)
 	})
 

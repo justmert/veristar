@@ -67,7 +67,9 @@ create policy chain_weeks_operator on agg.chain_weeks for select to cp_operator 
 create policy chain_weeks_jobs on agg.chain_weeks for all to jobs using (true) with check (true);
 create policy chain_week_members_jobs on agg.chain_week_members for all to jobs using (true) with check (true);
 
-revoke all on agg.chain_weeks, agg.chain_week_members from public;
+-- the default privileges of 00001 give cp_operator select on every agg
+-- table; the key column and the members are taken back from it
+revoke all on agg.chain_weeks, agg.chain_week_members from public, cp_operator;
 -- the tenant and operators read the counts; the key column is the jobs
 -- task's alone, and the members table is never readable outside it
 grant select (tenant_id, week, active_accounts, missing, closed_at, created_at) on agg.chain_weeks to cp_tenant, cp_operator;

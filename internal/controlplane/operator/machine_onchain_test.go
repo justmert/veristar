@@ -4,8 +4,12 @@ import (
 	"fmt"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/justmert/veristar/internal/controlplane/onchain"
+	"github.com/justmert/veristar/internal/jobs/chainactivity"
 )
 
 // TestMachineOnchain reads the on-chain routes of the machine api with a
@@ -51,4 +55,37 @@ func TestMachineOnchain(t *testing.T) {
 	e.get(t, scoped.Key, "/onchain/ids?tenant="+borealis.String(), http.StatusForbidden)
 	e.get(t, global.Key, "/onchain/daily?tenant="+f.tenants["probe"].String(), http.StatusNotFound)
 	e.get(t, global.Key, "/onchain/daily?band=primary", http.StatusBadRequest)
+
+	// weekly active accounts: a closed week with a count, a closed week
+	// with a reason, and the open current week
+	this := chainactivity.WeekStart(f.today)
+	superExec(t, f.pg, `insert into agg.chain_weeks (tenant_id, week, active_accounts, closed_at) values ($1, $2, 9, now())`,
+		aurora, this.AddDate(0, 0, -14))
+	superExec(t, f.pg, `insert into agg.chain_weeks (tenant_id, week, missing, closed_at) values ($1, $2, 'no_verified_ids', now())`,
+		borealis, this.AddDate(0, 0, -14))
+	superExec(t, f.pg, `insert into agg.chain_weeks (tenant_id, week, hash_key) values ($1, $2, $3)`, aurora, this, make([]byte, 32))
+	wq := "?from=" + this.AddDate(0, 0, -20).Format(time.DateOnly) + "&to=" + f.today.Format(time.DateOnly)
+	weeks := list[MachineOnchainWeek](t, e, global.Key, "/onchain/weekly"+wq, 1)
+	require.Len(t, weeks, 3)
+	for _, w := range weeks {
+		switch {
+		case w.TenantID == aurora && w.From == this.AddDate(0, 0, -14).Format(time.DateOnly):
+			require.Equal(t, int64(9), *w.ActiveAccounts)
+			require.Nil(t, w.Missing)
+			require.NotNil(t, w.ClosedAt)
+			require.Equal(t, onchain.WeekLabel(this.AddDate(0, 0, -14)), w.Week.Week)
+		case w.TenantID == aurora:
+			require.Nil(t, w.ActiveAccounts)
+			require.Equal(t, onchain.MissingWeekNotComplete, *w.Missing)
+			require.Nil(t, w.ClosedAt)
+		default:
+			require.Equal(t, borealis, w.TenantID)
+			require.Nil(t, w.ActiveAccounts, "a missing week is never a zero")
+			require.Equal(t, "no_verified_ids", *w.Missing)
+		}
+	}
+	for _, w := range list[MachineOnchainWeek](t, e, scoped.Key, "/onchain/weekly"+wq, 50) {
+		require.Equal(t, aurora, w.TenantID)
+	}
+	e.get(t, scoped.Key, "/onchain/weekly?tenant="+borealis.String(), http.StatusForbidden)
 }

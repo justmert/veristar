@@ -84,11 +84,40 @@ func TestLiveSources(t *testing.T) {
 	}
 	require.NotEmpty(t, quiet, "no contract among the recent ones could be read whole")
 	require.Len(t, days, 1)
+	// the initiators of the quiet contract's day come from the envelopes of
+	// its transactions, through batched getTransaction calls
+	t.Logf("contract %s on %s: %d initiators, missing %q", quiet, yesterday.Format(time.DateOnly),
+		len(days[0].Initiators), days[0].InitiatorsMissing)
+	if days[0].InitiatorsMissing == "" && days[0].Operations > 0 {
+		require.NotEmpty(t, days[0].Initiators)
+		require.LessOrEqual(t, int64(len(days[0].Initiators)), days[0].Operations)
+	}
 
 	days, err = reader.AccountDays(ctx, liveIssuer, yesterday, yesterday, root)
 	t.Logf("account %s on %s: %+v err=%v", liveIssuer, yesterday.Format(time.DateOnly), days, err)
 	require.NoError(t, err)
 	require.Len(t, days, 1)
+	if days[0].Operations > 0 {
+		require.NotEmpty(t, days[0].Initiators)
+	}
+
+	// a week of the issuer account: the distinct initiators over seven
+	// days, the weekly active accounts the chain-activity task stores
+	weekEnd := yesterday
+	weekStart := weekEnd.AddDate(0, 0, -6)
+	week, err := reader.AccountDays(ctx, liveIssuer, weekStart, weekEnd, root)
+	require.NoError(t, err)
+	require.Len(t, week, 7)
+	distinct := map[string]struct{}{}
+	var ops int64
+	for _, d := range week {
+		ops += d.Operations
+		for _, a := range d.Initiators {
+			distinct[a] = struct{}{}
+		}
+	}
+	t.Logf("account %s, %s to %s: %d operations, %d distinct initiators", liveIssuer,
+		weekStart.Format(time.DateOnly), weekEnd.Format(time.DateOnly), ops, len(distinct))
 
 	entry, err := r.Instance(ctx, liveSAC)
 	require.NoError(t, err)

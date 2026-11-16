@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/justmert/veristar/internal/controlplane/httpx"
+	"github.com/justmert/veristar/internal/controlplane/onchain"
 )
 
 // the on-chain routes of the machine api (contract 9.10 and 15.7): the
@@ -168,6 +169,88 @@ func (m *Machine) onchainDaily(w http.ResponseWriter, r *http.Request) error {
 	})
 	if err != nil {
 		return fmt.Errorf("operator: machine onchain daily: %w", err)
+	}
+	httpx.WriteJSON(w, http.StatusOK, out)
+	return nil
+}
+
+// MachineOnchainWeek is one item of GET /onchain/weekly: a project's
+// weekly active accounts for one iso week (utc). a week without a count
+// carries the reason in missing and never a zero.
+type MachineOnchainWeek struct {
+	TenantID uuid.UUID `json:"tenant_id"`
+	onchain.Week
+	ClosedAt *httpx.Timestamp `json:"closed_at"`
+}
+
+var onchainWeekKeys = keyset{cols: []string{"z.tenant_id", "z.week"}, casts: []string{"uuid", "date"}}
+
+func (m *Machine) onchainWeekly(w http.ResponseWriter, r *http.Request) error {
+	q := r.URL.Query()
+	if err := checkParams(q, "tenant", "from", "to", "limit", "cursor"); err != nil {
+		return err
+	}
+	key := keyFrom(r.Context())
+	p, err := parseMachinePage(q, "machine-onchain-weekly", key)
+	if err != nil {
+		return err
+	}
+	if err := onchainWeekKeys.validAfter(p); err != nil {
+		return err
+	}
+	now := m.now()
+	rg, err := p.days(q, now)
+	if err != nil {
+		return err
+	}
+	today := utcDay(now)
+	ctx := r.Context()
+	out := MachineRangeList[MachineOnchainWeek]{From: rg.From.Format(time.DateOnly), To: rg.To.Format(time.DateOnly), Items: []MachineOnchainWeek{}}
+	err = m.db.WithOperator(ctx, func(tx pgx.Tx) error {
+		sc, err := resolveScope(ctx, tx, key, q)
+		if err != nil {
+			return err
+		}
+		args := pgx.NamedArgs{"tenant": sc.arg(), "from_day": rg.From, "to_day": rg.To}
+		// the weeks whose monday lies in the range
+		inner := `with ` + tenantScopeCTE + `
+			select w.tenant_id, w.week, w.active_accounts, w.missing, w.closed_at
+			from agg.chain_weeks w join t on t.id = w.tenant_id
+			where w.week between @from_day::date and @to_day::date`
+		rows, err := tx.Query(ctx, onchainWeekKeys.wrap(inner, p, args), args)
+		if err != nil {
+			return err
+		}
+		items, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (MachineOnchainWeek, error) {
+			var x MachineOnchainWeek
+			var week time.Time
+			var closed *time.Time
+			err := row.Scan(&x.TenantID, &week, &x.ActiveAccounts, &x.Missing, &closed)
+			x.Week = onchain.Week{Week: onchain.WeekLabel(week), From: week.Format(time.DateOnly),
+				To: week.AddDate(0, 0, 6).Format(time.DateOnly), ActiveAccounts: x.ActiveAccounts, Missing: x.Missing}
+			x.ClosedAt = httpx.TimestampPtr(closed)
+			if closed == nil {
+				reason := onchain.MissingWeekNotComplete
+				if week.AddDate(0, 0, 6).Before(today) {
+					reason = onchain.MissingNotReadYet
+				}
+				x.Missing = &reason
+			}
+			return x, err
+		})
+		if err != nil {
+			return err
+		}
+		if len(items) > p.Limit {
+			items = items[:p.Limit]
+			l := items[len(items)-1]
+			out.NextCursor = p.next([]string{l.TenantID.String(), l.From}, out.From, out.To)
+		}
+		out.Items = items
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("operator: machine onchain weekly: %w", err)
 	}
 	httpx.WriteJSON(w, http.StatusOK, out)
 	return nil

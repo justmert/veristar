@@ -105,6 +105,8 @@ func TestOnchainOperatorViews(t *testing.T) {
 		require.Equal(t, http.StatusOK, code, string(body))
 		list := decode[GlobalList[WebProject]](t, body)
 		for _, p := range list.Items {
+			// the weekly part has its own subtest below
+			p.Onchain.WeeklyActive = onchain.WeeklyActive{}
 			switch p.Tenant.ID {
 			case aurora:
 				require.Equal(t, onchain.Summary{IDs: 2, IDsVerified: 1, Operations: ops[aurora], Transactions: 0 + 1 + 2 + 3 + 5 + 6 + 7 + 8,
@@ -192,6 +194,76 @@ func TestOnchainOperatorViews(t *testing.T) {
 			require.Equal(t, aurora.String(), recs[1][0])
 			require.Equal(t, "", recs[5][colOf(t, h, "onchain_operations")])
 			require.Equal(t, "3", recs[2][colOf(t, h, "onchain_operations")])
+		}
+	})
+
+	t.Run("weekly active accounts", func(t *testing.T) {
+		// three weeks back from today: a closed week with a count, one that
+		// closed missing, and one still open
+		wr := "from=" + f.today.AddDate(0, 0, -27).Format(time.DateOnly) + "&to=" + f.today.Format(time.DateOnly)
+		mondays := onchain.RangeWeeks(onchain.Range{From: f.today.AddDate(0, 0, -27), To: f.today})
+		require.GreaterOrEqual(t, len(mondays), 3)
+		counted, missed, open := mondays[0], mondays[1], mondays[2]
+		superExec(t, f.pg, `insert into agg.chain_weeks (tenant_id, week, active_accounts, closed_at) values ($1, $2, 12, now())`, aurora, counted)
+		superExec(t, f.pg, `insert into agg.chain_weeks (tenant_id, week, missing, closed_at) values ($1, $2, 'day_over_read_cap', now())`, aurora, missed)
+		superExec(t, f.pg, `insert into agg.chain_weeks (tenant_id, week, hash_key) values ($1, $2, $3)`, aurora, open, make([]byte, 32))
+		t.Cleanup(func() { superExec(t, f.pg, `delete from agg.chain_weeks where tenant_id = $1`, aurora) })
+
+		code, body := get("/api/operator/tenants/" + aurora.String() + "/onchain?" + wr)
+		require.Equal(t, http.StatusOK, code, string(body))
+		v := decode[onchain.View](t, body)
+		require.Len(t, v.Weeks, len(mondays))
+		require.Equal(t, onchain.WeekLabel(counted), v.Weeks[0].Week)
+		require.Equal(t, int64(12), *v.Weeks[0].ActiveAccounts)
+		require.Nil(t, v.Weeks[0].Missing)
+		require.Nil(t, v.Weeks[1].ActiveAccounts, "a missing week is never a zero")
+		require.Equal(t, "day_over_read_cap", *v.Weeks[1].Missing)
+		require.Nil(t, v.Weeks[2].ActiveAccounts)
+		wantOpen := onchain.MissingNotReadYet
+		if !open.AddDate(0, 0, 6).Before(f.today) {
+			wantOpen = onchain.MissingWeekNotComplete
+		}
+		require.Equal(t, wantOpen, *v.Weeks[2].Missing)
+		avg, latest := 12.0, int64(12)
+		want := onchain.WeeklyActive{Average: &avg, Latest: &latest, WeeksCounted: 1, WeeksMissing: len(mondays) - 1}
+		require.Equal(t, want, v.Totals.WeeklyActive)
+
+		// the list column, the compare and the exports carry the same weeks
+		code, body = get("/api/operator/web/projects?" + wr + "&limit=200")
+		require.Equal(t, http.StatusOK, code)
+		for _, p := range decode[GlobalList[WebProject]](t, body).Items {
+			if p.Tenant.ID == aurora {
+				require.Equal(t, want, p.Onchain.WeeklyActive)
+			} else {
+				require.Equal(t, len(mondays), p.Onchain.WeeklyActive.WeeksMissing)
+				require.Nil(t, p.Onchain.WeeklyActive.Average)
+			}
+		}
+		code, body = get("/api/operator/web/compare?" + wr + "&tenants=" + aurora.String())
+		require.Equal(t, http.StatusOK, code)
+		require.Equal(t, v.Weeks, decode[WebCompare](t, body).Projects[0].Onchain.Weeks)
+		code, body = get("/api/operator/web/projects.csv?" + wr + "&rows=200")
+		require.Equal(t, http.StatusOK, code)
+		recs := readCSV(t, body)
+		for _, rec := range recs[1:] {
+			if rec[0] == aurora.String() {
+				require.Equal(t, "12", rec[colOf(t, recs[0], "onchain_weekly_active_accounts_latest")])
+				require.Equal(t, "1", rec[colOf(t, recs[0], "onchain_weeks_counted")])
+			}
+		}
+		code, body = get("/api/operator/web/compare.csv?" + wr + "&tenants=" + aurora.String())
+		require.Equal(t, http.StatusOK, code)
+		recs = readCSV(t, body)
+		h := recs[0]
+		for _, rec := range recs[1:] {
+			if rec[colOf(t, h, "day")] == counted.AddDate(0, 0, 3).Format(time.DateOnly) {
+				require.Equal(t, onchain.WeekLabel(counted), rec[colOf(t, h, "onchain_week")])
+				require.Equal(t, "12", rec[colOf(t, h, "onchain_week_active_accounts")])
+			}
+			if rec[colOf(t, h, "day")] == missed.Format(time.DateOnly) {
+				require.Equal(t, "", rec[colOf(t, h, "onchain_week_active_accounts")])
+				require.Equal(t, "day_over_read_cap", rec[colOf(t, h, "onchain_week_missing")])
+			}
 		}
 	})
 
