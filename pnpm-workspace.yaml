@@ -6,12 +6,9 @@ packages:
   # its own lockfile, so they stay out of the workspace
   - "!examples/otel-*"
   - tests/*
-  # the web caddy's theme for umami's dashboard (docs/adr/0004)
-  - deploy/caddy/umami-theme
 
 # pinned versions, referenced as "catalog:" so the workspace cannot drift to two versions
 catalog:
-  "@axe-core/playwright": 4.14.0
   "@biomejs/biome": 2.5.15
   "@astrojs/node": 11.1.13
   "@creit.tech/stellar-wallets-kit": 2.8.0

@@ -3,7 +3,7 @@
 //
 //   src/tokens.css           the --vs-* custom properties, one block per theme
 //   src/theme.generated.css  the tailwind @theme that maps utilities to them
-//   the --vs-* block of deploy/caddy/umami-theme/site/_veristar/theme.css
+//   assets/mark.svg and assets/favicon.svg  the mark the status page serves
 //
 // so a brand change is an edit of tokens.ts and one run of this script.
 
@@ -22,7 +22,6 @@ import {
   type ThemeName,
   themes,
   type,
-  umamiRamp,
 } from "../src/tokens.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -135,94 +134,6 @@ function roleBlock(name: ThemeName) {
   want(join(src, "theme.generated.css"), out.join("\n"));
 }
 
-// the umami theme keeps its own names for the same values (docs/adr/0004).
-// two generated regions: the --vs-* values of each mode, and zen's
-// eleven-step neutral ramp of each mode
-{
-  if (radius.md !== "6px" || radius.lg !== "10px" || radius.xl !== "12px") {
-    throw new Error("umami radius tokens are written in rem; update them with radius md, lg, xl");
-  }
-  const vs = (t: Roles) => ({
-    background: t.ground,
-    card: t.raised,
-    popover: t.overlay,
-    muted: t.muted,
-    accent: t.hover,
-    selected: t.selected,
-    border: t.line,
-    input: t["line-strong"],
-    foreground: t.fg,
-    "muted-foreground": t["fg-2"],
-    "disabled-foreground": t["fg-disabled"],
-    primary: t.accent,
-    "primary-hover": t["accent-hover"],
-    "primary-foreground": t["on-accent"],
-    "primary-text": t["accent-text"],
-    ring: t["accent-text"],
-    success: t.success,
-    warning: t.warning,
-    destructive: t.critical,
-    "destructive-solid": t["critical-solid"],
-    "destructive-foreground": t["on-critical"],
-    "shadow-floating": shadow.overlay.replace("var(--vs-shadow-soft)", t["shadow-soft"]),
-  });
-  const decls = (o: Record<string, string>, pad = "  ") =>
-    Object.entries(o)
-      .map(([k, v]) => `${pad}--vs-${k}: ${v};`)
-      .join("\n");
-  const shared = {
-    "font-sans": font.sans,
-    "font-mono": font.mono,
-    "radius-control": "0.375rem",
-    "radius-card": "0.625rem",
-    "radius-overlay": "0.75rem",
-  };
-  const tokensBlock = [
-    "/* the brand's dark theme, umami's dark mode and the default */",
-    "html:root {",
-    decls({ ...vs(themes.dark), ...shared }),
-    "}",
-    "",
-    "/* the brand's light theme, umami's light mode */",
-    'html:root[data-theme="light"] {',
-    decls(vs(themes.light)),
-    "}",
-  ].join("\n");
-  const ramp = (r: string[]) =>
-    ["50", "100", "200", "300", "400", "500", "600", "700", "800", "900", "950"]
-      .map((step, i) => `  --zen-palette-${step}: ${r[i]};`)
-      .join("\n");
-  const rampBlock = [
-    "/* zen's neutral ramp in dark mode, light to dark */",
-    "html:root,",
-    '[data-theme="dark"][data-theme="dark"],',
-    ".dark.dark {",
-    ramp(umamiRamp.dark),
-    "}",
-    "",
-    "/* light mode: its own ramp and colour scheme. html:root[data-theme] outranks",
-    "   the colour scheme the semantic block above sets for every mode */",
-    'html:root[data-theme="light"],',
-    '[data-theme="light"][data-theme="light"] {',
-    "  color-scheme: light;",
-    ramp(umamiRamp.light),
-    "}",
-  ].join("\n");
-  const path = join(repo, "deploy/caddy/umami-theme/site/_veristar/theme.css");
-  let cur = readFileSync(path, "utf8");
-  const region = (name: string, body: string) => {
-    const open = `/* generated ${name}: start */\n`;
-    const close = `/* generated ${name}: end */`;
-    const a = cur.indexOf(open);
-    const b = cur.indexOf(close, a);
-    if (a < 0 || b < 0) throw new Error(`${path} has no generated ${name} region`);
-    cur = `${cur.slice(0, a + open.length)}${body}\n${cur.slice(b)}`;
-  };
-  region("brand tokens", tokensBlock);
-  region("ramps", rampBlock);
-  want(path, cur);
-}
-
 // the docs (mintlify) take the accent and both grounds; edited in place so
 // the rest of docs.json keeps its formatting. mintlify's "light" colour is
 // the one it draws on the dark theme and "dark" the one on the light theme.
@@ -243,8 +154,8 @@ function roleBlock(name: ThemeName) {
   want(path, text);
 }
 
-// the mark as svg files: the favicons (one dark tile everywhere), the umami
-// sidebar mark and the docs logo for each theme
+// the mark as svg files: the favicons (one dark tile everywhere), the status
+// page's mark and the docs logo for each theme
 {
   const d: Roles = themes.dark;
   const l: Roles = themes.light;
@@ -264,17 +175,14 @@ function roleBlock(name: ThemeName) {
     "apps/console/public/favicon.svg",
     "apps/site/public/favicon.svg",
     "docs/favicon.svg",
-    "deploy/caddy/umami-theme/site/_veristar/brand/favicon.svg",
+    "packages/brand/assets/favicon.svg",
   ]) {
     want(join(repo, f), favicon);
   }
+  // the public status page shows the mark on its dark header
   want(
-    join(repo, "deploy/caddy/umami-theme/site/_veristar/brand/mark.svg"),
+    join(repo, "packages/brand/assets/mark.svg"),
     `${head}  <title>Veristar</title>\n${mark(d.fg, d["accent-text"])}</svg>\n`,
-  );
-  want(
-    join(repo, "deploy/caddy/umami-theme/site/_veristar/brand/mark-light.svg"),
-    `${head}  <title>Veristar</title>\n${mark(l.fg, l["accent-text"])}</svg>\n`,
   );
   const logo = (t: Roles) =>
     '<svg xmlns="http://www.w3.org/2000/svg" width="152" height="32" viewBox="0 0 152 32" role="img" aria-label="Veristar">\n' +

@@ -5,7 +5,8 @@
 #
 #   1. the dev stack recreated on the new image (umami migrates the database
 #      it already holds, as production would) and umami-bootstrap
-#   2. tests/umami-compat: the umami behaviour checks, api and ui. its
+#   2. tests/umami-compat: the umami behaviour checks of the api and
+#      data contract. its
 #      reviewed route list names the umami version, so a new version stays red
 #      until a person has reviewed the new openapi contract
 #   3. the isolation gate (make isolation)
