@@ -46,6 +46,8 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/oschwald/maxminddb-golang/v2"
 
+	"github.com/justmert/veristar/internal/gateway"
+	"github.com/justmert/veristar/internal/integrity"
 	"github.com/justmert/veristar/internal/natsx"
 	"github.com/justmert/veristar/internal/umami"
 	"github.com/justmert/veristar/tests/fixtures/umamictr"
@@ -1002,13 +1004,25 @@ func outDir() string {
 }
 
 // countrySubnets picks /24 subnets inside networks the gateway image's db-ip
-// file assigns to each country (the same method as tests/webpath).
+// file assigns to each country (the same method as tests/webpath), and that
+// the image's network data classifies as access networks, so the browsers
+// look like residential visitors and the integrity grade of their traffic
+// does not depend on which network the draw lands in.
 func countrySubnets(t testing.TB, cc string) []netip.Prefix {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "dbip.mmdb")
+	dir := t.TempDir()
+	path := filepath.Join(dir, "dbip.mmdb")
 	id := mustDocker(t, "create", gatewayImage)
 	defer func() { _, _ = docker("rm", id) }()
 	mustDocker(t, "cp", id+":/geo/dbip-country-lite.mmdb", path)
+	for _, f := range []string{gateway.NetworkASNFile, gateway.NetworkClassesFile, gateway.NetworkTorFile} {
+		mustDocker(t, "cp", id+":/geo/"+f, filepath.Join(dir, f))
+	}
+	nw, err := gateway.OpenNetwork(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer nw.Close()
 	r, err := maxminddb.Open(path)
 	if err != nil {
 		t.Fatal(err)
@@ -1035,7 +1049,10 @@ func countrySubnets(t testing.TB, cc string) []netip.Prefix {
 		t.Fatalf("db-ip file has no /24 or wider ipv4 network for %s", cc)
 	}
 	var out []netip.Prefix
-	for range 5 {
+	for range 200 {
+		if len(out) == 5 {
+			break
+		}
 		n, _ := rand.Int(rand.Reader, big.NewInt(int64(len(cands))))
 		p := cands[n.Int64()]
 		k, _ := rand.Int(rand.Reader, big.NewInt(int64(1)<<(24-p.Bits())))
@@ -1044,6 +1061,13 @@ func countrySubnets(t testing.TB, cc string) []netip.Prefix {
 		client := netip.AddrFrom4([4]byte{byte(x >> 24), byte(x >> 16), byte(x >> 8), 10})
 		var v rec
 		if err := r.Lookup(client).Decode(&v); err != nil || v.Country.ISOCode != cc {
+			continue
+		}
+		ip, err := gateway.ParseClientIP(client.String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if class, _, err := nw.Classify(ip); err != nil || class != integrity.NetAccess {
 			continue
 		}
 		out = append(out, netip.PrefixFrom(netip.AddrFrom4([4]byte{byte(x >> 24), byte(x >> 16), byte(x >> 8), 0}), 24))
