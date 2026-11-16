@@ -10,6 +10,9 @@ import (
 	"testing"
 
 	"github.com/oschwald/maxminddb-golang/v2"
+
+	"github.com/justmert/veristar/internal/gateway"
+	"github.com/justmert/veristar/internal/integrity"
 )
 
 // countrySubnets picks, for each country, a random /24 inside a network the
@@ -17,13 +20,26 @@ import (
 // gives a docker network that subnet, so caddy's tcp peer is an address the
 // gateway resolves to the country. picking at random among all candidates
 // keeps the borrowed /24 (unreachable from this host while the test runs)
-// away from any one fixed range.
+// away from any one fixed range. the chosen address must also be in a
+// network the image's network data classifies as an access network, so the
+// browsers look like residential visitors: a hosting network gets a quarter
+// of the same-network threshold (integrity.PrefixThreshold), and the bursts
+// below would land in the quarantine band.
 func countrySubnets(t testing.TB, ccs ...string) map[string][]netip.Prefix {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "dbip.mmdb")
+	dir := t.TempDir()
+	path := filepath.Join(dir, "dbip.mmdb")
 	id := mustDocker(t, "create", gatewayImage)
 	defer func() { _, _ = docker("rm", id) }()
 	mustDocker(t, "cp", id+":/geo/dbip-country-lite.mmdb", path)
+	for _, f := range []string{gateway.NetworkASNFile, gateway.NetworkClassesFile, gateway.NetworkTorFile} {
+		mustDocker(t, "cp", id+":/geo/"+f, filepath.Join(dir, f))
+	}
+	nw, err := gateway.OpenNetwork(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer nw.Close()
 	r, err := maxminddb.Open(path)
 	if err != nil {
 		t.Fatal(err)
@@ -55,8 +71,12 @@ func countrySubnets(t testing.TB, ccs ...string) map[string][]netip.Prefix {
 		if len(cands[cc]) == 0 {
 			t.Fatalf("db-ip file has no /24 or wider ipv4 network for %s", cc)
 		}
-		// several choices, so a subnet another docker network holds can be skipped
-		for range 5 {
+		// several choices, so a subnet another docker network holds can be
+		// skipped; draws outside an access network do not count
+		for range 200 {
+			if len(out[cc]) == 5 {
+				break
+			}
 			n, _ := rand.Int(rand.Reader, big.NewInt(int64(len(cands[cc]))))
 			p := cands[cc][n.Int64()]
 			blocks := int64(1) << (24 - p.Bits())
@@ -73,6 +93,13 @@ func countrySubnets(t testing.TB, ccs ...string) map[string][]netip.Prefix {
 			}
 			client := netip.AddrFrom4([4]byte{byte(v >> 24), byte(v >> 16), byte(v >> 8), 10})
 			if err := r.Lookup(client).Decode(&rec); err != nil || rec.Country.ISOCode != cc {
+				continue
+			}
+			ip, err := gateway.ParseClientIP(client.String())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if class, _, err := nw.Classify(ip); err != nil || class != integrity.NetAccess {
 				continue
 			}
 			out[cc] = append(out[cc], sub)
