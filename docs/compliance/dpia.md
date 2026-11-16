@@ -46,8 +46,10 @@ shows high residual risk must consult their authority before use (Art. 36).
 ## 5. Security measures (summary for Art. 28 and Art. 32)
 
 - Transport encryption on every public endpoint (Caddy, TLS).
-- Ingestion edge and core on a private network; Umami's collect and admin
-  routes reachable only on the private network (`deploy/caddy/web.Caddyfile`).
+- Ingestion edge and core on a private network; no public host serves Umami,
+  so its collect, admin and dashboard routes are reachable only on the
+  private network (`deploy/caddy/umami_closed_test.go` checks the Caddy
+  configuration).
 - One database role per service with the least rights it needs, no role with
   `BYPASSRLS`, forced row-level security on every tenant table.
 - One NATS user per service with subject allow lists (`internal/natsx/topology.go`).

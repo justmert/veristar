@@ -232,8 +232,8 @@ image, with the counters on `EDGE_STATS` holding classes and keys only).
   further event of that visitor token goes to the quarantine band (`internal/gateway/volume.go`).
 - **Bands.** Every site has two Umami websites: the primary and a quarantine website.
   Quarantined events go to the quarantine website; they are never deleted and never mixed into
-  primary numbers. Tenants open the quarantine view through
-  `GET /api/sso/umami?site=<id>&view=quarantine`.
+  primary numbers. Tenants read the quarantine band in the console's web dashboard
+  (`band=quarantine`, control-plane-api.md section 18).
 
 Proved by: `TestPrefixThreshold` and `TestScaleOf` (`internal/integrity/integrity_test.go`);
 `TestEdgeSecretsCluster` subtests `quarantine starts at exactly the threshold across three

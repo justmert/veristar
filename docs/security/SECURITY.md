@@ -55,7 +55,7 @@ In scope:
 
 - Code and configuration in this repository: `cmd/`, `internal/`, `collector/`, `apps/console/`,
   `packages/tracker/`, `deploy/` (including the Caddyfiles), `infra/` and `db/`.
-- The hosted service on the `in.`, `otlp.`, `app.`, `web.` and `status.` hosts under the
+- The hosted service on the `in.`, `otlp.`, `app.` and `status.` hosts under the
   platform's base domain.
 - Tenant isolation, the privacy guarantees in [../compliance/privacy-strategy.md](../compliance/privacy-strategy.md),
   and any bypass of the bot and inflation checks that costs less than

@@ -29,7 +29,7 @@ Every test named below exists in the repository at the path given.
 | OTLP tokens (`sa_otlp_...`) | SHA-256 only, `cp.otlp_tokens` and `registry_otlp` | Write access to a tenant's API metrics |
 | Operator API keys (`sa_op_...`) | SHA-256 only, `cp.operator_api_keys` | Read access to aggregates of every tenant (or one) |
 | Console sessions (`sa_session`) | SHA-256 only, `cp.sessions` | A signed-in user's or operator's console access |
-| Umami tokens | Issued per SSO login, held by the browser | View-only access to the tenant's Umami websites |
+| Umami tokens of members | Issued by the control plane's login as the member's own Umami user, held in control plane memory for at most 5 minutes, never sent to a browser | View-only access to the tenant's Umami websites |
 | Umami admin account, `UMAMI_USER_PASSWORD_KEY`, `OAUTH_STATE_KEY`, database and NATS credentials | SOPS-encrypted secrets (`infra/secrets/`), deployed by Ansible | Break-glass and service credentials |
 | Tracker releases | `packages/tracker/releases/<version>/sdk.js`, `manifest.json`, `revoked.json` | Runs on every tenant page |
 | Audit log | `cp.audit_log` | Record of every operator and tenant action |
@@ -44,8 +44,11 @@ Every test named below exists in the repository at the path given.
 2. **Tenant server to edge** (`otlp.<BASE_DOMAIN>`). Authenticated by OTLP token; the content is
    still whatever the tenant sends.
 3. **Browser to console** (`app.<BASE_DOMAIN>`). Session cookie, CSRF header and `Origin` check.
-4. **Browser to Umami UI** (`web.<BASE_DOMAIN>`). Umami token from SSO; Caddy allowlist in
-   `deploy/caddy/web.Caddyfile`.
+4. **Umami.** No public host serves it ([ADR 0005](../adr/0005-umami-as-engine-only.md)).
+   The console's web dashboard reaches it only through the control plane, which reads on the
+   private network as the member's own Umami user. Its interface is on each core node's
+   loopback (`127.0.0.1:3300`) for platform administrators over SSH. `make test-caddy-closed`
+   fails when an internet-facing Caddy site refers to Umami.
 5. **Machine clients to the machine API** (`/api/metrics/v1/`). Operator API key.
 6. **Private network.** Gateway, collector, replayer, metricswriter, jobs, control plane, Umami,
    PostgreSQL and NATS. Each service connects to NATS as its own user with publish and subscribe
@@ -118,10 +121,14 @@ Built:
   membership first and answers 404 to non-members, then runs as `cp_tenant` inside
   `db.WithTenant`, where row-level security is forced on every tenant table and no application
   role has `BYPASSRLS` ([../reference/control-plane-api.md](../reference/control-plane-api.md) section 1.3).
+- Web dashboard (contract section 18): the membership check, the site resolved among the
+  tenant's own sites under `cp_tenant`, and the aggregates read under row-level security.
+  The Umami reads go out as the member's own Umami user, never as the admin, and only for one
+  of the checked site's two websites (`internal/controlplane/umamiread`), so Umami's own team
+  check is a second gate behind the control plane's.
 - Umami: each tenant is one Umami team, each user is `view-only` with team role
-  `team-view-only`. Caddy on `web.<BASE_DOMAIN>` makes `/api/*` read-only from outside and denies
-  the write, admin, share and collection routes for every method
-  (`deploy/caddy/web.Caddyfile`), including under `/teams/<id>/` rewrites.
+  `team-view-only`. No public host serves Umami, so no project holds an Umami token or reaches
+  its routes.
 - The tenant id of API metrics comes from the OTLP credential. `tenantguard` replaces resource
   attributes with an allowlisted set, so a forged `scf.tenant.id` is dropped
   (`collector/tenantguardprocessor/guard.go`, function `stamp`).
@@ -130,8 +137,10 @@ Built:
 Proved by:
 
 - `TestUmamiTenantIsolation` (`tests/isolation/umami/isolation_test.go`, build tag `isolation`):
-  user B calls every operation of Umami's OpenAPI contract with team A's ids, on the private
-  network and through web Caddy.
+  user B calls every operation of Umami's OpenAPI contract with team A's ids on the private
+  network.
+- `TestWebDashboardParity` subtest `isolation` (`internal/controlplane/webdash/live_test.go`)
+  and the gate's web dashboard cases (`tests/isolation/console/gate_test.go`).
 - `TestConsole` subtests `Isolation` and `WrongTenantSeesNothing`
   (`tests/isolation/console/console_test.go`) and `TestRemovedTenantIsGoneForFormerMembers`
   (`tests/isolation/console/removal_test.go`).
@@ -142,8 +151,8 @@ Proved by:
   `TestJobsBoundaries` (`internal/db/boundaries_test.go`).
 - `TestViewOnlyTeamMemberReadsButCannotChange`, `TestViewOnlyCannotReadOtherTeam` and
   `TestOpenAPIRouteListUnchanged` (`tests/umami-compat/access_test.go`).
-- `TestWebCaddyLive` subtests `deny list`, `api method allowlist`, `sso rules`
-  (`deploy/caddy/web_live_test.go`).
+- `TestCaddyfilesNameNoUmami` and `TestAssembledConfigsReachNoUmami`
+  (`deploy/caddy/umami_closed_test.go`): no internet-facing Caddy site reaches Umami.
 - Collector: `TestCollector` subtest `http cumulative with forged tenant and secret seed`
   (`tests/collector/collector_test.go`) and `TestMetricsFilteredAndStamped`
   (`collector/tenantguardprocessor/guard_test.go`).
@@ -153,9 +162,9 @@ The isolation gate (`make isolation`, the `isolation` job of `.github/workflows/
 these suites together on every push to `main` and every pull request
 ([branch-protection.md](branch-protection.md)).
 
-Residual risk: Umami shows Save, Transfer, Reset and Delete buttons to view-only users; they fail
-with 401. A new Umami version can add routes; `TestOpenAPIRouteListUnchanged` fails when the
-route list changes, which forces a review of the deny list before an upgrade.
+Residual risk: a new Umami version can change what a `view-only` team member may read;
+`TestViewOnlyCannotReadOtherTeam` and `TestOpenAPIRouteListUnchanged` fail on such a change,
+which forces a review before an upgrade.
 
 ### 3.3 Tenant metric inflation
 
@@ -230,7 +239,7 @@ attribution of an attack.
 | OTLP token `sa_otlp_` + 40 base62 | Write API metrics as that tenant. No read access: no route accepts an OTLP token for reading. | Stored only as SHA-256, prefix kept for display; shown once; format checked before hashing; revocation writes `registry_otlp` before commit, and a failed write rolls back (contract 6.4); suspended and removed tenants refused; `last_seen_at` shows use. | `TestOTLPTokens`, `TestGenerate`, `TestRegistryStatus` (`internal/controlplane/otlptokens/`); `TestBearerParsing`, `TestAuthenticateAgainstRegistry`, `TestFailsClosedWithoutSnapshot` (`collector/tenantauthextension/auth_test.go`); `TestCollector` subtest `unknown and revoked tokens`; `tests/e2e-console/specs/otlp-tokens.spec.ts` | Tokens do not expire. A thief can pollute the tenant's API data until the tenant revokes. |
 | Operator API key `sa_op_` + 40 base62 | Read aggregates of every tenant (global key) or one tenant (scoped key). No write, no raw data. | SHA-256 only; shown once; lifetime 1 to 365 days, default 90; revocation and expiry apply to the very next request; 10 requests per second, burst 20, per key and instance; usage counted per hour; key works only under `/api/metrics/v1/` and a session cookie does not work there (contract 9.1 to 9.3). | `TestMachineAPI` subtests `a revoked key is refused on the very next request`, `an expired key is refused`, `a key works nowhere else and a cookie not here`, `rate limit answers 429 with Retry-After`, `no plaintext key is stored anywhere`, `a scoped key sees only its tenant`; `TestKeyFormat`, `TestKeyLimiter` (`internal/controlplane/operator/machine_test.go`) | A stolen global key reads every tenant's aggregates until revoked or expired. |
 | Console session `sa_session` | The user's console access; for an operator, operator actions. | `HttpOnly`, `Secure`, `SameSite=Lax`, host-only; absolute lifetime 7 days, idle 24 hours; DB holds SHA-256 only; token renewed at sign-in; sign-out destroys the row; every state change needs `X-Requested-With: sa-console` and `Origin` equal to `CONSOLE_ORIGIN`; console CSP `default-src 'none'; script-src 'self'` with `frame-ancestors 'none'` (`deploy/caddy/app.Caddyfile`). | `TestSessionCookieFlags`, `TestSignInRenewsToken`, `TestLogoutInvalidates`, `TestCSRFOnLogout`, `TestStateFailures`, `TestPKCEFailure` (`internal/controlplane/auth/`); `TestCSRF` (`internal/controlplane/httpx/`); `TestStoreRefusesRawTokens` (`internal/controlplane/session/`); `tests/e2e-console/specs/console-session.spec.ts`; `TestAppCaddyServesConsoleAndApi` (`deploy/caddy/app_test.go`) | Malware on the user's machine can still take the cookie. There is no device binding. |
-| Umami token from the SSO URL | View-only Umami access to the user's teams. | Appears in a URL once; `/sso` accepted only with `Sec-Fetch-Site` `same-site` or `same-origin` and a `url` under `/websites/`; `Cache-Control: no-store`, `Referrer-Policy: no-referrer`; query cut from all Caddy logs; Umami passwords rotate daily so every token dies within about 24 hours; a removed member gets 401 for the tenant's websites as soon as the team membership is gone (contract 4.4.1). | `TestWebCaddyLive` subtest `sso rules` (`deploy/caddy/web_live_test.go`); `tests/e2e-console/specs/console-sso.spec.ts`; `tests/e2e-console/specs/console-isolation.spec.ts` | Umami's `/sso` page uses `router.push`, so the token stays in browser history until the next daily rotation. Anyone with access to that browser profile can reuse it for up to about a day. |
+| Umami token of a member | View-only Umami access to that member's teams. | Never leaves the control plane: obtained on the private network with the member's daily derived password, kept in memory for at most 5 minutes per member and site, used only for the website read routes `internal/umami.ReadWebsite` allows; Umami passwords rotate daily, so every token dies within about 24 hours; a removed member loses the console route at once (membership read on every request) and gets 401 from Umami as soon as the team membership is gone. | `TestReader` (`internal/controlplane/umamiread`); `TestProvisioningLive` (`internal/controlplane/provision/live_test.go`) | A control plane memory dump during the token's life exposes it. |
 
 ### 3.6 Umami and dependency vulnerabilities
 
@@ -240,11 +249,12 @@ Built:
   (`deploy/compose/dev.yml`, `upstream_images` in Ansible). Base images are pinned by digest
   (`deploy/images/*.Dockerfile`). GitHub Actions are pinned by commit SHA
   (`.github/workflows/*.yml`).
-- Umami is never exposed for collection or writing: only the replayer and control plane reach
-  its write routes on the private network. Web Caddy strips `X-Middleware-Subrequest` (the header
-  behind CVE-2025-29927) along with every client address header.
-- Umami has no outbound access in normal operation, which `TestWebPath` subtests
-  `egress from boot to here` and `no outbound calls during a ui session` check.
+- Umami is never exposed to the internet: no Caddy site proxies to it, so its Next.js
+  application, its middleware (CVE-2025-29927 needs a request from outside) and its share and
+  report routes have no public path. Only the replayer, the control plane and jobs reach it on
+  the private network.
+- Umami has no outbound access in normal operation, which the `TestWebPath` subtest
+  `egress from boot to here` checks.
 - Go services run as `nonroot` on distroless images; Caddy as user 10001
   (`deploy/images/`).
 

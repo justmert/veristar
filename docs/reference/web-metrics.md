@@ -47,9 +47,12 @@ All read routes take `startAt` and `endAt` in unix milliseconds and count only e
 | Country | `GET /metrics?type=country` | `session.country`, ISO 3166-1 alpha-2 from the `cf-ipcountry` header the replayer sets from the gateway's DB-IP lookup; `y` is distinct sessions. Region and city stay null: no header carries them and the constant address has no GeoLite entry. |
 | Device and browser | `GET /metrics?type=device`, `type=browser`, `type=os` | `session.device`, `browser`, `os` from Umami's parsing of the original user agent (`lib/detect.ts`); a desktop user agent with a screen up to 1920 px wide is `laptop`, wider is `desktop`; tracker 1.3.0 sends no screen, so its desktop user agents are `desktop`; `y` is distinct sessions |
 
-The metrics bar of the overview page shows Visitors, Visits, Views, Bounce rate and Visit
-duration; the Sources, Location and Environment panels show referrers, countries, and
-browsers, OS and devices ([umami-contract.md](umami-contract.md) item 11).
+A project reads all seven in the console's web dashboard (**Web** in each project): the tiles
+show page views, unique visitors, visits, bounce rate and visit duration, and the Sources,
+Countries and Environment panels show referrers, countries, and browsers, OS and devices. Which
+figure the dashboard reads from the daily aggregates and which from Umami directly is in
+[control-plane-api.md](control-plane-api.md) section 18.2; a project's view-only Umami user
+reads all seven for its team's websites only ([umami-contract.md](umami-contract.md) item 11).
 
 ## Unique visitors are unique per UTC day
 
@@ -123,7 +126,8 @@ primary numbers.
 
 ## Daily aggregates
 
-The operator views read `agg.web_daily` and `agg.web_daily_dim`, which the
+The project's web dashboard and the operator views read `agg.web_daily` and
+`agg.web_daily_dim`, which the
 jobs task `aggregate-web` (`internal/jobs/aggregateweb`) fills from Umami's
 own read routes, as the admin, for each active site, both bands and each UTC
 day: `/stats` gives one `web_daily` row, `/metrics` with `type` `referrer`,
@@ -147,10 +151,10 @@ by `TestAggregateWeb` (`internal/jobs/aggregateweb`) on every run.
 | Visitors over a range | Equal to the sum of daily visitors. Measured over three days: page views 13 = 7 + 3 + 3, visitors 10 = 5 + 3 + 2, visits 10 = 5 + 3 + 2, bounces 7 = 3 + 3 + 1, total time 1560 s = 360 + 0 + 1200; every `/metrics` value of the range equals the sum of its daily values (for example `github.com` 4 = 2 + 2, `DE` 5 = 2 + 2 + 1). The same client salt on three days gave three sessions, because Umami's daily salt changes with the event's day even before the gateway's visitor token rotates. | `lib/crypto.ts` `getSalt`, `lib/collection-session.ts` |
 | Paging | `/metrics` takes `limit` (default 500) and `offset`, and orders only by `y desc`, so values with equal counts have no stable order across pages. The task asks for one page of 1,000 values, doubles the limit while a page comes back full, and fails the site day above 64,000 values instead of paging. | `getPageviewMetrics.ts`, `getSessionMetrics.ts` |
 | Unknown website | `/stats` and `/metrics` of a website id that does not exist answer 200 with zeros for the admin. The task therefore checks that both websites of a site exist before it reads, and reports a missing one as an error rather than storing a day without traffic. | `canViewWebsite` passes for an admin |
-| `type=url` | Not a type in 3.5.0 (400); `path` and `fullPath` replaced it. The operator views do not use paths. | `lib/constants.ts` |
+| `type=url` | Not a type in 3.5.0 (400); `path` and `fullPath` replaced it. The aggregates do not store paths; the web dashboard reads `path`, `entry` and `exit` from Umami over the whole range (control-plane-api.md 18.2). | `lib/constants.ts` |
 
-Consequences for the operator views ([control-plane-api.md](control-plane-api.md)
-section 8):
+Consequences for the web dashboard and the operator views
+([control-plane-api.md](control-plane-api.md) sections 18 and 8):
 
 - Visitors, visits, bounces and total time over a range are sums of daily
   rows, which equal Umami's answer for the same range. A project's numbers

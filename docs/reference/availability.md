@@ -36,7 +36,7 @@ member in every zone.
 - **Health-checked DNS in front.** Azure Traffic Manager probes every node's port 80 (308
   healthy, 503 unhealthy, `deploy/caddy/assemble.sh`, tier `node`) and answers DNS with every
   healthy address (MultiValue). For `in` and `otlp` it asks `/`, the node's ingestion health,
-  every 10 s; for `app` and `web` it asks `/core`, the node's dashboard health, every 30 s, so
+  every 10 s; for `app` it asks `/core`, the node's dashboard health, every 30 s, so
   a node whose console path is unhealthy still takes ingestion. A browser that cannot connect
   to one address tries the next one from the same answer.
 - **Dashboards cannot stop ingestion.** The queue holds web events for 72 hours, so an outage
@@ -58,7 +58,7 @@ member in every zone.
 
 | Failure | Ingestion impact | Dashboard impact | Source |
 |---|---|---|---|
-| One node lost | requests to that address fail until Traffic Manager drops it from `in` and `otlp`: three failed probes 10 s apart plus the 5 s timeout, then up to 10 s of cached answers, so **up to about 45 s** for a client holding the old answer. A browser that gets a refused or timed-out connection tries the next address of the same answer at once | requests to that address fail until it leaves `app` and `web`: 3 x 30 s plus the 10 s timeout and 30 s of cached answers, **up to about 130 s**; if it held the Patroni leader, promotion runs in parallel (below) | configured (`infra/tofu/modules/failover`) |
+| One node lost | requests to that address fail until Traffic Manager drops it from `in` and `otlp`: three failed probes 10 s apart plus the 5 s timeout, then up to 10 s of cached answers, so **up to about 45 s** for a client holding the old answer. A browser that gets a refused or timed-out connection tries the next address of the same answer at once | requests to that address fail until it leaves `app`: 3 x 30 s plus the 10 s timeout and 30 s of cached answers, **up to about 130 s**; if it held the Patroni leader, promotion runs in parallel (below) | configured (`infra/tofu/modules/failover`) |
 | One NATS member lost | none (R3, quorum 2 of 3) | none | configured |
 | Patroni leader lost | none: ingestion does not touch PostgreSQL | writes and reads that need the leader stop until promotion: leader key TTL 30 s, plus up to one 10 s loop: **at most about 40 s** | configured (`core_patroni_dcs`) |
 | One availability zone lost | as one node lost; NATS, etcd and Patroni keep quorum with the other two zones | as one node lost | configured |
