@@ -194,6 +194,8 @@ type LoggedEvent struct {
 		U  string `json:"u"`
 		R  string `json:"r"`
 		N  string `json:"n"`
+		// Fr is the frame flag of tracker 1.3.0
+		Fr bool `json:"fr"`
 		TS int64  `json:"ts"`
 	} `json:"body"`
 }

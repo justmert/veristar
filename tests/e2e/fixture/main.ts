@@ -11,7 +11,11 @@
 //           requests, reset, tamper switch. browsers never reach it.
 
 import { readFileSync } from "node:fs";
-import { createServer as createHttpServer, request as httpRequest } from "node:http";
+import {
+  createServer as createHttpServer,
+  request as httpRequest,
+  type ServerResponse,
+} from "node:http";
 import { createServer as createHttpsServer } from "node:https";
 import { connect, type Socket } from "node:net";
 import { dirname, join, resolve } from "node:path";
@@ -69,6 +73,32 @@ const siteByHost = new Map(HOSTED_SITES.map((s) => [s.host, s]));
 // serve; a test can assert this stays empty
 const refused: { at: number; kind: string; target: string }[] = [];
 
+// a page on a tenant origin that asks chromium to prerender a page of the
+// same site and navigates to it a few seconds later, which activates the
+// prerendered page (tests/e2e/specs/webpath/signals.webpath.ts). served by
+// the fixture, so no example site has to carry speculation rules, which
+// would change what every other test sees in chromium. the target is a path
+// of the same origin and nothing else.
+const PRERENDER_PATH = "/__prerender";
+function servePrerenderLauncher(rawUrl: string, res: ServerResponse) {
+  const u = new URL(rawUrl, "https://launcher.invalid");
+  const to = u.searchParams.get("to") ?? "/";
+  const delay = Number(u.searchParams.get("delay") ?? "4000");
+  if (!/^\/[A-Za-z0-9/_.-]*$/.test(to) || !Number.isInteger(delay) || delay < 0 || delay > 60_000) {
+    res.writeHead(400);
+    res.end("bad launcher parameters");
+    return;
+  }
+  const rules = JSON.stringify({
+    prerender: [{ source: "list", urls: [to], eagerness: "immediate" }],
+  });
+  res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
+  res.end(
+    `<!doctype html><title>prerender launcher</title><script type="speculationrules">${rules}</script>` +
+      `<script>setTimeout(() => { location.href = ${JSON.stringify(to)}; }, ${delay});</script>`,
+  );
+}
+
 const cert = createCert([GATEWAY_HOST, `*.${TENANT_DOMAIN}`]);
 
 const tls = createHttpsServer({ key: cert.key, cert: cert.cert }, (req, res) => {
@@ -81,6 +111,10 @@ const tls = createHttpsServer({ key: cert.key, cert: cert.cert }, (req, res) => 
     return;
   }
   const site = siteByHost.get(host);
+  if (site && (req.url ?? "").startsWith(PRERENDER_PATH)) {
+    servePrerenderLauncher(req.url ?? "", res);
+    return;
+  }
   if (!site) {
     refused.push({ at: Date.now(), kind: "tls-host", target: host });
     res.writeHead(421);
