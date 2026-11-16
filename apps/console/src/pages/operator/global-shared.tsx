@@ -26,6 +26,7 @@ import {
   formatChange,
   formatDayRange,
   formatPercentile,
+  type IntegrityFilter,
   lastDays,
   MAX_COMPARE,
   type ProjectFilters,
@@ -263,9 +264,12 @@ const TRI_TEXT: Record<TriKey, { label: string; yes: string; no: string }> = {
 export function FiltersPanel({
   filters,
   onChange,
+  integrity,
 }: {
   filters: ProjectFilters;
   onChange: (f: ProjectFilters) => void;
+  // the web list filters on the integrity grade; the api list has none
+  integrity?: boolean;
 }) {
   const [search, setSearch] = useState(filters.q);
   useEffect(() => setSearch(filters.q), [filters.q]);
@@ -312,6 +316,18 @@ export function FiltersPanel({
             <option value="false">{TRI_TEXT[k].no}</option>
           </InlineSelect>
         ))}
+        {integrity ? (
+          <InlineSelect
+            label="Integrity"
+            value={filters.integrity}
+            onChange={(v) => onChange({ ...filters, integrity: v as IntegrityFilter })}
+          >
+            <option value="">Any grade</option>
+            <option value="C">C</option>
+            <option value="B">B and below</option>
+            <option value="A">Graded</option>
+          </InlineSelect>
+        ) : null}
         <DayInput
           label="Enrolled from"
           value={filters.enrolled_from}

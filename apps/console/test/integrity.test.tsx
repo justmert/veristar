@@ -133,6 +133,59 @@ describe("integrity panel", () => {
   });
 });
 
+describe("appeal this grade", () => {
+  it("opens a prefilled issue on the appeal form with no personal data", async () => {
+    const report = integrityReport.parse(f.integrityReportBody);
+    const site = report.sites[0]?.site_id ?? "";
+    const host = await render(
+      <IntegrityPanel
+        report={report}
+        appeal={{ slug: "stellar-dex", siteDomains: { [site]: "dex.example.org" } }}
+      />,
+    );
+    const a = host.querySelector<HTMLAnchorElement>("[data-testid=integrity-appeal]");
+    expect(a?.textContent).toBe("Appeal this grade");
+    expect(a?.getAttribute("target")).toBe("_blank");
+    const url = new URL(a?.getAttribute("href") ?? "");
+    expect(`${url.origin}${url.pathname}`).toBe("https://github.com/justmert/veristar/issues/new");
+    const q = url.searchParams;
+    expect(q.get("template")).toBe("integrity-appeal.yml");
+    expect(q.get("title")).toBe(
+      `integrity appeal: stellar-dex, ${report.from} to ${report.to}, grade B`,
+    );
+    expect(q.get("project")).toBe("stellar-dex");
+    expect(q.get("period")).toBe(`${report.from} to ${report.to} (UTC days)`);
+    expect(q.get("grade")).toBe("B");
+    expect(q.get("sites")).toBe(`dex.example.org: ${report.sites[0]?.grade}`);
+    expect(q.get("reasons")).toContain("quarantine_share (level B,");
+    expect(q.get("rule_version")).toBe(String(report.rule_version));
+    // only these fields; the tenant id and figures of a visitor never go
+    expect([...q.keys()].sort()).toEqual([
+      "grade",
+      "period",
+      "project",
+      "reasons",
+      "rule_version",
+      "sites",
+      "template",
+      "title",
+    ]);
+    expect(url.toString()).not.toContain(report.tenant_id);
+  });
+
+  it("is not offered for a range without a grade, nor without an appeal context", async () => {
+    const report = integrityReport.parse({ ...f.integrityReportBody, grade: null });
+    const host = await render(
+      <IntegrityPanel report={report} appeal={{ slug: "stellar-dex", siteDomains: {} }} />,
+    );
+    expect(host.querySelector("[data-testid=integrity-appeal]")).toBeNull();
+    const plain = await render(
+      <IntegrityPanel report={integrityReport.parse(f.integrityReportBody)} />,
+    );
+    expect(plain.querySelector("[data-testid=integrity-appeal]")).toBeNull();
+  });
+});
+
 describe("integrity in the global web view", () => {
   it("shows each row's grade, sorts by it and opens the reasons", async () => {
     const calls = stubByPath({
@@ -172,5 +225,23 @@ describe("integrity in the global web view", () => {
     expect(calls.map((x) => x.url)).toContain(
       `/api/operator/web/integrity?tenant=${c.TENANT_ID}&from=2026-10-14&to=2026-11-12`,
     );
+  });
+
+  it("filters to a grade and below and sends the filter", async () => {
+    const calls = stubByPath({ "/api/operator/web/projects": f.webProjectsBody });
+    const host = await renderRoutes(
+      [{ path: "/operator/web", element: <GlobalWebPage /> }],
+      "/operator/web?integrity_at_or_below=C",
+    );
+    await waitFor(() => expect(host.textContent).toContain("Stellar DEX"));
+    expect(calls.map((x) => x.url)).toContain(
+      "/api/operator/web/projects?integrity_at_or_below=C&sort=pageviews&order=desc&limit=50",
+    );
+    const select = [...host.querySelectorAll("label")].find((l) => l.textContent === "Integrity");
+    expect(select).toBeDefined();
+    const options = [...host.querySelectorAll(`#${CSS.escape(select?.htmlFor ?? "")} option`)].map(
+      (o) => o.textContent,
+    );
+    expect(options).toEqual(["Any grade", "C", "B and below", "Graded"]);
   });
 });

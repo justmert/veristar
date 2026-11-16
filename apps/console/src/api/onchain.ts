@@ -7,15 +7,19 @@ import { z } from "zod";
 import { request, requestNoContent } from "./client";
 import { comparisonFields } from "./cohort-schemas";
 import { cohortRecord, rule, ruleMatch } from "./cohorts";
-import { onchainDayTotal, onchainSummary } from "./onchain-schemas";
+import { onchainDayTotal, onchainSummary, onchainWeek, weeklyActive } from "./onchain-schemas";
 
 export {
   type CompareOnchain,
   compareOnchain,
   type OnchainDayTotal,
   type OnchainSummary,
+  type OnchainWeek,
   onchainDayTotal,
   onchainSummary,
+  onchainWeek,
+  type WeeklyActive,
+  weeklyActive,
 } from "./onchain-schemas";
 
 // the same setting as schemas.ts: no parser compiled with new Function,
@@ -126,8 +130,10 @@ export const onchainView = z.object({
     operations: count,
     transactions: count,
     days_missing: count,
+    weekly_active_accounts: weeklyActive,
   }),
   ids: z.array(chainId),
+  weeks: z.array(onchainWeek),
   link: z.object({ two_way: z.boolean(), sites: z.array(linkSite) }),
 });
 export type OnchainView = z.infer<typeof onchainView>;

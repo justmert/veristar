@@ -3,8 +3,11 @@ import { Download } from "lucide-react";
 import type { ReactNode } from "react";
 import type { Kpi, KpiKey } from "@/api/cohorts";
 import { exportPaths, type SCFView, scfViewQuery } from "@/api/onchain";
+import { integrityQuery, sitesQuery } from "@/api/queries";
+import type { IntegrityReport } from "@/api/schemas";
 import { OwnCohortPanel } from "@/components/cohort";
 import { ErrorPanel, Loading, StateBlock } from "@/components/error-panel";
+import { type AppealContext, AppealLink } from "@/components/integrity";
 import { projectTabs } from "@/components/nav/nav-items";
 import { NavTabs } from "@/components/nav/nav-tabs";
 import { DayStrip } from "@/components/onchain";
@@ -19,6 +22,7 @@ import {
   formatPercentile,
   formatShare,
 } from "@/lib/global";
+import { weeklyActiveText } from "@/lib/onchain";
 import { useProject } from "./project-layout";
 
 const RANGE = {};
@@ -60,13 +64,22 @@ export function SCFViewPage() {
 }
 
 // the integrity grade slot: it renders only when the control plane sends
-// the field, and shows exactly what it sends
-export function IntegritySlot({ value }: { value: SCFView["integrity"] }) {
+// the field, and shows exactly what it sends. appeal, when given, is the
+// project's own report for the same range, which the appeal link needs for
+// its reasons and rule set version.
+export function IntegritySlot({
+  value,
+  appeal,
+}: {
+  value: SCFView["integrity"];
+  appeal?: { report: IntegrityReport; context: AppealContext };
+}) {
   if (!value) return null;
   return (
     <Panel
       title="Integrity grade"
       description="The grade of your project's row in the operators' Global web view for this range."
+      actions={appeal ? <AppealLink report={appeal.report} appeal={appeal.context} /> : undefined}
     >
       {value.grade === null ? (
         <p className="text-body text-fg-2">No site day of this range has a grade yet.</p>
@@ -215,14 +228,32 @@ function RulesMet({ v }: { v: SCFView }) {
 }
 
 function SCFRows({ v }: { v: SCFView }) {
+  const { tenant } = useProject();
   const web = v.web;
   const api = v.api;
   const chain = v.onchain;
   const award = v.comparison?.cohort.award_date ?? null;
   const marker = award ? { day: award, label: `Award date ${formatDay(award)}` } : null;
+  // the project's own integrity report and sites for the same range, for
+  // the appeal link's reasons, rule set version and site domains
+  const report = useQuery({
+    ...integrityQuery("tenant", tenant.id, { from: v.from, to: v.to }),
+    enabled: Boolean(v.integrity?.grade),
+  });
+  const sites = useQuery({ ...sitesQuery(tenant.id), enabled: Boolean(v.integrity?.grade) });
+  const appeal =
+    report.data && sites.data
+      ? {
+          report: report.data,
+          context: {
+            slug: tenant.slug,
+            siteDomains: Object.fromEntries(sites.data.map((s) => [s.id, s.domain])),
+          },
+        }
+      : undefined;
   return (
     <>
-      <IntegritySlot value={v.integrity} />
+      <IntegritySlot value={v.integrity} appeal={appeal} />
       <CohortPlace v={v} />
       <RulesMet v={v} />
       <Panel title="Project" description="As the operator list shows it.">
@@ -304,6 +335,9 @@ function SCFRows({ v }: { v: SCFView }) {
             <Row label="Transactions">{formatCount(chain.transactions)}</Row>
             <Row label="Verified ids">{`${chain.ids_verified} of ${chain.ids}`}</Row>
             <Row label="Days without data">{formatCount(chain.days_missing)}</Row>
+            <Row label="Weekly active accounts">
+              {weeklyActiveText(chain.weekly_active_accounts)}
+            </Row>
           </dl>
           <div className="mt-4">
             <DayStrip

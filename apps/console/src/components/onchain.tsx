@@ -3,12 +3,25 @@ import { cn } from "@veristar/brand/cn";
 import { ArrowRight, Download, Link2, Link2Off } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link } from "react-router";
-import { type ChainId, exportPaths, type OnchainView, onchainQuery } from "@/api/onchain";
+import {
+  type ChainId,
+  exportPaths,
+  type OnchainView,
+  type OnchainWeek,
+  onchainQuery,
+} from "@/api/onchain";
 import { ErrorPanel, Loading } from "@/components/error-panel";
 import { Pill } from "@/components/status";
 import { Button } from "@/components/ui/button";
 import { formatCount } from "@/lib/format";
-import { dailyOperations, METHOD_TEXT, missingReasons, missingText, shortKey } from "@/lib/onchain";
+import {
+  dailyOperations,
+  METHOD_TEXT,
+  missingReasons,
+  missingText,
+  shortKey,
+  weeklyActiveText,
+} from "@/lib/onchain";
 
 // the on-chain witness in the console: the project panel on the overview,
 // and the parts the operator detail and the management page share. a day
@@ -76,6 +89,39 @@ export function DayStrip({
         );
       })}
     </div>
+  );
+}
+
+// weekly active accounts by the scf growth hack definition: the distinct
+// accounts that initiated at least one operation involving the project's
+// verified accounts or contracts in an iso week (utc). a week without a
+// count shows its reason and is never drawn as zero.
+export function WeeklyActiveList({ weeks, label }: { weeks: OnchainWeek[]; label: string }) {
+  if (weeks.length === 0) {
+    return <p className="text-small text-fg-3">No complete ISO week in this range.</p>;
+  }
+  return (
+    <ol aria-label={label} className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      {weeks.map((w) => (
+        <li
+          key={w.week}
+          data-week={w.week}
+          className="flex min-w-0 flex-col gap-0.5 rounded-md border border-line bg-sunken px-3 py-2"
+          title={`${w.from} to ${w.to} (UTC)`}
+        >
+          <span className="text-caption text-fg-3">{w.week}</span>
+          {w.active_accounts === null ? (
+            <span className="text-small text-fg-2" data-missing={w.missing ?? ""}>
+              No count. {missingText(w.missing ?? "week_not_counted")}
+            </span>
+          ) : (
+            <span className="text-title text-fg tabular-nums">
+              {formatCount(w.active_accounts)}
+            </span>
+          )}
+        </li>
+      ))}
+    </ol>
   );
 }
 
@@ -201,6 +247,19 @@ export function OnchainPanel({
             />
           </dl>
           <DayStrip label="Daily operations of the project" points={daily} />
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
+              <h3 className="text-body font-medium text-fg">Weekly active accounts</h3>
+              <span className="text-small text-fg-2" data-testid="waa-summary">
+                {weeklyActiveText(t.weekly_active_accounts)}
+              </span>
+            </div>
+            <p className="max-w-prose text-caption text-fg-3">
+              Accounts that initiated at least one operation involving your verified accounts or
+              contracts in an ISO week (UTC), as the SCF Growth Hack defines an active account.
+            </p>
+            <WeeklyActiveList weeks={view.weeks} label="Weekly active accounts per ISO week" />
+          </div>
           <IdRows view={view} compact />
         </>
       )}

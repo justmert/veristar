@@ -40,6 +40,7 @@ const viewBody = {
     operations: 12,
     transactions: 5,
     days_missing: 4,
+    weekly_active_accounts: { average: 42, latest: 40, weeks_counted: 2, weeks_missing: 1 },
   },
   ids: [
     {
@@ -128,6 +129,17 @@ const viewBody = {
       })),
     },
   ],
+  weeks: [
+    { week: "2026-W44", from: "2026-10-26", to: "2026-11-01", active_accounts: 44, missing: null },
+    {
+      week: "2026-W45",
+      from: "2026-11-02",
+      to: "2026-11-08",
+      active_accounts: null,
+      missing: "day_over_read_cap",
+    },
+    { week: "2026-W46", from: "2026-11-09", to: "2026-11-15", active_accounts: 40, missing: null },
+  ],
   link: {
     two_way: true,
     sites: [
@@ -189,6 +201,22 @@ describe("on-chain panel (contract 15.3)", () => {
     const strip = host.querySelector(`[aria-label="Daily operations of ${f.G_KEY}"]`);
     expect(strip?.querySelectorAll(".bg-series-1")).toHaveLength(2);
     expect(strip?.querySelectorAll(".border-dashed")).toHaveLength(2);
+  });
+
+  it("shows weekly active accounts per iso week, a missing week with its reason", async () => {
+    const view = onchainView.parse(viewBody);
+    const host = await render(<OnchainPanel view={view} />);
+    expect(host.querySelector("[data-testid=waa-summary]")?.textContent).toBe(
+      "42 a week on average over 2 weeks, 1 missing",
+    );
+    const weeks = host.querySelectorAll("[data-week]");
+    expect(weeks).toHaveLength(3);
+    expect(weeks[0]?.textContent).toContain("44");
+    // a week that could not be counted whole is never shown as zero
+    const missing = host.querySelector('[data-week="2026-W45"]');
+    expect(missing?.textContent).toContain("No count.");
+    expect(missing?.textContent).toContain("More activity than one run reads");
+    expect(missing?.textContent).not.toMatch(/\b0\b/);
   });
 
   it("says what to do when nothing is declared", async () => {
@@ -364,6 +392,7 @@ const scfBody = {
     transactions: 5,
     days_missing: 4,
     ids_failing: 1,
+    weekly_active_accounts: { average: 42, latest: 40, weeks_counted: 2, weeks_missing: 1 },
   },
   link_two_way: true,
   web_series: days.map((d) => ({
@@ -475,6 +504,10 @@ describe("operator on-chain column and exports (contract 15.7 and 16.1)", () => 
     const cells = host.querySelectorAll("[data-col=onchain]");
     expect(cells[0]?.textContent).toContain("12");
     expect(cells[0]?.textContent).toContain("1/2 verified");
+    expect(cells[0]?.querySelector("[data-col=waa]")?.textContent).toBe("42 active a week");
+    expect(cells[0]?.getAttribute("title")).toContain(
+      "weekly active accounts: 42 a week on average over 2 weeks, 1 missing",
+    );
     const exp = await render(
       <ExportListButton
         view="web"

@@ -98,7 +98,9 @@ export const API_NOTES = [
 
 export function GlobalApiPage() {
   const [params, setParams] = useSearchParams();
-  const state = readListState(params, apiSort.options, DEFAULT_SORT);
+  const read = readListState(params, apiSort.options, DEFAULT_SORT);
+  // the api list has no integrity grade, so the filter is never sent
+  const state = { ...read, filters: { ...read.filters, integrity: "" as const } };
   const set = (next: ListState<ApiSort>) =>
     setParams(writeListState(next, DEFAULT_SORT), { replace: true });
   const list = useInfiniteQuery(apiProjectsQuery(state));
