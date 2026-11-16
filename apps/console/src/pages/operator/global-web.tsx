@@ -22,9 +22,13 @@ import {
 } from "@/lib/global";
 import {
   AGGREGATE_NOTE,
+  COHORT_NOTE,
+  CohortLine,
   CompareBar,
   FiltersPanel,
+  GROWTH_SORT_TEXT,
   InlineSelect,
+  KpiCell,
   MagnitudeCell,
   Missing,
   Notes,
@@ -68,10 +72,18 @@ const SORT_TEXT: Record<WebSort, string> = {
   ingest_rejected: "Rejected requests",
   rejected_share: "Rejected share",
   integrity: "Integrity grade",
+  ...GROWTH_SORT_TEXT,
 };
 
 // the columns; `size` is what the magnitude bar measures when the table
 // is sorted by the column
+// the change and percentile columns of contract 19.2 this view shows
+const WEB_KPIS = [
+  { sort: "visitors_growth", label: "Visitors change", key: "visitors" },
+  { sort: "pageviews_growth", label: "Page views change", key: "pageviews" },
+  { sort: "onchain_operations_growth", label: "On-chain change", key: "onchain_operations" },
+] as const;
+
 const COLUMNS: { sort: WebSort; label: string; size: (p: WebProject) => number | null }[] = [
   { sort: "pageviews", label: "Page views", size: (p) => p.pageviews },
   { sort: "visitors", label: "Visitors", size: (p) => p.visitors },
@@ -173,7 +185,7 @@ export function GlobalWebPage() {
             />
           ) : (
             <TableScroll label="Global web table" dim={list.isPlaceholderData}>
-              <table className="w-full min-w-[64rem] border-separate border-spacing-0 text-left text-small tabular">
+              <table className="w-full min-w-[80rem] border-separate border-spacing-0 text-left text-small tabular">
                 <thead>
                   <tr>
                     <th scope="col" className={`${TH} w-10 pl-4`}>
@@ -194,6 +206,17 @@ export function GlobalWebPage() {
                       onSort={sortBy}
                     />
                     {COLUMNS.map((c) => (
+                      <SortHeader
+                        key={c.sort}
+                        label={c.label}
+                        sort={c.sort}
+                        current={state.sort}
+                        order={state.order}
+                        numeric
+                        onSort={sortBy}
+                      />
+                    ))}
+                    {WEB_KPIS.map((c) => (
                       <SortHeader
                         key={c.sort}
                         label={c.label}
@@ -247,7 +270,7 @@ export function GlobalWebPage() {
         ) : null}
       </div>
 
-      <Notes items={[VISITORS_NOTE, QUARANTINE_NOTE, REJECTED_NOTE, AGGREGATE_NOTE]}>
+      <Notes items={[VISITORS_NOTE, QUARANTINE_NOTE, REJECTED_NOTE, COHORT_NOTE, AGGREGATE_NOTE]}>
         <DbIpAttribution className="mt-1" />
       </Notes>
     </section>
@@ -292,6 +315,7 @@ function WebRow({
           {p.sites} {p.sites === 1 ? "site" : "sites"}, {p.sites_verified} verified,{" "}
           {p.sites_with_stellar_toml} with stellar.toml
         </span>
+        <CohortLine cohort={p.cohort} />
       </th>
       <td className={TD}>
         <IntegrityCell tenant={t} integrity={p.integrity} range={range} />
@@ -329,6 +353,15 @@ function WebRow({
           </span>
         ),
       )}
+      {WEB_KPIS.map((c) => (
+        <KpiCell
+          key={c.sort}
+          k={p.kpis[c.key]}
+          kind="relative"
+          on={sort === c.sort}
+          label={c.label}
+        />
+      ))}
       <OnchainCell s={p.onchain} />
       <td className={`${TD} pr-4 text-caption`}>
         {p.top.country.length === 0 ? (

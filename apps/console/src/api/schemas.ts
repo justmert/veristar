@@ -4,6 +4,7 @@
 // must not break an older console. a missing or mistyped field does fail.
 
 import { z } from "zod";
+import { cohort, comparisonFields } from "./cohort-schemas";
 import { compareOnchain, onchainSummary } from "./onchain-schemas";
 
 // zod compiles object parsers with new Function unless told not to. the csp
@@ -753,6 +754,8 @@ export const webProject = z.object({
   }),
   // 15.7 the on-chain column
   onchain: onchainSummary.optional(),
+  // 19.2 cohort, change against the previous period and percentile
+  ...comparisonFields,
 });
 export type WebProject = z.infer<typeof webProject>;
 
@@ -790,6 +793,18 @@ export const webSort = z.enum([
   "ingest_rejected",
   "rejected_share",
   "integrity",
+  // 19.2 the change against the previous period and the percentile
+  // inside the cohort filters
+  "visitors_growth",
+  "pageviews_growth",
+  "requests_growth",
+  "error_rate_change",
+  "onchain_operations_growth",
+  "visitors_percentile",
+  "pageviews_percentile",
+  "requests_percentile",
+  "error_rate_percentile",
+  "onchain_operations_percentile",
 ]);
 export type WebSort = z.infer<typeof webSort>;
 
@@ -844,6 +859,8 @@ export const apiProject = z.object({
   ...apiShape,
   // 15.7 the on-chain column
   onchain: onchainSummary.optional(),
+  // 19.2 cohort, change against the previous period and percentile
+  ...comparisonFields,
 });
 export type ApiProject = z.infer<typeof apiProject>;
 export const apiProjectPage = globalPage(apiProject);
@@ -864,6 +881,18 @@ export const apiSort = z.enum([
   "p99",
   "services",
   "routes",
+  // 19.2 the change against the previous period and the percentile
+  // inside the cohort filters
+  "visitors_growth",
+  "pageviews_growth",
+  "requests_growth",
+  "error_rate_change",
+  "onchain_operations_growth",
+  "visitors_percentile",
+  "pageviews_percentile",
+  "requests_percentile",
+  "error_rate_percentile",
+  "onchain_operations_percentile",
 ]);
 export type ApiSort = z.infer<typeof apiSort>;
 
@@ -910,6 +939,8 @@ export const webCompareProject = z.object({
     os: breakdown,
   }),
   onchain: compareOnchain.optional(),
+  // 19.5 the confirmed cohort; its award date annotates the charts
+  cohort,
 });
 export type WebCompareProject = z.infer<typeof webCompareProject>;
 
@@ -949,6 +980,8 @@ export const apiCompareProject = z.object({
   series: z.array(apiComparePoint),
   services: z.array(apiCompareService),
   onchain: compareOnchain.optional(),
+  // 19.5 the confirmed cohort; its award date annotates the charts
+  cohort,
 });
 export type ApiCompareProject = z.infer<typeof apiCompareProject>;
 export const apiCompare = z

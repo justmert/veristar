@@ -3,6 +3,7 @@ import {
   BarChart3,
   Blocks,
   Bot,
+  FileSignature,
   FolderKanban,
   LayoutGrid,
   type LucideIcon,
@@ -21,7 +22,7 @@ export type NavItem = {
   match: (rest: string) => boolean;
 };
 
-// the project area, five places (system v2 C-Nav). sites live on the
+// the project area, six places (system v2 C-Nav). sites live on the
 // overview; members and privacy are settings.
 export function projectNav(id: string): NavItem[] {
   const base = `/projects/${id}`;
@@ -46,6 +47,13 @@ export function projectNav(id: string): NavItem[] {
       to: `${base}/onchain`,
       icon: Blocks,
       match: (r) => r.startsWith("onchain") || r.startsWith("scf-view"),
+    },
+    {
+      key: "reports",
+      label: "Signed reports",
+      to: `${base}/reports`,
+      icon: FileSignature,
+      match: (r) => r.startsWith("reports"),
     },
     {
       key: "ai",
@@ -77,7 +85,7 @@ export const OPERATOR_NAV: NavItem[] = [
     label: "Projects",
     to: "/operator/tenants",
     icon: FolderKanban,
-    match: (r) => r.startsWith("tenants") || r === "web" || r === "api",
+    match: (r) => r.startsWith("tenants") || r === "web" || r === "api" || r.startsWith("rules"),
   },
   {
     key: "compare",
@@ -125,6 +133,7 @@ export const OPERATOR_TABS: Record<string, { to: string; label: string }[]> = {
     { to: "/operator/tenants", label: "Projects" },
     { to: "/operator/web", label: "Global web" },
     { to: "/operator/api", label: "Global API" },
+    { to: "/operator/rules", label: "Rules" },
   ],
   admin: [
     { to: "/operator/settings", label: "Settings" },

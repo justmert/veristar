@@ -142,6 +142,7 @@ export function CompareChart({
   missingText = "-",
   gapLabel,
   kind,
+  markers = [],
 }: {
   title: string;
   description: string;
@@ -157,6 +158,9 @@ export function CompareChart({
   // counts get whole ticks; a share keeps its axis at 0 to 100% while every
   // value is 0, instead of an axis scaled to nothing
   kind: "count" | "share" | "measure";
+  // days to annotate, such as a project's award date (contract 19.5), in
+  // the project's series slot; a day outside the chart is left out
+  markers?: ChartMarker[];
 }) {
   const { ref, seen } = useRevealOnce<HTMLDivElement>();
   // the lines draw in once; people who ask for reduced motion get them drawn
@@ -179,6 +183,7 @@ export function CompareChart({
     }
   });
   const gaps = gapLabel ? gapRuns(rows, series) : [];
+  const shown = markers.filter((m) => days.includes(m.day));
   const text = (i: number, d: number) => {
     const v = value(i, d);
     return v === null ? missingText : format(v);
@@ -194,7 +199,14 @@ export function CompareChart({
           ? `${description} Rings on the 10 s line are above 10 s, the last bucket bound.`
           : description
       }
-      legend={series.length > 1 ? <CompareLegend series={series} /> : undefined}
+      legend={
+        series.length > 1 || shown.length > 0 ? (
+          <div className="flex flex-col gap-1">
+            {series.length > 1 ? <CompareLegend series={series} /> : null}
+            {shown.length > 0 ? <MarkerLegend markers={shown} /> : null}
+          </div>
+        ) : undefined
+      }
       dim={false}
       table={
         <table className="w-full text-left text-small tabular">
@@ -314,6 +326,20 @@ export function CompareChart({
                 />
               ),
             )}
+            {shown.map((m) => (
+              <ReferenceLine
+                key={`${m.slot}-${m.day}`}
+                x={m.day}
+                stroke={SERIES_COLOR[m.slot] ?? "var(--vs-fg-3)"}
+                strokeDasharray="2 2"
+                label={{
+                  value: m.label,
+                  position: "insideTopRight",
+                  fontSize: 10,
+                  fill: "var(--vs-fg-2)",
+                }}
+              />
+            ))}
             {anyOpen ? (
               <ReferenceLine
                 y={OPEN_BUCKET_CEILING}
@@ -375,6 +401,37 @@ export function CompareChart({
         ) : null}
       </div>
     </ChartCard>
+  );
+}
+
+// a day a chart marks, such as an award date, in a project's series slot
+export type ChartMarker = { day: string; slot: number; label: string };
+
+// the marked days in words, so the annotation also reads without the plot
+export function MarkerLegend({ markers }: { markers: ChartMarker[] }) {
+  return (
+    <ul className="flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-fg-2">
+      {markers.map((m) => (
+        <li
+          key={`${m.slot}-${m.day}`}
+          data-marker={m.day}
+          className="inline-flex items-center gap-1.5"
+        >
+          <svg aria-hidden width="8" height="12" className="shrink-0">
+            <line
+              x1="4"
+              x2="4"
+              y1="0"
+              y2="12"
+              stroke={SERIES_COLOR[m.slot] ?? "var(--vs-fg-3)"}
+              strokeWidth="2"
+              strokeDasharray="2 2"
+            />
+          </svg>
+          {m.label}, {formatDay(m.day)}
+        </li>
+      ))}
+    </ul>
   );
 }
 

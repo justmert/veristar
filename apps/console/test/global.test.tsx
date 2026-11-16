@@ -92,6 +92,11 @@ describe("list state and query strings", () => {
         enrolled_from: "2026-01-01",
         enrolled_to: "",
         q: "dex",
+        program: "",
+        round: "",
+        category: "",
+        award_from: "",
+        award_to: "",
       },
       sort: "visitors",
       order: "asc",
@@ -204,6 +209,7 @@ function rowOf(host: HTMLElement, tenantId: string): HTMLElement {
 describe("global web view", () => {
   it("shows every column of 8.3, sends filters and sorts, and pages with the cursor", async () => {
     const calls = stubFetch([
+      { status: 200, body: f.cohortListBody },
       { status: 200, body: f.webProjectsBody },
       { status: 200, body: f.webProjectsBody },
       { status: 200, body: f.webProjectsBody },
@@ -218,7 +224,7 @@ describe("global web view", () => {
     expect(rowOf(host, f.TENANT_B).textContent).toContain("none");
     expect(host.textContent).toContain("IP Geolocation by DB-IP");
     expect(host.textContent).toContain("unique per UTC day");
-    expect(calls[0]?.url).toBe("/api/operator/web/projects?sort=pageviews&order=desc&limit=50");
+    expect(calls[1]?.url).toBe("/api/operator/web/projects?sort=pageviews&order=desc&limit=50");
 
     // filter to verified projects
     const verified = byLabel(host, "Domain verified") as unknown as HTMLSelectElement;
@@ -227,7 +233,7 @@ describe("global web view", () => {
       verified.dispatchEvent(new Event("change", { bubbles: true }));
     });
     await waitFor(() =>
-      expect(calls[1]?.url).toBe(
+      expect(calls[2]?.url).toBe(
         "/api/operator/web/projects?verified=true&sort=pageviews&order=desc&limit=50",
       ),
     );
@@ -239,7 +245,7 @@ describe("global web view", () => {
     if (!header) throw new Error("no visitors header");
     await click(header as HTMLElement);
     await waitFor(() =>
-      expect(calls[2]?.url).toBe(
+      expect(calls[3]?.url).toBe(
         "/api/operator/web/projects?verified=true&sort=visitors&order=desc&limit=50",
       ),
     );
@@ -247,11 +253,14 @@ describe("global web view", () => {
 
     await click(byRole(host, "button", "Load more"));
     await waitFor(() => expect(host.textContent).toContain("Anchor Hub"));
-    expect(calls[3]?.url).toContain("cursor=cG9zOjI");
+    expect(calls[4]?.url).toContain("cursor=cG9zOjI");
   });
 
   it("selects up to five projects into a comparison link", async () => {
-    stubFetch([{ status: 200, body: f.webProjectsBody }]);
+    stubFetch([
+      { status: 200, body: f.cohortListBody },
+      { status: 200, body: f.webProjectsBody },
+    ]);
     const host = await renderRoutes(operatorRoutes, "/operator/web");
     await waitFor(() => expect(host.textContent).toContain("Stellar DEX"));
     for (const id of [c.TENANT_ID, f.TENANT_B]) {
@@ -268,7 +277,10 @@ describe("global web view", () => {
 
 describe("global api view", () => {
   it("shows requests, rates, percentiles with >10 s, services, routes and the source", async () => {
-    const calls = stubFetch([{ status: 200, body: f.apiProjectsBody }]);
+    const calls = stubFetch([
+      { status: 200, body: f.cohortListBody },
+      { status: 200, body: f.apiProjectsBody },
+    ]);
     const host = await renderRoutes(operatorRoutes, "/operator/api");
     await waitFor(() => expect(host.textContent).toContain("Stellar DEX"));
     const a = rowOf(host, c.TENANT_ID);
@@ -285,7 +297,7 @@ describe("global api view", () => {
       expect(a.textContent).toContain(want);
     expect(rowOf(host, f.TENANT_B).textContent).toContain("none");
     expect(host.textContent).toContain("Derived from sampled traces");
-    expect(calls[0]?.url).toBe("/api/operator/api/projects?sort=requests&order=desc&limit=50");
+    expect(calls[1]?.url).toBe("/api/operator/api/projects?sort=requests&order=desc&limit=50");
   });
 });
 

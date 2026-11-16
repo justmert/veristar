@@ -5,6 +5,8 @@
 import { queryOptions } from "@tanstack/react-query";
 import { z } from "zod";
 import { request, requestNoContent } from "./client";
+import { comparisonFields } from "./cohort-schemas";
+import { cohortRecord, rule, ruleMatch } from "./cohorts";
 import { onchainDayTotal, onchainSummary } from "./onchain-schemas";
 
 export {
@@ -232,6 +234,15 @@ export const scfView = z.object({
       days_c: count,
     })
     .optional(),
+  // 19.3 the project's cohort record, the cohort its percentiles come from
+  // (program and round, both null for every listed project), its row's
+  // change and percentiles, and the saved rules it meets today
+  cohort: cohortRecord,
+  percentile_cohort: z
+    .object({ program: z.string().nullable(), round: z.string().nullable() })
+    .nullable(),
+  comparison: z.object(comparisonFields).nullable(),
+  rules_met: z.array(z.object({ rule, match: ruleMatch })),
 });
 export type SCFView = z.infer<typeof scfView>;
 

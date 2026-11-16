@@ -4,6 +4,14 @@ import { Link, useNavigate } from "react-router";
 import { ApiError } from "@/api/client";
 import { api, type EnrollmentInput } from "@/api/endpoints";
 import { keys, meQuery } from "@/api/queries";
+import {
+  CohortFields,
+  type CohortValues,
+  cohortBody,
+  EMPTY_COHORT,
+  isEmptyCohort,
+  validateCohort,
+} from "@/components/cohort";
 import { ErrorPanel, FormMessage, Loading } from "@/components/error-panel";
 import { TextAreaField, TextField } from "@/components/form-field";
 import { PageHeader } from "@/components/panel";
@@ -98,6 +106,26 @@ const SERVER_PATHS: Record<string, FieldKey> = {
   accepted_terms_version: "termsAccepted",
 };
 
+// the optional cohort proposal of contract 19.1: sent as the top-level
+// cohort object, left out when every field is empty
+export function withCohort(body: EnrollmentInput, cohort: CohortValues): EnrollmentInput {
+  if (isEmptyCohort(cohort)) return body;
+  const c = cohortBody(cohort);
+  const kept = Object.fromEntries(Object.entries(c).filter(([, v]) => v !== null));
+  return { ...body, cohort: kept };
+}
+
+// maps the cohort paths of a 422 onto the cohort fields
+export function serverCohortErrors(err: unknown): Partial<Record<keyof CohortValues, string>> {
+  if (!(err instanceof ApiError) || err.code !== "validation_failed") return {};
+  const out: Partial<Record<keyof CohortValues, string>> = {};
+  for (const [path, code] of Object.entries(err.fields)) {
+    const m = /^cohort\.(program|round|category|award_date)$/.exec(path);
+    if (m?.[1]) out[m[1] as keyof CohortValues] = v.fieldMessage(code);
+  }
+  return out;
+}
+
 export function serverEnrollErrors(err: unknown, values: EnrollValues): EnrollErrors {
   if (!(err instanceof ApiError)) return {};
   if (err.code === "slug_taken") return { slug: "This address is taken. Choose another one." };
@@ -130,6 +158,8 @@ export function EnrollForm({ termsVersion }: { termsVersion: string }) {
   const navigate = useNavigate();
   const [values, setValues] = useState<EnrollValues>(emptyEnrollValues);
   const [errors, setErrors] = useState<EnrollErrors>({});
+  const [cohort, setCohort] = useState<CohortValues>(EMPTY_COHORT);
+  const [cohortErrors, setCohortErrors] = useState<Partial<Record<keyof CohortValues, string>>>({});
   const termsId = useId();
   const formRef = useRef<HTMLFormElement>(null);
   const [focusTick, setFocusTick] = useState(0);
@@ -150,6 +180,7 @@ export function EnrollForm({ termsVersion }: { termsVersion: string }) {
     },
     onError: async (err) => {
       setErrors(serverEnrollErrors(err, values));
+      setCohortErrors(serverCohortErrors(err));
       if (err instanceof ApiError && err.code === "terms_version_mismatch") {
         setValues((s) => ({ ...s, termsAccepted: false }));
         await queryClient.invalidateQueries({ queryKey: keys.me });
@@ -164,16 +195,20 @@ export function EnrollForm({ termsVersion }: { termsVersion: string }) {
   function submit(e: FormEvent) {
     e.preventDefault();
     const found = validateEnrollment(values);
+    const cohortFound = validateCohort(cohort, new Date().toISOString().slice(0, 10));
     setErrors(found);
-    if (Object.keys(found).length > 0) {
+    setCohortErrors(cohortFound);
+    if (Object.keys(found).length > 0 || Object.keys(cohortFound).length > 0) {
       setFocusTick((n) => n + 1);
       return;
     }
-    enroll.mutate(enrollmentBody(values, termsVersion));
+    enroll.mutate(withCohort(enrollmentBody(values, termsVersion), cohort));
   }
 
   const otherError =
-    enroll.error && Object.keys(serverEnrollErrors(enroll.error, values)).length === 0
+    enroll.error &&
+    Object.keys(serverEnrollErrors(enroll.error, values)).length === 0 &&
+    Object.keys(serverCohortErrors(enroll.error)).length === 0
       ? enroll.error
       : null;
 
@@ -309,6 +344,21 @@ export function EnrollForm({ termsVersion }: { termsVersion: string }) {
                 value={values.scfRoundUrl}
                 onChange={set("scfRoundUrl")}
                 error={errors.scfRoundUrl}
+              />
+            </fieldset>
+
+            <fieldset className={fieldset}>
+              <legend className={legend}>SCF cohort (optional)</legend>
+              <p className="text-small text-fg-2">
+                If the Stellar Community Fund awarded your project, propose the program, round,
+                category and award date. An operator confirms them; until then your project is
+                compared with every enrolled project.
+              </p>
+              <CohortFields
+                values={cohort}
+                onChange={setCohort}
+                errors={cohortErrors}
+                idPrefix="enroll-cohort"
               />
             </fieldset>
 

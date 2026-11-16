@@ -21,6 +21,7 @@ import { GlobalWebPage } from "@/pages/operator/global-web";
 import { OperatorLayout } from "@/pages/operator/layout";
 import { OperatorMcpPage } from "@/pages/operator/mcp";
 import { ReviewQueuePage } from "@/pages/operator/review";
+import { RulesPage } from "@/pages/operator/rules";
 import { SettingsPage } from "@/pages/operator/settings";
 import { TenantDetailPage } from "@/pages/operator/tenant-detail";
 import { TenantsPage } from "@/pages/operator/tenants";
@@ -28,6 +29,8 @@ import { OverviewPage } from "@/pages/overview";
 import { PrivacyPage } from "@/pages/privacy";
 import { ProjectLayout } from "@/pages/project-layout";
 import { ProjectsPage } from "@/pages/projects";
+import { PublicReportPage } from "@/pages/public-report";
+import { ReportsPage } from "@/pages/reports";
 import { SCFViewPage } from "@/pages/scf-view";
 import { SignInPage } from "@/pages/sign-in";
 import { SitesPage } from "@/pages/sites";
@@ -69,6 +72,8 @@ export const router = createBrowserRouter([
   { path: "/sign-in", element: <SignInPage />, errorElement: <RouteErrorPage /> },
   { path: "/terms", element: <TermsPage />, errorElement: <RouteErrorPage /> },
   { path: "/sso-error", element: <SsoErrorPage />, errorElement: <RouteErrorPage /> },
+  // a shared signed report: public, no session (contract 20.5)
+  { path: "/r/:reportId", element: <PublicReportPage />, errorElement: <RouteErrorPage /> },
   // the mcp oauth consent screen; it signs the person in itself, so the
   // sealed request survives the github round trip (contract 12.3)
   { path: "/ai/consent", element: <McpConsentPage />, errorElement: <RouteErrorPage /> },
@@ -99,6 +104,7 @@ export const router = createBrowserRouter([
           { path: "ai", element: <McpPage /> },
           { path: "onchain", element: <OnchainPage /> },
           { path: "scf-view", element: <SCFViewPage /> },
+          { path: "reports", element: <ReportsPage /> },
         ],
       },
       {
@@ -112,6 +118,7 @@ export const router = createBrowserRouter([
           { path: "web", element: <GlobalWebPage /> },
           { path: "api", element: <GlobalApiPage /> },
           { path: "compare", element: <ComparePage /> },
+          { path: "rules", element: <RulesPage /> },
           { path: "api-keys", element: <ApiKeysPage /> },
           { path: "ai", element: <OperatorMcpPage /> },
           { path: "audit", element: <AuditPage /> },

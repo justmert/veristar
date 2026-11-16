@@ -5,6 +5,7 @@ import { Link, useParams } from "react-router";
 import { api } from "@/api/endpoints";
 import { operatorTenantQuery } from "@/api/queries";
 import type { OperatorSite, OperatorTenantDetail, TenantAction } from "@/api/schemas";
+import { OperatorCohortPanel } from "@/components/cohort";
 import { ErrorPanel, Loading } from "@/components/error-panel";
 import { StellarTomlSummary, VerificationDetail } from "@/components/evidence";
 import { IntegrityReportView } from "@/components/integrity";
@@ -198,6 +199,7 @@ export function TenantDetail({ detail }: { detail: OperatorTenantDetail }) {
         </div>
 
         <aside className="flex min-w-0 flex-col gap-4 xl:sticky xl:top-4">
+          <OperatorCohortPanel tenantId={t.id} />
           <Box id="evidence-h" title="Evidence">
             <EvidenceList items={evidenceOf(detail)} stacked />
           </Box>

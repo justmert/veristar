@@ -14,6 +14,18 @@ import { byLabel, byRole, click, renderRoutes, stubFetch, type, waitFor } from "
 const detailRoute = [{ path: "/operator/tenants/:tenantId", element: <TenantDetailPage /> }];
 
 // the on-chain section of the detail reads its own route after the detail
+// 19.1 a project without a cohort row
+const noCohort = {
+  status: 200,
+  body: {
+    tenant_id: f.TENANT_ID,
+    confirmed: null,
+    confirmed_at: null,
+    proposal: null,
+    proposed_at: null,
+  },
+};
+
 const noOnchain = {
   status: 200,
   body: {
@@ -100,6 +112,7 @@ describe("operator project detail", () => {
       { status: 200, body: f.operatorDetailBody },
       { status: 200, body: integrityReportBody },
       noOnchain,
+      noCohort,
     ]);
     const host = await renderRoutes(detailRoute, `/operator/tenants/${f.TENANT_ID}`);
     await waitFor(() => expect(host.textContent).toContain("Soroban AMM on mainnet"));
@@ -128,6 +141,7 @@ describe("operator project detail", () => {
       { status: 200, body: f.operatorDetailBody },
       { status: 200, body: integrityReportBody },
       noOnchain,
+      noCohort,
       {
         status: 200,
         body: { ...f.operatorSummaryBody, status: "rejected", status_reason: "Not on Stellar" },
@@ -135,7 +149,7 @@ describe("operator project detail", () => {
     ]);
     const host = await renderRoutes(detailRoute, `/operator/tenants/${f.TENANT_ID}`);
     await waitFor(() => byRole(host, "button", "Reject"));
-    await waitFor(() => expect(calls).toHaveLength(3));
+    await waitFor(() => expect(calls).toHaveLength(4));
     await click(byRole(host, "button", "Reject"));
     const dialog = dialogOpen(host);
     expect(dialog?.textContent).toContain("Reject Stellar DEX?");
@@ -143,17 +157,17 @@ describe("operator project detail", () => {
     const confirm = [...(dialog?.querySelectorAll("button") ?? [])].find(
       (b) => b.textContent === "Reject",
     ) as HTMLElement;
-    await waitFor(() => expect(calls).toHaveLength(3));
+    await waitFor(() => expect(calls).toHaveLength(4));
     await click(confirm);
-    expect(calls).toHaveLength(3);
+    expect(calls).toHaveLength(4);
     expect(dialog?.textContent).toContain("Required.");
     await type(byLabel(dialog as HTMLElement, "Reason"), "  Not on Stellar ");
     await click(confirm);
-    await waitFor(() => expect(calls).toHaveLength(4));
-    expect(calls[3]?.method).toBe("POST");
-    expect(calls[3]?.url).toBe(`/api/operator/tenants/${f.TENANT_ID}/reject`);
-    expect(calls[3]?.headers.get("X-Requested-With")).toBe("sa-console");
-    expect(calls[3]?.body).toEqual({ reason: "Not on Stellar" });
+    await waitFor(() => expect(calls).toHaveLength(5));
+    expect(calls[4]?.method).toBe("POST");
+    expect(calls[4]?.url).toBe(`/api/operator/tenants/${f.TENANT_ID}/reject`);
+    expect(calls[4]?.headers.get("X-Requested-With")).toBe("sa-console");
+    expect(calls[4]?.body).toEqual({ reason: "Not on Stellar" });
     await waitFor(() => expect(dialogOpen(host)).toBeUndefined());
   });
 
@@ -162,18 +176,19 @@ describe("operator project detail", () => {
       { status: 200, body: f.operatorDetailBody },
       { status: 200, body: integrityReportBody },
       noOnchain,
+      noCohort,
       { status: 200, body: { ...f.operatorSummaryBody, status: "active" } },
     ]);
     const host = await renderRoutes(detailRoute, `/operator/tenants/${f.TENANT_ID}`);
     await waitFor(() => byRole(host, "button", "Approve"));
-    await waitFor(() => expect(calls).toHaveLength(3));
+    await waitFor(() => expect(calls).toHaveLength(4));
     await click(byRole(host, "button", "Approve"));
     const dialog = dialogOpen(host) as HTMLElement;
     const confirm = [...dialog.querySelectorAll("button")].find((b) => b.textContent === "Approve");
     await click(confirm as HTMLElement);
-    await waitFor(() => expect(calls).toHaveLength(4));
-    expect(calls[3]?.url).toBe(`/api/operator/tenants/${f.TENANT_ID}/approve`);
-    expect(calls[3]?.body).toEqual({});
+    await waitFor(() => expect(calls).toHaveLength(5));
+    expect(calls[4]?.url).toBe(`/api/operator/tenants/${f.TENANT_ID}/approve`);
+    expect(calls[4]?.body).toEqual({});
   });
 
   it("shows a 409 invalid_transition in the dialog", async () => {
@@ -181,11 +196,12 @@ describe("operator project detail", () => {
       { status: 200, body: f.operatorDetailBody },
       { status: 200, body: integrityReportBody },
       noOnchain,
+      noCohort,
       { status: 409, body: f.errorBody("invalid_transition") },
     ]);
     const host = await renderRoutes(detailRoute, `/operator/tenants/${f.TENANT_ID}`);
     await waitFor(() => byRole(host, "button", "Remove"));
-    await waitFor(() => expect(calls).toHaveLength(3));
+    await waitFor(() => expect(calls).toHaveLength(4));
     await click(byRole(host, "button", "Remove"));
     const dialog = dialogOpen(host) as HTMLElement;
     await type(byLabel(dialog, "Reason"), "Fraud");
@@ -201,6 +217,7 @@ describe("operator project detail", () => {
       { status: 200, body: f.removedDetailBody },
       { status: 200, body: integrityReportBody },
       noOnchain,
+      noCohort,
     ]);
     const host = await renderRoutes(detailRoute, `/operator/tenants/${f.TENANT_ID}`);
     await waitFor(() => expect(host.textContent).toContain("Data is still being deleted."));

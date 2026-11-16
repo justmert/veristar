@@ -37,20 +37,33 @@ export function KindLabel({ kind }: { kind: ChainId["kind"] }) {
 export function DayStrip({
   points,
   label,
+  marker,
 }: {
   points: { day: string; value: number | null; missing?: string | null }[];
   label: string;
+  // a day to annotate, such as the project's award date (contract 19.5)
+  marker?: { day: string; label: string } | null;
 }) {
   const max = Math.max(1, ...points.map((p) => p.value ?? 0));
   return (
     <div role="img" aria-label={label} className="flex h-10 items-end gap-px">
       {points.map((p) => {
-        const title =
+        const marked = marker?.day === p.day;
+        const base =
           p.value === null
             ? `${p.day}: no data. ${p.missing ? missingText(p.missing) : ""}`
             : `${p.day}: ${formatCount(p.value)}`;
+        const title = marked ? `${base}. ${marker?.label}` : base;
         return (
-          <span key={p.day} title={title} className="flex h-full min-w-0 flex-1 items-end">
+          <span
+            key={p.day}
+            title={title}
+            data-marker={marked ? p.day : undefined}
+            className={cn(
+              "flex h-full min-w-0 flex-1 items-end",
+              marked && "border-l-2 border-dashed border-accent",
+            )}
+          >
             {p.value === null ? (
               <span className="h-full w-full rounded-bar border border-dashed border-line-strong" />
             ) : (

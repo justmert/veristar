@@ -375,6 +375,26 @@ const scfBody = {
   })),
   api_series: days.map((d) => ({ day: d, requests: 0 })),
   onchain_series: days.map((d) => ({ day: d, ids_read: 1, operations: 3, transactions: 1 })),
+  cohort: {
+    tenant_id: f.TENANT_ID,
+    confirmed: null,
+    confirmed_at: null,
+    proposal: null,
+    proposed_at: null,
+  },
+  percentile_cohort: { program: null, round: null },
+  comparison: {
+    cohort: { program: null, round: null, category: null, award_date: null },
+    cohort_size: 3,
+    kpis: {
+      visitors: { value: 300, previous: 200, change: 0.5, percentile: 1 },
+      pageviews: { value: 1234, previous: 1234, change: 0, percentile: 0.5 },
+      requests: { value: 0, previous: 0, change: null, percentile: null },
+      error_rate: { value: null, previous: null, change: null, percentile: null },
+      onchain_operations: { value: 12, previous: 0, change: null, percentile: 0.5 },
+    },
+  },
+  rules_met: [],
 };
 
 describe("what scf sees (contract 16.3)", () => {
@@ -436,6 +456,7 @@ describe("operator on-chain column and exports (contract 15.7 and 16.1)", () => 
       top: { referrer: [], country: [], device: [], browser: [] },
       integrity: { grade: "A", graded_days: 3, days_a: 3, days_b: 0, days_c: 0 },
       onchain: scfBody.onchain,
+      ...scfBody.comparison,
     });
     expect(row.onchain?.operations).toBe(12);
   });
