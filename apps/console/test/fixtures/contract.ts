@@ -703,3 +703,14 @@ export const erasureRunningBody = {
   affected_from: null,
   affected_to: null,
 };
+
+// 5.11 the step-up status of a session that holds a fresh step-up
+export const steppedUpBody = {
+  stepped_up: true,
+  stepped_up_at: "2026-11-16T09:00:00Z",
+  expires_at: "2026-11-16T21:00:00Z",
+  max_age_seconds: 43200,
+  passkeys: 1,
+  enrollment: "closed",
+  enrollment_until: null,
+};

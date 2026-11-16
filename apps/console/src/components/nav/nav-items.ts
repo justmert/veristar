@@ -99,7 +99,7 @@ export const OPERATOR_NAV: NavItem[] = [
     label: "Admin",
     to: "/operator/settings",
     icon: ShieldCheck,
-    match: (r) => ["settings", "api-keys", "ai", "audit"].some((p) => r.startsWith(p)),
+    match: (r) => ["settings", "operators", "api-keys", "ai", "audit"].some((p) => r.startsWith(p)),
   },
 ];
 
@@ -137,6 +137,7 @@ export const OPERATOR_TABS: Record<string, { to: string; label: string }[]> = {
   ],
   admin: [
     { to: "/operator/settings", label: "Settings" },
+    { to: "/operator/operators", label: "Operators" },
     { to: "/operator/api-keys", label: "API keys" },
     { to: "/operator/ai", label: "AI / MCP" },
     { to: "/operator/audit", label: "Audit log" },
