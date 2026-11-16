@@ -40,15 +40,17 @@ type inProcess struct {
 	Node *gateway.Node
 }
 
-// dbipFile copies the db-ip file out of the gateway image, so in-process
-// nodes use the same month as the containers.
+// dbipFile copies the image's geo directory out of the gateway image and
+// returns the db-ip file in it, so in-process nodes use the same month as
+// the containers and find the network data beside it, as the gateway reads
+// it.
 func dbipFile(t testing.TB) string {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "dbip.mmdb")
+	dir := t.TempDir()
 	id := mustDocker(t, "create", gatewayImage)
 	defer func() { _, _ = docker("rm", id) }()
-	mustDocker(t, "cp", id+":/geo/dbip-country-lite.mmdb", path)
-	return path
+	mustDocker(t, "cp", id+":/geo/.", dir)
+	return filepath.Join(dir, "dbip-country-lite.mmdb")
 }
 
 func startInProcess(t testing.TB, s *Stack, node string, now func() time.Time) *inProcess {
