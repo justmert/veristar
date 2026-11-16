@@ -516,6 +516,7 @@ describe("what scf sees with cohorts (contract 19.3)", () => {
       ingest_requests: 10,
       ingest_rejected: 0,
       rejected_share: 0,
+      coverage: { script_requests: 0, gpc_requests: 0, unmeasured_share: null },
     },
     api: null,
     onchain: null,
