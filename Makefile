@@ -226,12 +226,12 @@ webpath:
 
 # console browser flows (tests/e2e-console, build tag consolee2e): sign-in
 # through the TEST-ONLY github oauth fixture, enrollment, sites, snippet,
-# traffic through the real gateway, umami through sso, isolation, sso
-# hardening, session security, and the api traffic dashboard on
+# traffic through the real gateway, the console's web dashboard, isolation,
+# session security, and the api traffic dashboard on
 # real telemetry of the go example app. the control plane is built with the
 # oauthfixture tag; postgresql, nats, umami, the replayer, the gateway and
 # collector images, the metricswriter, a stock collector as the tenant's own
-# backend and the edge, web and app caddies run in containers the test owns. needs
+# backend and the edge and app caddies run in containers the test owns. needs
 # docker, node 26 with pnpm and the playwright browsers. screenshots and, on
 # failure, container logs land in .scratch/console-e2e.
 # CONSOLE_E2E_ARGS passes extra playwright arguments (for example --grep).

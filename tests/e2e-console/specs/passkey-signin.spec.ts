@@ -4,10 +4,9 @@
 // person's device. the console runs soropass's real ceremonies against it
 // and the control plane verifies the answers. the flows: create a passkey
 // account, sign in again from another browser that holds the same passkey,
-// join a project by the account's C-address and open its dashboard through
-// sso, and add a passkey to a github account that then signs in with it.
+// join a project by the account's C-address and open its web dashboard, and add a passkey to a github account that then signs in with it.
 import type { BrowserContext, CDPSession, Page } from "@playwright/test";
-import { APP, WEB } from "../fixture/env.ts";
+import { APP } from "../fixture/env.ts";
 import {
   addSiteApi,
   api,
@@ -15,10 +14,10 @@ import {
   newUser,
   type Site,
   signIn,
-  ssoFromConsole,
   type Tenant,
   uniqueHost,
   waitProvisioned,
+  waitWebReady,
 } from "./helpers.ts";
 import { expect, test } from "./test.ts";
 
@@ -164,18 +163,12 @@ test("a passkey member joins a project by its address and opens its dashboard", 
 
   const page = await device.newPage();
   await watchCSP(page);
-  await expect
-    .poll(
-      async () => {
-        await ssoFromConsole(page, site.id);
-        if (page.url().startsWith(`${APP}/sso-error`))
-          return new URL(page.url()).searchParams.get("code");
-        await page.waitForURL(`${WEB}/websites/${site.id}**`);
-        return "ok";
-      },
-      { timeout: 90_000, intervals: [1000, 2000, 3000] },
-    )
-    .toBe("ok");
+  // the reconciler makes the passkey account's umami user, then the shared
+  // project's web dashboard reads umami as it
+  await waitWebReady(device, shared.id, site.id);
+  await page.goto(`${APP}/projects/${shared.id}/web?site=${site.id}`);
+  await expect(page.getByRole("heading", { name: "Web analytics" })).toBeVisible();
+  await expect(page.getByLabel("Right now")).toBeVisible();
   await page.close();
 });
 
