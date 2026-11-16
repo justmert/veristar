@@ -87,7 +87,10 @@ test("the only owner of a project is refused and sees which project", async () =
   await page.getByRole("menuitem", { name: "Account" }).click();
   await page.waitForURL(`${APP}/account`);
   await expect(page.getByRole("heading", { name: "Account", level: 1 })).toBeVisible();
-  await expect(page.locator("main").getByText(user.login, { exact: true })).toBeVisible();
+  // the github method of the linked sign-in methods names the login and the id
+  await expect(page.getByRole("list", { name: "Sign-in methods" })).toContainText(
+    `${user.login} · id`,
+  );
 
   await page.getByRole("button", { name: "Delete account" }).click();
   const dialog = page.getByRole("dialog", { name: "Delete your account?" });
