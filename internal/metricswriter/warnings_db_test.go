@@ -62,7 +62,7 @@ func TestWarningsCountRequestsNotExports(t *testing.T) {
 			Point: Point{Tenant: tenant.String(), ResourceHash: strings.Repeat("ef", 32), Metric: metricDuration,
 				Attrs: []Attr{{attrRoute, "6:/keys/{redacted-secret}"}}, Temporality: Cumulative,
 				Start: start.UnixNano(), Time: at.UnixNano(), Count: requests, Sum: 0.01 * float64(requests), Counts: counts, Lossy: true},
-			TokenID: token, Source: SourceMetric, Service: "api", Method: "GET", Route: "/keys/{redacted-secret}", Status: 200,
+			TokenID: token, Source: SourceMetric, Service: "api", Method: "GET", Route: "/keys/{redacted-secret}", Status: 200, Class: "app",
 			SecretSeed: true, Coarse: true,
 		}
 		return &item{id: uuid.NewString(), tenant: tenant, meta: &jetstream.MsgMetadata{Timestamp: at.Add(time.Second)},
