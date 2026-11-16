@@ -180,7 +180,10 @@ func golden(t *testing.T, path, got string) {
 // TestRecordedLocalRun replays the answers recorded from the real machine
 // api of the local dev stack on 2026-11-13 (adoptionreport -raw), checks each
 // one against the contract, and requires the same evidence file the real run
-// wrote, except for the api base url
+// wrote, except for the api base url. the /web/daily answer carries the
+// integrity field the api gained later, as the api answers it for days
+// without a grade, so its body hash in the sources table differs from the
+// original run's
 func TestRecordedLocalRun(t *testing.T) {
 	dir := filepath.Join("testdata", "recorded", "local-2026-11-13")
 	var index []recorded
@@ -262,8 +265,8 @@ func TestRunsGapsAndPaging(t *testing.T) {
 			pv = 0
 		}
 		aRows = append(aRows,
-			webDaily{TenantID: tenantA, Day: d, Band: "primary", Sites: 2, Pageviews: pv, Visitors: pv / 2, Visits: pv / 2, Bounces: pv / 4, Totaltime: 30 * pv},
-			webDaily{TenantID: tenantA, Day: d, Band: "quarantine", Sites: 2, Pageviews: 1, Visitors: 1, Visits: 1, Bounces: 1})
+			webDaily{TenantID: tenantA, Day: d, Band: "primary", Sites: 2, Pageviews: pv, Visitors: pv / 2, Visits: pv / 2, Bounces: pv / 4, Totaltime: 30 * pv, Integrity: noGrade()},
+			webDaily{TenantID: tenantA, Day: d, Band: "quarantine", Sites: 2, Pageviews: 1, Visitors: 1, Visits: 1, Bounces: 1, Integrity: noGrade()})
 	}
 	cs.addJSON(t, q("/web/daily", "tenant", tenantA, "from", from, "to", to), webDailyList{From: from, To: to, Items: aRows[:20], NextCursor: ptr("p2")})
 	cs.addJSON(t, q("/web/daily", "tenant", tenantA, "from", from, "to", to, "cursor", "p2"), webDailyList{From: from, To: to, Items: aRows[20:]})
@@ -289,7 +292,7 @@ func TestRunsGapsAndPaging(t *testing.T) {
 
 	var bRows []webDaily
 	for _, d := range days("2026-11-13", 8) {
-		bRows = append(bRows, webDaily{TenantID: tenantB, Day: d, Band: "primary", Sites: 1, Pageviews: 3, Visitors: 1, Visits: 1, Bounces: 0, Totaltime: 60})
+		bRows = append(bRows, webDaily{TenantID: tenantB, Day: d, Band: "primary", Sites: 1, Pageviews: 3, Visitors: 1, Visits: 1, Bounces: 0, Totaltime: 60, Integrity: noGrade()})
 	}
 	cs.addJSON(t, q("/web/daily", "tenant", tenantB, "from", from, "to", to), webDailyList{From: from, To: to, Items: bRows})
 	cs.addJSON(t, q("/web/dimensions", "tenant", tenantB, "from", from, "to", to), webDimensionList{From: from, To: to, Items: []webDimension{}})
@@ -406,3 +409,7 @@ func TestRawRecorder(t *testing.T) {
 	require.Contains(t, string(body), "Project A")
 	require.Contains(t, res.file, "0 days")
 }
+
+// noGrade is the integrity of a day without a graded site day, as the api
+// answers it
+func noGrade() integritySummary { return integritySummary{Reasons: []rangeReason{}} }
