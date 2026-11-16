@@ -127,6 +127,8 @@ export function GlobalApiPage() {
         <p className="max-w-prose text-small text-fg-2">
           API traffic of every enrolled project over a range of UTC days. Sort by requests to find
           the lowest and highest usage projects, and select projects to compare them side by side.
+          Requests, error rates and latency leave out infrastructure requests: CORS preflights,
+          health and probe routes and known health checkers. Hover a request count to see them.
         </p>
       </div>
 
@@ -345,7 +347,16 @@ function ApiRow({
         ) : null}
         <CohortLine cohort={p.cohort} />
       </th>
-      {cell("requests", p.requests, <span data-col="requests">{formatCount(p.requests)}</span>)}
+      {cell(
+        "requests",
+        p.requests,
+        <span
+          data-col="requests"
+          title={`${formatCount(p.infrastructure_requests)} infrastructure requests not counted`}
+        >
+          {formatCount(p.requests)}
+        </span>,
+      )}
       {cell("rate_4xx", p.rate_4xx, rate(p.rate_4xx, p.requests_4xx))}
       {cell("rate_5xx", p.rate_5xx, rate(p.rate_5xx, p.requests_5xx))}
       {cell(

@@ -497,3 +497,76 @@ func TestTracesCarryBatchIDAndEndMinute(t *testing.T) {
 		t.Errorf("span minute %d, want %d", v.Int(), want)
 	}
 }
+
+// the traffic class is decided from the method, the normalized route and
+// the user agent before the user agent is dropped, and only infrastructure
+// traffic carries the attribute.
+func TestTrafficClass(t *testing.T) {
+	cases := []struct {
+		method, route, ua, synthetic string
+		want                         string
+	}{
+		{"GET", "/accounts/" + account, "Mozilla/5.0", "", ""},
+		{"options", "/accounts/" + account, "", "", "preflight"},
+		{"GET", "/healthz/", "", "", "health"},
+		{"GET", "/api/v1/status?verbose=1", "", "", "health"},
+		{"GET", "/", "ELB-HealthChecker/2.0", "", "probe"},
+		{"GET", "/", "kube-probe/1.31", "", "probe"},
+		{"GET", "/accounts", "", "test", "probe"},
+		{"GET", "/accounts", "", "bot", ""},
+	}
+	for _, c := range cases {
+		md := pmetric.NewMetrics()
+		h := md.ResourceMetrics().AppendEmpty().ScopeMetrics().AppendEmpty().Metrics().AppendEmpty()
+		h.SetName(schema.MetricDuration)
+		h.SetUnit("s")
+		dp := h.SetEmptyHistogram().DataPoints().AppendEmpty()
+		dp.Attributes().PutStr("http.request.method", c.method)
+		dp.Attributes().PutStr("url.path", c.route)
+		if c.ua != "" {
+			dp.Attributes().PutStr("user_agent.original", c.ua)
+		}
+		if c.synthetic != "" {
+			dp.Attributes().PutStr("user_agent.synthetic.type", c.synthetic)
+		}
+		g := newGuard(testCfg, processortest.NewNopSettings(Type).Logger, time.Now)
+		out, err := g.processMetrics(authed(uuid.NewString(), uuid.NewString()), md)
+		if err != nil {
+			t.Fatal(err)
+		}
+		attrs := out.ResourceMetrics().At(0).ScopeMetrics().At(0).Metrics().At(0).Histogram().DataPoints().At(0).Attributes()
+		var got string
+		v, ok := attrs.Get(schema.AttrTrafficClass)
+		if ok {
+			got = v.Str()
+		}
+		if (c.want == "" && ok) || (c.want != "" && got != c.want) {
+			t.Errorf("%s %s ua %q synthetic %q: class %q (present %v), want %q", c.method, c.route, c.ua, c.synthetic, got, ok, c.want)
+		}
+		for _, k := range []string{"user_agent.original", "user_agent.synthetic.type"} {
+			if _, ok := attrs.Get(k); ok {
+				t.Errorf("%s survives tenantguard", k)
+			}
+		}
+	}
+
+	// spans are classified the same way, so span-derived rows split too
+	td := ptrace.NewTraces()
+	sp := td.ResourceSpans().AppendEmpty().ScopeSpans().AppendEmpty().Spans().AppendEmpty()
+	sp.SetKind(ptrace.SpanKindServer)
+	sp.Attributes().PutStr("http.request.method", "GET")
+	sp.Attributes().PutStr("http.route", "/actuator/health/liveness")
+	sp.Attributes().PutStr("user_agent.original", "Mozilla/5.0")
+	g := newGuard(testCfg, processortest.NewNopSettings(Type).Logger, time.Now)
+	out, err := g.processTraces(authed(uuid.NewString(), uuid.NewString()), td)
+	if err != nil {
+		t.Fatal(err)
+	}
+	attrs := out.ResourceSpans().At(0).ScopeSpans().At(0).Spans().At(0).Attributes()
+	if v, ok := attrs.Get(schema.AttrTrafficClass); !ok || v.Str() != "health" {
+		t.Errorf("span class missing or not health")
+	}
+	if _, ok := attrs.Get("user_agent.original"); ok {
+		t.Error("user_agent.original survives on the span")
+	}
+}

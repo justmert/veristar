@@ -129,9 +129,13 @@ type Summary struct {
 	P95       Percentile `json:"p95"`
 	P99       Percentile `json:"p99"`
 	Lossy     bool       `json:"lossy"`
+	// InfrastructureRequests are the cors preflights, health and probe
+	// routes and health checker requests (internal/trafficclass) of the
+	// same rows. none of the fields above include them.
+	InfrastructureRequests int64 `json:"infrastructure_requests"`
 }
 
-func summary(requests, e4, e5 int64, lossy bool, p50, p95, p99 any) (Summary, error) {
+func summary(requests, e4, e5, infra int64, lossy bool, p50, p95, p99 any) (Summary, error) {
 	a, b, c, err := percentiles(p50, p95, p99)
 	if err != nil {
 		return Summary{}, err
@@ -139,7 +143,7 @@ func summary(requests, e4, e5 int64, lossy bool, p50, p95, p99 any) (Summary, er
 	return Summary{
 		Requests: requests, Errors4xx: e4, Errors5xx: e5,
 		Rate4xx: rate(e4, requests), Rate5xx: rate(e5, requests),
-		P50: a, P95: b, P99: c, Lossy: lossy,
+		P50: a, P95: b, P99: c, Lossy: lossy, InfrastructureRequests: infra,
 	}, nil
 }
 
@@ -152,8 +156,17 @@ type Period struct {
 
 // Overview is the answer of contract 7.5.
 type Overview struct {
-	Current  Period `json:"current"`
-	Previous Period `json:"previous"`
+	Current        Period         `json:"current"`
+	Previous       Period         `json:"previous"`
+	TrafficClasses TrafficClasses `json:"traffic_classes"`
+}
+
+// TrafficClasses says which traffic class rule set is in force and since
+// when infrastructure requests are counted apart. data before AppliedFrom
+// holds every request as application traffic.
+type TrafficClasses struct {
+	RuleSetVersion int              `json:"rule_set_version"`
+	AppliedFrom    *httpx.Timestamp `json:"applied_from"`
 }
 
 // Point is one time bucket of contract 7.6.
@@ -207,13 +220,16 @@ type Status struct {
 	Requests int64        `json:"requests"`
 	Classes  []ClassCount `json:"classes"`
 	Codes    []CodeCount  `json:"codes"`
+	// InfrastructureRequests are left out of Requests, Classes and Codes
+	InfrastructureRequests int64 `json:"infrastructure_requests"`
 }
 
 // ServiceItem is one service of contract 7.9.
 type ServiceItem struct {
 	Source
-	Requests int64 `json:"requests"`
-	Lossy    bool  `json:"lossy"`
+	Requests               int64 `json:"requests"`
+	InfrastructureRequests int64 `json:"infrastructure_requests"`
+	Lossy                  bool  `json:"lossy"`
 }
 
 // Services is the answer of contract 7.9.

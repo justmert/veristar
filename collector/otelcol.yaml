@@ -132,6 +132,10 @@ connectors:
             optional: true
           - key: error.type
             optional: true
+          # tenantguard's traffic class of an infrastructure request
+          # (preflight, health, probe); absent for application traffic
+          - key: scf.traffic.class
+            optional: true
         histogram:
           buckets: [0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1.0, 2.5, 5.0, 7.5, 10.0]
           value: Seconds(span.end_time - span.start_time)

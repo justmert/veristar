@@ -475,6 +475,7 @@ export const apiSummaryBody = {
   p95: 0.31,
   p99: ">10 s",
   lossy: false,
+  infrastructure_requests: 8640,
 };
 export const apiPreviousSummaryBody = {
   requests: 1000,
@@ -486,6 +487,7 @@ export const apiPreviousSummaryBody = {
   p95: 0.25,
   p99: 0.9,
   lossy: false,
+  infrastructure_requests: 0,
 };
 export const apiOverviewBody = {
   current: { range: apiRangeBody, sources: [apiSourceMetric], summary: apiSummaryBody },
@@ -494,6 +496,7 @@ export const apiOverviewBody = {
     sources: [apiSourceMetric],
     summary: apiPreviousSummaryBody,
   },
+  traffic_classes: { rule_set_version: 1, applied_from: "2026-11-16T09:00:00Z" },
 };
 export const apiEmptySummaryBody = {
   requests: 0,
@@ -505,6 +508,7 @@ export const apiEmptySummaryBody = {
   p95: null,
   p99: null,
   lossy: false,
+  infrastructure_requests: 0,
 };
 
 // 7.6: one point per bucket of the 24 hour range, empty buckets included
@@ -527,6 +531,7 @@ export const apiTimeseriesBody = {
         p95: 0.2,
         p99: 0.48,
         lossy: false,
+        infrastructure_requests: 0,
       };
     if (i === 22)
       return {
@@ -540,6 +545,7 @@ export const apiTimeseriesBody = {
         p95: ">10 s",
         p99: ">10 s",
         lossy: true,
+        infrastructure_requests: 0,
       };
     return { at, ...apiEmptySummaryBody };
   }),
@@ -559,6 +565,7 @@ export const apiRouteItemBody = {
   p95: 0.3,
   p99: 0.9,
   lossy: false,
+  infrastructure_requests: 0,
 };
 export const apiSpanRouteItemBody = {
   service: "orders-worker",
@@ -574,6 +581,7 @@ export const apiSpanRouteItemBody = {
   p95: 0.8,
   p99: ">10 s",
   lossy: false,
+  infrastructure_requests: 0,
 };
 export const ROUTES_CURSOR = "eyJyIjoicm91dGVzIiwibyI6NTAsImgiOiJhYmMifQ";
 export const apiRoutesBody = {
@@ -588,6 +596,7 @@ export const apiStatusBody = {
   range: apiRangeBody,
   sources: [apiSourceMetric],
   requests: 1200,
+  infrastructure_requests: 8640,
   classes: [
     { class: "1xx", requests: 0 },
     { class: "2xx", requests: 1150 },
@@ -614,6 +623,7 @@ export const apiServicesBody = {
       span_data_ignored: false,
       requests: 40,
       lossy: false,
+      infrastructure_requests: 0,
     },
     {
       service: "payments-api",
@@ -621,6 +631,7 @@ export const apiServicesBody = {
       span_data_ignored: false,
       requests: 1200,
       lossy: false,
+      infrastructure_requests: 0,
     },
   ],
 };

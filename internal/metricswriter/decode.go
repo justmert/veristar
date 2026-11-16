@@ -12,6 +12,7 @@ import (
 	"go.opentelemetry.io/collector/pdata/pmetric"
 
 	"github.com/justmert/veristar/internal/histo"
+	"github.com/justmert/veristar/internal/trafficclass"
 )
 
 // names published by the collector (docs/reference/collector.md). they are
@@ -31,6 +32,7 @@ const (
 	attrRoute      = "http.route"
 	attrStatusCode = "http.response.status_code"
 	attrLossy      = "scf.lossy"
+	attrClass      = "scf.traffic.class"
 
 	// flagSecretSeed is bit 1 of scf.flags: a secret seed was redacted
 	flagSecretSeed int64 = 1
@@ -51,6 +53,9 @@ type Decoded struct {
 	Method  string
 	Route   string
 	Status  int16
+	// Class is the traffic class tenantguard decided (internal/trafficclass);
+	// a point without scf.traffic.class is application traffic.
+	Class string
 	// SecretSeed is the resource's scf.flags bit: a secret seed was redacted
 	// from something this resource sent.
 	SecretSeed bool
@@ -235,6 +240,7 @@ func decodePoint(d *Decoded, dp pmetric.HistogramDataPoint) error {
 		return undecodable("data point times start %d, time %d", d.Start, d.Time)
 	}
 	d.NoRecordedValue = dp.Flags().NoRecordedValue()
+	d.Class = string(trafficclass.ClassApp)
 	for k, v := range dp.Attributes().All() {
 		switch k {
 		case attrLossy:
@@ -250,6 +256,14 @@ func decodePoint(d *Decoded, dp pmetric.HistogramDataPoint) error {
 			if err := checkText("route", d.Route, maxRouteLen); err != nil {
 				return err
 			}
+		case attrClass:
+			// only the infrastructure classes are ever published; app is
+			// the absence of the attribute
+			c := trafficclass.Class(v.AsString())
+			if v.Type() != pcommon.ValueTypeStr || !c.Infrastructure() {
+				return undecodable("traffic class %s", v.AsString())
+			}
+			d.Class = string(c)
 		case attrStatusCode:
 			if v.Type() != pcommon.ValueTypeInt || v.Int() < 100 || v.Int() > 599 {
 				return undecodable("status code %s", v.AsString())

@@ -570,6 +570,7 @@ function pctText(n: ApiNumbers, k: "p50" | "p95" | "p99"): string | null {
 function ApiTotalsTable({ data }: { data: ApiCompare }) {
   const cols: { label: string; value: (t: ApiCompareProject["totals"]) => string | null }[] = [
     { label: "Requests", value: (t) => formatCount(t.requests) },
+    { label: "Infrastructure requests", value: (t) => formatCount(t.infrastructure_requests) },
     { label: "4xx rate", value: (t) => formatRate(t.rate_4xx) },
     { label: "5xx rate", value: (t) => formatRate(t.rate_5xx) },
     { label: "p50", value: (t) => pctText(t, "p50") },

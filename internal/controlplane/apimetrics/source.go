@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/justmert/veristar/internal/controlplane/httpx"
 	"github.com/justmert/veristar/internal/db/tenantq"
+	"github.com/justmert/veristar/internal/trafficclass"
 )
 
 // the two values of the source column
@@ -68,4 +70,19 @@ func Select(ctx context.Context, q *tenantq.Queries, r Range, service *string) (
 		}
 	}
 	return sel, nil
+}
+
+// trafficClasses reads the rule set in force (00035). the first version's
+// applied_from is when infrastructure requests started to be counted apart.
+func trafficClasses(ctx context.Context, q *tenantq.Queries) (TrafficClasses, error) {
+	rows, err := q.TrafficClassRules(ctx)
+	if err != nil {
+		return TrafficClasses{}, fmt.Errorf("apimetrics: traffic class rules: %w", err)
+	}
+	out := TrafficClasses{RuleSetVersion: trafficclass.Version}
+	if len(rows) > 0 {
+		at := httpx.Timestamp(rows[0].AppliedFrom)
+		out.AppliedFrom = &at
+	}
+	return out, nil
 }

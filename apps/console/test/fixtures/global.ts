@@ -170,6 +170,7 @@ export const apiProjectA = {
   p95_over_10s: false,
   p99_seconds: null,
   p99_over_10s: true,
+  infrastructure_requests: 0,
   services: 3,
   routes: 41,
   span_services: 1,
@@ -192,6 +193,7 @@ export const apiProjectB = {
   p95_over_10s: false,
   p99_seconds: null,
   p99_over_10s: false,
+  infrastructure_requests: 0,
   services: 0,
   routes: 0,
   span_services: 0,
@@ -331,6 +333,7 @@ const noRequests = {
   p95_over_10s: false,
   p99_seconds: null,
   p99_over_10s: false,
+  infrastructure_requests: 0,
 };
 
 const someRequests = {
@@ -345,6 +348,7 @@ const someRequests = {
   p95_over_10s: false,
   p99_seconds: null,
   p99_over_10s: true,
+  infrastructure_requests: 0,
 };
 
 // 8.6

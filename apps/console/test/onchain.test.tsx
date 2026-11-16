@@ -381,6 +381,7 @@ const scfBody = {
     p95_over_10s: false,
     p99_seconds: null,
     p99_over_10s: false,
+    infrastructure_requests: 0,
     services: 0,
     routes: 0,
     source: null,

@@ -119,7 +119,7 @@ func periodSummary(ctx context.Context, q *tenantq.Queries, rng Range, f Filters
 	if err != nil {
 		return Period{}, fmt.Errorf("apimetrics: summary: %w", err)
 	}
-	s, err := summary(row.Requests, row.Errors4xx, row.Errors5xx, row.Lossy, row.P50, row.P95, row.P99)
+	s, err := summary(row.Requests, row.Errors4xx, row.Errors5xx, row.InfrastructureRequests, row.Lossy, row.P50, row.P95, row.P99)
 	if err != nil {
 		return Period{}, err
 	}
@@ -139,7 +139,10 @@ func (h *Routes) overview(w http.ResponseWriter, r *http.Request) error {
 		if out.Current, err = periodSummary(ctx, q, req.rng, req.filters); err != nil {
 			return err
 		}
-		out.Previous, err = periodSummary(ctx, q, prev, req.filters)
+		if out.Previous, err = periodSummary(ctx, q, prev, req.filters); err != nil {
+			return err
+		}
+		out.TrafficClasses, err = trafficClasses(ctx, q)
 		return err
 	}); err != nil {
 		return err
@@ -172,7 +175,7 @@ func (h *Routes) timeseries(w http.ResponseWriter, r *http.Request) error {
 	}
 	byStart := make(map[int64]Summary, len(rows))
 	for _, row := range rows {
-		s, err := summary(row.Requests, row.Errors4xx, row.Errors5xx, row.Lossy, row.P50, row.P95, row.P99)
+		s, err := summary(row.Requests, row.Errors4xx, row.Errors5xx, row.InfrastructureRequests, row.Lossy, row.P50, row.P95, row.P99)
 		if err != nil {
 			return err
 		}
@@ -327,7 +330,7 @@ func (h *Routes) routes(w http.ResponseWriter, r *http.Request) error {
 			out.NextCursor = encodeCursor(offset+limit, digest)
 			break
 		}
-		s, err := summary(row.Requests, row.Errors4xx, row.Errors5xx, row.Lossy, row.P50, row.P95, row.P99)
+		s, err := summary(row.Requests, row.Errors4xx, row.Errors5xx, row.InfrastructureRequests, row.Lossy, row.P50, row.P95, row.P99)
 		if err != nil {
 			return err
 		}
@@ -366,6 +369,12 @@ func (h *Routes) status(w http.ResponseWriter, r *http.Request) error {
 		idx[c] = i
 	}
 	for _, row := range rows {
+		out.InfrastructureRequests += row.InfrastructureRequests
+		if row.Requests == 0 {
+			// a code only infrastructure requests answered with is not
+			// part of the application's status mix
+			continue
+		}
 		c := classOf(row.StatusCode)
 		out.Codes = append(out.Codes, CodeCount{StatusCode: row.StatusCode, Class: c, Requests: row.Requests})
 		out.Classes[idx[c]].Requests += row.Requests
@@ -410,7 +419,7 @@ func (h *Routes) services(w http.ResponseWriter, r *http.Request) error {
 			// report a service with an invented zero
 			return fmt.Errorf("apimetrics: service %q has a source but no rows", s.Service)
 		}
-		out.Items = append(out.Items, ServiceItem{Source: s, Requests: t.Requests, Lossy: t.Lossy})
+		out.Items = append(out.Items, ServiceItem{Source: s, Requests: t.Requests, InfrastructureRequests: t.InfrastructureRequests, Lossy: t.Lossy})
 	}
 	httpx.WriteJSON(w, http.StatusOK, out)
 	return nil

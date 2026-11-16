@@ -68,47 +68,55 @@ const (
 // rows at the same times; tenant c holds the percentile cases.
 func fixture(a, b, c uuid.UUID) ([]point, []warning) {
 	ps := []point{
-		{a, at("2031-06-15T09:30:00Z"), svcBoth, "GET", accounts, 200, "metric", h(map[int]int64{2: 50, 3: 10}), false},
-		{a, at("2031-06-15T09:45:00Z"), svcBoth, "GET", accounts, 200, "metric", h(map[int]int64{1: 40, 2: 20, 4: 5}), false},
-		{a, at("2031-06-15T09:45:00Z"), svcBoth, "GET", accounts, 200, "span", h(map[int]int64{1: 7}), false},
-		{a, at("2031-06-15T10:00:00Z"), svcBoth, "GET", accounts, 404, "metric", h(map[int]int64{0: 12}), false},
-		{a, at("2031-06-15T10:00:00Z"), svcBoth, "POST", "/v1/tx", 201, "metric", h(map[int]int64{5: 8, 6: 2}), true},
-		{a, at("2031-06-15T10:30:00Z"), svcBoth, "POST", "/v1/tx", 503, "metric", h(map[int]int64{14: 3, 9: 1}), false},
-		{a, at("2031-06-15T10:30:00Z"), svcBoth, "GET", quoted, 500, "metric", h(map[int]int64{3: 2}), false},
-		{a, at("2031-06-15T10:15:00Z"), svcSpans, "GET", "/health", 200, "span", h(map[int]int64{0: 30}), false},
-		{a, at("2031-06-15T10:15:00Z"), svcSpans, "GET", "/health", 0, "span", h(map[int]int64{0: 4}), false},
-		{a, at("2031-06-15T09:40:00Z"), svcSwitch, "GET", "/v2/items", 200, "span", h(map[int]int64{2: 9}), false},
-		{a, at("2031-06-15T10:20:00Z"), svcSwitch, "GET", "/v2/items", 200, "metric", h(map[int]int64{2: 11, 7: 1}), false},
-		{a, at("2031-06-15T10:20:00Z"), svcSwitch, "DELETE", "/v2/items/{id}", 429, "metric", h(map[int]int64{1: 3}), false},
+		{a, at("2031-06-15T09:30:00Z"), svcBoth, "GET", accounts, 200, "metric", h(map[int]int64{2: 50, 3: 10}), false, ""},
+		{a, at("2031-06-15T09:45:00Z"), svcBoth, "GET", accounts, 200, "metric", h(map[int]int64{1: 40, 2: 20, 4: 5}), false, ""},
+		{a, at("2031-06-15T09:45:00Z"), svcBoth, "GET", accounts, 200, "span", h(map[int]int64{1: 7}), false, ""},
+		{a, at("2031-06-15T10:00:00Z"), svcBoth, "GET", accounts, 404, "metric", h(map[int]int64{0: 12}), false, ""},
+		{a, at("2031-06-15T10:00:00Z"), svcBoth, "POST", "/v1/tx", 201, "metric", h(map[int]int64{5: 8, 6: 2}), true, ""},
+		{a, at("2031-06-15T10:30:00Z"), svcBoth, "POST", "/v1/tx", 503, "metric", h(map[int]int64{14: 3, 9: 1}), false, ""},
+		{a, at("2031-06-15T10:30:00Z"), svcBoth, "GET", quoted, 500, "metric", h(map[int]int64{3: 2}), false, ""},
+		{a, at("2031-06-15T10:15:00Z"), svcSpans, "GET", "/health", 200, "span", h(map[int]int64{0: 30}), false, "health"},
+		{a, at("2031-06-15T10:15:00Z"), svcSpans, "GET", "/health", 0, "span", h(map[int]int64{0: 4}), false, "health"},
+		{a, at("2031-06-15T10:15:00Z"), svcSpans, "GET", "/jobs", 200, "span", h(map[int]int64{3: 5}), false, ""},
+		// infrastructure rows beside application rows of the same route:
+		// a preflight, a load balancer probe with a slow tail that must not
+		// move the percentiles, and a probe that failed with 503
+		{a, at("2031-06-15T09:45:00Z"), svcBoth, "OPTIONS", accounts, 204, "metric", h(map[int]int64{0: 25}), false, "preflight"},
+		{a, at("2031-06-15T10:00:00Z"), svcBoth, "GET", accounts, 200, "metric", h(map[int]int64{0: 60, 14: 40}), false, "probe"},
+		{a, at("2031-06-15T10:30:00Z"), svcBoth, "GET", "/healthz", 503, "metric", h(map[int]int64{13: 3}), true, "health"},
+		{a, at("2031-06-01T12:07:00Z"), svcBoth, "GET", "/healthz", 200, "metric", h(map[int]int64{0: 1440}), false, "health"},
+		{a, at("2031-06-15T09:40:00Z"), svcSwitch, "GET", "/v2/items", 200, "span", h(map[int]int64{2: 9}), false, ""},
+		{a, at("2031-06-15T10:20:00Z"), svcSwitch, "GET", "/v2/items", 200, "metric", h(map[int]int64{2: 11, 7: 1}), false, ""},
+		{a, at("2031-06-15T10:20:00Z"), svcSwitch, "DELETE", "/v2/items/{id}", 429, "metric", h(map[int]int64{1: 3}), false, ""},
 		// the preceding day, for the overview comparison of 24h
-		{a, at("2031-06-14T05:00:00Z"), svcBoth, "GET", accounts, 200, "metric", h(map[int]int64{2: 17}), false},
-		{a, at("2031-06-14T05:00:00Z"), svcSpans, "GET", "/health", 200, "span", h(map[int]int64{0: 6}), false},
+		{a, at("2031-06-14T05:00:00Z"), svcBoth, "GET", accounts, 200, "metric", h(map[int]int64{2: 17}), false, ""},
+		{a, at("2031-06-14T05:00:00Z"), svcSpans, "GET", "/health", 200, "span", h(map[int]int64{0: 6}), false, ""},
 		// inside 30 days
-		{a, at("2031-06-01T12:07:00Z"), svcBoth, "GET", accounts, 200, "metric", h(map[int]int64{2: 100}), false},
-		{a, at("2031-05-20T03:00:00Z"), svcSpans, "GET", "/health", 200, "span", h(map[int]int64{0: 20}), false},
+		{a, at("2031-06-01T12:07:00Z"), svcBoth, "GET", accounts, 200, "metric", h(map[int]int64{2: 100}), false, ""},
+		{a, at("2031-05-20T03:00:00Z"), svcSpans, "GET", "/health", 200, "span", h(map[int]int64{0: 20}), false, ""},
 		// 40 days back: before the minute horizon of 2031-05-16
-		{a, at("2031-05-06T10:10:00Z"), svcBoth, "GET", accounts, 200, "metric", h(map[int]int64{3: 6}), false},
+		{a, at("2031-05-06T10:10:00Z"), svcBoth, "GET", accounts, 200, "metric", h(map[int]int64{3: 6}), false, ""},
 		// before the hourly horizon of 2028-06-01
-		{a, at("2027-03-02T12:00:00Z"), svcBoth, "GET", accounts, 500, "metric", h(map[int]int64{4: 5}), false},
-		{a, at("2027-03-02T13:00:00Z"), svcSpans, "GET", "/health", 200, "span", h(map[int]int64{0: 2}), false},
+		{a, at("2027-03-02T12:00:00Z"), svcBoth, "GET", accounts, 500, "metric", h(map[int]int64{4: 5}), false, ""},
+		{a, at("2027-03-02T13:00:00Z"), svcSpans, "GET", "/health", 200, "span", h(map[int]int64{0: 2}), false, ""},
 		// the day before the 24mo range: must not be counted there
-		{a, at("2029-06-15T06:00:00Z"), svcBoth, "GET", accounts, 200, "metric", h(map[int]int64{2: 1000}), false},
+		{a, at("2029-06-15T06:00:00Z"), svcBoth, "GET", accounts, 200, "metric", h(map[int]int64{2: 1000}), false, ""},
 
-		{b, at("2031-06-15T10:00:00Z"), svcBoth, "GET", accounts, 200, "metric", h(map[int]int64{2: 999}), false},
-		{b, at("2031-06-01T12:07:00Z"), svcBoth, "GET", accounts, 200, "metric", h(map[int]int64{2: 999}), false},
-		{b, at("2031-06-15T10:00:00Z"), "svc-b-only", "GET", "/b", 200, "span", h(map[int]int64{2: 5}), false},
+		{b, at("2031-06-15T10:00:00Z"), svcBoth, "GET", accounts, 200, "metric", h(map[int]int64{2: 999}), false, ""},
+		{b, at("2031-06-01T12:07:00Z"), svcBoth, "GET", accounts, 200, "metric", h(map[int]int64{2: 999}), false, ""},
+		{b, at("2031-06-15T10:00:00Z"), "svc-b-only", "GET", "/b", 200, "span", h(map[int]int64{2: 5}), false, ""},
 
 		// p50 of the summed buckets is near 2.5 ms; the mean of the two
 		// minutes' p50s is near 1.9 s
-		{c, at("2031-06-15T10:10:00Z"), "lat", "GET", "/p", 200, "metric", h(map[int]int64{0: 99}), false},
-		{c, at("2031-06-15T10:11:00Z"), "lat", "GET", "/p", 200, "metric", h(map[int]int64{11: 1}), false},
+		{c, at("2031-06-15T10:10:00Z"), "lat", "GET", "/p", 200, "metric", h(map[int]int64{0: 99}), false, ""},
+		{c, at("2031-06-15T10:11:00Z"), "lat", "GET", "/p", 200, "metric", h(map[int]int64{11: 1}), false, ""},
 		// p99 in the open bucket, p50 a number
-		{c, at("2031-06-15T10:12:00Z"), "lat", "GET", "/slow", 200, "metric", h(map[int]int64{0: 95, 14: 5}), false},
+		{c, at("2031-06-15T10:12:00Z"), "lat", "GET", "/slow", 200, "metric", h(map[int]int64{0: 95, 14: 5}), false, ""},
 	}
 	// one point a month from the first day of the 24mo range on
 	for m := range 24 {
 		ps = append(ps, point{a, at("2029-06-16T06:00:00Z").AddDate(0, m, 0), svcBoth, "GET", accounts, 200, "metric",
-			h(map[int]int64{2: int64(m + 1)}), false})
+			h(map[int]int64{2: int64(m + 1)}), false, ""})
 	}
 	ws := []warning{
 		{a, at("2031-06-15T00:00:00Z"), "secret_in_path", 1},
@@ -285,11 +293,17 @@ func TestAPIMetrics(t *testing.T) {
 		var ov apimetrics.Overview
 		ca.ok(t, pathA+"overview?range=1h", &ov)
 		// minute rows 09:45 to 10:30, svc-both metric only, svc-spans spans,
-		// svc-switch metric only: 65+12+10+4+2 + 34 + 12+3
-		require.Equal(t, int64(142), ov.Current.Summary.Requests)
+		// svc-switch metric only: 65+12+10+4+2 + 5 + 12+3. the 34 /health
+		// spans, the 25 preflights, the 100 probe requests and the 3 failed
+		// /healthz checks are infrastructure: 162, none of them in the
+		// requests, the errors or the percentiles
+		require.Equal(t, int64(113), ov.Current.Summary.Requests)
 		require.Equal(t, int64(15), ov.Current.Summary.Errors4xx)
 		require.Equal(t, int64(6), ov.Current.Summary.Errors5xx)
+		require.Equal(t, int64(162), ov.Current.Summary.InfrastructureRequests)
 		require.True(t, ov.Current.Summary.Lossy)
+		require.Equal(t, 1, ov.TrafficClasses.RuleSetVersion)
+		require.NotNil(t, ov.TrafficClasses.AppliedFrom)
 
 		var wn apimetrics.Warnings
 		ca.ok(t, pathA+"warnings?range=24h", &wn)
@@ -326,7 +340,9 @@ func TestAPIMetrics(t *testing.T) {
 			// the last hour), never metric plus span (which would add 7)
 			if qs == "range=1h" {
 				require.Equal(t, int64(93), sv.Items[0].Requests)
-				require.Equal(t, int64(34), sv.Items[1].Requests)
+				require.Equal(t, int64(128), sv.Items[0].InfrastructureRequests)
+				require.Equal(t, int64(5), sv.Items[1].Requests)
+				require.Equal(t, int64(34), sv.Items[1].InfrastructureRequests)
 				// svc-switch: the 9 span requests at 09:40 are left out
 				require.Equal(t, int64(15), sv.Items[2].Requests)
 			}
@@ -576,17 +592,17 @@ func TestAPIMetrics(t *testing.T) {
 		// first batch rolled up, so the second batch lands partly in hours
 		// and days that already have (now stale) hourly and daily rows
 		e.write(t, []point{
-			{tenantD, at("2031-06-15T08:10:00Z"), "fresh", "GET", "/a", 200, "metric", h(map[int]int64{2: 10}), false},
-			{tenantD, at("2031-06-15T10:01:00Z"), "fresh", "GET", "/a", 200, "metric", h(map[int]int64{3: 5}), false},
-			{tenantD, at("2031-06-10T12:00:00Z"), "fresh", "GET", "/a", 500, "metric", h(map[int]int64{4: 3}), false},
+			{tenantD, at("2031-06-15T08:10:00Z"), "fresh", "GET", "/a", 200, "metric", h(map[int]int64{2: 10}), false, ""},
+			{tenantD, at("2031-06-15T10:01:00Z"), "fresh", "GET", "/a", 200, "metric", h(map[int]int64{3: 5}), false, ""},
+			{tenantD, at("2031-06-10T12:00:00Z"), "fresh", "GET", "/a", 500, "metric", h(map[int]int64{4: 3}), false, ""},
 		}, nil)
 		e.writeMinutes(t, []point{
-			{tenantD, at("2031-06-15T10:02:00Z"), "fresh", "GET", "/a", 200, "metric", h(map[int]int64{3: 7}), false},
-			{tenantD, at("2031-06-15T10:02:00Z"), "fresh", "GET", "/a", 200, "span", h(map[int]int64{1: 50}), false},
-			{tenantD, at("2031-06-15T09:50:00Z"), "fresh-span", "GET", "/h", 0, "span", h(map[int]int64{0: 4}), false},
-			{tenantD, at("2031-06-15T10:03:00Z"), "fresh-span", "GET", "/h", 200, "span", h(map[int]int64{0: 1}), false},
-			{tenantD, at("2031-06-12T03:00:00Z"), "fresh", "POST", "/b", 201, "metric", h(map[int]int64{14: 2, 2: 1}), true},
-			{tenantD, at("2031-05-01T00:00:00Z"), "fresh", "GET", "/a", 404, "metric", h(map[int]int64{0: 6}), false},
+			{tenantD, at("2031-06-15T10:02:00Z"), "fresh", "GET", "/a", 200, "metric", h(map[int]int64{3: 7}), false, ""},
+			{tenantD, at("2031-06-15T10:02:00Z"), "fresh", "GET", "/a", 200, "span", h(map[int]int64{1: 50}), false, ""},
+			{tenantD, at("2031-06-15T09:50:00Z"), "fresh-span", "GET", "/h", 0, "span", h(map[int]int64{0: 4}), false, ""},
+			{tenantD, at("2031-06-15T10:03:00Z"), "fresh-span", "GET", "/h", 200, "span", h(map[int]int64{0: 1}), false, ""},
+			{tenantD, at("2031-06-12T03:00:00Z"), "fresh", "POST", "/b", 201, "metric", h(map[int]int64{14: 2, 2: 1}), true, ""},
+			{tenantD, at("2031-05-01T00:00:00Z"), "fresh", "GET", "/a", 404, "metric", h(map[int]int64{0: 6}), false, ""},
 		}, nil)
 		var pending int
 		require.NoError(t, e.su.QueryRow(t.Context(), `select count(*) from api.rollup_pending where tenant_id = $1`, tenantD).Scan(&pending))

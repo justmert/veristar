@@ -1,0 +1,206 @@
+# trafficclass corpus, rule set version 1.
+# columns: method, raw path (normalized by routenorm before classifying,
+# as tenantguard does; - for a request without a route), user agent
+# (- for none), user_agent.synthetic.type (- for none), expected class.
+OPTIONS	/	-	-	preflight
+OPTIONS	/accounts	-	-	preflight
+OPTIONS	/api/v1/payments	-	-	preflight
+OPTIONS	/healthz	-	-	preflight
+OPTIONS	/accounts/GA7QYNF7SOWQ3GLR2BGMZEHXAVIRZA4KVWLTJJFC7MGXUA74P7UJVSGZ	-	-	preflight
+OPTIONS	/graphql	-	-	preflight
+OPTIONS	/v1/{id}/orders?x=1	-	-	preflight
+options	/accounts	-	-	preflight
+Options	/x	-	-	preflight
+OPTIONS	/	ELB-HealthChecker/2.0	-	preflight
+OPTIONS	-	-	-	preflight
+GET	/health	-	-	health
+GET	/healthz	-	-	health
+GET	/_health	-	-	health
+GET	/__health	-	-	health
+GET	/healthcheck	-	-	health
+GET	/health-check	-	-	health
+GET	/health_check	-	-	health
+GET	/livez	-	-	health
+GET	/readyz	-	-	health
+GET	/startupz	-	-	health
+GET	/liveness_check	-	-	health
+GET	/readiness_check	-	-	health
+GET	/ping	-	-	health
+GET	/_ping	-	-	health
+GET	/status	-	-	health
+GET	/_status	-	-	health
+GET	/heartbeat	-	-	health
+GET	/metrics	-	-	health
+GET	/HEALTH	-	-	health
+GET	/Healthz	-	-	health
+GET	/Status	-	-	health
+GET	/PING	-	-	health
+GET	/Metrics	-	-	health
+HEAD	/health	-	-	health
+POST	/ping	-	-	health
+GET	/health/	-	-	health
+GET	//healthz//	-	-	health
+GET	/healthz?verbose	-	-	health
+GET	/status#top	-	-	health
+GET	/api/health	-	-	health
+GET	/api/v1/health	-	-	health
+GET	/v1/health	-	-	health
+GET	/v2/healthz	-	-	health
+GET	/v1beta/status	-	-	health
+GET	/v10/ping	-	-	health
+GET	/v2alpha/health	-	-	health
+GET	/api/v1/status	-	-	health
+GET	/apis/v1/healthz	-	-	health
+GET	/rest/health	-	-	health
+GET	/actuator/health	-	-	health
+GET	/management/health	-	-	health
+GET	/manage/health	-	-	health
+GET	/admin/health	-	-	health
+GET	/q/health	-	-	health
+GET	/_ah/health	-	-	health
+GET	/internal/health	-	-	health
+GET	/_internal/status	-	-	health
+GET	/system/ping	-	-	health
+GET	/sys/health	-	-	health
+GET	/ops/heartbeat	-	-	health
+GET	/monitoring/metrics	-	-	health
+GET	/monitor/health	-	-	health
+GET	/.well-known/health	-	-	health
+GET	/_/health	-	-	health
+GET	/api/internal/healthz	-	-	health
+GET	/api/v1/internal/status	-	-	health
+GET	/health/live	-	-	health
+GET	/health/ready	-	-	health
+GET	/health/started	-	-	health
+GET	/health/liveness	-	-	health
+GET	/health/readiness	-	-	health
+GET	/actuator/health/liveness	-	-	health
+GET	/actuator/health/readiness	-	-	health
+GET	/q/health/live	-	-	health
+GET	/q/health/ready	-	-	health
+GET	/q/health/started	-	-	health
+GET	/livez/ping	-	-	health
+GET	/readyz/ping	-	-	health
+GET	/healthz/ready	-	-	health
+GET	/api/health/check	-	-	health
+GET	/health/all	-	-	health
+GET	/health/startup	-	-	health
+GET	/HEALTH/LIVE	-	-	health
+GET	/-/healthy	-	-	health
+GET	/-/ready	-	-	health
+GET	/liveness_check	-	-	health
+GET	/readiness_check	-	-	health
+GET	/accounts/{id}/status	-	-	app
+GET	/orders/123/status	-	-	app
+GET	/v1/orders/{id}/status	-	-	app
+GET	/payments/status/{id}	-	-	app
+GET	/users/ping/{id}	-	-	app
+GET	/metrics/{id}	-	-	app
+GET	/status/{id}	-	-	app
+GET	/health/{id}	-	-	app
+GET	/health/records	-	-	app
+GET	/health/patients/42	-	-	app
+GET	/api/health/records	-	-	app
+GET	/ready	-	-	app
+GET	/healthy	-	-	app
+GET	/live	-	-	app
+GET	/alive	-	-	app
+GET	/liveness	-	-	app
+GET	/readiness	-	-	app
+GET	/api/ready	-	-	app
+GET	/v1/healthy	-	-	app
+GET	/x/-/healthy	-	-	app
+GET	/-/live	-	-	app
+GET	/statuses	-	-	app
+GET	/pinged	-	-	app
+GET	/healthcare	-	-	app
+GET	/heartbeats	-	-	app
+GET	/metric	-	-	app
+GET	/status-page	-	-	app
+GET	/api/v1/accounts/health	-	-	app
+GET	/a/b/c/d/health	-	-	app
+GET	/api/v1/internal/x/health	-	-	app
+GET	/v1x/health	-	-	app
+GET	/vv1/health	-	-	app
+GET	/v/health	-	-	app
+GET	/v1gamma/health	-	-	app
+GET	/health/live/now	-	-	app
+GET	/health/live/ready	-	-	app
+GET	/	-	-	app
+GET	/accounts	-	-	app
+GET	/api/v1/payments/{id}	-	-	app
+GET	/graphql	-	-	app
+GET	/-	-	-	app
+GET	/api/v1/internal/health	-	-	health
+GET	/actuator/info	-	-	app
+GET	/actuator/prometheus	-	-	health
+GET	-	-	-	app
+GET	/	ELB-HealthChecker/2.0	-	probe
+GET	/api/v1/accounts	ELB-HealthChecker/2.0	-	probe
+GET	/	elb-healthchecker/1.0	-	probe
+GET	/api/v1/accounts	elb-healthchecker/1.0	-	probe
+GET	/	kube-probe/1.31	-	probe
+GET	/api/v1/accounts	kube-probe/1.31	-	probe
+GET	/	kube-probe/1.28+	-	probe
+GET	/api/v1/accounts	kube-probe/1.28+	-	probe
+GET	/	GoogleHC/1.0	-	probe
+GET	/api/v1/accounts	GoogleHC/1.0	-	probe
+GET	/	Envoy/HC	-	probe
+GET	/api/v1/accounts	Envoy/HC	-	probe
+GET	/	Consul Health Check	-	probe
+GET	/api/v1/accounts	Consul Health Check	-	probe
+GET	/	GoogleStackdriverMonitoring-UptimeChecks(https://cloud.google.com/monitoring)	-	probe
+GET	/api/v1/accounts	GoogleStackdriverMonitoring-UptimeChecks(https://cloud.google.com/monitoring)	-	probe
+GET	/	Cloudflare-Healthchecks/1.0	-	probe
+GET	/api/v1/accounts	Cloudflare-Healthchecks/1.0	-	probe
+GET	/	Edge Health Probe	-	probe
+GET	/api/v1/accounts	Edge Health Probe	-	probe
+GET	/	UptimeRobot/2.0	-	probe
+GET	/api/v1/accounts	UptimeRobot/2.0	-	probe
+GET	/	Uptime-Kuma/1.23.16	-	probe
+GET	/api/v1/accounts	Uptime-Kuma/1.23.16	-	probe
+GET	/	  kube-probe/1.30	-	probe
+GET	/api/v1/accounts	  kube-probe/1.30	-	probe
+HEAD	/	ELB-HealthChecker/2.0	-	probe
+GET	/healthz	kube-probe/1.31	-	health
+GET	/accounts	Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36	-	app
+GET	/accounts	curl/8.11.1	-	app
+GET	/accounts	Go-http-client/1.1	-	app
+GET	/accounts	python-requests/2.32.3	-	app
+GET	/accounts	axios/1.7.9	-	app
+GET	/accounts	node-fetch/1.0	-	app
+GET	/accounts	okhttp/4.12.0	-	app
+GET	/accounts	Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)	-	app
+GET	/accounts	my-kube-probe/1.0	-	app
+GET	/accounts	ELB	-	app
+GET	/accounts	HealthChecker/1.0	-	app
+GET	/accounts	Mozilla/5.0 kube-probe/1.31	-	app
+GET	/accounts	Envoy	-	app
+GET	/accounts	envoy/1.32	-	app
+GET	/accounts	PostmanRuntime/7.43.0	-	app
+GET	/accounts	Stellar/1.0	-	app
+GET	/accounts	UptimeRobot	-	app
+GET	/accounts	GoogleHC	-	probe
+GET	/accounts	-	test	probe
+GET	/accounts	-	TEST	probe
+POST	/v1/payments	-	test	probe
+GET	/accounts	-	bot	app
+GET	/accounts	-	other	app
+OPTIONS	/accounts	-	test	preflight
+GET	/health	-	bot	health
+GET	/	Mozilla/5.0+(compatible; UptimeRobot/2.0; http://www.uptimerobot.com/)	-	probe
+GET	/	Mozilla/5.0 (compatible; Cloudflare-Healthchecks/1.0; +https://www.cloudflare.com/; healthcheck-id: 0123abcd)	-	probe
+GET	/	Mozilla/5.0 (compatible; Cloudflare-Traffic-Manager/1.0; +https://www.cloudflare.com/traffic-manager/; pool-id: 0123abcd)	-	probe
+GET	/	Mozilla/5.0 (Windows NT 6.2; WOW64) AppleWebKit/537.4 (KHTML, like Gecko) Chrome/98 Safari/537.4 (StatusCake)	-	probe
+GET	/	Datadog/Synthetics	-	probe
+GET	/	Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/120.0 Safari/537.36 DatadogSynthetics	-	probe
+GET	/	Better Stack Better Uptime Bot Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36	-	probe
+GET	/	Better Uptime Bot Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/74.0.3729.169 Safari/537.36	-	probe
+GET	/	Nomad/1.9.3 (+https://developer.hashicorp.com/nomad/; go1.23.4)	-	probe
+GET	/	AlwaysOn	-	probe
+GET	/	GoogleHC	-	probe
+GET	/	Edge+Health+Probe	-	app
+GET	/	Mozilla/5.0 (compatible; NotUptimeRobot/2.0)	-	app
+GET	/	Mozilla/5.0 xstatuscake	-	app
+GET	/	AlwaysOnline/1.0	-	app
+GET	/	Mozilla/5.0 (compatible; MyCloudflare-Healthchecks/1.0)	-	app

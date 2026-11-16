@@ -24,7 +24,8 @@ import (
 func machineChosenCTE(source string) string {
 	return `
 r as (
-  select m.tenant_id, m.bucket_start, m.service, m.method, m.route, m.status_code, m.source, m.counts, m.count, m.lossy
+  select m.tenant_id, m.bucket_start, m.service, m.method, m.route, m.status_code, m.source, m.traffic_class,
+         m.counts, m.count, m.lossy
   from ` + source + ` m
   join t on t.id = m.tenant_id
   where (@service::text is null or m.service = @service::text)
@@ -95,7 +96,7 @@ var apiRouteKeys = keyset{
 const bucketSelect = `
 select tenant_id, bucket_start, count(distinct service)::bigint,
        (count(distinct service) filter (where source = 'span'))::bigint,
-       bool_or(lossy),` + numbersCols + `
+       coalesce(bool_or(lossy) filter (where traffic_class = 'app'), false),` + numbersCols + `
 from c group by tenant_id, bucket_start`
 
 func scanBucket(row pgx.CollectableRow, at *time.Time) (MachineAPIBucket, error) {
@@ -264,7 +265,8 @@ func (m *Machine) apiRoutesDaily(w http.ResponseWriter, r *http.Request) error {
 		args := pgx.NamedArgs{"tenant": sc.arg(), "from_at": rg.From, "to_end": rg.end(), "service": service}
 		// a service has one chosen source, so min(source) is that source
 		inner := `with ` + tenantScopeCTE + `,` + machineChosenCTE(operatorDaily) + `
-			select tenant_id, bucket_start, service, method, route, min(source), bool_or(lossy),` + numbersCols + `
+			select tenant_id, bucket_start, service, method, route, min(source),
+			       coalesce(bool_or(lossy) filter (where traffic_class = 'app'), false),` + numbersCols + `
 			from c group by tenant_id, bucket_start, service, method, route`
 		rows, err := tx.Query(ctx, apiRouteKeys.wrap(inner, p, args), args)
 		if err != nil {

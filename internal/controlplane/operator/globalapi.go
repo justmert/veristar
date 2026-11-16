@@ -34,7 +34,8 @@ var apiSorts = withGrowthSorts(map[string]string{
 // tenants.
 const apiChosenCTE = `
 r as (
-  select m.tenant_id, m.bucket_start, m.service, m.route, m.status_code, m.source, m.counts, m.count, m.lossy
+  select m.tenant_id, m.bucket_start, m.service, m.route, m.status_code, m.source, m.traffic_class,
+         m.counts, m.count, m.lossy
   from api.operator_daily(@from_at::timestamptz, @to_end::timestamptz, array(select id from t)) m
   join t on t.id = m.tenant_id
 ),
@@ -54,14 +55,15 @@ c as (
 const apiListCTE = `with ` + baseCTE + `,` + apiChosenCTE + `,
 m as (
   select tenant_id,
-         sum(count)::bigint as requests,
-         coalesce(sum(count) filter (where status_code between 400 and 499), 0)::bigint as requests_4xx,
-         coalesce(sum(count) filter (where status_code between 500 and 599), 0)::bigint as requests_5xx,
-         api.sum_buckets(counts) as buckets,
+         coalesce(sum(count) filter (where traffic_class = 'app'), 0)::bigint as requests,
+         coalesce(sum(count) filter (where traffic_class = 'app' and status_code between 400 and 499), 0)::bigint as requests_4xx,
+         coalesce(sum(count) filter (where traffic_class = 'app' and status_code between 500 and 599), 0)::bigint as requests_5xx,
+         coalesce(sum(count) filter (where traffic_class <> 'app'), 0)::bigint as infrastructure_requests,
+         api.sum_buckets(counts) filter (where traffic_class = 'app') as buckets,
          count(distinct service)::bigint as services,
          (count(distinct (service, route)) filter (where route <> ''))::bigint as routes,
          (count(distinct service) filter (where source = 'span'))::bigint as span_services,
-         bool_or(lossy) as lossy
+         coalesce(bool_or(lossy) filter (where traffic_class = 'app'), false) as lossy
   from c
   group by tenant_id
 ),
@@ -73,6 +75,7 @@ x as (
          coalesce(ap.has_api, false) as has_api_data,
          coalesce(m.requests, 0) as requests, coalesce(m.requests_4xx, 0) as requests_4xx,
          coalesce(m.requests_5xx, 0) as requests_5xx,
+         coalesce(m.infrastructure_requests, 0) as infrastructure_requests,
          coalesce(m.services, 0) as services, coalesce(m.routes, 0) as routes,
          coalesce(m.span_services, 0) as span_services, coalesce(m.lossy, false) as lossy,
          api.histogram_quantile(0.5, m.buckets) as p50,
@@ -130,6 +133,10 @@ type APINumbers struct {
 	Rate4xx     *float64 `json:"rate_4xx"`
 	Rate5xx     *float64 `json:"rate_5xx"`
 	Percentiles
+	// InfrastructureRequests are cors preflights, health and probe routes
+	// and health checker requests (internal/trafficclass). requests, the
+	// error counts, the rates and the percentiles leave them out.
+	InfrastructureRequests int64 `json:"infrastructure_requests"`
 }
 
 // source names the data a project's numbers come from: metric or span when
@@ -171,7 +178,7 @@ type APIProject struct {
 const apiRowSelect = `
 			select id, slug, name, status, created_at, sites, sites_verified, sites_with_stellar_toml,
 			       has_web_data, has_api_data, requests, requests_4xx, requests_5xx, rate_4xx, rate_5xx,
-			       p50, p95, p99, services, routes, span_services, lossy,` + kpiSelect + `
+			       p50, p95, p99, services, routes, span_services, lossy, infrastructure_requests,` + kpiSelect + `
 			from y`
 
 // scanAPIRow reads one row of apiRowSelect.
@@ -183,7 +190,7 @@ func scanAPIRow(row pgx.Row) (APIProject, error) {
 	err := row.Scan(append([]any{&p.Tenant.ID, &p.Tenant.Slug, &p.Tenant.Name, &p.Tenant.Status, &at,
 		&p.Sites, &p.SitesVerified, &p.SitesWithStellarToml, &p.HasWebData, &p.HasAPIData,
 		&p.Requests, &p.Requests4xx, &p.Requests5xx, &p.Rate4xx, &p.Rate5xx,
-		&p50, &p95, &p99, &p.Services, &p.Routes, &p.SpanServices, &p.Lossy}, k.dest()...)...)
+		&p50, &p95, &p99, &p.Services, &p.Routes, &p.SpanServices, &p.Lossy, &p.InfrastructureRequests}, k.dest()...)...)
 	p.Tenant.CreatedAt = httpx.Timestamp(at)
 	p.Percentiles = newPercentiles(p50, p95, p99)
 	p.Source = source(p.Services, p.SpanServices)
@@ -368,18 +375,23 @@ func emptyAPISeries(rg dayRange) []APIPoint {
 	return out
 }
 
-// numbersCols are the select columns of APINumbers over rows of c.
+// numbersCols are the select columns of APINumbers over rows of c: the
+// application numbers, then the infrastructure requests. an empty sum of
+// buckets has no quantile, so a group of infrastructure rows only has null
+// percentiles.
 const numbersCols = `
-  sum(count)::bigint,
-  coalesce(sum(count) filter (where status_code between 400 and 499), 0)::bigint,
-  coalesce(sum(count) filter (where status_code between 500 and 599), 0)::bigint,
-  api.histogram_quantile(0.5, api.sum_buckets(counts)),
-  api.histogram_quantile(0.95, api.sum_buckets(counts)),
-  api.histogram_quantile(0.99, api.sum_buckets(counts))`
+  coalesce(sum(count) filter (where traffic_class = 'app'), 0)::bigint,
+  coalesce(sum(count) filter (where traffic_class = 'app' and status_code between 400 and 499), 0)::bigint,
+  coalesce(sum(count) filter (where traffic_class = 'app' and status_code between 500 and 599), 0)::bigint,
+  api.histogram_quantile(0.5, api.sum_buckets(counts) filter (where traffic_class = 'app')),
+  api.histogram_quantile(0.95, api.sum_buckets(counts) filter (where traffic_class = 'app')),
+  api.histogram_quantile(0.99, api.sum_buckets(counts) filter (where traffic_class = 'app')),
+  coalesce(sum(count) filter (where traffic_class <> 'app'), 0)::bigint`
 
 func scanNumbers(dst *APINumbers, scan func(...any) error, before ...any) error {
 	var p50, p95, p99 *float64
-	if err := scan(append(before, &dst.Requests, &dst.Requests4xx, &dst.Requests5xx, &p50, &p95, &p99)...); err != nil {
+	if err := scan(append(before, &dst.Requests, &dst.Requests4xx, &dst.Requests5xx, &p50, &p95, &p99,
+		&dst.InfrastructureRequests)...); err != nil {
 		return err
 	}
 	dst.Rate4xx = ratio(dst.Requests4xx, dst.Requests)
@@ -393,7 +405,7 @@ func apiTotals(ctx context.Context, tx pgx.Tx, args pgx.NamedArgs) (map[uuid.UUI
 		select tenant_id, count(distinct service)::bigint,
 		       (count(distinct (service, route)) filter (where route <> ''))::bigint,
 		       (count(distinct service) filter (where source = 'span'))::bigint,
-		       bool_or(lossy),`+numbersCols+`
+		       coalesce(bool_or(lossy) filter (where traffic_class = 'app'), false),`+numbersCols+`
 		from c group by tenant_id`, args)
 	if err != nil {
 		return nil, fmt.Errorf("api totals: %w", err)
@@ -449,7 +461,8 @@ func apiServices(ctx context.Context, tx pgx.Tx, args pgx.NamedArgs, desc bool) 
 	}
 	rows, err := tx.Query(ctx, apiCompareCTE+`
 		select tenant_id, service, min(source),
-		       (count(distinct route) filter (where route <> ''))::bigint, bool_or(lossy),`+numbersCols+`
+		       (count(distinct route) filter (where route <> ''))::bigint,
+		       coalesce(bool_or(lossy) filter (where traffic_class = 'app'), false),`+numbersCols+`
 		from c group by tenant_id, service
 		order by tenant_id, sum(count) `+dir+`, service`, args)
 	if err != nil {

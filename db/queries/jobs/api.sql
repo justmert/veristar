@@ -64,17 +64,19 @@ where tenant_id = @tenant_id and bucket_start = sqlc.arg(hour)::timestamptz;
 -- name: RollupHour :execrows
 -- second half: one hourly row per dimension from the minute rows. sums of
 -- floats are taken in time order, so a re-run gives the same bits.
--- metric and span rows stay apart because source is a dimension.
+-- metric and span rows stay apart because source is a dimension, and
+-- application and infrastructure rows because traffic_class is one.
 insert into api.metrics_hourly (tenant_id, bucket_start, service, method, route, status_code,
-                                source, counts, sum, count, lossy)
+                                source, traffic_class, counts, sum, count, lossy)
 select m.tenant_id, sqlc.arg(hour)::timestamptz, m.service, m.method, m.route, m.status_code, m.source,
+       m.traffic_class,
        api.sum_buckets(m.counts order by m.bucket_start), sum(m.sum order by m.bucket_start),
        sum(m.count)::bigint, bool_or(m.lossy)
 from api.metrics_minute m
 where m.tenant_id = @tenant_id
   and m.bucket_start >= sqlc.arg(hour)::timestamptz
   and m.bucket_start < sqlc.arg(hour)::timestamptz + interval '1 hour'
-group by m.tenant_id, m.service, m.method, m.route, m.status_code, m.source;
+group by m.tenant_id, m.service, m.method, m.route, m.status_code, m.source, m.traffic_class;
 
 -- name: DeleteDailyRows :execrows
 delete from api.metrics_daily
@@ -86,15 +88,16 @@ where tenant_id = @tenant_id and bucket_start = sqlc.arg(day)::timestamptz;
 -- hours, not interval '1 day': on timestamptz that is calendar arithmetic in
 -- the session time zone and gives 23 or 25 hours on a daylight saving day.
 insert into api.metrics_daily (tenant_id, bucket_start, service, method, route, status_code,
-                               source, counts, sum, count, lossy)
+                               source, traffic_class, counts, sum, count, lossy)
 select h.tenant_id, sqlc.arg(day)::timestamptz, h.service, h.method, h.route, h.status_code, h.source,
+       h.traffic_class,
        api.sum_buckets(h.counts order by h.bucket_start), sum(h.sum order by h.bucket_start),
        sum(h.count)::bigint, bool_or(h.lossy)
 from api.metrics_hourly h
 where h.tenant_id = @tenant_id
   and h.bucket_start >= sqlc.arg(day)::timestamptz
   and h.bucket_start < sqlc.arg(day)::timestamptz + interval '24 hours'
-group by h.tenant_id, h.service, h.method, h.route, h.status_code, h.source;
+group by h.tenant_id, h.service, h.method, h.route, h.status_code, h.source, h.traffic_class;
 
 -- name: CreateMinutePartition :one
 -- false when the day's partition exists already

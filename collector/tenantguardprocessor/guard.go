@@ -23,6 +23,7 @@ import (
 	"github.com/justmert/veristar/collector/tenantauthextension"
 	"github.com/justmert/veristar/internal/redact"
 	"github.com/justmert/veristar/internal/routenorm"
+	"github.com/justmert/veristar/internal/trafficclass"
 )
 
 // errors returned to the receiver, which maps the grpc codes to http:
@@ -198,8 +199,10 @@ func statusCode(attrs pcommon.Map) (int64, bool) {
 	return 0, false
 }
 
-// normalizeAttrs rewrites a data point's or span's attributes to the four
+// normalizeAttrs rewrites a data point's or span's attributes to the
 // allowlisted keys, mapping legacy names, and returns the routenorm flags.
+// the traffic class is decided here, before the user agent is dropped, and
+// written only for infrastructure traffic.
 func normalizeAttrs(attrs pcommon.Map) int64 {
 	var flags int64
 	method, hasMethod := str(attrs, schema.AttrMethod, schema.LegacyMethod)
@@ -211,8 +214,11 @@ func normalizeAttrs(attrs pcommon.Map) int64 {
 	}
 	code, hasCode := statusCode(attrs)
 	errType, hasErr := str(attrs, schema.AttrErrorType)
+	ua, _ := str(attrs, schema.AttrUserAgent, schema.LegacyUserAgent)
+	synthetic, _ := str(attrs, schema.AttrSyntheticUAType)
 
 	attrs.Clear()
+	var normRoute string
 	if hasMethod {
 		// semconv lets instrumentation that treats methods as case
 		// insensitive record the canonical name
@@ -228,6 +234,7 @@ func normalizeAttrs(attrs pcommon.Map) int64 {
 			flags |= schema.FlagSecretSeed
 		}
 		attrs.PutStr(schema.AttrRoute, r)
+		normRoute = r
 	}
 	if hasCode {
 		attrs.PutInt(schema.AttrStatusCode, code)
@@ -241,6 +248,11 @@ func normalizeAttrs(attrs pcommon.Map) int64 {
 			e = schema.MethodOther
 		}
 		attrs.PutStr(schema.AttrErrorType, e)
+	}
+	if c := trafficclass.Classify(trafficclass.Request{
+		Method: method, Route: normRoute, UserAgent: ua, Synthetic: synthetic,
+	}); c.Infrastructure() {
+		attrs.PutStr(schema.AttrTrafficClass, string(c))
 	}
 	return flags
 }

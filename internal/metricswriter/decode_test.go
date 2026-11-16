@@ -92,6 +92,9 @@ func TestDecode(t *testing.T) {
 	if len(a.Attrs) != 4 {
 		t.Fatalf("identity attributes %v", a.Attrs)
 	}
+	if a.Class != "app" {
+		t.Fatalf("metric point class %q, want app", a.Class)
+	}
 	if b.Source != SourceSpan || b.Temporality != Delta || !b.Lossy || b.Route != "" || b.Status != 0 || b.Count != 6 {
 		t.Fatalf("span point %+v", b)
 	}
@@ -129,10 +132,34 @@ func TestDecodeRefuses(t *testing.T) {
 		"invalid method":      withAttrs(t, good, map[string]any{attrMethod: "G\xffT"}),
 		"invalid service":     build(t, payload{tenant: good.tenant, token: good.token, hash: good.hash, service: "api\xc3"}, one),
 		"overlong service":    build(t, payload{tenant: good.tenant, token: good.token, hash: good.hash, service: strings.Repeat("s", 129)}, one),
+		// app is the absence of the attribute, never a published value
+		"app class":     withAttrs(t, good, map[string]any{attrClass: "app"}),
+		"unknown class": withAttrs(t, good, map[string]any{attrClass: "bot"}),
+		"class not str": withAttrs(t, good, map[string]any{attrClass: int64(1)}),
 	}
 	for name, data := range cases {
 		if _, err := Decode(tenant, data); !errors.Is(err, ErrUndecodable) {
 			t.Errorf("%s: %v", name, err)
+		}
+	}
+}
+
+func TestDecodeTrafficClass(t *testing.T) {
+	tenant := uuid.New()
+	good := payload{tenant: tenant.String(), token: uuid.NewString(), hash: strings.Repeat("ab", 32)}
+	for _, c := range []string{"preflight", "health", "probe"} {
+		msg, err := Decode(tenant, withAttrs(t, good, map[string]any{attrMethod: "GET", attrClass: c}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		p := msg.Points[0]
+		if p.Class != c {
+			t.Errorf("class %q, want %q", p.Class, c)
+		}
+		// the class is part of the stream identity, so an application and
+		// an infrastructure stream of one route never mix
+		if len(p.Attrs) != 2 {
+			t.Errorf("identity attributes %v", p.Attrs)
 		}
 	}
 }
