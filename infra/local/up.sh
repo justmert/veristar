@@ -89,7 +89,7 @@ inv = {"all": {
     "vars": {
         "sa_environment": "local",
         "sa_base_domain": domain,
-        "sa_hostnames": {k: f"{k}.{domain}" for k in ["in", "otlp", "app", "web", "status"]},
+        "sa_hostnames": {k: f"{k}.{domain}" for k in ["in", "otlp", "app", "status"]},
         "sa_private_network_cidr": "$LC_PRIVATE_SUBNET",
         # the controller reaches the nodes from the public network's gateway
         "sa_admin_cidrs": ["$LC_PUBLIC_GATEWAY/32"],

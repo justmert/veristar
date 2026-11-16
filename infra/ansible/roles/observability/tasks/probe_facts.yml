@@ -16,7 +16,7 @@
       {%- set out = [] -%}
       {%- for h in (groups['edge'] + groups['core']) | unique -%}
       {%- set hosts = ([sa_hostnames.in, sa_hostnames.otlp] if h in groups['edge'] else [])
-            + ([sa_hostnames.app, sa_hostnames.web] if h in groups['core'] else []) -%}
+            + ([sa_hostnames.app] if h in groups['core'] else []) -%}
       {%- set _ = out.append({'name': h, 'hosts': hosts,
             'spec': h ~ '@' ~ hostvars[h].sa_public_ipv4 ~ ':443=' ~ hosts | join(',')}) -%}
       {%- endfor -%}
@@ -31,7 +31,7 @@
       {%- for n in ['ingestion', 'dashboard', 'freshness web', 'freshness api'] -%}
       {%- set _ = out.append({'group': 'slo', 'name': n}) -%}
       {%- endfor -%}
-      {%- for n in ['web event', 'otlp metric', 'console', 'web host', 'machine api', 'tracker integrity'] -%}
+      {%- for n in ['web event', 'otlp metric', 'console', 'machine api', 'tracker integrity'] -%}
       {%- set _ = out.append({'group': 'probe', 'name': n}) -%}
       {%- endfor -%}
       {%- for node in observability_probe_nodes -%}

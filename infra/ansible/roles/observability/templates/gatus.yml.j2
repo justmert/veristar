@@ -2,8 +2,8 @@
 # probe node, outside the main provider: the public status page on
 # status.<BASE_DOMAIN> and alerting to discord.
 #
-# what gatus checks itself: the public hostnames, the tracker file, the
-# console and the umami host. what the prober pushes as external endpoints:
+# what gatus checks itself: the public hostnames, the tracker file and the
+# console. what the prober pushes as external endpoints:
 # ingestion (web event and otlp metric), freshness through the machine api,
 # the tracker file's sha-384 against the release manifest, and every node by
 # address with sni. gatus 5.38.0 cannot do the last two: its conditions have
@@ -37,7 +37,7 @@ ui:
       link: "https://{{ sa_hostnames.app }}/.well-known/stellar.toml"
   dark-mode: true
   # the brand is dark only, so both of gatus's modes get the same palette
-  # (the tokens of deploy/caddy/umami-theme/site/_veristar/theme.css as the
+  # (the dark theme of packages/brand/src/tokens.ts as the
   # hsl triples gatus's stylesheet expects). gatus links this file before
   # its own stylesheet, so the selectors carry one more type selector than
   # gatus's :root and :root.dark to win
@@ -112,13 +112,6 @@ endpoints:
   - name: console
     group: hosts
     url: "https://{{ sa_hostnames.app }}/"
-    <<: *default
-    conditions:
-      - "[STATUS] == 200"
-      - "[CERTIFICATE_EXPIRATION] > {{ observability_probe_cert_min_validity }}"
-  - name: umami host
-    group: hosts
-    url: "https://{{ sa_hostnames.web }}/api/heartbeat"
     <<: *default
     conditions:
       - "[STATUS] == 200"

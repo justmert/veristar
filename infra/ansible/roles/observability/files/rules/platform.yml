@@ -70,7 +70,7 @@ groups:
         for: 2m
         labels: {severity: page}
         annotations:
-          summary: "console, umami host or machine api check fails from the probe"
+          summary: "console or machine api check fails from the probe"
           runbook: docs/runbooks/alerts.md#probedashboardfailing
       - alert: ProbeNodeCheckFailing
         expr: prober_check_success{check=~"nodes_.*"} == 0
