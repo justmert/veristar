@@ -146,7 +146,7 @@ func addMinutes(t *testing.T, d *pdb.DB, rows []minuteRow) {
 			_, err := tx.Exec(t.Context(), `
 insert into api.metrics_minute (tenant_id, bucket_start, service, method, route, status_code, source, counts, sum, count, lossy)
 values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-on conflict (tenant_id, bucket_start, service, method, route, status_code, source) do update
+on conflict (tenant_id, bucket_start, service, method, route, status_code, source, traffic_class) do update
   set counts = api.add_buckets(api.metrics_minute.counts, excluded.counts),
       sum = api.metrics_minute.sum + excluded.sum, count = api.metrics_minute.count + excluded.count,
       lossy = api.metrics_minute.lossy or excluded.lossy`,
