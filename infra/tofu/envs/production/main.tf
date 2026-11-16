@@ -129,13 +129,13 @@ module "failover" {
   resource_group_name = azurerm_resource_group.this.name
   name_prefix         = "${replace(var.base_domain, ".", "-")}-${local.environment}"
   # every hostname is served by all three nodes. ingestion (99.99 %) gets
-  # 10 s probing of the node's edge health, the dashboards (99.90 %) 30 s
-  # probing of its core health (deploy/caddy/assemble.sh, tier node)
+  # 10 s probing of the node's edge health, the console (99.90 %) 30 s
+  # probing of its core health (deploy/caddy/assemble.sh, tier node). umami
+  # has no public hostname: it stays on the private network
   profiles = {
     in   = { ipv4 = local.serving[*].public_ipv4, fast = true, path = "/" }
     otlp = { ipv4 = local.serving[*].public_ipv4, fast = true, path = "/" }
     app  = { ipv4 = local.serving[*].public_ipv4, fast = false, path = "/core" }
-    web  = { ipv4 = local.serving[*].public_ipv4, fast = false, path = "/core" }
   }
   tags = local.tags
 }
