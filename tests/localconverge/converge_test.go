@@ -250,28 +250,23 @@ func TestConvergedStack(t *testing.T) {
 		t.Logf("umami website_event paths: %s", paths)
 	})
 
-	// the console image carries the umami dashboard theme (docs/adr/0004);
-	// the core caddy serves it and links it into umami's html
-	t.Run("umami dashboard theme through the core caddy", func(t *testing.T) {
+	// umami has no public site: the core caddy holds no certificate for a
+	// web. name, so the handshake fails, and app. answers umami's api paths
+	// with the console's own routes, never with umami
+	t.Run("umami is not reachable through the core caddy", func(t *testing.T) {
 		hc := &http.Client{Transport: transport(core.Public), Timeout: 30 * time.Second}
-		get := func(path string) (*http.Response, []byte) {
-			resp, err := hc.Get("https://" + inv.All.Vars.Hostnames["web"] + path)
-			require.NoError(t, err)
-			defer resp.Body.Close()
-			b, err := io.ReadAll(resp.Body)
-			require.NoError(t, err)
-			return resp, b
+		resp, err := hc.Get("https://web." + inv.All.Vars.Domain + "/api/heartbeat")
+		if err == nil {
+			_ = resp.Body.Close()
 		}
-		for _, f := range []string{"_veristar/theme.css", "_veristar/fonts/fonts.css", "favicon.ico", "site.webmanifest"} {
-			want, err := os.ReadFile("../../deploy/caddy/umami-theme/site/" + f)
-			require.NoError(t, err)
-			resp, got := get("/" + f)
-			require.Equal(t, http.StatusOK, resp.StatusCode, f)
-			require.Equal(t, want, got, "%s differs from the repository's theme", f)
-		}
-		resp, page := get("/websites/" + site.ID)
-		require.Equal(t, http.StatusOK, resp.StatusCode)
-		require.Equal(t, 1, strings.Count(string(page), `<link rel="stylesheet" href="/_veristar/theme.css"></head>`))
+		require.Error(t, err, "a web. name must not complete a tls handshake")
+		resp, err = hc.Get("https://" + inv.All.Vars.Hostnames["app"] + "/api/heartbeat")
+		require.NoError(t, err)
+		b, err := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		require.NoError(t, err)
+		require.Equal(t, http.StatusNotFound, resp.StatusCode)
+		require.NotContains(t, string(b), `"ok":true`, "umami's heartbeat answered on app.")
 	})
 
 	t.Run("otlp metrics through every edge node into the platform database", func(t *testing.T) {

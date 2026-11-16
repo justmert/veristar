@@ -242,7 +242,7 @@ probe_vars() {
 {"observability_probe_tls": "internal",
  "observability_probe_ca_file": "$LC_STATE/probe-ca.crt",
  "observability_probe_extra_hosts": {"in.sa-local.test": "172.31.99.12", "otlp.sa-local.test": "172.31.99.12",
-   "app.sa-local.test": "172.31.99.22", "web.sa-local.test": "172.31.99.22", "status.sa-local.test": "172.31.99.51"}}
+   "app.sa-local.test": "172.31.99.22", "status.sa-local.test": "172.31.99.51"}}
 EOF
 }
 
