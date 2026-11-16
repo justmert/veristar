@@ -662,9 +662,22 @@ export const integrityCode = z.enum([
   "proof_failures",
   "page_volume",
   "too_little_traffic",
+  // rule version 2: page signals of tracker 1.3.0
+  "framed_share",
+  "never_visible_share",
 ]);
 export type IntegrityCode = z.infer<typeof integrityCode>;
 const integrityLevel = z.enum(["B", "C", "none"]);
+
+// 17.5 the estimate of visits not measured because of privacy signals:
+// tracker file requests, the part with global privacy control, and the share
+// of the second in the first (null below 100 requests)
+export const coverageEstimate = z.object({
+  script_requests: count,
+  gpc_requests: count,
+  unmeasured_share: share01,
+});
+export type CoverageEstimate = z.infer<typeof coverageEstimate>;
 
 // 17.3 the grade of a project row in the global web list
 export const integrityRow = z.object({
@@ -721,12 +734,20 @@ export const integrityDay = z.object({
     hosting_share: share01,
     quarantine_share: share01,
     proof_pass_rate: share01,
+    // rule version 2 inputs; rows graded before them read 0
+    signal_views: count.optional(),
+    framed: count.optional(),
+    never_visible: count.optional(),
+    framed_share: share01.optional(),
+    never_visible_share: share01.optional(),
   }),
+  coverage: coverageEstimate,
 });
 export type IntegrityDay = z.infer<typeof integrityDay>;
 
 export const integritySite = integritySummary.extend({
   site_id: id,
+  coverage: coverageEstimate,
   days: z.array(integrityDay),
 });
 export type IntegritySite = z.infer<typeof integritySite>;
@@ -738,6 +759,7 @@ export const integrityReport = integritySummary.extend({
   from: day,
   to: day,
   rule_version: z.number().int().positive(),
+  coverage: coverageEstimate,
   sites: z.array(integritySite),
 });
 export type IntegrityReport = z.infer<typeof integrityReport>;
@@ -760,6 +782,7 @@ export const webProject = z.object({
   ingest_rejected: count,
   rejected_share: share01,
   integrity: integrityRow,
+  coverage: coverageEstimate,
   top: z.object({
     referrer: z.array(keyValue),
     country: z.array(keyValue),
@@ -819,6 +842,7 @@ export const webSort = z.enum([
   "requests_percentile",
   "error_rate_percentile",
   "onchain_operations_percentile",
+  "unmeasured_share",
 ]);
 export type WebSort = z.infer<typeof webSort>;
 
@@ -932,6 +956,7 @@ export type Breakdown = z.infer<typeof breakdown>;
 export const webCompareProject = z.object({
   tenant: tenantRef,
   integrity: integritySummary,
+  coverage: coverageEstimate,
   totals: z.object({
     pageviews: count,
     visitors: count,

@@ -6,6 +6,7 @@ import { exportPaths, type SCFView, scfViewQuery } from "@/api/onchain";
 import { integrityQuery, sitesQuery } from "@/api/queries";
 import type { IntegrityReport } from "@/api/schemas";
 import { OwnCohortPanel } from "@/components/cohort";
+import { CoverageNote } from "@/components/coverage";
 import { ErrorPanel, Loading, StateBlock } from "@/components/error-panel";
 import { type AppealContext, AppealLink } from "@/components/integrity";
 import { projectTabs } from "@/components/nav/nav-items";
@@ -256,6 +257,14 @@ function SCFRows({ v }: { v: SCFView }) {
       <IntegritySlot value={v.integrity} appeal={appeal} />
       <CohortPlace v={v} />
       <RulesMet v={v} />
+      {web ? (
+        <Panel
+          title="Visits not measured"
+          description="Visitors with Global Privacy Control are not measured, by design. This is the estimated share of them for this range."
+        >
+          <CoverageNote coverage={web.coverage} />
+        </Panel>
+      ) : null}
       <Panel title="Project" description="As the operator list shows it.">
         <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           <Row label="Status">{v.tenant?.status ?? "n/a"}</Row>

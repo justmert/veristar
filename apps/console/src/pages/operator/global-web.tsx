@@ -3,6 +3,7 @@ import { SearchX } from "lucide-react";
 import { Link, useSearchParams } from "react-router";
 import { webProjectsQuery } from "@/api/queries";
 import { type WebProject, type WebSort, webSort } from "@/api/schemas";
+import { CoverageCell } from "@/components/coverage";
 import { DbIpAttribution } from "@/components/dbip-attribution";
 import { ErrorPanel, Loading, StateBlock } from "@/components/error-panel";
 import { IntegrityCell } from "@/components/integrity";
@@ -73,6 +74,7 @@ const SORT_TEXT: Record<WebSort, string> = {
   rejected_share: "Rejected share",
   integrity: "Integrity grade",
   ...GROWTH_SORT_TEXT,
+  unmeasured_share: "Not measured (privacy signals)",
 };
 
 // the columns; `size` is what the magnitude bar measures when the table
@@ -206,6 +208,13 @@ export function GlobalWebPage() {
                       order={state.order}
                       onSort={sortBy}
                     />
+                    <SortHeader
+                      label="Not measured"
+                      sort="unmeasured_share"
+                      current={state.sort}
+                      order={state.order}
+                      onSort={sortBy}
+                    />
                     {COLUMNS.map((c) => (
                       <SortHeader
                         key={c.sort}
@@ -320,6 +329,9 @@ function WebRow({
       </th>
       <td className={TD}>
         <IntegrityCell tenant={t} integrity={p.integrity} range={range} />
+      </td>
+      <td className={TD}>
+        <CoverageCell coverage={p.coverage} />
       </td>
       {cell("pageviews", p.pageviews, <span data-col="pageviews">{formatCount(p.pageviews)}</span>)}
       {cell("visitors", p.visitors, <span data-col="visitors">{formatCount(p.visitors)}</span>)}

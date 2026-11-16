@@ -96,6 +96,7 @@ export const webProjectA = {
   ingest_rejected: 75,
   rejected_share: 0.03968253968253968,
   integrity: { grade: "B", graded_days: 30, days_a: 21, days_b: 9, days_c: 0 },
+  coverage: { script_requests: 2400, gpc_requests: 288, unmeasured_share: 0.12 },
   top: {
     referrer: [{ key: "github.com", value: 81 }],
     country: [
@@ -130,6 +131,7 @@ export const webProjectB = {
   ingest_rejected: 0,
   rejected_share: null,
   integrity: { grade: null, graded_days: 0, days_a: 0, days_b: 0, days_c: 0 },
+  coverage: { script_requests: 40, gpc_requests: 3, unmeasured_share: null },
   top: { referrer: [], country: [], device: [], browser: [] },
   ...comparisonB,
 };
@@ -222,6 +224,7 @@ export const webCompareBody = {
     {
       tenant: refA,
       cohort: cohortA,
+      coverage: { script_requests: 500, gpc_requests: 60, unmeasured_share: 0.12 },
       integrity: {
         grade: "C",
         graded_days: 3,
@@ -270,6 +273,7 @@ export const webCompareBody = {
     {
       tenant: refB,
       cohort: noCohort,
+      coverage: { script_requests: 500, gpc_requests: 60, unmeasured_share: 0.12 },
       integrity: { grade: null, graded_days: 0, days_a: 0, days_b: 0, days_c: 0, reasons: [] },
       totals: {
         pageviews: 0,
@@ -442,6 +446,7 @@ export const integrityReportBody = {
   from: "2026-11-11",
   to: "2026-11-12",
   rule_version: 1,
+  coverage: { script_requests: 300, gpc_requests: 36, unmeasured_share: 0.12 },
   grade: "B",
   graded_days: 2,
   days_a: 1,
@@ -458,6 +463,7 @@ export const integrityReportBody = {
   sites: [
     {
       site_id: "0193a6f4-0101-7a22-b3c4-d5e6f7a8b9c0",
+      coverage: { script_requests: 300, gpc_requests: 36, unmeasured_share: 0.12 },
       grade: "B",
       graded_days: 2,
       days_a: 1,
@@ -492,6 +498,11 @@ export const integrityReportBody = {
             quarantine_share: 0,
             proof_pass_rate: 0.9900990099009901,
           },
+          coverage: {
+            script_requests: 180,
+            gpc_requests: 20,
+            unmeasured_share: 0.1111111111111111,
+          },
         },
         {
           day: "2026-11-12",
@@ -520,6 +531,11 @@ export const integrityReportBody = {
             hosting_share: null,
             quarantine_share: 0.15,
             proof_pass_rate: 1,
+          },
+          coverage: {
+            script_requests: 120,
+            gpc_requests: 16,
+            unmeasured_share: 0.13333333333333333,
           },
         },
       ],
