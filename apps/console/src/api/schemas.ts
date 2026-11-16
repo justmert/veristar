@@ -624,6 +624,99 @@ export type KeyValue = z.infer<typeof keyValue>;
 export const webDimension = z.enum(["referrer", "country", "device", "browser", "os"]);
 export type WebDimension = z.infer<typeof webDimension>;
 
+// 17 the integrity grade of web traffic. a range grade is C when at least
+// a quarter of the graded site days are C, B when at least a quarter are B
+// or C, A otherwise; null when no day was graded
+export const integrityGrade = z.enum(["A", "B", "C"]);
+export type IntegrityGrade = z.infer<typeof integrityGrade>;
+export const integrityCode = z.enum([
+  "hosting_share",
+  "quarantine_share",
+  "few_networks",
+  "spike",
+  "proof_failures",
+  "page_volume",
+  "too_little_traffic",
+]);
+export type IntegrityCode = z.infer<typeof integrityCode>;
+const integrityLevel = z.enum(["B", "C", "none"]);
+
+// 17.3 the grade of a project row in the global web list
+export const integrityRow = z.object({
+  grade: integrityGrade.nullable(),
+  graded_days: count,
+  days_a: count,
+  days_b: count,
+  days_c: count,
+});
+export type IntegrityRow = z.infer<typeof integrityRow>;
+
+export const integrityRangeReason = z.object({
+  code: integrityCode,
+  level: integrityLevel,
+  days: z.number().int().positive(),
+  text: z.string().min(1),
+});
+export type IntegrityRangeReason = z.infer<typeof integrityRangeReason>;
+
+export const integritySummary = integrityRow.extend({ reasons: z.array(integrityRangeReason) });
+export type IntegritySummary = z.infer<typeof integritySummary>;
+
+export const integrityReason = z.object({
+  code: integrityCode,
+  level: integrityLevel,
+  value: z.number(),
+  limit: z.number(),
+  text: z.string().min(1),
+});
+export type IntegrityReason = z.infer<typeof integrityReason>;
+
+export const integrityDay = z.object({
+  day,
+  grade: integrityGrade.nullable(),
+  closed: z.boolean(),
+  rule_version: z.number().int().positive(),
+  reasons: z.array(integrityReason),
+  evidence: z.object({
+    events: count,
+    quarantined: count,
+    proof_failures: count,
+    networks: count,
+    visitors: count,
+    pageviews: count,
+    baseline_visitors: count.nullable(),
+    baseline_days: z.number().int().min(0).max(28),
+    net: z.object({
+      access: count,
+      organisation: count,
+      hosting: count,
+      anonymiser: count,
+      unknown: count,
+    }),
+    hosting_share: share01,
+    quarantine_share: share01,
+    proof_pass_rate: share01,
+  }),
+});
+export type IntegrityDay = z.infer<typeof integrityDay>;
+
+export const integritySite = integritySummary.extend({
+  site_id: id,
+  days: z.array(integrityDay),
+});
+export type IntegritySite = z.infer<typeof integritySite>;
+
+// 17.2 and 17.3 one project's report, the same for the project and for
+// operators
+export const integrityReport = integritySummary.extend({
+  tenant_id: id,
+  from: day,
+  to: day,
+  rule_version: z.number().int().positive(),
+  sites: z.array(integritySite),
+});
+export type IntegrityReport = z.infer<typeof integrityReport>;
+
 // 8.3 one row of the global web list
 export const webProject = z.object({
   tenant: tenantRef,
@@ -641,6 +734,7 @@ export const webProject = z.object({
   ingest_requests: count,
   ingest_rejected: count,
   rejected_share: share01,
+  integrity: integrityRow,
   top: z.object({
     referrer: z.array(keyValue),
     country: z.array(keyValue),
@@ -683,6 +777,7 @@ export const webSort = z.enum([
   "ingest_requests",
   "ingest_rejected",
   "rejected_share",
+  "integrity",
 ]);
 export type WebSort = z.infer<typeof webSort>;
 
@@ -774,6 +869,7 @@ export type Breakdown = z.infer<typeof breakdown>;
 
 export const webCompareProject = z.object({
   tenant: tenantRef,
+  integrity: integritySummary,
   totals: z.object({
     pageviews: count,
     visitors: count,

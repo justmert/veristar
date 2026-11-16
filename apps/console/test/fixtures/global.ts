@@ -52,6 +52,7 @@ export const webProjectA = {
   ingest_requests: 1890,
   ingest_rejected: 75,
   rejected_share: 0.03968253968253968,
+  integrity: { grade: "B", graded_days: 30, days_a: 21, days_b: 9, days_c: 0 },
   top: {
     referrer: [{ key: "github.com", value: 81 }],
     country: [
@@ -84,6 +85,7 @@ export const webProjectB = {
   ingest_requests: 0,
   ingest_rejected: 0,
   rejected_share: null,
+  integrity: { grade: null, graded_days: 0, days_a: 0, days_b: 0, days_c: 0 },
   top: { referrer: [], country: [], device: [], browser: [] },
 };
 
@@ -172,6 +174,21 @@ export const webCompareBody = {
   projects: [
     {
       tenant: refA,
+      integrity: {
+        grade: "C",
+        graded_days: 3,
+        days_a: 1,
+        days_b: 0,
+        days_c: 2,
+        reasons: [
+          {
+            code: "hosting_share",
+            level: "C",
+            days: 2,
+            text: "A large share of events came from hosting networks or anonymisers.",
+          },
+        ],
+      },
       totals: {
         pageviews: 45,
         visitors: 18,
@@ -204,6 +221,7 @@ export const webCompareBody = {
     },
     {
       tenant: refB,
+      integrity: { grade: null, graded_days: 0, days_a: 0, days_b: 0, days_c: 0, reasons: [] },
       totals: {
         pageviews: 0,
         visitors: 0,
@@ -363,5 +381,97 @@ export const apiKeyUsageBody = {
   hours: [
     { hour: "2026-11-12T09:00:00Z", requests: 10, rejected: 0 },
     { hour: "2026-11-12T10:00:00Z", requests: 2, rejected: 2 },
+  ],
+};
+
+// 17.3 one project's integrity report: one site, a clean closed day and a
+// day in progress lowered to B
+export const integrityReportBody = {
+  tenant_id: TENANT_ID,
+  from: "2026-11-11",
+  to: "2026-11-12",
+  rule_version: 1,
+  grade: "B",
+  graded_days: 2,
+  days_a: 1,
+  days_b: 1,
+  days_c: 0,
+  reasons: [
+    {
+      code: "quarantine_share",
+      level: "B",
+      days: 1,
+      text: "A large share of accepted events went to the quarantine band.",
+    },
+  ],
+  sites: [
+    {
+      site_id: "0193a6f4-0101-7a22-b3c4-d5e6f7a8b9c0",
+      grade: "B",
+      graded_days: 2,
+      days_a: 1,
+      days_b: 1,
+      days_c: 0,
+      reasons: [
+        {
+          code: "quarantine_share",
+          level: "B",
+          days: 1,
+          text: "A large share of accepted events went to the quarantine band.",
+        },
+      ],
+      days: [
+        {
+          day: "2026-11-11",
+          grade: "A",
+          closed: true,
+          rule_version: 1,
+          reasons: [],
+          evidence: {
+            events: 1000,
+            quarantined: 0,
+            proof_failures: 10,
+            networks: 120,
+            visitors: 400,
+            pageviews: 1000,
+            baseline_visitors: 380,
+            baseline_days: 28,
+            net: { access: 850, organisation: 60, hosting: 80, anonymiser: 0, unknown: 10 },
+            hosting_share: 0.08,
+            quarantine_share: 0,
+            proof_pass_rate: 0.9900990099009901,
+          },
+        },
+        {
+          day: "2026-11-12",
+          grade: "B",
+          closed: false,
+          rule_version: 1,
+          reasons: [
+            {
+              code: "quarantine_share",
+              level: "B",
+              value: 0.15,
+              limit: 0.1,
+              text: "15% of accepted events went to the quarantine band (limit 10%): crowded address prefixes or visitors past the hourly volume bound.",
+            },
+          ],
+          evidence: {
+            events: 200,
+            quarantined: 30,
+            proof_failures: 0,
+            networks: 40,
+            visitors: 90,
+            pageviews: 180,
+            baseline_visitors: null,
+            baseline_days: 0,
+            net: { access: 0, organisation: 0, hosting: 0, anonymiser: 0, unknown: 0 },
+            hosting_share: null,
+            quarantine_share: 0.15,
+            proof_pass_rate: 1,
+          },
+        },
+      ],
+    },
   ],
 };

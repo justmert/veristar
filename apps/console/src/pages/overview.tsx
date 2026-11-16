@@ -6,6 +6,7 @@ import { apiOverviewQuery, ingestMonthQuery, sitesQuery } from "@/api/queries";
 import type { ApiOverview, Ingest, Site } from "@/api/schemas";
 import { DbIpAttribution } from "@/components/dbip-attribution";
 import { ErrorPanel, Loading, StateBlock } from "@/components/error-panel";
+import { IntegrityReportView } from "@/components/integrity";
 import { PageHeader } from "@/components/panel";
 import { Segmented } from "@/components/segmented";
 import { StatTile, type Trend } from "@/components/stat-tile";
@@ -101,6 +102,16 @@ export function OverviewPage() {
       ) : (
         <ProjectTraffic sites={live} range={range} canChange={canChange} tenantId={tenant.id} />
       )}
+
+      {live.length > 0 ? (
+        <IntegrityReportView
+          scope="tenant"
+          tenantId={tenant.id}
+          range={{ from: "", to: "" }}
+          siteNames={Object.fromEntries(sites.data.map((s) => [s.id, s.name]))}
+          intro="The integrity grade of your web traffic over the last 30 UTC days, with the reasons behind it. This is exactly the report SCF operators see for your project."
+        />
+      ) : null}
 
       <div className="flex flex-col gap-1">
         {live.length > 0 ? (

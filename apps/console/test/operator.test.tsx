@@ -8,6 +8,7 @@ import { SettingsPage } from "@/pages/operator/settings";
 import { TenantDetailPage } from "@/pages/operator/tenant-detail";
 import { queryFromParams, TenantsPage } from "@/pages/operator/tenants";
 import * as f from "./fixtures/contract";
+import { integrityReportBody } from "./fixtures/global";
 import { byLabel, byRole, click, renderRoutes, stubFetch, type, waitFor } from "./helpers";
 
 const detailRoute = [{ path: "/operator/tenants/:tenantId", element: <TenantDetailPage /> }];
@@ -73,9 +74,16 @@ describe("operator area guard", () => {
 
 describe("operator project detail", () => {
   it("shows enrollment answers, evidence, ingest counts and only the allowed actions", async () => {
-    stubFetch([{ status: 200, body: f.operatorDetailBody }]);
+    stubFetch([
+      { status: 200, body: f.operatorDetailBody },
+      { status: 200, body: integrityReportBody },
+    ]);
     const host = await renderRoutes(detailRoute, `/operator/tenants/${f.TENANT_ID}`);
     await waitFor(() => expect(host.textContent).toContain("Soroban AMM on mainnet"));
+    // the integrity report of the project, with the reasons of its days
+    await waitFor(() =>
+      expect(host.textContent).toContain("15% of accepted events went to the quarantine band"),
+    );
     expect(host.textContent).toContain("not a valid id");
     expect(host.textContent).toContain("Domain verified");
     expect(host.textContent).toContain("Public network");
@@ -92,6 +100,7 @@ describe("operator project detail", () => {
   it("requires a reason to reject and posts it with the csrf header", async () => {
     const calls = stubFetch([
       { status: 200, body: f.operatorDetailBody },
+      { status: 200, body: integrityReportBody },
       {
         status: 200,
         body: { ...f.operatorSummaryBody, status: "rejected", status_reason: "Not on Stellar" },
@@ -106,42 +115,47 @@ describe("operator project detail", () => {
     const confirm = [...(dialog?.querySelectorAll("button") ?? [])].find(
       (b) => b.textContent === "Reject",
     ) as HTMLElement;
+    await waitFor(() => expect(calls).toHaveLength(2));
     await click(confirm);
-    expect(calls).toHaveLength(1);
+    expect(calls).toHaveLength(2);
     expect(dialog?.textContent).toContain("Required.");
     await type(byLabel(dialog as HTMLElement, "Reason"), "  Not on Stellar ");
     await click(confirm);
-    await waitFor(() => expect(calls).toHaveLength(2));
-    expect(calls[1]?.method).toBe("POST");
-    expect(calls[1]?.url).toBe(`/api/operator/tenants/${f.TENANT_ID}/reject`);
-    expect(calls[1]?.headers.get("X-Requested-With")).toBe("sa-console");
-    expect(calls[1]?.body).toEqual({ reason: "Not on Stellar" });
+    await waitFor(() => expect(calls).toHaveLength(3));
+    expect(calls[2]?.method).toBe("POST");
+    expect(calls[2]?.url).toBe(`/api/operator/tenants/${f.TENANT_ID}/reject`);
+    expect(calls[2]?.headers.get("X-Requested-With")).toBe("sa-console");
+    expect(calls[2]?.body).toEqual({ reason: "Not on Stellar" });
     await waitFor(() => expect(dialogOpen(host)).toBeUndefined());
   });
 
   it("approves without a reason by sending an empty body", async () => {
     const calls = stubFetch([
       { status: 200, body: f.operatorDetailBody },
+      { status: 200, body: integrityReportBody },
       { status: 200, body: { ...f.operatorSummaryBody, status: "active" } },
     ]);
     const host = await renderRoutes(detailRoute, `/operator/tenants/${f.TENANT_ID}`);
     await waitFor(() => byRole(host, "button", "Approve"));
+    await waitFor(() => expect(calls).toHaveLength(2));
     await click(byRole(host, "button", "Approve"));
     const dialog = dialogOpen(host) as HTMLElement;
     const confirm = [...dialog.querySelectorAll("button")].find((b) => b.textContent === "Approve");
     await click(confirm as HTMLElement);
-    await waitFor(() => expect(calls).toHaveLength(2));
-    expect(calls[1]?.url).toBe(`/api/operator/tenants/${f.TENANT_ID}/approve`);
-    expect(calls[1]?.body).toEqual({});
+    await waitFor(() => expect(calls).toHaveLength(3));
+    expect(calls[2]?.url).toBe(`/api/operator/tenants/${f.TENANT_ID}/approve`);
+    expect(calls[2]?.body).toEqual({});
   });
 
   it("shows a 409 invalid_transition in the dialog", async () => {
-    stubFetch([
+    const calls = stubFetch([
       { status: 200, body: f.operatorDetailBody },
+      { status: 200, body: integrityReportBody },
       { status: 409, body: f.errorBody("invalid_transition") },
     ]);
     const host = await renderRoutes(detailRoute, `/operator/tenants/${f.TENANT_ID}`);
     await waitFor(() => byRole(host, "button", "Remove"));
+    await waitFor(() => expect(calls).toHaveLength(2));
     await click(byRole(host, "button", "Remove"));
     const dialog = dialogOpen(host) as HTMLElement;
     await type(byLabel(dialog, "Reason"), "Fraud");
@@ -153,7 +167,10 @@ describe("operator project detail", () => {
   });
 
   it("shows removal progress and no actions for a removed project", async () => {
-    stubFetch([{ status: 200, body: f.removedDetailBody }]);
+    stubFetch([
+      { status: 200, body: f.removedDetailBody },
+      { status: 200, body: integrityReportBody },
+    ]);
     const host = await renderRoutes(detailRoute, `/operator/tenants/${f.TENANT_ID}`);
     await waitFor(() => expect(host.textContent).toContain("Data is still being deleted."));
     expect(host.textContent).toContain("registry");

@@ -10,6 +10,7 @@ import {
   type AuditQuery,
   api,
   globalApi,
+  integrityApi,
   type TenantListQuery,
 } from "./endpoints";
 import type { ApiSort, WebSort } from "./schemas";
@@ -294,3 +295,15 @@ export const keyTenantsQuery = queryOptions({
   queryFn: ({ signal }) => globalApi.keyTenants(signal),
   staleTime: 5 * 60_000,
 });
+
+// the integrity job grades hourly, like the aggregates it reads. the project
+// reads under its own key, so a member's and an operator's caches never mix
+export const integrityQuery = (scope: "tenant" | "operator", tenantId: string, r: DayRange) =>
+  queryOptions({
+    queryKey:
+      scope === "tenant"
+        ? ([...keys.tenant(tenantId), "integrity", r] as const)
+        : keys.opGlobal("integrity", tenantId, r),
+    queryFn: ({ signal }) => integrityApi.report(scope, tenantId, r, signal),
+    staleTime: globalStale,
+  });
