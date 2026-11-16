@@ -11,6 +11,58 @@ import (
 	"github.com/google/uuid"
 )
 
+const memberSite = `-- name: MemberSite :one
+select s.id, s.tenant_id, s.status, s.quarantine_website_id, t.status as tenant_status, t.umami_team_id
+from cp.sites s
+join cp.tenants t on t.id = s.tenant_id
+where s.id = $1
+`
+
+type MemberSiteRow struct {
+	ID                  uuid.UUID
+	TenantID            uuid.UUID
+	Status              string
+	QuarantineWebsiteID uuid.NullUUID
+	TenantStatus        string
+	UmamiTeamID         uuid.NullUUID
+}
+
+// the site a member's umami read names, with what the membership check needs
+func (q *Queries) MemberSite(ctx context.Context, id uuid.UUID) (MemberSiteRow, error) {
+	row := q.db.QueryRow(ctx, memberSite, id)
+	var i MemberSiteRow
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.Status,
+		&i.QuarantineWebsiteID,
+		&i.TenantStatus,
+		&i.UmamiTeamID,
+	)
+	return i, err
+}
+
+const memberUmamiUser = `-- name: MemberUmamiUser :one
+select u.umami_username
+from cp.tenant_members m
+join cp.users u on u.id = m.user_id
+where m.tenant_id = $1 and m.user_id = $2
+`
+
+type MemberUmamiUserParams struct {
+	TenantID uuid.UUID
+	UserID   uuid.UUID
+}
+
+// the caller's umami user name when the caller is a member of the tenant;
+// null until the reconciler has made the umami user
+func (q *Queries) MemberUmamiUser(ctx context.Context, arg MemberUmamiUserParams) (*string, error) {
+	row := q.db.QueryRow(ctx, memberUmamiUser, arg.TenantID, arg.UserID)
+	var umami_username *string
+	err := row.Scan(&umami_username)
+	return umami_username, err
+}
+
 const provisionLockTenant = `-- name: ProvisionLockTenant :one
 
 select id, status, umami_team_id from cp.tenants where id = $1 for update
@@ -22,7 +74,7 @@ type ProvisionLockTenantRow struct {
 	UmamiTeamID uuid.NullUUID
 }
 
-// queries for the provisioning reconciler, sso and the umami password
+// queries for the provisioning reconciler, member umami sessions and the umami password
 // rotation. all run as cp_system.
 // one reconcile per tenant at a time: the row lock is held for the whole run,
 // across the umami calls, so the control plane and the jobs task never create
@@ -93,7 +145,7 @@ type ProvisionSetUmamiUsernameParams struct {
 }
 
 // the name the reconciler gives a new umami user, stored before the user is
-// created so sso logs in with the same name (00034)
+// created so member sessions log in with the same name (00034)
 func (q *Queries) ProvisionSetUmamiUsername(ctx context.Context, arg ProvisionSetUmamiUsernameParams) error {
 	_, err := q.db.Exec(ctx, provisionSetUmamiUsername, arg.UmamiUsername, arg.ID)
 	return err
@@ -199,58 +251,6 @@ func (q *Queries) ProvisionTenantIDs(ctx context.Context) ([]uuid.UUID, error) {
 		return nil, err
 	}
 	return items, nil
-}
-
-const sSOMember = `-- name: SSOMember :one
-select u.umami_username
-from cp.tenant_members m
-join cp.users u on u.id = m.user_id
-where m.tenant_id = $1 and m.user_id = $2
-`
-
-type SSOMemberParams struct {
-	TenantID uuid.UUID
-	UserID   uuid.UUID
-}
-
-// the caller's umami user name when the caller is a member of the tenant;
-// null until the reconciler has made the umami user
-func (q *Queries) SSOMember(ctx context.Context, arg SSOMemberParams) (*string, error) {
-	row := q.db.QueryRow(ctx, sSOMember, arg.TenantID, arg.UserID)
-	var umami_username *string
-	err := row.Scan(&umami_username)
-	return umami_username, err
-}
-
-const sSOSite = `-- name: SSOSite :one
-select s.id, s.tenant_id, s.status, s.quarantine_website_id, t.status as tenant_status, t.umami_team_id
-from cp.sites s
-join cp.tenants t on t.id = s.tenant_id
-where s.id = $1
-`
-
-type SSOSiteRow struct {
-	ID                  uuid.UUID
-	TenantID            uuid.UUID
-	Status              string
-	QuarantineWebsiteID uuid.NullUUID
-	TenantStatus        string
-	UmamiTeamID         uuid.NullUUID
-}
-
-// the site an sso request names, with what the membership check needs
-func (q *Queries) SSOSite(ctx context.Context, id uuid.UUID) (SSOSiteRow, error) {
-	row := q.db.QueryRow(ctx, sSOSite, id)
-	var i SSOSiteRow
-	err := row.Scan(
-		&i.ID,
-		&i.TenantID,
-		&i.Status,
-		&i.QuarantineWebsiteID,
-		&i.TenantStatus,
-		&i.UmamiTeamID,
-	)
-	return i, err
 }
 
 const setUmamiPasswordDay = `-- name: SetUmamiPasswordDay :exec

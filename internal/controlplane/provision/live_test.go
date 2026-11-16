@@ -3,14 +3,8 @@ package provision_test
 import (
 	"crypto/rand"
 	"errors"
-	"io"
 	"log/slog"
-	"net/http"
-	"net/http/httptest"
-	"net/url"
 	"slices"
-	"strconv"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -20,10 +14,8 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stretchr/testify/require"
 
-	"github.com/justmert/veristar/internal/controlplane/httpx"
 	"github.com/justmert/veristar/internal/controlplane/provision"
-	"github.com/justmert/veristar/internal/controlplane/session"
-	"github.com/justmert/veristar/internal/controlplane/sso"
+	"github.com/justmert/veristar/internal/controlplane/umamiread"
 	pdb "github.com/justmert/veristar/internal/db"
 	"github.com/justmert/veristar/internal/db/dbtest"
 	"github.com/justmert/veristar/internal/jobs/jobstest"
@@ -37,7 +29,7 @@ import (
 // a desktop chrome user agent that umami's isbot check accepts
 const ua = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
 
-// clock is the time the reconciler, sso and the rotation see, so a test can
+// clock is the time the reconciler, the umami sessions and the rotation see, so a test can
 // move to the next utc day without waiting for it.
 type clock struct {
 	mu  sync.Mutex
@@ -47,17 +39,16 @@ type clock struct {
 func (c *clock) Now() time.Time  { c.mu.Lock(); defer c.mu.Unlock(); return c.now }
 func (c *clock) Set(t time.Time) { c.mu.Lock(); c.now = t; c.mu.Unlock() }
 
-// env is one real postgres, nats and umami (with the web caddy in front),
-// started once for every check below.
+// env is one real postgres, nats and umami, started once for every check
+// below.
 type env struct {
 	d     *pdb.DB
 	kv    jetstream.KeyValue
 	um    *umamictr.Stack
-	web   *umamictr.Web
 	rec   *provision.Reconciler
 	key   umami.PasswordKey
 	clock *clock
-	srv   *httptest.Server
+	sess  *umamiread.Sessions
 	rot   *umamirotate.Rotator
 	pg    *dbtest.Postgres
 }
@@ -80,7 +71,6 @@ func start(t *testing.T) *env {
 	require.NoError(t, err)
 
 	um := umamictr.Start(t)
-	web := umamictr.StartWeb(t, um)
 
 	raw := make([]byte, umami.PasswordKeyLen)
 	_, err = rand.Read(raw)
@@ -91,38 +81,15 @@ func start(t *testing.T) *env {
 	c := &clock{now: time.Now().UTC()}
 	log := slog.New(slog.DiscardHandler)
 	e := &env{
-		d: d, kv: kv, um: um, web: web, key: key, clock: c, pg: pg,
+		d: d, kv: kv, um: um, key: key, clock: c, pg: pg,
 		rec: &provision.Reconciler{Admin: um.Admin, Registry: pub, Key: key, Tx: d.WithSystem, Now: c.Now, Log: log},
 		rot: &umamirotate.Rotator{Admin: um.Admin, Key: key, Now: c.Now, Log: log},
 	}
 
-	// the sso route behind the real console session middleware. /test-sign-in
-	// stands in for the github callback, which ends in the same
-	// SignIn call.
-	sm := session.New(d)
-	h := &sso.Handler{
-		Tx: d.WithSystem, Umami: um.Client, Key: key, WebOrigin: "https://web." + umamictr.WebDomain, Now: c.Now,
-		UserID: func(r *http.Request) (uuid.UUID, bool) {
-			u, ok := session.CurrentUser(r.Context())
-			return u.ID, ok
-		},
-	}
-	require.NoError(t, h.Check())
-	mux := http.NewServeMux()
-	mux.Handle(sso.Path, sm.RequireUser(h))
-	mux.Handle("/test-sign-in", httpx.HandlerFunc(func(w http.ResponseWriter, r *http.Request) error {
-		id, err := uuid.Parse(r.URL.Query().Get("user"))
-		if err != nil {
-			return httpx.NotFound()
-		}
-		if err := sm.SignIn(r.Context(), id); err != nil {
-			return err
-		}
-		w.WriteHeader(http.StatusNoContent)
-		return nil
-	}))
-	e.srv = httptest.NewServer(httpx.Base(log)(sm.Load(mux)))
-	t.Cleanup(e.srv.Close)
+	// the member sessions the console's web dashboard and the mcp tools
+	// read umami with
+	e.sess = &umamiread.Sessions{Tx: d.WithSystem, Umami: um.Client, Key: key, Now: c.Now}
+	require.NoError(t, e.sess.Check())
 	return e
 }
 
@@ -201,69 +168,25 @@ func (e *env) auditCount(t *testing.T) int {
 	return n
 }
 
-// signIn returns the session cookie of a console session for user.
-func (e *env) signIn(t *testing.T, user uuid.UUID) string {
+// token opens a member session for the site and returns its umami token.
+func (e *env) token(t *testing.T, user uuid.UUID, s site) umami.Token {
 	t.Helper()
-	resp, err := http.Get(e.srv.URL + "/test-sign-in?user=" + user.String())
+	got, sess, err := e.sess.SiteSession(t.Context(), user, s.id)
 	require.NoError(t, err)
-	_ = resp.Body.Close()
-	require.Equal(t, http.StatusNoContent, resp.StatusCode)
-	for _, c := range resp.Cookies() {
-		if c.Name == session.CookieName {
-			return c.Name + "=" + c.Value
-		}
-	}
-	t.Fatal("no session cookie")
-	return ""
+	require.Equal(t, s.id, got.ID)
+	require.Equal(t, uuid.NullUUID{UUID: s.quarantine, Valid: true}, got.QuarantineWebsiteID)
+	require.Equal(t, user.String(), sess.User.ID)
+	return sess.Token
 }
 
-var noRedirect = &http.Client{
-	Timeout:       30 * time.Second,
-	CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
-}
-
-// ssoClick is a click on "Open web dashboard" in the console. it returns
-// the status and headers; the body of a redirect is not read.
-func (e *env) ssoClick(t *testing.T, cookie string, query string, fetchSite string) (int, http.Header) {
+// failure opens a member session that must fail and returns its code.
+func (e *env) failure(t *testing.T, user, siteID uuid.UUID) string {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, e.srv.URL+sso.Path+"?"+query, nil)
-	require.NoError(t, err)
-	req.Header.Set("Cookie", cookie)
-	if fetchSite != "" {
-		req.Header.Set("Sec-Fetch-Site", fetchSite)
-	}
-	resp, err := noRedirect.Do(req)
-	require.NoError(t, err)
-	_ = resp.Body.Close()
-	return resp.StatusCode, resp.Header
-}
-
-// ssoToken clicks through sso and returns the umami token of the redirect.
-func (e *env) ssoToken(t *testing.T, cookie string, s site) umami.Token {
-	t.Helper()
-	status, hdr := e.ssoClick(t, cookie, "site="+s.id.String(), "same-origin")
-	require.Equal(t, http.StatusFound, status, hdr.Get("Location"))
-	require.Equal(t, "no-store", hdr.Get("Cache-Control"))
-	require.Equal(t, "no-referrer", hdr.Get("Referrer-Policy"))
-	loc, err := url.Parse(hdr.Get("Location"))
-	require.NoError(t, err)
-	require.Equal(t, "https", loc.Scheme)
-	require.Equal(t, "web."+umamictr.WebDomain, loc.Host)
-	require.Equal(t, "/sso", loc.Path)
-	require.Equal(t, "/websites/"+s.id.String(), loc.Query().Get("url"))
-	tok := loc.Query().Get("token")
-	require.NotEmpty(t, tok)
-	return umami.NewToken(tok)
-}
-
-func (e *env) ssoFailure(t *testing.T, cookie, query, fetchSite string) string {
-	t.Helper()
-	status, hdr := e.ssoClick(t, cookie, query, fetchSite)
-	require.Equal(t, http.StatusSeeOther, status)
-	loc, err := url.Parse(hdr.Get("Location"))
-	require.NoError(t, err)
-	require.Equal(t, "/sso-error", loc.Path)
-	return loc.Query().Get("code")
+	_, _, err := e.sess.SiteSession(t.Context(), user, siteID)
+	require.Error(t, err)
+	code, ok := umamiread.FailureCode(err)
+	require.True(t, ok, "%v", err)
+	return code
 }
 
 // stats reads a website's totals with a tenant user's token on the private network.
@@ -324,7 +247,7 @@ func TestProvisioningLive(t *testing.T) {
 			require.True(t, ok)
 			require.Equal(t, umami.RoleViewOnly, got.Role)
 			// the reconciler named the new umami user after the account and
-			// stored the name for sso (00034)
+			// stored the name for member sessions (00034)
 			require.Equal(t, provision.Username(u), got.Username)
 			var stored *string
 			e.sys(t, func(tx pgx.Tx) error {
@@ -448,82 +371,28 @@ func TestProvisioningLive(t *testing.T) {
 	}})
 	require.NoError(t, err)
 
-	ownerCookie := e.signIn(t, owner)
 	var first umami.Token
 
-	t.Run("sso lands on the site's dashboard with data", func(t *testing.T) {
-		first = e.ssoToken(t, ownerCookie, s)
-
-		// the browser follows the redirect to umami's /sso page through the
-		// web caddy, as a navigation from the same site, then the dashboard
-		// reads the website through the same caddy with the stored token
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, e.web.Base+"/sso?"+url.Values{
-			"token": {first.Reveal()}, "url": {"/websites/" + s.id.String()},
-		}.Encode(), nil)
-		require.NoError(t, err)
-		req.Host = e.web.Host
-		req.Header.Set("Sec-Fetch-Site", "same-site")
-		req.Header.Set("User-Agent", ua)
-		resp, err := e.web.HTTP.Do(req)
-		require.NoError(t, err)
-		body, _ := io.ReadAll(resp.Body)
-		_ = resp.Body.Close()
-		require.Equal(t, http.StatusOK, resp.StatusCode)
-		require.Contains(t, string(body), `<a href="https://db-ip.com"`, "the sso page carries the db-ip link")
-
-		page, err := http.NewRequestWithContext(ctx, http.MethodGet, e.web.Base+"/websites/"+s.id.String(), nil)
-		require.NoError(t, err)
-		page.Host = e.web.Host
-		page.Header.Set("User-Agent", ua)
-		resp, err = e.web.HTTP.Do(page)
-		require.NoError(t, err)
-		body, _ = io.ReadAll(resp.Body)
-		_ = resp.Body.Close()
-		require.Equal(t, http.StatusOK, resp.StatusCode)
-		require.Equal(t, 1, strings.Count(string(body), "IP Geolocation by DB-IP"))
-
-		stats, err := http.NewRequestWithContext(ctx, http.MethodGet, e.web.Base+"/api/websites/"+s.id.String()+"/stats?"+url.Values{
-			"startAt": {itoa(time.Now().Add(-time.Hour).UnixMilli())}, "endAt": {itoa(time.Now().UnixMilli())},
-		}.Encode(), nil)
-		require.NoError(t, err)
-		stats.Host = e.web.Host
-		stats.Header.Set("Authorization", "Bearer "+first.Reveal())
-		resp, err = e.web.HTTP.Do(stats)
-		require.NoError(t, err)
-		body, _ = io.ReadAll(resp.Body)
-		_ = resp.Body.Close()
-		require.Equal(t, http.StatusOK, resp.StatusCode, string(body))
-		require.Contains(t, string(body), `"pageviews":1`)
-
+	t.Run("a member session reads the site's numbers", func(t *testing.T) {
+		first = e.token(t, owner, s)
 		st, err := e.stats(t, first, s.id)
 		require.NoError(t, err)
 		require.Equal(t, int64(1), st.Pageviews)
 		require.Equal(t, int64(1), st.Visitors)
-
-		// the quarantine view goes to the quarantine website
-		status, hdr := e.ssoClick(t, ownerCookie, "site="+s.id.String()+"&view=quarantine", "same-origin")
-		require.Equal(t, http.StatusFound, status)
-		loc, err := url.Parse(hdr.Get("Location"))
+		// the quarantine website belongs to the same team
+		_, err = e.stats(t, first, s.quarantine)
 		require.NoError(t, err)
-		require.Equal(t, "/websites/"+s.quarantine.String(), loc.Query().Get("url"))
 
 		// refusals
-		require.Equal(t, sso.CodeCrossSite, e.ssoFailure(t, ownerCookie, "site="+s.id.String(), "cross-site"))
-		require.Equal(t, sso.CodeCrossSite, e.ssoFailure(t, ownerCookie, "site="+s.id.String(), "same-site"))
-		require.Equal(t, sso.CodeNotFound, e.ssoFailure(t, ownerCookie, "site="+uuid.NewString(), "same-origin"))
-		require.Equal(t, sso.CodeNotFound, e.ssoFailure(t, ownerCookie, "site=not-a-uuid", "same-origin"))
-		outsiderCookie := e.signIn(t, outsider)
-		require.Equal(t, sso.CodeNotFound, e.ssoFailure(t, outsiderCookie, "site="+s.id.String(), "none"))
-		status, _ = e.ssoClick(t, "", "site="+s.id.String(), "same-origin")
-		require.Equal(t, http.StatusUnauthorized, status)
+		require.Equal(t, umamiread.CodeNotFound, e.failure(t, owner, uuid.New()))
+		require.Equal(t, umamiread.CodeNotFound, e.failure(t, outsider, s.id))
 	})
 
 	// a site in review (contract 5.6) has no umami
-	// website the user may open, so sso answers provisioning_pending
-	// instead of sending the browser to an umami error page. the tenant is
-	// active and its team and the membership exist, as for a reviewed site.
-	t.Run("sso for a site in review answers provisioning_pending", func(t *testing.T) {
-		ownerCookie := e.signIn(t, owner)
+	// website the user may read, so a session answers provisioning_pending.
+	// the tenant is active and its team and the membership exist, as for a
+	// reviewed site.
+	t.Run("a session for a site in review answers provisioning_pending", func(t *testing.T) {
 		setStatus := func(status string) {
 			e.sys(t, func(tx pgx.Tx) error {
 				_, err := tx.Exec(ctx, `update cp.sites set status = $2 where id = $1`, s.id, status)
@@ -532,16 +401,13 @@ func TestProvisioningLive(t *testing.T) {
 		}
 		setStatus("pending")
 		defer setStatus("active")
-		for _, view := range []string{"", "&view=quarantine"} {
-			require.Equal(t, sso.CodeProvisioningPending, e.ssoFailure(t, ownerCookie, "site="+s.id.String()+view, "same-origin"))
-		}
+		require.Equal(t, umamiread.CodeProvisioningPending, e.failure(t, owner, s.id))
 		setStatus("active")
-		status, _ := e.ssoClick(t, ownerCookie, "site="+s.id.String(), "same-origin")
-		require.Equal(t, http.StatusFound, status)
+		e.token(t, owner, s)
 	})
 
-	t.Run("two tabs stay logged in after a second sso click", func(t *testing.T) {
-		second := e.ssoToken(t, ownerCookie, s)
+	t.Run("a second session leaves the first one logged in", func(t *testing.T) {
+		second := e.token(t, owner, s)
 		for i, tok := range []umami.Token{first, second} {
 			u, err := e.um.Client.Verify(ctx, tok)
 			require.NoError(t, err, "tab %d", i+1)
@@ -561,7 +427,7 @@ func TestProvisioningLive(t *testing.T) {
 		// rotation of the day ended the tokens issued before it; sign in again
 		_, err = e.um.Client.Verify(ctx, first)
 		require.ErrorIs(t, err, umami.ErrUnauthorized)
-		today := e.ssoToken(t, ownerCookie, s)
+		today := e.token(t, owner, s)
 		_, err = e.um.Client.Verify(ctx, today)
 		require.NoError(t, err)
 		again, err := e.rot.Rotate(ctx, e.d.WithSystem)
@@ -570,10 +436,10 @@ func TestProvisioningLive(t *testing.T) {
 		_, err = e.um.Client.Verify(ctx, today)
 		require.NoError(t, err, "a skipped rotation changes nothing")
 
-		// next utc day, before the rotation ran: sso still works with the
+		// next utc day, before the rotation ran: a session still opens with the
 		// previous day's password
 		e.clock.Set(day0.Add(24 * time.Hour))
-		beforeRotation := e.ssoToken(t, ownerCookie, s)
+		beforeRotation := e.token(t, owner, s)
 		_, err = e.um.Client.Verify(ctx, beforeRotation)
 		require.NoError(t, err)
 
@@ -586,7 +452,7 @@ func TestProvisioningLive(t *testing.T) {
 			_, err = e.stats(t, tok, s.id)
 			require.ErrorIs(t, err, umami.ErrUnauthorized, name)
 		}
-		fresh := e.ssoToken(t, ownerCookie, s)
+		fresh := e.token(t, owner, s)
 		st, err := e.stats(t, fresh, s.id)
 		require.NoError(t, err)
 		require.Equal(t, int64(1), st.Pageviews)
@@ -603,15 +469,14 @@ func TestProvisioningLive(t *testing.T) {
 		require.Equal(t, 2, n, "one audit row per rotation")
 
 		// a rotation that stopped running is not papered over: two days
-		// after the last rotation sso refuses
+		// after the last rotation a session is refused
 		e.clock.Set(day0.Add(3 * 24 * time.Hour))
-		require.Equal(t, sso.CodeProvisioningPending, e.ssoFailure(t, ownerCookie, "site="+s.id.String(), "same-origin"))
+		require.Equal(t, umamiread.CodeProvisioningPending, e.failure(t, owner, s.id))
 		e.clock.Set(day0.Add(24 * time.Hour))
 	})
 
 	t.Run("a removed member's umami token stops working after reconcile", func(t *testing.T) {
-		otherCookie := e.signIn(t, other)
-		tok := e.ssoToken(t, otherCookie, s)
+		tok := e.token(t, other, s)
 		_, err := e.stats(t, tok, s.id)
 		require.NoError(t, err)
 
@@ -627,9 +492,9 @@ func TestProvisioningLive(t *testing.T) {
 			_, err = e.stats(t, tok, id)
 			require.ErrorIs(t, err, umami.ErrUnauthorized, "website %s", id)
 		}
-		require.Equal(t, sso.CodeNotFound, e.ssoFailure(t, otherCookie, "site="+s.id.String(), "same-origin"))
+		require.Equal(t, umamiread.CodeNotFound, e.failure(t, other, s.id))
 		// the owner keeps access
-		_, err = e.stats(t, e.ssoToken(t, ownerCookie, s), s.id)
+		_, err = e.stats(t, e.token(t, owner, s), s.id)
 		require.NoError(t, err)
 	})
 
@@ -653,8 +518,6 @@ func TestProvisioningLive(t *testing.T) {
 		again, err := e.rec.Changes(ctx, tenant)
 		require.NoError(t, err)
 		require.Empty(t, again, "deleting what is gone is not retried (umami answers 500 for unknown ids)")
-		require.Equal(t, sso.CodeProvisioningPending, e.ssoFailure(t, ownerCookie, "site="+s.id.String(), "same-origin"))
+		require.Equal(t, umamiread.CodeProvisioningPending, e.failure(t, owner, s.id))
 	})
 }
-
-func itoa(n int64) string { return strconv.FormatInt(n, 10) }

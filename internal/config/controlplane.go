@@ -24,8 +24,6 @@ type ControlPlane struct {
 	ConsoleOrigin string
 	// IngestOrigin is https://in.<BASE_DOMAIN>, used in snippets.
 	IngestOrigin string
-	// WebOrigin is https://web.<BASE_DOMAIN>, the target of sso redirects.
-	WebOrigin string
 
 	GitHubClientID     string
 	GitHubClientSecret Secret
@@ -84,7 +82,6 @@ func LoadControlPlane(e *Env) (ControlPlane, error) {
 		OpsAddr:                  e.ListenAddr("CONTROLPLANE_OPS_ADDR"),
 		ConsoleOrigin:            e.origin("CONSOLE_ORIGIN"),
 		IngestOrigin:             e.origin("INGEST_ORIGIN"),
-		WebOrigin:                e.origin("WEB_ORIGIN"),
 		GitHubClientID:           e.String("GITHUB_CLIENT_ID"),
 		GitHubClientSecret:       e.Secret("GITHUB_CLIENT_SECRET", 1),
 		GitHubRedirectURL:        e.String("GITHUB_REDIRECT_URL"),
