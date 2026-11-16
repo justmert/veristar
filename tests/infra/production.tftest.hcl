@@ -274,6 +274,41 @@ run "inventory_with_restore" {
   }
 }
 
+# the web ports are open to the internet by default and limited to the
+# admin ranges when public_ingress_open is false; ssh never changes
+run "web_ports_open_by_default" {
+  command = plan
+
+  assert {
+    condition = alltrue([
+      for r in ["http", "https", "h3"] :
+      module.network.inbound_sources[r] == ["Internet"]
+    ])
+    error_message = "tcp 80, tcp 443 and udp 443 must be open to the internet by default"
+  }
+}
+
+run "web_ports_closed_to_admin_ranges" {
+  command = plan
+
+  variables {
+    public_ingress_open = false
+  }
+
+  assert {
+    condition = alltrue([
+      for r in ["http", "https", "h3"] :
+      module.network.inbound_sources[r] == sort(var.admin_cidrs)
+    ])
+    error_message = "closed, tcp 80, tcp 443 and udp 443 must accept only admin_cidrs"
+  }
+
+  assert {
+    condition     = module.network.inbound_sources["icmp"] == ["Internet"] && module.network.inbound_sources["ssh"] == sort(var.admin_cidrs)
+    error_message = "closing the web ports must not change icmp or ssh"
+  }
+}
+
 run "ssh_open_to_world_is_refused" {
   command = plan
 

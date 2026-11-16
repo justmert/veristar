@@ -232,6 +232,10 @@ emit peer lists, so there is one source of truth.
   the internet; TCP 22 only from `admin_cidrs`; everything else from the internet is
   denied. Azure's default rules allow traffic inside the virtual network; the host firewall of
   the `base` role and the internal mTLS cover it, as on every private link.
+- `public_ingress_open = false` in `terraform.tfvars` limits TCP 80, TCP 443 and UDP 443 to
+  `admin_cidrs` as well, without stopping anything. Traffic Manager's health probes are refused
+  then, so every endpoint shows as degraded and the names still resolve to all nodes. Set it back
+  to `true` (the default) and apply to serve the internet again.
 - Traffic Manager probes every node over HTTP on port 80, path `/`, and counts 200 to 299 and
   308 as healthy (it does not follow redirects). The Host header it sends is the endpoint's
   address, so the port 80 health answer must not depend on the Host header (it does not).
