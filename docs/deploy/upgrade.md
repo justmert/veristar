@@ -9,9 +9,10 @@ time, with every image's signature checked first. Upstream images (Umami, NATS, 
 observability) change only when their pin in `infra/ansible/vars/pins.yml` changes, which is a
 code change released the same way.
 
-Production rolls out releases this way: release `v0.2.2` reached all three nodes with
-`failed=0` and two planned Patroni switchovers
-([../reference/drills/2026-11-13-azure.md](../reference/drills/2026-11-13-azure.md)).
+Production rolls out releases this way: release `v0.3.0` reached all three nodes with
+`failed=0` in the core-first order below and three planned Patroni switchovers
+([../reference/drills/2026-11-13-azure.md](../reference/drills/2026-11-13-azure.md), "Release
+v0.3.0 rollout").
 
 ## Steps
 
@@ -52,8 +53,9 @@ Production rolls out releases this way: release `v0.2.2` reached all three nodes
    counting while the tiers differ. A release whose topology needs a newer NATS server says so in
    its upgrade notes; you converge it with `site.yml` instead.
 
-   Expected: `PLAY RECAP` with `failed=0`. A rolling deploy of all three production nodes took
-   29 min 25 s.
+   Expected: `PLAY RECAP` with `failed=0`. A rolling deploy of all three production nodes takes
+   about 30 min. Release `v0.3.0`: migrations applied 2 min 47 s after the start, the edge tier
+   began after 17 min 28 s, once every core node was done, and the run ended after 34 min 1 s.
 
 4. **Verify** with [verification.md](verification.md), then watch the alerts for an hour.
 
