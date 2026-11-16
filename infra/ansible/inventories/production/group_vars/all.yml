@@ -19,7 +19,8 @@ sa_image_registry: ghcr.io/justmert/veristar
 # 37740842 is justmert
 sa_operator_github_ids: "37740842"
 
-# stellar accounts (G-addresses) of operators who sign in with a wallet,
+# stellar accounts (G-addresses) of operators who sign in with a wallet and
+# passkey accounts (C-addresses) of operators who sign in with a passkey,
 # comma separated (OPERATOR_STELLAR_ADDRESSES); none is configured
 sa_operator_stellar_addresses: ""
 
