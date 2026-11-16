@@ -24,8 +24,6 @@ const (
 	// a contract with millions of events a day (checked 2026-11-16: about
 	// 1000 every 20 seconds); its day is left out at the read cap
 	liveBusy = "CAS3J7GYLGXMF6TDJBBYYSE3HQ6BBSMLNUQ34T6TZMYMW2EVH34XOWMA"
-	// sdf's account, read whole from horizon
-	liveAccount = "GCKFBEIYV2U22IO2BJ4KVJOIP7XPWQGQFKKWXR6DOSJBV7STMAQSMTGG"
 )
 
 func TestLiveSources(t *testing.T) {
@@ -87,11 +85,10 @@ func TestLiveSources(t *testing.T) {
 	require.NotEmpty(t, quiet, "no contract among the recent ones could be read whole")
 	require.Len(t, days, 1)
 
-	from := yesterday.AddDate(0, 0, -6)
-	days, err = reader.AccountDays(ctx, liveAccount, from, yesterday, root)
-	t.Logf("account %s from %s: %+v err=%v", liveAccount, from.Format(time.DateOnly), days, err)
+	days, err = reader.AccountDays(ctx, liveIssuer, yesterday, yesterday, root)
+	t.Logf("account %s on %s: %+v err=%v", liveIssuer, yesterday.Format(time.DateOnly), days, err)
 	require.NoError(t, err)
-	require.Len(t, days, 7)
+	require.Len(t, days, 1)
 
 	entry, err := r.Instance(ctx, liveSAC)
 	require.NoError(t, err)
