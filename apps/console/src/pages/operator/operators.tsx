@@ -1,5 +1,6 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
+import { ApiError } from "@/api/client";
 import {
   operatorKeys,
   operatorsApi,
@@ -30,6 +31,7 @@ import {
 } from "@/components/ui/table";
 import { formatDateTimeUtc } from "@/lib/format";
 import { shortAddress } from "@/lib/stellar-wallet";
+import { fieldMessage, githubLogin, strkey } from "@/lib/validate";
 import { queryClient } from "@/query-client";
 
 const ROLE_TEXT: Record<RosterRole, string> = {
@@ -288,11 +290,29 @@ function RowActions({
   );
 }
 
-function AddOperator() {
+// the roster's add rules (5.16): the identity of its kind, a reason of 1 to
+// 500 characters after trimming. the server checks them again.
+export function validateAddOperator(form: {
+  kind: "github" | "stellar";
+  value: string;
+  reason: string;
+}): { identity?: string; reason?: string } {
+  const out: { identity?: string; reason?: string } = {};
+  const v = form.value.trim();
+  const id = form.kind === "github" ? githubLogin(v) : v === "" ? "required" : strkey(v);
+  if (id) out.identity = fieldMessage(id);
+  const r = [...form.reason.trim()].length;
+  if (r === 0) out.reason = "Enter a reason. It is recorded in the audit log.";
+  else if (r > 500) out.reason = "Use at most 500 characters.";
+  return out;
+}
+
+export function AddOperator() {
   const [kind, setKind] = useState<"github" | "stellar">("github");
   const [value, setValue] = useState("");
   const [role, setRole] = useState<RosterRole>("operator");
   const [reason, setReason] = useState("");
+  const [errors, setErrors] = useState<{ identity?: string; reason?: string }>({});
   const m = useMutation({
     mutationFn: () =>
       operatorsApi.addOperator({
@@ -306,8 +326,17 @@ function AddOperator() {
       refresh();
     },
   });
+  // a 422 names its fields (2.5); each is shown at its field
+  const fields = m.error instanceof ApiError ? m.error.fields : {};
+  const serverField = (k: string) => (fields[k] ? fieldMessage(fields[k]) : undefined);
+  const identityError =
+    errors.identity ?? serverField(kind === "github" ? "github_login" : "stellar_address");
+  const reasonError = errors.reason ?? serverField("reason");
   function submit(e: FormEvent) {
     e.preventDefault();
+    const v = validateAddOperator({ kind, value, reason });
+    setErrors(v);
+    if (v.identity || v.reason) return;
     m.mutate();
   }
   return (
@@ -337,13 +366,7 @@ function AddOperator() {
           onChange={(e) => setValue(e.target.value)}
           autoComplete="off"
           spellCheck={false}
-          error={
-            m.error && "fields" in m.error
-              ? ((m.error.fields as Record<string, string>)[
-                  kind === "github" ? "github_login" : "stellar_address"
-                ] ?? null)
-              : null
-          }
+          error={identityError}
         />
         <SelectField
           label="Role"
@@ -361,6 +384,7 @@ function AddOperator() {
           maxLength={500}
           value={reason}
           onChange={(e) => setReason(e.target.value)}
+          error={reasonError}
         />
         <div>
           <Button type="submit" pending={m.isPending}>
