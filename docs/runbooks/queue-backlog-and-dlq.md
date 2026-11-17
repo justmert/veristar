@@ -51,20 +51,25 @@ ingestion capacity of a production node is in
    ```
 
    (production: `10.10.1.11`). Each line is stream, messages held, time of the oldest message,
-   and per consumer the pending and unacknowledged counts. A growing `WEB_EVENTS` with a
-   `replayer` consumer whose pending count grows is a stalled or slow replayer.
+   and per consumer the pending and unacknowledged counts. `WEB_EVENTS` has one consumer per
+   partition, `replayer-p00` to `replayer-p31` (and `replayer` while an upgrade drains the
+   single subject of earlier releases). Pending counts that grow on every partition are a slow
+   delivery as a whole; counts that grow on some partitions only point at the node that owns
+   them (step 2).
 
-2. **Is anyone consuming?** Exactly one replayer, one metrics writer and one jobs daemon lead,
-   on either core node. On each core node:
+2. **Is anyone consuming?** Every core node's replayer owns a share of the 32 web event
+   partitions (`replayer_partitions_owned`, 11, 11 and 10 on three nodes); exactly one metrics
+   writer and one jobs daemon lead, on any core node. On each core node:
 
    ```sh
    cd /opt/veristar/core && sudo docker compose ps replayer metricswriter jobs
    sudo docker compose logs --since 15m --tail 100 replayer
    ```
 
-   If both instances of a service are down, start them (`sudo docker compose up -d replayer`).
-   If both run and none leads, check the `locks` bucket in the stream list of step 1
-   (`KV_locks`) and NATS quorum ([edge-node-failure.md](edge-node-failure.md)).
+   If an instance of a service is down, start it (`sudo docker compose up -d replayer`); the
+   replayers of the other nodes deliver its partitions meanwhile. If every instance runs and
+   partitions or a lock stay without an owner, check the `locks` bucket in the stream list of
+   step 1 (`KV_locks`) and NATS quorum ([edge-node-failure.md](edge-node-failure.md)).
 
 3. **Is the downstream healthy?** The replayer needs Umami; the writer needs the database.
 
@@ -107,7 +112,9 @@ ingestion capacity of a production node is in
 4. **Watch it drain.** Repeat step 1 every few minutes. If the backlog grows faster than it
    drains and the oldest message approaches the stream's max age, check that every Umami
    process runs (`sudo docker compose ps` shows `umami` and `umami-2` and up), then see
-   [capacity.md](capacity.md) for raising the number of Umami processes. The replayer's
+   [capacity.md](capacity.md) for raising the number of Umami processes. Each node delivers its
+   own partitions to its own Umami processes, so a node with an Umami process down slows only
+   its share. The replayer's
    concurrency is already raised (`REPLAYER_WORKERS` 128, `REPLAYER_MAX_IN_FLIGHT` 900 in
    `infra/ansible/roles/core/defaults/main.yml`). Write down the oldest timestamp; events older
    than 72 hours will be lost and the tenants must be told.
@@ -154,8 +161,10 @@ message id.
    ```
 
    Replay needs a selection (`--all`, `--from`, `--to`, `--key` or `--reason`, which combine).
-   Each message goes back to its original subject on `WEB_EVENTS` or `API_METRICS` with its
-   payload unchanged, so the event id inside it and its original time stay, and the replayer's
+   Each message goes back to `WEB_EVENTS` or `API_METRICS` with its payload unchanged. A web
+   event goes to its visitor's partition, also one dead-lettered from the single subject of a
+   release before the partitions; a message that does not decode as a web event goes back to
+   its original subject. The payload is unchanged, so the event id inside it and its original time stay, and the replayer's
    duplicate guard still applies. Its message id is the original id plus
    `.replay.<dlq stream>.<dlq sequence>`, and the header `Sa-Dlq-Replay` names the DLQ message.
    The DLQ copy is securely deleted only after the stream acknowledged the publish, so a crash in
@@ -187,7 +196,7 @@ message id.
    ([erasure-requests.md](erasure-requests.md)); a replayed event that erasure should cover is
    back on `WEB_EVENTS`, where erasure waits for the replayer as for any queued event.
 
-`platformctl` is allowed to publish to `web.events.*` and `api.metrics.*` for this (its NATS user in
+`platformctl` is allowed to publish to `web.events.*.*`, `web.events.*` and `api.metrics.*` for this (its NATS user in
 `internal/natsx/topology.go`); no service user gained a permission.
 
 ## Exercised
