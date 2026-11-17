@@ -152,7 +152,7 @@ func (c *controlPlaneDouble) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	c.headers = append(c.headers, r.Header.Clone())
 	c.paths = append(c.paths, r.Method+" "+r.URL.Path)
 	c.mu.Unlock()
-	w.Header().Set("Set-Cookie", "sa_session=cookie-must-not-be-logged; Path=/; HttpOnly; Secure")
+	w.Header().Set("Set-Cookie", "__Host-sa_session=cookie-must-not-be-logged; Path=/; HttpOnly; Secure")
 	w.Header().Set("Location", "https://github.com/login/oauth/authorize?client_id=x&state="+redirectState)
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Referrer-Policy", "no-referrer")
@@ -234,7 +234,7 @@ func TestAppCaddyServesConsoleAndApi(t *testing.T) {
 		require.NoError(t, err)
 		req.Host = "app.sa.test"
 		req.Header.Set("User-Agent", ua)
-		req.Header.Set("Cookie", "sa_session=request-cookie-must-not-be-logged")
+		req.Header.Set("Cookie", "__Host-sa_session=request-cookie-must-not-be-logged")
 		req.Header.Set("X-Forwarded-For", "198.51.100.77")
 		// a client cannot choose the address the sign-in limits key on
 		req.Header.Set("X-Sa-Client-Addr", "198.51.100.88")
@@ -306,7 +306,7 @@ func TestAppCaddyServesConsoleAndApi(t *testing.T) {
 	require.NotEqual(t, "198.51.100.77", h.Get("X-Sa-Client-Addr"))
 	_, err = netip.ParseAddr(h.Get("X-Sa-Client-Addr"))
 	require.NoError(t, err, "caddy sends a bare address")
-	require.Equal(t, "sa_session=request-cookie-must-not-be-logged", h.Get("Cookie"), "the session cookie must reach the control plane")
+	require.Equal(t, "__Host-sa_session=request-cookie-must-not-be-logged", h.Get("Cookie"), "the session cookie must reach the control plane")
 
 	// the mcp endpoint, the oauth paths and the discovery documents go to
 	// the control plane (contract 12), and so does the stellar.toml of the
