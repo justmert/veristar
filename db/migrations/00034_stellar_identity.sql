@@ -88,7 +88,11 @@ grant select, insert, delete on cp.wallet_challenges_used to cp_system;
 
 -- +goose Down
 -- wallet accounts and wallet invites cannot be expressed in the old
--- columns, so the down step refuses while any exists
+-- columns, so the down step refuses while any exists. it runs as
+-- platform_owner, which the forced row-level security of both tables gives
+-- no policy, so the checks lift the force; otherwise they would see no rows
+alter table cp.users no force row level security;
+alter table cp.invites no force row level security;
 -- +goose StatementBegin
 do $$
 begin
@@ -101,6 +105,8 @@ begin
 end
 $$;
 -- +goose StatementEnd
+alter table cp.users force row level security;
+alter table cp.invites force row level security;
 drop table cp.wallet_challenges_used;
 drop index cp.invites_stellar_idx;
 drop index cp.invites_tenant_stellar_idx;

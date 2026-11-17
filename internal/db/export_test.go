@@ -11,6 +11,12 @@ import (
 // DownAll rolls every migration back, as platform_owner, so tests can prove
 // the down sections work.
 func DownAll(ctx context.Context, cfg AdminConfig, fsys fs.FS) error {
+	return DownTo(ctx, cfg, fsys, 0)
+}
+
+// DownTo rolls migrations back until version is the newest applied, as
+// platform_owner, the role platformctl migrates with.
+func DownTo(ctx context.Context, cfg AdminConfig, fsys fs.FS, version int64) error {
 	cc, err := pgx.ParseConfig(cfg.Server.connString(cfg.Admin, "dbtest-down"))
 	if err != nil {
 		return err
@@ -24,6 +30,6 @@ func DownAll(ctx context.Context, cfg AdminConfig, fsys fs.FS) error {
 	if err != nil {
 		return err
 	}
-	_, err = p.DownTo(ctx, 0)
+	_, err = p.DownTo(ctx, version)
 	return err
 }
