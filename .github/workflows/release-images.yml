@@ -24,8 +24,8 @@ concurrency:
 
 env:
   SYFT_VERSION: 1.57.1
-  # key while the repository is private (release key pair, nothing in the
-  # public rekor log), keyless once it is public; repository variable
+  # key for a private repository (release key pair, nothing in the public
+  # rekor log), keyless for a public one; repository variable
   # SIGNING_MODE, docs/security/supply-chain.md section 3
   SIGNING_MODE: ${{ vars.SIGNING_MODE || 'key' }}
   TRIVY_VERSION: 0.76.2

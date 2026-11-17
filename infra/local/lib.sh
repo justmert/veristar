@@ -83,8 +83,9 @@ lc_node_create() {
 	fi
 	# the public network carries the default route, as on a cloud server;
 	# without gw-priority docker may pick the private one.
-	# privileged inside this unprivileged container: capabilities stay inside the
-	# container's user namespace (the host clock cannot be set, for example).
+	# privileged: on a docker host that itself runs in a user namespace, the
+	# capabilities stay inside it (the host clock cannot be set, for
+	# example).
 	# docker and containerd storage are volumes, because overlayfs cannot
 	# stack on the container's own overlay root.
 	# LC_PRIVATE_ROUTE is the route a cloud private network gives each server

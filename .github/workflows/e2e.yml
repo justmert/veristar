@@ -1,7 +1,7 @@
 name: e2e
 
 # the end-to-end and container suites that are too slow for every pull
-# request (rfp conformance audit, gaps 1 and 2). ci.yml already gates every
+# request. ci.yml already gates every
 # change on make test, make test-containers, the isolation gate, the
 # supply-chain check, test-integration and the promtool rule tests; this
 # workflow runs every other suite each night and on demand, one matrix job

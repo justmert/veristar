@@ -19,8 +19,8 @@
 #            key (a github actions secret, a sops copy for recovery) and
 #            uploads nothing to the public rekor log, so a private repository
 #            reveals nothing; verified here with the committed public key
-#            (sa_signature_key) and --insecure-ignore-tlog. the mode while the
-#            repository is private.
+#            (sa_signature_key) and --insecure-ignore-tlog. the mode of
+#            releases v0.1.0 to v0.2.2.
 #   keyless  github's oidc identity of the release workflow at the tag,
 #            checked against fulcio and rekor; for a public repository.
 #   test-ephemeral-key  tests/supplychain proves this logic with a key made
