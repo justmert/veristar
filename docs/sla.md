@@ -124,7 +124,7 @@ Umami processes per node (bursts queue and drain after), three database members,
 
 ### Monitoring
 
-45 alert rules (plus 5 recording rules) with promtool tests, the prober, the status page and the
+48 alert rules (plus 5 recording rules) with promtool tests, the prober, the status page and the
 SLO report make up the monitoring baseline. In the alert fire-drills 16 alerts fired and resolved,
 and 3 more fired for real without a drill ([runbooks/alerts.md](runbooks/alerts.md),
 "Fire-drills"). On production the observability role runs on every node, and Prometheus has 43
