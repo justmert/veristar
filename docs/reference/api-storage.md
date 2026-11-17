@@ -103,7 +103,7 @@ one goes to `API_DLQ` alone, before anything of the batch is written.
 | `api.ingest_dedup` | `msg_id` (the `Nats-Msg-Id`, 1 to 256 bytes) | `tenant_id` (from the subject), `applied_at` | writer | retention, `applied_at` older than 8 days |
 | `api.route_registry` | `(tenant_id, day, service, route)` | `created_at` | writer | retention, days before a cutoff |
 | `api.ingest_warnings` | `(tenant_id, day, kind)` | `count > 0`; kinds `cardinality_overflow`, `lossy_histogram`, `secret_in_path`, `span_derived`, `coarse_buckets`; counts are requests (below) | writer | kept |
-| `api.rollup_pending` | `(tenant_id, hour)` | `marked_at` | writer | rollup, when it claims the hour |
+| `api.rollup_pending` | `(tenant_id, hour)` | `marked_at`, `parked_at`, `parked_error` | writer | rollup, when it claims the hour |
 
 `series_hash` and `resource_hash` are 32 bytes (SHA-256). Start and point
 times are unix nanoseconds (`bigint`), because timestamptz keeps only
@@ -284,7 +284,7 @@ insert a row with the same key.
 
 | Task | Every | Package | Does |
 |---|---|---|---|
-| `api-rollup` | 5 min | `internal/jobs/apirollup` | claims up to 500 pending hours per transaction until none is left; recomputes each hour whose lock it gets, then each day containing one, then runs the consistency check. A pending hour whose minute partition is gone keeps its hourly rows: the mark is dropped, logged as an error and counted in `jobs_api_rollup_orphaned_marks_total`, and the other hours carry on. Days are 24 hours, never a calendar day of the session time zone |
+| `api-rollup` | 5 min | `internal/jobs/apirollup` | claims up to 500 pending hours per transaction until none is left; recomputes each hour whose lock it gets, then each day containing one, then runs the consistency check. A pending hour whose minute partition is gone keeps its hourly rows: the mark is dropped, logged as an error and counted in `jobs_api_rollup_orphaned_marks_total`, and the other hours carry on. Each hour and each day is recomputed in its own savepoint: one the database refuses with a data error (a request count sum past the 64-bit range) is parked, its mark kept in `api.rollup_pending` with `parked_at` and `parked_error` (migration 00044), counted in `jobs_api_rollup_parked_hours_total`, and left out of later runs until an operator clears it, while every other hour commits. Days are 24 hours, never a calendar day of the session time zone |
 | `api-partition` | 1 h | `internal/jobs/apipartition` | creates minute partitions for today and 7 days ahead, hourly partitions for this month and 3 ahead |
 | `api-retention` | 1 h | `internal/jobs/apiretention` | drops minute partitions of days before today minus `API_MINUTE_RETENTION_DAYS` and hourly partitions of months before this month minus `API_HOURLY_RETENTION_MONTHS` (each drop its own transaction); an expired day with hours still in `rollup_pending` waits for the rollup (`RollupPendingInDay`, `db/queries/jobs/apiretention.sql`). Prunes `ingest_dedup` after 8 days, `series_state` and `resource_seen` after 7 idle days, `route_registry` days older than 8 days (a backlog can deliver points up to 7 days old) |
 

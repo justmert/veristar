@@ -6,11 +6,13 @@
 -- name: ClaimRollupHours :many
 -- takes up to max_hours pending hours, oldest first. the marks are deleted
 -- here, so the caller must recompute those hours (and their days) in the
--- same transaction; a rollback puts the marks back.
+-- same transaction; a rollback puts the marks back. parked hours are left
+-- where they are: claiming them again would fail the same way.
 delete from api.rollup_pending p
 where (p.tenant_id, p.hour) in (
   select r.tenant_id, r.hour
   from api.rollup_pending r
+  where r.parked_at is null
   order by r.hour, r.tenant_id
   limit @max_hours::int
   for update skip locked)
@@ -28,6 +30,16 @@ select pg_try_advisory_xact_lock(api.rollup_lock_key(@tenant_id, @hour::timestam
 insert into api.rollup_pending (tenant_id, hour) values (@tenant_id, @hour::timestamptz)
 on conflict (tenant_id, hour) do nothing;
 
+-- name: ParkRollupHour :exec
+-- puts back a claimed mark whose hour the database refused to recompute,
+-- parked with the error so no later batch claims it again
+insert into api.rollup_pending (tenant_id, hour, parked_at, parked_error)
+values (@tenant_id, @hour::timestamptz, now(), left(@error::text, 1000))
+on conflict (tenant_id, hour) do update set parked_at = excluded.parked_at, parked_error = excluded.parked_error;
+
+-- name: CountParkedRollupHours :one
+select count(*)::bigint as n from api.rollup_pending where parked_at is not null;
+
 -- name: MarkDriftedHours :many
 -- the consistency check behind the rollup: every (tenant, utc
 -- hour) between from and to that has minute rows, whose hourly rows
@@ -39,18 +51,19 @@ on conflict (tenant_id, hour) do nothing;
 -- rows are never marked: a purge that keeps aggregates deletes the minutes
 -- on purpose, and recomputing would erase the hourly rows it kept. it
 -- returns what it marked; any row means a mark was lost or an hour was
--- rolled up the old way, which the rollup reports.
+-- rolled up the old way, which the rollup reports. the sums stay numeric,
+-- so minute rows whose total does not fit bigint cannot fail the check.
 insert into api.rollup_pending (tenant_id, hour)
 select distinct m.tenant_id, m.hour
 from (
   select mm.tenant_id, date_trunc('hour', mm.bucket_start, 'UTC') as hour, mm.traffic_class,
-         sum(mm.count)::bigint as n
+         sum(mm.count) as n
   from api.metrics_minute mm
   where mm.bucket_start >= sqlc.arg(from_hour)::timestamptz and mm.bucket_start < sqlc.arg(to_hour)::timestamptz
   group by 1, 2, 3
 ) m
 left join (
-  select hh.tenant_id, hh.bucket_start as hour, hh.traffic_class, sum(hh.count)::bigint as n
+  select hh.tenant_id, hh.bucket_start as hour, hh.traffic_class, sum(hh.count) as n
   from api.metrics_hourly hh
   where hh.bucket_start >= sqlc.arg(from_hour)::timestamptz and hh.bucket_start < sqlc.arg(to_hour)::timestamptz
   group by 1, 2, 3

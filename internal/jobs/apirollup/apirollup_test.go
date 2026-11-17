@@ -541,3 +541,92 @@ func TestRollupStopsOnBusyBatchesAndChecksDriftHourly(t *testing.T) {
 	require.Equal(t, hours, res.Hours)
 	require.Zero(t, pendingCount(t, d))
 }
+
+// TestRollupParksHourItCannotRecompute gives one tenant an hour whose
+// request count does not fit bigint and another tenant a day whose hours do
+// not: those hours are parked with their error, every other hour is rolled
+// up, and no later run claims the parked hours again or fails on them.
+func TestRollupParksHourItCannotRecompute(t *testing.T) {
+	srv := jobstest.NATS(t)
+	pg := jobstest.Postgres(t)
+	d := jobstest.JobsDB(t, pg)
+	leader, _ := jobstest.Leader(t, srv, d, "rollup-park")
+	reg := prometheus.NewRegistry()
+	r, err := apirollup.New(slog.New(slog.DiscardHandler), reg)
+	require.NoError(t, err)
+
+	good, badHour, badDay := uuid.New(), uuid.New(), uuid.New()
+	day := time.Date(2031, 4, 1, 0, 0, 0, 0, time.UTC)
+	ensurePartitions(t, d, []time.Time{day}, []time.Time{day})
+	const huge = int64(5_000_000_000_000_000_000)
+	row := func(tn uuid.UUID, route string, at time.Time, n int64) minuteRow {
+		return minuteRow{key{dims{tn, "api", "GET", route, 200, "metric"}, at}, agg{Counts: [15]int64{n}, Sum: 1, Count: n}}
+	}
+	insertMinutes(t, d, []minuteRow{
+		row(good, "/a", day.Add(1*time.Hour), 3),
+		row(badHour, "/x", day.Add(2*time.Hour), huge),
+		row(badHour, "/x", day.Add(2*time.Hour+time.Minute), huge),
+		row(badDay, "/y", day.Add(3*time.Hour), huge),
+		row(badDay, "/y", day.Add(4*time.Hour), huge),
+		row(good, "/a", day.Add(5*time.Hour), 4),
+	})
+	res, err := r.Run(t.Context(), leader.Tx)
+	require.NoError(t, err, "one tenant's overflow must not fail the run")
+	require.Equal(t, 3, res.Parked, "the overflowing hour and both hours of the overflowing day")
+	require.Equal(t, 4, res.Hours)
+	hourly := readRows(t, d, "metrics_hourly")
+	require.Equal(t, int64(3), hourly[key{dims{good, "api", "GET", "/a", 200, "metric"}, day.Add(1 * time.Hour)}].Count)
+	require.Equal(t, int64(4), hourly[key{dims{good, "api", "GET", "/a", 200, "metric"}, day.Add(5 * time.Hour)}].Count)
+	require.Equal(t, int64(7), readRows(t, d, "metrics_daily")[key{dims{good, "api", "GET", "/a", 200, "metric"}, day}].Count)
+
+	var parked []string
+	require.NoError(t, d.WithRole(t.Context(), pdb.RoleJobs, func(tx pgx.Tx) error {
+		rows, err := tx.Query(t.Context(), `select tenant_id::text || ' ' || to_char(hour at time zone 'UTC', 'HH24') || ' ' || parked_error
+			from api.rollup_pending where parked_at is not null order by 1`)
+		if err != nil {
+			return err
+		}
+		parked, err = pgx.CollectRows(rows, pgx.RowTo[string])
+		return err
+	}))
+	require.Len(t, parked, 3)
+	for _, p := range parked {
+		require.Contains(t, p, "out of range")
+	}
+	require.Equal(t, 3, pendingCount(t, d), "nothing but the parked marks is pending")
+
+	gauge := func() float64 {
+		mfs, err := reg.Gather()
+		require.NoError(t, err)
+		for _, mf := range mfs {
+			if mf.GetName() == "jobs_api_rollup_parked_hours" {
+				return mf.GetMetric()[0].GetGauge().GetValue()
+			}
+		}
+		t.Fatal("no parked hours gauge")
+		return 0
+	}
+	require.Equal(t, float64(3), gauge())
+
+	// parked hours are neither claimed again nor marked by the consistency
+	// check, whose sums must not overflow on them either
+	res, err = r.Run(t.Context(), leader.Tx)
+	require.NoError(t, err)
+	require.Zero(t, res.Parked+res.Hours+res.Drifted)
+	require.Equal(t, float64(3), gauge())
+
+	// an operator clears the parked marks once the minutes are fixed
+	require.NoError(t, d.WithRole(t.Context(), pdb.RoleJobs, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(t.Context(), `delete from api.metrics_minute where tenant_id in ($1, $2) and route in ('/x', '/y') and bucket_start in ($3, $4)`,
+			badHour, badDay, day.Add(2*time.Hour+time.Minute), day.Add(4*time.Hour)); err != nil {
+			return err
+		}
+		_, err := tx.Exec(t.Context(), `update api.rollup_pending set parked_at = null, parked_error = null where parked_at is not null`)
+		return err
+	}))
+	res, err = r.Run(t.Context(), leader.Tx)
+	require.NoError(t, err)
+	require.Equal(t, 3, res.Hours)
+	require.Zero(t, pendingCount(t, d))
+	require.Equal(t, float64(0), gauge())
+}

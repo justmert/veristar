@@ -18,6 +18,7 @@ delete from api.rollup_pending p
 where (p.tenant_id, p.hour) in (
   select r.tenant_id, r.hour
   from api.rollup_pending r
+  where r.parked_at is null
   order by r.hour, r.tenant_id
   limit $1::int
   for update skip locked)
@@ -35,7 +36,8 @@ type ClaimRollupHoursRow struct {
 // docs/reference/api-storage.md.
 // takes up to max_hours pending hours, oldest first. the marks are deleted
 // here, so the caller must recompute those hours (and their days) in the
-// same transaction; a rollback puts the marks back.
+// same transaction; a rollback puts the marks back. parked hours are left
+// where they are: claiming them again would fail the same way.
 func (q *Queries) ClaimRollupHours(ctx context.Context, maxHours int32) ([]ClaimRollupHoursRow, error) {
 	rows, err := q.db.Query(ctx, claimRollupHours, maxHours)
 	if err != nil {
@@ -54,6 +56,17 @@ func (q *Queries) ClaimRollupHours(ctx context.Context, maxHours int32) ([]Claim
 		return nil, err
 	}
 	return items, nil
+}
+
+const countParkedRollupHours = `-- name: CountParkedRollupHours :one
+select count(*)::bigint as n from api.rollup_pending where parked_at is not null
+`
+
+func (q *Queries) CountParkedRollupHours(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countParkedRollupHours)
+	var n int64
+	err := row.Scan(&n)
+	return n, err
 }
 
 const createHourlyPartition = `-- name: CreateHourlyPartition :one
@@ -213,13 +226,13 @@ insert into api.rollup_pending (tenant_id, hour)
 select distinct m.tenant_id, m.hour
 from (
   select mm.tenant_id, date_trunc('hour', mm.bucket_start, 'UTC') as hour, mm.traffic_class,
-         sum(mm.count)::bigint as n
+         sum(mm.count) as n
   from api.metrics_minute mm
   where mm.bucket_start >= $1::timestamptz and mm.bucket_start < $2::timestamptz
   group by 1, 2, 3
 ) m
 left join (
-  select hh.tenant_id, hh.bucket_start as hour, hh.traffic_class, sum(hh.count)::bigint as n
+  select hh.tenant_id, hh.bucket_start as hour, hh.traffic_class, sum(hh.count) as n
   from api.metrics_hourly hh
   where hh.bucket_start >= $1::timestamptz and hh.bucket_start < $2::timestamptz
   group by 1, 2, 3
@@ -250,7 +263,8 @@ type MarkDriftedHoursRow struct {
 // rows are never marked: a purge that keeps aggregates deletes the minutes
 // on purpose, and recomputing would erase the hourly rows it kept. it
 // returns what it marked; any row means a mark was lost or an hour was
-// rolled up the old way, which the rollup reports.
+// rolled up the old way, which the rollup reports. the sums stay numeric,
+// so minute rows whose total does not fit bigint cannot fail the check.
 func (q *Queries) MarkDriftedHours(ctx context.Context, arg MarkDriftedHoursParams) ([]MarkDriftedHoursRow, error) {
 	rows, err := q.db.Query(ctx, markDriftedHours, arg.FromHour, arg.ToHour)
 	if err != nil {
@@ -269,6 +283,25 @@ func (q *Queries) MarkDriftedHours(ctx context.Context, arg MarkDriftedHoursPara
 		return nil, err
 	}
 	return items, nil
+}
+
+const parkRollupHour = `-- name: ParkRollupHour :exec
+insert into api.rollup_pending (tenant_id, hour, parked_at, parked_error)
+values ($1, $2::timestamptz, now(), left($3::text, 1000))
+on conflict (tenant_id, hour) do update set parked_at = excluded.parked_at, parked_error = excluded.parked_error
+`
+
+type ParkRollupHourParams struct {
+	TenantID uuid.UUID
+	Hour     time.Time
+	Error    string
+}
+
+// puts back a claimed mark whose hour the database refused to recompute,
+// parked with the error so no later batch claims it again
+func (q *Queries) ParkRollupHour(ctx context.Context, arg ParkRollupHourParams) error {
+	_, err := q.db.Exec(ctx, parkRollupHour, arg.TenantID, arg.Hour, arg.Error)
+	return err
 }
 
 const pruneIngestDedup = `-- name: PruneIngestDedup :execrows

@@ -163,6 +163,15 @@ groups:
         annotations:
           summary: "the api rollup on {{ $labels.node }} found hourly rows that disagreed with their minute rows"
           runbook: docs/runbooks/alerts.md#apirollupdriftedhours
+      # a parked hour is one the database refused to recompute (a data
+      # error, such as a count sum past bigint); it stays pending until an
+      # operator clears it
+      - alert: APIRollupParkedHours
+        expr: increase(jobs_api_rollup_parked_hours_total[1h]) > 0
+        labels: {severity: ticket}
+        annotations:
+          summary: "the api rollup on {{ $labels.node }} parked pending hours the database refused to recompute"
+          runbook: docs/runbooks/alerts.md#apirollupparkedhours
 
       # mcp tool calls that fail on the server side (contract 12.7): an
       # internal error, umami or the database unavailable, or the call

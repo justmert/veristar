@@ -361,6 +361,35 @@ Action: confirm the next pass cleared it (the counter stops rising, the alert
 resolves within the hour), then open an issue with the jobs log lines of the
 pass (tenants and hours) and recent metrics writer restarts or errors.
 
+### APIRollupParkedHours
+The database refused to recompute a pending hour of the API rollup
+(`jobs_api_rollup_parked_hours_total` rose; `jobs_api_rollup_parked_hours`
+is how many are parked now). The usual cause is a data error: the hour's
+request counts add up past the 64-bit integer range, which only absurd
+counts from one tenant's SDK can reach. The rollup kept the mark in
+`api.rollup_pending` with `parked_at` and `parked_error` set, carried on
+with every other hour, and no longer claims it; the hour stays pending, so
+dashboards read it from its minute rows and retention keeps them.
+Action: list the parked hours and their errors:
+
+```sql
+select tenant_id, hour, parked_at, parked_error
+from api.rollup_pending where parked_at is not null order by hour;
+```
+
+Look at the tenant's minute rows of that hour (`api.metrics_minute`, the
+largest `count` values) and its metrics writer log. Delete the rows that
+cannot be true, record what was removed in the incident, then clear the
+mark so the next pass recomputes the hour and its day:
+
+```sql
+update api.rollup_pending set parked_at = null, parked_error = null
+where tenant_id = '<tenant>' and hour = '<hour>';
+```
+
+The alert resolves an hour after the last park; `jobs_api_rollup_parked_hours`
+drops to 0 after the next pass.
+
 ### MCPToolFailuresHigh
 More than a fifth of the MCP tool calls on a control plane failed on the
 server side for 15 minutes: `internal`, `unavailable` (Umami or the database)

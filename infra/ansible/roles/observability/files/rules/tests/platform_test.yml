@@ -195,11 +195,22 @@ tests:
         values: '0x30 1x90'
       - series: 'jobs_api_rollup_drifted_hours_total{job="jobs",node="core-1"}'
         values: '0x120'
+      - series: 'jobs_api_rollup_parked_hours_total{job="jobs",node="core-3"}'
+        values: '0x30 3x90'
     alert_rule_test:
       - eval_time: 29m
         alertname: APIRollupOrphanedMarks
       - eval_time: 29m
         alertname: APIRollupDriftedHours
+      - eval_time: 29m
+        alertname: APIRollupParkedHours
+      - eval_time: 35m
+        alertname: APIRollupParkedHours
+        exp_alerts:
+          - exp_labels: {severity: ticket, job: jobs, node: core-3}
+            exp_annotations:
+              summary: "the api rollup on core-3 parked pending hours the database refused to recompute"
+              runbook: docs/runbooks/alerts.md#apirollupparkedhours
       - eval_time: 35m
         alertname: APIRollupOrphanedMarks
         exp_alerts:
