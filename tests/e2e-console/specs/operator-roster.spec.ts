@@ -5,7 +5,8 @@
 // the enrollment window and opens the area; the admin then suspends that
 // operator, whose next request is refused, and the deploy-settings row
 // refuses a suspension. a tenant gets 403 on every roster route, and an
-// operator session without a step-up gets 401 step_up_required.
+// operator session without a step-up gets 401 step_up_required, on the
+// operator routes and on a change to its sign-in methods.
 import type { BrowserContext, Page } from "@playwright/test";
 import { APP } from "../fixture/env.ts";
 import {
@@ -59,6 +60,22 @@ test("an operator session without a step-up is refused with step_up_required", a
       .or(page.getByRole("button", { name: "Register" })),
   ).toBeVisible();
   expect(new URL(page.url()).pathname).toBe("/operator");
+  // nor can the session alone change how the operator signs in: a passkey
+  // linked from it would sign in on its own
+  const link = await api<{ error: { code: string } }>(
+    ctx,
+    "POST",
+    "/api/me/identities/passkey/challenge",
+    {},
+  );
+  expect(link.status).toBe(401);
+  expect(link.body.error.code).toBe("step_up_required");
+  await page.goto(`${APP}/account`);
+  await expect(
+    page
+      .getByText("Confirm with your passkey to change sign-in methods.")
+      .or(page.getByText("Register a passkey for the operator area first.")),
+  ).toBeVisible();
   await ctx.close();
 });
 
