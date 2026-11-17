@@ -1,5 +1,5 @@
 // Package mcpserver is the model context protocol server of the control
-// plane (contract section 12, docs/guides/mcp.mdx). ai clients connect to
+// plane (contract section 12, docs/onboarding/mcp.md). ai clients connect to
 // https://app.<BASE_DOMAIN>/mcp over streamable http with a bearer
 // credential that acts as one console user: an mcp access key made in the
 // console, or an oauth access token from the authorization flow of the mcp

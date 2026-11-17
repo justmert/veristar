@@ -100,7 +100,8 @@ You stay signed in while you link, so both proofs come from one session.
 A GitHub account, an address or a passkey that already signs in to another
 console account cannot be linked; delete that account, or unlink the method
 there, first. An account holds one GitHub account, one wallet address and one
-passkey at most.
+sign-in passkey at most; an operator adds more passkeys for the operator area
+([roster.md](../operators/roster.md)).
 
 **Unlink** removes a method. The last method of an account cannot be removed.
 Signing in with an unlinked GitHub account or wallet later creates a new,

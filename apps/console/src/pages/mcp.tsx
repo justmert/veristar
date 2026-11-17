@@ -29,7 +29,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatDateTimeUtc } from "@/lib/format";
 import { useProject } from "./project-layout";
 
-// the project's "AI / MCP" page (contract 12.8, docs/onboarding/mcp.mdx):
+// the project's "AI / MCP" page (contract 12.8, docs/onboarding/mcp.md):
 // access keys for AI clients, the connector url for oauth clients, and the
 // list of everything that can read this project through mcp.
 

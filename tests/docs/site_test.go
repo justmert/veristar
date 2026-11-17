@@ -201,7 +201,7 @@ func TestNoEmDash(t *testing.T) {
 	files := append(markdownFiles(t, root), filepath.Join(root, "docs", "docs.json"))
 	for _, file := range files {
 		for i, l := range strings.Split(read(t, file), "\n") {
-			if strings.ContainsRune(l, '—') {
+			if strings.ContainsRune(l, '\u2014') {
 				t.Errorf("%s:%d: em dash", rel(root, file), i+1)
 			}
 		}
