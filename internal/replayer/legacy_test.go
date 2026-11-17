@@ -128,8 +128,9 @@ func TestLegacyDrainKeepsOrder(t *testing.T) {
 	for _, name := range []string{"core-1", "core-2"} {
 		reps = append(reps, startReplayerTo(t, env.srv.URL, []*url.URL{newSendProxy(t, log, name, st.URL)}, name, 16, 512))
 	}
-	waitFor(t, time.Minute, "both replayers own partitions", func() bool {
-		return scrape(t, reps[0].ops)["replayer_partitions_owned"]+scrape(t, reps[1].ops)["replayer_partitions_owned"] == events.Partitions
+	waitFor(t, 2*time.Minute, "the replayers own half of the partitions each", func() bool {
+		return scrape(t, reps[0].ops)["replayer_partitions_owned"] == events.Partitions/2 &&
+			scrape(t, reps[1].ops)["replayer_partitions_owned"] == events.Partitions/2
 	})
 	// every partition holds events newer than the oldest legacy one, so
 	// nothing may be sent while the earlier release holds the legacy lock
@@ -158,6 +159,9 @@ func TestLegacyDrainKeepsOrder(t *testing.T) {
 	}
 	for _, o := range rep.overlaps {
 		t.Error(o)
+	}
+	if len(rep.byNode) != 2 {
+		t.Errorf("sends came from %v, want both replayers", rep.byNode)
 	}
 	if rep.stored != visitors*perVisitor || rep.repeats != 0 {
 		t.Errorf("stored %d sends with %d repeats, want %d and none", rep.stored, rep.repeats, visitors*perVisitor)
