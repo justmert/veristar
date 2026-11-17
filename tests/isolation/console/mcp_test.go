@@ -326,7 +326,10 @@ func testMCPIsolation(t *testing.T, e *env, alice, bob *client, ta, tb, sa, sb u
 		require.False(t, r.isError, "%s: %s", tl.name, r.raw)
 		require.Empty(t, leaks(r.raw), "%s leaked tenant b: %s", tl.name, r.raw)
 	}
-	r := call(t, a, "get_api_overview", map[string]any{"range": "7d", "service": "beta-secret-svc"})
+	// a contract id of no project of tenant a is not found
+	r := call(t, a, "get_contract_functions", map[string]any{"chain_id": uuid.NewString()})
+	require.Equal(t, "not_found", r.code, r.raw)
+	r = call(t, a, "get_api_overview", map[string]any{"range": "7d", "service": "beta-secret-svc"})
 	require.EqualValues(t, 0, r.data["current"].(map[string]any)["summary"].(map[string]any)["requests"])
 	// control: tenant b's own key sees its data
 	r = call(t, b, "list_api_services", map[string]any{"range": "7d"})
@@ -495,6 +498,8 @@ func testMCPOperator(t *testing.T, e *env, alice *client, ta, tb uuid.UUID) {
 	require.Contains(t, res.raw, "beta-secret-svc")
 	res = call(t, cs, "get_tenant", map[string]any{"tenant_id": uuid.NewString()})
 	require.Equal(t, "not_found", res.code)
+	res = call(t, cs, "get_tenant_contract_functions", map[string]any{"tenant_id": ta.String(), "chain_id": uuid.NewString()})
+	require.Equal(t, "not_found", res.code, res.raw)
 	res = call(t, cs, "get_threshold_rule_matches", map[string]any{"rule_id": uuid.NewString()})
 	require.Equal(t, "not_found", res.code)
 	res = call(t, cs, "compare_tenants_web", map[string]any{"tenant_ids": []string{}})
