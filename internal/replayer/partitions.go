@@ -320,7 +320,7 @@ func (r *Replayer) hold(ctx context.Context, part int, lock *natsx.Lock) error {
 			case <-stopping:
 				handOver()
 				stopping = nil
-				t := time.NewTimer(2 * yieldTimeout)
+				t := time.NewTimer(yieldTimeout + 5*time.Second)
 				defer t.Stop()
 				hard = t.C
 			case <-check.C:

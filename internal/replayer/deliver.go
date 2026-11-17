@@ -80,9 +80,7 @@ func healthyRetryDelay(n int) time.Duration {
 // event.
 func (lr *leadRun) deliver(ctx context.Context, q *visitorQueue, h *held) bool {
 	for attempt := uint64(1); ; attempt++ {
-		// a hand-over stops before the next send, never between umami's 200
-		// and the bookkeeping, which would store the event twice
-		if ctx.Err() != nil || (!h.delivered && lr.yielding()) {
+		if ctx.Err() != nil {
 			return false
 		}
 		if !h.delivered && time.Since(h.published) >= lr.r.maxAge {
@@ -100,9 +98,6 @@ func (lr *leadRun) deliver(ctx context.Context, q *visitorQueue, h *held) bool {
 		err := lr.attempt(ctx, h)
 		if err == nil {
 			return true
-		}
-		if errors.Is(err, errYield) {
-			return false
 		}
 		if errors.Is(err, natsx.ErrLockLost) {
 			lr.cancel(err)
@@ -156,9 +151,12 @@ func (lr *leadRun) deliver(ctx context.Context, q *visitorQueue, h *held) bool {
 		lr.r.m.retries.Inc()
 		lr.r.log.Warn("delivery failed, retrying", "stream_seq", h.seq, "attempt", attempt,
 			"healthy_failures", h.healthyFailures, "retry_in", delay.String(), "error", f.err.Error())
+		// a hand-over delivers what the hold has, but does not wait out a
+		// retry: the event goes back to the stream, and the next owner
+		// waits until it can be redelivered. only the bookkeeping of an
+		// event umami already stored is finished, so it is not sent twice.
 		stop := lr.yield
 		if h.delivered {
-			// only the bookkeeping is left; it finishes even in a hand-over
 			stop = nil
 		}
 		if !lr.r.pool.gate.wait(ctx, stop, delay, waitOn) {
@@ -176,10 +174,6 @@ func (lr *leadRun) attempt(ctx context.Context, h *held) error {
 	defer release()
 	r := lr.r
 	ev := h.ev
-	if !h.delivered && lr.yielding() {
-		// the slot came free after the hand-over began
-		return errYield
-	}
 	if !h.delivered {
 		sent, err := r.store.sent(ctx, ev.ID)
 		if err != nil {
