@@ -226,6 +226,10 @@ services:
       # stellar accounts of operators who sign in with a wallet; empty when
       # the inventory lists none
       OPERATOR_STELLAR_ADDRESSES: "{{ sa_operator_stellar_addresses | default('') }}"
+      # how long a passkey step-up opens the operator area, and how long a
+      # first operator passkey may be registered without one (contract 5.15)
+      OPERATOR_STEP_UP_MAX_AGE: "{{ sa_operator_step_up_max_age | default('12h') }}"
+      OPERATOR_ENROLL_WINDOW: "{{ sa_operator_enroll_window | default('24h') }}"
       # earlier usage report keys whose reports still verify, newest first
       # (docs/runbooks/secret-rotation.md); empty until the first rotation
       REPORT_SIGNING_RETIRED_KEYS: "{{ sa_report_signing_retired_keys | default('') }}"
