@@ -423,6 +423,11 @@ func (r *Replayer) sampleLag(ctx context.Context) {
 			ackPending += uint64(info.NumAckPending) //nolint:gosec // a count
 			r.m.partitionPending.WithLabelValues(lr.label).Set(float64(info.NumPending))
 			r.m.partitionAckPending.WithLabelValues(lr.label).Set(float64(info.NumAckPending))
+			age := 0.0
+			if o := lr.oldest(); !o.IsZero() {
+				age = time.Since(o).Seconds()
+			}
+			r.m.partitionOldest.WithLabelValues(lr.label).Set(age)
 		}
 		if ok {
 			r.m.pending.Set(float64(pending))
@@ -512,6 +517,7 @@ func (r *Replayer) lead(parent context.Context, part int, lock *natsx.Lock, yiel
 		r.setOwned()
 		r.m.partitionPending.DeleteLabelValues(label)
 		r.m.partitionAckPending.DeleteLabelValues(label)
+		r.m.partitionOldest.DeleteLabelValues(label)
 	}()
 	r.log.Info("consuming", "consumer", name, "workers", r.set.Workers, "max_in_flight", r.set.MaxInFlight, "umami_processes", len(r.umami))
 	return lr.run(ctx, parent)

@@ -21,9 +21,14 @@ tests:
         values: '0x30'
       - series: 'jetstream_stream_first_seq{job="nats",node="edge-1",stream_name="API_METRICS"}'
         values: '7x30'
-      - series: 'jetstream_consumer_num_pending{job="nats",node="edge-1",stream_name="WEB_EVENTS",consumer_name="replayer"}'
-        values: '0x5 0+400x25'
-      - series: 'jetstream_consumer_num_ack_pending{job="nats",node="edge-1",stream_name="WEB_EVENTS",consumer_name="replayer"}'
+      # two partitions share the backlog; the alert reads their sum
+      - series: 'jetstream_consumer_num_pending{job="nats",node="edge-1",stream_name="WEB_EVENTS",consumer_name="replayer-p00"}'
+        values: '0x5 0+300x25'
+      - series: 'jetstream_consumer_num_pending{job="nats",node="edge-1",stream_name="WEB_EVENTS",consumer_name="replayer-p17"}'
+        values: '0x5 0+100x25'
+      - series: 'jetstream_consumer_num_ack_pending{job="nats",node="edge-1",stream_name="WEB_EVENTS",consumer_name="replayer-p00"}'
+        values: '0x30'
+      - series: 'jetstream_consumer_num_ack_pending{job="nats",node="edge-1",stream_name="WEB_EVENTS",consumer_name="replayer-p17"}'
         values: '0x30'
       - series: 'replayer_leader{job="replayer",node="core-1"}'
         values: '1x4 _x26'
@@ -46,14 +51,14 @@ tests:
         exp_alerts:
           - exp_labels: {severity: page}
             exp_annotations:
-              summary: "no replayer instance holds the lock and consumes WEB_EVENTS"
+              summary: "no replayer instance owns a WEB_EVENTS partition and consumes"
               runbook: docs/runbooks/alerts.md#replayernotconsuming
       - eval_time: 18m
         alertname: ReplayerLagHigh
       - eval_time: 29m
         alertname: ReplayerLagHigh
         exp_alerts:
-          - exp_labels: {severity: ticket, stream_name: WEB_EVENTS, consumer_name: replayer}
+          - exp_labels: {severity: ticket, stream_name: WEB_EVENTS}
             exp_annotations:
               summary: "9200 web events wait for the replayer"
               runbook: docs/runbooks/alerts.md#replayerlaghigh
@@ -207,8 +212,13 @@ tests:
       - series: 'replayer_oldest_pending_age_seconds{job="replayer",node="core-2"}'
         values: '0x120'
       # backlog grows by 200 a minute from 5,000
+      # the legacy consumer of an upgrade counts with the partitions
+      - series: 'jetstream_consumer_num_pending{job="nats",node="edge-1",stream_name="WEB_EVENTS",consumer_name="replayer-p03"}'
+        values: '4000+200x120'
       - series: 'jetstream_consumer_num_pending{job="nats",node="edge-1",stream_name="WEB_EVENTS",consumer_name="replayer"}'
-        values: '5000+200x120'
+        values: '1000x120'
+      - series: 'jetstream_consumer_num_ack_pending{job="nats",node="edge-1",stream_name="WEB_EVENTS",consumer_name="replayer-p03"}'
+        values: '0x120'
       - series: 'jetstream_consumer_num_ack_pending{job="nats",node="edge-1",stream_name="WEB_EVENTS",consumer_name="replayer"}'
         values: '0x120'
     alert_rule_test:
@@ -231,7 +241,7 @@ tests:
       - eval_time: 57m
         alertname: WebEventsBacklogGrowing
         exp_alerts:
-          - exp_labels: {severity: ticket, stream_name: WEB_EVENTS, consumer_name: replayer}
+          - exp_labels: {severity: ticket, stream_name: WEB_EVENTS}
             exp_annotations:
               summary: "the web event backlog is 16400 and grew over the last hour"
               runbook: docs/runbooks/alerts.md#webeventsdelayed-webeventsneardiscard-webeventsbackloggrowing
@@ -250,3 +260,31 @@ tests:
             exp_annotations:
               summary: "web events 2d 1h 0m 0s old wait for umami; WEB_EVENTS drops them at 72 hours"
               runbook: docs/runbooks/alerts.md#webeventsdelayed-webeventsneardiscard-webeventsbackloggrowing
+  - name: partitions without an owner
+    interval: 1m
+    input_series:
+      # three nodes own 11, 11 and 10; core-2 is killed after minute 4 and
+      # its partitions stay unowned. its last sample counts for the 5 minute
+      # lookback, so the gap shows from minute 9 and fires 5 minutes later
+      - series: 'replayer_partitions{job="replayer",node="core-1"}'
+        values: '32x20'
+      - series: 'replayer_partitions{job="replayer",node="core-3"}'
+        values: '32x20'
+      - series: 'replayer_partitions_owned{job="replayer",node="core-1"}'
+        values: '11x20'
+      - series: 'replayer_partitions_owned{job="replayer",node="core-2"}'
+        values: '11x4 _x16'
+      - series: 'replayer_partitions_owned{job="replayer",node="core-3"}'
+        values: '10x20'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: ReplayerPartitionsUnowned
+      - eval_time: 13m
+        alertname: ReplayerPartitionsUnowned
+      - eval_time: 15m
+        alertname: ReplayerPartitionsUnowned
+        exp_alerts:
+          - exp_labels: {severity: page}
+            exp_annotations:
+              summary: "11 WEB_EVENTS partitions have no replayer owner"
+              runbook: docs/runbooks/alerts.md#replayerpartitionsunowned
