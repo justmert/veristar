@@ -223,7 +223,37 @@ export const reportDocumentV2 = reportDocumentV1.extend({
   }),
 });
 
-export const reportDocument = z.discriminatedUnion("version", [reportDocumentV1, reportDocumentV2]);
+// version 3: the calls per function of each verified contract
+const v2 = reportDocumentV2.shape;
+export const reportDocumentV3 = reportDocumentV2.extend({
+  version: z.literal(3),
+  onchain: v2.onchain.extend({
+    contracts: z.array(
+      z.object({
+        strkey: z.string().regex(/^C[A-Z2-7]{55}$/),
+        days_read: count,
+        days_no_call_tree: count,
+        days_missing: count,
+        functions: z.array(
+          z.object({
+            function: z.string(),
+            caller: z.enum(["account", "contract"]),
+            successful: count,
+            failed: count.nullable(),
+            peak_daily_accounts: count,
+            days_with_calls: count,
+          }),
+        ),
+      }),
+    ),
+  }),
+});
+
+export const reportDocument = z.discriminatedUnion("version", [
+  reportDocumentV1,
+  reportDocumentV2,
+  reportDocumentV3,
+]);
 export type ReportDocument = z.infer<typeof reportDocument>;
 
 export const reportApi = {
