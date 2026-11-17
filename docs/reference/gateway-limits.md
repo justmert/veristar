@@ -97,7 +97,7 @@ Measured 2026-11-12 (`tests/recovery`), times after NATS was healthy again:
 
 ## Throughput
 
-Measured 2026-11-12 on a host (Intel Core Ultra 5 225, 10 cores), one
+Measured 2026-11-12 on a 10-core Intel Core Ultra 5 225 host, one
 gateway, one NATS server with file storage, all in Docker on one machine. Every
 request is a full `POST /v1/e`: parse, proof, origin, rate limits, visitor token,
 country, ip-cluster, sanitization and a JetStream publish waited for. Traffic is
