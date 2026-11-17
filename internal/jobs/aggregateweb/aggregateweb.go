@@ -93,15 +93,15 @@ type Result struct {
 
 // Aggregator reads umami and writes the agg tables.
 type Aggregator struct {
-	umami  Reader
-	sites  Sites
-	now    func() time.Time
+	umami Reader
+	sites Sites
+	now   func() time.Time
 	// rawMonths is WEB_RAW_RETENTION_MONTHS: umami holds no raw rows of the
 	// days before retain-web's cutoff, so reading such a day returns zeros
 	rawMonths int
-	log    *slog.Logger
-	days   prometheus.Counter
-	failed prometheus.Counter
+	log       *slog.Logger
+	days      prometheus.Counter
+	failed    prometheus.Counter
 }
 
 // New returns an Aggregator and registers its metrics on reg.
