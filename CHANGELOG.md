@@ -197,7 +197,7 @@ here, before they take effect, as the processing terms require
   `sa-systemd-failed.timer` writes every 5 minutes on every node. It covers a
   failing backup, the leader's `pgbackrest verify` or `check`, and the
   start-at-boot units ([docs/runbooks/alerts.md](docs/runbooks/alerts.md#systemdunitfailed)).
-  The platform has 48 alerts.
+  The platform has 49 alerts.
 - OpenTofu variable `public_ingress_open` (default `true`): `false` limits TCP
   80, TCP 443 and UDP 443 to `admin_cidrs` without stopping anything
   ([docs/deploy/opentofu.md](docs/deploy/opentofu.md)).
