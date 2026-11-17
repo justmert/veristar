@@ -12,30 +12,6 @@ import (
 	"github.com/google/uuid"
 )
 
-const commitSession = `-- name: CommitSession :exec
-insert into cp.sessions (token_hash, user_id, data, expiry)
-values ($1, $2, $3, $4)
-on conflict (token_hash) do update
-  set user_id = excluded.user_id, data = excluded.data, expiry = excluded.expiry
-`
-
-type CommitSessionParams struct {
-	TokenHash []byte
-	UserID    uuid.NullUUID
-	Data      []byte
-	Expiry    time.Time
-}
-
-func (q *Queries) CommitSession(ctx context.Context, arg CommitSessionParams) error {
-	_, err := q.db.Exec(ctx, commitSession,
-		arg.TokenHash,
-		arg.UserID,
-		arg.Data,
-		arg.Expiry,
-	)
-	return err
-}
-
 const deleteSession = `-- name: DeleteSession :exec
 delete from cp.sessions where token_hash = $1
 `
@@ -101,6 +77,31 @@ func (q *Queries) GetUser(ctx context.Context, id uuid.UUID) (CpUser, error) {
 		&i.PasskeyPublicKey,
 	)
 	return i, err
+}
+
+const insertSession = `-- name: InsertSession :exec
+insert into cp.sessions (token_hash, user_id, data, expiry)
+values ($1, $2, $3, $4)
+`
+
+type InsertSessionParams struct {
+	TokenHash []byte
+	UserID    uuid.NullUUID
+	Data      []byte
+	Expiry    time.Time
+}
+
+// a token made in this request (a sign-in, a first commit). a clash with
+// an existing row is an error, never an overwrite: tokens are 32 random
+// bytes
+func (q *Queries) InsertSession(ctx context.Context, arg InsertSessionParams) error {
+	_, err := q.db.Exec(ctx, insertSession,
+		arg.TokenHash,
+		arg.UserID,
+		arg.Data,
+		arg.Expiry,
+	)
+	return err
 }
 
 const linkGitHub = `-- name: LinkGitHub :one
@@ -324,6 +325,40 @@ delete from cp.wallet_challenges_used where expires_at <= now()
 func (q *Queries) PruneWalletChallenges(ctx context.Context) error {
 	_, err := q.db.Exec(ctx, pruneWalletChallenges)
 	return err
+}
+
+const renewSession = `-- name: RenewSession :execrows
+with gone as (
+  delete from cp.sessions old where old.token_hash = $5::bytea returning 1
+)
+insert into cp.sessions (token_hash, user_id, data, expiry)
+select $1::bytea, $2::uuid, $3::bytea, $4::timestamptz
+where exists (select 1 from gone)
+`
+
+type RenewSessionParams struct {
+	TokenHash    []byte
+	UserID       uuid.NullUUID
+	Data         []byte
+	Expiry       time.Time
+	OldTokenHash []byte
+}
+
+// a renewed token replaces the row of the token the request arrived with,
+// and only while that row still exists, so a session ended while the
+// request ran is not revived under the new token
+func (q *Queries) RenewSession(ctx context.Context, arg RenewSessionParams) (int64, error) {
+	result, err := q.db.Exec(ctx, renewSession,
+		arg.TokenHash,
+		arg.UserID,
+		arg.Data,
+		arg.Expiry,
+		arg.OldTokenHash,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const resolveInvites = `-- name: ResolveInvites :many
@@ -613,6 +648,33 @@ func (q *Queries) UnlinkStellar(ctx context.Context, id uuid.UUID) (CpUser, erro
 		&i.PasskeyPublicKey,
 	)
 	return i, err
+}
+
+const updateSession = `-- name: UpdateSession :execrows
+update cp.sessions set user_id = $1, data = $2, expiry = $3
+where token_hash = $4
+`
+
+type UpdateSessionParams struct {
+	UserID    uuid.NullUUID
+	Data      []byte
+	Expiry    time.Time
+	TokenHash []byte
+}
+
+// the token the request arrived with. a row deleted meanwhile (a sign-out,
+// a roster change, account deletion) stays deleted: 0 rows, no insert
+func (q *Queries) UpdateSession(ctx context.Context, arg UpdateSessionParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateSession,
+		arg.UserID,
+		arg.Data,
+		arg.Expiry,
+		arg.TokenHash,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const useWalletChallenge = `-- name: UseWalletChallenge :execrows
