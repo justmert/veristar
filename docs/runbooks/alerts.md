@@ -153,8 +153,9 @@ themselves.
 `WEB_EVENTS` keeps an accepted event at most 72 hours (stream max age, discard old). An event
 still waiting then is dropped by the stream without an error anywhere: it never reaches Umami and
 the gateway already answered 202. These alerts read `replayer_oldest_pending_age_seconds`, the
-publish time of the oldest message the replayer leader holds; in a backlog that is the oldest
-message of the stream, because the leader fetches in stream order.
+publish time of the oldest message each replayer holds over the partitions it owns, and take the
+largest; in a backlog that is the oldest message of the stream, because each partition is
+fetched in stream order. `replayer_partition_oldest_pending_age_seconds` shows it per partition.
 
 - `WebEventsDelayed` (ticket): the oldest held event is more than an hour old for 10 minutes.
   The dashboards are an hour or more behind.

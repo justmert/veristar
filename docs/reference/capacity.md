@@ -115,34 +115,68 @@ table shapes, and replace the tables above with the new figures and their date.
 The gateway's rate ([gateway-limits.md](gateway-limits.md), "Capacity") is what a node
 **accepts** into `WEB_EVENTS`. What reaches Umami is a second, separate rate: the replayer's.
 
-**Why one replayer delivers for the whole cluster.** The replayer runs on every core node, but
-only the holder of the `replayer` lock consumes `WEB_EVENTS`, through one durable consumer, and
-it sends to the Umami processes of its own node (`UMAMI_URL` in
-`infra/ansible/roles/core/templates/compose.yml.j2`). The single consumer is what keeps one
-visitor's events in one place at a time, which three things rely on:
+**How delivery grows with the nodes.** `WEB_EVENTS` is split into 32 partitions by a hash of
+the site id and the visitor token, each with its own durable consumer and its own lock. The
+replayer on every core node owns a share of the partitions (11, 11 and 10 on three nodes) and
+sends them to the Umami processes of its own node (`UMAMI_URL` in
+`infra/ansible/roles/core/templates/compose.yml.j2`), so every node's Umami processes store
+events at once ([../architecture.md](../architecture.md), "Web event partitions"). One visitor's
+events stay in one partition, which has one owner at a time, and three things rely on that:
 
 - **Order.** A visitor's events reach Umami in stream order: each visitor has one queue, one send
-  at a time, and a failing event holds back only that visitor's later events.
+  at a time, and a failing event holds back only that visitor's later events. A new owner of a
+  partition waits until its predecessor's unacknowledged messages can be redelivered.
 - **Visit continuity.** The visitor's `visit_state` record (Umami's session id, the cache token of
   its last answer and the last acceptance time) is read before a send and written after it with a
-  plain put (`internal/replayer/visit.go`). Two consumers handling the same visitor at once would
-  overwrite each other's record, send a stale cache token or none, and split one visit into
-  several.
+  plain put (`internal/replayer/visit.go`). One owner per visitor means no other process
+  overwrites it in between.
 - **The duplicate guard.** `sent.<event id>` is checked before a send and written after Umami's
-  200. Two consumers that hold the same redelivered message at once would both pass the check
-  and store the event twice.
+  200. Only the partition's owner holds the event, so no second process passes the check at the
+  same time.
 
-Which Umami process stores an event does not matter: every process uses the one database and
-`APP_SECRET`, and Umami derives the session and visit from them and the event alone
-([umami-contract.md](umami-contract.md) item 14). So delivering to the Umami of the node that
-consumes is safe; consuming one durable from several nodes at once is not. Delivery from every
-node needs each visitor owned by exactly one node: the stream's subjects partitioned by visitor
-(today the subject token is only the site id), one consumer and one lock per partition, a
-predecessor wait per partition as the single lock has today, and a migration of the subject,
-the NATS permissions, erasure's purge by subject and the DLQ replay. That design is not
-implemented; until it is, the delivery rate is one node's.
+Which Umami process, and which node, stores an event does not matter: every process uses the one
+database and `APP_SECRET`, and Umami derives the session and visit from them and the event alone
+([umami-contract.md](umami-contract.md) item 14).
 
-**Measured locally, 2026-11-17** (`TestDrainRateByUmamiProcesses`, `internal/replayer`,
+**Measured locally, 2026-11-17** (`TestDrainRateByReplayerNodes`, `internal/replayer`,
+`REPLAYER_NODES_MEASURE`): a 3-node NATS cluster with the production topology at 3 replicas,
+one PostgreSQL 18.6 container, and one Umami 3.5.0 process per replayer node capped at 1 core.
+1, 2 or 3 replayers in the test process (128 workers and 900 in flight each, as the core role
+sets) start on a queued backlog of page views of visitors with 6 events each; each run checks
+that Umami holds every event exactly once. Every container and replayer ran on the same host,
+which another project loaded at the same time; the load average on 10 cores is given per run.
+
+| Backlog | Replayer nodes | Rate | Delivered per node | Umami CPU per process (cores) | Mean send | Host load (1 min) |
+|---|---|---|---|---|---|---|
+| 12,000 | 1 | 417/s | 12,000 | not recorded | not recorded | 9.9 to 11.4 |
+| 12,000 | 2 | 523/s | 5,844, 6,156 | not recorded | not recorded | 11.4 to 11.7 |
+| 12,000 | 3 | 637/s | 4,050, 4,182, 3,768 | not recorded | not recorded | 11.2 to 15.3 |
+| 12,000 | 1 | 360/s | 12,000 | 0.98 | 349 ms | 14.9 to 15.9 |
+| 12,000 | 2 | 586/s | 6,072, 5,928 | 0.81, 0.92 | 413 ms | 15.5 to 16.1 |
+| 12,000 | 3 | 531/s | 4,002, 4,140, 3,858 | 0.51 to 0.61 | 608 ms | 16.1 to 16.0 |
+| 30,000 | 1 | 238/s | 30,000 | 0.79 | 518 ms | 21.2 to 28.1 |
+| 30,000 | 2 | 340/s | 15,126, 14,874 | 0.62, 0.68 | 688 ms | 27.2 to 35.3 |
+| 30,000 | 3 | 447/s | 10,296, 10,416, 9,288 | 0.56 to 0.59 | 762 ms | 32.4 to 37.9 |
+
+Reading:
+
+- Each node delivers its own share: the partitions split the events within 10 % between the
+  nodes in every run.
+- With one node, its Umami process ran at or near its one-core cap (0.79 to 0.98). With two and
+  three nodes the rate was 1.25 to 1.88 times one node's in the same series, and it rose from two
+  to three nodes in two of the three series; the
+  exception is the second 12,000 series, where three nodes drained 531/s against two nodes'
+  586/s while the mean send rose to 608 ms. In the runs with two and three nodes no Umami process
+  reached its cap and PostgreSQL used at most 0.27 cores, so on this host the limit was the time
+  of each send under the shared CPU, not either service. On production nodes each replayer and
+  its Umami processes have their own node's CPUs.
+- The rates fall as the host load rises (417/s for one node at a load of 10, 238/s at 21 to 28),
+  so they are figures of this host at that time, not of a production node.
+
+Delivery to the Umami processes of one node, the step these node counts build on, was measured
+on its own as well:
+
+**One node, by Umami processes, measured locally, 2026-11-17** (`TestDrainRateByUmamiProcesses`, `internal/replayer`,
 `REPLAYER_DRAIN_MEASURE=12000`): one NATS server, one PostgreSQL 18.6 container capped at 2 cores
 (`REPLAYER_DRAIN_PG_CPUS=2`, the vCPUs of a production node), Umami 3.5.0 containers capped at 1
 core each, one replayer in the test process. 12,000 page views of 2,000 visitors are queued, then
@@ -195,13 +229,14 @@ backlog**, above the expected peak of 50 a second. This is a sustained rate at t
 address can offer, not the ceiling: the queue never held an event, so the delivery rate the
 replayer reaches under a backlog was not reached. Measuring that ceiling needs a backlog, either
 the replayers stopped while events queue and then started again, or the gateway limits raised for
-load from several addresses as in [gateway-limits.md](gateway-limits.md), "Capacity". This release
-does not include partitioned replay: one replayer still delivers for the whole cluster to the Umami
-processes of its own node.
+load from several addresses as in [gateway-limits.md](gateway-limits.md), "Capacity". Release
+`0.4.0` does not include partitioned replay: in this run one replayer delivered for the whole
+cluster to the Umami processes of its own node.
 
-**What is not measured.** The delivery ceiling of a production node: the "about 420 events a
-second" of [availability.md](availability.md) is the 2026-11-13 drill's 280/s of one process scaled
-by its 1.5x for two, not a run. The production ingest figure of about 700 events a second per node
+**What is not measured.** The delivery ceiling of a production node, and partitioned delivery on
+production with one, two or three replayer nodes: the "about 420 events a second" per node of
+[availability.md](availability.md) is the 2026-11-13 drill's 280/s of one process scaled by its
+1.5x for two, not a run. The production ingest figure of about 700 events a second per node
 was measured with proofs solved before the run, so it holds no `GET /v1/c`.
 
 **What a backlog costs.** Above the delivery rate, events wait in `WEB_EVENTS`:

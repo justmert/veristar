@@ -127,10 +127,11 @@ run of 2026-11-13 ([local drill record](../reference/drills/2026-11-13.md)), bel
 over all of them (`UMAMI_URL` lists each). The reasoning and the per-count measurements are in the comment above `core_umami_processes` in
 `infra/ansible/roles/core/defaults/main.yml`. To raise web drain, raise that count (it must stay
 at most `REPLAYER_WORKERS`, 128) and give the nodes the cores for it; each idle process holds
-about 115 MB. Only the node whose replayer holds the lock delivers, to its own processes, and
-the lock can move to any core node, so every core node needs the size. Adding nodes does not
-raise the delivery rate ([../reference/capacity.md](../reference/capacity.md), "Web events end
-to end").
+about 115 MB. Every core node's replayer delivers its share of the 32 web event partitions to
+its own processes, and a node that is down leaves its share to the others, so every core node
+needs the size. Adding core nodes adds their Umami processes to the delivery
+([../reference/capacity.md](../reference/capacity.md), "Web events end to end", has the
+measured rates by node count).
 
 ## Exercised
 
