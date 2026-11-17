@@ -1,5 +1,6 @@
 import { CircleCheck, KeyRound } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { ApiError } from "@/api/client";
 import type { PasskeyAnswer } from "@/api/endpoints";
 import type { PasskeyChallenge } from "@/api/schemas";
 import { FormMessage } from "@/components/error-panel";
@@ -29,7 +30,8 @@ import { answerChallenge, createPasskey, type NewPasskey, passkeysAvailable } fr
 // (contract 5.15).
 //
 // a challenge is fetched when the dialog opens, and again after every
-// verification, which spends it.
+// verification, which spends it. when that fetch fails, a try again button
+// fetches it once more, after the wait a rate limit names.
 export function PasskeyDialog({
   open,
   onOpenChange,
@@ -54,6 +56,10 @@ export function PasskeyDialog({
   const [created, setCreated] = useState<NewPasskey | null>(null);
   const [pending, setPending] = useState<"use" | "create" | "confirm" | null>(null);
   const [error, setError] = useState<unknown>(null);
+  // when a failed challenge fetch may be retried (epoch ms), and the clock
+  // that counts down to it
+  const [retryAt, setRetryAt] = useState(0);
+  const [now, setNow] = useState(() => Date.now());
 
   // callers pass a fresh function on every render; the latest one is used
   // without refetching on each render
@@ -65,8 +71,18 @@ export function PasskeyDialog({
       setCurrent(await fetchChallenge.current());
     } catch (e) {
       setError(e);
+      const wait = e instanceof ApiError ? (e.retryAfter ?? 0) : 0;
+      setNow(Date.now());
+      setRetryAt(Date.now() + wait * 1000);
     }
   }, []);
+
+  const waiting = retryAt > now;
+  useEffect(() => {
+    if (!waiting) return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [waiting]);
 
   useEffect(() => {
     if (!open) return;
@@ -108,6 +124,14 @@ export function PasskeyDialog({
   const supported = passkeysAvailable();
   const busy = pending !== null;
   const ready = current !== null && !busy;
+  // no challenge and nothing on the way: the fetch failed
+  const stuck = current === null && error !== null && !busy;
+  const waitSeconds = Math.ceil((retryAt - now) / 1000);
+
+  async function retry() {
+    setError(null);
+    await prepare();
+  }
 
   return (
     <Dialog
@@ -172,6 +196,17 @@ export function PasskeyDialog({
           </div>
         )}
         {error ? <FormMessage error={error} /> : null}
+        {supported && stuck ? (
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full"
+            disabled={waiting}
+            onClick={() => void retry()}
+          >
+            {waiting ? `Try again in ${waitSeconds} s` : "Try again"}
+          </Button>
+        ) : null}
       </div>
     </Dialog>
   );
