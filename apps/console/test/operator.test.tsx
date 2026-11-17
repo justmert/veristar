@@ -3,6 +3,7 @@ import { auditPath, type TenantListQuery, tenantListPath } from "@/api/endpoints
 import { tenantAction } from "@/api/schemas";
 import { AuditPage, auditSummary, dayToUtc } from "@/pages/operator/audit";
 import { OperatorLayout } from "@/pages/operator/layout";
+import { AddOperator, validateAddOperator } from "@/pages/operator/operators";
 import { ReviewQueuePage } from "@/pages/operator/review";
 import { SettingsPage } from "@/pages/operator/settings";
 import { TenantDetailPage } from "@/pages/operator/tenant-detail";
@@ -524,5 +525,47 @@ describe("operator step-up", () => {
     ]);
     const host = await renderRoutes(area, "/operator");
     await waitFor(() => expect(host.textContent).toContain("This browser cannot use passkeys."));
+  });
+});
+
+describe("adding an operator (contract 5.16)", () => {
+  it("checks the identity and the reason before asking", () => {
+    expect(validateAddOperator({ kind: "github", value: "", reason: "" })).toEqual({
+      identity: "Required.",
+      reason: "Enter a reason. It is recorded in the audit log.",
+    });
+    expect(validateAddOperator({ kind: "stellar", value: "GABC", reason: "x" }).identity).toBe(
+      "Not a valid account (G...), muxed account (M...) or contract (C...) id.",
+    );
+    expect(
+      validateAddOperator({ kind: "github", value: "octocat", reason: "a".repeat(501) }).reason,
+    ).toBe("Use at most 500 characters.");
+    expect(validateAddOperator({ kind: "github", value: "octocat", reason: " on call " })).toEqual(
+      {},
+    );
+  });
+
+  it("shows an empty reason at its field and sends nothing", async () => {
+    const calls = stubFetch([]);
+    const host = await renderRoutes([{ path: "/", element: <AddOperator /> }], "/");
+    await type(byLabel(host, "GitHub login"), "octocat");
+    await click(byRole(host, "button", "Add operator"));
+    expect(host.textContent).toContain("Enter a reason. It is recorded in the audit log.");
+    expect(byLabel(host, "Reason").getAttribute("aria-invalid")).toBe("true");
+    expect(calls).toEqual([]);
+  });
+
+  it("shows the server's field codes at their fields", async () => {
+    stubFetch([
+      {
+        status: 422,
+        body: f.errorBody("validation_failed", { github_login: "unknown_github_login" }),
+      },
+    ]);
+    const host = await renderRoutes([{ path: "/", element: <AddOperator /> }], "/");
+    await type(byLabel(host, "GitHub login"), "nobody-here");
+    await type(byLabel(host, "Reason"), "joins the on-call rotation");
+    await click(byRole(host, "button", "Add operator"));
+    await waitFor(() => expect(host.textContent).toContain("No GitHub user has this username."));
   });
 });
