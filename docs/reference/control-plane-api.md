@@ -55,27 +55,38 @@ A new route adds its error codes to section 2.4 and its audit actions to section
 
 ### 1.1 Authentication
 
-- **Session cookie.** Name `sa_session`. Value: 32 random bytes, base64url, made by
+- **Cookie names.** Every cookie of the console carries the `__Host-` prefix, so a
+  browser accepts it only with `Secure`, `Path=/` and no `Domain`, from this host:
+  no other host of the domain can set or overwrite it.
+- **Session cookie.** Name `__Host-sa_session`. Value: 32 random bytes, base64url, made by
   `scs`. Attributes: `HttpOnly`, `Secure`, `SameSite=Lax`, `Path=/`, no `Domain`
   (host-only, so the cookie never reaches `in.` or `otlp.<BASE_DOMAIN>`). Persistent,
-  absolute lifetime 7 days, idle timeout 24 hours. The database holds only the
+  absolute lifetime 7 days from the sign-in, idle timeout 24 hours. A token renewal
+  keeps the sign-in's deadline, and a session whose sign-in is older than 7 days
+  answers 401 whatever its row says. The database holds only the
   SHA-256 of the value (`cp.sessions.token_hash`, 32 bytes) and the user
   (`cp.sessions.user_id`). The session store is the project's own `scs` store
   (`internal/controlplane/session`), because `scs`'s `pgxstore` works only on its
   fixed table layout, which `cp.sessions` does not have.
 - The token is renewed (`RenewToken`) at sign-in, so a session id fixed before
-  sign-in is useless afterwards.
-- **OAuth state cookie.** `sa_oauth`, only during sign-in: `HttpOnly`, `Secure`,
-  `SameSite=Lax`, `Path=/api/auth/github/callback`, `Max-Age=600`. Value: AES-256-GCM
+  sign-in is useless afterwards, and at a step-up (5.15).
+- **Ended sessions stay ended.** The end of each request writes the session back
+  (the idle timeout moves its expiry), but only as an update of the token the
+  request arrived with; a renewed token replaces the old row only while that row
+  exists. A sign-out, a roster suspension, removal or passkey reset (5.16) or an
+  account deletion (4.1.6) is therefore never undone by a request that was still
+  running.
+- **OAuth state cookie.** `__Host-sa_oauth`, only during sign-in: `HttpOnly`, `Secure`,
+  `SameSite=Lax`, `Path=/`, `Max-Age=600`. Value: AES-256-GCM
   sealed (key `OAUTH_STATE_KEY`) JSON `{state, verifier, return_to, exp}`. No database
   row is written for a visitor who has not signed in.
-- **Wallet challenge cookie.** `sa_stellar`, only between a wallet challenge and
+- **Wallet challenge cookie.** `__Host-sa_stellar`, only between a wallet challenge and
   its verification (4.1.7, 4.1.8): `HttpOnly`, `Secure`, `SameSite=Strict`,
-  `Path=/api`, `Max-Age=300`. Value: AES-256-GCM sealed (key `OAUTH_STATE_KEY`,
+  `Path=/`, `Max-Age=300`. Value: AES-256-GCM sealed (key `OAUTH_STATE_KEY`,
   additional data `sa_stellar/v1`) JSON `{nonce, address, purpose, user_id,
   return_to, exp}`. Every verification clears it.
-- **Passkey challenge cookie.** `sa_passkey`, only between a passkey challenge
-  and its verification (4.1.9): the attributes of `sa_stellar`. Value:
+- **Passkey challenge cookie.** `__Host-sa_passkey`, only between a passkey challenge
+  and its verification (4.1.9): the attributes of `__Host-sa_stellar`. Value:
   AES-256-GCM sealed (key `OAUTH_STATE_KEY`, additional data `sa_passkey/v1`)
   JSON `{challenge, purpose, user_id, return_to, exp}`. Every verification
   clears it.
@@ -209,7 +220,7 @@ List routes answer:
 | 400 | `ceremony_expired` | a passkey answer without matching options of this session, after they expired or were used (5.15) |
 | 400 | `step_up_failed` | a passkey answer that does not verify (5.15) |
 | 401 | `unauthenticated` | no session, expired session |
-| 401 | `step_up_required` | an `/api/operator` route without a recent passkey step-up on the session (5.1, 5.15); the session itself stays valid |
+| 401 | `step_up_required` | an `/api/operator` route, or a change to the sign-in methods of an operator account (4.1.8), without a recent passkey step-up on the session (5.1, 5.15); the session itself stays valid |
 | 401 | `enrollment_closed` | a first passkey from a session whose sign-in is older than the enrollment window (5.15) |
 | 403 | `csrf_header_missing` | see 1.2 |
 | 403 | `origin_mismatch` | see 1.2 |
@@ -217,7 +228,7 @@ List routes answer:
 | 403 | `terms_not_accepted` | the tenant has not accepted the current terms version (4.2.6) |
 | 403 | `operator_required` | an `/api/operator` route without operator rights (5.1) |
 | 403 | `operator_admin_required` | a roster change by an operator who is not an operator admin (5.16) |
-| 403 | `challenge_invalid` | a signed wallet challenge that does not verify: no `sa_stellar` cookie, a challenge of another console, another network, another account, another purpose or another session, or a signature that is not the account's (4.1.7); or a passkey answer that does not verify: no `sa_passkey` cookie, another challenge, origin, relying party, purpose or session, no user verification, or a signature that is not the passkey's key (4.1.9) |
+| 403 | `challenge_invalid` | a signed wallet challenge that does not verify: no `__Host-sa_stellar` cookie, a challenge of another console, another network, another account, another purpose or another session, or a signature that is not the account's (4.1.7); or a passkey answer that does not verify: no `__Host-sa_passkey` cookie, another challenge, origin, relying party, purpose or session, no user verification, or a signature that is not the passkey's key (4.1.9) |
 | 403 | `challenge_expired` | the wallet or passkey challenge is older than 5 minutes (4.1.7, 4.1.9) |
 | 403 | `challenge_used` | the wallet or passkey challenge was verified before (4.1.7, 4.1.9) |
 | 403 | `passkey_unknown` | a passkey answer without a public key names a credential that no live account holds (4.1.9) |
@@ -232,7 +243,7 @@ List routes answer:
 | 409 | `last_sign_in_method` | unlinking the only sign-in method of an account (4.1.8) |
 | 409 | `last_owner` | removing or demoting the last owner |
 | 409 | `passkey_required` | a step-up of an account without a passkey (5.15) |
-| 409 | `last_passkey` | deleting the last passkey of an account (5.15) |
+| 409 | `last_passkey` | deleting or unlinking the last step-up passkey of an account (4.1.8, 5.15) |
 | 409 | `last_operator_admin` | a roster change or account deletion that would leave no active operator admin (5.16, 4.1.6) |
 | 409 | `bootstrap_operator` | suspending, removing or demoting a roster row that the deploy settings ensure (5.16) |
 | 409 | `operator_exists` | adding an identity that is on the roster already (5.16) |
@@ -500,7 +511,7 @@ Query: `return_to` (optional): a console path starting with `/` and not with `//
 or `/\`, at most 512 characters. Anything else is replaced with `/`.
 
 Effect: creates `state` (32 random bytes, base64url) and a PKCE verifier
-(`oauth2.GenerateVerifier`), sets the `sa_oauth` cookie (1.1), and answers
+(`oauth2.GenerateVerifier`), sets the `__Host-sa_oauth` cookie (1.1), and answers
 **302** to `https://github.com/login/oauth/authorize` with `client_id`,
 `redirect_uri` (`GITHUB_REDIRECT_URL`), `state`, `code_challenge`,
 `code_challenge_method=S256` and `allow_signup=true`. No `scope` parameter is sent:
@@ -515,7 +526,7 @@ of the ceiling. When the ceiling is empty, a client whose own bucket was full
 (idle for at least 40 seconds) takes from a reserve of 5 per second, burst 20,
 instead: a flood keeps its own buckets below full and
 cannot reach it with the keys it is using. Over the limits: 429 `rate_limited` with `Retry-After` (JSON
-envelope, no redirect, no `sa_oauth` cookie).
+envelope, no redirect, no `__Host-sa_oauth` cookie).
 
 The client is the address core Caddy passes in `X-Sa-Client-Addr` (set from the
 connection, replacing any value the client sent; `deploy/caddy/app.Caddyfile`),
@@ -537,7 +548,7 @@ and `state`.
 
 Steps:
 
-1. Read and open `sa_oauth`; delete it in the response whatever happens next.
+1. Read and open `__Host-sa_oauth`; delete it in the response whatever happens next.
 2. `state` must equal the cookie's `state` (constant-time compare) and the cookie
    must not be expired. Otherwise: failure `state_mismatch`.
 3. `error=access_denied`: failure `access_denied`. Any other `error`: failure
@@ -684,7 +695,7 @@ through the Stellar Wallets Kit's module API (`apps/console/src/lib/stellar-wall
   (`Public Global Stellar Network ; September 2015`). The server key is derived
   from `OAUTH_STATE_KEY` with HKDF-SHA256 under its own label, so no extra
   setting holds it.
-- It sets the `sa_stellar` cookie (1.1) with the nonce, the address, purpose
+- It sets the `__Host-sa_stellar` cookie (1.1) with the nonce, the address, purpose
   `sign_in`, `return_to` and the expiry.
 - **200**:
 
@@ -697,12 +708,12 @@ through the Stellar Wallets Kit's module API (`apps/console/src/lib/stellar-wall
   as 4.1.1: 429 `rate_limited` with `Retry-After`.
 
 `POST /api/auth/stellar/verify`, body `{"transaction": "<signed envelope, base64 XDR>"}`.
-Steps, each refusal answering 403 with the code named, and the `sa_stellar`
+Steps, each refusal answering 403 with the code named, and the `__Host-sa_stellar`
 cookie cleared whatever happens:
 
 1. The request takes a token from the exchange buckets of 4.1.2 step 4
    (429 `rate_limited`).
-2. The `sa_stellar` cookie opens and names purpose `sign_in`
+2. The `__Host-sa_stellar` cookie opens and names purpose `sign_in`
    (`challenge_invalid`), and is not expired (`challenge_expired`).
 3. `txnbuild.ReadChallengeTx` with the server account, the public network
    passphrase and the console host as web auth domain and home domain: the
@@ -739,10 +750,18 @@ passkey. Linking needs both proofs in one browser session: the session proves
 the account, and the GitHub flow, a signed wallet challenge or a passkey answer
 proves the identity being added.
 
+- **Operator accounts.** On an account with the operator flag (5.1), every link
+  and unlink route below, the challenge routes and the GitHub start included,
+  needs a fresh operator step-up on the session (5.15) and answers **401
+  `step_up_required`** without one; the GitHub start answers **303** to
+  `/account?link_error=step_up_required`. A session alone cannot change how an
+  operator signs in. A linked passkey is a sign-in method only: it steps up only
+  when an active roster row names its address (5.15).
+
 - **Link a wallet.** Session, CSRF rules apply.
   `POST /api/me/identities/stellar/challenge` with `{"address": "G..."}` works
   as the sign-in challenge of 4.1.7 with purpose `link` and the session's user
-  id sealed into `sa_stellar`; 409 `identity_already_linked` when the account
+  id sealed into `__Host-sa_stellar`; 409 `identity_already_linked` when the account
   has an address. `POST /api/me/identities/stellar` with
   `{"transaction": "..."}` runs steps 1 to 5 of 4.1.7 for purpose `link`,
   requires the challenge's user id to be the session's (`challenge_invalid`),
@@ -750,15 +769,15 @@ proves the identity being added.
   `identity_in_use` when another live account holds the address.
 - **Link GitHub.** `GET /api/auth/github/start?link=1`: session (401 without
   one). The flow of 4.1.1 and 4.1.2 runs with the session's user id sealed into
-  `sa_oauth`; the callback requires the session to still hold that user and
+  `__Host-sa_oauth`; the callback requires the session to still hold that user and
   sets `github_id` and `github_login` instead of signing in. It answers **303**
   to `/account?linked=github`, or to `/account?link_error=<code>` with one of
-  `identity_in_use`, `identity_already_linked`, `state_mismatch`, the GitHub
-  failure codes of 4.1.2 and `internal`.
+  `identity_in_use`, `identity_already_linked`, `state_mismatch`,
+  `step_up_required`, the GitHub failure codes of 4.1.2 and `internal`.
 - **Link a passkey.** Session, CSRF rules apply.
   `POST /api/me/identities/passkey/challenge` with `{}` works as the sign-in
   challenge of 4.1.9 with purpose `link` and the session's user id sealed into
-  `sa_passkey`; 409 `identity_already_linked` when the account has a passkey,
+  `__Host-sa_passkey`; 409 `identity_already_linked` when the account has a passkey,
   422 when the body holds `return_to`. `POST /api/me/identities/passkey` with
   the answer of 4.1.9 runs its steps 1 to 6 for purpose `link`, requires the
   challenge's user id to be the session's (`challenge_invalid`), marks the
@@ -773,7 +792,8 @@ proves the identity being added.
   `DELETE /api/me/identities/stellar` and `DELETE /api/me/identities/passkey`:
   session, CSRF rules apply. **204**; 404
   `not_found` when the account has no identity of that kind; 409
-  `last_sign_in_method` when it is the only one. The operator flag follows the
+  `last_sign_in_method` when it is the only one; 409 `last_passkey` when the
+  passkey is the account's last step-up key (5.15). The operator flag follows the
   remaining identities; audit `user.identity_unlink` (detail: the kind only).
   The account's sessions stay. Signing in with an unlinked GitHub account or
   wallet afterwards creates a new account; an unlinked passkey answers 403
@@ -807,7 +827,7 @@ other key can hold an account at it. The control plane does not deploy the
 account and calls no Stellar service.
 
 `POST /api/auth/passkey/challenge`, body `{"return_to": "/projects"}` (optional,
-cleaned as in 4.1.1). It sets the `sa_passkey` cookie (1.1) with a 32-byte
+cleaned as in 4.1.1). It sets the `__Host-sa_passkey` cookie (1.1) with a 32-byte
 random challenge, purpose `sign_in`, `return_to` and the expiry, 5 minutes
 ahead. **200**:
 
@@ -845,11 +865,11 @@ known one. Each field is required except `public_key`: 422 `required`,
 `too_long` (authenticator data over 1024 bytes, client data over 4096, a
 signature over 80), `invalid_value` (a key that is not an uncompressed P-256
 point). Then, each refusal answering 403 with the code named and the
-`sa_passkey` cookie cleared whatever happens:
+`__Host-sa_passkey` cookie cleared whatever happens:
 
 1. The request takes a token from the exchange buckets of 4.1.2 step 4
    (429 `rate_limited`).
-2. The `sa_passkey` cookie opens and names purpose `sign_in`
+2. The `__Host-sa_passkey` cookie opens and names purpose `sign_in`
    (`challenge_invalid`), and is not expired (`challenge_expired`).
 3. Without `public_key`, the key is the one stored for `credential_id` on a
    live account; none: `passkey_unknown`.
@@ -1174,7 +1194,7 @@ the key.
 | `OPERATOR_STELLAR_ADDRESSES` | no | comma separated Stellar addresses, checksum checked, ensured like `OPERATOR_GITHUB_IDS`: account ids (G-addresses) of operators who sign in with a wallet, and passkey account addresses (C-addresses, 4.1.9) of operators who sign in with a passkey; empty when unset |
 | `OPERATOR_STEP_UP_MAX_AGE` | no | how long a passkey step-up opens the operator area (5.15); default `12h`, `5m` to `24h` |
 | `OPERATOR_ENROLL_WINDOW` | no | how long a first passkey may be registered without a step-up (5.15); default `24h`, `10m` to `168h` |
-| `OAUTH_STATE_KEY` | yes | 32 bytes, base64; seals `sa_oauth`, `sa_stellar` and `sa_passkey`, and derives the key that signs wallet challenges (4.1.7) |
+| `OAUTH_STATE_KEY` | yes | 32 bytes, base64; seals `__Host-sa_oauth`, `__Host-sa_stellar` and `__Host-sa_passkey`, and derives the key that signs wallet challenges (4.1.7) |
 | `REPORT_SIGNING_SEED` | yes | the Stellar secret seed (`S...`) that signs usage reports (20.2) |
 | `REPORT_SIGNING_KEY` | yes | the published account id (`G...`) of that seed; the process refuses to start when the seed does not derive it |
 | `REPORT_SIGNING_RETIRED_KEYS` | no | comma separated account ids of earlier report keys, newest first; their reports still verify (20.2) |
@@ -1684,9 +1704,12 @@ here is what passkey sign-in uses (4.1.9): an ES256 WebAuthn credential that the
 and uses with `@soropass/core`, whose base64url credential id and 65-byte SEC-1 key the control
 plane stores, and whose assertions `passkey.RelyingParty.Verify` checks
 (`internal/controlplane/passkey`): the console origin, the relying party, the challenge, user
-present and user verified, and the ES256 signature. An account steps up with its sign-in passkey,
-if it has one, and with the passkeys it adds here (`cp.operator_passkeys`, migration
-`00041_operator_roster.sql`). A security key works when it holds a PIN, because user
+present and user verified, and the ES256 signature. An account steps up with the passkeys it adds
+here (`cp.operator_passkeys`, migration `00041_operator_roster.sql`), and with its sign-in passkey
+only when an active roster row names that passkey's address. A passkey linked to an account the
+roster names by GitHub or wallet (4.1.8) signs in but does not step up: linking needs only a
+session, so it must not become the second factor. Such an operator registers a passkey here.
+A security key works when it holds a PIN, because user
 verification is required.
 
 The routes below sit behind the operator check of 5.1 and not behind the step-up, because they are
@@ -1707,11 +1730,12 @@ without padding, with the same limits and 422 field codes).
 
 `StepUpStatus` is `{stepped_up, stepped_up_at, expires_at, max_age_seconds, passkeys,
 sign_in_passkey, enrollment, enrollment_until}`; `passkeys` counts the added passkeys and the
-sign-in passkey. `POST /api/operator/step-up` answers with the same `StepUpStatus`. `enrollment` is
+sign-in passkey when it can step up, and `sign_in_passkey` says whether it can. `POST /api/operator/step-up` answers with the same `StepUpStatus`. `enrollment` is
 `open` (a first passkey may be registered without a step-up until `enrollment_until`),
 `sign_in_required` (a window is open, but this session's sign-in is older than it) or `closed`.
 `Passkey` is `{id, name, created_at, last_used_at}`. The sign-in passkey is not listed and not
-deleted here; it belongs to the account's identities (4.1.8).
+deleted here; it belongs to the account's identities (4.1.8), whose unlink refuses it with 409
+`last_passkey` while it is the last step-up key.
 
 - **Challenges.** A challenge is 32 random bytes with a purpose, the account and a 5-minute expiry,
   kept in the console session and removed when an answer is checked. The transaction that accepts
@@ -1733,7 +1757,7 @@ deleted here; it belongs to the account's identities (4.1.8).
   twice.
 - **First passkey.** A roster row gets an enrollment window of `OPERATOR_ENROLL_WINDOW` (default
   `24h`, `10m` to `168h`) when an admin adds it, when an admin resets its passkeys, and at start for
-  a bootstrap row whose account holds no passkey. Inside the window, an account without a passkey
+  a bootstrap row whose account holds no step-up passkey. Inside the window, an account without a passkey
   may register one without a step-up, from a session whose sign-in happened after the window
   opened; an older session gets **401 `enrollment_closed`**. The first registration closes the
   window. Later registrations need a step-up.
@@ -1781,6 +1805,8 @@ API at add time, as for members (4.2.5); the row is bound to the id.
   deletes the account's passkeys unless another active row keeps it an operator. A passkey reset
   deletes every passkey the account added for the step-up, ends its sessions and opens a new
   enrollment window. A sign-in passkey stays: it is one of the account's identities (4.1.8).
+  It steps up only when the row names its address (5.15), so after a reset an operator named by
+  GitHub or wallet holds no step-up key until a new registration.
 - **Account deletion (4.1.6)** removes the roster rows of the account's identities and its passkeys.
   The last active operator admin gets **409 `last_operator_admin`** instead.
 

@@ -70,16 +70,21 @@ The operator area asks for a passkey when you open it, and again after
 passkeys as passkey sign-in: a passkey on your phone or computer, or a security key with a PIN. The
 browser shows its own prompt; confirm with your fingerprint, face, screen lock or the key's PIN.
 
-- **If you sign in with a passkey**, that passkey also confirms the operator area. Select **Use
-  your passkey**, then **Confirm with your passkey**.
+- **If the roster lists you by your passkey**, the passkey you sign in with also confirms the
+  operator area. Select **Use your passkey**, then **Confirm with your passkey**. A passkey you
+  linked to an account the roster lists by GitHub or wallet signs in, but does not confirm the
+  operator area: register one here instead, so a passkey added from a stolen session never counts.
+- **Sign-in methods**: on an operator account, the **Account** page links and unlinks GitHub, a
+  wallet or a passkey only after you confirm with your passkey there. It refuses to unlink a
+  sign-in passkey that is your only one for the operator area.
 - **Your first passkey**: if your account has none, the operator area shows **Register a passkey**
   while your enrollment window is open. Give it a name, select **Register**, then **Create a
   passkey** and **Confirm with your passkey**. The registration also confirms the session.
 - **More passkeys**: on the Operators page, under **Your passkeys**, enter a name and select **Add a
   passkey**. Keep at least two, for example your phone and a security key, so a lost one does not
   lock you out.
-- **Delete a passkey**: select **Delete** next to it. The account always keeps one. Your sign-in
-  passkey is listed but managed on the **Account** page.
+- **Delete a passkey**: select **Delete** next to it. The account always keeps one. A sign-in
+  passkey that confirms the operator area is listed but managed on the **Account** page.
 - A passkey is bound to the console's address. It does not work on another site, so a look-alike
   page cannot use it.
 
@@ -94,7 +99,7 @@ confirmed area, and which an operator revokes there.
 
 | Situation | Recovery |
 |---|---|
-| An operator lost every passkey | An operator admin selects **Reset passkeys** on their row; the passkeys they added are deleted and the person registers a new one within the window. A lost sign-in passkey is unlinked on the Account page from another sign-in method |
+| An operator lost every passkey | An operator admin selects **Reset passkeys** on their row; the passkeys they added are deleted and the person registers a new one within the window. A lost sign-in passkey is unlinked on the Account page from another sign-in method, after the new passkey confirms the session |
 | Every operator admin lost their passkeys, or no admin is reachable | The hosting party puts an identity in `OPERATOR_GITHUB_IDS` and restarts the control plane; see the runbook |
 | The last admin is suspended or removed in the database by hand | The database refuses the change: the constraint trigger `operators_last_admin` keeps one active admin |
 

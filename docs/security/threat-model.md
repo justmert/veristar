@@ -28,7 +28,7 @@ Every test named below exists in the repository at the path given.
 | Daily visitor secret, daily IP-cluster secret, daily proof key | NATS KV `edge_secrets`, memory storage, per-key TTL | Whoever holds the visitor secret can link visitor tokens to a person for that day |
 | OTLP tokens (`sa_otlp_...`) | SHA-256 only, `cp.otlp_tokens` and `registry_otlp` | Write access to a tenant's API metrics |
 | Operator API keys (`sa_op_...`) | SHA-256 only, `cp.operator_api_keys` | Read access to aggregates of every tenant (or one) |
-| Console sessions (`sa_session`) | SHA-256 only, `cp.sessions` | A signed-in user's or operator's console access |
+| Console sessions (`__Host-sa_session`) | SHA-256 only, `cp.sessions` | A signed-in user's or operator's console access |
 | Umami tokens of members | Issued by the control plane's login as the member's own Umami user, held in the memory of the control plane instance that logged in, for at most 5 minutes, never sent to a browser | View-only access to the tenant's Umami websites |
 | Umami admin account, `UMAMI_USER_PASSWORD_KEY`, `OAUTH_STATE_KEY`, database and NATS credentials | SOPS-encrypted secrets (`infra/secrets/`), deployed by Ansible | Break-glass and service credentials |
 | Tracker releases | `packages/tracker/releases/<version>/sdk.js`, `manifest.json`, `revoked.json` | Runs on every tenant page |
@@ -260,7 +260,7 @@ attribution of an attack.
 |---|---|---|---|---|
 | OTLP token `sa_otlp_` + 40 base62 | Write API metrics as that tenant. No read access: no route accepts an OTLP token for reading. | Stored only as SHA-256, prefix kept for display; shown once; format checked before hashing; revocation writes `registry_otlp` before commit, and a failed write rolls back (contract 6.4); suspended and removed tenants refused; `last_seen_at` shows use. | `TestOTLPTokens`, `TestGenerate`, `TestRegistryStatus` (`internal/controlplane/otlptokens/`); `TestBearerParsing`, `TestAuthenticateAgainstRegistry`, `TestFailsClosedWithoutSnapshot` (`collector/tenantauthextension/auth_test.go`); `TestCollector` subtest `unknown and revoked tokens`; `tests/e2e-console/specs/otlp-tokens.spec.ts` | Tokens do not expire. A thief can pollute the tenant's API data until the tenant revokes. |
 | Operator API key `sa_op_` + 40 base62 | Read aggregates of every tenant (global key) or one tenant (scoped key). No write, no raw data. | SHA-256 only; shown once; lifetime 1 to 365 days, default 90; revocation and expiry apply to the very next request; 10 requests per second, burst 20, per key and instance; usage counted per hour; key works only under `/api/metrics/v1/` and a session cookie does not work there (contract 9.1 to 9.3). | `TestMachineAPI` subtests `a revoked key is refused on the very next request`, `an expired key is refused`, `a key works nowhere else and a cookie not here`, `rate limit answers 429 with Retry-After`, `no plaintext key is stored anywhere`, `a scoped key sees only its tenant`; `TestKeyFormat`, `TestKeyLimiter` (`internal/controlplane/operator/machine_test.go`) | A stolen global key reads every tenant's aggregates until revoked or expired. |
-| Console session `sa_session` | The user's console access; for an operator, operator actions. | `HttpOnly`, `Secure`, `SameSite=Lax`, host-only; absolute lifetime 7 days, idle 24 hours; DB holds SHA-256 only; token renewed at sign-in; sign-out destroys the row; every state change needs `X-Requested-With: sa-console` and `Origin` equal to `CONSOLE_ORIGIN`; console CSP `default-src 'none'; script-src 'self'` with `frame-ancestors 'none'` (`deploy/caddy/app.Caddyfile`). | `TestSessionCookieFlags`, `TestSignInRenewsToken`, `TestLogoutInvalidates`, `TestCSRFOnLogout`, `TestStateFailures`, `TestPKCEFailure` (`internal/controlplane/auth/`); `TestCSRF` (`internal/controlplane/httpx/`); `TestStoreRefusesRawTokens` (`internal/controlplane/session/`); `tests/e2e-console/specs/console-session.spec.ts`; `TestAppCaddyServesConsoleAndApi` (`deploy/caddy/app_test.go`) | Malware on the user's machine can still take the cookie. There is no device binding. |
+| Console session `__Host-sa_session` | The user's console access; for an operator, operator actions. | `HttpOnly`, `Secure`, `SameSite=Lax`, host-only with the `__Host-` prefix, so no other host of the domain can set or overwrite it (the sign-in state and challenge cookies carry the prefix too); absolute lifetime 7 days counted from the sign-in, kept across token renewals; idle 24 hours; DB holds SHA-256 only; token renewed at sign-in and at a step-up; sign-out, a roster suspension, removal or passkey reset and account deletion delete the rows, and a request still in flight never writes a deleted row back (its commit only updates the token it arrived with, and a renewed token replaces the old row only while that row exists); every state change needs `X-Requested-With: sa-console` and `Origin` equal to `CONSOLE_ORIGIN`; console CSP `default-src 'none'; script-src 'self'` with `frame-ancestors 'none'` (`deploy/caddy/app.Caddyfile`). | `TestSessionCookieFlags`, `TestSignInRenewsToken`, `TestLogoutInvalidates`, `TestCSRFOnLogout`, `TestStateFailures`, `TestPKCEFailure` (`internal/controlplane/auth/`); `TestCSRF` (`internal/controlplane/httpx/`); `TestStoreRefusesRawTokens`, `TestRevokedSessionsStayRevoked`, `TestLifetimeIsAbsolute` (`internal/controlplane/session/`); `tests/e2e-console/specs/console-session.spec.ts`; `TestAppCaddyServesConsoleAndApi` (`deploy/caddy/app_test.go`) | Malware on the user's machine can still take the cookie. There is no device binding. |
 | Umami token of a member | View-only Umami access to that member's teams. | Never leaves the control plane: obtained on the private network with the member's daily derived password, kept in the memory of each control plane instance for at most 5 minutes per member and site, used only for the website read routes `internal/umami.ReadWebsite` allows; Umami passwords rotate daily, so every token dies within about 24 hours; a removed member loses the console route at once (membership read on every request) and gets 401 from Umami as soon as the team membership is gone. | `TestReader` (`internal/controlplane/umamiread`); `TestProvisioningLive` (`internal/controlplane/provision/live_test.go`) | A control plane memory dump during the token's life exposes it. |
 
 ### 3.6 Umami and dependency vulnerabilities
@@ -350,12 +350,20 @@ Built:
   next request, ends their console sessions and revokes their operator MCP credentials.
 - The operator area needs a passkey assertion recorded on the session within
   `OPERATOR_STEP_UP_MAX_AGE` (12 hours by default); otherwise 401 `step_up_required`. A stolen
-  session cookie or a taken-over GitHub account alone does not open the area. The step-up uses
+  session cookie or a taken-over GitHub account or wallet alone does not open the area. The step-up uses
   the passkey verification of passkey sign-in (`internal/controlplane/passkey`): the assertion must
   name the console's relying party and origin, so a look-alike site cannot relay it, must sign a
   challenge the console issued for this session and purpose, and must carry user verification. A
   step-up renews the session token, and a challenge is accepted once (it is removed from the
   session and its hash stored in `cp.wallet_challenges_used`).
+- Step-up keys are the passkeys registered in the operator area and the account's sign-in
+  passkey only when an active roster row names that passkey's address. A passkey linked to an
+  account the roster names by GitHub or wallet signs in but does not step up, so a passkey linked
+  from a stolen session, before or after the account became an operator, never opens the area.
+- On an operator account, every link and unlink of a sign-in method needs a fresh step-up
+  (401 `step_up_required`), the GitHub link flow included; unlinking a sign-in passkey that is
+  the account's last step-up key answers 409 `last_passkey`, as deleting the last registered
+  passkey does.
 - A first passkey can be registered without a step-up only inside an enrollment window
   (`OPERATOR_ENROLL_WINDOW`, 24 hours by default) that an admin's addition or reset, or the start of
   the control plane for a deploy-settings identity without a passkey, opens; only from a session
@@ -369,13 +377,16 @@ Built:
   approve.
 - Every action writes an audit row; `cp_system` cannot update or delete `cp.audit_log`.
 - Actions need a reason (remove, reject, suspend) and are refused as 409 on a repeat.
-- Sign-in is GitHub OAuth with PKCE S256 and state and no scopes requested, or a SEP-10 wallet
-  challenge.
+- Sign-in is GitHub OAuth with PKCE S256 and state and no scopes requested, a SEP-10 wallet
+  challenge, or a passkey assertion (soropass, contract 4.1.9): relying party id the console host,
+  origin exactly `CONSOLE_ORIGIN`, user verification required, and a one-use challenge.
 
 Proved by: `TestStepUp` (`internal/controlplane/stepup/stepup_test.go`); `TestRosterRoutes`,
 `TestRosterDerivesOperatorFlag` and `TestBootstrap` (`internal/controlplane/operator/roster_test.go`);
 `TestGlobalRoutesNeedAnOperator` (`internal/controlplane/operator/global_umami_test.go`);
-`TestAuditLogAppendOnly` (`internal/db/boundaries_test.go`); `TestOperatorFlag`
+`TestAuditLogAppendOnly` (`internal/db/boundaries_test.go`); `TestOperatorFlag`,
+`TestOperatorSessionAloneCannotGainStepUpKey`, `TestLinkedPasskeyIsNoStepUpKey`,
+`TestOperatorChangesIdentitiesAfterStepUp` and `TestUnlinkLastStepUpPasskey`
 (`internal/controlplane/auth/`); the isolation gate's operator routes without a step-up
 (`tests/isolation/console/gate_test.go`); `tests/e2e-console/specs/operator-roster.spec.ts` with a
 Chromium virtual authenticator.
