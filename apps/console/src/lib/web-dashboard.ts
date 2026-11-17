@@ -82,13 +82,24 @@ export function webQuery(s: WebState, now: Date): WebQuery {
   return { from: d.from, to: d.to, site: s.site, band: s.band };
 }
 
-// the server allows 400 days; the form says so before asking
+// the web dashboard allows 400 days (18.1), more than the 366 of the
+// operator views; the form says so before asking
+export const WEB_MAX_DAYS = 400;
+
 export function validateWebDays(r: DayRange, now: Date): { from?: string; to?: string } {
-  const out = validateDays(r, now);
-  if (out.from || out.to) return out;
-  if ((Date.parse(r.to) - Date.parse(r.from)) / 86_400_000 + 1 > 400)
-    return { to: "A range covers at most 400 days." };
-  return {};
+  return validateDays(r, now, WEB_MAX_DAYS);
+}
+
+export function dayCount(r: DayRange): number {
+  return Math.round((Date.parse(r.to) - Date.parse(r.from)) / 86_400_000) + 1;
+}
+
+// a range cut to its last max days, for the views next to the dashboard that
+// allow fewer days than it does (on-chain 15, integrity 17.2: 366)
+export function lastDaysOf(r: DayRange, max: number): DayRange {
+  if (dayCount(r) <= max) return r;
+  const from = new Date(Date.parse(r.to) - (max - 1) * 86_400_000).toISOString().slice(0, 10);
+  return { from, to: r.to };
 }
 
 // a single day is shown per hour, from the engine; longer ranges per day,

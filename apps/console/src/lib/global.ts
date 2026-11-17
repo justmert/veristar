@@ -227,7 +227,11 @@ export function presetOf(from: string, to: string, now: Date): number | null {
 
 // the bounds of 8.1, checked before sending so the form can say which field
 // is wrong; the server checks them again
-export function validateDays(r: DayRange, now: Date): { from?: string; to?: string } {
+export function validateDays(
+  r: DayRange,
+  now: Date,
+  maxDays = 366,
+): { from?: string; to?: string } {
   const out: { from?: string; to?: string } = {};
   if (!isDay(r.from)) out.from = "Enter a start day.";
   if (!isDay(r.to)) out.to = "Enter an end day.";
@@ -235,8 +239,8 @@ export function validateDays(r: DayRange, now: Date): { from?: string; to?: stri
   const today = lastDays(1, now).to;
   if (r.to > today) out.to = "End no later than today (UTC).";
   else if (r.to < r.from) out.to = "End on or after the start.";
-  else if ((Date.parse(r.to) - Date.parse(r.from)) / 86_400_000 + 1 > 366)
-    out.to = "A range covers at most 366 days.";
+  else if ((Date.parse(r.to) - Date.parse(r.from)) / 86_400_000 + 1 > maxDays)
+    out.to = `A range covers at most ${maxDays} days.`;
   return out;
 }
 

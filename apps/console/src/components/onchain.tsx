@@ -14,6 +14,7 @@ import { ErrorPanel, Loading } from "@/components/error-panel";
 import { Pill } from "@/components/status";
 import { Button } from "@/components/ui/button";
 import { formatCount } from "@/lib/format";
+import { formatDayRange } from "@/lib/global";
 import {
   dailyOperations,
   METHOD_TEXT,
@@ -22,6 +23,7 @@ import {
   shortKey,
   weeklyActiveText,
 } from "@/lib/onchain";
+import { lastDaysOf } from "@/lib/web-dashboard";
 
 // the on-chain witness in the console: the project panel on the overview,
 // and the parts the operator detail and the management page share. a day
@@ -199,10 +201,13 @@ export function OnchainPanel({
   view,
   manageTo,
   actions,
+  rangeLabel,
 }: {
   view: OnchainView;
   manageTo?: string;
   actions?: ReactNode;
+  // the utc days the panel covers, when a page lets people choose them
+  rangeLabel?: string;
 }) {
   const t = view.totals;
   const daily = dailyOperations(view);
@@ -219,6 +224,11 @@ export function OnchainPanel({
           <p className="text-small text-fg-2">
             Ledger activity of the accounts and contracts the project declared, per UTC day.
           </p>
+          {rangeLabel ? (
+            <p className="text-small text-fg-2" data-testid="onchain-range">
+              {rangeLabel}
+            </p>
+          ) : null}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {t.ids > 0 ? <LinkStatus view={view} /> : null}
@@ -278,12 +288,19 @@ export function OnchainPanel({
   );
 }
 
-// the overview's on-chain section: the panel over the overview's range of
-// utc days, with the export of the overview's daily rows
-export function ProjectOnchainSection({ tenantId, days }: { tenantId: string; days: number }) {
-  const today = new Date().toISOString().slice(0, 10);
-  const from = new Date(Date.now() - (days - 1) * 86_400_000).toISOString().slice(0, 10);
-  const range = { from, to: today };
+// the on-chain section of the overview and the web dashboard: the panel over
+// the page's range of utc days, with the export of its daily rows. a range
+// is the page's own choice; days counts back from today.
+export function ProjectOnchainSection({
+  tenantId,
+  days,
+  range: chosen,
+}: {
+  tenantId: string;
+  days?: number;
+  range?: { from: string; to: string };
+}) {
+  const range = chosen ? lastDaysOf(chosen, ONCHAIN_MAX_DAYS) : lastUtcDays(days ?? 30);
   const q = useQuery(onchainQuery(tenantId, range));
   if (q.isPending) return <Loading label="Loading on-chain activity" />;
   if (q.error) return <ErrorPanel error={q.error} onRetry={() => q.refetch()} />;
@@ -291,6 +308,7 @@ export function ProjectOnchainSection({ tenantId, days }: { tenantId: string; da
     <OnchainPanel
       view={q.data}
       manageTo={`/projects/${tenantId}/onchain`}
+      rangeLabel={chosen ? onchainRangeLabel(chosen, range) : undefined}
       actions={
         <Button asChild variant="outline" size="sm">
           <a href={exportPaths.overview(tenantId, range)} download>
@@ -301,4 +319,23 @@ export function ProjectOnchainSection({ tenantId, days }: { tenantId: string; da
       }
     />
   );
+}
+
+function lastUtcDays(days: number): { from: string; to: string } {
+  const to = new Date().toISOString().slice(0, 10);
+  const from = new Date(Date.now() - (days - 1) * 86_400_000).toISOString().slice(0, 10);
+  return { from, to };
+}
+
+// the on-chain views cover at most this many days (contract 15)
+export const ONCHAIN_MAX_DAYS = 366;
+
+export function onchainRangeLabel(
+  chosen: { from: string; to: string },
+  shown: { from: string; to: string },
+): string {
+  const span = formatDayRange(shown.from, shown.to);
+  return shown.from === chosen.from
+    ? span
+    : `${span}, the last ${ONCHAIN_MAX_DAYS} days of the chosen range`;
 }
