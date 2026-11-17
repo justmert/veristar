@@ -268,7 +268,7 @@ here, before they take effect, as the processing terms require
   ([docs/runbooks/operators.md](docs/runbooks/operators.md)).
 - Optional settings: `OPERATOR_STEP_UP_MAX_AGE` (default `12h`) and
   `OPERATOR_ENROLL_WINDOW` (default `24h`).
-- Run the database migrations (`00035_tenant_web_dimensions.sql`) before the
+- Run the database migrations (`00042_tenant_web_dimensions.sql`) before the
   new control plane starts; the rolling `deploy.yml` does this in its
   bootstrap step.
 - Deploy the release, then apply OpenTofu for each environment. The plan
