@@ -147,6 +147,10 @@ func seedAPIRows(tx pgx.Tx) error {
 			  values ($1, $2, current_date, 'horizon', 3, 2, 1)`, []any{tenant, seedStrkey(i)}},
 			{`insert into agg.chain_reads (tenant_id, strkey, covered_from, covered_to, last_attempt_at, last_success_at)
 			  values ($1, $2, current_date, current_date, now(), now())`, []any{tenant, seedStrkey(i)}},
+			{`insert into agg.chain_daily (tenant_id, strkey, day, source, operations, transactions, counterparties, functions)
+			  values ($1, $2, current_date, 'rpc_events', 3, 2, 1, 'read')`, []any{tenant, seedContract(i)}},
+			{`insert into agg.chain_function_daily (tenant_id, strkey, day, function_name, caller, successful, failed, accounts)
+			  values ($1, $2, current_date, 'swap', 'contract', 2, 1, 1)`, []any{tenant, seedContract(i)}},
 			{`insert into agg.chain_weeks (tenant_id, week, hash_key) values ($1, date_trunc('week', current_date)::date, $2)`,
 				[]any{tenant, make([]byte, 32)}},
 			{`insert into agg.chain_week_members (tenant_id, week, strkey, member)
@@ -176,6 +180,10 @@ func seedAPIRows(tx pgx.Tx) error {
 // seedStrkey is a g account id of the seed, unique per index
 func seedStrkey(i int) string {
 	return "G" + strings.Repeat("A", 54) + string(rune('A'+i))
+}
+
+func seedContract(i int) string {
+	return "C" + strings.Repeat("A", 54) + string(rune('A'+i))
 }
 
 // seedRows gives each of two tenants one row in every tenant table, written
