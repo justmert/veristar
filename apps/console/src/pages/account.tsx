@@ -4,14 +4,17 @@ import { type ReactNode, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { ApiError } from "@/api/client";
 import { api, linkGitHubUrl } from "@/api/endpoints";
+import { operatorsApi, stepUpQuery } from "@/api/operators";
 import { meQuery } from "@/api/queries";
 import type { Me } from "@/api/schemas";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { FormMessage } from "@/components/error-panel";
 import { TextField } from "@/components/form-field";
 import { GitHubMark } from "@/components/github-mark";
+import { Notice } from "@/components/notice";
 import { PageHeader, Panel } from "@/components/panel";
 import { PasskeyDialog } from "@/components/passkey-dialog";
+import { steppedUp } from "@/components/step-up";
 import { Button } from "@/components/ui/button";
 import { WalletPicker } from "@/components/wallet-picker";
 import { connectWallet, shortAddress, signTransaction } from "@/lib/stellar-wallet";
@@ -39,6 +42,8 @@ const LINK_ERRORS: Record<string, string> = {
     "The link expired, or you signed in to another account meanwhile. Start again from this page.",
   access_denied: "GitHub linking was cancelled. Nothing changed.",
   rate_limited: "Too many requests right now. Wait a few seconds and start again.",
+  step_up_required:
+    "This is an operator account. Confirm with your passkey on this page, then link GitHub again.",
 };
 
 // the projects that block a deletion (contract 4.1.6), empty for any other
@@ -86,6 +91,57 @@ function MethodRow({
       </div>
       {action}
     </li>
+  );
+}
+
+// an operator account changes its sign-in methods only after a passkey
+// step-up (contract 4.1.8): a method added from a stolen session would sign
+// in on its own. the control plane refuses the change without one; this
+// notice is how the person gives it.
+function OperatorStepUp() {
+  const s = useQuery(stepUpQuery);
+  const [open, setOpen] = useState(false);
+  if (!s.data || s.data.stepped_up) return null;
+  if (s.data.passkeys === 0)
+    return (
+      <Notice
+        tone="warning"
+        title="Register a passkey for the operator area first."
+        actions={
+          <Button asChild variant="outline" size="sm">
+            <Link to="/operator">Open the operator area</Link>
+          </Button>
+        }
+      >
+        This is an operator account. Its sign-in methods change only after you confirm with a
+        passkey of the operator area.
+      </Notice>
+    );
+  return (
+    <Notice
+      tone="info"
+      title="Confirm with your passkey to change sign-in methods."
+      actions={
+        <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+          Use your passkey
+        </Button>
+      }
+    >
+      This is an operator account, so linking and unlinking need a recent passkey confirmation.
+      <PasskeyDialog
+        open={open}
+        onOpenChange={setOpen}
+        mode="confirm"
+        title="Confirm with your passkey"
+        userName=""
+        challenge={() => operatorsApi.stepUpChallenge()}
+        verify={async (answer) => {
+          const st = await operatorsApi.stepUp(answer);
+          await steppedUp(st);
+          setOpen(false);
+        }}
+      />
+    </Notice>
   );
 }
 
@@ -140,6 +196,7 @@ function SignInMethods({ me }: { me: Me }) {
             GitHub is linked. You can sign in with it from now on.
           </p>
         ) : null}
+        {me.user.is_operator ? <OperatorStepUp /> : null}
         <ul className="flex flex-col divide-y divide-line" aria-label="Sign-in methods">
           <MethodRow
             icon={<GitHubMark className="size-4" />}

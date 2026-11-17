@@ -100,3 +100,47 @@ describe("account deletion (contract 4.1.6)", () => {
     expect(document.body.querySelector("dialog[open]")).toBeNull();
   });
 });
+
+describe("sign-in methods of an operator account (contract 4.1.8)", () => {
+  const operatorMe = { ...f.meBody, user: { ...f.meBody.user, is_operator: true } };
+  const notSteppedUp = {
+    ...f.steppedUpBody,
+    stepped_up: false,
+    stepped_up_at: null,
+    expires_at: null,
+  };
+
+  it("asks for a passkey confirmation before the methods can change", async () => {
+    const calls = stubFetch([
+      { status: 200, body: operatorMe },
+      { status: 200, body: notSteppedUp },
+    ]);
+    const host = await page();
+    await waitFor(() =>
+      expect(host.textContent).toContain("Confirm with your passkey to change sign-in methods."),
+    );
+    expect(byRole(host, "button", "Use your passkey")).toBeTruthy();
+    expect(calls[1]?.url).toContain("/api/operator/step-up");
+  });
+
+  it("points an operator without a step-up passkey to the operator area", async () => {
+    stubFetch([
+      { status: 200, body: operatorMe },
+      { status: 200, body: { ...notSteppedUp, passkeys: 0 } },
+    ]);
+    const host = await page();
+    await waitFor(() =>
+      expect(host.textContent).toContain("Register a passkey for the operator area first."),
+    );
+  });
+
+  it("shows nothing extra once the session is stepped up", async () => {
+    stubFetch([
+      { status: 200, body: operatorMe },
+      { status: 200, body: f.steppedUpBody },
+    ]);
+    const host = await page();
+    await waitFor(() => expect(host.textContent).toContain("octocat"));
+    await waitFor(() => expect(host.textContent).not.toContain("Confirm with your passkey"));
+  });
+});
