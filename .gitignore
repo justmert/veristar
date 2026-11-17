@@ -49,6 +49,7 @@ keys.txt
 
 # os and editor files
 .DS_Store
+.claude/
 
 # opentofu plan files (encrypted, but local to one run) and the generated
 # ansible inventory (rewritten from state by make <env>-inventory)
@@ -73,4 +74,6 @@ __pycache__/
 /platformctl
 /prober
 /metricswriter
+/adoptionreport
+/issueage
 /collector/scf-otelcol
