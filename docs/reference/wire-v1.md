@@ -80,9 +80,9 @@ sent with `fetch` and `keepalive: true`.
 | `h` | string | yes | 100 | hostname of the page; the gateway replaces it with the host of the checked `Origin` header, so a page can report only its own host |
 | `u` | string | `pv` and `ev` | 500 | path and query of the page, plus a route fragment (see below) |
 | `r` | string | `pv` and `ev` | 500 | referrer: full url for another origin, path for the same origin, empty if none; the gateway keeps only scheme and host (see Referrer below) |
-| `ti` | string | no | 500 | document title; releases before 1.3.0 always send it, 1.3.0 only with `data-send-title="true"` |
-| `s` | string | no | 11 | screen as `WxH`; releases before 1.3.0 always send it, 1.3.0 never reads it |
-| `l` | string | no | 35 | `navigator.language`; releases before 1.3.0 always send it, 1.3.0 never reads it |
+| `ti` | string | no | 500 | document title; releases before 1.3.0 always send it, 1.3.0 only with `data-send-title="true"` or when the site's own `data-before-send` hook or `umami.track(props)` call sets it |
+| `s` | string | no | 11 | screen as `WxH`; releases before 1.3.0 always send it, 1.3.0 never reads it and sends it only when the site's own `data-before-send` hook or `umami.track(props)` call sets it |
+| `l` | string | no | 35 | `navigator.language`; releases before 1.3.0 always send it, 1.3.0 never reads it and sends it only when the site's own `data-before-send` hook or `umami.track(props)` call sets it |
 | `fr` | boolean | no | | `true` when the page runs inside a frame, sent from 1.3.0 on every event of such a page; absent at top level |
 | `n` | string | `ev` only | 50 | event name |
 | `d` | object | optional, `ev` only | 16 keys | event data, see below |
@@ -171,7 +171,8 @@ each accepted notice counts `signal_never_visible`. The counts are per site and 
 
 The wire format stays version 1: every field 1.3.0 adds is optional, and the gateway accepts the
 bodies of every earlier release unchanged. A gateway older than 1.3.0 refuses `fr` and `nv` as
-unknown, which is why the gateway ships before the console offers 1.3.0.
+unknown, and requires `ti`, `s` and `l`, so it refuses every event of a default 1.3.0 tracker.
+That is why the gateway ships before the console offers 1.3.0.
 
 ## Consent-gated start
 
