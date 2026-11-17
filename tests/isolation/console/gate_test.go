@@ -22,6 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/justmert/veristar/internal/controlplane/operator"
+	"github.com/justmert/veristar/internal/controlplane/reports"
 )
 
 // the console part of the tenant isolation gate: every route the
@@ -182,7 +183,7 @@ func catalogue(terms string) []route {
 	add(kindTenant, http.MethodPut, tp+"/cohort/proposal", fixed(map[string]any{"program": "Intruder Award"}))
 	add(kindTenant, http.MethodGet, tp+"/reports", nil)
 	add(kindTenant, http.MethodPost, tp+"/reports", func(gateIDs) any {
-		y := time.Now().UTC().AddDate(0, 0, -1).Format(time.DateOnly)
+		y := time.Now().UTC().AddDate(0, 0, -reports.FinalDays).Format(time.DateOnly)
 		return map[string]any{"from": y, "to": y}
 	})
 	add(kindTenant, http.MethodGet, tp+"/reports/{report_id}", nil)
@@ -436,7 +437,7 @@ func (e *env) gateWorld(t *testing.T) *gateWorld {
 		"name": "gate rule", "metric": "visitors", "min_per_day": 1, "min_days": 1, "months": 1})
 	require.Equal(t, http.StatusCreated, r.status, string(r.body))
 	w.ruleID = r.json(t)["id"].(string)
-	y := time.Now().UTC().AddDate(0, 0, -1).Format(time.DateOnly)
+	y := time.Now().UTC().AddDate(0, 0, -reports.FinalDays).Format(time.DateOnly)
 	r = w.alice.call(t, http.MethodPost, "/api/tenants/"+w.ta.String()+"/reports", map[string]any{"from": y, "to": y})
 	require.Equal(t, http.StatusCreated, r.status, string(r.body))
 	w.reportA = r.json(t)["id"].(string)

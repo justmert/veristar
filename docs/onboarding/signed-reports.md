@@ -13,8 +13,9 @@ or the file to an SCF submission instead of assembling screenshots.
 ## Create a report
 
 1. Open your project and choose **Signed reports**.
-2. Pick the period. A report covers whole UTC days that have ended, up to yesterday, at most
-   366 days.
+2. Pick the period. A report covers whole UTC days, at most 366 days, and ends four days before
+   today at the latest: Veristar reads today and the three days before it again to count late
+   events and grade them, so only older days are final, and a signed number never changes.
 3. Choose **Generate and sign**.
 
 Any member of the project who accepted the current terms creates reports. A project can create 20 reports per 24 hours.
@@ -49,6 +50,9 @@ Open its link, or download the JSON and run:
 ```sh
 platformctl report verify report.json
 ```
+
+It checks the signature and that the signer is listed in Veristar's own stellar.toml, whose address
+is built into `platformctl`; it never trusts a key or an address the report names.
 
 Any SEP-53 implementation verifies it too. The format, the canonical JSON form and examples in
 Node and Python are in [signed usage reports](../reference/usage-reports.md).

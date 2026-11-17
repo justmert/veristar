@@ -4257,7 +4257,7 @@ same reads at `GET /api/metrics/v1/rules` and
 
 ## 20. Signed usage reports
 
-A member generates a report of the project for a period of closed UTC days.
+A member generates a report of the project for a period of final UTC days.
 The control plane reads the same aggregates as "What SCF sees" (16.3),
 writes the report in its canonical JSON form, signs those bytes with the
 platform's report key with SEP-53 and stores both in `cp.usage_reports`
@@ -4279,8 +4279,13 @@ format, the canonical form and offline verification are in
 `signer`, `created_at`, `created_by`, `revoked_at`, `view_count`,
 `last_viewed_at`. **Detail** adds `file`, the signed file of 20.3.
 
-- The period is UTC days, both included, `to` before today (a signed number
-  never grows after signing), at most 366 days: 422 otherwise.
+- The period is UTC days, both included, at most 366 days, `from` not after
+  `to`: 422 `validation_failed` otherwise.
+- `to` is at least four days before today (UTC): aggregate-web and the
+  integrity grading read today and the three days before it again on every
+  run, so a later day can still change, and a signed number must not. A later
+  `to` answers 422 `period_not_final`, whose message names the last day
+  allowed.
 - 409 `not_reportable` for a project the operator views do not list.
 - Limits: 20 reports per project per 24 hours and 60 revocations per project
   per hour, 429 `rate_limited` with `Retry-After` beyond them.

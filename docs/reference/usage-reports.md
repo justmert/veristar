@@ -55,7 +55,7 @@ share, percentile and latency is a decimal string with six digits after the poin
 | `id` | the report's id, also the last part of its link |
 | `issuer` | `name`, `console` (the console origin), `stellar_toml` (where the keys are published), `signing_key` (the signer, which must equal `signature.signer`) |
 | `project` | `id`, `slug`, `name` |
-| `period` | `from`, `to` (UTC days, both included, all closed before the report was made), `days` |
+| `period` | `from`, `to` (UTC days, both included, `to` at least four days before the day the report was made), `days` |
 | `generated_at` | RFC 3339 UTC time of generation |
 | `methods` | the version of every definition behind the numbers: `format`, `web_metrics`, `api_metrics`, `onchain`, `cohort`, `integrity_rules`, `route_normaliser`, and `platform`, the release that made the report |
 | `web` | primary-band totals (page views, visitors, visits, bounces, total visit seconds, bounce rate, average visit seconds), the quarantine band, gateway requests and rejections, sites and verified sites, and a daily series |
@@ -125,15 +125,26 @@ published keys, and offers the file as JSON.
 platformctl report verify report.json
 ```
 
-It checks the signature, then reads `ACCOUNTS` of the stellar.toml the report names (HTTPS only)
-and requires the signer to be listed. To check against a key you already hold instead, and fetch
-nothing:
+It checks the signature, then reads `ACCOUNTS` of Veristar's stellar.toml,
+`https://app.veristar.app/.well-known/stellar.toml`, which is built into `platformctl`, and requires
+the signer to be listed there and the report's `issuer.stellar_toml` to name that same file. The
+trusted file never comes from the report itself: anyone can sign a report with their own key and
+name their own stellar.toml in it. For a report of another Veristar deployment, name that
+deployment's file (HTTPS, path `/.well-known/stellar.toml`):
+
+```sh
+platformctl report verify report.json --toml https://app.analytics.example/.well-known/stellar.toml
+```
+
+To check against a key you already hold instead, and fetch nothing:
 
 ```sh
 platformctl report verify report.json --signer GDG7D3Z267FHK3JHVPXF5SHTSQFEDLWYKEI5ECMSLDGKJUXPXZOJGF7O
 ```
 
 The exit code is 0 for a valid report, 1 for an invalid one and 2 when the check could not run.
+Every text it prints from the report, such as the project name, is quoted with escapes, so a name
+holding a line break or a terminal control sequence cannot add a line to the verdict.
 
 ### With any SEP-53 implementation
 

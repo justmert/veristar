@@ -70,6 +70,8 @@ export function errorText(err: unknown): string {
         return "This tracker version was revoked. Choose another version.";
       case "validation_failed":
         return "Some fields need attention.";
+      case "period_not_final":
+        return "End the report at least four days before today (UTC). The most recent days are still being counted and could change after signing.";
       case "rate_limited":
         return `Too many requests. Try again${err.retryAfter ? ` in ${err.retryAfter} s` : " shortly"}.`;
       case "unavailable":

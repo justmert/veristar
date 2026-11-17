@@ -25,11 +25,19 @@ import { useProject } from "./project-layout";
 
 const MAX_DAYS = 366;
 
-// the last full days before today: a report covers closed days only, so
-// its numbers never change after signing
+// a report ends this many days before today at the latest: the daily
+// aggregation and grading read today and the three days before it again,
+// so only older days are final and a signed number never changes
+export const FINAL_DAYS = 4;
+
+// the last final day, as yyyy-mm-dd in utc
+export function lastFinalDay(now: Date): string {
+  return lastDays(1, new Date(now.getTime() - FINAL_DAYS * 86_400_000)).to;
+}
+
+// the last n final days
 export function closedDays(n: number, now: Date): { from: string; to: string } {
-  const yesterday = new Date(now.getTime() - 86_400_000);
-  return lastDays(n, yesterday);
+  return lastDays(n, new Date(now.getTime() - FINAL_DAYS * 86_400_000));
 }
 
 // the bounds of 20.3, checked before sending; the server checks them again
@@ -42,8 +50,9 @@ export function validatePeriod(
   if (!isDay(from)) out.from = "Enter a start day.";
   if (!isDay(to)) out.to = "Enter an end day.";
   if (out.from || out.to) return out;
-  const today = lastDays(1, now).to;
-  if (to >= today) out.to = "End before today (UTC): a report covers closed days.";
+  const last = lastFinalDay(now);
+  if (to > last)
+    out.to = `End on ${last} or earlier (UTC): the last ${FINAL_DAYS} days can still change.`;
   else if (to < from) out.to = "End on or after the start.";
   else if ((Date.parse(to) - Date.parse(from)) / 86_400_000 + 1 > MAX_DAYS)
     out.to = `A report covers at most ${MAX_DAYS} days.`;
@@ -119,7 +128,7 @@ export function ReportsPage() {
               value={to}
               onChange={(e) => setTo(e.target.value)}
               error={errors.to}
-              hint="Up to yesterday (UTC), at most 366 days."
+              hint={`Up to ${lastFinalDay(new Date())} (UTC), at most ${MAX_DAYS} days.`}
             />
           </div>
           <FormMessage error={create.error} />

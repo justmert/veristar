@@ -303,7 +303,7 @@ func start(t *testing.T) *env {
 	require.NoError(t, err)
 	horizon, rpc, err := chain.Sources(stellarCfg)
 	require.NoError(t, err)
-	onchainRoutes, err := onchain.NewRoutes(scope, horizon, rpc, time.Now)
+	onchainRoutes, err := onchain.NewRoutes(scope, horizon, rpc, e.srv.URL, time.Now)
 	require.NoError(t, err)
 	onchainOperator, err := operator.NewOnchain(e.conn, time.Now)
 	require.NoError(t, err)

@@ -31,6 +31,8 @@ import (
 	"github.com/justmert/veristar/internal/controlplane/session"
 	"github.com/justmert/veristar/internal/controlplane/tenants"
 	pdb "github.com/justmert/veristar/internal/db"
+	"github.com/justmert/veristar/internal/jobs/aggregateweb"
+	"github.com/justmert/veristar/internal/jobs/integrity"
 	"github.com/justmert/veristar/internal/jobs/jobstest"
 )
 
@@ -210,7 +212,7 @@ func TestUsageReports(t *testing.T) {
 	e.sys(t, `insert into cp.tenant_members (tenant_id, user_id, role) values ($1, $2, 'member')`, a, member)
 	ca, cb, anon := e.client(t, &ua), e.client(t, &ub), e.client(t, nil)
 	today := time.Now().UTC().Truncate(24 * time.Hour)
-	from, to := today.AddDate(0, 0, -7).Format(time.DateOnly), today.AddDate(0, 0, -1).Format(time.DateOnly)
+	from, to := today.AddDate(0, 0, -10).Format(time.DateOnly), today.AddDate(0, 0, -reports.FinalDays).Format(time.DateOnly)
 
 	code, raw := ca.call(t, http.MethodPost, "/api/tenants/"+a.String()+"/reports", map[string]string{"from": from, "to": to})
 	require.Equal(t, http.StatusCreated, code, string(raw))
@@ -294,9 +296,27 @@ func TestUsageReports(t *testing.T) {
 		require.Equal(t, http.StatusUnauthorized, code)
 	})
 
+	t.Run("periods end on a final day", func(t *testing.T) {
+		// today and the three days before it are read again by the daily
+		// aggregation and grading, so none of them may be signed
+		for i := range reports.FinalDays {
+			end := today.AddDate(0, 0, -i).Format(time.DateOnly)
+			code, raw := ca.call(t, http.MethodPost, "/api/tenants/"+a.String()+"/reports", map[string]string{"from": from, "to": end})
+			require.Equal(t, http.StatusUnprocessableEntity, code, end)
+			var body struct {
+				Error struct {
+					Code string `json:"code"`
+				} `json:"error"`
+			}
+			require.NoError(t, json.Unmarshal(raw, &body))
+			require.Equal(t, reports.CodePeriodNotFinal, body.Error.Code, string(raw))
+		}
+		require.Equal(t, aggregateweb.RereadDays+1, reports.FinalDays)
+		require.Equal(t, integrity.RereadDays+1, reports.FinalDays)
+	})
+
 	t.Run("periods are closed days of at most 366", func(t *testing.T) {
 		for _, p := range []map[string]string{
-			{"from": from, "to": today.Format(time.DateOnly)},
 			{"from": to, "to": from},
 			{"from": today.AddDate(-2, 0, 0).Format(time.DateOnly), "to": to},
 			{"from": "2026-13-01", "to": to},

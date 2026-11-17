@@ -40,10 +40,11 @@ function watch(page: Page) {
 }
 
 // the closed utc days of a report: the week ending yesterday
+// a week of final days: a report ends four days before today at the latest
 function lastWeek(): { from: string; to: string } {
   const day = (offset: number) =>
     new Date(Date.now() - offset * 86_400_000).toISOString().slice(0, 10);
-  return { from: day(7), to: day(1) };
+  return { from: day(10), to: day(4) };
 }
 
 test.beforeAll(async ({ browser }) => {
