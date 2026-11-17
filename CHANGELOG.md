@@ -298,6 +298,34 @@ here, before they take effect, as the processing terms require
   `postgres-ha`); `ghcr.io/astral-sh/uv` 0.13.7 to 0.13.8 in the Python
   example. Test images: `curlimages/curl` 8.11.1 to 8.22.0 and `registry`
   3.0.0 to 3.1.2.
+- Signed usage reports are format version 2: `methods.integrity_rules`
+  lists every integrity rule version that graded the period, and a report
+  carries what "What SCF sees" shows next to the counts: the estimate of
+  visits not measured because of privacy signals, whether web and API data
+  exist, whether API metrics were lossy, the infrastructure requests left
+  out, and the weekly active accounts. Version 1 reports keep their layout
+  and still verify; the public report page reads both
+  ([docs/reference/usage-reports.md](docs/reference/usage-reports.md)).
+- A report ends four days before today at the latest: the daily aggregation
+  and grading read the last three days again, so only older days are final.
+  A later end answers 422 `period_not_final`.
+- The integrity report and the appeal link name the rule versions that
+  graded the period (`rule_versions`), not only the version applied now.
+- On-chain figures that rank, compare or grade a project count verified ids
+  only, as weekly active accounts do: the On-chain column and compare series,
+  the on-chain key metric and its percentile, threshold rules on on-chain
+  operations, "What SCF sees" and signed reports.
+- The stellar.toml link accepts an `ORG_URL` on the `www.` form of the
+  domain or with a trailing dot, and links both ways only for a verified
+  account and a file for the public network.
+- The SEP-53 ownership message names the console host and the project's
+  name next to its id.
+- Removing an id clears the proof of every contract proven through it.
+  The deployer check says when a transaction called a contract, since a
+  contract a factory created is not read; such a contract uses the admin
+  check.
+- The platform's internal probe project is no longer graded by the hourly
+  integrity job.
 
 ### Removed
 
@@ -379,6 +407,23 @@ here, before they take effect, as the processing terms require
 - The console cookies carry the `__Host-` prefix (`__Host-sa_session`,
   `__Host-sa_oauth`, `__Host-sa_stellar`, `__Host-sa_passkey`, all at
   `Path=/`), so no other host of the domain can set them.
+- `platformctl report verify` trusts Veristar's own stellar.toml, built
+  into the tool, instead of the one a report names; `--toml` names another
+  deployment's file. Every text it prints from a report is quoted, so a
+  project name cannot add a line to the verdict.
+- A SEP-53 ownership proof holds only while the account's master key can
+  authorise a payment alone (weight above 0 and at least the medium
+  threshold); otherwise it answers `master_key_no_weight` and the data entry
+  method proves the account. A challenge is spent in the same statement
+  that checks it is still open.
+- The public report page shows no figure until the signature holds.
+- Report verifiers read a number by its value as RFC 8785 does and refuse a
+  lone surrogate escape, the same in the CLI and the browser; every route
+  serves a report member as the exact signed bytes.
+- A report link's revocation is fixed once written: the database sets its
+  time, and neither the time nor who revoked changes afterwards.
+- The control plane refuses to start, and the chain-activity task refuses to
+  read, when Horizon or RPC serve another network than the public one.
 
 ### Upgrade notes
 
@@ -467,6 +512,13 @@ here, before they take effect, as the processing terms require
   leader through the upgrade. Once every member runs 3.7, going back to 3.6
   needs etcd's downgrade procedure or the snapshot, not a pin change
   ([docs/security/supply-chain.md](docs/security/supply-chain.md), section 8.2).
+- Run migrations `00044_usage_report_revocation.sql` and
+  `00045_jobs_internal_tenants.sql` with the others before the new control
+  plane and jobs start.
+- Verify reports of a deployment other than app.veristar.app with
+  `platformctl report verify <file> --toml https://app.<BASE_DOMAIN>/.well-known/stellar.toml`.
+- Ids proven before this release keep their proof: the weighted master key
+  rule applies to proofs made from now on.
 
 ## [0.3.0] - 2026-11-16
 
