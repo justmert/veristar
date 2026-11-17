@@ -14,8 +14,9 @@ security key on top of the sign-in.
 | Operator | Everything in the operator area except changing the roster |
 | Operator admin | The same, and add, suspend, resume, promote, demote and remove operators, and reset their passkeys |
 
-Each roster row names one identity: a GitHub account or a Stellar wallet address. A person who signs
-in both ways can hold one row of each kind.
+Each roster row names one identity: a GitHub account, or a Stellar address, which is a wallet's
+`G...` address or the `C...` address of a passkey account. A person who signs in several ways can
+hold one row per identity.
 
 ## Rows from the deploy settings
 
@@ -31,8 +32,10 @@ that are your path back in (see "Lockout recovery" below).
 
 ## Add an operator
 
-1. On the Operators page, under **Add an operator**, pick **GitHub** or **Stellar wallet**.
-2. Enter the GitHub login or the Stellar address (`G...`). A GitHub login is resolved to the account's
+1. On the Operators page, under **Add an operator**, pick **GitHub** or **Stellar wallet or
+   passkey**.
+2. Enter the GitHub login, or the Stellar address: a wallet's `G...` address, or the `C...` address
+   of a passkey account, which the person finds on their **Account** page. A GitHub login is resolved to the account's
    numeric id at once, so a later rename of the login does not move the access.
 3. Pick the role, enter a reason, and select **Add operator**.
 
@@ -44,12 +47,15 @@ person's passkeys, which opens a new window.
 ## Suspend, resume, change the role, remove
 
 Each action asks for a reason. The reason, the actor and the change go to the audit log
-(`operator.suspend`, `operator.resume`, `operator.role_change`, `operator.remove`).
+(`operator.suspend`, `operator.resume`, `operator.role_change`, `operator.remove`). Adding an
+operator writes `operator.add`, and a passkey reset writes `operator.passkeys_reset`.
 
 - **Suspend** ends the operator view at once: the person's next request is refused, their console
   sessions end, and their AI assistant connections with operator access are revoked. Their passkeys
   stay, so a resumption needs only a sign-in and a confirmation.
-- **Remove** takes the row off the roster. The person's passkeys are deleted and their sessions end.
+- **Remove** takes the row off the roster and the person's sessions end. Their operator passkeys are
+  deleted unless another active row still makes them an operator (a second identity of the same
+  person).
   They keep their ordinary console account and their project memberships.
 - **Make admin** and **Make operator** change the role.
 
@@ -90,6 +96,6 @@ confirmed area, and which an operator revokes there.
 |---|---|
 | An operator lost every passkey | An operator admin selects **Reset passkeys** on their row; the passkeys they added are deleted and the person registers a new one within the window. A lost sign-in passkey is unlinked on the Account page from another sign-in method |
 | Every operator admin lost their passkeys, or no admin is reachable | The hosting party puts an identity in `OPERATOR_GITHUB_IDS` and restarts the control plane; see the runbook |
-| The last admin is suspended or removed in the database by hand | The control plane refuses the change; the constraint keeps one active admin |
+| The last admin is suspended or removed in the database by hand | The database refuses the change: the constraint trigger `operators_last_admin` keeps one active admin |
 
 The runbook [Adding and removing operators](../runbooks/operators.md) has the steps.

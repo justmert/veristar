@@ -72,7 +72,8 @@ To add someone through the settings instead, for the first operator admin of a n
    commit, and converge as above. The row stays; the console can now change it.
 2. An operator admin selects **Remove** (or **Suspend**, to keep the passkeys for a later return) on
    the person's row and gives the reason. The person's next request is refused, their console
-   sessions end, their operator MCP credentials are revoked, and a removal deletes their passkeys.
+   sessions end, their operator MCP credentials are revoked, and a removal deletes their operator
+   passkeys unless another active row still makes the person an operator.
 3. Revoke the operator API keys that person created, unless another operator takes them over
    knowingly ([operator-key-revocation.md](operator-key-revocation.md)). To list them, on the
    database leader:

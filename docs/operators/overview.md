@@ -23,7 +23,8 @@ from the same daily aggregates the operator views read.
 
 ## Becoming an operator
 
-An operator is a person on the operator roster, with a GitHub account or a Stellar wallet. Operator
+An operator is a person on the operator roster, with a GitHub account, a Stellar wallet or a
+passkey account. Operator
 admins add and remove operators on the **Operators** page; [roster.md](roster.md) covers the page
 and the passkeys every operator registers.
 
