@@ -273,7 +273,7 @@ describe("accounts and contracts page (contract 15.4)", () => {
         body: {
           id: ACCOUNT_ID,
           account: f.G_KEY,
-          message: `Veristar ownership proof\nProject: ${f.TENANT_ID}\nAccount: ${f.G_KEY}\nNonce: 00112233445566778899aabbccddeeff\nExpires: 2026-11-16T10:00:00Z`,
+          message: `Veristar ownership proof\nConsole: app.veristar.app\nProject: "Project" (${f.TENANT_ID})\nAccount: ${f.G_KEY}\nNonce: 00112233445566778899aabbccddeeff\nExpires: 2026-11-16T10:00:00Z`,
           manage_data: { name: "veristar", value: "00112233445566778899aabbccddeeff" },
           expires_at: "2026-11-16T10:00:00Z",
         },

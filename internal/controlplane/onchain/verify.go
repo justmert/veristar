@@ -33,6 +33,8 @@ type outcome struct {
 	via    *string
 	detail map[string]any
 	err    string
+	// spends is the challenge nonce an account proof consumes
+	spends *string
 }
 
 // verifyTimeout bounds the ledger reads of one proof, so a slow source
@@ -94,6 +96,9 @@ func (h *Routes) verify(w http.ResponseWriter, r *http.Request) error {
 	switch method {
 	case MethodSEP53, MethodManageData:
 		o = h.proveAccount(pctx, a, row, method, b.Signature, nonce, expires)
+		// the proof spends this challenge and no other: a second request
+		// racing with the same signature finds it gone
+		o.spends = nonce
 	case MethodContractAdmin:
 		o = h.proveAdmin(pctx, a, row)
 	case MethodContractDeployer:
@@ -118,9 +123,27 @@ func (h *Routes) proveAccount(ctx context.Context, a tenants.Access, row idRow, 
 		return o
 	}
 	if method == MethodSEP53 {
-		msg := ChallengeMessage(a.TenantID, row.Strkey, *nonce, *expires)
+		name, err := h.projectName(ctx, a)
+		if err != nil {
+			o.err = chain.CodeUnavailable
+			return o
+		}
+		msg := ChallengeMessage(h.console, a.TenantID, name, row.Strkey, *nonce, *expires)
 		if err := chain.VerifySEP53(row.Strkey, msg, *sig); err != nil {
 			o.err = ErrBadSignature
+			return o
+		}
+		// a valid signature shows who holds the account's own key, not that
+		// the key still controls the account: an issuer that set its master
+		// weight to zero, or below a multisig threshold, would otherwise be
+		// claimable by whoever holds the old key
+		acct, err := h.horizon.Account(ctx, row.Strkey)
+		if err != nil {
+			o.err = chain.Code(err)
+			return o
+		}
+		if !acct.MasterControls() {
+			o.err = ErrMasterNoWeight
 			return o
 		}
 		o.detail = map[string]any{"standard": "sep-53"}
@@ -241,27 +264,34 @@ func (h *Routes) store(ctx context.Context, a tenants.Access, row idRow, method 
 	out := IDJSON{ID: row.ID, Strkey: row.Strkey, Kind: row.Kind, AddedBy: row.AddedBy, CreatedAt: httpx.Timestamp(row.CreatedAt)}
 	now := h.now().UTC()
 	err := h.scope.DB().WithSystem(ctx, func(tx pgx.Tx) error {
-		var q string
 		args := []any{row.ID, a.TenantID, now}
 		if o.err == "" {
 			detail, err := json.Marshal(o.detail)
 			if err != nil {
 				return err
 			}
-			q = `update cp.chain_ids set verify_method = $4, verified_at = $3, verified_via = $5, verify_detail = $6,
+			// an account proof holds only while its challenge is still the
+			// open one, checked in the same statement that spends it
+			tag, err := tx.Exec(ctx, `update cp.chain_ids set verify_method = $4, verified_at = $3, verified_via = $5, verify_detail = $6,
 			       last_verify_at = $3, last_verify_error = null, challenge_nonce = null, challenge_expires_at = null
-			     where id = $1 and tenant_id = $2`
-			args = append(args, method, o.via, detail)
-		} else {
-			q = `update cp.chain_ids set last_verify_at = $3, last_verify_error = $4 where id = $1 and tenant_id = $2`
-			args = append(args, o.err)
+			     where id = $1 and tenant_id = $2 and ($7::text is null or challenge_nonce = $7)`,
+				append(args, method, o.via, detail, o.spends)...)
+			if err != nil {
+				return err
+			}
+			if tag.RowsAffected() == 0 {
+				o.err = ErrNoChallenge
+			}
 		}
-		tag, err := tx.Exec(ctx, q, args...)
-		if err != nil {
-			return err
-		}
-		if tag.RowsAffected() == 0 {
-			return httpx.NotFound()
+		if o.err != "" {
+			tag, err := tx.Exec(ctx, `update cp.chain_ids set last_verify_at = $3, last_verify_error = $4 where id = $1 and tenant_id = $2`,
+				append(args, o.err)...)
+			if err != nil {
+				return err
+			}
+			if tag.RowsAffected() == 0 {
+				return httpx.NotFound()
+			}
 		}
 		result := "ok"
 		if o.err != "" {
@@ -274,7 +304,7 @@ func (h *Routes) store(ctx context.Context, a tenants.Access, row idRow, method 
 			return err
 		}
 		var r idRow
-		err = tx.QueryRow(ctx, `select verify_method, verified_at, verified_via, verify_detail, last_verify_at, last_verify_error
+		err := tx.QueryRow(ctx, `select verify_method, verified_at, verified_via, verify_detail, last_verify_at, last_verify_error
 			from cp.chain_ids where id = $1`, row.ID).Scan(&r.Method, &r.VerifiedAt, &r.Via, &r.Detail, &r.LastVerifyAt, &r.LastVerifyErr)
 		if err != nil {
 			return err

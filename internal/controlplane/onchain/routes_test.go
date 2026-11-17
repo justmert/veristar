@@ -43,9 +43,18 @@ type ledger struct {
 	data      map[string]map[string]string
 	txs       map[string]string
 	instances map[string]string
+	// signers and thresholds of an account; without an entry the master
+	// key weighs 1 and every threshold is 0, a fresh account
+	signers    map[string][]map[string]any
+	thresholds map[string]map[string]int
+	// onAccount runs before an account record is served
+	onAccount func(id string)
 }
 
 func (l *ledger) horizon(w http.ResponseWriter, r *http.Request) {
+	if strings.HasPrefix(r.URL.Path, "/accounts/") && l.onAccount != nil {
+		l.onAccount(strings.TrimPrefix(r.URL.Path, "/accounts/"))
+	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	switch {
@@ -60,7 +69,15 @@ func (l *ledger) horizon(w http.ResponseWriter, r *http.Request) {
 		for k, v := range d {
 			enc[k] = base64.StdEncoding.EncodeToString([]byte(v))
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"account_id": id, "data": enc})
+		signers, ok := l.signers[id]
+		if !ok {
+			signers = []map[string]any{{"key": id, "weight": 1, "type": "ed25519_public_key"}}
+		}
+		th, ok := l.thresholds[id]
+		if !ok {
+			th = map[string]int{"low_threshold": 0, "med_threshold": 0, "high_threshold": 0}
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"account_id": id, "data": enc, "signers": signers, "thresholds": th})
 	case strings.HasPrefix(r.URL.Path, "/transactions/"):
 		h := strings.TrimPrefix(r.URL.Path, "/transactions/")
 		env, ok := l.txs[h]
@@ -118,7 +135,8 @@ func start(t *testing.T) *env {
 	}), log)
 	require.NoError(t, err)
 
-	l := &ledger{data: map[string]map[string]string{}, txs: map[string]string{}, instances: map[string]string{}}
+	l := &ledger{data: map[string]map[string]string{}, txs: map[string]string{}, instances: map[string]string{},
+		signers: map[string][]map[string]any{}, thresholds: map[string]map[string]int{}}
 	hz := httptest.NewServer(http.HandlerFunc(l.horizon))
 	t.Cleanup(hz.Close)
 	rp := httptest.NewServer(http.HandlerFunc(l.rpc))
@@ -127,7 +145,7 @@ func start(t *testing.T) *env {
 	require.NoError(t, err)
 	re, err := chain.NewEndpoint(rp.URL, 1000, "test")
 	require.NoError(t, err)
-	routes, err := onchain.NewRoutes(scope, chain.NewHorizon(he), chain.NewRPC(re), time.Now)
+	routes, err := onchain.NewRoutes(scope, chain.NewHorizon(he), chain.NewRPC(re), "https://console.example.org", time.Now)
 	require.NoError(t, err)
 	overview, err := exports.NewOverview(scope, time.Now)
 	require.NoError(t, err)
@@ -373,7 +391,7 @@ func TestOnchainRoutes(t *testing.T) {
 	ch := c.call(t, http.MethodPost, base+"/ids/"+accountID+"/challenge", nil)
 	require.Equal(t, http.StatusOK, ch.status, string(ch.raw))
 	msg := ch.body["message"].(string)
-	require.Contains(t, msg, "Veristar ownership proof\nProject: "+tenant.String()+"\nAccount: "+account)
+	require.Contains(t, msg, "Veristar ownership proof\nConsole: console.example.org\nProject: \"Project\" ("+tenant.String()+")\nAccount: "+account)
 	wrong := keypair.MustRandom()
 	h := chain.SEP53Hash(msg)
 	bad, err := wrong.Sign(h[:])
@@ -385,6 +403,13 @@ func TestOnchainRoutes(t *testing.T) {
 	require.Equal(t, onchain.ErrBadSignature, ver["last_error"])
 	good, err := acctKP.Sign(h[:])
 	require.NoError(t, err)
+	// the signature holds, but the account is read from the ledger first:
+	// an account that does not exist proves nothing
+	r = c.call(t, http.MethodPost, base+"/ids/"+accountID+"/verify", map[string]any{"method": "sep53", "signature": base64.StdEncoding.EncodeToString(good)})
+	require.Equal(t, chain.CodeAccountMissing, r.body["verification"].(map[string]any)["last_error"], string(r.raw))
+	e.l.mu.Lock()
+	e.l.data[account] = map[string]string{}
+	e.l.mu.Unlock()
 	r = c.call(t, http.MethodPost, base+"/ids/"+accountID+"/verify", map[string]any{"method": "sep53", "signature": base64.StdEncoding.EncodeToString(good)})
 	ver = r.body["verification"].(map[string]any)
 	require.Equal(t, "verified", ver["status"], string(r.raw))
@@ -548,4 +573,72 @@ func TestOnchainRoutes(t *testing.T) {
 	require.Equal(t, http.StatusNoContent, r.status)
 	v = c.call(t, http.MethodGet, base, nil)
 	require.Len(t, v.body["ids"], 3)
+}
+
+// a sep-53 signature by an account's own key proves control only while
+// that key can authorise a payment. the first case is shaped like the usdc
+// issuer on the public network: master weight 0, thresholds 2/2/2, four
+// other signers of weight 1.
+func TestSEP53NeedsMasterWeight(t *testing.T) {
+	e := start(t)
+	owner := e.user(t)
+	kp := keypair.MustRandom()
+	account := kp.Address()
+	tenant := e.tenant(t, owner, []string{account})
+	c := e.client(t, owner)
+	base := "/api/tenants/" + tenant.String() + "/onchain"
+	id := idOf(t, c.call(t, http.MethodGet, base, nil), account)["id"].(string)
+
+	others := []map[string]any{}
+	for range 4 {
+		others = append(others, map[string]any{"key": keypair.MustRandom().Address(), "weight": 1, "type": "ed25519_public_key"})
+	}
+	e.l.mu.Lock()
+	e.l.data[account] = map[string]string{}
+	e.l.signers[account] = append(others, map[string]any{"key": account, "weight": 0, "type": "ed25519_public_key"})
+	e.l.thresholds[account] = map[string]int{"low_threshold": 2, "med_threshold": 2, "high_threshold": 2}
+	e.l.mu.Unlock()
+
+	sign := func() resp {
+		ch := c.call(t, http.MethodPost, base+"/ids/"+id+"/challenge", nil)
+		require.Equal(t, http.StatusOK, ch.status, string(ch.raw))
+		h := chain.SEP53Hash(ch.body["message"].(string))
+		sig, err := kp.Sign(h[:])
+		require.NoError(t, err)
+		return c.call(t, http.MethodPost, base+"/ids/"+id+"/verify", map[string]any{"method": "sep53", "signature": base64.StdEncoding.EncodeToString(sig)})
+	}
+	r := sign()
+	ver := r.body["verification"].(map[string]any)
+	require.Equal(t, "unverified", ver["status"], string(r.raw))
+	require.Equal(t, onchain.ErrMasterNoWeight, ver["last_error"])
+
+	// a master key below the medium threshold cannot pay alone either
+	e.l.mu.Lock()
+	e.l.signers[account] = append(others, map[string]any{"key": account, "weight": 1, "type": "ed25519_public_key"})
+	e.l.mu.Unlock()
+	r = sign()
+	require.Equal(t, onchain.ErrMasterNoWeight, r.body["verification"].(map[string]any)["last_error"], string(r.raw))
+
+	// a challenge replaced while the proof reads the ledger is not spent by
+	// the older signature
+	e.l.mu.Lock()
+	e.l.signers[account] = append(others, map[string]any{"key": account, "weight": 2, "type": "ed25519_public_key"})
+	e.l.mu.Unlock()
+	e.l.onAccount = func(string) {
+		e.sys(t, func(tx pgx.Tx) error {
+			_, err := tx.Exec(t.Context(), `update cp.chain_ids set challenge_nonce = repeat('0', 32) where strkey = $1`, account)
+			return err
+		})
+	}
+	r = sign()
+	ver = r.body["verification"].(map[string]any)
+	require.Equal(t, "unverified", ver["status"], string(r.raw))
+	require.Equal(t, onchain.ErrNoChallenge, ver["last_error"])
+	e.l.onAccount = nil
+
+	// a master key that reaches the medium threshold proves control
+	r = sign()
+	ver = r.body["verification"].(map[string]any)
+	require.Equal(t, "verified", ver["status"], string(r.raw))
+	require.Nil(t, ver["last_error"])
 }

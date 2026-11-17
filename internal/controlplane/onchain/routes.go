@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -67,6 +68,10 @@ const (
 	ErrTxFailed         = "transaction_failed"
 	ErrNoAdmin          = "no_admin_entry"
 	ErrAdminNotVerified = "admin_not_verified"
+	// ErrMasterNoWeight: the sep-53 signature holds, but the account's own
+	// key cannot authorise a medium threshold operation, so it does not
+	// prove control; the manage-data method proves it through the signers
+	ErrMasterNoWeight = "master_key_no_weight"
 )
 
 // AuditTarget names a declared id in the audit log.
@@ -78,15 +83,21 @@ type Routes struct {
 	horizon *chain.Horizon
 	rpc     *chain.RPC
 	network string
+	console string
 	now     func() time.Time
 }
 
-// NewRoutes needs the scope and both ledger apis; the proofs read them.
-func NewRoutes(s *tenants.Scope, h *chain.Horizon, r *chain.RPC, now func() time.Time) (*Routes, error) {
+// NewRoutes needs the scope, both ledger apis, which the proofs read, and
+// the console origin, whose host the challenge message names.
+func NewRoutes(s *tenants.Scope, h *chain.Horizon, r *chain.RPC, consoleOrigin string, now func() time.Time) (*Routes, error) {
 	if s == nil || h == nil || r == nil || now == nil {
 		return nil, errors.New("onchain: scope, horizon, rpc and clock are required")
 	}
-	return &Routes{scope: s, horizon: h, rpc: r, network: chain.PublicNetwork, now: now}, nil
+	u, err := url.Parse(consoleOrigin)
+	if err != nil || u.Host == "" {
+		return nil, errors.New("onchain: the console origin must be an absolute url")
+	}
+	return &Routes{scope: s, horizon: h, rpc: r, network: chain.PublicNetwork, console: u.Host, now: now}, nil
 }
 
 // Routes registers the paths under a router mounted at /api.
@@ -348,11 +359,14 @@ type ManageData struct {
 }
 
 // ChallengeMessage is the exact text signed for a challenge. it names the
-// platform, the project and the account, so a signature cannot be reused
-// for another project, account or challenge.
-func ChallengeMessage(tenant uuid.UUID, account, nonce string, expires time.Time) string {
+// platform, the console host, the project and the account, so a signature
+// cannot be reused for another project, account or challenge, and a wallet
+// shows the signer which project on which console asks. the name is quoted,
+// so a name cannot add a line of its own.
+func ChallengeMessage(console string, tenant uuid.UUID, name, account, nonce string, expires time.Time) string {
 	return "Veristar ownership proof\n" +
-		"Project: " + tenant.String() + "\n" +
+		"Console: " + console + "\n" +
+		"Project: " + strconv.Quote(name) + " (" + tenant.String() + ")\n" +
 		"Account: " + account + "\n" +
 		"Nonce: " + nonce + "\n" +
 		"Expires: " + expires.UTC().Format(time.RFC3339)
@@ -377,6 +391,10 @@ func (h *Routes) challenge(w http.ResponseWriter, r *http.Request) error {
 	nonce := hex.EncodeToString(raw[:])
 	expires := h.now().UTC().Add(ChallengeTTL).Truncate(time.Second)
 	ctx := r.Context()
+	name, err := h.projectName(ctx, a)
+	if err != nil {
+		return err
+	}
 	// the challenge columns are cp_system's, like every proof column; the
 	// id was read under the member's tenant scope
 	err = h.scope.DB().WithSystem(ctx, func(tx pgx.Tx) error {
@@ -397,10 +415,19 @@ func (h *Routes) challenge(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	httpx.WriteJSON(w, http.StatusOK, Challenge{
-		ID: row.ID, Account: row.Strkey, Message: ChallengeMessage(a.TenantID, row.Strkey, nonce, expires),
+		ID: row.ID, Account: row.Strkey, Message: ChallengeMessage(h.console, a.TenantID, name, row.Strkey, nonce, expires),
 		ManageData: ManageData{Name: ManageDataName, Value: nonce}, ExpiresAt: httpx.Timestamp(expires),
 	})
 	return nil
+}
+
+// projectName reads the project's name for the challenge message.
+func (h *Routes) projectName(ctx context.Context, a tenants.Access) (string, error) {
+	var name string
+	err := h.scope.InTenant(ctx, a, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `select name from cp.tenants where id = $1`, a.TenantID).Scan(&name)
+	})
+	return name, err
 }
 
 // limit answers 429 after verifyLimit console checks of an id within the
