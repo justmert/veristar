@@ -214,6 +214,13 @@ func startReplayer(t *testing.T, natsURL string, umamiURL *url.URL, node string)
 // lane and in-flight counts.
 func startReplayerTo(t *testing.T, natsURL string, umamiURLs []*url.URL, node string, workers, maxInFlight int) *running {
 	t.Helper()
+	return startReplayerWith(t, natsURL, umamiURLs, node, workers, maxInFlight, 1)
+}
+
+// startReplayerWith is startReplayerTo against a cluster of the given
+// replica count.
+func startReplayerWith(t *testing.T, natsURL string, umamiURLs []*url.URL, node string, workers, maxInFlight, replicas int) *running {
+	t.Helper()
 	nc, err := nats.Connect(natsURL, nats.MaxReconnects(-1), nats.ReconnectWait(100*time.Millisecond))
 	if err != nil {
 		t.Fatal(err)
@@ -230,7 +237,7 @@ func startReplayerTo(t *testing.T, natsURL string, umamiURLs []*url.URL, node st
 	log := obs.NewLogger(testWriter{t}, slog.LevelInfo).With("node", node)
 	ops := freeAddr(t)
 	set := replayer.Settings{NodeID: node, OpsAddr: ops, UmamiURLs: umamiURLs, Workers: workers, MaxInFlight: maxInFlight}
-	r, err := replayer.New(context.Background(), replayer.Config{Settings: set, NC: nc, Replicas: 1, Umami: ucs, Log: log, Registry: reg})
+	r, err := replayer.New(context.Background(), replayer.Config{Settings: set, NC: nc, Replicas: replicas, Umami: ucs, Log: log, Registry: reg})
 	if err != nil {
 		t.Fatal(err)
 	}
