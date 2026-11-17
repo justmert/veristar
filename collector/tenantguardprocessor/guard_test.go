@@ -2,12 +2,16 @@ package tenantguardprocessor
 
 import (
 	"context"
+	"math"
 	"strings"
 	"testing"
 	"time"
 	"unicode/utf8"
 
 	"github.com/google/uuid"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
+
 	"go.opentelemetry.io/collector/consumer/consumertest"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/plog"
@@ -108,7 +112,7 @@ func TestMetricsFilteredAndStamped(t *testing.T) {
 	g := newGuard(testCfg, processortest.NewNopSettings(Type).Logger, time.Now)
 	md := tenantMetrics()
 	origHash := resourceHash(md.ResourceMetrics().At(0).Resource().Attributes())
-	out, err := g.processMetrics(authed(tenant, token), md)
+	out, err := g.processMetrics(authed(tenant, token), storableValues(md))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -404,7 +408,7 @@ func TestHTTPDupKeepsStableNameOnly(t *testing.T) {
 		m.SetEmptyHistogram().DataPoints().AppendEmpty().SetCount(1)
 
 		g := newGuard(testCfg, processortest.NewNopSettings(Type).Logger, time.Now)
-		out, err := g.processMetrics(authed(uuid.NewString(), uuid.NewString()), md)
+		out, err := g.processMetrics(authed(uuid.NewString(), uuid.NewString()), storableValues(md))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -432,7 +436,7 @@ func TestServiceNameStorable(t *testing.T) {
 		md := tenantMetrics()
 		md.ResourceMetrics().At(0).Resource().Attributes().PutStr("service.name", in)
 		g := newGuard(testCfg, processortest.NewNopSettings(Type).Logger, time.Now)
-		out, err := g.processMetrics(authed(uuid.NewString(), uuid.NewString()), md)
+		out, err := g.processMetrics(authed(uuid.NewString(), uuid.NewString()), storableValues(md))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -530,7 +534,7 @@ func TestTrafficClass(t *testing.T) {
 			dp.Attributes().PutStr("user_agent.synthetic.type", c.synthetic)
 		}
 		g := newGuard(testCfg, processortest.NewNopSettings(Type).Logger, time.Now)
-		out, err := g.processMetrics(authed(uuid.NewString(), uuid.NewString()), md)
+		out, err := g.processMetrics(authed(uuid.NewString(), uuid.NewString()), storableValues(md))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -554,6 +558,8 @@ func TestTrafficClass(t *testing.T) {
 	td := ptrace.NewTraces()
 	sp := td.ResourceSpans().AppendEmpty().ScopeSpans().AppendEmpty().Spans().AppendEmpty()
 	sp.SetKind(ptrace.SpanKindServer)
+	sp.SetStartTimestamp(pcommon.Timestamp(1_000_000_000))
+	sp.SetEndTimestamp(pcommon.Timestamp(1_250_000_000))
 	sp.Attributes().PutStr("http.request.method", "GET")
 	sp.Attributes().PutStr("http.route", "/actuator/health/liveness")
 	sp.Attributes().PutStr("user_agent.original", "Mozilla/5.0")
@@ -602,7 +608,7 @@ func TestCumulativeStreamsKeepTheirIdentity(t *testing.T) {
 	g := newGuard(testCfg, processortest.NewNopSettings(Type).Logger, time.Now)
 	tenant, token := uuid.NewString(), uuid.NewString()
 	ids := func(md pmetric.Metrics) []string {
-		out, err := g.processMetrics(authed(tenant, token), md)
+		out, err := g.processMetrics(authed(tenant, token), storableValues(md))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -641,11 +647,197 @@ func TestCumulativeStreamsKeepTheirIdentity(t *testing.T) {
 	// delta points are counted as they are and carry no stream id
 	md := collidingStreams("")
 	md.ResourceMetrics().At(0).ScopeMetrics().At(0).Metrics().At(0).Histogram().SetAggregationTemporality(pmetric.AggregationTemporalityDelta)
-	out, err := g.processMetrics(authed(tenant, token), md)
+	out, err := g.processMetrics(authed(tenant, token), storableValues(md))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := out.ResourceMetrics().At(0).ScopeMetrics().At(0).Metrics().At(0).Histogram().DataPoints().At(0).Attributes().Get("scf.stream"); ok {
 		t.Error("delta point got a stream id")
+	}
+}
+
+// storableValues gives the points of a fixture built for attribute checks
+// the values tenantguard requires of every point: a temporality, a time,
+// and buckets that match the bounds.
+func storableValues(md pmetric.Metrics) pmetric.Metrics {
+	at := pcommon.Timestamp(2_000_000_000)
+	rms := md.ResourceMetrics()
+	for i := 0; i < rms.Len(); i++ {
+		sms := rms.At(i).ScopeMetrics()
+		for j := 0; j < sms.Len(); j++ {
+			ms := sms.At(j).Metrics()
+			for k := 0; k < ms.Len(); k++ {
+				m := ms.At(k)
+				switch m.Type() {
+				case pmetric.MetricTypeHistogram:
+					h := m.Histogram()
+					if h.AggregationTemporality() == pmetric.AggregationTemporalityUnspecified {
+						h.SetAggregationTemporality(pmetric.AggregationTemporalityDelta)
+					}
+					for d := 0; d < h.DataPoints().Len(); d++ {
+						dp := h.DataPoints().At(d)
+						if dp.Timestamp() == 0 {
+							dp.SetTimestamp(at)
+						}
+						if dp.BucketCounts().Len() != dp.ExplicitBounds().Len()+1 {
+							dp.ExplicitBounds().FromRaw(nil)
+							dp.BucketCounts().FromRaw([]uint64{dp.Count()})
+						}
+					}
+				case pmetric.MetricTypeExponentialHistogram:
+					h := m.ExponentialHistogram()
+					if h.AggregationTemporality() == pmetric.AggregationTemporalityUnspecified {
+						h.SetAggregationTemporality(pmetric.AggregationTemporalityDelta)
+					}
+					for d := 0; d < h.DataPoints().Len(); d++ {
+						if dp := h.DataPoints().At(d); dp.Timestamp() == 0 {
+							dp.SetTimestamp(at)
+						}
+					}
+				}
+			}
+		}
+	}
+	return md
+}
+
+// points and spans whose values the writer cannot store are dropped one by
+// one and counted; the valid ones of the same export go on.
+func TestInvalidValuesDroppedAlone(t *testing.T) {
+	reader := sdkmetric.NewManualReader()
+	g := newGuard(testCfg, processortest.NewNopSettings(Type).Logger, time.Now)
+	if err := g.useMeter(sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))); err != nil {
+		t.Fatal(err)
+	}
+	const at = pcommon.Timestamp(2_000_000_000)
+	md := pmetric.NewMetrics()
+	ms := md.ResourceMetrics().AppendEmpty().ScopeMetrics().AppendEmpty().Metrics()
+	m := ms.AppendEmpty()
+	m.SetName(schema.MetricDuration)
+	m.SetUnit("s")
+	h := m.SetEmptyHistogram()
+	h.SetAggregationTemporality(pmetric.AggregationTemporalityCumulative)
+	add := func(route string, fn func(pmetric.HistogramDataPoint)) {
+		dp := h.DataPoints().AppendEmpty()
+		dp.SetStartTimestamp(1_000)
+		dp.SetTimestamp(at)
+		dp.ExplicitBounds().FromRaw([]float64{0.1, 1})
+		dp.BucketCounts().FromRaw([]uint64{1, 1, 0})
+		dp.SetCount(2)
+		dp.SetSum(0.5)
+		dp.Attributes().PutStr("http.request.method", "GET")
+		dp.Attributes().PutStr("http.route", route)
+		fn(dp)
+	}
+	add("/good", func(pmetric.HistogramDataPoint) {})
+	add("/time-zero", func(dp pmetric.HistogramDataPoint) { dp.SetTimestamp(0) })
+	add("/time-past-2262", func(dp pmetric.HistogramDataPoint) { dp.SetTimestamp(1 << 63) })
+	add("/start-past-2262", func(dp pmetric.HistogramDataPoint) { dp.SetStartTimestamp(1 << 63) })
+	add("/start-after-time", func(dp pmetric.HistogramDataPoint) { dp.SetStartTimestamp(at + 1) })
+	add("/bounds-not-increasing", func(dp pmetric.HistogramDataPoint) { dp.ExplicitBounds().FromRaw([]float64{1, 0.1}) })
+	add("/bounds-equal", func(dp pmetric.HistogramDataPoint) { dp.ExplicitBounds().FromRaw([]float64{1, 1}) })
+	add("/bound-infinite", func(dp pmetric.HistogramDataPoint) { dp.ExplicitBounds().FromRaw([]float64{0.1, math.Inf(1)}) })
+	add("/bound-nan", func(dp pmetric.HistogramDataPoint) { dp.ExplicitBounds().FromRaw([]float64{0.1, math.NaN()}) })
+	add("/no-buckets", func(dp pmetric.HistogramDataPoint) { dp.BucketCounts().FromRaw(nil) })
+	add("/buckets-short", func(dp pmetric.HistogramDataPoint) { dp.BucketCounts().FromRaw([]uint64{2}) })
+	add("/count-huge", func(dp pmetric.HistogramDataPoint) { dp.SetCount(MaxPointCount + 1) })
+	add("/bucket-huge", func(dp pmetric.HistogramDataPoint) { dp.BucketCounts().FromRaw([]uint64{1, MaxPointCount + 1, 0}) })
+	add("/sum-nan", func(dp pmetric.HistogramDataPoint) { dp.SetSum(math.NaN()) })
+	// a stale marker carries no values, only its times are checked
+	add("/stale", func(dp pmetric.HistogramDataPoint) {
+		dp.SetFlags(pmetric.DefaultDataPointFlags.WithNoRecordedValue(true))
+		dp.BucketCounts().FromRaw(nil)
+	})
+	unspecified := ms.AppendEmpty()
+	unspecified.SetName(schema.MetricDuration)
+	unspecified.SetUnit("s")
+	udp := unspecified.SetEmptyHistogram().DataPoints().AppendEmpty()
+	udp.SetTimestamp(at)
+	udp.BucketCounts().FromRaw([]uint64{0})
+	exp := ms.AppendEmpty()
+	exp.SetName(schema.MetricDuration)
+	exp.SetUnit("s")
+	eh := exp.SetEmptyExponentialHistogram()
+	eh.SetAggregationTemporality(pmetric.AggregationTemporalityDelta)
+	eh.DataPoints().AppendEmpty().SetTimestamp(at)
+	eh.DataPoints().AppendEmpty().SetCount(1) // time zero
+
+	out, err := g.processMetrics(authed(uuid.NewString(), uuid.NewString()), md)
+	if err != nil {
+		t.Fatal(err)
+	}
+	kept := out.ResourceMetrics().At(0).ScopeMetrics().At(0).Metrics()
+	if kept.Len() != 2 {
+		t.Fatalf("%d metrics kept, want the explicit and the exponential one", kept.Len())
+	}
+	var routes []string
+	dps := kept.At(0).Histogram().DataPoints()
+	for i := 0; i < dps.Len(); i++ {
+		r, _ := dps.At(i).Attributes().Get("http.route")
+		routes = append(routes, r.Str())
+	}
+	if strings.Join(routes, " ") != "/good /stale" {
+		t.Errorf("kept %v, want /good and /stale", routes)
+	}
+	if n := kept.At(1).ExponentialHistogram().DataPoints().Len(); n != 1 {
+		t.Errorf("%d exponential points kept, want 1", n)
+	}
+
+	// a span without a start or with an end the writer cannot store
+	td := spans()
+	ss := td.ResourceSpans().At(0).ScopeSpans().At(0).Spans()
+	for _, fn := range []func(ptrace.Span){
+		func(sp ptrace.Span) { sp.SetEndTimestamp(0) },
+		func(sp ptrace.Span) { sp.SetEndTimestamp(1 << 63) },
+		func(sp ptrace.Span) { sp.SetStartTimestamp(0) },
+		func(sp ptrace.Span) { sp.SetStartTimestamp(sp.EndTimestamp() + 1) },
+	} {
+		sp := ss.AppendEmpty()
+		ss.At(0).CopyTo(sp)
+		sp.SetKind(ptrace.SpanKindServer)
+		sp.Attributes().PutStr("http.request.method", "GET")
+		fn(sp)
+	}
+	before := td.SpanCount()
+	tout, err := g.processTraces(authed(uuid.NewString(), uuid.NewString()), td)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantSpans := 0
+	ref := spans()
+	refOut, err := newGuard(testCfg, processortest.NewNopSettings(Type).Logger, time.Now).processTraces(authed(uuid.NewString(), uuid.NewString()), ref)
+	if err == nil {
+		wantSpans = refOut.SpanCount()
+	}
+	if tout.SpanCount() != wantSpans {
+		t.Errorf("%d of %d spans kept, want %d", tout.SpanCount(), before, wantSpans)
+	}
+
+	var rm metricdata.ResourceMetrics
+	if err := reader.Collect(context.Background(), &rm); err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]int64{}
+	for _, sm := range rm.ScopeMetrics {
+		for _, m := range sm.Metrics {
+			sum, ok := m.Data.(metricdata.Sum[int64])
+			if !ok || m.Name != "tenantguard_invalid_items" {
+				continue
+			}
+			for _, dp := range sum.DataPoints {
+				sig, _ := dp.Attributes.Value("signal")
+				r, _ := dp.Attributes.Value("reason")
+				got[sig.AsString()+"/"+r.AsString()] += dp.Value
+			}
+		}
+	}
+	want := map[string]int64{
+		"metrics/time": 5, "metrics/buckets": 6, "metrics/count": 2, "metrics/sum": 1,
+		"metrics/temporality": 1, "traces/time": 4,
+	}
+	for k, v := range want {
+		if got[k] != v {
+			t.Errorf("counter %s = %d, want %d (all %v)", k, got[k], v, got)
+		}
 	}
 }

@@ -6,11 +6,16 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"hash"
+	"math"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/metric/noop"
 
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/plog"
@@ -45,10 +50,106 @@ const maxServiceNameLen = 128
 type guard struct {
 	log *zap.Logger
 	lim *limiter
+	// invalid counts the data points, metrics and spans dropped because
+	// their values cannot be stored, by signal and reason. no attribute
+	// names the tenant.
+	invalid metric.Int64Counter
 }
 
 func newGuard(cfg *Config, log *zap.Logger, now func() time.Time) *guard {
-	return &guard{log: log, lim: newLimiter(cfg, now)}
+	c, _ := noop.NewMeterProvider().Meter("").Int64Counter("")
+	return &guard{log: log, lim: newLimiter(cfg, now), invalid: c}
+}
+
+// useMeter records the dropped items in the collector's own metrics.
+func (g *guard) useMeter(mp metric.MeterProvider) error {
+	c, err := mp.Meter("github.com/justmert/veristar/collector/tenantguardprocessor").Int64Counter(
+		"tenantguard_invalid_items",
+		metric.WithDescription("data points, metrics and spans tenantguard dropped because their values cannot be stored, by signal and reason"),
+		metric.WithUnit("{item}"))
+	if err != nil {
+		return err
+	}
+	g.invalid = c
+	return nil
+}
+
+// reasons an item is dropped as invalid
+const (
+	invalidTime        = "time"
+	invalidTemporality = "temporality"
+	invalidBuckets     = "buckets"
+	invalidCount       = "count"
+	invalidSum         = "sum"
+)
+
+func (g *guard) dropped(ctx context.Context, signal, reason string, n int) {
+	g.invalid.Add(ctx, int64(n), metric.WithAttributes(attribute.String("signal", signal), attribute.String("reason", reason)))
+}
+
+// MaxPointCount bounds the request count of one data point, and of each of
+// its buckets: a trillion requests, a thousand a second for 31 years of one
+// process. the writer refuses a larger point too, so a count can never
+// overflow the sums the platform stores.
+const MaxPointCount = 1_000_000_000_000
+
+// validTimes reports whether a point's or span's times can be stored: a
+// time after the epoch that fits a signed 64-bit nanosecond count, and a
+// start not after it. a zero start is a point without one.
+func validTimes(start, at pcommon.Timestamp) bool {
+	return at > 0 && at <= math.MaxInt64 && start <= at
+}
+
+// checkHistogram returns why an explicit histogram point cannot be stored,
+// or "". otlp allows a point without buckets, but its requests cannot be
+// placed in any latency bucket.
+func checkHistogram(dp pmetric.HistogramDataPoint) string {
+	if !validTimes(dp.StartTimestamp(), dp.Timestamp()) {
+		return invalidTime
+	}
+	if dp.Flags().NoRecordedValue() {
+		return ""
+	}
+	if dp.Count() > MaxPointCount {
+		return invalidCount
+	}
+	if dp.HasSum() && (math.IsNaN(dp.Sum()) || math.IsInf(dp.Sum(), 0)) {
+		return invalidSum
+	}
+	bounds, counts := dp.ExplicitBounds(), dp.BucketCounts()
+	if counts.Len() != bounds.Len()+1 {
+		return invalidBuckets
+	}
+	for i := 0; i < bounds.Len(); i++ {
+		b := bounds.At(i)
+		if math.IsNaN(b) || math.IsInf(b, 0) || (i > 0 && b <= bounds.At(i-1)) {
+			return invalidBuckets
+		}
+	}
+	for i := 0; i < counts.Len(); i++ {
+		if counts.At(i) > MaxPointCount {
+			return invalidCount
+		}
+	}
+	return ""
+}
+
+// checkExponential is checkHistogram for a point the transform processor
+// converts to the canonical explicit buckets afterwards.
+func checkExponential(dp pmetric.ExponentialHistogramDataPoint) string {
+	if !validTimes(dp.StartTimestamp(), dp.Timestamp()) {
+		return invalidTime
+	}
+	if dp.Flags().NoRecordedValue() {
+		return ""
+	}
+	if dp.Count() > MaxPointCount {
+		return invalidCount
+	}
+	if dp.HasSum() && (math.IsNaN(dp.Sum()) || math.IsInf(dp.Sum(), 0)) {
+		return invalidSum
+	}
+	return ""
 }
 
 // admit checks the credential and the tenant's buckets. it runs before any
@@ -326,6 +427,10 @@ func normalizePoint(scope []byte, m pmetric.Metric, cumulative bool, attrs pcomm
 	return flags
 }
 
+func knownTemporality(t pmetric.AggregationTemporality) bool {
+	return t == pmetric.AggregationTemporalityDelta || t == pmetric.AggregationTemporalityCumulative
+}
+
 // keepMetric reports whether a tenant metric may continue: one of the two
 // duration names, a histogram type and a duration unit. the span-derived
 // name is refused here because only the connector, after this processor,
@@ -380,24 +485,44 @@ func (g *guard) processMetrics(ctx context.Context, md pmetric.Metrics) (pmetric
 				}
 				m.SetDescription("")
 				m.Metadata().Clear()
+				// a point the writer could not store is dropped here, alone,
+				// so the rest of the export is stored
 				switch m.Type() {
 				case pmetric.MetricTypeHistogram:
-					cumulative := m.Histogram().AggregationTemporality() == pmetric.AggregationTemporalityCumulative
-					dps := m.Histogram().DataPoints()
-					for i := 0; i < dps.Len(); i++ {
-						dp := dps.At(i)
+					h := m.Histogram()
+					if !knownTemporality(h.AggregationTemporality()) {
+						g.dropped(ctx, "metrics", invalidTemporality, h.DataPoints().Len())
+						return true
+					}
+					cumulative := h.AggregationTemporality() == pmetric.AggregationTemporalityCumulative
+					dps := h.DataPoints()
+					dps.RemoveIf(func(dp pmetric.HistogramDataPoint) bool {
+						if r := checkHistogram(dp); r != "" {
+							g.dropped(ctx, "metrics", r, 1)
+							return true
+						}
 						flags |= normalizePoint(scope, m, cumulative, dp.Attributes())
 						dp.Exemplars().RemoveIf(func(pmetric.Exemplar) bool { return true })
-					}
+						return false
+					})
 					return dps.Len() == 0
 				default:
-					cumulative := m.ExponentialHistogram().AggregationTemporality() == pmetric.AggregationTemporalityCumulative
-					dps := m.ExponentialHistogram().DataPoints()
-					for i := 0; i < dps.Len(); i++ {
-						dp := dps.At(i)
+					h := m.ExponentialHistogram()
+					if !knownTemporality(h.AggregationTemporality()) {
+						g.dropped(ctx, "metrics", invalidTemporality, h.DataPoints().Len())
+						return true
+					}
+					cumulative := h.AggregationTemporality() == pmetric.AggregationTemporalityCumulative
+					dps := h.DataPoints()
+					dps.RemoveIf(func(dp pmetric.ExponentialHistogramDataPoint) bool {
+						if r := checkExponential(dp); r != "" {
+							g.dropped(ctx, "metrics", r, 1)
+							return true
+						}
 						flags |= normalizePoint(scope, m, cumulative, dp.Attributes())
 						dp.Exemplars().RemoveIf(func(pmetric.Exemplar) bool { return true })
-					}
+						return false
+					})
 					return dps.Len() == 0
 				}
 			})
@@ -432,6 +557,13 @@ func (g *guard) processTraces(ctx context.Context, td ptrace.Traces) (ptrace.Tra
 					return true
 				}
 				if _, ok := str(sp.Attributes(), schema.AttrMethod, schema.LegacyMethod); !ok {
+					return true
+				}
+				// a span without a start, or with an end before the epoch or
+				// past 2262, has no duration and no minute the writer could
+				// store; it is dropped alone instead of failing the export
+				if sp.StartTimestamp() == 0 || !validTimes(sp.StartTimestamp(), sp.EndTimestamp()) {
+					g.dropped(ctx, "traces", invalidTime, 1)
 					return true
 				}
 				flags |= normalizeAttrs(sp.Attributes())
