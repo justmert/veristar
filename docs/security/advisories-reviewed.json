@@ -126,12 +126,11 @@
       "revisit": "the next release"
     },
     {
-      "image": "quay.io/coreos/etcd:v3.6.16",
+      "image": "quay.io/coreos/etcd:v3.7.3",
       "findings": ["CVE-2026-78661 golang.org/x/net"],
-      "reviewed": "2026-11-13",
-      "rechecked": "2026-11-15",
-      "decision": "x/net html parser denial of service; the symbol is in the binary but no etcd api takes html. etcd ports are on the private address only, firewalled to the private network, and patroni is the only client. 3.7.3, the newest release, carries the same finding, so the minor jump would not fix it.",
-      "revisit": "3.6.17, or a release built with golang.org/x/net 0.62.0"
+      "reviewed": "2026-11-17",
+      "decision": "the same finding as 3.6.16, which carried it from 2026-11-13 (trivy 0.76.2 lists no other fixable critical or high finding in 3.7.3). x/net html parser denial of service; the symbol is in the binary but no etcd api takes html. etcd ports are on the private address only, firewalled to the private network, and patroni is the only client.",
+      "revisit": "3.7.4, or a release built with golang.org/x/net 0.62.0"
     },
     {
       "image": "twinproduction/gatus:v5.38.0",
