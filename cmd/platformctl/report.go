@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -23,13 +24,15 @@ import (
 )
 
 // reportUsage lists the report commands for the main usage text.
-const reportUsage = `  report verify <file> [--signer G...]
+const reportUsage = `  report verify <file> [--signer G... | --toml https://host/.well-known/stellar.toml]
                     verify a signed usage report: the canonical json form of its
                     report member and the sep-53 signature by the key it names.
                     without --signer the key must be listed in ACCOUNTS of the
-                    stellar.toml the report names (fetched over https); with
-                    --signer it must be that account and nothing is fetched.
-                    exit 0 valid, 1 not valid, 2 the check could not run
+                    trusted stellar.toml, fetched over https: veristar's own
+                    (` + defaultReportTOML + `) unless --toml
+                    names another deployment's. the report must name that same
+                    file. with --signer the key must be that account and nothing
+                    is fetched. exit 0 valid, 1 not valid, 2 the check could not run
   report keygen <dir>
                     make a new report signing key pair: write
                     report_signing_seed.json and report_signing_key.json (json
@@ -39,6 +42,12 @@ const reportUsage = `  report verify <file> [--signer G...]
                     print a new pair as REPORT_SIGNING_SEED= and
                     REPORT_SIGNING_KEY= lines, for a local env file
 `
+
+// defaultReportTOML is the stellar.toml that lists veristar's report keys.
+// it is built into the binary because the trusted key must never come from
+// the report under test: anyone can sign a report with their own key and
+// name their own stellar.toml in it.
+const defaultReportTOML = "https://app.veristar.app" + reports.StellarTOMLPath
 
 // errNotValid makes run exit 1 after the verdict, without a second error
 var errNotValid = errors.New("the report is not valid")
@@ -60,6 +69,7 @@ func reportVerify(ctx context.Context, args []string, stdout io.Writer, hc *http
 	fs := flag.NewFlagSet("report verify", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	signer := fs.String("signer", "", "the account id the report must be signed by")
+	trusted := fs.String("toml", "", "the stellar.toml whose ACCOUNTS list the trusted report keys")
 	// the file comes first or last; flag stops at the first non-flag
 	var file string
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
@@ -76,17 +86,29 @@ func reportVerify(ctx context.Context, args []string, stdout io.Writer, hc *http
 	if *signer != "" && !strkey.IsValidEd25519PublicKey(*signer) {
 		return errors.New("--signer must be a stellar account id (G...)")
 	}
+	if *signer != "" && *trusted != "" {
+		return errors.New("give --signer or --toml, not both")
+	}
+	tomlURL := *trusted
+	if tomlURL == "" {
+		tomlURL = defaultReportTOML
+	}
+	if err := checkTOMLURL(tomlURL); err != nil {
+		return err
+	}
 	raw, err := readLimited(file)
 	if err != nil {
 		return err
 	}
 	v, err := reports.Verify(raw)
 	if err != nil {
-		_, _ = fmt.Fprintf(stdout, "NOT VALID: %v\n", err)
+		_, _ = fmt.Fprintf(stdout, "NOT VALID: %s\n", printable(err.Error()))
 		return errNotValid
 	}
+	// every string below comes from the report, so it is quoted: a name
+	// holding a newline or a terminal escape cannot print a line of its own
 	_, _ = fmt.Fprintf(stdout, "signature: valid sep-53 signature by %s over the canonical report\n", v.Signer)
-	_, _ = fmt.Fprintf(stdout, "report:    %s, %s (%s), %s to %s, generated %s\n", v.ID, v.Project.Name, v.Project.Slug,
+	_, _ = fmt.Fprintf(stdout, "report:    %q, %q (%q), %q to %q, generated %q\n", v.ID, v.Project.Name, v.Project.Slug,
 		v.Period.From, v.Period.To, v.GeneratedAt)
 	if *signer != "" {
 		if v.Signer != *signer {
@@ -105,7 +127,11 @@ func reportVerify(ctx context.Context, args []string, stdout io.Writer, hc *http
 	if err := json.Unmarshal(raw, &head); err != nil {
 		return err
 	}
-	tomlURL := head.Report.Issuer.StellarTOML
+	if named := head.Report.Issuer.StellarTOML; named != tomlURL {
+		_, _ = fmt.Fprintf(stdout, "NOT VALID: the report names the stellar.toml %q, not the trusted %s (give --toml for another deployment)\n",
+			named, tomlURL)
+		return errNotValid
+	}
 	accounts, err := fetchAccounts(ctx, hc, tomlURL)
 	if err != nil {
 		return fmt.Errorf("read the published keys at %s: %w", tomlURL, err)
@@ -135,15 +161,35 @@ func readLimited(file string) ([]byte, error) {
 	return b, nil
 }
 
+// printable escapes control characters, so a verdict line built from the
+// report holds no newline or terminal escape.
+func printable(s string) string {
+	q := strconv.Quote(s)
+	return q[1 : len(q)-1]
+}
+
+// checkTOMLURL accepts an https url whose path is /.well-known/stellar.toml,
+// where sep-1 places the file.
+func checkTOMLURL(raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "https" || u.Host == "" || u.Path != reports.StellarTOMLPath || u.RawQuery != "" || u.Fragment != "" {
+		return errors.New("the trusted stellar.toml must be an https url of /.well-known/stellar.toml")
+	}
+	return nil
+}
+
 // maxTOML is sep-1's size limit of a stellar.toml.
 const maxTOML = 100 << 10
 
 // fetchAccounts reads ACCOUNTS of a stellar.toml at an https url whose path
 // is /.well-known/stellar.toml, as sep-1 places it.
 func fetchAccounts(ctx context.Context, hc *http.Client, raw string) ([]string, error) {
+	if err := checkTOMLURL(raw); err != nil {
+		return nil, err
+	}
 	u, err := url.Parse(raw)
-	if err != nil || u.Scheme != "https" || u.Host == "" || u.Path != reports.StellarTOMLPath || u.RawQuery != "" {
-		return nil, errors.New("the report's stellar_toml is not an https url of /.well-known/stellar.toml")
+	if err != nil {
+		return nil, err
 	}
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
