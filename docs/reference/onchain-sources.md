@@ -73,8 +73,8 @@ operation involving one of the project's verified accounts or contracts that wee
 - **Missing, never zero.** A week counts only when each verified id has all seven days read with
   their initiators. A contract day with more than 10,000 distinct transactions to look up keeps
   its daily counts and leaves its week without a count (`day_over_read_cap`); so does a day the
-  source no longer holds (`before_source_history`). An unfinished week waits at most 7 days after
-  its Sunday for failed reads to succeed, then closes with the reason.
+  source no longer holds (`before_source_history`). An unfinished week waits until 14 days after
+  its Monday (8 days after its Sunday) for failed reads to succeed, then closes with the reason.
 - **What counts.** The project's own accounts count when they initiate operations. A relayed or
   sponsored contract invocation counts the account that submitted the operation. A contract that
   emits no events has no operations through this source and adds no initiators.

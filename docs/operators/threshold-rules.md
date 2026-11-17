@@ -50,5 +50,6 @@ export is in the audit log.
 The machine metrics API serves the same reads at `GET /api/metrics/v1/rules` and
 `GET /api/metrics/v1/rules/{rule_id}/matches` ([api-keys.md](api-keys.md)); a key scoped to one
 project evaluates that project only. The operator MCP tools `list_threshold_rules` and
-`get_threshold_rule_matches` answer the same ([mcp.md](mcp.md)). The routes are section 19.4 of
+`get_threshold_rule_matches` answer the same, and `list_cohorts` lists the cohorts in use for a
+rule's cohort filter ([mcp.md](mcp.md)). The routes are section 19.4 of
 the [control plane API reference](../reference/control-plane-api.md).
