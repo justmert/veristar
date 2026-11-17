@@ -47,7 +47,7 @@ ocb's strict check refuses a mixed set.
 
    ```sh
    make collector-it      # the binary against real NATS with the production permissions
-   make apipath           # the four example apps through edge Caddy into PostgreSQL
+   make apipath           # the five example apps through edge Caddy into PostgreSQL
    make test
    ```
 

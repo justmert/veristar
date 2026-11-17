@@ -8,6 +8,11 @@
 import goMod from "../../../../examples/otel-go-nethttp/go.mod?raw";
 import goMain from "../../../../examples/otel-go-nethttp/main.go?raw";
 import goReadme from "../../../../examples/otel-go-nethttp/README.md?raw";
+import javaDockerfile from "../../../../examples/otel-java-spring/Dockerfile?raw";
+import javaConfig from "../../../../examples/otel-java-spring/otel.yaml?raw";
+import javaReadme from "../../../../examples/otel-java-spring/README.md?raw";
+import javaMain from "../../../../examples/otel-java-spring/src/main/java/example/Application.java?raw";
+import javaStart from "../../../../examples/otel-java-spring/start.sh?raw";
 import nodePackage from "../../../../examples/otel-node-express/package.json?raw";
 import nodeReadme from "../../../../examples/otel-node-express/README.md?raw";
 import nodeTelemetry from "../../../../examples/otel-node-express/src/telemetry.js?raw";
@@ -31,7 +36,7 @@ export type EnvRow = { name: string; values: string; purpose: string };
 export type ProseBlock = { kind: "p"; text: string } | { kind: "code"; text: string };
 
 export type OtelGuide = {
-  id: "node" | "go" | "python" | "rust";
+  id: "node" | "go" | "python" | "rust" | "java";
   label: string;
   // the example's directory under examples/ in the repository
   dir: string;
@@ -237,6 +242,28 @@ export function otelGuides(): OtelGuide[] {
         path: "src/main.rs",
         caption: "The request metrics and tracing middleware around the routes.",
         code: region(rustMain, "middleware"),
+      },
+    ]),
+    guide("java", "Java", "examples/otel-java-spring", javaReadme, [
+      {
+        path: "Dockerfile",
+        caption: "The agent jar from Maven Central, pinned by version and checksum.",
+        code: region(javaDockerfile, "agent"),
+      },
+      {
+        path: "start.sh",
+        caption: "The JVM starts with the agent and its configuration file.",
+        code: region(javaStart, "run"),
+      },
+      {
+        path: "otel.yaml",
+        caption: "Agent configuration: two exporters per signal, the token on the platform copy.",
+        code: region(javaConfig, "config"),
+      },
+      {
+        path: "src/main/java/example/Application.java",
+        caption: "Exit with 0 on SIGTERM, after the agent flushed both exporters.",
+        code: region(javaMain, "signal"),
       },
     ]),
   ];

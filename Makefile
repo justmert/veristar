@@ -269,7 +269,7 @@ collector-build:
 collector-it: collector-build
 	$(GO) test -tags collectorit -race -count=1 -p 2 -timeout 20m -v ./tests/collector/
 
-# api path (tests/otelapps, build tag apipath): the four example apps
+# api path (tests/otelapps, build tag apipath): the five example apps
 # export through the edge caddy (otlp.<BASE_DOMAIN>) to the built
 # scf-otelcol with real nats, with tokens created through the control plane
 # binary (oauthfixture build) on postgresql and umami. checks what reaches

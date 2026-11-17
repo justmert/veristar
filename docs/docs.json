@@ -108,6 +108,8 @@
               "onboarding/api/python",
               "onboarding/api/go",
               "onboarding/api/rust",
+              "onboarding/api/java",
+              "onboarding/api/anchor-platform",
               "onboarding/api/collector-fanout",
               "onboarding/api/http-route",
               "onboarding/api/what-gets-dropped",
