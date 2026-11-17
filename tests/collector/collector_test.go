@@ -631,7 +631,7 @@ func TestCollector(t *testing.T) {
 			t.Fatal("no messages")
 		}
 		resAllowed := map[string]bool{"service.name": true, "scf.tenant.id": true, "scf.token.id": true, "scf.resource.hash": true, "scf.flags": true}
-		dpAllowed := map[string]bool{"http.request.method": true, "http.route": true, "http.response.status_code": true, "error.type": true, "scf.lossy": true}
+		dpAllowed := map[string]bool{"http.request.method": true, "http.route": true, "http.response.status_code": true, "error.type": true, "scf.lossy": true, "scf.stream": true}
 		ids := map[string]bool{}
 		for _, r := range s.seen {
 			if ids[r.msgID] {
