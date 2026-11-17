@@ -60,7 +60,7 @@ func TestParseSEP41(t *testing.T) {
 	st := domaincheck.ParseStellarToml("stellar-verify.test", fixture(t, "sep41-contract.toml"))
 	require.Equal(t, domaincheck.TomlFound, st.Status)
 	require.Equal(t, "testnet", *st.Network)
-	require.False(t, *st.OrgURLSameDomain, "www. is another host")
+	require.True(t, *st.OrgURLSameDomain, "www. of the domain is the same site")
 	require.Nil(t, st.Version)
 	require.False(t, st.SigningKeyPresent)
 	require.Len(t, st.Currencies, 3)
@@ -154,4 +154,29 @@ func TestFetchStellarToml(t *testing.T) {
 	st = domaincheck.FetchStellarToml(t.Context(), g, "unknown.stellar-verify.test")
 	require.Equal(t, domaincheck.TomlError, st.Status)
 	require.Equal(t, netguard.CodeFetchError, *st.Error)
+}
+
+func TestOrgURLSameDomain(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		domain, org string
+		same        bool
+	}{
+		{"circle.com", "https://www.circle.com", true},
+		{"stellar.org", "https://www.stellar.org/", true},
+		{"stellar.org", "https://stellar.org./about", true},
+		{"stellar.org", "https://WWW.Stellar.org.", true},
+		{"www.example.org", "https://example.org", true},
+		{"example.org", "https://example.org", true},
+		{"example.org", "https://docs.example.org", false},
+		{"example.org", "https://www.example.org.evil.test", false},
+		{"example.org", "https://wwwexample.org", false},
+		{"example.org", "http://www.example.org", false},
+		{"example.org", "https://www.www.example.org", false},
+	} {
+		doc := "VERSION = \"2.7.0\"\n[DOCUMENTATION]\nORG_URL = \"" + tc.org + "\"\n"
+		st := domaincheck.ParseStellarToml(tc.domain, []byte(doc))
+		require.NotNil(t, st.OrgURLSameDomain, tc.org)
+		require.Equal(t, tc.same, *st.OrgURLSameDomain, "%s on %s", tc.org, tc.domain)
+	}
 }

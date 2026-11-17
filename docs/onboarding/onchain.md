@@ -101,7 +101,9 @@ SEP-1 links a domain and its accounts in both directions. Veristar checks both, 
 site domain:
 
 1. **Domain to ledger.** Your `https://<domain>/.well-known/stellar.toml` lists the account in
-   `ACCOUNTS` and sets `[DOCUMENTATION] ORG_URL` to a URL on the same domain:
+   `ACCOUNTS` and sets `[DOCUMENTATION] ORG_URL` to an https URL on the same domain or its `www.`
+   form. Veristar reads the first 50 entries of `ACCOUNTS` and of `[[CURRENCIES]]`, and the file
+   must be for the public network: leave out `NETWORK_PASSPHRASE` or set it to the public one.
 
    ```toml
    ACCOUNTS = ["GDWQ7YV27AVTL25BDOLZD6E44VCQLCEBJXBOOWA2R3VLKCUIZHSXZLDE"]
@@ -112,9 +114,12 @@ site domain:
 
 2. **Ledger to domain.** The account's home domain is your domain. Set it with a SetOptions
    operation (`home_domain = "example.org"`) from the account, in any wallet or the Stellar Lab.
+   The ledger keeps at most 32 bytes of home domain, so this leg needs a domain of 32 characters
+   or fewer.
 
-The **stellar.toml link** panel shows each leg per site and account. When every leg holds for an
-account on a verified domain, the project shows **stellar.toml linked both ways**. Veristar reads
+The **stellar.toml link** panel shows each leg per site and account. When every leg holds for a
+verified account on a verified domain, the project shows **stellar.toml linked both ways**; an
+account you have not proven never links, since anyone can declare an account that lists a domain. Veristar reads
 the stellar.toml once a day and the home domain with each daily ledger read, so a change shows
 within a day. A contract you list as a `[[CURRENCIES]]` `contract` shows as named by the file.
 
