@@ -29,6 +29,7 @@ same empty request to tell a working token from a refused one.)
 | 429 | `ResourceExhausted` | the project sent more requests or data points per second than its rate limit | retries with backoff | nothing for a short burst; if it persists, send fewer, larger requests (a larger batch size for traces) and keep the metric export interval at 60 seconds or less (see "Export interval" below) |
 | 502, 503 | `Unavailable` | the platform is restarting or briefly cannot store data | retries | nothing; the data arrives when it recovers |
 | 400 or 413 | `ResourceExhausted` | the request is larger than 4 MiB, before or after decompression | drops the batch | lower the SDK's batch size |
+| 400 | `InvalidArgument` | the request is within 4 MiB but larger than 8 MiB after the platform's processing, which happens only with many tiny exponential histograms; the answer says "export too large" | drops the batch | lower the SDK's batch size, or a Collector's `send_batch_max_size` |
 | 404 | | the path is not `/v1/metrics`, `/v1/traces` or `/v1/logs` | drops the batch | see "Endpoint URL" below |
 
 The rate limit is 50 requests per second (bursts up to 100) and 50,000 data points, spans and log
@@ -81,7 +82,8 @@ Work through these in order:
 | Percentiles marked approximate | the app sends exponential histograms or custom bucket bounds; the default explicit buckets of OpenTelemetry's HTTP instrumentations give exact percentiles |
 | Percentiles marked not reliable | the histogram's buckets are much wider than the standard ones, often an SDK's millisecond default bounds on a metric in seconds, so every request under 5 s lands in the 2.5 to 5 s bucket. Record `http.server.request.duration` in seconds with the default bounds of the HTTP instrumentation |
 | p95 shown as "> 10 s" | more than 5 % of the requests took longer than 10 seconds, the largest bucket bound |
-| Health checks or probes in the counts | exclude them from the instrumentation, as each example does |
+| Health checks or probes in the counts | the platform counts health and probe routes, CORS preflights and known health checkers apart as infrastructure requests and leaves them out of the figures ([what gets dropped](what-gets-dropped.md#changed-before-storing)). A health checker that calls an application route is recognised by its user agent only in traces: the `http.server.request.duration` metric carries no user agent, so a metric point is classified by route and method, or by `user_agent.synthetic.type` where the instrumentation sets it ([collector reference](../../reference/collector.md#traffic-classes)). To keep such checks out of the metric, exclude them in the instrumentation, as each example does |
+| Some series missing while the rest of the same export is stored | their data points have values that cannot be counted, such as no timestamp, a start after the end, or bucket counts that do not match the bounds; such points are dropped one by one ([what gets dropped](what-gets-dropped.md#dropped)). Check the SDK version and any custom aggregation |
 | A service name you do not recognise | `service.name` is missing and the SDK's default (`unknown_service:...`) is used; set `OTEL_SERVICE_NAME` |
 
 ## Still stuck

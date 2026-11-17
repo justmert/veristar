@@ -2335,7 +2335,7 @@ Both project lists take these filters; all given filters must hold.
 | `verified` | `true`, `false` | at least one non-removed site verified by the rule of 5.8 (`verified_at` set, `last_verify_error` null), or none |
 | `stellar_toml` | `true`, `false` | at least one non-removed site whose `stellar_toml.status` is `found`, or none |
 | `has_web_data` | `true`, `false` | primary-band page views above 0 in the range |
-| `has_api_data` | `true`, `false` | an `api.metrics_daily` row with requests in the range |
+| `has_api_data` | `true`, `false` | an `api.metrics_daily` row with application requests (traffic class `app`, 7.4) in the range; infrastructure requests alone do not count |
 | `enrolled_from`, `enrolled_to` | `yyyy-mm-dd` | `created_at` on or after the start of `enrolled_from`, before the end of `enrolled_to` (UTC) |
 | `q` | 1 to 100 characters | case-insensitive substring of `name` or `slug` |
 | `program`, `round`, `category` | 1 to 80 characters | exactly the confirmed cohort value of 19.1 |
@@ -2502,8 +2502,10 @@ than through `apimetrics.Select`, which is tenant-scoped. Item:
   chosen rows, never averaged. A percentile in the open bucket
   above 10 s has `*_seconds: null` and `*_over_10s: true`; without requests
   both are `null` and `false`. Sorting puts over-10 s above every number.
-- `services`: distinct services; `routes`: distinct `(service, route)` pairs
-  with a non-empty route; `span_services`: services whose numbers are span
+- `services`: distinct services with application requests; `routes`:
+  distinct `(service, route)` pairs with a non-empty route and application
+  requests, so a route only infrastructure requests reached (`/healthz`) is
+  not counted; `span_services`: those services whose numbers are span
   derived; `source`: `metric` or `span` when every service uses that source,
   `mixed` when they differ, `null` without data; `lossy`: some chosen row was
   re-bucketed inexactly.
@@ -2540,9 +2542,11 @@ default, or `asc`). **200**:
 - `series`: one point per day, the same source choice for every day (made
   over the whole range); a day without requests has 0 requests and `null`
   rates and percentiles.
-- `services`: every service with its source, numbers and routes, ordered by
-  requests (`service_order`), then by name, so the first and last entries
-  are the highest and lowest usage services.
+- `services`: every service with its source, numbers and routes (routes
+  with application requests), ordered by application requests
+  (`service_order`), then by name, so the first and last entries are the
+  highest and lowest usage services. A service only infrastructure requests
+  reached is listed with 0 requests and its `infrastructure_requests`.
 - Errors as 8.4.
 
 ### 8.7 Removal and `removal_keep_aggregates`
@@ -2737,7 +2741,9 @@ most 4 Umami requests of one answer run at once. The external prober
 Parameters `tenant`, `service`, `from`, `to`, `limit`, `cursor`. From
 `api.metrics_daily`, the source chosen per tenant and service over the whole
 range (7.3; metric rows when the service has any, otherwise span rows). One
-item per tenant and day with rows: `services`, `span_services`, `source`
+item per tenant and day with rows, so a day with only infrastructure requests
+has an item with `requests` 0 and its `infrastructure_requests`: `services`
+and `span_services` (services with application requests), `source`
 (`metric`, `span` or `mixed`), the numbers of 8.5 (`requests`,
 `requests_4xx`, `requests_5xx`, `rate_4xx`, `rate_5xx`, `p50_seconds`,
 `p50_over_10s`, ... `p99_over_10s`, `infrastructure_requests`) and `lossy`. Equal to the daily series of
@@ -2751,8 +2757,10 @@ service's `source`. Ordered by tenant, day, service, method, route (bytewise).
 ### 9.10 `GET /api/hourly`
 
 Parameters `tenant`, `service`, `from`, `to` (hours), `limit`, `cursor`. As
-9.8 over `api.metrics_hourly` (item field `hour`), which the rollup refreshes
-every 5 minutes, so the newest minutes of the current hour can be missing.
+9.8 over `api.operator_hourly` (item field `hour`): the rolled-up rows of
+`api.metrics_hourly`, and for hours the rollup (every 5 minutes) has not
+reached yet, the sums of their minute rows, so the current hour holds every
+minute the metrics writer has stored.
 
 ### 9.11 `GET /api/operator/api-keys/{key_id}/usage`
 

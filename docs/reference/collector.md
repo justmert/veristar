@@ -74,7 +74,9 @@ error becomes `Unavailable` (permanent errors `Internal`). HTTP codes:
 `ResourceExhausted` 429, `Unavailable` 503, `Unauthenticated` 401,
 `InvalidArgument` 400, `Internal` 500. `tenantguard` returns
 `ResourceExhausted` for rate limits and `Unauthenticated` without auth data;
-`jetstream` returns `Unavailable` when a publish is not acknowledged.
+`jetstream` returns `Unavailable` when a publish is not acknowledged, and a
+permanent error, so 400 over HTTP, for an export larger than the message
+limit after filtering (see "jetstream exporter").
 `memory_limiter` returns a plain error, so refusals under memory pressure are
 503 (retryable).
 
@@ -306,7 +308,8 @@ requests, so it is not one of the kept metrics (see "tenantguard" below).
   `http.response.status_code` (from `http.status_code`, int or string,
   100 to 599), `error.type` (redacted; longer than 64 bytes or not storable
   text becomes `_OTHER`), and `scf.traffic.class` for infrastructure traffic
-  (see "Traffic classes" below). Nothing else.
+  (see "Traffic classes" below), and `scf.stream` on cumulative points
+  (next item). Nothing else.
 - Route normalization rule set 2 adds to rule set 1: a
   segment that decodes to invalid UTF-8 or a control character becomes
   `{invalid}`; every run of digits between separators (`- _ . , ~ : + ; =`)
@@ -315,7 +318,34 @@ requests, so it is not one of the kept metrics (see "tenantguard" below).
   a route longer than 512 bytes keeps its leading whole segments and ends
   in `/{long}`. File names with letters (`john.doe`, `app.3f9a2b1c.js`) are
   kept: they cannot be told from route words.
-- Spans kept: kind SERVER with an HTTP method. Name set to the method;
+- Cumulative data points (histogram and exponential histogram) get
+  `scf.stream`: 32 hex digits, the first 128 bits of a SHA-256 over the
+  scope name, version and attributes, the metric name and unit as received,
+  and the point's original attributes (sorted keys, type and value), taken
+  before the scope is cleared and the attributes are rewritten. The rewriting
+  above can make two source streams of one resource identical (two scopes
+  recording the same metric, a legacy metric renamed after this processor,
+  an unknown or lower-case method, a long `error.type`, a route literal the
+  normalizer replaces, an attribute that is dropped); the stream id keeps
+  them apart in the writer's stream state, which counts a cumulative stream
+  by the difference between its exports. It is written after the tenant's
+  attributes are cleared, so a tenant cannot set it. It is part of the
+  stream identity only, never a dimension of a stored row. Delta points get
+  none: each is counted as it is.
+- Points the writer could not store are dropped one by one and counted in
+  the collector metric `tenantguard_invalid_items` (labels `signal` and
+  `reason`, no tenant), so the rest of the export goes on: a time of 0 or
+  past 2262 (`2^63` nanoseconds), a start after the time (`time`); a
+  temporality other than delta or cumulative, the whole metric
+  (`temporality`); explicit bounds that are not finite and strictly
+  increasing, or bucket counts that are not one more than the bounds,
+  including a point without buckets (`buckets`); a count or a bucket count
+  above 10^12 (`count`); a sum that is NaN or infinite (`sum`). A stale
+  marker (no recorded value) is checked for its times only.
+- Spans kept: kind SERVER with an HTTP method, a start time, and an end
+  time that is not before the start, after the first minute of the epoch
+  and before 2262 (others are dropped and counted as `time`, since they have
+  no duration or minute). Name set to the method;
   events, links, status message and trace state removed. Each kept span
   gets `scf.span.minute`, the start of the UTC minute it ended in (unix
   nanoseconds), and every resource of the export gets `scf.batch.id`, the
@@ -336,6 +366,21 @@ requests, so it is not one of the kept metrics (see "tenantguard" below).
   point without either stamp is a permanent error: the connector
   configuration lost them, and publishing would bring back the double
   counting they prevent.
+- Message size: every NATS server of the platform takes messages up to
+  8 MiB (`max_payload: 8388608` in the edge role's `nats.conf`, the dev
+  stack's `deploy/compose/nats-dev.conf` and the test servers;
+  `natsx.MaxPayload`). The server default of 1 MiB is below one export of a
+  few thousand histogram points, about 400 bytes each after filtering. A
+  tenant's part of an export larger than 8 MiB less 4 KiB for headers
+  (`MaxPartBytes`) can never be stored, so the whole export is refused as a
+  permanent error before anything is published: HTTP 400, gRPC
+  `InvalidArgument`, and the SDK drops it. A 4 MiB request stays below the
+  limit unless filtering adds more than it removes, as converting many tiny
+  exponential histograms to explicit buckets does. A part above the limit
+  the server announced at connect (a server not yet reconfigured, or a
+  connection made before its limit was raised, which keeps the old limit
+  until it reconnects) is answered 503 and the connection is renewed, so
+  the retry gets the new limit.
 - Synchronous, no sending queue, no retry, `publish_timeout` 5 s. Failure is
   `Unavailable` (503); the SDK retries the same bytes, so a publish that was
   stored but not acknowledged is deduplicated by the stream's 2 minute
@@ -455,6 +500,7 @@ future or older than 7 days is refused by the writer.
 | Setting | Source |
 |---|---|
 | HTTP body 4 MiB, gRPC message 4 MiB | fixed in `otelcol.yaml` |
+| one tenant's part of an export after filtering, 8 MiB less 4 KiB | NATS `max_payload`, `natsx.MaxPayload` |
 | `memory_limiter` `limit_mib`, `spike_limit_mib` | env, dev 512 / 128 |
 | rate limits | env, dev 50 req/s burst 100, 50,000 items/s burst 200,000 per tenant and node |
 | `publish_timeout` | 5 s |

@@ -361,6 +361,36 @@ here, before they take effect, as the processing terms require
 - The down steps of migrations 00031, 00034 and 00037 see the rows they
   guard against: forced row-level security hid every row from the migration
   role, so their refusals never fired. Only the down sections changed.
+- Cumulative metric streams that the collector's rewriting made identical
+  (two libraries recording the same route, an unknown or lower-case method,
+  a long `error.type`, a route literal the normalizer replaces) are counted
+  apart again: each cumulative point carries a stream id the collector
+  computes from what it arrived with (`scf.stream`), part of the writer's
+  stream state and never a row dimension. Before, such streams were counted
+  from each other's values and stored too few or far too many requests.
+- An export that is larger than 1 MiB after the collector's filtering is
+  stored instead of being answered 503 forever: every NATS server takes
+  messages up to 8 MiB (`max_payload`), and an export above that limit is
+  refused with 400 instead of a retry that can never succeed.
+- A data point with a value the platform cannot store (time 0 or past 2262,
+  a start after its time, bounds that are not finite and increasing, no or
+  mismatched buckets, a count above 10^12, a sum that is not finite, an
+  unspecified temporality) is dropped alone by the collector and counted in
+  `tenantguard_invalid_items`, and the metrics writer leaves out such a point
+  alone too. Before, the whole message went to `API_DLQ` and fired
+  `DLQNotEmpty`. A server span without a start or with an end the platform
+  cannot store is dropped alone instead of failing its trace export.
+- One point adds at most 10^9 requests, so no tenant's counts can overflow
+  the sums the platform keeps; and an hour the database still refuses to
+  roll up is parked (`parked_at`, `parked_error` in `api.rollup_pending`,
+  migration 00044, alert `APIRollupParkedHours`) instead of rolling back the
+  batch and stopping the rollup of every tenant.
+- The operator API views count `services`, `routes` and `has_api_data` from
+  application requests only, and order the compare services by application
+  requests, so a health check route no longer counts as a route.
+- The machine API reference says that `/api/hourly` includes the hours the
+  rollup has not reached yet, and that a day or hour with only
+  infrastructure requests has an item with `requests` 0.
 
 ### Security
 
@@ -479,8 +509,27 @@ here, before they take effect, as the processing terms require
   [the usage report signing key](docs/runbooks/secret-rotation.md#the-usage-report-signing-key)
   (there is no current key to retire).
 - Run the database migrations (`00035_cohorts_and_rules.sql` to
-  `00043_jobs_traffic_class_rules.sql`) before the new control plane starts; the
+  `00044_rollup_parked_hours.sql`) before the new control plane starts; the
   rolling `deploy.yml` does this in its bootstrap step.
+- NATS `max_payload` rises from the 1 MiB default to 8 MiB
+  (`roles/edge/templates/nats.conf.j2`). The edge role applies a changed
+  `nats.conf` with its reload handler (SIGHUP), which takes `max_payload`
+  without a restart; run the edge tier one node at a time as usual. Until
+  every node has the new configuration, an export above 1 MiB can still be
+  answered 503 and is retried by the SDK. A client keeps the limit the
+  server announced when it connected: the new collector renews its
+  connection when an export is above that limit, and the core services
+  publish nothing near it. The dev stack mounts
+  `deploy/compose/nats-dev.conf`; recreate its `nats` container
+  (`make dev-up`).
+- Upgrade the core tier before the edge tier, as above: the new metrics
+  writer continues each cumulative stream it already follows when the new
+  collector's first point with a stream id (`scf.stream`) arrives, from the
+  stream's stored state, so the change of identity counts no history twice.
+  A metrics writer of the earlier release would take those points for new
+  streams and count each process' history again. Streams that two source
+  series had shared before the upgrade continue once from that shared state,
+  which they had already miscounted.
 - Deploy the release, then apply OpenTofu for each environment. The plan
   destroys the Traffic Manager profile `web`, its three external endpoints
   (`web/0` to `web/2`) and the Cloudflare CNAME `web`; nothing else changes.
