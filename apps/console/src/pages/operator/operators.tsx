@@ -83,8 +83,11 @@ export function OperatorsPage() {
   );
 }
 
+// a deploy-settings row knows only the github id; once that person has an
+// account, its display name is the github login
 function identity(e: RosterEntry) {
-  if (e.kind === "github") return e.github_login ?? `GitHub id ${e.github_id}`;
+  if (e.kind === "github")
+    return e.github_login ?? (e.account?.display_name || `GitHub id ${e.github_id}`);
   return e.stellar_address ? shortAddress(e.stellar_address) : "";
 }
 
