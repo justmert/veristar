@@ -640,6 +640,7 @@ describe("what scf sees with cohorts (contract 19.3)", () => {
     ],
     api_series: [],
     onchain_series: [],
+    contract_functions: [],
     cohort: {
       tenant_id: c.TENANT_ID,
       confirmed: { ...f.cohortA, award_date: "2026-11-15" },
