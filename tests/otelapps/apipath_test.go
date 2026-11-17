@@ -33,6 +33,7 @@ import (
 	"go.opentelemetry.io/collector/pdata/pmetric"
 
 	"github.com/justmert/veristar/internal/natsx"
+	"github.com/justmert/veristar/tests/fixtures/stepuptest"
 )
 
 const (
@@ -554,6 +555,13 @@ func (s *apiStack) checkSuspension(t *testing.T, owner *user, tenantID string) {
 	tok := owner.newToken(t, tenantID, "suspension check")
 	s.waitStatus(t, tok.Token, http.StatusOK, 10*time.Second)
 	op := s.signIn(t, operatorGitHubID, "sa-operator")
+	// operator routes need a passkey step-up on top of the sign-in; the
+	// control plane's roster bootstrap opened the first key's enrollment
+	var keys stepuptest.Keys
+	keys.StepUpMe(t, appOrigin, func(method, path string, body any) (int, []byte) {
+		code, b := op.call(t, method, path, body, nil)
+		return code, []byte(b)
+	})
 
 	start := time.Now()
 	if code, body := op.call(t, http.MethodPost, "/api/operator/tenants/"+tenantID+"/suspend", map[string]any{"reason": "api path check"}, nil); code != http.StatusOK {
