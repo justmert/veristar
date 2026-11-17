@@ -77,7 +77,7 @@ func (f *Followup) Run(ctx context.Context, jobsTx, systemTx TxFunc) (Result, er
 	}
 	var errs []error
 	for _, r := range pending {
-		n, err := f.one(ctx, jobsTx, r)
+		n, err := f.one(ctx, jobsTx, systemTx, r)
 		res.SiteDays += n
 		if err != nil {
 			errs = append(errs, fmt.Errorf("request %s: %w", r.ID, err))
@@ -99,7 +99,7 @@ func (f *Followup) Run(ctx context.Context, jobsTx, systemTx TxFunc) (Result, er
 	return res, nil
 }
 
-func (f *Followup) one(ctx context.Context, jobsTx TxFunc, r systemq.CpErasureRequest) (int, error) {
+func (f *Followup) one(ctx context.Context, jobsTx, systemTx TxFunc, r systemq.CpErasureRequest) (int, error) {
 	site, ok, err := f.agg.Site(r.SiteID.String())
 	if err != nil {
 		return 0, err
@@ -118,6 +118,16 @@ func (f *Followup) one(ctx context.Context, jobsTx TxFunc, r systemq.CpErasureRe
 				return err
 			}
 			_, err := q.DeleteSiteAggregates(ctx, r.SiteID)
+			return err
+		}); err != nil {
+			return 0, err
+		}
+		if err := systemTx(ctx, func(tx pgx.Tx) error {
+			q := systemq.New(tx)
+			if err := q.LockSiteResetTenant(ctx, r.TenantID.String()); err != nil {
+				return err
+			}
+			_, err := q.DeleteSiteEdgeCounters(ctx, r.SiteID)
 			return err
 		}); err != nil {
 			return 0, err

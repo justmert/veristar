@@ -43,3 +43,19 @@ limit @row_limit;
 -- name: SetErasureReaggregated :execrows
 update cp.erasure_requests set reaggregated_at = now()
 where id = @id and reaggregated_at is null;
+
+-- name: LockSiteResetTenant :exec
+-- the shared agg lock of the tenant (jobsq.LockAggTenant), so the delete
+-- below does not interleave with an integrity grade of the same tenant
+select pg_advisory_xact_lock_shared(hashtextextended('agg.tenant:' || @tenant_key::text, 0));
+
+-- name: DeleteSiteEdgeCounters :one
+-- a site reset leaves no web data of the site: the gateways' outcome
+-- counters, network class evidence, page signals and network keys go too.
+-- cp_system deletes them; the jobs role may not delete edge counters
+with h as (delete from cp.web_ingest_hourly x where x.site_id = @site_id::uuid returning 1),
+     e as (delete from cp.web_evidence_daily x where x.site_id = @site_id::uuid returning 1),
+     s as (delete from cp.web_signals_daily x where x.site_id = @site_id::uuid returning 1),
+     n as (delete from cp.web_networks_daily x where x.site_id = @site_id::uuid returning 1)
+select (select count(*) from h)::bigint as ingest, (select count(*) from e)::bigint as evidence,
+       (select count(*) from s)::bigint as signals, (select count(*) from n)::bigint as networks;

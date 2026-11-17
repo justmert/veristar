@@ -516,6 +516,23 @@ func (e *env) followup(t *testing.T) erasurefollowup.Result {
 	return res
 }
 
+func (e *env) jobsExec(t *testing.T, sql string, args ...any) {
+	t.Helper()
+	require.NoError(t, e.d.WithRole(t.Context(), pdb.RoleJobs, func(tx pgx.Tx) error {
+		_, err := tx.Exec(t.Context(), sql, args...)
+		return err
+	}))
+}
+
+func (e *env) jobsCount(t *testing.T, sql string, args ...any) int64 {
+	t.Helper()
+	var n int64
+	require.NoError(t, e.d.WithRole(t.Context(), pdb.RoleJobs, func(tx pgx.Tx) error {
+		return tx.QueryRow(t.Context(), sql, args...).Scan(&n)
+	}))
+	return n
+}
+
 func (e *env) aggPageviews(t *testing.T, band string, day time.Time) int64 {
 	t.Helper()
 	var n int64
@@ -682,6 +699,26 @@ func TestErasure(t *testing.T) {
 	t.Run("site reset", func(t *testing.T) {
 		e.visit(t, ipA, uaA, events.BandQuarantine, 2)
 		e.drained(t)
+		// every per-site table of web data holds a row of this site and of
+		// another one; the reset must leave none of the first
+		siteID, other := uuid.MustParse(site), uuid.New()
+		tenantID := uuid.MustParse(e.site.Site.TenantID)
+		old := today.AddDate(0, 0, -30)
+		for _, s := range []uuid.UUID{siteID, other} {
+			e.jobsExec(t, `insert into agg.web_integrity_daily (site_id, tenant_id, day, rule_version, closed, events, quarantined,
+			    proof_failures, net_access, net_organisation, net_hosting, net_anonymiser, net_unknown, networks, visitors,
+			    pageviews, baseline_days, signal_views, framed, never_visible, reasons)
+			  values ($1, $2, $3, 2, true, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, '[]')`, s, tenantID, old)
+			e.jobsExec(t, `insert into agg.web_coverage_daily (site_id, tenant_id, day, script_requests, gpc_requests)
+			  values ($1, $2, $3, 10, 1)`, s, tenantID, old)
+			e.jobsExec(t, `insert into cp.web_evidence_daily (site_id, tenant_id, day, class, count) values ($1, $2, $3, 'access', 5)`, s, tenantID, old)
+			e.jobsExec(t, `insert into cp.web_signals_daily (site_id, tenant_id, day, signal, count) values ($1, $2, $3, 'signal_views', 5)`, s, tenantID, old)
+			e.jobsExec(t, `insert into cp.web_networks_daily (site_id, tenant_id, day, network) values ($1, $2, $3, '00000000000000a1')`, s, tenantID, old)
+			e.jobsExec(t, `insert into cp.web_ingest_hourly (site_id, tenant_id, hour, outcome, count) values ($1, $2, $3, 'accepted', 5)`,
+				s, tenantID, old.Add(time.Hour))
+		}
+		perSite := []string{"agg.web_integrity_daily", "agg.web_coverage_daily", "cp.web_evidence_daily",
+			"cp.web_signals_daily", "cp.web_networks_daily", "cp.web_ingest_hourly"}
 		m := e.erase(t, e.owner, map[string]any{"kind": "site_reset", "site_id": site, "confirm_domain": e.site.Domain})
 		require.Equal(t, "erased", m["outcome"], m)
 		require.EqualValues(t, 2, m["sessions_deleted"])
@@ -693,6 +730,10 @@ func TestErasure(t *testing.T) {
 		e.followup(t)
 		require.Zero(t, e.aggPageviews(t, "primary", today))
 		require.Zero(t, e.aggPageviews(t, "quarantine", today))
+		for _, table := range perSite {
+			require.Zero(t, e.jobsCount(t, `select count(*) from `+table+` where site_id = $1`, siteID), table)
+			require.Equal(t, int64(1), e.jobsCount(t, `select count(*) from `+table+` where site_id = $1`, other), table+" of another site")
+		}
 
 		r := e.owner.call(t, http.MethodGet, e.path(), nil)
 		require.Equal(t, http.StatusOK, r.status)
