@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 
 	"github.com/justmert/veristar/internal/config"
@@ -38,6 +39,7 @@ type nodeEnv struct {
 	url      string
 	releases string
 	node     *gateway.Node
+	reg      *prometheus.Registry
 }
 
 // nodeDBIP is the db-ip file of make geo-fetch, the same one the geo tests
@@ -93,8 +95,9 @@ func startNode(t *testing.T, overrides map[string]string) *nodeEnv {
 	cfg, err := config.LoadGateway(config.FromMap(env))
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(context.Background())
+	reg := obs.NewRegistry()
 	n, err := gateway.NewNode(ctx, gateway.NodeConfig{Gateway: cfg, NC: nc, Replicas: 1,
-		Log: obs.NewLogger(os.Stderr, slog.LevelWarn), Registry: obs.NewRegistry()})
+		Log: obs.NewLogger(os.Stderr, slog.LevelWarn), Registry: reg})
 	require.NoError(t, err)
 	done := make(chan error, 1)
 	go func() { done <- n.Run(ctx) }()
@@ -104,7 +107,35 @@ func startNode(t *testing.T, overrides map[string]string) *nodeEnv {
 		cancel()
 		<-done
 	})
-	return &nodeEnv{js: js, url: hs.URL, releases: cfg.ReleaseDir, node: n}
+	return &nodeEnv{js: js, url: hs.URL, releases: cfg.ReleaseDir, node: n, reg: reg}
+}
+
+// counter sums the node's counter name over the series whose labels include
+// every pair of labels
+func (e *nodeEnv) counter(t *testing.T, name string, labels map[string]string) float64 {
+	t.Helper()
+	mfs, err := e.reg.Gather()
+	require.NoError(t, err)
+	var sum float64
+	for _, mf := range mfs {
+		if mf.GetName() != name {
+			continue
+		}
+	series:
+		for _, m := range mf.GetMetric() {
+			have := map[string]string{}
+			for _, lp := range m.GetLabel() {
+				have[lp.GetName()] = lp.GetValue()
+			}
+			for k, v := range labels {
+				if have[k] != v {
+					continue series
+				}
+			}
+			sum += m.GetCounter().GetValue()
+		}
+	}
+	return sum
 }
 
 type nodeSite struct {
