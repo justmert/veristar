@@ -16,7 +16,7 @@
 # db-ip refuses some downloads from shared runner addresses.
 # base images are pinned by tag and index digest (resolved 2026-11-12).
 
-FROM golang:1.27.4-trixie@sha256:b54b2639de8c1bfe538ec5ffc45f29b1932235ac5f6d63c059853646677112d9 AS build
+FROM golang:1.27.4-trixie@sha256:f18c3d73a184fb0582828510722e723b63a93f7188d11dd223d9be6f6880e65d AS build
 
 ARG VERSION=dev
 
@@ -59,7 +59,7 @@ RUN if [ -z "$DBIP_MONTH" ]; then echo "build arg DBIP_MONTH (YYYY-MM) is requir
     go run ./scripts/dbipcheck /out/geo/dbip-country-lite.mmdb \
  && go run ./scripts/netdata check /out/geo
 
-FROM gcr.io/distroless/static-debian13:nonroot@sha256:25ac8f0c3b2334a9eb05452266bd4697864a8c8ef0ef71e5e6480d7f92868329
+FROM gcr.io/distroless/static-debian13:nonroot@sha256:aafe993665bf6200db38a02c11a9351e782a84b6a45e7f33b6695638c88e3931
 
 COPY --from=build /out/gateway /gateway
 COPY --from=geo-checked /out/geo/dbip-country-lite.mmdb /out/geo/dbip-country-lite.mmdb.month /out/geo/DBIP-ATTRIBUTION.txt /geo/
