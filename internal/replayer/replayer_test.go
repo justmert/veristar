@@ -173,7 +173,7 @@ func TestDevUmami(t *testing.T) {
 	t.Run("an undecodable message goes to WEB_DLQ", func(t *testing.T) {
 		siteID := uuid.NewString()
 		if _, err := natsx.PublishDedup(testCtx(t, time.Minute), env.js, natsx.StreamWebEvents,
-			natsx.Subject(natsx.SubjectWebEvents, siteID), uuid.NewString(), []byte("not json"), nil); err != nil {
+			natsx.Subject(natsx.SubjectWebEvents, siteID)+".00", uuid.NewString(), []byte("not json"), nil); err != nil {
 			t.Fatal(err)
 		}
 		waitFor(t, time.Minute, "stream drained", func() bool { return drained(t, env.js) })
