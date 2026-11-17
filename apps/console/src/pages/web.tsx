@@ -30,6 +30,7 @@ import { ErrorPanel, Loading, StateBlock } from "@/components/error-panel";
 import { NativeSelect, TextField } from "@/components/form-field";
 import { IntegrityReportView } from "@/components/integrity";
 import { StaggerItem } from "@/components/motion";
+import { Notice } from "@/components/notice";
 import { ProjectOnchainSection } from "@/components/onchain";
 import { PageHeader, Panel } from "@/components/panel";
 import { Segmented } from "@/components/segmented";
@@ -48,6 +49,7 @@ import {
   higherIsBetter,
   isSingleDay,
   keyLabel,
+  lastDaysOf,
   metricValue,
   pointValue,
   readWebState,
@@ -64,6 +66,8 @@ import {
   writeWebState,
 } from "@/lib/web-dashboard";
 import { useProject } from "./project-layout";
+
+const INTEGRITY_MAX_DAYS = 366;
 
 const METRIC_TILES: { metric: WebMetric; label: string; hint: string }[] = [
   { metric: "pageviews", label: "Page views", hint: "Pages loaded in a browser" },
@@ -107,12 +111,17 @@ export function WebPage() {
     setParams(writeWebState({ ...state, ...next }), { replace: true });
   const sites = useQuery(sitesQuery(tenant.id));
   const now = new Date();
-  const q = webQuery(state, now);
 
   if (sites.isPending) return <Loading label="Loading sites" />;
   if (sites.error) return <ErrorPanel error={sites.error} onRetry={() => sites.refetch()} />;
   const listed = sites.data.filter((s) => s.status !== "removed");
   const selected = state.site ? listed.find((s) => s.id === state.site) : undefined;
+  // a site in the address that is deleted or not one of this project's: the
+  // select shows all sites, so the figures are those of all sites too
+  const unknownSite = state.site !== null && !selected;
+  const q = webQuery(unknownSite ? { ...state, site: null } : state, now);
+  // the integrity report covers at most 366 days (17.2)
+  const graded = lastDaysOf(q, INTEGRITY_MAX_DAYS);
   const scopeSites = selected ? [selected] : listed;
   const utm = scopeSites.some((s) => s.collect_utm);
 
@@ -154,6 +163,21 @@ export function WebPage() {
         }
       />
 
+      {unknownSite && listed.length > 0 ? (
+        <Notice
+          tone="warning"
+          title="That site is not part of this project"
+          actions={
+            <Button variant="outline" size="sm" onClick={() => set({ site: null })}>
+              Clear the site
+            </Button>
+          }
+        >
+          The address names a site that was deleted or belongs to another project. The figures below
+          cover all sites of this project.
+        </Notice>
+      ) : null}
+
       {listed.length === 0 ? (
         <StateBlock
           kind="empty"
@@ -170,25 +194,25 @@ export function WebPage() {
       ) : (
         <>
           <RangeBar state={state} set={set} now={now} />
-          {state.band === "primary" ? <Realtime tenantId={tenant.id} site={state.site} /> : null}
+          {state.band === "primary" ? <Realtime tenantId={tenant.id} site={q.site} /> : null}
           <Dashboard tenantId={tenant.id} state={state} set={set} q={q} sites={listed} utm={utm} />
           <IntegrityReportView
             scope="tenant"
             tenantId={tenant.id}
-            range={{ from: q.from, to: q.to }}
+            range={graded}
             siteNames={Object.fromEntries(sites.data.map((s) => [s.id, s.name]))}
-            intro="The integrity grade of your web traffic over this range, with the reasons behind it. SCF operators see the same report."
+            intro={
+              graded.from === q.from
+                ? "The integrity grade of your web traffic over this range, with the reasons behind it. SCF operators see the same report."
+                : `The integrity grade of your web traffic over the last ${INTEGRITY_MAX_DAYS} days of this range (${formatDayRange(graded.from, graded.to)}), with the reasons behind it. SCF operators see the same report.`
+            }
           />
-          <ProjectOnchainSection tenantId={tenant.id} days={dayCount(q)} />
+          <ProjectOnchainSection tenantId={tenant.id} range={{ from: q.from, to: q.to }} />
           <DbIpAttribution />
         </>
       )}
     </div>
   );
-}
-
-function dayCount(q: { from: string; to: string }): number {
-  return Math.round((Date.parse(q.to) - Date.parse(q.from)) / 86_400_000) + 1;
 }
 
 // ---- range
@@ -358,8 +382,19 @@ function Dashboard({
       ? "pageviews"
       : state.metric;
 
+  // keepPreviousData shows the last range's figures while the next loads;
+  // they are dimmed and marked busy so they do not read as the new range
+  const stale = summary.isPlaceholderData;
+
   return (
-    <>
+    <div
+      className={cn(
+        "flex flex-col gap-5 transition-opacity duration-(--vs-duration-press)",
+        stale && "opacity-60",
+      )}
+      aria-busy={stale || undefined}
+      data-testid="web-dashboard"
+    >
       <FreshnessNote summary={s} band={state.band} onBand={(band) => set({ band })} />
       <motion.section
         aria-label="Totals"
@@ -398,7 +433,7 @@ function Dashboard({
       )}
 
       <Breakdowns tenantId={tenantId} q={q} visitors={cur.visitors} sites={sites} utm={utm} />
-    </>
+    </div>
   );
 }
 
@@ -618,12 +653,20 @@ function BreakdownPanel({
       ) : b.error ? (
         <ErrorPanel error={b.error} onRetry={() => b.refetch()} />
       ) : (
-        <BreakdownList
-          data={b.data}
-          visitors={visitors}
-          siteNames={siteNames}
-          onMore={b.data.total_keys > b.data.items.length && !more ? () => setMore(true) : null}
-        />
+        <div
+          className={cn(
+            "transition-opacity duration-(--vs-duration-press)",
+            b.isPlaceholderData && "opacity-60",
+          )}
+          aria-busy={b.isPlaceholderData || undefined}
+        >
+          <BreakdownList
+            data={b.data}
+            visitors={visitors}
+            siteNames={siteNames}
+            onMore={b.data.total_keys > b.data.items.length && !more ? () => setMore(true) : null}
+          />
+        </div>
       )}
     </Panel>
   );

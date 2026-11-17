@@ -5,6 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import {
   countryName,
   formatMetric,
+  lastDaysOf,
   readWebState,
   validateWebDays,
   webDays,
@@ -67,8 +68,24 @@ describe("web dashboard state", () => {
   it("checks a custom range before asking", () => {
     expect(validateWebDays({ from: "2026-11-01", to: "2026-11-17" }, NOW).to).toContain("today");
     expect(validateWebDays({ from: "2026-11-05", to: "2026-11-01" }, NOW).to).toContain("start");
-    expect(validateWebDays({ from: "2025-10-12", to: "2026-11-16" }, NOW).to).toBeDefined();
+    expect(validateWebDays({ from: "2025-10-12", to: "2026-11-16" }, NOW).to).toBe(
+      "A range covers at most 400 days.",
+    );
     expect(validateWebDays({ from: "2025-11-16", to: "2026-11-16" }, NOW)).toEqual({});
+    // 367 to 400 days are allowed (18.1), more than the 366 of the operator views
+    expect(validateWebDays({ from: "2025-11-15", to: "2026-11-16" }, NOW)).toEqual({});
+    expect(validateWebDays({ from: "2025-10-13", to: "2026-11-16" }, NOW)).toEqual({});
+  });
+
+  it("cuts a range to the days a neighbouring view allows", () => {
+    expect(lastDaysOf({ from: "2026-11-01", to: "2026-11-16" }, 366)).toEqual({
+      from: "2026-11-01",
+      to: "2026-11-16",
+    });
+    expect(lastDaysOf({ from: "2025-10-13", to: "2026-11-16" }, 366)).toEqual({
+      from: "2025-11-16",
+      to: "2026-11-16",
+    });
   });
 
   it("compares with the previous period", () => {
@@ -301,6 +318,36 @@ describe("web dashboard page (contract 18)", () => {
     expect(urls.some((u) => u.includes("/web/hourly"))).toBe(true);
     // quarantined traffic has no realtime strip
     expect(urls.some((u) => u.includes("/web/realtime"))).toBe(false);
+  });
+});
+
+describe("web dashboard address", () => {
+  it("shows all sites, and says so, for a site that is not the project's", async () => {
+    const urls = stubRoutes();
+    const other = "0b8f7c1e-1111-4222-8333-444455556666";
+    const host = await renderRoutes(routes, `/projects/${f.TENANT_ID}/web?site=${other}`);
+    await waitFor(() => expect(host.textContent).toContain("Unique visitors"));
+    expect(host.textContent).toContain("That site is not part of this project");
+    // no request names the unknown site; the figures are those of all sites
+    expect(urls.some((u) => u.includes(other))).toBe(false);
+    const summary = urls.find((u) => u.includes("/web/summary")) ?? "";
+    expect(summary).not.toContain("site=");
+    await click(byRole(host, "button", "Clear the site"));
+    await waitFor(() =>
+      expect(host.textContent).not.toContain("That site is not part of this project"),
+    );
+  });
+
+  it("asks for the on-chain activity of the chosen range", async () => {
+    const urls = stubRoutes();
+    await renderRoutes(
+      routes,
+      `/projects/${f.TENANT_ID}/web?range=custom&from=2026-10-01&to=2026-10-31`,
+    );
+    await waitFor(() => expect(urls.some((u) => u.includes("/onchain?"))).toBe(true));
+    const onchain = urls.find((u) => u.includes("/onchain?")) ?? "";
+    expect(onchain).toContain("from=2026-10-01");
+    expect(onchain).toContain("to=2026-10-31");
   });
 });
 
