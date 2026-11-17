@@ -468,7 +468,7 @@ w as (
   group by d.tenant_id
 ),
 ap as (
-  select m.tenant_id, bool_or(m.count > 0) as has_api
+  select m.tenant_id, bool_or(m.count > 0 and m.traffic_class = 'app') as has_api
   from api.operator_daily(@from_at::timestamptz, @to_end::timestamptz, array(select id from t)) m
   join t on t.id = m.tenant_id
   group by m.tenant_id

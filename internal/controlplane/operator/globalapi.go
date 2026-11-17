@@ -60,9 +60,9 @@ m as (
          coalesce(sum(count) filter (where traffic_class = 'app' and status_code between 500 and 599), 0)::bigint as requests_5xx,
          coalesce(sum(count) filter (where traffic_class <> 'app'), 0)::bigint as infrastructure_requests,
          api.sum_buckets(counts) filter (where traffic_class = 'app') as buckets,
-         count(distinct service)::bigint as services,
-         (count(distinct (service, route)) filter (where route <> ''))::bigint as routes,
-         (count(distinct service) filter (where source = 'span'))::bigint as span_services,
+         (count(distinct service) filter (where traffic_class = 'app'))::bigint as services,
+         (count(distinct (service, route)) filter (where route <> '' and traffic_class = 'app'))::bigint as routes,
+         (count(distinct service) filter (where source = 'span' and traffic_class = 'app'))::bigint as span_services,
          coalesce(bool_or(lossy) filter (where traffic_class = 'app'), false) as lossy
   from c
   group by tenant_id
@@ -402,9 +402,9 @@ func scanNumbers(dst *APINumbers, scan func(...any) error, before ...any) error 
 
 func apiTotals(ctx context.Context, tx pgx.Tx, args pgx.NamedArgs) (map[uuid.UUID]APITotals, error) {
 	rows, err := tx.Query(ctx, apiCompareCTE+`
-		select tenant_id, count(distinct service)::bigint,
-		       (count(distinct (service, route)) filter (where route <> ''))::bigint,
-		       (count(distinct service) filter (where source = 'span'))::bigint,
+		select tenant_id, (count(distinct service) filter (where traffic_class = 'app'))::bigint,
+		       (count(distinct (service, route)) filter (where route <> '' and traffic_class = 'app'))::bigint,
+		       (count(distinct service) filter (where source = 'span' and traffic_class = 'app'))::bigint,
 		       coalesce(bool_or(lossy) filter (where traffic_class = 'app'), false),`+numbersCols+`
 		from c group by tenant_id`, args)
 	if err != nil {
@@ -461,10 +461,10 @@ func apiServices(ctx context.Context, tx pgx.Tx, args pgx.NamedArgs, desc bool) 
 	}
 	rows, err := tx.Query(ctx, apiCompareCTE+`
 		select tenant_id, service, min(source),
-		       (count(distinct route) filter (where route <> ''))::bigint,
+		       (count(distinct route) filter (where route <> '' and traffic_class = 'app'))::bigint,
 		       coalesce(bool_or(lossy) filter (where traffic_class = 'app'), false),`+numbersCols+`
 		from c group by tenant_id, service
-		order by tenant_id, sum(count) `+dir+`, service`, args)
+		order by tenant_id, coalesce(sum(count) filter (where traffic_class = 'app'), 0) `+dir+`, service`, args)
 	if err != nil {
 		return nil, fmt.Errorf("api services: %w", err)
 	}
