@@ -351,7 +351,8 @@ test("the console's web dashboard shows the site's seven metrics for a selected 
   for (const [heading, value] of [
     ["Sources", REFERRER_HOST],
     ["Countries", "Germany"],
-    ["Environment", "chrome"],
+    // the engine's browser key reads as the browser's name
+    ["Environment", "Chrome"],
   ] as const) {
     const panel = page
       .locator("section")
