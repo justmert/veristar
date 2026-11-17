@@ -174,6 +174,8 @@ func catalogue(terms string) []route {
 	add(kindTenant, http.MethodPost, tp+"/onchain/ids/{chain_id}/verify", fixed(map[string]any{
 		"method": "sep53", "signature": "c2lnbmF0dXJl",
 	}))
+	add(kindTenant, http.MethodGet, tp+"/onchain/ids/{chain_id}/functions", nil)
+	add(kindTenant, http.MethodGet, tp+"/onchain/ids/{chain_id}/functions.csv", nil)
 	add(kindTenant, http.MethodGet, tp+"/overview.csv", nil)
 	add(kindTenant, http.MethodGet, tp+"/scf-view", nil)
 	add(kindTenant, http.MethodGet, tp+"/erasure", nil)
@@ -217,6 +219,8 @@ func catalogue(terms string) []route {
 	add(kindOperator, http.MethodGet, op+"/api/projects", nil)
 	add(kindOperator, http.MethodGet, op+"/api/compare?tenants={tenant_id}", nil)
 	add(kindOperator, http.MethodGet, op+"/tenants/{tenant_id}/onchain", nil)
+	add(kindOperator, http.MethodGet, op+"/tenants/{tenant_id}/onchain/ids/{chain_id}/functions", nil)
+	add(kindOperator, http.MethodGet, op+"/tenants/{tenant_id}/onchain/ids/{chain_id}/functions.csv", nil)
 	add(kindOperator, http.MethodGet, op+"/web/projects.csv", nil)
 	add(kindOperator, http.MethodGet, op+"/api/projects.csv", nil)
 	add(kindOperator, http.MethodGet, op+"/web/compare.csv?tenants={tenant_id}", nil)
@@ -283,7 +287,7 @@ func catalogue(terms string) []route {
 
 	// machine metrics api
 	for _, p := range []string{"/tenants", "/web/daily", "/web/dimensions", "/web/hourly", "/web/integrity", "/api/daily", "/api/routes/daily",
-		"/api/hourly", "/onchain/ids", "/onchain/daily", "/onchain/weekly", "/rules", "/rules/{rule_id}/matches", "/openapi.yaml"} {
+		"/api/hourly", "/onchain/ids", "/onchain/daily", "/onchain/weekly", "/onchain/functions", "/rules", "/rules/{rule_id}/matches", "/openapi.yaml"} {
 		add(kindMachine, http.MethodGet, operator.MachinePath+p, nil)
 	}
 	return out
@@ -491,6 +495,8 @@ func (e *env) snapshot(t *testing.T, w *gateWorld) map[string]string {
 			from cp.operator_api_keys x`, nil},
 		{"chain_ids", `select coalesce(json_agg(x order by x.id)::text, '') from cp.chain_ids x where x.tenant_id in ($1, $2)`, ab},
 		{"chain_daily", `select coalesce(json_agg(x order by x.tenant_id, x.strkey, x.day)::text, '') from agg.chain_daily x where x.tenant_id in ($1, $2)`, ab},
+		{"chain_function_daily", `select coalesce(json_agg(x order by x.tenant_id, x.strkey, x.day, x.caller, x.function_name)::text, '')
+			from agg.chain_function_daily x where x.tenant_id in ($1, $2)`, ab},
 		{"tenant_cohorts", `select coalesce(json_agg(x order by x.tenant_id)::text, '') from cp.tenant_cohorts x where x.tenant_id in ($1, $2)`, ab},
 		{"threshold_rules", `select coalesce(json_agg(x order by x.id)::text, '') from cp.threshold_rules x`, nil},
 		// view_count moves with every public view, by design
