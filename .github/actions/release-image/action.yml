@@ -1,9 +1,10 @@
 name: release-image
 description: >
   build and push one platform image, gate it with syft and trivy, then sign
-  it with cosign: with the release key and no transparency log while the
-  repository is private (signing-mode key), or keyless with build provenance
-  and sbom attestations once it is public (signing-mode keyless). used by
+  it with cosign: with the release key and no transparency log, which keeps
+  the image names and digests of a private repository out of the public log
+  (signing-mode key), or keyless with build provenance and sbom attestations
+  for a public repository (signing-mode keyless). used by
   release-images.yml for every image, so each one passes the same steps.
 
 inputs:
