@@ -2,7 +2,14 @@ import { act } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { auditPath, type TenantListQuery, tenantListPath } from "@/api/endpoints";
 import { tenantAction } from "@/api/schemas";
-import { AuditPage, auditSummary, auditVerb, dayToUtc } from "@/pages/operator/audit";
+import { dayPairError, EMPTY_FILTERS } from "@/lib/global";
+import {
+  AuditPage,
+  auditDaysError,
+  auditSummary,
+  auditVerb,
+  dayToUtc,
+} from "@/pages/operator/audit";
 import { OperatorLayout } from "@/pages/operator/layout";
 import { AddOperator, validateAddOperator } from "@/pages/operator/operators";
 import { ReviewQueuePage } from "@/pages/operator/review";
@@ -539,6 +546,22 @@ describe("operator step-up", () => {
     ]);
     const host = await renderRoutes(area, "/operator");
     await waitFor(() => expect(host.textContent).toContain("This browser cannot use passkeys."));
+  });
+});
+
+describe("operator day pairs", () => {
+  it("refuse an end before its start before asking", () => {
+    expect(auditDaysError("2026-11-10", "2026-11-01")).toBe("End on or after the start day.");
+    expect(auditDaysError("2025-01-01", "2026-11-01")).toBe("The days cover at most 400 days.");
+    expect(auditDaysError("2026-11-01", "2026-11-01")).toBeNull();
+    expect(auditDaysError("", "2026-11-01")).toBeNull();
+    expect(
+      dayPairError({ ...EMPTY_FILTERS, award_from: "2026-05-01", award_to: "2026-04-01" }),
+    ).toBe("Awarded to is before Awarded from. Change one of them.");
+    expect(
+      dayPairError({ ...EMPTY_FILTERS, enrolled_from: "2026-05-01", enrolled_to: "2026-04-01" }),
+    ).toContain("Enrolled to");
+    expect(dayPairError(EMPTY_FILTERS)).toBeNull();
   });
 });
 
