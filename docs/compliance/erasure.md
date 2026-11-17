@@ -5,7 +5,7 @@ description: "How a project owner asks for erasure, what is erased, and how the 
 
 How a project owner erases web analytics data, what each kind of request
 deletes, and how the request is tracked. This page is not legal advice. Last
-updated 2026-11-14. The API contract is
+updated 2026-11-17. The API contract is
 `docs/reference/control-plane-api.md` section 10; the
 > behaviour below is tested in `internal/controlplane/erasure/live_test.go`
 > against real PostgreSQL, NATS, Umami, the gateway's visitor code, the
@@ -161,12 +161,21 @@ While you are the only owner of a project that is not removed, the deletion is
 refused and the page lists those projects. Make another member an owner, or
 ask the operators to remove the project (section 6), then delete the account.
 
+While you are the last active operator admin, the deletion is refused with
+`409 last_operator_admin`. Make another operator an operator admin on the
+**Operators** page, then delete the account.
+
 The deletion runs in one transaction and:
 
 - removes you from every project, which revokes your MCP credentials for those
   projects; the reconciler then brings each project's Umami team in line;
+- removes every operator roster row that holds your GitHub id, your Stellar
+  address or your passkey account address (with its login, role, status
+  reason and enrollment window) and deletes the passkeys you added for the
+  operator area's step-up (credential id, public key, name, creation and last
+  use);
 - deletes your MCP access keys, AI client connections and their tokens, your
-  sessions in every browser, and the invites addressed to your GitHub account,
+  sessions in every browser (with any step-up time they held), and the invites addressed to your GitHub account,
   your Stellar address or your passkey account address;
 - deletes your Umami user, which ends every dashboard token you held. If Umami
   cannot be reached, nothing is deleted and the console asks you to try again;
@@ -182,7 +191,9 @@ They name you by the account id. Some of them also hold your GitHub login or
 your Stellar address or passkey account address in their detail as it was at
 the time, for example
 `user.sign_in`, `user.identity_link` and the `member.add` row of the project
-that added you.
+that added you. The roster's `operator.add` and `operator.bootstrap` rows keep
+the GitHub id and login or the Stellar address and the reason they were
+written with, and `operator.passkey_add` rows keep the passkey's name.
 
 Projects you created keep running under their other owners. Operator API keys
 you created as an operator stay active, because machine consumers of the

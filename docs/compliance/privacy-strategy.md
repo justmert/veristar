@@ -7,7 +7,7 @@ How the service keeps personal data to a minimum: what it holds in memory,
 queues and stores, for how long, and which controls tenants have. Legal
 statements cite the legal sources register (`sources.md`); technical statements
 point to the code or test that shows them. This page is not legal advice. Last
-updated 2026-11-16.
+updated 2026-11-17.
 
 ## 1. Roles
 
@@ -57,13 +57,19 @@ file-backed stream. "Stored" means PostgreSQL.
 | `cp.web_networks_daily` | per site and UTC day: the network keys reported by the gateways, for the distinct network count | stored | until the day leaves the regrade window (four days), then deleted by the `integrity` task; deleted in every removal purge |
 | `cp.web_signals_daily` | per site and UTC day: page views of trackers that report page signals, the framed part, never-visible notices | stored | as long as the site exists; removal follows `removal_keep_aggregates` |
 | `agg.web_coverage_daily` | per site and UTC day: requests for the tracker file, and the part that carried `Sec-GPC: 1` | stored | as long as the site exists; removal follows `removal_keep_aggregates` |
-| `agg.web_integrity_daily` | per site and UTC day: the integrity grade, its reasons and the counts it was computed from (events per class, distinct networks, quarantined and proof-failed requests, visitors, page views, baseline) | stored | as long as the site exists; removal follows `removal_keep_aggregates` |
+| `agg.web_integrity_daily` | per site and UTC day: the integrity grade, its reasons and the counts it was computed from (events per class, distinct networks, quarantined and proof-failed requests, visitors, page views, baseline), and the page signal counts of the day (page views that report signals, framed page views, never-visible notices) | stored | as long as the site exists; removal follows `removal_keep_aggregates` |
 | OTLP collector | tenant metrics and spans; logs are accepted and discarded | memory | the request; spans become duration histograms and are dropped (`collector/`) |
-| `API_METRICS` | filtered metric batches: tenant, service, normalized route, method, status class and code, histogram buckets | queued | until stored, at most 7 days |
-| `api.*` | one-minute, hourly and daily rows of the same dimensions | stored | minutes `API_MINUTE_RETENTION_DAYS`, hours `API_HOURLY_RETENTION_MONTHS` (at least 24), days as long as the tenant exists |
+| OTLP collector | the request's user agent (`user_agent.original`, or the legacy `http.user_agent`) and `user_agent.synthetic.type` | memory | the request; read with the method and route to set the traffic class (`app`, `preflight`, `health`, `probe`, `internal/trafficclass`), never queued or stored |
+| `API_METRICS` | filtered metric batches: tenant, service, normalized route, method, status class and code, traffic class, histogram buckets | queued | until stored, at most 7 days |
+| `api.*` | one-minute, hourly and daily rows of the same dimensions, traffic class included | stored | minutes `API_MINUTE_RETENTION_DAYS`, hours `API_HOURLY_RETENTION_MONTHS` (at least 24), days as long as the tenant exists |
 | Control plane (`cp.*`) | GitHub numeric id and login, the Stellar account address of a wallet sign-in, and the credential id, public key and soropass account address of a passkey sign-in, of console users; session token hashes; tenants, sites, OTLP token hashes, audit log, erasure requests | stored | while the account or tenant exists; the audit log is append-only |
+| Control plane (`cp.operators`) | the operator roster: per identity, the GitHub id and login or the Stellar address (`G...` or `C...`), role, status and status reason, enrollment window, the user id of the admin who added it | stored | until an operator admin removes the row or the person deletes the account |
+| Control plane (`cp.operator_passkeys`) | the passkeys an operator adds for the operator area's step-up: credential id, public key, name, creation and last use; the session holds the time of the last step-up | stored | until the operator removes the passkey, an admin resets the operator's passkeys, a removal leaves the person no active roster row, or the person deletes the account |
 | Control plane (`cp.tenant_cohorts`, `cp.threshold_rules`) | a project's SCF program, round, category and award date, confirmed and proposed, with the user ids of who proposed and confirmed them; the operators' saved threshold rules | stored | while the tenant exists; rules until an operator deletes them |
 | Control plane (`cp.usage_reports`) | signed usage reports: the canonical report (project aggregates, grade, cohort and percentiles), its signature, the user id of the member who created or revoked it, a view count and the time of the last view | stored | while the tenant exists; a revoked link answers no one; removal of the tenant deletes them |
+| `agg.chain_daily` | per declared id and UTC day: operations, transactions, distinct counterparties, and whether the day's initiating accounts went into its week | stored | while the id's project exists; removal follows `removal_keep_aggregates` |
+| `agg.chain_weeks` | per project and ISO week: while open, a random 32-byte key; once closed, the count of weekly active accounts or the reason it has none | stored | the key until the week closes; the count while the project exists, removal follows `removal_keep_aggregates` |
+| `agg.chain_week_members` | per project, open ISO week and declared id: HMAC-SHA256 of each account that initiated an operation involving the id, under the week's key | stored | until the week closes, when the job stores the count and deletes the hashes and the key (`internal/jobs/chainactivity`) |
 | Control plane (`cp.wallet_challenges_used`) | SHA-256 of the nonce of each used wallet sign-in challenge and of each used passkey challenge, with its expiry; no address, no credential and no account | stored | until the challenge expires (at most five minutes); the next wallet or passkey verification after that deletes it |
 
 No component stores an IP address or an autonomous system number. The privacy audit test (`tests/privacy/`)
@@ -123,9 +129,16 @@ day replaces the day's secrets, so visitors seen before it count again.
 | `agg.web_daily*` | while the site exists | removal purge (`agg.purge_tenant`) |
 | `agg.web_integrity_daily`, `cp.web_evidence_daily` | while the site exists | removal purge (`agg.purge_tenant`, `lifecycle.WebIngestPurger`) |
 | `cp.web_networks_daily` | four days | `jobs` task `integrity`; removal purge |
+| `cp.web_signals_daily` | while the site exists | removal purge (`lifecycle.WebIngestPurger`) |
+| `agg.web_coverage_daily` | while the site exists | removal purge (`agg.purge_tenant`) |
+| `agg.chain_daily`, closed `agg.chain_weeks` rows | while the project exists | removal purge (`agg.purge_chain`), unless the removal keeps aggregates |
+| `agg.chain_weeks` key, `agg.chain_week_members` | until the week closes: once every verified id has its seven days read, and at the latest 14 days after the week's Monday | `jobs` task `chain-activity` deletes the hashes and the key; every removal purge deletes them (`agg.purge_chain`) |
 | `api.metrics_minute` | `API_MINUTE_RETENTION_DAYS` | `jobs` task `api-retention` |
 | `api.metrics_hourly` | `API_HOURLY_RETENTION_MONTHS`, at least 24 | `jobs` task `api-retention` |
 | Control plane sessions | 7 days absolute, 24 hours idle | `jobs` task `session-prune` |
+| `cp.tenant_cohorts` | while the tenant row exists | deleted with the tenant row; a removal keeps the row and the cohort |
+| `cp.operators` | until removed | an operator admin's removal; account deletion |
+| `cp.operator_passkeys` | until removed | the operator's removal of a passkey; an admin's reset; a roster removal that leaves the person no active row; account deletion |
 | `cp.usage_reports` | while the tenant exists | deleted with the tenant row; a removed tenant's links answer 404 at once |
 
 `jobs retain-web` deletes Umami `website_event`, `event_data` and the disabled
@@ -140,7 +153,7 @@ daemon: the core role installs a systemd timer (`retain-web.timer`) that runs
 it once a day.
 
 Raw retention bounds what a tenant dashboard covers: with the default of 25
-months, Umami shows 24 full months.
+months, the console's web dashboard shows 24 full months.
 
 ## 5. Umami features that are off, and how
 
@@ -362,8 +375,7 @@ data, including Umami reports the console does not show.
   in the console, and the Umami reports the console does not show: aggregates and rankings of page
   views, visitors, referrers, countries, devices, browsers and events; event
   data the tenant's own site sent; Umami's session list (browser, operating
-  system, device, screen, language, country, region and city as Umami holds
-  them, page and event counts, first and last activity, and the session id
+  system, device, screen, language, country, page and event counts, first and last activity, and the session id
   derived from the daily visitor token); and API request counts, status codes
   and latency buckets. No IP address or user agent exists in any store, so
   none can be returned.
@@ -394,10 +406,24 @@ client reads the same records. Veristar stores:
   minutes. No signature is stored;
 - per id, the account's home domain and the read state of the daily job;
 - per id and UTC day, three counts: operations, transactions and distinct
-  counterparties.
+  counterparties;
+- per ISO week (UTC), the project's count of weekly active accounts: the
+  distinct accounts that initiated at least one operation involving one of
+  its verified ids. While a week is open, `agg.chain_weeks` holds a random
+  32-byte key for it and `agg.chain_week_members` holds
+  HMAC-SHA256(key, account) of every initiating account, so the daily job
+  counts distinct accounts across days. When the week closes (once every
+  verified id has its seven days read, at the latest 14 days after the
+  week's Monday) the job stores the count, or the reason it has none, and
+  deletes the hashes and the key (`internal/jobs/chainactivity/weeks.go`).
+  The key is readable by the jobs role only; tenants and operators read the
+  count.
 
 No counterparty address, transaction, amount or memo is stored, so no store
-holds a list of who interacted with a project. An id can belong to a person
+holds an address of who interacted with a project. During an open week only
+keyed hashes exist, and they are deleted with their key at the close. While
+the key exists, a holder of the jobs role's access can test whether a given
+address was active in that week; after the close nobody can. An id can belong to a person
 (a wallet); it is declared by the project's own members, it is public on the
 ledger already, and it is shown to the project's members and to operators only.
 Removing an id hides its rows; removing the project deletes its read state and,
