@@ -58,6 +58,10 @@ not loaded or a missing client address header (events and challenges). Every res
 `Access-Control-Allow-Origin` with that origin and `Vary: Origin`. The tracker files
 carry `Access-Control-Allow-Origin: *`, `Cross-Origin-Resource-Policy: cross-origin`
 and `Cache-Control: public, max-age=31536000, immutable`; there is no `latest` alias.
+The node's Caddy compresses them with zstd or gzip when the browser accepts either
+(`Content-Encoding`, `Vary: Accept-Encoding`); the integrity hash covers the decoded file, so
+subresource integrity is unaffected. No other route is compressed
+(`TestEdgeCompressesTheTrackerFile` in `deploy/caddy`).
 
 ## Readiness
 

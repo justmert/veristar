@@ -226,6 +226,10 @@ here, before they take effect, as the processing terms require
 
 ### Changed
 
+- The tracker file `sdk.js` is served compressed with zstd or gzip when the
+  browser accepts it; the integrity hash covers the decoded file, so pinned
+  snippets keep working
+  ([docs/reference/gateway-limits.md](docs/reference/gateway-limits.md)).
 - The rolling `deploy.yml` and `reboot.yml` visit the core node holding the
   Patroni leader last, so a run does one switchover, to a replica that is
   already done, instead of up to three.

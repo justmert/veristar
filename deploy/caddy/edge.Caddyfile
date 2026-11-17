@@ -80,6 +80,18 @@ in.{$BASE_DOMAIN} {
 	}
 	log_skip @event
 
+	# the tracker files are the only large answers of this site and are
+	# fetched once per browser and version (immutable, a year in cache).
+	# compressing them cuts what every first page view downloads; the
+	# integrity hash covers the decoded bytes, so sri is unaffected. the
+	# small event, challenge and refusal answers are left alone, which keeps
+	# the hot path free of encoder work
+	@tracker {
+		method GET HEAD
+		path /v/*/sdk.js
+	}
+	encode @tracker zstd gzip
+
 	reverse_proxy {
 		to {$GATEWAY_UPSTREAM}
 		# keep enough idle connections to the gateway for every request in
