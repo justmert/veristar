@@ -145,14 +145,18 @@ func TestPartitionedReplayersOnCluster(t *testing.T) {
 	}
 	var published atomic.Int64
 	next := make([]int, visitors)
-	pubCtx, stopPub := context.WithCancel(context.Background())
+	// the stop is seen between ticks only, so a batch is published whole
+	// and the counts below match what is in the stream
+	stop := make(chan struct{})
+	stopPub := func() { close(stop) }
+	pubCtx := context.Background()
 	var pubWG sync.WaitGroup
 	pubWG.Go(func() {
 		tk := time.NewTicker(500 * time.Millisecond)
 		defer tk.Stop()
 		for {
 			select {
-			case <-pubCtx.Done():
+			case <-stop:
 				return
 			case <-tk.C:
 			}
@@ -240,7 +244,7 @@ func publishCtx(t *testing.T, ctx context.Context, js jetstream.JetStream, evs .
 			t.Error(err)
 			return
 		}
-		if _, err := natsx.PublishDedup(ctx, js, natsx.StreamWebEvents, ev.Subject(), ev.ID, b, nil); err != nil && ctx.Err() == nil {
+		if _, err := natsx.PublishDedup(ctx, js, natsx.StreamWebEvents, ev.Subject(), ev.ID, b, nil); err != nil {
 			t.Error(err)
 			return
 		}
