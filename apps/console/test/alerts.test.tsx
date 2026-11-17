@@ -88,6 +88,19 @@ describe("alerts helpers", () => {
     expect(criticalCount(groups.flatMap((g) => g.alerts))).toBe(2);
   });
 
+  it("leaves silenced and inhibited alerts out of the critical count", () => {
+    const parsed = operatorAlerts.parse(
+      body({
+        alerts: [
+          alert(),
+          alert({ fingerprint: "f-silenced", state: "suppressed" }),
+          alert({ fingerprint: "f-inhibited", state: "suppressed", inhibited_by: ["f-down"] }),
+        ],
+      }),
+    );
+    expect(criticalCount(parsed.alerts)).toBe(1);
+  });
+
   it("says how long an alert has fired", () => {
     const now = Date.parse("2026-11-13T12:00:00Z");
     expect(firingFor("2026-11-13T11:59:30Z", now)).toBe("less than a minute");
