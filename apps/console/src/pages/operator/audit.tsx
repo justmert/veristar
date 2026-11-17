@@ -28,6 +28,16 @@ export function auditFromParams(p: URLSearchParams): AuditQuery {
 // a date input gives a local calendar day; the audit filter takes rfc 3339
 // in utc (contract 5.9), so the day is read as a utc day. "to" is the start
 // of the day after, so the chosen day is included.
+// 5.9: from before to, at most 400 days apart; the server refuses anything
+// else with invalid_query, so the form says it first
+export function auditDaysError(from: string, to: string): string | null {
+  if (!from || !to) return null;
+  if (to < from) return "End on or after the start day.";
+  if ((Date.parse(to) - Date.parse(from)) / 86_400_000 + 1 > 400)
+    return "The days cover at most 400 days.";
+  return null;
+}
+
 export function dayToUtc(day: string, end: boolean): string {
   if (day === "") return "";
   const d = new Date(`${day}T00:00:00Z`);
@@ -90,6 +100,7 @@ export function AuditPage() {
     to: utcToDay(q.to, true),
   });
   const list = useInfiniteQuery(auditQuery(q));
+  const [dayError, setDayError] = useState<string | null>(null);
   const active = FIELDS.filter((f) => q[f] !== "");
 
   function apply(next: URLSearchParams) {
@@ -98,6 +109,9 @@ export function AuditPage() {
 
   function submit(e: FormEvent) {
     e.preventDefault();
+    const bad = auditDaysError(draft.from.trim(), draft.to.trim());
+    setDayError(bad);
+    if (bad) return;
     const next = new URLSearchParams();
     for (const f of FIELDS) {
       const raw = draft[f].trim();
@@ -241,6 +255,7 @@ export function AuditPage() {
           className="max-lg:h-(--vs-control-touch)"
           value={draft.to}
           onChange={set("to")}
+          error={dayError}
         />
         <div className="flex flex-wrap items-end gap-2 sm:col-span-2 lg:col-span-3">
           <Button type="submit" className="max-lg:h-(--vs-control-touch)">

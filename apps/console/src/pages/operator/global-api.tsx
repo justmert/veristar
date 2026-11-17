@@ -11,6 +11,7 @@ import { formatRate } from "@/lib/api-metrics";
 import { formatCount } from "@/lib/format";
 import {
   activeFilterCount,
+  dayPairError,
   EMPTY_FILTERS,
   firstOrder,
   formatPct,
@@ -105,7 +106,10 @@ export function GlobalApiPage() {
   const state = { ...read, filters: { ...read.filters, integrity: "" as const } };
   const set = (next: ListState<ApiSort>) =>
     setParams(writeListState(next, DEFAULT_SORT), { replace: true });
-  const list = useInfiniteQuery(apiProjectsQuery(state));
+  // a day pair that ends before it starts is refused by the server; the
+  // filters say so and nothing is asked
+  const badDays = dayPairError(state.filters) !== null;
+  const list = useInfiniteQuery({ ...apiProjectsQuery(state), enabled: !badDays });
   const selection = useSelection();
   const filtered = activeFilterCount(state.filters) > 0;
   const first = list.data?.pages[0];
@@ -172,7 +176,9 @@ export function GlobalApiPage() {
 
         <CompareBar selection={selection} range={resolved} />
 
-        {list.isPending ? <Loading label="Loading projects" className="px-4" rows={6} /> : null}
+        {list.isPending && !badDays ? (
+          <Loading label="Loading projects" className="px-4" rows={6} />
+        ) : null}
         {list.error ? (
           <ErrorPanel error={list.error} onRetry={() => list.refetch()} className="m-4" />
         ) : null}

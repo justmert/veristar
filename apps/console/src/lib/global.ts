@@ -165,6 +165,16 @@ export function writeListState<S extends string>(s: ListState<S>, defaultSort: S
   return p;
 }
 
+// 8.2 day pairs: an end before its start is 400 invalid_query, so the form
+// says so and the list is not asked
+export function dayPairError(f: ProjectFilters): string | null {
+  if (f.enrolled_from && f.enrolled_to && f.enrolled_to < f.enrolled_from)
+    return "Enrolled to is before Enrolled from. Change one of them.";
+  if (f.award_from && f.award_to && f.award_to < f.award_from)
+    return "Awarded to is before Awarded from. Change one of them.";
+  return null;
+}
+
 export function activeFilterCount(f: ProjectFilters): number {
   return (
     (f.statuses.length ? 1 : 0) +

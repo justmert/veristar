@@ -14,6 +14,7 @@ import {
   activeFilterCount,
   countryName,
   type DayRange,
+  dayPairError,
   EMPTY_FILTERS,
   firstOrder,
   formatDuration,
@@ -104,7 +105,10 @@ export function GlobalWebPage() {
   const state = readListState(params, webSort.options, DEFAULT_SORT);
   const set = (next: ListState<WebSort>) =>
     setParams(writeListState(next, DEFAULT_SORT), { replace: true });
-  const list = useInfiniteQuery(webProjectsQuery(state));
+  // a day pair that ends before it starts is refused by the server; the
+  // filters say so and nothing is asked
+  const badDays = dayPairError(state.filters) !== null;
+  const list = useInfiniteQuery({ ...webProjectsQuery(state), enabled: !badDays });
   const selection = useSelection();
   const filtered = activeFilterCount(state.filters) > 0;
   const first = list.data?.pages[0];
@@ -169,7 +173,9 @@ export function GlobalWebPage() {
 
         <CompareBar selection={selection} range={resolved} />
 
-        {list.isPending ? <Loading label="Loading projects" className="px-4" rows={6} /> : null}
+        {list.isPending && !badDays ? (
+          <Loading label="Loading projects" className="px-4" rows={6} />
+        ) : null}
         {list.error ? (
           <ErrorPanel error={list.error} onRetry={() => list.refetch()} className="m-4" />
         ) : null}

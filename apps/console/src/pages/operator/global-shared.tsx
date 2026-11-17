@@ -22,6 +22,7 @@ import {
   type CohortKey,
   compareSearch,
   type DayRange,
+  dayPairError,
   EMPTY_FILTERS,
   formatChange,
   formatDayRange,
@@ -348,6 +349,11 @@ export function FiltersPanel({
         />
       </div>
       <CohortFilters filters={filters} onChange={onChange} />
+      {dayPairError(filters) ? (
+        <p role="alert" className="text-small text-critical">
+          {dayPairError(filters)}
+        </p>
+      ) : null}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 empty:hidden">
         {n > 0 ? (
           <Button type="button" variant="ghost" size="sm" onClick={() => onChange(EMPTY_FILTERS)}>
