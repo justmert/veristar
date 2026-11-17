@@ -32,9 +32,11 @@ const (
 	// lists the integrity rule versions that graded the period, and adds
 	// the coverage estimate and has_data to web, lossy, infrastructure
 	// requests and has_data to api, and weekly active accounts to onchain.
-	// a version 1 report keeps its layout and still verifies: the
-	// signature covers its bytes whatever members they hold.
-	FormatVersion = 2
+	// version 3 adds the calls per function of each verified contract to
+	// onchain (contracts). a version 1 or 2 report keeps its layout and
+	// still verifies: the signature covers its bytes whatever members they
+	// hold.
+	FormatVersion = 3
 	// WebMetricsVersion: docs/reference/web-metrics.md, primary band,
 	// daily-unique visitors summed over days and sites.
 	WebMetricsVersion = 1
@@ -44,8 +46,9 @@ const (
 	// (traffic class rule set 1, section 7.4).
 	APIMetricsVersion = 2
 	// OnchainVersion: control-plane-api section 15, horizon operations of
-	// accounts and rpc events of contracts.
-	OnchainVersion = 1
+	// accounts and rpc events of contracts. version 2 adds the calls per
+	// contract function, read from the transactions of those events.
+	OnchainVersion = 2
 	// CohortVersion: control-plane-api section 19, change against the
 	// previous period of equal length and cume_dist percentiles.
 	CohortVersion = 1
@@ -197,6 +200,30 @@ type Onchain struct {
 	TwoWayLink   bool         `json:"two_way_link"`
 	WeeklyActive WeeklyActive `json:"weekly_active_accounts"`
 	Series       []OnchainDay `json:"series"`
+	// the calls per function of each verified contract (format version 3)
+	Contracts []ContractCalls `json:"contracts"`
+}
+
+// FunctionCalls is one function of a contract and one kind of caller over
+// the period: Failed is null for the calls of accounts, and the accounts
+// are the busiest day's distinct count.
+type FunctionCalls struct {
+	Function          string `json:"function"`
+	Caller            string `json:"caller"`
+	Successful        int64  `json:"successful"`
+	Failed            *int64 `json:"failed"`
+	PeakDailyAccounts int64  `json:"peak_daily_accounts"`
+	DaysWithCalls     int64  `json:"days_with_calls"`
+}
+
+// ContractCalls is one verified contract's calls per function over the
+// period, with how many of its days were read.
+type ContractCalls struct {
+	Strkey         string          `json:"strkey"`
+	DaysRead       int64           `json:"days_read"`
+	DaysNoCallTree int64           `json:"days_no_call_tree"`
+	DaysMissing    int64           `json:"days_missing"`
+	Functions      []FunctionCalls `json:"functions"`
 }
 
 // Reason is one integrity reason over the period.
@@ -350,6 +377,16 @@ func Build(ctx context.Context, tx pgx.Tx, id string, tenant uuid.UUID, from, to
 			WeeksCounted: int64(o.WeeklyActive.WeeksCounted), WeeksMissing: int64(o.WeeklyActive.WeeksMissing)}}
 	for _, p := range v.OnchainSeries {
 		r.Onchain.Series = append(r.Onchain.Series, OnchainDay{Day: p.Day, IDsRead: p.IDsRead, Operations: p.Operations, Transactions: p.Transactions})
+	}
+	r.Onchain.Contracts = []ContractCalls{}
+	for _, c := range v.ContractFunctions {
+		cc := ContractCalls{Strkey: c.Strkey, DaysRead: int64(c.Functions.DaysRead), DaysNoCallTree: int64(c.Functions.DaysNoCallTree),
+			DaysMissing: int64(c.Functions.DaysMissing), Functions: []FunctionCalls{}}
+		for _, f := range c.Functions.Functions {
+			cc.Functions = append(cc.Functions, FunctionCalls{Function: f.Function, Caller: f.Caller, Successful: f.Successful,
+				Failed: f.Failed, PeakDailyAccounts: f.PeakDailyAccounts, DaysWithCalls: int64(f.DaysWithCalls)})
+		}
+		r.Onchain.Contracts = append(r.Onchain.Contracts, cc)
 	}
 	c := v.Comparison
 	r.Cohort = Cohort{
