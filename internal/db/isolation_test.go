@@ -89,6 +89,8 @@ var tenantTables = []tenantTable{
 	// the keyed hashes of an open week
 	{name: "agg.chain_weeks", key: "tenant_id"},
 	{name: "agg.chain_week_members", key: "tenant_id", denied: true},
+	// contract function calls (00047): a project reads its own rows
+	{name: "agg.chain_function_daily", key: "tenant_id"},
 	// integrity (00033): a project reads its own grades; the evidence and
 	// network rows behind them are jobs' only
 	{name: "agg.web_integrity_daily", key: "tenant_id"},
