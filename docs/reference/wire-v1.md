@@ -161,11 +161,14 @@ plus `fr` when framed. It carries no `u`, `r`, `ti`, `s`, `l`, `n` or `d`; the g
 notice with any of them (`page_fields_on_notice`). The notice passes every check an event passes,
 including the origin and the proof, and is sent during `pagehide` with `keepalive`, so only a proof
 the page already holds can be used: a page closed within moments of loading may send none, and the
-count is a lower bound. The gateway answers 202, counts the notice for the site and never queues it.
+count is a lower bound. The gateway answers 202 and never queues it; it counts the notice for the
+site only when the per-visitor volume bound and the same-network check would have put an event of
+that visitor in the primary band.
 
-**What the gateway does with the signals.** For each accepted pageview of a release that reports
-signals (`sv` 1.3.0 or newer) it counts `signal_views`, and `signal_framed` when `fr` is true;
-each accepted notice counts `signal_never_visible`. The counts are per site and UTC day on
+**What the gateway does with the signals.** For each pageview of a release that reports signals
+(`sv` 1.3.0 or newer) that is queued in the primary band it counts `signal_views`, and
+`signal_framed` when `fr` is true; a quarantined pageview counts neither. Each notice counted as
+above adds `signal_never_visible`. The counts are per site and UTC day on
 `EDGE_STATS` and are inputs of integrity rule version 2, where they can only lower a grade
 ([../security/bot-and-inflation.md](../security/bot-and-inflation.md), section "Page signals").
 
