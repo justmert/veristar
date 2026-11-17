@@ -203,7 +203,7 @@ diagnostic events of every transaction:
 | Contract | Result |
 |---|---|
 | The pool `CCY2...IZFWV` of the fixture `9ab4...361d` | 156 transactions read, functions `read`; 7 functions, all called by contracts, for example `swap` 141 successful calls from 33 accounts |
-| The router `CBQD...6QUK` of the same fixture | 3,010 transactions read, functions `read`; 16 rows: `swap_chained` called by accounts 2,030 times from 60 accounts and by contracts 849 times from 274 accounts, and 9 other functions called only by contracts, such as `config_pool_rewards` (100 calls) |
+| The router `CBQD...6QUK` of the same fixture | 3,010 transactions read, functions `read`; 16 rows: `swap_chained` called by accounts 2,030 times from 60 accounts and by contracts 849 times from 274 accounts, and 7 functions called only by contracts, such as `config_pool_rewards` (100 calls) |
 
 An earlier run of the same day found that a server can drop its oldest ledger between `getHealth`
 and the next request; the reader's 100-ledger margin above comes from that run.
