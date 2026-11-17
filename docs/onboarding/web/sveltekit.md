@@ -21,9 +21,9 @@ Put the tag in `src/app.html`, before `%sveltekit.head%`:
 The example replaces the comment with the tag in a `handle` hook so that tests can set their own
 site id at run time. In your app the tag from the console stands there:
 
-{/* snippet version=1.1.0 */}
+{/* snippet version=1.3.0 */}
 ```html
-<script defer src="https://in.analytics.example/v/1.1.0/sdk.js" integrity="sha384-lxlitLtIMAeT/K3ieev+MeMGxZe7oceuWLOy8GZAjK7TMKS2Uh9UPmfGLBczUPsq" crossorigin="anonymous" data-website-id="3f6a0c2e-9b1d-4e7a-8c5f-1d2e3f4a5b6c"></script>
+<script defer src="https://in.analytics.example/v/1.3.0/sdk.js" integrity="sha384-3E+vbTmGHWaU8kaLAWT6ttw70odRH565/3vRal5558SgSitqFlIbsFHlfzWnSUtT" crossorigin="anonymous" data-website-id="3f6a0c2e-9b1d-4e7a-8c5f-1d2e3f4a5b6c"></script>
 ```
 
 `app.html` is the page template of every route, and SvelteKit copies markup outside its

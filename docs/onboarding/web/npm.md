@@ -31,13 +31,13 @@ From a checkout of the repository, with the pnpm version from `package.json` ins
 ```sh
 pnpm install --frozen-lockfile
 cd packages/tracker
-NPM_PACKAGE=@your-scope/veristar-tracker node scripts/pack.mjs 1.2.0
+NPM_PACKAGE=@your-scope/veristar-tracker node scripts/pack.mjs 1.3.0
 ```
 
 `NPM_PACKAGE` is the scoped name the package gets, and the argument is a released tracker version
 from [`releases/manifest.json`](https://github.com/justmert/veristar/blob/main/packages/tracker/releases/manifest.json).
 The script prints the path of the tarball, for example
-`npm/your-scope-veristar-tracker-1.2.0.tgz`. Install that file in your app with your package
+`npm/your-scope-veristar-tracker-1.3.0.tgz`. Install that file in your app with your package
 manager, or publish it to a registry you control.
 
 `pack.mjs` refuses a version that is not in the release manifest, copies the release files
