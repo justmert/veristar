@@ -59,21 +59,31 @@ func OperationSource(envelopeXDR string, op uint32) (string, error) {
 // kilobytes, so 50 keep a batch well under the client's body limit.
 const EnvelopeBatch = 50
 
-// Envelopes reads the envelopes of transactions by hash through
-// getTransaction, EnvelopeBatch calls per json-rpc batch request. a hash
-// the server no longer holds fails with before_source_history.
-func (c *RPC) Envelopes(ctx context.Context, hashes []string) (map[string]string, error) {
-	out := make(map[string]string, len(hashes))
+// TxRecord is the part of a getTransaction answer the reader uses: the
+// envelope, for the initiator and the functions invoked at the top level,
+// and the diagnostic events, for the calls between contracts. a server
+// that does not record diagnostic events sends none.
+type TxRecord struct {
+	Status      string
+	EnvelopeXDR string
+	Diagnostics []string
+}
+
+// Transactions reads transactions by hash through getTransaction,
+// EnvelopeBatch calls per json-rpc batch request. a hash the server no
+// longer holds fails with before_source_history.
+func (c *RPC) Transactions(ctx context.Context, hashes []string) (map[string]TxRecord, error) {
+	out := make(map[string]TxRecord, len(hashes))
 	for start := 0; start < len(hashes); start += EnvelopeBatch {
 		part := hashes[start:min(start+EnvelopeBatch, len(hashes))]
-		if err := c.envelopeBatch(ctx, part, out); err != nil {
+		if err := c.transactionBatch(ctx, part, out); err != nil {
 			return nil, err
 		}
 	}
 	return out, nil
 }
 
-func (c *RPC) envelopeBatch(ctx context.Context, hashes []string, out map[string]string) error {
+func (c *RPC) transactionBatch(ctx context.Context, hashes []string, out map[string]TxRecord) error {
 	reqs := make([]map[string]any, len(hashes))
 	first := c.id.Add(int64(len(hashes))) - int64(len(hashes)) + 1
 	for i, h := range hashes {
@@ -97,9 +107,10 @@ func (c *RPC) envelopeBatch(ctx context.Context, hashes []string, out map[string
 		ID     int64     `json:"id"`
 		Error  *rpcError `json:"error"`
 		Result *struct {
-			Status      string `json:"status"`
-			TxHash      string `json:"txHash"`
-			EnvelopeXDR string `json:"envelopeXdr"`
+			Status      string   `json:"status"`
+			TxHash      string   `json:"txHash"`
+			EnvelopeXDR string   `json:"envelopeXdr"`
+			Diagnostics []string `json:"diagnosticEventsXdr"`
 		} `json:"result"`
 	}
 	if err := decode(r, &answers, "getTransaction batch"); err != nil {
@@ -126,7 +137,7 @@ func (c *RPC) envelopeBatch(ctx context.Context, hashes []string, out map[string
 		case a.Result.EnvelopeXDR == "":
 			return fail(CodeBadResponse, "getTransaction: %s answered without an envelope", h)
 		}
-		out[h] = a.Result.EnvelopeXDR
+		out[h] = TxRecord{Status: a.Result.Status, EnvelopeXDR: a.Result.EnvelopeXDR, Diagnostics: a.Result.Diagnostics}
 	}
 	return nil
 }

@@ -405,7 +405,9 @@ type fakeRPC struct {
 	// envelopes by transaction hash for getTransaction; a hash without one
 	// answers NOT_FOUND
 	envelopes map[string]string
-	batches   atomic.Int64
+	// whole answers by transaction hash, with diagnostic events
+	records map[string]TxRecord
+	batches atomic.Int64
 }
 
 func (f *fakeRPC) closeOf(seq uint32) time.Time {
@@ -434,6 +436,9 @@ func (f *fakeRPC) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			res := map[string]any{"status": "NOT_FOUND", "txHash": h}
 			if env, ok := f.envelopes[h]; ok {
 				res = map[string]any{"status": "SUCCESS", "txHash": h, "envelopeXdr": env}
+			}
+			if rec, ok := f.records[h]; ok {
+				res = map[string]any{"status": rec.Status, "txHash": h, "envelopeXdr": rec.EnvelopeXDR, "diagnosticEventsXdr": rec.Diagnostics}
 			}
 			out = append(out, map[string]any{"jsonrpc": "2.0", "id": q.ID, "result": res})
 		}
@@ -522,8 +527,8 @@ func TestContractDays(t *testing.T) {
 	got, err := r.ContractDays(t.Context(), contract, day1, day1.AddDate(0, 0, 1), h)
 	require.NoError(t, err)
 	require.Equal(t, []Day{
-		{Day: day1, Operations: 2, Transactions: 2, Counterparties: 2, Initiators: sorted(a, b)},
-		{Day: day1.AddDate(0, 0, 1)},
+		{Day: day1, Operations: 2, Transactions: 2, Counterparties: 2, Initiators: sorted(a, b), FunctionsState: FunctionsRead},
+		{Day: day1.AddDate(0, 0, 1), FunctionsState: FunctionsRead},
 	}, got)
 	require.Equal(t, int64(1), f.batches.Load())
 
@@ -598,11 +603,11 @@ func TestContractInitiatorCap(t *testing.T) {
 	for i := range MaxInitiatorTransactions + 1 {
 		by[day1.Unix()].txOps[strconv.Itoa(i)] = map[uint32]struct{}{0: {}}
 	}
-	got, err := r.withInitiators(t.Context(), []Day{{Day: day1, Operations: 1, Transactions: 1}}, by)
+	got, err := r.withInitiators(t.Context(), "", []Day{{Day: day1, Operations: 1, Transactions: 1}}, by)
 	require.NoError(t, err)
 	// the counts stay, the initiators are marked over the cap, and no
 	// transaction was looked up
-	require.Equal(t, []Day{{Day: day1, Operations: 1, Transactions: 1, InitiatorsMissing: CodeDayTooLarge}}, got)
+	require.Equal(t, []Day{{Day: day1, Operations: 1, Transactions: 1, InitiatorsMissing: CodeDayTooLarge, FunctionsState: CodeDayTooLarge}}, got)
 	require.Zero(t, f.batches.Load())
 }
 
