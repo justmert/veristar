@@ -187,7 +187,8 @@ export function AppealLink({
   appeal: AppealContext;
   className?: string;
 }) {
-  if (report.grade === null) return null;
+  // nothing to appeal without a grade, nor for the best one
+  if (report.grade === null || report.grade === "A") return null;
   return (
     <a
       href={appealUrl(appeal.slug, report, appeal.siteDomains)}
