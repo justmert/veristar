@@ -535,6 +535,10 @@ describe("the reports page (contract 20.3 and 20.4)", () => {
     });
     expect(calls.find((x) => x.method === "POST")?.url).toBe(`/api/tenants/${c.TENANT_ID}/reports`);
 
+    // repeated row buttons name their report
+    expect(byRole(host, "button", "Revoke link").getAttribute("aria-label")).toBe(
+      "Revoke link of the report for Oct 1, 2026 to Oct 31, 2026 (UTC)",
+    );
     await click(byRole(host, "button", "Revoke link"));
     const dialog = [...host.querySelectorAll("dialog")].find((d) => d.hasAttribute("open"));
     const confirm = [...(dialog?.querySelectorAll("button") ?? [])].find(
@@ -563,6 +567,31 @@ describe("the reports page (contract 20.3 and 20.4)", () => {
     await waitFor(() =>
       expect(host.textContent).toContain("End the report at least four days before today (UTC)"),
     );
+  });
+});
+
+describe("revoking a report link", () => {
+  it("forgets a refusal when the dialog closes", async () => {
+    routeFetch((method) => {
+      if (method === "POST") return { status: 429, body: c.errorBody("rate_limited") };
+      return { status: 200, body: { items: [summary] } };
+    });
+    const host = await renderRoutes(
+      projectRoutes(<ReportsPage />, "reports"),
+      `/projects/${c.TENANT_ID}/reports`,
+    );
+    await waitFor(() => expect(host.textContent).toContain("3 views"));
+    const open = () => [...host.querySelectorAll("dialog")].find((d) => d.hasAttribute("open"));
+    await click(byRole(host, "button", "Revoke link"));
+    const confirm = [...(open()?.querySelectorAll("button") ?? [])].find(
+      (b) => b.textContent === "Revoke link",
+    );
+    await click(confirm as HTMLElement);
+    await waitFor(() => expect(open()?.textContent).toContain("Too many requests"));
+    await click(byRole(open() as HTMLElement, "button", "Cancel"));
+    await waitFor(() => expect(open()).toBeUndefined());
+    await click(byRole(host, "button", "Revoke link"));
+    expect(open()?.textContent).not.toContain("Too many requests");
   });
 });
 

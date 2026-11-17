@@ -137,7 +137,7 @@ export function ReportsPage() {
               Report generated. Its link:{" "}
               <a
                 href={create.data.url}
-                className="break-all text-accent-text underline-offset-4 hover:underline"
+                className="break-all rounded-sm text-accent-text underline-offset-4 hover:underline focus-ring"
               >
                 {create.data.url}
               </a>
@@ -169,51 +169,70 @@ export function ReportsPage() {
             </StateBlock>
           ) : (
             <ul className="flex flex-col divide-y divide-line" aria-label="Reports">
-              {list.data.items.map((r) => (
-                <li
-                  key={r.id}
-                  data-report={r.id}
-                  className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3"
-                >
-                  <span className="flex min-w-0 flex-col gap-0.5">
-                    <span className="text-body font-medium text-fg">
-                      {formatDayRange(r.from, r.to)}
+              {list.data.items.map((r) => {
+                // the buttons repeat on every row; their names say which report
+                const of = `of the report for ${formatDayRange(r.from, r.to)}`;
+                return (
+                  <li
+                    key={r.id}
+                    data-report={r.id}
+                    className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3"
+                  >
+                    <span className="flex min-w-0 flex-col gap-0.5">
+                      <span className="text-body font-medium text-fg">
+                        {formatDayRange(r.from, r.to)}
+                      </span>
+                      <span className="text-caption text-fg-3">
+                        Generated {formatDateTimeUtc(r.created_at)}, {formatCount(r.view_count)}{" "}
+                        {r.view_count === 1 ? "view" : "views"}
+                      </span>
                     </span>
-                    <span className="text-caption text-fg-3">
-                      Generated {formatDateTimeUtc(r.created_at)}, {formatCount(r.view_count)}{" "}
-                      {r.view_count === 1 ? "view" : "views"}
-                    </span>
-                  </span>
-                  {r.revoked_at ? <Pill tone="warning">Link revoked</Pill> : null}
-                  <span className="ml-auto flex flex-wrap gap-1.5">
-                    {r.revoked_at ? null : (
-                      <>
-                        <Button asChild size="sm" variant="outline">
-                          <a href={r.url} target="_blank" rel="noopener">
-                            <ExternalLink aria-hidden />
-                            Open
-                          </a>
-                        </Button>
-                        <CopyButton text={r.url} label="Copy link" />
-                      </>
-                    )}
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => download.mutate(r)}
-                      pending={download.isPending && download.variables?.id === r.id}
-                    >
-                      <Download aria-hidden />
-                      JSON
-                    </Button>
-                    {r.revoked_at ? null : (
-                      <Button size="sm" variant="ghost" onClick={() => setRevoking(r)}>
-                        Revoke link
+                    {r.revoked_at ? <Pill tone="warning">Link revoked</Pill> : null}
+                    <span className="ml-auto flex flex-wrap gap-1.5">
+                      {r.revoked_at ? null : (
+                        <>
+                          <Button asChild size="sm" variant="outline">
+                            <a
+                              href={r.url}
+                              target="_blank"
+                              rel="noopener"
+                              aria-label={`Open the link ${of}`}
+                            >
+                              <ExternalLink aria-hidden />
+                              Open
+                            </a>
+                          </Button>
+                          <CopyButton
+                            text={r.url}
+                            label="Copy link"
+                            accessibleLabel={`Copy link ${of}`}
+                          />
+                        </>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => download.mutate(r)}
+                        pending={download.isPending && download.variables?.id === r.id}
+                        aria-label={`JSON ${of}`}
+                      >
+                        <Download aria-hidden />
+                        JSON
                       </Button>
-                    )}
-                  </span>
-                </li>
-              ))}
+                      {r.revoked_at ? null : (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setRevoking(r)}
+                          aria-label={`Revoke link ${of}`}
+                        >
+                          Revoke link
+                        </Button>
+                      )}
+                    </span>
+                  </li>
+                );
+              })}
             </ul>
           )
         ) : null}
@@ -223,7 +242,11 @@ export function ReportsPage() {
       <ConfirmDialog
         open={revoking !== null}
         onOpenChange={(o) => {
-          if (!o) setRevoking(null);
+          if (!o) {
+            setRevoking(null);
+            // a refusal shown for one report must not greet the next
+            revoke.reset();
+          }
         }}
         title="Revoke this link?"
         description="Anyone who opens the link sees that the report is not available. A JSON file already downloaded keeps its valid signature. A revoked link cannot be restored; generate a new report to share again."
