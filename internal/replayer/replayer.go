@@ -332,6 +332,12 @@ func (r *Replayer) Run(ctx context.Context) error {
 
 	run, stop := context.WithCancelCause(ctx)
 	defer stop(nil)
+	// the first member list comes before any lock is contended: without it
+	// every instance would start out assigned every partition, take what it
+	// can and keep it for minHold
+	if err := r.members.refresh(run); err != nil && run.Err() == nil {
+		r.log.Warn("partition membership not read at start, contending as the only member until it is", "error", err.Error())
+	}
 	var wg sync.WaitGroup
 	wg.Go(func() { r.members.run(run, r.buckets) })
 	for p := range events.Partitions {
