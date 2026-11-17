@@ -178,14 +178,31 @@ that are lost and the tenants must be told.
 <a id="replayernotconsuming"></a><a id="metricswriternotconsuming"></a>
 
 ### ReplayerNotConsuming, MetricsWriterNotConsuming
-No instance holds the consumer's lock for 2 minutes, or none is scraped.
+No replayer owns a web event partition, or no metrics writer holds its lock,
+for 2 minutes, or none is scraped.
 Action: `docker compose ps` on every core node; start the service. If all
 run, check the `locks` bucket and NATS.
 
+<a id="replayerpartitionsunowned"></a>
+
+### ReplayerPartitionsUnowned
+Fewer of the 32 `WEB_EVENTS` partitions than all have an owner for 5 minutes
+(`replayer_partitions` minus the sum of `replayer_partitions_owned`). The
+visitors of the unowned partitions wait; the others are delivered. A replayer
+that stops hands its partitions over within seconds, and a killed one's are
+taken within about a minute (15 s lock ttl and at most the 30 s ack wait).
+Action: `docker compose ps replayer` and `docker compose logs --since 15m
+replayer` on every core node. Each replayer logs `partition assignment
+changed` with the members it sees and `lock acquired` for each partition it
+takes. A replayer that cannot read the `locks` bucket logs `partition
+membership not refreshed`; check NATS quorum
+([edge-node-failure.md](edge-node-failure.md)). The partitions of a node that
+stays down are taken by the others after its member key expires.
+
 ### ReplayerUmamiProcessIdle
 One of the umami processes of a core node (`core_umami_processes`) stored no
-event for 15 minutes while the replayer leader on that node sent more than
-one event a second to the others. The visitors routed to that process wait
+event for 15 minutes while the replayer on that node sent more than one event
+a second to the others. The visitors routed to that process wait
 in their lanes and their events queue in `WEB_EVENTS`; nothing is lost.
 Action: `docker compose ps` on the node and `docker compose logs umami-<n>`
 (process 0 is the service `umami`, process n is `umami-<n+1>`); restart it.
