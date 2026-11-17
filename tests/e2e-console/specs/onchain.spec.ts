@@ -225,3 +225,110 @@ test("an operator sees the column, exports the rows on screen and reads the deta
     await ctx.close();
   }
 });
+
+// calls per contract function (contract 15.9): a declared contract that is
+// not verified counts nowhere, so it shows no calls and every day says why;
+// an account has no functions. the routes keep to their tenant
+const CONTRACT = "CBQDHNBFBZYE4MKPWBSJOPIYLW4SFSXAXUTSXJN76GNKYVYPCKWC6QUK";
+
+type Functions = {
+  kind: string;
+  verified: boolean;
+  functions: unknown[];
+  days: { day: string; state: string | null; missing: string | null }[];
+};
+
+test("an unverified contract shows no calls per function, and the routes keep to the project", async ({
+  browser,
+}) => {
+  const { page, ctx } = owner;
+  const added = await api<{ id: string }>(ctx, "POST", `/api/tenants/${tenant.id}/onchain/ids`, {
+    strkey: CONTRACT,
+  });
+  expect(added.status).toBe(201);
+  const contractId = added.body.id;
+  const view = await api<{ ids: { id: string; strkey: string; functions: unknown }[] }>(
+    ctx,
+    "GET",
+    `/api/tenants/${tenant.id}/onchain`,
+  );
+  for (const id of view.body.ids) expect(id.functions).toBeNull();
+  const accountId = view.body.ids.find((x) => x.strkey === ACCOUNT)?.id ?? "";
+
+  await page.goto(`${APP}/projects/${tenant.id}/onchain`);
+  const block = page.getByRole("region", { name: `Calls per function of ${CONTRACT}` });
+  await expect(block).toContainText("Calls per function show once the contract is verified");
+  await expect(block.getByRole("table")).toHaveCount(0);
+
+  const fns = await api<Functions>(
+    ctx,
+    "GET",
+    `/api/tenants/${tenant.id}/onchain/ids/${contractId}/functions`,
+  );
+  expect(fns.status).toBe(200);
+  expect(fns.body.kind).toBe("contract");
+  expect(fns.body.verified).toBe(false);
+  expect(fns.body.functions).toEqual([]);
+  expect(fns.body.days).toHaveLength(30);
+  for (const d of fns.body.days) {
+    expect(d.state).toBeNull();
+    expect(d.missing).toBe("not_verified");
+  }
+  const acct = await api<Functions>(
+    ctx,
+    "GET",
+    `/api/tenants/${tenant.id}/onchain/ids/${accountId}/functions`,
+  );
+  expect(acct.body.kind).toBe("account");
+  expect(acct.body.days[0]?.missing).toBe("not_a_contract");
+
+  const csv = await ctx.request.get(
+    `${APP}/api/tenants/${tenant.id}/onchain/ids/${contractId}/functions.csv`,
+  );
+  expect(csv.status()).toBe(200);
+  expect(csv.headers()["content-type"]).toBe("text/csv; charset=utf-8");
+  expect((await csv.text()).trim().split("\n")).toEqual([
+    "day,strkey,function,caller,day_state,day_missing,successful,failed,accounts",
+  ]);
+
+  // another project's member gets 404 on both routes
+  const intruder = await browser.newContext();
+  try {
+    await signIn(await intruder.newPage(), newUser("onchain-fn-intruder"));
+    for (const path of [
+      `/api/tenants/${tenant.id}/onchain/ids/${contractId}/functions`,
+      `/api/tenants/${tenant.id}/onchain/ids/${contractId}/functions.csv`,
+    ]) {
+      const r = await api(intruder, "GET", path);
+      expect(r.status, path).toBe(404);
+      expect(JSON.stringify(r.body)).not.toContain(CONTRACT);
+    }
+  } finally {
+    await intruder.close();
+  }
+
+  // an operator reads the same answer and its export
+  const op = await browser.newContext();
+  try {
+    const opPage = await op.newPage();
+    await signIn(opPage, OPERATOR);
+    await operatorStepUp(opPage, OPERATOR);
+    const r = await api<Functions>(
+      op,
+      "GET",
+      `/api/operator/tenants/${tenant.id}/onchain/ids/${contractId}/functions`,
+    );
+    expect(r.status).toBe(200);
+    expect(r.body).toEqual(fns.body);
+    const file = await op.request.get(
+      `${APP}/api/operator/tenants/${tenant.id}/onchain/ids/${contractId}/functions.csv`,
+    );
+    expect(file.status()).toBe(200);
+    await opPage.goto(`${APP}/operator/tenants/${tenant.id}`);
+    await expect(
+      opPage.getByRole("region", { name: `Calls per function of ${CONTRACT}` }),
+    ).toContainText("Calls per function show once the contract is verified");
+  } finally {
+    await op.close();
+  }
+});
