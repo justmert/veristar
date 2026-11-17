@@ -1,9 +1,9 @@
 ---
 title: "Terms of use"
 description: "The terms of use that every project accepts when it enrolls."
-version: 2026-11-16-draft.4
+version: 2026-11-17-draft.5
 status: draft
-effective: 2026-11-16
+effective: 2026-11-17
 ---
 
 
@@ -23,7 +23,7 @@ effective: 2026-11-16
   not process the data of a tenant's website visitors or API clients. It
   receives the project statistics of section 1.1.
 - **Tenant**: a project enrolled in the service, represented by the console
-  accounts (GitHub accounts or Stellar wallets) that are members of it.
+  accounts (GitHub accounts, Stellar wallets or passkeys) that are members of it.
 - For the data of a tenant's website visitors and API clients, the tenant is the
   **controller** and the hosting operator is the **processor** for that tenant.
   The hosting operator processes that data only to provide the service,
@@ -63,18 +63,29 @@ There is no billing, no paid tier, no advertising and no sale or resale of data.
   key, the visitor's opt-out flag, and honours Global Privacy Control. On a
   site that turns on Wallets Kit capture with the script tag, it also reads
   the names of the site's local storage keys and the kit's selected wallet id
-  (`privacy-strategy.md` section 6).
+  (`privacy-strategy.md` section 6). From tracker 1.3.0 the tracker no
+  longer reads the screen size or the browser language, and it sends the page
+  title only when the site turns that on with the script tag.
+- **Tracker file requests**: when a browser loads the tracker file, the
+  gateway reads the request's `Referer` and `Sec-GPC` headers in memory to
+  attribute the request to one site, and keeps only two per-site, per-day
+  counts: requests, and requests that carry Global Privacy Control. They
+  estimate the share of visits the tracker does not measure.
 - **IP addresses are never stored.** The ingestion gateway reads a visitor's
   address only in memory, shortens it, looks up the country in the DB-IP
   database, and discards it.
 - Visitors are counted with a **daily visitor token** derived from a secret that
   changes every UTC day and is never written to disk. After the day ends, nobody
   can recompute a token, so stored visits cannot be linked to a person.
-- **APIs**: request counts and latency histograms only, as aggregates. Traces,
+- **APIs**: request counts and latency histograms only, as aggregates.
+  Preflight, health check and uptime probe requests are counted separately
+  from application requests. Traces,
   spans and logs that applications send are discarded and never kept.
 - Console accounts: the numeric GitHub user id and GitHub login of a GitHub
-  sign-in, and the Stellar account address (public key) of a wallet sign-in.
-  No email address, no password and no private key.
+  sign-in, the Stellar account address (public key) of a wallet sign-in, and
+  the credential id, public key and smart account address of a passkey
+  sign-in. No email address, no password, no private key and no biometric
+  data, which never leaves the person's device.
 
 ## 4. Acceptable use
 

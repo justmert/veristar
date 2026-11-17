@@ -141,6 +141,11 @@ here, before they take effect, as the processing terms require
 
 ### Changed
 
+- Terms of use `2026-11-17-draft.5`: passkeys as a console sign-in method
+  and the data a passkey sign-in stores, the fields tracker 1.3.0 no longer
+  reads, the per-site counts of tracker file requests behind the estimate of
+  visits not measured, and the separate count of preflight, health check and
+  probe API requests. Every project accepts it at its next sign-in.
 - The core tier must be upgraded before the edge tier again: older jobs
   daemons refuse the new `signal_<name>` and `script_<name>` counters on
   `EDGE_STATS`, and older gateways refuse the events of tracker 1.3.0.

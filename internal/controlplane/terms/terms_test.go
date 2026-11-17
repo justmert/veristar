@@ -10,7 +10,7 @@ import (
 func TestEmbeddedTerms(t *testing.T) {
 	tm, err := Current()
 	require.NoError(t, err)
-	require.Equal(t, "2026-11-16-draft.4", tm.Version)
+	require.Equal(t, "2026-11-17-draft.5", tm.Version)
 	require.Equal(t, "draft", tm.Status)
 	require.True(t, strings.HasPrefix(tm.Markdown, "# Terms of use"))
 	require.NotContains(t, tm.Markdown, "version:")
