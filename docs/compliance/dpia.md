@@ -7,7 +7,7 @@ description: "The data protection impact assessment for cookieless web analytics
 The service, as processor, prepares this assessment to help tenants
 (controllers) with their own assessment under GDPR Art. 35. Each tenant decides
 with its counsel whether a DPIA is mandatory for it. This page is not legal
-advice. Last updated 2026-11-14.
+advice. Last updated 2026-11-17.
 
 ## 1. Description
 

@@ -41,13 +41,28 @@ By enrolling a project and accepting these terms, the tenant instructs the
 hosting operator to make aggregate statistics about the project available to
 SCF, so that SCF can follow the projects it funds and the ecosystem as a whole.
 
-- What SCF receives: per site and UTC day, counts of page views, visitors,
-  visits and bounces, total time, and the ranked referrer hosts, countries,
-  devices, browsers and operating systems; per API service, hourly and daily
-  request counts, status classes and latency histograms.
+- What SCF receives:
+  - per site and UTC day, counts of page views, visitors, visits and
+    bounces, total time, and the ranked referrer hosts, countries, devices,
+    browsers and operating systems;
+  - per site and UTC day, the integrity grade, its reasons and the counts it
+    is computed from: accepted events per network class, distinct networks,
+    quarantined and proof-failed requests, visitors, page views, the
+    baseline, and the page signal counts of tracker 1.3.0 (page views that
+    report signals, framed page views, pages left without being visible);
+  - per site and UTC day, the requests for the tracker file and the part of
+    them that carried Global Privacy Control, which estimate the share of
+    visits that is not measured;
+  - per API service, hourly and daily request counts, status classes and
+    latency histograms, with application requests apart from preflight,
+    health check and uptime probe requests;
+  - per declared Stellar account or contract and UTC day, counts of
+    operations, transactions and distinct counterparties, and per ISO week
+    the project's count of weekly active accounts.
 - What SCF does not receive: raw events, sessions, visitor tokens, page-level
-  event data, the project's web dashboard, or the console accounts of the tenant's
-  members. No row SCF receives describes one visitor or one API client.
+  event data, network keys, the keyed hashes of active accounts, the project's
+  web dashboard, or the console accounts of the tenant's members. No row SCF
+  receives describes one visitor, one API client or one active account.
 - The instruction lasts as long as the project is enrolled. It ends when the
   project is removed; the aggregates then follow section 6.
 
@@ -72,20 +87,43 @@ There is no billing, no paid tier, no advertising and no sale or resale of data.
   counts: requests, and requests that carry Global Privacy Control. They
   estimate the share of visits the tracker does not measure.
 - **IP addresses are never stored.** The ingestion gateway reads a visitor's
-  address only in memory, shortens it, looks up the country in the DB-IP
-  database, and discards it.
+  address only in memory, for the request, and discards it. With the whole
+  address it computes the daily visitor token below and compares the address
+  with the list of Tor exit addresses. It shortens the address to its /24
+  (IPv4) or /48 (IPv6) network to look up the country and the autonomous
+  system in the local DB-IP databases, and keys its rate limits and its
+  same-network checks on an HMAC of that network under a secret that changes
+  every UTC day. Only the country, a network class (access, organisation,
+  hosting, anonymiser or unknown) counted per site and day, and once per site
+  and day an HMAC of the autonomous system number under the same daily secret
+  leave the request.
 - Visitors are counted with a **daily visitor token** derived from a secret that
   changes every UTC day and is never written to disk. After the day ends, nobody
   can recompute a token, so stored visits cannot be linked to a person.
 - **APIs**: request counts and latency histograms only, as aggregates.
   Preflight, health check and uptime probe requests are counted separately
-  from application requests. Traces,
-  spans and logs that applications send are discarded and never kept.
+  from application requests; the collector reads the request's user agent in
+  memory for that and never stores it. Traces, spans and logs that
+  applications send are discarded and never kept.
+- **On-chain activity**: for the Stellar accounts and contracts a project
+  declares and proves, three counts per id and UTC day (operations,
+  transactions, distinct counterparties) and one count of weekly active
+  accounts per ISO week. While a week is open, the accounts behind its count
+  are held only as keyed hashes under a random key for that week; the hashes
+  and the key are deleted when the week closes. No counterparty address is
+  stored.
 - Console accounts: the numeric GitHub user id and GitHub login of a GitHub
   sign-in, the Stellar account address (public key) of a wallet sign-in, and
   the credential id, public key and smart account address of a passkey
   sign-in. No email address, no password, no private key and no biometric
   data, which never leaves the person's device.
+- Operators: the roster row of each operator identity (GitHub id and login,
+  or Stellar address), its role, status, status reason and enrollment window;
+  the passkeys an operator adds for the operator area (credential id, public
+  key, name, creation and last use); the time of the last step-up, in the
+  session. They are deleted when an operator admin removes the person from
+  the roster or the person deletes the account
+  (`docs/compliance/erasure.md` section 7).
 
 ## 4. Acceptable use
 
