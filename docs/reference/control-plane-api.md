@@ -4272,7 +4272,11 @@ The control plane reads the same aggregates as "What SCF sees" (16.3),
 writes the report in its canonical JSON form, signs those bytes with the
 platform's report key with SEP-53 and stores both in `cp.usage_reports`
 (migration 00036). A stored report never changes: a trigger refuses any
-change of its body, signature, signer, period or author for every role. The
+change of its body, signature, signer, period or author for every role. A
+revocation is fixed once written (migration 00043): `revoked_at` is the
+database's time of the revoking statement whatever the writer names, and
+neither it nor `revoked_by` changes afterwards, except that deleting the
+revoking user clears `revoked_by`. The
 format, the canonical form and offline verification are in
 [usage-reports.md](usage-reports.md).
 
