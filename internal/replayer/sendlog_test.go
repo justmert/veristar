@@ -108,6 +108,8 @@ type orderReport struct {
 	stored int
 	// repeats counts sends of an event umami had already stored
 	repeats int
+	// repeated describes each repeat: the event, the nodes and the times
+	repeated []string
 	// outOfOrder lists events stored after a later event of their visitor
 	outOfOrder []string
 	// overlaps lists sends of one visitor that ran at the same time
@@ -144,6 +146,7 @@ func (l *sendLog) checkOrder() orderReport {
 		last := -1
 		nodes := map[string]bool{}
 		seen := map[int]bool{}
+		first := map[int]sendEntry{}
 		for _, e := range es {
 			if e.status != http.StatusOK {
 				continue
@@ -152,6 +155,14 @@ func (l *sendLog) checkOrder() orderReport {
 			rep.stored++
 			rep.byNode[e.node]++
 			nodes[e.node] = true
+			if seen[j] {
+				f := first[j]
+				rep.repeated = append(rep.repeated, fmt.Sprintf("%s: %s %s-%s, then %s %s-%s", e.path,
+					f.node, f.start.Format("15:04:05.000"), f.end.Format("15:04:05.000"),
+					e.node, e.start.Format("15:04:05.000"), e.end.Format("15:04:05.000")))
+			} else {
+				first[j] = e
+			}
 			switch {
 			case seen[j] && j == last:
 				rep.repeats++

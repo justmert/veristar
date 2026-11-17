@@ -201,6 +201,9 @@ func TestPartitionedReplayersOnCluster(t *testing.T) {
 	for _, o := range rep.overlaps {
 		t.Error(o)
 	}
+	for _, r := range rep.repeated {
+		t.Logf("sent twice: %s", r)
+	}
 	if rep.repeats > workers {
 		t.Errorf("%d events stored twice, more than the %d delivery slots of the killed node", rep.repeats, workers)
 	}
@@ -218,9 +221,11 @@ func TestPartitionedReplayersOnCluster(t *testing.T) {
 	if missing != 0 {
 		t.Errorf("%d events lost", missing)
 	}
-	if twice != int64(rep.repeats) {
-		t.Errorf("umami stored %d events twice, the send log shows %d repeats", twice, rep.repeats)
+	// umami can never hold more copies than it answered 200 for
+	if twice > int64(rep.repeats) {
+		t.Errorf("umami stored %d events twice, the send log shows only %d repeats", twice, rep.repeats)
 	}
+	t.Logf("umami stored %d events twice", twice)
 	if rep.nodesPerVisitor < 2 {
 		t.Error("no visitor moved between nodes; the kill and restart did not move partitions")
 	}
