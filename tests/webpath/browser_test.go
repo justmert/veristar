@@ -189,14 +189,14 @@ type LoggedEvent struct {
 	Status int    `json:"status"`
 	Origin string `json:"origin"`
 	Body   struct {
-		W  string `json:"w"`
-		T  string `json:"t"`
-		U  string `json:"u"`
-		R  string `json:"r"`
-		N  string `json:"n"`
+		W string `json:"w"`
+		T string `json:"t"`
+		U string `json:"u"`
+		R string `json:"r"`
+		N string `json:"n"`
 		// Fr is the frame flag of tracker 1.3.0
-		Fr bool `json:"fr"`
-		TS int64  `json:"ts"`
+		Fr bool  `json:"fr"`
+		TS int64 `json:"ts"`
 	} `json:"body"`
 }
 
