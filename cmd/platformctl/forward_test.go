@@ -110,8 +110,8 @@ func TestQueueForward(t *testing.T) {
 	var wantWeb, wantAPI, wantStats []string
 	for i := range 25 {
 		id, body := fmt.Sprintf("ev-%d", i), fmt.Sprintf(`{"n":%d}`, i)
-		publishWithID(t, ctx, gateway, "web.events.site-a", id, body)
-		wantWeb = append(wantWeb, "web.events.site-a "+id+"="+body)
+		publishWithID(t, ctx, gateway, "web.events.site-a.09", id, body)
+		wantWeb = append(wantWeb, "web.events.site-a.09 "+id+"="+body)
 	}
 	for i := range 7 {
 		id, body := fmt.Sprintf("batch-%d", i), fmt.Sprintf("metrics %d", i)
@@ -154,15 +154,15 @@ func TestQueueForward(t *testing.T) {
 	// points at it) goes the same way; one the target already holds (a
 	// crash between the target's ack and the source ack) is stored once
 	t.Run("late events and a repeated id", func(t *testing.T) {
-		publishWithID(t, ctx, gateway, "web.events.site-a", "ev-late", `{"late":true}`)
+		publishWithID(t, ctx, gateway, "web.events.site-a.09", "ev-late", `{"late":true}`)
 		// the target stored ev-dup before the source ack was lost
-		publishWithID(t, ctx, newAdmin, "web.events.site-a", "ev-dup", `{"dup":true}`)
-		publishWithID(t, ctx, gateway, "web.events.site-a", "ev-dup", `{"dup":true}`)
+		publishWithID(t, ctx, newAdmin, "web.events.site-a.09", "ev-dup", `{"dup":true}`)
+		publishWithID(t, ctx, gateway, "web.events.site-a.09", "ev-dup", `{"dup":true}`)
 		out, err := run("forward", "--queues", "web", "--until-empty", "--idle", "1s")
 		require.NoError(t, err)
 		require.Contains(t, out, "web=2")
 		got := streamBodies(t, ctx, newAdmin, natsx.StreamWebEvents)
-		require.Equal(t, append(wantWeb, `web.events.site-a ev-dup={"dup":true}`, `web.events.site-a ev-late={"late":true}`), got)
+		require.Equal(t, append(wantWeb, `web.events.site-a.09 ev-dup={"dup":true}`, `web.events.site-a.09 ev-late={"late":true}`), got)
 		require.Empty(t, streamBodies(t, ctx, oldAdmin, natsx.StreamWebEvents))
 	})
 
@@ -170,7 +170,7 @@ func TestQueueForward(t *testing.T) {
 	// consumer; the forwarder must not split the queue with it
 	t.Run("refuses while the replayer still pulls", func(t *testing.T) {
 		replayer := oldEnv.js(t, natsx.ServiceReplayer)
-		c, err := replayer.Consumer(ctx, natsx.StreamWebEvents, natsx.ConsumerReplayer)
+		c, err := replayer.Consumer(ctx, natsx.StreamWebEvents, natsx.ConsumerPartition(9))
 		require.NoError(t, err)
 		done := make(chan error, 1)
 		go func() {
@@ -193,10 +193,10 @@ func TestQueueForward(t *testing.T) {
 
 	// a target without the stream refuses before anything moves
 	t.Run("target without the topology", func(t *testing.T) {
-		publishWithID(t, ctx, gateway, "web.events.site-a", "ev-kept", `{"kept":true}`)
+		publishWithID(t, ctx, gateway, "web.events.site-a.09", "ev-kept", `{"kept":true}`)
 		require.NoError(t, newAdmin.DeleteStream(ctx, natsx.StreamWebEvents))
 		_, err := run("forward", "--queues", "web", "--until-empty", "--idle", "1s")
 		require.ErrorContains(t, err, "target stream WEB_EVENTS")
-		require.Equal(t, []string{`web.events.site-a ev-kept={"kept":true}`}, streamBodies(t, ctx, oldAdmin, natsx.StreamWebEvents))
+		require.Equal(t, []string{`web.events.site-a.09 ev-kept={"kept":true}`}, streamBodies(t, ctx, oldAdmin, natsx.StreamWebEvents))
 	})
 }
