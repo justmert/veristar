@@ -24,7 +24,8 @@ start the control plane:
 1. makes each listed identity an active operator admin of the roster (audit `operator.bootstrap`,
    actor `system:startup`, written only when a row was inserted or changed);
 2. opens a first-passkey window of `OPERATOR_ENROLL_WINDOW` (default 24 hours) for each listed
-   identity whose account holds no passkey;
+   identity whose account holds no passkey for the operator area (a sign-in passkey counts only
+   when the listed identity is that passkey's address);
 3. recomputes every account's operator flag (audit `user.operator_sync` for each change);
 4. refuses to start when the roster has no active operator admin.
 
@@ -95,8 +96,9 @@ they are a member of. Their earlier operator actions stay in the audit log.
 **An operator lost every passkey.** An operator admin selects **Reset passkeys** on the person's
 row. The passkeys they added for the operator area are deleted, their sessions end and a new 24-hour
 window opens. The person signs in again and registers a new passkey. A sign-in passkey is one of the
-account's identities and stays; if it is the lost one, the person unlinks it on the **Account** page
-after signing in another way.
+account's identities and stays; if it is the lost one, the person signs in another way, registers
+the new passkey (which confirms the session) and then unlinks the lost one on the **Account** page,
+which needs that confirmation on an operator account.
 
 **No operator admin can open the operator area** (every admin lost their passkeys, left, or is
 unreachable):

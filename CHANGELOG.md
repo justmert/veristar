@@ -367,8 +367,26 @@ here, before they take effect, as the processing terms require
 - `golang.org/x/crypto` 0.59.0 carries the fix for GO-2026-5932
   (`x/crypto/openpgp`, never imported here); govulncheck reports no
   vulnerability in either Go module.
+- An operator account changes its sign-in methods (link or unlink GitHub, a
+  wallet or a passkey) only after a passkey step-up; the account page asks
+  for it. A sign-in passkey steps up only when the roster names its address,
+  so a passkey linked from a stolen session never opens the operator area,
+  and unlinking the last step-up passkey answers 409 `last_passkey`.
+- An ended console session stays ended: a request still running during a
+  sign-out, a roster suspension, removal or passkey reset, or an account
+  deletion no longer writes the session back. A token renewal at a step-up
+  keeps the sign-in's 7-day deadline instead of starting a new one.
+- The console cookies carry the `__Host-` prefix (`__Host-sa_session`,
+  `__Host-sa_oauth`, `__Host-sa_stellar`, `__Host-sa_passkey`, all at
+  `Path=/`), so no other host of the domain can set them.
 
 ### Upgrade notes
+
+- The session cookie is renamed to `__Host-sa_session`. The control plane no
+  longer reads `sa_session`, so everyone signs in again once after the
+  upgrade; the old cookie expires on its own. A sign-in that is in progress
+  during the upgrade (GitHub, wallet or passkey) starts again from the
+  sign-in page.
 
 - Infrastructure requests are counted apart from the moment migration 00040
   runs (`traffic_classes.applied_from` in the overview answer). Data stored
