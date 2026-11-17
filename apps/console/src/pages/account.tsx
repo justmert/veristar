@@ -20,6 +20,13 @@ import { WalletPicker } from "@/components/wallet-picker";
 import { connectWallet, shortAddress, signTransaction } from "@/lib/stellar-wallet";
 import { queryClient } from "@/query-client";
 
+// an operator account confirms identity changes with its operator passkey
+// first (contract 5.15); the control plane answers step_up_required until it
+// has a fresh confirmation
+function needsStepUp(err: unknown): boolean {
+  return err instanceof ApiError && err.code === "step_up_required";
+}
+
 // the typed confirmation of an account deletion: the github login, or the
 // whole address of a wallet or passkey account without one, exactly, so a stray click
 // or a paste of something else cannot delete an account
@@ -159,11 +166,17 @@ function SignInMethods({ me }: { me: Me }) {
   const both =
     [github_login, stellar_address, passkey_address].filter((m) => m !== null).length > 1;
 
+  // the change that waits for a passkey confirmation, if any
+  const [stepUp, setStepUp] = useState<"unlink" | "link" | null>(null);
+
   const unlink = useMutation({
     mutationFn: api.unlinkIdentity,
     onSuccess: async () => {
       setUnlinking(null);
       await qc.invalidateQueries({ queryKey: meQuery.queryKey });
+    },
+    onError: (err) => {
+      if (needsStepUp(err)) setStepUp("unlink");
     },
   });
 
@@ -177,6 +190,11 @@ function SignInMethods({ me }: { me: Me }) {
       description="Each method signs in to this same account. Link a second one to keep access if you lose the first; an account always keeps at least one."
     >
       <div className="flex flex-col gap-4">
+        {both ? null : (
+          <p id="unlink-note" className="text-small text-fg-2">
+            Unlink is off while this is your only sign-in method. Link another method first.
+          </p>
+        )}
         {linkError ? (
           <p
             role="alert"
@@ -184,7 +202,7 @@ function SignInMethods({ me }: { me: Me }) {
           >
             <CircleX aria-hidden className="mt-0.5 size-3.5 shrink-0 text-critical" />
             {LINK_ERRORS[linkError] ??
-              "Linking GitHub failed on our side. Try again; if it keeps failing, report it."}
+              "The service could not finish linking GitHub. Try again; if it keeps failing, report it to the operators."}
           </p>
         ) : null}
         {linked === "github" ? (
@@ -216,7 +234,7 @@ function SignInMethods({ me }: { me: Me }) {
                   variant="outline"
                   size="sm"
                   disabled={!both}
-                  title={both ? undefined : "Link another method before you unlink this one"}
+                  aria-describedby={both ? undefined : "unlink-note"}
                   onClick={() => {
                     unlink.reset();
                     setUnlinking("github");
@@ -251,7 +269,7 @@ function SignInMethods({ me }: { me: Me }) {
                   variant="outline"
                   size="sm"
                   disabled={!both}
-                  title={both ? undefined : "Link another method before you unlink this one"}
+                  aria-describedby={both ? undefined : "unlink-note"}
                   onClick={() => {
                     unlink.reset();
                     setUnlinking("stellar");
@@ -291,7 +309,7 @@ function SignInMethods({ me }: { me: Me }) {
                   variant="outline"
                   size="sm"
                   disabled={!both}
-                  title={both ? undefined : "Link another method before you unlink this one"}
+                  aria-describedby={both ? undefined : "unlink-note"}
                   onClick={() => {
                     unlink.reset();
                     setUnlinking("passkey");
@@ -325,9 +343,35 @@ function SignInMethods({ me }: { me: Me }) {
         userName={me.user.display_name}
         challenge={api.linkPasskeyChallenge}
         verify={async (answer) => {
-          await api.linkPasskey(answer);
+          try {
+            await api.linkPasskey(answer);
+          } catch (err) {
+            // the created passkey stays in this dialog; after the
+            // confirmation its button links it with a fresh challenge
+            if (needsStepUp(err)) setStepUp("link");
+            throw err;
+          }
           await qc.invalidateQueries({ queryKey: meQuery.queryKey });
           setPasskey(false);
+        }}
+      />
+
+      <PasskeyDialog
+        open={stepUp !== null}
+        onOpenChange={(o) => {
+          if (!o) setStepUp(null);
+        }}
+        mode="confirm"
+        title="Confirm it is you"
+        description="Your account holds operator access, so changing its sign-in methods needs a confirmation with your operator passkey."
+        userName=""
+        challenge={() => operatorsApi.stepUpChallenge()}
+        verify={async (answer) => {
+          const s = await operatorsApi.stepUp(answer);
+          await steppedUp(s);
+          const waiting = stepUp;
+          setStepUp(null);
+          if (waiting === "unlink" && unlinking) unlink.mutate(unlinking);
         }}
       />
 

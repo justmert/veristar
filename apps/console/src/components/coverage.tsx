@@ -42,19 +42,27 @@ export function CoverageNote({
   );
 }
 
-// the list column: the share, or a dash with the counts in the tooltip
+// the list column: the share, or a dash when there are too few loads, with
+// the counts behind it on a second line. shown, not left to a hover title,
+// so keyboard and screen reader users read the meaning too
 export function CoverageCell({ coverage }: { coverage: CoverageEstimate }) {
-  const title = `${formatCount(coverage.gpc_requests)} of ${formatCount(coverage.script_requests)} tracker loads with Global Privacy Control`;
-  if (coverage.unmeasured_share === null) {
-    return (
-      <span className="text-fg-3" title={title} data-col="unmeasured_share">
-        –
-      </span>
-    );
-  }
+  const loads = `${formatCount(coverage.gpc_requests)} of ${formatCount(coverage.script_requests)} loads with GPC`;
+  const none = coverage.unmeasured_share === null;
   return (
-    <span title={title} data-col="unmeasured_share">
-      {formatShare(coverage.unmeasured_share)}
+    <span className="inline-flex flex-col items-end">
+      <span className={none ? "text-fg-3" : undefined} data-col="unmeasured_share">
+        {none ? (
+          <>
+            <span aria-hidden>–</span>
+            <span className="sr-only">no estimate</span>
+          </>
+        ) : (
+          formatShare(coverage.unmeasured_share)
+        )}
+      </span>
+      <span className="font-sans text-caption text-fg-3" data-testid="coverage-detail">
+        {none ? `too few loads, ${loads}` : loads}
+      </span>
     </span>
   );
 }

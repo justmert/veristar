@@ -346,12 +346,71 @@ describe("passkey identities (contract 4.1.8, 4.2.5)", () => {
     expect(calls[1]?.method).toBe("DELETE");
   });
 
+  it("confirms with the operator passkey when the change needs a step-up, then unlinks", async () => {
+    const both = {
+      ...passkeyMe,
+      user: {
+        ...passkeyMe.user,
+        github_id: 1234567,
+        github_login: "octocat",
+        display_name: "octocat",
+      },
+    };
+    const stepped = {
+      stepped_up: true,
+      stepped_up_at: "2026-11-16T10:00:00Z",
+      expires_at: "2026-11-16T11:00:00Z",
+      max_age_seconds: 3600,
+      passkeys: 1,
+      sign_in_passkey: true,
+      enrollment: "closed",
+      enrollment_until: null,
+    };
+    const calls = stubFetch([
+      { status: 200, body: both },
+      { status: 401, body: f.errorBody("step_up_required") },
+      { status: 200, body: challenge },
+      { status: 200, body: stepped },
+      { status: 204 },
+      { status: 200, body: f.meBody },
+    ]);
+    const host = await renderRoutes([{ path: "/account", element: <AccountPage /> }], "/account");
+    await waitFor(() => expect(host.textContent).toContain("CBH2…AXAO"));
+    const unlinks = [
+      ...host.querySelectorAll<HTMLButtonElement>("ul[aria-label='Sign-in methods'] button"),
+    ].filter((b) => b.textContent === "Unlink");
+    await click(unlinks[1] as HTMLButtonElement);
+    await click(byRole(dialog(), "button", "Unlink"));
+    const top = () => {
+      const open = [...document.body.querySelectorAll<HTMLElement>("dialog[open]")];
+      const d = open.find((x) => x.textContent?.includes("Confirm it is you"));
+      if (!d) throw new Error("no open dialog");
+      return d;
+    };
+    await waitFor(() => expect(top().textContent).toContain("Confirm it is you"));
+    expect(calls[2]?.url).toBe("/api/operator/step-up/challenge");
+    await waitFor(() =>
+      expect(
+        (byRole(top(), "button", "Confirm with your passkey") as HTMLButtonElement).disabled,
+      ).toBe(false),
+    );
+    await click(byRole(top(), "button", "Confirm with your passkey"));
+    await waitFor(() => expect(calls.length).toBe(6));
+    expect(calls[3]?.url).toBe("/api/operator/step-up");
+    // the unlink runs again once confirmed
+    expect(calls[4]?.url).toBe("/api/me/identities/passkey");
+    expect(calls[4]?.method).toBe("DELETE");
+  });
+
   it("disables unlinking the only passkey", async () => {
     stubFetch([{ status: 200, body: passkeyMe }]);
     const host = await renderRoutes([{ path: "/account", element: <AccountPage /> }], "/account");
     await waitFor(() => expect(host.textContent).toContain("CBH2…AXAO"));
     const unlink = byRole(host, "button", "Unlink") as HTMLButtonElement;
     expect(unlink.disabled).toBe(true);
+    // the reason is shown, not left to a hover title
+    expect(host.textContent).toContain("Unlink is off while this is your only sign-in method.");
+    expect(unlink.getAttribute("aria-describedby")).toBe("unlink-note");
   });
 
   it("invites a passkey account by its C-address", () => {

@@ -101,7 +101,7 @@ export function ApiKeysPage() {
         <p className="max-w-prose text-body text-fg-2">
           Keys give a machine (a warehouse job, a report script, the monitoring prober) read access
           to aggregate metrics under <code className="font-mono text-fg">/api/metrics/v1/</code>. A
-          key works nowhere else, and a console session does not work there. Each key may make 10
+          key works nowhere else, and a console session does not work there. Each key makes up to 10
           requests per second.
         </p>
       </header>

@@ -956,7 +956,7 @@ export function WebTraffic({
         emptyText={
           metric === "accepted"
             ? "Counts appear here a few minutes after the first events arrive."
-            : "Quarantined, bot and rejected events would show here."
+            : "Quarantined, bot and rejected events show here when there are any."
         }
       />
     </div>
