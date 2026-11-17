@@ -212,6 +212,18 @@ Vectors and what limits them:
 - **Pushing real visitors into quarantine.** An attacker sharing an address prefix with real
   visitors (same /24 or /48) can send 20 distinct visitor tokens and quarantine that prefix for
   the site for an hour. Real visitors elsewhere are unaffected.
+- **Lowering the victim's integrity grade with forged page signals.** The never-visible and
+  framed shares of the grade ([bot-and-inflation.md](bot-and-inflation.md) section 9) are counted
+  from what the tracker reports. Outside a browser, `Origin` is a plain header, the site id is
+  public and one solved proof is reused up to the replay limit, so a script can send never-visible
+  notices or page views with `fr: true` for any site. Mitigation: a page view counts toward
+  `signal_views` and `signal_framed` only when it is queued in the primary band, and a notice
+  counts toward `signal_never_visible` only when the per-visitor volume bound and the same-network
+  threshold would have kept it there; a notice that fails them is counted in Prometheus only. One
+  visitor moves the shares by at most `VISITOR_EVENTS_PER_HOUR` signals per hour and one prefix by
+  at most its same-network threshold of visitors. A rival spread over many networks, each under
+  the limits, can still lower the grade to B or C; the reasons name the share that did it, and an
+  operator reads them before relying on a grade.
 - **Claiming the victim's domain.** Sites carry a domain ownership check and a stellar.toml signal
   ([../reference/control-plane-api.md](../reference/control-plane-api.md) sections 5.8 and 5.12). An unverified claim is
   visible to operators. Even an accepted claim gives the rival only its own site id; events of
@@ -221,7 +233,8 @@ Vectors and what limits them:
 
 Proved by: `TestRateLimitSite`, `TestRateLimitPrefixBurstAndRefill`,
 `TestRateLimitPrefixRefusalKeepsSiteTokens`, `TestRateLimitBoundedKeys`
-(`internal/gateway/ratelimit_test.go`); `TestEdgeSecretsCluster` subtest
+(`internal/gateway/ratelimit_test.go`); `TestForgedPageSignalsDoNotMoveTheGrade`
+(`internal/gateway/signals_node_test.go`); `TestEdgeSecretsCluster` subtest
 `quarantine starts at exactly the threshold across three gateways`
 (`internal/gateway/visitor_test.go`); `TestWebPath` subtest `quarantine`
 (`tests/webpath/webpath_test.go`); `TestVerifyRoutes`, `TestCheckDNS`, `TestCheckFile`

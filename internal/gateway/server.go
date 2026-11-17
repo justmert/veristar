@@ -324,10 +324,15 @@ type verdict struct {
 	// today; both are counted on EDGE_STATS beside the outcome
 	class   integrity.NetClass
 	network string
-	// signals are the page signal outcomes of an accepted page view or a
-	// never-visible notice (integrity.Signals)
+	// signals are the page signal outcomes of a page view queued in the
+	// primary band (integrity.Signals)
 	signals []string
 }
+
+// outcomeNoticeQuarantined labels a never-visible notice that failed the
+// ip-cluster or volume check. it goes to prometheus only; the verdict names
+// no site, so EDGE_STATS and the grade never see it.
+const outcomeNoticeQuarantined = "notice_quarantined"
 
 func refused(r Reason, site string) verdict {
 	return verdict{status: r.Status(), outcome: string(r), site: site}
@@ -371,7 +376,9 @@ func (s *Server) event(w http.ResponseWriter, r *http.Request) {
 // and schema, site exists and is active, Sec-GPC, a revoked tracker release,
 // Origin, challenge tag, age and work, replay limit, fetch metadata, rate
 // limits. an event that passes is enriched (visitor token, country, band),
-// sanitized and queued. a proof use taken by the replay check is given back
+// sanitized and queued. a never-visible notice takes the same path up to the
+// band and leaves it there: it is counted when it would have been queued in
+// the primary band, and never queued. a proof use taken by the replay check is given back
 // when a later check refuses the event, so only queued events count.
 func (s *Server) handleEvent(ctx context.Context, r *http.Request) verdict {
 	var used *events.Proof
@@ -445,16 +452,6 @@ func (s *Server) checkEvent(ctx context.Context, r *http.Request, used **events.
 	if s.c.Limiter.Allow(site.ID, pk) != RateAllowed {
 		return refused(ReasonRateLimited, site.ID)
 	}
-	if wire.Type == events.TypeNeverVisible {
-		// the notice passed every check an event passes, so it cannot be
-		// sent for a site from anywhere but its own pages, and costs a proof
-		// like an event. it is counted and never queued: there is no page
-		// view to store. the integrity grade reads it as a share of the
-		// site's page views, so a flood of notices can only lower the
-		// site's own grade.
-		return verdict{status: http.StatusAccepted, outcome: integrity.SignalNeverVisible, site: site.ID}
-	}
-
 	// every browser sends a user agent; the visitor token needs one
 	agent := r.Header.Get("User-Agent")
 	if agent == "" || len(r.Header.Values("User-Agent")) != 1 {
@@ -499,6 +496,19 @@ func (s *Server) checkEvent(ctx context.Context, r *http.Request, used **events.
 	}
 	if s.c.Volume.Observe(site.ID, vt) {
 		quarantine = true
+	}
+	if wire.Type == events.TypeNeverVisible {
+		// a notice is never queued, as there is no page view to store, and it
+		// is not proof that the page was ever shown: origin is a plain header,
+		// the site id is public and a proof can be reused, so any client can
+		// send one. it is counted only when the same ip-cluster and volume
+		// checks that keep an event in the primary band pass, and one that
+		// fails them leaves no trace on EDGE_STATS, so a flood of notices
+		// from one network cannot move the site's never-visible share.
+		if quarantine {
+			return verdict{status: http.StatusAccepted, outcome: outcomeNoticeQuarantined}
+		}
+		return verdict{status: http.StatusAccepted, outcome: integrity.SignalNeverVisible, site: site.ID}
 	}
 
 	// the hostname umami reports is the page's, which the Origin check above
@@ -555,8 +565,11 @@ func (s *Server) checkEvent(ctx context.Context, r *http.Request, used **events.
 	}
 	v := verdict{status: http.StatusAccepted, outcome: outcome, site: site.ID, class: class, network: network}
 	// the framed share is taken of the page views of trackers that can
-	// report a frame, so older releases on the same site do not dilute it
-	if wire.Type == events.TypePageview && integrity.ReportsSignals(wire.SDKVersion) {
+	// report a frame, so older releases on the same site do not dilute it.
+	// only primary band views count: a quarantined view is already judged
+	// not to be a real visit, and counting its frame flag would let one
+	// network push the framed share of any site it can name.
+	if !quarantine && wire.Type == events.TypePageview && integrity.ReportsSignals(wire.SDKVersion) {
 		v.signals = append(v.signals, integrity.SignalViews)
 		if wire.Framed {
 			v.signals = append(v.signals, integrity.SignalFramed)

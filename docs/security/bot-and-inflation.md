@@ -62,16 +62,22 @@ and stops at the first refusal:
 | 1 | Body size (`GATEWAY_MAX_BODY`, 8192 bytes) and wire schema | 413, 400 |
 | 2 | Site exists in the registry and is `active` | 404 |
 | 3 | `Sec-GPC: 1` (Global Privacy Control) | 204, nothing queued |
-| 4 | `Origin` is one of the site's registered origins | 403 |
-| 5 | Challenge age, tag and proof of work | 403 |
-| 6 | Replay limit for that proof on this node | 403 |
-| 7 | Fetch metadata (`Sec-Fetch-Site`, `Sec-Fetch-Mode`, `Sec-Fetch-Dest`) | 403 |
-| 8 | Rate limits per site and per address prefix | 429 |
-| 9 | `User-Agent` present exactly once | 400 |
-| 10 | Network class of the client address | (never refused) |
-| 11 | Same-network skepticism with class-aware thresholds, and the per-visitor volume bound: primary or quarantine band | (never refused) |
+| 4 | The event names a revoked tracker release (`sv`), so a cached or self-hosted copy of it stops counting | 410 |
+| 5 | `Origin` is one of the site's registered origins | 403 |
+| 6 | Challenge age, tag and proof of work | 403 |
+| 7 | Replay limit for that proof on this node | 403 |
+| 8 | Fetch metadata (`Sec-Fetch-Site`, `Sec-Fetch-Mode`, `Sec-Fetch-Dest`) | 403 |
+| 9 | Rate limits per site and per address prefix | 429 |
+| 10 | `User-Agent` present exactly once | 400 |
+| 11 | Network class of the client address | (never refused) |
+| 12 | Same-network skepticism with class-aware thresholds, and the per-visitor volume bound: primary or quarantine band | (never refused) |
 
-Checks 5 and 6 are one call (`ProofVerifier.Verify`, `internal/gateway/proof.go`). The replay
+A never-visible notice (`t: "nv"`) runs checks 1 to 12 like an event and leaves the sequence
+there: it is answered 202 and never queued. It counts as `signal_never_visible` only when check 12
+put it in the primary band; a notice that would have been quarantined is counted in the gateway's
+Prometheus metrics only (`outcome="notice_quarantined"`) and never reaches `EDGE_STATS`.
+
+Checks 6 and 7 are one call (`ProofVerifier.Verify`, `internal/gateway/proof.go`). The replay
 counter moves only for proofs that passed every other part of the check, so forged proofs cannot
 use up a real visitor's allowance. `GET /v1/c` checks the site, `Origin` and fetch metadata
 before it issues a challenge.
@@ -281,15 +287,22 @@ origin, so it passes the origin check and every later one. Tracker 1.3.0 reports
 truthfully: every event of a framed page carries `fr: true`, and a page that is left before it was
 ever visible sends a never-visible notice instead of a page view
 ([../reference/wire-v1.md](../reference/wire-v1.md), "Pages a person can see"). The gateway
-counts, per site and UTC day, the accepted page views of releases that report signals
-(`signal_views`), the framed part (`signal_framed`) and the accepted notices
-(`signal_never_visible`). The framed share is taken of `signal_views` only, so pages still on an
-older release neither dilute nor raise it. A site built to be embedded shows a steady framed share
-and its reason explains the grade; a frame used to inflate a site shows nearly all views framed.
-The signals are the page's own claims: leaving them out (an older release, a modified copy) only
-removes a reason, and sending more of them only lowers the site's own grade. A notice needs the
-site's origin and a solved proof like any event, so it cannot be sent for another site from
-outside its pages.
+counts, per site and UTC day, the page views of releases that report signals queued in the
+primary band (`signal_views`), the framed part of them (`signal_framed`) and the notices that
+passed the same band checks (`signal_never_visible`). The framed share is taken of `signal_views`
+only, so pages still on an older release neither dilute nor raise it. A site built to be embedded
+shows a steady framed share and its reason explains the grade; a frame used to inflate a site
+shows nearly all views framed.
+The signals are the page's own claims, and they are not proof that they came from the site's
+pages: `Origin` is a plain header outside a browser, the site id is public and one solved proof is
+reused up to the replay limit, so any client can send a notice or a framed page view for any site.
+Leaving them out (an older release, a modified copy) only removes a reason. Sending them for
+someone else's site is bounded by the same checks that bound inflation: a quarantined page view
+adds nothing to `signal_views` or `signal_framed`, and a notice counts only when the visitor and
+its prefix are within the volume and same-network limits. One network can therefore move a site's
+shares by about as much as it could add real-looking page views, not by an unbounded flood. The
+residual (many networks each staying under the limits) is the distributed case of section 6 and is
+listed in the threat model.
 A day with fewer than 50 accepted events has no grade; its reason `too_little_traffic` says so.
 The thresholds leave room for real audiences: Safari users behind iCloud Private Relay and people
 on company VPNs arrive from hosting networks, so a share of hosting traffic is normal and only a

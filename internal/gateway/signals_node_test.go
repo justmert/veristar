@@ -2,6 +2,7 @@ package gateway_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"testing"
 	"time"
@@ -186,4 +187,46 @@ func TestScriptRequestsAreCountedPerSite(t *testing.T) {
 	require.Empty(t, got[shared1.ID])
 	require.Empty(t, got[shared2.ID])
 	require.Empty(t, got[paused])
+}
+
+// a client that is not a browser can send notices and framed page views for
+// any site it can name. past the volume check of one visitor, and past the
+// ip-cluster check of one prefix, they stop counting toward the page
+// signals, so the never-visible and framed shares of the grade stop moving.
+func TestForgedPageSignalsDoNotMoveTheGrade(t *testing.T) {
+	e := startNode(t, map[string]string{"VISITOR_EVENTS_PER_HOUR": "5", "IPCLUSTER_THRESHOLD": "3"})
+	s := e.putSite(t, "https://victim.example")
+	c := e.client(t, s, "198.51.100.40")
+	p := proof(t, c, s.ID)
+	notice := map[string]any{"v": 1, "sv": "1.3.0", "w": s.ID, "t": "nv", "h": s.Host, "ts": time.Now().UnixMilli(), "p": p}
+	for range 30 {
+		require.Equal(t, http.StatusAccepted, postRaw(t, c, notice))
+	}
+	require.Equal(t, int64(5), e.edgeCounts(t)[s.ID][integrity.SignalNeverVisible],
+		"one visitor's notices count up to the volume limit only")
+
+	// a second forger in another network sends framed page views
+	f := e.client(t, s, "203.0.113.40")
+	pf := proof(t, f, s.ID)
+	for range 30 {
+		require.Equal(t, http.StatusAccepted, postRaw(t, f, wire13(s.ID, s.Host, pf, func(m map[string]any) { m["fr"] = true })))
+	}
+	got := e.edgeCounts(t)[s.ID]
+	require.Equal(t, int64(5), got[integrity.SignalViews], "quarantined views are not part of the signal base")
+	require.Equal(t, int64(5), got[integrity.SignalFramed], "quarantined views never count as framed")
+	require.Equal(t, int64(25), got["quarantined"])
+
+	// rotating the user agent from one prefix makes new visitors, which the
+	// ip-cluster check catches after its threshold
+	r := e.client(t, s, "192.0.2.40")
+	pr := proof(t, r, s.ID)
+	before := e.edgeCounts(t)[s.ID][integrity.SignalNeverVisible]
+	for i := range 20 {
+		r.Header.Set("User-Agent", fmt.Sprintf("%s rotate/%d", nodeUA, i))
+		require.Equal(t, http.StatusAccepted, postRaw(t, r, map[string]any{"v": 1, "sv": "1.3.0", "w": s.ID, "t": "nv",
+			"h": s.Host, "ts": time.Now().UnixMilli(), "p": pr}))
+	}
+	after := e.edgeCounts(t)[s.ID][integrity.SignalNeverVisible]
+	require.LessOrEqual(t, after-before, int64(3), "notices from one prefix count up to the ip-cluster threshold only")
+	require.Equal(t, uint64(30), e.queuedCount(t), "the framed views are queued, notices never")
 }

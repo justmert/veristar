@@ -128,10 +128,10 @@ type Inputs struct {
 	// BaselineDays earlier days with data; BaselineDaysUsed says how many
 	BaselineVisitors *int64
 	BaselineDaysUsed int
-	// page signals of tracker 1.3.0 on, read by rule version 2: accepted
-	// page views of trackers that report signals, the framed part of them,
-	// and the accepted never-visible notices. all three are the page's own
-	// claims
+	// page signals of tracker 1.3.0 on, read by rule version 2: page views
+	// of trackers that report signals queued in the primary band, the framed
+	// part of them, and the never-visible notices that passed the same band
+	// checks. all three are the page's own claims
 	SignalViews  int64
 	Framed       int64
 	NeverVisible int64

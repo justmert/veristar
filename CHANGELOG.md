@@ -325,6 +325,14 @@ here, before they take effect, as the processing terms require
 - Every web dashboard read passes the membership check, row-level security,
   a site check among the project's own sites, and, for Umami reads, Umami's
   own team check as a second gate. The isolation gate covers all five routes.
+- The page signals of tracker 1.3.0 can no longer be forged in bulk to lower
+  another project's integrity grade. A page view counts toward the framed
+  share only when it is queued in the primary band, and a never-visible
+  notice now passes the same-network and per-visitor volume checks and counts
+  only when an event of that visitor would have stayed in the primary band
+  ([docs/security/bot-and-inflation.md](docs/security/bot-and-inflation.md)
+  section 9, [docs/security/threat-model.md](docs/security/threat-model.md)
+  section 3.4).
 
 - pgx 5.13.0 fixes GHSA-w9rp-vfrh-q8vv, a panic in `Rows.Values` on a
   malformed server response.
