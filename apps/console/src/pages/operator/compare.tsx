@@ -25,7 +25,7 @@ import { DbIpAttribution } from "@/components/dbip-attribution";
 import { ErrorPanel, Loading, StateBlock } from "@/components/error-panel";
 import { CompareIntegrity } from "@/components/integrity";
 import { Stagger, StaggerItem } from "@/components/motion";
-import { StatusDot, statusTone } from "@/components/status";
+import { StatusDot, statusText, statusTone } from "@/components/status";
 import { Button } from "@/components/ui/button";
 import { formatRate, formatSeconds, OPEN_BUCKET } from "@/lib/api-metrics";
 import { formatCount } from "@/lib/format";
@@ -42,6 +42,7 @@ import {
 import { API_NOTES, SourceBadge } from "./global-api";
 import {
   AGGREGATE_NOTE,
+  type CompareHandover,
   cohortText,
   Missing,
   Notes,
@@ -83,6 +84,15 @@ const pctAxis = (v: number) => `${Math.round(v * 1000) / 10}%`;
 
 // the side-by-side view of up to five projects (contract 8.4 and 8.6). with
 // one project it is that project's aggregate drill-down.
+// the global web view over the comparison's range, so the projects found
+// there compare over the same days
+function addSearch(range: { from: string; to: string } | null): string {
+  const p = new URLSearchParams();
+  if (range?.from) p.set("from", range.from);
+  if (range?.to) p.set("to", range.to);
+  return p.toString();
+}
+
 export function ComparePage() {
   const [params, setParams] = useSearchParams();
   const { tenants, range } = readCompare(params);
@@ -158,7 +168,7 @@ export function ComparePage() {
                 ) : null}
                 <span className="inline-flex items-center gap-1 text-caption text-fg-3">
                   <StatusDot tone={statusTone(t.status)} />
-                  <span className="max-sm:sr-only">{t.status}</span>
+                  <span className="max-sm:sr-only">{statusText(t.status)}</span>
                 </span>
                 <Button
                   type="button"
@@ -180,7 +190,14 @@ export function ComparePage() {
             size="sm"
             className="border-dashed text-fg-2 max-lg:h-(--vs-control-touch)"
           >
-            <Link to="/operator/web">
+            <Link
+              to={`/operator/web?${addSearch(resolved)}`}
+              state={
+                {
+                  compare: (refs ?? []).map((t) => ({ id: t.id, name: t.name })),
+                } satisfies CompareHandover
+              }
+            >
               <Plus aria-hidden />
               Add a project
             </Link>
