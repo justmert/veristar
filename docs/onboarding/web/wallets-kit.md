@@ -92,6 +92,8 @@ export async function initKit(): Promise<typeof StellarWalletsKit> {
 }
 ```
 
+With `autoTrack: false`, wallet events are sent only once the tracker has started (`start()`, or
+`start({ automatic: false })` for wallet and chosen events only), from tracker 1.3.1.
 `attachWalletsKit` comes from the package's `wallets-kit` entry (`tracker/wallets-kit` in the
 example) and returns a function that stops the capture. It subscribes to the kit's own events, so
 `wallet_connected` carries the network. Attaching the same kit twice throws, because every event

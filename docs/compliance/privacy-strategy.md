@@ -189,7 +189,11 @@ platform reads from Umami is in `docs/reference/umami-contract.md`.
   - On every site: the value of `umami.disabled`. In default mode it is read
     when the page loads and again before every event. In consent mode
     (`data-auto-track="false"`) nothing is read until the site calls
-    `umami.start()`, and then before every event.
+    `umami.start()`, and then before every event. From tracker 1.3.1 this
+    holds for `umami.track()` as well: a call before `start()` reads nothing
+    and sends nothing (`ignores track() before start(), without reading
+    storage or fetching` in `packages/tracker/test/tracker.test.ts`); 1.3.0
+    and earlier send such a call at once, reading the flag first.
   - Only on a site that turns on Wallets Kit capture with the script tag
     (`data-wallets-kit="true"`), and only once the tracker has started: every
     500 ms, and on each `storage` event raised by another tab of the site, the
@@ -295,7 +299,9 @@ platform reads from Umami is in `docs/reference/umami-contract.md`.
   section 17.5).
 - **Deferred start.** With `data-auto-track="false"` the tracker loads, sends
   nothing and fetches no challenge until the site calls `umami.start()`, for
-  example after consent (`docs/reference/wire-v1.md`).
+  example after consent (`docs/reference/wire-v1.md`). From tracker 1.3.1
+  that includes `umami.track()` calls made before `start()`; with 1.3.0 and
+  earlier such a call sends its event at once.
 - **Erasure** (`erasure.md`): one visitor's visit of the current UTC day, one
   session at any time during raw retention, or a whole site.
 

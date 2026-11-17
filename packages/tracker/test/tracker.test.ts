@@ -234,6 +234,7 @@ describe("long spa sessions", () => {
     gw.replayLimit = 5;
     const w = openPage();
     const t = track(w, { autoTrack: false });
+    t.start({ automatic: false });
     for (let i = 0; i < 12; i++) await t.track(`e${i}`);
     const accepted = gw.events().filter((r) => r.status === 202);
     const refused = gw.events().filter((r) => r.status === 403);
@@ -246,6 +247,7 @@ describe("long spa sessions", () => {
     gw.replayLimit = 0;
     const w = openPage();
     const t = track(w, { autoTrack: false });
+    t.start({ automatic: false });
     await t.track("once");
     // the retry with a fresh proof is refused too, and then the tracker stops
     expect(gw.events().map((r) => r.status)).toEqual([403, 403]);
@@ -349,6 +351,7 @@ describe("custom events", () => {
   it("sends umami.track(name, data) as an ev event", async () => {
     const w = openPage();
     const t = track(w, { autoTrack: false });
+    t.start({ automatic: false });
     await t.track("signup", { plan: "pro", seats: 3, trial: true });
     await waitFor(() => gw.events().length === 1);
     const e = parse(gw.events()[0] as Recorded);
@@ -373,6 +376,7 @@ describe("custom events", () => {
   it("truncates long event names to 50 characters", async () => {
     const w = openPage();
     const t = track(w, { autoTrack: false });
+    t.start({ automatic: false });
     await t.track("n".repeat(80));
     await waitFor(() => gw.events().length === 1);
     expect(parse(gw.events()[0] as Recorded).n).toBe("n".repeat(50));
@@ -381,6 +385,7 @@ describe("custom events", () => {
   it("rejects nested event data and oversized bodies without sending", async () => {
     const w = openPage();
     const t = track(w, { autoTrack: false });
+    t.start({ automatic: false });
     await expect(t.track("x", { a: { b: 1 } } as never)).rejects.toThrow(/event data value/);
     await expect(t.track("x", { a: null } as never)).rejects.toThrow(/event data value/);
     await expect(t.track("x", { a: "nul\u0000" })).rejects.toThrow(/nul character/);
@@ -463,7 +468,7 @@ describe("nothing is sent", () => {
 });
 
 describe("deferred start", () => {
-  it("sends nothing until track() or start() is called", async () => {
+  it("sends nothing until start() is called", async () => {
     const w = openPage({ url: "https://site.example/" });
     const t = track(w, { autoTrack: false });
     await pause(QUIET_MS);
@@ -482,6 +487,60 @@ describe("deferred start", () => {
     await pause(QUIET_MS);
     expect(gw.events()).toHaveLength(2);
   });
+
+  // a consent-gated page calls track() from code that runs before the
+  // visitor answered the banner: nothing may be read, fetched or sent
+  it("ignores track() before start(), without reading storage or fetching (1.3.1)", async () => {
+    const w = openPage({ url: "https://site.example/" });
+    const proto = Object.getPrototypeOf(w.localStorage) as Storage;
+    const getItem = proto.getItem;
+    let reads = 0;
+    proto.getItem = function (this: Storage, key: string) {
+      reads++;
+      return getItem.call(this, key);
+    };
+    try {
+      const t = track(w, { autoTrack: false });
+      let hookCalls = 0;
+      await t.track();
+      await t.track("signup", { plan: "pro" });
+      await t.track((p) => {
+        hookCalls++;
+        return p;
+      });
+      await pause(QUIET_MS);
+      expect(gw.requests).toHaveLength(0);
+      expect(reads).toBe(0);
+      expect(hookCalls).toBe(0);
+
+      t.start();
+      await waitFor(() => gw.events().length === 1);
+      await t.track("signup");
+      await waitFor(() => gw.events().length === 2);
+      expect(gw.events().map((r) => parse(r).t)).toEqual(["pv", "ev"]);
+      expect(reads).toBeGreaterThan(0);
+    } finally {
+      proto.getItem = getItem;
+    }
+  });
+
+  it("start({ automatic: false }) sends only what track() is given", async () => {
+    const w = openPage({ url: "https://site.example/" });
+    const t = track(w, { autoTrack: false });
+    t.start({ automatic: false });
+    await pause(QUIET_MS);
+    expect(gw.requests).toHaveLength(0);
+    w.history.pushState({}, "", "/next");
+    await pause(QUIET_MS);
+    expect(gw.events()).toHaveLength(0);
+    await t.track("chosen");
+    await waitFor(() => gw.events().length === 1);
+    expect(parse(gw.events()[0] as Recorded).n).toBe("chosen");
+    // a later start() does nothing, as after an automatic start
+    t.start();
+    await pause(QUIET_MS);
+    expect(gw.events()).toHaveLength(1);
+  });
 });
 
 describe("gateway failures", () => {
@@ -489,6 +548,7 @@ describe("gateway failures", () => {
     gw.bits = 99;
     const w = openPage();
     const t = track(w, { autoTrack: false });
+    t.start({ automatic: false });
     await t.track("first");
     expect(gw.events()).toHaveLength(0);
     gw.bits = 8;
@@ -628,9 +688,10 @@ describe("counting only pages a person could see (1.3.0)", () => {
     expect(gw.challenges()).toHaveLength(1);
   });
 
-  it("sends no notice for a manual-only page that never started", async () => {
+  it("sends no notice for a manual-only page", async () => {
     const w = openPage({ visibility: "hidden" });
     const t = track(w, { autoTrack: false });
+    t.start({ automatic: false });
     await t.track("manual");
     leave(w);
     await pause(QUIET_MS);

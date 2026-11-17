@@ -12,7 +12,9 @@
 // removed; popstate is tracked; global privacy control stops all sending;
 // tracking can be started later (after consent) with start(); a proof is
 // replaced before the gateway's per-proof limit and after a 403 that says it
-// is used up, and that event is sent once more. from 1.3.0 an automatic
+// is used up, and that event is sent once more; from 1.3.1 a tracker loaded
+// with auto tracking off sends, reads and fetches nothing, track() included,
+// until start(). from 1.3.0 an automatic
 // pageview waits until the page is visible and not prerendered, a page
 // restored from the back/forward cache counts again, a page hidden from load
 // until it is left sends a never-visible notice instead, every event of a
@@ -85,11 +87,18 @@ export type TrackFunction = {
   (fn: (props: Payload) => Payload): Promise<void>;
 };
 
+export type StartOptions = {
+  // false starts only track() and the wallets kit capture, for a site that
+  // sends chosen events and no automatic pageviews. default true.
+  automatic?: boolean;
+};
+
 export type Tracker = {
   track: TrackFunction;
   // starts automatic pageviews, history hooks and click capture. used after
-  // consent when the tracker was loaded with auto tracking off.
-  start: () => void;
+  // consent when the tracker was loaded with auto tracking off; until then
+  // track() does nothing either.
+  start: (options?: StartOptions) => void;
   version: string;
 };
 
@@ -277,8 +286,13 @@ export function createTracker(window: Window, options: TrackerOptions): Tracker 
     return event;
   };
 
+  // a tracker loaded with auto tracking off waits for start(), which a
+  // consent-gated site calls only once the visitor agreed. until then no
+  // event goes out, and the opt-out flag is not read from storage either
+  const waiting = (): boolean => !autoTrack && !initialized;
+
   const send = async (input: Payload | null | undefined): Promise<void> => {
-    if (trackingDisabled()) return;
+    if (waiting() || trackingDisabled()) return;
     let payload = input;
     if (options.beforeSend) payload = await options.beforeSend("event", payload as Payload);
     if (!payload) return;
@@ -339,6 +353,9 @@ export function createTracker(window: Window, options: TrackerOptions): Tracker 
     name?: string | Payload | ((props: Payload) => Payload),
     data?: EventData,
   ): Promise<void> => {
+    // checked before the payload is built, so a track(fn) callback does not
+    // run either
+    if (waiting()) return Promise.resolve();
     try {
       if (typeof name === "string") return send({ ...getPayload(), name, data });
       if (typeof name === "function") return send(name(getPayload()));
@@ -508,14 +525,16 @@ export function createTracker(window: Window, options: TrackerOptions): Tracker 
     );
   };
 
-  const start = () => {
+  const start = (startOptions?: StartOptions) => {
     if (initialized) return;
     initialized = true;
-    watchVisibility();
-    pageview();
-    warmProof();
-    hookHistory();
-    handleClicks();
+    if (startOptions?.automatic !== false) {
+      watchVisibility();
+      pageview();
+      warmProof();
+      hookHistory();
+      handleClicks();
+    }
     // started with tracking, so a consent-gated site does not have the kit's
     // storage read before start(), and checked here because start() can be
     // called for a visitor with gpc, an opt-out or do-not-track honoured:
@@ -525,7 +544,7 @@ export function createTracker(window: Window, options: TrackerOptions): Tracker 
 
   if (autoTrack && !trackingDisabled()) {
     if (document.readyState === "complete") start();
-    else document.addEventListener("readystatechange", start, true);
+    else document.addEventListener("readystatechange", () => start(), true);
   }
 
   return { track, start, version: VERSION };

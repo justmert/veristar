@@ -754,6 +754,18 @@ and pinned by its SRI hash, listed in
 How to check a file against its release:
 [docs/security/verify-tracker.md](docs/security/verify-tracker.md).
 
+### Tracker 1.3.1 - 2026-11-17
+
+- With `data-auto-track="false"`, `umami.track()` before `umami.start()` sends
+  nothing, fetches no challenge, reads no browser storage and runs no
+  `track(fn)` callback, so consent mode measures no one before the site calls
+  `start()`. 1.3.0 sent such a call at once.
+- `umami.start({ automatic: false })` starts `umami.track()` (and the Wallets
+  Kit capture, where turned on) without automatic pageviews, navigation
+  tracking or click capture, for a site that sends only chosen events.
+- Wire format version 1 is unchanged; the gateway needs no update.
+- 9,694 bytes, 4,385 gzip (1.3.0: 9,615 and 4,348, +0.9% gzip).
+
 ### Tracker 1.3.0 - 2026-11-16
 
 - Counts only pages a person can see: a prerendered page on activation, a
