@@ -10,6 +10,19 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 )
 
+// MaxPayload is the largest message, payload and headers, every nats
+// server of the platform accepts: max_payload in the edge role's nats.conf,
+// the dev stack's nats.conf and the test servers. the server default of 1 MiB
+// is below what one otlp export of a few thousand histogram points becomes
+// on API_METRICS, while the collector accepts exports of up to 4 MiB; 8 MiB
+// is the largest value nats-server takes without a warning.
+const MaxPayload = 8 << 20
+
+// HeaderReserve is the part of MaxPayload kept for headers: the message id
+// and, when a message is dead-lettered, the reason and origin headers. a
+// payload that fits MaxPayload minus it can always be moved to a dlq.
+const HeaderReserve = 4 << 10
+
 // ErrNoMsgID is returned by PublishDedup when the message id is empty.
 var ErrNoMsgID = errors.New("natsx: publish without a message id cannot be deduplicated")
 

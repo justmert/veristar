@@ -5,7 +5,9 @@
 // API_METRICS with Nats-Msg-Id set to the sha-256 of the payload, waiting
 // for the acknowledgement. there is no sending queue and no retry inside the
 // collector: the client is answered only after jetstream stored the data, and
-// a failure goes back to the client as Unavailable, which it retries.
+// a failure goes back to the client as Unavailable, which it retries. an
+// export whose part for one tenant exceeds MaxPartBytes is refused as
+// permanent, since no retry could store it.
 package jetstreamexporter
 
 import (
@@ -119,21 +121,54 @@ func (e *metricsExporter) push(ctx context.Context, md pmetric.Metrics) error {
 		// configuration gets fixed.
 		e.log.Error("dropped data outside the published schema", zap.Int("items", dropped))
 	}
+	// an oversize part is refused before anything is published, so a
+	// refused export leaves no part of itself behind
+	for _, p := range parts {
+		if len(p.Data) > MaxPartBytes {
+			e.log.Warn("export refused, larger than the message size limit after filtering",
+				zap.String("tenant_id", p.TenantID), zap.Int("bytes", len(p.Data)), zap.Int("limit", MaxPartBytes))
+			return consumererror.NewPermanent(fmt.Errorf("%w: %d bytes after filtering, the limit is %d; send smaller batches",
+				errTooLarge, len(p.Data), MaxPartBytes))
+		}
+	}
 	e.mu.RLock()
-	js := e.js
+	nc, js := e.nc, e.js
 	e.mu.RUnlock()
 	if js == nil {
 		return status.Error(codes.Unavailable, "jetstream exporter not started")
 	}
 	for _, p := range parts {
-		if err := e.publish(ctx, js, p); err != nil {
+		if err := e.publish(ctx, nc, js, p); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (e *metricsExporter) publish(ctx context.Context, js jetstream.JetStream, p Part) error {
+// MaxPartBytes is the largest payload published for one tenant of one
+// export: the platform's message size limit less the room its headers need
+// (internal/natsx MaxPayload and HeaderReserve). a larger part could never
+// be stored, so the export is refused as permanent (400 over http,
+// InvalidArgument over grpc) instead of being answered 503 and retried
+// forever.
+const MaxPartBytes = natsx.MaxPayload - natsx.HeaderReserve
+
+// errTooLarge marks an export refused for its size after filtering.
+var errTooLarge = errors.New("jetstream exporter: export too large")
+
+func (e *metricsExporter) publish(ctx context.Context, nc *nats.Conn, js jetstream.JetStream, p Part) error {
+	if limit := nc.MaxPayload() - natsx.HeaderReserve; int64(len(p.Data)) > limit {
+		// the server announced a smaller limit than the platform's: a
+		// server not yet reconfigured, or a connection made before its
+		// limit was raised, which keeps the old one until it reconnects.
+		// the export is retried and the connection renewed meanwhile.
+		e.log.Warn("export above the limit the nats server announced, reconnecting",
+			zap.String("tenant_id", p.TenantID), zap.Int("bytes", len(p.Data)), zap.Int64("server_limit", limit))
+		if err := nc.ForceReconnect(); err != nil {
+			e.log.Warn("nats reconnect failed", zap.Error(err))
+		}
+		return status.Error(codes.Unavailable, "metrics queue unavailable, retry later")
+	}
 	ctx, cancel := context.WithTimeout(ctx, e.cfg.PublishTimeout)
 	defer cancel()
 	ack, err := natsx.PublishDedup(ctx, js, natsx.StreamAPIMetrics, natsx.Subject(natsx.SubjectAPIMetrics, p.TenantID), p.MsgID, p.Data, nil)

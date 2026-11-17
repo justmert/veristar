@@ -134,18 +134,18 @@ services:
   nats-1:
     <<: *nats
     network_mode: "service:node-edge-1"
-    command: [--name, edge-1, --cluster_name, sa-obs, --cluster, "nats://0.0.0.0:6222", --routes, "nats://172.30.17.22:6222,nats://172.30.17.23:6222", --jetstream, --store_dir, /data, --http_port, "8222"]
-    volumes: [nats1:/data]
+    command: [--config, /etc/nats/nats.conf, --name, edge-1, --cluster_name, sa-obs, --cluster, "nats://0.0.0.0:6222", --routes, "nats://172.30.17.22:6222,nats://172.30.17.23:6222", --jetstream, --store_dir, /data, --http_port, "8222"]
+    volumes: [nats1:/data, ../../deploy/compose/nats-dev.conf:/etc/nats/nats.conf:ro]
   nats-2:
     <<: *nats
     network_mode: "service:node-edge-2"
-    command: [--name, edge-2, --cluster_name, sa-obs, --cluster, "nats://0.0.0.0:6222", --routes, "nats://172.30.17.21:6222,nats://172.30.17.23:6222", --jetstream, --store_dir, /data, --http_port, "8222"]
-    volumes: [nats2:/data]
+    command: [--config, /etc/nats/nats.conf, --name, edge-2, --cluster_name, sa-obs, --cluster, "nats://0.0.0.0:6222", --routes, "nats://172.30.17.21:6222,nats://172.30.17.23:6222", --jetstream, --store_dir, /data, --http_port, "8222"]
+    volumes: [nats2:/data, ../../deploy/compose/nats-dev.conf:/etc/nats/nats.conf:ro]
   nats-3:
     <<: *nats
     network_mode: "service:node-edge-3"
-    command: [--name, edge-3, --cluster_name, sa-obs, --cluster, "nats://0.0.0.0:6222", --routes, "nats://172.30.17.21:6222,nats://172.30.17.22:6222", --jetstream, --store_dir, /data, --http_port, "8222"]
-    volumes: [nats3:/data]
+    command: [--config, /etc/nats/nats.conf, --name, edge-3, --cluster_name, sa-obs, --cluster, "nats://0.0.0.0:6222", --routes, "nats://172.30.17.21:6222,nats://172.30.17.22:6222", --jetstream, --store_dir, /data, --http_port, "8222"]
+    volumes: [nats3:/data, ../../deploy/compose/nats-dev.conf:/etc/nats/nats.conf:ro]
   etcd-1:
     <<: *etcd
     network_mode: "service:node-edge-1"

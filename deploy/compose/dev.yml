@@ -35,9 +35,10 @@ services:
 
   nats:
     image: nats:2.15.3-alpine@sha256:558394a23dd3c36f2d3a64b51865fd09908010e80a542cea5e75c2af543ed62a
-    command: ["--name", "dev-1", "--jetstream", "--store_dir", "/data", "--http_port", "8222"]
+    command: ["--config", "/etc/nats/nats.conf", "--name", "dev-1", "--jetstream", "--store_dir", "/data", "--http_port", "8222"]
     volumes:
       - natsdata:/data
+      - ./nats-dev.conf:/etc/nats/nats.conf:ro
     ports:
       - "127.0.0.1:4222:4222"
       - "127.0.0.1:8222:8222"

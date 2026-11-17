@@ -25,6 +25,8 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	tcnetwork "github.com/testcontainers/testcontainers-go/network"
 	"github.com/testcontainers/testcontainers-go/wait"
+
+	"github.com/justmert/veristar/internal/natsx"
 )
 
 // RepoRoot returns the repository root, found from this file's location.
@@ -133,10 +135,10 @@ func start(t testing.TB, name string, o options) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	cmd := []string{"--name", name, "--jetstream", "--store_dir", "/data", "--http_port", "8222"}
-	if o.config != "" {
-		cmd = append(cmd, "--config", "/etc/nats/test.conf")
-	}
+	// every test server takes the platform's message size limit, as the
+	// edge role's and the dev stack's servers do
+	config := "max_payload: " + strconv.Itoa(natsx.MaxPayload) + "\n" + o.config
+	cmd := []string{"--name", name, "--jetstream", "--store_dir", "/data", "--http_port", "8222", "--config", "/etc/nats/test.conf"}
 	cmd = append(cmd, o.args...)
 	loopback := netip.MustParseAddr("127.0.0.1")
 	opts := []testcontainers.ContainerCustomizer{
@@ -151,9 +153,9 @@ func start(t testing.TB, name string, o options) (*Server, error) {
 		testcontainers.WithWaitStrategy(wait.ForHTTP("/healthz?js-enabled-only=true").
 			WithPort("8222/tcp").WithStartupTimeout(time.Minute)),
 	}
-	if o.config != "" {
+	{
 		opts = append(opts, testcontainers.WithFiles(testcontainers.ContainerFile{
-			Reader:            strings.NewReader(o.config),
+			Reader:            strings.NewReader(config),
 			ContainerFilePath: "/etc/nats/test.conf",
 			FileMode:          0o644,
 		}))

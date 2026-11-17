@@ -5,6 +5,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -185,6 +187,28 @@ func TestPublishToJetStream(t *testing.T) {
 		t.Fatal("Nats-Msg-Id is not the payload sha-256")
 	}
 
+	// an export of 3 MiB is stored; one larger than the message limit is
+	// refused as permanent, since no retry could store it, and nothing of it
+	// is published
+	if err := exp.ConsumeMetrics(ctx, bigExport(tenant, 3<<20)); err != nil {
+		t.Fatalf("3 MiB export: %v", err)
+	}
+	other := uuid.NewString()
+	huge := bigExport(other, MaxPartBytes+1)
+	histogram(huge, tenant, schema.MetricDuration, "s", map[string]any{schema.AttrRoute: "/beside-huge"})
+	if err := exp.ConsumeMetrics(ctx, huge); !consumererror.IsPermanent(err) || !errors.Is(err, errTooLarge) {
+		t.Fatalf("oversize export: %v", err)
+	}
+	for sub, want := range map[string]uint64{natsx.Subject(natsx.SubjectAPIMetrics, tenant): 2, natsx.Subject(natsx.SubjectAPIMetrics, other): 0} {
+		info, err := stream.Info(ctx, jetstream.WithSubjectFilter(sub))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := info.State.Subjects[sub]; got != want {
+			t.Fatalf("%s holds %d messages, want %d", sub, got, want)
+		}
+	}
+
 	// unstamped data is a permanent error, not a retry
 	bad := pmetric.NewMetrics()
 	histogram(bad, "", schema.MetricDuration, "s", nil)
@@ -221,7 +245,7 @@ func TestPublishToJetStream(t *testing.T) {
 		t.Fatal(err)
 	}
 	// the publish buffered during the outage and the retry share one id
-	if info.State.Msgs != 2 {
+	if info.State.Msgs != 3 {
 		t.Fatalf("after recovery %d messages, want 2", info.State.Msgs)
 	}
 }
@@ -320,6 +344,31 @@ func TestSpanPartsDeduplicateOnRetry(t *testing.T) {
 	if _, _, err := Split(bad); err == nil {
 		t.Error("span point without a minute accepted")
 	}
+}
+
+// bigExport is one tenant's export of at least n bytes after filtering:
+// distinct routes on many points.
+func bigExport(tenant string, n int) pmetric.Metrics {
+	md := pmetric.NewMetrics()
+	rm := md.ResourceMetrics().AppendEmpty()
+	rm.Resource().Attributes().PutStr(schema.ResTenantID, tenant)
+	rm.Resource().Attributes().PutStr(schema.ResTokenID, uuid.NewString())
+	m := rm.ScopeMetrics().AppendEmpty().Metrics().AppendEmpty()
+	m.SetName(schema.MetricDuration)
+	m.SetUnit("s")
+	h := m.SetEmptyHistogram()
+	h.SetAggregationTemporality(pmetric.AggregationTemporalityDelta)
+	route := strings.Repeat("r", 900)
+	for i := 0; i*1000 < n; i++ {
+		dp := h.DataPoints().AppendEmpty()
+		dp.SetCount(1)
+		dp.ExplicitBounds().FromRaw(schema.Bounds)
+		bc := make([]uint64, 15)
+		bc[2] = 1
+		dp.BucketCounts().FromRaw(bc)
+		dp.Attributes().PutStr(schema.AttrRoute, "/"+route+strconv.Itoa(i))
+	}
+	return md
 }
 
 func pcommonTS(t time.Time) pcommon.Timestamp { return pcommon.NewTimestampFromTime(t) }
