@@ -141,8 +141,10 @@ test("the operator reads the column and the export", async () => {
   const row = page.locator(`tbody tr[data-tenant="${tenant.id}"]`);
   await expect(row).toBeVisible();
   const cell = row.locator("[data-col=unmeasured_share]");
-  await expect(cell).toHaveText("–");
-  await expect(cell).toHaveAttribute("title", "1 of 3 tracker loads with Global Privacy Control");
+  await expect(cell).toHaveText("–no estimate");
+  await expect(row.getByTestId("coverage-detail")).toHaveText(
+    "too few loads, 1 of 3 loads with GPC",
+  );
   await page.getByRole("button", { name: "Not measured", exact: true }).click();
   await page.waitForURL(/sort=unmeasured_share/);
   await page.screenshot({ path: join(shots, "global-web.png") });

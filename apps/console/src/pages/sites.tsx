@@ -546,7 +546,7 @@ export function SitesPage() {
             </Button>
           }
         >
-          It may have been deleted.
+          The site was deleted, or it belongs to another project.
         </StateBlock>
       );
     return (

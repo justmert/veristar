@@ -25,6 +25,7 @@ import {
 import {
   AGGREGATE_NOTE,
   COHORT_NOTE,
+  COVERAGE_NOTE,
   CohortLine,
   CompareBar,
   FiltersPanel,
@@ -285,7 +286,16 @@ export function GlobalWebPage() {
         ) : null}
       </div>
 
-      <Notes items={[VISITORS_NOTE, QUARANTINE_NOTE, REJECTED_NOTE, COHORT_NOTE, AGGREGATE_NOTE]}>
+      <Notes
+        items={[
+          VISITORS_NOTE,
+          QUARANTINE_NOTE,
+          REJECTED_NOTE,
+          COVERAGE_NOTE,
+          COHORT_NOTE,
+          AGGREGATE_NOTE,
+        ]}
+      >
         <DbIpAttribution className="mt-1" />
       </Notes>
     </section>

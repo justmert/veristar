@@ -828,6 +828,8 @@ export const QUARANTINE_NOTE =
   "Quarantined traffic came from an address range that sent more distinct visitors to a site within an hour than the limit allows (shared networks such as carrier NAT, VPNs and offices also trip it). It is kept in a separate band and never mixed into the numbers above; the share is quarantined page views over all page views.";
 export const REJECTED_NOTE =
   "Rejected requests were refused by the gateway (invalid proof, wrong origin, rate limits, and browsers asking not to be tracked with Global Privacy Control); the share is rejected over all requests the gateway answered.";
+export const COVERAGE_NOTE =
+  "Not measured is the estimated share of visits from browsers with Global Privacy Control (GPC), which load the tracker but are never measured. It is the share of tracker loads that carried the signal; below 100 loads the column shows a dash and no estimate.";
 export const AGGREGATE_NOTE =
   "Every number here comes from daily aggregates. Web numbers are copied from Umami once an hour; API numbers from the daily rollup, refreshed every 5 minutes.";
 

@@ -239,8 +239,8 @@ export function PipelineDown() {
       }
     >
       The always-firing Watchdog alert is missing from Alertmanager. Prometheus is not evaluating
-      the alert rules or cannot reach Alertmanager, so alerts that should fire may not be listed
-      here.
+      the alert rules or cannot reach Alertmanager, so this list can miss alerts that fire. Treat it
+      as incomplete until the Watchdog is back.
     </Notice>
   );
 }

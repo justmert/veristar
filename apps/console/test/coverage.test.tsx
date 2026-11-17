@@ -47,10 +47,14 @@ describe("coverage estimate (contract 17.5)", () => {
       "Of 2,400 loads of the tracker file, 288 carried the signal.",
     );
     const cells = [...host.querySelectorAll('[data-col="unmeasured_share"]')];
-    expect(cells.map((c) => c.textContent)).toEqual(["12%", "–"]);
-    expect(cells[1]?.getAttribute("title")).toBe(
-      "3 of 40 tracker loads with Global Privacy Control",
-    );
+    expect(cells.map((c) => c.textContent)).toEqual(["12%", "–no estimate"]);
+    // the meaning of the dash and the counts are visible text, not a title
+    const details = [...host.querySelectorAll('[data-testid="coverage-detail"]')];
+    expect(details.map((d) => d.textContent)).toEqual([
+      "288 of 2,400 loads with GPC",
+      "too few loads, 3 of 40 loads with GPC",
+    ]);
+    expect(host.querySelector("[title]")).toBeNull();
   });
 
   it("is part of the integrity panel a project and its operators see", async () => {

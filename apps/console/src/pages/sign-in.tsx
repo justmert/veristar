@@ -19,7 +19,8 @@ const SIGN_IN_ERRORS: Record<string, string> = {
   rate_limited: "Too many sign-ins right now. Wait a few seconds and start again.",
   exchange_failed: "GitHub did not confirm the sign-in. Start again from this page.",
   github_unavailable: "GitHub could not be reached. Try again in a moment.",
-  internal: "Sign-in failed on our side. Try again; if it keeps failing, report it.",
+  internal:
+    "The service could not finish the sign-in. Try again; if it keeps failing, report it to the operators.",
 };
 
 // same rule as the control plane (contract 4.1.1): a console path, never a
