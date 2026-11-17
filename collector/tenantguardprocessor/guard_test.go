@@ -228,8 +228,8 @@ func spans() ptrace.Traces {
 		sp.SetKind(kind)
 		sp.SetName(name)
 		_ = sp.Attributes().FromRaw(attrs)
-		sp.SetStartTimestamp(pcommon.Timestamp(1_000_000_000))
-		sp.SetEndTimestamp(pcommon.Timestamp(1_250_000_000))
+		sp.SetStartTimestamp(pcommon.Timestamp(61_000_000_000))
+		sp.SetEndTimestamp(pcommon.Timestamp(61_250_000_000))
 		sp.Events().AppendEmpty().SetName("event-marker")
 		sp.Links().AppendEmpty().Attributes().PutStr("link", "link-marker")
 		sp.Status().SetMessage("status-marker")
@@ -488,8 +488,8 @@ func TestTracesCarryBatchIDAndEndMinute(t *testing.T) {
 	}
 	sp := out.ResourceSpans().At(0).ScopeSpans().At(0).Spans().At(0)
 	v, ok := sp.Attributes().Get(schema.AttrSpanMinute)
-	// the spans end at 1.25 s after the epoch, in the first minute
-	if !ok || v.Type() != pcommon.ValueTypeInt || v.Int() != 0 {
+	// the spans end 61.25 s after the epoch, in the second minute
+	if !ok || v.Type() != pcommon.ValueTypeInt || v.Int() != int64(time.Minute) {
 		t.Errorf("span minute %v", v.AsRaw())
 	}
 	end := pcommon.NewTimestampFromTime(time.Date(2026, 11, 13, 10, 7, 59, 900, time.UTC))
@@ -558,8 +558,8 @@ func TestTrafficClass(t *testing.T) {
 	td := ptrace.NewTraces()
 	sp := td.ResourceSpans().AppendEmpty().ScopeSpans().AppendEmpty().Spans().AppendEmpty()
 	sp.SetKind(ptrace.SpanKindServer)
-	sp.SetStartTimestamp(pcommon.Timestamp(1_000_000_000))
-	sp.SetEndTimestamp(pcommon.Timestamp(1_250_000_000))
+	sp.SetStartTimestamp(pcommon.Timestamp(61_000_000_000))
+	sp.SetEndTimestamp(pcommon.Timestamp(61_250_000_000))
 	sp.Attributes().PutStr("http.request.method", "GET")
 	sp.Attributes().PutStr("http.route", "/actuator/health/liveness")
 	sp.Attributes().PutStr("user_agent.original", "Mozilla/5.0")
