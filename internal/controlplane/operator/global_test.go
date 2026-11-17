@@ -832,3 +832,60 @@ func TestGlobalCompare(t *testing.T) {
 		require.Equal(t, http.StatusBadRequest, code)
 	})
 }
+
+// infrastructure requests (health checks, preflights, probes) count only in
+// infrastructure_requests: a project that has nothing else has no API data,
+// and routes and services only infrastructure requests reached are not
+// counted or used to order the compare services.
+func TestGlobalAPIInfrastructureOnly(t *testing.T) {
+	f := newGlobalFixture(t)
+	rq := f.rangeQuery()
+	project := func(name string) APIProject {
+		t.Helper()
+		code, body := f.get(t, "/api/operator/api/projects?"+rq+"&q="+name)
+		require.Equal(t, http.StatusOK, code, string(body))
+		items := decode[GlobalList[APIProject]](t, body).Items
+		require.Len(t, items, 1)
+		return items[0]
+	}
+	auroraBefore := project("aurora")
+	dune, aurora := f.tenants["dune"], f.tenants["aurora"]
+	var health [15]int64
+	health[0] = 100_000
+	for _, row := range []struct {
+		tenant         uuid.UUID
+		service, route string
+	}{
+		{dune, "api", "/healthz"},
+		{aurora, "api", "/healthz"},
+		// a service only health checks reach, with far more requests than
+		// any application service of the project
+		{aurora, "sidecar", "/livez"},
+	} {
+		superExec(t, f.pg, `insert into api.metrics_daily (tenant_id, bucket_start, service, method, route, status_code, source, traffic_class, counts, sum, count, lossy)
+			values ($1, $2, $3, 'GET', $4, 200, 'metric', 'health', $5, 1, 100000, false)`, row.tenant, f.today, row.service, row.route, health[:])
+	}
+
+	d := project("dune")
+	require.False(t, d.HasAPIData, "infrastructure requests alone are no API data")
+	require.Equal(t, int64(0), d.Requests)
+	require.Equal(t, int64(100_000), d.InfrastructureRequests)
+	require.Equal(t, [3]int64{0, 0, 0}, [3]int64{d.Services, d.Routes, d.SpanServices})
+	code, body := f.get(t, "/api/operator/api/projects?"+rq+"&has_api_data=true&q=dune")
+	require.Equal(t, http.StatusOK, code)
+	require.Empty(t, decode[GlobalList[APIProject]](t, body).Items)
+
+	a := project("aurora")
+	require.Equal(t, auroraBefore.InfrastructureRequests+200_000, a.InfrastructureRequests)
+	require.Equal(t, [3]int64{auroraBefore.Services, auroraBefore.Routes, auroraBefore.SpanServices},
+		[3]int64{a.Services, a.Routes, a.SpanServices}, "infrastructure-only routes and services are not counted")
+
+	code, body = f.get(t, "/api/operator/api/compare?"+rq+"&tenants="+aurora.String())
+	require.Equal(t, http.StatusOK, code, string(body))
+	services := decode[APICompare](t, body).Projects[0].Services
+	require.NotEmpty(t, services)
+	require.NotEqual(t, "sidecar", services[0].Service, "services are ordered by application requests")
+	for j := 1; j < len(services); j++ {
+		require.GreaterOrEqual(t, services[j-1].Requests, services[j].Requests)
+	}
+}

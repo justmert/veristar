@@ -92,19 +92,30 @@ var apiRouteKeys = keyset{
 	casts: []string{"uuid", "timestamptz", "text", "text", "text"},
 }
 
-// bucketSelect groups the chosen rows per tenant and bucket.
+// bucketSelect groups the chosen rows per tenant and bucket. a bucket
+// exists for any request, so one with only infrastructure requests has
+// requests 0; services counts the services with application requests, as
+// every other api number does, and the source of such a bucket is the one
+// of its infrastructure rows.
 const bucketSelect = `
-select tenant_id, bucket_start, count(distinct service)::bigint,
+select tenant_id, bucket_start,
+       (count(distinct service) filter (where traffic_class = 'app'))::bigint,
+       (count(distinct service) filter (where source = 'span' and traffic_class = 'app'))::bigint,
+       count(distinct service)::bigint,
        (count(distinct service) filter (where source = 'span'))::bigint,
        coalesce(bool_or(lossy) filter (where traffic_class = 'app'), false),` + numbersCols + `
 from c group by tenant_id, bucket_start`
 
 func scanBucket(row pgx.CollectableRow, at *time.Time) (MachineAPIBucket, error) {
 	var b MachineAPIBucket
-	if err := scanNumbers(&b.APINumbers, row.Scan, &b.TenantID, at, &b.Services, &b.SpanServices, &b.Lossy); err != nil {
+	var all, allSpan int64
+	if err := scanNumbers(&b.APINumbers, row.Scan, &b.TenantID, at, &b.Services, &b.SpanServices, &all, &allSpan, &b.Lossy); err != nil {
 		return b, err
 	}
 	src := source(b.Services, b.SpanServices)
+	if src == nil {
+		src = source(all, allSpan)
+	}
 	if src == nil {
 		// a group exists only for rows, so it has at least one service
 		return b, fmt.Errorf("api bucket of tenant %s without a service", b.TenantID)
