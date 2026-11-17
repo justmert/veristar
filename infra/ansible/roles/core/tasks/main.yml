@@ -16,6 +16,10 @@
       # also checks each checksum)
       - (sa_operator_stellar_addresses | default('') | string) is match('^([GC][A-Z2-7]{55}(,[GC][A-Z2-7]{55})*)?$')
       - (sa_report_signing_retired_keys | default('') | string) is match('^(G[A-Z2-7]{55}(,G[A-Z2-7]{55})*)?$')
+      # go durations; the control plane refuses a value outside 5m to 24h
+      # and 10m to 168h at start
+      - (sa_operator_step_up_max_age | default('12h') | string) is match('^[0-9]+(m|h)$')
+      - (sa_operator_enroll_window | default('24h') | string) is match('^[0-9]+(m|h)$')
       - not core_oauth_fixture or sa_environment == 'local'
       - core_umami_processes | int >= 1
       # the metrics writer accepts points as old as API_METRICS keeps
@@ -29,7 +33,8 @@
       core needs the secrets role first, OPERATOR_GITHUB_IDS as
       sa_operator_github_ids, sa_operator_stellar_addresses empty or a comma
       separated list of G-addresses and C-addresses, sa_report_signing_retired_keys empty or
-      a comma separated list of G-addresses, acme dns-01 outside the local converge, the
+      a comma separated list of G-addresses, sa_operator_step_up_max_age and
+      sa_operator_enroll_window as minutes or hours (30m, 12h), acme dns-01 outside the local converge, the
       oauth fixture only in the local converge, between 1 and
       REPLAYER_WORKERS umami processes (core_umami_processes), and
       core_api_minute_retention_days of at least 8
