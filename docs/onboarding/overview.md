@@ -45,6 +45,8 @@ To sign in with GitHub, a Stellar wallet or a passkey, and to link them to one a
 | [Go](api/go.md) | `net/http` |
 | [Python](api/python.md) | FastAPI, including `OTEL_SEMCONV_STABILITY_OPT_IN` |
 | [Rust](api/rust.md) | actix-web |
+| [Java](api/java.md) | Spring Boot and other JVM services, with the OpenTelemetry Java agent |
+| [Stellar Anchor Platform](api/anchor-platform.md) | the Anchor Platform's SEP server and platform server |
 | [Setting http.route](api/http-route.md) | making requests group by route instead of by raw path |
 | [Fan-out from your own Collector](api/collector-fanout.md) | apps that already export to an OpenTelemetry Collector |
 | [What gets dropped](api/what-gets-dropped.md) | which of your data the platform keeps and which it discards |
@@ -66,8 +68,8 @@ Each guide is backed by an example that runs in the test suites:
   test gateway.
 - The Wallets Kit guide is backed by `TestWalletsKit` in `tests/webpath`, which runs the full chain
   into Umami.
-- The API guides are backed by `tests/otelapps`, which runs the four example apps and the fan-out
-  collector against stock collectors, and, with the `apipath` build tag, against the platform's own
+- The API guides are backed by `tests/otelapps`, which runs the five example apps, the Stellar
+  Anchor Platform and the fan-out collector against stock collectors, and, with the `apipath` build tag, against the platform's own
   collector.
 
 ## Help
