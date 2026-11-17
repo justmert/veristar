@@ -3,7 +3,9 @@ package tenantguardprocessor
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
+	"hash"
 	"slices"
 	"strconv"
 	"strings"
@@ -153,6 +155,57 @@ func storable(s string) bool {
 	return true
 }
 
+// identity hashing: every field is length-prefixed, so no two different
+// inputs give the same byte string
+func hashField(h hash.Hash, s string) {
+	var n [8]byte
+	binary.BigEndian.PutUint64(n[:], uint64(len(s)))
+	h.Write(n[:])
+	h.Write([]byte(s))
+}
+
+// hashMap writes attrs in key order, each key with its value's type and
+// value, so the int 200 and the string "200" differ.
+func hashMap(h hash.Hash, attrs pcommon.Map) {
+	keys := make([]string, 0, attrs.Len())
+	for k := range attrs.All() {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+	hashField(h, strconv.Itoa(len(keys)))
+	for _, k := range keys {
+		v, _ := attrs.Get(k)
+		hashField(h, k)
+		hashField(h, strconv.Itoa(int(v.Type())))
+		hashField(h, v.AsString())
+	}
+}
+
+// scopeIdentity is the hash input of an instrumentation scope, taken
+// before clearScope empties it: the same metric recorded by two libraries
+// is two streams.
+func scopeIdentity(s pcommon.InstrumentationScope) []byte {
+	h := sha256.New()
+	hashField(h, s.Name())
+	hashField(h, s.Version())
+	hashMap(h, s.Attributes())
+	return h.Sum(nil)
+}
+
+// streamID is the scf.stream value of a cumulative point: 128 bits of a
+// sha-256 over its scope, the metric's name and unit as received (the
+// legacy name is renamed only after tenantguard) and the point's original
+// attributes. it is the same on every export of the stream and differs
+// between any two streams the attribute rewriting would merge.
+func streamID(scope []byte, m pmetric.Metric, attrs pcommon.Map) string {
+	h := sha256.New()
+	h.Write(scope)
+	hashField(h, m.Name())
+	hashField(h, m.Unit())
+	hashMap(h, attrs)
+	return hex.EncodeToString(h.Sum(nil)[:16])
+}
+
 func clearScope(s pcommon.InstrumentationScope) {
 	s.SetName("")
 	s.SetVersion("")
@@ -257,6 +310,22 @@ func normalizeAttrs(attrs pcommon.Map) int64 {
 	return flags
 }
 
+// normalizePoint normalizes a data point's attributes and gives a
+// cumulative point its stream id, hashed from the attributes it arrived
+// with. the id is written after normalizeAttrs cleared the map, so a
+// tenant-supplied scf.stream is gone and only the computed one remains.
+func normalizePoint(scope []byte, m pmetric.Metric, cumulative bool, attrs pcommon.Map) int64 {
+	var id string
+	if cumulative {
+		id = streamID(scope, m, attrs)
+	}
+	flags := normalizeAttrs(attrs)
+	if cumulative {
+		attrs.PutStr(schema.AttrStream, id)
+	}
+	return flags
+}
+
 // keepMetric reports whether a tenant metric may continue: one of the two
 // duration names, a histogram type and a duration unit. the span-derived
 // name is refused here because only the connector, after this processor,
@@ -301,6 +370,7 @@ func (g *guard) processMetrics(ctx context.Context, md pmetric.Metrics) (pmetric
 		var flags int64
 		rm.SetSchemaUrl("")
 		rm.ScopeMetrics().RemoveIf(func(sm pmetric.ScopeMetrics) bool {
+			scope := scopeIdentity(sm.Scope())
 			clearScope(sm.Scope())
 			sm.SetSchemaUrl("")
 			dup := dupLegacy(sm.Metrics())
@@ -312,18 +382,20 @@ func (g *guard) processMetrics(ctx context.Context, md pmetric.Metrics) (pmetric
 				m.Metadata().Clear()
 				switch m.Type() {
 				case pmetric.MetricTypeHistogram:
+					cumulative := m.Histogram().AggregationTemporality() == pmetric.AggregationTemporalityCumulative
 					dps := m.Histogram().DataPoints()
 					for i := 0; i < dps.Len(); i++ {
 						dp := dps.At(i)
-						flags |= normalizeAttrs(dp.Attributes())
+						flags |= normalizePoint(scope, m, cumulative, dp.Attributes())
 						dp.Exemplars().RemoveIf(func(pmetric.Exemplar) bool { return true })
 					}
 					return dps.Len() == 0
 				default:
+					cumulative := m.ExponentialHistogram().AggregationTemporality() == pmetric.AggregationTemporalityCumulative
 					dps := m.ExponentialHistogram().DataPoints()
 					for i := 0; i < dps.Len(); i++ {
 						dp := dps.At(i)
-						flags |= normalizeAttrs(dp.Attributes())
+						flags |= normalizePoint(scope, m, cumulative, dp.Attributes())
 						dp.Exemplars().RemoveIf(func(pmetric.Exemplar) bool { return true })
 					}
 					return dps.Len() == 0

@@ -136,6 +136,10 @@ func TestDecodeRefuses(t *testing.T) {
 		"app class":     withAttrs(t, good, map[string]any{attrClass: "app"}),
 		"unknown class": withAttrs(t, good, map[string]any{attrClass: "bot"}),
 		"class not str": withAttrs(t, good, map[string]any{attrClass: int64(1)}),
+		// the stream id is the collector's, 16 bytes in hex
+		"short stream id":   withAttrs(t, good, map[string]any{attrStream: "abcd"}),
+		"stream id not hex": withAttrs(t, good, map[string]any{attrStream: strings.Repeat("z", 32)}),
+		"stream id not str": withAttrs(t, good, map[string]any{attrStream: int64(7)}),
 	}
 	for name, data := range cases {
 		if _, err := Decode(tenant, data); !errors.Is(err, ErrUndecodable) {

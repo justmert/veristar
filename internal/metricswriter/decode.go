@@ -33,6 +33,7 @@ const (
 	attrStatusCode = "http.response.status_code"
 	attrLossy      = "scf.lossy"
 	attrClass      = "scf.traffic.class"
+	attrStream     = "scf.stream"
 
 	// flagSecretSeed is bit 1 of scf.flags: a secret seed was redacted
 	flagSecretSeed int64 = 1
@@ -264,6 +265,11 @@ func decodePoint(d *Decoded, dp pmetric.HistogramDataPoint) error {
 				return undecodable("traffic class %s", v.AsString())
 			}
 			d.Class = string(c)
+		case attrStream:
+			// the collector's stream id of a cumulative point: 32 hex digits
+			if b, err := hex.DecodeString(v.AsString()); v.Type() != pcommon.ValueTypeStr || err != nil || len(b) != 16 {
+				return undecodable("stream id %q", v.AsString())
+			}
 		case attrStatusCode:
 			if v.Type() != pcommon.ValueTypeInt || v.Int() < 100 || v.Int() > 599 {
 				return undecodable("status code %s", v.AsString())

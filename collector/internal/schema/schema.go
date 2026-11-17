@@ -59,6 +59,16 @@ const (
 	// out for application traffic, so the streams of application requests
 	// keep the identity they had before the classifier existed.
 	AttrTrafficClass = "scf.traffic.class"
+	// AttrStream tells apart cumulative points that tenantguard's rewriting
+	// made identical inside one resource: two scopes recording the same
+	// metric, or attributes that normalize to the same values (an unknown
+	// method, a long error.type, a dropped attribute). it is a hash of what
+	// the point arrived with, its scope, metric name, unit and original
+	// attributes, so each source stream keeps its own identity in the
+	// writer's stream state. it is computed after the tenant's attributes
+	// are cleared, so a tenant cannot set it. it never becomes a row
+	// dimension. delta points carry none, since each one is counted as it is.
+	AttrStream = "scf.stream"
 )
 
 // user agent attributes read by tenantguard for the traffic class and
@@ -85,7 +95,7 @@ var ResourceAllowed = map[string]bool{
 // PointAllowed lists the data point attributes that may be published.
 var PointAllowed = map[string]bool{
 	AttrMethod: true, AttrRoute: true, AttrStatusCode: true, AttrErrorType: true, AttrLossy: true,
-	AttrTrafficClass: true,
+	AttrTrafficClass: true, AttrStream: true,
 }
 
 // PublishedMetrics lists the metric names that may be published.

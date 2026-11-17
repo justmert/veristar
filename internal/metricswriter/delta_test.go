@@ -2,6 +2,7 @@ package metricswriter
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 )
@@ -383,5 +384,60 @@ func TestEngineSeriesCap(t *testing.T) {
 	o.Tenant = "t2"
 	if _, _, err := s.Apply(&o); err == nil || errors.Is(err, ErrSeriesCap) {
 		t.Fatalf("unloaded tenant: %v", err)
+	}
+}
+
+// two source streams that the collector's attribute rewriting made
+// identical keep apart through their stream ids: the stored total is the
+// sum of both streams' increments, whether their points share a time or
+// not.
+func TestCollidingCumulativeStreams(t *testing.T) {
+	now := int64(1_700_000_000) * sec
+	post := Attr{"http.request.method", "1:POST"}
+	other := Attr{"error.type", "1:_OTHER"}
+	idA, idB := Attr{attrStream, "1:" + strings.Repeat("a", 32)}, Attr{attrStream, "1:" + strings.Repeat("b", 32)}
+	for _, gap := range []int64{0, 1} {
+		s := newState()
+		var total uint64
+		a := []uint64{100, 110, 120, 130}
+		b := []uint64{10, 12, 14, 16}
+		for i := range a {
+			at := now + int64(i+1)*10*sec
+			pa := cum(now, at, bk(a[i]), 0, post, s500, other, idA)
+			pb := cum(now, at+gap, bk(b[i]), 0, post, s500, other, idB)
+			for _, p := range []*Point{&pa, &pb} {
+				c, _, err := s.Apply(p)
+				if err != nil {
+					t.Fatal(err)
+				}
+				total += c.Count
+			}
+		}
+		if total != 146 {
+			t.Errorf("points %d ns apart: stored %d requests, want 146", gap, total)
+		}
+	}
+}
+
+// a stream stored before the collector added stream ids continues from its
+// stored state when its first point with an id arrives, instead of
+// counting the process' history again.
+func TestStreamIDContinuesLegacyState(t *testing.T) {
+	now := int64(1_700_000_000) * sec
+	id := Attr{attrStream, "1:" + strings.Repeat("c", 32)}
+	s := newState()
+	legacy := cum(now, now+60*sec, bk(5000), 50, routeA, get)
+	s.LoadSeries(legacy.Key(), SeriesState{Start: now, Last: now + 60*sec, Count: 5000, Sum: 50, Counts: bk(5000)})
+	s.LoadResource(ResourceKey{Tenant: "t1", ResourceHash: "r1", Start: now}, now+60*sec)
+	runSteps(t, s, []step{
+		{"first point with an id", cum(now, now+120*sec, bk(5007), 51, routeA, get, id), OutcomeIncrement, contrib(bk(7), 1)},
+		{"next", cum(now, now+180*sec, bk(5010), 52, routeA, get, id), OutcomeIncrement, contrib(bk(3), 1)},
+	})
+	p := cum(now, now+180*sec, bk(5010), 52, routeA, get, id)
+	if lk, ok := p.LegacyKey(); !ok || lk != legacy.Key() {
+		t.Fatalf("legacy key %v %v, want %v", lk, ok, legacy.Key())
+	}
+	if p.Key() == legacy.Key() {
+		t.Fatal("the stream id is not part of the key")
 	}
 }

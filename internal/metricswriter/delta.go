@@ -97,7 +97,24 @@ func compareKeys(a, b SeriesKey) int {
 
 // Key returns the stream identity of p.
 func (p *Point) Key() SeriesKey {
-	attrs := slices.Clone(p.Attrs)
+	return p.keyOf(p.Attrs)
+}
+
+// LegacyKey returns the identity p's stream had before the collector gave
+// cumulative points a stream id (scf.stream): the same key without that
+// attribute. ok is false for a point without one. the writer continues a
+// stream stored under its legacy key instead of counting it as new, so
+// the change of identity does not count a process' history a second time.
+func (p *Point) LegacyKey() (SeriesKey, bool) {
+	i := slices.IndexFunc(p.Attrs, func(a Attr) bool { return a.Key == attrStream })
+	if i < 0 {
+		return SeriesKey{}, false
+	}
+	return p.keyOf(slices.Delete(slices.Clone(p.Attrs), i, i+1)), true
+}
+
+func (p *Point) keyOf(attrs []Attr) SeriesKey {
+	attrs = slices.Clone(attrs)
 	slices.SortFunc(attrs, func(a, b Attr) int {
 		if c := compareStrings(a.Key, b.Key); c != 0 {
 			return c
@@ -409,6 +426,18 @@ func (s *State) Apply(p *Point) (Contribution, Outcome, error) {
 	at := Micro(p.Time)
 	rk := ResourceKey{Tenant: p.Tenant, ResourceHash: p.ResourceHash, Start: p.Start}
 	st, known := s.series[key]
+	if !known {
+		if lk, ok := p.LegacyKey(); ok {
+			if legacy, found := s.series[lk]; found {
+				// the stream was followed under its identity from before
+				// stream ids: it continues from that state. it replaces a
+				// stream already counted for the cap, so it adds none
+				c := *legacy
+				s.series[key] = &c
+				st, known = &c, true
+			}
+		}
+	}
 	if !known {
 		// the state the writer keeps per stream is bounded per tenant:
 		// a tenant that keeps inventing streams (a random
