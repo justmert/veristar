@@ -216,9 +216,40 @@ const DEVICE_LABEL: Record<string, string> = {
   tablet: "Tablet",
 };
 
+// the analytics engine's browser keys as people know the browsers
+const BROWSER_LABEL: Record<string, string> = {
+  android: "Android browser",
+  aol: "AOL",
+  bb10: "BlackBerry",
+  chrome: "Chrome",
+  "chromium-webview": "Chrome WebView",
+  crios: "Chrome on iOS",
+  curl: "curl",
+  edge: "Edge (legacy)",
+  "edge-chromium": "Edge",
+  "edge-ios": "Edge on iOS",
+  facebook: "Facebook in-app",
+  firefox: "Firefox",
+  fxios: "Firefox on iOS",
+  ie: "Internet Explorer",
+  instagram: "Instagram in-app",
+  ios: "Safari on iOS",
+  "ios-webview": "iOS WebView",
+  kakaotalk: "KakaoTalk",
+  miui: "MIUI Browser",
+  opera: "Opera",
+  "opera-mini": "Opera Mini",
+  safari: "Safari",
+  samsung: "Samsung Internet",
+  searchbot: "Search bot",
+  silk: "Silk",
+  yandexbrowser: "Yandex Browser",
+};
+
 export function keyLabel(d: WebDimension, key: string): string {
   if (d === "country") return countryName(key);
   if (d === "device") return DEVICE_LABEL[key] ?? key;
+  if (d === "browser") return BROWSER_LABEL[key] ?? key;
   return key;
 }
 

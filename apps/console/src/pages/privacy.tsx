@@ -8,7 +8,7 @@ import { ApiError } from "@/api/client";
 import { api, type ErasureInput } from "@/api/endpoints";
 import { erasureListQuery, erasureRequestQuery, keys, sitesQuery } from "@/api/queries";
 import type { ErasureKind, ErasureRequest, Site } from "@/api/schemas";
-import { webSessionsQuery } from "@/api/web";
+import { type WebBand, webSessionsQuery } from "@/api/web";
 import { ChoiceCard } from "@/components/choice-card";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { ErrorPanel, FormMessage, Loading, StateBlock } from "@/components/error-panel";
@@ -18,6 +18,7 @@ import { projectTabs } from "@/components/nav/nav-items";
 import { NavTabs } from "@/components/nav/nav-tabs";
 import { Notice } from "@/components/notice";
 import { PageHeader, Panel } from "@/components/panel";
+import { Segmented } from "@/components/segmented";
 import { StatusDot, type Tone } from "@/components/status";
 import { Button } from "@/components/ui/button";
 import {
@@ -29,8 +30,10 @@ import {
   userAgentField,
   utcToday,
 } from "@/lib/erasure";
-import { formatCount, formatDate, formatDateTimeUtc } from "@/lib/format";
+import { countOf, formatCount, formatDate, formatDateTimeUtc } from "@/lib/format";
+import { siblingUrl } from "@/lib/hosts";
 import { fieldMessage } from "@/lib/validate";
+import { keyLabel } from "@/lib/web-dashboard";
 import { queryClient } from "@/query-client";
 import { useProject } from "./project-layout";
 
@@ -137,9 +140,9 @@ export function erasureErrorText(err: unknown): string | null {
     case "site_removed":
       return "This site was deleted, and its web data was deleted with it.";
     case "provisioning_pending":
-      return "The dashboards of this site are still being set up, so it holds no web data yet. Try again in a minute.";
+      return "The web analytics of this site are still being set up, so it holds no web data yet. Try again in a minute.";
     case "unavailable":
-      return "The ingestion service could not be reached, so nothing was erased. Try again shortly.";
+      return "The ingestion service does not answer, so nothing was erased. Try again in a minute.";
     default:
       return null;
   }
@@ -273,7 +276,7 @@ function ErasureForm({ tenantId, sites }: { tenantId: string; sites: Site[] }) {
     },
     {
       kind: "site_reset",
-      hint: "Every event and session of this site, in both dashboards, and its aggregates. The site keeps collecting new visits.",
+      hint: "Every event and session of this site, counted and quarantined, and its aggregates. The site keeps collecting new visits.",
     },
   ];
 
@@ -296,7 +299,8 @@ function ErasureForm({ tenantId, sites }: { tenantId: string; sites: Site[] }) {
               name="site"
               className="w-full max-lg:h-(--vs-control-touch)"
               value={values.siteId}
-              onChange={(e) => change({ siteId: e.target.value, confirmDomain: "" })}
+              // a session id belongs to one site; a chosen one does not carry over
+              onChange={(e) => change({ siteId: e.target.value, confirmDomain: "", sessionId: "" })}
               error={errors.siteId}
             >
               {sites.length > 1 ? <option value="">Choose a site</option> : null}
@@ -448,7 +452,7 @@ function ErasureForm({ tenantId, sites }: { tenantId: string; sites: Site[] }) {
           if (!o) send.reset();
         }}
         title={`Reset all web data of ${site?.domain ?? "this site"}?`}
-        description="Every event and session of this site is deleted from both web dashboards, together with its queued undeliverable events and its aggregates. Dashboards start again from zero. This cannot be undone."
+        description="Every event and session of this site is deleted, counted and quarantined traffic alike, together with its queued undeliverable events and its aggregates. The web dashboard starts again from zero for this site. This cannot be undone."
         cancelLabel="Keep the data"
         confirmLabel="Reset site data"
         pendingLabel="Resetting"
@@ -607,10 +611,12 @@ export function HistoryRow({ r, domain }: { r: ErasureRequest; domain: string })
         {r.error ? <p className="text-critical">{r.error}</p> : null}
         {r.status !== "running" ? (
           <p className="text-fg-3">
-            Deleted <span className="tabular">{formatCount(r.sessions_deleted)}</span> session(s),{" "}
-            <span className="tabular">{formatCount(r.events_deleted)}</span> event(s) and{" "}
-            <span className="tabular">{formatCount(r.dlq_messages_deleted)}</span> undeliverable
-            queued message(s).
+            Deleted <span className="tabular">{countOf(r.sessions_deleted, "session")}</span>,{" "}
+            <span className="tabular">{countOf(r.events_deleted, "event")}</span> and{" "}
+            <span className="tabular">
+              {countOf(r.dlq_messages_deleted, "undeliverable queued message")}
+            </span>
+            .
             {r.affected_from
               ? r.reaggregated_at
                 ? ` Daily aggregates were recomputed ${formatDateTimeUtc(r.reaggregated_at)}.`
@@ -624,6 +630,7 @@ export function HistoryRow({ r, domain }: { r: ErasureRequest; domain: string })
 }
 
 function Explanation() {
+  const docs = siblingUrl(window.location.hostname, "docs");
   return (
     <aside aria-labelledby="erasure-explained" className="flex min-w-0 flex-col gap-4">
       <Panel title={<span id="erasure-explained">What can and cannot be erased</span>}>
@@ -655,9 +662,9 @@ function Explanation() {
             <div className="flex flex-col gap-0.5">
               <dt className="font-medium text-fg">Whole site</dt>
               <dd>
-                Deletes every event and session of the site in both dashboards and its aggregates,
-                at any time. Use it when a visitor cannot be identified by either of the other two,
-                or when personal data reached a page address, title or event by mistake.
+                Deletes every event and session of the site, counted and quarantined, and its
+                aggregates, at any time. Use it when a visitor cannot be identified by either of the
+                other two, or when personal data reached a page address, title or event by mistake.
               </dd>
             </div>
           </dl>
@@ -665,8 +672,21 @@ function Explanation() {
             Every request first waits until events of the site that were queued before it are
             stored, so none of them reappear afterwards. Afterwards the affected days of the
             aggregate figures are recomputed. Data in backups stays there until the backups expire.
-            API metrics hold no visitor data and are not affected. The full description is in the
-            service's erasure documentation (docs/compliance/erasure.md).
+            API metrics hold no visitor data and are not affected.{" "}
+            {docs ? (
+              <>
+                The full description is in the{" "}
+                <a
+                  href={`${docs}/compliance/erasure`}
+                  className="rounded-sm text-fg underline underline-offset-2 focus-ring"
+                >
+                  erasure documentation
+                </a>
+                .
+              </>
+            ) : (
+              "The full description is in the erasure documentation of the service."
+            )}
           </p>
         </div>
       </Panel>
@@ -690,22 +710,39 @@ export function SessionFinder({
 }) {
   const [day, setDay] = useState(utcToday(new Date()));
   const [page, setPage] = useState(1);
-  const q = useQuery(webSessionsQuery(tenantId, site.id, day, page));
+  const [band, setBand] = useState<WebBand>("primary");
+  const q = useQuery(webSessionsQuery(tenantId, site.id, day, page, band));
   const pages = q.data ? Math.max(1, Math.ceil(q.data.total / q.data.page_size)) : 1;
   return (
     <fieldset className="flex flex-col gap-3 rounded-md border border-line p-3">
       <legend className="px-1 text-small font-medium text-fg">Find the session</legend>
-      <div className="w-44">
-        <TextField
-          label="Day of the visit (UTC)"
-          type="date"
-          value={day}
-          max={utcToday(new Date())}
-          onChange={(e) => {
-            if (e.target.value) setDay(e.target.value);
-            setPage(1);
-          }}
-        />
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="w-44">
+          <TextField
+            label="Day of the visit (UTC)"
+            type="date"
+            value={day}
+            max={utcToday(new Date())}
+            onChange={(e) => {
+              if (e.target.value) setDay(e.target.value);
+              setPage(1);
+            }}
+          />
+        </div>
+        {site.quarantine_website_id ? (
+          <Segmented<WebBand>
+            label="Traffic"
+            value={band}
+            options={[
+              { value: "primary", label: "Counted" },
+              { value: "quarantine", label: "Quarantined" },
+            ]}
+            onChange={(b) => {
+              setBand(b);
+              setPage(1);
+            }}
+          />
+        ) : null}
       </div>
       {q.isPending ? (
         <Loading label="Loading sessions" />
@@ -732,7 +769,14 @@ export function SessionFinder({
                   </span>
                   <span className="text-fg-2">
                     {formatCount(x.views)} {x.views === 1 ? "page view" : "page views"},{" "}
-                    {[x.browser, x.os, x.device, x.country].filter(Boolean).join(", ")}
+                    {[
+                      x.browser && keyLabel("browser", x.browser),
+                      x.os,
+                      x.device && keyLabel("device", x.device),
+                      x.country && keyLabel("country", x.country),
+                    ]
+                      .filter(Boolean)
+                      .join(", ")}
                   </span>
                   <span className="font-mono text-caption text-fg-3">{x.id}</span>
                 </button>
