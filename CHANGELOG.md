@@ -20,6 +20,20 @@ here, before they take effect, as the processing terms require
 
 ### Added
 
+- API onboarding for Java: the guide
+  [docs/onboarding/api/java.md](docs/onboarding/api/java.md) and the example
+  `examples/otel-java-spring`, Spring Boot 4.1.2 on Java 25 with the
+  OpenTelemetry Java agent 2.33.1, which dual-exports through a declarative
+  configuration file. `tests/otelapps` runs it in every export mode and the
+  `apipath` suite against the platform collector; the console's API analytics
+  setup page has a Java tab.
+- API onboarding for the Stellar Anchor Platform:
+  [docs/onboarding/api/anchor-platform.md](docs/onboarding/api/anchor-platform.md)
+  and `examples/otel-anchor-platform` attach the Java agent to the Anchor
+  Platform 5.0.0 SEP server and platform server, with request metrics to the
+  platform and traces to the anchor's own backend. `TestAnchorPlatform` runs
+  the real Anchor Platform image on PostgreSQL and checks every SEP-1, SEP-10,
+  SEP-24 and platform API route and status that arrives.
 - Alerts on web events waiting for Umami: `WebEventsDelayed` (oldest over an
   hour), `WebEventsBacklogGrowing` (over 10,000 and still growing) and
   `WebEventsNearDiscard` (oldest over 48 hours, 24 hours before the queue
