@@ -7,7 +7,7 @@ The data processing terms between the hosting operator and each tenant. They
 follow GDPR Art. 28(3) clause by clause (S10) and are part of the terms of use
 (`terms.md`, section 1) that every project accepts at enrollment. In these
 terms "the operator" is the hosting operator of `terms.md` section 1: the party
-that runs the service and hosts its data. SCF is not a party to them; it
+that runs the service and hosts its data, Mert Köklü (kklumert@gmail.com). SCF is not a party to them; it
 receives the project statistics that clause 3 describes. This page is not legal
 advice. Last updated 2026-11-17.
 
@@ -56,7 +56,8 @@ The operator takes the measures in `dpia.md` section 5.
 The tenant gives general authorisation for the sub-processors in
 `subprocessors.md`. The operator announces an intended addition or replacement
 in the repository's changelog
-([CHANGELOG.md](https://github.com/justmert/veristar/blob/main/CHANGELOG.md)) and in the console before it takes effect, so
+([CHANGELOG.md](https://github.com/justmert/veristar/blob/main/CHANGELOG.md)) and in a new version of the terms of use,
+which every project accepts at its next sign-in (`terms.md` section 8), before it takes effect, so
 the tenant can object; if the objection cannot be resolved, the tenant may
 leave the service and have its data deleted under clause 9. The operator imposes on each sub-processor the same
 data protection obligations as in these terms and remains liable for it.
