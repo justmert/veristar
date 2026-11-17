@@ -791,6 +791,7 @@ func TestInvalidValuesDroppedAlone(t *testing.T) {
 		func(sp ptrace.Span) { sp.SetEndTimestamp(1 << 63) },
 		func(sp ptrace.Span) { sp.SetStartTimestamp(0) },
 		func(sp ptrace.Span) { sp.SetStartTimestamp(sp.EndTimestamp() + 1) },
+		func(sp ptrace.Span) { sp.SetStartTimestamp(1); sp.SetEndTimestamp(5) },
 	} {
 		sp := ss.AppendEmpty()
 		ss.At(0).CopyTo(sp)
@@ -833,7 +834,7 @@ func TestInvalidValuesDroppedAlone(t *testing.T) {
 	}
 	want := map[string]int64{
 		"metrics/time": 5, "metrics/buckets": 6, "metrics/count": 2, "metrics/sum": 1,
-		"metrics/temporality": 1, "traces/time": 4,
+		"metrics/temporality": 1, "traces/time": 5,
 	}
 	for k, v := range want {
 		if got[k] != v {

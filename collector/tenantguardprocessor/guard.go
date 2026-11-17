@@ -559,10 +559,11 @@ func (g *guard) processTraces(ctx context.Context, td ptrace.Traces) (ptrace.Tra
 				if _, ok := str(sp.Attributes(), schema.AttrMethod, schema.LegacyMethod); !ok {
 					return true
 				}
-				// a span without a start, or with an end before the epoch or
-				// past 2262, has no duration and no minute the writer could
-				// store; it is dropped alone instead of failing the export
-				if sp.StartTimestamp() == 0 || !validTimes(sp.StartTimestamp(), sp.EndTimestamp()) {
+				// a span without a start, or with an end in the first minute
+				// of the epoch or past 2262, has no duration and no minute
+				// the writer could store; it is dropped alone instead of
+				// failing the export
+				if sp.StartTimestamp() == 0 || !validTimes(sp.StartTimestamp(), sp.EndTimestamp()) || endMinute(sp.EndTimestamp()) <= 0 {
 					g.dropped(ctx, "traces", invalidTime, 1)
 					return true
 				}
