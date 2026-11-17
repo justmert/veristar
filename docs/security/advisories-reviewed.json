@@ -14,7 +14,7 @@
     {
       "id": "GHSA-vhf9-rcmp-v5fc",
       "reviewed": "2026-11-15",
-      "decision": "sql injection in the reports api (POST /api/reports/*) through filters[*].paramName, unauthenticated with a share token from GET /api/share/<slug>; advisory range <= 3.4.0, no patched version stated. the pinned 3.5.0 carries the fix (upstream commit 4fa9769519, src/lib/params.ts derives the placeholder name from the validated key). not reachable from the internet either: web.Caddyfile refuses /api/share*, /compat/* and every write method on /api/*. TestWebCaddyLive 'reports api sql injection' proves both against the pinned image: caddy refuses the routes, and on the private network the advisory's payloads run as plain filters (200, no division by zero, no sleep), while umami 3.4.0 answers the same payloads with a database error and a 4 second delay. no upgrade or deny rule needed."
+      "decision": "sql injection in the reports api (POST /api/reports/*) through filters[*].paramName, unauthenticated with a share token from GET /api/share/<slug>; advisory range <= 3.4.0, no patched version stated. the pinned 3.5.0 carries the fix (upstream commit 4fa9769519, src/lib/params.ts derives the placeholder name from the validated key). not reachable from the internet either: no public host serves umami, and make test-caddy-closed (deploy/caddy/umami_closed_test.go) fails when an internet-facing caddy config refers to it. checked on the private network against the pinned image: the advisory's payloads run as plain filters (200, no division by zero, no sleep), while umami 3.4.0 answers the same payloads with a database error and a 4 second delay. no upgrade or deny rule needed."
     }
   ],
   "upstream_image_findings": [

@@ -96,7 +96,6 @@ before the delegation changes.
    _acme-challenge.in.<domain>    CNAME  <sa_acme_challenge_domain>
    _acme-challenge.otlp.<domain>  CNAME  <sa_acme_challenge_domain>
    _acme-challenge.app.<domain>   CNAME  <sa_acme_challenge_domain>
-   _acme-challenge.web.<domain>   CNAME  <sa_acme_challenge_domain>
    ```
 
    `<sa_acme_challenge_domain>` is a name in a Cloudflare zone the new operator's token may

@@ -502,13 +502,13 @@ and the route is not reachable from the internet:
 
 - 3.5.0 contains upstream commit `4fa9769519`, which derives the placeholder name from the
   validated filter key (`src/lib/params.ts`).
-- `web.Caddyfile` refuses `/api/share*` and `/compat/*` for every method, and every write method
-  on `/api/*` except token verification and logout.
-- `TestWebCaddyLive`, subtest `reports api sql injection` (`make test-caddy-web`), proves both
-  against the pinned image. Caddy refuses the share route and all ten report routes under every
-  spelling Umami routes to the same handler. On the private network, the advisory's payloads run
-  as plain filters: a division by zero answers 200 and a 4 second `pg_sleep` returns at once.
-  The same payloads against Umami 3.4.0 answer 500 (`division by zero`) and take 4 seconds.
+- No public host serves Umami ([ADR 0005](../adr/0005-umami-as-engine-only.md)): no
+  internet-facing Caddy site names it or dials it, so neither `/api/share*` nor `/api/reports/*`
+  has a path from the internet. `make test-caddy-closed` (`deploy/caddy/umami_closed_test.go`)
+  fails the build when an input Caddyfile or an assembled node config refers to Umami.
+- Checked on 2026-11-15 on the private network against the pinned image, the advisory's
+  payloads run as plain filters: a division by zero answers 200 and a 4 second `pg_sleep` returns at once. The same
+  payloads against Umami 3.4.0 answer 500 (`division by zero`) and take 4 seconds.
 
 No upgrade and no new deny rule is needed. The decision is the advisory's entry in
 `advisories-reviewed.json`.

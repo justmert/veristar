@@ -49,8 +49,8 @@ Data loss window: what was not yet archived when the database was lost, at most
    sudo docker compose stop $(sudo docker compose config --services | grep -vx caddy)
    ```
 
-   Expected: `docker compose ps` lists only `caddy` as running. The node's `app` and `web`
-   endpoints in Traffic Manager turn degraded (their `/core` probe fails); `in` and `otlp` stay
+   Expected: `docker compose ps` lists only `caddy` as running. The node's `app` endpoint
+   in Traffic Manager turns degraded (their `/core` probe fails); `in` and `otlp` stay
    online.
 
 2. **Create the restore node.** In `infra/tofu/envs/<env>/terraform.tfvars` set
@@ -136,9 +136,9 @@ Data loss window: what was not yet archived when the database was lost, at most
    and consumer (`platformctl nats apply`).
 
    **Traffic Manager.** A replaced node fails its health checks until step 8 has converged it,
-   so its `in`, `otlp`, `app` and `web` endpoints show degraded and are left out of the answers
-   without any change. To keep a node out on purpose until you have checked it, disable its four
-   endpoints, `in-<n>`, `otlp-<n>`, `app-<n>` and `web-<n>` (profile names
+   so its `in`, `otlp` and `app` endpoints show degraded and are left out of the answers
+   without any change. To keep a node out on purpose until you have checked it, disable its three
+   endpoints, `in-<n>`, `otlp-<n>` and `app-<n>` (profile names
    `veristar-app-production-<label>`):
 
    ```sh
