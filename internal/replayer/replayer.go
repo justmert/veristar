@@ -349,7 +349,7 @@ func (r *Replayer) Run(ctx context.Context) error {
 	wg.Wait()
 	// the member key goes last, after every partition was handed back, so
 	// the others do not count this instance while it still delivers
-	r.members.leave()
+	r.members.leave(ctx)
 	if ctx.Err() != nil {
 		return nil
 	}

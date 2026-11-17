@@ -211,9 +211,9 @@ func (m *membership) update(listed []string, now time.Time) {
 }
 
 // leave deletes the member key, so the others reassign at once instead of
-// after the ttl.
-func (m *membership) leave() {
-	ctx, cancel := context.WithTimeout(context.Background(), natsx.LockRenewEvery)
+// after the ttl. it runs after ctx ended, so it detaches from it.
+func (m *membership) leave(ctx context.Context) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), natsx.LockRenewEvery)
 	defer cancel()
 	if err := m.kv.Delete(ctx, memberPrefix+m.node); err != nil {
 		m.log.Warn("member key not deleted, it expires with the bucket ttl", "error", err.Error())
