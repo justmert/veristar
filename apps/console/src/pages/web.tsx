@@ -6,13 +6,21 @@
 // events, utm values, hours and the last minutes come from the analytics
 // engine, read as the member.
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@veristar/brand/cn";
 import { fade, stagger } from "@veristar/brand/motion";
 import { ChevronDown, Globe } from "lucide-react";
 import { motion } from "motion/react";
-import { type FormEvent, useEffect, useMemo, useState } from "react";
+import {
+  type FormEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { Link, useSearchParams } from "react-router";
+import { ApiError } from "@/api/client";
 import { sitesQuery } from "@/api/queries";
 import type { Site } from "@/api/schemas";
 import {
@@ -22,6 +30,7 @@ import {
   type WebSummary,
   webBreakdownQuery,
   webHourlyQuery,
+  webKeys,
   webRealtimeQuery,
   webSummaryQuery,
 } from "@/api/web";
@@ -110,6 +119,7 @@ export function WebPage() {
   const set = (next: Partial<WebState>) =>
     setParams(writeWebState({ ...state, ...next }), { replace: true });
   const sites = useQuery(sitesQuery(tenant.id));
+  const provisioning = useProvisioningPending(tenant.id);
   const now = new Date();
 
   if (sites.isPending) return <Loading label="Loading sites" />;
@@ -163,6 +173,14 @@ export function WebPage() {
         }
       />
 
+      {provisioning ? (
+        <Notice tone="info" title="Your access is being set up">
+          Your access to the live figures of this project (pages, events, hours and visitors right
+          now) is being created. They load on their own once it is ready; the daily totals show
+          already.
+        </Notice>
+      ) : null}
+
       {unknownSite && listed.length > 0 ? (
         <Notice
           tone="warning"
@@ -213,6 +231,23 @@ export function WebPage() {
       )}
     </div>
   );
+}
+
+// whether a web read of the project is waiting for its analytics access
+// (409 provisioning_pending, 18.9). the query client keeps asking; this only
+// tells people why a panel is still loading.
+function useProvisioningPending(tenantId: string): boolean {
+  const cache = useQueryClient().getQueryCache();
+  const read = useCallback(
+    () =>
+      cache.findAll({ queryKey: webKeys.all(tenantId) }).some((q) => {
+        const e = q.state.error ?? q.state.fetchFailureReason;
+        return e instanceof ApiError && e.code === "provisioning_pending";
+      }),
+    [cache, tenantId],
+  );
+  const subscribe = useCallback((cb: () => void) => cache.subscribe(cb), [cache]);
+  return useSyncExternalStore(subscribe, read, read);
 }
 
 // ---- range

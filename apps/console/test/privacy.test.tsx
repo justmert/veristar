@@ -358,6 +358,10 @@ describe("privacy page", () => {
       ],
     });
     const host = await renderRoutes(routes(), path);
-    await waitFor(() => expect(host.textContent).toContain("does not match the api contract"));
+    await waitFor(() =>
+      expect(host.textContent).toContain(
+        "The server answered in a form this console does not read",
+      ),
+    );
   });
 });

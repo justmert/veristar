@@ -22,17 +22,38 @@ function onError(err: unknown) {
   }
 }
 
+// how long to wait for the reconciler (18.9) between tries, and how many
+// tries before the page stops and shows the message with a retry button
+const PENDING_DELAY_MS = 10_000;
+const PENDING_TRIES = 30;
+
+function pending(err: unknown): err is ApiError {
+  return err instanceof ApiError && err.code === "provisioning_pending";
+}
+
+// client errors do not get better by repeating them; network errors and 5xx
+// get two more tries. provisioning_pending clears by itself once the
+// reconciler has created the member's analytics access, so it is asked
+// again for a few minutes.
+export function retryQuery(count: number, err: unknown): boolean {
+  if (pending(err)) return count < PENDING_TRIES;
+  if (err instanceof ApiError && err.status < 500) return false;
+  return count < 2;
+}
+
+export function retryDelay(count: number, err: unknown): number {
+  if (pending(err)) return err.retryAfter ? err.retryAfter * 1000 : PENDING_DELAY_MS;
+  // react query's default backoff
+  return Math.min(1000 * 2 ** count, 30_000);
+}
+
 export const queryClient = new QueryClient({
   queryCache: new QueryCache({ onError }),
   mutationCache: new MutationCache({ onError }),
   defaultOptions: {
     queries: {
-      // client errors do not get better by repeating them; network errors
-      // and 5xx get two more tries
-      retry: (count, err) => {
-        if (err instanceof ApiError && err.status < 500) return false;
-        return count < 2;
-      },
+      retry: retryQuery,
+      retryDelay,
       refetchOnWindowFocus: true,
     },
     mutations: { retry: false },

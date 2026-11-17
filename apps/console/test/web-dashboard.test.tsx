@@ -203,7 +203,7 @@ const ctx: ProjectContext = {
 
 // a fetch double that answers by route, since the dashboard asks for its
 // panels at the same time and their order is not fixed
-function stubRoutes() {
+function stubRoutes(engine: "ok" | "pending" = "ok") {
   const urls: string[] = [];
   vi.stubGlobal(
     "fetch",
@@ -217,6 +217,8 @@ function stubRoutes() {
         });
       if (u.pathname.endsWith("/sites")) return json(200, f.sitePageBody);
       if (u.pathname.endsWith("/web/summary")) return json(200, summaryBody);
+      if (engine === "pending" && u.pathname.endsWith("/web/realtime"))
+        return json(409, f.errorBody("provisioning_pending"));
       if (u.pathname.endsWith("/web/realtime")) return json(200, realtimeBody);
       if (u.pathname.endsWith("/web/breakdown")) {
         const d = u.searchParams.get("dimension") ?? "";
@@ -336,6 +338,13 @@ describe("web dashboard address", () => {
     await waitFor(() =>
       expect(host.textContent).not.toContain("That site is not part of this project"),
     );
+  });
+
+  it("says why live figures wait while analytics access is being set up", async () => {
+    stubRoutes("pending");
+    const host = await renderRoutes(routes, `/projects/${f.TENANT_ID}/web`);
+    await waitFor(() => expect(host.textContent).toContain("Your access is being set up"));
+    expect(host.textContent).not.toContain("unavailable");
   });
 
   it("asks for the on-chain activity of the chosen range", async () => {
