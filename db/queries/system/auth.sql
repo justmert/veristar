@@ -141,11 +141,29 @@ order by t.name, t.id;
 -- expired rows are invisible here; the jobs task sessionprune deletes them
 select data from cp.sessions where token_hash = @token_hash and expiry > now();
 
--- name: CommitSession :exec
+-- name: InsertSession :exec
+-- a token made in this request (a sign-in, a first commit). a clash with
+-- an existing row is an error, never an overwrite: tokens are 32 random
+-- bytes
 insert into cp.sessions (token_hash, user_id, data, expiry)
-values (@token_hash, @user_id, @data, @expiry)
-on conflict (token_hash) do update
-  set user_id = excluded.user_id, data = excluded.data, expiry = excluded.expiry;
+values (@token_hash, @user_id, @data, @expiry);
+
+-- name: UpdateSession :execrows
+-- the token the request arrived with. a row deleted meanwhile (a sign-out,
+-- a roster change, account deletion) stays deleted: 0 rows, no insert
+update cp.sessions set user_id = @user_id, data = @data, expiry = @expiry
+where token_hash = @token_hash;
+
+-- name: RenewSession :execrows
+-- a renewed token replaces the row of the token the request arrived with,
+-- and only while that row still exists, so a session ended while the
+-- request ran is not revived under the new token
+with gone as (
+  delete from cp.sessions old where old.token_hash = sqlc.arg(old_token_hash)::bytea returning 1
+)
+insert into cp.sessions (token_hash, user_id, data, expiry)
+select sqlc.arg(token_hash)::bytea, sqlc.narg(user_id)::uuid, sqlc.arg(data)::bytea, sqlc.arg(expiry)::timestamptz
+where exists (select 1 from gone);
 
 -- name: DeleteSession :exec
 delete from cp.sessions where token_hash = @token_hash;

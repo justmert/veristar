@@ -89,13 +89,23 @@ func New(d *db.DB) *Manager {
 
 // Load is the middleware that loads the session of every request and
 // writes the cookie when the session changed. it goes after httpx.Base.
+// the request state it adds first lets the store's commit tell the token
+// the request arrived with from one made in it.
 func (m *Manager) Load(next http.Handler) http.Handler {
-	return m.scs.LoadAndSave(next)
+	h := m.scs.LoadAndSave(next)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h.ServeHTTP(w, r.WithContext(withRequestState(r.Context())))
+	})
 }
 
 // SignIn starts a signed-in session for userID. the token is renewed first,
 // so a session id planted before sign-in is useless afterwards.
 func (m *Manager) SignIn(ctx context.Context, userID uuid.UUID) error {
+	// a sign-in starts a new session: the token it makes is inserted
+	// whatever happened to the one the request arrived with
+	if st := stateOf(ctx); st != nil {
+		st.renewedFrom = nil
+	}
 	if err := m.scs.RenewToken(ctx); err != nil {
 		return fmt.Errorf("session: renew token: %w", err)
 	}
@@ -134,13 +144,25 @@ func (m *Manager) RemoveValue(ctx context.Context, key string) {
 	m.scs.Remove(ctx, key)
 }
 
-// Renew gives the session a new token and keeps its values, for a
-// privilege change inside a session (a step-up), so a token seen before
-// the change is worth nothing after it.
+// Renew gives the session a new token and keeps its values and its
+// deadline, for a privilege change inside a session (a step-up), so a token
+// seen before the change is worth nothing after it. the deadline stays the
+// one of the sign-in: renewing does not stretch the absolute lifetime. the
+// new token is stored at commit only while the old row still exists, so a
+// session ended while this request ran does not come back under it.
 func (m *Manager) Renew(ctx context.Context) error {
+	st := stateOf(ctx)
+	if st == nil {
+		return errors.New("session: renew outside the Load middleware")
+	}
+	if st.renewedFrom == nil {
+		st.renewedFrom = st.loaded
+	}
+	deadline := m.scs.Deadline(ctx)
 	if err := m.scs.RenewToken(ctx); err != nil {
 		return fmt.Errorf("session: renew token: %w", err)
 	}
+	m.scs.SetDeadline(ctx, deadline)
 	return nil
 }
 
@@ -155,8 +177,16 @@ func (m *Manager) SignOut(ctx context.Context, inTx func(pgx.Tx) error) error {
 	}
 	sum := sha256.Sum256([]byte(tok))
 	err := m.db.WithSystem(ctx, func(tx pgx.Tx) error {
-		if err := systemq.New(tx).DeleteSession(ctx, sum[:]); err != nil {
+		q := systemq.New(tx)
+		if err := q.DeleteSession(ctx, sum[:]); err != nil {
 			return err
+		}
+		// a token renewed in this request is not stored yet; the row is
+		// still the old token's
+		if st := stateOf(ctx); st != nil && st.renewedFrom != nil {
+			if err := q.DeleteSession(ctx, st.renewedFrom); err != nil {
+				return err
+			}
 		}
 		if inTx != nil {
 			return inTx(tx)
@@ -208,6 +238,12 @@ func (m *Manager) RequireUser(next http.Handler) http.Handler {
 		ctx := r.Context()
 		id, ok := m.UserID(ctx)
 		if !ok {
+			return httpx.Unauthenticated()
+		}
+		// the lifetime counts from the sign-in, whatever token the session
+		// holds now; a session older than it is over even if its row says
+		// otherwise
+		if at, ok := m.SignedInAt(ctx); !ok || time.Since(at) >= Lifetime {
 			return httpx.Unauthenticated()
 		}
 		var u systemq.CpUser

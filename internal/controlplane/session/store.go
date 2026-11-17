@@ -4,6 +4,7 @@
 package session
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"errors"
@@ -59,6 +60,32 @@ func hashBytes(hashed string) ([]byte, error) {
 	return b, nil
 }
 
+// requestState is what the store remembers of one request, so its commit
+// can tell the token the request arrived with from a token made in it.
+// scs commits every loaded session at the end of a request (the idle
+// timeout moves its expiry), and that commit must not write back a row
+// that a sign-out or a roster change deleted while the request ran.
+type requestState struct {
+	// loaded is the hash of the token whose row Find returned
+	loaded []byte
+	// renewedFrom is the hash of the token Renew replaced: its row is
+	// deleted at commit, in the statement that inserts the new one
+	renewedFrom []byte
+}
+
+type requestStateKey struct{}
+
+// withRequestState returns ctx carrying a fresh request state; Load puts
+// it on every request before scs reads the cookie.
+func withRequestState(ctx context.Context) context.Context {
+	return context.WithValue(ctx, requestStateKey{}, &requestState{})
+}
+
+func stateOf(ctx context.Context) *requestState {
+	st, _ := ctx.Value(requestStateKey{}).(*requestState)
+	return st
+}
+
 // FindCtx returns the data of an unexpired session.
 func (s *Store) FindCtx(ctx context.Context, token string) ([]byte, bool, error) {
 	h, err := hashBytes(token)
@@ -77,15 +104,29 @@ func (s *Store) FindCtx(ctx context.Context, token string) ([]byte, bool, error)
 	if err != nil {
 		return nil, false, fmt.Errorf("session: find: %w", err)
 	}
+	if st := stateOf(ctx); st != nil && st.loaded == nil {
+		st.loaded = h
+	}
 	return data, true, nil
 }
 
 // CommitCtx writes the session and fills user_id from its data in the same
 // statement, so all sessions of a user can be found and ended together.
+//
+// it never brings a deleted row back. the token the request arrived with
+// is only updated, so a session ended while the request ran stays ended. a
+// token renewed in this request replaces the old row only while that row
+// still exists. any other token was made in this request and is inserted.
+// a commit outside Load is refused: without the request state the store
+// cannot tell the three apart.
 func (s *Store) CommitCtx(ctx context.Context, token string, b []byte, expiry time.Time) error {
 	h, err := hashBytes(token)
 	if err != nil {
 		return err
+	}
+	st := stateOf(ctx)
+	if st == nil {
+		return errors.New("session: commit outside the Load middleware")
 	}
 	_, values, err := s.codec.Decode(b)
 	if err != nil {
@@ -104,9 +145,23 @@ func (s *Store) CommitCtx(ctx context.Context, token string, b []byte, expiry ti
 		uid = uuid.NullUUID{UUID: id, Valid: true}
 	}
 	err = s.db.WithSystem(ctx, func(tx pgx.Tx) error {
-		return systemq.New(tx).CommitSession(ctx, systemq.CommitSessionParams{
-			TokenHash: h, UserID: uid, Data: b, Expiry: expiry,
-		})
+		q := systemq.New(tx)
+		switch {
+		case st.loaded != nil && bytes.Equal(h, st.loaded):
+			_, err := q.UpdateSession(ctx, systemq.UpdateSessionParams{
+				TokenHash: h, UserID: uid, Data: b, Expiry: expiry,
+			})
+			return err
+		case st.renewedFrom != nil:
+			_, err := q.RenewSession(ctx, systemq.RenewSessionParams{
+				OldTokenHash: st.renewedFrom, TokenHash: h, UserID: uid, Data: b, Expiry: expiry,
+			})
+			return err
+		default:
+			return q.InsertSession(ctx, systemq.InsertSessionParams{
+				TokenHash: h, UserID: uid, Data: b, Expiry: expiry,
+			})
+		}
 	})
 	if err != nil {
 		return fmt.Errorf("session: commit: %w", err)
@@ -114,11 +169,16 @@ func (s *Store) CommitCtx(ctx context.Context, token string, b []byte, expiry ti
 	return nil
 }
 
-// DeleteCtx removes a session; an unknown one is not an error.
+// DeleteCtx removes a session; an unknown one is not an error. the row of
+// a token Renew replaced is left to the commit, which deletes it in the
+// statement that inserts the new token.
 func (s *Store) DeleteCtx(ctx context.Context, token string) error {
 	h, err := hashBytes(token)
 	if err != nil {
 		return err
+	}
+	if st := stateOf(ctx); st != nil && st.renewedFrom != nil && bytes.Equal(h, st.renewedFrom) {
+		return nil
 	}
 	err = s.db.WithSystem(ctx, func(tx pgx.Tx) error {
 		return systemq.New(tx).DeleteSession(ctx, h)
