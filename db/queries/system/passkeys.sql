@@ -8,9 +8,14 @@ where user_id = @user_id
 order by created_at, id;
 
 -- name: SignInPasskey :one
--- the account's sign-in passkey (4.1.9), which also serves the step-up;
--- both columns are null for an account without one
-select passkey_credential_id, passkey_public_key, passkey_address
+-- the account's sign-in passkey (4.1.9); both columns are null for an
+-- account without one. step_up says whether it also serves the step-up:
+-- only when an active roster row names its address, so the roster vouches
+-- for that very passkey. a passkey linked to an account the roster names
+-- by github or wallet is a sign-in method only; a session alone can link
+-- one, so it must not become a second factor.
+select passkey_credential_id, passkey_public_key, passkey_address,
+       (passkey_address is not null and cp.roster_active(null, null, passkey_address))::boolean as step_up
 from cp.users
 where id = @id and deleted_at is null;
 

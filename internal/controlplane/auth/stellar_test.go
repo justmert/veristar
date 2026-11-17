@@ -470,6 +470,9 @@ func TestUnlink(t *testing.T) {
 	b := e.browser(t)
 	require.Equal(t, http.StatusSeeOther, b.signIn(gh, "u-"+strconv.FormatInt(gh, 10), "/").StatusCode)
 	require.True(t, b.me().User.IsOperator)
+	// an operator account changes its sign-in methods after a step-up; the
+	// first passkey registration inside the bootstrap window records one
+	require.Equal(t, http.StatusCreated, b.addStepUpPasskey(newPasskey(t)).StatusCode)
 
 	// the only method cannot go; a method the account lacks is 404
 	res := b.del("/api/me/identities/github")

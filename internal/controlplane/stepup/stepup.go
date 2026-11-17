@@ -7,8 +7,11 @@
 // sec-1 key the control plane stores, and whose assertions
 // internal/controlplane/passkey verifies (passkey.RelyingParty.Verify). the
 // console runs every ceremony with the same @soropass/core helpers as sign-in
-// (apps/console/src/lib/passkey). an account steps up with its sign-in
-// passkey and with the passkeys it adds here (cp.operator_passkeys, 00041).
+// (apps/console/src/lib/passkey). an account steps up with the passkeys it
+// adds here (cp.operator_passkeys, 00041), and with its sign-in passkey only
+// when an active roster row names that passkey's address. a passkey linked
+// to an account the roster names by another identity is not a step-up key:
+// linking needs only a session, so it must not open the operator area.
 //
 // the package has three parts other code builds on:
 //
@@ -27,7 +30,7 @@
 //     step_up_required otherwise. requests made with an mcp credential
 //     (session.ViaCredential) pass: they carry no session to step up.
 //   - the passkey store over cp.operator_passkeys and the account's sign-in
-//     passkey (store.go).
+//     passkey when the roster names it (store.go).
 //
 // anything else that verifies a possession factor of the signed-in account
 // can call Record in the request that verified it, and every operator route

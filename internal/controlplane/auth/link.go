@@ -13,6 +13,7 @@ import (
 
 	"github.com/justmert/veristar/internal/controlplane/httpx"
 	"github.com/justmert/veristar/internal/controlplane/session"
+	"github.com/justmert/veristar/internal/controlplane/stepup"
 	"github.com/justmert/veristar/internal/db/systemq"
 )
 
@@ -20,6 +21,45 @@ import (
 // identity only with both proofs in one browser session: the session proves
 // the account, and the github flow, a signed wallet challenge or a passkey
 // assertion proves the identity being added. an account always keeps at least one identity.
+
+// a stolen console session, or a taken-over github account or wallet,
+// must not be able to change the sign-in methods of an operator account:
+// a passkey linked that way would sign in on its own, and unlinking could
+// strip the account's operator access. so every link and unlink of an
+// operator account needs a fresh operator step-up (5.15) on the session.
+
+// checkIdentityChange refuses a change to the identities of an operator
+// account without a fresh step-up of this session.
+func (h *Handler) checkIdentityChange(ctx context.Context, userID uuid.UUID, isOperator bool) error {
+	if !isOperator {
+		return nil
+	}
+	if h.stepUp != nil {
+		if ok, _ := h.stepUp.Fresh(ctx, userID); ok {
+			return nil
+		}
+	}
+	return httpx.E(http.StatusUnauthorized, httpx.CodeStepUpRequired,
+		"confirm with your passkey before you change the sign-in methods of an operator account")
+}
+
+// identityChangeAllowed is checkIdentityChange for a route that has the
+// session's user id only.
+func (h *Handler) identityChangeAllowed(ctx context.Context, userID uuid.UUID) error {
+	var u systemq.CpUser
+	err := h.db.WithSystem(ctx, func(tx pgx.Tx) error {
+		var err error
+		u, err = systemq.New(tx).GetUser(ctx, userID)
+		return err
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return httpx.Unauthenticated()
+	}
+	if err != nil {
+		return fmt.Errorf("load user: %w", err)
+	}
+	return h.checkIdentityChange(ctx, u.ID, u.IsOperator)
+}
 
 // accountPath is the console page that starts linking; the github link
 // flow returns there.
@@ -94,6 +134,15 @@ func (h *Handler) link(ctx context.Context, uid uuid.UUID, kind string,
 	var joined []uuid.UUID
 	err := h.db.WithSystem(ctx, func(tx pgx.Tx) error {
 		q := systemq.New(tx)
+		// the account row as this transaction sees it: the github link
+		// returns from github long after its start was checked
+		cur, err := q.GetUser(ctx, uid)
+		if err != nil {
+			return fmt.Errorf("load user: %w", err)
+		}
+		if err := h.checkIdentityChange(ctx, uid, cur.IsOperator); err != nil {
+			return err
+		}
 		for _, f := range extra {
 			if err := f(q); err != nil {
 				return err
@@ -162,7 +211,9 @@ func (h *Handler) unlinkPasskey(w http.ResponseWriter, r *http.Request) error {
 
 // unlink removes one identity of the signed-in account. 404 when the
 // account has no identity of that kind, 409 last_sign_in_method when it is
-// the only one. the other sessions of the account stay: they were opened by
+// the only one, 401 step_up_required for an operator account without a
+// fresh step-up, 409 last_passkey when the passkey is the account's last
+// step-up key (as for /api/operator/passkeys). the other sessions of the account stay: they were opened by
 // the person, whichever method they used.
 func (h *Handler) unlink(w http.ResponseWriter, r *http.Request, kind string, has func(session.User) bool,
 	del func(context.Context, *systemq.Queries, uuid.UUID) (systemq.CpUser, error),
@@ -175,8 +226,24 @@ func (h *Handler) unlink(w http.ResponseWriter, r *http.Request, kind string, ha
 	if !has(u) {
 		return httpx.NotFound()
 	}
+	if err := h.checkIdentityChange(ctx, u.ID, u.IsOperator); err != nil {
+		return err
+	}
 	err = h.db.WithSystem(ctx, func(tx pgx.Tx) error {
 		q := systemq.New(tx)
+		lastKey := false
+		if kind == "passkey" {
+			// the lock orders this with a delete of an added passkey, so
+			// the two cannot together leave the account without a key
+			if _, err := q.LockUserPasskeys(ctx, u.ID); err != nil {
+				return err
+			}
+			k, err := stepup.LoadKeys(ctx, tx, u.ID)
+			if err != nil {
+				return err
+			}
+			lastKey = k.SignIn && k.Count() == 1
+		}
 		row, err := del(ctx, q, u.ID)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return httpx.Conflict(httpx.CodeLastSignInMethod,
@@ -184,6 +251,11 @@ func (h *Handler) unlink(w http.ResponseWriter, r *http.Request, kind string, ha
 		}
 		if err != nil {
 			return fmt.Errorf("unlink %s: %w", kind, err)
+		}
+		// the error rolls the unlink back
+		if lastKey {
+			return httpx.Conflict(httpx.CodeLastPasskey,
+				"this passkey is your only one for the operator area; register another one first")
 		}
 		row, err = q.SetOperatorFlag(ctx, row.ID)
 		if err != nil {

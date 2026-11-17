@@ -158,7 +158,8 @@ func (q *Queries) LockUserPasskeys(ctx context.Context, userID uuid.UUID) ([]uui
 }
 
 const signInPasskey = `-- name: SignInPasskey :one
-select passkey_credential_id, passkey_public_key, passkey_address
+select passkey_credential_id, passkey_public_key, passkey_address,
+       (passkey_address is not null and cp.roster_active(null, null, passkey_address))::boolean as step_up
 from cp.users
 where id = $1 and deleted_at is null
 `
@@ -167,14 +168,24 @@ type SignInPasskeyRow struct {
 	PasskeyCredentialID *string
 	PasskeyPublicKey    []byte
 	PasskeyAddress      *string
+	StepUp              bool
 }
 
-// the account's sign-in passkey (4.1.9), which also serves the step-up;
-// both columns are null for an account without one
+// the account's sign-in passkey (4.1.9); both columns are null for an
+// account without one. step_up says whether it also serves the step-up:
+// only when an active roster row names its address, so the roster vouches
+// for that very passkey. a passkey linked to an account the roster names
+// by github or wallet is a sign-in method only; a session alone can link
+// one, so it must not become a second factor.
 func (q *Queries) SignInPasskey(ctx context.Context, id uuid.UUID) (SignInPasskeyRow, error) {
 	row := q.db.QueryRow(ctx, signInPasskey, id)
 	var i SignInPasskeyRow
-	err := row.Scan(&i.PasskeyCredentialID, &i.PasskeyPublicKey, &i.PasskeyAddress)
+	err := row.Scan(
+		&i.PasskeyCredentialID,
+		&i.PasskeyPublicKey,
+		&i.PasskeyAddress,
+		&i.StepUp,
+	)
 	return i, err
 }
 

@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
@@ -30,6 +31,7 @@ import (
 	"github.com/justmert/veristar/internal/controlplane/identity"
 	"github.com/justmert/veristar/internal/controlplane/operator"
 	"github.com/justmert/veristar/internal/controlplane/session"
+	"github.com/justmert/veristar/internal/controlplane/stepup"
 	"github.com/justmert/veristar/internal/controlplane/terms"
 	"github.com/justmert/veristar/internal/db/systemq"
 	"github.com/justmert/veristar/tests/fixtures/githuboauth"
@@ -141,7 +143,14 @@ func newEnvWith(t *testing.T, o envOptions) *env {
 	}
 	sessions := session.New(conn)
 	e := &env{}
+	// the operator step-up, so the tests can link and unlink on an operator
+	// account the way the console does: step up first
+	su, err := stepup.New(stepup.Config{
+		ConsoleOrigin: cp.URL, MaxAge: time.Hour, EnrollWindow: time.Hour,
+	}, conn, sessions)
+	require.NoError(t, err)
 	h, err := auth.New(auth.Config{
+		StepUp: su,
 		Reconcile: func(_ context.Context, tenantID uuid.UUID) {
 			e.mu.Lock()
 			e.reconciled = append(e.reconciled, tenantID)
@@ -163,7 +172,9 @@ func newEnvWith(t *testing.T, o envOptions) *env {
 		ConsoleOrigin: cp.URL,
 		Sessions:      sessions,
 		Public:        []controlplane.Routes{controlplane.RoutesFunc(h.Public), controlplane.RoutesFunc(terms.Routes)},
-		Private:       []controlplane.Routes{controlplane.RoutesFunc(h.Private)},
+		Private: []controlplane.Routes{controlplane.RoutesFunc(h.Private), controlplane.RoutesFunc(func(r chi.Router) {
+			r.Route("/operator", su.Routes)
+		})},
 	}))
 	e.cp, e.origin, e.fixture, e.fx, e.h = cp, cp.URL, fixture, fx, h
 	return e

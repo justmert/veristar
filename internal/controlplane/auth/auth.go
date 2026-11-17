@@ -73,6 +73,15 @@ type Config struct {
 	// tenant an invite made the user a member of, so the umami membership
 	// exists by the time the person opens a dashboard.
 	Reconcile func(ctx context.Context, tenantID uuid.UUID)
+	// StepUp reports whether the session holds a fresh operator step-up
+	// (stepup.Service). an operator account changes its sign-in methods
+	// only with one; nil refuses every such change.
+	StepUp StepUpChecker
+}
+
+// StepUpChecker is what linking needs of the operator step-up.
+type StepUpChecker interface {
+	Fresh(ctx context.Context, userID uuid.UUID) (bool, time.Time)
 }
 
 // Handler serves the auth routes.
@@ -91,6 +100,7 @@ type Handler struct {
 	now       func() time.Time
 	stellar   *stellarAuth
 	passkey   *passkeyAuth
+	stepUp    StepUpChecker
 }
 
 // New checks cfg and returns the handler.
@@ -148,6 +158,7 @@ func New(cfg Config, d *db.DB, s *session.Manager) (*Handler, error) {
 		now:     time.Now,
 		stellar: sa,
 		passkey: pa,
+		stepUp:  cfg.StepUp,
 	}, nil
 }
 
@@ -219,6 +230,15 @@ func (h *Handler) start(w http.ResponseWriter, r *http.Request) error {
 		uid, ok := h.sessions.UserID(r.Context())
 		if !ok {
 			return httpx.Unauthenticated()
+		}
+		// the route needs no session, so the account is read here; the
+		// callback checks the step-up again when it links
+		if err := h.identityChangeAllowed(r.Context(), uid); err != nil {
+			if he, ok := httpx.AsError(err); ok {
+				failLink(w, r, he.Code)
+				return nil
+			}
+			return err
 		}
 		p.LinkUser = uid.String()
 		p.ReturnTo = accountPath

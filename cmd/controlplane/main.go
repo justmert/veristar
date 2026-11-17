@@ -223,6 +223,13 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 	defer scope.Stop()
 
 	sessions := session.New(d)
+	// the passkey step-up of the operator area (contract 5.15)
+	stepUp, err := stepup.New(stepup.Config{
+		ConsoleOrigin: cfg.ConsoleOrigin, MaxAge: cfg.OperatorStepUpMaxAge, EnrollWindow: cfg.OperatorEnrollWindow,
+	}, d, sessions)
+	if err != nil {
+		return err
+	}
 	authH, err := auth.New(auth.Config{
 		ClientID:      cfg.GitHubClientID,
 		ClientSecret:  cfg.GitHubClientSecret,
@@ -231,6 +238,9 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 		ConsoleOrigin: cfg.ConsoleOrigin,
 		Endpoints:     endpoints,
 		Reconcile:     scope.Reconcile,
+		// an operator account changes its sign-in methods only after a
+		// step-up
+		StepUp: stepUp,
 	}, d, sessions)
 	if err != nil {
 		return err
@@ -244,13 +254,6 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 		return err
 	}
 	memberRoutes, err := members.NewRoutes(scope, users)
-	if err != nil {
-		return err
-	}
-	// the passkey step-up of the operator area (contract 5.15)
-	stepUp, err := stepup.New(stepup.Config{
-		ConsoleOrigin: cfg.ConsoleOrigin, MaxAge: cfg.OperatorStepUpMaxAge, EnrollWindow: cfg.OperatorEnrollWindow,
-	}, d, sessions)
 	if err != nil {
 		return err
 	}
