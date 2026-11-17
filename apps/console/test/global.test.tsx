@@ -302,6 +302,9 @@ describe("global api view", () => {
     ])
       expect(a.textContent).toContain(want);
     expect(rowOf(host, f.TENANT_B).textContent).toContain("none");
+    // the requests left out as infrastructure are shown, not hidden in a title
+    expect(a.textContent).toContain("+0 infrastructure");
+    expect(a.querySelector("[title*='infrastructure']")).toBeNull();
     expect(host.textContent).toContain("Derived from sampled traces");
     expect(calls[1]?.url).toBe("/api/operator/api/projects?sort=requests&order=desc&limit=50");
   });
