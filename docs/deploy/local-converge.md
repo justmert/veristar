@@ -102,7 +102,7 @@ over SSH, so SSH hardening, `AllowUsers` and the firewall's SSH rule all run as 
 - **Partition.** `lc_partition <location>` takes the router's interface into that location down,
   cutting it off the private network in both directions while its public addresses stay
   reachable; `lc_heal` restores it.
-- **Registry.** A `registry:3.0.0` container (pinned by digest) on the public network plays the
+- **Registry.** A `registry:3.1.2` container (pinned by digest) on the public network plays the
   image registry. `infra/local/build-images.sh` builds every image from `deploy/images` and
   pushes it there; the nodes pull from it. The local images carry the mutable tag `lc`, and a
   rebuild under the same tag is not pulled again (`pull: missing`); releases use immutable tags.

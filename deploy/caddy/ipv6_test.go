@@ -17,7 +17,7 @@ import (
 )
 
 // curlImage is the client of the ipv6 address test, pinned by digest.
-const curlImage = "curlimages/curl:8.11.1@sha256:c1fe1679c34d9784c1b0d1e5f62ac0a79fca01fb6377cdd33e90473c6f9f9a69"
+const curlImage = "curlimages/curl:8.22.0@sha256:58adaa4e8dca9c988bae2aba4ab3434a0bb2da16bbe3f92dec39ec7785166777"
 
 // composeNetwork is the part of a compose network definition that decides
 // how docker forwards a published port into the container.
