@@ -437,6 +437,11 @@ describe("the public report page (contract 20.5)", () => {
     await waitFor(() => expect(host.querySelector("[data-verdict=verified]")).not.toBeNull());
     expect(host.textContent).toContain("4,321");
     expect(host.textContent).toContain("1, 2");
+    // the members version 2 adds are shown
+    expect(host.textContent).toContain("About 10% of visits are not measured");
+    expect(host.textContent).toContain("No API traffic was recorded in this period.");
+    expect(host.textContent).toContain("Infrastructure requests12");
+    expect(host.textContent).toContain("15 a week on average over 2 weeks, 2 missing");
   });
 
   it("titles a signature by a key Veristar does not publish as not Veristar's", async () => {

@@ -8,6 +8,7 @@ import {
   type ReportDocument,
   reportDocument,
 } from "@/api/reports";
+import { CoverageNote } from "@/components/coverage";
 import { ErrorPanel, Loading, StateBlock } from "@/components/error-panel";
 import { Fact, Panel } from "@/components/panel";
 import { PublicFrame } from "@/components/public-frame";
@@ -23,6 +24,7 @@ import {
   formatPct,
   formatPercentile,
 } from "@/lib/global";
+import { weeklyActiveText } from "@/lib/onchain";
 import { type Verdict, verifyReport } from "@/lib/report-verify";
 import { downloadFile } from "./reports";
 
@@ -190,6 +192,9 @@ const KPI_LABEL: Record<string, string> = {
 };
 
 function ReportBody({ doc }: { doc: ReportDocument }) {
+  // version 2 adds coverage, has_data, lossy, infrastructure requests and
+  // weekly active accounts; a stored version 1 report shows without them
+  const v2 = doc.version === 2 ? doc : null;
   const c = doc.cohort;
   const cohortName = [c.program, c.round, c.category].filter(Boolean).join(", ");
   const population =
@@ -227,7 +232,13 @@ function ReportBody({ doc }: { doc: ReportDocument }) {
         </div>
       </Panel>
 
-      <Panel title="Web" aria-label="Web">
+      <Panel
+        title="Web"
+        aria-label="Web"
+        description={
+          v2 && !v2.web.has_data ? "No web traffic was recorded in this period." : undefined
+        }
+      >
         <Grid>
           <Fact label="Verified visitors">{num(doc.web.visitors)}</Fact>
           <Fact label="Page views">{num(doc.web.pageviews)}</Fact>
@@ -243,9 +254,28 @@ function ReportBody({ doc }: { doc: ReportDocument }) {
           <Fact label="Sites">{num(doc.web.sites)}</Fact>
           <Fact label="Verified sites">{num(doc.web.sites_verified)}</Fact>
         </Grid>
+        {v2 ? (
+          <CoverageNote
+            className="mt-3"
+            coverage={{
+              script_requests: v2.web.coverage.script_requests,
+              gpc_requests: v2.web.coverage.gpc_requests,
+              unmeasured_share:
+                v2.web.coverage.unmeasured_share === null
+                  ? null
+                  : Number(v2.web.coverage.unmeasured_share),
+            }}
+          />
+        ) : null}
       </Panel>
 
-      <Panel title="API" aria-label="API">
+      <Panel
+        title="API"
+        aria-label="API"
+        description={
+          v2 && !v2.api.has_data ? "No API traffic was recorded in this period." : undefined
+        }
+      >
         <Grid>
           <Fact label="Requests">{num(doc.api.requests)}</Fact>
           <Fact label="4xx rate">{share(doc.api.rate_4xx)}</Fact>
@@ -253,7 +283,17 @@ function ReportBody({ doc }: { doc: ReportDocument }) {
           <Fact label="p95 latency">{seconds(doc.api.p95)}</Fact>
           <Fact label="Services">{num(doc.api.services)}</Fact>
           <Fact label="Routes">{num(doc.api.routes)}</Fact>
+          {v2 ? (
+            <Fact label="Infrastructure requests">{num(v2.api.infrastructure_requests)}</Fact>
+          ) : null}
         </Grid>
+        {v2 ? (
+          <p className="mt-3 max-w-prose text-caption text-fg-3">
+            Requests, rates and latency count application requests only; the infrastructure requests
+            (CORS preflights, health and probe routes, known health checkers) are left out of them.
+            {v2.api.lossy ? " Some latency buckets are approximate." : ""}
+          </p>
+        ) : null}
       </Panel>
 
       <Panel
@@ -270,6 +310,17 @@ function ReportBody({ doc }: { doc: ReportDocument }) {
           <Fact label="Transactions">{num(doc.onchain.transactions)}</Fact>
           <Fact label="Verified ids">{`${doc.onchain.ids_verified} of ${doc.onchain.ids}`}</Fact>
           <Fact label="Days without data">{num(doc.onchain.days_missing)}</Fact>
+          {v2 ? (
+            <Fact label="Weekly active accounts">
+              {weeklyActiveText({
+                ...v2.onchain.weekly_active_accounts,
+                average:
+                  v2.onchain.weekly_active_accounts.average === null
+                    ? null
+                    : Number(v2.onchain.weekly_active_accounts.average),
+              })}
+            </Fact>
+          ) : null}
         </Grid>
       </Panel>
 
