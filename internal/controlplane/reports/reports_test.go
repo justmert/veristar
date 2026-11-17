@@ -26,6 +26,7 @@ import (
 	"github.com/justmert/veristar/internal/config"
 	"github.com/justmert/veristar/internal/controlplane"
 	"github.com/justmert/veristar/internal/controlplane/httpx"
+	"github.com/justmert/veristar/internal/controlplane/onchain"
 	"github.com/justmert/veristar/internal/controlplane/operator"
 	"github.com/justmert/veristar/internal/controlplane/reports"
 	"github.com/justmert/veristar/internal/controlplane/session"
@@ -256,6 +257,89 @@ func TestUsageReports(t *testing.T) {
 		_, err = reports.Verify(forged)
 		require.Error(t, err)
 		require.Equal(t, 1, e.auditCount(t, reports.ActionCreate, reports.Target(id)))
+	})
+
+	t.Run("format version 2 holds the rule versions, coverage, api flags and weekly active accounts", func(t *testing.T) {
+		owner := e.user(t)
+		g := e.tenant(t, owner, "gamma")
+		cg := e.client(t, &owner)
+		var site uuid.UUID
+		require.NoError(t, e.d.WithSystem(t.Context(), func(tx pgx.Tx) error {
+			return tx.QueryRow(t.Context(), `select id from cp.sites where tenant_id = $1`, g).Scan(&site)
+		}))
+		first, last := today.AddDate(0, 0, -30), today.AddDate(0, 0, -reports.FinalDays)
+		mondays := onchain.RangeWeeks(onchain.Range{From: first, To: last})
+		require.GreaterOrEqual(t, len(mondays), 2)
+		verified, declared := keypair.MustRandom().Address(), keypair.MustRandom().Address()
+		e.sys(t, `insert into cp.chain_ids (tenant_id, strkey, kind, added_by, verify_method, verified_at)
+			values ($1, $2, 'account', 'console', 'sep53', now()), ($1, $3, 'account', 'console', null, null)`, g, verified, declared)
+		require.NoError(t, e.d.WithRole(t.Context(), pdb.RoleJobs, func(tx pgx.Tx) error {
+			for i, rv := range []int{1, 2} {
+				// a day graded under each rule set, and an ungraded one
+				if _, err := tx.Exec(t.Context(), `insert into agg.web_integrity_daily (site_id, tenant_id, day, rule_version, grade, closed,
+				    events, quarantined, proof_failures, net_access, net_organisation, net_hosting, net_anonymiser, net_unknown,
+				    networks, visitors, pageviews, baseline_visitors, baseline_days, reasons)
+				  values ($1, $2, $3, $4, 'A', true, 60, 0, 0, 60, 0, 0, 0, 0, 3, 5, 9, null, 0, '[]')`,
+					site, g, last.AddDate(0, 0, -i), rv); err != nil {
+					return err
+				}
+			}
+			if _, err := tx.Exec(t.Context(), `insert into agg.web_integrity_daily (site_id, tenant_id, day, rule_version, grade, closed,
+			    events, quarantined, proof_failures, net_access, net_organisation, net_hosting, net_anonymiser, net_unknown,
+			    networks, visitors, pageviews, baseline_visitors, baseline_days, reasons)
+			  values ($1, $2, $3, 3, null, true, 1, 0, 0, 1, 0, 0, 0, 0, 1, 1, 1, null, 0, '[]')`, site, g, last.AddDate(0, 0, -2)); err != nil {
+				return err
+			}
+			if _, err := tx.Exec(t.Context(), `insert into agg.web_coverage_daily (site_id, tenant_id, day, script_requests, gpc_requests)
+				values ($1, $2, $3, 100, 10)`, site, g, last); err != nil {
+				return err
+			}
+			for _, a := range []struct {
+				strkey string
+				ops    int64
+			}{{verified, 7}, {declared, 1000}} {
+				if _, err := tx.Exec(t.Context(), `insert into agg.chain_daily (tenant_id, strkey, day, source, operations, transactions, counterparties)
+					values ($1, $2, $3, 'horizon', $4, 1, 1)`, g, a.strkey, last, a.ops); err != nil {
+					return err
+				}
+			}
+			_, err := tx.Exec(t.Context(), `insert into agg.chain_weeks (tenant_id, week, active_accounts, closed_at) values ($1, $2, 9, now())`,
+				g, mondays[0])
+			return err
+		}))
+		code, raw := cg.call(t, http.MethodPost, "/api/tenants/"+g.String()+"/reports",
+			map[string]string{"from": first.Format(time.DateOnly), "to": last.Format(time.DateOnly)})
+		require.Equal(t, http.StatusCreated, code, string(raw))
+		d := decode[reports.Detail](t, raw)
+		rep := decode[reports.Report](t, d.File.Report)
+		require.Equal(t, 2, rep.Version)
+		require.Equal(t, 2, rep.Methods.Format)
+		// the rule sets that graded the period, not the one the jobs apply now
+		require.Equal(t, []int{1, 2}, rep.Methods.IntegrityRules)
+		require.Equal(t, reports.Coverage{ScriptRequests: 100, GPCRequests: 10, UnmeasuredShare: rep.Web.Coverage.UnmeasuredShare}, rep.Web.Coverage)
+		require.NotNil(t, rep.Web.Coverage.UnmeasuredShare)
+		require.True(t, rep.Web.HasData)
+		require.False(t, rep.API.HasData)
+		require.False(t, rep.API.Lossy)
+		require.Zero(t, rep.API.InfrastructureRequests)
+		// only the verified account's operations count
+		require.Equal(t, int64(2), rep.Onchain.IDs)
+		require.Equal(t, int64(1), rep.Onchain.IDsVerified)
+		require.Equal(t, int64(7), rep.Onchain.Operations)
+		require.Equal(t, "9.000000", *rep.Onchain.WeeklyActive.Average)
+		require.Equal(t, int64(9), *rep.Onchain.WeeklyActive.Latest)
+		require.Equal(t, int64(1), rep.Onchain.WeeklyActive.WeeksCounted)
+		require.Equal(t, int64(len(mondays)-1), rep.Onchain.WeeklyActive.WeeksMissing)
+		require.Equal(t, "7.000000", *rep.Cohort.KPIs["onchain_operations"].Value)
+		// the raw canonical form names every new member
+		for _, m := range []string{`"integrity_rules":[1,2]`, `"has_data":true`, `"lossy":false`, `"infrastructure_requests":0`,
+			`"weekly_active_accounts":{`, `"coverage":{"gpc_requests":10,"script_requests":100,`} {
+			require.Contains(t, string(d.File.Report), m)
+		}
+		file, err := json.Marshal(d.File)
+		require.NoError(t, err)
+		_, err = reports.Verify(file)
+		require.NoError(t, err)
 	})
 
 	t.Run("the public link shows that report alone, without an account", func(t *testing.T) {

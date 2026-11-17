@@ -772,7 +772,9 @@ export const integrityReport = integritySummary.extend({
   tenant_id: id,
   from: day,
   to: day,
+  // the version the jobs apply now, and the versions that graded the days
   rule_version: z.number().int().positive(),
+  rule_versions: z.array(z.number().int().positive()),
   coverage: coverageEstimate,
   sites: z.array(integritySite),
 });

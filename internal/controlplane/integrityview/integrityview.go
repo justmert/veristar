@@ -107,7 +107,11 @@ type Report struct {
 	TenantID    uuid.UUID `json:"tenant_id"`
 	From        string    `json:"from"`
 	To          string    `json:"to"`
-	RuleVersion int       `json:"rule_version"`
+	// RuleVersion is the rule version the jobs apply now; RuleVersions are
+	// the versions that graded the range's days, ascending, empty without
+	// a graded day. a stored grade is never re-derived under a new version
+	RuleVersion  int   `json:"rule_version"`
+	RuleVersions []int `json:"rule_versions"`
 	Summary
 	// Coverage sums the project's coverage over the range
 	Coverage coverageview.Estimate `json:"coverage"`
@@ -134,7 +138,7 @@ func Load(ctx context.Context, tx pgx.Tx, tenants []uuid.UUID, from, to time.Tim
 	out := make(map[uuid.UUID]*Report, len(tenants))
 	for _, id := range tenants {
 		out[id] = &Report{TenantID: id, From: from.Format(time.DateOnly), To: to.Format(time.DateOnly),
-			RuleVersion: integrity.RuleVersion, Summary: SummaryOf(integrity.Combine(nil)),
+			RuleVersion: integrity.RuleVersion, RuleVersions: []int{}, Summary: SummaryOf(integrity.Combine(nil)),
 			Coverage: coverageview.Of(0, 0), Sites: []Site{}}
 	}
 	if len(tenants) == 0 {
@@ -195,6 +199,9 @@ func Load(ctx context.Context, tx pgx.Tx, tenants []uuid.UUID, from, to time.Tim
 			d.Reasons = append(d.Reasons, Reason{Code: r.Code, Level: r.Level, Value: r.Value, Limit: r.Limit, Text: r.Text()})
 		}
 		a.site.Days = append(a.site.Days, d)
+		if rep := out[tenant]; grade != nil && !slices.Contains(rep.RuleVersions, int(rv)) {
+			rep.RuleVersions = append(rep.RuleVersions, int(rv))
+		}
 		dg := integrity.DayGrade{Reasons: rs}
 		if grade != nil {
 			dg.Grade = *grade
@@ -219,6 +226,7 @@ func Load(ctx context.Context, tx pgx.Tx, tenants []uuid.UUID, from, to time.Tim
 		return nil, err
 	}
 	for tenant, rep := range out {
+		slices.Sort(rep.RuleVersions)
 		rep.Coverage = cov.Tenant(tenant)
 		// a site with tracker file requests but no graded day yet still
 		// shows its coverage

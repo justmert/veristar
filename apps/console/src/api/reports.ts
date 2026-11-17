@@ -71,8 +71,9 @@ export const publicReport = z.object({
 });
 export type PublicReport = z.infer<typeof publicReport>;
 
-// the report document of format version 1 (docs/reference/usage-reports.md),
-// read for display only; the signature check runs on the raw object
+// the report document (docs/reference/usage-reports.md), read for display
+// only; the signature check runs on the raw object. a stored report keeps
+// the layout of the version it was signed in, so every version is read
 const kpiDoc = z.object({
   value: decimal,
   previous: decimal,
@@ -80,9 +81,9 @@ const kpiDoc = z.object({
   percentile: decimal,
 });
 const latency = z.object({ seconds: decimal, over_10s: z.boolean() });
-export const reportDocument = z.object({
+export const reportDocumentV1 = z.object({
   format: z.literal("veristar-usage-report"),
-  version: z.number().int(),
+  version: z.literal(1),
   id: z.string(),
   issuer: z.object({
     name: z.string(),
@@ -191,6 +192,38 @@ export const reportDocument = z.object({
     }),
   ),
 });
+
+// version 2: the integrity rule versions that graded the period, the
+// coverage estimate, has_data, lossy, infrastructure requests and weekly
+// active accounts
+const v1 = reportDocumentV1.shape;
+export const reportDocumentV2 = reportDocumentV1.extend({
+  version: z.literal(2),
+  methods: v1.methods.extend({ integrity_rules: z.array(z.number().int().positive()) }),
+  web: v1.web.extend({
+    has_data: z.boolean(),
+    coverage: z.object({
+      script_requests: count,
+      gpc_requests: count,
+      unmeasured_share: decimal,
+    }),
+  }),
+  api: v1.api.extend({
+    has_data: z.boolean(),
+    lossy: z.boolean(),
+    infrastructure_requests: count,
+  }),
+  onchain: v1.onchain.extend({
+    weekly_active_accounts: z.object({
+      average: decimal,
+      latest: count.nullable(),
+      weeks_counted: count,
+      weeks_missing: count,
+    }),
+  }),
+});
+
+export const reportDocument = z.discriminatedUnion("version", [reportDocumentV1, reportDocumentV2]);
 export type ReportDocument = z.infer<typeof reportDocument>;
 
 export const reportApi = {

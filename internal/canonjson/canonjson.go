@@ -4,6 +4,9 @@
 // have their members sorted by the utf-16 code units of their names, no
 // whitespace is written, strings use the shortest escapes of rfc 8785
 // section 3.2.2.2, and numbers are integers between -(2^53-1) and 2^53-1.
+// a number counts by its value, as rfc 8785 reads it through an ieee 754
+// double: 12345.0 and 1.2345e4 are both the integer 12345 and are written
+// so, which is also what a browser's JSON.parse and every jcs library do.
 //
 // the integer restriction is what keeps the form exact: for an integer in
 // that range every rfc 8785 implementation writes the same digits, so
@@ -17,9 +20,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"slices"
 	"strconv"
-	"strings"
 	"unicode/utf16"
 	"unicode/utf8"
 )
@@ -39,11 +42,14 @@ func Marshal(v any) ([]byte, error) {
 
 // Canonicalize reads one json text and returns its canonical form. it
 // refuses what rfc 8785 cannot represent exactly or what i-json forbids:
-// a duplicate member name, a number that is not a safe integer, invalid
-// utf-8 and trailing data.
+// a duplicate member name, a number whose value is not a safe integer,
+// invalid utf-8, a lone surrogate escape and trailing data.
 func Canonicalize(raw []byte) ([]byte, error) {
 	if !utf8.Valid(raw) {
 		return nil, errors.New("canonjson: the input is not valid utf-8")
+	}
+	if err := checkSurrogates(raw); err != nil {
+		return nil, err
 	}
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.UseNumber()
@@ -173,18 +179,65 @@ func write(b *bytes.Buffer, v any) error {
 	return nil
 }
 
-// integer accepts a json number only when it is an integer written without
-// a fraction or exponent and within the safe range.
+// integer accepts a json number whose value, read as an ieee 754 double
+// the way rfc 8785 reads it, is an integer within the safe range.
 func integer(x json.Number) (int64, error) {
 	s := string(x)
-	if strings.ContainsAny(s, ".eE") {
-		return 0, fmt.Errorf("canonjson: %s is not an integer; the canonical form holds integers only", s)
-	}
-	n, err := strconv.ParseInt(s, 10, 64)
-	if err != nil || n > MaxSafeInteger || n < -MaxSafeInteger {
+	f, err := strconv.ParseFloat(s, 64)
+	if err != nil || math.IsInf(f, 0) {
 		return 0, fmt.Errorf("canonjson: %s is outside the safe integer range", s)
 	}
-	return n, nil
+	if f != math.Trunc(f) {
+		return 0, fmt.Errorf("canonjson: %s is not an integer; the canonical form holds integers only", s)
+	}
+	if f > MaxSafeInteger || f < -MaxSafeInteger {
+		return 0, fmt.Errorf("canonjson: %s is outside the safe integer range", s)
+	}
+	return int64(f), nil
+}
+
+// checkSurrogates refuses a \u escape of a utf-16 surrogate that is not
+// part of a pair. encoding/json would read it as u+fffd, a character the
+// signer never wrote, so the canonical bytes would differ from what any
+// other jcs implementation computes.
+func checkSurrogates(raw []byte) error {
+	hex4 := func(i int) (rune, bool) {
+		if i+6 > len(raw) || raw[i] != '\\' || raw[i+1] != 'u' {
+			return 0, false
+		}
+		v, err := strconv.ParseUint(string(raw[i+2:i+6]), 16, 16)
+		return rune(v), err == nil
+	}
+	in := false
+	for i := 0; i < len(raw); i++ {
+		c := raw[i]
+		switch {
+		case !in:
+			in = c == '"'
+		case c == '"':
+			in = false
+		case c == '\\' && i+1 < len(raw) && raw[i+1] == 'u':
+			r, ok := hex4(i)
+			if !ok {
+				return errors.New("canonjson: a \\u escape needs four hex digits")
+			}
+			switch {
+			case utf16.IsSurrogate(r) && r < 0xdc00:
+				lo, ok := hex4(i + 6)
+				if !ok || lo < 0xdc00 || lo > 0xdfff {
+					return errors.New("canonjson: a string holds a lone surrogate escape")
+				}
+				i += 11
+			case utf16.IsSurrogate(r):
+				return errors.New("canonjson: a string holds a lone surrogate escape")
+			default:
+				i += 5
+			}
+		case c == '\\':
+			i++
+		}
+	}
+	return nil
 }
 
 // writeString writes s with the escapes of rfc 8785 section 3.2.2.2: the

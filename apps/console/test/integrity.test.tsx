@@ -158,7 +158,8 @@ describe("appeal this grade", () => {
     expect(q.get("grade")).toBe("B");
     expect(q.get("sites")).toBe(`dex.example.org: ${report.sites[0]?.grade}`);
     expect(q.get("reasons")).toContain("quarantine_share (level B,");
-    expect(q.get("rule_version")).toBe(String(report.rule_version));
+    // the rule set that graded the days, not the one the jobs apply now
+    expect(q.get("rule_version")).toBe("1");
     // only these fields; the tenant id and figures of a visitor never go
     expect([...q.keys()].sort()).toEqual([
       "grade",
@@ -171,6 +172,16 @@ describe("appeal this grade", () => {
       "title",
     ]);
     expect(url.toString()).not.toContain(report.tenant_id);
+  });
+
+  it("names every rule set that graded a period across a rule change", async () => {
+    const report = integrityReport.parse({ ...f.integrityReportBody, rule_versions: [1, 2] });
+    const host = await render(
+      <IntegrityPanel report={report} appeal={{ slug: "stellar-dex", siteDomains: {} }} />,
+    );
+    expect(host.textContent).toContain("graded under rule sets 1 and 2");
+    const a = host.querySelector<HTMLAnchorElement>("[data-testid=integrity-appeal]");
+    expect(new URL(a?.getAttribute("href") ?? "").searchParams.get("rule_version")).toBe("1, 2");
   });
 
   it("is not offered for a range without a grade, nor without an appeal context", async () => {

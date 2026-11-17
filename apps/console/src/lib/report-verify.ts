@@ -1,8 +1,11 @@
 // the browser's own check of a signed usage report
 // (docs/reference/usage-reports.md): the canonical json form of the report
 // (rfc 8785, restricted to what a report holds), then a sep-53 signature
-// check with webcrypto's ed25519. the page never trusts the server's word
-// that a report is valid; it recomputes the signed bytes and checks them.
+// check with webcrypto's ed25519. the page does not take the server's word
+// that a report is valid: it recomputes the signed bytes and checks them.
+// the list of veristar's keys it compares the signer with comes from the
+// same console, though; a check that relies on no part of this server runs
+// on the downloaded file (platformctl report verify, or any sep-53 library).
 
 // the fixed prefix of sep-53: the signer hashes prefix and message with
 // sha-256 and signs that hash, so a signed message is never a transaction
@@ -15,8 +18,23 @@ export class CanonicalError extends Error {
   }
 }
 
+// a utf-16 surrogate that is not part of a pair
+const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+
+function str(s: string): string {
+  // the cli refuses a lone surrogate too: it is no character, and json
+  // readers disagree on what it becomes
+  if (LONE_SURROGATE.test(s)) {
+    throw new CanonicalError(
+      "a string holds a lone surrogate; the canonical form holds characters only",
+    );
+  }
+  return JSON.stringify(s);
+}
+
 // canonicalize writes the rfc 8785 form of a json value. numbers must be
-// safe integers: every jcs implementation writes those the same way, which
+// safe integers by value (12345.0 parses to 12345, as in the cli and every
+// jcs implementation, which all write such an integer the same way); that
 // is why a report carries ratios as decimal strings. strings are written
 // exactly as ecmascript's JSON.stringify writes them, which is the string
 // form rfc 8785 section 3.2.2.2 adopts. members are ordered by their utf-16
@@ -24,7 +42,7 @@ export class CanonicalError extends Error {
 export function canonicalize(v: unknown): string {
   if (v === null) return "null";
   if (typeof v === "boolean") return v ? "true" : "false";
-  if (typeof v === "string") return JSON.stringify(v);
+  if (typeof v === "string") return str(v);
   if (typeof v === "number") {
     if (!Number.isSafeInteger(v)) {
       throw new CanonicalError(
@@ -37,7 +55,7 @@ export function canonicalize(v: unknown): string {
   if (typeof v === "object") {
     const o = v as Record<string, unknown>;
     const names = Object.keys(o).sort();
-    return `{${names.map((k) => `${JSON.stringify(k)}:${canonicalize(o[k])}`).join(",")}}`;
+    return `{${names.map((k) => `${str(k)}:${canonicalize(o[k])}`).join(",")}}`;
   }
   throw new CanonicalError(`a value of type ${typeof v} has no json form`);
 }
