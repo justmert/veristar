@@ -36,6 +36,12 @@ export function Dialog({
   const titleId = useId();
   const descId = useId();
 
+  // the open prop decides; escape only asks. the latest value is read after
+  // a native close, so a caller that refuses to close (a ceremony is
+  // running) gets its dialog back instead of a closed one it believes open
+  const openRef = useRef(open);
+  openRef.current = open;
+
   useEffect(() => {
     const d = ref.current;
     if (!d) return;
@@ -84,7 +90,19 @@ export function Dialog({
       ref={ref}
       aria-labelledby={titleId}
       aria-describedby={description ? descId : undefined}
-      onClose={() => onOpenChange(false)}
+      onCancel={(e) => {
+        // escape: keep the dialog open and let the caller decide
+        e.preventDefault();
+        onOpenChange(false);
+      }}
+      onClose={() => {
+        onOpenChange(false);
+        // a browser may close on a repeated escape despite the cancel above
+        setTimeout(() => {
+          const d = ref.current;
+          if (d && openRef.current && !d.open) d.showModal();
+        }, 0);
+      }}
       onClick={(e) => {
         // a click on the scrim (the dialog box itself, outside its panel)
         if (e.target === e.currentTarget) onOpenChange(false);

@@ -208,6 +208,42 @@ describe("passkey sign-in (contract 4.1.9)", () => {
     expect(calls[2]?.url).toBe("/api/auth/passkey/challenge");
   });
 
+  it("offers another try when the challenge cannot be fetched", async () => {
+    const calls = stubFetch([
+      { status: 503, body: f.errorBody("unavailable") },
+      { status: 200, body: challenge },
+    ]);
+    const host = await renderRoutes([{ path: "/sign-in", element: <SignInPage /> }], "/sign-in");
+    await click(byRole(host, "button", "Continue with a passkey"));
+    await waitFor(() => byRole(dialog(), "button", "Try again"));
+    expect(
+      (byRole(dialog(), "button", "Sign in with your passkey") as HTMLButtonElement).disabled,
+    ).toBe(true);
+    await click(byRole(dialog(), "button", "Try again"));
+    await waitFor(() =>
+      expect(
+        (byRole(dialog(), "button", "Sign in with your passkey") as HTMLButtonElement).disabled,
+      ).toBe(false),
+    );
+    expect(calls.map((c) => c.url)).toEqual([
+      "/api/auth/passkey/challenge",
+      "/api/auth/passkey/challenge",
+    ]);
+    expect(dialog().textContent).not.toContain("Try again");
+  });
+
+  it("waits out a rate limit before the next try", async () => {
+    stubFetch([
+      { status: 429, body: f.errorBody("rate_limited"), headers: { "Retry-After": "30" } },
+    ]);
+    const host = await renderRoutes([{ path: "/sign-in", element: <SignInPage /> }], "/sign-in");
+    await click(byRole(host, "button", "Continue with a passkey"));
+    await waitFor(() => byRole(dialog(), "button", "Try again in 30 s"));
+    expect((byRole(dialog(), "button", "Try again in 30 s") as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+  });
+
   it("tells a dismissed prompt apart from a failure", async () => {
     seen.refuse = true;
     const calls = stubFetch([
