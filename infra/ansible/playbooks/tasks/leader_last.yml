@@ -1,0 +1,38 @@
+---
+# puts the core nodes into the group leader_last_group, the patroni leader
+# last. patroni in synchronous mode switches over only to the synchronous
+# standby, so in inventory order a leader handed over to a node that was
+# itself replaced next, and a rolling deploy did up to three switchovers.
+# with the leader last, every other member already runs the new image (or
+# was rebooted) when the leader hands over, and one switchover is enough.
+# a cluster that answers on no node keeps the inventory order.
+# leader_last_members replaces the read (tests/playbooks).
+- name: Read the patroni cluster
+  ansible.builtin.uri:
+    url: "https://{{ sa_private_ip }}:8008/cluster"
+    ca_path: "{{ sa_tls_root.ca_path }}"
+    client_cert: "{{ sa_tls_root.client_cert }}"
+    client_key: "{{ sa_tls_root.client_key }}"
+    return_content: true
+    timeout: 10
+  register: leader_last_cluster
+  failed_when: false
+  when: leader_last_members is not defined
+
+- name: Order the core nodes with the patroni leader last
+  ansible.builtin.add_host:
+    name: "{{ item }}"
+    groups: "{{ leader_last_group }}"
+  loop: "{{ (groups['core'] | reject('equalto', leader_last_leader) | list) + ([leader_last_leader] if leader_last_leader in groups['core'] else []) }}"
+  run_once: true
+  changed_when: false
+  vars:
+    leader_last_answers: >-
+      {{ ansible_play_hosts | map('extract', hostvars, 'leader_last_cluster')
+         | selectattr('json', 'defined') | map(attribute='json')
+         | selectattr('members', 'defined') | list }}
+    leader_last_view: >-
+      {{ leader_last_members if leader_last_members is defined
+         else ((leader_last_answers | first).members if leader_last_answers else []) }}
+    leader_last_leader: >-
+      {{ leader_last_view | selectattr('role', 'equalto', 'leader') | map(attribute='name') | first | default('') }}

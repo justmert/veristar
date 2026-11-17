@@ -1,0 +1,27 @@
+---
+# runs playbooks/tasks/leader_last.yml for leaderlast_test.go with a given
+# patroni member list instead of a cluster, and writes the order of the play
+# that follows.
+#   ansible-playbook -i leaderlast-inventory.yml leaderlast.yml -e @<members.json> -e out=<file>
+- name: Order the core nodes
+  hosts: core
+  connection: local
+  gather_facts: false
+  vars:
+    leader_last_group: test_core_order
+  tasks:
+    - name: Order the core nodes
+      ansible.builtin.include_tasks: ../../infra/ansible/playbooks/tasks/leader_last.yml
+
+- name: Record the order a serial play visits the nodes
+  hosts: test_core_order
+  connection: local
+  gather_facts: false
+  serial: 1
+  tasks:
+    - name: Append this node
+      ansible.builtin.lineinfile:
+        path: "{{ out }}"
+        line: "{{ inventory_hostname }}"
+        create: true
+        mode: "0644"

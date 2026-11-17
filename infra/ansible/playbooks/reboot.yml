@@ -10,7 +10,8 @@
 # nodes one at a time, then core nodes one at a time, then the probe. each
 # edge and core node is drained first (port 80 answers 503 and dns drops it,
 # as in deploy.yml); a core node holding the patroni leader hands it to the
-# synchronous replica before it goes down. after the reboot the start-at-boot
+# synchronous replica before it goes down; the leader's node goes last, so
+# that happens once per run. after the reboot the start-at-boot
 # unit brings the compose projects up, and the node must be healthy again
 # before the drain flag is removed. any failure stops the run with the
 # remaining nodes untouched.
@@ -68,8 +69,22 @@
       vars:
         drain_dir: /etc/veristar/drain
 
-- name: Reboot core nodes one by one
+# the patroni leader goes last, so it hands over once, to a member that is
+# already done (tasks/leader_last.yml)
+- name: Order the core nodes with the patroni leader last
   hosts: core
+  become: true
+  gather_facts: false
+  any_errors_fatal: true
+  vars_files: [../vars/pins.yml]
+  vars:
+    leader_last_group: reboot_core_order
+  tasks:
+    - name: Order the core nodes
+      ansible.builtin.include_tasks: tasks/leader_last.yml
+
+- name: Reboot core nodes one by one
+  hosts: reboot_core_order
   become: true
   serial: 1
   any_errors_fatal: true

@@ -10,7 +10,8 @@
 # address; after the drain wait the node pulls, recreates what changed and must
 # be healthy before the drain flag is removed and port 80 answers 308 again. a
 # core node that holds the patroni leader hands it to the synchronous replica
-# before its postgres is recreated. any failure stops the run with the remaining
+# before its postgres is recreated; the leader's node goes last, so that
+# happens once per run. any failure stops the run with the remaining
 # nodes untouched.
 #
 #   ansible-playbook -i inventories/<env>/ playbooks/deploy.yml -e sa_image_tag=<release>
@@ -34,8 +35,22 @@
 - name: Apply the migrations and the nats topology of the new release
   ansible.builtin.import_playbook: bootstrap.yml
 
-- name: Deploy core nodes one by one
+# the patroni leader goes last, so it hands over once, to a member that is
+# already done (tasks/leader_last.yml)
+- name: Order the core nodes with the patroni leader last
   hosts: core
+  become: true
+  gather_facts: false
+  any_errors_fatal: true
+  vars_files: [../vars/pins.yml]
+  vars:
+    leader_last_group: deploy_core_order
+  tasks:
+    - name: Order the core nodes
+      ansible.builtin.include_tasks: tasks/leader_last.yml
+
+- name: Deploy core nodes one by one
+  hosts: deploy_core_order
   become: true
   serial: 1
   any_errors_fatal: true
