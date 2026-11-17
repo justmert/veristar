@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 
 	"github.com/justmert/veristar/internal/events"
@@ -158,7 +159,9 @@ func (m *membership) refresh(ctx context.Context) error {
 	for k := range lister.Keys() {
 		listed = append(listed, strings.TrimPrefix(k, memberPrefix))
 	}
-	if err := lister.Stop(); err != nil && !errors.Is(err, jetstream.ErrNoKeysFound) {
+	// the lister ends its own subscription once it delivered every key, so
+	// stopping it afterwards finds nothing to stop
+	if err := lister.Stop(); err != nil && !errors.Is(err, jetstream.ErrNoKeysFound) && !errors.Is(err, nats.ErrBadSubscription) {
 		return err
 	}
 	m.update(listed, time.Now())
