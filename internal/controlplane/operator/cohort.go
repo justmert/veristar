@@ -149,7 +149,7 @@ ko as (
   from cp.chain_ids c
   join pop on pop.id = c.tenant_id
   join agg.chain_daily d on d.tenant_id = c.tenant_id and d.strkey = c.strkey
-  where d.day between @prev_from_day::date and @to_day::date
+  where c.verified_at is not null and d.day between @prev_from_day::date and @to_day::date
   group by c.tenant_id
 ),
 kv as (

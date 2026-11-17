@@ -12,13 +12,16 @@ global and compare view exports to CSV exactly as shown. The contracts are secti
 ## Read the on-chain column
 
 **Global web** and **Global API** carry an **On-chain** column: the operations of the project's
-declared ids over the range, with how many of its ids are verified and, when some days have no data,
-how many id-days are missing. Hover the cell for transactions and failing reads. A project without
-declared ids shows a dash.
+verified ids over the range, with how many of its declared ids are verified and, when some days have
+no data, how many verified id-days are missing. Hover the cell for transactions and failing reads. A
+project without declared ids shows a dash.
 
 - **Verified** means the project proved control: a SEP-53 signature or a data entry for an account,
   or for a contract its stored admin or its deployer being one of the project's verified accounts.
-  Give unverified ids no weight in a decision; anyone can declare any public id.
+  Anyone can declare any public id, so unverified ids count nowhere: the column's operations, the
+  compare series, the on-chain key metric and its percentile, threshold rules on on-chain
+  operations, What SCF sees and signed reports all read verified ids only, as weekly active
+  accounts do. The project's detail section still lists every declared id with its own numbers.
 - **Missing** days were not read, for a reason the detail names. They are never zeros. Accounts
   are read back 90 days at the first read; contracts only from about a week before they were
   declared, because public Stellar RPC servers keep events for about seven days.

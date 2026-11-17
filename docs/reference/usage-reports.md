@@ -60,7 +60,7 @@ share, percentile and latency is a decimal string with six digits after the poin
 | `methods` | the version of every definition behind the numbers: `format`, `web_metrics`, `api_metrics`, `onchain`, `cohort`, `integrity_rules`, `route_normaliser`, and `platform`, the release that made the report |
 | `web` | primary-band totals (page views, visitors, visits, bounces, total visit seconds, bounce rate, average visit seconds), the quarantine band, gateway requests and rejections, sites and verified sites, and a daily series |
 | `api` | requests, 4xx and 5xx with their rates, p50, p95 and p99 latency, services, routes, source, and a daily series |
-| `onchain` | declared ids and verified ids, operations, transactions, days not read, the two-way stellar.toml link, and a daily series |
+| `onchain` | declared ids and verified ids; operations, transactions, days not read and a daily series of the verified ids only; the two-way stellar.toml link |
 | `integrity` | the grade over the period, its graded site days per grade, and every reason with its plain language text |
 | `cohort` | the confirmed program, round, category and award date, the population of the percentiles, its size, and for visitors, page views, requests, error rate and on-chain operations the value, the previous period's value, the change and the percentile |
 | `rules_met` | the operators' saved threshold rules the project met on the generation day |

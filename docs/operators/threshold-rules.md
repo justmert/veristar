@@ -13,7 +13,7 @@ for every operator, and the project sees on its "What SCF sees" page which rules
 | Field | Meaning |
 |---|---|
 | Name | what you call the rule, 1 to 100 characters |
-| Metric | **Verified visitors** (primary-band visitors summed over the project's sites per UTC day), **API requests**, or **On-chain operations** |
+| Metric | **Verified visitors** (primary-band visitors summed over the project's sites per UTC day), **API requests**, or **On-chain operations** (of the project's verified ids only) |
 | Minimum per day | the daily value a day must reach to qualify, at least 1 |
 | Days per month | how many qualifying days each month needs, 1 to 28 |
 | Months | how many complete calendar months the rule looks back, 1 to 12 |
