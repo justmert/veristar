@@ -19,6 +19,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/prometheus/client_golang/prometheus"
 
+	"github.com/justmert/veristar/internal/config"
 	"github.com/justmert/veristar/internal/db/jobsq"
 )
 
@@ -124,7 +125,8 @@ type tenantDay struct {
 // back, which puts its marks back for the next leader.
 func (r *Rollup) Run(ctx context.Context, tx TxFunc) (Result, error) {
 	var total Result
-	drift := r.lastDrift.IsZero() || r.now().Sub(r.lastDrift) >= DriftEvery
+	first := r.lastDrift.IsZero()
+	drift := first || r.now().Sub(r.lastDrift) >= DriftEvery
 	for {
 		res, claimed, err := r.batch(ctx, tx)
 		if err != nil {
@@ -146,7 +148,8 @@ func (r *Rollup) Run(ctx context.Context, tx TxFunc) (Result, error) {
 			}
 			drift = false
 			r.lastDrift = r.now()
-			n, err := r.checkDrift(ctx, tx, r.lastDrift)
+			n, err := r.checkDrift(ctx, tx, r.lastDrift, first)
+			first = false
 			if err != nil {
 				return total, err
 			}
@@ -270,13 +273,33 @@ func (r *Rollup) batch(ctx context.Context, tx TxFunc) (Result, int, error) {
 // its minute rows and that no mark covers. with the hour locks nothing
 // should be found; a finding means a mark was lost some other way, and it is
 // repaired by the next batch and reported.
-func (r *Rollup) checkDrift(ctx context.Context, tx TxFunc, now time.Time) (int, error) {
+//
+// the first check of a process reaches back to when the traffic class rule
+// set took effect, at most as far as minute rows are always kept. a rollup
+// of the release before it, still running on another node during the
+// rolling deploy, stores every class of an hour under 'app'; the per-class
+// comparison finds such an hour, and recomputing it fixes its day as well.
+func (r *Rollup) checkDrift(ctx context.Context, tx TxFunc, now time.Time, first bool) (int, error) {
 	to := now.UTC().Truncate(time.Hour)
 	from := to.Add(-DriftWindow)
 	var marked []jobsq.MarkDriftedHoursRow
 	err := tx(ctx, func(tx pgx.Tx) error {
+		q := jobsq.New(tx)
+		if first {
+			applied, err := q.TrafficClassRulesFrom(ctx)
+			if err != nil {
+				return fmt.Errorf("traffic class rules: %w", err)
+			}
+			oldest := to.AddDate(0, 0, -config.MinMinuteRetentionDays)
+			if a := applied.UTC().Truncate(time.Hour); a.Before(from) {
+				from = a
+				if from.Before(oldest) {
+					from = oldest
+				}
+			}
+		}
 		var err error
-		marked, err = jobsq.New(tx).MarkDriftedHours(ctx, jobsq.MarkDriftedHoursParams{FromHour: from, ToHour: to})
+		marked, err = q.MarkDriftedHours(ctx, jobsq.MarkDriftedHoursParams{FromHour: from, ToHour: to})
 		return err
 	})
 	if err != nil {

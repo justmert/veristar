@@ -31,29 +31,40 @@ on conflict (tenant_id, hour) do nothing;
 -- name: MarkDriftedHours :many
 -- the consistency check behind the rollup: every (tenant, utc
 -- hour) between from and to that has minute rows, whose hourly rows
--- disagree with them on the request count, and that no mark covers, is
--- marked again so the next batch recomputes it. hours without minute rows
--- are never marked: a purge that keeps aggregates deletes the minutes on
--- purpose, and recomputing would erase the hourly rows it kept. it returns
--- what it marked; any row means a mark was lost, which the rollup reports.
+-- disagree with them on the request count of any traffic class, and that
+-- no mark covers, is marked again so the next batch recomputes it. the
+-- count is compared per class because a rollup that ignores the class
+-- (the release before migration 00040, still running during its rolling
+-- deploy) stores the right total under 'app' alone. hours without minute
+-- rows are never marked: a purge that keeps aggregates deletes the minutes
+-- on purpose, and recomputing would erase the hourly rows it kept. it
+-- returns what it marked; any row means a mark was lost or an hour was
+-- rolled up the old way, which the rollup reports.
 insert into api.rollup_pending (tenant_id, hour)
-select m.tenant_id, m.hour
+select distinct m.tenant_id, m.hour
 from (
-  select mm.tenant_id, date_trunc('hour', mm.bucket_start, 'UTC') as hour, sum(mm.count)::bigint as n
+  select mm.tenant_id, date_trunc('hour', mm.bucket_start, 'UTC') as hour, mm.traffic_class,
+         sum(mm.count)::bigint as n
   from api.metrics_minute mm
   where mm.bucket_start >= sqlc.arg(from_hour)::timestamptz and mm.bucket_start < sqlc.arg(to_hour)::timestamptz
-  group by 1, 2
+  group by 1, 2, 3
 ) m
 left join (
-  select hh.tenant_id, hh.bucket_start as hour, sum(hh.count)::bigint as n
+  select hh.tenant_id, hh.bucket_start as hour, hh.traffic_class, sum(hh.count)::bigint as n
   from api.metrics_hourly hh
   where hh.bucket_start >= sqlc.arg(from_hour)::timestamptz and hh.bucket_start < sqlc.arg(to_hour)::timestamptz
-  group by 1, 2
-) h on h.tenant_id = m.tenant_id and h.hour = m.hour
+  group by 1, 2, 3
+) h on h.tenant_id = m.tenant_id and h.hour = m.hour and h.traffic_class = m.traffic_class
 where m.n is distinct from h.n
   and not exists (select 1 from api.rollup_pending p where p.tenant_id = m.tenant_id and p.hour = m.hour)
 on conflict (tenant_id, hour) do nothing
 returning tenant_id, hour;
+
+-- name: TrafficClassRulesFrom :one
+-- when the first traffic class rule set took effect (migration 00040).
+-- hours rolled up before it by an older rollup may hold every class under
+-- 'app', so the first consistency check of a process reaches back to it
+select coalesce(min(applied_from), now())::timestamptz as applied_from from api.traffic_class_rules;
 
 -- name: DeleteHourlyRows :execrows
 -- first half of recomputing one tenant's hour: the old rows go, so a

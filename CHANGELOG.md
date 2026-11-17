@@ -300,6 +300,17 @@ here, before they take effect, as the processing terms require
   writer, as during any writer restart. A collector of the earlier release
   sends no traffic class, so its requests are stored as application traffic
   until the edge nodes run the new one.
+- `deploy.yml` now stops the jobs daemon on every core node before the
+  migrations, and each node's core role starts it again with the new image.
+  A jobs daemon of `0.3.0` still running on a node not yet updated would roll
+  up an hour's minute rows without their traffic class and store every class
+  under application traffic. As a second guard, the API rollup compares hourly
+  rows with their minute rows per traffic class, and the first check of each
+  new jobs process reaches back to `api.traffic_class_rules.applied_from`
+  (at most 8 days), so such an hour and its day are recomputed. Migration
+  00043 lets the jobs role read `api.traffic_class_rules`. If a deploy stops
+  before a core node is updated, its jobs daemon stays stopped: run the
+  deploy again.
 - At the first start after the upgrade, every identity in
   `OPERATOR_GITHUB_IDS` and `OPERATOR_STELLAR_ADDRESSES` becomes an operator
   admin and gets a 24-hour window to register a first passkey. Each operator

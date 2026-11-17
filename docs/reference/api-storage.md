@@ -136,13 +136,23 @@ rollup therefore never recomputes an hour while a writer that writes into
 it is open. A hash collision between two hours only makes the rollup skip
 an hour until its next run.
 
-Behind the locks the rollup runs a consistency check once per run
-(`MarkDriftedHours`): every hour of the last 24 (`apirollup.DriftWindow`)
-that has minute rows, whose hourly rows disagree with them on the request
-count and that no mark covers is marked again, recomputed in the same run,
-logged as an error and counted in `jobs_api_rollup_drifted_hours_total`.
-It is a second line of defence behind the locks. Hours without minute rows are never
-marked, because a purge that keeps aggregates deletes minutes on purpose.
+Behind the locks the rollup runs a consistency check at most once an hour
+(`MarkDriftedHours`, `apirollup.DriftEvery`): every hour of the last 24
+(`apirollup.DriftWindow`) that has minute rows, whose hourly rows disagree
+with them on the request count of any traffic class and that no mark covers
+is marked again, recomputed in the same run, logged as an error and counted
+in `jobs_api_rollup_drifted_hours_total`. It is a second line of defence
+behind the locks. Hours without minute rows are never marked, because a
+purge that keeps aggregates deletes minutes on purpose.
+
+The count is compared per traffic class because a rollup that ignores the
+class, the one of the release before migration 00040, gets the total of an
+hour right while storing every class under `app`. The first check of each
+jobs process reaches back to the oldest `api.traffic_class_rules.applied_from`
+instead of 24 hours, at most 8 days (`API_MINUTE_RETENTION_DAYS`' floor), so
+an hour such a rollup wrote during the rolling deploy of 00040 is recomputed
+with its day. `deploy.yml` also stops every jobs daemon before the
+migrations, so in a normal upgrade the check finds nothing.
 
 `ingest_warnings` counts requests, not exports: a cumulative
 series re-exported with no new request adds nothing. `lossy_histogram`,
@@ -214,12 +224,16 @@ queue:
 | `ingest_warnings` | select (own rows) | none | select, insert, update | select, insert, update, delete |
 | `series_state`, `resource_seen`, `ingest_dedup`, `route_registry` | none | none | select, insert, update | select, insert, update, delete |
 | `rollup_pending` | select (own rows, 00021: hourly and daily answers read pending hours from minutes) | none | select, insert, update | select, insert, update, delete |
+| `traffic_class_rules` | select (all rows, no tenant data) | select (all rows) | none | select (00043: the rollup's first consistency check) |
 
 Every table has forced row-level security with exactly one `cp_tenant`
 policy keyed on `cp.current_tenant_id()`; `cp_operator` has a select policy
 on hourly and daily only; `metrics_writer` and `jobs` have policies over all
-rows of the tables they use. `cp_system` has no table right in `api`; it has
-schema usage only to call `api.purge_tenant` (migration 00017). Functions:
+rows of the tables they use. `traffic_class_rules` (00040) holds no tenant
+data: one select policy over all rows for `cp_tenant`, `cp_operator`,
+`cp_system` and, since 00043, `jobs`. `cp_system` reads
+`traffic_class_rules` and has no other table right in `api`; its schema usage
+also serves to call `api.purge_tenant` (migration 00017). Functions:
 `add_buckets` for all four roles; `sum_buckets` and `histogram_quantile` for
 `cp_tenant`, `cp_operator`, `jobs`; the partition functions for `jobs` only.
 
@@ -251,7 +265,8 @@ schema usage only to call `api.purge_tenant` (migration 00017). Functions:
 | `ClaimRollupHours` | many | delete and return up to N pending hours, oldest first (`skip locked`) |
 | `TryLockRollupHour` | one | exclusive hour lock without waiting; false while a writer has the hour open |
 | `RestoreRollupMark` | exec | put back the mark of an hour that was not recomputed |
-| `MarkDriftedHours` | many | consistency check: mark hours whose hourly rows disagree with their minutes |
+| `MarkDriftedHours` | many | consistency check: mark hours whose hourly rows disagree with their minutes on the count of any traffic class |
+| `TrafficClassRulesFrom` | one | when the first traffic class rule set took effect; how far back a process's first consistency check reaches |
 | `DeleteHourlyRows` + `RollupHour` | execrows | recompute one tenant's hour from minutes |
 | `DeleteDailyRows` + `RollupDay` | execrows | recompute one tenant's UTC day from hours |
 | `CreateMinutePartition`, `CreateHourlyPartition` | one | create ahead; false when present |

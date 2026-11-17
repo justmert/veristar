@@ -132,8 +132,9 @@ in `deploy/caddy` reproduces both layouts.
   role and database and the platform database, `platformctl db migrate`, `db roles`,
   starts Umami (which migrates itself), `umami bootstrap`, `db umami-retention-role`,
   `nats apply`. Each step reports a change only when it made one.
-- `deploy.yml`: `bootstrap.yml` (migrations and the NATS topology), core nodes one at a
-  time, edge nodes one at a time, then the observability role on every node including the
+- `deploy.yml`: stops the jobs daemon on every core node, so none of the running release writes
+  after the migrations; `bootstrap.yml` (migrations and the NATS topology), core nodes one at a
+  time (each starts jobs again with the new image), edge nodes one at a time, then the observability role on every node including the
   probe. The core tier goes first so that the jobs process already reads every counter the new
   gateways send ([upgrade.md](upgrade.md)). Each node must answer 308 on port 80 (the composite health) before the next
   starts; any failure stops the run.

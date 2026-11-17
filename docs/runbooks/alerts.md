@@ -326,7 +326,9 @@ The API rollup found hours whose hourly rows disagreed with their minute rows
 although no pending mark existed (`jobs_api_rollup_drifted_hours_total`
 rose). The rollup has marked them again and recomputes them on its next pass,
 so the figures heal on their own; the alert means a mark was lost, which is a
-bug.
+bug, or, right after the upgrade to the release with migration 00040, that a
+jobs daemon of the earlier release rolled up an hour without its traffic class
+(the first check of a new jobs process looks for exactly that).
 Action: confirm the next pass cleared it (the counter stops rising, the alert
 resolves within the hour), then open an issue with the jobs log lines of the
 pass (tenants and hours) and recent metrics writer restarts or errors.
