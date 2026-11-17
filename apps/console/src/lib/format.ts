@@ -37,3 +37,8 @@ const dateTimeFmt = new Intl.DateTimeFormat("en", {
 export function formatDateTimeUtc(iso: string): string {
   return `${dateTimeFmt.format(new Date(iso))} UTC`;
 }
+
+// a count with its noun, singular for one: "1 day", "3 days"
+export function countOf(n: number, one: string, many = `${one}s`): string {
+  return `${formatCount(n)} ${n === 1 ? one : many}`;
+}
