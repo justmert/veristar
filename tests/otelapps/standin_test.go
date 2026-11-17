@@ -104,9 +104,10 @@ func runCase(t *testing.T, a app, m mode) {
 
 	for _, backend := range []string{"tenant", "platform"} {
 		dir := filepath.Join(out, backend)
-		got := waitForCounts(t, dir, a.name, m, totalRequests())
+		got := waitForCounts(t, dir, a, m, totalRequests())
 		checkMetrics(t, backend, got.metrics, m, want)
 		checkTraces(t, backend, got.traces, want)
+		checkProbe(t, backend, a, m, got)
 	}
 }
 

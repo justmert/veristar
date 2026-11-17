@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- spring boot example for the opentelemetry java agent. the agent itself is
+     not a dependency: the Dockerfile downloads the pinned jar and verifies its
+     checksum. versions of everything below come from the spring boot parent,
+     except opentelemetry-api, which follows the agent. -->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-parent</artifactId>
+    <version>4.1.2</version>
+    <relativePath/>
+  </parent>
+
+  <groupId>example</groupId>
+  <artifactId>otel-java-spring</artifactId>
+  <version>1.0.0</version>
+
+  <!-- docs:start dependencies -->
+  <properties>
+    <java.version>25</java.version>
+    <!-- the api version the agent 2.33.1 bridges (it targets sdk 1.67.0); the
+         spring boot parent manages an older one, so it is set here -->
+    <opentelemetry.version>1.67.0</opentelemetry.version>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-webmvc</artifactId>
+    </dependency>
+    <!-- only for the app's own span; the agent instruments the http server
+         without any dependency -->
+    <dependency>
+      <groupId>io.opentelemetry</groupId>
+      <artifactId>opentelemetry-api</artifactId>
+    </dependency>
+  </dependencies>
+  <!-- docs:end dependencies -->
+
+  <build>
+    <finalName>app</finalName>
+    <plugins>
+      <plugin>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-maven-plugin</artifactId>
+      </plugin>
+    </plugins>
+  </build>
+</project>
