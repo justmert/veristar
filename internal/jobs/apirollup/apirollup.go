@@ -13,10 +13,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/justmert/veristar/internal/config"
@@ -52,6 +54,10 @@ type Result struct {
 	// Drifted counts hours the consistency check found disagreeing with
 	// their minutes without a mark, and marked again.
 	Drifted int
+	// Parked counts claimed hours the database refused to recompute (a
+	// data error, such as a sum past bigint); their marks went back
+	// parked with the error, and the other hours carried on.
+	Parked int
 }
 
 // DriftWindow is how far back the consistency check compares hourly rows
@@ -73,6 +79,8 @@ type Rollup struct {
 	pending  prometheus.Gauge
 	orphaned prometheus.Counter
 	drifted  prometheus.Counter
+	parked   prometheus.Counter
+	parkedN  prometheus.Gauge
 	// lastDrift is when the consistency check last ran in this process;
 	// the scheduler runs one Run at a time, so it needs no lock
 	lastDrift time.Time
@@ -107,7 +115,15 @@ func New(log *slog.Logger, reg prometheus.Registerer) (*Rollup, error) {
 		Name: "jobs_api_rollup_drifted_hours_total",
 		Help: "hours whose hourly rows disagreed with their minute rows without a pending mark; marked again. any increase means a lost mark.",
 	})
-	for _, c := range []prometheus.Collector{r.hours, r.days, r.pending, r.orphaned, r.drifted} {
+	r.parked = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "jobs_api_rollup_parked_hours_total",
+		Help: "pending hours the database refused to recompute; each was parked with its error and is no longer claimed.",
+	})
+	r.parkedN = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "jobs_api_rollup_parked_hours",
+		Help: "pending hours parked now; above 0 needs an operator (docs/runbooks/alerts.md).",
+	})
+	for _, c := range []prometheus.Collector{r.hours, r.days, r.pending, r.orphaned, r.drifted, r.parked, r.parkedN} {
 		if err := reg.Register(c); err != nil {
 			return nil, fmt.Errorf("apirollup: register metrics: %w", err)
 		}
@@ -138,7 +154,7 @@ func (r *Rollup) Run(ctx context.Context, tx TxFunc) (Result, error) {
 		// would be claimed again at once, so a batch of busy marks would
 		// loop back to back until the writers paused. they
 		// wait for the next run instead.
-		progressed := res.Hours+res.Orphaned > 0
+		progressed := res.Hours+res.Orphaned+res.Parked > 0
 		if claimed < ClaimBatch || !progressed {
 			// the check runs at most once per DriftEvery, after the backlog
 			// is worked off, and what it marks is recomputed by one more
@@ -159,10 +175,10 @@ func (r *Rollup) Run(ctx context.Context, tx TxFunc) (Result, error) {
 			}
 		}
 	}
-	if total.Hours+total.Busy+total.Orphaned+total.Drifted > 0 {
+	if total.Hours+total.Busy+total.Orphaned+total.Drifted+total.Parked > 0 {
 		r.log.Info("api rollup", "hours", total.Hours, "days", total.Days,
 			"hourly_rows", total.HourlyRows, "daily_rows", total.DailyRows,
-			"busy", total.Busy, "orphaned", total.Orphaned, "drifted", total.Drifted)
+			"busy", total.Busy, "orphaned", total.Orphaned, "drifted", total.Drifted, "parked", total.Parked)
 	}
 	return total, nil
 }
@@ -174,12 +190,14 @@ func (r *Result) add(b Result) {
 	r.DailyRows += b.DailyRows
 	r.Busy += b.Busy
 	r.Orphaned += b.Orphaned
+	r.Parked += b.Parked
 }
 
 func (r *Rollup) batch(ctx context.Context, tx TxFunc) (Result, int, error) {
 	var res Result
 	var claimedN int
-	err := tx(ctx, func(tx pgx.Tx) error {
+	var parked int64
+	work := func(tx pgx.Tx) error {
 		res = Result{}
 		q := jobsq.New(tx)
 		claimed, err := q.ClaimRollupHours(ctx, ClaimBatch)
@@ -198,7 +216,7 @@ func (r *Rollup) batch(ctx context.Context, tx TxFunc) (Result, int, error) {
 		for _, d := range parts {
 			have[utcDay(d)] = true
 		}
-		days := map[tenantDay]bool{}
+		days := map[tenantDay][]time.Time{}
 		var order []tenantDay
 		for _, c := range claimed {
 			hour := c.Hour.UTC()
@@ -229,35 +247,84 @@ func (r *Rollup) batch(ctx context.Context, tx TxFunc) (Result, int, error) {
 				res.Busy++
 				continue
 			}
-			if _, err := q.DeleteHourlyRows(ctx, jobsq.DeleteHourlyRowsParams{TenantID: c.TenantID, Hour: hour}); err != nil {
-				return fmt.Errorf("delete hour %s of %s: %w", hour.Format(time.RFC3339), c.TenantID, err)
+			// each hour in its own savepoint: an hour the database refuses
+			// (a count sum past bigint, from one tenant's absurd counts) is
+			// parked, and the batch, with every other tenant's hours,
+			// commits
+			var n int64
+			err = savepoint(ctx, tx, func(q *jobsq.Queries) error {
+				if _, err := q.DeleteHourlyRows(ctx, jobsq.DeleteHourlyRowsParams{TenantID: c.TenantID, Hour: hour}); err != nil {
+					return fmt.Errorf("delete hour %s of %s: %w", hour.Format(time.RFC3339), c.TenantID, err)
+				}
+				var err error
+				n, err = q.RollupHour(ctx, jobsq.RollupHourParams{TenantID: c.TenantID, Hour: hour})
+				if err != nil {
+					return fmt.Errorf("roll up hour %s of %s: %w", hour.Format(time.RFC3339), c.TenantID, err)
+				}
+				return nil
+			})
+			if dataError(err) {
+				if err := r.park(ctx, q, c.TenantID, hour, err); err != nil {
+					return err
+				}
+				res.Parked++
+				continue
 			}
-			n, err := q.RollupHour(ctx, jobsq.RollupHourParams{TenantID: c.TenantID, Hour: hour})
 			if err != nil {
-				return fmt.Errorf("roll up hour %s of %s: %w", hour.Format(time.RFC3339), c.TenantID, err)
+				return err
 			}
 			res.Hours++
 			res.HourlyRows += n
 			k := tenantDay{tenant: c.TenantID, day: utcDay(hour)}
-			if !days[k] {
-				days[k] = true
+			if _, ok := days[k]; !ok {
 				order = append(order, k)
 			}
+			days[k] = append(days[k], hour)
 		}
 		// days after hours: a day is the sum of its hourly rows, which must
 		// hold the hours just recomputed
 		for _, k := range order {
-			if _, err := q.DeleteDailyRows(ctx, jobsq.DeleteDailyRowsParams{TenantID: k.tenant, Day: k.day}); err != nil {
-				return fmt.Errorf("delete day %s of %s: %w", k.day.Format(time.DateOnly), k.tenant, err)
+			var n int64
+			err := savepoint(ctx, tx, func(q *jobsq.Queries) error {
+				if _, err := q.DeleteDailyRows(ctx, jobsq.DeleteDailyRowsParams{TenantID: k.tenant, Day: k.day}); err != nil {
+					return fmt.Errorf("delete day %s of %s: %w", k.day.Format(time.DateOnly), k.tenant, err)
+				}
+				var err error
+				n, err = q.RollupDay(ctx, jobsq.RollupDayParams{TenantID: k.tenant, Day: k.day})
+				if err != nil {
+					return fmt.Errorf("roll up day %s of %s: %w", k.day.Format(time.DateOnly), k.tenant, err)
+				}
+				return nil
+			})
+			if dataError(err) {
+				// the day's hours were recomputed, but the day refuses their
+				// sum: they are parked, so the day is not left behind them
+				// unnoticed and readers keep taking those hours from minutes
+				for _, hour := range days[k] {
+					if err := r.park(ctx, q, k.tenant, hour, err); err != nil {
+						return err
+					}
+					res.Parked++
+				}
+				continue
 			}
-			n, err := q.RollupDay(ctx, jobsq.RollupDayParams{TenantID: k.tenant, Day: k.day})
 			if err != nil {
-				return fmt.Errorf("roll up day %s of %s: %w", k.day.Format(time.DateOnly), k.tenant, err)
+				return err
 			}
 			res.Days++
 			res.DailyRows += n
 		}
 		return nil
+	}
+	err := tx(ctx, func(tx pgx.Tx) error {
+		if err := work(tx); err != nil {
+			return err
+		}
+		// the parked hours of the whole table, for the gauge: a small
+		// count, read in the batch so a run needs no extra transaction
+		var err error
+		parked, err = jobsq.New(tx).CountParkedRollupHours(ctx)
+		return err
 	})
 	if err != nil {
 		return Result{}, 0, fmt.Errorf("apirollup: %w", err)
@@ -266,7 +333,44 @@ func (r *Rollup) batch(ctx context.Context, tx TxFunc) (Result, int, error) {
 	r.hours.Add(float64(res.Hours))
 	r.days.Add(float64(res.Days))
 	r.orphaned.Add(float64(res.Orphaned))
+	r.parked.Add(float64(res.Parked))
+	r.parkedN.Set(float64(parked))
 	return res, claimedN, nil
+}
+
+// savepoint runs fn inside a savepoint of tx and rolls back to it when fn
+// fails, so the transaction can go on.
+func savepoint(ctx context.Context, tx pgx.Tx, fn func(*jobsq.Queries) error) error {
+	sp, err := tx.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("savepoint: %w", err)
+	}
+	if err := fn(jobsq.New(sp)); err != nil {
+		_ = sp.Rollback(ctx)
+		return err
+	}
+	if err := sp.Commit(ctx); err != nil {
+		return fmt.Errorf("release savepoint: %w", err)
+	}
+	return nil
+}
+
+// dataError reports a data exception (sqlstate class 22, numeric value out
+// of range among them) or an integrity violation (23): the stored values
+// refuse the result, so recomputing again gives the same error.
+func dataError(err error) bool {
+	var pe *pgconn.PgError
+	return errors.As(err, &pe) && (strings.HasPrefix(pe.Code, "22") || strings.HasPrefix(pe.Code, "23"))
+}
+
+// park puts a claimed hour's mark back, parked with the error.
+func (r *Rollup) park(ctx context.Context, q *jobsq.Queries, tenant uuid.UUID, hour time.Time, cause error) error {
+	r.log.Error("the database refused to recompute a pending hour, it is parked and left out of later runs",
+		"tenant", tenant.String(), "hour", hour.Format(time.RFC3339), "error", cause.Error())
+	if err := q.ParkRollupHour(ctx, jobsq.ParkRollupHourParams{TenantID: tenant, Hour: hour, Error: cause.Error()}); err != nil {
+		return fmt.Errorf("park hour %s of %s: %w", hour.Format(time.RFC3339), tenant, err)
+	}
+	return nil
 }
 
 // checkDrift marks again every recent hour whose hourly rows disagree with
