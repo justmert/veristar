@@ -117,7 +117,8 @@ test("the edge counted every load of the tracker file and the gpc one", async ()
 test("the snippet offers the title opt-in from 1.3.0", async () => {
   const page = owner.page;
   await page.goto(`${APP}/projects/${tenant.id}/sites/${site.id}/snippet`);
-  await expect(page.getByText("tracker 1.3.0").first()).toBeVisible();
+  // the newest release, which reads the title choice like every release from 1.3.0
+  await expect(page.getByText("tracker 1.3.1").first()).toBeVisible();
   await page.getByLabel("Send the page title").check();
   await expect(page.locator("pre code").first()).toContainText('data-send-title="true"');
   expect(tag).not.toContain("data-send-title");
