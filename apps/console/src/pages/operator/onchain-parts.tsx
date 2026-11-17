@@ -11,6 +11,7 @@ import type { TenantRef } from "@/api/schemas";
 import { SeriesLine } from "@/components/compare-charts";
 import { ErrorPanel, Loading } from "@/components/error-panel";
 import { DayStrip, IdRows, LinkStatus, WeeklyActiveList } from "@/components/onchain";
+import { ContractFunctionsBlock } from "@/components/onchain-functions";
 import { Button } from "@/components/ui/button";
 import { formatCount } from "@/lib/format";
 import { type ListState, listParams } from "@/lib/global";
@@ -200,7 +201,12 @@ export function TenantOnchainSection({ tenantId }: { tenantId: string }) {
             <div className="mb-4">
               <WeeklyActiveList weeks={q.data.weeks} label="Weekly active accounts per ISO week" />
             </div>
-            <IdRows view={q.data} />
+            <IdRows
+              view={q.data}
+              extra={(id) => (
+                <ContractFunctionsBlock id={id} source={{ tenantId, operator: true, range: {} }} />
+              )}
+            />
           </div>
         )
       ) : null}

@@ -22,6 +22,10 @@ const MISSING: Record<string, string> = {
   week_not_counted: "Weekly active accounts were not counted for this week",
   no_verified_ids:
     "The project had no verified account or contract; only verified ones count toward weekly active accounts",
+  not_verified: "The contract is not verified; only verified contracts count",
+  not_a_contract: "An account has no contract functions",
+  no_call_tree:
+    "The ledger API sent no call tree for a transaction; only the calls of accounts are counted",
 };
 
 export function missingText(code: string): string {
