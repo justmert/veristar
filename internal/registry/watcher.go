@@ -33,6 +33,7 @@ type Watcher[T any] struct {
 
 	mu     sync.RWMutex
 	snap   map[string]T
+	gen    uint64 // counts every change of snap, under mu
 	loaded atomic.Bool
 	synced atomic.Int64 // unix nanoseconds of the last complete initial load
 }
@@ -68,6 +69,23 @@ func (w *Watcher[T]) Snapshot() map[string]T {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 	return maps.Clone(w.snap)
+}
+
+// Generation counts the changes of the snapshot: it moves on every applied
+// update and every rebuilt snapshot, so a reader that derives an index from
+// the snapshot knows when to build it again.
+func (w *Watcher[T]) Generation() uint64 {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	return w.gen
+}
+
+// SnapshotAt returns a copy of every entry and the generation it belongs to,
+// read together.
+func (w *Watcher[T]) SnapshotAt() (map[string]T, uint64) {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	return maps.Clone(w.snap), w.gen
 }
 
 // Len returns the number of entries in the snapshot.
@@ -136,6 +154,7 @@ func (w *Watcher[T]) watchOnce(ctx context.Context) error {
 				if initial {
 					w.mu.Lock()
 					w.snap = next
+					w.gen++
 					w.mu.Unlock()
 					w.synced.Store(time.Now().UnixNano())
 					w.loaded.Store(true)
@@ -153,6 +172,7 @@ func (w *Watcher[T]) watchOnce(ctx context.Context) error {
 			cp := maps.Clone(w.snap)
 			w.applyTo(cp, e)
 			w.snap = cp
+			w.gen++
 			w.mu.Unlock()
 		}
 	}

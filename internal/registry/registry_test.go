@@ -56,12 +56,18 @@ func TestWatcherSurvivesRestart(t *testing.T) {
 	got, ok := w.Get(before.ID)
 	require.True(t, ok)
 	require.Equal(t, before, got)
+	snap, loadedGen := w.SnapshotAt()
+	require.Equal(t, map[string]registry.Site{before.ID: before}, snap)
+	require.Positive(t, loadedGen, "the loaded snapshot is a change")
+	require.Equal(t, loadedGen, w.Generation())
 
-	// updates and deletes arrive
+	// updates and deletes arrive, and each one moves the generation
 	suspended := before
 	suspended.Status = "suspended"
 	require.NoError(t, pub.PutSite(ctx, suspended))
 	require.Eventually(t, func() bool { s, _ := w.Get(before.ID); return !s.Active() }, 5*time.Second, 20*time.Millisecond)
+	_, gen := w.SnapshotAt()
+	require.Greater(t, gen, loadedGen, "an update moves the generation")
 	gone := site(registry.StatusActive)
 	require.NoError(t, pub.PutSite(ctx, gone))
 	require.Eventually(t, func() bool { _, ok := w.Get(gone.ID); return ok }, 5*time.Second, 20*time.Millisecond)
