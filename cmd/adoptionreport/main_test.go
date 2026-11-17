@@ -178,14 +178,15 @@ func golden(t *testing.T, path, got string) {
 }
 
 // TestRecordedLocalRun replays the answers recorded from the real machine
-// api of the local dev stack on 2026-11-13 (adoptionreport -raw), checks each
-// one against the contract, and requires the same evidence file the real run
-// wrote, except for the api base url. the /web/daily answer carries the
-// integrity field the api gained later, as the api answers it for days
-// without a grade, so its body hash in the sources table differs from the
-// original run's
+// api of a local stack on 2026-11-17 (adoptionreport -raw), checks each one
+// against the contract, and requires the same evidence file the real run
+// wrote. the stack ran the gateway, replayer, control plane, jobs,
+// metricswriter and collector of this repository on the dev compose
+// databases; browsers loaded a local site with the console's snippet (one of
+// them with global privacy control) and the go example app sent its requests,
+// cors preflights among them, through the collector
 func TestRecordedLocalRun(t *testing.T) {
-	dir := filepath.Join("testdata", "recorded", "local-2026-11-13")
+	dir := filepath.Join("testdata", "recorded", "local-2026-11-17")
 	var index []recorded
 	b, err := os.ReadFile(filepath.Join(dir, "index.json"))
 	require.NoError(t, err)
@@ -199,11 +200,18 @@ func TestRecordedLocalRun(t *testing.T) {
 		h.Set("X-Request-Id", r.RequestID)
 		cs.add(r.Path, canned{status: r.Status, header: h, body: body})
 	}
-	res := runReport(t, cs, "-tenants", "01a1d37e-a3c3-724a-b427-12f2b3aa38dd", "-from", "2026-10-31", "-to", "2026-11-13")
+	// -now is the time the real run wrote its file at
+	res := runReport(t, cs, "-tenants", "01a1e73a-634e-79c4-8503-92a0e05fe779", "-from", "2026-11-04", "-to", "2026-11-17",
+		"-now", "2026-11-17T02:04:54Z")
 	require.Equal(t, 0, res.code, res.stderr)
-	got := strings.ReplaceAll(res.file, cs.base(), "http://localhost:8085/api/metrics/v1")
-	golden(t, filepath.Join("testdata", "recorded", "local-2026-11-13.golden.md"), got)
-	require.Contains(t, res.stdout, "longest run 1 day (2026-11-13), below the 14-day threshold")
+	got := strings.ReplaceAll(res.file, cs.base(), "http://localhost:8185/api/metrics/v1")
+	golden(t, filepath.Join("testdata", "recorded", "local-2026-11-17.golden.md"), got)
+	require.Contains(t, res.stdout, "longest run 1 day (2026-11-17), below the 14-day threshold")
+	// the browser with global privacy control fetched the tracker file but
+	// was not measured; the preflights stay out of the api requests
+	require.Contains(t, got, "Tracker file requests in the range: 10, of which with Global Privacy Control: 2.")
+	require.Contains(t, got, "| Requests | 19 |")
+	require.Contains(t, got, "| Infrastructure requests, not counted above | 5 |")
 }
 
 // the synthetic fixtures below are test data only: they exercise runs, gaps,
@@ -243,7 +251,11 @@ func days(from string, n int) []string {
 // the 6th (zero) and the 11th (never aggregated), so its longest run is 9
 // days (12 to 20); the threshold is set to 9 so it passes, and tenant b,
 // with 8 days, does not. the tenant list and a's daily rows come in two
-// pages each; the first tenant page is refused once with 429.
+// pages each; the first tenant page is refused once with 429. a's 19 days
+// carry 8 tracker file requests each, one with gpc: no day reaches the
+// 100 requests a share needs, the range does (19 of 152). infrastructure
+// requests come on days with requests, on a's day without (the 18th) and
+// on b's only api day, and are never counted as requests.
 func TestRunsGapsAndPaging(t *testing.T) {
 	cs := newContractServer(t)
 	from, to := "2026-11-01", "2026-11-20"
@@ -255,6 +267,8 @@ func TestRunsGapsAndPaging(t *testing.T) {
 	cs.addJSON(t, "/tenants", tenantList{Items: []tenant{tenantRow(tenantA, "Project A")}, NextCursor: ptr("c1")})
 	cs.addJSON(t, q("/tenants", "cursor", "c1"), tenantList{Items: []tenant{tenantRow(tenantB, "Project | B")}})
 
+	// a day's share is null below 100 requests, as the api answers it
+	aCoverage := coverageCounts{ScriptRequests: 8, GPCRequests: 1}
 	var aRows []webDaily
 	for i, d := range days(from, 20) {
 		if d == "2026-11-11" {
@@ -265,8 +279,8 @@ func TestRunsGapsAndPaging(t *testing.T) {
 			pv = 0
 		}
 		aRows = append(aRows,
-			webDaily{TenantID: tenantA, Day: d, Band: "primary", Sites: 2, Pageviews: pv, Visitors: pv / 2, Visits: pv / 2, Bounces: pv / 4, Totaltime: 30 * pv, Integrity: noGrade()},
-			webDaily{TenantID: tenantA, Day: d, Band: "quarantine", Sites: 2, Pageviews: 1, Visitors: 1, Visits: 1, Bounces: 1, Integrity: noGrade()})
+			webDaily{TenantID: tenantA, Day: d, Band: "primary", Sites: 2, Pageviews: pv, Visitors: pv / 2, Visits: pv / 2, Bounces: pv / 4, Totaltime: 30 * pv, Integrity: noGrade(), Coverage: aCoverage},
+			webDaily{TenantID: tenantA, Day: d, Band: "quarantine", Sites: 2, Pageviews: 1, Visitors: 1, Visits: 1, Bounces: 1, Integrity: noGrade(), Coverage: aCoverage})
 	}
 	cs.addJSON(t, q("/web/daily", "tenant", tenantA, "from", from, "to", to), webDailyList{From: from, To: to, Items: aRows[:20], NextCursor: ptr("p2")})
 	cs.addJSON(t, q("/web/daily", "tenant", tenantA, "from", from, "to", to, "cursor", "p2"), webDailyList{From: from, To: to, Items: aRows[20:]})
@@ -278,16 +292,19 @@ func TestRunsGapsAndPaging(t *testing.T) {
 		{TenantID: tenantA, Day: "2026-11-02", Band: "primary", Dimension: "referrer", Key: "a|b.example", Value: 1},
 	}})
 	cs.addJSON(t, q("/api/daily", "tenant", tenantA, "from", from, "to", to), apiDailyList{From: from, To: to, Items: []apiDaily{
+		{TenantID: tenantA, Day: "2026-11-18", Services: 1, Source: "metric", apiNumbers: apiNumbers{InfrastructureRequests: 7}},
 		{TenantID: tenantA, Day: "2026-11-19", Services: 1, Source: "metric", apiNumbers: apiNumbers{Requests: 100, Requests4xx: 10, Requests5xx: 1,
-			Rate4xx: ptr(0.1), Rate5xx: ptr(0.01), P50Seconds: ptr(0.02), P95Seconds: ptr(1.5), P99Seconds: nil, P99Over10s: true}},
+			Rate4xx: ptr(0.1), Rate5xx: ptr(0.01), P50Seconds: ptr(0.02), P95Seconds: ptr(1.5), P99Seconds: nil, P99Over10s: true, InfrastructureRequests: 40}},
 		{TenantID: tenantA, Day: "2026-11-20", Services: 2, SpanServices: 1, Source: "mixed", apiNumbers: apiNumbers{Requests: 50,
-			Rate4xx: ptr(0.0), Rate5xx: ptr(0.0), P50Seconds: ptr(0.01), P95Seconds: nil, P95Over10s: true, P99Seconds: nil, P99Over10s: true, Lossy: true}},
+			Rate4xx: ptr(0.0), Rate5xx: ptr(0.0), P50Seconds: ptr(0.01), P95Seconds: nil, P95Over10s: true, P99Seconds: nil, P99Over10s: true, Lossy: true,
+			InfrastructureRequests: 3}},
 	}})
 	cs.addJSON(t, q("/api/routes/daily", "tenant", tenantA, "from", "2026-11-20", "to", "2026-11-20"), apiRouteDailyList{From: "2026-11-20", To: "2026-11-20", Items: []apiRouteDaily{
 		{TenantID: tenantA, Day: "2026-11-20", Service: "svc", Method: "GET", Route: "", Source: "span", apiNumbers: apiNumbers{Requests: 20,
 			Rate4xx: ptr(0.0), Rate5xx: ptr(0.0), P50Seconds: ptr(0.01), P95Seconds: ptr(0.02), P99Seconds: ptr(0.03)}},
 		{TenantID: tenantA, Day: "2026-11-20", Service: "svc", Method: "GET", Route: "/a/{id}", Source: "metric", apiNumbers: apiNumbers{Requests: 30,
 			Rate4xx: ptr(0.0), Rate5xx: ptr(0.0), P50Seconds: ptr(0.01), P95Seconds: nil, P95Over10s: true, P99Seconds: nil, P99Over10s: true, Lossy: true}},
+		{TenantID: tenantA, Day: "2026-11-20", Service: "svc", Method: "OPTIONS", Route: "/a/{id}", Source: "metric", apiNumbers: apiNumbers{InfrastructureRequests: 3}},
 	}})
 
 	var bRows []webDaily
@@ -296,7 +313,9 @@ func TestRunsGapsAndPaging(t *testing.T) {
 	}
 	cs.addJSON(t, q("/web/daily", "tenant", tenantB, "from", from, "to", to), webDailyList{From: from, To: to, Items: bRows})
 	cs.addJSON(t, q("/web/dimensions", "tenant", tenantB, "from", from, "to", to), webDimensionList{From: from, To: to, Items: []webDimension{}})
-	cs.addJSON(t, q("/api/daily", "tenant", tenantB, "from", from, "to", to), apiDailyList{From: from, To: to, Items: []apiDaily{}})
+	cs.addJSON(t, q("/api/daily", "tenant", tenantB, "from", from, "to", to), apiDailyList{From: from, To: to, Items: []apiDaily{
+		{TenantID: tenantB, Day: "2026-11-15", Services: 1, Source: "span", apiNumbers: apiNumbers{InfrastructureRequests: 12}},
+	}})
 
 	res := runReport(t, cs, "-tenants", tenantA+","+tenantB, "-from", from, "-to", to, "-min-days", "9", "-now", "2026-11-21T08:00:00Z")
 	require.Equal(t, 0, res.code, res.stderr)
@@ -307,17 +326,24 @@ func TestRunsGapsAndPaging(t *testing.T) {
 	require.Contains(t, f, "| Project A | `"+tenantA+"` | active | 2026-10-01 | 2026-11-01 | 9 days (2026-11-12 to 2026-11-20) | yes | 2 of 20 |")
 	require.Contains(t, f, "| Project \\| B | `"+tenantB+"` | active | 2026-10-01 | 2026-11-13 | 8 days (2026-11-13 to 2026-11-20) | no | 0 of 20 |")
 	require.Contains(t, f, "| 2026-11-11 | not aggregated |")
-	require.Contains(t, f, "| 2026-11-06 | 0 | 0 | 0 | none (no visits) | none (no visits) | 1 | no |")
+	require.Contains(t, f, "| 2026-11-06 | 0 | 0 | 0 | none (no visits) | none (no visits) | 1 | 8 (1) | no |")
 	require.Contains(t, f, "| Days the aggregation never read | 1 |")
 	// quarantine rows are reported, never counted: DE 5 and NG 4, no US
 	require.Contains(t, f, "| DE | 5 |\n| NG | 4 |\n")
 	require.NotContains(t, f, "| US |")
 	require.Contains(t, f, "| a\\|b.example | 1 |")
 	require.Contains(t, f, "Quarantined page views in the range, not counted above: 19.")
-	require.Contains(t, f, "| 2026-11-19 | 100 | 89 | 10 | 1 | 20.0 ms | 1.500 s | metric | 1 |")
-	require.Contains(t, f, "| 2026-11-20 | 50 | 50 | 0 | 0 | 10.0 ms | >10 s | mixed, approximate | 2 |")
-	require.Contains(t, f, "| svc | GET | /a/{id} | 30 | 0 | 0 | 10.0 ms | >10 s | metric |\n| svc | GET | (empty) | 20 |")
-	require.Contains(t, f, "No API requests in the range.")
+	require.Contains(t, f, "| 2026-11-19 | 100 | 89 | 10 | 1 | 20.0 ms | 1.500 s | metric | 1 | 40 |")
+	require.Contains(t, f, "| svc | GET | /a/{id} | 30 | 0 | 0 | 10.0 ms | >10 s | metric | 0 |\n| svc | GET | (empty) | 20 |")
+	require.Contains(t, f, "No API requests in the range. Infrastructure requests, not counted: 12.")
+	require.Contains(t, f, "Tracker file requests in the range: 152, of which with Global Privacy Control: 19. Estimated share of visits not measured: 12.5%.")
+	require.Contains(t, f, "Tracker file requests in the range: 0, of which with Global Privacy Control: 0. No estimate")
+	require.Contains(t, f, "| 2026-11-12 | 21 | 10 | 10 | 50.0% | 63 s | 1 | 8 (1) | yes |")
+	require.Contains(t, f, "| Requests | 150 |\n| Status below 400 | 139 |")
+	require.Contains(t, f, "| Infrastructure requests, not counted above | 50 |")
+	require.NotContains(t, f, "| 2026-11-18 | 0 |", "a day with infrastructure requests only is not a day with requests")
+	require.Contains(t, f, "| 2026-11-20 | 50 | 50 | 0 | 0 | 10.0 ms | >10 s | mixed, approximate | 2 | 3 |")
+	require.Contains(t, f, "| svc | OPTIONS | /a/{id} | 0 | 0 | 0 | none | none | metric | 3 |")
 	require.Contains(t, res.stdout, tenantA+" Project A: longest run 9 days (2026-11-12 to 2026-11-20), meets the 9-day threshold")
 }
 
@@ -413,3 +439,22 @@ func TestRawRecorder(t *testing.T) {
 // noGrade is the integrity of a day without a graded site day, as the api
 // answers it
 func noGrade() integritySummary { return integritySummary{Reasons: []rangeReason{}} }
+
+// TestCoverageDisagrees: the api repeats a day's coverage on both bands'
+// items, so two different values for one day stop the report
+func TestCoverageDisagrees(t *testing.T) {
+	cs := newContractServer(t)
+	cs.addJSON(t, "/tenants", tenantList{Items: []tenant{tenantRow(tenantA, "Project A")}})
+	from := "2026-11-12"
+	cs.addJSON(t, q("/web/daily", "tenant", tenantA, "from", from, "to", from), webDailyList{From: from, To: from, Items: []webDaily{
+		{TenantID: tenantA, Day: from, Band: "primary", Sites: 1, Pageviews: 1, Visitors: 1, Visits: 1, Integrity: noGrade(),
+			Coverage: coverageCounts{ScriptRequests: 3, GPCRequests: 1}},
+		{TenantID: tenantA, Day: from, Band: "quarantine", Sites: 1, Integrity: noGrade(),
+			Coverage: coverageCounts{ScriptRequests: 4, GPCRequests: 1}},
+	}})
+	cs.addJSON(t, q("/web/dimensions", "tenant", tenantA, "from", from, "to", from), webDimensionList{From: from, To: from, Items: []webDimension{}})
+	cs.addJSON(t, q("/api/daily", "tenant", tenantA, "from", from, "to", from), apiDailyList{From: from, To: from, Items: []apiDaily{}})
+	res := runReport(t, cs, "-tenants", tenantA, "-from", from, "-to", from)
+	require.Equal(t, 1, res.code)
+	require.Contains(t, res.stderr, "two coverages for day 2026-11-12")
+}

@@ -7,6 +7,8 @@ import (
 	"net/url"
 	"slices"
 	"time"
+
+	"github.com/justmert/veristar/internal/coverage"
 )
 
 // the shapes below follow docs/reference/openapi/metrics-v1.yaml field for
@@ -43,6 +45,17 @@ type webDaily struct {
 	// the integrity grade of the tenant's sites on the day (control plane
 	// api 17.4); decoded so the strict decoder accepts the field
 	Integrity integritySummary `json:"integrity"`
+	// the requests for the tracker file on the day and the part that sent
+	// global privacy control (control plane api 17.5), the same on both
+	// bands' items; the report shows them so a reader knows how many visits
+	// the web numbers cannot include
+	Coverage coverageCounts `json:"coverage"`
+}
+
+type coverageCounts struct {
+	ScriptRequests  int64    `json:"script_requests"`
+	GPCRequests     int64    `json:"gpc_requests"`
+	UnmeasuredShare *float64 `json:"unmeasured_share"`
 }
 
 type integritySummary struct {
@@ -97,6 +110,10 @@ type apiNumbers struct {
 	P99Seconds  *float64 `json:"p99_seconds"`
 	P99Over10s  bool     `json:"p99_over_10s"`
 	Lossy       bool     `json:"lossy"`
+	// cors preflights, health and probe routes and known health checkers
+	// (control plane api 7.4). every other number leaves them out, so the
+	// report shows them apart and never adds them to requests
+	InfrastructureRequests int64 `json:"infrastructure_requests"`
 }
 
 type apiDaily struct {
@@ -153,6 +170,9 @@ type webDay struct {
 	Present    bool
 	Primary    webDaily
 	Quarantine webDaily
+	// Coverage is the tenant's tracker file requests of the day, which the
+	// api repeats on both bands' items
+	Coverage coverageCounts
 }
 
 // accepted is the evidence rule: the gateway accepts an event only after its
@@ -182,8 +202,11 @@ type tenantEvidence struct {
 	DaysMissing      int
 	Primary          webDaily
 	QuarantineViews  int64
-	Breakdowns       map[string][]keyValue
-	BreakdownKeys    map[string]int
+	// Coverage sums the tracker file requests of every day of the range,
+	// with the share recomputed by the contract's rule for the whole range
+	Coverage      coverageCounts
+	Breakdowns    map[string][]keyValue
+	BreakdownKeys map[string]int
 
 	APIDays        []apiDaily
 	APIRun         dayRun
@@ -380,7 +403,11 @@ func analyseWeb(te *tenantEvidence, daily []webDaily, dims []webDimension, from,
 		if !ok {
 			return fmt.Errorf("/web/daily returned day %s outside the range", r.Day)
 		}
+		if d.Present && !sameCoverage(d.Coverage, r.Coverage) {
+			return fmt.Errorf("/web/daily returned two coverages for day %s", r.Day)
+		}
 		d.Present = true
+		d.Coverage = r.Coverage
 		switch r.Band {
 		case "primary":
 			d.Primary = r
@@ -422,7 +449,12 @@ func analyseWeb(te *tenantEvidence, daily []webDaily, dims []webDimension, from,
 	te.Current = cur
 	for _, d := range te.Days {
 		te.QuarantineViews += d.Quarantine.Pageviews
+		te.Coverage.ScriptRequests += d.Coverage.ScriptRequests
+		te.Coverage.GPCRequests += d.Coverage.GPCRequests
 	}
+	// the share of a range is the same quotient with the same floor as the
+	// api's daily one, never an average of daily shares
+	te.Coverage.UnmeasuredShare = coverage.Share(te.Coverage.ScriptRequests, te.Coverage.GPCRequests)
 
 	sums := map[string]map[string]int64{}
 	for _, r := range dims {
@@ -457,6 +489,17 @@ func analyseWeb(te *tenantEvidence, daily []webDaily, dims []webDimension, from,
 	return nil
 }
 
+// sameCoverage compares the coverage of the two bands' items of one day
+func sameCoverage(a, b coverageCounts) bool {
+	if a.ScriptRequests != b.ScriptRequests || a.GPCRequests != b.GPCRequests {
+		return false
+	}
+	if a.UnmeasuredShare == nil || b.UnmeasuredShare == nil {
+		return a.UnmeasuredShare == b.UnmeasuredShare
+	}
+	return *a.UnmeasuredShare == *b.UnmeasuredShare
+}
+
 func analyseAPI(te *tenantEvidence, rows []apiDaily, from, to time.Time) error {
 	slices.SortFunc(rows, func(a, b apiDaily) int { return cmp.Compare(a.Day, b.Day) })
 	var cur dayRun
@@ -472,6 +515,8 @@ func analyseAPI(te *tenantEvidence, rows []apiDaily, from, to time.Time) error {
 		if d.Before(from) || d.After(to) {
 			return fmt.Errorf("/api/daily returned day %s outside the range", r.Day)
 		}
+		// counted on every day, also one with infrastructure requests only
+		te.APITotal.InfrastructureRequests += r.InfrastructureRequests
 		if r.Requests == 0 {
 			continue
 		}
