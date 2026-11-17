@@ -2,6 +2,7 @@ package metricswriter
 
 import (
 	"errors"
+	"math"
 	"net/http"
 	"strings"
 	"testing"
@@ -118,9 +119,6 @@ func TestDecodeRefuses(t *testing.T) {
 		"other metric": build(t, good, func(ms pmetric.MetricSlice) {
 			histogram(ms, "http.client.duration", pmetric.AggregationTemporalityDelta, canonical, make([]uint64, 15), nil)
 		}),
-		"no buckets": build(t, good, func(ms pmetric.MetricSlice) {
-			histogram(ms, metricDuration, pmetric.AggregationTemporalityDelta, nil, nil, nil)
-		}),
 		"cumulative spans": build(t, good, func(ms pmetric.MetricSlice) {
 			histogram(ms, metricFromSpans, pmetric.AggregationTemporalityCumulative, canonical, make([]uint64, 15), nil)
 		}),
@@ -145,6 +143,52 @@ func TestDecodeRefuses(t *testing.T) {
 		if _, err := Decode(tenant, data); !errors.Is(err, ErrUndecodable) {
 			t.Errorf("%s: %v", name, err)
 		}
+	}
+}
+
+// badPoints sets each kind of point whose values come from the tenant's sdk
+// and cannot be stored: the collector drops them, and one that still
+// arrives is left out alone.
+var badPoints = map[string]func(pmetric.HistogramDataPoint){
+	"time zero":             func(dp pmetric.HistogramDataPoint) { dp.SetTimestamp(0) },
+	"time past 2262":        func(dp pmetric.HistogramDataPoint) { dp.SetTimestamp(1 << 63) },
+	"start past 2262":       func(dp pmetric.HistogramDataPoint) { dp.SetStartTimestamp(1 << 63) },
+	"start after time":      func(dp pmetric.HistogramDataPoint) { dp.SetStartTimestamp(dp.Timestamp() + 1) },
+	"bounds not increasing": func(dp pmetric.HistogramDataPoint) { dp.ExplicitBounds().FromRaw([]float64{1, 0.1}) },
+	"bound infinite":        func(dp pmetric.HistogramDataPoint) { dp.ExplicitBounds().FromRaw([]float64{0.1, math.Inf(1)}) },
+	"bound nan":             func(dp pmetric.HistogramDataPoint) { dp.ExplicitBounds().FromRaw([]float64{0.1, math.NaN()}) },
+	"no buckets":            func(dp pmetric.HistogramDataPoint) { dp.ExplicitBounds().FromRaw(nil); dp.BucketCounts().FromRaw(nil) },
+	"buckets short":         func(dp pmetric.HistogramDataPoint) { dp.BucketCounts().FromRaw([]uint64{3}) },
+	"count huge":            func(dp pmetric.HistogramDataPoint) { dp.SetCount(MaxPointCount + 1) },
+	"bucket huge":           func(dp pmetric.HistogramDataPoint) { dp.BucketCounts().FromRaw([]uint64{1, MaxPointCount + 1, 0}) },
+	"sum nan":               func(dp pmetric.HistogramDataPoint) { dp.SetSum(math.NaN()) },
+}
+
+func TestDecodeLeavesOutBadPointsAlone(t *testing.T) {
+	tenant := uuid.New()
+	good := payload{tenant: tenant.String(), token: uuid.NewString(), hash: strings.Repeat("ab", 32)}
+	for name, spoil := range badPoints {
+		data := build(t, good, func(ms pmetric.MetricSlice) {
+			histogram(ms, metricDuration, pmetric.AggregationTemporalityDelta, []float64{0.1, 1}, []uint64{1, 2, 0}, map[string]any{attrRoute: "/good"})
+			spoil(histogram(ms, metricDuration, pmetric.AggregationTemporalityDelta, []float64{0.1, 1}, []uint64{1, 2, 0}, map[string]any{attrRoute: "/bad"}))
+		})
+		msg, err := Decode(tenant, data)
+		if err != nil {
+			t.Errorf("%s: the message is refused: %v", name, err)
+			continue
+		}
+		if len(msg.Points) != 1 || msg.Points[0].Route != "/good" || msg.Rejected != 1 || msg.Reason == "" {
+			t.Errorf("%s: points %d, rejected %d (%q)", name, len(msg.Points), msg.Rejected, msg.Reason)
+		}
+	}
+	// a temporality the tenant's sdk left unspecified loses that metric only
+	data := build(t, good, func(ms pmetric.MetricSlice) {
+		histogram(ms, metricDuration, pmetric.AggregationTemporalityDelta, canonical, make([]uint64, 15), map[string]any{attrRoute: "/good"})
+		histogram(ms, metricDuration, pmetric.AggregationTemporalityUnspecified, canonical, make([]uint64, 15), map[string]any{attrRoute: "/bad"})
+	})
+	msg, err := Decode(tenant, data)
+	if err != nil || len(msg.Points) != 1 || msg.Rejected != 1 {
+		t.Errorf("unspecified temporality: %v, points %d, rejected %d", err, len(msg.Points), msg.Rejected)
 	}
 }
 
