@@ -123,7 +123,7 @@ const tls = createHttpsServer({ key: cert.key, cert: cert.cert }, (req, res) => 
   }
   const upstream = httpRequest(
     {
-      host: "127.0.0.1",
+      host: site.listenHost ?? "127.0.0.1",
       port: site.port,
       method: req.method,
       path: req.url,

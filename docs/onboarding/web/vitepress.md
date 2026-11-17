@@ -5,8 +5,8 @@ description: "Add the tracker to a VitePress documentation site with the head op
 
 For a VitePress site. Tested by the example
 [`examples/vitepress`](https://github.com/justmert/veristar/tree/main/examples/vitepress)
-(VitePress 1.6.4 with the default theme, `vitepress build` and `vitepress preview`), which runs in
-the browser test matrix.
+(VitePress 1.6.4 with the default theme, `vitepress build`, with the built pages served as static
+files), which runs in the browser test matrix.
 
 ## Where the tag goes
 

@@ -25,7 +25,7 @@ function siteServer(site: (typeof SITES)[number]) {
   return {
     command,
     ...(site.npmDir ? { cwd: join(import.meta.dirname, "..", "..", site.npmDir) } : {}),
-    url: `http://127.0.0.1:${site.port}/`,
+    url: `http://${site.listenHost ?? "127.0.0.1"}:${site.port}/`,
     env,
     // an npm install with a full build, or mint dev fetching its renderer
     // on the first run, takes longer than a workspace build
