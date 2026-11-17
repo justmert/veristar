@@ -41,7 +41,9 @@ member in every zone.
   to one address tries the next one from the same answer.
 - **Dashboards cannot stop ingestion.** The queue holds web events for 72 hours, so an outage
   of the database or of Umami costs the dashboards only, and the backlog drains when they
-  return.
+  return. An event still queued after 72 hours is dropped, and a backlog large enough to fill
+  the NATS file store stops ingestion, so the alerts on the queue's age and growth page well
+  before either ([capacity.md](capacity.md), "Web events end to end").
 - **A database quorum of three.** PostgreSQL under Patroni with three members, one per zone:
   one leader, one synchronous standby and one asynchronous replica. Patroni's DCS is the etcd
   cluster with three members, one per zone, so losing one zone keeps the election quorum (two
@@ -98,12 +100,20 @@ contention add time, which the production drills measure.
 - **The port-80 health check sees no TLS failure.** A broken certificate on port 443 leaves the
   node in DNS. The prober checks each node's certificate by its own address, and the
   `CertificateExpiringSoon` alert fires 14 days before expiry.
-- **Web event drain rate.** Each node runs `core_umami_processes` (2) Umami processes, one
-  per vCPU; the replayer spreads visitors over them. Scaled from the local measurements
-  ([drills/2026-11-13.md](drills/2026-11-13.md), "Web drain with several Umami processes"), two
-  processes drain about 420 events a second, far above the expected peak (50 a second) and
-  below the 10x burst profile (500 a second): a burst queues in JetStream and drains after it,
-  so ingestion stays up and the dashboards catch up.
+- **Web event drain rate.** Ingestion and delivery are two rates. Every node accepts events,
+  but one replayer, the holder of the `replayer` lock, delivers them for the whole cluster to
+  the `core_umami_processes` (2) Umami processes of its own node, so delivery does not grow with
+  the node count ([capacity.md](capacity.md), "Web events end to end", says why and what
+  delivery from every node would need). The delivery rate of a production node has not been
+  measured. The local drill gave 280 events a second for one Umami process
+  ([drills/2026-11-13.md](drills/2026-11-13.md)); scaled by the drill's 1.5x for two processes
+  that is about 420 a second, an estimate. Local runs on 2026-11-17 on a contended host drained
+  282 to 696 a second. Against the expected peak (50 a second) that leaves room; above the
+  delivery rate, as in a long 10x burst (500 a second), events queue in `WEB_EVENTS` and the
+  dashboards fall behind. The queue keeps an event at most 72 hours and then drops it, and a
+  large backlog can fill the NATS file store first, which stops ingestion;
+  `WebEventsDelayed`, `WebEventsBacklogGrowing` and `WebEventsNearDiscard` announce both
+  ([../runbooks/alerts.md](../runbooks/alerts.md)).
 - **Three database members.** With one member down the leader still has a synchronous
   standby; only with two members down does the leader run alone, and a further failure in that
   time loses what only the leader had, back to the last archived WAL (`archive_timeout` 60 s).
