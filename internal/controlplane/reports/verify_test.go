@@ -53,7 +53,7 @@ func TestVersion2ReportStillVerifies(t *testing.T) {
 		"methods": map[string]any{"format": 2, "web_metrics": 1, "api_metrics": 2, "onchain": 1, "cohort": 1,
 			"integrity_rules": []any{1, 2}, "route_normaliser": 1, "platform": "v0.4.0"},
 		"web": map[string]any{"pageviews": 9, "has_data": true}, "api": map[string]any{"requests": 0, "has_data": false},
-		"onchain": map[string]any{"ids": 1, "weekly_active_accounts": map[string]any{"average": nil}},
+		"onchain":   map[string]any{"ids": 1, "weekly_active_accounts": map[string]any{"average": nil}},
 		"integrity": map[string]any{"grade": nil}, "cohort": map[string]any{"kpis": map[string]any{}}, "rules_met": []any{},
 	}
 	body, err := canonjson.Marshal(v2)
