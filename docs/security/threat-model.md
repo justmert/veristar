@@ -224,6 +224,14 @@ Vectors and what limits them:
   at most its same-network threshold of visitors. A rival spread over many networks, each under
   the limits, can still lower the grade to B or C; the reasons name the share that did it, and an
   operator reads them before relying on a grade.
+- **Moving the victim's unmeasured-share estimate.** The tracker file route has no proof or
+  origin check, and `Referer`, `Sec-Fetch-Dest` and `Sec-GPC` are plain headers outside a
+  browser, so a script can claim script loads of any site with or without Global Privacy
+  Control. Mitigation: each gateway counts at most 60 such requests per site and truncated
+  prefix at once and one per 10 seconds after that; the file is still served
+  ([../compliance/privacy-strategy.md](../compliance/privacy-strategy.md) section 6, "Forged
+  requests"). A rival with many networks can still move the share of a small site. The share
+  is an estimate shown beside the numbers and is not an input of the integrity grade.
 - **Claiming the victim's domain.** Sites carry a domain ownership check and a stellar.toml signal
   ([../reference/control-plane-api.md](../reference/control-plane-api.md) sections 5.8 and 5.12). An unverified claim is
   visible to operators. Even an accepted claim gives the rival only its own site id; events of
@@ -234,6 +242,7 @@ Vectors and what limits them:
 Proved by: `TestRateLimitSite`, `TestRateLimitPrefixBurstAndRefill`,
 `TestRateLimitPrefixRefusalKeepsSiteTokens`, `TestRateLimitBoundedKeys`
 (`internal/gateway/ratelimit_test.go`); `TestForgedPageSignalsDoNotMoveTheGrade`
+(`internal/gateway/signals_node_test.go`); `TestForgedScriptRequestsAreCountedWithinAPrefixLimit`
 (`internal/gateway/signals_node_test.go`); `TestEdgeSecretsCluster` subtest
 `quarantine starts at exactly the threshold across three gateways`
 (`internal/gateway/visitor_test.go`); `TestWebPath` subtest `quarantine`
