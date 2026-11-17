@@ -4,6 +4,8 @@
 package caddy_test
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/tls"
 	"encoding/json"
@@ -20,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/klauspost/compress/zstd"
 	"github.com/moby/moby/api/types/container"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
@@ -299,4 +302,93 @@ func TestEdgeAccessLogHasNoClientIdentity(t *testing.T) {
 	require.NotContains(t, all, "EdgeLogProbe")
 	require.NotContains(t, all, "EdgeRefererProbe")
 	require.NotContains(t, all, "maria")
+}
+
+// the tracker file is served compressed when the browser accepts it, with
+// the bytes the integrity hash was taken of once decoded; the other routes
+// of the event site answer unencoded.
+func TestEdgeCompressesTheTrackerFile(t *testing.T) {
+	ctx := context.Background()
+	// about the size of a tracker release, and compressible like one
+	script := []byte(strings.Repeat("(function(){var w=window,d=document;w.umami=w.umami||{};})();\n", 300))
+	var lc net.ListenConfig
+	ln, err := lc.Listen(ctx, "tcp", "0.0.0.0:0")
+	require.NoError(t, err)
+	srv := &http.Server{ReadHeaderTimeout: 5 * time.Second, Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v/1.3.0/sdk.js" {
+			w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+			w.Header().Set("Content-Length", strconv.Itoa(len(script)))
+			_, _ = w.Write(script)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(script)
+	})}
+	go func() { _ = srv.Serve(ln) }()
+	t.Cleanup(func() { _ = srv.Close() })
+
+	env := baseEnv()
+	env["GATEWAY_UPSTREAM"] = "host.docker.internal:" + strconv.Itoa(ln.Addr().(*net.TCPAddr).Port)
+	c, err := testcontainers.Run(ctx, caddyImage,
+		testcontainers.WithEnv(env),
+		testcontainers.WithFiles(testcontainers.ContainerFile{
+			HostFilePath: caddyfile(t), ContainerFilePath: "/etc/caddy/Caddyfile", FileMode: 0o644,
+		}),
+		testcontainers.WithExposedPorts("443/tcp"),
+		testcontainers.WithHostConfigModifier(func(hc *container.HostConfig) {
+			hc.ExtraHosts = append(hc.ExtraHosts, "host.docker.internal:host-gateway")
+		}),
+		testcontainers.WithWaitStrategy(wait.ForLog("serving initial configuration").WithStartupTimeout(time.Minute)),
+	)
+	testcontainers.CleanupContainer(t, c)
+	require.NoError(t, err)
+	endpoint, err := c.PortEndpoint(ctx, "443/tcp", "")
+	require.NoError(t, err)
+	client := &http.Client{Timeout: 10 * time.Second, Transport: &http.Transport{
+		TLSClientConfig: &tls.Config{ServerName: "in.edge.test", InsecureSkipVerify: true},
+	}}
+	get := func(path, accept string) (*http.Response, []byte) {
+		t.Helper()
+		var resp *http.Response
+		require.Eventually(t, func() bool {
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://"+endpoint+path, nil)
+			require.NoError(t, err)
+			req.Host = "in.edge.test"
+			// set by hand, so the go client neither adds gzip nor decodes
+			req.Header.Set("Accept-Encoding", accept)
+			resp, err = client.Do(req)
+			return err == nil
+		}, 30*time.Second, 250*time.Millisecond, "caddy did not answer over tls")
+		defer func() { _ = resp.Body.Close() }()
+		b, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+		return resp, b
+	}
+
+	resp, body := get("/v/1.3.0/sdk.js", "gzip")
+	require.Equal(t, "gzip", resp.Header.Get("Content-Encoding"))
+	require.Contains(t, resp.Header.Values("Vary"), "Accept-Encoding")
+	zr, err := gzip.NewReader(bytes.NewReader(body))
+	require.NoError(t, err)
+	plain, err := io.ReadAll(zr)
+	require.NoError(t, err)
+	require.Equal(t, script, plain, "the decoded file is the file the integrity hash covers")
+	require.Less(t, len(body), len(script)/4)
+
+	resp, body = get("/v/1.3.0/sdk.js", "zstd")
+	require.Equal(t, "zstd", resp.Header.Get("Content-Encoding"))
+	zd, err := zstd.NewReader(bytes.NewReader(body))
+	require.NoError(t, err)
+	plain, err = io.ReadAll(zd)
+	zd.Close()
+	require.NoError(t, err)
+	require.Equal(t, script, plain)
+
+	resp, body = get("/v/1.3.0/sdk.js", "identity")
+	require.Empty(t, resp.Header.Get("Content-Encoding"))
+	require.Equal(t, script, body)
+
+	resp, _ = get("/v1/c?w=probe", "gzip, zstd")
+	require.Empty(t, resp.Header.Get("Content-Encoding"), "only the tracker file is compressed")
 }
