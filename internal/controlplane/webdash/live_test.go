@@ -265,6 +265,7 @@ func days(from, to time.Time) []time.Time {
 	return out
 }
 
+//nolint:contextcheck // the helpers take the test and use its context, t.Context()
 func TestWebDashboardParity(t *testing.T) {
 	e := start(t)
 	ctx := t.Context()
