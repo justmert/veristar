@@ -31,6 +31,44 @@ tests:
             exp_annotations:
               summary: "fewer than two of the three etcd members answer"
               runbook: docs/runbooks/alerts.md#etcdmembersdown
+  - name: etcd space
+    interval: 1m
+    input_series:
+      # 0.4 of the quota, then 0.6 from minute 5
+      - series: 'etcd_mvcc_db_total_size_in_bytes{job="etcd",node="edge-1"}'
+        values: '800x4 1200x30'
+      - series: 'etcd_server_quota_backend_bytes{job="etcd",node="edge-1"}'
+        values: '2000x34'
+      - series: 'etcd_mvcc_db_total_size_in_bytes{job="etcd",node="edge-2"}'
+        values: '20x34'
+      - series: 'etcd_server_quota_backend_bytes{job="etcd",node="edge-2"}'
+        values: '2000x34'
+      # every member reports the cluster's alarm of member 1a2b
+      - series: 'etcd_debugging_server_alarms{job="etcd",node="edge-1",alarm_type="NOSPACE",server_id="1a2b"}'
+        values: '_x2 1x5'
+      - series: 'etcd_debugging_server_alarms{job="etcd",node="edge-2",alarm_type="NOSPACE",server_id="1a2b"}'
+        values: '_x2 1x5'
+      - series: 'etcd_debugging_server_alarms{job="etcd",node="edge-2",alarm_type="CORRUPT",server_id="3c4d"}'
+        values: '1x7'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: EtcdDatabaseSpaceHigh
+      - eval_time: 21m
+        alertname: EtcdDatabaseSpaceHigh
+        exp_alerts:
+          - exp_labels: {severity: ticket, job: etcd, node: edge-1}
+            exp_annotations:
+              summary: "the etcd database on edge-1 uses 60% of its quota"
+              runbook: docs/runbooks/alerts.md#etcddatabasespacehigh
+      - eval_time: 1m
+        alertname: EtcdNoSpaceAlarm
+      - eval_time: 4m
+        alertname: EtcdNoSpaceAlarm
+        exp_alerts:
+          - exp_labels: {severity: page, server_id: 1a2b}
+            exp_annotations:
+              summary: "etcd raised the NOSPACE alarm (member 1a2b) and refuses every write"
+              runbook: docs/runbooks/alerts.md#etcdnospacealarm
   - name: patroni leader and replication lag
     interval: 1m
     input_series:
@@ -115,3 +153,45 @@ tests:
             exp_annotations:
               summary: "wal archiving fails on core-1"
               runbook: docs/runbooks/alerts.md#walarchivingfailing
+  - name: backup job result
+    interval: 1m
+    input_series:
+      # verify failed on core-1 at t=600; the leader moved and the next run,
+      # on core-2 at t=1800, succeeded. core-1's record stays failed.
+      - series: 'sa_backup_last_run_timestamp_seconds{job="node",node="core-1",unit="sa-pgbackrest-verify.service"}'
+        values: '600x60'
+      - series: 'sa_backup_last_run_success{job="node",node="core-1",unit="sa-pgbackrest-verify.service"}'
+        values: '0x60'
+      - series: 'sa_backup_last_run_timestamp_seconds{job="node",node="core-2",unit="sa-pgbackrest-verify.service"}'
+        values: '_x30 1800x30'
+      - series: 'sa_backup_last_run_success{job="node",node="core-2",unit="sa-pgbackrest-verify.service"}'
+        values: '_x30 1x30'
+      # a diff that succeeded on core-1 and then failed on core-2
+      - series: 'sa_backup_last_run_timestamp_seconds{job="node",node="core-1",unit="sa-pgbackrest-diff.service"}'
+        values: '300x60'
+      - series: 'sa_backup_last_run_success{job="node",node="core-1",unit="sa-pgbackrest-diff.service"}'
+        values: '1x60'
+      - series: 'sa_backup_last_run_timestamp_seconds{job="node",node="core-2",unit="sa-pgbackrest-diff.service"}'
+        values: '_x10 900x50'
+      - series: 'sa_backup_last_run_success{job="node",node="core-2",unit="sa-pgbackrest-diff.service"}'
+        values: '_x10 0x50'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: BackupJobFailed
+        exp_alerts:
+          - exp_labels: {severity: ticket, job: node, node: core-1, unit: sa-pgbackrest-verify.service}
+            exp_annotations:
+              summary: "the last run of sa-pgbackrest-verify.service, on core-1, failed"
+              runbook: docs/runbooks/alerts.md#backupjobfailed
+          - exp_labels: {severity: ticket, job: node, node: core-2, unit: sa-pgbackrest-diff.service}
+            exp_annotations:
+              summary: "the last run of sa-pgbackrest-diff.service, on core-2, failed"
+              runbook: docs/runbooks/alerts.md#backupjobfailed
+      - eval_time: 45m
+        alertname: BackupJobFailed
+        exp_alerts:
+          - exp_labels: {severity: ticket, job: node, node: core-2, unit: sa-pgbackrest-diff.service}
+            exp_annotations:
+              summary: "the last run of sa-pgbackrest-diff.service, on core-2, failed"
+              runbook: docs/runbooks/alerts.md#backupjobfailed
+

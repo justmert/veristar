@@ -18,3 +18,10 @@ ExecCondition=/bin/sh -c 'c=$$(/usr/bin/curl -sS -o /dev/null -w %%{http_code} {
 {% for c in item.commands %}
 ExecStart=/usr/bin/docker compose --project-directory {{ backup_compose_dir }} exec -T {{ backup_compose_service }} pgbackrest --stanza={{ backup_stanza }} {{ c }}
 {% endfor %}
+# the unit's failed state does not last: when the leader moves, the next
+# run on this node is skipped as a replica's, and the skip clears the failed
+# state although nothing was fixed. so every run that was not skipped
+# records its end and result in a textfile, and BackupJobFailed reads the
+# newest run across the nodes. the leading - keeps a failing writer from
+# failing the backup.
+ExecStopPost=-/usr/local/sbin/sa-backup-result {{ item.name }}
