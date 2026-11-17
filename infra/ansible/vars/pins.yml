@@ -22,7 +22,7 @@ age_sha256: cbe24006683f8eb669266162894b9a522a1af52f2665fbc63a4bb032ed26ac10
 # tests/pins fails when the two differ
 upstream_images:
   nats: nats:2.15.3-alpine@sha256:558394a23dd3c36f2d3a64b51865fd09908010e80a542cea5e75c2af543ed62a
-  etcd: quay.io/coreos/etcd:v3.6.16@sha256:a9c7cc12156f4b26ca41f0b57ba5b76c45037ff6c1e47ea3d68cb7908d48a965
+  etcd: quay.io/coreos/etcd:v3.7.3@sha256:8d1b6c24f08e12ed7623d1df421832b3cafabe221aa6b658b97288d07807582f
   # the alpine build of the same release (2026-11-13): the debian build
   # carries zlib1g with two fixable highs (docs/security/supply-chain.md 8.1)
   haproxy: haproxy:3.4.7-alpine@sha256:b9fe316f718d5015c5cfebd8ca019591f3e44656f61d93cb8b59a1028961e530

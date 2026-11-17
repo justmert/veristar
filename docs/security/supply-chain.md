@@ -484,7 +484,7 @@ Pins moved together in `infra/ansible/vars/pins.yml`, the observability role def
 | Image | Finding | Why it is accepted, and when to revisit |
 |---|---|---|
 | Umami 3.5.0 (newest release; 3.5.0 is the newest tag on GHCR) | `undici` 6.28.0: CVE-2026-109383 (TLS options dropped), CVE-2026-109869, CVE-2026-19534, CVE-2026-87018 (client-side denial of service) | All four are in undici's HTTP client. Umami makes no outbound request in this deployment: `PRIVATE_MODE`, `DISABLE_TELEMETRY` and `DISABLE_UPDATES` are set, and `TestWebPath` checks no egress from boot and during a UI session (`threat-model.md`). Inbound requests are served by Next.js, not undici. Revisit at the next Umami release through `make umami-upgrade`. |
-| etcd 3.6.16 (newest 3.6 release) | `golang.org/x/net` CVE-2026-78661 (HTML parser denial of service, GO-2026-6860); the symbol is in the binary | etcd's client and peer ports are published on the private address only, the firewall accepts the private network only, and the only client is Patroni. No etcd API takes HTML. Revisit at 3.6.17. |
+| etcd 3.6.16 (newest 3.6 release); 3.7.3 since 2026-11-17 | `golang.org/x/net` CVE-2026-78661 (HTML parser denial of service, GO-2026-6860); the symbol is in the binary. 3.7.3 carries the same finding and no other | etcd's client and peer ports are published on the private address only, the firewall accepts the private network only, and the only client is Patroni. No etcd API takes HTML. Revisit at 3.7.4. |
 | Prometheus 3.15.1, Alertmanager 0.34.2 | `golang.org/x/net` CVE-2026-78661 | govulncheck: module present, vulnerable symbols not in either binary. The younger lines (Prometheus 3.16.0, Alertmanager 0.35.0, scanned) carry the same finding, so a bump would not fix it. |
 | node_exporter 1.12.1 (newest) | 16 high: Go 1.26.5 standard library (CVE-2026-111943, -33818, -39821, -46600, -56853, -56858, -56859, -56860, -56862, -78667, -78669, -97031), `x/net` CVE-2026-78661 and -78669, `x/crypto` CVE-2026-56854, `x/text` CVE-2026-56851 | govulncheck: the `x/net/html`, `x/crypto`, `x/text`, CVE-2026-46600 and CVE-2026-78667 symbols are not in the binary. The rest are present and are denial of service in the HTTP server, TLS and parsers, or an x509 client issue. The exporter listens on the private address only (`--web.listen-address`), the firewall drops everything else, it has no TLS configuration and makes no outbound TLS connection, and only Prometheus scrapes it. An attacker must already be on the private network. Revisit at the next node_exporter release. |
 | postgres_exporter 0.20.1 (newest) | 19 high: Go 1.26.4 standard library (CVE-2026-111943, -33818, -39821, -39822, -46600, -56853, -56858, -56859, -56860, -56862, -78667, -78669, -97031), `x/net` CVE-2026-46600, -78661 and -78669, `x/crypto` CVE-2026-56854, `x/text` CVE-2026-56851 and -56852 | govulncheck: the `x/net/html`, `x/crypto`, `x/text`, CVE-2026-39821, -39822, -56859 and -78667 symbols are not in the binary. The rest are present. The exporter is on the private address of the PostgreSQL hosts only, scraped by Prometheus, and connects only to PostgreSQL through HAProxy on the private network as a role that holds `pg_monitor` and nothing else (`tasks/core.yml`). Revisit at the next release. |
@@ -506,7 +506,7 @@ candidates, scanned with Trivy 0.76.2:
 | Candidate | Result |
 |---|---|
 | Grafana 13.3.1 | The same 10 findings as 13.2.6, in the same bundled plugin binaries |
-| etcd 3.7.3 | The same `golang.org/x/net` CVE-2026-78661 as 3.6.16. The minor jump would need a Patroni compatibility check and fixes nothing |
+| etcd 3.7.3 | The same `golang.org/x/net` CVE-2026-78661 as 3.6.16. The minor jump would need a Patroni compatibility check and fixes nothing. Taken on 2026-11-17 as the newest stable line, after that check: section 8.2 |
 | Prometheus 3.16.0, Alertmanager 0.35.0 | The same `golang.org/x/net` CVE-2026-78661 |
 | Gatus, node_exporter, postgres_exporter, prometheus-nats-exporter, Umami | No release newer than the pin |
 
@@ -533,3 +533,29 @@ and the route is not reachable from the internet:
 
 No upgrade and no new deny rule is needed. The decision is the advisory's entry in
 `advisories-reviewed.json`.
+
+### 8.2 etcd 3.6 to 3.7 (2026-11-17)
+
+The etcd pin moved from 3.6.16 to 3.7.3, the newest release; the 3.7 line was released on
+2026-07-08. The move fixes no finding (section 8.1); it keeps the cluster on the maintained line.
+What was checked before the pin moved:
+
+- **Upgrade path.** etcd's 3.6 to 3.7 upgrade guide supports a rolling, zero-downtime upgrade of a
+  running cluster from 3.6.11 or later, one member at a time. The cluster runs 3.6.16. 3.7 removes
+  the `--experimental-*` flags and the v2 store; the edge compose command uses neither, and every
+  flag it passes exists in 3.7.3.
+- **Rolling upgrade.** A three-member 3.6.16 cluster with data was moved to 3.7.3 one member at a
+  time: every step kept quorum, every member answered `endpoint health`, keys written before and
+  between the steps were read back, and the storage version moved from 3.6.0 to 3.7.0 only when the
+  last member ran 3.7.3.
+- **Patroni.** Patroni 4.1.5 from the `postgres-ha` image, with `failsafe_mode` as in production,
+  ran as leader on that cluster through the whole rolling upgrade and stayed primary; its keys
+  (`leader`, `members`, `config`, `failsafe`, `status`) are in place on 3.7.3. The JSON gateway
+  answers of `/v3/kv/range`, `/v3/kv/put`, `/v3/lease/grant` and `/v3/cluster/member/list` (the
+  last one read by `roles/edge/tasks/etcd.yml`) keep their field names.
+- **Metrics.** `etcd_server_has_leader` and `etcd_server_leader_changes_seen_total`, which the
+  alerts and the database dashboard read, are exported by 3.7.3 unchanged.
+
+Once every member runs 3.7, the cluster cannot go back to 3.6 by changing the image; a downgrade
+follows etcd's downgrade procedure or restores a snapshot. The CHANGELOG upgrade notes give the
+operator steps.

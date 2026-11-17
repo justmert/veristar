@@ -20,7 +20,7 @@ names were confirmed on the local test stack (`tests/observability`).
 | metrics writer | ops port | `metricswriter_leader`, `metricswriter_consumer_pending_messages`, `metricswriter_cardinality_overflow_points_total`, batch and point counters |
 | jobs | ops port | `jobs_leader`, `jobs_task_runs_total{task,result}`, `jobs_task_last_success_timestamp_seconds{task}`, `jobs_umami_rotated_epoch_day` |
 | NATS | prometheus-nats-exporter 0.20.3, `-jsz=all -varz -healthz`, one per server | `jetstream_stream_total_messages`, `jetstream_stream_first_seq`, `jetstream_consumer_num_pending`, `jetstream_consumer_num_ack_pending`, `jetstream_server_jetstream_disabled`, `jetstream_server_total_streams{is_meta_leader}`, `gnatsd_healthz_status` (0 is healthy), `gnatsd_varz_*` |
-| etcd 3.6 | client port `/metrics` | `etcd_server_has_leader`, `etcd_server_leader_changes_seen_total` |
+| etcd 3.7 | client port `/metrics` | `etcd_server_has_leader`, `etcd_server_leader_changes_seen_total` |
 | Patroni 4.1.5 | REST API `/metrics` (`patroni/api.py`) | `patroni_primary`, `patroni_replica`, `patroni_cluster_unlocked`, `patroni_xlog_location`, `patroni_xlog_replayed_location`, `patroni_postgres_running` |
 | PostgreSQL | postgres_exporter 0.20.1 default collectors | `pg_up`, `pg_replication_lag_seconds`, `pg_replication_is_replica`, `pg_stat_archiver_failed_count`, `pg_stat_archiver_last_archive_age` |
 | pgBackRest | node_exporter textfile written hourly by the role | `pgbackrest_last_backup_completion_timestamp_seconds{stanza,type}`, `pgbackrest_info_success` |
