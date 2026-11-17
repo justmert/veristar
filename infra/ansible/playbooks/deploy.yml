@@ -32,6 +32,29 @@
 - name: Verify the release
   ansible.builtin.import_playbook: verify-release.yml
 
+# every nats server gets the permissions of the new release before any of
+# its services starts. they only add to the earlier release's, so the
+# services still running keep theirs. the core tier goes first, and from
+# 0.4.0 on its replayer consumes one consumer per web event partition, which
+# the permissions of 0.3.x do not name; the edge tier, which renders the
+# same block again, comes only after it.
+- name: Install the nats permissions of the new release
+  hosts: edge
+  become: true
+  serial: 1
+  any_errors_fatal: true
+  max_fail_percentage: 0
+  vars_files: [../vars/pins.yml]
+  roles:
+    - secrets
+  tasks:
+    - name: Render and install the nats authorization
+      ansible.builtin.import_role:
+        name: edge
+        tasks_from: nats_auth.yml
+    - name: Reload nats with it before the next server
+      ansible.builtin.meta: flush_handlers
+
 # the jobs daemons of the running release stop on every core node before
 # the migrations: a migration can change what a task must write (00040 made
 # traffic_class part of every api metric key), and a jobs daemon of the

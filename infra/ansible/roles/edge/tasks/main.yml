@@ -65,25 +65,9 @@
   no_log: true
   notify: Reload nats
 
-# the authorization block comes from internal/natsx through platformctl, so
-# the deployed permissions are the ones the code was tested with
-- name: Render the nats authorization from the topology
-  ansible.builtin.command:
-    argv: [docker, run, --rm, -i, --network, none, "{{ platform_images.platformctl }}", nats, auth-config]
-    stdin: "{{ sa_secrets.nats_password_hashes | to_json }}"
-  register: edge_nats_auth
-  changed_when: false
-  no_log: true
-
-- name: Install the nats authorization
-  ansible.builtin.copy:
-    content: "{{ edge_nats_auth.stdout }}\n"
-    dest: "{{ edge_conf_dir }}/nats/auth.conf"
-    owner: "{{ edge_nats_uid }}"
-    group: "{{ edge_nats_uid }}"
-    mode: "0600"
-  no_log: true
-  notify: Reload nats
+# deploy.yml also runs this alone on every nats server before the core tier
+- name: Install the nats authorization of this release
+  ansible.builtin.import_tasks: nats_auth.yml
 
 # a oneshot unit that starts the project's containers once docker is up,
 # also run alone by the restart drill (tests/drills/start-unit.sh)
