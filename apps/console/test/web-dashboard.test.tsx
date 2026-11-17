@@ -412,11 +412,40 @@ describe("session finder of the privacy page (contract 10.2 and 18)", () => {
     await waitFor(() => expect(host.textContent).toContain("3 page views"));
     expect(host.textContent).toContain("1 page view,");
     expect(calls[0]?.url).toContain(`/tenants/${f.TENANT_ID}/web/sessions?site=${f.SITE_ID}&day=`);
+    // the engine's keys read as names
+    expect(host.textContent).toContain("Chrome, Linux, Laptop, Germany");
+    expect(host.textContent).toContain("Safari, iOS, Mobile");
     const first = [...host.querySelectorAll("button")].find((b) =>
-      (b.textContent ?? "").includes("chrome"),
+      (b.textContent ?? "").includes("Chrome"),
     );
     if (!first) throw new Error("no session button");
     await click(first);
     expect(chosen).toBe("2f1c7a9e-5b3d-4c8e-9a1f-6d0b2e4c8a7f");
+  });
+
+  it("lists quarantined sessions when asked", async () => {
+    const body = {
+      day: "2026-11-16",
+      band: "quarantine",
+      site: siteRef,
+      source: "engine",
+      page: 1,
+      page_size: 50,
+      total: 0,
+      items: [],
+    };
+    const calls = stubFetch([
+      { status: 200, body: { ...body, band: "primary" } },
+      { status: 200, body },
+    ]);
+    const site = { ...f.siteBody } as Parameters<typeof SessionFinder>[0]["site"];
+    const host = await render(
+      <SessionFinder tenantId={f.TENANT_ID} site={site} chosen="" onChoose={() => {}} />,
+    );
+    await waitFor(() => expect(host.textContent).toContain("No sessions on this day."));
+    expect(calls[0]?.url).not.toContain("band=");
+    await click(byRole(host, "radio", "Quarantined"));
+    await waitFor(() => expect(calls.length).toBe(2));
+    expect(calls[1]?.url).toContain("band=quarantine");
   });
 });

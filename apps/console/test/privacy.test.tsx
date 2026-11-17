@@ -345,7 +345,7 @@ describe("privacy page", () => {
     await click(byRole(host, "button", "Request erasure"));
     await waitFor(() =>
       expect(host.textContent).toContain(
-        "The ingestion service could not be reached, so nothing was erased.",
+        "The ingestion service does not answer, so nothing was erased.",
       ),
     );
   });

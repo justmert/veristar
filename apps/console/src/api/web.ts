@@ -258,15 +258,22 @@ export const webSessions = z.object({
 export type WebSessions = z.infer<typeof webSessions>;
 
 // one site's sessions of one utc day, for the erasure of one session
-export const webSessionsQuery = (tenantId: string, site: string, d: string, page: number) =>
+export const webSessionsQuery = (
+  tenantId: string,
+  site: string,
+  d: string,
+  page: number,
+  band: WebBand = "primary",
+) =>
   queryOptions({
-    queryKey: ["tenant", tenantId, "web", "sessions", site, d, page] as const,
+    queryKey: ["tenant", tenantId, "web", "sessions", site, d, band, page] as const,
     queryFn: ({ signal }) =>
       request(
         "GET",
         `/tenants/${enc(tenantId)}/web/sessions${query([
           ["site", site],
           ["day", d],
+          ["band", band === "primary" ? null : band],
           ["page", page > 1 ? String(page) : null],
         ])}`,
         webSessions,
