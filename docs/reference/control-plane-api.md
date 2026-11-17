@@ -2851,7 +2851,10 @@ tenant.
 6. The jobs task `erasure-followup` (every minute) fails `running` rows whose
    heartbeat is older than 2 minutes, then for each finished row with
    affected days reads those days of `agg.web_daily` and `agg.web_daily_dim`
-   again from Umami; for `site_reset` it deletes every aggregate row of the site
+   again from Umami; for `site_reset` it deletes every aggregate and counter row of the site
+   (`agg.web_daily`, `agg.web_daily_dim`, `agg.web_integrity_daily`,
+   `agg.web_coverage_daily`, and as `cp_system` `cp.web_ingest_hourly`,
+   `cp.web_evidence_daily`, `cp.web_signals_daily`, `cp.web_networks_daily`)
    and reads the last 4 days again. It sets `reaggregated_at`.
 
 NATS rights this needs (`internal/natsx/topology.go`): the control plane sends

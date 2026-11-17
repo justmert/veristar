@@ -25,12 +25,17 @@ suspension or by terms the project has not accepted yet. There are three kinds.
 |---|---|---|---|
 | `visitor_today` | the site, the data subject's IP address and user agent | that visitor's Umami sessions on both bands of the site for the current UTC day, with all their events; the visitor's undeliverable messages in `WEB_DLQ`; the visitor's record in `visit_state` | only during the UTC day of the visit |
 | `session` | the site and an Umami session id, found with the session finder on the Privacy page (contract section 18.7) | that session and all its events; while the session's visit record still exists (24 hours after its last event), also the visitor's `WEB_DLQ` messages and the record | during the whole raw retention period |
-| `site_reset` | the site and its domain, typed again as confirmation | every event and session of both Umami websites of the site (Umami's reset), every `WEB_DLQ` message and visit record of the site, and every aggregate row of the site | at any time |
+| `site_reset` | the site and its domain, typed again as confirmation | every event and session of both Umami websites of the site (Umami's reset), every `WEB_DLQ` message and visit record of the site, and every aggregate and counter row of the site (`agg.web_daily`, `agg.web_daily_dim`, `agg.web_integrity_daily`, `agg.web_coverage_daily`, `cp.web_ingest_hourly`, `cp.web_evidence_daily`, `cp.web_signals_daily`, `cp.web_networks_daily`) | at any time |
 
 After each kind the jobs task `erasure-followup` reads the affected UTC days of
 `agg.web_daily` and `agg.web_daily_dim` again from Umami (for `site_reset` it
-deletes every aggregate row of the site and reads the last days again), so the
-operator view stops counting erased visits. The request shows
+deletes every aggregate and counter row of the site listed above, as the jobs
+role for the `agg` tables and as `cp_system` for the gateway counters in `cp`,
+and reads the last days again), so the
+operator view stops counting erased visits. Affected days older than the raw
+retention cutoff (`WEB_RAW_RETENTION_MONTHS`) are not read again: Umami holds
+no raw rows for them, and their aggregates are kept counts that name no
+visitor. The request shows
 `reaggregated_at` when that is done.
 
 ## 2. Why visitor erasure works only on the day of the visit
