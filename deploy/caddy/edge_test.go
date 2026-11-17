@@ -347,28 +347,39 @@ func TestEdgeCompressesTheTrackerFile(t *testing.T) {
 	client := &http.Client{Timeout: 10 * time.Second, Transport: &http.Transport{
 		TLSClientConfig: &tls.Config{ServerName: "in.edge.test", InsecureSkipVerify: true},
 	}}
-	get := func(path, accept string) (*http.Response, []byte) {
+	// returns the header, not the response, so no caller holds a body the
+	// helper has already closed
+	get := func(path, accept string) (http.Header, []byte) {
 		t.Helper()
-		var resp *http.Response
+		var (
+			header  http.Header
+			body    []byte
+			code    int
+			readErr error
+		)
 		require.Eventually(t, func() bool {
 			req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://"+endpoint+path, nil)
 			require.NoError(t, err)
 			req.Host = "in.edge.test"
 			// set by hand, so the go client neither adds gzip nor decodes
 			req.Header.Set("Accept-Encoding", accept)
-			resp, err = client.Do(req)
-			return err == nil
+			resp, err := client.Do(req)
+			if err != nil {
+				return false
+			}
+			defer func() { _ = resp.Body.Close() }()
+			body, readErr = io.ReadAll(resp.Body)
+			header, code = resp.Header, resp.StatusCode
+			return true
 		}, 30*time.Second, 250*time.Millisecond, "caddy did not answer over tls")
-		defer func() { _ = resp.Body.Close() }()
-		b, err := io.ReadAll(resp.Body)
-		require.NoError(t, err)
-		require.Equal(t, http.StatusOK, resp.StatusCode)
-		return resp, b
+		require.NoError(t, readErr)
+		require.Equal(t, http.StatusOK, code)
+		return header, body
 	}
 
-	resp, body := get("/v/1.3.0/sdk.js", "gzip")
-	require.Equal(t, "gzip", resp.Header.Get("Content-Encoding"))
-	require.Contains(t, resp.Header.Values("Vary"), "Accept-Encoding")
+	header, body := get("/v/1.3.0/sdk.js", "gzip")
+	require.Equal(t, "gzip", header.Get("Content-Encoding"))
+	require.Contains(t, header.Values("Vary"), "Accept-Encoding")
 	zr, err := gzip.NewReader(bytes.NewReader(body))
 	require.NoError(t, err)
 	plain, err := io.ReadAll(zr)
@@ -376,8 +387,8 @@ func TestEdgeCompressesTheTrackerFile(t *testing.T) {
 	require.Equal(t, script, plain, "the decoded file is the file the integrity hash covers")
 	require.Less(t, len(body), len(script)/4)
 
-	resp, body = get("/v/1.3.0/sdk.js", "zstd")
-	require.Equal(t, "zstd", resp.Header.Get("Content-Encoding"))
+	header, body = get("/v/1.3.0/sdk.js", "zstd")
+	require.Equal(t, "zstd", header.Get("Content-Encoding"))
 	zd, err := zstd.NewReader(bytes.NewReader(body))
 	require.NoError(t, err)
 	plain, err = io.ReadAll(zd)
@@ -385,10 +396,10 @@ func TestEdgeCompressesTheTrackerFile(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, script, plain)
 
-	resp, body = get("/v/1.3.0/sdk.js", "identity")
-	require.Empty(t, resp.Header.Get("Content-Encoding"))
+	header, body = get("/v/1.3.0/sdk.js", "identity")
+	require.Empty(t, header.Get("Content-Encoding"))
 	require.Equal(t, script, body)
 
-	resp, _ = get("/v1/c?w=probe", "gzip, zstd")
-	require.Empty(t, resp.Header.Get("Content-Encoding"), "only the tracker file is compressed")
+	header, _ = get("/v1/c?w=probe", "gzip, zstd")
+	require.Empty(t, header.Get("Content-Encoding"), "only the tracker file is compressed")
 }

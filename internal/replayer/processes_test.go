@@ -194,7 +194,7 @@ func TestDrainRateByUmamiProcesses(t *testing.T) {
 		t.Fatalf("in flight %d is below workers %d", inFlight, workers)
 	}
 	t.Logf("replayer workers %d, in flight %d", workers, inFlight)
-		// REPLAYER_DRAIN_COUNTS=2,6 measures only those process counts
+	// REPLAYER_DRAIN_COUNTS=2,6 measures only those process counts
 	counts := make([]int, 0, maxProcs)
 	for n := 1; n <= maxProcs; n++ {
 		counts = append(counts, n)
