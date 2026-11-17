@@ -278,7 +278,7 @@ func (g *Grader) siteDay(ctx context.Context, tx TxFunc, s registry.Site, day, t
 			return fmt.Errorf("encode reasons: %w", err)
 		}
 		p := jobsq.UpsertIntegrityDayParams{
-			SiteID: siteID, TenantID: tenantID, Day: day, RuleVersion: int32(version), //nolint:gosec // a member of rules.RuleVersions
+			SiteID: siteID, TenantID: tenantID, Day: day, RuleVersion: int32(version),
 			Closed: day.Before(today), Events: in.Events, Quarantined: in.Quarantined,
 			ProofFailures: in.ProofFailures, NetAccess: in.NetAccess, NetOrganisation: in.NetOrganisation,
 			NetHosting: in.NetHosting, NetAnonymiser: in.NetAnonymiser, NetUnknown: in.NetUnknown,
