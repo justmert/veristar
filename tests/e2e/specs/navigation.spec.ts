@@ -44,6 +44,9 @@ for (const key of [
   "vue-spa",
   "sveltekit",
   "nextjs",
+  "docusaurus",
+  "vitepress",
+  "mintlify",
 ] as const) {
   test(`${key}: route changes, back and forward are one pageview each`, async ({ page }) => {
     const site = siteByKey(key);

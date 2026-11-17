@@ -28,6 +28,9 @@ To sign in with GitHub, a Stellar wallet or a passkey, and to link them to one a
 | [SvelteKit](web/sveltekit.md) | SvelteKit |
 | [React Router with server rendering](web/react-router.md) | React Router in framework mode |
 | [Next.js](web/nextjs.md) | Next.js with the App Router |
+| [Docusaurus](web/docusaurus.md) | a Docusaurus documentation site |
+| [VitePress](web/vitepress.md) | a VitePress documentation site |
+| [Mintlify](web/mintlify.md) | a documentation site hosted by Mintlify |
 | [npm package](web/npm.md) | bundling the tracker into your app instead of a script tag |
 | [Self-hosting sdk.js](web/self-hosting.md) | serving the tracker file from your own domain |
 | [Content security policy](web/content-security-policy.md) | sites that send a CSP header |
@@ -62,10 +65,11 @@ To sign in with GitHub, a Stellar wallet or a passkey, and to link them to one a
 
 Each guide is backed by an example that runs in the test suites:
 
-- The static HTML, Vite and React, Vue, Astro, SvelteKit, React Router and Next.js guides, and the
-  consent, self-hosting, content security policy and custom event guides, are backed by example
-  sites that run in the browser test matrix (`tests/e2e`: Chromium, Firefox and WebKit) against a
-  test gateway.
+- The static HTML, Vite and React, Vue, Astro, SvelteKit, React Router, Next.js, Docusaurus,
+  VitePress and Mintlify guides, and the consent, self-hosting, content security policy and custom
+  event guides, are backed by example sites that run in the browser test matrix (`tests/e2e`:
+  Chromium, Firefox and WebKit) against a test gateway. The Mintlify example runs in Mintlify's
+  local preview, `mint dev`.
 - The Wallets Kit guide is backed by `TestWalletsKit` in `tests/webpath`, which runs the full chain
   into Umami.
 - The API guides are backed by `tests/otelapps`, which runs the five example apps, the Stellar

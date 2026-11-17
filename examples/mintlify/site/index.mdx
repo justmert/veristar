@@ -1,0 +1,22 @@
+---
+title: "Mintlify example"
+---
+
+<nav>
+  <a href="/" id="nav-home">Home</a> <a href="/pricing" id="nav-pricing">Pricing</a> <a href="/docs/getting-started" id="nav-docs">Docs</a>
+</nav>
+
+Client-side routing. Every route change is one pageview.
+
+{/* docs:start event */}
+<button type="button" id="signup" data-umami-event="signup-click" data-umami-event-plan="free">
+  Sign up
+</button>
+{/* docs:end event */}
+
+{/* docs:start track */}
+{/* the tracker may be blocked by the visitor, so the call is optional */}
+<button type="button" id="manual" onClick={() => window.umami?.track("manual-call", { source: "mintlify" })}>
+  Track by call
+</button>
+{/* docs:end track */}

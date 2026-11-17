@@ -34,6 +34,9 @@ export interface SiteDef {
     | "vue-spa"
     | "sveltekit"
     | "nextjs"
+    | "docusaurus"
+    | "vitepress"
+    | "mintlify"
     | "wallets-kit-spa";
   host: string;
   origin: string;
@@ -41,6 +44,9 @@ export interface SiteDef {
   siteId: string;
   // workspace package that serves the site
   pkg: string;
+  // set for an example that is a standalone npm project outside the pnpm
+  // workspace: its directory, relative to the repository root
+  npmDir?: string;
   // a link on the home page that leads to another page of the site
   navSelector: string;
 }
@@ -51,6 +57,7 @@ function site(
   port: number,
   siteId: string,
   navSelector: string,
+  npmDir?: string,
 ): SiteDef {
   const host = `${label}.${TENANT_DOMAIN}`;
   return {
@@ -61,6 +68,7 @@ function site(
     siteId,
     pkg: `@veristar/example-${key}`,
     navSelector,
+    ...(npmDir ? { npmDir } : {}),
   };
 }
 
@@ -73,6 +81,25 @@ export const SITES: readonly SiteDef[] = [
   site("vue-spa", "vue", 47106, "0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e06", "#nav-pricing"),
   site("sveltekit", "svelte", 47107, "0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e07", "#nav-pricing"),
   site("nextjs", "next", 47108, "0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e08", "#nav-pricing"),
+  // the sites of the documentation site guides. docusaurus and vitepress are
+  // standalone npm projects; mintlify runs its local preview (mint dev)
+  site(
+    "docusaurus",
+    "docusaurus",
+    47109,
+    "0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e09",
+    "#nav-pricing",
+    "examples/docusaurus",
+  ),
+  site(
+    "vitepress",
+    "vitepress",
+    47110,
+    "0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e10",
+    "#nav-pricing",
+    "examples/vitepress",
+  ),
+  site("mintlify", "mintlify", 47111, "0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e11", "#nav-pricing"),
 ];
 
 // the wallets kit example. it is not part of the browser matrix

@@ -34,6 +34,17 @@ here, before they take effect, as the processing terms require
   platform and traces to the anchor's own backend. `TestAnchorPlatform` runs
   the real Anchor Platform image on PostgreSQL and checks every SEP-1, SEP-10,
   SEP-24 and platform API route and status that arrives.
+- Web analytics guides for documentation sites: Docusaurus (`scripts` in
+  `docusaurus.config.ts`), VitePress (`head` in `.vitepress/config.ts`) and
+  Mintlify (a `tracker.js` file in the docs repository), each with the
+  console's tag and its integrity value
+  ([docs/onboarding/web/docusaurus.md](docs/onboarding/web/docusaurus.md),
+  [docs/onboarding/web/vitepress.md](docs/onboarding/web/vitepress.md),
+  [docs/onboarding/web/mintlify.md](docs/onboarding/web/mintlify.md)). The
+  examples `examples/docusaurus` (Docusaurus 3.10.2), `examples/vitepress`
+  (VitePress 1.6.4) and `examples/mintlify` (Mintlify's local preview, CLI
+  4.3.49) run in the browser test matrix and in the real-gateway browser
+  test.
 - Alerts on web events waiting for Umami: `WebEventsDelayed` (oldest over an
   hour), `WebEventsBacklogGrowing` (over 10,000 and still growing) and
   `WebEventsNearDiscard` (oldest over 48 hours, 24 hours before the queue

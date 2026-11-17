@@ -1,0 +1,19 @@
+{
+  "name": "@veristar/example-vitepress",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vitepress build",
+    "start": "vitepress preview --host 127.0.0.1 --port ${PORT:-4173}",
+    "test": "node --test 'test/*.test.ts'"
+  },
+  "dependencies": {
+    "vitepress": "1.6.4"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.6"
+  },
+  "engines": {
+    "node": "26.13.1"
+  }
+}
