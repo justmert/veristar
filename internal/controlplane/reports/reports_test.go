@@ -342,6 +342,35 @@ func TestUsageReports(t *testing.T) {
 		require.NoError(t, err)
 	})
 
+	t.Run("every route serves the report member as the signed bytes", func(t *testing.T) {
+		// json encoders escape u+2028 and u+2029, which would change the bytes
+		owner := e.user(t)
+		d := e.tenant(t, owner, "delta")
+		cd := e.client(t, &owner)
+		e.sys(t, `update cp.tenants set name = $1 where id = $2`, "Beta\u2028Labs\u2029 <&>", d)
+		code, raw := cd.call(t, http.MethodPost, "/api/tenants/"+d.String()+"/reports", map[string]string{"from": to, "to": to})
+		require.Equal(t, http.StatusCreated, code, string(raw))
+		rid := decode[reports.Detail](t, raw).ID
+		var body string
+		require.NoError(t, e.d.WithSystem(t.Context(), func(tx pgx.Tx) error {
+			return tx.QueryRow(t.Context(), `select body from cp.usage_reports where id = $1`, rid).Scan(&body)
+		}))
+		require.Contains(t, body, "Beta\u2028Labs\u2029 <&>")
+		require.Contains(t, string(raw), `"report":`+body+`,`)
+		code, raw = cd.call(t, http.MethodGet, "/api/tenants/"+d.String()+"/reports/"+rid, nil)
+		require.Equal(t, http.StatusOK, code)
+		require.Contains(t, string(raw), `"report":`+body+`,`)
+		code, raw = anon.call(t, http.MethodGet, "/api/public/reports/"+rid, nil)
+		require.Equal(t, http.StatusOK, code)
+		require.Contains(t, string(raw), `"report":`+body+`,`)
+		var pub reports.PublicReport
+		require.NoError(t, json.Unmarshal(raw, &pub))
+		file, err := json.Marshal(pub.File)
+		require.NoError(t, err)
+		_, err = reports.Verify(file)
+		require.NoError(t, err)
+	})
+
 	t.Run("the public link shows that report alone, without an account", func(t *testing.T) {
 		code, raw := anon.call(t, http.MethodGet, "/api/public/reports/"+id, nil)
 		require.Equal(t, http.StatusOK, code, string(raw))
