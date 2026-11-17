@@ -338,18 +338,27 @@ func waitFor(t *testing.T, timeout time.Duration, what string, cond func() bool)
 	t.Fatalf("timed out after %s waiting for %s", timeout, what)
 }
 
-// drained reports whether the replayer consumer has nothing pending and
-// nothing unacknowledged, and the work-queue stream is empty.
+// drained reports whether every replayer consumer (the partitions and, when
+// it exists, the legacy one) has nothing pending and nothing
+// unacknowledged, and the work-queue stream is empty.
 func drained(t *testing.T, js jetstream.JetStream) bool {
 	t.Helper()
 	ctx := testCtx(t, 10*time.Second)
-	c, err := js.Consumer(ctx, natsx.StreamWebEvents, natsx.ConsumerReplayer)
-	if err != nil {
-		t.Fatal(err)
-	}
-	info, err := c.Info(ctx)
-	if err != nil {
-		t.Fatal(err)
+	for _, name := range natsx.ReplayerConsumers() {
+		c, err := js.Consumer(ctx, natsx.StreamWebEvents, name)
+		if name == natsx.ConsumerReplayer && errors.Is(err, jetstream.ErrConsumerNotFound) {
+			continue
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		info, err := c.Info(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.NumPending != 0 || info.NumAckPending != 0 {
+			return false
+		}
 	}
 	st, err := js.Stream(ctx, natsx.StreamWebEvents)
 	if err != nil {
@@ -359,7 +368,7 @@ func drained(t *testing.T, js jetstream.JetStream) bool {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return info.NumPending == 0 && info.NumAckPending == 0 && sinfo.State.Msgs == 0
+	return sinfo.State.Msgs == 0
 }
 
 // streamMsgs reads every message of a stream by sequence. an ordered
