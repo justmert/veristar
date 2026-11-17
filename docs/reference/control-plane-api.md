@@ -2378,7 +2378,7 @@ Operator. Default sort `pageviews`. Item:
   `sites_with_stellar_toml`, `pageviews`, `visitors`, `visits`, `bounces`,
   `totaltime`, `bounce_rate`, `avg_visit_duration`, `quarantine_pageviews`,
   `quarantine_visitors`, `quarantine_share`, `ingest_requests`,
-  `ingest_rejected`, `rejected_share`, `integrity`.
+  `ingest_rejected`, `rejected_share`, `integrity`, `unmeasured_share`.
 - `integrity`: the range grade over the project's graded site days (17.1);
   `grade` is `null` without one. Sorting by `integrity` orders A, B, C and
   puts projects without a grade last.
@@ -2669,8 +2669,10 @@ Parameters `tenant`, `band` (`primary` or `quarantine`, absent for both),
 rows summed. A day the aggregation task read without traffic has zeros; a day
 it never read is absent. Ordered by tenant, day, band. Summed over a range
 these equal the totals of 8.3 for the same range. `integrity` is the grade of
-the tenant's sites on that day (17.4). `GET /web/integrity` lists the grades
-per site and day (17.4).
+the tenant's sites on that day (17.4), and `coverage` the tenant's estimate of
+visits not measured because of privacy signals on that day (17.5); both are
+the same on the two bands' items. `GET /web/integrity` lists the grades per
+site and day (17.4).
 
 ### 9.6 `GET /web/dimensions`
 
@@ -3449,9 +3451,11 @@ marked failed in the scheduler metrics. Metric:
   `GET /api/metrics/v1/onchain/ids` (declared ids with proof and read state,
   keyset by tenant and strkey) and `GET /api/metrics/v1/onchain/daily`
   (stored daily rows of declared ids, keyset by tenant, strkey and day) and
-  `GET /api/metrics/v1/onchain/weekly` (one item per tenant and ISO week whose
-  Monday lies in the range: `tenant_id`, `week`, `from`, `to`,
-  `active_accounts`, `missing`, `closed_at`; keyset by tenant and week), with
+  `GET /api/metrics/v1/onchain/weekly` (one item per stored week, a row of
+  `agg.chain_weeks` whose Monday lies in the range: `tenant_id`, `week`,
+  `from`, `to`, `active_accounts`, `missing`, `closed_at`; keyset by tenant
+  and week; a week the task never counted for the project has no item, where
+  the console and the exports show it as `week_not_counted`), with
   the `tenant`, `from`, `to`, `limit` and `cursor` rules of section 9.
 - MCP (section 12): tenant tools `get_onchain_activity` (15.3) and
   `get_scf_view` (16.3), operator tool `get_tenant_onchain`; all carry the
@@ -3483,7 +3487,8 @@ operation involving one of the project's **verified** ids that week:
 - A week closes on the first run after its Sunday at which every verified
   id has all seven days with their initiators; the count is over the members
   of the ids verified at that moment. It closes as missing at once when a
-  day can never be read whole, and at the latest 7 days after its Sunday.
+  day can never be read whole, and at the latest on the first run 14 days
+  after its Monday (8 days after its Sunday).
 - `agg.chain_daily.initiators` records per day: `read`,
   `day_over_read_cap` (a contract day with more than 10,000 distinct
   transactions to look up; the day's counts stay) or `before_source_history`.
@@ -3728,17 +3733,6 @@ The coverage object of 17.5 travels with the grade in each item below.
 - The web project list (8.2), its CSV export and the MCP overview filter on
   the range grade with `integrity_at_or_below`.
 
-### 17.5 Appeals
-
-The grade is computed by the rules of 17.1 and stored per site and day; no
-route sets or edits it. The project overview and "What SCF sees" link to a
-new issue on the **Integrity appeal** form of the public tracker
-(`.github/ISSUE_TEMPLATE/integrity-appeal.yml`), with the fields `project`
-(slug), `period`, `grade`, `sites` (domain and grade per site), `reasons`
-(code, level and day count) and `rule_version` filled in from 17.2, and no
-personal or visitor data. Operators answer and decide on the issue; the
-stored grade does not change.
-
 ### 17.5 Coverage: visits not measured because of privacy signals
 
 Visitors whose browser sends Global Privacy Control are not measured, by
@@ -3771,6 +3765,17 @@ requests. Where it appears:
   export, and per day of the project overview export.
 
 ---
+
+### 17.6 Appeals
+
+The grade is computed by the rules of 17.1 and stored per site and day; no
+route sets or edits it. The project overview and "What SCF sees" link to a
+new issue on the **Integrity appeal** form of the public tracker
+(`.github/ISSUE_TEMPLATE/integrity-appeal.yml`), with the fields `project`
+(slug), `period`, `grade`, `sites` (domain and grade per site), `reasons`
+(code, level and day count) and `rule_version` filled in from 17.2, and no
+personal or visitor data. Operators answer and decide on the issue; the
+stored grade does not change.
 
 ## 18. Web dashboard
 
@@ -3919,7 +3924,7 @@ Member. Query `dimension` (required), `from`, `to`, `site`, `band`, `limit`
 - `sites` are the sites an engine read covered; `null` for an aggregate read,
   which covers every row of the selection.
 - The engine read takes each site's whole ranking in one answer, doubling its
-  limit from 1,000 while a page comes back full; a site with more than 64,000
+  limit from 1,000 while a page comes back full; a site with 64,000 or more
   values in the range is 400 `invalid_query`, asking for a shorter range.
 
 ### 18.5 `GET /api/tenants/{tenant_id}/web/hourly`
@@ -4006,13 +4011,14 @@ project and requires 404 and no change.
 
 - 400 `invalid_query`: an unknown or repeated parameter, a bad day, range,
   band, site id, dimension, limit or page, `sessions` without `site`, UTM of a site that does not collect it,
-  more than 64,000 values (18.4).
+  64,000 or more values (18.4).
 - 404 `not_found`: not a member, or a site that is not the tenant's.
 - 409 `provisioning_pending`: an engine read before the reconciler created the
   member's Umami user or team membership. The aggregate routes answer.
 - 429 `rate_limited` with `Retry-After`: more than 120 engine requests
   (`breakdown` of an engine dimension, `hourly`, `realtime`, `sessions`) by
-  one member in a minute. The aggregate reads are not limited.
+  one member in a minute, counted by each control plane instance on its own.
+  The aggregate reads are not limited.
 - 503 `unavailable` with `Retry-After`: Umami is unreachable or answered 5xx.
 
 ### 18.10 Parity with Umami
@@ -4082,7 +4088,7 @@ characters without control characters; `award_date` is a UTC day from
 
 A project also proposes its cohort at enrollment (4.2.1). Operator routes
 answer 404 `not_found` for an unknown or internal project, 422 for an invalid
-value.
+value. The operator MCP tool `list_cohorts` reads `GET /api/operator/cohorts`.
 
 ### 19.2 Growth and percentiles in the global views
 
@@ -4184,9 +4190,9 @@ evaluation to projects confirmed in it; its fields are optional.
 `items` holds the projects that meet the rule, ordered by name; `days` lists
 each qualifying day with the project's value. The machine API serves the
 same reads at `GET /api/metrics/v1/rules` and
-`GET /api/metrics/v1/rules/{rule_id}/matches` (9.3 rules; a key scoped to one
-tenant evaluates that tenant only), and MCP at `list_threshold_rules` and
-`get_threshold_rule_matches`.
+`GET /api/metrics/v1/rules/{rule_id}/matches` (9.12; with the key rules of
+9.3, a key scoped to one tenant evaluates that tenant only), and MCP at
+`list_threshold_rules` and `get_threshold_rule_matches`.
 
 ---
 

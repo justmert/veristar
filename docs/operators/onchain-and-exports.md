@@ -53,7 +53,7 @@ A week without a count shows its reason, never 0:
 | Reason | Meaning |
 |---|---|
 | `week_not_complete` | the week is not over yet |
-| `not_read_yet` | the week is over and a day is still being read; the week closes once it is read whole, or 7 days after its Sunday at the latest |
+| `not_read_yet` | the week is over and a day is still being read; the week closes once it is read whole, or 14 days after its Monday at the latest |
 | `no_verified_ids` | the project had no verified account or contract when the week closed |
 | `day_over_read_cap` | a contract had more than 10,000 transactions with events in one day, so its initiators were not read whole |
 | `before_source_history` | a day of the week was outside what the source still holds when the project declared the id; contract events stay readable for about seven days |
