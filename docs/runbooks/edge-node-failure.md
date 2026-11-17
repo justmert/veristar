@@ -44,7 +44,7 @@ Conventions (node names, addresses, compose directories) are in [overview.md](ov
 
    Expected: `503` at once. Wait 120 s before stopping anything (three 10 s probes, the
    5 s timeout and the 10 s answer TTL of `in` and `otlp`, with margin). On a converged or core
-   node, which is also in the `app` and `web` answers (three 30 s probes, a 10 s timeout and a
+   node, which is also in the `app` answers (three 30 s probes, a 10 s timeout and a
    30 s TTL), wait 150 s. These are the waits `deploy.yml` and `reboot.yml` use for edge and
    core nodes.
 

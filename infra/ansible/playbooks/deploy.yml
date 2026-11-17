@@ -25,7 +25,7 @@
 # touched. traffic manager (infra/tofu/modules/failover) drops an endpoint
 # after three failed probes: for in. and otlp. every 10 s with a 5 s timeout
 # and a 10 s answer ttl, so a resolver may keep the address for up to
-# 30 + 5 + 10 s; for app. and web. every 30 s with a 10 s timeout and a 30 s
+# 30 + 5 + 10 s; for app. every 30 s with a 10 s timeout and a 30 s
 # ttl, up to 90 + 10 + 30 s. 120 s (edge) and 150 s (core) cover that with
 # margin.
 - name: Verify the release

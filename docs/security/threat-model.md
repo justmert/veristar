@@ -401,11 +401,12 @@ variables. Proved by `TestRefused`, `TestRefusedAddresses`, `TestRefusedNames`,
 
 Built: the client IP never leaves gateway memory; Caddy log filters delete addresses, user agent
 and forwarding headers (edge) and all request headers, query strings and response headers
-(app, web); the replayer sends Umami the constant `192.0.2.1`; `internal/redact` replaces all ten
+(app); the replayer sends Umami the constant `192.0.2.1`; `internal/redact` replaces all ten
 SEP-23 strkey types, email and federation addresses, with S secret seeds becoming
 `{redacted-secret}`; the referrer is cut to scheme and host. Proved by `TestNoAddressAnywhere`
 (`tests/gateway/privacy_test.go`), `TestNoMarkerAddressAnywhere` (`tests/privacy/privacy_test.go`),
-`TestEdgeAccessLogHasNoClientIdentity` (`deploy/caddy/edge_test.go`), `TestWebCaddyLive` subtest
-`access log`, `TestClientIPNeverPrints` (`internal/gateway/clientip_test.go`), `TestWebPath`
+`TestEdgeAccessLogHasNoClientIdentity` (`deploy/caddy/edge_test.go`),
+`TestAppCaddyServesConsoleAndApi` (`deploy/caddy/app_test.go`, access log part),
+`TestClientIPNeverPrints` (`internal/gateway/clientip_test.go`), `TestWebPath`
 subtest `privacy dump`, `TestCollector` subtest `secret seed absent from collector logs`, and
 `internal/redact/redact_test.go`. Details: `docs/compliance/`.

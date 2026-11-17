@@ -81,9 +81,9 @@ is at least 10 minutes old (rule `QueueOldestMessageTooOld`).
 - Ingestion (99.99%): one result per 30 s interval, `slo_ingestion`,
   available when the gateway answered 202 to the probe's web event and the
   collector answered 200 to its OTLP metric.
-- Dashboard (99.90%): `slo_dashboard`, available when the console, the Umami
-  host and an authenticated machine API call (`/web/hourly` with the probe's
-  scoped key) all answered.
+- Dashboard (99.90%): `slo_dashboard`, available when the console and an
+  authenticated machine API call (`/web/hourly` with the probe's scoped key)
+  both answered.
 - Freshness, reported separately: `slo_freshness-web` and
   `slo_freshness-api`. Accepted probe events older than the limit (10 minutes
   in production) must be visible through `/web/hourly` and `/api/hourly`. The

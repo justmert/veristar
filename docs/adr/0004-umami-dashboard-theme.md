@@ -1,7 +1,7 @@
 ---
 title: "0004: Veristar theme on Umami's dashboard"
 sidebarTitle: "0004: Umami dashboard theme"
-description: "How web.<BASE_DOMAIN> shows Umami's dashboard in Veristar's colours, fonts and icons while the Umami image stays official and unmodified."
+description: "Superseded by ADR 0005. How the removed web.<BASE_DOMAIN> host showed Umami's dashboard in Veristar's colours, fonts and icons with the Umami image unmodified."
 ---
 
 - Status: superseded by [ADR 0005](0005-umami-as-engine-only.md) on 2026-11-16. The

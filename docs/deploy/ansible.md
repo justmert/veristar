@@ -18,7 +18,7 @@ ends with the procedure for a converge.
 | Docker Engine, Compose | `5:29.9.3-1~debian.13~trixie`, `5.6.1-1~debian.13~trixie` | Docker's trixie apt repo; key fingerprint 9DC8 5822 9FC7 DD38 854A E2D8 8D81 803C 0EBF CD88 is checked |
 | Patroni, pgBackRest | `4.1.5-2.pgdg13+1`, `2.60.0-1.pgdg13+1` | PGDG trixie, installed into `postgres:18.7-trixie` without moving `postgresql-18` (the build checks it) |
 | SOPS, age | 3.13.3, 1.3.2 | SHA-256 against the release checksums file (SOPS) and GitHub's asset digest (age) |
-| Caddy | 2.11.9 with `caddy-dns/cloudflare` v0.2.4 | `caddy.Dockerfile` compiles against 2.11.9 and `caddy validate` accepts `dns cloudflare` for every assembled node config (2026-11-13); production holds Let's Encrypt certificates for `in`, `otlp`, `app` and `web` on every node ([../reference/drills/2026-11-13-azure.md](../reference/drills/2026-11-13-azure.md)) |
+| Caddy | 2.11.9 with `caddy-dns/cloudflare` v0.2.4 | `caddy.Dockerfile` compiles against 2.11.9 and `caddy validate` accepts `dns cloudflare` for every assembled node config (2026-11-13); production holds Let's Encrypt certificates for `in`, `otlp` and `app` on every node ([../reference/drills/2026-11-13-azure.md](../reference/drills/2026-11-13-azure.md)) |
 
 Build notes:
 
