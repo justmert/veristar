@@ -33,6 +33,7 @@ type metrics struct {
 	legacyLeader        prometheus.Gauge
 	partitionPending    *prometheus.GaugeVec
 	partitionAckPending *prometheus.GaugeVec
+	partitionOldest     *prometheus.GaugeVec
 	pending             prometheus.Gauge
 	ackPending          prometheus.Gauge
 	lagSampled          prometheus.Gauge
@@ -77,6 +78,10 @@ func newMetrics(reg prometheus.Registerer, processes int, inFlight, oldestAge fu
 		partitionAckPending: prometheus.NewGaugeVec(prometheus.GaugeOpts{
 			Name: "replayer_partition_ack_pending_messages",
 			Help: "messages of one partition this instance owns that its consumer delivered and that are not yet acknowledged. reported by the owner only.",
+		}, []string{"partition"}),
+		partitionOldest: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "replayer_partition_oldest_pending_age_seconds",
+			Help: "age, from its stream publish time, of the oldest message this instance holds unacknowledged in one partition it owns; 0 when it holds none. sampled with the lag gauges, reported by the owner only.",
 		}, []string{"partition"}),
 		pending: prometheus.NewGauge(prometheus.GaugeOpts{
 			Name: "replayer_consumer_pending_messages",
@@ -148,7 +153,7 @@ func newMetrics(reg prometheus.Registerer, processes int, inFlight, oldestAge fu
 			Help: "age, from its stream publish time, of the oldest message this instance holds unacknowledged, over every partition it owns. 0 when it owns none or holds nothing.",
 		}, oldestAge),
 	}
-	for _, c := range []prometheus.Collector{m.leader, m.owned, m.partitions, m.legacyLeader, m.partitionPending, m.partitionAckPending, m.pending, m.ackPending, m.lagSampled, m.send, m.perProcess, m.outcomes,
+	for _, c := range []prometheus.Collector{m.leader, m.owned, m.partitions, m.legacyLeader, m.partitionPending, m.partitionAckPending, m.partitionOldest, m.pending, m.ackPending, m.lagSampled, m.send, m.perProcess, m.outcomes,
 		m.retries, m.writeFaultRetries, m.visitStateSkipped, m.visitStateBytes, m.visitStateMax, m.undecodable, m.bookkeeping, m.ackFailures, m.lockConfirms, m.inFlight, m.oldestHeld} {
 		if err := reg.Register(c); err != nil {
 			return nil, fmt.Errorf("replayer: register metrics: %w", err)
