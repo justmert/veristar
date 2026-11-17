@@ -188,7 +188,8 @@ test("state-changing requests need X-Requested-With and the console origin", asy
 
 test("sign-out ends the session for the old cookie value", async ({ page, context, browser }) => {
   await signIn(page, newUser("out"));
-  const value = (await context.cookies(APP)).find((c) => c.name === "__Host-sa_session")?.value ?? "";
+  const value =
+    (await context.cookies(APP)).find((c) => c.name === "__Host-sa_session")?.value ?? "";
   expect(value).not.toBe("");
   const r = await api(context, "POST", "/api/auth/logout");
   expect(r.status).toBe(204);
@@ -230,7 +231,9 @@ test("callback refuses a foreign state and a cancelled consent", async ({ page }
   await page.click("#fixture-cancel");
   await page.waitForURL(`${APP}/sign-in?error=access_denied`);
   await expect(page.getByRole("alert")).toBeVisible();
-  expect((await page.context().cookies(APP)).find((c) => c.name === "__Host-sa_session")).toBeUndefined();
+  expect(
+    (await page.context().cookies(APP)).find((c) => c.name === "__Host-sa_session"),
+  ).toBeUndefined();
 });
 
 test("a code replayed at the callback does not sign in a second browser", async ({
