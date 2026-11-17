@@ -44,11 +44,11 @@ func TestToolSets(t *testing.T) {
 		"get_web_metrics", "get_web_realtime", "get_event_stats", "get_event_series", "get_event_properties",
 		"get_sessions", "get_session_stats", "list_funnels", "run_funnel", "run_journey", "run_retention", "get_goals",
 		"list_api_services", "get_api_overview", "get_api_timeseries", "get_api_status_codes", "list_api_routes",
-		"get_api_top_error_routes", "get_api_warnings", "get_onchain_activity", "get_scf_view"} {
+		"get_api_top_error_routes", "get_api_warnings", "get_onchain_activity", "get_contract_functions", "get_scf_view"} {
 		require.True(t, tn[want], want)
 	}
 	for _, want := range []string{"list_tenants", "get_tenant", "get_global_web_overview", "get_global_api_overview",
-		"compare_tenants_web", "compare_tenants_api", "get_tenant_onchain", "list_cohorts", "list_threshold_rules",
+		"compare_tenants_web", "compare_tenants_api", "get_tenant_onchain", "get_tenant_contract_functions", "list_cohorts", "list_threshold_rules",
 		"get_threshold_rule_matches"} {
 		require.True(t, on[want], want)
 		require.False(t, tn[want], "operator tool %s in the tenant set", want)
