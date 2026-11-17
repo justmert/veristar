@@ -256,8 +256,11 @@ paths:
         From `api.metrics_daily`. For each tenant and service the source is
         chosen over the whole range: metric rows when the service has any,
         otherwise span rows (control-plane-api 7.3); the two are never added.
-        One item per tenant and day with requests, over every service or the
-        one named by `service`. Equal to the daily series of
+        One item per tenant and day with rows, over every service or the
+        one named by `service`; a day with only infrastructure requests
+        (control-plane-api 7.4) has an item with `requests` 0 and its
+        `infrastructure_requests`. `services` and `span_services` count the
+        services with application requests. Equal to the daily series of
         `GET /api/operator/api/compare` for the same range.
       parameters:
         - $ref: '#/components/parameters/tenant'
@@ -329,10 +332,13 @@ paths:
       operationId: apiHourly
       summary: API request numbers per tenant and UTC hour
       description: |
-        From `api.metrics_hourly`, which the rollup job refreshes every 5
-        minutes, so the newest minutes of the current hour can be missing
-        until the next rollup. Source choice as `/api/daily`, over the hour
-        range. One item per tenant and hour with requests.
+        From `api.operator_hourly`: the rolled-up rows of `api.metrics_hourly`,
+        and for the hours the rollup job (every 5 minutes) has not reached
+        yet, the sums of their minute rows, so the current hour holds every
+        minute the metrics writer has stored. Source choice as `/api/daily`,
+        over the hour range. One item per tenant and hour with rows; an hour
+        with only infrastructure requests has `requests` 0 and its
+        `infrastructure_requests`.
       parameters:
         - $ref: '#/components/parameters/tenant'
         - $ref: '#/components/parameters/service'
@@ -454,14 +460,16 @@ paths:
       operationId: onchainWeekly
       summary: Weekly active accounts per tenant and ISO week
       description: |
-        From `agg.chain_weeks`: one item per tenant and ISO week (UTC, Monday
-        to Sunday) whose Monday lies in the range. `active_accounts` is the
+        From `agg.chain_weeks`: one item per stored week, a tenant's ISO week
+        (UTC, Monday to Sunday) whose Monday lies in the range. `active_accounts` is the
         number of distinct accounts that initiated at least one operation
         involving the tenant's verified accounts and contracts in the week,
         the Weekly Active Accounts definition of the SCF Growth Hack
-        official rules. A week without a count has `active_accounts` `null`
-        and the reason in `missing`; it is never a zero. Ordered by tenant
-        and week.
+        official rules. A stored week without a count has `active_accounts`
+        `null` and the reason in `missing`; it is never a zero. A week the
+        weekly task never counted for the tenant has no item; the console and
+        the exports show it as `week_not_counted`. Ordered by tenant and
+        week.
       parameters:
         - $ref: '#/components/parameters/tenant'
         - $ref: '#/components/parameters/fromDay'

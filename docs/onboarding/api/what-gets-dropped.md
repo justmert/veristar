@@ -32,11 +32,19 @@ message for names and marker strings that must not be there.
 - **Logs**: accepted, so your SDK reports no errors, and discarded.
 - **Scope names and versions, schema URLs, descriptions and exemplars.**
 - **Gauge and sum versions** of the duration metric: only histograms are read.
+- **Data points that cannot be counted**, one by one, while the rest of the export is kept: a
+  time of zero or past the year 2262, a start time after the time, a temporality other than
+  delta or cumulative (the whole metric), bucket bounds that are not finite and strictly
+  increasing, bucket counts that do not match the bounds (including a histogram without
+  buckets), a count above 10^12 and a sum that is not a finite number.
+- **Spans that have no duration**: a span without a start time, one that ends before it starts,
+  in the first minute of 1970 or past 2262.
 
 ## Changed before storing
 
-- **Methods** outside the standard set (CONNECT, DELETE, GET, HEAD, OPTIONS, PATCH, POST, PUT,
-  TRACE, QUERY) become `_OTHER`; the comparison is case-sensitive.
+- **Methods** are upper-cased first, then a method outside the standard set (CONNECT, DELETE,
+  GET, HEAD, OPTIONS, PATCH, POST, PUT, TRACE, QUERY) becomes `_OTHER`: `get` is stored as
+  `GET`.
 - **Routes** are normalized: ids, keys, hashes and similar values become placeholders, and only 300
   distinct routes and 50 services per project and UTC day are kept apart ([http-route.md](http-route.md)).
 - **`error.type`** is redacted; a value longer than 64 bytes becomes `_OTHER`.
@@ -45,6 +53,9 @@ message for names and marker strings that must not be there.
   Data that arrives with other bounds, and every exponential histogram, is re-bucketed and its
   percentiles are marked approximate. A percentile above 10 seconds is shown as "> 10 s".
 - **Temporality** does not matter: cumulative and delta both arrive as exact per-minute counts.
+  Two cumulative series that only differ in what the platform drops or rewrites (two
+  libraries recording the same route, an unknown method, a long `error.type`) are counted
+  apart and then stored together.
 - **Traffic class**: CORS preflights (`OPTIONS`), health and probe routes such as `/healthz`,
   `/readyz` or `/actuator/health/liveness`, and requests from known health checkers such as
   `ELB-HealthChecker` or `kube-probe` are marked as infrastructure requests. The API traffic page
