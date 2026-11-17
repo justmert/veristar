@@ -1,6 +1,6 @@
 //go:build apipath
 
-// TestAPIPath is the api path integration verification with the four example
+// TestAPIPath is the api path integration verification with the five example
 // apps: each app exports with PLATFORM_OTLP_ENDPOINT pointed at the real
 // scf-otelcol behind the real edge caddy (otlp.<base domain>), with real
 // nats and a token created through the real control plane api, and the
@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"sort"
 	"strconv"
@@ -48,6 +49,10 @@ const (
 	// refusal and acceptance after a registry change must be this fast
 	registryDeadline = 5 * time.Second
 )
+
+// trustStoreSetup matches the lines /__cacert_entrypoint.sh of the eclipse
+// temurin image prints when USE_SYSTEM_CA_CERTS is set (apipath.compose.yml)
+var trustStoreSetup = regexp.MustCompile(`\| (Using a temporary truststore at |Picked up JAVA_TOOL_OPTIONS: |Importing keystore |Import command completed: |Entry for alias .* successfully imported\.$|Adding certificate with alias |Certificate was added to keystore$|Certificate with CN=.* is already in the JVM truststore)`)
 
 // canonical bucket bounds in seconds (docs/reference/api-storage.md)
 var canonicalBounds = []float64{0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1, 2.5, 5, 7.5, 10}
@@ -163,6 +168,16 @@ func (s *apiStack) runCase(t *testing.T, owner *user, files []string, tenantID s
 	// every export to the platform, traces included, was answered with
 	// success, so no sdk logged a failure
 	logs := composeIn(t, composeProject, files, env, "logs", "--no-color", a.name)
+	// the java image's entrypoint and the keytool runs it makes report the
+	// edge ca and the system cas they add to the jvm trust store; those lines
+	// are that setup, not export errors
+	var kept []string
+	for _, l := range strings.Split(logs, "\n") {
+		if !trustStoreSetup.MatchString(l) {
+			kept = append(kept, l)
+		}
+	}
+	logs = strings.Join(kept, "\n")
 	for _, bad := range []string{"export failed", "failed to export", "Failed to export", "ExportError", "OTLPExporterError", "error sending", "certificate", "401", "Unauthorized"} {
 		if strings.Contains(logs, bad) {
 			t.Errorf("%s logged %q:\n%s", a.name, bad, logs)
@@ -171,11 +186,12 @@ func (s *apiStack) runCase(t *testing.T, owner *user, files []string, tenantID s
 
 	// dual export: the tenant's own backend still got everything, full
 	// traces with the internal marker spans and events included
-	got := waitForCounts(t, filepath.Join(out, "tenant"), a.name, m, totalRequests())
+	got := waitForCounts(t, filepath.Join(out, "tenant"), a, m, totalRequests())
 	checkMetrics(t, "tenant", got.metrics, m, want)
 	checkTraces(t, "tenant", got.traces, want)
+	checkProbe(t, "tenant", a, m, got)
 
-	p := s.waitQueued(t, tok.ID, m, totalRequests())
+	p := s.waitQueued(t, tok.ID, a, m, totalRequests())
 	s.checkPlatform(t, p, tenantID, tok.ID, a, m, want)
 	if m.legacy {
 		checkLegacySeconds(t, filepath.Join(out, "tenant", "metrics.jsonl"), a.name, p)
@@ -196,6 +212,10 @@ type platformSummary struct {
 	sums         map[requestKey]float64 // latest cumulative sum per key of the tenant metric
 	pointBounds  map[requestKey][]float64
 	problems     []string
+	// requests under the app's probe route, kept out of metric and spans
+	probeMetric, probeSpans int64
+	// scf.traffic.class of the points of each key, empty for app traffic
+	classes map[requestKey]string
 }
 
 type series struct {
@@ -215,9 +235,12 @@ func pointKey(attrs pcommon.Map) (requestKey, error) {
 	return requestKey{method.Str(), route.Str(), int(st.Int())}, nil
 }
 
-func (s *apiStack) summarize(tokenID string) platformSummary {
+// summarize totals what reached API_METRICS for tokenID. requests under the
+// app's probe route are moved to probeMetric and probeSpans.
+func (s *apiStack) summarize(tokenID, probe string) platformSummary {
 	p := platformSummary{metric: map[requestKey]int64{}, spans: map[requestKey]int64{}, units: map[string]bool{},
-		bounds: map[string]bool{}, temporality: map[string]bool{}, sums: map[requestKey]float64{}, pointBounds: map[requestKey][]float64{}}
+		bounds: map[string]bool{}, temporality: map[string]bool{}, sums: map[requestKey]float64{}, pointBounds: map[requestKey][]float64{},
+		classes: map[requestKey]string{}}
 	type latest struct {
 		t     pcommon.Timestamp
 		count uint64
@@ -251,6 +274,14 @@ func (s *apiStack) summarize(tokenID string) platformSummary {
 							p.problems = append(p.problems, err.Error())
 							continue
 						}
+						class := ""
+						if v, ok := dp.Attributes().Get("scf.traffic.class"); ok {
+							class = v.Str()
+						}
+						if prev, ok := p.classes[key]; ok && prev != class {
+							p.problems = append(p.problems, fmt.Sprintf("%s queued with traffic classes %q and %q", key, prev, class))
+						}
+						p.classes[key] = class
 						switch m.Name() {
 						case spanMetric:
 							p.spanPoints++
@@ -285,22 +316,24 @@ func (s *apiStack) summarize(tokenID string) platformSummary {
 		p.metric[sr.key] += int64(v.count)
 		p.sums[sr.key] += v.sum
 	}
+	p.probeMetric = withoutProbe(p.metric, probe)
+	p.probeSpans = withoutProbe(p.spans, probe)
 	return p
 }
 
 // waitQueued drains API_METRICS until the token's span-derived requests
 // (and for metric modes its metric requests) reach total, then drains once
 // more after a pause so a late duplicate would be counted too.
-func (s *apiStack) waitQueued(t *testing.T, tokenID string, m mode, total int64) platformSummary {
+func (s *apiStack) waitQueued(t *testing.T, tokenID string, a app, m mode, total int64) platformSummary {
 	t.Helper()
 	deadline := time.Now().Add(60 * time.Second)
 	for {
 		s.drain(t)
-		p := s.summarize(tokenID)
+		p := s.summarize(tokenID, a.probe)
 		if sum(p.spans) >= total && (!m.metrics || sum(p.metric) >= total) {
 			time.Sleep(3 * time.Second)
 			s.drain(t)
-			return s.summarize(tokenID)
+			return s.summarize(tokenID, a.probe)
 		}
 		if time.Now().After(deadline) {
 			t.Logf("jetstream after 60 s: %d metric and %d span-derived requests of %d", sum(p.metric), sum(p.spans), total)
@@ -355,6 +388,24 @@ func (s *apiStack) checkPlatform(t *testing.T, p platformSummary, tenantID, toke
 				t.Errorf("route %q queued, want one of the app's templates", k.Route)
 			}
 		}
+	}
+
+	// the collector marks health checks as infrastructure traffic
+	// (internal/trafficclass) and leaves every other request unmarked
+	for k, class := range p.classes {
+		want := ""
+		if a.probe != "" && k.Route == a.probe {
+			want = "health"
+		}
+		if class != want {
+			t.Errorf("%s queued with scf.traffic.class %q, want %q", k, class, want)
+		}
+	}
+	if a.probe != "" {
+		if p.probeSpans == 0 || (m.metrics && p.probeMetric == 0) {
+			t.Errorf("%d span-derived and %d metric requests under the probe route %s on jetstream, want the health checks", p.probeSpans, p.probeMetric, a.probe)
+		}
+		t.Logf("jetstream: %d span-derived and %d metric health checks under %s, left out of the counts", p.probeSpans, p.probeMetric, a.probe)
 	}
 
 	if len(p.units) != 1 || !p.units["s"] {
@@ -482,7 +533,7 @@ func (s *apiStack) checkQueue(t *testing.T, tenantID string) {
 		t.Fatal("no messages")
 	}
 	resAllowed := map[string]bool{"service.name": true, "scf.tenant.id": true, "scf.token.id": true, "scf.resource.hash": true, "scf.flags": true}
-	dpAllowed := map[string]bool{"http.request.method": true, "http.route": true, "http.response.status_code": true, "error.type": true, "scf.lossy": true, "scf.stream": true}
+	dpAllowed := map[string]bool{"http.request.method": true, "http.route": true, "http.response.status_code": true, "error.type": true, "scf.lossy": true, "scf.stream": true, "scf.traffic.class": true}
 	names := map[string]int{}
 	for _, q := range s.seen {
 		if q.subject != natsx.Subject(natsx.SubjectAPIMetrics, tenantID) {
