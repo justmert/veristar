@@ -64,6 +64,14 @@ describe("snippet guides", () => {
     const npm = snippetGuides(s).at(-1);
     expect(npm?.id).toBe("npm");
     expect(npm?.copy).toBe("pnpm add tracker@1.0.0");
+    expect(npm?.code).toContain(
+      `init({ siteId: "${s.site_id}", host: "https://in.example.net" });`,
+    );
+    // consent and the title are init() options for the package (1.3.0 and later read the title)
+    const late = snippet.parse({ ...s, version: "1.3.0", npm: { ...s.npm, version: "1.3.0" } });
+    const withOpts = snippetGuides(late, { consent: true, title: true }).at(-1);
+    expect(withOpts?.code).toContain("autoTrack: false, sendTitle: true });");
+    expect(snippetGuides(s, { title: true }).at(-1)?.code).not.toContain("sendTitle");
   });
 });
 

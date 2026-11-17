@@ -40,6 +40,16 @@ export function readsTitleChoice(version: string): boolean {
   return true;
 }
 
+// the package's init() call: the tag's attributes in camel case
+// (docs/onboarding/web/npm.md). the gateway origin is the one the tag loads
+// the tracker from.
+export function npmInit(s: Snippet, opts: { consent?: boolean; title?: boolean } = {}): string {
+  const parts = [`siteId: "${s.site_id}"`, `host: "${new URL(s.src).origin}"`];
+  if (opts.consent) parts.push("autoTrack: false");
+  if (opts.title && readsTitleChoice(s.npm?.version ?? s.version)) parts.push("sendTitle: true");
+  return `init({ ${parts.join(", ")} });`;
+}
+
 // every guide carries the tag exactly as the control plane built it (contract
 // 4.3.6), or with the consent and title attributes added when asked; only the
 // surrounding file context differs per framework
@@ -109,8 +119,8 @@ export function snippetGuides(
       id: "npm",
       label: "npm",
       where: `Package ${s.npm.package} ${s.npm.version}`,
-      note: "Install the pinned version, then import it once in your app's entry module.",
-      code: `${s.npm.install}\n\n${s.npm.import}`,
+      note: "Install the pinned version, then import it and call init() once in your app's entry module.",
+      code: `${s.npm.install}\n\n${s.npm.import}\n${npmInit(s, opts)}`,
       copy: s.npm.install,
     });
   }
