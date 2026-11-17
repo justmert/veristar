@@ -128,8 +128,9 @@ const (
 	// acquireRetry is how often an instance tries to take a lock it wants.
 	acquireRetry = time.Second
 	// yieldTimeout bounds how long a partition that is handed over on
-	// purpose waits for the sends in progress before it stops them.
-	yieldTimeout = 15 * time.Second
+	// purpose delivers what it holds before it stops and hands the rest
+	// back. the core role gives the container 30 s to stop.
+	yieldTimeout = 10 * time.Second
 )
 
 // errNotReady ends a hold because jetstream could not serve the consumer
@@ -138,7 +139,8 @@ const (
 var errNotReady = errors.New("replayer: jetstream not ready")
 
 // errYield ends a hold on purpose: the partition is handed to another
-// instance or the process shuts down. the sends in progress finish first.
+// instance or the process shuts down. what the hold fetched is delivered
+// first, so the next owner finds nothing unacknowledged and starts at once.
 var errYield = errors.New("replayer: partition handed over")
 
 // legacyLead is the leads key of the legacy consumer's hold.
@@ -726,8 +728,11 @@ func (lr *leadRun) run(ctx, parent context.Context) error {
 	wg.Go(func() { lr.keepalive(ctx) })
 	err := lr.fetchLoop(ctx)
 	if errors.Is(err, errYield) {
-		// a hand-over: the visitors stop after the send in progress, so
-		// nothing is cut off between umami's answer and the bookkeeping
+		// a hand-over: nothing more is fetched and the visitors deliver what
+		// they hold, so every message is acked when the lock goes and the
+		// next owner's wait for its predecessor ends at once. a nak would
+		// not do: the server counts a nacked message as unacknowledged
+		// until it is delivered again.
 		done := make(chan struct{})
 		go func() {
 			lr.visitorsWG.Wait()
@@ -737,7 +742,7 @@ func (lr *leadRun) run(ctx, parent context.Context) error {
 		select {
 		case <-done:
 		case <-t.C:
-			lr.r.log.Warn("sends still in progress at the end of the hand-over, stopping them", "consumer", lr.name)
+			lr.r.log.Warn("messages still held at the end of the hand-over, handing them back", "consumer", lr.name)
 		case <-ctx.Done():
 		}
 		t.Stop()
@@ -908,12 +913,12 @@ func (lr *leadRun) enqueue(ctx context.Context, h *held) {
 }
 
 // runVisitor delivers one visitor's messages in stream order until its queue
-// is empty, ctx ends or the hold yields. messages left held are naked by
-// release, in stream order.
+// is empty or ctx ends, also during a hand-over. messages left held are
+// naked by release, in stream order.
 func (lr *leadRun) runVisitor(ctx context.Context, q *visitorQueue) {
 	for {
 		lr.mu.Lock()
-		if len(q.msgs) == 0 || lr.yielding() {
+		if len(q.msgs) == 0 {
 			delete(lr.visitors, q.key)
 			lr.mu.Unlock()
 			return
