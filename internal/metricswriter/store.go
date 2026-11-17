@@ -246,6 +246,11 @@ func (w *Writer) applyTx(ctx context.Context, tx pgx.Tx, items []*item) (*result
 		if it.dlq != "" || it.refused != "" || it.duplicate {
 			continue
 		}
+		if n := it.decoded.Rejected; n > 0 {
+			res.rejected += n
+			w.log.Warn("points with values that cannot be stored left out, the rest of the message is applied",
+				"tenant", it.tenant.String(), "points", n, "first_reason", it.decoded.Reason)
+		}
 		recv := it.meta.Timestamp
 		for i := range it.decoded.Points {
 			d := &it.decoded.Points[i]

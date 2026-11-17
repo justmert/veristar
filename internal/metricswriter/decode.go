@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math"
 	"strconv"
 	"unicode/utf8"
 
@@ -69,6 +70,12 @@ type Decoded struct {
 type Message struct {
 	Tenant uuid.UUID
 	Points []Decoded
+	// Rejected counts the points left out because their values cannot be
+	// stored (times, buckets, counts), and Reason names the first. the
+	// collector drops such points; one that still arrives is refused alone,
+	// and the rest of the message is applied.
+	Rejected int
+	Reason   string
 	// Resources is the number of resources in the message, and SecretSeeds
 	// how many of them carry the secret seed flag.
 	Resources   int
@@ -112,6 +119,19 @@ func undecodable(format string, a ...any) error {
 	return fmt.Errorf("%w: %s", ErrUndecodable, fmt.Sprintf(format, a...))
 }
 
+// errBadValues marks a point whose values, which come from the tenant's
+// sdk, cannot be stored. only that point is left out.
+var errBadValues = errors.New("metricswriter: point values cannot be stored")
+
+func badValues(format string, a ...any) error {
+	return fmt.Errorf("%w: %s", errBadValues, fmt.Sprintf(format, a...))
+}
+
+// MaxPointCount bounds the request count of one point and of each of its
+// buckets, as tenantguard does: a trillion requests, a thousand a second for
+// 31 years of one process.
+const MaxPointCount = 1_000_000_000_000
+
 // Decode reads one API_METRICS payload for the tenant of its subject. the
 // collector guarantees the schema; anything else means a producer that is
 // not the collector, or a collector bug, and the whole message is refused
@@ -137,7 +157,7 @@ func Decode(tenant uuid.UUID, data []byte) (Message, error) {
 		for j := 0; j < sms.Len(); j++ {
 			ms := sms.At(j).Metrics()
 			for k := 0; k < ms.Len(); k++ {
-				pts, err := decodeMetric(res, ms.At(k))
+				pts, err := decodeMetric(res, ms.At(k), &msg)
 				if err != nil {
 					return Message{}, err
 				}
@@ -192,7 +212,15 @@ func decodeResource(tenant uuid.UUID, attrs pcommon.Map) (Decoded, error) {
 	return d, nil
 }
 
-func decodeMetric(res Decoded, m pmetric.Metric) ([]Decoded, error) {
+// reject counts a point left out for its values.
+func (msg *Message) reject(n int, err error) {
+	if msg.Rejected == 0 {
+		msg.Reason = err.Error()
+	}
+	msg.Rejected += n
+}
+
+func decodeMetric(res Decoded, m pmetric.Metric, msg *Message) ([]Decoded, error) {
 	var source string
 	switch m.Name() {
 	case metricDuration:
@@ -213,7 +241,12 @@ func decodeMetric(res Decoded, m pmetric.Metric) ([]Decoded, error) {
 	case pmetric.AggregationTemporalityCumulative:
 		temp = Cumulative
 	default:
-		return nil, undecodable("metric %s has temporality %s", m.Name(), h.AggregationTemporality())
+		if source == SourceSpan {
+			return nil, undecodable("metric %s has temporality %s", m.Name(), h.AggregationTemporality())
+		}
+		// the tenant's sdk chose it; its points cannot be counted
+		msg.reject(h.DataPoints().Len(), badValues("metric %s has temporality %s", m.Name(), h.AggregationTemporality()))
+		return nil, nil
 	}
 	if source == SourceSpan && temp != Delta {
 		return nil, undecodable("span-derived metric is not delta")
@@ -226,7 +259,10 @@ func decodeMetric(res Decoded, m pmetric.Metric) ([]Decoded, error) {
 		d.Metric = m.Name()
 		d.Source = source
 		d.Temporality = temp
-		if err := decodePoint(&d, dp); err != nil {
+		if err := decodePoint(&d, dp); errors.Is(err, errBadValues) {
+			msg.reject(1, err)
+			continue
+		} else if err != nil {
 			return nil, err
 		}
 		out = append(out, d)
@@ -237,8 +273,8 @@ func decodeMetric(res Decoded, m pmetric.Metric) ([]Decoded, error) {
 func decodePoint(d *Decoded, dp pmetric.HistogramDataPoint) error {
 	d.Start = int64(dp.StartTimestamp()) //nolint:gosec // unix nanoseconds fit in int64 until 2262
 	d.Time = int64(dp.Timestamp())       //nolint:gosec // as above
-	if d.Start < 0 || d.Time <= 0 {
-		return undecodable("data point times start %d, time %d", d.Start, d.Time)
+	if d.Start < 0 || d.Time <= 0 || d.Start > d.Time {
+		return badValues("data point times start %d, time %d", dp.StartTimestamp(), dp.Timestamp())
 	}
 	d.NoRecordedValue = dp.Flags().NoRecordedValue()
 	d.Class = string(trafficclass.ClassApp)
@@ -286,16 +322,32 @@ func decodePoint(d *Decoded, dp pmetric.HistogramDataPoint) error {
 	}
 	d.Count = dp.Count()
 	d.Sum = dp.Sum()
+	if d.Count > MaxPointCount {
+		return badValues("count %d above %d", d.Count, uint64(MaxPointCount))
+	}
+	if math.IsNaN(d.Sum) || math.IsInf(d.Sum, 0) {
+		return badValues("sum %v", d.Sum)
+	}
 	src := dp.BucketCounts().AsRaw()
 	bounds := dp.ExplicitBounds().AsRaw()
 	if len(src) != len(bounds)+1 {
 		// otlp allows a histogram without buckets, but then its requests
 		// cannot be placed in any bucket of the canonical layout
-		return undecodable("data point has %d buckets for %d bounds", len(src), len(bounds))
+		return badValues("data point has %d buckets for %d bounds", len(src), len(bounds))
+	}
+	for i, b := range bounds {
+		if math.IsInf(b, 0) {
+			return badValues("bound %d is %v", i, b)
+		}
+	}
+	for _, c := range src {
+		if c > MaxPointCount {
+			return badValues("bucket count %d above %d", c, uint64(MaxPointCount))
+		}
 	}
 	counts, exact, err := histo.Rebucket(bounds, src)
 	if err != nil {
-		return undecodable("re-bucket: %v", err)
+		return badValues("re-bucket: %v", err)
 	}
 	if !exact {
 		d.Lossy = true
