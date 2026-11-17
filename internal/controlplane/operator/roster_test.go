@@ -182,26 +182,29 @@ func TestRosterRoutes(t *testing.T) {
 		Bootstrap: identity.Operators{GitHub: map[int64]bool{41: true}}, EnrollWindow: time.Hour,
 	})
 	require.NoError(t, err)
-	srv.Config.Handler = controlplane.NewHandler(controlplane.Options{
-		Log: slog.New(slog.DiscardHandler), ConsoleOrigin: srv.URL, Sessions: sessions,
-		Public: []controlplane.Routes{controlplane.RoutesFunc(func(r chi.Router) {
-			r.Get("/test-sign-in/{id}", func(w http.ResponseWriter, r *http.Request) {
-				id := uuid.MustParse(chi.URLParam(r, "id"))
-				if err := sessions.SignIn(r.Context(), id); err != nil {
-					http.Error(w, err.Error(), http.StatusInternalServerError)
-					return
-				}
-				if r.URL.Query().Get("step_up") == "1" {
-					if _, err := stepUp.Record(r.Context(), id); err != nil {
+	handler := func(roster *Roster) http.Handler {
+		return controlplane.NewHandler(controlplane.Options{
+			Log: slog.New(slog.DiscardHandler), ConsoleOrigin: srv.URL, Sessions: sessions,
+			Public: []controlplane.Routes{controlplane.RoutesFunc(func(r chi.Router) {
+				r.Get("/test-sign-in/{id}", func(w http.ResponseWriter, r *http.Request) {
+					id := uuid.MustParse(chi.URLParam(r, "id"))
+					if err := sessions.SignIn(r.Context(), id); err != nil {
 						http.Error(w, err.Error(), http.StatusInternalServerError)
 						return
 					}
-				}
-				w.WriteHeader(http.StatusNoContent)
-			})
-		})},
-		Private: []controlplane.Routes{controlplane.RoutesFunc(guard.Mount(roster))},
-	})
+					if r.URL.Query().Get("step_up") == "1" {
+						if _, err := stepUp.Record(r.Context(), id); err != nil {
+							http.Error(w, err.Error(), http.StatusInternalServerError)
+							return
+						}
+					}
+					w.WriteHeader(http.StatusNoContent)
+				})
+			})},
+			Private: []controlplane.Routes{controlplane.RoutesFunc(guard.Mount(roster))},
+		})
+	}
+	srv.Config.Handler = handler(roster)
 	signIn := func(id uuid.UUID, stepped bool) *rosterClient {
 		jar, err := cookiejar.New(nil)
 		require.NoError(t, err)
@@ -290,13 +293,33 @@ func TestRosterRoutes(t *testing.T) {
 	require.Equal(t, http.StatusOK, st, m)
 	st, m = admin.do(t, http.MethodPost, "/roster/"+bootRow+"/role", map[string]any{"role": "operator", "reason": reason})
 	require.Equal(t, http.StatusConflict, st)
-	require.Contains(t, []string{"last_operator_admin", "bootstrap_operator"}, errCode(m))
+	require.Equal(t, "bootstrap_operator", errCode(m))
 
 	// removal
 	st, _ = admin.do(t, http.MethodPost, "/roster/"+plainRow+"/remove", map[string]any{"reason": reason})
 	require.Equal(t, http.StatusNoContent, st)
 	st, _ = admin.do(t, http.MethodPost, "/roster/"+plainRow+"/suspend", map[string]any{"reason": reason})
 	require.Equal(t, http.StatusNotFound, st)
+
+	// the last admin rule, once the deploy settings no longer name 41: the
+	// same roster without a bootstrap identity. 43 stepped down above, so 41
+	// is the only active admin and may neither step down nor be suspended
+	require.Equal(t, 1, superCount(t, pg, `select count(*) from cp.operators where role = 'operator_admin' and status = 'active'`))
+	noBoot, err := NewRoster(RosterConfig{DB: d, Guard: guard, Lookup: fakeLookup{}, EnrollWindow: time.Hour})
+	require.NoError(t, err)
+	srv.Config.Handler = handler(noBoot)
+	for _, change := range []struct {
+		path string
+		body map[string]any
+	}{
+		{"/role", map[string]any{"role": "operator", "reason": reason}},
+		{"/suspend", map[string]any{"reason": reason}},
+		{"/remove", map[string]any{"reason": reason}},
+	} {
+		st, m = admin.do(t, http.MethodPost, "/roster/"+bootRow+change.path, change.body)
+		require.Equal(t, http.StatusConflict, st, change.path)
+		require.Equal(t, "last_operator_admin", errCode(m), change.path)
+	}
 
 	for _, a := range []string{ActionOperatorAdd, ActionOperatorSuspend, ActionOperatorResume, ActionOperatorPasskeysReset,
 		ActionOperatorRoleChange, ActionOperatorRemove} {

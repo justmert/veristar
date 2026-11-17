@@ -342,15 +342,17 @@ func (ro *Roster) apply(ctx context.Context, u session.User, id uuid.UUID, act s
 		if err != nil {
 			return err
 		}
-		activeAdmin := cur.Status == "active" && cur.Role == RoleOperatorAdmin
-		losesAdmin := activeAdmin && (act == "suspend" || act == "remove" || (act == "role" && *role != RoleOperatorAdmin))
-		if losesAdmin && len(admins) <= 1 && slices.Contains(admins, cur.ID) {
-			return httpx.Conflict(httpx.CodeLastOperatorAdmin,
-				"the roster must keep at least one active operator admin; add or promote another admin first")
-		}
-		if ro.bootstrapped(cur) && (act == "suspend" || act == "remove" || (act == "role" && *role != RoleOperatorAdmin)) {
+		demotes := act == "suspend" || act == "remove" || (act == "role" && *role != RoleOperatorAdmin)
+		// a deploy-settings row is refused first: that holds however many
+		// admins there are, and its message names the one way to change it
+		if ro.bootstrapped(cur) && demotes {
 			return httpx.Conflict(httpx.CodeBootstrapOperator,
 				"this identity is in OPERATOR_GITHUB_IDS or OPERATOR_STELLAR_ADDRESSES; take it out of the deploy settings first")
+		}
+		activeAdmin := cur.Status == "active" && cur.Role == RoleOperatorAdmin
+		if activeAdmin && demotes && len(admins) <= 1 && slices.Contains(admins, cur.ID) {
+			return httpx.Conflict(httpx.CodeLastOperatorAdmin,
+				"the roster must keep at least one active operator admin; add or promote another admin first")
 		}
 		detail := map[string]any{"reason": reason, "github_id": cur.GithubID, "stellar_address": cur.StellarAddress}
 		var action string
