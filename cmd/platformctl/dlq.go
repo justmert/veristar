@@ -17,6 +17,7 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 
 	"github.com/justmert/veristar/internal/config"
+	"github.com/justmert/veristar/internal/events"
 	"github.com/justmert/veristar/internal/natsx"
 	"github.com/justmert/veristar/internal/obs"
 )
@@ -210,13 +211,10 @@ func dlqList(ctx context.Context, dlq jetstream.Stream, q dlqQueue, sel dlqSelec
 func dlqReplay(ctx context.Context, js jetstream.JetStream, dlq jetstream.Stream, q dlqQueue, sel dlqSelect, stdout io.Writer) error {
 	var replayed, duplicates, skipped int
 	err := dlqEach(ctx, dlq, q, sel, func(m *jetstream.RawStreamMsg) error {
-		subject := m.Header.Get(natsx.HeaderDLQSubject)
-		// only a concrete subject of the original stream is accepted, so a
-		// damaged header cannot route a message anywhere else
-		if !strings.HasPrefix(subject, q.targetSubject+".") || strings.ContainsAny(subject, "*> ") ||
-			strings.Count(subject, ".") != strings.Count(q.targetSubject, ".")+1 {
+		subject, ok := replaySubject(q, m.Header.Get(natsx.HeaderDLQSubject), m.Data)
+		if !ok {
 			skipped++
-			_, _ = fmt.Fprintf(stdout, "skip %d: original subject %q is not on %s\n", m.Sequence, subject, q.targetStream)
+			_, _ = fmt.Fprintf(stdout, "skip %d: original subject %q is not on %s\n", m.Sequence, m.Header.Get(natsx.HeaderDLQSubject), q.targetStream)
 			return nil
 		}
 		h := nats.Header{}
@@ -248,6 +246,31 @@ func dlqReplay(ctx context.Context, js jetstream.JetStream, dlq jetstream.Stream
 		err = fmt.Errorf("dlq replay: %d message(s) skipped and kept", skipped)
 	}
 	return err
+}
+
+// replaySubject is where a replayed message goes. only a concrete subject of
+// the original stream is accepted, so a damaged header cannot route a
+// message anywhere else. a web event that decodes goes to its partition,
+// whichever subject it failed on: one dead-lettered from the legacy subject
+// of an earlier release then reaches the replayer that owns its visitor. one
+// that does not decode goes back to its original subject, a partition or,
+// while an upgrade keeps it, the legacy subject.
+func replaySubject(q dlqQueue, orig string, data []byte) (string, bool) {
+	if !strings.HasPrefix(orig, q.targetSubject+".") || strings.ContainsAny(orig, "*> ") {
+		return "", false
+	}
+	extra := strings.Count(orig, ".") - strings.Count(q.targetSubject, ".")
+	if q.targetStream != natsx.StreamWebEvents {
+		return orig, extra == 1
+	}
+	if extra != 1 && extra != 2 {
+		return "", false
+	}
+	site, _, _ := strings.Cut(strings.TrimPrefix(orig, q.targetSubject+"."), ".")
+	if ev, err := events.DecodeWebEvent(data); err == nil && ev.SiteID == site {
+		return ev.Subject(), true
+	}
+	return orig, true
 }
 
 func dlqPurge(ctx context.Context, dlq jetstream.Stream, q dlqQueue, sel dlqSelect, stdout io.Writer) error {

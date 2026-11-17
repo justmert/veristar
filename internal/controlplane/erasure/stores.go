@@ -76,22 +76,27 @@ func lastSeq(ctx context.Context, events jetstream.Stream) (uint64, error) {
 var errQueueBehind = errors.New("erasure: queued events did not drain in time")
 
 // waitQueue returns once WEB_EVENTS holds no message of the site with a
-// sequence at or below snap. WEB_EVENTS is a work queue: the replayer acks a
-// message after umami stored it or after moving it to WEB_DLQ, and an acked
-// message leaves the stream. so when no old message of the site is left,
-// every event accepted before the request is in umami or in the dlq, where
-// the run finds and deletes it.
+// sequence at or below snap, on any of its subjects: every partition of the
+// site and, while an upgrade drains it, the legacy subject. WEB_EVENTS is a
+// work queue: the replayer acks a message after umami stored it or after
+// moving it to WEB_DLQ, and an acked message leaves the stream. so when no
+// old message of the site is left, every event accepted before the request
+// is in umami or in the dlq, where the run finds and deletes it.
 func waitQueue(ctx context.Context, events jetstream.Stream, site string, snap uint64, wait time.Duration) error {
-	subject := natsx.Subject(natsx.SubjectWebEvents, site)
 	deadline := time.Now().Add(wait)
 	for {
-		m, err := events.GetMsg(ctx, 1, jetstream.WithGetMsgSubject(subject))
-		switch {
-		case errors.Is(err, jetstream.ErrMsgNotFound):
-			return nil
-		case err != nil:
-			return fmt.Errorf("erasure: read %s: %w", natsx.StreamWebEvents, err)
-		case m.Sequence > snap:
+		behind := false
+		for _, subject := range natsx.WebEventsSite(site) {
+			m, err := events.GetMsg(ctx, 1, jetstream.WithGetMsgSubject(subject))
+			switch {
+			case errors.Is(err, jetstream.ErrMsgNotFound):
+			case err != nil:
+				return fmt.Errorf("erasure: read %s: %w", natsx.StreamWebEvents, err)
+			case m.Sequence <= snap:
+				behind = true
+			}
+		}
+		if !behind {
 			return nil
 		}
 		if time.Now().After(deadline) {
