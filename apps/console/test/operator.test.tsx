@@ -523,8 +523,6 @@ describe("operator step-up", () => {
       },
     ]);
     const host = await renderRoutes(area, "/operator");
-    await waitFor(() =>
-      expect(host.textContent).toContain("This browser cannot use passkeys."),
-    );
+    await waitFor(() => expect(host.textContent).toContain("This browser cannot use passkeys."));
   });
 });
