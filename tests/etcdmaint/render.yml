@@ -1,0 +1,49 @@
+---
+# renders the etcd settings of roles/edge for render_test.go: the compose
+# project with the etcd command and each member's defrag calendar.
+#   ansible-playbook -i inventory.yml render.yml -e out=<dir>
+- name: Render the etcd settings of each edge member
+  hosts: edge
+  connection: local
+  gather_facts: false
+  vars_files: [../../infra/ansible/vars/pins.yml]
+  vars:
+    roles_dir: "{{ playbook_dir }}/../../infra/ansible/roles"
+    # placeholders: the template only interpolates them
+    secrets_tls_fingerprint: test
+    secrets_env_dir: /etc/veristar/env
+    sa_ingest_gogc: "200"
+    sa_tls: internal
+    sa_base_domain: example.test
+    sa_image_registry: registry.example.test
+    sa_image_tag: test
+    sa_public_ipv4: 192.0.2.1
+    sa_public_ipv6: ""
+    edge_etcd_initial_state: new
+  tasks:
+    - name: Load the edge role defaults
+      ansible.builtin.include_vars:
+        file: "{{ roles_dir }}/edge/defaults/main.yml"
+
+    - name: Run the edge facts
+      ansible.builtin.include_role:
+        name: edge
+        tasks_from: peers.yml
+
+    - name: Create the output directory
+      ansible.builtin.file:
+        path: "{{ out }}/{{ inventory_hostname }}"
+        state: directory
+        mode: "0755"
+
+    - name: Render the compose project
+      ansible.builtin.template:
+        src: "{{ roles_dir }}/edge/templates/compose.yml.j2"
+        dest: "{{ out }}/{{ inventory_hostname }}/compose.yml"
+        mode: "0644"
+
+    - name: Write the defrag calendar
+      ansible.builtin.copy:
+        content: "{{ edge_etcd_defrag_calendar }}\n"
+        dest: "{{ out }}/{{ inventory_hostname }}/defrag-calendar"
+        mode: "0644"

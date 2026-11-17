@@ -1,0 +1,14 @@
+---
+# test-only inventory of tests/etcdmaint: the converged three-node layout of
+# production, every host in edge and core
+all:
+  vars:
+    ansible_connection: local
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    sa_environment: test
+  children:
+    edge:
+      hosts:
+        node-1: {sa_tier: node, sa_private_ip: 10.10.1.11}
+        node-2: {sa_tier: node, sa_private_ip: 10.10.2.12}
+        node-3: {sa_tier: node, sa_private_ip: 10.10.3.13}

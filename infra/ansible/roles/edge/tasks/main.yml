@@ -93,6 +93,9 @@
 - name: Decide how this node's etcd member starts
   ansible.builtin.include_tasks: etcd.yml
 
+- name: Install the weekly etcd defrag
+  ansible.builtin.include_tasks: etcd_defrag.yml
+
 - name: Write the compose project
   ansible.builtin.template:
     src: compose.yml.j2

@@ -108,6 +108,16 @@ services:
       # new when the cluster is created, existing when a rebuilt node rejoins
       # (tasks/etcd.yml)
       - --initial-cluster-state={{ edge_etcd_initial_state }}
+      # etcd keeps every revision of every key until it is compacted, and
+      # patroni rewrites its leader key every loop, so without compaction the
+      # database grows until it reaches the quota and etcd refuses every
+      # write (the NOSPACE alarm). periodic compaction keeps an hour of
+      # history; sa-etcd-defrag.timer returns the freed pages to the disk.
+      # the quota is set explicitly so the alert on its use and the runbook
+      # name the same number (defaults/main.yml)
+      - --auto-compaction-mode=periodic
+      - --auto-compaction-retention={{ edge_etcd_compaction_retention }}
+      - --quota-backend-bytes={{ edge_etcd_quota_backend_bytes }}
     volumes:
       - etcddata:/var/lib/etcd
       - {{ sa_tls_dir }}/etcd:/etc/etcd/tls:ro
