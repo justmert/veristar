@@ -376,6 +376,10 @@ func loadState(ctx context.Context, q *writerq.Queries, items []*item, state *St
 			}
 			k := p.Key()
 			series[it.tenant][k.Hash] = true
+			if lk, ok := p.LegacyKey(); ok {
+				// a stream stored before stream ids continues from that row
+				series[it.tenant][lk.Hash] = true
+			}
 			streams[it.tenant] = append(streams[it.tenant], k)
 			resources[it.tenant][p.ResourceHash] = true
 		}

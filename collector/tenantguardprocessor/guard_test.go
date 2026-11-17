@@ -570,3 +570,82 @@ func TestTrafficClass(t *testing.T) {
 		t.Error("user_agent.original survives on the span")
 	}
 }
+
+// collidingStreams is one resource whose two cumulative streams become
+// identical after normalization: the same metric from two scopes, both
+// with an error.type too long to keep.
+func collidingStreams(forged string) pmetric.Metrics {
+	md := pmetric.NewMetrics()
+	rm := md.ResourceMetrics().AppendEmpty()
+	rm.Resource().Attributes().PutStr("service.name", "api")
+	for _, scope := range []string{"spring-webmvc", "tomcat"} {
+		sm := rm.ScopeMetrics().AppendEmpty()
+		sm.Scope().SetName(scope)
+		m := sm.Metrics().AppendEmpty()
+		m.SetName(schema.MetricDuration)
+		m.SetUnit("s")
+		h := m.SetEmptyHistogram()
+		h.SetAggregationTemporality(pmetric.AggregationTemporalityCumulative)
+		dp := h.DataPoints().AppendEmpty()
+		dp.Attributes().PutStr("http.request.method", "POST")
+		dp.Attributes().PutStr("http.route", "/v1/tx")
+		dp.Attributes().PutInt("http.response.status_code", 500)
+		dp.Attributes().PutStr("error.type", "org.springframework.web.util.NestedServletException: Request processing failed")
+		if forged != "" {
+			dp.Attributes().PutStr("scf.stream", forged)
+		}
+	}
+	return md
+}
+
+func TestCumulativeStreamsKeepTheirIdentity(t *testing.T) {
+	g := newGuard(testCfg, processortest.NewNopSettings(Type).Logger, time.Now)
+	tenant, token := uuid.NewString(), uuid.NewString()
+	ids := func(md pmetric.Metrics) []string {
+		out, err := g.processMetrics(authed(tenant, token), md)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got []string
+		sms := out.ResourceMetrics().At(0).ScopeMetrics()
+		for i := 0; i < sms.Len(); i++ {
+			a := sms.At(i).Metrics().At(0).Histogram().DataPoints().At(0).Attributes()
+			v, ok := a.Get("scf.stream")
+			if !ok {
+				t.Fatalf("cumulative point without scf.stream: %v", a.AsRaw())
+			}
+			if e, _ := a.Get("error.type"); e.Str() != schema.MethodOther {
+				t.Fatalf("error.type %q, the case needs it collapsed", e.Str())
+			}
+			if len(v.Str()) != 32 {
+				t.Errorf("stream id %q is not 32 hex digits", v.Str())
+			}
+			got = append(got, v.Str())
+		}
+		return got
+	}
+	first := ids(collidingStreams(""))
+	if first[0] == first[1] {
+		t.Fatal("two source streams got one stream id")
+	}
+	// stable across exports, and a tenant-supplied value is replaced
+	again := ids(collidingStreams(""))
+	if again[0] != first[0] || again[1] != first[1] {
+		t.Errorf("stream ids changed between exports: %v then %v", first, again)
+	}
+	forged := strings.Repeat("ab", 16)
+	if got := ids(collidingStreams(forged)); got[0] == forged || got[1] == forged {
+		t.Error("tenant-supplied stream id kept")
+	}
+
+	// delta points are counted as they are and carry no stream id
+	md := collidingStreams("")
+	md.ResourceMetrics().At(0).ScopeMetrics().At(0).Metrics().At(0).Histogram().SetAggregationTemporality(pmetric.AggregationTemporalityDelta)
+	out, err := g.processMetrics(authed(tenant, token), md)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := out.ResourceMetrics().At(0).ScopeMetrics().At(0).Metrics().At(0).Histogram().DataPoints().At(0).Attributes().Get("scf.stream"); ok {
+		t.Error("delta point got a stream id")
+	}
+}
