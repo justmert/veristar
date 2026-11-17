@@ -48,7 +48,7 @@ import (
 
 const (
 	// __Host- as for the wallet challenge cookie
-	passkeyCookie = "__Host-sa_passkey"
+	passkeyCookie = "__Host-sa_passkey" //nolint:gosec // a cookie name, not a credential
 	// the bytes of a passkey challenge, sent base64url
 	passkeyChallengeLen = 32
 	// what the console asks the browser to wait for the authenticator
