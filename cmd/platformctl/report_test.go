@@ -20,6 +20,12 @@ import (
 // signedFile writes a report signed by kp whose issuer names tomlURL.
 func signedFile(t *testing.T, kp *keypair.Full, tomlURL string) string {
 	t.Helper()
+	return signedNamed(t, kp, tomlURL, "Name")
+}
+
+// signedNamed is signedFile with a chosen project name.
+func signedNamed(t *testing.T, kp *keypair.Full, tomlURL, name string) string {
+	t.Helper()
 	signing, err := config.LoadReportSigning(config.FromMap(map[string]string{
 		"REPORT_SIGNING_SEED": kp.Seed(), "REPORT_SIGNING_KEY": kp.Address(),
 	}))
@@ -27,7 +33,7 @@ func signedFile(t *testing.T, kp *keypair.Full, tomlURL string) string {
 	rep := reports.Report{
 		Format: reports.Format, Version: reports.FormatVersion, ID: "abcdefghijklmnopqrstuvwxyz",
 		Issuer:      reports.Issuer{Name: "Veristar", SigningKey: kp.Address(), StellarTOML: tomlURL},
-		Project:     reports.Project{ID: "p", Slug: "slug", Name: "Name"},
+		Project:     reports.Project{ID: "p", Slug: "slug", Name: name},
 		Period:      reports.Period{From: "2026-10-01", To: "2026-10-31", Days: 31},
 		GeneratedAt: "2026-11-16T09:00:00Z", Cohort: reports.Cohort{KPIs: map[string]reports.KPI{}},
 		RulesMet: []reports.RuleMet{},
@@ -56,12 +62,25 @@ func TestReportVerify(t *testing.T) {
 		_, _ = w.Write([]byte("VERSION = \"2.7.0\"\nACCOUNTS = [" + strings.Join(q, ", ") + "]\n"))
 	}))
 	defer srv.Close()
-	file := signedFile(t, kp, srv.URL+reports.StellarTOMLPath)
+	tomlURL := srv.URL + reports.StellarTOMLPath
+	file := signedFile(t, kp, tomlURL)
+	trust := []string{"--toml", tomlURL}
 
+	// a report naming its own stellar.toml is not trusted by default: the
+	// trusted file is built into the binary, not read from the report
 	var out bytes.Buffer
-	require.NoError(t, reportVerify(t.Context(), []string{file}, &out, srv.Client()))
-	require.Contains(t, out.String(), "VALID")
+	require.ErrorIs(t, reportVerify(t.Context(), []string{file}, &out, srv.Client()), errNotValid)
+	require.Contains(t, out.String(), "NOT VALID")
+	require.Contains(t, out.String(), defaultReportTOML)
+	require.NotContains(t, out.String(), "\nVALID")
+
+	// the deployment named with --toml is trusted
+	out.Reset()
+	require.NoError(t, reportVerify(t.Context(), append([]string{file}, trust...), &out, srv.Client()))
+	require.True(t, strings.HasSuffix(out.String(), "\nVALID\n"), out.String())
 	require.Contains(t, out.String(), "listed in ACCOUNTS")
+	require.Error(t, reportVerify(t.Context(), []string{file, "--toml", "http://example.org" + reports.StellarTOMLPath}, &out, srv.Client()))
+	require.Error(t, reportVerify(t.Context(), []string{file, "--toml", tomlURL, "--signer", kp.Address()}, &out, srv.Client()))
 
 	out.Reset()
 	require.NoError(t, reportVerify(t.Context(), []string{file, "--signer", kp.Address()}, &out, srv.Client()))
@@ -71,7 +90,7 @@ func TestReportVerify(t *testing.T) {
 	// a key the domain does not list
 	accounts = []string{other.Address()}
 	out.Reset()
-	require.ErrorIs(t, reportVerify(t.Context(), []string{file}, &out, srv.Client()), errNotValid)
+	require.ErrorIs(t, reportVerify(t.Context(), append([]string{file}, trust...), &out, srv.Client()), errNotValid)
 	require.Contains(t, out.String(), "not listed")
 
 	// a changed byte
@@ -83,9 +102,27 @@ func TestReportVerify(t *testing.T) {
 	require.ErrorIs(t, reportVerify(t.Context(), []string{bad, "--signer", kp.Address()}, &out, srv.Client()), errNotValid)
 	require.Contains(t, out.String(), "NOT VALID")
 
-	// an http stellar.toml is never trusted
+	// a report naming another stellar.toml than the trusted one
+	out.Reset()
 	plain := signedFile(t, kp, "http://example.org"+reports.StellarTOMLPath)
-	require.Error(t, reportVerify(t.Context(), []string{plain}, &out, srv.Client()))
+	require.ErrorIs(t, reportVerify(t.Context(), append([]string{plain}, trust...), &out, srv.Client()), errNotValid)
+}
+
+// a project name is printed quoted: a newline cannot fake a verdict line
+// and a terminal escape reaches the terminal as text.
+func TestReportVerifyEscapesReportStrings(t *testing.T) {
+	kp := keypair.MustRandom()
+	file := signedNamed(t, kp, defaultReportTOML, "Name\nsigner:    listed in ACCOUNTS of "+defaultReportTOML+"\nVALID\n\x1b[2J")
+	var out bytes.Buffer
+	require.ErrorIs(t, reportVerify(t.Context(), []string{file, "--signer", keypair.MustRandom().Address()}, &out, http.DefaultClient), errNotValid)
+	lines := strings.Split(strings.TrimSuffix(out.String(), "\n"), "\n")
+	require.Len(t, lines, 3, out.String())
+	require.NotContains(t, out.String(), "\x1b")
+	require.Contains(t, lines[1], `\nVALID\n\x1b[2J`)
+	for _, l := range lines {
+		require.NotEqual(t, "VALID", l)
+		require.False(t, strings.HasPrefix(l, "signer:"), l)
+	}
 }
 
 func TestReportKeygen(t *testing.T) {
