@@ -385,9 +385,9 @@ func startProc(t *testing.T, bin, natsURL, umamiURL, node string) *proc {
 	return p
 }
 
-// restart: the active replayer is killed with SIGKILL mid-run. the standby
-// takes the lock, nothing is lost, and events stored twice are at most the
-// messages the killed process held in flight.
+// restart: a replayer that owns every partition is killed with SIGKILL
+// mid-run. the other replayer takes all of them, nothing is lost, and events
+// stored twice are at most the messages the killed process held in flight.
 func TestRestartStandbyTakesOver(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds and kills replayer processes")
@@ -396,7 +396,9 @@ func TestRestartStandbyTakesOver(t *testing.T) {
 	env := startNATS(t)
 	bin := buildReplayer(t)
 	a := startProc(t, bin, env.srv.URL, umamiURL.String(), "it-a")
-	waitFor(t, 30*time.Second, "a to lead", func() bool { return scrapeOK(a.ops)["replayer_leader"] == 1 })
+	waitFor(t, 30*time.Second, "a to own every partition", func() bool {
+		return scrapeOK(a.ops)["replayer_partitions_owned"] == float64(events.Partitions)
+	})
 	b := startProc(t, bin, env.srv.URL, umamiURL.String(), "it-b")
 
 	s := newSite(t, admin)
@@ -425,7 +427,9 @@ func TestRestartStandbyTakesOver(t *testing.T) {
 	inFlight := atKill["replayer_in_flight_messages"]
 	deliveredByA := atKill[`replayer_outcomes_total{outcome="delivered"}`]
 
-	waitFor(t, time.Minute, "b to lead", func() bool { return scrapeOK(b.ops)["replayer_leader"] == 1 })
+	waitFor(t, 2*time.Minute, "b to own every partition", func() bool {
+		return scrapeOK(b.ops)["replayer_partitions_owned"] == float64(events.Partitions)
+	})
 	takeover := time.Since(killed)
 	waitFor(t, 3*time.Minute, "stream drained by b", func() bool { return drained(t, env.js) })
 	drainedAfter := time.Since(killed)
@@ -442,7 +446,7 @@ func TestRestartStandbyTakesOver(t *testing.T) {
 	}
 	mb := scrapeOK(b.ops)
 	count, sum := mb[`replayer_send_duration_seconds_count{result="ok"}`], mb[`replayer_send_duration_seconds_sum{result="ok"}`]
-	t.Logf("restart: %d events; a delivered %.0f before SIGKILL with %.0f in flight; b led %.1f s after the kill and drained %.1f s after it; b delivered %.0f, skipped %.0f as duplicates; missing %d, stored twice %d; b mean send latency %.1f ms over %.0f sends",
+	t.Logf("restart: %d events; a delivered %.0f before SIGKILL with %.0f in flight; b owned every partition %.1f s after the kill and drained %.1f s after it; b delivered %.0f, skipped %.0f as duplicates; missing %d, stored twice %d; b mean send latency %.1f ms over %.0f sends",
 		n, deliveredByA, inFlight, takeover.Seconds(), drainedAfter.Seconds(),
 		mb[`replayer_outcomes_total{outcome="delivered"}`], mb[`replayer_outcomes_total{outcome="duplicate_skipped"}`],
 		missing, dup, 1000*sum/math.Max(count, 1), count)
