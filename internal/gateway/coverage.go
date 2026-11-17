@@ -5,7 +5,6 @@ import (
 	"net/url"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/justmert/veristar/internal/registry"
 )
@@ -22,48 +21,48 @@ import (
 // SiteSnapshots is the registry view the attribution needs: every site at
 // once, to index the registered origins.
 type SiteSnapshots interface {
-	Snapshot() map[string]registry.Site
+	// SnapshotAt returns every site and the generation of that snapshot
+	SnapshotAt() (map[string]registry.Site, uint64)
+	// Generation moves whenever the snapshot changes
+	Generation() uint64
 	Loaded() bool
 }
-
-// scriptIndexTTL is how long an origin index is used before it is built
-// again from the registry, so a newly registered origin is attributed
-// within that time.
-const scriptIndexTTL = 30 * time.Second
 
 type originSite struct {
 	pattern origin
 	site    string
 }
 
-// ScriptAttribution finds the site a tracker file request was made for.
+// ScriptAttribution maps a tracker file request to a site through an index
+// of the active sites' origins. the index is built again whenever the
+// registry snapshot changed, so a newly registered origin is attributed from
+// its first request, and an unchanged registry costs no rebuild.
 type ScriptAttribution struct {
 	sites SiteSnapshots
-	now   func() time.Time
 
 	mu    sync.Mutex
-	built time.Time
+	gen   uint64
 	exact map[origin][]string
 	wild  []originSite
 }
 
 // NewScriptAttribution returns an attribution over the registry snapshot.
-func NewScriptAttribution(sites SiteSnapshots, now func() time.Time) *ScriptAttribution {
-	return &ScriptAttribution{sites: sites, now: now}
+func NewScriptAttribution(sites SiteSnapshots) *ScriptAttribution {
+	return &ScriptAttribution{sites: sites}
 }
 
-// index returns the current origin index, building it when it is older than
-// scriptIndexTTL.
+// index returns the origin index of the current registry snapshot, building
+// it when the snapshot changed since the last build.
 func (a *ScriptAttribution) index() (map[origin][]string, []originSite) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	now := a.now()
-	if a.exact != nil && now.Sub(a.built) < scriptIndexTTL {
+	if a.exact != nil && a.sites.Generation() == a.gen {
 		return a.exact, a.wild
 	}
+	snap, gen := a.sites.SnapshotAt()
 	exact := map[origin][]string{}
 	var wild []originSite
-	for id, s := range a.sites.Snapshot() {
+	for id, s := range snap {
 		if !s.Active() {
 			continue
 		}
@@ -79,7 +78,7 @@ func (a *ScriptAttribution) index() (map[origin][]string, []originSite) {
 			}
 		}
 	}
-	a.exact, a.wild, a.built = exact, wild, now
+	a.exact, a.wild, a.gen = exact, wild, gen
 	return exact, wild
 }
 
