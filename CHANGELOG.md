@@ -192,15 +192,37 @@ here, before they take effect, as the processing terms require
   `sa-systemd-failed.timer` writes every 5 minutes on every node. It covers a
   failing backup, the leader's `pgbackrest verify` or `check`, and the
   start-at-boot units ([docs/runbooks/alerts.md](docs/runbooks/alerts.md#systemdunitfailed)).
-  The platform has 39 alerts.
+  The platform has 45 alerts.
 - OpenTofu variable `public_ingress_open` (default `true`): `false` limits TCP
   80, TCP 443 and UDP 443 to `admin_cidrs` without stopping anything
   ([docs/deploy/opentofu.md](docs/deploy/opentofu.md)).
 - Signed usage reports name `api_metrics` method version 2: infrastructure
   requests are left out of every API number of a report
   ([docs/reference/usage-reports.md](docs/reference/usage-reports.md)).
+- etcd compacts its history every hour (`--auto-compaction-mode=periodic`,
+  `--auto-compaction-retention=1h`) and runs with an explicit 2 GiB quota
+  (`--quota-backend-bytes`). `sa-etcd-defrag.timer` defragments each member
+  once a week, one member at a time and only while every member is healthy.
+  New alerts `EtcdDatabaseSpaceHigh` (the database file above half the quota)
+  and `EtcdNoSpaceAlarm`, and the runbook
+  [docs/runbooks/etcd-maintenance.md](docs/runbooks/etcd-maintenance.md).
+- `TextfileStale` alerts when a node_exporter textfile writer stopped
+  (`systemd.prom` older than 15 minutes, `reboot.prom` 30 minutes,
+  `pgbackrest.prom` and `tls.prom` 2 hours), and `TextfileScrapeError` when
+  node_exporter cannot read one.
+- `InternalCertificateExpiringSoon` alerts 30 days before the private
+  network's node certificate or internal CA expires, from
+  `sa-tls-expiry.timer`.
+- `BackupJobFailed` alerts when the newest run of a backup unit across the
+  database nodes failed. Each run that was not skipped records its result
+  (`sa-backup-result`), so the failure stays visible after the Patroni leader
+  moves, which clears the unit's failed state.
 
 ### Changed
+
+- The rolling `deploy.yml` and `reboot.yml` visit the core node holding the
+  Patroni leader last, so a run does one switchover, to a replica that is
+  already done, instead of up to three.
 
 - Terms of use `2026-11-17-draft.5`: passkeys as a console sign-in method
   and the data a passkey sign-in stores, the fields tracker 1.3.0 no longer
@@ -251,6 +273,7 @@ here, before they take effect, as the processing terms require
 - `sa-core-start` retries a failed start (every 20 s, up to six times in 30
   minutes) instead of staying failed when Docker's restart policy races it at
   boot and a container briefly reports a dependency as unhealthy.
+  `sa-edge-start` and `sa-observability-start` retry the same way.
 - The backup units run only on the Patroni leader in Azure mode too; on a
   replica they skip their run cleanly instead of failing.
 
@@ -312,6 +335,14 @@ here, before they take effect, as the processing terms require
   after the apply first applies OpenTofu from a `v0.3.0` checkout
   ([docs/deploy/upgrade.md](docs/deploy/upgrade.md), "Rollback across an
   OpenTofu change").
+- The rolling deploy recreates the etcd container of each node with the new
+  compaction and quota flags, one node at a time in the edge play. A cluster
+  that ran without compaction keeps its database file at its size until it
+  is defragmented: after the deploy, compact and defragment once as in
+  [docs/runbooks/etcd-maintenance.md](docs/runbooks/etcd-maintenance.md).
+- The deploy installs the timers `sa-etcd-defrag` and `sa-tls-expiry` and the
+  backup result writer. `BackupJobFailed` sees a backup unit after its first
+  run that was not skipped.
 - Remove `WEB_ORIGIN` from the control plane environment and `PROBER_WEB_URL`
   from the prober environment if you set them by hand; the templates no longer
   write them.
