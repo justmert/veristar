@@ -5,6 +5,8 @@ import (
 	"strconv"
 
 	"github.com/prometheus/client_golang/prometheus"
+
+	"github.com/justmert/veristar/internal/events"
 )
 
 // outcome labels of replayer_outcomes_total
@@ -25,43 +27,68 @@ const (
 )
 
 type metrics struct {
-	leader            prometheus.Gauge
-	pending           prometheus.Gauge
-	ackPending        prometheus.Gauge
-	lagSampled        prometheus.Gauge
-	send              *prometheus.HistogramVec
-	perProcess        *prometheus.CounterVec
-	outcomes          *prometheus.CounterVec
-	retries           prometheus.Counter
-	writeFaultRetries prometheus.Counter
-	visitStateSkipped *prometheus.CounterVec
-	visitStateBytes   prometheus.Gauge
-	visitStateMax     prometheus.Gauge
-	undecodable       prometheus.Counter
-	bookkeeping       prometheus.Counter
-	inFlight          prometheus.GaugeFunc
-	oldestHeld        prometheus.GaugeFunc
-	ackFailures       prometheus.Counter
-	lockConfirms      *prometheus.CounterVec
+	leader              prometheus.Gauge
+	owned               prometheus.Gauge
+	partitions          prometheus.Gauge
+	legacyLeader        prometheus.Gauge
+	partitionPending    *prometheus.GaugeVec
+	partitionAckPending *prometheus.GaugeVec
+	pending             prometheus.Gauge
+	ackPending          prometheus.Gauge
+	lagSampled          prometheus.Gauge
+	send                *prometheus.HistogramVec
+	perProcess          *prometheus.CounterVec
+	outcomes            *prometheus.CounterVec
+	retries             prometheus.Counter
+	writeFaultRetries   prometheus.Counter
+	visitStateSkipped   *prometheus.CounterVec
+	visitStateBytes     prometheus.Gauge
+	visitStateMax       prometheus.Gauge
+	undecodable         prometheus.Counter
+	bookkeeping         prometheus.Counter
+	inFlight            prometheus.GaugeFunc
+	oldestHeld          prometheus.GaugeFunc
+	ackFailures         prometheus.Counter
+	lockConfirms        *prometheus.CounterVec
 }
 
 func newMetrics(reg prometheus.Registerer, processes int, inFlight, oldestAge func() float64) (*metrics, error) {
 	m := &metrics{
 		leader: prometheus.NewGauge(prometheus.GaugeOpts{
 			Name: "replayer_leader",
-			Help: "1 while this instance holds the replayer lock and consumes, else 0.",
+			Help: "1 while this instance owns at least one WEB_EVENTS partition or the legacy subject and consumes, else 0.",
 		}),
+		owned: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "replayer_partitions_owned",
+			Help: "WEB_EVENTS partitions this instance owns and consumes. the sum over the instances equals replayer_partitions while every partition has an owner.",
+		}),
+		partitions: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "replayer_partitions",
+			Help: "the fixed number of WEB_EVENTS partitions.",
+		}),
+		legacyLeader: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "replayer_legacy_leader",
+			Help: "1 while this instance drains the single web subject of releases before the partitions, else 0.",
+		}),
+		partitionPending: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "replayer_partition_pending_messages",
+			Help: "consumer lag of one partition this instance owns (partition label 00 to 31, or legacy): messages not yet delivered to its consumer. reported by the owner only.",
+		}, []string{"partition"}),
+		partitionAckPending: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "replayer_partition_ack_pending_messages",
+			Help: "messages of one partition this instance owns that its consumer delivered and that are not yet acknowledged. reported by the owner only.",
+		}, []string{"partition"}),
 		pending: prometheus.NewGauge(prometheus.GaugeOpts{
 			Name: "replayer_consumer_pending_messages",
-			Help: "consumer lag: WEB_EVENTS messages not yet delivered to the replayer consumer.",
+			Help: "consumer lag: WEB_EVENTS messages not yet delivered to the consumers this instance owns, summed. the sum over the instances is the whole lag.",
 		}),
 		ackPending: prometheus.NewGauge(prometheus.GaugeOpts{
 			Name: "replayer_consumer_ack_pending_messages",
-			Help: "WEB_EVENTS messages delivered to the replayer consumer and not yet acknowledged.",
+			Help: "WEB_EVENTS messages delivered to the consumers this instance owns and not yet acknowledged, summed.",
 		}),
 		lagSampled: prometheus.NewGauge(prometheus.GaugeOpts{
 			Name: "replayer_consumer_info_timestamp_seconds",
-			Help: "unix time of the last successful consumer info read behind the lag gauges.",
+			Help: "unix time of the last round in which every owned consumer's info was read for the lag gauges.",
 		}),
 		send: prometheus.NewHistogramVec(prometheus.HistogramOpts{
 			Name:    "replayer_send_duration_seconds",
@@ -114,19 +141,20 @@ func newMetrics(reg prometheus.Registerer, processes int, inFlight, oldestAge fu
 		}, []string{"result"}),
 		inFlight: prometheus.NewGaugeFunc(prometheus.GaugeOpts{
 			Name: "replayer_in_flight_messages",
-			Help: "messages held between fetch and ack by this instance.",
+			Help: "messages held between fetch and ack by this instance, over every partition it owns.",
 		}, inFlight),
 		oldestHeld: prometheus.NewGaugeFunc(prometheus.GaugeOpts{
 			Name: "replayer_oldest_pending_age_seconds",
-			Help: "age, from its stream publish time, of the oldest message this leader holds unacknowledged. 0 on a standby or when nothing is held.",
+			Help: "age, from its stream publish time, of the oldest message this instance holds unacknowledged, over every partition it owns. 0 when it owns none or holds nothing.",
 		}, oldestAge),
 	}
-	for _, c := range []prometheus.Collector{m.leader, m.pending, m.ackPending, m.lagSampled, m.send, m.perProcess, m.outcomes,
+	for _, c := range []prometheus.Collector{m.leader, m.owned, m.partitions, m.legacyLeader, m.partitionPending, m.partitionAckPending, m.pending, m.ackPending, m.lagSampled, m.send, m.perProcess, m.outcomes,
 		m.retries, m.writeFaultRetries, m.visitStateSkipped, m.visitStateBytes, m.visitStateMax, m.undecodable, m.bookkeeping, m.ackFailures, m.lockConfirms, m.inFlight, m.oldestHeld} {
 		if err := reg.Register(c); err != nil {
 			return nil, fmt.Errorf("replayer: register metrics: %w", err)
 		}
 	}
+	m.partitions.Set(float64(events.Partitions))
 	// create every labelled series at 0, so alerts and rates work before the
 	// first event of each kind
 	for _, o := range []string{outcomeDelivered, outcomeBot, outcomeDLQ, outcomeDuplicate} {

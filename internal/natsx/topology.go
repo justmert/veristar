@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go/jetstream"
+
+	"github.com/justmert/veristar/internal/events"
 )
 
 // stream names
@@ -18,7 +20,9 @@ const (
 	StreamAPIDLQ     = "API_DLQ"
 )
 
-// subject prefixes. the last token is the site id, tenant id or node id.
+// subject prefixes. the token after the prefix is the site id, tenant id or
+// node id. WEB_EVENTS subjects carry the visitor's partition as one more
+// token (events.WebEvent.Subject).
 const (
 	SubjectWebEvents  = "web.events"
 	SubjectAPIMetrics = "api.metrics"
@@ -67,6 +71,44 @@ const (
 // Subject returns prefix.token, the subject for one site, tenant or node.
 func Subject(prefix, token string) string { return prefix + "." + token }
 
+// WEB_EVENTS subject filters. the partitioned subjects have four tokens and
+// the legacy ones of earlier releases three, so the two never overlap.
+const (
+	// WebEventsPartitioned matches every partitioned web event subject.
+	WebEventsPartitioned = SubjectWebEvents + ".*.*"
+	// WebEventsLegacy matches the subjects earlier releases published to,
+	// web.events.<site id>. the stream keeps it, and the replayer drains it,
+	// until `platformctl nats retire-legacy-web` removes it after an upgrade.
+	WebEventsLegacy = SubjectWebEvents + ".*"
+)
+
+// WebEventsPartition is the filter of one partition's consumer.
+func WebEventsPartition(p int) string {
+	return SubjectWebEvents + ".*." + events.PartitionToken(p)
+}
+
+// WebEventsSite are the subjects that hold a site's queued events: its
+// legacy subject and its partitions.
+func WebEventsSite(site string) []string {
+	return []string{Subject(SubjectWebEvents, site), Subject(SubjectWebEvents, site) + ".*"}
+}
+
+// ConsumerPartition is the durable consumer of one WEB_EVENTS partition.
+func ConsumerPartition(p int) string { return ConsumerReplayer + "-p" + events.PartitionToken(p) }
+
+// LockPartition is the lock that makes one replayer the only owner of a
+// partition.
+func LockPartition(p int) string { return LockReplayer + "-p" + events.PartitionToken(p) }
+
+// ReplayerConsumers lists the partition consumers, then the legacy one.
+func ReplayerConsumers() []string {
+	out := make([]string, 0, events.Partitions+1)
+	for p := range events.Partitions {
+		out = append(out, ConsumerPartition(p))
+	}
+	return append(out, ConsumerReplayer)
+}
+
 const (
 	// LocksTTL is the bucket ttl of locks. a holder that stops renewing loses
 	// the lock at most this long after its last renewal.
@@ -112,6 +154,21 @@ type Spec struct {
 	Streams   []jetstream.StreamConfig
 	Buckets   []jetstream.KeyValueConfig
 	Consumers []ConsumerSpec
+	// Legacy are objects of earlier releases that Apply keeps while they
+	// exist and never creates: an upgrade drains them, a new installation
+	// never has them.
+	Legacy Legacy
+}
+
+// Legacy is the part of an earlier release's topology an upgrade drains.
+type Legacy struct {
+	// Subjects maps a stream to subjects it keeps, ahead of its own, while
+	// the live stream still has them.
+	Subjects map[string][]string
+	// Consumers are reconciled to these settings while they exist. Apply
+	// handles them before Spec.Consumers, because a work-queue stream
+	// refuses a filtered consumer next to an unfiltered one.
+	Consumers []ConsumerSpec
 }
 
 // ConsumerSpec is a durable consumer on a stream.
@@ -130,7 +187,7 @@ func Topology(replicas int) (Spec, error) {
 		return jetstream.StreamConfig{
 			Name:        name,
 			Description: desc,
-			Subjects:    []string{subject + ".*"},
+			Subjects:    []string{subject},
 			Retention:   jetstream.WorkQueuePolicy,
 			Storage:     jetstream.FileStorage,
 			Replicas:    replicas,
@@ -158,10 +215,11 @@ func Topology(replicas int) (Spec, error) {
 			MaxMsgSize:  -1,
 		}
 	}
-	consumer := func(stream, name, desc string) ConsumerSpec {
+	consumer := func(stream, name, filter, desc string) ConsumerSpec {
 		return ConsumerSpec{Stream: stream, Config: jetstream.ConsumerConfig{
 			Durable:       name,
 			Description:   desc,
+			FilterSubject: filter,
 			DeliverPolicy: jetstream.DeliverAllPolicy,
 			AckPolicy:     jetstream.AckExplicitPolicy,
 			AckWait:       AckWait,
@@ -171,11 +229,20 @@ func Topology(replicas int) (Spec, error) {
 			MaxDeliver: -1,
 		}}
 	}
+	consumers := make([]ConsumerSpec, 0, events.Partitions+2)
+	for p := range events.Partitions {
+		consumers = append(consumers, consumer(StreamWebEvents, ConsumerPartition(p), WebEventsPartition(p),
+			"replayer delivers the web events of partition "+events.PartitionToken(p)+" to umami"))
+	}
+	consumers = append(consumers,
+		consumer(StreamAPIMetrics, ConsumerMetricsWriter, "", "metricswriter stores metric batches"),
+		consumer(StreamEdgeStats, ConsumerJobs, "", "jobs edgestats task drains outcome counters"),
+	)
 	return Spec{
 		Streams: []jetstream.StreamConfig{
-			workQueue(StreamWebEvents, SubjectWebEvents, "accepted web events, subject token is the site id", 72*time.Hour),
-			workQueue(StreamAPIMetrics, SubjectAPIMetrics, "filtered otlp metrics, subject token is the tenant id", 7*24*time.Hour),
-			workQueue(StreamEdgeStats, SubjectEdgeStats, "per-site outcome counters, subject token is the node id", 7*24*time.Hour),
+			workQueue(StreamWebEvents, WebEventsPartitioned, "accepted web events, subject tokens are the site id and the visitor's partition", 72*time.Hour),
+			workQueue(StreamAPIMetrics, SubjectAPIMetrics+".*", "filtered otlp metrics, subject token is the tenant id", 7*24*time.Hour),
+			workQueue(StreamEdgeStats, SubjectEdgeStats+".*", "per-site outcome counters, subject token is the node id", 7*24*time.Hour),
 			dlq(StreamWebDLQ, SubjectWebDLQ, "web events rejected permanently downstream, subject token is the site id", 7*24*time.Hour),
 			dlq(StreamAPIDLQ, SubjectAPIDLQ, "metric batches rejected permanently downstream, subject token is the tenant id", 30*24*time.Hour),
 		},
@@ -187,10 +254,15 @@ func Topology(replicas int) (Spec, error) {
 			{Bucket: BucketVisitState, Description: "replayer visit continuity and duplicate guard", History: 1, Storage: jetstream.MemoryStorage, Replicas: replicas, TTL: 24 * time.Hour, MaxBytes: VisitStateMaxBytes},
 			{Bucket: BucketLocks, Description: "leader locks for singleton workers", History: 1, Storage: jetstream.MemoryStorage, Replicas: replicas, TTL: LocksTTL},
 		},
-		Consumers: []ConsumerSpec{
-			consumer(StreamWebEvents, ConsumerReplayer, "replayer delivers web events to umami"),
-			consumer(StreamAPIMetrics, ConsumerMetricsWriter, "metricswriter stores metric batches"),
-			consumer(StreamEdgeStats, ConsumerJobs, "jobs edgestats task drains outcome counters"),
+		Consumers: consumers,
+		// the single subject and consumer of earlier releases, kept until
+		// their last events are delivered. the consumer gets a filter, so it
+		// no longer overlaps the partition consumers on the work queue.
+		Legacy: Legacy{
+			Subjects: map[string][]string{StreamWebEvents: {WebEventsLegacy}},
+			Consumers: []ConsumerSpec{
+				consumer(StreamWebEvents, ConsumerReplayer, WebEventsLegacy, "replayer drains the web events of releases before the partitions"),
+			},
 		},
 	}, nil
 }
@@ -303,15 +375,28 @@ func user(name string, allowResponses bool, sub []string, pub ...[]string) User 
 
 func subjects(s ...string) []string { return s }
 
+// consumeReplayer covers every WEB_EVENTS consumer of the replayer: the
+// partitions and the legacy one.
+func consumeReplayer() []string {
+	var out []string
+	for _, c := range ReplayerConsumers() {
+		out = append(out, consume(StreamWebEvents, c)...)
+	}
+	return out
+}
+
 // Users returns the nats user of every service. only
 // gateways subscribe to edge.visitor-token and edge.ipcluster, only the
 // control plane sends visitor-token requests, and each service reaches only
 // the streams, consumers and buckets it needs.
 func Users() []User {
 	return []User{
+		// the gateway keeps the legacy web subject while an upgrade runs, so
+		// a gateway of the earlier release still publishes on a server that
+		// already has the new permissions
 		user(ServiceGateway, true,
 			subjects(SubjectIPCluster, SubjectVisitorToken),
-			subjects(SubjectWebEvents+".*", SubjectEdgeStats+".*", SubjectIPCluster),
+			subjects(WebEventsPartitioned, WebEventsLegacy, SubjectEdgeStats+".*", SubjectIPCluster),
 			kvWatch(BucketRegistrySites),
 			kvWrite(BucketEdgeSecrets),
 			kvRecreate(BucketEdgeSecrets),
@@ -320,8 +405,12 @@ func Users() []User {
 			subjects(SubjectAPIMetrics+".*"),
 			kvWatch(BucketRegistryOTLP),
 		),
+		// stream reads let the replayer find the oldest legacy or
+		// partitioned event, which keeps a visitor's order while both kinds
+		// are queued during an upgrade
 		user(ServiceReplayer, false, nil,
-			consume(StreamWebEvents, ConsumerReplayer),
+			consumeReplayer(),
+			streamRead(StreamWebEvents),
 			subjects(SubjectWebDLQ+".*", SubjectEdgeStats+".*"),
 			kvWrite(BucketVisitState),
 			kvWrite(BucketLocks),
@@ -364,8 +453,8 @@ func Users() []User {
 		// the new one
 		user(ServicePlatformctl, false, nil,
 			subjects(jsAPI+".>"),
-			subjects(SubjectWebEvents+".*", SubjectAPIMetrics+".*", SubjectEdgeStats+".*"),
-			consume(StreamWebEvents, ConsumerReplayer),
+			subjects(WebEventsPartitioned, WebEventsLegacy, SubjectAPIMetrics+".*", SubjectEdgeStats+".*"),
+			consumeReplayer(),
 			consume(StreamAPIMetrics, ConsumerMetricsWriter),
 			consume(StreamEdgeStats, ConsumerJobs),
 		),
