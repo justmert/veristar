@@ -32,6 +32,31 @@
 - name: Verify the release
   ansible.builtin.import_playbook: verify-release.yml
 
+# the jobs daemons of the running release stop on every core node before
+# the migrations: a migration can change what a task must write (00040 made
+# traffic_class part of every api metric key), and a jobs daemon of the
+# earlier release would keep writing the old way on the nodes not updated
+# yet. each node's core role starts jobs again with the new image. while
+# none runs, edge counters and api marks wait in nats and in
+# api.rollup_pending, as during any jobs restart. a run that fails before a
+# node is updated leaves jobs stopped there: run the deploy again, or
+# `docker compose start jobs` in the core directory to go back.
+- name: Stop the jobs daemons of the running release
+  hosts: core
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Find the core compose project
+      ansible.builtin.stat:
+        path: /opt/veristar/core/compose.yml
+      register: deploy_core_compose
+
+    - name: Stop jobs
+      ansible.builtin.command:
+        argv: [docker, compose, --project-directory, /opt/veristar/core, stop, jobs]
+      when: deploy_core_compose.stat.exists
+      changed_when: true
+
 - name: Apply the migrations and the nats topology of the new release
   ansible.builtin.import_playbook: bootstrap.yml
 

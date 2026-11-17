@@ -285,7 +285,9 @@ flowchart LR
   routes to the current leader.
 - `replayer`, `metricswriter` and `jobs` run on every node with one active instance each,
   chosen by leader locks in NATS. `metricswriter` and `jobs` write the lock revision into every
-  transaction and abort if a newer leader wrote, so a paused former leader cannot write.
+  transaction and abort if a newer leader wrote, so a paused former leader cannot write. A
+  rolling deploy stops `jobs` on every node before the migrations, so no daemon of the earlier
+  release writes under a schema it does not know.
 - Backups: pgBackRest on the database nodes archives WAL and takes scheduled full and
   differential backups from the Patroni leader to zone-redundant Azure Blob Storage
   ([deploy/backups.md](deploy/backups.md)). The local converge uses a separate repository node

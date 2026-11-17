@@ -89,8 +89,9 @@ var Want = map[string]map[db.Role]string{
 	"api.metrics_daily":  {db.RoleCPTenant: "r", db.RoleCPOperator: "r", db.RoleJobs: "rawd"},
 	"api.series_state":   {db.RoleMetricsWriter: "raw", db.RoleJobs: "rawd"},
 	// when each traffic class rule set took effect (00040), read by every
-	// role that shows api numbers
-	"api.traffic_class_rules": {db.RoleCPSystem: "r", db.RoleCPTenant: "r", db.RoleCPOperator: "r"},
+	// role that shows api numbers and by the api rollup's first consistency
+	// check (00043)
+	"api.traffic_class_rules": {db.RoleCPSystem: "r", db.RoleCPTenant: "r", db.RoleCPOperator: "r", db.RoleJobs: "r"},
 	"api.resource_seen":       {db.RoleMetricsWriter: "raw", db.RoleJobs: "rawd"},
 	"api.ingest_dedup":        {db.RoleMetricsWriter: "raw", db.RoleJobs: "rawd"},
 	"api.route_registry":      {db.RoleMetricsWriter: "raw", db.RoleJobs: "rawd"},

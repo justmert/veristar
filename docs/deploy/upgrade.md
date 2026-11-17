@@ -54,7 +54,10 @@ v0.3.0 rollout").
    ```
 
    Order (`infra/ansible/playbooks/deploy.yml`): verify every platform image's signature on the
-   controller and pin the nodes to the verified digests; run `bootstrap.yml` (migrations, role
+   controller and pin the nodes to the verified digests; stop the jobs daemon on every core node,
+   so no daemon of the running release writes after the migrations changed what it must write
+   (each node's core role starts it again with the new image; the counters it reads wait in
+   NATS and `api.rollup_pending` meanwhile); run `bootstrap.yml` (migrations, role
    passwords, Umami bootstrap, NATS topology of the release); then each core node in turn, the
    node holding the Patroni leader last: drain (port 80 answers 503), wait 150 s for DNS, hand
    the Patroni leader to the synchronous replica before the node's postgres image changes,
