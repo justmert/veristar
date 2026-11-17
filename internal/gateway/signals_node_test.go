@@ -252,10 +252,26 @@ func TestForgedScriptRequestsAreCountedWithinAPrefixLimit(t *testing.T) {
 		if gpc {
 			req.Header.Set("Sec-GPC", "1")
 		}
+		// the handler counts after it has written the file, so the response
+		// can arrive first. every countable request ends either counted or
+		// left out by the limit; waiting for one of the two keeps a stats
+		// flush from reading the counters before this request reached them.
+		// with gpc the gpc counter is the last one the handler adds
+		last := coverage.ScriptRequests
+		if gpc {
+			last = coverage.ScriptGPC
+		}
+		settled := func() float64 {
+			return e.counter(t, "gateway_outcomes_total", map[string]string{"outcome": last}) +
+				e.counter(t, "gateway_script_requests_not_counted_total", nil)
+		}
+		before := settled()
 		res, err := http.DefaultClient.Do(req)
 		require.NoError(t, err)
 		require.NoError(t, res.Body.Close())
 		require.Equal(t, http.StatusOK, res.StatusCode, "the file is always served")
+		require.Eventually(t, func() bool { return settled() == before+1 }, 10*time.Second, 5*time.Millisecond,
+			"the request was neither counted nor left out by the limit")
 	}
 	burst := int64(gateway.DefaultScriptCountRate.Burst)
 	for range 3 * burst {
