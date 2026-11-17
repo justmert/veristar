@@ -29,7 +29,7 @@ type ControlPlane struct {
 	GitHubClientSecret Secret
 	// GitHubRedirectURL is <ConsoleOrigin>/api/auth/github/callback.
 	GitHubRedirectURL string
-	// OAuthStateKey seals the sa_oauth cookie (aes-256-gcm).
+	// OAuthStateKey seals the __Host-sa_oauth cookie (aes-256-gcm).
 	OAuthStateKey Key32
 	// OperatorGitHubIDs are the numeric github ids of the operators.
 	OperatorGitHubIDs map[int64]bool

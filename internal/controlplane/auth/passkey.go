@@ -33,7 +33,7 @@ import (
 // never verifies here. a challenge is bound, like a wallet challenge
 // (stellar.go), to:
 //   - the browser: the challenge, purpose and expiry travel in the sealed
-//     sa_passkey cookie, and the assertion must sign that challenge;
+//     __Host-sa_passkey cookie, and the assertion must sign that challenge;
 //   - one use: the verification stores a hash of the challenge in
 //     cp.wallet_challenges_used in the transaction that signs in or links;
 //   - challengeTTL, after which the cookie is refused.
@@ -47,7 +47,8 @@ import (
 // has not seen sign.
 
 const (
-	passkeyCookie = "sa_passkey"
+	// __Host- as for the wallet challenge cookie
+	passkeyCookie = "__Host-sa_passkey"
 	// the bytes of a passkey challenge, sent base64url
 	passkeyChallengeLen = 32
 	// what the console asks the browser to wait for the authenticator
@@ -232,7 +233,7 @@ type passkeyVerified struct {
 	publicKey    []byte
 }
 
-// verifyPasskey checks an assertion against the sa_passkey cookie and
+// verifyPasskey checks an assertion against the __Host-sa_passkey cookie and
 // clears the cookie, whatever the result. it does not mark the challenge
 // used; usePasskeyChallenge does, in the caller's transaction.
 func (h *Handler) verifyPasskey(w http.ResponseWriter, r *http.Request, purpose string) (passkeyVerified, error) {

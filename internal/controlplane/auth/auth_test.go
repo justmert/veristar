@@ -380,14 +380,14 @@ func TestSignInRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, state, 32)
 	// the browser holds the sealed state, not the verifier in clear
-	oc := b.cookie("sa_oauth")
+	oc := b.cookie("__Host-sa_oauth")
 	require.NotNil(t, oc)
 	require.NotContains(t, oc.Value, q.Get("state"))
 
 	res := b.get(b.consent(authorize, "authorize", id, login).String())
 	require.Equal(t, http.StatusSeeOther, res.StatusCode)
 	require.Equal(t, "/projects?tab=sites", res.Header.Get("Location"))
-	require.Nil(t, b.cookie("sa_oauth"), "the state cookie is single use")
+	require.Nil(t, b.cookie("__Host-sa_oauth"), "the state cookie is single use")
 	sc := setCookie(t, res, session.CookieName)
 	require.NotNil(t, sc)
 
@@ -439,14 +439,31 @@ func TestSessionCookieFlags(t *testing.T) {
 	b := e.browser(t)
 
 	res := b.get(e.origin + "/api/auth/github/start")
-	oc := setCookie(t, res, "sa_oauth")
+	oc := setCookie(t, res, "__Host-sa_oauth")
 	require.NotNil(t, oc)
 	require.True(t, oc.HttpOnly)
 	require.True(t, oc.Secure)
 	require.Equal(t, http.SameSiteLaxMode, oc.SameSite)
-	require.Equal(t, callbackPath, oc.Path)
+	// the __Host- prefix needs Path=/, Secure and no Domain, or a browser
+	// drops the cookie
+	require.Equal(t, "/", oc.Path)
 	require.Equal(t, 600, oc.MaxAge)
 	require.Empty(t, oc.Domain)
+	// the wallet and passkey challenge cookies follow the same rules
+	for path, name := range map[string]string{
+		"/api/auth/stellar/challenge": "__Host-sa_stellar",
+		"/api/auth/passkey/challenge": "__Host-sa_passkey",
+	} {
+		body := map[string]any{}
+		if name == "__Host-sa_stellar" {
+			body["address"] = newKP(t).Address()
+		}
+		ck := setCookie(t, b.postJSON(path, body), name)
+		require.NotNil(t, ck, name)
+		require.True(t, ck.Secure, name)
+		require.Equal(t, "/", ck.Path, name)
+		require.Empty(t, ck.Domain, name)
+	}
 
 	res = b.signIn(newGitHubID(), "flags-user", "")
 	sc := setCookie(t, res, session.CookieName)
@@ -511,13 +528,13 @@ func TestStateFailures(t *testing.T) {
 	t.Run("tampered cookie", func(t *testing.T) {
 		b := e.browser(t)
 		cb := b.consent(b.start(""), "authorize", newGitHubID(), "tamper")
-		oc := b.cookie("sa_oauth")
+		oc := b.cookie("__Host-sa_oauth")
 		require.NotNil(t, oc)
 		raw, err := base64.RawURLEncoding.DecodeString(oc.Value)
 		require.NoError(t, err)
 		raw[len(raw)-1] ^= 1
 		u, _ := url.Parse(e.origin + callbackPath)
-		b.jar.SetCookies(u, []*http.Cookie{{Name: "sa_oauth", Value: base64.RawURLEncoding.EncodeToString(raw), Path: callbackPath}})
+		b.jar.SetCookies(u, []*http.Cookie{{Name: "__Host-sa_oauth", Value: base64.RawURLEncoding.EncodeToString(raw), Path: "/"}})
 		require.Equal(t, "state_mismatch", failureCode(t, b.get(cb.String())))
 	})
 
@@ -858,7 +875,7 @@ func TestStartRateLimitedPerClient(t *testing.T) {
 	require.Less(t, ok, auth.StartBurst, "one client must run out long before the global ceiling")
 	require.Equal(t, "rate_limited", decode[apiError](t, limited).Error.Code)
 	require.Equal(t, "2", limited.Header.Get("Retry-After"))
-	require.Nil(t, setCookie(t, limited, "sa_oauth"), "a refused start sets no state cookie")
+	require.Nil(t, setCookie(t, limited, "__Host-sa_oauth"), "a refused start sets no state cookie")
 
 	// other clients are not affected, also another address in the same /24
 	for _, other := range []string{"198.51.100.20", "203.0.113.78", "2001:db8:1::1"} {
@@ -886,7 +903,7 @@ func TestCallbackStateIsSingleUse(t *testing.T) {
 	b := e.browser(t)
 	authorize := b.start("")
 	state := authorize.Query().Get("state")
-	sealed := b.cookie("sa_oauth")
+	sealed := b.cookie("__Host-sa_oauth")
 	require.NotNil(t, sealed)
 	plain := e.cp.Client()
 	plain.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
@@ -894,7 +911,7 @@ func TestCallbackStateIsSingleUse(t *testing.T) {
 		u := e.origin + callbackPath + "?state=" + url.QueryEscape(state) + "&code=made-up-" + strconv.Itoa(i)
 		req, err := http.NewRequest(http.MethodGet, u, nil)
 		require.NoError(t, err)
-		req.AddCookie(&http.Cookie{Name: "sa_oauth", Value: sealed.Value})
+		req.AddCookie(&http.Cookie{Name: "__Host-sa_oauth", Value: sealed.Value})
 		// each replay from a different address, as a distributed attacker
 		req.Header.Set(auth.ClientAddrHeader, "192.0.2."+strconv.Itoa(i+1))
 		res := fetch(t, plain, req)

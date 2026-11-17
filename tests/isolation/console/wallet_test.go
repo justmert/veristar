@@ -96,10 +96,10 @@ func TestWalletIsolation(t *testing.T) {
 	require.NoError(t, err)
 	r = alice.call(t, http.MethodPost, "/api/me/identities/stellar/challenge", map[string]any{"address": kp2.Address()})
 	require.Equal(t, http.StatusOK, r.status, string(r.body))
-	ck := alice.cookie("sa_stellar", "/api/me")
+	ck := alice.cookie("__Host-sa_stellar", "/api/me")
 	require.NotNil(t, ck)
 	u, _ := url.Parse(e.srv.URL + "/api")
-	w.hc.Jar.SetCookies(u, []*http.Cookie{{Name: "sa_stellar", Value: ck.Value, Path: "/api"}})
+	w.hc.Jar.SetCookies(u, []*http.Cookie{{Name: "__Host-sa_stellar", Value: ck.Value, Path: "/"}})
 	// the signature and the account check out, but the challenge names
 	// alice's session
 	r = w.call(t, http.MethodPost, "/api/me/identities/stellar", map[string]any{

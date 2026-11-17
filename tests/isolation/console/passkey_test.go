@@ -75,19 +75,19 @@ func TestPasskeyIsolation(t *testing.T) {
 	r = alice.call(t, http.MethodPost, "/api/me/identities/passkey/challenge", map[string]any{})
 	require.Equal(t, http.StatusOK, r.status, string(r.body))
 	ch := r.json(t)
-	ck := alice.cookie("sa_passkey", "/api/me")
+	ck := alice.cookie("__Host-sa_passkey", "/api/me")
 	require.NotNil(t, ck)
 	u, _ := url.Parse(e.srv.URL + "/api")
 	other := consoleapi.NewPasskey(t)
 	b := e.signInPasskey(t, other, true)
-	b.hc.Jar.SetCookies(u, []*http.Cookie{{Name: "sa_passkey", Value: ck.Value, Path: "/api"}})
+	b.hc.Jar.SetCookies(u, []*http.Cookie{{Name: "__Host-sa_passkey", Value: ck.Value, Path: "/"}})
 	r = b.call(t, http.MethodPost, "/api/me/identities/passkey",
 		consoleapi.NewPasskey(t).Answer(t, ch["challenge"].(string), ch["rp_id"].(string), e.srv.URL, true))
 	require.Equal(t, http.StatusForbidden, r.status, string(r.body))
 	require.Equal(t, "challenge_invalid", r.code(t))
 	// a github account holding the copied cookie: the challenge names alice
 	carol := e.signIn(t, "pi-carol")
-	carol.hc.Jar.SetCookies(u, []*http.Cookie{{Name: "sa_passkey", Value: ck.Value, Path: "/api"}})
+	carol.hc.Jar.SetCookies(u, []*http.Cookie{{Name: "__Host-sa_passkey", Value: ck.Value, Path: "/"}})
 	r = carol.call(t, http.MethodPost, "/api/me/identities/passkey",
 		consoleapi.NewPasskey(t).Answer(t, ch["challenge"].(string), ch["rp_id"].(string), e.srv.URL, true))
 	require.Equal(t, http.StatusForbidden, r.status, string(r.body))

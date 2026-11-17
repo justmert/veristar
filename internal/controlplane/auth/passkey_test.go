@@ -119,11 +119,11 @@ func TestPasskeyChallengeShape(t *testing.T) {
 
 	var ck *http.Cookie
 	for _, x := range b.jar.Cookies(mustURL(t, e.origin+"/api/auth/passkey/verify")) {
-		if x.Name == "sa_passkey" {
+		if x.Name == "__Host-sa_passkey" {
 			ck = x
 		}
 	}
-	require.NotNil(t, ck, "sa_passkey cookie")
+	require.NotNil(t, ck, "__Host-sa_passkey cookie")
 	// a fresh challenge each time
 	require.NotEqual(t, c.Challenge, b.passkeyChallenge("/api/auth/passkey/challenge", nil).Challenge)
 }
@@ -136,8 +136,8 @@ func TestPasskeyCreateAndSignIn(t *testing.T) {
 	res := b.passkeySignIn(p, true)
 	require.Equal(t, http.StatusOK, res.StatusCode, string(res.body))
 	require.Equal(t, "/", decode[auth.VerifyResponse](t, res).ReturnTo)
-	require.NotNil(t, setCookie(t, res, "sa_session"))
-	cleared := setCookie(t, res, "sa_passkey")
+	require.NotNil(t, setCookie(t, res, "__Host-sa_session"))
+	cleared := setCookie(t, res, "__Host-sa_passkey")
 	require.NotNil(t, cleared)
 	require.Negative(t, cleared.MaxAge)
 
@@ -193,7 +193,7 @@ func TestPasskeyUnknown(t *testing.T) {
 	res := b.passkeySignIn(newPasskey(t), false)
 	require.Equal(t, http.StatusForbidden, res.StatusCode)
 	require.Equal(t, "passkey_unknown", apiCode(t, res))
-	require.Nil(t, setCookie(t, res, "sa_session"))
+	require.Nil(t, setCookie(t, res, "__Host-sa_session"))
 }
 
 func TestPasskeyRefusals(t *testing.T) {
@@ -237,7 +237,7 @@ func TestPasskeyRefusals(t *testing.T) {
 			res := b.postJSON("/api/auth/passkey/verify", mk(b, c))
 			require.Equal(t, http.StatusForbidden, res.StatusCode, string(res.body))
 			require.Equal(t, "challenge_invalid", apiCode(t, res))
-			require.Nil(t, setCookie(t, res, "sa_session"))
+			require.Nil(t, setCookie(t, res, "__Host-sa_session"))
 		})
 	}
 
@@ -278,7 +278,7 @@ func TestPasskeyExpiredAndReplay(t *testing.T) {
 	c = b.passkeyChallenge("/api/auth/passkey/challenge", nil)
 	var held *http.Cookie
 	for _, ck := range b.jar.Cookies(mustURL(t, e.origin+"/api/auth/passkey/verify")) {
-		if ck.Name == "sa_passkey" {
+		if ck.Name == "__Host-sa_passkey" {
 			held = ck
 		}
 	}
@@ -294,11 +294,11 @@ func TestPasskeyExpiredAndReplay(t *testing.T) {
 	// a copy of the cookie and the answer, replayed from elsewhere, is
 	// refused by the record of used challenges
 	thief := e.browser(t)
-	thief.jar.SetCookies(mustURL(t, e.origin+"/api"), []*http.Cookie{{Name: "sa_passkey", Value: held.Value, Path: "/api"}})
+	thief.jar.SetCookies(mustURL(t, e.origin+"/api"), []*http.Cookie{{Name: "__Host-sa_passkey", Value: held.Value, Path: "/"}})
 	res = thief.postJSON("/api/auth/passkey/verify", answer)
 	require.Equal(t, http.StatusForbidden, res.StatusCode)
 	require.Equal(t, "challenge_used", apiCode(t, res))
-	require.Nil(t, setCookie(t, res, "sa_session"))
+	require.Nil(t, setCookie(t, res, "__Host-sa_session"))
 }
 
 // a challenge cookie of another console sharing the state key is bound to
@@ -310,13 +310,13 @@ func TestPasskeyOtherConsole(t *testing.T) {
 	c := ob.passkeyChallenge("/api/auth/passkey/challenge", nil)
 	var held *http.Cookie
 	for _, ck := range ob.jar.Cookies(mustURL(t, other.origin+"/api/auth/passkey/verify")) {
-		if ck.Name == "sa_passkey" {
+		if ck.Name == "__Host-sa_passkey" {
 			held = ck
 		}
 	}
 	require.NotNil(t, held)
 	b := e.browser(t)
-	b.jar.SetCookies(mustURL(t, e.origin+"/api"), []*http.Cookie{{Name: "sa_passkey", Value: held.Value, Path: "/api"}})
+	b.jar.SetCookies(mustURL(t, e.origin+"/api"), []*http.Cookie{{Name: "__Host-sa_passkey", Value: held.Value, Path: "/"}})
 	body := p.assert(t, c.Challenge, other.origin, c.RPID)
 	body["public_key"] = b64u.EncodeToString(p.pub)
 	res := b.postJSON("/api/auth/passkey/verify", body)

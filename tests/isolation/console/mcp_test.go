@@ -393,7 +393,7 @@ func testMCPTransport(t *testing.T, e *env, alice *client, ta uuid.UUID) {
 	_, key := alice.mcpKey(t, ta, "transport")
 	for name, h := range map[string]map[string]string{
 		"no credential":    {},
-		"session cookie":   {"Cookie": "sa_session=whatever"},
+		"session cookie":   {"Cookie": "__Host-sa_session=whatever"},
 		"wrong scheme":     {"Authorization": "Basic " + key},
 		"short key":        {"Authorization": "Bearer sa_mcp_short"},
 		"guessed key":      {"Authorization": "Bearer sa_mcp_" + strings.Repeat("A", 40)},

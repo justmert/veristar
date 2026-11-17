@@ -12,12 +12,15 @@ import (
 	"time"
 )
 
-// the sa_oauth cookie of contract 1.1: it carries state, the pkce verifier
-// and the return path through the github round trip, sealed so the browser
-// can neither read the verifier nor change any field. no database row is
-// written for a visitor who has not signed in.
+// the __Host-sa_oauth cookie of contract 1.1: it carries state, the pkce
+// verifier and the return path through the github round trip, sealed so the
+// browser can neither read the verifier nor change any field. no database
+// row is written for a visitor who has not signed in. the __Host- prefix
+// makes the browser refuse a cookie of that name set by another host of
+// the domain or with a Domain attribute, so a sibling host cannot plant its
+// own sealed state (a login csrf); the prefix needs Secure and Path=/.
 const (
-	stateCookie    = "sa_oauth"
+	stateCookie    = "__Host-sa_oauth"
 	stateCookieTTL = 10 * time.Minute // github's code lifetime
 	callbackPath   = "/api/auth/github/callback"
 )
@@ -104,13 +107,13 @@ func (s *sealer) open(v string, now time.Time) (statePayload, error) {
 	return p, nil
 }
 
-// stateCookieFor builds the sa_oauth cookie. an empty value with maxAge -1
+// stateCookieFor builds the __Host-sa_oauth cookie. an empty value with maxAge -1
 // deletes it.
 func stateCookieFor(value string, maxAge int) *http.Cookie {
 	return &http.Cookie{
 		Name:     stateCookie,
 		Value:    value,
-		Path:     callbackPath,
+		Path:     "/",
 		MaxAge:   maxAge,
 		HttpOnly: true,
 		Secure:   true,

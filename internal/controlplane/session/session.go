@@ -19,9 +19,11 @@ import (
 	"github.com/justmert/veristar/internal/db/systemq"
 )
 
-// cookie and lifetime settings of contract 1.1
+// cookie and lifetime settings of contract 1.1. the __Host- prefix makes
+// the browser accept the cookie only from this host, with Secure, Path=/
+// and no Domain, so no other host of the domain can set or overwrite it
 const (
-	CookieName  = "sa_session"
+	CookieName  = "__Host-sa_session"
 	Lifetime    = 7 * 24 * time.Hour
 	IdleTimeout = 24 * time.Hour
 )

@@ -38,7 +38,7 @@ import (
 //     hash, which includes the network passphrase, and only
 //     network.PublicNetworkPassphrase is accepted;
 //   - the browser: the nonce, address, purpose and expiry travel in the
-//     sealed sa_stellar cookie, and the signed transaction must carry that
+//     sealed __Host-sa_stellar cookie, and the signed transaction must carry that
 //     nonce and address;
 //   - one use: the verification stores the nonce's hash in
 //     cp.wallet_challenges_used in the transaction that signs in or links,
@@ -49,8 +49,10 @@ import (
 // transaction's time bounds.
 
 const (
-	stellarCookie     = "sa_stellar"
-	stellarCookiePath = "/api"
+	// the __Host- prefix keeps other hosts of the domain from setting it,
+	// as for the state cookie; it needs Path=/
+	stellarCookie     = "__Host-sa_stellar"
+	stellarCookiePath = "/"
 	challengeTTL      = 5 * time.Minute
 
 	purposeSignIn = "sign_in"
@@ -249,7 +251,7 @@ type verified struct {
 	nonce   string
 }
 
-// verifyChallenge checks a signed challenge against the sa_stellar cookie
+// verifyChallenge checks a signed challenge against the __Host-sa_stellar cookie
 // and clears the cookie, whatever the result. it does not mark the
 // challenge used; useChallenge does, in the caller's transaction.
 func (h *Handler) verifyChallenge(w http.ResponseWriter, r *http.Request, purpose string) (verified, error) {
