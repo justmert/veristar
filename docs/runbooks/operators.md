@@ -104,17 +104,29 @@ unreachable):
    is there, and converge as in "Add an operator". The start makes the identity an active operator
    admin again, even if it was suspended or demoted.
 2. If that person's account still holds passkeys they no longer have, delete the ones added for
-   the operator area on the database leader, as the `platform` database owner (a lost sign-in
-   passkey is unlinked on the **Account** page once the person signs in with GitHub or a wallet):
+   the operator area on the database leader (a lost sign-in passkey is unlinked on the **Account**
+   page once the person signs in with GitHub or a wallet). Connect as the `postgres` superuser, as in
+   [Which core node holds the database](overview.md#which-core-node-holds-the-database):
+   `cp.users`, `cp.operator_passkeys` and `cp.sessions` enforce row-level security for every other
+   role, so the `platform` database owner sees no row and deletes nothing.
+
+   ```sh
+   cd /opt/veristar/core && sudo docker compose exec postgres psql -U postgres -d platform
+   ```
 
    ```sql
    begin;
+   select id from cp.users where github_id = <github id> and deleted_at is null;
    delete from cp.operator_passkeys
    where user_id = (select id from cp.users where github_id = <github id> and deleted_at is null);
    delete from cp.sessions
    where user_id = (select id from cp.users where github_id = <github id> and deleted_at is null);
-   commit;
    ```
+
+   The `select` returns exactly one row and the first `delete` reports `DELETE 1` or more (one
+   per passkey); the second reports the sessions it ended. Run `commit;` when they do. On `(0 rows)`
+   or a first `DELETE 0`, run `rollback;` and check the GitHub id: no live account with passkeys
+   holds it.
 
    Restart the control plane on one core node (`docker compose restart controlplane`). With no
    passkey left, the start opens a new first-passkey window for the identity.
