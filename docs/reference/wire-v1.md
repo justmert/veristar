@@ -185,8 +185,12 @@ That is why the gateway ships before the console offers 1.3.0.
 With `data-auto-track="false"` the tracker loads but sends nothing and fetches no challenge. Once
 the visitor has consented, the site calls `umami.start()`, which sends the pageview for the current
 page and turns on SPA navigation tracking and `data-umami-event` click capture, exactly as automatic
-tracking would have. A second call does nothing. `umami.track()` also works before `start()`, for a
-site that wants to send only chosen events. Sites in jurisdictions that need opt-in use this; the
+tracking would have. A second call does nothing. From tracker 1.3.1, `umami.track()` before
+`start()` does nothing either: it sends no event, fetches no challenge, reads no storage and does not
+run a `track(fn)` callback. A site that wants to send only chosen events calls
+`umami.start({ automatic: false })`, which starts `umami.track()` without the automatic pageview,
+SPA navigation tracking and click capture. Releases 1.0.0 to 1.3.0 send a `umami.track()` call
+before `start()` at once. Sites in jurisdictions that need opt-in use this; the
 default, without the attribute, is to start at once.
 
 ## Differences from Umami's `/api/send`

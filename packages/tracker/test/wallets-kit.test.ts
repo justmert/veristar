@@ -67,7 +67,10 @@ function expectNoAddressOnTheWire() {
 }
 
 function newTracker(): Tracker {
-  return createTracker(window, { siteId: SITE, host: gw.origin, autoTrack: false });
+  const t = createTracker(window, { siteId: SITE, host: gw.origin, autoTrack: false });
+  // only the wallet events, no pageview
+  t.start({ automatic: false });
+  return t;
 }
 
 describe.each(KITS)("stellar wallets kit %s", (version, mod) => {

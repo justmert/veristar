@@ -66,6 +66,10 @@ installed `window.umami`, `init()` returns that one, so the two never count twic
 `init()` takes the same options as the tag's attributes, in camel case: `autoTrack`, `doNotTrack`,
 `excludeSearch`, `excludeHash`, `domains` (an array), `beforeSend` (a function) and `walletsKit`
 (use `attachWalletsKit` instead, see [wallets-kit.md](wallets-kit.md)).
+With `autoTrack: false` the tracker waits for `start()`, after consent, before it sends anything,
+`track()` calls and wallet events included (from 1.3.1). Call `start({ automatic: false })` to send
+only what you pass to `track()`, without automatic pageviews and click capture
+([consent.md](consent.md)).
 
 ## Build against the workspace package
 
