@@ -62,6 +62,7 @@ type Link struct {
 // tomlSignal is the part of cp.sites.stellar_toml the link reads.
 type tomlSignal struct {
 	Status           string   `json:"status"`
+	Network          *string  `json:"network"`
 	OrgURL           *string  `json:"org_url"`
 	OrgURLSameDomain *bool    `json:"org_url_same_domain"`
 	Accounts         []string `json:"accounts"`
@@ -111,6 +112,11 @@ func buildLink(sites []siteRow, ids []idRow) (Link, error) {
 			ls.OrgURLMatches = sig.Status == "found" && sig.OrgURLSameDomain != nil && *sig.OrgURLSameDomain
 		}
 		found := sig.Status == "found"
+		// the accounts the witness reads live on the public network; a
+		// file that names another network's passphrase speaks of other
+		// accounts, even under the same strkeys. sep-1 makes the field
+		// optional, so a file without it is taken as public
+		public := sig.Network == nil || *sig.Network == "public"
 		for _, r := range kinds(ids, "account") {
 			a := LinkAccount{Strkey: r.Strkey, ListedInToml: found && slices.Contains(sig.Accounts, r.Strkey)}
 			if r.HomeDomain != nil && *r.HomeDomain != "" {
@@ -118,7 +124,9 @@ func buildLink(sites []siteRow, ids []idRow) (Link, error) {
 				a.HomeDomain = &hd
 				a.HomeDomainMatches = strings.EqualFold(strings.TrimSuffix(hd, "."), s.Domain)
 			}
-			a.TwoWay = s.Verified && ls.OrgURLMatches && a.ListedInToml && a.HomeDomainMatches
+			// only a proven account links a project: a home domain and a
+			// listing are public, so anyone could declare such an account
+			a.TwoWay = s.Verified && public && r.VerifiedAt != nil && ls.OrgURLMatches && a.ListedInToml && a.HomeDomainMatches
 			ls.TwoWay = ls.TwoWay || a.TwoWay
 			ls.Accounts = append(ls.Accounts, a)
 		}

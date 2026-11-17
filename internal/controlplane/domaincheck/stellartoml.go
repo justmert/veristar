@@ -194,14 +194,21 @@ func ParseStellarToml(domain string, body []byte) StellarToml {
 	return out
 }
 
-// sameDomain reports whether an https url's host is domain.
+// sameDomain reports whether an https url's host is domain, its www. form,
+// or domain the www. form of the host. many issuers publish ORG_URL as
+// https://www.<domain> while their stellar.toml sits on the bare domain, and
+// a fully qualified name ends with a dot; both name the same site.
 func sameDomain(raw, domain string) bool {
 	u, err := url.Parse(raw)
 	if err != nil || u.Scheme != "https" || u.Hostname() == "" {
 		return false
 	}
-	h, err := idna.Lookup.ToASCII(strings.ToLower(u.Hostname()))
-	return err == nil && h == domain
+	h, err := idna.Lookup.ToASCII(strings.TrimSuffix(strings.ToLower(u.Hostname()), "."))
+	if err != nil || h == "" {
+		return false
+	}
+	d := strings.TrimSuffix(strings.ToLower(domain), ".")
+	return h == d || h == "www."+d || d == "www."+h
 }
 
 // FetchStellarToml fetches and parses https://<domain>/.well-known/stellar.toml

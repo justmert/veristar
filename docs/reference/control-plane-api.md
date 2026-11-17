@@ -3454,13 +3454,19 @@ method, which any wallet or the Stellar Lab can submit.
 The link uses SEP-1 fields only and adds no key:
 
 - Domain to ledger: the stellar.toml served at the verified domain (5.12) lists
-  the account under `ACCOUNTS`, and its `[DOCUMENTATION] ORG_URL` is on that
-  domain (`org_url_matches`).
+  the account under `ACCOUNTS`, and its `[DOCUMENTATION] ORG_URL` is an https
+  URL on that domain (`org_url_matches`): the domain itself or its `www.`
+  form, either with or without a trailing dot. The file names the public
+  network: `NETWORK_PASSPHRASE` is absent or the public network's passphrase.
+  The first 50 `ACCOUNTS` and the first 50 `[[CURRENCIES]]` are read; an id
+  listed after them does not count as listed.
 - Ledger to domain: the account's `home_domain`, which only the account's
-  signers can set with a SetOptions operation, equals the domain.
+  signers can set with a SetOptions operation, equals the domain. The ledger
+  holds at most 32 bytes of home domain, so a domain longer than that cannot
+  hold this leg.
 
-An account is `two_way` when the domain is verified (5.8) and every leg
-holds; a site and the project are `two_way` when any account is. A contract
+An account is `two_way` when the domain is verified (5.8), the account is
+verified (15.4) and every leg holds; a site and the project are `two_way` when any account is. A contract
 listed as a `[[CURRENCIES]]` `contract` is `listed_in_toml`; contracts have no
 home domain and are not part of `two_way`.
 
