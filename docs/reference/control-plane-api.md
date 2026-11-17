@@ -2863,7 +2863,7 @@ and message get) and manages `WEB_DLQ`.
 | Key | Service | Meaning |
 |---|---|---|
 | `ERASURE_QUEUE_WAIT` | controlplane | optional, Go duration, default `15m`, at most `72h`: how long a run waits for the site's queued events |
-| `WEB_RAW_RETENTION_MONTHS` | `jobs retain-web` | optional, default 25, 1 to 1200 |
+| `WEB_RAW_RETENTION_MONTHS` | `jobs retain-web`, `jobs` (aggregate-web reads no older day) | optional, default 25, 25 to 1200: tenant dashboards cover 24 full months plus the month in progress, so a lower value refuses to start |
 | `UMAMI_DB_NAME`, `UMAMI_DB_JOBS_RETENTION_PASSWORD` | `jobs retain-web`, `platformctl db umami-retention-role` | the umami database on the platform cluster (with `PLATFORM_DB_HOST`, `PLATFORM_DB_PORT`, `PLATFORM_DB_SSLMODE`) and the password of role `jobs_retention` |
 
 ## 11. Operator alerts
@@ -3680,7 +3680,10 @@ operators read every project's under `cp_operator`; both get the same report.
   quarter are `B` or `C`, `A` otherwise, `null` without a graded day. Range
   reasons count the days each code applied to, with the worst level.
 - `closed` is `true` once the UTC day has ended. A day is graded again while
-  the web aggregates of 8 may still change it (three days).
+  the web aggregates of 8 may still change it (three days). An operator
+  backfill of an older day keeps the day's `rule_version` and `networks`
+  (the network keys are pruned after the window) and reads the other inputs
+  again; an older day that was never graded stays ungraded.
 - `evidence.net` counts accepted events per network class; `networks` is the
   number of distinct autonomous systems. Neither holds an address or a
   network number.

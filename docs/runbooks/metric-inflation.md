@@ -41,7 +41,12 @@ it says `umami`. Replace `<tenant id>`, `<site id>` and the dates.
    endpoints, which the ledger activity of the project helps to tell apart.
 
    After a backfill of the web aggregates, or to grade days outside the regular window again, run
-   `jobs run integrity --from <YYYY-MM-DD> --to <YYYY-MM-DD>` on the jobs leader.
+   `jobs run integrity --from <YYYY-MM-DD> --to <YYYY-MM-DD>` on the jobs leader. A web
+   aggregate backfill reaches back only to the raw retention cutoff (`WEB_RAW_RETENTION_MONTHS`):
+   Umami has no raw rows before it, and `jobs run aggregate-web` refuses such a `--from`. A day
+   older than the three-day regrade window has lost its network keys, so its regrade keeps the
+   stored `rule_version` and `networks` and reads only the other inputs again; a day of that age
+   that has no grade row is not graded at all, rather than graded on a network count of zero.
 
 2. **Network evidence per day** while a day is still open (the network keys are deleted once the
    day leaves the regrade window, the counts stay in the grade row):

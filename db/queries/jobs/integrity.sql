@@ -36,6 +36,12 @@ select visitors from agg.web_daily
 where site_id = @site_id and band = 'primary' and day < @day::date and day >= @since::date
 order by day desc;
 
+-- name: IntegrityStoredDay :many
+-- the rule version and network count a day was graded with. the network
+-- keys of a day are pruned once it leaves the regrade window, so a later
+-- regrade keeps both instead of counting zero networks
+select rule_version, networks from agg.web_integrity_daily where site_id = @site_id and day = @day;
+
 -- name: UpsertIntegrityDay :exec
 insert into agg.web_integrity_daily (
   site_id, tenant_id, day, rule_version, grade, closed, events, quarantined, proof_failures,

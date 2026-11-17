@@ -72,16 +72,20 @@ commands:
                     ` + integrity.TaskName + `)
   run ` + aggregateweb.TaskName + ` --from <yyyy-mm-dd> --to <yyyy-mm-dd>
                     read the web aggregates of every active site again for
-                    each utc day of the range, both days included
+                    each utc day of the range, both days included; refuses a
+                    day older than WEB_RAW_RETENTION_MONTHS, whose raw rows
+                    retain-web deleted
   run ` + integrity.TaskName + ` --from <yyyy-mm-dd> --to <yyyy-mm-dd>
-                    grade every site again for each utc day of the range
+                    grade every site again for each utc day of the range; a
+                    day before the regrade window keeps its rule version and
+                    network count
   run ` + umamirotate.TaskName + ` --force
                     set every umami user's password for today even when
                     today's rotation is recorded; run it after
                     UMAMI_USER_PASSWORD_KEY changed (credential rotation, or
                     a migration into an environment with its own key)
   retain-web        delete raw umami event and session rows older than
-                    WEB_RAW_RETENTION_MONTHS (default 25) as the role
+                    WEB_RAW_RETENTION_MONTHS (default 25, at least 25) as the role
                     jobs_retention; refuses to run on an umami schema it was
                     not tested with. needs PLATFORM_DB_HOST, PLATFORM_DB_PORT,
                     PLATFORM_DB_SSLMODE, PLATFORM_DB_SSLROOTCERT (verify-full only) with the
@@ -99,7 +103,8 @@ PLATFORM_DB_SSLMODE, PLATFORM_DB_SSLROOTCERT (verify-full only) with the
 optional PLATFORM_DB_SSLCERT and PLATFORM_DB_SSLKEY, PLATFORM_DB_JOBS_PASSWORD, PLATFORM_DB_CP_SYSTEM_PASSWORD
 (reconcile and umami-rotate run control plane logic as cp_system), UMAMI_URL,
 UMAMI_ADMIN_PASSWORD, UMAMI_USER_PASSWORD_KEY, API_MINUTE_RETENTION_DAYS,
-API_HOURLY_RETENTION_MONTHS (at least 24), the optional STELLAR_HORIZON_URL,
+API_HOURLY_RETENTION_MONTHS (at least 24), the optional WEB_RAW_RETENTION_MONTHS
+(default 25, the oldest month aggregate-web reads again), the optional STELLAR_HORIZON_URL,
 STELLAR_RPC_URL, STELLAR_HORIZON_RPS and STELLAR_RPC_RPS (ledger apis of
 chain-activity), and JOBS_OPS_ADDR for daemon.
 `
@@ -257,13 +262,16 @@ func open(ctx context.Context, env *config.Env, log *slog.Logger, opsAddr bool) 
 	umamiCfg, umamiErr := config.LoadUmamiAdmin(env)
 	pwKey := env.UmamiUserPasswordKey()
 	apiRet, apiRetErr := config.LoadAPIRetention(env)
+	// the same setting retain-web deletes with; aggregate-web reads no day
+	// whose raw rows are gone
+	webRet, webRetErr := config.LoadWebRetention(env)
 	stellarCfg, stellarErr := config.LoadStellar(env)
 	var addr string
 	if opsAddr {
 		addr = env.String("JOBS_OPS_ADDR")
 	}
 	// one error naming every missing key, as config promises
-	if err := errors.Join(natsErr, dbErr, umamiErr, apiRetErr, stellarErr, env.Err()); err != nil {
+	if err := errors.Join(natsErr, dbErr, umamiErr, apiRetErr, webRetErr, stellarErr, env.Err()); err != nil {
 		return nil, "", err
 	}
 	key, err := umami.NewPasswordKey(pwKey.Reveal())
@@ -437,6 +445,10 @@ func open(ctx context.Context, env *config.Env, log *slog.Logger, opsAddr bool) 
 	// so operators see exactly the numbers umami shows tenants
 	aggWeb, err := aggregateweb.New(admin, sites, time.Now, log, reg)
 	if err != nil {
+		closeAll()
+		return nil, "", err
+	}
+	if err := aggWeb.SetRawRetentionMonths(webRet.Months); err != nil {
 		closeAll()
 		return nil, "", err
 	}

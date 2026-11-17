@@ -148,7 +148,7 @@ approval-required.
 ## 6. Retention and deletion
 
 - Raw web events and sessions are deleted after `WEB_RAW_RETENTION_MONTHS`
-  months, 25 by default, so dashboards cover 24 full months.
+  months, 25 by default and never fewer, so dashboards cover 24 full months.
 - API metric aggregates are kept for at least 24 months.
 - A project owner can erase one visitor's visit of the current UTC day, one
   session at any time, or all web data of a site (`docs/compliance/erasure.md`).
