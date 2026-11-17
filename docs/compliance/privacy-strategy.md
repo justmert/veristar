@@ -293,8 +293,10 @@ Before an event is queued, the gateway (`internal/redact`,
   (`SanitizeReferrer`, tested in `internal/gateway/sanitize_test.go` and
   end to end in `tests/gateway`);
 - replaces all ten SEP-23 strkey types (G, M, C, W, L, B, T, X, P, S),
-  email addresses and federation addresses in the path, kept query values,
-  referrer host, title and event data; S secret seeds become `{redacted-secret}`;
+  email addresses and federation addresses in the page hostname, path, kept
+  query values, referrer host, title and event data; S secret seeds become
+  `{redacted-secret}`. The hostname matters for a site registered with a
+  wildcard origin, where any subdomain label passes the origin check;
 - drops every query parameter of the page URL. Only on a site whose owner
   turned on UTM collection (the site setting `collect_utm`, off by default;
   `docs/reference/control-plane-api.md` 3.1) does it keep `utm_source`,

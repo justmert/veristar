@@ -27,6 +27,10 @@ import (
 //     same-origin path becomes empty: it names a page of the site itself,
 //     which umami never counts as a referrer. anything else (opaque urls,
 //     scheme relative urls, junk) becomes empty too.
+//   - hostname is lower cased and redacted like the referrer host. it comes
+//     from the checked Origin, and a site registered with a wildcard origin
+//     (https://*.example.com) accepts any label in its place, so a page
+//     address such as <account>.example.com would otherwise reach umami.
 //   - title, event name and event data keys and string values are redacted.
 //   - language is cut to its primary subtag.
 //   - every field is cut to its field limit after redaction, because a
@@ -71,14 +75,16 @@ type SanitizeReport struct {
 	DroppedDataKeys int
 }
 
-// SanitizeWire rewrites the privacy relevant fields of w in place: URL,
-// Referrer, Title, Language, Name and Data. hostname, screen and the proof
-// are left alone; the wire parser already restricts them to fixed shapes.
+// SanitizeWire rewrites the privacy relevant fields of w in place: Hostname,
+// URL, Referrer, Title, Language, Name and Data. screen and the proof are
+// left alone; the wire parser already restricts them to fixed shapes.
 // collectUTM is the site's registry setting (registry.Site.CollectUTM).
 func SanitizeWire(w *events.Wire, collectUTM bool) SanitizeReport {
 	var rep SanitizeReport
 	var f redact.Flags
 	var n int
+	w.Hostname, f = SanitizeHostname(w.Hostname)
+	rep.Redacted |= f
 	w.URL, f, n = SanitizeURL(w.URL, collectUTM)
 	rep.Redacted |= f
 	rep.DroppedQueryParams += n
@@ -296,6 +302,13 @@ func SanitizeReferrer(r string) (string, redact.Flags) {
 		host = "[" + host + "]"
 	}
 	return sanCapURL(strings.ToLower(pu.Scheme)+"://"+host, events.MaxReferrer), flags
+}
+
+// SanitizeHostname lower cases and redacts a page hostname, then cuts it to
+// events.MaxHostname. an ipv6 literal keeps its brackets.
+func SanitizeHostname(h string) (string, redact.Flags) {
+	out, flags := redact.String(strings.ToLower(h))
+	return sanCapUnits(out, events.MaxHostname), flags
 }
 
 // SanitizeText redacts free text and cuts it to max utf-16 code units.

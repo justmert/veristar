@@ -333,6 +333,9 @@ here, before they take effect, as the processing terms require
   ([docs/security/bot-and-inflation.md](docs/security/bot-and-inflation.md)
   section 9, [docs/security/threat-model.md](docs/security/threat-model.md)
   section 3.4).
+- The page hostname is redacted like the referrer host before an event is
+  queued. A site registered with a wildcard origin accepts any subdomain
+  label, so a Stellar key used as a label no longer reaches Umami.
 
 - pgx 5.13.0 fixes GHSA-w9rp-vfrh-q8vv, a panic in `Rows.Values` on a
   malformed server response.
