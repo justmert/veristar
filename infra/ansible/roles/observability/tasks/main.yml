@@ -76,7 +76,8 @@
 # docker does not retry a container whose start failed while the daemon came
 # up: after a power-off in the production database drill (2026-11-13)
 # alertmanager stayed exited with code 255. the same oneshot unit as the edge
-# and core projects starts every existing container once docker is up.
+# and core projects starts every existing container once docker is up, and
+# retries a failed start like them (roles/core tasks/start_unit.yml).
 - name: Install the start-at-boot unit of the observability project
   ansible.builtin.copy:
     content: |
@@ -85,10 +86,14 @@
       Description=start the observability compose project's containers after boot
       After=docker.service sa-core-start.service sa-edge-start.service
       Requires=docker.service
+      StartLimitIntervalSec=30min
+      StartLimitBurst=6
 
       [Service]
       Type=oneshot
       TimeoutStartSec=15min
+      Restart=on-failure
+      RestartSec=20s
       ExecStart=/usr/bin/docker compose --project-directory {{ observability_dir }} start
 
       [Install]
