@@ -18,6 +18,7 @@ import (
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/processor"
 	"go.opentelemetry.io/collector/processor/processorhelper"
+	"go.uber.org/zap"
 )
 
 // Type is the component type used in otelcol.yaml.
@@ -49,6 +50,9 @@ func sharedGuard(set processor.Settings, cfg *Config) *guard {
 	g, ok := limiters[set.ID]
 	if !ok || g.lim.cfg != cfg {
 		g = newGuard(cfg, set.Logger, time.Now)
+		if err := g.useMeter(set.MeterProvider); err != nil {
+			set.Logger.Warn("tenantguard: invalid item counter not registered", zap.Error(err))
+		}
 		limiters[set.ID] = g
 	}
 	return g
