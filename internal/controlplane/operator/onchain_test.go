@@ -109,11 +109,18 @@ func TestOnchainOperatorViews(t *testing.T) {
 			p.Onchain.WeeklyActive = onchain.WeeklyActive{}
 			switch p.Tenant.ID {
 			case aurora:
+				// the unverified contract counts as declared, not in the numbers
 				require.Equal(t, onchain.Summary{IDs: 2, IDsVerified: 1, Operations: ops[aurora], Transactions: 0 + 1 + 2 + 3 + 5 + 6 + 7 + 8,
-					DaysMissing: 1 + int64(fixtureDays-1), IDsFailing: 1}, p.Onchain)
+					DaysMissing: 1, IDsFailing: 0}, p.Onchain)
+				require.InDelta(t, float64(ops[aurora]), *p.Comparison.KPIs.OnchainOperations.Value, 0)
 			case borealis:
+				// an unverified account's activity is no figure of the project
 				require.Equal(t, int64(1), p.Onchain.IDs)
-				require.Equal(t, ops[borealis], p.Onchain.Operations)
+				require.Equal(t, int64(0), p.Onchain.IDsVerified)
+				require.Equal(t, int64(0), p.Onchain.Operations)
+				// nor of its cohort kpi and percentile
+				require.Zero(t, *p.Comparison.KPIs.OnchainOperations.Value)
+				require.Nil(t, p.Comparison.KPIs.OnchainOperations.Percentile)
 			default:
 				require.Equal(t, onchain.Summary{}, p.Onchain, p.Tenant.Name)
 			}

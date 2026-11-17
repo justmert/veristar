@@ -458,7 +458,7 @@ d as (
   select c.tenant_id, x.day, sum(x.operations)::bigint as v
   from cp.chain_ids c join t on t.id = c.tenant_id
   join agg.chain_daily x on x.tenant_id = c.tenant_id and x.strkey = c.strkey
-  where x.day between @from_day::date and @to_day::date
+  where c.verified_at is not null and x.day between @from_day::date and @to_day::date
   group by c.tenant_id, x.day
 )`,
 }

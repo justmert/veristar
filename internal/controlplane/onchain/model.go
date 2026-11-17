@@ -329,15 +329,19 @@ func Load(ctx context.Context, tx pgx.Tx, sites string, tenant uuid.UUID, rg Ran
 }
 
 // Summary is a project's on-chain column in the operator lists and the
-// exports (contract 15.7): ids, proofs and numbers over the range.
+// exports (contract 15.7): ids, proofs and numbers over the range. the
+// numbers count verified ids only, like weekly active accounts: anyone can
+// declare any public id, so a declared id that was never proven must not
+// lift a project's figures, its percentiles or the rules it meets.
 type Summary struct {
 	IDs          int64 `json:"ids"`
 	IDsVerified  int64 `json:"ids_verified"`
 	Operations   int64 `json:"operations"`
 	Transactions int64 `json:"transactions"`
-	// day-id pairs of the range without a stored row, today excluded
+	// day-id pairs of the range without a stored row, verified ids only,
+	// today excluded
 	DaysMissing int64 `json:"days_missing"`
-	// ids whose last read failed
+	// verified ids whose last read failed
 	IDsFailing int64 `json:"ids_failing"`
 	// weekly active accounts over the iso weeks of the range
 	WeeklyActive WeeklyActive `json:"weekly_active_accounts"`
@@ -384,9 +388,11 @@ func Summaries(ctx context.Context, tx pgx.Tx, tenants []uuid.UUID, rg Range, to
 		  group by d.tenant_id, d.strkey
 		)
 		select c.tenant_id, count(*)::bigint, (count(*) filter (where c.verified))::bigint,
-		       coalesce(sum(d.operations), 0)::bigint, coalesce(sum(d.transactions), 0)::bigint,
-		       (count(*) * $5::bigint - coalesce(sum(d.days), 0))::bigint,
-		       (count(*) filter (where c.failing))::bigint
+		       coalesce(sum(d.operations) filter (where c.verified), 0)::bigint,
+		       coalesce(sum(d.transactions) filter (where c.verified), 0)::bigint,
+		       ((count(*) filter (where c.verified)) * $5::bigint
+		         - coalesce(sum(d.days) filter (where c.verified), 0))::bigint,
+		       (count(*) filter (where c.verified and c.failing))::bigint
 		from c left join d on d.tenant_id = c.tenant_id and d.strkey = c.strkey
 		group by c.tenant_id`, tenants, rg.From, rg.To, last, complete)
 	if err != nil {
@@ -415,8 +421,8 @@ type DayTotal struct {
 	Transactions *int64 `json:"transactions"`
 }
 
-// DailyTotals reads the summed daily activity of every tenant over rg,
-// one point per day of the range.
+// DailyTotals reads the summed daily activity of every tenant's verified
+// ids over rg, one point per day of the range.
 func DailyTotals(ctx context.Context, tx pgx.Tx, tenants []uuid.UUID, rg Range) (map[uuid.UUID][]DayTotal, error) {
 	days := rg.Days()
 	out := make(map[uuid.UUID][]DayTotal, len(tenants))
@@ -434,7 +440,7 @@ func DailyTotals(ctx context.Context, tx pgx.Tx, tenants []uuid.UUID, rg Range) 
 		select d.tenant_id, d.day, count(*)::bigint, sum(d.operations)::bigint, sum(d.transactions)::bigint
 		from agg.chain_daily d
 		join cp.chain_ids c on c.tenant_id = d.tenant_id and c.strkey = d.strkey
-		where d.tenant_id = any($1::uuid[]) and d.day between $2::date and $3::date
+		where d.tenant_id = any($1::uuid[]) and c.verified_at is not null and d.day between $2::date and $3::date
 		group by d.tenant_id, d.day`, tenants, rg.From, rg.To)
 	if err != nil {
 		return nil, fmt.Errorf("onchain: daily totals: %w", err)

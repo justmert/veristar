@@ -401,21 +401,28 @@ func TestThresholdRules(t *testing.T) {
 			f.tenants["gamma"], account)
 		superExec(t, f.pg, `insert into agg.chain_daily (tenant_id, strkey, day, source, operations, transactions, counterparties)
 			values ($1, $2, '2026-10-05', 'horizon', 7, 1, 1)`, f.tenants["gamma"], account)
-		for metric, want := range map[string]string{"requests": "beta", "onchain_operations": "gamma"} {
+		matches := func(metric string) RuleMatches {
 			code, body := f.do(t, http.MethodPost, "/api/operator/rules",
 				map[string]any{"name": metric, "metric": metric, "min_per_day": 5, "min_days": 1, "months": 1})
 			require.Equal(t, http.StatusCreated, code, string(body))
 			id := decode[Rule](t, body).ID
 			code, body = f.do(t, http.MethodGet, "/api/operator/rules/"+id.String()+"/matches", nil)
 			require.Equal(t, http.StatusOK, code, string(body))
-			m := decode[RuleMatches](t, body)
-			require.Len(t, m.Items, 1, metric)
-			require.Equal(t, want, m.Items[0].Tenant.Slug)
-			if metric == "requests" {
-				// the metric rows win over the span rows of the same service
-				require.Equal(t, int64(60), m.Items[0].Months[0].Days[0].Value)
-			}
+			return decode[RuleMatches](t, body)
 		}
+		m := matches("requests")
+		require.Len(t, m.Items, 1)
+		require.Equal(t, "beta", m.Items[0].Tenant.Slug)
+		// the metric rows win over the span rows of the same service
+		require.Equal(t, int64(60), m.Items[0].Months[0].Days[0].Value)
+
+		// an id the project only declared does not count: anyone can
+		// declare any public account
+		require.Empty(t, matches("onchain_operations").Items, "an unverified id meets no rule")
+		superExec(t, f.pg, `update cp.chain_ids set verify_method = 'sep53', verified_at = now() where strkey = $1`, account)
+		m = matches("onchain_operations")
+		require.Len(t, m.Items, 1)
+		require.Equal(t, "gamma", m.Items[0].Tenant.Slug)
 	})
 }
 

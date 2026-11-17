@@ -3481,15 +3481,23 @@ marked failed in the scheduler metrics. Metric:
 ### 15.7 Operators, the machine API and MCP
 
 - `GET /api/operator/web/projects` and `GET /api/operator/api/projects`: every
-  row carries `onchain` (**Summary**: `ids`, `ids_verified`, `operations`,
-  `transactions` over the range, `days_missing` (id-days of the range before
-  today without a row), `ids_failing` (ids whose last read failed) and
+  row carries `onchain` (**Summary**: `ids` (declared), `ids_verified`, and,
+  over the verified ids only, `operations` and `transactions` over the range,
+  `days_missing` (verified id-days of the range before today without a row),
+  `ids_failing` (verified ids whose last read failed), and
   `weekly_active_accounts` (15.8)). The column is not a sort key.
+- Every on-chain figure an operator ranks, compares or grades a project by
+  counts **verified ids only**, as weekly active accounts do: the Summary,
+  the compare series, the `onchain_operations` key metric and its percentile
+  (19.2), threshold rules on `onchain_operations` (19.4), "What SCF sees"
+  (16.3) and signed usage reports (20). Anyone can declare any public id, so
+  an id the project has not proven adds nothing to them. The project's own
+  view (15.3) still shows every declared id with its own numbers.
 - `GET /api/operator/web/compare` and `GET /api/operator/api/compare`: every
   project carries `onchain`: `totals` (Summary), `series`, one point per day
-  of the range: `ids_read` and the summed `operations` and `transactions`,
-  both `null` on a day no id has a row for, and `weeks`, the weeks of 15.8
-  that lie whole inside the range.
+  of the range: `ids_read` and the summed `operations` and `transactions` of
+  the verified ids, both `null` on a day no verified id has a row for, and
+  `weeks`, the weeks of 15.8 that lie whole inside the range.
 - `GET /api/operator/tenants/{tenant_id}/onchain?from=&to=`: the view of 15.3
   for one project, read as `cp_operator` over `cp.operator_sites`; 404 for an
   unknown or internal tenant.
@@ -4161,7 +4169,8 @@ Every row of 8.3 and 8.5 carries:
 - The five key metrics: `visitors` (primary-band visitors, the verified
   count of 8.3), `pageviews` (primary band), `requests` and `error_rate`
   (requests answered 500 to 599 over requests) with the source rule of 8.5
-  and without infrastructure requests (7.4), and `onchain_operations` (15.7). `value` is the range, `previous` the range
+  and without infrastructure requests (7.4), and `onchain_operations` (15.7,
+  verified ids only). `value` is the range, `previous` the range
   of equal length that ends the day before `from`.
 - `change` is `(value - previous) / previous` for the four counts and
   `value - previous` for the error rate; `null` when `previous` is 0 or
@@ -4204,7 +4213,8 @@ least `min_days` days with `metric` at or above `min_per_day`, and, when
 `min_grade` is set, an integrity grade (17) over those months of at least
 `min_grade` (A is best). `metric` is `visitors` (primary band, summed over
 the project's sites per day), `requests` (the source rule of 8.5 over the
-window, infrastructure requests left out as in 7.4) or `onchain_operations`. Limits: `min_per_day` 1 to 10^12,
+window, infrastructure requests left out as in 7.4) or `onchain_operations`
+(verified ids only, 15.7). Limits: `min_per_day` 1 to 10^12,
 `min_days` 1 to 28, `months` 1 to 12, at most 200 rules. `cohort` limits the
 evaluation to projects confirmed in it; its fields are optional.
 
