@@ -77,7 +77,7 @@ flowchart LR
 
 ## Projects and operators
 
-Each project is a tenant. Members sign in with GitHub and see only their own project's data:
+Each project is a tenant. Members sign in with GitHub, a Stellar wallet or a passkey and see only their own project's data:
 every request runs under database row-level security for that project. SCF operators see
 aggregates across projects, never raw events or sessions, and machine consumers can read the
 same aggregates through the [metrics API](/operators/api-keys).
