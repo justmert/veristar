@@ -17,6 +17,7 @@ import {
   enrollApi,
   type GitHubUser,
   newUser,
+  operatorStepUp,
   pasteSnippet,
   type Site,
   signIn,
@@ -60,6 +61,8 @@ test.beforeAll(async ({ browser }) => {
   const octx = await browser.newContext();
   op = { ctx: octx, page: await octx.newPage() };
   await signIn(op.page, OPERATOR);
+  // the operator views need a passkey step-up on top of the sign-in
+  await operatorStepUp(op.page, OPERATOR);
   const tctx = await browser.newContext();
   owner = { ctx: tctx, page: await tctx.newPage() };
   await signIn(owner.page, newUser("coverageown"));
