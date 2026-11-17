@@ -24,6 +24,7 @@
   --color-line: var(--vs-line);
   --color-line-strong: var(--vs-line-strong);
   --color-line-subtle: var(--vs-line-subtle);
+  --color-line-input: var(--vs-line-input);
   --color-fg: var(--vs-fg);
   --color-fg-2: var(--vs-fg-2);
   --color-fg-3: var(--vs-fg-3);

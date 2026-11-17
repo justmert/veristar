@@ -27,7 +27,9 @@ export const palette = {
     700: "#2a2a27",
     650: "#2e2d29",
     600: "#3d3c37",
+    550: "#737169",
     500: "#6e6c65",
+    450: "#97958c",
     400: "#918f86",
     300: "#a6a49c",
     200: "#d9d8d2",
@@ -49,7 +51,9 @@ export const palette = {
     250: "#e3e1db",
     300: "#c4c1b9",
     400: "#a3a099",
+    500: "#89867d",
     600: "#6b6961",
+    650: "#66645c",
     700: "#57554e",
     800: "#3b3a35",
     850: "#2a2925",
@@ -101,9 +105,14 @@ export type Roles = {
   line: string; // every border by default
   "line-strong": string; // control borders, the chart baseline
   "line-subtle": string; // table row rules, chart grid
+  // the edge of a form control (input, select, checkbox): at least 3:1
+  // against the control's fill and every surface it sits on (wcag 1.4.11)
+  "line-input": string;
   // text
   fg: string;
   "fg-2": string;
+  // the quietest readable text: at least 4.5:1 on every surface up to
+  // selected, so a caption keeps its contrast in a selected row
   "fg-3": string;
   "fg-disabled": string;
   "on-accent": string; // text on the accent fill
@@ -157,9 +166,12 @@ export const themes = {
     line: p.neutral[650],
     "line-strong": p.neutral[600],
     "line-subtle": p.neutral[750],
+    // 3.83 on sunken, 3.49 on raised, 3.26 on overlay
+    "line-input": p.neutral[550],
     fg: p.neutral[100],
     "fg-2": p.neutral[300],
-    "fg-3": p.neutral[400],
+    // 4.79 on selected
+    "fg-3": p.neutral[450],
     "fg-disabled": p.neutral[500],
     "on-accent": p.white,
     "on-critical": p.white,
@@ -204,9 +216,12 @@ export const themes = {
     line: p.paper[250],
     "line-strong": p.paper[300],
     "line-subtle": p.paper[150],
+    // 3.64 on sunken, raised and overlay (white), 3.34 on ground
+    "line-input": p.paper[500],
     fg: p.paper[900],
     "fg-2": p.paper[700],
-    "fg-3": p.paper[600],
+    // 4.62 on selected
+    "fg-3": p.paper[650],
     "fg-disabled": p.paper[400],
     "on-accent": p.white,
     "on-critical": p.white,
