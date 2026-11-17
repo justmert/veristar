@@ -51,8 +51,10 @@ type ServerConfig struct {
 	Publisher        *Publisher
 	Releases         *Releases
 	// Scripts attributes tracker file requests to a site for the two
-	// coverage counters (internal/coverage).
-	Scripts *ScriptAttribution
+	// coverage counters (internal/coverage); ScriptCounts bounds how many of
+	// them one prefix adds to one site.
+	Scripts      *ScriptAttribution
+	ScriptCounts *ScriptCountLimiter
 	// MaxBody is GATEWAY_MAX_BODY, at most events.MaxBody.
 	MaxBody    int
 	Log        *slog.Logger
@@ -82,13 +84,16 @@ type Server struct {
 	outcomes *prometheus.CounterVec
 	duration *prometheus.HistogramVec
 	warnings *prometheus.CounterVec
+	// scriptLimited counts tracker file requests served but not counted
+	// because their prefix used up its script count bucket
+	scriptLimited prometheus.Counter
 }
 
 // NewServer checks the configuration and registers the metrics.
 func NewServer(c ServerConfig) (*Server, error) {
 	if c.Sites == nil || c.Challenger == nil || c.Proofs == nil || c.Signals == nil || c.ClientIP == nil ||
 		c.Geo == nil || c.Network == nil || c.Sightings == nil || c.Visitor == nil || c.Cluster == nil || c.Volume == nil || c.Limiter == nil || c.ChallengeLimiter == nil || c.Stats == nil ||
-		c.Publisher == nil || c.Releases == nil || c.Scripts == nil || c.Log == nil || c.Registerer == nil || c.Now == nil {
+		c.Publisher == nil || c.Releases == nil || c.Scripts == nil || c.ScriptCounts == nil || c.Log == nil || c.Registerer == nil || c.Now == nil {
 		return nil, errors.New("gateway: ServerConfig is missing a dependency")
 	}
 	if c.MaxBody < 1 || c.MaxBody > events.MaxBody {
@@ -110,7 +115,11 @@ func NewServer(c ServerConfig) (*Server, error) {
 			Help: "accepted events where a side step failed: geo or network lookup, network key or ip-cluster gossip.",
 		}, []string{"step"}),
 	}
-	for _, m := range []prometheus.Collector{s.outcomes, s.duration, s.warnings} {
+	s.scriptLimited = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "gateway_script_requests_not_counted_total",
+		Help: "tracker file requests served but left out of the coverage counters because their prefix reached the per-site count limit.",
+	})
+	for _, m := range []prometheus.Collector{s.outcomes, s.duration, s.warnings, s.scriptLimited} {
 		if err := c.Registerer.Register(m); err != nil {
 			return nil, fmt.Errorf("gateway: register server metrics: %w", err)
 		}
@@ -206,6 +215,26 @@ func (s *Server) countScript(r *http.Request) {
 	}
 	site, ok := s.c.Scripts.Site(r.Header)
 	if !ok {
+		return
+	}
+	// Referer, Sec-Fetch-Dest and Sec-GPC are plain headers outside a
+	// browser, so any client can claim a script load with or without the
+	// signal for any site. the per-prefix bucket bounds what one network adds
+	// to a site's counters; the file has already been served either way.
+	ip, err := s.c.ClientIP.FromRequest(r)
+	if err != nil {
+		s.c.Log.Error("script request not counted, client address header unusable", "header", s.c.ClientIP.Header(), "error", err.Error())
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), requestBudget)
+	defer cancel()
+	_, pk, err := s.prefixOf(ctx, ip)
+	if err != nil {
+		s.c.Log.Error("script request not counted", "error", err.Error())
+		return
+	}
+	if !s.c.ScriptCounts.Allow(site, pk) {
+		s.scriptLimited.Inc()
 		return
 	}
 	if err := s.c.Stats.Count(site, coverage.ScriptRequests); err != nil {

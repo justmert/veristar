@@ -32,7 +32,13 @@ from the directory of `DBIP_MMDB` ([geo.md](geo.md)).
 Fixed in code: publish acknowledgement wait 2 s (`PublishAckWait`), readiness canary
 every 1 s with a maximum age of 7 s (`CanaryMaxAge`, so `/readyz` fails within 10 s
 of a queue outage), 200,000 entries each for the replay table, the ip-cluster sets,
-the visitor volume table and each rate limit table.
+the visitor volume table and each rate limit table. Coverage counting of `GET /v/*/sdk.js`:
+a token bucket per site and keyed hash of the /24 or /48, burst 60 and one token every
+10 s, per node (`DefaultScriptCountRate`). It decides only whether a request counts toward
+`script_requests` and `script_gpc`; the file is always served and stays cacheable, and
+requests past the bucket are counted in `gateway_script_requests_not_counted_total`
+([../compliance/privacy-strategy.md](../compliance/privacy-strategy.md) section 6, "Forged
+requests").
 
 Each limit is per node. With three edge nodes, a site can send three times the
 site rate, and a captured proof can be replayed three times the replay limit.
@@ -47,6 +53,7 @@ was refused, rate limited or quarantined against the real gateway
 | 2026-11-13 | `VISITOR_EVENTS_PER_HOUR` | new, 600 | same-IP skepticism counts distinct visitor tokens only, so one address and one user agent could send at the prefix rate into the primary band; ten events a minute on average is far above a person's use of one site |
 | 2026-11-13 | `PROOF_REPLAY_LIMIT` | counts queued events only | refused events used up a proof that a single-page app keeps for the whole tab (`TestRefusedEventsKeepTheProofAllowance` in `internal/gateway`) |
 | 2026-11-13 | `RATE_SITE_*`, `RATE_PREFIX_*` | also applied to `GET /v1/c`, in separate buckets | the challenge route had no limit, so one client could request challenges without bound; checked after the origin and fetch metadata checks, so refused requests take no token (`TestChallengeRateLimits` in `tests/gateway`) |
+| 2026-11-17 | script count bucket | new, 60 at once and one per 10 s per site and prefix | the tracker file route has no proof or origin check, so forged `Referer`, `Sec-Fetch-Dest` and `Sec-GPC` headers from one network could move a site's unmeasured share toward 0% or 100% (`TestForgedScriptRequestsAreCountedWithinAPrefixLimit` in `internal/gateway`) |
 
 ## Responses
 

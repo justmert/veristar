@@ -190,3 +190,49 @@ func (l *RateLimiter) Len() (sites, prefixes int) {
 	defer l.mu.Unlock()
 	return len(l.site.buckets), len(l.prefix.buckets)
 }
+
+// DefaultScriptCountRate bounds how many tracker file requests from one
+// truncated prefix count toward one site's coverage counters on one node.
+// the file is immutable and cached for a year, so a browser fetches it about
+// once per release; 60 at once and one more every ten seconds is far above
+// what the people behind one office or carrier prefix load, and caps what a
+// client that forges Referer, Sec-Fetch-Dest and Sec-GPC can add.
+var DefaultScriptCountRate = Rate{PerSecond: 0.1, Burst: 60}
+
+// ScriptCountLimiter holds one token bucket per site and truncated prefix
+// for the coverage counters. it only decides whether a request is counted;
+// the file is served either way, so the limit never costs a page its
+// script.
+type ScriptCountLimiter struct {
+	now    func() time.Time
+	mu     sync.Mutex
+	prefix *rlTable[rlPrefixID]
+}
+
+// NewScriptCountLimiter builds the limiter. maxKeys bounds its bucket table.
+func NewScriptCountLimiter(r Rate, maxKeys int, now func() time.Time) (*ScriptCountLimiter, error) {
+	if err := r.validate(); err != nil {
+		return nil, fmt.Errorf("script count rate: %w", err)
+	}
+	if maxKeys < 1 {
+		return nil, errors.New("gateway: script count limiter needs room for at least one key")
+	}
+	if now == nil {
+		return nil, errors.New("gateway: script count limiter needs a clock")
+	}
+	return &ScriptCountLimiter{now: now, prefix: newRLTable[rlPrefixID](r, maxKeys)}, nil
+}
+
+// Allow takes one token from the bucket of site and prefix, and reports
+// whether there was one.
+func (l *ScriptCountLimiter) Allow(siteID string, prefix PrefixKey) bool {
+	now := l.now()
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	b := l.prefix.get(rlPrefixID{site: siteID, prefix: prefix}, now)
+	if b.tokens < 1 {
+		return false
+	}
+	b.tokens--
+	return true
+}

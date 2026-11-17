@@ -12,6 +12,7 @@ import (
 
 	"github.com/justmert/veristar/internal/coverage"
 	"github.com/justmert/veristar/internal/events"
+	"github.com/justmert/veristar/internal/gateway"
 	"github.com/justmert/veristar/internal/integrity"
 	"github.com/justmert/veristar/internal/natsx"
 	"github.com/justmert/veristar/internal/registry"
@@ -151,6 +152,8 @@ func TestScriptRequestsAreCountedPerSite(t *testing.T) {
 		t.Helper()
 		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, e.url+"/v/1.2.0/sdk.js", nil)
 		require.NoError(t, err)
+		// caddy sets the client address on every route
+		req.Header.Set(nodeClientIPHeader, "198.51.100.31")
 		if referer != "" {
 			req.Header.Set("Referer", referer)
 		}
@@ -229,4 +232,44 @@ func TestForgedPageSignalsDoNotMoveTheGrade(t *testing.T) {
 	after := e.edgeCounts(t)[s.ID][integrity.SignalNeverVisible]
 	require.LessOrEqual(t, after-before, int64(3), "notices from one prefix count up to the ip-cluster threshold only")
 	require.Equal(t, uint64(30), e.queuedCount(t), "the framed views are queued, notices never")
+}
+
+// a client that forges Referer, Sec-Fetch-Dest and Sec-GPC is served the
+// file every time, but one prefix adds at most the script count burst to a
+// site's coverage counters, so it cannot push the unmeasured share toward 0%
+// or 100%. another prefix has its own bucket.
+func TestForgedScriptRequestsAreCountedWithinAPrefixLimit(t *testing.T) {
+	e := startNode(t, nil)
+	s := e.putSite(t, "https://cover.example")
+	e.client(t, s, "198.51.100.50")
+	get := func(addr string, gpc bool) {
+		t.Helper()
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, e.url+"/v/1.2.0/sdk.js", nil)
+		require.NoError(t, err)
+		req.Header.Set(nodeClientIPHeader, addr)
+		req.Header.Set("Referer", "https://cover.example/")
+		req.Header.Set("Sec-Fetch-Dest", "script")
+		if gpc {
+			req.Header.Set("Sec-GPC", "1")
+		}
+		res, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		require.NoError(t, res.Body.Close())
+		require.Equal(t, http.StatusOK, res.StatusCode, "the file is always served")
+	}
+	burst := int64(gateway.DefaultScriptCountRate.Burst)
+	for range 3 * burst {
+		get("203.0.113.50", true)
+	}
+	got := e.edgeCounts(t)[s.ID]
+	// the bucket refills one token every ten seconds while the loop runs
+	require.GreaterOrEqual(t, got[coverage.ScriptGPC], burst)
+	require.LessOrEqual(t, got[coverage.ScriptGPC], burst+1)
+	require.Equal(t, got[coverage.ScriptGPC], got[coverage.ScriptRequests])
+	// an address in the same /24 shares the bucket
+	get("203.0.113.51", false)
+	require.Equal(t, got[coverage.ScriptRequests], e.edgeCounts(t)[s.ID][coverage.ScriptRequests])
+	// another network counts on its own
+	get("192.0.2.50", false)
+	require.Equal(t, got[coverage.ScriptRequests]+1, e.edgeCounts(t)[s.ID][coverage.ScriptRequests])
 }

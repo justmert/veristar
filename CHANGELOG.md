@@ -340,6 +340,13 @@ here, before they take effect, as the processing terms require
 - The page hostname is redacted like the referrer host before an event is
   queued. A site registered with a wildcard origin accepts any subdomain
   label, so a Stellar key used as a label no longer reaches Umami.
+- Requests for the tracker file count toward a site's unmeasured-share
+  estimate at most 60 at once and one per 10 seconds per site and address
+  prefix on each node, so forged `Referer`, `Sec-Fetch-Dest` and `Sec-GPC`
+  headers from one network can no longer push the share toward 0% or 100%.
+  The file itself is still served to every request and stays cacheable
+  ([docs/compliance/privacy-strategy.md](docs/compliance/privacy-strategy.md)
+  section 6).
 
 - pgx 5.13.0 fixes GHSA-w9rp-vfrh-q8vv, a panic in `Rows.Values` on a
   malformed server response.
