@@ -39,8 +39,11 @@ test("a member makes an access key on the AI page, uses it and revokes it", asyn
   page,
   context,
 }) => {
-  await signIn(page, newUser("mcp-key"));
-  const tenant = await enrollApi(context, "MCP E2E Key");
+  const user = newUser("mcp-key");
+  await signIn(page, user);
+  // the project slug is unique across the console, so the name carries the
+  // attempt's user id: a playwright retry would otherwise get slug_taken
+  const tenant = await enrollApi(context, `MCP E2E Key ${user.id}`);
   await projectPage(page, tenant.id);
   await expect(page.getByRole("link", { name: "AI assistants" }).first()).toBeVisible();
   await expect(page.getByText(`${APP}/mcp`).first()).toBeVisible();
@@ -103,7 +106,8 @@ test("a connector is approved on the consent page after a github sign-in", async
   const setup = await browser.newContext({ ignoreHTTPSErrors: true });
   const setupPage = await setup.newPage();
   await signIn(setupPage, user);
-  const tenant = await enrollApi(setup, "MCP E2E Consent");
+  // the user id keeps the slug unique per attempt, as in the test above
+  const tenant = await enrollApi(setup, `MCP E2E Consent ${user.id}`);
   await setup.close();
 
   const ctx = await browser.newContext({ ignoreHTTPSErrors: true });
@@ -170,7 +174,7 @@ test("a connector is approved on the consent page after a github sign-in", async
   ).toBeVisible();
   await expect(page.getByText(user.login)).toBeVisible();
   await expect(page.getByText("127.0.0.1:65531")).toBeVisible();
-  const choice = page.getByRole("radio", { name: /MCP E2E Consent/ });
+  const choice = page.getByRole("radio", { name: new RegExp(`MCP E2E Consent ${user.id}`) });
   await expect(choice).toBeChecked();
   await page.getByRole("button", { name: "Approve" }).click();
   await expect.poll(() => callback?.toString() ?? "").toContain("code=");
