@@ -139,7 +139,7 @@ day replaces the day's secrets, so visitors seen before it count again.
 | `cp.tenant_cohorts` | while the tenant row exists | deleted with the tenant row; a removal keeps the row and the cohort |
 | `cp.operators` | until removed | an operator admin's removal; account deletion |
 | `cp.operator_passkeys` | until removed | the operator's removal of a passkey; an admin's reset; a roster removal that leaves the person no active row; account deletion |
-| `cp.usage_reports` | while the tenant exists | deleted with the tenant row; a removed tenant's links answer 404 at once |
+| `cp.usage_reports` | until the tenant is removed | removal purge (`reports` step, `cp.purge_usage_reports`), whatever `removal_keep_aggregates` says; a removed tenant's links answer 404 at once |
 
 `jobs retain-web` deletes Umami `website_event`, `event_data` and the disabled
 features' per-event tables by `created_at`, then sessions that have no event
