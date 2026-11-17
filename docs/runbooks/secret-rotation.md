@@ -296,8 +296,10 @@ the relay, the exporters, Prometheus, Alertmanager and the services on each node
 `deploy.yml` (one node at a time, drained, the Patroni leader switched over first) rather than
 `site.yml` in production.
 
-**Renew node certificates** (yearly, or when the `make internal-ca` report shows certificates
-due; also after adding a node or changing a private address):
+**Renew node certificates** (yearly, when
+[InternalCertificateExpiringSoon](alerts.md#internalcertificateexpiringsoon) fires 30 days
+before the expiry, or when the `make internal-ca` report shows certificates due; also after
+adding a node or changing a private address):
 
 ```sh
 make internal-ca ENV=<env>
