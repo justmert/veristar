@@ -62,6 +62,24 @@ here, before they take effect, as the processing terms require
   `agg.chain_daily.functions`, row-level security, `agg.purge_chain`)
   ([docs/reference/onchain-sources.md](docs/reference/onchain-sources.md#calls-per-contract-function),
   [control-plane-api.md](docs/reference/control-plane-api.md#159-calls-per-contract-function)).
+- Web event delivery from every core node: `WEB_EVENTS` is split into 32
+  partitions by a hash of the visitor token, each with its own consumer
+  (`replayer-p00` to `replayer-p31`) and lock. The replayer on every core node
+  owns a share of the partitions (11, 11 and 10 on three nodes) and delivers
+  them to its own node's Umami processes, so delivery grows with the node
+  count. A visitor's events stay in one partition with one owner, so their
+  order, visit continuity and the duplicate guard hold through node loss and
+  rolling deploys; a replayer that stops delivers what it holds before it
+  hands its partitions over
+  ([docs/architecture.md](docs/architecture.md), "Web event partitions").
+- `platformctl nats retire-legacy-web` removes the single web subject of
+  earlier releases once its last event is delivered.
+- Replayer metrics `replayer_partitions`, `replayer_partitions_owned`,
+  `replayer_legacy_leader`, and per partition
+  `replayer_partition_pending_messages`,
+  `replayer_partition_ack_pending_messages` and
+  `replayer_partition_oldest_pending_age_seconds`; the alert
+  `ReplayerPartitionsUnowned`; two partition panels on the queues dashboard.
 
 ### Changed
 
@@ -71,6 +89,29 @@ here, before they take effect, as the processing terms require
   behind a function's daily count are held in memory while the day is read
   and never stored. The data processing terms and the records of processing
   list the same. Every project accepts it at its next sign-in.
+- Gateways queue web events on `web.events.<site id>.<partition>` instead of
+  `web.events.<site id>`. Erasure waits for every partition of a site, and
+  `platformctl dlq replay` and `platformctl queue forward` send a web event
+  to its partition.
+- `replayer_leader` is 1 on every replayer that owns a partition, and the
+  replayer lag gauges count the partitions the instance owns; the queues
+  dashboard sums them over the nodes. `ReplayerLagHigh` and
+  `WebEventsBacklogGrowing` read the sum of every replayer consumer.
+- `deploy.yml` installs the NATS permissions of the new release on every
+  NATS server before the core tier. The replayer container gets 30 s to stop.
+
+### Upgrade notes
+
+- Web events move from one subject per site to 32 partitions. The rolling
+  deploy carries the queue across without losing or repeating an event:
+  `nats apply` keeps the old subject and its consumer (now filtered to
+  `web.events.*`) next to the partitions, the replayer drains the old
+  consumer under the old `replayer` lock, and while both kinds are queued it
+  keeps each visitor's events in order. After the deploy, once every gateway
+  runs this release, run `platformctl nats retire-legacy-web`. The steps,
+  expected log lines and the rollback are in
+  [docs/deploy/upgrade.md](docs/deploy/upgrade.md), "Upgrading to
+  partitioned web events".
 
 ## [0.4.0] - 2026-11-18
 
