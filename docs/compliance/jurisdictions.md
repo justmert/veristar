@@ -7,13 +7,18 @@ description: "Where the tracker can run without end-user opt-in, and where conse
 Where a tenant can run the tracker without asking visitors for consent first,
 and where consent mode applies. Every row cites the legal sources register
 (`sources.md`); a row without a confirmed source says so. This page is not
-legal advice. Last updated 2026-11-13.
+legal advice. Last updated 2026-11-17.
 
 ## Why this needs a per-country answer
 
-The tracker runs JavaScript that makes the browser send information (page
-path, referrer, title, screen, language) and reads one browser storage key
-(the opt-out flag). That is all the default tracker reads. On a site that opts
+The tracker runs JavaScript that makes the browser send information and reads
+one browser storage key (the opt-out flag). Tracker 1.3.0 sends the page path,
+the referrer and the hostname, and the page title only when the site sets
+`data-send-title="true"`; it reads whether the page runs inside a frame and
+the page's visibility and prerendering state, which decide when the page view
+is sent, and never reads the screen size or the browser language. Releases
+before 1.3.0 also send the page title, the screen size and the browser
+language. That is all the default tracker reads. On a site that opts
 in to Wallets Kit capture with the script tag (`data-wallets-kit="true"`), it
 also lists the names of the site's `localStorage` keys twice a second and reads
 the kit's selected wallet id (never the address), from the moment tracking
