@@ -218,6 +218,12 @@ here, before they take effect, as the processing terms require
   (`sa-backup-result`), so the failure stays visible after the Patroni leader
   moves, which clears the unit's failed state.
 
+- Every platform release carries its third-party licence report as release
+  assets, `licences.json` and `console-bundle.txt`, next to
+  `release-images.json`; `release-images.yml` and `release-workstation.sh`
+  run the licence gate on the tag and stop the release when it fails
+  ([docs/security/supply-chain.md](docs/security/supply-chain.md), section 7).
+
 ### Changed
 
 - The rolling `deploy.yml` and `reboot.yml` visit the core node holding the
@@ -256,6 +262,24 @@ here, before they take effect, as the processing terms require
 - `make umami-compat` checks Umami's API and data contract only.
 - Members read the web aggregates of their own project under row-level
   security: migration 00042 grants `cp_tenant` read on `agg.web_daily_dim`.
+
+- etcd 3.6.16 to 3.7.3, the newest release. See the upgrade notes for the
+  rolling upgrade.
+- Go modules: `github.com/jackc/pgx/v5` 5.12.0 to 5.13.0,
+  `golang.org/x/crypto` 0.58.0 to 0.59.0, `golang.org/x/time` 0.15.0 to
+  0.16.0, `github.com/oschwald/maxminddb-golang/v2` 2.9.0 to 2.9.1, and with
+  them `golang.org/x/sync` 0.25.0, `golang.org/x/sys` 0.50.0 and
+  `golang.org/x/text` 0.44.0. pgx now reloads the client certificate and key
+  named by `PLATFORM_DB_SSLCERT` and `PLATFORM_DB_SSLKEY` for each new
+  database connection, so a rotated certificate is used without a restart.
+- npm: `cn` 0.4.0 to 0.5.2 (console and brand package) and
+  `@vitejs/plugin-vue` 6.0.10 to 6.0.11 (Vue example).
+- Base images at their current digests: `gcr.io/distroless/static-debian13`
+  and `cc-debian13` (`nonroot`), `golang:1.27.4-trixie`, `caddy:2.11.9` and
+  `caddy:2.11.9-builder`, `postgres:18.7-trixie` (the base of
+  `postgres-ha`); `ghcr.io/astral-sh/uv` 0.13.7 to 0.13.8 in the Python
+  example. Test images: `curlimages/curl` 8.11.1 to 8.22.0 and `registry`
+  3.0.0 to 3.1.2.
 
 ### Removed
 
@@ -301,6 +325,12 @@ here, before they take effect, as the processing terms require
 - Every web dashboard read passes the membership check, row-level security,
   a site check among the project's own sites, and, for Umami reads, Umami's
   own team check as a second gate. The isolation gate covers all five routes.
+
+- pgx 5.13.0 fixes GHSA-w9rp-vfrh-q8vv, a panic in `Rows.Values` on a
+  malformed server response.
+- `golang.org/x/crypto` 0.59.0 carries the fix for GO-2026-5932
+  (`x/crypto/openpgp`, never imported here); govulncheck reports no
+  vulnerability in either Go module.
 
 ### Upgrade notes
 
@@ -374,6 +404,15 @@ here, before they take effect, as the processing terms require
   write them.
 - Links and bookmarks to `web.<BASE_DOMAIN>` stop working. Members find their
   web dashboard under **Web** in each project in the console.
+- etcd moves from 3.6.16 to 3.7.3. etcd supports this as a rolling upgrade
+  from 3.6.11 or later, and the edge play of `deploy.yml` recreates one etcd
+  member at a time and waits for it to be healthy before the next node; do
+  not move it with `site.yml`, whose edge play recreates every member at
+  once. Before the deploy, check `etcdctl endpoint health --cluster` and take
+  a snapshot (`etcdctl snapshot save`) on one member. Patroni keeps its
+  leader through the upgrade. Once every member runs 3.7, going back to 3.6
+  needs etcd's downgrade procedure or the snapshot, not a pin change
+  ([docs/security/supply-chain.md](docs/security/supply-chain.md), section 8.2).
 
 ## [0.3.0] - 2026-11-16
 
