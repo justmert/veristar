@@ -211,6 +211,24 @@ export function DecisionPanel({
     setFieldError(null);
   }
 
+  // the radio group pattern: one tab stop, the arrow keys move the choice
+  // and the focus together
+  function arrows(e: KeyboardEvent<HTMLDivElement>) {
+    const step =
+      e.key === "ArrowRight" || e.key === "ArrowDown"
+        ? 1
+        : e.key === "ArrowLeft" || e.key === "ArrowUp"
+          ? -1
+          : 0;
+    if (step === 0 || allowed.length < 2) return;
+    e.preventDefault();
+    const i = allowed.indexOf(choice as (typeof allowed)[number]);
+    const next = allowed[(i + step + allowed.length) % allowed.length];
+    if (!next) return;
+    pick(next);
+    e.currentTarget.querySelector<HTMLElement>(`[data-choice="${next}"]`)?.focus();
+  }
+
   // a and r pick, ctrl or cmd enter submits; typing in the reason is left alone
   function keys(e: KeyboardEvent) {
     if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
@@ -232,7 +250,12 @@ export function DecisionPanel({
       noValidate
       className="flex flex-col gap-3"
     >
-      <div role="radiogroup" aria-label="Decision" className="grid grid-cols-2 gap-2">
+      <div
+        role="radiogroup"
+        aria-label="Decision"
+        className="grid grid-cols-2 gap-2"
+        onKeyDown={arrows}
+      >
         {allowed.map((c) => {
           const on = c === choice;
           return (
@@ -242,6 +265,8 @@ export function DecisionPanel({
               type="button"
               role="radio"
               aria-checked={on}
+              tabIndex={on ? 0 : -1}
+              data-choice={c}
               aria-keyshortcuts={c === "approve" ? "A" : "R"}
               onClick={() => pick(c)}
               className={cn(

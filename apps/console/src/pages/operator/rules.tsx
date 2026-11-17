@@ -4,6 +4,8 @@ import { type FormEvent, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { ApiError } from "@/api/client";
 import {
+  type CohortValue,
+  cohortListQuery,
   type Rule,
   type RuleInput,
   type RuleMatches,
@@ -20,6 +22,7 @@ import { Panel } from "@/components/panel";
 import { Button } from "@/components/ui/button";
 import { countOf, formatCount } from "@/lib/format";
 import { formatDayRange, isDay } from "@/lib/global";
+import { fieldMessage } from "@/lib/validate";
 import { cohortText, TD, TH } from "./global-shared";
 
 // saved threshold rules (contract 19.4): an operator defines a traction
@@ -260,7 +263,11 @@ export function RulesPage() {
       <ConfirmDialog
         open={deleting !== null}
         onOpenChange={(o) => {
-          if (!o) setDeleting(null);
+          if (!o) {
+            setDeleting(null);
+            // a refusal shown for one rule must not greet the next
+            remove.reset();
+          }
         }}
         title={`Delete ${deleting?.name ?? "the rule"}?`}
         description="The rule is removed for every operator, the machine API and the AI tools. The audit log keeps its definition."
@@ -271,6 +278,45 @@ export function RulesPage() {
         onConfirm={() => deleting && remove.mutate(deleting.id)}
       />
     </section>
+  );
+}
+
+const COHORT_LIST = { program: "programs", round: "rounds", category: "categories" } as const;
+const COHORT_LABEL = { program: "Program", round: "Round", category: "Category" } as const;
+
+function CohortSelect({
+  field,
+  values,
+  loading,
+  value,
+  onChange,
+  error,
+}: {
+  field: "program" | "round" | "category";
+  values: CohortValue[];
+  loading: boolean;
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
+  error?: string;
+}) {
+  const opts = values.map((v) => v.value);
+  // a rule saved with a value no project holds any more keeps showing it
+  if (value && !opts.includes(value)) opts.unshift(value);
+  return (
+    <SelectField
+      label={COHORT_LABEL[field]}
+      value={value}
+      onChange={onChange}
+      error={error}
+      disabled={loading}
+    >
+      <option value="">{loading ? "Loading" : "Any"}</option>
+      {opts.map((o) => (
+        <option key={o} value={o}>
+          {o}
+        </option>
+      ))}
+    </SelectField>
   );
 }
 
@@ -286,6 +332,9 @@ function RuleEditor({
   const qc = useQueryClient();
   const [form, setForm] = useState<RuleForm>(initial);
   const [errors, setErrors] = useState<Partial<Record<keyof RuleForm, string>>>({});
+  // a rule's cohort matches the values operators confirmed (19.1); free text
+  // could name a cohort no project holds, so the choice is from those values
+  const cohorts = useQuery(cohortListQuery);
   const save = useMutation({
     mutationFn: (body: RuleInput) => (id ? ruleApi.update(id, body) : ruleApi.create(body)),
     onSuccess: async (r) => {
@@ -297,7 +346,7 @@ function RuleEditor({
       const out: Partial<Record<keyof RuleForm, string>> = {};
       for (const [path, code] of Object.entries(err.fields)) {
         const k = SERVER_FIELDS[path];
-        if (k) out[k] = code.replaceAll("_", " ");
+        if (k) out[k] = fieldMessage(code);
       }
       setErrors(out);
     },
@@ -375,27 +424,22 @@ function RuleEditor({
             <option value="B">B or better</option>
             <option value="C">C or better</option>
           </SelectField>
-          <TextField
-            label="Program"
-            optional
-            value={form.program}
-            onChange={set("program")}
-            error={errors.program}
-          />
-          <TextField
-            label="Round"
-            optional
-            value={form.round}
-            onChange={set("round")}
-            error={errors.round}
-          />
-          <TextField
-            label="Category"
-            optional
-            value={form.category}
-            onChange={set("category")}
-            error={errors.category}
-          />
+          {(["program", "round", "category"] as const).map((k) => (
+            <CohortSelect
+              key={k}
+              field={k}
+              values={cohorts.data?.[COHORT_LIST[k]] ?? []}
+              loading={cohorts.isPending}
+              value={form[k]}
+              onChange={set(k)}
+              error={
+                errors[k] ??
+                (cohorts.error
+                  ? "The confirmed values could not be loaded. Reload the page."
+                  : undefined)
+              }
+            />
+          ))}
         </div>
         <FormMessage
           error={

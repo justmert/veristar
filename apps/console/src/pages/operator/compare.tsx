@@ -208,9 +208,9 @@ export function ComparePage() {
 
       <section aria-labelledby="compare-web" className="flex flex-col gap-3">
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <h2 id="compare-web" className="text-section text-fg">
+          <h3 id="compare-web" className="text-section text-fg">
             Web
-          </h2>
+          </h3>
           <span className="text-small text-fg-3">Per UTC day, from project aggregates</span>
           <span className="ml-auto">
             <ExportCompareButton view="web" tenants={tenants} resolved={resolved}>
@@ -225,9 +225,9 @@ export function ComparePage() {
 
       <section aria-labelledby="compare-api" className="flex flex-col gap-3">
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <h2 id="compare-api" className="text-section text-fg">
+          <h3 id="compare-api" className="text-section text-fg">
             API
-          </h2>
+          </h3>
           <span className="text-small text-fg-3">Every service, per UTC day</span>
           <span className="ml-auto">
             <ExportCompareButton view="api" tenants={tenants} resolved={resolved}>

@@ -173,6 +173,7 @@ describe("threshold rules (contract 19.4)", () => {
         return { status: 200, body: { items: saved && !deleted ? [rule] : [] } };
       if (url.startsWith(`/api/operator/rules/${rule.id}/matches`))
         return { status: 200, body: matches };
+      if (url === "/api/operator/cohorts") return { status: 200, body: f.cohortListBody };
       return { status: 500 };
     });
     const host = await renderRoutes(
@@ -191,7 +192,11 @@ describe("threshold rules (contract 19.4)", () => {
     await type(byLabel(host, "On days per month") as HTMLInputElement, "3");
     await type(byLabel(host, "Months") as HTMLInputElement, "2");
     await select(byLabel(host, "Minimum integrity grade") as unknown as HTMLSelectElement, "B");
-    await type(byLabel(host, "Program") as HTMLInputElement, "Build Award");
+    // the cohort is chosen from the confirmed values
+    await waitFor(() =>
+      expect((byLabel(host, "Program") as unknown as HTMLSelectElement).disabled).toBe(false),
+    );
+    await select(byLabel(host, "Program") as unknown as HTMLSelectElement, "Build Award");
     await click(byRole(host, "button", "Save rule"));
     await waitFor(() => expect(calls.find((x) => x.method === "POST")).toBeDefined());
     expect(calls.find((x) => x.method === "POST")?.body).toEqual({
