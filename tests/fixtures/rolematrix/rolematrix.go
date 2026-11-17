@@ -38,7 +38,7 @@ var Want = map[string]map[db.Role]string{
 		// the writer refuses queued metrics of a removed tenant (00018)
 		db.RoleMetricsWriter: "r(id,status)",
 		// aggregate-web skips removed tenants (00019), integrity skips
-		// internal ones (00044)
+		// internal ones (00045)
 		db.RoleJobs: "r(id,is_internal,status)",
 	},
 	// role only, and a trigger lets only an owner change members (00028, C-6)
