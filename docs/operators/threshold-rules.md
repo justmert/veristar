@@ -24,8 +24,10 @@ The months are complete UTC calendar months before the month of the evaluation d
 16 November with three months, the window is August, September and October; the current month
 never counts, so a project's result does not change during the month.
 
-Only active and suspended projects are evaluated. API requests follow the same source rule as the
-Global API view: a service's metric data wins over its span-derived data.
+Only active and suspended projects are evaluated. API requests follow the same rules as the
+Global API view: application requests only, with infrastructure requests (CORS preflights, health
+and probe routes, known health checkers) left out, and a service's metric data wins over its
+span-derived data.
 
 ## Create, edit and delete
 
