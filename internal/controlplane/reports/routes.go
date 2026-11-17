@@ -228,8 +228,22 @@ type createBody struct {
 	To   *string `json:"to"`
 }
 
-// period checks a report period: closed utc days, so a signed number never
-// grows after signing; to before today; at most MaxPeriodDays days.
+// FinalDays is how many days before today the last day of a report may
+// lie at the latest. the web aggregation and integrity grading read today
+// and the three days before it again on every run, so a day is final only
+// once it is four days old; a signed number must never change afterwards.
+const FinalDays = 4
+
+// CodePeriodNotFinal is the 422 for a period that ends on a day that can
+// still change.
+const CodePeriodNotFinal = "period_not_final"
+
+// LastFinalDay is the last day a report created on today may end on.
+func LastFinalDay(today time.Time) time.Time { return today.AddDate(0, 0, -FinalDays) }
+
+// period checks a report period: final utc days, so a signed number never
+// changes after signing; to on or before LastFinalDay; at most
+// MaxPeriodDays days.
 func period(b createBody, today time.Time) (time.Time, time.Time, error) {
 	var f tenants.Fields
 	var from, to time.Time
@@ -248,16 +262,19 @@ func period(b createBody, today time.Time) (time.Time, time.Time, error) {
 	if err := f.Err(); err != nil {
 		return from, to, err
 	}
+	if last := LastFinalDay(today); to.After(last) {
+		return from, to, httpx.E(http.StatusUnprocessableEntity, CodePeriodNotFinal, fmt.Sprintf(
+			"the period must end on %s or earlier: the last %d days can still change until the daily aggregation has read them for the last time",
+			last.Format(time.DateOnly), FinalDays))
+	}
 	switch {
-	case !to.Before(today):
-		f.Add("to", httpx.FieldInvalidValue)
 	case to.Before(from):
 		f.Add("from", httpx.FieldInvalidValue)
 	case int(to.Sub(from).Hours()/24)+1 > MaxPeriodDays:
 		f.Add("from", httpx.FieldInvalidValue)
 	}
 	if err := f.Err(); err != nil {
-		return from, to, httpx.Validation(fmt.Sprintf("the period must be closed utc days ending before today, at most %d days", MaxPeriodDays),
+		return from, to, httpx.Validation(fmt.Sprintf("the period must start on or before its end and hold at most %d days", MaxPeriodDays),
 			map[string]string{"from": httpx.FieldInvalidValue, "to": httpx.FieldInvalidValue})
 	}
 	return from, to, nil

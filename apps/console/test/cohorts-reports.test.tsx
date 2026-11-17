@@ -463,11 +463,14 @@ describe("the reports page (contract 20.3 and 20.4)", () => {
     );
     await waitFor(() => expect(host.textContent).toContain("3 views"));
 
-    // today is not a closed day
-    const today = new Date().toISOString().slice(0, 10);
-    await type(byLabel(host, "To") as HTMLInputElement, today);
-    await click(byRole(host, "button", "Generate and sign"));
-    expect(host.textContent).toContain("End before today (UTC)");
+    // the last days before today are not final yet
+    for (const back of [0, 1, 3]) {
+      const day = new Date(Date.now() - back * 86_400_000).toISOString().slice(0, 10);
+      await type(byLabel(host, "To") as HTMLInputElement, day);
+      await click(byRole(host, "button", "Generate and sign"));
+      expect(host.textContent).toContain("the last 4 days can still change");
+    }
+    expect(calls.some((x) => x.method === "POST")).toBe(false);
 
     await type(byLabel(host, "From") as HTMLInputElement, "2026-10-01");
     await type(byLabel(host, "To") as HTMLInputElement, "2026-10-31");
@@ -488,6 +491,24 @@ describe("the reports page (contract 20.3 and 20.4)", () => {
     await waitFor(() => expect(host.textContent).toContain("Link revoked"));
     expect(calls.find((x) => x.url.endsWith("/revoke"))?.url).toBe(
       `/api/tenants/${c.TENANT_ID}/reports/abcdefghijklmnopqrstuvwxyz/revoke`,
+    );
+  });
+
+  it("explains the server's refusal of a period that is not final", async () => {
+    routeFetch((method) =>
+      method === "POST"
+        ? { status: 422, body: c.errorBody("period_not_final") }
+        : { status: 200, body: { items: [] } },
+    );
+    const host = await renderRoutes(
+      projectRoutes(<ReportsPage />, "reports"),
+      `/projects/${c.TENANT_ID}/reports`,
+    );
+    await type(byLabel(host, "From") as HTMLInputElement, "2026-10-01");
+    await type(byLabel(host, "To") as HTMLInputElement, "2026-10-31");
+    await click(byRole(host, "button", "Generate and sign"));
+    await waitFor(() =>
+      expect(host.textContent).toContain("End the report at least four days before today (UTC)"),
     );
   });
 });
