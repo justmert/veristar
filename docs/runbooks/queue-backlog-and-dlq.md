@@ -9,7 +9,8 @@ wait in `API_METRICS` until the metrics writer has stored them in PostgreSQL. Bo
 work queues, file-backed at three replicas. Messages that can never be stored
 go to `WEB_DLQ` (kept 7 days) and `API_DLQ` (kept 30 days).
 
-Alerts that lead here: `QueueOldestMessageTooOld`, `ReplayerLagHigh`, `MetricsWriterLagHigh`,
+Alerts that lead here: `QueueOldestMessageTooOld`, `ReplayerLagHigh`, `WebEventsDelayed`,
+`WebEventsBacklogGrowing`, `WebEventsNearDiscard`, `MetricsWriterLagHigh`,
 `ReplayerNotConsuming`, `MetricsWriterNotConsuming`, `DLQNotEmpty` ([alerts.md](alerts.md)).
 Conventions are in [overview.md](overview.md).
 
@@ -17,7 +18,7 @@ Conventions are in [overview.md](overview.md).
 
 | Stream | Max age | What happens at the limit |
 |---|---|---|
-| `WEB_EVENTS` | 72 hours | the oldest accepted events are dropped by the stream; they never reach Umami |
+| `WEB_EVENTS` | 72 hours | the oldest accepted events are dropped by the stream, silently: they never reach Umami, and nothing counts them. `WebEventsNearDiscard` pages 24 hours before |
 | `API_METRICS` | 7 days | the same for metric batches |
 | `WEB_DLQ` | 7 days | dead-lettered events expire |
 | `API_DLQ` | 30 days | dead-lettered batches expire |

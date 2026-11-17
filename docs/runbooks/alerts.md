@@ -147,6 +147,34 @@ Action: check that the leader consumes and how fast (Queues dashboard). If
 Umami or the database is slow, fix that first; the consumers catch up by
 themselves.
 
+<a id="webeventsdelayed"></a><a id="webeventsneardiscard"></a><a id="webeventsbackloggrowing"></a>
+
+### WebEventsDelayed, WebEventsNearDiscard, WebEventsBacklogGrowing
+`WEB_EVENTS` keeps an accepted event at most 72 hours (stream max age, discard old). An event
+still waiting then is dropped by the stream without an error anywhere: it never reaches Umami and
+the gateway already answered 202. These alerts read `replayer_oldest_pending_age_seconds`, the
+publish time of the oldest message the replayer leader holds; in a backlog that is the oldest
+message of the stream, because the leader fetches in stream order.
+
+- `WebEventsDelayed` (ticket): the oldest held event is more than an hour old for 10 minutes.
+  The dashboards are an hour or more behind.
+- `WebEventsBacklogGrowing` (ticket): more than 10,000 events wait and the backlog grew over the
+  last hour for 30 minutes. The gateways accept faster than the replayer delivers, so it will not
+  drain on its own.
+- `WebEventsNearDiscard` (page): the oldest held event is more than 48 hours old. In less than
+  24 hours the stream starts dropping events.
+
+The backlog also takes disk: every NATS server keeps a replica of `WEB_EVENTS` in its file store
+(`edge_nats_max_file_store`, 20G per server), which it shares with every other stream. A full
+store refuses new messages on every stream, so ingestion then answers 503.
+
+Action: follow [queue-backlog-and-dlq.md](queue-backlog-and-dlq.md) ("Backlog"). If Umami or the
+database is down or slow, fix that first. If everything is healthy and the backlog still grows,
+traffic is above what the replayer delivers: the measured rates and the levers are in
+[../reference/availability.md](../reference/availability.md) ("Web event drain rate") and
+[capacity.md](capacity.md). Before 72 hours, write down the oldest timestamp; events older than
+that are lost and the tenants must be told.
+
 <a id="replayernotconsuming"></a><a id="metricswriternotconsuming"></a>
 
 ### ReplayerNotConsuming, MetricsWriterNotConsuming
