@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"fmt"
 	"net/http"
 	"slices"
 	"strings"
@@ -486,6 +487,61 @@ func TestCollector(t *testing.T) {
 		if code, _ := s.postMetrics(t, tn.Token, emptyMetrics(), ""); code != http.StatusOK {
 			t.Errorf("after bombs: %d", code)
 		}
+	})
+
+	t.Run("valid export of 3 MiB is queued", func(t *testing.T) {
+		// a batch of thousands of histogram points stays under the 4 MiB
+		// request limit and is still over 3 MiB after filtering, three
+		// times the nats server's default message limit
+		tn := s.newTenant(t)
+		md := pmetric.NewMetrics()
+		rm := md.ResourceMetrics().AppendEmpty()
+		rm.Resource().Attributes().PutStr("service.name", "big")
+		m := rm.ScopeMetrics().AppendEmpty().Metrics().AppendEmpty()
+		m.SetName("http.server.request.duration")
+		m.SetUnit("s")
+		h := m.SetEmptyHistogram()
+		h.SetAggregationTemporality(pmetric.AggregationTemporalityDelta)
+		now := time.Now()
+		counts := make([]uint64, 15)
+		counts[4] = 1
+		var body []byte
+		n := 0
+		for len(body) < 3<<20+(1<<19) {
+			for range 1000 {
+				dp := h.DataPoints().AppendEmpty()
+				dp.SetStartTimestamp(pcommon.NewTimestampFromTime(now.Add(-time.Minute)))
+				dp.SetTimestamp(pcommon.NewTimestampFromTime(now))
+				dp.ExplicitBounds().FromRaw(canonical)
+				dp.BucketCounts().FromRaw(counts)
+				dp.SetCount(1)
+				dp.SetSum(0.06)
+				dp.Attributes().PutStr("http.request.method", "GET")
+				dp.Attributes().PutStr("http.route", fmt.Sprintf("/accounts/{account}/operations/{id}/page-%06d", n))
+				dp.Attributes().PutInt("http.response.status_code", 200)
+				n++
+			}
+			body, _ = (&pmetric.ProtoMarshaler{}).MarshalMetrics(md)
+		}
+		if len(body) >= 4<<20 {
+			t.Fatalf("request of %d bytes is over the receiver's limit", len(body))
+		}
+		if code, msg := s.postMetrics(t, tn.Token, body, ""); code != http.StatusOK {
+			t.Fatalf("%d bytes, %d points: %d %s", len(body), n, code, msg)
+		}
+		s.waitPoints(t, tn.ID, "http.server.request.duration", 30*time.Second, func(p []point) bool { return len(p) == n })
+		var queued int
+		s.mu.Lock()
+		for _, r := range s.seen {
+			if r.subject == natsx.Subject(natsx.SubjectAPIMetrics, tn.ID) {
+				queued = max(queued, len(r.data))
+			}
+		}
+		s.mu.Unlock()
+		if queued < 3<<20 {
+			t.Errorf("largest queued message %d bytes, the case needs over 3 MiB", queued)
+		}
+		t.Logf("request %d bytes, %d points, queued message %d bytes", len(body), n, queued)
 	})
 
 	t.Run("rate limit 429 then sdk retry succeeds", func(t *testing.T) {
