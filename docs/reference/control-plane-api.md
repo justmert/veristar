@@ -1789,7 +1789,8 @@ API at add time, as for members (4.2.5); the row is bound to the id.
 - **409 `last_operator_admin`**: the change would leave no active operator admin. The constraint
   trigger `operators_last_admin` refuses such a change whatever statement makes it.
 - **409 `bootstrap_operator`**: a suspension, removal or demotion of a bootstrap row; the next start
-  would undo it. Take the identity out of the settings first.
+  would undo it. Take the identity out of the settings first. A bootstrap row gets this code even
+  when it is also the last operator admin.
 - **409 `operator_exists`**: the identity is on the roster already. **409 `invalid_transition`**: a
   suspension of a suspended row, a resumption of an active one, or a role the row holds already.
 - **Effects.** A suspension and a removal turn the flag off at once (5.1), which also revokes the
