@@ -306,6 +306,12 @@ here, before they take effect, as the processing terms require
 - Deploy the release, then apply OpenTofu for each environment. The plan
   destroys the Traffic Manager profile `web`, its three external endpoints
   (`web/0` to `web/2`) and the Cloudflare CNAME `web`; nothing else changes.
+  The apply also rewrites `hosts.json` without the `web` hostname that the
+  `0.3.0` templates read, so apply only after the release has soaked, and
+  keep a copy of the earlier `hosts.json` until then. A rollback to `0.3.0`
+  after the apply first applies OpenTofu from a `v0.3.0` checkout
+  ([docs/deploy/upgrade.md](docs/deploy/upgrade.md), "Rollback across an
+  OpenTofu change").
 - Remove `WEB_ORIGIN` from the control plane environment and `PROBER_WEB_URL`
   from the prober environment if you set them by hand; the templates no longer
   write them.

@@ -101,7 +101,7 @@ func TestRebootEdgePlayLeavesConvergedNodesToCore(t *testing.T) {
 // the core play reboots converged nodes, which also carry in. and otlp.
 // through the same caddy; the gateway must be ready before the undrain.
 func TestRebootCorePlayWaitsForTheGatewayOnConvergedNodes(t *testing.T) {
-	core := playFor(t, loadPlays(t, "reboot.yml"), "core")
+	core := playFor(t, loadPlays(t, "reboot.yml"), "reboot_core_order")
 	reboot := index(core.Tasks, func(tk task) bool { return tk.Reboot != nil })
 	switchover := index(core.Tasks, func(tk task) bool { return tk.Include == "tasks/switchover.yml" })
 	require.Less(t, switchover, reboot, "the leader is handed over before the reboot")

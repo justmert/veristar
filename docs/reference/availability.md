@@ -63,7 +63,7 @@ member in every zone.
 | Patroni leader lost | none: ingestion does not touch PostgreSQL | writes and reads that need the leader stop until promotion: leader key TTL 30 s, plus up to one 10 s loop: **at most about 40 s** | configured (`core_patroni_dcs`) |
 | One availability zone lost | as one node lost; NATS, etcd and Patroni keep quorum with the other two zones | as one node lost | configured |
 | Database or Umami down on every node | none: the queue holds web events for 72 h (`WEB_EVENTS` max age) | down for the whole outage | configured |
-| Rolling deploy | none: `deploy.yml` drains each node and waits 120 s before touching its edge services and 150 s before its core services | one switchover per node with a changed postgres image, a few seconds each | configured |
+| Rolling deploy | none: `deploy.yml` drains each node and waits 120 s before touching its edge services and 150 s before its core services | one switchover per run when the postgres image changes, a few seconds: the leader's node goes last | configured |
 | etcd quorum lost (two nodes down) | ingestion continues on the remaining node only while its NATS server still has a JetStream quorum, which two lost nodes take away: ingest answers 503 | `failsafe_mode: true` keeps a leader primary only while it reaches every member, which two lost nodes take away | configured |
 | Full NATS restart | ingest answers 503 until JetStream has quorum again; visitors seen earlier that day are counted again | none | configured |
 
