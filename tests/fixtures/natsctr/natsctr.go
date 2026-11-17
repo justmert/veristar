@@ -7,6 +7,7 @@ package natsctr
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -274,6 +275,7 @@ func StartCluster(t testing.TB, opts ...Option) *Cluster {
 	for _, s := range c.Servers {
 		WaitHealthy(t, s.MonitorURL, "", 2*time.Minute)
 	}
+	c.waitPeers(t, 2*time.Minute)
 	return c
 }
 
@@ -297,6 +299,73 @@ func (c *Cluster) Restart(t testing.TB) {
 	for _, s := range c.Servers {
 		WaitHealthy(t, s.MonitorURL, "", 2*time.Minute)
 	}
+	c.waitPeers(t, 2*time.Minute)
+}
+
+// waitPeers polls /jsz until the meta leader reports every other node as a
+// current, online peer. /healthz answers 200 as soon as a node knows a meta
+// leader, but the leader places a stream or bucket with three replicas only
+// on peers it has heard from, so a test that creates one right after
+// /healthz could get "no suitable peers for placement, peer offline".
+func (c *Cluster) waitPeers(t testing.TB, timeout time.Duration) {
+	t.Helper()
+	type jsz struct {
+		Meta *struct {
+			Leader   string `json:"leader"`
+			Size     int    `json:"cluster_size"`
+			Replicas []struct {
+				Name    string `json:"name"`
+				Current bool   `json:"current"`
+				Offline bool   `json:"offline"`
+			} `json:"replicas"`
+		} `json:"meta_cluster"`
+	}
+	ready := func(s *Server) (bool, string) {
+		req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, s.MonitorURL+"/jsz?leader-only=true", nil)
+		if err != nil {
+			t.Fatalf("natsctr: %v", err)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return false, err.Error()
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusOK {
+			// leader-only answers 400 on a node that is not the leader
+			return false, resp.Status
+		}
+		var j jsz
+		if err := json.NewDecoder(resp.Body).Decode(&j); err != nil {
+			return false, err.Error()
+		}
+		if j.Meta == nil || j.Meta.Leader == "" {
+			return false, "no meta leader"
+		}
+		if j.Meta.Size != len(c.Servers) || len(j.Meta.Replicas) != len(c.Servers)-1 {
+			return false, fmt.Sprintf("leader %s sees %d peers of %d", j.Meta.Leader, len(j.Meta.Replicas), len(c.Servers)-1)
+		}
+		for _, r := range j.Meta.Replicas {
+			if r.Name == "" || !r.Current || r.Offline {
+				return false, fmt.Sprintf("leader %s: peer %q current %t offline %t", j.Meta.Leader, r.Name, r.Current, r.Offline)
+			}
+		}
+		return true, ""
+	}
+	deadline := time.Now().Add(timeout)
+	var last string
+	for time.Now().Before(deadline) {
+		for _, s := range c.Servers {
+			ok, why := ready(s)
+			if ok {
+				return
+			}
+			if why != "" && !strings.HasPrefix(why, "400") {
+				last = why
+			}
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+	t.Fatalf("natsctr: cluster peers not all online after %s: %s", timeout, last)
 }
 
 // WaitHealthy polls /healthz until it answers 200.
