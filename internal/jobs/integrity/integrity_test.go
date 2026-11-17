@@ -55,10 +55,13 @@ func TestGrader(t *testing.T) {
 
 	tenant, clean, hosting, removedTenant := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
 	removedSite, framedSite := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
+	probeTenant, probeSite := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
 	c, err := pg.Superuser(ctx, "platform")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = c.Close(context.Background()) })
 	_, err = c.Exec(ctx, `insert into cp.tenants (id, slug, name, status) values ($1, 'p-int', 'Int', 'active'), ($2, 'p-gone', 'Gone', 'removed')`, tenant, removedTenant)
+	require.NoError(t, err)
+	_, err = c.Exec(ctx, `insert into cp.tenants (id, slug, name, status, is_internal) values ($1, 'p-probe', 'Probe', 'active', true)`, probeTenant)
 	require.NoError(t, err)
 
 	now := time.Date(2031, 6, 20, 15, 0, 0, 0, time.UTC)
@@ -112,6 +115,9 @@ func TestGrader(t *testing.T) {
 	networks(hosting, tenant, today.AddDate(0, 0, -10), 2)
 	// a day with events but no web aggregate yet waits
 	outcome(clean, tenant, today, "accepted", 300)
+	// the platform's internal probe project is never graded
+	web(probeSite, probeTenant, y, 500, 500)
+	outcome(probeSite, probeTenant, y, "accepted", 500)
 	// a removed tenant's site is never written again
 	web(removedSite, removedTenant, y, 500, 500)
 	outcome(removedSite, removedTenant, y, "accepted", 500)
@@ -131,7 +137,7 @@ func TestGrader(t *testing.T) {
 	signal(framedSite, tenant, y, rules.SignalNeverVisible, 50)
 
 	sites := fakeSites{}
-	for _, s := range []struct{ id, tn uuid.UUID }{{clean, tenant}, {hosting, tenant}, {removedSite, removedTenant}, {framedSite, tenant}} {
+	for _, s := range []struct{ id, tn uuid.UUID }{{clean, tenant}, {hosting, tenant}, {removedSite, removedTenant}, {framedSite, tenant}, {probeSite, probeTenant}} {
 		sites[s.id.String()] = registry.Site{ID: s.id.String(), TenantID: s.tn.String(), Status: registry.StatusActive,
 			Origins: []string{"https://x.example"}, QuarantineWebsiteID: uuid.NewString()}
 	}
@@ -140,7 +146,7 @@ func TestGrader(t *testing.T) {
 	require.NoError(t, err)
 	res, err := g.Run(ctx, leader.Tx)
 	require.NoError(t, err)
-	require.Equal(t, 4, res.Sites)
+	require.Equal(t, 4, res.Sites, "the internal probe's site is left out")
 	require.Equal(t, 1, res.Waiting, "the clean site's today has events but no aggregate")
 	require.Equal(t, int64(2), res.Pruned)
 
@@ -164,6 +170,9 @@ func TestGrader(t *testing.T) {
 		}))
 		return r, found
 	}
+
+	_, ok := read(probeSite, y)
+	require.False(t, ok, "an internal project gets no grade")
 
 	cleanDay, ok := read(clean, y)
 	require.True(t, ok)
