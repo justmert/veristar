@@ -113,11 +113,11 @@ func TestWalletChallengeShape(t *testing.T) {
 	// the cookie is http-only, secure, strict and scoped to /api
 	var ck *http.Cookie
 	for _, c := range b.jar.Cookies(mustURL(t, e.origin+"/api/auth/stellar/verify")) {
-		if c.Name == "sa_stellar" {
+		if c.Name == "__Host-sa_stellar" {
 			ck = c
 		}
 	}
-	require.NotNil(t, ck, "sa_stellar cookie")
+	require.NotNil(t, ck, "__Host-sa_stellar cookie")
 
 	// a muxed address or a seed is not an account id
 	for _, bad := range []string{"", "nope", kp.Seed(),
@@ -150,10 +150,10 @@ func TestWalletSignIn(t *testing.T) {
 	})
 	require.Equal(t, http.StatusOK, res.StatusCode, string(res.body))
 	require.Equal(t, "/", decode[auth.VerifyResponse](t, res).ReturnTo)
-	sess := setCookie(t, res, "sa_session")
+	sess := setCookie(t, res, "__Host-sa_session")
 	require.NotNil(t, sess)
 	// the challenge cookie is cleared
-	cleared := setCookie(t, res, "sa_stellar")
+	cleared := setCookie(t, res, "__Host-sa_stellar")
 	require.NotNil(t, cleared)
 	require.Negative(t, cleared.MaxAge)
 
@@ -201,7 +201,7 @@ func TestWalletWrongNetwork(t *testing.T) {
 	})
 	require.Equal(t, http.StatusForbidden, res.StatusCode)
 	require.Equal(t, "challenge_invalid", apiCode(t, res))
-	require.Nil(t, setCookie(t, res, "sa_session"))
+	require.Nil(t, setCookie(t, res, "__Host-sa_session"))
 	require.Equal(t, http.StatusUnauthorized, b.get(e.origin+"/api/me").StatusCode)
 }
 
@@ -251,7 +251,7 @@ func TestWalletReplay(t *testing.T) {
 	c := b.challenge("/api/auth/stellar/challenge", kp)
 	var held *http.Cookie
 	for _, ck := range b.jar.Cookies(mustURL(t, e.origin+"/api/auth/stellar/verify")) {
-		if ck.Name == "sa_stellar" {
+		if ck.Name == "__Host-sa_stellar" {
 			held = ck
 		}
 	}
@@ -268,11 +268,11 @@ func TestWalletReplay(t *testing.T) {
 	// a copy of the cookie and the signed challenge, replayed from
 	// elsewhere, is refused by the database record of used challenges
 	thief := e.browser(t)
-	thief.jar.SetCookies(mustURL(t, e.origin+"/api"), []*http.Cookie{{Name: "sa_stellar", Value: held.Value, Path: "/api"}})
+	thief.jar.SetCookies(mustURL(t, e.origin+"/api"), []*http.Cookie{{Name: "__Host-sa_stellar", Value: held.Value, Path: "/"}})
 	res = thief.postJSON("/api/auth/stellar/verify", map[string]string{"transaction": signed})
 	require.Equal(t, http.StatusForbidden, res.StatusCode)
 	require.Equal(t, "challenge_used", apiCode(t, res))
-	require.Nil(t, setCookie(t, res, "sa_session"))
+	require.Nil(t, setCookie(t, res, "__Host-sa_session"))
 }
 
 // a challenge issued by another console that shares the key (and so the
@@ -286,13 +286,13 @@ func TestWalletOtherOrigin(t *testing.T) {
 	c := ob.challenge("/api/auth/stellar/challenge", kp)
 	var held *http.Cookie
 	for _, ck := range ob.jar.Cookies(mustURL(t, other.origin+"/api/auth/stellar/verify")) {
-		if ck.Name == "sa_stellar" {
+		if ck.Name == "__Host-sa_stellar" {
 			held = ck
 		}
 	}
 	require.NotNil(t, held)
 	b := e.browser(t)
-	b.jar.SetCookies(mustURL(t, e.origin+"/api"), []*http.Cookie{{Name: "sa_stellar", Value: held.Value, Path: "/api"}})
+	b.jar.SetCookies(mustURL(t, e.origin+"/api"), []*http.Cookie{{Name: "__Host-sa_stellar", Value: held.Value, Path: "/"}})
 	res := b.postJSON("/api/auth/stellar/verify", map[string]string{
 		"transaction": sign(t, c.Transaction, network.PublicNetworkPassphrase, kp),
 	})
@@ -423,7 +423,7 @@ func TestLinkGitHubToWallet(t *testing.T) {
 
 	var held string
 	for _, ck := range b.jar.Cookies(mustURL(t, e.origin+"/")) {
-		if ck.Name == "sa_session" {
+		if ck.Name == "__Host-sa_session" {
 			held = ck.Value
 		}
 	}
@@ -438,7 +438,7 @@ func TestLinkGitHubToWallet(t *testing.T) {
 	require.Equal(t, "/account?linked=github", cb.Header.Get("Location"))
 	// linking keeps the session; it does not sign in anew, so the token is
 	// not renewed (scs may resend the same cookie for the idle timeout)
-	if sc := setCookie(t, cb, "sa_session"); sc != nil {
+	if sc := setCookie(t, cb, "__Host-sa_session"); sc != nil {
 		require.Equal(t, held, sc.Value)
 	}
 

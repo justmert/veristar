@@ -59,7 +59,7 @@ type Config struct {
 	ClientSecret config.Secret
 	// RedirectURL is GITHUB_REDIRECT_URL.
 	RedirectURL string
-	// StateKey seals the sa_oauth cookie.
+	// StateKey seals the __Host-sa_oauth cookie.
 	StateKey []byte
 	// ConsoleOrigin is CONSOLE_ORIGIN. its host is the web_auth_domain and
 	// home domain of wallet challenges, which binds a signed challenge to
@@ -204,7 +204,7 @@ func cleanReturnTo(s string) string {
 }
 
 // start answers 302 to github's authorize page with fresh state and a pkce
-// challenge, and keeps both secrets in the sealed sa_oauth cookie.
+// challenge, and keeps both secrets in the sealed __Host-sa_oauth cookie.
 func (h *Handler) start(w http.ResponseWriter, r *http.Request) error {
 	// every start sets a cookie and sends a browser to github; the buckets
 	// keep one client's flood from locking others out (per client) and a

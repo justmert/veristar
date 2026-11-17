@@ -229,7 +229,7 @@ func TestDeleteAccount(t *testing.T) {
 		r := bob.Call(t, http.MethodDelete, "/api/me", nil)
 		require.Equal(t, http.StatusNoContent, r.Status, string(r.Body))
 		cookie := strings.Join(r.Header.Values("Set-Cookie"), "\n")
-		require.Contains(t, cookie, "sa_session=")
+		require.Contains(t, cookie, "__Host-sa_session=")
 		require.Contains(t, cookie, "Max-Age=0", "the cookie must be expired")
 
 		// the account row keeps its id and nothing that names the person

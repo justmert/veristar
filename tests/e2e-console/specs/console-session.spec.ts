@@ -28,22 +28,22 @@ test("sign-in sends pkce s256, state and no scope; cookies carry the documented 
   await page.getByRole("link", { name: "Continue with GitHub" }).click();
   await page.waitForURL(`${OAUTH}/login/oauth/authorize?**`);
 
-  // while the browser is at github, only the sealed oauth cookie exists, and
-  // only for the callback path
+  // while the browser is at github, only the sealed oauth cookie exists. its
+  // __Host- name makes the browser keep it host-only with path /
   const during = await context.cookies(`${APP}/api/auth/github/callback`);
-  const oauth = during.find((c) => c.name === "sa_oauth");
-  expect(oauth, "sa_oauth cookie during sign-in").toBeTruthy();
+  const oauth = during.find((c) => c.name === "__Host-sa_oauth");
+  expect(oauth, "__Host-sa_oauth cookie during sign-in").toBeTruthy();
   expect(oauth).toMatchObject({
     httpOnly: true,
     secure: true,
     sameSite: "Lax",
-    path: "/api/auth/github/callback",
+    path: "/",
     domain: new URL(APP).hostname,
   });
   const ttl = (oauth?.expires ?? 0) - Date.now() / 1000;
   expect(ttl).toBeGreaterThan(500);
   expect(ttl).toBeLessThanOrEqual(600);
-  expect((await context.cookies(APP)).find((c) => c.name === "sa_session")).toBeUndefined();
+  expect((await context.cookies(APP)).find((c) => c.name === "__Host-sa_session")).toBeUndefined();
 
   const authorize = new URL(page.url());
   const q = authorize.searchParams;
@@ -54,7 +54,7 @@ test("sign-in sends pkce s256, state and no scope; cookies carry the documented 
   expect(q.get("allow_signup")).toBe("true");
   // 32 random bytes, base64url
   expect(q.get("state")).toMatch(/^[A-Za-z0-9_-]{43}$/);
-  expect(page.url()).not.toContain("sa_oauth");
+  expect(page.url()).not.toContain("__Host-sa_oauth");
 
   await page.fill("#fixture-user-id", String(user.id));
   await page.fill("#fixture-login", user.login);
@@ -63,10 +63,10 @@ test("sign-in sends pkce s256, state and no scope; cookies carry the documented 
 
   const cookies = await context.cookies(APP);
   expect(
-    cookies.find((c) => c.name === "sa_oauth"),
-    "sa_oauth deleted at the callback",
+    cookies.find((c) => c.name === "__Host-sa_oauth"),
+    "__Host-sa_oauth deleted at the callback",
   ).toBeUndefined();
-  const session = cookies.find((c) => c.name === "sa_session");
+  const session = cookies.find((c) => c.name === "__Host-sa_session");
   expect(session).toMatchObject({
     httpOnly: true,
     secure: true,
@@ -188,11 +188,11 @@ test("state-changing requests need X-Requested-With and the console origin", asy
 
 test("sign-out ends the session for the old cookie value", async ({ page, context, browser }) => {
   await signIn(page, newUser("out"));
-  const value = (await context.cookies(APP)).find((c) => c.name === "sa_session")?.value ?? "";
+  const value = (await context.cookies(APP)).find((c) => c.name === "__Host-sa_session")?.value ?? "";
   expect(value).not.toBe("");
   const r = await api(context, "POST", "/api/auth/logout");
   expect(r.status).toBe(204);
-  expect((await context.cookies(APP)).find((c) => c.name === "sa_session")).toBeUndefined();
+  expect((await context.cookies(APP)).find((c) => c.name === "__Host-sa_session")).toBeUndefined();
   expect((await api(context, "GET", "/api/me")).status).toBe(401);
 
   // replaying the old value in a fresh browser does not bring it back
@@ -200,10 +200,10 @@ test("sign-out ends the session for the old cookie value", async ({ page, contex
   try {
     await other.addCookies([
       {
-        name: "sa_session",
+        name: "__Host-sa_session",
         value,
-        domain: new URL(APP).hostname,
-        path: "/",
+        // a url, not a domain: a __Host- cookie must be host-only
+        url: `${APP}/`,
         secure: true,
         httpOnly: true,
         sameSite: "Lax",
@@ -230,7 +230,7 @@ test("callback refuses a foreign state and a cancelled consent", async ({ page }
   await page.click("#fixture-cancel");
   await page.waitForURL(`${APP}/sign-in?error=access_denied`);
   await expect(page.getByRole("alert")).toBeVisible();
-  expect((await page.context().cookies(APP)).find((c) => c.name === "sa_session")).toBeUndefined();
+  expect((await page.context().cookies(APP)).find((c) => c.name === "__Host-sa_session")).toBeUndefined();
 });
 
 test("a code replayed at the callback does not sign in a second browser", async ({
@@ -238,7 +238,7 @@ test("a code replayed at the callback does not sign in a second browser", async 
   browser,
 }) => {
   // capture the callback url of a real sign-in, then replay it in another
-  // browser: that one has no sa_oauth cookie, and the code is single use
+  // browser: that one has no __Host-sa_oauth cookie, and the code is single use
   let callback = "";
   page.on("request", (r) => {
     if (r.url().startsWith(`${APP}/api/auth/github/callback?`)) callback = r.url();
@@ -250,7 +250,7 @@ test("a code replayed at the callback does not sign in a second browser", async 
     const p = await other.newPage();
     await p.goto(callback);
     await p.waitForURL(`${APP}/sign-in?error=state_mismatch`);
-    expect((await other.cookies(APP)).find((c) => c.name === "sa_session")).toBeUndefined();
+    expect((await other.cookies(APP)).find((c) => c.name === "__Host-sa_session")).toBeUndefined();
   } finally {
     await other.close();
   }
