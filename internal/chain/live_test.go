@@ -7,6 +7,7 @@
 package chain
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -92,6 +93,17 @@ func TestLiveSources(t *testing.T) {
 		require.NotEmpty(t, days[0].Initiators)
 		require.LessOrEqual(t, int64(len(days[0].Initiators)), days[0].Operations)
 	}
+	// its function calls come from the same answers: the server records
+	// diagnostic events when the day's state is read
+	t.Logf("contract %s on %s: functions %s, %d rows", quiet, yesterday.Format(time.DateOnly), days[0].FunctionsState, len(days[0].Functions))
+	for _, f := range days[0].Functions {
+		failed := "-"
+		if f.Failed != nil {
+			failed = fmt.Sprint(*f.Failed)
+		}
+		t.Logf("  %s by %s: %d successful, %s failed, %d accounts", f.Function, f.Caller, f.Successful, failed, f.Accounts)
+	}
+	require.NotEmpty(t, days[0].FunctionsState)
 
 	days, err = reader.AccountDays(ctx, liveIssuer, yesterday, yesterday, root)
 	t.Logf("account %s on %s: %+v err=%v", liveIssuer, yesterday.Format(time.DateOnly), days, err)
