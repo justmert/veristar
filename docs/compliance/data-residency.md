@@ -27,7 +27,7 @@ so every service has one member in each zone.
 | Health-checked DNS failover | Azure Traffic Manager, a global DNS service. Sees DNS queries for the service's hostnames and checks the nodes' health endpoint; never analytics data | Microsoft Azure |
 | Authoritative DNS and domain registration | Cloudflare's DNS network, DNS only (no proxy: traffic goes straight to Azure). Sees DNS queries for the service's hostnames; never analytics data | Cloudflare |
 | External prober and public status page | a separate Azure VM in East US (United States), outside the production deployment and its region ([../deploy/probe.md](../deploy/probe.md)). Holds no analytics data: it probes the public endpoints with its own synthetic traffic for the internal probe tenant and keeps the check results and the daily SLO result files | Microsoft Azure |
-| Console sign-in | GitHub OAuth | GitHub, Inc. (United States). Receives only the sign-in of console users; never visitor or API client data |
+| Console sign-in | GitHub OAuth for a GitHub sign-in; a wallet or passkey sign-in is verified by the control plane in Azure Denmark East | GitHub, Inc. (United States) for a GitHub sign-in only. Receives only the sign-in of console users; never visitor or API client data |
 
 ## What leaves the EU
 
@@ -39,9 +39,12 @@ so every service has one member in each zone.
   visitor's or tenant's data reaches it. Its status page at
   `status.veristar.app` shows check results only; Cloudflare serves its DNS
   record without a proxy.
-- **Console sign-in.** Console users authenticate with GitHub. GitHub sees that
-  a user signs in to the service. The control plane stores the numeric GitHub
-  id and login only. This concerns tenant staff, not end users.
+- **Console sign-in.** Console users sign in with GitHub, a Stellar wallet or a
+  passkey. For a GitHub sign-in, GitHub sees that a user signs in to the
+  service, and the control plane stores the numeric GitHub id and login. A
+  wallet or passkey sign-in passes through no third party: the wallet or the
+  passkey answers in the person's own browser and the control plane checks the
+  signature. This concerns tenant staff and operators, not end users.
 - **Operator access.** Operators read aggregates through the console and the
   machine API. Aggregates are counts per site and day. An operator outside
   the EU reading them transfers personal data only if the aggregates are

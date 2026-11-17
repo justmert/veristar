@@ -44,7 +44,8 @@ Measured gateway capacity is in
 
 ## For projects (tenants)
 
-1. Sign in at `https://app.<BASE_DOMAIN>` with GitHub and enroll your project.
+1. Sign in at `https://app.<BASE_DOMAIN>` with GitHub, a Stellar wallet or a passkey, and enroll
+   your project.
 2. Add a site, copy its snippet, and put it in your pages: [docs/onboarding](docs/onboarding).
 3. For API metrics, create an OTLP token and add a second exporter to your application.
 4. Questions and problems: [docs/support.md](docs/support.md). The service is free, and
@@ -55,7 +56,8 @@ Privacy and the right to erasure: [docs/compliance](docs/compliance).
 ## For SCF operators
 
 [docs/operators](docs/operators): review and enrollment modes, removal, reading the global
-views, and API keys for machine consumers.
+views, SCF cohorts and percentiles, threshold rules, the signed usage reports projects share, the
+operator roster with its passkey step-up, and API keys for machine consumers.
 
 ## For whoever runs the service
 
