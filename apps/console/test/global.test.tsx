@@ -340,6 +340,34 @@ describe("comparison", () => {
     expect(host.textContent).toContain("from traces");
   });
 
+  it("keeps the compared projects and the range when an operator adds a project", async () => {
+    const calls = routeFetch((_m, url) => {
+      if (url.startsWith("/api/operator/web/compare"))
+        return { status: 200, body: f.webCompareBody };
+      if (url.startsWith("/api/operator/api/compare"))
+        return { status: 200, body: f.apiCompareBody };
+      if (url.startsWith("/api/operator/cohorts")) return { status: 200, body: f.cohortListBody };
+      if (url.startsWith("/api/operator/web/projects"))
+        return { status: 200, body: f.webProjectsBody };
+      return { status: 503, body: c.errorBody("unavailable") };
+    });
+    const host = await renderRoutes(
+      operatorRoutes,
+      `/operator/compare?tenants=${c.TENANT_ID},${f.TENANT_B}`,
+    );
+    await waitFor(() => expect(host.textContent).toContain("payments-api"));
+    const add = [...host.querySelectorAll("a")].find((a) => a.textContent === "Add a project");
+    if (!add) throw new Error("no add link");
+    await click(add);
+    await waitFor(() => expect(host.textContent).toContain("2 of 5 selected"));
+    const selected = host.querySelector("[aria-label='Selected projects']")?.textContent ?? "";
+    expect(selected).toContain("Stellar DEX");
+    const list = calls.find((x) => x.url.startsWith("/api/operator/web/projects"))?.url ?? "";
+    const range = f.webCompareBody as { from: string; to: string };
+    expect(list).toContain(`from=${range.from}`);
+    expect(list).toContain(`to=${range.to}`);
+  });
+
   it("asks for a selection when no project is named", async () => {
     const calls = stubFetch([]);
     const host = await renderRoutes(operatorRoutes, "/operator/compare");

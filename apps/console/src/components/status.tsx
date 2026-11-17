@@ -78,6 +78,11 @@ const STATUS: Record<string, { tone: Tone; text: string }> = {
   removed: { tone: "info", text: "Deleted" },
 };
 
+// the status in words, for places that show it without a pill
+export function statusText(status: string): string {
+  return STATUS[status]?.text ?? status;
+}
+
 export function statusTone(status: string): Tone {
   return STATUS[status]?.tone ?? "info";
 }

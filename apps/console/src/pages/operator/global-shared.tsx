@@ -7,7 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { cn } from "@veristar/brand/cn";
 import { ArrowDown, ArrowUp, ArrowUpDown, Columns2, Search, X } from "lucide-react";
 import { type FormEvent, type ReactNode, useEffect, useId, useState } from "react";
-import { Link } from "react-router";
+import { Link, useLocation } from "react-router";
 import { type Cohort, type CohortValue, cohortListQuery, type Kpi } from "@/api/cohorts";
 import { type TenantStatus, tenantStatus } from "@/api/schemas";
 import { SERIES_BG } from "@/components/compare-charts";
@@ -664,8 +664,24 @@ export function orMissing(v: string | null): ReactNode {
 
 export type Selection = { id: string; name: string }[];
 
+// the comparison page hands its projects over in the router state when an
+// operator goes to add one, so the table starts with them selected
+export type CompareHandover = { compare: Selection };
+
+function handedOver(state: unknown): Selection {
+  const c = (state as Partial<CompareHandover> | null)?.compare;
+  if (!Array.isArray(c)) return [];
+  return c
+    .filter(
+      (s): s is { id: string; name: string } =>
+        typeof s?.id === "string" && typeof s?.name === "string",
+    )
+    .slice(0, MAX_COMPARE);
+}
+
 export function useSelection() {
-  const [sel, setSel] = useState<Selection>([]);
+  const location = useLocation();
+  const [sel, setSel] = useState<Selection>(() => handedOver(location.state));
   const has = (id: string) => sel.some((s) => s.id === id);
   const slot = (id: string) => sel.findIndex((s) => s.id === id);
   const toggle = (id: string, name: string) =>

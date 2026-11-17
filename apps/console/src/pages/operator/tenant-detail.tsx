@@ -254,7 +254,7 @@ export function TenantDetail({ detail }: { detail: OperatorTenantDetail }) {
                     {m.display_name}
                   </span>
                   <span className="text-fg-3">
-                    {m.role}, since {formatDate(m.created_at)}
+                    {m.role === "owner" ? "Owner" : "Member"}, since {formatDate(m.created_at)}
                   </span>
                 </li>
               ))}
