@@ -77,10 +77,12 @@ test("the admin adds an operator who registers a first passkey", async ({ browse
   secondUser = newUser("sa-op2");
   await registerGitHub(secondUser);
   const p = admin.page;
-  await p.getByLabel("GitHub login").fill(secondUser.login);
-  await p.getByLabel("Role").selectOption("operator");
-  await p.getByLabel("Reason").fill("joins the review team");
-  await p.getByRole("button", { name: "Add operator" }).click();
+  // the closed action dialog has a reason field too, so the form is scoped
+  const add = p.locator("form").filter({ has: p.getByRole("button", { name: "Add operator" }) });
+  await add.getByLabel("GitHub login").fill(secondUser.login);
+  await add.getByLabel("Role").selectOption("operator");
+  await add.getByLabel("Reason").fill("joins the review team");
+  await add.getByRole("button", { name: "Add operator" }).click();
   const row = p.locator("tr", { hasText: secondUser.login });
   await expect(row).toContainText("Operator");
   await expect(row).toContainText("First passkey before");
@@ -113,8 +115,9 @@ test("a suspension ends the operator's access at once", async () => {
   await p.reload();
   const row = p.locator("tr", { hasText: secondUser.login });
   await row.getByRole("button", { name: "Suspend" }).click();
-  await p.getByLabel("Reason").fill("left the review team");
-  await p.getByRole("dialog").getByRole("button", { name: "Suspend" }).click();
+  const dialog = p.getByRole("dialog");
+  await dialog.getByLabel("Reason").fill("left the review team");
+  await dialog.getByRole("button", { name: "Suspend" }).click();
   await expect(row).toContainText("Suspended");
   await expect(row).toContainText("left the review team");
   // the suspended operator's session ended with the suspension
