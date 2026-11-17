@@ -45,6 +45,17 @@ read whole, it shows the reason instead of a number, never zero. The
 [sources page](../reference/onchain-sources.md#weekly-active-accounts) explains how each kind of id
 is read.
 
+### Calls per contract function
+
+Each verified contract on **Accounts and contracts** shows **Calls per function**: per function,
+the calls made by accounts (operations that invoke the contract) and by other contracts, the
+failed calls of contracts, and the most distinct accounts behind them on one day. **Daily calls**
+shows each function per UTC day, and **Export CSV** downloads those rows. **What SCF sees** shows
+the same totals that reviewers see. Calls are found in the transactions where your contract emits
+an event, and only verified contracts count. The
+[sources page](../reference/onchain-sources.md#calls-per-contract-function) explains how calls and
+failures are read.
+
 ## Add an account or a contract
 
 The ids you gave at enrollment are already listed. To add another:
