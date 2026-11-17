@@ -180,9 +180,10 @@ func TestMachineOnchainFunctions(t *testing.T) {
 	days := list[MachineOnchainDay](t, e, global.Key, "/onchain/daily"+q, 50)
 	states := map[string]string{}
 	for _, d := range days {
-		if d.Strkey == auroraFnContract {
+		switch d.Strkey {
+		case auroraFnContract:
 			states[d.Day] = *d.Functions
-		} else if d.Strkey == auroraAccount {
+		case auroraAccount:
 			require.Nil(t, d.Functions)
 		}
 	}
