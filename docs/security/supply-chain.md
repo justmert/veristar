@@ -405,7 +405,7 @@ found, fails the gate.
 | Section | What it contains | How it is derived | Fails on |
 |---|---|---|---|
 | shipped | Go modules linked into a platform binary; npm packages of the console bundle, `sdk.js` and the npm package of the tracker | `go list -deps ./cmd/...` in the root module and `go list -deps .` in the collector distribution that ocb generates (`dist/scf-otelcol`, from `collector/builder-config.yaml`); the `dependencies` and `optionalDependencies` closure of the shipped importers `apps/console` and `packages/tracker` in `pnpm-lock.yaml` | any licence not on the OSI list |
-| not shipped | everything else in `go.mod`, the collector module, `pnpm-lock.yaml`, the example lockfiles (`package-lock.json`, `uv.lock`, `Cargo.lock`, `go.mod`) and `infra/ansible/requirements.txt`, each with the importers that pull it in | the rest of the same graphs | a non-OSI licence without a matching allowlist entry, and any allowlist entry that no longer matches (package gone, upgraded, relicensed or now shipped) |
+| not shipped | everything else in `go.mod`, the collector module, `pnpm-lock.yaml`, the example lockfiles (`package-lock.json`, `uv.lock`, `Cargo.lock`, `go.mod`, the Java example's `pom.xml`) and `infra/ansible/requirements.txt`, each with the importers that pull it in | the rest of the same graphs | a non-OSI licence without a matching allowlist entry, and any allowlist entry that no longer matches (package gone, upgraded, relicensed or now shipped) |
 
 Three checks keep the shipped section honest instead of trusting `package.json`:
 
@@ -423,7 +423,8 @@ Three checks keep the shipped section honest instead of trusting `package.json`:
   as testcontainers are listed as not shipped.
 
 Packages whose licence trivy did not find on disk are looked up in the npm, PyPI or crates.io
-registry, and Go modules in deps.dev, which reads the licence from the module zip. Trivy 0.76.2 does
+registry, and Go modules and Maven artifacts in deps.dev, which reads the licence from the module zip
+or the artifact's POM. Trivy 0.76.2 does
 not classify the MIT-0 text of `github.com/segmentio/asm`, for example. The project's own modules (the root module, the collector distribution and the example roots) are
 reported separately as own code under the repository's Apache-2.0 licence.
 
