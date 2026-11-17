@@ -220,8 +220,8 @@ Vectors and what limits them:
   `signal_views` and `signal_framed` only when it is queued in the primary band, and a notice
   counts toward `signal_never_visible` only when the per-visitor volume bound and the same-network
   threshold would have kept it there; a notice that fails them is counted in Prometheus only. One
-  visitor moves the shares by at most `VISITOR_EVENTS_PER_HOUR` signals per hour and one prefix by
-  at most its same-network threshold of visitors. A rival spread over many networks, each under
+  visitor adds at most `VISITOR_EVENTS_PER_HOUR` signals per hour and node, and one prefix at
+  most its same-network threshold of visitors, each within that bound. A rival spread over many networks, each under
   the limits, can still lower the grade to B or C; the reasons name the share that did it, and an
   operator reads them before relying on a grade.
 - **Moving the victim's unmeasured-share estimate.** The tracker file route has no proof or
