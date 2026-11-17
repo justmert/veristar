@@ -144,9 +144,25 @@ func (g *Grader) Backfill(ctx context.Context, tx TxFunc, from, to time.Time) (R
 		return Result{}, ErrRegistryNotLoaded
 	}
 	snap := g.sites.Snapshot()
+	// an internal project, such as the platform's own probe, is in no
+	// operator view, report or rule; grading it only feeds the job's grade
+	// metrics with days nobody reads
+	var internal []string
+	if err := tx(ctx, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, `select id::text from cp.tenants where is_internal`)
+		if err != nil {
+			return err
+		}
+		internal, err = pgx.CollectRows(rows, pgx.RowTo[string])
+		return err
+	}); err != nil {
+		return Result{}, fmt.Errorf("integrity: internal projects: %w", err)
+	}
 	ids := make([]string, 0, len(snap))
-	for id := range snap {
-		ids = append(ids, id)
+	for id, s := range snap {
+		if !slices.Contains(internal, s.TenantID) {
+			ids = append(ids, id)
+		}
 	}
 	slices.Sort(ids)
 
