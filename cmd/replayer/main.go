@@ -1,7 +1,8 @@
 // Command replayer delivers accepted web events from WEB_EVENTS to umami
-// (docs/reference/umami-contract.md). it runs on both core nodes; only the holder of
-// the replayer lock consumes. /healthz, /readyz and /metrics are on a private
-// ops port.
+// (docs/reference/umami-contract.md). it runs on every core node and consumes
+// the web event partitions assigned to its node, delivering them to that
+// node's umami processes. /healthz, /readyz and /metrics are on a private ops
+// port.
 package main
 
 import (
