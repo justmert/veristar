@@ -107,11 +107,22 @@ func (s *Service) status(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
+	out, err := s.currentStatus(ctx, u)
+	if err != nil {
+		return err
+	}
+	httpx.WriteJSON(w, http.StatusOK, out)
+	return nil
+}
+
+// currentStatus reads the step-up and enrollment state of u; GET and POST
+// /step-up answer with the same shape so the console parses one schema.
+func (s *Service) currentStatus(ctx context.Context, u session.User) (Status, error) {
 	out := Status{MaxAgeSeconds: int64(s.maxAge / time.Second)}
 	if ok, at := s.Fresh(ctx, u.ID); ok {
 		out.SteppedUp, out.SteppedUpAt, out.ExpiresAt = true, ts(at), ts(at.Add(s.maxAge))
 	}
-	err = s.db.WithSystem(ctx, func(tx pgx.Tx) error {
+	err := s.db.WithSystem(ctx, func(tx pgx.Tx) error {
 		k, err := LoadKeys(ctx, tx, u.ID)
 		if err != nil {
 			return err
@@ -127,11 +138,7 @@ func (s *Service) status(w http.ResponseWriter, r *http.Request) error {
 		}
 		return nil
 	})
-	if err != nil {
-		return err
-	}
-	httpx.WriteJSON(w, http.StatusOK, out)
-	return nil
+	return out, err
 }
 
 func (s *Service) stepUpChallenge(w http.ResponseWriter, r *http.Request) error {
@@ -192,7 +199,6 @@ func (s *Service) stepUp(w http.ResponseWriter, r *http.Request) error {
 	if len(fields) > 0 {
 		return httpx.Validation("the passkey answer is incomplete or malformed", fields)
 	}
-	var at time.Time
 	recorded := false
 	err = s.db.WithSystem(ctx, func(tx pgx.Tx) error {
 		q := systemq.New(tx)
@@ -213,7 +219,7 @@ func (s *Service) stepUp(w http.ResponseWriter, r *http.Request) error {
 		if _, err := q.TouchPasskey(ctx, systemq.TouchPasskeyParams{UserID: u.ID, CredentialID: credID}); err != nil {
 			return err
 		}
-		if at, err = s.Record(ctx, u.ID); err != nil {
+		if _, err = s.Record(ctx, u.ID); err != nil {
 			return err
 		}
 		recorded = true
@@ -231,10 +237,11 @@ func (s *Service) stepUp(w http.ResponseWriter, r *http.Request) error {
 		}
 		return err
 	}
-	httpx.WriteJSON(w, http.StatusOK, Status{
-		SteppedUp: true, SteppedUpAt: ts(at), ExpiresAt: ts(at.Add(s.maxAge)),
-		MaxAgeSeconds: int64(s.maxAge / time.Second),
-	})
+	out, err := s.currentStatus(ctx, u)
+	if err != nil {
+		return err
+	}
+	httpx.WriteJSON(w, http.StatusOK, out)
 	return nil
 }
 

@@ -455,6 +455,7 @@ describe("operator step-up", () => {
     stepped_up_at: null,
     expires_at: null,
     max_age_seconds: 43200,
+    sign_in_passkey: false,
   };
 
   it("asks an operator with a passkey to confirm before the area loads", async () => {

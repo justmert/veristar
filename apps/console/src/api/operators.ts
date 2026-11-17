@@ -15,10 +15,10 @@ export const stepUpStatus = z.object({
   stepped_up_at: time.nullable(),
   expires_at: time.nullable(),
   max_age_seconds: z.number().int().positive(),
-  passkeys: z.number().int().nonnegative().optional(),
-  sign_in_passkey: z.boolean().optional(),
-  enrollment: z.enum(["open", "sign_in_required", "closed"]).optional(),
-  enrollment_until: time.nullable().optional(),
+  passkeys: z.number().int().nonnegative(),
+  sign_in_passkey: z.boolean(),
+  enrollment: z.enum(["open", "sign_in_required", "closed"]),
+  enrollment_until: time.nullable(),
 });
 export type StepUpStatus = z.infer<typeof stepUpStatus>;
 
