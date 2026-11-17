@@ -21,6 +21,9 @@ func compose(t *testing.T, env []string, args ...string) string {
 
 func TestOtelApps(t *testing.T) {
 	sel := selectedApps()
+	if len(sel) == 0 && strings.Contains(","+os.Getenv("OTELAPPS_APPS")+",", ",anchor-platform,") {
+		t.Skip("OTELAPPS_APPS names only anchor-platform (TestAnchorPlatform)")
+	}
 	if len(sel) == 0 {
 		t.Fatalf("OTELAPPS_APPS=%q matches no app", os.Getenv("OTELAPPS_APPS"))
 	}
