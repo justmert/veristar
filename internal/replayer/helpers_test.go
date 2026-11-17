@@ -471,6 +471,17 @@ func startUmamiProcesses(t *testing.T, n int, cpus *float64) *umamiStack {
 			"POSTGRES_USER": "umami", "POSTGRES_PASSWORD": dbPass, "POSTGRES_DB": "umami", "TZ": "UTC",
 		}),
 		tcnetwork.WithNetwork([]string{"pg"}, nw),
+		// REPLAYER_DRAIN_PG_CPUS caps the database for the drain measurement,
+		// as on a node where postgresql shares its vcpus with everything else
+		testcontainers.WithHostConfigModifier(func(hc *container.HostConfig) {
+			if v := os.Getenv("REPLAYER_DRAIN_PG_CPUS"); v != "" {
+				c, err := strconv.ParseFloat(v, 64)
+				if err != nil || c <= 0 {
+					t.Fatalf("REPLAYER_DRAIN_PG_CPUS=%q", v)
+				}
+				hc.NanoCPUs = int64(c * 1e9)
+			}
+		}),
 		// the entrypoint runs a temporary server during init; the second
 		// "ready" line is the real one
 		testcontainers.WithWaitStrategy(wait.ForLog("database system is ready to accept connections").

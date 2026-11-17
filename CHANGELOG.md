@@ -18,6 +18,11 @@ here, before they take effect, as the processing terms require
 
 ### Added
 
+- Alerts on web events waiting for Umami: `WebEventsDelayed` (oldest over an
+  hour), `WebEventsBacklogGrowing` (over 10,000 and still growing) and
+  `WebEventsNearDiscard` (oldest over 48 hours, 24 hours before the queue
+  drops it), with a runbook section
+  ([docs/runbooks/alerts.md](docs/runbooks/alerts.md)).
 - Cohorts for fair comparison: every project carries its SCF program, round,
   category and award date. The project proposes them at enrollment or on its
   "What SCF sees" page, and an operator confirms, edits, sets or dismisses
@@ -226,6 +231,15 @@ here, before they take effect, as the processing terms require
 
 ### Changed
 
+- The capacity documents separate the ingest rate from the delivery rate:
+  700 events a second per node is what a gateway accepts, measured without
+  challenge requests, while one replayer delivers for the whole cluster. The
+  local delivery measurements and what a backlog costs (the 72 hour discard,
+  the NATS file store) are in
+  [docs/reference/capacity.md](docs/reference/capacity.md). Corrected too:
+  the proof key's lifetime, the CORS header the gateway sends, and the
+  gateway's check order, which now lists the revoked-release check and where
+  a never-visible notice leaves it.
 - The tracker file `sdk.js` is served compressed with zstd or gzip when the
   browser accepts it; the integrity hash covers the decoded file, so pinned
   snippets keep working

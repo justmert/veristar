@@ -1,13 +1,14 @@
 ---
-title: "API metrics capacity"
-description: "Measured storage cost of API metric rows, extrapolated to the retention horizons."
+title: "API metrics and web event capacity"
+description: "Measured storage cost of API metric rows, extrapolated to the retention horizons, and the web event delivery rate."
 ---
 
 What API metric rows cost in PostgreSQL, measured, and the extrapolation to the
 retention horizons: minute rows for 30 days (`API_MINUTE_RETENTION_DAYS`), hourly
 rows for 36 months (`API_HOURLY_RETENTION_MONTHS`), daily rows forever. The table
 shapes are in [api-storage.md](api-storage.md). Gateway throughput is in
-[gateway-limits.md](gateway-limits.md).
+[gateway-limits.md](gateway-limits.md); how fast accepted web events reach Umami is in "Web events
+end to end" below.
 
 ## How the numbers are measured
 
@@ -108,3 +109,79 @@ bound.
 
 Re-run the measurement and `make api-volume` after any change to the metric
 table shapes, and replace the tables above with the new figures and their date.
+
+## Web events end to end
+
+The gateway's rate ([gateway-limits.md](gateway-limits.md), "Capacity") is what a node
+**accepts** into `WEB_EVENTS`. What reaches Umami is a second, separate rate: the replayer's.
+
+**Why one replayer delivers for the whole cluster.** The replayer runs on every core node, but
+only the holder of the `replayer` lock consumes `WEB_EVENTS`, through one durable consumer, and
+it sends to the Umami processes of its own node (`UMAMI_URL` in
+`infra/ansible/roles/core/templates/compose.yml.j2`). The single consumer is what keeps one
+visitor's events in one place at a time, which three things rely on:
+
+- **Order.** A visitor's events reach Umami in stream order: each visitor has one queue, one send
+  at a time, and a failing event holds back only that visitor's later events.
+- **Visit continuity.** The visitor's `visit_state` record (Umami's session id, the cache token of
+  its last answer and the last acceptance time) is read before a send and written after it with a
+  plain put (`internal/replayer/visit.go`). Two consumers handling the same visitor at once would
+  overwrite each other's record, send a stale cache token or none, and split one visit into
+  several.
+- **The duplicate guard.** `sent.<event id>` is checked before a send and written after Umami's
+  200. Two consumers that hold the same redelivered message at once would both pass the check
+  and store the event twice.
+
+Which Umami process stores an event does not matter: every process uses the one database and
+`APP_SECRET`, and Umami derives the session and visit from them and the event alone
+([umami-contract.md](umami-contract.md) item 14). So delivering to the Umami of the node that
+consumes is safe; consuming one durable from several nodes at once is not. Delivery from every
+node needs each visitor owned by exactly one node: the stream's subjects partitioned by visitor
+(today the subject token is only the site id), one consumer and one lock per partition, a
+predecessor wait per partition as the single lock has today, and a migration of the subject,
+the NATS permissions, erasure's purge by subject and the DLQ replay. That design is not
+implemented; until it is, the delivery rate is one node's.
+
+**Measured locally, 2026-11-17** (`TestDrainRateByUmamiProcesses`, `internal/replayer`,
+`REPLAYER_DRAIN_MEASURE=12000`): one NATS server, one PostgreSQL 18.6 container capped at 2 cores
+(`REPLAYER_DRAIN_PG_CPUS=2`, the vCPUs of a production node), Umami 3.5.0 containers capped at 1
+core each, one replayer in the test process. 12,000 page views of 2,000 visitors are queued, then
+drained; each run checks that Umami holds all 12,000. The host was shared with other work, at a
+load average of 30 to 46 on 10 cores during the runs, so these rates are lower bounds of the
+software, not a node's figure.
+
+| Umami processes | Replayer workers / in flight | Rate | Umami CPU per process (cores) | PostgreSQL CPU per event | Mean send |
+|---|---|---|---|---|---|
+| 2 | 128 / 900 | 425/s | 0.81, 0.78 | 0.51 ms | |
+| 4 | 128 / 900 | 424/s | 0.40 to 0.52 | 0.52 ms | |
+| 6 | 128 / 900 | 515/s | 0.31 to 0.44 | 0.55 ms | |
+| 2 | 512 / 1,800 | 282/s | 0.58, 0.53 | 0.55 ms | 877 ms |
+| 6 | 512 / 1,800 | 696/s | 0.41 to 0.59 | 0.49 ms | 325 ms |
+
+Reading:
+
+- No Umami process reached its one-core cap and PostgreSQL used at most 0.34 of its 2 cores, so
+  on this host the bound was the time of each send under contention (325 to 877 ms), not either
+  service's CPU. With more sends in flight, 6 processes drained 696/s.
+- PostgreSQL's cost per stored event was steady at 0.49 to 0.55 ms of CPU in every run, whatever
+  the contention.
+- A `WEB_EVENTS` message of these page views takes **690 bytes** of the store (8,280,000 bytes for
+  12,000 messages).
+
+**What is not measured.** No end-to-end sustained rate of a production node has been measured:
+the "about 420 events a second" of [availability.md](availability.md) is the 2026-11-13 drill's
+280/s of one process scaled by its 1.5x for two, not a run. The production ingest figure of about
+700 events a second per node was measured with proofs solved before the run, so it holds no
+`GET /v1/c`; a real page load also fetches one challenge, which that figure does not include.
+
+**What a backlog costs.** Above the delivery rate, events wait in `WEB_EVENTS`:
+
+- At 72 hours (max age, discard old) the stream drops the oldest events without a trace.
+  `WebEventsNearDiscard` pages at 48 hours ([../runbooks/alerts.md](../runbooks/alerts.md)).
+- Before that, the backlog can fill the store. Every NATS server keeps a replica in its file store
+  (`edge_nats_max_file_store`, 20G per server), shared with every other stream, and a full store
+  refuses new messages on every stream, so ingestion answers 503. At the measured 690 bytes per
+  message, 20 GB holds about 29 million such events; a backlog that grows by more than about 110
+  events a second fills it before the 72 hours run out (29 million / 259,200 s). Both are
+  arithmetic on the measured message size, not a run, and real events with a title or event data
+  are larger.

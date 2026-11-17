@@ -10,10 +10,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nats-io/nats.go/jetstream"
 	"github.com/testcontainers/testcontainers-go"
 	tcexec "github.com/testcontainers/testcontainers-go/exec"
 
 	"github.com/justmert/veristar/internal/events"
+	"github.com/justmert/veristar/internal/natsx"
 	"github.com/justmert/veristar/internal/umami"
 )
 
@@ -180,15 +182,57 @@ func TestDrainRateByUmamiProcesses(t *testing.T) {
 	warm := startReplayerTo(t, env.srv.URL, st.URLs, "warmup", 128, 900)
 	waitFor(t, 10*time.Minute, "warm-up drained", func() bool { return drained(t, env.js) })
 	warm.stop(t)
+	workers, inFlight := 128, 900
+	for key, dst := range map[string]*int{"REPLAYER_DRAIN_WORKERS": &workers, "REPLAYER_DRAIN_IN_FLIGHT": &inFlight} {
+		if v := os.Getenv(key); v != "" {
+			if *dst, err = strconv.Atoi(v); err != nil || *dst < 1 {
+				t.Fatalf("%s=%q", key, v)
+			}
+		}
+	}
+	if inFlight < workers {
+		t.Fatalf("in flight %d is below workers %d", inFlight, workers)
+	}
+	t.Logf("replayer workers %d, in flight %d", workers, inFlight)
+		// REPLAYER_DRAIN_COUNTS=2,6 measures only those process counts
+	counts := make([]int, 0, maxProcs)
 	for n := 1; n <= maxProcs; n++ {
+		counts = append(counts, n)
+	}
+	if v := os.Getenv("REPLAYER_DRAIN_COUNTS"); v != "" {
+		counts = counts[:0]
+		for f := range strings.SplitSeq(v, ",") {
+			n, err := strconv.Atoi(strings.TrimSpace(f))
+			if err != nil || n < 1 || n > maxProcs {
+				t.Fatalf("REPLAYER_DRAIN_COUNTS=%q: each count must be 1 to REPLAYER_DRAIN_PROCESSES", v)
+			}
+			counts = append(counts, n)
+		}
+	}
+	for _, n := range counts {
 		s, evs := backlog(total)
+		// the store a backlog takes on each server: short page views with a
+		// path, a desktop user agent, a title, screen and language
+		if sinfo, err := (func() (*jetstream.StreamInfo, error) {
+			ws, err := env.js.Stream(testCtx(t, 10*time.Second), natsx.StreamWebEvents)
+			if err != nil {
+				return nil, err
+			}
+			return ws.Info(testCtx(t, 10*time.Second))
+		})(); err == nil && sinfo.State.Msgs > 0 {
+			t.Logf("WEB_EVENTS holds %d messages in %d bytes, %.0f bytes per message", sinfo.State.Msgs, sinfo.State.Bytes,
+				float64(sinfo.State.Bytes)/float64(sinfo.State.Msgs))
+		}
 		cpu0 := cpuUsec(t, st.ums[:n])
+		pg0 := cpuUsec(t, []*testcontainers.DockerContainer{st.pg})[0]
 		start := time.Now()
-		// the core role's lanes and in-flight bound
-		rp := startReplayerTo(t, env.srv.URL, st.URLs[:n], fmt.Sprintf("measure-%d", n), 128, 900)
+		// the core role's lanes and in-flight bound, unless
+		// REPLAYER_DRAIN_WORKERS and REPLAYER_DRAIN_IN_FLIGHT override them
+		rp := startReplayerTo(t, env.srv.URL, st.URLs[:n], fmt.Sprintf("measure-%d", n), workers, inFlight)
 		waitFor(t, 30*time.Minute, "stream drained", func() bool { return drained(t, env.js) })
 		elapsed := time.Since(start)
 		cpu := cpuUsec(t, st.ums[:n])
+		pgCores := float64(cpuUsec(t, []*testcontainers.DockerContainer{st.pg})[0]-pg0) / float64(elapsed.Microseconds())
 		m := scrape(t, rp.ops)
 		rp.stop(t)
 		stats, err := st.Admin.Stats(testCtx(t, time.Minute), s.ID, umami.Range{Start: h, End: h.Add(time.Hour)})
@@ -203,8 +247,22 @@ func TestDrainRateByUmamiProcesses(t *testing.T) {
 			cores = append(cores, fmt.Sprintf("%.2f", float64(cpu[i]-cpu0[i])/float64(elapsed.Microseconds())))
 			sends = append(sends, fmt.Sprintf("%.0f", m[fmt.Sprintf(`replayer_umami_sends_total{process="%d"}`, i)]))
 		}
-		t.Logf("umami processes %d: %d events in %.1f s = %.0f events/s; cpu per umami process (cores) %s; sends per process %s",
-			n, len(evs), elapsed.Seconds(), float64(len(evs))/elapsed.Seconds(), strings.Join(cores, " "), strings.Join(sends, " "))
+		rate := float64(len(evs)) / elapsed.Seconds()
+		// mean time of one send to umami, from the replayer's own histogram
+		var sendSum, sendCount float64
+		for k, v := range m {
+			if strings.HasPrefix(k, "replayer_send_duration_seconds_sum") {
+				sendSum += v
+			}
+			if strings.HasPrefix(k, "replayer_send_duration_seconds_count") {
+				sendCount += v
+			}
+		}
+		if sendCount > 0 {
+			t.Logf("umami processes %d: mean send %.1f ms over %.0f sends", n, sendSum/sendCount*1000, sendCount)
+		}
+		t.Logf("umami processes %d: %d events in %.1f s = %.0f events/s; cpu per umami process (cores) %s; postgres %.2f cores, %.2f ms of cpu per event; sends per process %s",
+			n, len(evs), elapsed.Seconds(), rate, strings.Join(cores, " "), pgCores, pgCores*1000/rate, strings.Join(sends, " "))
 	}
 }
 
