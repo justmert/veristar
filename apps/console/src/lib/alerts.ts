@@ -66,8 +66,10 @@ export function alertUrgency(a: FiringAlert): { word: string; tone: AlertTone } 
   return { word: a.severity ?? "No severity", tone: "warning" };
 }
 
+// a suppressed (silenced or inhibited) alert is held back on purpose, so the
+// banner and the badge count only those an operator acts on
 export function criticalCount(alerts: FiringAlert[]): number {
-  return alerts.filter((a) => a.severity === CRITICAL_SEVERITY).length;
+  return alerts.filter((a) => a.severity === CRITICAL_SEVERITY && a.state !== "suppressed").length;
 }
 
 // "4 min", "2 h 5 min", "3 d 4 h". under a minute is said as such, and a
