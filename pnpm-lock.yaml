@@ -454,6 +454,16 @@ importers:
         specifier: 'catalog:'
         version: 7.0.2
 
+  examples/mintlify:
+    dependencies:
+      tracker:
+        specifier: workspace:*
+        version: link:../../packages/tracker
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.6
+
   examples/nextjs:
     dependencies:
       next:
