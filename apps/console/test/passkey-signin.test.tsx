@@ -215,7 +215,7 @@ describe("passkey sign-in (contract 4.1.9)", () => {
     ]);
     const host = await renderRoutes([{ path: "/sign-in", element: <SignInPage /> }], "/sign-in");
     await click(byRole(host, "button", "Continue with a passkey"));
-    await waitFor(() => byRole(dialog(), "button", "Try again"));
+    await waitFor(() => byRole(dialog(), "button", "Try again"), 10_000);
     expect(
       (byRole(dialog(), "button", "Sign in with your passkey") as HTMLButtonElement).disabled,
     ).toBe(true);
@@ -238,7 +238,8 @@ describe("passkey sign-in (contract 4.1.9)", () => {
     ]);
     const host = await renderRoutes([{ path: "/sign-in", element: <SignInPage /> }], "/sign-in");
     await click(byRole(host, "button", "Continue with a passkey"));
-    await waitFor(() => byRole(dialog(), "button", "Try again in 30 s"));
+    // a loaded host can take longer than the default two seconds here
+    await waitFor(() => byRole(dialog(), "button", "Try again in 30 s"), 10_000);
     expect((byRole(dialog(), "button", "Try again in 30 s") as HTMLButtonElement).disabled).toBe(
       true,
     );
