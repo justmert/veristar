@@ -3394,12 +3394,14 @@ stay and come back if the id is added again.
 
 **`POST /api/tenants/{tenant_id}/onchain/ids/{chain_id}/challenge`** (accounts
 only, 422 for a contract): any member. A new random nonce valid for 30
-minutes replaces any earlier one.
+minutes replaces any earlier one. The message names the console host and the
+project by its name, quoted as a Go or JSON string, and its id, so a wallet
+shows the signer which project asks.
 
 ```json
 {
   "id": "uuid", "account": "G...",
-  "message": "Veristar ownership proof\nProject: <tenant id>\nAccount: G...\nNonce: <32 hex>\nExpires: 2026-11-16T10:00:00Z",
+  "message": "Veristar ownership proof\nConsole: <console host>\nProject: \"<name>\" (<tenant id>)\nAccount: G...\nNonce: <32 hex>\nExpires: 2026-11-16T10:00:00Z",
   "manage_data": { "name": "veristar", "value": "<32 hex>" },
   "expires_at": "2026-11-16T10:00:00Z"
 }
@@ -3411,17 +3413,21 @@ terms accepted, not `suspended`, at most 10 attempts per id and hour (429
 
 | Method | Kind | Body | The proof holds when |
 |---|---|---|---|
-| `sep53` | account | `{"method": "sep53", "signature": "<base64 or hex>"}` | the signature is the account's ed25519 signature of SHA-256(`"Stellar Signed Message:\n"` + `message`), SEP-53, over the open challenge's message |
+| `sep53` | account | `{"method": "sep53", "signature": "<base64 or hex>"}` | the signature is the account's ed25519 signature of SHA-256(`"Stellar Signed Message:\n"` + `message`), SEP-53, over the open challenge's message, and the account as Horizon reads it then gives its master key a weight above 0 and at least its medium threshold |
 | `manage_data` | account | `{"method": "manage_data"}` | the account's data entry `veristar` on the ledger (Horizon) equals the open challenge's nonce |
 | `contract_admin` | contract | `{"method": "contract_admin"}` | the contract's instance storage (RPC `getLedgerEntries`) holds an address under the key `Admin`, `admin`, `Owner` or `owner` (a symbol, or a one-element vector of one, as Rust enum variants such as OpenZeppelin's `Owner` are stored) that is a verified id of the same project |
 | `contract_deployer` | contract | `{"method": "contract_deployer", "tx_hash": "<64 hex>"}` | the successful transaction (Horizon) creates the contract from an address, the contract id recomputed from network, address and salt equals the declared id, and the address is a verified id of the same project |
 
 The answer is 200 with the id object in every case: a proof that does not
 hold sets `verification.last_error`: `no_challenge`, `challenge_expired`,
-`bad_signature`, `data_entry_mismatch`, `no_verified_owner`,
+`bad_signature`, `master_key_no_weight` (the signature holds but the master
+key cannot authorise a medium threshold operation; prove the account with
+`manage_data`), `data_entry_mismatch`, `no_verified_owner`,
 `deployer_not_verified`, `contract_not_created_in_transaction`,
 `transaction_failed`, `no_admin_entry`, `admin_not_verified`, or a source code
-of 15.3. A held proof clears the challenge, so a signature works once.
+of 15.3. A held proof clears the challenge in the same statement that checks
+it is still the open one, so a signature works once, also against concurrent
+requests.
 `verification.via` names the verified account a contract was proven through;
 `detail` holds `storage_key` or `tx_hash`.
 

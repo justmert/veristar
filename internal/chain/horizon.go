@@ -54,6 +54,43 @@ type Account struct {
 	ID         string            `json:"account_id"`
 	HomeDomain string            `json:"home_domain"`
 	Data       map[string]string `json:"data"`
+	Thresholds Thresholds        `json:"thresholds"`
+	Signers    []Signer          `json:"signers"`
+}
+
+// Thresholds are the weights an account's operations need.
+type Thresholds struct {
+	Low  int `json:"low_threshold"`
+	Med  int `json:"med_threshold"`
+	High int `json:"high_threshold"`
+}
+
+// Signer is one signer of an account with its weight.
+type Signer struct {
+	Key    string `json:"key"`
+	Weight int    `json:"weight"`
+	Type   string `json:"type"`
+}
+
+// MasterWeight is the weight of the account's own key: horizon lists it
+// among the signers, and a master key it does not list weighs nothing.
+func (a Account) MasterWeight() int {
+	for _, s := range a.Signers {
+		if s.Key == a.ID {
+			return s.Weight
+		}
+	}
+	return 0
+}
+
+// MasterControls says whether the account's own key alone can authorise a
+// medium threshold operation such as a payment: its weight is above zero
+// and reaches the medium threshold. an issuer that locked its master key
+// (weight 0) or handed control to a multisig policy fails, so a signature
+// by that key proves nothing about who controls the account.
+func (a Account) MasterControls() bool {
+	w := a.MasterWeight()
+	return w > 0 && w >= a.Thresholds.Med
 }
 
 // DataValue returns a decoded manage-data entry.

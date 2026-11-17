@@ -62,7 +62,7 @@ test("an owner declares an account and gets a challenge to prove it", async () =
 
   await page.getByRole("button", { name: "Prove control" }).click();
   const message = page.locator("pre", { hasText: "Veristar ownership proof" });
-  await expect(message).toContainText(`Project: ${tenant.id}`);
+  await expect(message).toContainText(`(${tenant.id})`);
   await expect(message).toContainText(`Account: ${ACCOUNT}`);
   await expect(page.getByText("Or publish a data entry")).toBeVisible();
 

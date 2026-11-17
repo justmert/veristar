@@ -32,6 +32,8 @@ const VERIFY_ERRORS: Record<string, string> = {
   no_challenge: "Create a challenge first.",
   challenge_expired: "The challenge expired. Create a new one.",
   bad_signature: "The signature does not match this account and challenge.",
+  master_key_no_weight:
+    "The signature is valid, but this account's own key cannot send a payment on its own (its weight is 0 or below the medium threshold). Prove the account with a data entry instead.",
   data_entry_mismatch: "The account has no data entry with the challenge value yet.",
   no_verified_owner: "Verify one of the project's accounts first; a contract is proven through it.",
   deployer_not_verified: "The contract was deployed by an account the project has not verified.",

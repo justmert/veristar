@@ -324,7 +324,7 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	onchainRoutes, err := onchain.NewRoutes(scope, horizon, rpc, time.Now)
+	onchainRoutes, err := onchain.NewRoutes(scope, horizon, rpc, cfg.ConsoleOrigin, time.Now)
 	if err != nil {
 		return err
 	}

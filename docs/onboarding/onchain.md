@@ -65,7 +65,11 @@ Use either method:
 approve the message. The wallet signs it with SEP-53 (Sign and Verify Messages), the standard that
 prefixes the message so that a signature can never be a transaction: signing moves no funds and
 sends nothing to the ledger. Veristar lists the wallets that sign SEP-53 messages, such as Freighter
-5.34 or later, Lobstr and Hana.
+5.34 or later, Lobstr and Hana. A signature counts only while the account's own key can still
+send a payment on its own: Veristar reads the account after checking the signature, and its master
+key weight must be above 0 and at least the account's medium threshold. An account whose master key
+was set to weight 0, such as an issuer locked behind several signers, proves control with a data
+entry instead.
 
 **Publish a data entry.** Submit a manage-data operation from the account with the entry name and
 value the challenge shows (name `veristar`), then choose **Check the data entry**. Any wallet or the
@@ -73,8 +77,9 @@ value the challenge shows (name `veristar`), then choose **Check the data entry*
 XLM of reserve while the entry exists; delete the entry afterwards to release it. Use this method
 when your wallet cannot sign messages or the account needs several signers.
 
-A signature or entry proves the account for this project only: the challenge names the project and
-the account, and works once.
+A signature or entry proves the account for this project only: the challenge names the console,
+the project by name and id, and the account, and works once. Renaming the project while a challenge
+is open makes its message stale; create a new challenge after a rename.
 
 ## Prove control of a contract
 
