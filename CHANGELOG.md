@@ -276,6 +276,21 @@ here, before they take effect, as the processing terms require
   `sa-edge-start` and `sa-observability-start` retry the same way.
 - The backup units run only on the Patroni leader in Azure mode too; on a
   replica they skip their run cleanly instead of failing.
+- `jobs run aggregate-web --from` refuses a day before the raw retention
+  cutoff, and the erasure follow-up skips such days: Umami answers them with
+  zeros, which replaced the kept aggregates.
+- `jobs run integrity` on a day before the regrade window keeps the day's
+  stored network count and rule version, since its network keys are pruned;
+  regrading it counted zero networks and could add `few_networks`. Such a day
+  that was never graded stays ungraded.
+- A site reset also deletes the site's integrity grades, coverage estimates,
+  gateway outcome counters, network class evidence, page signals and network
+  keys, not only `agg.web_daily` and `agg.web_daily_dim`.
+- `WEB_RAW_RETENTION_MONTHS` below 25 is refused at startup; tenant
+  dashboards need 24 full months of raw rows.
+- The down steps of migrations 00031, 00034 and 00037 see the rows they
+  guard against: forced row-level security hid every row from the migration
+  role, so their refusals never fired. Only the down sections changed.
 
 ### Security
 
@@ -335,7 +350,7 @@ here, before they take effect, as the processing terms require
   [the usage report signing key](docs/runbooks/secret-rotation.md#the-usage-report-signing-key)
   (there is no current key to retire).
 - Run the database migrations (`00035_cohorts_and_rules.sql` to
-  `00042_tenant_web_dimensions.sql`) before the new control plane starts; the
+  `00043_jobs_traffic_class_rules.sql`) before the new control plane starts; the
   rolling `deploy.yml` does this in its bootstrap step.
 - Deploy the release, then apply OpenTofu for each environment. The plan
   destroys the Traffic Manager profile `web`, its three external endpoints
