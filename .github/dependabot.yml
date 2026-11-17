@@ -35,7 +35,7 @@ updates:
         patterns: ["*"]
 
   - package-ecosystem: docker
-    directories: ["/deploy/images", "/infra/local", "/examples/otel-go-nethttp", "/examples/otel-node-express", "/examples/otel-python-fastapi", "/examples/otel-rust-actix"]
+    directories: ["/deploy/images", "/infra/local", "/examples/otel-go-nethttp", "/examples/otel-node-express", "/examples/otel-python-fastapi", "/examples/otel-rust-actix", "/examples/otel-java-spring", "/examples/otel-anchor-platform"]
     schedule: { interval: weekly, day: monday }
 
   # the upstream images production runs are pinned in ansible variables
@@ -76,3 +76,12 @@ updates:
   - package-ecosystem: cargo
     directories: ["/examples/otel-rust-actix"]
     schedule: { interval: weekly, day: monday }
+
+  # the spring boot parent and opentelemetry-api; the java agent jar the
+  # Dockerfiles download is pinned by version and checksum and moved by hand,
+  # together with opentelemetry-api, which follows the agent's sdk version
+  - package-ecosystem: maven
+    directories: ["/examples/otel-java-spring"]
+    schedule: { interval: weekly, day: monday }
+    ignore:
+      - dependency-name: io.opentelemetry:opentelemetry-api
