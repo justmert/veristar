@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { formatRate } from "@/lib/api-metrics";
 import { formatCount } from "@/lib/format";
 import {
+  activeFilterCount,
   EMPTY_FILTERS,
   firstOrder,
   formatPct,
@@ -106,6 +107,7 @@ export function GlobalApiPage() {
     setParams(writeListState(next, DEFAULT_SORT), { replace: true });
   const list = useInfiniteQuery(apiProjectsQuery(state));
   const selection = useSelection();
+  const filtered = activeFilterCount(state.filters) > 0;
   const first = list.data?.pages[0];
   const resolved = first ? { from: first.from, to: first.to } : null;
   const items = list.data?.pages.flatMap((p) => p.items) ?? [];
@@ -179,16 +181,18 @@ export function GlobalApiPage() {
             <StateBlock
               kind="empty"
               icon={<SearchX aria-hidden />}
-              title="No project matches these filters"
+              title={filtered ? "No project matches these filters" : "No project enrolled yet"}
               className="m-4"
               action={
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => set({ ...state, filters: EMPTY_FILTERS })}
-                >
-                  Clear filters
-                </Button>
+                filtered ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => set({ ...state, filters: EMPTY_FILTERS })}
+                  >
+                    Clear filters
+                  </Button>
+                ) : null
               }
             />
           ) : (

@@ -1,7 +1,8 @@
+import { act } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { auditPath, type TenantListQuery, tenantListPath } from "@/api/endpoints";
 import { tenantAction } from "@/api/schemas";
-import { AuditPage, auditSummary, dayToUtc } from "@/pages/operator/audit";
+import { AuditPage, auditSummary, auditVerb, dayToUtc } from "@/pages/operator/audit";
 import { OperatorLayout } from "@/pages/operator/layout";
 import { AddOperator, validateAddOperator } from "@/pages/operator/operators";
 import { ReviewQueuePage } from "@/pages/operator/review";
@@ -428,9 +429,22 @@ describe("review workspace", () => {
       "1 of 2 not a valid id",
     );
 
-    const reject = [...host.querySelectorAll("[role=radio]")].find((r) =>
-      r.textContent?.includes("Reject"),
-    ) as HTMLElement;
+    const radios = [...host.querySelectorAll<HTMLElement>("[role=radio]")];
+    const reject = radios.find((r) => r.textContent?.includes("Reject")) as HTMLElement;
+    const approve = radios.find((r) => r.textContent?.includes("Approve")) as HTMLElement;
+    // one tab stop; the arrow keys move the choice and the focus
+    expect(approve.tabIndex).toBe(0);
+    expect(reject.tabIndex).toBe(-1);
+    approve.focus();
+    await act(async () => {
+      approve.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+    });
+    expect(reject.getAttribute("aria-checked")).toBe("true");
+    expect(document.activeElement).toBe(reject);
+    await act(async () => {
+      reject.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true }));
+    });
+    expect(approve.getAttribute("aria-checked")).toBe("true");
     await click(reject);
     await click(byRole(host, "button", "Reject projectCtrl Enter"));
     expect(calls).toHaveLength(3);
@@ -525,6 +539,18 @@ describe("operator step-up", () => {
     ]);
     const host = await renderRoutes(area, "/operator");
     await waitFor(() => expect(host.textContent).toContain("This browser cannot use passkeys."));
+  });
+});
+
+describe("audit sentences", () => {
+  it("words the operator, cohort, rule, report, on-chain, export and identity actions", () => {
+    expect(auditVerb("operator.add")).toBe("added operator");
+    expect(auditVerb("cohort.confirm")).toBe("confirmed the cohort of");
+    expect(auditVerb("rule.delete")).toBe("deleted rule");
+    expect(auditVerb("report.revoke")).toBe("revoked a report link of");
+    expect(auditVerb("onchain.verify")).toBe("verified an on-chain id of");
+    expect(auditVerb("export.csv")).toBe("exported CSV of");
+    expect(auditVerb("user.identity_link")).toBe("linked a sign-in method to");
   });
 });
 

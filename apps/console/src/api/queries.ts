@@ -144,10 +144,17 @@ export const operatorTenantsQuery = (q: TenantListQuery) =>
     getNextPageParam: (last) => last.next_cursor,
   });
 
+// how often a running removal is read again, so its steps advance on screen
+export const REMOVAL_POLL = 5_000;
+
 export const operatorTenantQuery = (id: string) =>
   queryOptions({
     queryKey: keys.opTenant(id),
     queryFn: ({ signal }) => api.operator.tenant(id, signal),
+    refetchInterval: (q) => {
+      const r = q.state.data?.removal;
+      return r && r.completed_at === null ? REMOVAL_POLL : false;
+    },
   });
 
 export const enrollmentModeQuery = queryOptions({

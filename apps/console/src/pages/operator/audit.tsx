@@ -55,7 +55,20 @@ const FIELD_LABEL: Record<Field, string> = {
 
 // one click narrows the log to a family of actions (the action filter takes
 // a prefix ending in a dot)
-const QUICK = ["tenant.", "site.", "member.", "erasure.", "mcp."];
+const QUICK = [
+  "tenant.",
+  "site.",
+  "member.",
+  "erasure.",
+  "mcp.",
+  "operator.",
+  "cohort.",
+  "rule.",
+  "report.",
+  "onchain.",
+  "export.",
+  "user.",
+];
 
 const EMPTY_DRAFT: Record<Field, string> = {
   tenant_id: "",
@@ -373,6 +386,34 @@ const VERB: Record<string, string> = {
   "umami.password_rotate": "rotated dashboard passwords",
   "user.sign_in": "signed in",
   "user.sign_out": "signed out",
+  "user.identity_link": "linked a sign-in method to",
+  "user.identity_unlink": "unlinked a sign-in method from",
+  "user.operator_sync": "synced the operator flag of",
+  "operator.add": "added operator",
+  "operator.bootstrap": "added operator from the deploy settings",
+  "operator.remove": "removed operator",
+  "operator.suspend": "suspended operator",
+  "operator.resume": "resumed operator",
+  "operator.role_change": "changed the operator role of",
+  "operator.passkey_add": "added an operator passkey",
+  "operator.passkey_delete": "deleted an operator passkey",
+  "operator.passkeys_reset": "reset the passkeys of",
+  "operator.step_up": "confirmed with a passkey",
+  "cohort.set": "set the cohort of",
+  "cohort.propose": "proposed a cohort for",
+  "cohort.confirm": "confirmed the cohort of",
+  "cohort.proposal_dismiss": "dismissed the cohort proposal of",
+  "rule.create": "created rule",
+  "rule.update": "edited rule",
+  "rule.delete": "deleted rule",
+  "report.create": "signed a report for",
+  "report.revoke": "revoked a report link of",
+  "report.view": "viewed report",
+  "onchain.add": "declared an on-chain id for",
+  "onchain.remove": "removed an on-chain id from",
+  "onchain.challenge": "started on-chain verification for",
+  "onchain.verify": "verified an on-chain id of",
+  "export.csv": "exported CSV of",
 };
 
 export function auditVerb(action: string): string {

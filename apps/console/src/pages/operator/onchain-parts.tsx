@@ -123,9 +123,9 @@ export function CompareOnchainSection({
   return (
     <section aria-labelledby="compare-onchain" className="flex flex-col gap-3">
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <h2 id="compare-onchain" className="text-section text-fg">
+        <h3 id="compare-onchain" className="text-section text-fg">
           On-chain
-        </h2>
+        </h3>
         <span className="text-small text-fg-3">
           Operations of the declared accounts and contracts per UTC day; a dashed day has no data
         </span>
@@ -179,9 +179,9 @@ export function TenantOnchainSection({ tenantId }: { tenantId: string }) {
   return (
     <section aria-labelledby="onchain-detail-h" className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 id="onchain-detail-h" className="text-section text-fg">
+        <h3 id="onchain-detail-h" className="text-section text-fg">
           On-chain
-        </h2>
+        </h3>
         {q.data?.ids.length ? <LinkStatus view={q.data} /> : null}
       </div>
       {q.isPending ? <Loading label="Loading on-chain activity" /> : null}

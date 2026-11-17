@@ -231,11 +231,13 @@ export function InlineSelect({
   value,
   onChange,
   children,
+  disabled,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   children: ReactNode;
+  disabled?: boolean;
 }) {
   const id = useId();
   return (
@@ -243,7 +245,13 @@ export function InlineSelect({
       <label htmlFor={id} className="text-caption whitespace-nowrap text-fg-3">
         {label}
       </label>
-      <NativeSelect id={id} value={value} onChange={(e) => onChange(e.target.value)} size="sm">
+      <NativeSelect
+        id={id}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        size="sm"
+        disabled={disabled}
+      >
         {children}
       </NativeSelect>
     </span>
@@ -375,8 +383,19 @@ function CohortFilters({
     category: list.data?.categories ?? [],
   };
   return (
-    <fieldset className="grid grid-cols-2 gap-x-3 gap-y-2 sm:flex sm:flex-wrap sm:items-center sm:gap-x-4">
+    <fieldset
+      className="grid grid-cols-2 gap-x-3 gap-y-2 sm:flex sm:flex-wrap sm:items-center sm:gap-x-4"
+      aria-busy={list.isPending || undefined}
+    >
       <legend className="sr-only">SCF cohort</legend>
+      {list.error ? (
+        <span className="col-span-2 flex items-center gap-2 text-caption text-fg-2" role="alert">
+          The cohort values could not be loaded.
+          <Button type="button" variant="ghost" size="xs" onClick={() => list.refetch()}>
+            Try again
+          </Button>
+        </span>
+      ) : null}
       {COHORT_KEYS.map((k) => {
         const opts = values[k].map((v) => v.value);
         // a value from the address that no project holds any more stays
@@ -388,8 +407,9 @@ function CohortFilters({
             label={COHORT_TEXT[k]}
             value={filters[k]}
             onChange={(v) => onChange({ ...filters, [k]: v })}
+            disabled={list.isPending}
           >
-            <option value="">Any</option>
+            <option value="">{list.isPending ? "Loading" : "Any"}</option>
             {opts.map((o) => (
               <option key={o} value={o}>
                 {o}

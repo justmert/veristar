@@ -136,7 +136,7 @@ export function TenantsPage() {
           <StateBlock
             kind="empty"
             icon={<SearchX aria-hidden />}
-            title="No project matches these filters"
+            title={filtered ? "No project matches these filters" : "No project enrolled yet"}
             className="m-4"
             action={
               filtered ? (
