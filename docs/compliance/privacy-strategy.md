@@ -44,7 +44,7 @@ file-backed stream. "Stored" means PostgreSQL.
 | Gateway | client address (in `X-Edge-Client-Ip` from Caddy) | memory | the request. It is truncated to /24 (IPv4) or /48 (IPv6) for the country and autonomous system lookups, compared whole against the Tor exit list, and is never logged, queued or stored (`internal/gateway/clientip.go`, `internal/gateway/network.go`, `docs/reference/geo.md`) |
 | Gateway | network class of the event (`access`, `organisation`, `hosting`, `anonymiser`, `unknown`) and, per site and UTC day, the network as an HMAC of its autonomous system number under the daily IP-cluster secret, cut to 64 bits | memory, then counted on `EDGE_STATS` | the request; the class leaves only as a per-site count, the network key once per site and day; the autonomous system number itself never leaves the gateway |
 | Gateway | networks reported per site and day, as keys | memory | the UTC day, in a bounded table |
-| Gateway | `Referer` and `Sec-GPC` headers of a request for `sdk.js` | memory | the request. The `Referer` is reduced to its origin, matched against the registered origins of the active sites and dropped; only the site it names leaves the request, as one count, and one more count when `Sec-GPC: 1` was sent (section 6, "Measuring what is not measured") |
+| Gateway | `Referer` and `Sec-GPC` headers of a request for `sdk.js` | memory | the request. The `Referer` is reduced to its origin, matched against the registered origins of the active sites and dropped; only the site it names leaves the request, as one count, and one more count when `Sec-GPC: 1` was sent (section 6, "Measuring what is not measured"). The count is bounded by a token bucket per site and keyed hash of the truncated prefix, held in memory like the event rate limits |
 | Gateway | page signals of tracker 1.3.0: a page view's frame flag, a never-visible notice | memory, then counted on `EDGE_STATS` | the request; only per-site counts leave it |
 | Gateway | daily visitor secret, daily IP-cluster secret | `edge_secrets`, memory bucket | until the next UTC midnight (per-key TTL), then gone; gateways zero their copies at midnight (`internal/gateway/visitor.go`) |
 | Gateway | daily proof key, which signs challenges and derives no visitor token | `edge_secrets`, memory bucket | until the end of the following UTC day (per-key TTL), so a challenge issued just before midnight still verifies during its 6 hour validity; gateways keep yesterday's key in memory and zero older ones (`internal/gateway/challenge.go`) |
@@ -273,6 +273,21 @@ platform reads from Umami is in `docs/reference/umami-contract.md`.
     estimate. Automated clients that fetch the script like a browser are
     counted. Read the share as the order of magnitude of the gap, not as an
     exact figure.
+  - **Forged requests.** `Referer`, `Sec-Fetch-Dest` and `Sec-GPC` are plain
+    headers outside a browser, and the script route has no proof or origin
+    check, so a script can claim loads of any site with or without the
+    signal. The file is always served, but each gateway counts at most 60
+    requests per site and truncated address prefix (/24 for IPv4, /48 for
+    IPv6) at once and one more every 10 seconds after that
+    (`DefaultScriptCountRate`, `internal/gateway/ratelimit.go`); requests
+    beyond it are counted only in
+    `gateway_script_requests_not_counted_total`. The bucket is kept in
+    memory under the keyed hash of the prefix, like the event rate limits.
+    The remaining risk: a client spread over many prefixes can still add
+    up to that much per prefix and node, so a site with little traffic can
+    have its share moved by someone who controls many networks. The share
+    stays an estimate shown beside the numbers, never an input of the
+    integrity grade.
 
   The estimate is on the project's overview, in "What SCF sees", in the
   operators' global web view as a column, in the CSV exports, in the

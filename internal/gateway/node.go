@@ -163,6 +163,10 @@ func NewNode(ctx context.Context, c NodeConfig) (*Node, error) {
 	if err != nil {
 		return nil, err
 	}
+	scriptCounts, err := NewScriptCountLimiter(DefaultScriptCountRate, DefaultRateLimitKeys, c.Now)
+	if err != nil {
+		return nil, err
+	}
 	if n.stats, err = NewStats(StatsConfig{Node: g.NodeID, JS: js, Log: c.Log, Registerer: c.Registry, Now: c.Now}); err != nil {
 		return nil, err
 	}
@@ -188,6 +192,7 @@ func NewNode(ctx context.Context, c NodeConfig) (*Node, error) {
 		Publisher:        n.pub,
 		Releases:         n.releases,
 		Scripts:          NewScriptAttribution(n.sites, c.Now),
+		ScriptCounts:     scriptCounts,
 		MaxBody:          g.MaxBody,
 		Log:              c.Log,
 		Registerer:       c.Registry,

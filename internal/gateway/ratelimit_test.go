@@ -170,3 +170,39 @@ func TestRateLimitConcurrent(t *testing.T) {
 		t.Fatalf("allowed %d, want %d", total, 6*60)
 	}
 }
+
+// the script count bucket is per site and prefix: one prefix spends its
+// burst on one site, refills at its rate, and leaves other sites and
+// prefixes alone.
+func TestScriptCountLimiter(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0)
+	l, err := NewScriptCountLimiter(Rate{PerSecond: 0.1, Burst: 3}, 10, func() time.Time { return now })
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, b := PrefixKey{1}, PrefixKey{2}
+	for range 3 {
+		if !l.Allow("site-1", a) {
+			t.Errorf("allow refused")
+		}
+	}
+	if l.Allow("site-1", a) {
+		t.Errorf("allow past the bucket")
+	}
+	if !l.Allow("site-2", a) {
+		t.Errorf("another site has its own bucket")
+	}
+	if !l.Allow("site-1", b) {
+		t.Errorf("another prefix has its own bucket")
+	}
+	now = now.Add(10 * time.Second)
+	if !l.Allow("site-1", a) {
+		t.Errorf("one token after ten seconds")
+	}
+	if l.Allow("site-1", a) {
+		t.Errorf("allow past the bucket")
+	}
+	if _, err := NewScriptCountLimiter(Rate{}, 10, time.Now); err == nil {
+		t.Error("a zero rate was accepted")
+	}
+}
