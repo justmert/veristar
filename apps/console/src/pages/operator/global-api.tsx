@@ -40,6 +40,7 @@ import {
   TD,
   TH,
   useSelection,
+  WithDetail,
 } from "./global-shared";
 import { ExportListButton, OnchainCell, OnchainHeader } from "./onchain-parts";
 
@@ -128,7 +129,8 @@ export function GlobalApiPage() {
           API traffic of every enrolled project over a range of UTC days. Sort by requests to find
           the lowest and highest usage projects, and select projects to compare them side by side.
           Requests, error rates and latency leave out infrastructure requests: CORS preflights,
-          health and probe routes and known health checkers. Hover a request count to see them.
+          health and probe routes and known health checkers. Each request count names those left out
+          below it.
         </p>
       </div>
 
@@ -319,7 +321,11 @@ function ApiRow({
   const slot = selection.slot(t.id);
   const rate = (r: number | null, n: number) => {
     const v = formatRate(r);
-    return v === null ? <Missing /> : <span title={`${formatCount(n)} requests`}>{v}</span>;
+    return v === null ? (
+      <Missing />
+    ) : (
+      <WithDetail detail={`${formatCount(n)} requests`}>{v}</WithDetail>
+    );
   };
   const cell = (s: ApiSort, v: number | null, children: React.ReactNode) => (
     <MagnitudeCell on={sort === s} value={v} max={max}>
@@ -350,12 +356,9 @@ function ApiRow({
       {cell(
         "requests",
         p.requests,
-        <span
-          data-col="requests"
-          title={`${formatCount(p.infrastructure_requests)} infrastructure requests not counted`}
-        >
-          {formatCount(p.requests)}
-        </span>,
+        <WithDetail detail={`+${formatCount(p.infrastructure_requests)} infrastructure`}>
+          <span data-col="requests">{formatCount(p.requests)}</span>
+        </WithDetail>,
       )}
       {cell("rate_4xx", p.rate_4xx, rate(p.rate_4xx, p.requests_4xx))}
       {cell("rate_5xx", p.rate_5xx, rate(p.rate_5xx, p.requests_5xx))}

@@ -591,6 +591,17 @@ export function SortHeader<S extends string>({
 
 // a number with a bar of its size against the largest loaded value, drawn
 // only on the column the table is sorted by, so the long tail shows at once
+// a number with the count behind it on a second line: shown, not left to a
+// hover title, so keyboard and screen reader users read it too
+export function WithDetail({ children, detail }: { children: ReactNode; detail: ReactNode }) {
+  return (
+    <span className="inline-flex flex-col items-end">
+      <span>{children}</span>
+      <span className="font-sans text-caption text-fg-3">{detail}</span>
+    </span>
+  );
+}
+
 export function MagnitudeCell({
   children,
   value,

@@ -46,6 +46,7 @@ import {
   TH,
   useSelection,
   VISITORS_NOTE,
+  WithDetail,
 } from "./global-shared";
 import { ExportListButton, OnchainCell, OnchainHeader } from "./onchain-parts";
 
@@ -348,9 +349,9 @@ function WebRow({
         p.quarantine_share === null ? (
           <Missing />
         ) : (
-          <span title={`${formatCount(p.quarantine_pageviews)} quarantined page views`}>
+          <WithDetail detail={`${formatCount(p.quarantine_pageviews)} page views`}>
             {formatShare(p.quarantine_share)}
-          </span>
+          </WithDetail>
         ),
       )}
       {cell(
@@ -359,11 +360,11 @@ function WebRow({
         p.rejected_share === null ? (
           <Missing />
         ) : (
-          <span
-            title={`${formatCount(p.ingest_rejected)} of ${formatCount(p.ingest_requests)} requests`}
+          <WithDetail
+            detail={`${formatCount(p.ingest_rejected)} of ${formatCount(p.ingest_requests)} requests`}
           >
             {formatShare(p.rejected_share)}
-          </span>
+          </WithDetail>
         ),
       )}
       {WEB_KPIS.map((c) => (
