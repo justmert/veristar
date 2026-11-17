@@ -25,6 +25,20 @@ mkdir -p "$out"
 
 trivy --version | grep -q '^Version: 0\.76\.2$' || { echo "trivy is not 0.76.2" >&2; exit 1; }
 
+# go mod download all writes a checksum for every module of the build list
+# into go.sum, including test-only dependencies of dependencies that the
+# committed go.sum leaves out. the scan needs them in the module cache, not
+# in the repository, so both files are put back on exit and a local run
+# leaves the tree as it found it
+sums="$(mktemp -d)"
+cp go.sum "$sums/root"
+cp examples/otel-go-nethttp/go.sum "$sums/example"
+restore() {
+	cp "$sums/root" go.sum
+	cp "$sums/example" examples/otel-go-nethttp/go.sum
+	rm -rf "$sums"
+}
+trap restore EXIT
 go mod download all
 (cd examples/otel-go-nethttp && go mod download all)
 # same ocb version and manifest as make collector-build; sources only. ocb
