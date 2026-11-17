@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/justmert/veristar/internal/config"
+	"github.com/justmert/veristar/internal/events"
 	"github.com/justmert/veristar/internal/natsx"
 	"github.com/justmert/veristar/internal/obs"
 	"github.com/justmert/veristar/tests/fixtures/natsctr"
@@ -199,4 +200,18 @@ func TestQueueForward(t *testing.T) {
 		require.ErrorContains(t, err, "target stream WEB_EVENTS")
 		require.Equal(t, []string{`web.events.site-a.09 ev-kept={"kept":true}`}, streamBodies(t, ctx, oldAdmin, natsx.StreamWebEvents))
 	})
+}
+
+// a web event queued on the legacy subject of an earlier release is
+// forwarded to its partition; everything else keeps its subject.
+func TestForwardSubject(t *testing.T) {
+	ev := &events.WebEvent{ID: "0193a3f2-6a4e-7cc1-9b1a-3f2d8e9c1a20", SiteID: "0193a3f2-6a4e-7cc1-9b1a-3f2d8e9c1a21",
+		WebsiteID: "0193a3f2-6a4e-7cc1-9b1a-3f2d8e9c1a21", Band: events.BandPrimary, VT: strings.Repeat("ab", 32),
+		UA: "Mozilla/5.0", Type: events.TypePageview, Hostname: "x.example", URL: "/", AcceptedAt: 1_700_000_000_000}
+	body, err := ev.Marshal()
+	require.NoError(t, err)
+	require.Equal(t, ev.Subject(), forwardSubject(natsx.StreamWebEvents, ev.LegacySubject(), body))
+	require.Equal(t, ev.Subject(), forwardSubject(natsx.StreamWebEvents, ev.Subject(), body))
+	require.Equal(t, "web.events.site-a", forwardSubject(natsx.StreamWebEvents, "web.events.site-a", []byte("x")))
+	require.Equal(t, "api.metrics.t", forwardSubject(natsx.StreamAPIMetrics, "api.metrics.t", body))
 }
