@@ -114,3 +114,17 @@ func TestLeaderGateExitCodes(t *testing.T) {
 		require.Equal(t, want, got, "status %s", code)
 	}
 }
+
+// every backup unit records the result of a run that was not skipped
+// (backupresult_test.go), in every repository mode, and a failing writer
+// never fails the backup itself (the leading -)
+func TestBackupUnitsRecordTheirResult(t *testing.T) {
+	out := render(t)
+	for _, mode := range []string{"azure", "s3", "posix-host"} {
+		for _, job := range jobs {
+			b, err := os.ReadFile(filepath.Join(out, mode, "sa-pgbackrest-"+job+".service"))
+			require.NoError(t, err)
+			require.Contains(t, strings.Split(string(b), "\n"), "ExecStopPost=-/usr/local/sbin/sa-backup-result "+job, "%s %s", mode, job)
+		}
+	}
+}

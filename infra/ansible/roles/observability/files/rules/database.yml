@@ -21,6 +21,26 @@ groups:
         annotations:
           summary: "fewer than two of the three etcd members answer"
           runbook: docs/runbooks/alerts.md#etcdmembersdown
+      # etcd refuses every write once its database file reaches the quota
+      # (--quota-backend-bytes, roles/edge), and patroni then cannot renew
+      # its leader key. hourly compaction and the weekly defrag keep the file
+      # at a few megabytes, so half the quota means one of them stopped
+      - alert: EtcdDatabaseSpaceHigh
+        expr: etcd_mvcc_db_total_size_in_bytes / etcd_server_quota_backend_bytes > 0.5
+        for: 15m
+        labels: {severity: ticket}
+        annotations:
+          summary: "the etcd database on {{ $labels.node }} uses {{ $value | humanizePercentage }} of its quota"
+          runbook: docs/runbooks/alerts.md#etcddatabasespacehigh
+      # the alarm is cluster wide and every member reports it, so one alert
+      # per member that raised it. etcd 3.6 and 3.7 export it as
+      # etcd_debugging_server_alarms
+      - alert: EtcdNoSpaceAlarm
+        expr: max by (server_id) (etcd_debugging_server_alarms{alarm_type="NOSPACE"}) > 0
+        labels: {severity: page}
+        annotations:
+          summary: "etcd raised the NOSPACE alarm (member {{ $labels.server_id }}) and refuses every write"
+          runbook: docs/runbooks/alerts.md#etcdnospacealarm
 
       # one cluster scope; a leader is a member with patroni_primary 1
       - alert: PatroniNoLeader
@@ -47,6 +67,21 @@ groups:
         annotations:
           summary: "the newest pgbackrest backup is older than 26 hours, or none is known"
           runbook: docs/runbooks/alerts.md#backuptooold
+      # the newest run of a backup unit across the database nodes failed
+      # (sa-backup-result, roles/backup). SystemdUnitFailed loses such a
+      # failure once the leader moves, because the next run on the old
+      # leader is skipped and the skip clears the failed state; this record
+      # lasts until a later run of the same unit succeeds on any node
+      - alert: BackupJobFailed
+        expr: |
+          sa_backup_last_run_success == 0
+          and on (unit, node)
+          (sa_backup_last_run_timestamp_seconds == on (unit) group_left max by (unit) (sa_backup_last_run_timestamp_seconds))
+        for: 5m
+        labels: {severity: ticket}
+        annotations:
+          summary: "the last run of {{ $labels.unit }}, on {{ $labels.node }}, failed"
+          runbook: docs/runbooks/alerts.md#backupjobfailed
       # a failure since the last 15 minutes, or nothing archived for 15
       # minutes on the primary while wal is being written
       - alert: WALArchivingFailing

@@ -33,6 +33,10 @@ backup_diff_calendar: "Mon..Sat *-*-* 01:00:00 UTC"
 # check proves a fresh wal segment reaches the repository
 backup_verify_calendar: "*-*-* 05:30:00 UTC"
 
+# node_exporter's textfile directory (roles/observability), where every run
+# that was not skipped records its end and result for BackupJobFailed
+backup_textfile_dir: /etc/veristar/observability/textfile
+
 # posix-host mode only: the port of pgbackrest's tls protocol, whose
 # certificates come from the internal ca (tasks/tls.yml)
 backup_tls_port: 8432

@@ -3,6 +3,42 @@
 # daily verification. on the repository node (posix-host) they run there; in
 # azure and s3 mode every database node carries them and only the patroni
 # leader runs them (templates/backup.service.j2, ExecCondition).
+- name: Create the textfile directory
+  ansible.builtin.file:
+    path: "{{ backup_textfile_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+# systemd gives ExecStopPost the run's result in SERVICE_RESULT:
+# exec-condition for a run skipped on a replica, success, or the reason of
+# the failure (exit-code, timeout, signal, ...)
+- name: Install the backup result writer
+  ansible.builtin.copy:
+    dest: /usr/local/sbin/sa-backup-result
+    content: |
+      #!/bin/sh
+      # managed by ansible (infra/ansible/roles/backup)
+      set -eu
+      [ "${SERVICE_RESULT:-}" = exec-condition ] && exit 0
+      ok=0
+      [ "${SERVICE_RESULT:-}" = success ] && ok=1
+      u=sa-pgbackrest-$1.service
+      f={{ backup_textfile_dir }}/backup-$1.prom
+      {
+        echo '# HELP sa_backup_last_run_timestamp_seconds end of the last run of the backup unit that was not skipped'
+        echo '# TYPE sa_backup_last_run_timestamp_seconds gauge'
+        echo "sa_backup_last_run_timestamp_seconds{unit=\"$u\"} $(date +%s)"
+        echo '# HELP sa_backup_last_run_success 1 when that run succeeded'
+        echo '# TYPE sa_backup_last_run_success gauge'
+        echo "sa_backup_last_run_success{unit=\"$u\"} $ok"
+      } >"$f.tmp"
+      mv "$f.tmp" "$f"
+    owner: root
+    group: root
+    mode: "0755"
+
 - name: Write the backup units
   ansible.builtin.template:
     src: "backup.{{ unit[1] }}.j2"
