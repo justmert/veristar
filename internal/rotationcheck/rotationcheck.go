@@ -152,18 +152,55 @@ func natsTLS(n *NATS) ([]nats.Option, error) {
 	return []nats.Option{nats.Secure(tc), nats.TLSHandshakeFirst()}, nil
 }
 
+// natsAttempt logs in to every server on its own. given several urls,
+// nats.Connect tries them in turn and reports only the last server's error,
+// so one dropped connection would hide that the others refused the
+// credential. a credential is accepted when any server takes it and refused
+// only when every server refused it; a server that gives no answer is asked
+// again, and stays inconclusive if it never answers.
 func natsAttempt(urls []string, tlsOpts []nats.Option, user, pw string) (Outcome, string) {
-	opts := append([]nats.Option{nats.UserInfo(user, pw), nats.Timeout(attemptTimeout),
-		nats.MaxReconnects(0), nats.NoReconnect(), nats.DontRandomize()}, tlsOpts...)
-	nc, err := nats.Connect(strings.Join(urls, ","), opts...)
-	if err == nil {
-		nc.Close()
-		return Accepted, ""
+	refused := 0
+	var unanswered []string
+	for _, u := range urls {
+		o, detail := natsServerAttempt(u, tlsOpts, user, pw)
+		switch o {
+		case Accepted:
+			return Accepted, ""
+		case Refused:
+			refused++
+		default:
+			unanswered = append(unanswered, u+": "+detail)
+		}
 	}
-	if errors.Is(err, nats.ErrAuthorization) || strings.Contains(strings.ToLower(err.Error()), "authorization violation") {
+	if refused == len(urls) {
 		return Refused, ""
 	}
-	return Inconclusive, err.Error()
+	return Inconclusive, strings.Join(unanswered, "; ")
+}
+
+// natsAttempts bounds how often one server is asked before its missing
+// answer counts as inconclusive
+const natsAttempts = 3
+
+func natsServerAttempt(url string, tlsOpts []nats.Option, user, pw string) (Outcome, string) {
+	opts := append([]nats.Option{nats.UserInfo(user, pw), nats.Timeout(attemptTimeout),
+		nats.MaxReconnects(0), nats.NoReconnect(), nats.DontRandomize()}, tlsOpts...)
+	var detail string
+	for i := range natsAttempts {
+		if i > 0 {
+			time.Sleep(time.Second)
+		}
+		nc, err := nats.Connect(url, opts...)
+		if err == nil {
+			nc.Close()
+			return Accepted, ""
+		}
+		if errors.Is(err, nats.ErrAuthorization) || strings.Contains(strings.ToLower(err.Error()), "authorization violation") {
+			return Refused, ""
+		}
+		detail = err.Error()
+	}
+	return Inconclusive, detail
 }
 
 func umamiAttempt(ctx context.Context, c *umami.Client, user, pw string) (Outcome, string) {
