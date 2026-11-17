@@ -46,7 +46,8 @@ file-backed stream. "Stored" means PostgreSQL.
 | Gateway | networks reported per site and day, as keys | memory | the UTC day, in a bounded table |
 | Gateway | `Referer` and `Sec-GPC` headers of a request for `sdk.js` | memory | the request. The `Referer` is reduced to its origin, matched against the registered origins of the active sites and dropped; only the site it names leaves the request, as one count, and one more count when `Sec-GPC: 1` was sent (section 6, "Measuring what is not measured") |
 | Gateway | page signals of tracker 1.3.0: a page view's frame flag, a never-visible notice | memory, then counted on `EDGE_STATS` | the request; only per-site counts leave it |
-| Gateway | daily visitor secret, daily IP-cluster secret, daily proof key | `edge_secrets`, memory bucket | until the next UTC midnight (per-key TTL), then gone; gateways zero their copies at midnight (`internal/gateway/visitor.go`) |
+| Gateway | daily visitor secret, daily IP-cluster secret | `edge_secrets`, memory bucket | until the next UTC midnight (per-key TTL), then gone; gateways zero their copies at midnight (`internal/gateway/visitor.go`) |
+| Gateway | daily proof key, which signs challenges and derives no visitor token | `edge_secrets`, memory bucket | until the end of the following UTC day (per-key TTL), so a challenge issued just before midnight still verifies during its 6 hour validity; gateways keep yesterday's key in memory and zero older ones (`internal/gateway/challenge.go`) |
 | Gateway | IP-cluster sets: keyed HMAC of the truncated network, visitor tokens | memory | a sliding hour |
 | `WEB_EVENTS` | accepted event: site, band, visitor token, user agent (cut to 500 UTF-16 code units), country code, hostname, path with allowlisted query, referrer scheme and host, title, screen, language, event name and data. Tracker 1.3.0 sends no screen and no language, and a title only when the site sets `data-send-title="true"`, so those fields stay empty for its events | queued | until the replayer delivers it, at most 72 hours |
 | `WEB_DLQ` | events Umami refused permanently, same fields | queued | at most 7 days; erasure deletes matching messages |
@@ -121,7 +122,7 @@ day replaces the day's secrets, so visitors seen before it count again.
 | Store | Retention | Mechanism |
 |---|---|---|
 | Client address | the request | never written |
-| `edge_secrets` | until next UTC midnight | per-key TTL, memory storage |
+| `edge_secrets` | visitor and IP-cluster secrets until the next UTC midnight; the proof key until the end of the following UTC day | per-key TTL, memory storage |
 | `visit_state` | 24 hours after the last write | bucket TTL, memory storage |
 | `WEB_EVENTS` | until delivered, at most 72 hours | work-queue stream, max age |
 | `WEB_DLQ` | at most 7 days | max age; erasure deletes earlier |
