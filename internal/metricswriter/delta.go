@@ -236,6 +236,15 @@ type Contribution struct {
 // exactly, so the writer reports it instead of guessing.
 var ErrInvalidPoint = errors.New("metricswriter: invalid point")
 
+// MaxPointRequests bounds what one point may add to the stored counts: a
+// billion requests, 16 million a second for a minute from one stream of one
+// process. no real export comes near it, and with it the sums the platform
+// keeps in 64-bit integers (an hour, a day, a tenant's month) stay far
+// from overflowing even when a tenant sends absurd counts at its full rate
+// limit. a point above it is refused; a cumulative one still becomes the
+// base of its stream's next difference.
+const MaxPointRequests = 1_000_000_000
+
 // DefaultFirstPointThreshold is the default for the first-point rule.
 const DefaultFirstPointThreshold = 120 * time.Second
 
@@ -408,6 +417,16 @@ func compareBytes(a, b []byte) int {
 // Apply applies one point and returns what it contributes. points of one
 // stream must be applied in the order they were queued.
 func (s *State) Apply(p *Point) (Contribution, Outcome, error) {
+	c, out, err := s.apply(p)
+	if err == nil && c.Count > MaxPointRequests {
+		// the stream's state already holds this point, so the next one
+		// adds only its own difference
+		return Contribution{}, 0, fmt.Errorf("%w: adds %d requests, more than %d", ErrInvalidPoint, c.Count, MaxPointRequests)
+	}
+	return c, out, err
+}
+
+func (s *State) apply(p *Point) (Contribution, Outcome, error) {
 	if p.Temporality != Delta && p.Temporality != Cumulative {
 		return Contribution{}, 0, fmt.Errorf("%w: temporality %d", ErrInvalidPoint, p.Temporality)
 	}

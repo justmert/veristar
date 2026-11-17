@@ -441,3 +441,31 @@ func TestStreamIDContinuesLegacyState(t *testing.T) {
 		t.Fatal("the stream id is not part of the key")
 	}
 }
+
+// one point can add at most MaxPointRequests; a cumulative point above it
+// is refused but becomes its stream's base, so the stream goes on.
+func TestPointRequestBound(t *testing.T) {
+	now := int64(1_700_000_000) * sec
+	s := newState()
+	big := Point{Tenant: "t1", ResourceHash: "r1", Temporality: Delta, Start: now, Time: now + sec, Count: MaxPointRequests + 1, Counts: bk(MaxPointRequests + 1)}
+	if _, _, err := s.Apply(&big); !errors.Is(err, ErrInvalidPoint) {
+		t.Fatalf("delta point above the bound: %v", err)
+	}
+	ok := big
+	ok.Count, ok.Counts = MaxPointRequests, bk(MaxPointRequests)
+	if c, _, err := s.Apply(&ok); err != nil || c.Count != MaxPointRequests {
+		t.Fatalf("delta point at the bound: %v %d", err, c.Count)
+	}
+	first := cum(now, now+10*sec, bk(5), 0, routeA)
+	jump := cum(now, now+20*sec, bk(5+MaxPointRequests+1), 0, routeA)
+	next := cum(now, now+30*sec, bk(5+MaxPointRequests+8), 0, routeA)
+	if _, _, err := s.Apply(&first); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.Apply(&jump); !errors.Is(err, ErrInvalidPoint) {
+		t.Fatalf("cumulative jump above the bound: %v", err)
+	}
+	if c, out, err := s.Apply(&next); err != nil || out != OutcomeIncrement || c.Count != 7 {
+		t.Fatalf("after the refused jump: %v %s %d, want an increment of 7", err, out, c.Count)
+	}
+}
