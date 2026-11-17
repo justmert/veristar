@@ -592,6 +592,8 @@ func TestCollector(t *testing.T) {
 		hist := m.SetEmptyHistogram()
 		hist.SetAggregationTemporality(pmetric.AggregationTemporalityDelta)
 		dp := hist.DataPoints().AppendEmpty()
+		// a point the collector keeps, so the export reaches the exporter
+		dp.SetTimestamp(pcommon.NewTimestampFromTime(time.Now()))
 		dp.SetCount(1)
 		dp.ExplicitBounds().FromRaw(canonical)
 		dp.BucketCounts().FromRaw(make([]uint64, 15))
