@@ -298,6 +298,8 @@ func catalogue(terms string) []route {
 const (
 	gateAccountA     = "GDWQ7YV27AVTL25BDOLZD6E44VCQLCEBJXBOOWA2R3VLKCUIZHSXZLDE"
 	gateFreshAccount = "GABZATVFOHSGTZNO2VUY2JDXW3R76URMFO2MUQVXBRBIDRCJXBEZG5QH"
+	// a verified contract of tenant a with calls per function
+	gateContractA = "CBQDHNBFBZYE4MKPWBSJOPIYLW4SFSXAXUTSXJN76GNKYVYPCKWC6QUK"
 )
 
 // walked returns "METHOD /path" for every route the router serves.
@@ -348,7 +350,7 @@ func (w *gateWorld) aIDs() gateIDs {
 // markers are strings only tenant a's data holds.
 func (w *gateWorld) markers() []string {
 	return []string{w.ta.String(), w.sa.String(), w.domainA, w.slugA, w.nameA, w.inviteA, w.tokenA, w.requestA, w.credentialA,
-		w.chainA, w.chainKeyA, w.reportA}
+		w.chainA, w.chainKeyA, gateContractA, w.reportA}
 }
 
 func (w *gateWorld) leaked(body []byte) []string {
@@ -412,6 +414,16 @@ func (e *env) gateWorld(t *testing.T) *gateWorld {
 		// a closed week of weekly active accounts
 		_, err = c.Exec(context.Background(), `insert into agg.chain_weeks (tenant_id, week, active_accounts, closed_at)
 			values ($1, date_trunc('week', current_date - 7)::date, 5, now())`, w.ta)
+		require.NoError(t, err)
+		// a verified contract with a day of calls per function
+		_, err = c.Exec(context.Background(), `insert into cp.chain_ids (tenant_id, strkey, kind, added_by, verify_method, verified_at, verified_via)
+			values ($1, $2, 'contract', 'console', 'contract_admin', now(), $3)`, w.ta, gateContractA, w.chainKeyA)
+		require.NoError(t, err)
+		_, err = c.Exec(context.Background(), `insert into agg.chain_daily (tenant_id, strkey, day, source, operations, transactions, counterparties, functions)
+			values ($1, $2, current_date - 1, 'rpc_events', 4, 4, 0, 'read')`, w.ta, gateContractA)
+		require.NoError(t, err)
+		_, err = c.Exec(context.Background(), `insert into agg.chain_function_daily (tenant_id, strkey, day, function_name, caller, successful, failed, accounts)
+			values ($1, $2, current_date - 1, 'swap', 'account', 4, null, 2)`, w.ta, gateContractA)
 		require.NoError(t, err)
 	})
 
