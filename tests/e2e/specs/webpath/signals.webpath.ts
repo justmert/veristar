@@ -245,7 +245,9 @@ test("track() before start() sends nothing @consent", async ({ page }) => {
   await page.click("#consent-accept");
   await expect.poll(async () => (await byType(staticSite, "pv")).length).toBe(1);
   await page.evaluate(() => window.umami?.track("after-consent"));
-  await expect.poll(async () => (await byType(staticSite, "ev")).map((e) => e.n)).toEqual(["after-consent"]);
+  await expect
+    .poll(async () => (await byType(staticSite, "ev")).map((e) => e.n))
+    .toEqual(["after-consent"]);
   for (const r of await sent(staticSite)) expect(r.verdict.status).toBe(202);
   expect((await sent(staticSite)).map(wire).every((e) => e.sv === "1.3.1")).toBe(true);
 });
