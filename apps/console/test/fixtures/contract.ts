@@ -711,6 +711,7 @@ export const steppedUpBody = {
   expires_at: "2026-11-16T21:00:00Z",
   max_age_seconds: 43200,
   passkeys: 1,
+  sign_in_passkey: false,
   enrollment: "closed",
   enrollment_until: null,
 };

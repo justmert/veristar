@@ -21,6 +21,7 @@ import {
 import { LayoutGroup, motion } from "motion/react";
 import { type ReactNode, useId } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
+import { stepUpQuery } from "@/api/operators";
 import { operatorAlertsQuery, tenantQuery } from "@/api/queries";
 import type { Me } from "@/api/schemas";
 import { StatusDot, statusTone } from "@/components/status";
@@ -293,12 +294,16 @@ function OperatorSection({
   rest: string | null;
   onNavigate?: () => void;
 }) {
-  // alerts are polled only inside the operator area (contract 5.13)
-  const alerts = useQuery({ ...operatorAlertsQuery, enabled: inOperator });
-  const current = inOperator && !alerts.error ? alerts.data : undefined;
+  // alerts are polled only inside the operator area (contract 5.13), and
+  // only once the session holds a step-up: before it every operator route
+  // answers 401 step_up_required, which is not an unreachable alert source
+  const stepUp = useQuery({ ...stepUpQuery, enabled: inOperator });
+  const live = inOperator && stepUp.data?.stepped_up === true;
+  const alerts = useQuery({ ...operatorAlertsQuery, enabled: live });
+  const current = live && !alerts.error ? alerts.data : undefined;
   const critical = current ? criticalCount(current.alerts) : 0;
   const count = current?.alerts.length ?? 0;
-  const failed = inOperator && alerts.error !== null;
+  const failed = live && alerts.error !== null;
   return (
     <nav aria-label="Operator" className="flex flex-col gap-px">
       <span className="px-2.5 pt-2 pb-1.5 text-caption tracking-wide text-fg-2">OPERATOR</span>

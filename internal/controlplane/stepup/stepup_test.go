@@ -216,6 +216,12 @@ func TestStepUp(t *testing.T) {
 		require.Equal(t, "step_up_required", code(t, b))
 		st, b = c2.stepUp(t, key)
 		require.Equal(t, http.StatusOK, st, string(b))
+		// the answer has the full status shape the console parses
+		var after stepup.Status
+		require.NoError(t, json.Unmarshal(b, &after))
+		require.True(t, after.SteppedUp)
+		require.Equal(t, stepup.EnrollmentClosed, after.Enrollment)
+		require.Equal(t, int64(1), after.Passkeys)
 		st, _ = c2.call(t, http.MethodGet, "/protected", nil)
 		require.Equal(t, http.StatusNoContent, st)
 

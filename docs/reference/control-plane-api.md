@@ -1724,7 +1724,7 @@ without padding, with the same limits and 422 field codes).
 
 `StepUpStatus` is `{stepped_up, stepped_up_at, expires_at, max_age_seconds, passkeys,
 sign_in_passkey, enrollment, enrollment_until}`; `passkeys` counts the added passkeys and the
-sign-in passkey. `POST /api/operator/step-up` answers without the last four. `enrollment` is
+sign-in passkey. `POST /api/operator/step-up` answers with the same `StepUpStatus`. `enrollment` is
 `open` (a first passkey may be registered without a step-up until `enrollment_until`),
 `sign_in_required` (a window is open, but this session's sign-in is older than it) or `closed`.
 `Passkey` is `{id, name, created_at, last_used_at}`. The sign-in passkey is not listed and not
