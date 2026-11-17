@@ -72,6 +72,13 @@ const (
 	// key cannot authorise a medium threshold operation, so it does not
 	// prove control; the manage-data method proves it through the signers
 	ErrMasterNoWeight = "master_key_no_weight"
+	// ErrViaRemoved: the id was proven through a verified id the project
+	// removed since; the proof no longer holds and the id is unverified
+	ErrViaRemoved = "verified_through_removed_id"
+	// ErrFactoryCreated: the transaction creates no contract at its top
+	// level but calls one, so a factory contract may have created the id;
+	// such a creation is not read, and the admin method proves the id
+	ErrFactoryCreated = "contract_created_by_contract"
 )
 
 // AuditTarget names a declared id in the audit log.
@@ -321,6 +328,13 @@ func (h *Routes) remove(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	ctx := r.Context()
+	// a contract proven through this id, and anything proven through that
+	// contract, loses its proof first: the proof rested on this id being
+	// the project's. done before the removal, so a failure in between
+	// leaves fewer verified ids, never more
+	if err := h.unverifyDerived(ctx, a, row); err != nil {
+		return err
+	}
 	err = h.scope.InTenant(ctx, a, func(tx pgx.Tx) error {
 		tag, err := tx.Exec(ctx, `delete from cp.chain_ids where id = $1`, row.ID)
 		if err != nil {
@@ -339,6 +353,46 @@ func (h *Routes) remove(w http.ResponseWriter, r *http.Request) error {
 	}
 	httpx.NoContent(w)
 	return nil
+}
+
+// unverifyDerived clears the proof of every id verified through row,
+// directly or through another such id, under cp_system where proofs are
+// written, with an audit row each.
+func (h *Routes) unverifyDerived(ctx context.Context, a tenants.Access, row idRow) error {
+	return h.scope.DB().WithSystem(ctx, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, `
+			with recursive via(strkey) as (
+			  select $2::text
+			  union
+			  select c.strkey from cp.chain_ids c join via on c.verified_via = via.strkey
+			  where c.tenant_id = $1 and c.verified_at is not null
+			)
+			update cp.chain_ids set verify_method = null, verified_at = null, verified_via = null, verify_detail = null,
+			       last_verify_at = now(), last_verify_error = $3
+			where tenant_id = $1 and verified_at is not null and strkey in (select strkey from via) and strkey <> $2
+			returning id, strkey`, a.TenantID, row.Strkey, ErrViaRemoved)
+		if err != nil {
+			return err
+		}
+		type cleared struct {
+			ID     uuid.UUID
+			Strkey string
+		}
+		list, err := pgx.CollectRows(rows, pgx.RowToStructByPos[cleared])
+		if err != nil {
+			return err
+		}
+		for _, c := range list {
+			if err := audit.InSystem(ctx, tx, audit.Entry{
+				Actor: audit.User(a.User.ID), Action: ActionVerify, Target: AuditTarget(c.ID),
+				Detail: map[string]any{"tenant_id": a.TenantID.String(), "strkey": c.Strkey, "result": ErrViaRemoved,
+					"removed": row.Strkey},
+			}); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 // Challenge is the answer of POST .../challenge (contract 15.4.1): the

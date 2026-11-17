@@ -93,7 +93,12 @@ A contract is proven through an account your project has already verified. Choos
   **Check the deployer**. Veristar reads the transaction, recomputes the contract id from the
   deploying address and the salt, and the proof holds when the id matches and the deploying address
   is one of your verified accounts. Horizon keeps about a year of transactions; for an older
-  contract, use the admin check.
+  contract, use the admin check. Only a contract the transaction creates itself is read: a
+  contract that a factory contract created during a contract call is not, and the check says so;
+  prove such a contract with the admin check.
+
+A contract's proof rests on the account it was proven through. Removing that account clears the
+proof of every contract proven through it; prove them again through another verified account.
 
 ## Link your domain and your accounts both ways
 

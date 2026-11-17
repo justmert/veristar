@@ -132,6 +132,26 @@ func TestDeployments(t *testing.T) {
 
 	_, err = Deployments(PublicNetwork, "AAAA")
 	require.Error(t, err)
+	calls, err := CallsContract(b64)
+	require.NoError(t, err)
+	require.False(t, calls, "a top-level creation calls no contract")
+
+	// a factory call: the envelope invokes a contract function, and the
+	// contract it creates appears in no operation
+	factory := accountAddress(t, deployer)
+	fn := xdr.ScSymbol("deploy")
+	env.V1.Tx.Operations[0].Body.InvokeHostFunctionOp.HostFunction = xdr.HostFunction{
+		Type:           xdr.HostFunctionTypeHostFunctionTypeInvokeContract,
+		InvokeContract: &xdr.InvokeContractArgs{ContractAddress: factory, FunctionName: fn, Args: []xdr.ScVal{}},
+	}
+	b64, err = xdr.MarshalBase64(env)
+	require.NoError(t, err)
+	got, err = Deployments(PublicNetwork, b64)
+	require.NoError(t, err)
+	require.Empty(t, got)
+	calls, err = CallsContract(b64)
+	require.NoError(t, err)
+	require.True(t, calls)
 }
 
 func instanceEntry(t *testing.T, contract string, storage xdr.ScMap) string {
@@ -584,4 +604,37 @@ func TestContractInitiatorCap(t *testing.T) {
 	// transaction was looked up
 	require.Equal(t, []Day{{Day: day1, Operations: 1, Transactions: 1, InitiatorsMissing: CodeDayTooLarge}}, got)
 	require.Zero(t, f.batches.Load())
+}
+
+func TestCheckNetwork(t *testing.T) {
+	var horizonPass, rpcPass atomic.Value
+	horizonPass.Store(PublicNetwork)
+	rpcPass.Store(PublicNetwork)
+	hz := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"network_passphrase": horizonPass.Load()})
+	}))
+	defer hz.Close()
+	rp := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			ID     int64  `json:"id"`
+			Method string `json:"method"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		require.Equal(t, "getNetwork", req.Method)
+		_ = json.NewEncoder(w).Encode(map[string]any{"jsonrpc": "2.0", "id": req.ID,
+			"result": map[string]any{"passphrase": rpcPass.Load(), "protocolVersion": 23}})
+	}))
+	defer rp.Close()
+	he, err := NewEndpoint(hz.URL, 100, "test")
+	require.NoError(t, err)
+	re, err := NewEndpoint(rp.URL, 100, "test")
+	require.NoError(t, err)
+	h, r := NewHorizon(he), NewRPC(re)
+
+	require.NoError(t, CheckNetwork(t.Context(), h, r, PublicNetwork))
+	horizonPass.Store("Test SDF Network ; September 2015")
+	require.Equal(t, CodeWrongNetwork, Code(CheckNetwork(t.Context(), h, r, PublicNetwork)))
+	horizonPass.Store(PublicNetwork)
+	rpcPass.Store("Test SDF Future Network ; October 2022")
+	require.Equal(t, CodeWrongNetwork, Code(CheckNetwork(t.Context(), h, r, PublicNetwork)))
 }

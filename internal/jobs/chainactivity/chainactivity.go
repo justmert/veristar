@@ -157,6 +157,12 @@ func (t *Task) Run(ctx context.Context, tx TxFunc) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
+	// sources on another network would store other accounts' activity
+	// under the same strkeys; a source that cannot be read now fails per
+	// id below, as before
+	if err := chain.CheckNetwork(ctx, reader.Horizon, reader.RPC, chain.PublicNetwork); chain.Code(err) == chain.CodeWrongNetwork {
+		return Result{}, fmt.Errorf("chainactivity: %w", err)
+	}
 	var horizon, rpc window
 	cache := map[string]read{}
 	res := Result{IDs: len(list)}

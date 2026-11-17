@@ -89,6 +89,15 @@ func (c *RPC) Health(ctx context.Context) (Health, error) {
 	return h, err
 }
 
+// Network reads getNetwork's passphrase.
+func (c *RPC) Network(ctx context.Context) (string, error) {
+	var n struct {
+		Passphrase string `json:"passphrase"`
+	}
+	err := c.call(ctx, "getNetwork", nil, &n)
+	return n.Passphrase, err
+}
+
 // LedgerClose reads when a ledger closed, through getLedgers.
 func (c *RPC) LedgerClose(ctx context.Context, seq uint32) (time.Time, error) {
 	var res protocol.GetLedgersResponse

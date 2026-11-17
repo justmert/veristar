@@ -82,6 +82,22 @@ func Deployments(passphrase, envelopeXDR string) ([]Deployment, error) {
 	return out, nil
 }
 
+// CallsContract says whether a transaction envelope invokes a contract
+// function. a contract created inside such a call, by a factory contract,
+// appears in no operation of the envelope, so Deployments cannot see it.
+func CallsContract(envelopeXDR string) (bool, error) {
+	var env xdr.TransactionEnvelope
+	if err := xdr.SafeUnmarshalBase64(envelopeXDR, &env); err != nil {
+		return false, fmt.Errorf("chain: decode envelope: %w", err)
+	}
+	for _, op := range env.Operations() {
+		if ih, ok := op.Body.GetInvokeHostFunctionOp(); ok && ih.HostFunction.Type == xdr.HostFunctionTypeHostFunctionTypeInvokeContract {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // adminKeys are the instance storage keys read as the contract's admin or
 // owner. soroban has no standard admin entry; these are the conventions of
 // the soroban examples and the stellar asset contract (symbol "Admin") and
