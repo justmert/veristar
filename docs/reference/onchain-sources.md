@@ -12,7 +12,7 @@ each source, what it gives, and its limits, as checked on 2026-11-16.
 | Key | Default | Used for |
 |---|---|---|
 | `STELLAR_HORIZON_URL` | `https://horizon.stellar.org` | account operations, account records (home domain, data entries), transactions of deployer proofs, ledger close times |
-| `STELLAR_RPC_URL` | `https://mainnet.sorobanrpc.com` | contract events (`getEvents`), the envelopes of their transactions (`getTransaction`), contract instances (`getLedgerEntries`), ledger close times (`getLedgers`), the retention window (`getHealth`) |
+| `STELLAR_RPC_URL` | `https://mainnet.sorobanrpc.com` | contract events (`getEvents`), the envelopes and diagnostic events of their transactions (`getTransaction`), contract instances (`getLedgerEntries`), ledger close times (`getLedgers`), the retention window (`getHealth`) |
 | `STELLAR_HORIZON_RPS` | `0.8` | requests per second to Horizon |
 | `STELLAR_RPC_RPS` | `2` | requests per second to Stellar RPC |
 
@@ -79,6 +79,73 @@ operation involving one of the project's verified accounts or contracts that wee
   sponsored contract invocation counts the account that submitted the operation. A contract that
   emits no events has no operations through this source and adds no initiators.
 
+## Calls per contract function
+
+For each verified contract, the platform counts per UTC day the calls into each of its functions,
+split by caller, with the distinct accounts behind them. The definitions are section 15.9 of
+[control-plane-api.md](control-plane-api.md#159-calls-per-contract-function).
+
+### Where the calls come from
+
+The reader already fetches, through `getTransaction`, every transaction in which the contract
+emitted an event in a successful call (see above). The same answer carries what the calls need:
+
+| Caller | Read from | How |
+|---|---|---|
+| `account`: the operation invokes the contract | `envelopeXdr` | the `invoke_host_function` operation whose host function is `invoke_contract` with the contract as `contract_address`; its `function_name` is the function. For a fee bump, the inner transaction carries the operation |
+| `contract`: another contract calls it | `diagnosticEventsXdr` | the host emits a diagnostic `fn_call` event when a call starts, from the calling contract (no contract for the operation's own call), with the callee's 32-byte id and the function name as topics, and a `fn_return` event from the callee when the call returns |
+
+The invoking account of every call is the initiator of the operation, as for
+[weekly active accounts](#weekly-active-accounts): the operation's source, or the transaction's;
+the inner transaction's source for a fee bump, never the fee payer; a muxed source counts as its
+`G` account.
+
+- **Successful and failed.** The events of one transaction form its call tree depth first. A
+  call the next event of its caller closes without a `fn_return`, or one still open at the end,
+  failed: the callee returned an error that the calling contract handled, and the transaction
+  went on. Mainnet transaction
+  `9ab4a86a900cb2d5ec61fc77b1a86962acef14e74679b7c9d88bb868122a361d` shows it: a pool calls
+  `balance` on another contract twice, both calls end in contract error 13 without a
+  `fn_return`, and the pool goes on to complete the deposit.
+- **Calls of accounts never show as failed.** Every transaction read holds an event of the
+  contract in a successful call, so its operation succeeded. A failed transaction keeps no
+  contract events (only the fee events of the native asset contract, with
+  `inSuccessfulContractCall` false), and `getEvents` serves no diagnostic events, so no public
+  source lists failed transactions per contract. The `failed` count of the `account` caller is
+  therefore `null`, never 0. Finding them would mean reading every transaction of every ledger
+  through `getTransactions`: ledger 65,526,000 alone filled a whole page of 200 transactions on
+  2026-11-17, at a ledger every five to six seconds.
+- **Discovery.** A transaction in which the contract emits no event is not found. In every
+  transaction found, every call into the contract counts, also calls that emit no event.
+- **Diagnostic events.** A server records them only when `ENABLE_SOROBAN_DIAGNOSTIC_EVENTS` is
+  on ([`getTransaction`](https://developers.stellar.org/docs/data/apis/rpc/api-reference/methods/getTransaction)).
+  `mainnet.sorobanrpc.com` sends them. A day with a transaction that invokes a contract without
+  them, or with events that form no call tree, stores the calls of accounts only and records
+  `no_call_tree`.
+- **Distinct accounts without addresses.** A day's transactions are read in one run, so the
+  distinct accounts per function are counted in memory and only the count is stored. No address
+  and no hash of one is kept.
+- **Cap.** At most 64 functions per contract and day keep their own rows; the rest add up under
+  `{other}`. A day with more than 10,000 transactions to read stores no calls
+  (`day_over_read_cap`), as for weekly active accounts.
+- **Window.** The calls of a day are read once it is over, while the RPC window holds it. A
+  contract day stored before the calls were counted is read again while it is at most seven days
+  old, and recorded `before_source_history` once it is older.
+
+### Fixtures
+
+The unit tests under `internal/chain` decode these mainnet transactions, as `getTransaction`
+returned them on 2026-11-17 (`internal/chain/testdata`):
+
+| Transaction | Ledger | What it shows |
+|---|---|---|
+| `a3adca3c0dbb8d7b006afd59bea15bc967f76f1a0b9d99a4a895ccd9ea70f690` | 65,526,000 | a fee bump: the inner source `GAY4...SMTHL` calls `harvest` on `CBGS...KKY3`, which calls `harvest` on `CDL7...IGWA` 14 times, each calling `mint` on `CB23...OUOV`; the fee payer `GA2J...HVAW` initiates nothing |
+| `9ab4a86a900cb2d5ec61fc77b1a86962acef14e74679b7c9d88bb868122a361d` | 65,520,023 | `deposit` on a router, which calls `deposit` on a pool; two failed `balance` calls the pool handles |
+| `71993751270817b44ee32a1c25a0eaf2016c68d92851739c5a1a28e9ebce6965` | 65,526,000 | a classic transaction whose asset contract emitted events: no contract call |
+
+No Soroban transaction of the window used a muxed source; the muxed case rewrites the fee bump's
+inner source as a muxed account of the same key.
+
 ## How a day is read
 
 - A day is a UTC day and is read once it is over. The reader finds the first ledger of the day by
@@ -122,6 +189,21 @@ The run of 2026-11-16 (UTC) after the weekly active accounts were added read the
 | A quiet contract `CABF...BFOX` found among recent events, 2026-11-15 | 2,021 operations, 1,388 transactions; 1,388 envelopes read through batched `getTransaction`, 1 distinct initiator |
 | USDC issuer account, 2026-11-15 | 3 operations, 1 distinct initiator |
 | USDC issuer account, ISO week 2026-W46 (2026-11-09 to 2026-11-15) | 136 operations, 8 distinct initiators |
+
+`TestLiveFunctions` reads one contract's calls per function for yesterday (set `LIVE_CONTRACT`
+to read another):
+
+```sh
+go test -tags live -count=1 -v -run TestLiveFunctions ./internal/chain/
+```
+
+The runs of 2026-11-17 (UTC) read 2026-11-16 from `mainnet.sorobanrpc.com`, which sent the
+diagnostic events of every transaction:
+
+| Contract | Result |
+|---|---|
+| The pool `CCY2...IZFWV` of the fixture `9ab4...361d` | 156 transactions read, functions `read`; 7 functions, all called by contracts, for example `swap` 141 successful calls from 33 accounts |
+| The router `CBQD...6QUK` of the same fixture | 3,010 transactions read, functions `read`; 16 rows: `swap_chained` called by accounts 2,030 times from 60 accounts and by contracts 849 times from 274 accounts, and 9 other functions called only by contracts, such as `config_pool_rewards` (100 calls) |
 
 An earlier run of the same day found that a server can drop its oldest ledger between `getHealth`
 and the next request; the reader's 100-ledger margin above comes from that run.

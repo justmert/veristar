@@ -58,8 +58,10 @@ SCF, so that SCF can follow the projects it funds and the ecosystem as a whole.
     latency histograms, with application requests apart from preflight,
     health check and uptime probe requests;
   - per declared Stellar account or contract and UTC day, counts of
-    operations, transactions and distinct counterparties, and per ISO week
-    the project's count of weekly active accounts.
+    operations, transactions and distinct counterparties; per verified
+    contract, UTC day, function and kind of caller, counts of successful
+    and failed calls and of the distinct accounts that made them; and per
+    ISO week the project's count of weekly active accounts.
 - What SCF does not receive: raw events, sessions, visitor tokens, page-level
   event data, network keys, the keyed hashes of active accounts, the project's
   web dashboard, or the console accounts of the tenant's members. No row SCF
@@ -108,11 +110,14 @@ There is no billing, no paid tier, no advertising and no sale or resale of data.
   applications send are discarded and never kept.
 - **On-chain activity**: for the Stellar accounts and contracts a project
   declares and proves, three counts per id and UTC day (operations,
-  transactions, distinct counterparties) and one count of weekly active
-  accounts per ISO week. While a week is open, the accounts behind its count
-  are held only as keyed hashes under a random key for that week; the hashes
-  and the key are deleted when the week closes. No counterparty address is
-  stored.
+  transactions, distinct counterparties), for each verified contract the
+  daily calls per function and kind of caller with the number of distinct
+  accounts that made them, and one count of weekly active accounts per ISO
+  week. The accounts behind a function's daily count are held in memory
+  while the day is read and never stored. While a week is open, the accounts
+  behind its count are held only as keyed hashes under a random key for that
+  week; the hashes and the key are deleted when the week closes. No
+  counterparty or caller address is stored.
 - Console accounts: the numeric GitHub user id and GitHub login of a GitHub
   sign-in, the Stellar account address (public key) of a wallet sign-in, and
   the credential id, public key and smart account address of a passkey

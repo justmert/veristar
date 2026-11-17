@@ -3267,10 +3267,11 @@ No new key: the issuer is `CONSOLE_ORIGIN` and the seal key is derived from
 A project declares the Stellar accounts (`G...`) and Soroban contracts
 (`C...`) it operates, proves that it controls them, and gets their daily
 ledger activity next to its web and API usage. Ledger data is public. The
-platform stores the declared ids, the proofs, three daily counts per id and
-one weekly count per project; it stores no counterparty address and no
-transaction, and keeps the accounts behind a weekly count only as keyed
-hashes until the week closes (15.8).
+platform stores the declared ids, the proofs, three daily counts per id,
+daily calls per contract function (15.9) and one weekly count per project;
+it stores no counterparty or caller address and no transaction, and keeps
+the accounts behind a weekly count only as keyed hashes until the week
+closes (15.8).
 
 ### 15.1 Tables
 
@@ -3294,6 +3295,9 @@ hashes until the week closes (15.8).
 
 - `agg.chain_weeks` and `agg.chain_week_members` (migration 00038): the
   weekly active accounts of 15.8.
+- `agg.chain_function_daily` (migration 00047): the calls per contract
+  function of 15.9, and `agg.chain_daily.functions`, how much of a contract
+  day's calls was read.
 
 `agg.chain_daily` and `agg.chain_reads` are readable by `cp_tenant` (own
 rows, row-level security), `cp_operator` and `jobs` (writes).
@@ -3301,7 +3305,8 @@ rows, row-level security), `cp_operator` and `jobs` (writes).
 `agg.chain_week_members` is the jobs task's alone. The purge step `chain` of
 5.5 deletes the read state, the week members and the open weeks of a removed
 tenant and, unless `removal_keep_aggregates`, its daily counts and closed
-weeks, through `agg.purge_chain(tenant, keep_aggregates)`.
+weeks and function rows, through `agg.purge_chain(tenant, keep_aggregates)`.
+`agg.chain_function_daily` is readable like `agg.chain_daily`.
 
 ### 15.2 Sources and what the counts mean
 
@@ -3539,9 +3544,17 @@ errors.
   and week; a week the task never counted for the project has no item, where
   the console and the exports show it as `week_not_counted`), with
   the `tenant`, `from`, `to`, `limit` and `cursor` rules of section 9.
-- MCP (section 12): tenant tools `get_onchain_activity` (15.3) and
-  `get_scf_view` (16.3), operator tool `get_tenant_onchain`; all carry the
-  weekly active accounts.
+- `GET /api/metrics/v1/onchain/functions` (15.9): one item per verified
+  contract, day, caller and function with calls (`tenant_id`, `strkey`,
+  `day`, `function`, `caller`, `successful`, `failed`, `accounts`), keyset
+  by tenant, strkey, day, caller and function. Items of
+  `GET /api/metrics/v1/onchain/daily` carry `functions`, the read state of
+  15.9 (`null` for an account day).
+- MCP (section 12): tenant tools `get_onchain_activity` (15.3),
+  `get_contract_functions` (15.9) and `get_scf_view` (16.3), operator tools
+  `get_tenant_onchain` and `get_tenant_contract_functions`; the view tools
+  carry the weekly active accounts and each verified contract's calls per
+  function.
 
 ### 15.8 Weekly active accounts
 
@@ -3585,6 +3598,89 @@ operation involving one of the project's **verified** ids that week:
   whole inside the range, `null` when none), `latest` (the last counted
   week), `weeks_counted` and `weeks_missing`.
 
+### 15.9 Calls per contract function
+
+For every declared contract, the task `chain-activity` (15.6) counts per UTC
+day the calls into each of its functions, by kind of caller. It reads them
+from the same `getTransaction` answers that give a contract day's initiators
+(15.8): each transaction with an event of the contract in a successful call.
+
+| Caller | A call | Read from |
+|---|---|---|
+| `account` | the operation's host function is `invoke_contract` with the contract as `contract_address`; the account that submitted the operation called it | the envelope's `invoke_host_function` operation and its `function_name`; for a fee bump the inner transaction's |
+| `contract` | another contract calls the contract during an invocation, including the host's `__check_auth` call of a contract account on behalf of the contract asking for authorisation | the transaction's diagnostic events (`diagnosticEventsXdr`): a `fn_call` event emitted by the calling contract, with the callee's id and the function name as topics |
+
+- `successful` counts calls that returned. `failed` counts calls of the
+  `contract` caller that ended in an error the calling contract handled,
+  inside a transaction that went on: the host emits `fn_call` when a call
+  starts and `fn_return` from the callee when it returns, so a call that
+  the caller's next event closes without a `fn_return` failed. `failed` is
+  `null` for the `account` caller: every transaction read succeeded, and a
+  failed transaction keeps no contract events, so `getEvents` does not list
+  it and no public source lists failed transactions per contract.
+- `accounts` is the number of distinct G accounts that initiated the
+  operations the calls belong to (the initiator of 15.8: the operation's
+  source, or the transaction's; a muxed source counts as its G account; never
+  the fee payer of a fee bump). It is counted in memory while the day is
+  read; no address and no hash of one is stored. A range carries
+  `peak_daily_accounts`, the largest daily value, never a sum.
+- At most 64 functions per contract and day keep their own rows, those with
+  the most calls (both callers, failed ones included; ties by name); the
+  rest add up under `{other}`, which no Soroban symbol can spell, with their
+  accounts counted once.
+- `agg.chain_daily.functions` per contract day: `read` (both callers),
+  `no_call_tree` (the source sent a transaction without diagnostic events,
+  or events that form no call tree; only the `account` rows are stored),
+  `day_over_read_cap` (more than 10,000 transactions to read, none stored),
+  or `before_source_history` (stored before migration 00047 and outside the
+  source's window now). A contract day stored without its calls is read
+  again while it is at most 7 days old.
+- A contract that emits no event in a transaction is not found in that
+  transaction: the calls counted are those of transactions in which the
+  contract emitted at least one event, and all calls into the contract in
+  each such transaction count.
+- Only verified contracts (15.4) count: the view, the routes below, the
+  machine API, "What SCF sees" and signed reports carry calls of verified
+  contracts only.
+
+**`GET /api/tenants/{tenant_id}/onchain/ids/{chain_id}/functions?from=&to=`**
+(any member) and
+**`GET /api/operator/tenants/{tenant_id}/onchain/ids/{chain_id}/functions?from=&to=`**
+(operators): one declared id's calls per function, caller and day, range
+rules of 15.3; 404 for an id of another tenant.
+
+```json
+{
+  "id": "uuid", "strkey": "C...", "kind": "contract", "verified": true,
+  "from": "2026-11-10", "to": "2026-11-16",
+  "days_read": 5, "days_no_call_tree": 1, "days_missing": 0,
+  "days": [
+    { "day": "2026-11-10", "state": "read", "missing": null },
+    { "day": "2026-11-11", "state": "no_call_tree", "missing": null },
+    { "day": "2026-11-16", "state": null, "missing": "day_not_complete" }
+  ],
+  "functions": [
+    { "function": "swap", "caller": "account", "successful": 812, "failed": null,
+      "peak_daily_accounts": 77, "days_with_calls": 6,
+      "series": [ { "day": "2026-11-10", "successful": 140, "failed": null, "accounts": 61 } ] }
+  ]
+}
+```
+
+- A day has a `state` or a `missing` reason: a reason of 15.3, `not_read_yet`
+  (the day is stored without its calls), a state code above, `not_verified`
+  (an unverified contract, which has no functions) or `not_a_contract` (an
+  account). A series point is `null` on a day whose calls by that caller were
+  not read (`contract` on a `no_call_tree` day) and 0 on a read day without
+  calls. `days_missing` counts complete days without calls read.
+- The view of 15.3 carries `functions` on each verified contract: the same
+  members without `days` and `series`; `null` for an account and an
+  unverified contract.
+- `GET .../onchain/ids/{chain_id}/functions.csv` under both prefixes: one row
+  per day, function and caller: `day, strkey, function, caller, day_state,
+  day_missing, successful, failed, accounts`, empty cells where a number was
+  not read. Each writes one `export.csv` audit row.
+
 ## 16. Exports and "What SCF sees"
 
 ### 16.1 Operator exports
@@ -3598,6 +3694,7 @@ charset=utf-8` as an attachment, streamed, one header row:
 | `GET /api/projects.csv` | the same for `GET /api/projects` |
 | `GET /web/compare.csv?tenants=&from=&to=` | one row per project and day of `GET /web/compare` |
 | `GET /api/compare.csv?tenants=&from=&to=` | one row per project and day of `GET /api/compare` |
+| `GET /tenants/{tenant_id}/onchain/ids/{chain_id}/functions.csv?from=&to=` | one row per day, function and caller of one declared contract (15.9) |
 
 - `rows` is 1 to 5000, default 50; the console sends the number of rows it
   shows, with the range it resolved, so the file holds exactly the rows on
@@ -3650,7 +3747,9 @@ The web columns are the project's `agg.web_daily` rows, summed over its sites
 (empty on a day not aggregated yet); the API columns are the daily series of
 7.6 (0 on a day without requests, as on the API traffic page); the on-chain
 columns are as in 16.1, and `integrity_grade` is the day's grade of 17. It
-writes one `export.csv` audit row.
+writes one `export.csv` audit row. A contract's calls per function export
+under `GET /api/tenants/{tenant_id}/onchain/ids/{chain_id}/functions.csv`
+(15.9).
 
 ### 16.3 What SCF sees
 
@@ -3676,7 +3775,8 @@ membership only; it takes no tenant list and never names another project.
   "comparison": "cohort, cohort_size and kpis of 19.2",
   "rules_met": [{ "rule": "Rule of 19.4", "match": "RuleMatch of 19.4" }],
   "web_series": "the series of 8.4", "api_series": "the series of 8.6",
-  "onchain_series": "the series of 15.7"
+  "onchain_series": "the series of 15.7",
+  "contract_functions": [{ "strkey": "C...", "functions": "the functions member of 15.9 without days and series" }]
 }
 ```
 
@@ -4315,13 +4415,14 @@ format, the canonical form and offline verification are in
 `signer`, `created_at`, `created_by`, `revoked_at`, `view_count`,
 `last_viewed_at`. **Detail** adds `file`, the signed file of 20.3.
 
-A new report is format version 2 (its members are in
+A new report is format version 3 (its members are in
 [usage-reports.md](usage-reports.md)): `methods.integrity_rules` lists the
 rule versions that graded the period, and it carries the figures "What SCF
 sees" shows next to the counts: the web coverage estimate, `has_data` of web
-and API, `lossy` and `infrastructure_requests` of the API, and the weekly
-active accounts. A stored version 1 report keeps its layout and verifies as
-before.
+and API, `lossy` and `infrastructure_requests` of the API, the weekly
+active accounts, and the calls per function of each verified contract
+(`onchain.contracts`, 15.9). A stored version 1 or 2 report keeps its layout
+and verifies as before.
 
 - The period is UTC days, both included, at most 366 days, `from` not after
   `to`: 422 `validation_failed` otherwise.

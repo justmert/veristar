@@ -865,7 +865,7 @@ func testOperatorRoutes(t *testing.T, e *env, w *gateWorld, cat []route) {
 	// the guard and not from a missing route
 	for _, r := range cat {
 		if (r.kind == kindOperator || r.kind == kindStepUp) && r.method == http.MethodGet {
-			p := r.fill(gateIDs{tenant: w.ta.String(), key: keyID, rule: w.ruleID})
+			p := r.fill(gateIDs{tenant: w.ta.String(), key: keyID, rule: w.ruleID, chain: w.chainA})
 			res := w.op.call(t, r.method, p, nil)
 			require.Equal(t, http.StatusOK, res.status, "control: operator %s: %s", p, res.body)
 		}
@@ -994,7 +994,7 @@ func testMachineAPI(t *testing.T, e *env, w *gateWorld, cat []route) {
 			dataRoutes = append(dataRoutes, r.fill(gateIDs{rule: w.ruleID}))
 		}
 	}
-	require.Len(t, dataRoutes, 13)
+	require.Len(t, dataRoutes, 14)
 	sent := 0
 	refused := func(r machineResp, status int, code, what string) {
 		t.Helper()

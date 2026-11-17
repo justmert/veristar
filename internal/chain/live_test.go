@@ -8,6 +8,7 @@ package chain
 
 import (
 	"fmt"
+	"os"
 	"testing"
 	"time"
 
@@ -136,4 +137,38 @@ func TestLiveSources(t *testing.T) {
 	admins, err := Admins(entry)
 	require.NoError(t, err)
 	t.Logf("contract %s admins: %+v", liveSAC, admins)
+}
+
+// TestLiveFunctions reads yesterday's calls per function of a contract
+// from the default rpc server: by default the liquidity pool of the
+// fixture 9ab4a86a...361d, which other contracts call.
+func TestLiveFunctions(t *testing.T) {
+	contract := os.Getenv("LIVE_CONTRACT")
+	if contract == "" {
+		contract = "CCY2PXGMKNQHO7WNYXEWX76L2C5BH3JUW3RCATGUYKY7QQTRILBZIFWV"
+	}
+	c, err := config.LoadStellar(config.FromMap(nil))
+	require.NoError(t, err)
+	h, r, err := Sources(c)
+	require.NoError(t, err)
+	reader, err := NewReader(h, r)
+	require.NoError(t, err)
+	ctx := t.Context()
+	_, health, err := reader.RPCWindow(ctx)
+	require.NoError(t, err)
+	yesterday := utcDay(time.Now()).AddDate(0, 0, -1)
+	days, err := reader.ContractDays(ctx, contract, yesterday, yesterday, health)
+	require.NoError(t, err)
+	require.Len(t, days, 1)
+	d := days[0]
+	t.Logf("contract %s on %s: %d operations, %d transactions, %d initiators, functions %s, %d rows",
+		contract, yesterday.Format(time.DateOnly), d.Operations, d.Transactions, len(d.Initiators), d.FunctionsState, len(d.Functions))
+	for _, f := range d.Functions {
+		failed := "-"
+		if f.Failed != nil {
+			failed = fmt.Sprint(*f.Failed)
+		}
+		t.Logf("  %s by %s: %d successful, %s failed, %d accounts", f.Function, f.Caller, f.Successful, failed, f.Accounts)
+	}
+	require.NotEmpty(t, d.FunctionsState)
 }
