@@ -332,20 +332,21 @@ export async function virtualAuthenticator(page: Page, user: GitHubUser) {
     },
   });
   if (existsSync(credentialFile(user))) {
-    const credential = JSON.parse(readFileSync(credentialFile(user), "utf8")) as VirtualCredential;
-    await cdp.send("WebAuthn.addCredential", { authenticatorId, credential });
+    const saved = JSON.parse(readFileSync(credentialFile(user), "utf8")) as VirtualCredential[];
+    for (const credential of saved) {
+      await cdp.send("WebAuthn.addCredential", { authenticatorId, credential });
+    }
   }
   return {
     cdp,
     authenticatorId,
-    // stores the credential with its current signature counter, so the next
-    // spec's authenticator counts on from it
+    // stores every credential with its current signature counter, so the
+    // next spec's authenticator holds the same keys and counts on from them
     save: async () => {
       const { credentials } = (await cdp.send("WebAuthn.getCredentials", { authenticatorId })) as {
         credentials: VirtualCredential[];
       };
-      if (credentials.length > 0)
-        writeFileSync(credentialFile(user), JSON.stringify(credentials[0]));
+      if (credentials.length > 0) writeFileSync(credentialFile(user), JSON.stringify(credentials));
     },
   };
 }

@@ -1112,6 +1112,18 @@ func TestConsoleFlows(t *testing.T) {
 	if err := os.Remove(realFailures); err != nil && !os.IsNotExist(err) {
 		t.Fatal(err)
 	}
+	// the virtual passkeys of an earlier run belong to that run's database;
+	// kept, they would be offered to this run's control plane, which never
+	// registered them
+	stale, err := filepath.Glob(filepath.Join(outDir(), "passkey-*.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range stale {
+		if err := os.Remove(f); err != nil {
+			t.Fatal(err)
+		}
+	}
 	cmd := exec.Command("pnpm", args...)
 	cmd.Dir = repoRoot()
 	cmd.Env = append(os.Environ(),
