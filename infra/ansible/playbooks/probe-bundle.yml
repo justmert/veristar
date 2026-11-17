@@ -33,7 +33,7 @@
     # the slo collector runs the static sloreport binary of this checkout
     # (make build) on the same distroless base as the platform's go images
     probe_bundle_sloreport_bin: "{{ playbook_dir }}/../../../dist/bin/sloreport"
-    probe_bundle_sloreport_base: gcr.io/distroless/static-debian13:nonroot@sha256:25ac8f0c3b2334a9eb05452266bd4697864a8c8ef0ef71e5e6480d7f92868329
+    probe_bundle_sloreport_base: gcr.io/distroless/static-debian13:nonroot@sha256:aafe993665bf6200db38a02c11a9351e782a84b6a45e7f33b6695638c88e3931
     # the edge caddy serves the prober's and gatus's metrics to prometheus;
     # the watchdog push is wired when the core nodes know the probe
     probe_bundle_metrics: true

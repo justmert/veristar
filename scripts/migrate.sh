@@ -24,7 +24,7 @@
 # MIGRATE_DOCKER_NETWORK (default host, so 127.0.0.1 is this machine).
 set -eu
 
-PG_IMAGE="${MIGRATE_PG_IMAGE:-postgres:18.7-trixie@sha256:9f4fd4aa918f52ae3d6f3b687f1de90d8f867cd4d520021545a9a50c120eae3b}"
+PG_IMAGE="${MIGRATE_PG_IMAGE:-postgres:18.7-trixie@sha256:2ea8630df176ad090ec92136dee850397c5af8781e4bcf2e4162593691c61bbc}"
 NETWORK="${MIGRATE_DOCKER_NETWORK:-host}"
 
 die() {

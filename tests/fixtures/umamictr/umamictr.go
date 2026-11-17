@@ -221,7 +221,7 @@ func Start(t testing.TB) *Stack {
 // CaddyImage is caddy 2.11.9 by its pinned digest: the
 // final stage of deploy/images/caddy.Dockerfile. the deploy/caddy tests check
 // that the dockerfile builds on it.
-const CaddyImage = "caddy:2.11.9@sha256:e40b94d0a43b5ff69cb20568d73f10c70703df7b0ffc2298eb3d723cdc9d0bd1"
+const CaddyImage = "caddy:2.11.9@sha256:4851e54a46b206517c574821bb5cc67f170d2156041e9fbc4c9193b45e84a75b"
 
 // PlatformCaddyTag names the image built from deploy/images/caddy.Dockerfile:
 // caddy with the cloudflare dns plugin, which the assembled node configs

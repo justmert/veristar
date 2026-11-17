@@ -9,7 +9,7 @@
 
 FROM otel/opentelemetry-collector-builder:0.165.0@sha256:2c15b2e66f09577f897a0106a13a36c3040e4329396a04a8814c05513891fd7a AS ocb
 
-FROM golang:1.27.4-trixie@sha256:b54b2639de8c1bfe538ec5ffc45f29b1932235ac5f6d63c059853646677112d9 AS build
+FROM golang:1.27.4-trixie@sha256:f18c3d73a184fb0582828510722e723b63a93f7188d11dd223d9be6f6880e65d AS build
 
 COPY --from=ocb /usr/local/bin/ocb /usr/local/bin/ocb
 
@@ -33,7 +33,7 @@ COPY tests/fixtures ./tests/fixtures
 RUN mkdir -p dist && ocb --config collector/builder-config.yaml --skip-strict-versioning=false && \
     ./dist/scf-otelcol/scf-otelcol components >/dev/null
 
-FROM gcr.io/distroless/static-debian13:nonroot@sha256:25ac8f0c3b2334a9eb05452266bd4697864a8c8ef0ef71e5e6480d7f92868329
+FROM gcr.io/distroless/static-debian13:nonroot@sha256:aafe993665bf6200db38a02c11a9351e782a84b6a45e7f33b6695638c88e3931
 
 COPY --from=build /src/dist/scf-otelcol/scf-otelcol /scf-otelcol
 COPY collector/otelcol.yaml /etc/scf-otelcol/otelcol.yaml

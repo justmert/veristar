@@ -43,7 +43,7 @@ Names: `{{ sa_image_registry }}/<name>:{{ sa_image_tag }}`. Upstream images (NAT
 HAProxy, Umami) are pinned by digest in `infra/ansible/vars/pins.yml`.
 
 **PostgreSQL 18.7.** `postgres_version: "18.7"` in `pins.yml`, `PG_BASE`
-`postgres:18.7-trixie@sha256:9f4fd4aa918f52ae3d6f3b687f1de90d8f867cd4d520021545a9a50c120eae3b`
+`postgres:18.7-trixie@sha256:2ea8630df176ad090ec92136dee850397c5af8781e4bcf2e4162593691c61bbc`
 (index digest, resolved 2026-11-13) and `PG_VERSION=18.7` in the Dockerfile. The image built on
 2026-11-13 reports `postgres (PostgreSQL) 18.7 (Debian 18.7-1.pgdg13+2)`, `patroni 4.1.5` and
 `pgBackRest 2.60.0`.

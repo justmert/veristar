@@ -42,8 +42,8 @@ const (
 	gatewayImage  = "veristar/gateway:webpath"
 	replayerImage = "veristar/replayer:webpath"
 	// pinned by digest, the same digests the gateway tests use
-	caddyImage  = "caddy:2.11.9@sha256:e40b94d0a43b5ff69cb20568d73f10c70703df7b0ffc2298eb3d723cdc9d0bd1"
-	staticImage = "gcr.io/distroless/static-debian13:nonroot@sha256:25ac8f0c3b2334a9eb05452266bd4697864a8c8ef0ef71e5e6480d7f92868329"
+	caddyImage  = "caddy:2.11.9@sha256:4851e54a46b206517c574821bb5cc67f170d2156041e9fbc4c9193b45e84a75b"
+	staticImage = "gcr.io/distroless/static-debian13:nonroot@sha256:aafe993665bf6200db38a02c11a9351e782a84b6a45e7f33b6695638c88e3931"
 
 	gatewayHost = "in.sa-test.example"
 	edgeDomain  = "sa-test.example"
