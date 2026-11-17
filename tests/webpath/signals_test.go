@@ -158,3 +158,37 @@ func TestPageSignals(t *testing.T) {
 		}
 	})
 }
+
+// TestConsentGatedTrack is the browser check of tracker 1.3.1 in chromium,
+// firefox and webkit through caddy, the gateway, nats, the replayer and
+// umami: with data-auto-track="false", umami.track() before umami.start()
+// sends nothing and fetches no challenge, and after the consent click the
+// pageview and a later umami.track() are accepted. run it alone with
+// `go test -tags webpath -run TestConsentGatedTrack ./tests/webpath/`.
+func TestConsentGatedTrack(t *testing.T) {
+	s := newStack(t)
+	fwdBin := buildTool(t, "tests/webpath/fwd")
+	s.StartNATS(t)
+	s.StartUmami(t)
+	quarantine := uuid.NewString()
+	s.AddWebsite(t, siteStatic.ID, siteStatic.Key, siteStatic.Host)
+	s.AddWebsite(t, quarantine, siteStatic.Key+" quarantine", siteStatic.Host)
+	s.PutSite(t, registry.Site{ID: siteStatic.ID, TenantID: uuid.NewString(), Status: registry.StatusActive,
+		Origins: []string{"https://" + siteStatic.Host}, QuarantineWebsiteID: quarantine})
+	s.StartEdge(t)
+	s.AddCountry(t, "DE", countrySubnets(t, "DE")["DE"])
+	s.StartForwarder(t, fwdBin, "DE")
+	waitChallenge(t, s.FwdAddr, siteStatic)
+	b := startBrowsersWith(t, s.FwdAddr, []siteRun{{Site: siteStatic, Version: "1.3.1", Build: "build"}})
+	b.MustRun(t, []string{"signals-chromium", "signals-firefox", "signals-webkit"}, "@consent")
+	logged := b.NewEvents(t)
+	all202(t, logged)
+	byName := map[string]int{}
+	for _, e := range logged {
+		byName[e.Body.T+":"+e.Body.N]++
+	}
+	// one pageview and one custom event per engine, nothing from before
+	if byName["pv:"] != 3 || byName["ev:after-consent"] != 3 || len(byName) != 2 {
+		t.Errorf("events the browsers sent: %v, want 3 pageviews and 3 after-consent events", byName)
+	}
+}

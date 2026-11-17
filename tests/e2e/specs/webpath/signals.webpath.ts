@@ -226,3 +226,26 @@ test("a prerendered page counts on activation and fetches nothing before @signal
     rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
   }
 });
+
+// tracker 1.3.1, consent mode: code that calls umami.track() before the
+// visitor answered the banner sends nothing and fetches no challenge; the
+// accept click starts the tracker and the pageview goes out as usual
+// (tests/webpath TestConsentGatedTrack)
+test("track() before start() sends nothing @consent", async ({ page }) => {
+  await page.goto(`${staticSite.origin}/consent.html`);
+  await trackerReady(page);
+  await page.evaluate(async () => {
+    await window.umami?.track();
+    await window.umami?.track("before-consent", { step: 1 });
+  });
+  await new Promise((r) => setTimeout(r, 1500));
+  const before = (await recorded()).filter((r) => r.path === "/v1/c" || r.path === "/v1/e");
+  expect(before).toEqual([]);
+
+  await page.click("#consent-accept");
+  await expect.poll(async () => (await byType(staticSite, "pv")).length).toBe(1);
+  await page.evaluate(() => window.umami?.track("after-consent"));
+  await expect.poll(async () => (await byType(staticSite, "ev")).map((e) => e.n)).toEqual(["after-consent"]);
+  for (const r of await sent(staticSite)) expect(r.verdict.status).toBe(202);
+  expect((await sent(staticSite)).map(wire).every((e) => e.sv === "1.3.1")).toBe(true);
+});
