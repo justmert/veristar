@@ -257,8 +257,9 @@ and the three days before it, the window `aggregate-web` reads again, from:
 | Primary page views | `agg.web_daily` | page-reported, can only lower |
 | Page views of trackers that report page signals, the framed part, never-visible notices | `cp.web_signals_daily` | page-reported, can only lower (rule version 2) |
 
-Rule version 2 (`internal/integrity/grade.go`), applied since tracker 1.3.0, starts every day at
-A. Each rule can only lower the grade:
+Rule version 2 (`internal/integrity/grade.go`) grades every site day graded since its deployment,
+whatever tracker release the site runs; the closed days still in the regrade window at the
+deployment (the three days before it) were recomputed under it. It starts every day at A. Each rule can only lower the grade:
 
 | Code | Lowers to | When |
 |---|---|---|
@@ -301,7 +302,8 @@ applied to, so a single bad day stays visible.
 
 Every stored day keeps its inputs, its reasons and the rule version that graded it
 (`agg.web_integrity_daily`), so a later change of rules is a new version and never rewrites how a
-closed evaluation was graded.
+closed evaluation was graded once the day has left the regrade window (today and the three days
+before it).
 
 Where the grade appears:
 
