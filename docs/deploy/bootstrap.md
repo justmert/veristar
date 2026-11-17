@@ -77,7 +77,9 @@ with these steps on 2026-11-13 ([../reference/drills/2026-11-13-azure.md](../ref
 9. **First operator sign-in.** An operator listed in `sa_operator_github_ids` opens
    `https://app.<BASE_DOMAIN>/` and signs in with GitHub (the environment's OAuth App, callback `https://app.<BASE_DOMAIN>/api/auth/github/callback`).
    Expected: the console shows the operator area and asks for a passkey or security key.
-   Register one within 24 hours of the control plane's first start; the operator area opens.
+   Register one within 24 hours of the control plane's first start; the operator area opens. If
+   the window closed before anyone registered one, restart the control plane on one core node
+   (`docker compose restart controlplane`): a listed identity without a passkey gets a new window.
    Add the other operators on the Operators page ([../operators/roster.md](../operators/roster.md)).
 
 10. **Probe tenant** (monitoring). On the core node that holds the Patroni leader,

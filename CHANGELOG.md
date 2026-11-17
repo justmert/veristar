@@ -159,20 +159,6 @@ here, before they take effect, as the processing terms require
   answer for the same websites and range.
 - `make test-caddy-closed` fails when an internet-facing Caddy site refers to
   Umami.
-
-### Changed
-
-- Terms of use `2026-11-17-draft.5`: passkeys as a console sign-in method
-  and the data a passkey sign-in stores, the fields tracker 1.3.0 no longer
-  reads, the per-site counts of tracker file requests behind the estimate of
-  visits not measured, and the separate count of preflight, health check and
-  probe API requests. Every project accepts it at its next sign-in.
-- The core tier must be upgraded before the edge tier again: older jobs
-  daemons refuse the new `signal_<name>` and `script_<name>` counters on
-  `EDGE_STATS`, and older gateways refuse the events of tracker 1.3.0.
-- `release-tracker.yml` packs and publishes the npm package only when the
-  repository variable `NPM_PACKAGE` is set, and otherwise releases and
-  attests `sdk.js` alone with a notice in the log.
 - API traffic classes: CORS preflights (every `OPTIONS` request), health and
   probe routes (`/health`, `/healthz`, `/livez`, `/readyz`, `/ping`, `/status`,
   `/metrics`, `/actuator/health/liveness` and the other conventions listed in
@@ -201,9 +187,34 @@ here, before they take effect, as the processing terms require
 - The console's API traffic page names the infrastructure requests the
   figures leave out, and the routes list marks routes that only
   infrastructure requests reached.
+- Alert `SystemdUnitFailed` (ticket): a platform `sa-*` systemd unit has been
+  failed for 15 minutes, read from `sa_systemd_unit_failed`, which the new
+  `sa-systemd-failed.timer` writes every 5 minutes on every node. It covers a
+  failing backup, the leader's `pgbackrest verify` or `check`, and the
+  start-at-boot units ([docs/runbooks/alerts.md](docs/runbooks/alerts.md#systemdunitfailed)).
+  The platform has 39 alerts.
+- OpenTofu variable `public_ingress_open` (default `true`): `false` limits TCP
+  80, TCP 443 and UDP 443 to `admin_cidrs` without stopping anything
+  ([docs/deploy/opentofu.md](docs/deploy/opentofu.md)).
+- Signed usage reports name `api_metrics` method version 2: infrastructure
+  requests are left out of every API number of a report
+  ([docs/reference/usage-reports.md](docs/reference/usage-reports.md)).
 
 ### Changed
 
+- Terms of use `2026-11-17-draft.5`: passkeys as a console sign-in method
+  and the data a passkey sign-in stores, the fields tracker 1.3.0 no longer
+  reads, the per-site counts of tracker file requests behind the estimate of
+  visits not measured, the separate count of preflight, health check and
+  probe API requests, the operator roster and step-up passkey data, the
+  weekly active accounts, and the full list of project statistics SCF
+  receives. Every project accepts it at its next sign-in.
+- The core tier must be upgraded before the edge tier again: older jobs
+  daemons refuse the new `signal_<name>` and `script_<name>` counters on
+  `EDGE_STATS`, and older gateways refuse the events of tracker 1.3.0.
+- `release-tracker.yml` packs and publishes the npm package only when the
+  repository variable `NPM_PACKAGE` is set, and otherwise releases and
+  attests `sdk.js` alone with a notice in the log.
 - `OPERATOR_GITHUB_IDS` and `OPERATOR_STELLAR_ADDRESSES` are the bootstrap of
   the roster: at every start each listed identity is made an active operator
   admin. Taking an identity out of them no longer removes the person; an
@@ -222,7 +233,7 @@ here, before they take effect, as the processing terms require
   machine API read.
 - `make umami-compat` checks Umami's API and data contract only.
 - Members read the web aggregates of their own project under row-level
-  security: a migration grants `cp_tenant` read on `agg.web_daily_dim`.
+  security: migration 00042 grants `cp_tenant` read on `agg.web_daily_dim`.
 
 ### Removed
 
@@ -234,6 +245,14 @@ here, before they take effect, as the processing terms require
 - The control plane setting `WEB_ORIGIN` and the prober setting
   `PROBER_WEB_URL` with its `web host` check.
 - `make test-caddy-web`.
+
+### Fixed
+
+- `sa-core-start` retries a failed start (every 20 s, up to six times in 30
+  minutes) instead of staying failed when Docker's restart policy races it at
+  boot and a container briefly reports a dependency as unhealthy.
+- The backup units run only on the Patroni leader in Azure mode too; on a
+  replica they skip their run cleanly instead of failing.
 
 ### Security
 
@@ -263,14 +282,27 @@ here, before they take effect, as the processing terms require
   admin and gets a 24-hour window to register a first passkey. Each operator
   signs in after the upgrade, opens the operator area and registers a passkey
   within that window; an operator admin resets the passkeys of anyone who
-  misses it. Then add the other operators on the Operators page and keep the
+  misses it. When no operator admin registered one in time, restart the
+  control plane on one core node (`docker compose restart controlplane`):
+  each identity of the settings that still has no passkey gets a new window. Then add the other operators on the Operators page and keep the
   settings to the identities that are your path back in after a lockout
   ([docs/runbooks/operators.md](docs/runbooks/operators.md)).
 - Optional settings: `OPERATOR_STEP_UP_MAX_AGE` (default `12h`) and
-  `OPERATOR_ENROLL_WINDOW` (default `24h`).
-- Run the database migrations (`00042_tenant_web_dimensions.sql`) before the
-  new control plane starts; the rolling `deploy.yml` does this in its
-  bootstrap step.
+  `OPERATOR_ENROLL_WINDOW` (default `24h`), set through
+  `sa_operator_step_up_max_age` and `sa_operator_enroll_window` in the
+  inventory; the core role passes the defaults when they are absent.
+- Add the usage report signing pair to the SOPS file of an existing
+  environment before you deploy: the control plane refuses to start without
+  `REPORT_SIGNING_SEED` and `REPORT_SIGNING_KEY`, and `new-secrets.py`
+  writes them only for a new environment. Run
+  `platformctl report keygen /dev/shm/report-key` on the controller and write
+  both files into `infra/secrets/<env>/secrets.enc.yaml` with `sops set`, as
+  in steps 1 and 3 of
+  [the usage report signing key](docs/runbooks/secret-rotation.md#the-usage-report-signing-key)
+  (there is no current key to retire).
+- Run the database migrations (`00035_cohorts_and_rules.sql` to
+  `00042_tenant_web_dimensions.sql`) before the new control plane starts; the
+  rolling `deploy.yml` does this in its bootstrap step.
 - Deploy the release, then apply OpenTofu for each environment. The plan
   destroys the Traffic Manager profile `web`, its three external endpoints
   (`web/0` to `web/2`) and the Cloudflare CNAME `web`; nothing else changes.
