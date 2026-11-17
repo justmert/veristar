@@ -34,10 +34,10 @@
 
 # every nats server gets the permissions of the new release before any of
 # its services starts. they only add to the earlier release's, so the
-# services still running keep theirs. the core tier goes first, and from
-# 0.4.0 on its replayer consumes one consumer per web event partition, which
-# the permissions of 0.3.x do not name; the edge tier, which renders the
-# same block again, comes only after it.
+# services still running keep theirs. the core tier goes first, and since
+# web events are partitioned its replayer reads one consumer per partition,
+# which the permissions of earlier releases do not name; the edge tier,
+# which renders the same block again, comes only after it.
 - name: Install the nats permissions of the new release
   hosts: edge
   become: true
