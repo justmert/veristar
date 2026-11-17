@@ -30,6 +30,7 @@ quarantined.
 | Average visit duration | time between the first and last page view of a visit, averaged; the time on the last page is not measured |
 | Quarantined page views, visitors, share | the quarantine band, and its share of all page views |
 | Gateway requests, rejected, rejected share | every request the gateway answered for the project's sites, and those it refused |
+| Not measured (privacy signals) | the estimated share of visits the tracker does not measure because the browser sends Global Privacy Control, from the tracker file requests of the range; shown from 100 requests on ([reading-the-numbers.md](reading-the-numbers.md)) |
 | Sites, verified sites, sites with stellar.toml | the project's non-removed sites and the evidence on them |
 
 Each row also carries the top five referrers, countries, devices and browsers over the range.
@@ -51,21 +52,23 @@ One row per project.
 
 | Column | Meaning |
 |---|---|
-| Requests | requests over every service of the project |
+| Requests | application requests over every service of the project; hover the count to see the infrastructure requests (CORS preflights, health and probe routes, known health checkers) left out of it |
 | 4xx, 5xx and their rates | requests answered with status 400 to 499 and 500 to 599; a request without a status code counts in requests only |
 | p50, p95, p99 | latency percentiles from the summed histogram buckets of the range, in seconds; `>10 s` when the percentile is above the last bucket bound |
 | Services, routes | distinct services, and distinct normalized routes |
 | Source | `Metrics`, `From traces` or `Metrics and traces` (see span-derived data) |
 
-Sorting by requests in each direction finds the highest and lowest usage projects. Percentiles
+Requests, error rates and latency count application requests only; infrastructure requests are
+shown apart and never mix into them. Sorting by requests in each direction finds the highest and
+lowest usage projects. Percentiles
 are never averaged across services or days; they are computed from bucket counts summed over
 exactly what the row covers.
 
 ## Growth and percentiles
 
 Both tables carry five key metrics for every project: verified visitors (the primary band's
-visitors), page views, requests, error rate (requests answered 500 to 599 over all requests) and
-on-chain operations. For each one you see:
+visitors), page views, application requests, error rate (application requests answered 500 to
+599 over all application requests) and on-chain operations. For each one you see:
 
 - **Change**: the value against the previous period of equal length, the days just before the
   range. For the four counts it is relative (`+50%` means one and a half times the previous
