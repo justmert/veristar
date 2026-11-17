@@ -207,6 +207,31 @@ minute. Patroni cannot renew its leader key; the primary demotes itself
 after its TTL.
 Action: start the stopped members on the edge nodes. Check time sync.
 
+### EtcdDatabaseSpaceHigh
+The etcd database file on a member uses more than half of its quota
+(`etcd_mvcc_db_total_size_in_bytes` over `etcd_server_quota_backend_bytes`,
+2 GiB) for 15 minutes. Hourly compaction and the weekly defrag
+(`sa-etcd-defrag.timer`) keep it at a few megabytes, so one of them stopped.
+At the quota etcd raises [EtcdNoSpaceAlarm](#etcdnospacealarm) and refuses
+every write.
+Action: check that the etcd command carries `--auto-compaction-mode=periodic`
+and `--auto-compaction-retention=1h` (`sudo docker compose -f
+/opt/veristar/edge/compose.yml config etcd`) and that the log shows
+`completed auto periodic compaction` within the last two hours (`sudo docker
+compose logs --since 2h etcd` in `/opt/veristar/edge`). Check the last defrag
+run (`sudo journalctl -u sa-etcd-defrag.service`). Then compact and
+defragment by hand: [etcd-maintenance.md](etcd-maintenance.md).
+
+### EtcdNoSpaceAlarm
+etcd raised the `NOSPACE` alarm: a member's database file reached the quota,
+and the whole cluster refuses every write until the alarm is cleared, even
+after space is freed. Patroni cannot renew its leader key, so switchovers,
+failovers, `deploy.yml` and `reboot.yml` fail; failsafe mode keeps the
+current primary running.
+Action: follow [etcd-maintenance.md](etcd-maintenance.md) to the end,
+including `alarm disarm`; the alert resolves at the next scrape once the
+alarm is gone.
+
 ### PatroniNoLeader
 No PostgreSQL member is primary for 1 minute. The control plane, the writer
 and jobs fail.
@@ -228,6 +253,20 @@ by hand with `sudo docker compose exec postgres pgbackrest --stanza=sa
 --type=full backup` and fix the schedule. If the run failed on a refused
 delete of an interrupted backup, see
 [the storage account](../deploy/backups.md#1-the-storage-account).
+
+### BackupJobFailed
+The newest run of a backup unit (`sa-pgbackrest-full`, `-diff` or `-verify`)
+across the database nodes failed, for 5 minutes. Every run that was not
+skipped records its end and result (`sa_backup_last_run_success`, written by
+`sa-backup-result` when the unit stops), so the failure stays on record when
+the Patroni leader moves, while [SystemdUnitFailed](#systemdunitfailed)
+clears once the old leader skips its next run. The `node` label names the
+node of the failed run.
+Action: on that node, `sudo journalctl -u <unit>` for the error, then follow
+[BackupTooOld](#backuptooold) for a backup and
+[WALArchivingFailing](#walarchivingfailing) for a failed `check`. Once the
+cause is fixed, run the unit again on the current leader (`sudo systemctl
+start <unit>`); its success clears the alert.
 
 ### WALArchivingFailing
 WAL archiving failed in the last 15 minutes, or the primary archived nothing
@@ -320,7 +359,9 @@ minutes (`sa_systemd_unit_failed`, written every 5 minutes by
 backup units on the Patroni leader (`sa-pgbackrest-full`, `-diff`, or
 `-verify`, which runs `pgbackrest verify` and then `check`) and the
 start-at-boot units (`sa-core-start`, `sa-edge-start`,
-`sa-observability-start`). On a replica the backup units skip their run
+`sa-observability-start`), which retry a failed start up to six times
+before they stay failed, and `sa-etcd-defrag`, which fails without
+defragmenting when a member of the etcd cluster is unhealthy. On a replica the backup units skip their run
 (`Result=exec-condition`), which is not a failure; a backup unit failed on a
 replica means its leader check got neither 200 nor 503 from Patroni's
 `/primary`, so the node's Patroni API is down or refuses the node's
@@ -332,8 +373,50 @@ command by hand once its cause is fixed; a failed `check` also means WAL may
 not reach the repository ([WALArchivingFailing](#walarchivingfailing)). For a
 start unit, `docker compose ps -a` in the project directory
 (`/opt/veristar/core`, `edge` or `observability`) and start what is down.
+For `sa-etcd-defrag`, bring the unhealthy etcd member back
+([EtcdNoLeader, EtcdMembersDown](#etcdnoleader)); the next
+week's run defragments again. A failed backup unit also raises
+[BackupJobFailed](#backupjobfailed), which stays until a later run succeeds.
 Once fixed, `sudo systemctl reset-failed <unit>` (a later successful run also
 clears it); the alert resolves within 5 minutes.
+
+### TextfileStale
+A node_exporter textfile was not written for longer than its limit for 5
+minutes: `systemd.prom` 15 minutes (`sa-systemd-failed.timer`, every 5
+minutes), `reboot.prom` 30 minutes (`sa-reboot-required.timer`, every 10
+minutes), `pgbackrest.prom` 2 hours (`sa-pgbackrest-textfile`, hourly from
+cron) and `tls.prom` 2 hours (`sa-tls-expiry.timer`, hourly). node_exporter
+keeps serving the last file, so the alerts built on it (SystemdUnitFailed,
+HostRebootRequired, BackupTooOld, InternalCertificateExpiringSoon) see old
+values: a stopped `sa-systemd-failed` timer hides every failed unit.
+Action: on the node, `systemctl list-timers 'sa-*'` and `sudo journalctl -u
+<writer>.service` for a timer; for `pgbackrest.prom`, `systemctl status cron`
+and run `sudo /usr/local/sbin/sa-pgbackrest-textfile` by hand. A converge
+installs the timers again. The alert resolves once the file is written.
+
+### TextfileScrapeError
+node_exporter could not read a file of its textfile directory
+(`/etc/veristar/observability/textfile`) for 15 minutes. It leaves an
+unreadable file out completely, so that file's metrics vanish.
+Action: `sudo docker compose logs --since 1h node-exporter` in
+`/opt/veristar/observability` names the file and the parse error. Run that
+file's writer by hand (see [TextfileStale](#textfilestale)) or delete a file
+that no writer owns.
+
+### InternalCertificateExpiringSoon
+The private network's node certificate or the earliest trusted internal CA
+on a node expires within 30 days, for 1 hour (`sa_tls_certificate_expiry_timestamp_seconds`,
+written hourly by `sa-tls-expiry.timer` from `/etc/veristar/tls/root/node.crt`
+and `/etc/veristar/tls/ca/ca.crt`). An expired certificate breaks every
+mutual TLS link between the nodes: NATS routes, etcd, Patroni, PostgreSQL
+replication and the scrapes. Node certificates last 365 days and are renewed
+only when you run `make internal-ca`.
+Action: for `cert="node"`, renew as in
+[secret-rotation.md](secret-rotation.md#internal-ca-and-node-certificates)
+("Renew node certificates": `make internal-ca ENV=<env>`, then a rolling
+deploy of the running release). For `cert="ca"`, rotate the CA as described
+in the same section. The alert resolves within the hour after the new
+certificate is installed.
 
 ### Watchdog
 Always firing, by design. Alertmanager sends it every minute to the probe's

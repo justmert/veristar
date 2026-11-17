@@ -18,7 +18,7 @@ environment is built from are listed in [../deploy/prerequisites.md](../deploy/p
 
 | Runbook | Use it when |
 |---|---|
-| [alerts.md](alerts.md) | an alert fires: the meaning and first action of each of 39 alerts |
+| [alerts.md](alerts.md) | an alert fires: the meaning and first action of each of 45 alerts |
 | [edge-node-failure.md](edge-node-failure.md) | a node's gateway, collector, NATS server or etcd member answers badly or not at all, or a VM is lost |
 | [database-failover.md](database-failover.md) | the PostgreSQL leader changed or is missing, or a replica needs a rebuild |
 | [disaster-recovery.md](disaster-recovery.md) | no database member holds good data and the cluster is rebuilt from backups |
@@ -35,6 +35,7 @@ environment is built from are listed in [../deploy/prerequisites.md](../deploy/p
 | [capacity.md](capacity.md) | adding or removing resources |
 | [security-patch.md](security-patch.md) | a critical or high vulnerability needs a patch within 24 hours |
 | [secret-rotation.md](secret-rotation.md) | rotating a credential on schedule or after an exposure |
+| [etcd-maintenance.md](etcd-maintenance.md) | the etcd database grows toward its quota, etcd raised the NOSPACE alarm, or a cluster gets compaction for the first time |
 | [collector-upgrade.md](collector-upgrade.md) | upgrading the OpenTelemetry Collector |
 | [umami-upgrade.md](umami-upgrade.md) | upgrading Umami, or rolling an upgrade back |
 | [tracker-release.md](tracker-release.md) | releasing or revoking a tracker version |

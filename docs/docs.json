@@ -198,6 +198,7 @@
                   "runbooks/capacity",
                   "runbooks/security-patch",
                   "runbooks/secret-rotation",
+                  "runbooks/etcd-maintenance",
                   "runbooks/collector-upgrade",
                   "runbooks/umami-upgrade",
                   "runbooks/tracker-release",
