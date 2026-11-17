@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "node build.ts",
-    "start": "cd dist && npx --yes mint@4.3.49 dev --host --no-open --no-telemetry --port ${PORT:-3000}",
+    "start": "cd dist && npx --yes mint@4.3.49 dev --no-open --no-telemetry --port ${PORT:-3000}",
     "test": "node --test 'test/*.test.ts'"
   },
   "dependencies": {

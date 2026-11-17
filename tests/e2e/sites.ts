@@ -47,6 +47,8 @@ export interface SiteDef {
   // set for an example that is a standalone npm project outside the pnpm
   // workspace: its directory, relative to the repository root
   npmDir?: string;
+  // the address the site's server listens on, when it is not 127.0.0.1
+  listenHost?: string;
   // a link on the home page that leads to another page of the site
   navSelector: string;
 }
@@ -58,6 +60,7 @@ function site(
   siteId: string,
   navSelector: string,
   npmDir?: string,
+  listenHost?: string,
 ): SiteDef {
   const host = `${label}.${TENANT_DOMAIN}`;
   return {
@@ -69,6 +72,7 @@ function site(
     pkg: `@veristar/example-${key}`,
     navSelector,
     ...(npmDir ? { npmDir } : {}),
+    ...(listenHost ? { listenHost } : {}),
   };
 }
 
@@ -99,7 +103,17 @@ export const SITES: readonly SiteDef[] = [
     "#nav-pricing",
     "examples/vitepress",
   ),
-  site("mintlify", "mintlify", 47111, "0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e11", "#nav-pricing"),
+  // mint dev listens on localhost only (::1 or 127.0.0.1, as the resolver
+  // orders them); it has no option to pick the loopback address
+  site(
+    "mintlify",
+    "mintlify",
+    47111,
+    "0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e11",
+    "#nav-pricing",
+    undefined,
+    "localhost",
+  ),
 ];
 
 // the wallets kit example. it is not part of the browser matrix
