@@ -9,6 +9,12 @@ listen: "0.0.0.0:4222"
 http: "0.0.0.0:8222"
 # clients on other nodes (the core services) are told this address
 client_advertise: "{{ sa_private_ip }}:4222"
+# the largest message the server takes, 8 MiB (internal/natsx MaxPayload).
+# the default 1 MiB is below one otlp export of a few thousand histogram
+# points after the collector, which accepts exports up to 4 MiB. a change
+# is applied by the reload handler; connected clients keep the limit they
+# got at connect until they reconnect
+max_payload: 8388608
 
 # client connections: tls only, from the first byte (handshake_first), so
 # not even the INFO line crosses the network in clear; a plain client gets
