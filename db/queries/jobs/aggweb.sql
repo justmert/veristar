@@ -35,7 +35,12 @@ select @site_id::uuid, @tenant_id::uuid, @day::date, @band::text,
        unnest(@dimensions::text[]), unnest(@keys::text[]), unnest(@dim_values::bigint[]);
 
 -- name: DeleteSiteAggregates :one
--- a site reset (erasure) leaves no web data; its aggregates go with it
+-- a site reset (erasure) leaves no web data; its aggregates go with it,
+-- the integrity grades and coverage estimates included. the edge counters
+-- in cp go in DeleteSiteEdgeCounters, as cp_system
 with d as (delete from agg.web_daily w where w.site_id = @site_id::uuid returning 1),
-     dd as (delete from agg.web_daily_dim m where m.site_id = @site_id::uuid returning 1)
-select (select count(*) from d)::bigint as daily, (select count(*) from dd)::bigint as dims;
+     dd as (delete from agg.web_daily_dim m where m.site_id = @site_id::uuid returning 1),
+     i as (delete from agg.web_integrity_daily g where g.site_id = @site_id::uuid returning 1),
+     c as (delete from agg.web_coverage_daily v where v.site_id = @site_id::uuid returning 1)
+select (select count(*) from d)::bigint as daily, (select count(*) from dd)::bigint as dims,
+       (select count(*) from i)::bigint as integrity, (select count(*) from c)::bigint as coverage;

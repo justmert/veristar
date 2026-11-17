@@ -25,20 +25,32 @@ func (q *Queries) AggTenantStatus(ctx context.Context, id uuid.UUID) (string, er
 
 const deleteSiteAggregates = `-- name: DeleteSiteAggregates :one
 with d as (delete from agg.web_daily w where w.site_id = $1::uuid returning 1),
-     dd as (delete from agg.web_daily_dim m where m.site_id = $1::uuid returning 1)
-select (select count(*) from d)::bigint as daily, (select count(*) from dd)::bigint as dims
+     dd as (delete from agg.web_daily_dim m where m.site_id = $1::uuid returning 1),
+     i as (delete from agg.web_integrity_daily g where g.site_id = $1::uuid returning 1),
+     c as (delete from agg.web_coverage_daily v where v.site_id = $1::uuid returning 1)
+select (select count(*) from d)::bigint as daily, (select count(*) from dd)::bigint as dims,
+       (select count(*) from i)::bigint as integrity, (select count(*) from c)::bigint as coverage
 `
 
 type DeleteSiteAggregatesRow struct {
-	Daily int64
-	Dims  int64
+	Daily     int64
+	Dims      int64
+	Integrity int64
+	Coverage  int64
 }
 
-// a site reset (erasure) leaves no web data; its aggregates go with it
+// a site reset (erasure) leaves no web data; its aggregates go with it,
+// the integrity grades and coverage estimates included. the edge counters
+// in cp go in DeleteSiteEdgeCounters, as cp_system
 func (q *Queries) DeleteSiteAggregates(ctx context.Context, siteID uuid.UUID) (DeleteSiteAggregatesRow, error) {
 	row := q.db.QueryRow(ctx, deleteSiteAggregates, siteID)
 	var i DeleteSiteAggregatesRow
-	err := row.Scan(&i.Daily, &i.Dims)
+	err := row.Scan(
+		&i.Daily,
+		&i.Dims,
+		&i.Integrity,
+		&i.Coverage,
+	)
 	return i, err
 }
 

@@ -70,6 +70,37 @@ func (q *Queries) CompleteErasureRequest(ctx context.Context, arg CompleteErasur
 	return i, err
 }
 
+const deleteSiteEdgeCounters = `-- name: DeleteSiteEdgeCounters :one
+with h as (delete from cp.web_ingest_hourly x where x.site_id = $1::uuid returning 1),
+     e as (delete from cp.web_evidence_daily x where x.site_id = $1::uuid returning 1),
+     s as (delete from cp.web_signals_daily x where x.site_id = $1::uuid returning 1),
+     n as (delete from cp.web_networks_daily x where x.site_id = $1::uuid returning 1)
+select (select count(*) from h)::bigint as ingest, (select count(*) from e)::bigint as evidence,
+       (select count(*) from s)::bigint as signals, (select count(*) from n)::bigint as networks
+`
+
+type DeleteSiteEdgeCountersRow struct {
+	Ingest   int64
+	Evidence int64
+	Signals  int64
+	Networks int64
+}
+
+// a site reset leaves no web data of the site: the gateways' outcome
+// counters, network class evidence, page signals and network keys go too.
+// cp_system deletes them; the jobs role may not delete edge counters
+func (q *Queries) DeleteSiteEdgeCounters(ctx context.Context, siteID uuid.UUID) (DeleteSiteEdgeCountersRow, error) {
+	row := q.db.QueryRow(ctx, deleteSiteEdgeCounters, siteID)
+	var i DeleteSiteEdgeCountersRow
+	err := row.Scan(
+		&i.Ingest,
+		&i.Evidence,
+		&i.Signals,
+		&i.Networks,
+	)
+	return i, err
+}
+
 const erasureHeartbeat = `-- name: ErasureHeartbeat :execrows
 
 update cp.erasure_requests set heartbeat_at = now()
@@ -241,6 +272,17 @@ func (q *Queries) ListErasureReaggregation(ctx context.Context, rowLimit int32) 
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockSiteResetTenant = `-- name: LockSiteResetTenant :exec
+select pg_advisory_xact_lock_shared(hashtextextended('agg.tenant:' || $1::text, 0))
+`
+
+// the shared agg lock of the tenant (jobsq.LockAggTenant), so the delete
+// below does not interleave with an integrity grade of the same tenant
+func (q *Queries) LockSiteResetTenant(ctx context.Context, tenantKey string) error {
+	_, err := q.db.Exec(ctx, lockSiteResetTenant, tenantKey)
+	return err
 }
 
 const setErasureReaggregated = `-- name: SetErasureReaggregated :execrows
