@@ -195,6 +195,14 @@ describe("appeal this grade", () => {
     );
     expect(plain.querySelector("[data-testid=integrity-appeal]")).toBeNull();
   });
+
+  it("is not offered for grade A", async () => {
+    const report = integrityReport.parse({ ...f.integrityReportBody, grade: "A" });
+    const host = await render(
+      <IntegrityPanel report={report} appeal={{ slug: "stellar-dex", siteDomains: {} }} />,
+    );
+    expect(host.querySelector("[data-testid=integrity-appeal]")).toBeNull();
+  });
 });
 
 describe("integrity in the global web view", () => {
