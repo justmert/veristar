@@ -466,6 +466,45 @@ func TestUsageReports(t *testing.T) {
 			return err
 		})
 		require.Error(t, err)
+
+		// a member's own tenant role cannot rewrite a revocation either: not
+		// who revoked, not when
+		asMember := func(sql string, args ...any) error {
+			return e.d.WithTenant(t.Context(), a, func(tx pgx.Tx) error {
+				if _, err := tx.Exec(t.Context(), `select set_config('app.user_id', $1, true)`, member.String()); err != nil {
+					return err
+				}
+				_, err := tx.Exec(t.Context(), sql, args...)
+				return err
+			})
+		}
+		require.Error(t, asMember(`update cp.usage_reports set revoked_by = $2 where id = $1`, id, member))
+		require.Error(t, asMember(`update cp.usage_reports set revoked_at = revoked_at - interval '1 day' where id = $1`, id))
+		require.Error(t, e.d.WithSystem(t.Context(), func(tx pgx.Tx) error {
+			_, err := tx.Exec(t.Context(), `update cp.usage_reports set revoked_by = $2 where id = $1`, id, member)
+			return err
+		}))
+
+		// two more stored reports to revoke
+		ids := []string{}
+		for range 2 {
+			code, raw := ca.call(t, http.MethodPost, "/api/tenants/"+a.String()+"/reports", map[string]string{"from": to, "to": to})
+			require.Equal(t, http.StatusCreated, code, string(raw))
+			ids = append(ids, decode[reports.Detail](t, raw).ID)
+		}
+		// a revocation takes the database's time, whatever the writer names
+		fresh := ids[0]
+		require.NoError(t, asMember(`update cp.usage_reports set revoked_at = '2020-01-01', revoked_by = $2 where id = $1`, fresh, member))
+		var at time.Time
+		var by uuid.UUID
+		require.NoError(t, e.d.WithSystem(t.Context(), func(tx pgx.Tx) error {
+			return tx.QueryRow(t.Context(), `select revoked_at, revoked_by from cp.usage_reports where id = $1`, fresh).Scan(&at, &by)
+		}))
+		require.WithinDuration(t, time.Now(), at, time.Minute)
+		require.Equal(t, member, by)
+		// a revocation by someone else's name is refused
+		another := ids[1]
+		require.Error(t, asMember(`update cp.usage_reports set revoked_at = now(), revoked_by = $2 where id = $1`, another, ua))
 	})
 
 	t.Run("stellar.toml lists the current and retired keys", func(t *testing.T) {
@@ -507,7 +546,11 @@ func TestUsageReports(t *testing.T) {
 	})
 
 	t.Run("creation is limited per project", func(t *testing.T) {
-		for i := 1; i < reports.CreateLimit; i++ {
+		var made int
+		require.NoError(t, e.d.WithSystem(t.Context(), func(tx pgx.Tx) error {
+			return tx.QueryRow(t.Context(), `select count(*) from cp.usage_reports where tenant_id = $1`, a).Scan(&made)
+		}))
+		for i := made; i < reports.CreateLimit; i++ {
 			code, raw := ca.call(t, http.MethodPost, "/api/tenants/"+a.String()+"/reports", map[string]string{"from": to, "to": to})
 			require.Equal(t, http.StatusCreated, code, string(raw))
 		}
