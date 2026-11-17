@@ -86,7 +86,9 @@ func setup(t *testing.T) *world {
 	port := freePort(t)
 	name := fmt.Sprintf("sa-supplychain-registry-%d", port)
 	must(t, "", nil, "docker", "run", "-d", "--rm", "--name", name, "-p", fmt.Sprintf("127.0.0.1:%d:5000", port), registryImage)
-	t.Cleanup(func() { _, _ = run(t, "", nil, "docker", "rm", "-f", name) })
+	// -v also removes the anonymous volume of the registry image's
+	// /var/lib/registry, which docker rm alone leaves behind on every run
+	t.Cleanup(func() { _, _ = run(t, "", nil, "docker", "rm", "-f", "-v", name) })
 	w.registry = fmt.Sprintf("127.0.0.1:%d/sa", port)
 	for i := 0; i < 50; i++ {
 		if _, err := run(t, "", nil, "curl", "-fsS", fmt.Sprintf("http://127.0.0.1:%d/v2/", port)); err == nil {
