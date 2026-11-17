@@ -434,6 +434,18 @@ describe("the public report page (contract 20.5)", () => {
     expect(host.textContent).toContain("1, 2");
   });
 
+  it("titles a signature by a key Veristar does not publish as not Veristar's", async () => {
+    withCrypto();
+    const body = publicBody(document);
+    const other = `G${"A".repeat(55)}`;
+    stubFetch([{ status: 200, body: { ...body, keys: { ...body.keys, current: other } } }]);
+    const host = await renderRoutes(publicRoute, "/r/abcdefghijklmnopqrstuvwxyz");
+    await waitFor(() => expect(host.querySelector("[data-verdict=unknown-key]")).not.toBeNull());
+    expect(host.textContent).toContain("Not signed by Veristar");
+    expect(host.textContent).not.toContain("Signature verified");
+    expect(host.querySelector("[data-verdict=unknown-key]")?.getAttribute("role")).toBe("alert");
+  });
+
   it("says a changed report is not valid", async () => {
     withCrypto();
     const tampered = { ...document, web: { ...document.web, visitors: 9999 } };

@@ -14,8 +14,15 @@ import { PublicFrame } from "@/components/public-frame";
 import { Pill } from "@/components/status";
 import { Button } from "@/components/ui/button";
 import { isNotFound } from "@/lib/errors";
-import { formatCount, formatDateTimeUtc } from "@/lib/format";
-import { formatChange, formatDayRange, formatPercentile } from "@/lib/global";
+import { countOf, formatCount, formatDateTimeUtc } from "@/lib/format";
+import {
+  formatChange,
+  formatDay,
+  formatDayRange,
+  formatDuration,
+  formatPct,
+  formatPercentile,
+} from "@/lib/global";
 import { type Verdict, verifyReport } from "@/lib/report-verify";
 import { downloadFile } from "./reports";
 
@@ -111,6 +118,7 @@ function VerdictPanel({ verdict, r }: { verdict: Verdict | null; r: PublicReport
       </Panel>
     );
   }
+  const unknownKey = verdict.key === "unknown";
   const keyText =
     verdict.key === "current"
       ? "Veristar's current report key"
@@ -118,25 +126,33 @@ function VerdictPanel({ verdict, r }: { verdict: Verdict | null; r: PublicReport
         ? "an earlier Veristar report key, still published"
         : "a key Veristar does not publish";
   return (
-    <Panel title="Signature verified" aria-label="Signature" actions={download}>
+    <Panel
+      title={unknownKey ? "Not signed by Veristar" : "Signature verified"}
+      aria-label="Signature"
+      actions={download}
+    >
       <div className="flex flex-col gap-2">
         <p
-          role="status"
-          data-verdict={verdict.key === "unknown" ? "unknown-key" : "verified"}
+          role={unknownKey ? "alert" : "status"}
+          data-verdict={unknownKey ? "unknown-key" : "verified"}
           className="flex items-start gap-2 text-body text-fg"
         >
-          {verdict.key === "unknown" ? (
-            <ShieldX aria-hidden className="mt-0.5 size-4 shrink-0 text-warning" />
+          {unknownKey ? (
+            <CircleAlert aria-hidden className="mt-0.5 size-4 shrink-0 text-warning" />
           ) : (
             <ShieldCheck aria-hidden className="mt-0.5 size-4 shrink-0 text-success" />
           )}
-          This browser checked the SEP-53 signature over the report's canonical form. It was made by{" "}
-          {keyText}.
+          {unknownKey
+            ? "The SEP-53 signature matches the report's canonical form, but the key that made it is not one Veristar publishes. Do not treat these figures as Veristar's."
+            : `This browser checked the SEP-53 signature over the report's canonical form. It was made by ${keyText}.`}
         </p>
         <code className="break-all font-mono text-caption text-fg-2">{verdict.signer}</code>
         <p className="text-caption text-fg-3">
           The published keys are in{" "}
-          <a href={r.keys.stellar_toml} className="underline underline-offset-2 hover:text-fg">
+          <a
+            href={r.keys.stellar_toml}
+            className="rounded-sm underline underline-offset-2 hover:text-fg focus-ring"
+          >
             stellar.toml
           </a>
           . Verify the downloaded file yourself with any SEP-53 implementation.
@@ -162,9 +178,7 @@ function share(v: string | null): string {
 }
 
 function seconds(l: { seconds: string | null; over_10s: boolean }): string {
-  if (l.over_10s) return ">10 s";
-  if (l.seconds === null) return "n/a";
-  return `${Number(l.seconds).toFixed(3)} s`;
+  return formatPct(l.seconds === null ? null : Number(l.seconds), l.over_10s) ?? "n/a";
 }
 
 const KPI_LABEL: Record<string, string> = {
@@ -187,8 +201,8 @@ function ReportBody({ doc }: { doc: ReportDocument }) {
       <div className="flex flex-col gap-1">
         <h1 className="text-page text-fg">{doc.project.name}</h1>
         <p className="text-body text-fg-2">
-          Usage report for {formatDayRange(doc.period.from, doc.period.to)}, {doc.period.days} days.
-          Generated {formatDateTimeUtc(doc.generated_at)}.
+          Usage report for {formatDayRange(doc.period.from, doc.period.to)},{" "}
+          {countOf(doc.period.days, "day")}. Generated {formatDateTimeUtc(doc.generated_at)}.
         </p>
       </div>
 
@@ -198,7 +212,7 @@ function ReportBody({ doc }: { doc: ReportDocument }) {
             Grade {doc.integrity.grade ?? "not graded"}
           </span>
           <span className="text-small text-fg-2">
-            {doc.integrity.graded_days} graded site days: {doc.integrity.days_a} A,{" "}
+            {countOf(doc.integrity.graded_days, "graded site day")}: {doc.integrity.days_a} A,{" "}
             {doc.integrity.days_b} B, {doc.integrity.days_c} C
           </span>
           {doc.integrity.reasons.length > 0 ? (
@@ -219,6 +233,11 @@ function ReportBody({ doc }: { doc: ReportDocument }) {
           <Fact label="Page views">{num(doc.web.pageviews)}</Fact>
           <Fact label="Visits">{num(doc.web.visits)}</Fact>
           <Fact label="Bounce rate">{share(doc.web.bounce_rate)}</Fact>
+          <Fact label="Visit duration">
+            {doc.web.avg_visit_duration_seconds === null
+              ? "n/a"
+              : formatDuration(Number(doc.web.avg_visit_duration_seconds))}
+          </Fact>
           <Fact label="Quarantined share">{share(doc.web.quarantine_share)}</Fact>
           <Fact label="Gateway requests">{num(doc.web.gateway_requests)}</Fact>
           <Fact label="Sites">{num(doc.web.sites)}</Fact>
@@ -257,7 +276,7 @@ function ReportBody({ doc }: { doc: ReportDocument }) {
       <Panel
         title="Cohort"
         aria-label="Cohort"
-        description={`${cohortName ? `Confirmed cohort: ${cohortName}${c.award_date ? `, awarded ${c.award_date}` : ""}. ` : "No confirmed cohort. "}Percentiles among ${population} (${c.cohort_size} projects): the share with a value at or below this project's.`}
+        description={`${cohortName ? `Confirmed cohort: ${cohortName}${c.award_date ? `, awarded ${formatDay(c.award_date)}` : ""}. ` : "No confirmed cohort. "}Percentiles among ${population} (${c.cohort_size} projects): the share with a value at or below this project's.`}
       >
         <table className="w-full text-left text-small tabular" aria-label="Key metrics">
           <thead>
@@ -302,7 +321,8 @@ function ReportBody({ doc }: { doc: ReportDocument }) {
           <ul className="flex flex-col gap-1 text-small text-fg-2">
             {doc.rules_met.map((x) => (
               <li key={x.name}>
-                <span className="font-medium text-fg">{x.name}</span>, {x.from} to {x.to}
+                <span className="font-medium text-fg">{x.name}</span>,{" "}
+                {formatDayRange(x.from, x.to)}
               </li>
             ))}
           </ul>
