@@ -22,7 +22,7 @@ The measured numbers behind the sizing:
 |---|---|---|
 | `DiskUsageHigh` (above 80% for 10 minutes) | any node | find what grew, then a larger server type or volume |
 | `ReplicationLagHigh`, slow dashboards, high CPU on the leader | core nodes | larger `node_vm_size`, PostgreSQL parameters |
-| `ReplayerLagHigh` that drains slower than it grows | core nodes | more Umami capacity (see the note on Umami below) |
+| `ReplayerLagHigh`, `WebEventsBacklogGrowing` or `WebEventsDelayed` that drains slower than it grows | core nodes | more Umami capacity on every core node (see the note on Umami below) |
 | `MetricsWriterLagHigh` | core nodes | `METRICSWRITER_BATCH`, larger `node_vm_size` |
 | Gateway or collector latency, `429` from rate limits for legitimate tenants | edge nodes | larger `node_vm_size`, `edge_gateway_env` and `edge_collector_env` limits |
 | JetStream store close to `max_file_store` or `max_memory_store` | edge nodes | `edge_nats_max_file_store` (20G) and `edge_nats_max_memory_store` (512M), and a larger disk |
@@ -127,7 +127,10 @@ run of 2026-11-13 ([local drill record](../reference/drills/2026-11-13.md)), bel
 over all of them (`UMAMI_URL` lists each). The reasoning and the per-count measurements are in the comment above `core_umami_processes` in
 `infra/ansible/roles/core/defaults/main.yml`. To raise web drain, raise that count (it must stay
 at most `REPLAYER_WORKERS`, 128) and give the nodes the cores for it; each idle process holds
-about 115 MB.
+about 115 MB. Only the node whose replayer holds the lock delivers, to its own processes, and
+the lock can move to any core node, so every core node needs the size. Adding nodes does not
+raise the delivery rate ([../reference/capacity.md](../reference/capacity.md), "Web events end
+to end").
 
 ## Exercised
 
