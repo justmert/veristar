@@ -22,7 +22,10 @@ estimate of visits not measured because of privacy signals
 
 Both `/v1/c` and `/v1/e` are CORS simple requests: the tracker sends no custom headers and uses
 `credentials: 'omit'`, so the browser sends no preflight and no cookies. The gateway answers both
-with `Access-Control-Allow-Origin` (the request's origin when it is registered for the site).
+with `Access-Control-Allow-Origin` set to the request's `Origin`, whatever it is, and
+`Vary: Origin`, so a refusal reaches the page as its status instead of a CORS error. Echoing the
+origin grants nothing, because no credentials are allowed; whether the origin is registered for
+the site is the gateway's own check, which answers 403 when it is not.
 
 ## Challenge
 
