@@ -34,6 +34,36 @@ groups:
         annotations:
           summary: "{{ $value }} web events wait for the replayer"
           runbook: docs/runbooks/alerts.md#replayerlaghigh
+      # WEB_EVENTS keeps a message at most 72 hours (max age, discard old)
+      # and then drops it without a trace, so a backlog that the replayer
+      # drains more slowly than the gateways fill it ends in lost page views.
+      # the leader reports the stream publish time of the oldest message it
+      # holds, which in a backlog is the oldest message of the stream, since
+      # it fetches in stream order. a standby reports 0, hence max().
+      - alert: WebEventsDelayed
+        expr: max(replayer_oldest_pending_age_seconds) > 3600
+        for: 10m
+        labels: {severity: ticket}
+        annotations:
+          summary: "the oldest web event the replayer holds was accepted {{ $value | humanizeDuration }} ago"
+          runbook: docs/runbooks/alerts.md#webeventsdelayed-webeventsneardiscard-webeventsbackloggrowing
+      - alert: WebEventsNearDiscard
+        expr: max(replayer_oldest_pending_age_seconds) > 48 * 3600
+        labels: {severity: page}
+        annotations:
+          summary: "web events {{ $value | humanizeDuration }} old wait for umami; WEB_EVENTS drops them at 72 hours"
+          runbook: docs/runbooks/alerts.md#webeventsdelayed-webeventsneardiscard-webeventsbackloggrowing
+      # the backlog is large and grew over the last hour: the gateways accept
+      # faster than the replayer delivers, so it will not drain by itself
+      - alert: WebEventsBacklogGrowing
+        expr: |
+          (sa:consumer_backlog:max{stream_name="WEB_EVENTS",consumer_name="replayer"} > 10000)
+          and (delta(sa:consumer_backlog:max{stream_name="WEB_EVENTS",consumer_name="replayer"}[1h]) > 0)
+        for: 30m
+        labels: {severity: ticket}
+        annotations:
+          summary: "the web event backlog is {{ $value }} and grew over the last hour"
+          runbook: docs/runbooks/alerts.md#webeventsdelayed-webeventsneardiscard-webeventsbackloggrowing
       - alert: MetricsWriterLagHigh
         expr: sa:consumer_backlog:max{stream_name="API_METRICS",consumer_name="metricswriter"} > 5000
         for: 10m
