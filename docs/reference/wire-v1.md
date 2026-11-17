@@ -77,7 +77,7 @@ sent with `fetch` and `keepalive: true`.
 | `sv` | string | no | 20 | tracker release as `x.y.z`, sent from 1.2.0 on; the gateway answers 410 when it names a revoked release |
 | `w` | string | yes | | site id |
 | `t` | string | yes | | `pv` pageview, `ev` custom event or `nv` never-visible notice (1.3.0 on, see below) |
-| `h` | string | yes | 100 | hostname of the page; the gateway replaces it with the host of the checked `Origin` header, so a page can report only its own host |
+| `h` | string | yes | 100 | hostname of the page; the gateway replaces it with the host of the checked `Origin` header, so a page can report only its own host, then lower cases and redacts it like the referrer host (a wildcard origin accepts any subdomain label) |
 | `u` | string | `pv` and `ev` | 500 | path and query of the page, plus a route fragment (see below) |
 | `r` | string | `pv` and `ev` | 500 | referrer: full url for another origin, path for the same origin, empty if none; the gateway keeps only scheme and host (see Referrer below) |
 | `ti` | string | no | 500 | document title; releases before 1.3.0 always send it, 1.3.0 only with `data-send-title="true"` or when the site's own `data-before-send` hook or `umami.track(props)` call sets it |

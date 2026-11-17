@@ -207,6 +207,32 @@ func TestSanitizeReferrer(t *testing.T) {
 	}
 }
 
+// a wildcard origin accepts any subdomain label, so the page hostname can
+// carry a strkey; it is redacted like the referrer host, in either case.
+func TestSanitizeHostname(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"shop.example", "shop.example"},
+		{strings.ToLower(sanG) + ".wild.example", "{account}.wild.example"},
+		{sanG + ".wild.example", "{account}.wild.example"},
+		{"[2001:db8::1]", "[2001:db8::1]"},
+		{"192.0.2.1", "192.0.2.1"},
+	}
+	for _, c := range cases {
+		got, flags := SanitizeHostname(c.in)
+		if got != c.want {
+			t.Errorf("SanitizeHostname(%q) = %q, want %q", c.in, got, c.want)
+		}
+		if c.in != c.want && strings.ToLower(c.in) != c.want && !flags.Has(redact.KindAccount) {
+			t.Errorf("SanitizeHostname(%q) reports %b", c.in, flags)
+		}
+	}
+	w := &events.Wire{Hostname: strings.ToLower(sanG) + ".wild.example", URL: "/"}
+	rep := SanitizeWire(w, false)
+	if w.Hostname != "{account}.wild.example" || !rep.Redacted.Has(redact.KindAccount) {
+		t.Errorf("SanitizeWire hostname = %q, report %b", w.Hostname, rep.Redacted)
+	}
+}
+
 func TestSanitizeLanguage(t *testing.T) {
 	cases := map[string]string{"en-US": "en", "pt_BR": "pt", "TR": "tr", "zh-Hant-TW": "zh", "": "", "x-klingon": "", "e1": "", "a": ""}
 	for in, want := range cases {
