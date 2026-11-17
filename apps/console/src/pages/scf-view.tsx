@@ -13,13 +13,15 @@ import { projectTabs } from "@/components/nav/nav-items";
 import { NavTabs } from "@/components/nav/nav-tabs";
 import { DayStrip } from "@/components/onchain";
 import { Fact, PageHeader, Panel } from "@/components/panel";
-import { Pill } from "@/components/status";
+import { Pill, statusText } from "@/components/status";
 import { Button } from "@/components/ui/button";
-import { formatCount } from "@/lib/format";
+import { countOf, formatCount } from "@/lib/format";
 import {
   formatChange,
   formatDay,
+  formatDayRange,
   formatDuration,
+  formatPct,
   formatPercentile,
   formatShare,
 } from "@/lib/global";
@@ -42,7 +44,7 @@ export function SCFViewPage() {
       <NavTabs label="On-chain" items={projectTabs(tenant.id, "onchain") ?? []} />
       <PageHeader
         title="What SCF sees"
-        description={`The figures the SCF operator views show about this project for ${v.from} to ${v.to} (UTC days), from the same queries. Nothing here is hidden from you, and nothing is scored beyond what is shown.`}
+        description={`The figures the SCF operator views show about this project for ${formatDayRange(v.from, v.to)}, from the same queries. Nothing here is hidden from you, and nothing is scored beyond what is shown.`}
         actions={
           <Button asChild variant="outline">
             <a href={exportPaths.overview(tenant.id, { from: v.from, to: v.to })} download>
@@ -90,8 +92,8 @@ export function IntegritySlot({
             {value.grade}
           </span>
           <span className="text-small text-fg-2">
-            {value.graded_days} graded site days: {value.days_a} A, {value.days_b} B, {value.days_c}{" "}
-            C
+            {countOf(value.graded_days, "graded site day")}: {value.days_a} A, {value.days_b} B,{" "}
+            {value.days_c} C
           </span>
         </div>
       )}
@@ -215,7 +217,7 @@ function RulesMet({ v }: { v: SCFView }) {
               <ul className="flex flex-wrap gap-x-4 gap-y-1 text-caption text-fg-3">
                 {match.months.map((m) => (
                   <li key={m.month}>
-                    {m.month}: {m.qualifying_days} qualifying days
+                    {m.month}: {countOf(m.qualifying_days, "qualifying day")}
                   </li>
                 ))}
                 <li>Integrity grade {match.integrity.grade ?? "not graded"}</li>
@@ -268,7 +270,7 @@ function SCFRows({ v }: { v: SCFView }) {
       ) : null}
       <Panel title="Project" description="As the operator list shows it.">
         <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <Row label="Status">{v.tenant?.status ?? "n/a"}</Row>
+          <Row label="Status">{v.tenant ? statusText(v.tenant.status) : "n/a"}</Row>
           <Row label="Sites">{v.sites ? formatCount(v.sites.sites) : "n/a"}</Row>
           <Row label="Verified sites">{v.sites ? formatCount(v.sites.sites_verified) : "n/a"}</Row>
           <Row label="Sites with stellar.toml">
@@ -320,13 +322,7 @@ function SCFRows({ v }: { v: SCFView }) {
             <Row label="Requests">{formatCount(api.requests)}</Row>
             <Row label="4xx rate">{api.rate_4xx === null ? "n/a" : formatShare(api.rate_4xx)}</Row>
             <Row label="5xx rate">{api.rate_5xx === null ? "n/a" : formatShare(api.rate_5xx)}</Row>
-            <Row label="p95">
-              {api.p95_over_10s
-                ? "over 10 s"
-                : api.p95_seconds === null
-                  ? "n/a"
-                  : `${api.p95_seconds.toFixed(3)} s`}
-            </Row>
+            <Row label="p95">{formatPct(api.p95_seconds, api.p95_over_10s) ?? "n/a"}</Row>
             <Row label="Services">{formatCount(api.services)}</Row>
             <Row label="Routes">{formatCount(api.routes)}</Row>
           </dl>
