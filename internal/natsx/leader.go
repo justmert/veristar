@@ -196,13 +196,34 @@ func (l *Lock) Renew(ctx context.Context) (uint64, error) {
 // Confirm checks with the server that this holder still has the lock at its
 // current revision. the replayer calls it before every send batch, because
 // it cannot fence umami's database.
+//
+// the bucket allows direct gets, which any replica answers, and a follower
+// that has not applied the latest renewal yet answers with an older revision
+// or, right after the acquire, with no key. such an answer is read again
+// for up to a second before it counts as a loss: a real loss shows the same
+// for that whole time (a successor's hold, which the nonce in the value
+// tells apart even after the bucket was recreated, or an expired key), while
+// a lagging replica catches up in milliseconds. the caller does not send
+// while Confirm runs, so the wait cannot let a former holder send.
 func (l *Lock) Confirm(ctx context.Context) (uint64, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.rev == 0 {
 		return 0, ErrLockLost
 	}
-	e, err := l.kv.Get(ctx, l.name)
+	const attempts, pause = 40, 25 * time.Millisecond
+	var (
+		e   jetstream.KeyValueEntry
+		err error
+	)
+	for i := range attempts {
+		e, err = l.kv.Get(ctx, l.name)
+		stale := (err == nil && e.Revision() < l.rev) ||
+			errors.Is(err, jetstream.ErrKeyNotFound) || errors.Is(err, jetstream.ErrKeyDeleted)
+		if !stale || i == attempts-1 || !sleep(ctx, pause) {
+			break
+		}
+	}
 	if err != nil {
 		if errors.Is(err, jetstream.ErrKeyNotFound) || errors.Is(err, jetstream.ErrKeyDeleted) {
 			l.rev = 0
