@@ -324,6 +324,18 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	// a source on another network would let a proof speak of another
+	// network's account under the same strkey: refuse to start. a source
+	// that does not answer now only fails the proofs that need it
+	nctx, ncancel := context.WithTimeout(ctx, 15*time.Second)
+	err = chain.CheckNetwork(nctx, horizon, rpc, chain.PublicNetwork)
+	ncancel()
+	if chain.Code(err) == chain.CodeWrongNetwork {
+		return err
+	}
+	if err != nil {
+		log.Warn("stellar sources: network not checked", "err", err)
+	}
 	onchainRoutes, err := onchain.NewRoutes(scope, horizon, rpc, cfg.ConsoleOrigin, time.Now)
 	if err != nil {
 		return err

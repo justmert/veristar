@@ -52,7 +52,8 @@ func (l *ledgers) horizon(w http.ResponseWriter, r *http.Request) {
 	p := r.URL.Path
 	switch {
 	case p == "/":
-		_ = json.NewEncoder(w).Encode(map[string]any{"history_latest_ledger": l.latest, "history_elder_ledger": 1})
+		_ = json.NewEncoder(w).Encode(map[string]any{"history_latest_ledger": l.latest, "history_elder_ledger": 1,
+			"network_passphrase": chain.PublicNetwork})
 	case strings.HasPrefix(p, "/ledgers/"):
 		seq, _ := strconv.ParseInt(strings.TrimPrefix(p, "/ledgers/"), 10, 64)
 		_ = json.NewEncoder(w).Encode(map[string]any{"sequence": seq, "closed_at": l.closeOf(seq).Format(time.RFC3339)})
@@ -107,6 +108,8 @@ func (l *ledgers) rpc(w http.ResponseWriter, r *http.Request) {
 	oldest := l.latest - 7*perDay
 	var result any
 	switch req.Method {
+	case "getNetwork":
+		result = map[string]any{"passphrase": chain.PublicNetwork}
 	case "getHealth":
 		result = map[string]any{"status": "healthy", "oldestLedger": oldest, "latestLedger": l.latest}
 	case "getLedgers":

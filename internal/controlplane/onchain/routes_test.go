@@ -573,6 +573,19 @@ func TestOnchainRoutes(t *testing.T) {
 	require.Equal(t, http.StatusNoContent, r.status)
 	v = c.call(t, http.MethodGet, base, nil)
 	require.Len(t, v.body["ids"], 3)
+
+	// removing the account both contracts were proven through takes their
+	// proofs with it: they rested on the account being the project's
+	r = c.call(t, http.MethodDelete, base+"/ids/"+accountID, nil)
+	require.Equal(t, http.StatusNoContent, r.status)
+	v = c.call(t, http.MethodGet, base, nil)
+	require.Len(t, v.body["ids"], 2)
+	for _, s := range []string{adminContract, deployContract} {
+		ver := idOf(t, v, s)["verification"].(map[string]any)
+		require.Equal(t, "unverified", ver["status"], s)
+		require.Equal(t, onchain.ErrViaRemoved, ver["last_error"], s)
+		require.Nil(t, ver["via"], s)
+	}
 }
 
 // a sep-53 signature by an account's own key proves control only while

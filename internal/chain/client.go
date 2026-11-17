@@ -27,6 +27,9 @@ const (
 	CodeBeforeHistory  = "before_source_history"
 	CodeDayTooLarge    = "day_over_read_cap"
 	CodeAccountMissing = "account_not_found"
+	// CodeWrongNetwork: the source serves another network than the one
+	// the platform reads
+	CodeWrongNetwork = "wrong_network"
 )
 
 // Error is a failed read with a stable code.

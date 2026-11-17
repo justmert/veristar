@@ -38,8 +38,9 @@ func (h *Horizon) get(ctx context.Context, path string, q url.Values, into any, 
 
 // Root is the part of horizon's root document the reader needs.
 type Root struct {
-	LatestLedger int64 `json:"history_latest_ledger"`
-	ElderLedger  int64 `json:"history_elder_ledger"`
+	LatestLedger      int64  `json:"history_latest_ledger"`
+	ElderLedger       int64  `json:"history_elder_ledger"`
+	NetworkPassphrase string `json:"network_passphrase"`
 }
 
 // Root reads the ledger range horizon holds.

@@ -38,6 +38,10 @@ const VERIFY_ERRORS: Record<string, string> = {
   no_verified_owner: "Verify one of the project's accounts first; a contract is proven through it.",
   deployer_not_verified: "The contract was deployed by an account the project has not verified.",
   contract_not_created_in_transaction: "That transaction did not create this contract.",
+  contract_created_by_contract:
+    "That transaction called a contract, which may have created this one as a factory. A contract created that way cannot be proven by its transaction; use the admin check.",
+  verified_through_removed_id:
+    "This contract was proven through an id the project removed. Prove it again through a verified account.",
   transaction_failed: "That transaction failed on the ledger.",
   no_admin_entry: "The contract stores no Admin or Owner entry that can be read.",
   admin_not_verified: "The contract's admin is not one of the project's verified accounts.",

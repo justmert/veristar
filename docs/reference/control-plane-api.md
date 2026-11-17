@@ -3424,12 +3424,19 @@ hold sets `verification.last_error`: `no_challenge`, `challenge_expired`,
 key cannot authorise a medium threshold operation; prove the account with
 `manage_data`), `data_entry_mismatch`, `no_verified_owner`,
 `deployer_not_verified`, `contract_not_created_in_transaction`,
+`contract_created_by_contract` (the transaction creates no contract itself
+but calls one, as a factory does; a contract created inside a contract call
+is not read, so prove it with `contract_admin`),
 `transaction_failed`, `no_admin_entry`, `admin_not_verified`, or a source code
 of 15.3. A held proof clears the challenge in the same statement that checks
 it is still the open one, so a signature works once, also against concurrent
 requests.
 `verification.via` names the verified account a contract was proven through;
-`detail` holds `storage_key` or `tx_hash`.
+`detail` holds `storage_key` or `tx_hash`. A proof is what held when it was
+checked; it is not read again on its own. A contract proven through an id
+rests on that id: removing the id clears the proof of every id proven
+through it, directly or in a chain, with `last_error`
+`verified_through_removed_id` and a `onchain.verify` audit row each.
 
 The proofs follow SEP-53 exactly, so any wallet that signs messages with it
 works; the console asks through the Stellar Wallets Kit. A wallet that cannot
@@ -3483,6 +3490,13 @@ exponential backoff and jitter, never shorter than a `Retry-After`; after six
 attempts the id records `rate_limited` or `source_unavailable` and the run is
 marked failed in the scheduler metrics. Metric:
 `jobs_chain_reads_total{kind, result}`.
+
+Before reading, each run compares the network passphrase Horizon's root
+document and RPC's `getNetwork` announce with the public network's. A source
+on another network fails the run with `wrong_network` and stores nothing;
+the control plane refuses to start on such a source. A source that does not
+answer the comparison is read as before, and its ids record their own read
+errors.
 
 ### 15.7 Operators, the machine API and MCP
 

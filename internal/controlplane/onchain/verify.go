@@ -254,6 +254,9 @@ func (h *Routes) proveDeployer(ctx context.Context, a tenants.Access, row idRow,
 		return o
 	}
 	o.err = ErrNotInTransaction
+	if calls, err := chain.CallsContract(tx.EnvelopeXDR); err == nil && calls {
+		o.err = ErrFactoryCreated
+	}
 	return o
 }
 
