@@ -1,6 +1,7 @@
 package reports
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/base32"
 	"encoding/json"
@@ -375,8 +376,36 @@ func (h *Routes) create(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return fmt.Errorf("reports: store: %w", err)
 	}
-	httpx.Created(w, "/api/tenants/"+a.TenantID.String()+"/reports/"+id, Detail{Summary: out, File: File{Report: body, Signature: sig}})
+	d := Detail{Summary: out, File: File{Report: body, Signature: sig}}
+	w.Header().Set("Location", "/api/tenants/"+a.TenantID.String()+"/reports/"+id)
+	writeWithReport(w, http.StatusCreated, &d, &d.File)
 	return nil
+}
+
+// reportSlot stands in for the report member while the answer around it
+// is encoded: encoding/json escapes u+2028 and u+2029 even inside a raw
+// message, so the signed bytes are put back verbatim afterwards. no other
+// member can hold the slot, since it holds nul characters no server-built
+// value has.
+var reportSlot = []byte(`"\u0000signed report\u0000"`)
+
+// writeWithReport writes v, whose file is f, with f's report member as the
+// exact stored bytes, so the served member is byte for byte what was signed.
+func writeWithReport(w http.ResponseWriter, status int, v any, f *File) {
+	signed := f.Report
+	f.Report = reportSlot
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	err := enc.Encode(v)
+	f.Report = signed
+	if err != nil || bytes.Count(buf.Bytes(), reportSlot) != 1 {
+		http.Error(w, `{"error":{"code":"internal","message":"internal error","request_id":""}}`, http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(status)
+	_, _ = w.Write(bytes.Replace(buf.Bytes(), reportSlot, signed, 1))
 }
 
 // CodeNotReportable is the 409 of a project the operator views do not list.
@@ -415,7 +444,7 @@ func (h *Routes) get(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return fmt.Errorf("reports: get: %w", err)
 	}
-	httpx.WriteJSON(w, http.StatusOK, out)
+	writeWithReport(w, http.StatusOK, &out, &out.File)
 	return nil
 }
 
@@ -539,7 +568,7 @@ func (h *Routes) public(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	httpx.WriteJSON(w, http.StatusOK, out)
+	writeWithReport(w, http.StatusOK, &out, &out.File)
 	return nil
 }
 
