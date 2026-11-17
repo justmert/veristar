@@ -45,14 +45,18 @@ so such an image cannot be deployed.
 The last job writes `release-images.json` (schema 1: release tag, and per image the repository,
 tag and digest; `scripts/supply-chain/release-manifest.py` refuses a set of names other than the
 expected eleven), verifies every digest again the way the deploy does, and attaches the file to
-the GitHub release (in keyless mode it also attests the file).
+the GitHub release (in keyless mode it also attests the file). The `licences` job runs the licence
+gate on the tag (section 7); the last job waits for it and attaches its report, `licences.json` and
+`console-bundle.txt`, to the same release, so every release records the licences of what it ships.
 
 ### 2.1 Release from a workstation
 
 A release can also be built and signed on a workstation, with the same gate and the same key as
 the workflow's key mode (section 3). `scripts/supply-chain/release-workstation.sh <tag> <work dir>`
 runs every step below; it refuses a checkout that is not exactly at the tag or that has local
-changes. Release `v0.1.0` was built by `release-images.yml`; `v0.2.0`, `v0.2.1` and `v0.2.2` were built
+changes. Before it builds anything it runs the licence gate (section 7) into `<work dir>/licences`,
+so a tag whose dependencies fail the gate is never released, and step 4 attaches the report beside
+the manifest. Release `v0.1.0` was built by `release-images.yml`; `v0.2.0`, `v0.2.1` and `v0.2.2` were built
 on a workstation; `v0.2.3` and `v0.3.0` were built by `release-images.yml` in keyless mode. The steps, run from a clean checkout of the tag:
 
 1. **Build and push** each image of the matrix in `release-images.yml` with the same Dockerfile,
@@ -71,8 +75,8 @@ on a workstation; `v0.2.3` and `v0.3.0` were built by `release-images.yml` in ke
 4. **Write the manifest** with `scripts/supply-chain/release-manifest.py <digest dir> <tag>`
    (one `{"name","repo","tag","digest"}` file per image, as the workflow's artifacts), verify
    every digest with `cosign verify --key infra/ansible/vars/release-cosign.pub
-   --insecure-ignore-tlog=true`, and attach `release-images.json` to the GitHub release
-   (`gh release create <tag> release-images.json`).
+   --insecure-ignore-tlog=true`, and attach `release-images.json`, `licences.json` and
+   `console-bundle.txt` to the GitHub release (`gh release upload <tag> ...`).
 
 The deploy verifies a workstation release like a key-mode workflow release: the key, the
 manifest and the registry digests are the same. Production verifies in keyless mode since
@@ -360,7 +364,8 @@ explicit allowlist, reviewed for one exact version and licence, with a written r
 skipped silently: a package that cannot be placed in either section, or whose licence cannot be
 found, fails the gate.
 
-`scripts/supply-chain/licence-gate.sh` (the `licences` job in `ci.yml`, and local runs) feeds
+`scripts/supply-chain/licence-gate.sh` (the `licences` jobs in `ci.yml` and `release-images.yml`,
+`release-workstation.sh`, and local runs) feeds
 `scripts/supply-chain/licences.py`, which reads `docs/security/licence-policy.json`:
 
 | Section | What it contains | How it is derived | Fails on |
@@ -426,6 +431,14 @@ version and the licence string the report printed, a reason that says why the pa
 shipped and what it is, and the review date. The reviewer checks the report's "pulled in by" line.
 A version bump of an allowlisted package fails the gate until the entry is reviewed again.
 
+**The report of a release.** Every release carries the third-party licence report of its tag as
+release assets: `licences.json` (every package with its licence, section and the importers that
+pull it in) and `console-bundle.txt` (the npm packages of the console bundle). `release-images.yml`
+produces them in its `licences` job and the manifest job uploads them with `release-images.json`
+(in keyless mode `licences.json` is attested with the manifest); `release-workstation.sh` does the
+same for a workstation release. A failing gate stops either path before the release is published.
+The pull request gate in `ci.yml` keeps the same report as a run artifact only.
+
 ## 8. Results recorded on 2026-11-13
 
 - Trivy and syft on all 12 platform images built from this tree and the 11 upstream images. All 12
@@ -440,7 +453,9 @@ A version bump of an allowlisted package fails the gate until the entry is revie
   mitigation and its reasoning.
 - govulncheck: no called vulnerability in either module after the fixes (the example app moved to
   `golang.org/x/net` v0.62.0). One uncalled module finding remains (`golang.org/x/crypto/openpgp`,
-  GO-2026-5932, fixed only in a pseudo-version; the package is not imported).
+  GO-2026-5932, fixed only in a pseudo-version; the package is not imported). It is gone since
+  2026-11-17: `golang.org/x/crypto` v0.59.0 carries the fix, and govulncheck reports no
+  vulnerability in either module, called or not.
 - A throwaway build of `postgres-ha` with `gosu` left in fails the gate: 1 critical, 25 high,
   exit 1.
 

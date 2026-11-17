@@ -11,11 +11,14 @@
 #      sops file, with no transparency log upload
 #   4. write release-images.json, verify every digest with the committed public
 #      key, and attach the file to the github release of the tag
+#   the licence gate (licence-gate.sh) runs first, so a release whose
+#   dependencies fail it is never built, and its report (licences.json and
+#   console-bundle.txt) is attached to the release beside release-images.json
 #
 #   scripts/supply-chain/release-workstation.sh <tag> <work dir>
 #
-# needs: a clean checkout at the tag, docker with buildx, cosign 3.1.4,
-# syft 1.57.1 and trivy 0.76.2 on PATH, sops 3.13.3 at $SOPS, the operator's
+# needs: a clean checkout at the tag, docker with buildx, go, node with
+# pnpm, cosign 3.1.4, syft 1.57.1 and trivy 0.76.2 on PATH, sops 3.13.3 at $SOPS, the operator's
 # age identity, GH_TOKEN of the release account with write:packages (also
 # used for the docker login), and python3.
 set -eu
@@ -33,6 +36,11 @@ cd "$root"
 cosign version 2>/dev/null | grep -q 'GitVersion: *v3\.1\.4$' || { echo "cosign is not 3.1.4" >&2; exit 1; }
 
 mkdir -p "$work/digests" "$work/scan"
+
+# the licence report of the tag; trivy reads licences from the module cache
+# and node_modules, which a fresh checkout does not have yet
+pnpm install --frozen-lockfile >/dev/null
+scripts/supply-chain/licence-gate.sh "$work/licences"
 printf '%s' "$GH_TOKEN" | docker login ghcr.io -u justmert --password-stdin >/dev/null
 
 # the release key, from the production sops file, only in this process's
@@ -88,5 +96,5 @@ python3 -c 'import json,sys; [print(i["repo"]+"@"+i["digest"]) for i in json.loa
 	done
 gh release view "$tag" >/dev/null 2>&1 ||
 	gh release create "$tag" --verify-tag --title "$tag" --notes "images: release-images.json (built and signed on a workstation, docs/security/supply-chain.md section 2.1)"
-gh release upload "$tag" "$work/release-images.json" --clobber
+gh release upload "$tag" "$work/release-images.json" "$work/licences/licences.json" "$work/licences/console-bundle.txt" --clobber
 echo "release $tag: $work/release-images.json"
