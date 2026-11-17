@@ -192,3 +192,83 @@
     enabled: true
     state: started
     daemon_reload: "{{ observability_failed_units is changed }}"
+
+# the private network's certificates come from playbooks/internal-ca.yml and
+# are renewed only when an operator runs it (docs/runbooks/secret-rotation.md),
+# so their expiry is otherwise visible nowhere. this timer writes the
+# notAfter of the node certificate and of the earliest ca in the trusted
+# bundle for the InternalCertificateExpiringSoon alert.
+- name: Install openssl for the certificate expiry writer
+  ansible.builtin.apt:
+    name: openssl
+    state: present
+
+- name: Install the internal certificate expiry textfile writer
+  ansible.builtin.copy:
+    dest: /usr/local/sbin/sa-tls-expiry
+    content: |
+      #!/bin/sh
+      # managed by ansible (infra/ansible/roles/observability)
+      set -eu
+      f={{ observability_conf_dir }}/textfile/tls.prom
+      t=$(mktemp -d)
+      trap 'rm -rf "$t"' EXIT
+      end() { date -d "$(openssl x509 -noout -enddate -in "$1" | cut -d= -f2)" +%s; }
+      # the bundle holds a retired ca beside the new one during a rotation
+      awk -v d="$t" '/BEGIN CERTIFICATE/ { n++ } n { print > (d "/ca" n ".pem") }' {{ sa_tls_dir }}/ca/ca.crt
+      ca=
+      for c in "$t"/ca*.pem; do
+        e=$(end "$c")
+        if [ -z "$ca" ] || [ "$e" -lt "$ca" ]; then ca=$e; fi
+      done
+      node=$(end {{ sa_tls_dir }}/root/node.crt)
+      {
+        echo '# HELP sa_tls_certificate_expiry_timestamp_seconds notAfter of the internal node certificate and of the earliest trusted internal ca'
+        echo '# TYPE sa_tls_certificate_expiry_timestamp_seconds gauge'
+        echo "sa_tls_certificate_expiry_timestamp_seconds{cert=\"node\"} $node"
+        echo "sa_tls_certificate_expiry_timestamp_seconds{cert=\"ca\"} $ca"
+      } >"$f.tmp"
+      mv "$f.tmp" "$f"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the internal certificate expiry timer
+  ansible.builtin.copy:
+    dest: "/etc/systemd/system/{{ item.name }}"
+    content: "{{ item.content }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - name: sa-tls-expiry.service
+      content: |
+        # managed by ansible (infra/ansible/roles/observability)
+        [Unit]
+        Description=write sa_tls_certificate_expiry_timestamp_seconds for node_exporter
+
+        [Service]
+        Type=oneshot
+        ExecStart=/usr/local/sbin/sa-tls-expiry
+    - name: sa-tls-expiry.timer
+      content: |
+        # managed by ansible (infra/ansible/roles/observability)
+        [Unit]
+        Description=write sa_tls_certificate_expiry_timestamp_seconds every hour
+
+        [Timer]
+        OnBootSec=3min
+        OnUnitActiveSec=1h
+
+        [Install]
+        WantedBy=timers.target
+  loop_control:
+    label: "{{ item.name }}"
+  register: observability_tls_expiry_units
+
+- name: Start the internal certificate expiry timer
+  ansible.builtin.systemd_service:
+    name: sa-tls-expiry.timer
+    enabled: true
+    state: started
+    daemon_reload: "{{ observability_tls_expiry_units is changed }}"
