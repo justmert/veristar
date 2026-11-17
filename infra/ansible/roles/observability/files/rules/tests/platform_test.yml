@@ -240,3 +240,88 @@ tests:
             exp_annotations:
               summary: "50% of mcp tool calls on core-1 fail on the server"
               runbook: docs/runbooks/alerts.md#mcptoolfailureshigh
+  - name: textfile freshness
+    interval: 1m
+    input_series:
+      # written every minute on core-1; core-2's writer stopped at 0
+      - series: 'node_textfile_mtime_seconds{job="node",node="core-1",file="/textfile/systemd.prom"}'
+        values: '0+60x40'
+      - series: 'node_textfile_mtime_seconds{job="node",node="core-2",file="/textfile/systemd.prom"}'
+        values: '0x40'
+      # every 10 minutes is fresh; one stopped at 0 is stale after 30
+      - series: 'node_textfile_mtime_seconds{job="node",node="core-1",file="/textfile/reboot.prom"}'
+        values: '0x9 600x9 1200x9 1800x9 2400x9'
+      - series: 'node_textfile_mtime_seconds{job="node",node="core-2",file="/textfile/reboot.prom"}'
+        values: '0x49'
+      - series: 'node_textfile_mtime_seconds{job="node",node="core-1",file="/textfile/pgbackrest.prom"}'
+        values: '0x49'
+      - series: 'node_textfile_scrape_error{job="node",node="core-1"}'
+        values: '0x4 1x20'
+      - series: 'node_textfile_scrape_error{job="node",node="core-2"}'
+        values: '0x24'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: TextfileStale
+      - eval_time: 21m
+        alertname: TextfileStale
+        exp_alerts:
+          - exp_labels: {severity: ticket, job: node, node: core-2, file: /textfile/systemd.prom}
+            exp_annotations:
+              summary: "/textfile/systemd.prom on core-2 was last written 21m 0s ago"
+              runbook: docs/runbooks/alerts.md#textfilestale
+      - eval_time: 36m
+        alertname: TextfileStale
+        exp_alerts:
+          - exp_labels: {severity: ticket, job: node, node: core-2, file: /textfile/systemd.prom}
+            exp_annotations:
+              summary: "/textfile/systemd.prom on core-2 was last written 36m 0s ago"
+              runbook: docs/runbooks/alerts.md#textfilestale
+          - exp_labels: {severity: ticket, job: node, node: core-2, file: /textfile/reboot.prom}
+            exp_annotations:
+              summary: "/textfile/reboot.prom on core-2 was last written 36m 0s ago"
+              runbook: docs/runbooks/alerts.md#textfilestale
+      - eval_time: 19m
+        alertname: TextfileScrapeError
+      - eval_time: 20m
+        alertname: TextfileScrapeError
+        exp_alerts:
+          - exp_labels: {severity: ticket, job: node, node: core-1}
+            exp_annotations:
+              summary: "node_exporter on core-1 cannot read a textfile"
+              runbook: docs/runbooks/alerts.md#textfilescrapeerror
+  - name: hourly textfiles
+    interval: 1m
+    input_series:
+      # pgbackrest.prom stopped at 0; tls.prom is written every hour
+      - series: 'node_textfile_mtime_seconds{job="node",node="core-1",file="/textfile/pgbackrest.prom"}'
+        values: '0x200'
+      - series: 'node_textfile_mtime_seconds{job="node",node="core-1",file="/textfile/tls.prom"}'
+        values: '0x59 3600x59 7200x80'
+    alert_rule_test:
+      - eval_time: 2h
+        alertname: TextfileStale
+      - eval_time: 2h10m
+        alertname: TextfileStale
+        exp_alerts:
+          - exp_labels: {severity: ticket, job: node, node: core-1, file: /textfile/pgbackrest.prom}
+            exp_annotations:
+              summary: "/textfile/pgbackrest.prom on core-1 was last written 2h 10m 0s ago"
+              runbook: docs/runbooks/alerts.md#textfilestale
+  - name: internal certificates
+    interval: 1m
+    input_series:
+      # the node certificate expires on day 40; the ca far later
+      - series: 'sa_tls_certificate_expiry_timestamp_seconds{job="node",node="core-1",cert="node"}'
+        values: '3456000x14600'
+      - series: 'sa_tls_certificate_expiry_timestamp_seconds{job="node",node="core-1",cert="ca"}'
+        values: '315360000x14600'
+    alert_rule_test:
+      - eval_time: 240h
+        alertname: InternalCertificateExpiringSoon
+      - eval_time: 242h
+        alertname: InternalCertificateExpiringSoon
+        exp_alerts:
+          - exp_labels: {severity: ticket, job: node, node: core-1, cert: node}
+            exp_annotations:
+              summary: "the internal node certificate on core-1 expires in 29d 22h 0m 0s"
+              runbook: docs/runbooks/alerts.md#internalcertificateexpiringsoon

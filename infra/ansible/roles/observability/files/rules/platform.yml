@@ -107,6 +107,45 @@ groups:
           summary: "{{ $labels.unit }} failed on {{ $labels.node }}"
           runbook: docs/runbooks/alerts.md#systemdunitfailed
 
+      # the textfile writers above (and sa-pgbackrest-textfile, sa-tls-expiry)
+      # leave their last file in place when they stop, and node_exporter
+      # serves it as if it were current: a stopped sa-systemd-failed timer
+      # would hide every failed unit. each limit is a few missed runs of the
+      # writer's schedule: every 5 minutes, every 10 minutes, hourly at :07
+      # (cron), hourly. 5 minutes after a boot leave the timers their first run
+      - alert: TextfileStale
+        expr: |
+          (time() - node_textfile_mtime_seconds{file="/textfile/systemd.prom"} > 900)
+          or (time() - node_textfile_mtime_seconds{file="/textfile/reboot.prom"} > 1800)
+          or (time() - node_textfile_mtime_seconds{file="/textfile/pgbackrest.prom"} > 7200)
+          or (time() - node_textfile_mtime_seconds{file="/textfile/tls.prom"} > 7200)
+        for: 5m
+        labels: {severity: ticket}
+        annotations:
+          summary: "{{ $labels.file }} on {{ $labels.node }} was last written {{ $value | humanizeDuration }} ago"
+          runbook: docs/runbooks/alerts.md#textfilestale
+      # a textfile node_exporter cannot parse is left out entirely, so its
+      # metrics vanish rather than go stale
+      - alert: TextfileScrapeError
+        expr: node_textfile_scrape_error == 1
+        for: 15m
+        labels: {severity: ticket}
+        annotations:
+          summary: "node_exporter on {{ $labels.node }} cannot read a textfile"
+          runbook: docs/runbooks/alerts.md#textfilescrapeerror
+
+      # the private network's certificates (sa-tls-expiry). make internal-ca
+      # renews a certificate with less than 30 days left, so the alert starts
+      # when a run would renew it; an expired one breaks every mutual tls
+      # connection between the nodes
+      - alert: InternalCertificateExpiringSoon
+        expr: sa_tls_certificate_expiry_timestamp_seconds - time() < 30 * 86400
+        for: 1h
+        labels: {severity: ticket}
+        annotations:
+          summary: "the internal {{ $labels.cert }} certificate on {{ $labels.node }} expires in {{ $value | humanizeDuration }}"
+          runbook: docs/runbooks/alerts.md#internalcertificateexpiringsoon
+
       # api rollup integrity (internal/jobs/apirollup). an orphaned mark is
       # a pending hour whose minute partition was already dropped, so its
       # hourly rows can no longer be recomputed; a drifted hour had hourly
