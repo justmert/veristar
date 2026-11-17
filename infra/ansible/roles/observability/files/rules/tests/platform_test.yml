@@ -310,18 +310,18 @@ tests:
   - name: internal certificates
     interval: 1m
     input_series:
-      # the node certificate expires on day 40; the ca far later
+      # the node certificate has 30 days and 2 hours left at 0; the ca far more
       - series: 'sa_tls_certificate_expiry_timestamp_seconds{job="node",node="core-1",cert="node"}'
-        values: '3456000x14600'
+        values: '2599200x200'
       - series: 'sa_tls_certificate_expiry_timestamp_seconds{job="node",node="core-1",cert="ca"}'
-        values: '315360000x14600'
+        values: '315360000x200'
     alert_rule_test:
-      - eval_time: 240h
+      - eval_time: 3h
         alertname: InternalCertificateExpiringSoon
-      - eval_time: 242h
+      - eval_time: 3h5m
         alertname: InternalCertificateExpiringSoon
         exp_alerts:
           - exp_labels: {severity: ticket, job: node, node: core-1, cert: node}
             exp_annotations:
-              summary: "the internal node certificate on core-1 expires in 29d 22h 0m 0s"
+              summary: "the internal node certificate on core-1 expires in 29d 22h 55m 0s"
               runbook: docs/runbooks/alerts.md#internalcertificateexpiringsoon
