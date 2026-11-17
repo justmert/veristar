@@ -428,41 +428,49 @@ function Install({
             changes only when you change the tag on purpose.
           </p>
 
-          {npm ? null : (
-            <div className="flex flex-col gap-2 rounded-lg border border-line p-3">
-              <div className="flex items-start gap-3">
-                <Checkbox
-                  id={consentId}
-                  checked={consent}
-                  onCheckedChange={(c) => setConsent(c === true)}
-                  aria-describedby={`${consentId}-d`}
-                  className="mt-0.5"
-                />
-                <label htmlFor={consentId} className="text-body text-fg">
-                  Wait for consent before measuring
-                </label>
-              </div>
-              <p id={`${consentId}-d`} className="pl-7 text-small text-fg-2">
-                Adds <code className="font-mono text-fg">data-auto-track="false"</code> to the tag.
-                The tracker then loads but sends nothing and reads no storage until your consent
-                banner calls <code className="font-mono text-fg">umami.start()</code>. Your site
-                keeps the visitor's choice and calls it again on later pages.
-              </p>
-              <AnimatePresence initial={false}>
-                {consent ? (
-                  <motion.div {...fade} className="pl-7">
-                    <CodeBlock
-                      code={CONSENT_START}
-                      label="When the visitor agrees"
-                      copyLabel="Copy call"
-                    />
-                  </motion.div>
-                ) : null}
-              </AnimatePresence>
+          <div className="flex flex-col gap-2 rounded-lg border border-line p-3">
+            <div className="flex items-start gap-3">
+              <Checkbox
+                id={consentId}
+                checked={consent}
+                onCheckedChange={(c) => setConsent(c === true)}
+                aria-describedby={`${consentId}-d`}
+                className="mt-0.5"
+              />
+              <label htmlFor={consentId} className="text-body text-fg">
+                Wait for consent before measuring
+              </label>
             </div>
-          )}
+            <p id={`${consentId}-d`} className="pl-7 text-small text-fg-2">
+              {npm ? (
+                <>
+                  Passes <code className="font-mono text-fg">autoTrack: false</code> to{" "}
+                  <code className="font-mono text-fg">init()</code>.
+                </>
+              ) : (
+                <>
+                  Adds <code className="font-mono text-fg">data-auto-track="false"</code> to the
+                  tag.
+                </>
+              )}{" "}
+              The tracker then loads but sends nothing and reads no storage until your consent
+              banner calls <code className="font-mono text-fg">umami.start()</code>. Your site keeps
+              the visitor's choice and calls it again on later pages.
+            </p>
+            <AnimatePresence initial={false}>
+              {consent ? (
+                <motion.div {...fade} className="pl-7">
+                  <CodeBlock
+                    code={CONSENT_START}
+                    label="When the visitor agrees"
+                    copyLabel="Copy call"
+                  />
+                </motion.div>
+              ) : null}
+            </AnimatePresence>
+          </div>
 
-          {npm || !titleChoice ? null : (
+          {!titleChoice ? null : (
             <div className="flex flex-col gap-2 rounded-lg border border-line p-3">
               <div className="flex items-start gap-3">
                 <Checkbox
@@ -477,7 +485,17 @@ function Install({
                 </label>
               </div>
               <p id={`${titleId}-d`} className="pl-7 text-small text-fg-2">
-                Adds <code className="font-mono text-fg">data-send-title="true"</code> to the tag.
+                {npm ? (
+                  <>
+                    Passes <code className="font-mono text-fg">sendTitle: true</code> to{" "}
+                    <code className="font-mono text-fg">init()</code>.
+                  </>
+                ) : (
+                  <>
+                    Adds <code className="font-mono text-fg">data-send-title="true"</code> to the
+                    tag.
+                  </>
+                )}{" "}
                 Without it the tracker sends the page's path and referrer only. No metric needs the
                 title, and a title can name a person, so turn this on only if your titles are
                 generic.
