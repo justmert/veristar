@@ -218,30 +218,13 @@ test("the project reads its own grade on the overview, as operators see it", asy
   await expect(panel.getByText("Accepted events").first()).toBeVisible();
   await page.screenshot({ path: join(shots, "overview.png"), fullPage: true });
 
-  // the appeal link opens a prefilled issue on the appeal form, with the
-  // slug, the site's domain, the period, the grade, the reasons and the
-  // rule set version, and nothing about a person
-  const appeal = panel.getByRole("link", { name: "Appeal this grade" });
-  await expect(appeal).toBeVisible();
-  const href = new URL((await appeal.getAttribute("href")) ?? "");
-  expect(`${href.origin}${href.pathname}`).toBe("https://github.com/justmert/veristar/issues/new");
-  const q = href.searchParams;
-  expect(q.get("template")).toBe("integrity-appeal.yml");
-  expect(q.get("project")).toBe(tenant.slug);
-  expect(q.get("grade")).toBe("A");
-  expect(q.get("sites")).toBe(`${site.domain}: A`);
-  expect(q.get("rule_version")).toMatch(/^\d+$/);
-  expect(q.get("period")).toMatch(/^\d{4}-\d{2}-\d{2} to \d{4}-\d{2}-\d{2} \(UTC days\)$/);
-  expect(href.toString()).not.toContain(tenant.id);
-
-  // "what scf sees" offers the same appeal for its range
+  // grade A is the best grade, so there is nothing to appeal: no link here
+  // or on "what scf sees". the issue the link opens for a lower grade is
+  // checked in the console's unit tests
+  await expect(panel.getByRole("link", { name: "Appeal this grade" })).toHaveCount(0);
   await page.goto(`${APP}/projects/${tenant.id}/scf-view`);
   await expect(page.getByTestId("integrity-grade")).toHaveText("A");
-  const scfAppeal = page.getByRole("link", { name: "Appeal this grade" });
-  await expect(scfAppeal).toBeVisible();
-  const scfHref = new URL((await scfAppeal.getAttribute("href")) ?? "");
-  expect(scfHref.searchParams.get("project")).toBe(tenant.slug);
-  expect(scfHref.searchParams.get("grade")).toBe("A");
+  await expect(page.getByRole("link", { name: "Appeal this grade" })).toHaveCount(0);
 });
 
 test("another project's member and a non-operator are refused", async () => {
