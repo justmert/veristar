@@ -198,8 +198,9 @@ func (h *Routes) parse(r *http.Request, allowed ...string) (request, error) {
 		}
 		siteID = &id
 	}
-	if err := h.s.InTenant(r.Context(), a, func(tx pgx.Tx) error {
-		rows, err := tenantq.New(tx).WebDashSites(r.Context())
+	ctx := r.Context()
+	if err := h.s.InTenant(ctx, a, func(tx pgx.Tx) error {
+		rows, err := tenantq.New(tx).WebDashSites(ctx)
 		if err != nil {
 			return fmt.Errorf("webdash: sites: %w", err)
 		}
