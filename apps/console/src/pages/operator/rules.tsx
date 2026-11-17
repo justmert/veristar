@@ -18,8 +18,8 @@ import { ErrorPanel, FormMessage, Loading, StateBlock } from "@/components/error
 import { SelectField, TextField } from "@/components/form-field";
 import { Panel } from "@/components/panel";
 import { Button } from "@/components/ui/button";
-import { formatCount } from "@/lib/format";
-import { isDay } from "@/lib/global";
+import { countOf, formatCount } from "@/lib/format";
+import { formatDayRange, isDay } from "@/lib/global";
 import { cohortText, TD, TH } from "./global-shared";
 
 // saved threshold rules (contract 19.4): an operator defines a traction
@@ -461,8 +461,8 @@ function MatchList({ data }: { data: RuleMatches }) {
   return (
     <div className="flex flex-col gap-3">
       <p className="text-small text-fg-2" aria-live="polite">
-        {data.items.length} of {data.evaluated} evaluated projects meet the rule, over {data.from}{" "}
-        to {data.to} ({data.months.join(", ")}).
+        {data.items.length} of {data.evaluated} evaluated projects meet the rule, over{" "}
+        {formatDayRange(data.from, data.to)} ({data.months.join(", ")}).
       </p>
       {data.items.length === 0 ? null : (
         <ul className="flex flex-col divide-y divide-line" aria-label="Projects that meet the rule">
@@ -476,8 +476,8 @@ function MatchList({ data }: { data: RuleMatches }) {
                   {m.tenant.name}
                 </Link>
                 <span className="text-caption text-fg-3">
-                  Integrity grade {m.integrity.grade ?? "not graded"} ({m.integrity.graded_days}{" "}
-                  graded site days)
+                  Integrity grade {m.integrity.grade ?? "not graded"} (
+                  {countOf(m.integrity.graded_days, "graded site day")})
                 </span>
                 {cohortText(m.cohort) ? (
                   <span className="text-caption text-fg-3">{cohortText(m.cohort)}</span>
@@ -486,8 +486,8 @@ function MatchList({ data }: { data: RuleMatches }) {
               <ul className="flex flex-col gap-1 text-caption text-fg-2">
                 {m.months.map((mo) => (
                   <li key={mo.month} data-month={mo.month}>
-                    <span className="font-medium text-fg">{mo.month}</span>: {mo.qualifying_days}{" "}
-                    qualifying days
+                    <span className="font-medium text-fg">{mo.month}</span>:{" "}
+                    {countOf(mo.qualifying_days, "qualifying day")}
                     {mo.days.length > 0 ? (
                       <span className="text-fg-3">
                         {" "}
