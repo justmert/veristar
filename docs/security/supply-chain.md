@@ -393,21 +393,27 @@ reported separately as own code under the repository's Apache-2.0 licence.
 images (distroless, Alpine in the Caddy image, Debian in `postgres-ha`) are not part of these
 graphs. The image SBOMs from `scan-image.sh` list them.
 
-**Why the Wallets Kit packages are allowlisted.** `@creit.tech/stellar-wallets-kit` 2.7.1 and 2.8.0
-are installed only as devDependencies of `packages/tracker` (`swk-2.7.1`, `swk-2.8.0`, so the
-wallets kit adapter tests run the real kit) and as a dependency of the example app
+**Why the Wallets Kit packages are allowlisted.** `@creit.tech/stellar-wallets-kit` 2.8.0 is a
+dependency of the console, which signs in with a Stellar wallet. The console imports the kit's
+module API and a fixed list of its wallet modules (`apps/console/src/lib/stellar-wallet/modules.ts`),
+never its WalletConnect, HOT, NEAR, Trezor or xBull connectors. The policy marks the kit as
+`bundle_only` for the console: the kit counts as shipped, and each package below it counts as
+shipped exactly when the real console bundle contains it. Checked on 2026-11-17: the console bundle
+holds two packages of the kit's tree, `@creit.tech/stellar-wallets-kit@2.8.0` (MIT) and
+`@lobstrco/signer-extension-api@3.0.0` (Apache-2.0, moved from the GPL-3.0 2.0.0 by an override in
+`pnpm-workspace.yaml`), and no `walletconnect`, `reown`, `xbull`, `trezor`, `near` or `elliptic`
+package. The kit 2.7.1 and 2.8.0 are also devDependencies of `packages/tracker` (`swk-2.7.1`,
+`swk-2.8.0`, so the wallets kit adapter tests run the real kit) and a dependency of the example app
 `examples/wallets-kit-spa`, a sample for tenants that is also a test target and is never deployed.
-The lockfile graph shows no other path to them. Checked on 2026-11-13: esbuild's input list for
-`sdk.js` and for the npm entry points contains only `src/` and `releases/` files; the packed npm
-package (`@sa-local-test/tracker` 1.1.0) has no dependency fields, no bare imports and no kit
-code; the console bundle contains none of the kit's packages and no `walletconnect`, `reown`,
-`creit.tech`, `xbull` or `trezor` string; the SBOMs of all 12 platform images list none of them. The
-kit pulls in 25 lockfile entries the gate reports as non-OSI (24 distinct versions): 19 Reown and
-WalletConnect versions and `@trezor/crypto-utils` under "SEE LICENSE IN LICENSE.md" (not an OSI
-licence), and four with no licence in their registry metadata (`@creit.tech/xbull-wallet-connect`,
-`@hot-wallet/sdk`, `@near-wallet-selector/core`, `text-encoding-utf-8`). The project
-does not bundle or redistribute any of them, so they are allowlisted as test and example
-dependencies. Tenants who add the kit to their own sites take it from npm under its own terms.
+The tracker builds take no kit code: esbuild's input list for `sdk.js` and for the npm entry points
+contains only `src/` and `releases/` files, and the packed npm package has no dependency fields. The rest of
+the kit's tree is not shipped. It holds 25 lockfile entries the gate reports as non-OSI (24 distinct
+versions): 19 Reown and WalletConnect versions and `@trezor/crypto-utils` under "SEE LICENSE IN
+LICENSE.md" (not an OSI licence), and four with no licence in their registry metadata
+(`@creit.tech/xbull-wallet-connect`, `@hot-wallet/sdk`, `@near-wallet-selector/core`,
+`text-encoding-utf-8`). The project does not bundle or redistribute any of them, so they are
+allowlisted as packages that are installed but not shipped, and the gate fails if the console bundle
+ever contains one. Tenants who add the kit to their own sites take it from npm under its own terms.
 
 The other allowlisted packages are data, not code: `caniuse-lite` (CC-BY-4.0, browser support data
 for build tools; it reaches the console importer only through the shadcn CLI and is not bundled),
