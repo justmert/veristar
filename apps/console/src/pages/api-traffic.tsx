@@ -353,7 +353,7 @@ function FilterSelect({
 }) {
   const id = useId();
   return (
-    <div className="flex h-(--vs-control-sm) items-center rounded-md border border-line-strong bg-sunken pl-2.5 transition-colors duration-(--vs-duration-reveal) ease-standard focus-within:border-fg-disabled hover:border-fg-disabled max-lg:h-(--vs-control-touch)">
+    <div className="flex h-(--vs-control-sm) items-center rounded-md border border-line-input bg-sunken pl-2.5 transition-colors duration-(--vs-duration-reveal) ease-standard focus-within:border-fg-3 hover:border-fg-3 max-lg:h-(--vs-control-touch)">
       <label htmlFor={id} className="text-small whitespace-nowrap text-fg-3">
         {label}
       </label>
@@ -441,7 +441,7 @@ function Filters({
           <label htmlFor={routeId} className="sr-only">
             Route
           </label>
-          <div className="flex h-(--vs-control-sm) min-w-0 flex-1 items-center gap-2 rounded-md border border-line-strong bg-sunken px-2.5 transition-colors duration-(--vs-duration-reveal) ease-standard focus-within:border-fg-disabled hover:border-fg-disabled max-lg:h-(--vs-control-touch)">
+          <div className="flex h-(--vs-control-sm) min-w-0 flex-1 items-center gap-2 rounded-md border border-line-input bg-sunken px-2.5 transition-colors duration-(--vs-duration-reveal) ease-standard focus-within:border-fg-3 hover:border-fg-3 max-lg:h-(--vs-control-touch)">
             <Search aria-hidden className="size-3.5 shrink-0 text-fg-3" />
             <input
               id={routeId}
