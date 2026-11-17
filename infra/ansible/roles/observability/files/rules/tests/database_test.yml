@@ -194,4 +194,3 @@ tests:
             exp_annotations:
               summary: "the last run of sa-pgbackrest-diff.service, on core-2, failed"
               runbook: docs/runbooks/alerts.md#backupjobfailed
-
