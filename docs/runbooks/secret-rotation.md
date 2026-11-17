@@ -267,7 +267,9 @@ exposed. A replaced key stays published as retired, so every report it signed st
 
 5. **Check** that `stellar.toml` lists the new key first and the retired one after it, that
    `GET /api/public/report-keys` answers the same, that the status page shows the new key, and that
-   a report created now verifies with `platformctl report verify`. Update the key on
+   a report created now verifies with `platformctl report verify` (add
+   `--toml https://app.<BASE_DOMAIN>/.well-known/stellar.toml` on a deployment other than
+   app.veristar.app; the tool trusts Veristar's own file by default). Update the key on
    [signed usage reports](../reference/usage-reports.md). Commit the SOPS file and the inventory.
 
 The control plane refuses to start when `REPORT_SIGNING_KEY` is not the account of
