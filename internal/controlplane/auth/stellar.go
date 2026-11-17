@@ -171,6 +171,9 @@ func (h *Handler) stellarLinkChallenge(w http.ResponseWriter, r *http.Request) e
 	if err != nil {
 		return err
 	}
+	if err := h.checkIdentityChange(r.Context(), u.ID, u.IsOperator); err != nil {
+		return err
+	}
 	if u.StellarAddress != nil {
 		return httpx.Conflict(httpx.CodeIdentityLinked, "this account already has a stellar sign-in; unlink it first")
 	}

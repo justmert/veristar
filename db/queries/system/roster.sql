@@ -88,8 +88,8 @@ returning *, (xmax = 0)::boolean as inserted, (updated_at = now())::boolean as t
 
 -- name: RosterIdentityPasskeys :one
 -- the step-up passkeys of the live account holding a roster row's
--- identity, its sign-in passkey (00037) included; 0 when no account holds
--- it yet
+-- identity; 0 when no account holds it yet. the sign-in passkey (00037)
+-- counts only when the row names its address, as for the step-up itself
 select coalesce((
   select count(*) from cp.operator_passkeys k
   join cp.users u on u.id = k.user_id
@@ -100,9 +100,8 @@ select coalesce((
 ), 0)::bigint + coalesce((
   select count(*) from cp.users u
   where u.deleted_at is null and u.passkey_public_key is not null
-    and ((sqlc.narg(github_id)::bigint is not null and u.github_id = sqlc.narg(github_id)::bigint)
-      or (sqlc.narg(stellar_address)::text is not null
-          and sqlc.narg(stellar_address)::text in (u.stellar_address, u.passkey_address)))
+    and sqlc.narg(stellar_address)::text is not null
+    and u.passkey_address = sqlc.narg(stellar_address)::text
 ), 0)::bigint;
 
 -- name: RosterIdentityUser :one

@@ -344,6 +344,34 @@ func TestStepUp(t *testing.T) {
 		require.Equal(t, http.StatusNoContent, st)
 	})
 
+	t.Run("a sign-in passkey of an account the roster names by github is no step-up key", func(t *testing.T) {
+		key, err := webauthnsoft.New()
+		require.NoError(t, err)
+		pub, err := base64.RawURLEncoding.DecodeString(key.PublicKey())
+		require.NoError(t, err)
+		// the account signs in with github, the roster names that github
+		// id, and a passkey was linked to it: by the person or by whoever
+		// held the session
+		user := e.operator(t, e.now.Add(-2*time.Hour))
+		require.NoError(t, e.d.WithSystem(t.Context(), func(tx pgx.Tx) error {
+			_, err := tx.Exec(t.Context(), `update cp.users set passkey_address = $2, passkey_credential_id = $3,
+				passkey_public_key = $4 where id = $1`,
+				user, "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC", key.CredentialID(), pub)
+			return err
+		}))
+		c := e.signIn(t, user)
+		var s stepup.Status
+		_, b := c.call(t, http.MethodGet, "/step-up", nil)
+		require.NoError(t, json.Unmarshal(b, &s))
+		require.False(t, s.SignInPasskey)
+		require.Zero(t, s.Passkeys)
+		st, b := c.call(t, http.MethodPost, "/step-up/challenge", map[string]any{})
+		require.Equal(t, http.StatusConflict, st)
+		require.Equal(t, "passkey_required", code(t, b))
+		st, _ = c.call(t, http.MethodGet, "/protected", nil)
+		require.Equal(t, http.StatusUnauthorized, st)
+	})
+
 	t.Run("the audit log records each ceremony", func(t *testing.T) {
 		var n int
 		require.NoError(t, e.d.WithSystem(t.Context(), func(tx pgx.Tx) error {

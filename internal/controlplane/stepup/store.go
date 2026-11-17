@@ -25,10 +25,12 @@ type Passkey struct {
 }
 
 // Keys are the credentials an account can step up with: its added passkeys
-// and its sign-in passkey, by credential id.
+// and, when the roster names its address, its sign-in passkey, by
+// credential id.
 type Keys struct {
 	Added []Passkey
-	// SignIn is true when the account has a sign-in passkey (4.1.9)
+	// SignIn is true when the account's sign-in passkey (4.1.9) can step
+	// up: an active roster row names its address
 	SignIn   bool
 	signInID string
 	byID     map[string][]byte
@@ -64,7 +66,7 @@ func LoadKeys(ctx context.Context, tx pgx.Tx, user uuid.UUID) (Keys, error) {
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return Keys{}, fmt.Errorf("stepup: sign-in passkey: %w", err)
 	}
-	if err == nil && si.PasskeyCredentialID != nil {
+	if err == nil && si.PasskeyCredentialID != nil && si.StepUp {
 		k.SignIn, k.signInID = true, *si.PasskeyCredentialID
 		k.byID[*si.PasskeyCredentialID] = si.PasskeyPublicKey
 	}

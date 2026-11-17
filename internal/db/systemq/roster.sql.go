@@ -469,9 +469,8 @@ select coalesce((
 ), 0)::bigint + coalesce((
   select count(*) from cp.users u
   where u.deleted_at is null and u.passkey_public_key is not null
-    and (($1::bigint is not null and u.github_id = $1::bigint)
-      or ($2::text is not null
-          and $2::text in (u.stellar_address, u.passkey_address)))
+    and $2::text is not null
+    and u.passkey_address = $2::text
 ), 0)::bigint
 `
 
@@ -481,8 +480,8 @@ type RosterIdentityPasskeysParams struct {
 }
 
 // the step-up passkeys of the live account holding a roster row's
-// identity, its sign-in passkey (00037) included; 0 when no account holds
-// it yet
+// identity; 0 when no account holds it yet. the sign-in passkey (00037)
+// counts only when the row names its address, as for the step-up itself
 func (q *Queries) RosterIdentityPasskeys(ctx context.Context, arg RosterIdentityPasskeysParams) (int32, error) {
 	row := q.db.QueryRow(ctx, rosterIdentityPasskeys, arg.GithubID, arg.StellarAddress)
 	var column_1 int32

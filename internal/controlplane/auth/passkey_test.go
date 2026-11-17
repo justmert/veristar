@@ -446,6 +446,9 @@ func TestUnlinkPasskey(t *testing.T) {
 	b := e.browser(t)
 	require.Equal(t, http.StatusOK, b.passkeySignIn(p, true).StatusCode)
 	require.True(t, b.me().User.IsOperator)
+	// an operator account changes its sign-in methods after a step-up; the
+	// sign-in passkey the roster names is a step-up key
+	require.Equal(t, http.StatusOK, b.stepUp(p).StatusCode)
 
 	// the only method cannot go; methods the account lacks are 404
 	res := b.del("/api/me/identities/passkey")
@@ -468,7 +471,9 @@ func TestUnlinkPasskey(t *testing.T) {
 	}).StatusCode)
 
 	// unlinking the passkey leaves a wallet account, and the operator flag
-	// follows the identity that remains
+	// follows the identity that remains. the passkey is the account's only
+	// step-up key, so another one is registered first
+	require.Equal(t, http.StatusCreated, b.addStepUpPasskey(newPasskey(t)).StatusCode)
 	require.Equal(t, http.StatusNoContent, b.del("/api/me/identities/passkey").StatusCode)
 	me := b.me()
 	require.Nil(t, me.User.PasskeyAddress)
