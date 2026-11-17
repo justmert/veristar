@@ -234,7 +234,7 @@ describe("operator alerts page", () => {
     ]);
     const host = await renderRoutes(alertsRoute(), "/operator/alerts");
     await waitFor(() => expect(host.textContent).toContain("No alert source configured"));
-    expect(host.textContent).toContain("ALERTMANAGER_URLS");
+    expect(host.textContent).toContain("deploy settings");
   });
 
   it("refreshes every 30 seconds and on demand", async () => {

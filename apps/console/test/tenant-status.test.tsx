@@ -158,6 +158,6 @@ describe("domain verification page (contract 5.8)", () => {
     const host = await renderRoutes(routes, path);
     await waitFor(() => byRole(host, "button", "Check now"));
     await click(byRole(host, "button", "Check now"));
-    await waitFor(() => expect(host.textContent).toContain("Try again in 600 s"));
+    await waitFor(() => expect(host.textContent).toContain("Try again in 10 minutes"));
   });
 });
