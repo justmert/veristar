@@ -53,8 +53,9 @@ func validSymbol(s string) bool {
 		return false
 	}
 	for i := 0; i < len(s); i++ {
-		c := s[i]
-		if !(c == '_' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9') {
+		switch c := s[i]; {
+		case c == '_', c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9':
+		default:
 			return false
 		}
 	}
