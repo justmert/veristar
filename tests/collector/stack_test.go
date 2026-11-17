@@ -34,6 +34,7 @@ import (
 	"github.com/justmert/veristar/internal/natsx"
 	"github.com/justmert/veristar/internal/registry"
 	"github.com/justmert/veristar/tests/fixtures/natsctr"
+	"github.com/justmert/veristar/tests/fixtures/otelcolcfg"
 )
 
 // limits the collector runs with in this suite. the request burst is small
@@ -173,7 +174,7 @@ func (s *stack) startCollector(t *testing.T) {
 	// does not need the fixed port 8888, which another collector on the
 	// host may hold
 	cmd := exec.Command(bin, "--config", filepath.Join(repoRoot(t), "collector", "otelcol.yaml"),
-		"--config", noSelfMetrics(t))
+		"--config", otelcolcfg.NoSelfMetrics(t))
 	cmd.Env = []string{
 		"NATS_URL=" + s.nats.URL,
 		"NATS_USER=collector",
@@ -453,15 +454,4 @@ func freeListener(t *testing.T) net.Listener {
 		t.Fatal(err)
 	}
 	return l
-}
-
-// noSelfMetrics writes a configuration overlay that turns the collector's
-// own metrics off, for the second --config of a test collector.
-func noSelfMetrics(t *testing.T) string {
-	t.Helper()
-	p := filepath.Join(t.TempDir(), "no-self-metrics.yaml")
-	if err := os.WriteFile(p, []byte("service:\n  telemetry:\n    metrics:\n      level: none\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	return p
 }

@@ -62,6 +62,7 @@ import (
 	"github.com/justmert/veristar/internal/natsx"
 	"github.com/justmert/veristar/internal/registry"
 	"github.com/justmert/veristar/tests/fixtures/natsctr"
+	"github.com/justmert/veristar/tests/fixtures/otelcolcfg"
 )
 
 const (
@@ -393,7 +394,9 @@ func TestVolume(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// collector
+	// collector. the run never reads the collector's own metrics, so it
+	// does not need their fixed port 8888, which another collector on the
+	// host may hold
 	httpAddr, grpcAddr, health := freeAddr(t), freeAddr(t), freeAddr(t)
 	start(t, "collector", col, []string{
 		"NATS_URL=" + srv.URL, "NATS_USER=collector", "NATS_PASSWORD=" + creds["collector"],
@@ -401,7 +404,7 @@ func TestVolume(t *testing.T) {
 		"COLLECTOR_MEMORY_LIMIT_MIB=512", "COLLECTOR_MEMORY_SPIKE_MIB=128",
 		"COLLECTOR_RATE_REQUESTS_PER_SECOND=50", "COLLECTOR_RATE_REQUESTS_BURST=100",
 		"COLLECTOR_RATE_ITEMS_PER_SECOND=50000", "COLLECTOR_RATE_ITEMS_BURST=200000",
-	}, "--config", filepath.Join(root, "collector", "otelcol.yaml"))
+	}, "--config", filepath.Join(root, "collector", "otelcol.yaml"), "--config", otelcolcfg.NoSelfMetrics(t))
 	waitOK(t, "http://"+health+"/", time.Minute)
 
 	// writer, with the dev values (docs/reference/api-storage.md)

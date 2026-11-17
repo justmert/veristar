@@ -60,6 +60,7 @@ import (
 	"github.com/justmert/veristar/internal/obs"
 	"github.com/justmert/veristar/internal/registry"
 	"github.com/justmert/veristar/tests/fixtures/natsctr"
+	"github.com/justmert/veristar/tests/fixtures/otelcolcfg"
 )
 
 // the writer settings of the suite. the first-point threshold is shortened
@@ -230,7 +231,7 @@ func (s *suite) startCollector(t *testing.T) {
 	// does not need the fixed port 8888, which another collector on the
 	// host may hold
 	cmd := exec.Command(filepath.Join(s.root, "dist", "scf-otelcol", "scf-otelcol"), "--config", filepath.Join(s.root, "collector", "otelcol.yaml"),
-		"--config", noSelfMetrics(t))
+		"--config", otelcolcfg.NoSelfMetrics(t))
 	cmd.Env = []string{
 		"NATS_URL=" + s.nats.URL, "NATS_USER=collector", "NATS_PASSWORD=" + s.creds["collector"],
 		"COLLECTOR_GRPC_ADDR=" + s.grpcAddr, "COLLECTOR_HTTP_ADDR=" + s.httpAddr, "COLLECTOR_HEALTH_ADDR=" + health,
@@ -1227,15 +1228,4 @@ func spanPayload(t *testing.T, n int) []byte {
 		t.Fatal(err)
 	}
 	return b
-}
-
-// noSelfMetrics writes a configuration overlay that turns the collector's
-// own metrics off, for the second --config of a test collector.
-func noSelfMetrics(t *testing.T) string {
-	t.Helper()
-	p := filepath.Join(t.TempDir(), "no-self-metrics.yaml")
-	if err := os.WriteFile(p, []byte("service:\n  telemetry:\n    metrics:\n      level: none\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	return p
 }
