@@ -383,7 +383,7 @@ here, before they take effect, as the processing terms require
 - One point adds at most 10^9 requests, so no tenant's counts can overflow
   the sums the platform keeps; and an hour the database still refuses to
   roll up is parked (`parked_at`, `parked_error` in `api.rollup_pending`,
-  migration 00044, alert `APIRollupParkedHours`) instead of rolling back the
+  migration 00046, alert `APIRollupParkedHours`) instead of rolling back the
   batch and stopping the rollup of every tenant.
 - The operator API views count `services`, `routes` and `has_api_data` from
   application requests only, and order the compare services by application
@@ -509,7 +509,7 @@ here, before they take effect, as the processing terms require
   [the usage report signing key](docs/runbooks/secret-rotation.md#the-usage-report-signing-key)
   (there is no current key to retire).
 - Run the database migrations (`00035_cohorts_and_rules.sql` to
-  `00044_rollup_parked_hours.sql`) before the new control plane starts; the
+  `00046_rollup_parked_hours.sql`) before the new control plane starts; the
   rolling `deploy.yml` does this in its bootstrap step.
 - NATS `max_payload` rises from the 1 MiB default to 8 MiB
   (`roles/edge/templates/nats.conf.j2`). The edge role applies a changed
