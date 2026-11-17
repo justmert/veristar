@@ -3,6 +3,7 @@ package db_test
 import (
 	"context"
 	"io/fs"
+	"strings"
 	"testing"
 	"testing/fstest"
 
@@ -153,4 +154,57 @@ func TestOpenRefusesPrivilegedLogin(t *testing.T) {
 	_, err = pdb.LoadPoolConfig(config.FromMap(map[string]string{}), pdb.RoleCPTenant)
 	require.ErrorContains(t, err, "PLATFORM_DB_CP_TENANT_PASSWORD")
 	require.ErrorContains(t, err, "PLATFORM_DB_HOST")
+}
+
+// the down steps of 00031, 00034 and 00037 refuse while rows exist that the
+// older schema cannot hold. they run as platform_owner, which cp.users'
+// forced row-level security gives no policy, so each check lifts the force
+// first; without that every exists() saw zero rows and the down step went
+// on, dropping a linked passkey or failing later on a constraint.
+func TestDownGuardsSeeRows(t *testing.T) {
+	ctx := context.Background()
+	require.NoError(t, pg.CreateDatabase(ctx, "downguards"))
+	cfg, err := pdb.LoadAdminConfig(pg.Config("downguards"))
+	require.NoError(t, err)
+	_, err = pdb.Migrate(ctx, cfg, db.Migrations(), quietLog())
+	require.NoError(t, err)
+	c, err := pg.Superuser(ctx, "downguards")
+	require.NoError(t, err)
+	defer func() { _ = c.Close(ctx) }()
+	exec := func(sql string) {
+		t.Helper()
+		_, err := c.Exec(ctx, sql)
+		require.NoError(t, err)
+	}
+	version := func() int64 {
+		t.Helper()
+		var v int64
+		require.NoError(t, c.QueryRow(ctx, `select max(version_id) from goose_db_version where is_applied`).Scan(&v))
+		return v
+	}
+	passkey := `'C` + strings.Repeat("A", 55) + `', 'cred-1', decode('04' || repeat('00', 64), 'hex')`
+
+	// a github account with a linked passkey: 00037's down would drop it
+	exec(`insert into cp.users (github_id, github_login, passkey_address, passkey_credential_id, passkey_public_key)
+	      values (9001, 'linked', ` + passkey + `)`)
+	err = pdb.DownTo(ctx, cfg, db.Migrations(), 36)
+	require.ErrorContains(t, err, "passkey identities")
+	require.Equal(t, int64(37), version(), "the down step of 00037 stopped and rolled back")
+	var n int
+	require.NoError(t, c.QueryRow(ctx, `select count(*) from cp.users where passkey_address is not null`).Scan(&n))
+	require.Equal(t, 1, n, "the passkey is still there")
+	exec(`delete from cp.users`)
+
+	// a wallet-only account: 00034's down cannot express it
+	exec(`insert into cp.users (stellar_address) values ('G` + strings.Repeat("A", 55) + `')`)
+	err = pdb.DownTo(ctx, cfg, db.Migrations(), 33)
+	require.ErrorContains(t, err, "wallet-only accounts")
+	require.Equal(t, int64(34), version())
+	exec(`delete from cp.users`)
+
+	// a deleted account: 00031's down cannot restore it
+	exec(`insert into cp.users (github_id, github_login, deleted_at) values (null, null, now())`)
+	err = pdb.DownTo(ctx, cfg, db.Migrations(), 30)
+	require.ErrorContains(t, err, "deleted accounts")
+	require.Equal(t, int64(31), version())
 }

@@ -33,7 +33,10 @@ alter table cp.users add constraint users_identity_check check (
 
 -- +goose Down
 -- emptied rows cannot satisfy the old constraints, so the down step refuses
--- while any exists instead of inventing github ids for them
+-- while any exists instead of inventing github ids for them. the down step
+-- runs as platform_owner, which cp.users' forced row-level security gives no
+-- policy, so the check lifts the force; otherwise it would see no rows
+alter table cp.users no force row level security;
 -- +goose StatementBegin
 do $$
 begin
@@ -43,6 +46,7 @@ begin
 end
 $$;
 -- +goose StatementEnd
+alter table cp.users force row level security;
 alter table cp.users drop constraint users_identity_check;
 drop index cp.users_github_id_live_idx;
 alter table cp.users add constraint users_github_id_key unique (github_id);

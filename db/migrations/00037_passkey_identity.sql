@@ -66,7 +66,12 @@ alter table cp.invites add constraint invites_stellar_address_check
 
 -- +goose Down
 -- passkey-only accounts and passkey invites cannot be expressed in the old
--- columns, so the down step refuses while any exists
+-- columns, so the down step refuses while any exists. a linked passkey of a
+-- github or wallet account counts too: the down step would drop it. it runs
+-- as platform_owner, which the forced row-level security of both tables
+-- gives no policy, so the checks lift the force; otherwise they see no rows
+alter table cp.users no force row level security;
+alter table cp.invites no force row level security;
 -- +goose StatementBegin
 do $$
 begin
@@ -79,6 +84,8 @@ begin
 end
 $$;
 -- +goose StatementEnd
+alter table cp.users force row level security;
+alter table cp.invites force row level security;
 alter table cp.invites drop constraint invites_stellar_address_check;
 alter table cp.invites add constraint invites_stellar_address_check
   check (stellar_address ~ '^G[A-Z2-7]{55}$');
