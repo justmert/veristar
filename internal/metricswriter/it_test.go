@@ -226,7 +226,11 @@ func (s *suite) js(t *testing.T, user string) jetstream.JetStream {
 func (s *suite) startCollector(t *testing.T) {
 	t.Helper()
 	health := freeAddr(t)
-	cmd := exec.Command(filepath.Join(s.root, "dist", "scf-otelcol", "scf-otelcol"), "--config", filepath.Join(s.root, "collector", "otelcol.yaml"))
+	// the suite never reads the collector's own metrics; without them it
+	// does not need the fixed port 8888, which another collector on the
+	// host may hold
+	cmd := exec.Command(filepath.Join(s.root, "dist", "scf-otelcol", "scf-otelcol"), "--config", filepath.Join(s.root, "collector", "otelcol.yaml"),
+		"--config", noSelfMetrics(t))
 	cmd.Env = []string{
 		"NATS_URL=" + s.nats.URL, "NATS_USER=collector", "NATS_PASSWORD=" + s.creds["collector"],
 		"COLLECTOR_GRPC_ADDR=" + s.grpcAddr, "COLLECTOR_HTTP_ADDR=" + s.httpAddr, "COLLECTOR_HEALTH_ADDR=" + health,
@@ -843,6 +847,59 @@ func TestMetricsWriter(t *testing.T) {
 		s.expectExact(t, tn, SourceMetric, map[dimKey]int64{{"/hour", 200}: 100})
 	})
 
+	t.Run("cumulative streams the collector rewrites alike stay apart", func(t *testing.T) {
+		// two libraries of one process record the same route and status,
+		// each with an exception message as error.type, which the
+		// collector replaces with _OTHER: the two streams look the same
+		// after the collector and only their stream ids tell them apart
+		for _, gap := range []time.Duration{0, time.Nanosecond} {
+			tn := s.newTenant(t)
+			start := time.Now().Add(-10 * time.Second)
+			a := []uint64{100, 110, 120, 130}
+			b := []uint64{10, 12, 14, 16}
+			now := time.Now()
+			for i := range a {
+				md := pmetric.NewMetrics()
+				rm := md.ResourceMetrics().AppendEmpty()
+				rm.Resource().Attributes().PutStr("service.name", "colliding")
+				for j, scope := range []string{"spring-webmvc", "tomcat"} {
+					count, at := a[i], now.Add(time.Duration(i)*10*time.Second)
+					if j == 1 {
+						count, at = b[i], at.Add(gap)
+					}
+					sm := rm.ScopeMetrics().AppendEmpty()
+					sm.Scope().SetName(scope)
+					m := sm.Metrics().AppendEmpty()
+					m.SetName("http.server.request.duration")
+					m.SetUnit("s")
+					h := m.SetEmptyHistogram()
+					h.SetAggregationTemporality(pmetric.AggregationTemporalityCumulative)
+					dp := h.DataPoints().AppendEmpty()
+					dp.SetStartTimestamp(pcommon.NewTimestampFromTime(start))
+					dp.SetTimestamp(pcommon.NewTimestampFromTime(at))
+					dp.ExplicitBounds().FromRaw(canonicalBounds)
+					counts := make([]uint64, 15)
+					counts[5] = count
+					dp.BucketCounts().FromRaw(counts)
+					dp.SetCount(count)
+					dp.SetSum(0.1 * float64(count))
+					dp.Attributes().PutStr("http.request.method", "POST")
+					dp.Attributes().PutStr("http.route", "/v1/tx")
+					dp.Attributes().PutInt("http.response.status_code", 500)
+					dp.Attributes().PutStr("error.type", "org.springframework.web.util.NestedServletException: Request processing failed; "+scope)
+				}
+				body, err := (&pmetric.ProtoMarshaler{}).MarshalMetrics(md)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if code := s.postMetrics(t, tn.token, body); code != http.StatusOK {
+					t.Fatalf("collector answered %d", code)
+				}
+			}
+			s.expectExact(t, tn, SourceMetric, map[dimKey]int64{{"/v1/tx", 500}: 146})
+		}
+	})
+
 	t.Run("latency percentiles land in the true percentile's bucket", func(t *testing.T) {
 		tn := s.newTenant(t)
 		a := s.newApp(t, tn, appOpts{delta: true})
@@ -1170,4 +1227,15 @@ func spanPayload(t *testing.T, n int) []byte {
 		t.Fatal(err)
 	}
 	return b
+}
+
+// noSelfMetrics writes a configuration overlay that turns the collector's
+// own metrics off, for the second --config of a test collector.
+func noSelfMetrics(t *testing.T) string {
+	t.Helper()
+	p := filepath.Join(t.TempDir(), "no-self-metrics.yaml")
+	if err := os.WriteFile(p, []byte("service:\n  telemetry:\n    metrics:\n      level: none\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return p
 }

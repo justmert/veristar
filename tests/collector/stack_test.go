@@ -169,7 +169,11 @@ func port(addr string) string {
 func (s *stack) startCollector(t *testing.T) {
 	t.Helper()
 	bin := filepath.Join(repoRoot(t), "dist", "scf-otelcol", "scf-otelcol")
-	cmd := exec.Command(bin, "--config", filepath.Join(repoRoot(t), "collector", "otelcol.yaml"))
+	// the suite never reads the collector's own metrics; without them it
+	// does not need the fixed port 8888, which another collector on the
+	// host may hold
+	cmd := exec.Command(bin, "--config", filepath.Join(repoRoot(t), "collector", "otelcol.yaml"),
+		"--config", noSelfMetrics(t))
 	cmd.Env = []string{
 		"NATS_URL=" + s.nats.URL,
 		"NATS_USER=collector",
@@ -449,4 +453,15 @@ func freeListener(t *testing.T) net.Listener {
 		t.Fatal(err)
 	}
 	return l
+}
+
+// noSelfMetrics writes a configuration overlay that turns the collector's
+// own metrics off, for the second --config of a test collector.
+func noSelfMetrics(t *testing.T) string {
+	t.Helper()
+	p := filepath.Join(t.TempDir(), "no-self-metrics.yaml")
+	if err := os.WriteFile(p, []byte("service:\n  telemetry:\n    metrics:\n      level: none\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return p
 }
