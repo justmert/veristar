@@ -201,7 +201,7 @@ test("the privacy page erases one session by its id and leaves the other", async
   // the history on the page shows the finished request with its counts
   const history = page.getByRole("region", { name: "Request history" });
   await expect(history.getByText(`One session: ${host}`)).toBeVisible();
-  await expect(history.getByText(/Deleted 1 session\(s\), 2 event\(s\)/)).toBeVisible();
+  await expect(history.getByText(/Deleted 1 session, 2 events and 0 undeliverable/)).toBeVisible();
 
   // the erased session and its page views are gone, the other stays
   const left = await sessions();
