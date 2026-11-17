@@ -117,7 +117,8 @@ test("an operator saves a threshold rule and opens its matches", async () => {
   await form.getByLabel("At least, per day").fill("1");
   await form.getByLabel("On days per month").fill("1");
   await form.getByLabel("Months", { exact: true }).fill("1");
-  await form.getByLabel("Program").fill(PROGRAM);
+  // the cohort is chosen from the confirmed values
+  await form.getByLabel("Program").selectOption(PROGRAM);
   await form.getByRole("button", { name: "Save rule" }).click();
   const matches = o.getByRole("region", { name: "Rule matches" });
   // the project has no traffic, so it is evaluated and does not qualify
