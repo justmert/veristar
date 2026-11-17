@@ -104,9 +104,9 @@ type Site struct {
 
 // Report is a project's integrity over a range of utc days.
 type Report struct {
-	TenantID    uuid.UUID `json:"tenant_id"`
-	From        string    `json:"from"`
-	To          string    `json:"to"`
+	TenantID uuid.UUID `json:"tenant_id"`
+	From     string    `json:"from"`
+	To       string    `json:"to"`
 	// RuleVersion is the rule version the jobs apply now; RuleVersions are
 	// the versions that graded the range's days, ascending, empty without
 	// a graded day. a stored grade is never re-derived under a new version

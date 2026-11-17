@@ -162,15 +162,15 @@ type Latency struct {
 type API struct {
 	HasData                bool     `json:"has_data"`
 	Requests               int64    `json:"requests"`
-	Requests4xx int64    `json:"requests_4xx"`
-	Requests5xx int64    `json:"requests_5xx"`
-	Rate4xx     *string  `json:"rate_4xx"`
-	Rate5xx     *string  `json:"rate_5xx"`
-	P50         Latency  `json:"p50"`
-	P95         Latency  `json:"p95"`
-	P99         Latency  `json:"p99"`
-	Services    int64    `json:"services"`
-	Routes      int64    `json:"routes"`
+	Requests4xx            int64    `json:"requests_4xx"`
+	Requests5xx            int64    `json:"requests_5xx"`
+	Rate4xx                *string  `json:"rate_4xx"`
+	Rate5xx                *string  `json:"rate_5xx"`
+	P50                    Latency  `json:"p50"`
+	P95                    Latency  `json:"p95"`
+	P99                    Latency  `json:"p99"`
+	Services               int64    `json:"services"`
+	Routes                 int64    `json:"routes"`
 	Source                 *string  `json:"source"`
 	Lossy                  bool     `json:"lossy"`
 	InfrastructureRequests int64    `json:"infrastructure_requests"`
