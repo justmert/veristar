@@ -68,9 +68,11 @@ do not come back.
    | `registry` | NATS KV `registry_sites` | the key of every site, so the gateway refuses new events |
    | `otlp_tokens` | `cp.otlp_tokens`, `registry_otlp` | tokens revoked |
    | `umami` | Umami | both websites of every site with their data, the team, and the Umami users of members who belong to no other project that is not removed |
-   | `web_ingest` | `cp.web_ingest_hourly` | the project's rows, unless `keep_aggregates` |
+   | `web_ingest` | `cp.web_ingest_hourly`, `cp.web_evidence_daily`, `cp.web_signals_daily`, `cp.web_networks_daily` | the network keys always; the other three tables' rows unless `keep_aggregates` |
    | `api` | `api` schema | minute rows, series and resource state, route caps and rollup marks always; hourly, daily and warning rows unless `keep_aggregates`. `ingest_dedup` ids stay until they expire (8 days), so a message still queued is not applied twice |
-   | `agg` | `agg` schema | aggregate rows, unless `keep_aggregates` |
+   | `agg` | `agg` schema | web aggregate rows, unless `keep_aggregates` |
+   | `chain` | `agg.chain_*` | read state (`chain_reads`), week members and open weeks always; daily counts and closed weeks unless `keep_aggregates` |
+   | `reports` | `cp.usage_reports` | every signed usage report of the project, always |
 
    Each finished step is stored in `cp.tenant_removals.steps` and audited as
    `purge.step` (actor `system:purge`). When every step is done,

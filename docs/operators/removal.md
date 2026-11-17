@@ -47,9 +47,11 @@ their console sign-in; they lose access to the project only.
 ## Keeping or deleting aggregates
 
 The **Settings** tab has **Aggregates of removed projects**. When set to keep, a project
-removed from then on keeps its anonymous daily counts (web aggregates, gateway outcome
-counts, hourly and daily API data) in the tables the global views and the metrics API read.
-Raw web data, the Umami websites and per-minute API data are deleted either way.
+removed from then on keeps its anonymous daily counts (web aggregates and grades, gateway
+outcome, evidence and signal counts, hourly and daily API data, daily ledger counts and
+closed ledger weeks) in the tables the global views and the metrics API read. Raw web data,
+the Umami websites, per-minute API data, the network keys, the ledger read state, week
+members and open weeks, and the signed usage reports are deleted either way.
 
 - The default is **delete**. Through the API the setting is
   `PUT /api/operator/settings/removal-keep-aggregates` with `{"keep": true}` or

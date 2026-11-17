@@ -1399,10 +1399,16 @@ Then the purge runs in the reconciler, store by store, in this order: `registry`
 OTLP key to `revoked`, 6.4), `umami` (both
 websites of every site with their data, the team, then Umami users whose console
 user has no membership in any non-removed tenant), `web_ingest`
-(`cp.web_ingest_hourly` rows; skipped when `keep_aggregates`), `api`
+(`cp.web_networks_daily` rows always; `cp.web_ingest_hourly`,
+`cp.web_evidence_daily` and `cp.web_signals_daily` rows unless
+`keep_aggregates`), `api`
 (`api.purge_tenant`; minute rows and writer state always, hourly, daily and
 warning rows unless `keep_aggregates`),
-`agg` (8.7; skipped when `keep_aggregates`). Each finished store writes
+`agg` (8.7; skipped when `keep_aggregates`), `chain` (`agg.purge_chain`:
+`agg.chain_reads`, `agg.chain_week_members` and open weeks of
+`agg.chain_weeks` always; `agg.chain_daily` and closed weeks unless
+`keep_aggregates`), `reports` (`cp.purge_usage_reports`: every signed usage
+report of the tenant, whatever `keep_aggregates` says). Each finished store writes
 `steps.<name>` and an audit row `purge.step` (actor `system:purge`); the last one
 sets `completed_at` and writes `purge.complete`. A failed store is retried on the
 next reconcile. The tenant row, its member rows and all audit rows remain.
@@ -1653,10 +1659,13 @@ and new). **200** `{"keep": ...}`.
 
 - The value is copied into `cp.tenant_removals.keep_aggregates` when a tenant is
   removed (5.5), so changing it later never changes a removal in progress.
-- `true` keeps `cp.web_ingest_hourly` rows, `api.metrics_hourly`,
-  `api.metrics_daily` and `api.ingest_warnings` rows and `agg` rows of the
-  removed tenant. Umami websites, their raw data and `api` minute rows are
-  always deleted.
+- `true` keeps `cp.web_ingest_hourly`, `cp.web_evidence_daily` and
+  `cp.web_signals_daily` rows, `api.metrics_hourly`, `api.metrics_daily` and
+  `api.ingest_warnings` rows, the web `agg` rows, `agg.chain_daily` and the
+  closed weeks of `agg.chain_weeks` of the removed tenant. Umami websites and
+  their raw data, `api` minute rows, `cp.web_networks_daily`,
+  `agg.chain_reads`, `agg.chain_week_members`, open chain weeks and the signed
+  usage reports are always deleted.
 
 ### 5.14 Configuration keys
 
@@ -2513,8 +2522,10 @@ default, or `asc`). **200**:
 ### 8.7 Removal and `removal_keep_aggregates`
 
 The purge step `agg` (after `api` in the removal purge of 5.5) deletes the tenant's
-`agg.web_daily` and `agg.web_daily_dim` rows through the security definer
-function `agg.purge_tenant`, the only right `cp_system` has in `agg`. With
+`agg.web_daily`, `agg.web_daily_dim`, `agg.web_integrity_daily` and
+`agg.web_coverage_daily` rows through the security definer function
+`agg.purge_tenant`; `cp_system` has no table right in `agg`, only these
+functions and `agg.purge_chain` (the `chain` step). With
 `keep_aggregates` the step records `{"skipped": "keep_aggregates"}` and every
 row stays (5.13). The function takes the tenant's advisory lock exclusively;
 `aggregate-web` holds it shared for each write and skips removed tenants, so
