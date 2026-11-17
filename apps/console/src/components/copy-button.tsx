@@ -12,9 +12,13 @@ export function CopyButton({
   size = "sm",
   variant = "outline",
   iconOnly = false,
+  accessibleLabel,
 }: {
   text: string;
   label?: string;
+  // a longer name for assistive technology when several copy buttons share
+  // a page, starting with the visible label
+  accessibleLabel?: string;
   size?: "sm" | "xs" | "default";
   variant?: "outline" | "ghost";
   iconOnly?: boolean;
@@ -45,7 +49,7 @@ export function CopyButton({
         variant={variant}
         size={iconOnly ? (size === "xs" ? "icon-xs" : "icon-sm") : size}
         onClick={copy}
-        aria-label={iconOnly ? label : undefined}
+        aria-label={iconOnly ? label : copied ? undefined : accessibleLabel}
         className={copied ? "text-success" : undefined}
       >
         <AnimatePresence mode="wait" initial={false}>
