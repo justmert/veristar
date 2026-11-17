@@ -94,7 +94,7 @@ type Config struct {
 
 // Load reads PLATFORM_DB_HOST, PLATFORM_DB_PORT, PLATFORM_DB_SSLMODE, the
 // tls files of config.LoadPostgresTLS, UMAMI_DB_NAME, UMAMI_DB_JOBS_RETENTION_PASSWORD and
-// WEB_RAW_RETENTION_MONTHS (default 25).
+// WEB_RAW_RETENTION_MONTHS (default 25, at least 25).
 func Load(e *config.Env) (Config, error) {
 	ret, _ := config.LoadWebRetention(e)
 	c := Config{

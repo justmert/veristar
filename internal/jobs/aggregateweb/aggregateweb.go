@@ -23,7 +23,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/prometheus/client_golang/prometheus"
 
+	"github.com/justmert/veristar/internal/config"
 	"github.com/justmert/veristar/internal/db/jobsq"
+	"github.com/justmert/veristar/internal/jobs/retainweb"
 	"github.com/justmert/veristar/internal/registry"
 	"github.com/justmert/veristar/internal/umami"
 )
@@ -94,6 +96,9 @@ type Aggregator struct {
 	umami  Reader
 	sites  Sites
 	now    func() time.Time
+	// rawMonths is WEB_RAW_RETENTION_MONTHS: umami holds no raw rows of the
+	// days before retain-web's cutoff, so reading such a day returns zeros
+	rawMonths int
 	log    *slog.Logger
 	days   prometheus.Counter
 	failed prometheus.Counter
@@ -105,7 +110,7 @@ func New(r Reader, sites Sites, now func() time.Time, log *slog.Logger, reg prom
 		return nil, errors.New("aggregateweb: needs an umami reader, sites, a clock, a log and a registerer")
 	}
 	a := &Aggregator{
-		umami: r, sites: sites, now: now, log: log,
+		umami: r, sites: sites, now: now, log: log, rawMonths: config.DefaultWebRawRetentionMonths,
 		days: prometheus.NewCounter(prometheus.CounterOpts{
 			Name: "jobs_aggregate_web_days_total",
 			Help: "site days of agg.web_daily and agg.web_daily_dim replaced from umami.",
@@ -122,6 +127,28 @@ func New(r Reader, sites Sites, now func() time.Time, log *slog.Logger, reg prom
 	}
 	return a, nil
 }
+
+// SetRawRetentionMonths sets WEB_RAW_RETENTION_MONTHS, the setting retain-web
+// deletes raw umami rows with. it defaults to config.DefaultWebRawRetentionMonths.
+func (a *Aggregator) SetRawRetentionMonths(months int) error {
+	if months < 1 {
+		return fmt.Errorf("aggregateweb: raw retention of %d months", months)
+	}
+	a.rawMonths = months
+	return nil
+}
+
+// RawCutoff is the first day umami still holds raw rows for. retain-web
+// deletes everything older, after which /stats answers zeros for a day; such
+// a zero would replace an aggregate that agg.web_daily keeps for the life of
+// the site, so no task reads a day before it.
+func (a *Aggregator) RawCutoff() time.Time {
+	return UTCDay(retainweb.Cutoff(a.now(), a.rawMonths))
+}
+
+// ErrBeforeRawCutoff is returned by a backfill that asks for a day whose raw
+// rows retain-web already deleted; nothing is read or written.
+var ErrBeforeRawCutoff = errors.New("aggregateweb: day is before the raw retention cutoff")
 
 // UTCDay is the start of t's utc day.
 func UTCDay(t time.Time) time.Time {
@@ -147,7 +174,9 @@ func (a *Aggregator) Run(ctx context.Context, tx TxFunc) (Result, error) {
 
 // Backfill reads every utc day from from to to, both included, for every
 // active site. a day after today is refused: umami has nothing for it yet,
-// and a zero row would claim the day was read. a site that fails is
+// and a zero row would claim the day was read. a day before RawCutoff is
+// refused as well: umami deleted its raw rows, and the zeros it answers
+// would overwrite the kept aggregate. a site that fails is
 // counted and reported in the returned error; the other sites still run,
 // so one broken website does not hold back every tenant's numbers.
 func (a *Aggregator) Backfill(ctx context.Context, tx TxFunc, from, to time.Time) (Result, error) {
@@ -157,6 +186,10 @@ func (a *Aggregator) Backfill(ctx context.Context, tx TxFunc, from, to time.Time
 	}
 	if today := UTCDay(a.now()); to.After(today) {
 		return Result{}, fmt.Errorf("aggregateweb: --to %s is after today %s (utc)", to.Format(time.DateOnly), today.Format(time.DateOnly))
+	}
+	if cutoff := a.RawCutoff(); from.Before(cutoff) {
+		return Result{}, fmt.Errorf("%w: --from %s is before %s, the oldest day umami still holds (WEB_RAW_RETENTION_MONTHS %d)",
+			ErrBeforeRawCutoff, from.Format(time.DateOnly), cutoff.Format(time.DateOnly), a.rawMonths)
 	}
 	if !a.sites.Loaded() {
 		return Result{}, ErrRegistryNotLoaded
@@ -217,11 +250,16 @@ func (a *Aggregator) Backfill(ctx context.Context, tx TxFunc, from, to time.Time
 // BackfillSite reads one site's days from from to to again, whatever the
 // site's status: an erasure can concern a suspended site, whose aggregates
 // must still stop counting erased visits. days after today are left out,
-// because umami has nothing for them yet. it returns the site days written.
+// because umami has nothing for them yet, and so are days before RawCutoff,
+// whose raw rows are gone and whose kept aggregate must not become zero. it
+// returns the site days written.
 func (a *Aggregator) BackfillSite(ctx context.Context, tx TxFunc, s registry.Site, from, to time.Time) (int, error) {
 	from, to = UTCDay(from), UTCDay(to)
 	if today := UTCDay(a.now()); to.After(today) {
 		to = today
+	}
+	if cutoff := a.RawCutoff(); from.Before(cutoff) {
+		from = cutoff
 	}
 	if to.Before(from) {
 		return 0, nil

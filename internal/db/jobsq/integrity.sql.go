@@ -165,6 +165,43 @@ func (q *Queries) IntegritySignals(ctx context.Context, arg IntegritySignalsPara
 	return items, nil
 }
 
+const integrityStoredDay = `-- name: IntegrityStoredDay :many
+select rule_version, networks from agg.web_integrity_daily where site_id = $1 and day = $2
+`
+
+type IntegrityStoredDayParams struct {
+	SiteID uuid.UUID
+	Day    time.Time
+}
+
+type IntegrityStoredDayRow struct {
+	RuleVersion int32
+	Networks    int64
+}
+
+// the rule version and network count a day was graded with. the network
+// keys of a day are pruned once it leaves the regrade window, so a later
+// regrade keeps both instead of counting zero networks
+func (q *Queries) IntegrityStoredDay(ctx context.Context, arg IntegrityStoredDayParams) ([]IntegrityStoredDayRow, error) {
+	rows, err := q.db.Query(ctx, integrityStoredDay, arg.SiteID, arg.Day)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []IntegrityStoredDayRow{}
+	for rows.Next() {
+		var i IntegrityStoredDayRow
+		if err := rows.Scan(&i.RuleVersion, &i.Networks); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const integrityWebDay = `-- name: IntegrityWebDay :one
 select coalesce(sum(visitors), 0)::bigint as visitors, coalesce(sum(pageviews), 0)::bigint as pageviews,
        (count(*) > 0)::boolean as ok

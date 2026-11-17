@@ -133,9 +133,18 @@ own read routes, as the admin, for each active site, both bands and each UTC
 day: `/stats` gives one `web_daily` row, `/metrics` with `type` `referrer`,
 `country`, `device`, `browser` and `os` gives the `web_daily_dim` rows.
 A run reads today and the 3 days before it every hour; `jobs run
-aggregate-web --from <day> --to <day>` reads any range again. Each site day
-replaces its rows in one fenced transaction, so re-running changes nothing
-and a backfill restores deleted rows.
+aggregate-web --from <day> --to <day>` reads any range again back to the raw
+retention cutoff. Each site day replaces its rows in one fenced transaction,
+so re-running changes nothing and a backfill restores deleted rows.
+
+The aggregates outlive Umami's raw rows: `jobs retain-web` deletes raw events
+and sessions older than `WEB_RAW_RETENTION_MONTHS`, while `agg.web_daily` and
+`agg.web_daily_dim` are kept while the site exists. Umami answers a day it no
+longer holds with zeros, so `aggregate-web` never reads a day before the
+retention cutoff (the same day retain-web computes): a backfill whose `--from`
+is older is refused before anything is read, and the erasure follow-up reads
+only the days on or after the cutoff. The kept aggregate of an older day stays
+as it was.
 
 The answers below were measured on 2026-11-12 against the dev Umami (the pinned 3.5.0 image, events sent through `/api/send` the way
 the replayer sends them, three UTC days, six visitors, a bot, a custom event,

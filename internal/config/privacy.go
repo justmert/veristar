@@ -30,17 +30,23 @@ func LoadErasure(e *Env) (Erasure, error) {
 // dashboards always cover 24 full months.
 const DefaultWebRawRetentionMonths = 25
 
+// MinWebRawRetentionMonths is the floor of WEB_RAW_RETENTION_MONTHS. tenant
+// dashboards read umami's raw rows and must cover 24 full months; the month
+// in progress is the 25th. a lower value is a startup error, never clamped,
+// like API_HOURLY_RETENTION_MONTHS.
+const MinWebRawRetentionMonths = 25
+
 // WebRetention is the setting of `jobs retain-web`.
 type WebRetention struct {
 	Months int
 }
 
 // LoadWebRetention reads WEB_RAW_RETENTION_MONTHS, DefaultWebRawRetentionMonths
-// when unset.
+// when unset, MinWebRawRetentionMonths to 1200 when set.
 func LoadWebRetention(e *Env) (WebRetention, error) {
 	c := WebRetention{Months: DefaultWebRawRetentionMonths}
 	if e.Has("WEB_RAW_RETENTION_MONTHS") {
-		c.Months = e.Int("WEB_RAW_RETENTION_MONTHS", 1, 1200)
+		c.Months = e.Int("WEB_RAW_RETENTION_MONTHS", MinWebRawRetentionMonths, 1200)
 	}
 	return c, e.Err()
 }

@@ -9,7 +9,9 @@
 //
 // a regular run grades today and the integrity.RereadDays days before it,
 // the window aggregate-web reads again, so a late aggregate reaches the
-// grade; `jobs run integrity --from <day> --to <day>` grades any range.
+// grade; `jobs run integrity --from <day> --to <day>` grades any range. a
+// day before the window keeps the rule version and network count it was
+// graded with, since its network keys are pruned.
 package integrity
 
 import (
@@ -244,13 +246,39 @@ func (g *Grader) siteDay(ctx context.Context, tx TxFunc, s registry.Site, day, t
 			}
 			return nil
 		}
-		r := rules.Grade(in)
+		version := rules.RuleVersion
+		// the network keys of a day before the regrade window are pruned,
+		// so counting them again gives zero and a busy day would gain
+		// few_networks. such a day keeps the network count and the rule
+		// version it was graded with; the other inputs are kept for the
+		// life of the site and are read again
+		if day.Before(today.AddDate(0, 0, -RereadDays)) {
+			stored, err := q.IntegrityStoredDay(ctx, jobsq.IntegrityStoredDayParams{SiteID: siteID, Day: day})
+			if err != nil {
+				return fmt.Errorf("stored grade: %w", err)
+			}
+			switch {
+			case len(stored) == 1:
+				version = int(stored[0].RuleVersion)
+				in.Networks = max(in.Networks, stored[0].Networks)
+			case in.Classified() > 0 && in.Networks == 0:
+				// never graded and its network keys are gone: a grade
+				// would rest on a network count of zero
+				g.log.Warn("integrity: day not graded, its network keys are pruned",
+					"site", siteID.String(), "day", day.Format(time.DateOnly))
+				return nil
+			}
+		}
+		r, err := rules.GradeVersion(version, in)
+		if err != nil {
+			return fmt.Errorf("grade: %w", err)
+		}
 		reasons, err := json.Marshal(r.Reasons)
 		if err != nil {
 			return fmt.Errorf("encode reasons: %w", err)
 		}
 		p := jobsq.UpsertIntegrityDayParams{
-			SiteID: siteID, TenantID: tenantID, Day: day, RuleVersion: rules.RuleVersion,
+			SiteID: siteID, TenantID: tenantID, Day: day, RuleVersion: int32(version), //nolint:gosec // a member of rules.RuleVersions
 			Closed: day.Before(today), Events: in.Events, Quarantined: in.Quarantined,
 			ProofFailures: in.ProofFailures, NetAccess: in.NetAccess, NetOrganisation: in.NetOrganisation,
 			NetHosting: in.NetHosting, NetAnonymiser: in.NetAnonymiser, NetUnknown: in.NetUnknown,

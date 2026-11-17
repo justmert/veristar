@@ -125,7 +125,7 @@ day replaces the day's secrets, so visitors seen before it count again.
 | `visit_state` | 24 hours after the last write | bucket TTL, memory storage |
 | `WEB_EVENTS` | until delivered, at most 72 hours | work-queue stream, max age |
 | `WEB_DLQ` | at most 7 days | max age; erasure deletes earlier |
-| Umami raw rows | `WEB_RAW_RETENTION_MONTHS` (default 25) | `jobs retain-web` as role `jobs_retention` (`internal/jobs/retainweb`) |
+| Umami raw rows | `WEB_RAW_RETENTION_MONTHS` (default 25, at least 25) | `jobs retain-web` as role `jobs_retention` (`internal/jobs/retainweb`) |
 | `agg.web_daily*` | while the site exists | removal purge (`agg.purge_tenant`) |
 | `agg.web_integrity_daily`, `cp.web_evidence_daily` | while the site exists | removal purge (`agg.purge_tenant`, `lifecycle.WebIngestPurger`) |
 | `cp.web_networks_daily` | four days | `jobs` task `integrity`; removal purge |

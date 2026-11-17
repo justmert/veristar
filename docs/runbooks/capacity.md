@@ -61,7 +61,7 @@ it, keeping a quarter of the store free (the test checks that ratio), then run
 3. **Retention settings** that set the size: `API_MINUTE_RETENTION_DAYS` (at least 8) and
    `API_HOURLY_RETENTION_MONTHS` (at least 24) on `jobs` and `controlplane`, from
    `core_api_minute_retention_days` and `core_api_hourly_retention_months` in the core role;
-   raw Umami events are kept `WEB_RAW_RETENTION_MONTHS` (25 by default) by `jobs retain-web`.
+   raw Umami events are kept `WEB_RAW_RETENTION_MONTHS` (25 by default, and at least 25) by `jobs retain-web`.
 
 ## Change a VM size
 
