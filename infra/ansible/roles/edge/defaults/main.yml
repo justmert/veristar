@@ -54,6 +54,24 @@ edge_etcd_volume: veristar-edge_etcddata
 edge_etcd_state_file: "{{ edge_conf_dir }}/etcd-initial-state"
 edge_etcd_peer_url: "https://{{ sa_private_ip }}:2380"
 
+# etcd history and space (templates/compose.yml.j2). one hour of history is
+# far more than patroni reads back. 2 GiB is etcd's own default quota, set
+# explicitly; patroni's keys need a few megabytes once compacted, so the
+# EtcdDatabaseSpaceHigh alert at half of it means compaction or defrag stopped
+edge_etcd_compaction_retention: 1h
+edge_etcd_quota_backend_bytes: 2147483648
+# sa-etcd-defrag.timer (tasks/etcd_defrag.yml): weekly, and each member at its
+# own time, edge_etcd_defrag_spacing_minutes apart, because a member blocks
+# its reads and writes while it defragments and two at once would cost the
+# quorum
+edge_etcd_defrag_weekday: Tue
+edge_etcd_defrag_hour: 4
+edge_etcd_defrag_spacing_minutes: 20
+edge_etcd_defrag_minute: "{{ groups['edge'].index(inventory_hostname) * (edge_etcd_defrag_spacing_minutes | int) }}"
+edge_etcd_defrag_calendar: >-
+  {{ edge_etcd_defrag_weekday }} *-*-*
+  {{ '%02d:%02d:00' | format(edge_etcd_defrag_hour | int + (edge_etcd_defrag_minute | int) // 60, (edge_etcd_defrag_minute | int) % 60) }} UTC
+
 # ipv6-only docker network that only caddy joins, so published ipv6 ports
 # keep the visitor's address. a unique local prefix: it never
 # leaves the node, and every node may use the same one.

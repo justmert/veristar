@@ -436,11 +436,12 @@ ansible-venv:
 ansible-lint:
 	cd infra/ansible && $(ANSIBLE_BIN)/yamllint -s . && $(ANSIBLE_BIN)/ansible-lint
 
-# renders the edge and core role files that hold the nats liveness settings
-# and checks them (tests/natsconf); needs the ansible venv, no host
+# renders the role files that hold the nats liveness settings, the systemd
+# units and the etcd space settings and checks them (tests/natsconf,
+# tests/systemdunits, tests/etcdmaint); needs the ansible venv, no host
 .PHONY: ansible-render-test
 ansible-render-test:
-	ANSIBLE_VENV=$(ANSIBLE_VENV) $(GO) test -tags ansiblerender -count=1 ./tests/natsconf/ ./tests/systemdunits/
+	ANSIBLE_VENV=$(ANSIBLE_VENV) $(GO) test -tags ansiblerender -count=1 ./tests/natsconf/ ./tests/systemdunits/ ./tests/etcdmaint/
 
 staging-deploy production-deploy: %-deploy:
 	@test -f infra/ansible/inventories/$*/hosts.json || { echo "no inventory: run make $*-apply first" >&2; exit 1; }

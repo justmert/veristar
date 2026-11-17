@@ -1,0 +1,71 @@
+---
+# compaction (templates/compose.yml.j2) marks old revisions free inside the
+# database file but never shrinks it; only a defrag does, and etcd's quota
+# counts the file. a member blocks its reads and writes while it
+# defragments, so each member runs at its own time of the week
+# (defaults/main.yml) and only while every member of the cluster is
+# healthy: a degraded cluster skips the week, and the unit fails, which
+# SystemdUnitFailed reports. Persistent stays off, so members that boot
+# together after an outage do not catch up on a missed run at the same time.
+- name: Install the etcd defrag script
+  ansible.builtin.copy:
+    dest: /usr/local/sbin/sa-etcd-defrag
+    content: |
+      #!/bin/sh
+      # managed by ansible (infra/ansible/roles/edge)
+      set -eu
+      ctl() {
+        docker compose --project-directory {{ edge_dir }} exec -T etcd etcdctl \
+          --endpoints=https://127.0.0.1:2379 --cacert=/etc/etcd/tls/ca.crt \
+          --cert=/etc/etcd/tls/node.crt --key=/etc/etcd/tls/node.key "$@"
+      }
+      ctl endpoint health --cluster
+      ctl endpoint status -w table
+      ctl defrag
+      ctl endpoint status -w table
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the etcd defrag timer
+  ansible.builtin.copy:
+    dest: "/etc/systemd/system/{{ item.name }}"
+    content: "{{ item.content }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - name: sa-etcd-defrag.service
+      content: |
+        # managed by ansible (infra/ansible/roles/edge)
+        [Unit]
+        Description=defragment this node's etcd member
+        After=docker.service
+        Requires=docker.service
+
+        [Service]
+        Type=oneshot
+        TimeoutStartSec=10min
+        ExecStart=/usr/local/sbin/sa-etcd-defrag
+    - name: sa-etcd-defrag.timer
+      content: |
+        # managed by ansible (infra/ansible/roles/edge)
+        [Unit]
+        Description=defragment this node's etcd member once a week
+
+        [Timer]
+        OnCalendar={{ edge_etcd_defrag_calendar }}
+        Persistent=false
+
+        [Install]
+        WantedBy=timers.target
+  loop_control:
+    label: "{{ item.name }}"
+  register: edge_etcd_defrag_units
+
+- name: Start the etcd defrag timer
+  ansible.builtin.systemd_service:
+    name: sa-etcd-defrag.timer
+    enabled: true
+    state: started
+    daemon_reload: "{{ edge_etcd_defrag_units is changed }}"
