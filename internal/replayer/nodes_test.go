@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/testcontainers/testcontainers-go"
+
 	"github.com/justmert/veristar/internal/events"
 	"github.com/justmert/veristar/internal/natsx"
 	"github.com/justmert/veristar/internal/umami"
@@ -108,7 +110,16 @@ func TestDrainRateByReplayerNodes(t *testing.T) {
 	for _, n := range counts {
 		s, sent := backlog(total)
 		load0 := loadAvg()
+		used := st.ums[:n*perNode]
+		cpu0 := cpuUsec(t, used)
+		pg0 := cpuUsec(t, []*testcontainers.DockerContainer{st.pg})[0]
 		elapsed, ms := run(n, fmt.Sprintf("measure%d", n))
+		cpu := cpuUsec(t, used)
+		pgCores := float64(cpuUsec(t, []*testcontainers.DockerContainer{st.pg})[0]-pg0) / float64(elapsed.Microseconds())
+		var cores []string
+		for i := range used {
+			cores = append(cores, fmt.Sprintf("%.2f", float64(cpu[i]-cpu0[i])/float64(elapsed.Microseconds())))
+		}
 		stats, err := st.Admin.Stats(testCtx(t, time.Minute), s.ID, umami.Range{Start: h, End: h.Add(time.Hour)})
 		if err != nil {
 			t.Fatal(err)
@@ -120,8 +131,14 @@ func TestDrainRateByReplayerNodes(t *testing.T) {
 		for _, m := range ms {
 			perNodeSends = append(perNodeSends, fmt.Sprintf("%.0f", m[`replayer_outcomes_total{outcome="delivered"}`]))
 		}
-		t.Logf("replayer nodes %d: %d events in %.1f s = %.0f events/s; delivered per node %s; host load average %s at the start, %s at the end",
-			n, sent, elapsed.Seconds(), float64(sent)/elapsed.Seconds(), strings.Join(perNodeSends, " "), load0, loadAvg())
+		var sendSum, sendCount float64
+		for _, m := range ms {
+			sendSum += m[`replayer_send_duration_seconds_sum{result="ok"}`]
+			sendCount += m[`replayer_send_duration_seconds_count{result="ok"}`]
+		}
+		t.Logf("replayer nodes %d: %d events in %.1f s = %.0f events/s; delivered per node %s; umami cpu per process (cores) %s; postgres %.2f cores; mean send %.0f ms; host load average %s at the start, %s at the end",
+			n, sent, elapsed.Seconds(), float64(sent)/elapsed.Seconds(), strings.Join(perNodeSends, " "), strings.Join(cores, " "),
+			pgCores, 1000*sendSum/max(sendCount, 1), load0, loadAvg())
 	}
 }
 
