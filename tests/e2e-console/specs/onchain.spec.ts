@@ -124,7 +124,7 @@ test("what scf sees and the overview export answer for the project", async () =>
   expect(r.headers()["content-disposition"]).toContain("attachment");
   const lines = (await r.text()).trim().split("\n");
   const header = lines[0]?.split(",") ?? [];
-  expect(header.slice(0, 13)).toEqual([
+  expect(header.slice(0, 14)).toEqual([
     "day",
     "web_pageviews",
     "web_visitors",
@@ -135,6 +135,7 @@ test("what scf sees and the overview export answer for the project", async () =>
     "api_requests",
     "api_errors_4xx",
     "api_errors_5xx",
+    "api_infrastructure_requests",
     "onchain_ids_read",
     "onchain_operations",
     "onchain_transactions",
