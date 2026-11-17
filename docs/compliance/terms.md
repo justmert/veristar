@@ -17,8 +17,9 @@ effective: 2026-11-17
 
 ## 1. Parties and roles
 
-- **Hosting operator**: the party that runs this service and hosts its data,
-  named in the repository. It runs the service for every tenant alike.
+- **Hosting operator**: Mert Köklü, who runs this service and hosts its
+  data (contact: kklumert@gmail.com). The hosting operator runs the service
+  for every tenant alike.
 - **SCF**: the Stellar Community Fund. SCF does not run the service and does
   not process the data of a tenant's website visitors or API clients. It
   receives the project statistics of section 1.1.
@@ -177,7 +178,9 @@ accepted, the project can be read but not changed.
 
 ## 10. Contact
 
-Privacy and security questions: the public issue tracker of the repository for
-general questions, and the repository's private vulnerability reporting for
-security issues. A dedicated privacy contact is named once the operating entity
-is decided.
+Privacy questions, and requests about console accounts, for which the hosting
+operator is the controller: Mert Köklü, at kklumert@gmail.com. A visitor of a
+tenant's website asks the tenant, which is the controller of that data
+(section 1). General questions: the public issue tracker of
+the repository. Security issues: the repository's private vulnerability
+reporting.

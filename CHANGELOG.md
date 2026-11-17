@@ -254,7 +254,9 @@ here, before they take effect, as the processing terms require
   visits not measured, the separate count of preflight, health check and
   probe API requests, the operator roster and step-up passkey data, the
   weekly active accounts, and the full list of project statistics SCF
-  receives. Every project accepts it at its next sign-in.
+  receives. It names the hosting operator and the privacy contact, and
+  announces sub-processor changes in the changelog and a new terms version.
+  Every project accepts it at its next sign-in.
 - The core tier must be upgraded before the edge tier again: older jobs
   daemons refuse the new `signal_<name>` and `script_<name>` counters on
   `EDGE_STATS`, and older gateways refuse the events of tracker 1.3.0.
