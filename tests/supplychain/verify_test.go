@@ -35,7 +35,7 @@ import (
 )
 
 // infra/local/env.sh pins the same registry image for the local converge
-const registryImage = "registry:3.0.0@sha256:6c5666b861f3505b116bb9aa9b25175e71210414bd010d92035ff64018f9457e"
+const registryImage = "registry:3.1.2@sha256:82f6ff4a7f982960c8aa51617fea3aabc485df6e55cce80d22deb1de36f1bc3c"
 
 // the platform_images keys of vars/pins.yml, as release-images.yml names them
 var images = []string{"gateway", "collector", "caddy", "console", "controlplane", "replayer",
