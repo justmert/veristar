@@ -11,6 +11,10 @@ func TestCanonicalize(t *testing.T) {
 		{`{"b": 1, "a": [true, false, null], "c": {}}`, `{"a":[true,false,null],"b":1,"c":{}}`},
 		{`  [ ]  `, `[]`},
 		{`-0`, `0`},
+		// a number counts by its value, as rfc 8785 and JSON.parse read it
+		{`[12345.0, 1.2345e4, 1E3, -0.0, 9.007199254740991e15]`, `[12345,12345,1000,0,9007199254740991]`},
+		// a surrogate pair escape is one character
+		{`"\ud83d\ude00 \\ud800"`, "\"\U0001F600 \\\\ud800\""},
 		{`9007199254740991`, `9007199254740991`},
 		{`-9007199254740991`, `-9007199254740991`},
 		// rfc 8785 section 3.2.2.2: the short escapes, lowercase \u00xx for
@@ -34,7 +38,9 @@ func TestCanonicalize(t *testing.T) {
 
 func TestCanonicalizeRefuses(t *testing.T) {
 	for _, in := range []string{
-		`1.5`, `1e3`, `9007199254740992`, `-9007199254740992`,
+		`1.5`, `1e-3`, `12345.5`, `9007199254740992`, `-9007199254740992`, `1e400`,
+		// a lone surrogate: encoding/json would turn it into u+fffd
+		`"\ud800"`, `"\udc00"`, `"a\ud800b"`, `"\ud800\u0041"`, `{"\udfff":1}`,
 		`{"a":1,"a":2}`, `{"a":1} {}`, `{"a":`, "\"\xff\"",
 	} {
 		_, err := Canonicalize([]byte(in))

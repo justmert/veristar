@@ -36,7 +36,11 @@ export function appealUrl(
     grade: gradeOf(report.grade),
     sites: sites || "none",
     reasons,
-    rule_version: String(report.rule_version),
+    // the versions that graded the period, which an appeal is about; the
+    // current version when no day was graded
+    rule_version: (report.rule_versions.length ? report.rule_versions : [report.rule_version]).join(
+      ", ",
+    ),
   });
   return `${APPEAL_REPOSITORY}/issues/new?${q.toString()}`;
 }

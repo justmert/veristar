@@ -19,8 +19,10 @@ or the file to an SCF submission instead of assembling screenshots.
 3. Choose **Generate and sign**.
 
 Any member of the project who accepted the current terms creates reports. A project can create 20 reports per 24 hours.
-The report holds the numbers "What SCF sees" shows for the same period, and the versions of
-every definition behind them.
+The report holds the numbers "What SCF sees" shows for the same period, including the estimate of
+visits not measured because of privacy signals, the API flags (no data, lossy, infrastructure
+requests left out) and the weekly active accounts, and the versions of every definition behind them,
+including every integrity rule version that graded the period.
 
 ## Share it
 

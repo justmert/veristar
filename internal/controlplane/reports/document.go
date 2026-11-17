@@ -19,7 +19,6 @@ import (
 
 	"github.com/justmert/veristar/internal/controlplane/integrityview"
 	"github.com/justmert/veristar/internal/controlplane/operator"
-	"github.com/justmert/veristar/internal/integrity"
 	"github.com/justmert/veristar/internal/routenorm"
 )
 
@@ -29,8 +28,13 @@ import (
 const (
 	// Format is the value of the report's format member.
 	Format = "veristar-usage-report"
-	// FormatVersion is the version of the document layout below.
-	FormatVersion = 1
+	// FormatVersion is the version of the document layout below. version 2
+	// lists the integrity rule versions that graded the period, and adds
+	// the coverage estimate and has_data to web, lossy, infrastructure
+	// requests and has_data to api, and weekly active accounts to onchain.
+	// a version 1 report keeps its layout and still verifies: the
+	// signature covers its bytes whatever members they hold.
+	FormatVersion = 2
 	// WebMetricsVersion: docs/reference/web-metrics.md, primary band,
 	// daily-unique visitors summed over days and sites.
 	WebMetricsVersion = 1
@@ -73,14 +77,36 @@ type Period struct {
 
 // Methods are the versions of every definition behind the numbers.
 type Methods struct {
-	Format          int    `json:"format"`
-	WebMetrics      int    `json:"web_metrics"`
-	APIMetrics      int    `json:"api_metrics"`
-	Onchain         int    `json:"onchain"`
-	Cohort          int    `json:"cohort"`
-	IntegrityRules  int    `json:"integrity_rules"`
+	Format     int `json:"format"`
+	WebMetrics int `json:"web_metrics"`
+	APIMetrics int `json:"api_metrics"`
+	Onchain    int `json:"onchain"`
+	Cohort     int `json:"cohort"`
+	// IntegrityRules are the rule versions that graded the period's site
+	// days, ascending: a grade is never re-derived, so a period graded
+	// across a rule change names both versions. empty without a graded day
+	IntegrityRules  []int  `json:"integrity_rules"`
 	RouteNormaliser int    `json:"route_normaliser"`
 	Platform        string `json:"platform"`
+}
+
+// Coverage estimates the visits not measured because the browser sends
+// global privacy control: tracker file requests, the ones that carried
+// the signal, and their share as a decimal string.
+type Coverage struct {
+	ScriptRequests  int64   `json:"script_requests"`
+	GPCRequests     int64   `json:"gpc_requests"`
+	UnmeasuredShare *string `json:"unmeasured_share"`
+}
+
+// WeeklyActive is the weekly active accounts over the iso weeks that lie
+// whole inside the period: the mean of the counted weeks as a decimal
+// string, the last counted week, and how many weeks were counted and not.
+type WeeklyActive struct {
+	Average      *string `json:"average"`
+	Latest       *int64  `json:"latest"`
+	WeeksCounted int64   `json:"weeks_counted"`
+	WeeksMissing int64   `json:"weeks_missing"`
 }
 
 // WebDay is one day of the web series. Aggregated is false for a day the
@@ -93,8 +119,10 @@ type WebDay struct {
 	Visits     *int64 `json:"visits"`
 }
 
-// Web is the project's web numbers over the period.
+// Web is the project's web numbers over the period. HasData is false
+// when no page view was counted, so zeros mean no data rather than no use.
 type Web struct {
+	HasData                 bool     `json:"has_data"`
 	Pageviews               int64    `json:"pageviews"`
 	Visitors                int64    `json:"visitors"`
 	Visits                  int64    `json:"visits"`
@@ -109,6 +137,7 @@ type Web struct {
 	GatewayRejected         int64    `json:"gateway_rejected"`
 	Sites                   int64    `json:"sites"`
 	SitesVerified           int64    `json:"sites_verified"`
+	Coverage                Coverage `json:"coverage"`
 	Series                  []WebDay `json:"series"`
 }
 
@@ -127,9 +156,12 @@ type Latency struct {
 	OverTenSeconds bool    `json:"over_10s"`
 }
 
-// API is the project's api numbers over the period.
+// API is the project's api numbers over the period. Lossy is set when a
+// metric row of the period overflowed its route limit, and
+// InfrastructureRequests counts the requests every number leaves out.
 type API struct {
-	Requests    int64    `json:"requests"`
+	HasData                bool     `json:"has_data"`
+	Requests               int64    `json:"requests"`
 	Requests4xx int64    `json:"requests_4xx"`
 	Requests5xx int64    `json:"requests_5xx"`
 	Rate4xx     *string  `json:"rate_4xx"`
@@ -139,8 +171,10 @@ type API struct {
 	P99         Latency  `json:"p99"`
 	Services    int64    `json:"services"`
 	Routes      int64    `json:"routes"`
-	Source      *string  `json:"source"`
-	Series      []APIDay `json:"series"`
+	Source                 *string  `json:"source"`
+	Lossy                  bool     `json:"lossy"`
+	InfrastructureRequests int64    `json:"infrastructure_requests"`
+	Series                 []APIDay `json:"series"`
 }
 
 // OnchainDay is one day of the on-chain series; the numbers are null when
@@ -152,7 +186,8 @@ type OnchainDay struct {
 	Transactions *int64 `json:"transactions"`
 }
 
-// Onchain is the project's ledger activity over the period.
+// Onchain is the project's ledger activity over the period: the numbers
+// and the series count verified ids only.
 type Onchain struct {
 	IDs          int64        `json:"ids"`
 	IDsVerified  int64        `json:"ids_verified"`
@@ -160,6 +195,7 @@ type Onchain struct {
 	Transactions int64        `json:"transactions"`
 	DaysMissing  int64        `json:"days_missing"`
 	TwoWayLink   bool         `json:"two_way_link"`
+	WeeklyActive WeeklyActive `json:"weekly_active_accounts"`
 	Series       []OnchainDay `json:"series"`
 }
 
@@ -274,7 +310,7 @@ func Build(ctx context.Context, tx pgx.Tx, id string, tenant uuid.UUID, from, to
 		GeneratedAt: now.UTC().Truncate(time.Second).Format(time.RFC3339),
 		Methods: Methods{
 			Format: FormatVersion, WebMetrics: WebMetricsVersion, APIMetrics: APIMetricsVersion, Onchain: OnchainVersion,
-			Cohort: CohortVersion, IntegrityRules: integrity.RuleVersion, RouteNormaliser: routenorm.Version, Platform: platform,
+			Cohort: CohortVersion, IntegrityRules: reps[tenant].RuleVersions, RouteNormaliser: routenorm.Version, Platform: platform,
 		},
 		Integrity: Integrity{Grade: ig.Grade, GradedDays: int64(ig.GradedDays), DaysA: int64(ig.DaysA), DaysB: int64(ig.DaysB),
 			DaysC: int64(ig.DaysC), Reasons: []Reason{}},
@@ -285,11 +321,13 @@ func Build(ctx context.Context, tx pgx.Tx, id string, tenant uuid.UUID, from, to
 	}
 	w := v.Web
 	r.Web = Web{
-		Pageviews: w.Pageviews, Visitors: w.Visitors, Visits: w.Visits, Bounces: w.Bounces, TotaltimeSeconds: w.Totaltime,
+		HasData: v.HasWebData, Pageviews: w.Pageviews, Visitors: w.Visitors, Visits: w.Visits, Bounces: w.Bounces, TotaltimeSeconds: w.Totaltime,
 		BounceRate: decimal(w.BounceRate), AvgVisitDurationSeconds: decimal(w.AvgVisitDuration),
 		QuarantinePageviews: w.QuarantinePageviews, QuarantineVisitors: w.QuarantineVisitors,
 		QuarantineShare: decimal(w.QuarantineShare), GatewayRequests: w.IngestRequests, GatewayRejected: w.IngestRejected,
 		Sites: v.Sites.Sites, SitesVerified: v.Sites.SitesVerified, Series: []WebDay{},
+		Coverage: Coverage{ScriptRequests: w.Coverage.ScriptRequests, GPCRequests: w.Coverage.GPCRequests,
+			UnmeasuredShare: decimal(w.Coverage.UnmeasuredShare)},
 	}
 	for _, p := range v.WebSeries {
 		r.Web.Series = append(r.Web.Series, WebDay{Day: p.Day, Aggregated: p.Aggregated, Pageviews: p.Pageviews,
@@ -297,7 +335,7 @@ func Build(ctx context.Context, tx pgx.Tx, id string, tenant uuid.UUID, from, to
 	}
 	a := v.API
 	r.API = API{
-		Requests: a.Requests, Requests4xx: a.Requests4xx, Requests5xx: a.Requests5xx,
+		HasData: v.HasAPIData, Lossy: a.Lossy, InfrastructureRequests: a.InfrastructureRequests, Requests: a.Requests, Requests4xx: a.Requests4xx, Requests5xx: a.Requests5xx,
 		Rate4xx: decimal(a.Rate4xx), Rate5xx: decimal(a.Rate5xx),
 		P50: latency(a.P50Seconds, a.P50Over10s), P95: latency(a.P95Seconds, a.P95Over10s), P99: latency(a.P99Seconds, a.P99Over10s),
 		Services: a.Services, Routes: a.Routes, Source: a.Source, Series: []APIDay{},
@@ -307,7 +345,9 @@ func Build(ctx context.Context, tx pgx.Tx, id string, tenant uuid.UUID, from, to
 	}
 	o := v.Onchain
 	r.Onchain = Onchain{IDs: o.IDs, IDsVerified: o.IDsVerified, Operations: o.Operations, Transactions: o.Transactions,
-		DaysMissing: o.DaysMissing, TwoWayLink: v.LinkTwoWay, Series: []OnchainDay{}}
+		DaysMissing: o.DaysMissing, TwoWayLink: v.LinkTwoWay, Series: []OnchainDay{},
+		WeeklyActive: WeeklyActive{Average: decimal(o.WeeklyActive.Average), Latest: o.WeeklyActive.Latest,
+			WeeksCounted: int64(o.WeeklyActive.WeeksCounted), WeeksMissing: int64(o.WeeklyActive.WeeksMissing)}}
 	for _, p := range v.OnchainSeries {
 		r.Onchain.Series = append(r.Onchain.Series, OnchainDay{Day: p.Day, IDsRead: p.IDsRead, Operations: p.Operations, Transactions: p.Transactions})
 	}

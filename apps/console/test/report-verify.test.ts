@@ -5,6 +5,7 @@
 import { Keypair } from "@stellar/stellar-sdk/base";
 import { describe, expect, it } from "vitest";
 import {
+  CanonicalError,
   canonicalize,
   decodeAccountId,
   SEP53_PREFIX,
@@ -40,6 +41,15 @@ describe("rfc 8785 canonical form", () => {
     expect(canonicalize(9007199254740991)).toBe("9007199254740991");
     expect(() => canonicalize(1.5)).toThrow();
     expect(() => canonicalize(2 ** 53)).toThrow();
+    // a number counts by its value, as in the cli: both write 12345
+    expect(canonicalize(JSON.parse("[12345.0, 1.2345e4, 1E3]"))).toBe("[12345,12345,1000]");
+  });
+
+  it("refuses a lone surrogate, as the cli does, and keeps a pair", () => {
+    expect(canonicalize(JSON.parse('"\\ud83d\\ude00"'))).toBe('"\u{1F600}"');
+    for (const raw of ['"\\ud800"', '"\\udc00"', '"a\\ud800b"', '{"\\udfff":1}']) {
+      expect(() => canonicalize(JSON.parse(raw))).toThrow(CanonicalError);
+    }
   });
 });
 

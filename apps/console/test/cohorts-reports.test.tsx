@@ -6,6 +6,7 @@ import { createHash, generateKeyPairSync, sign, webcrypto } from "node:crypto";
 import { act } from "react";
 import { Outlet } from "react-router";
 import { describe, expect, it, vi } from "vitest";
+import { reportDocument } from "@/api/reports";
 import { OperatorCohortPanel } from "@/components/cohort";
 import { canonicalize, crc16xmodem } from "@/lib/report-verify";
 import { withCohort } from "@/pages/enroll";
@@ -357,14 +358,37 @@ const document = {
   rules_met: [],
 };
 
-function publicBody(report: Record<string, unknown>, signer = SIGNER) {
+// format version 2: the rule versions that graded the period, coverage,
+// has_data, lossy, infrastructure requests and weekly active accounts
+const documentV2 = {
+  ...document,
+  version: 2,
+  methods: { ...document.methods, format: 2, integrity_rules: [1, 2] },
+  web: {
+    ...document.web,
+    has_data: true,
+    coverage: { script_requests: 6000, gpc_requests: 600, unmeasured_share: "0.100000" },
+  },
+  api: { ...document.api, has_data: false, lossy: false, infrastructure_requests: 12 },
+  onchain: {
+    ...document.onchain,
+    weekly_active_accounts: {
+      average: "14.500000",
+      latest: 15,
+      weeks_counted: 2,
+      weeks_missing: 2,
+    },
+  },
+};
+
+function publicBody(report: Record<string, unknown>, signer = SIGNER, signed: unknown = document) {
   return {
     id: "abcdefghijklmnopqrstuvwxyz",
     url: "https://app.veristar.example/r/abcdefghijklmnopqrstuvwxyz",
     created_at: "2026-11-16T09:00:00Z",
     file: {
       report,
-      signature: { scheme: "sep-53", signer, value: sep53(canonicalize(document)) },
+      signature: { scheme: "sep-53", signer, value: sep53(canonicalize(signed)) },
     },
     keys: {
       current: SIGNER,
@@ -396,6 +420,20 @@ describe("the public report page (contract 20.5)", () => {
     expect(host.textContent).not.toContain(EM_DASH);
   });
 
+  it("reads a version 2 report and still a stored version 1 report", async () => {
+    withCrypto();
+    expect(reportDocument.safeParse(document).success).toBe(true);
+    expect(reportDocument.safeParse(documentV2).success).toBe(true);
+    // a version 2 report without its new members is not a version 2 report
+    const { coverage: _, ...webWithout } = documentV2.web;
+    expect(reportDocument.safeParse({ ...documentV2, web: webWithout }).success).toBe(false);
+    stubFetch([{ status: 200, body: publicBody(documentV2, SIGNER, documentV2) }]);
+    const host = await renderRoutes(publicRoute, "/r/abcdefghijklmnopqrstuvwxyz");
+    await waitFor(() => expect(host.querySelector("[data-verdict=verified]")).not.toBeNull());
+    expect(host.textContent).toContain("4,321");
+    expect(host.textContent).toContain("1, 2");
+  });
+
   it("says a changed report is not valid", async () => {
     withCrypto();
     const tampered = { ...document, web: { ...document.web, visitors: 9999 } };
@@ -403,6 +441,9 @@ describe("the public report page (contract 20.5)", () => {
     const host = await renderRoutes(publicRoute, "/r/abcdefghijklmnopqrstuvwxyz");
     await waitFor(() => expect(host.querySelector("[data-verdict=invalid]")).not.toBeNull());
     expect(host.textContent).toContain("the signature does not match the report");
+    // none of the changed figures is shown next to the verdict
+    expect(host.textContent).not.toContain("9,999");
+    expect(host.textContent).not.toContain("Stellar DEX");
   });
 
   it("shows a revoked or unknown link as not available", async () => {

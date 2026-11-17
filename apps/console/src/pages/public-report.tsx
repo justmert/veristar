@@ -21,8 +21,10 @@ import { downloadFile } from "./reports";
 
 // the public page of a signed usage report (contract 20.5): anyone with the
 // link reads the report and this browser checks its signature itself, from
-// the canonical bytes of the report and the platform's published keys. no
-// account is needed and no number is taken on the server's word.
+// the canonical bytes of the report, against the keys this console
+// publishes. no account is needed, and the numbers show only once the
+// signature holds. the key list comes from the same server as the report,
+// so the page points to an offline check of the downloaded file too.
 export function PublicReportPage() {
   const { reportId = "" } = useParams();
   const q = useQuery(publicReportQuery(reportId));
@@ -69,7 +71,9 @@ export function ReportView({ r }: { r: PublicReport }) {
   return (
     <>
       <VerdictPanel verdict={verdict} r={r} />
-      {parsed.success ? (
+      {/* a report whose signature does not hold, or is still being checked,
+          shows no figure: the reader would take it for a signed one */}
+      {!verdict?.ok ? null : parsed.success ? (
         <ReportBody doc={parsed.data} />
       ) : (
         <StateBlock kind="error" title="This report has a layout this page does not know">
@@ -312,7 +316,9 @@ function ReportBody({ doc }: { doc: ReportDocument }) {
           <Fact label="API metrics">{doc.methods.api_metrics}</Fact>
           <Fact label="On-chain">{doc.methods.onchain}</Fact>
           <Fact label="Cohort method">{doc.methods.cohort}</Fact>
-          <Fact label="Integrity rules">{doc.methods.integrity_rules}</Fact>
+          <Fact label="Integrity rules">
+            {[doc.methods.integrity_rules].flat().join(", ") || "none graded"}
+          </Fact>
           <Fact label="Route normaliser">{doc.methods.route_normaliser}</Fact>
           <Fact label="Platform">{doc.methods.platform}</Fact>
         </Grid>

@@ -16,7 +16,7 @@ A report file is one JSON object with two members:
 
 ```json
 {
-  "report": { "format": "veristar-usage-report", "version": 1, "...": "..." },
+  "report": { "format": "veristar-usage-report", "version": 2, "...": "..." },
   "signature": {
     "scheme": "sep-53",
     "signer": "GDG7D3Z267FHK3JHVPXF5SHTSQFEDLWYKEI5ECMSLDGKJUXPXZOJGF7O",
@@ -42,7 +42,10 @@ The message is `report` written in the JSON Canonicalization Scheme,
 - `true`, `false`, `null` as written.
 
 A report holds no fractional number. Every number is an integer between -(2^53 - 1) and
-2^53 - 1, which every JCS implementation writes as the same decimal digits, and every ratio,
+2^53 - 1, which every JCS implementation writes as the same decimal digits. A verifier reads a
+number by its value, as RFC 8785 does: `12345.0` and `1.2345e4` both stand for `12345`, and a
+value that is not such an integer is refused. A string holding a lone UTF-16 surrogate escape (such
+as `"\ud800"` without its pair) is refused too, since it is no character; and every ratio,
 share, percentile and latency is a decimal string with six digits after the point, such as
 `"0.166667"`. So any RFC 8785 library in any language reproduces the signed bytes exactly. The
 `report` member of a file Veristar serves is already in this form.
@@ -51,23 +54,36 @@ share, percentile and latency is a decimal string with six digits after the poin
 
 | Member | Content |
 |---|---|
-| `format`, `version` | `veristar-usage-report`, `1` |
+| `format`, `version` | `veristar-usage-report`, `2` (reports created before format version 2 carry `1`; see below) |
 | `id` | the report's id, also the last part of its link |
 | `issuer` | `name`, `console` (the console origin), `stellar_toml` (where the keys are published), `signing_key` (the signer, which must equal `signature.signer`) |
 | `project` | `id`, `slug`, `name` |
 | `period` | `from`, `to` (UTC days, both included, `to` at least four days before the day the report was made), `days` |
 | `generated_at` | RFC 3339 UTC time of generation |
-| `methods` | the version of every definition behind the numbers: `format`, `web_metrics`, `api_metrics`, `onchain`, `cohort`, `integrity_rules`, `route_normaliser`, and `platform`, the release that made the report |
-| `web` | primary-band totals (page views, visitors, visits, bounces, total visit seconds, bounce rate, average visit seconds), the quarantine band, gateway requests and rejections, sites and verified sites, and a daily series |
-| `api` | requests, 4xx and 5xx with their rates, p50, p95 and p99 latency, services, routes, source, and a daily series |
-| `onchain` | declared ids and verified ids; operations, transactions, days not read and a daily series of the verified ids only; the two-way stellar.toml link |
+| `methods` | the version of every definition behind the numbers: `format`, `web_metrics`, `api_metrics`, `onchain`, `cohort`, `integrity_rules` (the list of integrity rule versions that graded the period's site days, ascending, empty without a graded day), `route_normaliser`, and `platform`, the release that made the report |
+| `web` | `has_data` (false when no page view was counted, so the zeros mean no data), primary-band totals (page views, visitors, visits, bounces, total visit seconds, bounce rate, average visit seconds), the quarantine band, gateway requests and rejections, sites and verified sites, `coverage` (tracker file requests, those that sent Global Privacy Control, and the estimated share of visits not measured because of it), and a daily series |
+| `api` | `has_data`, requests, 4xx and 5xx with their rates, p50, p95 and p99 latency, services, routes, source, `lossy` (a metric row of the period overflowed its route limit), `infrastructure_requests` (the requests every number leaves out), and a daily series |
+| `onchain` | declared ids and verified ids; operations, transactions, days not read and a daily series of the verified ids only; the two-way stellar.toml link; `weekly_active_accounts` (`average` over the counted ISO weeks that lie whole inside the period, `latest`, `weeks_counted`, `weeks_missing`) |
 | `integrity` | the grade over the period, its graded site days per grade, and every reason with its plain language text |
 | `cohort` | the confirmed program, round, category and award date, the population of the percentiles, its size, and for visitors, page views, requests, error rate and on-chain operations the value, the previous period's value, the change and the percentile |
 | `rules_met` | the operators' saved threshold rules the project met on the generation day |
 
 The numbers are the ones the operator views and "What SCF sees" show for the same period:
-the report reads them with the same SQL. A report holds aggregates only; no visitor, address,
+the report reads them with the same SQL, and it holds every figure that page shows: the coverage
+estimate, whether web and API data exist, whether API metrics were lossy, the infrastructure
+requests left out, and the weekly active accounts. A report holds aggregates only; no visitor, address,
 user agent or member of the project is in it.
+
+### Format versions
+
+| Version | Layout |
+|---|---|
+| `2` | the current layout above |
+| `1` | reports created before format version 2: `methods.integrity_rules` is a single number, the rule version the jobs applied when the report was made, which is not necessarily the version that graded every day of the period; `web.has_data`, `web.coverage`, `api.has_data`, `api.lossy`, `api.infrastructure_requests` and `onchain.weekly_active_accounts` are absent |
+
+A stored report never changes, so a version 1 report keeps its layout and still verifies: the
+signature covers its own bytes, and the checks below read only members both versions share. A
+reader of the numbers reads `version` first.
 
 Method versions, version 1:
 

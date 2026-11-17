@@ -3688,7 +3688,7 @@ operators read every project's under `cp_operator`; both get the same report.
 
 ```json
 {
-  "tenant_id": "uuid", "from": "2026-11-01", "to": "2026-11-30", "rule_version": 2,
+  "tenant_id": "uuid", "from": "2026-11-01", "to": "2026-11-30", "rule_version": 2, "rule_versions": [1, 2],
   "grade": "B", "graded_days": 30, "days_a": 22, "days_b": 6, "days_c": 2,
   "coverage": { "script_requests": 4200, "gpc_requests": 504, "unmeasured_share": 0.12 },
   "reasons": [
@@ -3730,7 +3730,9 @@ operators read every project's under `cp_operator`; both get the same report.
   `framed_share` and `never_visible_share` (rule version 2), `proof_failures`,
   `page_volume`, `too_little_traffic`. `rule_version` of a day is the version
   that graded it; the report's `rule_version` is the version the jobs apply
-  now. `level` is the grade
+  now, and its `rule_versions` lists the versions that graded the range's
+  graded days, ascending (empty without one). A stored grade is never
+  re-derived under a newer version. `level` is the grade
   the reason caps the day at (`B`, `C`) or `none`. `value` and `limit` are the
   observed figure and the threshold it crossed (a share from 0 to 1, a count
   or a factor). `text` is the plain language form; the same text reaches the
@@ -3836,7 +3838,9 @@ route sets or edits it. The project overview and "What SCF sees" link to a
 new issue on the **Integrity appeal** form of the public tracker
 (`.github/ISSUE_TEMPLATE/integrity-appeal.yml`), with the fields `project`
 (slug), `period`, `grade`, `sites` (domain and grade per site), `reasons`
-(code, level and day count) and `rule_version` filled in from 17.2, and no
+(code, level and day count) and `rule_version` (the versions in
+`rule_versions` that graded the period, comma separated; the current
+version when no day was graded) filled in from 17.2, and no
 personal or visitor data. Operators answer and decide on the issue; the
 stored grade does not change.
 
@@ -4284,6 +4288,14 @@ format, the canonical form and offline verification are in
 **Summary**: `id`, `url` (`https://app.<BASE_DOMAIN>/r/<id>`), `from`, `to`,
 `signer`, `created_at`, `created_by`, `revoked_at`, `view_count`,
 `last_viewed_at`. **Detail** adds `file`, the signed file of 20.3.
+
+A new report is format version 2 (its members are in
+[usage-reports.md](usage-reports.md)): `methods.integrity_rules` lists the
+rule versions that graded the period, and it carries the figures "What SCF
+sees" shows next to the counts: the web coverage estimate, `has_data` of web
+and API, `lossy` and `infrastructure_requests` of the API, and the weekly
+active accounts. A stored version 1 report keeps its layout and verifies as
+before.
 
 - The period is UTC days, both included, at most 366 days, `from` not after
   `to`: 422 `validation_failed` otherwise.

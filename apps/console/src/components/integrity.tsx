@@ -229,7 +229,11 @@ export function IntegrityPanel({
           {title}
         </span>
       }
-      description={`UTC days ${report.from} to ${report.to}, rule set ${report.rule_version}.`}
+      description={`UTC days ${report.from} to ${report.to}, ${
+        report.rule_versions.length > 1
+          ? `graded under rule sets ${report.rule_versions.join(" and ")}`
+          : `rule set ${report.rule_versions[0] ?? report.rule_version}`
+      }.`}
       actions={
         <span className="inline-flex flex-wrap items-center gap-3">
           <GradeBadge grade={report.grade} />
