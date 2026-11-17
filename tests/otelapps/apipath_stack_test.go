@@ -39,6 +39,7 @@ import (
 	"github.com/justmert/veristar/internal/natsx"
 	"github.com/justmert/veristar/tests/fixtures/githuboauth"
 	"github.com/justmert/veristar/tests/fixtures/natsctr"
+	"github.com/justmert/veristar/tests/fixtures/otelcolcfg"
 	"github.com/justmert/veristar/tests/fixtures/umamictr"
 )
 
@@ -312,7 +313,10 @@ func startAPIStack(t *testing.T) *apiStack {
 
 	// the collector binary
 	s.httpAddr, s.grpcAddr, s.health = ports[2], ports[3], ports[4]
-	s.collector = exec.Command(bin, "--config", filepath.Join(root, "collector", "otelcol.yaml"))
+	// the suite never reads the collector's own metrics, so it does not
+	// need their fixed port 8888, which another collector on the host may hold
+	s.collector = exec.Command(bin, "--config", filepath.Join(root, "collector", "otelcol.yaml"),
+		"--config", otelcolcfg.NoSelfMetrics(t))
 	s.collector.Env = []string{
 		"NATS_URL=" + ns.URL,
 		"NATS_USER=" + natsx.ServiceCollector,
