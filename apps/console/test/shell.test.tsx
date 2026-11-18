@@ -124,10 +124,10 @@ describe("console shell", () => {
     await waitFor(() => expect(current(host)).toEqual(["Account"]));
   });
 
-  it("shows one slim alert line on operator pages while a paging alert fires", async () => {
+  it("shows the alert note on operator pages while a paging alert fires", async () => {
     serve(f.operatorMeBody, [critical]);
     const host = await renderRoutes(routes, "/operator/projects");
-    await waitFor(() => expect(host.textContent).toContain("A critical alert is firing."));
+    await waitFor(() => expect(host.textContent).toContain("1 critical alert is firing."));
     const open = [...host.querySelectorAll("a")].find((a) => a.textContent === "Open alerts");
     expect(open?.getAttribute("href")).toBe("/operator/alerts");
     expect(current(host)).toEqual(["Projects"]);
@@ -135,11 +135,11 @@ describe("console shell", () => {
     const alerts = [...host.querySelectorAll("aside a")].find((a) =>
       a.textContent?.startsWith("Alerts"),
     );
-    await waitFor(() => expect(alerts?.textContent).toBe("Alerts1 alert firing"));
+    await waitFor(() => expect(alerts?.textContent).toBe("Alerts11 critical alert firing"));
     const review = [...host.querySelectorAll("aside a")].find((a) =>
       a.textContent?.startsWith("Review"),
     );
-    await waitFor(() => expect(review?.textContent).toBe("Review1 project waits for review"));
+    await waitFor(() => expect(review?.textContent).toBe("Review11 project waits for review"));
   });
 
   it("reads no operator data outside the operator area", async () => {

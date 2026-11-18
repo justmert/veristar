@@ -84,6 +84,41 @@ export function Pill({
   );
 }
 
+// a count on a nav item or a button (projects waiting, alerts firing): one
+// shape for every count, tinted by what it means. the words for a screen
+// reader go in `label`
+export function CountBadge({
+  tone,
+  label,
+  children,
+  className,
+}: {
+  tone: "neutral" | "warning" | "critical";
+  label: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <span
+      data-tone={tone}
+      className={cn(
+        "inline-flex h-5 min-w-5 shrink-0 items-center justify-center gap-1 rounded-full border px-1 text-axis font-medium tabular",
+        tone === "critical"
+          ? "border-critical-line bg-critical-soft text-critical"
+          : tone === "warning"
+            ? "border-warning-line bg-warning-soft text-warning"
+            : "border-line-strong bg-selected text-fg",
+        className,
+      )}
+    >
+      <span aria-hidden className="inline-flex items-center [&_svg]:size-3">
+        {children}
+      </span>
+      <span className="sr-only">{label}</span>
+    </span>
+  );
+}
+
 // the status vocabulary of the console: one word and tone per status, used
 // by StatusBadge (status-badge.tsx) and wherever a status is said in text.
 // the tones: success when it works (active, verified, set up), warning when

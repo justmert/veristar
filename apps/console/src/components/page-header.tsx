@@ -11,14 +11,19 @@ export type Freshness = {
   cadence?: string;
 };
 
-// the title row of every console page: what the page answers, one line of
-// purpose when the title is not enough, the freshness of its numbers, and
-// the page's actions. the one primary action (the accent button) goes in
-// `primary`; everything else in `secondary`. no tabs: the sidebar lists
-// every page.
+// the title row of every console page, one anatomy everywhere: the title,
+// one line of purpose, the facts of the object as a key-value row, the
+// freshness of its numbers, and the actions pinned top right. the one
+// primary action (the accent button) goes in `primary`; everything else in
+// `secondary`. no tabs: the sidebar lists every page.
+//
+// `freshness`: leave it out on a page without numbers. `null` while the
+// numbers load (or failed) keeps the line's height, so nothing moves when
+// the time arrives.
 export function PageHeader({
   title,
   description,
+  details,
   freshness,
   primary,
   secondary,
@@ -27,6 +32,8 @@ export function PageHeader({
 }: {
   title: ReactNode;
   description?: ReactNode;
+  // facts of the object the page is about (slug, owner, since)
+  details?: { label: string; value: ReactNode }[];
   freshness?: Freshness | null;
   primary?: ReactNode;
   secondary?: ReactNode;
@@ -34,18 +41,45 @@ export function PageHeader({
   meta?: ReactNode;
   className?: string;
 }) {
+  const actions = primary || secondary;
   return (
-    <header className={cn("flex flex-wrap items-start justify-between gap-x-6 gap-y-3", className)}>
+    <header
+      className={cn(
+        "grid gap-x-6 gap-y-3",
+        actions && "sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start",
+        className,
+      )}
+    >
       <div className="flex min-w-0 flex-col gap-1">
         <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-          <h1 className="min-w-0 text-heading break-words text-fg">{title}</h1>
+          {/* a long title stops at two lines; the full title is its tooltip */}
+          <h1
+            className="line-clamp-2 min-w-0 text-heading break-words text-fg"
+            title={typeof title === "string" ? title : undefined}
+          >
+            {title}
+          </h1>
           {meta}
         </div>
         {description ? <p className="max-w-prose text-body text-fg-2">{description}</p> : null}
-        {freshness ? <FreshnessLine freshness={freshness} /> : null}
+        {details?.length ? (
+          <dl className="flex flex-wrap gap-x-6 gap-y-1 text-small">
+            {details.map((d) => (
+              <div key={d.label} className="flex min-w-0 gap-2">
+                <dt className="text-fg-2">{d.label}</dt>
+                <dd className="min-w-0 break-words text-fg">{d.value}</dd>
+              </div>
+            ))}
+          </dl>
+        ) : null}
+        {freshness ? (
+          <FreshnessLine freshness={freshness} />
+        ) : freshness === null ? (
+          <span aria-hidden className="h-4" data-freshness-pending="" />
+        ) : null}
       </div>
-      {primary || secondary ? (
-        <div className="flex flex-wrap items-center gap-2 max-sm:w-full [&>*]:max-sm:h-(--vs-control-touch)">
+      {actions ? (
+        <div className="flex flex-wrap items-center gap-2 max-sm:w-full sm:justify-end [&>*]:max-sm:h-(--vs-control-touch)">
           {secondary}
           {primary}
         </div>
