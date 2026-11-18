@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@veristar/brand/cn";
-import { ChevronRight, ExternalLink, ShieldCheck } from "lucide-react";
+import { ExternalLink, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { integrityQuery, operatorTenantQuery } from "@/api/queries";
 import type {
@@ -129,10 +129,9 @@ function SiteDays({ site, name }: { site: IntegritySite; name: string }) {
   const days = [...site.days].reverse();
   return (
     <Disclosure
+      variant="row"
       data-site={site.site_id}
-      className="rounded-md bg-sunken"
-      summaryClassName="flex-wrap gap-x-3 gap-y-1 rounded-md px-3 text-small font-normal"
-      bodyClassName="p-0"
+      summaryClassName="flex-wrap gap-x-3 gap-y-1"
       summary={
         <>
           <span className="min-w-0 truncate text-small font-medium text-fg">{name}</span>
@@ -141,9 +140,9 @@ function SiteDays({ site, name }: { site: IntegritySite; name: string }) {
         </>
       }
     >
-      <ol className="flex flex-col divide-y divide-line">
+      <ol className="flex flex-col divide-y divide-line-subtle">
         {days.map((d) => (
-          <li key={d.day} className="flex flex-col gap-2 px-3 py-2" data-day={d.day}>
+          <li key={d.day} className="flex flex-col gap-2 py-2 first:pt-0" data-day={d.day}>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <span className="text-small font-medium text-fg tabular">
                 {formatDate(`${d.day}T00:00:00Z`)}
@@ -199,31 +198,32 @@ function SiteList({
   // a few sites stay one row each; the group starts where rows repeat
   const group = idle.length >= 3;
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col divide-y divide-line-subtle border-y border-line-subtle">
       {(group ? graded : sites).map((s) => (
         <SiteDays key={s.site_id} site={s} name={nameOf(s)} />
       ))}
       {group ? (
-        <details className="group rounded-md border border-line bg-sunken" data-sites-idle>
-          <summary className="flex cursor-pointer list-none flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 focus-ring [&::-webkit-details-marker]:hidden">
-            <ChevronRight
-              aria-hidden
-              className="size-4 text-fg-3 transition-transform duration-(--vs-duration-press) ease-standard group-open:rotate-90"
-            />
-            <span className="text-small font-medium text-fg">{formatCount(idle.length)} sites</span>
-            <GradeBadge grade={null} />
-            <span className="text-caption text-fg-3">
-              No site day with enough traffic for a grade in this range.
-            </span>
-          </summary>
-          <ul className="flex flex-col gap-1 border-t border-line px-3 py-2 text-small text-fg-2">
+        <Disclosure
+          variant="row"
+          data-sites-idle=""
+          summaryClassName="flex-wrap gap-x-3 gap-y-1"
+          summary={
+            <>
+              <span className="text-small font-medium text-fg">
+                {formatCount(idle.length)} sites
+              </span>
+              <GradeBadge grade={null} />
+            </>
+          }
+        >
+          <ul className="flex flex-col gap-1 text-small text-fg-2">
             {idle.map((s) => (
               <li key={s.site_id} data-site={s.site_id} className="break-words">
                 {nameOf(s)}
               </li>
             ))}
           </ul>
-        </details>
+        </Disclosure>
       ) : null}
     </div>
   );

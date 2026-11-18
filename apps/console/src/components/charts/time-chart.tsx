@@ -3,6 +3,12 @@
 // partial periods hatched with a legend entry, a readout of exact values on
 // hover and on the arrow keys, and a table view, so no value depends on
 // hovering or on colour. one y axis only.
+//
+// sparse data: a chart whose data covers one bucket (a new project, only
+// today) is not drawn as an axis with one bar at its edge. it shows the
+// value at its time instead, as a compact first data state. a line that
+// starts inside the range starts at its first value, not with a rise from
+// the zeros before it.
 
 import { cn } from "@veristar/brand/cn";
 import { fade, transition } from "@veristar/brand/motion";
@@ -158,8 +164,36 @@ export type TimeChartProps = {
   // false leaves out the series and partial legend, for a group of charts
   // that shares one legend on the page
   legend?: boolean;
+  // lines: the zeros before a series' first value are a gap (the series
+  // starts in the range), so the line does not rise from 0. "keep" draws
+  // them, for a rate whose zero is a real reading from the first bucket
+  leadingZeros?: "gap" | "keep";
   className?: string;
 };
+
+// the buckets that hold data: a bar above zero, a line with a value
+export function dataBuckets(
+  kind: "bar" | "line",
+  series: { values: (number | null)[] }[],
+  n: number,
+): number[] {
+  const out: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const has = series.some((s) => {
+      const v = s.values[i];
+      return v !== null && v !== undefined && (kind === "line" || v > 0);
+    });
+    if (has) out.push(i);
+  }
+  return out;
+}
+
+// a line's values with the zeros before its first non-zero value as gaps
+export function trimLeadingZeros(values: (number | null)[]): (number | null)[] {
+  const first = values.findIndex((v) => v !== null && v !== undefined && v !== 0);
+  if (first <= 0) return values;
+  return values.map((v, i) => (i < first && v === 0 ? null : v));
+}
 
 export function TimeChart({
   title,
@@ -186,6 +220,7 @@ export function TimeChart({
   height = 200,
   actions,
   legend = true,
+  leadingZeros = "gap",
   className,
 }: TimeChartProps) {
   const [showPrev, setShowPrev] = useState(true);
@@ -196,8 +231,18 @@ export function TimeChart({
   const uid = useId().replace(/:/g, "");
   const H = height;
   const n = buckets.length;
+  if (kind === "line" && leadingZeros === "gap")
+    series = series.map((s) => ({ ...s, values: trimLeadingZeros(s.values) }));
   const noComplete = state === "data" && n > 0 && buckets.every((b) => b.partial);
-  const view: ChartState | "no-complete" = noComplete ? "no-complete" : state;
+  // one bucket with data and nothing to compare it with: the first data
+  const filled = state === "data" ? dataBuckets(kind, series, n) : [];
+  const prevHasData = (previous ?? []).some((v) => v !== null && v !== undefined && v > 0);
+  const first = n > 1 && filled.length === 1 && !prevHasData ? (filled[0] ?? null) : null;
+  const view: ChartState | "no-complete" | "first" = noComplete
+    ? "no-complete"
+    : first !== null
+      ? "first"
+      : state;
   const hasPrev = view === "data" && !!previous && previous.length > 0;
   const hasPartial = view === "data" && buckets.some((b) => b.partial);
   const Heading = headingLevel === 2 ? "h2" : "h3";
@@ -337,7 +382,7 @@ export function TimeChart({
               {previousLabel}
             </Button>
           ) : null}
-          {view === "data" ? (
+          {view === "data" || view === "first" ? (
             <Button
               type="button"
               variant="ghost"
@@ -404,6 +449,21 @@ export function TimeChart({
               <EmptyState compact title={noCompleteTitle}>
                 {noCompleteText}
               </EmptyState>
+            </motion.div>
+          ) : view === "first" && !asTable && first !== null ? (
+            <motion.div key="first" {...fade}>
+              <FirstData
+                bucket={buckets[first]}
+                rows={series
+                  .filter((s) => s.values[first] !== null && s.values[first] !== undefined)
+                  .map((s) => ({
+                    key: s.key,
+                    label: s.label,
+                    tone: s.tone,
+                    value: show(s.values[first]),
+                  }))}
+                named={series.length > 1}
+              />
             </motion.div>
           ) : asTable ? (
             <motion.div key="table" {...fade} className="max-h-80 overflow-y-auto">
@@ -721,6 +781,36 @@ export function TimeChart({
         </AnimatePresence>
       </div>
     </section>
+  );
+}
+
+// the first data of a series: its time and its value, no axis
+function FirstData({
+  bucket,
+  rows,
+  named,
+}: {
+  bucket: TimeBucket | undefined;
+  rows: { key: string; label: string; tone: SeriesTone; value: string }[];
+  named: boolean;
+}) {
+  return (
+    <div data-first-data={bucket?.at ?? ""} className="flex flex-col gap-2 py-2">
+      <span className="text-caption text-fg-2">{bucket?.label}</span>
+      <dl className="flex flex-wrap items-end gap-x-8 gap-y-3">
+        {rows.map((r) => (
+          <div key={r.key} className="flex min-w-0 flex-col gap-1">
+            <dt
+              className={cn("flex items-center gap-1 text-caption text-fg-2", !named && "sr-only")}
+            >
+              <span aria-hidden className={cn("size-2 rounded-bar", SWATCH[r.tone])} />
+              {r.label}
+            </dt>
+            <dd className="text-heading text-fg tabular">{r.value}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
   );
 }
 

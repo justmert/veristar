@@ -211,3 +211,19 @@ export function routeFetch(
   );
   return calls;
 }
+
+// opens a row menu ("..." button) and picks one of its items by its text
+export async function pickRowAction(host: HTMLElement, rowName: string, item: string) {
+  const trigger = host.querySelector<HTMLElement>(`button[aria-label="Actions for ${rowName}"]`);
+  if (!trigger) throw new Error(`no row menu for ${rowName}`);
+  await act(async () => {
+    trigger.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0 }));
+  });
+  const el = [...document.querySelectorAll<HTMLElement>("[role=menuitem]")].find(
+    (m) => m.textContent === item,
+  );
+  if (!el) throw new Error(`no menu item ${item}`);
+  await act(async () => {
+    el.click();
+  });
+}
