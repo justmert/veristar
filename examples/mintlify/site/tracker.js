@@ -4,8 +4,8 @@
 // integrity value. the tracker then counts every page change on its own.
 // docs:start tracker
 const tracker = document.createElement("script");
-tracker.src = "https://in.analytics.example/v/1.3.2/sdk.js";
-tracker.integrity = "sha384-Q2xIA5ztfj7VBlpI/+6kehWQVUC2jZPr89aAooy7Uinc/V2C0VF7Ti66L3gj6D/v";
+tracker.src = "https://in.analytics.example/v/1.4.0/sdk.js";
+tracker.integrity = "sha384-8bYExYW1FMGfNg5LETdGYFjtJPLfyY+gJQwWA0rL5xNM7Xl+3wK99GxSV3+siv/A";
 tracker.crossOrigin = "anonymous";
 tracker.dataset.websiteId = "3f6a0c2e-9b1d-4e7a-8c5f-1d2e3f4a5b6c";
 document.head.appendChild(tracker);

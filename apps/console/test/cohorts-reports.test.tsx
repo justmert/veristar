@@ -407,6 +407,7 @@ const documentV3 = {
   methods: { ...documentV2.methods, format: 3, onchain: 2 },
   onchain: {
     ...documentV2.onchain,
+    counts_reason: null,
     contracts: [
       {
         strkey: FN_CONTRACT,
@@ -518,6 +519,40 @@ describe("the public report page (contract 20.5)", () => {
     expect(host.textContent).toContain("15 a week on average over 2 weeks, 2 missing");
   });
 
+  it("leaves out version 3 on-chain counts that measured nothing, never as zero", async () => {
+    withCrypto();
+    const unread = {
+      ...documentV3,
+      onchain: {
+        ...documentV3.onchain,
+        operations: null,
+        transactions: null,
+        days_missing: null,
+        counts_reason: "nothing_read",
+        series: [{ day: "2026-10-01", ids_read: 0, operations: null, transactions: null }],
+        contracts: [],
+      },
+    };
+    expect(reportDocument.safeParse(unread).success).toBe(true);
+    // the reason is part of version 3: a null count without it is refused
+    const { counts_reason: _, ...withoutReason } = unread.onchain;
+    expect(reportDocument.safeParse({ ...unread, onchain: withoutReason }).success).toBe(false);
+    // version 2 keeps numbers
+    expect(
+      reportDocument.safeParse({
+        ...documentV2,
+        onchain: { ...documentV2.onchain, operations: null },
+      }).success,
+    ).toBe(false);
+    stubFetch([{ status: 200, body: publicBody(unread, SIGNER, unread) }]);
+    const host = await renderRoutes(publicRoute, "/r/abcdefghijklmnopqrstuvwxyz");
+    await waitFor(() => expect(host.querySelector("[data-verdict=verified]")).not.toBeNull());
+    expect(host.querySelector("[data-hero=onchain_operations]")).toBeNull();
+    expect(host.textContent).not.toContain("Transactions");
+    expect(host.textContent).not.toContain("Days without data");
+    expect(host.textContent).not.toContain("77");
+  });
+
   it("titles a signature by a key Veristar does not publish as not Veristar's", async () => {
     withCrypto();
     const body = publicBody(document);
@@ -542,10 +577,17 @@ describe("the public report page (contract 20.5)", () => {
     expect(host.textContent).not.toContain("Stellar DEX");
   });
 
-  it("shows a revoked or unknown link as not available", async () => {
+  it("shows an unknown link as not available", async () => {
     stubFetch([{ status: 404, body: c.errorBody("not_found") }]);
     const host = await renderRoutes(publicRoute, "/r/zzzzzzzzzzzzzzzzzzzzzzzzzz");
     await waitFor(() => expect(host.textContent).toContain("This report link is not available"));
+  });
+
+  it("shows a revoked link (410 report_revoked) as not available", async () => {
+    stubFetch([{ status: 410, body: c.errorBody("report_revoked") }]);
+    const host = await renderRoutes(publicRoute, "/r/zzzzzzzzzzzzzzzzzzzzzzzzzz");
+    await waitFor(() => expect(host.textContent).toContain("This report link is not available"));
+    expect(host.textContent).not.toContain("did not load");
   });
 });
 

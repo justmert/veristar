@@ -262,6 +262,7 @@ List routes answer:
 | 409 | `rule_limit` | a threshold rule create beyond 200 rules (19.4) |
 | 409 | `not_reportable` | a usage report of a project the operator views do not list (20.1) |
 | 410 | `tracker_version_revoked` | snippet for a revoked tracker version |
+| 410 | `report_revoked` | public link of a usage report its project revoked (20.3) |
 | 413 | `body_too_large` | body over 64 KiB |
 | 415 | `unsupported_media_type` | see section 1 |
 | 422 | `validation_failed` | field rules, details in `fields` |
@@ -617,7 +618,8 @@ Session.
 ```json
 {
   "user": { "id": "uuid", "github_id": 1234567, "github_login": "octocat", "stellar_address": null,
-            "passkey_address": null, "display_name": "octocat", "is_operator": false },
+            "passkey_address": null, "display_name": "octocat", "is_operator": false,
+            "operator_role": null },
   "tenants": [
     { "id": "uuid", "slug": "stellar-dex", "name": "Stellar DEX", "status": "active", "role": "owner",
       "accepted_terms_version": "2026-11-12-draft.1", "terms_current": true }
@@ -625,6 +627,12 @@ Session.
   "terms": { "current_version": "2026-11-12-draft.1", "status": "draft", "url": "/terms" }
 }
 ```
+
+`user` is the User object (3.1) plus `operator_role`: the role of the account's
+active roster row (5.16), `operator_admin` or `operator`, and `null` when
+`is_operator` is false. An account that matches an active admin row through any
+of its identities is `operator_admin`. The operator admin routes (5.16, 11.1)
+accept exactly the accounts with `operator_admin`.
 
 `tenants` lists every tenant the user is a member of, except `removed`, ordered by
 `name`, unpaginated (a user has few). `terms_current` is
@@ -1501,8 +1509,15 @@ Operator. **200**:
 - `ingest` sums `cp.web_ingest_hourly` over all the tenant's sites for the last 24
   full hours and 30 full days (UTC), non-zero outcomes only.
 - `removal`: `null`, or for a removed tenant
-  `{"requested_at", "requested_by", "keep_aggregates", "completed_at", "steps": {"registry": {"done_at": "..."}, ...}}`
-  from `cp.tenant_removals`.
+  `{"requested_at", "requested_by", "requested_by_login", "requested_by_display_name", "reason", "keep_aggregates", "completed_at", "steps": {"registry": {"done_at": "..."}, ...}}`
+  from `cp.tenant_removals`. `requested_by` is the operator's user id.
+  `requested_by_login` is that account's GitHub login, `null` for an account
+  without one or a deleted account. `requested_by_display_name` is its
+  display name (the login, else the short wallet or passkey address), or
+  `Deleted account` for an account deleted since (4.1.6). Both are `null`
+  when `requested_by` is `null`.
+- `recent_audit`: the last 20 rows of 5.9 for the tenant, with the same
+  display names.
 - `allowed_actions`: the actions of 5.5 valid from the current status, so the
   console shows only those buttons.
 - 404 `not_found` for unknown, malformed or internal ids.
@@ -1701,18 +1716,42 @@ Operator. List envelope of AuditEntry, ordered by `(at desc, id desc)`, under
 
 ```json
 { "id": 1234, "at": "...", "actor": "user:uuid", "actor_login": "octocat",
-  "action": "tenant.suspend", "target": "tenant:uuid",
+  "actor_display_name": "octocat",
+  "action": "tenant.suspend", "target": "tenant:uuid", "target_display_name": "Acme",
   "detail": { "tenant_id": "uuid", "status": { "old": "active", "new": "suspended" }, "reason": "..." } }
 ```
 
 - `id` is the `cp.audit_log` identity (a number). `actor_login` is the
   `github_login` for `user:` actors, else `null`. It is also `null` for the
   actor of a deleted account (4.1.6).
+- `actor_display_name` names a `user:` actor as the console names an
+  account: the GitHub login, else the short form of the wallet or passkey
+  address (`GBRP…OX2H`). It is `Deleted account` for an account deleted
+  since (4.1.6), and `null` for every other actor (`system:<task>`,
+  `public`, `mcp_credential:<id>`).
+- `target_display_name` names the target: the project's name for
+  `tenant:<id>`, the site's name for `site:<id>`, the account's display name
+  for `user:<id>` (as `actor_display_name`), and `Report <from> to <to>`
+  (period dates) for `report:<id>`. The names are read with the row, so a
+  renamed project shows its current name and a removed project or site keeps
+  its name. An object that no longer exists has a fixed placeholder:
+  `Deleted account`, `Deleted project`, `Deleted site` or `Deleted report`
+  (the reports of a removed project are deleted, 5.5). Every other target
+  kind, and an empty target, is `null`.
 - Query filters, all optional and combined with AND: `tenant_id` (rows whose
   `target` is `tenant:<id>` or whose `detail.tenant_id` is `<id>`), `target`
   (exact), `action` (exact, or a prefix ending in `.`, such as `tenant.`),
-  `actor` (exact), `from` and `to` (RFC 3339, `from < to`, at most 400 days
-  apart), `limit`, `cursor`.
+  `actor` (exact), `q` (text search, below), `from` and `to` (RFC 3339,
+  `from < to`, at most 400 days apart), `limit`, `cursor`.
+- `q` (1 to 200 characters) matches case-insensitively, as a substring, and
+  `%` and `_` are plain characters. A row matches when its `action`,
+  `actor`, `target` or `detail` text holds `q`; when its `user:` actor or
+  target is a live account whose GitHub login, wallet address or passkey
+  address holds `q`; when its target is a project whose name or slug holds
+  `q`, or a site whose name or domain holds `q`; or when its
+  `detail.tenant_id` is such a project. A trigram index over the row text
+  (migration 00052) serves the search, and the result pages like any other
+  filter.
 - 400 `invalid_query` for a malformed value.
 
 ### 5.10 Tenant-visible status and reason
@@ -2496,8 +2535,14 @@ Both project lists take these filters; all given filters must hold.
   without a denominator, a percentile without requests) come last in both
   orders. Ties are broken by `id` in the same direction. `name` sorts by
   `lower(name)`.
-- `limit` and `cursor` as 2.3. The envelope adds `from`, `to` and `total`
-  (projects matching the filters): `{"from", "to", "total", "items", "next_cursor"}`.
+- `limit` and `cursor` as 2.3. The envelope adds `from`, `to`, `total`
+  (projects matching the filters) and `read_at`:
+  `{"from", "to", "read_at", "total", "items", "next_cursor"}`. On the web
+  list (8.3), `read_at` is when the hourly aggregation last read a day of
+  the range for a project of the page (`agg.web_daily.read_at`), `null` when
+  none of them has a row. On the API list (8.5) it is the time of the read:
+  the API views read the metric tables live, with minute rows for the hours
+  a rollup has not closed yet (7.2).
 - Sort values are range sums that the hourly task changes, so no keyset
   over them stays stable. The cursor is a position in the sorted list,
   bound to the route, range, filters, sort and order it was made for; any
@@ -2585,10 +2630,13 @@ Operator. Query `tenants` (1 to 5 distinct tenant ids, comma-separated),
 ```json
 {
   "from": "2026-11-01", "to": "2026-11-12",
+  "previous_from": "2026-10-20", "previous_to": "2026-10-31",
+  "read_at": "2026-11-12T14:05:00Z",
   "days": ["2026-11-01", "...", "2026-11-12"],
   "projects": [
     {
       "tenant": { "TenantRef": "..." },
+      "previous_totals": { "...": "the shape of totals" },
       "totals": {
         "pageviews": 0, "visitors": 0, "visits": 0, "bounces": 0, "totaltime": 0,
         "bounce_rate": null, "avg_visit_duration": null,
@@ -2621,6 +2669,13 @@ Operator. Query `tenants` (1 to 5 distinct tenant ids, comma-separated),
   example before a backfill). A day the task read without traffic is
   `aggregated: true` with zeros.
 - `totals` sum the aggregated points; derived values follow 8.3.
+- `previous_from` and `previous_to` name the previous period, the range of
+  the same number of days that ends the day before `from`, and each
+  project's `previous_totals` has the shape of `totals` over it: what a
+  compare of that period answers as `totals`. A project without rows there
+  has zeros and `null` rates.
+- `read_at`: when the aggregation last read a day of the range for one of
+  the compared projects, `null` when none has a row (as on 8.3).
 - `breakdowns`: referrer, country, device, browser and operating system of
   the primary band over the range, the `breakdown_limit` largest keys (ties
   by key), and `total_keys`, the number of distinct keys. For a project with
@@ -2688,10 +2743,12 @@ default, or `asc`). **200**:
 
 ```json
 {
-  "from": "...", "to": "...", "days": ["..."],
+  "from": "...", "to": "...", "previous_from": "...", "previous_to": "...",
+  "read_at": "2026-11-18T14:05:00Z", "days": ["..."],
   "projects": [
     {
       "tenant": { "TenantRef": "..." },
+      "previous_totals": { "...": "the shape of totals" },
       "totals": { "requests": 0, "requests_4xx": 0, "requests_5xx": 0, "rate_4xx": null, "rate_5xx": null,
                   "p50_seconds": null, "p50_over_10s": false, "p95_seconds": null, "p95_over_10s": false,
                   "p99_seconds": null, "p99_over_10s": false,
@@ -2706,6 +2763,9 @@ default, or `asc`). **200**:
 ```
 
 - `totals` equal the project's row of 8.5 for the same range.
+- `previous_from`, `previous_to` and each project's `previous_totals` give
+  the previous period as on 8.4, with the shape of `totals`.
+- `read_at` is the time of the read, as on 8.5.
 - `onchain` (15.7) and `cohort` (19.1) complete each project.
 - `series`: one point per day, the same source choice for every day (made
   over the whole range); a day without requests has 0 requests and `null`
@@ -3981,7 +4041,7 @@ membership only; it takes no tenant list and never names another project.
   "has_web_data": true, "has_api_data": false,
   "web": "the project's row of 8.3 without tenant, site counts and top lists",
   "api": "the project's row of 8.5 without tenant and site counts",
-  "onchain": "Summary of 15.7",
+  "onchain": "Summary of 15.7, with the null counts and counts_reason below",
   "integrity": "the row's grade of 17.3",
   "link_two_way": true,
   "cohort": "CohortRecord of 19.1",
@@ -4000,6 +4060,13 @@ membership only; it takes no tenant list and never names another project.
   project's own row of 19.2 computed in that population.
 - `rules_met` holds every saved rule the project meets when the request is
   answered (19.4), with its evidence.
+- `onchain` is the Summary of 15.7 with one difference: `operations`,
+  `transactions` and `days_missing` are `null` when they measure nothing,
+  and `counts_reason` says why: `no_verified_id` (the project has no
+  verified account or contract) or `nothing_read` (no day of a verified id
+  in the range has a stored row). `counts_reason` is `null` when the three
+  hold numbers, so a `0` always means a read found no activity. The
+  operator lists of 15.7 keep their numbers.
 
 `in_operator_views` is false for an internal project, which the operator
 views do not list; `tenant`, `sites`, `web`, `api`, `onchain` and
@@ -4586,7 +4653,7 @@ evaluation to projects confirmed in it; its fields are optional.
 
 | Route | Does |
 |---|---|
-| `GET /api/operator/rules` | `{"items": [Rule]}`, oldest first |
+| `GET /api/operator/rules` | `{"items": [Rule plus `match_count`, `evaluated`, `matches_as_of`]}`, oldest first (below) |
 | `POST /api/operator/rules` | body: the rule's fields; audit `rule.create`; **201** Rule; 409 `rule_limit` beyond 200 rules |
 | `GET /api/operator/rules/{rule_id}` | the Rule |
 | `PUT /api/operator/rules/{rule_id}` | replaces every field; audit `rule.update` with old and new values; **200** Rule |
@@ -4613,7 +4680,11 @@ evaluation to projects confirmed in it; its fields are optional.
 ```
 
 `items` holds the projects that meet the rule, ordered by name; `days` lists
-each qualifying day with the project's value. The machine API serves the
+each qualifying day with the project's value. In the console list, each Rule
+adds what its matches route answers for today: `match_count` (the number of
+`items`), `evaluated` and `matches_as_of` (today's UTC day). The list reads
+every rule in one snapshot. The machine API's rule list (9.12) carries the
+Rule fields only. The machine API serves the
 same reads at `GET /api/metrics/v1/rules` and
 `GET /api/metrics/v1/rules/{rule_id}/matches` (9.12; with the key rules of
 9.3, a key scoped to one tenant evaluates that tenant only), and MCP at
@@ -4705,8 +4776,11 @@ rule versions that graded the period, and it carries the figures "What SCF
 sees" shows next to the counts: the web coverage estimate, `has_data` of web
 and API, `lossy` and `infrastructure_requests` of the API, the weekly
 active accounts, and the calls per function of each verified contract
-(`onchain.contracts`, 15.9). A stored version 1 or 2 report keeps its layout
-and verifies as before.
+(`onchain.contracts`, 15.9). Its `onchain.operations`,
+`onchain.transactions` and `onchain.days_missing` are `null` with
+`onchain.counts_reason` (`no_verified_id` or `nothing_read`) when they
+measure nothing, as in 16.3. A stored version 1 or 2 report keeps its
+layout, with numbers in those members, and verifies as before.
 
 - The period is UTC days, both included, at most 366 days, `from` not after
   `to`: 422 `validation_failed` otherwise.
@@ -4755,8 +4829,10 @@ Rotation is in the secret rotation runbook.
   step, `reports` (through `cp.purge_usage_reports`, which refuses a tenant
   that is not removed); its links answer 404 from the moment of removal.
 - It reads exactly one row by id under `cp_system`. An unknown or malformed
-  id, a revoked link and a removed project all answer the same 404
-  `not_found`.
+  id and a removed project answer the same 404 `not_found`. A revoked link
+  answers 410 `report_revoked` with the bare error envelope: no project,
+  period, figure or date of the report. A revoked link counts no view and
+  writes no audit row.
 - Every answer increments `view_count` and writes a `report.view` audit row
   without any trait of the reader.
 - Limits: 300 views of one report per hour, and 20 requests per second

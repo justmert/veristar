@@ -223,11 +223,17 @@ export const reportDocumentV2 = reportDocumentV1.extend({
   }),
 });
 
-// version 3: the calls per function of each verified contract
+// version 3: the calls per function of each verified contract, and
+// operations, transactions and days_missing null with counts_reason when
+// they measured nothing
 const v2 = reportDocumentV2.shape;
 export const reportDocumentV3 = reportDocumentV2.extend({
   version: z.literal(3),
   onchain: v2.onchain.extend({
+    operations: count.nullable(),
+    transactions: count.nullable(),
+    days_missing: count.nullable(),
+    counts_reason: z.enum(["no_verified_id", "nothing_read"]).nullable(),
     contracts: z.array(
       z.object({
         strkey: z.string().regex(/^C[A-Z2-7]{55}$/),

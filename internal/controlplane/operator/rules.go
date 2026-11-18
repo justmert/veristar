@@ -142,9 +142,19 @@ func getRule(ctx context.Context, tx pgx.Tx, id uuid.UUID, lock bool) (Rule, err
 
 func ruleID(r *http.Request) (uuid.UUID, error) { return httpx.ParseID(chi.URLParam(r, "rule_id")) }
 
+// RuleListItem is a Rule of GET /api/operator/rules with what its matches
+// route answers today: how many projects meet it and how many it
+// evaluated, as of MatchesAsOf (the utc day of the request).
+type RuleListItem struct {
+	Rule
+	MatchCount  int    `json:"match_count"`
+	Evaluated   int    `json:"evaluated"`
+	MatchesAsOf string `json:"matches_as_of"`
+}
+
 // RuleList is the answer of GET /api/operator/rules.
 type RuleList struct {
-	Items []Rule `json:"items"`
+	Items []RuleListItem `json:"items"`
 }
 
 func (h *Rules) list(w http.ResponseWriter, r *http.Request) error {
@@ -152,11 +162,28 @@ func (h *Rules) list(w http.ResponseWriter, r *http.Request) error {
 		return httpx.BadQuery("this route takes no query parameters")
 	}
 	ctx := r.Context()
-	var out RuleList
+	asOf := utcDay(h.now())
+	out := RuleList{Items: []RuleListItem{}}
 	err := h.db.WithOperator(ctx, func(tx pgx.Tx) error {
-		var err error
-		out.Items, err = ListRules(ctx, tx)
-		return err
+		// one snapshot, so every count reads the same data, as the matches
+		// route of each rule would
+		if err := snapshot(ctx, tx); err != nil {
+			return err
+		}
+		rules, err := ListRules(ctx, tx)
+		if err != nil {
+			return err
+		}
+		for _, rule := range rules {
+			m, err := EvaluateRule(ctx, tx, rule, asOf, nil)
+			if err != nil {
+				return err
+			}
+			out.Items = append(out.Items, RuleListItem{
+				Rule: rule, MatchCount: len(m.meeting().Items), Evaluated: m.Evaluated, MatchesAsOf: m.AsOf,
+			})
+		}
+		return nil
 	})
 	if err != nil {
 		return err

@@ -18,6 +18,37 @@ here, before they take effect, as the processing terms require
 
 ### Added
 
+- The operator web and API lists and compare views carry `read_at`: when
+  the aggregation last read the web data shown, and the time of the read for
+  the API views, which read the metric tables live.
+- The operator compare views (`/api/operator/web/compare`,
+  `/api/operator/api/compare`) add the previous period: `previous_from`,
+  `previous_to` and each project's `previous_totals`, so a one-project view
+  shows its change without a second request.
+- `GET /api/operator/rules` adds to each rule `match_count`, `evaluated` and
+  `matches_as_of`: what the rule's matches route answers today, so the
+  console's rule list shows the counts without one request per rule.
+- `GET /api/me` returns the operator's roster role in `user.operator_role`
+  (`operator_admin`, `operator`, or `null` for an account that is not an
+  operator), so the console shows the admin pages to the accounts the admin
+  routes accept.
+- The operator audit log names who and what each row is about:
+  `actor_display_name` (the GitHub login, or the short wallet or passkey
+  address) and `target_display_name` (the project, site, account or report
+  the row names), read with the row, so a renamed project shows its current
+  name. A deleted account, project, site or report has a fixed placeholder
+  such as `Deleted account`. The tenant detail's `recent_audit` carries the
+  same fields
+  ([contract 5.9](docs/reference/control-plane-api.md#59-get-apioperatoraudit)).
+- `GET /api/operator/audit?q=` searches the audit log on the server: a
+  case-insensitive substring of a row's action, actor, target or detail, or
+  of the login, address, project name or site name the row refers to. It
+  combines with every other filter and pages the same way. A trigram index
+  serves it (migration 00052, which installs the trusted `pg_trgm`
+  extension into its own schema `ext`).
+- The removal object of the operator tenant detail names who asked for the
+  removal: `requested_by_login` and `requested_by_display_name` next to the
+  `requested_by` user id.
 - SCF awards: `platformctl scf import` imports an SCF awards file (tab or
   comma separated, with or without a header row, from a file or standard
   input) and keeps organisation data only; names of people, profiles, links,
@@ -104,6 +135,18 @@ here, before they take effect, as the processing terms require
 
 ### Changed
 
+- What SCF sees and signed usage reports of format version 3 answer
+  `null` for the on-chain `operations`, `transactions` and `days_missing`
+  when they measure nothing, with `counts_reason`: `no_verified_id` (no
+  verified account or contract) or `nothing_read` (no ledger day of a
+  verified id in the range was read). A `0` now always means a read found
+  no activity. The operator lists keep their numbers, and stored version 1
+  and 2 reports keep theirs and still verify
+  ([docs/reference/usage-reports.md](docs/reference/usage-reports.md)).
+- A revoked usage report link answers 410 `report_revoked` with the bare
+  error envelope, so a reader can tell a revoked link from an unknown one,
+  which stays 404 `not_found` with a removed project's links. The answer
+  names nothing of the project, and a revoked link counts no view.
 - The console is redesigned around one page per task. A grouped sidebar (Data, Funding,
   Setup and Team for your project; Work and Admin for operators) and a command palette
   (Ctrl K) take you to any page or project. Pages that showed the same thing in several
@@ -126,11 +169,17 @@ here, before they take effect, as the processing terms require
   Vite dev server, `http://localhost:5173`, which proxies `/api`, so a console started with
   `pnpm --filter ./apps/console dev` signs in. CONTRIBUTING.md lists every step from a
   fresh clone, including `CONTROLPLANE_URL`, which the console dev server requires.
-- Tracker 1.3.2 is the release the console recommends: it counts a redirecting
-  route once, counts the current page when consent is given after
-  single-page navigation, keeps tracked links of client-side routers
-  client-side and never holds a link for more than a second. Pin it in your
-  snippet to get these fixes ([Tracker releases](#tracker-releases)).
+- Tracker 1.4.0 is the release the console recommends: it installs the
+  tracker as `window.veristar` as well, the same object as `window.umami`,
+  so your code can call `veristar.start()` and `veristar.track()`; the
+  `umami.*` calls stay supported. The consent and custom events guides name
+  the `veristar` calls, and the guides pin 1.4.0
+  ([Tracker releases](#tracker-releases)).
+- Tracker 1.3.2 counts a redirecting route once, counts the current page
+  when consent is given after single-page navigation, keeps tracked links
+  of client-side routers client-side and never holds a link for more than a
+  second. Pin 1.3.2 or later in your snippet to get these fixes
+  ([Tracker releases](#tracker-releases)).
 - Terms of use `2026-11-18-draft.6`: SCF also receives, per verified
   contract, UTC day, function and kind of caller, the counts of successful
   and failed calls and of the distinct accounts that made them; the accounts
@@ -170,7 +219,7 @@ here, before they take effect, as the processing terms require
 - Every fixed port of the test suites and example compose files is in the
   27xxx range, outside the Linux ephemeral port range, and `tests/ci` refuses
   a fixed port that returns to it.
-- The onboarding guides and the Mintlify example pin tracker 1.3.2.
+- The onboarding guides and the Mintlify example pin tracker 1.4.0.
 - `ghcr.io/astral-sh/uv` 0.13.8 to 0.13.9 in the Python example, and the
   controller's uv (`scripts/supply-chain/install-tools.sh`) 0.13.7 to 0.13.9.
 - The metrics writer refuses a point that adds more than ten million
@@ -284,6 +333,10 @@ here, before they take effect, as the processing terms require
 
 ### Upgrade notes
 
+- Migration 00052 installs the `pg_trgm` extension, which ships with
+  PostgreSQL's contrib modules (the `postgres` images include it). It is a
+  trusted extension, so the database owner `platform_owner` installs it
+  without a superuser.
 - Web events move from one subject per site to 32 partitions. The rolling
   deploy carries the queue across without losing or repeating an event:
   `nats apply` keeps the old subject and its consumer (now filtered to
@@ -300,7 +353,7 @@ here, before they take effect, as the processing terms require
 - Every project accepts terms of use `2026-11-18-draft.6` at its next
   sign-in; until it does, changes to the project are blocked (403
   `terms_not_accepted`, contract 4.2.6).
-- Tracker 1.3.2 is served next to every earlier release; sites move to it
+- Tracker 1.3.2 and 1.4.0 are served next to every earlier release; sites move to them
   by replacing their tag ([docs/onboarding/web/upgrading.md](docs/onboarding/web/upgrading.md)).
 - Development stack: point the dev GitHub OAuth App's callback at
   `http://localhost:5173/api/auth/github/callback`.
@@ -1205,6 +1258,18 @@ and pinned by its SRI hash, listed in
 [packages/tracker/releases/manifest.json](packages/tracker/releases/manifest.json).
 How to check a file against its release:
 [docs/security/verify-tracker.md](docs/security/verify-tracker.md).
+
+### Tracker 1.4.0 - 2026-11-18
+
+- `sdk.js` installs the tracker as `window.veristar` and `window.umami`, one
+  object under two names, so `veristar.track()`, `veristar.start()` and
+  `veristar.version` are the same as their `umami` counterparts. A page that
+  already holds either name keeps it, and the tracker installs nothing.
+- `init()` of the npm package installs both names and returns a tracker
+  already installed under either name.
+- What the tracker reads and sends is unchanged, and wire format version 1
+  is unchanged; the gateway needs no update beyond serving the new file.
+- 10,231 bytes, 4,641 gzip (1.3.2: 10,202 and 4,626, +0.3% gzip).
 
 ### Tracker 1.3.2 - 2026-11-18
 

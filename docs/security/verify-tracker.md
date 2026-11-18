@@ -4,7 +4,7 @@ description: "Check that the sdk.js your pages load is exactly the released file
 ---
 
 This page shows how you check that the `sdk.js` your pages load is exactly the released file, how
-you rebuild it from source, and how you host it yourself. The examples use version `1.3.2`;
+you rebuild it from source, and how you host it yourself. The examples use version `1.4.0`;
 replace it with the version in your snippet. `in.<BASE_DOMAIN>` is the platform's ingest host.
 
 ## 1. What protects you without any action
@@ -12,8 +12,8 @@ replace it with the version in your snippet. `in.<BASE_DOMAIN>` is the platform'
 The snippet the console gives you pins one version and its hash:
 
 ```html
-<script defer src="https://in.<BASE_DOMAIN>/v/1.3.2/sdk.js"
-  integrity="sha384-Q2xIA5ztfj7VBlpI/+6kehWQVUC2jZPr89aAooy7Uinc/V2C0VF7Ti66L3gj6D/v"
+<script defer src="https://in.<BASE_DOMAIN>/v/1.4.0/sdk.js"
+  integrity="sha384-8bYExYW1FMGfNg5LETdGYFjtJPLfyY+gJQwWA0rL5xNM7Xl+3wK99GxSV3+siv/A"
   crossorigin="anonymous" data-website-id="<site id>"></script>
 ```
 
@@ -37,7 +37,7 @@ The snippet the console gives you pins one version and its hash:
 ## 2. Check a file by hand
 
 ```sh
-curl -fsS -o sdk.js https://in.<BASE_DOMAIN>/v/1.3.2/sdk.js
+curl -fsS -o sdk.js https://in.<BASE_DOMAIN>/v/1.4.0/sdk.js
 # the integrity value of the snippet
 printf 'sha384-%s\n' "$(openssl dgst -sha384 -binary sdk.js | base64)"
 # the hex digest, as in releases/manifest.json
@@ -58,8 +58,8 @@ git clone https://github.com/justmert/veristar && cd veristar
 #   git checkout "$(git log --diff-filter=A --format=%H -1 -- packages/tracker/releases/<version>/sdk.js)"
 corepack disable; npm install -g pnpm@12.18.0
 pnpm install --frozen-lockfile
-pnpm --filter tracker build 1.3.2     # writes packages/tracker/dist/sdk.js
-cmp packages/tracker/dist/sdk.js packages/tracker/releases/1.3.2/sdk.js && echo identical
+pnpm --filter tracker build 1.4.0     # writes packages/tracker/dist/sdk.js
+cmp packages/tracker/dist/sdk.js packages/tracker/releases/1.4.0/sdk.js && echo identical
 ```
 
 The release workflow builds with Node.js 26.13.1.
@@ -71,8 +71,8 @@ value. Set `data-host-url` to the platform's ingest origin, because otherwise th
 events to the origin it was loaded from:
 
 ```html
-<script defer src="/static/sdk-1.3.2.js"
-  integrity="sha384-Q2xIA5ztfj7VBlpI/+6kehWQVUC2jZPr89aAooy7Uinc/V2C0VF7Ti66L3gj6D/v"
+<script defer src="/static/sdk-1.4.0.js"
+  integrity="sha384-8bYExYW1FMGfNg5LETdGYFjtJPLfyY+gJQwWA0rL5xNM7Xl+3wK99GxSV3+siv/A"
   crossorigin="anonymous" data-website-id="<site id>"
   data-host-url="https://in.<BASE_DOMAIN>"></script>
 ```

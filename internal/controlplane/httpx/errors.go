@@ -38,6 +38,8 @@ const (
 	CodeSiteRemoved          = "site_removed"
 	CodeTermsVersionMismatch = "terms_version_mismatch"
 	CodeTrackerRevoked       = "tracker_version_revoked"
+	// a usage report link its project revoked (contract 20.3)
+	CodeReportRevoked        = "report_revoked"
 	CodeBodyTooLarge         = "body_too_large"
 	CodeUnsupportedMediaType = "unsupported_media_type"
 	CodeValidationFailed     = "validation_failed"
