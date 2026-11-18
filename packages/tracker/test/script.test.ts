@@ -124,19 +124,11 @@ describe("released sdk.js 1.4.0", () => {
     await w.veristar?.track("from-veristar", { k: "v" });
     await w.umami?.track("from-umami");
     await waitFor(() => gw.events().length === 3);
-    expect(gw.events().map((r) => parse(r).n)).toEqual([
-      undefined,
-      "from-veristar",
-      "from-umami",
-    ]);
+    expect(gw.events().map((r) => parse(r).n)).toEqual([undefined, "from-veristar", "from-umami"]);
   });
 
   it("leaves a tracker already installed under either name alone", async () => {
-    const w = load(
-      "",
-      "<script>window.veristar = { version: 'mine' };</script>",
-      "1.4.0",
-    );
+    const w = load("", "<script>window.veristar = { version: 'mine' };</script>", "1.4.0");
     await pause(600);
     expect(w.veristar?.version).toBe("mine");
     expect(w.umami).toBeUndefined();
