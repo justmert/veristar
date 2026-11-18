@@ -274,16 +274,29 @@ func (h *Routes) store(ctx context.Context, a tenants.Access, row idRow, method 
 				return err
 			}
 			// an account proof holds only while its challenge is still the
-			// open one, checked in the same statement that spends it
+			// open one, checked in the same statement that spends it. a
+			// contract proof holds only while the id it rests on is still a
+			// verified id of the project: the row is share locked, so a
+			// removal of that id waits for this statement and then clears
+			// the proof (remove), or ran first and the proof does not hold
 			tag, err := tx.Exec(ctx, `update cp.chain_ids set verify_method = $4, verified_at = $3, verified_via = $5, verify_detail = $6,
 			       last_verify_at = $3, last_verify_error = null, challenge_nonce = null, challenge_expires_at = null
-			     where id = $1 and tenant_id = $2 and ($7::text is null or challenge_nonce = $7)`,
+			     where id = $1 and tenant_id = $2 and ($7::text is null or challenge_nonce = $7)
+			       and ($5::text is null or exists (select 1 from cp.chain_ids v
+			            where v.tenant_id = $2 and v.strkey = $5 and v.verified_at is not null for share))`,
 				append(args, method, o.via, detail, o.spends)...)
 			if err != nil {
 				return err
 			}
 			if tag.RowsAffected() == 0 {
-				o.err = ErrNoChallenge
+				switch method {
+				case MethodContractAdmin:
+					o.err = ErrAdminNotVerified
+				case MethodContractDeployer:
+					o.err = ErrNotDeployer
+				default:
+					o.err = ErrNoChallenge
+				}
 			}
 		}
 		if o.err != "" {
