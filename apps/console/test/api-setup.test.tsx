@@ -1,7 +1,7 @@
 import { Outlet } from "react-router";
 import { describe, expect, it } from "vitest";
 import type { Tenant } from "@/api/schemas";
-import { ConnectApiPage, validateToken } from "@/pages/project/connect-api";
+import { ConnectApiPage, lastUsedToken, validateToken } from "@/pages/project/connect-api";
 import * as f from "./fixtures/contract";
 import { byLabel, byRole, click, renderRoutes, stubFetch, type, waitFor } from "./helpers";
 
@@ -43,10 +43,10 @@ describe("api analytics setup page (contract section 6)", () => {
     ]);
     const host = await renderRoutes(routes(), path);
     await waitFor(() => expect(host.textContent).toContain("No active tokens."));
-    // the checkbox sits inside its label
-    const toggle = [...host.querySelectorAll("label")]
-      .find((l) => l.textContent?.trim() === "Show revoked tokens")
-      ?.querySelector("input");
+    const label = [...host.querySelectorAll("label")].find(
+      (l) => l.textContent?.trim() === "Show revoked tokens",
+    );
+    const toggle = label ? host.ownerDocument.getElementById(label.htmlFor) : null;
     if (!toggle) throw new Error("no show revoked checkbox");
     await click(toggle);
     await waitFor(() => expect(host.textContent).toContain("Revoked"));
@@ -161,13 +161,12 @@ describe("api analytics setup page (contract section 6)", () => {
     expect(() => byLabel(host, "Token name")).toThrow();
   });
 
-  it("says what the service keeps and that the tenant backend keeps everything", async () => {
+  it("says in a few lines what the service keeps and that the own backend keeps everything", async () => {
     stubFetch([{ status: 200, body: page([]) }]);
     const host = await renderRoutes(routes(), path);
     const text = host.textContent ?? "";
     expect(text).toContain("Only HTTP server request duration is kept");
-    expect(text).toContain("Traces are not stored");
-    expect(text).toContain("Logs are accepted");
+    expect(text).toContain("Other metrics, traces and logs are dropped");
     expect(text).toContain("Your own backend keeps the full data");
   });
 
@@ -190,5 +189,15 @@ describe("validateToken", () => {
   it("refuses an environment the contract refuses", () => {
     expect(validateToken({ name: "API", environment: "-x" }).environment).toBeDefined();
     expect(validateToken({ name: "API", environment: "a".repeat(33) }).environment).toBeDefined();
+  });
+});
+
+describe("lastUsedToken", () => {
+  it("picks the token used last, or none when no token was used", () => {
+    const t = f.otlpTokenBody as never as Parameters<typeof lastUsedToken>[0][number];
+    expect(lastUsedToken([t])).toBeNull();
+    const a = { ...t, id: "a", last_seen_at: "2026-11-10T10:00:00Z" };
+    const b = { ...t, id: "b", last_seen_at: "2026-11-12T10:00:00Z" };
+    expect(lastUsedToken([a, t, b])?.id).toBe("b");
   });
 });
