@@ -1,22 +1,19 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { cn } from "@veristar/brand/cn";
 import { fade } from "@veristar/brand/motion";
 import { Check, CircleAlert, LoaderCircle } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { api } from "@/api/endpoints";
 import { keys, verificationQuery } from "@/api/queries";
 import type { Site, SiteVerification, VerifyMethod } from "@/api/schemas";
 import { CopyButton } from "@/components/copy-button";
-import { ErrorPanel, FormMessage, Loading } from "@/components/error-panel";
-import {
-  StellarTomlSummary,
-  VerificationPill,
-  verifyAdvice,
-  verifyErrorText,
-} from "@/components/evidence";
+import { FormMessage } from "@/components/error-panel";
+import { verifyAdvice, verifyErrorText } from "@/components/evidence";
 import { NativeSelect } from "@/components/form-field";
+import { ErrorState } from "@/components/states";
+import { toast } from "@/components/toast";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatDateTimeUtc } from "@/lib/format";
 import { queryClient } from "@/query-client";
@@ -25,108 +22,108 @@ type Choice = "both" | VerifyMethod;
 
 const METHOD_TEXT: Record<VerifyMethod, string> = { dns: "DNS record", file: "file" };
 
-// contract 5.8: proves control of the site's domain with a dns txt record or a
-// file under /.well-known. verification never gates traffic; operators see it
-// as evidence. the third step of a site's setup, with its stellar.toml below.
-export function VerifySection({ site }: { site: Site }) {
-  const info = useQuery(verificationQuery(site.id));
-  return (
-    <div className="flex flex-col gap-6">
-      {info.isPending ? <Loading label="Loading the verification instructions" /> : null}
-      {info.error ? <ErrorPanel error={info.error} onRetry={() => info.refetch()} /> : null}
-      {info.data ? <Verify v={info.data} tenantId={site.tenant_id} /> : null}
-      <section
-        aria-label="stellar.toml"
-        className="rounded-lg border border-line bg-raised px-4 py-3 sm:px-5"
-      >
-        <StellarTomlSummary
-          toml={site.stellar_toml}
-          checkedAt={site.stellar_toml_checked_at}
-          domain={site.domain}
-        />
-      </section>
-    </div>
-  );
+export type VerifyLine = {
+  tone: "checking" | "failed" | "verified" | "idle";
+  title: string;
+  body: string | null;
+};
+
+// the line under the check button: what is happening now, or the last
+// result with what to do about it
+export function verifyLine(v: SiteVerification, checking: Choice | null): VerifyLine {
+  if (checking)
+    return {
+      tone: "checking",
+      title:
+        checking === "file"
+          ? `Fetching ${v.file.url}`
+          : checking === "dns"
+            ? `Looking up TXT records for ${v.dns.name}`
+            : `Looking up TXT records for ${v.dns.name}, then fetching the file`,
+      body: "This takes up to 15 seconds.",
+    };
+  if (v.last_verify_error)
+    return {
+      tone: "failed",
+      title: verifyErrorText(v.last_verify_error),
+      body: verifyAdvice(v.last_verify_error),
+    };
+  if (v.verification === "verified")
+    return {
+      tone: "verified",
+      title: `Verified by ${v.verify_method ? METHOD_TEXT[v.verify_method] : "the check"}`,
+      body: "Keep the record or file in place. The daily check reads it again.",
+    };
+  return { tone: "idle", title: "Add the record or the file, then check.", body: null };
 }
 
-function Verify({ v, tenantId }: { v: SiteVerification; tenantId: string }) {
+// contract 5.8: proves control of the site's domain with a dns txt record or
+// a file under /.well-known. verification never gates traffic; operators see
+// it as evidence. one step of the site's setup; `current` gives its check
+// button the accent while it is the step to do now.
+export function VerifyDomain({ site, current = false }: { site: Site; current?: boolean }) {
+  const info = useQuery(verificationQuery(site.id));
+  if (info.isPending)
+    return (
+      <div role="status" aria-busy="true" className="flex flex-col gap-3">
+        <span className="sr-only">Loading the verification steps</span>
+        <Skeleton className="h-9 w-1/2" />
+        <Skeleton className="h-24 w-full" />
+      </div>
+    );
+  if (info.error) return <ErrorState error={info.error} onRetry={() => info.refetch()} compact />;
+  return <Verify v={info.data} tenantId={site.tenant_id} current={current} />;
+}
+
+function Verify({
+  v,
+  tenantId,
+  current,
+}: {
+  v: SiteVerification;
+  tenantId: string;
+  current: boolean;
+}) {
   const siteId = v.site_id;
+  const choiceId = useId();
   const [method, setMethod] = useState<VerifyMethod>(v.verify_method ?? "dns");
   const [choice, setChoice] = useState<Choice>("both");
   const verify = useMutation({
     mutationFn: () => api.verifySite(siteId, choice === "both" ? null : choice),
     onSuccess: async (next) => {
       queryClient.setQueryData(keys.verification(siteId), next);
+      if (next.verification === "verified" && next.last_verify_error === null)
+        toast.success(`${v.domain} is verified.`);
       await queryClient.invalidateQueries({ queryKey: keys.sites(tenantId) });
     },
   });
 
   const verified = v.verification === "verified" && v.last_verify_error === null;
-  // the line under the button: what is happening now, or the last result
-  const line = verify.isPending
-    ? {
-        tone: "checking" as const,
-        title:
-          choice === "file"
-            ? `Fetching ${v.file.url}`
-            : choice === "dns"
-              ? `Looking up TXT records for ${v.dns.name}`
-              : `Looking up TXT records for ${v.dns.name}, then fetching the file`,
-        body: "This takes up to 15 seconds.",
-      }
-    : v.last_verify_error
-      ? {
-          tone: "failed" as const,
-          title: verifyErrorText(v.last_verify_error),
-          body: verifyAdvice(v.last_verify_error),
-        }
-      : verified
-        ? {
-            tone: "verified" as const,
-            title: `Verified by ${v.verify_method ? METHOD_TEXT[v.verify_method] : "the check"}`,
-            body: "Keep the record or file in place so the daily check keeps passing.",
-          }
-        : {
-            tone: "idle" as const,
-            title: "Add the record, then check.",
-            body: null,
-          };
+  const line = verifyLine(v, verify.isPending ? choice : null);
 
   return (
-    <section
-      aria-labelledby="verify-title"
-      className="flex flex-col rounded-lg border border-line bg-raised"
-    >
-      <header className="flex flex-wrap items-start justify-between gap-3 px-4 pt-4 sm:px-5">
-        <div className="flex min-w-0 flex-col gap-1">
-          <h2 id="verify-title" className="text-title text-fg">
-            Prove you control <span className="break-all">{v.domain}</span>
-          </h2>
-          <p className="text-small text-fg-2">
-            Either method is enough. Verification is shown to operators of the service and does not
-            change how events are collected.
-          </p>
-        </div>
-        <VerificationPill verification={v.verification} live={verify.isPending} />
-      </header>
-
+    <div className="flex min-w-0 flex-col gap-4">
       <Tabs
         value={method}
         onValueChange={(m) => setMethod(m as VerifyMethod)}
-        className="mt-3 gap-0"
+        className="min-w-0 gap-3"
       >
-        <TabsList variant="line" aria-label="Method" className="px-2 sm:px-3">
-          <TabsTrigger value="dns">DNS record</TabsTrigger>
-          <TabsTrigger value="file">File on the site</TabsTrigger>
+        <TabsList aria-label="Method" className="max-w-full">
+          <TabsTrigger value="dns" className="max-lg:h-(--vs-control-touch)">
+            DNS record
+          </TabsTrigger>
+          <TabsTrigger value="file" className="max-lg:h-(--vs-control-touch)">
+            File on the site
+          </TabsTrigger>
         </TabsList>
         <TabsContent
           forceMount
           value="dns"
-          className="data-[state=inactive]:hidden flex flex-col gap-3 px-4 pt-4 sm:px-5"
+          className="flex flex-col gap-3 data-[state=inactive]:hidden"
         >
-          <p className="text-small text-fg-2">
-            Add this record where you manage DNS for {v.domain}, at your registrar or DNS host.
-            Changes can take a while to propagate.
+          <p className="max-w-prose text-small text-fg-2">
+            Add this record where you manage the DNS of {v.domain}. A change can take some time to
+            show.
           </p>
           <RecordTable
             label="DNS TXT record"
@@ -140,11 +137,11 @@ function Verify({ v, tenantId }: { v: SiteVerification; tenantId: string }) {
         <TabsContent
           forceMount
           value="file"
-          className="data-[state=inactive]:hidden flex flex-col gap-3 px-4 pt-4 sm:px-5"
+          className="flex flex-col gap-3 data-[state=inactive]:hidden"
         >
-          <p className="text-small text-fg-2">
-            Serve this text over HTTPS at the address below, with status 200 and nothing else in the
-            file. Redirects to another host are not followed.
+          <p className="max-w-prose text-small text-fg-2">
+            Serve this text over HTTPS at the address below, with status 200. Put nothing else in
+            the file. The check does not follow a redirect to another host.
           </p>
           <RecordTable
             label="Verification file"
@@ -156,84 +153,73 @@ function Verify({ v, tenantId }: { v: SiteVerification; tenantId: string }) {
         </TabsContent>
       </Tabs>
 
-      <div className="mt-4 flex flex-col gap-3 border-t border-line px-4 py-4 sm:px-5">
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="flex flex-col gap-1">
-            <label htmlFor="verify-choice" className="text-small font-medium text-fg">
-              Check
-            </label>
-            <NativeSelect
-              id="verify-choice"
-              value={choice}
-              onChange={(e) => setChoice(e.target.value as Choice)}
-            >
-              <option value="both">DNS first, then the file</option>
-              <option value="dns">Only the DNS record</option>
-              <option value="file">Only the file</option>
-            </NativeSelect>
-          </div>
-          <Button
-            onClick={() => verify.mutate()}
-            pending={verify.isPending}
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="flex flex-col gap-1">
+          <label htmlFor={choiceId} className="text-small font-medium text-fg">
+            Check
+          </label>
+          <NativeSelect
+            id={choiceId}
+            value={choice}
+            onChange={(e) => setChoice(e.target.value as Choice)}
             className="max-lg:h-(--vs-control-touch)"
           >
-            {verify.isPending ? "Checking" : verified ? "Check again" : "Check now"}
-          </Button>
+            <option value="both">DNS record, then the file</option>
+            <option value="dns">Only the DNS record</option>
+            <option value="file">Only the file</option>
+          </NativeSelect>
         </div>
-        <div aria-live="polite" className="min-h-12">
-          <AnimatePresence mode="wait" initial={false}>
-            <motion.div key={`${line.tone}-${line.title}`} {...fade} className="flex gap-2">
-              <span className="mt-1 flex">
-                {line.tone === "checking" ? (
-                  <LoaderCircle aria-hidden className="size-4 animate-spin text-fg-2" />
-                ) : line.tone === "failed" ? (
-                  <CircleAlert aria-hidden className="size-4 text-warning" />
-                ) : line.tone === "verified" ? (
-                  <Check aria-hidden className="size-4 text-success" strokeWidth={2.6} />
-                ) : (
-                  <span aria-hidden className="m-1 size-2 rounded-full bg-fg-3" />
-                )}
-              </span>
-              <span className="flex min-w-0 flex-col gap-1 text-small">
-                <span
-                  className={cn(
-                    "break-words",
-                    line.tone === "failed"
-                      ? "text-warning"
-                      : line.tone === "verified"
-                        ? "text-success"
-                        : "text-fg",
-                  )}
-                >
-                  {line.title}
-                </span>
-                {line.body ? <span className="text-fg-2">{line.body}</span> : null}
-                {!verify.isPending && v.last_verify_at ? (
-                  <span className="text-fg-3">
-                    Last checked {formatDateTimeUtc(v.last_verify_at)}
-                    {verified && v.verified_at
-                      ? `, verified ${formatDateTimeUtc(v.verified_at)}`
-                      : ""}
-                  </span>
-                ) : null}
-              </span>
-            </motion.div>
-          </AnimatePresence>
-        </div>
-        <span role="status" className="sr-only">
-          {verify.isSuccess
-            ? verify.data.verification === "verified" && verify.data.last_verify_error === null
-              ? "Verified."
-              : "Not verified yet."
-            : ""}
-        </span>
-        <FormMessage error={verify.error} />
-        <p className="text-caption font-normal text-fg-3">
-          A check takes up to 15 seconds. At most 6 checks per site and hour. The domain is also
-          checked again once a day.
-        </p>
+        <Button
+          variant={current && !verified ? "default" : "outline"}
+          onClick={() => verify.mutate()}
+          pending={verify.isPending}
+          className="max-lg:h-(--vs-control-touch)"
+        >
+          {verify.isPending ? "Checking" : verified ? "Check again" : "Check now"}
+        </Button>
       </div>
-    </section>
+
+      <div aria-live="polite" className="min-h-12">
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div key={`${line.tone}-${line.title}`} {...fade} className="flex gap-2">
+            <span className="mt-1 flex">
+              {line.tone === "checking" ? (
+                <LoaderCircle aria-hidden className="size-4 animate-spin text-fg-2" />
+              ) : line.tone === "failed" ? (
+                <CircleAlert aria-hidden className="size-4 text-warning" />
+              ) : line.tone === "verified" ? (
+                <Check aria-hidden className="size-4 text-success" strokeWidth={2.6} />
+              ) : (
+                <span aria-hidden className="m-1 size-2 rounded-full bg-fg-3" />
+              )}
+            </span>
+            <span className="flex min-w-0 flex-col gap-1 text-small">
+              <span className="break-words text-fg">{line.title}</span>
+              {line.body ? <span className="text-fg-2">{line.body}</span> : null}
+              {!verify.isPending && v.last_verify_at ? (
+                <span className="text-fg-2">
+                  Last checked {formatDateTimeUtc(v.last_verify_at)}.
+                  {verified && v.verified_at
+                    ? ` Verified ${formatDateTimeUtc(v.verified_at)}.`
+                    : ""}
+                </span>
+              ) : null}
+            </span>
+          </motion.div>
+        </AnimatePresence>
+      </div>
+      <span role="status" className="sr-only">
+        {verify.isSuccess
+          ? verify.data.verification === "verified" && verify.data.last_verify_error === null
+            ? "Verified."
+            : "Not verified yet."
+          : ""}
+      </span>
+      <FormMessage error={verify.error} />
+      <p className="text-caption text-fg-2">
+        You can check 6 times per hour. The service also checks the domain once a day.
+      </p>
+    </div>
   );
 }
 
@@ -254,22 +240,21 @@ function RecordTable({
       {rows.map((r) => (
         <div
           key={r.k}
-          className="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-x-3 gap-y-1 px-3 py-2 sm:grid-cols-[5rem_minmax(0,1fr)_auto]"
+          className="grid grid-cols-[4rem_minmax(0,1fr)_auto] items-center gap-x-3 px-3 py-2"
         >
-          <dt className="text-caption text-fg-3">{r.k}</dt>
+          <dt className="text-caption text-fg-2">{r.k}</dt>
           <dd className="min-w-0 break-all font-mono text-small text-fg">{r.value}</dd>
-          {r.copy === false ? (
-            <span className="max-sm:hidden" />
-          ) : (
-            <span className="col-start-2 sm:col-start-auto">
+          <span className="flex">
+            {r.copy === false ? null : (
               <CopyButton
                 text={r.value}
                 label={`Copy ${r.k.toLowerCase()}`}
                 size="xs"
                 variant="ghost"
+                iconOnly
               />
-            </span>
-          )}
+            )}
+          </span>
         </div>
       ))}
     </dl>

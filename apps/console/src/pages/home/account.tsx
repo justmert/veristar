@@ -81,7 +81,7 @@ export function AccountPage() {
     return (
       <div className="flex flex-col gap-8">
         <PageHeader {...HEADER} />
-        <div role="status" aria-busy="true" className="flex max-w-content flex-col gap-3">
+        <div role="status" aria-busy="true" className="flex max-w-prose flex-col gap-3">
           <span className="sr-only">Loading your account</span>
           {[0, 1, 2].map((i) => (
             <Skeleton key={i} className="h-(--vs-row) w-full" />
@@ -97,7 +97,7 @@ export function AccountPage() {
       </div>
     );
   return (
-    <div className="flex max-w-content flex-col gap-8">
+    <div className="flex max-w-prose flex-col gap-8">
       <PageHeader {...HEADER} />
       <SignInMethods me={me.data} />
       {me.data.user.is_operator ? <OperatorPasskeys userName={me.data.user.display_name} /> : null}

@@ -179,7 +179,7 @@ export function EnrollPage() {
       <section className="flex flex-col gap-6">
         <BackLink />
         <PageHeader {...HEADER} />
-        <div role="status" aria-busy="true" className="flex max-w-content flex-col gap-4">
+        <div role="status" aria-busy="true" className="flex max-w-prose flex-col gap-4">
           <span className="sr-only">Loading the form</span>
           <Skeleton className="h-9 w-full" />
           <Skeleton className="h-9 w-full" />
