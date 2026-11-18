@@ -2,6 +2,7 @@ package operator
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"sort"
 	"strings"
@@ -28,23 +29,30 @@ type AlertReader interface {
 // delivery for deployments without a receiver (no discord webhook
 // configured).
 type Alerts struct {
-	src AlertReader
-	now func() time.Time
+	src   AlertReader
+	guard *Guard
+	now   func() time.Time
 }
 
 // NewAlerts takes the configured source, or nil when ALERTMANAGER_URLS is
 // unset; the route then answers alert_source_not_configured on every call,
-// so the page never shows "all clear" without having asked anyone.
-func NewAlerts(src AlertReader, now func() time.Time) *Alerts {
+// so the page never shows "all clear" without having asked anyone. the
+// guard limits the route to operator admins: alert labels and descriptions
+// name nodes and internal addresses.
+func NewAlerts(src AlertReader, guard *Guard, now func() time.Time) (*Alerts, error) {
+	if guard == nil {
+		return nil, errors.New("operator: the alerts route needs the guard")
+	}
 	if now == nil {
 		now = time.Now
 	}
-	return &Alerts{src: src, now: now}
+	return &Alerts{src: src, guard: guard, now: now}, nil
 }
 
-// Routes registers the path under the guarded /api/operator router.
+// Routes registers the path under the guarded /api/operator router, behind
+// the operator admin check.
 func (h *Alerts) Routes(r chi.Router) {
-	r.Method(http.MethodGet, "/alerts", httpx.HandlerFunc(h.list))
+	r.With(h.guard.RequireAdmin).Method(http.MethodGet, "/alerts", httpx.HandlerFunc(h.list))
 }
 
 // AlertsAnswer is the body of contract 11.1.

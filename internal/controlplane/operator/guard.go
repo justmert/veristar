@@ -114,7 +114,7 @@ func (g *Guard) RequireAdmin(next http.Handler) http.Handler {
 			return err
 		}
 		if !ok {
-			return httpx.Forbidden(httpx.CodeOperatorAdminRequired, "only operator admins can change the roster")
+			return httpx.Forbidden(httpx.CodeOperatorAdminRequired, "this route is for operator admins")
 		}
 		next.ServeHTTP(w, r)
 		return nil

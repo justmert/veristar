@@ -270,6 +270,10 @@ here, before they take effect, as the processing terms require
 - A sign-in drops every value the browser's previous session held, so an
   operator step-up or a passkey ceremony of another sign-in never carries
   over into the new session.
+- `GET /api/operator/alerts` is for operator admins: an operator without an
+  active `operator_admin` row gets 403 `operator_admin_required`, and the
+  control plane never asks Alertmanager for that request. Alert labels and
+  descriptions name nodes and internal addresses.
 
 ### Upgrade notes
 
