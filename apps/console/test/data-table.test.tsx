@@ -302,4 +302,22 @@ describe("data table", () => {
     });
     expect(copy.className).toContain("invisible");
   });
+
+  it("wraps a short value on a phone card and cuts only a column that truncates", async () => {
+    const phone: Column<Row>[] = [
+      columns[0] as Column<Row>,
+      { key: "type", header: "Type", cell: () => "Machine API key", mobile: true },
+      { ...(columns[2] as Column<Row>), mobile: true },
+    ];
+    const host = await render(
+      <DataTable label="Keys" columns={phone} rows={rows} getRowKey={(r) => r.id} />,
+    );
+    const card = host.querySelector("ul[aria-label='Keys'] li") as HTMLElement;
+    const [type, country] = [...card.querySelectorAll("dd")] as HTMLElement[];
+    expect(type?.textContent).toBe("Machine API key");
+    expect(type?.className).toContain("break-words");
+    expect(type?.className).not.toContain("truncate");
+    expect(type?.querySelector(".truncate")).toBeNull();
+    expect(country?.querySelector(".truncate")?.textContent).toBe("Germany");
+  });
 });
