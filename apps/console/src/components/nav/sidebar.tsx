@@ -8,6 +8,7 @@ import {
   BookOpen,
   Check,
   ChevronsUpDown,
+  CircleAlert,
   Ellipsis,
   FolderOpen,
   LogOut,
@@ -25,8 +26,8 @@ import { Link, useLocation, useNavigate } from "react-router";
 import type { TenantListQuery } from "@/api/endpoints";
 import { stepUpQuery } from "@/api/operators";
 import { operatorAlertsQuery, operatorTenantsQuery, tenantQuery } from "@/api/queries";
-import type { Me } from "@/api/schemas";
-import { StatusDot, statusEntry } from "@/components/status";
+import type { FiringAlert, Me } from "@/api/schemas";
+import { CountBadge, StatusDot, statusEntry } from "@/components/status";
 import {
   Menu,
   MenuContent,
@@ -351,8 +352,6 @@ function OperatorGroups({ rest, onNavigate }: { rest: string | null; onNavigate?
   const alerts = useQuery({ ...operatorAlertsQuery, enabled: live });
   const queue = useInfiniteQuery({ ...operatorTenantsQuery(REVIEW_QUEUE), enabled: live });
   const current = live && !alerts.error ? alerts.data : undefined;
-  const critical = current ? criticalCount(current.alerts) : 0;
-  const count = current?.alerts.length ?? 0;
   const failed = live && alerts.error !== null;
   const first = queue.data?.pages[0];
   const waiting = first ? first.items.length : 0;
@@ -366,52 +365,49 @@ function OperatorGroups({ rest, onNavigate }: { rest: string | null; onNavigate?
       badges={{
         review:
           waiting > 0 ? (
-            <Badge tone="neutral">
+            <CountBadge
+              tone="neutral"
+              label={`${waiting === 1 && !more ? "1 project waits" : `${formatCount(waiting)}${more ? " or more" : ""} projects wait`} for review`}
+            >
               {formatCount(waiting)}
               {more ? "+" : ""}
-              <span className="sr-only">
-                {waiting === 1 && !more ? " project waits" : " projects wait"} for review
-              </span>
-            </Badge>
+            </CountBadge>
           ) : null,
-        alerts:
-          failed || count > 0 ? (
-            <Badge tone={failed || critical > 0 ? "critical" : "warning"}>
-              {failed ? "!" : formatCount(count)}
-              <span className="sr-only">
-                {failed
-                  ? ", alert source unreachable"
-                  : count === 1
-                    ? " alert firing"
-                    : " alerts firing"}
-              </span>
-            </Badge>
-          ) : null,
+        alerts: failed ? (
+          <CountBadge tone="critical" label="The alert source did not answer">
+            <CircleAlert />
+          </CountBadge>
+        ) : current ? (
+          <AlertsBadge alerts={current.alerts} />
+        ) : null,
       }}
     />
   );
 }
 
-function Badge({
-  tone,
-  children,
-}: {
-  tone: "neutral" | "warning" | "critical";
-  children: ReactNode;
-}) {
+// the alerts count: the critical (paging) alerts while any fires, the same
+// number the alert line says; else every firing alert, in warning
+export function AlertsBadge({ alerts, className }: { alerts: FiringAlert[]; className?: string }) {
+  const critical = criticalCount(alerts);
+  if (critical > 0)
+    return (
+      <CountBadge
+        tone="critical"
+        className={className}
+        label={critical === 1 ? "1 critical alert firing" : `${critical} critical alerts firing`}
+      >
+        {formatCount(critical)}
+      </CountBadge>
+    );
+  if (alerts.length === 0) return null;
   return (
-    <span
-      className={cn(
-        "inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-axis tabular",
-        tone === "critical"
-          ? "bg-critical-solid text-on-critical"
-          : tone === "warning"
-            ? "border border-warning-line text-warning"
-            : "bg-selected text-fg",
-      )}
+    <CountBadge
+      tone="warning"
+      className={className}
+      label={alerts.length === 1 ? "1 alert firing" : `${alerts.length} alerts firing`}
     >
-      {children}
-    </span>
+      {formatCount(alerts.length)}
+    </CountBadge>
   );
 }
 
