@@ -144,6 +144,10 @@ here, before they take effect, as the processing terms require
   language and title. The data processing terms (clauses 3 and 9) and the
   records of processing list the same. Every project accepts it at its next
   sign-in.
+  The text reads in plain words for the people who accept it: it links the
+  published doc pages instead of repository paths, names settings in words
+  instead of configuration keys, uses US spelling like the console, and the
+  draft status shows only in the version, not as a notice in the text.
 - Gateways queue web events on `web.events.<site id>.<partition>` instead of
   `web.events.<site id>`. Erasure waits for every partition of a site, and
   `platformctl dlq replay` and `platformctl queue forward` send a web event

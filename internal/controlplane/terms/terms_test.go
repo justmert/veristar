@@ -20,6 +20,20 @@ func TestEmbeddedTerms(t *testing.T) {
 	require.Contains(t, tm.Markdown, "the hosting operator is the **processor**")
 	require.Contains(t, tm.Markdown, "### 1.1 Project statistics for SCF")
 	require.NotContains(t, tm.Markdown, "Today that is the Stellar\n  Community Fund")
+	// people read this text in the console: the draft status lives in the
+	// front matter, and the body names doc pages, not repository paths or
+	// configuration keys
+	require.NotContains(t, tm.Markdown, "Status: draft")
+	require.NotContains(t, tm.Markdown, "Not legal advice")
+	require.NotContains(t, tm.Markdown, "`", "no code spans in the terms")
+	require.NotContains(t, tm.Markdown, "docs/")
+	require.NotContains(t, tm.Markdown, ".md")
+	require.Contains(t, tm.Markdown, "(https://docs.veristar.app/compliance/dpa-template)")
+	require.Contains(t, tm.Markdown, "Mert Köklü, at kklumert@gmail.com")
+	// us spelling, like the console
+	for _, w := range []string{"honour", "recognis", "organis", "anonymis", "licence", "Licence"} {
+		require.NotContains(t, tm.Markdown, w)
+	}
 }
 
 func TestParseRefuses(t *testing.T) {

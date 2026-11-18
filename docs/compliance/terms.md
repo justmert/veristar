@@ -9,11 +9,9 @@ effective: 2026-11-18
 
 # Terms of use
 
-> **Status: draft.** Not legal advice.
-> Projects accept this version when they enroll. When a new version is
-> published, every project accepts it at its next sign-in, and changes to a
-> project are blocked until it does. The final version drops `draft` from the
-> version and the status.
+Projects accept this version when they enroll. When a new version is
+published, every project accepts it at its next sign-in, and changes to a
+project are blocked until it does.
 
 ## 1. Parties and roles
 
@@ -31,10 +29,11 @@ effective: 2026-11-18
   following the tenant's documented instructions: the tenant's configuration of
   the service (sites, allowed origins, tokens, members) and the instruction of
   section 1.1.
-- The data processing terms in `docs/compliance/dpa-template.md` (GDPR Article
+- The [data processing terms](https://docs.veristar.app/compliance/dpa-template) (GDPR Article
   28: purpose, duration, categories of data, sub-processors, security, help with
   data subject requests, deletion at the end of the service) are part of these
-  terms. Sub-processors are listed in `docs/compliance/subprocessors.md`.
+  terms. Sub-processors are listed on the
+  [sub-processors](https://docs.veristar.app/compliance/subprocessors) page.
 
 ### 1.1 Project statistics for SCF
 
@@ -84,17 +83,18 @@ There is no billing, no paid tier, no advertising and no sale or resale of data.
 - **Websites**: page views and custom events sent by the tracker script. The
   tracker sets no cookies and writes no browser storage. It reads one storage
   key, the visitor's opt-out flag (inside a frame, also the frame's window
-  name, which the parent page can set to the same flag), and honours Global
-  Privacy Control. On a
-  site that turns on Wallets Kit capture with the script tag, it also reads
-  the names of the site's local storage keys and the kit's selected wallet id
-  (`privacy-strategy.md` section 6). From tracker 1.3.0 the tracker no
-  longer reads the screen size or the browser language, and it reads the page
-  title only when the site turns that on with the script tag. A site's own
-  before-send hook or `track()` call can still supply these three fields.
+  name, which the parent page can set to the same flag), and honors Global
+  Privacy Control. On a site that turns on
+  [Wallets Kit capture](https://docs.veristar.app/onboarding/web/wallets-kit) with the script tag,
+  it also reads the names of the site's local storage keys and the kit's
+  selected wallet id. From tracker 1.3.0 the tracker no longer reads the
+  screen size or the browser language, and it reads the page title only when
+  the site turns that on with the script tag. A site's own code can still
+  supply these three fields when it sends an event.
 - **Tracker file requests**: when a browser loads the tracker file, the
-  gateway reads the request's `Referer` and `Sec-GPC` headers in memory to
-  attribute the request to one site, and keeps only two per-site, per-day
+  gateway reads, in memory, the address of the page that loaded it and
+  whether the browser sends Global Privacy Control, to attribute the request
+  to one site, and keeps only two per-site, per-day
   counts: requests, and requests that carry Global Privacy Control. They
   estimate the share of visits the tracker does not measure.
 - **IP addresses are never stored.** The ingestion gateway reads a visitor's
@@ -104,8 +104,8 @@ There is no billing, no paid tier, no advertising and no sale or resale of data.
   (IPv4) or /48 (IPv6) network to look up the country and the autonomous
   system in the local DB-IP databases, and keys its rate limits and its
   same-network checks on an HMAC of that network under a secret that changes
-  every UTC day. Only the country, a network class (access, organisation,
-  hosting, anonymiser or unknown) counted per site and day, and once per site
+  every UTC day. Only the country, a network class (access, organization,
+  hosting, anonymizer or unknown) counted per site and day, and once per site
   and day an HMAC of the autonomous system number under the same daily secret
   leave the request.
 - Visitors are counted with a **daily visitor token** derived from a secret that
@@ -138,8 +138,8 @@ There is no billing, no paid tier, no advertising and no sale or resale of data.
   the passkeys an operator adds for the operator area (credential id, public
   key, name, creation and last use); the time of the last step-up, in the
   session. They are deleted when an operator admin removes the person from
-  the roster or the person deletes the account
-  (`docs/compliance/erasure.md` section 7).
+  the roster or the person
+  [deletes the account](https://docs.veristar.app/compliance/erasure#7-deleting-your-console-account).
 
 ## 4. Acceptable use
 
@@ -149,7 +149,7 @@ Tenants may use the service only:
 - for properties the tenant controls;
 - without putting **personal data in URLs, page titles, referrers or event
   data**. The service removes Stellar keys, email addresses and secret seeds it
-  recognises, but tenants must not rely on that;
+  recognizes, but tenants must not rely on that;
 - without inflating, forging or replaying traffic;
 - without trying to reach other tenants' data;
 - without working against the service's limits or security.
@@ -163,41 +163,46 @@ switch enrollment from open to approval-required.
 
 ## 6. Retention and deletion
 
-- Raw web events and sessions are deleted after `WEB_RAW_RETENTION_MONTHS`
-  months, 25 by default and never fewer, so dashboards cover 24 full months.
+- Raw web events and sessions are deleted after a retention period that the
+  hosting operator sets: 25 months by default and never fewer, so dashboards
+  cover 24 full months.
 - API metric aggregates are kept for at least 24 months.
 - A project owner can erase one visitor's visit of the current UTC day, one
-  session at any time, or all web data of a site (`docs/compliance/erasure.md`).
+  session at any time, or all web data of a site
+  ([erasure](https://docs.veristar.app/compliance/erasure)).
   A visit on an earlier day cannot be linked to a person, by design.
 - When a project is removed, its raw web data, per-minute API data, network
   keys, open weeks of active accounts and signed usage reports are deleted.
   Its aggregates (web, hourly and daily API, on-chain counts and calls per
-  function) are deleted too, unless the hosting operator keeps them under the
-  published `removal_keep_aggregates` setting (`docs/runbooks/tenant-removal.md`).
+  function) are deleted too, unless the hosting operator has set the service
+  to keep the aggregates of removed projects
+  ([keeping or deleting aggregates](https://docs.veristar.app/operators/removal#keeping-or-deleting-aggregates)).
 
 ## 7. Availability
 
 The service is designed for 99.99% ingestion availability and 99.90% dashboard
-availability. These are targets, not guarantees. A public status page and a
-public issue tracker are provided.
+availability. These are targets, not guarantees. A public
+[status page](https://status.veristar.app) and a public
+[issue tracker](https://github.com/justmert/veristar/issues) are provided.
 
 ## 8. Changes to these terms
 
 A new version must be accepted by each project at its next sign-in. Until it is
 accepted, the project can be read but not changed.
 
-## 9. Licences and attribution
+## 9. Licenses and attribution
 
 - Country data: "IP Geolocation by DB-IP" (https://db-ip.com), licensed under
   Creative Commons Attribution 4.0.
 - The platform is open source under the Apache License 2.0. The tracker script is
-  under the MIT licence and keeps Umami's copyright notice.
+  under the MIT license and keeps Umami's copyright notice.
 
 ## 10. Contact
 
 Privacy questions, and requests about console accounts, for which the hosting
 operator is the controller: Mert Köklü, at kklumert@gmail.com. A visitor of a
 tenant's website asks the tenant, which is the controller of that data
-(section 1). General questions: the public issue tracker of
-the repository. Security issues: the repository's private vulnerability
-reporting.
+(section 1). General questions: the public
+[issue tracker](https://github.com/justmert/veristar/issues), as described on
+the [support](https://docs.veristar.app/support) page. Security issues: private vulnerability
+reporting, as described in the [security policy](https://docs.veristar.app/security/SECURITY).
