@@ -7,6 +7,7 @@ import {
   actorName,
   auditChanges,
   auditDaysError,
+  auditReason,
   auditSentence,
   auditVerb,
   dayToUtc,
@@ -622,8 +623,39 @@ describe("audit log", () => {
     expect(calls[2]?.url).toBe(
       "/api/operator/audit?action=tenant.&from=2026-11-01T00%3A00%3A00Z&limit=50",
     );
-    expect(host.querySelector("[data-count]")?.textContent).toBe("2 entries shown.");
+    await waitFor(() =>
+      expect(host.querySelector("[data-count]")?.textContent).toBe("2 entries shown."),
+    );
+    // the search reads the loaded entries as sentences
+    await type(byLabel(host, "Search the log"), "suspended");
+    await waitFor(() =>
+      expect(host.querySelector("[data-count]")?.textContent).toBe("1 of 2 entries"),
+    );
+    // a row opens to its codes; no row carries a details line of its own
+    expect(host.textContent).not.toContain("Details");
+    const row = host.querySelector<HTMLElement>("article[data-action]") as HTMLElement;
+    await click(row.querySelector("button[aria-expanded]") as HTMLElement);
+    expect(row.textContent).toContain(row.dataset.action ?? "");
+    expect(row.hasAttribute("data-open")).toBe(true);
   });
+});
+
+it("reads the reason code of a revoked AI assistant key, and leaves out the console's own", () => {
+  const base = {
+    id: 1,
+    at: "2026-11-12T09:00:00Z",
+    actor: "user:x",
+    actor_login: "lumen-dev",
+    action: "mcp_credential.revoke",
+    target: "mcp_credential:y",
+  };
+  expect(auditReason({ ...base, detail: { reason: "user" } })).toBeNull();
+  expect(auditReason({ ...base, detail: { reason: "tenant_suspended" } })).toBe(
+    "the project was suspended",
+  );
+  expect(auditReason({ ...base, action: "tenant.suspend", detail: { reason: "Spam" } })).toBe(
+    "Spam",
+  );
 });
 
 it("knows every lifecycle action of contract 5.5", () => {
