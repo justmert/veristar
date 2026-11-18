@@ -93,7 +93,7 @@ describe("integrity text", () => {
     if (!open) throw new Error("no day");
     const o = Object.fromEntries(evidenceFacts(open).map((x) => [x.label, x.value]));
     expect(o["Access networks"]).toBe("–");
-    expect(o["Baseline visitors"]).toBe("no history yet");
+    expect(o["Baseline visitors"]).toBe("–");
   });
 });
 
