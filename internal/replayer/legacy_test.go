@@ -205,3 +205,36 @@ func natsOn(t *testing.T, srv *natsctr.Server) *natsEnv {
 	}
 	return &natsEnv{srv: srv, nc: nc, js: js}
 }
+
+// without the legacy consumer (a fresh installation, or after
+// retire-legacy-web) no instance takes the legacy lock: taking it only to
+// find the consumer missing would repeat on every instance every minute.
+func TestNoLegacyLockWithoutLegacyConsumer(t *testing.T) {
+	env := startNATS(t)
+	ctx := testCtx(t, time.Minute)
+	locks, err := env.js.KeyValue(ctx, natsx.BucketLocks)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w, err := locks.Watch(ctx, natsx.LockReplayer, jetstream.UpdatesOnly())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = w.Stop() }()
+	unused, _ := url.Parse("http://127.0.0.1:1")
+	rr := startReplayer(t, env.srv.URL, unused, "node-a")
+	waitFor(t, 30*time.Second, "every partition owned", func() bool {
+		return scrapeOK(rr.ops)["replayer_partitions_owned"] == float64(events.Partitions)
+	})
+	timeout := time.After(3 * time.Second)
+	for {
+		select {
+		case e := <-w.Updates():
+			if e != nil {
+				t.Fatalf("legacy lock written (%s) although the legacy consumer does not exist", e.Operation())
+			}
+		case <-timeout:
+			return
+		}
+	}
+}
