@@ -31,7 +31,10 @@ func TestBrowserMatrix(t *testing.T) {
 	_, file, _, _ := runtime.Caller(0)
 	root := filepath.Clean(filepath.Join(filepath.Dir(file), "..", ".."))
 	box := browserbox.Start(t, proxyPort)
-	cmd := exec.Command("pnpm", "--filter", "@veristar/e2e", "run", "matrix")
+	// SA_E2E_ARGS passes playwright options through, --project=firefox-gpc
+	// for example, to run part of the matrix
+	args := append([]string{"--filter", "@veristar/e2e", "run", "matrix"}, strings.Fields(os.Getenv("SA_E2E_ARGS"))...)
+	cmd := exec.Command("pnpm", args...)
 	cmd.Dir = root
 	cmd.Env = append(os.Environ(), box.Env()...)
 	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
