@@ -659,7 +659,7 @@ describe("operator on-chain column and exports (contract 15.7 and 16.1)", () => 
     const cell = host.querySelector("[data-col=onchain]");
     expect(cell?.textContent).toContain("12");
     // the rest of the summary is read with the number, not only on hover
-    expect(cell?.textContent).toContain("1 of 2 ids verified");
+    expect(cell?.textContent).toContain("1 of 2 IDs verified");
     expect(cell?.textContent).toContain(
       "Weekly active accounts: 42 a week on average over 2 weeks, 1 missing",
     );
