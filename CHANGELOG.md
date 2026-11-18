@@ -18,6 +18,23 @@ here, before they take effect, as the processing terms require
 
 ### Added
 
+- The operator audit log names who and what each row is about:
+  `actor_display_name` (the GitHub login, or the short wallet or passkey
+  address) and `target_display_name` (the project, site, account or report
+  the row names), read with the row, so a renamed project shows its current
+  name. A deleted account, project, site or report has a fixed placeholder
+  such as `Deleted account`. The tenant detail's `recent_audit` carries the
+  same fields
+  ([contract 5.9](docs/reference/control-plane-api.md#59-get-apioperatoraudit)).
+- `GET /api/operator/audit?q=` searches the audit log on the server: a
+  case-insensitive substring of a row's action, actor, target or detail, or
+  of the login, address, project name or site name the row refers to. It
+  combines with every other filter and pages the same way. A trigram index
+  serves it (migration 00052, which installs the trusted `pg_trgm`
+  extension into its own schema `ext`).
+- The removal object of the operator tenant detail names who asked for the
+  removal: `requested_by_login` and `requested_by_display_name` next to the
+  `requested_by` user id.
 - SCF awards: `platformctl scf import` imports an SCF awards file (tab or
   comma separated, with or without a header row, from a file or standard
   input) and keeps organisation data only; names of people, profiles, links,
@@ -302,6 +319,10 @@ here, before they take effect, as the processing terms require
 
 ### Upgrade notes
 
+- Migration 00052 installs the `pg_trgm` extension, which ships with
+  PostgreSQL's contrib modules (the `postgres` images include it). It is a
+  trusted extension, so the database owner `platform_owner` installs it
+  without a superuser.
 - Web events move from one subject per site to 32 partitions. The rolling
   deploy carries the queue across without losing or repeating an event:
   `nats apply` keeps the old subject and its consumer (now filtered to
