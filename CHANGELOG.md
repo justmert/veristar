@@ -39,7 +39,7 @@ here, before they take effect, as the processing terms require
   name. A deleted account, project, site or report has a fixed placeholder
   such as `Deleted account`. The tenant detail's `recent_audit` carries the
   same fields
-  ([contract 5.9](docs/reference/control-plane-api.md#59-)).
+  ([contract 5.9](docs/reference/control-plane-api.md#59-get-apioperatoraudit)).
 - `GET /api/operator/audit?q=` searches the audit log on the server: a
   case-insensitive substring of a row's action, actor, target or detail, or
   of the login, address, project name or site name the row refers to. It
