@@ -21,6 +21,7 @@ import { ErrorState, LoadingState, Skeleton } from "@/components/states";
 import { Pill } from "@/components/status";
 import { toast } from "@/components/toast";
 import { Button } from "@/components/ui/button";
+import { Dialog } from "@/components/ui/dialog";
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
 import { countOf, formatDateTimeUtc } from "@/lib/format";
 import { shortAddress } from "@/lib/stellar-wallet";
@@ -65,9 +66,8 @@ export function OperatorsPage() {
     <div className="flex min-w-0 flex-col gap-8">
       <PageHeader
         title="Operators"
-        description="The people with access to the operator area. Operator admins add, suspend and remove operators."
         primary={
-          admin && !adding ? (
+          admin ? (
             <Button onClick={() => setAdding(true)} className="max-lg:h-(--vs-control-touch)">
               <Plus aria-hidden />
               Add operator
@@ -75,7 +75,9 @@ export function OperatorsPage() {
           ) : null
         }
       />
-      {admin && adding ? <AddOperator onClose={() => setAdding(false)} /> : null}
+      <Dialog open={admin && adding} onOpenChange={setAdding} title="Add an operator">
+        {admin && adding ? <AddOperator onClose={() => setAdding(false)} /> : null}
+      </Dialog>
       {me.isPending || roster.isPending ? (
         <LoadingState label="Loading the operators">
           <Skeleton.Table rows={4} columns={4} />
@@ -240,10 +242,7 @@ function RosterSection({ items, admin, me }: { items: RosterEntry[]; admin: bool
       cell: (e) => <RowActions entry={e} onPick={(action) => setPending({ entry: e, action })} />,
     });
   return (
-    <section aria-labelledby="roster-h" className="flex min-w-0 flex-col gap-3">
-      <h2 id="roster-h" className="text-title text-fg">
-        Roster
-      </h2>
+    <section aria-label="Roster" className="flex min-w-0 flex-col gap-3">
       <DataTable
         label="Roster"
         columns={columns}
@@ -350,8 +349,8 @@ export function validateAddOperator(form: {
   return out;
 }
 
-// the form opens from the header button, above the roster, as the create
-// forms of the other operator pages do
+// the form opens in a dialog from the header button, as the create forms
+// of the other operator pages do
 export function AddOperator({ onClose }: { onClose?: () => void }) {
   const [kind, setKind] = useState<"github" | "stellar">("github");
   const [value, setValue] = useState("");
@@ -387,79 +386,67 @@ export function AddOperator({ onClose }: { onClose?: () => void }) {
     m.mutate();
   }
   return (
-    <section
-      aria-labelledby="add-operator-h"
-      className="flex max-w-prose animate-rise-in flex-col gap-4 rounded-lg border border-line bg-raised p-4 sm:p-5"
-    >
-      <div className="flex flex-col gap-1">
-        <h2 id="add-operator-h" className="text-title text-fg">
-          Add an operator
-        </h2>
-        <p className="text-small text-fg-2">
-          The person signs in with this identity. Then they register a passkey within 24 hours,
-          unless the deployment sets another time. Reset the passkeys to open a new window.
-        </p>
-      </div>
-      <form onSubmit={submit} className="grid gap-4" noValidate aria-label="Add an operator">
-        <SelectField
-          label="Signs in with"
-          name="kind"
-          value={kind}
-          onChange={(e) => setKind(e.target.value as "github" | "stellar")}
-        >
-          <option value="github">GitHub</option>
-          <option value="stellar">Stellar wallet or passkey</option>
-        </SelectField>
-        <TextField
-          label={kind === "github" ? "GitHub login" : "Stellar address"}
-          hint={
-            kind === "github"
-              ? undefined
-              : "A wallet's G-address, or the C-address of a passkey account from the person's Account page."
-          }
-          name="identity"
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          autoComplete="off"
-          spellCheck={false}
-          error={identityError}
-        />
-        <SelectField
-          label="Role"
-          name="role"
-          value={role}
-          onChange={(e) => setRole(e.target.value as RosterRole)}
-        >
-          <option value="operator">Operator</option>
-          <option value="operator_admin">Operator admin</option>
-        </SelectField>
-        <TextField
-          label="Reason"
-          name="reason"
-          hint={REASON_HINT}
-          maxLength={500}
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-          error={reasonError}
-        />
-        <div className="flex flex-wrap gap-2">
-          <Button type="submit" pending={m.isPending} className="max-lg:h-(--vs-control-touch)">
-            {m.isPending ? "Adding" : "Add operator"}
+    <form onSubmit={submit} className="grid gap-4 pb-4" noValidate aria-label="Add an operator">
+      <SelectField
+        label="Signs in with"
+        name="kind"
+        value={kind}
+        onChange={(e) => setKind(e.target.value as "github" | "stellar")}
+        className="w-full"
+      >
+        <option value="github">GitHub</option>
+        <option value="stellar">Stellar wallet or passkey</option>
+      </SelectField>
+      <TextField
+        label={kind === "github" ? "GitHub login" : "Stellar address"}
+        hint={
+          kind === "github"
+            ? undefined
+            : "A wallet's G-address, or the C-address of a passkey account from the person's Account page."
+        }
+        name="identity"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        autoComplete="off"
+        spellCheck={false}
+        error={identityError}
+      />
+      <SelectField
+        label="Role"
+        name="role"
+        value={role}
+        onChange={(e) => setRole(e.target.value as RosterRole)}
+        className="w-full"
+      >
+        <option value="operator">Operator</option>
+        <option value="operator_admin">Operator admin</option>
+      </SelectField>
+      <TextField
+        label="Reason"
+        name="reason"
+        hint={REASON_HINT}
+        maxLength={500}
+        value={reason}
+        onChange={(e) => setReason(e.target.value)}
+        error={reasonError}
+      />
+      <FormMessage error={m.error} />
+      <div className="flex flex-wrap justify-end gap-2">
+        {onClose ? (
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onClose}
+            className="max-lg:h-(--vs-control-touch)"
+          >
+            Cancel
           </Button>
-          {onClose ? (
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={onClose}
-              className="max-lg:h-(--vs-control-touch)"
-            >
-              Cancel
-            </Button>
-          ) : null}
-        </div>
-        <FormMessage error={m.error} />
-      </form>
-    </section>
+        ) : null}
+        <Button type="submit" pending={m.isPending} className="max-lg:h-(--vs-control-touch)">
+          {m.isPending ? "Adding" : "Add operator"}
+        </Button>
+      </div>
+    </form>
   );
 }
 

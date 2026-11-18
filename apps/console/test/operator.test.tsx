@@ -403,6 +403,11 @@ describe("operator project list, status view", () => {
 });
 
 describe("enrollment mode switch", () => {
+  const radio = (host: HTMLElement, name: string) =>
+    [...host.querySelectorAll<HTMLElement>("[aria-labelledby=mode-h] [role=radio]")].find(
+      (r) => r.textContent === name,
+    ) as HTMLElement;
+
   it("asks for confirmation and puts the new mode", async () => {
     const calls = stubFetch([
       { status: 200, body: { mode: "open" } },
@@ -410,19 +415,12 @@ describe("enrollment mode switch", () => {
       { status: 200, body: { mode: "approval" } },
     ]);
     const host = await renderRoutes([{ path: "/", element: <SettingsPage /> }], "/");
-    await waitFor(() => byLabel(host, "Approval required"));
-    expect(host.textContent).toContain("Current mode: Open");
-    // the change button is live only once another option is chosen
-    const change = () =>
-      byRole(
-        host.querySelector("[aria-labelledby=mode-h]") as HTMLElement,
-        "button",
-        "Change setting",
-      );
-    expect(change().hasAttribute("disabled")).toBe(true);
-    await click(byLabel(host, "Approval required") as HTMLElement);
-    expect(change().hasAttribute("disabled")).toBe(false);
-    await click(change());
+    await waitFor(() => expect(radio(host, "Approval required")).toBeTruthy());
+    // the control shows the mode in force, once
+    expect(radio(host, "Open").getAttribute("aria-checked")).toBe("true");
+    expect(host.textContent).not.toContain("Current");
+    // choosing the other mode opens its confirmation at once
+    await click(radio(host, "Approval required"));
     const dialog = dialogOpen(host) as HTMLElement;
     expect(dialog.textContent).toContain("new enrollments only");
     expect(calls).toHaveLength(2);
@@ -434,24 +432,18 @@ describe("enrollment mode switch", () => {
     expect(calls[2]?.body).toEqual({ mode: "approval" });
   });
 
-  it("cancelling the dialog sends nothing", async () => {
+  it("cancelling the dialog sends nothing and keeps the mode in force", async () => {
     const calls = stubFetch([
       { status: 200, body: { mode: "approval" } },
       { status: 200, body: { keep: true } },
     ]);
     const host = await renderRoutes([{ path: "/", element: <SettingsPage /> }], "/");
-    await waitFor(() => byLabel(host, "Open"));
-    await click(byLabel(host, "Open") as HTMLElement);
-    await click(
-      byRole(
-        host.querySelector("[aria-labelledby=mode-h]") as HTMLElement,
-        "button",
-        "Change setting",
-      ),
-    );
+    await waitFor(() => expect(radio(host, "Open")).toBeTruthy());
+    await click(radio(host, "Open"));
     await click(byRole(dialogOpen(host) as HTMLElement, "button", "Cancel"));
     expect(dialogOpen(host)).toBeUndefined();
     expect(calls).toHaveLength(2);
+    expect(radio(host, "Approval required").getAttribute("aria-checked")).toBe("true");
   });
 });
 
