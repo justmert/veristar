@@ -107,7 +107,7 @@ test.afterAll(async () => {
   await tenant?.ctx.close();
 });
 
-test("an operator sees firing alerts by severity, the badge and the critical banner", async () => {
+test("an operator admin sees firing alerts by severity and the badge", async () => {
   await send([WATCHDOG, SERVICE_DOWN, BACKUP_TOO_OLD]);
   const page = op.page;
   await page.goto(alertsUrl);
@@ -137,15 +137,17 @@ test("an operator sees firing alerts by severity, the badge and the critical ban
   await expect(page.getByText(/^Last checked \d\d:\d\d:\d\d UTC$/)).toBeVisible();
 
   const nav = page.getByRole("navigation", { name: "Operator" });
-  await expect(nav.getByRole("link", { name: /^Alerts\s*1 critical alert firing$/ })).toBeVisible();
+  // the badge counts the alerts the page lists
+  const badge = nav.getByRole("link", { name: /^Alerts\s*2 alerts firing$/ });
+  await expect(badge).toBeVisible();
   await page.screenshot({ path: join(shots, "firing.png"), fullPage: true });
 
-  // the banner follows the operator to the other pages of the area
+  // on the other pages of the area the badge is the signal; nothing sits
+  // above the page title
   await page.goto(`${APP}/operator/projects`);
-  await expect(
-    page.getByRole("alert").filter({ hasText: "1 critical alert is firing." }),
-  ).toBeVisible();
-  await page.getByRole("link", { name: "Open alerts" }).click();
+  await expect(badge).toBeVisible();
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  await badge.click();
   await expect(page).toHaveURL(alertsUrl);
 });
 
