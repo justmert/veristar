@@ -8,6 +8,7 @@ import { apiProjectsQuery, operatorTenantsQuery, webProjectsQuery } from "@/api/
 import { type ApiSort, apiSort, type TenantStatus, tenantStatus, webSort } from "@/api/schemas";
 import { DataTable } from "@/components/data-table";
 import { DbIpAttribution } from "@/components/dbip-attribution";
+import { Disclosure } from "@/components/disclosure";
 import { type Filter, FilterBar } from "@/components/filter-bar";
 import { SelectField } from "@/components/form-field";
 import { PageHeader } from "@/components/page-header";
@@ -57,6 +58,7 @@ import {
   switchView,
   VIEWS,
 } from "@/lib/operator-projects";
+import { PortfolioBar, type Segment, usePortfolio } from "./portfolio";
 import { apiColumns, pick, statusColumns, webColumns } from "./project-columns";
 import { handedOver, ListRange, type Selection, SeriesSwatch } from "./shared";
 
@@ -153,7 +155,7 @@ export function OperatorProjectsPage() {
       : !isEmpty(filters);
   const clearAll = () => {
     setSearch("");
-    if (view === "status") setParams({}, { replace: true });
+    if (view === "status") setParams({ view: "status" }, { replace: true });
     else setFilters(EMPTY_FILTERS);
   };
 
@@ -266,11 +268,48 @@ export function OperatorProjectsPage() {
     );
   }
 
+  // the portfolio counts over the range of the list, so a count and the
+  // rows it filters to agree
+  const portfolio = usePortfolio(view === "status" ? { from: "", to: "" } : listState.range);
+  const current = currentSegment(view, statusQ, filters);
+  function pickSegment(seg: Segment) {
+    setSearch(currentQ);
+    if (seg.kind === "review") {
+      setParams(statusParams({ ...statusQ, status: [], review: true }), { replace: true });
+      return;
+    }
+    if (seg.kind === "all" || seg.kind === "status") {
+      const statuses = seg.kind === "status" ? [seg.status] : [];
+      if (view === "status") setStatusQ({ status: statuses, review: false });
+      else setFilters({ ...EMPTY_FILTERS, q: filters.q, statuses });
+      return;
+    }
+    // the data segments live in the web and api views
+    const to: ProjectsView = seg.kind === "api" ? "api" : view === "api" ? "api" : "web";
+    const next = switchView(params, to);
+    const state = readListState<string>(
+      next,
+      to === "web" ? webSort.options : apiSort.options,
+      to === "web" ? DEFAULT_WEB_SORT : DEFAULT_API_SORT,
+    );
+    const tri: Partial<ProjectFilters> =
+      seg.kind === "web"
+        ? { has_web_data: "true" }
+        : seg.kind === "api"
+          ? { has_api_data: "true" }
+          : { has_web_data: "false", has_api_data: "false" };
+    const out = writeListState(
+      { ...state, filters: { ...EMPTY_FILTERS, q: state.filters.q, ...tri } },
+      to === "web" ? DEFAULT_WEB_SORT : DEFAULT_API_SORT,
+    );
+    out.set("view", to);
+    setParams(out, { replace: true });
+  }
+
   return (
     <div className="flex min-w-0 flex-col gap-6">
       <PageHeader
         title="All projects"
-        description="Every enrolled project with its status, web numbers and API numbers."
         freshness={
           list.dataUpdatedAt > 0
             ? {
@@ -282,72 +321,66 @@ export function OperatorProjectsPage() {
               }
             : null
         }
-        primary={
-          selected.length > 0 ? (
-            <Button asChild className="max-lg:h-(--vs-control-touch)">
-              <Link to={`/operator/compare?${compare.toString()}`}>
-                <Columns2 aria-hidden />
-                Compare {selected.length}
-              </Link>
-            </Button>
-          ) : (
-            <Button disabled className="max-lg:h-(--vs-control-touch)">
-              <Columns2 aria-hidden />
-              Compare
-            </Button>
-          )
+        secondary={
+          view !== "status" ? (
+            <ListRange
+              resolved={resolved}
+              requested={listState.range}
+              onRange={(range) => writeList({ ...listState, range })}
+            />
+          ) : null
         }
       />
 
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
-        <Segmented
-          label="View"
-          value={view}
-          options={VIEWS}
-          onChange={(v) => setParams(switchView(params, v), { replace: true })}
-        />
-        {view !== "status" ? (
-          <ListRange
-            resolved={resolved}
-            requested={listState.range}
-            onRange={(range) => writeList({ ...listState, range })}
-          />
-        ) : null}
-      </div>
+      <PortfolioBar portfolio={portfolio} current={current} onPick={pickSegment} />
 
       <div className="flex min-w-0 flex-col gap-3">
-        <FilterBar
-          collapsed
-          search={search}
-          onSearch={setSearch}
-          searchLabel="Search projects"
-          placeholder="Search projects"
-          filters={
-            view === "status"
-              ? statusFilters(statusQ, setStatusQ)
-              : listFilters(filters, setFilters, view === "web")
-          }
-          onClearAll={clearAll}
-          actions={
-            view === "status" ? null : (
-              <ColumnMenu
-                view={view}
-                shown={shown}
-                sort={sort}
-                onChange={(ids) => {
-                  saveColumns(view, ids);
-                  setChosen((c) => ({ ...c, [view]: ids }));
-                }}
-              />
-            )
-          }
-        />
+        <div className="flex min-w-0 flex-wrap items-start gap-3">
+          <Segmented
+            label="View"
+            value={view}
+            options={VIEWS}
+            onChange={(v) => setParams(switchView(params, v), { replace: true })}
+            className="h-(--vs-control)"
+          />
+          <FilterBar
+            collapsed
+            className="min-w-0 flex-1 basis-80"
+            search={search}
+            onSearch={setSearch}
+            searchLabel="Search projects"
+            placeholder="Search projects"
+            filters={
+              view === "status"
+                ? statusFilters(statusQ, setStatusQ)
+                : listFilters(filters, setFilters, view === "web")
+            }
+            onClearAll={clearAll}
+            actions={
+              view === "status" ? null : (
+                <ColumnMenu
+                  view={view}
+                  shown={shown}
+                  sort={sort}
+                  onChange={(ids) => {
+                    saveColumns(view, ids);
+                    setChosen((c) => ({ ...c, [view]: ids }));
+                  }}
+                />
+              )
+            }
+          />
+        </div>
         {badDays ? (
           <p role="alert" className="text-small text-critical">
             {dayPairError(filters)}
           </p>
         ) : null}
-        <CompareStrip selected={selected} onChange={setSelected} />
+        <SelectionBar
+          selected={selected}
+          onChange={setSelected}
+          href={`/operator/compare?${compare.toString()}`}
+        />
         {table}
         {list.data && loaded > 0 && !badDays ? (
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -371,6 +404,29 @@ export function OperatorProjectsPage() {
       {view !== "status" ? <AboutNumbers view={view} /> : null}
     </div>
   );
+}
+
+// the segment of the portfolio the list shows now, when its filters are
+// exactly one segment's (the search aside)
+function currentSegment(view: ProjectsView, q: TenantListQuery, f: ProjectFilters): string | null {
+  if (view === "status") {
+    if (q.review) return q.status.length === 0 ? "review" : null;
+    if (q.status.length === 0) return "all";
+    return q.status.length === 1 ? `status:${q.status[0]}` : null;
+  }
+  const others = (Object.keys(EMPTY_FILTERS) as (keyof ProjectFilters)[]).filter(
+    (k) => !["q", "statuses", "has_web_data", "has_api_data"].includes(k),
+  );
+  if (others.some((k) => f[k] !== EMPTY_FILTERS[k])) return null;
+  const tri = `${f.has_web_data}/${f.has_api_data}`;
+  if (f.statuses.length === 0) {
+    if (tri === "/") return "all";
+    if (tri === "true/" && view === "web") return "web";
+    if (tri === "/true" && view === "api") return "api";
+    if (tri === "false/false") return "none";
+    return null;
+  }
+  return f.statuses.length === 1 && tri === "/" ? `status:${f.statuses[0]}` : null;
 }
 
 // ---- filters
@@ -680,28 +736,28 @@ function ColumnMenu({
 
 // ---- comparison
 
-function CompareStrip({
+// the selection bar sits where the checkboxes are and holds the way into
+// the comparison: it shows once a row is selected and stays in view while
+// the list scrolls
+function SelectionBar({
   selected,
   onChange,
+  href,
 }: {
   selected: Selection;
   onChange: (s: Selection) => void;
+  href: string;
 }) {
-  if (selected.length === 0)
-    return (
-      <p className="text-small text-fg-2">
-        Select up to {MAX_COMPARE} projects to compare them side by side.
-      </p>
-    );
+  if (selected.length === 0) return null;
   return (
     <section
       aria-label="Selected for comparison"
-      className="flex animate-fade-in flex-wrap items-center gap-2"
+      className="sticky top-0 z-(--vs-layer-raised) flex animate-fade-in flex-wrap items-center gap-2 rounded-lg border border-fg bg-overlay px-3 py-2 shadow-overlay max-lg:top-(--vs-header)"
     >
       <span className="text-small text-fg-2">
-        <span className="text-fg tabular">{selected.length}</span> of {MAX_COMPARE} selected
+        <span className="font-medium text-fg tabular">{selected.length}</span> of {MAX_COMPARE}
       </span>
-      <ul className="flex min-w-0 flex-wrap gap-2">
+      <ul className="flex min-w-0 flex-1 flex-wrap gap-2">
         {selected.map((s, i) => (
           <li key={s.id} className="min-w-0">
             <button
@@ -723,7 +779,13 @@ function CompareStrip({
         onClick={() => onChange([])}
         className="max-lg:h-(--vs-control-touch)"
       >
-        Clear selection
+        Clear
+      </Button>
+      <Button asChild size="sm" className="max-lg:h-(--vs-control-touch)">
+        <Link to={href}>
+          <Columns2 aria-hidden />
+          Compare {selected.length}
+        </Link>
       </Button>
     </section>
   );
@@ -733,24 +795,15 @@ function CompareStrip({
 
 function AboutNumbers({ view }: { view: "web" | "api" }) {
   return (
-    <details className="max-w-prose text-small text-fg-2">
-      <summary className="w-fit cursor-pointer rounded-sm font-medium transition-colors duration-(--vs-duration-press) ease-standard hover:text-fg focus-ring">
-        About these numbers
-      </summary>
-      <ul className="mt-2 flex list-disc flex-col gap-1 pl-5">
+    <Disclosure variant="inline" summary="About these numbers" className="max-w-prose">
+      <ul className="mt-2 flex list-disc flex-col gap-1 pl-5 text-small text-fg-2">
         <li>Every number comes from daily totals of UTC days.</li>
         <li>Today is partial. It holds the data read so far.</li>
-        <li>Point to a column header to see what the column counts.</li>
-        {view === "web" ? (
-          <li>Web numbers are read from the web analytics every hour.</li>
-        ) : (
-          <>
-            <li>API numbers refresh every 5 minutes.</li>
-            <li>Latency percentiles come from summed duration buckets, not from averages.</li>
-          </>
+        {view === "web" ? null : (
+          <li>Latency percentiles come from summed duration buckets, not from averages.</li>
         )}
       </ul>
-      {view === "web" ? <DbIpAttribution className="mt-2" /> : null}
-    </details>
+      {view === "web" ? <DbIpAttribution className="mt-2 text-small text-fg-2" /> : null}
+    </Disclosure>
   );
 }

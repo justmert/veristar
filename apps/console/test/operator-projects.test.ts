@@ -12,11 +12,11 @@ import {
 import { chartState } from "@/pages/operator/compare";
 
 describe("project list views", () => {
-  it("reads the view and falls back to the status view", () => {
-    expect(readView("web")).toBe("web");
+  it("reads the view and falls back to the web view, which sorts the projects with data first", () => {
+    expect(readView("status")).toBe("status");
     expect(readView("api")).toBe("api");
-    expect(readView("tenants")).toBe("status");
-    expect(readView(null)).toBe("status");
+    expect(readView("tenants")).toBe("web");
+    expect(readView(null)).toBe("web");
   });
 
   it("keeps the search and the status across views and drops what a view cannot apply", () => {
@@ -32,8 +32,8 @@ describe("project list views", () => {
     expect(api.has("integrity_at_or_below")).toBe(false);
     expect(api.has("sort")).toBe(false);
     const status = switchView(web, "status");
-    expect(status.toString()).toBe("q=dex&status=active");
-    const back = switchView(new URLSearchParams("q=dex&review=true&sort=name"), "web");
+    expect(status.toString()).toBe("view=status&q=dex&status=active");
+    const back = switchView(new URLSearchParams("view=status&q=dex&review=true&sort=name"), "web");
     expect(back.toString()).toBe("q=dex&view=web");
   });
 
@@ -49,7 +49,7 @@ describe("project list views", () => {
       order: "asc",
     });
     expect(statusParams(q).toString()).toBe(
-      "status=pending%2Cactive&review=true&sort=name&order=asc",
+      "view=status&status=pending%2Cactive&review=true&sort=name&order=asc",
     );
   });
 

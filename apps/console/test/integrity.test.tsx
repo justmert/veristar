@@ -221,7 +221,8 @@ describe("integrity in the global web view", () => {
     const row = host.querySelector<HTMLElement>(`tr[data-tenant="${c.TENANT_ID}"]`);
     expect(row?.querySelector('[data-col="integrity"]')?.textContent).toBe("Grade B");
     const other = host.querySelector<HTMLElement>(`tr[data-tenant="${f.TENANT_B}"]`);
-    expect(other?.querySelector('[data-col="integrity"]')?.textContent).toBe("Not graded");
+    // no grade, no pill: the cell stays empty
+    expect(other?.querySelector('[data-col="integrity"]')).toBeNull();
 
     const header = [...host.querySelectorAll("th button")].find((b) => b.textContent === "Grade");
     if (!header) throw new Error("no integrity header");

@@ -313,14 +313,16 @@ test("the operator filters to verified projects, sorts by visitors and compares 
   const page = op.page;
   const [a, b, c, d] = ["A", "B", "C", "D"].map(project) as [Project, Project, Project, Project];
   await page.goto(`${APP}/operator`);
-  // the sidebar opens Projects, its view control picks the web view
+  // the sidebar opens Projects in the web view, the projects with data first
   await page
     .getByRole("navigation", { name: "Operator" })
     .getByRole("link", { name: "All projects" })
     .click();
   await page.waitForURL(`${APP}/operator/projects`);
-  await page.getByRole("radiogroup", { name: "View" }).getByRole("radio", { name: "Web" }).click();
-  await page.waitForURL(`${APP}/operator/projects?view=web`);
+  await expect(
+    page.getByRole("radiogroup", { name: "View" }).getByRole("radio", { name: "Web" }),
+  ).toHaveAttribute("aria-checked", "true");
+  await expect(page.getByRole("navigation", { name: "Portfolio" })).toBeVisible();
   await expect(page.getByRole("heading", { level: 1, name: "All projects" })).toBeVisible();
   // the definitions are on the column headers
   await expect(
@@ -364,8 +366,8 @@ test("the operator filters to verified projects, sorts by visitors and compares 
   );
   await page.screenshot({ path: join(shots, "global-web.png"), fullPage: true });
 
-  // compare stays disabled until a project is selected
-  await expect(page.getByRole("button", { name: "Compare", exact: true })).toBeDisabled();
+  // the selection bar with the way into the comparison shows once a row is selected
+  await expect(page.getByRole("region", { name: "Selected for comparison" })).toHaveCount(0);
   for (const p of [a, b, c])
     await page
       .getByRole("table", { name: "Projects, web numbers" })

@@ -22,7 +22,12 @@ import { OperatorProjectsPage } from "@/pages/operator/projects";
 import { ReviewQueuePage } from "@/pages/operator/review";
 import { SettingsPage } from "@/pages/operator/settings";
 import * as f from "./fixtures/contract";
-import { apiCompareBody, integrityReportBody, webCompareBody } from "./fixtures/global";
+import {
+  apiCompareBody,
+  integrityReportBody,
+  webCompareBody,
+  webProjectsBody,
+} from "./fixtures/global";
 import { byLabel, byRole, click, render, renderRoutes, stubFetch, type, waitFor } from "./helpers";
 import { type Route, routeFetch } from "./route-fetch";
 
@@ -349,6 +354,15 @@ describe("operator project list, status view", () => {
 
   it("searches as the person types, sorts by a header and loads the next page", async () => {
     const calls = routeFetch([
+      // the portfolio counts and the review count beside the list
+      {
+        path: /\/api\/operator\/tenants\?review=true/,
+        answer: { status: 200, body: { items: [], next_cursor: null } },
+      },
+      {
+        path: "/api/operator/web/projects",
+        answer: { status: 200, body: { ...webProjectsBody, items: [] } },
+      },
       {
         path: "/api/operator/tenants",
         answer: [
@@ -367,10 +381,12 @@ describe("operator project list, status view", () => {
     ]);
     const host = await renderRoutes(
       [{ path: "/operator/projects", element: <OperatorProjectsPage /> }],
-      "/operator/projects",
+      "/operator/projects?view=status",
     );
     await waitFor(() => expect(host.textContent).toContain("Stellar DEX"));
-    expect(calls[0]?.url).toBe("/api/operator/tenants?sort=created_at&order=desc&limit=50");
+    expect(calls.find((c) => c.url.startsWith("/api/operator/tenants?sort"))?.url).toBe(
+      "/api/operator/tenants?sort=created_at&order=desc&limit=50",
+    );
     await type(byLabel(host, "Search projects"), "dex");
     await waitFor(() => expect(calls.some((c) => c.url.includes("q=dex"))).toBe(true));
     const name = host.querySelector("th[aria-sort] button") as HTMLElement;
