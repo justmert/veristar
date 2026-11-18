@@ -643,7 +643,7 @@ function History({ tenantId, sites }: { tenantId: string; sites: Site[] }) {
         error={list.error}
         onRetry={() => list.refetch()}
         loadingRows={3}
-        empty={{ title: "No erasure was requested yet." }}
+        empty={{ title: "No erasure requested yet" }}
         footer={{
           kind: "more",
           hasMore: list.hasNextPage,

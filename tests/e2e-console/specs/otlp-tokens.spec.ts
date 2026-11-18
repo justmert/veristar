@@ -162,7 +162,7 @@ test("the token is revoked after a confirmation", async () => {
   await expect(dialog).toBeHidden();
   await expect(page.getByText("Payments API is revoked.")).toBeVisible();
   await expect(
-    page.getByRole("table", { name: "Tokens" }).getByText("No active tokens."),
+    page.getByRole("table", { name: "Tokens" }).getByText("No active tokens"),
   ).toBeVisible();
 
   one = await api<Token>(ctx, "GET", `/api/tenants/${tenant.id}/otlp-tokens/${tokenId}`);

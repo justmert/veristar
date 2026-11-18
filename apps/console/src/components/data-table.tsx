@@ -2,7 +2,7 @@ import { cn } from "@veristar/brand/cn";
 import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { type ReactNode, useLayoutEffect, useRef, useState } from "react";
 import { Link } from "react-router";
-import { ErrorState } from "@/components/states";
+import { EmptyState, ErrorState } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -589,13 +589,17 @@ function CellValue<Row>({ column: c, row }: { column: Column<Row>; row: Row }) {
   );
 }
 
+// the empty state of a table: the shared empty anatomy, without its box
 function EmptyRow({ empty }: { empty?: { title: string; text?: ReactNode; action?: ReactNode } }) {
   return (
-    <div role="status" className="flex flex-col items-center gap-2 px-4 py-6 text-center">
-      <span className="text-body font-medium text-fg">{empty?.title ?? "Nothing to show"}</span>
-      {empty?.text ? <span className="text-small text-fg-2">{empty.text}</span> : null}
-      {empty?.action}
-    </div>
+    <EmptyState
+      compact
+      title={empty?.title ?? "Nothing to show"}
+      action={empty?.action}
+      className="border-0"
+    >
+      {empty?.text}
+    </EmptyState>
   );
 }
 

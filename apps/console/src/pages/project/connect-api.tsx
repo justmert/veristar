@@ -509,7 +509,7 @@ function TokensSection({
         onRetry={() => list.refetch()}
         loadingRows={2}
         empty={{
-          title: showRevoked ? "No tokens yet." : "No active tokens.",
+          title: showRevoked ? "No tokens yet" : "No active tokens",
           text: "Create a token in step 1.",
         }}
       />

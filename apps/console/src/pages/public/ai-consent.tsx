@@ -8,10 +8,10 @@ import { ChoiceCard } from "@/components/choice-card";
 import { FormMessage } from "@/components/error-panel";
 import { Notice } from "@/components/notice";
 import { PublicFrame } from "@/components/public-frame";
-import { ErrorState, LoadingState, Skeleton } from "@/components/states";
+import { ErrorState, LoadingState, MessagePage, Skeleton } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { errorMessage } from "@/lib/errors";
-import { ProjectsButton, StopPage } from "./not-found";
+import { ProjectsButton } from "./not-found";
 
 // the oauth consent screen of the mcp authorization flow (contract 12.3).
 // /oauth/authorize checks the client and sends the browser here with a
@@ -98,7 +98,7 @@ function Stop({
   children?: React.ReactNode;
 }) {
   return (
-    <StopPage
+    <MessagePage
       icon={tone === "critical" ? <CircleAlert aria-hidden /> : <Plug aria-hidden />}
       tone={tone === "critical" ? "critical" : "neutral"}
       title={title}
@@ -106,7 +106,7 @@ function Stop({
       className="w-full"
     >
       {children}
-    </StopPage>
+    </MessagePage>
   );
 }
 
