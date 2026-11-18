@@ -52,7 +52,7 @@ describe("utm collection setting (contract 3.1 collect_utm, 4.3.4)", () => {
     const calls = stubFetch([]);
     const host = await render(<CampaignParams site={f.siteBody as Site} canEdit isOwner={false} />);
     expect(box(host).hasAttribute("disabled")).toBe(true);
-    expect(host.textContent).toContain("Only an owner of the project can change it.");
+    expect(host.textContent).toContain("Only an owner can change it.");
     await click(box(host));
     expect(calls).toHaveLength(0);
   });

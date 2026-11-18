@@ -29,7 +29,7 @@ import { Notice } from "@/components/notice";
 import { PageHeader } from "@/components/page-header";
 import { RangeControl } from "@/components/range-control";
 import { Segmented } from "@/components/segmented";
-import { Sparkline, StatCard } from "@/components/stat-card";
+import { Sparkline, StatCard, StatGrid } from "@/components/stat-card";
 import { EmptyState, ErrorState, Missing } from "@/components/states";
 import { StatusDot } from "@/components/status";
 import { Button } from "@/components/ui/button";
@@ -59,6 +59,7 @@ import {
   writeWebState,
 } from "@/lib/web-dashboard";
 import { useProject } from "@/pages/project-layout";
+import { Movers } from "./movers";
 import { PAGE_HEADERS, WebSkeleton } from "./page-frame";
 import { SelectFilter } from "./select-filter";
 import { METRIC_LABEL, WebTrendChart } from "./web-chart";
@@ -408,7 +409,19 @@ function Dashboard({
       aria-busy={stale || undefined}
       data-testid="web-dashboard"
     >
-      <section aria-label="Totals" className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+      <Movers
+        items={METRICS.map((t) => ({
+          key: t.metric,
+          label: METRIC_LABEL[t.metric],
+          change: webTrend(
+            t.metric,
+            metricValue(cur.totals, t.metric),
+            metricValue(prev.totals, t.metric),
+            cur.range.days,
+          ),
+        }))}
+      />
+      <StatGrid aria-label="Totals">
         {METRICS.map((t) => {
           const v = metricValue(cur.totals, t.metric);
           const spark = sparkOf(cur.series, t.metric);
@@ -416,7 +429,6 @@ function Dashboard({
             <StatCard
               key={t.metric}
               data-metric={t.metric}
-              className={t.metric === "pageviews" ? "max-md:col-span-2" : undefined}
               label={METRIC_LABEL[t.metric]}
               definition={t.definition}
               value={v}
@@ -430,10 +442,12 @@ function Dashboard({
               }
               selected={chartable(t.metric) ? metric === t.metric : undefined}
               onSelect={chartable(t.metric) ? () => set({ metric: t.metric }) : undefined}
+              // a rate or an average with no visit behind it is no card
+              hideWhenEmpty
             />
           );
         })}
-      </section>
+      </StatGrid>
 
       <WebTrendChart tenantId={tenantId} q={q} summary={summary} metric={metric} />
 
@@ -677,18 +691,17 @@ function NotCounted({
       ? summary.other_band.pageviews
       : summary.current.totals.pageviews
     : null;
-  const rows = other > 0 ? [...OUTCOMES, OTHER_OUTCOME] : OUTCOMES;
+  // an outcome nothing reached is left out; a range where nothing reached
+  // any outcome draws neither list
+  const rows = (other > 0 ? [...OUTCOMES, OTHER_OUTCOME] : OUTCOMES).filter(
+    (o) => pending || value(o.key) > 0,
+  );
 
   return (
     <section aria-labelledby="not-counted" className="flex flex-col gap-4">
-      <div className="flex flex-col gap-1">
-        <h2 id="not-counted" className="text-section text-fg">
-          Not counted
-        </h2>
-        <p className="text-small text-fg-2">
-          Events your sites sent that the totals leave out. These counts refresh every few minutes.
-        </p>
-      </div>
+      <h2 id="not-counted" className="text-section text-fg">
+        Not counted
+      </h2>
 
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-raised px-4 py-3 sm:px-5">
         <p className="text-body text-fg-2" data-testid="quarantined-pageviews">
@@ -723,7 +736,7 @@ function NotCounted({
             for (const a of answers) if (a.error) a.refetch();
           }}
         />
-      ) : (
+      ) : rows.length === 0 ? null : (
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="flex min-w-0 flex-col gap-3 rounded-lg border border-line bg-raised p-4 sm:p-5">
             <h3 className="text-title text-fg">Every event, by outcome</h3>
@@ -750,21 +763,23 @@ function NotCounted({
               ))}
             </dl>
           </div>
-          <div className="flex min-w-0 flex-col gap-3 rounded-lg border border-line bg-raised p-4 sm:p-5">
-            <h3 className="text-title text-fg">Why events were rejected</h3>
-            <BreakdownList
-              label="Reasons"
-              state={pending ? "loading" : undefined}
-              items={reasons.map((r) => ({
-                key: r.key,
-                label: r.label,
-                text: r.label,
-                value: r.count,
-              }))}
-              valueLabel="Events"
-              emptyTitle="No rejected events in this range"
-            />
-          </div>
+          {!pending && reasons.length === 0 ? null : (
+            <div className="flex min-w-0 flex-col gap-3 rounded-lg border border-line bg-raised p-4 sm:p-5">
+              <h3 className="text-title text-fg">Why events were rejected</h3>
+              <BreakdownList
+                label="Reasons"
+                state={pending ? "loading" : undefined}
+                items={reasons.map((r) => ({
+                  key: r.key,
+                  label: r.label,
+                  text: r.label,
+                  value: r.count,
+                }))}
+                valueLabel="Events"
+                emptyTitle="No rejected events in this range"
+              />
+            </div>
+          )}
         </div>
       )}
     </section>

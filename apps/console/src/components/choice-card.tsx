@@ -1,13 +1,11 @@
 import { cn } from "@veristar/brand/cn";
-import { Check } from "lucide-react";
 import { type ReactNode, useId } from "react";
 
 // one option of a radio group drawn as a card: a native radio (keyboard,
 // forms and assistive technology work as usual), its title as the name and
 // its description read with it. the whole card is the click target. the
-// chosen card has a 2 px ink edge, a filled radio and a check, on the card's
-// own fill: never a grey that reads as disabled, never the danger or accent
-// colour.
+// chosen card says so once: its filled radio, on the card's own fill and
+// edge (never a grey that reads as disabled, never a second mark).
 export function ChoiceCard({
   name,
   value,
@@ -34,7 +32,7 @@ export function ChoiceCard({
     <label
       htmlFor={`${id}-r`}
       className={cn(
-        "flex min-w-0 cursor-pointer flex-col gap-1 rounded-lg border border-line bg-raised p-3 transition-colors duration-(--vs-duration-reveal) ease-standard hover:border-line-strong has-checked:border-fg has-checked:ring-1 has-checked:ring-fg has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-accent-text has-disabled:cursor-not-allowed has-disabled:opacity-50",
+        "flex min-w-0 cursor-pointer flex-col gap-1 rounded-lg border border-line bg-raised p-3 transition-colors duration-(--vs-duration-reveal) ease-standard hover:border-line-strong has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-accent-text has-disabled:cursor-not-allowed has-disabled:opacity-50",
         className,
       )}
     >
@@ -62,10 +60,7 @@ export function ChoiceCard({
             <span className="size-1.5 rounded-full bg-transparent" />
           </span>
         </span>
-        <span className="ml-auto flex items-center gap-2">
-          {badge}
-          {checked ? <Check aria-hidden className="size-4 text-fg" strokeWidth={2.4} /> : null}
-        </span>
+        {badge ? <span className="ml-auto flex items-center gap-2">{badge}</span> : null}
       </span>
       {description ? (
         <span id={`${id}-d`} className="text-small font-normal text-fg-2">

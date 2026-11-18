@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Ban, ExternalLink, KeyRound } from "lucide-react";
-import { type FormEvent, type ReactNode, useState } from "react";
+import { type ReactNode, useState } from "react";
 import { ApiError } from "@/api/client";
 import {
   clientSnippets,
@@ -16,13 +16,12 @@ import {
   tenantMcpQuery,
 } from "@/api/mcp";
 import { CodeBlock, CopyField } from "@/components/code-block";
-import { ConfirmDialog } from "@/components/confirm-dialog";
+import { CreateDialog } from "@/components/create-dialog";
 import { type Column, DataTable } from "@/components/data-table";
-import { FormMessage } from "@/components/error-panel";
 import { TextField } from "@/components/form-field";
 import { Notice } from "@/components/notice";
 import { PageHeader } from "@/components/page-header";
-import { SecretPanel } from "@/components/secret-panel";
+import { Section } from "@/components/panel";
 import { Missing } from "@/components/states";
 import { StatusBadge } from "@/components/status-badge";
 import { toast } from "@/components/toast";
@@ -74,7 +73,6 @@ function serverErrors(err: unknown): McpKeyErrors {
 export function AiPage() {
   const { tenant, me, isOwner } = useProject();
   const list = useQuery(tenantMcpQuery(tenant.id));
-  const [created, setCreated] = useState<McpCredentialCreated | null>(null);
   const qc = useQueryClient();
   const canCreate = tenant.status === "active" || tenant.status === "pending";
   const docs = siblingUrl(window.location.hostname, "docs");
@@ -83,6 +81,15 @@ export function AiPage() {
     <div className="flex flex-col gap-8">
       <PageHeader
         {...PAGE_HEADERS.ai}
+        primary={
+          canCreate ? (
+            <CreateKey
+              takenNames={(list.data ?? []).filter((c) => c.status === "active").map((c) => c.name)}
+              create={(b) => mcpApi.createTenantKey(tenant.id, b)}
+              onCreated={() => qc.invalidateQueries({ queryKey: mcpKeys.tenant(tenant.id) })}
+            />
+          ) : null
+        }
         secondary={
           docs ? (
             <Button asChild variant="outline">
@@ -94,46 +101,136 @@ export function AiPage() {
           ) : null
         }
       />
-
-      <div className="flex max-w-content flex-col gap-8">
-        <Connect created={created} />
-
-        <section aria-labelledby="mcp-keys-h" className="flex min-w-0 flex-col gap-4">
-          <div className="flex flex-col gap-1">
-            <h2 id="mcp-keys-h" className="text-title text-fg">
-              Access keys and connections
-            </h2>
-            <p className="max-w-prose text-small text-fg-2">
-              A connection acts as the person who made it. It stops when that person leaves the
-              project. You can revoke your own; owners can revoke all.
-            </p>
-          </div>
-          {created ? (
-            <CreatedKeyPanel created={created} onDone={() => setCreated(null)} />
-          ) : canCreate ? (
-            <McpKeyCreateForm
-              label="Create an access key"
-              takenNames={(list.data ?? []).filter((c) => c.status === "active").map((c) => c.name)}
-              create={(b) => mcpApi.createTenantKey(tenant.id, b)}
-              onCreated={(k) => {
-                qc.invalidateQueries({ queryKey: mcpKeys.tenant(tenant.id) });
-                setCreated(k);
-              }}
-            />
-          ) : (
-            <Notice tone="info" title="No new keys while the project is suspended or removed">
-              You can still revoke the keys below.
-            </Notice>
-          )}
-          <CredentialSection
-            list={list}
-            canRevoke={(c) => isOwner || c.user_id === me.user.id}
-            revoke={(c) => mcpApi.revokeTenantCredential(tenant.id, c.id)}
-            invalidate={() => qc.invalidateQueries({ queryKey: mcpKeys.tenant(tenant.id) })}
-          />
-        </section>
-      </div>
+      {canCreate ? null : (
+        <Notice tone="info" title="No new keys while the project is suspended or removed" />
+      )}
+      <Section title="Keys and connections" count={list.data?.length ?? null}>
+        <CredentialSection
+          list={list}
+          canRevoke={(c) => isOwner || c.user_id === me.user.id}
+          revoke={(c) => mcpApi.revokeTenantCredential(tenant.id, c.id)}
+          invalidate={() => qc.invalidateQueries({ queryKey: mcpKeys.tenant(tenant.id) })}
+        />
+      </Section>
+      <Connect created={null} />
     </div>
+  );
+}
+
+// the header's Create key: a name and an expiry in a dialog, then the key
+// once in the same dialog, with the client commands that hold it
+export function CreateKey({
+  create,
+  onCreated,
+  takenNames = [],
+}: {
+  create: (b: McpKeyInput) => Promise<McpCredentialCreated>;
+  onCreated: (k: McpCredentialCreated) => void;
+  // the names of the live keys, to warn on a second key with the same name
+  takenNames?: string[];
+}) {
+  const [form, setForm] = useState<McpKeyForm>({ name: "", days: String(MCP_KEY_DEFAULT_DAYS) });
+  const [errors, setErrors] = useState<McpKeyErrors>({});
+  const m = useMutation({
+    mutationFn: create,
+    onSuccess: (k) => onCreated(k),
+    onError: (err) => setErrors(serverErrors(err)),
+  });
+  const created = m.data;
+  return (
+    <CreateDialog
+      label="Create key"
+      title="Create an access key"
+      icon={<KeyRound aria-hidden />}
+      pending={m.isPending}
+      pendingLabel="Creating"
+      error={m.error && Object.keys(serverErrors(m.error)).length === 0 ? m.error : null}
+      onSubmit={() => {
+        const v = validateMcpKey(form);
+        setErrors(v.errors);
+        if (v.body) m.mutate(v.body);
+      }}
+      onClosed={() => {
+        m.reset();
+        setForm({ name: "", days: String(MCP_KEY_DEFAULT_DAYS) });
+        setErrors({});
+      }}
+      secret={
+        created
+          ? {
+              value: created.key,
+              noun: "key",
+              name: created.name,
+              copyLabel: "Copy key",
+              children: <ClientCommands created={created} />,
+            }
+          : null
+      }
+    >
+      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_11rem]">
+        <TextField
+          label="Name"
+          hint={
+            nameTaken(takenNames, form.name) ? (
+              <span className="text-warning">
+                A key with this name exists. Use another name to tell them apart.
+              </span>
+            ) : undefined
+          }
+          placeholder="laptop"
+          maxLength={100}
+          className="max-lg:h-(--vs-control-touch)"
+          value={form.name}
+          error={errors.name}
+          onChange={(e) => setForm({ ...form, name: e.target.value })}
+        />
+        <TextField
+          label="Expires after (days)"
+          hint={`At most ${MCP_KEY_MAX_DAYS}`}
+          type="number"
+          inputMode="numeric"
+          min={1}
+          max={MCP_KEY_MAX_DAYS}
+          className="tabular max-lg:h-(--vs-control-touch)"
+          value={form.days}
+          error={errors.days}
+          onChange={(e) => setForm({ ...form, days: e.target.value })}
+        />
+      </div>
+    </CreateDialog>
+  );
+}
+
+// the commands of the clients that take a key, written with the new key;
+// the code on screen shows its start, the copy holds it whole
+function ClientCommands({ created }: { created: McpCredentialCreated }) {
+  const origin = window.location.origin;
+  const s = clientSnippets(origin, created.key);
+  const shown = clientSnippets(origin, `${created.key.slice(0, 11)}...`);
+  return (
+    <Tabs defaultValue="claude-code" className="min-w-0 gap-3">
+      <TabsList aria-label="Client" className="max-w-full overflow-x-auto">
+        <TabsTrigger value="claude-code">Claude Code</TabsTrigger>
+        <TabsTrigger value="cursor">Cursor</TabsTrigger>
+      </TabsList>
+      <TabsContent value="claude-code" className="min-w-0">
+        <CodeBlock
+          code={shown.claudeCode}
+          copyText={s.claudeCode}
+          label="Terminal"
+          copyLabel="Copy command"
+          wrap
+        />
+      </TabsContent>
+      <TabsContent value="cursor" className="min-w-0">
+        <CodeBlock
+          code={shown.cursor}
+          copyText={s.cursor}
+          label="mcp.json"
+          copyLabel="Copy configuration"
+        />
+      </TabsContent>
+    </Tabs>
   );
 }
 
@@ -151,26 +248,16 @@ export function CredentialSection({
   revoke: (c: McpCredential) => Promise<void>;
   invalidate: () => void;
 }) {
-  const [revoking, setRevoking] = useState<McpCredential | null>(null);
-  const m = useMutation({
-    mutationFn: (c: McpCredential) => revoke(c),
-    onSuccess: (_, c) => {
-      setRevoking(null);
-      toast.success(`${c.name} is revoked.`);
-      invalidate();
-    },
-  });
   const columns: Column<McpCredential>[] = [
     {
       key: "name",
       header: "Name",
       primary: true,
       minWidth: "min-w-56",
-      className: "w-full max-w-0",
-      truncate: (c) => c.name,
+      className: "w-full",
       cell: (c) => (
         <span className="flex min-w-0 flex-col py-1">
-          <span className="truncate font-medium text-fg">{c.name}</span>
+          <span className="font-medium break-words text-fg">{c.name}</span>
           <span className="truncate text-caption font-normal text-fg-2">
             {c.kind === "key" ? "Access key" : "Connector"}
             {c.prefix ? <code className="ml-2 font-mono">{c.prefix}...</code> : null}
@@ -209,27 +296,6 @@ export function CredentialSection({
           <Missing reason={NOT_USED} />
         ),
     },
-    {
-      key: "action",
-      header: "Actions",
-      align: "right",
-      mobile: true,
-      cell: (c) =>
-        c.status === "active" && canRevoke(c) ? (
-          <Button
-            variant="destructive-outline"
-            size="sm"
-            className="relative z-(--vs-layer-raised) max-lg:h-(--vs-control-touch)"
-            onClick={() => {
-              m.reset();
-              setRevoking(c);
-            }}
-          >
-            <Ban aria-hidden />
-            Revoke
-          </Button>
-        ) : null,
-    },
   ];
   return (
     <>
@@ -244,23 +310,27 @@ export function CredentialSection({
         error={list.error}
         onRetry={() => list.refetch()}
         loadingRows={2}
-        empty={{
-          title: "No key or connection yet",
-          text: "Create an access key, or connect a client through sign-in.",
-        }}
-      />
-      <ConfirmDialog
-        open={revoking !== null}
-        onOpenChange={(o) => {
-          if (!o) setRevoking(null);
-        }}
-        title={`Revoke the key “${revoking?.name ?? ""}”?`}
-        description="The next request of this client is refused. You cannot restore it. Make a new one instead."
-        confirmLabel="Revoke"
-        pendingLabel="Revoking"
-        pending={m.isPending}
-        error={m.error}
-        onConfirm={() => revoking && m.mutate(revoking)}
+        empty={{ title: "No key or connection yet" }}
+        rowActions={(c) => [
+          c.status === "active" &&
+            canRevoke(c) && {
+              label: "Revoke",
+              icon: <Ban aria-hidden />,
+              destructive: true,
+              confirm: {
+                title: `Revoke the key “${c.name}”?`,
+                description:
+                  "The next request of this client is refused. You cannot restore it. Make a new one instead.",
+                confirmLabel: "Revoke",
+                pendingLabel: "Revoking",
+                run: async () => {
+                  await revoke(c);
+                  toast.success(`${c.name} is revoked.`);
+                  invalidate();
+                },
+              },
+            },
+        ]}
       />
     </>
   );
@@ -301,22 +371,13 @@ function StepItem({ n, children }: { n: number; children: ReactNode }) {
   );
 }
 
-// how to connect each client: the server url once, then numbered steps per
-// client. with a key just made, the commands hold it.
+// how to connect each client: the server url once, then a few numbered
+// steps per client. a key's commands are in the create dialog, filled in
 export function Connect({ created }: { created: McpCredentialCreated | null }) {
   const origin = window.location.origin;
   const s = clientSnippets(origin, created?.key ?? null);
-  const keyStep = created
-    ? "The commands below hold your new key."
-    : "Create an access key below. Then the commands hold it.";
   return (
-    <section
-      aria-labelledby="mcp-connect"
-      className="flex min-w-0 flex-col gap-4 rounded-lg border border-line bg-raised p-5 max-sm:p-4"
-    >
-      <h2 id="mcp-connect" className="text-title text-fg">
-        Connect a client
-      </h2>
+    <Section title="Connect a client">
       <div className="flex min-w-0 flex-col gap-1">
         <span className="text-caption text-fg-2">Server URL</span>
         <CopyField value={mcpEndpoint(origin)} label="server URL" className="max-w-md" />
@@ -333,45 +394,37 @@ export function Connect({ created }: { created: McpCredentialCreated | null }) {
             Cursor
           </TabsTrigger>
         </TabsList>
-        <TabsContent value="connector" className="min-w-0 animate-rise-in">
+        <TabsContent value="connector" className="min-w-0">
           <Steps>
-            <StepItem n={1}>
-              In claude.ai or Claude Desktop, open Settings, then Connectors, then Add custom
-              connector. In ChatGPT, open Settings, then Connectors, then Create.
+            <StepItem n={1}>Settings, then Connectors</StepItem>
+            <StepItem n={2}>Add a custom connector with the server URL</StepItem>
+            <StepItem n={3}>Sign in and approve</StepItem>
+          </Steps>
+        </TabsContent>
+        <TabsContent value="claude-code" className="min-w-0">
+          <Steps>
+            <StepItem n={1}>Create a key</StepItem>
+            <StepItem n={2}>
+              Run the command
+              <CodeBlock code={s.claudeCode} label="Terminal" copyLabel="Copy command" wrap />
             </StepItem>
-            <StepItem n={2}>Paste the server URL. Leave the client credentials empty.</StepItem>
             <StepItem n={3}>
-              Sign in to this console, choose the project and approve. You do not need a key.
+              Or sign in without a key
+              <CodeBlock code={s.claudeCodeOAuth} label="Terminal" copyLabel="Copy command" wrap />
             </StepItem>
           </Steps>
         </TabsContent>
-        <TabsContent value="claude-code" className="min-w-0 animate-rise-in">
+        <TabsContent value="cursor" className="min-w-0">
           <Steps>
-            <StepItem n={1}>{keyStep}</StepItem>
+            <StepItem n={1}>Create a key</StepItem>
             <StepItem n={2}>
-              Run this command.
-              <CodeBlock code={s.claudeCode} label="Terminal" copyLabel="Copy command" />
-            </StepItem>
-            <StepItem n={3}>
-              To sign in through the browser instead of a key, run this command.
-              <CodeBlock code={s.claudeCodeOAuth} label="Terminal" copyLabel="Copy command" />
-            </StepItem>
-          </Steps>
-        </TabsContent>
-        <TabsContent value="cursor" className="min-w-0 animate-rise-in">
-          <Steps>
-            <StepItem n={1}>{keyStep}</StepItem>
-            <StepItem n={2}>
-              <span>
-                Add this to <code className="font-mono">.cursor/mcp.json</code> in the project, or
-                to <code className="font-mono">~/.cursor/mcp.json</code> for all projects.
-              </span>
+              Add to <code className="font-mono">.cursor/mcp.json</code>
               <CodeBlock code={s.cursor} label="mcp.json" copyLabel="Copy configuration" />
             </StepItem>
           </Steps>
         </TabsContent>
       </Tabs>
-    </section>
+    </Section>
   );
 }
 
@@ -380,109 +433,4 @@ export function Connect({ created }: { created: McpCredentialCreated | null }) {
 export function nameTaken(names: string[], name: string): boolean {
   const n = name.trim().toLowerCase();
   return n !== "" && names.some((x) => x.trim().toLowerCase() === n);
-}
-
-export function McpKeyCreateForm({
-  label,
-  create,
-  onCreated,
-  takenNames = [],
-}: {
-  label: string;
-  create: (b: McpKeyInput) => Promise<McpCredentialCreated>;
-  onCreated: (k: McpCredentialCreated) => void;
-  // the names of the live keys, to warn on a second key with the same name
-  takenNames?: string[];
-}) {
-  const [form, setForm] = useState<McpKeyForm>({ name: "", days: String(MCP_KEY_DEFAULT_DAYS) });
-  const [errors, setErrors] = useState<McpKeyErrors>({});
-  const m = useMutation({
-    mutationFn: create,
-    onSuccess: (k) => {
-      setForm({ name: "", days: String(MCP_KEY_DEFAULT_DAYS) });
-      onCreated(k);
-    },
-    onError: (err) => setErrors(serverErrors(err)),
-  });
-  function submit(e: FormEvent) {
-    e.preventDefault();
-    const v = validateMcpKey(form);
-    setErrors(v.errors);
-    if (v.body) m.mutate(v.body);
-  }
-  return (
-    <form
-      aria-label={label}
-      onSubmit={submit}
-      noValidate
-      className="max-w-prose flex flex-col gap-3 rounded-lg border border-line bg-raised p-5 max-sm:p-4"
-    >
-      <h3 className="text-body font-medium text-fg">{label}</h3>
-      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_11rem_auto] sm:items-start">
-        <TextField
-          label="Name"
-          hint={
-            nameTaken(takenNames, form.name) ? (
-              <span className="text-warning">
-                A key with this name exists. Use another name to tell them apart.
-              </span>
-            ) : (
-              "Where you use the key, for example laptop or Cursor."
-            )
-          }
-          placeholder="laptop"
-          maxLength={100}
-          className="max-lg:h-(--vs-control-touch)"
-          value={form.name}
-          error={errors.name}
-          onChange={(e) => setForm({ ...form, name: e.target.value })}
-        />
-        <TextField
-          label="Expires after (days)"
-          hint={`${MCP_KEY_DEFAULT_DAYS} by default, at most ${MCP_KEY_MAX_DAYS}.`}
-          type="number"
-          inputMode="numeric"
-          min={1}
-          max={MCP_KEY_MAX_DAYS}
-          className="tabular max-lg:h-(--vs-control-touch)"
-          value={form.days}
-          error={errors.days}
-          onChange={(e) => setForm({ ...form, days: e.target.value })}
-        />
-        <Button
-          type="submit"
-          className="sm:mt-6 max-lg:h-(--vs-control-touch)"
-          pending={m.isPending}
-        >
-          {m.isPending ? null : <KeyRound aria-hidden />}
-          {m.isPending ? "Creating" : "Create key"}
-        </Button>
-      </div>
-      {m.error && Object.keys(serverErrors(m.error)).length === 0 ? (
-        <FormMessage error={m.error} />
-      ) : null}
-    </form>
-  );
-}
-
-export function CreatedKeyPanel({
-  created,
-  onDone,
-}: {
-  created: McpCredentialCreated;
-  onDone: () => void;
-}) {
-  return (
-    <section aria-label="New access key">
-      <SecretPanel
-        value={created.key}
-        noun="key"
-        name={created.name}
-        description={`It is shown only once. It expires ${
-          created.expires_at ? formatDateTimeUtc(created.expires_at) : "never"
-        }. The Claude Code and Cursor commands above now hold it.`}
-        onDone={onDone}
-      />
-    </section>
-  );
 }

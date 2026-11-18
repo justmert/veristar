@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ThemeChoice, useTheme } from "@veristar/brand/theme";
-import { KeyRound, Trash2, Wallet } from "lucide-react";
+import { KeyRound, Trash2, Unlink, Wallet } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { ApiError } from "@/api/client";
@@ -15,13 +15,13 @@ import { Notice } from "@/components/notice";
 import { OperatorPasskeys } from "@/components/operator-passkeys";
 import { PageHeader } from "@/components/page-header";
 import { PasskeyDialog } from "@/components/passkey-dialog";
+import { RowMenu } from "@/components/row-menu";
 import { Segmented } from "@/components/segmented";
 import { ErrorState } from "@/components/states";
 import { steppedUp } from "@/components/step-up";
 import { toast } from "@/components/toast";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tooltip } from "@/components/ui/tooltip";
 import { WalletPicker } from "@/components/wallet-picker";
 import { connectWallet, shortAddress, signTransaction } from "@/lib/stellar-wallet";
 import { queryClient } from "@/query-client";
@@ -69,11 +69,7 @@ const METHOD_NAME: Record<Method, string> = {
   passkey: "Your passkey",
 };
 
-const HEADER = {
-  title: "Account",
-  description:
-    "How you sign in to the console and the theme of this browser. Operators also manage their passkeys here.",
-};
+const HEADER = { title: "Account" };
 
 // the signed-in person's own account: the sign-in methods linked to it
 // (contract 4.1.8), an operator's passkeys (5.15), and the deletion of the
@@ -104,12 +100,16 @@ export function AccountPage() {
       </div>
     );
   return (
-    <div className="flex max-w-prose flex-col gap-8">
+    <div className="flex flex-col gap-8">
       <PageHeader {...HEADER} />
-      <SignInMethods me={me.data} />
-      {me.data.user.is_operator ? <OperatorPasskeys userName={me.data.user.display_name} /> : null}
-      <Appearance />
-      <DeleteAccount me={me.data} />
+      <div className="flex max-w-prose flex-col gap-8">
+        <SignInMethods me={me.data} />
+        {me.data.user.is_operator ? (
+          <OperatorPasskeys userName={me.data.user.display_name} />
+        ) : null}
+        <Appearance />
+        <DeleteAccount me={me.data} />
+      </div>
     </div>
   );
 }
@@ -190,7 +190,9 @@ function OperatorStepUp() {
   );
 }
 
-function UnlinkButton({
+// a linked method's one action, unlinking, in its row menu. the only
+// method has no menu: nothing can be done with it
+function UnlinkMenu({
   method,
   alone,
   onClick,
@@ -199,24 +201,14 @@ function UnlinkButton({
   alone: boolean;
   onClick: () => void;
 }) {
-  const button = (
-    <Button
-      variant="outline"
-      size="sm"
-      disabled={alone}
-      aria-describedby={alone ? "unlink-note" : undefined}
-      data-method={method}
-      onClick={onClick}
-      className="max-lg:h-(--vs-control-touch)"
-    >
-      Unlink
-    </Button>
-  );
-  if (!alone) return button;
+  if (alone) return null;
   return (
-    <Tooltip content="Link another method first.">
-      <span className="inline-flex">{button}</span>
-    </Tooltip>
+    <RowMenu
+      name={METHOD_NAME[method]}
+      actions={[
+        { label: "Unlink", icon: <Unlink aria-hidden />, destructive: true, onSelect: onClick },
+      ]}
+    />
   );
 }
 
@@ -255,15 +247,9 @@ function SignInMethods({ me }: { me: Me }) {
 
   return (
     <section aria-labelledby="methods-h" className="flex flex-col gap-4">
-      <div className="flex flex-col gap-1">
-        <h2 id="methods-h" className="text-title text-fg">
-          Sign-in methods
-        </h2>
-        <p className="max-w-prose text-small text-fg-2">
-          Each method signs in to this account. Link a second method, so you keep access if you lose
-          one.
-        </p>
-      </div>
+      <h2 id="methods-h" className="text-title text-fg">
+        Sign-in methods
+      </h2>
       {linkError ? (
         <Notice tone="critical" role="alert" title="GitHub was not linked">
           {LINK_ERRORS[linkError] ?? LINK_ERROR_OTHER}
@@ -293,7 +279,7 @@ function SignInMethods({ me }: { me: Me }) {
           }
           action={
             github_login !== null ? (
-              <UnlinkButton
+              <UnlinkMenu
                 method="github"
                 alone={alone}
                 onClick={() => {
@@ -324,7 +310,7 @@ function SignInMethods({ me }: { me: Me }) {
           }
           action={
             stellar_address !== null ? (
-              <UnlinkButton
+              <UnlinkMenu
                 method="stellar"
                 alone={alone}
                 onClick={() => {
@@ -361,7 +347,7 @@ function SignInMethods({ me }: { me: Me }) {
           }
           action={
             passkey_address !== null ? (
-              <UnlinkButton
+              <UnlinkMenu
                 method="passkey"
                 alone={alone}
                 onClick={() => {
@@ -385,11 +371,6 @@ function SignInMethods({ me }: { me: Me }) {
           }
         />
       </ul>
-      {alone ? (
-        <p id="unlink-note" className="text-small text-fg-2">
-          Unlink is off while this is your only sign-in method. Link another method first.
-        </p>
-      ) : null}
 
       <PasskeyDialog
         open={passkey}
@@ -504,26 +485,13 @@ function DeleteAccount({ me }: { me: Me }) {
 
   return (
     <section aria-labelledby="danger-h" className="flex flex-col gap-4">
-      <h2 id="danger-h" className="text-title text-fg">
-        Danger zone
-      </h2>
-      <div className="flex flex-col gap-4 rounded-lg border border-critical-line bg-raised p-5 max-sm:p-4">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="flex min-w-0 max-w-prose flex-col gap-2">
-            <span className="text-body font-medium text-fg">Delete account</span>
-            <ul className="flex list-disc flex-col gap-1 pl-5 text-small text-fg-2">
-              <li>You leave all your projects and lose access to their dashboards.</li>
-              <li>Your sessions, AI access keys and AI connections end.</li>
-              <li>Open invites to your GitHub account, wallet or passkey are deleted.</li>
-              <li>
-                Your GitHub id, Stellar address and passkey are removed. The audit log keeps its
-                entries, which name only your account id.
-              </li>
-              <li>A later sign-in with any method makes a new, empty account.</li>
-            </ul>
-          </div>
+      <div className="flex flex-col gap-4 border-t border-line pt-6">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <h2 id="danger-h" className="text-title text-fg">
+            Delete account
+          </h2>
           <Button
-            variant="destructive-outline"
+            variant="outline"
             className="max-lg:h-(--vs-control-touch)"
             onClick={() => {
               del.reset();
@@ -563,7 +531,20 @@ function DeleteAccount({ me }: { me: Me }) {
         open={open}
         onOpenChange={setOpen}
         title="Delete your account?"
-        description={`The account ${me.user.display_name} is deleted and you are signed out everywhere. You cannot undo this.`}
+        description={
+          <div className="flex flex-col gap-2">
+            <p>
+              The account {me.user.display_name} is deleted and you are signed out everywhere. You
+              cannot undo this.
+            </p>
+            <ul className="flex list-disc flex-col gap-1 pl-5 text-small">
+              <li>You leave all your projects.</li>
+              <li>Your sessions, AI keys, AI connections and open invites end.</li>
+              <li>Your GitHub id, Stellar address and passkey are removed.</li>
+              <li>A later sign-in makes a new, empty account.</li>
+            </ul>
+          </div>
+        }
         cancelLabel="Keep my account"
         confirmLabel="Delete account"
         pendingLabel="Deleting"
@@ -588,14 +569,9 @@ function Appearance() {
   const theme = useTheme();
   return (
     <section aria-labelledby="theme-h" className="flex flex-col gap-4">
-      <div className="flex flex-col gap-1">
-        <h2 id="theme-h" className="text-title text-fg">
-          Theme
-        </h2>
-        <p className="max-w-prose text-small text-fg-2">
-          This browser keeps the choice. System follows your device.
-        </p>
-      </div>
+      <h2 id="theme-h" className="text-title text-fg">
+        Theme
+      </h2>
       <Segmented<ThemeChoice>
         label="Theme"
         value={theme.choice}

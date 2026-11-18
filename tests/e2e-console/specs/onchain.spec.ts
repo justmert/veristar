@@ -84,15 +84,11 @@ test("an owner declares an account and gets a challenge to prove it", async () =
     expect(p.missing).not.toBeNull();
   }
 
-  // the overview sums the on-chain activity up in one card, next to web
-  // and api, and links to the on-chain page
+  // a declared id that is not proven counts for nothing: the overview has
+  // no on-chain card, and its setup step marks on-chain as not connected
   await page.goto(`${APP}/projects/${tenant.id}`);
-  const card = page.getByRole("region", { name: "On-chain" });
-  await expect(card).toContainText("0 of 1 verified");
-  await expect(card.getByRole("link", { name: "On-chain" })).toHaveAttribute(
-    "href",
-    `/projects/${tenant.id}/onchain`,
-  );
+  await expect(page.getByRole("region", { name: "On-chain" })).toHaveCount(0);
+  await expect(page.locator('[data-part="onchain"]')).not.toHaveAttribute("data-done", "");
 
   // weekly active accounts: the project has no verified id and the task
   // has not counted a week of it, so every iso week of the range shows its
@@ -109,29 +105,28 @@ test("an owner declares an account and gets a challenge to prove it", async () =
   }
   expect(weekly.body.totals.weekly_active_accounts.average).toBeNull();
   expect(weekly.body.totals.weekly_active_accounts.weeks_missing).toBe(weekly.body.weeks.length);
-  // the on-chain page shows every week of its default range and why it
-  // has no count, and the summary says that none was counted
+  // with no verified id nothing counts yet, so the page stays one first
+  // step: the id is added, its proof is the step to do now, and no empty
+  // week, strip or number is drawn
   await page.goto(`${APP}/projects/${tenant.id}/onchain`);
-  await expect(page.getByRole("heading", { name: "Weekly active accounts" })).toBeVisible();
-  const weeks = page.getByRole("list", { name: "Weekly active accounts per ISO week" });
-  await expect(weeks.locator("[data-week]")).toHaveCount(weekly.body.weeks.length);
-  // every week misses for one reason, so the reason shows once under them
-  await expect(weeks.locator("xpath=..").locator("p[data-missing]")).toBeVisible();
-  await expect(weeks.locator("[data-week]").first()).not.toContainText(/\b0\b/);
-  await expect(page.getByTestId("waa-summary")).toContainText("No complete week counted");
-  // the project has no verified id, so its activity counts nothing yet
-  await expect(page.getByTestId("activity-scope")).toContainText(
-    "0 of 1 account or contract verified",
-  );
+  const first = page.locator("[data-first-step]");
+  await expect(first.locator('[data-check="1"]')).toHaveAttribute("data-state", "done");
+  await expect(first.locator('[data-check="2"]')).toHaveAttribute("data-state", "current");
+  await expect(page.getByRole("heading", { name: "Weekly active accounts" })).toHaveCount(0);
+  await expect(page.getByTestId("activity-scope")).toHaveCount(0);
 });
 
 test("scf review and the overview export answer for the project", async () => {
   const { page, ctx } = owner;
   await page.goto(`${APP}/projects/${tenant.id}/scf`);
   await expect(page.getByRole("heading", { name: "SCF review", level: 1 })).toBeVisible();
+  // no id is verified: the verdict carries no on-chain number, and the
+  // figures, on demand, say how many ids are verified and draw no strip
+  await expect(page.locator("[data-key-number=onchain_operations]")).toHaveCount(0);
+  await page.locator("details#figures > summary").click();
   const chain = page.getByRole("region", { name: "On-chain" });
   await expect(chain).toContainText("0 of 1");
-  await expect(chain.getByText("Weekly active accounts", { exact: true })).toBeVisible();
+  await expect(chain.getByText("Weekly active accounts", { exact: true })).toHaveCount(0);
   const href = await page.getByRole("link", { name: "Export CSV" }).getAttribute("href");
   expect(href).toMatch(new RegExp(`^/api/tenants/${tenant.id}/overview\\.csv\\?from=`));
 
@@ -274,9 +269,10 @@ test("an unverified contract shows no calls per function, and the routes keep to
   const accountId = view.body.ids.find((x) => x.strkey === ACCOUNT)?.id ?? "";
 
   await page.goto(`${APP}/projects/${tenant.id}/onchain`);
-  const block = page.getByRole("region", { name: `Calls per function of ${CONTRACT}` });
-  await expect(block).toContainText("Calls per function show when the contract is verified");
-  await expect(block.getByRole("table")).toHaveCount(0);
+  // an unverified contract has no calls per function to show
+  await expect(page.getByRole("region", { name: `Calls per function of ${CONTRACT}` })).toHaveCount(
+    0,
+  );
 
   const fns = await api<Functions>(
     ctx,
@@ -346,7 +342,7 @@ test("an unverified contract shows no calls per function, and the routes keep to
     await opPage.getByText("On-chain IDs", { exact: true }).click();
     await expect(
       opPage.getByRole("region", { name: `Calls per function of ${CONTRACT}` }),
-    ).toContainText("Calls per function show when the contract is verified");
+    ).toHaveCount(0);
   } finally {
     await op.close();
   }

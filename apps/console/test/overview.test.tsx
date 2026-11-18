@@ -1,11 +1,13 @@
 import { Outlet } from "react-router";
 import { describe, expect, it, vi } from "vitest";
 import type { Site } from "@/api/schemas";
+import type { WebSummary } from "@/api/web";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { apiRangeOfDays, overviewDays, readOverviewPreset } from "@/lib/overview";
 import { combineFirstEvent, firstEvent, nextSetupStep } from "@/lib/site-setup";
 import { ingestWindow, sparkOf, sumOutcomes } from "@/lib/web-dashboard";
 import { OverviewPage } from "@/pages/project/overview";
+import { onlyDay } from "@/pages/project/web-chart";
 import type { ProjectContext } from "@/pages/project-layout";
 import * as f from "./fixtures/contract";
 import { integrityReportBody } from "./fixtures/global";
@@ -282,6 +284,26 @@ const routes = [
   },
 ];
 
+describe("the chart of a range with one day of data", () => {
+  it("narrows to that day only when no other day of either range has page views", () => {
+    const body = summaryBody(10);
+    const zero = (d: string) => ({ ...day(d), pageviews: 0 });
+    const one = {
+      ...body,
+      current: { ...body.current, series: [zero("2026-11-15"), day("2026-11-16")] },
+      previous: { ...body.previous, series: [zero("2026-11-13"), zero("2026-11-14")] },
+    } as unknown as WebSummary;
+    expect(onlyDay(one)).toBe("2026-11-16");
+    // two days with data, or a previous range with data, keep the day chart
+    expect(onlyDay(body as unknown as WebSummary)).toBeNull();
+    const before = {
+      ...one,
+      previous: { ...body.previous, series: [day("2026-11-13"), zero("2026-11-14")] },
+    } as unknown as WebSummary;
+    expect(onlyDay(before)).toBeNull();
+  });
+});
+
 describe("overview page", () => {
   it("shows web numbers from the web totals, api numbers and one line per other page", async () => {
     const urls = stub({ pageviews: 120, ingest: { accepted: 5 }, api: "used" });
@@ -300,6 +322,12 @@ describe("overview page", () => {
       ),
     );
     expect(host.querySelector('[data-summary="Integrity grade"] [data-grade]')).not.toBeNull();
+    // the change leads: what moved most against the previous period
+    const movers = [...host.querySelectorAll("[data-mover]")].map((e) =>
+      e.getAttribute("data-mover"),
+    );
+    expect(movers[0]).toBe("pageviews");
+    expect(host.querySelector('[data-mover="pageviews"]')?.textContent).toContain("50%");
     const links = [...host.querySelectorAll("a")].map((a) => a.getAttribute("href"));
     expect(links).toContain(`/projects/${f.TENANT_ID}/scf`);
     expect(links).toContain(`/projects/${f.TENANT_ID}/onchain`);
@@ -321,7 +349,12 @@ describe("overview page", () => {
     const step = host.querySelector('[aria-label="Next step"]');
     expect(step?.getAttribute("data-step")).toBe("install");
     expect(step?.textContent).toContain("Continue setup");
-    expect(host.querySelector('[data-api="none"]')?.textContent).toContain("Connect API");
+    // an api that sent nothing draws no cards; the third step marks which
+    // part is connected: the api is not, the proven on-chain account is
+    expect(host.querySelector('[data-tile="API requests"]')).toBeNull();
+    await waitFor(() => expect(host.querySelector('[data-check="3"]')).not.toBeNull());
+    expect(host.querySelector('[data-part="api"]')?.hasAttribute("data-done")).toBe(false);
+    expect(host.querySelector('[data-part="onchain"]')?.hasAttribute("data-done")).toBe(true);
 
     stub({ pageviews: 7, ingest: {}, api: "none" });
     const again = await renderRoutes(routes, `/projects/${f.TENANT_ID}`);

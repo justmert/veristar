@@ -1,8 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
-import { Outlet, useLocation } from "react-router";
+import { Navigate, Outlet, useLocation } from "react-router";
 import { stepUpQuery } from "@/api/operators";
 import { meQuery } from "@/api/queries";
 import { areaOf } from "@/components/nav/nav-items";
+import { useOperatorAdmin } from "@/components/nav/operator-role";
 import { PageHeader } from "@/components/page-header";
 import { ErrorState } from "@/components/states";
 import { StepUpGate } from "@/components/step-up";
@@ -12,8 +13,8 @@ import { OperatorsOnlyPage } from "@/pages/public/not-found";
 // the gate in front of every operator page. the control plane enforces
 // operator rights on every route (contract 5.1); this check only keeps the
 // pages away from people who would get 403 on each request anyway. the
-// sidebar names the pages and the shell draws the line for a paging alert.
-// each operator page draws its own header.
+// sidebar names the pages; each operator page draws its own header. alerts
+// are platform operations and open for operator admins only.
 export function OperatorLayout() {
   const me = useQuery(meQuery);
   if (me.isPending) return <GateLoading />;
@@ -31,13 +32,21 @@ function SteppedUp({ userName }: { userName: string }) {
   if (!s.data.stepped_up)
     return (
       <div className="flex min-w-0 flex-col gap-6">
-        <PageHeader
-          title="Operator area"
-          description="The operator area asks for your passkey before it opens."
-        />
+        <PageHeader title="Operator area" />
         <StepUpGate status={s.data} userName={userName} />
       </div>
     );
+  return <AdminPages />;
+}
+
+// the alerts page is for operator admins: anyone else lands on Review
+function AdminPages() {
+  const { pathname } = useLocation();
+  const admin = useOperatorAdmin();
+  const a = areaOf(pathname);
+  const alerts = a.kind === "operator" && (a.rest === "alerts" || a.rest.startsWith("alerts/"));
+  if (alerts && admin === undefined) return <GateLoading />;
+  if (alerts && admin === false) return <Navigate to="/operator" replace />;
   return <Outlet />;
 }
 

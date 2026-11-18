@@ -72,7 +72,7 @@ export function SiteSettingsPage() {
         }
       />
       <div className="flex max-w-prose flex-col gap-8">
-        <Section title="Name and allowed origins" description="You cannot change the domain.">
+        <Section title="Name and allowed origins">
           {canEdit ? <EditSiteForm site={site} /> : <ReadOnly site={site} />}
         </Section>
         <Section title="Campaign parameters">
@@ -84,25 +84,14 @@ export function SiteSettingsPage() {
   );
 }
 
-function Section({
-  title,
-  description,
-  children,
-}: {
-  title: string;
-  description?: string;
-  children: ReactNode;
-}) {
+function Section({ title, children }: { title: string; children: ReactNode }) {
   const id = useId();
   return (
     <section aria-labelledby={id} className="flex flex-col gap-4">
-      <div className="flex flex-col gap-1">
-        <h2 id={id} className="text-title text-fg">
-          {title}
-        </h2>
-        {description ? <p className="text-small text-fg-2">{description}</p> : null}
-      </div>
-      <div className="rounded-lg border border-line bg-raised p-5 max-sm:p-4">{children}</div>
+      <h2 id={id} className="text-title text-fg">
+        {title}
+      </h2>
+      {children}
     </section>
   );
 }
@@ -249,9 +238,8 @@ export function CampaignParams({
         <code className="font-mono text-small">ref</code>) in page addresses
       </label>
       <p id={`${id}-d`} className="col-start-2 text-small text-fg-2">
-        Off by default: the service drops all query parameters. These parameters can identify a
-        person, so analytics without consent should not keep them. A change applies within a minute.
-        {canEdit && !isOwner ? " Only an owner of the project can change it." : null}
+        Off by default: they can identify a person.
+        {canEdit && !isOwner ? " Only an owner can change it." : null}
       </p>
       <FormMessage error={save.error} className="col-start-2" />
     </div>
@@ -272,18 +260,12 @@ function DangerZone({ site }: { site: Site }) {
   });
   return (
     <section aria-labelledby="danger-h" className="flex flex-col gap-4">
-      <h2 id="danger-h" className="text-title text-fg">
-        Danger zone
-      </h2>
-      <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-critical-line bg-raised p-5 max-sm:p-4">
-        <div className="flex min-w-0 flex-col gap-1">
-          <span className="text-body font-medium text-fg">Delete this site</span>
-          <span className="text-small text-fg-2">
-            The site stops collecting. Its web data is deleted.
-          </span>
-        </div>
+      <div className="flex flex-wrap items-center justify-between gap-4 border-t border-line pt-6">
+        <h2 id="danger-h" className="text-title text-fg">
+          Delete site
+        </h2>
         <Button
-          variant="destructive-outline"
+          variant="outline"
           className="max-lg:h-(--vs-control-touch)"
           onClick={() => {
             remove.reset();

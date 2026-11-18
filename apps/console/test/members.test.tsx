@@ -78,11 +78,14 @@ describe("members", () => {
     stubFetch([{ status: 200, body: f.membersBody }]);
     const host = await renderRoutes(routes(), path);
     await waitFor(() =>
-      expect(host.querySelector("#invites-h")?.textContent).toBe(
-        `Open invites (${f.membersBody.invites.length})`,
+      expect(host.querySelector("[data-invites] h2")?.textContent).toBe(
+        `Open invites${f.membersBody.invites.length}`,
       ),
     );
     expect(host.querySelectorAll("[data-invite]").length).toBeGreaterThan(0);
     expect(host.querySelector(".text-warning")).toBeNull();
+    // row actions sit in a menu; no red button stands in a row
+    expect(host.querySelector("[data-invite] button.text-critical")).toBeNull();
+    expect(host.querySelector("[data-invite] [data-row-menu]")).not.toBeNull();
   });
 });

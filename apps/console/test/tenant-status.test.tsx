@@ -198,8 +198,8 @@ describe("a project page while the project loads", () => {
 
   it("keeps the description of a page that has one", async () => {
     pending();
-    const host = await renderRoutes(routes, at("/members"));
-    expect(host.querySelector("header p")?.textContent).toBe("The people who manage this project.");
+    const host = await renderRoutes(routes, at("/ai"));
+    expect(host.querySelector("header p")?.textContent).toBe("Read-only, this project only.");
   });
 
   it("names a site page and links back to Sites", async () => {

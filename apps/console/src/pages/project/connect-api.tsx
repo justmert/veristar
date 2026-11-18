@@ -1,23 +1,18 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { cn } from "@veristar/brand/cn";
-import { fade } from "@veristar/brand/motion";
-import { ArrowRight, Ban, Check, ExternalLink, KeyRound } from "lucide-react";
-import { AnimatePresence, motion } from "motion/react";
-import { type FormEvent, type ReactNode, useId, useState } from "react";
+import { ArrowRight, Ban, ExternalLink, KeyRound } from "lucide-react";
+import { type ReactNode, useId, useState } from "react";
 import { Link } from "react-router";
 import { ApiError } from "@/api/client";
 import { api } from "@/api/endpoints";
 import { keys, otlpTokensQuery } from "@/api/queries";
 import type { OtlpToken, OtlpTokenCreated, Tenant } from "@/api/schemas";
-import { CodeBlock, CopyField } from "@/components/code-block";
-import { ConfirmDialog } from "@/components/confirm-dialog";
+import { CodeBlock } from "@/components/code-block";
+import { CreateDialog } from "@/components/create-dialog";
 import { type Column, DataTable } from "@/components/data-table";
-import { Disclosure } from "@/components/disclosure";
-import { FormMessage } from "@/components/error-panel";
 import { TextField } from "@/components/form-field";
 import { Notice } from "@/components/notice";
 import { PageHeader } from "@/components/page-header";
-import { SecretPanel } from "@/components/secret-panel";
+import { Section } from "@/components/panel";
 import { Missing } from "@/components/states";
 import { StatusDot } from "@/components/status";
 import { StatusBadge } from "@/components/status-badge";
@@ -27,13 +22,14 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatDateTimeUtc } from "@/lib/format";
 import { siblingUrl } from "@/lib/hosts";
-import { inline } from "@/lib/markdown";
-import { type OtelGuide, otelGuides, otlpEndpoint } from "@/lib/otel-guides";
+import { otlpEndpoint } from "@/lib/otel-guides";
 import * as v from "@/lib/validate";
 import { NOT_USED, nameTaken } from "@/pages/project/ai";
 import { useProject } from "@/pages/project-layout";
 import { queryClient } from "@/query-client";
+import { ENDPOINT_PLACEHOLDER, exampleDocsPath, exporterSnippet, STACKS } from "./connect-snippets";
 import { PAGE_HEADERS } from "./page-frame";
+import { Step, Steps } from "./steps";
 
 export type TokenValues = { name: string; environment: string };
 export type TokenErrors = Partial<Record<keyof TokenValues, string>>;
@@ -89,307 +85,158 @@ export function lastUsedToken(tokens: OtlpToken[]): OtlpToken | null {
 export function ConnectApiPage() {
   const { tenant, termsCurrent } = useProject();
   const endpoint = otlpEndpoint(window.location.hostname);
+  const docs = siblingUrl(window.location.hostname, "docs");
   const [showRevoked, setShowRevoked] = useState(false);
-  const [created, setCreated] = useState<OtlpTokenCreated | null>(null);
+  const [creating, setCreating] = useState(false);
   const list = useQuery({
     ...otlpTokensQuery(tenant.id, showRevoked),
     refetchInterval: (q) => (waiting(q.state.data) ? FIRST_DATA_POLL : false),
   });
   const tokens = list.data ?? [];
-  const hasToken = tokens.some((t) => t.status === "active") || created !== null;
+  const active = tokens.filter((t) => t.status === "active");
+  const hasToken = active.length > 0;
   const lastUsed = lastUsedToken(tokens);
+  const blocked = createBlocked(tenant, termsCurrent);
+  const create = (
+    <Button onClick={() => setCreating(true)} className="w-fit">
+      <KeyRound aria-hidden />
+      Create token
+    </Button>
+  );
 
   return (
     <div className="flex flex-col gap-8">
-      <PageHeader {...PAGE_HEADERS["connect-api"]} />
+      <PageHeader
+        {...PAGE_HEADERS["connect-api"]}
+        // the first token is created from the first step; later ones here
+        primary={hasToken && !blocked ? create : null}
+        secondary={
+          docs ? (
+            <Button asChild variant="ghost">
+              <a href={`${docs}/onboarding/api/what-gets-dropped`}>
+                What is kept
+                <ExternalLink aria-hidden />
+              </a>
+            </Button>
+          ) : null
+        }
+      />
 
-      <div className="grid items-start gap-x-10 gap-y-8 xl:grid-cols-[minmax(0,1fr)_18rem]">
-        <div className="flex min-w-0 flex-col gap-8">
-          <ol
-            aria-label="Setup steps"
-            className="flex min-w-0 flex-col rounded-lg border border-line bg-raised"
-          >
-            <Step n={1} state={hasToken ? "done" : "current"} title="Create an ingest token">
-              <p className="max-w-prose text-small text-fg-2">
-                Use one token for each app or environment. Then you can revoke one token and keep
-                the others.
-              </p>
-              <AnimatePresence initial={false}>
-                {created ? (
-                  <motion.div key={created.id} {...fade}>
-                    <CreatedToken token={created} onDone={() => setCreated(null)} />
-                  </motion.div>
-                ) : null}
-              </AnimatePresence>
-              <CreateGate
-                tenant={tenant}
-                canCreate={termsCurrent}
-                onCreated={setCreated}
-                takenNames={tokens.filter((t) => t.status === "active").map((t) => t.name)}
-              />
-            </Step>
-            <Step
-              n={2}
-              state={hasToken ? (lastUsed ? "done" : "current") : "next"}
-              title="Add a second exporter"
-            >
-              <Exporter endpoint={endpoint} />
-            </Step>
-            <Step n={3} state={lastUsed ? "done" : "next"} title="First data" last>
-              <FirstData
-                tenantId={tenant.id}
-                hasToken={hasToken}
-                lastUsed={lastUsed}
-                loading={list.isPending}
-              />
-            </Step>
-          </ol>
-
-          <TokensSection
-            tenantId={tenant.id}
-            list={list}
-            showRevoked={showRevoked}
-            onShowRevoked={setShowRevoked}
-          />
-        </div>
-        <KeptSection />
-      </div>
-    </div>
-  );
-}
-
-// a numbered step of the setup: done (a check), the current one (accent
-// ring) or a later one (muted)
-function Step({
-  n,
-  state,
-  title,
-  last = false,
-  children,
-}: {
-  n: number;
-  state: "done" | "current" | "next";
-  title: string;
-  last?: boolean;
-  children: ReactNode;
-}) {
-  return (
-    <li
-      className={cn(
-        "grid min-w-0 grid-cols-[1.75rem_minmax(0,1fr)] gap-3 p-5 max-sm:p-4",
-        !last && "border-b border-line",
-      )}
-    >
-      <span
-        className={cn(
-          "flex size-7 items-center justify-center rounded-full font-mono text-small transition-colors duration-(--vs-duration-change) ease-standard",
-          state === "done"
-            ? "bg-success text-ground"
-            : state === "current"
-              ? "border-2 border-accent-text text-accent-text"
-              : "border border-line-strong text-fg-2",
-        )}
+      {hasToken && blocked ? blocked : null}
+      <section
+        aria-label="Setup"
+        className="flex min-w-0 flex-col rounded-lg border border-line bg-raised p-5 max-sm:p-4"
       >
-        {state === "done" ? <Check aria-hidden className="size-4" strokeWidth={3} /> : n}
-        <span className="sr-only">
-          {state === "done" ? ", done" : state === "current" ? ", to do now" : ""}
-        </span>
-      </span>
-      <div className="flex min-w-0 flex-col gap-3">
-        {/* the content of a later step is usable now, so its title reads at
-            full strength too; the number marks the order */}
-        <h2 className="pt-1 text-title text-fg">{title}</h2>
-        {children}
-      </div>
-    </li>
-  );
-}
-
-// a short numbered instruction inside a step
-function SubStep({ n, title, children }: { n: string; title: string; children: ReactNode }) {
-  return (
-    <div className="flex min-w-0 flex-col gap-2">
-      <h3 className="flex items-baseline gap-2 text-body font-medium text-fg">
-        <span className="font-mono text-small text-fg-2">{n}</span>
-        {title}
-      </h3>
-      <div className="flex min-w-0 flex-col gap-2">{children}</div>
-    </div>
-  );
-}
-
-function Exporter({ endpoint }: { endpoint: string | null }) {
-  const guides = otelGuides();
-  return (
-    <div className="flex min-w-0 flex-col gap-6">
-      <SubStep n="a" title="Copy the endpoint">
-        {endpoint ? (
-          <CopyField value={endpoint} label="endpoint" className="max-w-md" />
-        ) : (
-          <p className="max-w-prose text-small text-fg-2">
-            The endpoint is the console's host name with otlp. in place of app.
-          </p>
-        )}
-        <p className="max-w-prose text-small text-fg-2">
-          OTLP over HTTP or gRPC, port 443. Send the token as{" "}
-          <code className="font-mono text-fg">Authorization: Bearer sa_otlp_...</code> on this
-          exporter only.
-        </p>
-      </SubStep>
-      <SubStep n="b" title="Add the exporter to your app">
-        <p className="max-w-prose text-small text-fg-2">
-          Keep the exporter to your own backend. Add a second one with the token. Set service.name,
-          so each service shows separately.
-        </p>
-        <Tabs defaultValue={guides[0]?.id ?? "node"} className="min-w-0 gap-3">
-          <TabsList aria-label="Language" className="max-w-full overflow-x-auto">
-            {guides.map((g) => (
-              <TabsTrigger key={g.id} value={g.id} className="max-lg:h-(--vs-control-touch)">
-                {g.label}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-          {guides.map((g) => (
-            <TabsContent key={g.id} value={g.id} className="min-w-0 animate-rise-in">
-              <Guide guide={g} />
-            </TabsContent>
-          ))}
-        </Tabs>
-      </SubStep>
-    </div>
-  );
-}
-
-// a closed section of extra detail
-function More({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <Disclosure
-      summary={title}
-      className="min-w-0 bg-transparent text-small"
-      summaryClassName="px-3 text-small font-normal text-fg-2 hover:bg-transparent hover:text-fg"
-      bodyClassName="flex min-w-0 flex-col gap-3 p-3"
-    >
-      {children}
-    </Disclosure>
-  );
-}
-
-function Guide({ guide }: { guide: OtelGuide }) {
-  return (
-    <div className="flex min-w-0 flex-col gap-4">
-      {guide.files.map((f) => (
-        <div key={`${f.path}:${f.caption}`} className="flex min-w-0 flex-col gap-2">
-          <p className="text-small text-fg-2">{f.caption}</p>
-          <CodeBlock
-            code={f.code}
-            className="min-w-0 [&_pre]:max-h-96"
-            label={<code className="font-mono text-fg">{f.path}</code>}
-            copyLabel={`Copy ${f.path}`}
+        <Steps label="Setup steps">
+          <Step n={1} state={hasToken ? "done" : "current"} title="Create a token">
+            {blocked ?? create}
+          </Step>
+          <Step
+            n={2}
+            state={hasToken ? (lastUsed ? "done" : "current") : "todo"}
+            title="Add the exporter"
+          >
+            <Snippets endpoint={endpoint} docs={docs} />
+          </Step>
+          <Step
+            n={3}
+            state={lastUsed ? "done" : hasToken ? "waiting" : "todo"}
+            title="Data arrived"
+            aside={
+              lastUsed ? (
+                <Arrived tenantId={tenant.id} lastUsed={lastUsed} />
+              ) : hasToken ? (
+                <span
+                  className="flex items-center gap-2 text-small text-fg-2"
+                  aria-live="polite"
+                  data-waiting=""
+                >
+                  <StatusDot tone="info" live />
+                  Checking every 30 s
+                </span>
+              ) : null
+            }
           />
-        </div>
-      ))}
-      <More title={`Environment variables (${guide.env.length})`}>
-        <div className="min-w-0 overflow-x-auto rounded-md border border-line">
-          <table className="w-full min-w-120 text-left text-body">
-            <thead className="text-caption text-fg-2">
-              <tr className="border-b border-line">
-                <th scope="col" className="h-9 px-3 font-medium">
-                  Variable
-                </th>
-                <th scope="col" className="px-3 font-medium">
-                  Values
-                </th>
-                <th scope="col" className="px-3 font-medium">
-                  Purpose
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-line-subtle text-fg-2">
-              {guide.env.map((r) => (
-                <tr key={r.name}>
-                  <td className="px-3 py-2 font-mono text-caption whitespace-nowrap text-fg">
-                    {r.name}
-                  </td>
-                  <td className="px-3 py-2">{inline(r.values)}</td>
-                  <td className="px-3 py-2">{inline(r.purpose)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <p className="max-w-prose text-fg-2">{inline(guide.envNote)}</p>
-      </More>
-      <More title="About this example">
-        {guide.prose.map((b) =>
-          b.kind === "p" ? (
-            <p key={b.text} className="max-w-prose text-fg-2">
-              {inline(b.text)}
-            </p>
-          ) : (
-            <CodeBlock key={b.text} code={b.text} className="min-w-0" />
-          ),
-        )}
-        <p className="text-fg-2">
-          The full example is in <code className="font-mono text-fg">{guide.dir}</code> of the
-          repository.
-        </p>
-      </More>
+        </Steps>
+      </section>
+
+      <TokensSection
+        tenantId={tenant.id}
+        list={list}
+        showRevoked={showRevoked}
+        onShowRevoked={setShowRevoked}
+      />
+
+      <CreateTokenDialog
+        tenantId={tenant.id}
+        open={creating}
+        onOpenChange={setCreating}
+        endpoint={endpoint}
+        docs={docs}
+        takenNames={active.map((t) => t.name)}
+      />
     </div>
   );
 }
 
-function FirstData({
-  tenantId,
-  hasToken,
-  lastUsed,
-  loading,
+// the exporter to add, per stack, with the endpoint and the token written
+// in; the copied text holds the token, the shown one only its start
+function Snippets({
+  endpoint,
+  docs,
+  token,
 }: {
-  tenantId: string;
-  hasToken: boolean;
-  lastUsed: OtlpToken | null;
-  loading: boolean;
+  endpoint: string | null;
+  docs: string | null;
+  token?: string;
 }) {
-  const state = loading ? "loading" : lastUsed ? "received" : hasToken ? "waiting" : "none";
+  const at = endpoint ?? ENDPOINT_PLACEHOLDER;
+  const shown = token ? `${token.slice(0, 12)}...` : "<token>";
   return (
-    <div aria-live="polite">
-      <AnimatePresence mode="wait" initial={false}>
-        <motion.div key={state} {...fade} className="flex flex-col gap-2">
-          {state === "received" && lastUsed ? (
-            <div
-              data-arrived=""
-              className="flex animate-highlight flex-col gap-3 rounded-lg border border-success-line p-4"
+    <Tabs defaultValue={STACKS[0]?.id ?? "node"} className="min-w-0 gap-3">
+      <TabsList aria-label="Language" className="max-w-full overflow-x-auto">
+        {STACKS.map((g) => (
+          <TabsTrigger key={g.id} value={g.id} className="max-lg:h-(--vs-control-touch)">
+            {g.label}
+          </TabsTrigger>
+        ))}
+      </TabsList>
+      {STACKS.map((g) => (
+        <TabsContent key={g.id} value={g.id} className="flex min-w-0 flex-col gap-2">
+          <div data-snippet={g.id} className="min-w-0">
+            <CodeBlock
+              code={exporterSnippet(g.id, at, shown)}
+              copyText={exporterSnippet(g.id, at, token ?? "<token>")}
+              copyLabel={`Copy the ${g.label} exporter`}
+            />
+          </div>
+          {docs ? (
+            <a
+              href={`${docs}${exampleDocsPath(g.id)}`}
+              className="inline-flex w-fit items-center gap-1 rounded-sm text-small text-fg-2 transition-colors duration-(--vs-duration-press) ease-standard hover:text-fg focus-ring"
             >
-              <p className="flex items-center gap-2 text-body font-medium text-fg">
-                <Check aria-hidden className="size-4 text-success" strokeWidth={2.6} />
-                Data arrived
-              </p>
-              <p className="text-small text-fg-2">
-                {lastUsed.name} was last used {formatDateTimeUtc(lastUsed.last_seen_at ?? "")}.
-              </p>
-              <Button asChild variant="outline" size="sm" className="self-start">
-                <Link to={`/projects/${tenantId}/api`}>
-                  See the traffic
-                  <ArrowRight aria-hidden />
-                </Link>
-              </Button>
-            </div>
-          ) : state === "waiting" ? (
-            <>
-              <p className="flex items-center gap-2 text-body text-fg">
-                <StatusDot tone="info" live />
-                Waiting for the first data
-              </p>
-              <p className="max-w-prose text-small text-fg-2">
-                This page checks every 30 seconds. Exporters send in batches, so the first data can
-                take a minute or two.
-              </p>
-            </>
-          ) : state === "none" ? (
-            <p className="text-small text-fg-2">This step completes when an app sends data.</p>
+              Full {g.label} example
+              <ExternalLink aria-hidden className="size-3.5" />
+            </a>
           ) : null}
-        </motion.div>
-      </AnimatePresence>
-    </div>
+        </TabsContent>
+      ))}
+    </Tabs>
+  );
+}
+
+function Arrived({ tenantId, lastUsed }: { tenantId: string; lastUsed: OtlpToken }) {
+  return (
+    <span data-arrived="" className="flex flex-wrap items-center gap-x-3 gap-y-1 text-small">
+      <span className="text-fg-2 tabular">{formatDateTimeUtc(lastUsed.last_seen_at ?? "")}</span>
+      <Link
+        to={`/projects/${tenantId}/api`}
+        className="group inline-flex items-center gap-1 rounded-sm font-medium text-fg hover:underline focus-ring"
+      >
+        See the traffic
+        <ArrowRight aria-hidden className="size-3.5" />
+      </Link>
+    </span>
   );
 }
 
@@ -405,28 +252,17 @@ function TokensSection({
   onShowRevoked: (on: boolean) => void;
 }) {
   const revokedId = useId();
-  const [revoking, setRevoking] = useState<OtlpToken | null>(null);
-  const revoke = useMutation({
-    mutationFn: (t: OtlpToken) => api.revokeOtlpToken(tenantId, t.id),
-    onSuccess: async (_, t) => {
-      setRevoking(null);
-      toast.success(`${t.name} is revoked.`);
-      await queryClient.invalidateQueries({ queryKey: keys.otlpTokensAll(tenantId) });
-    },
-  });
   const columns: Column<OtlpToken>[] = [
     {
       key: "name",
       header: "Name",
       primary: true,
       minWidth: "min-w-48",
-      // the name takes the spare width; a long one truncates, so the dates
-      // and Revoke stay in view
-      className: "w-full max-w-0",
-      truncate: (t) => t.name,
+      // the name takes the spare width and wraps rather than cuts
+      className: "w-full",
       cell: (t) => (
-        <span className="flex min-w-0 items-center gap-2">
-          <span className="truncate font-medium text-fg">{t.name}</span>
+        <span className="flex min-w-0 flex-wrap items-center gap-2">
+          <span className="font-medium break-words text-fg">{t.name}</span>
           {t.environment ? (
             <span className="shrink-0 rounded-full border border-line-strong px-2 font-mono text-caption text-fg-2">
               {t.environment}
@@ -460,38 +296,13 @@ function TokensSection({
           <Missing reason={NOT_USED} />
         ),
     },
-    {
-      key: "action",
-      mobile: true,
-      header: "Actions",
-      align: "right",
-      cell: (t) =>
-        t.status === "active" ? (
-          <Button
-            variant="destructive-outline"
-            size="sm"
-            className="relative z-(--vs-layer-raised) max-lg:h-(--vs-control-touch)"
-            onClick={() => {
-              revoke.reset();
-              setRevoking(t);
-            }}
-          >
-            <Ban aria-hidden />
-            Revoke
-          </Button>
-        ) : null,
-    },
   ];
 
   return (
-    <section aria-labelledby="tokens-h" className="flex min-w-0 flex-col gap-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="flex flex-col gap-1">
-          <h2 id="tokens-h" className="text-title text-fg">
-            Tokens
-          </h2>
-          <p className="text-small text-fg-2">The full token shows once, when you create it.</p>
-        </div>
+    <Section
+      title="Tokens"
+      count={list.data?.length ?? null}
+      actions={
         <span className="flex items-center gap-2">
           <Checkbox
             id={revokedId}
@@ -502,53 +313,54 @@ function TokensSection({
             Show revoked tokens
           </label>
         </span>
-      </div>
-      <DataTable<OtlpToken>
-        label="Tokens"
-        columns={columns}
-        rows={list.data ?? []}
-        getRowKey={(t) => t.id}
-        rowLabel={(t) => t.name}
-        rowProps={(t) => ({ "data-token": t.id })}
-        state={list.isPending ? "loading" : list.error ? "error" : "data"}
-        error={list.error}
-        onRetry={() => list.refetch()}
-        loadingRows={2}
-        empty={{
-          title: showRevoked ? "No tokens yet" : "No active tokens",
-          text: "Create a token in step 1.",
-        }}
-      />
-      <ConfirmDialog
-        open={revoking !== null}
-        onOpenChange={(o) => {
-          if (!o) setRevoking(null);
-        }}
-        title={revoking ? `Revoke the token “${revoking.name}”?` : "Revoke the token?"}
-        description="The collector refuses this token within seconds. Apps that still send with it get 401. You cannot undo this."
-        confirmLabel="Revoke token"
-        pendingLabel="Revoking"
-        pending={revoke.isPending}
-        error={revoke.error}
-        onConfirm={() => revoking && revoke.mutate(revoking)}
-      />
-    </section>
+      }
+    >
+      {list.data && list.data.length === 0 ? (
+        // nothing to list: one line, not an empty table
+        <p className="text-small text-fg-2" data-tokens="none">
+          {showRevoked ? "No tokens yet" : "No active tokens"}
+        </p>
+      ) : (
+        <DataTable<OtlpToken>
+          label="Tokens"
+          columns={columns}
+          rows={list.data ?? []}
+          getRowKey={(t) => t.id}
+          rowLabel={(t) => t.name}
+          rowProps={(t) => ({ "data-token": t.id })}
+          state={list.isPending ? "loading" : list.error ? "error" : "data"}
+          error={list.error}
+          onRetry={() => list.refetch()}
+          loadingRows={2}
+          empty={{ title: showRevoked ? "No tokens yet" : "No active tokens" }}
+          rowActions={(t) => [
+            t.status === "active" && {
+              label: "Revoke",
+              icon: <Ban aria-hidden />,
+              destructive: true,
+              confirm: {
+                title: `Revoke the token “${t.name}”?`,
+                description:
+                  "The collector refuses this token within seconds. Apps that still send with it get 401. You cannot undo this.",
+                confirmLabel: "Revoke token",
+                pendingLabel: "Revoking",
+                run: async () => {
+                  await api.revokeOtlpToken(tenantId, t.id);
+                  toast.success(`${t.name} is revoked.`);
+                  await queryClient.invalidateQueries({ queryKey: keys.otlpTokensAll(tenantId) });
+                },
+              },
+            },
+          ]}
+        />
+      )}
+    </Section>
   );
 }
 
-// the create form only where the control plane would accept it (contract
+// the create action only where the control plane would accept it (contract
 // 6.6); otherwise the reason, so nobody fills in a form that must fail
-function CreateGate({
-  tenant,
-  canCreate,
-  onCreated,
-  takenNames,
-}: {
-  tenant: Tenant;
-  canCreate: boolean;
-  onCreated: (t: OtlpTokenCreated) => void;
-  takenNames: string[];
-}) {
+function createBlocked(tenant: Tenant, canCreate: boolean): ReactNode | null {
   if (tenant.status === "suspended")
     return (
       <Notice tone="info">
@@ -566,18 +378,26 @@ function CreateGate({
         You can create tokens once an owner accepts the current terms. Revoking works now.
       </Notice>
     );
-  return <CreateTokenForm tenantId={tenant.id} onCreated={onCreated} takenNames={takenNames} />;
+  return null;
 }
 
-export function CreateTokenForm({
+// the form, then the token once with the exporter written for it, in one
+// dialog. the plaintext lives only in this component's state and is gone
+// once the dialog closes (contract 6.2: shown once)
+function CreateTokenDialog({
   tenantId,
-  onCreated,
-  takenNames = [],
+  open,
+  onOpenChange,
+  endpoint,
+  docs,
+  takenNames,
 }: {
   tenantId: string;
-  onCreated: (t: OtlpTokenCreated) => void;
-  // the names of the live tokens, to warn on a second token with one name
-  takenNames?: string[];
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  endpoint: string | null;
+  docs: string | null;
+  takenNames: string[];
 }) {
   const [values, setValues] = useState<TokenValues>({ name: "", environment: "" });
   const [errors, setErrors] = useState<TokenErrors>({});
@@ -585,16 +405,14 @@ export function CreateTokenForm({
   const create = useMutation({
     mutationFn: (body: { name: string; environment?: string }) =>
       api.createOtlpToken(tenantId, body),
-    onSuccess: async (t) => {
-      setValues({ name: "", environment: "" });
-      onCreated(t);
+    onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: keys.otlpTokensAll(tenantId) });
     },
     onError: (err) => setErrors(serverTokenErrors(err)),
   });
+  const created: OtlpTokenCreated | undefined = create.data;
 
-  function submit(e: FormEvent) {
-    e.preventDefault();
+  function submit() {
     const found = validateToken(values);
     setErrors(found);
     if (Object.keys(found).length > 0) return;
@@ -603,13 +421,37 @@ export function CreateTokenForm({
   }
 
   return (
-    <form
-      noValidate
+    <CreateDialog
+      label="Create token"
+      title="Create a token"
+      trigger={false}
+      open={open}
+      onOpenChange={onOpenChange}
+      pending={create.isPending}
+      pendingLabel="Creating"
+      error={
+        create.error && Object.keys(serverTokenErrors(create.error)).length === 0
+          ? create.error
+          : null
+      }
       onSubmit={submit}
-      aria-label="Create a token"
-      className="max-w-prose flex flex-col gap-3"
+      onClosed={() => {
+        create.reset();
+        setValues({ name: "", environment: "" });
+        setErrors({});
+      }}
+      secret={
+        created
+          ? {
+              value: created.token,
+              noun: "token",
+              name: created.name,
+              children: <Snippets endpoint={endpoint} docs={docs} token={created.token} />,
+            }
+          : null
+      }
     >
-      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_12rem_auto] sm:items-start">
+      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_12rem]">
         <TextField
           label="Token name"
           name="name"
@@ -642,68 +484,7 @@ export function CreateTokenForm({
           error={errors.environment}
           className="max-lg:h-(--vs-control-touch)"
         />
-        <Button
-          type="submit"
-          className="max-lg:h-(--vs-control-touch) sm:mt-6"
-          pending={create.isPending}
-        >
-          {create.isPending ? null : <KeyRound aria-hidden />}
-          {create.isPending ? "Creating" : "Create token"}
-        </Button>
       </div>
-      <FormMessage
-        error={
-          create.error && Object.keys(serverTokenErrors(create.error)).length === 0
-            ? create.error
-            : null
-        }
-      />
-    </form>
-  );
-}
-
-// the plaintext lives only in this component's props, never in the query
-// cache, and is gone once the panel is closed (contract 6.2: shown once)
-export function CreatedToken({ token, onDone }: { token: OtlpTokenCreated; onDone: () => void }) {
-  return (
-    <SecretPanel
-      value={token.token}
-      noun="token"
-      name={token.name}
-      description="Store it as a secret of your app. It is shown only this once. If you lose it, create a new token and revoke this one."
-      onDone={onDone}
-    />
-  );
-}
-
-// what the service keeps of the data, in a few lines; the full list is in
-// the docs
-function KeptSection() {
-  const docs = siblingUrl(window.location.hostname, "docs");
-  return (
-    <aside aria-labelledby="otlp-kept" className="flex flex-col gap-3 xl:sticky xl:top-6">
-      <h2 id="otlp-kept" className="text-caption text-fg-2">
-        What the service keeps
-      </h2>
-      <ul className="flex flex-col gap-2 text-small text-fg-2">
-        <li>
-          Only HTTP server request duration is kept, with method, route, status code and service
-          name.
-        </li>
-        <li>
-          Other metrics, traces and logs are dropped. IDs and keys in routes become placeholders.
-        </li>
-        <li className="text-fg">Your own backend keeps the full data.</li>
-      </ul>
-      {docs ? (
-        <a
-          href={`${docs}/onboarding/api/what-gets-dropped`}
-          className="inline-flex w-fit items-center gap-1 rounded-sm text-small text-fg underline decoration-line-strong underline-offset-4 transition-colors duration-(--vs-duration-press) ease-standard hover:decoration-fg focus-ring"
-        >
-          What the service drops
-          <ExternalLink aria-hidden className="size-4" />
-        </a>
-      ) : null}
-    </aside>
+    </CreateDialog>
   );
 }

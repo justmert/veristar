@@ -5,6 +5,7 @@
 // the figures lead; how the report was built is the footer.
 
 import { useQuery } from "@tanstack/react-query";
+import { cn } from "@veristar/brand/cn";
 import { CircleAlert, Download, FileX, ShieldCheck, ShieldX } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { useParams } from "react-router";
@@ -18,19 +19,12 @@ import { percentileHiddenReason } from "@/components/cohort";
 import { CopyButton } from "@/components/copy-button";
 import { CoverageNote } from "@/components/coverage";
 import { Disclosure } from "@/components/disclosure";
-import { gradeMeaning } from "@/components/integrity";
+import { GradeBadge } from "@/components/integrity";
 import { FunctionsTable, functionsDaysText } from "@/components/onchain-functions";
 import { PublicFrame } from "@/components/public-frame";
-import {
-  EmptyState,
-  ErrorState,
-  LoadingState,
-  MessagePage,
-  Missing,
-  Skeleton,
-} from "@/components/states";
+import { Sparkline, StatCard, type StatChange } from "@/components/stat-card";
+import { EmptyState, ErrorState, LoadingState, MessagePage, Skeleton } from "@/components/states";
 import { Pill } from "@/components/status";
-import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { isNotFound } from "@/lib/errors";
 import {
@@ -48,13 +42,7 @@ import {
   OPEN_BUCKET,
 } from "@/lib/format";
 import { siblingUrl } from "@/lib/hosts";
-import {
-  chainGap,
-  DAYS_WITHOUT_DATA,
-  NO_VERIFIED_IDS,
-  shortKey,
-  weeklyActiveText,
-} from "@/lib/onchain";
+import { chainGap, DAYS_WITHOUT_DATA, shortKey, weeklyActiveText } from "@/lib/onchain";
 import { type Verdict, verifyReport } from "@/lib/report-verify";
 import { downloadFile } from "@/lib/reports";
 
@@ -156,7 +144,7 @@ function Signature({ verdict, r }: { verdict: Verdict | null; r: PublicReport })
   const name = typeof r.file.report.id === "string" ? r.file.report.id : r.id;
   const download = (
     <Button
-      variant="outline"
+      variant="ghost"
       size="sm"
       className="print:hidden max-lg:h-(--vs-control-touch)"
       onClick={() => downloadFile(r.file, `veristar-report-${name}.json`)}
@@ -193,8 +181,9 @@ function Signature({ verdict, r }: { verdict: Verdict | null; r: PublicReport })
   } else {
     tone = "ok";
     line = (
-      <p role="status" data-verdict="verified" className="text-body text-fg">
-        <span className="font-medium">Signed by Veristar.</span> This browser checked the signature.
+      <p role="status" data-verdict="verified" className="text-small text-fg-2">
+        <span className="font-medium text-fg">Signed by Veristar.</span> This browser checked the
+        signature.
       </p>
     );
   }
@@ -217,11 +206,17 @@ function Signature({ verdict, r }: { verdict: Verdict | null; r: PublicReport })
   return (
     <section
       aria-label="Signature"
-      className="flex min-w-0 flex-col gap-2 rounded-lg border border-line bg-raised p-3 sm:p-4 print:border-line-strong"
+      // a holding signature is a compact trust mark under the title; one
+      // that does not hold is a block the reader cannot miss
+      className={cn(
+        "flex min-w-0 flex-col gap-1",
+        (tone === "bad" || tone === "warn") &&
+          "rounded-lg border border-line bg-raised p-3 sm:p-4 print:border-line-strong",
+      )}
     >
-      <div className="flex flex-wrap items-start gap-3">
-        <span className="mt-1 flex shrink-0 [&_svg]:size-5">{icon}</span>
-        <div className="min-w-0 flex-1">{line}</div>
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <span className="flex shrink-0 [&_svg]:size-4">{icon}</span>
+        <div className="min-w-0">{line}</div>
         {download}
       </div>
       {verdict?.ok ? (
@@ -257,63 +252,45 @@ function num(s: string | null | undefined): number | null {
   return s === null || s === undefined ? null : Number(s);
 }
 
-function shareOrMissing(s: string | null, why: string): ReactNode {
-  const v = num(s);
-  return v === null ? <Missing reason={why} /> : formatPercent(v);
-}
+// a figure of the report: its label over its value; a figure the report
+// has no value for is left out, never a dash
+type Fig = { label: string; value: ReactNode; title?: string } | null;
 
-function latency(l: { seconds: string | null; over_10s: boolean }): ReactNode {
-  if (l.over_10s) return OPEN_BUCKET;
-  const v = num(l.seconds);
-  return v === null ? <Missing reason="No API requests in this period" /> : formatLatency(v);
-}
-
-function Hero({ label, children }: { label: string; children: ReactNode }) {
+function Figures({ items }: { items: Fig[] }) {
+  const shown = items.filter((f): f is NonNullable<Fig> => f !== null);
+  if (shown.length === 0) return null;
   return (
-    <div className="flex min-w-0 flex-col gap-1 rounded-lg border border-line bg-raised p-4 print:border-line-strong">
-      <dt className="text-caption text-fg-2">{label}</dt>
-      <dd className="min-w-0 text-metric text-fg tabular">{children}</dd>
-    </div>
-  );
-}
-
-function Figure({
-  label,
-  title,
-  children,
-}: {
-  label: string;
-  title?: string;
-  children: ReactNode;
-}) {
-  return (
-    <div className="flex min-w-0 flex-col gap-1">
-      <dt className="text-caption text-fg-2" title={title}>
-        {label}
-      </dt>
-      <dd className="min-w-0 text-body text-fg tabular">{children}</dd>
-    </div>
+    <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+      {shown.map((f) => (
+        <div key={f.label} className="flex min-w-0 flex-col gap-1">
+          <dt className="text-caption text-fg-2" title={f.title}>
+            {f.label}
+          </dt>
+          <dd className="min-w-0 text-body text-fg tabular">{f.value}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 
 function Section({
   title,
   meta,
-  note,
   children,
 }: {
   title: string;
   meta?: ReactNode;
-  note?: ReactNode;
   children: ReactNode;
 }) {
   return (
-    <section aria-label={title} className="flex min-w-0 break-inside-avoid flex-col gap-3">
+    <section
+      aria-label={title}
+      className="flex min-w-0 break-inside-avoid flex-col gap-3 border-t border-line pt-6"
+    >
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-section text-fg">{title}</h2>
+        <h2 className="text-title text-fg">{title}</h2>
         {meta}
       </div>
-      {note ? <p className="text-small text-fg-2">{note}</p> : null}
       {children}
     </section>
   );
@@ -327,6 +304,29 @@ const KPI_LABEL: Record<string, string> = {
   onchain_operations: "On-chain operations",
 };
 
+const fig = (label: string, value: ReactNode | null, title?: string): Fig =>
+  value === null || value === undefined ? null : { label, value, title };
+const pct = (s: string | null) => {
+  const v = num(s);
+  return v === null ? null : formatPercent(v);
+};
+
+function changeOf(r: number | null): StatChange | null {
+  if (r === null) return null;
+  const direction = r > 0.0005 ? "up" : r < -0.0005 ? "down" : "flat";
+  return {
+    text: formatChange(r),
+    direction,
+    good: direction === "flat" ? null : direction === "up",
+    period: "previous period",
+  };
+}
+
+function shaped(values: number[]): number[] | null {
+  if (values.length < 2) return null;
+  return Math.max(...values) === Math.min(...values) ? null : values;
+}
+
 function ReportBody({ doc, signature }: { doc: ReportDocument; signature: ReactNode }) {
   // version 2 adds coverage, has_data, lossy, infrastructure requests and
   // weekly active accounts, version 3 the calls per contract function; a
@@ -335,16 +335,7 @@ function ReportBody({ doc, signature }: { doc: ReportDocument; signature: ReactN
   const v3 = doc.version === 3 ? doc : null;
   const c = doc.cohort;
   const cohortName = [c.program, c.round, c.category].filter(Boolean).join(", ");
-  const population =
-    c.percentile_program || c.percentile_round
-      ? [c.percentile_program, c.percentile_round].filter(Boolean).join(", ")
-      : "every enrolled project";
   const hidden = percentileHiddenReason(c.cohort_size);
-  // a table of dashes says nothing; one line says it instead
-  const noCohortValue = Object.keys(KPI_LABEL).every((k) => {
-    const v = c.kpis[k];
-    return num(v?.change) === null && (hidden !== null || num(v?.percentile) === null);
-  });
   const waa = v2
     ? {
         ...v2.onchain.weekly_active_accounts,
@@ -355,227 +346,272 @@ function ReportBody({ doc, signature }: { doc: ReportDocument; signature: ReactN
   // the signed figures carry 0 where no verified id was read; the report
   // reads them with the same missing-value rule as the console
   const chainMissing = chainGap(doc.onchain.ids_verified, doc.onchain.series);
+  const chainOk = chainMissing === null;
+
+  // the hero: the counts the project has, each with its change and its days
+  const hero = [
+    {
+      key: "visitors",
+      value: doc.web.visitors,
+      spark: doc.web.series.map((p) => p.visitors ?? 0),
+    },
+    {
+      key: "pageviews",
+      value: doc.web.pageviews,
+      spark: doc.web.series.map((p) => p.pageviews ?? 0),
+    },
+    { key: "requests", value: doc.api.requests, spark: doc.api.series.map((p) => p.requests) },
+    {
+      key: "onchain_operations",
+      value: chainOk ? doc.onchain.operations : 0,
+      spark: doc.onchain.series.map((p) => p.operations ?? 0),
+    },
+  ].filter((h) => h.value > 0);
+
+  // the cohort table keeps the rows and the columns that hold a value
+  const rows = Object.entries(KPI_LABEL)
+    .map(([k, label]) => ({
+      k,
+      label,
+      change: num(c.kpis[k]?.change),
+      pct: hidden ? null : num(c.kpis[k]?.percentile),
+    }))
+    .filter((r) => r.change !== null || r.pct !== null);
+  const anyChange = rows.some((r) => r.change !== null);
+  const anyPct = rows.some((r) => r.pct !== null);
+
+  const webData = v2 ? v2.web.has_data : doc.web.pageviews > 0;
+  const apiData = v2 ? v2.api.has_data : doc.api.requests > 0;
+
   return (
-    <article className="flex min-w-0 flex-col gap-8">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-heading break-words text-fg">{doc.project.name}</h1>
-        <p className="text-body text-fg-2">
-          Usage report for {formatDateRange(doc.period.from, doc.period.to)},{" "}
-          {countOf(doc.period.days, "day")}, UTC.
-        </p>
+    <article className="flex min-w-0 flex-col gap-6">
+      <header className="flex flex-col gap-3">
+        <div className="flex flex-col gap-1">
+          <h1 className="text-heading break-words text-fg">{doc.project.name}</h1>
+          <p className="text-body text-fg-2">
+            {formatDateRange(doc.period.from, doc.period.to)}, {countOf(doc.period.days, "day")},
+            UTC
+          </p>
+        </div>
+        {signature}
       </header>
 
-      {signature}
+      {hero.length > 0 ? (
+        <section aria-label="Key figures" className="grid grid-cols-2 gap-3">
+          {hero.map((h) => {
+            const kpi = c.kpis[h.key];
+            const p = hidden ? null : num(kpi?.percentile);
+            const line = shaped(h.spark);
+            return (
+              <StatCard
+                key={h.key}
+                data-hero={h.key}
+                label={KPI_LABEL[h.key] ?? h.key}
+                value={h.value}
+                change={changeOf(num(kpi?.change))}
+                spark={line ? <Sparkline values={line} /> : undefined}
+                footer={
+                  p !== null ? (
+                    <span className="text-caption text-fg-2 tabular">
+                      {formatCohortPercentile(p)} in cohort
+                    </span>
+                  ) : null
+                }
+              />
+            );
+          })}
+        </section>
+      ) : null}
 
-      <dl aria-label="Key figures" className="grid grid-cols-2 gap-3">
-        <Hero label="Verified visitors">{formatCount(doc.web.visitors)}</Hero>
-        <Hero label="Page views">{formatCount(doc.web.pageviews)}</Hero>
-        <Hero label="API requests">{formatCount(doc.api.requests)}</Hero>
-        <Hero label="On-chain operations">
-          {chainMissing ? <Missing reason={chainMissing} /> : formatCount(doc.onchain.operations)}
-        </Hero>
-      </dl>
+      {g.graded_days > 0 ? (
+        <Section title="Integrity" meta={<GradeBadge grade={g.grade} />}>
+          <div className="flex flex-col gap-2" data-testid="report-grade">
+            {g.reasons.length > 0 ? (
+              <ul className="flex flex-col gap-1 text-small">
+                {g.reasons.map((x) => (
+                  <li key={x.code} data-reason={x.code} className="flex gap-2">
+                    <span className="min-w-0 flex-1 text-fg">{x.text}</span>
+                    <span className="text-fg-2 tabular">{countOf(x.days, "day")}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            <p className="text-caption text-fg-2 tabular">
+              {countOf(g.graded_days, "graded site day")}: {formatCount(g.days_a)} A ·{" "}
+              {formatCount(g.days_b)} B · {formatCount(g.days_c)} C
+            </p>
+          </div>
+        </Section>
+      ) : null}
 
-      <Section title="Integrity">
-        <div className="flex flex-col gap-2">
-          <span data-testid="report-grade" className="w-fit">
-            <StatusBadge kind="grade" grade={g.grade} />
-          </span>
-          <p className="text-small text-fg">{gradeMeaning(g.grade)}</p>
-          <p className="text-caption text-fg-2">
-            {g.graded_days === 0
-              ? "No graded site day in this period."
-              : `${countOf(g.graded_days, "graded site day")}: ${formatCount(g.days_a)} A, ${formatCount(g.days_b)} B, ${formatCount(g.days_c)} C.`}
-          </p>
-          {g.reasons.length > 0 ? (
-            <ul className="flex flex-col gap-1 text-small text-fg-2">
-              {g.reasons.map((x) => (
-                <li key={x.code} data-reason={x.code}>
-                  {x.text} ({countOf(x.days, "day")})
-                </li>
-              ))}
-            </ul>
-          ) : null}
-        </div>
-      </Section>
-
-      <Section
-        title="Web"
-        note={v2 && !v2.web.has_data ? "No web traffic was recorded in this period." : undefined}
-      >
-        <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-          <Figure label="Visits">{formatCount(doc.web.visits)}</Figure>
-          <Figure label="Bounce rate">{shareOrMissing(doc.web.bounce_rate, "No visits")}</Figure>
-          <Figure label="Average visit">
-            {num(doc.web.avg_visit_duration_seconds) === null ? (
-              <Missing reason="No visits" />
-            ) : (
-              formatDuration(num(doc.web.avg_visit_duration_seconds) ?? 0)
-            )}
-          </Figure>
-          <Figure label="Quarantined share">
-            {shareOrMissing(doc.web.quarantine_share, "No page views")}
-          </Figure>
-          <Figure label="Gateway requests">{formatCount(doc.web.gateway_requests)}</Figure>
-          <Figure label="Verified sites">
-            {formatCount(doc.web.sites_verified)} of {formatCount(doc.web.sites)}
-          </Figure>
-        </dl>
-        {v2 ? (
-          <CoverageNote
-            coverage={{
-              script_requests: v2.web.coverage.script_requests,
-              gpc_requests: v2.web.coverage.gpc_requests,
-              unmeasured_share: num(v2.web.coverage.unmeasured_share),
-            }}
+      {webData ? (
+        <Section title="Web">
+          <Figures
+            items={[
+              doc.web.visits > 0 ? fig("Visits", formatCount(doc.web.visits)) : null,
+              fig("Bounce rate", pct(doc.web.bounce_rate)),
+              fig(
+                "Average visit",
+                num(doc.web.avg_visit_duration_seconds) === null
+                  ? null
+                  : formatDuration(num(doc.web.avg_visit_duration_seconds) ?? 0),
+              ),
+              fig("Quarantined share", pct(doc.web.quarantine_share)),
+              fig("Gateway requests", formatCount(doc.web.gateway_requests)),
+              doc.web.sites > 0
+                ? fig(
+                    "Verified sites",
+                    `${formatCount(doc.web.sites_verified)} of ${formatCount(doc.web.sites)}`,
+                  )
+                : null,
+            ]}
           />
-        ) : null}
-      </Section>
-
-      <Section
-        title="API"
-        note={v2 && !v2.api.has_data ? "No API traffic was recorded in this period." : undefined}
-      >
-        <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-          <Figure label="4xx rate">{shareOrMissing(doc.api.rate_4xx, "No API requests")}</Figure>
-          <Figure label="5xx rate">{shareOrMissing(doc.api.rate_5xx, "No API requests")}</Figure>
-          <Figure label="p95 latency">{latency(doc.api.p95)}</Figure>
-          <Figure label="Services">{formatCount(doc.api.services)}</Figure>
-          <Figure label="Distinct routes">{formatCount(doc.api.routes)}</Figure>
           {v2 ? (
-            <Figure label="Infrastructure requests">
-              {formatCount(v2.api.infrastructure_requests)}
-            </Figure>
+            <CoverageNote
+              coverage={{
+                script_requests: v2.web.coverage.script_requests,
+                gpc_requests: v2.web.coverage.gpc_requests,
+                unmeasured_share: num(v2.web.coverage.unmeasured_share),
+              }}
+            />
           ) : null}
-        </dl>
-        {v2 ? (
-          <p className="text-caption text-fg-2">
-            Requests, rates and latency count application requests only. Preflights, health checks
-            and probes are left out.
-            {v2.api.lossy ? " Some latency buckets are approximate." : ""}
-          </p>
-        ) : null}
-      </Section>
+        </Section>
+      ) : null}
 
-      <Section
-        title="On-chain"
-        meta={
-          doc.onchain.two_way_link ? (
-            <Pill tone="success">stellar.toml linked both ways</Pill>
-          ) : null
-        }
-      >
-        <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-          <Figure label="Transactions">
-            {chainMissing ? (
-              <Missing reason={chainMissing} />
-            ) : (
-              formatCount(doc.onchain.transactions)
-            )}
-          </Figure>
-          <Figure label="Verified IDs">
-            {formatCount(doc.onchain.ids_verified)} of {formatCount(doc.onchain.ids)}
-          </Figure>
-          <Figure label="Days without data" title={DAYS_WITHOUT_DATA}>
-            {doc.onchain.ids_verified === 0 ? (
-              <Missing reason={NO_VERIFIED_IDS} />
-            ) : (
-              formatCount(doc.onchain.days_missing)
-            )}
-          </Figure>
-          {waa ? (
-            <div className="col-span-2 flex min-w-0 flex-col gap-1 sm:col-span-3">
-              <dt className="text-caption text-fg-2">Weekly active accounts</dt>
-              <dd className="text-body text-fg">{weeklyActiveText(waa)}</dd>
+      {apiData ? (
+        <Section title="API">
+          <Figures
+            items={[
+              fig("4xx rate", pct(doc.api.rate_4xx)),
+              fig("5xx rate", pct(doc.api.rate_5xx)),
+              doc.api.p95.over_10s
+                ? fig("p95 latency", OPEN_BUCKET)
+                : fig(
+                    "p95 latency",
+                    num(doc.api.p95.seconds) === null
+                      ? null
+                      : formatLatency(num(doc.api.p95.seconds) ?? 0),
+                  ),
+              fig("Services", formatCount(doc.api.services)),
+              fig("Distinct routes", formatCount(doc.api.routes)),
+              v2 && v2.api.infrastructure_requests > 0
+                ? fig(
+                    "Infrastructure requests",
+                    formatCount(v2.api.infrastructure_requests),
+                    "Preflights, health checks and probes, left out of the figures",
+                  )
+                : null,
+            ]}
+          />
+        </Section>
+      ) : null}
+
+      {doc.onchain.ids > 0 ? (
+        <Section
+          title="On-chain"
+          meta={
+            doc.onchain.two_way_link ? (
+              <Pill tone="success">stellar.toml linked both ways</Pill>
+            ) : null
+          }
+        >
+          <Figures
+            items={[
+              chainOk ? fig("Transactions", formatCount(doc.onchain.transactions)) : null,
+              fig(
+                "Verified IDs",
+                `${formatCount(doc.onchain.ids_verified)} of ${formatCount(doc.onchain.ids)}`,
+              ),
+              chainOk
+                ? fig("Days without data", formatCount(doc.onchain.days_missing), DAYS_WITHOUT_DATA)
+                : null,
+              waa && waa.average !== null
+                ? fig("Weekly active accounts", weeklyActiveText(waa))
+                : null,
+            ]}
+          />
+          {v3?.onchain.contracts.map((k) => (
+            <div key={k.strkey} className="flex min-w-0 flex-col gap-2" data-contract={k.strkey}>
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <span className="text-small text-fg">
+                  Contract{" "}
+                  <code className="font-mono" title={k.strkey}>
+                    {shortKey(k.strkey)}
+                  </code>
+                </span>
+                <span className="text-caption text-fg-2">{functionsDaysText(k)}</span>
+              </div>
+              <FunctionsTable summary={k} label={`Calls per function of ${k.strkey}`} />
             </div>
+          ))}
+        </Section>
+      ) : null}
+
+      {cohortName || rows.length > 0 ? (
+        <Section
+          title="Cohort"
+          meta={
+            <span className="text-small text-fg-2 tabular">
+              {countOf(c.cohort_size, "project")}
+            </span>
+          }
+        >
+          {cohortName ? (
+            <p className="text-small text-fg" data-cohort="">
+              {cohortName}
+              {c.award_date ? (
+                <span className="text-fg-2"> · awarded {formatDate(c.award_date)}</span>
+              ) : null}
+            </p>
           ) : null}
-        </dl>
-        {v3?.onchain.contracts.map((k) => (
-          <div key={k.strkey} className="flex min-w-0 flex-col gap-2" data-contract={k.strkey}>
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <span className="text-small text-fg">
-                Contract{" "}
-                <code className="font-mono" title={k.strkey}>
-                  {shortKey(k.strkey)}
-                </code>
-              </span>
-              <span className="text-caption text-fg-2">{functionsDaysText(k)}</span>
-            </div>
-            <FunctionsTable summary={k} label={`Calls per function of ${k.strkey}`} />
-          </div>
-        ))}
-      </Section>
-
-      <Section
-        title="Cohort"
-        note={`${
-          cohortName
-            ? `Confirmed cohort: ${cohortName}${c.award_date ? `, awarded ${formatDate(c.award_date)}` : ""}.`
-            : "No confirmed cohort."
-        } Percentiles place the project among ${population}: ${countOf(c.cohort_size, "project")}.`}
-      >
-        {noCohortValue ? (
-          <p className="text-small text-fg" data-testid="cohort-no-values">
-            No metric has a change or a percentile in this period.
-          </p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-body" aria-label="Key metrics">
-              <thead>
-                <tr className="text-caption text-fg-2">
-                  <th scope="col" className="py-2 pr-3 font-normal">
-                    Metric
-                  </th>
-                  <th scope="col" className="py-2 pr-3 text-right font-normal">
-                    Change
-                  </th>
-                  <th scope="col" className="py-2 text-right font-normal">
-                    Percentile
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {Object.entries(KPI_LABEL).map(([k, label]) => {
-                  const v = c.kpis[k];
-                  const change = num(v?.change);
-                  const pct = num(v?.percentile);
-                  return (
-                    <tr key={k} data-kpi={k} className="border-t border-line-subtle">
-                      <th scope="row" className="py-2 pr-3 font-normal text-fg-2">
-                        {label}
+          {rows.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-body" aria-label="Key metrics">
+                <thead>
+                  <tr className="text-caption text-fg-2">
+                    <th scope="col" className="py-2 pr-3 font-normal">
+                      Metric
+                    </th>
+                    {anyChange ? (
+                      <th scope="col" className="py-2 pr-3 text-right font-normal">
+                        Change
                       </th>
-                      <td className="py-2 pr-3 text-right text-fg tabular">
-                        {change === null ? (
-                          <Missing reason="No value in the previous period" />
-                        ) : k === "error_rate" ? (
-                          formatPoints(change)
-                        ) : (
-                          formatChange(change)
-                        )}
-                      </td>
-                      <td className="py-2 text-right text-fg tabular">
-                        {hidden ? (
-                          <Missing reason={hidden} />
-                        ) : pct === null ? (
-                          <Missing reason="No value in this period" />
-                        ) : (
-                          formatCohortPercentile(pct)
-                        )}
-                      </td>
+                    ) : null}
+                    {anyPct ? (
+                      <th scope="col" className="py-2 text-right font-normal">
+                        Percentile
+                      </th>
+                    ) : null}
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((r) => (
+                    <tr key={r.k} data-kpi={r.k} className="border-t border-line-subtle">
+                      <th scope="row" className="py-2 pr-3 font-normal text-fg-2">
+                        {r.label}
+                      </th>
+                      {anyChange ? (
+                        <td className="py-2 pr-3 text-right text-fg tabular">
+                          {r.change === null
+                            ? null
+                            : r.k === "error_rate"
+                              ? formatPoints(r.change)
+                              : formatChange(r.change)}
+                        </td>
+                      ) : null}
+                      {anyPct ? (
+                        <td className="py-2 text-right text-fg tabular">
+                          {r.pct === null ? null : formatCohortPercentile(r.pct)}
+                        </td>
+                      ) : null}
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-        {hidden ? (
-          <p className="text-caption text-fg-2" data-testid="percentile-hidden">
-            Percentiles show from a cohort of 5 projects. This cohort has{" "}
-            {countOf(c.cohort_size, "project")}. The JSON file keeps them.
-          </p>
-        ) : null}
-      </Section>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+        </Section>
+      ) : null}
 
       {doc.rules_met.length > 0 ? (
         <Section title="SCF rules met">
@@ -590,25 +626,31 @@ function ReportBody({ doc, signature }: { doc: ReportDocument; signature: ReactN
         </Section>
       ) : null}
 
-      <footer className="flex flex-col gap-3 border-t border-line pt-4 text-caption text-fg-2">
-        <p>
-          Generated {formatDateTimeUtc(doc.generated_at)}. Report {doc.id}. The report holds daily
-          and period totals only, with no visitor, address or user agent.
-        </p>
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-4">
-          <Build label="Report format">{doc.methods.format}</Build>
-          <Build label="Web metrics">{doc.methods.web_metrics}</Build>
-          <Build label="API metrics">{doc.methods.api_metrics}</Build>
-          <Build label="On-chain">{doc.methods.onchain}</Build>
-          <Build label="Cohort method">{doc.methods.cohort}</Build>
-          <Build label="Integrity rules">
-            {[doc.methods.integrity_rules].flat().join(", ") || <Missing reason="Not graded" />}
-          </Build>
-          <Build label="Route rules">{doc.methods.route_normaliser}</Build>
-          <Build label="Platform">
-            <PlatformBuild value={doc.methods.platform} />
-          </Build>
-        </dl>
+      <footer className="flex flex-col gap-2 border-t border-line pt-4 text-caption text-fg-2">
+        <Disclosure
+          variant="inline"
+          summary={`Generated ${formatDateTimeUtc(doc.generated_at)}`}
+          className="text-caption"
+          bodyClassName="flex flex-col gap-2"
+        >
+          <p>Report {doc.id}</p>
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-4">
+            <Build label="Report format">{doc.methods.format}</Build>
+            <Build label="Web metrics">{doc.methods.web_metrics}</Build>
+            <Build label="API metrics">{doc.methods.api_metrics}</Build>
+            <Build label="On-chain">{doc.methods.onchain}</Build>
+            <Build label="Cohort method">{doc.methods.cohort}</Build>
+            {[doc.methods.integrity_rules].flat().length > 0 ? (
+              <Build label="Integrity rules">
+                {[doc.methods.integrity_rules].flat().join(", ")}
+              </Build>
+            ) : null}
+            <Build label="Route rules">{doc.methods.route_normaliser}</Build>
+            <Build label="Platform">
+              <PlatformBuild value={doc.methods.platform} />
+            </Build>
+          </dl>
+        </Disclosure>
       </footer>
     </article>
   );

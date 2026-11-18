@@ -7,7 +7,7 @@ import { DecisionPanel } from "@/components/decision-panel";
 import { EvidenceList, evidenceOf } from "@/components/evidence-list";
 import { PageHeader } from "@/components/page-header";
 import { SecretPanel } from "@/components/secret-panel";
-import { StatCard } from "@/components/stat-card";
+import { StatCard, StatGrid } from "@/components/stat-card";
 import { EmptyState, ErrorState, LoadingState, Missing, Skeleton } from "@/components/states";
 import { StatusBadge } from "@/components/status-badge";
 import { Toaster, toast } from "@/components/toast";
@@ -229,13 +229,28 @@ describe("stat card", () => {
     const views = host.querySelector("[data-tile=views]") as HTMLButtonElement;
     expect(views.getAttribute("aria-pressed")).toBe("true");
     expect(views.textContent).toContain("69,798");
-    expect(views.textContent).toContain("+12%vs previous 30 days");
+    // the change follows the value, its period only read out
+    expect(views.textContent).toContain("69,798+12% vs previous 30 days");
+    expect(views.querySelector("[data-change=up] .sr-only")?.textContent).toBe(
+      " vs previous 30 days",
+    );
     expect(views.textContent).toContain("In chart");
     await click(views);
     expect(select).toHaveBeenCalledOnce();
     expect(host.textContent).toContain("–Too few visits");
     expect(host.textContent).toContain("Loading Visits");
     expect(host.textContent).toContain("Did not load");
+  });
+
+  it("draws nothing for a missing optional metric", async () => {
+    const host = await render(
+      <StatGrid data-testid="grid">
+        <StatCard label="Page views" value={3} />
+        <StatCard label="On-chain operations" value={null} hideWhenEmpty />
+      </StatGrid>,
+    );
+    expect(host.querySelector("[data-testid=grid]")?.children).toHaveLength(1);
+    expect(host.textContent).not.toContain("On-chain");
   });
 });
 

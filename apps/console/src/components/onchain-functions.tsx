@@ -199,66 +199,59 @@ function DailyCalls({ id, source }: { id: ChainId; source: FunctionsSource }) {
   return <FunctionsDaily data={q.data} />;
 }
 
-// the calls per function of one declared contract. source, when given,
-// lets the reader open the daily calls and export them.
+// the calls per function of one declared contract, as a part of the
+// contract's row (a divider above it, no box of its own). an unverified
+// contract has none and draws nothing. source, when given, lets the reader
+// open the daily calls and export them.
 export function ContractFunctionsBlock({ id, source }: { id: ChainId; source?: FunctionsSource }) {
   const [open, setOpen] = useState(false);
   if (id.kind !== "contract") return null;
   const s = id.functions;
+  if (s === null) return null;
   return (
     <section
       aria-label={`Calls per function of ${id.strkey}`}
-      className="flex min-w-0 flex-col gap-3 rounded-md border border-line bg-sunken p-3 sm:p-4"
+      className="flex min-w-0 flex-col gap-3 border-t border-line-subtle pt-3"
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h4 className="text-body font-medium text-fg">Calls per function</h4>
-        {s ? (
-          <span className="text-caption text-fg-2" data-testid="functions-days">
-            {functionsDaysText(s)}
-          </span>
-        ) : null}
+        <span className="text-caption text-fg-2" data-testid="functions-days">
+          {functionsDaysText(s)}
+        </span>
       </div>
-      {s === null ? (
-        <p className="text-small text-fg-2">
-          Calls per function show when the contract is verified. Only verified contracts count.
-        </p>
-      ) : (
-        <>
-          <FunctionsTable summary={s} label={`Calls per function of ${id.strkey}`} />
-          {source ? (
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                aria-expanded={open}
-                onClick={() => setOpen(!open)}
-                className="max-lg:h-(--vs-control-touch)"
-              >
-                <ChevronDown
-                  aria-hidden
-                  className={
-                    open
-                      ? "rotate-180 transition-transform duration-(--vs-duration-press) ease-standard"
-                      : "transition-transform duration-(--vs-duration-press) ease-standard"
-                  }
-                />
-                Daily calls
-              </Button>
-              <Button asChild variant="ghost" size="sm" className="max-lg:h-(--vs-control-touch)">
-                <a href={exportPaths.functions(source, id.id)} download>
-                  <Download aria-hidden />
-                  Export CSV
-                </a>
-              </Button>
-            </div>
-          ) : null}
-          {source && open ? (
-            <div className="animate-rise-in">
-              <DailyCalls id={id} source={source} />
-            </div>
-          ) : null}
-        </>
-      )}
+      <FunctionsTable summary={s} label={`Calls per function of ${id.strkey}`} />
+      {source ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-expanded={open}
+            onClick={() => setOpen(!open)}
+            className="max-lg:h-(--vs-control-touch)"
+          >
+            <ChevronDown
+              aria-hidden
+              className={
+                open
+                  ? "rotate-180 transition-transform duration-(--vs-duration-press) ease-standard"
+                  : "transition-transform duration-(--vs-duration-press) ease-standard"
+              }
+            />
+            Daily calls
+          </Button>
+          <Button asChild variant="ghost" size="sm" className="max-lg:h-(--vs-control-touch)">
+            <a href={exportPaths.functions(source, id.id)} download>
+              <Download aria-hidden />
+              Export CSV
+            </a>
+          </Button>
+        </div>
+      ) : null}
+      {source && open ? (
+        <div className="animate-rise-in">
+          <DailyCalls id={id} source={source} />
+        </div>
+      ) : null}
     </section>
   );
 }

@@ -160,7 +160,7 @@ describe("erasure schemas (contract 10.1)", () => {
 });
 
 describe("privacy page", () => {
-  it("shows the history and the explanation to a member, without the form", async () => {
+  it("shows the history to a member, without the form", async () => {
     serve({
       [`GET ${sitesUrl}`]: [{ status: 200, body: f.sitePageBody }],
       [`GET ${listUrl}`]: [{ status: 200, body: listOf(f.erasureDoneBody) }],
@@ -172,8 +172,8 @@ describe("privacy page", () => {
     expect(host.textContent).toContain("Daily aggregates are being recomputed.");
     expect(host.textContent).toContain("Only owners of this project can request erasure.");
     expect(host.querySelector("form")).toBeNull();
-    expect(host.textContent).toContain("What can and cannot be erased");
-    expect(host.textContent).toContain("At midnight UTC the day's secret is destroyed.");
+    // what erasure can reach is in the docs, not in a side column
+    expect(host.querySelector("aside")).toBeNull();
   });
 
   it("sends a visitor erasure once, clears the typed values and stores them nowhere", async () => {

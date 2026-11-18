@@ -121,34 +121,28 @@ export function evidenceOf(
   return items;
 }
 
-// stacked puts each value under its label, for a narrow column
-export function EvidenceList({ items, stacked }: { items: EvidenceItem[]; stacked?: boolean }) {
+// one layout everywhere: each fact on one line, its status icon, its label
+// and its value. the labels share one column as wide as the longest, so
+// the values line up. `stacked` is kept for callers and changes nothing.
+export function EvidenceList({ items }: { items: EvidenceItem[]; stacked?: boolean }) {
   return (
-    <ul aria-label="Evidence" className="flex flex-col">
+    <ul
+      aria-label="Evidence"
+      className="grid grid-cols-[1rem_auto_minmax(0,1fr)] gap-x-3 text-small"
+    >
       {items.map((e) => (
         <li
           key={e.key}
           data-evidence={e.key}
           data-signal={e.signal}
-          className={cn(
-            "grid grid-cols-[1rem_minmax(0,1fr)] items-start gap-x-2 py-1 text-small",
-            !stacked && "sm:grid-cols-[1rem_10rem_minmax(0,1fr)]",
-          )}
+          className="col-span-3 grid grid-cols-subgrid items-baseline py-1"
         >
-          <span className="mt-1 flex">{SIGNAL_ICON[e.signal]}</span>
-          <span className="text-fg-2">
+          <span className="flex translate-y-0.5 self-start">{SIGNAL_ICON[e.signal]}</span>
+          <span className="max-w-48 text-fg-2">
             {e.label}
             <span className="sr-only">:</span>
           </span>
-          <span
-            className={cn(
-              "col-start-2 min-w-0 break-words",
-              !stacked && "sm:col-start-3",
-              VALUE_TONE[e.signal],
-            )}
-          >
-            {e.value}
-          </span>
+          <span className={cn("min-w-0 break-words", VALUE_TONE[e.signal])}>{e.value}</span>
         </li>
       ))}
     </ul>
