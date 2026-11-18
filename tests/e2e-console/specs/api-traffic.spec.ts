@@ -204,7 +204,13 @@ async function rows(p: Page) {
 }
 
 // the range control is a radio group with the presets' short names
+// the range is a radio group on a wide screen and a select on a phone
 async function pickRange(p: Page, label: string) {
+  const select = p.getByRole("combobox", { name: "Range" });
+  if (await select.isVisible()) {
+    await select.selectOption({ label });
+    return;
+  }
   await p
     .getByRole("radiogroup", { name: "Range" })
     .getByRole("radio", { name: label, exact: true })
