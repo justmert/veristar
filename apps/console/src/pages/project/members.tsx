@@ -8,7 +8,7 @@ import { keys, membersQuery } from "@/api/queries";
 import type { AddMemberResult, Invite, Member, Members, Role } from "@/api/schemas";
 import { Avatar } from "@/components/avatar";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { type Column, DataTable } from "@/components/data-table";
+import { type Column, DataTable, useRowPages } from "@/components/data-table";
 import { FormMessage } from "@/components/error-panel";
 import { FilterBar } from "@/components/filter-bar";
 import { NativeSelect, SelectField, TextField } from "@/components/form-field";
@@ -201,10 +201,8 @@ function MembersBody({
   const [pending, setPending] = useState<Pending | null>(null);
   const ownerCount = data.members.filter((m) => m.role === "owner").length;
   const lastOwner = (m: Member) => m.role === "owner" && ownerCount === 1;
-  const [page, setPage] = useState(0);
   const shown = matchMembers(data.members, q);
-  const pages = Math.max(1, Math.ceil(shown.length / MEMBER_PAGE));
-  const current = Math.min(page, pages - 1);
+  const paged = useRowPages(shown, MEMBER_PAGE, q);
 
   const setRole = useMutation({
     mutationFn: (p: { member: Member; role: Role }) =>
@@ -326,10 +324,7 @@ function MembersBody({
         {data.members.length >= MEMBER_SEARCH_FROM ? (
           <FilterBar
             search={q}
-            onSearch={(t) => {
-              setQ(t);
-              setPage(0);
-            }}
+            onSearch={setQ}
             searchLabel="Search members"
             placeholder="Search by name or address"
             onClearAll={() => setQ("")}
@@ -338,22 +333,12 @@ function MembersBody({
         <DataTable<Member>
           label="Members"
           columns={columns}
-          rows={shown.slice(current * MEMBER_PAGE, (current + 1) * MEMBER_PAGE)}
+          rows={paged.rows}
           getRowKey={(m) => m.user_id}
           rowLabel={(m) => m.display_name}
           rowProps={(m) => ({ "data-member": m.user_id })}
           empty={{ title: "No member matches", text: "Search by another name or address." }}
-          footer={
-            shown.length > MEMBER_PAGE
-              ? {
-                  kind: "pager",
-                  page: current,
-                  pageSize: MEMBER_PAGE,
-                  total: shown.length,
-                  onPage: setPage,
-                }
-              : undefined
-          }
+          footer={paged.footer}
         />
       </section>
 
@@ -514,10 +499,8 @@ function InvitesSection({
   canManage: boolean;
 }) {
   const [q, setQ] = useState("");
-  const [page, setPage] = useState(0);
   const shown = matchInvites(invites, q);
-  const pages = Math.max(1, Math.ceil(shown.length / MEMBER_PAGE));
-  const current = Math.min(page, pages - 1);
+  const paged = useRowPages(shown, MEMBER_PAGE, q);
   const columns: Column<Invite>[] = [
     {
       key: "person",
@@ -572,10 +555,7 @@ function InvitesSection({
       {invites.length >= MEMBER_SEARCH_FROM ? (
         <FilterBar
           search={q}
-          onSearch={(t) => {
-            setQ(t);
-            setPage(0);
-          }}
+          onSearch={setQ}
           searchLabel="Search invites"
           placeholder="Search by name or address"
           onClearAll={() => setQ("")}
@@ -584,22 +564,12 @@ function InvitesSection({
       <DataTable<Invite>
         label="Open invites"
         columns={columns}
-        rows={shown.slice(current * MEMBER_PAGE, (current + 1) * MEMBER_PAGE)}
+        rows={paged.rows}
         getRowKey={(i) => i.id}
         rowLabel={(i) => i.display_name}
         rowProps={(i) => ({ "data-invite": i.id })}
         empty={{ title: "No invite matches", text: "Search by another name or address." }}
-        footer={
-          shown.length > MEMBER_PAGE
-            ? {
-                kind: "pager",
-                page: current,
-                pageSize: MEMBER_PAGE,
-                total: shown.length,
-                onPage: setPage,
-              }
-            : undefined
-        }
+        footer={paged.footer}
       />
     </section>
   );
