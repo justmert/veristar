@@ -114,7 +114,7 @@ describe("mcp access keys", () => {
 describe("mcp key list", () => {
   it("says when a key ends, with the reason of a revocation", () => {
     const c = mcpCredential.parse(credential);
-    expect(credentialEnd(c)).toBe("Expires Feb 12, 2027, 05:00 UTC");
+    expect(credentialEnd(c)).toBe("Feb 12, 2027, 05:00 UTC");
     const revoked = mcpCredential.parse({
       ...credential,
       status: "revoked",

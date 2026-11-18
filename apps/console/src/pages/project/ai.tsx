@@ -281,7 +281,7 @@ export function CredentialSection({
     },
     {
       key: "ends",
-      header: "Ends",
+      header: "Expires",
       minWidth: "min-w-44",
       cell: (c) => <span className="text-fg-2">{credentialEnd(c)}</span>,
     },
@@ -347,9 +347,9 @@ export function credentialEnd(c: McpCredential): string {
     return `Revoked ${formatDateTimeUtc(c.revoked_at)}${
       c.revoked_reason ? `: ${REVOKED_REASON[c.revoked_reason] ?? c.revoked_reason}` : ""
     }`;
-  if (c.expires_at)
-    return `${c.status === "expired" ? "Expired" : "Expires"} ${formatDateTimeUtc(c.expires_at)}`;
-  return "Stays valid while the client refreshes it";
+  // the status column says active or expired; the cell holds the date only
+  if (c.expires_at) return formatDateTimeUtc(c.expires_at);
+  return "Renewed by the client";
 }
 
 // numbered steps of one client
