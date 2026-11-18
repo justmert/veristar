@@ -63,7 +63,7 @@ In scope:
 
 Not covered by this policy:
 
-- The boundaries listed in [bot-and-inflation.md](bot-and-inflation.md) section 9, for example
+- The boundaries listed in [bot-and-inflation.md](bot-and-inflation.md) section 11, for example
   that a scripted client can solve the challenge and set browser headers, or that real browsers on
   residential proxies pass every check.
 - Volumetric denial of service, spam, and social engineering of maintainers or operators.

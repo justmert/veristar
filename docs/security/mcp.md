@@ -26,7 +26,7 @@ This page states its security model; the privacy side is in
 | Format | `sa_mcp_` and 40 random base62 characters (about 238 bits) | access token `sa_mcpat_`, refresh token `sa_mcprt_`, each with 40 random characters |
 | Stored | SHA-256 and a four-character display prefix | SHA-256 only |
 | Lifetime | 1 to 365 days, 90 by default | access 1 hour; refresh 30 days, rotated on every use |
-| Made by | a project member on the AI page, or an operator | the person on the consent page after GitHub sign-in |
+| Made by | a project member on the AI page, or an operator | the person on the consent page, signed in to the console with GitHub, a Stellar wallet or a passkey |
 
 - A credential acts as one console user. Every request reads the credential, the user, the
   membership and the project status again in one statement; nothing is cached.
@@ -52,7 +52,8 @@ the consent page sealed with AES-256-GCM under a key derived from `OAUTH_STATE_K
 a label of its own, and expires after 10 minutes. The consent page needs a console session, shows
 the client's name and the origin the browser returns to, and grants exactly one project (or the
 operator view for operators) only on an explicit approve; the approve call carries the console's
-CSRF header and Origin check. The authorization answer carries `iss` (RFC 9207).
+CSRF header and Origin check, and approving the operator view also needs a fresh passkey step-up
+of the operator area. The authorization answer carries `iss` (RFC 9207).
 
 ## Tenant isolation
 
