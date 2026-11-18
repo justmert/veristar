@@ -627,7 +627,7 @@ function Summaries({ tenantId, sites, days }: { tenantId: string; sites: Site[];
           <span className="text-small text-fg-2">No accounts or contracts declared</span>
         ) : activity?.gap ? (
           <span className="flex flex-wrap items-baseline gap-x-2">
-            <span className="font-mono text-title text-fg tabular">
+            <span className="text-title text-fg tabular">
               <Missing reason={activity.gap} />
             </span>
             <span className="text-small text-fg-2">
