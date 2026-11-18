@@ -162,6 +162,13 @@ here, before they take effect, as the processing terms require
   project, or a site in review) answers 503 `provisioning_pending`, as the
   contract says, instead of starting a run against Umami websites that do
   not exist.
+- `make local-converge-up` no longer fails with `Pool overlaps with other one
+  on this address space` on a host where a Compose project holds
+  172.31.0.0/16: the local converge's public network moved from
+  172.31.99.0/24 to 10.98.99.0/24, outside Docker's default address pools.
+  `LC_IMAGE_TAG` names a second set of local images, so a rolling
+  `deploy.yml` from one release to another runs locally, and
+  `make local-converge-e2e` runs on the `LC_TOPOLOGY=node` layout too.
 
 ### Upgrade notes
 
