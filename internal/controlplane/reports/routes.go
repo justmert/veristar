@@ -318,8 +318,10 @@ func (h *Routes) create(w http.ResponseWriter, r *http.Request) error {
 	}
 	ctx := r.Context()
 	// the creation limit is read under cp_tenant, which sees only its own
-	// project's reports
-	if err := h.c.Scope.InTenant(ctx, a, func(tx pgx.Tx) error {
+	// project's reports: once here, so a refused request builds nothing,
+	// and again under the project's lock in the insert transaction, so
+	// concurrent requests cannot all pass it
+	underLimit := func(tx pgx.Tx) error {
 		var n int
 		var oldest time.Time
 		if err := tx.QueryRow(ctx, `select count(*), coalesce(min(created_at), now()) from cp.usage_reports
@@ -330,7 +332,8 @@ func (h *Routes) create(w http.ResponseWriter, r *http.Request) error {
 			return httpx.RateLimited(max(oldest.Add(CreateWindow).Sub(now), time.Second))
 		}
 		return nil
-	}); err != nil {
+	}
+	if err := h.c.Scope.InTenant(ctx, a, underLimit); err != nil {
 		return err
 	}
 	id, err := NewID()
@@ -360,6 +363,12 @@ func (h *Routes) create(w http.ResponseWriter, r *http.Request) error {
 	}
 	var out Summary
 	err = h.c.Scope.InTenant(ctx, a, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, `select pg_advisory_xact_lock(hashtextextended('cp.reports:' || $1::text, 0))`, a.TenantID.String()); err != nil {
+			return err
+		}
+		if err := underLimit(tx); err != nil {
+			return err
+		}
 		var err error
 		out, err = h.scanSummary(tx.QueryRow(ctx, `insert into cp.usage_reports
 			(id, tenant_id, period_from, period_to, body, signature, signer, created_by)
@@ -464,6 +473,10 @@ func (h *Routes) revoke(w http.ResponseWriter, r *http.Request) error {
 	now := h.c.Now()
 	var out Summary
 	err = h.c.Scope.InTenant(ctx, a, func(tx pgx.Tx) error {
+		// one revocation at a time per project, so the count below holds
+		if _, err := tx.Exec(ctx, `select pg_advisory_xact_lock(hashtextextended('cp.reports:' || $1::text, 0))`, a.TenantID.String()); err != nil {
+			return err
+		}
 		var n int
 		var oldest time.Time
 		if err := tx.QueryRow(ctx, `select count(*), coalesce(min(revoked_at), now()) from cp.usage_reports
