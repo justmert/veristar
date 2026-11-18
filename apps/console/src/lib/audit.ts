@@ -165,6 +165,18 @@ const VERB: Record<string, string> = {
   "onchain.challenge": "started the on-chain check for",
   "onchain.verify": "verified an on-chain id of",
   "export.csv": "exported a CSV file of",
+  // the setup steps the service runs for a project
+  "provision.team_create": "set up analytics for",
+  "provision.user_create": "created an analytics account for",
+  "provision.user_update": "updated the analytics account of",
+  "provision.membership_add": "gave analytics access to",
+  "provision.membership_remove": "removed analytics access from",
+  "provision.website_create": "created the analytics site of",
+  "provision.website_update": "updated the analytics site of",
+  "provision.website_delete": "deleted the analytics site of",
+  "provision.registry_put": "opened event intake for",
+  "provision.registry_delete": "closed event intake for",
+  "provision.otlp_registry_put": "opened API data intake for",
 };
 
 // an action this list does not know keeps its code, so nothing is hidden
@@ -189,6 +201,9 @@ const TARGET_KIND: Record<string, string> = {
   mcp_credential: "an AI assistant key",
   operator_api_key: "a machine API key",
   otlp_token: "an API token",
+  chain_id: "an on-chain id",
+  invite: "an invite",
+  mcp_client: "an AI client",
 };
 
 export type AuditSentence = {
@@ -211,10 +226,12 @@ export function auditSentence(e: AuditEntry): AuditSentence {
   let object: string | null = e.target ? (named ?? TARGET_KIND[prefix] ?? "an object") : null;
   // a verb that names its own object ("the project") reads "a project" twice
   // without a name, so the article goes
-  if (object && !named && / the (project|site|member|operator|rule)$/.test(verb)) {
-    verb = verb.replace(/ the (project|site|member|operator|rule)$/, "");
+  if (object && !named && / the (project|site|member|operator|rule|report)$/.test(verb)) {
+    verb = verb.replace(/ the (project|site|member|operator|rule|report)$/, "");
   }
-  if (!e.target) {
+  // an action on the actor itself (a sign-in) or on a setting, whose verb
+  // names it, reads without a second object
+  if (!e.target || e.target === e.actor || e.action.startsWith("settings.")) {
     verb = verb.replace(/ (on|of|for|from|to)$/, "");
     object = null;
   }
