@@ -595,9 +595,11 @@ function Summaries({ tenantId, sites, days }: { tenantId: string; sites: Site[];
           <span className="flex flex-wrap items-center gap-2">
             <StatusBadge kind="grade" grade={grade.data.grade} />
             <span className="text-small text-fg-2">
-              {grade.data.graded_days === 0
-                ? "Too few visits for a grade"
-                : countOf(grade.data.graded_days, "graded site day")}
+              {sites.length === 0
+                ? "No site to grade"
+                : grade.data.graded_days === 0
+                  ? "Too few visits for a grade"
+                  : `Graded on ${countOf(grade.data.graded_days, "site day")}`}
             </span>
           </span>
         )}
