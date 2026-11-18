@@ -120,10 +120,11 @@ func (s *Search) search(w http.ResponseWriter, r *http.Request) error {
 	if ok, wait := s.allow(u.ID, s.now()); !ok {
 		return httpx.RateLimited(wait)
 	}
+	ctx := r.Context()
 	var awards []AwardRow
-	err = s.db.WithSystem(r.Context(), func(tx pgx.Tx) error {
+	err = s.db.WithSystem(ctx, func(tx pgx.Tx) error {
 		var err error
-		awards, err = LoadAwards(r.Context(), tx)
+		awards, err = LoadAwards(ctx, tx)
 		return err
 	})
 	if err != nil {
