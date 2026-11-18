@@ -12,8 +12,6 @@ import {
 } from "@/api/schemas";
 import {
   EMPTY_FILTERS,
-  formatDuration,
-  formatPct,
   type ListState,
   lastDays,
   readCompare,
@@ -148,14 +146,6 @@ describe("list state and query strings", () => {
     expect(validateDays({ from: "2026-11-05", to: "2026-11-01" }, now).to).toBeDefined();
     expect(validateDays({ from: "2025-11-11", to: "2026-11-12" }, now).to).toContain("366");
     expect(validateDays({ from: "2025-11-12", to: "2026-11-12" }, now)).toEqual({});
-  });
-
-  it("formats durations and percentiles, never inventing a number above 10 s", () => {
-    expect(formatDuration(90.94)).toBe("1 min 31 s");
-    expect(formatDuration(null)).toBeNull();
-    expect(formatPct(null, true)).toBe(">10 s");
-    expect(formatPct(0.041, false)).toBe("41 ms");
-    expect(formatPct(null, false)).toBeNull();
   });
 });
 

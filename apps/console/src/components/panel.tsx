@@ -1,32 +1,5 @@
 import { cn } from "@veristar/brand/cn";
 import type { ReactNode } from "react";
-import { PageHeader as SharedHeader } from "@/components/page-header";
-
-// the older page header api; it draws the shared header so every page has
-// the same title step while it moves to components/page-header.tsx
-export function PageHeader({
-  title,
-  description,
-  actions,
-  meta,
-  className,
-}: {
-  title: ReactNode;
-  description?: ReactNode;
-  actions?: ReactNode;
-  meta?: ReactNode;
-  className?: string;
-}) {
-  return (
-    <SharedHeader
-      title={title}
-      description={description}
-      secondary={actions}
-      meta={meta}
-      className={className}
-    />
-  );
-}
 
 // a raised surface with an optional header. raised = border only; depth
 // comes from the overlay surface, never from a shadow on a card.

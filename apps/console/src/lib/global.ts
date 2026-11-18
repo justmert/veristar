@@ -1,20 +1,9 @@
 // the pure part of the global web and api views and the comparison: url
-// state, query strings and number formats, kept apart from the components so
+// state and query strings, kept apart from the components so
 // tests can check them directly. the rules mirror
 // docs/reference/control-plane-api.md section 8.
 
 import { type TenantStatus, tenantStatus } from "@/api/schemas";
-import {
-  formatDuration as durationText,
-  formatCohortPercentile,
-  formatDate,
-  formatDateRange,
-  formatLatency,
-  formatPercent,
-  formatPoints,
-  OPEN_BUCKET,
-  formatChange as relativeText,
-} from "@/lib/format";
 
 // "" means the filter is not sent
 export type Tri = "" | "true" | "false";
@@ -263,32 +252,3 @@ export function validateDays(
     out.to = `A range covers at most ${maxDays} days.`;
   return out;
 }
-
-// the formats of lib/format.ts under the names and nullable signatures the
-// scf view, the public report and the on-chain section read. one
-// implementation: each only passes null through.
-export function formatChange(v: number | null, kind: "relative" | "points"): string | null {
-  if (v === null) return null;
-  return kind === "points" ? formatPoints(v) : relativeText(v);
-}
-
-export function formatPercentile(v: number | null): string | null {
-  return v === null ? null : formatCohortPercentile(v);
-}
-
-export function formatDuration(s: number | null): string | null {
-  return s === null ? null : durationText(s);
-}
-
-export function formatShare(v: number | null): string | null {
-  return v === null ? null : formatPercent(v);
-}
-
-// contract 8.5: seconds, the open bucket above 10 s, or none
-export function formatPct(seconds: number | null, over10s: boolean): string | null {
-  if (over10s) return OPEN_BUCKET;
-  return seconds === null ? null : formatLatency(seconds);
-}
-
-export const formatDay = (d: string) => formatDate(d);
-export const formatDayRange = (from: string, to: string) => formatDateRange(from, to);
