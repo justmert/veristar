@@ -9,7 +9,7 @@ import type { AuditEntry } from "@/api/schemas";
 import { ErrorPanel, Loading, StateBlock } from "@/components/error-panel";
 import { TextField } from "@/components/form-field";
 import { Button } from "@/components/ui/button";
-import { formatDate, formatDateTimeUtc, formatTimeUtc } from "@/lib/format";
+import { formatCount, formatDate, formatDateTimeUtc, formatTimeUtc, MISSING } from "@/lib/format";
 
 const FIELDS = ["tenant_id", "action", "actor", "target", "from", "to"] as const;
 type Field = (typeof FIELDS)[number];
@@ -348,16 +348,26 @@ export function auditSummary(e: AuditEntry): string[] {
   return out;
 }
 
+// one side of a change as a person reads it: a list or an object is spelt
+// out (never "[object Object]"), a missing value is the missing glyph
+export function changeValue(v: unknown): string {
+  if (v === null || v === undefined || v === "") return MISSING;
+  if (typeof v === "boolean") return v ? "on" : "off";
+  if (typeof v === "number") return formatCount(v);
+  if (Array.isArray(v)) return v.length ? v.map(changeValue).join(", ") : MISSING;
+  if (isObj(v)) {
+    const parts = Object.entries(v).map(([k, x]) => `${k.replaceAll("_", " ")} ${changeValue(x)}`);
+    return parts.length ? parts.join(", ") : MISSING;
+  }
+  return String(v);
+}
+
 // every { old, new } pair of the detail, drawn as a change chip
 export function auditChanges(e: AuditEntry): { key: string; from: string; to: string }[] {
   const out: { key: string; from: string; to: string }[] = [];
   for (const [key, v] of Object.entries(e.detail ?? {})) {
     if (isObj(v) && "old" in v && "new" in v)
-      out.push({
-        key: key.replaceAll("_", " "),
-        from: v.old === null ? "none" : String(v.old),
-        to: v.new === null ? "none" : String(v.new),
-      });
+      out.push({ key: key.replaceAll("_", " "), from: changeValue(v.old), to: changeValue(v.new) });
   }
   return out;
 }
