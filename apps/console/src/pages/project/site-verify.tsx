@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatDateTimeUtc } from "@/lib/format";
+import { Breakable } from "@/pages/project/breakable";
 import { queryClient } from "@/query-client";
 
 type Choice = "both" | VerifyMethod;
@@ -240,10 +241,13 @@ function RecordTable({
       {rows.map((r) => (
         <div
           key={r.k}
-          className="grid grid-cols-[4rem_minmax(0,1fr)_auto] items-center gap-x-3 px-3 py-2"
+          className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 px-3 py-2 sm:grid-cols-[4rem_minmax(0,1fr)_auto]"
         >
-          <dt className="text-caption text-fg-2">{r.k}</dt>
-          <dd className="min-w-0 break-all font-mono text-small text-fg">{r.value}</dd>
+          {/* on a phone the label sits above its value, which keeps the width */}
+          <dt className="col-span-2 text-caption text-fg-2 sm:col-span-1">{r.k}</dt>
+          <dd className="min-w-0 font-mono text-small text-fg">
+            <Breakable text={r.value} />
+          </dd>
           <span className="flex">
             {r.copy === false ? null : (
               <CopyButton

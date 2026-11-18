@@ -70,19 +70,21 @@ export function setupSteps(site: Site, event: FirstEvent | null): SetupStep[] {
     {
       key: "domain",
       title: "Verify the domain",
+      // a later step stays neutral until the steps before it are done: a
+      // failed check shows only once the step is the one to do
       state: domainDone(site)
         ? "done"
-        : site.last_verify_error
-          ? "attention"
-          : received
-            ? "current"
-            : "todo",
+        : !received
+          ? "todo"
+          : site.last_verify_error
+            ? "attention"
+            : "current",
       optional: false,
     },
     {
       key: "toml",
       title: "stellar.toml",
-      state: !toml ? "todo" : toml.status === "found" ? "done" : "attention",
+      state: !toml ? "todo" : toml.status === "found" ? "done" : received ? "attention" : "todo",
       optional: true,
     },
   ];

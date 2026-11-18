@@ -33,6 +33,7 @@ import {
 } from "@/lib/site-setup";
 import { CONSENT_START, readsTitleChoice, snippetGuides } from "@/lib/snippet-guides";
 import { webPath } from "@/lib/web-dashboard";
+import { Breakable } from "@/pages/project/breakable";
 import { useProject } from "@/pages/project-layout";
 import { NotFoundPage } from "@/pages/public/not-found";
 import { SitePageLoading, SitesBackLink } from "./page-frame";
@@ -117,7 +118,7 @@ function SiteSetup({ site }: { site: Site }) {
         </Notice>
       ) : null}
 
-      <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_17rem]">
+      <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_20rem]">
         <ol aria-label="Setup steps" className="flex min-w-0 flex-col">
           <Step n={1} step={step("install")} id="install" settled={first.event !== null}>
             {snippet.isPending ? (
@@ -695,16 +696,16 @@ function SiteAside({ site }: { site: Site }) {
       <dl className="flex min-w-0 flex-col gap-3 text-small">
         <div className="flex min-w-0 flex-col gap-1">
           <dt className="text-caption text-fg-2">Domain</dt>
-          <dd className="break-all font-mono text-fg" title={site.domain}>
-            {site.domain}
+          <dd className="font-mono text-fg" title={site.domain}>
+            <Breakable text={site.domain} />
           </dd>
         </div>
         <div className="flex min-w-0 flex-col gap-1">
           <dt className="text-caption text-fg-2">Allowed origins</dt>
           <dd className="flex min-w-0 flex-col gap-1">
             {site.origins.map((o) => (
-              <span key={o} className="break-all font-mono text-fg" title={o}>
-                {o}
+              <span key={o} className="font-mono text-fg" title={o}>
+                <Breakable text={o} />
               </span>
             ))}
             <Link

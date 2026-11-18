@@ -76,6 +76,11 @@ describe("the setup model", () => {
     expect(setupStatus(failed, "received")).toBe("failed");
   });
 
+  it("keeps a later step neutral while an earlier one is open", () => {
+    const failed = { ...site, last_verify_error: "dns_no_record" } as Site;
+    expect(setupSteps(failed, "waiting")[2]?.state).toBe("todo");
+  });
+
   it("counts stellar.toml as optional", () => {
     const done = { ...site, verification: "verified" } as Site;
     const steps = setupSteps(done, "received");
