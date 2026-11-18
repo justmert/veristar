@@ -218,7 +218,7 @@ test("a signed report verifies in a browser without a session, until its link is
 
     const again = await reader.newPage();
     await again.goto(url);
-    await expect(again.getByText("This report link is not available")).toBeVisible();
+    await expect(again.getByText("This report link was revoked")).toBeVisible();
   } finally {
     await reader.close();
   }
