@@ -48,8 +48,9 @@ gateways answer from NATS and do not need Umami or PostgreSQL ([architecture](..
 - **Block a route at Caddy.** Add the path to `deploy/caddy/app.Caddyfile` for the control plane,
   run `go test ./deploy/caddy/` and `make test-caddy-closed`, and roll out with the normal
   deploy.
-- **Take the dashboards offline, keep ingestion.** On the core nodes stop the `umami` service (and
-  the `controlplane` if the flaw is there): `docker compose stop umami`. Events queue in the
+- **Take the dashboards offline, keep ingestion.** On the core nodes stop every Umami process (and
+  the `controlplane` if the flaw is there): `sudo docker compose stop umami umami-2`, plus
+  `umami-3` and up when the inventory raises `core_umami_processes`. Events queue in the
   `WEB_EVENTS` stream (72 hour retention) and the replayer delivers them when Umami returns, with
   their original timestamps. Post a notice on the status page.
 - **Rotate exposed credentials.** OTLP tokens and operator API keys can be revoked in the console;

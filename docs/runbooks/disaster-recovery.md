@@ -188,16 +188,44 @@ Data loss window: what was not yet archived when the database was lost, at most
    `Sync Standby` and one `Replica`, all `streaming`; three etcd members `started`. Each node's
    port 80 answers `308`, and Traffic Manager adds its endpoints back.
 
-9. **Import and verify** with the services on every node stopped
-   (`sudo docker compose stop umami controlplane replayer metricswriter jobs` on each):
+9. **Import and verify.** On every node stop the services that use the databases, every Umami
+   process included (`umami` plus `umami-2` up to `umami-<core_umami_processes>`; `sudo docker
+   compose ps` lists them). `scripts/migrate.sh` drops `umami` and `platform` before it restores
+   them, and PostgreSQL refuses to drop a database that a running process still holds:
 
    ```sh
-   make migrate-import MIGRATE_ENV=<new leader env file> MIGRATE_DIR=<directory of step 4>
-   make verify-migration SOURCE_ENV=<restore env file> TARGET_ENV=<new leader env file>
+   cd /opt/veristar/core && sudo docker compose stop umami umami-2 controlplane replayer metricswriter jobs
    ```
 
-   Expected: `verify-migration` exits 0 (row counts of every table, per-tenant daily web and API
-   aggregates, Umami `/stats` for a sample of sites and days). Then start the services again
+   Then import as in [../handover/rebuild.md](../handover/rebuild.md) section 4.1: the SSH
+   tunnels to the new leader, the env file with the new environment's values, and the steps of
+   `make migrate-import` one by one, because Umami must be stopped for the restore and running
+   for the comparison and the reconcile:
+
+   ```sh
+   make build
+   scripts/migrate.sh import <new leader env file> <directory of step 4>
+   # on the leader: start umami (process 1 only), read its address again for the tunnel
+   set -a && . ./<new leader env file> && set +a
+   dist/bin/platformctl db migrate
+   ```
+
+   The restored databases come from this environment, so they already hold its Umami admin
+   password and user password key: skip the re-keying of rebuild.md section 4.
+
+   Compare before anything writes to the new cluster. The restore node runs no Umami, so set
+   `UMAMI_URL` and `UMAMI_ADMIN_PASSWORD` in the restore env file to the new environment's
+   tunnelled Umami. The row counts of every table of both databases (Umami's tables included)
+   and the daily web and API aggregates are then compared between the restore node and the new
+   leader, and the `/stats` sample checks that the new Umami answers for the restored sites:
+
+   ```sh
+   make verify-migration SOURCE_ENV=<restore env file> TARGET_ENV=<new leader env file>
+   dist/bin/jobs run reconcile
+   ```
+
+   Expected: `verify-migration` exits 0 with `result: source and target are equal`, and the
+   reconcile rebuilds the NATS registries from the `cp` tables. Then start the services again
    (`make <env>-deploy ...`), and the replayer and metrics writer drain what JetStream held.
 
 10. **Take a full backup** of the new generation at once:
