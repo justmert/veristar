@@ -1,7 +1,7 @@
 import { act } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { auditPath, type TenantListQuery, tenantListPath } from "@/api/endpoints";
-import { tenantAction } from "@/api/schemas";
+import { type AuditEntry, tenantAction } from "@/api/schemas";
 import {
   actorKind,
   actorName,
@@ -157,7 +157,8 @@ describe("operator project page", () => {
     expect(host.querySelector("form[aria-label='Decision on Stellar DEX']")).not.toBeNull();
     expect(byRole(host, "button", "Actions")).toBeTruthy();
     // the last entries of the audit log read as sentences
-    expect(host.textContent).toContain("sa-operator suspended a project");
+    // the page names the project it knows
+    expect(host.textContent).toContain("sa-operator suspended the project Stellar DEX");
     expect(host.querySelector("a[href*='/operator/audit?tenant_id=']")).not.toBeNull();
   });
 
@@ -433,9 +434,57 @@ describe("audit log", () => {
       { key: "origins", from: "https://a.example", to: "https://a.example, https://b.example" },
       { key: "cohort", from: "–", to: "program Build Award, round 38" },
       { key: "campaign params", from: "off", to: "on" },
-      { key: "names", from: "–", to: "–" },
     ]);
     expect(JSON.stringify(auditChanges(e))).not.toContain("[object Object]");
+  });
+
+  it("says states with the badge words and leaves out empty changes", () => {
+    const e = {
+      ...f.auditEntryBody,
+      action: "tenant.reject",
+      detail: { status: { old: "pending", new: "rejected" }, network: { old: null, new: null } },
+    };
+    expect(auditChanges(e)).toEqual([{ key: "status", from: "In review", to: "Not approved" }]);
+    const site = {
+      ...f.auditEntryBody,
+      action: "site.verify",
+      target: `site:${f.SITE_ID}`,
+      detail: { result: "dns_no_record", verification: { old: "unchecked", new: "unverified" } },
+    };
+    expect(auditChanges(site)).toEqual([
+      { key: "verification", from: "Not checked", to: "Not verified" },
+    ]);
+    // a check that did not pass is a check, not a verification
+    const said = (x: AuditEntry) => {
+      const t = auditSentence(x, { [`site:${f.SITE_ID}`]: "example.org" });
+      return `${t.verb} ${t.object}`;
+    };
+    expect(said(site)).toBe("checked the domain of the site example.org");
+    expect(said({ ...site, detail: { result: "ok" } })).toBe(
+      "verified the domain of the site example.org",
+    );
+  });
+
+  it("names the object from the detail or from the page", () => {
+    const site = { ...f.auditEntryBody, action: "site.create", target: `site:${f.SITE_ID}` };
+    expect(auditSentence({ ...site, detail: {} }).object).toBe("a site");
+    expect(
+      auditSentence({ ...site, detail: {} }, { [`site:${f.SITE_ID}`]: "example.org" }),
+    ).toMatchObject({ verb: "added the site", object: "example.org" });
+    const id = auditSentence({
+      ...f.auditEntryBody,
+      action: "onchain.add",
+      target: "chain_id:c1",
+      detail: { strkey: "GBRPYHIL2CI3FNQ4BXLFMNDLFJUNPU2HY3ZMFSHONUCEOASW7QC7OX2H" },
+    });
+    expect(id.object).toBe("GBRP…OX2H");
+    const report = auditSentence({
+      ...f.auditEntryBody,
+      action: "report.create",
+      target: "report:r1",
+      detail: { from: "2026-10-20", to: "2026-11-18" },
+    });
+    expect(`${report.verb} ${report.object}`).toBe("signed a report for Oct 20 to Nov 18, 2026");
   });
 
   it("reads an entry as a sentence and tells the system from people", () => {
