@@ -255,10 +255,14 @@ List routes answer:
 | 409 | `tenant_not_active` | OTLP token create while the tenant is `pending` or `rejected` (6.2) |
 | 409 | `erasure_in_progress` | an erasure request while another one runs for the same site (10.2) |
 | 409 | `too_many_keys` | an MCP access key create over 20 active keys of the user (12.8) |
+| 409 | `no_proposal` | a cohort confirm or dismiss without an open proposal (19.1) |
+| 409 | `rule_limit` | a threshold rule create beyond 200 rules (19.4) |
+| 409 | `not_reportable` | a usage report of a project the operator views do not list (20.1) |
 | 410 | `tracker_version_revoked` | snippet for a revoked tracker version |
 | 413 | `body_too_large` | body over 64 KiB |
 | 415 | `unsupported_media_type` | see section 1 |
 | 422 | `validation_failed` | field rules, details in `fields` |
+| 422 | `period_not_final` | a usage report period that ends on a day the daily aggregation still reads again (20.1) |
 | 429 | `rate_limited` | per-client, per-session or per-route limit; `Retry-After` header set |
 | 500 | `internal` | anything unexpected; details only in the log |
 | 503 | `unavailable` | database, NATS, Umami or GitHub unreachable, or a tenant request that waited longer than its 5 second lock timeout for the tenant row (a reconcile or an operator action holds it; 1.3); `Retry-After` set |
