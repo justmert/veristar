@@ -66,20 +66,29 @@ export type TableFooter =
 export type Sort = { key: string; order: "asc" | "desc" };
 
 // paging for a list the page already holds in full (30 sites, 45 invites):
-// the rows of the current page and the pager footer. the page goes back to
-// the first when the list shrinks under it (a search narrowed it)
+// the rows of the current page and the pager footer. the page stays inside
+// the list when it shrinks, and goes back to the first when `resetKey` (the
+// search text) changes
 export function useRowPages<Row>(
   rows: Row[],
   pageSize = 10,
+  resetKey = "",
 ): { rows: Row[]; footer: TableFooter | undefined } {
-  const [page, setPage] = useState(0);
+  const [state, setState] = useState({ page: 0, key: resetKey });
+  const page = state.key === resetKey ? state.page : 0;
   const last = Math.max(0, Math.ceil(rows.length / pageSize) - 1);
   const at = Math.min(page, last);
   return {
     rows: rows.slice(at * pageSize, at * pageSize + pageSize),
     footer:
       rows.length > pageSize
-        ? { kind: "pager", page: at, pageSize, total: rows.length, onPage: setPage }
+        ? {
+            kind: "pager",
+            page: at,
+            pageSize,
+            total: rows.length,
+            onPage: (p) => setState({ page: p, key: resetKey }),
+          }
         : undefined,
   };
 }
