@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { clientSnippets, mcpCredential, mcpCredentialCreated } from "@/api/mcp";
-import { credentialEnd, McpKeyCreateForm, validateMcpKey } from "@/pages/project/ai";
+import { CreateKey, credentialEnd, validateMcpKey } from "@/pages/project/ai";
 import { byLabel, byRole, click, render, stubFetch, type, waitFor } from "./helpers";
 
 const credential = {
@@ -85,8 +85,7 @@ describe("mcp access keys", () => {
       { status: 201, body: { ...credential, key: `sa_mcp_${"B".repeat(40)}` } },
     ]);
     const host = await render(
-      <McpKeyCreateForm
-        label="Create an access key"
+      <CreateKey
         create={async (b) => {
           const { mcpApi } = await import("@/api/mcp");
           return mcpApi.createTenantKey(credential.tenant_id, b);
@@ -94,11 +93,17 @@ describe("mcp access keys", () => {
         onCreated={(k) => created.push(k)}
       />,
     );
-    await type(byLabel(host, "Name"), "laptop");
+    // the header button opens the dialog; the dialog's own button submits
     await click(byRole(host, "button", "Create key"));
+    const dialog = () => host.querySelector("dialog") as HTMLElement;
+    await type(byLabel(dialog(), "Name"), "laptop");
+    await click(byRole(dialog(), "button", "Create key"));
     await waitFor(() => expect(host.textContent).toContain("Use at most 100 characters."));
-    await click(byRole(host, "button", "Create key"));
+    await click(byRole(dialog(), "button", "Create key"));
     await waitFor(() => expect(created).toHaveLength(1));
+    // the key shows once in the same dialog, with the commands that hold it
+    await waitFor(() => expect(dialog().textContent).toContain("Copy your new key"));
+    expect(dialog().textContent).toContain("claude mcp add");
     expect(calls[1]?.url).toBe(`/api/tenants/${credential.tenant_id}/mcp-credentials`);
     expect(calls[1]?.method).toBe("POST");
     expect(calls[1]?.headers.get("X-Requested-With")).toBe("sa-console");
