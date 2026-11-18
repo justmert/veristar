@@ -190,11 +190,8 @@ test("an operator sees the column, exports the rows on screen and reads the deta
     await signIn(page, OPERATOR);
     await operatorStepUp(page, OPERATOR);
     await page.goto(`${APP}/operator/projects?view=web&q=${encodeURIComponent(`On-chain ${run}`)}`);
-    // the column is one of the optional ones: the column menu shows it
-    await page.getByRole("button", { name: "Columns" }).click();
-    await page.getByRole("menuitemcheckbox", { name: "On-chain", exact: true }).click();
-    await page.keyboard.press("Escape");
-    await expect(page.getByRole("columnheader", { name: "On-chain", exact: true })).toBeVisible();
+    // the header names the column, then reads its definition
+    await expect(page.getByRole("columnheader", { name: /^On-chain\W+Operations/ })).toBeVisible();
     const row = page.locator(`tr[data-tenant="${tenant.id}"]`);
     // the summary is read with the number: a tooltip on hover and focus
     await expect(row.locator("[data-col=onchain]")).toContainText("0 of 1 id verified");
