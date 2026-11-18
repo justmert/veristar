@@ -1,27 +1,46 @@
 import { useMutation, useQueries, useQuery } from "@tanstack/react-query";
-import { cn } from "@veristar/brand/cn";
-import { Check, ChevronRight, CircleAlert, Minus, Plus } from "lucide-react";
-import { type FormEvent, type ReactNode, useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router";
+import { MonitorSmartphone, Plus } from "lucide-react";
+import { type FormEvent, type ReactNode, useMemo, useState } from "react";
+import { Link, useNavigate } from "react-router";
 import { ApiError } from "@/api/client";
 import { api, type SiteInput, type SitePatch } from "@/api/endpoints";
-import { ingestMonthQuery, keys, sitesQuery } from "@/api/queries";
+import { ingestDayQuery, ingestMonthQuery, keys, sitesQuery } from "@/api/queries";
 import type { Ingest, Site } from "@/api/schemas";
-import { ErrorPanel, FormMessage, Loading, StateBlock } from "@/components/error-panel";
+import { webHourlyQuery } from "@/api/web";
+import { type Column, DataTable, type Sort } from "@/components/data-table";
+import { FormMessage } from "@/components/error-panel";
+import { FilterBar } from "@/components/filter-bar";
 import { TextAreaField, TextField } from "@/components/form-field";
-import { Stagger, StaggerItem } from "@/components/motion";
-import { Notice } from "@/components/notice";
-import { PageHeader, Panel } from "@/components/panel";
-import { StatusPill } from "@/components/status";
+import { PageHeader } from "@/components/page-header";
+import { EmptyState, ErrorState, LoadingState, Missing, Skeleton } from "@/components/states";
+import { StatusBadge } from "@/components/status-badge";
+import { toast } from "@/components/toast";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
-import { Table, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { formatCount, formatShareOf } from "@/lib/format";
+import { Skeleton as Bone } from "@/components/ui/skeleton";
+import { formatCount, formatShareOf, utcDay } from "@/lib/format";
 import { sumRejected } from "@/lib/outcomes";
+import {
+  combineFirstEvent,
+  type FirstEvent,
+  firstEvent,
+  nextAction,
+  setupRank,
+  setupStatus,
+  siteSetupPath,
+  webSeen,
+} from "@/lib/site-setup";
 import * as v from "@/lib/validate";
-import { webPath } from "@/lib/web-dashboard";
 import { useProject } from "@/pages/project-layout";
 import { queryClient } from "@/query-client";
+
+export {
+  type FirstEvent,
+  firstEvent,
+  setupDone,
+  siteSettingsPath,
+  siteSetupPath,
+} from "@/lib/site-setup";
 
 export type SiteValues = { name: string; domain: string; origins: string };
 export type SiteErrors = Partial<Record<keyof SiteValues, string>>;
@@ -80,212 +99,6 @@ export function sitePatch(site: Site, values: SiteValues): SitePatch {
   return patch;
 }
 
-// ------------------------------------------------------------ setup state
-
-export type FirstEvent = "waiting" | "received" | "refused";
-
-// whether a site's tag works, from the ingest counts the console already
-// reads: counted events mean it does; only rejections mean the tag runs but
-// its events are refused
-export function firstEvent(...answers: (Ingest | undefined)[]): FirstEvent {
-  let counted = 0;
-  let rejected = 0;
-  for (const a of answers) {
-    if (!a) continue;
-    const t = a.totals;
-    counted += (t.accepted ?? 0) + (t.quarantined ?? 0) + (t.bot ?? 0);
-    rejected += sumRejected(t);
-  }
-  return counted > 0 ? "received" : rejected > 0 ? "refused" : "waiting";
-}
-
-// setup is three steps: the site is added, its first event arrives, its
-// domain is verified
-export function setupDone(site: Site, event: FirstEvent | null): number {
-  return 1 + (event === "received" ? 1 : 0) + (site.verification === "verified" ? 1 : 0);
-}
-
-// a site's own pages: its setup (install, first event, domain) and its
-// settings
-export const siteSetupPath = (s: Pick<Site, "id" | "tenant_id">) =>
-  `/projects/${s.tenant_id}/sites/${s.id}`;
-export const siteSettingsPath = (s: Pick<Site, "id" | "tenant_id">) =>
-  `/projects/${s.tenant_id}/sites/${s.id}/settings`;
-
-type MarkState = "ok" | "wait" | "warn" | "none";
-
-function Mark({ state, children }: { state: MarkState; children: ReactNode }) {
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1 text-caption font-normal",
-        state === "none" ? "text-fg-3" : "text-fg-2",
-      )}
-    >
-      {state === "ok" ? (
-        <Check aria-hidden className="size-3 text-success" strokeWidth={2.6} />
-      ) : state === "wait" ? (
-        <span aria-hidden className="relative inline-flex size-3 items-center justify-center">
-          <span className="absolute inset-0.5 animate-live rounded-full bg-info" />
-          <span className="size-1.5 rounded-full bg-info" />
-        </span>
-      ) : state === "warn" ? (
-        <CircleAlert aria-hidden className="size-3 text-warning" />
-      ) : (
-        <Minus aria-hidden className="size-3" />
-      )}
-      {children}
-    </span>
-  );
-}
-
-// the three setup marks of a site, always as icon plus word
-export function SetupMarks({ site, event }: { site: Site; event: FirstEvent | null }) {
-  return (
-    <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
-      {event === null ? (
-        <Mark state="none">Checking</Mark>
-      ) : event === "received" ? (
-        <Mark state="ok">Installed</Mark>
-      ) : event === "refused" ? (
-        <Mark state="warn">Refused</Mark>
-      ) : (
-        <Mark state="wait">Waiting</Mark>
-      )}
-      <Mark
-        state={
-          site.verification === "verified"
-            ? "ok"
-            : site.verification === "unverified"
-              ? "warn"
-              : "none"
-        }
-      >
-        Domain
-      </Mark>
-      <Mark state={site.stellar_toml?.status === "found" ? "ok" : "none"}>stellar.toml</Mark>
-    </span>
-  );
-}
-
-function phoneSummary(site: Site, event: FirstEvent | null): string {
-  if (event === null) return "Checking";
-  if (event === "refused") return "Events are refused";
-  if (event === "waiting") return "Waiting for first event";
-  if (site.verification !== "verified") return "Installed, domain not verified";
-  return site.stellar_toml?.status === "found" ? "Verified, stellar.toml found" : "Verified";
-}
-
-// ------------------------------------------------------------ sites table
-
-// the project's sites with how far each one is set up and its last 30 days.
-// rows stack on a phone.
-export function SitesTable({ sites, actions }: { sites: Site[]; actions?: ReactNode }) {
-  const month = useQueries({ queries: sites.map((s) => ingestMonthQuery(s.id)) });
-  return (
-    <Panel title="Sites" actions={actions} flush className="overflow-hidden">
-      <div className="max-md:hidden">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Site</TableHead>
-              <TableHead>Setup</TableHead>
-              <TableHead className="text-right">Accepted, 30d</TableHead>
-              <TableHead className="text-right">Held back</TableHead>
-              <TableHead>
-                <span className="sr-only">Actions</span>
-              </TableHead>
-            </TableRow>
-          </TableHeader>
-          <Stagger as="tbody">
-            {sites.map((s, i) => {
-              const q = month[i];
-              const event = q?.data ? firstEvent(q.data) : null;
-              const t = q?.data?.totals;
-              const all = t ? Object.values(t).reduce((a, b) => a + b, 0) : 0;
-              const held = t ? (t.quarantined ?? 0) + (t.bot ?? 0) + sumRejected(t) : 0;
-              const pending = q?.error ? "n/a" : "...";
-              return (
-                <StaggerItem
-                  as="tr"
-                  key={s.id}
-                  className="transition-colors duration-(--vs-duration-press) ease-standard hover:bg-hover"
-                >
-                  <TableCell>
-                    <Link
-                      to={siteSetupPath(s)}
-                      className="group/site flex min-w-0 flex-col rounded-sm focus-ring"
-                    >
-                      <span className="flex items-center gap-2 font-medium text-fg group-hover/site:underline">
-                        {s.name}
-                        {s.status !== "active" ? <StatusPill status={s.status} /> : null}
-                      </span>
-                      <span className="truncate text-caption font-normal text-fg-3">
-                        {s.domain}
-                      </span>
-                    </Link>
-                  </TableCell>
-                  <TableCell>
-                    <SetupMarks site={s} event={event} />
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-fg">
-                    {t ? formatCount(t.accepted ?? 0) : pending}
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-fg-2">
-                    {t ? formatShareOf(held, all) : pending}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center justify-end gap-1">
-                      {event === "waiting" || event === "refused" ? (
-                        <Button asChild variant="ghost" size="sm" className="text-accent-text">
-                          <Link to={siteSetupPath(s)}>Continue setup</Link>
-                        </Button>
-                      ) : null}
-                      <Button asChild variant="ghost" size="sm">
-                        <Link
-                          to={webPath(s.tenant_id, s.id)}
-                          aria-label={`Web analytics of ${s.name}`}
-                        >
-                          Analytics
-                        </Link>
-                      </Button>
-                    </div>
-                  </TableCell>
-                </StaggerItem>
-              );
-            })}
-          </Stagger>
-        </Table>
-      </div>
-      <Stagger as="ul" className="flex flex-col md:hidden">
-        {sites.map((s, i) => {
-          const q = month[i];
-          const event = q?.data ? firstEvent(q.data) : null;
-          return (
-            <StaggerItem as="li" key={s.id} className="border-t border-line-subtle">
-              <Link
-                to={siteSetupPath(s)}
-                className="flex min-h-(--vs-control-touch) items-center gap-3 px-4 py-3 transition-colors duration-(--vs-duration-press) hover:bg-hover focus-ring"
-              >
-                <span className="flex min-w-0 flex-1 flex-col gap-1">
-                  <span className="truncate text-body font-medium text-fg">{s.domain}</span>
-                  <span className="truncate text-caption font-normal text-fg-2">
-                    {phoneSummary(s, event)}
-                  </span>
-                </span>
-                <span className="font-mono text-body text-fg">
-                  {q?.data ? formatCount(q.data.totals.accepted ?? 0) : ""}
-                </span>
-                <ChevronRight aria-hidden className="size-4 text-fg-3" />
-              </Link>
-            </StaggerItem>
-          );
-        })}
-      </Stagger>
-    </Panel>
-  );
-}
-
 // ------------------------------------------------------------ add a site
 
 export function AddSiteForm({
@@ -307,6 +120,7 @@ export function AddSiteForm({
     mutationFn: (body: SiteInput) => api.createSite(tenantId, body),
     onSuccess: async (site) => {
       await queryClient.invalidateQueries({ queryKey: keys.sites(tenantId) });
+      toast.success(`${site.name} is added. Install its tag next.`);
       onDone(site);
     },
     onError: (err) => setErrors(serverSiteErrors(err, values)),
@@ -398,7 +212,7 @@ export function AddSiteDialog({
       open={open}
       onOpenChange={onOpenChange}
       title="Add a site"
-      description="One site per website. The next screen walks you through the script and verification."
+      description="Add one site for each website. Its setup page comes next."
     >
       {open ? (
         <div className="pb-4">
@@ -463,7 +277,7 @@ export function OriginsField({
           autoCapitalize="none"
           spellCheck={false}
           placeholder="https://example.org"
-          hint="One per line. Events are accepted only from pages on these origins: the domain or its subdomains over https, or http://localhost for testing."
+          hint="Put one origin on each line. Only pages on these origins can send events: the domain or its subdomains over https, or http://localhost for tests."
           value={value}
           onChange={(e) => onChange(e.target.value)}
           error={error}
@@ -484,35 +298,331 @@ export function OriginsField({
   );
 }
 
+// ------------------------------------------------------------ first event
+
+// rows are folded every few minutes, so a 30 s poll finds a first event soon
+// after it is countable without asking more often than it can change
+export const FIRST_EVENT_POLL = 30_000;
+
+// today's page views of a site from the web dashboard's engine: the second
+// source of the first event. a card or row shows a gap at once instead of
+// waiting for the dashboards to be set up.
+function webTodayQuery(site: Site) {
+  return { ...webHourlyQuery(site.tenant_id, utcDay(), site.id, "primary"), retry: false };
+}
+
+// the first event of one site, from both sources, polled while nothing has
+// arrived. `month` and `day` keep the gateway's refusal reasons.
+export function useFirstEvent(site: Site): {
+  event: FirstEvent | null;
+  day: Ingest | undefined;
+  month: Ingest | undefined;
+} {
+  const month = useQuery(ingestMonthQuery(site.id));
+  const monthReceived = month.data !== undefined && firstEvent(month.data) === "received";
+  const day = useQuery({
+    ...ingestDayQuery(site.id),
+    refetchInterval: (q) =>
+      monthReceived || (q.state.data && firstEvent(q.state.data) === "received")
+        ? false
+        : FIRST_EVENT_POLL,
+  });
+  const gatewayKnown = month.data !== undefined || day.data !== undefined;
+  const gateway = gatewayKnown ? firstEvent(month.data, day.data) : null;
+  const web = useQuery({
+    ...webTodayQuery(site),
+    enabled: !monthReceived,
+    refetchInterval: (q) =>
+      gateway === "received" || webSeen(q.state.data) ? false : FIRST_EVENT_POLL,
+  });
+  return {
+    event: combineFirstEvent(gateway, web.data ? webSeen(web.data) : null),
+    day: day.data,
+    month: month.data,
+  };
+}
+
+// ------------------------------------------------------------ sites table
+
+type Row = {
+  site: Site;
+  event: FirstEvent | null;
+  // neither source answered
+  failed: boolean;
+  month: Ingest | undefined;
+  monthFailed: boolean;
+};
+
+const PAGE_SIZE = 25;
+
+// the sites whose name or domain holds the search text
+export function matchSites(list: Site[], q: string): Site[] {
+  const t = q.trim().toLowerCase();
+  if (!t) return list;
+  return list.filter((s) => s.name.toLowerCase().includes(t) || s.domain.includes(t));
+}
+
+function counted(m: Ingest | undefined): number | null {
+  return m ? (m.totals.accepted ?? 0) : null;
+}
+
+export function sortRows(rows: Row[], sort: Sort): Row[] {
+  const dir = sort.order === "asc" ? 1 : -1;
+  const by = (r: Row): string | number =>
+    sort.key === "name"
+      ? r.site.name.toLowerCase()
+      : sort.key === "events"
+        ? (counted(r.month) ?? -1)
+        : r.event === null
+          ? 99
+          : setupRank(setupStatus(r.site, r.event));
+  return [...rows].sort((a, b) => {
+    const x = by(a);
+    const y = by(b);
+    return (x < y ? -1 : x > y ? 1 : 0) * dir || a.site.name.localeCompare(b.site.name);
+  });
+}
+
+function SetupCell({ row }: { row: Row }) {
+  if (row.failed) return <Missing reason="Did not load" />;
+  return <StatusBadge kind="setup" status={setupStatus(row.site, row.event)} />;
+}
+
+// the project's sites with how far each is set up and its last 30 days:
+// search, sort and pages for long lists, one status and one next action per
+// site. rows stack on a phone.
+export function SitesTable({ sites, actions }: { sites: Site[]; actions?: ReactNode }) {
+  const [q, setQ] = useState("");
+  const [sort, setSort] = useState<Sort>({ key: "setup", order: "asc" });
+  const [page, setPage] = useState(0);
+  const months = useQueries({ queries: sites.map((s) => ingestMonthQuery(s.id)) });
+  const gateway = months.map((m) => (m.data ? firstEvent(m.data) : null));
+  const webs = useQueries({
+    queries: sites.map((s, i) => ({
+      ...webTodayQuery(s),
+      enabled: months[i]?.isFetched === true && gateway[i] !== "received",
+    })),
+  });
+  const rows: Row[] = sites.map((site, i) => {
+    const w = webs[i];
+    const web = w?.data ? webSeen(w.data) : null;
+    const event = combineFirstEvent(gateway[i] ?? null, web);
+    return {
+      site,
+      event,
+      failed: event === null && months[i]?.isError === true && (w?.isError ?? true),
+      month: months[i]?.data,
+      monthFailed: months[i]?.isError === true,
+    };
+  });
+  const byId = new Map(rows.map((r) => [r.site.id, r]));
+  const shown = sortRows(
+    matchSites(sites, q).flatMap((s) => byId.get(s.id) ?? []),
+    sort,
+  );
+  const pages = Math.max(1, Math.ceil(shown.length / PAGE_SIZE));
+  const current = Math.min(page, pages - 1);
+  const slice = shown.slice(current * PAGE_SIZE, (current + 1) * PAGE_SIZE);
+
+  const columns: Column<Row>[] = [
+    {
+      key: "site",
+      header: "Site",
+      sortKey: "name",
+      primary: true,
+      minWidth: "min-w-56",
+      className: "max-w-0 w-full",
+      truncate: (r) => `${r.site.name}, ${r.site.domain}`,
+      cell: (r) => (
+        <span className="flex min-w-0 flex-col py-1">
+          <span className="flex min-w-0 items-center gap-2">
+            <span className="truncate">{r.site.name}</span>
+            {r.site.status !== "active" ? <StatusBadge kind="site" status={r.site.status} /> : null}
+          </span>
+          <span className="truncate font-mono text-caption font-normal text-fg-2">
+            {r.site.domain}
+          </span>
+        </span>
+      ),
+    },
+    {
+      key: "setup",
+      header: "Setup",
+      sortKey: "setup",
+      mobile: true,
+      minWidth: "min-w-40",
+      cell: (r) => <SetupCell row={r} />,
+    },
+    {
+      key: "events",
+      header: "Counted events, 30 days",
+      sortKey: "events",
+      align: "right",
+      numeric: true,
+      mobile: true,
+      minWidth: "min-w-40",
+      cell: (r) => {
+        if (r.monthFailed) return <Missing reason="Did not load" />;
+        const n = counted(r.month);
+        return n === null ? <Bone className="ml-auto h-3 w-12" /> : formatCount(n);
+      },
+    },
+    {
+      key: "held",
+      header: "Not counted",
+      align: "right",
+      numeric: true,
+      minWidth: "min-w-28",
+      cell: (r) => {
+        const t = r.month?.totals;
+        if (r.monthFailed) return <Missing reason="Did not load" />;
+        if (!t) return <Bone className="ml-auto h-3 w-10" />;
+        const all = Object.values(t).reduce((a, b) => a + b, 0);
+        if (all === 0) return <Missing reason="No events in 30 days" />;
+        return formatShareOf((t.quarantined ?? 0) + (t.bot ?? 0) + sumRejected(t), all);
+      },
+    },
+    {
+      key: "next",
+      header: "Next",
+      minWidth: "min-w-36",
+      cell: (r) => {
+        if (r.event === null) return null;
+        const a = nextAction(r.site, setupStatus(r.site, r.event));
+        return (
+          <Link
+            to={a.to}
+            className="relative z-(--vs-layer-raised) rounded-sm whitespace-nowrap text-fg underline decoration-line-strong underline-offset-4 transition-colors duration-(--vs-duration-press) ease-standard hover:decoration-fg focus-ring"
+          >
+            {a.label}
+          </Link>
+        );
+      },
+    },
+  ];
+
+  return (
+    <div className="flex flex-col gap-4">
+      {sites.length > 5 || actions ? (
+        <div className="flex flex-wrap items-end gap-3">
+          {sites.length > 5 ? (
+            <FilterBar
+              className="min-w-0 flex-1"
+              search={q}
+              onSearch={(t) => {
+                setQ(t);
+                setPage(0);
+              }}
+              searchLabel="Search sites"
+              placeholder="Search by name or domain"
+              onClearAll={() => setQ("")}
+            />
+          ) : null}
+          {actions}
+        </div>
+      ) : null}
+      <DataTable<Row>
+        label="Sites"
+        columns={columns}
+        rows={slice}
+        getRowKey={(r) => r.site.id}
+        rowLabel={(r) => r.site.name}
+        rowHref={(r) => siteSetupPath(r.site)}
+        rowProps={(r) => ({ "data-site": r.site.id })}
+        sort={sort}
+        onSort={(key) =>
+          setSort((s) =>
+            s.key === key
+              ? { key, order: s.order === "asc" ? "desc" : "asc" }
+              : { key, order: "asc" },
+          )
+        }
+        empty={{
+          title: "No site matches",
+          text: "Search by another name or domain.",
+          action: (
+            <Button variant="outline" size="sm" onClick={() => setQ("")}>
+              Clear the search
+            </Button>
+          ),
+        }}
+        footer={
+          shown.length > PAGE_SIZE
+            ? {
+                kind: "pager",
+                page: current,
+                pageSize: PAGE_SIZE,
+                total: shown.length,
+                onPage: setPage,
+              }
+            : undefined
+        }
+      />
+    </div>
+  );
+}
+
 // ------------------------------------------------------------ the page
+
+const HEADER = {
+  title: "Sites",
+  description: "Each website of the project and how far its setup is.",
+};
 
 export function SitesPage() {
   const { tenant, termsCurrent } = useProject();
   // a suspended project's sites cannot be created or changed (contract 5.11)
   const canChange = termsCurrent && tenant.status !== "suspended";
   const sites = useQuery(sitesQuery(tenant.id));
-  const location = useLocation();
   const navigate = useNavigate();
-  const justEnrolled = (location.state as { enrolled?: boolean } | null)?.enrolled === true;
+  const [adding, setAdding] = useState(false);
+  const live = useMemo(
+    () => (sites.data ?? []).filter((s) => s.status !== "removed"),
+    [sites.data],
+  );
+  const months = useQueries({ queries: live.map((s) => ingestMonthQuery(s.id)) });
+  const read = months.map((m) => m.dataUpdatedAt).filter((t) => t > 0);
+  const freshness =
+    read.length > 0
+      ? { at: new Date(Math.min(...read)), cadence: "Event counts refresh every few minutes." }
+      : null;
 
-  if (sites.isPending) return <Loading label="Loading sites" />;
-  if (sites.error) return <ErrorPanel error={sites.error} onRetry={() => sites.refetch()} />;
-  const live = sites.data.filter((s) => s.status !== "removed");
+  const add =
+    canChange && live.length > 0 ? (
+      <Button onClick={() => setAdding(true)} className="max-lg:h-(--vs-control-touch)">
+        <Plus aria-hidden />
+        Add site
+      </Button>
+    ) : null;
 
-  if (live.length === 0) {
-    return (
-      <div className="flex max-w-dialog flex-col gap-6">
-        <PageHeader
-          title="Add your first site"
-          description="Name the website you want to measure. The next screen walks you through the script tag and domain verification."
-        />
-        {justEnrolled ? (
-          <Notice tone="success" title="Project enrolled">
-            Add its website to get the tracking snippet.
-          </Notice>
-        ) : null}
-        {canChange ? (
-          <Panel>
+  return (
+    <div className="flex flex-col gap-8">
+      <PageHeader {...HEADER} freshness={freshness} primary={add} />
+      {sites.isPending ? (
+        <LoadingState label="Loading sites">
+          <Skeleton.Table rows={4} columns={5} />
+        </LoadingState>
+      ) : sites.error ? (
+        <ErrorState error={sites.error} onRetry={() => sites.refetch()} />
+      ) : live.length === 0 ? (
+        canChange ? (
+          <section
+            aria-labelledby="first-site"
+            className="flex max-w-dialog flex-col gap-4 rounded-lg border border-line bg-raised p-5 max-sm:p-4"
+          >
+            <div className="flex items-start gap-3">
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-line-strong text-fg-2">
+                <MonitorSmartphone aria-hidden className="size-5" strokeWidth={1.75} />
+              </span>
+              <div className="flex flex-col gap-1">
+                <h2 id="first-site" className="text-title text-fg">
+                  Add your first site
+                </h2>
+                <p className="text-small text-fg-2">
+                  Name the website to measure. Its setup page shows the tag to install.
+                </p>
+              </div>
+            </div>
             <AddSiteForm
               tenantId={tenant.id}
               cancellable={false}
@@ -520,27 +630,21 @@ export function SitesPage() {
                 if (site) navigate(siteSetupPath(site));
               }}
             />
-          </Panel>
+          </section>
         ) : (
-          <StateBlock kind="empty" title="No sites yet">
-            Sites cannot be added while the project is suspended or its current terms are not
-            accepted.
-          </StateBlock>
-        )}
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex flex-col gap-6">
-      <PageHeader
-        title="Sites"
-        description="Each website the project measures, how far it is set up and its last 30 days."
-      />
-      <SitesTable
-        sites={live}
-        actions={canChange ? <AddSiteButton tenantId={tenant.id} /> : null}
-      />
+          <EmptyState
+            icon={<MonitorSmartphone aria-hidden strokeWidth={1.75} />}
+            title="No site yet"
+          >
+            {tenant.status === "suspended"
+              ? "You cannot add sites while the project is suspended."
+              : "An owner must accept the new terms before you can add sites."}
+          </EmptyState>
+        )
+      ) : (
+        <SitesTable sites={live} />
+      )}
+      <AddSiteDialog tenantId={tenant.id} open={adding} onOpenChange={setAdding} />
     </div>
   );
 }
