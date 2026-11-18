@@ -339,7 +339,10 @@ requests, so it is not one of the kept metrics (see "tenantguard" below).
   temporality other than delta or cumulative, the whole metric
   (`temporality`); explicit bounds that are not finite and strictly
   increasing, or bucket counts that are not one more than the bounds,
-  including a point without buckets (`buckets`); a count or a bucket count
+  including a point without buckets, and an exponential histogram point the
+  conversion cannot map: a scale outside -10 to 20, a zero threshold that is
+  not a finite non-negative number, or buckets beyond the floating point
+  range (`buckets`); a count or a bucket count
   above 10^12, or a count that is not the total of the buckets (for an
   exponential histogram, the zero count plus every bucket) (`count`); a sum that is NaN, infinite or above 10^18 seconds
   in magnitude (`sum`). A stale marker (no recorded value) is checked for
