@@ -266,10 +266,7 @@ export function OperatorCohortPanel({
             <p className="text-body text-fg-2">No cohort is confirmed for this project.</p>
           )}
           {q.data.proposal && !readOnly ? (
-            <div
-              data-proposal
-              className="flex flex-col gap-3 rounded-md border border-line-strong px-3 py-3"
-            >
+            <div data-proposal className="flex flex-col gap-3 border-t border-line-subtle pt-4">
               <div className="flex flex-wrap items-center gap-2">
                 <Pill tone="info">Proposed by the project</Pill>
                 {q.data.proposed_at ? (
@@ -295,10 +292,6 @@ export function OperatorCohortPanel({
               </div>
             </div>
           ) : null}
-          <p className="text-caption text-fg-2">
-            The program, round, category and award date this project is compared in. Only confirmed
-            values place it in a cohort.
-          </p>
         </div>
       ) : null}
     </Panel>
@@ -400,10 +393,6 @@ export function OwnCohortPanel({
             </div>
           </form>
         ) : null}
-        <p className="text-caption text-fg-2">
-          Operators compare your project in this program, round, category and award date. You
-          propose them, and an operator confirms them.
-        </p>
       </div>
     </Panel>
   );

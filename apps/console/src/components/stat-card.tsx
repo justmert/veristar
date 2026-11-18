@@ -23,6 +23,14 @@ export type StatChange = {
 // previous period and a sparkline. a card that drives the chart below is a
 // toggle (aria-pressed) and shows its selected state. a value that does not
 // exist is the missing glyph with the reason, never "0" or "n/a".
+//
+// the change against the previous period sits right after the value, the
+// most visible thing after it: an arrow and the change in its colour, no
+// words (the period is read out to assistive technology). without a
+// previous value there is no change, and nothing shows.
+//
+// an optional metric that has no value is not a card of dashes: with
+// `hideWhenEmpty` the card draws nothing, and a StatGrid closes the gap.
 export function StatCard({
   label,
   definition,
@@ -36,6 +44,7 @@ export function StatCard({
   onSelect,
   state = "data",
   footer,
+  hideWhenEmpty = false,
   className,
   ...data
 }: {
@@ -53,9 +62,12 @@ export function StatCard({
   onSelect?: () => void;
   state?: "data" | "loading" | "error";
   footer?: ReactNode;
+  // draw nothing when the value is missing (state "data" and value null)
+  hideWhenEmpty?: boolean;
   className?: string;
   [attr: `data-${string}`]: string | undefined;
 }) {
+  if (hideWhenEmpty && state === "data" && value === null) return null;
   const Comp = onSelect ? "button" : "div";
   // the value always fits the card: its length sets how far the metric step
   // may shrink on a narrow card (a phone, six cards in a row). the exact
@@ -122,21 +134,26 @@ export function StatCard({
         </span>
       ) : (
         <>
-          <span className="flex min-w-0 items-baseline gap-1 tabular" style={fit}>
-            {value === null ? (
-              <Missing reason={missingReason} className="text-metric" />
-            ) : (
-              <span className="metric-fit text-fg" data-value="">
-                {typeof value === "number" ? (
-                  <AnimatedNumber value={value} format={format} />
-                ) : (
-                  value
-                )}
-              </span>
-            )}
-            {unit && value !== null ? <span className="text-small text-fg-2">{unit}</span> : null}
+          <span
+            className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1 tabular"
+            style={fit}
+          >
+            <span className="flex min-w-0 items-baseline gap-1">
+              {value === null ? (
+                <Missing reason={missingReason} className="text-metric" />
+              ) : (
+                <span className="metric-fit text-fg" data-value="">
+                  {typeof value === "number" ? (
+                    <AnimatedNumber value={value} format={format} />
+                  ) : (
+                    value
+                  )}
+                </span>
+              )}
+              {unit && value !== null ? <span className="text-small text-fg-2">{unit}</span> : null}
+            </span>
+            {change && value !== null ? <ChangeLine change={change} /> : null}
           </span>
-          {change ? <ChangeLine change={change} /> : null}
           {spark ? <span className="mt-auto block pt-1">{spark}</span> : null}
           {footer}
         </>
@@ -146,22 +163,44 @@ export function StatCard({
 }
 
 function ChangeLine({ change }: { change: StatChange }) {
+  const flat = change.direction === "flat";
   const Icon =
     change.direction === "up" ? ArrowUp : change.direction === "down" ? ArrowDown : ArrowRight;
   const tone =
-    change.good === null || change.direction === "flat"
-      ? "text-fg-2"
-      : change.good
-        ? "text-success"
-        : "text-critical";
+    change.good === null || flat ? "text-fg-2" : change.good ? "text-success" : "text-critical";
   return (
-    <span className="flex flex-wrap items-center gap-x-1 text-caption">
-      <span className={cn("flex items-center gap-1 tabular", tone)}>
-        <Icon aria-hidden className="size-3" />
-        {change.text}
-      </span>
-      <span className="text-fg-3">vs {change.period}</span>
+    <span
+      data-change={change.direction}
+      className={cn("flex items-center gap-1 text-body font-semibold tabular", tone)}
+    >
+      <Icon aria-hidden className="size-4" strokeWidth={2.4} />
+      {flat ? <span className="sr-only">{change.text}</span> : change.text}
+      <span className="sr-only"> vs {change.period}</span>
     </span>
+  );
+}
+
+// stat cards in a row that closes up: a card that draws nothing (a missing
+// optional metric) leaves no gap, and the cards share the row evenly
+export function StatGrid({
+  children,
+  min = "11rem",
+  className,
+  ...rest
+}: {
+  children: ReactNode;
+  // the narrowest a card gets before the row wraps
+  min?: string;
+  className?: string;
+} & React.HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div
+      className={cn("grid gap-3", className)}
+      style={{ gridTemplateColumns: `repeat(auto-fit, minmax(min(${min}, 100%), 1fr))` }}
+      {...rest}
+    >
+      {children}
+    </div>
   );
 }
 

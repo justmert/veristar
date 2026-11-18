@@ -31,6 +31,9 @@ export type NavItem = {
   // the item is current for these paths (relative to the project or the
   // operator root), sub-pages included: a site page keeps Sites current
   match: (rest: string) => boolean;
+  // reached from the command palette and from other pages, not listed in
+  // the sidebar
+  paletteOnly?: boolean;
 };
 
 export type NavGroup = { key: string; label: string; items: NavItem[] };
@@ -154,6 +157,7 @@ export const OPERATOR_NAV: NavGroup[] = [
         to: "/operator/compare",
         icon: BarChart3,
         match: (r) => under(r, "compare"),
+        paletteOnly: true,
       },
       {
         key: "rules",

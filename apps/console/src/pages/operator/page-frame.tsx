@@ -62,7 +62,7 @@ export function AlertsSkeleton() {
   );
 }
 
-// the list of keys above the client guide
+// the list of keys above the client guide (the create form opens in a dialog)
 export function KeysSkeleton() {
   return (
     <LoadingState label="Loading the keys">
@@ -124,53 +124,21 @@ function ListSkeleton() {
 
 type Frame = {
   title: string;
-  // the header has a freshness line, so its height is kept
-  fresh?: boolean;
   body: () => React.ReactNode;
 };
 
-// the header of each operator page, as the page itself draws it
+// the header of each operator page, as the page itself draws it: the title
+// alone (the freshness slot keeps its height on every page)
 const FRAMES: Record<string, Frame> = {
-  "": {
-    title: "Review",
-    fresh: true,
-    body: ReviewSkeleton,
-  },
-  alerts: {
-    title: "Alerts",
-    body: AlertsSkeleton,
-  },
-  projects: {
-    title: "All projects",
-    fresh: true,
-    body: ProjectsSkeleton,
-  },
-  compare: {
-    title: "Compare",
-    fresh: true,
-    body: CompareSkeleton,
-  },
-  rules: {
-    title: "Rules",
-    body: ListSkeleton,
-  },
-  settings: {
-    title: "Settings",
-    body: FormSkeleton,
-  },
-  operators: {
-    title: "Operators",
-    body: FormSkeleton,
-  },
-  keys: {
-    title: "Access keys",
-    body: KeysSkeleton,
-  },
-  audit: {
-    title: "Audit log",
-    fresh: true,
-    body: ListSkeleton,
-  },
+  "": { title: "Review", body: ReviewSkeleton },
+  alerts: { title: "Alerts", body: AlertsSkeleton },
+  projects: { title: "All projects", body: ProjectsSkeleton },
+  compare: { title: "Compare", body: CompareSkeleton },
+  rules: { title: "Rules", body: ListSkeleton },
+  settings: { title: "Settings", body: FormSkeleton },
+  operators: { title: "Operators", body: FormSkeleton },
+  keys: { title: "Access keys", body: KeysSkeleton },
+  audit: { title: "Audit log", body: ListSkeleton },
 };
 
 // the page while the operator area loads: its own title line and skeleton.
@@ -184,7 +152,7 @@ export function OperatorPagePending({ rest }: { rest: string }) {
   const Body = frame.body;
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <PageHeader title={frame.title} freshness={frame.fresh ? null : undefined} />
+      <PageHeader title={frame.title} />
       <Body />
     </div>
   );
