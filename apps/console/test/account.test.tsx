@@ -135,3 +135,22 @@ describe("sign-in methods of an operator account (contract 4.1.8)", () => {
     await waitFor(() => expect(host.textContent).not.toContain("Confirm with your passkey"));
   });
 });
+
+describe("theme on the account page", () => {
+  it("shares one choice with every other theme control", async () => {
+    const { setThemeChoice } = await import("@veristar/brand/theme");
+    stubFetch([{ status: 200, body: f.meBody }]);
+    const host = await page();
+    await waitFor(() => expect(host.textContent).toContain("Theme"));
+    await click(byRole(host, "radio", "Light"));
+    expect(document.documentElement.dataset.theme).toBe("light");
+    expect(localStorage.getItem("veristar-theme")).toBe("light");
+    // a change from another control shows here at once
+    setThemeChoice("dark");
+    await waitFor(() =>
+      expect(byRole(host, "radio", "Dark").getAttribute("aria-checked")).toBe("true"),
+    );
+    setThemeChoice("system");
+    expect(localStorage.getItem("veristar-theme")).toBeNull();
+  });
+});
