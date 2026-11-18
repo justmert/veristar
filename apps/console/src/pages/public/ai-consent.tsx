@@ -268,15 +268,9 @@ function Consent({
         <FormMessage error={approve.error} />
         <FormMessage error={deny.error} />
       </div>
-      <div className="flex flex-wrap gap-2 border-t border-line px-5 py-4 sm:px-6">
-        <Button
-          type="submit"
-          disabled={busy || !choice}
-          pending={approve.isPending || approve.isSuccess}
-          className="max-sm:h-(--vs-control-touch) max-sm:flex-1"
-        >
-          {approve.isPending || approve.isSuccess ? "Approving" : "Approve"}
-        </Button>
+      {/* the order and alignment of every dialog: the way back first, the
+          action last, on the right */}
+      <div className="flex flex-wrap justify-end gap-2 border-t border-line px-5 py-4 sm:px-6">
         <Button
           type="button"
           variant="outline"
@@ -286,6 +280,14 @@ function Consent({
           onClick={() => deny.mutate()}
         >
           Deny
+        </Button>
+        <Button
+          type="submit"
+          disabled={busy || !choice}
+          pending={approve.isPending || approve.isSuccess}
+          className="max-sm:h-(--vs-control-touch) max-sm:flex-1"
+        >
+          {approve.isPending || approve.isSuccess ? "Approving" : "Approve"}
         </Button>
       </div>
     </form>
