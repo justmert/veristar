@@ -636,12 +636,16 @@ describe("the reports page (contract 20.3 and 20.4)", () => {
     );
     await click(confirm as HTMLElement);
     await waitFor(() => expect(host.textContent).toContain("Link revoked"));
-    // a revoked report keeps one action: its signed file
+    // a revoked report keeps one action, in its menu: its signed file
+    const revokedRow = host.querySelector(`[data-report="${summary.id}"]`) as HTMLElement;
+    expect(revokedRow.querySelector('button[aria-label^="Copy link of"]')).toBeNull();
+    await openMenu(revokedRow, "Actions for the report for Oct 1 to Oct 31, 2026");
+    expect(menuItem("Download JSON")).toBeTruthy();
     expect(
-      host.querySelector(
-        `[data-report="${summary.id}"] button[aria-label="Download JSON of the report for Oct 1 to Oct 31, 2026"]`,
+      [...globalThis.document.querySelectorAll("[role=menuitem]")].some((m) =>
+        m.textContent?.includes("Revoke link"),
       ),
-    ).not.toBeNull();
+    ).toBe(false);
     expect(calls.find((x) => x.url.endsWith("/revoke"))?.url).toBe(
       `/api/tenants/${c.TENANT_ID}/reports/abcdefghijklmnopqrstuvwxyz/revoke`,
     );
