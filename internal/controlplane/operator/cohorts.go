@@ -269,6 +269,13 @@ func (h *Cohorts) change(w http.ResponseWriter, r *http.Request, fn func(tx pgx.
 		if _, err := tx.Exec(ctx, `select pg_advisory_xact_lock(hashtextextended('cp.cohort:' || $1::text, 0))`, id); err != nil {
 			return err
 		}
+		// the project writes its proposal without that lock, so the row is
+		// locked too: a proposal changed after the read below would
+		// otherwise be the one a confirm copies, while the audit row names
+		// the one read
+		if _, err := tx.Exec(ctx, `select 1 from cp.tenant_cohorts where tenant_id = $1 for update`, id); err != nil {
+			return err
+		}
 		before, err := readCohort(ctx, tx, id)
 		if err != nil {
 			return err
