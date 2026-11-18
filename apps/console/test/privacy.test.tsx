@@ -1,13 +1,7 @@
 import { Outlet } from "react-router";
 import { describe, expect, it, vi } from "vitest";
 import { erasureRequest, erasureRequestPage, type Tenant } from "@/api/schemas";
-import {
-  confirmDomainField,
-  ipField,
-  isIpAddress,
-  sessionField,
-  userAgentField,
-} from "@/lib/erasure";
+import { ipField, isIpAddress, sessionField, userAgentField } from "@/lib/erasure";
 import { PrivacyPage } from "@/pages/project/privacy";
 import * as f from "./fixtures/contract";
 import { byLabel, byRole, type Call, click, renderRoutes, type, waitFor } from "./helpers";
@@ -68,6 +62,12 @@ function serve(table: Record<string, Answer[]>): Call[] {
 
 const listOf = (...items: unknown[]) => ({ items, next_cursor: null });
 
+function openDialog(): HTMLElement {
+  const d = document.body.querySelector<HTMLElement>("dialog[open]");
+  if (!d) throw new Error("no open dialog");
+  return d;
+}
+
 // every value the browser keeps for this origin, to prove the typed address
 // and user agent never land there
 function storedText(): string {
@@ -121,7 +121,7 @@ describe("erasure field checks (contract 10.2)", () => {
     expect(ipField(" ")).toBe("required");
   });
 
-  it("checks the user agent, session id and typed domain", () => {
+  it("checks the user agent and the session id", () => {
     expect(userAgentField(UA)).toBeNull();
     expect(userAgentField("")).toBe("required");
     expect(userAgentField(`Mozilla\t5.0`)).toBe("invalid_format");
@@ -131,9 +131,6 @@ describe("erasure field checks (contract 10.2)", () => {
     expect(userAgentField("é".repeat(1025))).toBe("too_long");
     expect(sessionField(f.SESSION_ID.toUpperCase())).toBeNull();
     expect(sessionField("not-a-uuid")).toBe("invalid_format");
-    expect(confirmDomainField("example.org", "example.org")).toBeNull();
-    expect(confirmDomainField("example.com", "example.org")).toBe("invalid_value");
-    expect(confirmDomainField("", "example.org")).toBe("required");
   });
 });
 
@@ -205,6 +202,10 @@ describe("privacy page", () => {
     await type(ip, ` ${IP} `);
     await type(ua, `${UA}\n`);
     await click(byRole(host, "button", "Request erasure"));
+    // nothing is sent before the confirmation
+    expect(calls.some((c) => c.method === "POST")).toBe(false);
+    expect(openDialog().textContent).toContain("Erase one visitor on example.org?");
+    await click(byRole(openDialog(), "button", "Erase data"));
 
     await waitFor(() => expect(calls.some((c) => c.method === "POST")).toBe(true));
     const post = calls.filter((c) => c.method === "POST");
@@ -256,7 +257,9 @@ describe("privacy page", () => {
     await type(byLabel(host, "Visitor's IP address"), "2001:db8::7");
     await type(byLabel(host, "Visitor's user agent"), UA);
     await click(byRole(host, "button", "Request erasure"));
+    await click(byRole(openDialog(), "button", "Erase data"));
     await waitFor(() => expect(host.textContent).toContain("Too long."));
+    expect(document.body.querySelector("dialog[open]")).toBeNull();
     // a 422 leaves the values in place so the owner can correct them
     expect(byLabel(host, "Visitor's IP address").value).toBe("2001:db8::7");
   });
@@ -279,6 +282,7 @@ describe("privacy page", () => {
     await click(byLabel(host, "One session") as unknown as HTMLElement);
     await type(byLabel(host, "Session id"), ` ${f.SESSION_ID.toUpperCase()} `);
     await click(byRole(host, "button", "Request erasure"));
+    await click(byRole(openDialog(), "button", "Erase data"));
     await waitFor(() => expect(calls.some((c) => c.method === "POST")).toBe(true));
     expect(calls.find((c) => c.method === "POST")?.body).toEqual({
       kind: "session",
@@ -302,25 +306,25 @@ describe("privacy page", () => {
     const host = await renderRoutes(routes(), path);
     await waitFor(() => expect(host.textContent).toContain("No erasure was requested yet."));
     await click(byLabel(host, "Whole site") as unknown as HTMLElement);
-    await type(byLabel(host, "Type the site's domain to confirm"), "example.com");
     await click(byRole(host, "button", "Reset site data"));
-    expect(host.textContent).toContain("Type example.org exactly.");
-    expect(host.querySelector("dialog[open]")).toBeNull();
-
-    await type(byLabel(host, "Type the site's domain to confirm"), "example.org");
-    await click(byRole(host, "button", "Reset site data"));
-    const dialog = host.ownerDocument.querySelector("dialog[open]") as HTMLElement | null;
-    expect(dialog?.textContent).toContain("Reset all web data of example.org?");
+    const dialog = openDialog();
+    expect(dialog.textContent).toContain("Reset all web data of example.org?");
+    const confirm = byRole(dialog, "button", "Reset site data") as HTMLButtonElement;
+    // the domain is typed in the dialog, exactly
+    await type(byLabel(dialog, "Type example.org to confirm"), "example.com");
+    expect(confirm.disabled).toBe(true);
+    await type(byLabel(dialog, "Type example.org to confirm"), "example.org");
+    expect(confirm.disabled).toBe(false);
     expect(calls.filter((c) => c.method === "POST")).toHaveLength(0);
 
     // the first attempt meets a running request of the same site
-    await click(byRole(dialog as HTMLElement, "button", "Reset site data"));
+    await click(confirm);
     await waitFor(() =>
-      expect(dialog?.textContent).toContain(
+      expect(dialog.textContent).toContain(
         "Another erasure request for this site is still running.",
       ),
     );
-    await click(byRole(dialog as HTMLElement, "button", "Reset site data"));
+    await click(confirm);
     await waitFor(() => expect(host.textContent).toContain("Whole site on example.org: running"));
     const posts = calls.filter((c) => c.method === "POST");
     expect(posts).toHaveLength(2);
@@ -343,6 +347,7 @@ describe("privacy page", () => {
     await type(byLabel(host, "Visitor's IP address"), IP);
     await type(byLabel(host, "Visitor's user agent"), UA);
     await click(byRole(host, "button", "Request erasure"));
+    await click(byRole(openDialog(), "button", "Erase data"));
     await waitFor(() =>
       expect(host.textContent).toContain(
         "The ingestion service does not answer, so nothing was erased.",
