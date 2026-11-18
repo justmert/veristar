@@ -262,6 +262,30 @@ func TestRosterRoutes(t *testing.T) {
 		}
 	}
 
+	// account.passkeys counts what can step up, as the step-up status does:
+	// a passkey account named by its own address steps up with its sign-in
+	// passkey, a github account with a linked sign-in passkey does not
+	pkAddr := "C" + strings.Repeat("A", 55)
+	pkID, linkedID := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
+	superExec(t, pg, `insert into cp.users (id, passkey_address, passkey_credential_id, passkey_public_key)
+		values ($1, $2, 'cGstc2lnbi1pbg', decode('04' || repeat('22', 64), 'hex'))`, pkID, pkAddr)
+	superExec(t, pg, `insert into cp.operators (stellar_address, role) values ($1, 'operator')`, pkAddr)
+	superExec(t, pg, `insert into cp.users (id, github_id, github_login, passkey_address, passkey_credential_id, passkey_public_key)
+		values ($1, 45, 'linked-op', $2, 'bGlua2VkLWtleQ', decode('04' || repeat('33', 64), 'hex'))`,
+		linkedID, "C"+strings.Repeat("B", 55))
+	superExec(t, pg, `insert into cp.operators (github_id, role) values (45, 'operator')`)
+	_, m = admin.do(t, http.MethodGet, "/roster", nil)
+	counted := map[string]float64{}
+	for _, it := range m["items"].([]any) {
+		row := it.(map[string]any)
+		if a, ok := row["account"].(map[string]any); ok {
+			counted[a["user_id"].(string)] = a["passkeys"].(float64)
+		}
+	}
+	require.Equal(t, float64(1), counted[pkID.String()], m)
+	require.Equal(t, float64(0), counted[linkedID.String()], m)
+	superExec(t, pg, `delete from cp.operators where stellar_address = $1 or github_id = 45`, pkAddr)
+
 	// the deploy settings keep their rows
 	for _, act := range []string{"suspend", "remove"} {
 		st, m = admin.do(t, http.MethodPost, "/roster/"+bootRow+"/"+act, map[string]any{"reason": reason})

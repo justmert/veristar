@@ -581,6 +581,7 @@ func testTerms(t *testing.T, e *env) {
 		{http.MethodPost, tp + "/sites", map[string]any{"name": "n", "domain": "t2.example.org", "origins": []string{"https://t2.example.org"}}},
 		{http.MethodPatch, tp + "/sites/" + site.String(), map[string]any{"name": "x"}},
 		{http.MethodDelete, tp + "/sites/" + site.String(), nil},
+		{http.MethodPut, tp + "/cohort/proposal", map[string]any{"program": "Terms Award"}},
 	}
 	for _, b := range blocked {
 		r := owner.call(t, b.method, b.path, b.body)
