@@ -400,8 +400,12 @@ describe("comparison", () => {
       `/api/operator/web/compare?tenants=${encodeURIComponent(`${c.TENANT_ID},${f.TENANT_B}`)}&breakdown_limit=10`,
       `/api/operator/api/compare?tenants=${encodeURIComponent(`${c.TENANT_ID},${f.TENANT_B}`)}`,
     ]);
-    // one row per compared project, one cell per metric
-    expect(columnOf(host, "Web totals", "Visitors")).toEqual(["18", "0"]);
+    // one row per compared project with data, one cell per metric; a project
+    // without web data is one row of names instead of empty lines and cells
+    expect(columnOf(host, "Web totals", "Visitors")).toEqual(["18"]);
+    const none = host.querySelector("[data-no-data]") as HTMLElement;
+    expect(none.textContent).toContain("No web data");
+    expect(none.querySelector(`[data-tenant="${f.TENANT_B}"]`)).not.toBeNull();
     expect(columnOf(host, "API totals", "p99").join(" ")).toContain(">10 s");
     expect(host.textContent).toContain("not read");
     expect(host.textContent).toContain("github.com");
