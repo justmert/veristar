@@ -262,6 +262,7 @@ List routes answer:
 | 409 | `rule_limit` | a threshold rule create beyond 200 rules (19.4) |
 | 409 | `not_reportable` | a usage report of a project the operator views do not list (20.1) |
 | 410 | `tracker_version_revoked` | snippet for a revoked tracker version |
+| 410 | `report_revoked` | public link of a usage report its project revoked (20.3) |
 | 413 | `body_too_large` | body over 64 KiB |
 | 415 | `unsupported_media_type` | see section 1 |
 | 422 | `validation_failed` | field rules, details in `fields` |
@@ -4765,8 +4766,10 @@ Rotation is in the secret rotation runbook.
   step, `reports` (through `cp.purge_usage_reports`, which refuses a tenant
   that is not removed); its links answer 404 from the moment of removal.
 - It reads exactly one row by id under `cp_system`. An unknown or malformed
-  id, a revoked link and a removed project all answer the same 404
-  `not_found`.
+  id and a removed project answer the same 404 `not_found`. A revoked link
+  answers 410 `report_revoked` with the bare error envelope: no project,
+  period, figure or date of the report. A revoked link counts no view and
+  writes no audit row.
 - Every answer increments `view_count` and writes a `report.view` audit row
   without any trait of the reader.
 - Limits: 300 views of one report per hour, and 20 requests per second

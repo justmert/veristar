@@ -682,12 +682,15 @@ func testPublicRoutes(t *testing.T, e *env, w *gateWorld, cat []route) {
 		require.Empty(t, leakedB(res.body), rt.path)
 		sent++
 	}
-	// a revoked link is gone for everyone, and stays so
+	// a revoked link is gone for everyone, and stays so: 410 with the bare
+	// error envelope, nothing of the project behind it
 	r = w.bob.call(t, http.MethodPost, "/api/tenants/"+w.tb.String()+"/reports/"+w.reportB+"/revoke", nil)
 	require.Equal(t, http.StatusOK, r.status, string(r.body))
 	res := e.anonymous(t).call(t, http.MethodGet, "/api/public/reports/"+w.reportB, nil)
-	require.Equal(t, http.StatusNotFound, res.status)
+	require.Equal(t, http.StatusGone, res.status)
+	require.Contains(t, string(res.body), `"code":"report_revoked"`)
 	require.Empty(t, leakedB(res.body))
+	require.Empty(t, w.leaked(res.body))
 	t.Logf("%d public report requests: each link answered its own report only", sent+1)
 }
 

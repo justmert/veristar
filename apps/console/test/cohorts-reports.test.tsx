@@ -572,10 +572,17 @@ describe("the public report page (contract 20.5)", () => {
     expect(host.textContent).not.toContain("Stellar DEX");
   });
 
-  it("shows a revoked or unknown link as not available", async () => {
+  it("shows an unknown link as not available", async () => {
     stubFetch([{ status: 404, body: c.errorBody("not_found") }]);
     const host = await renderRoutes(publicRoute, "/r/zzzzzzzzzzzzzzzzzzzzzzzzzz");
     await waitFor(() => expect(host.textContent).toContain("This report link is not available"));
+  });
+
+  it("shows a revoked link (410 report_revoked) as not available", async () => {
+    stubFetch([{ status: 410, body: c.errorBody("report_revoked") }]);
+    const host = await renderRoutes(publicRoute, "/r/zzzzzzzzzzzzzzzzzzzzzzzzzz");
+    await waitFor(() => expect(host.textContent).toContain("This report link is not available"));
+    expect(host.textContent).not.toContain("did not load");
   });
 });
 

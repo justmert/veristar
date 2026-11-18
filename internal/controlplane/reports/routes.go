@@ -526,10 +526,17 @@ type PublicReport struct {
 	Keys      Keys            `json:"keys"`
 }
 
-// public answers one report by id to anyone. an unknown id, a revoked link
-// and a removed project all answer the same 404, so the route says nothing
-// about which ids exist. the read, the view count and the audit row are one
-// cp_system transaction that names this one id and nothing else.
+// errRevoked ends the public read of a revoked link before it counts a
+// view or writes an audit row.
+var errRevoked = errors.New("reports: the link is revoked")
+
+// public answers one report by id to anyone. an unknown id and a removed
+// project answer the same 404, so the route says nothing about which ids
+// exist; a revoked link answers 410 report_revoked with the bare error
+// envelope, so a reader holding it learns that it was revoked and nothing
+// about the project. both cases run the same single read. the read, the
+// view count and the audit row are one cp_system transaction that names
+// this one id and nothing else.
 func (h *Routes) public(w http.ResponseWriter, r *http.Request) error {
 	if len(r.URL.Query()) > 0 {
 		return httpx.BadQuery("this route takes no query parameters")
@@ -548,12 +555,16 @@ func (h *Routes) public(w http.ResponseWriter, r *http.Request) error {
 		var tenant uuid.UUID
 		var body, sig, signer string
 		var created time.Time
-		err := tx.QueryRow(ctx, `select u.tenant_id, u.body, u.signature, u.signer, u.created_at
+		var revoked bool
+		err := tx.QueryRow(ctx, `select u.tenant_id, u.body, u.signature, u.signer, u.created_at, u.revoked_at is not null
 			from cp.usage_reports u join cp.tenants t on t.id = u.tenant_id
-			where u.id = $1 and u.revoked_at is null and t.status <> 'removed'
-			for update of u`, id).Scan(&tenant, &body, &sig, &signer, &created)
+			where u.id = $1 and t.status <> 'removed'
+			for update of u`, id).Scan(&tenant, &body, &sig, &signer, &created, &revoked)
 		if err != nil {
 			return err
+		}
+		if revoked {
+			return errRevoked
 		}
 		var n int
 		var oldest time.Time
@@ -577,6 +588,9 @@ func (h *Routes) public(w http.ResponseWriter, r *http.Request) error {
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return httpx.NotFound()
+	}
+	if errors.Is(err, errRevoked) {
+		return httpx.E(http.StatusGone, httpx.CodeReportRevoked, "this report link was revoked")
 	}
 	if err != nil {
 		return err

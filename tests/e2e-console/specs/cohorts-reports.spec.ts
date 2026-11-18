@@ -216,5 +216,5 @@ test("a signed report verifies in a browser without a session, until its link is
   } finally {
     await reader.close();
   }
-  expect(problems.filter((p) => !p.includes("404"))).toEqual([]);
+  expect(problems.filter((p) => !p.includes("404") && !p.includes("410"))).toEqual([]);
 });

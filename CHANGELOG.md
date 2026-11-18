@@ -112,6 +112,10 @@ here, before they take effect, as the processing terms require
   no activity. The operator lists keep their numbers, and stored version 1
   and 2 reports keep theirs and still verify
   ([docs/reference/usage-reports.md](docs/reference/usage-reports.md)).
+- A revoked usage report link answers 410 `report_revoked` with the bare
+  error envelope, so a reader can tell a revoked link from an unknown one,
+  which stays 404 `not_found` with a removed project's links. The answer
+  names nothing of the project, and a revoked link counts no view.
 - The console is redesigned around one page per task. A grouped sidebar (Data, Funding,
   Setup and Team for your project; Work and Admin for operators) and a command palette
   (Ctrl K) take you to any page or project. Pages that showed the same thing in several

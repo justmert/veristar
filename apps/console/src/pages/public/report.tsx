@@ -8,6 +8,7 @@ import { useQuery } from "@tanstack/react-query";
 import { CircleAlert, Download, FileX, ShieldCheck, ShieldX } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { useParams } from "react-router";
+import { ApiError } from "@/api/client";
 import {
   type PublicReport,
   publicReportQuery,
@@ -70,9 +71,9 @@ export function PublicReportPage() {
         <Skeleton.Table rows={4} columns={2} />
       </LoadingState>
     );
-  else if (isNotFound(q.error))
-    // a revoked link, a removed project and an unknown id answer the same
-    // 404, so the page cannot tell them apart and names all three
+  else if (isNotFound(q.error) || (q.error instanceof ApiError && q.error.status === 410))
+    // a removed project and an unknown id answer 404 and a revoked link
+    // 410 report_revoked; this page names all three in one message
     body = (
       <MessagePage
         icon={<FileX aria-hidden />}
