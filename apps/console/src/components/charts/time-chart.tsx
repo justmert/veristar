@@ -155,6 +155,9 @@ export type TimeChartProps = {
   height?: number;
   // controls next to the legend, such as a metric switch
   actions?: ReactNode;
+  // false leaves out the series and partial legend, for a group of charts
+  // that shares one legend on the page
+  legend?: boolean;
   className?: string;
 };
 
@@ -182,6 +185,7 @@ export function TimeChart({
   ceiling,
   height = 200,
   actions,
+  legend = true,
   className,
 }: TimeChartProps) {
   const [showPrev, setShowPrev] = useState(true);
@@ -284,7 +288,7 @@ export function TimeChart({
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           {actions}
-          {view === "data" && (series.length > 1 || hasPartial) ? (
+          {legend && view === "data" && (series.length > 1 || hasPartial) ? (
             <ul aria-label="Legend" className="flex flex-wrap items-center gap-x-3 gap-y-1">
               {series.length > 1
                 ? series.map((s) => (
