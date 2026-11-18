@@ -110,6 +110,7 @@ export function ComparePage() {
     <div className="flex min-w-0 flex-col gap-8">
       <PageHeader
         title="Compare"
+        description="Up to 5 projects side by side, from their daily totals."
         freshness={
           web.dataUpdatedAt > 0
             ? {

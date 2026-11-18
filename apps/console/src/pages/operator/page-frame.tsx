@@ -145,8 +145,18 @@ const FRAMES: Record<string, Frame> = {
     description: `Alerts that fire now. The page checks again every ${ALERTS_REFRESH_MS / 1000} seconds.`,
     body: AlertsSkeleton,
   },
-  projects: { title: "All projects", fresh: true, body: ProjectsSkeleton },
-  compare: { title: "Compare", fresh: true, body: CompareSkeleton },
+  projects: {
+    title: "All projects",
+    description: "Every enrolled project with its status, web numbers and API numbers.",
+    fresh: true,
+    body: ProjectsSkeleton,
+  },
+  compare: {
+    title: "Compare",
+    description: "Up to 5 projects side by side, from their daily totals.",
+    fresh: true,
+    body: CompareSkeleton,
+  },
   rules: {
     title: "Rules",
     description:
