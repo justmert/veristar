@@ -10,7 +10,7 @@ import { Link, useSearchParams } from "react-router";
 import type { ApiFilters } from "@/api/endpoints";
 import { onchainQuery } from "@/api/onchain";
 import { apiOverviewQuery, ingestMonthQuery, integrityQuery, sitesQuery } from "@/api/queries";
-import type { ApiOverview, Site } from "@/api/schemas";
+import type { ApiOverview, Site, TenantStatus } from "@/api/schemas";
 import { type WebSummary, webSummaryQuery } from "@/api/web";
 import { DbIpAttribution } from "@/components/dbip-attribution";
 import { PageHeader } from "@/components/page-header";
@@ -61,9 +61,32 @@ import { METRIC_LABEL, WebTrendChart } from "./web-chart";
 const NO_FILTERS: ApiFilters = { service: null, route: null, method: null };
 const CADENCE = "Web totals refresh every hour. API counts refresh every few minutes.";
 
+// a project that is not approved, is suspended or was removed takes no new
+// site and no setup step; the status notice above the page says why, and
+// the empty state says what to do instead
+const STOPPED: ReadonlySet<TenantStatus> = new Set(["rejected", "suspended", "removed"]);
+
+function noSiteText(status: TenantStatus, isOwner: boolean, termsCurrent: boolean): string {
+  switch (status) {
+    case "rejected":
+      return isOwner
+        ? "You can add sites after operators approve the project. Change the answers above and submit them again."
+        : "You can add sites after operators approve the project. An owner of this project can change the answers and submit them again.";
+    case "suspended":
+      return "You cannot add sites while the project is suspended.";
+    case "removed":
+      return "This project was removed. It cannot take new sites.";
+    default:
+      return termsCurrent
+        ? "Add the website that you want to measure. You get a script tag for its pages."
+        : "An owner must accept the new terms before you can add sites.";
+  }
+}
+
 export function OverviewPage() {
-  const { tenant, termsCurrent } = useProject();
-  const canChange = termsCurrent && tenant.status !== "suspended";
+  const { tenant, termsCurrent, isOwner } = useProject();
+  const stopped = STOPPED.has(tenant.status);
+  const canChange = termsCurrent && !stopped;
   const sites = useQuery(sitesQuery(tenant.id));
   const [params, setParams] = useSearchParams();
   const preset = readOverviewPreset(params.get("range"));
@@ -87,7 +110,7 @@ export function OverviewPage() {
           title="No sites yet"
           action={canChange ? <AddSiteButton tenantId={tenant.id} variant="default" /> : undefined}
         >
-          Add the website that you want to measure. You get a script tag for its pages.
+          {noSiteText(tenant.status, isOwner, termsCurrent)}
         </EmptyState>
         <Summaries tenantId={tenant.id} sites={live} days={days} />
       </>
@@ -95,7 +118,7 @@ export function OverviewPage() {
   else
     body = (
       <>
-        <NextStep sites={live} tenantId={tenant.id} />
+        {stopped ? null : <NextStep sites={live} tenantId={tenant.id} />}
         <RangeControl<OverviewPreset>
           value={preset}
           presets={WEB_PRESETS}
