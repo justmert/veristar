@@ -1,11 +1,10 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { MoreHorizontal } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { ApiError } from "@/api/client";
 import {
   operatorKeys,
   operatorsApi,
-  type Passkey,
-  passkeysQuery,
   type RosterAction,
   type RosterEntry,
   type RosterRole,
@@ -14,22 +13,16 @@ import {
 import { keys, meQuery } from "@/api/queries";
 import type { User } from "@/api/schemas";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { ErrorPanel, FormMessage, Loading } from "@/components/error-panel";
+import { type Column, DataTable } from "@/components/data-table";
+import { FormMessage } from "@/components/error-panel";
 import { SelectField, TextField } from "@/components/form-field";
-import { Panel } from "@/components/panel";
-
+import { PageHeader } from "@/components/page-header";
+import { ErrorState, LoadingState, Skeleton } from "@/components/states";
 import { Pill } from "@/components/status";
-import { AddPasskeyDialog } from "@/components/step-up";
+import { toast } from "@/components/toast";
 import { Button } from "@/components/ui/button";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { formatDateTimeUtc } from "@/lib/format";
+import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
+import { countOf, formatDateTimeUtc } from "@/lib/format";
 import { shortAddress } from "@/lib/stellar-wallet";
 import { fieldMessage, githubLogin, strkey } from "@/lib/validate";
 import { queryClient } from "@/query-client";
@@ -43,7 +36,6 @@ const REASON_HINT = "Recorded in the audit log with your name.";
 
 function refresh() {
   void queryClient.invalidateQueries({ queryKey: operatorKeys.roster });
-  void queryClient.invalidateQueries({ queryKey: operatorKeys.passkeys });
   void queryClient.invalidateQueries({ queryKey: keys.me });
 }
 
@@ -55,32 +47,44 @@ function mine(e: RosterEntry, u: User) {
   );
 }
 
-// the operator roster (contract 5.16) and the signed-in operator's own
-// passkeys (contract 5.15). every operator sees the roster; operator admins
-// change it, and every change asks for a reason that goes to the audit log
+// the operator roster (contract 5.16). every operator sees it; operator
+// admins change it, and every change asks for a reason for the audit log.
+// a person's own passkeys are on the Account page.
 export function OperatorsPage() {
   const me = useQuery(meQuery);
   const roster = useQuery(rosterQuery);
-  if (me.isPending || roster.isPending) return <Loading label="Loading the operators" />;
-  if (me.error) return <ErrorPanel error={me.error} onRetry={() => me.refetch()} />;
-  if (roster.error) return <ErrorPanel error={roster.error} onRetry={() => roster.refetch()} />;
-  const items = roster.data.items;
-  const admin = items.some(
-    (e) => mine(e, me.data.user) && e.status === "active" && e.role === "operator_admin",
-  );
+  const admin =
+    me.data && roster.data
+      ? roster.data.items.some(
+          (e) => mine(e, me.data.user) && e.status === "active" && e.role === "operator_admin",
+        )
+      : false;
+  const error = me.error ?? roster.error;
   return (
-    <div className="flex animate-rise-in flex-col gap-8">
-      <header className="flex max-w-prose flex-col gap-1">
-        <h2 className="text-section text-fg">Operators</h2>
-        <p className="text-body text-fg-2">
-          The people who hold the operator view, each with a GitHub account or a Stellar wallet.
-          Operator admins add, suspend and remove operators here. The identities in the deploy
-          settings are operator admins at every start of the service and cannot be changed here.
-        </p>
-      </header>
-      <RosterSection items={items} admin={admin} me={me.data.user} />
-      {admin ? <AddOperator /> : null}
-      <PasskeySection userName={me.data.user.display_name} />
+    <div className="flex min-w-0 flex-col gap-8">
+      <PageHeader
+        title="Operators"
+        description="The people with access to the operator area. Operator admins add, suspend and remove operators."
+      />
+      {me.isPending || roster.isPending ? (
+        <LoadingState label="Loading the operators">
+          <Skeleton.Table rows={4} columns={4} />
+        </LoadingState>
+      ) : error ? (
+        <ErrorState
+          title="The operators did not load"
+          error={error}
+          onRetry={() => {
+            me.refetch();
+            roster.refetch();
+          }}
+        />
+      ) : me.data && roster.data ? (
+        <>
+          <RosterSection items={roster.data.items} admin={admin} me={me.data.user} />
+          {admin ? <AddOperator /> : null}
+        </>
+      ) : null}
     </div>
   );
 }
@@ -109,14 +113,14 @@ const ACTION_TEXT: Record<
     tone: "destructive",
   },
   operator_admin: {
-    title: "Make an operator admin:",
-    confirm: "Make admin",
+    title: "Give operator admin rights to",
+    confirm: "Give admin rights",
     pending: "Saving",
     tone: "primary",
   },
   operator: {
-    title: "Make a plain operator:",
-    confirm: "Make operator",
+    title: "Take operator admin rights from",
+    confirm: "Take admin rights",
     pending: "Saving",
     tone: "primary",
   },
@@ -124,16 +128,27 @@ const ACTION_TEXT: Record<
 
 const ACTION_DETAIL: Record<RosterAction | RosterRole, string> = {
   suspend:
-    "The person loses the operator view at once, their console sessions end and their AI assistant connections with operator access are revoked.",
-  resume:
-    "The person holds the operator view again after their next sign-in and passkey confirmation.",
-  remove:
-    "The person leaves the roster. Their passkeys are deleted and their console sessions end.",
+    "The person loses the operator area at once. Their console sessions end. Their AI assistant connections with operator access are revoked.",
+  resume: "The person gets the operator area back after the next sign-in and passkey check.",
+  remove: "The person leaves the roster. Their passkeys are deleted and their sessions end.",
   "reset-passkeys":
-    "Every passkey of the person is deleted and their sessions end. They can register a new one within the enrollment window that opens now.",
+    "Every passkey of the person is deleted and their sessions end. A new window to register a passkey opens now.",
   operator_admin: "Operator admins add, suspend and remove operators.",
-  operator: "The person keeps the operator view but can no longer change the roster.",
+  operator: "The person keeps the operator area but cannot change the roster.",
 };
+
+const ACTION_DONE: Record<RosterAction | RosterRole, string> = {
+  suspend: "is suspended",
+  resume: "is active again",
+  remove: "is removed from the roster",
+  "reset-passkeys": "has no passkeys now. A new window to register one is open",
+  operator_admin: "is an operator admin now",
+  operator: "is an operator now",
+};
+
+function kindText(e: RosterEntry): string {
+  return e.kind === "github" ? "GitHub" : e.kind === "passkey" ? "Passkey" : "Stellar wallet";
+}
 
 function RosterSection({ items, admin, me }: { items: RosterEntry[]; admin: boolean; me: User }) {
   const [pending, setPending] = useState<Pending | null>(null);
@@ -143,88 +158,93 @@ function RosterSection({ items, admin, me }: { items: RosterEntry[]; admin: bool
         await operatorsApi.setRole(p.entry.id, p.action, reason);
       else await operatorsApi.rosterAction(p.entry.id, p.action, reason);
     },
-    onSuccess: () => {
+    onSuccess: (_d, { p }) => {
       setPending(null);
+      toast.success(`${identity(p.entry)} ${ACTION_DONE[p.action]}.`);
       refresh();
     },
   });
   const t = pending ? ACTION_TEXT[pending.action] : null;
+  const columns: Column<RosterEntry>[] = [
+    {
+      key: "operator",
+      header: "Operator",
+      primary: true,
+      minWidth: "min-w-56",
+      cell: (e) => (
+        <span className="flex min-w-0 flex-wrap items-center gap-2">
+          <span className="min-w-0 truncate font-mono text-fg">{identity(e)}</span>
+          <span className="text-caption text-fg-2">{kindText(e)}</span>
+          {e.bootstrap ? <Pill tone="info">Deploy settings</Pill> : null}
+          {mine(e, me) ? <Pill tone="info">You</Pill> : null}
+        </span>
+      ),
+    },
+    { key: "role", header: "Role", mobile: true, cell: (e) => ROLE_TEXT[e.role] },
+    {
+      key: "status",
+      header: "Status",
+      mobile: true,
+      cell: (e) => (
+        <span className="flex min-w-0 flex-col items-start gap-1">
+          {e.status === "active" ? (
+            <Pill tone="success">Active</Pill>
+          ) : (
+            <Pill tone="warning">Suspended</Pill>
+          )}
+          {e.status_reason ? (
+            <span className="truncate text-caption text-fg-2">{e.status_reason}</span>
+          ) : null}
+        </span>
+      ),
+    },
+    {
+      key: "account",
+      header: "Sign-in",
+      mobile: true,
+      cell: (e) => (
+        <span className="flex flex-col text-small text-fg-2">
+          {e.account ? (
+            <>
+              <span>{countOf(e.account.passkeys, "passkey")}</span>
+              <span className="text-caption">
+                {e.account.last_login_at
+                  ? `Last sign-in ${formatDateTimeUtc(e.account.last_login_at)}`
+                  : "Never signed in"}
+              </span>
+            </>
+          ) : (
+            <span>No sign-in yet</span>
+          )}
+          {e.enrollment_until ? (
+            <span className="text-caption">
+              First passkey before {formatDateTimeUtc(e.enrollment_until)}
+            </span>
+          ) : null}
+        </span>
+      ),
+    },
+  ];
+  if (admin)
+    columns.push({
+      key: "actions",
+      header: "Actions",
+      align: "right",
+      cell: (e) => <RowActions entry={e} onPick={(action) => setPending({ entry: e, action })} />,
+    });
   return (
-    <Panel title="Roster" flush>
-      <div className="overflow-x-auto">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Operator</TableHead>
-              <TableHead>Role</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Account</TableHead>
-              {admin ? <TableHead className="text-right">Actions</TableHead> : null}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {items.map((e) => (
-              <TableRow key={e.id} data-roster={e.id}>
-                <TableCell>
-                  <span className="flex flex-wrap items-center gap-2">
-                    <span className="font-mono text-fg">{identity(e)}</span>
-                    <span className="text-caption text-fg-3">
-                      {e.kind === "github"
-                        ? "GitHub"
-                        : e.kind === "passkey"
-                          ? "Passkey"
-                          : "Stellar wallet"}
-                    </span>
-                    {e.bootstrap ? <Pill tone="info">Deploy settings</Pill> : null}
-                    {mine(e, me) ? <Pill tone="info">You</Pill> : null}
-                  </span>
-                </TableCell>
-                <TableCell>{ROLE_TEXT[e.role]}</TableCell>
-                <TableCell>
-                  <span className="flex flex-col">
-                    {e.status === "active" ? (
-                      <Pill tone="success">Active</Pill>
-                    ) : (
-                      <Pill tone="warning">Suspended</Pill>
-                    )}
-                    {e.status_reason ? (
-                      <span className="text-caption text-fg-3">{e.status_reason}</span>
-                    ) : null}
-                  </span>
-                </TableCell>
-                <TableCell>
-                  <span className="flex flex-col text-small text-fg-2">
-                    {e.account ? (
-                      <>
-                        <span>
-                          {e.account.passkeys} {e.account.passkeys === 1 ? "passkey" : "passkeys"}
-                        </span>
-                        <span className="text-caption text-fg-3">
-                          {e.account.last_login_at
-                            ? `Last sign-in ${formatDateTimeUtc(e.account.last_login_at)}`
-                            : "Never signed in"}
-                        </span>
-                      </>
-                    ) : (
-                      <span>No sign-in yet</span>
-                    )}
-                    {e.enrollment_until ? (
-                      <span className="text-caption text-fg-3">
-                        First passkey before {formatDateTimeUtc(e.enrollment_until)}
-                      </span>
-                    ) : null}
-                  </span>
-                </TableCell>
-                {admin ? (
-                  <TableCell className="text-right">
-                    <RowActions entry={e} onPick={(action) => setPending({ entry: e, action })} />
-                  </TableCell>
-                ) : null}
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
+    <section aria-labelledby="roster-h" className="flex min-w-0 flex-col gap-3">
+      <h2 id="roster-h" className="text-title text-fg">
+        Roster
+      </h2>
+      <DataTable
+        label="Roster"
+        columns={columns}
+        rows={items}
+        getRowKey={(e) => e.id}
+        rowLabel={(e) => identity(e)}
+        rowProps={(e) => ({ "data-roster": e.id })}
+      />
       <ConfirmDialog
         open={pending !== null}
         onOpenChange={(o) => {
@@ -233,7 +253,7 @@ function RosterSection({ items, admin, me }: { items: RosterEntry[]; admin: bool
             m.reset();
           }
         }}
-        title={t && pending ? `${t.title} ${identity(pending.entry)}` : ""}
+        title={t && pending ? `${t.title} ${identity(pending.entry)}?` : ""}
         description={pending ? ACTION_DETAIL[pending.action] : ""}
         reason={{ required: true, hint: REASON_HINT, maxLength: 500 }}
         confirmLabel={t?.confirm ?? ""}
@@ -243,10 +263,11 @@ function RosterSection({ items, admin, me }: { items: RosterEntry[]; admin: bool
         error={m.error}
         onConfirm={(reason) => pending && m.mutate({ p: pending, reason })}
       />
-    </Panel>
+    </section>
   );
 }
 
+// one menu per row: the everyday changes first, the destructive ones last
 function RowActions({
   entry,
   onPick,
@@ -254,37 +275,51 @@ function RowActions({
   entry: RosterEntry;
   onPick: (a: RosterAction | RosterRole) => void;
 }) {
-  if (entry.bootstrap)
-    return (
-      <Button size="sm" variant="outline" onClick={() => onPick("reset-passkeys")}>
-        Reset passkeys
-      </Button>
-    );
   return (
-    <span className="inline-flex flex-wrap justify-end gap-2">
-      {entry.status === "active" ? (
-        <Button size="sm" variant="outline" onClick={() => onPick("suspend")}>
-          Suspend
+    <Menu>
+      <MenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label={`Actions for ${identity(entry)}`}
+          className="max-lg:size-(--vs-control-touch)"
+        >
+          <MoreHorizontal aria-hidden />
         </Button>
-      ) : (
-        <Button size="sm" variant="outline" onClick={() => onPick("resume")}>
-          Resume
-        </Button>
-      )}
-      <Button
-        size="sm"
-        variant="outline"
-        onClick={() => onPick(entry.role === "operator_admin" ? "operator" : "operator_admin")}
-      >
-        {entry.role === "operator_admin" ? "Make operator" : "Make admin"}
-      </Button>
-      <Button size="sm" variant="outline" onClick={() => onPick("reset-passkeys")}>
-        Reset passkeys
-      </Button>
-      <Button size="sm" variant="outline" onClick={() => onPick("remove")}>
-        Remove
-      </Button>
-    </span>
+      </MenuTrigger>
+      <MenuContent align="end">
+        {entry.bootstrap ? null : (
+          <>
+            <MenuItem
+              onSelect={() =>
+                onPick(entry.role === "operator_admin" ? "operator" : "operator_admin")
+              }
+            >
+              {entry.role === "operator_admin" ? "Make operator" : "Make operator admin"}
+            </MenuItem>
+            {entry.status === "active" ? null : (
+              <MenuItem onSelect={() => onPick("resume")}>Resume</MenuItem>
+            )}
+          </>
+        )}
+        <MenuItem tone="critical" onSelect={() => onPick("reset-passkeys")}>
+          Reset passkeys
+        </MenuItem>
+        {entry.bootstrap ? null : (
+          <>
+            {entry.status === "active" ? (
+              <MenuItem tone="critical" onSelect={() => onPick("suspend")}>
+                Suspend
+              </MenuItem>
+            ) : null}
+            <MenuSeparator />
+            <MenuItem tone="critical" onSelect={() => onPick("remove")}>
+              Remove from the roster
+            </MenuItem>
+          </>
+        )}
+      </MenuContent>
+    </Menu>
   );
 }
 
@@ -319,6 +354,7 @@ export function AddOperator() {
         reason: reason.trim(),
       }),
     onSuccess: () => {
+      toast.success(`${value.trim()} is added. They can register a passkey now.`);
       setValue("");
       setReason("");
       refresh();
@@ -338,11 +374,17 @@ export function AddOperator() {
     m.mutate();
   }
   return (
-    <Panel
-      title="Add an operator"
-      description="The person signs in with this identity, then registers a passkey within the enrollment window that opens now (24 hours unless the deployment sets another length). An operator admin can reset passkeys to open a new window."
-    >
-      <form onSubmit={submit} className="grid max-w-prose gap-3" noValidate>
+    <section aria-labelledby="add-operator-h" className="flex max-w-prose flex-col gap-4">
+      <div className="flex flex-col gap-1">
+        <h2 id="add-operator-h" className="text-title text-fg">
+          Add an operator
+        </h2>
+        <p className="text-small text-fg-2">
+          The person signs in with this identity. Then they register a passkey within 24 hours,
+          unless the deployment sets another time. Reset the passkeys to open a new window.
+        </p>
+      </div>
+      <form onSubmit={submit} className="grid gap-4" noValidate aria-label="Add an operator">
         <SelectField
           label="Signs in with"
           name="kind"
@@ -385,115 +427,12 @@ export function AddOperator() {
           error={reasonError}
         />
         <div>
-          <Button type="submit" pending={m.isPending}>
+          <Button type="submit" pending={m.isPending} className="max-lg:h-(--vs-control-touch)">
             {m.isPending ? "Adding" : "Add operator"}
           </Button>
         </div>
         <FormMessage error={m.error} />
       </form>
-    </Panel>
-  );
-}
-
-function PasskeySection({ userName }: { userName: string }) {
-  const list = useQuery(passkeysQuery);
-  const [name, setName] = useState("");
-  const [adding, setAdding] = useState(false);
-  const [deleting, setDeleting] = useState<Passkey | null>(null);
-  const del = useMutation({
-    mutationFn: (id: string) => operatorsApi.deletePasskey(id),
-    onSuccess: () => {
-      setDeleting(null);
-      refresh();
-    },
-  });
-  return (
-    <Panel
-      title="Your passkeys"
-      description="The passkeys that open the operator area for you, beside the passkey you sign in with if you have one. Keep at least two, so a lost one does not lock you out."
-    >
-      <div className="flex flex-col gap-4">
-        {list.isPending ? (
-          <Loading label="Loading your passkeys" />
-        ) : list.error ? (
-          <ErrorPanel error={list.error} onRetry={() => list.refetch()} />
-        ) : (
-          <ul className="flex flex-col divide-y divide-line">
-            {list.data.sign_in_passkey ? (
-              <li data-passkey="sign-in" className="flex flex-col py-2">
-                <span className="text-fg">Your sign-in passkey</span>
-                <span className="text-caption text-fg-3">
-                  The passkey this account signs in with also confirms the operator area. It is
-                  managed on the Account page.
-                </span>
-              </li>
-            ) : null}
-            {list.data.items.map((p) => (
-              <li
-                key={p.id}
-                data-passkey={p.id}
-                className="flex items-center justify-between gap-3 py-2"
-              >
-                <span className="flex flex-col">
-                  <span className="text-fg">{p.name}</span>
-                  <span className="text-caption text-fg-3">
-                    Added {formatDateTimeUtc(p.created_at)}
-                    {p.last_used_at ? `, last used ${formatDateTimeUtc(p.last_used_at)}` : ""}
-                  </span>
-                </span>
-                <Button size="sm" variant="outline" onClick={() => setDeleting(p)}>
-                  Delete
-                </Button>
-              </li>
-            ))}
-          </ul>
-        )}
-        <form
-          className="flex flex-wrap items-end gap-3"
-          noValidate
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (name.trim()) setAdding(true);
-          }}
-        >
-          <TextField
-            label="Name of the new passkey"
-            name="new-passkey"
-            maxLength={64}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-          <Button type="submit" disabled={name.trim() === ""}>
-            Add a passkey
-          </Button>
-        </form>
-        <AddPasskeyDialog
-          open={adding}
-          onOpenChange={setAdding}
-          name={name.trim()}
-          userName={userName}
-          onAdded={() => {
-            setName("");
-            refresh();
-          }}
-        />
-      </div>
-      <ConfirmDialog
-        open={deleting !== null}
-        onOpenChange={(o) => {
-          if (!o) {
-            setDeleting(null);
-            del.reset();
-          }
-        }}
-        title={`Delete ${deleting?.name ?? ""}`}
-        description="The key no longer opens the operator area."
-        confirmLabel="Delete"
-        pendingLabel="Deleting"
-        pending={del.isPending}
-        error={del.error}
-        onConfirm={() => deleting && del.mutate(deleting.id)}
-      />
-    </Panel>
+    </section>
   );
 }
