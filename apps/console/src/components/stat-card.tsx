@@ -1,5 +1,5 @@
 import { cn } from "@veristar/brand/cn";
-import { ArrowDown, ArrowRight, ArrowUp, CircleAlert, Info } from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUp, ChartColumn, CircleAlert, Info } from "lucide-react";
 import type { ReactNode } from "react";
 import { AnimatedNumber } from "@/components/motion";
 import { Missing } from "@/components/states";
@@ -87,8 +87,10 @@ export function StatCard({
           ) : null}
         </span>
         {selected ? (
-          <span className="shrink-0 animate-fade-in whitespace-nowrap rounded-full border border-pressed-line px-2 text-axis text-fg">
-            In chart
+          // an icon, not a word: a narrow card keeps its full label
+          <span className="inline-flex shrink-0 animate-fade-in text-fg" title="In chart">
+            <ChartColumn aria-hidden className="size-3.5" />
+            <span className="sr-only">In chart</span>
           </span>
         ) : null}
       </span>
