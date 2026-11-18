@@ -389,6 +389,13 @@ func (h *Routes) remove(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
+	// a contract proof that read the ledger while this id was removed
+	// either saw the id gone or held its row until it committed (store);
+	// in the second case its proof rests on the removed id, so it is
+	// cleared now
+	if err := h.unverifyDerived(ctx, a, row); err != nil {
+		return err
+	}
 	httpx.NoContent(w)
 	return nil
 }
