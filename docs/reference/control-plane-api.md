@@ -44,7 +44,7 @@ A new route adds its error codes to section 2.4 and its audit actions to section
 | Item | Rule |
 |---|---|
 | Base URL | `https://app.<BASE_DOMAIN>/api`. Caddy (`deploy/caddy/app.Caddyfile`) serves the console and proxies `/api/*` to the control plane unchanged. |
-| Dev base URL | `http://localhost:8085/api` (the GitHub OAuth App callback is `http://localhost:8085/api/auth/github/callback`). 8080 is the dev gateway, so the control plane listens on 8085 and is also the dev console origin. |
+| Dev base URL | `http://localhost:8085/api` for direct API calls (8080 is the dev gateway, so the control plane listens on 8085). The dev console runs on the Vite dev server at `http://localhost:5173`, which proxies `/api` to the control plane; it is the dev console origin, and the GitHub OAuth App callback is `http://localhost:5173/api/auth/github/callback`. |
 | Media type | Request and response bodies are `application/json; charset=utf-8`. A body on a request with another `Content-Type` is refused with 415. |
 | Body size | Request bodies are limited to 64 KiB (413). |
 | Unknown fields | A request body with a field this document does not list is refused with 400 `invalid_body`, so a typo never passes silently. |
@@ -106,7 +106,7 @@ Every request with method `POST`, `PUT`, `PATCH` or `DELETE` must carry both:
    only such header is `Access-Control-Allow-Origin: *` on the two public OAuth
    discovery documents of 12.3).
 2. `Origin` equal to `CONSOLE_ORIGIN` (`https://app.<BASE_DOMAIN>`; dev
-   `http://localhost:8085`). Missing or different: 403 `origin_mismatch`.
+   `http://localhost:5173`). Missing or different: 403 `origin_mismatch`.
 
 `GET` and `HEAD` never change state. The only `GET` route with side effects outside
 the database is the browser redirect `/api/auth/github/start`, covered in its
@@ -1481,8 +1481,8 @@ user has no membership in any non-removed tenant), `web_ingest`
 warning rows unless `keep_aggregates`),
 `agg` (8.7; skipped when `keep_aggregates`), `chain` (`agg.purge_chain`:
 `agg.chain_reads`, `agg.chain_week_members` and open weeks of
-`agg.chain_weeks` always; `agg.chain_daily` and closed weeks unless
-`keep_aggregates`), `reports` (`cp.purge_usage_reports`: every signed usage
+`agg.chain_weeks` always; `agg.chain_daily`, `agg.chain_function_daily` and
+closed weeks unless `keep_aggregates`), `reports` (`cp.purge_usage_reports`: every signed usage
 report of the tenant, whatever `keep_aggregates` says). Each finished store writes
 `steps.<name>` and an audit row `purge.step` (actor `system:purge`); the last one
 sets `completed_at` and writes `purge.complete`. A failed store is retried on the
@@ -1740,8 +1740,8 @@ and new). **200** `{"keep": ...}`.
   removed (5.5), so changing it later never changes a removal in progress.
 - `true` keeps `cp.web_ingest_hourly`, `cp.web_evidence_daily` and
   `cp.web_signals_daily` rows, `api.metrics_hourly`, `api.metrics_daily` and
-  `api.ingest_warnings` rows, the web `agg` rows, `agg.chain_daily` and the
-  closed weeks of `agg.chain_weeks` of the removed tenant. Umami websites and
+  `api.ingest_warnings` rows, the web `agg` rows, `agg.chain_daily`,
+  `agg.chain_function_daily` and the closed weeks of `agg.chain_weeks` of the removed tenant. Umami websites and
   their raw data, `api` minute rows, `cp.web_networks_daily`,
   `agg.chain_reads`, `agg.chain_week_members`, open chain weeks and the signed
   usage reports are always deleted.
@@ -3409,8 +3409,10 @@ closes (15.8).
   unique on `(tenant_id, strkey)`. `kind` is `account` or `contract`,
   `added_by` is `enrollment` or `console`. A trigger on `cp.tenants` copies the
   G and C ids of `enrollment_answers.stellar_ids` into it at enrollment and
-  resubmission; an id the answers already held and the tenant removed in the
-  console is not copied again until the answers add it anew. M (muxed) ids
+  resubmission, up to 20 declared ids per project (migration 00048, the same
+  cap as `POST .../onchain/ids` in 15.3), so a resubmission never takes a
+  project past it. An id the answers already held and the tenant removed in
+  the console is not copied again until the answers add it anew. M (muxed) ids
   are not copied: their activity is the activity of their G account, which the
   tenant adds. `cp_tenant` inserts and deletes rows of its own tenant; only
   `cp_system` writes the challenge and proof columns.

@@ -24,17 +24,17 @@ from browsers, and only the file can be self-hosted.
 ## Steps
 
 1. **Copy the file of the version you use.** Download it from the gateway, for example
-   `https://in.analytics.example/v/1.3.1/sdk.js`, or take `packages/tracker/releases/1.3.1/sdk.js`
+   `https://in.analytics.example/v/1.3.2/sdk.js`, or take `packages/tracker/releases/1.3.2/sdk.js`
    from the repository. The files are immutable: a version's bytes never change.
-2. **Serve it unchanged** from a path of your choice, for example `/js/sdk/1.3.1/sdk.js`. Do not
+2. **Serve it unchanged** from a path of your choice, for example `/js/sdk/1.3.2/sdk.js`. Do not
    minify, bundle or otherwise rewrite it; the integrity check would refuse it.
 3. **Change the tag:** point `src` at your copy, keep the `integrity` value, and add
    `data-host-url` with the gateway origin, because `sdk.js` can no longer find the gateway from its
    own address:
 
-{/* snippet version=1.3.1 self-hosted=/js/sdk/1.3.1/sdk.js */}
+{/* snippet version=1.3.2 self-hosted=/js/sdk/1.3.2/sdk.js */}
 ```html
-<script defer src="/js/sdk/1.3.1/sdk.js" integrity="sha384-54fz21LNRgy6RLEdhwecMK8yavckH44JnSX9iSA3p2uiEtCEs6fyFt6LhuOL5kKw" crossorigin="anonymous" data-website-id="3f6a0c2e-9b1d-4e7a-8c5f-1d2e3f4a5b6c" data-host-url="https://in.analytics.example"></script>
+<script defer src="/js/sdk/1.3.2/sdk.js" integrity="sha384-Q2xIA5ztfj7VBlpI/+6kehWQVUC2jZPr89aAooy7Uinc/V2C0VF7Ti66L3gj6D/v" crossorigin="anonymous" data-website-id="3f6a0c2e-9b1d-4e7a-8c5f-1d2e3f4a5b6c" data-host-url="https://in.analytics.example"></script>
 ```
 
 4. **Check the file** before you publish it: its SHA-384 must be the integrity value in the

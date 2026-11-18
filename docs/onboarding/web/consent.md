@@ -14,9 +14,9 @@ which runs in the browser test matrix.
 
 Add `data-auto-track="false"` to the tag from the console:
 
-{/* snippet version=1.3.1 auto-track-off */}
+{/* snippet version=1.3.2 auto-track-off */}
 ```html
-<script defer src="https://in.analytics.example/v/1.3.1/sdk.js" integrity="sha384-54fz21LNRgy6RLEdhwecMK8yavckH44JnSX9iSA3p2uiEtCEs6fyFt6LhuOL5kKw" crossorigin="anonymous" data-website-id="3f6a0c2e-9b1d-4e7a-8c5f-1d2e3f4a5b6c" data-auto-track="false"></script>
+<script defer src="https://in.analytics.example/v/1.3.2/sdk.js" integrity="sha384-Q2xIA5ztfj7VBlpI/+6kehWQVUC2jZPr89aAooy7Uinc/V2C0VF7Ti66L3gj6D/v" crossorigin="anonymous" data-website-id="3f6a0c2e-9b1d-4e7a-8c5f-1d2e3f4a5b6c" data-auto-track="false"></script>
 ```
 
 With it, `sdk.js` loads and installs `window.umami`, but sends nothing, fetches no challenge and
@@ -83,9 +83,9 @@ so a call that runs before the banner is answered measures no one. If your site 
 events and no automatic pageviews, call `umami.start({ automatic: false })` after consent instead
 of `umami.start()`; from then on `umami.track()` sends.
 
-This holds from tracker 1.3.1, the version in the tag above. Releases 1.3.0 and earlier send a
+This holds from tracker 1.3.1; the tag above is 1.3.2. Releases 1.3.0 and earlier send a
 `umami.track()` call before `start()` at once, so on those releases call `umami.track()` only after
-consent, or [upgrade](upgrading.md) to 1.3.1.
+consent, or [upgrade](upgrading.md) to 1.3.2.
 
 ## An opt-out control
 
