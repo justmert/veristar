@@ -1,5 +1,6 @@
 import { cn } from "@veristar/brand/cn";
 import type { CoverageEstimate } from "@/api/schemas";
+import { Missing } from "@/components/states";
 import { formatCount, formatPercent } from "@/lib/format";
 
 // the estimate of visits not measured because of privacy signals (contract
@@ -50,14 +51,7 @@ export function CoverageCell({ coverage }: { coverage: CoverageEstimate }) {
   return (
     <span className="inline-flex flex-col items-end">
       <span className={share === null ? "text-fg-3" : undefined} data-col="unmeasured_share">
-        {share === null ? (
-          <>
-            <span aria-hidden>–</span>
-            <span className="sr-only">no estimate</span>
-          </>
-        ) : (
-          formatPercent(share)
-        )}
+        {share === null ? <Missing reason="No estimate" /> : formatPercent(share)}
       </span>
       <span className="font-sans text-caption text-fg-3" data-testid="coverage-detail">
         {share === null ? `too few loads, ${loads}` : loads}

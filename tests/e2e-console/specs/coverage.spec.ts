@@ -159,7 +159,7 @@ test("the operator reads the column and the export", async () => {
   await page.getByRole("menuitemcheckbox", { name: "Not measured" }).click();
   await page.keyboard.press("Escape");
   const cell = row.locator("[data-col=unmeasured_share]");
-  await expect(cell).toHaveText("–no estimate");
+  await expect(cell).toHaveText("–No estimate");
   await expect(row.getByTestId("coverage-detail")).toHaveText(
     "too few loads, 1 of 3 loads with GPC",
   );

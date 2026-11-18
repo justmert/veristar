@@ -14,7 +14,7 @@ import type {
 } from "@/api/schemas";
 import { CoverageNote } from "@/components/coverage";
 import { Panel } from "@/components/panel";
-import { ErrorState, LoadingState, Skeleton } from "@/components/states";
+import { ErrorState, LoadingState, Missing, Skeleton } from "@/components/states";
 import { Pill, type Tone } from "@/components/status";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -67,7 +67,11 @@ export function dayCountsText(s: IntegrityRow): string {
 
 // the evidence of one day as label and value pairs, platform observations
 // first, then the page-reported page views
-export function evidenceFacts(d: IntegrityDay): { label: string; value: string }[] {
+// a value that was not measured is the missing glyph; `reason` says why in
+// its tooltip
+export function evidenceFacts(
+  d: IntegrityDay,
+): { label: string; value: string; reason?: string }[] {
   const e = d.evidence;
   const classified =
     e.net.access + e.net.organisation + e.net.hosting + e.net.anonymiser + e.net.unknown;
@@ -92,8 +96,9 @@ export function evidenceFacts(d: IntegrityDay): { label: string; value: string }
       label: "Baseline visitors",
       value:
         e.baseline_visitors === null
-          ? "no history yet"
+          ? MISSING
           : `${formatCount(e.baseline_visitors)} (median of ${e.baseline_days} days)`,
+      reason: "No history yet",
     },
     { label: "Page views (page-reported)", value: formatCount(e.pageviews) },
   ];
@@ -157,7 +162,13 @@ function SiteDays({ site, name }: { site: IntegritySite; name: string }) {
               {evidenceFacts(d).map((f) => (
                 <div key={f.label} className="flex min-w-0 flex-col">
                   <dt className="text-caption text-fg-3">{f.label}</dt>
-                  <dd className="text-small text-fg tabular">{f.value}</dd>
+                  <dd className="text-small text-fg tabular">
+                    {f.value === MISSING ? (
+                      <Missing reason={f.reason ?? "Not measured"} />
+                    ) : (
+                      f.value
+                    )}
+                  </dd>
                 </div>
               ))}
             </dl>
