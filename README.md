@@ -1,6 +1,6 @@
 # Veristar
 
-Multi-tenant web and API analytics for projects building on Stellar, run as a shared, free
+Multi-tenant web, API and on-chain analytics for projects building on Stellar, run as a shared, free
 service for the Stellar Community Fund (SCF). Projects get private dashboards of their own
 traffic; designated SCF operators get a cross-project view built from aggregates, for
 funding and ecosystem-visibility decisions.
@@ -10,15 +10,21 @@ funding and ecosystem-visibility decisions.
   page's origin, rate limits, a same-network check), keeps the client address in memory only
   for the request, and queues the event. A replayer delivers it to an unmodified
   [Umami](https://umami.is) 3.5.0, the engine that stores the events and computes the
-  metrics on the private network; each project reads them in the console's web dashboard. No cookies and no
-  stored IP addresses; visitors are counted per UTC day with a secret that is destroyed at
-  midnight. Whether a site may run it without asking for consent depends on the country, and
-  a consent mode exists where it may not
-  ([docs/compliance/jurisdictions.md](docs/compliance/jurisdictions.md)).
+  metrics on the private network; each project reads them in the console's web dashboard. No
+  cookies and no stored IP addresses; visitors are counted per UTC day with a secret that is destroyed at
+  midnight. In the countries that require consent for it, the tracker's consent mode sends nothing
+  until the visitor agrees ([docs/compliance/jurisdictions.md](docs/compliance/jurisdictions.md)).
 - **API analytics.** Tenant applications dual-export OpenTelemetry data to their own backend
   and to the SCF collector. The collector drops traces, spans and logs, keeps HTTP request
   counts, status codes and latency histograms per normalized route, and stores them in
   PostgreSQL for at least 24 months.
+- **On-chain activity.** Projects declare their Stellar accounts and Soroban contracts and prove
+  control of them; a daily job reads their operations, transactions, counterparties, weekly
+  active accounts and calls per contract function from public ledger APIs
+  ([docs/onboarding/onchain.md](docs/onboarding/onchain.md)).
+- **Signed reports.** A project creates a usage report for any period, signed with the
+  service's published Stellar key, and shares it with SCF reviewers, who verify it without an
+  account ([docs/onboarding/signed-reports.md](docs/onboarding/signed-reports.md)).
 
 How it fits together: [docs/architecture.md](docs/architecture.md). Why Umami and why beside
 it rather than a fork: [docs/adr](docs/adr).
@@ -48,7 +54,8 @@ Measured gateway capacity is in
    your project.
 2. Add a site, copy its snippet, and put it in your pages: [docs/onboarding](docs/onboarding).
 3. For API metrics, create an OTLP token and add a second exporter to your application.
-4. Questions and problems: [docs/support.md](docs/support.md). The service is free, and
+4. For on-chain activity, declare your accounts and contracts and prove that you control them.
+5. Questions and problems: [docs/support.md](docs/support.md). The service is free, and
    charges no fees to anyone.
 
 Privacy and the right to erasure: [docs/compliance](docs/compliance).
@@ -71,7 +78,7 @@ operator roster with its passkey step-up, and API keys for machine consumers.
 
 ```
 cmd/                 gateway, replayer, metricswriter, controlplane, jobs, platformctl,
-                     prober, sloreport, issueage
+                     prober, sloreport, issueage, adoptionreport
 internal/            the Go packages behind them
 collector/           the OpenTelemetry Collector distribution and its three custom components
 db/                  goose migrations and sqlc queries
