@@ -265,6 +265,8 @@ describe("integrity in the global web view", () => {
     );
     expect(options).toEqual(["Any", "Any grade given", "B or C", "C"]);
     // the active filter shows as a chip that removes it
-    expect(host.querySelector("ul[aria-label='Active filters']")?.textContent).toContain("Grade:C");
+    expect(host.querySelector("ul[aria-label='Active filters']")?.textContent).toContain(
+      "Grade: C",
+    );
   });
 });
