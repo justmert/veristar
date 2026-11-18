@@ -402,7 +402,7 @@ requests, so it is not one of the kept metrics (see "tenantguard" below).
 
 Load balancer health checks, Kubernetes probes, uptime monitors and CORS preflights reach a service
 as ordinary HTTP requests, so a service that answers its own load balancer every few seconds would
-look busier, and usually faster, than its users make it. `tenantguard` classifies every data point
+look busier, and faster, than its users make it. `tenantguard` classifies every data point
 and every server span with `internal/trafficclass` while it still holds the original attributes,
 then drops the user agent with everything else that is not published. Infrastructure traffic gets
 the point attribute `scf.traffic.class`; application traffic gets none, so its streams keep the

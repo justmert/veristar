@@ -85,8 +85,8 @@ which answers `{"visitors": n}`: distinct sessions with an event in the last 5 m
 (`src/queries/sql/getActiveVisitors.ts`). `TestWebDashboardParity`
 (`internal/controlplane/webdash`) compares every figure against these routes.
 
-Two findings of the earlier public interface still apply to any Umami user and stay relevant
-should a host ever serve Umami again: `POST /api/me/api-keys` succeeds for a view-only user and
+Two findings of the earlier public interface still apply to any Umami user, and matter again if
+a host ever serves Umami: `POST /api/me/api-keys` succeeds for a view-only user and
 returns an Umami API key, and enabling 2FA on a platform user makes its login answer
 `requiresTwoFactor`, which the control plane refuses. No public host serves Umami, so neither
 is reachable by a project; `make test-caddy-closed` fails when an internet-facing Caddy site
