@@ -267,16 +267,17 @@ export function sparkOf(series: WebPoint[], m: WebMetric): number[] | null {
   return Math.max(...v) === Math.min(...v) ? null : v;
 }
 
-// the gateway's outcome counts cover whole utc hours up to the current one,
-// so a range of days reads from its first midnight to the end of its last
-// day or the current whole hour, whichever comes first. null when no whole
-// hour of the range has passed yet (just after midnight on "Today").
+// the gateway's outcome counts come in whole utc hours, so a range of days
+// reads from its first midnight to the end of its last day or the end of the
+// running hour, whichever comes first. null when the range starts in the
+// future.
 export function ingestWindow(
   r: DayRange,
   now: Date,
 ): { from: string; to: string; bucket: "day" } | null {
   const hour = new Date(now);
   hour.setUTCMinutes(0, 0, 0);
+  hour.setUTCHours(hour.getUTCHours() + 1);
   const from = Date.parse(`${r.from}T00:00:00Z`);
   const to = Math.min(Date.parse(`${r.to}T00:00:00Z`) + 86_400_000, hour.getTime());
   if (to <= from) return null;

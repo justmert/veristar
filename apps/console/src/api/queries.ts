@@ -109,9 +109,12 @@ export const ingestDayQuery = (siteId: string) =>
 
 // last 30 days in day buckets, ending at the current whole utc hour (the
 // route accepts only whole hours)
+// the window ends after the running hour: a tag installed minutes ago shows
+// its first counts here, not an hour later
 export function thirtyDayRange(now: Date): { from: string; to: string; bucket: "day" } {
   const to = new Date(now);
   to.setUTCMinutes(0, 0, 0);
+  to.setUTCHours(to.getUTCHours() + 1);
   const from = new Date(to.getTime() - 30 * 24 * 3600_000);
   const iso = (d: Date) => d.toISOString().replace(/\.\d{3}Z$/, "Z");
   return { from: iso(from), to: iso(to), bucket: "day" };

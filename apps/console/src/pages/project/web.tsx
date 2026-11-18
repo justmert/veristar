@@ -624,7 +624,9 @@ function NotCounted({
     queries: sites.map((s) => ({
       queryKey: ["ingest", s.id, span?.from ?? "", span?.to ?? ""] as const,
       queryFn: ({ signal }: { signal: AbortSignal }) =>
-        span ? api.ingest(s.id, span, signal) : Promise.reject(new Error("no complete hour")),
+        span
+          ? api.ingest(s.id, span, signal)
+          : Promise.reject(new Error("the range has not started")),
       enabled: span !== null,
       // rows are folded every few minutes; asking more often shows nothing new
       staleTime: 2 * 60_000,
@@ -677,8 +679,8 @@ function NotCounted({
       </div>
 
       {span === null ? (
-        <EmptyState compact title="No complete hour yet">
-          Outcome counts show after the first hour of the day ends.
+        <EmptyState compact title="The range has not started">
+          Outcome counts show from the first day of the range. Choose an earlier range.
         </EmptyState>
       ) : failed ? (
         <ErrorState
