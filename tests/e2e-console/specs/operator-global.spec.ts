@@ -322,18 +322,19 @@ test("the operator filters to verified projects, sorts by visitors and compares 
   await page.getByRole("radiogroup", { name: "View" }).getByRole("radio", { name: "Web" }).click();
   await page.waitForURL(`${APP}/operator/projects?view=web`);
   await expect(page.getByRole("heading", { level: 1, name: "Projects" })).toBeVisible();
-  // the definitions are on the column headers; the notes fold away
+  // the definitions are on the column headers
   await expect(
     page.getByRole("columnheader", { name: "Visitors", exact: true }).getByRole("button"),
   ).toHaveAttribute("aria-description", /unique per UTC day and site/);
-  await page.getByText("About these numbers").click();
-  await expect(page.getByText("IP Geolocation by DB-IP")).toBeVisible();
 
   // the search applies as the operator types
   await page.getByLabel("Search projects").fill(run);
   await page.waitForURL(new RegExp(`q=${run}`));
   // default sort is page views: b (6), d (4), a (3), c (1)
   await expect.poll(() => rowIds(page)).toEqual([b, d, a, c].map((p) => p.tenant.id));
+  // the notes fold away under the table; opened once the rows stand still
+  await page.getByText("About these numbers").click();
+  await expect(page.getByText("IP Geolocation by DB-IP")).toBeVisible();
 
   // the filters sit in one sheet and apply at once
   await page.getByRole("button", { name: "Filters", exact: true }).click();
