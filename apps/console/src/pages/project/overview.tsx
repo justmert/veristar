@@ -29,6 +29,7 @@ import {
 } from "@/lib/api-metrics";
 import { countOf, formatCount, formatPercent } from "@/lib/format";
 import { type DayRange, lastDays } from "@/lib/global";
+import { verifiedActivity } from "@/lib/onchain";
 import {
   apiRangeOfDays,
   type OverviewPreset,
@@ -387,6 +388,8 @@ function PageLink({ to, children }: { to: string; children: ReactNode }) {
 function Summaries({ tenantId, sites, days }: { tenantId: string; sites: Site[]; days: DayRange }) {
   const grade = useQuery(integrityQuery("tenant", tenantId, days));
   const chain = useQuery(onchainQuery(tenantId, days));
+  // verified ids only, as On-chain and SCF review count them
+  const activity = chain.data ? verifiedActivity(chain.data) : null;
   const unverified = sites.filter((s) => s.status === "active" && s.verification !== "verified");
   const inReview = sites.filter((s) => s.in_review || s.status === "pending");
   return (
@@ -431,10 +434,10 @@ function Summaries({ tenantId, sites, days }: { tenantId: string; sites: Site[];
         ) : (
           <span className="flex flex-wrap items-baseline gap-x-2">
             <span className="font-mono text-title text-fg tabular">
-              {formatCount(chain.data.totals.operations)}
+              {formatCount(activity?.operations ?? 0)}
             </span>
             <span className="text-small text-fg-2">
-              operations, {formatCount(chain.data.totals.ids_verified)} of{" "}
+              operations of verified ids, {formatCount(activity?.verified ?? 0)} of{" "}
               {formatCount(chain.data.totals.ids)} verified
             </span>
           </span>
