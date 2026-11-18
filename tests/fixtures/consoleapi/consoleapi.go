@@ -70,6 +70,9 @@ type Options struct {
 	// Umami is what account deletion deletes the umami user with. nil uses
 	// an in-memory Users, available as Env.Umami.
 	Umami account.UmamiUsers
+	// Extra adds routes over the env's scope to the session routes, such
+	// as the snippet route.
+	Extra func(s *tenants.Scope) []controlplane.Routes
 }
 
 // Users is an in-memory stand-in for the umami users api, for tests that
@@ -145,7 +148,10 @@ type Env struct {
 	OAuth   *githuboauth.Server
 	Terms   string
 	// Umami is the in-memory umami users when Options.Umami was nil
-	Umami  *Users
+	Umami *Users
+	// Lookup resolves logins against the oauth fixture with the app's
+	// credentials, as the member routes do
+	Lookup *auth.UserLookup
 	nextGH atomic.Int64
 	// keys are the operators' software authenticators (Client.StepUp)
 	keys stepuptest.Keys
@@ -212,6 +218,7 @@ func Start(t testing.TB, o Options) *Env {
 		ClientID: clientID, ClientSecret: secret, Endpoints: endpoints,
 	})
 	require.NoError(t, err)
+	e.Lookup = users
 	stepUps, guard := stepuptest.Guard(t, o.DB, sessions, e.Srv.URL, operators)
 	mode, err := operator.NewEnrollmentMode(o.DB)
 	require.NoError(t, err)
@@ -228,13 +235,17 @@ func Start(t testing.TB, o Options) *Env {
 		DB: o.DB, Sessions: sessions, Umami: um, Reconcile: e.Scope.Reconcile, StepUp: stepUps,
 	})
 	require.NoError(t, err)
+	private := []controlplane.Routes{
+		controlplane.RoutesFunc(ah.Private), accountRoutes, tenants.NewRoutes(e.Scope), memberRoutes, sites.NewRoutes(e.Scope),
+		controlplane.RoutesFunc(guard.Mount(mode, actions)),
+	}
+	if o.Extra != nil {
+		private = append(private, o.Extra(e.Scope)...)
+	}
 	h := controlplane.NewHandler(controlplane.Options{
 		Log: log, ConsoleOrigin: e.Srv.URL, Sessions: sessions,
-		Public: []controlplane.Routes{controlplane.RoutesFunc(ah.Public)},
-		Private: []controlplane.Routes{
-			controlplane.RoutesFunc(ah.Private), accountRoutes, tenants.NewRoutes(e.Scope), memberRoutes, sites.NewRoutes(e.Scope),
-			controlplane.RoutesFunc(guard.Mount(mode, actions)),
-		},
+		Public:  []controlplane.Routes{controlplane.RoutesFunc(ah.Public)},
+		Private: private,
 	})
 	api.Store(&h)
 	return e

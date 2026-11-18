@@ -100,6 +100,24 @@ func unavailable(r *http.Request, err error) error {
 	return httpx.Unavailable("the token registry is unreachable")
 }
 
+// CheckNewToken validates the name and environment of a new token the way
+// POST /api/tenants/{tenant_id}/otlp-tokens does; platformctl uses it too.
+func CheckNewToken(f *tenants.Fields, name, environment *string) (string, string) {
+	var n, env string
+	if name == nil {
+		f.Add("name", httpx.FieldRequired)
+	} else {
+		n = tenants.Text(f, "name", *name, 1, 100)
+	}
+	if environment != nil {
+		env = *environment
+		if env != "" && !environmentRe.MatchString(env) {
+			f.Add("environment", httpx.FieldInvalidFormat)
+		}
+	}
+	return n, env
+}
+
 type createBody struct {
 	Name        *string `json:"name"`
 	Environment *string `json:"environment"`
@@ -122,18 +140,7 @@ func (h *Routes) create(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	var f tenants.Fields
-	var name, env string
-	if b.Name == nil {
-		f.Add("name", httpx.FieldRequired)
-	} else {
-		name = tenants.Text(&f, "name", *b.Name, 1, 100)
-	}
-	if b.Environment != nil {
-		env = *b.Environment
-		if env != "" && !environmentRe.MatchString(env) {
-			f.Add("environment", httpx.FieldInvalidFormat)
-		}
-	}
+	name, env := CheckNewToken(&f, b.Name, b.Environment)
 	if err := f.Err(); err != nil {
 		return err
 	}
