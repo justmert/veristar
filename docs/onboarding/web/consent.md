@@ -75,12 +75,14 @@ If you use a consent management platform, call `window.umami?.start()` from its 
 analytics purpose instead. In a framework app, call it wherever your banner component learns the
 choice; the tag stays where the framework guide puts it.
 
-From tracker 1.3.1, `umami.track()` before `start()` does nothing: no event, no challenge and no
-storage read, so a call that runs before the banner is answered measures no one. If your site sends
-only chosen events and no automatic pageviews, call `umami.start({ automatic: false })` after
-consent instead of `umami.start()`; from then on `umami.track()` sends. Tracker 1.3.0 and earlier
-send a `umami.track()` call before `start()` at once, so on those releases do not call it before
-consent.
+`umami.track()` before `start()` does nothing either: no event, no challenge and no storage read,
+so a call that runs before the banner is answered measures no one. If your site sends only chosen
+events and no automatic pageviews, call `umami.start({ automatic: false })` after consent instead
+of `umami.start()`; from then on `umami.track()` sends.
+
+This holds from tracker 1.3.1, the version in the tag above. Releases 1.3.0 and earlier send a
+`umami.track()` call before `start()` at once, so on those releases call `umami.track()` only after
+consent, or [upgrade](upgrading.md) to 1.3.1.
 
 ## An opt-out control
 

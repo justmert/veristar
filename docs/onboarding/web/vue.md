@@ -5,7 +5,7 @@ description: "Add the tracker to a Vue app built with Vite and Vue Router."
 
 For a Vue app built with Vite, with Vue Router. Tested by the example
 [`examples/vue-spa`](https://github.com/justmert/veristar/tree/main/examples/vue-spa) (Vue 3.5.45, Vue Router 5.4.0,
-`@vitejs/plugin-vue` 6.0.10, Vite 8), which runs in the browser test matrix.
+`@vitejs/plugin-vue` 6.0.11, Vite 8), which runs in the browser test matrix.
 
 ## Where the tag goes
 

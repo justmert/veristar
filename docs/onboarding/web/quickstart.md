@@ -15,16 +15,18 @@ from there, not from this page.
 
 ## 1. Enroll your project
 
-Sign in to the console with GitHub or a Stellar wallet ([Signing in](../sign-in.md)). Choose **Enroll a project** and fill in the project name, its
-website and a short description. Depending on how the operators run the service, the project is
-active at once or waits for an operator's review; the console shows which. Sites can be added
-while a project waits, but they receive data only once it is active.
+Sign in to the console with GitHub, a Stellar wallet or a passkey ([Signing in](../sign-in.md)).
+Choose **Enroll a project** and fill in the project name, its website and a short description.
+Depending on how the operators run the service, the project is active at once or waits for an
+operator's review; the console shows which. You can add sites while a project waits, and they
+receive data once it is active.
 
-Add everyone who needs to see the dashboards under the project's **Members**.
+Add everyone who needs to see the dashboards under the project's **Settings**, **Members**.
 
 ## 2. Add a site
 
-Open the project's **Sites** page and choose **Add a site**:
+Open the project's **Overview**. Its **Sites** panel lists the project's sites; choose **Add site**
+(for a project without sites the overview asks for the first site directly) and fill in:
 
 - **Name**: anything that tells your sites apart.
 - **Domain**: the domain the site runs on, for example `docs.example.org`.
@@ -33,16 +35,21 @@ Open the project's **Sites** page and choose **Add a site**:
   `localhost` and `127.0.0.1`: add for example `http://localhost:5173` (with your dev server's
   port) to test from your machine.
 
-A site whose domain belonged to a removed project is marked **In review** and waits for an
-operator before it receives data.
+Choose **Add and set up**. The console opens the site's setup page, which walks you through the
+next steps. A site whose domain belonged to a removed project is marked **In review** and waits
+for an operator before it receives data.
 
 The gateway refuses events from any other origin, so a copied tag on someone else's site does not
 count towards yours.
 
 ## 3. Copy the tag
 
-Choose **Snippet** next to the site. The console shows the tag for the newest tracker version.
-The guides use version 1.3.1, the newest release, which looks like this:
+On the setup page, pick how the site is built under **Install the tracker**; the console shows the
+tag for the newest tracker version, marked recommended, and where it goes. Two options change the
+tag: **Wait for consent before measuring** adds `data-auto-track="false"` ([consent.md](consent.md)),
+and **Send the page title** adds `data-send-title="true"`. To come back to it later, open the site from the **Sites** panel and choose
+**Snippet** on its **Setup** tab. The site id is on the same page. The guides use version 1.3.1,
+the newest release, which looks like this:
 
 {/* snippet version=1.3.1 */}
 ```html
@@ -88,13 +95,17 @@ tab shows three requests to the gateway:
 | `GET /v1/c?w=<site id>` | 200 | a challenge, once per page load |
 | `POST /v1/e` | 202 | the pageview, accepted and queued |
 
-If the tracker file is missing or the event answers something else, see
-[Troubleshooting](#troubleshooting) below.
+The setup page's **First event** step turns to **First event received** once the gateway counted
+an event from the site; if events arrive but are refused, it names the reasons. If the tracker file
+is missing or the event answers something else, see [Troubleshooting](#troubleshooting) below.
+
+Verifying the domain (**Verify domain** on the site's **Setup** tab) is optional: it shows the
+service's operators that the project controls the domain, and data flows without it.
 
 ## 6. Open the dashboard
 
-Open **Web** in your project in the console, or choose **Analytics** next to the site on the
-**Overview** page. The dashboard shows page views, unique visitors, visits, bounce rate and visit
+Open **Web** in your project in the console, or choose **Analytics** next to the site in the
+**Sites** panel of the **Overview**. The dashboard shows page views, unique visitors, visits, bounce rate and visit
 duration for today, 7, 30 or 90 days or any range of UTC days you pick, each against the previous
 period, with pages, entry and exit pages, referrers, countries, browsers, operating systems,
 devices and custom events. Choose a site to see it alone, or **All sites** for the whole project.
@@ -123,7 +134,8 @@ Countries come from the DB-IP country database:
 - **No address is stored.** The network address is used in memory only, for the country lookup,
   the daily visitor token and the gateway's rate and abuse checks. Region and city are never
   recorded.
-- **Global Privacy Control is honoured.** A browser that sends it is not counted at all.
+- **Global Privacy Control is honoured.** The tracker sends nothing from a browser that has it
+  turned on, and the gateway drops any event that carries it.
 - **URLs are cleaned before they are stored.** Query parameters are removed. Campaign
   parameters (`utm_source`, `utm_medium`, `utm_campaign`, `utm_content`, `utm_term` and `ref`)
   are kept only if you turn on "Keep campaign parameters" for the site in the console; it is off
@@ -173,7 +185,7 @@ tracker.
 | `sdk.js` answers 410 | that tracker version was revoked; pick a current one in the console and replace the tag ([upgrading.md](upgrading.md)) |
 | no request to the gateway at all | the tag is not in the page the browser received, a content blocker removed it, the browser sends Global Privacy Control, the opt-out flag is set, or `data-auto-track="false"` is set without `umami.start()` |
 | the browser console reports a content security policy violation | add the gateway to your policy ([content-security-policy.md](content-security-policy.md)) |
-| `POST /v1/e` answers 403 | the page's origin is not one of the site's allowed origins; add it on the **Sites** page |
+| `POST /v1/e` answers 403 | most often the page's origin is not one of the site's allowed origins: add it on the site's **Settings** tab. The setup page's **First event** step names the refusal reason |
 | `POST /v1/e` answers 404 | the site id is wrong, or the site or project is not active yet |
 | `POST /v1/e` answers 429 | the site sent more than the gateway's rate limit; it recovers by itself |
 | events arrive but the dashboard stays empty | switch **Traffic** to **Quarantined** on the **Web** page; on a shared network your own test visits can land there |
