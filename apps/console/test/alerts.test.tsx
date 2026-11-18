@@ -171,8 +171,8 @@ describe("operator alerts page", () => {
     expect(host.textContent).not.toContain("All clear");
     // where the alerts come from, as facts in the header
     expect(host.querySelector("[data-sources]")?.textContent).toBe("Alertmanager, 1 server");
-    // the count beside the title is the badge's: the alerts to act on now
-    expect(host.querySelector("h1 ~ [data-count]")?.textContent).toBe("1");
+    // the count beside the title is the badge's: every firing alert
+    expect(host.querySelector("h1 ~ [data-count]")?.textContent).toBe("2");
   });
 
   it("says all clear with the time of the check when nothing fires", async () => {
