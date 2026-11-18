@@ -151,7 +151,7 @@ describe("operator alerts page", () => {
     ]);
 
     const headings = [...host.querySelectorAll("h2")].map((h) => h.textContent);
-    expect(headings).toEqual(["Act now1", "Act within a working day1"]);
+    expect(headings).toEqual(["Act now 1", "Act within a working day 1"]);
     expect(host.querySelector("h1")?.textContent).toBe("Alerts");
     const down = host.querySelector("[data-alert=ServiceDown]") as HTMLElement;
     // the title in sentence case, the labels as a secondary line
