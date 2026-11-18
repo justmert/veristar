@@ -1,9 +1,10 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { CircleAlert, CircleCheck, FileText, KeyRound, Shield, Wallet } from "lucide-react";
+import { FileText, KeyRound, LoaderCircle, Shield, Wallet } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { api, signInUrl } from "@/api/endpoints";
 import { GitHubMark } from "@/components/github-mark";
+import { Notice } from "@/components/notice";
 import { PasskeyDialog } from "@/components/passkey-dialog";
 import { PublicFrame } from "@/components/public-frame";
 import { Button } from "@/components/ui/button";
@@ -20,7 +21,7 @@ const SIGN_IN_ERRORS: Record<string, string> = {
   exchange_failed: "GitHub did not confirm the sign-in. Start again from this page.",
   github_unavailable: "GitHub could not be reached. Try again in a moment.",
   internal:
-    "The service could not finish the sign-in. Try again; if it keeps failing, report it to the operators.",
+    "The service could not finish the sign-in. Try again. If it keeps failing, check the service status.",
 };
 
 // same rule as the control plane (contract 4.1.1): a console path, never a
@@ -50,6 +51,8 @@ export function SignInPage() {
   const navigate = useNavigate();
   const [picker, setPicker] = useState(false);
   const [passkey, setPasskey] = useState(false);
+  // the github sign-in is a full page navigation that can take seconds
+  const [leaving, setLeaving] = useState(false);
   const qc = useQueryClient();
   const code = params.get("error");
   const message = code ? (SIGN_IN_ERRORS[code] ?? SIGN_IN_ERRORS.internal) : null;
@@ -61,35 +64,28 @@ export function SignInPage() {
     <PublicFrame>
       <div className="flex w-full max-w-[24rem] flex-col gap-6">
         <div className="flex flex-col gap-2">
-          <h1 className="text-h1 tracking-tight text-fg">Sign in</h1>
+          <h1 className="text-heading text-fg">Sign in to Veristar</h1>
           <p className="text-body text-fg-2">
-            Web and API analytics for projects building on Stellar, free for every project.
+            Web, API and on-chain analytics for projects that build on Stellar. Free for every
+            project.
           </p>
         </div>
 
         {message ? (
-          <p
-            role="alert"
-            className="flex animate-fade-in items-start gap-2 rounded-lg border border-critical-line bg-raised px-3 py-3 text-body text-fg"
-          >
-            <CircleAlert aria-hidden className="mt-1 size-4 shrink-0 text-critical" />
+          <Notice tone="critical" role="alert">
             {message}
-          </p>
+          </Notice>
         ) : null}
         {deleted ? (
-          <p
-            role="status"
-            className="flex animate-fade-in items-start gap-2 rounded-lg border border-line bg-raised px-3 py-3 text-body text-fg"
-          >
-            <CircleCheck aria-hidden className="mt-1 size-4 shrink-0 text-success" />
-            Your account was deleted. Signing in again creates a new, empty account.
-          </p>
+          <Notice tone="success">
+            Your account is deleted. A new sign-in makes a new, empty account.
+          </Notice>
         ) : null}
 
         <div className="flex flex-col gap-2">
-          <Button asChild size="lg" className="w-full">
-            <a href={signInUrl(returnTo)}>
-              <GitHubMark />
+          <Button asChild size="lg" className="w-full" pending={leaving}>
+            <a href={signInUrl(returnTo)} onClick={() => setLeaving(true)}>
+              {leaving ? <LoaderCircle aria-hidden className="animate-spin" /> : <GitHubMark />}
               Continue with GitHub
             </a>
           </Button>
@@ -135,7 +131,7 @@ export function SignInPage() {
           onOpenChange={setPasskey}
           mode="sign_in"
           title="Continue with a passkey"
-          description="A passkey signs you in with Face ID, Touch ID, Windows Hello or a security key. It is a soropass passkey: its key also controls a Stellar smart account, whose address names your console account."
+          description="A passkey signs you in with Face ID, Touch ID, Windows Hello or a security key. The passkey also controls a Stellar smart account. Its address is the name of your account."
           userName="Veristar account"
           challenge={() => api.passkeyChallenge(returnTo)}
           verify={async (answer) => {
@@ -149,16 +145,15 @@ export function SignInPage() {
         <ul className="flex flex-col gap-2 text-small text-fg-2">
           <li className="flex gap-2">
             <Shield aria-hidden className="mt-1 size-3.5 shrink-0 text-fg-3" />
-            GitHub shares your public username and id. No email, no repository access.
+            GitHub shares your public username and id. No email, no repositories.
           </li>
           <li className="flex gap-2">
             <Wallet aria-hidden className="mt-1 size-3.5 shrink-0 text-fg-3" />A wallet shares your
-            public Stellar address. The signature moves no funds.
+            public address and moves no funds.
           </li>
           <li className="flex gap-2">
-            <KeyRound aria-hidden className="mt-1 size-3.5 shrink-0 text-fg-3" />A passkey shares
-            its public key and its smart account address. Your fingerprint or face never leaves the
-            device.
+            <KeyRound aria-hidden className="mt-1 size-3.5 shrink-0 text-fg-3" />A passkey shares a
+            public key. Your face or fingerprint stays on the device.
           </li>
           <li className="flex gap-2">
             <FileText aria-hidden className="mt-1 size-3.5 shrink-0 text-fg-3" />
