@@ -26,10 +26,33 @@ where ($1::text is null
   and ($5::text is null or a.actor = $5::text)
   and ($6::timestamptz is null or a.at >= $6::timestamptz)
   and ($7::timestamptz is null or a.at < $7::timestamptz)
-  and ($8::timestamptz is null
-       or (a.at, a.id) < ($8::timestamptz, $9::bigint))
+  and ($8::text is null
+       or (a.action || ' ' || a.actor || ' ' || a.target || ' ' || a.detail::text) ilike $8::text
+       or a.actor = any(array(
+            select 'user:' || su.id::text from cp.users su
+            where su.deleted_at is null
+              and (su.github_login ilike $8::text
+                   or su.stellar_address ilike $8::text
+                   or su.passkey_address ilike $8::text)))
+       or a.target = any(array(
+            select 'user:' || su.id::text from cp.users su
+            where su.deleted_at is null
+              and (su.github_login ilike $8::text
+                   or su.stellar_address ilike $8::text
+                   or su.passkey_address ilike $8::text)
+            union all
+            select 'tenant:' || st.id::text from cp.tenants st
+            where st.name ilike $8::text or st.slug ilike $8::text
+            union all
+            select 'site:' || ss.id::text from cp.sites ss
+            where ss.name ilike $8::text or ss.domain ilike $8::text))
+       or a.detail ->> 'tenant_id' = any(array(
+            select st.id::text from cp.tenants st
+            where st.name ilike $8::text or st.slug ilike $8::text)))
+  and ($9::timestamptz is null
+       or (a.at, a.id) < ($9::timestamptz, $10::bigint))
 order by a.at desc, a.id desc
-limit $10
+limit $11
 `
 
 type OperatorAuditPageParams struct {
@@ -40,6 +63,7 @@ type OperatorAuditPageParams struct {
 	Actor      *string
 	FromAt     *time.Time
 	ToAt       *time.Time
+	QLike      *string
 	AfterAt    *time.Time
 	AfterID    *int64
 	Lim        int32
@@ -59,6 +83,11 @@ type OperatorAuditPageRow struct {
 // has no right on cp.audit_log or cp.users.
 // newest first, keyset over (at, id). every filter is optional; a null
 // parameter matches every row. action_like is an escaped like pattern.
+// q_like is the escaped search pattern of q ('%' around it): it matches a
+// row whose action, actor, target or detail holds it (the trigram index of
+// 00052 serves this expression), and a row whose actor, target or tenant
+// names a live account, project or site whose login, address, name, slug
+// or domain holds it.
 func (q *Queries) OperatorAuditPage(ctx context.Context, arg OperatorAuditPageParams) ([]OperatorAuditPageRow, error) {
 	rows, err := q.db.Query(ctx, operatorAuditPage,
 		arg.TenantID,
@@ -68,6 +97,7 @@ func (q *Queries) OperatorAuditPage(ctx context.Context, arg OperatorAuditPagePa
 		arg.Actor,
 		arg.FromAt,
 		arg.ToAt,
+		arg.QLike,
 		arg.AfterAt,
 		arg.AfterID,
 		arg.Lim,

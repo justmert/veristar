@@ -40,15 +40,19 @@ func (h *AuditLog) Routes(r chi.Router) {
 	r.Method(http.MethodGet, "/audit", httpx.HandlerFunc(h.list))
 }
 
-// AuditEntry is one audit row of contract 5.9.
+// AuditEntry is one audit row of contract 5.9. the display names are
+// resolved when the row is read (resolveAuditNames), so a rename shows the
+// current name and a deleted object a placeholder.
 type AuditEntry struct {
-	ID         int64           `json:"id"`
-	At         httpx.Timestamp `json:"at"`
-	Actor      string          `json:"actor"`
-	ActorLogin *string         `json:"actor_login"`
-	Action     string          `json:"action"`
-	Target     string          `json:"target"`
-	Detail     json.RawMessage `json:"detail"`
+	ID                int64           `json:"id"`
+	At                httpx.Timestamp `json:"at"`
+	Actor             string          `json:"actor"`
+	ActorLogin        *string         `json:"actor_login"`
+	ActorDisplayName  *string         `json:"actor_display_name"`
+	Action            string          `json:"action"`
+	Target            string          `json:"target"`
+	TargetDisplayName *string         `json:"target_display_name"`
+	Detail            json.RawMessage `json:"detail"`
 }
 
 // ToAuditEntry converts a row; the tenant detail route (contract 5.4
@@ -117,7 +121,7 @@ func parseAuditQuery(r *http.Request) (systemq.OperatorAuditPageParams, int, err
 	var p systemq.OperatorAuditPageParams
 	for key := range q {
 		switch key {
-		case "tenant_id", "target", "action", "actor", "from", "to", "limit", "cursor":
+		case "tenant_id", "target", "action", "actor", "q", "from", "to", "limit", "cursor":
 		default:
 			return p, 0, httpx.BadQuery("unknown query parameter " + key)
 		}
@@ -157,6 +161,14 @@ func parseAuditQuery(r *http.Request) (systemq.OperatorAuditPageParams, int, err
 	}
 	if p.Actor, err = single(q, "actor"); err != nil {
 		return p, 0, err
+	}
+	search, err := single(q, "q")
+	if err != nil {
+		return p, 0, err
+	}
+	if search != nil {
+		like := "%" + likeEscaper.Replace(*search) + "%"
+		p.QLike = &like
 	}
 	action, err := single(q, "action")
 	if err != nil {
@@ -209,21 +221,23 @@ func (h *AuditLog) list(w http.ResponseWriter, r *http.Request) error {
 	}
 	ctx := r.Context()
 	var rows []systemq.OperatorAuditPageRow
+	var out httpx.List[AuditEntry]
 	if err := h.db.WithSystem(ctx, func(tx pgx.Tx) error {
 		var qerr error
-		rows, qerr = systemq.New(tx).OperatorAuditPage(ctx, p)
-		return qerr
+		if rows, qerr = systemq.New(tx).OperatorAuditPage(ctx, p); qerr != nil {
+			return qerr
+		}
+		if len(rows) > limit {
+			out.NextCursor = encodeAuditCursor(rows[limit-1].At, rows[limit-1].ID)
+			rows = rows[:limit]
+		}
+		out.Items = make([]AuditEntry, 0, len(rows))
+		for _, row := range rows {
+			out.Items = append(out.Items, ToAuditEntry(row))
+		}
+		return resolveAuditNames(ctx, tx, out.Items)
 	}); err != nil {
 		return fmt.Errorf("operator: audit page: %w", err)
-	}
-	out := httpx.List[AuditEntry]{Items: make([]AuditEntry, 0, min(len(rows), limit))}
-	for i, row := range rows {
-		if i == limit {
-			last := rows[limit-1]
-			out.NextCursor = encodeAuditCursor(last.At, last.ID)
-			break
-		}
-		out.Items = append(out.Items, ToAuditEntry(row))
 	}
 	httpx.WriteJSON(w, http.StatusOK, out)
 	return nil

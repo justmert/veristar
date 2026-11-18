@@ -1502,8 +1502,15 @@ Operator. **200**:
 - `ingest` sums `cp.web_ingest_hourly` over all the tenant's sites for the last 24
   full hours and 30 full days (UTC), non-zero outcomes only.
 - `removal`: `null`, or for a removed tenant
-  `{"requested_at", "requested_by", "keep_aggregates", "completed_at", "steps": {"registry": {"done_at": "..."}, ...}}`
-  from `cp.tenant_removals`.
+  `{"requested_at", "requested_by", "requested_by_login", "requested_by_display_name", "reason", "keep_aggregates", "completed_at", "steps": {"registry": {"done_at": "..."}, ...}}`
+  from `cp.tenant_removals`. `requested_by` is the operator's user id.
+  `requested_by_login` is that account's GitHub login, `null` for an account
+  without one or a deleted account. `requested_by_display_name` is its
+  display name (the login, else the short wallet or passkey address), or
+  `Deleted account` for an account deleted since (4.1.6). Both are `null`
+  when `requested_by` is `null`.
+- `recent_audit`: the last 20 rows of 5.9 for the tenant, with the same
+  display names.
 - `allowed_actions`: the actions of 5.5 valid from the current status, so the
   console shows only those buttons.
 - 404 `not_found` for unknown, malformed or internal ids.
@@ -1702,18 +1709,42 @@ Operator. List envelope of AuditEntry, ordered by `(at desc, id desc)`, under
 
 ```json
 { "id": 1234, "at": "...", "actor": "user:uuid", "actor_login": "octocat",
-  "action": "tenant.suspend", "target": "tenant:uuid",
+  "actor_display_name": "octocat",
+  "action": "tenant.suspend", "target": "tenant:uuid", "target_display_name": "Acme",
   "detail": { "tenant_id": "uuid", "status": { "old": "active", "new": "suspended" }, "reason": "..." } }
 ```
 
 - `id` is the `cp.audit_log` identity (a number). `actor_login` is the
   `github_login` for `user:` actors, else `null`. It is also `null` for the
   actor of a deleted account (4.1.6).
+- `actor_display_name` names a `user:` actor as the console names an
+  account: the GitHub login, else the short form of the wallet or passkey
+  address (`GBRP…OX2H`). It is `Deleted account` for an account deleted
+  since (4.1.6), and `null` for every other actor (`system:<task>`,
+  `public`, `mcp_credential:<id>`).
+- `target_display_name` names the target: the project's name for
+  `tenant:<id>`, the site's name for `site:<id>`, the account's display name
+  for `user:<id>` (as `actor_display_name`), and `Report <from> to <to>`
+  (period dates) for `report:<id>`. The names are read with the row, so a
+  renamed project shows its current name and a removed project or site keeps
+  its name. An object that no longer exists has a fixed placeholder:
+  `Deleted account`, `Deleted project`, `Deleted site` or `Deleted report`
+  (the reports of a removed project are deleted, 5.5). Every other target
+  kind, and an empty target, is `null`.
 - Query filters, all optional and combined with AND: `tenant_id` (rows whose
   `target` is `tenant:<id>` or whose `detail.tenant_id` is `<id>`), `target`
   (exact), `action` (exact, or a prefix ending in `.`, such as `tenant.`),
-  `actor` (exact), `from` and `to` (RFC 3339, `from < to`, at most 400 days
-  apart), `limit`, `cursor`.
+  `actor` (exact), `q` (text search, below), `from` and `to` (RFC 3339,
+  `from < to`, at most 400 days apart), `limit`, `cursor`.
+- `q` (1 to 200 characters) matches case-insensitively, as a substring, and
+  `%` and `_` are plain characters. A row matches when its `action`,
+  `actor`, `target` or `detail` text holds `q`; when its `user:` actor or
+  target is a live account whose GitHub login, wallet address or passkey
+  address holds `q`; when its target is a project whose name or slug holds
+  `q`, or a site whose name or domain holds `q`; or when its
+  `detail.tenant_id` is such a project. A trigram index over the row text
+  (migration 00052) serves the search, and the result pages like any other
+  filter.
 - 400 `invalid_query` for a malformed value.
 
 ### 5.10 Tenant-visible status and reason
