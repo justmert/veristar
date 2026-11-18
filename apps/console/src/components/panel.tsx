@@ -13,6 +13,7 @@ export function Panel({
   bodyClassName,
   as: As = "section",
   flush = false,
+  rows = false,
   ...rest
 }: {
   title?: ReactNode;
@@ -24,6 +25,9 @@ export function Panel({
   as?: "section" | "div" | "article";
   // the body has no padding: a table or a list runs to the panel's edge
   flush?: boolean;
+  // the body is a list of rows: each child is one row, split from the next
+  // by a divider, never a bordered card of its own (no box in a box)
+  rows?: boolean;
 } & Omit<React.HTMLAttributes<HTMLElement>, "title">) {
   return (
     <As
@@ -41,8 +45,10 @@ export function Panel({
       ) : null}
       <div
         className={cn(
-          flush ? "" : "px-4 pb-4 sm:px-5",
-          !title && !actions && !flush && "pt-4",
+          flush ? "" : rows ? "px-4 pb-1 sm:px-5" : "px-4 pb-4 sm:px-5",
+          !title && !actions && !flush && !rows && "pt-4",
+          rows && "flex flex-col divide-y divide-line-subtle [&>*]:py-3",
+          rows && (title || actions) && "[&>*:first-child]:pt-0",
           bodyClassName,
         )}
       >
