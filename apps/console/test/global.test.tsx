@@ -20,7 +20,7 @@ import {
   writeListState,
 } from "@/lib/global";
 import { API_COLUMNS, WEB_COLUMNS } from "@/lib/operator-projects";
-import { ComparePage } from "@/pages/operator/compare";
+import { ComparePage, latencyAxis, percentAxis } from "@/pages/operator/compare";
 import { OperatorProjectsPage } from "@/pages/operator/projects";
 import * as c from "./fixtures/contract";
 import * as f from "./fixtures/global";
@@ -404,6 +404,27 @@ describe("comparison", () => {
     const host = await renderRoutes(operatorRoutes, "/operator/compare");
     await waitFor(() => expect(host.textContent).toContain("No project is selected"));
     expect(calls).toEqual([]);
+  });
+});
+
+describe("comparison axes", () => {
+  it("keep the decimals a rate step needs", () => {
+    const axis = percentAxis([[0.009, null], [0.002]]);
+    expect([0, 0.0025, 0.005, 0.0075, 0.01].map(axis)).toEqual([
+      "0%",
+      "0.25%",
+      "0.50%",
+      "0.75%",
+      "1.00%",
+    ]);
+    expect([0, 0.25, 0.5].map(percentAxis([[0.44]]))).toEqual(["0%", "25%", "50%"]);
+  });
+
+  it("draw latency in one unit that fits the values", () => {
+    const ms = latencyAxis([[0.342], [0.739, null]]);
+    expect([0, 0.2, 0.8].map(ms)).toEqual(["0 ms", "200 ms", "800 ms"]);
+    const s = latencyAxis([[2.25]]);
+    expect([0, 0.5, 2.5].map(s)).toEqual(["0 s", "0.5 s", "2.5 s"]);
   });
 });
 
