@@ -19,7 +19,7 @@ import (
 	"github.com/justmert/veristar/internal/db"
 )
 
-// the award search of the enrollment form (control-plane-api 4.2.8): a
+// the award search of the enrollment form (control-plane-api 4.2.7): a
 // signed-in person types a project name or website and picks the project's
 // award, and the form fills the cohort, the website and the stellar ids. a
 // result holds what the form fills and nothing else.

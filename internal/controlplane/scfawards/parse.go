@@ -13,7 +13,7 @@ import (
 	"unicode/utf8"
 )
 
-// field is one column the import maps. every other column of the export is
+// field is one column the import maps. every other column of the file is
 // read past and never kept.
 type field int
 
@@ -39,7 +39,7 @@ var fieldNames = [fieldCount]string{
 func (f field) String() string { return fieldNames[f] }
 
 // positions are the columns of a file without a header row: the layout of
-// scf's build award export (column 0 repeats the project name, column 25
+// the scf awards file (column 0 repeats the project name, column 25
 // names a person and is never read).
 var positions = [fieldCount]int{
 	fProject: 3, fRound: 1, fCategory: 4, fAwardType: 11, fAwardDate: 10, fAwardAmount: 7,
@@ -148,7 +148,7 @@ func Parse(data []byte, today time.Time) (Parsed, error) {
 		r.Comma = '\t'
 		p.Delimiter = "tab"
 	}
-	// the export writes quotes inside unquoted fields (a description that
+	// awards files write quotes inside unquoted fields (a description that
 	// quotes a word); they are text, as spreadsheet tools read them
 	r.LazyQuotes = true
 	r.FieldsPerRecord = -1
@@ -349,7 +349,7 @@ func parseRow(rec []string, cols [fieldCount]int, hasHeader bool, today time.Tim
 	return a, nil
 }
 
-// parseDate reads m/d/yyyy, the export's form, or yyyy-mm-dd.
+// parseDate reads m/d/yyyy, the files' form, or yyyy-mm-dd.
 func parseDate(s string) (time.Time, error) {
 	if d, err := time.Parse(time.DateOnly, s); err == nil {
 		return d, nil

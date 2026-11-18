@@ -321,7 +321,7 @@ func start(t *testing.T) *env {
 	require.NoError(t, err)
 	ruleRoutes, err := operator.NewRules(e.conn, time.Now)
 	require.NoError(t, err)
-	// the scf award search of the enrollment form (contract 4.2.8) and the
+	// the scf award search of the enrollment form (contract 4.2.7) and the
 	// award matching on enrollment and site creation (19.5)
 	scfSearch, err := scfawards.NewSearch(e.conn, time.Now)
 	require.NoError(t, err)

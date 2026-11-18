@@ -40,7 +40,6 @@ that one project only and never the operator tools.
 | `get_tenant_contract_functions` | **Calls per function** of one verified contract, per function, caller and UTC day |
 | `list_cohorts` | the cohort filters: the confirmed programs, rounds and categories with their project counts, and the proposals waiting for you; both overviews filter by cohort and carry each project's change against the previous period and percentile in the cohort |
 | `list_threshold_rules`, `get_threshold_rule_matches` | Rules: the saved traction rules, and the projects that meet one with their qualifying days and integrity grade |
-| `list_scf_awards` | The imported SCF awards: the project each one matches and the evidence, whether Veristar measures that project, its cohort beside the award, and counts by round and category ([scf-awards.md](scf-awards.md)) |
 
 Ranges are whole UTC days, both included, at most 366 days, the 30 days ending today by default.
 Sessions and raw events are never part of the operator view.

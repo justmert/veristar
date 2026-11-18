@@ -503,11 +503,12 @@ every other change in the console.
 
 ### SCF award directory
 
-Operators import SCF's build award export to see which funded projects the
-service measures (contract section 19.5). The export holds personal data of
-the applicants next to the organisation data: names of people, LinkedIn and X
-profiles, images, document and DocSend links, descriptions and traction text.
-The import keeps organisation data only, and drops the rest at parse time:
+Operators import an SCF awards file so the enrollment form can search the
+awards and the service can propose a funded project's cohort (contract
+sections 4.2.7 and 19.5). An awards file can hold personal data next to the
+organisation data: names of people, LinkedIn and X profiles, images, document
+and DocSend links, descriptions and traction text. The import keeps
+organisation data only, and drops the rest at parse time:
 
 - `platformctl scf import` reads the file from standard input or a path into
   memory once. The service never writes the file to disk, and records only its
@@ -527,7 +528,11 @@ not, so no tenant reads it and no tenant purge touches it
 award matches an enrolled project only on exact evidence, a website host or a
 verified on-chain id, never a name, and the match writes no personal data: the
 cohort proposal it makes holds the award's program, round, category and award
-date, and its audit row names the evidence.
+date, and its audit row names the evidence. The award search of the
+enrollment form answers a signed-in person with, per matching project, its
+name, round, category, program, award date, website and Stellar ids, at most
+ten projects and thirty searches a minute; the amounts, tranches and counts
+stay in the database.
 
 The report signing key signs reports only. It is a Stellar key that holds no
 funds and signs no transaction; its public account id is published.

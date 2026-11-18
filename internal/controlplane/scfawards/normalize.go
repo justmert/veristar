@@ -1,12 +1,14 @@
-// Package scfawards imports the scf build award export into the award
-// directory (cp.scf_awards, migration 00050), matches the funded projects
-// to enrolled projects on exact evidence and writes cohort proposals from
-// the matches (control-plane-api section 19.5).
+// Package scfawards imports an scf awards file into the award directory
+// (cp.scf_awards, migration 00050), matches the funded projects to
+// enrolled projects on exact evidence, writes cohort proposals from the
+// matches (control-plane-api section 19.5) and serves the award search of
+// the enrollment form (4.2.7).
 //
-// the export holds personal data next to the organisation data: names of
-// people, linkedin and x handles, document links, descriptions and
-// traction text. the parser reads only the organisation fields it maps and
-// the stellar ids found in the row, so nothing else leaves this package.
+// an awards file can hold personal data next to the organisation data:
+// names of people, linkedin and x handles, document links, descriptions
+// and traction text. the parser reads only the organisation fields it maps
+// and the stellar ids found in the row, so nothing else leaves this
+// package.
 package scfawards
 
 import (
@@ -24,7 +26,7 @@ import (
 // ProgramBuildAward is the cohort program of an scf build award.
 const ProgramBuildAward = "Build Award"
 
-// programs maps the export's award type, folded to lower case, to the
+// programs maps the file's award type, folded to lower case, to the
 // cohort program. a type outside the table rejects the row, so a new kind
 // of award gets a program on purpose, not by accident.
 var programs = map[string]string{
@@ -32,7 +34,7 @@ var programs = map[string]string{
 	"build award": ProgramBuildAward,
 }
 
-// Categories maps the export's category, folded to lower case, to the
+// Categories maps the file's category, folded to lower case, to the
 // cohort category (docs/operators/scf-awards.md lists the table). scf names
 // its categories itself and operators compare projects by them, so each
 // keeps its scf name; the table fixes the spelling and refuses a category
@@ -57,7 +59,7 @@ func fold(s string) string { return strings.ToLower(collapse(s)) }
 var roundRe = regexp.MustCompile(`(?i)^scf\s*#\s*0*([0-9]{1,4})$`)
 
 // NormalizeRound returns the round as "SCF #<n>", the form operators
-// filter by. the export writes some rounds with a trailing space.
+// filter by. some files write rounds with a trailing space.
 func NormalizeRound(s string) (string, bool) {
 	m := roundRe.FindStringSubmatch(collapse(s))
 	if m == nil {

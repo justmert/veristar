@@ -15,13 +15,13 @@ import (
 )
 
 const scfUsage = `  scf import [-dry-run] FILE
-                    import an scf build award export (FILE, or - for standard
-                    input; tab or comma separated, with or without a header
-                    row) into the award directory, upserting by project and
-                    round, then match every award to the enrolled projects
-                    and write cohort proposals. keeps organisation data only;
-                    prints the counts and every rejected row with its reason.
-                    -dry-run parses and reports without touching the database
+                    import an scf awards file (FILE, or - for standard input;
+                    tab or comma separated, with or without a header row)
+                    into the award directory, upserting by project and round,
+                    then match every award to the enrolled projects and write
+                    cohort proposals. keeps organisation data only; prints the
+                    counts and every rejected row with its reason. -dry-run
+                    parses and reports without touching the database
   scf match         run the matching and the cohort proposals again without
                     importing, after projects proved new evidence
 `
@@ -80,12 +80,12 @@ func runSCF(ctx context.Context, args []string, env *config.Env, stdin io.Reader
 	return errors.New("usage: platformctl scf import [-dry-run] FILE | scf match")
 }
 
-// readExport reads the export from path, or from standard input for "-",
+// readExport reads the awards file from path, or from standard input for "-",
 // so the file can stream over ssh and never rest on a server.
 func readExport(path string, stdin io.Reader) ([]byte, error) {
 	r := stdin
 	if path != "-" {
-		f, err := os.Open(path) //nolint:gosec // the operator names the export to import
+		f, err := os.Open(path) //nolint:gosec // the operator names the file to import
 		if err != nil {
 			return nil, err
 		}

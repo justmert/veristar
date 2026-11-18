@@ -88,7 +88,7 @@ SCF decides by program, round, category and award date, so every project carries
 values. They come from three sides:
 
 1. A project proposes them, at enrollment or later on its **SCF review** page.
-2. The SCF award import proposes them for every funded project it matches on exact evidence
+2. The SCF award matching proposes them for a matched project that has no proposal
    ([scf-awards.md](scf-awards.md)).
 3. You confirm the proposal on the project's detail page, edit it before confirming, set the
    values yourself, or dismiss the proposal. Only confirmed values count.
