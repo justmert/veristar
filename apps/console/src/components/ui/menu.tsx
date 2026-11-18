@@ -86,8 +86,35 @@ function MenuRadioItem({
   );
 }
 
+// an on or off choice inside a menu, such as a column of a table; the menu
+// stays open so several can be changed in a row
+function MenuCheckboxItem({
+  className,
+  children,
+  ...props
+}: React.ComponentProps<typeof M.CheckboxItem>) {
+  return (
+    <M.CheckboxItem
+      onSelect={(e) => e.preventDefault()}
+      className={cn(
+        "flex h-8 cursor-pointer select-none items-center gap-2 rounded-sm px-2 text-body outline-none transition-colors duration-(--vs-duration-press) data-[disabled]:pointer-events-none data-[highlighted]:bg-hover data-[disabled]:text-disabled-fg [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-fg-2",
+        className,
+      )}
+      {...props}
+    >
+      <span className="flex size-4 items-center justify-center">
+        <M.ItemIndicator>
+          <Check aria-hidden />
+        </M.ItemIndicator>
+      </span>
+      {children}
+    </M.CheckboxItem>
+  );
+}
+
 export {
   Menu,
+  MenuCheckboxItem,
   MenuContent,
   MenuItem,
   MenuLabel,
