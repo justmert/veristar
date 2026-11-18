@@ -123,7 +123,7 @@ test("an operator saves a threshold rule and opens its matches", async () => {
   await form.getByLabel("Name").fill(`Steady web ${run}`);
   await form.getByLabel("Minimum per day").fill("1");
   await form.getByLabel("Days per month").fill("1");
-  await form.getByLabel("Months", { exact: true }).fill("1");
+  await form.getByRole("textbox", { name: /^Months( \(required\))?$/ }).fill("1");
   // the cohort is chosen from the confirmed values
   await form.getByLabel("SCF program").selectOption(PROGRAM);
   await form.getByRole("button", { name: "Save rule" }).click();
