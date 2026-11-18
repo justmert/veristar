@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/justmert/veristar/internal/events"
+	"github.com/justmert/veristar/tests/fixtures/browserbox"
 )
 
 // the example sites of tests/e2e/sites.ts (SITES), with the same fixed ids
@@ -48,10 +49,14 @@ func TestBrowserMatrix(t *testing.T) {
 	}
 	mark := lastSeq(t, s.JS)
 
+	// the browsers run in a container of their own, out of reach of the
+	// host's network changes; they reach the fixture's proxy
+	// (tests/e2e/sites.ts PORTS.proxy) through it
+	box := browserbox.Start(t, 47080)
 	eventLog := filepath.Join(t.TempDir(), "events.jsonl")
 	cmd := exec.Command("pnpm", "--filter", "@veristar/e2e", "exec", "playwright", "test")
 	cmd.Dir = repoRoot()
-	cmd.Env = append(os.Environ(), "SA_E2E_GATEWAY_UPSTREAM="+caddyAddr, "SA_E2E_EVENT_LOG="+eventLog)
+	cmd.Env = append(append(os.Environ(), box.Env()...), "SA_E2E_GATEWAY_UPSTREAM="+caddyAddr, "SA_E2E_EVENT_LOG="+eventLog)
 	out, err := cmd.CombinedOutput()
 	summary := string(out)
 	if i := strings.LastIndex(summary, "Running "); i >= 0 {

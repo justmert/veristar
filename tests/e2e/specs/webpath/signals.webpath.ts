@@ -179,24 +179,53 @@ test("a page inside a frame says so on every event @signals", async ({ page }) =
   expect((await byType(spa, "pv"))[0]?.fr).toBeUndefined();
 });
 
+// a chromium process with no debugger attached. with the browsers in a
+// container (tests/fixtures/browserbox) it starts there through docker exec,
+// so it shares their network namespace and reaches the proxy on the same
+// loopback port; otherwise it is playwright's chromium on this machine
+function startUndebuggedChromium(args: string[]): { stop: () => Promise<void> } {
+  const box = process.env.SA_E2E_BROWSER_BOX;
+  if (box) {
+    const proc = spawn("docker", ["exec", "-i", box, "node", "/box/bin/undebugged.mjs", ...args], {
+      stdio: ["pipe", "ignore", "ignore"],
+    });
+    const exited = new Promise((resolve) => proc.once("exit", resolve));
+    return {
+      // closing stdin ends chromium inside the container and removes its profile
+      stop: async () => {
+        proc.stdin.end();
+        await exited;
+      },
+    };
+  }
+  const dir = mkdtempSync(join(tmpdir(), "sa-prerender-"));
+  const proc = spawn(chromium.executablePath(), [...args, `--user-data-dir=${dir}`], {
+    stdio: "ignore",
+  });
+  const exited = new Promise((resolve) => proc.once("exit", resolve));
+  return {
+    // the profile is removed once chromium has exited, or it can still be
+    // writing to it
+    stop: async () => {
+      proc.kill();
+      await exited;
+      rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+    },
+  };
+}
+
 test("a prerendered page counts on activation and fetches nothing before @signals-prerender", async ({
   browserName,
 }) => {
   test.skip(browserName !== "chromium", "prerendering exists in chromium only");
-  const dir = mkdtempSync(join(tmpdir(), "sa-prerender-"));
-  const proc = spawn(
-    chromium.executablePath(),
-    [
-      "--headless",
-      "--no-first-run",
-      "--no-default-browser-check",
-      `--user-data-dir=${dir}`,
-      `--proxy-server=http://127.0.0.1:${PORTS.proxy}`,
-      "--ignore-certificate-errors",
-      `${spa.origin}/__prerender?to=/&delay=6000`,
-    ],
-    { stdio: "ignore" },
-  );
+  const chrome = startUndebuggedChromium([
+    "--headless",
+    "--no-first-run",
+    "--no-default-browser-check",
+    `--proxy-server=http://127.0.0.1:${PORTS.proxy}`,
+    "--ignore-certificate-errors",
+    `${spa.origin}/__prerender?to=/&delay=6000`,
+  ]);
   try {
     // the prerendered page loads sdk.js under the prerender purpose header
     await expect
@@ -218,12 +247,7 @@ test("a prerendered page counts on activation and fetches nothing before @signal
     expect(evs[0]?.verdict.status).toBe(202);
     expect(evs[0]?.headers["sec-purpose"]).toBeUndefined();
   } finally {
-    // the profile is removed once chromium has exited, or it can still be
-    // writing to it
-    const exited = new Promise((resolve) => proc.once("exit", resolve));
-    proc.kill();
-    await exited;
-    rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+    await chrome.stop();
   }
 });
 
