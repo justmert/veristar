@@ -1,4 +1,4 @@
-import { arrival, page, stagger, transition } from "@veristar/brand/motion";
+import { page, stagger, transition } from "@veristar/brand/motion";
 import { animate, MotionConfig, motion, useInView } from "motion/react";
 import { type ReactNode, useEffect, useRef } from "react";
 
@@ -59,21 +59,6 @@ export function StaggerItem({
     <C variants={{ initial: page.initial, animate: page.animate }} className={className} {...rest}>
       {children}
     </C>
-  );
-}
-
-// something new: a row or an event that arrived while the page was open
-export function Arrival({ children, className }: { children: ReactNode; className?: string }) {
-  return (
-    <motion.div
-      layout
-      initial={arrival.initial}
-      animate={arrival.animate}
-      exit={arrival.exit}
-      className={className}
-    >
-      {children}
-    </motion.div>
   );
 }
 

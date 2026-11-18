@@ -6,10 +6,11 @@ import { CopyButton } from "@/components/copy-button";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 
-// a secret shown once (R7): masked by default, reveal and copy, and the
-// person confirms they stored it before the panel can close. afterwards
-// only its prefix or last characters are ever shown.
-export function OneTimeSecret({
+// the one "copy it now" panel for every token and key: the secret is shown
+// once, masked by default, with reveal and copy, and the person confirms
+// they stored it before the panel can close. afterwards only its prefix or
+// last characters are ever shown.
+export function SecretPanel({
   value,
   title,
   description,

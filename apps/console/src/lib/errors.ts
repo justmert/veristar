@@ -153,3 +153,39 @@ function waitText(seconds: number | null): string {
 export function isNotFound(err: unknown): boolean {
   return err instanceof ApiError && err.status === 404;
 }
+
+const UUID = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi;
+const PATH = /(^|\s)\/[\w./{}:%-]+/g;
+
+// the error as one sentence for a person: errorText without the transport
+// detail (reference, code, status, ids and paths). the detail goes in
+// errorDetails, which "Copy details" puts on the clipboard.
+export function errorMessage(err: unknown): string {
+  const text = errorText(err)
+    .replace(/\s*Reference \S+?\.(?=\s|$)/g, "")
+    .replace(/\s*\([a-z_]+, HTTP \d+\)/g, "")
+    .replace(/\s*\((?:csrf_header_missing|origin_mismatch)\)/g, "")
+    .replace(UUID, "")
+    .replace(PATH, "$1")
+    .replace(/\s{2,}/g, " ")
+    .replace(/\s+([.,])/g, "$1")
+    .replace(/\.{2,}/g, ".")
+    .trim();
+  return text && text !== "." ? text : "The request failed.";
+}
+
+// what an operator needs to trace a failure in the logs, as plain lines
+export function errorDetails(err: unknown, now: Date = new Date()): string {
+  const lines: string[] = [];
+  if (err instanceof ApiError) {
+    if (err.requestId) lines.push(`Request id: ${err.requestId}`);
+    lines.push(`Error code: ${err.code}`, `HTTP status: ${err.status}`);
+    if (err.message) lines.push(`Message: ${err.message}`);
+  } else if (err instanceof Error) {
+    lines.push(`Error: ${err.name}`, `Message: ${err.message}`);
+  } else if (err !== undefined && err !== null) {
+    lines.push(`Error: ${String(err)}`);
+  }
+  lines.push(`Time: ${now.toISOString()}`);
+  return lines.join("\n");
+}

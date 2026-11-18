@@ -36,6 +36,22 @@ if (!("IntersectionObserver" in globalThis)) {
   } as unknown as typeof IntersectionObserver;
 }
 
+// jsdom has no matchMedia; the theme choice and the phone layouts read it.
+// the test dom is a wide screen with no colour scheme preference.
+if (typeof window !== "undefined" && !window.matchMedia) {
+  window.matchMedia = (query: string) =>
+    ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addEventListener() {},
+      removeEventListener() {},
+      addListener() {},
+      removeListener() {},
+      dispatchEvent: () => false,
+    }) as MediaQueryList;
+}
+
 // jsdom has no showModal or close on <dialog>. every supported browser has
 // them; this fills the test dom with the open attribute and the close event
 // the console relies on.

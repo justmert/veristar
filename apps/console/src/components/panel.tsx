@@ -1,8 +1,9 @@
 import { cn } from "@veristar/brand/cn";
 import type { ReactNode } from "react";
+import { PageHeader as SharedHeader } from "@/components/page-header";
 
-// the page title row: what the page answers, one line of context, and the
-// page's actions on the right
+// the older page header api; it draws the shared header so every page has
+// the same title step while it moves to components/page-header.tsx
 export function PageHeader({
   title,
   description,
@@ -17,16 +18,13 @@ export function PageHeader({
   className?: string;
 }) {
   return (
-    <div className={cn("flex flex-wrap items-start justify-between gap-x-6 gap-y-3", className)}>
-      <div className="flex min-w-0 flex-col gap-1">
-        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-          <h1 className="min-w-0 text-page text-fg">{title}</h1>
-          {meta}
-        </div>
-        {description ? <p className="max-w-prose text-body text-fg-2">{description}</p> : null}
-      </div>
-      {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
-    </div>
+    <SharedHeader
+      title={title}
+      description={description}
+      secondary={actions}
+      meta={meta}
+      className={className}
+    />
   );
 }
 
@@ -94,23 +92,6 @@ export function Fact({
     <div className={cn("flex min-w-0 flex-col gap-1", className)}>
       <dt className="text-caption text-fg-3">{label}</dt>
       <dd className="min-w-0 text-body text-fg">{children}</dd>
-    </div>
-  );
-}
-
-export function SectionTitle({
-  children,
-  actions,
-  className,
-}: {
-  children: ReactNode;
-  actions?: ReactNode;
-  className?: string;
-}) {
-  return (
-    <div className={cn("flex flex-wrap items-baseline justify-between gap-3", className)}>
-      <h2 className="text-section text-fg">{children}</h2>
-      {actions}
     </div>
   );
 }
