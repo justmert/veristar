@@ -1,0 +1,73 @@
+# the stellar anchor platform's sep server and platform server with the
+# opentelemetry java agent attached: request metrics go to veristar, traces to
+# the anchor's own otlp backend, logs nowhere.
+#
+#   ANCHOR_SEP10_SIGNING_SEED=S... ANCHOR_JWT_SECRET=... ANCHOR_DB_PASSWORD=... \
+#   TENANT_OTLP_ENDPOINT=http://otel-collector:4318 \
+#   PLATFORM_OTLP_ENDPOINT=https://otlp.<BASE_DOMAIN> PLATFORM_OTLP_TOKEN=sa_otlp_... \
+#     docker compose -f examples/otel-anchor-platform/compose.yaml up -d --build
+#
+# tests/otelapps (TestAnchorPlatform) runs this file against stock collectors.
+
+# docs:start otel
+# the java agent reads its settings from OTEL_* variables. metrics and traces
+# have their own endpoint, so each signal goes to one backend.
+x-otel: &otel
+  OTEL_METRICS_EXPORTER: otlp
+  OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: ${PLATFORM_OTLP_ENDPOINT:?set PLATFORM_OTLP_ENDPOINT}/v1/metrics
+  # the space in "Bearer <token>" is written %20: header values are url-encoded
+  OTEL_EXPORTER_OTLP_METRICS_HEADERS: Authorization=Bearer%20${PLATFORM_OTLP_TOKEN:?set PLATFORM_OTLP_TOKEN}
+  OTEL_METRIC_EXPORT_INTERVAL: ${METRICS_EXPORT_INTERVAL_MS:-60000}
+  # set to none if the anchor keeps no traces of its own
+  OTEL_TRACES_EXPORTER: otlp
+  OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: ${TENANT_OTLP_ENDPOINT:?set TENANT_OTLP_ENDPOINT}/v1/traces
+  OTEL_LOGS_EXPORTER: none
+# docs:end otel
+
+x-anchor-secrets: &anchor-secrets
+  SECRET_DATA_PASSWORD: ${ANCHOR_DB_PASSWORD:?set ANCHOR_DB_PASSWORD}
+  SECRET_SEP10_SIGNING_SEED: ${ANCHOR_SEP10_SIGNING_SEED:?set ANCHOR_SEP10_SIGNING_SEED}
+  SECRET_SEP10_JWT_SECRET: ${ANCHOR_JWT_SECRET:?set ANCHOR_JWT_SECRET}
+  SECRET_SEP24_INTERACTIVE_URL_JWT_SECRET: ${ANCHOR_JWT_SECRET:?set ANCHOR_JWT_SECRET}
+  SECRET_SEP24_MORE_INFO_URL_JWT_SECRET: ${ANCHOR_JWT_SECRET:?set ANCHOR_JWT_SECRET}
+
+services:
+  db:
+    image: postgres:18.7-trixie@sha256:2ea8630df176ad090ec92136dee850397c5af8781e4bcf2e4162593691c61bbc
+    environment:
+      POSTGRES_USER: anchor
+      POSTGRES_PASSWORD: ${ANCHOR_DB_PASSWORD:?set ANCHOR_DB_PASSWORD}
+      POSTGRES_DB: anchor
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "anchor", "-d", "anchor"]
+      interval: 2s
+      retries: 30
+
+  # docs:start services
+  sep-server:
+    build: .
+    image: anchor-platform-otel:5.0.0
+    command: ["--sep-server"]
+    env_file: anchor.env
+    environment:
+      <<: [*otel, *anchor-secrets]
+      OTEL_SERVICE_NAME: anchor-sep-server
+    volumes: ["./config:/config:ro"]
+    ports: ["127.0.0.1:8080:8080"]
+    depends_on:
+      db: { condition: service_healthy }
+
+  platform-server:
+    build: .
+    image: anchor-platform-otel:5.0.0
+    command: ["--platform-server"]
+    env_file: anchor.env
+    environment:
+      <<: [*otel, *anchor-secrets]
+      OTEL_SERVICE_NAME: anchor-platform-server
+    volumes: ["./config:/config:ro"]
+    ports: ["127.0.0.1:8085:8085"]
+    depends_on:
+      db: { condition: service_healthy }
+      sep-server: { condition: service_started }
+  # docs:end services

@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/justmert/veristar/internal/config"
+	"github.com/justmert/veristar/internal/events"
 	"github.com/justmert/veristar/internal/obs"
 	"github.com/justmert/veristar/tests/fixtures/natsctr"
 )
@@ -31,7 +32,7 @@ func TestNATSApplyAndCheck(t *testing.T) {
 	require.NoError(t, runNATSWith(ctx, []string{"apply"}, env("1"), log))
 	require.NotContains(t, logs.String(), `"action":"create"`)
 	require.NotContains(t, logs.String(), `"action":"update"`)
-	require.Equal(t, 13, strings.Count(logs.String(), `"action":"unchanged"`))
+	require.Equal(t, 5+5+events.Partitions+2, strings.Count(logs.String(), `"action":"unchanged"`))
 	require.NoError(t, runNATSWith(ctx, []string{"check"}, env("1"), log))
 
 	// three replicas cannot be placed on one server; the error is not hidden

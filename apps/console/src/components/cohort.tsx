@@ -12,13 +12,24 @@ import {
   cohortKeys,
   operatorCohortQuery,
 } from "@/api/cohorts";
-import { ErrorPanel, FormMessage, Loading } from "@/components/error-panel";
+import { FormMessage } from "@/components/error-panel";
 import { TextField } from "@/components/form-field";
 import { Fact, Panel } from "@/components/panel";
 import { DateField } from "@/components/range-control";
+import { ErrorState, LoadingState, Skeleton } from "@/components/states";
 import { Pill } from "@/components/status";
 import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/format";
+
+// a percentile places a project among at least this many projects; in a
+// smaller cohort one project more or less moves it by a quarter or more
+export const PERCENTILE_MIN_COHORT = 5;
+
+export function percentileHiddenReason(cohortSize: number): string | null {
+  return cohortSize < PERCENTILE_MIN_COHORT
+    ? `Fewer than ${PERCENTILE_MIN_COHORT} projects in the cohort`
+    : null;
+}
 
 export type CohortValues = { program: string; round: string; category: string; award_date: string };
 
@@ -196,8 +207,19 @@ export function OperatorCohortPanel({ tenantId }: { tenantId: string }) {
         ) : null
       }
     >
-      {q.isPending ? <Loading label="Loading the cohort" rows={1} /> : null}
-      {q.error ? <ErrorPanel error={q.error} onRetry={() => q.refetch()} /> : null}
+      {q.isPending ? (
+        <LoadingState label="Loading the cohort">
+          <Skeleton.Table rows={1} columns={4} />
+        </LoadingState>
+      ) : null}
+      {q.error ? (
+        <ErrorState
+          compact
+          title="The cohort did not load"
+          error={q.error}
+          onRetry={() => q.refetch()}
+        />
+      ) : null}
       {q.data ? (
         <div className="flex flex-col gap-4">
           {editing ? (

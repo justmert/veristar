@@ -13,14 +13,14 @@ or the file to an SCF submission instead of assembling screenshots.
 ## Create a report
 
 1. Open your project and choose **SCF review**. The reports are in its **Signed reports**
-   section.
-2. Pick the period. A report covers whole UTC days, at most 366 days, and ends four days before
+   section, which also lists what a report contains.
+2. Pick the period: enter the first and the last day as `2026-11-18`. A report covers whole UTC days, at most 366 days, and ends four days before
    today at the latest: Veristar reads today and the three days before it again to count late
    events and grade them, so only older days are final, and a signed number never changes.
 3. Choose **Generate and sign**.
 
 Any member of the project who accepted the current terms creates reports. A project can create 20 reports per 24 hours.
-The report holds the numbers "What SCF sees" shows for the same period, including the estimate of
+The report holds the numbers **SCF review** shows for the same period, including the estimate of
 visits not measured because of privacy signals, the API flags (no data, lossy, infrastructure
 requests left out) and the weekly active accounts, and the versions of every definition behind them,
 including every integrity rule version that graded the period.
@@ -32,7 +32,8 @@ guess. Anyone with the link sees the report and needs no account. The page check
 in the visitor's browser and shows whether it is valid and which of Veristar's keys signed it,
 and offers the signed file as JSON.
 
-The **Signed reports** section lists your reports with their link and how often each link was opened. A
+The **Signed reports** section lists your reports with how often each link was opened. **Copy link**
+copies a report's link; its menu opens the report, downloads the JSON or revokes the link. A
 report never changes after it is created. To stop sharing one, choose **Revoke link**: the link
 then answers "not available" for everyone, and revoking cannot be undone. Your members still see
 the revoked report in the **Signed reports** section. Creating a report, revoking its link and every view
@@ -40,11 +41,13 @@ of the link are in the audit log; a view records no trait of the person who open
 
 ## Your cohort
 
-Your report and your "What SCF sees" page show your percentiles inside your SCF cohort: the
+Your report and your **SCF review** page show your percentiles inside your SCF cohort: the
 projects in your program and round. An owner of the project proposes your program, round,
-category and award date at enrollment or on the "What SCF sees" page; an SCF operator confirms
+category and award date at enrollment or on the **SCF review** page; an SCF operator confirms
 them. Until then your
-percentiles are among all enrolled projects.
+percentiles are among all enrolled projects. A percentile shows only in a cohort of 5 projects or
+more; in a smaller cohort one project more or less moves it too far, so the page and the report page
+show why it is missing instead (the signed JSON file keeps the value).
 
 ## Verify a report
 

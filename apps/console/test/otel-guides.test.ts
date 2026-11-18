@@ -12,8 +12,8 @@ function read(dir: string, path: string): string {
 describe("api analytics guides built from the example apps", () => {
   const guides = otelGuides();
 
-  it("has the four languages of the example apps", () => {
-    expect(guides.map((g) => g.id)).toEqual(["node", "go", "python", "rust"]);
+  it("has the five languages of the example apps", () => {
+    expect(guides.map((g) => g.id)).toEqual(["node", "go", "python", "rust", "java"]);
   });
 
   // a shown snippet must be the example's own code: every non-empty line,
@@ -54,6 +54,9 @@ describe("api analytics guides built from the example apps", () => {
     expect(code("python")).toContain("metric_reader(PLATFORM_ENDPOINT, AUTH)");
     expect(code("rust")).toContain('format!("Bearer {}", c.platform_token)');
     expect(code("rust")).toContain(".with_headers(auth.clone())");
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: the guide's source text must hold the placeholder itself
+    expect(code("java")).toContain("endpoint: ${PLATFORM_OTLP_ENDPOINT}/v1/metrics");
+    expect(code("java").match(/value: Bearer \$\{PLATFORM_OTLP_TOKEN\}/g)).toHaveLength(2);
   });
 
   it("shows python's semantic conventions opt-in from the Dockerfile and the readme", () => {

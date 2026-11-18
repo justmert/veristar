@@ -317,8 +317,8 @@
     {
       "id": 8,
       "type": "stat",
-      "title": "replayer leader",
-      "description": "1 on the instance that holds the replayer lock.",
+      "title": "replayer partitions owned",
+      "description": "WEB_EVENTS partitions each replayer owns. together they own all 32; an instance that owns none is idle or starting.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -335,7 +335,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "replayer_leader{node=~\"$node\"}",
+          "expr": "replayer_partitions_owned{node=~\"$node\"}",
           "legendFormat": "{{node}}",
           "refId": "A"
         }
@@ -343,31 +343,12 @@
       "fieldConfig": {
         "defaults": {
           "unit": "short",
-          "mappings": [
-            {
-              "type": "value",
-              "options": {
-                "0": {
-                  "text": "down",
-                  "color": "red"
-                },
-                "1": {
-                  "text": "ok",
-                  "color": "green"
-                }
-              }
-            }
-          ],
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "red",
+                "color": "blue",
                 "value": null
-              },
-              {
-                "color": "green",
-                "value": 1
               }
             ]
           }
@@ -382,7 +363,7 @@
           "fields": "",
           "values": false
         },
-        "colorMode": "background",
+        "colorMode": "value",
         "graphMode": "none",
         "textMode": "auto"
       }
@@ -444,7 +425,7 @@
       "id": 10,
       "type": "timeseries",
       "title": "replayer lag and oldest held message",
-      "description": "the replayer's own view: pending and unacknowledged messages, and the age of the oldest message it holds.",
+      "description": "the replayers' own view, summed over the instances: pending and unacknowledged messages of the partitions they own, and the age of the oldest message any of them holds.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -461,7 +442,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(replayer_consumer_pending_messages{node=~\"$node\"})",
+          "expr": "sum(replayer_consumer_pending_messages{node=~\"$node\"})",
           "legendFormat": "pending",
           "refId": "A"
         },
@@ -470,7 +451,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(replayer_consumer_ack_pending_messages{node=~\"$node\"})",
+          "expr": "sum(replayer_consumer_ack_pending_messages{node=~\"$node\"})",
           "legendFormat": "ack pending",
           "refId": "B"
         },
@@ -479,7 +460,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(replayer_in_flight_messages{node=~\"$node\"})",
+          "expr": "sum(replayer_in_flight_messages{node=~\"$node\"})",
           "legendFormat": "in flight",
           "refId": "C"
         }
@@ -565,13 +546,101 @@
       }
     },
     {
+      "id": 15,
+      "type": "timeseries",
+      "title": "replayer backlog by partition",
+      "description": "pending plus unacknowledged messages of each WEB_EVENTS partition, from its owner. one partition far above the others points at its owner or at one heavy visitor.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 42,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (partition) (replayer_partition_pending_messages{node=~\"$node\"} + replayer_partition_ack_pending_messages{node=~\"$node\"})",
+          "legendFormat": "{{partition}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "hidden",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 16,
+      "type": "timeseries",
+      "title": "oldest held message by partition",
+      "description": "age of the oldest message each partition's owner holds unacknowledged.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 42,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max by (partition) (replayer_partition_oldest_pending_age_seconds{node=~\"$node\"})",
+          "legendFormat": "{{partition}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "hidden",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
       "id": 12,
       "type": "row",
       "title": "metrics writer",
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 42,
+        "y": 50,
         "w": 24,
         "h": 1
       },
@@ -588,7 +657,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 43,
+        "y": 51,
         "w": 12,
         "h": 8
       },
@@ -661,7 +730,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 43,
+        "y": 51,
         "w": 12,
         "h": 8
       },

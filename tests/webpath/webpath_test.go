@@ -610,9 +610,9 @@ func (su *suite) outage(t *testing.T, container, tag string) {
 }
 
 // replayerKill stops both replayers, queues 400 browser events, starts one
-// replayer and kills it with SIGKILL while it delivers. the standby takes
-// over; nothing may be lost and events stored twice may not exceed what was
-// in flight at the kill.
+// replayer and kills it with SIGKILL while it delivers. the other replayer
+// takes over every partition the killed one owned; nothing may be lost and
+// events stored twice may not exceed what was in flight at the kill.
 func (su *suite) replayerKill(t *testing.T) {
 	s := su.s
 	s.ResetSites(t, su.sites(siteAstro))
@@ -630,7 +630,8 @@ func (su *suite) replayerKill(t *testing.T) {
 	t.Logf("%d browser events queued with both replayers stopped", len(logged))
 	s.start(t, a.Name)
 	waitHTTP(t, a.OpsURL+"/healthz", time.Minute)
-	// wait for a to lead before b starts, so b is the standby
+	// wait for a to own partitions before b starts, so a holds the queue
+	// when b joins and the kill finds a delivering
 	deadline := time.Now().Add(2 * time.Minute)
 	for mustScrape(t, a.OpsURL)["replayer_leader"] != 1 {
 		if time.Now().After(deadline) {

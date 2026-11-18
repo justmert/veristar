@@ -69,6 +69,49 @@ func NewOnchain(d *db.DB, now func() time.Time) (*Onchain, error) {
 // Routes registers the path under the guarded /api/operator router.
 func (o *Onchain) Routes(r chi.Router) {
 	r.Method(http.MethodGet, "/tenants/{tenant_id}/onchain", httpx.HandlerFunc(o.detail))
+	r.Method(http.MethodGet, "/tenants/{tenant_id}/onchain/ids/{chain_id}/functions", httpx.HandlerFunc(o.functions))
+}
+
+// functions serves GET /api/operator/tenants/{tenant_id}/onchain/ids/{chain_id}/functions,
+// a declared contract's calls per function, caller and day.
+func (o *Onchain) functions(w http.ResponseWriter, r *http.Request) error {
+	id, err := httpx.ParseID(chi.URLParam(r, "tenant_id"))
+	if err != nil {
+		return err
+	}
+	chainID, err := httpx.ParseID(chi.URLParam(r, "chain_id"))
+	if err != nil {
+		return err
+	}
+	now := o.now()
+	rg, err := onchain.ParseRange(r.URL.Query(), now, onchain.DefaultRangeDays, onchain.MaxRangeDays)
+	if err != nil {
+		return err
+	}
+	ctx := r.Context()
+	var v onchain.ContractFunctions
+	err = o.db.WithOperator(ctx, func(tx pgx.Tx) error {
+		if err := snapshot(ctx, tx); err != nil {
+			return err
+		}
+		if _, err := compareTenants(ctx, tx, []uuid.UUID{id}); err != nil {
+			return err
+		}
+		x, ok, lerr := onchain.LoadFunctions(ctx, tx, id, chainID, rg, utcDay(now))
+		if lerr != nil {
+			return lerr
+		}
+		if !ok {
+			return httpx.NotFound()
+		}
+		v = x
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	httpx.WriteJSON(w, http.StatusOK, v)
+	return nil
 }
 
 func (o *Onchain) detail(w http.ResponseWriter, r *http.Request) error {

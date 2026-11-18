@@ -21,6 +21,9 @@ func compose(t *testing.T, env []string, args ...string) string {
 
 func TestOtelApps(t *testing.T) {
 	sel := selectedApps()
+	if len(sel) == 0 && strings.Contains(","+os.Getenv("OTELAPPS_APPS")+",", ",anchor-platform,") {
+		t.Skip("OTELAPPS_APPS names only anchor-platform (TestAnchorPlatform)")
+	}
 	if len(sel) == 0 {
 		t.Fatalf("OTELAPPS_APPS=%q matches no app", os.Getenv("OTELAPPS_APPS"))
 	}
@@ -104,9 +107,10 @@ func runCase(t *testing.T, a app, m mode) {
 
 	for _, backend := range []string{"tenant", "platform"} {
 		dir := filepath.Join(out, backend)
-		got := waitForCounts(t, dir, a.name, m, totalRequests())
+		got := waitForCounts(t, dir, a, m, totalRequests())
 		checkMetrics(t, backend, got.metrics, m, want)
 		checkTraces(t, backend, got.traces, want)
+		checkProbe(t, backend, a, m, got)
 	}
 }
 

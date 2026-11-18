@@ -1,0 +1,28 @@
+{
+  "name": "@veristar/example-docusaurus",
+  "private": true,
+  "scripts": {
+    "build": "docusaurus build",
+    "start": "docusaurus serve --host 127.0.0.1 --no-open --port ${PORT:-3000}",
+    "test": "node --test 'test/*.test.ts'"
+  },
+  "dependencies": {
+    "@docusaurus/core": "3.10.2",
+    "@docusaurus/preset-classic": "3.10.2",
+    "@mdx-js/react": "3.1.1",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "@docusaurus/types": "3.10.2",
+    "@types/node": "26.6.6"
+  },
+  "engines": {
+    "node": "26.13.1"
+  },
+  "overrides": {
+    "serialize-javascript": "7.1.4",
+    "tinypool": "2.2.0",
+    "uuid": "11.1.1"
+  }
+}

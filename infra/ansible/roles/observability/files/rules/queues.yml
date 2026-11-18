@@ -11,6 +11,11 @@ groups:
         expr: max by (stream_name) (jetstream_stream_first_seq)
       - record: sa:consumer_backlog:max
         expr: max by (stream_name, consumer_name) (jetstream_consumer_num_pending + jetstream_consumer_num_ack_pending)
+      # the replayer consumes WEB_EVENTS through one consumer per partition
+      # (replayer-p00 to replayer-p31) and, while an upgrade drains it, the
+      # legacy consumer "replayer"; its backlog is their sum
+      - record: sa:replayer_backlog:sum
+        expr: sum by (stream_name) (sa:consumer_backlog:max{stream_name="WEB_EVENTS",consumer_name=~"replayer(-p[0-9]+)?"})
 
       # the exporter has no first-message timestamp. WEB_EVENTS and
       # API_METRICS are work queues, so the first sequence is the oldest
@@ -28,7 +33,7 @@ groups:
           runbook: docs/runbooks/alerts.md#queueoldestmessagetooold
 
       - alert: ReplayerLagHigh
-        expr: sa:consumer_backlog:max{stream_name="WEB_EVENTS",consumer_name="replayer"} > 5000
+        expr: sa:replayer_backlog:sum > 5000
         for: 10m
         labels: {severity: ticket}
         annotations:
@@ -37,9 +42,11 @@ groups:
       # WEB_EVENTS keeps a message at most 72 hours (max age, discard old)
       # and then drops it without a trace, so a backlog that the replayer
       # drains more slowly than the gateways fill it ends in lost page views.
-      # the leader reports the stream publish time of the oldest message it
-      # holds, which in a backlog is the oldest message of the stream, since
-      # it fetches in stream order. a standby reports 0, hence max().
+      # each instance reports the stream publish time of the oldest message
+      # it holds over the partitions it owns. every partition is fetched in
+      # stream order, so in a backlog the largest of these is the oldest
+      # message of the stream. an instance that holds nothing reports 0,
+      # hence max().
       - alert: WebEventsDelayed
         expr: max(replayer_oldest_pending_age_seconds) > 3600
         for: 10m
@@ -57,8 +64,8 @@ groups:
       # faster than the replayer delivers, so it will not drain by itself
       - alert: WebEventsBacklogGrowing
         expr: |
-          (sa:consumer_backlog:max{stream_name="WEB_EVENTS",consumer_name="replayer"} > 10000)
-          and (delta(sa:consumer_backlog:max{stream_name="WEB_EVENTS",consumer_name="replayer"}[1h]) > 0)
+          (sa:replayer_backlog:sum > 10000)
+          and (delta(sa:replayer_backlog:sum[1h]) > 0)
         for: 30m
         labels: {severity: ticket}
         annotations:
@@ -71,17 +78,28 @@ groups:
         annotations:
           summary: "{{ $value }} metric batches wait for the metrics writer"
           runbook: docs/runbooks/alerts.md#metricswriterlaghigh
-      # no instance holds the lock: nothing consumes, whatever the backlog
+      # no instance owns a partition: nothing consumes, whatever the backlog
       - alert: ReplayerNotConsuming
         expr: (sum(replayer_leader) < 1) or absent(replayer_leader)
         for: 2m
         labels: {severity: page}
         annotations:
-          summary: "no replayer instance holds the lock and consumes WEB_EVENTS"
+          summary: "no replayer instance owns a WEB_EVENTS partition and consumes"
           runbook: docs/runbooks/alerts.md#replayernotconsuming
-      # the replayer sends each visitor to one umami process. a process that
-      # stopped answering holds its visitors back in their lanes while the
-      # others go on, so the leader's total rate alone hides it. above one
+      # some partitions have no owner: their visitors' events wait while the
+      # others are delivered. a node that stops hands its partitions over
+      # within seconds and a killed one within about a minute (lock ttl and
+      # ack wait), so 5 minutes is a real gap
+      - alert: ReplayerPartitionsUnowned
+        expr: max(replayer_partitions) - sum(replayer_partitions_owned) > 0
+        for: 5m
+        labels: {severity: page}
+        annotations:
+          summary: "{{ $value }} WEB_EVENTS partitions have no replayer owner"
+          runbook: docs/runbooks/alerts.md#replayerpartitionsunowned
+      # the replayer sends each visitor to one umami process of its node. a
+      # process that stopped answering holds its visitors back in their lanes
+      # while the others go on, so the node's total rate alone hides it. above one
       # event a second the visitors spread over every process; below it a
       # process can see none for ten minutes by chance.
       - alert: ReplayerUmamiProcessIdle

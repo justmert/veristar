@@ -100,20 +100,28 @@ contention add time, which the production drills measure.
 - **The port-80 health check sees no TLS failure.** A broken certificate on port 443 leaves the
   node in DNS. The prober checks each node's certificate by its own address, and the
   `CertificateExpiringSoon` alert fires 14 days before expiry.
-- **Web event drain rate.** Ingestion and delivery are two rates. Every node accepts events,
-  but one replayer, the holder of the `replayer` lock, delivers them for the whole cluster to
-  the `core_umami_processes` (2) Umami processes of its own node, so delivery does not grow with
-  the node count ([capacity.md](capacity.md), "Web events end to end", says why and what
-  delivery from every node would need). The delivery rate of a production node has not been
-  measured. The local drill gave 280 events a second for one Umami process
-  ([drills/2026-11-13.md](drills/2026-11-13.md)); scaled by the drill's 1.5x for two processes
-  that is about 420 a second, an estimate. Local runs on 2026-11-17 on a contended host drained
-  282 to 696 a second. Against the expected peak (50 a second) that leaves room; above the
-  delivery rate, as in a long 10x burst (500 a second), events queue in `WEB_EVENTS` and the
-  dashboards fall behind. The queue keeps an event at most 72 hours and then drops it, and a
-  large backlog can fill the NATS file store first, which stops ingestion;
-  `WebEventsDelayed`, `WebEventsBacklogGrowing` and `WebEventsNearDiscard` announce both
-  ([../runbooks/alerts.md](../runbooks/alerts.md)).
+- **Web event drain rate.** Ingestion and delivery are two rates. Every node accepts events, and
+  every node's replayer delivers the web event partitions it owns (11, 11 and 10 of 32 on three
+  nodes) to the `core_umami_processes` (2) Umami processes of its own node, so delivery grows
+  with the node count ([capacity.md](capacity.md), "Web events end to end"). On production on
+  2026-11-18, with release `0.4.0` and one replayer delivering for the whole cluster, the cluster
+  delivered 55.5 events a second end to end, challenges included, every event stored in Umami in
+  the second it was sent and the queue never holding one: above the expected peak, but the rate
+  one address could offer, not the ceiling. The delivery ceiling of a production node has not been
+  measured. The local drill gave 280 events a second for one
+  Umami process ([drills/2026-11-13.md](drills/2026-11-13.md)); scaled by the drill's 1.5x for
+  two processes that is about 420 a second per node, an estimate. Local runs on 2026-11-17 on a
+  contended host, with every node's containers on that one host and one Umami process per node,
+  drained 238 to 417 a second with one replayer node, 340 to 586 with two and 447 to 637 with
+  three. Against the expected peak (50 a second) that leaves room; above the delivery rate, as in
+  a long 10x burst (500 a second), events queue in `WEB_EVENTS` and the dashboards fall behind.
+  The queue keeps an event at most 72 hours and then drops it, and a large backlog can fill the
+  NATS file store first, which stops ingestion; `WebEventsDelayed`, `WebEventsBacklogGrowing`
+  and `WebEventsNearDiscard` announce both ([../runbooks/alerts.md](../runbooks/alerts.md)).
+- **Node loss and web delivery.** A node that stops hands its partitions to the other replayers
+  within seconds; a node that is lost holds them until their locks expire (15 s) and its
+  unacknowledged events can be redelivered (at most 30 s), then the others deliver them. While a
+  node is down the remaining nodes deliver every partition.
 - **Three database members.** With one member down the leader still has a synchronous
   standby; only with two members down does the leader run alone, and a further failure in that
   time loses what only the leader had, back to the last archived WAL (`archive_timeout` 60 s).

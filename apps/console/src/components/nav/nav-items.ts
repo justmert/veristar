@@ -254,9 +254,3 @@ export function pageTitle(pathname: string): string {
   if (a.kind === "home" && a.rest === "projects/new") return "Enroll a project";
   return currentItem(pathname)?.label ?? "Veristar";
 }
-
-// the on-chain and scf pages still pass this to a tab bar; the sidebar
-// lists every page now, so there is no second level to draw
-export function projectTabs(_id: string, _place: string): null {
-  return null;
-}

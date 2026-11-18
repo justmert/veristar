@@ -4,8 +4,9 @@ import { Link, Outlet, useOutletContext, useParams } from "react-router";
 import { api } from "@/api/endpoints";
 import { keys, meQuery, tenantQuery } from "@/api/queries";
 import type { Me, Tenant } from "@/api/schemas";
-import { ErrorPanel, FormMessage, Loading } from "@/components/error-panel";
+import { FormMessage } from "@/components/error-panel";
 import { Notice as ToneNotice } from "@/components/notice";
+import { ErrorState, LoadingState, Skeleton } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { isNotFound } from "@/lib/errors";
 import { NotFoundPage, ProjectsButton, StopPage } from "@/pages/public/not-found";
@@ -23,7 +24,13 @@ export function ProjectLayout() {
   const me = useQuery(meQuery);
   const tenant = useQuery(tenantQuery(tenantId));
 
-  if (tenant.isPending || me.isPending) return <Loading label="Loading the project" />;
+  if (tenant.isPending || me.isPending)
+    return (
+      <LoadingState label="Loading the project">
+        <Skeleton.StatRow count={3} />
+        <Skeleton.Table rows={3} />
+      </LoadingState>
+    );
   if (isNotFound(tenant.error)) {
     // a removed project answers 404 everywhere (contract 1.3); /api/me still
     // lists it with the operator's reason (5.10)
@@ -34,8 +41,18 @@ export function ProjectLayout() {
       <NotFoundPage />
     );
   }
-  if (tenant.error) return <ErrorPanel error={tenant.error} onRetry={() => tenant.refetch()} />;
-  if (me.error) return <ErrorPanel error={me.error} onRetry={() => me.refetch()} />;
+  if (tenant.error)
+    return (
+      <ErrorState
+        title="The project did not load"
+        error={tenant.error}
+        onRetry={() => tenant.refetch()}
+      />
+    );
+  if (me.error)
+    return (
+      <ErrorState title="Your account did not load" error={me.error} onRetry={() => me.refetch()} />
+    );
 
   const t = tenant.data;
   const current = me.data.terms.current_version;

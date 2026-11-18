@@ -22,6 +22,10 @@ const MISSING: Record<string, string> = {
   week_not_counted: "Weekly active accounts were not counted for this week",
   no_verified_ids:
     "The project had no verified account or contract; only verified ones count toward weekly active accounts",
+  not_verified: "The contract is not verified; only verified contracts count",
+  not_a_contract: "An account has no contract functions",
+  no_call_tree:
+    "The ledger API sent no call tree for a transaction; only the calls of accounts are counted",
 };
 
 export function missingText(code: string): string {
@@ -79,16 +83,48 @@ export function missingReasons(id: ChainId): { code: string; days: number }[] {
   return [...by.entries()].map(([code, days]) => ({ code, days })).sort((a, b) => b.days - a.days);
 }
 
-// the project's daily sum over its ids; a day no id has a row for is null
-export function dailyOperations(v: OnchainView): { day: string; value: number | null }[] {
-  return v.days.map((day, i) => {
-    let sum: number | null = null;
-    for (const id of v.ids) {
-      const n = id.series[i]?.operations;
-      if (n !== null && n !== undefined) sum = (sum ?? 0) + n;
+// one definition of "Days without data" for every page that shows it
+export const DAYS_WITHOUT_DATA =
+  "Days before today without a ledger read, added up over the verified ids.";
+
+// the activity of a range as scf reviewers count it: verified ids only, and
+// days before today. the on-chain view sums every declared id, today
+// included; these figures read the same as the scf review and the operator
+// views (contract 15.7), so one label never has two definitions.
+export type VerifiedActivity = {
+  verified: number;
+  operations: number;
+  transactions: number;
+  // verified id-days of the range before today without a stored row
+  daysMissing: number;
+  // one point per day: the sum of the verified ids that have a row, or
+  // missing with a reason when none has one
+  daily: { day: string; value: number | null; missing: string | null }[];
+};
+
+export function verifiedActivity(v: OnchainView): VerifiedActivity {
+  const ids = v.ids.filter((id) => id.verification.status === "verified");
+  let operations = 0;
+  let transactions = 0;
+  let daysMissing = 0;
+  for (const id of ids) {
+    for (const p of id.series) {
+      if (p.operations !== null) operations += p.operations;
+      if (p.transactions !== null) transactions += p.transactions;
+      if (p.operations === null && p.missing !== "day_not_complete") daysMissing++;
     }
-    return { day, value: sum };
+  }
+  const daily = v.days.map((day, i) => {
+    let sum: number | null = null;
+    let missing: string | null = ids.length === 0 ? "no_verified_ids" : null;
+    for (const id of ids) {
+      const p = id.series[i];
+      if (p?.operations !== null && p?.operations !== undefined) sum = (sum ?? 0) + p.operations;
+      else if (p?.missing && !missing) missing = p.missing;
+    }
+    return { day, value: sum, missing: sum === null ? missing : null };
   });
+  return { verified: ids.length, operations, transactions, daysMissing, daily };
 }
 
 // the weekly active accounts of a range in one line: the scf growth hack

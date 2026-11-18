@@ -125,6 +125,9 @@ var Want = map[string]map[db.Role]string{
 		db.RoleJobs:       "rawd",
 	},
 	"agg.chain_week_members": {db.RoleJobs: "rawd"},
+	// calls per contract function (00047): written by chain-activity, read
+	// by the tenant (its own rows) and operators
+	"agg.chain_function_daily": {db.RoleCPTenant: "r", db.RoleCPOperator: "r", db.RoleJobs: "rawd"},
 	// integrity (00033): the grades are read by the tenant (its own rows)
 	// and operators; edgestats and integrity write the evidence and network
 	// rows behind them, and cp_system deletes those in a purge

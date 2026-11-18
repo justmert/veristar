@@ -1,6 +1,6 @@
-// the on-chain witness, "what scf sees" and the csv exports, end to end. an
+// the on-chain witness, the scf review and the csv exports, end to end. an
 // owner declares an account in the console and sees it unverified with a
-// challenge to prove it; the scf view and the overview export answer for
+// challenge to prove it; the scf review and the overview export answer for
 // the project; another project's member gets 404 on every route of it; an
 // operator sees the on-chain column, exports exactly the rows on screen
 // and reads the on-chain section of the project's detail.
@@ -48,6 +48,7 @@ test.afterAll(async () => {
 test("an owner declares an account and gets a challenge to prove it", async () => {
   const { page } = owner;
   await page.goto(`${APP}/projects/${tenant.id}/onchain`);
+  await expect(page.getByRole("heading", { name: "On-chain", level: 1 })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Accounts and contracts" })).toBeVisible();
   await page.getByLabel("Account or contract").fill("not-a-key");
   await page.getByRole("button", { name: "Add", exact: true }).click();
@@ -57,7 +58,8 @@ test("an owner declares an account and gets a challenge to prove it", async () =
 
   await page.getByLabel("Account or contract").fill(ACCOUNT);
   await page.getByRole("button", { name: "Add", exact: true }).click();
-  await expect(page.getByText(ACCOUNT, { exact: true })).toBeVisible();
+  // the id shows in its short form, the whole id in its tooltip
+  await expect(page.locator(`[data-strkey="${ACCOUNT}"]`)).toBeVisible();
   await expect(page.getByText("Unverified").first()).toBeVisible();
 
   await page.getByRole("button", { name: "Prove control" }).click();
@@ -107,14 +109,30 @@ test("an owner declares an account and gets a challenge to prove it", async () =
   }
   expect(weekly.body.totals.weekly_active_accounts.average).toBeNull();
   expect(weekly.body.totals.weekly_active_accounts.weeks_missing).toBe(weekly.body.weeks.length);
+  // the on-chain page shows every week of its default range with its
+  // reason, and the summary says that none was counted
+  await page.goto(`${APP}/projects/${tenant.id}/onchain`);
+  await expect(page.getByRole("heading", { name: "Weekly active accounts" })).toBeVisible();
+  const weeks = page.getByRole("list", { name: "Weekly active accounts per ISO week" });
+  await expect(weeks.locator("[data-week]")).toHaveCount(weekly.body.weeks.length);
+  await expect(
+    weeks.locator("[data-week]").first().locator("[data-missing]").first(),
+  ).toBeAttached();
+  await expect(weeks.locator("[data-week]").first()).not.toContainText(/\b0\b/);
+  await expect(page.getByTestId("waa-summary")).toContainText("No complete week counted");
+  // the project has no verified id, so its activity counts nothing yet
+  await expect(page.getByTestId("activity-scope")).toContainText(
+    "0 of 1 account or contract verified",
+  );
 });
 
-test("what scf sees and the overview export answer for the project", async () => {
+test("scf review and the overview export answer for the project", async () => {
   const { page, ctx } = owner;
   await page.goto(`${APP}/projects/${tenant.id}/scf`);
-  await expect(page.getByRole("heading", { name: "What SCF sees" })).toBeVisible();
-  await expect(page.getByText("The project's on-chain column.")).toBeVisible();
-  await expect(page.getByText("Weekly active accounts", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "SCF review", level: 1 })).toBeVisible();
+  const chain = page.getByRole("region", { name: "On-chain" });
+  await expect(chain).toContainText("0 of 1");
+  await expect(chain.getByText("Weekly active accounts", { exact: true })).toBeVisible();
   const href = await page.getByRole("link", { name: "Export CSV" }).getAttribute("href");
   expect(href).toMatch(new RegExp(`^/api/tenants/${tenant.id}/overview\\.csv\\?from=`));
 
@@ -163,7 +181,7 @@ test("another project's member sees none of it", async ({ browser }) => {
     const chainId = view.body.ids[0]?.id ?? "";
     for (const [method, path, body] of [
       ["GET", `/api/tenants/${tenant.id}/onchain`],
-      ["GET", `/api/tenants/${tenant.id}/scf`],
+      ["GET", `/api/tenants/${tenant.id}/scf-view`],
       ["GET", `/api/tenants/${tenant.id}/overview.csv`],
       ["POST", `/api/tenants/${tenant.id}/onchain/ids`, { strkey: ACCOUNT }],
       ["POST", `/api/tenants/${tenant.id}/onchain/ids/${chainId}/challenge`, {}],
@@ -224,5 +242,113 @@ test("an operator sees the column, exports the rows on screen and reads the deta
     await expect(section).toContainText("Unverified");
   } finally {
     await ctx.close();
+  }
+});
+
+// calls per contract function (contract 15.9): a declared contract that is
+// not verified counts nowhere, so it shows no calls and every day says why;
+// an account has no functions. the routes keep to their tenant
+const CONTRACT = "CBQDHNBFBZYE4MKPWBSJOPIYLW4SFSXAXUTSXJN76GNKYVYPCKWC6QUK";
+
+type Functions = {
+  kind: string;
+  verified: boolean;
+  functions: unknown[];
+  days: { day: string; state: string | null; missing: string | null }[];
+};
+
+test("an unverified contract shows no calls per function, and the routes keep to the project", async ({
+  browser,
+}) => {
+  const { page, ctx } = owner;
+  const added = await api<{ id: string }>(ctx, "POST", `/api/tenants/${tenant.id}/onchain/ids`, {
+    strkey: CONTRACT,
+  });
+  expect(added.status).toBe(201);
+  const contractId = added.body.id;
+  const view = await api<{ ids: { id: string; strkey: string; functions: unknown }[] }>(
+    ctx,
+    "GET",
+    `/api/tenants/${tenant.id}/onchain`,
+  );
+  for (const id of view.body.ids) expect(id.functions).toBeNull();
+  const accountId = view.body.ids.find((x) => x.strkey === ACCOUNT)?.id ?? "";
+
+  await page.goto(`${APP}/projects/${tenant.id}/onchain`);
+  const block = page.getByRole("region", { name: `Calls per function of ${CONTRACT}` });
+  await expect(block).toContainText("Calls per function show when the contract is verified");
+  await expect(block.getByRole("table")).toHaveCount(0);
+
+  const fns = await api<Functions>(
+    ctx,
+    "GET",
+    `/api/tenants/${tenant.id}/onchain/ids/${contractId}/functions`,
+  );
+  expect(fns.status).toBe(200);
+  expect(fns.body.kind).toBe("contract");
+  expect(fns.body.verified).toBe(false);
+  expect(fns.body.functions).toEqual([]);
+  expect(fns.body.days).toHaveLength(30);
+  for (const d of fns.body.days) {
+    expect(d.state).toBeNull();
+    expect(d.missing).toBe("not_verified");
+  }
+  const acct = await api<Functions>(
+    ctx,
+    "GET",
+    `/api/tenants/${tenant.id}/onchain/ids/${accountId}/functions`,
+  );
+  expect(acct.body.kind).toBe("account");
+  expect(acct.body.days[0]?.missing).toBe("not_a_contract");
+
+  const csv = await ctx.request.get(
+    `${APP}/api/tenants/${tenant.id}/onchain/ids/${contractId}/functions.csv`,
+  );
+  expect(csv.status()).toBe(200);
+  expect(csv.headers()["content-type"]).toBe("text/csv; charset=utf-8");
+  expect((await csv.text()).trim().split("\n")).toEqual([
+    "day,strkey,function,caller,day_state,day_missing,successful,failed,accounts",
+  ]);
+
+  // another project's member gets 404 on both routes
+  const intruder = await browser.newContext();
+  try {
+    await signIn(await intruder.newPage(), newUser("onchain-fn-intruder"));
+    for (const path of [
+      `/api/tenants/${tenant.id}/onchain/ids/${contractId}/functions`,
+      `/api/tenants/${tenant.id}/onchain/ids/${contractId}/functions.csv`,
+    ]) {
+      const r = await api(intruder, "GET", path);
+      expect(r.status, path).toBe(404);
+      expect(JSON.stringify(r.body)).not.toContain(CONTRACT);
+    }
+  } finally {
+    await intruder.close();
+  }
+
+  // an operator reads the same answer and its export
+  const op = await browser.newContext();
+  try {
+    const opPage = await op.newPage();
+    await signIn(opPage, OPERATOR);
+    await operatorStepUp(opPage, OPERATOR);
+    const r = await api<Functions>(
+      op,
+      "GET",
+      `/api/operator/tenants/${tenant.id}/onchain/ids/${contractId}/functions`,
+    );
+    expect(r.status).toBe(200);
+    expect(r.body).toEqual(fns.body);
+    const file = await op.request.get(
+      `${APP}/api/operator/tenants/${tenant.id}/onchain/ids/${contractId}/functions.csv`,
+    );
+    expect(file.status()).toBe(200);
+    await opPage.goto(`${APP}/operator/projects/${tenant.id}`);
+    await opPage.getByText("On-chain ids", { exact: true }).click();
+    await expect(
+      opPage.getByRole("region", { name: `Calls per function of ${CONTRACT}` }),
+    ).toContainText("Calls per function show when the contract is verified");
+  } finally {
+    await op.close();
   }
 });

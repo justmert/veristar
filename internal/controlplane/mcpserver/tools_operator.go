@@ -23,7 +23,8 @@ How to work:
 	`carries the change against the previous period and the percentile inside the cohort filters (list_cohorts).
 3. compare_tenants_web and compare_tenants_api put up to five projects side by side with daily series.
 4. get_tenant_onchain returns one project's declared Stellar accounts and contracts, their proofs and daily ledger ` +
-	`activity; the overviews and compares carry an onchain summary per project.
+	`activity; get_tenant_contract_functions gives a contract's calls per function and day; the overviews and ` +
+	`compares carry an onchain summary per project.
 5. list_threshold_rules and get_threshold_rule_matches list the saved traction rules and the projects that meet ` +
 	`each, with the qualifying days and the integrity grade as evidence.
 

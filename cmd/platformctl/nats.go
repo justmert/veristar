@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"log/slog"
@@ -23,6 +24,11 @@ import (
 // natsUsage lists the nats subcommands for the main usage text.
 const natsUsage = `  nats apply        create or update every nats stream, bucket and consumer (NATS_URL, NATS_REPLICAS)
   nats check        report differences between the server and the topology, change nothing
+  nats retire-legacy-web [--wait 10m]
+                    after an upgrade to partitioned web events, once every gateway runs
+                    the new release: waits until the replayer delivered every event of
+                    the old single web subject, then removes that subject and its consumer
+                    (docs/deploy/upgrade.md)
   nats auth-config  print the nats server authorization block for every service user;
                     reads a json object {"<user>": "<bcrypt hash>"} on stdin
 `
@@ -42,8 +48,11 @@ func runNATS(ctx context.Context, args []string) error {
 }
 
 func runNATSWith(ctx context.Context, args []string, env *config.Env, log *slog.Logger) error {
+	if len(args) >= 1 && args[0] == "retire-legacy-web" {
+		return runRetireLegacyWeb(ctx, args[1:], env, log)
+	}
 	if len(args) != 1 || (args[0] != "apply" && args[0] != "check") {
-		return fmt.Errorf("usage: platformctl nats apply|check, got %q", strings.Join(args, " "))
+		return fmt.Errorf("usage: platformctl nats apply|check|retire-legacy-web, got %q", strings.Join(args, " "))
 	}
 	cfg, err := config.LoadNATS(env)
 	if err != nil {
@@ -85,6 +94,43 @@ func runNATSWith(ctx context.Context, args []string, env *config.Env, log *slog.
 		}
 	}
 	log.Info("nats topology in place", "replicas", cfg.Replicas, "objects", len(changes))
+	return nil
+}
+
+// retirePoll is how often retire-legacy-web checks the legacy subject while
+// the replayer drains it.
+const retirePoll = 2 * time.Second
+
+func runRetireLegacyWeb(ctx context.Context, args []string, env *config.Env, log *slog.Logger) error {
+	fs := flag.NewFlagSet("nats retire-legacy-web", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	wait := fs.Duration("wait", 10*time.Minute, "how long to wait for the replayer to deliver the last legacy events")
+	if err := fs.Parse(args); err != nil {
+		return fmt.Errorf("nats retire-legacy-web: %w", err)
+	}
+	if fs.NArg() != 0 || *wait < 0 {
+		return fmt.Errorf("usage: platformctl nats retire-legacy-web [--wait 10m], got %q", strings.Join(args, " "))
+	}
+	cfg, err := config.LoadNATS(env)
+	if err != nil {
+		return err
+	}
+	nc, err := natsx.Connect(cfg, natsx.ServicePlatformctl, log)
+	if err != nil {
+		return err
+	}
+	defer nc.Close()
+	js, err := jetstream.New(nc)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(ctx, *wait+natsTimeout)
+	defer cancel()
+	st, err := natsx.RetireLegacyWeb(ctx, js, *wait, retirePoll)
+	if err != nil {
+		return err
+	}
+	log.Info("legacy web subject retired", "subject", natsx.WebEventsLegacy, "consumer", natsx.ConsumerReplayer, "left", st.Messages)
 	return nil
 }
 

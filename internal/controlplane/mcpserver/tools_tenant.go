@@ -23,7 +23,8 @@ How to work:
 	`get_session_stats for sessions, and list_funnels, run_funnel, run_journey, run_retention and get_goals for reports.
 3. API analytics (from OpenTelemetry): list_api_services, then get_api_overview, get_api_timeseries, list_api_routes, ` +
 	`get_api_status_codes, get_api_top_error_routes and get_api_warnings.
-4. On-chain and review: get_onchain_activity for the declared Stellar accounts and contracts, and get_scf_view for ` +
+4. On-chain and review: get_onchain_activity for the declared Stellar accounts and contracts, get_contract_functions ` +
+	`for a contract's calls per function and day, and get_scf_view for ` +
 	`the figures SCF reviewers see about the project.
 
 Integrity: get_web_integrity returns the integrity grade (A, B or C) of the project's web traffic per site and day ` +
