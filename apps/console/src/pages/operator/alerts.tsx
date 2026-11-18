@@ -276,7 +276,7 @@ function SeverityList({ group, now }: { group: SeverityGroup; now: number }) {
   return (
     <section aria-labelledby={headingId} className="flex flex-col gap-3" data-severity={group.key}>
       <h2 id={headingId} className="flex items-baseline gap-2 text-title text-fg">
-        {groupTitle(group.key)}
+        {groupTitle(group.key)}{" "}
         <span className="font-mono text-small font-normal text-fg-2 tabular">
           {group.alerts.length}
         </span>
