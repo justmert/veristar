@@ -185,7 +185,7 @@ function SiteDays({ site, name }: { site: IntegritySite; name: string }) {
 // the sites of a report. sites without a graded day all say the same, so
 // they are one line with their names behind a toggle; only the graded
 // sites, the exceptions, get a row each
-function SiteList({
+export function SiteList({
   sites,
   siteNames,
 }: {

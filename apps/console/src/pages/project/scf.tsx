@@ -16,10 +16,11 @@ import type { IntegrityGrade } from "@/api/schemas";
 import { OwnCohortPanel, percentileHiddenReason } from "@/components/cohort";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { CopyButton } from "@/components/copy-button";
+import { CoverageNote } from "@/components/coverage";
 import { type Column, DataTable } from "@/components/data-table";
 import { Disclosure } from "@/components/disclosure";
 import { FormMessage } from "@/components/error-panel";
-import { GradeBadge, IntegrityPanel } from "@/components/integrity";
+import { AppealLink, GradeBadge, NetworkAttribution, SiteList } from "@/components/integrity";
 import { DayStrip } from "@/components/onchain";
 import { FunctionsTable, functionsDaysText } from "@/components/onchain-functions";
 import { PageHeader } from "@/components/page-header";
@@ -461,13 +462,23 @@ function IntegritySection({ v }: { v: SCFView }) {
         onRetry={() => report.refetch()}
       />
     );
+  // the verdict above already holds the grade and its reasons; here only
+  // what it rests on: each site's days, the estimate and the appeal
   return (
-    <IntegrityPanel
-      title="Integrity report"
-      report={report.data}
-      siteNames={names}
-      appeal={sites.data ? { slug: tenant.slug, siteDomains: names } : undefined}
-    />
+    <section
+      aria-label="Integrity report"
+      data-integrity={report.data.tenant_id}
+      className="flex min-w-0 flex-col gap-3"
+    >
+      <SiteList sites={report.data.sites} siteNames={names} />
+      <CoverageNote coverage={report.data.coverage} />
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <NetworkAttribution />
+        {sites.data ? (
+          <AppealLink report={report.data} appeal={{ slug: tenant.slug, siteDomains: names }} />
+        ) : null}
+      </div>
+    </section>
   );
 }
 
