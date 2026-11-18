@@ -28,6 +28,7 @@ export const meBody = {
     passkey_address: null,
     display_name: "octocat",
     is_operator: false,
+    operator_role: null,
   },
   tenants: [
     {
@@ -211,6 +212,7 @@ export const operatorMeBody = {
     passkey_address: null,
     display_name: "sa-operator",
     is_operator: true,
+    operator_role: "operator_admin",
   },
   tenants: [],
 };
@@ -714,26 +716,4 @@ export const steppedUpBody = {
   sign_in_passkey: false,
   enrollment: "closed",
   enrollment_until: null,
-};
-
-// 5.16 the roster as an operator admin reads it: the signed-in operator
-// (operatorMeBody) holds the admin role
-export const adminRosterBody = {
-  items: [
-    {
-      id: "0193a6f8-5555-7000-8000-000000000001",
-      kind: "github",
-      github_id: 1,
-      github_login: "sa-operator",
-      stellar_address: null,
-      role: "operator_admin",
-      status: "active",
-      status_reason: null,
-      bootstrap: true,
-      enrollment_until: null,
-      created_at: "2026-11-01T09:00:00Z",
-      updated_at: "2026-11-01T09:00:00Z",
-      account: null,
-    },
-  ],
 };

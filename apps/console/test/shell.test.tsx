@@ -7,7 +7,7 @@ import * as f from "./fixtures/contract";
 import { click, renderRoutes, waitFor } from "./helpers";
 
 // answers by url, so the shell's parallel reads need no fixed order
-function serve(me: unknown, alerts: unknown[] = [], roster: unknown = f.adminRosterBody) {
+function serve(me: unknown, alerts: unknown[] = []) {
   const urls: string[] = [];
   vi.stubGlobal(
     "fetch",
@@ -22,7 +22,6 @@ function serve(me: unknown, alerts: unknown[] = [], roster: unknown = f.adminRos
       if (input.startsWith(`/api/tenants/${f.TENANT_ID}`)) return json(200, f.tenantBody);
       if (input.startsWith("/api/tenants/")) return json(404, f.errorBody("not_found"));
       if (input === "/api/operator/step-up") return json(200, f.steppedUpBody);
-      if (input === "/api/operator/roster") return json(200, roster);
       if (input === "/api/operator/alerts")
         return json(200, {
           checked_at: "2026-11-13T12:00:05Z",
@@ -156,7 +155,7 @@ describe("console shell", () => {
   });
 
   it("signals firing alerts by the Alerts badge only, for an operator admin", async () => {
-    serve(f.operatorMeBody, [critical]);
+    const urls = serve(f.operatorMeBody, [critical]);
     const host = await renderRoutes(routes, "/operator/projects");
     await waitFor(() => expect(current(host)).toEqual(["All projects"]));
     // the badge counts every alert the Alerts page lists
@@ -170,6 +169,8 @@ describe("console shell", () => {
       a.textContent?.startsWith("Review"),
     );
     await waitFor(() => expect(review?.textContent).toBe("Review11 project waits for review"));
+    // /api/me names the role, so the roster is not read for it
+    expect(urls).not.toContain("/api/operator/roster");
     // nothing above the page title
     expect(host.querySelector('[role="alert"]')).toBeNull();
     // the switcher names the operator area; no project pages show here
@@ -178,12 +179,15 @@ describe("console shell", () => {
   });
 
   it("hides Alerts from an operator who is not an admin", async () => {
-    const urls = serve(f.operatorMeBody, [critical], {
-      items: [{ ...f.adminRosterBody.items[0], role: "operator" }],
-    });
+    const urls = serve(
+      { ...f.operatorMeBody, user: { ...f.operatorMeBody.user, operator_role: "operator" } },
+      [critical],
+    );
     const host = await renderRoutes(routes, "/operator/projects");
     await waitFor(() => expect(current(host)).toEqual(["All projects"]));
-    await waitFor(() => expect(urls).toContain("/api/operator/roster"));
+    await waitFor(() =>
+      expect(urls.some((u) => u.startsWith("/api/operator/tenants"))).toBe(true),
+    );
     const nav = host.querySelector('aside nav[aria-label="Operator"]') as HTMLElement;
     expect(nav.textContent).toContain("Review");
     expect(nav.textContent).not.toContain("Alerts");

@@ -140,7 +140,6 @@ describe("operator alerts page", () => {
     const calls = stubFetch([
       { status: 200, body: f.operatorMeBody },
       { status: 200, body: f.steppedUpBody },
-      { status: 200, body: f.adminRosterBody },
       { status: 200, body: body({ alerts: [alert(), ticket] }) },
     ]);
     const host = await renderRoutes(alertsRoute(), "/operator/alerts");
@@ -148,7 +147,6 @@ describe("operator alerts page", () => {
     expect(calls.map((c) => c.url)).toEqual([
       "/api/me",
       "/api/operator/step-up",
-      "/api/operator/roster",
       "/api/operator/alerts",
     ]);
 
@@ -179,7 +177,6 @@ describe("operator alerts page", () => {
     stubFetch([
       { status: 200, body: f.operatorMeBody },
       { status: 200, body: f.steppedUpBody },
-      { status: 200, body: f.adminRosterBody },
       { status: 200, body: body() },
     ]);
     const host = await renderRoutes(alertsRoute(), "/operator/alerts");
@@ -194,7 +191,6 @@ describe("operator alerts page", () => {
     stubFetch([
       { status: 200, body: f.operatorMeBody },
       { status: 200, body: f.steppedUpBody },
-      { status: 200, body: f.adminRosterBody },
       {
         status: 200,
         body: body({ watchdog_firing: false, sources: [{ ...source, watchdog_firing: false }] }),
@@ -210,7 +206,6 @@ describe("operator alerts page", () => {
     stubFetch([
       { status: 200, body: f.operatorMeBody },
       { status: 200, body: f.steppedUpBody },
-      { status: 200, body: f.adminRosterBody },
       {
         status: 200,
         body: body({
@@ -238,7 +233,6 @@ describe("operator alerts page", () => {
     stubFetch([
       { status: 200, body: f.operatorMeBody },
       { status: 200, body: f.steppedUpBody },
-      { status: 200, body: f.adminRosterBody },
       { status: 503, body: f.errorBody("alert_source_unreachable") },
     ]);
     const host = await renderRoutes(alertsRoute(), "/operator/alerts");
@@ -251,7 +245,6 @@ describe("operator alerts page", () => {
     stubFetch([
       { status: 200, body: f.operatorMeBody },
       { status: 200, body: f.steppedUpBody },
-      { status: 200, body: f.adminRosterBody },
       { status: 503, body: f.errorBody("alert_source_not_configured") },
     ]);
     const host = await renderRoutes(alertsRoute(), "/operator/alerts");
@@ -264,7 +257,6 @@ describe("operator alerts page", () => {
     const calls = stubFetch([
       { status: 200, body: f.operatorMeBody },
       { status: 200, body: f.steppedUpBody },
-      { status: 200, body: f.adminRosterBody },
       { status: 200, body: body() },
       { status: 200, body: body({ alerts: [ticket], checked_at: "2026-11-13T12:00:35Z" }) },
       { status: 200, body: body({ checked_at: "2026-11-13T12:00:40Z" }) },

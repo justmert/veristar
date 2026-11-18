@@ -84,8 +84,9 @@ export const removedTenant = z.object({
 });
 export type RemovedTenant = z.infer<typeof removedTenant>;
 
+// 4.1.4 adds the role of the account's active roster row, null outside it
 export const me = z.object({
-  user,
+  user: user.extend({ operator_role: z.enum(["operator_admin", "operator"]).nullable() }),
   tenants: z.array(meTenant),
   terms: termsRef,
   removed_tenants: z.array(removedTenant),
