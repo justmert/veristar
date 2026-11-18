@@ -11,9 +11,13 @@ where (sqlc.narg(github_id)::bigint is not null and github_id = sqlc.narg(github
 order by created_at, id;
 
 -- name: ListRoster :many
--- every row with the live account that holds its identity, if one exists
+-- every row with the live account that holds its identity, if one exists.
+-- passkeys counts what can step up, as RosterIdentityPasskeys and the
+-- step-up status do: the added passkeys, and the sign-in passkey when this
+-- row names its address
 select o.*, u.id as user_id, u.github_login as account_github_login, u.last_login_at,
-       (select count(*) from cp.operator_passkeys k where k.user_id = u.id)::bigint as passkeys
+       ((select count(*) from cp.operator_passkeys k where k.user_id = u.id)
+        + coalesce((u.passkey_public_key is not null and u.passkey_address = o.stellar_address)::int, 0))::bigint as passkeys
 from cp.operators o
 left join cp.users u
   on u.deleted_at is null

@@ -222,7 +222,7 @@ List routes answer:
 | 400 | `ceremony_expired` | a passkey answer without matching options of this session, after they expired or were used (5.15) |
 | 400 | `step_up_failed` | a passkey answer that does not verify (5.15) |
 | 401 | `unauthenticated` | no session, expired session |
-| 401 | `step_up_required` | an `/api/operator` route, or a change to the sign-in methods of an operator account (4.1.8), without a recent passkey step-up on the session (5.1, 5.15); the session itself stays valid |
+| 401 | `step_up_required` | an `/api/operator` route, a change to the sign-in methods of an operator account (4.1.8) or the deletion of one (4.1.6), without a recent passkey step-up on the session (5.1, 5.15); the session itself stays valid |
 | 401 | `enrollment_closed` | a first passkey from a session whose sign-in is older than the enrollment window (5.15) |
 | 403 | `csrf_header_missing` | see 1.2 |
 | 403 | `origin_mismatch` | see 1.2 |
@@ -639,7 +639,9 @@ Refused with **409 `sole_owner`** while the caller is the only owner of a tenant
 whose status is not `removed`; the error envelope lists those tenants in
 `tenants` (2.2), ordered by name. Nothing changes then. The caller makes another
 member an owner (4.2.5), or asks the operators to remove the tenant (5.5), and
-repeats the request. The last active operator admin of the roster gets **409
+repeats the request. An operator account needs a fresh passkey step-up (5.15)
+first, as for its identity changes (4.1.8): without one the answer is **401
+`step_up_required`** and nothing changes. The last active operator admin of the roster gets **409
 `last_operator_admin`** and changes nothing; another operator becomes an admin
 first (5.16).
 
@@ -1078,9 +1080,10 @@ Audit `tenant.terms_accept`.
 While a tenant's accepted version is not current, every mutating tenant route
 answers 403 `terms_not_accepted`, except this one, member removal, and the
 routes that take something out of use, answer a data request or only check a
-claim: OTLP token revocation (6.4), MCP credential revocation (12.8), report
-link revocation (20.1), erasure (10.2) and the domain check (5.8). Reads keep
-working. A tenant accepts a new terms version through this route.
+claim or read: OTLP token revocation (6.4), MCP access keys and their
+revocation (12.8), report link revocation (20.1), erasure (10.2) and the
+domain check (5.8). Reads keep working. A tenant accepts a new terms version
+through this route.
 
 ### 4.3 Sites
 
@@ -3201,7 +3204,7 @@ resource is `<CONSOLE_ORIGIN>/mcp`.
 | `POST /oauth/register` | RFC 7591 | public clients only (`token_endpoint_auth_method` absent or `none`); 1 to 10 `redirect_uris`, each `https`, `http` on a loopback host (RFC 8252 7.3) or a private-use scheme without a fragment (`javascript`, `data`, `file` and similar refused); `client_name` at most 100 characters. Unknown metadata is ignored. 201 with `client_id` (`mcpc_` and 32 characters). At most 10 registrations a minute per instance, burst 30; a client without any grant is deleted after a day |
 | `GET /oauth/authorize` | OAuth 2.1 | `response_type=code`, `client_id`, `redirect_uri` (exactly a registered one; optional when the client registered exactly one), `code_challenge` with `code_challenge_method=S256` (required), `state` (at most 1,024 characters), optional `resource` (must equal the resource URI, RFC 8707) and `scope` (`analytics:read`; `offline_access` is accepted and ignored, every grant gets a refresh token). An unknown client or redirect URI is shown on the console page with `error`; every later error goes to the redirect URI with `error`, `state` and `iss`. A valid request is sealed (AES-256-GCM, key derived from `OAUTH_STATE_KEY` with HKDF and its own label, 10 minutes) and the browser goes to the console page `/ai/consent?request=<sealed>` |
 | `POST /api/mcp/authorize/inspect`, `.../approve`, `.../deny` | console | session routes with the CSRF rules of 1.2 (12.8) |
-| `POST /oauth/token` | OAuth 2.1 | form body. `authorization_code`: `client_id`, `code` (single use, 60 seconds), `redirect_uri` (as in the request), `code_verifier` (43 to 128 unreserved characters, S256 checked), optional `resource`. `refresh_token`: `client_id`, `refresh_token`. 200 `{access_token, token_type: "Bearer", expires_in: 3600, refresh_token, scope}` with `Cache-Control: no-store` |
+| `POST /oauth/token` | OAuth 2.1 | form body. `authorization_code`: `client_id`, `code` (single use, 60 seconds), `redirect_uri` (when given, exactly the one of the request; a client that left it out of the request leaves it out here too, and OAuth 2.1 lets any client leave it out), `code_verifier` (43 to 128 unreserved characters, S256 checked), optional `resource`. `refresh_token`: `client_id`, `refresh_token`. 200 `{access_token, token_type: "Bearer", expires_in: 3600, refresh_token, scope}` with `Cache-Control: no-store` |
 | `POST /oauth/revoke` | RFC 7009 | `client_id`, `token` (refresh or access token); revokes the whole grant of the presenting client; 200 whatever the token was |
 
 Lifetimes: access token 1 hour, refresh token 30 days from its issue, rotated
@@ -4419,7 +4422,7 @@ characters without control characters; `award_date` is a UTC day from
 | Route | Who | Does |
 |---|---|---|
 | `GET /api/tenants/{tenant_id}/cohort` | member | the project's CohortRecord |
-| `PUT /api/tenants/{tenant_id}/cohort/proposal` | owner | body: a cohort object with at least one field; replaces the proposal, audit `cohort.propose`; **200** CohortRecord |
+| `PUT /api/tenants/{tenant_id}/cohort/proposal` | owner, current terms (4.2.6) | body: a cohort object with at least one field; replaces the proposal, audit `cohort.propose`; **200** CohortRecord |
 | `GET /api/operator/cohorts` | operator | the confirmed values in use with their project counts (`programs`, `rounds`, `categories`: `[{"value", "projects"}]`) and every pending proposal (`proposals`: `[{"tenant", "confirmed", "proposal", "proposed_at"}]`), removed and internal projects left out |
 | `GET /api/operator/tenants/{tenant_id}/cohort` | operator | the CohortRecord |
 | `PUT /api/operator/tenants/{tenant_id}/cohort` | operator | body: a cohort object; sets the confirmed values, an object of nulls clears them; audit `cohort.set`; **200** CohortRecord |

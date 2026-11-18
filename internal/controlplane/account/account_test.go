@@ -322,8 +322,17 @@ func TestDeleteAccount(t *testing.T) {
 	t.Run("the last operator admin cannot delete the account; another can, and leaves the roster", func(t *testing.T) {
 		op, opID := e.personWithID(t, operatorGH, "acct-operator")
 		require.Equal(t, true, op.Call(t, http.MethodGet, "/api/me", nil).JSON(t)["user"].(map[string]any)["is_operator"])
-		op.StepUp(t)
+		// a session alone cannot delete an operator account: the deletion
+		// strips the roster rows, so it needs the passkey step-up first
+		audits := e.Count(t, `select count(*) from cp.audit_log`)
 		r := op.Call(t, http.MethodDelete, "/api/me", nil)
+		require.Equal(t, http.StatusUnauthorized, r.Status, string(r.Body))
+		require.Equal(t, "step_up_required", r.Code(t))
+		require.Equal(t, audits, e.Count(t, `select count(*) from cp.audit_log`))
+		require.Equal(t, 1, e.Count(t, `select count(*) from cp.operators where github_id = $1`, operatorGH))
+		require.Equal(t, http.StatusOK, op.Call(t, http.MethodGet, "/api/me", nil).Status, "the session stays")
+		op.StepUp(t)
+		r = op.Call(t, http.MethodDelete, "/api/me", nil)
 		require.Equal(t, http.StatusConflict, r.Status, string(r.Body))
 		require.Equal(t, "last_operator_admin", r.Code(t))
 		require.Equal(t, 1, e.Count(t, `select count(*) from cp.users where id = $1 and is_operator and deleted_at is null`, opID))

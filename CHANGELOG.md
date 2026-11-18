@@ -137,6 +137,10 @@ here, before they take effect, as the processing terms require
   not a finite non-negative number, buckets beyond the floating point
   range), counted as `buckets`. One such point kept the whole metric
   unconverted, and the export lost every valid point of that metric.
+- Deleting an operator account (`DELETE /api/me`) needs a fresh passkey
+  step-up, as changing its sign-in methods does, so a session alone cannot
+  remove an operator from the roster. Without one the answer is 401
+  `step_up_required` and nothing changes.
 
 ### Fixed
 
@@ -199,12 +203,16 @@ here, before they take effect, as the processing terms require
   `LC_IMAGE_TAG` names a second set of local images, so a rolling
   `deploy.yml` from one release to another runs locally, and
   `make local-converge-e2e` runs on the `LC_TOPOLOGY=node` layout too.
-
-### Fixed
-
 - The replayer reads a visitor's visit record again when a NATS replica
   that has not caught up answers with an older one, so events of a visitor
   delivered back to back keep their visit.
+- The MCP token endpoint accepts an authorization code without `redirect_uri`
+  when the authorization request left it out, as a client with one
+  registered redirect URI may. A `redirect_uri` that is given must still
+  match exactly.
+- The operator roster counts a passkey account's sign-in passkey in
+  `account.passkeys` when the row names that account's address, as the
+  step-up status does, so such an operator no longer shows 0 passkeys.
 
 ### Upgrade notes
 
