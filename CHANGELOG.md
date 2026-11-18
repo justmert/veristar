@@ -99,6 +99,11 @@ here, before they take effect, as the processing terms require
   `WebEventsBacklogGrowing` read the sum of every replayer consumer.
 - `deploy.yml` installs the NATS permissions of the new release on every
   NATS server before the core tier. The replayer container gets 30 s to stop.
+- The collector and the metrics writer drop a histogram point whose sum
+  exceeds 10^18 seconds in magnitude, counted as `sum` in
+  `tenantguard_invalid_items`. Two sums near the floating point limit in one
+  minute or one hour no longer fail the writer's message or the hourly
+  rollup.
 
 ### Fixed
 

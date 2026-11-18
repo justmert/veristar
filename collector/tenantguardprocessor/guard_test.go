@@ -743,6 +743,9 @@ func TestInvalidValuesDroppedAlone(t *testing.T) {
 	add("/count-huge", func(dp pmetric.HistogramDataPoint) { dp.SetCount(MaxPointCount + 1) })
 	add("/bucket-huge", func(dp pmetric.HistogramDataPoint) { dp.BucketCounts().FromRaw([]uint64{1, MaxPointCount + 1, 0}) })
 	add("/sum-nan", func(dp pmetric.HistogramDataPoint) { dp.SetSum(math.NaN()) })
+	add("/sum-huge", func(dp pmetric.HistogramDataPoint) { dp.SetSum(1e308) })
+	add("/sum-huge-negative", func(dp pmetric.HistogramDataPoint) { dp.SetSum(-MaxPointSum * 2) })
+	add("/sum-at-limit", func(dp pmetric.HistogramDataPoint) { dp.SetSum(MaxPointSum) })
 	// a stale marker carries no values, only its times are checked
 	add("/stale", func(dp pmetric.HistogramDataPoint) {
 		dp.SetFlags(pmetric.DefaultDataPointFlags.WithNoRecordedValue(true))
@@ -761,6 +764,9 @@ func TestInvalidValuesDroppedAlone(t *testing.T) {
 	eh.SetAggregationTemporality(pmetric.AggregationTemporalityDelta)
 	eh.DataPoints().AppendEmpty().SetTimestamp(at)
 	eh.DataPoints().AppendEmpty().SetCount(1) // time zero
+	esum := eh.DataPoints().AppendEmpty()
+	esum.SetTimestamp(at)
+	esum.SetSum(1e308)
 
 	out, err := g.processMetrics(authed(uuid.NewString(), uuid.NewString()), md)
 	if err != nil {
@@ -776,8 +782,8 @@ func TestInvalidValuesDroppedAlone(t *testing.T) {
 		r, _ := dps.At(i).Attributes().Get("http.route")
 		routes = append(routes, r.Str())
 	}
-	if strings.Join(routes, " ") != "/good /stale" {
-		t.Errorf("kept %v, want /good and /stale", routes)
+	if strings.Join(routes, " ") != "/good /sum-at-limit /stale" {
+		t.Errorf("kept %v, want /good, /sum-at-limit and /stale", routes)
 	}
 	if n := kept.At(1).ExponentialHistogram().DataPoints().Len(); n != 1 {
 		t.Errorf("%d exponential points kept, want 1", n)
@@ -833,7 +839,7 @@ func TestInvalidValuesDroppedAlone(t *testing.T) {
 		}
 	}
 	want := map[string]int64{
-		"metrics/time": 5, "metrics/buckets": 6, "metrics/count": 2, "metrics/sum": 1,
+		"metrics/time": 5, "metrics/buckets": 6, "metrics/count": 2, "metrics/sum": 4,
 		"metrics/temporality": 1, "traces/time": 5,
 	}
 	for k, v := range want {
