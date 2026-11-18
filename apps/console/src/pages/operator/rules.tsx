@@ -30,6 +30,7 @@ import { DateField, isIsoDay } from "@/components/range-control";
 import { EmptyState, ErrorState, LoadingState, Missing, Skeleton } from "@/components/states";
 import { toast } from "@/components/toast";
 import { Button } from "@/components/ui/button";
+import { Dialog } from "@/components/ui/dialog";
 import { Menu, MenuContent, MenuItem, MenuTrigger } from "@/components/ui/menu";
 import { countOf, formatCount, formatDate, formatDateRange } from "@/lib/format";
 import { isDay } from "@/lib/global";
@@ -233,30 +234,36 @@ export function RulesPage() {
     <div className="flex min-w-0 flex-col gap-6">
       <PageHeader
         title="Rules"
-        description="Save a traction rule once. See the projects that meet it, with the days that qualify them."
         primary={
-          editing ? null : (
-            <Button
-              onClick={() => setEditing({ id: null, form: EMPTY_RULE })}
-              className="max-lg:h-(--vs-control-touch)"
-            >
-              <Plus aria-hidden />
-              New rule
-            </Button>
-          )
+          <Button
+            onClick={() => setEditing({ id: null, form: EMPTY_RULE })}
+            className="max-lg:h-(--vs-control-touch)"
+          >
+            <Plus aria-hidden />
+            New rule
+          </Button>
         }
       />
 
-      {editing ? (
-        <RuleEditor
-          id={editing.id}
-          initial={editing.form}
-          onDone={(saved) => {
-            setEditing(null);
-            if (saved) open(saved.id);
-          }}
-        />
-      ) : null}
+      <Dialog
+        open={editing !== null}
+        onOpenChange={(o) => {
+          if (!o) setEditing(null);
+        }}
+        title={editing?.id ? "Edit rule" : "New rule"}
+      >
+        {editing ? (
+          <RuleEditor
+            key={editing.id ?? "new"}
+            id={editing.id}
+            initial={editing.form}
+            onDone={(saved) => {
+              setEditing(null);
+              if (saved) open(saved.id);
+            }}
+          />
+        ) : null}
+      </Dialog>
 
       {rules.isPending ? (
         <LoadingState label="Loading the rules">
@@ -269,9 +276,7 @@ export function RulesPage() {
           onRetry={() => rules.refetch()}
         />
       ) : items.length === 0 ? (
-        <EmptyState icon={<ListChecks aria-hidden />} title="No rule is saved yet">
-          Save a rule. Then the projects that meet it show here.
-        </EmptyState>
+        <EmptyState icon={<ListChecks aria-hidden />} title="No rule is saved yet" />
       ) : (
         <DataTable
           label="Rules"
@@ -385,6 +390,7 @@ function CohortSelect({
       onChange={onChange}
       error={error}
       disabled={loading}
+      className="w-full"
     >
       <option value="">{loading ? "Loading" : "Any"}</option>
       {opts.map((o) => (
@@ -438,75 +444,66 @@ function RuleEditor({
     if (v.body) save.mutate(v.body);
   }
 
+  // two fields to a row, each row the same height: the labels are short
+  // enough never to wrap, and a hint sits under both fields of a row or
+  // under neither. the optional fields are one group, marked once.
   const title = id ? "Edit rule" : "New rule";
   return (
-    <section
-      aria-labelledby="rule-editor-h"
-      className="flex animate-rise-in flex-col gap-4 rounded-lg border border-line bg-raised p-4 sm:p-5"
-    >
-      <h2 id="rule-editor-h" className="text-title text-fg">
-        {title}
-      </h2>
-      <form
-        onSubmit={submit}
-        noValidate
-        aria-label={title}
-        className="max-w-prose flex flex-col gap-4"
-      >
+    <form onSubmit={submit} noValidate aria-label={title} className="flex flex-col gap-4 pb-4">
+      <TextField
+        label="Name"
+        value={form.name}
+        onChange={set("name")}
+        error={errors.name}
+        maxLength={100}
+      />
+      <div className="grid gap-4 sm:grid-cols-2">
+        <SelectField
+          label="Metric"
+          value={form.metric}
+          onChange={set("metric")}
+          error={errors.metric}
+          className="w-full"
+        >
+          {(Object.keys(METRIC_TEXT) as RuleMetric[]).map((m) => (
+            <option key={m} value={m}>
+              {METRIC_TEXT[m]}
+            </option>
+          ))}
+        </SelectField>
         <TextField
-          label="Name"
-          value={form.name}
-          onChange={set("name")}
-          error={errors.name}
-          maxLength={100}
-          required
+          label="Minimum per day"
+          inputMode="numeric"
+          value={form.minPerDay}
+          onChange={set("minPerDay")}
+          error={errors.minPerDay}
         />
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <TextField
+          label="Days per month"
+          inputMode="numeric"
+          hint="1 to 28"
+          value={form.minDays}
+          onChange={set("minDays")}
+          error={errors.minDays}
+        />
+        <TextField
+          label="Complete months"
+          inputMode="numeric"
+          hint="1 to 12"
+          value={form.months}
+          onChange={set("months")}
+          error={errors.months}
+        />
+      </div>
+      <fieldset className="flex flex-col gap-3 border-t border-line pt-4">
+        <legend className="float-left mb-3 text-small text-fg-2">Optional</legend>
+        <div className="clear-left grid gap-4 sm:grid-cols-2">
           <SelectField
-            label="Metric"
-            value={form.metric}
-            onChange={set("metric")}
-            error={errors.metric}
-          >
-            {(Object.keys(METRIC_TEXT) as RuleMetric[]).map((m) => (
-              <option key={m} value={m}>
-                {METRIC_TEXT[m]}
-              </option>
-            ))}
-          </SelectField>
-          <TextField
-            label="Minimum per day"
-            inputMode="numeric"
-            value={form.minPerDay}
-            onChange={set("minPerDay")}
-            error={errors.minPerDay}
-            required
-          />
-          <TextField
-            label="Days per month"
-            inputMode="numeric"
-            hint="1 to 28"
-            value={form.minDays}
-            onChange={set("minDays")}
-            error={errors.minDays}
-            required
-          />
-          <TextField
-            label="Months"
-            inputMode="numeric"
-            hint="1 to 12 complete months"
-            value={form.months}
-            onChange={set("months")}
-            error={errors.months}
-            required
-          />
-        </div>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <SelectField
-            label="Minimum integrity grade"
+            label="Integrity grade"
             value={form.minGrade}
             onChange={set("minGrade")}
             error={errors.minGrade}
+            className="w-full"
           >
             <option value="">Any grade</option>
             <option value="A">A</option>
@@ -528,28 +525,28 @@ function RuleEditor({
             />
           ))}
         </div>
-        <FormMessage
-          error={
-            save.error instanceof ApiError && save.error.code === "validation_failed"
-              ? null
-              : save.error
-          }
-        />
-        <div className="flex flex-wrap gap-2">
-          <Button type="submit" pending={save.isPending} className="max-lg:h-(--vs-control-touch)">
-            {save.isPending ? "Saving" : "Save rule"}
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => onDone(null)}
-            className="max-lg:h-(--vs-control-touch)"
-          >
-            Cancel
-          </Button>
-        </div>
-      </form>
-    </section>
+      </fieldset>
+      <FormMessage
+        error={
+          save.error instanceof ApiError && save.error.code === "validation_failed"
+            ? null
+            : save.error
+        }
+      />
+      <div className="flex flex-wrap justify-end gap-2">
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={() => onDone(null)}
+          className="max-lg:h-(--vs-control-touch)"
+        >
+          Cancel
+        </Button>
+        <Button type="submit" pending={save.isPending} className="max-lg:h-(--vs-control-touch)">
+          {save.isPending ? "Saving" : "Save rule"}
+        </Button>
+      </div>
+    </form>
   );
 }
 
