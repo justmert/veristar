@@ -120,19 +120,16 @@ test("the edge counted every load of the tracker file and the gpc one", async ()
 test("the snippet offers the title opt-in from 1.3.0", async () => {
   const page = owner.page;
   await page.goto(`${APP}/projects/${tenant.id}/sites/${site.id}`);
-  // the site's events arrived, so its install step is done and folds away;
-  // the counts fold in every few minutes, so the page is read again until
-  // the first event shows
+  // the loads above close as soon as the tracker file arrives, so a page
+  // view may or may not have reached the gateway: the install step is open,
+  // or done and folded away behind Show
+  const install = page.getByRole("region", { name: /^Install the tag\W/ });
+  await expect(install).toBeVisible();
+  const show = install.getByRole("button", { name: "Show" });
   await expect(async () => {
-    await page.reload();
-    await expect(page.getByRole("region", { name: /^First event\W+done$/ })).toBeVisible({
-      timeout: 5_000,
-    });
-  }).toPass({ timeout: 120_000 });
-  await page
-    .getByRole("region", { name: /^Install the tag\W+done$/ })
-    .getByRole("button", { name: "Show" })
-    .click();
+    if (await show.isVisible()) await show.click();
+    await expect(page.getByLabel("Send the page title")).toBeVisible({ timeout: 2_000 });
+  }).toPass({ timeout: 30_000 });
   // the newest release, which reads the title choice like every release from 1.3.0
   await expect(page.getByText("tracker 1.3.2").first()).toBeVisible();
   await page.getByLabel("Send the page title").check();
