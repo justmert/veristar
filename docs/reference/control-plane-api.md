@@ -618,7 +618,8 @@ Session.
 ```json
 {
   "user": { "id": "uuid", "github_id": 1234567, "github_login": "octocat", "stellar_address": null,
-            "passkey_address": null, "display_name": "octocat", "is_operator": false },
+            "passkey_address": null, "display_name": "octocat", "is_operator": false,
+            "operator_role": null },
   "tenants": [
     { "id": "uuid", "slug": "stellar-dex", "name": "Stellar DEX", "status": "active", "role": "owner",
       "accepted_terms_version": "2026-11-12-draft.1", "terms_current": true }
@@ -626,6 +627,12 @@ Session.
   "terms": { "current_version": "2026-11-12-draft.1", "status": "draft", "url": "/terms" }
 }
 ```
+
+`user` is the User object (3.1) plus `operator_role`: the role of the account's
+active roster row (5.16), `operator_admin` or `operator`, and `null` when
+`is_operator` is false. An account that matches an active admin row through any
+of its identities is `operator_admin`. The operator admin routes (5.16, 11.1)
+accept exactly the accounts with `operator_admin`.
 
 `tenants` lists every tenant the user is a member of, except `removed`, ordered by
 `name`, unpaginated (a user has few). `terms_current` is

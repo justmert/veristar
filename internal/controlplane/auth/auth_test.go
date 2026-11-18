@@ -405,6 +405,8 @@ func TestSignInRoundTrip(t *testing.T) {
 	require.Nil(t, got.User.StellarAddress)
 	require.Equal(t, login, got.User.DisplayName)
 	require.False(t, got.User.IsOperator)
+	require.Nil(t, got.User.OperatorRole)
+	require.Contains(t, string(me.body), `"operator_role":null`)
 	require.Empty(t, got.Tenants)
 	require.NotNil(t, got.Tenants, "tenants is an empty list, not null")
 	cur := terms.MustCurrent()
@@ -592,12 +594,32 @@ func TestOperatorFlag(t *testing.T) {
 	e := newEnv(t, op)
 	b := e.browser(t)
 	require.Equal(t, http.StatusSeeOther, b.signIn(op, "operator-user", "").StatusCode)
-	require.True(t, decode[auth.Me](t, b.get(e.origin+"/api/me")).User.IsOperator)
+	me := decode[auth.Me](t, b.get(e.origin+"/api/me"))
+	require.True(t, me.User.IsOperator)
+	require.NotNil(t, me.User.OperatorRole)
+	require.Equal(t, "operator_admin", *me.User.OperatorRole)
+
+	// the role follows the roster row, beside a spare admin so the roster
+	// keeps one
+	require.NoError(t, conn.WithSystem(context.Background(), func(tx pgx.Tx) error {
+		if _, err := tx.Exec(context.Background(), `insert into cp.operators (github_id, role) values ($1, 'operator_admin')`,
+			newGitHubID()); err != nil {
+			return err
+		}
+		_, err := tx.Exec(context.Background(), `update cp.operators set role = 'operator' where github_id = $1`, op)
+		return err
+	}))
+	me = decode[auth.Me](t, b.get(e.origin+"/api/me"))
+	require.True(t, me.User.IsOperator)
+	require.NotNil(t, me.User.OperatorRole)
+	require.Equal(t, "operator", *me.User.OperatorRole)
 
 	// suspended on the roster: the flag clears in the same transaction, so
 	// the next request of the live session sees it
 	suspendRoster(t, &op, nil)
-	require.False(t, decode[auth.Me](t, b.get(e.origin+"/api/me")).User.IsOperator)
+	me = decode[auth.Me](t, b.get(e.origin+"/api/me"))
+	require.False(t, me.User.IsOperator)
+	require.Nil(t, me.User.OperatorRole)
 	// and a new sign-in does not bring it back
 	b2 := e.browser(t)
 	require.Equal(t, http.StatusSeeOther, b2.signIn(op, "operator-user", "").StatusCode)

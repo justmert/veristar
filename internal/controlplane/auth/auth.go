@@ -500,6 +500,10 @@ type MeUser struct {
 	PasskeyAddress *string   `json:"passkey_address"`
 	DisplayName    string    `json:"display_name"`
 	IsOperator     bool      `json:"is_operator"`
+	// OperatorRole is the role of the account's active roster row
+	// (operator_admin when any of its rows is an active admin row), and
+	// nil for an account that is not an operator
+	OperatorRole *string `json:"operator_role"`
 }
 
 // MeUserOf is the MeUser of a session user.
@@ -537,6 +541,32 @@ type MeRemovedTenant struct {
 	StatusChangedAt httpx.Timestamp `json:"status_changed_at"`
 }
 
+// operatorRole is the roster role of an operator: operator_admin when an
+// active row of the account is an admin row, else operator. it reads the
+// same rows as the operator guard, so the console shows the admin pages to
+// exactly the accounts the admin routes accept.
+func operatorRole(ctx context.Context, q *systemq.Queries, u session.User) (*string, error) {
+	if !u.IsOperator {
+		return nil, nil
+	}
+	rows, err := q.RosterEntriesForUser(ctx, systemq.RosterEntriesForUserParams{
+		GithubID: u.GitHubID, StellarAddress: u.StellarAddress, PasskeyAddress: u.PasskeyAddress,
+	})
+	if err != nil {
+		return nil, err
+	}
+	var role *string
+	for _, o := range rows {
+		if o.Status != "active" {
+			continue
+		}
+		if r := o.Role; role == nil || r == "operator_admin" {
+			role = &r
+		}
+	}
+	return role, nil
+}
+
 // Me is the answer of GET /api/me.
 type Me struct {
 	User           MeUser            `json:"user"`
@@ -557,20 +587,26 @@ func (h *Handler) me(w http.ResponseWriter, r *http.Request) error {
 	}
 	var rows []systemq.ListUserTenantsRow
 	var removed []systemq.ListUserRemovedTenantsRow
+	var role *string
 	err = h.db.WithSystem(ctx, func(tx pgx.Tx) error {
 		q := systemq.New(tx)
 		var qerr error
 		if rows, qerr = q.ListUserTenants(ctx, u.ID); qerr != nil {
 			return qerr
 		}
-		removed, qerr = q.ListUserRemovedTenants(ctx, u.ID)
+		if removed, qerr = q.ListUserRemovedTenants(ctx, u.ID); qerr != nil {
+			return qerr
+		}
+		role, qerr = operatorRole(ctx, q, u)
 		return qerr
 	})
 	if err != nil {
 		return err
 	}
+	user := MeUserOf(u)
+	user.OperatorRole = role
 	out := Me{
-		User:           MeUserOf(u),
+		User:           user,
 		Tenants:        make([]MeTenant, 0, len(rows)),
 		RemovedTenants: make([]MeRemovedTenant, 0, len(removed)),
 		Terms:          MeTerms{CurrentVersion: t.Version, Status: t.Status, URL: terms.URL},

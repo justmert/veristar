@@ -18,6 +18,10 @@ here, before they take effect, as the processing terms require
 
 ### Added
 
+- `GET /api/me` returns the operator's roster role in `user.operator_role`
+  (`operator_admin`, `operator`, or `null` for an account that is not an
+  operator), so the console shows the admin pages to the accounts the admin
+  routes accept.
 - The operator audit log names who and what each row is about:
   `actor_display_name` (the GitHub login, or the short wallet or passkey
   address) and `target_display_name` (the project, site, account or report
