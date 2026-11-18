@@ -59,7 +59,7 @@ export function evidenceOf(
     },
     {
       key: "ids",
-      label: "Account and contract ids",
+      label: "Ids given at enrollment",
       signal: ids.length === 0 ? "absent" : invalid.length > 0 ? "risk" : "ok",
       value:
         ids.length === 0
@@ -70,7 +70,7 @@ export function evidenceOf(
     },
     {
       key: "scf",
-      label: "SCF round",
+      label: "SCF round link",
       signal: t.enrollment_answers.scf_round_url ? "ok" : "absent",
       value: t.enrollment_answers.scf_round_url ?? "None given",
     },
@@ -84,7 +84,7 @@ export function evidenceOf(
     });
   items.push({
     key: "events",
-    label: "Events, 30 days",
+    label: "Events, last 30 full days",
     signal: accepted > 0 ? "ok" : "absent",
     value:
       events === 0
