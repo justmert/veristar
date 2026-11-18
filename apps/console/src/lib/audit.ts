@@ -2,8 +2,10 @@
 // changes of an entry, and runs of identical system events folded into one
 // line. pure, so tests read it directly.
 
-import type { AuditEntry } from "@/api/schemas";
-import { formatCount, MISSING } from "@/lib/format";
+import type { AuditEntry, SiteStatus, TenantStatus } from "@/api/schemas";
+import { statusEntry } from "@/components/status";
+import { formatCount, formatDateRange, MISSING } from "@/lib/format";
+import { shortAddress } from "@/lib/stellar-wallet";
 
 // ---------------------------------------------------------------- days
 
@@ -209,10 +211,41 @@ export type AuditSentence = {
 
 const PROJECT = /^tenant:([0-9a-f-]{36})$/;
 
-export function auditSentence(e: AuditEntry): AuditSentence {
+// a check that did not pass reads "checked", never "verified"
+const CHECKS: Record<string, string> = {
+  "site.verify": "checked the domain of the site",
+  "onchain.verify": "checked an on-chain id of",
+};
+
+// the name of the object from the detail of the entry: a name, a domain, a
+// login, an on-chain id or the range of a report
+function nameOf(e: AuditEntry): string | null {
+  const strkey = detailText(e, "strkey");
+  const from = detailText(e, "from");
+  const to = detailText(e, "to");
+  return (
+    detailText(e, "name") ??
+    detailText(e, "domain") ??
+    detailText(e, "github_login") ??
+    (strkey ? shortAddress(strkey) : null) ??
+    (e.target.startsWith("report:") && from && to ? formatDateRange(from, to) : null)
+  );
+}
+
+// names maps a target ("site:<id>", "tenant:<id>") to the name a page
+// already knows, for entries whose detail does not carry it
+export function auditSentence(
+  e: AuditEntry,
+  names: Readonly<Record<string, string>> = {},
+): AuditSentence {
   const tool = e.action === "mcp.tool_call" ? detailText(e, "tool") : null;
-  let verb = tool ? `used the AI tool ${tool} on` : auditVerb(e.action);
-  const named = detailText(e, "name") ?? detailText(e, "domain") ?? detailText(e, "github_login");
+  const failed = e.action in CHECKS && detailText(e, "result") !== "ok";
+  let verb = tool
+    ? `used the AI tool ${tool} on`
+    : failed
+      ? (CHECKS[e.action] as string)
+      : auditVerb(e.action);
+  const named = nameOf(e) ?? names[e.target] ?? null;
   const prefix = e.target.split(":")[0] ?? "";
   let object: string | null = e.target ? (named ?? TARGET_KIND[prefix] ?? "an object") : null;
   // a verb that names its own object ("the project") reads "a project" twice
@@ -242,6 +275,28 @@ function isObj(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
+// the states of a change in the words the status badges use, so the log
+// and the pills never disagree ("Not approved", not "rejected")
+const VERIFICATION_WORD: Record<string, string> = {
+  verified: "Verified",
+  unverified: "Not verified",
+  unchecked: "Not checked",
+};
+
+function stateWord(key: string, target: string, v: unknown): string | null {
+  if (typeof v !== "string") return null;
+  if (key === "status") {
+    const kind = target.startsWith("site:") ? "site" : "project";
+    const e =
+      kind === "site"
+        ? statusEntry({ kind, status: v as SiteStatus })
+        : statusEntry({ kind, status: v as TenantStatus });
+    return e?.word ?? null;
+  }
+  if (key === "verification") return VERIFICATION_WORD[v] ?? null;
+  return null;
+}
+
 // one side of a change as a person reads it: a list or an object is spelt
 // out (never "[object Object]"), a missing value is the missing glyph
 export function changeValue(v: unknown): string {
@@ -256,12 +311,15 @@ export function changeValue(v: unknown): string {
   return String(v);
 }
 
-// every { old, new } pair of the detail
+// every { old, new } pair of the detail that changed something; a pair
+// with the same value on both sides says nothing and is left out
 export function auditChanges(e: AuditEntry): { key: string; from: string; to: string }[] {
   const out: { key: string; from: string; to: string }[] = [];
   for (const [key, v] of Object.entries(e.detail ?? {})) {
-    if (isObj(v) && "old" in v && "new" in v)
-      out.push({ key: key.replaceAll("_", " "), from: changeValue(v.old), to: changeValue(v.new) });
+    if (!isObj(v) || !("old" in v) || !("new" in v)) continue;
+    const from = stateWord(key, e.target, v.old) ?? changeValue(v.old);
+    const to = stateWord(key, e.target, v.new) ?? changeValue(v.new);
+    if (from !== to) out.push({ key: key.replaceAll("_", " "), from, to });
   }
   return out;
 }

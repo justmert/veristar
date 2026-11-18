@@ -67,24 +67,15 @@ function percentile(k: Kpi, cohortSize: number) {
   );
 }
 
-// the project name, cut to the column with the full name in a tooltip, and
-// the status when it is not the usual one for the list
-function ProjectName({
-  name,
-  badge,
-  slot,
-}: {
-  name: string;
-  badge?: React.ReactNode;
-  slot: number;
-}) {
+// the project name, cut to the column with the full name in a tooltip. the
+// status has its own column in every view.
+function ProjectName({ name, slot }: { name: string; slot: number }) {
   return (
     <span className="flex min-w-0 items-center gap-2">
       <SeriesSwatch slot={slot} />
       <Tooltip content={name}>
         <span className="min-w-0 truncate">{name}</span>
       </Tooltip>
-      {badge}
     </span>
   );
 }
@@ -207,17 +198,7 @@ function commonColumns<R extends Row>(slot: (id: string) => number): Column<R>[]
       primary: true,
       minWidth: "min-w-48",
       className: "max-w-72",
-      cell: (r) => (
-        <ProjectName
-          name={r.tenant.name}
-          slot={slot(r.tenant.id)}
-          badge={
-            r.tenant.status === "active" ? null : (
-              <StatusBadge kind="project" status={r.tenant.status} operator />
-            )
-          }
-        />
-      ),
+      cell: (r) => <ProjectName name={r.tenant.name} slot={slot(r.tenant.id)} />,
     },
     {
       key: "status",
@@ -506,16 +487,26 @@ export function statusColumns(slot: (id: string) => number): Column<OperatorTena
     {
       key: "sites",
       header: "Sites",
-      definition:
-        "Sites of the project, the sites with a verified domain and the sites whose domain serves a stellar.toml file.",
-      minWidth: "min-w-48",
-      cell: (t) => (
-        <span className="whitespace-nowrap text-fg-2">
-          <span className="text-fg">{countOf(t.site_count, "site")}</span>,{" "}
-          {formatCount(t.sites_verified)} verified, {formatCount(t.sites_with_stellar_toml)} with
-          stellar.toml
-        </span>
-      ),
+      definition: "Sites of the project.",
+      align: "right",
+      numeric: true,
+      cell: (t) => formatCount(t.site_count),
+    },
+    {
+      key: "sites_verified",
+      header: "Verified sites",
+      definition: "Sites with a verified domain.",
+      align: "right",
+      numeric: true,
+      cell: (t) => formatCount(t.sites_verified),
+    },
+    {
+      key: "sites_with_stellar_toml",
+      header: "Sites with stellar.toml",
+      definition: "Sites whose domain serves a stellar.toml file.",
+      align: "right",
+      numeric: true,
+      cell: (t) => formatCount(t.sites_with_stellar_toml),
     },
     {
       key: "created_at",

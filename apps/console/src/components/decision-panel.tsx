@@ -37,8 +37,10 @@ const PRESETS = [
 const NOUN = { project: "project", site: "site" } as const;
 
 // approve or reject inline. a reject needs a reason, an approve takes an
-// optional note (contract 5.5); both reach the members. a and r pick, ctrl
-// or cmd enter sends. a project and a site use the same panel and words.
+// optional note (contract 5.5); both reach the members. nothing is chosen
+// when the panel opens, so no key sends a decision the operator did not
+// make: a and r pick, then ctrl or cmd enter sends. a project and a site
+// use the same panel and words.
 export function DecisionPanel({
   subject,
   onDecided,
@@ -51,7 +53,7 @@ export function DecisionPanel({
   const allowed = (["approve", "reject"] as const).filter(
     (a) => subject.kind === "site" || subject.allowed.includes(a),
   );
-  const [choice, setChoice] = useState<Choice>(allowed[0] ?? "approve");
+  const [choice, setChoice] = useState<Choice | null>(null);
   const [reason, setReason] = useState("");
   const [fieldError, setFieldError] = useState<string | null>(null);
   const ids = useId();
@@ -76,7 +78,7 @@ export function DecisionPanel({
 
   function submit(e?: FormEvent) {
     e?.preventDefault();
-    if (run.isPending) return;
+    if (run.isPending || choice === null) return;
     const code = v.reason(reason, required);
     setFieldError(code ? v.fieldMessage(code) : null);
     if (code) return;
@@ -100,7 +102,9 @@ export function DecisionPanel({
           : 0;
     if (step === 0 || allowed.length < 2) return;
     e.preventDefault();
-    const i = allowed.indexOf(choice as (typeof allowed)[number]);
+    // from the focused card, which is the chosen one once there is a choice
+    const from = (e.target as HTMLElement).closest<HTMLElement>("[data-choice]")?.dataset.choice;
+    const i = allowed.indexOf((from ?? choice) as (typeof allowed)[number]);
     const next = allowed[(i + step + allowed.length) % allowed.length];
     if (!next) return;
     pick(next);
@@ -134,7 +138,7 @@ export function DecisionPanel({
         className="grid grid-cols-2 gap-2"
         onKeyDown={arrows}
       >
-        {allowed.map((c) => {
+        {allowed.map((c, i) => {
           const on = c === choice;
           return (
             // biome-ignore lint/a11y/useSemanticElements: a radio card with a shortcut hint, like the segmented control
@@ -143,7 +147,8 @@ export function DecisionPanel({
               type="button"
               role="radio"
               aria-checked={on}
-              tabIndex={on ? 0 : -1}
+              // with nothing chosen the first card takes the one tab stop
+              tabIndex={on || (choice === null && i === 0) ? 0 : -1}
               data-choice={c}
               aria-keyshortcuts={c === "approve" ? "A" : "R"}
               onClick={() => pick(c)}
@@ -203,7 +208,9 @@ export function DecisionPanel({
       <div className="flex flex-col gap-1">
         <label htmlFor={`${ids}-r`} className="text-small font-medium text-fg">
           Reason{" "}
-          <span className="font-normal text-fg-3">{required ? "(required)" : "(optional)"}</span>
+          <span className="font-normal text-fg-3">
+            {choice === null ? "(required to reject)" : required ? "(required)" : "(optional)"}
+          </span>
         </label>
         <Textarea
           id={`${ids}-r`}
@@ -257,20 +264,24 @@ export function DecisionPanel({
           type="submit"
           variant={choice === "reject" ? "destructive-outline" : "default"}
           pending={run.isPending}
-          disabled={conflict}
+          disabled={conflict || choice === null}
           aria-keyshortcuts="Control+Enter"
           className="max-lg:h-(--vs-control-touch) max-lg:w-full"
         >
-          {run.isPending
-            ? choice === "reject"
-              ? "Rejecting"
-              : "Approving"
-            : choice === "reject"
-              ? `Reject ${noun}`
-              : `Approve ${noun}`}
-          <span aria-hidden className="font-mono text-axis font-normal opacity-70 max-lg:hidden">
-            Ctrl Enter
-          </span>
+          {choice === null
+            ? "Choose Approve or Reject"
+            : run.isPending
+              ? choice === "reject"
+                ? "Rejecting"
+                : "Approving"
+              : choice === "reject"
+                ? `Reject ${noun}`
+                : `Approve ${noun}`}
+          {choice === null ? null : (
+            <span aria-hidden className="font-mono text-axis font-normal opacity-70 max-lg:hidden">
+              Ctrl Enter
+            </span>
+          )}
         </Button>
       </div>
     </form>

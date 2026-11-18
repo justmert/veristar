@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Ban, KeyRound, MoreHorizontal } from "lucide-react";
+import { Ban, KeyRound, MoreHorizontal, Plus } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { globalApi } from "@/api/endpoints";
 import {
@@ -115,6 +115,7 @@ export function AccessKeysPage() {
     | { type: "assistant"; key: McpCredentialCreated }
     | null
   >(null);
+  const [creating, setCreating] = useState(false);
   const [revoking, setRevoking] = useState<KeyRow | null>(null);
   const [usage, setUsage] = useState<KeyRow | null>(null);
   const names = new Map((tenants.data ?? []).map((t) => [t.id, t.name]));
@@ -239,6 +240,14 @@ export function AccessKeysPage() {
       <PageHeader
         title="Access keys"
         description="Read-only keys for machines and AI assistants. A key reads daily totals and changes nothing."
+        primary={
+          creating || created ? null : (
+            <Button onClick={() => setCreating(true)} className="max-lg:h-(--vs-control-touch)">
+              <Plus aria-hidden />
+              Create key
+            </Button>
+          )
+        }
       />
 
       {created ? (
@@ -251,13 +260,17 @@ export function AccessKeysPage() {
           }
           onDone={() => setCreated(null)}
         />
-      ) : (
+      ) : creating ? (
         <CreateKeyForm
           tenants={tenants.data?.map((t) => ({ id: t.id, name: t.name })) ?? []}
           tenantsError={tenants.error}
-          onCreated={setCreated}
+          onCancel={() => setCreating(false)}
+          onCreated={(c) => {
+            setCreating(false);
+            setCreated(c);
+          }}
         />
-      )}
+      ) : null}
 
       <section aria-labelledby="keys-list-h" className="flex min-w-0 flex-col gap-3">
         <h2 id="keys-list-h" className="text-title text-fg">
@@ -286,7 +299,7 @@ export function AccessKeysPage() {
             rowProps={(r) => ({ "data-key-id": r.id, "data-kind": r.kind })}
             empty={{
               title: "No key yet",
-              text: "Create a key above for a machine or an AI assistant.",
+              text: "Choose Create key to make a key for a machine or an AI assistant.",
             }}
           />
         )}
@@ -318,10 +331,12 @@ export function AccessKeysPage() {
 function CreateKeyForm({
   tenants,
   tenantsError,
+  onCancel,
   onCreated,
 }: {
   tenants: { id: string; name: string }[];
   tenantsError: unknown;
+  onCancel: () => void;
   onCreated: (
     c: { type: "machine"; key: ApiKeyCreated } | { type: "assistant"; key: McpCredentialCreated },
   ) => void;
@@ -357,16 +372,14 @@ function CreateKeyForm({
 
   const machine = form.type === "machine";
   return (
-    <section aria-labelledby="create-key-h" className="flex max-w-prose flex-col gap-4">
+    <section
+      aria-labelledby="create-key-h"
+      className="flex max-w-prose animate-rise-in flex-col gap-4 rounded-lg border border-line bg-raised p-4 sm:p-5"
+    >
       <h2 id="create-key-h" className="text-title text-fg">
         Create a key
       </h2>
-      <form
-        aria-label="Create a key"
-        onSubmit={submit}
-        noValidate
-        className="flex flex-col gap-4 rounded-lg border border-line bg-raised p-4 sm:p-5"
-      >
+      <form aria-label="Create a key" onSubmit={submit} noValidate className="flex flex-col gap-4">
         <fieldset className="flex flex-col gap-2">
           <legend className="pb-2 text-small font-medium text-fg">Type</legend>
           <div className="grid gap-2 sm:grid-cols-2">
@@ -458,7 +471,7 @@ function CreateKeyForm({
         {create.error && Object.keys(serverKeyErrors(create.error)).length === 0 ? (
           <FormMessage error={create.error} />
         ) : null}
-        <div>
+        <div className="flex flex-wrap gap-2">
           <Button
             type="submit"
             pending={create.isPending}
@@ -467,10 +480,24 @@ function CreateKeyForm({
             {create.isPending ? null : <KeyRound aria-hidden />}
             {create.isPending ? "Creating" : "Create key"}
           </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onCancel}
+            className="max-lg:h-(--vs-control-touch)"
+          >
+            Cancel
+          </Button>
         </div>
       </form>
     </section>
   );
+}
+
+// a key as the one-time panel shows it before reveal: its prefix, then dots.
+// a key is printed in full only inside that panel.
+function masked(key: string): string {
+  return `${key.slice(0, Math.min(8, key.indexOf("_", 3) + 1 || 4))}${"•".repeat(24)}`;
 }
 
 function CreatedKey({
@@ -487,7 +514,8 @@ function CreatedKey({
   const origin = window.location.origin;
   if (created.type === "machine") {
     const k = created.key;
-    const curl = `curl -H "Authorization: Bearer ${k.key}" \\\n  "${origin}/api/metrics/v1/tenants"`;
+    const curl = (key: string) =>
+      `curl -H "Authorization: Bearer ${key}" \\\n  "${origin}/api/metrics/v1/tenants"`;
     return (
       <SecretPanel
         value={k.key}
@@ -499,12 +527,20 @@ function CreatedKey({
         copyLabel="Copy key"
         onDone={onDone}
       >
-        <CodeBlock code={curl} label="Try it with curl" copyLabel="Copy command" wrap />
+        <CodeBlock
+          code={curl(masked(k.key))}
+          copyText={curl(k.key)}
+          label="Try it with curl. The copied command holds the key."
+          copyLabel="Copy command"
+          wrap
+        />
       </SecretPanel>
     );
   }
   const k = created.key;
+  // the snippets show the key masked; their copy holds the key
   const s = clientSnippets(origin, k.key);
+  const shown = clientSnippets(origin, masked(k.key));
   return (
     <SecretPanel
       value={k.key}
@@ -517,14 +553,16 @@ function CreatedKey({
       onDone={onDone}
     >
       <CodeBlock
-        code={s.claudeCode}
-        label="Claude Code, with this key"
+        code={shown.claudeCode}
+        copyText={s.claudeCode}
+        label="Claude Code. The copied command holds the key."
         copyLabel="Copy command"
         wrap
       />
       <CodeBlock
-        code={s.cursor}
-        label="Cursor, in .cursor/mcp.json"
+        code={shown.cursor}
+        copyText={s.cursor}
+        label="Cursor, in .cursor/mcp.json. The copied text holds the key."
         copyLabel="Copy configuration"
       />
     </SecretPanel>

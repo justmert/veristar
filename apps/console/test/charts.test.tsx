@@ -94,6 +94,21 @@ describe("time chart", () => {
     expect(whole.querySelector("[data-legend=partial]")).toBeNull();
   });
 
+  it("leaves out the legend when the page shows one for a group of charts", async () => {
+    const host = await render(
+      <TimeChart
+        title="Page views"
+        state="data"
+        buckets={buckets}
+        series={series}
+        legend={false}
+      />,
+    );
+    expect(host.querySelector("ul[aria-label=Legend]")).toBeNull();
+    // the hatching still marks the partial period
+    expect(host.querySelectorAll("[data-partial]")).toHaveLength(1);
+  });
+
   it("toggles the previous period", async () => {
     const host = await render(
       <TimeChart
