@@ -131,6 +131,10 @@ here, before they take effect, as the processing terms require
 
 ### Fixed
 
+- A project that resubmits its enrollment keeps at most 20 declared accounts and
+  contracts: the ids of the new answers are added in the order they are listed
+  until the project holds 20, the cap the console holds every project to
+  (migration 00048).
 - A page whose path starts with two slashes (`https://example.com//docs/a`)
   is stored under its own path. Umami read such a path as a host and stored
   `/a`, and a path such as `//search%20term` made Umami refuse the event,
