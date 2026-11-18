@@ -100,6 +100,16 @@ here, before they take effect, as the processing terms require
 - `deploy.yml` installs the NATS permissions of the new release on every
   NATS server before the core tier. The replayer container gets 30 s to stop.
 
+### Fixed
+
+- A page whose path starts with two slashes (`https://example.com//docs/a`)
+  is stored under its own path. Umami read such a path as a host and stored
+  `/a`, and a path such as `//search%20term` made Umami refuse the event,
+  which went to the dead letter queue. The gateway also drops a referrer
+  host that the browser URL parser refuses (`a<b`, `1.2.3.256`, a zone),
+  which Umami refused the same way, and refuses a site origin whose last
+  label is a number but not an IPv4 address.
+
 ### Upgrade notes
 
 - Web events move from one subject per site to 32 partitions. The rolling

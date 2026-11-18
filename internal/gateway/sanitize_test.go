@@ -191,6 +191,24 @@ func TestSanitizeReferrer(t *testing.T) {
 		{"file:///home/jane/page.html", ""},
 		{"//evil.example/x", ""},
 		{"not a url", ""},
+		// umami parses the referrer with the whatwg url parser
+		// (src/app/api/send/route.ts) and answers 500 for one it cannot
+		// parse, which sent the event to the dlq. go's parser accepts these
+		// hosts, so they are dropped here
+		{"a://[:]x", ""},
+		{"a://[:]/", ""},
+		{"https://a<b.example/", ""},
+		{"https://a%25b.example/", ""},
+		{"https://a\"b.example/", ""},
+		{"http://1.2.3.256/", ""},
+		{"http://a.09/", ""},
+		{"http://a.0x1/", ""},
+		{"http://01.2.3.4/", ""},
+		{"http://[fe80::1%25eth0]/", ""},
+		{"https://über.example/", ""},
+		{"https://a_b.example/", "https://a_b.example"},
+		{"https://a.0x1g/", "https://a.0x1g"},
+		{"https://example.com./", "https://example.com."},
 	}
 	for _, c := range cases {
 		out, _ := SanitizeReferrer(c.in)
@@ -230,6 +248,40 @@ func TestSanitizeHostname(t *testing.T) {
 	rep := SanitizeWire(w, false)
 	if w.Hostname != "{account}.wild.example" || !rep.Redacted.Has(redact.KindAccount) {
 		t.Errorf("SanitizeWire hostname = %q, report %b", w.Hostname, rep.Redacted)
+	}
+}
+
+// umami resolves the url against https://<hostname> with the whatwg url
+// parser (src/app/api/send/route.ts). a path that starts with two slashes,
+// or a slash and a backslash, reads as a scheme relative url there: //docs/a
+// was stored as /a on host docs, and //[ made umami answer 500, which sent
+// the event to the dlq. browsers report such paths for urls like
+// https://example.com//docs, so the path is kept behind a /. segment, which
+// the parser removes again.
+func TestSanitizeURLSchemeRelativePath(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"//docs/a", "/.//docs/a"},
+		{"//[", "/.//["},
+		{"/\\evil", "/./\\evil"},
+		{"///", "/.///"},
+		{"//docs?q=1#/r", "/.//docs#/r"},
+		{"/.//docs", "/.//docs"},
+		{"/docs//a", "/docs//a"},
+		{"/", "/"},
+	}
+	for _, c := range cases {
+		got, _, _ := SanitizeURL(c.in, false)
+		if got != c.want {
+			t.Errorf("SanitizeURL(%q) = %q, want %q", c.in, got, c.want)
+		}
+		if again, _, _ := SanitizeURL(got, false); again != got {
+			t.Errorf("SanitizeURL(%q) = %q is not a fixed point: %q", c.in, got, again)
+		}
+	}
+	long := "//" + strings.Repeat("a", events.MaxURL)
+	got, _, _ := SanitizeURL(long, false)
+	if !strings.HasPrefix(got, "/.//") || len(got) > events.MaxURL {
+		t.Errorf("SanitizeURL(long) = %q...", got[:8])
 	}
 }
 
