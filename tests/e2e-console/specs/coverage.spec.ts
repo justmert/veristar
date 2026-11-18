@@ -125,6 +125,8 @@ test("the snippet offers the title opt-in from 1.3.0", async () => {
   // or done and folded away behind Show
   const install = page.getByRole("region", { name: /^Install the tag\W/ });
   await expect(install).toBeVisible();
+  // the step folds once the first event is known, so its sources answer first
+  await page.waitForLoadState("networkidle");
   const show = install.getByRole("button", { name: "Show" });
   await expect(async () => {
     if (await show.isVisible()) await show.click();
