@@ -170,7 +170,6 @@ export function AccessKeysPage() {
     {
       key: "used",
       header: "Last used",
-      mobile: true,
       cell: (r) =>
         r.lastUsed ? (
           <span className="whitespace-nowrap">{formatDateTimeUtc(r.lastUsed)}</span>
