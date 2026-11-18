@@ -392,7 +392,7 @@ function Figure({
           label
         )}
       </dt>
-      <dd className="min-w-0 font-mono text-body text-fg tabular">{children}</dd>
+      <dd className="min-w-0 text-body text-fg tabular">{children}</dd>
     </div>
   );
 }

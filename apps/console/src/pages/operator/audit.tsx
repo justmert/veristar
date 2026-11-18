@@ -447,7 +447,7 @@ function AuditRow({ e, nested }: { e: AuditEntry; nested?: boolean }) {
       <time
         dateTime={e.at}
         title={formatDateTimeUtc(e.at)}
-        className="col-start-2 font-mono text-caption text-fg-2 tabular sm:col-start-3 sm:row-start-1"
+        className="col-start-2 text-caption text-fg-2 tabular sm:col-start-3 sm:row-start-1"
       >
         {formatTimeUtc(e.at)}
       </time>

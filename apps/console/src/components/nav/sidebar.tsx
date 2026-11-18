@@ -402,7 +402,7 @@ function Badge({
   return (
     <span
       className={cn(
-        "inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1 font-mono text-axis tabular",
+        "inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-axis tabular",
         tone === "critical"
           ? "bg-critical-solid text-on-critical"
           : tone === "warning"

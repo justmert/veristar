@@ -277,7 +277,7 @@ function Metric({
   return (
     <div className="flex min-w-0 flex-col gap-1 border-r border-line-subtle px-5 py-3 last:border-r-0 max-sm:px-3">
       <dt className="truncate text-caption text-fg-2">{label}</dt>
-      <dd className="min-h-6 font-mono text-body font-medium text-fg tabular">
+      <dd className="min-h-6 text-body font-medium text-fg tabular">
         {pending ? <Skeleton className="h-5 w-12" /> : children}
       </dd>
     </div>

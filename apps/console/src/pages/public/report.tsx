@@ -242,7 +242,7 @@ function Hero({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex min-w-0 flex-col gap-1 rounded-lg border border-line bg-raised p-4 print:border-line-strong">
       <dt className="text-caption text-fg-2">{label}</dt>
-      <dd className="min-w-0 font-mono text-metric text-fg tabular">{children}</dd>
+      <dd className="min-w-0 text-metric text-fg tabular">{children}</dd>
     </div>
   );
 }
@@ -261,7 +261,7 @@ function Figure({
       <dt className="text-caption text-fg-2" title={title}>
         {label}
       </dt>
-      <dd className="min-w-0 font-mono text-body text-fg tabular">{children}</dd>
+      <dd className="min-w-0 text-body text-fg tabular">{children}</dd>
     </div>
   );
 }
@@ -487,7 +487,7 @@ function ReportBody({ doc }: { doc: ReportDocument }) {
                     <th scope="row" className="py-2 pr-3 font-normal text-fg-2">
                       {label}
                     </th>
-                    <td className="py-2 pr-3 text-right font-mono text-fg tabular">
+                    <td className="py-2 pr-3 text-right text-fg tabular">
                       {change === null ? (
                         <Missing reason="No value in the previous period" />
                       ) : k === "error_rate" ? (
@@ -496,7 +496,7 @@ function ReportBody({ doc }: { doc: ReportDocument }) {
                         formatChange(change)
                       )}
                     </td>
-                    <td className="py-2 text-right font-mono text-fg tabular">
+                    <td className="py-2 text-right text-fg tabular">
                       {hidden ? (
                         <Missing reason={hidden} />
                       ) : pct === null ? (

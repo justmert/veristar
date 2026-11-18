@@ -1061,7 +1061,7 @@ function StatusSection({
               <li key={c.class} data-class={c.class} className="flex items-center gap-1 text-fg-2">
                 <span aria-hidden className={cn("size-2 rounded-bar", CLASS[c.class].bg)} />
                 {CLASS[c.class].label}
-                <span className="font-mono text-fg tabular">{formatCount(c.requests)}</span>
+                <span className="text-fg tabular">{formatCount(c.requests)}</span>
               </li>
             ))}
           </ul>

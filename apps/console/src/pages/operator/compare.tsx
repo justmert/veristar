@@ -647,7 +647,7 @@ function ServicesCard({ project, slot }: { project: ApiCompareProject; slot: num
                 <span className="min-w-0 truncate font-mono text-caption text-fg">
                   {s.service === "" ? "Service without a name" : s.service}
                 </span>
-                <span className="shrink-0 font-mono text-small text-fg tabular">
+                <span className="shrink-0 text-small text-fg tabular">
                   {formatCount(s.requests)}
                 </span>
               </div>

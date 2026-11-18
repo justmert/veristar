@@ -704,8 +704,7 @@ function CompareStrip({
       className="flex animate-fade-in flex-wrap items-center gap-2"
     >
       <span className="text-small text-fg-2">
-        <span className="font-mono text-fg tabular">{selected.length}</span> of {MAX_COMPARE}{" "}
-        selected
+        <span className="text-fg tabular">{selected.length}</span> of {MAX_COMPARE} selected
       </span>
       <ul className="flex min-w-0 flex-wrap gap-2">
         {selected.map((s, i) => (

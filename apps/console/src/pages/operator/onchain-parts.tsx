@@ -41,9 +41,7 @@ export function CompareOnchainSection({
                 </span>
                 {declared ? (
                   <span className="text-small text-fg-2">
-                    <span className="font-mono text-fg tabular">
-                      {formatCount(s.totals.operations)}
-                    </span>{" "}
+                    <span className="text-fg tabular">{formatCount(s.totals.operations)}</span>{" "}
                     operations, {countOf(s.totals.transactions, "transaction")},{" "}
                     {s.totals.ids_verified} of {countOf(s.totals.ids, "id")} verified. Weekly active
                     accounts: {weeklyActiveText(s.totals.weekly_active_accounts)}.

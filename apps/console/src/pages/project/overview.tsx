@@ -409,7 +409,7 @@ function Summaries({ tenantId, sites, days }: { tenantId: string; sites: Site[];
     <section aria-label="Project" className="grid gap-3 md:grid-cols-3">
       <SummaryCard title="Sites" to={`/projects/${tenantId}/sites`} link="Sites">
         <span className="flex flex-wrap items-baseline gap-x-2">
-          <span className="font-mono text-title text-fg tabular">{formatCount(sites.length)}</span>
+          <span className="text-title text-fg tabular">{formatCount(sites.length)}</span>
           <span className="text-small text-fg-2">
             {sites.length === 0
               ? "No site added"
@@ -446,7 +446,7 @@ function Summaries({ tenantId, sites, days }: { tenantId: string; sites: Site[];
           <span className="text-small text-fg-2">No accounts or contracts declared</span>
         ) : (
           <span className="flex flex-wrap items-baseline gap-x-2">
-            <span className="font-mono text-title text-fg tabular">
+            <span className="text-title text-fg tabular">
               {formatCount(activity?.operations ?? 0)}
             </span>
             <span className="text-small text-fg-2">
