@@ -5,15 +5,22 @@ description: "Declare your project's Stellar accounts and Soroban contracts, pro
 ---
 
 Veristar shows the ledger activity of your project's Stellar accounts and Soroban contracts next to
-its web and API usage, on your overview and in the views SCF reviewers use. You declare the ids,
+its web and API usage, on your overview, on **SCF review** and in the views SCF reviewers use. You declare the ids,
 prove that your project controls each one, and Veristar reads their activity from public ledger
 APIs once a day. The contract is section 15 of
 [`docs/reference/control-plane-api.md`](../reference/control-plane-api.md).
 
 ## What you see
 
-Open your project and choose **On-chain**. **Accounts and contracts** lists every id you declared,
-with:
+Open your project and choose **On-chain**. The page has three parts: **Activity** for a range
+you choose (7, 30, 90 or 365 days, or your own UTC days), **Accounts and contracts**, and the
+**stellar.toml link** checklist. **Export CSV** downloads the daily rows of the range.
+
+**Activity** counts your verified ids only, the way SCF reviewers see them: operations,
+transactions, weekly active accounts and days without data (days before today without a ledger
+read, added up over the verified ids), with the daily operations and every ISO week.
+
+**Accounts and contracts** lists every id you declared, with:
 
 - **Verified** or **Unverified**: whether the project proved control of the id.
 - Per UTC day: **operations**, **transactions** and **counterparties** (distinct other accounts or
@@ -33,7 +40,7 @@ lists every limit.
 
 ### Weekly active accounts
 
-The on-chain panel of your overview and **What SCF sees** show your project's **weekly active
+The **On-chain** page and **SCF review** show your project's **weekly active
 accounts**, by the SCF Growth Hack definition: an active account is "the account that initiated at
 least one operation" in the week. Veristar counts the distinct accounts that initiated at least one
 successful operation involving your **verified** accounts or contracts in each ISO week (Monday to
@@ -50,7 +57,7 @@ is read.
 Each verified contract on **Accounts and contracts** shows **Calls per function**: per function,
 the calls made by accounts (operations that invoke the contract) and by other contracts, the
 failed calls of contracts, and the most distinct accounts behind them on one day. **Daily calls**
-shows each function per UTC day, and **Export CSV** downloads those rows. **What SCF sees** shows
+shows each function per UTC day, and **Export CSV** downloads those rows. **SCF review** shows
 the same totals that reviewers see. Calls are found in the transactions where your contract emits
 an event, and only verified contracts count. The
 [sources page](../reference/onchain-sources.md#calls-per-contract-function) explains how calls and
@@ -65,7 +72,7 @@ The ids you gave at enrollment are already listed. To add another:
 
 A project declares at most 20 ids. For a muxed account (`M...`), add its `G` account: a muxed
 address is a label on that account, and its activity is the account's activity. An owner removes an
-id with **Remove**; adding it again brings its history back.
+id from its actions menu; adding it again brings its history back.
 
 ## Prove control of an account
 
@@ -133,18 +140,22 @@ site domain:
    The ledger keeps at most 32 bytes of home domain, so this leg needs a domain of 32 characters
    or fewer.
 
-The **stellar.toml link** panel shows each leg per site and account. When every leg holds for a
+The **stellar.toml link** checklist shows each leg per site and account as one line, done or not
+done. A line that is not done has one action: verify the domain, open the site setup, or copy the
+lines or the domain to set. When every leg holds for a
 verified account on a verified domain, the project shows **stellar.toml linked both ways**; an
 account you have not proven never links, since anyone can declare an account that lists a domain. Veristar reads
 the stellar.toml once a day and the home domain with each daily ledger read, so a change shows
 within a day. A contract you list as a `[[CURRENCIES]]` `contract` shows as named by the file.
 
-## What SCF sees
+## SCF review
 
-**What SCF sees** shows the figures the SCF operator views show about your project for the same
-range, from the same queries: your project's row in Global web and Global API, its integrity grade
-with the **Appeal this grade** link, its on-chain column with the weekly active accounts, and their
-daily series. **Export CSV** downloads your overview's daily numbers
+**SCF review** shows the figures the SCF operator views show about your project for the same
+range, from the same queries: your standing (the integrity grade with what it means, your cohort,
+and the change and percentile of each key metric), the full integrity report with the
+**Appeal this grade** link, the rules you meet, your project's rows in the web and API views, its
+on-chain column with the weekly active accounts and the calls per contract function, and their
+daily series. The same page creates [signed reports](signed-reports.md) of these figures. **Export CSV** downloads your overview's daily numbers
 (web, API and on-chain) for the range. The [overview guide](overview.md) explains each web and API
 number.
 

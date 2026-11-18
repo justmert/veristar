@@ -294,7 +294,7 @@ platform reads from Umami is in `docs/reference/umami-contract.md`.
     stays an estimate shown beside the numbers, never an input of the
     integrity grade.
 
-  The estimate is on the project's overview, in "What SCF sees", in the
+  The estimate is in the integrity report of the project's SCF review page, in the
   operators' global web view as a column, in the CSV exports, in the
   machine API and in the MCP tools ([../reference/control-plane-api.md](../reference/control-plane-api.md),
   section 17.5).

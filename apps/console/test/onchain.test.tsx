@@ -8,10 +8,20 @@ import { EMPTY_FILTERS } from "@/lib/global";
 import { listExportHref } from "@/lib/operator-projects";
 import { OnchainValue } from "@/pages/operator/shared";
 import { OnchainPage } from "@/pages/project/onchain";
+import { ScfReviewPage } from "@/pages/project/scf";
 import type { ProjectContext } from "@/pages/project-layout";
-import { IntegritySlot, SCFViewPage } from "@/pages/scf-view";
 import * as f from "./fixtures/contract";
-import { byLabel, byRole, click, render, renderRoutes, stubFetch, type, waitFor } from "./helpers";
+import {
+  byLabel,
+  byRole,
+  click,
+  render,
+  renderRoutes,
+  routeFetch,
+  stubFetch,
+  type,
+  waitFor,
+} from "./helpers";
 
 const ACCOUNT_ID = "0193a6f8-6666-7a88-9b99-caadbbeccddd";
 const CONTRACT_ID = "0193a6f8-7777-7b99-acaa-dbbeccddeeff";
@@ -531,21 +541,39 @@ const scfBody = {
   rules_met: [],
 };
 
-describe("what scf sees (contract 16.3)", () => {
-  it("shows the operator rows and no grade the control plane did not send", async () => {
-    stubFetch([{ status: 200, body: scfBody }]);
+describe("scf review figures (contract 16.3)", () => {
+  function answer(scf: unknown) {
+    return routeFetch((_method, url) => {
+      if (url.includes("/scf-view")) return { status: 200, body: scf };
+      if (url.includes("/reports")) return { status: 200, body: { items: [] } };
+      if (url.includes("/sites")) return { status: 200, body: { items: [], next_cursor: null } };
+      return { status: 404, body: f.errorBody("not_found") };
+    });
+  }
+
+  it("shows the operator rows, one definition per label and the contract calls", async () => {
+    answer(scfBody);
     const host = await renderRoutes(
-      routes(<SCFViewPage />, "scf-view"),
-      `/projects/${f.TENANT_ID}/scf-view`,
+      routes(<ScfReviewPage />, "scf"),
+      `/projects/${f.TENANT_ID}/scf`,
     );
     await waitFor(() => expect(host.textContent).toContain("1,234"));
     expect(host.textContent).toContain("1 of 2");
     expect(host.textContent).toContain("stellar.toml linked both ways");
-    expect(host.querySelector("[data-testid=integrity-grade]")).toBeNull();
+    // the control plane sent no grade, so none is drawn
+    expect(host.querySelector("[data-testid=standing-grade] [data-grade]")).toBeNull();
     const link = [...host.querySelectorAll("a")].find((a) => a.textContent?.includes("Export CSV"));
     expect(link?.getAttribute("href")).toBe(
       `/api/tenants/${f.TENANT_ID}/overview.csv?from=${days[0]}&to=${days[3]}`,
     );
+    // "Days without data" reads as the on-chain page counts it, and the api
+    // count of routes is named for what it counts
+    expect(host.querySelector("[data-figure=days-missing]")?.textContent).toContain(
+      "before today without a ledger read",
+    );
+    expect(host.querySelector("[data-figure=routes]")?.textContent).toContain("Distinct routes");
+    // a value the view does not have is the missing glyph, never n/a
+    expect(host.textContent).not.toContain("n/a");
     // each verified contract's calls per function, failed missing for accounts
     const table = host.querySelector(`[aria-label="Calls per function of ${f.C_KEY}"]`);
     const row = table?.querySelector('[data-function="swap"][data-caller="account"]');
@@ -554,14 +582,32 @@ describe("what scf sees (contract 16.3)", () => {
     expect(host.textContent).toContain("2 days read, 1 with calls of accounts only");
   });
 
-  it("renders the integrity grade when the field arrives", async () => {
-    const host = await render(
-      <IntegritySlot value={{ grade: "B", graded_days: 8, days_a: 5, days_b: 3, days_c: 0 }} />,
+  it("draws the grade with its word, colour and meaning when the field arrives", async () => {
+    answer({
+      ...scfBody,
+      integrity: { grade: "B", graded_days: 8, days_a: 5, days_b: 3, days_c: 0 },
+    });
+    const host = await renderRoutes(
+      routes(<ScfReviewPage />, "scf"),
+      `/projects/${f.TENANT_ID}/scf`,
     );
-    expect(host.querySelector("[data-testid=integrity-grade]")?.textContent).toBe("B");
-    expect(host.textContent).toContain("8 graded site days: 5 A, 3 B, 0 C");
-    const empty = await render(<IntegritySlot value={undefined} />);
-    expect(empty.textContent).toBe("");
+    await waitFor(() => expect(host.querySelector("[data-testid=standing-grade]")).not.toBeNull());
+    const card = host.querySelector("[data-testid=standing-grade]");
+    expect(card?.querySelector("[data-grade]")?.getAttribute("data-grade")).toBe("B");
+    expect(card?.textContent).toContain("Grade B");
+    expect(card?.textContent).toContain("A quarter or more of the graded site days");
+    expect(card?.textContent).toContain("8 graded site days: 5 A, 3 B, 0 C.");
+  });
+
+  it("says when the project is not in the scf views", async () => {
+    answer({ ...scfBody, in_operator_views: false });
+    const host = await renderRoutes(
+      routes(<ScfReviewPage />, "scf"),
+      `/projects/${f.TENANT_ID}/scf`,
+    );
+    await waitFor(() => expect(host.textContent).toContain("Not in the SCF views"));
+    expect(host.textContent).not.toContain("Figures");
+    expect(host.textContent).toContain("Signed reports");
   });
 });
 

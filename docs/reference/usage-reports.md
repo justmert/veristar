@@ -68,7 +68,7 @@ share, percentile and latency is a decimal string with six digits after the poin
 | `cohort` | the confirmed program, round, category and award date, the population of the percentiles, its size, and for visitors, page views, requests, error rate and on-chain operations the value, the previous period's value, the change and the percentile |
 | `rules_met` | the operators' saved threshold rules the project met on the generation day |
 
-The numbers are the ones the operator views and "What SCF sees" show for the same period:
+The numbers are the ones the operator views and the project's **SCF review** page show for the same period:
 the report reads them with the same SQL, and it holds every figure that page shows: the coverage
 estimate, whether web and API data exist, whether API metrics were lossy, the infrastructure
 requests left out, the weekly active accounts, and the calls per contract function. A report holds aggregates only; no visitor, address,

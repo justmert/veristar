@@ -83,6 +83,10 @@ export function missingReasons(id: ChainId): { code: string; days: number }[] {
   return [...by.entries()].map(([code, days]) => ({ code, days })).sort((a, b) => b.days - a.days);
 }
 
+// one definition of "Days without data" for every page that shows it
+export const DAYS_WITHOUT_DATA =
+  "Days before today without a ledger read, added up over the verified ids.";
+
 // the activity of a range as scf reviewers count it: verified ids only, and
 // days before today. the on-chain view sums every declared id, today
 // included; these figures read the same as the scf review and the operator

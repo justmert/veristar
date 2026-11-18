@@ -20,7 +20,7 @@ project without declared ids shows a dash.
   or for a contract its stored admin or its deployer being one of the project's verified accounts.
   Anyone can declare any public id, so unverified ids count nowhere: the column's operations, the
   compare series, the on-chain key metric and its percentile, threshold rules on on-chain
-  operations, What SCF sees and signed reports all read verified ids only, as weekly active
+  operations, the project's SCF review and signed reports all read verified ids only, as weekly active
   accounts do. The project's detail section still lists every declared id with its own numbers.
 - **Missing** days were not read, for a reason the detail names. They are never zeros. Accounts
   are read back 90 days at the first read; contracts only from about a week before they were
@@ -119,10 +119,11 @@ week of the day (`onchain_week`) with its `onchain_week_active_accounts` or
 
 ## What projects see
 
-Each project has a **What SCF sees** page with its own row of these views, computed by the same
+Each project has an **SCF review** page with its own row of these views, computed by the same
 queries for the same range, with its integrity grade, weekly active accounts and the calls per
 function of each verified contract. It sees nothing about other projects. The project's own
-**On-chain** page shows the same calls per function, with the daily calls and their export.
+**On-chain** page shows the same calls per function, with the daily calls and their export, and
+counts its activity over verified ids only, as these views do.
 
 ## Machine API and AI clients
 

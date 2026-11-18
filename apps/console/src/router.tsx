@@ -32,10 +32,10 @@ import { WebPage } from "@/pages/project/web";
 import { ProjectLayout } from "@/pages/project-layout";
 import { AiConsentPage } from "@/pages/public/ai-consent";
 import { NotFoundPage, RouteErrorPage } from "@/pages/public/not-found";
+import { PublicReportPage } from "@/pages/public/report";
 import { SignInPage } from "@/pages/public/sign-in";
 import { SsoErrorPage } from "@/pages/public/sso-error";
 import { TermsPage } from "@/pages/public/terms";
-import { PublicReportPage } from "@/pages/public-report";
 import { queryClient } from "@/query-client";
 
 // the first paint while the session check runs: the mark breathing in the

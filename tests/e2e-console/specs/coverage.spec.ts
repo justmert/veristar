@@ -4,7 +4,7 @@
 // Sec-GPC: 1 on every request. the gateway attributes each request for the
 // tracker file to the site by the page's origin in the Referer header and
 // counts it, and the gpc one again; the jobs daemon stores both counters.
-// the project then reads the counts on its overview and what scf sees, and
+// the project then reads the counts on its overview and its scf review, and
 // an operator reads them in the global web table's column and in its export.
 // three loads are below the 100 the share needs, so every view states the
 // counts and says the share cannot be estimated yet.
@@ -134,11 +134,13 @@ test("the snippet offers the title opt-in from 1.3.0", async () => {
   expect(tag).not.toContain("data-send-title");
 });
 
-test("the project reads the estimate in what scf sees", async () => {
+test("the project reads the estimate in its scf review", async () => {
   const page = owner.page;
   await page.goto(`${APP}/projects/${tenant.id}/scf`);
-  const scf = page.getByRole("region", { name: "Visits not measured" });
+  // the estimate is part of the integrity report, once on the page
+  const scf = page.getByRole("region", { name: "Integrity report" });
   await expect(scf.getByTestId("coverage")).toContainText("Of 3 loads of the tracker file");
+  await expect(page.getByTestId("coverage")).toHaveCount(1);
 });
 
 test("the operator reads the column and the export", async () => {

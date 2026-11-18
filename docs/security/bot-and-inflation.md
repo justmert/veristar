@@ -325,8 +325,8 @@ Where the grade appears:
   graded project), the grade and reasons in compare and in the tenant detail,
   `GET /api/operator/web/integrity` for one project's reasons per site and day
   ([../reference/control-plane-api.md](../reference/control-plane-api.md) section 17).
-- **The project:** the same report on its own overview (`GET /api/tenants/{tenant_id}/integrity`),
-  so builders see exactly what SCF sees.
+- **The project:** the grade on its overview, and the same full report on its **SCF review** page
+  (`GET /api/tenants/{tenant_id}/integrity`), so builders see exactly what SCF sees.
 - **Machines:** `GET /api/metrics/v1/web/integrity` per site and day, with the same
   `integrity_at_or_below` filter on the site day's grade, and an `integrity` object on every
   `/web/daily` item.
@@ -341,8 +341,8 @@ The grade is automatic: the rules above compute it, and no one sets or edits it 
 decide what a grade means for a project. If you think your project's grade misreads your traffic,
 appeal it:
 
-1. Open your project's overview or **What SCF sees** in the console and select **Appeal this
-   grade** next to the grade. It appears whenever the range has a grade.
+1. Open your project's **SCF review** page in the console and select **Appeal this grade** next to
+   the integrity report. It appears whenever the range has a grade of B or C.
 2. The link opens a new issue on the **Integrity appeal** form of the public tracker, filled in
    with your project slug, each site's domain and grade, the period, the range grade, the reason
    codes with their day counts and the rule set version. It carries no personal data and no
