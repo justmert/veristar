@@ -109,20 +109,15 @@ test("an owner declares an account and gets a challenge to prove it", async () =
   }
   expect(weekly.body.totals.weekly_active_accounts.average).toBeNull();
   expect(weekly.body.totals.weekly_active_accounts.weeks_missing).toBe(weekly.body.weeks.length);
-  // the on-chain page shows every week of its default range and why it
-  // has no count, and the summary says that none was counted
+  // with no verified id nothing counts yet, so the page stays one first
+  // step: the id is added, its proof is the step to do now, and no empty
+  // week, strip or number is drawn
   await page.goto(`${APP}/projects/${tenant.id}/onchain`);
-  await expect(page.getByRole("heading", { name: "Weekly active accounts" })).toBeVisible();
-  const weeks = page.getByRole("list", { name: "Weekly active accounts per ISO week" });
-  await expect(weeks.locator("[data-week]")).toHaveCount(weekly.body.weeks.length);
-  // every week misses for one reason, so the reason shows once under them
-  await expect(weeks.locator("xpath=..").locator("p[data-missing]")).toBeVisible();
-  await expect(weeks.locator("[data-week]").first()).not.toContainText(/\b0\b/);
-  await expect(page.getByTestId("waa-summary")).toContainText("No complete week counted");
-  // the project has no verified id, so its activity counts nothing yet
-  await expect(page.getByTestId("activity-scope")).toContainText(
-    "0 of 1 account or contract verified",
-  );
+  const first = page.locator("[data-first-step]");
+  await expect(first.locator('[data-check="1"]')).toHaveAttribute("data-state", "done");
+  await expect(first.locator('[data-check="2"]')).toHaveAttribute("data-state", "current");
+  await expect(page.getByRole("heading", { name: "Weekly active accounts" })).toHaveCount(0);
+  await expect(page.getByTestId("activity-scope")).toHaveCount(0);
 });
 
 test("scf review and the overview export answer for the project", async () => {
