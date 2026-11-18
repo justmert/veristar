@@ -232,7 +232,7 @@ function QueueItem({
     >
       <span className="flex min-w-0 items-baseline justify-between gap-2">
         <span className="min-w-0 truncate text-body font-medium text-fg">{t.name}</span>
-        <span className="shrink-0 font-mono text-caption text-fg-2">
+        <span className="shrink-0 text-caption text-fg-2 tabular">
           {ageText(t.status_changed_at, now)}
         </span>
       </span>
