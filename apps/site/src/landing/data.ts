@@ -18,7 +18,7 @@ export const heroBars = [
   { h: 50, dy: -8, r: -2, v: "v2" },
 ] as const;
 
-// the problem: the review cycle of resources/rfp.md section 2, and veristar's fix for each step
+// the problem: the review cycle that scf reviewers run today, and veristar's fix for each step
 export const reviewSteps = [
   { step: "A project assembles its own usage report", fix: "Veristar measures it for you" },
   { step: "Reviewers question the numbers", fix: "Five checks on every page view" },
@@ -35,7 +35,7 @@ export const verbs = [
   {
     who: "Veristar",
     w: "Check",
-    p: "Each event passes five checks. Personal data is removed. Every project is counted the same way.",
+    p: "Each event passes five checks. IP addresses, email addresses and Stellar keys are removed. Every project is counted the same way.",
   },
   {
     who: "Everyone",
@@ -50,7 +50,7 @@ export const strata = [
     from: "from a script tag",
     terms: [
       { k: "Page views", v: "Every page view event from the pinned tracker." },
-      { k: "Visitors", v: "One person on one UTC day." },
+      { k: "Visitors", v: "One browser on one network, per UTC day." },
       {
         k: "Visit duration and bounce rate",
         v: "From the first to the last page view of a visit.",
@@ -81,8 +81,14 @@ export const strata = [
         k: "Operations",
         v: "Successful operations of the accounts and contracts that you declare.",
       },
-      { k: "Proof of control", v: "A SEP-53 signature or a data entry. Only proved ids count." },
-      { k: "Counterparties", v: "Distinct accounts that interact with yours, per day." },
+      {
+        k: "Proof of control",
+        v: "For an account, a SEP-53 signature or a data entry. For a contract, its admin or deployer. Only proved ids count.",
+      },
+      {
+        k: "Counterparties",
+        v: "Distinct accounts and contracts that interact with yours, per day.",
+      },
       { k: "Weekly active accounts", v: "As the SCF Growth Hack rules define them." },
     ],
   },
@@ -91,8 +97,8 @@ export const strata = [
 // trust: docs/security/bot-and-inflation.md
 export const gateNames = [
   "Pinned script",
-  "Browser proof",
   "Origin",
+  "Browser proof",
   "Rate limits",
   "Same network",
 ];
@@ -101,11 +107,11 @@ export type Fate = "ok" | "no" | "hold";
 export const travellers: { who: string; stop: string; at: number; fate: Fate; verdict: string }[] =
   [
     { who: "A visitor in a real browser", stop: "100%", at: 0, fate: "ok", verdict: "Counted" },
-    { who: "A post from a server script", stop: "30%", at: 2, fate: "no", verdict: "Rejected" },
+    { who: "A post from a server script", stop: "50%", at: 3, fate: "no", verdict: "Rejected" },
     {
       who: "Your tag, copied to a site you did not register",
-      stop: "50%",
-      at: 3,
+      stop: "30%",
+      at: 2,
       fate: "no",
       verdict: "Rejected",
     },
@@ -135,7 +141,7 @@ export const opGroups = [
     name: "Attention",
     pages: [
       [
-        "Review queue",
+        "Review",
         "Projects that wait for approval, and active projects with a site in review. The oldest come first.",
       ],
       [
@@ -147,12 +153,10 @@ export const opGroups = [
   {
     name: "Projects",
     pages: [
-      ["Projects", "Every project, with search, a status filter and sort."],
       [
-        "Global web",
-        "The web numbers of every project for a range of days. Sort by any column, also by integrity grade.",
+        "All projects",
+        "Every project in three views. Status has search, a status filter and sort. Web and API show the numbers for a range of days.",
       ],
-      ["Global API", "The API numbers of every project, with p50, p95 and p99 latency."],
       ["Rules", "Saved traction rules, and the projects that meet them, with the evidence."],
     ],
   },
@@ -160,16 +164,21 @@ export const opGroups = [
     name: "Compare",
     pages: [
       ["Compare", "Up to five projects side by side, for web and API."],
-      ["CSV export", "Every global and compare view exports exactly as shown."],
+      ["CSV export", "Every table and comparison exports as CSV, with the columns on screen."],
     ],
   },
   {
     name: "Admin",
     pages: [
       ["Settings", "Open enrollment, or approval before a project can start."],
-      ["Operators", "The operator roster. Each operator confirms with a passkey."],
-      ["API keys", "Keys that give other tools access to the metrics API."],
-      ["AI / MCP", "Keys that let an AI client read the operator view."],
+      [
+        "Operators",
+        "The operator roster. Each operator confirms with a passkey or a security key.",
+      ],
+      [
+        "Access keys",
+        "Keys for the metrics API, and keys that let an AI client read the operator view.",
+      ],
       ["Audit log", "Every recorded change, with the person who made it."],
     ],
   },
@@ -240,7 +249,7 @@ export const perf = [
   {
     n: "700",
     unit: "a second",
-    k: "Web events ingested by one node",
+    k: "Web events accepted by one node",
     v: "The gateway of one production node accepts them into the queue at p99 50 ms. The expected peak is 50 a second.",
     wide: true,
   },
@@ -251,7 +260,7 @@ export const perf = [
     v: "Veristar stored all 1,000,000, equal to the requests sent, on 12 Nov 2026.",
     wide: true,
   },
-  { n: "4,385", unit: "bytes", k: "Tracker size", v: "Version 1.3.1, after gzip.", wide: false },
+  { n: "4,641", unit: "bytes", k: "Tracker size", v: "Version 1.4.0, after gzip.", wide: false },
   {
     n: "150",
     unit: "ms",
@@ -263,7 +272,7 @@ export const perf = [
     n: "72",
     unit: "hours",
     k: "Queue",
-    v: "Accepted events wait up to 72 hours. Maintenance loses no data.",
+    v: "Accepted events wait up to 72 hours. The rolling reboot drill lost no accepted event.",
     wide: false,
   },
 ];
@@ -277,7 +286,7 @@ export const ledger = [
   },
   {
     k: "The releases",
-    v: "Release images are signed with cosign. Each node checks the signature before it pulls an image.",
+    v: "Release images are signed with cosign. Every deploy checks each signature before a node pulls an image.",
     href: hrefs.docs("security/supply-chain"),
     aria: "Read about the supply chain",
   },

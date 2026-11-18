@@ -9,9 +9,7 @@
   },
   "overrides": [
     {
-      "includes": [
-        "src/landing/**/*.css"
-      ],
+      "includes": ["src/landing/**/*.css"],
       "linter": {
         "rules": {
           "style": {
@@ -24,9 +22,7 @@
       }
     },
     {
-      "includes": [
-        "src/landing/landing.tsx"
-      ],
+      "includes": ["src/landing/landing.tsx"],
       "linter": {
         "rules": {
           "a11y": {
