@@ -2,7 +2,7 @@
 // carries its definition on its header, so the table explains itself.
 
 import type { Kpi, KpiKey } from "@/api/cohorts";
-import type { ApiProject, OperatorTenantSummary, WebProject } from "@/api/schemas";
+import type { ApiProject, OperatorTenantSummary, TenantStatus, WebProject } from "@/api/schemas";
 import { CoverageCell } from "@/components/coverage";
 import type { Column } from "@/components/data-table";
 import { IntegrityCell } from "@/components/integrity";
@@ -68,14 +68,28 @@ function percentile(k: Kpi, cohortSize: number) {
 }
 
 // the project name, cut to the column with the full name in a tooltip. the
-// status has its own column in every view.
-function ProjectName({ name, slot }: { name: string; slot: number }) {
+// status has its own column in every view; the web and api phone cards
+// show it as a badge on the name line, so their three numbers stay numbers
+function ProjectName({
+  name,
+  slot,
+  status,
+}: {
+  name: string;
+  slot: number;
+  status?: TenantStatus;
+}) {
   return (
     <span className="flex min-w-0 items-center gap-2">
       <SeriesSwatch slot={slot} />
       <Tooltip content={name}>
         <span className="min-w-0 truncate">{name}</span>
       </Tooltip>
+      {status ? (
+        <span className="shrink-0 sm:hidden">
+          <StatusBadge kind="project" status={status} operator />
+        </span>
+      ) : null}
     </span>
   );
 }
@@ -198,7 +212,9 @@ function commonColumns<R extends Row>(slot: (id: string) => number): Column<R>[]
       primary: true,
       minWidth: "min-w-48",
       className: "max-w-72",
-      cell: (r) => <ProjectName name={r.tenant.name} slot={slot(r.tenant.id)} />,
+      cell: (r) => (
+        <ProjectName name={r.tenant.name} slot={slot(r.tenant.id)} status={r.tenant.status} />
+      ),
     },
     {
       key: "status",
