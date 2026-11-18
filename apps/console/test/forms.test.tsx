@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { toast } from "@/components/toast";
 import { EnrollForm } from "@/pages/home/enroll";
 import { AddMemberForm } from "@/pages/project/members";
 import { AddSiteForm } from "@/pages/project/sites";
@@ -158,10 +159,14 @@ describe("add member form", () => {
       { status: 201, body: f.addMemberAsInviteBody },
       { status: 200, body: f.membersBody },
     ]);
+    const said = vi.spyOn(toast, "success");
     const host = await render(<AddMemberForm tenantId={f.TENANT_ID} />);
     await type(byLabel(host, "GitHub username"), "@someone");
     await click(byRole(host, "button", "Add"));
-    await waitFor(() => expect(host.textContent).toContain("someone has no account yet"));
+    await waitFor(() =>
+      expect(said).toHaveBeenCalledWith(expect.stringContaining("someone has no account yet")),
+    );
+    said.mockRestore();
     expect(calls[0]?.body).toEqual({ github_login: "someone", role: "member" });
   });
 
