@@ -10,7 +10,7 @@ import { Missing } from "@/components/states";
 import { Tooltip } from "@/components/ui/tooltip";
 import { countOf, formatCount, formatDate, utcDay } from "@/lib/format";
 import { type DayRange, lastDays, MAX_COMPARE, presetOf, RANGE_PRESETS } from "@/lib/global";
-import { weeklyActiveText } from "@/lib/onchain";
+import { NO_VERIFIED_IDS, weeklyActiveText } from "@/lib/onchain";
 
 // the cohort a project is confirmed in, as one short line
 export function cohortText(c: Pick<Cohort, "program" | "round" | "category">): string | null {
@@ -60,10 +60,10 @@ export function SourceText({
 
 export function onchainNote(s: OnchainSummary): string {
   return [
-    `${s.ids_verified} of ${countOf(s.ids, "id")} verified`,
+    `${s.ids_verified} of ${countOf(s.ids, "ID")} verified`,
     countOf(s.transactions, "transaction"),
-    s.days_missing ? `${countOf(s.days_missing, "id day")} without data` : null,
-    s.ids_failing ? `${countOf(s.ids_failing, "id")} not read` : null,
+    s.days_missing ? `${countOf(s.days_missing, "ID day")} without data` : null,
+    s.ids_failing ? `${countOf(s.ids_failing, "ID")} not read` : null,
     `Weekly active accounts: ${weeklyActiveText(s.weekly_active_accounts)}`,
   ]
     .filter(Boolean)
@@ -74,6 +74,8 @@ export function onchainNote(s: OnchainSummary): string {
 // opens on keyboard focus too
 export function OnchainValue({ s }: { s: OnchainSummary | undefined }) {
   if (!s || s.ids === 0) return <Missing reason="No accounts or contracts declared" />;
+  // nothing is measured without a verified id, so no 0 shows
+  if (s.ids_verified === 0) return <Missing reason={`${NO_VERIFIED_IDS}. ${onchainNote(s)}`} />;
   const note = onchainNote(s);
   return (
     <Tooltip content={note}>

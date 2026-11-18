@@ -39,11 +39,16 @@ export function CompareOnchainSection({
                 <span className="min-w-0 truncate text-body font-medium text-fg">
                   {p.tenant.name}
                 </span>
-                {declared ? (
+                {declared && s.totals.ids_verified === 0 ? (
+                  // nothing is measured without a verified id, so no 0 shows
+                  <span className="text-small text-fg-2">
+                    No verified account or contract, 0 of {countOf(s.totals.ids, "ID")} verified
+                  </span>
+                ) : declared ? (
                   <span className="text-small text-fg-2">
                     <span className="text-fg tabular">{formatCount(s.totals.operations)}</span>{" "}
                     operations, {countOf(s.totals.transactions, "transaction")},{" "}
-                    {s.totals.ids_verified} of {countOf(s.totals.ids, "id")} verified. Weekly active
+                    {s.totals.ids_verified} of {countOf(s.totals.ids, "ID")} verified. Weekly active
                     accounts: {weeklyActiveText(s.totals.weekly_active_accounts)}.
                   </span>
                 ) : (
