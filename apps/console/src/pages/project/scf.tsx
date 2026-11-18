@@ -45,7 +45,13 @@ import {
   formatTick,
   OPEN_BUCKET,
 } from "@/lib/format";
-import { DAYS_WITHOUT_DATA, shortKey, weeklyActiveText } from "@/lib/onchain";
+import {
+  chainGap,
+  DAYS_WITHOUT_DATA,
+  NO_VERIFIED_IDS,
+  shortKey,
+  weeklyActiveText,
+} from "@/lib/onchain";
 import {
   closedDays,
   downloadFile,
@@ -193,6 +199,12 @@ function CohortPlace({ v }: { v: SCFView }) {
       ? `the projects confirmed in ${[pc.program, pc.round].filter(Boolean).join(", ")}`
       : "every listed project, because no cohort is confirmed for yours";
   const hidden = percentileHiddenReason(c.cohort_size);
+  // on-chain operations follow the one missing-value rule of the figures:
+  // without a verified id neither range is measured
+  const chain = v.onchain;
+  const chainNow = chain ? chainGap(chain.ids_verified, v.onchain_series) : null;
+  const chainBefore = chain && chain.ids_verified === 0 ? NO_VERIFIED_IDS : null;
+  const gapOf = (r: KpiRow, gap: string | null) => (r.key === "onchain_operations" ? gap : null);
   const columns: Column<KpiRow>[] = [
     { key: "metric", header: "Metric", primary: true, cell: (r) => r.label },
     {
@@ -201,14 +213,20 @@ function CohortPlace({ v }: { v: SCFView }) {
       align: "right",
       numeric: true,
       mobile: true,
-      cell: (r) => kpiText(r.k.value, r.kind),
+      cell: (r) => {
+        const gap = gapOf(r, chainNow);
+        return gap ? <Missing reason={gap} /> : kpiText(r.k.value, r.kind);
+      },
     },
     {
       key: "previous",
       header: "Previous range",
       align: "right",
       numeric: true,
-      cell: (r) => kpiText(r.k.previous, r.kind),
+      cell: (r) => {
+        const gap = gapOf(r, chainBefore);
+        return gap ? <Missing reason={gap} /> : kpiText(r.k.previous, r.kind);
+      },
     },
     {
       key: "change",
@@ -433,6 +451,7 @@ function Figures({ v }: { v: SCFView }) {
   const web = v.web;
   const api = v.api;
   const chain = v.onchain;
+  const chainMissing = chain ? chainGap(chain.ids_verified, v.onchain_series) : null;
   const award = v.comparison?.cohort.award_date ?? null;
   const marker = award ? { day: award, label: `Award date ${formatDate(award)}` } : null;
   const awardInRange = marker !== null && v.days.includes(marker.day);
@@ -552,13 +571,21 @@ function Figures({ v }: { v: SCFView }) {
         {chain ? (
           <>
             <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-              <Figure label="Operations">{formatCount(chain.operations)}</Figure>
-              <Figure label="Transactions">{formatCount(chain.transactions)}</Figure>
+              <Figure label="Operations">
+                {chainMissing ? <Missing reason={chainMissing} /> : formatCount(chain.operations)}
+              </Figure>
+              <Figure label="Transactions">
+                {chainMissing ? <Missing reason={chainMissing} /> : formatCount(chain.transactions)}
+              </Figure>
               <Figure label="Verified ids">
                 {formatCount(chain.ids_verified)} of {formatCount(chain.ids)}
               </Figure>
               <Figure label="Days without data" definition={DAYS_WITHOUT_DATA} name="days-missing">
-                {formatCount(chain.days_missing)}
+                {chain.ids_verified === 0 ? (
+                  <Missing reason={NO_VERIFIED_IDS} />
+                ) : (
+                  formatCount(chain.days_missing)
+                )}
               </Figure>
             </dl>
             <div className="flex flex-col gap-1">

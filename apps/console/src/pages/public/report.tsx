@@ -38,7 +38,13 @@ import {
   formatPoints,
   OPEN_BUCKET,
 } from "@/lib/format";
-import { DAYS_WITHOUT_DATA, shortKey, weeklyActiveText } from "@/lib/onchain";
+import {
+  chainGap,
+  DAYS_WITHOUT_DATA,
+  NO_VERIFIED_IDS,
+  shortKey,
+  weeklyActiveText,
+} from "@/lib/onchain";
 import { type Verdict, verifyReport } from "@/lib/report-verify";
 import { downloadFile } from "@/lib/reports";
 
@@ -317,6 +323,9 @@ function ReportBody({ doc }: { doc: ReportDocument }) {
       }
     : null;
   const g = doc.integrity;
+  // the signed figures carry 0 where no verified id was read; the report
+  // reads them with the same missing-value rule as the console
+  const chainMissing = chainGap(doc.onchain.ids_verified, doc.onchain.series);
   return (
     <article className="flex min-w-0 flex-col gap-8">
       <header className="flex flex-col gap-1">
@@ -331,7 +340,9 @@ function ReportBody({ doc }: { doc: ReportDocument }) {
         <Hero label="Verified visitors">{formatCount(doc.web.visitors)}</Hero>
         <Hero label="Page views">{formatCount(doc.web.pageviews)}</Hero>
         <Hero label="API requests">{formatCount(doc.api.requests)}</Hero>
-        <Hero label="On-chain operations">{formatCount(doc.onchain.operations)}</Hero>
+        <Hero label="On-chain operations">
+          {chainMissing ? <Missing reason={chainMissing} /> : formatCount(doc.onchain.operations)}
+        </Hero>
       </dl>
 
       <Section title="Integrity">
@@ -424,12 +435,22 @@ function ReportBody({ doc }: { doc: ReportDocument }) {
         }
       >
         <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-          <Figure label="Transactions">{formatCount(doc.onchain.transactions)}</Figure>
+          <Figure label="Transactions">
+            {chainMissing ? (
+              <Missing reason={chainMissing} />
+            ) : (
+              formatCount(doc.onchain.transactions)
+            )}
+          </Figure>
           <Figure label="Verified ids">
             {formatCount(doc.onchain.ids_verified)} of {formatCount(doc.onchain.ids)}
           </Figure>
           <Figure label="Days without data" title={DAYS_WITHOUT_DATA}>
-            {formatCount(doc.onchain.days_missing)}
+            {doc.onchain.ids_verified === 0 ? (
+              <Missing reason={NO_VERIFIED_IDS} />
+            ) : (
+              formatCount(doc.onchain.days_missing)
+            )}
           </Figure>
           {waa ? (
             <div className="col-span-2 flex min-w-0 flex-col gap-1 sm:col-span-3">

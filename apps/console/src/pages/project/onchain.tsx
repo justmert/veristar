@@ -49,6 +49,7 @@ import { isDay, lastDays } from "@/lib/global";
 import {
   DAYS_WITHOUT_DATA,
   METHOD_TEXT,
+  NO_VERIFIED_IDS,
   shortKey,
   verifiedActivity,
   verifyErrorText,
@@ -190,7 +191,10 @@ function freshnessOf(v: OnchainView) {
 function Activity({ view }: { view: OnchainView }) {
   const a = verifiedActivity(view);
   const w = view.totals.weekly_active_accounts;
-  const none = a.verified === 0 ? "No verified account or contract" : undefined;
+  // days without data stay countable while no read landed, only a project
+  // without a verified id has none to count
+  const none = a.verified === 0 ? NO_VERIFIED_IDS : undefined;
+  const gap = a.gap ?? undefined;
   return (
     <section aria-labelledby="activity-h" className="flex min-w-0 flex-col gap-4">
       <div className="flex flex-col gap-1">
@@ -208,15 +212,15 @@ function Activity({ view }: { view: OnchainView }) {
           data-stat="operations"
           label="Operations"
           definition="Successful operations that involve your verified accounts and contracts."
-          value={none ? null : a.operations}
-          missingReason={none}
+          value={gap ? null : a.operations}
+          missingReason={gap}
         />
         <StatCard
           data-stat="transactions"
           label="Transactions"
           definition="Transactions that hold those operations."
-          value={none ? null : a.transactions}
-          missingReason={none}
+          value={gap ? null : a.transactions}
+          missingReason={gap}
         />
         <StatCard
           data-stat="waa"
