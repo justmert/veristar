@@ -83,7 +83,15 @@ export const rule = z.object({
   updated_at: time,
 });
 export type Rule = z.infer<typeof rule>;
-export const ruleList = z.object({ items: z.array(rule) });
+// the console's rule list adds what each rule's matches route answers today
+// (19.4), so the list counts the matches without a request per rule
+export const listedRule = rule.extend({
+  match_count: count,
+  evaluated: count,
+  matches_as_of: day,
+});
+export type ListedRule = z.infer<typeof listedRule>;
+export const ruleList = z.object({ items: z.array(listedRule) });
 
 export type RuleInput = {
   name: string;
