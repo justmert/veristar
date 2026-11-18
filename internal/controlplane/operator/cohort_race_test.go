@@ -15,8 +15,8 @@ import (
 func TestCohortConfirmAuditsWhatItConfirms(t *testing.T) {
 	f := newCohortFixture(t)
 	beta := f.tenants["beta"]
-	superExec(t, f.pg, `insert into cp.tenant_cohorts (tenant_id, proposed_program, proposed_by, proposed_at)
-		values ($1, 'First', $2, now())`, beta, f.op)
+	superExec(t, f.pg, `insert into cp.tenant_cohorts (tenant_id, proposed_program, proposed_by, proposed_at, proposed_source)
+		values ($1, 'First', $2, now(), 'member')`, beta, f.op)
 
 	// the project's new proposal, written and not yet committed
 	c, err := f.pg.Superuser(t.Context(), "platform")

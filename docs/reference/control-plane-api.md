@@ -279,8 +279,9 @@ List routes answer:
 `not_bare_origin`, `origin_outside_domain`, `invalid_domain`, `invalid_strkey`,
 `invalid_github_login`, `invalid_role`, `duplicate`, `unknown_tracker_version`,
 `unknown_github_login` (a well-formed login that names no GitHub user account,
-4.2.5), `invalid_value` (a value outside an enumerated set, such as `mode`) and
-`unknown_tenant` (a `tenant_id` that names no tenant or a removed one, 9.2).
+4.2.5), `invalid_value` (a value outside an enumerated set, such as `mode`),
+`unknown_tenant` (a `tenant_id` that names no tenant or a removed one, 9.2) and
+`unknown_scf_award` (an `scf_award_id` that names no award, 4.2.1).
 
 ---
 
@@ -490,7 +491,21 @@ Cohorts and threshold rules (section 19): `cohort.propose` (actor
 `tenant:<id>` and detail `tenant_id` and the old and new values; rule rows
 have target `rule:<id>` and the rule's fields (old and new for an update). A
 rule matches export is an `export.csv` row with target `operator:rule_matches`
-and detail `rule_id`, `query` and `rows`.
+and detail `rule_id`, `query` and `rows`. `cohort.confirm` and
+`cohort.proposal_dismiss` add `source`, `member` or `scf_import`, the origin
+of the proposal they confirmed or dismissed.
+
+SCF award directory (19.5): `scf.import` (actor `system:platformctl-scf`,
+target `scf_import:<id>`, detail `import_id`, `file_sha256`, `file_bytes`,
+`has_header`, `delimiter`, `records`, `inserted`, `updated`, `unchanged`,
+`rejected` and `rejections`, the first 200 rejected rows as
+`{"record", "line", "field", "reason"}` without their values). A proposal
+the directory writes is a `cohort.propose` row under `cp_system` with actor
+`system:platformctl-scf` (an import or `scf match`) or `system:scf-match`
+(an enrollment or a new site), target `tenant:<id>` and detail `tenant_id`,
+`source` (`scf_import`), `award_id`, `evidence` and the old and new
+`proposal`. An enrollment that names an award (4.2.1) adds `scf_award_id` to
+its `tenant.create` row.
 
 Usage reports (section 20): `report.create` and `report.revoke` (actor
 `user:<id>`, written under `cp_tenant`) and `report.view` (actor `public`,
@@ -960,6 +975,16 @@ Session. Enrollment.
 - `cohort` is optional: the project's proposal of its SCF cohort (19.1), at
   least one field, written as the proposal in the same transaction and named
   in the `tenant.create` audit row as `cohort_proposal`.
+- `scf_award_id` is optional: the `id` of a result of the award search
+  (4.2.7). The award's program, round, category and award date become the
+  project's own cohort proposal, as if sent in `cohort`, and the
+  `tenant.create` audit row names the award. 422 `invalid_format` for a value
+  that is not a UUID, `unknown_scf_award` for an id that names no award, and
+  `invalid_value` when `cohort` is sent as well. The form fills `website` and
+  `stellar_ids` from the same result; the server does not.
+- In the same transaction, the award matching of 19.5 runs for the new
+  project and writes a proposal from a matched award when the project made
+  none.
 - `slug` and `description` optional, `enrollment.stellar_ids` and
   `enrollment.scf_round_url` optional; the rest required (3.2).
 - `accepted_terms_version` must equal the current version: else 409
@@ -1096,6 +1121,40 @@ against this table: a route not listed must answer 403 `terms_not_accepted`
 while the accepted version is not current, and a listed one must not.
 
 A tenant accepts a new terms version through this route.
+
+#### 4.2.7 `GET /api/scf/awards/search?q=`
+
+Session. The award search of the enrollment form: a person types the
+project's name or website, picks the project, and the form fills the
+cohort, the website and the Stellar ids. It reads the award directory of
+19.5.
+
+- `q`: 2 to 100 characters after white space is collapsed, required, once;
+  any other parameter is 400 `invalid_query`.
+- Matches a project whose name or website host holds `q`, case-insensitive.
+  Names that start with `q` come first, then by name; at most 10 results.
+- Awards that share a website host (or a name, without a host) are one
+  project and give one result, from the most recent award (latest award
+  date, then highest round); `rounds` lists the rounds of the others, newest
+  first.
+- At most 30 searches per person per minute: 429 `rate_limited` with
+  `Retry-After` beyond. A refused query does not count.
+
+```json
+{
+  "items": [
+    {
+      "id": "uuid", "project": "Example Pay", "round": "SCF #44", "category": "Applications",
+      "program": "Build Award", "award_date": "2026-06-01", "website": "https://examplepay.example",
+      "stellar_ids": ["GA..."], "rounds": ["SCF #31"]
+    }
+  ]
+}
+```
+
+`award_date` and `website` are `null` when the award has none;
+`stellar_ids` are the account and contract ids of every award of the
+project. A result holds these fields and nothing else.
 
 ### 4.3 Sites
 
@@ -4408,12 +4467,14 @@ review left out of engine reads, and a member without a Umami user who gets
 
 ## 19. Cohorts, growth, percentiles and threshold rules
 
-SCF decides by program, round, category and award date. SCF publishes no
-machine-readable directory of its awards, so a project proposes its cohort
-and an operator confirms it; only confirmed values place a project in a
-cohort. The values live in `cp.tenant_cohorts` (migration 00035): the
-project writes only the proposal columns under `cp_tenant`, operators write
-the confirmed columns under `cp_system`, operators read under `cp_operator`.
+SCF decides by program, round, category and award date. A project
+proposes its cohort (typed, or picked with the award search of 4.2.7), the
+award matching (19.5) proposes one for a matched project that made none, and
+an operator confirms the proposal; only confirmed values place a project in
+a cohort. The values live in
+`cp.tenant_cohorts` (migrations 00035 and 00050): the project writes only
+the proposal columns under `cp_tenant`, operators and the directory write
+under `cp_system`, operators read under `cp_operator`.
 
 ### 19.1 Cohort routes
 
@@ -4430,7 +4491,8 @@ the confirmed columns under `cp_system`, operators read under `cp_operator`.
 ```
 
 `confirmed` and `proposal` are `null` when not set; inside them any field
-may be `null`. Program, round and category are trimmed text of 1 to 80
+may be `null`. A member's proposal replaces a pending one of the award
+matching. Program, round and category are trimmed text of 1 to 80
 characters without control characters; `award_date` is a UTC day from
 2018-01-01 to today.
 
@@ -4553,6 +4615,55 @@ same reads at `GET /api/metrics/v1/rules` and
 `GET /api/metrics/v1/rules/{rule_id}/matches` (9.12; with the key rules of
 9.3, a key scoped to one tenant evaluates that tenant only), and MCP at
 `list_threshold_rules` and `get_threshold_rule_matches`.
+
+### 19.5 SCF award directory and matching
+
+`cp.scf_awards` (migration 00050) holds SCF awards an operator imports from
+an awards file with `platformctl scf import`
+([operator guide](../operators/scf-awards.md)). One row per project and
+round: project name, round (`SCF #<n>`), category, program, award date,
+award amount, tranche, website host, and the Stellar account and contract
+ids the row declares. No column holds a person: the parser drops every other
+column of the file before anything is stored. `cp.scf_award_imports` records
+each run (file SHA-256 and size, counts, actor). Neither table has a tenant:
+`cp_system` writes, `cp_operator` reads, `cp_tenant` has no right, and a
+tenant removal (5.5) leaves them. The directory has no read route of its
+own; the award search (4.2.7) and the matching below use it.
+
+The import has no HTTP route: request bodies are JSON of at most 64 KiB
+(section 1), and an awards file runs to megabytes. It upserts by project
+(case-insensitive) and round, writes `scf.import` (3.3) and then runs the
+matching in the same transaction.
+
+**Matching.** An award matches an enrolled project (status `pending`,
+`active` or `suspended`, not internal) only on exact evidence:
+
+- its website host equals the host of a site of the project (the domain or
+  an origin of a site that is not removed) or of the project's enrollment
+  website. Hosts compare lower case, in IDNA A-label form, without a
+  trailing dot and without a leading `www.`;
+- one of its strkeys is a verified on-chain id of the project (15.4).
+
+Names are never compared. A host many organisations share (code hosting,
+document sharing, social profiles, SCF's own pages) is never evidence.
+Several awards that point to one project, and to no other, all match it:
+the project was funded in several rounds, and its most recent award (latest
+award date, then highest round) is the one its proposal comes from. An
+award that points to several projects is ambiguous and matches nothing, and
+so is every award of a project such an award points to.
+
+**Proposals.** For every matched project, the matching writes the most
+recent award's program, round, category and award date as the project's
+cohort proposal (audit `cohort.propose`, source `scf_import`) when the
+project has no confirmed cohort, no proposal of its own and no earlier
+proposal of the same award that an operator confirmed or dismissed. A
+confirmed cohort and a member's own proposal are never overwritten. A
+pending proposal of the matching follows a later change of its award, and
+moves to a newer award of the project when a later import adds one. The
+operator confirms or dismisses it like any proposal (19.1). The matching
+also runs inside the enrollment transaction of a new project (4.2.1) and
+after a site is created (4.3.1); `platformctl scf match` runs it again for
+every project.
 
 ---
 

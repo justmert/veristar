@@ -101,8 +101,8 @@ func TestCohortProposalAuditsWhatItReplaced(t *testing.T) {
 	superExec(t, pg, `insert into cp.tenants (id, slug, name, status, created_by, accepted_terms_version)
 		values ($1, 'race', 'race', 'active', $2, 't')`, tenant, owner)
 	superExec(t, pg, `insert into cp.tenant_members (tenant_id, user_id, role) values ($1, $2, 'owner')`, tenant, owner)
-	superExec(t, pg, `insert into cp.tenant_cohorts (tenant_id, proposed_program, proposed_by, proposed_at)
-		values ($1, 'First', $2, now())`, tenant, owner)
+	superExec(t, pg, `insert into cp.tenant_cohorts (tenant_id, proposed_program, proposed_by, proposed_at, proposed_source)
+		values ($1, 'First', $2, now(), 'member')`, tenant, owner)
 	scope, err := tenants.NewScope(d, "t", tenants.ReconcileFunc(func(context.Context, uuid.UUID) error { return nil }),
 		slog.New(slog.DiscardHandler))
 	require.NoError(t, err)
@@ -123,7 +123,7 @@ func TestCohortProposalAuditsWhatItReplaced(t *testing.T) {
 	tx, err := c.Begin(t.Context())
 	require.NoError(t, err)
 	_, err = tx.Exec(t.Context(), `update cp.tenant_cohorts set proposed_program = null, proposed_by = null,
-		proposed_at = null where tenant_id = $1`, tenant)
+		proposed_at = null, proposed_source = null where tenant_id = $1`, tenant)
 	require.NoError(t, err)
 
 	done := make(chan int, 1)

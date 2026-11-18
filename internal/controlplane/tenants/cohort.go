@@ -92,17 +92,19 @@ func CheckCohort(f *Fields, path string, c *CohortInput, today time.Time, allowE
 }
 
 // ProposeCohort writes a proposal of tenant by user in tx: under cp_system
-// at enrollment, under cp_tenant from the proposal route. the confirmed
-// values are untouched.
+// at enrollment, under cp_tenant from the proposal route. the proposal is
+// the member's own (proposed_source member, 00050); it replaces a pending
+// proposal of the scf import. the confirmed values are untouched.
 func ProposeCohort(ctx context.Context, tx pgx.Tx, tenant, user uuid.UUID, v CohortValues) error {
 	_, err := tx.Exec(ctx, `
 		insert into cp.tenant_cohorts (tenant_id, proposed_program, proposed_round, proposed_category,
-		                               proposed_award_date, proposed_by, proposed_at, updated_at)
-		values ($1, $2, $3, $4, $5, $6, now(), now())
+		                               proposed_award_date, proposed_by, proposed_at, proposed_source, updated_at)
+		values ($1, $2, $3, $4, $5, $6, now(), 'member', now())
 		on conflict (tenant_id) do update set
 		  proposed_program = excluded.proposed_program, proposed_round = excluded.proposed_round,
 		  proposed_category = excluded.proposed_category, proposed_award_date = excluded.proposed_award_date,
-		  proposed_by = excluded.proposed_by, proposed_at = excluded.proposed_at, updated_at = excluded.updated_at`,
+		  proposed_by = excluded.proposed_by, proposed_at = excluded.proposed_at,
+		  proposed_source = excluded.proposed_source, updated_at = excluded.updated_at`,
 		tenant, v.Program, v.Round, v.Category, v.AwardDate, user)
 	return err
 }

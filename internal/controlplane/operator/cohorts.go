@@ -39,6 +39,10 @@ type CohortRecord struct {
 	ConfirmedAt *httpx.Timestamp `json:"confirmed_at"`
 	Proposal    *Cohort          `json:"proposal"`
 	ProposedAt  *httpx.Timestamp `json:"proposed_at"`
+	// ProposalSource says who made the pending proposal, member or
+	// scf_import (00050); the audit rows of a confirm and a dismissal name
+	// it, the answers do not
+	ProposalSource *string `json:"-"`
 }
 
 func tsPtr(t *time.Time) *httpx.Timestamp {
@@ -56,10 +60,11 @@ func readCohort(ctx context.Context, tx pgx.Tx, id uuid.UUID) (CohortRecord, err
 	var c, p Cohort
 	var award, pAward *time.Time
 	var confirmedAt, proposedAt *time.Time
+	var source *string
 	err := tx.QueryRow(ctx, `select program, round, category, award_date, confirmed_at,
-		       proposed_program, proposed_round, proposed_category, proposed_award_date, proposed_at
+		       proposed_program, proposed_round, proposed_category, proposed_award_date, proposed_at, proposed_source
 		from cp.tenant_cohorts where tenant_id = $1`, id).Scan(&c.Program, &c.Round, &c.Category, &award, &confirmedAt,
-		&p.Program, &p.Round, &p.Category, &pAward, &proposedAt)
+		&p.Program, &p.Round, &p.Category, &pAward, &proposedAt, &source)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return out, nil
 	}
@@ -72,7 +77,7 @@ func readCohort(ctx context.Context, tx pgx.Tx, id uuid.UUID) (CohortRecord, err
 	}
 	if proposedAt != nil {
 		p.AwardDate = dateString(pAward)
-		out.Proposal, out.ProposedAt = &p, tsPtr(proposedAt)
+		out.Proposal, out.ProposedAt, out.ProposalSource = &p, tsPtr(proposedAt), source
 	}
 	return out, nil
 }
@@ -346,13 +351,14 @@ func (h *Cohorts) confirm(w http.ResponseWriter, r *http.Request) error {
 			program = proposed_program, round = proposed_round, category = proposed_category,
 			award_date = proposed_award_date, confirmed_by = $2, confirmed_at = now(),
 			proposed_program = null, proposed_round = null, proposed_category = null, proposed_award_date = null,
-			proposed_by = null, proposed_at = null, updated_at = now()
+			proposed_by = null, proposed_at = null, proposed_source = null, updated_at = now()
 			where tenant_id = $1`, id, userOf(actor)); err != nil {
 			return fmt.Errorf("operator: confirm cohort: %w", err)
 		}
 		return audit.InSystem(r.Context(), tx, audit.Entry{
 			Actor: actor, Action: ActionCohortConfirm, Target: audit.TenantTarget(id),
-			Detail: map[string]any{"tenant_id": id.String(), "cohort": audit.Change(cohortDetail(before.Confirmed), cohortDetail(before.Proposal))},
+			Detail: map[string]any{"tenant_id": id.String(), "cohort": audit.Change(cohortDetail(before.Confirmed), cohortDetail(before.Proposal)),
+				"source": before.ProposalSource},
 		})
 	})
 }
@@ -364,13 +370,13 @@ func (h *Cohorts) dismiss(w http.ResponseWriter, r *http.Request) error {
 		}
 		if _, err := tx.Exec(r.Context(), `update cp.tenant_cohorts set
 			proposed_program = null, proposed_round = null, proposed_category = null, proposed_award_date = null,
-			proposed_by = null, proposed_at = null, updated_at = now()
+			proposed_by = null, proposed_at = null, proposed_source = null, updated_at = now()
 			where tenant_id = $1`, id); err != nil {
 			return fmt.Errorf("operator: dismiss cohort proposal: %w", err)
 		}
 		return audit.InSystem(r.Context(), tx, audit.Entry{
 			Actor: actor, Action: ActionCohortProposalDismiss, Target: audit.TenantTarget(id),
-			Detail: map[string]any{"tenant_id": id.String(), "proposal": cohortDetail(before.Proposal)},
+			Detail: map[string]any{"tenant_id": id.String(), "proposal": cohortDetail(before.Proposal), "source": before.ProposalSource},
 		})
 	})
 }
