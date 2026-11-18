@@ -32,5 +32,9 @@ RUN if [ -z "$CMD" ]; then echo "build arg CMD is required, e.g. --build-arg CMD
 FROM gcr.io/distroless/static-debian13:nonroot@sha256:aafe993665bf6200db38a02c11a9351e782a84b6a45e7f33b6695638c88e3931
 
 COPY --from=build /out/service /service
+# platformctl tenant create prints the script tag of the newest tracker
+# release from the same baked copy the control plane image carries
+COPY packages/tracker/releases /releases
+ENV TRACKER_RELEASE_DIR=/releases
 USER nonroot:nonroot
 ENTRYPOINT ["/service"]
