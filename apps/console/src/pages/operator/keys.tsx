@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Ban, KeyRound, MoreHorizontal, Plus } from "lucide-react";
-import { type FormEvent, useState } from "react";
+import { Ban, KeyRound } from "lucide-react";
+import { useState } from "react";
 import { globalApi } from "@/api/endpoints";
 import {
   clientSnippets,
@@ -16,18 +16,15 @@ import { apiKeysQuery, apiKeyUsageQuery, keys, keyTenantsQuery } from "@/api/que
 import type { ApiKey, ApiKeyCreated } from "@/api/schemas";
 import { ChoiceCard } from "@/components/choice-card";
 import { CodeBlock, CopyField } from "@/components/code-block";
-import { ConfirmDialog } from "@/components/confirm-dialog";
+import { CreateDialog } from "@/components/create-dialog";
 import { type Column, DataTable } from "@/components/data-table";
 import { FormMessage } from "@/components/error-panel";
 import { SelectField, TextField } from "@/components/form-field";
 import { PageHeader } from "@/components/page-header";
-import { SecretPanel } from "@/components/secret-panel";
 import { EmptyState, ErrorState, LoadingState, Missing, Skeleton } from "@/components/states";
 import { StatusBadge } from "@/components/status-badge";
 import { toast } from "@/components/toast";
-import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
-import { Menu, MenuContent, MenuItem, MenuTrigger } from "@/components/ui/menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   DEFAULT_EXPIRY_DAYS,
@@ -115,13 +112,6 @@ export function AccessKeysPage() {
   const machines = useQuery(apiKeysQuery);
   const assistants = useQuery(operatorMcpQuery);
   const tenants = useQuery(keyTenantsQuery);
-  const [created, setCreated] = useState<
-    | { type: "machine"; key: ApiKeyCreated }
-    | { type: "assistant"; key: McpCredentialCreated }
-    | null
-  >(null);
-  const [creating, setCreating] = useState(false);
-  const [revoking, setRevoking] = useState<KeyRow | null>(null);
   const [usage, setUsage] = useState<KeyRow | null>(null);
   const names = new Map((tenants.data ?? []).map((t) => [t.id, t.name]));
 
@@ -133,18 +123,16 @@ export function AccessKeysPage() {
   );
   const error = machines.error ?? assistants.error;
 
-  const revoke = useMutation({
-    mutationFn: (r: KeyRow) =>
-      r.kind === "machine" ? globalApi.revokeApiKey(r.id) : mcpApi.revokeOperatorCredential(r.id),
-    onSuccess: async (_d, r) => {
-      setRevoking(null);
-      toast.success(`${r.name} is revoked. Its next request is refused.`);
-      await Promise.all([
-        qc.invalidateQueries({ queryKey: keys.opKeys }),
-        qc.invalidateQueries({ queryKey: mcpKeys.operator }),
-      ]);
-    },
-  });
+  async function revoke(r: KeyRow) {
+    await (r.kind === "machine"
+      ? globalApi.revokeApiKey(r.id)
+      : mcpApi.revokeOperatorCredential(r.id));
+    toast.success(`${r.name} is revoked. Its next request is refused.`);
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: keys.opKeys }),
+      qc.invalidateQueries({ queryKey: mcpKeys.operator }),
+    ]);
+  }
 
   const columns: Column<KeyRow>[] = [
     {
@@ -200,61 +188,19 @@ export function AccessKeysPage() {
           <span className="whitespace-nowrap">Renewed by the client</span>
         ),
     },
-    {
-      key: "actions",
-      mobile: true,
-      header: "Actions",
-      align: "right",
-      cell: (r) =>
-        r.kind !== "machine" && r.status === "revoked" ? null : (
-          <Menu>
-            <MenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label={`Actions for ${r.name}`}
-                className="max-lg:size-(--vs-control-touch)"
-              >
-                <MoreHorizontal aria-hidden />
-              </Button>
-            </MenuTrigger>
-            <MenuContent align="end">
-              {r.kind === "machine" ? (
-                <MenuItem onSelect={() => setUsage(r)}>Show usage</MenuItem>
-              ) : null}
-              {r.status !== "revoked" ? (
-                <MenuItem
-                  tone="critical"
-                  onSelect={() => {
-                    revoke.reset();
-                    setRevoking(r);
-                  }}
-                >
-                  <Ban aria-hidden />
-                  Revoke
-                </MenuItem>
-              ) : null}
-            </MenuContent>
-          </Menu>
-        ),
-    },
   ];
-
-  const tenantOptions = tenants.data?.map((t) => ({ id: t.id, name: t.name })) ?? [];
-  const closeCreate = () => {
-    setCreating(false);
-    setCreated(null);
-  };
 
   return (
     <div className="flex min-w-0 flex-col gap-8">
       <PageHeader
         title="Access keys"
         primary={
-          <Button onClick={() => setCreating(true)} className="max-lg:h-(--vs-control-touch)">
-            <Plus aria-hidden />
-            Create key
-          </Button>
+          <CreateKey
+            tenants={tenants.data?.map((t) => ({ id: t.id, name: t.name })) ?? []}
+            tenantsError={tenants.error}
+            takenNames={rows.filter((r) => r.status === "active").map((r) => r.name)}
+            names={names}
+          />
         }
       />
 
@@ -281,44 +227,28 @@ export function AccessKeysPage() {
           getRowKey={(r) => r.id}
           rowLabel={(r) => r.name}
           rowProps={(r) => ({ "data-key-id": r.id, "data-kind": r.kind })}
+          rowActions={(r) => [
+            r.kind === "machine" ? { label: "Show usage", onSelect: () => setUsage(r) } : null,
+            r.status !== "revoked"
+              ? {
+                  label: "Revoke",
+                  icon: <Ban aria-hidden />,
+                  destructive: true,
+                  confirm: {
+                    title: `Revoke the key “${r.name}”?`,
+                    description:
+                      "The next request with it is refused. You cannot restore it. Create a new key instead.",
+                    confirmLabel: "Revoke",
+                    pendingLabel: "Revoking",
+                    run: () => revoke(r),
+                  },
+                }
+              : null,
+          ]}
         />
       )}
 
       <ConnectSteps />
-
-      <Dialog
-        open={creating || created !== null}
-        onOpenChange={(o) => {
-          // a shown key closes only through its done step
-          if (!o && created === null) closeCreate();
-        }}
-        title={created ? "Key created" : "Create a key"}
-      >
-        {created ? (
-          <div className="pb-4">
-            <CreatedKey
-              created={created}
-              tenantName={
-                created.type === "machine" && created.key.tenant_id
-                  ? (names.get(created.key.tenant_id) ?? null)
-                  : null
-              }
-              onDone={closeCreate}
-            />
-          </div>
-        ) : creating ? (
-          <CreateKeyForm
-            tenants={tenantOptions}
-            tenantsError={tenants.error}
-            takenNames={rows.filter((r) => r.status === "active").map((r) => r.name)}
-            onCancel={closeCreate}
-            onCreated={(c) => {
-              setCreating(false);
-              setCreated(c);
-            }}
-          />
-        ) : null}
-      </Dialog>
 
       <Dialog
         open={usage !== null}
@@ -329,52 +259,36 @@ export function AccessKeysPage() {
       >
         {usage ? <Usage row={usage} /> : null}
       </Dialog>
-
-      <ConfirmDialog
-        open={revoking !== null}
-        onOpenChange={(o) => {
-          if (!o) {
-            setRevoking(null);
-            revoke.reset();
-          }
-        }}
-        title={revoking ? `Revoke the key “${revoking.name}”?` : "Revoke the key?"}
-        description="The next request with it is refused. You cannot restore it. Create a new key instead."
-        confirmLabel="Revoke"
-        pendingLabel="Revoking"
-        pending={revoke.isPending}
-        error={revoke.error}
-        onConfirm={() => revoking && revoke.mutate(revoking)}
-      />
     </div>
   );
 }
 
-function CreateKeyForm({
+type Created =
+  | { type: "machine"; key: ApiKeyCreated }
+  | { type: "assistant"; key: McpCredentialCreated };
+
+// the header button and its dialog: one form for both kinds of key, then
+// the new key once, with its first command, in the same dialog
+function CreateKey({
   tenants,
   tenantsError,
   takenNames,
-  onCancel,
-  onCreated,
+  names,
 }: {
   tenants: { id: string; name: string }[];
   tenantsError: unknown;
   // the names of the live keys, to warn on a second key with the same name
   takenNames: string[];
-  onCancel: () => void;
-  onCreated: (
-    c: { type: "machine"; key: ApiKeyCreated } | { type: "assistant"; key: McpCredentialCreated },
-  ) => void;
+  names: Map<string, string>;
 }) {
   const qc = useQueryClient();
   const [form, setForm] = useState<KeyForm>(EMPTY_KEY_FORM);
   const [errors, setErrors] = useState<KeyErrors>({});
+  const [created, setCreated] = useState<Created | null>(null);
   const create = useMutation({
     mutationFn: async (
       b: NonNullable<ReturnType<typeof validateKeyForm>["body"]>,
-    ): Promise<
-      { type: "machine"; key: ApiKeyCreated } | { type: "assistant"; key: McpCredentialCreated }
-    > =>
+    ): Promise<Created> =>
       b.type === "machine"
         ? { type: "machine", key: await globalApi.createApiKey(b.body) }
         : { type: "assistant", key: await mcpApi.createOperatorKey(b.body) },
@@ -382,14 +296,12 @@ function CreateKeyForm({
       await qc.invalidateQueries({
         queryKey: c.type === "machine" ? keys.opKeys : mcpKeys.operator,
       });
-      setForm(EMPTY_KEY_FORM);
-      onCreated(c);
+      setCreated(c);
     },
     onError: (err) => setErrors(serverKeyErrors(err)),
   });
 
-  function submit(e: FormEvent) {
-    e.preventDefault();
+  function submit() {
     const v = validateKeyForm(form);
     setErrors(v.errors);
     if (v.body) create.mutate(v.body);
@@ -397,11 +309,43 @@ function CreateKeyForm({
 
   const machine = form.type === "machine";
   return (
-    <form
-      aria-label="Create a key"
+    <CreateDialog
+      label="Create key"
+      title="Create a key"
+      pending={create.isPending}
+      pendingLabel="Creating"
+      error={
+        create.error && Object.keys(serverKeyErrors(create.error)).length === 0
+          ? create.error
+          : null
+      }
       onSubmit={submit}
-      noValidate
-      className="flex flex-col gap-4 pb-4"
+      secret={
+        created
+          ? {
+              value: created.key.key,
+              noun: "key",
+              name: created.key.name,
+              copyLabel: "Copy key",
+              children: (
+                <CreatedKey
+                  created={created}
+                  tenantName={
+                    created.type === "machine" && created.key.tenant_id
+                      ? (names.get(created.key.tenant_id) ?? null)
+                      : null
+                  }
+                />
+              ),
+            }
+          : null
+      }
+      onClosed={() => {
+        setForm(EMPTY_KEY_FORM);
+        setErrors({});
+        setCreated(null);
+        create.reset();
+      }}
     >
       <fieldset className="flex flex-col gap-2">
         <legend className="pb-2 text-small font-medium text-fg">Type</legend>
@@ -412,7 +356,7 @@ function CreateKeyForm({
             checked={machine}
             onChange={() => setForm({ ...form, type: "machine" })}
             title="Machine API key"
-            description="For a script or a job that reads the metrics API. Up to 10 requests a second."
+            description="For a script or a job that reads the metrics API."
           />
           <ChoiceCard
             name="key-type"
@@ -420,7 +364,7 @@ function CreateKeyForm({
             checked={!machine}
             onChange={() => setForm({ ...form, type: "assistant" })}
             title="AI assistant key"
-            description="For an AI client that searches, ranks and compares projects. It acts as you."
+            description="For an AI client that searches and compares projects as you."
           />
         </div>
       </fieldset>
@@ -429,14 +373,8 @@ function CreateKeyForm({
           label="Name"
           hint={
             nameTaken(takenNames, form.name) ? (
-              <span className="text-warning">
-                A key with this name exists. Use another name to tell them apart.
-              </span>
-            ) : machine ? (
-              "Who uses the key, for example warehouse."
-            ) : (
-              "Where you use the key, for example laptop."
-            )
+              <span className="text-warning">A key with this name exists.</span>
+            ) : undefined
           }
           placeholder={machine ? "warehouse" : "laptop"}
           maxLength={100}
@@ -447,7 +385,7 @@ function CreateKeyForm({
         />
         <TextField
           label="Expires after, days"
-          hint={`${DEFAULT_EXPIRY_DAYS} by default, at most ${MAX_EXPIRY_DAYS}.`}
+          placeholder={`${DEFAULT_EXPIRY_DAYS}, at most ${MAX_EXPIRY_DAYS}`}
           inputMode="numeric"
           className="tabular max-lg:h-(--vs-control-touch)"
           value={form.days}
@@ -465,7 +403,6 @@ function CreateKeyForm({
               checked={form.scope === "all"}
               onChange={() => setForm({ ...form, scope: "all" })}
               title="Every project"
-              description="The daily totals of every project."
             />
             <ChoiceCard
               name="scope"
@@ -473,11 +410,10 @@ function CreateKeyForm({
               checked={form.scope === "tenant"}
               onChange={() => setForm({ ...form, scope: "tenant" })}
               title="One project"
-              description="Only the project you choose."
             />
           </div>
           {form.scope === "tenant" ? (
-            <div className="flex max-w-md animate-rise-in flex-col gap-2 pt-2">
+            <div className="flex animate-rise-in flex-col gap-2 pt-2">
               <SelectField
                 label="Project"
                 value={form.tenantId}
@@ -497,24 +433,7 @@ function CreateKeyForm({
           ) : null}
         </fieldset>
       ) : null}
-      {create.error && Object.keys(serverKeyErrors(create.error)).length === 0 ? (
-        <FormMessage error={create.error} />
-      ) : null}
-      <div className="flex flex-wrap justify-end gap-2">
-        <Button
-          type="button"
-          variant="ghost"
-          onClick={onCancel}
-          className="max-lg:h-(--vs-control-touch)"
-        >
-          Cancel
-        </Button>
-        <Button type="submit" pending={create.isPending} className="max-lg:h-(--vs-control-touch)">
-          {create.isPending ? null : <KeyRound aria-hidden />}
-          {create.isPending ? "Creating" : "Create key"}
-        </Button>
-      </div>
-    </form>
+    </CreateDialog>
   );
 }
 
@@ -524,41 +443,27 @@ function masked(key: string): string {
   return `${key.slice(0, Math.min(8, key.indexOf("_", 3) + 1 || 4))}${"•".repeat(24)}`;
 }
 
-function CreatedKey({
-  created,
-  tenantName,
-  onDone,
-}: {
-  created:
-    | { type: "machine"; key: ApiKeyCreated }
-    | { type: "assistant"; key: McpCredentialCreated };
-  tenantName: string | null;
-  onDone: () => void;
-}) {
+// the first command with the new key: shown masked, copied in full
+function CreatedKey({ created, tenantName }: { created: Created; tenantName: string | null }) {
   const origin = window.location.origin;
   if (created.type === "machine") {
     const k = created.key;
     const curl = (key: string) =>
       `curl -H "Authorization: Bearer ${key}" \\\n  "${origin}/api/metrics/v1/tenants"`;
     return (
-      <SecretPanel
-        value={k.key}
-        noun="key"
-        name={k.name}
-        description={`The service keeps only a hash, so it shows the key once. It reads ${
-          k.tenant_id ? `the project ${tenantName ?? "you chose"}` : "every project"
-        }. It expires ${formatDateTimeUtc(k.expires_at)}.`}
-        copyLabel="Copy key"
-        onDone={onDone}
-      >
+      <div className="flex min-w-0 flex-col gap-3">
+        <p className="text-small text-fg-2">
+          {k.tenant_id ? (tenantName ?? "One project") : "Every project"}, until{" "}
+          {formatDateTimeUtc(k.expires_at)}
+        </p>
         <CodeBlock
           code={curl(masked(k.key))}
           copyText={curl(k.key)}
-          label="Try it with curl. The copied command holds the key."
+          label="curl"
           copyLabel="Copy command"
           wrap
         />
-      </SecretPanel>
+      </div>
     );
   }
   const k = created.key;
@@ -566,30 +471,24 @@ function CreatedKey({
   const s = clientSnippets(origin, k.key);
   const shown = clientSnippets(origin, masked(k.key));
   return (
-    <SecretPanel
-      value={k.key}
-      noun="key"
-      name={k.name}
-      description={`The service keeps only a hash, so it shows the key once. It expires ${
-        k.expires_at ? formatDateTimeUtc(k.expires_at) : "never"
-      }.`}
-      copyLabel="Copy key"
-      onDone={onDone}
-    >
+    <div className="flex min-w-0 flex-col gap-3">
+      {k.expires_at ? (
+        <p className="text-small text-fg-2">Until {formatDateTimeUtc(k.expires_at)}</p>
+      ) : null}
       <CodeBlock
         code={shown.claudeCode}
         copyText={s.claudeCode}
-        label="Claude Code. The copied command holds the key."
+        label="Claude Code"
         copyLabel="Copy command"
         wrap
       />
       <CodeBlock
         code={shown.cursor}
         copyText={s.cursor}
-        label="Cursor, in .cursor/mcp.json. The copied text holds the key."
+        label=".cursor/mcp.json"
         copyLabel="Copy configuration"
       />
-    </SecretPanel>
+    </div>
   );
 }
 

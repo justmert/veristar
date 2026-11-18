@@ -323,7 +323,7 @@ function SelectedProject({
                 <h2 id="evidence-h" className="text-title text-fg">
                   Evidence
                 </h2>
-                <EvidenceList items={withNumbers(evidenceOf(detail.data), numbers)} stacked />
+                <EvidenceList items={withNumbers(evidenceOf(detail.data), numbers)} />
               </section>
 
               <Answers detail={detail.data} />

@@ -165,7 +165,9 @@ describe("operator alerts page", () => {
     expect(down.querySelector("a")?.getAttribute("href")).toBe(
       "https://github.com/justmert/veristar/blob/main/docs/runbooks/alerts.md#servicedown",
     );
-    expect(host.textContent).toContain("12:00:05 UTC, every 30 s");
+    expect(host.querySelector("[data-freshness]")?.getAttribute("datetime")).toBe(
+      "2026-11-13T12:00:05Z",
+    );
     expect(host.textContent).not.toContain("All clear");
     // where the alerts come from, as facts in the header
     expect(host.querySelector("[data-sources]")?.textContent).toBe("Alertmanager, 1 server");
@@ -183,7 +185,7 @@ describe("operator alerts page", () => {
     const host = await renderRoutes(alertsRoute(), "/operator/alerts");
     await waitFor(() => expect(host.textContent).toContain("All clear"));
     expect(host.textContent).toContain("No alert fires.");
-    expect(host.textContent).toContain("12:00:05 UTC, every 30 s");
+    expect(host.querySelector("[data-freshness]")).not.toBeNull();
     expect(host.textContent).not.toContain("critical alert");
     expect(host.querySelector("[data-alert]")).toBeNull();
   });
@@ -273,9 +275,10 @@ describe("operator alerts page", () => {
       vi.advanceTimersByTime(ALERTS_REFRESH_MS);
     });
     await waitFor(() => expect(host.textContent).toContain("BackupTooOld"));
-    expect(host.textContent).toContain("12:00:35 UTC, every 30 s");
+    const checked = () => host.querySelector("[data-freshness]")?.getAttribute("datetime");
+    expect(checked()).toBe("2026-11-13T12:00:35Z");
     await click(byRole(host, "button", "Check now"));
-    await waitFor(() => expect(host.textContent).toContain("12:00:40 UTC, every 30 s"));
+    await waitFor(() => expect(checked()).toBe("2026-11-13T12:00:40Z"));
     expect(calls.filter((c) => c.url === "/api/operator/alerts")).toHaveLength(3);
   });
 });
