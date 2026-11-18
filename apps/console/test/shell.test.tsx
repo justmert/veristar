@@ -111,7 +111,7 @@ describe("console shell", () => {
     for (const group of ["Data", "Funding", "Setup", "Team"])
       expect(nav.textContent).toContain(group);
     expect(current(host)).toEqual(["Sites"]);
-    expect(host.querySelector('[data-testid="page-title"]')?.textContent).toBe("Sites");
+    expect(host.querySelector('[data-testid="page-title"]')?.textContent).toBe("Stellar DEX");
     // no operator group for a member, and no second-level tab bar
     expect(host.querySelector('nav[aria-label="Operator"]')).toBeNull();
     expect(host.querySelectorAll("nav").length).toBeGreaterThan(0);
