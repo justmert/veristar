@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { MeTenant } from "@/api/schemas";
 import { EnrollForm } from "@/pages/home/enroll";
-import { matchProjects, nextStep } from "@/pages/home/projects";
+import { matchProjects, nextStep, ProjectsPage } from "@/pages/home/projects";
 import * as f from "./fixtures/contract";
-import { byLabel, byRole, click, render, stubFetch, type } from "./helpers";
+import { byLabel, byRole, click, render, routeFetch, stubFetch, type, waitFor } from "./helpers";
 
 const base = f.meBody.tenants[0] as MeTenant;
 
@@ -36,6 +36,21 @@ describe("projects home", () => {
       act: false,
     });
     expect(nextStep({ ...base, status: "suspended" })?.act).toBe(false);
+  });
+});
+
+describe("projects home errors", () => {
+  it("says once that the numbers did not load and loads them again", async () => {
+    const calls = routeFetch((_m, url) =>
+      url.endsWith("/api/me")
+        ? { status: 200, body: f.meBody }
+        : { status: 500, body: f.errorBody("internal") },
+    );
+    const host = await render(<ProjectsPage />);
+    await waitFor(() => expect(host.textContent).toContain("Numbers did not load"));
+    const before = calls.length;
+    await click(byRole(host, "button", "Try again"));
+    await waitFor(() => expect(calls.length).toBeGreaterThan(before));
   });
 });
 

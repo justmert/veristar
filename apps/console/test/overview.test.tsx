@@ -93,7 +93,14 @@ describe("web helpers of the overview and web", () => {
     });
     expect(sparkOf([p("2026-11-15", 3)], "pageviews")).toBeNull();
     expect(sparkOf([p("2026-11-15", 3), p("2026-11-16", 3)], "pageviews")).toBeNull();
-    expect(sparkOf([p("2026-11-15", 3), p("2026-11-16", null)], "pageviews")).toEqual([3, 0]);
+    // one or two days with data is a spike, not a shape
+    expect(sparkOf([p("2026-11-15", 3), p("2026-11-16", null)], "pageviews")).toBeNull();
+    expect(
+      sparkOf(
+        [p("2026-11-13", 1), p("2026-11-14", 2), p("2026-11-15", 3), p("2026-11-16", null)],
+        "pageviews",
+      ),
+    ).toEqual([1, 2, 3, 0]);
   });
 });
 
@@ -355,7 +362,7 @@ describe("overview page", () => {
     }
   });
 
-  it("offers no Add site on a stopped project and says what to do instead", async () => {
+  it("offers Add site where the control plane takes a site, and says what to do", async () => {
     const noSites = () => {
       vi.stubGlobal(
         "fetch",
@@ -377,24 +384,29 @@ describe("overview page", () => {
     };
     const buttons = (host: HTMLElement) =>
       [...host.querySelectorAll("button")].map((b) => b.textContent?.trim());
-    // an active project offers the button
+    // an active project starts with the setup checklist and its Add site
     noSites();
     const active = await renderRoutes(stopped("active"), `/projects/${f.TENANT_ID}`);
-    await waitFor(() => expect(active.textContent).toContain("No sites yet"));
+    await waitFor(() => expect(active.textContent).toContain("Set up the project"));
+    expect(active.querySelector('[data-check="1"]')?.getAttribute("data-state")).toBe("current");
     expect(buttons(active)).toContain("Add site");
 
+    // the control plane takes sites on a project that is not approved: they
+    // wait for review. a suspended project refuses them.
     const cases = [
-      ["rejected", true, "Change the answers above and submit them again."],
-      ["rejected", false, "An owner of this project can change the answers"],
-      ["suspended", true, "You cannot add sites while the project is suspended."],
-      ["removed", true, "This project was removed. It cannot take new sites."],
+      ["rejected", true, "Change the answers above and submit them again.", true],
+      ["rejected", false, "An owner can change the answers", true],
+      ["suspended", true, "You cannot add sites while the project is suspended.", false],
+      ["removed", true, "This project was removed. It cannot take new sites.", false],
     ] as const;
-    for (const [status, isOwner, text] of cases) {
+    for (const [status, isOwner, text, add] of cases) {
       noSites();
       const host = await renderRoutes(stopped(status, isOwner), `/projects/${f.TENANT_ID}`);
       await waitFor(() => expect(host.textContent).toContain("No sites yet"));
       expect(host.textContent).toContain(text);
-      expect(buttons(host)).not.toContain("Add site");
+      expect(host.textContent).not.toContain("Set up the project");
+      if (add) expect(buttons(host)).toContain("Add site");
+      else expect(buttons(host)).not.toContain("Add site");
     }
   });
 });

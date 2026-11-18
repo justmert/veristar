@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router";
 import { api } from "@/api/endpoints";
 import { stepUpQuery } from "@/api/operators";
-import { meQuery, operatorAlertsQuery } from "@/api/queries";
+import { meQuery, operatorAlertsQuery, tenantQuery } from "@/api/queries";
 import { CommandPalette, isPaletteKey } from "@/components/command-palette";
 import { FormMessage } from "@/components/error-panel";
 import { PageMotion } from "@/components/motion";
@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { MenuContainer } from "@/components/ui/menu";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { criticalCount } from "@/lib/alerts";
+import { isNotFound } from "@/lib/errors";
 import { queryClient } from "@/query-client";
 
 // the signed-in frame: the sidebar on a wide screen, a top bar with the
@@ -32,6 +33,11 @@ export function AppShell() {
   const { pathname } = useLocation();
   const [drawer, setDrawer] = useState(false);
   const [palette, setPalette] = useState(false);
+  // a project that answers 404 names that in the top bar, not a page of it
+  const area = areaOf(pathname);
+  const asked = area.kind === "project" ? area.id : null;
+  const tenant = useQuery({ ...tenantQuery(asked ?? ""), enabled: asked !== null });
+  const gone = asked !== null && isNotFound(tenant.error);
   const signOut = useMutation({
     mutationFn: api.logout,
     onSuccess: () => {
@@ -66,10 +72,12 @@ export function AppShell() {
   }, []);
 
   if (!me.data) return null;
-  const area = areaOf(pathname);
   const operatorArea = me.data.user.is_operator && area.kind === "operator";
-  const contextTitle =
-    area.kind === "project"
+  const contextTitle = gone
+    ? me.data.removed_tenants.some((r) => r.id === asked)
+      ? "Project removed"
+      : "Project not found"
+    : area.kind === "project"
       ? (me.data.tenants.find((t) => t.id === area.id)?.name ?? "Veristar")
       : area.kind === "operator"
         ? "Operator area"

@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { CirclePause, CircleX, Clock, FileText, LoaderCircle } from "lucide-react";
-import { Link, Outlet, useLocation, useOutletContext, useParams } from "react-router";
+import { Outlet, useLocation, useOutletContext, useParams } from "react-router";
 import { api } from "@/api/endpoints";
 import { keys, meQuery, tenantQuery } from "@/api/queries";
 import type { Me, Tenant } from "@/api/schemas";
@@ -9,6 +9,8 @@ import { Notice as ToneNotice } from "@/components/notice";
 import { ErrorState, MessagePage } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { isNotFound } from "@/lib/errors";
+import { siblingUrl } from "@/lib/hosts";
+import { termsVersionLabel } from "@/lib/terms";
 import { ProjectPagePending } from "@/pages/project/page-frame";
 import { NotFoundPage, ProjectsButton } from "@/pages/public/not-found";
 import { ResubmitForm } from "@/pages/resubmit";
@@ -37,7 +39,7 @@ export function ProjectLayout() {
     return removed ? (
       <RemovedNotice name={removed.name} reason={removed.status_reason} />
     ) : (
-      <NotFoundPage />
+      <NotFoundPage project />
     );
   }
   if (tenant.error)
@@ -114,17 +116,10 @@ export function StatusNotice({ tenant, isOwner }: { tenant: Tenant; isOwner: boo
   const reason = tenant.status_reason ? ` Reason given: “${tenant.status_reason}”` : "";
   switch (tenant.status) {
     case "pending":
+      // waiting is a normal state: info tone, no action. each page offers
+      // its own Add site
       return (
-        <ToneNotice
-          tone="warning"
-          icon={<Clock aria-hidden />}
-          title="Waiting for review"
-          actions={
-            <Button asChild variant="outline" size="sm" className="max-sm:h-(--vs-control-touch)">
-              <Link to={`/projects/${tenant.id}/sites`}>Add site</Link>
-            </Button>
-          }
-        >
+        <ToneNotice tone="info" icon={<Clock aria-hidden />} title="Waiting for review">
           Operators review new projects before their sites receive traffic. You can add sites and
           members now.
         </ToneNotice>
@@ -138,16 +133,28 @@ export function StatusNotice({ tenant, isOwner }: { tenant: Tenant; isOwner: boo
           submit them again.
         </ToneNotice>
       );
-    case "suspended":
+    case "suspended": {
+      // the person must act to resume: warning tone, and a way to reach
+      // support where the docs exist
+      const docs = siblingUrl(window.location.hostname, "docs");
       return (
         <ToneNotice
-          tone="info"
+          tone="warning"
           icon={<CirclePause aria-hidden />}
           title="This project is suspended"
+          actions={
+            docs ? (
+              <Button asChild variant="outline" size="sm" className="max-sm:h-(--vs-control-touch)">
+                <a href={`${docs}/support`}>Contact support</a>
+              </Button>
+            ) : null
+          }
         >
-          New events from its sites are refused. Its dashboards stay readable.{reason}
+          New events from its sites are refused. Its dashboards stay readable. Contact support to
+          resume the project.{reason}
         </ToneNotice>
       );
+    }
     default:
       if (tenant.provisioning === "pending")
         return (
@@ -172,6 +179,7 @@ function TermsNotice({
   version: string;
   isOwner: boolean;
 }) {
+  const label = termsVersionLabel(version);
   const accept = useMutation({
     mutationFn: () => api.acceptTerms(tenant.id, version),
     onSuccess: async (t) => {
@@ -208,7 +216,7 @@ function TermsNotice({
               pending={accept.isPending}
               className="max-sm:h-(--vs-control-touch)"
             >
-              Accept version {version}
+              Accept the terms
             </Button>
           </>
         ) : (
@@ -217,8 +225,8 @@ function TermsNotice({
       }
     >
       {isOwner
-        ? `Until an owner accepts version ${version}, this project can be viewed but not changed.`
-        : `Until an owner accepts version ${version}, this project can be viewed but not changed. Ask an owner of this project to accept them.`}
+        ? `${label}. Until an owner accepts the new terms, you can view this project but not change it.`
+        : `${label}. Until an owner accepts the new terms, you can view this project but not change it. Ask an owner to accept them.`}
       <FormMessage error={accept.error} className="mt-2" />
     </ToneNotice>
   );

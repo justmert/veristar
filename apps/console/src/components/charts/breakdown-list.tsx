@@ -8,6 +8,7 @@ import { Link } from "react-router";
 import { EmptyState, ErrorState } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { Skeleton as Bone } from "@/components/ui/skeleton";
+import { Tooltip } from "@/components/ui/tooltip";
 import { formatCount, formatShareOf } from "@/lib/format";
 
 export type BreakdownItem = {
@@ -30,6 +31,9 @@ export type BreakdownListProps = {
   total?: number | null;
   // the heading of the value column, such as "Visitors"
   valueLabel?: string;
+  // what the share column counts, as a tooltip on its heading, such as when
+  // one visitor counts in several rows
+  shareDefinition?: string;
   format?: (n: number) => string;
   // rows shown before "Show more"
   limit?: number;
@@ -49,11 +53,23 @@ export type BreakdownListProps = {
   className?: string;
 };
 
+// a share of a part: a part smaller than the whole never reads as 100%, so
+// 99.8% and 0.2% add up as the reader expects
+const DEFINED =
+  "w-12 rounded-sm text-right underline decoration-line-strong decoration-dotted underline-offset-4 focus-ring";
+
+export function partShare(value: number, total: number): string {
+  if (total > 0 && value < total && value / total >= 0.995)
+    return `${(Math.floor((value / total) * 1000) / 10).toFixed(1)}%`;
+  return formatShareOf(value, total);
+}
+
 export function BreakdownList({
   label,
   items,
   total,
   valueLabel = "Value",
+  shareDefinition,
   format = formatCount,
   limit = 10,
   onShowMore,
@@ -102,35 +118,52 @@ export function BreakdownList({
 
   return (
     <div className={cn("flex min-w-0 flex-col gap-2", className)}>
-      <div
-        aria-hidden
-        className="flex items-center justify-between gap-3 px-2 text-caption text-fg-2"
-      >
-        <span>{label}</span>
+      <div className="flex items-center justify-between gap-3 px-2 text-caption text-fg-2">
+        <span aria-hidden>{label}</span>
         <span className="flex gap-4">
-          {showShare ? <span className="w-12 text-right">Share</span> : null}
-          <span className="min-w-16 text-right">{valueLabel}</span>
+          {showShare ? (
+            shareDefinition ? (
+              <Tooltip content={shareDefinition}>
+                {/* biome-ignore lint/a11y/noNoninteractiveTabindex: the definition opens on focus too */}
+                <span tabIndex={0} className={DEFINED}>
+                  Share
+                  <span className="sr-only">. {shareDefinition}</span>
+                </span>
+              </Tooltip>
+            ) : (
+              <span aria-hidden className="w-12 text-right">
+                Share
+              </span>
+            )
+          ) : null}
+          <span aria-hidden className="min-w-16 text-right">
+            {valueLabel}
+          </span>
         </span>
       </div>
       <ul aria-label={label} className="flex flex-col gap-1">
         {shown.map((it) => {
+          // the bar stays inside the label column, so it never runs under
+          // the share and the value
           const bar = (
             <>
-              <span
-                aria-hidden
-                className={cn(
-                  "absolute inset-y-0 left-0 rounded-sm transition-colors duration-(--vs-duration-press)",
-                  selectedKey === it.key ? "bg-pressed" : "bg-selected",
-                )}
-                style={{ width: `${(it.value / max) * 100}%` }}
-              />
-              <span className="relative min-w-0 flex-1 truncate text-fg" title={it.text}>
-                {it.label}
+              <span className="relative flex min-w-0 flex-1 self-stretch items-center">
+                <span
+                  aria-hidden
+                  className={cn(
+                    "absolute inset-y-1 left-0 rounded-sm transition-colors duration-(--vs-duration-press)",
+                    selectedKey === it.key ? "bg-pressed" : "bg-selected",
+                  )}
+                  style={{ width: `${(it.value / max) * 100}%` }}
+                />
+                <span className="relative min-w-0 flex-1 truncate px-1 text-fg" title={it.text}>
+                  {it.label}
+                </span>
               </span>
               <span className="relative flex shrink-0 gap-4 text-small tabular">
                 {showShare ? (
                   <span className="w-12 text-right text-fg-2">
-                    {formatShareOf(it.value, total ?? 0)}
+                    {partShare(it.value, total ?? 0)}
                   </span>
                 ) : null}
                 <span className="min-w-16 text-right text-fg">{format(it.value)}</span>

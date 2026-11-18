@@ -73,7 +73,7 @@ describe("integrity text", () => {
     expect(gradeText("A")).toBe("Grade A");
     expect(gradeText(null)).toBe("Not graded");
     expect(dayCountsText(f.integrityReportBody as never)).toBe(
-      "2 graded site days: 1 A, 1 B, 0 C.",
+      "Graded on 2 site days: 1 A, 1 B, 0 C.",
     );
     expect(
       dayCountsText({ grade: null, graded_days: 0, days_a: 0, days_b: 0, days_c: 0 }),

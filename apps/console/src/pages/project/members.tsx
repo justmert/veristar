@@ -14,12 +14,11 @@ import { FilterBar } from "@/components/filter-bar";
 import { NativeSelect, SelectField, TextField } from "@/components/form-field";
 import { PageHeader } from "@/components/page-header";
 import { ErrorState } from "@/components/states";
-import { Pill } from "@/components/status";
 import { toast } from "@/components/toast";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Tooltip } from "@/components/ui/tooltip";
-import { countOf, formatDate } from "@/lib/format";
+import { countOf, formatCount, formatDate } from "@/lib/format";
 import * as v from "@/lib/validate";
 import { useProject } from "@/pages/project-layout";
 import { queryClient } from "@/query-client";
@@ -359,21 +358,7 @@ function MembersBody({
       </section>
 
       {data.invites.length > 0 ? (
-        <section aria-labelledby="invites-h" className="flex min-w-0 flex-col gap-4">
-          <h2 id="invites-h" className="text-title text-fg">
-            Open invites
-          </h2>
-          <ul
-            aria-label="Open invites"
-            className="flex flex-col rounded-lg border border-line bg-raised"
-          >
-            {data.invites.map((i) => (
-              <li key={i.id} className="border-b border-line-subtle last:border-b-0">
-                <InviteRow tenantId={tenantId} invite={i} canManage={canManage} />
-              </li>
-            ))}
-          </ul>
-        </section>
+        <InvitesSection tenantId={tenantId} invites={data.invites} canManage={canManage} />
       ) : null}
 
       <ConfirmDialog
@@ -509,15 +494,118 @@ export function AddMemberForm({ tenantId, onDone }: { tenantId: string; onDone?:
   );
 }
 
-function InviteRow({
+export function matchInvites(list: Invite[], q: string): Invite[] {
+  const t = q.trim().toLowerCase();
+  if (!t) return list;
+  return list.filter((i) =>
+    [i.display_name, i.github_login, i.stellar_address].some((x) => x?.toLowerCase().includes(t)),
+  );
+}
+
+// open invites in the members table form: a count in the title, search from
+// the same size on, and pages, so a long list stays short
+function InvitesSection({
   tenantId,
-  invite,
+  invites,
   canManage,
 }: {
   tenantId: string;
-  invite: Invite;
+  invites: Invite[];
   canManage: boolean;
 }) {
+  const [q, setQ] = useState("");
+  const [page, setPage] = useState(0);
+  const shown = matchInvites(invites, q);
+  const pages = Math.max(1, Math.ceil(shown.length / MEMBER_PAGE));
+  const current = Math.min(page, pages - 1);
+  const columns: Column<Invite>[] = [
+    {
+      key: "person",
+      header: "Person",
+      primary: true,
+      minWidth: "min-w-56",
+      cell: (i) => (
+        <span className="flex min-w-0 items-center gap-2 py-1">
+          <Initial login={i.display_name} dashed />
+          <span className="min-w-0 truncate font-medium text-fg">
+            <PersonName
+              githubLogin={i.github_login}
+              address={i.stellar_address}
+              name={i.display_name}
+            />
+          </span>
+        </span>
+      ),
+    },
+    {
+      key: "role",
+      header: "Joins as",
+      mobile: true,
+      cell: (i) => <span className="text-fg-2">{i.role === "owner" ? "Owner" : "Member"}</span>,
+    },
+    {
+      key: "until",
+      header: "Open until",
+      mobile: true,
+      cell: (i) => <span className="whitespace-nowrap text-fg-2">{formatDate(i.expires_at)}</span>,
+    },
+    ...(canManage
+      ? [
+          {
+            key: "actions",
+            header: "Actions",
+            align: "right" as const,
+            mobile: true,
+            cell: (i: Invite) => <RevokeInvite tenantId={tenantId} invite={i} />,
+          },
+        ]
+      : []),
+  ];
+  return (
+    <section aria-labelledby="invites-h" className="flex min-w-0 flex-col gap-4">
+      <div className="flex flex-col gap-1">
+        <h2 id="invites-h" className="text-title text-fg">
+          Open invites ({formatCount(invites.length)})
+        </h2>
+        <p className="text-small text-fg-2">A person joins with their role at the first sign-in.</p>
+      </div>
+      {invites.length >= MEMBER_SEARCH_FROM ? (
+        <FilterBar
+          search={q}
+          onSearch={(t) => {
+            setQ(t);
+            setPage(0);
+          }}
+          searchLabel="Search invites"
+          placeholder="Search by name or address"
+          onClearAll={() => setQ("")}
+        />
+      ) : null}
+      <DataTable<Invite>
+        label="Open invites"
+        columns={columns}
+        rows={shown.slice(current * MEMBER_PAGE, (current + 1) * MEMBER_PAGE)}
+        getRowKey={(i) => i.id}
+        rowLabel={(i) => i.display_name}
+        rowProps={(i) => ({ "data-invite": i.id })}
+        empty={{ title: "No invite matches", text: "Search by another name or address." }}
+        footer={
+          shown.length > MEMBER_PAGE
+            ? {
+                kind: "pager",
+                page: current,
+                pageSize: MEMBER_PAGE,
+                total: shown.length,
+                onPage: setPage,
+              }
+            : undefined
+        }
+      />
+    </section>
+  );
+}
+
+function RevokeInvite({ tenantId, invite }: { tenantId: string; invite: Invite }) {
   const [open, setOpen] = useState(false);
   const revoke = useMutation({
     mutationFn: () => api.revokeInvite(tenantId, invite.id),
@@ -528,38 +616,19 @@ function InviteRow({
     },
   });
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 transition-colors duration-(--vs-duration-press) ease-standard hover:bg-hover">
-      <Initial login={invite.display_name} dashed />
-      <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <p className="flex min-w-0 flex-wrap items-center gap-2 text-body font-medium text-fg">
-          <span className="min-w-0 truncate">
-            <PersonName
-              githubLogin={invite.github_login}
-              address={invite.stellar_address}
-              name={invite.display_name}
-            />
-          </span>
-          <Pill tone="info">Not signed in yet</Pill>
-        </p>
-        <p className="text-small text-fg-2">
-          Joins as {ROLE_WORD[invite.role]} at the first sign-in. The invite is open until{" "}
-          {formatDate(invite.expires_at)}.
-        </p>
-      </div>
-      {canManage ? (
-        <Button
-          variant="destructive-outline"
-          size="sm"
-          className="max-lg:h-(--vs-control-touch)"
-          onClick={() => {
-            revoke.reset();
-            setOpen(true);
-          }}
-        >
-          <Ban aria-hidden />
-          Revoke
-        </Button>
-      ) : null}
+    <>
+      <Button
+        variant="destructive-outline"
+        size="sm"
+        className="max-lg:h-(--vs-control-touch)"
+        onClick={() => {
+          revoke.reset();
+          setOpen(true);
+        }}
+      >
+        <Ban aria-hidden />
+        Revoke
+      </Button>
       <ConfirmDialog
         open={open}
         onOpenChange={setOpen}
@@ -571,6 +640,6 @@ function InviteRow({
         error={revoke.error}
         onConfirm={() => revoke.mutate()}
       />
-    </div>
+    </>
   );
 }

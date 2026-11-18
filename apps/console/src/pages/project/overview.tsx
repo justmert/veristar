@@ -4,7 +4,8 @@
 // answer is one line that links to its own page.
 
 import { useQueries, useQuery } from "@tanstack/react-query";
-import { ArrowRight, Globe } from "lucide-react";
+import { cn } from "@veristar/brand/cn";
+import { ArrowRight, Check, Clock, Globe } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import type { ApiFilters } from "@/api/endpoints";
@@ -15,9 +16,8 @@ import { type WebSummary, webSummaryQuery } from "@/api/web";
 import { DbIpAttribution } from "@/components/dbip-attribution";
 import { PageHeader } from "@/components/page-header";
 import { RangeControl } from "@/components/range-control";
-import { Sparkline, StatCard } from "@/components/stat-card";
-import { EmptyState, ErrorState, Skeleton } from "@/components/states";
-import { StatusDot } from "@/components/status";
+import { StatCard } from "@/components/stat-card";
+import { EmptyState, ErrorState, Missing, Skeleton } from "@/components/states";
 import { StatusBadge } from "@/components/status-badge";
 import { Skeleton as Bone } from "@/components/ui/skeleton";
 import {
@@ -43,14 +43,13 @@ import {
   formatMetric,
   metricValue,
   periodLabel,
-  sparkOf,
   WEB_MAX_DAYS,
   WEB_PRESETS,
   type WebMetric,
   webPath,
   webTrend,
 } from "@/lib/web-dashboard";
-import { AddSiteButton } from "@/pages/project/sites";
+import { AddSiteButton, canAddSites } from "@/pages/project/sites";
 import { useProject } from "@/pages/project-layout";
 import { OverviewSkeleton, PAGE_HEADERS } from "./page-frame";
 import { METRIC_LABEL, WebTrendChart } from "./web-chart";
@@ -58,32 +57,30 @@ import { METRIC_LABEL, WebTrendChart } from "./web-chart";
 const NO_FILTERS: ApiFilters = { service: null, route: null, method: null };
 const CADENCE = "Web totals refresh every hour. API counts refresh every few minutes.";
 
-// a project that is not approved, is suspended or was removed takes no new
-// site and no setup step; the status notice above the page says why, and
-// the empty state says what to do instead
+// a project that is not approved, is suspended or was removed shows no setup
+// step: no event can arrive. the status notice above the page says why.
 const STOPPED: ReadonlySet<TenantStatus> = new Set(["rejected", "suspended", "removed"]);
 
 function noSiteText(status: TenantStatus, isOwner: boolean, termsCurrent: boolean): string {
+  if (!termsCurrent) return "An owner must accept the new terms before you can add sites.";
   switch (status) {
     case "rejected":
       return isOwner
-        ? "You can add sites after operators approve the project. Change the answers above and submit them again."
-        : "You can add sites after operators approve the project. An owner of this project can change the answers and submit them again.";
+        ? "Sites that you add now wait until operators approve the project. Change the answers above and submit them again."
+        : "Sites that you add now wait until operators approve the project. An owner can change the answers and submit them again.";
     case "suspended":
       return "You cannot add sites while the project is suspended.";
     case "removed":
       return "This project was removed. It cannot take new sites.";
     default:
-      return termsCurrent
-        ? "Add the website that you want to measure. You get a script tag for its pages."
-        : "An owner must accept the new terms before you can add sites.";
+      return "Add the website that you want to measure. You get a script tag for its pages.";
   }
 }
 
 export function OverviewPage() {
   const { tenant, termsCurrent, isOwner } = useProject();
   const stopped = STOPPED.has(tenant.status);
-  const canChange = termsCurrent && !stopped;
+  const canAdd = canAddSites(tenant.status, termsCurrent);
   const sites = useQuery(sitesQuery(tenant.id));
   const [params, setParams] = useSearchParams();
   const { preset, days } = readOverviewRange(params, new Date());
@@ -108,20 +105,27 @@ export function OverviewPage() {
     // summaries stay, only the web numbers wait for a site
     body = (
       <>
-        <EmptyState
-          icon={<Globe aria-hidden strokeWidth={1.75} />}
-          title="No sites yet"
-          action={canChange ? <AddSiteButton tenantId={tenant.id} variant="default" /> : undefined}
-        >
-          {noSiteText(tenant.status, isOwner, termsCurrent)}
-        </EmptyState>
+        {!stopped && canAdd ? (
+          <SetupChecklist tenantId={tenant.id} sites={live} days={days} canAdd={canAdd} />
+        ) : (
+          <EmptyState
+            icon={<Globe aria-hidden strokeWidth={1.75} />}
+            title="No sites yet"
+            // the resubmit form above holds the page's main action
+            action={canAdd ? <AddSiteButton tenantId={tenant.id} variant="outline" /> : undefined}
+          >
+            {noSiteText(tenant.status, isOwner, termsCurrent)}
+          </EmptyState>
+        )}
         <Summaries tenantId={tenant.id} sites={live} days={days} />
       </>
     );
   else
     body = (
       <>
-        {stopped ? null : <NextStep sites={live} tenantId={tenant.id} />}
+        {stopped ? null : (
+          <SetupChecklist tenantId={tenant.id} sites={live} days={days} canAdd={canAdd} />
+        )}
         <RangeControl<OverviewPreset>
           value={preset}
           presets={WEB_PRESETS}
@@ -169,7 +173,7 @@ export function OverviewPage() {
     </div>
   );
 }
-// ---- the next setup step: one line, one action
+// ---- the setup checklist and its next site step: one line, one action
 
 const STEP_TEXT: Record<SetupNext["step"], { text: string; action: string }> = {
   install: {
@@ -180,7 +184,10 @@ const STEP_TEXT: Record<SetupNext["step"], { text: string; action: string }> = {
   verify: { text: "counts page views. Verify its domain.", action: "Verify domain" },
 };
 
-function NextStep({ sites, tenantId }: { sites: Site[]; tenantId: string }) {
+// the setup step of the first site that is not set up, read from the edge
+// counts and, while those have no event, the web totals. loading is true
+// while an answer is missing, so no step jumps.
+function useNextStep(sites: Site[], tenantId: string) {
   const range = lastDays(30, new Date());
   const active = sites.filter((s) => s.status === "active" && !s.in_review);
   const ingest = useQueries({ queries: active.map((s) => ingestMonthQuery(s.id)) });
@@ -207,30 +214,185 @@ function NextStep({ sites, tenantId }: { sites: Site[]; tenantId: string }) {
     const views = w?.data?.current.totals.pageviews;
     return combineFirstEvent(fromEdge[i] ?? null, views === undefined ? null : views > 0);
   });
-  if (!step) return null;
-  const t = STEP_TEXT[step.step];
+  const loading = ingest.some((q) => q.isPending) || web.some((q) => q.isPending);
+  return { active, step, loading };
+}
+
+type CheckState = "done" | "current" | "todo" | "waiting";
+
+// the project's setup as one checklist at the top of the overview: a site,
+// its tracker and domain, then the api or an on-chain account. it goes away
+// when every step is done. a step is current only when the one before it is
+// done, so the card offers one action at a time.
+function SetupChecklist({
+  tenantId,
+  sites,
+  days,
+  canAdd,
+}: {
+  tenantId: string;
+  sites: Site[];
+  days: DayRange;
+  canAdd: boolean;
+}) {
+  const next = useNextStep(sites, tenantId);
+  const api = useQuery(apiOverviewQuery(tenantId, apiRangeOfDays(days), NO_FILTERS));
+  const chain = useQuery(onchainQuery(tenantId, days));
+  const hasSite = sites.length > 0;
+  const siteDone = hasSite && next.active.length > 0 && !next.loading && next.step === null;
+  const dataDone =
+    (api.data ? usesApi(api.data) : false) || (chain.data ? chain.data.totals.ids > 0 : false);
+  const dataKnown = !api.isPending && !chain.isPending;
+  // a project with a site waits for every answer, so a set-up project
+  // never shows the card for a moment
+  if (hasSite && (next.loading || !dataKnown)) return null;
+  if (siteDone && dataDone) return null;
+
+  const states: CheckState[] = [
+    hasSite ? "done" : "current",
+    !hasSite ? "todo" : next.active.length === 0 ? "waiting" : siteDone ? "done" : "current",
+    dataDone ? "done" : hasSite && (siteDone || next.active.length === 0) ? "current" : "todo",
+  ];
+  const done = states.filter((x) => x === "done").length;
+  const step = next.step;
+  const t = step ? STEP_TEXT[step.step] : null;
   return (
     <section
-      aria-label="Next step"
-      data-step={step.step}
-      className="flex animate-rise-in flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-line bg-raised px-4 py-3"
+      aria-labelledby="setup-h"
+      data-setup
+      className="flex animate-rise-in flex-col gap-3 rounded-lg border border-line bg-raised p-5 max-sm:p-4"
     >
-      <StatusDot tone={step.step === "refused" ? "warning" : "info"} live />
-      <p className="min-w-0 flex-1 text-body text-fg-2">
-        <span className="font-medium text-fg">{step.site.name}</span> {t.text}{" "}
-        <span className="text-caption">Step {step.done + 1} of 3.</span>
-      </p>
-      <Link
-        to={siteSetupPath(step.site)}
-        className="group inline-flex items-center gap-1 rounded-sm text-body font-medium text-fg hover:underline focus-ring max-lg:min-h-(--vs-control-touch)"
-      >
-        {t.action}
-        <ArrowRight
-          aria-hidden
-          className="size-4 transition-transform duration-(--vs-duration-press) group-hover:translate-x-0.5"
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <h2 id="setup-h" className="text-title text-fg">
+          Set up the project
+        </h2>
+        <span className="text-caption text-fg-2">{done} of 3 done</span>
+      </div>
+      <ol className="flex flex-col divide-y divide-line-subtle">
+        <CheckItem
+          n={1}
+          state={states[0] as CheckState}
+          title="Add a site"
+          text="Name the website that you want to measure."
+          action={
+            states[0] === "current" && canAdd ? (
+              <AddSiteButton tenantId={tenantId} variant="default" />
+            ) : null
+          }
         />
-      </Link>
+        <CheckItem
+          n={2}
+          state={states[1] as CheckState}
+          title="Install the tracker and verify the domain"
+          text={
+            states[1] === "waiting"
+              ? "Operators review the site first. Then install its tracker."
+              : "Add the tag to the pages of each site, then prove that you own the domain."
+          }
+        >
+          {states[1] === "current" && step && t ? (
+            <section
+              aria-label="Next step"
+              data-step={step.step}
+              className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3"
+            >
+              <p className="min-w-0 flex-1 text-small text-fg-2">
+                <span className="font-medium text-fg">{step.site.name}</span> {t.text}
+              </p>
+              <Link
+                to={siteSetupPath(step.site)}
+                className="group inline-flex w-fit items-center gap-1 rounded-sm text-body font-medium text-fg hover:underline focus-ring max-lg:min-h-(--vs-control-touch)"
+              >
+                {t.action}
+                <ArrowRight
+                  aria-hidden
+                  className="size-4 transition-transform duration-(--vs-duration-press) group-hover:translate-x-0.5"
+                />
+              </Link>
+            </section>
+          ) : null}
+        </CheckItem>
+        <CheckItem
+          n={3}
+          state={states[2] as CheckState}
+          title="Connect your API or an on-chain account"
+          text="Send API metrics from your services, or add a Stellar account or contract."
+          action={
+            states[2] === "current" ? (
+              <span className="flex flex-wrap gap-x-6 gap-y-2">
+                <PageLink to={`/projects/${tenantId}/connect-api`}>Connect API</PageLink>
+                <PageLink to={`/projects/${tenantId}/onchain`}>Add an account</PageLink>
+              </span>
+            ) : null
+          }
+        />
+      </ol>
     </section>
+  );
+}
+
+function CheckItem({
+  n,
+  state,
+  title,
+  text,
+  action,
+  children,
+}: {
+  n: number;
+  state: CheckState;
+  title: string;
+  text: string;
+  action?: ReactNode;
+  children?: ReactNode;
+}) {
+  const word =
+    state === "done"
+      ? "Done"
+      : state === "current"
+        ? "Now"
+        : state === "waiting"
+          ? "Waiting"
+          : "Later";
+  return (
+    <li
+      data-check={n}
+      data-state={state}
+      className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-2 py-3 first:pt-0 last:pb-0"
+    >
+      <span
+        aria-hidden
+        className={cn(
+          "mt-px flex size-6 items-center justify-center rounded-full border text-caption tabular",
+          state === "done"
+            ? "border-success-line text-success"
+            : state === "current"
+              ? "border-fg text-fg"
+              : "border-line text-fg-3",
+        )}
+      >
+        {state === "done" ? (
+          <Check className="size-3.5" />
+        ) : state === "waiting" ? (
+          <Clock className="size-3.5" />
+        ) : (
+          n
+        )}
+      </span>
+      <div className="flex min-w-0 flex-col gap-1">
+        <p className={cn("text-body", state === "done" ? "text-fg-2" : "text-fg")}>
+          <span className="sr-only">{word}: </span>
+          {title}
+        </p>
+        {state === "done" ? null : <p className="text-small text-fg-2">{text}</p>}
+      </div>
+      {state === "current" && (action || children) ? (
+        <div className="col-start-2 flex min-w-0 flex-col gap-2">
+          {children}
+          {action}
+        </div>
+      ) : null}
+    </li>
   );
 }
 
@@ -267,13 +429,21 @@ function Numbers({
 
   return (
     <div className="flex flex-col gap-4">
+      {/* the numbers name their pages in their own header, not in a loose
+          row of links under the cards */}
+      <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
+        <h2 className="text-caption text-fg-2">Web and API</h2>
+        <span className="flex flex-wrap gap-x-6 gap-y-1">
+          <PageLink to={webPath(tenantId, only?.id)}>Web</PageLink>
+          <PageLink to={`/projects/${tenantId}/api`}>API</PageLink>
+        </span>
+      </div>
       <section
         aria-label="Numbers"
         className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6"
       >
         {WEB_CARDS.map((c) => {
           const v = summary ? metricValue(summary.current.totals, c.metric) : null;
-          const spark = summary ? sparkOf(summary.current.series, c.metric) : null;
           return (
             <StatCard
               key={c.metric}
@@ -294,7 +464,6 @@ function Numbers({
                     )
                   : null
               }
-              spark={spark ? <Sparkline values={spark} /> : null}
               selected={chartable(c.metric) ? shown === c.metric : undefined}
               onSelect={chartable(c.metric) ? () => setMetric(c.metric) : undefined}
             />
@@ -307,10 +476,6 @@ function Numbers({
           period={periodLabel(dayCount(days))}
         />
       </section>
-      <div className="flex flex-wrap gap-x-6 gap-y-2">
-        <PageLink to={webPath(tenantId, only?.id)}>Web</PageLink>
-        <PageLink to={`/projects/${tenantId}/api`}>API</PageLink>
-      </div>
 
       {summaryState === "error" ? (
         <ErrorState title="The numbers did not load" error={summaryError} onRetry={onRetry} />
@@ -351,7 +516,7 @@ function ApiCards({
     return (
       <div
         data-api="none"
-        className="col-span-2 flex flex-col justify-between gap-2 rounded-lg border border-dashed border-line-strong p-4 md:col-span-3"
+        className="flex flex-col justify-between gap-2 rounded-lg border border-dashed border-line-strong p-4 md:col-span-3"
       >
         <span className="text-caption text-fg-2">API</span>
         <p className="text-body text-fg-2">No API requests in this range.</p>
@@ -444,9 +609,11 @@ function Summaries({ tenantId, sites, days }: { tenantId: string; sites: Site[];
           <span className="flex flex-wrap items-center gap-2">
             <StatusBadge kind="grade" grade={grade.data.grade} />
             <span className="text-small text-fg-2">
-              {grade.data.graded_days === 0
-                ? "Too few visits for a grade"
-                : countOf(grade.data.graded_days, "graded site day")}
+              {sites.length === 0
+                ? "No site to grade"
+                : grade.data.graded_days === 0
+                  ? "Too few visits for a grade"
+                  : `Graded on ${countOf(grade.data.graded_days, "site day")}`}
             </span>
           </span>
         )}
@@ -458,6 +625,16 @@ function Summaries({ tenantId, sites, days }: { tenantId: string; sites: Site[];
           <span className="text-small text-fg-2">On-chain activity did not load.</span>
         ) : chain.data.totals.ids === 0 ? (
           <span className="text-small text-fg-2">No accounts or contracts declared</span>
+        ) : activity?.gap ? (
+          <span className="flex flex-wrap items-baseline gap-x-2">
+            <span className="font-mono text-title text-fg tabular">
+              <Missing reason={activity.gap} />
+            </span>
+            <span className="text-small text-fg-2">
+              operations, {formatCount(activity.verified)} of {formatCount(chain.data.totals.ids)}{" "}
+              verified
+            </span>
+          </span>
         ) : (
           <span className="flex flex-wrap items-baseline gap-x-2">
             <span className="text-title text-fg tabular">

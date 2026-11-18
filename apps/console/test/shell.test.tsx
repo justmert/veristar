@@ -20,6 +20,7 @@ function serve(me: unknown, alerts: unknown[] = []) {
         });
       if (input === "/api/me") return json(200, me);
       if (input.startsWith(`/api/tenants/${f.TENANT_ID}`)) return json(200, f.tenantBody);
+      if (input.startsWith("/api/tenants/")) return json(404, f.errorBody("not_found"));
       if (input === "/api/operator/step-up") return json(200, f.steppedUpBody);
       if (input === "/api/operator/alerts")
         return json(200, {
@@ -127,6 +128,30 @@ describe("console shell", () => {
       ),
     );
     expect(current(host)).toEqual([]);
+  });
+
+  it("keeps the last project on the account page", async () => {
+    serve(f.meBody);
+    const first = await renderRoutes(routes, `/projects/${f.TENANT_ID}/web`);
+    await waitFor(() => expect(current(first)).toEqual(["Web"]));
+    const host = await renderRoutes(routes, "/account");
+    await waitFor(() =>
+      expect(host.querySelector('aside nav[aria-label="Project"]')).not.toBeNull(),
+    );
+    // the project nav stays, with no project page marked current
+    expect(current(host)).toEqual([]);
+  });
+
+  it("draws no project pages for a project that does not exist", async () => {
+    serve(f.meBody);
+    const host = await renderRoutes(routes, "/projects/0193a6f8-0000-7000-8000-000000000000");
+    await waitFor(() =>
+      expect(host.querySelector('[data-testid="page-title"]')?.textContent).toBe(
+        "Project not found",
+      ),
+    );
+    expect(host.querySelector('aside nav[aria-label="Project"]')).toBeNull();
+    expect(host.textContent).toContain("Choose a project");
   });
 
   it("shows the alert note on operator pages while a paging alert fires", async () => {

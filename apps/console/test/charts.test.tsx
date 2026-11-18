@@ -2,6 +2,7 @@ import { act } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { ApiError } from "@/api/client";
 import { BreakdownList, type TimeBucket, TimeChart, type TimeSeries } from "@/components/charts";
+import { partShare } from "@/components/charts/breakdown-list";
 import { byRole, click, render, waitFor } from "./helpers";
 
 const buckets: TimeBucket[] = [
@@ -255,5 +256,14 @@ describe("breakdown list", () => {
     );
     await click(byRole(failed, "button", "Try again"));
     expect(retry).toHaveBeenCalledOnce();
+  });
+});
+
+describe("breakdown shares", () => {
+  it("never shows a part smaller than the whole as 100%", () => {
+    expect(partShare(998, 1000)).toBe("99.8%");
+    expect(partShare(2, 1000)).toBe("0.2%");
+    expect(partShare(1000, 1000)).toBe("100%");
+    expect(partShare(500, 1000)).toBe("50%");
   });
 });

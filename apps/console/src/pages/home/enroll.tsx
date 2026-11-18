@@ -22,6 +22,7 @@ import { toast } from "@/components/toast";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
+import { isDraftTerms, termsVersionLabel } from "@/lib/terms";
 import * as v from "@/lib/validate";
 import { queryClient } from "@/query-client";
 
@@ -348,7 +349,7 @@ export function EnrollForm({ termsVersion }: { termsVersion: string }) {
                 name="website"
                 type="url"
                 inputMode="url"
-                placeholder="https://"
+                hint="The full address, with https://."
                 autoCapitalize="none"
                 spellCheck={false}
                 value={values.website}
@@ -428,8 +429,7 @@ export function EnrollForm({ termsVersion }: { termsVersion: string }) {
                   optional
                   type="url"
                   inputMode="url"
-                  placeholder="https://"
-                  hint="The link to the project's Stellar Community Fund submission."
+                  hint="The full link to the project's Stellar Community Fund submission, with https://."
                   autoCapitalize="none"
                   spellCheck={false}
                   value={values.scfRoundUrl}
@@ -466,25 +466,30 @@ export function EnrollForm({ termsVersion }: { termsVersion: string }) {
                   aria-describedby={errors.termsAccepted ? `${termsId}-e` : undefined}
                   className="mt-1"
                 />
-                <label htmlFor={termsId} className="text-body text-fg">
-                  I accept the{" "}
-                  <a
-                    href="/terms"
-                    target="_blank"
-                    rel="noopener"
-                    className="rounded-sm underline decoration-line-strong underline-offset-2 transition-colors duration-(--vs-duration-press) hover:decoration-fg focus-ring"
-                  >
-                    terms of the service
-                  </a>{" "}
-                  (version <span className="font-mono text-small">{termsVersion}</span>) for this
-                  project.
+                <label htmlFor={termsId} className="flex flex-col gap-1 text-body text-fg">
+                  <span>
+                    I accept the{" "}
+                    <a
+                      href="/terms"
+                      target="_blank"
+                      rel="noopener"
+                      className="rounded-sm underline decoration-line-strong underline-offset-2 transition-colors duration-(--vs-duration-press) hover:decoration-fg focus-ring"
+                    >
+                      terms of the service
+                    </a>{" "}
+                    for this project.
+                  </span>
+                  <span className="text-caption text-fg-2" title={termsVersion}>
+                    {termsVersionLabel(termsVersion)}
+                    {isDraftTerms(termsVersion) ? ", draft" : ""}
+                  </span>
                 </label>
               </div>
               {errors.termsAccepted ? (
                 <p
                   id={`${termsId}-e`}
                   role="alert"
-                  className="animate-fade-in pl-6 text-caption text-critical"
+                  className="animate-fade-in text-caption text-critical"
                 >
                   {errors.termsAccepted}
                 </p>
@@ -495,7 +500,7 @@ export function EnrollForm({ termsVersion }: { termsVersion: string }) {
               <Button
                 type="submit"
                 pending={enroll.isPending}
-                className="max-sm:h-(--vs-control-touch) max-sm:flex-1"
+                className="min-w-36 max-sm:h-(--vs-control-touch) max-sm:flex-1"
               >
                 {enroll.isPending ? "Enrolling" : "Enroll project"}
               </Button>
@@ -503,10 +508,16 @@ export function EnrollForm({ termsVersion }: { termsVersion: string }) {
                 <Link to="/">Cancel</Link>
               </Button>
               {errorCount > 0 ? (
-                <span role="status" className="text-caption text-critical sm:ml-auto">
-                  {errorCount === 1
-                    ? "1 field needs attention"
-                    : `${errorCount} fields need attention`}
+                <span role="status" className="max-sm:basis-full">
+                  <button
+                    type="button"
+                    onClick={() => setFocusTick((n) => n + 1)}
+                    className="rounded-sm text-left text-caption text-critical underline decoration-critical-line underline-offset-2 hover:decoration-critical focus-ring max-sm:py-2"
+                  >
+                    {errorCount === 1
+                      ? "1 field needs attention. Go to it."
+                      : `${errorCount} fields need attention. Go to the first.`}
+                  </button>
                 </span>
               ) : null}
               {otherError ? <FormMessage error={otherError} className="w-full" /> : null}

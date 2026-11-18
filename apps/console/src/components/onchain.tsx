@@ -108,35 +108,54 @@ export function WeeklyActiveList({ weeks, label }: { weeks: OnchainWeek[]; label
   if (weeks.length === 0) {
     return <p className="text-small text-fg-2">No complete ISO week in this range.</p>;
   }
+  // when every week misses for the same reason, the reason shows once
+  // under the weeks instead of in each of them
+  const codes = new Set(
+    weeks.map((w) => (w.active_accounts === null ? (w.missing ?? "week_not_counted") : "")),
+  );
+  const shared = codes.size === 1 && !codes.has("") ? [...codes][0] : null;
   return (
-    <ol aria-label={label} className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-      {weeks.map((w) => {
-        const reason =
-          w.active_accounts === null ? missingText(w.missing ?? "week_not_counted") : "";
-        return (
-          <li
-            key={w.week}
-            data-week={w.week}
-            className="flex min-w-0 flex-col gap-1 rounded-md border border-line bg-sunken px-3 py-2"
-          >
-            <span className="text-caption text-fg-2">
-              {w.week}
-              <span className="sr-only">, {formatDateRange(w.from, w.to)}, UTC</span>
-            </span>
-            {w.active_accounts === null ? (
-              <>
-                <Missing reason={reason} className="text-title" />
-                <span aria-hidden className="text-caption text-fg-2" data-missing={w.missing ?? ""}>
-                  {reason}
-                </span>
-              </>
-            ) : (
-              <span className="text-title text-fg tabular">{formatCount(w.active_accounts)}</span>
-            )}
-          </li>
-        );
-      })}
-    </ol>
+    <div className="flex min-w-0 flex-col gap-2">
+      <ol aria-label={label} className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {weeks.map((w) => {
+          const reason =
+            w.active_accounts === null ? missingText(w.missing ?? "week_not_counted") : "";
+          return (
+            <li
+              key={w.week}
+              data-week={w.week}
+              className="flex min-w-0 flex-col gap-1 rounded-md border border-line bg-sunken px-3 py-2"
+            >
+              <span className="text-caption text-fg-2">
+                {w.week}
+                <span className="sr-only">, {formatDateRange(w.from, w.to)}, UTC</span>
+              </span>
+              {w.active_accounts === null ? (
+                <>
+                  <Missing reason={reason} className="text-title" />
+                  {shared ? null : (
+                    <span
+                      aria-hidden
+                      className="text-caption text-fg-2"
+                      data-missing={w.missing ?? ""}
+                    >
+                      {reason}
+                    </span>
+                  )}
+                </>
+              ) : (
+                <span className="text-title text-fg tabular">{formatCount(w.active_accounts)}</span>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+      {shared ? (
+        <p className="text-caption text-fg-2" data-missing={shared}>
+          {missingText(shared)}.
+        </p>
+      ) : null}
+    </div>
   );
 }
 
@@ -156,6 +175,10 @@ export function LinkStatus({ view }: { view: OnchainView }) {
 
 // one id's totals over the range in one line
 export function IdTotals({ id }: { id: ChainId }) {
+  // without a read day the totals are not measured, so no 0 shows
+  if (id.totals.days_read === 0) {
+    return <span className="text-small text-fg-2">No ledger read in this range</span>;
+  }
   return (
     <span className="text-small text-fg-2">
       <span className="text-fg tabular">{formatCount(id.totals.operations)}</span>{" "}

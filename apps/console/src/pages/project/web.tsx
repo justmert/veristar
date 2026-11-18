@@ -25,7 +25,6 @@ import {
 } from "@/api/web";
 import { BreakdownList } from "@/components/charts";
 import { DbIpAttribution } from "@/components/dbip-attribution";
-import { type Filter, FilterBar } from "@/components/filter-bar";
 import { Notice } from "@/components/notice";
 import { PageHeader } from "@/components/page-header";
 import { RangeControl } from "@/components/range-control";
@@ -144,25 +143,26 @@ export function WebPage() {
   const scope = selected ? [selected] : listed;
   const utm = scope.some((s) => s.collect_utm);
   const days = webDays(state, now);
-  const siteFilter: Filter = {
-    key: "site",
-    label: "Site",
-    control: (
-      <SelectFilter
-        label="Site"
-        value={selected?.id ?? ""}
-        onChange={(v) => set({ site: v || null })}
-      >
-        <option value="">All sites</option>
-        {listed.map((s) => (
-          <option key={s.id} value={s.id}>
-            {s.name} ({s.domain})
-          </option>
-        ))}
-      </SelectFilter>
-    ),
-    active: selected ? { label: selected.name, onClear: () => set({ site: null }) } : null,
-  };
+  // one control filters by site, and choosing All sites is the one way to
+  // clear it: no chip and no second Clear, so the row keeps its height.
+  // the options show the site name; the domain joins only where two sites
+  // share a name
+  const names = new Map<string, number>();
+  for (const x of listed) names.set(x.name, (names.get(x.name) ?? 0) + 1);
+  const siteFilter = (
+    <SelectFilter
+      label="Site"
+      value={selected?.id ?? ""}
+      onChange={(v) => set({ site: v || null })}
+    >
+      <option value="">All sites</option>
+      {listed.map((x) => (
+        <option key={x.id} value={x.id} title={x.domain}>
+          {(names.get(x.name) ?? 0) > 1 ? `${x.name} (${x.domain})` : x.name}
+        </option>
+      ))}
+    </SelectFilter>
+  );
 
   return (
     <Page header={header}>
@@ -178,9 +178,7 @@ export function WebPage() {
             maxDays={WEB_MAX_DAYS}
             validate={(r) => validateWebDays(r, new Date())}
           />
-          {listed.length > 1 ? (
-            <FilterBar filters={[siteFilter]} onClearAll={() => set({ site: null })} />
-          ) : null}
+          {listed.length > 1 ? siteFilter : null}
         </div>
 
         {provisioning ? (
@@ -503,7 +501,9 @@ function BreakdownPanel({
         group.wide && "lg:col-span-2",
       )}
     >
-      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+      {/* the row is as tall as the segmented control, so titles of panels
+          side by side sit on one line with or without it */}
+      <div className="flex min-h-(--vs-control-touch) flex-wrap items-center justify-between gap-x-3 gap-y-2">
         <h2 id={headingId} className="text-title text-fg">
           {group.title}
         </h2>
@@ -553,6 +553,7 @@ function BreakdownPanel({
             };
           })}
           total={events ? null : visitors}
+          shareDefinition="The share of the range's visitors. A visitor can count in several rows, so the shares can add up to more than 100%."
           valueLabel={events ? "Events" : "Visitors"}
           emptyTitle={
             active === "event"
