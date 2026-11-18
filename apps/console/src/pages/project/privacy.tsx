@@ -639,25 +639,32 @@ function History({ tenantId, sites }: { tenantId: string; sites: Site[] }) {
   ];
   return (
     <Section title="Request history" count={list.data ? rows.length : null}>
-      <DataTable<ErasureRequest>
-        label="Request history"
-        columns={columns}
-        rows={rows}
-        getRowKey={(r) => r.id}
-        rowLabel={(r) => `${KIND_LABEL[r.kind]} ${r.id}`}
-        rowProps={(r) => ({ "data-erasure": r.id })}
-        state={list.isPending ? "loading" : list.error ? "error" : "data"}
-        error={list.error}
-        onRetry={() => list.refetch()}
-        loadingRows={3}
-        empty={{ title: "No erasure requested yet" }}
-        footer={{
-          kind: "more",
-          hasMore: list.hasNextPage,
-          loading: list.isFetchingNextPage,
-          onMore: () => void list.fetchNextPage(),
-        }}
-      />
+      {/* no request yet is one line, not column headers over an empty box */}
+      {list.data && rows.length === 0 ? (
+        <p role="status" className="text-small text-fg-2">
+          No erasure requested yet
+        </p>
+      ) : (
+        <DataTable<ErasureRequest>
+          label="Request history"
+          columns={columns}
+          rows={rows}
+          getRowKey={(r) => r.id}
+          rowLabel={(r) => `${KIND_LABEL[r.kind]} ${r.id}`}
+          rowProps={(r) => ({ "data-erasure": r.id })}
+          state={list.isPending ? "loading" : list.error ? "error" : "data"}
+          error={list.error}
+          onRetry={() => list.refetch()}
+          loadingRows={3}
+          empty={{ title: "No erasure requested yet" }}
+          footer={{
+            kind: "more",
+            hasMore: list.hasNextPage,
+            loading: list.isFetchingNextPage,
+            onMore: () => void list.fetchNextPage(),
+          }}
+        />
+      )}
     </Section>
   );
 }
