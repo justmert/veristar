@@ -201,7 +201,6 @@ function RosterSection({ items, admin, me }: { items: RosterEntry[]; admin: bool
     {
       key: "account",
       header: "Sign-in",
-      mobile: true,
       cell: (e) => (
         <span className="flex flex-col text-small text-fg-2">
           {e.account ? (
