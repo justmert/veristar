@@ -1078,12 +1078,20 @@ Session, owner. Body `{"version": "..."}`. Must equal the current version, else 
 Audit `tenant.terms_accept`.
 
 While a tenant's accepted version is not current, every mutating tenant route
-answers 403 `terms_not_accepted`, except this one, member removal, and the
-routes that take something out of use, answer a data request or only check a
-claim or read: OTLP token revocation (6.4), MCP access keys and their
-revocation (12.8), report link revocation (20.1), erasure (10.2) and the
-domain check (5.8). Reads keep working. A tenant accepts a new terms version
-through this route.
+answers 403 `terms_not_accepted`, the domain check (5.8) included. Reads keep
+working. These mutating routes are the exceptions, each for the reason given:
+
+| Route | Why it works without the current terms |
+|---|---|
+| `POST /api/tenants/{tenant_id}/terms` (this route) | it is how the project accepts the current terms |
+| `DELETE /api/tenants/{tenant_id}/members/{user_id}` (4.2.5) | leaving or removing a member only reduces access |
+| `DELETE /api/tenants/{tenant_id}/otlp-tokens/{token_id}` (6.4) | a revocation only reduces exposure |
+| `POST /api/tenants/{tenant_id}/reports/{report_id}/revoke` (20.1) | a revocation only reduces exposure |
+| `DELETE /api/tenants/{tenant_id}/mcp-credentials/{credential_id}` (12.8) | a revocation only reduces exposure |
+| `POST /api/tenants/{tenant_id}/erasure` (10.2) | an erasure answers a data subject's request |
+| `POST /api/tenants/{tenant_id}/mcp-credentials` (12.8) | an MCP access key reads only, and reads need no current terms |
+
+A tenant accepts a new terms version through this route.
 
 ### 4.3 Sites
 
@@ -1577,7 +1585,8 @@ never gates ingestion.
 
 This is the only route that returns `verify_token`.
 
-`POST /api/sites/{site_id}/verify`: session, member. Body `{}` or
+`POST /api/sites/{site_id}/verify`: session, member, current terms accepted
+(403 `terms_not_accepted`, 4.2.6). Body `{}` or
 `{"method": "dns" | "file"}` (absent: DNS first, then the file; first success
 wins). Runs the check synchronously (at most about 15 seconds: 5 for DNS, 10 for
 the file), writes the result under `cp_system` (1.3), audit `site.verify` (detail:
