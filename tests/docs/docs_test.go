@@ -164,8 +164,12 @@ func slug(heading string) string {
 func anchors(text string) map[string]bool {
 	set := map[string]bool{}
 	seen := map[string]int{}
-	for _, line := range proseLines(text) {
+	// headings keep their inline code: github's anchor includes the code text,
+	// so a heading like 5.9 `GET /api/operator/audit` has #59-get-apioperatoraudit
+	raw := strings.Split(text, "\n")
+	for i, line := range proseLines(text) {
 		if m := headRe.FindStringSubmatch(line); m != nil {
+			m = headRe.FindStringSubmatch(raw[i])
 			s := slug(m[2])
 			if n := seen[s]; n > 0 {
 				set[fmt.Sprintf("%s-%d", s, n)] = true
