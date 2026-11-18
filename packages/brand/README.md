@@ -59,8 +59,9 @@ Raised surfaces have a border and no shadow; overlays add `shadow-overlay`, dial
 **Lines.** `line` #2E2D29 by default, `line-strong` #3D3C37 for controls and the chart
 baseline, `line-subtle` #252522 for row rules and the chart grid.
 
-**Text.** `fg` #EEEDE8, `fg-2` #A6A49C, `fg-3` #918F86, `fg-disabled` #6E6C65. Every pair with
-the surfaces passes WCAG 2.2 AA (checked by the Umami theme's asset script).
+**Text.** `fg` #EEEDE8, `fg-2` #A6A49C, `fg-3` #97958C, `fg-disabled` #6E6C65. `fg`, `fg-2`
+and `fg-3` pass WCAG 2.2 AA (4.5:1) on every surface in both themes; the lowest pair is `fg-3` on
+`selected`, 4.79:1 dark and 4.62:1 light.
 
 **Accent.** Terracotta: `accent` #B5482E with white `on-accent` (5.3:1), `accent-hover` #A13F28,
 `accent-pressed` #8A3622. It fills the single primary action per screen and is never a status.
@@ -110,7 +111,7 @@ new number, never on page load), *arrival* 240 ms plus a 1.2 s highlight (a new 
 With reduced motion only opacity changes remain.
 
 **Mark.** An orbit circle crossed by a meridian with the accent star at its top
-(`src/mark.tsx`, `docs/logo/veristar.svg`, the Umami favicon).
+(`src/mark.tsx`, `docs/logo/veristar.svg`, the favicons and `assets/mark.svg`).
 
 ## Changing the brand
 
@@ -124,5 +125,5 @@ components only name roles.
 2. Run `generate`. `tokens.css` gains a `[data-theme="<name>"]` block.
 3. Offer it in `src/theme.ts` and `src/theme-boot.js`.
 
-Components need no change. Check the new roles with the dataviz palette validator for the series
-and with the Umami theme's contrast check for text pairs.
+Components need no change. Check the new series colours for colour-vision distance and the new
+text roles for WCAG 2.2 AA contrast on every surface before you commit them.
