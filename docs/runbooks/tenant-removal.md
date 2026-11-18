@@ -11,7 +11,8 @@ operator guide, [Removing a project](../operators/removal.md). The code is
 [control plane API reference](../reference/control-plane-api.md).
 
 Every action is an operator route: it needs a console session of an operator on the roster,
-confirmed with a passkey ([Adding and removing operators](operators.md)). Run the SQL below on the
+confirmed with a passkey ([Adding and removing operators](operators.md)). Removal also runs from
+`platformctl`, as described below. Run the SQL below on the
 database leader, as described in the [runbooks overview](overview.md).
 
 ## Suspending a project
@@ -54,7 +55,27 @@ do not come back.
 1. In the console operator area, open the project and choose **Remove**, or
    call `POST /api/operator/tenants/{tenant_id}/remove` with
    `{"reason": "..."}`. The reason is required and the project's members see
-   it.
+   it. Without console access, run `platformctl tenant remove` on the core
+   node that holds the Patroni leader, with the flags of
+   [bootstrap step 10](../deploy/bootstrap.md):
+
+   ```sh
+   ssh <core node> sudo docker run --rm --network veristar-core_default \
+     --env-file /etc/veristar/env/platformctl.env \
+     -v /etc/veristar/tls/ca:/etc/sa-tls:ro \
+     -e PLATFORM_DB_HOST=haproxy -e PLATFORM_DB_PORT=5000 -e PLATFORM_DB_NAME=platform \
+     -e PLATFORM_DB_SSLMODE=verify-full -e PLATFORM_DB_SSLROOTCERT=/etc/sa-tls/ca.crt \
+     ghcr.io/justmert/veristar/platformctl:<release> \
+     tenant remove -slug <slug> -reason "<reason>"
+   ```
+
+   `-tenant <tenant id>` names the project instead of `-slug`, and `-dry-run`
+   performs the removal and rolls it back. The command runs the same
+   transaction as the console, records `requested_by` as empty and writes the
+   audit row with the actor `system:platformctl-tenant`. It refuses the
+   internal monitoring project. The console triggers the reconciler at once;
+   after the command, the jobs task `reconcile` starts the purge within 10
+   minutes.
 2. In one transaction the control plane sets the project to `removed`, sets
    every site to `removed` (domains stay on the rows), deletes open invites,
    inserts the `cp.tenant_removals` row and writes the `tenant.remove` audit
