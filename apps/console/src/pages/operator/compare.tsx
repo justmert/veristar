@@ -466,15 +466,12 @@ function WebSection({ data }: { data: WebCompare }) {
   const markers = markersOf(withData);
   const col = (k: "pageviews" | "visitors" | "bounce_rate" | "avg_visit_duration") =>
     withData.map((p) => p.series.map((s) => s[k]));
-  const notRead = withData.some((p) => p.series.some((s) => !s.aggregated));
-  const gaps = notRead ? "A gap is a day that is not read yet." : undefined;
   if (withData.length === 0) return <NoData label="No web data" projects={without} />;
   return (
     <>
       <div className="grid gap-4 lg:grid-cols-2">
         <CompareChart
           title="Page views"
-          description={gaps}
           buckets={buckets}
           projects={projects}
           values={col("pageviews")}
@@ -484,7 +481,6 @@ function WebSection({ data }: { data: WebCompare }) {
         />
         <CompareChart
           title="Visitors"
-          description={gaps}
           buckets={buckets}
           projects={projects}
           values={col("visitors")}
