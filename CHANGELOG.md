@@ -140,6 +140,14 @@ here, before they take effect, as the processing terms require
 
 ### Fixed
 
+- API analytics, the operator lists and compares, the scf view and the machine
+  API answer for any range again when a project's request counts over the range
+  pass the 64-bit limit: request totals stop at the largest 64-bit value and
+  percentiles read through an overflow-safe histogram sum (migration 00049).
+  Before, such a range answered 500, for every project in an operator list.
+- A `visitor_today` erasure reads the visitor's state from the stream leader, so
+  a replica that has not yet applied the visitor's newest session cannot hide
+  that session from the erasure.
 - A project that resubmits its enrollment keeps at most 20 declared accounts and
   contracts: the ids of the new answers are added in the order they are listed
   until the project holds 20, the cap the console holds every project to
