@@ -74,6 +74,7 @@ export const ROLE_HELP =
 
 // from this many people the list gets a search field
 export const MEMBER_SEARCH_FROM = 8;
+const MEMBER_PAGE = 25;
 
 // the members whose name, login or address holds the search text
 export function matchMembers(list: Member[], q: string): Member[] {
@@ -204,7 +205,10 @@ function MembersBody({
   const [pending, setPending] = useState<Pending | null>(null);
   const ownerCount = data.members.filter((m) => m.role === "owner").length;
   const lastOwner = (m: Member) => m.role === "owner" && ownerCount === 1;
+  const [page, setPage] = useState(0);
   const shown = matchMembers(data.members, q);
+  const pages = Math.max(1, Math.ceil(shown.length / MEMBER_PAGE));
+  const current = Math.min(page, pages - 1);
 
   const setRole = useMutation({
     mutationFn: (p: { member: Member; role: Role }) =>
@@ -287,6 +291,7 @@ function MembersBody({
       key: "actions",
       header: "Actions",
       align: "right",
+      mobile: true,
       cell: (m) => {
         const self = m.user_id === selfId;
         if (!(canManage || self) || lastOwner(m)) return null;
@@ -324,7 +329,10 @@ function MembersBody({
         {data.members.length >= MEMBER_SEARCH_FROM ? (
           <FilterBar
             search={q}
-            onSearch={setQ}
+            onSearch={(t) => {
+              setQ(t);
+              setPage(0);
+            }}
             searchLabel="Search members"
             placeholder="Search by name or address"
             onClearAll={() => setQ("")}
@@ -333,11 +341,22 @@ function MembersBody({
         <DataTable<Member>
           label="Members"
           columns={columns}
-          rows={shown}
+          rows={shown.slice(current * MEMBER_PAGE, (current + 1) * MEMBER_PAGE)}
           getRowKey={(m) => m.user_id}
           rowLabel={(m) => m.display_name}
           rowProps={(m) => ({ "data-member": m.user_id })}
           empty={{ title: "No member matches", text: "Search by another name or address." }}
+          footer={
+            shown.length > MEMBER_PAGE
+              ? {
+                  kind: "pager",
+                  page: current,
+                  pageSize: MEMBER_PAGE,
+                  total: shown.length,
+                  onPage: setPage,
+                }
+              : undefined
+          }
         />
       </section>
 
