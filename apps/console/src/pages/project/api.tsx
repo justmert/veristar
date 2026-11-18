@@ -414,14 +414,14 @@ function TracesBadge() {
     <Tooltip content={SPAN_NOTE}>
       {/* biome-ignore lint/a11y/noNoninteractiveTabindex: the note opens on focus too */}
       <span tabIndex={0} className="inline-flex rounded-full focus-ring">
-        <Pill tone="info">From traces</Pill>
+        <Pill tone="neutral">From traces</Pill>
       </span>
     </Tooltip>
   );
 }
 
 function ApproxBadge() {
-  return <Pill tone="info">Approximate</Pill>;
+  return <Pill tone="neutral">Approximate</Pill>;
 }
 
 // ---- the dashboard
@@ -1161,7 +1161,7 @@ function ServicesSection({ services }: { services: ApiServiceItem[] }) {
                 <Tooltip content={IGNORED_NOTE}>
                   {/* biome-ignore lint/a11y/noNoninteractiveTabindex: the note opens on focus too */}
                   <span tabIndex={0} className="inline-flex rounded-full focus-ring">
-                    <Pill tone="info">Metrics only</Pill>
+                    <Pill tone="neutral">Metrics only</Pill>
                   </span>
                 </Tooltip>
               ) : null}

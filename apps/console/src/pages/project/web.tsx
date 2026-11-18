@@ -323,7 +323,10 @@ function Realtime({ tenantId, site }: { tenantId: string; site: string | null })
       className="flex flex-wrap items-center gap-x-6 gap-y-3 rounded-lg border border-line bg-raised px-4 py-3 sm:px-5"
     >
       <div className="flex min-h-8 items-center gap-3">
-        <StatusDot tone={rt.data && rt.data.visitors > 0 ? "success" : "info"} live={!!rt.data} />
+        <StatusDot
+          tone={rt.data && rt.data.visitors > 0 ? "success" : "neutral"}
+          live={!!rt.data}
+        />
         {rt.isPending ? (
           <Bone className="h-6 w-48" />
         ) : rt.error ? (

@@ -194,7 +194,7 @@ export function DataTable<Row>({
           <table
             ref={frame.tableRef}
             aria-label={label}
-            className="w-full border-separate border-spacing-0 text-small"
+            className="w-full border-separate border-spacing-0 text-body"
           >
             <thead ref={frame.headRef}>
               <tr>
@@ -601,7 +601,7 @@ function FloatingHead<Row>({
       <div className="overflow-hidden bg-raised">
         <table
           ref={frame.copyTableRef}
-          className="table-fixed border-separate border-spacing-0 text-small"
+          className="table-fixed border-separate border-spacing-0 text-body"
           style={{ width: size.table }}
         >
           <colgroup>
@@ -695,7 +695,7 @@ function PhoneCard<Row>({
       <dt className="text-caption text-fg-2">{c.header}</dt>
       <dd
         className={cn(
-          "min-w-0 text-small break-words text-fg",
+          "min-w-0 text-body break-words text-fg",
           c.numeric && "tabular",
           href && ABOVE_ROW_LINK,
         )}

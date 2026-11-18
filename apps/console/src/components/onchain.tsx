@@ -167,7 +167,7 @@ export function LinkStatus({ view }: { view: OnchainView }) {
       stellar.toml linked both ways
     </Pill>
   ) : (
-    <Pill tone="info">
+    <Pill tone="neutral">
       <Link2Off aria-hidden className="size-3" />
       stellar.toml link not complete
     </Pill>
