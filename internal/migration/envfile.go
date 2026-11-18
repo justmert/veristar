@@ -75,6 +75,16 @@ func LoadEndpoint(values map[string]string) (Endpoint, error) {
 	return Endpoint{Admin: admin, UmamiDatabase: name, UmamiURL: u}, errors.Join(aerr, uerr, e.Err())
 }
 
+// LoadDatabases is LoadEndpoint without UMAMI_URL and UMAMI_ADMIN_PASSWORD,
+// for a side that runs no umami (a restore node): Open then builds no
+// admin client, and no /stats can be read on that side.
+func LoadDatabases(values map[string]string) (Endpoint, error) {
+	e := config.FromMap(values)
+	admin, aerr := pdb.LoadAdminConfig(e)
+	name := e.String("UMAMI_DB_NAME")
+	return Endpoint{Admin: admin, UmamiDatabase: name}, errors.Join(aerr, e.Err())
+}
+
 // Open connects to both databases and builds the umami admin client.
 // close releases the connections.
 func Open(ctx context.Context, ep Endpoint, appName string) (side Side, closeFn func(), err error) {
@@ -92,6 +102,10 @@ func Open(ctx context.Context, ep Endpoint, appName string) (side Side, closeFn 
 	closeFn = func() {
 		_ = p.Close(context.WithoutCancel(ctx))
 		_ = u.Close(context.WithoutCancel(ctx))
+	}
+	if ep.UmamiURL.URL == nil {
+		// LoadDatabases: the databases only
+		return Side{Platform: p, Umami: u}, closeFn, nil
 	}
 	c, err := umami.New(ep.UmamiURL.URL, nil)
 	if err == nil {
