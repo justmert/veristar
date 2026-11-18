@@ -179,6 +179,12 @@ here, before they take effect, as the processing terms require
   `deploy.yml` from one release to another runs locally, and
   `make local-converge-e2e` runs on the `LC_TOPOLOGY=node` layout too.
 
+### Fixed
+
+- The replayer reads a visitor's visit record again when a NATS replica
+  that has not caught up answers with an older one, so events of a visitor
+  delivered back to back keep their visit.
+
 ### Upgrade notes
 
 - Web events move from one subject per site to 32 partitions. The rolling

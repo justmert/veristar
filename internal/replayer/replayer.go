@@ -412,34 +412,7 @@ func (r *Replayer) sampleLag(ctx context.Context) {
 	t := time.NewTicker(lagEvery)
 	defer t.Stop()
 	for {
-		var pending, ackPending uint64
-		ok := true
-		for _, lr := range r.activeLeads() {
-			ictx, cancel := context.WithTimeout(ctx, lagEvery)
-			info, err := lr.cons.Info(ictx)
-			cancel()
-			if err != nil {
-				ok = false
-				if ctx.Err() == nil {
-					r.log.Warn("consumer info failed, lag gauges are stale", "consumer", lr.name, "error", err.Error())
-				}
-				continue
-			}
-			pending += info.NumPending
-			ackPending += uint64(info.NumAckPending) //nolint:gosec // a count
-			r.m.partitionPending.WithLabelValues(lr.label).Set(float64(info.NumPending))
-			r.m.partitionAckPending.WithLabelValues(lr.label).Set(float64(info.NumAckPending))
-			age := 0.0
-			if o := lr.oldest(); !o.IsZero() {
-				age = time.Since(o).Seconds()
-			}
-			r.m.partitionOldest.WithLabelValues(lr.label).Set(age)
-		}
-		if ok {
-			r.m.pending.Set(float64(pending))
-			r.m.ackPending.Set(float64(ackPending))
-			r.m.lagSampled.Set(float64(time.Now().Unix()))
-		}
+		r.sampleConsumers(ctx)
 		r.sampleVisitState(ctx)
 		select {
 		case <-ctx.Done():
@@ -447,6 +420,59 @@ func (r *Replayer) sampleLag(ctx context.Context) {
 		case <-t.C:
 		}
 	}
+}
+
+// sampleConsumers reads the info of every consumer this instance holds into
+// the lag gauges once.
+func (r *Replayer) sampleConsumers(ctx context.Context) {
+	var pending, ackPending uint64
+	ok := true
+	for _, lr := range r.activeLeads() {
+		ictx, cancel := context.WithTimeout(ctx, lagEvery)
+		info, err := lr.cons.Info(ictx)
+		cancel()
+		if err != nil {
+			ok = false
+			if ctx.Err() == nil {
+				r.log.Warn("consumer info failed, lag gauges are stale", "consumer", lr.name, "error", err.Error())
+			}
+			continue
+		}
+		pending += info.NumPending
+		ackPending += uint64(info.NumAckPending) //nolint:gosec // a count
+		age := 0.0
+		if o := lr.oldest(); !o.IsZero() {
+			age = time.Since(o).Seconds()
+		}
+		// the hold can end while the info is read. its gauges are deleted
+		// when it ends, and setting them afterwards would bring them back
+		// for good, so the next owner's gauges count the partition twice
+		r.mu.Lock()
+		if r.leads[lr.part] == lr {
+			r.m.partitionPending.WithLabelValues(lr.label).Set(float64(info.NumPending))
+			r.m.partitionAckPending.WithLabelValues(lr.label).Set(float64(info.NumAckPending))
+			r.m.partitionOldest.WithLabelValues(lr.label).Set(age)
+		}
+		r.mu.Unlock()
+	}
+	if ok {
+		r.m.pending.Set(float64(pending))
+		r.m.ackPending.Set(float64(ackPending))
+		r.m.lagSampled.Set(float64(time.Now().Unix()))
+	}
+}
+
+// endLead removes a hold that ended and its gauges.
+func (r *Replayer) endLead(lr *leadRun) {
+	r.mu.Lock()
+	if r.leads[lr.part] == lr {
+		delete(r.leads, lr.part)
+	}
+	r.m.partitionPending.DeleteLabelValues(lr.label)
+	r.m.partitionAckPending.DeleteLabelValues(lr.label)
+	r.m.partitionOldest.DeleteLabelValues(lr.label)
+	r.mu.Unlock()
+	r.setOwned()
 }
 
 // sampleVisitState refreshes the visit_state usage gauges, which the
@@ -516,15 +542,7 @@ func (r *Replayer) lead(parent context.Context, part int, lock *natsx.Lock, yiel
 	r.leads[part] = lr
 	r.mu.Unlock()
 	r.setOwned()
-	defer func() {
-		r.mu.Lock()
-		delete(r.leads, part)
-		r.mu.Unlock()
-		r.setOwned()
-		r.m.partitionPending.DeleteLabelValues(label)
-		r.m.partitionAckPending.DeleteLabelValues(label)
-		r.m.partitionOldest.DeleteLabelValues(label)
-	}()
+	defer r.endLead(lr)
 	r.log.Info("consuming", "consumer", name, "workers", r.set.Workers, "max_in_flight", r.set.MaxInFlight, "umami_processes", len(r.umami))
 	return lr.run(ctx, parent)
 }
@@ -697,6 +715,10 @@ type visitorQueue struct {
 	msgs []*held
 	// blocked is set while the oldest message fails on a healthy umami
 	blocked bool
+	// visitRev is the revision of the visit record this queue wrote last,
+	// which a later load of the record waits for (visitStore.load); only
+	// the queue's goroutine touches it
+	visitRev uint64
 }
 
 // targetHealth is the last health check of one umami process. mu is held
