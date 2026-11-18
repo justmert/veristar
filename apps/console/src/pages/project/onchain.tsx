@@ -5,7 +5,7 @@
 // with its reason, never zero.
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Blocks, Check, Download, MoreHorizontal, Plus, X } from "lucide-react";
+import { Blocks, Check, Download, MoreHorizontal, Plus, Trash2, X } from "lucide-react";
 import { type FormEvent, Fragment, type ReactNode, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { ApiError } from "@/api/client";
@@ -456,6 +456,7 @@ function IdItem({
                     setConfirm(true);
                   }}
                 >
+                  <Trash2 aria-hidden />
                   Remove {kind}
                 </MenuItem>
               </MenuContent>

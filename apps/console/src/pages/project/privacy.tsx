@@ -409,7 +409,11 @@ function ErasureForm({ tenantId, sites }: { tenantId: string; sites: Site[] }) {
         </motion.div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <Button type="submit" variant="destructive" className="max-lg:h-(--vs-control-touch)">
+          <Button
+            type="submit"
+            variant="destructive-outline"
+            className="max-lg:h-(--vs-control-touch)"
+          >
             <Eraser aria-hidden />
             {values.kind === "site_reset" ? "Reset site data" : "Request erasure"}
           </Button>

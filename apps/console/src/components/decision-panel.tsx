@@ -255,7 +255,7 @@ export function DecisionPanel({
         </span>
         <Button
           type="submit"
-          variant={choice === "reject" ? "destructive" : "default"}
+          variant={choice === "reject" ? "destructive-outline" : "default"}
           pending={run.isPending}
           disabled={conflict}
           aria-keyshortcuts="Control+Enter"

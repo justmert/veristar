@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { KeyRound } from "lucide-react";
+import { KeyRound, Trash2 } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { ApiError } from "@/api/client";
 import { operatorKeys, operatorsApi, type Passkey, passkeysQuery } from "@/api/operators";
@@ -132,13 +132,14 @@ export function OperatorPasskeys({ userName }: { userName: string }) {
                 </span>
                 <Button
                   size="sm"
-                  variant="outline"
+                  variant="destructive-outline"
                   className="max-lg:h-(--vs-control-touch)"
                   onClick={() => {
                     del.reset();
                     setDeleting(p);
                   }}
                 >
+                  <Trash2 aria-hidden />
                   Delete
                 </Button>
               </li>

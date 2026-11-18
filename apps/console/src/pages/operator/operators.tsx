@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { MoreHorizontal } from "lucide-react";
+import { CirclePause, KeyRound, MoreHorizontal, UserMinus } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { ApiError } from "@/api/client";
 import {
@@ -303,17 +303,20 @@ function RowActions({
           </>
         )}
         <MenuItem tone="critical" onSelect={() => onPick("reset-passkeys")}>
+          <KeyRound aria-hidden />
           Reset passkeys
         </MenuItem>
         {entry.bootstrap ? null : (
           <>
             {entry.status === "active" ? (
               <MenuItem tone="critical" onSelect={() => onPick("suspend")}>
+                <CirclePause aria-hidden />
                 Suspend
               </MenuItem>
             ) : null}
             <MenuSeparator />
             <MenuItem tone="critical" onSelect={() => onPick("remove")}>
+              <UserMinus aria-hidden />
               Remove from the roster
             </MenuItem>
           </>

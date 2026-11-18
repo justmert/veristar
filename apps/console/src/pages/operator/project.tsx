@@ -1,6 +1,15 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { cn } from "@veristar/brand/cn";
-import { ArrowRight, Check, ChevronDown, LoaderCircle, MoreHorizontal } from "lucide-react";
+import {
+  ArrowRight,
+  Check,
+  ChevronDown,
+  CirclePause,
+  CirclePlay,
+  LoaderCircle,
+  MoreHorizontal,
+  Trash2,
+} from "lucide-react";
 import { type ReactNode, useId, useLayoutEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 import { api } from "@/api/endpoints";
@@ -410,6 +419,13 @@ function MoreActions({ detail }: { detail: OperatorTenantDetail }) {
                 setAction(x);
               }}
             >
+              {x === "suspend" ? (
+                <CirclePause aria-hidden />
+              ) : x === "remove" ? (
+                <Trash2 aria-hidden />
+              ) : (
+                <CirclePlay aria-hidden />
+              )}
               {ACTIONS[x].label} project
             </MenuItem>
           ))}
