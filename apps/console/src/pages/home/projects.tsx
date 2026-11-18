@@ -1,27 +1,22 @@
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { cn } from "@veristar/brand/cn";
-import {
-  ChevronRight,
-  CirclePause,
-  CircleX,
-  Clock,
-  FileText,
-  FolderPlus,
-  Plus,
-} from "lucide-react";
+import { ChevronRight, CircleAlert, FolderPlus, Plus } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Link, redirect } from "react-router";
 import type { ApiFilters } from "@/api/endpoints";
-import { apiOverviewQuery, ingestMonthQuery, meQuery, sitesQuery } from "@/api/queries";
+import { apiOverviewQuery, meQuery, sitesQuery } from "@/api/queries";
 import type { Me, MeTenant, RemovedTenant } from "@/api/schemas";
-import { ErrorPanel, Loading, StateBlock } from "@/components/error-panel";
+import { webSummaryQuery } from "@/api/web";
+import { FilterBar } from "@/components/filter-bar";
 import { Stagger, StaggerItem } from "@/components/motion";
 import { Notice } from "@/components/notice";
-import { PageHeader } from "@/components/panel";
-import { StatusPill, type Tone, toneText } from "@/components/status";
+import { PageHeader } from "@/components/page-header";
+import { EmptyState, ErrorState, Missing } from "@/components/states";
+import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatCount } from "@/lib/format";
+import { readWebState, webQuery } from "@/lib/web-dashboard";
 import { queryClient } from "@/query-client";
 
 // an operator who is a member of no project starts on the operator review
@@ -38,70 +33,106 @@ export async function projectsLoader() {
   return null;
 }
 
+// from this many projects the list gets a search field
+export const SEARCH_FROM = 7;
+
+// the projects whose name or address holds the search text, in any case
+export function matchProjects(list: MeTenant[], q: string): MeTenant[] {
+  const t = q.trim().toLowerCase();
+  if (!t) return list;
+  return list.filter((p) => p.name.toLowerCase().includes(t) || p.slug.includes(t));
+}
+
+function EnrollButton() {
+  return (
+    <Button asChild className="max-sm:h-(--vs-control-touch)">
+      <Link to="/projects/new">
+        <Plus aria-hidden />
+        Enroll a project
+      </Link>
+    </Button>
+  );
+}
+
 export function ProjectsPage() {
   const me = useQuery(meQuery);
-  if (me.isPending) return <Loading label="Loading your projects" />;
-  if (me.error) return <ErrorPanel error={me.error} onRetry={() => me.refetch()} />;
-  const tenants = me.data.tenants;
+  const [q, setQ] = useState("");
+  const tenants = me.data?.tenants ?? [];
+  const header = (
+    <PageHeader
+      title="Projects"
+      description="A project is one team, with its sites, keys and members."
+      primary={me.data && tenants.length > 0 ? <EnrollButton /> : null}
+    />
+  );
 
+  if (me.isPending)
+    return (
+      <section className="flex flex-col gap-8">
+        {header}
+        <div role="status" aria-busy="true" className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <span className="sr-only">Loading your projects</span>
+          {[0, 1].map((i) => (
+            <CardSkeleton key={i} />
+          ))}
+        </div>
+      </section>
+    );
+  if (me.error)
+    return (
+      <section className="flex flex-col gap-8">
+        {header}
+        <ErrorState error={me.error} onRetry={() => me.refetch()} />
+      </section>
+    );
+
+  const shown = matchProjects(tenants, q);
   return (
-    <section className="flex flex-col gap-6">
-      <PageHeader
-        title="Your projects"
-        description="A project is one team. It holds its websites and the people who manage them."
-        actions={
-          tenants.length > 0 ? (
-            <Button asChild className="max-sm:h-(--vs-control-touch)">
-              <Link to="/projects/new">
-                <Plus aria-hidden />
-                Enroll a project
-              </Link>
-            </Button>
-          ) : null
-        }
-      />
+    <section className="flex flex-col gap-8">
+      {header}
       <RemovedNotices removed={me.data.removed_tenants} />
 
       {tenants.length === 0 ? (
-        <StateBlock
-          kind="empty"
+        <EmptyState
           icon={<FolderPlus aria-hidden strokeWidth={1.75} />}
-          title="Enroll your first project"
-          action={
-            <Button asChild className="max-sm:h-(--vs-control-touch)">
-              <Link to="/projects/new">
-                <Plus aria-hidden />
-                Enroll a project
-              </Link>
-            </Button>
-          }
+          title="No project yet"
+          action={<EnrollButton />}
         >
-          Enroll your Stellar project to get a tracking snippet for its website and a private
-          dashboard. If a teammate already enrolled it, ask them to add your GitHub username on the
-          project's members page.
-        </StateBlock>
+          Enroll your project to get a tracking tag and private dashboards.
+        </EmptyState>
       ) : (
-        <Stagger as="ul" className="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-3">
-          {tenants.map((t) => (
-            <StaggerItem as="li" key={t.id} className="flex">
-              <ProjectCard tenant={t} />
-            </StaggerItem>
-          ))}
-          <StaggerItem as="li" className="flex">
-            <Link
-              to="/projects/new"
-              className="flex min-h-48 w-full flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-line-strong text-fg-2 transition-colors duration-(--vs-duration-press) hover:border-fg-3 hover:bg-raised hover:text-fg focus-ring"
+        <div className="flex flex-col gap-4">
+          {tenants.length >= SEARCH_FROM ? (
+            <FilterBar
+              search={q}
+              onSearch={setQ}
+              searchLabel="Search projects"
+              placeholder="Search by name or address"
+              onClearAll={() => setQ("")}
+            />
+          ) : null}
+          {shown.length === 0 ? (
+            <EmptyState
+              compact
+              title="No project matches"
+              action={
+                <Button variant="outline" size="sm" onClick={() => setQ("")}>
+                  Clear the search
+                </Button>
+              }
             >
-              <span className="flex size-10 items-center justify-center rounded-lg border border-line-strong">
-                <Plus aria-hidden className="size-5" />
-              </span>
-              <span className="text-body font-medium">Enroll another project</span>
-              <span className="max-w-64 text-center text-small text-fg-3">
-                One project per team. Its sites, members and API keys live inside it.
-              </span>
-            </Link>
-          </StaggerItem>
-        </Stagger>
+              Search by another name or address.
+            </EmptyState>
+          ) : (
+            <Stagger as="ul" className="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-3">
+              {shown.map((t) => (
+                <StaggerItem as="li" key={t.id} className="flex min-w-0">
+                  <ProjectCard tenant={t} />
+                </StaggerItem>
+              ))}
+            </Stagger>
+          )}
+        </div>
       )}
     </section>
   );
@@ -109,58 +140,53 @@ export function ProjectsPage() {
 
 const ROLE: Record<MeTenant["role"], string> = { owner: "Owner", member: "Member" };
 
-// the one thing that waits on the person for this project, from what
-// /api/me says about it; an active project with current terms shows its
-// address instead
-function nextStep(t: MeTenant): { text: string; tone: Tone | null; icon: ReactNode } {
+// the one thing that waits for this project, or null when nothing does.
+// `act` is true when the person must do it (amber); otherwise they wait.
+export function nextStep(t: MeTenant): { text: string; act: boolean } | null {
   const owner = t.role === "owner";
   if (t.status === "rejected")
     return {
-      text: owner
-        ? "Not approved: edit the answers and resubmit"
-        : "Not approved: an owner can edit the answers and resubmit",
-      tone: "critical",
-      icon: <CircleX aria-hidden />,
+      text: owner ? "Change the answers and send them again." : "An owner can send it again.",
+      act: owner,
     };
   if (!t.terms_current)
     return {
-      text: owner ? "New terms to accept" : "New terms: ask an owner to accept them",
-      tone: "warning",
-      icon: <FileText aria-hidden />,
+      text: owner ? "Accept the new terms." : "An owner must accept the new terms.",
+      act: owner,
     };
-  if (t.status === "pending")
-    return { text: "Waiting for operator review", tone: "info", icon: <Clock aria-hidden /> };
-  if (t.status === "suspended")
-    return {
-      text: "Suspended: new events are refused",
-      tone: "info",
-      icon: <CirclePause aria-hidden />,
-    };
-  return { text: t.slug, tone: null, icon: null };
+  if (t.status === "pending") return { text: "Operators review the project.", act: false };
+  if (t.status === "suspended") return { text: "New events are refused.", act: false };
+  return null;
 }
 
 const NO_FILTERS: ApiFilters = { service: null, route: null, method: null };
 
-// one project as a card: who it is, what waits on the person, and the last
-// 30 days in numbers, read from the same queries the overview uses (so
-// opening the project shows them from the cache)
+// one project as a card: who it is, what waits for it, and its last 30
+// days, read from the sources its own pages read (page views from the web
+// dashboard, requests from the api metrics), so the numbers agree
 function ProjectCard({ tenant: t }: { tenant: MeTenant }) {
   const next = nextStep(t);
   const sites = useQuery(sitesQuery(t.id));
-  const list = sites.data ?? [];
-  const month = useQueries({ queries: list.map((s) => ingestMonthQuery(s.id)) });
-  const api = useQuery(apiOverviewQuery(t.id, { range: "30d" }, NO_FILTERS));
-  const verified = list.filter((s) => s.verification === "verified").length;
-  const monthDone = month.every((m) => !m.isPending);
-  const accepted = month.reduce((n, m) => n + (m.data?.totals.accepted ?? 0), 0);
+  const live = (sites.data ?? []).filter((s) => s.status !== "removed");
+  const hasSites = live.length > 0;
+  const web = useQuery({
+    ...webSummaryQuery(t.id, webQuery(readWebState(new URLSearchParams()), new Date())),
+    enabled: hasSites,
+    // a card shows the gap at once; the web page waits for the setup
+    retry: false,
+  });
+  const api = useQuery({ ...apiOverviewQuery(t.id, { range: "30d" }, NO_FILTERS), retry: false });
+  const verified = live.filter((s) => s.verification === "verified").length;
+  const views = web.data?.current.totals.pageviews ?? null;
   const requests = api.data?.current.summary.requests ?? null;
 
   return (
     <Link
       to={`/projects/${t.id}`}
-      className="group flex w-full flex-col rounded-lg border border-line bg-raised transition duration-(--vs-duration-reveal) ease-standard hover:border-line-strong hover:bg-hover focus-ring"
+      data-tenant={t.id}
+      className="group flex w-full min-w-0 flex-col rounded-lg border border-line bg-raised transition-colors duration-(--vs-duration-press) ease-standard hover:border-line-strong hover:bg-hover focus-ring"
     >
-      <div className="flex items-start gap-3 p-5 pb-4">
+      <div className="flex items-start gap-3 p-5 max-sm:p-4">
         <span
           aria-hidden
           className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-selected text-title text-fg uppercase"
@@ -168,52 +194,73 @@ function ProjectCard({ tenant: t }: { tenant: MeTenant }) {
           {t.name.slice(0, 1)}
         </span>
         <span className="flex min-w-0 flex-1 flex-col gap-1">
-          <span className="truncate text-title text-fg">{t.name}</span>
-          <span className="truncate text-small text-fg-3">{t.slug}</span>
+          <span className="truncate text-title text-fg" title={t.name}>
+            {t.name}
+          </span>
+          <span className="flex min-w-0 items-center gap-2 text-small text-fg-2">
+            <span className="truncate font-mono" title={t.slug}>
+              {t.slug}
+            </span>
+            <span aria-hidden>·</span>
+            <span className="shrink-0">{ROLE[t.role]}</span>
+          </span>
         </span>
-        <span className="flex shrink-0 flex-col items-end gap-1">
-          <StatusPill status={t.status} />
-          <span className="text-caption font-normal text-fg-3">{ROLE[t.role]}</span>
+        <span className="flex shrink-0 items-center gap-1">
+          <StatusBadge kind="project" status={t.status} />
+          <ChevronRight
+            aria-hidden
+            className="size-4 text-fg-3 transition-transform duration-(--vs-duration-press) ease-standard group-hover:translate-x-0.5 group-hover:text-fg"
+          />
         </span>
       </div>
-      {next.tone ? (
+      {next ? (
         <span
           className={cn(
-            "mx-5 mb-4 flex min-w-0 items-center gap-2 rounded-md border border-line bg-sunken px-3 py-2 text-small [&_svg]:size-3.5 [&_svg]:shrink-0",
-            toneText(next.tone),
+            "mx-5 mb-4 flex min-w-0 items-center gap-2 text-small max-sm:mx-4",
+            next.act ? "text-warning" : "text-fg-2",
           )}
         >
-          {next.icon}
-          <span className="truncate">{next.text}</span>
+          {next.act ? <CircleAlert aria-hidden className="size-4 shrink-0" /> : null}
+          <span className="min-w-0">{next.text}</span>
         </span>
       ) : null}
       <dl className="mt-auto grid grid-cols-3 border-t border-line-subtle">
-        <Metric label="Sites" pending={sites.isPending} failed={sites.isError}>
-          {list.length}
-          {list.length > 0 ? (
-            <span className="ml-1 font-sans text-caption font-normal text-fg-3">
-              {verified} verified
+        <Metric label="Sites" pending={sites.isPending}>
+          {sites.isError ? (
+            <Missing reason="Did not load" />
+          ) : (
+            <span className="flex flex-col">
+              {formatCount(live.length)}
+              {hasSites ? (
+                <span className="font-sans text-caption font-normal text-fg-2">
+                  {formatCount(verified)} verified
+                </span>
+              ) : null}
             </span>
-          ) : null}
+          )}
         </Metric>
         <Metric
-          label="Web events, 30d"
-          pending={sites.isPending || !monthDone}
-          failed={sites.isError || month.some((m) => m.isError)}
+          label="Page views, 30 days"
+          pending={sites.isPending || (hasSites && web.isPending)}
         >
-          {list.length === 0 ? "none" : formatCount(accepted)}
+          {sites.isError || web.isError ? (
+            <Missing reason="Did not load" />
+          ) : !hasSites ? (
+            <Missing reason="No site yet" />
+          ) : views === null ? (
+            <Missing reason="No data in this range" />
+          ) : (
+            formatCount(views)
+          )}
         </Metric>
-        <Metric label="API requests, 30d" pending={api.isPending} failed={api.isError}>
-          {requests === null || requests === 0 ? "none" : formatCount(requests)}
+        <Metric label="API requests, 30 days" pending={api.isPending}>
+          {api.isError || requests === null ? (
+            <Missing reason="Did not load" />
+          ) : (
+            formatCount(requests)
+          )}
         </Metric>
       </dl>
-      <span className="flex items-center justify-between border-t border-line-subtle px-5 py-3 text-small text-fg-2 transition-colors duration-(--vs-duration-press) group-hover:text-fg">
-        Open project
-        <ChevronRight
-          aria-hidden
-          className="size-4 transition-transform duration-(--vs-duration-press) group-hover:translate-x-0.5"
-        />
-      </span>
     </Link>
   );
 }
@@ -221,26 +268,40 @@ function ProjectCard({ tenant: t }: { tenant: MeTenant }) {
 function Metric({
   label,
   pending,
-  failed,
   children,
 }: {
   label: string;
   pending: boolean;
-  failed: boolean;
   children: ReactNode;
 }) {
   return (
-    <div className="flex min-w-0 flex-col gap-1 border-r border-line-subtle px-5 py-3 last:border-r-0">
-      <dt className="truncate text-caption font-normal text-fg-3">{label}</dt>
-      <dd className="flex items-baseline font-mono text-title font-medium text-fg tabular">
-        {pending ? (
-          <Skeleton className="h-5 w-12" />
-        ) : failed ? (
-          <span className="text-fg-3">n/a</span>
-        ) : (
-          children
-        )}
+    <div className="flex min-w-0 flex-col gap-1 border-r border-line-subtle px-5 py-3 last:border-r-0 max-sm:px-3">
+      <dt className="truncate text-caption text-fg-2">{label}</dt>
+      <dd className="min-h-6 font-mono text-body font-medium text-fg tabular">
+        {pending ? <Skeleton className="h-5 w-12" /> : children}
       </dd>
+    </div>
+  );
+}
+
+function CardSkeleton() {
+  return (
+    <div aria-hidden className="flex flex-col rounded-lg border border-line bg-raised">
+      <div className="flex items-start gap-3 p-5">
+        <Skeleton className="size-10 rounded-lg" />
+        <div className="flex flex-1 flex-col gap-2">
+          <Skeleton className="h-4 w-1/2" />
+          <Skeleton className="h-3 w-1/3" />
+        </div>
+      </div>
+      <div className="grid grid-cols-3 border-t border-line-subtle">
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="flex flex-col gap-2 px-5 py-3">
+            <Skeleton className="h-3 w-3/4" />
+            <Skeleton className="h-5 w-1/2" />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -278,7 +339,7 @@ export function RemovedNotices({ removed }: { removed: RemovedTenant[] }) {
         <li key={r.id}>
           <Notice
             tone="critical"
-            title={`${r.name} was removed by an operator`}
+            title={`An operator removed ${r.name}`}
             actions={
               <Button
                 variant="ghost"
@@ -295,8 +356,8 @@ export function RemovedNotices({ removed }: { removed: RemovedTenant[] }) {
               </Button>
             }
           >
-            Its sites no longer accept traffic and its dashboards were deleted.
-            {r.status_reason ? ` Reason given: ${r.status_reason}` : null}
+            Its sites no longer accept traffic. Its dashboards were deleted.
+            {r.status_reason ? ` Reason: ${r.status_reason}` : null}
           </Notice>
         </li>
       ))}
