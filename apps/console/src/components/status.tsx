@@ -105,6 +105,20 @@ const ALERT: Record<"page" | "ticket" | "suppressed", StatusEntry> = {
   suppressed: { tone: "info", word: "Silenced" },
 };
 
+// how far a site is set up: one word per site on the sites list and the
+// site's setup page. waiting for a first event is a normal state; refused
+// events and a failed domain check need action.
+export type SetupStatus = "checking" | "waiting" | "refused" | "unverified" | "failed" | "done";
+
+const SETUP: Record<SetupStatus, StatusEntry> = {
+  checking: { tone: "info", word: "Checking" },
+  waiting: { tone: "info", word: "No events yet" },
+  refused: { tone: "warning", word: "Events refused" },
+  unverified: { tone: "info", word: "Domain not verified" },
+  failed: { tone: "warning", word: "Domain check failed" },
+  done: { tone: "success", word: "Set up" },
+};
+
 const GRADE: Record<IntegrityGrade, StatusEntry> = {
   A: { tone: "success", word: "Grade A" },
   B: { tone: "warning", word: "Grade B" },
@@ -116,6 +130,7 @@ export type BadgeSubject =
   | { kind: "site"; status: SiteStatus; operator?: boolean }
   | { kind: "key"; status: "active" | "expired" | "revoked" }
   | { kind: "alert"; status: "page" | "ticket" | "suppressed" }
+  | { kind: "setup"; status: SetupStatus }
   | { kind: "grade"; grade: IntegrityGrade | null };
 
 // the operator acts on what waits for review; its members only wait
@@ -134,6 +149,8 @@ export function statusEntry(s: BadgeSubject): StatusEntry {
       return KEY[s.status];
     case "alert":
       return ALERT[s.status];
+    case "setup":
+      return SETUP[s.status];
     case "grade":
       return s.grade === null ? { tone: "info", word: "Not graded" } : GRADE[s.grade];
   }
