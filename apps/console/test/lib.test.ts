@@ -1,9 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { ingest, snippet } from "@/api/schemas";
+import { snippet } from "@/api/schemas";
 import { parseBlocks } from "@/lib/markdown";
 import { rejectionRows, sumRejected, sumUnclassified } from "@/lib/outcomes";
 import { snippetGuides } from "@/lib/snippet-guides";
-import { hourSlots } from "@/pages/project/overview";
 import { safeReturnTo } from "@/pages/public/sign-in";
 import * as f from "./fixtures/contract";
 
@@ -23,13 +22,6 @@ describe("ingest outcomes", () => {
     ]);
     expect(sumRejected(totals)).toBe(8);
     expect(sumUnclassified({ accepted: 1, future_class: 7 })).toBe(7);
-  });
-
-  it("fills hours the route omitted with zero", () => {
-    const slots = hourSlots(ingest.parse(f.ingestBody));
-    expect(slots).toHaveLength(24);
-    expect(slots[0]).toEqual({ at: "2026-11-11T09:00:00Z", accepted: 120, quarantined: 3 });
-    expect(slots[1]).toEqual({ at: "2026-11-11T10:00:00Z", accepted: 0, quarantined: 0 });
   });
 });
 

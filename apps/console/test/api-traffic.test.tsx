@@ -13,17 +13,19 @@ import {
 } from "@/api/schemas";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import {
+  instantToField,
+  isPartialBucket,
   latencyText,
-  localInputToUtc,
   percentileChange,
   rateChange,
   rateText,
   readState,
   relativeChange,
-  validateCustom,
+  toStatChange,
+  validateCustomEnd,
   writeState,
 } from "@/lib/api-metrics";
-import { ApiPage, IGNORED_NOTE } from "@/pages/project/api";
+import { ApiPage, plotLatency, rateTone, sparkValues, standouts } from "@/pages/project/api";
 import * as f from "./fixtures/contract";
 import { byLabel, click, renderRoutes, type, waitFor } from "./helpers";
 
@@ -179,24 +181,52 @@ describe("api metrics formats and url state", () => {
     expect([s.sort, s.order]).toEqual(["route", "asc"]);
   });
 
-  it("checks a custom range against the contract's bounds", () => {
+  it("checks the end of a custom range and shows an instant as the field takes it", () => {
     const now = new Date("2026-11-12T10:00:00Z");
-    expect(localInputToUtc("2026-11-01T08:30")).toBe("2026-11-01T08:30:00Z");
-    expect(validateCustom("2026-11-01T00:00", "2026-11-02T00:00", now)).toEqual({});
-    expect(validateCustom("2026-11-02T00:00", "2026-11-01T00:00", now).to).toBe(
-      "End after the start.",
-    );
-    expect(validateCustom("1999-12-31T00:00", "2000-01-02T00:00", now).from).toBeDefined();
-    expect(validateCustom("2024-01-01T00:00", "2026-11-01T00:00", now).to).toBe(
-      "A custom range covers at most 800 days.",
-    );
-    expect(validateCustom("2026-11-12T00:00", "2026-11-14T00:00", now).to).toBe(
+    expect(validateCustomEnd("2026-11-13T09:00:00Z", now)).toBeNull();
+    expect(validateCustomEnd("2026-11-14T00:00:00Z", now)).toBe(
       "End no later than 24 hours from now.",
     );
-    expect(validateCustom("", "", now)).toEqual({
-      from: "Enter a start date and time.",
-      to: "Enter an end date and time.",
+    expect(instantToField("2026-11-01T08:30:00Z")).toBe("2026-11-01 08:30");
+  });
+
+  it("marks the running bucket as partial", () => {
+    const range = apiServices.parse(f.apiServicesBody).range;
+    const at = range.from;
+    const step = range.bucket_seconds * 1000;
+    expect(isPartialBucket(at, range, Date.parse(at) + step - 1)).toBe(true);
+    expect(isPartialBucket(at, range, Date.parse(at) + step)).toBe(false);
+  });
+
+  it("turns a change into a stat card line, and says nothing without a previous value", () => {
+    expect(toStatChange(relativeChange(1200, 1000), null)).toEqual({
+      text: "+20%",
+      direction: "up",
+      good: null,
+      period: "previous range",
     });
+    expect(toStatChange(rateChange(0.03, 0.02), true)?.good).toBe(false);
+    expect(toStatChange(rateChange(0.02, 0.02), true)).toMatchObject({
+      direction: "flat",
+      good: null,
+    });
+    expect(toStatChange(relativeChange(5, 0), null)).toBeNull();
+  });
+
+  it("colours rates by their marks, plots the open bucket on the 10 s line and skips flat sparklines", () => {
+    expect(rateTone("4xx", 0.049)).toBeUndefined();
+    expect(rateTone("4xx", 0.05)).toBe("text-warning");
+    expect(rateTone("5xx", 0.0001)).toBe("text-critical");
+    expect(rateTone("5xx", 0)).toBeUndefined();
+    const open = plotLatency(">10 s") ?? 0;
+    expect(open).toBeGreaterThan(10);
+    expect(open).toBeLessThan(10.01);
+    expect(plotLatency(null)).toBeNull();
+    const points = apiTimeseries.parse(f.apiTimeseriesBody).points;
+    expect(sparkValues(points.slice(0, 1), (p) => p.requests)).toBeNull();
+    expect(sparkValues(points, () => 3)).toBeNull();
+    const items = apiRoutes.parse(f.apiRoutesBody).items;
+    expect(standouts(items).slow?.route).toBe("/jobs/{id}");
   });
 });
 
@@ -296,7 +326,7 @@ describe("api traffic page", () => {
     const net = serve({ services: f.apiServicesEmptyBody, warnings: f.apiWarningsNoneBody });
     const host = await renderRoutes(routes(), path);
     await waitFor(() => expect(host.textContent).toContain("No API requests in this range"));
-    const link = [...host.querySelectorAll("a")].find((a) => text(a) === "Set up API analytics");
+    const link = [...host.querySelectorAll("a")].find((a) => text(a) === "Connect API");
     expect(link?.getAttribute("href")).toBe(`/projects/${f.TENANT_ID}/connect-api`);
     // no summary is asked for when no service sent anything
     expect(net.calls.map((u) => u.pathname.split("/").pop()).sort()).toEqual([
@@ -312,7 +342,6 @@ describe("api traffic page", () => {
     await waitFor(() => expect(tile(host, "p99")).toContain(">10 s"));
     expect(tile(host, "Requests")).toContain("1,200");
     expect(tile(host, "Requests")).toContain("+20%");
-    expect(tile(host, "Requests")).toContain("Previous range: 1,000");
     expect(tile(host, "4xx rate")).toContain("2.5%");
     expect(tile(host, "4xx rate")).toContain("30 client errors");
     // the sign says the direction in text, beside the arrow and its colour
@@ -321,15 +350,14 @@ describe("api traffic page", () => {
     expect(tile(host, "5xx rate")).toMatch(/-\d[\d.]* pp/);
     expect(tile(host, "p50")).toContain("42 ms");
     expect(tile(host, "p95")).toContain("310 ms");
-    expect(tile(host, "p99")).toContain("was 900 ms");
-    expect(host.textContent).toContain("Compared with the previous range of equal length");
-    // infrastructure requests stay out of the tiles and are named apart
+    expect(host.textContent).toContain("Compared with");
+    // infrastructure requests stay out of the cards and are named apart
     const infra = text(host.querySelector('[data-testid="infrastructure-requests"]'));
-    expect(infra).toContain("8,640 infrastructure requests");
-    expect(infra).toContain("counted apart from Nov 16, 2026");
+    expect(infra).toContain("8,640 health checks and preflights are not included");
+    expect(infra).toContain("kept apart since Nov 16, 2026");
   });
 
-  it("shows a banner for each warning kind with a count, and none for the others", async () => {
+  it("shows a notice for each warning kind that needs one, traces only where they apply", async () => {
     serve(full);
     const host = await renderRoutes(routes(), path);
     await waitFor(() =>
@@ -379,17 +407,25 @@ describe("api traffic page", () => {
     const host = await renderRoutes(routes(), path);
     await waitFor(() => expect(host.querySelector('ul[aria-label="Services"]')).not.toBeNull());
     const items = [...host.querySelectorAll('ul[aria-label="Services"] li')];
-    expect(items.map((li) => (li.textContent ?? "").includes(IGNORED_NOTE))).toEqual([false, true]);
+    expect(items.map((li) => (li.textContent ?? "").includes("Metrics only"))).toEqual([
+      false,
+      true,
+    ]);
   });
 
   it("shows the status distribution by class and by code", async () => {
     serve(full);
     const host = await renderRoutes(routes(), path);
-    await waitFor(() => expect(host.querySelector('[data-code="503"]')).not.toBeNull());
-    expect(cells(host.querySelector('[data-code="404"]'))).toEqual(["404", "", "30", "2.5%"]);
+    const code = (c: string) =>
+      host.querySelector(`ul[aria-label="Status codes"] li[data-key="${c}"]`);
+    await waitFor(() => expect(code("503")).not.toBeNull());
+    expect(text(code("404"))).toContain("404");
+    expect(text(code("404"))).toContain("30");
+    expect(text(code("404"))).toContain("2.5%");
     const bar = host.querySelector('[role="img"][aria-label^="Requests by status class"]');
-    expect(bar?.getAttribute("aria-label")).toContain("2xx success 1,150, 96%");
-    expect(bar?.getAttribute("aria-label")).toContain("No status code 0, 0%");
+    expect(bar?.getAttribute("aria-label")).toContain("2xx success 1,150");
+    // a class without requests draws nothing
+    expect(bar?.getAttribute("aria-label")).not.toContain("No status code");
   });
 
   it("switches the range and asks every route for it", async () => {
@@ -430,18 +466,18 @@ describe("api traffic page", () => {
   it("pages forward with the cursor and back to the first page", async () => {
     const net = serve(full);
     const host = await renderRoutes(routes(), path);
-    await waitFor(() => expect(host.textContent).toContain("1 to 2 of 134"));
-    const next = [...host.querySelectorAll("button")].find((b) => text(b) === "Next");
+    await waitFor(() => expect(host.textContent).toContain("1 to 50 of 134"));
+    const next = host.querySelector<HTMLButtonElement>('button[aria-label="Next page"]');
     if (!next) throw new Error("no next button");
     await click(next);
     await waitFor(() =>
       expect(net.last("routes")?.searchParams.get("cursor")).toBe(f.ROUTES_CURSOR),
     );
-    await waitFor(() => expect(host.textContent).toContain("51 to 52 of 134"));
-    const prev = [...host.querySelectorAll("button")].find((b) => text(b) === "Previous");
+    await waitFor(() => expect(host.textContent).toContain("51 to 100 of 134"));
+    const prev = host.querySelector<HTMLButtonElement>('button[aria-label="Previous page"]');
     if (!prev) throw new Error("no previous button");
     await click(prev);
-    await waitFor(() => expect(host.textContent).toContain("1 to 2 of 134"));
+    await waitFor(() => expect(host.textContent).toContain("1 to 50 of 134"));
   });
 
   it("filters to a route from its row and clears the filter again", async () => {
@@ -474,14 +510,14 @@ describe("api traffic page", () => {
     expect(host.querySelector("[data-tile=Requests]")?.textContent).toContain("1,200");
   });
 
-  it("applies a route typed into the filter", async () => {
+  it("applies a route typed into the filter on enter, with no apply button", async () => {
     const net = serve(full);
     const host = await renderRoutes(routes(), path);
     await waitFor(() => expect(host.querySelector("[data-route]")).not.toBeNull());
-    await type(byLabel(host, "Route") as HTMLInputElement, " /v1/accounts/{id} ");
-    const form = host.querySelector<HTMLFormElement>('form[aria-label="Route filter"]');
+    const input = byLabel(host, "Route") as HTMLInputElement;
+    await type(input, " /v1/accounts/{id} ");
     await act(async () => {
-      form?.requestSubmit();
+      input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
     });
     await waitFor(() =>
       expect(net.last("routes")?.searchParams.get("route")).toBe("/v1/accounts/{id}"),
@@ -512,25 +548,29 @@ describe("api traffic page", () => {
     const host = await renderRoutes(routes(), path);
     // the p95 tile drives the chart to latency; its card shows the table
     await waitFor(() =>
-      expect(host.querySelector('[data-tile="p95"] button[aria-pressed]')).not.toBeNull(),
+      expect(host.querySelector('button[data-tile="p95"][aria-pressed]')).not.toBeNull(),
     );
-    const p95 = host.querySelector<HTMLButtonElement>('[data-tile="p95"] button[aria-pressed]');
-    if (!p95) throw new Error("no p95 tile");
+    const p95 = host.querySelector<HTMLButtonElement>('button[data-tile="p95"][aria-pressed]');
+    if (!p95) throw new Error("no p95 card");
     await click(p95);
-    await waitFor(() => expect(host.textContent).toContain("Latency"));
+    await waitFor(() => expect(host.textContent).toContain("Latency per hour"));
     const card = () =>
-      [...host.querySelectorAll("section")].find((s) => text(s.querySelector("h3")) === "Latency");
+      [...host.querySelectorAll("section")].find(
+        (s) => text(s.querySelector("h2")) === "Latency per hour",
+      );
     const toggle = card()?.querySelector<HTMLButtonElement>('button[aria-label="Show as table"]');
     if (!toggle) throw new Error("no table toggle");
     await click(toggle);
     await waitFor(() => expect(card()?.querySelector("tbody tr")).not.toBeNull());
-    const latency = [...host.querySelectorAll("section")].find(
-      (s) => text(s.querySelector("h3")) === "Latency",
-    );
-    const rows = [...(latency?.querySelectorAll("tbody tr") ?? [])];
+    const rows = [...(card()?.querySelectorAll("tbody tr") ?? [])];
     expect(rows).toHaveLength(24);
-    expect(cells(rows[22])).toEqual(["Nov 12, 2026, 08:00 UTC", "2 s", ">10 s", ">10 s", "yes"]);
-    expect(cells(rows[0])).toEqual(["Nov 11, 2026, 10:00 UTC", "–", "–", "–", "no"]);
-    expect(text(latency)).toContain("Rings on the 10 s line are above 10 s");
+    // p95 first, then p50 and p99
+    expect(cells(rows[22])).toEqual([
+      "Nov 12, 2026, 08:00 UTC, approximate",
+      ">10 s",
+      "2 s",
+      ">10 s",
+    ]);
+    expect(cells(rows[0])).toEqual(["Nov 11, 2026, 10:00 UTC", "–", "–", "–"]);
   });
 });
