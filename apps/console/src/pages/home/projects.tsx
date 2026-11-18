@@ -15,7 +15,7 @@ import { EmptyState, ErrorState, Missing } from "@/components/states";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatCount } from "@/lib/format";
+import { formatCount, truncateMiddle } from "@/lib/format";
 import { readWebState, webQuery } from "@/lib/web-dashboard";
 import { queryClient } from "@/query-client";
 
@@ -266,8 +266,10 @@ function ProjectCard({
             {t.name}
           </span>
           <span className="flex min-w-0 items-center gap-2 text-small text-fg-2">
+            {/* a long slug keeps its start and its end, which tell similar
+                slugs apart */}
             <span className="truncate font-mono" title={t.slug}>
-              {t.slug}
+              {truncateMiddle(t.slug, 24)}
             </span>
             <span aria-hidden>·</span>
             <span className="shrink-0">{ROLE[t.role]}</span>
