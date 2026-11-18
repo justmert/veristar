@@ -149,6 +149,7 @@
               "operators/removal",
               "operators/global-views",
               "operators/threshold-rules",
+              "operators/scf-awards",
               "operators/onchain-and-exports",
               "operators/reading-the-numbers",
               "operators/api-keys",

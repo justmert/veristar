@@ -36,3 +36,15 @@ not legal advice. Last updated 2026-11-18.
 | Transfers | a GitHub sign-in and a GitHub login lookup pass through GitHub in the United States; a wallet sign-in and a passkey sign-in pass through no third party |
 | Retention | sessions: 7 days absolute, 24 hours idle; accounts: until the person deletes the account or the service stops; operator roster rows: until an operator admin removes them or the person deletes the account; operator passkeys: until the person removes one, an admin resets them, a removal leaves the person with no active roster row, or the person deletes the account; the audit log: while the service runs |
 | Erasure | each person deletes their own account on the console's Account page; GitHub id, login, Stellar address, passkey (credential id, public key and account address), operator roster rows and operator passkeys, memberships, sessions, MCP credentials and invites are deleted (refused with `last_operator_admin` while the person is the last active operator admin), and audit rows keep a pseudonymous account id (`erasure.md` section 7). Unlinking a sign-in method removes that identity from the account at once |
+
+## C. SCF award directory
+
+| Item | Entry |
+|---|---|
+| Purpose | show operators which SCF-funded projects the service measures, and propose each matched project's cohort (`privacy-strategy.md` section 12) |
+| Data read | SCF's build award export, read once in memory by `platformctl scf import`; the service never writes the file to disk |
+| Data stored | organisation data only: project name, round, category, program, award date, award amount, tranche percent and status, website host, and the Stellar account and contract ids the row declares; per import, the file's SHA-256, size, counts and the actor |
+| Personal data stored | none: names of people, LinkedIn and X profiles, images, document and DocSend links, descriptions and traction text are dropped at parse time |
+| Recipients | SCF's operators, through the operator API, its CSV export and the operator MCP tool |
+| Transfers | none |
+| Retention | until removed from the database; an import never deletes rows, and a tenant removal leaves them |

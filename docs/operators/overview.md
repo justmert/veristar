@@ -16,6 +16,7 @@ aggregates the operator views read.
 | [removal.md](removal.md) | Removing a project that is not part of the ecosystem, what is deleted, and the setting that keeps or deletes its aggregates |
 | [global-views.md](global-views.md) | The Web and API views of Projects and the Compare page: ranges, filters, sorting, growth, cohorts, percentiles and side-by-side comparison |
 | [threshold-rules.md](threshold-rules.md) | Saved traction rules and the projects that meet them, with the evidence |
+| [scf-awards.md](scf-awards.md) | Importing SCF's award export, which funded projects Veristar measures, and cohort proposals from exact matches |
 | [onchain-and-exports.md](onchain-and-exports.md) | Ledger activity of the accounts and contracts projects declare, calls per contract function, and the CSV exports |
 | [reading-the-numbers.md](reading-the-numbers.md) | What bands, daily-unique visitors and span-derived API data mean, and how to compare projects fairly |
 | [api-keys.md](api-keys.md) | Keys for machine consumers of the metrics API: create, use, revoke, usage |
