@@ -16,6 +16,8 @@ here, before they take effect, as the processing terms require
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-18
+
 ### Added
 
 - Alerts on web events waiting for Umami: `WebEventsDelayed` (oldest over an
@@ -466,48 +468,18 @@ here, before they take effect, as the processing terms require
 
 ### Upgrade notes
 
-- The session cookie is renamed to `__Host-sa_session`. The control plane no
-  longer reads `sa_session`, so everyone signs in again once after the
-  upgrade; the old cookie expires on its own. A sign-in that is in progress
-  during the upgrade (GitHub, wallet or passkey) starts again from the
-  sign-in page.
+In the order of the rollout: before the deploy, during the rolling deploy
+(`deploy.yml`, [docs/deploy/upgrade.md](docs/deploy/upgrade.md)), then after it.
 
-- Infrastructure requests are counted apart from the moment migration 00040
-  runs (`traffic_classes.applied_from` in the overview answer). Data stored
-  before keeps every request as application traffic, as it was counted then;
-  a range that spans the upgrade compares numbers counted both ways.
-- The rolling deploy runs migration 00040 first, then the core nodes, then
-  the edge nodes. Between the migration and the new metrics writer, the
-  writer of the earlier release cannot store minute rows (the table's key
-  changed); its messages wait in `API_METRICS` and are applied by the new
-  writer, as during any writer restart. A collector of the earlier release
-  sends no traffic class, so its requests are stored as application traffic
-  until the edge nodes run the new one.
-- `deploy.yml` now stops the jobs daemon on every core node before the
-  migrations, and each node's core role starts it again with the new image.
-  A jobs daemon of `0.3.0` still running on a node not yet updated would roll
-  up an hour's minute rows without their traffic class and store every class
-  under application traffic. As a second guard, the API rollup compares hourly
-  rows with their minute rows per traffic class, and the first check of each
-  new jobs process reaches back to `api.traffic_class_rules.applied_from`
-  (at most 8 days), so such an hour and its day are recomputed. Migration
-  00043 lets the jobs role read `api.traffic_class_rules`. If a deploy stops
-  before a core node is updated, its jobs daemon stays stopped: run the
-  deploy again.
-- At the first start after the upgrade, every identity in
-  `OPERATOR_GITHUB_IDS` and `OPERATOR_STELLAR_ADDRESSES` becomes an operator
-  admin and gets a 24-hour window to register a first passkey. Each operator
-  signs in after the upgrade, opens the operator area and registers a passkey
-  within that window; an operator admin resets the passkeys of anyone who
-  misses it. When no operator admin registered one in time, restart the
-  control plane on one core node (`docker compose restart controlplane`):
-  each identity of the settings that still has no passkey gets a new window. Then add the other operators on the Operators page and keep the
-  settings to the identities that are your path back in after a lockout
-  ([docs/runbooks/operators.md](docs/runbooks/operators.md)).
-- Optional settings: `OPERATOR_STEP_UP_MAX_AGE` (default `12h`) and
-  `OPERATOR_ENROLL_WINDOW` (default `24h`), set through
-  `sa_operator_step_up_max_age` and `sa_operator_enroll_window` in the
-  inventory; the core role passes the defaults when they are absent.
+**Before the deploy**
+
+- This release is signed in key mode on a workstation, while the
+  repository's GitHub Actions are off
+  ([docs/security/supply-chain.md](docs/security/supply-chain.md) section
+  2.1). `infra/ansible/vars/signing.yml` verifies keyless releases, so add
+  `ANSIBLE_EXTRA='-e sa_signature_mode=key'` to every `make <env>-deploy`;
+  without it `verify-release.yml` refuses the release before any node is
+  touched.
 - Add the usage report signing pair to the SOPS file of an existing
   environment before you deploy: the control plane refuses to start without
   `REPORT_SIGNING_SEED` and `REPORT_SIGNING_KEY`, and `new-secrets.py`
@@ -517,9 +489,53 @@ here, before they take effect, as the processing terms require
   in steps 1 and 3 of
   [the usage report signing key](docs/runbooks/secret-rotation.md#the-usage-report-signing-key)
   (there is no current key to retire).
+- Remove `WEB_ORIGIN` from the control plane environment and `PROBER_WEB_URL`
+  from the prober environment if you set them by hand; the templates no longer
+  write them.
+- Optional settings: `OPERATOR_STEP_UP_MAX_AGE` (default `12h`) and
+  `OPERATOR_ENROLL_WINDOW` (default `24h`), set through
+  `sa_operator_step_up_max_age` and `sa_operator_enroll_window` in the
+  inventory; the core role passes the defaults when they are absent.
+- etcd moves from 3.6.16 to 3.7.3. etcd supports this as a rolling upgrade
+  from 3.6.11 or later. Before the deploy, check
+  `etcdctl endpoint health --cluster` and take a snapshot
+  (`etcdctl snapshot save`) on one member. Once every member runs 3.7, going
+  back to 3.6 needs etcd's downgrade procedure or the snapshot, not a pin
+  change ([docs/security/supply-chain.md](docs/security/supply-chain.md),
+  section 8.2).
+
+**During the rolling deploy**
+
+- `deploy.yml` now stops the jobs daemon on every core node before the
+  migrations, and each node's core role starts it again with the new image.
+  A jobs daemon of `0.3.0` still running on a node not yet updated would roll
+  up an hour's minute rows without their traffic class and store every class
+  under application traffic. As a second guard, the API rollup compares hourly
+  rows with their minute rows per traffic class, and the first check of each
+  new jobs process reaches back to `api.traffic_class_rules.applied_from`
+  (at most 8 days), so such an hour and its day are recomputed. If a deploy
+  stops before a core node is updated, its jobs daemon stays stopped: run the
+  deploy again.
 - Run the database migrations (`00035_cohorts_and_rules.sql` to
-  `00046_rollup_parked_hours.sql`) before the new control plane starts; the
-  rolling `deploy.yml` does this in its bootstrap step.
+  `00046_rollup_parked_hours.sql`) before the new control plane and jobs
+  start; the rolling `deploy.yml` does this in its bootstrap step, right
+  after the signature check. Migration 00043 lets the jobs role read
+  `api.traffic_class_rules`; 00044 and 00045 are needed by the new control
+  plane and jobs. Between migration 00040 and the new metrics writer, the
+  writer of the earlier release cannot store minute rows (the table's key
+  changed); its messages wait in `API_METRICS` and are applied by the new
+  writer, as during any writer restart.
+- Upgrade the core tier before the edge tier: the rolling deploy runs the
+  core nodes, then the edge nodes. The new metrics writer continues each
+  cumulative stream it already follows when the new collector's first point
+  with a stream id (`scf.stream`) arrives, from the stream's stored state, so
+  the change of identity counts no history twice. A metrics writer of the
+  earlier release would take those points for new streams and count each
+  process' history again. Streams that two source series had shared before
+  the upgrade continue once from that shared state, which they had already
+  miscounted. A collector of the earlier release sends no traffic class, so
+  its requests are stored as application traffic until the edge nodes run
+  the new one.
 - NATS `max_payload` rises from the 1 MiB default to 8 MiB
   (`roles/edge/templates/nats.conf.j2`). The edge role applies a changed
   `nats.conf` with its reload handler (SIGHUP), which takes `max_payload`
@@ -531,48 +547,53 @@ here, before they take effect, as the processing terms require
   publish nothing near it. The dev stack mounts
   `deploy/compose/nats-dev.conf`; recreate its `nats` container
   (`make dev-up`).
-- Upgrade the core tier before the edge tier, as above: the new metrics
-  writer continues each cumulative stream it already follows when the new
-  collector's first point with a stream id (`scf.stream`) arrives, from the
-  stream's stored state, so the change of identity counts no history twice.
-  A metrics writer of the earlier release would take those points for new
-  streams and count each process' history again. Streams that two source
-  series had shared before the upgrade continue once from that shared state,
-  which they had already miscounted.
-- Deploy the release, then apply OpenTofu for each environment. The plan
-  destroys the Traffic Manager profile `web`, its three external endpoints
-  (`web/0` to `web/2`) and the Cloudflare CNAME `web`; nothing else changes.
-  The apply also rewrites `hosts.json` without the `web` hostname that the
-  `0.3.0` templates read, so apply only after the release has soaked, and
-  keep a copy of the earlier `hosts.json` until then. A rollback to `0.3.0`
-  after the apply first applies OpenTofu from a `v0.3.0` checkout
-  ([docs/deploy/upgrade.md](docs/deploy/upgrade.md), "Rollback across an
-  OpenTofu change").
-- The rolling deploy recreates the etcd container of each node with the new
-  compaction and quota flags, one node at a time in the edge play. A cluster
-  that ran without compaction keeps its database file at its size until it
-  is defragmented: after the deploy, compact and defragment once as in
+- The edge play of `deploy.yml` recreates the etcd container of each node
+  with etcd 3.7.3 and the new compaction and quota flags, one member at a
+  time, and waits for it to be healthy before the next node. Do not move it
+  with `site.yml`, whose edge play recreates every member at once. Patroni
+  keeps its leader through the upgrade.
+
+**After the deploy**
+
+- A cluster that ran without compaction keeps its etcd database file at its
+  size until it is defragmented: compact and defragment once, one member at
+  a time, as in
   [docs/runbooks/etcd-maintenance.md](docs/runbooks/etcd-maintenance.md).
 - The deploy installs the timers `sa-etcd-defrag` and `sa-tls-expiry` and the
   backup result writer. `BackupJobFailed` sees a backup unit after its first
   run that was not skipped.
-- Remove `WEB_ORIGIN` from the control plane environment and `PROBER_WEB_URL`
-  from the prober environment if you set them by hand; the templates no longer
-  write them.
+- The session cookie is renamed to `__Host-sa_session`. The control plane no
+  longer reads `sa_session`, so everyone signs in again once after the
+  upgrade; the old cookie expires on its own. A sign-in that is in progress
+  during the upgrade (GitHub, wallet or passkey) starts again from the
+  sign-in page.
+- At the first start after the upgrade, every identity in
+  `OPERATOR_GITHUB_IDS` and `OPERATOR_STELLAR_ADDRESSES` becomes an operator
+  admin and gets a 24-hour window to register a first passkey. Each operator
+  signs in after the upgrade, opens the operator area and registers a passkey
+  within that window; an operator admin resets the passkeys of anyone who
+  misses it. When no operator admin registered one in time, restart the
+  control plane on one core node (`docker compose restart controlplane`):
+  each identity of the settings that still has no passkey gets a new window.
+  Then add the other operators on the Operators page and keep the settings
+  to the identities that are your path back in after a lockout
+  ([docs/runbooks/operators.md](docs/runbooks/operators.md)).
+- Infrastructure requests are counted apart from the moment migration 00040
+  runs (`traffic_classes.applied_from` in the overview answer). Data stored
+  before keeps every request as application traffic, as it was counted then;
+  a range that spans the upgrade compares numbers counted both ways.
 - Links and bookmarks to `web.<BASE_DOMAIN>` stop working. Members find their
   web dashboard under **Web** in each project in the console.
-- etcd moves from 3.6.16 to 3.7.3. etcd supports this as a rolling upgrade
-  from 3.6.11 or later, and the edge play of `deploy.yml` recreates one etcd
-  member at a time and waits for it to be healthy before the next node; do
-  not move it with `site.yml`, whose edge play recreates every member at
-  once. Before the deploy, check `etcdctl endpoint health --cluster` and take
-  a snapshot (`etcdctl snapshot save`) on one member. Patroni keeps its
-  leader through the upgrade. Once every member runs 3.7, going back to 3.6
-  needs etcd's downgrade procedure or the snapshot, not a pin change
-  ([docs/security/supply-chain.md](docs/security/supply-chain.md), section 8.2).
-- Run migrations `00044_usage_report_revocation.sql` and
-  `00045_jobs_internal_tenants.sql` with the others before the new control
-  plane and jobs start.
+- Once the release has soaked, apply OpenTofu for each environment. The plan
+  destroys the Traffic Manager profile `web`, its three external endpoints
+  (`web/0` to `web/2`) and the Cloudflare CNAME `web`; nothing else changes.
+  The apply also rewrites `hosts.json` without the `web` hostname that the
+  `0.3.0` templates read, so it is the point after which a rollback needs
+  one more step: keep a copy of the earlier `hosts.json` before the apply,
+  and a rollback to `0.3.0` after the apply first applies OpenTofu from a
+  `v0.3.0` checkout
+  ([docs/deploy/upgrade.md](docs/deploy/upgrade.md), "Rollback across an
+  OpenTofu change").
 - Verify reports of a deployment other than app.veristar.app with
   `platformctl report verify <file> --toml https://app.<BASE_DOMAIN>/.well-known/stellar.toml`.
 - Ids proven before this release keep their proof: the weighted master key
@@ -950,7 +971,8 @@ How to check a file against its release:
   starts tracking on `umami.start()`, the server-issued proof of work, and a
   byte-identical rebuild of every committed release.
 
-[Unreleased]: https://github.com/justmert/veristar/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/justmert/veristar/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/justmert/veristar/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/justmert/veristar/compare/v0.2.3...v0.3.0
 [0.2.3]: https://github.com/justmert/veristar/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/justmert/veristar/compare/v0.2.1...v0.2.2
