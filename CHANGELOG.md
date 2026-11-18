@@ -18,6 +18,23 @@ here, before they take effect, as the processing terms require
 
 ### Added
 
+- SCF award directory: `platformctl scf import` reads SCF's build award
+  export (tab or comma separated, with or without a header row, from a file
+  or standard input) and keeps organisation data only; names of people,
+  profiles, links, descriptions and traction text are dropped at parse time.
+  It upserts by project and round, reports every rejected row with its reason
+  and audits the run as `scf.import`. Awards match enrolled projects on exact
+  evidence only (website host or verified on-chain id, never a name), and
+  each matched project without a confirmed cohort or a proposal of its own
+  gets the award as its cohort proposal, marked `scf_import`, for an operator
+  to confirm. The matching also runs when a project enrolls or adds a site,
+  and `platformctl scf match` runs it again. `GET /api/operator/scf/awards`,
+  its CSV and the operator MCP tool `list_scf_awards` list every award with
+  its match, whether Veristar measures the project and how its cohort
+  compares, with counts by round and category (migration 00050,
+  [docs/operators/scf-awards.md](docs/operators/scf-awards.md)).
+- A cohort record and a pending proposal name their source
+  (`proposal_source`: `member` or `scf_import`).
 - `platformctl verify-migration --no-stats` compares two environments without
   the Umami `/stats` sample, for a restore node that runs no Umami. The env
   files then need no `UMAMI_URL` or `UMAMI_ADMIN_PASSWORD`, and the report
