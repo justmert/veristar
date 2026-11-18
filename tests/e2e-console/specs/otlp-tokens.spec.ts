@@ -69,7 +69,7 @@ test("the api analytics page shows the endpoint, the guides and what is kept", a
   await expect(page.getByText("Your own backend keeps the full data")).toBeVisible();
 
   const tabs = page.getByRole("tab");
-  await expect(tabs).toHaveText(["Node.js", "Go", "Python", "Rust"]);
+  await expect(tabs).toHaveText(["Node.js", "Go", "Python", "Rust", "Java"]);
   await expect(page.getByText("new NodeSDK(")).toBeVisible();
   await page.getByRole("tab", { name: "Python" }).click();
   await expect(
@@ -79,6 +79,10 @@ test("the api analytics page shows the endpoint, the guides and what is kept", a
   await expect(page.getByText("func setupTelemetry(", { exact: false })).toBeVisible();
   await page.getByRole("tab", { name: "Rust" }).click();
   await expect(page.getByText("fn setup_telemetry(", { exact: false })).toBeVisible();
+  await page.getByRole("tab", { name: "Java" }).click();
+  await expect(
+    page.getByText("exec java -javaagent:/app/opentelemetry-javaagent.jar", { exact: false }),
+  ).toBeVisible();
   await page.screenshot({ path: join(shots, "page.png"), fullPage: true });
 });
 
