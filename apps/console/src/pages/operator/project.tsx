@@ -546,7 +546,7 @@ function Sites({
       mobile: true,
       minWidth: "min-w-44",
       cell: (x) => (
-        <span className="flex flex-col gap-0.5 py-1 text-small">
+        <span className="flex flex-col gap-1 py-1 text-small">
           <DomainFact site={x} />
           <TomlFact site={x} />
         </span>
