@@ -5,7 +5,7 @@
 import { cn } from "@veristar/brand/cn";
 import { type ReactNode, useState } from "react";
 import { Link } from "react-router";
-import { EmptyState, ErrorState } from "@/components/states";
+import { ErrorState } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { Skeleton as Bone } from "@/components/ui/skeleton";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -104,11 +104,13 @@ export function BreakdownList({
         className={className}
       />
     );
+  // an empty list is one line inside its panel, not a box in the box
   if (state === "empty" || items.length === 0)
     return (
-      <EmptyState compact title={emptyTitle} className={className}>
-        {emptyText}
-      </EmptyState>
+      <p role="status" className={cn("text-small text-fg-2", className)}>
+        {emptyTitle}
+        {emptyText ? <span className="block text-caption text-fg-3">{emptyText}</span> : null}
+      </p>
     );
 
   const max = Math.max(1, ...items.map((i) => i.value));
