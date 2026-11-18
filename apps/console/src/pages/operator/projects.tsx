@@ -26,7 +26,7 @@ import {
   MenuSeparator,
   MenuTrigger,
 } from "@/components/ui/menu";
-import { countOf, formatCount, formatDate } from "@/lib/format";
+import { countOf, formatDate } from "@/lib/format";
 import {
   COHORT_KEYS,
   type CohortKey,
@@ -427,10 +427,9 @@ export function OperatorProjectsPage() {
         {table}
         {list.data && loaded > 0 && !badDays ? (
           <div className="flex flex-wrap items-center justify-between gap-3">
+            {/* the pager counts the rows; this says how many match the filters */}
             <p className="text-small text-fg-2" aria-live="polite" data-count="">
-              {total !== null
-                ? `${countOf(total, "project")} match. ${formatCount(loaded)} shown.`
-                : `${countOf(loaded, "project")} shown.${list.hasNextPage ? " Load more for the rest." : ""}`}
+              {total !== null ? `${countOf(total, "project")} match.` : null}
             </p>
             {view !== "status" && resolved ? (
               <Button asChild variant="outline" size="sm" className="max-lg:h-(--vs-control-touch)">
