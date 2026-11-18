@@ -281,8 +281,12 @@ test("remove takes the project away from its members and keeps the audit trail",
   // each entry reads as a sentence; the action code stays in its details
   for (const verb of ["approved", "suspended", "resumed", "removed"])
     await expect(entries).toContainText(`${OPERATOR.login} ${verb}`);
-  for (const action of ["tenant.approve", "tenant.suspend", "tenant.resume", "tenant.remove"])
-    await expect(entries).toContainText(action);
+  for (const action of ["tenant.approve", "tenant.suspend", "tenant.resume", "tenant.remove"]) {
+    // each row opens in place to its details
+    const row = entries.locator(`article[data-action="${action}"]`).first();
+    await row.getByRole("button", { name: "Show the details" }).click();
+    await expect(row).toContainText(action);
+  }
   await expect(entries).toContainText("Reason: Unusual traffic, contact us");
   await expect(entries).toContainText("Reason: Not a Stellar project");
   // the filters apply at once, with no apply button
