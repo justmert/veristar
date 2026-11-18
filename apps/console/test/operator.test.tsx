@@ -161,6 +161,31 @@ describe("operator project page", () => {
     expect(host.querySelector("a[href*='/operator/audit?tenant_id=']")).not.toBeNull();
   });
 
+  it("lists many sites as short rows with their checks in words", async () => {
+    const site = f.operatorDetailBody.sites[0];
+    const sites = Array.from({ length: 30 }, (_, i) => ({
+      ...site,
+      id: `0193a6f6-5555-7e66-bf77-${String(i).padStart(12, "0")}`,
+      name: `Site ${i}`,
+      domain: `s${i}.example.org`,
+      verification: i === 0 ? "verified" : "unverified",
+      stellar_toml: null,
+    }));
+    routeFetch(detailRoutes({ ...f.operatorDetailBody, sites }));
+    const host = await renderRoutes(detailRoute, `/operator/projects/${f.TENANT_ID}`);
+    await waitFor(() => expect(host.querySelectorAll("article[data-site]")).toHaveLength(10));
+    const second = host.querySelector(
+      "[data-site='0193a6f6-5555-7e66-bf77-000000000001']",
+    ) as HTMLElement;
+    expect(second.textContent).toContain("Domain not verified");
+    expect(second.querySelector("[data-fact=missing]")).not.toBeNull();
+    const evidence = host.querySelector("[data-evidence=domain]") as HTMLElement;
+    expect(evidence.dataset.signal).toBe("partial");
+    expect(evidence.textContent).toContain("1 of 30 sites verified");
+    await click(byRole(host, "button", "Show all 30 sites"));
+    expect(host.querySelectorAll("article[data-site]")).toHaveLength(30);
+  });
+
   it("removes through the menu with a reason and the typed slug", async () => {
     const calls = routeFetch(
       detailRoutes(f.operatorDetailBody, [
@@ -201,11 +226,59 @@ describe("operator project page", () => {
   });
 
   it("shows the removal steps in words and no decision for a removed project", async () => {
-    routeFetch(detailRoutes(f.removedDetailBody));
+    const removal = {
+      ...f.removedDetailBody,
+      removal: {
+        ...f.removedDetailBody.removal,
+        steps: {
+          registry: { done_at: "2026-11-12T11:00:05Z" },
+          agg: { done_at: "2026-11-12T11:00:06Z" },
+          chain: { done_at: "2026-11-12T11:00:07Z" },
+          reports: { done_at: "2026-11-12T11:00:08Z" },
+        },
+      },
+    };
+    const calls = routeFetch(
+      detailRoutes(removal, [
+        {
+          path: "/api/operator/audit",
+          answer: {
+            status: 200,
+            body: {
+              items: [{ ...f.auditEntryBody, actor: `user:${f.OPERATOR_ID}` }],
+              next_cursor: null,
+            },
+          },
+        },
+      ]),
+    );
     const host = await renderRoutes(detailRoute, `/operator/projects/${f.TENANT_ID}`);
     await waitFor(() => expect(host.textContent).toContain("The service is deleting the data."));
-    expect(host.textContent).toContain("Project record closed");
+    const steps = [...host.querySelectorAll("[data-step]")].map(
+      (li) => li.children[1]?.textContent,
+    );
+    expect(steps).toEqual([
+      "Project record closed",
+      "Daily totals deleted",
+      "On-chain data deleted",
+      "Reports revoked",
+    ]);
+    // the requester is named by login, never by the user id
+    await waitFor(() =>
+      expect(host.querySelector("[data-requested]")?.textContent).toContain(
+        `by ${f.auditEntryBody.actor_login}`,
+      ),
+    );
+    expect(host.querySelector("[aria-labelledby=removal-h]")?.textContent).not.toContain(
+      f.OPERATOR_ID,
+    );
+    expect(calls.some((c) => c.url.includes(`actor=user%3A${f.OPERATOR_ID}`))).toBe(true);
+    // the data is deleted, so no figures and no action are offered
     expect(host.querySelector("form[aria-label^='Decision on']")).toBeNull();
+    expect(host.querySelector("[data-stat]")).toBeNull();
+    expect(host.textContent).not.toContain("Open in Compare");
+    await waitFor(() => expect(host.textContent).toContain("No cohort is confirmed"));
+    expect([...host.querySelectorAll("button")].some((b) => b.textContent === "Edit")).toBe(false);
   });
 
   it("keeps the header when the project does not load", async () => {
