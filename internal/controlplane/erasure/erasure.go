@@ -110,13 +110,15 @@ func New(cfg Config) (*Service, error) {
 
 // stores are the nats objects a run uses.
 type stores struct {
+	// nc reads visit_state on the stream leader (leaderGet)
+	nc     *nats.Conn
 	visits jetstream.KeyValue
 	events jetstream.Stream
 	dlq    jetstream.Stream
 }
 
 func (s *Service) bind(ctx context.Context) (stores, error) {
-	var st stores
+	st := stores{nc: s.cfg.NC}
 	var err error
 	if st.visits, err = s.js.KeyValue(ctx, natsx.BucketVisitState); err != nil {
 		return st, fmt.Errorf("erasure: bind %s: %w", natsx.BucketVisitState, err)
@@ -317,12 +319,12 @@ func (s *Service) websites(j job) map[string]bool {
 func (s *Service) visitorToday(ctx context.Context, st stores, j job, c *counts) (string, string, error) {
 	site := j.req.SiteID.String()
 	day := utcDay(*j.req.Day)
-	rec, err := visitRecord(ctx, st.visits, site, j.vt)
+	rec, err := visitRecord(ctx, st, site, j.vt)
 	if err != nil {
 		return "", "", err
 	}
 	// sessions an earlier run of today recorded before it failed
-	pending, err := pendingErasure(ctx, st.visits, site, j.vt)
+	pending, err := pendingErasure(ctx, st, site, j.vt)
 	if err != nil {
 		return "", "", err
 	}
@@ -437,7 +439,7 @@ func (s *Service) session(ctx context.Context, st stores, j job, c *counts) (str
 		return "", "", err
 	}
 	for _, vt := range vts {
-		rec, err := visitRecord(ctx, st.visits, site, vt)
+		rec, err := visitRecord(ctx, st, site, vt)
 		if err != nil {
 			return "", "", err
 		}

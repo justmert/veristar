@@ -150,19 +150,72 @@ func containsToken(vt string) func([]byte) bool {
 
 // visitRecord reads the replayer's record of a visitor on a site; nil when
 // there is none (visit_state keeps records 24 hours after the last event).
-func visitRecord(ctx context.Context, kv jetstream.KeyValue, site, vt string) (*replayer.VisitRecord, error) {
-	e, err := kv.Get(ctx, replayer.VisitKey(site, vt))
-	if errors.Is(err, jetstream.ErrKeyNotFound) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, fmt.Errorf("erasure: read %s: %w", natsx.BucketVisitState, err)
+// it reads through the stream leader (leaderGet): the run reads the record
+// right after the replayer acked the visitor's last event, and a replica
+// that has not applied the replayer's last put would answer with an older
+// record that misses the newest session.
+func visitRecord(ctx context.Context, st stores, site, vt string) (*replayer.VisitRecord, error) {
+	v, ok, err := leaderGet(ctx, st.nc, replayer.VisitKey(site, vt))
+	if err != nil || !ok {
+		return nil, err
 	}
 	var r replayer.VisitRecord
-	if err := json.Unmarshal(e.Value(), &r); err != nil {
+	if err := json.Unmarshal(v, &r); err != nil {
 		return nil, fmt.Errorf("erasure: visit record of the visitor is not readable: %w", err)
 	}
 	return &r, nil
+}
+
+// msgGetSubject is the jetstream api that reads a stream message on the
+// stream leader. visit_state allows direct gets, which any replica
+// answers; this api is never answered by a replica.
+const msgGetSubject = "$JS.API.STREAM.MSG.GET.KV_" + natsx.BucketVisitState
+
+// leaderGet reads the newest value of a visit_state key on the stream
+// leader. ok is false when the key has no value or its newest entry is a
+// delete or purge marker.
+func leaderGet(ctx context.Context, nc *nats.Conn, key string) (value []byte, ok bool, err error) {
+	req, err := json.Marshal(map[string]string{"last_by_subj": "$KV." + natsx.BucketVisitState + "." + key})
+	if err != nil {
+		return nil, false, err
+	}
+	m, err := nc.RequestWithContext(ctx, msgGetSubject, req)
+	if err != nil {
+		return nil, false, fmt.Errorf("erasure: read %s: %w", natsx.BucketVisitState, err)
+	}
+	var resp struct {
+		Error *struct {
+			Code    int    `json:"code"`
+			ErrCode int    `json:"err_code"`
+			Desc    string `json:"description"`
+		} `json:"error"`
+		Message *struct {
+			Header []byte `json:"hdrs"`
+			Data   []byte `json:"data"`
+		} `json:"message"`
+	}
+	if err := json.Unmarshal(m.Data, &resp); err != nil {
+		return nil, false, fmt.Errorf("erasure: read %s: answer is not json: %w", natsx.BucketVisitState, err)
+	}
+	switch {
+	case resp.Error != nil && resp.Error.Code == 404:
+		return nil, false, nil
+	case resp.Error != nil:
+		return nil, false, fmt.Errorf("erasure: read %s: %d %s", natsx.BucketVisitState, resp.Error.ErrCode, resp.Error.Desc)
+	case resp.Message == nil:
+		return nil, false, fmt.Errorf("erasure: read %s: answer holds no message", natsx.BucketVisitState)
+	}
+	if len(resp.Message.Header) > 0 {
+		h, err := nats.DecodeHeadersMsg(resp.Message.Header)
+		if err != nil {
+			return nil, false, fmt.Errorf("erasure: read %s: headers: %w", natsx.BucketVisitState, err)
+		}
+		switch h.Get("KV-Operation") {
+		case "DEL", "PURGE":
+			return nil, false, nil
+		}
+	}
+	return resp.Message.Data, true, nil
 }
 
 // purgeVisit removes a visitor's record with its history. without it the
@@ -184,17 +237,15 @@ func purgeVisit(ctx context.Context, kv jetstream.KeyValue, site, vt string) err
 // record did not.
 func pendingKey(site, vt string) string { return "erasing." + site + "." + vt }
 
-// pendingErasure reads the progress record of an earlier run; nil when none.
-func pendingErasure(ctx context.Context, kv jetstream.KeyValue, site, vt string) (*replayer.VisitRecord, error) {
-	e, err := kv.Get(ctx, pendingKey(site, vt))
-	if errors.Is(err, jetstream.ErrKeyNotFound) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, fmt.Errorf("erasure: read %s: %w", natsx.BucketVisitState, err)
+// pendingErasure reads the progress record of an earlier run; nil when
+// none. it reads through the stream leader, as visitRecord does.
+func pendingErasure(ctx context.Context, st stores, site, vt string) (*replayer.VisitRecord, error) {
+	v, ok, err := leaderGet(ctx, st.nc, pendingKey(site, vt))
+	if err != nil || !ok {
+		return nil, err
 	}
 	var r replayer.VisitRecord
-	if err := json.Unmarshal(e.Value(), &r); err != nil {
+	if err := json.Unmarshal(v, &r); err != nil {
 		return nil, fmt.Errorf("erasure: progress record of the visitor is not readable: %w", err)
 	}
 	return &r, nil
