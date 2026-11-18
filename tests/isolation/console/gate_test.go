@@ -118,7 +118,7 @@ func catalogue(terms string) []route {
 		{http.MethodPost, "/api/me/identities/passkey/challenge"}, {http.MethodPost, "/api/me/identities/passkey"},
 		{http.MethodDelete, "/api/me/identities/passkey"},
 		{http.MethodGet, "/api/tenants"}, {http.MethodPost, "/api/tenants"},
-		// the scf award search of the enrollment form (contract 4.2.8):
+		// the scf award search of the enrollment form (contract 4.2.7):
 		// organisation data of the award directory, no tenant. covered by
 		// the scfawards search tests
 		{http.MethodGet, "/api/scf/awards/search"},

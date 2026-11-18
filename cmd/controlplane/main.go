@@ -370,7 +370,7 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	// the scf award search of the enrollment form (contract 4.2.8) and the
+	// the scf award search of the enrollment form (contract 4.2.7) and the
 	// award matching on enrollment and site creation (19.5); background
 	// matches finish before the pools close
 	scfSearch, err := scfawards.NewSearch(d, time.Now)

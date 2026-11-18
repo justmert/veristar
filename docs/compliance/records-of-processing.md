@@ -41,10 +41,10 @@ not legal advice. Last updated 2026-11-18.
 
 | Item | Entry |
 |---|---|
-| Purpose | show operators which SCF-funded projects the service measures, and propose each matched project's cohort (`privacy-strategy.md` section 12) |
-| Data read | SCF's build award export, read once in memory by `platformctl scf import`; the service never writes the file to disk |
+| Purpose | let a person enrolling a project find the project's SCF award, and propose each matched project's cohort (`privacy-strategy.md` section 12) |
+| Data read | an SCF awards file, read once in memory by `platformctl scf import`; the service never writes the file to disk |
 | Data stored | organisation data only: project name, round, category, program, award date, award amount, tranche percent and status, website host, and the Stellar account and contract ids the row declares; per import, the file's SHA-256, size, counts and the actor |
 | Personal data stored | none: names of people, LinkedIn and X profiles, images, document and DocSend links, descriptions and traction text are dropped at parse time |
-| Recipients | SCF's operators, through the operator API, its CSV export and the operator MCP tool |
+| Recipients | signed-in people enrolling a project, who see per matching project its name, round, category, program, award date, website and Stellar ids through the award search; operators, who see the cohort proposal of a matched project |
 | Transfers | none |
 | Retention | until removed from the database; an import never deletes rows, and a tenant removal leaves them |

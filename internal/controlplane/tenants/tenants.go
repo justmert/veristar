@@ -151,7 +151,7 @@ type createBody struct {
 	AcceptedTermsVersion *string     `json:"accepted_terms_version"`
 	// an optional cohort proposal (contract 19.1)
 	Cohort *CohortInput `json:"cohort"`
-	// an optional award of the scf award search (4.2.8): its program,
+	// an optional award of the scf award search (4.2.7): its program,
 	// round, category and award date become the cohort proposal
 	SCFAwardID *string `json:"scf_award_id"`
 }

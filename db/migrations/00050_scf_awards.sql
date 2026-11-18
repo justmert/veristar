@@ -2,10 +2,10 @@
 -- (control-plane-api section 19.5).
 --
 -- cp.scf_awards holds one row per funded project and round, imported by an
--- operator from an scf build award export with platformctl scf import. it
+-- operator from an scf awards file with platformctl scf import. it
 -- holds organisation data only: the project's name, round, category,
 -- program, award date and amount, tranche, website host and the stellar ids
--- the export declares. the import drops every other column of the export
+-- the file declares. the import drops every other column of the file
 -- (people's names, linkedin and x handles, document and docsend links,
 -- descriptions, traction text) while it parses, so none of them reaches the
 -- database. the rows have no tenant: they describe scf's funded projects,
