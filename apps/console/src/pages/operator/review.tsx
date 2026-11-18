@@ -18,7 +18,6 @@ import type { OperatorSite, OperatorTenantSummary } from "@/api/schemas";
 import { DecisionPanel } from "@/components/decision-panel";
 import { EvidenceList, evidenceOf } from "@/components/evidence-list";
 import { PageHeader } from "@/components/page-header";
-import { Kbd } from "@/components/panel";
 import { EmptyState, ErrorState, LoadingState, Skeleton } from "@/components/states";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
@@ -142,10 +141,6 @@ export function ReviewQueuePage() {
                 {list.isFetchingNextPage ? "Loading" : "Load more"}
               </Button>
             ) : null}
-            <p className="text-caption leading-6 text-fg-2 max-lg:hidden">
-              <Kbd>J</Kbd> <Kbd>K</Kbd> move in the queue. <Kbd>A</Kbd> <Kbd>R</Kbd> choose.{" "}
-              <Kbd>Ctrl Enter</Kbd> sends.
-            </p>
           </nav>
           {selected ? (
             <div className={cn("min-w-0", !picked && "max-lg:hidden")}>
@@ -225,6 +220,9 @@ function QueueItem({
     <button
       type="button"
       aria-current={current ? "true" : undefined}
+      aria-keyshortcuts="J K"
+      // the keys move in the queue; the decision's keys sit on its buttons
+      title="J / K"
       data-tenant={t.id}
       onClick={onPick}
       className={cn(
@@ -295,7 +293,7 @@ function SelectedProject({
           <motion.div
             key="data"
             {...fade}
-            className="grid min-w-0 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_19rem]"
+            className="grid min-w-0 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]"
           >
             <div className="flex min-w-0 flex-col gap-6">
               <header className="flex min-w-0 flex-col gap-1">
