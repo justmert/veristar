@@ -190,8 +190,8 @@ describe("threshold rules (contract 19.4)", () => {
     await type(byLabel(host, "Name") as HTMLInputElement, " Steady web ");
     await type(byLabel(host, "Minimum per day") as HTMLInputElement, "100");
     await type(byLabel(host, "Days per month") as HTMLInputElement, "3");
-    await type(byLabel(host, "Months") as HTMLInputElement, "2");
-    await select(byLabel(host, "Minimum integrity grade") as unknown as HTMLSelectElement, "B");
+    await type(byLabel(host, "Complete months") as HTMLInputElement, "2");
+    await select(byLabel(host, "Integrity grade") as unknown as HTMLSelectElement, "B");
     // the cohort is chosen from the confirmed values
     await waitFor(() =>
       expect((byLabel(host, "SCF program") as unknown as HTMLSelectElement).disabled).toBe(false),

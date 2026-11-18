@@ -278,7 +278,11 @@ export function webColumns(range: DayRange, slot: (id: string) => number): Colum
       definition:
         "Integrity grade of the web traffic in the range. Select a grade to see its reasons.",
       sortKey: "integrity",
-      cell: (r) => <IntegrityCell tenant={r.tenant} integrity={r.integrity} range={range} />,
+      // a grade shows only once given: a column of "Not graded" says nothing
+      cell: (r) =>
+        r.integrity.grade === null ? null : (
+          <IntegrityCell tenant={r.tenant} integrity={r.integrity} range={range} />
+        ),
     },
     num("pageviews", "Page views", "Page views of the counted traffic in the range.", (r) => (
       <span data-col="pageviews">{formatCount(r.pageviews)}</span>

@@ -7,12 +7,12 @@ import { PageHeader } from "@/components/page-header";
 import { LoadingState, Skeleton } from "@/components/states";
 import { Skeleton as Bone } from "@/components/ui/skeleton";
 
-// the review queue beside the project in review: identity, numbers,
-// evidence and the decision
+// the review queue beside the project in review: identity and evidence,
+// with the decision in its own column
 export function ReviewSkeleton() {
   return (
     <LoadingState label="Loading the review queue">
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]">
+      <div className="grid gap-6 lg:grid-cols-[16rem_minmax(0,1fr)]">
         <div aria-hidden className="flex flex-col gap-2">
           {Array.from({ length: 4 }, (_, i) => (
             <div
@@ -24,16 +24,15 @@ export function ReviewSkeleton() {
             </div>
           ))}
         </div>
-        <div className="flex flex-col gap-6 max-lg:hidden">
-          <div aria-hidden className="flex flex-col gap-2">
-            <Bone className="h-6 w-1/3" />
-            <Bone className="h-3 w-1/2" />
-          </div>
-          <Skeleton.StatRow count={4} />
-          <div className="grid gap-4 xl:grid-cols-2">
+        <div className="grid items-start gap-6 max-lg:hidden xl:grid-cols-[minmax(0,1fr)_19rem]">
+          <div className="flex flex-col gap-6">
+            <div aria-hidden className="flex flex-col gap-2">
+              <Bone className="h-6 w-1/3" />
+              <Bone className="h-3 w-1/2" />
+            </div>
             <Skeleton.Table rows={5} columns={2} />
-            <Bone aria-hidden className="h-48 w-full rounded-lg" />
           </div>
+          <Bone aria-hidden className="h-64 w-full rounded-lg" />
         </div>
       </div>
     </LoadingState>
@@ -63,11 +62,15 @@ export function AlertsSkeleton() {
   );
 }
 
-// the list of keys (the create form opens in a dialog)
+// the list of keys above the client guide (the create form opens in a dialog)
 export function KeysSkeleton() {
   return (
     <LoadingState label="Loading the keys">
       <Skeleton.Table rows={3} columns={6} />
+      <div className="flex flex-col gap-3">
+        <Bone aria-hidden className="h-5 w-48" />
+        <Bone aria-hidden className="h-32 w-full rounded-lg" />
+      </div>
     </LoadingState>
   );
 }

@@ -7,6 +7,7 @@ import {
   actorName,
   auditChanges,
   auditDaysError,
+  auditReason,
   auditSentence,
   auditVerb,
   dayToUtc,
@@ -22,7 +23,12 @@ import { OperatorProjectsPage } from "@/pages/operator/projects";
 import { ReviewQueuePage } from "@/pages/operator/review";
 import { SettingsPage } from "@/pages/operator/settings";
 import * as f from "./fixtures/contract";
-import { apiCompareBody, integrityReportBody, webCompareBody } from "./fixtures/global";
+import {
+  apiCompareBody,
+  integrityReportBody,
+  webCompareBody,
+  webProjectsBody,
+} from "./fixtures/global";
 import { byLabel, byRole, click, render, renderRoutes, stubFetch, type, waitFor } from "./helpers";
 import { type Route, routeFetch } from "./route-fetch";
 
@@ -162,6 +168,24 @@ describe("operator project page", () => {
     expect(host.querySelector("a[href*='/operator/audit?tenant_id=']")).not.toBeNull();
   });
 
+  it("leaves the figures out when the project has no data, and keeps the events fact", async () => {
+    const emptyWeb = { ...webCompareBody, projects: [webCompareBody.projects[1]] };
+    const emptyApi = { ...apiCompareBody, projects: [apiCompareBody.projects[1]] };
+    const calls = routeFetch([
+      { path: "/api/operator/web/compare", answer: { status: 200, body: emptyWeb } },
+      { path: "/api/operator/api/compare", answer: { status: 200, body: emptyApi } },
+      ...detailRoutes(f.operatorDetailBody),
+    ]);
+    const host = await renderRoutes(detailRoute, `/operator/projects/${f.TENANT_ID}`);
+    await waitFor(() => expect(host.querySelector("h1")?.textContent).toBe("Stellar DEX"));
+    await waitFor(() =>
+      expect(calls.filter((c) => c.url.includes("/compare")).length).toBeGreaterThanOrEqual(2),
+    );
+    await act(async () => {});
+    expect(host.querySelector("[data-numbers]")).toBeNull();
+    expect(host.querySelector("[data-evidence=events]")).not.toBeNull();
+  });
+
   it("lists many sites in a paged table with their checks in words", async () => {
     const site = f.operatorDetailBody.sites[0];
     const sites = Array.from({ length: 30 }, (_, i) => ({
@@ -184,7 +208,16 @@ describe("operator project page", () => {
     expect(evidence.dataset.signal).toBe("partial");
     expect(evidence.textContent).toContain("1 of 30 sites verified");
     expect(host.textContent).toContain("1 to 10 of 30");
-    await click(host.querySelector('button[aria-label="Checks of s1.example.org"]') as HTMLElement);
+    const trigger = host.querySelector('button[aria-label="Actions for Site 1"]') as HTMLElement;
+    await act(async () => {
+      trigger.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0 }));
+    });
+    const show = () =>
+      [...document.querySelectorAll<HTMLElement>("[role=menuitem]")].find(
+        (m) => m.textContent === "Show checks",
+      );
+    await waitFor(() => expect(show()).toBeTruthy());
+    await click(show() as HTMLElement);
     await waitFor(() => expect(host.textContent).toContain("Checks of s1.example.org"));
   });
 
@@ -320,6 +353,15 @@ describe("operator project list, status view", () => {
 
   it("searches as the person types, sorts by a header and loads the next page", async () => {
     const calls = routeFetch([
+      // the portfolio counts and the review count beside the list
+      {
+        path: /\/api\/operator\/tenants\?review=true/,
+        answer: { status: 200, body: { items: [], next_cursor: null } },
+      },
+      {
+        path: "/api/operator/web/projects",
+        answer: { status: 200, body: { ...webProjectsBody, items: [] } },
+      },
       {
         path: "/api/operator/tenants",
         answer: [
@@ -338,10 +380,12 @@ describe("operator project list, status view", () => {
     ]);
     const host = await renderRoutes(
       [{ path: "/operator/projects", element: <OperatorProjectsPage /> }],
-      "/operator/projects",
+      "/operator/projects?view=status",
     );
     await waitFor(() => expect(host.textContent).toContain("Stellar DEX"));
-    expect(calls[0]?.url).toBe("/api/operator/tenants?sort=created_at&order=desc&limit=50");
+    expect(calls.find((c) => c.url.startsWith("/api/operator/tenants?sort"))?.url).toBe(
+      "/api/operator/tenants?sort=created_at&order=desc&limit=50",
+    );
     await type(byLabel(host, "Search projects"), "dex");
     await waitFor(() => expect(calls.some((c) => c.url.includes("q=dex"))).toBe(true));
     const name = host.querySelector("th[aria-sort] button") as HTMLElement;
@@ -357,6 +401,11 @@ describe("operator project list, status view", () => {
 });
 
 describe("enrollment mode switch", () => {
+  const radio = (host: HTMLElement, name: string) =>
+    [...host.querySelectorAll<HTMLElement>("[aria-labelledby=mode-h] [role=radio]")].find(
+      (r) => r.textContent === name,
+    ) as HTMLElement;
+
   it("asks for confirmation and puts the new mode", async () => {
     const calls = stubFetch([
       { status: 200, body: { mode: "open" } },
@@ -364,19 +413,12 @@ describe("enrollment mode switch", () => {
       { status: 200, body: { mode: "approval" } },
     ]);
     const host = await renderRoutes([{ path: "/", element: <SettingsPage /> }], "/");
-    await waitFor(() => byLabel(host, "Approval required"));
-    expect(host.textContent).toContain("Current mode: Open");
-    // the change button is live only once another option is chosen
-    const change = () =>
-      byRole(
-        host.querySelector("[aria-labelledby=mode-h]") as HTMLElement,
-        "button",
-        "Change setting",
-      );
-    expect(change().hasAttribute("disabled")).toBe(true);
-    await click(byLabel(host, "Approval required") as HTMLElement);
-    expect(change().hasAttribute("disabled")).toBe(false);
-    await click(change());
+    await waitFor(() => expect(radio(host, "Approval required")).toBeTruthy());
+    // the control shows the mode in force, once
+    expect(radio(host, "Open").getAttribute("aria-checked")).toBe("true");
+    expect(host.textContent).not.toContain("Current");
+    // choosing the other mode opens its confirmation at once
+    await click(radio(host, "Approval required"));
     const dialog = dialogOpen(host) as HTMLElement;
     expect(dialog.textContent).toContain("new enrollments only");
     expect(calls).toHaveLength(2);
@@ -388,24 +430,18 @@ describe("enrollment mode switch", () => {
     expect(calls[2]?.body).toEqual({ mode: "approval" });
   });
 
-  it("cancelling the dialog sends nothing", async () => {
+  it("cancelling the dialog sends nothing and keeps the mode in force", async () => {
     const calls = stubFetch([
       { status: 200, body: { mode: "approval" } },
       { status: 200, body: { keep: true } },
     ]);
     const host = await renderRoutes([{ path: "/", element: <SettingsPage /> }], "/");
-    await waitFor(() => byLabel(host, "Open"));
-    await click(byLabel(host, "Open") as HTMLElement);
-    await click(
-      byRole(
-        host.querySelector("[aria-labelledby=mode-h]") as HTMLElement,
-        "button",
-        "Change setting",
-      ),
-    );
+    await waitFor(() => expect(radio(host, "Open")).toBeTruthy());
+    await click(radio(host, "Open"));
     await click(byRole(dialogOpen(host) as HTMLElement, "button", "Cancel"));
     expect(dialogOpen(host)).toBeUndefined();
     expect(calls).toHaveLength(2);
+    expect(radio(host, "Approval required").getAttribute("aria-checked")).toBe("true");
   });
 });
 
@@ -577,8 +613,39 @@ describe("audit log", () => {
     expect(calls[2]?.url).toBe(
       "/api/operator/audit?action=tenant.&from=2026-11-01T00%3A00%3A00Z&limit=50",
     );
-    expect(host.querySelector("[data-count]")?.textContent).toBe("2 entries shown.");
+    await waitFor(() =>
+      expect(host.querySelector("[data-count]")?.textContent).toBe("2 entries shown."),
+    );
+    // the search reads the loaded entries as sentences
+    await type(byLabel(host, "Search the log"), "suspended");
+    await waitFor(() =>
+      expect(host.querySelector("[data-count]")?.textContent).toBe("1 of 2 entries"),
+    );
+    // a row opens to its codes; no row carries a details line of its own
+    expect(host.textContent).not.toContain("Details");
+    const row = host.querySelector<HTMLElement>("article[data-action]") as HTMLElement;
+    await click(row.querySelector("button[aria-expanded]") as HTMLElement);
+    expect(row.textContent).toContain(row.dataset.action ?? "");
+    expect(row.hasAttribute("data-open")).toBe(true);
   });
+});
+
+it("reads the reason code of a revoked AI assistant key, and leaves out the console's own", () => {
+  const base = {
+    id: 1,
+    at: "2026-11-12T09:00:00Z",
+    actor: "user:x",
+    actor_login: "lumen-dev",
+    action: "mcp_credential.revoke",
+    target: "mcp_credential:y",
+  };
+  expect(auditReason({ ...base, detail: { reason: "user" } })).toBeNull();
+  expect(auditReason({ ...base, detail: { reason: "tenant_suspended" } })).toBe(
+    "the project was suspended",
+  );
+  expect(auditReason({ ...base, action: "tenant.suspend", detail: { reason: "Spam" } })).toBe(
+    "Spam",
+  );
 });
 
 it("knows every lifecycle action of contract 5.5", () => {
@@ -623,8 +690,9 @@ describe("review workspace", () => {
     expect(host.querySelector("ul[aria-label=Evidence]")?.textContent).toContain(
       "1 of 2 not a valid ID",
     );
+    // the figures follow the evidence, and only the ones with data show
     await waitFor(() =>
-      expect(host.querySelector("[data-stat=pageviews]")?.textContent).not.toContain("Loading"),
+      expect(host.querySelector("[data-stat=pageviews]")?.textContent).toContain("45"),
     );
 
     const radios = [...host.querySelectorAll<HTMLElement>("[role=radio]")];
@@ -811,8 +879,10 @@ describe("adding an operator (contract 5.16)", () => {
   it("shows an empty reason at its field and sends nothing", async () => {
     const calls = stubFetch([]);
     const host = await renderRoutes([{ path: "/", element: <AddOperator /> }], "/");
-    await type(byLabel(host, "GitHub login"), "octocat");
     await click(byRole(host, "button", "Add operator"));
+    const dialog = host.querySelector("dialog") as HTMLElement;
+    await type(byLabel(dialog, "GitHub login"), "octocat");
+    await click(byRole(dialog, "button", "Add operator"));
     expect(host.textContent).toContain("Enter a reason. It is recorded in the audit log.");
     expect(byLabel(host, "Reason").getAttribute("aria-invalid")).toBe("true");
     expect(calls).toEqual([]);
@@ -826,9 +896,11 @@ describe("adding an operator (contract 5.16)", () => {
       },
     ]);
     const host = await renderRoutes([{ path: "/", element: <AddOperator /> }], "/");
-    await type(byLabel(host, "GitHub login"), "nobody-here");
-    await type(byLabel(host, "Reason"), "joins the on-call rotation");
     await click(byRole(host, "button", "Add operator"));
+    const dialog = host.querySelector("dialog") as HTMLElement;
+    await type(byLabel(dialog, "GitHub login"), "nobody-here");
+    await type(byLabel(dialog, "Reason"), "joins the on-call rotation");
+    await click(byRole(dialog, "button", "Add operator"));
     await waitFor(() => expect(host.textContent).toContain("No GitHub user has this username."));
   });
 });

@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import {
   type AlertTone,
   alertUrgency,
+  criticalCount,
   firingFor,
   groupBySeverity,
   groupTitle,
@@ -50,7 +51,11 @@ export function useNow(everyMs: number): number {
 export function AlertsPage() {
   const alerts = useQuery(operatorAlertsQuery);
   const now = useNow(15_000);
-  const count = alerts.data && !alerts.error ? alerts.data.alerts.length : null;
+  const data = alerts.data && !alerts.error ? alerts.data : null;
+  // the count beside the title is the count of the sidebar badge: the
+  // alerts to act on now while any fires, else every alert
+  const critical = data ? criticalCount(data.alerts) : 0;
+  const count = data ? (critical > 0 ? critical : data.alerts.length) : null;
   const refreshing = alerts.isFetching && !alerts.isPending;
 
   return (
@@ -58,30 +63,57 @@ export function AlertsPage() {
       <PageHeader
         title="Alerts"
         meta={
-          count !== null ? (
-            <span className="text-body text-fg-2 tabular" data-count="">
+          count !== null && count > 0 ? (
+            <span
+              className={cn("text-body tabular", critical > 0 ? "text-critical" : "text-fg-2")}
+              data-count=""
+            >
               {count}
             </span>
           ) : null
         }
-        description={`Alerts that fire now. The page checks again every ${EVERY}.`}
+        freshness={
+          alerts.data && !alerts.error
+            ? {
+                at: alerts.data.checked_at,
+                cadence: `The page checks again every ${EVERY}.`,
+              }
+            : null
+        }
+        details={
+          alerts.isPending
+            ? undefined
+            : [
+                { label: "Source", value: <SourceFact error={alerts.error} data={data} /> },
+                ...(RUNBOOKS
+                  ? [
+                      {
+                        label: "Runbooks",
+                        value: (
+                          <a
+                            href={RUNBOOKS}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="rounded-sm underline-offset-4 hover:underline focus-ring"
+                          >
+                            alerts.md
+                          </a>
+                        ),
+                      },
+                    ]
+                  : []),
+              ]
+        }
         secondary={
-          <>
-            <LiveState
-              error={alerts.error}
-              pending={alerts.isPending}
-              checkedAt={alerts.data?.checked_at ?? null}
-            />
-            <Button
-              variant="outline"
-              className="max-lg:h-(--vs-control-touch)"
-              onClick={() => alerts.refetch()}
-              pending={refreshing}
-            >
-              {refreshing ? null : <RotateCcw aria-hidden />}
-              {alerts.isFetching ? "Checking" : "Check now"}
-            </Button>
-          </>
+          <Button
+            variant="outline"
+            className="max-lg:h-(--vs-control-touch)"
+            onClick={() => alerts.refetch()}
+            pending={refreshing}
+          >
+            {refreshing ? null : <RotateCcw aria-hidden />}
+            {alerts.isFetching ? "Checking" : "Check now"}
+          </Button>
         }
       />
 
@@ -100,38 +132,34 @@ export function AlertsPage() {
   );
 }
 
-// the breathing dot says the page is listening; it stops when the source
-// does not answer, because then nothing is heard
-function LiveState({
-  error,
-  pending,
-  checkedAt,
-}: {
-  error: unknown;
-  pending: boolean;
-  checkedAt: string | null;
-}) {
-  if (pending) return null;
-  if (error)
+// the runbook of every alert, opened where it says which channels the
+// alerts reach
+const RUNBOOKS = runbookUrl("docs/runbooks/alerts.md#where-alerts-show");
+
+// where the alerts come from: the alert service and its servers, the
+// addresses on hover
+function SourceFact({ error, data }: { error: unknown; data: OperatorAlerts | null }) {
+  if (error || !data)
     return (
-      <span className="flex items-center gap-1 text-caption text-fg-2">
+      <span className="inline-flex items-center gap-1" data-sources="">
         <StatusDot tone="critical" />
         {error instanceof ApiError && error.code === "alert_source_not_configured"
-          ? "No alert source"
+          ? "None set up"
           : "Not answering"}
       </span>
     );
+  const answered = data.sources.filter((s) => s.reachable).length;
   return (
-    <span className="flex items-center gap-1 text-caption text-fg-2">
-      <StatusDot tone="success" live />
-      {checkedAt ? (
-        <span>
-          Last checked{" "}
-          <time dateTime={checkedAt}>{formatTimeUtc(checkedAt, { seconds: true })}</time>
-        </span>
-      ) : (
-        "Live"
-      )}
+    <span
+      className="inline-flex items-center gap-1"
+      title={data.sources.map((s) => s.address).join(", ")}
+      data-sources=""
+    >
+      <StatusDot tone={answered === data.sources.length ? "success" : "warning"} live />
+      Alertmanager,{" "}
+      {answered === data.sources.length
+        ? countOf(data.sources.length, "server")
+        : `${answered} of ${countOf(data.sources.length, "server")}`}
     </span>
   );
 }
@@ -237,8 +265,7 @@ function PipelineDown() {
         ) : null
       }
     >
-      The always-on test alert is missing. An alert can fire without showing here. Treat this list
-      as incomplete until the test alert is back.
+      The always-on test alert is missing. An alert can fire without showing here.
     </Notice>
   );
 }
@@ -249,23 +276,13 @@ function SourcesDown({ down, total }: { down: AlertSource[]; total: number }) {
       tone="warning"
       title={`${down.length} of ${countOf(total, "alert server")} did not answer`}
     >
-      <span className="flex flex-col gap-2">
-        <span>
-          Each server holds every alert, so the list comes from the servers that answered.
-        </span>
-        <details className="text-caption">
-          <summary className="w-fit cursor-pointer rounded-sm text-fg-2 hover:text-fg focus-ring">
-            Servers and errors
-          </summary>
-          <ul className="mt-1 flex flex-col gap-1 font-mono text-fg-2">
-            {down.map((s) => (
-              <li key={s.address} className="break-all">
-                {s.address}: {s.error}
-              </li>
-            ))}
-          </ul>
-        </details>
-      </span>
+      <ul className="flex flex-col gap-1 font-mono text-caption text-fg-2">
+        {down.map((s) => (
+          <li key={s.address} className="break-all">
+            {s.address}: {s.error}
+          </li>
+        ))}
+      </ul>
     </Notice>
   );
 }

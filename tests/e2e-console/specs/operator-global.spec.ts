@@ -313,14 +313,16 @@ test("the operator filters to verified projects, sorts by visitors and compares 
   const page = op.page;
   const [a, b, c, d] = ["A", "B", "C", "D"].map(project) as [Project, Project, Project, Project];
   await page.goto(`${APP}/operator`);
-  // the sidebar opens Projects, its view control picks the web view
+  // the sidebar opens Projects in the web view, the projects with data first
   await page
     .getByRole("navigation", { name: "Operator" })
     .getByRole("link", { name: "All projects" })
     .click();
   await page.waitForURL(`${APP}/operator/projects`);
-  await page.getByRole("radiogroup", { name: "View" }).getByRole("radio", { name: "Web" }).click();
-  await page.waitForURL(`${APP}/operator/projects?view=web`);
+  await expect(
+    page.getByRole("radiogroup", { name: "View" }).getByRole("radio", { name: "Web" }),
+  ).toHaveAttribute("aria-checked", "true");
+  await expect(page.getByRole("navigation", { name: "Portfolio" })).toBeVisible();
   await expect(page.getByRole("heading", { level: 1, name: "All projects" })).toBeVisible();
   // the definitions are on the column headers
   await expect(
@@ -364,8 +366,8 @@ test("the operator filters to verified projects, sorts by visitors and compares 
   );
   await page.screenshot({ path: join(shots, "global-web.png"), fullPage: true });
 
-  // compare stays disabled until a project is selected
-  await expect(page.getByRole("button", { name: "Compare", exact: true })).toBeDisabled();
+  // the selection bar with the way into the comparison shows once a row is selected
+  await expect(page.getByRole("region", { name: "Selected for comparison" })).toHaveCount(0);
   for (const p of [a, b, c])
     await page
       .getByRole("table", { name: "Projects, web numbers" })
@@ -445,9 +447,9 @@ test("an api key is created, read with from a client without a session, and revo
   const page = op.page;
   await page.goto(`${APP}/operator/keys`);
   await expect(page.getByRole("heading", { level: 1, name: "Access keys" })).toBeVisible();
-  // the header button opens the form, as on the other operator pages
+  // the header button opens the form in a dialog
   await page.getByRole("button", { name: "Create key" }).click();
-  const form = page.getByRole("form", { name: "Create a key" });
+  const form = page.getByRole("dialog", { name: "Create a key" });
   const name = `e2e ${run}`;
   // a machine api key is the first type
   await expect(form.getByRole("radio", { name: /Machine API key/ })).toBeChecked();
@@ -484,9 +486,10 @@ test("an api key is created, read with from a client without a session, and revo
     expect(cookieOnly.status()).toBe(401);
 
     // the key is shown once: after dismissing, only its prefix remains
-    await expect(shown.getByRole("button", { name: "Done" })).toBeDisabled();
+    const done = page.getByRole("dialog").getByRole("button", { name: "Done" });
+    await expect(done).toBeDisabled();
     await shown.getByRole("checkbox").check();
-    await shown.getByRole("button", { name: "Done" }).click();
+    await done.click();
     await expect(shown).toHaveCount(0);
     const row = page
       .getByRole("table", { name: "Keys and connections" })
@@ -498,6 +501,11 @@ test("an api key is created, read with from a client without a session, and revo
     await expect(
       page.getByRole("region", { name: `Usage of ${name}` }).locator("[data-usage=requests]"),
     ).toHaveText("1");
+    // the usage opens in a dialog; closing it gives the list back
+    await page
+      .getByRole("dialog", { name: `Usage of ${name}` })
+      .getByRole("button", { name: "Close" })
+      .click();
     // the closed menu finishes its exit before the row menu opens again
     await expect(page.getByRole("menu")).toHaveCount(0);
 

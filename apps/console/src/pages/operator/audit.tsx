@@ -1,13 +1,12 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { cn } from "@veristar/brand/cn";
-import { ArrowRight, Bot, ChevronDown, Cog, ScrollText } from "lucide-react";
-import { useEffect, useState } from "react";
+import { ArrowRight, Bot, ChevronDown, Cog, ScrollText, User } from "lucide-react";
+import { useEffect, useId, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import type { AuditQuery } from "@/api/endpoints";
 import { auditQuery } from "@/api/queries";
 import type { AuditEntry } from "@/api/schemas";
 import { Avatar } from "@/components/avatar";
-import { Disclosure } from "@/components/disclosure";
 import { type Filter, FilterBar } from "@/components/filter-bar";
 import { SelectField, TextField } from "@/components/form-field";
 import { PageHeader } from "@/components/page-header";
@@ -21,11 +20,12 @@ import {
   auditDaysError,
   auditReason,
   auditSentence,
+  auditText,
   dayToUtc,
   foldRuns,
   utcToDay,
 } from "@/lib/audit";
-import { countOf, formatDate, formatDateTimeUtc, formatTimeUtc } from "@/lib/format";
+import { countOf, formatCount, formatDate, formatDateTimeUtc, formatTimeUtc } from "@/lib/format";
 
 const FIELDS = ["tenant_id", "action", "actor", "target", "from", "to"] as const;
 type Field = (typeof FIELDS)[number];
@@ -52,7 +52,12 @@ export function AuditPage() {
   const to = utcToDay(q.to, true);
   const daysError = auditDaysError(from, to);
   const list = useInfiniteQuery({ ...auditQuery(q), enabled: daysError === null });
-  const entries = list.data?.pages.flatMap((p) => p.items) ?? [];
+  const loaded = list.data?.pages.flatMap((p) => p.items) ?? [];
+  // the search reads the loaded entries as sentences; older entries join it
+  // as they load
+  const [search, setSearch] = useState("");
+  const needle = search.trim().toLowerCase();
+  const entries = needle ? loaded.filter((e) => auditText(e).includes(needle)) : loaded;
 
   function setOne(f: Field, value: string) {
     const next = new URLSearchParams(params);
@@ -117,10 +122,24 @@ export function AuditPage() {
     <div className="flex min-w-0 flex-col gap-6">
       <PageHeader
         title="Audit log"
-        description="Every action of an operator, a project member or the system. Newest first."
         freshness={list.dataUpdatedAt > 0 ? { at: new Date(list.dataUpdatedAt) } : null}
       />
-      <FilterBar collapsed filters={filters} onClearAll={filtered ? clear : undefined} />
+      <FilterBar
+        collapsed
+        search={search}
+        onSearch={setSearch}
+        searchLabel="Search the log"
+        placeholder="Search the log"
+        filters={filters}
+        onClearAll={
+          filtered || needle
+            ? () => {
+                setSearch("");
+                clear();
+              }
+            : undefined
+        }
+      />
       {daysError ? (
         <p role="alert" className="text-small text-critical">
           {daysError}
@@ -138,12 +157,23 @@ export function AuditPage() {
         />
       ) : (
         <>
-          <AuditEntries entries={entries} onClear={filtered ? clear : undefined} />
-          {entries.length > 0 ? (
+          <AuditEntries
+            entries={entries}
+            onClear={
+              filtered || needle
+                ? () => {
+                    setSearch("");
+                    clear();
+                  }
+                : undefined
+            }
+          />
+          {loaded.length > 0 ? (
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-small text-fg-2" aria-live="polite" data-count="">
-                {countOf(entries.length, "entry", "entries")} shown
-                {list.hasNextPage ? ". Older entries load on request." : "."}
+              <p className="text-small text-fg-2 tabular" aria-live="polite" data-count="">
+                {needle
+                  ? `${formatCount(entries.length)} of ${countOf(loaded.length, "entry", "entries")}`
+                  : `${countOf(loaded.length, "entry", "entries")} shown.`}
               </p>
               {list.hasNextPage ? (
                 <Button
@@ -273,9 +303,7 @@ export function AuditEntries({
             </Button>
           ) : null
         }
-      >
-        {onClear ? "Change or clear the filters." : "Actions show here when they happen."}
-      </EmptyState>
+      ></EmptyState>
     );
   const shown = limit ? entries.slice(0, limit) : entries;
   const today = new Date().toISOString().slice(0, 10);
@@ -349,8 +377,8 @@ function ItemRow({ item, names }: { item: AuditItem; names: Names }) {
 // are square marks with an icon, so they never look like a person
 function ActorMark({ e }: { e: AuditEntry }) {
   const s = auditSentence(e);
-  if (s.kind === "person") return <Avatar name={e.actor_login ?? "?"} />;
-  const Icon = s.kind === "system" ? Cog : Bot;
+  if (s.kind === "person" && e.actor_login) return <Avatar name={e.actor_login} />;
+  const Icon = s.kind === "system" ? Cog : s.kind === "assistant" ? Bot : User;
   return (
     <span
       aria-hidden
@@ -362,96 +390,141 @@ function ActorMark({ e }: { e: AuditEntry }) {
   );
 }
 
+// one entry as a sentence with its changes and reason. the row itself
+// opens to the codes and the raw detail, so no row carries a second line
+// for them
 function AuditRow({ e, names, nested }: { e: AuditEntry; names: Names; nested?: boolean }) {
   const s = auditSentence(e, names);
   const changes = auditChanges(e);
   const reason = auditReason(e);
+  const [open, setOpen] = useState(false);
+  const id = useId();
   return (
     <article
       data-action={e.action}
+      data-open={open ? "" : undefined}
       className={cn(
-        "grid grid-cols-[1.75rem_minmax(0,1fr)] gap-x-3 gap-y-1 px-4 py-3 sm:grid-cols-[1.75rem_minmax(0,1fr)_auto]",
-        !nested &&
-          "border-b border-line-subtle transition-colors duration-(--vs-duration-press) ease-standard hover:bg-hover",
+        "flex flex-col",
+        !nested && "border-b border-line-subtle",
+        open && !nested && "bg-sunken",
       )}
     >
-      <ActorMark e={e} />
-      <div className="flex min-w-0 flex-col gap-1">
-        <p className="text-body break-words text-fg-2">
-          <span className={cn("font-medium", s.kind === "person" ? "text-fg" : "text-fg-2")}>
-            {s.actor}
-          </span>{" "}
-          {s.verb}
-          {s.object ? (
-            <>
-              {" "}
-              {s.href ? (
-                <Link
-                  to={s.href}
-                  className="rounded-sm font-medium text-fg underline-offset-4 hover:underline focus-ring"
-                >
-                  {s.object}
-                </Link>
-              ) : (
-                <span className="font-medium text-fg">{s.object}</span>
-              )}
-            </>
-          ) : null}
-          .
-        </p>
-        {changes.length > 0 || reason ? (
-          <div className="flex flex-wrap items-center gap-1">
-            {changes.map((c) => (
-              <span
-                key={c.key}
-                className="inline-flex max-w-full items-center gap-1 rounded-sm border border-line px-1 text-caption"
-              >
-                <span className="text-fg-2">{c.key}</span>
-                <span className="sr-only">changed from</span>
-                <span className="text-fg-2 line-through">{c.from}</span>
-                <ArrowRight aria-hidden className="size-3 shrink-0 text-fg-3" />
-                <span className="sr-only">to</span>
-                <span className="text-fg">{c.to}</span>
-              </span>
-            ))}
-            {reason ? (
-              <q className="text-caption break-words text-fg-2">
-                <span className="sr-only">Reason: </span>
-                {reason}
-              </q>
-            ) : null}
-          </div>
-        ) : null}
-        <Disclosure
-          variant="inline"
-          summary="Details"
-          className="text-caption"
-          bodyClassName="pt-1"
-        >
-          <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1">
-            <dt className="text-fg-2">Action</dt>
-            <dd className="font-mono break-all text-fg">{e.action}</dd>
-            <dt className="text-fg-2">Actor</dt>
-            <dd className="font-mono break-all text-fg">{e.actor}</dd>
-            {e.target ? (
+      {/* biome-ignore lint/a11y/useKeyWithClickEvents: the chevron button is the keyboard way to open the row */}
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: a click anywhere on the row opens it, as the chevron does */}
+      <div
+        onClick={(ev) => {
+          if ((ev.target as HTMLElement).closest("a, button")) return;
+          setOpen((o) => !o);
+        }}
+        className={cn(
+          "grid cursor-pointer grid-cols-[1.75rem_minmax(0,1fr)_auto] gap-x-3 gap-y-1 px-4 py-3",
+          !open && "transition-colors duration-(--vs-duration-press) ease-standard hover:bg-hover",
+        )}
+      >
+        <ActorMark e={e} />
+        <div className="flex min-w-0 flex-col gap-1">
+          <p className="text-body break-words text-fg-2">
+            <span className={cn("font-medium", s.kind === "person" ? "text-fg" : "text-fg-2")}>
+              {s.actor}
+            </span>{" "}
+            {s.verb}
+            {s.object ? (
               <>
-                <dt className="text-fg-2">Target</dt>
-                <dd className="font-mono break-all text-fg">{e.target}</dd>
+                {" "}
+                {s.href ? (
+                  <Link
+                    to={s.href}
+                    className="rounded-sm font-medium text-fg underline-offset-4 hover:underline focus-ring"
+                  >
+                    {s.object}
+                  </Link>
+                ) : (
+                  <span className="font-medium text-fg">{s.object}</span>
+                )}
               </>
             ) : null}
-          </dl>
-          <pre className="mt-2 overflow-x-auto rounded-md border border-line bg-sunken p-2 font-mono text-caption text-fg-2">
-            {JSON.stringify(e.detail ?? {}, null, 2)}
-          </pre>
-        </Disclosure>
+            .
+          </p>
+          {changes.length > 0 || reason ? (
+            <div className="flex flex-wrap items-center gap-1">
+              {changes.map((c) => (
+                <span
+                  key={c.key}
+                  className="inline-flex max-w-full items-center gap-1 rounded-sm border border-line px-1 text-caption"
+                >
+                  <span className="text-fg-2">{c.key}</span>
+                  <span className="sr-only">changed from</span>
+                  <span className="text-fg-2 line-through">{c.from}</span>
+                  <ArrowRight aria-hidden className="size-3 shrink-0 text-fg-3" />
+                  <span className="sr-only">to</span>
+                  <span className="text-fg">{c.to}</span>
+                </span>
+              ))}
+              {reason ? (
+                <span className="text-caption break-words text-fg-2" data-reason="">
+                  <span className="sr-only">Reason: </span>
+                  {reason}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+        <span className="flex items-start gap-1">
+          <time
+            dateTime={e.at}
+            title={formatDateTimeUtc(e.at)}
+            className="pt-1 text-caption text-fg-2 tabular"
+          >
+            {formatTimeUtc(e.at)}
+          </time>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-expanded={open}
+            aria-controls={id}
+            aria-label={open ? "Hide the details" : "Show the details"}
+            onClick={() => setOpen((o) => !o)}
+            className="-mt-1 max-lg:size-(--vs-control-touch)"
+          >
+            <ChevronDown
+              aria-hidden
+              className={cn(
+                "transition-transform duration-(--vs-duration-change) ease-standard",
+                open && "rotate-180",
+              )}
+            />
+          </Button>
+        </span>
       </div>
-      <time
-        dateTime={e.at}
-        title={formatDateTimeUtc(e.at)}
-        className="col-start-2 text-caption text-fg-2 tabular sm:col-start-3 sm:row-start-1"
-      >
-        {formatTimeUtc(e.at)}
-      </time>
+      {open ? (
+        <div
+          id={id}
+          className="grid animate-fade-in grid-cols-[1.75rem_minmax(0,1fr)] gap-x-3 px-4 pb-3 text-caption"
+        >
+          <span aria-hidden />
+          <div className="min-w-0">
+            <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1">
+              <dt className="text-fg-2">Action</dt>
+              <dd className="font-mono break-all text-fg">{e.action}</dd>
+              <dt className="text-fg-2">Actor</dt>
+              <dd className="font-mono break-all text-fg">{e.actor}</dd>
+              {e.target ? (
+                <>
+                  <dt className="text-fg-2">Target</dt>
+                  <dd className="font-mono break-all text-fg">{e.target}</dd>
+                </>
+              ) : null}
+            </dl>
+            {e.detail && Object.keys(e.detail).length > 0 ? (
+              <pre className="mt-2 overflow-x-auto rounded-md border border-line bg-sunken p-2 font-mono text-caption text-fg-2">
+                {JSON.stringify(e.detail, null, 2)}
+              </pre>
+            ) : null}
+          </div>
+        </div>
+      ) : (
+        <span id={id} hidden />
+      )}
     </article>
   );
 }
