@@ -11,9 +11,9 @@ import { EXAMPLE } from "../build.ts";
 const root = join(import.meta.dirname, "..");
 
 test("tracker.js holds the example tag's values", () => {
-  const entry = releases().find((r) => r.version === "1.3.0");
+  const entry = releases().find((r) => r.version === "1.3.1");
   assert.ok(entry);
-  assert.equal(EXAMPLE.src, scriptUrl("https://in.analytics.example", "1.3.0"));
+  assert.equal(EXAMPLE.src, scriptUrl("https://in.analytics.example", "1.3.1"));
   assert.equal(EXAMPLE.integrity, entry.integrity);
   const source = readFileSync(join(root, "site", "tracker.js"), "utf8");
   assert.ok(source.includes(`tracker.src = "${EXAMPLE.src}";`));
