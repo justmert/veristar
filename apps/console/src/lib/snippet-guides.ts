@@ -11,11 +11,13 @@ export type Guide = {
 };
 
 // consent mode: with data-auto-track="false" the tracker loads but sends
-// nothing until the site calls umami.start() (docs/onboarding/web/consent.md).
+// nothing until the site calls veristar.start() (docs/onboarding/web/consent.md).
+// the tracker installs one object as window.veristar and window.umami from
+// 1.4.0, the release the snippet pins.
 // the attribute is outside what the integrity hash covers, so the pinned
 // version and hash stay exactly as the control plane built them.
 export const CONSENT_ATTR = 'data-auto-track="false"';
-export const CONSENT_START = "window.umami?.start();";
+export const CONSENT_START = "window.veristar?.start();";
 
 export function consentTag(tag: string): string {
   return tag.replace(/><\/script>$/, ` ${CONSENT_ATTR}></script>`);
