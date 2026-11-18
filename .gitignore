@@ -56,6 +56,7 @@ keys.txt
 tfplan
 infra/ansible/inventories/*/hosts.json
 infra/ansible/inventories/*/hosts.json.tmp
+infra/ansible/inventories/*/hosts.json.pre-*
 
 # the local converge's generated secrets (encrypted to a throwaway key under
 # .scratch), never a real environment's
