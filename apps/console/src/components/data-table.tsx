@@ -207,6 +207,7 @@ export function DataTable<Row>({
                           c.numeric && "font-mono tabular",
                           c.minWidth,
                           c.className,
+                          href && c !== primary && ABOVE_ROW_LINK,
                         )}
                       >
                         {c === primary && href ? (
@@ -282,6 +283,11 @@ export function DataTable<Row>({
 const HEAD =
   "sticky top-0 z-(--vs-layer-raised) h-9 border-b border-line bg-raised px-3 text-left align-middle text-caption font-medium whitespace-nowrap text-fg-2";
 const CELL = "border-b border-line-subtle px-3 align-middle text-fg group-last/row:border-b-0";
+// the row link stretches over the whole row; a control inside another cell
+// (a menu, a reasons button, a second link) sits above it and gets its own
+// click
+const ABOVE_ROW_LINK =
+  "[&_:is(a,button,input,select,textarea,[role=button])]:relative [&_:is(a,button,input,select,textarea,[role=button])]:z-(--vs-layer-raised)";
 
 function HeaderCell<Row>({
   column: c,
@@ -423,6 +429,7 @@ function PhoneCard<Row>({
                   className={cn(
                     "min-w-0 truncate text-small text-fg",
                     c.numeric && "font-mono tabular",
+                    href && ABOVE_ROW_LINK,
                   )}
                 >
                   {c.cell(row)}
