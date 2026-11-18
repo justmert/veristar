@@ -51,6 +51,7 @@ import { siblingUrl } from "@/lib/hosts";
 import {
   chainGap,
   DAYS_WITHOUT_DATA,
+  NO_LEDGER_READ,
   NO_VERIFIED_IDS,
   shortKey,
   weeklyActiveText,
@@ -372,7 +373,11 @@ function ReportBody({ doc, signature }: { doc: ReportDocument; signature: ReactN
         <Hero label="Page views">{formatCount(doc.web.pageviews)}</Hero>
         <Hero label="API requests">{formatCount(doc.api.requests)}</Hero>
         <Hero label="On-chain operations">
-          {chainMissing ? <Missing reason={chainMissing} /> : formatCount(doc.onchain.operations)}
+          {chainMissing || doc.onchain.operations === null ? (
+            <Missing reason={chainMissing ?? NO_LEDGER_READ} />
+          ) : (
+            formatCount(doc.onchain.operations)
+          )}
         </Hero>
       </dl>
 
@@ -467,8 +472,8 @@ function ReportBody({ doc, signature }: { doc: ReportDocument; signature: ReactN
       >
         <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
           <Figure label="Transactions">
-            {chainMissing ? (
-              <Missing reason={chainMissing} />
+            {chainMissing || doc.onchain.transactions === null ? (
+              <Missing reason={chainMissing ?? NO_LEDGER_READ} />
             ) : (
               formatCount(doc.onchain.transactions)
             )}
@@ -477,8 +482,8 @@ function ReportBody({ doc, signature }: { doc: ReportDocument; signature: ReactN
             {formatCount(doc.onchain.ids_verified)} of {formatCount(doc.onchain.ids)}
           </Figure>
           <Figure label="Days without data" title={DAYS_WITHOUT_DATA}>
-            {doc.onchain.ids_verified === 0 ? (
-              <Missing reason={NO_VERIFIED_IDS} />
+            {doc.onchain.ids_verified === 0 || doc.onchain.days_missing === null ? (
+              <Missing reason={chainMissing ?? NO_VERIFIED_IDS} />
             ) : (
               formatCount(doc.onchain.days_missing)
             )}

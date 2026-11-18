@@ -407,6 +407,7 @@ const documentV3 = {
   methods: { ...documentV2.methods, format: 3, onchain: 2 },
   onchain: {
     ...documentV2.onchain,
+    counts_reason: null,
     contracts: [
       {
         strkey: FN_CONTRACT,
@@ -513,6 +514,38 @@ describe("the public report page (contract 20.5)", () => {
     expect(row?.querySelector("[data-missing]")).not.toBeNull();
     expect(host.textContent).toContain("5 days read, 2 without data");
     expect(host.textContent).toContain("15 a week on average over 2 weeks, 2 missing");
+  });
+
+  it("shows version 3 on-chain counts that measured nothing as missing, never as zero", async () => {
+    withCrypto();
+    const unread = {
+      ...documentV3,
+      onchain: {
+        ...documentV3.onchain,
+        operations: null,
+        transactions: null,
+        days_missing: null,
+        counts_reason: "nothing_read",
+        series: [{ day: "2026-10-01", ids_read: 0, operations: null, transactions: null }],
+        contracts: [],
+      },
+    };
+    expect(reportDocument.safeParse(unread).success).toBe(true);
+    // the reason is part of version 3: a null count without it is refused
+    const { counts_reason: _, ...withoutReason } = unread.onchain;
+    expect(reportDocument.safeParse({ ...unread, onchain: withoutReason }).success).toBe(false);
+    // version 2 keeps numbers
+    expect(
+      reportDocument.safeParse({
+        ...documentV2,
+        onchain: { ...documentV2.onchain, operations: null },
+      }).success,
+    ).toBe(false);
+    stubFetch([{ status: 200, body: publicBody(unread, SIGNER, unread) }]);
+    const host = await renderRoutes(publicRoute, "/r/abcdefghijklmnopqrstuvwxyz");
+    await waitFor(() => expect(host.querySelector("[data-verdict=verified]")).not.toBeNull());
+    expect(host.textContent).toContain("No ledger read for a verified id in this range");
+    expect(host.textContent).not.toContain("77");
   });
 
   it("titles a signature by a key Veristar does not publish as not Veristar's", async () => {

@@ -357,7 +357,10 @@ func TestUsageReports(t *testing.T) {
 		// only the verified ids' operations count
 		require.Equal(t, int64(4), rep.Onchain.IDs)
 		require.Equal(t, int64(2), rep.Onchain.IDsVerified)
-		require.Equal(t, int64(7), rep.Onchain.Operations)
+		require.Equal(t, int64(7), *rep.Onchain.Operations)
+		require.Equal(t, int64(1), *rep.Onchain.Transactions)
+		require.NotNil(t, rep.Onchain.DaysMissing)
+		require.Nil(t, rep.Onchain.CountsReason)
 		require.Equal(t, "9.000000", *rep.Onchain.WeeklyActive.Average)
 		require.Equal(t, int64(9), *rep.Onchain.WeeklyActive.Latest)
 		require.Equal(t, int64(1), rep.Onchain.WeeklyActive.WeeksCounted)
@@ -372,6 +375,39 @@ func TestUsageReports(t *testing.T) {
 		require.NoError(t, err)
 		_, err = reports.Verify(file)
 		require.NoError(t, err)
+	})
+
+	t.Run("on-chain counts that measured nothing are null with a reason", func(t *testing.T) {
+		// alpha declares no id: nothing is verified
+		rep := decode[reports.Report](t, created.File.Report)
+		require.Zero(t, rep.Onchain.IDsVerified)
+		require.Nil(t, rep.Onchain.Operations)
+		require.Nil(t, rep.Onchain.Transactions)
+		require.Nil(t, rep.Onchain.DaysMissing)
+		require.Equal(t, onchain.ReasonNoVerifiedID, *rep.Onchain.CountsReason)
+		require.Contains(t, string(created.File.Report),
+			`"counts_reason":"no_verified_id","days_missing":null,`)
+		require.Contains(t, string(created.File.Report), `"operations":null,`)
+
+		// a verified id without a single read day in the period
+		owner := e.user(t)
+		u := e.tenant(t, owner, "unread")
+		e.sys(t, `insert into cp.chain_ids (tenant_id, strkey, kind, added_by, verify_method, verified_at, verified_via)
+			values ($1, $2, 'account', 'console', 'sep53', now(), null)`, u, keypair.MustRandom().Address())
+		code, raw := e.client(t, &owner).call(t, http.MethodPost, "/api/tenants/"+u.String()+"/reports", map[string]string{"from": from, "to": to})
+		require.Equal(t, http.StatusCreated, code, string(raw))
+		d := decode[reports.Detail](t, raw)
+		rep = decode[reports.Report](t, d.File.Report)
+		require.Equal(t, int64(1), rep.Onchain.IDsVerified)
+		require.Nil(t, rep.Onchain.Operations)
+		require.Nil(t, rep.Onchain.Transactions)
+		require.Nil(t, rep.Onchain.DaysMissing)
+		require.Equal(t, onchain.ReasonNothingRead, *rep.Onchain.CountsReason)
+		file, err := json.Marshal(d.File)
+		require.NoError(t, err)
+		_, err = reports.Verify(file)
+		require.NoError(t, err)
+
 	})
 
 	t.Run("every route serves the report member as the signed bytes", func(t *testing.T) {

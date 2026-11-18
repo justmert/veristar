@@ -40,6 +40,19 @@ export const onchainSummary = z.object({
 });
 export type OnchainSummary = z.infer<typeof onchainSummary>;
 
+// why operations, transactions and days_missing measured nothing
+export const countsReason = z.enum(["no_verified_id", "nothing_read"]);
+
+// the on-chain summary of "what scf sees": the counts are null with
+// counts_reason when they measured nothing, never a zero
+export const scfOnchainSummary = onchainSummary.extend({
+  operations: count.nullable(),
+  transactions: count.nullable(),
+  days_missing: count.nullable(),
+  counts_reason: countsReason.nullable(),
+});
+export type SCFOnchainSummary = z.infer<typeof scfOnchainSummary>;
+
 export const onchainDayTotal = z.object({
   day,
   ids_read: count,

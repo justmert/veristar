@@ -96,6 +96,9 @@ func TestReportVerify(t *testing.T) {
 	// a changed byte
 	raw, err := os.ReadFile(file)
 	require.NoError(t, err)
+	// a version 3 report without a verified id carries null on-chain
+	// counts with their reason, and verifies like any other
+	require.Contains(t, string(raw), `"counts_reason":null,"days_missing":null,`)
 	bad := filepath.Join(t.TempDir(), "bad.json")
 	require.NoError(t, os.WriteFile(bad, bytes.Replace(raw, []byte(`"days":31`), []byte(`"days":30`), 1), 0o600))
 	out.Reset()

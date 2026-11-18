@@ -104,6 +104,14 @@ here, before they take effect, as the processing terms require
 
 ### Changed
 
+- What SCF sees and signed usage reports of format version 3 answer
+  `null` for the on-chain `operations`, `transactions` and `days_missing`
+  when they measure nothing, with `counts_reason`: `no_verified_id` (no
+  verified account or contract) or `nothing_read` (no ledger day of a
+  verified id in the range was read). A `0` now always means a read found
+  no activity. The operator lists keep their numbers, and stored version 1
+  and 2 reports keep theirs and still verify
+  ([docs/reference/usage-reports.md](docs/reference/usage-reports.md)).
 - The console is redesigned around one page per task. A grouped sidebar (Data, Funding,
   Setup and Team for your project; Work and Admin for operators) and a command palette
   (Ctrl K) take you to any page or project. Pages that showed the same thing in several

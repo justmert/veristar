@@ -7,7 +7,7 @@ import { z } from "zod";
 import { request, requestNoContent } from "./client";
 import { comparisonFields } from "./cohort-schemas";
 import { cohortRecord, rule, ruleMatch } from "./cohorts";
-import { onchainDayTotal, onchainSummary, onchainWeek, weeklyActive } from "./onchain-schemas";
+import { onchainDayTotal, onchainWeek, scfOnchainSummary, weeklyActive } from "./onchain-schemas";
 
 export {
   type CompareOnchain,
@@ -18,6 +18,7 @@ export {
   onchainDayTotal,
   onchainSummary,
   onchainWeek,
+  type SCFOnchainSummary,
   type WeeklyActive,
   weeklyActive,
 } from "./onchain-schemas";
@@ -276,7 +277,7 @@ export const scfView = z.object({
       lossy: z.boolean(),
     })
     .nullable(),
-  onchain: onchainSummary.nullable(),
+  onchain: scfOnchainSummary.nullable(),
   link_two_way: z.boolean(),
   web_series: z.array(
     z.object({

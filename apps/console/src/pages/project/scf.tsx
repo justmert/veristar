@@ -48,6 +48,7 @@ import {
 import {
   chainGap,
   DAYS_WITHOUT_DATA,
+  NO_LEDGER_READ,
   NO_VERIFIED_IDS,
   shortKey,
   weeklyActiveText,
@@ -587,17 +588,25 @@ function Figures({ v }: { v: SCFView }) {
           <>
             <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
               <Figure label="Operations">
-                {chainMissing ? <Missing reason={chainMissing} /> : formatCount(chain.operations)}
+                {chainMissing || chain.operations === null ? (
+                  <Missing reason={chainMissing ?? NO_LEDGER_READ} />
+                ) : (
+                  formatCount(chain.operations)
+                )}
               </Figure>
               <Figure label="Transactions">
-                {chainMissing ? <Missing reason={chainMissing} /> : formatCount(chain.transactions)}
+                {chainMissing || chain.transactions === null ? (
+                  <Missing reason={chainMissing ?? NO_LEDGER_READ} />
+                ) : (
+                  formatCount(chain.transactions)
+                )}
               </Figure>
               <Figure label="Verified IDs">
                 {formatCount(chain.ids_verified)} of {formatCount(chain.ids)}
               </Figure>
               <Figure label="Days without data" definition={DAYS_WITHOUT_DATA} name="days-missing">
-                {chain.ids_verified === 0 ? (
-                  <Missing reason={NO_VERIFIED_IDS} />
+                {chain.ids_verified === 0 || chain.days_missing === null ? (
+                  <Missing reason={chainMissing ?? NO_VERIFIED_IDS} />
                 ) : (
                   formatCount(chain.days_missing)
                 )}
