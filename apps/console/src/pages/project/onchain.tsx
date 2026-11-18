@@ -839,7 +839,7 @@ function LinkSiteCard({ s, tenantId }: { s: LinkSite; tenantId: string }) {
         {s.two_way ? (
           <Pill tone="success">Linked both ways</Pill>
         ) : (
-          <Pill tone="info">Not linked</Pill>
+          <Pill tone="neutral">Not linked</Pill>
         )}
       </div>
       <ul className="flex flex-col divide-y divide-line-subtle" aria-label="Checks">
@@ -920,7 +920,7 @@ function CheckLine({
       <span
         className={
           ok
-            ? "mt-1 flex size-4 shrink-0 items-center justify-center rounded-full bg-success-soft text-success"
+            ? "mt-1 flex size-4 shrink-0 items-center justify-center rounded-full border border-success-line text-success"
             : "mt-1 flex size-4 shrink-0 items-center justify-center rounded-full border border-line-strong text-fg-2"
         }
       >

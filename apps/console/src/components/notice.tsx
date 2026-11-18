@@ -11,14 +11,22 @@ const ICON: Record<NoticeTone, ReactNode> = {
   success: <CircleCheck aria-hidden />,
 };
 const COLOUR: Record<NoticeTone, string> = {
-  info: "text-fg-2",
+  info: "text-info",
   warning: "text-warning",
   critical: "text-critical",
   success: "text-success",
 };
 
+const LINE: Record<NoticeTone, string> = {
+  info: "border-info-line",
+  warning: "border-warning-line",
+  critical: "border-critical-line",
+  success: "border-success-line",
+};
+
 // one notice under the header of a page, only the one that applies: it names
-// what is blocked and the next action
+// what is blocked and the next action. a notice never fills: the surface
+// stays raised, the edge and the icon carry the tone, the words stay neutral
 export function Notice({
   tone,
   title,
@@ -41,17 +49,13 @@ export function Notice({
       role={role}
       className={cn(
         "grid animate-rise-in grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-3 rounded-lg border bg-raised px-4 py-3 sm:grid-cols-[auto_minmax(0,1fr)_auto]",
-        tone === "critical"
-          ? "border-critical-line"
-          : tone === "warning"
-            ? "border-warning-line"
-            : "border-line",
+        LINE[tone],
         className,
       )}
     >
       <span
         className={cn(
-          "flex size-8 items-center justify-center self-start rounded-md border border-line-strong [&_svg]:size-4",
+          "flex size-8 items-center justify-center self-start rounded-md border border-current [&_svg]:size-4",
           COLOUR[tone],
         )}
       >
