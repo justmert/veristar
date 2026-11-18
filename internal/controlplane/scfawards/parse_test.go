@@ -142,6 +142,9 @@ func TestParseCommaWithHeader(t *testing.T) {
 	require.Len(t, p.Awards, 2)
 	require.Equal(t, "Anchorly", p.Awards[1].Project)
 	require.Equal(t, 2, p.Awards[1].Record)
+	require.Equal(t, 33, *p.Awards[1].TranchePercent, "the Tranche % column")
+	require.Equal(t, "Pre-Launch #1 - MVP", *p.Awards[1].TrancheStatus)
+	require.Equal(t, "2026-09-01", p.Awards[1].AwardDate.Format(time.DateOnly))
 	noPersonalData(t, p)
 
 	// a header maps columns by name, wherever they are

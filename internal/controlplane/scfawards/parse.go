@@ -59,7 +59,7 @@ var headerNames = [fieldCount][]string{
 	fAwardType:      {"award type", "type", "program"},
 	fAwardDate:      {"award date", "date awarded", "awarded date", "awarded on"},
 	fAwardAmount:    {"award amount", "amount", "awarded amount", "award amount usd", "total award"},
-	fTranchePercent: {"tranche", "tranche percent", "tranches paid", "percent paid", "tranche completion"},
+	fTranchePercent: {"tranche", "tranche %", "tranche percent", "tranches paid", "percent paid", "tranche completion"},
 	fTrancheStatus:  {"status", "tranche status", "stage"},
 	fWebsite:        {"website", "project website", "website url", "url"},
 }
