@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
+import { act } from "react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { type Column, DataTable } from "@/components/data-table";
 import { byRole, click, render, waitFor } from "./helpers";
 
@@ -23,7 +24,31 @@ const columns: Column<Row>[] = [
   { key: "country", header: "Country", cell: (r) => r.country, truncate: (r) => r.country },
 ];
 
-const table = (host: HTMLElement) => host.querySelector("table") as HTMLTableElement;
+const table = (host: HTMLElement) => host.querySelector("section table") as HTMLTableElement;
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+// jsdom has no layout: a table wider than its frame is a table whose width
+// is more than the frame's
+function layout(tableWidth: number, frameWidth: number) {
+  vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return this.tagName === "TABLE" ? tableWidth : 0;
+  });
+  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return this.tagName === "SECTION" ? frameWidth : 0;
+  });
+  vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return this.tagName === "SECTION" ? Math.max(tableWidth, frameWidth) : 0;
+  });
+}
 
 describe("data table", () => {
   it("sorts by its headers with aria-sort", async () => {
@@ -194,5 +219,87 @@ describe("data table", () => {
     expect(card.textContent).toContain("1,200");
     // a column not marked for the phone stays in the table only
     expect(card.textContent).not.toContain("Germany");
+  });
+
+  it("scrolls with the page and sticks its header when the columns fit", async () => {
+    layout(800, 800);
+    const host = await render(
+      <DataTable label="Projects table" columns={columns} rows={rows} getRowKey={(r) => r.id} />,
+    );
+    const frame = host.querySelector("section") as HTMLElement;
+    // no scroll region of its own: no height cap, no overflow, no tab stop
+    expect(frame.className).not.toMatch(/max-h|overflow/);
+    expect(frame.hasAttribute("tabindex")).toBe(false);
+    expect(frame.hasAttribute("data-wide")).toBe(false);
+    const th = table(host).querySelector("th") as HTMLElement;
+    expect(th.className).toContain("sticky");
+    // under the shell header below lg, at the window top from lg
+    expect(th.className).toContain("top-(--vs-header)");
+    expect(th.className).toContain("lg:top-0");
+    expect(host.querySelector("[data-sticky-head]")).toBeNull();
+    expect(host.querySelector("[data-fade]")).toBeNull();
+  });
+
+  it("scrolls sideways in its frame with edge fades when the columns do not fit", async () => {
+    layout(1200, 800);
+    const onSort = vi.fn();
+    const host = await render(
+      <DataTable
+        label="Projects table"
+        columns={columns}
+        rows={rows}
+        getRowKey={(r) => r.id}
+        sort={{ key: "visits", order: "desc" }}
+        onSort={onSort}
+      />,
+    );
+    const frame = host.querySelector("section") as HTMLElement;
+    expect(frame.hasAttribute("data-wide")).toBe(true);
+    expect(frame.className).toContain("overflow-x-auto");
+    expect(frame.className).not.toMatch(/max-h|overflow-y|overflow-auto/);
+    expect(frame.getAttribute("tabindex")).toBe("0");
+    // the real header does not stick inside the sideways scroll
+    expect(table(host).querySelector("th")?.className).not.toContain("sticky");
+
+    const start = host.querySelector('[data-fade="start"]') as HTMLElement;
+    const end = host.querySelector('[data-fade="end"]') as HTMLElement;
+    expect(start.className).not.toContain("opacity-100");
+    expect(end.className).toContain("opacity-100");
+    Object.defineProperty(frame, "scrollLeft", { configurable: true, value: 400 });
+    await act(async () => {
+      frame.dispatchEvent(new Event("scroll"));
+    });
+    expect(start.className).toContain("opacity-100");
+    expect(end.className).not.toContain("opacity-100");
+
+    // the copy of the header sticks to the window, hidden until the real
+    // header leaves the view
+    const copy = host.querySelector("[data-sticky-head]") as HTMLElement;
+    expect(copy.getAttribute("aria-hidden")).toBe("true");
+    expect(copy.className).toContain("sticky");
+    expect(copy.className).toContain("invisible");
+    const thead = table(host).querySelector("thead") as HTMLElement;
+    vi.spyOn(thead, "getBoundingClientRect").mockReturnValue({
+      top: -60,
+      height: 36,
+    } as DOMRect);
+    vi.spyOn(table(host), "getBoundingClientRect").mockReturnValue({ bottom: 400 } as DOMRect);
+    await act(async () => {
+      window.dispatchEvent(new Event("scroll"));
+    });
+    expect(copy.className).not.toContain("invisible");
+    // it follows the sideways scroll and sorts on click, out of the tab order
+    expect((copy.querySelector("table") as HTMLElement).style.translate).toBe("-400px 0");
+    const copied = copy.querySelector("button") as HTMLButtonElement;
+    expect(copied.tabIndex).toBe(-1);
+    await click(copied);
+    expect(onSort).toHaveBeenCalledWith("name");
+
+    // once the last row passes the top, the copy hides again
+    vi.spyOn(table(host), "getBoundingClientRect").mockReturnValue({ bottom: 20 } as DOMRect);
+    await act(async () => {
+      window.dispatchEvent(new Event("scroll"));
+    });
+    expect(copy.className).toContain("invisible");
   });
 });
