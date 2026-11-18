@@ -41,6 +41,7 @@ import {
   formatCount,
   formatDate,
   formatDateRange,
+  formatDateTimeShort,
   formatDateTimeUtc,
   formatTimeUtc,
 } from "@/lib/format";
@@ -174,7 +175,7 @@ export function AccessKeysPage() {
       header: "Last used",
       cell: (r) =>
         r.lastUsed ? (
-          <span className="whitespace-nowrap">{formatDateTimeUtc(r.lastUsed)}</span>
+          <span className="whitespace-nowrap">{formatDateTimeShort(r.lastUsed)}</span>
         ) : (
           <Missing reason="Never used" />
         ),
@@ -190,7 +191,7 @@ export function AccessKeysPage() {
             reason={`Revoked ${formatDate(r.revoked)}${r.revokedReason ? `, ${r.revokedReason}` : ""}`}
           />
         ) : r.expires ? (
-          <span className="whitespace-nowrap">{formatDateTimeUtc(r.expires)}</span>
+          <span className="whitespace-nowrap">{formatDateTimeShort(r.expires)}</span>
         ) : (
           <span className="whitespace-nowrap">Renewed by the client</span>
         ),
