@@ -19,7 +19,14 @@ import { CoverageNote } from "@/components/coverage";
 import { gradeMeaning } from "@/components/integrity";
 import { FunctionsTable, functionsDaysText } from "@/components/onchain-functions";
 import { PublicFrame } from "@/components/public-frame";
-import { EmptyState, ErrorState, LoadingState, Missing, Skeleton } from "@/components/states";
+import {
+  EmptyState,
+  ErrorState,
+  LoadingState,
+  MessagePage,
+  Missing,
+  Skeleton,
+} from "@/components/states";
 import { Pill } from "@/components/status";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
@@ -57,14 +64,12 @@ export function PublicReportPage() {
     // a revoked link, a removed project and an unknown id answer the same
     // 404, so the page cannot tell them apart and names all three
     body = (
-      <EmptyState
-        icon={<FileX aria-hidden strokeWidth={1.75} />}
-        title="This report link is not available"
-        className="w-full"
-      >
-        The project revoked the link, the project was removed, or the address is not complete. Ask
-        the project for a new link.
-      </EmptyState>
+      <MessagePage icon={<FileX aria-hidden />} title="This report link is not available">
+        <p>
+          The project revoked the link, the project was removed, or the address is not complete. Ask
+          the project for a new link.
+        </p>
+      </MessagePage>
     );
   else if (q.error || !q.data)
     body = (

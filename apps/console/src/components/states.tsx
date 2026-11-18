@@ -1,5 +1,5 @@
 import { cn } from "@veristar/brand/cn";
-import { CircleAlert, RotateCcw } from "lucide-react";
+import { CircleAlert, Inbox, RotateCcw } from "lucide-react";
 import type { ReactNode } from "react";
 import { CopyButton } from "@/components/copy-button";
 import { Button } from "@/components/ui/button";
@@ -43,16 +43,7 @@ function StateFrame({
         className,
       )}
     >
-      {icon ? (
-        <span
-          className={cn(
-            "flex size-10 items-center justify-center rounded-lg border border-line-strong [&_svg]:size-5",
-            tone === "critical" ? "text-critical" : "text-fg-2",
-          )}
-        >
-          {icon}
-        </span>
-      ) : null}
+      {icon ? <IconTile tone={tone}>{icon}</IconTile> : null}
       <span className="flex max-w-prose flex-col gap-1">
         <span className="text-title text-fg">{title}</span>
         {children ? <span className="text-small text-fg-2">{children}</span> : null}
@@ -64,8 +55,10 @@ function StateFrame({
   );
 }
 
-// nothing to show yet: the title says what is missing, the text why or what
-// comes next, the action is the one way forward
+// nothing to show yet, one anatomy everywhere: an icon tile, a title that
+// says what is missing (no full stop), the text that says why or what comes
+// next (sentences), and the one way forward. a dashed edge marks a section
+// that is empty; a whole page that has nothing uses MessagePage
 export function EmptyState({
   icon,
   title,
@@ -85,7 +78,7 @@ export function EmptyState({
     <StateFrame
       tone="neutral"
       role="status"
-      icon={icon}
+      icon={icon ?? <Inbox aria-hidden strokeWidth={1.75} />}
       title={title}
       actions={action}
       compact={compact}
@@ -93,6 +86,58 @@ export function EmptyState({
     >
       {children}
     </StateFrame>
+  );
+}
+
+// a whole page that stands in for the one asked for (not found, removed,
+// revoked, operators only, a crash, a link that no longer works): one solid
+// card in one place, the same icon tile as every state, the page title,
+// what happened and why, and the way on. a section that is only empty uses
+// EmptyState instead
+export function MessagePage({
+  icon,
+  tone = "neutral",
+  title,
+  children,
+  actions,
+  className,
+}: {
+  icon: ReactNode;
+  tone?: "neutral" | "critical";
+  title: string;
+  children?: ReactNode;
+  actions?: ReactNode;
+  className?: string;
+}) {
+  return (
+    <section
+      data-message-page=""
+      className={cn(
+        "mx-auto flex w-full max-w-prose animate-rise-in flex-col gap-4 rounded-lg border border-line bg-raised px-6 py-10 sm:px-10",
+        className,
+      )}
+    >
+      <IconTile tone={tone}>{icon}</IconTile>
+      <h1 className="text-heading text-fg">{title}</h1>
+      {children ? (
+        <div className="flex max-w-prose flex-col gap-1 text-body text-fg-2">{children}</div>
+      ) : null}
+      {actions ? <div className="flex flex-wrap gap-2 pt-1">{actions}</div> : null}
+    </section>
+  );
+}
+
+// the square that holds the icon of every state and message page
+function IconTile({ tone, children }: { tone: "neutral" | "critical"; children: ReactNode }) {
+  return (
+    <span
+      className={cn(
+        "flex size-10 shrink-0 items-center justify-center rounded-lg border border-line-strong bg-raised [&_svg]:size-5",
+        tone === "critical" ? "text-critical" : "text-fg-2",
+      )}
+    >
+      {children}
+    </span>
   );
 }
 

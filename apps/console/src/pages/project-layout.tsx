@@ -6,11 +6,11 @@ import { keys, meQuery, tenantQuery } from "@/api/queries";
 import type { Me, Tenant } from "@/api/schemas";
 import { FormMessage } from "@/components/error-panel";
 import { Notice as ToneNotice } from "@/components/notice";
-import { ErrorState } from "@/components/states";
+import { ErrorState, MessagePage } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { isNotFound } from "@/lib/errors";
 import { ProjectPagePending } from "@/pages/project/page-frame";
-import { NotFoundPage, ProjectsButton, StopPage } from "@/pages/public/not-found";
+import { NotFoundPage, ProjectsButton } from "@/pages/public/not-found";
 import { ResubmitForm } from "@/pages/resubmit";
 import { queryClient } from "@/query-client";
 
@@ -95,7 +95,7 @@ export function Notice({
 
 export function RemovedNotice({ name, reason }: { name: string; reason: string | null }) {
   return (
-    <StopPage
+    <MessagePage
       icon={<CircleX aria-hidden />}
       tone="critical"
       title="This project was removed by an operator"
@@ -106,7 +106,7 @@ export function RemovedNotice({ name, reason }: { name: string; reason: string |
         its dashboards were deleted.
       </p>
       {reason ? <p>Reason given: {reason}</p> : null}
-    </StopPage>
+    </MessagePage>
   );
 }
 
