@@ -177,7 +177,7 @@ export function AccessKeysPage() {
         r.lastUsed ? (
           <span className="whitespace-nowrap">{formatDateTimeShort(r.lastUsed)}</span>
         ) : (
-          <Missing reason="Never used" />
+          <Missing reason="Not used yet" />
         ),
     },
     {

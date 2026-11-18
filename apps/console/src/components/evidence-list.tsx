@@ -79,14 +79,14 @@ export function evidenceOf(
         },
     {
       key: "ids",
-      label: "Ids given at enrollment",
+      label: "IDs given at enrollment",
       signal: ids.length === 0 ? "absent" : invalid.length > 0 ? "partial" : "ok",
       value:
         ids.length === 0
           ? "Not given"
           : invalid.length > 0
-            ? `${invalid.length} of ${ids.length} not a valid id`
-            : `Valid (${countOf(ids.length, "id")})`,
+            ? `${invalid.length} of ${ids.length} not a valid ID`
+            : `Valid (${countOf(ids.length, "ID")})`,
     },
     {
       key: "scf",
