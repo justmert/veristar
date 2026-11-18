@@ -75,7 +75,7 @@ export function StepUpGate({ status, userName }: { status: StepUpStatus; userNam
       </Notice>
     );
   return (
-    <div className="mx-auto flex w-full max-w-prose animate-rise-in flex-col gap-4">
+    <div className="flex w-full max-w-prose animate-rise-in flex-col gap-4">
       {(status.passkeys ?? 0) > 0 ? (
         <ConfirmPanel maxAgeSeconds={status.max_age_seconds} />
       ) : status.enrollment === "open" ? (
