@@ -782,7 +782,7 @@ describe("audit sentences", () => {
     expect(auditVerb("operator.add")).toBe("added the operator");
     expect(auditVerb("cohort.confirm")).toBe("confirmed the cohort of");
     expect(auditVerb("rule.delete")).toBe("deleted the rule");
-    expect(auditVerb("report.revoke")).toBe("revoked a report link of");
+    expect(auditVerb("report.revoke")).toBe("revoked the link of the report");
     expect(auditVerb("onchain.verify")).toBe("verified an on-chain ID of");
     expect(auditVerb("export.csv")).toBe("exported a CSV file of");
     expect(auditVerb("user.identity_link")).toBe("added a sign-in method to");

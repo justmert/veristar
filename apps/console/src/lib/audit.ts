@@ -151,7 +151,7 @@ const VERB: Record<string, string> = {
   "rule.update": "edited the rule",
   "rule.delete": "deleted the rule",
   "report.create": "signed a report for",
-  "report.revoke": "revoked a report link of",
+  "report.revoke": "revoked the link of the report",
   "report.view": "opened the report",
   "onchain.add": "declared an on-chain ID for",
   "onchain.remove": "removed an on-chain ID from",
