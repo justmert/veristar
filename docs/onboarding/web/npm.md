@@ -5,8 +5,8 @@ description: "Bundle the tracker into your app as an npm package instead of a sc
 ---
 
 The tracker also comes as an npm package that you bundle into your app instead of loading a script
-tag. It is the same tracker: `init()` installs `window.umami` exactly as `sdk.js` does, so
-`umami.track()` and `data-umami-event` work unchanged.
+tag. It is the same tracker: `init()` installs `window.veristar` and `window.umami` exactly as
+`sdk.js` does, so `veristar.track()`, `umami.track()` and `data-umami-event` work unchanged.
 
 You build the npm package from this repository with
 [`packages/tracker/scripts/pack.mjs`](https://github.com/justmert/veristar/blob/main/packages/tracker/scripts/pack.mjs),
@@ -34,16 +34,16 @@ From a checkout of the repository, with the pnpm version from `package.json` ins
 ```sh
 pnpm install --frozen-lockfile
 cd packages/tracker
-NPM_PACKAGE=@your-scope/veristar-tracker node scripts/pack.mjs 1.3.2
+NPM_PACKAGE=@your-scope/veristar-tracker node scripts/pack.mjs 1.4.0
 ```
 
 `NPM_PACKAGE` is the scoped name the package gets, and the argument is the tracker version. The
 script compiles the package code from the checkout's source, so it packs only the version in
-`packages/tracker/package.json` (1.3.2 on `main`); without an argument it uses that version. To
+`packages/tracker/package.json` (1.4.0 on `main`); without an argument it uses that version. To
 pack an earlier release, check out the commit that released it. The version must be listed in
 [`releases/manifest.json`](https://github.com/justmert/veristar/blob/main/packages/tracker/releases/manifest.json).
 The script prints, as JSON, the path of the tarball, for example
-`npm/your-scope-veristar-tracker-1.3.2.tgz`. Install that file in your app with your package
+`npm/your-scope-veristar-tracker-1.4.0.tgz`. Install that file in your app with your package
 manager, or publish it to a registry you control.
 
 `pack.mjs` refuses a version that is not in the release manifest or is not the source's own, copies
@@ -67,7 +67,8 @@ workspace package `tracker`; in your app, import it from the scoped name you pac
 `@your-scope/veristar-tracker`.
 
 `init()` returns the tracker. Calling it again returns the same tracker; if a script tag already
-installed `window.umami`, `init()` returns that one, so the two never count twice.
+installed `window.veristar` or `window.umami`, `init()` returns that one, so the two never count
+twice.
 
 `init()` takes the same options as the tag's attributes, in camel case: `autoTrack`, `doNotTrack`,
 `excludeSearch`, `excludeHash`, `domains` (an array), `beforeSend` (a function), `sendTitle` and
