@@ -99,6 +99,8 @@ here, before they take effect, as the processing terms require
   `WebEventsBacklogGrowing` read the sum of every replayer consumer.
 - `deploy.yml` installs the NATS permissions of the new release on every
   NATS server before the core tier. The replayer container gets 30 s to stop.
+- `ghcr.io/astral-sh/uv` 0.13.8 to 0.13.9 in the Python example, and the
+  controller's uv (`scripts/supply-chain/install-tools.sh`) 0.13.7 to 0.13.9.
 - The collector and the metrics writer drop a histogram point whose sum
   exceeds 10^18 seconds in magnitude, counted as `sum` in
   `tenantguard_invalid_items`. Two sums near the floating point limit in one
