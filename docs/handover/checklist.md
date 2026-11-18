@@ -48,8 +48,8 @@ Who signs: the new operator for each item, SCF for section 9.
       tracker release is served byte for byte with a valid certificate, the console and OTLP
       answer.
 - [ ] An example page that still carries a snippet from before the cutover delivers a pageview in
-      Chromium, Firefox and WebKit (the `@cutover` check of `tests/handover`, pointed at the real
-      names, or by hand with the browsers' network tools).
+      Chromium, Firefox and WebKit (the `@cutover` check of `tests/e2e-console/handover/handover.spec.ts`,
+      pointed at the real names, or by hand with the browsers' network tools).
 - [ ] Only if the domain cannot be transferred: every tenant was told to replace its snippet and
       OTLP endpoint before `cutover-redirect.yml` ran ([plan.md](plan.md) section 5).
 
@@ -78,6 +78,10 @@ Who signs: the new operator for each item, SCF for section 9.
       secrets (`rotate-all.yml` asks GitHub), the Cloudflare token, Azure role assignments, Discord
       webhooks, the registry pull token, the OpenTofu state passphrase and the provider tokens in
       `tofu.enc.env`.
+- [ ] The usage report signing key: the original operator's account id is in
+      `sa_report_signing_retired_keys` of the new environment, or the pair was replaced in place with
+      its retirement step ([plan.md](plan.md) section 4). A report moved with the data verifies with
+      `platformctl report verify`.
 - [ ] `secrets.previous.enc.yaml` deleted after `rotate-all.yml` passed.
 - [ ] Operator API keys the original operator created are revoked
       ([../runbooks/operator-key-revocation.md](../runbooks/operator-key-revocation.md)).
@@ -104,7 +108,8 @@ Who signs: the new operator for each item, SCF for section 9.
 - [ ] GitHub OAuth apps of every environment belong to the new owner, with the
       callback URLs of the new environment and wildcard redirect matching off.
 - [ ] The operator roster on the Operators page holds exactly the people SCF names, with SCF's own
-      operator admins, and `OPERATOR_GITHUB_IDS` lists only SCF's recovery identities; the control
+      operator admins, and `OPERATOR_GITHUB_IDS` and `OPERATOR_STELLAR_ADDRESSES` list only SCF's
+      recovery identities; the control
       plane was restarted after the settings change ([../operators/roster.md](../operators/roster.md)).
 - [ ] Alerts reach the new operator: the console's operator Alerts page lists them, and a Discord
       webhook, if used, belongs to the new operator and received a test alert before the old one

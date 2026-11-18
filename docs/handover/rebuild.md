@@ -15,8 +15,11 @@ that changes hands. The tooling ran end to end between two separate environments
 Follow [../deploy/overview.md](../deploy/overview.md) steps 1 to 6 with the new operator's own
 accounts and secrets. The new environment gets its own values for everything: database
 passwords, NATS users, the Umami admin password, `UMAMI_USER_PASSWORD_KEY`, `APP_SECRET`, the
-OAuth app, the pgBackRest cipher passphrase. Nothing is copied from the old environment's
-secrets file except what section 3 names for reading the old backup repository.
+OAuth app, the pgBackRest cipher passphrase, the usage report signing key. Nothing is copied
+from the old environment's secrets file except what section 3 names for reading the old backup
+repository. Add the old report signing key's account id to `sa_report_signing_retired_keys` in
+the new inventory, so the signed reports that move with the data still verify
+([plan.md](plan.md) section 4).
 
 Build it with the **same release** (`SA_IMAGE_TAG`) the old environment runs. The import refuses
 a target whose platform migration version or Umami migrations differ from the source's, because
@@ -311,11 +314,14 @@ GitHub itself (`incorrect_client_credentials` for the previous OAuth client secr
 counts only when the system said the credential was wrong; an unreachable server is a failure,
 never a pass.
 
-Two kinds of value it does not generate:
+Three kinds of value it does not generate:
 
 - `pgbackrest_cipher_pass` stays: the repository is encrypted with it. A rebuilt environment has
   its own repository and value already; a handover in place needs a new repository
   ([../runbooks/secret-rotation.md](../runbooks/secret-rotation.md)).
+- `report_signing_seed` and `report_signing_key` stay: every shared report names the key's
+  account id. A handover in place replaces the pair with its retirement step
+  ([the usage report signing key](../runbooks/secret-rotation.md#the-usage-report-signing-key)).
 - Values issued by providers (GitHub client secret, Cloudflare token, Discord webhooks) come
   from those providers. Issue new ones, pass them to `rotate-secrets.py` in the `SA_*` variables
   `new-secrets.py` reads, and revoke the old ones at the provider. `rotate-all.yml` stops on any
