@@ -481,6 +481,8 @@ export function SitesTable({ sites, actions }: { sites: Site[]; actions?: ReactN
     {
       key: "next",
       header: "Next",
+      // the next step is the card's action on a phone, never behind Details
+      action: true,
       minWidth: "min-w-36",
       cell: (r) => {
         if (r.event === null) return null;
