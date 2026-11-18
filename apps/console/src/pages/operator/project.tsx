@@ -238,7 +238,14 @@ export function TenantDetail({ detail }: { detail: OperatorTenantDetail }) {
                 <ArrowRight aria-hidden className="size-3.5" />
               </Link>
             </div>
-            <AuditEntries entries={detail.recent_audit} limit={5} />
+            <AuditEntries
+              entries={detail.recent_audit}
+              limit={5}
+              names={{
+                [`tenant:${t.id}`]: t.name,
+                ...Object.fromEntries(detail.sites.map((s) => [`site:${s.id}`, s.domain])),
+              }}
+            />
           </section>
         </div>
 
