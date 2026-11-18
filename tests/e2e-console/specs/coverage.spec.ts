@@ -120,6 +120,13 @@ test("the edge counted every load of the tracker file and the gpc one", async ()
 test("the snippet offers the title opt-in from 1.3.0", async () => {
   const page = owner.page;
   await page.goto(`${APP}/projects/${tenant.id}/sites/${site.id}`);
+  // the edge counted the site's events, so the install step is done and
+  // folds once the page has read them
+  await expect(page.getByText(/^2 of 3 done/)).toBeVisible();
+  await page
+    .getByRole("region", { name: /^Install the tag\W+done$/ })
+    .getByRole("button", { name: "Show" })
+    .click();
   // the newest release, which reads the title choice like every release from 1.3.0
   await expect(page.getByText("tracker 1.3.1").first()).toBeVisible();
   await page.getByLabel("Send the page title").check();
