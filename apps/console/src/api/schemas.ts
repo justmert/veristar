@@ -1137,3 +1137,18 @@ export const passkeyChallenge = z.object({
   expires_at: time,
 });
 export type PasskeyChallenge = z.infer<typeof passkeyChallenge>;
+
+// 4.2.7 an scf award as the enrollment search returns it
+export const scfAward = z.object({
+  id: z.string(),
+  project: z.string(),
+  round: z.string(),
+  category: z.string().nullable(),
+  program: z.string().nullable(),
+  award_date: z.string().nullable(),
+  website: z.string().nullable(),
+  stellar_ids: z.array(z.string()),
+  rounds: z.array(z.string()),
+});
+export type ScfAward = z.infer<typeof scfAward>;
+export const scfAwardSearch = z.object({ items: z.array(scfAward) });

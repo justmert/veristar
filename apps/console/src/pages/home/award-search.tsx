@@ -5,35 +5,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { Search } from "lucide-react";
 import { useEffect, useId, useState } from "react";
-import { z } from "zod";
-import { ApiError, request } from "@/api/client";
+import { ApiError } from "@/api/client";
+import { api } from "@/api/endpoints";
+import type { ScfAward } from "@/api/schemas";
 import { Input } from "@/components/ui/input";
 import { errorMessage } from "@/lib/errors";
-
-export const scfAward = z.object({
-  id: z.string(),
-  project: z.string(),
-  round: z.string(),
-  category: z.string().nullable(),
-  program: z.string().nullable(),
-  award_date: z.string().nullable(),
-  website: z.string().nullable(),
-  stellar_ids: z.array(z.string()),
-  rounds: z.array(z.string()),
-});
-export type ScfAward = z.infer<typeof scfAward>;
-
-const searchAnswer = z.object({ items: z.array(scfAward) });
-
-export function searchAwards(q: string, signal?: AbortSignal) {
-  return request(
-    "GET",
-    `/scf/awards/search?q=${encodeURIComponent(q)}`,
-    searchAnswer,
-    undefined,
-    signal,
-  );
-}
 
 // the query as the server reads it: white space collapsed, 2 to 100 characters
 export function awardQuery(text: string): string | null {
@@ -65,7 +41,7 @@ export function AwardSearch({ onPick }: { onPick: (a: ScfAward) => void }) {
 
   const results = useQuery({
     queryKey: ["scf-awards", "search", q],
-    queryFn: ({ signal }) => searchAwards(q ?? "", signal),
+    queryFn: ({ signal }) => api.searchScfAwards(q ?? "", signal),
     enabled: q !== null && !waiting,
     retry: false,
     staleTime: 60_000,
