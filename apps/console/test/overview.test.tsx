@@ -325,4 +325,76 @@ describe("overview page", () => {
       ),
     );
   });
+
+  const stopped = (status: ProjectContext["tenant"]["status"], isOwner = true) => [
+    {
+      path: "/projects/:tenantId",
+      element: (
+        <TooltipProvider>
+          <Outlet
+            context={{ ...ctx, isOwner, tenant: { ...ctx.tenant, status } } as ProjectContext}
+          />
+        </TooltipProvider>
+      ),
+      children: [{ index: true, element: <OverviewPage /> }],
+    },
+  ];
+
+  it("offers no setup step on a project that is not approved, suspended or removed", async () => {
+    for (const status of ["rejected", "suspended", "removed"] as const) {
+      const urls = stub({ pageviews: 0, ingest: {}, api: "none" });
+      const host = await renderRoutes(stopped(status), `/projects/${f.TENANT_ID}`);
+      await waitFor(() =>
+        expect(host.querySelector('[data-metric="pageviews"]')?.textContent).toContain("0"),
+      );
+      // the same site is at its install step on an active project (above)
+      expect(host.querySelector('[aria-label="Next step"]')).toBeNull();
+      expect(host.textContent).not.toContain("Continue setup");
+      // the setup step is not even read
+      expect(urls.some((u) => u.includes("/ingest"))).toBe(false);
+    }
+  });
+
+  it("offers no Add site on a stopped project and says what to do instead", async () => {
+    const noSites = () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (input: string) => {
+          const u = new URL(input, "https://app.example.org");
+          const body = u.pathname.endsWith("/sites")
+            ? { ...f.sitePageBody, items: [] }
+            : u.pathname.endsWith("/integrity")
+              ? integrityReportBody
+              : u.pathname.endsWith("/onchain")
+                ? onchainBody
+                : null;
+          return new Response(JSON.stringify(body ?? { error: { code: "unavailable" } }), {
+            status: body ? 200 : 503,
+            headers: { "Content-Type": "application/json; charset=utf-8" },
+          });
+        }),
+      );
+    };
+    const buttons = (host: HTMLElement) =>
+      [...host.querySelectorAll("button")].map((b) => b.textContent?.trim());
+    // an active project offers the button
+    noSites();
+    const active = await renderRoutes(stopped("active"), `/projects/${f.TENANT_ID}`);
+    await waitFor(() => expect(active.textContent).toContain("No sites yet"));
+    expect(buttons(active)).toContain("Add site");
+
+    const cases = [
+      ["rejected", true, "Change the answers above and submit them again."],
+      ["rejected", false, "An owner of this project can change the answers"],
+      ["suspended", true, "You cannot add sites while the project is suspended."],
+      ["removed", true, "This project was removed. It cannot take new sites."],
+    ] as const;
+    for (const [status, isOwner, text] of cases) {
+      noSites();
+      const host = await renderRoutes(stopped(status, isOwner), `/projects/${f.TENANT_ID}`);
+      await waitFor(() => expect(host.textContent).toContain("No sites yet"));
+      expect(host.textContent).toContain(text);
+      expect(buttons(host)).not.toContain("Add site");
+    }
+  });
 });
