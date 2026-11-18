@@ -7,7 +7,7 @@ import { apiRangeOfDays, overviewDays, readOverviewPreset } from "@/lib/overview
 import { combineFirstEvent, firstEvent, nextSetupStep } from "@/lib/site-setup";
 import { ingestWindow, sparkOf, sumOutcomes } from "@/lib/web-dashboard";
 import { OverviewPage } from "@/pages/project/overview";
-import { onlyDay } from "@/pages/project/web-chart";
+import { dayHours, onlyDay } from "@/pages/project/web-chart";
 import type { ProjectContext } from "@/pages/project-layout";
 import * as f from "./fixtures/contract";
 import { integrityReportBody } from "./fixtures/global";
@@ -301,6 +301,22 @@ describe("the chart of a range with one day of data", () => {
       previous: { ...body.previous, series: [day("2026-11-13"), zero("2026-11-14")] },
     } as unknown as WebSummary;
     expect(onlyDay(before)).toBeNull();
+  });
+
+  it("draws every hour of the day, zeros around the one hour with page views", () => {
+    const now = Date.parse("2026-11-16T14:20:00Z");
+    const { buckets, points } = dayHours(
+      "2026-11-16",
+      [{ at: "2026-11-16T14:00:00Z", pageviews: 79, visitors: 12 }],
+      now,
+    );
+    expect(buckets).toHaveLength(24);
+    expect(buckets[0]?.at).toBe("2026-11-16T00:00:00Z");
+    expect(points[3]).toEqual({ at: "2026-11-16T03:00:00Z", pageviews: 0, visitors: 0 });
+    expect(points[14]?.pageviews).toBe(79);
+    // the running hour is hatched; the hours that have not begun hold no value
+    expect(buckets.filter((b) => b.partial).map((b) => b.at)).toEqual(["2026-11-16T14:00:00Z"]);
+    expect(points[15]).toBeNull();
   });
 });
 
