@@ -128,12 +128,15 @@ export function CohortFields({
 
 function CohortFacts({ c }: { c: Cohort }) {
   return (
-    <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-      <Fact label="Program">{c.program ?? "Not set"}</Fact>
-      <Fact label="Round">{c.round ?? "Not set"}</Fact>
-      <Fact label="Category">{c.category ?? "Not set"}</Fact>
-      <Fact label="Award date">{c.award_date ? formatDate(c.award_date) : "Not set"}</Fact>
-    </dl>
+    // four columns only where the card is wide, not in a side column
+    <div className="@container">
+      <dl className="grid grid-cols-2 gap-3 @lg:grid-cols-4">
+        <Fact label="Program">{c.program ?? "Not set"}</Fact>
+        <Fact label="Round">{c.round ?? "Not set"}</Fact>
+        <Fact label="Category">{c.category ?? "Not set"}</Fact>
+        <Fact label="Award date">{c.award_date ? formatDate(c.award_date) : "Not set"}</Fact>
+      </dl>
+    </div>
   );
 }
 
