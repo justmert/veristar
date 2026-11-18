@@ -8,6 +8,7 @@ import { Link, useLocation, useParams, useSearchParams } from "react-router";
 import { sitesQuery, snippetQuery } from "@/api/queries";
 import type { Ingest, Site, Snippet } from "@/api/schemas";
 import { CodeBlock, CopyField } from "@/components/code-block";
+import { Disclosure } from "@/components/disclosure";
 import { StellarTomlSummary } from "@/components/evidence";
 import { NativeSelect } from "@/components/form-field";
 import { Notice } from "@/components/notice";
@@ -519,60 +520,56 @@ function Install({ snippet, onVersion }: { snippet: Snippet; onVersion: (v: stri
         ) : null}
       </div>
 
-      <details className="group rounded-lg border border-line text-small">
-        <summary className="flex min-h-10 cursor-pointer list-none items-center gap-2 rounded-lg px-3 text-fg-2 transition-colors duration-(--vs-duration-press) ease-standard hover:text-fg focus-ring max-lg:min-h-(--vs-control-touch) [&::-webkit-details-marker]:hidden">
-          <ChevronRight
-            aria-hidden
-            className="size-4 transition-transform duration-(--vs-duration-press) ease-standard group-open:rotate-90"
-          />
-          Version and what the tag pins
-        </summary>
-        <div className="flex flex-col gap-3 border-t border-line p-3">
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="flex flex-col gap-1">
-              <label htmlFor={pickerId} className="text-small font-medium text-fg">
-                Tracker version
-              </label>
-              <NativeSelect
-                id={pickerId}
-                value={snippet.version}
-                onChange={(e) => onVersion(e.target.value)}
-              >
-                {snippet.versions.map((ver, i) => (
-                  <option key={ver.version} value={ver.version}>
-                    {ver.version}
-                    {i === 0 ? " (recommended)" : ""}
-                  </option>
-                ))}
-              </NativeSelect>
-            </div>
-            {v ? (
-              <p className="pb-1 text-small text-fg-2">
-                Released {formatDate(v.released)}. {formatBytes(v.gzip_bytes)} compressed,{" "}
-                {formatBytes(v.bytes)} raw.
-              </p>
-            ) : null}
+      <Disclosure
+        summary="Version and what the tag pins"
+        className="bg-transparent text-small"
+        summaryClassName="px-3 text-small font-normal text-fg-2 hover:bg-transparent hover:text-fg"
+        bodyClassName="flex flex-col gap-3 p-3"
+      >
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="flex flex-col gap-1">
+            <label htmlFor={pickerId} className="text-small font-medium text-fg">
+              Tracker version
+            </label>
+            <NativeSelect
+              id={pickerId}
+              value={snippet.version}
+              onChange={(e) => onVersion(e.target.value)}
+            >
+              {snippet.versions.map((ver, i) => (
+                <option key={ver.version} value={ver.version}>
+                  {ver.version}
+                  {i === 0 ? " (recommended)" : ""}
+                </option>
+              ))}
+            </NativeSelect>
           </div>
-          <dl className="grid gap-x-4 gap-y-2 sm:grid-cols-[6rem_minmax(0,1fr)] sm:items-center">
-            <dt className="text-fg-2">Script</dt>
-            <dd className="min-w-0">
-              <CopyField value={snippet.src} label="script address" />
-            </dd>
-            <dt className="text-fg-2">Integrity</dt>
-            <dd className="min-w-0">
-              <CopyField value={snippet.integrity} label="integrity" />
-            </dd>
-            <dt className="text-fg-2">Site id</dt>
-            <dd className="min-w-0">
-              <CopyField value={snippet.site_id} label="site id" />
-            </dd>
-          </dl>
-          <p className="text-fg-2">
-            The browser refuses the script if one byte differs from the integrity hash. To use a
-            newer tracker, choose it above and replace the tag on your pages.
-          </p>
+          {v ? (
+            <p className="pb-1 text-small text-fg-2">
+              Released {formatDate(v.released)}. {formatBytes(v.gzip_bytes)} compressed,{" "}
+              {formatBytes(v.bytes)} raw.
+            </p>
+          ) : null}
         </div>
-      </details>
+        <dl className="grid gap-x-4 gap-y-2 sm:grid-cols-[6rem_minmax(0,1fr)] sm:items-center">
+          <dt className="text-fg-2">Script</dt>
+          <dd className="min-w-0">
+            <CopyField value={snippet.src} label="script address" />
+          </dd>
+          <dt className="text-fg-2">Integrity</dt>
+          <dd className="min-w-0">
+            <CopyField value={snippet.integrity} label="integrity" />
+          </dd>
+          <dt className="text-fg-2">Site id</dt>
+          <dd className="min-w-0">
+            <CopyField value={snippet.site_id} label="site id" />
+          </dd>
+        </dl>
+        <p className="text-fg-2">
+          The browser refuses the script if one byte differs from the integrity hash. To use a newer
+          tracker, choose it above and replace the tag on your pages.
+        </p>
+      </Disclosure>
     </section>
   );
 }

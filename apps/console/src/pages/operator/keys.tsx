@@ -18,6 +18,7 @@ import { ChoiceCard } from "@/components/choice-card";
 import { CodeBlock, CopyField } from "@/components/code-block";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { type Column, DataTable } from "@/components/data-table";
+import { Disclosure } from "@/components/disclosure";
 import { FormMessage } from "@/components/error-panel";
 import { SelectField, TextField } from "@/components/form-field";
 import { PageHeader } from "@/components/page-header";
@@ -589,14 +590,11 @@ function ConnectSteps() {
 
 function ClientSteps({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <details className="group rounded-lg border border-line bg-raised">
-      <summary className="cursor-pointer rounded-lg px-4 py-3 text-body font-medium text-fg transition-colors duration-(--vs-duration-press) ease-standard hover:bg-hover focus-ring max-lg:min-h-(--vs-control-touch)">
-        {title}
-      </summary>
-      <ol className="flex list-decimal flex-col gap-3 border-t border-line py-4 pr-4 pl-10 text-small text-fg">
+    <Disclosure summary={title} bodyClassName="p-0">
+      <ol className="flex list-decimal flex-col gap-3 py-4 pr-4 pl-10 text-small text-fg">
         {children}
       </ol>
-    </details>
+    </Disclosure>
   );
 }
 

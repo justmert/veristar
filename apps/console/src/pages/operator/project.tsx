@@ -3,7 +3,6 @@ import { cn } from "@veristar/brand/cn";
 import {
   ArrowRight,
   Check,
-  ChevronDown,
   CirclePause,
   CirclePlay,
   LoaderCircle,
@@ -18,6 +17,7 @@ import type { OperatorSite, OperatorTenantDetail, TenantAction } from "@/api/sch
 import { OperatorCohortPanel } from "@/components/cohort";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { DecisionPanel } from "@/components/decision-panel";
+import { Disclosure } from "@/components/disclosure";
 import { StellarTomlSummary, VerificationDetail } from "@/components/evidence";
 import { EvidenceList, evidenceOf } from "@/components/evidence-list";
 import { IntegrityReportView } from "@/components/integrity";
@@ -193,20 +193,20 @@ export function TenantDetail({ detail }: { detail: OperatorTenantDetail }) {
             )}
           </section>
 
-          <Disclosure id="integrity" title="Integrity report">
+          <Fold id="integrity" title="Integrity report">
             <IntegrityReportView
               scope="operator"
               tenantId={t.id}
               range={{ from: "", to: "" }}
               siteNames={Object.fromEntries(detail.sites.map((s) => [s.id, s.domain]))}
             />
-          </Disclosure>
+          </Fold>
 
-          <Disclosure id="onchain" title="On-chain ids">
+          <Fold id="onchain" title="On-chain ids">
             <TenantOnchainSection tenantId={t.id} />
-          </Disclosure>
+          </Fold>
 
-          <Disclosure id="events" title="Tracker requests by outcome">
+          <Fold id="events" title="Tracker requests by outcome">
             <p className="mb-3 text-small text-fg-2">
               What the gateway did with each tracker request. The counts roll up every hour.
             </p>
@@ -214,7 +214,7 @@ export function TenantDetail({ detail }: { detail: OperatorTenantDetail }) {
               <Counts title="Last 24 full hours, UTC" counts={detail.ingest.last_24h} />
               <Counts title="Last 30 full days, UTC" counts={detail.ingest.last_30d} />
             </div>
-          </Disclosure>
+          </Fold>
 
           <section aria-labelledby="audit-h" className="flex flex-col gap-3">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -274,18 +274,17 @@ function Box({ id, title, children }: { id: string; title: string; children: Rea
   );
 }
 
-function Disclosure({ id, title, children }: { id: string; title: string; children: ReactNode }) {
+function Fold({ id, title, children }: { id: string; title: string; children: ReactNode }) {
   return (
-    <details id={id} className="group min-w-0 rounded-lg border border-line bg-raised">
-      <summary className="flex cursor-pointer items-center justify-between gap-3 rounded-lg px-4 py-3 text-title text-fg transition-colors duration-(--vs-duration-press) ease-standard hover:bg-hover focus-ring max-lg:min-h-(--vs-control-touch) sm:px-5">
-        {title}
-        <ChevronDown
-          aria-hidden
-          className="size-4 text-fg-2 transition-transform duration-(--vs-duration-change) ease-standard group-open:rotate-180"
-        />
-      </summary>
-      <div className="min-w-0 border-t border-line p-4 sm:p-5">{children}</div>
-    </details>
+    <Disclosure
+      id={id}
+      summary={title}
+      className="min-w-0"
+      summaryClassName="sm:px-5"
+      bodyClassName="min-w-0 sm:p-5"
+    >
+      {children}
+    </Disclosure>
   );
 }
 
@@ -488,37 +487,37 @@ function SiteCard({ site }: { site: OperatorSite }) {
           {site.status_reason}
         </p>
       ) : null}
-      <details className="group text-small">
-        <summary className="w-fit cursor-pointer rounded-sm text-fg-2 transition-colors duration-(--vs-duration-press) ease-standard hover:text-fg focus-ring">
-          Domain check, stellar.toml and allowed origins
-        </summary>
-        <div className="mt-3 flex flex-col gap-4">
-          <div className="grid gap-4 md:grid-cols-2">
-            <VerificationDetail
-              verification={site.verification}
-              verifyMethod={site.verify_method}
-              verifiedAt={site.verified_at}
-              lastVerifyAt={site.last_verify_at}
-              lastVerifyError={site.last_verify_error}
-            />
-            <StellarTomlSummary
-              toml={site.stellar_toml}
-              checkedAt={site.stellar_toml_checked_at}
-              domain={site.domain}
-            />
-          </div>
-          <ul className="flex flex-wrap gap-1" aria-label="Allowed origins">
-            {site.origins.map((o) => (
-              <li
-                key={o}
-                className="rounded-sm border border-line px-1 font-mono text-caption break-all text-fg-2"
-              >
-                {o}
-              </li>
-            ))}
-          </ul>
+      <Disclosure
+        variant="inline"
+        summary="Domain check, stellar.toml and allowed origins"
+        className="text-small"
+        bodyClassName="flex flex-col gap-4 pt-3"
+      >
+        <div className="grid gap-4 md:grid-cols-2">
+          <VerificationDetail
+            verification={site.verification}
+            verifyMethod={site.verify_method}
+            verifiedAt={site.verified_at}
+            lastVerifyAt={site.last_verify_at}
+            lastVerifyError={site.last_verify_error}
+          />
+          <StellarTomlSummary
+            toml={site.stellar_toml}
+            checkedAt={site.stellar_toml_checked_at}
+            domain={site.domain}
+          />
         </div>
-      </details>
+        <ul className="flex flex-wrap gap-1" aria-label="Allowed origins">
+          {site.origins.map((o) => (
+            <li
+              key={o}
+              className="rounded-sm border border-line px-1 font-mono text-caption break-all text-fg-2"
+            >
+              {o}
+            </li>
+          ))}
+        </ul>
+      </Disclosure>
       {site.in_review ? (
         <div className="border-t border-line-subtle pt-3">
           <DecisionPanel subject={{ kind: "site", id: site.id, name: site.domain }} />

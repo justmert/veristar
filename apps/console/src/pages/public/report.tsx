@@ -16,6 +16,7 @@ import {
 } from "@/api/reports";
 import { percentileHiddenReason } from "@/components/cohort";
 import { CoverageNote } from "@/components/coverage";
+import { Disclosure } from "@/components/disclosure";
 import { gradeMeaning } from "@/components/integrity";
 import { FunctionsTable, functionsDaysText } from "@/components/onchain-functions";
 import { PublicFrame } from "@/components/public-frame";
@@ -200,28 +201,28 @@ function Signature({ verdict, r }: { verdict: Verdict | null; r: PublicReport })
         {download}
       </div>
       {verdict?.ok ? (
-        <details className="group text-small text-fg-2">
-          <summary className="w-fit cursor-pointer rounded-sm text-fg-2 transition-colors duration-(--vs-duration-press) hover:text-fg focus-ring max-lg:py-2">
-            Signature details
-          </summary>
-          <div className="mt-2 flex flex-col gap-2">
-            <p>
-              The signature follows SEP-53, the Stellar standard for signed messages. It covers the
-              canonical form of the report. It was made by {keyText}:
-            </p>
-            <code className="font-mono text-caption break-all text-fg">{verdict.signer}</code>
-            <p>
-              Veristar publishes its report keys in its{" "}
-              <a
-                href={r.keys.stellar_toml}
-                className="rounded-sm text-fg underline decoration-line-strong underline-offset-2 hover:decoration-fg focus-ring"
-              >
-                stellar.toml file
-              </a>
-              . Check the downloaded JSON file again with any SEP-53 tool.
-            </p>
-          </div>
-        </details>
+        <Disclosure
+          variant="inline"
+          summary="Signature details"
+          className="text-small text-fg-2"
+          bodyClassName="flex flex-col gap-2"
+        >
+          <p>
+            The signature follows SEP-53, the Stellar standard for signed messages. It covers the
+            canonical form of the report. It was made by {keyText}:
+          </p>
+          <code className="font-mono text-caption break-all text-fg">{verdict.signer}</code>
+          <p>
+            Veristar publishes its report keys in its{" "}
+            <a
+              href={r.keys.stellar_toml}
+              className="rounded-sm text-fg underline decoration-line-strong underline-offset-2 hover:decoration-fg focus-ring"
+            >
+              stellar.toml file
+            </a>
+            . Check the downloaded JSON file again with any SEP-53 tool.
+          </p>
+        </Disclosure>
       ) : null}
     </section>
   );
