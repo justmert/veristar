@@ -77,14 +77,19 @@ export function OverviewPage() {
   if (sites.isPending) body = <OverviewSkeleton />;
   else if (sites.error) body = <ErrorState error={sites.error} onRetry={() => sites.refetch()} />;
   else if (live.length === 0)
+    // a project without a site can still declare on-chain ids: the
+    // summaries stay, only the web numbers wait for a site
     body = (
-      <EmptyState
-        icon={<Globe aria-hidden strokeWidth={1.75} />}
-        title="No sites yet"
-        action={canChange ? <AddSiteButton tenantId={tenant.id} variant="default" /> : undefined}
-      >
-        Add the website that you want to measure. You get a script tag for its pages.
-      </EmptyState>
+      <>
+        <EmptyState
+          icon={<Globe aria-hidden strokeWidth={1.75} />}
+          title="No sites yet"
+          action={canChange ? <AddSiteButton tenantId={tenant.id} variant="default" /> : undefined}
+        >
+          Add the website that you want to measure. You get a script tag for its pages.
+        </EmptyState>
+        <Summaries tenantId={tenant.id} sites={live} days={days} />
+      </>
     );
   else
     body = (
@@ -390,11 +395,13 @@ function Summaries({ tenantId, sites, days }: { tenantId: string; sites: Site[];
         <span className="flex flex-wrap items-baseline gap-x-2">
           <span className="font-mono text-title text-fg tabular">{formatCount(sites.length)}</span>
           <span className="text-small text-fg-2">
-            {inReview.length > 0
-              ? `${formatCount(inReview.length)} in review`
-              : unverified.length > 0
-                ? `${countOf(unverified.length, "domain")} not verified`
-                : "All domains verified"}
+            {sites.length === 0
+              ? "No site added"
+              : inReview.length > 0
+                ? `${formatCount(inReview.length)} in review`
+                : unverified.length > 0
+                  ? `${countOf(unverified.length, "domain")} not verified`
+                  : "All domains verified"}
           </span>
         </span>
       </SummaryCard>
