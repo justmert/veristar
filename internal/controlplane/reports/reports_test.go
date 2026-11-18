@@ -508,12 +508,57 @@ func TestUsageReports(t *testing.T) {
 		}
 	})
 
-	t.Run("a revoked link answers 404 and stays revoked", func(t *testing.T) {
+	t.Run("a revoked link answers 410 report_revoked and stays revoked", func(t *testing.T) {
 		e.sys(t, `insert into cp.tenant_members (tenant_id, user_id, role) values ($1, $2, 'member')`, b, ua)
+		var viewsBefore int64
+		require.NoError(t, e.d.WithSystem(t.Context(), func(tx pgx.Tx) error {
+			return tx.QueryRow(t.Context(), `select view_count from cp.usage_reports where id = $1`, id).Scan(&viewsBefore)
+		}))
+		auditBefore := e.auditCount(t, reports.ActionView, reports.Target(id))
 		code, raw := ca.call(t, http.MethodPost, "/api/tenants/"+a.String()+"/reports/"+id+"/revoke", nil)
 		require.Equal(t, http.StatusOK, code, string(raw))
 		require.NotNil(t, decode[reports.Summary](t, raw).RevokedAt)
-		code, _ = anon.call(t, http.MethodGet, "/api/public/reports/"+id, nil)
+		code, raw = anon.call(t, http.MethodGet, "/api/public/reports/"+id, nil)
+		require.Equal(t, http.StatusGone, code, string(raw))
+		// the bare envelope: nothing of the project, the period or the report
+		var env struct {
+			Error struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		require.NoError(t, json.Unmarshal(raw, &env))
+		require.Equal(t, "report_revoked", env.Error.Code)
+		var top map[string]json.RawMessage
+		require.NoError(t, json.Unmarshal(raw, &top))
+		require.Len(t, top, 1, string(raw))
+		for _, leak := range []string{"alpha", a.String(), from, to, id, e.key.Address()} {
+			require.NotContains(t, string(raw), leak)
+		}
+		// no view counted, no audit row written
+		var viewsAfter int64
+		require.NoError(t, e.d.WithSystem(t.Context(), func(tx pgx.Tx) error {
+			return tx.QueryRow(t.Context(), `select view_count from cp.usage_reports where id = $1`, id).Scan(&viewsAfter)
+		}))
+		require.Equal(t, viewsBefore, viewsAfter)
+		require.Equal(t, auditBefore, e.auditCount(t, reports.ActionView, reports.Target(id)))
+		// an unknown id of the same form stays 404
+		code, raw = anon.call(t, http.MethodGet, "/api/public/reports/"+strings.Repeat("a", 26), nil)
+		require.Equal(t, http.StatusNotFound, code, string(raw))
+		require.Contains(t, string(raw), `"code":"not_found"`)
+		// a revoked link of a removed project answers 404 like any removed one
+		owner := e.user(t)
+		gone := e.tenant(t, owner, "gone")
+		cg := e.client(t, &owner)
+		code, raw = cg.call(t, http.MethodPost, "/api/tenants/"+gone.String()+"/reports", map[string]string{"from": to, "to": to})
+		require.Equal(t, http.StatusCreated, code, string(raw))
+		goneID := decode[reports.Detail](t, raw).ID
+		code, _ = cg.call(t, http.MethodPost, "/api/tenants/"+gone.String()+"/reports/"+goneID+"/revoke", nil)
+		require.Equal(t, http.StatusOK, code)
+		code, _ = anon.call(t, http.MethodGet, "/api/public/reports/"+goneID, nil)
+		require.Equal(t, http.StatusGone, code)
+		e.sys(t, `update cp.tenants set status = 'removed' where id = $1`, gone)
+		code, _ = anon.call(t, http.MethodGet, "/api/public/reports/"+goneID, nil)
 		require.Equal(t, http.StatusNotFound, code)
 		code, _ = ca.call(t, http.MethodPost, "/api/tenants/"+a.String()+"/reports/"+id+"/revoke", nil)
 		require.Equal(t, http.StatusOK, code)
