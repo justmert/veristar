@@ -49,6 +49,12 @@ its Go side live in `internal/histo`.
   skipped. Percentiles over a range are
   `api.histogram_quantile(q, api.sum_buckets(counts))`; percentiles are never
   averaged.
+- `api.sum_buckets_read(bigint[])` (migration 00049): the sum the read routes
+  use for percentiles over a range. It adds in numeric and, when the total
+  passes 2^62, divides every bucket by `ceil(total / 2^62)`, rounding down, so
+  the result fits `api.histogram_quantile` and every quantile keeps its bucket
+  and its place inside it. Below 2^62 it equals `api.sum_buckets`. The rollups
+  keep `api.sum_buckets`, because a stored row holds exact counts.
 
 ## Metric tables
 
@@ -234,8 +240,9 @@ data: one select policy over all rows for `cp_tenant`, `cp_operator`,
 `cp_system` and, since 00043, `jobs`. `cp_system` reads
 `traffic_class_rules` and has no other table right in `api`; its schema usage
 also serves to call `api.purge_tenant` (migration 00017). Functions:
-`add_buckets` for all four roles; `sum_buckets` and `histogram_quantile` for
-`cp_tenant`, `cp_operator`, `jobs`; the partition functions for `jobs` only.
+`add_buckets` for all four roles; `sum_buckets`, `sum_buckets_read` (with its
+helpers `add_buckets_numeric`, `merge_buckets_numeric`, `fit_buckets`) and
+`histogram_quantile` for `cp_tenant`, `cp_operator`, `jobs`; the partition functions for `jobs` only.
 
 ## Queries
 

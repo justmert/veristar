@@ -171,14 +171,19 @@ func TestSchemaDatabaseAndFunctionRights(t *testing.T) {
 		"api.histogram_quantile(double precision,bigint[])": {
 			pdb.RoleCPTenant, pdb.RoleCPOperator, pdb.RoleJobs,
 		},
-		"api.protect_partition(text)":       nil,
-		"api.create_minute_partition(date)": {pdb.RoleJobs},
-		"api.create_hourly_partition(date)": {pdb.RoleJobs},
-		"api.drop_minute_partition(date)":   {pdb.RoleJobs},
-		"api.drop_hourly_partition(date)":   {pdb.RoleJobs},
-		"api.minute_partitions()":           {pdb.RoleJobs},
-		"api.hourly_partitions()":           {pdb.RoleJobs},
-		"api.purge_tenant(uuid,boolean)":    {pdb.RoleCPSystem},
+		// the overflow-safe histogram sum of the read routes (00049)
+		"api.sum_buckets_read(bigint[])":                 {pdb.RoleCPTenant, pdb.RoleCPOperator, pdb.RoleJobs},
+		"api.add_buckets_numeric(numeric[],bigint[])":    {pdb.RoleCPTenant, pdb.RoleCPOperator, pdb.RoleJobs},
+		"api.merge_buckets_numeric(numeric[],numeric[])": {pdb.RoleCPTenant, pdb.RoleCPOperator, pdb.RoleJobs},
+		"api.fit_buckets(numeric[])":                     {pdb.RoleCPTenant, pdb.RoleCPOperator, pdb.RoleJobs},
+		"api.protect_partition(text)":                    nil,
+		"api.create_minute_partition(date)":              {pdb.RoleJobs},
+		"api.create_hourly_partition(date)":              {pdb.RoleJobs},
+		"api.drop_minute_partition(date)":                {pdb.RoleJobs},
+		"api.drop_hourly_partition(date)":                {pdb.RoleJobs},
+		"api.minute_partitions()":                        {pdb.RoleJobs},
+		"api.hourly_partitions()":                        {pdb.RoleJobs},
+		"api.purge_tenant(uuid,boolean)":                 {pdb.RoleCPSystem},
 		// eviction of idle writer streams by api-retention (00029)
 		"api.evict_idle_series_states(timestamp with time zone,bigint)": {pdb.RoleJobs},
 		// the hour lock key the writer and the rollup share (00026)
