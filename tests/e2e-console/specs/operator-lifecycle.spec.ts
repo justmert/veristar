@@ -185,8 +185,8 @@ test("a new project waits in the review queue and the operator approves it", asy
   const review = page.getByRole("region", { name: `Review ${tenant.name}` });
   await expect(review.getByRole("list", { name: "Evidence" })).toBeVisible();
   await expect(review.getByRole("radiogroup", { name: "Decision" })).toBeVisible();
-  // the numbers of the project sit next to the decision
-  await expect(review.getByRole("region", { name: "Numbers" })).toBeVisible();
+  // a new project has no figures yet: the evidence carries the decision
+  await expect(review.locator("[data-numbers]")).toHaveCount(0);
   await review.getByRole("link", { name: "Open the project page" }).click();
   await page.waitForURL(`${APP}/operator/projects/${tenant.id}`);
   // enrollment answers and the site with its evidence
