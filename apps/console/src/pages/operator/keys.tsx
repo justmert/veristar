@@ -197,6 +197,7 @@ export function AccessKeysPage() {
     },
     {
       key: "actions",
+      mobile: true,
       header: "Actions",
       align: "right",
       cell: (r) =>
