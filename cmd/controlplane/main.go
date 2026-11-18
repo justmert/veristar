@@ -370,7 +370,7 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	// the scf award directory (contract 19.4) and its matching on
+	// the scf award directory (contract 19.5) and its matching on
 	// enrollment and site creation; background matches finish before the
 	// pools close
 	scfAwards, err := operator.NewSCFAwards(d, time.Now)

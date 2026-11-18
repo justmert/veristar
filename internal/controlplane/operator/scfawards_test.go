@@ -21,7 +21,7 @@ import (
 	"github.com/justmert/veristar/internal/controlplane/session"
 )
 
-// the scf award routes (contract 19.4): only an operator with a fresh
+// the scf award routes (contract 19.5): only an operator with a fresh
 // step-up reads them; the list matches, measures and counts the imported
 // awards; the csv is the same rows and writes an audit row.
 func TestSCFAwardRoutes(t *testing.T) {

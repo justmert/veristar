@@ -1,5 +1,5 @@
 -- the scf award directory and the cohort proposals made from it
--- (control-plane-api section 19.4).
+-- (control-plane-api section 19.5).
 --
 -- cp.scf_awards holds one row per funded project and round, imported by an
 -- operator from an scf build award export with platformctl scf import. it

@@ -1,7 +1,7 @@
 // Package scfawards imports the scf build award export into the award
 // directory (cp.scf_awards, migration 00050), matches the funded projects
 // to enrolled projects on exact evidence and writes cohort proposals from
-// the matches (control-plane-api section 19.4).
+// the matches (control-plane-api section 19.5).
 //
 // the export holds personal data next to the organisation data: names of
 // people, linkedin and x handles, document links, descriptions and

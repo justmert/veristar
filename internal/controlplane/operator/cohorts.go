@@ -40,7 +40,7 @@ type CohortRecord struct {
 	Proposal    *Cohort          `json:"proposal"`
 	ProposedAt  *httpx.Timestamp `json:"proposed_at"`
 	// ProposalSource says who made the pending proposal: member (the
-	// project) or scf_import (the award directory, section 19.4); null
+	// project) or scf_import (the award directory, section 19.5); null
 	// without a proposal
 	ProposalSource *string `json:"proposal_source"`
 }

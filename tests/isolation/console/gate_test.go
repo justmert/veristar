@@ -248,7 +248,7 @@ func catalogue(terms string) []route {
 	add(kindOperator, http.MethodDelete, op+"/rules/{rule_id}", nil)
 	add(kindOperator, http.MethodGet, op+"/rules/{rule_id}/matches", nil)
 	add(kindOperator, http.MethodGet, op+"/rules/{rule_id}/matches.csv", nil)
-	// the scf award directory (contract 19.4)
+	// the scf award directory (contract 19.5)
 	add(kindOperator, http.MethodGet, op+"/scf/awards", nil)
 	add(kindOperator, http.MethodGet, op+"/scf/awards.csv", nil)
 	add(kindOperator, http.MethodGet, op+"/scf/imports", nil)

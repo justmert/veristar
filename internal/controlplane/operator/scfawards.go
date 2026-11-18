@@ -23,7 +23,7 @@ import (
 	"github.com/justmert/veristar/internal/db"
 )
 
-// the scf award directory (contract 19.4): every imported award with its
+// the scf award directory (contract 19.5): every imported award with its
 // match to an enrolled project, the project's cohort beside the award and
 // whether Veristar measures the project, with counts by round and
 // category. it answers which funded projects are measured. the routes only
@@ -109,7 +109,7 @@ type SCFMeasured struct {
 
 // SCFCohort compares a matched project's cohort with the award.
 type SCFCohort struct {
-	// State is one of the cohort states of contract 19.4
+	// State is one of the cohort states of contract 19.5
 	State          string            `json:"state"`
 	Award          scfawards.Cohort  `json:"award"`
 	Confirmed      *scfawards.Cohort `json:"confirmed"`

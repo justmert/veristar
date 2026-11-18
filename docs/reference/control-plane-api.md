@@ -490,7 +490,21 @@ Cohorts and threshold rules (section 19): `cohort.propose` (actor
 `tenant:<id>` and detail `tenant_id` and the old and new values; rule rows
 have target `rule:<id>` and the rule's fields (old and new for an update). A
 rule matches export is an `export.csv` row with target `operator:rule_matches`
-and detail `rule_id`, `query` and `rows`.
+and detail `rule_id`, `query` and `rows`. `cohort.confirm` and
+`cohort.proposal_dismiss` add `source`, the source of the proposal they
+confirmed or dismissed.
+
+SCF award directory (19.5): `scf.import` (actor `system:platformctl-scf`,
+target `scf_import:<id>`, detail `import_id`, `file_sha256`, `file_bytes`,
+`has_header`, `delimiter`, `records`, `inserted`, `updated`, `unchanged`,
+`rejected` and `rejections`, the first 200 rejected rows as
+`{"record", "line", "field", "reason"}` without their values). A proposal
+the directory writes is a `cohort.propose` row under `cp_system` with actor
+`system:platformctl-scf` (an import or `scf match`) or `system:scf-match`
+(an enrollment or a new site), target `tenant:<id>` and detail `tenant_id`,
+`source` (`scf_import`), `award_id`, `evidence` and the old and new
+`proposal`. The award export is an `export.csv` row with target
+`operator:scf_awards`.
 
 Usage reports (section 20): `report.create` and `report.revoke` (actor
 `user:<id>`, written under `cp_tenant`) and `report.view` (actor `public`,
@@ -4408,12 +4422,13 @@ review left out of engine reads, and a member without a Umami user who gets
 
 ## 19. Cohorts, growth, percentiles and threshold rules
 
-SCF decides by program, round, category and award date. SCF publishes no
-machine-readable directory of its awards, so a project proposes its cohort
-and an operator confirms it; only confirmed values place a project in a
-cohort. The values live in `cp.tenant_cohorts` (migration 00035): the
-project writes only the proposal columns under `cp_tenant`, operators write
-the confirmed columns under `cp_system`, operators read under `cp_operator`.
+SCF decides by program, round, category and award date. A project
+proposes its cohort, the SCF award directory (19.5) proposes one for every
+funded project it matches, and an operator confirms the proposal; only
+confirmed values place a project in a cohort. The values live in
+`cp.tenant_cohorts` (migrations 00035 and 00050): the project writes only
+the proposal columns under `cp_tenant`, operators and the directory write
+under `cp_system`, operators read under `cp_operator`.
 
 ### 19.1 Cohort routes
 
@@ -4425,12 +4440,16 @@ the confirmed columns under `cp_system`, operators read under `cp_operator`.
   "confirmed": { "program": "Build Award", "round": "SCF #38", "category": "DeFi", "award_date": "2026-10-01" },
   "confirmed_at": "2026-11-16T09:00:00.000Z",
   "proposal": null,
-  "proposed_at": null
+  "proposed_at": null,
+  "proposal_source": null
 }
 ```
 
 `confirmed` and `proposal` are `null` when not set; inside them any field
-may be `null`. Program, round and category are trimmed text of 1 to 80
+may be `null`. `proposal_source` names who made the pending proposal:
+`member` (the project) or `scf_import` (the award directory, 19.5); `null`
+without a proposal. A member's proposal replaces a pending one of the
+directory. Program, round and category are trimmed text of 1 to 80
 characters without control characters; `award_date` is a UTC day from
 2018-01-01 to today.
 
@@ -4438,7 +4457,7 @@ characters without control characters; `award_date` is a UTC day from
 |---|---|---|
 | `GET /api/tenants/{tenant_id}/cohort` | member | the project's CohortRecord |
 | `PUT /api/tenants/{tenant_id}/cohort/proposal` | owner, current terms (4.2.6) | body: a cohort object with at least one field; replaces the proposal, audit `cohort.propose`; **200** CohortRecord |
-| `GET /api/operator/cohorts` | operator | the confirmed values in use with their project counts (`programs`, `rounds`, `categories`: `[{"value", "projects"}]`) and every pending proposal (`proposals`: `[{"tenant", "confirmed", "proposal", "proposed_at"}]`), removed and internal projects left out |
+| `GET /api/operator/cohorts` | operator | the confirmed values in use with their project counts (`programs`, `rounds`, `categories`: `[{"value", "projects"}]`) and every pending proposal (`proposals`: `[{"tenant", "confirmed", "proposal", "proposed_at", "source"}]`), removed and internal projects left out |
 | `GET /api/operator/tenants/{tenant_id}/cohort` | operator | the CohortRecord |
 | `PUT /api/operator/tenants/{tenant_id}/cohort` | operator | body: a cohort object; sets the confirmed values, an object of nulls clears them; audit `cohort.set`; **200** CohortRecord |
 | `POST /api/operator/tenants/{tenant_id}/cohort/confirm` | operator | copies the proposal into the confirmed values and clears it; audit `cohort.confirm`; 409 `no_proposal` without one |
@@ -4553,6 +4572,143 @@ same reads at `GET /api/metrics/v1/rules` and
 `GET /api/metrics/v1/rules/{rule_id}/matches` (9.12; with the key rules of
 9.3, a key scoped to one tenant evaluates that tenant only), and MCP at
 `list_threshold_rules` and `get_threshold_rule_matches`.
+
+### 19.5 SCF award directory
+
+`cp.scf_awards` (migration 00050) holds the SCF awards an operator imports
+from SCF's build award export with `platformctl scf import`
+([operator guide](../operators/scf-awards.md)). One row per project and
+round: project name, round (`SCF #<n>`), category, program, award date,
+award amount in US dollars, tranche percent and status, website host, and
+the Stellar account and contract ids the row declares. No column holds a
+person: the parser drops every other column of the export before anything
+is stored. `cp.scf_award_imports` records each run (file SHA-256 and size,
+counts, actor). Neither table has a tenant: `cp_system` writes, `cp_operator`
+reads, `cp_tenant` has no right, and a tenant removal (5.5) leaves them.
+
+The import has no HTTP route. Request bodies are JSON of at most 64 KiB
+(section 1), and an export runs to several megabytes, so the import runs on
+the operator's host. It upserts by project (case-insensitive) and round,
+writes `scf.import` (3.3) and then runs the matching below in the same
+transaction.
+
+**Matching.** An award matches an enrolled project (status `pending`,
+`active` or `suspended`, not internal) only on exact evidence:
+
+- its website host equals the host of a site of the project (the domain or
+  an origin of a site that is not removed) or of the project's enrollment
+  website. Hosts compare lower case, in IDNA A-label form, without a
+  trailing dot and without a leading `www.`;
+- one of its strkeys is a verified on-chain id of the project (15.4).
+
+Names are never compared. A host many organisations share (code hosting,
+document sharing, social profiles, SCF's own pages) is never evidence. An
+award that points to several projects, or to a project another award also
+points to, is `ambiguous` and matches nothing; one with no evidence is
+`not_enrolled`.
+
+**Cohort proposals.** For every matched project, the directory writes the
+award's program, round, category and award date as the project's cohort
+proposal (`proposal_source` `scf_import`, audit `cohort.propose`) when the
+project has no confirmed cohort, no proposal of its own and no earlier
+proposal of the same award that an operator confirmed or dismissed. A
+confirmed cohort and a member's own proposal are never overwritten; the
+list shows them beside the award. A pending proposal of the directory
+follows a later change of its award. The matching also runs inside the
+enrollment transaction of a new project (4.2.1) and after a site is created
+(4.3.1); `platformctl scf match` runs it again for every project.
+
+**Cohort states** of a matched award (`cohort.state`):
+
+| State | Means |
+|---|---|
+| `confirmed` | the confirmed cohort holds the award's values |
+| `confirmed_differs` | the confirmed cohort contradicts the award (a value the award states, held differently) |
+| `proposed` | the directory's proposal from this award waits for an operator |
+| `member_proposal` | the project's own proposal waits and holds the award's values |
+| `member_proposal_differs` | the project's own proposal waits and contradicts the award |
+| `dismissed` | an operator dismissed the proposal from this award |
+| `not_proposed` | the evidence appeared after the last matching run; the next import or `platformctl scf match` proposes it |
+
+| Route | Does |
+|---|---|
+| `GET /api/operator/scf/awards` | every award with its match, measurement and cohort, and the summary |
+| `GET /api/operator/scf/awards.csv` | the same rows as CSV (16.1), one per award, at most 5000 |
+| `GET /api/operator/scf/imports` | `{"items": [Import]}`, the last 100 runs, newest first |
+
+Query of the list and the CSV: `from` and `to` (8.1; default the 30 days
+ending today) set the range of the measurement; `state` (`matched`,
+`ambiguous`, `not_enrolled`), `round` and `category` (exact), `q` (1 to 100
+characters of the project name, case-insensitive) and `measured` (`true` or
+`false`) narrow `items`. The summary always counts every award. Any other
+parameter is 400 `invalid_query`.
+
+```json
+{
+  "from": "2026-10-20", "to": "2026-11-18",
+  "last_import": {
+    "id": "uuid", "file_sha256": "hex", "file_bytes": 1048576, "has_header": false, "delimiter": "tab",
+    "records": 120, "inserted": 118, "updated": 0, "unchanged": 0, "rejected": 2,
+    "actor": "system:platformctl-scf", "imported_at": "2026-11-18T18:00:00.000Z"
+  },
+  "summary": {
+    "total": { "awards": 118, "award_amount_usd": "9600000.00", "matched": 3, "ambiguous": 1, "not_enrolled": 114, "measured": 2 },
+    "by_round": [ { "key": "SCF #45", "awards": 40, "award_amount_usd": "3300000.00", "matched": 1, "ambiguous": 0, "not_enrolled": 39, "measured": 1 } ],
+    "by_category": [ { "key": "Applications", "awards": 30, "award_amount_usd": "2400000.00", "matched": 1, "ambiguous": 0, "not_enrolled": 29, "measured": 1 } ],
+    "cohort_states": { "proposed": 1, "confirmed": 1, "confirmed_differs": 1 }
+  },
+  "items": [
+    {
+      "id": "uuid", "project": "Example Pay", "round": "SCF #45", "category": "Applications",
+      "program": "Build Award", "award_date": "2026-09-01", "award_amount_usd": "100000.00",
+      "tranche_percent": 33, "tranche_status": "Pre-Launch #1 - MVP", "website_host": "examplepay.example",
+      "stellar_ids": [], "first_imported_at": "...", "imported_at": "...",
+      "match": {
+        "state": "matched", "tenant": "TenantRef",
+        "evidence": [ { "kind": "site_domain", "value": "examplepay.example", "site_id": "uuid", "verified": true } ],
+        "candidates": [], "shared_with": []
+      },
+      "measured": {
+        "measured": true, "has_web_data": true, "has_api_data": false, "has_onchain_data": false,
+        "sites": 1, "sites_verified": 1, "verified_onchain_ids": 0,
+        "last_web_day": "2026-11-17", "last_api_day": null, "last_onchain_day": null, "last_activity": "2026-11-17"
+      },
+      "cohort": {
+        "state": "proposed", "award": "Cohort of 19.2", "confirmed": null,
+        "proposal": "Cohort of 19.2", "proposal_source": "scf_import"
+      }
+    }
+  ]
+}
+```
+
+- `items` are ordered by round, newest first, then by project name.
+- `award_amount_usd` is a decimal string with two places.
+- `evidence` kinds: `site_domain`, `site_origin`, `enrollment_website` and
+  `onchain_id`; `verified` is true for a site whose domain the project proved
+  (5.8) and for every on-chain id, false for an enrollment website.
+- An `ambiguous` award lists its `candidates` (`[{"tenant", "evidence"}]`)
+  and, when one project holds several awards, the other awards in
+  `shared_with`.
+- `measured` and `cohort` are `null` unless the award is matched. Over the
+  range, `has_web_data` means primary-band page views (8.3), `has_api_data`
+  application requests (7.4), `has_onchain_data` operations of verified ids
+  (15.7); `measured` is any of the three, `last_activity` the latest day of
+  them.
+- `summary.total.measured` and the `measured` counts are the matched awards
+  whose project is measured.
+
+An `Import` holds the fields of `last_import`. The CSV columns are
+`award_id`, `project`, `round`, `category`, `program`, `award_date`,
+`award_amount_usd`, `tranche_percent`, `tranche_status`, `website_host`,
+`stellar_ids`, `match_state`, `tenant_id`, `tenant_slug`, `tenant_name`,
+`tenant_status`, `evidence` (`kind:value`, space separated),
+`candidate_tenant_ids`, `measured`, `has_web_data`, `has_api_data`,
+`has_onchain_data`, `sites`, `sites_verified`, `verified_onchain_ids`,
+`last_activity`, `cohort_state`, `confirmed_program`, `confirmed_round`,
+`confirmed_category`, `confirmed_award_date` and `proposal_source`; each
+export writes `export.csv` with target `operator:scf_awards`. The operator
+MCP tool `list_scf_awards` reads the list.
 
 ---
 
