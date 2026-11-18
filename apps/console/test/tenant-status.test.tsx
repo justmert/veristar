@@ -83,7 +83,7 @@ describe("tenant status banner (contract 5.10)", () => {
   it("lists removed projects from /api/me until dismissed", async () => {
     const me = f.meWithRemovedBody as Me;
     const host = await render(<RemovedNotices removed={me.removed_tenants} />);
-    expect(host.textContent).toContain("Old Project was removed by an operator");
+    expect(host.textContent).toContain("An operator removed Old Project");
     expect(host.textContent).toContain("Not a Stellar project");
     await click(byRole(host, "button", "Dismiss"));
     expect(host.textContent).toBe("");
