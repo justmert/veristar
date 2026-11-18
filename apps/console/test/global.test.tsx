@@ -262,6 +262,8 @@ describe("project list, web view", () => {
     );
     expect(header.closest("th")?.getAttribute("aria-sort")).toBe("descending");
 
+    // the sorted page has landed once its pager is back
+    await waitFor(() => expect(byRole(host, "button", "Load more")).toBeTruthy());
     await click(byRole(host, "button", "Load more"));
     await waitFor(() => expect(host.textContent).toContain("Anchor Hub"));
     expect(list().at(-1)?.url).toContain("cursor=cG9zOjI");
