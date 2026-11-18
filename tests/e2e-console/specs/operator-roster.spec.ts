@@ -102,8 +102,10 @@ test("the admin adds an operator who registers a first passkey", async ({ browse
   await registerGitHub(secondUser);
   const p = admin.page;
   await p.goto(`${APP}/operator/operators`);
+  // the header button opens the form above the roster
+  await p.getByRole("button", { name: "Add operator" }).click();
   // the closed action dialog has a reason field too, so the form is scoped
-  const add = p.locator("form").filter({ has: p.getByRole("button", { name: "Add operator" }) });
+  const add = p.getByRole("form", { name: "Add an operator" });
   await add.getByLabel("GitHub login").fill(secondUser.login);
   await add.getByLabel("Role").selectOption("operator");
   await add.getByLabel("Reason").fill("joins the review team");
