@@ -4,12 +4,11 @@ description: "How a project owner asks for erasure, what is erased, and how the 
 ---
 
 How a project owner erases web analytics data, what each kind of request
-deletes, and how the request is tracked. This page is not legal advice. Last
-updated 2026-11-17. The API contract is
-`docs/reference/control-plane-api.md` section 10; the
-> behaviour below is tested in `internal/controlplane/erasure/live_test.go`
-> against real PostgreSQL, NATS, Umami, the gateway's visitor code, the
-> replayer and the jobs follow-up.
+deletes, and how the request is tracked. The API contract is
+`docs/reference/control-plane-api.md` section 10. The behaviour below is
+tested in `internal/controlplane/erasure/live_test.go` against real
+PostgreSQL, NATS, Umami, the gateway's visitor code, the replayer and the
+jobs follow-up. This page is not legal advice. Last updated 2026-11-18.
 
 ## 1. What can be erased
 
