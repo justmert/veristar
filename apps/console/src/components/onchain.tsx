@@ -53,8 +53,15 @@ export function StrKey({ strkey, className }: { strkey: string; className?: stri
   );
 }
 
+// whether a strip has nothing to draw: no day with a count above zero.
+// a section can collapse its heading with it
+export function stripIsEmpty(points: { value: number | null }[]): boolean {
+  return points.every((p) => p.value === null || p.value === 0);
+}
+
 // one cell per utc day: a bar for a read day (a zero is a flat bar), a
-// dashed empty cell for a day without numbers, with its reason on hover
+// dashed empty cell for a day without numbers, with its reason on hover.
+// a strip without any day above zero draws nothing
 export function DayStrip({
   points,
   label,
@@ -65,6 +72,7 @@ export function DayStrip({
   // a day to annotate, such as the project's award date (contract 19.5)
   marker?: { day: string; label: string } | null;
 }) {
+  if (stripIsEmpty(points)) return null;
   const max = Math.max(1, ...points.map((p) => p.value ?? 0));
   return (
     <div role="img" aria-label={label} className="flex h-10 items-end gap-px">
@@ -103,11 +111,15 @@ export function DayStrip({
 // weekly active accounts by the scf growth hack definition: the distinct
 // accounts that initiated at least one operation involving the project's
 // verified accounts or contracts in an iso week (utc). a week without a
-// count shows the missing glyph and its reason, never a zero.
+// count shows the missing glyph, never a zero. the weeks are one row of
+// figures split by dividers, not boxes; without any counted week the list
+// draws nothing (see weeksAreEmpty)
+export function weeksAreEmpty(weeks: OnchainWeek[]): boolean {
+  return weeks.every((w) => w.active_accounts === null);
+}
+
 export function WeeklyActiveList({ weeks, label }: { weeks: OnchainWeek[]; label: string }) {
-  if (weeks.length === 0) {
-    return <p className="text-small text-fg-2">No complete ISO week in this range.</p>;
-  }
+  if (weeksAreEmpty(weeks)) return null;
   // when every week misses for the same reason, the reason shows once
   // under the weeks instead of in each of them
   const codes = new Set(
@@ -116,7 +128,10 @@ export function WeeklyActiveList({ weeks, label }: { weeks: OnchainWeek[]; label
   const shared = codes.size === 1 && !codes.has("") ? [...codes][0] : null;
   return (
     <div className="flex min-w-0 flex-col gap-2">
-      <ol aria-label={label} className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <ol
+        aria-label={label}
+        className="grid grid-cols-2 gap-y-3 sm:grid-cols-4 [&>li]:border-line-subtle [&>li:not(:nth-child(2n+1))]:border-l sm:[&>li]:border-l sm:[&>li:nth-child(4n+1)]:border-l-0"
+      >
         {weeks.map((w) => {
           const reason =
             w.active_accounts === null ? missingText(w.missing ?? "week_not_counted") : "";
@@ -124,7 +139,7 @@ export function WeeklyActiveList({ weeks, label }: { weeks: OnchainWeek[]; label
             <li
               key={w.week}
               data-week={w.week}
-              className="flex min-w-0 flex-col gap-1 rounded-md border border-line bg-sunken px-3 py-2"
+              className="flex min-w-0 flex-col gap-1 px-3 first:pl-0 max-sm:[&:nth-child(2n+1)]:pl-0 sm:[&:nth-child(4n+1)]:pl-0"
             >
               <span className="text-caption text-fg-2" title={w.week}>
                 {formatWeekOf(w.from)}

@@ -23,7 +23,9 @@ export const METRIC_LABEL: Record<WebMetric, string> = {
 const LINE: readonly WebMetric[] = ["bounce_rate", "avg_visit_duration"];
 
 // the one chart of the web numbers: per day from the daily totals, or per
-// hour for a single day. web and the overview draw the same chart.
+// hour for a single day. a longer range whose data all falls on one day
+// (a new project) is drawn per hour of that day too: one bar at the end of
+// 30 empty days says nothing. web and the overview draw the same chart.
 export function WebTrendChart({
   tenantId,
   q,
@@ -35,15 +37,25 @@ export function WebTrendChart({
   summary: WebSummary;
   metric: WebMetric;
 }) {
-  if (isSingleDay(q))
+  const only = isSingleDay(q) ? null : onlyDay(summary);
+  if (isSingleDay(q) || only)
     return (
       <HourChart
         tenantId={tenantId}
-        q={q}
+        q={only ? { ...q, from: only, to: only } : q}
         metric={metric === "visitors" ? "visitors" : "pageviews"}
+        day={only}
       />
     );
   return <DayChart summary={summary} metric={metric} />;
+}
+
+// the one day of a range that holds page views, when no other day of the
+// range or of the previous range does
+export function onlyDay(summary: WebSummary): string | null {
+  const withData = summary.current.series.filter((p) => (p.pageviews ?? 0) > 0);
+  const before = summary.previous.series.some((p) => (p.pageviews ?? 0) > 0);
+  return withData.length === 1 && !before ? (withData[0]?.day ?? null) : null;
 }
 
 function DayChart({ summary, metric }: { summary: WebSummary; metric: WebMetric }) {
@@ -90,10 +102,13 @@ function HourChart({
   tenantId,
   q,
   metric,
+  day = null,
 }: {
   tenantId: string;
   q: WebQuery;
   metric: "pageviews" | "visitors";
+  // the day a longer range narrowed to; its date goes in the title
+  day?: string | null;
 }) {
   const h = useQuery(webHourlyQuery(tenantId, q.from, q.site, q.band));
   const points = h.data?.points ?? [];
@@ -113,7 +128,7 @@ function HourChart({
   return (
     <TimeChart
       key={state}
-      title={`${label === "Unique visitors" ? "Visitors" : label} per hour`}
+      title={`${label === "Unique visitors" ? "Visitors" : label} per hour${day ? `, ${formatDate(day)}` : ""}`}
       buckets={buckets}
       series={[{ key: metric, label, tone: "series-1", values: points.map((p) => p[metric]) }]}
       state={state}

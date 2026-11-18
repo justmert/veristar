@@ -48,32 +48,40 @@ test("a member makes an access key on the AI page, uses it and revokes it", asyn
   await expect(page.getByRole("link", { name: "AI assistants" }).first()).toBeVisible();
   await expect(page.getByText(`${APP}/mcp`).first()).toBeVisible();
 
-  // field rules before anything is sent
+  // the header's Create key opens the dialog; field rules before anything
+  // is sent
   await page.getByRole("button", { name: "Create key" }).click();
-  await expect(page.getByText("Enter a name.")).toBeVisible();
+  const form = page.getByRole("dialog", { name: "Create an access key" });
+  await form.getByRole("button", { name: "Create key" }).click();
+  await expect(form.getByText("Enter a name.")).toBeVisible();
 
-  await page.getByLabel("Name").fill("e2e laptop");
-  await page.getByRole("button", { name: "Create key" }).click();
-  // the one-time secret is masked until it is revealed
-  const shown = page.getByRole("region", { name: "New secret" });
+  await form.getByLabel("Name").fill("e2e laptop");
+  await form.getByRole("button", { name: "Create key" }).click();
+  // the one-time secret replaces the form in the same dialog, masked until
+  // it is revealed
+  const dialog = page.getByRole("dialog", { name: "Copy your new key" });
+  const shown = dialog.getByRole("region", { name: "New secret" });
   await expect(shown).toBeVisible();
   await shown.getByRole("button", { name: "Show the secret" }).click();
   // the masked text crossfades out before the key fades in
-  await expect(shown.locator("code")).toHaveText(/^sa_mcp_[0-9A-Za-z]{40}$/);
-  const key = (await shown.locator("code").textContent())?.trim() ?? "";
+  const secret = shown.locator("code").first();
+  await expect(secret).toHaveText(/^sa_mcp_[0-9A-Za-z]{40}$/);
+  const key = (await secret.textContent())?.trim() ?? "";
   expect(key).toMatch(/^sa_mcp_[0-9A-Za-z]{40}$/);
-  // the snippets now hold the key
-  await page.getByRole("tab", { name: "Claude Code" }).click();
+  // the commands are written for the key: on screen its start, the copy
+  // holds it whole
   await expect(
-    page.locator("pre").filter({ hasText: "claude mcp add --transport http veristar" }).first(),
-  ).toContainText(key);
-  await page.getByRole("tab", { name: "Cursor" }).click();
-  await expect(page.locator("pre").filter({ hasText: "mcpServers" })).toContainText(key);
+    dialog.locator("pre").filter({ hasText: "claude mcp add --transport http veristar" }),
+  ).toContainText(key.slice(0, 11));
+  await dialog.getByRole("tab", { name: "Cursor" }).click();
+  await expect(dialog.locator("pre").filter({ hasText: "mcpServers" })).toContainText(
+    key.slice(0, 11),
+  );
   // done stays disabled until the person says the key is stored
-  await expect(shown.getByRole("button", { name: "Done" })).toBeDisabled();
+  await expect(dialog.getByRole("button", { name: "Done" })).toBeDisabled();
   await shown.getByRole("checkbox").check();
-  await shown.getByRole("button", { name: "Done" }).click();
-  await expect(shown).toHaveCount(0);
+  await dialog.getByRole("button", { name: "Done" }).click();
+  await expect(dialog).toHaveCount(0);
 
   // the list shows the prefix, never the key
   const row = page
@@ -94,8 +102,9 @@ test("a member makes an access key on the AI page, uses it and revokes it", asyn
   await page.reload();
   await expect(row).not.toContainText("Not used yet");
 
-  // revoke: the next request is refused
-  await row.getByRole("button", { name: "Revoke" }).click();
+  // revoke, from the row menu: the next request is refused
+  await row.getByRole("button", { name: /^Actions for / }).click();
+  await page.getByRole("menuitem", { name: "Revoke" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Revoke" }).click();
   await expect(row).toContainText("Revoked");
   await expect(row).toContainText("revoked in the console");
@@ -225,7 +234,8 @@ test("a connector is approved on the consent page after a github sign-in", async
     .getByRole("row")
     .filter({ hasText: "E2E connector" });
   await expect(row).toContainText("Active");
-  await row.getByRole("button", { name: "Revoke" }).click();
+  await row.getByRole("button", { name: /^Actions for / }).click();
+  await page.getByRole("menuitem", { name: "Revoke" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Revoke" }).click();
   await expect(row).toContainText("Revoked");
   expect((await mcp(ctx, tokens.access_token, "tools/list")).status).toBe(401);

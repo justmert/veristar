@@ -7,7 +7,7 @@ import * as f from "./fixtures/contract";
 import { click, renderRoutes, waitFor } from "./helpers";
 
 // answers by url, so the shell's parallel reads need no fixed order
-function serve(me: unknown, alerts: unknown[] = []) {
+function serve(me: unknown, alerts: unknown[] = [], roster: unknown = f.adminRosterBody) {
   const urls: string[] = [];
   vi.stubGlobal(
     "fetch",
@@ -22,6 +22,7 @@ function serve(me: unknown, alerts: unknown[] = []) {
       if (input.startsWith(`/api/tenants/${f.TENANT_ID}`)) return json(200, f.tenantBody);
       if (input.startsWith("/api/tenants/")) return json(404, f.errorBody("not_found"));
       if (input === "/api/operator/step-up") return json(200, f.steppedUpBody);
+      if (input === "/api/operator/roster") return json(200, roster);
       if (input === "/api/operator/alerts")
         return json(200, {
           checked_at: "2026-11-13T12:00:05Z",
@@ -154,33 +155,55 @@ describe("console shell", () => {
     expect(host.textContent).toContain("Choose a project");
   });
 
-  it("shows the alert note on operator pages while a paging alert fires", async () => {
+  it("signals firing alerts by the Alerts badge only, for an operator admin", async () => {
     serve(f.operatorMeBody, [critical]);
     const host = await renderRoutes(routes, "/operator/projects");
-    await waitFor(() => expect(host.textContent).toContain("1 critical alert is firing."));
-    const open = [...host.querySelectorAll("a")].find((a) => a.textContent === "Open alerts");
-    expect(open?.getAttribute("href")).toBe("/operator/alerts");
-    expect(current(host)).toEqual(["All projects"]);
-    // the badges on Review and Alerts
-    const alerts = [...host.querySelectorAll("aside a")].find((a) =>
-      a.textContent?.startsWith("Alerts"),
-    );
-    await waitFor(() => expect(alerts?.textContent).toBe("Alerts11 critical alert firing"));
+    await waitFor(() => expect(current(host)).toEqual(["All projects"]));
+    // the badge counts every alert the Alerts page lists
+    await waitFor(() => {
+      const alerts = [...host.querySelectorAll("aside a")].find((a) =>
+        a.textContent?.startsWith("Alerts"),
+      );
+      expect(alerts?.textContent).toBe("Alerts11 alert firing");
+    });
     const review = [...host.querySelectorAll("aside a")].find((a) =>
       a.textContent?.startsWith("Review"),
     );
     await waitFor(() => expect(review?.textContent).toBe("Review11 project waits for review"));
-    // operators do not work inside one project, so there is no switcher here
-    expect(host.querySelector("aside")?.textContent).not.toContain("Choose a project");
+    // nothing above the page title
+    expect(host.querySelector('[role="alert"]')).toBeNull();
+    // the switcher names the operator area; no project pages show here
+    expect(host.querySelector("aside")?.textContent).toContain("Operator area");
+    expect(host.querySelector('aside nav[aria-label="Project"]')).toBeNull();
+  });
+
+  it("hides Alerts from an operator who is not an admin", async () => {
+    const urls = serve(f.operatorMeBody, [critical], {
+      items: [{ ...f.adminRosterBody.items[0], role: "operator" }],
+    });
+    const host = await renderRoutes(routes, "/operator/projects");
+    await waitFor(() => expect(current(host)).toEqual(["All projects"]));
+    await waitFor(() => expect(urls).toContain("/api/operator/roster"));
+    const nav = host.querySelector('aside nav[aria-label="Operator"]') as HTMLElement;
+    expect(nav.textContent).toContain("Review");
+    expect(nav.textContent).not.toContain("Alerts");
+    expect(urls).not.toContain("/api/operator/alerts");
+  });
+
+  it("shows one context at a time to an operator who is also a member", async () => {
+    serve({ ...f.operatorMeBody, tenants: f.meBody.tenants });
+    const host = await renderRoutes(routes, `/projects/${f.TENANT_ID}/web`);
+    await waitFor(() => expect(current(host)).toEqual(["Web"]));
+    expect(host.querySelector('aside nav[aria-label="Project"]')).not.toBeNull();
+    expect(host.querySelector('nav[aria-label="Operator"]')).toBeNull();
   });
 
   it("reads no operator data outside the operator area", async () => {
     const urls = serve(f.operatorMeBody, [critical]);
     const host = await renderRoutes(routes, "/account");
     await waitFor(() => expect(host.textContent).toContain("page body"));
-    expect(host.querySelector('nav[aria-label="Operator"]')).not.toBeNull();
+    expect(host.querySelector('nav[aria-label="Operator"]')).toBeNull();
     expect(urls.filter((u) => u.startsWith("/api/operator"))).toEqual([]);
-    expect(host.textContent).not.toContain("critical alert");
   });
 
   it("opens the command palette with ctrl k and goes to a page", async () => {

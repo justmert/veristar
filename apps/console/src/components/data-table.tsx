@@ -3,6 +3,7 @@ import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight } from "luci
 import { type ReactNode, useLayoutEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { Disclosure } from "@/components/disclosure";
+import { type RowAction, RowMenu } from "@/components/row-menu";
 import { EmptyState, ErrorState } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -24,6 +25,9 @@ import { formatCount, truncateMiddle } from "@/lib/format";
 export type Column<Row> = {
   key: string;
   header: string;
+  // the header is read by assistive technology but not drawn (the column
+  // of row actions)
+  hideHeader?: boolean;
   // what the column counts, in one or two sentences: a tooltip on the
   // header (hover and keyboard focus), so the table carries its own
   // definitions instead of paragraphs under it
@@ -69,9 +73,12 @@ export type Sort = { key: string; order: "asc" | "desc" };
 // the rows of the current page and the pager footer. the page stays inside
 // the list when it shrinks, and goes back to the first when `resetKey` (the
 // search text) changes
+// the page size of every table
+export const PAGE_SIZE = 25;
+
 export function useRowPages<Row>(
   rows: Row[],
-  pageSize = 10,
+  pageSize = PAGE_SIZE,
   resetKey = "",
 ): { rows: Row[]; footer: TableFooter | undefined } {
   const [state, setState] = useState({ page: 0, key: resetKey });
@@ -110,6 +117,10 @@ export function DataTable<Row>({
   footer,
   selection,
   loadingRows = 5,
+  rowActions,
+  rowNext,
+  pageSize = PAGE_SIZE,
+  pageResetKey = "",
   className,
 }: {
   // the accessible name of the table and its scroll region
@@ -136,8 +147,42 @@ export function DataTable<Row>({
     disabled?: (row: Row) => boolean;
   };
   loadingRows?: number;
+  // a row's secondary and destructive actions, in its "..." menu (the last
+  // column). see RowMenu
+  rowActions?: (row: Row) => (RowAction | null | false | undefined)[];
+  // the one inline action a row may show: its primary next step, as a text
+  // link before the menu ("Continue setup"). null when the row has none
+  rowNext?: (row: Row) => { label: string; to: string } | null;
+  // a table without its own footer pages its rows at this size
+  pageSize?: number;
+  // the page goes back to the first when this changes (the search text)
+  pageResetKey?: string;
   className?: string;
 }) {
+  const paged = useRowPages(rows, pageSize, pageResetKey);
+  if (!footer) {
+    rows = paged.rows;
+    footer = paged.footer;
+  }
+  if (rowActions || rowNext)
+    columns = [
+      ...columns,
+      {
+        key: "_row-actions",
+        header: "Actions",
+        hideHeader: true,
+        action: true,
+        align: "right",
+        className: "w-px whitespace-nowrap",
+        cell: (r) => (
+          <RowEnd
+            name={rowLabel?.(r) ?? getRowKey(r)}
+            next={rowNext?.(r) ?? null}
+            actions={rowActions?.(r) ?? []}
+          />
+        ),
+      },
+    ];
   const primary = columns.find((c) => c.primary) ?? columns[0];
   const span = columns.length + (selection ? 1 : 0);
   const name = (r: Row) => rowLabel?.(r) ?? getRowKey(r);
@@ -424,7 +469,9 @@ function HeaderCell<Row>({
   const active = c.sortKey !== undefined && sort?.key === c.sortKey;
   const ariaSort = active ? (sort?.order === "asc" ? "ascending" : "descending") : undefined;
   const right = c.align === "right";
-  const label = c.definition ? (
+  const label = c.hideHeader ? (
+    <span className="sr-only">{c.header}</span>
+  ) : c.definition ? (
     <span className="underline decoration-line-strong decoration-dotted underline-offset-4">
       {c.header}
     </span>
@@ -761,6 +808,31 @@ function PhoneCard<Row>({
         ) : null}
       </div>
     </li>
+  );
+}
+
+// the end of a row: the next step as a text link, then the menu
+function RowEnd({
+  name,
+  next,
+  actions,
+}: {
+  name: string;
+  next: { label: string; to: string } | null;
+  actions: (RowAction | null | false | undefined)[];
+}) {
+  return (
+    <span className="inline-flex items-center justify-end gap-2">
+      {next ? (
+        <Link
+          to={next.to}
+          className="rounded-sm text-small font-medium whitespace-nowrap text-fg underline decoration-line-strong underline-offset-4 hover:decoration-fg focus-ring"
+        >
+          {next.label}
+        </Link>
+      ) : null}
+      <RowMenu name={name} actions={actions} />
+    </span>
   );
 }
 

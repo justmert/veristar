@@ -467,7 +467,8 @@ describe("the public report page (contract 20.5)", () => {
     expect(host.querySelector("footer")?.textContent).toContain("Route rules2");
     expect(host.textContent).toContain("4,321");
     expect(host.textContent).toContain("Grade A");
-    expect(host.textContent).toContain("+116%");
+    // the figures lead, each with its change
+    expect(host.querySelector("[data-hero=visitors]")?.textContent).toContain("+116%");
     expect(host.textContent).toContain("P75");
     expect(byRole(host, "button", "Download JSON")).toBeTruthy();
     expect(host.textContent).not.toContain(EM_DASH);
@@ -487,14 +488,16 @@ describe("the public report page (contract 20.5)", () => {
     expect(host.textContent).toContain("1, 2");
     // the members version 2 adds are shown
     expect(host.textContent).toContain("About 10% of visits are not measured");
-    expect(host.textContent).toContain("No API traffic was recorded in this period.");
-    expect(host.textContent).toContain("Infrastructure requests12");
+    // a part with no data is left out, not listed as zeros and dashes
+    expect(host.querySelector('section[aria-label="API"]')).toBeNull();
+    expect(host.querySelector("[data-hero=requests]")).toBeNull();
     expect(host.textContent).toContain("15 a week on average over 2 weeks, 2 missing");
+    // a cohort of three keeps its percentiles back: no column of dashes
     expect(host.textContent).not.toContain("P75");
-    expect(host.querySelector("tr[data-kpi=visitors] [data-missing]")).not.toBeNull();
-    expect(host.querySelector("[data-testid=percentile-hidden]")?.textContent).toContain(
-      "This cohort has 3 projects",
+    expect([...host.querySelectorAll("th")].some((th) => th.textContent === "Percentile")).toBe(
+      false,
     );
+    expect(host.querySelector("[data-missing]")).toBeNull();
   });
 
   it("reads a version 3 report with the calls per contract function", async () => {
@@ -596,6 +599,7 @@ describe("the reports page (contract 20.3 and 20.4)", () => {
       `/projects/${c.TENANT_ID}/scf`,
     );
     await waitFor(() => expect(host.textContent).toContain("3 views"));
+    await click(byRole(host, "button", "Sign a report"));
 
     // the last days before today are not final yet
     for (const back of [0, 1, 3]) {
@@ -609,13 +613,15 @@ describe("the reports page (contract 20.3 and 20.4)", () => {
     await type(byLabel(host, "From") as HTMLInputElement, "2026-10-01");
     await type(byLabel(host, "To") as HTMLInputElement, "2026-10-31");
     await click(byRole(host, "button", "Generate and sign"));
-    await waitFor(() => expect(host.textContent).toContain("Report generated"));
-    expect(host.querySelector("[role=status] a")?.getAttribute("href")).toBe(summary.url);
+    // the link shows in the same dialog that signed it
+    await waitFor(() => expect(host.textContent).toContain("Report signed"));
+    expect(host.querySelector("dialog [role=status] a")?.getAttribute("href")).toBe(summary.url);
     expect(calls.find((x) => x.method === "POST")?.body).toEqual({
       from: "2026-10-01",
       to: "2026-10-31",
     });
     expect(calls.find((x) => x.method === "POST")?.url).toBe(`/api/tenants/${c.TENANT_ID}/reports`);
+    await click(byRole(host, "button", "Done"));
 
     // one main action per row; the rest is in a menu named for its report
     const row = host.querySelector(`[data-report="${summary.id}"]`) as HTMLElement;
@@ -651,6 +657,7 @@ describe("the reports page (contract 20.3 and 20.4)", () => {
       projectRoutes(<SignedReports />, "scf"),
       `/projects/${c.TENANT_ID}/scf`,
     );
+    await click(byRole(host, "button", "Sign a report"));
     await type(byLabel(host, "From") as HTMLInputElement, "2026-10-01");
     await type(byLabel(host, "To") as HTMLInputElement, "2026-10-31");
     await click(byRole(host, "button", "Generate and sign"));
@@ -760,18 +767,23 @@ describe("scf review with cohorts (contract 19.3)", () => {
       projectRoutes(<ScfReviewPage />, "scf"),
       `/projects/${c.TENANT_ID}/scf`,
     );
-    await waitFor(() => expect(host.textContent).toContain("Change and place in the cohort"));
-    expect(host.querySelector("[data-testid=cohort-population]")?.textContent).toContain(
-      "the projects confirmed in Build Award, SCF #38: 4 projects, active or suspended",
+    await waitFor(() => expect(host.querySelector("[data-testid=verdict]")).not.toBeNull());
+    // the verdict: the cohort, the rule met and the key numbers with change
+    const verdict = host.querySelector("[data-testid=verdict]");
+    expect(verdict?.querySelector("[data-cohort]")?.textContent).toContain("4 projects");
+    expect(verdict?.querySelector(`[data-rule-met="${rule.id}"]`)).not.toBeNull();
+    expect(verdict?.querySelector("[data-key-number=visitors]")?.textContent).toContain("+100%");
+    expect(host.querySelector("[data-testid=cohort-population]")?.textContent).toBe(
+      "Build Award, SCF #38 · 4 projects",
     );
     const visitors = host.querySelector("tr[data-kpi=visitors]");
     expect(visitors?.textContent).toContain("+100%");
-    // a cohort of four is too small for a percentile, and the page says why
+    // a cohort of four is too small for a percentile: no column of dashes
     expect(visitors?.textContent).not.toContain("P75");
-    expect(visitors?.querySelector("[data-missing]")?.textContent).toContain(
-      "Fewer than 5 projects in the cohort",
+    expect(host.querySelector("[data-percentile]")).toBeNull();
+    expect([...host.querySelectorAll("th")].some((th) => th.textContent === "Percentile")).toBe(
+      false,
     );
-    expect(host.querySelector("[data-testid=percentile-hidden]")).not.toBeNull();
     expect(host.querySelector("tr[data-kpi=error_rate]")?.textContent).toContain("-0.1 pp");
     expect(host.querySelector(`[data-rule="${rule.id}"]`)?.textContent).toContain(
       "Oct 2026: 4 qualifying days",

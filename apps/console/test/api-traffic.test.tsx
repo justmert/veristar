@@ -25,7 +25,14 @@ import {
   validateCustomEnd,
   writeState,
 } from "@/lib/api-metrics";
-import { ApiPage, plotLatency, rateTone, sparkValues, standouts } from "@/pages/project/api";
+import {
+  ApiPage,
+  lastDayOnly,
+  plotLatency,
+  rateTone,
+  sparkValues,
+  standouts,
+} from "@/pages/project/api";
 import * as f from "./fixtures/contract";
 import { byLabel, click, renderRoutes, type, waitFor } from "./helpers";
 
@@ -572,5 +579,23 @@ describe("api traffic page", () => {
       ">10 s",
     ]);
     expect(cells(rows[0])).toEqual(["Nov 11, 2026, 10:00 UTC", "–", "–", "–"]);
+  });
+});
+
+describe("a sparse range of days", () => {
+  const point = (at: string, requests: number) =>
+    ({ at, requests }) as unknown as Parameters<typeof lastDayOnly>[0][number];
+  const range = (resolution: "day" | "hour") =>
+    ({ resolution }) as unknown as Parameters<typeof lastDayOnly>[1];
+  it("narrows to hours only when the last day alone has requests", () => {
+    const days = [point("2026-11-16T00:00:00Z", 0), point("2026-11-17T00:00:00Z", 0)];
+    expect(lastDayOnly([...days, point("2026-11-18T00:00:00Z", 5)], range("day"))).toBe(true);
+    expect(
+      lastDayOnly(
+        [point("2026-11-16T00:00:00Z", 1), point("2026-11-17T00:00:00Z", 5)],
+        range("day"),
+      ),
+    ).toBe(false);
+    expect(lastDayOnly([...days, point("2026-11-18T00:00:00Z", 5)], range("hour"))).toBe(false);
   });
 });

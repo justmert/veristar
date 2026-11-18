@@ -3,7 +3,6 @@
 // session and the step-up load, and a page draws the same skeleton while its
 // own data loads, so nothing moves when the page lands.
 
-import { ALERTS_REFRESH_MS } from "@/api/queries";
 import { PageHeader } from "@/components/page-header";
 import { LoadingState, Skeleton } from "@/components/states";
 import { Skeleton as Bone } from "@/components/ui/skeleton";
@@ -64,15 +63,11 @@ export function AlertsSkeleton() {
   );
 }
 
-// the create form above the list of keys
+// the list of keys (the create form opens in a dialog)
 export function KeysSkeleton() {
   return (
     <LoadingState label="Loading the keys">
-      <Bone aria-hidden className="h-72 w-full rounded-lg" />
-      <div className="flex flex-col gap-3">
-        <Bone aria-hidden className="h-5 w-48" />
-        <Skeleton.Table rows={3} columns={6} />
-      </div>
+      <Skeleton.Table rows={3} columns={6} />
     </LoadingState>
   );
 }
@@ -126,67 +121,21 @@ function ListSkeleton() {
 
 type Frame = {
   title: string;
-  description?: string;
-  // the header has a freshness line, so its height is kept
-  fresh?: boolean;
   body: () => React.ReactNode;
 };
 
-// the header of each operator page, as the page itself draws it
+// the header of each operator page, as the page itself draws it: the title
+// alone (the freshness slot keeps its height on every page)
 const FRAMES: Record<string, Frame> = {
-  "": {
-    title: "Review",
-    description: "Projects that wait for a decision, oldest first.",
-    fresh: true,
-    body: ReviewSkeleton,
-  },
-  alerts: {
-    title: "Alerts",
-    description: `Alerts that fire now. The page checks again every ${ALERTS_REFRESH_MS / 1000} seconds.`,
-    body: AlertsSkeleton,
-  },
-  projects: {
-    title: "All projects",
-    description: "Every enrolled project with its status, web numbers and API numbers.",
-    fresh: true,
-    body: ProjectsSkeleton,
-  },
-  compare: {
-    title: "Compare",
-    description: "Up to 5 projects side by side, from their daily totals.",
-    fresh: true,
-    body: CompareSkeleton,
-  },
-  rules: {
-    title: "Rules",
-    description:
-      "Save a traction rule once. See the projects that meet it, with the days that qualify them.",
-    body: ListSkeleton,
-  },
-  settings: {
-    title: "Settings",
-    description:
-      "Settings for every project. Each change asks for a confirmation and goes to the audit log.",
-    body: FormSkeleton,
-  },
-  operators: {
-    title: "Operators",
-    description:
-      "The people with access to the operator area. Operator admins add, suspend and remove operators.",
-    body: FormSkeleton,
-  },
-  keys: {
-    title: "Access keys",
-    description:
-      "Read-only keys for machines and AI assistants. A key reads daily totals and changes nothing.",
-    body: KeysSkeleton,
-  },
-  audit: {
-    title: "Audit log",
-    description: "Every action of an operator, a project member or the system. Newest first.",
-    fresh: true,
-    body: ListSkeleton,
-  },
+  "": { title: "Review", body: ReviewSkeleton },
+  alerts: { title: "Alerts", body: AlertsSkeleton },
+  projects: { title: "All projects", body: ProjectsSkeleton },
+  compare: { title: "Compare", body: CompareSkeleton },
+  rules: { title: "Rules", body: ListSkeleton },
+  settings: { title: "Settings", body: FormSkeleton },
+  operators: { title: "Operators", body: FormSkeleton },
+  keys: { title: "Access keys", body: KeysSkeleton },
+  audit: { title: "Audit log", body: ListSkeleton },
 };
 
 // the page while the operator area loads: its own title line and skeleton.
@@ -200,11 +149,7 @@ export function OperatorPagePending({ rest }: { rest: string }) {
   const Body = frame.body;
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <PageHeader
-        title={frame.title}
-        description={frame.description}
-        freshness={frame.fresh ? null : undefined}
-      />
+      <PageHeader title={frame.title} />
       <Body />
     </div>
   );

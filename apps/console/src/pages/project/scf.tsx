@@ -5,28 +5,31 @@
 // the rules met, the figures, and the reports.
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Ban, Download, ExternalLink, FileSignature, MoreHorizontal } from "lucide-react";
+import { cn } from "@veristar/brand/cn";
+import { Ban, Check, Download, ExternalLink, FileSignature, MoreHorizontal } from "lucide-react";
 import { type FormEvent, type ReactNode, useState } from "react";
 import type { Kpi, KpiKey } from "@/api/cohorts";
 import { exportPaths, type SCFView, scfViewQuery } from "@/api/onchain";
 import { integrityQuery, sitesQuery } from "@/api/queries";
 import { type ReportSummary, reportApi, reportKeysOf, reportsQuery } from "@/api/reports";
-import type { TenantStatus } from "@/api/schemas";
+import type { IntegrityGrade } from "@/api/schemas";
 import { OwnCohortPanel, percentileHiddenReason } from "@/components/cohort";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { CopyButton } from "@/components/copy-button";
 import { type Column, DataTable } from "@/components/data-table";
+import { Disclosure } from "@/components/disclosure";
 import { FormMessage } from "@/components/error-panel";
-import { dayCountsText, gradeMeaning, IntegrityPanel } from "@/components/integrity";
+import { GradeBadge, IntegrityPanel } from "@/components/integrity";
 import { DayStrip } from "@/components/onchain";
 import { FunctionsTable, functionsDaysText } from "@/components/onchain-functions";
 import { PageHeader } from "@/components/page-header";
 import { DateField } from "@/components/range-control";
+import { Sparkline, StatCard, type StatChange } from "@/components/stat-card";
 import { EmptyState, ErrorState, LoadingState, Missing, Skeleton } from "@/components/states";
 import { Pill } from "@/components/status";
-import { StatusBadge } from "@/components/status-badge";
 import { toast } from "@/components/toast";
 import { Button } from "@/components/ui/button";
+import { Dialog } from "@/components/ui/dialog";
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
 import { Tooltip } from "@/components/ui/tooltip";
 import { errorMessage } from "@/lib/errors";
@@ -45,13 +48,7 @@ import {
   formatTick,
   OPEN_BUCKET,
 } from "@/lib/format";
-import {
-  chainGap,
-  DAYS_WITHOUT_DATA,
-  NO_VERIFIED_IDS,
-  shortKey,
-  weeklyActiveText,
-} from "@/lib/onchain";
+import { chainGap, DAYS_WITHOUT_DATA, shortKey, weeklyActiveText } from "@/lib/onchain";
 import {
   closedDays,
   downloadFile,
@@ -68,14 +65,17 @@ export function ScfReviewPage() {
   const { tenant, isOwner } = useProject();
   const q = useQuery(scfViewQuery(tenant.id, RANGE));
   const v = q.data;
+  const [signing, setSigning] = useState(false);
 
   const header = (
     <PageHeader
       title={PAGE_HEADERS.scf.title}
-      description={
-        v
-          ? `What SCF reviewers see about your project for ${formatDateRange(v.from, v.to)}, UTC. They read the same figures.`
-          : PAGE_HEADERS.scf.description
+      description={v ? `${formatDateRange(v.from, v.to)}, UTC` : undefined}
+      primary={
+        <Button onClick={() => setSigning(true)}>
+          <FileSignature aria-hidden />
+          Sign a report
+        </Button>
       }
       secondary={
         v ? (
@@ -100,17 +100,20 @@ export function ScfReviewPage() {
         onRetry={() => q.refetch()}
       />
     );
+  else if (!v.in_operator_views)
+    body = (
+      <>
+        <EmptyState title="Not in the SCF views">
+          This project is internal to the platform. SCF reviewers do not see it.
+        </EmptyState>
+        <OwnCohortPanel tenantId={tenant.id} record={v.cohort} isOwner={isOwner} />
+      </>
+    );
   else
     body = (
       <>
-        <Standing v={v} tenantId={tenant.id} isOwner={isOwner} />
-        {v.in_operator_views ? (
-          <>
-            <IntegritySection v={v} />
-            <RulesMet v={v} />
-            <Figures v={v} />
-          </>
-        ) : null}
+        <Verdict v={v} tenantId={tenant.id} />
+        <OnDemand v={v} tenantId={tenant.id} isOwner={isOwner} />
       </>
     );
 
@@ -118,67 +121,225 @@ export function ScfReviewPage() {
     <div className="flex min-w-0 flex-col gap-8">
       {header}
       {body}
-      <SignedReports />
+      <SignedReports open={signing} onOpenChange={setSigning} />
     </div>
   );
 }
 
-// ---- standing: grade, cohort, change and place in the cohort
+// ---- the verdict: the grade and what lowered it, the cohort, and the
+// three numbers that carry the project, each with its change
 
-function Standing({ v, tenantId, isOwner }: { v: SCFView; tenantId: string; isOwner: boolean }) {
+type KeyNumber = {
+  key: KpiKey;
+  label: string;
+  value: number;
+  change: number | null;
+  percentile: number | null;
+  spark: number[];
+};
+
+const KEY_ORDER: { key: KpiKey; label: string }[] = [
+  { key: "visitors", label: "Visitors" },
+  { key: "requests", label: "API requests" },
+  { key: "onchain_operations", label: "On-chain operations" },
+  { key: "pageviews", label: "Page views" },
+];
+
+// the first three counts the project has data for, in the order a funder
+// reads them; a count of zero or one not measured is left out, not dashed
+export function keyNumbers(v: SCFView): KeyNumber[] {
+  const chainOk = v.onchain !== null && chainGap(v.onchain.ids_verified, v.onchain_series) === null;
+  const own: Record<string, number | null> = {
+    visitors: v.web?.visitors ?? null,
+    pageviews: v.web?.pageviews ?? null,
+    requests: v.api?.requests ?? null,
+    onchain_operations: chainOk ? (v.onchain?.operations ?? null) : null,
+  };
+  const spark: Record<string, number[]> = {
+    visitors: v.web_series.map((p) => p.visitors ?? 0),
+    pageviews: v.web_series.map((p) => p.pageviews ?? 0),
+    requests: v.api_series.map((p) => p.requests),
+    onchain_operations: v.onchain_series.map((p) => p.operations ?? 0),
+  };
+  const out: KeyNumber[] = [];
+  for (const k of KEY_ORDER) {
+    if (k.key === "onchain_operations" && !chainOk) continue;
+    const kpi = v.comparison?.kpis[k.key];
+    const value = kpi?.value ?? own[k.key] ?? null;
+    if (value === null || value <= 0) continue;
+    out.push({
+      ...k,
+      value,
+      change: kpi?.change ?? null,
+      percentile: kpi?.percentile ?? null,
+      spark: spark[k.key] ?? [],
+    });
+    if (out.length === 3) break;
+  }
+  return out;
+}
+
+function changeOf(r: number | null): StatChange | null {
+  if (r === null) return null;
+  const direction = r > 0.0005 ? "up" : r < -0.0005 ? "down" : "flat";
+  return {
+    text: formatChange(r),
+    direction,
+    good: direction === "flat" ? null : direction === "up",
+    period: "previous range",
+  };
+}
+
+// a spark only when it has a shape
+function shaped(values: number[]): number[] | null {
+  if (values.length < 2) return null;
+  return Math.max(...values) === Math.min(...values) ? null : values;
+}
+
+function Verdict({ v, tenantId }: { v: SCFView; tenantId: string }) {
+  const keys = keyNumbers(v);
+  const c = v.comparison;
+  const hidden = c ? percentileHiddenReason(c.cohort_size) : null;
+  const cohort = v.cohort.confirmed;
+  const graded = v.integrity && (v.sites?.sites ?? 0) > 0;
   return (
-    <section aria-label="Standing" className="flex min-w-0 flex-col gap-4">
-      <h2 className="text-section text-fg">Standing</h2>
-      {v.in_operator_views ? (
-        <div className="grid min-w-0 gap-3 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]">
-          <GradeCard v={v} />
-          <OwnCohortPanel tenantId={tenantId} record={v.cohort} isOwner={isOwner} />
+    <section aria-label="Standing" data-testid="verdict" className="flex min-w-0 flex-col gap-3">
+      {cohort || v.rules_met.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-small">
+          {cohort ? (
+            <span className="flex flex-wrap items-baseline gap-x-2" data-cohort="">
+              <span className="text-fg">
+                {[cohort.program, cohort.round, cohort.category].filter(Boolean).join(", ")}
+              </span>
+              {c ? (
+                <span className="text-fg-2 tabular">{countOf(c.cohort_size, "project")}</span>
+              ) : null}
+            </span>
+          ) : null}
+          {v.rules_met.map(({ rule }) => (
+            <span key={rule.id} data-rule-met={rule.id}>
+              <Pill tone="success">
+                <Check aria-hidden className="size-3" />
+                {rule.name}
+              </Pill>
+            </span>
+          ))}
         </div>
-      ) : (
-        <>
-          <EmptyState title="Not in the SCF views">
-            This project is internal to the platform. SCF reviewers do not see it.
-          </EmptyState>
-          <OwnCohortPanel tenantId={tenantId} record={v.cohort} isOwner={isOwner} />
-        </>
-      )}
-      {v.in_operator_views ? <CohortPlace v={v} /> : null}
+      ) : null}
+      <div className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {graded ? <GradeCard v={v} tenantId={tenantId} /> : null}
+        {keys.map((k) => (
+          <StatCard
+            key={k.key}
+            data-key-number={k.key}
+            label={k.label}
+            value={k.value}
+            change={changeOf(k.change)}
+            spark={
+              shaped(k.spark) ? (
+                <Sparkline values={shaped(k.spark) as number[]} label={`${k.label} per day`} />
+              ) : undefined
+            }
+            footer={
+              !hidden && k.percentile !== null ? (
+                <span className="text-caption text-fg-2 tabular" data-percentile="">
+                  {formatCohortPercentile(k.percentile)} in cohort
+                </span>
+              ) : null
+            }
+          />
+        ))}
+      </div>
     </section>
   );
 }
 
-// the grade of the project's row for the range: the word and colour of the
-// shared badge, what it means, and the days behind it
-function GradeCard({ v }: { v: SCFView }) {
+const GRADE_TONE: Record<IntegrityGrade, string> = {
+  A: "text-success",
+  B: "text-warning",
+  C: "text-critical",
+};
+
+// the grade as the focal number, and under it the reasons that lowered
+// it, each with its days; a grade nothing lowered shows its day counts
+function GradeCard({ v, tenantId }: { v: SCFView; tenantId: string }) {
   const g = v.integrity;
-  const sites = v.sites?.sites ?? null;
+  const report = useQuery(integrityQuery("tenant", tenantId, { from: v.from, to: v.to }));
+  const reasons = report.data?.reasons.filter((r) => r.level !== "none") ?? [];
+  if (!g) return null;
   return (
     <div
       data-testid="standing-grade"
-      className="flex min-w-0 flex-col gap-3 rounded-lg border border-line bg-raised p-4 sm:p-5"
+      className="flex min-w-0 flex-col gap-2 rounded-lg border border-line bg-raised p-4"
     >
-      <h3 className="text-caption text-fg-2">Integrity grade</h3>
-      {g ? (
-        <>
-          <StatusBadge kind="grade" grade={g.grade} className="w-fit" />
-          {sites === 0 ? (
-            <p className="text-small text-fg">No site to grade. Add a site to get a grade.</p>
-          ) : (
-            <>
-              <p className="text-small text-fg">{gradeMeaning(g.grade)}</p>
-              {/* without a graded day the meaning above says it already */}
-              {g.graded_days > 0 ? (
-                <p className="text-caption text-fg-2">{dayCountsText(g)}</p>
-              ) : null}
-            </>
-          )}
-        </>
+      <span className="text-caption text-fg-2">Integrity grade</span>
+      {g.grade ? (
+        <span className={cn("text-metric tabular", GRADE_TONE[g.grade])} data-grade={g.grade}>
+          {g.grade}
+        </span>
       ) : (
-        <p className="text-small text-fg-2">
-          The grade shows when the reviewers' view has one for this range.
-        </p>
+        <GradeBadge grade={null} className="w-fit" />
       )}
+      {reasons.length > 0 ? (
+        <ul className="flex flex-col gap-1" aria-label="What lowered the grade">
+          {reasons.map((r) => (
+            <li
+              key={r.code}
+              data-reason={r.code}
+              className="flex items-baseline gap-2 text-caption text-fg-2"
+            >
+              <span className={cn("tabular", r.level === "C" ? "text-critical" : "text-warning")}>
+                {r.level}
+              </span>
+              <span className="min-w-0 flex-1 text-fg">{r.text}</span>
+              <span className="tabular">{countOf(r.days, "day")}</span>
+            </li>
+          ))}
+        </ul>
+      ) : g.graded_days > 0 ? (
+        <span className="text-caption text-fg-2 tabular" data-day-counts="">
+          {formatCount(g.days_a)} A · {formatCount(g.days_b)} B · {formatCount(g.days_c)} C
+        </span>
+      ) : null}
     </div>
+  );
+}
+
+// ---- everything else, on demand: one line each until opened
+
+function OnDemand({ v, tenantId, isOwner }: { v: SCFView; tenantId: string; isOwner: boolean }) {
+  return (
+    <div className="flex min-w-0 flex-col divide-y divide-line border-y border-line">
+      {(v.sites?.sites ?? 0) > 0 ? (
+        <Detail id="integrity" summary="Integrity by site">
+          <IntegritySection v={v} />
+        </Detail>
+      ) : null}
+      <Detail id="cohort" summary="Cohort">
+        <div className="flex min-w-0 flex-col gap-4">
+          <OwnCohortPanel tenantId={tenantId} record={v.cohort} isOwner={isOwner} />
+          <CohortPlace v={v} />
+          <RulesMet v={v} />
+        </div>
+      </Detail>
+      <Detail id="figures" summary="Figures">
+        <Figures v={v} />
+      </Detail>
+    </div>
+  );
+}
+
+function Detail({ id, summary, children }: { id: string; summary: string; children: ReactNode }) {
+  return (
+    <Disclosure
+      id={id}
+      variant="row"
+      summary={summary}
+      summaryClassName="py-3 text-body font-medium"
+      bodyClassName="pb-5 pl-0"
+    >
+      {children}
+    </Disclosure>
   );
 }
 
@@ -198,23 +359,28 @@ function kpiText(v: number | null, kind: "count" | "rate"): ReactNode {
 }
 
 // the change against the previous range and the place in the cohort,
-// exactly as the operator lists compute them (contract 19.2 and 19.3). a
-// percentile needs a cohort of five projects.
+// exactly as the operator lists compute them (contract 19.2 and 19.3). a row
+// without data is left out, and a column no row fills is not drawn.
 function CohortPlace({ v }: { v: SCFView }) {
   const c = v.comparison;
   if (!c) return null;
   const pc = v.percentile_cohort;
   const population =
     pc && (pc.program || pc.round)
-      ? `the projects confirmed in ${[pc.program, pc.round].filter(Boolean).join(", ")}`
-      : "every listed project, because no cohort is confirmed for yours";
+      ? [pc.program, pc.round].filter(Boolean).join(", ")
+      : "Every listed project";
   const hidden = percentileHiddenReason(c.cohort_size);
-  // on-chain operations follow the one missing-value rule of the figures:
-  // without a verified id neither range is measured
   const chain = v.onchain;
-  const chainNow = chain ? chainGap(chain.ids_verified, v.onchain_series) : null;
-  const chainBefore = chain && chain.ids_verified === 0 ? NO_VERIFIED_IDS : null;
-  const gapOf = (r: KpiRow, gap: string | null) => (r.key === "onchain_operations" ? gap : null);
+  const chainOk = chain !== null && chainGap(chain.ids_verified, v.onchain_series) === null;
+  const rows = KPI_ROWS.map((r) => ({ ...r, k: c.kpis[r.key] })).filter(
+    (r) =>
+      (r.key !== "onchain_operations" || chainOk) &&
+      (r.k.value !== null || r.k.previous !== null) &&
+      !(r.kind === "count" && !r.k.value && !r.k.previous),
+  );
+  if (rows.length === 0) return null;
+  const anyChange = rows.some((r) => r.k.change !== null);
+  const anyPercentile = !hidden && rows.some((r) => r.k.percentile !== null);
   const columns: Column<KpiRow>[] = [
     { key: "metric", header: "Metric", primary: true, cell: (r) => r.label },
     {
@@ -223,76 +389,53 @@ function CohortPlace({ v }: { v: SCFView }) {
       align: "right",
       numeric: true,
       mobile: true,
-      cell: (r) => {
-        const gap = gapOf(r, chainNow);
-        return gap ? <Missing reason={gap} /> : kpiText(r.k.value, r.kind);
-      },
+      cell: (r) => kpiText(r.k.value, r.kind),
     },
     {
       key: "previous",
       header: "Previous range",
       align: "right",
       numeric: true,
-      cell: (r) => {
-        const gap = gapOf(r, chainBefore);
-        return gap ? <Missing reason={gap} /> : kpiText(r.k.previous, r.kind);
-      },
+      cell: (r) => kpiText(r.k.previous, r.kind),
     },
-    {
+  ];
+  if (anyChange)
+    columns.push({
       key: "change",
       header: "Change",
       align: "right",
       numeric: true,
       mobile: true,
       cell: (r) =>
-        r.k.change === null ? (
-          <Missing reason="No value in the previous range" />
-        ) : r.kind === "rate" ? (
-          formatPoints(r.k.change)
-        ) : (
-          formatChange(r.k.change)
-        ),
-    },
-    {
+        r.k.change === null
+          ? null
+          : r.kind === "rate"
+            ? formatPoints(r.k.change)
+            : formatChange(r.k.change),
+    });
+  if (anyPercentile)
+    columns.push({
       key: "percentile",
       header: "Percentile",
       definition: "The share of the cohort with a value at or below yours.",
       align: "right",
       numeric: true,
       mobile: true,
-      cell: (r) =>
-        hidden ? (
-          <Missing reason={hidden} />
-        ) : r.k.percentile === null ? (
-          <Missing reason="No value in this range" />
-        ) : (
-          formatCohortPercentile(r.k.percentile)
-        ),
-    },
-  ];
+      cell: (r) => (r.k.percentile === null ? null : formatCohortPercentile(r.k.percentile)),
+    });
   return (
-    <div className="flex min-w-0 flex-col gap-3">
-      <div className="flex flex-col gap-1">
-        <h3 className="text-title text-fg">Change and place in the cohort</h3>
-        <p className="max-w-prose text-small text-fg-2" data-testid="cohort-population">
-          Each metric against the previous range of the same length. The cohort is {population}:{" "}
-          {countOf(c.cohort_size, "project")}, active or suspended.
-        </p>
-      </div>
+    <div className="flex min-w-0 flex-col gap-2">
+      <p className="text-small text-fg-2" data-testid="cohort-population">
+        <span className="text-fg">{population}</span> · {countOf(c.cohort_size, "project")}
+      </p>
       <DataTable<KpiRow>
         label="Key metrics"
         columns={columns}
-        rows={KPI_ROWS.map((r) => ({ ...r, k: c.kpis[r.key] }))}
+        rows={rows}
         getRowKey={(r) => r.key}
         rowLabel={(r) => r.label}
         rowProps={(r) => ({ "data-kpi": r.key })}
       />
-      {hidden ? (
-        <p className="text-caption text-fg-2" data-testid="percentile-hidden">
-          Percentiles show once a cohort has 5 projects. This cohort has{" "}
-          {countOf(c.cohort_size, "project")}. One project more or less moves them too far.
-        </p>
-      ) : null}
     </div>
   );
 }
@@ -304,35 +447,27 @@ function IntegritySection({ v }: { v: SCFView }) {
   const report = useQuery(integrityQuery("tenant", tenant.id, { from: v.from, to: v.to }));
   const sites = useQuery(sitesQuery(tenant.id));
   const names = Object.fromEntries((sites.data ?? []).map((s) => [s.id, s.domain]));
-  let body: ReactNode;
   if (report.isPending)
-    body = (
+    return (
       <LoadingState label="Loading the integrity report">
         <Skeleton.Table rows={3} columns={3} />
       </LoadingState>
     );
-  else if (report.error)
-    body = (
+  if (report.error)
+    return (
       <ErrorState
         title="The integrity report did not load"
         error={report.error}
         onRetry={() => report.refetch()}
       />
     );
-  else
-    body = (
-      <IntegrityPanel
-        title="Integrity report"
-        report={report.data}
-        siteNames={names}
-        appeal={sites.data ? { slug: tenant.slug, siteDomains: names } : undefined}
-      />
-    );
   return (
-    <section aria-label="Integrity" className="flex min-w-0 flex-col gap-4">
-      <h2 className="text-section text-fg">Integrity</h2>
-      {body}
-    </section>
+    <IntegrityPanel
+      title="Integrity report"
+      report={report.data}
+      siteNames={names}
+      appeal={sites.data ? { slug: tenant.slug, siteDomains: names } : undefined}
+    />
   );
 }
 
@@ -345,92 +480,72 @@ const METRIC_TEXT: Record<string, string> = {
 };
 
 function RulesMet({ v }: { v: SCFView }) {
+  if (v.rules_met.length === 0) return null;
   return (
-    <section aria-label="Rules you meet" className="flex min-w-0 flex-col gap-4">
-      <div className="flex flex-col gap-1">
-        <h2 className="text-section text-fg">Rules you meet</h2>
-        <p className="max-w-prose text-small text-fg-2">
-          The traction rules that SCF operators saved and that your project meets today.
-        </p>
-      </div>
-      {v.rules_met.length === 0 ? (
-        <EmptyState compact title="No rule met today">
-          A rule counts the days of complete calendar months. Your project meets none of the rules
-          now.
-        </EmptyState>
-      ) : (
-        <ul className="grid gap-3 md:grid-cols-2">
-          {v.rules_met.map(({ rule, match }) => (
-            <li
-              key={rule.id}
-              data-rule={rule.id}
-              className="flex min-w-0 flex-col gap-2 rounded-lg border border-line bg-raised p-4 sm:p-5"
-            >
-              <span className="text-body font-medium text-fg">{rule.name}</span>
-              <span className="text-small text-fg-2">
-                {METRIC_TEXT[rule.metric] ?? rule.metric}: {formatCount(rule.min_per_day)} or more a
-                day, on {countOf(rule.min_days, "day")} or more in each of the last{" "}
-                {countOf(rule.months, "month")}
-                {rule.min_grade ? `. Integrity grade ${rule.min_grade} or better` : ""}.
-              </span>
-              <ul className="flex flex-wrap gap-x-4 gap-y-1 text-caption text-fg-2">
-                {match.months.map((m) => (
-                  <li key={m.month}>
-                    {formatTick(`${m.month}-01`, "month")}:{" "}
-                    {countOf(m.qualifying_days, "qualifying day")}
-                  </li>
-                ))}
-              </ul>
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
+    <ul
+      aria-label="Rules you meet"
+      className="flex flex-col divide-y divide-line-subtle rounded-lg border border-line bg-raised px-4 sm:px-5"
+    >
+      {v.rules_met.map(({ rule, match }) => (
+        <li key={rule.id} data-rule={rule.id} className="flex min-w-0 flex-col gap-1 py-3">
+          <span className="flex flex-wrap items-baseline justify-between gap-x-3">
+            <span className="text-body font-medium text-fg">{rule.name}</span>
+            <span className="text-caption text-fg-2">
+              {METRIC_TEXT[rule.metric] ?? rule.metric} ≥ {formatCount(rule.min_per_day)} a day,{" "}
+              {countOf(rule.min_days, "day")} × {countOf(rule.months, "month")}
+              {rule.min_grade ? `, grade ${rule.min_grade}` : ""}
+            </span>
+          </span>
+          <ul className="flex flex-wrap gap-x-4 gap-y-1 text-caption text-fg-2">
+            {match.months.map((m) => (
+              <li key={m.month}>
+                {formatTick(`${m.month}-01`, "month")}:{" "}
+                {countOf(m.qualifying_days, "qualifying day")}
+              </li>
+            ))}
+          </ul>
+        </li>
+      ))}
+    </ul>
   );
 }
 
-// ---- the figures of the project's rows in the operator views
+// ---- the figures of the project's rows in the operator views, past the
+// key numbers above; a figure with no value is left out
 
 const DEFINED =
   "rounded-sm underline decoration-line-strong decoration-dotted underline-offset-2 focus-ring";
 
-function Figure({
-  label,
-  definition,
-  children,
-  name,
-  text = false,
-}: {
-  label: string;
-  definition?: string;
-  children: ReactNode;
-  name?: string;
-  // a word or a badge, not a number: set in the sans face
-  text?: boolean;
-}) {
+type Fig = { label: string; value: ReactNode; definition?: string; name?: string } | null;
+
+function FigureList({ items }: { items: Fig[] }) {
+  const shown = items.filter((f): f is NonNullable<Fig> => f !== null);
+  if (shown.length === 0) return null;
   return (
-    <div className="flex min-w-0 flex-col gap-1" data-figure={name}>
-      <dt className="text-caption text-fg-2">
-        {definition ? (
-          <Tooltip content={definition}>
-            {/* biome-ignore lint/a11y/noNoninteractiveTabindex: the definition opens on focus too */}
-            <span tabIndex={0} className={DEFINED}>
-              {label}
-              <span className="sr-only">. {definition}</span>
-            </span>
-          </Tooltip>
-        ) : (
-          label
-        )}
-      </dt>
-      <dd className={text ? "min-w-0 text-body text-fg" : "min-w-0 text-body text-fg tabular"}>
-        {children}
-      </dd>
-    </div>
+    <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+      {shown.map((f) => (
+        <div key={f.label} className="flex min-w-0 flex-col gap-1" data-figure={f.name}>
+          <dt className="text-caption text-fg-2">
+            {f.definition ? (
+              <Tooltip content={f.definition}>
+                {/* biome-ignore lint/a11y/noNoninteractiveTabindex: the definition opens on focus too */}
+                <span tabIndex={0} className={DEFINED}>
+                  {f.label}
+                  <span className="sr-only">. {f.definition}</span>
+                </span>
+              </Tooltip>
+            ) : (
+              f.label
+            )}
+          </dt>
+          <dd className="min-w-0 text-body text-fg tabular">{f.value}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 
-function FigureCard({
+function FigureGroup({
   title,
   meta,
   children,
@@ -440,12 +555,9 @@ function FigureCard({
   children: ReactNode;
 }) {
   return (
-    <section
-      aria-label={title}
-      className="flex min-w-0 flex-col gap-4 rounded-lg border border-line bg-raised p-4 sm:p-5"
-    >
+    <section aria-label={title} className="flex min-w-0 flex-col gap-3 py-4 first:pt-0 last:pb-0">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-title text-fg">{title}</h3>
+        <h3 className="text-caption text-fg-2">{title}</h3>
         {meta}
       </div>
       {children}
@@ -453,115 +565,68 @@ function FigureCard({
   );
 }
 
-function share(v: number | null, why: string): ReactNode {
-  return v === null ? <Missing reason={why} /> : formatPercent(v);
-}
-
 // one definition per label: "Distinct routes" is not the route rows of the
 // api page, which list each method of a route
 const DISTINCT_ROUTES =
   "Distinct service and route pairs with application requests. A route with two methods counts once. A route that only health checks reached does not count.";
 
+const fig = (label: string, value: ReactNode | null, more?: Partial<NonNullable<Fig>>): Fig =>
+  value === null || value === undefined ? null : { label, value, ...more };
+const pct = (v: number | null) => (v === null ? null : formatPercent(v));
+
 function Figures({ v }: { v: SCFView }) {
   const web = v.web;
   const api = v.api;
   const chain = v.onchain;
-  const chainMissing = chain ? chainGap(chain.ids_verified, v.onchain_series) : null;
+  const shown = new Set(keyNumbers(v).map((k) => k.key));
   const award = v.comparison?.cohort.award_date ?? null;
   const marker = award ? { day: award, label: `Award date ${formatDate(award)}` } : null;
   const awardInRange = marker !== null && v.days.includes(marker.day);
-  const notListed = <Missing reason="Not listed in the operator views" />;
+  const chainOk = chain !== null && chain.ids_verified > 0;
+  const webDays = v.web_series.some((p) => p.aggregated && (p.pageviews ?? 0) > 0);
+  const chainDays = v.onchain_series.some((p) => (p.operations ?? 0) > 0);
   return (
-    <section aria-label="Figures" className="flex min-w-0 flex-col gap-4">
-      <div className="flex flex-col gap-1">
-        <h2 className="text-section text-fg">Figures</h2>
-        <p className="max-w-prose text-small text-fg-2">
-          Your project's rows in the operator views, over the same range.
-        </p>
-      </div>
-      <div className="grid min-w-0 gap-3 lg:grid-cols-2">
-        <FigureCard title="Project">
-          <dl className="grid grid-cols-2 gap-4">
-            <Figure label="Status" text>
-              {v.tenant ? (
-                <StatusBadge kind="project" status={v.tenant.status as TenantStatus} />
-              ) : (
-                notListed
-              )}
-            </Figure>
-            <Figure label="Sites">{v.sites ? formatCount(v.sites.sites) : notListed}</Figure>
-            <Figure label="Verified sites">
-              {v.sites ? formatCount(v.sites.sites_verified) : notListed}
-            </Figure>
-            <Figure label="Sites with stellar.toml">
-              {v.sites ? formatCount(v.sites.sites_with_stellar_toml) : notListed}
-            </Figure>
-          </dl>
-        </FigureCard>
-        <FigureCard title="API">
-          {api ? (
-            <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-              <Figure label="Requests">{formatCount(api.requests)}</Figure>
-              <Figure label="4xx rate">{share(api.rate_4xx, "No API requests")}</Figure>
-              <Figure label="5xx rate">{share(api.rate_5xx, "No API requests")}</Figure>
-              <Figure label="p95 latency">
-                {api.p95_over_10s ? (
-                  OPEN_BUCKET
-                ) : api.p95_seconds === null ? (
-                  <Missing reason="No API requests" />
-                ) : (
-                  formatLatency(api.p95_seconds)
-                )}
-              </Figure>
-              <Figure label="Services">{formatCount(api.services)}</Figure>
-              <Figure label="Distinct routes" definition={DISTINCT_ROUTES} name="routes">
-                {formatCount(api.routes)}
-              </Figure>
-            </dl>
-          ) : (
-            <p className="text-small text-fg-2">No API data in this range.</p>
-          )}
-        </FigureCard>
-      </div>
-      <FigureCard title="Web">
-        {web ? (
-          <>
-            <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-              <Figure label="Page views">{formatCount(web.pageviews)}</Figure>
-              <Figure label="Visitors">{formatCount(web.visitors)}</Figure>
-              <Figure label="Visits">{formatCount(web.visits)}</Figure>
-              <Figure label="Bounce rate">{share(web.bounce_rate, "No visits")}</Figure>
-              <Figure label="Average visit">
-                {web.avg_visit_duration === null ? (
-                  <Missing reason="No visits" />
-                ) : (
-                  formatDuration(web.avg_visit_duration)
-                )}
-              </Figure>
-              <Figure
-                label="Quarantined share"
-                definition="The share of page views held apart because they look automated."
-              >
-                {share(web.quarantine_share, "No page views")}
-              </Figure>
-              <Figure
-                label="Gateway requests"
-                definition="Events that reached the Veristar edge, counted or not."
-              >
-                {formatCount(web.ingest_requests)}
-              </Figure>
-              <Figure
-                label="Refused share"
-                definition="The share of gateway requests the edge refused."
-              >
-                {share(web.rejected_share, "No gateway requests")}
-              </Figure>
-            </dl>
+    <div className="flex min-w-0 flex-col divide-y divide-line-subtle">
+      {v.sites && v.sites.sites > 0 ? (
+        <FigureGroup title="Sites">
+          <FigureList
+            items={[
+              fig("Sites", formatCount(v.sites.sites)),
+              fig("Verified sites", formatCount(v.sites.sites_verified)),
+              fig("Sites with stellar.toml", formatCount(v.sites.sites_with_stellar_toml)),
+            ]}
+          />
+        </FigureGroup>
+      ) : null}
+      {web && v.has_web_data ? (
+        <FigureGroup title="Web">
+          <FigureList
+            items={[
+              shown.has("pageviews") ? null : fig("Page views", formatCount(web.pageviews)),
+              shown.has("visitors") ? null : fig("Visitors", formatCount(web.visitors)),
+              fig("Visits", formatCount(web.visits)),
+              fig("Bounce rate", pct(web.bounce_rate)),
+              fig(
+                "Average visit",
+                web.avg_visit_duration === null ? null : formatDuration(web.avg_visit_duration),
+              ),
+              fig("Quarantined share", pct(web.quarantine_share), {
+                definition: "The share of page views held apart because they look automated.",
+              }),
+              fig("Gateway requests", formatCount(web.ingest_requests), {
+                definition: "Events that reached the Veristar edge, counted or not.",
+              }),
+              fig("Refused share", pct(web.rejected_share), {
+                definition: "The share of gateway requests the edge refused.",
+              }),
+            ]}
+          />
+          {webDays ? (
             <div className="flex flex-col gap-1">
               <span className="text-caption text-fg-2">
                 Daily page views, UTC days
                 {awardInRange && award ? (
-                  <span data-award>. The dashed line is your award date, {formatDate(award)}.</span>
+                  <span data-award>, award date {formatDate(award)} dashed</span>
                 ) : null}
               </span>
               <DayStrip
@@ -574,41 +639,60 @@ function Figures({ v }: { v: SCFView }) {
                 }))}
               />
             </div>
-          </>
-        ) : (
-          <p className="text-small text-fg-2">No web data in this range.</p>
-        )}
-      </FigureCard>
-      <FigureCard
-        title="On-chain"
-        meta={v.link_two_way ? <Pill tone="success">stellar.toml linked both ways</Pill> : null}
-      >
-        {chain ? (
-          <>
-            <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-              <Figure label="Operations">
-                {chainMissing ? <Missing reason={chainMissing} /> : formatCount(chain.operations)}
-              </Figure>
-              <Figure label="Transactions">
-                {chainMissing ? <Missing reason={chainMissing} /> : formatCount(chain.transactions)}
-              </Figure>
-              <Figure label="Verified IDs">
-                {formatCount(chain.ids_verified)} of {formatCount(chain.ids)}
-              </Figure>
-              <Figure label="Days without data" definition={DAYS_WITHOUT_DATA} name="days-missing">
-                {chain.ids_verified === 0 ? (
-                  <Missing reason={NO_VERIFIED_IDS} />
-                ) : (
-                  formatCount(chain.days_missing)
-                )}
-              </Figure>
-            </dl>
-            <div className="flex flex-col gap-1">
-              <span className="text-caption text-fg-2">Weekly active accounts</span>
-              <span className="text-body text-fg">
-                {weeklyActiveText(chain.weekly_active_accounts)}
-              </span>
-            </div>
+          ) : null}
+        </FigureGroup>
+      ) : null}
+      {api && api.requests > 0 ? (
+        <FigureGroup title="API">
+          <FigureList
+            items={[
+              shown.has("requests") ? null : fig("Requests", formatCount(api.requests)),
+              fig("4xx rate", pct(api.rate_4xx)),
+              fig("5xx rate", pct(api.rate_5xx)),
+              fig(
+                "p95 latency",
+                api.p95_over_10s
+                  ? OPEN_BUCKET
+                  : api.p95_seconds === null
+                    ? null
+                    : formatLatency(api.p95_seconds),
+              ),
+              fig("Services", formatCount(api.services)),
+              fig("Distinct routes", formatCount(api.routes), {
+                definition: DISTINCT_ROUTES,
+                name: "routes",
+              }),
+            ]}
+          />
+        </FigureGroup>
+      ) : null}
+      {chain && chain.ids > 0 ? (
+        <FigureGroup
+          title="On-chain"
+          meta={v.link_two_way ? <Pill tone="success">stellar.toml linked both ways</Pill> : null}
+        >
+          <FigureList
+            items={[
+              chainOk && !shown.has("onchain_operations")
+                ? fig("Operations", formatCount(chain.operations))
+                : null,
+              chainOk ? fig("Transactions", formatCount(chain.transactions)) : null,
+              fig(
+                "Verified IDs",
+                `${formatCount(chain.ids_verified)} of ${formatCount(chain.ids)}`,
+              ),
+              chainOk
+                ? fig("Days without data", formatCount(chain.days_missing), {
+                    definition: DAYS_WITHOUT_DATA,
+                    name: "days-missing",
+                  })
+                : null,
+              chain.weekly_active_accounts.average === null
+                ? null
+                : fig("Weekly active accounts", weeklyActiveText(chain.weekly_active_accounts)),
+            ]}
+          />
+          {chainOk && chainDays ? (
             <div className="flex flex-col gap-1">
               <span className="text-caption text-fg-2">Daily operations, UTC days</span>
               <DayStrip
@@ -621,67 +705,56 @@ function Figures({ v }: { v: SCFView }) {
                 }))}
               />
             </div>
-            {v.contract_functions.length ? (
-              <div className="flex min-w-0 flex-col gap-4">
-                <h4 className="text-body font-medium text-fg">Contract calls</h4>
-                {v.contract_functions.map((c) => (
-                  <div
-                    key={c.strkey}
-                    className="flex min-w-0 flex-col gap-2"
-                    data-contract={c.strkey}
-                  >
-                    <div className="flex flex-wrap items-baseline justify-between gap-2">
-                      <code className="font-mono text-small text-fg" title={c.strkey}>
-                        {shortKey(c.strkey)}
-                      </code>
-                      <span className="text-caption text-fg-2">
-                        {functionsDaysText(c.functions)}
-                      </span>
-                    </div>
-                    <FunctionsTable
-                      summary={c.functions}
-                      label={`Calls per function of ${c.strkey}`}
-                    />
+          ) : null}
+          {v.contract_functions.length ? (
+            <div className="flex min-w-0 flex-col gap-4">
+              <h4 className="text-body font-medium text-fg">Contract calls</h4>
+              {v.contract_functions.map((c) => (
+                <div
+                  key={c.strkey}
+                  className="flex min-w-0 flex-col gap-2"
+                  data-contract={c.strkey}
+                >
+                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <code className="font-mono text-small text-fg" title={c.strkey}>
+                      {shortKey(c.strkey)}
+                    </code>
+                    <span className="text-caption text-fg-2">{functionsDaysText(c.functions)}</span>
                   </div>
-                ))}
-              </div>
-            ) : null}
-          </>
-        ) : (
-          <p className="text-small text-fg-2">No accounts or contracts declared.</p>
-        )}
-      </FigureCard>
-    </section>
+                  <FunctionsTable
+                    summary={c.functions}
+                    label={`Calls per function of ${c.strkey}`}
+                  />
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </FigureGroup>
+      ) : null}
+    </div>
   );
 }
 
-// ---- signed reports of the same figures
+// ---- signed reports of the same figures: a list of rows, and a dialog
+// that signs a new one and hands over its link
 
-const CONTAINS = [
-  "Web: visitors, page views, visits and bounce rate",
-  "API: requests, error rates and p95 latency",
-  "On-chain: operations, weekly active accounts and calls per function",
-  "The integrity grade, the cohort, the percentiles and the rules met",
-  "The Veristar signature, which anyone can check",
-];
-
-export function SignedReports() {
+export function SignedReports({
+  open,
+  onOpenChange,
+}: {
+  // the page's header button opens the dialog; alone, the section has its own
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+}) {
   const { tenant } = useProject();
   const list = useQuery(reportsQuery(tenant.id));
   const queryClient = useQueryClient();
-  const initial = closedDays(30, new Date());
-  const [from, setFrom] = useState(initial.from);
-  const [to, setTo] = useState(initial.to);
-  const [errors, setErrors] = useState<{ from?: string; to?: string }>({});
+  const [ownOpen, setOwnOpen] = useState(false);
+  const controlled = open !== undefined;
+  const signing = controlled ? open : ownOpen;
+  const setSigning = (o: boolean) => (controlled ? onOpenChange?.(o) : setOwnOpen(o));
   const [revoking, setRevoking] = useState<ReportSummary | null>(null);
   const refresh = () => queryClient.invalidateQueries({ queryKey: reportKeysOf.list(tenant.id) });
-  const create = useMutation({
-    mutationFn: () => reportApi.create(tenant.id, { from, to }),
-    onSuccess: async (r) => {
-      toast.success(`Report for ${formatDateRange(r.from, r.to)} signed.`);
-      await refresh();
-    },
-  });
   const revoke = useMutation({
     mutationFn: (id: string) => reportApi.revoke(tenant.id, id),
     onSuccess: async (r) => {
@@ -698,137 +771,59 @@ export function SignedReports() {
     onError: (e) => toast.error(`The JSON file did not download. ${errorMessage(e)}`),
   });
 
-  function submit(e: FormEvent) {
-    e.preventDefault();
-    const found = validatePeriod(from, to, new Date());
-    setErrors(found);
-    if (!found.from && !found.to) create.mutate();
-  }
-
+  const items = list.data?.items ?? [];
   return (
-    <section aria-labelledby="signed-reports-h" className="flex min-w-0 flex-col gap-4">
-      <div className="flex flex-col gap-1">
-        <h2 id="signed-reports-h" className="text-section text-fg">
+    <section aria-labelledby="signed-reports-h" className="flex min-w-0 flex-col gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 id="signed-reports-h" className="text-title text-fg">
           Signed reports
+          {items.length > 0 ? (
+            <span className="ml-2 text-small text-fg-2 tabular">{formatCount(items.length)}</span>
+          ) : null}
         </h2>
-        <p className="max-w-prose text-small text-fg-2">
-          A signed report holds these figures for closed UTC days. Share its link in your SCF
-          submission. Anyone can check the signature without an account.
-        </p>
-      </div>
-      <div className="grid min-w-0 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,20rem)]">
-        <section
-          aria-label="Generate a report"
-          className="flex min-w-0 flex-col gap-4 rounded-lg border border-line bg-raised p-4 sm:p-5"
-        >
-          <h3 className="text-title text-fg">Generate a report</h3>
-          <form onSubmit={submit} noValidate className="max-w-prose flex flex-col gap-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <DateField
-                label="From"
-                value={from}
-                onChange={setFrom}
-                error={errors.from}
-                hint="UTC day"
-              />
-              <DateField
-                label="To"
-                value={to}
-                onChange={setTo}
-                error={errors.to}
-                hint={`UTC day, ${formatDate(lastFinalDay(new Date()))} or earlier`}
-              />
-            </div>
-            <p className="text-caption text-fg-2">
-              A report covers at most {MAX_REPORT_DAYS} days. The last 4 days can still change, so a
-              report ends before them.
-            </p>
-            <FormMessage error={create.error} />
-            {create.data ? (
-              <div
-                role="status"
-                className="flex flex-col gap-2 rounded-md border border-line bg-sunken p-3 text-small text-fg"
-              >
-                <span>Report generated. Share this link:</span>
-                <span className="flex min-w-0 flex-wrap items-center gap-2">
-                  <a
-                    href={create.data.url}
-                    className="min-w-0 break-all rounded-sm font-mono text-accent-text underline-offset-4 hover:underline focus-ring"
-                  >
-                    {create.data.url}
-                  </a>
-                  <CopyButton text={create.data.url} label="Copy link" size="xs" />
-                </span>
-              </div>
-            ) : null}
-            <div>
-              <Button
-                type="submit"
-                pending={create.isPending}
-                className="max-sm:w-full max-lg:h-(--vs-control-touch)"
-              >
-                <FileSignature aria-hidden />
-                {create.isPending ? "Signing" : "Generate and sign"}
-              </Button>
-            </div>
-          </form>
-        </section>
-        <section
-          aria-label="What a report contains"
-          className="flex min-w-0 flex-col gap-3 rounded-lg border border-line p-4 sm:p-5"
-        >
-          <h3 className="text-caption text-fg-2">What a report contains</h3>
-          <ul className="flex flex-col gap-2 text-small text-fg-2">
-            {CONTAINS.map((t) => (
-              <li key={t} className="flex gap-2">
-                <span aria-hidden className="mt-2 size-1 shrink-0 rounded-full bg-fg-3" />
-                {t}
-              </li>
-            ))}
-          </ul>
-          <p className="text-caption text-fg-2">
-            Daily and period totals only. No visitor, address or user agent.
-          </p>
-        </section>
-      </div>
-
-      <section aria-label="Your reports" className="flex min-w-0 flex-col gap-3">
-        <h3 className="text-title text-fg">Your reports</h3>
-        {list.isPending ? (
-          <LoadingState label="Loading the reports">
-            <Skeleton.Table rows={2} columns={3} />
-          </LoadingState>
-        ) : list.error ? (
-          <ErrorState
-            compact
-            title="The reports did not load"
-            error={list.error}
-            onRetry={() => list.refetch()}
-          />
-        ) : list.data.items.length === 0 ? (
-          <EmptyState compact icon={<FileSignature aria-hidden />} title="No report yet">
-            Generate a report, then share its link in your SCF submission.
-          </EmptyState>
-        ) : (
-          <ul
-            className="flex flex-col divide-y divide-line rounded-lg border border-line bg-raised"
-            aria-label="Reports"
-          >
-            {list.data.items.map((r) => (
-              <ReportRow
-                key={r.id}
-                r={r}
-                downloading={download.isPending && download.variables?.id === r.id}
-                onDownload={() => download.mutate(r)}
-                onRevoke={() => {
-                  revoke.reset();
-                  setRevoking(r);
-                }}
-              />
-            ))}
-          </ul>
+        {controlled ? null : (
+          <Button variant="outline" size="sm" onClick={() => setSigning(true)}>
+            <FileSignature aria-hidden />
+            Sign a report
+          </Button>
         )}
-      </section>
+      </div>
+      {list.isPending ? (
+        <LoadingState label="Loading the reports">
+          <Skeleton.Table rows={2} columns={3} />
+        </LoadingState>
+      ) : list.error ? (
+        <ErrorState
+          compact
+          title="The reports did not load"
+          error={list.error}
+          onRetry={() => list.refetch()}
+        />
+      ) : items.length === 0 ? (
+        <p className="text-small text-fg-2" data-reports="none">
+          No report yet
+        </p>
+      ) : (
+        <ul
+          className="flex flex-col divide-y divide-line rounded-lg border border-line bg-raised"
+          aria-label="Reports"
+        >
+          {items.map((r) => (
+            <ReportRow
+              key={r.id}
+              r={r}
+              downloading={download.isPending && download.variables?.id === r.id}
+              onDownload={() => download.mutate(r)}
+              onRevoke={() => {
+                revoke.reset();
+                setRevoking(r);
+              }}
+            />
+          ))}
+        </ul>
+      )}
+
+      <SignDialog open={signing} onOpenChange={setSigning} onSigned={refresh} />
 
       <ConfirmDialog
         open={revoking !== null}
@@ -852,6 +847,100 @@ export function SignedReports() {
         onConfirm={() => revoking && revoke.mutate(revoking.id)}
       />
     </section>
+  );
+}
+
+// the period of closed utc days, then the signed report's link in the same
+// dialog
+function SignDialog({
+  open,
+  onOpenChange,
+  onSigned,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSigned: () => Promise<unknown>;
+}) {
+  const { tenant } = useProject();
+  const initial = closedDays(30, new Date());
+  const [from, setFrom] = useState(initial.from);
+  const [to, setTo] = useState(initial.to);
+  const [errors, setErrors] = useState<{ from?: string; to?: string }>({});
+  const create = useMutation({
+    mutationFn: () => reportApi.create(tenant.id, { from, to }),
+    onSuccess: async (r) => {
+      toast.success(`Report for ${formatDateRange(r.from, r.to)} signed.`);
+      await onSigned();
+    },
+  });
+
+  function close(o: boolean) {
+    onOpenChange(o);
+    if (!o) {
+      create.reset();
+      setErrors({});
+    }
+  }
+
+  function submit(e: FormEvent) {
+    e.preventDefault();
+    if (create.data) {
+      close(false);
+      return;
+    }
+    const found = validatePeriod(from, to, new Date());
+    setErrors(found);
+    if (!found.from && !found.to) create.mutate();
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={close}
+      title={create.data ? "Report signed" : "Sign a report"}
+      onSubmit={submit}
+      footer={
+        create.data ? (
+          <Button type="submit">Done</Button>
+        ) : (
+          <>
+            <Button type="button" variant="ghost" onClick={() => close(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" pending={create.isPending}>
+              <FileSignature aria-hidden />
+              {create.isPending ? "Signing" : "Generate and sign"}
+            </Button>
+          </>
+        )
+      }
+    >
+      {create.data ? (
+        <div role="status" className="flex min-w-0 flex-wrap items-center gap-2 text-small">
+          <a
+            href={create.data.url}
+            className="min-w-0 break-all rounded-sm font-mono text-accent-text underline-offset-4 hover:underline focus-ring"
+          >
+            {create.data.url}
+          </a>
+          <CopyButton text={create.data.url} label="Copy link" size="xs" />
+        </div>
+      ) : (
+        <div className="flex flex-col gap-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <DateField label="From" value={from} onChange={setFrom} error={errors.from} />
+            <DateField
+              label="To"
+              value={to}
+              onChange={setTo}
+              error={errors.to}
+              hint={`${formatDate(lastFinalDay(new Date()))} or earlier, at most ${MAX_REPORT_DAYS} days`}
+            />
+          </div>
+          <FormMessage error={create.error} />
+        </div>
+      )}
+    </Dialog>
   );
 }
 

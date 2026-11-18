@@ -25,6 +25,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { isDraftTerms, termsVersionLabel } from "@/lib/terms";
 import * as v from "@/lib/validate";
 import { queryClient } from "@/query-client";
+import { AwardSearch, awardCohort, type ScfAward } from "./award-search";
 
 export type EnrollValues = {
   name: string;
@@ -121,6 +122,31 @@ export function withCohort(body: EnrollmentInput, cohort: CohortValues): Enrollm
   return { ...body, cohort: kept };
 }
 
+// the award picked with the search and the cohort it filled in. the form
+// names the award only while that cohort is unchanged; an edited cohort is
+// sent as typed (contract 4.2.1: never both)
+export type PickedAward = { id: string; cohort: CohortValues };
+
+export function sameCohort(a: CohortValues, b: CohortValues): boolean {
+  return (["program", "round", "category", "award_date"] as const).every(
+    (k) => a[k].trim() === b[k].trim(),
+  );
+}
+
+export function withAward(
+  body: EnrollmentInput,
+  cohort: CohortValues,
+  award: PickedAward | null,
+): EnrollmentInput & { scf_award_id?: string } {
+  if (award && sameCohort(cohort, award.cohort)) return { ...body, scf_award_id: award.id };
+  return withCohort(body, cohort);
+}
+
+// the stellar ids of an award in the form's field: one per line, at most 20
+export function awardIds(ids: string[]): string {
+  return ids.slice(0, 20).join("\n");
+}
+
 // maps the cohort paths of a 422 onto the cohort fields
 export function serverCohortErrors(err: unknown): Partial<Record<keyof CohortValues, string>> {
   if (!(err instanceof ApiError) || err.code !== "validation_failed") return {};
@@ -169,10 +195,7 @@ function BackLink() {
   );
 }
 
-const HEADER = {
-  title: "Enroll a project",
-  description: "Tell us about your project. Operators read the answers.",
-};
+const HEADER = { title: "Enroll a project" };
 
 export function EnrollPage() {
   const me = useQuery(meQuery);
@@ -258,6 +281,22 @@ export function EnrollForm({ termsVersion }: { termsVersion: string }) {
   const [cohortErrors, setCohortErrors] = useState<Partial<Record<keyof CohortValues, string>>>({});
   const [moreOpen, setMoreOpen] = useState(false);
   const [cohortOpen, setCohortOpen] = useState(false);
+  const [award, setAward] = useState<PickedAward | null>(null);
+  const [awardError, setAwardError] = useState<string | null>(null);
+
+  function pick(a: ScfAward) {
+    const c = awardCohort(a);
+    setValues((s) => ({
+      ...s,
+      name: a.project,
+      website: a.website ?? s.website,
+      stellarIds: a.stellar_ids.length ? awardIds(a.stellar_ids) : s.stellarIds,
+    }));
+    setCohort(c);
+    setCohortOpen(true);
+    setAward({ id: a.id, cohort: c });
+    setAwardError(null);
+  }
   const termsId = useId();
   const formRef = useRef<HTMLFormElement>(null);
   const [focusTick, setFocusTick] = useState(0);
@@ -286,6 +325,12 @@ export function EnrollForm({ termsVersion }: { termsVersion: string }) {
     },
     onError: async (err) => {
       show(serverEnrollErrors(err, values), serverCohortErrors(err));
+      // an award the directory no longer holds: the cohort is sent as typed
+      // next time, and the search says what to do
+      if (err instanceof ApiError && err.fields.scf_award_id) {
+        setAward(null);
+        setAwardError(v.fieldMessage(err.fields.scf_award_id));
+      }
       setFocusTick((n) => n + 1);
       if (err instanceof ApiError && err.code === "terms_version_mismatch") {
         setValues((s) => ({ ...s, termsAccepted: false }));
@@ -307,7 +352,7 @@ export function EnrollForm({ termsVersion }: { termsVersion: string }) {
       setFocusTick((n) => n + 1);
       return;
     }
-    enroll.mutate(withCohort(enrollmentBody(values, termsVersion), cohort));
+    enroll.mutate(withAward(enrollmentBody(values, termsVersion), cohort, award));
   }
 
   const otherError =
@@ -322,7 +367,7 @@ export function EnrollForm({ termsVersion }: { termsVersion: string }) {
   return (
     <section className="flex flex-col gap-6">
       <BackLink />
-      <div className="grid items-start gap-x-12 gap-y-8 xl:grid-cols-[minmax(0,40rem)_minmax(0,17rem)]">
+      <div className="flex max-w-prose flex-col gap-8">
         <div className="flex min-w-0 flex-col gap-8">
           <PageHeader {...HEADER} />
 
@@ -333,6 +378,15 @@ export function EnrollForm({ termsVersion }: { termsVersion: string }) {
             className="flex flex-col gap-8"
             aria-label="Enroll a project"
           >
+            <div className="flex flex-col gap-1">
+              <AwardSearch onPick={pick} />
+              {awardError ? (
+                <p role="alert" className="text-caption text-critical" data-award-error="">
+                  {awardError}
+                </p>
+              ) : null}
+            </div>
+
             <Group title="Project">
               <TextField
                 label="Project name"
@@ -443,10 +497,6 @@ export function EnrollForm({ termsVersion }: { termsVersion: string }) {
                 open={cohortOpen}
                 onToggle={setCohortOpen}
               >
-                <p className="max-w-prose text-small text-fg-2">
-                  If the Stellar Community Fund gave the project an award, enter it here. An
-                  operator confirms it. Until then, the project is compared with all projects.
-                </p>
                 <CohortFields
                   values={cohort}
                   onChange={setCohort}
@@ -524,38 +574,7 @@ export function EnrollForm({ termsVersion }: { termsVersion: string }) {
             </div>
           </form>
         </div>
-
-        <aside aria-labelledby={`${termsId}-after`} className="flex flex-col gap-2 xl:pt-16">
-          <h2 id={`${termsId}-after`} className="text-caption text-fg-2">
-            After you enroll
-          </h2>
-          <ol className="flex flex-col">
-            {AFTER.map((step, i) => (
-              <li
-                key={step.title}
-                className="grid grid-cols-[1.5rem_minmax(0,1fr)] gap-2 border-t border-line py-3"
-              >
-                <span className="text-small text-fg-2 tabular">{i + 1}</span>
-                <span className="flex flex-col gap-1">
-                  <span className="text-body font-medium text-fg">{step.title}</span>
-                  <span className="text-small text-fg-2">{step.text}</span>
-                </span>
-              </li>
-            ))}
-          </ol>
-        </aside>
       </div>
     </section>
   );
 }
-
-// what happens next, as the console does it: sites come first, review
-// (where the service asks for it) runs at the same time, the api is optional
-const AFTER = [
-  { title: "Add your website", text: "You get a tracking tag for each site." },
-  {
-    title: "Operator review",
-    text: "If the service asks for approval, operators read the answers. You can add sites meanwhile.",
-  },
-  { title: "Connect your API", text: "Optional. Send API metrics with a token." },
-];

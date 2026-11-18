@@ -351,4 +351,67 @@ describe("data table", () => {
     await waitFor(() => expect(host.textContent).toContain("11 to 20 of 25"));
     expect(host.textContent).toContain("Row 10");
   });
+
+  it("ends a row with its next step and a menu, destructive actions last behind a confirmation", async () => {
+    const run = vi.fn(async () => undefined);
+    const edit = vi.fn();
+    const host = await render(
+      <DataTable
+        label="Projects table"
+        columns={columns}
+        rows={rows}
+        getRowKey={(r) => r.id}
+        rowLabel={(r) => r.name}
+        rowNext={(r) => (r.id === "a" ? { label: "Continue setup", to: "/setup" } : null)}
+        rowActions={(r) => [
+          {
+            label: "Remove",
+            destructive: true,
+            confirm: {
+              title: `Remove ${r.name}?`,
+              description: "It goes.",
+              confirmLabel: "Remove",
+              run,
+            },
+          },
+          { label: "Rename", onSelect: edit },
+        ]}
+      />,
+    );
+    const links = [...table(host).querySelectorAll("a")].map((a) => a.textContent);
+    expect(links).toEqual(["Continue setup"]);
+    // no visible header over the actions
+    expect(table(host).querySelector("thead")?.textContent).toBe("NameVisitsCountryActions");
+    expect(table(host).querySelector("thead .sr-only")?.textContent).toBe("Actions");
+    const trigger = host.querySelector<HTMLElement>('button[aria-label="Actions for Anchor"]');
+    await act(async () => {
+      trigger?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0 }));
+    });
+    const items = [...document.querySelectorAll<HTMLElement>("[role=menuitem]")];
+    expect(items.map((i) => i.textContent)).toEqual(["Rename", "Remove"]);
+    await act(async () => {
+      items[1]?.click();
+    });
+    const dialog = document.body.querySelector<HTMLElement>("dialog[open]");
+    if (!dialog) throw new Error("no dialog");
+    expect(dialog.textContent).toContain("Remove Anchor?");
+    await click(byRole(dialog, "button", "Remove"));
+    expect(run).toHaveBeenCalledWith("");
+  });
+
+  it("pages at 25 rows when the caller has no footer", async () => {
+    const many = Array.from({ length: 30 }, (_, i) => ({
+      id: String(i),
+      name: `P${i}`,
+      visits: i,
+      country: "X",
+    }));
+    const host = await render(
+      <DataTable label="Many" columns={columns} rows={many} getRowKey={(r) => r.id} />,
+    );
+    expect(table(host).querySelectorAll("tbody tr")).toHaveLength(25);
+    expect(host.textContent).toContain("1 to 25 of 30");
+    await click(host.querySelector('button[aria-label="Next page"]') as HTMLElement);
+    expect(table(host).querySelectorAll("tbody tr")).toHaveLength(5);
+  });
 });

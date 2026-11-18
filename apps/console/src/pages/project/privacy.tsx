@@ -16,6 +16,7 @@ import { FormMessage } from "@/components/error-panel";
 import { SelectField, TextAreaField, TextField } from "@/components/form-field";
 import { Notice } from "@/components/notice";
 import { PageHeader } from "@/components/page-header";
+import { Section } from "@/components/panel";
 import { DateField } from "@/components/range-control";
 import { Segmented } from "@/components/segmented";
 import { EmptyState, ErrorState } from "@/components/states";
@@ -149,10 +150,23 @@ export function erasureErrorText(err: unknown): string | null {
 export function PrivacyPage() {
   const { tenant, isOwner } = useProject();
   const sites = useQuery(sitesQuery(tenant.id));
+  const docs = siblingUrl(window.location.hostname, "docs");
 
   return (
     <div className="flex flex-col gap-8">
-      <PageHeader {...PAGE_HEADERS.privacy} />
+      <PageHeader
+        {...PAGE_HEADERS.privacy}
+        secondary={
+          docs ? (
+            <Button asChild variant="ghost">
+              <a href={`${docs}/compliance/erasure`}>
+                How erasure works
+                <ExternalLink aria-hidden />
+              </a>
+            </Button>
+          ) : null
+        }
+      />
       {sites.isPending ? (
         <PrivacySkeleton />
       ) : sites.error ? (
@@ -179,22 +193,19 @@ function PrivacyBody({
 }) {
   const live = all.filter((s) => s.status !== "removed");
   return (
-    <div className="grid items-start gap-8 xl:grid-cols-[minmax(0,1fr)_18rem]">
-      <div className="flex min-w-0 flex-col gap-8">
-        {live.length === 0 ? (
-          <EmptyState icon={<Eraser aria-hidden strokeWidth={1.75} />} title="Nothing to erase">
-            The project has no site, so it holds no web data.
-          </EmptyState>
-        ) : isOwner ? (
-          <ErasureForm tenantId={tenantId} sites={live} />
-        ) : (
-          <Notice tone="info" title="Owners request erasure">
-            Only owners of this project can request erasure. The history below shows each request.
-          </Notice>
-        )}
-        <History tenantId={tenantId} sites={all} />
-      </div>
-      <Explanation />
+    <div className="flex min-w-0 flex-col gap-8">
+      {live.length === 0 ? (
+        <EmptyState icon={<Eraser aria-hidden strokeWidth={1.75} />} title="Nothing to erase">
+          The project has no site, so it holds no web data.
+        </EmptyState>
+      ) : isOwner ? (
+        <ErasureForm tenantId={tenantId} sites={live} />
+      ) : (
+        <Notice tone="info" title="Owners request erasure">
+          Only owners of this project can request erasure. The history below shows each request.
+        </Notice>
+      )}
+      <History tenantId={tenantId} sites={all} />
     </div>
   );
 }
@@ -308,7 +319,7 @@ function ErasureForm({ tenantId, sites }: { tenantId: string; sites: Site[] }) {
         autoComplete="off"
         onSubmit={submit}
         aria-label="Request erasure"
-        className="max-w-prose flex min-w-0 flex-col gap-6 rounded-lg border border-line bg-raised p-5 max-sm:p-4"
+        className="max-w-prose flex min-w-0 flex-col gap-6"
       >
         <div className="max-w-sm">
           <SelectField
@@ -421,7 +432,6 @@ function ErasureForm({ tenantId, sites }: { tenantId: string; sites: Site[] }) {
             <Eraser aria-hidden />
             {values.kind === "site_reset" ? "Reset site data" : "Request erasure"}
           </Button>
-          <span className="text-small text-fg-2">You confirm in the next step.</span>
         </div>
         {confirming || fieldError ? null : special ? (
           <FormMessage error={new Error(special)} />
@@ -628,10 +638,7 @@ function History({ tenantId, sites }: { tenantId: string; sites: Site[] }) {
     },
   ];
   return (
-    <section aria-labelledby="erasure-history" className="flex min-w-0 flex-col gap-4">
-      <h2 id="erasure-history" className="text-title text-fg">
-        Request history
-      </h2>
+    <Section title="Request history" count={list.data ? rows.length : null}>
       <DataTable<ErasureRequest>
         label="Request history"
         columns={columns}
@@ -651,44 +658,7 @@ function History({ tenantId, sites }: { tenantId: string; sites: Site[] }) {
           onMore: () => void list.fetchNextPage(),
         }}
       />
-    </section>
-  );
-}
-
-// what can and cannot be erased, in a few lines; the full description is
-// in the docs
-function Explanation() {
-  const docs = siblingUrl(window.location.hostname, "docs");
-  return (
-    <aside
-      aria-labelledby="erasure-explained"
-      className="flex min-w-0 flex-col gap-3 xl:sticky xl:top-6"
-    >
-      <h2 id="erasure-explained" className="text-caption text-fg-2">
-        What can and cannot be erased
-      </h2>
-      <ul className="flex flex-col gap-2 text-small text-fg-2">
-        <li>
-          The service stores no IP address. It knows a visitor only by a token that changes each UTC
-          day.
-        </li>
-        <li>
-          One visitor works only on the day of the visit. At midnight UTC the day's secret is
-          destroyed.
-        </li>
-        <li>One session works while the raw data is kept.</li>
-        <li>Backups keep data until they expire. API metrics hold no visitor data.</li>
-      </ul>
-      {docs ? (
-        <a
-          href={`${docs}/compliance/erasure`}
-          className="inline-flex w-fit items-center gap-1 rounded-sm text-small text-fg underline decoration-line-strong underline-offset-4 transition-colors duration-(--vs-duration-press) ease-standard hover:decoration-fg focus-ring"
-        >
-          How erasure works
-          <ExternalLink aria-hidden className="size-4" />
-        </a>
-      ) : null}
-    </aside>
+    </Section>
   );
 }
 
