@@ -281,7 +281,21 @@ describe("decision panel", () => {
         <Toaster />
       </>,
     );
-    expect(byRole(host, "radio", "ApproveA").getAttribute("aria-checked")).toBe("true");
+    // nothing is chosen on open: the submit waits for a choice, and ctrl
+    // enter sends nothing
+    expect(byRole(host, "radio", "ApproveA").getAttribute("aria-checked")).toBe("false");
+    expect(byRole(host, "radio", "RejectR").getAttribute("aria-checked")).toBe("false");
+    const send = host.querySelector("button[type=submit]") as HTMLButtonElement;
+    expect(send.disabled).toBe(true);
+    expect(send.textContent).toBe("Choose Approve or Reject");
+    await act(async () => {
+      host
+        .querySelector("form")
+        ?.dispatchEvent(
+          new KeyboardEvent("keydown", { key: "Enter", ctrlKey: true, bubbles: true }),
+        );
+    });
+    expect(calls).toHaveLength(0);
     await act(async () => {
       host
         .querySelector("form")

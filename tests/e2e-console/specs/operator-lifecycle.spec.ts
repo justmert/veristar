@@ -198,6 +198,8 @@ test("a new project waits in the review queue and the operator approves it", asy
   await expect(decision.getByRole("radio")).toHaveText([/Approve/, /Reject/]);
   expect(await menuActions()).toEqual(["Remove project"]);
 
+  // nothing is chosen on open, so the send waits for a choice
+  await expect(decision.getByRole("button", { name: "Choose Approve or Reject" })).toBeDisabled();
   await decision.getByRole("radio", { name: /Approve/ }).click();
   await decision.getByLabel(/^Reason/).fill("Looks good");
   await decision.getByRole("button", { name: /^Approve project/ }).click();
