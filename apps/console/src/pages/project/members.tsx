@@ -13,12 +13,14 @@ import { FormMessage } from "@/components/error-panel";
 import { FilterBar } from "@/components/filter-bar";
 import { NativeSelect, SelectField, TextField } from "@/components/form-field";
 import { PageHeader } from "@/components/page-header";
+import { Section } from "@/components/panel";
+import type { RowAction } from "@/components/row-menu";
 import { ErrorState } from "@/components/states";
 import { toast } from "@/components/toast";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Tooltip } from "@/components/ui/tooltip";
-import { countOf, formatCount, formatDate } from "@/lib/format";
+import { formatDate } from "@/lib/format";
 import * as v from "@/lib/validate";
 import { useProject } from "@/pages/project-layout";
 import { queryClient } from "@/query-client";
@@ -163,12 +165,7 @@ export function MembersPage() {
           data={list.data}
         />
       )}
-      <Dialog
-        open={adding}
-        onOpenChange={setAdding}
-        title="Add a person"
-        description="A person without an account gets an invite. They join at their first sign-in."
-      >
+      <Dialog open={adding} onOpenChange={setAdding} title="Add a person">
         {adding ? (
           <div className="pb-4">
             <AddMemberForm tenantId={tenant.id} onDone={() => setAdding(false)} />
@@ -179,9 +176,7 @@ export function MembersPage() {
   );
 }
 
-type Pending =
-  | { kind: "role"; member: Member; role: Role }
-  | { kind: "remove"; member: Member; self: boolean };
+type Pending = { kind: "role"; member: Member; role: Role };
 
 function MembersBody({
   tenantId,
@@ -219,22 +214,40 @@ function MembersBody({
       }
     },
   });
-  const remove = useMutation({
-    mutationFn: (m: Member) => api.removeMember(tenantId, m.user_id),
-    onSuccess: async (_, m) => {
-      setPending(null);
-      if (m.user_id === selfId) {
-        toast.success(`You left ${tenantName}.`);
-        // after leaving, every route of this project answers 404
-        queryClient.removeQueries({ queryKey: keys.tenant(tenantId) });
-        await queryClient.invalidateQueries({ queryKey: keys.me });
-        navigate("/", { replace: true });
-        return;
-      }
-      toast.success(`${m.display_name} is removed.`);
-      await queryClient.invalidateQueries({ queryKey: keys.members(tenantId) });
-    },
-  });
+  // the row menu's confirmation runs this; leaving takes the person home
+  async function remove(m: Member) {
+    await api.removeMember(tenantId, m.user_id);
+    if (m.user_id === selfId) {
+      toast.success(`You left ${tenantName}.`);
+      // after leaving, every route of this project answers 404
+      queryClient.removeQueries({ queryKey: keys.tenant(tenantId) });
+      await queryClient.invalidateQueries({ queryKey: keys.me });
+      navigate("/", { replace: true });
+      return;
+    }
+    toast.success(`${m.display_name} is removed.`);
+    await queryClient.invalidateQueries({ queryKey: keys.members(tenantId) });
+  }
+  const rowActions = (m: Member): RowAction[] => {
+    const self = m.user_id === selfId;
+    if (!(canManage || self) || lastOwner(m)) return [];
+    return [
+      {
+        label: self ? "Leave project" : "Remove",
+        icon: self ? <LogOut aria-hidden /> : <UserMinus aria-hidden />,
+        destructive: true,
+        confirm: {
+          title: self ? `Leave ${tenantName}?` : `Remove ${shownName(m)}?`,
+          description: self
+            ? "You lose access to its sites and data at once. An owner can add you again."
+            : `${m.display_name} loses access to this project's sites and data at once.`,
+          confirmLabel: self ? "Leave project" : "Remove member",
+          pendingLabel: self ? "Leaving" : "Removing",
+          run: () => remove(m),
+        },
+      },
+    ];
+  };
 
   const columns: Column<Member>[] = [
     {
@@ -281,46 +294,12 @@ function MembersBody({
       mobile: true,
       cell: (m) => <span className="whitespace-nowrap text-fg-2">{formatDate(m.created_at)}</span>,
     },
-    {
-      key: "actions",
-      header: "Actions",
-      align: "right",
-      mobile: true,
-      cell: (m) => {
-        const self = m.user_id === selfId;
-        if (!(canManage || self) || lastOwner(m)) return null;
-        return (
-          <Button
-            variant="destructive-outline"
-            size="sm"
-            className="max-lg:h-(--vs-control-touch)"
-            onClick={() => {
-              remove.reset();
-              setPending({ kind: "remove", member: m, self });
-            }}
-          >
-            {self ? <LogOut aria-hidden /> : <UserMinus aria-hidden />}
-            {self ? "Leave" : "Remove"}
-          </Button>
-        );
-      },
-    },
   ];
 
   const p = pending;
   return (
     <div className="flex flex-col gap-8">
-      <section aria-labelledby="members-h" className="flex min-w-0 flex-col gap-4">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <h2 id="members-h" className="text-title text-fg">
-            {countOf(data.members.length, "member")}
-          </h2>
-          {canManage && ownerCount === 1 ? (
-            <span className="text-small text-fg-2">
-              The last owner cannot leave or become a member.
-            </span>
-          ) : null}
-        </div>
+      <Section title="Members" count={data.members.length} className="gap-4">
         {data.members.length >= MEMBER_SEARCH_FROM ? (
           <FilterBar
             search={q}
@@ -339,8 +318,9 @@ function MembersBody({
           rowProps={(m) => ({ "data-member": m.user_id })}
           empty={{ title: "No member matches", text: "Search by another name or address." }}
           footer={paged.footer}
+          rowActions={rowActions}
         />
-      </section>
+      </Section>
 
       {data.invites.length > 0 ? (
         <InvitesSection tenantId={tenantId} invites={data.invites} canManage={canManage} />
@@ -351,33 +331,21 @@ function MembersBody({
         onOpenChange={(o) => {
           if (!o) setPending(null);
         }}
-        tone={p?.kind === "role" ? "primary" : "destructive"}
+        tone="primary"
         title={
-          p?.kind === "role"
-            ? `Make ${p.member.display_name} ${p.role === "owner" ? "an owner" : "a member"}?`
-            : p?.self
-              ? `Leave ${tenantName}?`
-              : `Remove ${p ? shownName(p.member) : ""}?`
+          p ? `Make ${p.member.display_name} ${p.role === "owner" ? "an owner" : "a member"}?` : ""
         }
         description={
-          p?.kind === "role"
-            ? p.role === "owner"
-              ? "Owners can add and remove people, delete sites, accept new terms and request erasure."
-              : "Members can no longer add or remove people, delete sites, accept terms or request erasure."
-            : p?.self
-              ? "You lose access to its sites and data at once. An owner can add you again."
-              : `${p?.member.display_name ?? ""} loses access to this project's sites and data at once.`
+          p?.role === "owner"
+            ? "Owners can add and remove people, delete sites, accept new terms and request erasure."
+            : "Members can no longer add or remove people, delete sites, accept terms or request erasure."
         }
-        confirmLabel={
-          p?.kind === "role" ? "Change role" : p?.self ? "Leave project" : "Remove member"
-        }
-        pendingLabel={p?.kind === "role" ? "Changing" : p?.self ? "Leaving" : "Removing"}
-        pending={setRole.isPending || remove.isPending}
-        error={p?.kind === "role" ? setRole.error : remove.error}
+        confirmLabel="Change role"
+        pendingLabel="Changing"
+        pending={setRole.isPending}
+        error={setRole.error}
         onConfirm={() => {
-          if (!p) return;
-          if (p.kind === "role") setRole.mutate({ member: p.member, role: p.role });
-          else remove.mutate(p.member);
+          if (p) setRole.mutate({ member: p.member, role: p.role });
         }}
       />
     </div>
@@ -532,26 +500,30 @@ function InvitesSection({
       mobile: true,
       cell: (i) => <span className="whitespace-nowrap text-fg-2">{formatDate(i.expires_at)}</span>,
     },
-    ...(canManage
+  ];
+  const rowActions = (i: Invite): RowAction[] =>
+    canManage
       ? [
           {
-            key: "actions",
-            header: "Actions",
-            align: "right" as const,
-            mobile: true,
-            cell: (i: Invite) => <RevokeInvite tenantId={tenantId} invite={i} />,
+            label: "Revoke invite",
+            icon: <Ban aria-hidden />,
+            destructive: true,
+            confirm: {
+              title: `Revoke the invite for ${i.display_name}?`,
+              description: "They cannot join with this invite. You can invite them again.",
+              confirmLabel: "Revoke invite",
+              pendingLabel: "Revoking",
+              run: async () => {
+                await api.revokeInvite(tenantId, i.id);
+                toast.success(`The invite for ${i.display_name} is revoked.`);
+                await queryClient.invalidateQueries({ queryKey: keys.members(tenantId) });
+              },
+            },
           },
         ]
-      : []),
-  ];
+      : [];
   return (
-    <section aria-labelledby="invites-h" className="flex min-w-0 flex-col gap-4">
-      <div className="flex flex-col gap-1">
-        <h2 id="invites-h" className="text-title text-fg">
-          Open invites ({formatCount(invites.length)})
-        </h2>
-        <p className="text-small text-fg-2">A person joins with their role at the first sign-in.</p>
-      </div>
+    <Section title="Open invites" count={invites.length} className="gap-4" data-invites="">
       {invites.length >= MEMBER_SEARCH_FROM ? (
         <FilterBar
           search={q}
@@ -570,46 +542,8 @@ function InvitesSection({
         rowProps={(i) => ({ "data-invite": i.id })}
         empty={{ title: "No invite matches", text: "Search by another name or address." }}
         footer={paged.footer}
+        rowActions={rowActions}
       />
-    </section>
-  );
-}
-
-function RevokeInvite({ tenantId, invite }: { tenantId: string; invite: Invite }) {
-  const [open, setOpen] = useState(false);
-  const revoke = useMutation({
-    mutationFn: () => api.revokeInvite(tenantId, invite.id),
-    onSuccess: async () => {
-      setOpen(false);
-      toast.success(`The invite for ${invite.display_name} is revoked.`);
-      await queryClient.invalidateQueries({ queryKey: keys.members(tenantId) });
-    },
-  });
-  return (
-    <>
-      <Button
-        variant="destructive-outline"
-        size="sm"
-        className="max-lg:h-(--vs-control-touch)"
-        onClick={() => {
-          revoke.reset();
-          setOpen(true);
-        }}
-      >
-        <Ban aria-hidden />
-        Revoke
-      </Button>
-      <ConfirmDialog
-        open={open}
-        onOpenChange={setOpen}
-        title={`Revoke the invite for ${invite.display_name}?`}
-        description="They cannot join with this invite. You can invite them again."
-        confirmLabel="Revoke invite"
-        pendingLabel="Revoking"
-        pending={revoke.isPending}
-        error={revoke.error}
-        onConfirm={() => revoke.mutate()}
-      />
-    </>
+    </Section>
   );
 }
