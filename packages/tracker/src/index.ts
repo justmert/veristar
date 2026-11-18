@@ -612,18 +612,21 @@ export function createTracker(window: Window, options: TrackerOptions): Tracker 
 declare global {
   interface Window {
     umami?: Tracker;
+    veristar?: Tracker;
   }
 }
 
-// esm entry for bundler users. the tracker is also installed as window.umami
-// when no other copy is, so umami.track() and data-umami-event work the same
-// as with the script tag.
+// esm entry for bundler users. the tracker is also installed as
+// window.veristar and window.umami when no other copy is, so veristar.track(),
+// umami.track() and data-umami-event work the same as with the script tag.
 export function init(options: TrackerOptions): Tracker {
   if (typeof window === "undefined") throw new Error("umami: init() needs a browser window");
   if (!options.siteId) throw new Error("umami: siteId is required");
   if (!options.host) throw new Error("umami: host is required");
-  if (window.umami) return window.umami;
+  const installed = window.veristar ?? window.umami;
+  if (installed) return installed;
   const tracker = createTracker(window, options);
+  window.veristar = tracker;
   window.umami = tracker;
   return tracker;
 }

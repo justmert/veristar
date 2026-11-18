@@ -2,6 +2,7 @@ import { JSDOM, VirtualConsole } from "jsdom";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   createTracker,
+  init,
   type Payload,
   type Tracker,
   type TrackerOptions,
@@ -942,5 +943,30 @@ describe("free text the gateway refuses (1.3.2)", () => {
     const e = parse(gw.events()[0] as Recorded);
     expect(e.ti).toBe("Inbox(3)");
     expect(e.r).toBe("https://ref.example/x");
+  });
+});
+
+describe("window names (1.4.0)", () => {
+  const g = globalThis as { window?: Window };
+  afterEach(() => {
+    delete g.window;
+  });
+
+  it("init() installs one tracker as window.veristar and window.umami", () => {
+    const w = openPage();
+    g.window = w;
+    const t = init({ siteId: SITE, host: gw.origin, autoTrack: false });
+    expect(w.veristar).toBe(t);
+    expect(w.umami).toBe(t);
+    expect(init({ siteId: SITE, host: gw.origin })).toBe(t);
+  });
+
+  it("init() returns a tracker already installed as window.veristar", () => {
+    const w = openPage();
+    g.window = w;
+    const first = init({ siteId: SITE, host: gw.origin, autoTrack: false });
+    delete w.umami;
+    expect(init({ siteId: SITE, host: gw.origin, autoTrack: false })).toBe(first);
+    expect(w.umami).toBeUndefined();
   });
 });
