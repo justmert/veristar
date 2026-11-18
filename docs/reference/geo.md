@@ -58,9 +58,10 @@ What this project does about it:
 
 - `scripts/fetch-dbip.sh` writes `DBIP-ATTRIBUTION.txt` next to the database.
   The gateway image ships that file beside the database.
-- Every page that shows country data must carry the link above: the console's
-  web dashboard and other pages with country breakdowns, the operator
-  dashboards and the public docs. Umami's own interface has no public host
+- Every page that shows or uses country or network data carries the link above:
+  the console's web dashboard and the other console pages with country or
+  network breakdowns, the operator dashboards, and the docs pages that describe
+  the lookup. Umami's own interface has no public host
   ([ADR 0005](../adr/0005-umami-as-engine-only.md)), so no page outside the
   console and the docs shows country results.
 - The database is used unmodified. CC BY 4.0 does not restrict commercial use
@@ -68,7 +69,7 @@ What this project does about it:
 
 ## File and record shape
 
-Read with `github.com/oschwald/maxminddb-golang/v2` v2.9.0 from
+Read with the gateway's reader, `github.com/oschwald/maxminddb-golang/v2`, from
 `dbip-country-lite-2026-11.mmdb` (built 2026-11-01 02:47:39 UTC, 8,515,063
 bytes uncompressed, 4,205,904 bytes gzipped).
 
@@ -144,11 +145,6 @@ How to read this:
 
 ## Monthly update
 
-The network data follows the same month: `scripts/fetch-network.sh <dir>
-[YYYY-MM]` runs in the image build right after `fetch-dbip.sh`, and `SIGHUP`
-reloads it together with the country file (`Network.Reload`); when any of the
-three files does not load, the previous data stays in use.
-
 1. `scripts/fetch-dbip.sh <dir> [YYYY-MM]` downloads the month's file (default:
    the current UTC month), decompresses it, opens it with the gateway's own
    reader (`scripts/dbipcheck`), checks that a public address resolves, and
@@ -157,8 +153,14 @@ three files does not load, the previous data stays in use.
    1st, before DB-IP publishes, pass the previous month explicitly.
 2. The image build runs the script. A running gateway picks up a replaced file
    (written to a temporary name and renamed over the old one) on `SIGHUP`
-   (`Geo.ReloadOnSIGHUP`). If the new file does not open, the error is logged at
-   error level and the previous file stays in use.
+   (`Node.Reload`, which also reloads the network data and the revoked tracker
+   list). If the new file does not open, the error is logged at error level and
+   the previous file stays in use.
+
+The network data follows the same month: `scripts/fetch-network.sh <dir>
+[YYYY-MM]` runs in the image build right after `fetch-dbip.sh`, and the same
+`SIGHUP` reloads it (`Network.Reload`); when any of the three files does not
+load, the previous network data stays in use.
 
 ## Tests
 
