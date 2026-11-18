@@ -35,7 +35,7 @@ Sign in to the console with GitHub and choose **Enroll a project**, as for web a
 
 ## 2. Create a token
 
-Open the project's **API analytics setup** page. It shows the OTLP endpoint for your service and
+Open the project's **Connect API** page (Setup in the sidebar). It shows the OTLP endpoint for your service and
 lets project members create tokens: give the token a name and an environment (for example
 `production`), then **Create token**. The token (`sa_otlp_` followed by 40 characters) is shown
 once. Store it as a secret of your app, for example in your secret manager or deployment

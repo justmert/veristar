@@ -80,11 +80,11 @@ browser shows its own prompt; confirm with your fingerprint, face, screen lock o
 - **Your first passkey**: if your account has none, the operator area shows **Register a passkey**
   while your enrollment window is open. Give it a name, select **Register**, then **Create a
   passkey** and **Confirm with your passkey**. The registration also confirms the session.
-- **More passkeys**: on the Operators page, under **Your passkeys**, enter a name and select **Add a
-  passkey**. Keep at least two, for example your phone and a security key, so a lost one does not
+- **More passkeys**: on the **Account** page, under **Your passkeys**, enter a name and select **Add
+  a passkey**. Keep at least two, for example your phone and a security key, so a lost one does not
   lock you out.
 - **Delete a passkey**: select **Delete** next to it. The account always keeps one. A sign-in
-  passkey that confirms the operator area is listed but managed on the **Account** page.
+  passkey that confirms the operator area is listed there but managed under **Sign-in methods**.
 - A passkey is bound to the console's address. It does not work on another site, so a look-alike
   page cannot use it.
 
