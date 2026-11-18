@@ -9,6 +9,7 @@ import { Notice as ToneNotice } from "@/components/notice";
 import { ErrorState } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { isNotFound } from "@/lib/errors";
+import { termsVersionLabel } from "@/lib/terms";
 import { ProjectPagePending } from "@/pages/project/page-frame";
 import { NotFoundPage, ProjectsButton, StopPage } from "@/pages/public/not-found";
 import { ResubmitForm } from "@/pages/resubmit";
@@ -172,6 +173,7 @@ function TermsNotice({
   version: string;
   isOwner: boolean;
 }) {
+  const label = termsVersionLabel(version);
   const accept = useMutation({
     mutationFn: () => api.acceptTerms(tenant.id, version),
     onSuccess: async (t) => {
@@ -208,7 +210,7 @@ function TermsNotice({
               pending={accept.isPending}
               className="max-sm:h-(--vs-control-touch)"
             >
-              Accept version {version}
+              Accept the terms
             </Button>
           </>
         ) : (
@@ -217,8 +219,8 @@ function TermsNotice({
       }
     >
       {isOwner
-        ? `Until an owner accepts version ${version}, this project can be viewed but not changed.`
-        : `Until an owner accepts version ${version}, this project can be viewed but not changed. Ask an owner of this project to accept them.`}
+        ? `${label}. Until an owner accepts the new terms, you can view this project but not change it.`
+        : `${label}. Until an owner accepts the new terms, you can view this project but not change it. Ask an owner to accept them.`}
       <FormMessage error={accept.error} className="mt-2" />
     </ToneNotice>
   );

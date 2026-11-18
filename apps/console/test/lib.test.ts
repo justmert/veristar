@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { snippet } from "@/api/schemas";
-import { parseBlocks } from "@/lib/markdown";
+import { inline, parseBlocks } from "@/lib/markdown";
 import { rejectionRows, sumRejected, sumUnclassified } from "@/lib/outcomes";
 import { snippetGuides } from "@/lib/snippet-guides";
 import { safeReturnTo } from "@/pages/public/sign-in";
@@ -75,9 +75,39 @@ describe("terms markdown", () => {
 
   it("groups list items with continuation lines", () => {
     expect(parseBlocks("1. one\n2. two\n   more\n\n- a\n- b")).toEqual([
-      { kind: "ol", items: ["one", "two more"] },
-      { kind: "ul", items: ["a", "b"] },
+      {
+        kind: "ol",
+        items: [
+          { text: "one", sub: [] },
+          { text: "two more", sub: [] },
+        ],
+      },
+      {
+        kind: "ul",
+        items: [
+          { text: "a", sub: [] },
+          { text: "b", sub: [] },
+        ],
+      },
     ]);
+  });
+
+  it("nests an indented list under its item, with its own continuation lines", () => {
+    expect(parseBlocks("- What it gets:\n  - one\n    more\n  - two\n- next")).toEqual([
+      {
+        kind: "ul",
+        items: [
+          { text: "What it gets:", sub: ["one more", "two"] },
+          { text: "next", sub: [] },
+        ],
+      },
+    ]);
+  });
+
+  it("links a bare https address without its trailing punctuation", () => {
+    const out = inline("See https://db-ip.com), then stop.");
+    const a = out.find((n) => typeof n === "object") as { props: { href: string } };
+    expect(a.props.href).toBe("https://db-ip.com/");
   });
 });
 
