@@ -1,3 +1,4 @@
+import { act } from "react";
 import { Outlet } from "react-router";
 import { describe, expect, it } from "vitest";
 import type { Tenant } from "@/api/schemas";
@@ -22,6 +23,17 @@ function routes(tenant: Tenant = base, termsCurrent = true) {
 
 const page = (items: unknown[]) => ({ items, next_cursor: null });
 
+// the create dialog opens from the first step, or the header once a token exists
+async function openCreate(host: HTMLElement) {
+  await click(byRole(host, "button", "Create token"));
+}
+
+function submit(host: HTMLElement): HTMLElement {
+  const dialog = [...host.querySelectorAll("dialog")].find((d) => d.hasAttribute("open"));
+  if (!dialog) throw new Error("no open dialog");
+  return byRole(dialog as HTMLElement, "button", "Create token");
+}
+
 describe("api analytics setup page (contract section 6)", () => {
   it("lists the active tokens with prefix, environment and use", async () => {
     const calls = stubFetch([{ status: 200, body: page([f.otlpTokenBody]) }]);
@@ -38,11 +50,12 @@ describe("api analytics setup page (contract section 6)", () => {
   it("asks for revoked tokens only when they are to be shown", async () => {
     const revoked = { ...f.otlpTokenBody, status: "revoked", revoked_at: "2026-11-12T10:00:00Z" };
     const calls = stubFetch([
-      { status: 200, body: page([]) },
+      { status: 200, body: page([f.otlpTokenBody]) },
       { status: 200, body: page([revoked]) },
     ]);
     const host = await renderRoutes(routes(), path);
-    await waitFor(() => expect(host.textContent).toContain("No active tokens"));
+    // the list starts with an active token; the toggle sits above it
+    await waitFor(() => expect(host.textContent).toContain("Production API"));
     const label = [...host.querySelectorAll("label")].find(
       (l) => l.textContent?.trim() === "Show revoked tokens",
     );
@@ -53,8 +66,8 @@ describe("api analytics setup page (contract section 6)", () => {
     expect(calls[1]?.url).toBe(
       `/api/tenants/${f.TENANT_ID}/otlp-tokens?include_revoked=true&limit=200`,
     );
-    // a revoked token cannot be revoked again
-    expect(() => byRole(host, "button", "Revoke")).toThrow();
+    // a revoked token has no row menu: nothing is left to do with it
+    expect(host.querySelector('button[aria-label^="Actions for"]')).toBeNull();
   });
 
   it("creates a token and shows the plaintext once, until it is dismissed", async () => {
@@ -63,10 +76,11 @@ describe("api analytics setup page (contract section 6)", () => {
       { status: 201, body: f.otlpTokenCreatedBody },
     ]);
     const host = await renderRoutes(routes(), path);
-    await waitFor(() => expect(host.textContent).toContain("No active tokens"));
+    await waitFor(() => expect(host.querySelector('[data-check="1"]')).not.toBeNull());
+    await openCreate(host);
     await type(byLabel(host, "Token name"), "  Production API ");
     await type(byLabel(host, "Environment"), "production");
-    await click(byRole(host, "button", "Create token"));
+    await click(submit(host));
     // the secret is masked until it is shown on purpose
     await waitFor(() => expect(host.querySelector('[aria-label="New secret"]')).not.toBeNull());
     expect(host.textContent).not.toContain(f.OTLP_PLAIN);
@@ -79,7 +93,11 @@ describe("api analytics setup page (contract section 6)", () => {
     expect(calls[1]?.headers.get("X-Requested-With")).toBe("sa-console");
     expect(calls[1]?.body).toEqual({ name: "Production API", environment: "production" });
     expect(host.textContent).toContain("It is shown only this once");
-    expect(byLabel(host, "Token name").value).toBe("");
+    // the exporter of each stack is written for the new token: the copy
+    // holds it, the code on screen only its start
+    expect(host.querySelector("dialog [data-snippet=node]")?.textContent).toContain(
+      `Bearer ${f.OTLP_PLAIN.slice(0, 12)}...`,
+    );
     // done stays disabled until the person says they stored it
     const done = byRole(host, "button", "Done") as HTMLButtonElement;
     expect(done.disabled).toBe(true);
@@ -97,9 +115,10 @@ describe("api analytics setup page (contract section 6)", () => {
       { status: 201, body: { ...f.otlpTokenCreatedBody, environment: "" } },
     ]);
     const host = await renderRoutes(routes(), path);
-    await waitFor(() => expect(host.textContent).toContain("No active tokens"));
+    await waitFor(() => expect(host.querySelector('[data-check="1"]')).not.toBeNull());
+    await openCreate(host);
     await type(byLabel(host, "Token name"), "Staging");
-    await click(byRole(host, "button", "Create token"));
+    await click(submit(host));
     await waitFor(() => expect(calls).toHaveLength(2));
     expect(calls[1]?.body).toEqual({ name: "Staging" });
   });
@@ -110,16 +129,17 @@ describe("api analytics setup page (contract section 6)", () => {
       { status: 422, body: f.errorBody("validation_failed", { name: "too_many" }) },
     ]);
     const host = await renderRoutes(routes(), path);
-    await waitFor(() => expect(host.textContent).toContain("No active tokens"));
+    await waitFor(() => expect(host.querySelector('[data-check="1"]')).not.toBeNull());
+    await openCreate(host);
     await type(byLabel(host, "Environment"), "Production EU");
-    await click(byRole(host, "button", "Create token"));
+    await click(submit(host));
     expect(calls).toHaveLength(1);
     expect(host.textContent).toContain("Required.");
     expect(host.textContent).toContain("Use up to 32 lowercase letters");
 
     await type(byLabel(host, "Token name"), "One more");
     await type(byLabel(host, "Environment"), "");
-    await click(byRole(host, "button", "Create token"));
+    await click(submit(host));
     await waitFor(() => expect(host.textContent).toContain("This project has 50 active tokens."));
   });
 
@@ -127,8 +147,9 @@ describe("api analytics setup page (contract section 6)", () => {
     const calls = stubFetch([{ status: 200, body: page([f.otlpTokenBody]) }, { status: 204 }]);
     const host = await renderRoutes(routes(), path);
     await waitFor(() => expect(host.textContent).toContain("Production API"));
-    await click(byRole(host, "button", "Revoke"));
-    const dialog = host.querySelector("dialog");
+    await openMenu(host, "Actions for Production API");
+    await click(menuItem("Revoke"));
+    const dialog = [...host.querySelectorAll("dialog")].find((d) => d.hasAttribute("open"));
     expect(dialog?.hasAttribute("open")).toBe(true);
     expect(dialog?.textContent).toContain("Revoke the token “Production API”?");
     expect(dialog?.textContent).toContain("refuses this token within seconds");
@@ -146,8 +167,8 @@ describe("api analytics setup page (contract section 6)", () => {
     const host = await renderRoutes(routes({ ...base, status: "suspended" }), path);
     await waitFor(() => expect(host.textContent).toContain("Production API"));
     expect(host.textContent).toContain("cannot be created while the project is suspended");
-    expect(() => byLabel(host, "Token name")).toThrow();
-    expect(byRole(host, "button", "Revoke")).toBeTruthy();
+    expect(() => byRole(host, "button", "Create token")).toThrow();
+    expect(host.querySelector('button[aria-label="Actions for Production API"]')).not.toBeNull();
 
     stubFetch([{ status: 200, body: page([]) }]);
     const pending = await renderRoutes(routes({ ...base, status: "pending" }), path);
@@ -158,25 +179,32 @@ describe("api analytics setup page (contract section 6)", () => {
     stubFetch([{ status: 200, body: page([]) }]);
     const host = await renderRoutes(routes(base, false), path);
     await waitFor(() => expect(host.textContent).toContain("accepts the current terms"));
-    expect(() => byLabel(host, "Token name")).toThrow();
+    expect(() => byRole(host, "button", "Create token")).toThrow();
   });
 
-  it("says in a few lines what the service keeps and that the own backend keeps everything", async () => {
-    stubFetch([{ status: 200, body: page([]) }]);
+  it("shows one short exporter per stack, node first, and no example files", async () => {
+    stubFetch([{ status: 200, body: page([f.otlpTokenBody]) }]);
     const host = await renderRoutes(routes(), path);
-    const text = host.textContent ?? "";
-    expect(text).toContain("Only HTTP server request duration is kept");
-    expect(text).toContain("Other metrics, traces and logs are dropped");
-    expect(text).toContain("Your own backend keeps the full data");
-  });
-
-  it("shows the five language guides as tabs, node first", async () => {
-    stubFetch([{ status: 200, body: page([]) }]);
-    const host = await renderRoutes(routes(), path);
+    await waitFor(() => expect(host.querySelector("[role=tab]")).not.toBeNull());
     const tabs = [...host.querySelectorAll("[role=tab]")].map((t) => t.textContent);
     expect(tabs).toEqual(["Node.js", "Go", "Python", "Rust", "Java"]);
-    expect(host.textContent).toContain("src/telemetry.js");
-    expect(host.textContent).toContain("new NodeSDK(");
+    const node = host.querySelector("[data-snippet=node] code")?.textContent ?? "";
+    expect(node).toContain("new OTLPMetricExporter({");
+    expect(node.split("\n").length).toBeLessThanOrEqual(5);
+    // no file of the example and no path inside the repository
+    expect(host.textContent).not.toContain("src/telemetry.js");
+    expect(host.textContent).not.toContain("new NodeSDK(");
+    expect(host.textContent).not.toContain("apps/console");
+  });
+
+  it("marks the steps by state: token done, exporter now, data awaited", async () => {
+    stubFetch([{ status: 200, body: page([f.otlpTokenBody]) }]);
+    const host = await renderRoutes(routes(), path);
+    await waitFor(() => expect(host.textContent).toContain("Production API"));
+    const states = [...host.querySelectorAll("[data-check]")].map((e) =>
+      e.getAttribute("data-state"),
+    );
+    expect(states).toEqual(["done", "current", "waiting"]);
   });
 });
 
@@ -201,3 +229,20 @@ describe("lastUsedToken", () => {
     expect(lastUsedToken([a, t, b])?.id).toBe("b");
   });
 });
+
+// radix opens a menu on pointer down, not on click
+async function openMenu(scope: HTMLElement, label: string) {
+  const trigger = scope.querySelector<HTMLElement>(`button[aria-label="${label}"]`);
+  if (!trigger) throw new Error(`no menu ${label}`);
+  await act(async () => {
+    trigger.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0 }));
+  });
+}
+
+function menuItem(text: string): HTMLElement {
+  const el = [...document.querySelectorAll<HTMLElement>("[role=menuitem]")].find((m) =>
+    m.textContent?.includes(text),
+  );
+  if (!el) throw new Error(`no menu item ${text}`);
+  return el;
+}

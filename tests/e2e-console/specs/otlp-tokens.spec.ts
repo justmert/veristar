@@ -50,7 +50,7 @@ test.afterAll(async () => {
   await ctx?.close();
 });
 
-test("the api analytics page shows the endpoint, the guides and what is kept", async () => {
+test("the api analytics page shows the steps and one short exporter per stack", async () => {
   await page.goto(`${APP}/projects/${tenant.id}`);
   // the setup page is Connect API in the sidebar's Setup group
   await page
@@ -59,30 +59,16 @@ test("the api analytics page shows the endpoint, the guides and what is kept", a
     .click();
   await page.waitForURL(`${APP}/projects/${tenant.id}/connect-api`);
   await expect(page.getByRole("heading", { name: "Connect your API" })).toBeVisible();
-  await expect(page.getByText(`https://otlp.${BASE_DOMAIN}`, { exact: true })).toBeVisible();
-  await expect(page.getByText("Only HTTP server request duration is kept")).toBeVisible();
-  await expect(page.getByText("Your own backend keeps the full data")).toBeVisible();
-
-  const tabs = page.getByRole("tab");
-  await expect(tabs).toHaveText(["Node.js", "Go", "Python", "Rust", "Java"]);
-  await expect(page.getByText("new NodeSDK(")).toBeVisible();
-  await page.getByRole("tab", { name: "Python" }).click();
-  await expect(
-    page.getByText("ENV OTEL_SEMCONV_STABILITY_OPT_IN=http", { exact: true }),
-  ).toBeVisible();
-  await page.getByRole("tab", { name: "Go" }).click();
-  await expect(page.getByText("func setupTelemetry(", { exact: false })).toBeVisible();
-  await page.getByRole("tab", { name: "Rust" }).click();
-  await expect(page.getByText("fn setup_telemetry(", { exact: false })).toBeVisible();
-  await page.getByRole("tab", { name: "Java" }).click();
-  await expect(
-    page.getByText("exec java -javaagent:/app/opentelemetry-javaagent.jar", { exact: false }),
-  ).toBeVisible();
+  // a new project: the token is the step to do now, the rest waits
+  await expect(page.locator('[data-check="1"]')).toHaveAttribute("data-state", "current");
+  await expect(page.locator('[data-check="2"]')).toHaveAttribute("data-state", "todo");
   await page.screenshot({ path: join(shots, "page.png"), fullPage: true });
 });
 
 test("a token is created through the control plane and shown once", async () => {
-  const form = page.getByRole("form", { name: "Create a token" });
+  await page.getByRole("button", { name: "Create token" }).click();
+  const dialog = page.getByRole("dialog", { name: "Create a token" });
+  const form = dialog.getByRole("form", { name: "Create a token" });
   await form.getByLabel("Token name").fill("Payments API");
   await form.getByLabel("Environment").fill("production");
   const created = page.waitForResponse(
@@ -103,6 +89,16 @@ test("a token is created through the control plane and shown once", async () => 
   await expect(panel).toContainText("Copy your new token");
   await expect(panel).toContainText("Payments API");
   await expect(panel).not.toContainText(plain);
+  // the exporter of each stack is written for this token and the endpoint;
+  // the code on screen shows only the token's start
+  const tabs = panel.getByRole("tab");
+  await expect(tabs).toHaveText(["Node.js", "Go", "Python", "Rust", "Java"]);
+  const node = panel.locator("[data-snippet=node]");
+  await expect(node).toContainText(`https://otlp.${BASE_DOMAIN}/v1/metrics`);
+  await expect(node).toContainText(`Bearer ${plain.slice(0, 12)}...`);
+  await expect(node).not.toContainText("apps/console");
+  await panel.getByRole("tab", { name: "Java" }).click();
+  await expect(panel.locator("[data-snippet=java]")).toContainText("otlp_http:");
   await panel.getByRole("button", { name: "Show the secret" }).click();
   await expect(panel.locator("code")).toHaveText(plain);
   await panel.getByRole("button", { name: "Copy", exact: true }).click();
@@ -110,17 +106,18 @@ test("a token is created through the control plane and shown once", async () => 
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(plain);
   await page.screenshot({ path: join(shots, "created.png"), fullPage: true });
 
-  // the table names it by prefix only
-  const list = page.getByRole("table", { name: "Tokens" });
-  await expect(list.getByText("Payments API", { exact: true })).toBeVisible();
-  await expect(list.getByText(`${body.prefix}...`)).toBeVisible();
-  await expect(list).not.toContainText(plain);
-
   // done stays disabled until the person confirms they stored it
   const done = panel.getByRole("button", { name: "Done" });
   await expect(done).toBeDisabled();
   await panel.getByRole("checkbox").click();
   await done.click();
+
+  // the table names it by prefix only; the exporter is the step now
+  const list = page.getByRole("table", { name: "Tokens" });
+  await expect(list.getByText("Payments API", { exact: true })).toBeVisible();
+  await expect(list.getByText(`${body.prefix}...`)).toBeVisible();
+  await expect(list).not.toContainText(plain);
+  await expect(page.locator('[data-check="2"]')).toHaveAttribute("data-state", "current");
   await expect(page.getByText(plain)).toHaveCount(0);
   // a reload shows the token again only as its prefix
   await page.reload();
@@ -142,7 +139,9 @@ test("the token is revoked after a confirmation", async () => {
     .getByRole("table", { name: "Tokens" })
     .getByRole("row")
     .filter({ hasText: "Payments API" });
-  await row.getByRole("button", { name: "Revoke" }).click();
+  const menu = row.getByRole("button", { name: "Actions for Payments API" });
+  await menu.click();
+  await page.getByRole("menuitem", { name: "Revoke" }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
   await expect(dialog).toContainText("Revoke the token “Payments API”?");
@@ -152,7 +151,8 @@ test("the token is revoked after a confirmation", async () => {
   let one = await api<Token>(ctx, "GET", `/api/tenants/${tenant.id}/otlp-tokens/${tokenId}`);
   expect(one.body.status).toBe("active");
 
-  await row.getByRole("button", { name: "Revoke" }).click();
+  await menu.click();
+  await page.getByRole("menuitem", { name: "Revoke" }).click();
   const revoked = page.waitForResponse(
     (r) =>
       r.url() === `${APP}/api/tenants/${tenant.id}/otlp-tokens/${tokenId}` &&
@@ -162,9 +162,7 @@ test("the token is revoked after a confirmation", async () => {
   expect((await revoked).status()).toBe(204);
   await expect(dialog).toBeHidden();
   await expect(page.getByText("Payments API is revoked.")).toBeVisible();
-  await expect(
-    page.getByRole("table", { name: "Tokens" }).getByText("No active tokens"),
-  ).toBeVisible();
+  await expect(page.locator("[data-tokens=none]")).toHaveText("No active tokens");
 
   one = await api<Token>(ctx, "GET", `/api/tenants/${tenant.id}/otlp-tokens/${tokenId}`);
   expect(one.status).toBe(200);
@@ -177,7 +175,7 @@ test("the token is revoked after a confirmation", async () => {
     .getByRole("row")
     .filter({ hasText: "Payments API" });
   await expect(shown.getByText("Revoked", { exact: true })).toBeVisible();
-  await expect(shown.getByRole("button", { name: "Revoke" })).toHaveCount(0);
+  await expect(shown.getByRole("button", { name: /^Actions for/ })).toHaveCount(0);
   await page.screenshot({ path: join(shots, "revoked.png"), fullPage: true });
 });
 
