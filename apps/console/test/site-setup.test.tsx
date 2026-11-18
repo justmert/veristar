@@ -152,8 +152,11 @@ describe("a setup step", () => {
 
   it("folds once the state is known on load, not before", async () => {
     const host = await render(<Harness start="done" settled={false} />);
-    // the state is not known yet: the step does not fold, the body stays
-    expect(host.textContent).toContain("copy this snippet");
+    // the state is not known yet: the body waits behind a loading line, so
+    // it never shows and then folds away
+    expect(host.textContent).not.toContain("copy this snippet");
+    expect(host.querySelector('[aria-busy="true"]')).not.toBeNull();
+    expect(toggle(host)).toBeNull();
     await click(byRole(host, "button", "settle"));
     await waitFor(() => expect(host.textContent).not.toContain("copy this snippet"));
     expect(toggle(host)?.textContent).toBe("Show");
