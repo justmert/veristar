@@ -520,7 +520,7 @@ function MatchList({ data }: { data: RuleMatches }) {
                   {m.tenant.name}
                 </Link>
                 <span className="text-caption text-fg-3">
-                  Integrity grade {m.integrity.grade ?? "not graded"} (
+                  {m.integrity.grade ? `Integrity grade ${m.integrity.grade}` : "Not graded"} (
                   {countOf(m.integrity.graded_days, "graded site day")})
                 </span>
                 {cohortText(m.cohort) ? (

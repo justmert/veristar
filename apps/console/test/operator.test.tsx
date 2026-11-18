@@ -5,6 +5,7 @@ import { tenantAction } from "@/api/schemas";
 import { dayPairError, EMPTY_FILTERS } from "@/lib/global";
 import {
   AuditPage,
+  auditChanges,
   auditDaysError,
   auditSummary,
   auditVerb,
@@ -366,6 +367,25 @@ describe("audit log", () => {
         null,
       ),
     ).toBe(`/operator/audit?tenant_id=${f.TENANT_ID}&action=tenant.&limit=50`);
+  });
+
+  it("spells out lists and objects in change chips", () => {
+    const e = {
+      ...f.auditEntryBody,
+      detail: {
+        origins: { old: ["https://a.example"], new: ["https://a.example", "https://b.example"] },
+        cohort: { old: null, new: { program: "Build Award", round: 38 } },
+        campaign_params: { old: false, new: true },
+        names: { old: [], new: "" },
+      },
+    };
+    expect(auditChanges(e)).toEqual([
+      { key: "origins", from: "https://a.example", to: "https://a.example, https://b.example" },
+      { key: "cohort", from: "–", to: "program Build Award, round 38" },
+      { key: "campaign params", from: "off", to: "on" },
+      { key: "names", from: "–", to: "–" },
+    ]);
+    expect(JSON.stringify(auditChanges(e))).not.toContain("[object Object]");
   });
 
   it("summarises status changes and reasons", () => {
