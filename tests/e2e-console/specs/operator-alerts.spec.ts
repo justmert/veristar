@@ -137,13 +137,13 @@ test("an operator sees firing alerts by severity, the badge and the critical ban
   await expect(page.getByText(/^Last checked \d\d:\d\d:\d\d UTC$/)).toBeVisible();
 
   const nav = page.getByRole("navigation", { name: "Operator" });
-  await expect(nav.getByRole("link", { name: /^Alerts\s*2 alerts firing$/ })).toBeVisible();
+  await expect(nav.getByRole("link", { name: /^Alerts\s*1 critical alert firing$/ })).toBeVisible();
   await page.screenshot({ path: join(shots, "firing.png"), fullPage: true });
 
   // the banner follows the operator to the other pages of the area
   await page.goto(`${APP}/operator/projects`);
   await expect(
-    page.getByRole("alert").filter({ hasText: "A critical alert is firing." }),
+    page.getByRole("alert").filter({ hasText: "1 critical alert is firing." }),
   ).toBeVisible();
   await page.getByRole("link", { name: "Open alerts" }).click();
   await expect(page).toHaveURL(alertsUrl);

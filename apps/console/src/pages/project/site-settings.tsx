@@ -40,7 +40,11 @@ export function SiteSettingsPage() {
       <div className="flex flex-col gap-6">
         <SitesBackLink tenantId={tenant.id} />
         <PageHeader title="Site settings" />
-        <ErrorState error={sites.error} onRetry={() => sites.refetch()} />
+        <ErrorState
+          title="The site did not load"
+          error={sites.error}
+          onRetry={() => sites.refetch()}
+        />
       </div>
     );
   if (!site) return <SitePageLoading tenantId={tenant.id} page="settings" />;
@@ -156,7 +160,7 @@ function EditSiteForm({ site }: { site: Site }) {
       noValidate
       onSubmit={submit}
       aria-label={`Edit ${site.name}`}
-      className="flex flex-col gap-4"
+      className="max-w-prose flex flex-col gap-4"
     >
       <TextField
         label="Name"
@@ -279,7 +283,7 @@ function DangerZone({ site }: { site: Site }) {
           </span>
         </div>
         <Button
-          variant="destructive"
+          variant="destructive-outline"
           className="max-lg:h-(--vs-control-touch)"
           onClick={() => {
             remove.reset();
@@ -293,7 +297,7 @@ function DangerZone({ site }: { site: Site }) {
       <ConfirmDialog
         open={open}
         onOpenChange={setOpen}
-        title={`Delete ${site.name}?`}
+        title={`Delete the site “${site.name}”?`}
         description={`Events from ${site.domain} are refused, and all web data of this site is deleted. You cannot undo this.`}
         cancelLabel="Keep site"
         confirmLabel="Delete site"

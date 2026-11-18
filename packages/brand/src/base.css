@@ -79,13 +79,15 @@
       background-color: transparent;
     }
   }
+  /* the breathing of a skeleton keeps it visible: it never fades below
+     the 1.3:1 the muted role holds on a card */
   @keyframes vs-skeleton {
     0%,
     100% {
       opacity: 1;
     }
     50% {
-      opacity: 0.5;
+      opacity: 0.8;
     }
   }
   @keyframes vs-spin {
@@ -137,6 +139,22 @@
 
 @utility tabular {
   font-variant-numeric: tabular-nums;
+}
+
+/* a stat value that always fits its card. the value keeps the metric step
+   while it fits; a longer value steps down with the card's width (its
+   characters in --metric-chars, a tabular digit is about 0.62 em), never
+   below the small step. the line height stays, so a row of cards keeps one
+   height. needs a size container (@container) around it */
+@utility metric-fit {
+  font-size: max(
+    var(--vs-text-small),
+    min(var(--vs-text-metric), calc(100cqi / var(--metric-chars, 6) * 1.6))
+  );
+  line-height: var(--vs-text-metric-line);
+  font-weight: var(--vs-text-metric-weight);
+  letter-spacing: var(--vs-text-metric-tracking);
+  white-space: nowrap;
 }
 
 /* the focus halo every control shares: accent border plus a soft ring */
@@ -223,6 +241,43 @@
     &[open]::backdrop {
       opacity: 0;
     }
+  }
+}
+
+/* a list that scrolls inside its box fades out at its lower edge while more
+   rows lie below, so a cut row reads as "more below". a box that does not
+   scroll has no scroll timeline, so it draws no fade */
+@utility scroll-fade {
+  animation: vs-scroll-fade linear both;
+  animation-timeline: scroll(self);
+}
+@keyframes vs-scroll-fade {
+  0%,
+  98% {
+    mask-image: linear-gradient(
+      to bottom,
+      var(--vs-fg) calc(100% - var(--vs-space-6)),
+      transparent
+    );
+  }
+  100% {
+    mask-image: none;
+  }
+}
+
+/* the same along a line: code that runs past its box fades out at the right
+   edge while more of the line lies beyond it */
+@utility scroll-fade-x {
+  animation: vs-scroll-fade-x linear both;
+  animation-timeline: scroll(self inline);
+}
+@keyframes vs-scroll-fade-x {
+  0%,
+  98% {
+    mask-image: linear-gradient(to right, var(--vs-fg) calc(100% - var(--vs-space-8)), transparent);
+  }
+  100% {
+    mask-image: none;
   }
 }
 

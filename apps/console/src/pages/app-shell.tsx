@@ -10,18 +10,22 @@ import { CommandPalette, isPaletteKey } from "@/components/command-palette";
 import { FormMessage } from "@/components/error-panel";
 import { PageMotion } from "@/components/motion";
 import { areaOf, pageTitle } from "@/components/nav/nav-items";
-import { Sidebar } from "@/components/nav/sidebar";
+import { AlertsBadge, Sidebar } from "@/components/nav/sidebar";
 import { Kbd } from "@/components/panel";
 import { Toaster, toast } from "@/components/toast";
 import { Button } from "@/components/ui/button";
+import { MenuContainer } from "@/components/ui/menu";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { criticalCount } from "@/lib/alerts";
 import { queryClient } from "@/query-client";
 
 // the signed-in frame: the sidebar on a wide screen, a top bar with the
 // page title and a drawer on a phone, the toasts, the command palette
-// (ctrl k) and, on operator pages while a paging alert fires, one slim line
-// that links to Alerts. the page settles in when the route changes.
+// (ctrl k) and, on operator pages while a paging alert fires, a note that
+// links to Alerts. the note sits in the row of the Go to button (on a phone,
+// a badge in the top bar), a row that is always there: the page never
+// moves down when the note arrives. the page settles in when the route
+// changes.
 export function AppShell() {
   const me = useQuery(meQuery);
   const navigate = useNavigate();
@@ -46,6 +50,11 @@ export function AppShell() {
     document.getElementById("main")?.focus({ preventScroll: true });
   }, [pathname]);
 
+  // the tab names the page
+  useEffect(() => {
+    document.title = `${pageTitle(pathname)} · Veristar`;
+  }, [pathname]);
+
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (!isPaletteKey(e)) return;
@@ -57,7 +66,14 @@ export function AppShell() {
   }, []);
 
   if (!me.data) return null;
-  const operatorArea = me.data.user.is_operator && areaOf(pathname).kind === "operator";
+  const area = areaOf(pathname);
+  const operatorArea = me.data.user.is_operator && area.kind === "operator";
+  const contextTitle =
+    area.kind === "project"
+      ? (me.data.tenants.find((t) => t.id === area.id)?.name ?? "Veristar")
+      : area.kind === "operator"
+        ? "Operator area"
+        : "Veristar";
   const side = (
     <Sidebar me={me.data} onSignOut={() => signOut.mutate()} onNavigate={() => setDrawer(false)} />
   );
@@ -88,9 +104,12 @@ export function AppShell() {
           <Link to="/" className="rounded-md p-1 focus-ring" aria-label="Veristar, your projects">
             <Mark className="size-5" />
           </Link>
+          {/* the context (the project, the operator area), never the page: the
+              page's own title is the h1 right below */}
           <span className="min-w-0 flex-1 truncate text-title text-fg" data-testid="page-title">
-            {pageTitle(pathname)}
+            {contextTitle}
           </span>
+          {operatorArea && pathname !== "/operator/alerts" ? <OperatorAlertButton /> : null}
           <Button
             variant="ghost"
             size="icon-lg"
@@ -105,8 +124,8 @@ export function AppShell() {
         </Drawer>
 
         <div className="flex min-w-0 flex-col">
-          {operatorArea ? <OperatorAlertLine linked={pathname !== "/operator/alerts"} /> : null}
-          <div className="hidden justify-end px-6 pt-4 lg:flex xl:px-10">
+          <div className="hidden min-h-12 items-start justify-end gap-4 px-6 pt-4 lg:flex xl:px-10">
+            {operatorArea && pathname !== "/operator/alerts" ? <OperatorAlertLine /> : null}
             <Button
               variant="ghost"
               size="sm"
@@ -141,35 +160,50 @@ export function AppShell() {
   );
 }
 
-// one slim line over every operator page while a paging (critical) alert
-// fires; the details are on Alerts. it reads the alerts only once the
-// session holds a step-up, as the operator area does
-function OperatorAlertLine({ linked }: { linked: boolean }) {
+// the paging (critical) alerts while any fires, read only once the session
+// holds a step-up, as the operator area does. not on Alerts itself
+function useCriticalAlerts() {
   const stepUp = useQuery(stepUpQuery);
   const live = stepUp.data?.stepped_up === true;
   const alerts = useQuery({ ...operatorAlertsQuery, enabled: live });
-  const current = alerts.error ? undefined : alerts.data;
-  const critical = current ? criticalCount(current.alerts) : 0;
-  if (!live || critical === 0) return null;
+  const current = live && !alerts.error ? alerts.data : undefined;
+  return current ? current.alerts.filter((a) => criticalCount([a]) === 1) : [];
+}
+
+function OperatorAlertLine() {
+  const critical = useCriticalAlerts().length;
+  if (critical === 0) return null;
   return (
     <div
       role="alert"
-      className="flex min-h-10 flex-wrap items-center gap-x-3 gap-y-1 border-b border-critical-line bg-critical-soft px-4 py-2 text-small text-fg sm:px-6 xl:px-10"
+      className="mr-auto flex h-(--vs-control-sm) min-w-0 animate-fade-in items-center gap-2 rounded-md border border-critical-line bg-critical-soft px-3 text-small text-fg"
     >
       <TriangleAlert aria-hidden className="size-4 shrink-0 text-critical" />
-      <span className="min-w-0 flex-1">
-        {critical === 1 ? "A critical alert is firing." : `${critical} critical alerts are firing.`}{" "}
-        Act now.
+      <span className="min-w-0 truncate">
+        {critical === 1 ? "1 critical alert is firing." : `${critical} critical alerts are firing.`}
       </span>
-      {linked ? (
-        <Link
-          to="/operator/alerts"
-          className="rounded-sm font-medium text-fg underline decoration-line-strong underline-offset-4 hover:decoration-fg focus-ring max-sm:py-2"
-        >
-          Open alerts
-        </Link>
-      ) : null}
+      <Link
+        to="/operator/alerts"
+        className="shrink-0 rounded-sm font-medium text-fg underline decoration-line-strong underline-offset-4 hover:decoration-fg focus-ring"
+      >
+        Open alerts
+      </Link>
     </div>
+  );
+}
+
+// the same on a phone: a button with the count in the top bar
+function OperatorAlertButton() {
+  const critical = useCriticalAlerts();
+  if (critical.length === 0) return null;
+  return (
+    <Button asChild variant="ghost" size="lg" className="gap-1 px-2 text-critical">
+      <Link to="/operator/alerts">
+        <TriangleAlert aria-hidden />
+        <AlertsBadge alerts={critical} />
+        <span className="sr-only">Open alerts</span>
+      </Link>
+    </Button>
   );
 }
 
@@ -185,6 +219,7 @@ function Drawer({
   children: React.ReactNode;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
+  const [box, setBox] = useState<HTMLDivElement | null>(null);
   useEffect(() => {
     const d = ref.current;
     if (!d) return;
@@ -202,17 +237,18 @@ function Drawer({
       }}
       className="drawer-motion m-0 h-dvh max-h-dvh w-(--vs-sidebar) max-w-[85vw] border-r border-line bg-ground p-0 text-fg lg:hidden"
     >
-      <div className="relative h-full">
+      <div ref={setBox} className="relative h-full">
         <Button
           variant="ghost"
           size="icon-lg"
           aria-label="Close navigation"
-          className="absolute top-2 right-2"
+          className="absolute top-2 right-2 z-(--vs-layer-raised)"
           onClick={onClose}
         >
           <X aria-hidden />
         </Button>
-        {children}
+        {/* the switcher and the account menu open inside the drawer */}
+        <MenuContainer.Provider value={box}>{children}</MenuContainer.Provider>
       </div>
     </dialog>
   );

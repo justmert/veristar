@@ -22,10 +22,10 @@ export const palette = {
     900: "#151514",
     850: "#1c1c1a",
     800: "#22221f",
-    780: "#232320",
     750: "#252522",
     700: "#2a2a27",
     650: "#2e2d29",
+    625: "#33322e",
     600: "#3d3c37",
     550: "#737169",
     500: "#6e6c65",
@@ -40,7 +40,20 @@ export const palette = {
   white: "#ffffff",
   green: { 500: "#3fb27f", 800: "#2b4a3b", 950: "#0e2a1c" },
   amber: { 500: "#e0a54a", 800: "#4a3a1f", 950: "#2a2112" },
-  red: { 400: "#f97066", 600: "#c93a36", 800: "#5a2a26", 900: "#2a1816" },
+  // crimson, the destructive and critical hue: cooler than the terracotta
+  // accent, so a destructive action never reads as the primary one. oklab
+  // distance to the accent (x100, normal / protan / deutan): solid 11.0 /
+  // 12.3 / 9.1, light text to accent-text 10.8 / 12.2 / 8.8, dark text to
+  // accent-text 11.8 / 12.0 / 8.3
+  crimson: {
+    300: "#f26a90",
+    500: "#a81650",
+    600: "#940543",
+    700: "#5f2937",
+    900: "#31151c",
+    lightSoft: "#fee8ec",
+    lightLine: "#f5c1cc",
+  },
   // the light theme's neutrals: a warm paper ground under white cards
   paper: {
     0: "#ffffff",
@@ -49,9 +62,11 @@ export const palette = {
     150: "#ebe9e4",
     200: "#e5e3dd",
     250: "#e3e1db",
+    275: "#d9d6cf",
     300: "#c4c1b9",
     400: "#a3a099",
     500: "#89867d",
+    525: "#84817a",
     600: "#6b6961",
     650: "#66645c",
     700: "#57554e",
@@ -65,13 +80,11 @@ export const palette = {
     success: "#1a6a42",
     successSoft: "#e4f2ea",
     successLine: "#b5dbc5",
-    warning: "#80530a",
+    // an amber that stays apart from critical (4xx next to 5xx): 5.22 on
+    // white, 4.79 on the ground
+    warning: "#a35a00",
     warningSoft: "#fbf1dd",
     warningLine: "#ebd09c",
-    critical: "#ab3328",
-    criticalSoft: "#fbe8e5",
-    criticalLine: "#efbdb6",
-    criticalSolid: "#c4372c",
   },
   // the data palette, validated with the dataviz validator on the raised
   // surface: worst adjacent cvd delta e 8.4, normal vision 19.7, every hue
@@ -99,7 +112,8 @@ export type Roles = {
   overlay: string; // menus, popovers, tooltips, dialogs
   hover: string; // a row or item under the pointer
   selected: string; // the current item, a pressed toggle
-  muted: string; // skeletons, the track of a meter
+  // skeletons, the track of a meter: at least 1.3:1 on the card and the page
+  muted: string;
   scrim: string; // behind a dialog
   // lines
   line: string; // every border by default
@@ -146,7 +160,11 @@ export type Roles = {
   critical: string;
   "critical-soft": string;
   "critical-line": string;
-  "critical-solid": string; // the fill of a destructive button
+  // the fill of the confirm button of a destructive dialog, and its hover;
+  // a destructive action anywhere else is drawn in `critical` text with an
+  // icon, never a fill
+  "critical-solid": string;
+  "critical-solid-hover": string;
   info: string;
   // data
   "series-1": string;
@@ -174,7 +192,8 @@ export const themes = {
     overlay: p.neutral[800],
     hover: p.neutral[750],
     selected: p.neutral[700],
-    muted: p.neutral[780],
+    // 1.33 on raised, 1.42 on ground
+    muted: p.neutral[625],
     scrim: "rgb(8 8 7 / 0.6)",
     line: p.neutral[650],
     "line-strong": p.neutral[600],
@@ -185,9 +204,10 @@ export const themes = {
     "fg-2": p.neutral[300],
     // 4.79 on selected
     "fg-3": p.neutral[450],
-    "fg-disabled": p.neutral[500],
+    // 3.14 on disabled-fill
+    "fg-disabled": p.neutral[550],
     "disabled-fill": p.neutral[750],
-    "disabled-fg": p.neutral[500],
+    "disabled-fg": p.neutral[550],
     "disabled-line": p.neutral[650],
     pressed: p.neutral[700],
     "pressed-line": p.neutral[500],
@@ -204,10 +224,13 @@ export const themes = {
     warning: p.amber[500],
     "warning-soft": p.amber[950],
     "warning-line": p.amber[800],
-    critical: p.red[400],
-    "critical-soft": p.red[900],
-    "critical-line": p.red[800],
-    "critical-solid": p.red[600],
+    // 5.88 on raised, 4.96 on selected
+    critical: p.crimson[300],
+    "critical-soft": p.crimson[900],
+    "critical-line": p.crimson[700],
+    // white on it 7.25
+    "critical-solid": p.crimson[500],
+    "critical-solid-hover": p.crimson[600],
     info: p.neutral[300],
     "series-1": p.blue[500],
     "series-2": p.magenta[500],
@@ -230,7 +253,8 @@ export const themes = {
     overlay: p.paper[0],
     hover: p.paper[150],
     selected: p.paper[200],
-    muted: p.paper[150],
+    // 1.45 on raised, 1.33 on ground
+    muted: p.paper[275],
     scrim: "rgb(26 25 23 / 0.32)",
     line: p.paper[250],
     "line-strong": p.paper[300],
@@ -241,10 +265,11 @@ export const themes = {
     "fg-2": p.paper[700],
     // 4.62 on selected
     "fg-3": p.paper[650],
-    "fg-disabled": p.paper[400],
+    // 3.20 on disabled-fill
+    "fg-disabled": p.paper[525],
     "disabled-fill": p.paper[150],
-    "disabled-fg": p.paper[400],
-    "disabled-line": p.paper[250],
+    "disabled-fg": p.paper[525],
+    "disabled-line": p.paper[300],
     pressed: p.paper[200],
     "pressed-line": p.paper[400],
     "on-accent": p.white,
@@ -260,10 +285,12 @@ export const themes = {
     warning: p.light.warning,
     "warning-soft": p.light.warningSoft,
     "warning-line": p.light.warningLine,
-    critical: p.light.critical,
-    "critical-soft": p.light.criticalSoft,
-    "critical-line": p.light.criticalLine,
-    "critical-solid": p.light.criticalSolid,
+    // 8.89 on white
+    critical: p.crimson[600],
+    "critical-soft": p.crimson.lightSoft,
+    "critical-line": p.crimson.lightLine,
+    "critical-solid": p.crimson[500],
+    "critical-solid-hover": p.crimson[600],
     info: p.paper[700],
     "series-1": p.seriesLight[0],
     "series-2": p.seriesLight[1],
@@ -292,8 +319,8 @@ export const font = {
 } as const;
 
 // the type scale: size / line height, weight, tracking. numbers are set in
-// mono at small and metric only. `heading` is the console's page title;
-// `page` stays for the website.
+// the sans with tabular figures; mono is for code, ids, keys and routes.
+// `heading` is the console's page title; `page` stays for the website.
 export const type = {
   axis: { size: "11px", line: "14px", weight: 400, tracking: "0" },
   caption: { size: "12px", line: "16px", weight: 500, tracking: "0.01em" },

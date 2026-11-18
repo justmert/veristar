@@ -143,7 +143,7 @@ export const OPERATOR_NAV: NavGroup[] = [
       },
       {
         key: "projects",
-        label: "Projects",
+        label: "All projects",
         to: "/operator/projects",
         icon: FolderKanban,
         match: (r) => under(r, "projects"),
@@ -204,7 +204,7 @@ export const OPERATOR_NAV: NavGroup[] = [
 export const HOME_NAV: NavItem[] = [
   {
     key: "projects",
-    label: "Projects",
+    label: "My projects",
     to: "/",
     icon: FolderOpen,
     match: (r) => r === "",

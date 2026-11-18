@@ -236,7 +236,7 @@ test("an operator sees the column, exports the rows on screen and reads the deta
     expect(audit.body.items.some((e) => e.detail.view === "web_projects")).toBe(true);
 
     await page.goto(`${APP}/operator/projects/${tenant.id}`);
-    await page.getByText("On-chain ids", { exact: true }).click();
+    await page.getByText("On-chain IDs", { exact: true }).click();
     const section = page.locator("details#onchain");
     await expect(section).toContainText(ACCOUNT);
     await expect(section).toContainText("Unverified");
@@ -344,7 +344,7 @@ test("an unverified contract shows no calls per function, and the routes keep to
     );
     expect(file.status()).toBe(200);
     await opPage.goto(`${APP}/operator/projects/${tenant.id}`);
-    await opPage.getByText("On-chain ids", { exact: true }).click();
+    await opPage.getByText("On-chain IDs", { exact: true }).click();
     await expect(
       opPage.getByRole("region", { name: `Calls per function of ${CONTRACT}` }),
     ).toContainText("Calls per function show when the contract is verified");

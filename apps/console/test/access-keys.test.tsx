@@ -116,7 +116,7 @@ describe("access keys", () => {
     await type(byLabel(host, "Name") as HTMLInputElement, "warehouse");
     await click(byRole(host, "button", "Create key"));
     // the one-time secret is masked until it is revealed
-    await waitFor(() => byRole(host, "button", "Copy key"));
+    await waitFor(() => expect(host.querySelector('button[aria-label="Copy key"]')).not.toBeNull());
     expect(host.querySelector('[aria-label="Secret hidden"]')).toBeTruthy();
     await click(host.querySelector('[aria-label="Show the secret"]') as HTMLElement);
     await waitFor(() => expect(host.textContent).toContain(f.KEY_PLAIN));

@@ -41,9 +41,7 @@ export function CompareOnchainSection({
                 </span>
                 {declared ? (
                   <span className="text-small text-fg-2">
-                    <span className="font-mono text-fg tabular">
-                      {formatCount(s.totals.operations)}
-                    </span>{" "}
+                    <span className="text-fg tabular">{formatCount(s.totals.operations)}</span>{" "}
                     operations, {countOf(s.totals.transactions, "transaction")},{" "}
                     {s.totals.ids_verified} of {countOf(s.totals.ids, "id")} verified. Weekly active
                     accounts: {weeklyActiveText(s.totals.weekly_active_accounts)}.
@@ -82,7 +80,7 @@ export function TenantOnchainSection({ tenantId }: { tenantId: string }) {
   const q = useQuery(operatorOnchainQuery(tenantId, {}));
   if (q.isPending)
     return (
-      <LoadingState label="Loading the on-chain ids">
+      <LoadingState label="Loading the on-chain IDs">
         <Skeleton.Table rows={2} columns={2} />
       </LoadingState>
     );
@@ -90,7 +88,7 @@ export function TenantOnchainSection({ tenantId }: { tenantId: string }) {
     return (
       <ErrorState
         compact
-        title="The on-chain ids did not load"
+        title="The on-chain IDs did not load"
         error={q.error}
         onRetry={() => q.refetch()}
       />

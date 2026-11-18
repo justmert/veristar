@@ -24,7 +24,10 @@ export type TypedConfirmation = {
 // action and the object; the description says what happens. options: a
 // reason field (operators: the members read it) and a typed confirmation
 // for an action that cannot be undone. destructive actions use the solid
-// critical button; Cancel has the focus, so Enter never confirms by accident.
+// critical button, the only place it appears. the first field has the
+// focus, else Cancel, so Enter never confirms by accident. a required
+// reason says so in its label and is checked on confirm, as in the decision
+// panel.
 export function ConfirmDialog({
   open,
   onOpenChange,
@@ -100,7 +103,7 @@ export function ConfirmDialog({
       onSubmit={submit}
       footer={
         <>
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} autoFocus>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             {cancelLabel}
           </Button>
           <Button
@@ -122,6 +125,7 @@ export function ConfirmDialog({
               label={reason.label ?? "Reason"}
               name="reason"
               optional={!reason.required}
+              required={reason.required}
               rows={3}
               maxLength={reason.maxLength ?? 1000}
               hint={reason.hint ?? "The project's members see this text."}

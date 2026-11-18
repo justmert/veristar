@@ -432,7 +432,7 @@ describe("api traffic page", () => {
     const net = serve(full);
     const host = await renderRoutes(routes(), path);
     await waitFor(() => expect(host.querySelector("[data-route]")).not.toBeNull());
-    await click(radio(host, "7d"));
+    await click(radio(host, "7 days"));
     await waitFor(() => expect(net.last("routes")?.searchParams.get("range")).toBe("7d"));
     for (const k of ["services", "warnings", "overview", "status"])
       expect(net.last(k)?.searchParams.get("range")).toBe("7d");

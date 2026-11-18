@@ -24,7 +24,7 @@ Add everyone who needs to see the dashboards under the project's **Members**.
 
 ## 2. Add a site
 
-Open the project's **Sites** page and choose **Add a site**:
+Open the project's **Sites** page and choose **Add site**:
 
 - **Name**: anything that tells your sites apart.
 - **Domain**: the domain the site runs on, for example `docs.example.org`.

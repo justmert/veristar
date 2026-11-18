@@ -62,7 +62,9 @@ describe("states", () => {
     expect(details).toContain("Time: 2026-11-18T01:49:00.000Z");
 
     const retry = vi.fn();
-    const host = await render(<ErrorState error={apiError} onRetry={retry} />);
+    const host = await render(
+      <ErrorState title="The sites did not load" error={apiError} onRetry={retry} />,
+    );
     const alert = host.querySelector("[role=alert]") as HTMLElement;
     expect(alert.textContent).not.toContain("req-42");
     expect(alert.textContent).not.toContain("0193a6f3");
@@ -106,18 +108,27 @@ describe("toast", () => {
     const host = await render(<Toaster />);
     await act(async () => {
       toast.success("Site added.");
-      toast.error("The key was not revoked. Try again.", {
-        action: { label: "Retry", onClick: () => {} },
-      });
     });
     const live = host.querySelector("[aria-live=polite]") as HTMLElement;
     expect(live.textContent).toContain("Site added.");
-    expect(host.querySelector("[data-toast=error]")?.textContent).toContain("Retry");
     const dismiss = host.querySelector("[data-toast=success] button") as HTMLButtonElement;
     await click(dismiss);
     expect(live.textContent).not.toContain("Site added.");
     await act(async () => toast.clear());
     expect(live.textContent).toBe("");
+  });
+
+  it("shows one toast at a time: a new one replaces the last", async () => {
+    const host = await render(<Toaster />);
+    await act(async () => {
+      toast.success("Site added.");
+      toast.error("The key was not revoked. Try again.", {
+        action: { label: "Retry", onClick: () => {} },
+      });
+    });
+    expect(host.querySelectorAll("[data-toast]")).toHaveLength(1);
+    expect(host.querySelector("[data-toast=error]")?.textContent).toContain("Retry");
+    await act(async () => toast.clear());
   });
 });
 
@@ -179,7 +190,12 @@ describe("secret panel", () => {
   it("masks the secret and needs the stored confirmation before Done", async () => {
     const done = vi.fn();
     const host = await render(
-      <SecretPanel value="sa_otlp_Ab3xSecretValue" title="Token created" onDone={done} />,
+      <SecretPanel
+        value="sa_otlp_Ab3xSecretValue"
+        noun="token"
+        name="Payments API"
+        onDone={done}
+      />,
     );
     expect(host.textContent).not.toContain("Ab3xSecretValue");
     const finish = byRole(host, "button", "Done") as HTMLButtonElement;

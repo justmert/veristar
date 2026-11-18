@@ -1,10 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
-import { Outlet } from "react-router";
+import { Outlet, useLocation } from "react-router";
 import { stepUpQuery } from "@/api/operators";
 import { meQuery } from "@/api/queries";
+import { areaOf } from "@/components/nav/nav-items";
 import { PageHeader } from "@/components/page-header";
-import { ErrorState, LoadingState, Skeleton } from "@/components/states";
+import { ErrorState } from "@/components/states";
 import { StepUpGate } from "@/components/step-up";
+import { OperatorPagePending } from "@/pages/operator/page-frame";
 import { OperatorsOnlyPage } from "@/pages/public/not-found";
 
 // the gate in front of every operator page. the control plane enforces
@@ -39,12 +41,11 @@ function SteppedUp({ userName }: { userName: string }) {
   return <Outlet />;
 }
 
+// while the gate loads, the page draws its own header and skeleton
 function GateLoading() {
-  return (
-    <LoadingState label="Loading the operator area">
-      <Skeleton.Table rows={4} columns={3} />
-    </LoadingState>
-  );
+  const { pathname } = useLocation();
+  const a = areaOf(pathname);
+  return <OperatorPagePending rest={a.kind === "operator" ? a.rest : ""} />;
 }
 
 function GateError({ error, onRetry }: { error: unknown; onRetry: () => void }) {

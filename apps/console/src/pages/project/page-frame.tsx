@@ -12,9 +12,15 @@ import { LoadingState, Skeleton } from "@/components/states";
 import { Skeleton as Bone } from "@/components/ui/skeleton";
 
 export const PAGE_HEADERS = {
-  overview: { title: "Overview" },
-  web: { title: "Web" },
-  api: { title: "API" },
+  overview: {
+    title: "Overview",
+    description: "The main numbers of your project: web visits, API traffic and on-chain activity.",
+  },
+  web: { title: "Web", description: "Visits to your sites: pages, sources, places and devices." },
+  api: {
+    title: "API",
+    description: "Requests to your API: volume, errors and latency by service and route.",
+  },
   onchain: {
     title: "On-chain",
     description:
@@ -44,6 +50,10 @@ export const PAGE_HEADERS = {
 } as const;
 
 type PageKey = keyof typeof PAGE_HEADERS;
+
+// the pages whose header has a freshness line: their pending header keeps
+// the line's height, so the page does not move when it lands
+const FRESHNESS = new Set<PageKey>(["overview", "web", "api", "onchain", "sites"]);
 
 // ---- the skeleton of each page, in the shape of what lands
 
@@ -262,7 +272,10 @@ export function ProjectPagePending({ tenantId, pathname }: { tenantId: string; p
   const Body = SKELETON[page.key];
   return (
     <div className="flex min-w-0 flex-col gap-8">
-      <PageHeader {...PAGE_HEADERS[page.key]} />
+      <PageHeader
+        {...PAGE_HEADERS[page.key]}
+        freshness={FRESHNESS.has(page.key) ? null : undefined}
+      />
       <Body />
     </div>
   );

@@ -1,7 +1,7 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { cn } from "@veristar/brand/cn";
 import { fade } from "@veristar/brand/motion";
-import { ArrowRight, Check, ChevronRight, ExternalLink, KeyRound } from "lucide-react";
+import { ArrowRight, Ban, Check, ExternalLink, KeyRound } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { type FormEvent, type ReactNode, useId, useState } from "react";
 import { Link } from "react-router";
@@ -12,6 +12,7 @@ import type { OtlpToken, OtlpTokenCreated, Tenant } from "@/api/schemas";
 import { CodeBlock, CopyField } from "@/components/code-block";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { type Column, DataTable } from "@/components/data-table";
+import { Disclosure } from "@/components/disclosure";
 import { FormMessage } from "@/components/error-panel";
 import { TextField } from "@/components/form-field";
 import { Notice } from "@/components/notice";
@@ -256,16 +257,14 @@ function Exporter({ endpoint }: { endpoint: string | null }) {
 // a closed section of extra detail
 function More({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <details className="group min-w-0 rounded-lg border border-line text-small">
-      <summary className="flex min-h-10 cursor-pointer list-none items-center gap-2 rounded-lg px-3 text-fg-2 transition-colors duration-(--vs-duration-press) ease-standard hover:text-fg focus-ring max-lg:min-h-(--vs-control-touch) [&::-webkit-details-marker]:hidden">
-        <ChevronRight
-          aria-hidden
-          className="size-4 transition-transform duration-(--vs-duration-press) ease-standard group-open:rotate-90"
-        />
-        {title}
-      </summary>
-      <div className="flex min-w-0 flex-col gap-3 border-t border-line p-3">{children}</div>
-    </details>
+    <Disclosure
+      summary={title}
+      className="min-w-0 bg-transparent text-small"
+      summaryClassName="px-3 text-small font-normal text-fg-2 hover:bg-transparent hover:text-fg"
+      bodyClassName="flex min-w-0 flex-col gap-3 p-3"
+    >
+      {children}
+    </Disclosure>
   );
 }
 
@@ -462,7 +461,7 @@ function TokensSection({
       cell: (t) =>
         t.status === "active" ? (
           <Button
-            variant="ghost"
+            variant="destructive-outline"
             size="sm"
             className="relative z-(--vs-layer-raised) max-lg:h-(--vs-control-touch)"
             onClick={() => {
@@ -470,6 +469,7 @@ function TokensSection({
               setRevoking(t);
             }}
           >
+            <Ban aria-hidden />
             Revoke
           </Button>
         ) : null,
@@ -508,7 +508,7 @@ function TokensSection({
         onRetry={() => list.refetch()}
         loadingRows={2}
         empty={{
-          title: showRevoked ? "No tokens yet." : "No active tokens.",
+          title: showRevoked ? "No tokens yet" : "No active tokens",
           text: "Create a token in step 1.",
         }}
       />
@@ -517,7 +517,7 @@ function TokensSection({
         onOpenChange={(o) => {
           if (!o) setRevoking(null);
         }}
-        title={`Revoke ${revoking?.name ?? "the token"}?`}
+        title={revoking ? `Revoke the token “${revoking.name}”?` : "Revoke the token?"}
         description="The collector refuses this token within seconds. Apps that still send with it get 401. You cannot undo this."
         confirmLabel="Revoke token"
         pendingLabel="Revoking"
@@ -575,7 +575,6 @@ export function CreateTokenForm({
     onSuccess: async (t) => {
       setValues({ name: "", environment: "" });
       onCreated(t);
-      toast.success(`${t.name} is created. Copy the token now.`);
       await queryClient.invalidateQueries({ queryKey: keys.otlpTokensAll(tenantId) });
     },
     onError: (err) => setErrors(serverTokenErrors(err)),
@@ -591,7 +590,12 @@ export function CreateTokenForm({
   }
 
   return (
-    <form noValidate onSubmit={submit} aria-label="Create a token" className="flex flex-col gap-3">
+    <form
+      noValidate
+      onSubmit={submit}
+      aria-label="Create a token"
+      className="max-w-prose flex flex-col gap-3"
+    >
       <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_12rem_auto] sm:items-start">
         <TextField
           label="Token name"
@@ -644,7 +648,8 @@ export function CreatedToken({ token, onDone }: { token: OtlpTokenCreated; onDon
   return (
     <SecretPanel
       value={token.token}
-      title={`Copy the token ${token.name} now`}
+      noun="token"
+      name={token.name}
       description="Store it as a secret of your app. It is shown only this once. If you lose it, create a new token and revoke this one."
       onDone={onDone}
     />
@@ -666,7 +671,7 @@ function KeptSection() {
           name.
         </li>
         <li>
-          Other metrics, traces and logs are dropped. Ids and keys in routes become placeholders.
+          Other metrics, traces and logs are dropped. IDs and keys in routes become placeholders.
         </li>
         <li className="text-fg">Your own backend keeps the full data.</li>
       </ul>

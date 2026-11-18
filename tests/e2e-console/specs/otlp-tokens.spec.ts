@@ -100,7 +100,8 @@ test("a token is created through the control plane and shown once", async () => 
 
   // the one-time secret is masked until it is shown on purpose
   const panel = page.getByRole("region", { name: "New secret" });
-  await expect(panel).toContainText("Copy the token Payments API now");
+  await expect(panel).toContainText("Copy your new token");
+  await expect(panel).toContainText("Payments API");
   await expect(panel).not.toContainText(plain);
   await panel.getByRole("button", { name: "Show the secret" }).click();
   await expect(panel.locator("code")).toHaveText(plain);
@@ -162,7 +163,7 @@ test("the token is revoked after a confirmation", async () => {
   await expect(dialog).toBeHidden();
   await expect(page.getByText("Payments API is revoked.")).toBeVisible();
   await expect(
-    page.getByRole("table", { name: "Tokens" }).getByText("No active tokens."),
+    page.getByRole("table", { name: "Tokens" }).getByText("No active tokens"),
   ).toBeVisible();
 
   one = await api<Token>(ctx, "GET", `/api/tenants/${tenant.id}/otlp-tokens/${tokenId}`);

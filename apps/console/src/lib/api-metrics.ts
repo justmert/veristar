@@ -25,15 +25,15 @@ import {
   OPEN_BUCKET,
 } from "@/lib/format";
 
-// short labels, so the eight choices fit a phone's width
+// the labels of every range control; a phone shows them in a select
 export const PRESETS: { value: ApiRangePreset; label: string }[] = [
-  { value: "1h", label: "1h" },
-  { value: "24h", label: "24h" },
-  { value: "7d", label: "7d" },
-  { value: "30d", label: "30d" },
-  { value: "90d", label: "90d" },
-  { value: "12mo", label: "12mo" },
-  { value: "24mo", label: "24mo" },
+  { value: "1h", label: "1 hour" },
+  { value: "24h", label: "24 hours" },
+  { value: "7d", label: "7 days" },
+  { value: "30d", label: "30 days" },
+  { value: "90d", label: "90 days" },
+  { value: "12mo", label: "12 months" },
+  { value: "24mo", label: "24 months" },
 ];
 
 export const DEFAULT_PRESET: ApiRangePreset = "24h";

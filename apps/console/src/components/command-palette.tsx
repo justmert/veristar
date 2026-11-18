@@ -1,6 +1,6 @@
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { cn } from "@veristar/brand/cn";
-import { CornerDownLeft, FolderOpen, Search } from "lucide-react";
+import { CornerDownLeft, FolderOpen, Search, X } from "lucide-react";
 import { type KeyboardEvent, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { stepUpQuery } from "@/api/operators";
@@ -8,7 +8,10 @@ import { operatorTenantsQuery } from "@/api/queries";
 import type { Me } from "@/api/schemas";
 import { areaOf, HOME_NAV, OPERATOR_NAV, projectNav } from "@/components/nav/nav-items";
 import { Kbd } from "@/components/panel";
+import { Button } from "@/components/ui/button";
 
+// the group header carries the context ("Lumen Pay", "Operator"), so a row
+// says only the page or project name
 type Entry = { key: string; group: string; label: string; detail?: string; to: string };
 
 // ctrl k or cmd k opens it from any signed-in page; the shell owns the key
@@ -73,28 +76,21 @@ export function CommandPalette({
         for (const i of g.items)
           out.push({
             key: `p-${i.key}`,
-            group: "Pages",
+            group: projectName ? `Pages of ${projectName}` : "Project pages",
             label: i.label,
-            detail: projectName,
             to: i.to,
           });
     for (const i of HOME_NAV)
-      out.push({ key: `h-${i.key}`, group: "Pages", label: i.label, to: i.to });
-    out.push({ key: "h-new", group: "Pages", label: "Enroll a project", to: "/projects/new" });
+      out.push({ key: `h-${i.key}`, group: "Console", label: i.label, to: i.to });
+    out.push({ key: "h-new", group: "Console", label: "Enroll a project", to: "/projects/new" });
     if (operator)
       for (const g of OPERATOR_NAV)
         for (const i of g.items)
-          out.push({
-            key: `o-${i.key}`,
-            group: "Pages",
-            label: i.label,
-            detail: "Operator",
-            to: i.to,
-          });
+          out.push({ key: `o-${i.key}`, group: "Operator pages", label: i.label, to: i.to });
     for (const t of me.tenants)
       out.push({
         key: `t-${t.id}`,
-        group: "Your projects",
+        group: "My projects",
         label: t.name,
         to: `/projects/${t.id}`,
       });
@@ -102,7 +98,7 @@ export function CommandPalette({
       for (const t of opList.data?.pages.flatMap((p) => p.items) ?? [])
         out.push({
           key: `ot-${t.id}`,
-          group: "All projects",
+          group: "All projects (operator)",
           label: t.name,
           detail: t.slug,
           to: `/operator/projects/${t.id}`,
@@ -111,7 +107,7 @@ export function CommandPalette({
     // the operator list is already searched by the server
     return out.filter(
       (e) =>
-        e.group === "All projects" ||
+        e.group === "All projects (operator)" ||
         !lower ||
         e.label.toLowerCase().includes(lower) ||
         (e.detail ?? "").toLowerCase().includes(lower),
@@ -151,7 +147,9 @@ export function CommandPalette({
       onClick={(e) => {
         if (e.target === e.currentTarget) onOpenChange(false);
       }}
-      className="dialog-motion mx-auto mt-16 mb-auto max-h-[70dvh] w-full max-w-dialog bg-transparent p-4 text-fg max-sm:mt-4"
+      // overflow-visible: a modal dialog clips to its box by default, which
+      // would cut the panel's shadow into a visible rectangle
+      className="dialog-motion mx-auto mt-16 mb-auto max-h-[70dvh] w-full max-w-dialog overflow-visible bg-transparent p-4 text-fg max-sm:mt-4"
     >
       <div className="flex max-h-[calc(70dvh-2rem)] flex-col overflow-hidden rounded-xl border border-line-strong bg-overlay shadow-dialog">
         <div className="flex items-center gap-2 border-b border-line px-4">
@@ -175,8 +173,22 @@ export function CommandPalette({
           <span className="max-sm:hidden">
             <Kbd>Esc</Kbd>
           </span>
+          <Button
+            variant="ghost"
+            size="icon-lg"
+            aria-label="Close"
+            className="-mr-2 sm:hidden"
+            onClick={() => onOpenChange(false)}
+          >
+            <X aria-hidden />
+          </Button>
         </div>
-        <div id={listId} role="listbox" aria-label="Results" className="overflow-y-auto p-2">
+        <div
+          id={listId}
+          role="listbox"
+          aria-label="Results"
+          className="scroll-fade min-h-0 overflow-y-auto p-2"
+        >
           {entries.length === 0 ? (
             <p role="status" className="px-2 py-6 text-center text-small text-fg-2">
               No page or project matches. Try another name.
@@ -205,10 +217,12 @@ export function CommandPalette({
                       i === at ? "bg-hover text-fg" : "text-fg-2",
                     )}
                   >
-                    {e.group === "Pages" ? null : (
+                    {e.key.startsWith("t-") || e.key.startsWith("ot-") ? (
                       <FolderOpen aria-hidden className="size-4 shrink-0 text-fg-3" />
-                    )}
-                    <span className="min-w-0 flex-1 truncate">{e.label}</span>
+                    ) : null}
+                    <span className="min-w-0 flex-1 truncate">
+                      <Highlight text={e.label} term={term} />
+                    </span>
                     {e.detail ? (
                       <span className="max-w-40 shrink-0 truncate text-caption text-fg-3">
                         {e.detail}
@@ -223,7 +237,40 @@ export function CommandPalette({
             })
           )}
         </div>
+        <div
+          aria-hidden
+          className="flex items-center gap-4 border-t border-line px-4 py-2 text-caption text-fg-3 max-sm:hidden"
+        >
+          <span className="flex items-center gap-1">
+            <Kbd>↑</Kbd>
+            <Kbd>↓</Kbd>
+            Move
+          </span>
+          <span className="flex items-center gap-1">
+            <Kbd>Enter</Kbd>
+            Open
+          </span>
+          <span className="flex items-center gap-1">
+            <Kbd>Esc</Kbd>
+            Close
+          </span>
+        </div>
       </div>
     </dialog>
+  );
+}
+
+// the typed part of a name, marked
+function Highlight({ text, term }: { text: string; term: string }) {
+  const at = term ? text.toLowerCase().indexOf(term.toLowerCase()) : -1;
+  if (at < 0) return <>{text}</>;
+  return (
+    <>
+      {text.slice(0, at)}
+      <mark className="rounded-sm bg-transparent font-semibold text-fg underline decoration-accent-text underline-offset-2">
+        {text.slice(at, at + term.length)}
+      </mark>
+      {text.slice(at + term.length)}
+    </>
   );
 }

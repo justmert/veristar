@@ -6,9 +6,14 @@ import { Button } from "@/components/ui/button";
 
 type State = "idle" | "copied" | "failed";
 
+// one copy button: the icon and the word "Copy" (the place says what it
+// copies), or the icon alone in a tight header. `label` names the target for
+// assistive technology ("Copy key"); `visibleLabel` replaces the word only
+// where the place cannot say it (the details of an error)
 export function CopyButton({
   text,
   label = "Copy",
+  visibleLabel = "Copy",
   size = "sm",
   variant = "outline",
   iconOnly = false,
@@ -16,6 +21,7 @@ export function CopyButton({
 }: {
   text: string;
   label?: string;
+  visibleLabel?: string;
   // a longer name for assistive technology when several copy buttons share
   // a page, starting with the visible label
   accessibleLabel?: string;
@@ -49,7 +55,13 @@ export function CopyButton({
         variant={variant}
         size={iconOnly ? (size === "xs" ? "icon-xs" : "icon-sm") : size}
         onClick={copy}
-        aria-label={iconOnly ? label : copied ? undefined : accessibleLabel}
+        aria-label={
+          copied
+            ? undefined
+            : iconOnly
+              ? label
+              : (accessibleLabel ?? (label !== visibleLabel ? label : undefined))
+        }
         className={copied ? "text-success" : undefined}
       >
         <AnimatePresence mode="wait" initial={false}>
@@ -61,7 +73,7 @@ export function CopyButton({
             )}
           </motion.span>
         </AnimatePresence>
-        {iconOnly ? null : copied ? "Copied" : label}
+        {iconOnly ? null : copied ? "Copied" : visibleLabel}
       </Button>
       <span role="status" className="sr-only">
         {copied ? "Copied to the clipboard" : ""}

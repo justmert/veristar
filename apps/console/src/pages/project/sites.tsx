@@ -99,7 +99,7 @@ export function AddSiteForm({
   onDone,
   onCancel,
   cancellable,
-  submitLabel = "Add and set up",
+  submitLabel = "Add site",
 }: {
   tenantId: string;
   onDone: (site?: Site) => void;
@@ -481,6 +481,8 @@ export function SitesTable({ sites, actions }: { sites: Site[]; actions?: ReactN
     {
       key: "next",
       header: "Next",
+      // the next step is the card's action on a phone, never behind Details
+      action: true,
       minWidth: "min-w-36",
       cell: (r) => {
         if (r.event === null) return null;
@@ -592,7 +594,11 @@ export function SitesPage() {
       {sites.isPending ? (
         <SitesSkeleton />
       ) : sites.error ? (
-        <ErrorState error={sites.error} onRetry={() => sites.refetch()} />
+        <ErrorState
+          title="The sites did not load"
+          error={sites.error}
+          onRetry={() => sites.refetch()}
+        />
       ) : live.length === 0 ? (
         canChange ? (
           <section

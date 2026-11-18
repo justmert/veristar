@@ -1,56 +1,14 @@
 import { useMutation } from "@tanstack/react-query";
-import { cn } from "@veristar/brand/cn";
 import { LockKeyhole, LogOut, RotateCcw, SearchX, TriangleAlert } from "lucide-react";
-import type { ReactNode } from "react";
 import { isRouteErrorResponse, Link, useNavigate, useRouteError } from "react-router";
 import { api } from "@/api/endpoints";
 import { CopyButton } from "@/components/copy-button";
 import { FormMessage } from "@/components/error-panel";
 import { PublicFrame } from "@/components/public-frame";
+import { MessagePage } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { errorDetails, errorMessage } from "@/lib/errors";
 import { queryClient } from "@/query-client";
-
-// a whole page that stands in for the one asked for (not found, removed,
-// operators only, a crash): what happened, why, and the way on
-export function StopPage({
-  icon,
-  tone = "neutral",
-  title,
-  children,
-  actions,
-  className,
-}: {
-  icon: ReactNode;
-  tone?: "neutral" | "critical";
-  title: string;
-  children?: ReactNode;
-  actions?: ReactNode;
-  className?: string;
-}) {
-  return (
-    <section
-      className={cn(
-        "mx-auto flex min-h-80 w-full max-w-prose animate-rise-in flex-col justify-center gap-4 rounded-lg border border-line px-6 py-10 sm:px-10 sm:py-12",
-        className,
-      )}
-    >
-      <span
-        className={cn(
-          "flex size-10 items-center justify-center rounded-lg border border-line-strong [&_svg]:size-5",
-          tone === "critical" ? "text-critical" : "text-fg-2",
-        )}
-      >
-        {icon}
-      </span>
-      <h1 className="text-heading text-fg">{title}</h1>
-      {children ? (
-        <div className="flex max-w-prose flex-col gap-1 text-body text-fg-2">{children}</div>
-      ) : null}
-      {actions ? <div className="flex flex-wrap gap-2 pt-1">{actions}</div> : null}
-    </section>
-  );
-}
 
 export function ProjectsButton() {
   return (
@@ -62,9 +20,9 @@ export function ProjectsButton() {
 
 export function NotFoundPage() {
   return (
-    <StopPage icon={<SearchX aria-hidden />} title="Page not found" actions={<ProjectsButton />}>
+    <MessagePage icon={<SearchX aria-hidden />} title="Page not found" actions={<ProjectsButton />}>
       <p>This address does not exist in the console, or the project behind it is not yours.</p>
-    </StopPage>
+    </MessagePage>
   );
 }
 
@@ -80,7 +38,7 @@ export function OperatorsOnlyPage() {
     },
   });
   return (
-    <StopPage
+    <MessagePage
       icon={<LockKeyhole aria-hidden />}
       title="Operators only"
       actions={
@@ -103,7 +61,7 @@ export function OperatorsOnlyPage() {
         was added recently, sign out and sign in again.
       </p>
       <FormMessage error={signOut.error} className="mt-2" />
-    </StopPage>
+    </MessagePage>
   );
 }
 
@@ -111,14 +69,14 @@ export function RouteErrorPage() {
   const error = useRouteError();
   if (isRouteErrorResponse(error) && error.status === 404) {
     return (
-      <PublicFrame footer={false}>
+      <PublicFrame>
         <NotFoundPage />
       </PublicFrame>
     );
   }
   return (
-    <PublicFrame footer={false}>
-      <StopPage
+    <PublicFrame>
+      <MessagePage
         icon={<TriangleAlert aria-hidden />}
         tone="critical"
         title="The console hit an error"
@@ -137,6 +95,7 @@ export function RouteErrorPage() {
             <CopyButton
               text={errorDetails(error)}
               label="Copy details"
+              visibleLabel="Copy details"
               variant="ghost"
               size="default"
             />
@@ -145,7 +104,7 @@ export function RouteErrorPage() {
       >
         <p role="alert">{errorMessage(error)}</p>
         <p>Reload the page. If the error stays, send the copied details to the operators.</p>
-      </StopPage>
+      </MessagePage>
     </PublicFrame>
   );
 }

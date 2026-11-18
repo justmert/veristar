@@ -9,6 +9,7 @@ import {
   formatCount,
   formatDate,
   formatDateRange,
+  formatDateTimeShort,
   formatDateTimeUtc,
   formatDuration,
   formatLatency,
@@ -23,6 +24,7 @@ import {
   MISSING,
   niceTicks,
   OPEN_BUCKET,
+  truncateMiddle,
   utcDay,
 } from "@/lib/format";
 
@@ -145,6 +147,9 @@ describe("dates and times", () => {
     expect(formatTimeUtc("2026-11-18T01:49:30Z")).toBe("01:49 UTC");
     expect(formatTimeUtc("2026-11-18T01:49:05Z", { seconds: true })).toBe("01:49:05 UTC");
     expect(formatDateTimeUtc("2026-11-18T01:49:00Z")).toBe("Nov 18, 2026, 01:49 UTC");
+    const now = new Date("2026-12-01T00:00:00Z");
+    expect(formatDateTimeShort("2026-11-18T08:23:00Z", now)).toBe("Nov 18, 08:23 UTC");
+    expect(formatDateTimeShort("2025-11-18T08:23:00Z", now)).toBe("Nov 18, 2025, 08:23 UTC");
     expect(formatDateTimeUtc("2026-11-18T00:00:00Z")).toBe("Nov 18, 2026, 00:00 UTC");
     expect(formatTimeRange("2026-11-18T14:00:00Z", "2026-11-18T15:00:00Z")).toBe(
       "Nov 18, 2026, 14:00 to 15:00 UTC",
@@ -193,5 +198,12 @@ describe("places and axes", () => {
     expect(niceTicks(0.3)).toEqual([0, 0.1, 0.2, 0.3]);
     expect(niceTicks(3, { integer: true })).toEqual([0, 1, 2, 3]);
     expect(niceTicks(2e12).at(-1)).toBeGreaterThanOrEqual(2e12);
+  });
+});
+
+describe("text", () => {
+  it("cuts a long name in the middle", () => {
+    expect(truncateMiddle("stress-project-12", 40)).toBe("stress-project-12");
+    expect(truncateMiddle("stress-project-twelve-12", 12)).toBe("stress…ve-12");
   });
 });

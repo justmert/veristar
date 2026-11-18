@@ -79,7 +79,15 @@ export function BreakdownList({
       </div>
     );
   if (state === "error")
-    return <ErrorState compact error={error} onRetry={onRetry} className={className} />;
+    return (
+      <ErrorState
+        compact
+        title={`${label} did not load`}
+        error={error}
+        onRetry={onRetry}
+        className={className}
+      />
+    );
   if (state === "empty" || items.length === 0)
     return (
       <EmptyState compact title={emptyTitle} className={className}>
@@ -119,7 +127,7 @@ export function BreakdownList({
               <span className="relative min-w-0 flex-1 truncate text-fg" title={it.text}>
                 {it.label}
               </span>
-              <span className="relative flex shrink-0 gap-4 font-mono text-small tabular">
+              <span className="relative flex shrink-0 gap-4 text-small tabular">
                 {showShare ? (
                   <span className="w-12 text-right text-fg-2">
                     {formatShareOf(it.value, total ?? 0)}

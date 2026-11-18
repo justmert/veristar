@@ -47,7 +47,7 @@ describe("coverage estimate (contract 17.5)", () => {
       "Of 2,400 loads of the tracker file, 288 carried the signal.",
     );
     const cells = [...host.querySelectorAll('[data-col="unmeasured_share"]')];
-    expect(cells.map((c) => c.textContent)).toEqual(["12%", "–no estimate"]);
+    expect(cells.map((c) => c.textContent)).toEqual(["12%", "–No estimate"]);
     // the meaning of the dash and the counts are visible text, not a title
     const details = [...host.querySelectorAll('[data-testid="coverage-detail"]')];
     expect(details.map((d) => d.textContent)).toEqual([

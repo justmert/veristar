@@ -111,35 +111,40 @@ describe("console shell", () => {
     for (const group of ["Data", "Funding", "Setup", "Team"])
       expect(nav.textContent).toContain(group);
     expect(current(host)).toEqual(["Sites"]);
-    expect(host.querySelector('[data-testid="page-title"]')?.textContent).toBe("Sites");
+    expect(host.querySelector('[data-testid="page-title"]')?.textContent).toBe("Stellar DEX");
     // no operator group for a member, and no second-level tab bar
     expect(host.querySelector('nav[aria-label="Operator"]')).toBeNull();
     expect(host.querySelectorAll("nav").length).toBeGreaterThan(0);
     expect(host.textContent).toContain("Account");
   });
 
-  it("marks Account in the sidebar footer on the account page", async () => {
+  it("marks the account menu, the one way to Account, on the account page", async () => {
     serve(f.meBody);
     const host = await renderRoutes(routes, "/account");
-    await waitFor(() => expect(current(host)).toEqual(["Account"]));
+    await waitFor(() =>
+      expect(host.querySelector('aside button[aria-current="page"]')?.textContent).toContain(
+        "Account menu",
+      ),
+    );
+    expect(current(host)).toEqual([]);
   });
 
-  it("shows one slim alert line on operator pages while a paging alert fires", async () => {
+  it("shows the alert note on operator pages while a paging alert fires", async () => {
     serve(f.operatorMeBody, [critical]);
     const host = await renderRoutes(routes, "/operator/projects");
-    await waitFor(() => expect(host.textContent).toContain("A critical alert is firing."));
+    await waitFor(() => expect(host.textContent).toContain("1 critical alert is firing."));
     const open = [...host.querySelectorAll("a")].find((a) => a.textContent === "Open alerts");
     expect(open?.getAttribute("href")).toBe("/operator/alerts");
-    expect(current(host)).toEqual(["Projects"]);
+    expect(current(host)).toEqual(["All projects"]);
     // the badges on Review and Alerts
     const alerts = [...host.querySelectorAll("aside a")].find((a) =>
       a.textContent?.startsWith("Alerts"),
     );
-    await waitFor(() => expect(alerts?.textContent).toBe("Alerts1 alert firing"));
+    await waitFor(() => expect(alerts?.textContent).toBe("Alerts11 critical alert firing"));
     const review = [...host.querySelectorAll("aside a")].find((a) =>
       a.textContent?.startsWith("Review"),
     );
-    await waitFor(() => expect(review?.textContent).toBe("Review1 project waits for review"));
+    await waitFor(() => expect(review?.textContent).toBe("Review11 project waits for review"));
   });
 
   it("reads no operator data outside the operator area", async () => {
@@ -167,7 +172,9 @@ describe("console shell", () => {
       input.dispatchEvent(new Event("input", { bubbles: true }));
     });
     const options = [...(dialog?.querySelectorAll('[role="option"]') ?? [])];
-    expect(options.map((o) => o.textContent)).toEqual(["MembersStellar DEX"]);
+    // the project is said once, in the group header
+    expect(options.map((o) => o.textContent)).toEqual(["Members"]);
+    expect(dialog?.textContent).toContain("Pages of Stellar DEX");
     await act(async () => {
       input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
     });
@@ -191,7 +198,7 @@ describe("console shell", () => {
       setter?.call(input, "dex");
       input.dispatchEvent(new Event("input", { bubbles: true }));
     });
-    expect(dialog?.textContent).toContain("Your projects");
+    expect(dialog?.textContent).toContain("My projects");
     expect(dialog?.textContent).toContain("Stellar DEX");
     await act(async () => {
       setter?.call(input, "zzz");

@@ -1,6 +1,6 @@
 import { cn } from "@veristar/brand/cn";
 import { ArrowDown, ArrowRight, ArrowUp, ChartColumn, CircleAlert, Info } from "lucide-react";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { AnimatedNumber } from "@/components/motion";
 import { Missing } from "@/components/states";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -18,7 +18,8 @@ export type StatChange = {
 };
 
 // one number per card: the label (with its definition in a tooltip), the
-// value in the metric step, an optional unit, the change against the
+// value in the metric step (tabular sans; it steps down to fit a narrow
+// card), an optional unit, the change against the
 // previous period and a sparkline. a card that drives the chart below is a
 // toggle (aria-pressed) and shows its selected state. a value that does not
 // exist is the missing glyph with the reason, never "0" or "n/a".
@@ -56,6 +57,13 @@ export function StatCard({
   [attr: `data-${string}`]: string | undefined;
 }) {
   const Comp = onSelect ? "button" : "div";
+  // the value always fits the card: its length sets how far the metric step
+  // may shrink on a narrow card (a phone, six cards in a row). the exact
+  // value stays; it is never cut or compacted
+  const text = value === null ? "" : typeof value === "number" ? format(value) : value;
+  const fit = {
+    "--metric-chars": Math.max(6, text.length + (unit ? unit.length * 0.6 + 1 : 0)),
+  } as CSSProperties;
   return (
     <Comp
       type={onSelect ? "button" : undefined}
@@ -63,16 +71,19 @@ export function StatCard({
       onClick={onSelect}
       {...data}
       className={cn(
-        "group/stat flex min-w-0 flex-col gap-2 rounded-lg border bg-raised p-4 text-left transition duration-(--vs-duration-press) ease-standard",
+        "group/stat @container flex min-w-0 flex-col gap-2 rounded-lg border bg-raised p-4 text-left transition duration-(--vs-duration-press) ease-standard",
         onSelect &&
           "focus-ring hover:border-line-strong hover:bg-hover active:translate-y-px disabled:pointer-events-none",
-        selected ? "border-pressed-line bg-pressed hover:bg-pressed" : "border-line",
+        // the card that drives the chart: an ink edge and the chart icon, on
+        // the card's own fill (a grey fill reads as pressed or disabled)
+        selected ? "border-fg ring-1 ring-fg hover:bg-raised" : "border-line",
         className,
       )}
     >
-      <span className="flex w-full items-center justify-between gap-2">
-        <span className="flex min-w-0 items-center gap-1 text-caption text-fg-2">
-          <span className="truncate">{label}</span>
+      <span className="flex w-full items-start justify-between gap-2">
+        {/* a label wraps, never truncates: its end often carries the meaning */}
+        <span className="flex min-w-0 items-start gap-1 text-caption text-fg-2">
+          <span className="min-w-0 break-words">{label}</span>
           {definition ? (
             <Tooltip content={definition}>
               <span
@@ -103,7 +114,7 @@ export function StatCard({
         </span>
       ) : state === "error" ? (
         <span className="flex flex-col gap-1">
-          <Missing reason="The value did not load" className="font-mono text-metric" />
+          <Missing reason="The value did not load" className="text-metric" />
           <span className="flex items-center gap-1 text-small text-critical">
             <CircleAlert aria-hidden className="size-3.5" />
             Did not load
@@ -111,11 +122,11 @@ export function StatCard({
         </span>
       ) : (
         <>
-          <span className="flex items-baseline gap-1 tabular">
+          <span className="flex min-w-0 items-baseline gap-1 tabular" style={fit}>
             {value === null ? (
-              <Missing reason={missingReason} className="font-mono text-metric" />
+              <Missing reason={missingReason} className="text-metric" />
             ) : (
-              <span className="font-mono text-metric text-fg">
+              <span className="metric-fit text-fg" data-value="">
                 {typeof value === "number" ? (
                   <AnimatedNumber value={value} format={format} />
                 ) : (
@@ -145,7 +156,7 @@ function ChangeLine({ change }: { change: StatChange }) {
         : "text-critical";
   return (
     <span className="flex flex-wrap items-center gap-x-1 text-caption">
-      <span className={cn("flex items-center gap-1 font-mono", tone)}>
+      <span className={cn("flex items-center gap-1 tabular", tone)}>
         <Icon aria-hidden className="size-3" />
         {change.text}
       </span>

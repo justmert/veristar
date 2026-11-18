@@ -149,10 +149,10 @@ export function DecisionPanel({
               onClick={() => pick(c)}
               className={cn(
                 "flex items-center justify-between gap-2 rounded-md border px-3 py-2 text-left text-body font-medium transition-colors duration-(--vs-duration-press) ease-standard focus-ring max-lg:min-h-(--vs-control-touch)",
+                // selected is the ink edge on the card's own fill, for both
+                // choices: the icon carries approve or reject, never the edge
                 on
-                  ? c === "approve"
-                    ? "border-success bg-selected text-fg"
-                    : "border-critical bg-selected text-fg"
+                  ? "border-fg bg-raised text-fg ring-1 ring-fg"
                   : "border-line-strong text-fg-2 hover:bg-hover hover:text-fg",
               )}
             >
@@ -255,7 +255,7 @@ export function DecisionPanel({
         </span>
         <Button
           type="submit"
-          variant={choice === "reject" ? "destructive" : "default"}
+          variant={choice === "reject" ? "destructive-outline" : "default"}
           pending={run.isPending}
           disabled={conflict}
           aria-keyshortcuts="Control+Enter"
