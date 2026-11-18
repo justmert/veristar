@@ -126,7 +126,7 @@ cap it.
 Target for one gateway instance on its own: at least 2,000 req/s with p99 under 50 ms. Met by both.
 
 `make gateway-load` is a manual target and not part of `make gateway-it` or the nightly e2e
-workflow. On GitHub's standard runner for private repositories (2 vCPUs, 7 GB) k6, the gateway and
+workflow. On a GitHub-hosted runner with 2 vCPUs and 7 GB, k6, the gateway and
 NATS share two cores; two runs there sent 2,400 and 2,221 req/s with p99 174 ms and 222 ms
 (e2e runs 43437576423 and 43454017432), which measures the runner, not the gateway. Run it on a host
 with cores to spare for k6 before a release that touches the event path.
