@@ -746,6 +746,36 @@ func TestGlobalCompare(t *testing.T) {
 		require.NoError(t, rows.Scan(&keys))
 		rows.Close()
 		require.Equal(t, keys, aurora.Breakdowns["os"].TotalKeys)
+		// the previous period is the range of equal length before it, and its
+		// totals are what a compare of that range answers
+		prevFrom, prevTo := first.AddDate(0, 0, -fixtureDays), first.AddDate(0, 0, -1)
+		require.Equal(t, prevFrom.Format(time.DateOnly), c.PreviousFrom)
+		require.Equal(t, prevTo.Format(time.DateOnly), c.PreviousTo)
+		code, body = f.get(t, "/api/operator/web/compare?from="+c.PreviousFrom+"&to="+c.PreviousTo+tq)
+		require.Equal(t, http.StatusOK, code, string(body))
+		pc := decode[WebCompare](t, body)
+		for i := range c.Projects {
+			require.Equal(t, pc.Projects[i].Totals, c.Projects[i].PreviousTotals, "previous totals of %s", ids[i])
+		}
+		require.Positive(t, aurora.PreviousTotals.Pageviews+aurora.PreviousTotals.QuarantinePageviews,
+			"the fixture has two days before the range")
+		// read_at is the latest aggregation read of the compared projects
+		var readAt time.Time
+		rows = f.superQuery(t, `select max(read_at) from agg.web_daily where tenant_id = any($1) and day between $2 and $3`, ids, first, f.today)
+		require.True(t, rows.Next())
+		require.NoError(t, rows.Scan(&readAt))
+		rows.Close()
+		require.NotNil(t, c.ReadAt)
+		require.True(t, readAt.Truncate(time.Millisecond).Equal(time.Time(*c.ReadAt)), "%s vs %s", readAt, time.Time(*c.ReadAt))
+		code, body = f.get(t, "/api/operator/web/compare?"+rq+"&tenants="+ids[2].String())
+		require.Equal(t, http.StatusOK, code)
+		require.Contains(t, string(body), `"read_at":null`, "no row of the range, no read time")
+		// the list's read_at covers its page
+		code, body = f.get(t, "/api/operator/web/projects?"+rq+"&q=aurora")
+		require.Equal(t, http.StatusOK, code)
+		lr := decode[GlobalList[WebProject]](t, body).ReadAt
+		require.NotNil(t, lr)
+
 		dune := c.Projects[2]
 		require.Equal(t, WebTotals{}, dune.Totals)
 		require.Empty(t, dune.Breakdowns["referrer"].Items)
@@ -755,10 +785,22 @@ func TestGlobalCompare(t *testing.T) {
 	})
 
 	t.Run("api", func(t *testing.T) {
+		before := time.Now()
 		code, body := f.get(t, "/api/operator/api/compare?"+rq+tq)
 		require.Equal(t, http.StatusOK, code, string(body))
 		c := decode[APICompare](t, body)
 		require.Len(t, c.Projects, 3)
+		// the api views read live: read_at is the time of the read
+		require.NotNil(t, c.ReadAt)
+		require.WithinRange(t, time.Time(*c.ReadAt), before.Add(-time.Second), time.Now().Add(time.Second))
+		code, body = f.get(t, "/api/operator/api/compare?from="+c.PreviousFrom+"&to="+c.PreviousTo+tq)
+		require.Equal(t, http.StatusOK, code, string(body))
+		pc := decode[APICompare](t, body)
+		for i := range c.Projects {
+			require.Equal(t, pc.Projects[i].Totals, c.Projects[i].PreviousTotals, "previous totals of %s", ids[i])
+		}
+		require.Positive(t, c.Projects[1].PreviousTotals.Requests+c.Projects[1].PreviousTotals.InfrastructureRequests,
+			"the fixture has a day before the range")
 		code, body = f.get(t, "/api/operator/api/projects?"+rq+"&sort=name&order=asc")
 		require.Equal(t, http.StatusOK, code)
 		list := map[uuid.UUID]APIProject{}

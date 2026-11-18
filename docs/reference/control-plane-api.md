@@ -2535,8 +2535,14 @@ Both project lists take these filters; all given filters must hold.
   without a denominator, a percentile without requests) come last in both
   orders. Ties are broken by `id` in the same direction. `name` sorts by
   `lower(name)`.
-- `limit` and `cursor` as 2.3. The envelope adds `from`, `to` and `total`
-  (projects matching the filters): `{"from", "to", "total", "items", "next_cursor"}`.
+- `limit` and `cursor` as 2.3. The envelope adds `from`, `to`, `total`
+  (projects matching the filters) and `read_at`:
+  `{"from", "to", "read_at", "total", "items", "next_cursor"}`. On the web
+  list (8.3), `read_at` is when the hourly aggregation last read a day of
+  the range for a project of the page (`agg.web_daily.read_at`), `null` when
+  none of them has a row. On the API list (8.5) it is the time of the read:
+  the API views read the metric tables live, with minute rows for the hours
+  a rollup has not closed yet (7.2).
 - Sort values are range sums that the hourly task changes, so no keyset
   over them stays stable. The cursor is a position in the sorted list,
   bound to the route, range, filters, sort and order it was made for; any
@@ -2624,10 +2630,13 @@ Operator. Query `tenants` (1 to 5 distinct tenant ids, comma-separated),
 ```json
 {
   "from": "2026-11-01", "to": "2026-11-12",
+  "previous_from": "2026-10-20", "previous_to": "2026-10-31",
+  "read_at": "2026-11-12T14:05:00Z",
   "days": ["2026-11-01", "...", "2026-11-12"],
   "projects": [
     {
       "tenant": { "TenantRef": "..." },
+      "previous_totals": { "...": "the shape of totals" },
       "totals": {
         "pageviews": 0, "visitors": 0, "visits": 0, "bounces": 0, "totaltime": 0,
         "bounce_rate": null, "avg_visit_duration": null,
@@ -2660,6 +2669,13 @@ Operator. Query `tenants` (1 to 5 distinct tenant ids, comma-separated),
   example before a backfill). A day the task read without traffic is
   `aggregated: true` with zeros.
 - `totals` sum the aggregated points; derived values follow 8.3.
+- `previous_from` and `previous_to` name the previous period, the range of
+  the same number of days that ends the day before `from`, and each
+  project's `previous_totals` has the shape of `totals` over it: what a
+  compare of that period answers as `totals`. A project without rows there
+  has zeros and `null` rates.
+- `read_at`: when the aggregation last read a day of the range for one of
+  the compared projects, `null` when none has a row (as on 8.3).
 - `breakdowns`: referrer, country, device, browser and operating system of
   the primary band over the range, the `breakdown_limit` largest keys (ties
   by key), and `total_keys`, the number of distinct keys. For a project with
@@ -2727,10 +2743,12 @@ default, or `asc`). **200**:
 
 ```json
 {
-  "from": "...", "to": "...", "days": ["..."],
+  "from": "...", "to": "...", "previous_from": "...", "previous_to": "...",
+  "read_at": "2026-11-18T14:05:00Z", "days": ["..."],
   "projects": [
     {
       "tenant": { "TenantRef": "..." },
+      "previous_totals": { "...": "the shape of totals" },
       "totals": { "requests": 0, "requests_4xx": 0, "requests_5xx": 0, "rate_4xx": null, "rate_5xx": null,
                   "p50_seconds": null, "p50_over_10s": false, "p95_seconds": null, "p95_over_10s": false,
                   "p99_seconds": null, "p99_over_10s": false,
@@ -2745,6 +2763,9 @@ default, or `asc`). **200**:
 ```
 
 - `totals` equal the project's row of 8.5 for the same range.
+- `previous_from`, `previous_to` and each project's `previous_totals` give
+  the previous period as on 8.4, with the shape of `totals`.
+- `read_at` is the time of the read, as on 8.5.
 - `onchain` (15.7) and `cohort` (19.1) complete each project.
 - `series`: one point per day, the same source choice for every day (made
   over the whole range); a day without requests has 0 requests and `null`

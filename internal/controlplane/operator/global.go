@@ -406,11 +406,15 @@ type SiteCounts struct {
 // GlobalList is the list envelope of the project lists: contract 2.3 plus
 // the range read and the number of projects that match the filters.
 type GlobalList[T any] struct {
-	From       string  `json:"from"`
-	To         string  `json:"to"`
-	Total      int64   `json:"total"`
-	Items      []T     `json:"items"`
-	NextCursor *string `json:"next_cursor"`
+	From string `json:"from"`
+	To   string `json:"to"`
+	// when the numbers were read: the web list's latest aggregation read
+	// of the page's projects (null when none has a row), the api list's
+	// read of the metric tables
+	ReadAt     *httpx.Timestamp `json:"read_at"`
+	Total      int64            `json:"total"`
+	Items      []T              `json:"items"`
+	NextCursor *string          `json:"next_cursor"`
 }
 
 // ratio is a / b, or null when b is zero.

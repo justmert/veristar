@@ -239,7 +239,8 @@ func (g *Global) apiProjects(w http.ResponseWriter, r *http.Request) error {
 			items[i].Onchain = chainSums[items[i].Tenant.ID]
 		}
 		out.Items = items
-		return nil
+		out.ReadAt, err = apiReadAt(ctx, tx)
+		return err
 	})
 	if err != nil {
 		return fmt.Errorf("operator: api projects: %w", err)
@@ -276,21 +277,39 @@ type APITotals struct {
 
 // APICompareProject is one project of GET /api/operator/api/compare.
 type APICompareProject struct {
-	Tenant   TenantRef      `json:"tenant"`
-	Totals   APITotals      `json:"totals"`
-	Series   []APIPoint     `json:"series"`
-	Services []APIService   `json:"services"`
-	Onchain  CompareOnchain `json:"onchain"`
+	Tenant TenantRef `json:"tenant"`
+	Totals APITotals `json:"totals"`
+	// the same numbers over the previous period of equal length
+	// (APICompare.PreviousFrom to PreviousTo)
+	PreviousTotals APITotals      `json:"previous_totals"`
+	Series         []APIPoint     `json:"series"`
+	Services       []APIService   `json:"services"`
+	Onchain        CompareOnchain `json:"onchain"`
 	// the confirmed cohort; its award date annotates the charts
 	Cohort Cohort `json:"cohort"`
 }
 
 // APICompare is the answer of GET /api/operator/api/compare (contract 8.6).
 type APICompare struct {
-	From     string              `json:"from"`
-	To       string              `json:"to"`
-	Days     []string            `json:"days"`
-	Projects []APICompareProject `json:"projects"`
+	From         string              `json:"from"`
+	To           string              `json:"to"`
+	PreviousFrom string              `json:"previous_from"`
+	PreviousTo   string              `json:"previous_to"`
+	ReadAt       *httpx.Timestamp    `json:"read_at"`
+	Days         []string            `json:"days"`
+	Projects     []APICompareProject `json:"projects"`
+}
+
+// apiReadAt is when the api views read the metric tables: the start of
+// the snapshot transaction. they read live (minute rows stand in for the
+// hours a rollup has not closed yet), so no stored time is older.
+func apiReadAt(ctx context.Context, tx pgx.Tx) (*httpx.Timestamp, error) {
+	var at time.Time
+	if err := tx.QueryRow(ctx, `select transaction_timestamp()`).Scan(&at); err != nil {
+		return nil, fmt.Errorf("api read_at: %w", err)
+	}
+	ts := httpx.Timestamp(at.UTC())
+	return &ts, nil
 }
 
 // apiCompareCTE is apiChosenCTE over the compared tenants only.
@@ -316,7 +335,11 @@ func (g *Global) apiCompare(w http.ResponseWriter, r *http.Request) error {
 		desc = v == "desc"
 	}
 	ctx := r.Context()
-	out := APICompare{From: rg.From.Format(time.DateOnly), To: rg.To.Format(time.DateOnly), Days: dayStrings(rg)}
+	prev := rg.previous()
+	out := APICompare{
+		From: rg.From.Format(time.DateOnly), To: rg.To.Format(time.DateOnly), Days: dayStrings(rg),
+		PreviousFrom: prev.From.Format(time.DateOnly), PreviousTo: prev.To.Format(time.DateOnly),
+	}
 	err = g.db.WithOperator(ctx, func(tx pgx.Tx) error {
 		if err := snapshot(ctx, tx); err != nil {
 			return err
@@ -328,6 +351,13 @@ func (g *Global) apiCompare(w http.ResponseWriter, r *http.Request) error {
 		args := pgx.NamedArgs{"ids": ids, "from_at": rg.From, "to_end": rg.end()}
 		totals, err := apiTotals(ctx, tx, args)
 		if err != nil {
+			return err
+		}
+		prevTotals, err := apiTotals(ctx, tx, pgx.NamedArgs{"ids": ids, "from_at": prev.From, "to_end": prev.end()})
+		if err != nil {
+			return err
+		}
+		if out.ReadAt, err = apiReadAt(ctx, tx); err != nil {
 			return err
 		}
 		series, err := apiSeries(ctx, tx, args, rg)
@@ -347,7 +377,7 @@ func (g *Global) apiCompare(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 		for _, t := range tenants {
-			p := APICompareProject{Tenant: t, Totals: totals[t.ID], Series: series[t.ID], Services: services[t.ID], Onchain: chainOf[t.ID],
+			p := APICompareProject{Tenant: t, Totals: totals[t.ID], PreviousTotals: prevTotals[t.ID], Series: series[t.ID], Services: services[t.ID], Onchain: chainOf[t.ID],
 				Cohort: cohorts[t.ID]}
 			if p.Services == nil {
 				p.Services = []APIService{}
