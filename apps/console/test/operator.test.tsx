@@ -621,7 +621,7 @@ describe("review workspace", () => {
     // no alerts here: the alerts have their own page
     expect(calls.some((c) => c.url.includes("/alerts"))).toBe(false);
     expect(host.querySelector("ul[aria-label=Evidence]")?.textContent).toContain(
-      "1 of 2 not a valid id",
+      "1 of 2 not a valid ID",
     );
     await waitFor(() =>
       expect(host.querySelector("[data-stat=pageviews]")?.textContent).not.toContain("Loading"),
