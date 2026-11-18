@@ -154,10 +154,55 @@ const onchainBody = {
     days_missing: 0,
     weekly_active_accounts: { average: null, latest: null, weeks_counted: 0, weeks_missing: 1 },
   },
-  ids: [],
+  ids: [
+    chainId("01a1ed00-0000-7000-8000-000000000001", "verified", [1200, 34]),
+    // an unverified id's operations stay out of the card
+    chainId("01a1ed00-0000-7000-8000-000000000002", "unverified", [500, 500]),
+  ],
   weeks: [],
   link: { two_way: false, sites: [] },
 };
+
+function chainId(id: string, status: "verified" | "unverified", ops: [number, number]) {
+  return {
+    id,
+    strkey: f.G_KEY,
+    kind: "account",
+    added_by: "enrollment",
+    created_at: "2026-11-12T09:00:00Z",
+    verification: {
+      status,
+      method: status === "verified" ? "sep53" : null,
+      verified_at: status === "verified" ? "2026-11-12T10:00:00Z" : null,
+      via: null,
+      detail: null,
+      last_attempt_at: null,
+      last_error: null,
+    },
+    read: {
+      source: "horizon",
+      covered_from: "2026-11-15",
+      covered_to: "2026-11-16",
+      last_success_at: "2026-11-16T01:00:00Z",
+      last_error: null,
+      last_error_at: null,
+      home_domain: null,
+      account_exists: true,
+    },
+    totals: {
+      operations: ops[0] + ops[1],
+      transactions: 2,
+      peak_counterparties: 1,
+      days_read: 2,
+      days_missing: 0,
+    },
+    series: [
+      { day: "2026-11-15", operations: ops[0], transactions: 1, counterparties: 1, missing: null },
+      { day: "2026-11-16", operations: ops[1], transactions: 1, counterparties: 1, missing: null },
+    ],
+    functions: null,
+  };
+}
 
 const ctx: ProjectContext = {
   tenant: f.tenantBody as ProjectContext["tenant"],
@@ -242,7 +287,11 @@ describe("overview page", () => {
     await waitFor(() =>
       expect(host.querySelector('[data-tile="API requests"]')?.textContent).toContain("1,200"),
     );
-    await waitFor(() => expect(host.textContent).toContain("1,234"));
+    await waitFor(() =>
+      expect(host.querySelector('[data-summary="On-chain"]')?.textContent).toContain(
+        "1,234operations of verified ids, 1 of 2 verified",
+      ),
+    );
     expect(host.querySelector('[data-summary="Integrity grade"] [data-grade]')).not.toBeNull();
     const links = [...host.querySelectorAll("a")].map((a) => a.getAttribute("href"));
     expect(links).toContain(`/projects/${f.TENANT_ID}/scf`);
