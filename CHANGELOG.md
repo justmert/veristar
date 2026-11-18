@@ -135,6 +135,15 @@ here, before they take effect, as the processing terms require
   contracts: the ids of the new answers are added in the order they are listed
   until the project holds 20, the cap the console holds every project to
   (migration 00048).
+- `PUT /api/tenants/{tenant_id}/cohort/proposal` answers 403
+  `terms_not_accepted` until the project accepts the current terms, as every
+  other mutating tenant route does.
+- An operator's cohort confirm copies exactly the proposal its audit row
+  names, also when the project changes its proposal at the same moment.
+- Operator routes and the machine metrics API answer 400 `invalid_query` or
+  `invalid_cursor` for a query value or cursor key that holds a nul
+  character, invalid UTF-8, a uuid in another form or a year 0 date; they
+  answered 500.
 - A page whose path starts with two slashes (`https://example.com//docs/a`)
   is stored under its own path. Umami read such a path as a host and stored
   `/a`, and a path such as `//search%20term` made Umami refuse the event,
