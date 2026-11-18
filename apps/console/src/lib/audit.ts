@@ -2,6 +2,7 @@
 // changes of an entry, and runs of identical system events folded into one
 // line. pure, so tests read it directly.
 
+import { REVOKED_REASON } from "@/api/mcp";
 import type { AuditEntry, SiteStatus, TenantStatus } from "@/api/schemas";
 import { statusEntry } from "@/components/status";
 import { formatCount, formatDateRange, MISSING } from "@/lib/format";
@@ -327,7 +328,22 @@ export function auditChanges(e: AuditEntry): { key: string; from: string; to: st
 }
 
 export function auditReason(e: AuditEntry): string | null {
-  return detailText(e, "reason");
+  const reason = detailText(e, "reason");
+  // an ai assistant key carries a reason code, not words: in the console
+  // the sentence already says who revoked it, so only the other causes read
+  if (e.action === "mcp_credential.revoke") {
+    if (reason === null || reason === "user") return null;
+    return REVOKED_REASON[reason] ?? null;
+  }
+  return reason;
+}
+
+// the words of an entry, for the search of the loaded log
+export function auditText(e: AuditEntry, names?: Readonly<Record<string, string>>): string {
+  const s = auditSentence(e, names);
+  return [s.actor, s.verb, s.object ?? "", auditReason(e) ?? "", e.action, e.target]
+    .join(" ")
+    .toLowerCase();
 }
 
 // ------------------------------------------------------------------ runs
