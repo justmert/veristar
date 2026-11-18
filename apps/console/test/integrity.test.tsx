@@ -211,6 +211,7 @@ describe("integrity in the global web view", () => {
       "/api/operator/web/projects": f.webProjectsBody,
       "/api/operator/web/integrity": f.integrityReportBody,
       [`/api/operator/tenants/${c.TENANT_ID}`]: c.operatorDetailBody,
+      "/api/operator/cohorts": f.cohortListBody,
     });
     const host = await renderRoutes(
       [{ path: "/operator/projects", element: <OperatorProjectsPage /> }],
@@ -222,9 +223,7 @@ describe("integrity in the global web view", () => {
     const other = host.querySelector<HTMLElement>(`tr[data-tenant="${f.TENANT_B}"]`);
     expect(other?.querySelector('[data-col="integrity"]')?.textContent).toBe("Not graded");
 
-    const header = [...host.querySelectorAll("th button")].find(
-      (b) => b.textContent === "Integrity",
-    );
+    const header = [...host.querySelectorAll("th button")].find((b) => b.textContent === "Grade");
     if (!header) throw new Error("no integrity header");
     await click(header as HTMLElement);
     // the first order of a number is largest first: C before B before A
@@ -247,7 +246,10 @@ describe("integrity in the global web view", () => {
   });
 
   it("filters to a grade and below and sends the filter", async () => {
-    const calls = stubByPath({ "/api/operator/web/projects": f.webProjectsBody });
+    const calls = stubByPath({
+      "/api/operator/web/projects": f.webProjectsBody,
+      "/api/operator/cohorts": f.cohortListBody,
+    });
     const host = await renderRoutes(
       [{ path: "/operator/projects", element: <OperatorProjectsPage /> }],
       "/operator/projects?view=web&integrity_at_or_below=C",
@@ -256,11 +258,15 @@ describe("integrity in the global web view", () => {
     expect(calls.map((x) => x.url)).toContain(
       "/api/operator/web/projects?integrity_at_or_below=C&sort=pageviews&order=desc&limit=50",
     );
-    const select = [...host.querySelectorAll("label")].find((l) => l.textContent === "Integrity");
+    const select = [...host.querySelectorAll("label")].find((l) => l.textContent === "Grade");
     expect(select).toBeDefined();
     const options = [...host.querySelectorAll(`#${CSS.escape(select?.htmlFor ?? "")} option`)].map(
       (o) => o.textContent,
     );
-    expect(options).toEqual(["Any grade", "C", "B and below", "Graded"]);
+    expect(options).toEqual(["Any", "Any grade given", "B or C", "C"]);
+    // the active filter shows as a chip that removes it
+    expect(host.querySelector("ul[aria-label='Active filters']")?.textContent).toContain(
+      "Grade: C",
+    );
   });
 });

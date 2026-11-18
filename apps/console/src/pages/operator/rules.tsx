@@ -1,6 +1,12 @@
-import { type QueryClient, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, ListChecks, Plus } from "lucide-react";
-import { type FormEvent, useState } from "react";
+import {
+  type QueryClient,
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import { Download, ListChecks, MoreHorizontal, Plus } from "lucide-react";
+import { type FormEvent, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { ApiError } from "@/api/client";
 import {
@@ -16,15 +22,19 @@ import {
   rulesQuery,
 } from "@/api/cohorts";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { ErrorPanel, FormMessage, Loading, StateBlock } from "@/components/error-panel";
+import { type Column, DataTable } from "@/components/data-table";
+import { FormMessage } from "@/components/error-panel";
 import { SelectField, TextField } from "@/components/form-field";
-import { Panel } from "@/components/panel";
-import { DateField } from "@/components/range-control";
+import { PageHeader } from "@/components/page-header";
+import { DateField, isIsoDay } from "@/components/range-control";
+import { EmptyState, ErrorState, LoadingState, Missing, Skeleton } from "@/components/states";
+import { toast } from "@/components/toast";
 import { Button } from "@/components/ui/button";
-import { countOf, formatCount, formatDateRange } from "@/lib/format";
+import { Menu, MenuContent, MenuItem, MenuTrigger } from "@/components/ui/menu";
+import { countOf, formatCount, formatDate, formatDateRange } from "@/lib/format";
 import { isDay } from "@/lib/global";
 import { fieldMessage } from "@/lib/validate";
-import { cohortText, TD, TH } from "./global-shared";
+import { cohortText } from "./shared";
 
 // saved threshold rules (contract 19.4): an operator defines a traction
 // rule once and lists the projects that meet it, each with its evidence
@@ -142,40 +152,99 @@ export function RulesPage() {
   const asOfParam = params.get("as_of") ?? "";
   const asOf = isDay(asOfParam) ? asOfParam : "";
   const rules = useQuery(rulesQuery);
+  const items = rules.data?.items ?? [];
+  // each rule's match count, evaluated today, so the list says how many
+  // projects meet it without opening it
+  const counts = useQueries({ queries: items.map((r) => ruleMatchesQuery(r.id, "")) });
   const qc = useQueryClient();
   const [editing, setEditing] = useState<{ id: string | null; form: RuleForm } | null>(null);
   const [deleting, setDeleting] = useState<Rule | null>(null);
   const remove = useMutation({
     mutationFn: (id: string) => ruleApi.remove(id),
     onSuccess: async (_d, id) => {
+      const name = deleting?.name ?? "The rule";
       setDeleting(null);
       if (id === selected) setParams({}, { replace: true });
+      toast.success(`${name} is deleted.`);
       await refreshRules(qc);
     },
   });
   const open = (id: string) => setParams({ rule: id }, { replace: true });
-  const current = rules.data?.items.find((r) => r.id === selected) ?? null;
+  const current = items.find((r) => r.id === selected) ?? null;
+
+  const columns: Column<Rule>[] = [
+    {
+      key: "rule",
+      header: "Rule",
+      primary: true,
+      minWidth: "min-w-64",
+      cell: (r) => (
+        <span className="flex min-w-0 flex-col">
+          <span className="truncate font-medium text-fg">{r.name}</span>
+          <span className="text-caption font-normal whitespace-normal text-fg-2">
+            {describeRule(r)}
+          </span>
+        </span>
+      ),
+    },
+    {
+      key: "cohort",
+      header: "Cohort",
+      mobile: true,
+      cell: (r) => cohortText(r.cohort) ?? "Every project",
+    },
+    {
+      key: "matches",
+      header: "Projects that meet it",
+      definition: "Projects that meet the rule when it is evaluated today.",
+      align: "right",
+      numeric: true,
+      mobile: true,
+      cell: (r) => {
+        const q = counts[items.indexOf(r)];
+        if (!q || q.isPending) return <span className="text-fg-2">Evaluating</span>;
+        if (q.error || !q.data) return <Missing reason="The rule did not evaluate" />;
+        return (
+          <span data-matches={r.id}>
+            {formatCount(q.data.items.length)} of {formatCount(q.data.evaluated)}
+          </span>
+        );
+      },
+    },
+    {
+      key: "actions",
+      header: "Actions",
+      align: "right",
+      cell: (r) => (
+        <RowMenu
+          name={r.name}
+          onEdit={() => setEditing({ id: r.id, form: formOf(r) })}
+          onDelete={() => {
+            remove.reset();
+            setDeleting(r);
+          }}
+        />
+      ),
+    },
+  ];
 
   return (
-    <section aria-labelledby="rules-h" className="flex flex-col gap-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex flex-col gap-1">
-          <h2 id="rules-h" className="text-section text-fg">
-            Threshold rules
-          </h2>
-          <p className="max-w-prose text-small text-fg-2">
-            Define a traction rule once, such as verified visitors on enough days of every month,
-            and list the projects that meet it with the days that qualify them and their integrity
-            grade. Months are complete UTC calendar months before the evaluation day.
-          </p>
-        </div>
-        {editing ? null : (
-          <Button onClick={() => setEditing({ id: null, form: EMPTY_RULE })}>
-            <Plus aria-hidden />
-            New rule
-          </Button>
-        )}
-      </div>
+    <div className="flex min-w-0 flex-col gap-6">
+      <PageHeader
+        title="Rules"
+        description="Save a traction rule once. See the projects that meet it, with the days that qualify them."
+        primary={
+          editing ? null : (
+            <Button
+              onClick={() => setEditing({ id: null, form: EMPTY_RULE })}
+              className="max-lg:h-(--vs-control-touch)"
+            >
+              <Plus aria-hidden />
+              New rule
+            </Button>
+          )
+        }
+      />
 
       {editing ? (
         <RuleEditor
@@ -188,68 +257,34 @@ export function RulesPage() {
         />
       ) : null}
 
-      {rules.isPending ? <Loading label="Loading rules" /> : null}
-      {rules.error ? <ErrorPanel error={rules.error} onRetry={() => rules.refetch()} /> : null}
-      {rules.data ? (
-        rules.data.items.length === 0 ? (
-          <StateBlock kind="empty" icon={<ListChecks aria-hidden />} title="No rule is saved yet">
-            Save a rule to list the projects that meet it.
-          </StateBlock>
-        ) : (
-          <div className="overflow-x-auto rounded-lg border border-line bg-raised">
-            <table className="w-full min-w-[48rem] border-separate border-spacing-0 text-left text-small">
-              <thead>
-                <tr>
-                  <th scope="col" className={`${TH} pl-4`}>
-                    Rule
-                  </th>
-                  <th scope="col" className={TH}>
-                    Cohort
-                  </th>
-                  <th scope="col" className={`${TH} pr-4 text-right`}>
-                    <span className="sr-only">Actions</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="[&>tr:last-child>*]:border-0">
-                {rules.data.items.map((r) => (
-                  <tr
-                    key={r.id}
-                    data-rule={r.id}
-                    data-state={r.id === selected ? "selected" : undefined}
-                    className="data-[state=selected]:bg-selected"
-                  >
-                    <th scope="row" className={`${TD} pl-4 font-normal`}>
-                      <span className="block text-body font-medium text-fg">{r.name}</span>
-                      <span className="block text-caption text-fg-3">{describeRule(r)}</span>
-                    </th>
-                    <td className={`${TD} text-caption text-fg-2`}>
-                      {cohortText({ ...r.cohort, award_date: null }) ?? "Every project"}
-                    </td>
-                    <td className={`${TD} pr-4`}>
-                      <span className="flex justify-end gap-1">
-                        <Button size="sm" variant="outline" onClick={() => open(r.id)}>
-                          Matches
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => setEditing({ id: r.id, form: formOf(r) })}
-                        >
-                          Edit
-                        </Button>
-                        <Button size="sm" variant="ghost" onClick={() => setDeleting(r)}>
-                          Delete
-                        </Button>
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )
-      ) : null}
+      {rules.isPending ? (
+        <LoadingState label="Loading the rules">
+          <Skeleton.Table rows={3} columns={3} />
+        </LoadingState>
+      ) : rules.error ? (
+        <ErrorState
+          title="The rules did not load"
+          error={rules.error}
+          onRetry={() => rules.refetch()}
+        />
+      ) : items.length === 0 ? (
+        <EmptyState icon={<ListChecks aria-hidden />} title="No rule is saved yet">
+          Save a rule. Then the projects that meet it show here.
+        </EmptyState>
+      ) : (
+        <DataTable
+          label="Rules"
+          columns={columns}
+          rows={items}
+          getRowKey={(r) => r.id}
+          rowLabel={(r) => r.name}
+          rowHref={(r) => `/operator/rules?rule=${r.id}`}
+          rowProps={(r) => ({
+            "data-rule": r.id,
+            ...(r.id === selected ? { "data-current": "" } : {}),
+          })}
+        />
+      )}
 
       {current ? (
         <Matches
@@ -271,19 +306,57 @@ export function RulesPage() {
           }
         }}
         title={`Delete ${deleting?.name ?? "the rule"}?`}
-        description="The rule is removed for every operator, the machine API and the AI tools. The audit log keeps its definition."
+        description="The rule goes away for every operator, the machine API and the AI tools. The audit log keeps its definition."
         confirmLabel="Delete rule"
         pendingLabel="Deleting"
         pending={remove.isPending}
         error={remove.error}
         onConfirm={() => deleting && remove.mutate(deleting.id)}
       />
-    </section>
+    </div>
+  );
+}
+
+function RowMenu({
+  name,
+  onEdit,
+  onDelete,
+}: {
+  name: string;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    // above the row link, so the menu opens instead of the rule
+    <span className="relative z-(--vs-layer-raised) inline-flex">
+      <Menu>
+        <MenuTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label={`Actions for ${name}`}
+            className="max-lg:size-(--vs-control-touch)"
+          >
+            <MoreHorizontal aria-hidden />
+          </Button>
+        </MenuTrigger>
+        <MenuContent align="end">
+          <MenuItem onSelect={onEdit}>Edit rule</MenuItem>
+          <MenuItem tone="critical" onSelect={onDelete}>
+            Delete rule
+          </MenuItem>
+        </MenuContent>
+      </Menu>
+    </span>
   );
 }
 
 const COHORT_LIST = { program: "programs", round: "rounds", category: "categories" } as const;
-const COHORT_LABEL = { program: "Program", round: "Round", category: "Category" } as const;
+const COHORT_LABEL = {
+  program: "SCF program",
+  round: "SCF round",
+  category: "SCF category",
+} as const;
 
 function CohortSelect({
   field,
@@ -340,6 +413,7 @@ function RuleEditor({
     mutationFn: (body: RuleInput) => (id ? ruleApi.update(id, body) : ruleApi.create(body)),
     onSuccess: async (r) => {
       await refreshRules(qc);
+      toast.success(`${r.name} is saved.`);
       onDone(r);
     },
     onError: (err) => {
@@ -362,9 +436,16 @@ function RuleEditor({
     if (v.body) save.mutate(v.body);
   }
 
+  const title = id ? "Edit rule" : "New rule";
   return (
-    <Panel title={id ? "Edit rule" : "New rule"} aria-label={id ? "Edit rule" : "New rule"}>
-      <form onSubmit={submit} noValidate className="flex flex-col gap-4">
+    <section
+      aria-labelledby="rule-editor-h"
+      className="flex animate-rise-in flex-col gap-4 rounded-lg border border-line bg-raised p-4 sm:p-5"
+    >
+      <h2 id="rule-editor-h" className="text-title text-fg">
+        {title}
+      </h2>
+      <form onSubmit={submit} noValidate aria-label={title} className="flex flex-col gap-4">
         <TextField
           label="Name"
           value={form.name}
@@ -373,7 +454,7 @@ function RuleEditor({
           maxLength={100}
           required
         />
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <SelectField
             label="Metric"
             value={form.metric}
@@ -387,7 +468,7 @@ function RuleEditor({
             ))}
           </SelectField>
           <TextField
-            label="At least, per day"
+            label="Minimum per day"
             inputMode="numeric"
             value={form.minPerDay}
             onChange={set("minPerDay")}
@@ -395,7 +476,7 @@ function RuleEditor({
             required
           />
           <TextField
-            label="On days per month"
+            label="Days per month"
             inputMode="numeric"
             hint="1 to 28"
             value={form.minDays}
@@ -413,7 +494,7 @@ function RuleEditor({
             required
           />
         </div>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <SelectField
             label="Minimum integrity grade"
             value={form.minGrade}
@@ -435,9 +516,7 @@ function RuleEditor({
               onChange={set(k)}
               error={
                 errors[k] ??
-                (cohorts.error
-                  ? "The confirmed values could not be loaded. Reload the page."
-                  : undefined)
+                (cohorts.error ? "The cohort values did not load. Reload the page." : undefined)
               }
             />
           ))}
@@ -449,16 +528,21 @@ function RuleEditor({
               : save.error
           }
         />
-        <div className="flex gap-2">
-          <Button type="submit" pending={save.isPending}>
+        <div className="flex flex-wrap gap-2">
+          <Button type="submit" pending={save.isPending} className="max-lg:h-(--vs-control-touch)">
             {save.isPending ? "Saving" : "Save rule"}
           </Button>
-          <Button type="button" variant="ghost" onClick={() => onDone(null)}>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => onDone(null)}
+            className="max-lg:h-(--vs-control-touch)"
+          >
             Cancel
           </Button>
         </div>
       </form>
-    </Panel>
+    </section>
   );
 }
 
@@ -472,27 +556,54 @@ function Matches({
   onAsOf: (d: string) => void;
 }) {
   const q = useQuery(ruleMatchesQuery(rule.id, asOf));
+  const [draft, setDraft] = useState(asOf);
+  useEffect(() => setDraft(asOf), [asOf]);
   return (
-    <Panel
-      title={`Projects that meet ${rule.name}`}
+    <section
       aria-label="Rule matches"
-      description={describeRule(rule)}
-      actions={
-        <span className="flex flex-wrap items-end gap-2">
-          <DateField label="Evaluated on" value={asOf} onChange={onAsOf} />
-          <Button asChild variant="outline" size="sm">
+      className="flex min-w-0 flex-col gap-4 rounded-lg border border-line bg-raised p-4 sm:p-5"
+    >
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="flex min-w-0 flex-col gap-1">
+          <h2 className="text-title break-words text-fg">Projects that meet {rule.name}</h2>
+          <p className="text-small text-fg-2">{describeRule(rule)}.</p>
+        </div>
+        <div className="flex flex-wrap items-end gap-2">
+          <div className="w-44">
+            <DateField
+              label="Evaluated on"
+              optional
+              value={draft}
+              onChange={(v) => {
+                setDraft(v);
+                const t = v.trim();
+                if (t !== asOf && (t === "" || isIsoDay(t))) onAsOf(t);
+              }}
+            />
+          </div>
+          <Button
+            asChild
+            variant="outline"
+            size="sm"
+            className="mb-6 max-lg:h-(--vs-control-touch)"
+          >
             <a href={ruleMatchesCsv(rule.id, asOf)} download>
               <Download aria-hidden />
               Export CSV
             </a>
           </Button>
-        </span>
-      }
-    >
-      {q.isPending ? <Loading label="Evaluating the rule" /> : null}
-      {q.error ? <ErrorPanel error={q.error} onRetry={() => q.refetch()} /> : null}
-      {q.data ? <MatchList data={q.data} /> : null}
-    </Panel>
+        </div>
+      </div>
+      {q.isPending ? (
+        <LoadingState label="Evaluating the rule">
+          <Skeleton.Table rows={3} columns={2} />
+        </LoadingState>
+      ) : q.error ? (
+        <ErrorState title="The rule did not evaluate" error={q.error} onRetry={() => q.refetch()} />
+      ) : (
+        <MatchList data={q.data} />
+      )}
+    </section>
   );
 }
 
@@ -500,43 +611,40 @@ function MatchList({ data }: { data: RuleMatches }) {
   return (
     <div className="flex flex-col gap-3">
       <p className="text-small text-fg-2" aria-live="polite">
-        {data.items.length} of {data.evaluated} evaluated projects meet the rule, over{" "}
-        {formatDateRange(data.from, data.to)} ({data.months.join(", ")}).
+        {formatCount(data.items.length)} of {countOf(data.evaluated, "project")} meet the rule.
+        Months: {data.months.join(", ")}. Days {formatDateRange(data.from, data.to)}, UTC.
       </p>
       {data.items.length === 0 ? null : (
         <ul className="flex flex-col divide-y divide-line" aria-label="Projects that meet the rule">
           {data.items.map((m) => (
-            <li key={m.tenant.id} data-tenant={m.tenant.id} className="flex flex-col gap-1 py-3">
-              <span className="flex flex-wrap items-baseline gap-x-3">
+            <li
+              key={m.tenant.id}
+              data-tenant={m.tenant.id}
+              className="flex min-w-0 flex-col gap-1 py-3"
+            >
+              <span className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
                 <Link
                   to={`/operator/projects/${m.tenant.id}`}
-                  className="rounded-sm text-body font-medium text-fg underline-offset-4 hover:underline focus-ring"
+                  className="min-w-0 truncate rounded-sm text-body font-medium text-fg underline-offset-4 hover:underline focus-ring"
                 >
                   {m.tenant.name}
                 </Link>
-                <span className="text-caption text-fg-3">
-                  {m.integrity.grade ? `Integrity grade ${m.integrity.grade}` : "Not graded"} (
-                  {countOf(m.integrity.graded_days, "graded site day")})
+                <span className="text-caption text-fg-2">
+                  {m.integrity.grade ? `Grade ${m.integrity.grade}` : "No grade"},{" "}
+                  {countOf(m.integrity.graded_days, "graded site day")}
                 </span>
                 {cohortText(m.cohort) ? (
-                  <span className="text-caption text-fg-3">{cohortText(m.cohort)}</span>
+                  <span className="text-caption text-fg-2">{cohortText(m.cohort)}</span>
                 ) : null}
               </span>
               <ul className="flex flex-col gap-1 text-caption text-fg-2">
                 {m.months.map((mo) => (
-                  <li key={mo.month} data-month={mo.month}>
+                  <li key={mo.month} data-month={mo.month} className="break-words">
                     <span className="font-medium text-fg">{mo.month}</span>:{" "}
                     {countOf(mo.qualifying_days, "qualifying day")}
-                    {mo.days.length > 0 ? (
-                      <span className="text-fg-3">
-                        {" "}
-                        (
-                        {mo.days
-                          .map((d) => `${d.day.slice(8)}: ${formatCount(d.value)}`)
-                          .join(", ")}
-                        )
-                      </span>
-                    ) : null}
+                    {mo.days.length > 0
+                      ? ` (${mo.days.map((d) => `${formatDate(d.day)}: ${formatCount(d.value)}`).join(", ")})`
+                      : ""}
                   </li>
                 ))}
               </ul>

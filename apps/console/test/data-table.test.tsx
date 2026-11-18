@@ -47,6 +47,30 @@ describe("data table", () => {
     expect(host.querySelector("section")?.getAttribute("aria-label")).toBe("Projects table");
   });
 
+  it("carries a column definition on its header for hover and keyboard", async () => {
+    const defined: Column<Row>[] = [
+      { ...columns[0], definition: undefined } as Column<Row>,
+      { ...(columns[1] as Column<Row>), definition: "Visits in the range." },
+      { ...(columns[2] as Column<Row>), definition: "Where most visits came from." },
+    ];
+    const host = await render(
+      <DataTable
+        label="Projects table"
+        columns={defined}
+        rows={rows}
+        getRowKey={(r) => r.id}
+        sort={{ key: "visits", order: "desc" }}
+        onSort={() => {}}
+      />,
+    );
+    const ths = [...table(host).querySelectorAll("th")];
+    expect(ths[1]?.querySelector("button")?.getAttribute("aria-description")).toBe(
+      "Visits in the range.",
+    );
+    const plain = ths[2]?.querySelector("[tabindex='0']");
+    expect(plain?.textContent).toContain("Where most visits came from.");
+  });
+
   it("links each row and passes data attributes through", async () => {
     const host = await render(
       <DataTable

@@ -21,21 +21,12 @@ import {
   validateDays,
   writeListState,
 } from "@/lib/global";
-import { ApiKeysPage, validateKeyForm } from "@/pages/operator/api-keys";
+import { API_COLUMNS, WEB_COLUMNS } from "@/lib/operator-projects";
 import { ComparePage } from "@/pages/operator/compare";
 import { OperatorProjectsPage } from "@/pages/operator/projects";
 import * as c from "./fixtures/contract";
 import * as f from "./fixtures/global";
-import {
-  byLabel,
-  byRole,
-  type Call,
-  click,
-  renderRoutes,
-  stubFetch,
-  type,
-  waitFor,
-} from "./helpers";
+import { byLabel, byRole, type Call, click, renderRoutes, stubFetch, waitFor } from "./helpers";
 
 const EM_DASH = String.fromCharCode(0x2014);
 
@@ -201,7 +192,6 @@ function routeFetch(
 const operatorRoutes = [
   { path: "/operator/projects", element: <OperatorProjectsPage /> },
   { path: "/operator/compare", element: <ComparePage /> },
-  { path: "/operator/keys", element: <ApiKeysPage /> },
 ];
 
 function rowOf(host: HTMLElement, tenantId: string): HTMLElement {
@@ -210,34 +200,61 @@ function rowOf(host: HTMLElement, tenantId: string): HTMLElement {
   return row;
 }
 
-describe("global web view", () => {
-  it("shows every column of 8.3, sends filters and sorts, and pages with the cursor", async () => {
-    const calls = stubFetch([
-      { status: 200, body: f.cohortListBody },
-      { status: 200, body: f.webProjectsBody },
-      { status: 200, body: f.webProjectsBody },
-      { status: 200, body: f.webProjectsBody },
-      { status: 200, body: f.webProjectsPage2Body },
-    ]);
+// the list of projects answers from its routes, whatever the order
+function listFetch(page: unknown) {
+  return routeFetch((_m, url) => {
+    if (url.startsWith("/api/operator/cohorts")) return { status: 200, body: f.cohortListBody };
+    if (
+      url.startsWith("/api/operator/web/projects") ||
+      url.startsWith("/api/operator/api/projects")
+    )
+      return { status: 200, body: page };
+    return { status: 503, body: c.errorBody("unavailable") };
+  });
+}
+
+// shows every column of a view, as a person who chose them all
+function showAll(view: "web" | "api") {
+  const ids = (view === "web" ? WEB_COLUMNS : API_COLUMNS).map((x) => x.id);
+  window.localStorage.setItem(`veristar.operator.projects.columns.${view}`, JSON.stringify(ids));
+}
+
+function sortHeaders(host: HTMLElement): string[] {
+  return [...host.querySelectorAll("table th[aria-sort] button")].map((b) =>
+    (b.textContent ?? "").trim(),
+  );
+}
+
+describe("project list, web view", () => {
+  it("shows the default columns, filters at once, sorts by a header and pages", async () => {
+    window.localStorage.clear();
+    const calls = routeFetch((_m, url) => {
+      if (url.startsWith("/api/operator/cohorts")) return { status: 200, body: f.cohortListBody };
+      if (url.includes("cursor=")) return { status: 200, body: f.webProjectsPage2Body };
+      return { status: 200, body: f.webProjectsBody };
+    });
     const host = await renderRoutes(operatorRoutes, "/operator/projects?view=web");
     await waitFor(() => expect(host.textContent).toContain("Stellar DEX"));
     const a = rowOf(host, c.TENANT_ID);
-    for (const want of ["1,200", "410", "530", "49%", "1 min 31 s", "3.2%", "4.0%", "Germany"])
-      expect(a.textContent).toContain(want);
-    // a project without visits has no ratios
-    expect(rowOf(host, f.TENANT_B).textContent).toContain("none");
+    for (const want of ["1,200", "410", "49%", "3.2%"]) expect(a.textContent).toContain(want);
+    // a project without visits shows the missing glyph with its reason
+    expect(rowOf(host, f.TENANT_B).textContent).toContain("No visits in this range");
     expect(host.textContent).toContain("IP Geolocation by DB-IP");
-    expect(host.textContent).toContain("unique per UTC day");
-    expect(calls[1]?.url).toBe("/api/operator/web/projects?sort=pageviews&order=desc&limit=50");
+    const visitorsHead = [...host.querySelectorAll("th button")].find(
+      (b) => b.textContent === "Visitors",
+    );
+    expect(visitorsHead?.getAttribute("aria-description")).toContain("unique per UTC day");
+    const list = () => calls.filter((x) => x.url.startsWith("/api/operator/web/projects"));
+    expect(list()[0]?.url).toBe("/api/operator/web/projects?sort=pageviews&order=desc&limit=50");
 
-    // filter to verified projects
+    // a filter in the filter sheet applies at once
     const verified = byLabel(host, "Domain verified") as unknown as HTMLSelectElement;
     await act(async () => {
       verified.value = "true";
       verified.dispatchEvent(new Event("change", { bubbles: true }));
     });
     await waitFor(() =>
-      expect(calls[2]?.url).toBe(
+      expect(list().at(-1)?.url).toBe(
         "/api/operator/web/projects?verified=true&sort=pageviews&order=desc&limit=50",
       ),
     );
@@ -249,7 +266,7 @@ describe("global web view", () => {
     if (!header) throw new Error("no visitors header");
     await click(header as HTMLElement);
     await waitFor(() =>
-      expect(calls[3]?.url).toBe(
+      expect(list().at(-1)?.url).toBe(
         "/api/operator/web/projects?verified=true&sort=visitors&order=desc&limit=50",
       ),
     );
@@ -257,34 +274,48 @@ describe("global web view", () => {
 
     await click(byRole(host, "button", "Load more"));
     await waitFor(() => expect(host.textContent).toContain("Anchor Hub"));
-    expect(calls[4]?.url).toContain("cursor=cG9zOjI");
+    expect(list().at(-1)?.url).toContain("cursor=cG9zOjI");
   });
 
-  it("selects up to five projects into a comparison link", async () => {
-    stubFetch([
-      { status: 200, body: f.cohortListBody },
-      { status: 200, body: f.webProjectsBody },
-    ]);
+  it("reaches every web sort key of 8.3 as a sortable column", async () => {
+    showAll("web");
+    listFetch(f.webProjectsBody);
     const host = await renderRoutes(operatorRoutes, "/operator/projects?view=web");
     await waitFor(() => expect(host.textContent).toContain("Stellar DEX"));
+    expect(sortHeaders(host)).toHaveLength(webSort.options.length);
+    expect(
+      WEB_COLUMNS.filter((x) => x.sortKey)
+        .map((x) => x.sortKey)
+        .sort(),
+    ).toEqual([...webSort.options].sort());
+    const a = rowOf(host, c.TENANT_ID);
+    for (const want of ["530", "1 min 31 s", "4.0%", "Germany 120"])
+      expect(a.textContent).toContain(want);
+    window.localStorage.clear();
+  });
+
+  it("selects projects into a comparison link and keeps the disabled state until then", async () => {
+    window.localStorage.clear();
+    listFetch(f.webProjectsBody);
+    const host = await renderRoutes(operatorRoutes, "/operator/projects?view=web");
+    await waitFor(() => expect(host.textContent).toContain("Stellar DEX"));
+    expect(byRole(host, "button", "Compare").hasAttribute("disabled")).toBe(true);
     for (const id of [c.TENANT_ID, f.TENANT_B]) {
       const box = rowOf(host, id).querySelector<HTMLElement>("[role=checkbox]");
       if (!box) throw new Error("no checkbox");
       await click(box);
     }
-    const link = [...host.querySelectorAll("a")].find((a) => a.textContent === "Compare");
+    const link = [...host.querySelectorAll("a")].find((x) => x.textContent === "Compare 2");
     expect(link?.getAttribute("href")).toBe(
       `/operator/compare?tenants=${encodeURIComponent(`${c.TENANT_ID},${f.TENANT_B}`)}&from=2026-10-14&to=2026-11-12`,
     );
   });
 });
 
-describe("global api view", () => {
+describe("project list, api view", () => {
   it("shows requests, rates, percentiles with >10 s, services, routes and the source", async () => {
-    const calls = stubFetch([
-      { status: 200, body: f.cohortListBody },
-      { status: 200, body: f.apiProjectsBody },
-    ]);
+    showAll("api");
+    const calls = listFetch(f.apiProjectsBody);
     const host = await renderRoutes(operatorRoutes, "/operator/projects?view=api");
     await waitFor(() => expect(host.textContent).toContain("Stellar DEX"));
     const a = rowOf(host, c.TENANT_ID);
@@ -296,17 +327,30 @@ describe("global api view", () => {
       "620 ms",
       ">10 s",
       "41",
-      "Metrics and traces (1 of 3 from traces)",
+      "Metrics and traces (1 of 3 services from traces)",
     ])
       expect(a.textContent).toContain(want);
-    expect(rowOf(host, f.TENANT_B).textContent).toContain("none");
-    // the requests left out as infrastructure are shown, not hidden in a title
-    expect(a.textContent).toContain("+0 infrastructure");
-    expect(a.querySelector("[title*='infrastructure']")).toBeNull();
-    expect(host.textContent).toContain("Derived from sampled traces");
-    expect(calls[1]?.url).toBe("/api/operator/api/projects?sort=requests&order=desc&limit=50");
+    expect(rowOf(host, f.TENANT_B).textContent).toContain("No requests in this range");
+    expect(host.textContent).toContain("Traces are sampled");
+    expect(sortHeaders(host)).toHaveLength(apiSort.options.length);
+    expect(
+      API_COLUMNS.filter((x) => x.sortKey)
+        .map((x) => x.sortKey)
+        .sort(),
+    ).toEqual([...apiSort.options].sort());
+    expect(calls.find((x) => x.url.startsWith("/api/operator/api/projects"))?.url).toBe(
+      "/api/operator/api/projects?sort=requests&order=desc&limit=50",
+    );
+    window.localStorage.clear();
   });
 });
+
+// the cells of one metric column of a totals table, top to bottom
+function columnOf(host: HTMLElement, table: string, header: string): string[] {
+  const t = host.querySelector(`table[aria-label='${table}']`) as HTMLTableElement;
+  const i = [...t.querySelectorAll("thead th")].findIndex((th) => th.textContent === header);
+  return [...t.querySelectorAll("tbody tr")].map((tr) => tr.children[i]?.textContent ?? "");
+}
 
 describe("comparison", () => {
   it("aligns web and api numbers of the compared projects and marks unread days", async () => {
@@ -324,12 +368,8 @@ describe("comparison", () => {
       `/api/operator/api/compare?tenants=${encodeURIComponent(`${c.TENANT_ID},${f.TENANT_B}`)}`,
     ]);
     // one row per compared project, one cell per metric
-    const web = host.querySelector("section[aria-label='Web totals']");
-    const visitors = [...(web?.querySelectorAll("td[data-metric='Visitors']") ?? [])];
-    expect(visitors.map((td) => td.textContent)).toEqual(["18", "0"]);
-    const api = host.querySelector("section[aria-label='API totals']");
-    const p99 = [...(api?.querySelectorAll("td[data-metric='p99']") ?? [])];
-    expect(p99.map((td) => td.textContent).join(" ")).toContain(">10 s");
+    expect(columnOf(host, "Web totals", "Visitors")).toEqual(["18", "0"]);
+    expect(columnOf(host, "API totals", "p99").join(" ")).toContain(">10 s");
     expect(host.textContent).toContain("not read");
     expect(host.textContent).toContain("github.com");
     expect(host.textContent).toContain("13 more");
@@ -358,7 +398,8 @@ describe("comparison", () => {
     if (!add) throw new Error("no add link");
     await click(add);
     await waitFor(() => expect(host.textContent).toContain("2 of 5 selected"));
-    const selected = host.querySelector("[aria-label='Selected projects']")?.textContent ?? "";
+    const selected =
+      host.querySelector("[aria-label='Selected for comparison']")?.textContent ?? "";
     expect(selected).toContain("Stellar DEX");
     const list = calls.find((x) => x.url.startsWith("/api/operator/web/projects"))?.url ?? "";
     const range = f.webCompareBody as { from: string; to: string };
@@ -371,120 +412,6 @@ describe("comparison", () => {
     const host = await renderRoutes(operatorRoutes, "/operator/compare");
     await waitFor(() => expect(host.textContent).toContain("No project is selected"));
     expect(calls).toEqual([]);
-  });
-});
-
-describe("api keys", () => {
-  it("validates the create form with the rules of 9.2", () => {
-    expect(
-      validateKeyForm({ name: " ", scope: "all", tenantId: "", days: "90" }).errors.name,
-    ).toBeDefined();
-    expect(
-      validateKeyForm({ name: "a", scope: "tenant", tenantId: "", days: "90" }).errors.tenantId,
-    ).toBeDefined();
-    expect(
-      validateKeyForm({ name: "a", scope: "all", tenantId: "", days: "366" }).errors.days,
-    ).toBeDefined();
-    expect(
-      validateKeyForm({ name: "a\u0007", scope: "all", tenantId: "", days: "1" }).errors.name,
-    ).toBeDefined();
-    expect(
-      validateKeyForm({ name: " warehouse ", scope: "tenant", tenantId: c.TENANT_ID, days: "30" })
-        .body,
-    ).toEqual({
-      name: "warehouse",
-      scope: "metrics:read",
-      tenant_id: c.TENANT_ID,
-      expires_in_days: 30,
-    });
-  });
-
-  it("creates a key, shows it once with a copy button, and revokes after a confirmation", async () => {
-    let revoked = false;
-    let created = false;
-    const calls = routeFetch((method, url) => {
-      if (url.startsWith("/api/operator/tenants?"))
-        return { status: 200, body: { items: [c.operatorSummaryBody], next_cursor: null } };
-      if (method === "POST") {
-        created = true;
-        return { status: 201, body: f.apiKeyCreatedBody };
-      }
-      if (method === "DELETE") {
-        revoked = true;
-        return { status: 204 };
-      }
-      if (url === "/api/operator/api-keys?limit=200")
-        return {
-          status: 200,
-          body: revoked
-            ? { items: [f.revokedKeyBody], next_cursor: null }
-            : created
-              ? f.apiKeyPageBody
-              : { items: [], next_cursor: null },
-        };
-      return { status: 500 };
-    });
-    const host = await renderRoutes(operatorRoutes, "/operator/keys");
-    await waitFor(() => expect(host.textContent).toContain("No key has been created yet."));
-    expect(
-      calls.some((x) => x.url.includes("status=active%2Cpending%2Csuspended%2Crejected")),
-    ).toBe(true);
-
-    await type(byLabel(host, "Name") as HTMLInputElement, "warehouse");
-    await click(byRole(host, "button", "Create key"));
-    // the one-time secret is masked until it is revealed
-    await waitFor(() => byRole(host, "button", "Copy key"));
-    expect(host.querySelector('[aria-label="Secret hidden"]')).toBeTruthy();
-    await click(host.querySelector('[aria-label="Show the secret"]') as HTMLElement);
-    await waitFor(() => expect(host.textContent).toContain(f.KEY_PLAIN));
-    const post = calls.find((x) => x.method === "POST");
-    expect(post).toMatchObject({
-      method: "POST",
-      url: "/api/operator/api-keys",
-      body: { name: "warehouse", scope: "metrics:read", expires_in_days: 90 },
-    });
-    expect(post?.headers.get("X-Requested-With")).toBe("sa-console");
-    expect(byRole(host, "button", "Copy key")).toBeTruthy();
-
-    // once dismissed, the key is not shown again
-    // done stays disabled until the operator says the key is stored
-    expect(byRole(host, "button", "Done").hasAttribute("disabled")).toBe(true);
-    await click(host.querySelector('[role="checkbox"]') as HTMLElement);
-    await click(byRole(host, "button", "Done"));
-    await waitFor(() => expect(host.textContent).toContain("sa_op_Ab3x..."));
-    expect(host.textContent).not.toContain(f.KEY_PLAIN);
-
-    await click(byRole(host, "button", "Revoke"));
-    const dialog = [...host.querySelectorAll("dialog")].find((d) => d.hasAttribute("open"));
-    expect(dialog?.textContent).toContain("next request with this key is refused");
-    const confirm = [...(dialog?.querySelectorAll("button") ?? [])].find(
-      (b) => b.textContent === "Revoke key",
-    );
-    if (!confirm) throw new Error("no confirm button");
-    await click(confirm);
-    await waitFor(() => expect(host.textContent).toContain("Revoked"));
-    expect(calls.find((x) => x.method === "DELETE")?.url).toBe(
-      `/api/operator/api-keys/${f.KEY_ID}`,
-    );
-  });
-
-  it("shows usage per key from 9.11", async () => {
-    const calls = routeFetch((_m, url) => {
-      if (url.startsWith("/api/operator/tenants?"))
-        return { status: 200, body: { items: [], next_cursor: null } };
-      if (url === "/api/operator/api-keys?limit=200")
-        return { status: 200, body: f.apiKeyPageBody };
-      if (url.endsWith("/usage")) return { status: 200, body: f.apiKeyUsageBody };
-      return { status: 500 };
-    });
-    const host = await renderRoutes(operatorRoutes, "/operator/keys");
-    await waitFor(() => expect(host.textContent).toContain("sa_op_Ab3x..."));
-    await click(byRole(host, "button", "Usage"));
-    await waitFor(() =>
-      expect(host.querySelector("[data-usage=requests]")?.textContent).toBe("12"),
-    );
-    expect(host.querySelector("[data-usage=rejected]")?.textContent).toBe("2");
-    expect(calls.some((x) => x.url === `/api/operator/api-keys/${f.KEY_ID}/usage`)).toBe(true);
   });
 });
 

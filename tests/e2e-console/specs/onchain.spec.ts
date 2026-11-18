@@ -192,7 +192,8 @@ test("an operator sees the column, exports the rows on screen and reads the deta
     await page.goto(`${APP}/operator/projects?view=web&q=${encodeURIComponent(`On-chain ${run}`)}`);
     await expect(page.getByRole("columnheader", { name: "On-chain", exact: true })).toBeVisible();
     const row = page.locator(`tr[data-tenant="${tenant.id}"]`);
-    await expect(row.locator("[data-col=onchain]")).toContainText("0/1 verified");
+    // the summary is read with the number: a tooltip on hover and focus
+    await expect(row.locator("[data-col=onchain]")).toContainText("0 of 1 id verified");
 
     const href = await page.getByRole("link", { name: "Export CSV" }).getAttribute("href");
     expect(href).toContain("/api/operator/web/projects.csv?");
@@ -216,9 +217,8 @@ test("an operator sees the column, exports the rows on screen and reads the deta
     expect(audit.body.items.some((e) => e.detail.view === "web_projects")).toBe(true);
 
     await page.goto(`${APP}/operator/projects/${tenant.id}`);
-    const section = page.locator("section", {
-      has: page.getByRole("heading", { name: "On-chain" }),
-    });
+    await page.getByText("On-chain ids", { exact: true }).click();
+    const section = page.locator("details#onchain");
     await expect(section).toContainText(ACCOUNT);
     await expect(section).toContainText("Unverified");
   } finally {

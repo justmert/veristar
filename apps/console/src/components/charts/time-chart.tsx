@@ -146,6 +146,9 @@ export type TimeChartProps = {
   noCompleteText?: string;
   // a dashed line at one bucket, such as an award date
   marker?: { at: string; label: string } | null;
+  // several such lines, one per compared project; each label sits one line
+  // below the previous one so they never overlap
+  markers?: { at: string; label: string }[];
   // a value line the data is capped at, such as the 10 s latency bucket
   ceiling?: { value: number; label: string } | null;
   // the plot height in px
@@ -175,6 +178,7 @@ export function TimeChart({
   noCompleteTitle = "No complete period yet",
   noCompleteText = "The first period is still running. Its value shows here when it ends.",
   marker,
+  markers,
   ceiling,
   height = 200,
   actions,
@@ -219,7 +223,9 @@ export function TimeChart({
   const barW = Math.max(1, slot - gap);
   const y = (v: number) => H - (Math.min(v, top) / top) * H;
   const cx = (i: number) => AXIS_W + slot * i + slot / 2;
-  const markerIndex = marker ? buckets.findIndex((b) => b.at.startsWith(marker.at)) : -1;
+  const marks = [...(marker ? [marker] : []), ...(markers ?? [])]
+    .map((m) => ({ ...m, i: buckets.findIndex((b) => b.at.startsWith(m.at)) }))
+    .filter((m) => m.i >= 0);
 
   function change(i: number): { text: string; good: boolean | null } | null {
     if (!hasPrev) return null;
@@ -486,7 +492,34 @@ export function TimeChart({
                           <rect width="1.5" height="4" fill="var(--vs-series-partial)" />
                         </pattern>
                       ))}
+                      <pattern
+                        id={`${uid}-band`}
+                        width="4"
+                        height="4"
+                        patternUnits="userSpaceOnUse"
+                        patternTransform="rotate(45)"
+                      >
+                        <rect width="1.5" height="4" fill="var(--vs-series-partial)" />
+                      </pattern>
                     </defs>
+                    {kind === "line"
+                      ? buckets.map((b, i) =>
+                          b.partial ? (
+                            // a line cannot be hatched, so the running period
+                            // is a hatched band behind it, as in the legend
+                            <rect
+                              key={`band-${b.at}`}
+                              data-partial=""
+                              x={AXIS_W + slot * i}
+                              y="0"
+                              width={slot}
+                              height={H}
+                              fill={`url(#${uid}-band)`}
+                              opacity="0.5"
+                            />
+                          ) : null,
+                        )
+                      : null}
                     {ticks.map((t) => (
                       <g key={t}>
                         <line
@@ -618,21 +651,26 @@ export function TimeChart({
                           />
                         ))
                       : null}
-                    {marker && markerIndex >= 0 ? (
-                      <g data-marker={marker.at}>
+                    {marks.map((m, k) => (
+                      <g key={`${m.at}-${m.label}`} data-marker={m.at}>
                         <line
-                          x1={cx(markerIndex)}
-                          x2={cx(markerIndex)}
+                          x1={cx(m.i)}
+                          x2={cx(m.i)}
                           y1="0"
                           y2={H}
                           className="stroke-accent-text"
                           strokeDasharray="3 3"
                         />
-                        <text x={cx(markerIndex) + 4} y="10" className="fill-fg-2 text-axis">
-                          {marker.label}
+                        <text
+                          x={cx(m.i) + (cx(m.i) > width / 2 ? -4 : 4)}
+                          y={10 + k * 12}
+                          textAnchor={cx(m.i) > width / 2 ? "end" : "start"}
+                          className="fill-fg-2 text-axis"
+                        >
+                          {m.label}
                         </text>
                       </g>
-                    ) : null}
+                    ))}
                     {hover !== null ? (
                       <line
                         x1={cx(hover)}

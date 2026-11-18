@@ -91,4 +91,18 @@ describe("filter bar", () => {
     expect(host.querySelector("dialog")?.hasAttribute("open")).toBe(true);
     expect(host.querySelector("dialog")?.textContent).toContain("status control");
   });
+
+  it("keeps every filter behind the Filters button on a wide screen when collapsed", async () => {
+    const host = await render(
+      <FilterBar
+        collapsed
+        filters={[{ key: "grade", label: "Grade", control: <span>grade control</span> }]}
+        actions={<button type="button">Columns</button>}
+      />,
+    );
+    expect(byRole(host, "button", "Filters")).toBeTruthy();
+    expect(byRole(host, "button", "Columns")).toBeTruthy();
+    expect(host.querySelector("dialog")?.textContent).toContain("grade control");
+    expect(host.querySelector("dialog")?.hasAttribute("open")).toBe(false);
+  });
 });

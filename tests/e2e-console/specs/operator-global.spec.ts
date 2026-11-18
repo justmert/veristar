@@ -295,6 +295,14 @@ test("a non-operator gets 403 on the global views and the key routes", async () 
   }
 });
 
+// the cells of one column of a totals table, top to bottom
+async function columnOf(page: Page, table: string, header: string): Promise<string[]> {
+  return page.getByRole("table", { name: table }).evaluate((t, h) => {
+    const i = [...t.querySelectorAll("thead th")].findIndex((th) => th.textContent === h);
+    return [...t.querySelectorAll("tbody tr")].map((tr) => tr.children[i]?.textContent ?? "");
+  }, header);
+}
+
 async function rowIds(page: Page): Promise<string[]> {
   return page
     .locator("tbody tr[data-tenant]")
@@ -313,22 +321,36 @@ test("the operator filters to verified projects, sorts by visitors and compares 
   await page.waitForURL(`${APP}/operator/projects`);
   await page.getByRole("radiogroup", { name: "View" }).getByRole("radio", { name: "Web" }).click();
   await page.waitForURL(`${APP}/operator/projects?view=web`);
-  await expect(page.getByRole("heading", { name: "Global web" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Projects" })).toBeVisible();
+  // the definitions are on the column headers; the notes fold away
+  await expect(
+    page.getByRole("columnheader", { name: "Visitors", exact: true }).getByRole("button"),
+  ).toHaveAttribute("aria-description", /unique per UTC day and site/);
+  await page.getByText("About these numbers").click();
   await expect(page.getByText("IP Geolocation by DB-IP")).toBeVisible();
-  await expect(page.getByText("Visitors are unique per UTC day and site")).toBeVisible();
 
-  await page.getByLabel("Search", { exact: true }).fill(run);
-  await page.getByRole("button", { name: "Search", exact: true }).click();
+  // the search applies as the operator types
+  await page.getByLabel("Search projects").fill(run);
   await page.waitForURL(new RegExp(`q=${run}`));
   // default sort is page views: b (6), d (4), a (3), c (1)
   await expect.poll(() => rowIds(page)).toEqual([b, d, a, c].map((p) => p.tenant.id));
 
-  await page.getByLabel("Domain verified").selectOption("true");
+  // the filters sit in one sheet and apply at once
+  await page.getByRole("button", { name: "Filters", exact: true }).click();
+  const sheet = page.getByRole("dialog", { name: "Filters" });
+  await sheet.getByLabel("Domain verified").selectOption("true");
   await page.waitForURL(/verified=true/);
+  await sheet.getByRole("button", { name: "Show results" }).click();
+  await expect(page.getByRole("list", { name: "Active filters" })).toContainText(
+    "At least one site",
+  );
   await expect.poll(() => rowIds(page)).toEqual([b, a, c].map((p) => p.tenant.id));
   await expect(page.getByText("3 projects match")).toBeVisible();
 
-  await page.getByRole("button", { name: "Visitors", exact: true }).click();
+  await page
+    .getByRole("columnheader", { name: "Visitors", exact: true })
+    .getByRole("button")
+    .click();
   await page.waitForURL(/sort=visitors/);
   await expect.poll(() => rowIds(page)).toEqual([a, b, c].map((p) => p.tenant.id));
   const visitors = await page
@@ -341,24 +363,28 @@ test("the operator filters to verified projects, sorts by visitors and compares 
   );
   await page.screenshot({ path: join(shots, "global-web.png"), fullPage: true });
 
-  for (const p of [a, b, c]) await page.getByLabel(`Compare ${p.tenant.name}`).check();
-  await page
-    .getByRole("region", { name: "Comparison" })
-    .getByRole("link", { name: "Compare" })
-    .click();
+  // compare stays disabled until a project is selected
+  await expect(page.getByRole("button", { name: "Compare", exact: true })).toBeDisabled();
+  for (const p of [a, b, c])
+    await page
+      .getByRole("table", { name: "Projects, web numbers" })
+      .getByLabel(`Select ${p.tenant.name}`)
+      .check();
+  await page.getByRole("link", { name: "Compare 3" }).click();
   await page.waitForURL(/\/operator\/compare\?tenants=/);
-  const compared = page.getByRole("list", { name: "Compared projects" });
+  await expect(page.getByRole("heading", { level: 1, name: "Compare" })).toBeVisible();
+  const compared = page.getByRole("region", { name: "Compared projects" });
   await expect(compared.getByRole("listitem")).toHaveCount(3);
   await expect(compared).toContainText(a.tenant.name);
 
   // one row per compared project in the order of the comparison
-  const webTotals = page.getByRole("region", { name: "Web totals" });
-  await expect(webTotals.locator("td[data-metric='Visitors']")).toHaveText(["3", "2", "1"]);
-  await expect(webTotals.locator("td[data-metric='Page views']")).toHaveText(["3", "6", "1"]);
-  const apiTotals = page.getByRole("region", { name: "API totals" });
-  await expect(apiTotals.locator("td[data-metric='Requests']")).toHaveText(["4", "8", "2"]);
+  await expect.poll(() => columnOf(page, "Web totals", "Visitors")).toEqual(["3", "2", "1"]);
+  expect(await columnOf(page, "Web totals", "Page views")).toEqual(["3", "6", "1"]);
+  await expect.poll(() => columnOf(page, "API totals", "Requests")).toEqual(["4", "8", "2"]);
   for (const title of ["Page views", "Visitors", "Requests", "p95 latency"])
     await expect(page.getByRole("heading", { name: title, exact: true })).toBeVisible();
+  // the breakdowns fold away under one disclosure
+  await page.getByText("Referrers, countries, devices, browsers and systems").click();
   await expect(page.getByRole("region", { name: "Devices" })).toBeVisible();
   await expect(page.getByRole("region", { name: "Countries" })).toBeVisible();
   await expect(page.getByText("IP Geolocation by DB-IP")).toBeVisible();
@@ -388,9 +414,9 @@ test("the pages work at phone width", async () => {
     "/operator/keys",
   ]) {
     await page.goto(`${APP}${path}`);
-    await expect(page.getByRole("heading", { level: 2 }).first()).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
     await page.waitForLoadState("networkidle");
-    // only the scrollable tables and the operator tabs may be wider
+    // nothing is wider than the screen: tables become stacked rows
     await expect
       .poll(() =>
         page.evaluate(() => {
@@ -398,12 +424,7 @@ test("the pages work at phone width", async () => {
           if (document.documentElement.scrollWidth <= w) return [];
           return [...document.querySelectorAll("body *")]
             .filter((e) => e.getBoundingClientRect().right > w + 1)
-            .filter(
-              (e) =>
-                !e.closest(
-                  "[aria-label='Global web table'], [aria-label='Global API table'], [aria-label='Web totals'], [aria-label='API totals'], [role='radiogroup'][aria-label='View']",
-                ),
-            )
+            .filter((e) => !e.closest("[role='radiogroup']"))
             .slice(0, 5)
             .map((e) => `${e.tagName.toLowerCase()}.${e.getAttribute("class") ?? ""}`);
         }),
@@ -422,10 +443,13 @@ test("an api key is created, read with from a client without a session, and revo
 }) => {
   const page = op.page;
   await page.goto(`${APP}/operator/keys`);
-  const form = page.getByRole("form", { name: "Create an API key" });
+  await expect(page.getByRole("heading", { level: 1, name: "Access keys" })).toBeVisible();
+  const form = page.getByRole("form", { name: "Create a key" });
   const name = `e2e ${run}`;
+  // a machine api key is the first type
+  await expect(form.getByRole("radio", { name: /Machine API key/ })).toBeChecked();
   await form.getByLabel("Name").fill(name);
-  await form.getByLabel("Expires after (days)").fill("7");
+  await form.getByLabel("Expires after, days").fill("7");
   await form.getByRole("button", { name: "Create key" }).click();
   // the one-time secret is masked until it is revealed
   const shown = page.getByRole("region", { name: "New secret" });
@@ -461,17 +485,24 @@ test("an api key is created, read with from a client without a session, and revo
     await shown.getByRole("checkbox").check();
     await shown.getByRole("button", { name: "Done" }).click();
     await expect(shown).toHaveCount(0);
-    const row = page.getByRole("listitem", { name: `Key ${name}` });
+    const row = page
+      .getByRole("table", { name: "Keys and connections" })
+      .locator("tr[data-kind=machine]", { hasText: name });
     await expect(row).toContainText(key.slice(0, 10));
     await expect(page.getByText(key)).toHaveCount(0);
-    await row.getByRole("button", { name: "Usage" }).click();
-    await expect(row.locator("[data-usage=requests]")).toHaveText("1");
+    await row.getByRole("button", { name: `Actions for ${name}` }).click();
+    await page.getByRole("menuitem", { name: "Show usage" }).click();
+    await expect(
+      page.getByRole("region", { name: `Usage of ${name}` }).locator("[data-usage=requests]"),
+    ).toHaveText("1");
 
-    await row.getByRole("button", { name: "Revoke" }).click();
+    await row.getByRole("button", { name: `Actions for ${name}` }).click();
+    await page.getByRole("menuitem", { name: "Revoke" }).click();
     const dialog = page.getByRole("dialog");
-    await expect(dialog).toContainText("The next request with this key is refused");
-    await dialog.getByRole("button", { name: "Revoke key" }).click();
+    await expect(dialog).toContainText("The next request with it is refused");
+    await dialog.getByRole("button", { name: "Revoke", exact: true }).click();
     await expect(dialog).toBeHidden();
+    await expect(page.getByText(`${name} is revoked`)).toBeVisible();
     await expect(row).toContainText("Revoked");
 
     const refused = await get({ authorization: `Bearer ${key}` });

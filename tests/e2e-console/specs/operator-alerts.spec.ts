@@ -112,16 +112,16 @@ test("an operator sees firing alerts by severity, the badge and the critical ban
   const page = op.page;
   await page.goto(alertsUrl);
 
-  const pageGroup = page.getByRole("region", { name: /^Page, act now \(1\)$/ });
-  const ticketGroup = page.getByRole("region", {
-    name: /^Ticket, act within a working day \(1\)$/,
-  });
+  await expect(page.getByRole("heading", { level: 1, name: /^Alerts/ })).toBeVisible();
+  const pageGroup = page.getByRole("region", { name: /^Act now 1$/ });
+  const ticketGroup = page.getByRole("region", { name: /^Act within a working day 1$/ });
   await expect(pageGroup).toBeVisible();
   await expect(ticketGroup).toBeVisible();
 
   const down = pageGroup.locator('[data-alert="ServiceDown"]');
-  await expect(down).toContainText("controlplane on core-2 does not answer scrapes");
-  await expect(down).toContainText(/Firing for 2 h \d+ min/);
+  // the title in sentence case; the labels follow as a secondary line
+  await expect(down).toContainText("Controlplane on core-2 does not answer scrapes");
+  await expect(down).toContainText(/Fires for 2 h \d+ min/);
   await expect(down).toContainText("core-2");
   await expect(down).toContainText("10.0.1.5:9303");
   await expect(down.getByRole("link", { name: /ServiceDown/ })).toHaveAttribute(
@@ -129,11 +129,11 @@ test("an operator sees firing alerts by severity, the badge and the critical ban
     "https://github.com/justmert/veristar/blob/main/docs/runbooks/alerts.md#servicedown",
   );
   await expect(ticketGroup.locator('[data-alert="BackupTooOld"]')).toContainText(
-    /Firing for 3\d min/,
+    /Fires for 3\d min/,
   );
   // the watchdog is the pipeline's heartbeat, never a listed alert
   await expect(page.locator('[data-alert="Watchdog"]')).toHaveCount(0);
-  await expect(page.getByText("Alerting pipeline down")).toHaveCount(0);
+  await expect(page.getByText("The alert checks do not run")).toHaveCount(0);
   await expect(page.getByText(/^Last checked \d\d:\d\d:\d\d UTC$/)).toBeVisible();
 
   const nav = page.getByRole("navigation", { name: "Operator" });
@@ -154,9 +154,8 @@ test("all clear once the alerts resolve, with the time of the check", async () =
   const page = op.page;
   await page.goto(alertsUrl);
   await expect(page.getByText("All clear", { exact: true })).toBeVisible();
-  await expect(
-    page.getByText(/^No alert is firing\. Last checked \d\d:\d\d:\d\d UTC\.$/),
-  ).toBeVisible();
+  await expect(page.getByText(/^No alert fires\./)).toBeVisible();
+  await expect(page.getByText(/^Last checked \d\d:\d\d:\d\d UTC$/)).toBeVisible();
   await expect(page.locator("[data-alert]")).toHaveCount(0);
   await expect(page.getByText("critical alert")).toHaveCount(0);
   await page.screenshot({ path: join(shots, "all-clear.png"), fullPage: true });
@@ -176,9 +175,9 @@ test("a missing watchdog shows the alerting pipeline as down, never all clear", 
   await send([], [WATCHDOG]);
   const page = op.page;
   await page.goto(alertsUrl);
-  await expect(page.getByText("Alerting pipeline down")).toBeVisible();
+  await expect(page.getByText("The alert checks do not run")).toBeVisible();
   await expect(page.getByText("All clear", { exact: true })).toHaveCount(0);
-  await expect(page.getByText(/this is not all clear/)).toBeVisible();
+  await expect(page.getByText(/An alert can fire without showing here/).first()).toBeVisible();
   await page.screenshot({ path: join(shots, "pipeline-down.png"), fullPage: true });
 });
 
@@ -199,7 +198,9 @@ test("alert source unreachable while alertmanager is down, and no list", async (
   try {
     const page = op.page;
     await page.goto(alertsUrl);
-    await expect(page.getByText("Alert source unreachable", { exact: true })).toBeVisible();
+    await expect(
+      page.getByText("The alert service does not answer", { exact: true }),
+    ).toBeVisible();
     await expect(page.getByText("All clear", { exact: true })).toHaveCount(0);
     await expect(page.locator("[data-alert]")).toHaveCount(0);
     const nav = page.getByRole("navigation", { name: "Operator" });

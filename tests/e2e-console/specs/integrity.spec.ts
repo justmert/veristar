@@ -250,7 +250,7 @@ test("the operator sorts the global web table by grade and opens the reasons", a
   const cell = row.locator("[data-col=integrity]");
   await expect(cell).toHaveText("Grade A");
 
-  await page.getByRole("button", { name: "Integrity", exact: true }).click();
+  await page.getByRole("columnheader", { name: "Grade", exact: true }).getByRole("button").click();
   await page.waitForURL(/sort=integrity/);
   await expect(row).toBeVisible();
 
@@ -264,6 +264,8 @@ test("the operator sorts the global web table by grade and opens the reasons", a
 
   // the same report on the project's detail page and in the comparison
   await page.goto(`${APP}/operator/projects/${tenant.id}`);
+  await expect(page.locator("[data-stat=grade]")).toContainText("A");
+  await page.getByText("Integrity report", { exact: true }).click();
   const detail = page.getByRole("region", { name: "Integrity" });
   await expect(detail.locator("[data-grade]").first()).toHaveText("Grade A");
   await page.goto(`${APP}/operator/compare?tenants=${tenant.id}`);
@@ -276,11 +278,15 @@ test("the operator filters the global web table to a grade and below", async () 
   const page = op.page;
   // an A project is not among the projects graded B or worse
   await page.goto(`${APP}/operator/projects?view=web&q=${run}&integrity_at_or_below=B`);
-  await expect(page.getByLabel("Integrity", { exact: true })).toHaveValue("B");
+  await expect(page.getByRole("list", { name: "Active filters" })).toContainText("B or C");
   await expect(page.locator(`tbody tr[data-tenant="${tenant.id}"]`)).toHaveCount(0);
   // and is among every graded project
-  await page.getByLabel("Integrity", { exact: true }).selectOption("A");
+  await page.getByRole("button", { name: /^Filters/ }).click();
+  const sheet = page.getByRole("dialog", { name: "Filters" });
+  await expect(sheet.getByLabel("Grade", { exact: true })).toHaveValue("B");
+  await sheet.getByLabel("Grade", { exact: true }).selectOption("A");
   await page.waitForURL(/integrity_at_or_below=A/);
+  await sheet.getByRole("button", { name: "Show results" }).click();
   await expect(page.locator(`tbody tr[data-tenant="${tenant.id}"]`)).toBeVisible();
 
   // the api answers the same, and the export takes the filter

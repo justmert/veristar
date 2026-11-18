@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ArrowLeft, ArrowRight, Check, LoaderCircle } from "lucide-react";
-import { useState } from "react";
+import { ArrowRight, Check, ChevronDown, LoaderCircle, MoreHorizontal } from "lucide-react";
+import { type ReactNode, useState } from "react";
 import { Link, useParams } from "react-router";
 import { api } from "@/api/endpoints";
 import { operatorTenantQuery } from "@/api/queries";
@@ -8,20 +8,22 @@ import type { OperatorSite, OperatorTenantDetail, TenantAction } from "@/api/sch
 import { OperatorCohortPanel } from "@/components/cohort";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { DecisionPanel } from "@/components/decision-panel";
-import { ErrorPanel, Loading } from "@/components/error-panel";
 import { StellarTomlSummary, VerificationDetail } from "@/components/evidence";
 import { EvidenceList, evidenceOf } from "@/components/evidence-list";
 import { IntegrityReportView } from "@/components/integrity";
-import { Stagger, StaggerItem } from "@/components/motion";
-import { Fact } from "@/components/panel";
-import { StatusPill } from "@/components/status";
+import { PageHeader } from "@/components/page-header";
+import { ErrorState, LoadingState, Skeleton } from "@/components/states";
+import { StatusBadge } from "@/components/status-badge";
+import { toast } from "@/components/toast";
 import { Button } from "@/components/ui/button";
+import { Menu, MenuContent, MenuItem, MenuTrigger } from "@/components/ui/menu";
 import { isNotFound } from "@/lib/errors";
-import { formatCount, formatDate, formatDateTimeUtc, formatShareOf } from "@/lib/format";
+import { formatCount, formatDate, formatDateTimeUtc } from "@/lib/format";
 import { outcomeLabel } from "@/lib/outcomes";
 import { NotFoundPage } from "@/pages/public/not-found";
 import { AuditEntries } from "./audit";
 import { refreshOperator } from "./decision";
+import { ProjectNumbers } from "./numbers";
 import { TenantOnchainSection } from "./onchain-parts";
 
 type ActionSpec = {
@@ -31,37 +33,21 @@ type ActionSpec = {
   reasonRequired: boolean;
   tone: "primary" | "destructive";
   pending: string;
+  done: (name: string) => string;
 };
 
-// contract 5.5: reject, suspend and remove need a reason; approve and resume
-// take an optional note. the member sees whichever is given.
-export const ACTIONS: Record<TenantAction, ActionSpec> = {
-  approve: {
-    label: "Approve",
-    title: (n) => `Approve ${n}?`,
-    description:
-      "The project becomes active. Its dashboards are set up and its sites start receiving traffic.",
-    reasonRequired: false,
-    tone: "primary",
-    pending: "Approving",
-  },
-  reject: {
-    label: "Reject",
-    title: (n) => `Reject ${n}?`,
-    description:
-      "Nothing is set up for the project. Its owners see the reason and can edit and resubmit the enrollment.",
-    reasonRequired: true,
-    tone: "destructive",
-    pending: "Rejecting",
-  },
+// contract 5.5: suspend and remove need a reason; resume takes an optional
+// note. approve and reject are the decision panel's.
+export const ACTIONS: Record<"suspend" | "resume" | "remove", ActionSpec> = {
   suspend: {
     label: "Suspend",
     title: (n) => `Suspend ${n}?`,
     description:
-      "New events from the project's sites are refused. Its dashboards stay readable. You can resume it later.",
+      "The sites of the project stop accepting events. Its dashboards stay readable. You can resume it later.",
     reasonRequired: true,
     tone: "destructive",
     pending: "Suspending",
+    done: (n) => `${n} is suspended. Its members see the reason.`,
   },
   resume: {
     label: "Resume",
@@ -70,193 +56,189 @@ export const ACTIONS: Record<TenantAction, ActionSpec> = {
     reasonRequired: false,
     tone: "primary",
     pending: "Resuming",
+    done: (n) => `${n} is active again.`,
   },
   remove: {
     label: "Remove",
     title: (n) => `Remove ${n}?`,
     description:
-      "The project's sites stop accepting events, its dashboards and their data are deleted, and its members lose access. The project record and the audit log remain. This cannot be undone.",
+      "The sites stop accepting events. The dashboards and their data are deleted, and the members lose access. The project record and the audit log stay. You cannot undo this.",
     reasonRequired: true,
     tone: "destructive",
     pending: "Removing",
+    done: (n) => `${n} is removed. Its data is being deleted.`,
   },
 };
 
-const ORDER: TenantAction[] = ["approve", "resume", "reject", "suspend", "remove"];
+const MENU_ORDER = ["resume", "suspend", "remove"] as const;
 
-// the buttons: one accent action that moves the project forward, an
-// outline for the reversible stop, solid red for what cannot be undone
-const VARIANT: Record<TenantAction, "default" | "outline" | "destructive"> = {
-  approve: "default",
-  resume: "default",
-  reject: "outline",
-  suspend: "outline",
-  remove: "destructive",
+// the removal steps of contract 5.13 in words
+const STEP_TEXT: Record<string, string> = {
+  registry: "Project record closed",
+  otlp_tokens: "API tokens revoked",
+  umami: "Web analytics deleted",
+  web_ingest: "Web traffic stopped",
+  api: "API data deleted",
+  agg: "Daily totals handled",
 };
+
+// a removal deletes data in steps; the page checks again until it is done
+const REMOVAL_POLL_MS = 10_000;
 
 export function OperatorProjectPage() {
   const { tenantId = "" } = useParams();
-  const detail = useQuery(operatorTenantQuery(tenantId));
-  if (detail.isPending) return <Loading label="Loading the project" />;
+  const detail = useQuery({
+    ...operatorTenantQuery(tenantId),
+    refetchInterval: (q) =>
+      q.state.data?.removal && q.state.data.removal.completed_at === null ? REMOVAL_POLL_MS : false,
+  });
   if (isNotFound(detail.error)) return <NotFoundPage />;
-  if (detail.error) return <ErrorPanel error={detail.error} onRetry={() => detail.refetch()} />;
+  if (detail.error)
+    return (
+      <div className="flex flex-col gap-6">
+        <PageHeader title="Project" />
+        <ErrorState
+          title="The project did not load"
+          error={detail.error}
+          onRetry={() => detail.refetch()}
+        />
+      </div>
+    );
+  if (detail.isPending)
+    return (
+      <div className="flex flex-col gap-6">
+        <PageHeader title="Project" />
+        <LoadingState label="Loading the project">
+          <Skeleton.StatRow count={3} />
+          <Skeleton.Table rows={3} columns={2} />
+        </LoadingState>
+      </div>
+    );
   return <TenantDetail detail={detail.data} />;
 }
 
-// the operator's page of one project (system v2 F-ProjectDetail)
+// the operator's page of one project: the status, the one decision, the
+// numbers, the sites, the evidence once and the record around it
 export function TenantDetail({ detail }: { detail: OperatorTenantDetail }) {
   const t = detail.tenant;
-  const a = t.enrollment_answers;
+  const decides = detail.allowed_actions.some((a) => a === "approve" || a === "reject");
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-4">
-        <div className="flex min-w-0 flex-col gap-2">
-          <Link
-            to="/operator/projects"
-            className="inline-flex w-fit items-center gap-1 rounded-sm text-small text-fg-2 transition-colors duration-(--vs-duration-press) ease-standard hover:text-fg focus-ring"
-          >
-            <ArrowLeft aria-hidden className="size-3.5" />
-            Projects
-          </Link>
-          <h2 className="min-w-0 break-words text-page text-fg">{t.name}</h2>
-          <p className="flex flex-wrap items-center gap-x-4 gap-y-1 text-small text-fg-2">
-            <StatusPill status={t.status} />
-            <span className="font-mono">{t.slug}</span>
-            <span>
-              Enrolled {formatDate(t.created_at)}
-              {t.created_by ? ` by ${t.created_by.display_name}` : ""}
-              {t.approved_by ? `, approved by ${t.approved_by.display_name}` : ""}
-            </span>
-            <span>Status since {formatDateTimeUtc(t.status_changed_at)}</span>
-          </p>
-          {t.status_reason ? (
-            <p className="text-small text-fg">
-              <span className="text-fg-3">Reason: </span>
-              {t.status_reason}
-            </p>
-          ) : null}
-        </div>
-        <Actions detail={detail} />
-      </div>
-
-      <IngestTiles detail={detail} />
-
-      <IntegrityReportView
-        scope="operator"
-        tenantId={t.id}
-        range={{ from: "", to: "" }}
-        siteNames={Object.fromEntries(detail.sites.map((s) => [s.id, s.domain]))}
+    <div className="flex min-w-0 flex-col gap-8">
+      <PageHeader
+        title={t.name}
+        meta={<StatusBadge kind="project" status={t.status} operator />}
+        description={
+          <>
+            <span className="font-mono text-fg-2">{t.slug}</span>. Enrolled{" "}
+            {formatDate(t.created_at)}
+            {t.created_by ? ` by ${t.created_by.display_name}` : ""}
+            {t.approved_by ? `, approved by ${t.approved_by.display_name}` : ""}. Status since{" "}
+            {formatDateTimeUtc(t.status_changed_at)}.
+          </>
+        }
+        secondary={<MoreActions detail={detail} />}
       />
 
-      <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_22rem]">
-        <div className="flex min-w-0 flex-col gap-6">
-          {detail.removal ? <Removal removal={detail.removal} /> : null}
+      {t.status_reason ? (
+        <p className="-mt-4 max-w-prose text-small break-words text-fg">
+          <span className="text-fg-2">Reason: </span>
+          {t.status_reason}
+        </p>
+      ) : null}
+
+      {decides ? (
+        <section
+          aria-labelledby="decision-h"
+          className="flex flex-col gap-3 rounded-lg border border-line bg-raised p-4 sm:p-5"
+        >
+          <h2 id="decision-h" className="text-title text-fg">
+            Decision
+          </h2>
+          <DecisionPanel
+            subject={{ kind: "project", id: t.id, name: t.name, allowed: detail.allowed_actions }}
+          />
+        </section>
+      ) : null}
+
+      {detail.removal ? <Removal removal={detail.removal} /> : null}
+
+      <div className="grid min-w-0 items-start gap-8 xl:grid-cols-[minmax(0,1fr)_22rem]">
+        <div className="flex min-w-0 flex-col gap-8">
+          <ProjectNumbers tenantId={t.id} />
 
           <section aria-labelledby="sites-h" className="flex flex-col gap-3">
-            <h3 id="sites-h" className="text-title text-fg">
+            <h2 id="sites-h" className="text-title text-fg">
               Sites
-            </h3>
+            </h2>
             {detail.sites.length === 0 ? (
-              <p className="rounded-lg border border-dashed border-line-strong px-4 py-5 text-small text-fg-2">
-                No sites.
-              </p>
+              <p className="text-small text-fg-2">The project has no site yet.</p>
             ) : (
-              <Stagger as="ul" className="flex flex-col gap-3">
+              <ul className="flex flex-col gap-3">
                 {detail.sites.map((s) => (
-                  <StaggerItem as="li" key={s.id}>
-                    <SiteEvidence site={s} />
-                  </StaggerItem>
-                ))}
-              </Stagger>
-            )}
-          </section>
-
-          <Box
-            id="ingest-h"
-            title="Events across all sites"
-            description="Every outcome the gateway recorded, from the hourly ingest counts."
-          >
-            <div className="grid gap-5 sm:grid-cols-2">
-              <Counts title="Last 24 full hours (UTC)" counts={detail.ingest.last_24h} />
-              <Counts title="Last 30 full days (UTC)" counts={detail.ingest.last_30d} />
-            </div>
-          </Box>
-
-          <TenantOnchainSection tenantId={t.id} />
-
-          <section aria-labelledby="audit-h" className="flex flex-col gap-3">
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <h3 id="audit-h" className="text-title text-fg">
-                Recent audit entries
-              </h3>
-              <Button asChild variant="ghost" size="sm">
-                <Link to={`/operator/audit?tenant_id=${t.id}`}>
-                  Full audit log of this project
-                  <ArrowRight aria-hidden />
-                </Link>
-              </Button>
-            </div>
-            <AuditEntries entries={detail.recent_audit} />
-          </section>
-        </div>
-
-        <aside className="flex min-w-0 flex-col gap-4 xl:sticky xl:top-4">
-          <OperatorCohortPanel tenantId={t.id} />
-          <Box id="evidence-h" title="Evidence">
-            <EvidenceList items={evidenceOf(detail)} stacked />
-          </Box>
-          <Box id="answers-h" title="Enrollment answers">
-            <dl className="flex flex-col gap-3">
-              <Fact label="Website">
-                <span className="break-all">{a.website}</span>
-              </Fact>
-              <Fact label="How it uses Stellar">
-                <span className="whitespace-pre-wrap break-words">{a.stellar_usage}</span>
-              </Fact>
-              <Fact label="SCF round">
-                <span className="break-all">{a.scf_round_url ?? "None given"}</span>
-              </Fact>
-              <Fact label="Description">
-                <span className="whitespace-pre-wrap break-words">
-                  {t.description || "None given"}
-                </span>
-              </Fact>
-              <Fact label="Terms version">{t.accepted_terms_version ?? "Not accepted"}</Fact>
-              <Fact label="Dashboards">{t.provisioning === "ready" ? "Set up" : "Not set up"}</Fact>
-            </dl>
-            <h4 className="mt-4 text-caption text-fg-3">Account and contract ids</h4>
-            {detail.stellar_ids.length === 0 ? (
-              <p className="mt-1 text-small text-fg-2">None given.</p>
-            ) : (
-              <ul className="mt-1 flex flex-col gap-1" aria-label="Account and contract ids">
-                {detail.stellar_ids.map((s) => (
-                  <li key={s.id} className="flex flex-col text-small">
-                    <code className="break-all font-mono text-caption text-fg">{s.id}</code>
-                    <span
-                      className={s.valid ? "text-caption text-fg-3" : "text-caption text-warning"}
-                    >
-                      {s.valid ? (s.type ?? "").replace("_", " ") : "not a valid id"}
-                    </span>
+                  <li key={s.id}>
+                    <SiteCard site={s} />
                   </li>
                 ))}
               </ul>
             )}
+          </section>
+
+          <Disclosure id="integrity" title="Integrity report">
+            <IntegrityReportView
+              scope="operator"
+              tenantId={t.id}
+              range={{ from: "", to: "" }}
+              siteNames={Object.fromEntries(detail.sites.map((s) => [s.id, s.domain]))}
+            />
+          </Disclosure>
+
+          <Disclosure id="onchain" title="On-chain ids">
+            <TenantOnchainSection tenantId={t.id} />
+          </Disclosure>
+
+          <Disclosure id="events" title="Tracker requests by outcome">
+            <p className="mb-3 text-small text-fg-2">
+              What the gateway did with each tracker request. The counts roll up every hour.
+            </p>
+            <div className="grid gap-5 sm:grid-cols-2">
+              <Counts title="Last 24 full hours, UTC" counts={detail.ingest.last_24h} />
+              <Counts title="Last 30 full days, UTC" counts={detail.ingest.last_30d} />
+            </div>
+          </Disclosure>
+
+          <section aria-labelledby="audit-h" className="flex flex-col gap-3">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <h2 id="audit-h" className="text-title text-fg">
+                Recent activity
+              </h2>
+              <Link
+                to={`/operator/audit?tenant_id=${t.id}`}
+                className="inline-flex items-center gap-1 rounded-sm text-small text-fg underline-offset-4 hover:underline focus-ring"
+              >
+                Open the full audit log
+                <ArrowRight aria-hidden className="size-3.5" />
+              </Link>
+            </div>
+            <AuditEntries entries={detail.recent_audit} limit={5} />
+          </section>
+        </div>
+
+        <aside className="flex min-w-0 flex-col gap-4 xl:sticky xl:top-4">
+          <Box id="evidence-h" title="Evidence">
+            <EvidenceList items={evidenceOf(detail)} stacked />
           </Box>
+          <OperatorCohortPanel tenantId={t.id} />
+          <Answers detail={detail} />
           <Box id="members-h" title="Members">
-            <ul className="flex flex-col gap-1 text-small">
+            <ul className="flex flex-col gap-2 text-small">
               {detail.members.map((m) => (
                 <li
                   key={m.github_id ?? m.stellar_address ?? m.passkey_address ?? m.display_name}
-                  className="flex flex-wrap items-baseline gap-x-2"
+                  className="flex min-w-0 flex-wrap items-baseline gap-x-2"
                 >
-                  <span
-                    className="font-medium text-fg"
-                    title={m.stellar_address ?? m.passkey_address ?? undefined}
-                  >
-                    {m.display_name}
-                  </span>
-                  <span className="text-fg-3">
-                    {m.role === "owner" ? "Owner" : "Member"}, since {formatDate(m.created_at)}
+                  <span className="min-w-0 truncate font-medium text-fg">{m.display_name}</span>
+                  <span className="text-fg-2">
+                    {m.role === "owner" ? "Owner" : "Member"} since {formatDate(m.created_at)}
                   </span>
                 </li>
               ))}
@@ -268,98 +250,136 @@ export function TenantDetail({ detail }: { detail: OperatorTenantDetail }) {
   );
 }
 
-// a raised section with an h3, under the page's h2
-function Box({
-  id,
-  title,
-  description,
-  children,
-}: {
-  id: string;
-  title: string;
-  description?: string;
-  children: React.ReactNode;
-}) {
+function Box({ id, title, children }: { id: string; title: string; children: ReactNode }) {
   return (
     <section
       aria-labelledby={id}
-      className="flex min-w-0 flex-col gap-3 rounded-lg border border-line bg-raised px-4 py-4"
+      className="flex min-w-0 flex-col gap-3 rounded-lg border border-line bg-raised p-4 sm:p-5"
     >
-      <div className="flex flex-col gap-1">
-        <h3 id={id} className="text-title text-fg">
-          {title}
-        </h3>
-        {description ? <p className="text-caption text-fg-3">{description}</p> : null}
-      </div>
+      <h2 id={id} className="text-title text-fg">
+        {title}
+      </h2>
       {children}
     </section>
   );
 }
 
-// the ingest counts the detail carries, as the tiles of the page; the
-// detail has no page view or api numbers, those live in compare
-function IngestTiles({ detail }: { detail: OperatorTenantDetail }) {
-  const sum = (c: Record<string, number>) => Object.values(c).reduce((x, y) => x + y, 0);
-  const day = sum(detail.ingest.last_24h);
-  const month = sum(detail.ingest.last_30d);
-  const accepted = detail.ingest.last_30d.accepted ?? 0;
-  const quarantined = detail.ingest.last_30d.quarantined ?? 0;
-  const share = (n: number) => formatShareOf(n, month);
-  const tiles = [
-    { k: "Events, 24 hours", v: formatCount(day), d: "All outcomes" },
-    { k: "Events, 30 days", v: formatCount(month), d: "All outcomes" },
-    { k: "Accepted, 30 days", v: share(accepted), d: `${formatCount(accepted)} events` },
-    { k: "Quarantined, 30 days", v: share(quarantined), d: "Held back before counting" },
-  ];
+function Disclosure({ id, title, children }: { id: string; title: string; children: ReactNode }) {
   return (
-    <dl className="grid grid-cols-2 overflow-hidden rounded-lg border border-line bg-raised lg:grid-cols-4">
-      {tiles.map((x, i) => (
-        <div
-          key={x.k}
-          className={`flex flex-col gap-1 border-line px-4 py-3 ${i % 2 === 1 ? "border-l" : ""} ${i >= 2 ? "max-lg:border-t lg:border-l" : ""}`}
-        >
-          <dt className="text-caption text-fg-2">{x.k}</dt>
-          <dd className="font-mono text-section text-fg tabular">{x.v}</dd>
-          <dd className="text-caption text-fg-3">{x.d}</dd>
-        </div>
-      ))}
-    </dl>
+    <details id={id} className="group min-w-0 rounded-lg border border-line bg-raised">
+      <summary className="flex cursor-pointer items-center justify-between gap-3 rounded-lg px-4 py-3 text-title text-fg transition-colors duration-(--vs-duration-press) ease-standard hover:bg-hover focus-ring max-lg:min-h-(--vs-control-touch) sm:px-5">
+        {title}
+        <ChevronDown
+          aria-hidden
+          className="size-4 text-fg-2 transition-transform duration-(--vs-duration-change) ease-standard group-open:rotate-180"
+        />
+      </summary>
+      <div className="min-w-0 border-t border-line p-4 sm:p-5">{children}</div>
+    </details>
   );
 }
 
-function Actions({ detail }: { detail: OperatorTenantDetail }) {
+function Answers({ detail }: { detail: OperatorTenantDetail }) {
   const t = detail.tenant;
-  const [action, setAction] = useState<TenantAction | null>(null);
+  const a = t.enrollment_answers;
+  const rows: [string, ReactNode][] = [
+    ["Website", <span className="break-all">{a.website}</span>],
+    [
+      "How it uses Stellar",
+      <span className="whitespace-pre-wrap break-words">{a.stellar_usage}</span>,
+    ],
+    [
+      "SCF round",
+      a.scf_round_url ? <span className="break-all">{a.scf_round_url}</span> : "Not given",
+    ],
+    [
+      "Description",
+      t.description ? (
+        <span className="whitespace-pre-wrap break-words">{t.description}</span>
+      ) : (
+        "Not given"
+      ),
+    ],
+    ["Terms version", t.accepted_terms_version ?? "Not accepted"],
+    ["Dashboards", t.provisioning === "ready" ? "Set up" : "Not set up yet"],
+  ];
+  return (
+    <Box id="answers-h" title="Enrollment answers">
+      <dl className="flex flex-col gap-3 text-small">
+        {rows.map(([k, v]) => (
+          <div key={k} className="flex min-w-0 flex-col gap-1">
+            <dt className="text-caption text-fg-2">{k}</dt>
+            <dd className="text-fg">{v}</dd>
+          </div>
+        ))}
+        <div className="flex min-w-0 flex-col gap-1">
+          <dt className="text-caption text-fg-2">Account and contract ids</dt>
+          <dd>
+            {detail.stellar_ids.length === 0 ? (
+              <span className="text-fg">Not given</span>
+            ) : (
+              <ul className="flex flex-col gap-1" aria-label="Account and contract ids">
+                {detail.stellar_ids.map((s) => (
+                  <li key={s.id} className="flex min-w-0 flex-col">
+                    <code className="font-mono text-caption break-all text-fg">{s.id}</code>
+                    <span
+                      className={s.valid ? "text-caption text-fg-2" : "text-caption text-warning"}
+                    >
+                      {s.valid ? (s.type ?? "").replace("_", " ") : "Not a valid id"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </dd>
+        </div>
+      </dl>
+    </Box>
+  );
+}
+
+// suspend, resume and remove: less frequent than a decision, so they sit in
+// one menu, and each goes through the confirmation with its reason
+function MoreActions({ detail }: { detail: OperatorTenantDetail }) {
+  const t = detail.tenant;
+  const [action, setAction] = useState<(typeof MENU_ORDER)[number] | null>(null);
   const run = useMutation({
     mutationFn: ({ act, reason }: { act: TenantAction; reason: string }) =>
       api.operator.tenantAction(t.id, act, reason),
-    onSuccess: async () => {
+    onSuccess: async (_d, vars) => {
       setAction(null);
+      const spec = ACTIONS[vars.act as (typeof MENU_ORDER)[number]];
+      toast.success(spec.done(t.name));
       await refreshOperator();
     },
   });
-  const allowed = ORDER.filter((x) => detail.allowed_actions.includes(x));
+  const allowed = MENU_ORDER.filter((x) => detail.allowed_actions.includes(x));
+  if (allowed.length === 0) return null;
   const spec = action ? ACTIONS[action] : null;
-
   return (
-    <section aria-label="Actions" className="flex flex-wrap items-center gap-2">
-      {allowed.length === 0 ? (
-        <p className="text-small text-fg-2">No action is possible from this status.</p>
-      ) : (
-        allowed.map((x) => (
-          <Button
-            key={x}
-            variant={VARIANT[x]}
-            className="max-lg:h-(--vs-control-touch)"
-            onClick={() => {
-              run.reset();
-              setAction(x);
-            }}
-          >
-            {ACTIONS[x].label}
+    <>
+      <Menu>
+        <MenuTrigger asChild>
+          <Button variant="outline" className="max-lg:h-(--vs-control-touch)">
+            <MoreHorizontal aria-hidden />
+            Actions
           </Button>
-        ))
-      )}
+        </MenuTrigger>
+        <MenuContent align="end">
+          {allowed.map((x) => (
+            <MenuItem
+              key={x}
+              tone={ACTIONS[x].tone === "destructive" ? "critical" : undefined}
+              onSelect={() => {
+                run.reset();
+                setAction(x);
+              }}
+            >
+              {ACTIONS[x].label} project
+            </MenuItem>
+          ))}
+        </MenuContent>
+      </Menu>
       <ConfirmDialog
         open={action !== null}
         onOpenChange={(o) => {
@@ -368,67 +388,90 @@ function Actions({ detail }: { detail: OperatorTenantDetail }) {
         title={spec ? spec.title(t.name) : ""}
         description={spec?.description ?? ""}
         reason={{ required: spec?.reasonRequired ?? true }}
-        confirmLabel={spec?.label ?? ""}
+        typed={
+          action === "remove" ? { value: t.slug, label: `Type ${t.slug} to confirm` } : undefined
+        }
+        confirmLabel={spec ? `${spec.label} project` : ""}
         pendingLabel={spec?.pending ?? ""}
         tone={spec?.tone ?? "destructive"}
         pending={run.isPending}
         error={run.error}
         onConfirm={(reason) => action && run.mutate({ act: action, reason })}
       />
-    </section>
+    </>
   );
 }
 
-function SiteEvidence({ site }: { site: OperatorSite }) {
+// one status per site: "In review" while an operator must decide, else the
+// site's own status. the domain check and stellar.toml detail open on request.
+function SiteCard({ site }: { site: OperatorSite }) {
   return (
     <article
       aria-labelledby={`op-site-${site.id}`}
-      className={`flex flex-col gap-3 rounded-lg border bg-raised px-4 py-4 ${site.in_review ? "border-warning-line" : "border-line"}`}
+      data-site={site.id}
+      className="flex min-w-0 flex-col gap-3 rounded-lg border border-line bg-raised p-4 sm:p-5"
     >
-      <div className="flex flex-wrap items-center gap-2">
-        <h4 id={`op-site-${site.id}`} className="text-body font-semibold text-fg">
+      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+        <h3 id={`op-site-${site.id}`} className="min-w-0 truncate text-body font-medium text-fg">
           {site.name}
-        </h4>
-        <StatusPill status={site.status} />
+        </h3>
         {site.in_review ? (
-          <span className="text-caption font-medium text-warning">In review</span>
-        ) : null}
-        <span className="font-mono text-small text-fg-2 sm:ml-auto">{site.domain}</span>
+          <span className="inline-flex items-center gap-1 text-caption font-medium text-warning">
+            In review
+          </span>
+        ) : (
+          <StatusBadge kind="site" status={site.status} operator />
+        )}
+        <span className="min-w-0 font-mono text-small break-all text-fg-2 sm:ml-auto">
+          {site.domain}
+        </span>
       </div>
       {site.domain_previously_removed ? (
         <p className="text-small text-warning">
-          This domain, a parent or a subdomain of it, belonged to a removed project.
+          This domain, or a parent or subdomain of it, belonged to a removed project.
         </p>
       ) : null}
       {site.status_reason ? (
-        <p className="text-small text-fg">
-          <span className="text-fg-3">Reason: </span>
+        <p className="text-small break-words text-fg">
+          <span className="text-fg-2">Reason: </span>
           {site.status_reason}
         </p>
       ) : null}
-      <ul className="flex flex-wrap gap-1" aria-label="Allowed origins">
-        {site.origins.map((o) => (
-          <li key={o} className="rounded-sm border border-line px-1 font-mono text-axis text-fg-2">
-            {o}
-          </li>
-        ))}
-      </ul>
-      <div className="grid gap-4 border-t border-line-subtle pt-3 md:grid-cols-2">
-        <VerificationDetail
-          verification={site.verification}
-          verifyMethod={site.verify_method}
-          verifiedAt={site.verified_at}
-          lastVerifyAt={site.last_verify_at}
-          lastVerifyError={site.last_verify_error}
-        />
-        <StellarTomlSummary
-          toml={site.stellar_toml}
-          checkedAt={site.stellar_toml_checked_at}
-          domain={site.domain}
-        />
-      </div>
+      <details className="group text-small">
+        <summary className="w-fit cursor-pointer rounded-sm text-fg-2 transition-colors duration-(--vs-duration-press) ease-standard hover:text-fg focus-ring">
+          Domain check, stellar.toml and allowed origins
+        </summary>
+        <div className="mt-3 flex flex-col gap-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <VerificationDetail
+              verification={site.verification}
+              verifyMethod={site.verify_method}
+              verifiedAt={site.verified_at}
+              lastVerifyAt={site.last_verify_at}
+              lastVerifyError={site.last_verify_error}
+            />
+            <StellarTomlSummary
+              toml={site.stellar_toml}
+              checkedAt={site.stellar_toml_checked_at}
+              domain={site.domain}
+            />
+          </div>
+          <ul className="flex flex-wrap gap-1" aria-label="Allowed origins">
+            {site.origins.map((o) => (
+              <li
+                key={o}
+                className="rounded-sm border border-line px-1 font-mono text-caption break-all text-fg-2"
+              >
+                {o}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </details>
       {site.in_review ? (
-        <DecisionPanel subject={{ kind: "site", id: site.id, name: site.domain }} />
+        <div className="border-t border-line-subtle pt-3">
+          <DecisionPanel subject={{ kind: "site", id: site.id, name: site.domain }} />
+        </div>
       ) : null}
     </article>
   );
@@ -437,17 +480,15 @@ function SiteEvidence({ site }: { site: OperatorSite }) {
 function Counts({ title, counts }: { title: string; counts: Record<string, number> }) {
   const rows = Object.entries(counts).sort((x, y) => y[1] - x[1]);
   return (
-    <div className="flex flex-col gap-1">
-      <h4 className="text-caption text-fg-3">{title}</h4>
+    <div className="flex min-w-0 flex-col gap-1">
+      <h3 className="text-caption text-fg-2">{title}</h3>
       {rows.length === 0 ? (
-        <p className="text-small text-fg-2">No events.</p>
+        <p className="text-small text-fg-2">No tracker requests.</p>
       ) : (
         <dl className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 text-small">
           {rows.map(([k, n]) => (
             <div key={k} className="contents">
-              <dt className="border-b border-line-subtle py-1 text-fg-2">
-                {outcomeLabel(k) === "Other rejections" ? k : outcomeLabel(k)}
-              </dt>
+              <dt className="border-b border-line-subtle py-1 text-fg-2">{outcomeLabel(k)}</dt>
               <dd className="border-b border-line-subtle py-1 text-right font-mono text-fg tabular">
                 {formatCount(n)}
               </dd>
@@ -473,41 +514,43 @@ function Removal({ removal }: { removal: NonNullable<OperatorTenantDetail["remov
   return (
     <section
       aria-labelledby="removal-h"
-      className={`flex flex-col gap-3 rounded-lg border bg-raised px-4 py-4 ${done ? "border-line" : "border-line-strong"}`}
+      className="flex flex-col gap-3 rounded-lg border border-line bg-raised p-4 sm:p-5"
     >
-      <div className="flex flex-col gap-1">
-        <h3 id="removal-h" className="text-title text-fg">
-          Removal
-        </h3>
-        <p className="flex items-center gap-2 text-small font-medium text-fg" role="status">
-          {done ? (
-            <Check aria-hidden className="size-4 text-success" strokeWidth={2.6} />
-          ) : (
-            <LoaderCircle aria-hidden className="size-4 animate-spin text-info" />
-          )}
-          {done
-            ? `Completed ${formatDateTimeUtc(removal.completed_at ?? "")}.`
-            : "Data is still being deleted."}
-        </p>
-        <p className="text-small text-fg-2">
-          Requested {formatDateTimeUtc(removal.requested_at)}
-          {by ? ` by ${by}` : ""}. Aggregates are {removal.keep_aggregates ? "kept" : "deleted"}.
-        </p>
-      </div>
+      <h2 id="removal-h" className="text-title text-fg">
+        Removal
+      </h2>
+      <p className="flex items-center gap-2 text-small font-medium text-fg" role="status">
+        {done ? (
+          <Check aria-hidden className="size-4 text-success" strokeWidth={2.6} />
+        ) : (
+          <LoaderCircle aria-hidden className="size-4 animate-spin text-fg-2" />
+        )}
+        {done
+          ? `Completed ${formatDateTimeUtc(removal.completed_at ?? "")}.`
+          : "The service is deleting the data. This page checks again every 10 seconds."}
+      </p>
+      <p className="text-small text-fg-2">
+        Requested {formatDateTimeUtc(removal.requested_at)}
+        {by ? ` by ${by}` : ""}. The daily totals are {removal.keep_aggregates ? "kept" : "deleted"}
+        .
+      </p>
       {steps.length > 0 ? (
         <ul className="flex flex-col gap-1" aria-label="Removal steps">
           {steps.map(([name, s]) => (
             <li
               key={name}
-              className="grid grid-cols-[1rem_minmax(0,12rem)_minmax(0,1fr)] items-center gap-2 text-small"
+              className="flex flex-wrap items-center gap-x-2 text-small"
+              data-step={name}
             >
               <Check aria-hidden className="size-3.5 text-success" strokeWidth={2.6} />
-              <span className="font-mono text-caption text-fg">{name}</span>
-              <span className="text-fg-2">Done {formatDateTimeUtc(s.done_at)}</span>
+              <span className="text-fg">{STEP_TEXT[name] ?? name}</span>
+              <span className="text-fg-2">{formatDateTimeUtc(s.done_at)}</span>
             </li>
           ))}
         </ul>
-      ) : null}
+      ) : (
+        <p className="text-small text-fg-2">No step is done yet.</p>
+      )}
     </section>
   );
 }
