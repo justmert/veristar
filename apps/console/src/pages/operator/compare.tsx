@@ -1,63 +1,49 @@
 import { useQuery } from "@tanstack/react-query";
-import { Columns2, Plus, X } from "lucide-react";
+import { ChevronDown, Columns2, Download, Plus, X } from "lucide-react";
+import type { ReactNode } from "react";
 import { Link, useSearchParams } from "react-router";
 import type { Cohort } from "@/api/cohorts";
+import { exportPaths } from "@/api/onchain";
 import { apiCompareQuery, webCompareQuery } from "@/api/queries";
 import type {
   ApiCompare,
   ApiCompareProject,
   ApiNumbers,
-  Breakdown,
   TenantRef,
   WebCompare,
   WebDimension,
 } from "@/api/schemas";
-import type { Series } from "@/components/api-charts";
-import {
-  type ChartMarker,
-  CompareChart,
-  type CompareValue,
-  SERIES_BG,
-  SERIES_COLOR,
-  SeriesLine,
-} from "@/components/compare-charts";
+import { BreakdownList, type TimeBucket, TimeChart } from "@/components/charts";
+import { type Column, DataTable } from "@/components/data-table";
 import { DbIpAttribution } from "@/components/dbip-attribution";
-import { ErrorPanel, Loading, StateBlock } from "@/components/error-panel";
 import { CompareIntegrity } from "@/components/integrity";
-import { Stagger, StaggerItem } from "@/components/motion";
-import { StatusDot, statusText, statusTone } from "@/components/status";
+import { PageHeader } from "@/components/page-header";
+import { EmptyState, ErrorState, LoadingState, Missing, Skeleton } from "@/components/states";
+import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
-import { rateText } from "@/lib/api-metrics";
 import {
+  countOf,
   countryName,
   formatCompact,
   formatCount,
+  formatDate,
+  formatDuration,
   formatLatency,
   formatPercent,
-  MISSING,
+  formatTick,
   OPEN_BUCKET,
+  utcDay,
 } from "@/lib/format";
+import { compareSearch, type DayRange, MAX_COMPARE, readCompare } from "@/lib/global";
+import { CompareOnchainSection } from "./onchain-parts";
 import {
-  compareSearch,
-  type DayRange,
-  formatDuration,
-  formatPct,
-  formatShare,
-  MAX_COMPARE,
-  readCompare,
-} from "@/lib/global";
-import { API_NOTES, SourceBadge } from "./global-api";
-import {
-  AGGREGATE_NOTE,
   type CompareHandover,
   cohortText,
-  Missing,
-  Notes,
-  QUARANTINE_NOTE,
-  RangeControl,
-  VISITORS_NOTE,
-} from "./global-shared";
-import { CompareOnchainSection, ExportCompareButton } from "./onchain-parts";
+  ListRange,
+  SERIES_TONES,
+  SeriesSwatch,
+  SourceText,
+} from "./shared";
 
 const DIMENSIONS: { dim: WebDimension; label: string }[] = [
   { dim: "referrer", label: "Referrers" },
@@ -67,35 +53,8 @@ const DIMENSIONS: { dim: WebDimension; label: string }[] = [
   { dim: "os", label: "Operating systems" },
 ];
 
-// the award date of each compared project that has one (contract 19.5),
-// drawn on every daily chart so growth after funding is visible
-function awardMarkers(projects: { tenant: TenantRef; cohort: Cohort }[]): ChartMarker[] {
-  return projects.flatMap((p, slot) =>
-    p.cohort.award_date
-      ? [{ day: p.cohort.award_date, slot, label: `${p.tenant.name} awarded` }]
-      : [],
-  );
-}
-
-function seriesOf(tenants: TenantRef[]): Series[] {
-  return tenants.map((t, i) => ({
-    key: t.id,
-    label: t.name,
-    color: SERIES_COLOR[i] ?? "var(--vs-fg-3)",
-  }));
-}
-
-// the side-by-side view of up to five projects (contract 8.4 and 8.6). with
-// one project it is that project's aggregate drill-down.
-// the global web view over the comparison's range, so the projects found
-// there compare over the same days
-function addSearch(range: { from: string; to: string } | null): string {
-  const p = new URLSearchParams();
-  if (range?.from) p.set("from", range.from);
-  if (range?.to) p.set("to", range.to);
-  return p.toString();
-}
-
+// up to five projects side by side (contract 8.4 and 8.6), web, api and
+// on-chain, per utc day. each compared project links to its page.
 export function ComparePage() {
   const [params, setParams] = useSearchParams();
   const { tenants, range } = readCompare(params);
@@ -105,38 +64,29 @@ export function ComparePage() {
 
   if (tenants.length === 0) {
     return (
-      <section aria-labelledby="compare-h" className="flex flex-col gap-4">
-        <h2 id="compare-h" className="text-section text-fg">
-          Compare projects
-        </h2>
-        <StateBlock
-          kind="empty"
+      <div className="flex flex-col gap-6">
+        <PageHeader title="Compare" />
+        <EmptyState
           icon={<Columns2 aria-hidden />}
           title="No project is selected"
           action={
-            <div className="flex flex-wrap justify-center gap-2">
-              <Button asChild variant="outline" size="sm">
-                <Link to="/operator/projects?view=web">Projects, web view</Link>
-              </Button>
-              <Button asChild variant="outline" size="sm">
-                <Link to="/operator/projects?view=api">Projects, API view</Link>
-              </Button>
-            </div>
+            <Button asChild variant="outline" size="sm">
+              <Link to="/operator/projects?view=web">Open Projects</Link>
+            </Button>
           }
         >
-          Select up to five projects in the web or API view of Projects, then choose Compare.
-        </StateBlock>
-      </section>
+          Select up to {MAX_COMPARE} projects in Projects. Then choose Compare.
+        </EmptyState>
+      </div>
     );
   }
 
-  const resolved = web.data ? { from: web.data.from, to: web.data.to } : null;
-  const refs = web.data?.projects.map((p) => p.tenant) ?? apiq.data?.projects.map((p) => p.tenant);
-  const cohorts = web.data?.projects ?? apiq.data?.projects ?? [];
-  const cohortOf = (id: string) => {
-    const c = cohorts.find((p) => p.tenant.id === id)?.cohort;
-    return c ? cohortText(c) : null;
-  };
+  const resolved = web.data
+    ? { from: web.data.from, to: web.data.to }
+    : apiq.data
+      ? { from: apiq.data.from, to: apiq.data.to }
+      : null;
+  const refs = web.data?.projects ?? apiq.data?.projects ?? null;
   const remove = (id: string) =>
     setParams(
       compareSearch(
@@ -145,469 +95,530 @@ export function ComparePage() {
       ),
       { replace: true },
     );
+  const exportLink = (view: "web" | "api", label: string) =>
+    resolved ? (
+      <Button asChild variant="outline" size="sm" className="max-lg:h-(--vs-control-touch)">
+        <a href={exportPaths.compare(view, tenants, resolved)} download>
+          <Download aria-hidden />
+          {label}
+        </a>
+      </Button>
+    ) : null;
 
   return (
-    <section aria-labelledby="compare-h" className="flex flex-col gap-6">
-      <h2 id="compare-h" className="text-section text-fg">
-        {tenants.length === 1 ? "Project aggregates" : "Compare projects"}
-      </h2>
+    <div className="flex min-w-0 flex-col gap-8">
+      <PageHeader
+        title="Compare"
+        freshness={
+          web.dataUpdatedAt > 0
+            ? {
+                at: new Date(web.dataUpdatedAt),
+                cadence: "Web numbers are read every hour. API numbers refresh every 5 minutes.",
+              }
+            : null
+        }
+        secondary={
+          <>
+            {exportLink("web", "Export web CSV")}
+            {exportLink("api", "Export API CSV")}
+          </>
+        }
+      />
 
-      {/* the compared projects and the range stay in view while the charts scroll */}
-      <div className="sticky top-0 z-20 -mx-4 flex flex-wrap items-center gap-2 border-b border-line bg-ground px-4 py-2 max-lg:top-(--vs-header) sm:-mx-8 sm:px-8">
-        <span className="text-small text-fg-3">Compared projects</span>
-        {refs ? (
-          <ul aria-label="Compared projects" className="flex flex-wrap gap-2">
-            {refs.map((t, i) => (
-              <li
-                key={t.id}
-                className="inline-flex h-8 max-w-96 animate-reveal-in items-center gap-2 rounded-md border border-line-strong pr-1 pl-2 text-small text-fg"
-              >
-                <SeriesLine slot={i} />
-                <span className="truncate font-medium">{t.name}</span>
-                {cohortOf(t.id) ? (
-                  <span data-cohort className="truncate text-caption text-fg-3 max-md:hidden">
-                    {cohortOf(t.id)}
-                  </span>
-                ) : null}
-                <span className="inline-flex items-center gap-1 text-caption text-fg-3">
-                  <StatusDot tone={statusTone(t.status)} />
-                  <span className="max-sm:sr-only">{statusText(t.status)}</span>
-                </span>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-xs"
-                  aria-label={`Remove ${t.name} from the comparison`}
-                  onClick={() => remove(t.id)}
-                >
-                  <X aria-hidden />
-                </Button>
-              </li>
-            ))}
-          </ul>
-        ) : null}
-        {tenants.length < MAX_COMPARE ? (
-          <Button
-            asChild
-            variant="outline"
-            size="sm"
-            className="border-dashed text-fg-2 max-lg:h-(--vs-control-touch)"
-          >
+      <section aria-label="Compared projects" className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          {refs ? (
+            <ul className="flex min-w-0 flex-wrap gap-2">
+              {refs.map((p, i) => (
+                <ProjectChip
+                  key={p.tenant.id}
+                  tenant={p.tenant}
+                  cohort={p.cohort}
+                  slot={i}
+                  onRemove={() => remove(p.tenant.id)}
+                />
+              ))}
+            </ul>
+          ) : (
+            <span className="text-small text-fg-2">{countOf(tenants.length, "project")}</span>
+          )}
+          {tenants.length < MAX_COMPARE ? (
             <Link
-              to={`/operator/projects?view=web&${addSearch(resolved)}`}
+              to={`/operator/projects?${addSearch(resolved)}`}
               state={
                 {
-                  compare: (refs ?? []).map((t) => ({ id: t.id, name: t.name })),
+                  compare: (refs ?? []).map((p) => ({ id: p.tenant.id, name: p.tenant.name })),
                 } satisfies CompareHandover
               }
+              className="inline-flex h-8 items-center gap-1 rounded-md border border-dashed border-line-strong px-2 text-small text-fg-2 transition-colors duration-(--vs-duration-press) ease-standard hover:bg-hover hover:text-fg focus-ring max-lg:h-(--vs-control-touch)"
             >
-              <Plus aria-hidden />
+              <Plus aria-hidden className="size-4" />
               Add a project
             </Link>
-          </Button>
-        ) : null}
-        <RangeControl resolved={resolved} onChange={setRange} className="lg:ml-auto" />
-      </div>
-
-      <section aria-labelledby="compare-web" className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <h3 id="compare-web" className="text-section text-fg">
-            Web
-          </h3>
-          <span className="text-small text-fg-3">Per UTC day, from project aggregates</span>
-          <span className="ml-auto">
-            <ExportCompareButton view="web" tenants={tenants} resolved={resolved}>
-              Export web CSV
-            </ExportCompareButton>
-          </span>
+          ) : null}
         </div>
-        {web.isPending ? <Loading label="Loading web numbers" /> : null}
-        {web.error ? <ErrorPanel error={web.error} onRetry={() => web.refetch()} /> : null}
-        {web.data ? <WebSection data={web.data} /> : null}
+        <ListRange resolved={resolved} requested={range} onRange={setRange} />
       </section>
 
-      <section aria-labelledby="compare-api" className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <h3 id="compare-api" className="text-section text-fg">
-            API
-          </h3>
-          <span className="text-small text-fg-3">Every service, per UTC day</span>
-          <span className="ml-auto">
-            <ExportCompareButton view="api" tenants={tenants} resolved={resolved}>
-              Export API CSV
-            </ExportCompareButton>
-          </span>
-        </div>
-        {apiq.isPending ? <Loading label="Loading API numbers" /> : null}
-        {apiq.error ? <ErrorPanel error={apiq.error} onRetry={() => apiq.refetch()} /> : null}
-        {apiq.data ? <ApiSection data={apiq.data} /> : null}
-      </section>
+      <Section id="compare-web" title="Web">
+        {web.isPending ? (
+          <ChartsLoading />
+        ) : web.error ? (
+          <ErrorState
+            title="The web numbers did not load"
+            error={web.error}
+            onRetry={() => web.refetch()}
+          />
+        ) : (
+          <WebSection data={web.data} />
+        )}
+      </Section>
+
+      <Section id="compare-api" title="API">
+        {apiq.isPending ? (
+          <ChartsLoading />
+        ) : apiq.error ? (
+          <ErrorState
+            title="The API numbers did not load"
+            error={apiq.error}
+            onRetry={() => apiq.refetch()}
+          />
+        ) : (
+          <ApiSection data={apiq.data} />
+        )}
+      </Section>
 
       {web.data ? <CompareOnchainSection projects={web.data.projects} /> : null}
 
-      <Notes
-        items={[
-          VISITORS_NOTE,
-          QUARANTINE_NOTE,
-          "A day not read by the aggregation yet (for example before a backfill) is a gap in the web charts and shows as not read in the tables; a day read without traffic shows 0.",
-          ...API_NOTES.filter((n) => n !== AGGREGATE_NOTE),
-          AGGREGATE_NOTE,
-        ]}
+      <details className="max-w-prose text-small text-fg-2">
+        <summary className="w-fit cursor-pointer rounded-sm font-medium transition-colors duration-(--vs-duration-press) ease-standard hover:text-fg focus-ring">
+          About these numbers
+        </summary>
+        <ul className="mt-2 flex list-disc flex-col gap-1 pl-5">
+          <li>Every number comes from daily totals of UTC days.</li>
+          <li>A hatched day is still running. Its value grows until the day ends.</li>
+          <li>A gap in a web chart is a day that the web analytics have not read yet.</li>
+          <li>Visitors are unique per UTC day and site.</li>
+          <li>Latency percentiles come from summed duration buckets, not from averages.</li>
+        </ul>
+        <DbIpAttribution className="mt-2" />
+      </details>
+    </div>
+  );
+}
+
+// the project list over the comparison's range, so the projects found there
+// compare over the same days
+function addSearch(range: DayRange | null): string {
+  const p = new URLSearchParams({ view: "web" });
+  if (range?.from) p.set("from", range.from);
+  if (range?.to) p.set("to", range.to);
+  return p.toString();
+}
+
+function ProjectChip({
+  tenant,
+  cohort,
+  slot,
+  onRemove,
+}: {
+  tenant: TenantRef;
+  cohort: Cohort;
+  slot: number;
+  onRemove: () => void;
+}) {
+  const c = cohortText(cohort);
+  return (
+    <li
+      data-tenant={tenant.id}
+      className="inline-flex h-8 max-w-full min-w-0 animate-fade-in items-center gap-2 rounded-md border border-line-strong pr-1 pl-2 text-small max-lg:h-(--vs-control-touch)"
+    >
+      <SeriesSwatch slot={slot} />
+      <Link
+        to={`/operator/projects/${tenant.id}`}
+        className="min-w-0 truncate rounded-sm font-medium text-fg underline-offset-4 hover:underline focus-ring"
       >
-        <DbIpAttribution className="mt-1" />
-      </Notes>
+        {tenant.name}
+      </Link>
+      {c ? (
+        <span data-cohort className="truncate text-caption text-fg-2 max-md:hidden">
+          {c}
+        </span>
+      ) : null}
+      {tenant.status !== "active" ? (
+        <StatusBadge kind="project" status={tenant.status} operator />
+      ) : null}
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-xs"
+        className="max-lg:size-(--vs-control-touch)"
+        aria-label={`Remove ${tenant.name} from the comparison`}
+        onClick={onRemove}
+      >
+        <X aria-hidden />
+      </Button>
+    </li>
+  );
+}
+
+function Section({ id, title, children }: { id: string; title: string; children: ReactNode }) {
+  return (
+    <section aria-labelledby={id} className="flex min-w-0 flex-col gap-4">
+      <h2 id={id} className="text-section text-fg">
+        {title}
+      </h2>
+      {children}
     </section>
+  );
+}
+
+function ChartsLoading() {
+  return (
+    <LoadingState label="Loading the numbers">
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Skeleton.Chart />
+        <Skeleton.Chart />
+      </div>
+      <Skeleton.Table rows={3} />
+    </LoadingState>
+  );
+}
+
+// ---- charts
+
+function bucketsOf(days: string[]): TimeBucket[] {
+  const today = utcDay();
+  return days.map((d) => ({
+    at: d,
+    label: `${formatDate(d)}, UTC`,
+    tick: formatTick(d, "day"),
+    partial: d === today,
+  }));
+}
+
+function markersOf(projects: { tenant: TenantRef; cohort: Cohort }[]) {
+  return projects.flatMap((p) =>
+    p.cohort.award_date ? [{ at: p.cohort.award_date, label: `${p.tenant.name} awarded` }] : [],
+  );
+}
+
+// a chart only draws when a complete day has a value: a range whose only
+// value is the running day says so, instead of an empty frame
+export function chartState(
+  buckets: TimeBucket[],
+  series: (number | null)[][],
+): "data" | "empty" | "no-complete" {
+  const has = (i: number) => series.some((s) => s[i] !== null && s[i] !== undefined);
+  if (!buckets.some((_, i) => has(i))) return "empty";
+  if (!buckets.some((b, i) => !b.partial && has(i))) return "no-complete";
+  return "data";
+}
+
+function CompareChart({
+  title,
+  description,
+  buckets,
+  projects,
+  values,
+  format,
+  axisFormat,
+  markers,
+  ceiling,
+  higherIsBetter = true,
+}: {
+  title: string;
+  description: string;
+  buckets: TimeBucket[];
+  projects: TenantRef[];
+  values: (number | null)[][];
+  format: (n: number) => string;
+  axisFormat: (n: number) => string;
+  markers: { at: string; label: string }[];
+  ceiling?: { value: number; label: string };
+  higherIsBetter?: boolean;
+}) {
+  const st = chartState(buckets, values);
+  return (
+    <TimeChart
+      title={title}
+      description={description}
+      headingLevel={3}
+      kind="line"
+      buckets={buckets}
+      series={projects.map((t, i) => ({
+        key: t.id,
+        label: t.name,
+        tone: SERIES_TONES[i] ?? "series-1",
+        values: values[i] ?? [],
+      }))}
+      format={format}
+      axisFormat={axisFormat}
+      higherIsBetter={higherIsBetter}
+      markers={markers}
+      ceiling={ceiling}
+      state={st === "data" ? "data" : "empty"}
+      emptyTitle={st === "no-complete" ? "No complete day yet" : "No data in this range"}
+      emptyText={
+        st === "no-complete"
+          ? "Only today has data. Today is still running. The totals below hold its value."
+          : "Choose a longer range, or wait for the first data."
+      }
+      height={180}
+    />
   );
 }
 
 // ---- web
 
 function WebSection({ data }: { data: WebCompare }) {
-  const series = seriesOf(data.projects.map((p) => p.tenant));
-  const markers = awardMarkers(data.projects);
-  const point = (s: number, d: number) => data.projects[s]?.series[d];
-  const count = (k: "pageviews" | "visitors" | "visits") => (s: number, d: number) =>
-    point(s, d)?.[k] ?? null;
-  const fmtCount = (v: number | "open") => (v === "open" ? OPEN_BUCKET : formatCount(v));
+  const buckets = bucketsOf(data.days);
+  const projects = data.projects.map((p) => p.tenant);
+  const markers = markersOf(data.projects);
+  const col = (k: "pageviews" | "visitors" | "bounce_rate" | "avg_visit_duration") =>
+    data.projects.map((p) => p.series.map((s) => s[k]));
+  const notRead = data.projects.some((p) => p.series.some((s) => !s.aggregated));
+  const gaps = notRead ? " A gap is a day that is not read yet." : "";
   return (
     <>
-      <div className="grid gap-3 lg:grid-cols-2">
+      <div className="grid gap-4 lg:grid-cols-2">
         <CompareChart
-          kind="count"
           title="Page views"
-          description="Page views of the primary band per UTC day."
-          days={data.days}
-          series={series}
-          markers={markers}
-          value={count("pageviews")}
-          format={fmtCount}
+          description={`Page views per UTC day.${gaps}`}
+          buckets={buckets}
+          projects={projects}
+          values={col("pageviews")}
+          format={formatCount}
           axisFormat={formatCompact}
-          missingText="not read"
-          gapLabel="not read"
+          markers={markers}
         />
         <CompareChart
-          kind="count"
           title="Visitors"
-          description="Visitors per UTC day, unique within the day and site."
-          days={data.days}
-          series={series}
-          markers={markers}
-          value={count("visitors")}
-          format={fmtCount}
+          description={`Visitors per UTC day, unique per site.${gaps}`}
+          buckets={buckets}
+          projects={projects}
+          values={col("visitors")}
+          format={formatCount}
           axisFormat={formatCompact}
-          missingText="not read"
-          gapLabel="not read"
+          markers={markers}
         />
         <CompareChart
-          kind="share"
           title="Bounce rate"
-          description="Visits with one page view and no event, over all visits. Gaps are days without visits."
-          days={data.days}
-          series={series}
-          markers={markers}
-          value={(s, d) => point(s, d)?.bounce_rate ?? null}
-          format={(v) => (v === "open" ? OPEN_BUCKET : (formatShare(v) ?? MISSING))}
+          description="Visits with one page view and no event. A gap is a day without visits."
+          buckets={buckets}
+          projects={projects}
+          values={col("bounce_rate")}
+          format={formatPercent}
           axisFormat={formatPercent}
+          markers={markers}
+          higherIsBetter={false}
         />
         <CompareChart
-          kind="count"
-          title="Average visit duration"
-          description="Time between the first and last page view of a visit, averaged per day."
-          days={data.days}
-          series={series}
+          title="Average visit"
+          description="Time from the first to the last page view, on average."
+          buckets={buckets}
+          projects={projects}
+          values={col("avg_visit_duration")}
+          format={formatDuration}
+          axisFormat={formatDuration}
           markers={markers}
-          value={(s, d) => point(s, d)?.avg_visit_duration ?? null}
-          format={(v) => (v === "open" ? OPEN_BUCKET : (formatDuration(v) ?? MISSING))}
-          axisFormat={(v) => formatDuration(v) ?? ""}
         />
       </div>
-      <CompareIntegrity projects={data.projects} />
-      <WebTotalsTable data={data} />
-      {DIMENSIONS.map((d) => (
-        <BreakdownRow
-          key={d.dim}
-          label={d.label}
-          dim={d.dim}
-          projects={data.projects.map((p) => ({ tenant: p.tenant, b: p.breakdowns[d.dim] }))}
-        />
-      ))}
-    </>
-  );
-}
-
-function WebTotalsTable({ data }: { data: WebCompare }) {
-  const cols: {
-    label: string;
-    value: (t: WebCompare["projects"][number]["totals"]) => string | null;
-  }[] = [
-    { label: "Page views", value: (t) => formatCount(t.pageviews) },
-    { label: "Visitors", value: (t) => formatCount(t.visitors) },
-    { label: "Visits", value: (t) => formatCount(t.visits) },
-    { label: "Bounce rate", value: (t) => formatShare(t.bounce_rate) },
-    { label: "Average visit duration", value: (t) => formatDuration(t.avg_visit_duration) },
-    { label: "Quarantined page views", value: (t) => formatCount(t.quarantine_pageviews) },
-    { label: "Quarantined share", value: (t) => formatShare(t.quarantine_share) },
-  ];
-  return (
-    <TotalsTable
-      label="Web totals"
-      metrics={cols.map((c) => c.label)}
-      rows={data.projects.map((p) => ({
-        tenant: p.tenant,
-        cells: cols.map((c) => c.value(p.totals)),
-      }))}
-    />
-  );
-}
-
-// the range totals: one row per project in its series slot, one column per
-// metric, so a column reads down across the projects
-function TotalsTable({
-  label,
-  metrics,
-  rows,
-}: {
-  label: string;
-  metrics: string[];
-  rows: { tenant: TenantRef; cells: (string | null)[] }[];
-}) {
-  return (
-    <section
-      aria-label={label}
-      // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable region needs focus (wcag 2.1.1)
-      tabIndex={0}
-      className="relative overflow-x-auto rounded-lg border border-line bg-raised focus-ring"
-    >
-      <table className="w-full text-left text-small tabular">
-        <thead>
-          <tr>
-            <th
-              scope="col"
-              className="h-9 border-b border-line px-4 text-caption font-medium text-fg-3"
-            >
-              Project
-            </th>
-            {metrics.map((m) => (
-              <th
-                key={m}
-                scope="col"
-                className="h-9 border-b border-line px-3 text-right text-caption font-medium whitespace-nowrap text-fg-3 last:pr-4"
-              >
-                {m}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r, i) => (
-            <tr
-              key={r.tenant.id}
-              data-tenant={r.tenant.id}
-              className="transition-colors duration-(--vs-duration-press) ease-standard hover:bg-hover [&:last-child>*]:border-0"
-            >
-              <th
-                scope="row"
-                className="h-10 border-b border-line-subtle px-4 font-medium whitespace-nowrap text-fg"
-              >
-                <span className="inline-flex items-center gap-2">
-                  <SeriesLine slot={i} />
-                  {r.tenant.name}
-                </span>
-              </th>
-              {r.cells.map((c, j) => (
-                <td
-                  key={metrics[j]}
-                  data-metric={metrics[j]}
-                  className="border-b border-line-subtle px-3 text-right font-mono whitespace-nowrap text-fg last:pr-4"
-                >
-                  {c === null ? <Missing /> : c}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </section>
-  );
-}
-
-function keyText(dim: WebDimension, key: string): string {
-  return dim === "country" ? countryName(key) : key;
-}
-
-// one dimension across the projects: each project's top keys with a bar
-// scaled to that project's largest value. values are umami's y, distinct
-// visitors of a day whose page views carry the key, summed over the days.
-function BreakdownRow({
-  label,
-  dim,
-  projects,
-}: {
-  label: string;
-  dim: WebDimension;
-  projects: { tenant: TenantRef; b: Breakdown }[];
-}) {
-  return (
-    <section
-      aria-label={label}
-      className="flex flex-col gap-3 rounded-lg border border-line bg-raised px-4 py-4"
-    >
-      <div className="flex flex-col gap-1">
-        <h3 className="text-title text-fg">{label}</h3>
-        <p className="text-caption text-fg-3">
-          Top values over the range, counted in daily visitors.
-          {dim === "referrer"
-            ? " Only other sites count; visits from a project's own pages do not."
-            : ""}
-        </p>
-      </div>
-      <Stagger className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-        {projects.map(({ tenant, b }, i) => {
-          const max = Math.max(1, ...b.items.map((x) => x.value));
-          return (
-            <StaggerItem key={tenant.id} className="min-w-0">
-              <p className="flex items-center gap-1 text-small font-medium text-fg">
-                <SeriesLine slot={i} />
-                <span className="truncate">{tenant.name}</span>
-              </p>
-              {b.items.length === 0 ? (
-                <p className="mt-1 text-small text-fg-3">None in this range.</p>
+      <TotalsTable
+        label="Web totals"
+        projects={data.projects}
+        columns={[
+          { key: "pageviews", header: "Page views", value: (p) => formatCount(p.totals.pageviews) },
+          { key: "visitors", header: "Visitors", value: (p) => formatCount(p.totals.visitors) },
+          { key: "visits", header: "Visits", value: (p) => formatCount(p.totals.visits) },
+          {
+            key: "bounce_rate",
+            header: "Bounce rate",
+            value: (p) =>
+              p.totals.bounce_rate === null ? (
+                <Missing reason="No visits in this range" />
               ) : (
-                <ul className="mt-2 flex flex-col gap-2" aria-label={`${label} of ${tenant.name}`}>
-                  {b.items.map((x) => (
-                    <li key={x.key} className="text-small">
-                      <div className="flex items-baseline justify-between gap-2">
-                        <span className="min-w-0 truncate text-fg-2" title={keyText(dim, x.key)}>
-                          {keyText(dim, x.key)}
-                        </span>
-                        <span className="shrink-0 font-mono text-fg tabular">
-                          {formatCount(x.value)}
-                        </span>
-                      </div>
-                      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-line-subtle">
-                        <div
-                          className={`h-full rounded-full ${SERIES_BG[i] ?? "bg-fg-3"}`}
-                          // the width is data; react writes it through the cssom
-                          style={{ width: `${(x.value / max) * 100}%` }}
-                        />
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {b.total_keys > b.items.length ? (
-                <p className="mt-1 text-caption text-fg-3">
-                  {formatCount(b.total_keys - b.items.length)} more
-                </p>
-              ) : null}
-            </StaggerItem>
-          );
-        })}
-      </Stagger>
-    </section>
+                formatPercent(p.totals.bounce_rate)
+              ),
+          },
+          {
+            key: "avg",
+            header: "Average visit",
+            value: (p) =>
+              p.totals.avg_visit_duration === null ? (
+                <Missing reason="No visits in this range" />
+              ) : (
+                formatDuration(p.totals.avg_visit_duration)
+              ),
+          },
+          {
+            key: "held",
+            header: "Held back",
+            definition:
+              "Page views from a network that sent too many visitors in one hour. They are not in the other numbers.",
+            value: (p) =>
+              p.totals.quarantine_share === null ? (
+                <Missing reason="No page views in this range" />
+              ) : (
+                `${formatPercent(p.totals.quarantine_share)} (${formatCount(p.totals.quarantine_pageviews)})`
+              ),
+          },
+        ]}
+        mobile={["pageviews", "visitors", "bounce_rate"]}
+      />
+      <CompareIntegrity projects={data.projects} />
+      <Disclosure title="Referrers, countries, devices, browsers and systems">
+        <div className="flex flex-col gap-6">
+          {DIMENSIONS.map((d) => (
+            <section key={d.dim} aria-label={d.label} className="flex flex-col gap-3">
+              <h3 className="text-title text-fg">{d.label}</h3>
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {data.projects.map((p, i) => {
+                  const b = p.breakdowns[d.dim];
+                  return (
+                    <div key={p.tenant.id} className="flex min-w-0 flex-col gap-2">
+                      <p className="flex min-w-0 items-center gap-2 text-small font-medium text-fg">
+                        <SeriesSwatch slot={i} />
+                        <span className="truncate">{p.tenant.name}</span>
+                      </p>
+                      <BreakdownList
+                        label={`${d.label} of ${p.tenant.name}`}
+                        valueLabel="Visitors"
+                        state={b.items.length === 0 ? "empty" : "data"}
+                        emptyTitle="None in this range"
+                        emptyText={
+                          d.dim === "referrer"
+                            ? "Only other sites count as referrers."
+                            : "No visitors in this range."
+                        }
+                        limit={5}
+                        items={b.items.map((x) => {
+                          const text = d.dim === "country" ? countryName(x.key) : x.key;
+                          return { key: x.key, label: text, text, value: x.value };
+                        })}
+                      />
+                      {b.total_keys > b.items.length ? (
+                        <p className="text-caption text-fg-2">
+                          {countOf(b.total_keys - b.items.length, "more value")} not shown
+                        </p>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          ))}
+        </div>
+      </Disclosure>
+    </>
   );
 }
 
 // ---- api
 
-function pctValue(seconds: number | null, over: boolean): CompareValue {
-  if (over) return "open";
-  return seconds;
+// a percentile above 10 s has no number: it is drawn on the 10 s line and
+// read as ">10 s"
+const OVER = 10.000001;
+
+function pct(n: ApiNumbers, k: "p50" | "p95" | "p99"): number | null {
+  if (n[`${k}_over_10s`]) return OVER;
+  return n[`${k}_seconds`];
+}
+
+function latencyCell(n: ApiNumbers, k: "p50" | "p95" | "p99") {
+  const v = pct(n, k);
+  if (v === null) return <Missing reason="No requests in this range" />;
+  return v > 10 ? OPEN_BUCKET : formatLatency(v);
+}
+
+function rateCell(v: number | null) {
+  return v === null ? <Missing reason="No requests in this range" /> : formatPercent(v);
 }
 
 function ApiSection({ data }: { data: ApiCompare }) {
-  const series = seriesOf(data.projects.map((p) => p.tenant));
-  const markers = awardMarkers(data.projects);
-  const point = (s: number, d: number) => data.projects[s]?.series[d];
-  const rate = (k: "rate_4xx" | "rate_5xx") => (s: number, d: number) => point(s, d)?.[k] ?? null;
+  const buckets = bucketsOf(data.days);
+  const projects = data.projects.map((p) => p.tenant);
+  const markers = markersOf(data.projects);
+  const col = (f: (s: ApiCompareProject["series"][number]) => number | null) =>
+    data.projects.map((p) => p.series.map(f));
   return (
     <>
-      <div className="grid gap-3 lg:grid-cols-2">
+      <div className="grid gap-4 lg:grid-cols-2">
         <CompareChart
-          kind="count"
           title="Requests"
           description="Requests per UTC day over every service."
-          days={data.days}
-          series={series}
-          markers={markers}
-          value={(s, d) => point(s, d)?.requests ?? null}
-          format={(v) => (v === "open" ? OPEN_BUCKET : formatCount(v))}
+          buckets={buckets}
+          projects={projects}
+          values={col((s) => s.requests)}
+          format={formatCount}
           axisFormat={formatCompact}
+          markers={markers}
         />
         <CompareChart
-          kind="measure"
           title="p95 latency"
-          description="95th percentile of request duration per day, from summed histograms. Gaps are days without requests."
-          days={data.days}
-          series={series}
-          markers={markers}
-          value={(s, d) => {
-            const p = point(s, d);
-            return p ? pctValue(p.p95_seconds, p.p95_over_10s) : null;
-          }}
-          format={(v) => (v === "open" ? OPEN_BUCKET : formatLatency(v))}
+          description="The duration that 95% of requests stay under. A gap is a day without requests."
+          buckets={buckets}
+          projects={projects}
+          values={col((s) => pct(s, "p95"))}
+          format={formatLatency}
           axisFormat={formatLatency}
+          markers={markers}
+          ceiling={{ value: 10, label: ">10 s above" }}
+          higherIsBetter={false}
         />
         <CompareChart
-          kind="share"
           title="4xx rate"
-          description="Share of requests answered with a 4xx status. Gaps are days without requests."
-          days={data.days}
-          series={series}
-          markers={markers}
-          value={rate("rate_4xx")}
-          format={(v) => (v === "open" ? OPEN_BUCKET : (rateText(v) ?? MISSING))}
+          description="Requests answered with a 4xx status. A gap is a day without requests."
+          buckets={buckets}
+          projects={projects}
+          values={col((s) => s.rate_4xx)}
+          format={formatPercent}
           axisFormat={formatPercent}
+          markers={markers}
+          higherIsBetter={false}
         />
         <CompareChart
-          kind="share"
           title="5xx rate"
-          description="Share of requests answered with a 5xx status. Gaps are days without requests."
-          days={data.days}
-          series={series}
-          markers={markers}
-          value={rate("rate_5xx")}
-          format={(v) => (v === "open" ? OPEN_BUCKET : (rateText(v) ?? MISSING))}
+          description="Requests answered with a 5xx status. A gap is a day without requests."
+          buckets={buckets}
+          projects={projects}
+          values={col((s) => s.rate_5xx)}
+          format={formatPercent}
           axisFormat={formatPercent}
+          markers={markers}
+          higherIsBetter={false}
         />
       </div>
-      <ApiTotalsTable data={data} />
-      <Stagger className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {data.projects.map((p, i) => (
-          <StaggerItem key={p.tenant.id} className="min-w-0">
-            <ServicesCard project={p} slot={i} />
-          </StaggerItem>
-        ))}
-      </Stagger>
+      <TotalsTable
+        label="API totals"
+        projects={data.projects}
+        columns={[
+          { key: "requests", header: "Requests", value: (p) => formatCount(p.totals.requests) },
+          {
+            key: "infra",
+            header: "Infrastructure",
+            definition:
+              "Requests left out of the other numbers: health checks, probes and CORS checks.",
+            value: (p) => formatCount(p.totals.infrastructure_requests),
+          },
+          { key: "rate_4xx", header: "4xx rate", value: (p) => rateCell(p.totals.rate_4xx) },
+          { key: "rate_5xx", header: "5xx rate", value: (p) => rateCell(p.totals.rate_5xx) },
+          { key: "p50", header: "p50", value: (p) => latencyCell(p.totals, "p50") },
+          { key: "p95", header: "p95", value: (p) => latencyCell(p.totals, "p95") },
+          { key: "p99", header: "p99", value: (p) => latencyCell(p.totals, "p99") },
+          { key: "services", header: "Services", value: (p) => formatCount(p.totals.services) },
+          { key: "routes", header: "Routes", value: (p) => formatCount(p.totals.routes) },
+        ]}
+        mobile={["requests", "rate_5xx", "p95"]}
+      />
+      <Disclosure title="Services of each project">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {data.projects.map((p, i) => (
+            <ServicesCard key={p.tenant.id} project={p} slot={i} />
+          ))}
+        </div>
+      </Disclosure>
     </>
-  );
-}
-
-function pctText(n: ApiNumbers, k: "p50" | "p95" | "p99"): string | null {
-  return formatPct(n[`${k}_seconds`], n[`${k}_over_10s`]);
-}
-
-function ApiTotalsTable({ data }: { data: ApiCompare }) {
-  const cols: { label: string; value: (t: ApiCompareProject["totals"]) => string | null }[] = [
-    { label: "Requests", value: (t) => formatCount(t.requests) },
-    { label: "Infrastructure requests", value: (t) => formatCount(t.infrastructure_requests) },
-    { label: "4xx rate", value: (t) => rateText(t.rate_4xx) },
-    { label: "5xx rate", value: (t) => rateText(t.rate_5xx) },
-    { label: "p50", value: (t) => pctText(t, "p50") },
-    { label: "p95", value: (t) => pctText(t, "p95") },
-    { label: "p99", value: (t) => pctText(t, "p99") },
-    { label: "Services", value: (t) => formatCount(t.services) },
-    { label: "Routes", value: (t) => formatCount(t.routes) },
-  ];
-  return (
-    <TotalsTable
-      label="API totals"
-      metrics={cols.map((c) => c.label)}
-      rows={data.projects.map((p) => ({
-        tenant: p.tenant,
-        cells: cols.map((c) => c.value(p.totals)),
-      }))}
-    />
   );
 }
 
@@ -616,33 +627,32 @@ function ServicesCard({ project, slot }: { project: ApiCompareProject; slot: num
   return (
     <section
       aria-label={`Services of ${project.tenant.name}`}
-      className="flex h-full min-w-0 flex-col gap-2 rounded-lg border border-line bg-raised px-4 py-3"
+      className="flex min-w-0 flex-col gap-2 rounded-lg border border-line bg-raised p-4"
     >
-      <p className="flex items-center gap-1 text-body font-medium text-fg">
-        <SeriesLine slot={slot} />
+      <p className="flex min-w-0 items-center gap-2 text-body font-medium text-fg">
+        <SeriesSwatch slot={slot} />
         <span className="truncate">{project.tenant.name}</span>
       </p>
-      <div className="flex flex-wrap items-center gap-2 text-caption text-fg-3">
-        <SourceBadge source={t.source} spanServices={t.span_services} services={t.services} />
-        {t.lossy ? <span>some latency buckets are approximate</span> : null}
-      </div>
+      <p className="text-caption text-fg-2">
+        <SourceText source={t.source} spanServices={t.span_services} services={t.services} />
+        {t.lossy ? ". Some latency buckets are approximate." : null}
+      </p>
       {project.services.length === 0 ? (
-        <p className="text-small text-fg-3">No requests in this range.</p>
+        <p className="text-small text-fg-2">No requests in this range.</p>
       ) : (
-        <ul className="flex flex-col text-small">
+        <ul className="flex flex-col">
           {project.services.map((s) => (
-            <li key={s.service} className="border-b border-line-subtle py-1 last:border-0">
+            <li key={s.service} className="border-b border-line-subtle py-2 last:border-0">
               <div className="flex items-baseline justify-between gap-2">
                 <span className="min-w-0 truncate font-mono text-caption text-fg">
-                  {s.service === "" ? "(no service name)" : s.service}
+                  {s.service === "" ? "Service without a name" : s.service}
                 </span>
-                <span className="shrink-0 font-mono text-fg tabular">
+                <span className="shrink-0 font-mono text-small text-fg tabular">
                   {formatCount(s.requests)}
                 </span>
               </div>
-              <p className="text-caption text-fg-3">
-                {formatCount(s.routes)} {s.routes === 1 ? "route" : "routes"}, 5xx{" "}
-                {rateText(s.rate_5xx) ?? MISSING}, p95 {pctText(s, "p95") ?? MISSING}
+              <p className="text-caption text-fg-2">
+                {countOf(s.routes, "route")}, 5xx {rateText(s.rate_5xx)}, p95 {latencyText(s)}
                 {s.source === "span" ? ", from traces" : ""}
                 {s.lossy ? ", approximate" : ""}
               </p>
@@ -651,5 +661,85 @@ function ServicesCard({ project, slot }: { project: ApiCompareProject; slot: num
         </ul>
       )}
     </section>
+  );
+}
+
+function rateText(v: number | null): string {
+  return v === null ? "not measured" : formatPercent(v);
+}
+
+function latencyText(n: ApiNumbers): string {
+  const v = pct(n, "p95");
+  if (v === null) return "not measured";
+  return v > 10 ? OPEN_BUCKET : formatLatency(v);
+}
+
+// ---- shared
+
+type TotalsRow = { tenant: TenantRef };
+
+// the range totals: one row per project in its series slot, one column per
+// metric, so a column reads down across the projects
+function TotalsTable<R extends TotalsRow>({
+  label,
+  projects,
+  columns,
+  mobile,
+}: {
+  label: string;
+  projects: R[];
+  columns: { key: string; header: string; definition?: string; value: (p: R) => ReactNode }[];
+  mobile: string[];
+}) {
+  const slots = new Map(projects.map((p, i) => [p.tenant.id, i]));
+  const cols: Column<R>[] = [
+    {
+      key: "name",
+      header: "Project",
+      primary: true,
+      minWidth: "min-w-48",
+      className: "max-w-72",
+      cell: (p) => (
+        <span className="flex min-w-0 items-center gap-2">
+          <SeriesSwatch slot={slots.get(p.tenant.id) ?? -1} />
+          <span className="truncate">{p.tenant.name}</span>
+        </span>
+      ),
+    },
+    ...columns.map((c) => ({
+      key: c.key,
+      header: c.header,
+      definition: c.definition,
+      align: "right" as const,
+      numeric: true,
+      mobile: mobile.includes(c.key),
+      cell: c.value,
+    })),
+  ];
+  return (
+    <DataTable
+      label={label}
+      columns={cols}
+      rows={projects}
+      getRowKey={(p) => p.tenant.id}
+      rowLabel={(p) => p.tenant.name}
+      rowHref={(p) => `/operator/projects/${p.tenant.id}`}
+      rowProps={(p) => ({ "data-tenant": p.tenant.id })}
+    />
+  );
+}
+
+function Disclosure({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <details className="group rounded-lg border border-line bg-raised">
+      <summary className="flex cursor-pointer items-center justify-between gap-3 rounded-lg px-4 py-3 text-body font-medium text-fg transition-colors duration-(--vs-duration-press) ease-standard hover:bg-hover focus-ring max-lg:min-h-(--vs-control-touch)">
+        {title}
+        <ChevronDown
+          aria-hidden
+          className="size-4 text-fg-2 transition-transform duration-(--vs-duration-change) ease-standard group-open:rotate-180"
+        />
+      </summary>
+      <div className="border-t border-line p-4">{children}</div>
+    </details>
   );
 }

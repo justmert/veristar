@@ -4,8 +4,9 @@ import { exportPaths, onchainView } from "@/api/onchain";
 import { webProject } from "@/api/schemas";
 import { OnchainPanel } from "@/components/onchain";
 import { EMPTY_FILTERS } from "@/lib/global";
+import { listExportHref } from "@/lib/operator-projects";
 import { OnchainPage } from "@/pages/onchain";
-import { ExportListButton, OnchainCell } from "@/pages/operator/onchain-parts";
+import { OnchainValue } from "@/pages/operator/shared";
 import type { ProjectContext } from "@/pages/project-layout";
 import { IntegritySlot, SCFViewPage } from "@/pages/scf-view";
 import * as f from "./fixtures/contract";
@@ -495,36 +496,32 @@ describe("operator on-chain column and exports (contract 15.7 and 16.1)", () => 
 
   it("draws the cell and exports exactly the rows on screen", async () => {
     const host = await render(
-      <table>
-        <tbody>
-          <tr>
-            <OnchainCell s={scfBody.onchain} />
-            <OnchainCell s={undefined} />
-          </tr>
-        </tbody>
-      </table>,
+      <p>
+        <OnchainValue s={scfBody.onchain} />
+        <OnchainValue s={undefined} />
+      </p>,
     );
-    const cells = host.querySelectorAll("[data-col=onchain]");
-    expect(cells[0]?.textContent).toContain("12");
-    expect(cells[0]?.textContent).toContain("1/2 verified");
-    expect(cells[0]?.querySelector("[data-col=waa]")?.textContent).toBe("42 active a week");
-    expect(cells[0]?.getAttribute("title")).toContain(
-      "weekly active accounts: 42 a week on average over 2 weeks, 1 missing",
+    const cell = host.querySelector("[data-col=onchain]");
+    expect(cell?.textContent).toContain("12");
+    // the rest of the summary is read with the number, not only on hover
+    expect(cell?.textContent).toContain("1 of 2 ids verified");
+    expect(cell?.textContent).toContain(
+      "Weekly active accounts: 42 a week on average over 2 weeks, 1 missing",
     );
-    const exp = await render(
-      <ExportListButton
-        view="web"
-        state={{
+    expect(host.textContent).toContain("No accounts or contracts declared");
+    expect(
+      listExportHref(
+        "web",
+        {
           range: { from: "", to: "" },
           filters: { ...EMPTY_FILTERS, statuses: ["active"] },
           sort: "visitors",
           order: "desc",
-        }}
-        resolved={{ from: "2026-10-18", to: "2026-11-16" }}
-        rows={75}
-      />,
-    );
-    expect(exp.querySelector("a")?.getAttribute("href")).toBe(
+        },
+        { from: "2026-10-18", to: "2026-11-16" },
+        75,
+      ),
+    ).toBe(
       "/api/operator/web/projects.csv?status=active&sort=visitors&order=desc&from=2026-10-18&to=2026-11-16&rows=75",
     );
     expect(
