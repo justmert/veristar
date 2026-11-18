@@ -38,6 +38,8 @@ const shadows = new Set(Object.keys(shadow));
 
 // suffixes of colour-looking prefixes that are not colours
 const NOT_COLOUR: Record<string, RegExp> = {
+  // the direction of a gradient; its stops (from-*, to-*) name the roles
+  bg: /^linear-to-(t|tr|r|br|b|bl|l|tl)$/,
   text: /^(left|center|right|start|end|justify|wrap|nowrap|balance|pretty|ellipsis|clip)$/,
   border:
     /^(\d+|x|y|t|b|l|r|s|e|x-\d+|y-\d+|t-\d+|b-\d+|l-\d+|r-\d+|s-\d+|e-\d+|solid|dashed|dotted|double|hidden|none|collapse|separate|spacing.*)$/,
