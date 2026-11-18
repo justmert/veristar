@@ -118,10 +118,15 @@ describe("console shell", () => {
     expect(host.textContent).toContain("Account");
   });
 
-  it("marks Account in the sidebar footer on the account page", async () => {
+  it("marks the account menu, the one way to Account, on the account page", async () => {
     serve(f.meBody);
     const host = await renderRoutes(routes, "/account");
-    await waitFor(() => expect(current(host)).toEqual(["Account"]));
+    await waitFor(() =>
+      expect(host.querySelector('aside button[aria-current="page"]')?.textContent).toContain(
+        "Account menu",
+      ),
+    );
+    expect(current(host)).toEqual([]);
   });
 
   it("shows the alert note on operator pages while a paging alert fires", async () => {

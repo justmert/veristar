@@ -136,15 +136,14 @@ export function Sidebar({
           <FooterLink to="/terms" icon={<ScrollText aria-hidden />}>
             Terms
           </FooterLink>
-          <FooterLink
-            to="/account"
-            icon={<UserRound aria-hidden />}
-            current={area.kind === "home" && area.rest === "account"}
+          {/* one way to Account: the account menu, which also holds the
+              theme and sign out. it is marked current on the account page */}
+          <AccountMenu
+            me={me}
+            onSignOut={onSignOut}
             onNavigate={onNavigate}
-          >
-            Account
-          </FooterLink>
-          <AccountMenu me={me} onSignOut={onSignOut} onNavigate={onNavigate} />
+            current={area.kind === "home" && area.rest === "account"}
+          />
         </div>
       </div>
     </LayoutGroup>
@@ -155,10 +154,12 @@ function AccountMenu({
   me,
   onSignOut,
   onNavigate,
+  current,
 }: {
   me: Me;
   onSignOut: () => void;
   onNavigate?: () => void;
+  current?: boolean;
 }) {
   const navigate = useNavigate();
   const theme = useTheme();
@@ -167,14 +168,15 @@ function AccountMenu({
       <MenuTrigger asChild>
         <button
           type="button"
-          className="mt-1 flex items-center gap-2 rounded-md px-2 py-2 text-left text-fg transition-colors duration-(--vs-duration-press) hover:bg-hover focus-ring aria-expanded:bg-selected max-lg:min-h-(--vs-control-touch)"
+          aria-current={current ? "page" : undefined}
+          className="mt-1 flex items-center gap-2 rounded-md px-2 py-2 text-left text-fg transition-colors duration-(--vs-duration-press) hover:bg-hover focus-ring aria-expanded:bg-selected aria-[current=page]:bg-selected max-lg:min-h-(--vs-control-touch)"
         >
           <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-line-strong text-caption font-semibold text-fg">
             {me.user.display_name.slice(0, 2)}
           </span>
           <span className="min-w-0 flex-1 truncate text-small">{me.user.display_name}</span>
           <Ellipsis aria-hidden className="size-4 text-fg-3" />
-          <span className="sr-only">, account menu</span>
+          <span className="sr-only">, Account menu</span>
         </button>
       </MenuTrigger>
       <MenuContent side="top" align="start" className="w-(--radix-dropdown-menu-trigger-width)">
