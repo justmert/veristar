@@ -22,7 +22,10 @@ func (m *Machine) rules(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	ctx := r.Context()
-	var out RuleList
+	// the saved rules alone; the console's list adds the match counts
+	var out struct {
+		Items []Rule `json:"items"`
+	}
 	err := m.db.WithOperator(ctx, func(tx pgx.Tx) error {
 		if _, err := resolveScope(ctx, tx, keyFrom(ctx), q); err != nil {
 			return err

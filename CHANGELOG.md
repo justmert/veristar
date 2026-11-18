@@ -18,6 +18,9 @@ here, before they take effect, as the processing terms require
 
 ### Added
 
+- `GET /api/operator/rules` adds to each rule `match_count`, `evaluated` and
+  `matches_as_of`: what the rule's matches route answers today, so the
+  console's rule list shows the counts without one request per rule.
 - `GET /api/me` returns the operator's roster role in `user.operator_role`
   (`operator_admin`, `operator`, or `null` for an account that is not an
   operator), so the console shows the admin pages to the accounts the admin

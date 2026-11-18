@@ -4632,7 +4632,7 @@ evaluation to projects confirmed in it; its fields are optional.
 
 | Route | Does |
 |---|---|
-| `GET /api/operator/rules` | `{"items": [Rule]}`, oldest first |
+| `GET /api/operator/rules` | `{"items": [Rule plus `match_count`, `evaluated`, `matches_as_of`]}`, oldest first (below) |
 | `POST /api/operator/rules` | body: the rule's fields; audit `rule.create`; **201** Rule; 409 `rule_limit` beyond 200 rules |
 | `GET /api/operator/rules/{rule_id}` | the Rule |
 | `PUT /api/operator/rules/{rule_id}` | replaces every field; audit `rule.update` with old and new values; **200** Rule |
@@ -4659,7 +4659,11 @@ evaluation to projects confirmed in it; its fields are optional.
 ```
 
 `items` holds the projects that meet the rule, ordered by name; `days` lists
-each qualifying day with the project's value. The machine API serves the
+each qualifying day with the project's value. In the console list, each Rule
+adds what its matches route answers for today: `match_count` (the number of
+`items`), `evaluated` and `matches_as_of` (today's UTC day). The list reads
+every rule in one snapshot. The machine API's rule list (9.12) carries the
+Rule fields only. The machine API serves the
 same reads at `GET /api/metrics/v1/rules` and
 `GET /api/metrics/v1/rules/{rule_id}/matches` (9.12; with the key rules of
 9.3, a key scoped to one tenant evaluates that tenant only), and MCP at
