@@ -1,12 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@veristar/brand/cn";
+import { ChevronRight } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
 import { termsQuery } from "@/api/queries";
 import { PublicFrame } from "@/components/public-frame";
 import { ErrorState, LoadingState, Skeleton } from "@/components/states";
-import { StatusDot } from "@/components/status";
 import { Markdown, outline } from "@/lib/markdown";
+import { isDraftTerms, termsVersionLabel } from "@/lib/terms";
 
 // public: people read the terms before they sign in and enroll
 export function TermsPage() {
@@ -50,7 +51,30 @@ export function TermsPage() {
         ) : (
           <span aria-hidden className="hidden lg:block" />
         )}
-        <div className="min-w-0 max-w-prose">
+        <div className="flex min-w-0 max-w-prose flex-col gap-6">
+          {sections.length > 0 ? (
+            <details className="group rounded-lg border border-line lg:hidden">
+              <summary className="flex min-h-(--vs-control-touch) cursor-pointer list-none items-center gap-2 rounded-lg px-4 text-body text-fg focus-ring [&::-webkit-details-marker]:hidden">
+                <ChevronRight
+                  aria-hidden
+                  className="size-4 text-fg-2 transition-transform duration-(--vs-duration-press) ease-standard group-open:rotate-90"
+                />
+                On this page
+              </summary>
+              <nav aria-label="Sections on this page" className="flex flex-col gap-px px-2 pb-2">
+                {sections.map((s) => (
+                  <a
+                    key={s.id}
+                    href={`#${s.id}`}
+                    onClick={(e) => e.currentTarget.closest("details")?.removeAttribute("open")}
+                    className="flex min-h-(--vs-control-touch) items-center rounded-md px-2 text-body text-fg-2 transition-colors duration-(--vs-duration-press) hover:bg-hover hover:text-fg focus-ring"
+                  >
+                    {s.text}
+                  </a>
+                ))}
+              </nav>
+            </details>
+          ) : null}
           {terms.isPending ? (
             <LoadingState label="Loading the terms">
               <Skeleton.Table rows={6} columns={1} />
@@ -68,16 +92,13 @@ export function TermsPage() {
               <Markdown
                 source={terms.data.markdown}
                 afterTitle={
-                  <p className="flex flex-wrap items-center gap-2 text-small text-fg-2">
-                    <span>Version</span>
-                    <span className="rounded-sm border border-line bg-sunken px-2 py-1 font-mono text-fg">
-                      {terms.data.version}
-                    </span>
-                    {terms.data.status === "draft" ? (
-                      <span className="flex items-center gap-1 text-fg-2">
-                        <StatusDot tone="info" />
-                        Draft
-                      </span>
+                  <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-small text-fg-2">
+                    <span title={terms.data.version}>{termsVersionLabel(terms.data.version)}</span>
+                    {isDraftTerms(terms.data.version, terms.data.status) ? (
+                      <>
+                        <span aria-hidden>·</span>
+                        <span>Draft, not yet final</span>
+                      </>
                     ) : null}
                   </p>
                 }
