@@ -127,13 +127,8 @@ test("the snippet offers the title opt-in from 1.3.0", async () => {
   expect(tag).not.toContain("data-send-title");
 });
 
-test("the project reads the estimate on its overview and in what scf sees", async () => {
+test("the project reads the estimate in what scf sees", async () => {
   const page = owner.page;
-  await page.goto(`${APP}/projects/${tenant.id}`);
-  const note = page.getByRole("region", { name: "Integrity" }).getByTestId("coverage");
-  await expect(note).toContainText("Too few loads of the tracker file (3 of 100)");
-  await expect(note).toContainText("Of 3 loads of the tracker file, 1 carried the signal.");
-  await page.screenshot({ path: join(shots, "overview.png"), fullPage: true });
   await page.goto(`${APP}/projects/${tenant.id}/scf`);
   const scf = page.getByRole("region", { name: "Visits not measured" });
   await expect(scf.getByTestId("coverage")).toContainText("Of 3 loads of the tracker file");

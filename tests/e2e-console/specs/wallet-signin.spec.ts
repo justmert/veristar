@@ -113,7 +113,7 @@ test("a wallet member joins a project by address and opens its dashboard", async
   await waitWebReady(wallet, shared.id, site.id);
   // and the shared project's web dashboard opens in the console
   await page.goto(`${APP}/projects/${shared.id}/web?site=${site.id}`);
-  await expect(page.getByRole("heading", { name: "Web analytics" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Web", exact: true })).toBeVisible();
   await expect(page.getByLabel("Right now")).toBeVisible();
 
   // the owner's member list shows the short address

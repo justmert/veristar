@@ -218,6 +218,7 @@ function stubRoutes(engine: "ok" | "pending" = "ok") {
         });
       if (u.pathname.endsWith("/sites")) return json(200, f.sitePageBody);
       if (u.pathname.endsWith("/web/summary")) return json(200, summaryBody);
+      if (u.pathname.endsWith("/ingest")) return json(200, { ...f.ingestBody, bucket: "day" });
       if (engine === "pending" && u.pathname.endsWith("/web/realtime"))
         return json(409, f.errorBody("provisioning_pending"));
       if (u.pathname.endsWith("/web/realtime")) return json(200, realtimeBody);
@@ -293,8 +294,12 @@ describe("web dashboard page (contract 18)", () => {
     await waitFor(() =>
       expect(host.querySelector('[data-testid="web-active"]')?.textContent).toBe("7"),
     );
-    expect(host.textContent).toContain("20% of page views were quarantined");
-    expect(host.textContent).toContain("Totals updated");
+    // what the totals leave out, with the reasons
+    expect(host.textContent).toContain("300 quarantined page views, 20% of all page views");
+    await waitFor(() => expect(host.textContent).toContain("Origin not allowed"));
+    expect(host.querySelector('[data-outcome="accepted"]')?.textContent).toContain("2,810");
+    expect(host.querySelector('[data-outcome="rejected"]')?.textContent).toContain("17");
+    expect(host.querySelector("[data-freshness]")?.textContent).toContain("Updated");
     // the default range is the last 30 utc days, the whole project, counted traffic
     const summary = urls.find((u) => u.includes("/web/summary")) ?? "";
     expect(summary).toContain(`/tenants/${f.TENANT_ID}/web/summary?from=`);
@@ -303,7 +308,7 @@ describe("web dashboard page (contract 18)", () => {
     // utm is offered only for a site that collects it
     expect(host.textContent).not.toContain("Campaign");
     // more values of a breakdown are one press away
-    await click(byRole(host, "button", "Show up to 100"));
+    await click(byRole(host, "button", "Show all 22"));
     await waitFor(() =>
       expect(urls.some((u) => u.includes("dimension=page") && u.includes("limit=100"))).toBe(true),
     );
@@ -336,7 +341,7 @@ describe("web dashboard address", () => {
     expect(urls.some((u) => u.includes(other))).toBe(false);
     const summary = urls.find((u) => u.includes("/web/summary")) ?? "";
     expect(summary).not.toContain("site=");
-    await click(byRole(host, "button", "Clear the site"));
+    await click(byRole(host, "button", "Show all sites"));
     await waitFor(() =>
       expect(host.textContent).not.toContain("That site is not part of this project"),
     );
@@ -345,20 +350,31 @@ describe("web dashboard address", () => {
   it("says why live figures wait while analytics access is being set up", async () => {
     stubRoutes("pending");
     const host = await renderRoutes(routes, `/projects/${f.TENANT_ID}/web`);
-    await waitFor(() => expect(host.textContent).toContain("Your access is being set up"));
+    await waitFor(() => expect(host.textContent).toContain("Live figures are being set up"));
     expect(host.textContent).not.toContain("unavailable");
   });
 
-  it("asks for the on-chain activity of the chosen range", async () => {
+  it("asks for the outcome counts of the chosen days and no integrity or on-chain panel", async () => {
     const urls = stubRoutes();
-    await renderRoutes(
+    const host = await renderRoutes(
       routes,
       `/projects/${f.TENANT_ID}/web?range=custom&from=2026-10-01&to=2026-10-31`,
     );
-    await waitFor(() => expect(urls.some((u) => u.includes("/onchain?"))).toBe(true));
-    const onchain = urls.find((u) => u.includes("/onchain?")) ?? "";
-    expect(onchain).toContain("from=2026-10-01");
-    expect(onchain).toContain("to=2026-10-31");
+    await waitFor(() => expect(urls.some((u) => u.includes("/ingest?"))).toBe(true));
+    const ingest = decodeURIComponent(urls.find((u) => u.includes("/ingest?")) ?? "");
+    expect(ingest).toContain(`/sites/${f.SITE_ID}/ingest?from=2026-10-01T00:00:00Z`);
+    expect(ingest).toContain("to=2026-11-01T00:00:00Z&bucket=day");
+    await waitFor(() => expect(host.textContent).toContain("Unique visitors"));
+    expect(urls.some((u) => u.includes("/onchain") || u.includes("/integrity"))).toBe(false);
+  });
+
+  it("switches to quarantined traffic from the not counted section", async () => {
+    stubRoutes();
+    const host = await renderRoutes(routes, `/projects/${f.TENANT_ID}/web`);
+    await waitFor(() => expect(host.textContent).toContain("Unique visitors"));
+    await click(byRole(host, "button", "Show quarantined traffic"));
+    await waitFor(() => expect(host.textContent).toContain("You see quarantined traffic"));
+    expect(host.querySelector('[aria-label="Right now"]')).toBeNull();
   });
 });
 

@@ -11,6 +11,7 @@ import {
   apiRouteSort,
   type Percentile,
 } from "@/api/schemas";
+import type { StatChange } from "@/components/stat-card";
 import {
   formatChange,
   formatDate,
@@ -24,14 +25,15 @@ import {
   OPEN_BUCKET,
 } from "@/lib/format";
 
-export const PRESETS: { value: ApiRangePreset; label: string; span: string }[] = [
-  { value: "1h", label: "1 hour", span: "hour" },
-  { value: "24h", label: "24 hours", span: "24 hours" },
-  { value: "7d", label: "7 days", span: "7 days" },
-  { value: "30d", label: "30 days", span: "30 days" },
-  { value: "90d", label: "90 days", span: "90 days" },
-  { value: "12mo", label: "12 months", span: "12 months" },
-  { value: "24mo", label: "24 months", span: "24 months" },
+// short labels, so the eight choices fit a phone's width
+export const PRESETS: { value: ApiRangePreset; label: string }[] = [
+  { value: "1h", label: "1h" },
+  { value: "24h", label: "24h" },
+  { value: "7d", label: "7d" },
+  { value: "30d", label: "30d" },
+  { value: "90d", label: "90d" },
+  { value: "12mo", label: "12mo" },
+  { value: "24mo", label: "24mo" },
 ];
 
 export const DEFAULT_PRESET: ApiRangePreset = "24h";
@@ -123,42 +125,27 @@ function isInstant(v: string): boolean {
   );
 }
 
-// the custom range form uses datetime-local inputs, read as utc because
-// every bucket of the api is a utc minute, hour or day
-export function localInputToUtc(v: string): string | null {
-  const m = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})(:\d{2})?$/.exec(v);
-  if (!m) return null;
-  const iso = `${m[1]}T${m[2]}${m[3] ?? ":00"}Z`;
-  return Number.isNaN(Date.parse(iso)) ? null : iso;
-}
-
-export function utcToLocalInput(iso: string): string {
-  return new Date(iso).toISOString().slice(0, 16);
+// a custom range's instant as the range control's field shows it:
+// "2026-11-18 14:00", utc
+export function instantToField(iso: string): string {
+  return new Date(iso).toISOString().slice(0, 16).replace("T", " ");
 }
 
 const DAY = 86_400_000;
-const EARLIEST = Date.parse("2000-01-01T00:00:00Z");
 
-// the bounds of contract 7.1, checked before sending so the form can say
-// which field is wrong; the server checks them again
-export function validateCustom(
-  from: string,
-  to: string,
-  now: Date,
-): { from?: string; to?: string } {
-  const f = localInputToUtc(from);
-  const t = localInputToUtc(to);
-  const out: { from?: string; to?: string } = {};
-  if (!f) out.from = "Enter a start date and time.";
-  if (!t) out.to = "Enter an end date and time.";
-  if (!f || !t) return out;
-  const fm = Date.parse(f);
-  const tm = Date.parse(t);
-  if (fm < EARLIEST) out.from = "Start on or after 1 January 2000.";
-  if (tm > now.getTime() + DAY) out.to = "End no later than 24 hours from now.";
-  if (fm >= tm) out.to = "End after the start.";
-  else if (tm - fm > 800 * DAY) out.to = "A custom range covers at most 800 days.";
-  return out;
+// the rules of contract 7.1 the shared checks do not know: the end at most
+// 24 hours from now. the range control checks the format, the order, the
+// first day (2000-01-01) and the length (800 days) itself.
+export const CUSTOM_MIN_DAY = "2000-01-01";
+export const CUSTOM_MAX_DAYS = 800;
+
+export function validateCustomEnd(to: string, now: Date): string | null {
+  return Date.parse(to) > now.getTime() + DAY ? "End no later than 24 hours from now." : null;
+}
+
+// a bucket that has not ended yet is partial: its count is still growing
+export function isPartialBucket(at: string, r: ApiRange, now: number): boolean {
+  return Date.parse(at) + r.bucket_seconds * 1000 > now;
 }
 
 // a latency percentile or a rate as text; null when the range has no
@@ -250,4 +237,18 @@ export const OPEN_BUCKET_CEILING = 10;
 export function plotPercentile(p: Percentile): number | null {
   if (p === null) return null;
   return p === OPEN_BUCKET ? OPEN_BUCKET_CEILING : p;
+}
+
+// a change as a stat card shows it. a change with nothing to compare
+// against has no line on the card: the page says once that the previous
+// range had no requests.
+export function toStatChange(
+  c: Change,
+  upIsBad: boolean | null,
+  period = "previous range",
+): StatChange | null {
+  if (c.direction === null || !c.text) return null;
+  const direction = c.direction === "same" ? "flat" : c.direction;
+  const good = upIsBad === null || direction === "flat" ? null : (direction === "up") !== upIsBad;
+  return { text: c.text, direction, good, period };
 }

@@ -57,7 +57,7 @@ describe("filter bar", () => {
       select.dispatchEvent(new Event("change", { bubbles: true }));
     });
     const chips = host.querySelector('ul[aria-label="Active filters"]') as HTMLElement;
-    expect(chips.textContent).toContain("Status:Active");
+    expect(chips.textContent).toContain("Status: Active");
     await click(chips.querySelector('[aria-label="Remove filter Status"]') as HTMLElement);
     expect(host.querySelector('ul[aria-label="Active filters"]')).toBeNull();
 
