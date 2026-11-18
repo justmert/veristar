@@ -13,7 +13,7 @@ Database names are those of the migrations in `db/migrations/`
 response field maps to a column, the field has the column's name.
 
 Sections 1 to 3 hold the conventions every route follows: transport,
-authentication, errors, shared objects and the audit log. Sections 4 to 18 hold
+authentication, errors, shared objects and the audit log. Sections 4 to 20 hold
 the routes by area:
 
 | Section | Area |
@@ -31,6 +31,8 @@ the routes by area:
 | 16 | CSV exports and "What SCF sees" |
 | 17 | the integrity grade of web traffic |
 | 18 | a project's web dashboard: totals, days, breakdowns, hours and visitors right now |
+| 19 | SCF cohorts, growth and percentiles in the global views, and threshold rules |
+| 20 | signed usage reports and their public verification |
 
 A new route adds its error codes to section 2.4 and its audit actions to section
 3.3. The meaning of an existing field never changes.
@@ -254,6 +256,7 @@ List routes answer:
 | 409 | `tenant_suspended` | site create or update while the tenant is `suspended` (5.11); OTLP token create while `suspended` (6.2) |
 | 409 | `tenant_not_active` | OTLP token create while the tenant is `pending` or `rejected` (6.2) |
 | 409 | `erasure_in_progress` | an erasure request while another one runs for the same site (10.2) |
+| 409 | `provisioning_pending` | a web dashboard read from Umami (18.9) before the reconciler created the member's Umami user or team membership |
 | 409 | `too_many_keys` | an MCP access key create over 20 active keys of the user (12.8) |
 | 409 | `no_proposal` | a cohort confirm or dismiss without an open proposal (19.1) |
 | 409 | `rule_limit` | a threshold rule create beyond 200 rules (19.4) |
@@ -266,7 +269,6 @@ List routes answer:
 | 429 | `rate_limited` | per-client, per-session or per-route limit; `Retry-After` header set |
 | 500 | `internal` | anything unexpected; details only in the log |
 | 503 | `unavailable` | database, NATS, Umami or GitHub unreachable, or a tenant request that waited longer than its 5 second lock timeout for the tenant row (a reconcile or an operator action holds it; 1.3); `Retry-After` set |
-| 409 | `provisioning_pending` | a web dashboard read from Umami (18.9) before the reconciler created the member's Umami user or team membership |
 | 503 | `provisioning_pending` | an erasure (10.2) before the reconciler created the site's Umami websites; `Retry-After` set |
 | 503 | `alert_source_unreachable` | no Alertmanager member answered the operator alerts route (11.2) |
 | 503 | `alert_source_not_configured` | the operator alerts route on a control plane without `ALERTMANAGER_URLS` (11.2) |
@@ -366,7 +368,7 @@ The identity fields follow User.
 An invite names either a GitHub account or a Stellar account. `github_id` is
 the GitHub account the invite is bound to; `github_login` is that account's
 login when the invite was made, for display (4.2.5). `stellar_address` is the
-G-address of an invite by address; the other two fields are then `null`.
+G-address or C-address of an invite by address; the other two fields are then `null`.
 
 **Site** (`cp.sites`):
 
@@ -428,7 +430,8 @@ Every mutation writes one `cp.audit_log` row in the same transaction as the chan
 - `detail`: JSON with the changed fields (old and new values for updates). Never a
   token, cookie, password or secret.
 
-Sign-in, tenants and sites (section 4): `user.sign_in`, `user.sign_out`, `account.delete`, `tenant.create`, `tenant.update`,
+Sign-in, tenants and sites (section 4): `user.sign_in`, `user.sign_out`,
+`user.identity_link`, `user.identity_unlink`, `account.delete`, `tenant.create`, `tenant.update`,
 `tenant.terms_accept`, `member.add`, `member.role_change`, `member.remove`,
 `invite.create`, `invite.revoke`, `invite.resolve`, `site.create`, `site.update`,
 `site.delete`, `provision.team_create`, `provision.website_create`,
@@ -2392,6 +2395,8 @@ Operator. Default sort `pageviews`. Item:
   "quarantine_pageviews": 40, "quarantine_visitors": 12, "quarantine_share": 0.03225806451612903,
   "ingest_requests": 1890, "ingest_rejected": 75, "rejected_share": 0.03968253968253968,
   "integrity": { "grade": "A", "graded_days": 24, "days_a": 22, "days_b": 2, "days_c": 0 },
+  "coverage": { "script_requests": 1900, "gpc_requests": 230, "unmeasured_share": 0.12105263157894737 },
+  "onchain": { "Summary of 15.7": "..." },
   "top": {
     "referrer": [ { "key": "github.com", "value": 81 } ],
     "country": [ { "key": "DE", "value": 120 } ],
@@ -2426,6 +2431,10 @@ Operator. Default sort `pageviews`. Item:
 - `integrity`: the range grade over the project's graded site days (17.1);
   `grade` is `null` without one. Sorting by `integrity` orders A, B, C and
   puts projects without a grade last.
+- `coverage`: the estimate of visits not measured because of privacy signals
+  (17.5). `sort=unmeasured_share` sorts by its `unmeasured_share`.
+- `onchain`: the project's on-chain column (15.7). The cohort, growth and
+  percentile fields of 19.2 complete the item.
 
 ### 8.4 `GET /api/operator/web/compare`
 
@@ -2464,6 +2473,8 @@ Operator. Query `tenants` (1 to 5 distinct tenant ids, comma-separated),
 - `projects` come in the order of `tenants`. Every `series` has one point per
   entry of `days`, so the charts align.
 - `integrity`: the project's range grade with its reasons (17.1).
+- `coverage` (17.5), `onchain` (15.7) and `cohort` (19.1) complete each
+  project; the example leaves them out.
 - A point is `aggregated: false`, with every number `null`, when no site of
   the project has a row for that day yet (the day was never read, for
   example before a backfill). A day the task read without traffic is
@@ -2522,6 +2533,8 @@ than through `apimetrics.Select`, which is tenant-scoped. Item:
   `requests_5xx`, `rate_4xx`, `rate_5xx`, `p50`, `p95`, `p99`, `services`,
   `routes`. Sorting by `requests` in each order finds the lowest and highest
   usage projects.
+- `onchain` (15.7) and the cohort, growth and percentile fields of 19.2
+  complete the item.
 
 ### 8.6 `GET /api/operator/api/compare`
 
@@ -2548,6 +2561,7 @@ default, or `asc`). **200**:
 ```
 
 - `totals` equal the project's row of 8.5 for the same range.
+- `onchain` (15.7) and `cohort` (19.1) complete each project.
 - `series`: one point per day, the same source choice for every day (made
   over the whole range); a day without requests has 0 requests and `null`
   rates and percentiles.
@@ -2582,7 +2596,8 @@ which `jobs` already requires.
 ## 9. Operator API keys and machine metrics API
 
 Operators create keys in the console (9.2); machines read
-aggregate metrics with them under `/api/metrics/v1/` (9.3 to 9.10). The
+aggregate metrics with them under `/api/metrics/v1/` (9.3 to 9.10 and 9.12,
+plus the on-chain routes of 15.7 and the integrity route of 17.4). The
 machine API's own contract, and the document its tests validate every answer
 against, is `docs/reference/openapi/metrics-v1.yaml` (OpenAPI 3.1, served at
 `GET /api/metrics/v1/openapi.yaml`). This section states the rules around it;
