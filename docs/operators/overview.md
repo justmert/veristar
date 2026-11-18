@@ -5,9 +5,10 @@ description: "For the SCF operators who govern the shared service: enrollment, r
 ---
 
 Operators are the SCF people who govern the shared service: they decide who may enroll, which
-projects stay, and how projects compare. Operators see aggregate numbers only. They are not
-members of any project and have no access to a project's own web dashboard, whose totals come
-from the same daily aggregates the operator views read.
+projects stay, and how projects compare. Operators see aggregate numbers, plus each project's
+enrollment answers, members and audit log for review. They are not members of any project and
+have no access to a project's own web dashboard, whose totals come from the same daily
+aggregates the operator views read.
 
 | Page | Covers |
 |---|---|
@@ -15,17 +16,18 @@ from the same daily aggregates the operator views read.
 | [removal.md](removal.md) | Removing a project that is not part of the ecosystem, what is deleted, and the setting that keeps or deletes its aggregates |
 | [global-views.md](global-views.md) | The Global web, Global API and Compare pages: ranges, filters, sorting, growth, cohorts, percentiles and side-by-side comparison |
 | [threshold-rules.md](threshold-rules.md) | Saved traction rules and the projects that meet them, with the evidence |
+| [onchain-and-exports.md](onchain-and-exports.md) | Ledger activity of the accounts and contracts projects declare, calls per contract function, and the CSV exports |
 | [reading-the-numbers.md](reading-the-numbers.md) | What bands, daily-unique visitors and span-derived API data mean, and how to compare projects fairly |
 | [api-keys.md](api-keys.md) | Keys for machine consumers of the metrics API: create, use, revoke, usage |
 | [mcp.md](mcp.md) | Connecting an AI client to the operator view through the MCP server |
 | [roster.md](roster.md) | The Operators page: roles, adding and removing operators, passkeys, and lockout recovery |
 | [alerts.md](alerts.md) | The Alerts page: the platform's live alerts, the count badge and critical banner, and what the page shows when alerting itself is broken |
+| [umami-admin-access.md](umami-admin-access.md) | For platform administrators with SSH access: opening Umami's own interface over a tunnel to debug the engine |
 
 ## Becoming an operator
 
 An operator is a person on the operator roster, with a GitHub account, a Stellar wallet or a
-passkey account. Operator
-admins add and remove operators on the **Operators** page; [roster.md](roster.md) covers the page
+passkey account. Operator admins add and remove operators on the **Operators** page; [roster.md](roster.md) covers the page
 and the passkeys every operator registers.
 
 - The identities in the deploy settings `OPERATOR_GITHUB_IDS` and `OPERATOR_STELLAR_ADDRESSES` are
