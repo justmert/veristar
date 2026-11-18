@@ -439,6 +439,11 @@ func (h *TenantCohort) propose(w http.ResponseWriter, r *http.Request) error {
 	if err := a.RequireOwner(); err != nil {
 		return err
 	}
+	// a mutating tenant route: refused until the current terms are
+	// accepted (contract 4.2.6)
+	if err := a.RequireTerms(); err != nil {
+		return err
+	}
 	var b tenants.CohortInput
 	if err := httpx.DecodeJSON(r, &b); err != nil {
 		return err
