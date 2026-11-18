@@ -292,7 +292,7 @@ describe("on-chain page activity (contract 15.3)", () => {
     const open = [...(card?.querySelectorAll('[data-check="open"]') ?? [])];
     expect(open).toHaveLength(3);
     // the main text is plain words; the file's keys are only in what to copy
-    expect(open[0]?.textContent).toContain("names this domain as your organisation website");
+    expect(open[0]?.textContent).toContain("names this domain as your organization website");
     expect(open[0]?.textContent).toContain("It names https://other.org now.");
     expect(open[0]?.textContent).not.toContain("ORG_URL");
     for (const line of open) expect(line.querySelectorAll("button")).toHaveLength(1);

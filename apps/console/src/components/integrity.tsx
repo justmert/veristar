@@ -75,9 +75,9 @@ export function evidenceFacts(d: IntegrityDay): { label: string; value: string }
   return [
     { label: "Accepted events", value: formatCount(e.events) },
     { label: "Access networks", value: shareOf(e.net.access) },
-    { label: "Organisation networks", value: shareOf(e.net.organisation) },
+    { label: "Organization networks", value: shareOf(e.net.organisation) },
     { label: "Hosting networks", value: shareOf(e.net.hosting) },
-    { label: "Anonymisers", value: shareOf(e.net.anonymiser) },
+    { label: "Anonymizers", value: shareOf(e.net.anonymiser) },
     { label: "Distinct networks", value: formatCount(e.networks) },
     {
       label: "Quarantined",

@@ -118,7 +118,7 @@ const VERB: Record<string, string> = {
   "member.remove": "removed the member",
   "member.role_change": "changed the role of",
   "invite.create": "invited",
-  "invite.revoke": "cancelled the invite of",
+  "invite.revoke": "canceled the invite of",
   "invite.resolve": "closed the invite of",
   "erasure.request": "asked to erase data of",
   "erasure.complete": "erased data of",

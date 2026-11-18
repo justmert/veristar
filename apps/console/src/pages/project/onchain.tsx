@@ -805,7 +805,7 @@ function LinkSiteCard({ s, tenantId }: { s: LinkSite; tenantId: string }) {
         </CheckLine>
         <CheckLine
           ok={s.org_url_matches}
-          text="The file names this domain as your organisation website."
+          text="The file names this domain as your organization website."
           note={s.org_url ? `It names ${s.org_url} now.` : "Add these lines to the file."}
         >
           <CopyButton

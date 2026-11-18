@@ -46,7 +46,7 @@ export const LINK_ERRORS: Record<string, string> = {
   identity_already_linked: "This account already has a GitHub sign-in. Unlink it first.",
   state_mismatch:
     "The link expired, or you signed in to another account meanwhile. Start again from this page.",
-  access_denied: "You cancelled the link on GitHub. Nothing changed.",
+  access_denied: "You canceled the link on GitHub. Nothing changed.",
   rate_limited: "Too many requests. Wait a few seconds, then start again.",
   step_up_required:
     "This is an operator account. Confirm with your passkey on this page, then link GitHub again.",
