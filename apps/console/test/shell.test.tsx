@@ -167,7 +167,9 @@ describe("console shell", () => {
       input.dispatchEvent(new Event("input", { bubbles: true }));
     });
     const options = [...(dialog?.querySelectorAll('[role="option"]') ?? [])];
-    expect(options.map((o) => o.textContent)).toEqual(["MembersStellar DEX"]);
+    // the project is said once, in the group header
+    expect(options.map((o) => o.textContent)).toEqual(["Members"]);
+    expect(dialog?.textContent).toContain("Pages of Stellar DEX");
     await act(async () => {
       input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
     });
@@ -191,7 +193,7 @@ describe("console shell", () => {
       setter?.call(input, "dex");
       input.dispatchEvent(new Event("input", { bubbles: true }));
     });
-    expect(dialog?.textContent).toContain("Your projects");
+    expect(dialog?.textContent).toContain("My projects");
     expect(dialog?.textContent).toContain("Stellar DEX");
     await act(async () => {
       setter?.call(input, "zzz");
