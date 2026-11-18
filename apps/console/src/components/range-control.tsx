@@ -1,6 +1,6 @@
 import { cn } from "@veristar/brand/cn";
 import { type FormEvent, useEffect, useState } from "react";
-import { TextField } from "@/components/form-field";
+import { NativeSelect, TextField } from "@/components/form-field";
 import { Segmented } from "@/components/segmented";
 import { Button } from "@/components/ui/button";
 import { formatDateRange, formatTimeRange } from "@/lib/format";
@@ -115,9 +115,10 @@ export function validateRange(
   return out;
 }
 
-// one range control for every data source: presets passed in, plus a
-// custom range of utc days (or utc times). the chosen range is always said
-// in words with "UTC".
+// one range control for every data source: presets passed in (labels in
+// words: "24 hours", "7 days", "12 months"), plus a custom range of utc days
+// (or utc times). the chosen range is always said in words with "UTC". it
+// sits under the page header on every data page.
 export function RangeControl<T extends string>({
   label = "Range",
   value,
@@ -202,13 +203,32 @@ export function RangeControl<T extends string>({
   return (
     <div className={cn("flex flex-col gap-3", className)}>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <Segmented label={label} value={shown} options={options} onChange={choose} />
+        {/* a phone gets a select: eight choices do not fit its width */}
+        <Segmented
+          label={label}
+          value={shown}
+          options={options}
+          onChange={choose}
+          className="max-sm:hidden"
+        />
+        <NativeSelect
+          aria-label={label}
+          value={shown}
+          onChange={(e) => choose(e.target.value as T | "custom")}
+          className="sm:hidden"
+        >
+          {options.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </NativeSelect>
         {words ? (
           <span className="text-small text-fg-2" aria-live="polite">
             {words}
           </span>
         ) : (
-          <span className="text-caption text-fg-2">UTC</span>
+          <span className="text-small whitespace-nowrap text-fg-2">Days and hours in UTC</span>
         )}
       </div>
       {editing ? (

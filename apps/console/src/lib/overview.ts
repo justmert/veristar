@@ -4,7 +4,7 @@
 
 import type { ApiRangeQuery } from "@/api/endpoints";
 import { utcDay } from "@/lib/format";
-import { type DayRange, lastDays } from "@/lib/global";
+import { type DayRange, isDay, lastDays } from "@/lib/global";
 import { WEB_PRESETS } from "@/lib/web-dashboard";
 
 export type OverviewPreset = (typeof WEB_PRESETS)[number]["value"];
@@ -15,6 +15,20 @@ export function readOverviewPreset(v: string | null): OverviewPreset {
 
 export function overviewDays(p: OverviewPreset, now: Date): DayRange {
   return lastDays(p === "today" ? 1 : Number(p), now);
+}
+
+// the range in the address: a preset, or a custom pair of utc days
+// (?range=custom&from=&to=), as on Web
+export function readOverviewRange(
+  params: URLSearchParams,
+  now: Date,
+): { preset: OverviewPreset | "custom"; days: DayRange } {
+  const from = params.get("from") ?? "";
+  const to = params.get("to") ?? "";
+  if (params.get("range") === "custom" && isDay(from) && isDay(to) && from <= to)
+    return { preset: "custom", days: { from, to } };
+  const preset = readOverviewPreset(params.get("range"));
+  return { preset, days: overviewDays(preset, now) };
 }
 
 // the api numbers of exactly the web range's utc days: from the first
