@@ -8,7 +8,6 @@ export function Breakable({ text }: { text: string }) {
     <span className="wrap-anywhere">
       {parts.map((p, i) => (
         // parts have no identity beyond their position in the text
-        // biome-ignore lint/suspicious/noArrayIndexKey: the text does not reorder
         <Fragment key={i}>
           {p}
           {i < parts.length - 1 ? <wbr /> : null}
