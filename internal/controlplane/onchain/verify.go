@@ -73,9 +73,11 @@ func (h *Routes) verify(w http.ResponseWriter, r *http.Request) error {
 			map[string]string{"tx_hash": httpx.FieldInvalidFormat})
 	}
 	ctx := r.Context()
-	if err := h.limit(ctx, row.ID); err != nil {
+	release, err := h.limit(ctx, row.ID)
+	if err != nil {
 		return err
 	}
+	defer release()
 	// the proof that needs the challenge reads it under cp_system, where
 	// it is written
 	var nonce *string
