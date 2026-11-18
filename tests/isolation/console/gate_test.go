@@ -174,6 +174,8 @@ func catalogue(terms string) []route {
 	add(kindTenant, http.MethodPost, tp+"/onchain/ids/{chain_id}/verify", fixed(map[string]any{
 		"method": "sep53", "signature": "c2lnbmF0dXJl",
 	}))
+	add(kindTenant, http.MethodGet, tp+"/onchain/ids/{chain_id}/functions", nil)
+	add(kindTenant, http.MethodGet, tp+"/onchain/ids/{chain_id}/functions.csv", nil)
 	add(kindTenant, http.MethodGet, tp+"/overview.csv", nil)
 	add(kindTenant, http.MethodGet, tp+"/scf-view", nil)
 	add(kindTenant, http.MethodGet, tp+"/erasure", nil)
@@ -217,6 +219,8 @@ func catalogue(terms string) []route {
 	add(kindOperator, http.MethodGet, op+"/api/projects", nil)
 	add(kindOperator, http.MethodGet, op+"/api/compare?tenants={tenant_id}", nil)
 	add(kindOperator, http.MethodGet, op+"/tenants/{tenant_id}/onchain", nil)
+	add(kindOperator, http.MethodGet, op+"/tenants/{tenant_id}/onchain/ids/{chain_id}/functions", nil)
+	add(kindOperator, http.MethodGet, op+"/tenants/{tenant_id}/onchain/ids/{chain_id}/functions.csv", nil)
 	add(kindOperator, http.MethodGet, op+"/web/projects.csv", nil)
 	add(kindOperator, http.MethodGet, op+"/api/projects.csv", nil)
 	add(kindOperator, http.MethodGet, op+"/web/compare.csv?tenants={tenant_id}", nil)
@@ -283,7 +287,7 @@ func catalogue(terms string) []route {
 
 	// machine metrics api
 	for _, p := range []string{"/tenants", "/web/daily", "/web/dimensions", "/web/hourly", "/web/integrity", "/api/daily", "/api/routes/daily",
-		"/api/hourly", "/onchain/ids", "/onchain/daily", "/onchain/weekly", "/rules", "/rules/{rule_id}/matches", "/openapi.yaml"} {
+		"/api/hourly", "/onchain/ids", "/onchain/daily", "/onchain/weekly", "/onchain/functions", "/rules", "/rules/{rule_id}/matches", "/openapi.yaml"} {
 		add(kindMachine, http.MethodGet, operator.MachinePath+p, nil)
 	}
 	return out
@@ -294,6 +298,8 @@ func catalogue(terms string) []route {
 const (
 	gateAccountA     = "GDWQ7YV27AVTL25BDOLZD6E44VCQLCEBJXBOOWA2R3VLKCUIZHSXZLDE"
 	gateFreshAccount = "GABZATVFOHSGTZNO2VUY2JDXW3R76URMFO2MUQVXBRBIDRCJXBEZG5QH"
+	// a verified contract of tenant a with calls per function
+	gateContractA = "CBQDHNBFBZYE4MKPWBSJOPIYLW4SFSXAXUTSXJN76GNKYVYPCKWC6QUK"
 )
 
 // walked returns "METHOD /path" for every route the router serves.
@@ -344,7 +350,7 @@ func (w *gateWorld) aIDs() gateIDs {
 // markers are strings only tenant a's data holds.
 func (w *gateWorld) markers() []string {
 	return []string{w.ta.String(), w.sa.String(), w.domainA, w.slugA, w.nameA, w.inviteA, w.tokenA, w.requestA, w.credentialA,
-		w.chainA, w.chainKeyA, w.reportA}
+		w.chainA, w.chainKeyA, gateContractA, w.reportA}
 }
 
 func (w *gateWorld) leaked(body []byte) []string {
@@ -408,6 +414,16 @@ func (e *env) gateWorld(t *testing.T) *gateWorld {
 		// a closed week of weekly active accounts
 		_, err = c.Exec(context.Background(), `insert into agg.chain_weeks (tenant_id, week, active_accounts, closed_at)
 			values ($1, date_trunc('week', current_date - 7)::date, 5, now())`, w.ta)
+		require.NoError(t, err)
+		// a verified contract with a day of calls per function
+		_, err = c.Exec(context.Background(), `insert into cp.chain_ids (tenant_id, strkey, kind, added_by, verify_method, verified_at, verified_via)
+			values ($1, $2, 'contract', 'console', 'contract_admin', now(), $3)`, w.ta, gateContractA, w.chainKeyA)
+		require.NoError(t, err)
+		_, err = c.Exec(context.Background(), `insert into agg.chain_daily (tenant_id, strkey, day, source, operations, transactions, counterparties, functions)
+			values ($1, $2, current_date - 1, 'rpc_events', 4, 4, 0, 'read')`, w.ta, gateContractA)
+		require.NoError(t, err)
+		_, err = c.Exec(context.Background(), `insert into agg.chain_function_daily (tenant_id, strkey, day, function_name, caller, successful, failed, accounts)
+			values ($1, $2, current_date - 1, 'swap', 'account', 4, null, 2)`, w.ta, gateContractA)
 		require.NoError(t, err)
 	})
 
@@ -491,6 +507,8 @@ func (e *env) snapshot(t *testing.T, w *gateWorld) map[string]string {
 			from cp.operator_api_keys x`, nil},
 		{"chain_ids", `select coalesce(json_agg(x order by x.id)::text, '') from cp.chain_ids x where x.tenant_id in ($1, $2)`, ab},
 		{"chain_daily", `select coalesce(json_agg(x order by x.tenant_id, x.strkey, x.day)::text, '') from agg.chain_daily x where x.tenant_id in ($1, $2)`, ab},
+		{"chain_function_daily", `select coalesce(json_agg(x order by x.tenant_id, x.strkey, x.day, x.caller, x.function_name)::text, '')
+			from agg.chain_function_daily x where x.tenant_id in ($1, $2)`, ab},
 		{"tenant_cohorts", `select coalesce(json_agg(x order by x.tenant_id)::text, '') from cp.tenant_cohorts x where x.tenant_id in ($1, $2)`, ab},
 		{"threshold_rules", `select coalesce(json_agg(x order by x.id)::text, '') from cp.threshold_rules x`, nil},
 		// view_count moves with every public view, by design
@@ -859,7 +877,7 @@ func testOperatorRoutes(t *testing.T, e *env, w *gateWorld, cat []route) {
 	// the guard and not from a missing route
 	for _, r := range cat {
 		if (r.kind == kindOperator || r.kind == kindStepUp) && r.method == http.MethodGet {
-			p := r.fill(gateIDs{tenant: w.ta.String(), key: keyID, rule: w.ruleID})
+			p := r.fill(gateIDs{tenant: w.ta.String(), key: keyID, rule: w.ruleID, chain: w.chainA})
 			res := w.op.call(t, r.method, p, nil)
 			require.Equal(t, http.StatusOK, res.status, "control: operator %s: %s", p, res.body)
 		}
@@ -988,7 +1006,7 @@ func testMachineAPI(t *testing.T, e *env, w *gateWorld, cat []route) {
 			dataRoutes = append(dataRoutes, r.fill(gateIDs{rule: w.ruleID}))
 		}
 	}
-	require.Len(t, dataRoutes, 13)
+	require.Len(t, dataRoutes, 14)
 	sent := 0
 	refused := func(r machineResp, status int, code, what string) {
 		t.Helper()

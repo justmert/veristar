@@ -498,6 +498,51 @@ paths:
           $ref: '#/components/responses/RateLimited'
         '500':
           $ref: '#/components/responses/Internal'
+  /onchain/functions:
+    get:
+      operationId: onchainFunctions
+      summary: Calls per verified contract, function, caller and UTC day
+      description: |
+        From `agg.chain_function_daily`: one item per verified contract,
+        UTC day, function and kind of caller with at least one call.
+        Declared contracts that are not verified have no items. A function
+        without an item on a day whose `/onchain/daily` row has `functions`
+        `read` had no calls; on a `no_call_tree` day only the calls of
+        accounts were read. The calls come from the transactions in which
+        the contract emitted an event in a successful call, read through
+        `getTransaction`: the envelope gives the calls of accounts, the
+        diagnostic events the calls of other contracts. At most 64
+        functions per contract and day have their own item; the rest add
+        up under `{other}`. Ordered by tenant, strkey, day, caller and
+        function.
+      parameters:
+        - $ref: '#/components/parameters/tenant'
+        - $ref: '#/components/parameters/fromDay'
+        - $ref: '#/components/parameters/toDay'
+        - $ref: '#/components/parameters/limit'
+        - $ref: '#/components/parameters/cursor'
+      responses:
+        '200':
+          description: One page of function rows.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/X-Request-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OnchainFunctionList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/Internal'
   /rules:
     get:
       operationId: listRules
@@ -1406,7 +1451,7 @@ components:
     OnchainDaily:
       type: object
       additionalProperties: false
-      required: [tenant_id, strkey, day, source, operations, transactions, counterparties]
+      required: [tenant_id, strkey, day, source, operations, transactions, counterparties, functions]
       properties:
         tenant_id:
           $ref: '#/components/schemas/ID'
@@ -1424,6 +1469,55 @@ components:
           $ref: '#/components/schemas/Count'
         counterparties:
           $ref: '#/components/schemas/Count'
+        functions:
+          type: [string, 'null']
+          description: |
+            How much of a contract day's calls per function was read
+            (`/onchain/functions`): `read` (calls of accounts and of
+            contracts), `no_call_tree` (calls of accounts only),
+            `day_over_read_cap` or `before_source_history` (none). `null`
+            for an account day and for a contract day not read for its
+            calls yet.
+          enum: [read, no_call_tree, day_over_read_cap, before_source_history, null]
+    OnchainFunction:
+      type: object
+      additionalProperties: false
+      required: [tenant_id, strkey, day, function, caller, successful, failed, accounts]
+      properties:
+        tenant_id:
+          $ref: '#/components/schemas/ID'
+        strkey:
+          type: string
+          pattern: '^C[A-Z2-7]{55}$'
+        day:
+          $ref: '#/components/schemas/Day'
+        function:
+          type: string
+          description: |
+            The function name, a Soroban symbol, or `{other}` for the
+            calls to the functions beyond the 64 with the most calls that
+            day.
+          pattern: '^([A-Za-z0-9_]{1,32}|\{other\})$'
+        caller:
+          type: string
+          description: |
+            `account`: the operation's host function invokes the contract.
+            `contract`: another contract calls it during an invocation.
+          enum: [account, contract]
+        successful:
+          $ref: '#/components/schemas/Count'
+        failed:
+          type: [integer, 'null']
+          minimum: 0
+          description: |
+            Calls that ended in an error the calling contract handled.
+            `null` for the calls of accounts: every transaction read
+            succeeded, and a failed transaction is not found through
+            contract events.
+        accounts:
+          description: Distinct accounts that initiated the operations the calls belong to.
+          allOf:
+            - $ref: '#/components/schemas/Count'
     OnchainWeekly:
       type: object
       additionalProperties: false
@@ -1466,6 +1560,21 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/OnchainWeekly'
+        next_cursor:
+          $ref: '#/components/schemas/Cursor'
+    OnchainFunctionList:
+      type: object
+      additionalProperties: false
+      required: [from, to, items, next_cursor]
+      properties:
+        from:
+          $ref: '#/components/schemas/Day'
+        to:
+          $ref: '#/components/schemas/Day'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OnchainFunction'
         next_cursor:
           $ref: '#/components/schemas/Cursor'
     OnchainDailyList:

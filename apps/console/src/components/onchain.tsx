@@ -152,8 +152,17 @@ export function LinkStatus({ view }: { view: OnchainView }) {
 }
 
 // the per-id rows of a view: kind, strkey, proof, numbers and why any day
-// is missing
-export function IdRows({ view, compact }: { view: OnchainView; compact?: boolean }) {
+// is missing. extra adds a page's own part under an id, such as a
+// contract's calls per function
+export function IdRows({
+  view,
+  compact,
+  extra,
+}: {
+  view: OnchainView;
+  compact?: boolean;
+  extra?: (id: ChainId) => ReactNode;
+}) {
   return (
     <ul className="flex flex-col divide-y divide-line">
       {view.ids.map((id) => {
@@ -189,6 +198,7 @@ export function IdRows({ view, compact }: { view: OnchainView; compact?: boolean
                 ))}
               </ul>
             ) : null}
+            {extra ? extra(id) : null}
           </li>
         );
       })}

@@ -1,0 +1,26 @@
+# otel.yaml without the meter provider: the agent records no metrics, and the
+# platform derives request metrics from the server spans instead. start.sh
+# uses this file when EXPORT_SIGNALS=traces.
+file_format: "1.0"
+resource:
+  attributes:
+    - name: service.name
+      value: ${OTEL_SERVICE_NAME:-otel-java-spring}
+  attributes_list: ${OTEL_RESOURCE_ATTRIBUTES}
+propagator:
+  composite:
+    - tracecontext:
+    - baggage:
+tracer_provider:
+  processors:
+    - batch:
+        exporter:
+          otlp_http:
+            endpoint: ${TENANT_OTLP_ENDPOINT}/v1/traces
+    - batch:
+        exporter:
+          otlp_http:
+            endpoint: ${PLATFORM_OTLP_ENDPOINT}/v1/traces
+            headers:
+              - name: Authorization
+                value: Bearer ${PLATFORM_OTLP_TOKEN}

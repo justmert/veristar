@@ -1,0 +1,49 @@
+# declarative configuration of the opentelemetry java agent: two exporters per
+# signal, the token on the platform copy only. the agent reads this file when
+# started with -Dotel.config.file (start.sh) and then ignores the OTEL_*
+# variables it would otherwise read; ${VAR} and ${VAR:-default} are replaced
+# from the environment. schema: github.com/open-telemetry/opentelemetry-configuration
+# docs:start config
+file_format: "1.0"
+resource:
+  attributes:
+    - name: service.name
+      value: ${OTEL_SERVICE_NAME:-otel-java-spring}
+  attributes_list: ${OTEL_RESOURCE_ATTRIBUTES}
+propagator:
+  composite:
+    - tracecontext:
+    - baggage:
+tracer_provider:
+  processors:
+    - batch:
+        exporter:
+          otlp_http:
+            endpoint: ${TENANT_OTLP_ENDPOINT}/v1/traces
+    - batch:
+        exporter:
+          otlp_http:
+            endpoint: ${PLATFORM_OTLP_ENDPOINT}/v1/traces
+            headers:
+              - name: Authorization
+                value: Bearer ${PLATFORM_OTLP_TOKEN}
+meter_provider:
+  readers:
+    - periodic:
+        interval: ${METRICS_EXPORT_INTERVAL_MS:-10000}
+        exporter:
+          otlp_http:
+            endpoint: ${TENANT_OTLP_ENDPOINT}/v1/metrics
+            temporality_preference: ${OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE:-cumulative}
+            default_histogram_aggregation: ${OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION:-explicit_bucket_histogram}
+    - periodic:
+        interval: ${METRICS_EXPORT_INTERVAL_MS:-10000}
+        exporter:
+          otlp_http:
+            endpoint: ${PLATFORM_OTLP_ENDPOINT}/v1/metrics
+            headers:
+              - name: Authorization
+                value: Bearer ${PLATFORM_OTLP_TOKEN}
+            temporality_preference: ${OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE:-cumulative}
+            default_histogram_aggregation: ${OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION:-explicit_bucket_histogram}
+# docs:end config

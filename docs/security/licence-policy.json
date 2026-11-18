@@ -197,14 +197,14 @@
       "package": "caniuse-lite",
       "version": "1.0.30001826",
       "licence": "(CC-BY-4.0)",
-      "reason": "browser support data under CC-BY-4.0, used by build tooling (browserslist via the shadcn cli, astro, next and react router dev tools). only shadcn/tailwind.css of shadcn is bundled into the console, so this data never reaches an artifact; attribution stays in the package.",
+      "reason": "browser support data under CC-BY-4.0, used by build tooling (browserslist via the shadcn cli, astro, next and react router dev tools, and the docusaurus example's build). only shadcn/tailwind.css of shadcn is bundled into the console, so this data never reaches an artifact; attribution stays in the package.",
       "reviewed": "2026-11-13"
     },
     {
       "package": "mdn-data",
       "version": "2.0.28",
       "licence": "(CC0-1.0)",
-      "reason": "css reference data under CC0-1.0 (public domain dedication), used by css-tree in test and example tooling (jsdom, astro). not bundled into any artifact.",
+      "reason": "css reference data under CC0-1.0 (public domain dedication), used by css-tree in test and example tooling (jsdom, astro, the docusaurus example). not bundled into any artifact.",
       "reviewed": "2026-11-13"
     },
     {
@@ -227,6 +227,41 @@
       "licence": "(CDLA-Permissive-2.0)",
       "reason": "mozilla's root certificate data under CDLA-Permissive-2.0, a permissive data licence, not code. pulled in by the rust example app examples/otel-rust-actix (rustls), which tenants copy; never built into a platform image.",
       "reviewed": "2026-11-13"
+    },
+    {
+      "package": "eval",
+      "version": "0.1.8",
+      "licence": "none",
+      "reason": "evaluates server bundles for the static site generation of @docusaurus/core; its registry metadata declares no spdx licence, while the package ships the MIT licence text. pulled in only by the docusaurus example examples/docusaurus (a standalone npm project with its own package-lock.json, a sample for tenants and a browser test target, never deployed); not in sdk.js, the npm package, the console bundle or any image.",
+      "reviewed": "2026-11-17"
+    },
+    {
+      "package": "format",
+      "version": "0.2.2",
+      "licence": "none",
+      "reason": "printf-style formatting, pulled in by @docusaurus/mdx-loader through remark-frontmatter and fault; its registry metadata declares no spdx licence, while the package ships the MIT licence text. pulled in only by the docusaurus example examples/docusaurus (a standalone npm project with its own package-lock.json, a sample for tenants and a browser test target, never deployed); not in sdk.js, the npm package, the console bundle or any image.",
+      "reviewed": "2026-11-17"
+    },
+    {
+      "package": "require-like",
+      "version": "0.1.2",
+      "licence": "none",
+      "reason": "a require() factory used by eval, which @docusaurus/core depends on; its registry metadata declares no spdx licence, while the package ships the MIT licence text. pulled in only by the docusaurus example examples/docusaurus (a standalone npm project with its own package-lock.json, a sample for tenants and a browser test target, never deployed); not in sdk.js, the npm package, the console bundle or any image.",
+      "reviewed": "2026-11-17"
+    },
+    {
+      "package": "mdn-data",
+      "version": "2.0.30",
+      "licence": "(CC0-1.0)",
+      "reason": "css reference data under CC0-1.0 (public domain dedication), used by css-tree in the css minifier of the docusaurus example examples/docusaurus (a standalone npm project with its own package-lock.json, a sample for tenants and a browser test target, never deployed). not bundled into any artifact.",
+      "reviewed": "2026-11-17"
+    },
+    {
+      "package": "@iconify-json/simple-icons",
+      "version": "1.2.102",
+      "licence": "(CC0-1.0)",
+      "reason": "brand icon data under CC0-1.0 (public domain dedication), a dependency of the default theme of vitepress in the vitepress example examples/vitepress (a standalone npm project with its own package-lock.json, a sample for tenants and a browser test target, never deployed). not in sdk.js, the npm package, the console bundle or any image.",
+      "reviewed": "2026-11-17"
     }
   ]
 }

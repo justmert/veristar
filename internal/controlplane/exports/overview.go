@@ -48,6 +48,7 @@ func NewOverview(s *tenants.Scope, now func() time.Time) (*Overview, error) {
 // Routes registers the path under a router mounted at /api.
 func (o *Overview) Routes(r chi.Router) {
 	r.Method(http.MethodGet, "/tenants/{tenant_id}/overview.csv", httpx.HandlerFunc(o.overview))
+	r.Method(http.MethodGet, "/tenants/{tenant_id}/onchain/ids/{chain_id}/functions.csv", httpx.HandlerFunc(o.functions))
 }
 
 type webDay struct {

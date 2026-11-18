@@ -139,9 +139,10 @@ is in "Capacity" below.
 **Supported ingest rate: about 700 events a second per node at p99 50 ms, about 2,100 a second
 across the three production nodes.** This is what the gateways accept into `WEB_EVENTS`, with
 proofs solved before the run: the `GET /v1/c` each page load also makes is not part of it. It is
-not the rate at which events reach Umami. One replayer delivers for the whole cluster to the
-Umami processes of one node, so an accepted rate above that node's delivery rate builds a backlog
-that the queue keeps for at most 72 hours ([capacity.md](capacity.md), "Web events end to end").
+not the rate at which events reach Umami. Every node's replayer delivers its share of the 32 web
+event partitions to its own node's Umami processes, so an accepted rate above the nodes' combined
+delivery rate builds a backlog that the queue keeps for at most 72 hours
+([capacity.md](capacity.md), "Web events end to end", has the measured rates).
 
 The expected peak of the availability statement is 50 events a second, so the cluster accepts
 about 40 times that, and one node alone accepts the 10x burst (500 a second) at p99 under 50 ms. The cluster figure is three times the per-node

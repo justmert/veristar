@@ -1,8 +1,9 @@
 import { Outlet } from "react-router";
 import { describe, expect, it } from "vitest";
-import { exportPaths, onchainView } from "@/api/onchain";
+import { contractFunctions, exportPaths, onchainView } from "@/api/onchain";
 import { webProject } from "@/api/schemas";
 import { OnchainPanel } from "@/components/onchain";
+import { ContractFunctionsBlock, FunctionsDaily } from "@/components/onchain-functions";
 import { EMPTY_FILTERS } from "@/lib/global";
 import { listExportHref } from "@/lib/operator-projects";
 import { OnchainPage } from "@/pages/onchain";
@@ -92,6 +93,7 @@ const viewBody = {
           missing: "day_not_complete",
         },
       ],
+      functions: null,
     },
     {
       id: CONTRACT_ID,
@@ -128,6 +130,7 @@ const viewBody = {
         counterparties: null,
         missing: i === 3 ? "day_not_complete" : "rate_limited",
       })),
+      functions: null,
     },
   ],
   weeks: [
@@ -407,6 +410,26 @@ const scfBody = {
   })),
   api_series: days.map((d) => ({ day: d, requests: 0 })),
   onchain_series: days.map((d) => ({ day: d, ids_read: 1, operations: 3, transactions: 1 })),
+  contract_functions: [
+    {
+      strkey: f.C_KEY,
+      functions: {
+        days_read: 2,
+        days_no_call_tree: 1,
+        days_missing: 0,
+        functions: [
+          {
+            function: "swap",
+            caller: "account",
+            successful: 17,
+            failed: null,
+            peak_daily_accounts: 6,
+            days_with_calls: 3,
+          },
+        ],
+      },
+    },
+  ],
   cohort: {
     tenant_id: f.TENANT_ID,
     confirmed: null,
@@ -444,6 +467,12 @@ describe("what scf sees (contract 16.3)", () => {
     expect(link?.getAttribute("href")).toBe(
       `/api/tenants/${f.TENANT_ID}/overview.csv?from=${days[0]}&to=${days[3]}`,
     );
+    // each verified contract's calls per function, failed missing for accounts
+    const table = host.querySelector(`[aria-label="Calls per function of ${f.C_KEY}"]`);
+    const row = table?.querySelector('[data-function="swap"][data-caller="account"]');
+    expect(row?.textContent).toContain("17");
+    expect(row?.querySelector("[data-missing]")).not.toBeNull();
+    expect(host.textContent).toContain("2 days read, 1 with calls of accounts only");
   });
 
   it("renders the integrity grade when the field arrives", async () => {
@@ -527,5 +556,141 @@ describe("operator on-chain column and exports (contract 15.7 and 16.1)", () => 
     expect(
       exportPaths.compare("api", [f.TENANT_ID], { from: "2026-11-01", to: "2026-11-16" }),
     ).toBe(`/api/operator/api/compare.csv?from=2026-11-01&to=2026-11-16&tenants=${f.TENANT_ID}`);
+  });
+});
+
+// a verified contract with calls on three days: one read whole, one with
+// the calls of accounts only, one not read (contract 15.8)
+const FN_CONTRACT_ID = "0193a6f8-9999-7caa-bdbb-eccddeeff002";
+const functionsSummaryBody = {
+  days_read: 1,
+  days_no_call_tree: 1,
+  days_missing: 1,
+  functions: [
+    {
+      function: "swap",
+      caller: "account",
+      successful: 9,
+      failed: null,
+      peak_daily_accounts: 4,
+      days_with_calls: 2,
+    },
+    {
+      function: "{other}",
+      caller: "contract",
+      successful: 2,
+      failed: 1,
+      peak_daily_accounts: 1,
+      days_with_calls: 1,
+    },
+  ],
+};
+const functionsBody = {
+  ...functionsSummaryBody,
+  id: FN_CONTRACT_ID,
+  strkey: f.C_KEY,
+  kind: "contract",
+  verified: true,
+  from: days[0],
+  to: days[3],
+  days: [
+    { day: days[0], state: "read", missing: null },
+    { day: days[1], state: "no_call_tree", missing: null },
+    { day: days[2], state: null, missing: "day_over_read_cap" },
+    { day: days[3], state: null, missing: "day_not_complete" },
+  ],
+  functions: [
+    {
+      ...functionsSummaryBody.functions[0],
+      series: [
+        { day: days[0], successful: 5, failed: null, accounts: 3 },
+        { day: days[1], successful: 4, failed: null, accounts: 4 },
+        { day: days[2], successful: null, failed: null, accounts: null },
+        { day: days[3], successful: null, failed: null, accounts: null },
+      ],
+    },
+    {
+      ...functionsSummaryBody.functions[1],
+      series: [
+        { day: days[0], successful: 2, failed: 1, accounts: 1 },
+        { day: days[1], successful: null, failed: null, accounts: null },
+        { day: days[2], successful: null, failed: null, accounts: null },
+        { day: days[3], successful: null, failed: null, accounts: null },
+      ],
+    },
+  ],
+};
+
+describe("calls per contract function (contract 15.8)", () => {
+  const verifiedContract = onchainView.parse({
+    ...viewBody,
+    ids: [
+      {
+        ...viewBody.ids[1],
+        id: FN_CONTRACT_ID,
+        verification: { ...none, status: "verified", method: "contract_admin" },
+        functions: functionsSummaryBody,
+      },
+    ],
+  }).ids[0];
+
+  it("shows the totals per function and caller, failed missing for accounts", async () => {
+    if (!verifiedContract) throw new Error("no id");
+    const host = await render(<ContractFunctionsBlock id={verifiedContract} />);
+    expect(host.querySelector("[data-testid=functions-days]")?.textContent).toBe(
+      "1 day read, 1 with calls of accounts only, 1 without data",
+    );
+    const swap = host.querySelector('[data-function="swap"]');
+    expect(swap?.textContent).toContain("Accounts");
+    expect(swap?.querySelector("[data-missing]")).not.toBeNull();
+    const other = host.querySelector('[data-function="{other}"]');
+    expect(other?.textContent).toContain("Other functions");
+    expect(other?.textContent).toContain("Contracts");
+    // without a source there is nothing to open or export
+    expect(host.textContent).not.toContain("Daily calls");
+  });
+
+  it("says an unverified contract's calls do not count", async () => {
+    const id = onchainView.parse(viewBody).ids[1];
+    if (!id) throw new Error("no id");
+    const host = await render(<ContractFunctionsBlock id={id} />);
+    expect(host.textContent).toContain("Calls per function show once the contract is verified");
+    expect(host.querySelector("table")).toBeNull();
+  });
+
+  it("loads the daily calls from the tenant route and links the export", async () => {
+    if (!verifiedContract) throw new Error("no id");
+    const calls = stubFetch([{ status: 200, body: functionsBody }]);
+    const src = { tenantId: f.TENANT_ID, range: { from: days[0], to: days[3] } };
+    const host = await render(<ContractFunctionsBlock id={verifiedContract} source={src} />);
+    const link = [...host.querySelectorAll("a")].find((a) => a.textContent?.includes("Export CSV"));
+    expect(link?.getAttribute("href")).toBe(
+      `/api/tenants/${f.TENANT_ID}/onchain/ids/${FN_CONTRACT_ID}/functions.csv?from=${days[0]}&to=${days[3]}`,
+    );
+    await click(byRole(host, "button", "Daily calls"));
+    await waitFor(() => expect(host.textContent).toContain("successful calls per day"));
+    expect(calls[0]?.url).toBe(
+      `/api/tenants/${f.TENANT_ID}/onchain/ids/${FN_CONTRACT_ID}/functions?from=${days[0]}&to=${days[3]}`,
+    );
+  });
+
+  it("draws a day not read as missing with its reason, never as zero", async () => {
+    const data = contractFunctions.parse(functionsBody);
+    const host = await render(<FunctionsDaily data={data} />);
+    expect(host.textContent).toContain("1 day without data: More activity than one run reads");
+    expect(host.textContent).toContain("1 day with the calls of accounts only");
+    const strip = host.querySelector('[aria-label="Daily calls of Other functions by contracts"]');
+    expect(strip?.querySelectorAll(".bg-series-1")).toHaveLength(1);
+    expect(strip?.querySelectorAll(".border-dashed")).toHaveLength(3);
+    const titles = [...(strip?.querySelectorAll("[title]") ?? [])].map((e) =>
+      e.getAttribute("title"),
+    );
+    expect(titles[1]).toContain("only the calls of accounts are counted");
+  });
+
+  it("reads the operator route for an operator source", () => {
+    expect(
+      exportPaths.functions({ tenantId: f.TENANT_ID, operator: true, range: {} }, FN_CONTRACT_ID),
+    ).toBe(`/api/operator/tenants/${f.TENANT_ID}/onchain/ids/${FN_CONTRACT_ID}/functions.csv`);
   });
 });

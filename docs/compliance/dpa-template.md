@@ -33,8 +33,8 @@ gives at enrollment by accepting `terms.md` section 1.1: to make aggregate
 statistics about its project available to SCF, limited to the aggregates
 listed there (per site and day web aggregates, the integrity grade and the
 counts it is computed from, the tracker file and Global Privacy Control
-counts, hourly and daily API aggregates, daily on-chain counts and weekly
-active accounts), for as long as the project is enrolled. The operator processes personal data only on
+counts, hourly and daily API aggregates, daily on-chain counts, daily calls
+per contract function and weekly active accounts), for as long as the project is enrolled. The operator processes personal data only on
 these instructions, including with regard to transfers to third countries,
 unless EU or member state law requires otherwise, in which case it informs the
 tenant first unless that law forbids it. The operator informs the tenant

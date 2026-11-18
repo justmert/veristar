@@ -18,6 +18,7 @@ import { TextField } from "@/components/form-field";
 import { projectTabs } from "@/components/nav/nav-items";
 import { NavTabs } from "@/components/nav/nav-tabs";
 import { DayStrip, KindLabel, LinkStatus, VerifiedPill } from "@/components/onchain";
+import { ContractFunctionsBlock } from "@/components/onchain-functions";
 import { PageHeader, Panel } from "@/components/panel";
 import { Pill } from "@/components/status";
 import { Button } from "@/components/ui/button";
@@ -80,9 +81,11 @@ export function OnchainPage() {
       <LinkPanel view={v} />
       <p className="text-caption text-fg-3">
         Ledger data is public. Veristar stores the ids you declare, their proofs and daily counts of
-        operations, transactions and counterparties, never the counterparties themselves. Accounts
-        are read from Horizon; contracts from the events they emit through Stellar RPC, which keeps
-        about seven days, so a contract's history starts the day you add it.
+        operations, transactions and counterparties, and for contracts the daily calls per function
+        with the number of distinct accounts behind them, never the counterparties or callers
+        themselves. Accounts are read from Horizon; contracts from the events they emit through
+        Stellar RPC, which keeps about seven days, so a contract's history starts the day you add
+        it.
       </p>
     </div>
   );
@@ -233,6 +236,7 @@ function IdItem({
           </span>
         ))}
       </div>
+      <ContractFunctionsBlock id={id} source={{ tenantId, range: RANGE }} />
       <ConfirmDialog
         open={confirm}
         onOpenChange={setConfirm}

@@ -16,6 +16,7 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 
 	"github.com/justmert/veristar/internal/config"
+	"github.com/justmert/veristar/internal/events"
 	"github.com/justmert/veristar/internal/natsx"
 	"github.com/justmert/veristar/internal/obs"
 )
@@ -31,17 +32,30 @@ const forwardUsage = `  queue forward [--queues web,api,stats] [--until-empty] [
                     message only after the target stream acknowledged it
 `
 
-// forwardQueue is one work-queue stream and the durable consumer whose
-// service is stopped while its messages are forwarded.
+// forwardQueue is one work-queue stream and the durable consumers whose
+// service is stopped while its messages are forwarded. web has one
+// consumer per partition and, while an upgrade drains it, the legacy one;
+// a consumer listed as optional may be missing.
 type forwardQueue struct {
-	stream, consumer string
+	stream    string
+	consumers []string
+	optional  string
 }
 
 var forwardQueues = map[string]forwardQueue{
-	"web":   {natsx.StreamWebEvents, natsx.ConsumerReplayer},
-	"api":   {natsx.StreamAPIMetrics, natsx.ConsumerMetricsWriter},
-	"stats": {natsx.StreamEdgeStats, natsx.ConsumerJobs},
+	"web":   {stream: natsx.StreamWebEvents, consumers: natsx.ReplayerConsumers(), optional: natsx.ConsumerReplayer},
+	"api":   {stream: natsx.StreamAPIMetrics, consumers: []string{natsx.ConsumerMetricsWriter}},
+	"stats": {stream: natsx.StreamEdgeStats, consumers: []string{natsx.ConsumerJobs}},
 }
+
+// forwardSource is one bound consumer of a queue.
+type forwardSource struct {
+	queue, name string
+	cons        jetstream.Consumer
+}
+
+// forwardIdlePoll is the pause after a round that found every queue empty.
+const forwardIdlePoll = 500 * time.Millisecond
 
 // errConsumerBusy means a service still pulls from a consumer the forwarder
 // would bind: the two would split the queue between two environments.
@@ -138,34 +152,39 @@ func runForwardWith(ctx context.Context, args []string, srcEnv, dstEnv *config.E
 		return err
 	}
 
-	consumers := map[string]jetstream.Consumer{}
+	var sources []forwardSource
 	for _, q := range selected {
 		fq := forwardQueues[q]
-		c, err := src.Consumer(ctx, fq.stream, fq.consumer)
-		if err != nil {
-			return fmt.Errorf("queue forward: bind %s/%s: %w", fq.stream, fq.consumer, err)
-		}
-		info, err := c.Info(ctx)
-		if err != nil {
-			return fmt.Errorf("queue forward: %s/%s info: %w", fq.stream, fq.consumer, err)
-		}
-		// a waiting pull request means the service still runs
-		if info.NumWaiting > 0 {
-			return fmt.Errorf("%w on %s/%s; stop the %s service in the source environment first", errConsumerBusy, fq.stream, fq.consumer, fq.consumer)
+		for _, name := range fq.consumers {
+			c, err := src.Consumer(ctx, fq.stream, name)
+			if name == fq.optional && errors.Is(err, jetstream.ErrConsumerNotFound) {
+				continue
+			}
+			if err != nil {
+				return fmt.Errorf("queue forward: bind %s/%s: %w", fq.stream, name, err)
+			}
+			info, err := c.Info(ctx)
+			if err != nil {
+				return fmt.Errorf("queue forward: %s/%s info: %w", fq.stream, name, err)
+			}
+			// a waiting pull request means the service still runs
+			if info.NumWaiting > 0 {
+				return fmt.Errorf("%w on %s/%s; stop the %s service in the source environment first", errConsumerBusy, fq.stream, name, fq.consumers[0])
+			}
+			sources = append(sources, forwardSource{queue: q, name: name, cons: c})
 		}
 		if _, err := dst.Stream(ctx, fq.stream); err != nil {
 			return fmt.Errorf("queue forward: target stream %s: %w", fq.stream, err)
 		}
-		consumers[q] = c
 	}
 
 	totals := forwardTotals{}
 	lastMove := time.Now()
 	for {
 		moved := 0
-		for _, q := range selected {
-			n, err := forwardBatch(ctx, consumers[q], dst, forwardQueues[q].stream, *batch)
-			totals[q] += n
+		for _, fs := range sources {
+			n, err := forwardBatch(ctx, fs.cons, dst, forwardQueues[fs.queue].stream, *batch)
+			totals[fs.queue] += n
 			moved += n
 			if err != nil {
 				_, _ = fmt.Fprintf(stdout, "forwarded %s\n", totals)
@@ -181,8 +200,12 @@ func runForwardWith(ctx context.Context, args []string, srcEnv, dstEnv *config.E
 			_, _ = fmt.Fprintf(stdout, "forwarded %s (stopped)\n", totals)
 			return nil
 		}
+		select {
+		case <-ctx.Done():
+		case <-time.After(forwardIdlePoll):
+		}
 		if *untilEmpty && time.Since(lastMove) >= *idle {
-			empty, err := forwardEmpty(ctx, consumers)
+			empty, err := forwardEmpty(ctx, sources)
 			if err != nil {
 				return err
 			}
@@ -195,13 +218,17 @@ func runForwardWith(ctx context.Context, args []string, srcEnv, dstEnv *config.E
 }
 
 // forwardBatch moves up to n messages of one consumer. each message is
-// published to the target with its subject, headers and body unchanged, so
-// the target stream deduplicates on the same Nats-Msg-Id the source used
-// and a message forwarded twice (a crash between the target's ack and the
-// source ack) is stored once. the source message is acked only after the
+// published to the target with its headers and body unchanged, so the
+// target stream deduplicates on the same Nats-Msg-Id the source used and a
+// message forwarded twice (a crash between the target's ack and the source
+// ack) is stored once. the subject is unchanged too, except that a web event
+// queued on the legacy subject goes to its partition, which the target
+// stream always has. the source message is acked only after the
 // target acknowledged it; on a failure it is handed back at once.
 func forwardBatch(ctx context.Context, c jetstream.Consumer, dst jetstream.JetStream, stream string, n int) (int, error) {
-	b, err := c.Fetch(n, jetstream.FetchMaxWait(time.Second))
+	// no long poll: web alone has one consumer per partition, and a second
+	// of waiting on each empty one would hold back the others
+	b, err := c.FetchNoWait(n)
 	if err != nil {
 		if ctx.Err() != nil {
 			return 0, nil
@@ -210,7 +237,7 @@ func forwardBatch(ctx context.Context, c jetstream.Consumer, dst jetstream.JetSt
 	}
 	moved := 0
 	for m := range b.Messages() {
-		msg := &nats.Msg{Subject: m.Subject(), Header: m.Headers(), Data: m.Data()}
+		msg := &nats.Msg{Subject: forwardSubject(stream, m.Subject(), m.Data()), Header: m.Headers(), Data: m.Data()}
 		if _, err := dst.PublishMsg(ctx, msg, jetstream.WithExpectStream(stream)); err != nil {
 			_ = m.Nak()
 			return moved, fmt.Errorf("queue forward: publish to target %s: %w", stream, err)
@@ -226,13 +253,24 @@ func forwardBatch(ctx context.Context, c jetstream.Consumer, dst jetstream.JetSt
 	return moved, nil
 }
 
+// forwardSubject is the target subject of a forwarded message.
+func forwardSubject(stream, subject string, data []byte) string {
+	if stream != natsx.StreamWebEvents || strings.Count(subject, ".") != strings.Count(natsx.SubjectWebEvents, ".")+1 {
+		return subject
+	}
+	if ev, err := events.DecodeWebEvent(data); err == nil && ev.LegacySubject() == subject {
+		return ev.Subject()
+	}
+	return subject
+}
+
 // forwardEmpty reports whether no consumer has a message left to deliver
 // or one delivered and not yet acked.
-func forwardEmpty(ctx context.Context, consumers map[string]jetstream.Consumer) (bool, error) {
-	for q, c := range consumers {
-		info, err := c.Info(ctx)
+func forwardEmpty(ctx context.Context, sources []forwardSource) (bool, error) {
+	for _, fs := range sources {
+		info, err := fs.cons.Info(ctx)
 		if err != nil {
-			return false, fmt.Errorf("queue forward: %s info: %w", q, err)
+			return false, fmt.Errorf("queue forward: %s info: %w", fs.name, err)
 		}
 		if info.NumPending > 0 || info.NumAckPending > 0 {
 			return false, nil

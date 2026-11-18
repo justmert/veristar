@@ -259,7 +259,7 @@ func TestUsageReports(t *testing.T) {
 		require.Equal(t, 1, e.auditCount(t, reports.ActionCreate, reports.Target(id)))
 	})
 
-	t.Run("format version 2 holds the rule versions, coverage, api flags and weekly active accounts", func(t *testing.T) {
+	t.Run("format version 3 holds the rule versions, coverage, api flags, weekly active accounts and contract calls", func(t *testing.T) {
 		owner := e.user(t)
 		g := e.tenant(t, owner, "gamma")
 		cg := e.client(t, &owner)
@@ -271,8 +271,11 @@ func TestUsageReports(t *testing.T) {
 		mondays := onchain.RangeWeeks(onchain.Range{From: first, To: last})
 		require.GreaterOrEqual(t, len(mondays), 2)
 		verified, declared := keypair.MustRandom().Address(), keypair.MustRandom().Address()
-		e.sys(t, `insert into cp.chain_ids (tenant_id, strkey, kind, added_by, verify_method, verified_at)
-			values ($1, $2, 'account', 'console', 'sep53', now()), ($1, $3, 'account', 'console', null, null)`, g, verified, declared)
+		const contract, unverifiedContract = "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAG", "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAH"
+		e.sys(t, `insert into cp.chain_ids (tenant_id, strkey, kind, added_by, verify_method, verified_at, verified_via)
+			values ($1, $2, 'account', 'console', 'sep53', now(), null), ($1, $3, 'account', 'console', null, null, null),
+			       ($1, $4, 'contract', 'console', 'contract_admin', now(), $2), ($1, $5, 'contract', 'console', null, null, null)`,
+			g, verified, declared, contract, unverifiedContract)
 		require.NoError(t, e.d.WithRole(t.Context(), pdb.RoleJobs, func(tx pgx.Tx) error {
 			for i, rv := range []int{1, 2} {
 				// a day graded under each rule set, and an ungraded one
@@ -303,6 +306,17 @@ func TestUsageReports(t *testing.T) {
 					return err
 				}
 			}
+			// a contract day with calls of both callers, for each contract
+			for _, c := range []string{contract, unverifiedContract} {
+				if _, err := tx.Exec(t.Context(), `insert into agg.chain_daily (tenant_id, strkey, day, source, operations, transactions, counterparties, functions)
+					values ($1, $2, $3, 'rpc_events', 0, 0, 0, 'read')`, g, c, last); err != nil {
+					return err
+				}
+				if _, err := tx.Exec(t.Context(), `insert into agg.chain_function_daily (tenant_id, strkey, day, function_name, caller, successful, failed, accounts)
+					values ($1, $2, $3, 'swap', 'account', 4, null, 3), ($1, $2, $3, 'swap', 'contract', 1, 2, 1)`, g, c, last); err != nil {
+					return err
+				}
+			}
 			_, err := tx.Exec(t.Context(), `insert into agg.chain_weeks (tenant_id, week, active_accounts, closed_at) values ($1, $2, 9, now())`,
 				g, mondays[0])
 			return err
@@ -312,8 +326,25 @@ func TestUsageReports(t *testing.T) {
 		require.Equal(t, http.StatusCreated, code, string(raw))
 		d := decode[reports.Detail](t, raw)
 		rep := decode[reports.Report](t, d.File.Report)
-		require.Equal(t, 2, rep.Version)
-		require.Equal(t, 2, rep.Methods.Format)
+		require.Equal(t, 3, rep.Version)
+		require.Equal(t, 3, rep.Methods.Format)
+		require.Equal(t, 2, rep.Methods.Onchain)
+		// only the verified contract's calls are in the report
+		require.Len(t, rep.Onchain.Contracts, 1)
+		cc := rep.Onchain.Contracts[0]
+		require.Equal(t, contract, cc.Strkey)
+		require.Equal(t, int64(1), cc.DaysRead)
+		require.Len(t, cc.Functions, 2)
+		for _, fn := range cc.Functions {
+			require.Equal(t, "swap", fn.Function)
+			if fn.Caller == "account" {
+				require.Nil(t, fn.Failed)
+				require.Equal(t, int64(4), fn.Successful)
+				require.Equal(t, int64(3), fn.PeakDailyAccounts)
+			} else {
+				require.Equal(t, int64(2), *fn.Failed)
+			}
+		}
 		// the rule sets that graded the period, not the one the jobs apply now
 		require.Equal(t, []int{1, 2}, rep.Methods.IntegrityRules)
 		require.Equal(t, reports.Coverage{ScriptRequests: 100, GPCRequests: 10, UnmeasuredShare: rep.Web.Coverage.UnmeasuredShare}, rep.Web.Coverage)
@@ -322,9 +353,9 @@ func TestUsageReports(t *testing.T) {
 		require.False(t, rep.API.HasData)
 		require.False(t, rep.API.Lossy)
 		require.Zero(t, rep.API.InfrastructureRequests)
-		// only the verified account's operations count
-		require.Equal(t, int64(2), rep.Onchain.IDs)
-		require.Equal(t, int64(1), rep.Onchain.IDsVerified)
+		// only the verified ids' operations count
+		require.Equal(t, int64(4), rep.Onchain.IDs)
+		require.Equal(t, int64(2), rep.Onchain.IDsVerified)
 		require.Equal(t, int64(7), rep.Onchain.Operations)
 		require.Equal(t, "9.000000", *rep.Onchain.WeeklyActive.Average)
 		require.Equal(t, int64(9), *rep.Onchain.WeeklyActive.Latest)
@@ -333,7 +364,7 @@ func TestUsageReports(t *testing.T) {
 		require.Equal(t, "7.000000", *rep.Cohort.KPIs["onchain_operations"].Value)
 		// the raw canonical form names every new member
 		for _, m := range []string{`"integrity_rules":[1,2]`, `"has_data":true`, `"lossy":false`, `"infrastructure_requests":0`,
-			`"weekly_active_accounts":{`, `"coverage":{"gpc_requests":10,"script_requests":100,`} {
+			`"weekly_active_accounts":{`, `"coverage":{"gpc_requests":10,"script_requests":100,`, `"contracts":[{"days_missing":`} {
 			require.Contains(t, string(d.File.Report), m)
 		}
 		file, err := json.Marshal(d.File)

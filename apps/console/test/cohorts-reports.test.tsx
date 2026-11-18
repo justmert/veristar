@@ -423,6 +423,35 @@ const documentV2 = {
   },
 };
 
+// format version 3: the calls per function of each verified contract
+const FN_CONTRACT = "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAG";
+const documentV3 = {
+  ...documentV2,
+  version: 3,
+  methods: { ...documentV2.methods, format: 3, onchain: 2 },
+  onchain: {
+    ...documentV2.onchain,
+    contracts: [
+      {
+        strkey: FN_CONTRACT,
+        days_read: 5,
+        days_no_call_tree: 0,
+        days_missing: 2,
+        functions: [
+          {
+            function: "deposit",
+            caller: "account",
+            successful: 812,
+            failed: null,
+            peak_daily_accounts: 77,
+            days_with_calls: 5,
+          },
+        ],
+      },
+    ],
+  },
+};
+
 function publicBody(report: Record<string, unknown>, signer = SIGNER, signed: unknown = document) {
   return {
     id: "abcdefghijklmnopqrstuvwxyz",
@@ -478,6 +507,24 @@ describe("the public report page (contract 20.5)", () => {
     expect(host.textContent).toContain("About 10% of visits are not measured");
     expect(host.textContent).toContain("No API traffic was recorded in this period.");
     expect(host.textContent).toContain("Infrastructure requests12");
+    expect(host.textContent).toContain("15 a week on average over 2 weeks, 2 missing");
+  });
+
+  it("reads a version 3 report with the calls per contract function", async () => {
+    withCrypto();
+    expect(reportDocument.safeParse(documentV3).success).toBe(true);
+    // a version 3 report without its contracts is not a version 3 report
+    const { contracts: _, ...onchainWithout } = documentV3.onchain;
+    expect(reportDocument.safeParse({ ...documentV3, onchain: onchainWithout }).success).toBe(
+      false,
+    );
+    stubFetch([{ status: 200, body: publicBody(documentV3, SIGNER, documentV3) }]);
+    const host = await renderRoutes(publicRoute, "/r/abcdefghijklmnopqrstuvwxyz");
+    await waitFor(() => expect(host.querySelector("[data-verdict=verified]")).not.toBeNull());
+    const row = host.querySelector(`[data-contract="${FN_CONTRACT}"] [data-function="deposit"]`);
+    expect(row?.textContent).toContain("812");
+    expect(row?.querySelector("[data-missing]")).not.toBeNull();
+    expect(host.textContent).toContain("5 days read, 2 without data");
     expect(host.textContent).toContain("15 a week on average over 2 weeks, 2 missing");
   });
 
@@ -677,6 +724,7 @@ describe("what scf sees with cohorts (contract 19.3)", () => {
     ],
     api_series: [],
     onchain_series: [],
+    contract_functions: [],
     cohort: {
       tenant_id: c.TENANT_ID,
       confirmed: { ...f.cohortA, award_date: "2026-11-15" },

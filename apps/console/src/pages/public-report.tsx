@@ -10,6 +10,7 @@ import {
 } from "@/api/reports";
 import { CoverageNote } from "@/components/coverage";
 import { ErrorPanel, Loading, StateBlock } from "@/components/error-panel";
+import { FunctionsTable, functionsDaysText } from "@/components/onchain-functions";
 import { Fact, Panel } from "@/components/panel";
 import { PublicFrame } from "@/components/public-frame";
 import { Pill } from "@/components/status";
@@ -193,8 +194,10 @@ const KPI_LABEL: Record<string, string> = {
 
 function ReportBody({ doc }: { doc: ReportDocument }) {
   // version 2 adds coverage, has_data, lossy, infrastructure requests and
-  // weekly active accounts; a stored version 1 report shows without them
-  const v2 = doc.version === 2 ? doc : null;
+  // weekly active accounts, version 3 the calls per contract function; a
+  // stored older report shows without them
+  const v2 = doc.version === 2 || doc.version === 3 ? doc : null;
+  const v3 = doc.version === 3 ? doc : null;
   const c = doc.cohort;
   const cohortName = [c.program, c.round, c.category].filter(Boolean).join(", ");
   const population =
@@ -322,6 +325,15 @@ function ReportBody({ doc }: { doc: ReportDocument }) {
             </Fact>
           ) : null}
         </Grid>
+        {v3?.onchain.contracts.map((c) => (
+          <div key={c.strkey} className="mt-4 flex flex-col gap-1.5" data-contract={c.strkey}>
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <code className="min-w-0 break-all text-small text-fg">{c.strkey}</code>
+              <span className="text-caption text-fg-3">{functionsDaysText(c)}</span>
+            </div>
+            <FunctionsTable summary={c} label={`Calls per function of ${c.strkey}`} />
+          </div>
+        ))}
       </Panel>
 
       <Panel

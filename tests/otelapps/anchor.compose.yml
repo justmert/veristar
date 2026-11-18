@@ -1,0 +1,19 @@
+# override of examples/otel-anchor-platform/compose.yaml for the anchor
+# platform test (anchor_test.go): both servers join the network of the stock
+# collectors from deploy/compose/examples.yml and publish on loopback test
+# ports instead of 8080 and 8085. every value comes from the test.
+#
+#   ANCHOR_NETWORK  docker network the tenant backend and the stand-in are on
+
+networks:
+  default:
+    name: ${ANCHOR_NETWORK:?set ANCHOR_NETWORK}
+    external: true
+
+services:
+  sep-server:
+    image: sa-otelapps/anchor-platform-otel:dev
+    ports: !override ["127.0.0.1:47206:8080"]
+  platform-server:
+    image: sa-otelapps/anchor-platform-otel:dev
+    ports: !override ["127.0.0.1:47207:8085"]

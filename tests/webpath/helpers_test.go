@@ -148,14 +148,35 @@ func dayRange(d time.Time) umami.Range {
 	return umami.Range{Start: start, End: start.Add(24*time.Hour - time.Millisecond)}
 }
 
-// Drained waits until the replayer consumer has nothing pending and nothing
-// unacknowledged, and returns how long that took.
+// Drained waits until every replayer consumer (each partition and, when it
+// exists, the legacy one) has nothing pending and nothing unacknowledged,
+// and returns how long that took.
 func (s *Stack) Drained(t testing.TB, timeout time.Duration) time.Duration {
 	t.Helper()
 	start := time.Now()
-	ctx := context.Background()
 	for {
-		c, err := s.JS.Consumer(ctx, natsx.StreamWebEvents, natsx.ConsumerReplayer)
+		info := s.consumerInfo(t)
+		if info.NumPending == 0 && info.NumAckPending == 0 {
+			return time.Since(start)
+		}
+		if time.Since(start) > timeout {
+			t.Fatalf("replayer consumers not drained after %s: pending %d, ack pending %d", timeout, info.NumPending, info.NumAckPending)
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+}
+
+// consumerInfo sums the pending and unacknowledged counts of every replayer
+// consumer.
+func (s *Stack) consumerInfo(t testing.TB) *jetstream.ConsumerInfo {
+	t.Helper()
+	ctx := context.Background()
+	sum := &jetstream.ConsumerInfo{}
+	for _, name := range natsx.ReplayerConsumers() {
+		c, err := s.JS.Consumer(ctx, natsx.StreamWebEvents, name)
+		if name == natsx.ConsumerReplayer && errors.Is(err, jetstream.ErrConsumerNotFound) {
+			continue
+		}
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -163,27 +184,10 @@ func (s *Stack) Drained(t testing.TB, timeout time.Duration) time.Duration {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if info.NumPending == 0 && info.NumAckPending == 0 {
-			return time.Since(start)
-		}
-		if time.Since(start) > timeout {
-			t.Fatalf("replayer consumer not drained after %s: pending %d, ack pending %d", timeout, info.NumPending, info.NumAckPending)
-		}
-		time.Sleep(200 * time.Millisecond)
+		sum.NumPending += info.NumPending
+		sum.NumAckPending += info.NumAckPending
 	}
-}
-
-func (s *Stack) consumerInfo(t testing.TB) *jetstream.ConsumerInfo {
-	t.Helper()
-	c, err := s.JS.Consumer(context.Background(), natsx.StreamWebEvents, natsx.ConsumerReplayer)
-	if err != nil {
-		t.Fatal(err)
-	}
-	info, err := c.Info(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	return info
+	return sum
 }
 
 // ResetSites waits for the replayer to drain, resets the umami websites and

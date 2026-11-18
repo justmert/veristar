@@ -103,6 +103,15 @@ type SCFViewAnswer struct {
 	WebSeries     []WebPoint         `json:"web_series"`
 	APISeries     []APIPoint         `json:"api_series"`
 	OnchainSeries []onchain.DayTotal `json:"onchain_series"`
+	// the calls per function of each verified contract over the range
+	ContractFunctions []ContractUsage `json:"contract_functions"`
+}
+
+// ContractUsage is one verified contract's calls per function in the
+// "what scf sees" view.
+type ContractUsage struct {
+	Strkey    string            `json:"strkey"`
+	Functions onchain.Functions `json:"functions"`
 }
 
 // PercentileCohort names the population of a project's percentiles in the
@@ -170,6 +179,9 @@ func LoadSCFView(ctx context.Context, tx pgx.Tx, id uuid.UUID, from, to, now tim
 	}
 	if out.RulesMet == nil {
 		out.RulesMet = []SCFRule{}
+	}
+	if out.ContractFunctions == nil {
+		out.ContractFunctions = []ContractUsage{}
 	}
 	if out.WebSeries == nil {
 		out.WebSeries = []WebPoint{}
@@ -251,6 +263,12 @@ func loadSCF(ctx context.Context, tx pgx.Tx, id uuid.UUID, rg dayRange, now time
 		return err
 	}
 	out.LinkTwoWay = view.Link.TwoWay
+	out.ContractFunctions = []ContractUsage{}
+	for _, x := range view.IDs {
+		if x.Functions != nil {
+			out.ContractFunctions = append(out.ContractFunctions, ContractUsage{Strkey: x.Strkey, Functions: *x.Functions})
+		}
+	}
 	return nil
 }
 

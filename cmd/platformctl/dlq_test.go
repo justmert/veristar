@@ -5,16 +5,19 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"log/slog"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stretchr/testify/require"
 
 	"github.com/justmert/veristar/internal/config"
+	"github.com/justmert/veristar/internal/events"
 	"github.com/justmert/veristar/internal/natsx"
 	"github.com/justmert/veristar/internal/obs"
 	"github.com/justmert/veristar/tests/fixtures/natsctr"
@@ -76,7 +79,8 @@ func TestDLQ(t *testing.T) {
 		require.NoError(t, err)
 		i := 0
 		for m := range b.Messages() {
-			require.NoError(t, natsx.DeadLetter(ctx, j, dlqStream, natsx.Subject(dlqPrefix, lastToken(m.Subject())), m, reasons[i]))
+			// the dlq token is the site or tenant, the third subject token
+			require.NoError(t, natsx.DeadLetter(ctx, j, dlqStream, natsx.Subject(dlqPrefix, strings.Split(m.Subject(), ".")[2]), m, reasons[i]))
 			require.NoError(t, m.DoubleAck(ctx))
 			i++
 		}
@@ -84,11 +88,11 @@ func TestDLQ(t *testing.T) {
 		require.Equal(t, len(reasons), i)
 	}
 	for i, site := range []string{"site-a", "site-a", "site-a", "site-b"} {
-		_, err := natsx.PublishDedup(ctx, gateway, natsx.StreamWebEvents, natsx.Subject(natsx.SubjectWebEvents, site),
+		_, err := natsx.PublishDedup(ctx, gateway, natsx.StreamWebEvents, natsx.Subject(natsx.SubjectWebEvents, site)+".04",
 			"e"+string(rune('1'+i)), []byte(`{"id":"e`+string(rune('1'+i))+`","secret":"payload-marker"}`), nil)
 		require.NoError(t, err)
 	}
-	deadLetter(replayer, natsx.StreamWebEvents, natsx.ConsumerReplayer, natsx.StreamWebDLQ, natsx.SubjectWebDLQ,
+	deadLetter(replayer, natsx.StreamWebEvents, natsx.ConsumerPartition(4), natsx.StreamWebDLQ, natsx.SubjectWebDLQ,
 		"umami 400: bad\nrequest", "umami 400: bad\nrequest", "schema: no site", "schema: no site")
 	_, err = natsx.PublishDedup(ctx, collector, natsx.StreamAPIMetrics, natsx.Subject(natsx.SubjectAPIMetrics, "tenant-1"), "m1", []byte("batch"), nil)
 	require.NoError(t, err)
@@ -148,7 +152,7 @@ func TestDLQ(t *testing.T) {
 		require.NoError(t, err)
 		m, err := s.GetMsg(ctx, 0, jetstream.WithGetMsgSubject(natsx.SubjectWebEvents+".>"))
 		require.NoError(t, err)
-		require.Equal(t, "web.events.site-a", m.Subject)
+		require.Equal(t, "web.events.site-a.04", m.Subject, "a message that does not decode goes back to its own subject")
 		require.JSONEq(t, `{"id":"e1","secret":"payload-marker"}`, string(m.Data), "the payload and its event id are kept")
 		require.Empty(t, m.Header.Get(natsx.HeaderDLQReason))
 		require.Equal(t, "WEB_DLQ.1", m.Header.Get(HeaderDLQReplay))
@@ -157,7 +161,7 @@ func TestDLQ(t *testing.T) {
 
 	t.Run("replay after a crash between publish and delete stores once", func(t *testing.T) {
 		// the earlier run published dlq message 3 and died before deleting it
-		_, err := natsx.PublishDedup(ctx, admin, natsx.StreamWebEvents, "web.events.site-a", replayID("e3", natsx.StreamWebDLQ, 3), []byte("x"), nil)
+		_, err := natsx.PublishDedup(ctx, admin, natsx.StreamWebEvents, "web.events.site-a.04", replayID("e3", natsx.StreamWebDLQ, 3), []byte("x"), nil)
 		require.NoError(t, err)
 		out, err := run("replay", "--queue", "web", "--reason", "schema")
 		require.NoError(t, err)
@@ -167,7 +171,7 @@ func TestDLQ(t *testing.T) {
 	})
 
 	t.Run("a message dead-lettered again replays with a stable id", func(t *testing.T) {
-		deadLetter(replayer, natsx.StreamWebEvents, natsx.ConsumerReplayer, natsx.StreamWebDLQ, natsx.SubjectWebDLQ, "still failing")
+		deadLetter(replayer, natsx.StreamWebEvents, natsx.ConsumerPartition(4), natsx.StreamWebDLQ, natsx.SubjectWebDLQ, "still failing")
 		out, err := run("list", "--queue", "web")
 		require.NoError(t, err)
 		require.Contains(t, out, "still failing")
@@ -180,6 +184,34 @@ func TestDLQ(t *testing.T) {
 		m, err := s.GetMsg(ctx, info.State.LastSeq)
 		require.NoError(t, err)
 		require.Equal(t, "e1.replay.WEB_DLQ.5", m.Header.Get(jetstream.MsgIDHeader))
+	})
+
+	t.Run("an event replays to its partition, also one from the legacy subject", func(t *testing.T) {
+		// drain what the earlier subtests put back, so the replayed events
+		// are the only ones left
+		s, err := admin.Stream(ctx, natsx.StreamWebEvents)
+		require.NoError(t, err)
+		require.NoError(t, s.Purge(ctx))
+		site := uuid.NewString()
+		vt := strings.Repeat("5e", 32)
+		ev := &events.WebEvent{ID: "0193a3f2-6a4e-7cc1-9b1a-3f2d8e9c1a20", SiteID: site, WebsiteID: site, Band: events.BandPrimary,
+			VT: vt, UA: "Mozilla/5.0", Type: events.TypePageview, Hostname: "x.example", URL: "/", AcceptedAt: time.Now().UnixMilli()}
+		body, err := ev.Marshal()
+		require.NoError(t, err)
+		for i, orig := range []string{ev.LegacySubject(), ev.Subject()} {
+			h := nats.Header{}
+			h.Set(natsx.HeaderDLQSubject, orig)
+			h.Set(natsx.HeaderDLQStream, natsx.StreamWebEvents)
+			h.Set(natsx.HeaderDLQReason, "umami 500")
+			_, err := natsx.PublishDedup(ctx, replayer, natsx.StreamWebDLQ, natsx.Subject(natsx.SubjectWebDLQ, site), fmt.Sprintf("ev-%d", i), body, h)
+			require.NoError(t, err)
+		}
+		out, err := run("replay", "--queue", "web", "--key", site)
+		require.NoError(t, err, out)
+		require.Contains(t, out, "replayed 2 message(s)")
+		info, err := s.Info(ctx, jetstream.WithSubjectFilter(natsx.WebEventsPartitioned))
+		require.NoError(t, err)
+		require.Equal(t, map[string]uint64{ev.Subject(): 2}, info.State.Subjects)
 	})
 
 	t.Run("replay refuses a subject outside the original stream", func(t *testing.T) {

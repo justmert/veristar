@@ -90,7 +90,7 @@ func (lr *leadRun) deliver(ctx context.Context, q *visitorQueue, h *held) bool {
 			if lr.deadLetter(ctx, h, fmt.Sprintf("not delivered within the %s max age of %s", lr.r.maxAge, natsx.StreamWebEvents)) {
 				return true
 			}
-			if !lr.gate.wait(ctx, natsx.RetryDelay(attempt), noTarget) {
+			if !lr.r.pool.gate.wait(ctx, lr.yield, natsx.RetryDelay(attempt), noTarget) {
 				return false
 			}
 			continue
@@ -119,12 +119,12 @@ func (lr *leadRun) deliver(ctx context.Context, q *visitorQueue, h *held) bool {
 		delay := natsx.RetryDelay(attempt)
 		waitOn := noTarget
 		if f.send && !f.permanent {
-			healthy := lr.healthy(ctx, h.target)
+			healthy := lr.r.healthy(ctx, h.target)
 			if healthy {
-				lr.writes[h.target].fail(h.key, time.Now())
+				lr.r.pool.writes[h.target].fail(h.key, time.Now())
 			}
 			switch {
-			case healthy && lr.writes[h.target].faulted(time.Now()):
+			case healthy && lr.r.pool.writes[h.target].faulted(time.Now()):
 				// the process cannot write (writefault.go): the failure says
 				// nothing about this event, so it is not counted and the
 				// visitor waits for the process's next stored send
@@ -151,7 +151,15 @@ func (lr *leadRun) deliver(ctx context.Context, q *visitorQueue, h *held) bool {
 		lr.r.m.retries.Inc()
 		lr.r.log.Warn("delivery failed, retrying", "stream_seq", h.seq, "attempt", attempt,
 			"healthy_failures", h.healthyFailures, "retry_in", delay.String(), "error", f.err.Error())
-		if !lr.gate.wait(ctx, delay, waitOn) {
+		// a hand-over delivers what the hold has, but does not wait out a
+		// retry: the event goes back to the stream, and the next owner
+		// waits until it can be redelivered. only the bookkeeping of an
+		// event umami already stored is finished, so it is not sent twice.
+		stop := lr.yield
+		if h.delivered {
+			stop = nil
+		}
+		if !lr.r.pool.gate.wait(ctx, stop, delay, waitOn) {
 			return false
 		}
 	}
@@ -222,9 +230,9 @@ func (lr *leadRun) attempt(ctx context.Context, h *held) error {
 			r.m.send.WithLabelValues(sendOK).Observe(elapsed)
 		}
 		r.m.perProcess.WithLabelValues(strconv.Itoa(h.target)).Inc()
-		if lr.writes[h.target].succeed(h.key, time.Now()) {
+		if lr.r.pool.writes[h.target].succeed(h.key, time.Now()) {
 			// visitors waiting out a write fault of this process retry now
-			lr.gate.wake(writeFaultWaiter(h.target))
+			lr.r.pool.gate.wake(writeFaultWaiter(h.target))
 		}
 		h.delivered, h.bot = true, res.Bot
 		h.sessionID, h.cache = res.SessionID, res.Cache
@@ -338,8 +346,8 @@ type gate struct {
 }
 
 // wait sleeps for d, or until target answers again when target is not
-// noTarget. it returns false when ctx ended first.
-func (g *gate) wait(ctx context.Context, d time.Duration, target int) bool {
+// noTarget. it returns false when ctx ended or stop was closed first.
+func (g *gate) wait(ctx context.Context, stop <-chan struct{}, d time.Duration, target int) bool {
 	ch := make(chan struct{}, 1)
 	g.mu.Lock()
 	if g.waiters == nil {
@@ -356,6 +364,8 @@ func (g *gate) wait(ctx context.Context, d time.Duration, target int) bool {
 	defer t.Stop()
 	select {
 	case <-ctx.Done():
+		return false
+	case <-stop:
 		return false
 	case <-t.C:
 		return true
