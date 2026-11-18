@@ -75,11 +75,6 @@ export function sessionField(v: string): FieldCode | null {
   return UUID.test(t) ? null : "invalid_format";
 }
 
-export function confirmDomainField(v: string, domain: string): FieldCode | null {
-  if (v.trim() === "") return "required";
-  return v.trim() === domain ? null : "invalid_value";
-}
-
 export const KIND_LABEL: Record<ErasureKind, string> = {
   visitor_today: "One visitor, today",
   session: "One session",
