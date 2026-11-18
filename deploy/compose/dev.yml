@@ -154,11 +154,11 @@ services:
       - "127.0.0.1:9091:9090"
 
   # control plane api. in the "core" profile: it needs the platform
-  # database migrated with role passwords (make db-migrate db-roles). port
-  # 8085 is the dev github oauth app's callback (8080 is the dev gateway). the
-  # api is reached directly at http://localhost:8085/api, which is also the
-  # console origin, so the host-only session cookie and the csrf origin check
-  # see one origin. ops port on loopback only. GITHUB_CLIENT_ID,
+  # database migrated with role passwords (make db-migrate db-roles). it
+  # listens on 8085 (8080 is the dev gateway). the console origin is the vite
+  # dev server on http://localhost:5173, which proxies /api here, so the
+  # host-only session cookie, the csrf origin check and the github oauth
+  # callback all see that one origin. ops port on loopback only. GITHUB_CLIENT_ID,
   # GITHUB_CLIENT_SECRET (the dev github oauth app) and OPERATOR_GITHUB_IDS are added
   # to .env.dev by hand; they default to empty here so the other services still
   # start, and the control plane then refuses to start and names each key.
@@ -178,11 +178,11 @@ services:
     environment:
       CONTROLPLANE_ADDR: 0.0.0.0:8085
       CONTROLPLANE_OPS_ADDR: 0.0.0.0:9090
-      CONSOLE_ORIGIN: http://localhost:8085
+      CONSOLE_ORIGIN: http://localhost:5173
       INGEST_ORIGIN: http://localhost:8080
       GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
       GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
-      GITHUB_REDIRECT_URL: http://localhost:8085/api/auth/github/callback
+      GITHUB_REDIRECT_URL: http://localhost:5173/api/auth/github/callback
       OAUTH_STATE_KEY: ${OAUTH_STATE_KEY:?run make dev-env}
       REPORT_SIGNING_SEED: ${REPORT_SIGNING_SEED:?run make dev-env}
       REPORT_SIGNING_KEY: ${REPORT_SIGNING_KEY:?run make dev-env}

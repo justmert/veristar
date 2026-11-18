@@ -39,7 +39,32 @@ Compose (`deploy/compose/dev.yml`). The Makefile wraps it:
 | `make db-migrate`, `make db-roles` | migrates the platform database and gives the roles their passwords |
 | `make dev-ps`, `make dev-logs`, `make dev-down`, `make dev-reset` | status, logs, stop, and start again with empty volumes |
 
-The console runs with `pnpm --filter ./apps/console dev`.
+From a fresh clone, the whole stack with the console comes up in this order:
+
+```sh
+pnpm install --frozen-lockfile
+make dev-up                   # postgresql, nats and umami
+make umami-bootstrap
+make db-migrate db-roles
+set -a && . deploy/compose/.env.dev && set +a && dist/bin/platformctl nats apply
+```
+
+The control plane signs users in with GitHub. Create a GitHub OAuth App with the callback URL
+`http://localhost:5173/api/auth/github/callback`, then add `GITHUB_CLIENT_ID`,
+`GITHUB_CLIENT_SECRET` and `OPERATOR_GITHUB_IDS` (your numeric GitHub id) to
+`deploy/compose/.env.dev`. Start the platform services and the console:
+
+```sh
+docker compose --env-file deploy/compose/.env.dev -f deploy/compose/dev.yml \
+  --profile core up -d --build controlplane replayer metricswriter
+make gateway-up               # the collect gateway, profile edge
+CONTROLPLANE_URL=http://localhost:8085 pnpm --filter ./apps/console dev
+```
+
+Open the console at `http://localhost:5173`. The Vite dev server proxies `/api` to the control
+plane, so the console, the session cookie and the OAuth callback share that one origin, which is
+the `CONSOLE_ORIGIN` of the dev stack. Run the console on another port and the control plane
+refuses its requests with `origin_mismatch`.
 
 ## Checks
 

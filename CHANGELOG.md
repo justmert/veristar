@@ -83,6 +83,11 @@ here, before they take effect, as the processing terms require
 
 ### Changed
 
+- Development stack: the control plane's `CONSOLE_ORIGIN` and GitHub callback are now the
+  Vite dev server, `http://localhost:5173`, which proxies `/api`, so a console started with
+  `pnpm --filter ./apps/console dev` signs in. CONTRIBUTING.md lists every step from a
+  fresh clone, including `CONTROLPLANE_URL`, which the console dev server requires. Point
+  the dev GitHub OAuth App's callback at `http://localhost:5173/api/auth/github/callback`.
 - Terms of use `2026-11-18-draft.6`: SCF also receives, per verified
   contract, UTC day, function and kind of caller, the counts of successful
   and failed calls and of the distinct accounts that made them; the accounts
