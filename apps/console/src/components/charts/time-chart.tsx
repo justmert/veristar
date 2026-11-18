@@ -623,7 +623,7 @@ export function TimeChart({
                                 data-series={s.key}
                                 cx={cx(run[0]?.i ?? 0)}
                                 cy={y(run[0]?.v ?? 0)}
-                                r="2"
+                                r="3"
                                 className={FILL[s.tone]}
                               />
                             ) : (
