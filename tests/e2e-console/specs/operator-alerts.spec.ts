@@ -204,7 +204,7 @@ test("alert source unreachable while alertmanager is down, and no list", async (
     await expect(page.getByText("All clear", { exact: true })).toHaveCount(0);
     await expect(page.locator("[data-alert]")).toHaveCount(0);
     const nav = page.getByRole("navigation", { name: "Operator" });
-    await expect(nav.getByRole("link", { name: /alert source unreachable/ })).toBeVisible();
+    await expect(nav.getByRole("link", { name: /alert source did not answer/ })).toBeVisible();
     const r = await api<{ error?: { code?: string } }>(op.ctx, "GET", "/api/operator/alerts");
     expect(r.status).toBe(503);
     expect(r.body?.error?.code).toBe("alert_source_unreachable");
