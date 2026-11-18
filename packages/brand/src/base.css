@@ -79,13 +79,15 @@
       background-color: transparent;
     }
   }
+  /* the breathing of a skeleton keeps it visible: it never fades below
+     the 1.3:1 the muted role holds on a card */
   @keyframes vs-skeleton {
     0%,
     100% {
       opacity: 1;
     }
     50% {
-      opacity: 0.5;
+      opacity: 0.8;
     }
   }
   @keyframes vs-spin {
