@@ -92,7 +92,11 @@ export function Sidebar({
           <span className="text-title">Veristar</span>
         </Link>
 
-        <ProjectSwitcher me={me} id={projectId} onNavigate={onNavigate} />
+        {/* operators do not work inside one project, so the operator area
+            has no switcher; the command palette opens any project */}
+        {area.kind === "operator" ? null : (
+          <ProjectSwitcher me={me} id={projectId} onNavigate={onNavigate} />
+        )}
 
         {projectId ? (
           <Groups
