@@ -134,21 +134,44 @@ const MARK_ICON: Record<Mark, ReactNode> = {
   none: <Minus aria-hidden className="size-3.5 text-fg-3" />,
 };
 
-// one checklist row; the icon repeats what the words already say
+// what to do about a stellar.toml check that did not pass, in one sentence
+const TOML_ADVICE: Record<Exclude<StellarToml["status"], "found">, string> = {
+  not_found: "Serve the file at the address below with status 200.",
+  invalid: "Fix the TOML syntax of the file. A TOML validator shows the line.",
+  too_large: "Make the file smaller than 100 KB.",
+  refused: "Serve the file from the domain itself on a public address, without a redirect.",
+  error: "Make sure the domain answers over HTTPS. The next daily check reads it again.",
+};
+
+export function tomlAdvice(status: StellarToml["status"]): string | null {
+  return status === "found" ? null : TOML_ADVICE[status];
+}
+
+// one checklist row; the icon repeats what the words already say. a row that
+// did not pass says what to do next.
 function EvidenceRow({
   mark,
   label,
   children,
+  advice,
 }: {
   mark: Mark;
   label: string;
   children: ReactNode;
+  advice?: string | null;
 }) {
   return (
     <div className="grid grid-cols-[1rem_minmax(0,8rem)_minmax(0,1fr)] items-start gap-x-2 py-1">
       <span className="mt-1 flex">{MARK_ICON[mark]}</span>
       <dt className="text-fg-2">{label}</dt>
-      <dd className="min-w-0 break-words text-fg">{children}</dd>
+      <dd className="min-w-0 break-words text-fg">
+        {children}
+        {mark === "warn" && advice ? (
+          <span className="block text-fg-2" data-advice="">
+            {advice}
+          </span>
+        ) : null}
+      </dd>
     </div>
   );
 }
@@ -197,11 +220,10 @@ export function StellarTomlSummary({
     <div className={cn("flex flex-col gap-1 text-small", className)}>
       {head}
       <dl className="flex flex-col divide-y divide-line-subtle">
-        <EvidenceRow mark={found ? "ok" : "warn"} label="File">
+        <EvidenceRow mark={found ? "ok" : "warn"} label="File" advice={tomlAdvice(toml.status)}>
           {TOML_STATUS[toml.status]}
           {toml.http_status !== null && !found ? ` (HTTP ${toml.http_status})` : ""}
-          {toml.error ? ` (${toml.error})` : ""}
-          {found ? null : <span className="block break-all text-fg-3">{where}</span>}
+          {found ? null : <span className="block break-all font-mono text-fg-3">{where}</span>}
         </EvidenceRow>
         {found ? (
           <>
@@ -214,12 +236,14 @@ export function StellarTomlSummary({
             <EvidenceRow
               mark={accounts === 0 ? "none" : (toml.accounts_valid ?? 0) < accounts ? "warn" : "ok"}
               label="Accounts"
+              advice="List each account in ACCOUNTS as a valid G address."
             >
               {accounts} listed, {toml.accounts_valid ?? 0} valid
             </EvidenceRow>
             <EvidenceRow
               mark={toml.signing_key_present ? (toml.signing_key_valid ? "ok" : "warn") : "none"}
               label="Signing key"
+              advice="Set SIGNING_KEY to a valid G address."
             >
               {toml.signing_key_present
                 ? toml.signing_key_valid
@@ -230,6 +254,7 @@ export function StellarTomlSummary({
             <EvidenceRow
               mark={toml.org_url ? (toml.org_url_same_domain ? "ok" : "warn") : "none"}
               label="Organization URL"
+              advice="Set ORG_URL to an address on this domain."
             >
               <span className="break-all">{toml.org_url ?? "None"}</span>
               {toml.org_url
@@ -241,6 +266,7 @@ export function StellarTomlSummary({
             <EvidenceRow
               mark={total === 0 ? "none" : invalidCurrencies > 0 ? "warn" : "ok"}
               label="Currencies"
+              advice="Give each currency a valid issuer or contract."
             >
               {total}
               {total > currencies.length ? `, first ${currencies.length} shown` : ""}
