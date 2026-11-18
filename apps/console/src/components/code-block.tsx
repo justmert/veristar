@@ -8,6 +8,7 @@ export function CodeBlock({
   code,
   label,
   copyLabel = "Copy",
+  copyText,
   className,
   actions,
   wrap = false,
@@ -15,6 +16,8 @@ export function CodeBlock({
   code: string;
   label?: ReactNode;
   copyLabel?: string;
+  // what the copy action copies when the shown code is an example around it
+  copyText?: string;
   className?: string;
   actions?: ReactNode;
   wrap?: boolean;
@@ -25,7 +28,7 @@ export function CodeBlock({
         <span className="truncate text-caption text-fg-3">{label}</span>
         <div className="flex items-center gap-2">
           {actions}
-          <CopyButton text={code} label={copyLabel} size="xs" variant="ghost" />
+          <CopyButton text={copyText ?? code} label={copyLabel} size="xs" variant="ghost" />
         </div>
       </div>
       <pre
