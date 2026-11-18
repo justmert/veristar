@@ -16,7 +16,7 @@ import { DbIpAttribution } from "@/components/dbip-attribution";
 import { PageHeader } from "@/components/page-header";
 import { RangeControl } from "@/components/range-control";
 import { Sparkline, StatCard } from "@/components/stat-card";
-import { EmptyState, ErrorState, Skeleton } from "@/components/states";
+import { EmptyState, ErrorState, Missing, Skeleton } from "@/components/states";
 import { StatusDot } from "@/components/status";
 import { StatusBadge } from "@/components/status-badge";
 import { Skeleton as Bone } from "@/components/ui/skeleton";
@@ -444,6 +444,13 @@ function Summaries({ tenantId, sites, days }: { tenantId: string; sites: Site[];
           <span className="text-small text-fg-2">On-chain activity did not load.</span>
         ) : chain.data.totals.ids === 0 ? (
           <span className="text-small text-fg-2">No accounts or contracts declared</span>
+        ) : activity?.gap ? (
+          <span className="flex flex-wrap items-baseline gap-x-2">
+            <span className="font-mono text-title text-fg tabular">
+              <Missing reason={activity.gap} />
+            </span>
+            <span className="text-small text-fg-2">operations. {activity.gap}.</span>
+          </span>
         ) : (
           <span className="flex flex-wrap items-baseline gap-x-2">
             <span className="font-mono text-title text-fg tabular">

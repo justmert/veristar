@@ -158,6 +158,10 @@ export function LinkStatus({ view }: { view: OnchainView }) {
 
 // one id's totals over the range in one line
 export function IdTotals({ id }: { id: ChainId }) {
+  // without a read day the totals are not measured, so no 0 shows
+  if (id.totals.days_read === 0) {
+    return <span className="text-small text-fg-2">No ledger read in this range</span>;
+  }
   return (
     <span className="text-small text-fg-2">
       <span className="font-mono text-fg tabular">{formatCount(id.totals.operations)}</span>{" "}

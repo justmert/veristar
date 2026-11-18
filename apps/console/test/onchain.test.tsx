@@ -5,6 +5,7 @@ import { webProject } from "@/api/schemas";
 import { WeeklyActiveList } from "@/components/onchain";
 import { ContractFunctionsBlock, FunctionsDaily } from "@/components/onchain-functions";
 import { EMPTY_FILTERS } from "@/lib/global";
+import { chainGap, NO_LEDGER_READ, NO_VERIFIED_IDS } from "@/lib/onchain";
 import { listExportHref } from "@/lib/operator-projects";
 import { OnchainValue } from "@/pages/operator/shared";
 import { OnchainPage } from "@/pages/project/onchain";
@@ -817,5 +818,13 @@ describe("calls per contract function (contract 15.8)", () => {
     expect(
       exportPaths.functions({ tenantId: f.TENANT_ID, operator: true, range: {} }, FN_CONTRACT_ID),
     ).toBe(`/api/operator/tenants/${f.TENANT_ID}/onchain/ids/${FN_CONTRACT_ID}/functions.csv`);
+  });
+});
+
+describe("one missing-value rule for on-chain figures", () => {
+  it("shows 0 only after a read of a verified id", () => {
+    expect(chainGap(0, [{ operations: 4 }])).toBe(NO_VERIFIED_IDS);
+    expect(chainGap(1, [{ operations: null }, { operations: null }])).toBe(NO_LEDGER_READ);
+    expect(chainGap(1, [{ operations: null }, { operations: 0 }])).toBeNull();
   });
 });

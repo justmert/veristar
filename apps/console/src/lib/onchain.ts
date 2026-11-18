@@ -87,6 +87,20 @@ export function missingReasons(id: ChainId): { code: string; days: number }[] {
 export const DAYS_WITHOUT_DATA =
   "Days before today without a ledger read, added up over the verified ids.";
 
+export const NO_VERIFIED_IDS = "No verified account or contract";
+export const NO_LEDGER_READ = "No ledger read for a verified id in this range";
+
+// one missing-value rule for the on-chain figures of every page and the
+// signed report. the figures count verified ids only, so without one they
+// are not measured, and without a single read day they are not measured
+// either. 0 shows only when a read found no activity. series holds the
+// verified ids' daily sums, null on a day without a read.
+export function chainGap(verified: number, series: { operations: number | null }[]): string | null {
+  if (verified === 0) return NO_VERIFIED_IDS;
+  if (!series.some((p) => p.operations !== null)) return NO_LEDGER_READ;
+  return null;
+}
+
 // the activity of a range as scf reviewers count it: verified ids only, and
 // days before today. the on-chain view sums every declared id, today
 // included; these figures read the same as the scf review and the operator
@@ -97,6 +111,8 @@ export type VerifiedActivity = {
   transactions: number;
   // verified id-days of the range before today without a stored row
   daysMissing: number;
+  // why operations and transactions are not measured, null when they are
+  gap: string | null;
   // one point per day: the sum of the verified ids that have a row, or
   // missing with a reason when none has one
   daily: { day: string; value: number | null; missing: string | null }[];
@@ -124,7 +140,17 @@ export function verifiedActivity(v: OnchainView): VerifiedActivity {
     }
     return { day, value: sum, missing: sum === null ? missing : null };
   });
-  return { verified: ids.length, operations, transactions, daysMissing, daily };
+  return {
+    verified: ids.length,
+    operations,
+    transactions,
+    daysMissing,
+    gap: chainGap(
+      ids.length,
+      daily.map((d) => ({ operations: d.value })),
+    ),
+    daily,
+  };
 }
 
 // the weekly active accounts of a range in one line: the scf growth hack
