@@ -42,6 +42,7 @@ import { EmptyState, ErrorState } from "@/components/states";
 import { Pill } from "@/components/status";
 import { toast } from "@/components/toast";
 import { Button } from "@/components/ui/button";
+import { Dialog } from "@/components/ui/dialog";
 import { Menu, MenuContent, MenuItem, MenuTrigger } from "@/components/ui/menu";
 import { WalletPicker } from "@/components/wallet-picker";
 import { countOf, formatCount, formatDateTimeUtc } from "@/lib/format";
@@ -50,7 +51,6 @@ import {
   DAYS_WITHOUT_DATA,
   METHOD_TEXT,
   missingText,
-  NO_VERIFIED_IDS,
   shortKey,
   type VerifiedActivity,
   verifiedActivity,
@@ -60,6 +60,7 @@ import {
 import { connectWallet, signMessage, WalletError } from "@/lib/stellar-wallet";
 import { useProject } from "@/pages/project-layout";
 import { OnchainSkeleton, PAGE_HEADERS } from "./page-frame";
+import { Step, Steps } from "./steps";
 
 const CADENCE = "Veristar reads the ledger once a day.";
 
@@ -100,11 +101,14 @@ export function OnchainPage() {
   const canChange = termsCurrent && tenant.status !== "suspended";
   const [params, setParams] = useSearchParams();
   const range = readOnchainRange(params);
+  const [adding, setAdding] = useState(false);
   const view = useQuery({
     ...onchainQuery(tenant.id, onchainRequest(range, new Date())),
     placeholderData: (prev) => prev,
   });
   const v = view.data;
+  // until one id is proven nothing counts, so the page is its first step
+  const proven = v ? v.ids.some((id) => id.verification.status === "verified") : false;
 
   function setRange(next: RangeState) {
     const p = new URLSearchParams(params);
@@ -122,9 +126,17 @@ export function OnchainPage() {
   const header = (
     <PageHeader
       {...PAGE_HEADERS.onchain}
-      freshness={v ? freshnessOf(v) : null}
+      freshness={v && proven ? freshnessOf(v) : undefined}
+      primary={
+        v && v.ids.length > 0 && canChange ? (
+          <Button onClick={() => setAdding(true)}>
+            <Plus aria-hidden />
+            Add account
+          </Button>
+        ) : null
+      }
       secondary={
-        v && v.ids.length > 0 ? (
+        v && proven ? (
           <Button asChild variant="outline">
             <a href={exportPaths.overview(tenant.id, { from: v.from, to: v.to })} download>
               <Download aria-hidden />
@@ -146,30 +158,24 @@ export function OnchainPage() {
         onRetry={() => view.refetch()}
       />
     );
+  else if (!proven)
+    body = <FirstStep view={v} tenantId={tenant.id} canChange={canChange} isOwner={isOwner} />;
   else
     body = (
       <>
-        {v.ids.length > 0 ? (
-          <>
-            <RangeControl<Preset>
-              value={range.preset}
-              presets={PRESETS}
-              onPreset={(preset) => setRange({ preset, custom: null })}
-              custom={range.custom}
-              onCustom={(custom) => setRange({ preset: "custom", custom })}
-              range={{ from: v.from, to: v.to }}
-              maxDays={MAX_DAYS}
-              maxDay={lastDays(1, new Date()).to}
-            />
-            <Activity view={v} />
-          </>
-        ) : null}
+        <RangeControl<Preset>
+          value={range.preset}
+          presets={PRESETS}
+          onPreset={(preset) => setRange({ preset, custom: null })}
+          custom={range.custom}
+          onCustom={(custom) => setRange({ preset: "custom", custom })}
+          range={{ from: v.from, to: v.to }}
+          maxDays={MAX_DAYS}
+          maxDay={lastDays(1, new Date()).to}
+        />
+        <Activity view={v} />
         <Ids view={v} tenantId={tenant.id} canChange={canChange} isOwner={isOwner} />
         <LinkSection view={v} tenantId={tenant.id} />
-        <p className="max-w-prose text-caption text-fg-2">
-          Ledger data is public. Veristar keeps daily counts per ID and per contract function. It
-          keeps no counterparty, caller or transaction.
-        </p>
       </>
     );
 
@@ -177,7 +183,48 @@ export function OnchainPage() {
     <div className="flex min-w-0 flex-col gap-8">
       {header}
       {body}
+      <AddDialog tenantId={tenant.id} open={adding} onOpenChange={setAdding} />
     </div>
+  );
+}
+
+// the page before any id is proven: add an id, then prove control of it
+function FirstStep({
+  view,
+  tenantId,
+  canChange,
+  isOwner,
+}: {
+  view: OnchainView;
+  tenantId: string;
+  canChange: boolean;
+  isOwner: boolean;
+}) {
+  if (!canChange && view.ids.length === 0)
+    return (
+      <EmptyState icon={<Blocks aria-hidden strokeWidth={1.75} />} title="No accounts or contracts">
+        An owner or member adds them after the terms are accepted.
+      </EmptyState>
+    );
+  const added = view.ids.length > 0;
+  return (
+    <section
+      aria-labelledby="ids-h"
+      data-first-step=""
+      className="flex min-w-0 flex-col gap-4 rounded-lg border border-line bg-raised p-5 max-sm:p-4"
+    >
+      <h2 id="ids-h" className="text-title text-fg">
+        Accounts and contracts
+      </h2>
+      <Steps>
+        <Step n={1} state={added ? "done" : "current"} title="Add an account or contract">
+          <AddForm tenantId={tenantId} />
+        </Step>
+        <Step n={2} state={added ? "current" : "todo"} title="Prove control">
+          <IdList view={view} tenantId={tenantId} canChange={canChange} isOwner={isOwner} />
+        </Step>
+      </Steps>
+    </section>
   );
 }
 
@@ -193,21 +240,20 @@ function freshnessOf(v: OnchainView) {
 function Activity({ view }: { view: OnchainView }) {
   const a = verifiedActivity(view);
   const w = view.totals.weekly_active_accounts;
-  // days without data stay countable while no read landed, only a project
-  // without a verified id has none to count
-  const none = a.verified === 0 ? NO_VERIFIED_IDS : undefined;
   const gap = a.gap ?? undefined;
+  // a strip with no counted day says nothing; it is not drawn
+  const anyDay = a.daily.some((d) => d.value !== null);
+  const anyWeek = view.weeks.some((x) => x.active_accounts !== null);
   return (
     <section aria-labelledby="activity-h" className="flex min-w-0 flex-col gap-4">
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <h2 id="activity-h" className="text-section text-fg">
           Activity
         </h2>
-        <p className="text-small text-fg-2" data-testid="activity-scope">
+        <span className="text-small text-fg-2 tabular" data-testid="activity-scope">
           {a.verified} of{" "}
-          {countOf(view.totals.ids, "account or contract", "accounts and contracts")} verified. Only
-          verified ones count, as SCF reviewers see them.
-        </p>
+          {countOf(view.totals.ids, "account or contract", "accounts and contracts")} verified
+        </span>
       </div>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard
@@ -224,39 +270,41 @@ function Activity({ view }: { view: OnchainView }) {
           value={gap ? null : a.transactions}
           missingReason={gap}
         />
-        <StatCard
-          data-stat="waa"
-          label="Weekly active accounts"
-          definition="The average of the counted ISO weeks. An active account started at least one operation with your verified IDs in the week."
-          value={w.average === null ? null : Math.round(w.average)}
-          missingReason={weeklyActiveText(w)}
-        />
-        <StatCard
-          data-stat="days-missing"
-          label="Days without data"
-          definition={DAYS_WITHOUT_DATA}
-          value={none ? null : a.daysMissing}
-          missingReason={none}
-        />
+        {w.average === null ? null : (
+          <StatCard
+            data-stat="waa"
+            label="Weekly active accounts"
+            definition="The average of the counted ISO weeks. An active account started at least one operation with your verified IDs in the week. This is the SCF Growth Hack definition."
+            value={Math.round(w.average)}
+          />
+        )}
+        {a.daysMissing > 0 ? (
+          <StatCard
+            data-stat="days-missing"
+            label="Days without data"
+            definition={DAYS_WITHOUT_DATA}
+            value={a.daysMissing}
+          />
+        ) : null}
       </div>
-      <div className="flex min-w-0 flex-col gap-2 rounded-lg border border-line bg-raised p-4 sm:p-5">
-        <h3 className="text-caption text-fg-2">Daily operations, UTC days</h3>
-        <DayStrip label="Daily operations of the project" points={a.daily} />
-        <DailyReasons daily={a.daily} />
-      </div>
-      <div className="flex min-w-0 flex-col gap-3 rounded-lg border border-line bg-raised p-4 sm:p-5">
-        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <h3 className="text-title text-fg">Weekly active accounts</h3>
-          <span className="text-small text-fg-2" data-testid="waa-summary">
-            {weeklyActiveText(w)}
-          </span>
+      {anyDay ? (
+        <div className="flex min-w-0 flex-col gap-2 rounded-lg border border-line bg-raised p-4 sm:p-5">
+          <h3 className="text-caption text-fg-2">Daily operations, UTC days</h3>
+          <DayStrip label="Daily operations of the project" points={a.daily} />
+          <DailyReasons daily={a.daily} />
         </div>
-        <p className="max-w-prose text-caption text-fg-2">
-          Accounts that started at least one operation with your verified IDs in an ISO week (UTC).
-          This is the SCF Growth Hack definition.
-        </p>
-        <WeeklyActiveList weeks={view.weeks} label="Weekly active accounts per ISO week" />
-      </div>
+      ) : null}
+      {anyWeek ? (
+        <div className="flex min-w-0 flex-col gap-3 rounded-lg border border-line bg-raised p-4 sm:p-5">
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <h3 className="text-title text-fg">Weekly active accounts</h3>
+            <span className="text-small text-fg-2" data-testid="waa-summary">
+              {weeklyActiveText(w)}
+            </span>
+          </div>
+          <WeeklyActiveList weeks={view.weeks} label="Weekly active accounts per ISO week" />
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -302,43 +350,61 @@ function Ids({
 }) {
   return (
     <section aria-labelledby="ids-h" className="flex min-w-0 flex-col gap-4">
-      <div className="flex flex-col gap-1">
-        <h2 id="ids-h" className="text-section text-fg">
-          Accounts and contracts
-        </h2>
-        <p className="text-small text-fg-2">
-          Prove control of each ID. Only proven IDs count toward your activity.
-        </p>
+      <h2 id="ids-h" className="text-section text-fg">
+        Accounts and contracts
+      </h2>
+      <div className="min-w-0 rounded-lg border border-line bg-raised px-4 py-4 sm:px-5">
+        <IdList view={view} tenantId={tenantId} canChange={canChange} isOwner={isOwner} />
       </div>
-      {canChange ? <AddForm tenantId={tenantId} /> : null}
-      {view.ids.length === 0 ? (
-        <EmptyState
-          icon={<Blocks aria-hidden strokeWidth={1.75} />}
-          title="No accounts or contracts"
-        >
-          {canChange
-            ? "Add an account (G…) or a contract (C…). IDs from your enrollment show here."
-            : "An owner or member adds them after the terms are accepted."}
-        </EmptyState>
-      ) : (
-        <ul className="flex flex-col gap-3" aria-label="Declared IDs">
-          {view.ids.map((id) => (
-            <IdItem
-              key={id.id}
-              id={id}
-              tenantId={tenantId}
-              range={{ from: view.from, to: view.to }}
-              canChange={canChange}
-              isOwner={isOwner}
-            />
-          ))}
-        </ul>
-      )}
     </section>
   );
 }
 
-function AddForm({ tenantId }: { tenantId: string }) {
+// the declared ids as rows with dividers, never a card per id
+function IdList({
+  view,
+  tenantId,
+  canChange,
+  isOwner,
+}: {
+  view: OnchainView;
+  tenantId: string;
+  canChange: boolean;
+  isOwner: boolean;
+}) {
+  return (
+    <ul className="flex flex-col divide-y divide-line-subtle" aria-label="Declared IDs">
+      {view.ids.map((id) => (
+        <IdItem
+          key={id.id}
+          id={id}
+          tenantId={tenantId}
+          range={{ from: view.from, to: view.to }}
+          canChange={canChange}
+          isOwner={isOwner}
+        />
+      ))}
+    </ul>
+  );
+}
+
+function AddDialog({
+  tenantId,
+  open,
+  onOpenChange,
+}: {
+  tenantId: string;
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange} title="Add an account or contract" size="sm">
+      {open ? <AddForm tenantId={tenantId} onAdded={() => onOpenChange(false)} /> : null}
+    </Dialog>
+  );
+}
+
+function AddForm({ tenantId, onAdded }: { tenantId: string; onAdded?: () => void }) {
   const refresh = useRefresh(tenantId);
   const [strkey, setStrkey] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -346,6 +412,7 @@ function AddForm({ tenantId }: { tenantId: string }) {
     mutationFn: (s: string) => onchainApi.add(tenantId, s),
     onSuccess: async (id) => {
       setStrkey("");
+      onAdded?.();
       toast.success(
         `${id.kind === "account" ? "Account" : "Contract"} ${shortKey(id.strkey)} added.`,
       );
@@ -380,13 +447,14 @@ function AddForm({ tenantId }: { tenantId: string }) {
       onSubmit={submit}
       noValidate
       aria-label="Add an account or contract"
-      className="max-w-prose flex flex-col gap-3 rounded-lg border border-line bg-raised p-4 sm:p-5"
+      className="flex max-w-prose flex-col gap-3"
     >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
         <div className="min-w-0 flex-1">
           <TextField
             label="Account or contract"
             name="strkey"
+            data-autofocus=""
             value={strkey}
             onChange={(e) => setStrkey(e.target.value)}
             placeholder="G… or C…"
@@ -441,10 +509,7 @@ function IdItem({
   const v = id.verification;
   const verified = v.status === "verified";
   return (
-    <li
-      data-id={id.strkey}
-      className="flex min-w-0 flex-col gap-4 rounded-lg border border-line bg-raised p-4 sm:p-5"
-    >
+    <li data-id={id.strkey} className="flex min-w-0 flex-col gap-3 py-4 first:pt-0 last:pb-0">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <KindLabel kind={id.kind} />
         <StrKey strkey={id.strkey} />
@@ -509,20 +574,22 @@ function IdItem({
         )
       ) : null}
 
-      <div className="flex min-w-0 flex-col gap-2">
-        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-          <IdTotals id={id} />
-          {id.read.home_domain ? (
-            <span className="text-caption text-fg-2">Home domain {id.read.home_domain}</span>
-          ) : null}
+      {verified && id.totals.days_read > 0 ? (
+        <div className="flex min-w-0 flex-col gap-2">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+            <IdTotals id={id} />
+            {id.read.home_domain ? (
+              <span className="text-caption text-fg-2">Home domain {id.read.home_domain}</span>
+            ) : null}
+          </div>
+          <DayStrip
+            label={`Daily operations of ${id.strkey}`}
+            points={id.series.map((p) => ({ day: p.day, value: p.operations, missing: p.missing }))}
+          />
+          <MissingDays id={id} />
         </div>
-        <DayStrip
-          label={`Daily operations of ${id.strkey}`}
-          points={id.series.map((p) => ({ day: p.day, value: p.operations, missing: p.missing }))}
-        />
-        <MissingDays id={id} />
-      </div>
-      <ContractFunctionsBlock id={id} source={{ tenantId, range }} />
+      ) : null}
+      {verified ? <ContractFunctionsBlock id={id} source={{ tenantId, range }} /> : null}
       <ConfirmDialog
         open={confirm}
         onOpenChange={setConfirm}
@@ -578,15 +645,9 @@ function AccountProof({ id, tenantId }: { id: ChainId; tenantId: string }) {
   }
   return (
     <div className="flex animate-rise-in flex-col gap-4 rounded-md border border-line bg-sunken p-4">
-      <p className="text-small text-fg-2">
-        Prove that the project controls this account before{" "}
-        {formatDateTimeUtc(challenge.expires_at)}. Use one of the two ways. Either one is enough.
-      </p>
-      <div className="grid gap-3 lg:grid-cols-2">
+      <p className="text-caption text-fg-2">Until {formatDateTimeUtc(challenge.expires_at)}</p>
+      <div className="grid gap-4 lg:grid-cols-2">
         <ProofOption title="Sign with a wallet">
-          <p className="text-small text-fg-2">
-            The wallet signs this message. Signing moves no funds and sends no transaction.
-          </p>
           <pre className="overflow-x-auto rounded-md border border-line bg-raised p-2 font-mono text-caption whitespace-pre-wrap break-all text-fg-2">
             {challenge.message}
           </pre>
@@ -600,10 +661,6 @@ function AccountProof({ id, tenantId }: { id: ChainId; tenantId: string }) {
           </Button>
         </ProofOption>
         <ProofOption title="Publish a data entry">
-          <p className="text-small text-fg-2">
-            Send a manage data operation from the account with this name and value. Then check it.
-            You can delete the entry after the check.
-          </p>
           <dl className="grid gap-3 sm:grid-cols-2">
             <div className="flex min-w-0 flex-col gap-1">
               <dt className="text-caption text-fg-2">Entry name</dt>
@@ -657,7 +714,7 @@ function AccountProof({ id, tenantId }: { id: ChainId; tenantId: string }) {
 // step, as either one is enough
 function ProofOption({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div className="flex min-w-0 flex-col gap-2 rounded-md border border-line bg-raised p-3 sm:p-4">
+    <div className="flex min-w-0 flex-col gap-2 lg:[&+&]:border-l lg:[&+&]:border-line lg:[&+&]:pl-4 max-lg:[&+&]:border-t max-lg:[&+&]:border-line max-lg:[&+&]:pt-3">
       <h4 className="text-body font-medium text-fg">{title}</h4>
       <div className="flex min-w-0 flex-col gap-2">{children}</div>
     </div>
@@ -667,7 +724,7 @@ function ProofOption({ title, children }: { title: string; children: ReactNode }
 // a value to copy, shown whole: an entry value is short and must be exact
 function CopyBox({ value, label }: { value: string; label: string }) {
   return (
-    <div className="flex min-w-0 items-center gap-1 rounded-md border border-line bg-raised pl-2">
+    <div className="flex min-w-0 items-center gap-1 rounded-md bg-raised pl-2">
       <code className="min-w-0 flex-1 py-1 font-mono text-small break-all text-fg">{value}</code>
       <CopyButton text={value} label={`Copy ${label}`} size="xs" variant="ghost" iconOnly />
     </div>
@@ -702,11 +759,7 @@ function ContractProof({ id, tenantId }: { id: ChainId; tenantId: string }) {
     );
   return (
     <div className="flex flex-col gap-4 rounded-md border border-line bg-sunken p-4">
-      <p className="text-small text-fg-2">
-        Prove the contract through an account that the project verified. Use one of the two checks.
-        Either one is enough.
-      </p>
-      <div className="grid gap-3 lg:grid-cols-2">
+      <div className="grid gap-4 lg:grid-cols-2">
         <ProofOption title="The account is the contract's admin">
           <Button
             size="sm"
@@ -768,39 +821,31 @@ function LinkSection({ view, tenantId }: { view: OnchainView; tenantId: string }
   const hasVerifiedAccount = view.ids.some(
     (id) => id.kind === "account" && id.verification.status === "verified",
   );
+  // every line of the link needs a verified account; without one the
+  // section waits until the first step is done
+  if (!hasVerifiedAccount) return null;
   return (
     <section aria-labelledby="link-h" className="flex min-w-0 flex-col gap-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex min-w-0 flex-col gap-1">
-          <h2 id="link-h" className="text-section text-fg">
-            stellar.toml link
-          </h2>
-          <p className="max-w-prose text-small text-fg-2">
-            Your domain names your accounts, and your accounts name your domain. Only a verified
-            account can link.
-          </p>
-        </div>
-        {view.ids.length > 0 ? <LinkStatus view={view} /> : null}
+        <h2 id="link-h" className="text-section text-fg">
+          stellar.toml link
+        </h2>
+        <LinkStatus view={view} />
       </div>
-      {view.link.sites.length > 0 && !hasVerifiedAccount ? (
-        // every line of the checklist needs an account, so with none the
-        // page says that once instead of a checklist per domain
-        <EmptyState compact title="Add and verify an account first">
-          The link pairs a site domain with a verified Stellar account. Add an account above and
-          prove control of it.
-        </EmptyState>
-      ) : view.link.sites.length === 0 ? (
-        <EmptyState
-          compact
-          title="No site to link"
-          action={
-            <Button asChild variant="outline" className="max-lg:h-(--vs-control-touch)">
-              <Link to={`/projects/${tenantId}/sites`}>Go to sites</Link>
-            </Button>
-          }
+      {view.link.sites.length === 0 ? (
+        // the link starts from a site domain: one line and the way there
+        <p
+          className="flex flex-wrap items-baseline gap-x-3 text-small text-fg-2"
+          data-link="no-site"
         >
-          The link starts from a site domain. Add a site and verify its domain.
-        </EmptyState>
+          No site to link
+          <Link
+            to={`/projects/${tenantId}/sites`}
+            className="rounded-sm font-medium text-fg hover:underline focus-ring"
+          >
+            Add a site
+          </Link>
+        </p>
       ) : (
         <div className="flex flex-col gap-3">
           {(showAll ? view.link.sites : view.link.sites.slice(0, LINK_SITES_SHOWN)).map((s) => (

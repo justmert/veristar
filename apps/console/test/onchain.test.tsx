@@ -218,8 +218,9 @@ describe("on-chain page activity (contract 15.3)", () => {
     expect(host.textContent).toContain("Verified");
     expect(host.textContent).toContain("Unverified");
     expect(host.textContent).toContain("stellar.toml linked both ways");
-    // a failed read is a missing day with its reason, not a zero
-    expect(host.textContent).toContain("3 days without data. The ledger API refused more requests");
+    // an unverified id draws no strip and no reasons: nothing of it counts
+    expect(host.textContent).not.toContain("3 days without data");
+    expect(host.querySelector(`[aria-label="Daily operations of ${f.C_KEY}"]`)).toBeNull();
     expect(host.textContent).toContain(
       "1 day without data. Before the first day read for this account",
     );
@@ -298,7 +299,7 @@ describe("on-chain page activity (contract 15.3)", () => {
     for (const line of open) expect(line.querySelectorAll("button")).toHaveLength(1);
   });
 
-  it("says what to do when nothing is declared", async () => {
+  it("is one first step until an id is proven", async () => {
     stubFetch([
       {
         status: 200,
@@ -311,10 +312,39 @@ describe("on-chain page activity (contract 15.3)", () => {
       },
     ]);
     const host = await renderRoutes(routes(<OnchainPage />, "onchain"), path);
-    await waitFor(() => expect(host.textContent).toContain("No accounts or contracts"));
-    expect(host.textContent).toContain("Add an account (G…) or a contract (C…).");
-    expect(host.textContent).toContain("No site to link");
+    await waitFor(() => expect(host.querySelector("[data-first-step]")).not.toBeNull());
+    const steps = host.querySelectorAll("[data-first-step] [data-check]");
+    expect([...steps].map((e) => e.getAttribute("data-state"))).toEqual(["current", "todo"]);
+    expect(byLabel(host, "Account or contract")).not.toBeNull();
+    // no range, no empty numbers, no link checklist and no export before a proof
     expect(host.textContent).not.toContain("Activity");
+    expect(host.textContent).not.toContain("stellar.toml");
+    expect(host.textContent).not.toContain("Export CSV");
+  });
+});
+
+describe("on-chain first step", () => {
+  it("marks the add step done and asks for the proof of each declared id", async () => {
+    stubFetch([
+      {
+        status: 200,
+        body: {
+          ...viewBody,
+          ids: viewBody.ids.map((id) => ({ ...id, verification: none })),
+          totals: { ...viewBody.totals, ids_verified: 0 },
+        },
+      },
+    ]);
+    const host = await renderRoutes(
+      routes(<OnchainPage />, "onchain"),
+      `/projects/${f.TENANT_ID}/onchain`,
+    );
+    await waitFor(() => expect(host.querySelector("[data-first-step]")).not.toBeNull());
+    const steps = host.querySelectorAll("[data-first-step] [data-check]");
+    expect([...steps].map((e) => e.getAttribute("data-state"))).toEqual(["done", "current"]);
+    expect(host.textContent).toContain("Prove control");
+    expect(host.querySelectorAll("[data-first-step] [data-id]")).toHaveLength(2);
+    expect(host.querySelector('[aria-label^="Daily operations"]')).toBeNull();
   });
 });
 
@@ -346,6 +376,7 @@ describe("accounts and contracts page (contract 15.4)", () => {
     ]);
     const host = await renderRoutes(routes(<OnchainPage />, "onchain"), path);
     await waitFor(() => expect(host.textContent).toContain("Accounts and contracts"));
+    await click(byRole(host, "button", "Add account"));
     await type(byLabel(host, "Account or contract"), "not-a-key");
     await click(byRole(host, "button", "Add"));
     expect(host.textContent).toContain("Enter a Stellar account (G…) or a Soroban contract (C…)");
