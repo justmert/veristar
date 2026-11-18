@@ -1,12 +1,13 @@
 // entry of the released sdk.js: reads the script tag's data attributes and
-// installs window.umami. the attribute names are umami's, so umami's
-// integration docs stay valid.
+// installs the tracker as window.veristar and window.umami, one object under
+// two names. the attribute names and window.umami are umami's, so umami's
+// integration docs and existing site code stay valid.
 
 import { type BeforeSend, createTracker, type Payload } from "./index.ts";
 
 ((window: Window) => {
   const script = window.document.currentScript as HTMLScriptElement | null;
-  if (!script || window.umami) return;
+  if (!script || window.umami || window.veristar) return;
 
   const attr = (name: string): string | null => script.getAttribute(`data-${name}`);
   const siteId = attr("website-id");
@@ -26,7 +27,7 @@ import { type BeforeSend, createTracker, type Payload } from "./index.ts";
       }
     : undefined;
 
-  window.umami = createTracker(window, {
+  const tracker = createTracker(window, {
     siteId,
     host,
     autoTrack: attr("auto-track") !== "false",
@@ -38,4 +39,6 @@ import { type BeforeSend, createTracker, type Payload } from "./index.ts";
     walletsKit: attr("wallets-kit") === "true",
     sendTitle: attr("send-title") === "true",
   });
+  window.veristar = tracker;
+  window.umami = tracker;
 })(window);

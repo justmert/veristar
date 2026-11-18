@@ -9,6 +9,7 @@ import { cn } from "@veristar/brand/cn";
 import { CircleAlert, Download, FileX, ShieldCheck, ShieldX } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { useParams } from "react-router";
+import { ApiError } from "@/api/client";
 import {
   type PublicReport,
   publicReportQuery,
@@ -57,9 +58,9 @@ export function PublicReportPage() {
         <Skeleton.Table rows={4} columns={2} />
       </LoadingState>
     );
-  else if (isNotFound(q.error))
-    // a revoked link, a removed project and an unknown id answer the same
-    // 404, so the page cannot tell them apart and names all three
+  else if (isNotFound(q.error) || (q.error instanceof ApiError && q.error.status === 410))
+    // a removed project and an unknown id answer 404 and a revoked link
+    // 410 report_revoked; this page names all three in one message
     body = (
       <MessagePage
         icon={<FileX aria-hidden />}
@@ -310,6 +311,7 @@ const pct = (s: string | null) => {
   const v = num(s);
   return v === null ? null : formatPercent(v);
 };
+const cnt = (v: number | null) => (v === null ? null : formatCount(v));
 
 function changeOf(r: number | null): StatChange | null {
   if (r === null) return null;
@@ -343,8 +345,8 @@ function ReportBody({ doc, signature }: { doc: ReportDocument; signature: ReactN
       }
     : null;
   const g = doc.integrity;
-  // the signed figures carry 0 where no verified id was read; the report
-  // reads them with the same missing-value rule as the console
+  // a figure no ledger read backs is null in format 3; older formats carry
+  // 0, so the report reads both with the same missing-value rule as the console
   const chainMissing = chainGap(doc.onchain.ids_verified, doc.onchain.series);
   const chainOk = chainMissing === null;
 
@@ -363,7 +365,7 @@ function ReportBody({ doc, signature }: { doc: ReportDocument; signature: ReactN
     { key: "requests", value: doc.api.requests, spark: doc.api.series.map((p) => p.requests) },
     {
       key: "onchain_operations",
-      value: chainOk ? doc.onchain.operations : 0,
+      value: chainOk ? (doc.onchain.operations ?? 0) : 0,
       spark: doc.onchain.series.map((p) => p.operations ?? 0),
     },
   ].filter((h) => h.value > 0);
@@ -517,13 +519,13 @@ function ReportBody({ doc, signature }: { doc: ReportDocument; signature: ReactN
         >
           <Figures
             items={[
-              chainOk ? fig("Transactions", formatCount(doc.onchain.transactions)) : null,
+              chainOk ? fig("Transactions", cnt(doc.onchain.transactions)) : null,
               fig(
                 "Verified IDs",
                 `${formatCount(doc.onchain.ids_verified)} of ${formatCount(doc.onchain.ids)}`,
               ),
               chainOk
-                ? fig("Days without data", formatCount(doc.onchain.days_missing), DAYS_WITHOUT_DATA)
+                ? fig("Days without data", cnt(doc.onchain.days_missing), DAYS_WITHOUT_DATA)
                 : null,
               waa && waa.average !== null
                 ? fig("Weekly active accounts", weeklyActiveText(waa))

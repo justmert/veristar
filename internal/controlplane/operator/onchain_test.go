@@ -336,7 +336,14 @@ func TestSCFView(t *testing.T) {
 	}, *got.Web)
 	require.Equal(t, web.SiteCounts, *got.Sites)
 	require.Equal(t, web.Integrity, *got.Integrity)
-	require.Equal(t, web.Onchain, *got.Onchain)
+	require.Equal(t, web.Onchain.IDs, got.Onchain.IDs)
+	require.Equal(t, web.Onchain.IDsVerified, got.Onchain.IDsVerified)
+	require.Equal(t, web.Onchain.Operations, *got.Onchain.Operations)
+	require.Equal(t, web.Onchain.Transactions, *got.Onchain.Transactions)
+	require.Equal(t, web.Onchain.DaysMissing, *got.Onchain.DaysMissing)
+	require.Equal(t, web.Onchain.IDsFailing, got.Onchain.IDsFailing)
+	require.Equal(t, web.Onchain.WeeklyActive, got.Onchain.WeeklyActive)
+	require.Nil(t, got.Onchain.CountsReason)
 	code, body = call(t, f.h, "/api/operator/api/projects?"+rq+"&limit=200")
 	require.Equal(t, http.StatusOK, code)
 	for _, p := range decode[GlobalList[APIProject]](t, body).Items {
@@ -348,6 +355,28 @@ func TestSCFView(t *testing.T) {
 	code, body = call(t, f.h, "/api/operator/web/compare?"+rq+"&tenants="+aurora.String())
 	require.Equal(t, http.StatusOK, code)
 	require.Equal(t, decode[WebCompare](t, body).Projects[0].Series, got.WebSeries)
+
+	// counts that measured nothing are null with a reason, where the
+	// operator lists keep their zeros: borealis declares an unverified id
+	// with read days, dune a verified id that was never read
+	borealis, dune := f.tenants["borealis"], f.tenants["dune"]
+	superExec(t, f.pg, `insert into cp.chain_ids (tenant_id, strkey, kind, added_by, verify_method, verified_at)
+		values ($1, 'GDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD', 'account', 'console', 'sep53', now())`, dune)
+	for _, c := range []struct {
+		tenant uuid.UUID
+		reason string
+	}{{borealis, onchain.ReasonNoVerifiedID}, {dune, onchain.ReasonNothingRead}} {
+		u := uuid.Must(uuid.NewV7())
+		superExec(t, f.pg, `insert into cp.users (id, github_id, github_login) values ($1, $2, $3)`, u, 9000+len(c.reason), c.reason)
+		superExec(t, f.pg, `insert into cp.tenant_members (tenant_id, user_id, role) values ($1, $2, 'member')`, c.tenant, u)
+		code, body := as(u, "/api/tenants/"+c.tenant.String()+"/scf-view?"+rq)
+		require.Equal(t, http.StatusOK, code, string(body))
+		require.Contains(t, string(body),
+			`"operations":null,"transactions":null,"days_missing":null,"counts_reason":"`+c.reason+`"`)
+		got := decode[SCFViewAnswer](t, body)
+		require.Equal(t, int64(1), got.Onchain.IDs)
+		require.Nil(t, got.Onchain.Operations)
+	}
 
 	// a non-member, and a member asking for another project, get 404
 	code, _ = as(outsider, "/api/tenants/"+aurora.String()+"/scf-view")

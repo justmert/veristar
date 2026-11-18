@@ -78,17 +78,17 @@ type SCFAPIRow struct {
 // InOperatorViews is false for a project the operator views do not list
 // (an internal project); its rows are then null.
 type SCFViewAnswer struct {
-	From            string           `json:"from"`
-	To              string           `json:"to"`
-	Days            []string         `json:"days"`
-	InOperatorViews bool             `json:"in_operator_views"`
-	Tenant          *TenantRef       `json:"tenant"`
-	Sites           *SiteCounts      `json:"sites"`
-	HasWebData      bool             `json:"has_web_data"`
-	HasAPIData      bool             `json:"has_api_data"`
-	Web             *SCFWebRow       `json:"web"`
-	API             *SCFAPIRow       `json:"api"`
-	Onchain         *onchain.Summary `json:"onchain"`
+	From            string      `json:"from"`
+	To              string      `json:"to"`
+	Days            []string    `json:"days"`
+	InOperatorViews bool        `json:"in_operator_views"`
+	Tenant          *TenantRef  `json:"tenant"`
+	Sites           *SiteCounts `json:"sites"`
+	HasWebData      bool        `json:"has_web_data"`
+	HasAPIData      bool        `json:"has_api_data"`
+	Web             *SCFWebRow  `json:"web"`
+	API             *SCFAPIRow  `json:"api"`
+	Onchain         *SCFOnchain `json:"onchain"`
 	// the integrity grade of the project's row in the global web view
 	// (contract 17.3), present when the views list the project
 	Integrity  *IntegrityGrade `json:"integrity,omitempty"`
@@ -105,6 +105,35 @@ type SCFViewAnswer struct {
 	OnchainSeries []onchain.DayTotal `json:"onchain_series"`
 	// the calls per function of each verified contract over the range
 	ContractFunctions []ContractUsage `json:"contract_functions"`
+}
+
+// SCFOnchain is the on-chain summary of the "what scf sees" view and of a
+// usage report: the summary of the operator lists, except that
+// operations, transactions and days_missing are null with CountsReason
+// set when they measured nothing (no verified id, or no ledger day of a
+// verified id read in the range), so a zero always means a read found no
+// activity.
+type SCFOnchain struct {
+	IDs          int64   `json:"ids"`
+	IDsVerified  int64   `json:"ids_verified"`
+	Operations   *int64  `json:"operations"`
+	Transactions *int64  `json:"transactions"`
+	DaysMissing  *int64  `json:"days_missing"`
+	CountsReason *string `json:"counts_reason"`
+	IDsFailing   int64   `json:"ids_failing"`
+	// weekly active accounts over the iso weeks of the range
+	WeeklyActive onchain.WeeklyActive `json:"weekly_active_accounts"`
+}
+
+// NewSCFOnchain turns the operator list summary into the view's.
+func NewSCFOnchain(s onchain.Summary) SCFOnchain {
+	out := SCFOnchain{IDs: s.IDs, IDsVerified: s.IDsVerified, IDsFailing: s.IDsFailing, WeeklyActive: s.WeeklyActive,
+		CountsReason: s.CountsReason()}
+	if out.CountsReason == nil {
+		ops, txs, missing := s.Operations, s.Transactions, s.DaysMissing
+		out.Operations, out.Transactions, out.DaysMissing = &ops, &txs, &missing
+	}
+	return out
 }
 
 // ContractUsage is one verified contract's calls per function in the
@@ -255,7 +284,7 @@ func loadSCF(ctx context.Context, tx pgx.Tx, id uuid.UUID, rg dayRange, now time
 	if err != nil {
 		return err
 	}
-	s := chainOf[id].Totals
+	s := NewSCFOnchain(chainOf[id].Totals)
 	out.Onchain = &s
 	out.OnchainSeries = chainOf[id].Series
 	view, err := onchain.Load(ctx, tx, onchain.OperatorSites, id, rg.onchain(), utcDay(now))

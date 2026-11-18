@@ -587,6 +587,7 @@ const DISTINCT_ROUTES =
 const fig = (label: string, value: ReactNode | null, more?: Partial<NonNullable<Fig>>): Fig =>
   value === null || value === undefined ? null : { label, value, ...more };
 const pct = (v: number | null) => (v === null ? null : formatPercent(v));
+const cnt = (v: number | null) => (v === null ? null : formatCount(v));
 
 function Figures({ v }: { v: SCFView }) {
   const web = v.web;
@@ -688,15 +689,15 @@ function Figures({ v }: { v: SCFView }) {
           <FigureList
             items={[
               chainOk && !shown.has("onchain_operations")
-                ? fig("Operations", formatCount(chain.operations))
+                ? fig("Operations", cnt(chain.operations))
                 : null,
-              chainOk ? fig("Transactions", formatCount(chain.transactions)) : null,
+              chainOk ? fig("Transactions", cnt(chain.transactions)) : null,
               fig(
                 "Verified IDs",
                 `${formatCount(chain.ids_verified)} of ${formatCount(chain.ids)}`,
               ),
               chainOk
-                ? fig("Days without data", formatCount(chain.days_missing), {
+                ? fig("Days without data", cnt(chain.days_missing), {
                     definition: DAYS_WITHOUT_DATA,
                     name: "days-missing",
                   })

@@ -34,9 +34,9 @@ its measurement.
 
 Add `data-wallets-kit="true"` to the tag from the console:
 
-{/* snippet version=1.3.2 wallets-kit */}
+{/* snippet version=1.4.0 wallets-kit */}
 ```html
-<script defer src="https://in.analytics.example/v/1.3.2/sdk.js" integrity="sha384-Q2xIA5ztfj7VBlpI/+6kehWQVUC2jZPr89aAooy7Uinc/V2C0VF7Ti66L3gj6D/v" crossorigin="anonymous" data-website-id="3f6a0c2e-9b1d-4e7a-8c5f-1d2e3f4a5b6c" data-wallets-kit="true"></script>
+<script defer src="https://in.analytics.example/v/1.4.0/sdk.js" integrity="sha384-8bYExYW1FMGfNg5LETdGYFjtJPLfyY+gJQwWA0rL5xNM7Xl+3wK99GxSV3+siv/A" crossorigin="anonymous" data-website-id="3f6a0c2e-9b1d-4e7a-8c5f-1d2e3f4a5b6c" data-wallets-kit="true"></script>
 ```
 
 The dapp itself only sets up the kit, as it would anyway:

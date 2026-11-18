@@ -263,12 +263,18 @@ type Ingest struct {
 
 // Removal is the removal object of contract 5.4.
 type Removal struct {
-	RequestedAt    httpx.Timestamp  `json:"requested_at"`
-	RequestedBy    *uuid.UUID       `json:"requested_by"`
-	Reason         string           `json:"reason"`
-	KeepAggregates bool             `json:"keep_aggregates"`
-	CompletedAt    *httpx.Timestamp `json:"completed_at"`
-	Steps          json.RawMessage  `json:"steps"`
+	RequestedAt httpx.Timestamp `json:"requested_at"`
+	RequestedBy *uuid.UUID      `json:"requested_by"`
+	// the github login of the requester, null for a wallet or passkey
+	// account, a deleted account or no requester
+	RequestedByLogin *string `json:"requested_by_login"`
+	// the console name of the requester (login or short address),
+	// DeletedAccountName for a deleted account, null for no requester
+	RequestedByDisplayName *string          `json:"requested_by_display_name"`
+	Reason                 string           `json:"reason"`
+	KeepAggregates         bool             `json:"keep_aggregates"`
+	CompletedAt            *httpx.Timestamp `json:"completed_at"`
+	Steps                  json.RawMessage  `json:"steps"`
 }
 
 // TenantDetail is the answer of GET /api/operator/tenants/{tenant_id}.
@@ -413,6 +419,20 @@ func (h *Tenants) detail(w http.ResponseWriter, r *http.Request) error {
 		out.RecentAudit = make([]AuditEntry, 0, len(rows))
 		for _, row := range rows {
 			out.RecentAudit = append(out.RecentAudit, ToAuditEntry(row))
+		}
+		if err := resolveAuditNames(ctx, tx, out.RecentAudit); err != nil {
+			return err
+		}
+		if out.Removal != nil && out.Removal.RequestedBy != nil {
+			by, err := userRef(ctx, q, uuid.NullUUID{UUID: *out.Removal.RequestedBy, Valid: true})
+			if err != nil {
+				return err
+			}
+			name := DeletedAccountName
+			if by != nil {
+				out.Removal.RequestedByLogin, name = by.GitHubLogin, by.DisplayName
+			}
+			out.Removal.RequestedByDisplayName = &name
 		}
 		return nil
 	})

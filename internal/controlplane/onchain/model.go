@@ -360,6 +360,37 @@ type Summary struct {
 	IDsFailing int64 `json:"ids_failing"`
 	// weekly active accounts over the iso weeks of the range
 	WeeklyActive WeeklyActive `json:"weekly_active_accounts"`
+	// stored day rows of verified ids in the range, today included: zero
+	// means the counts above measured nothing. the operator lists keep
+	// their zeros; the scf view and the usage report read it to answer
+	// null with a reason instead (CountsReason)
+	RowsRead int64 `json:"-"`
+}
+
+// the reasons the scf view and a usage report give for on-chain counts
+// that are null rather than zero.
+const (
+	// ReasonNoVerifiedID: the project has no verified account or contract,
+	// and the counts cover verified ids only
+	ReasonNoVerifiedID = "no_verified_id"
+	// ReasonNothingRead: no ledger day of a verified id in the range was
+	// read
+	ReasonNothingRead = "nothing_read"
+)
+
+// CountsReason says why operations, transactions and days_missing of s
+// measure nothing, or nil when they hold numbers.
+func (s Summary) CountsReason() *string {
+	var r string
+	switch {
+	case s.IDsVerified == 0:
+		r = ReasonNoVerifiedID
+	case s.RowsRead == 0:
+		r = ReasonNothingRead
+	default:
+		return nil
+	}
+	return &r
 }
 
 // Summaries reads the on-chain summary of every tenant in tenants over rg.
@@ -396,7 +427,8 @@ func Summaries(ctx context.Context, tx pgx.Tx, tenants []uuid.UUID, rg Range, to
 		d as (
 		  select d.tenant_id, d.strkey,
 		         sum(d.operations)::bigint as operations, sum(d.transactions)::bigint as transactions,
-		         count(*) filter (where d.day <= $4::date)::bigint as days
+		         count(*) filter (where d.day <= $4::date)::bigint as days,
+		         count(*)::bigint as rows_read
 		  from agg.chain_daily d
 		  join c on c.tenant_id = d.tenant_id and c.strkey = d.strkey
 		  where d.day between $2::date and $3::date
@@ -407,7 +439,8 @@ func Summaries(ctx context.Context, tx pgx.Tx, tenants []uuid.UUID, rg Range, to
 		       coalesce(sum(d.transactions) filter (where c.verified), 0)::bigint,
 		       ((count(*) filter (where c.verified)) * $5::bigint
 		         - coalesce(sum(d.days) filter (where c.verified), 0))::bigint,
-		       (count(*) filter (where c.verified and c.failing))::bigint
+		       (count(*) filter (where c.verified and c.failing))::bigint,
+		       coalesce(sum(d.rows_read) filter (where c.verified), 0)::bigint
 		from c left join d on d.tenant_id = c.tenant_id and d.strkey = c.strkey
 		group by c.tenant_id`, tenants, rg.From, rg.To, last, complete)
 	if err != nil {
@@ -417,7 +450,7 @@ func Summaries(ctx context.Context, tx pgx.Tx, tenants []uuid.UUID, rg Range, to
 	for rows.Next() {
 		var id uuid.UUID
 		var s Summary
-		if err := rows.Scan(&id, &s.IDs, &s.IDsVerified, &s.Operations, &s.Transactions, &s.DaysMissing, &s.IDsFailing); err != nil {
+		if err := rows.Scan(&id, &s.IDs, &s.IDsVerified, &s.Operations, &s.Transactions, &s.DaysMissing, &s.IDsFailing, &s.RowsRead); err != nil {
 			return nil, fmt.Errorf("onchain: summaries: %w", err)
 		}
 		s.WeeklyActive = out[id].WeeklyActive

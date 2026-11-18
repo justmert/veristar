@@ -31,7 +31,10 @@ tracker 1.3.2, a link that a client-side router handles stays a client-side navi
 waits for its event at most one second, and download links and links into another window are left
 to the browser.
 
-**From JavaScript**, with `umami.track(name, data)`:
+**From JavaScript**, with `veristar.track(name, data)`. The tracker installs one object under two
+names, `window.veristar` and `window.umami`, so `umami.track(name, data)` is the same call and stays
+supported. `window.veristar` is there from tracker 1.4.0; the example below uses `window.umami`,
+which works on every release:
 
 {/* include examples/static-html/src/page.js region=track */}
 ```js
@@ -42,13 +45,13 @@ document.getElementById("manual").addEventListener("click", () => {
 ```
 
 Data values can be strings, numbers or booleans, for example
-`umami.track("plan-chosen", { plan: "pro", seats: 3, annual: true })`. `umami.track()` returns a
-promise. The visitor can block the tracker, so call it as `window.umami?.track(...)` and never let
+`veristar.track("plan-chosen", { plan: "pro", seats: 3, annual: true })`. `veristar.track()` returns a
+promise. The visitor can block the tracker, so call it as `window.veristar?.track(...)` and never let
 your own code depend on it. The framework guides show the same call in React, Vue, Svelte and
 Next.js components.
 
 If you installed the [npm package](npm.md) instead of the script tag, `init({ siteId, host })`
-installs the same `window.umami`, so both ways above work unchanged.
+installs the same `window.veristar` and `window.umami`, so both ways above work unchanged.
 
 ## Limits
 
@@ -64,7 +67,7 @@ The tracker checks every event before it sends anything, and the gateway checks 
 | String value | up to 500 characters, no NUL character | longer strings are cut to 500 characters; a NUL character makes `track()` reject |
 | Whole event | 8192 bytes on the wire | `track()` rejects |
 
-"Rejects" means the promise returned by `umami.track()` is rejected with a `TypeError` that names
+"Rejects" means the promise returned by `veristar.track()` is rejected with a `TypeError` that names
 the problem, for example `umami: event data has more than 16 keys`, and **nothing is sent**. The
 tracker does not drop the extra keys for you, because silently losing data would hide the mistake;
 the error shows up in your browser console instead.

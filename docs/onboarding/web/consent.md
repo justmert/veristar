@@ -14,13 +14,14 @@ which runs in the browser test matrix.
 
 Add `data-auto-track="false"` to the tag from the console:
 
-{/* snippet version=1.3.2 auto-track-off */}
+{/* snippet version=1.4.0 auto-track-off */}
 ```html
-<script defer src="https://in.analytics.example/v/1.3.2/sdk.js" integrity="sha384-Q2xIA5ztfj7VBlpI/+6kehWQVUC2jZPr89aAooy7Uinc/V2C0VF7Ti66L3gj6D/v" crossorigin="anonymous" data-website-id="3f6a0c2e-9b1d-4e7a-8c5f-1d2e3f4a5b6c" data-auto-track="false"></script>
+<script defer src="https://in.analytics.example/v/1.4.0/sdk.js" integrity="sha384-8bYExYW1FMGfNg5LETdGYFjtJPLfyY+gJQwWA0rL5xNM7Xl+3wK99GxSV3+siv/A" crossorigin="anonymous" data-website-id="3f6a0c2e-9b1d-4e7a-8c5f-1d2e3f4a5b6c" data-auto-track="false"></script>
 ```
 
-With it, `sdk.js` loads and installs `window.umami`, but sends nothing, fetches no challenge and
-reads no browser storage. When the visitor agrees, your code calls `umami.start()`. That sends the
+With it, `sdk.js` loads and installs the tracker as `window.veristar`, but sends nothing, fetches
+no challenge and reads no browser storage. When the visitor agrees, your code calls
+`veristar.start()`. That sends the
 pageview of the current page and from then on counts route changes and `data-umami-event` clicks,
 exactly as the tracker does without the attribute. Calling `start()` again does nothing. From
 tracker 1.3.2, the current page is the one the visitor is on when they agree, also after
@@ -28,7 +29,12 @@ single-page navigation while the banner was open, and the pageview keeps the vis
 referrer; 1.3.1 and earlier count the page the tracker loaded on.
 
 The tracker does not remember the choice; your site does, as it does for any other consent. On
-the next page load, call `umami.start()` again as soon as you know the visitor agreed earlier.
+the next page load, call `veristar.start()` again as soon as you know the visitor agreed earlier.
+
+The same tracker is also installed as `window.umami`, the name Umami's own documentation uses, so
+`umami.start()` and `umami.track()` are the same calls and stay supported. `window.veristar` is
+there from tracker 1.4.0; on earlier releases, use `umami.start()`. The example below uses
+`window.umami`, which works on every release.
 
 ## Example
 
@@ -74,18 +80,18 @@ if (localStorage.getItem(KEY) === "granted") {
 }
 ```
 
-If you use a consent management platform, call `window.umami?.start()` from its callback for the
+If you use a consent management platform, call `window.veristar?.start()` from its callback for the
 analytics purpose instead. In a framework app, call it wherever your banner component learns the
 choice; the tag stays where the framework guide puts it.
 
-`umami.track()` before `start()` does nothing either: no event, no challenge and no storage read,
-so a call that runs before the banner is answered measures no one. If your site sends only chosen
-events and no automatic pageviews, call `umami.start({ automatic: false })` after consent instead
-of `umami.start()`; from then on `umami.track()` sends.
+`veristar.track()` before `start()` does nothing either: no event, no challenge and no storage
+read, so a call that runs before the banner is answered measures no one. If your site sends only
+chosen events and no automatic pageviews, call `veristar.start({ automatic: false })` after consent
+instead of `veristar.start()`; from then on `veristar.track()` sends.
 
-This holds from tracker 1.3.1; the tag above is 1.3.2. Releases 1.3.0 and earlier send a
+This holds from tracker 1.3.1; the tag above is 1.4.0. Releases 1.3.0 and earlier send a
 `umami.track()` call before `start()` at once, so on those releases call `umami.track()` only after
-consent, or [upgrade](upgrading.md) to 1.3.2.
+consent, or [upgrade](upgrading.md) to 1.4.0.
 
 ## An opt-out control
 

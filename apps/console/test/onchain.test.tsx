@@ -518,6 +518,7 @@ const scfBody = {
     operations: 12,
     transactions: 5,
     days_missing: 4,
+    counts_reason: null,
     ids_failing: 1,
     weekly_active_accounts: { average: 42, latest: 40, weeks_counted: 2, weeks_missing: 1 },
   },
@@ -637,6 +638,35 @@ describe("scf review figures (contract 16.3)", () => {
     // nothing in the report lowered a day, so the day counts stand in for
     // the reasons, as numbers
     expect(card?.querySelector("[data-day-counts]")?.textContent).toBe("5 A · 3 B · 0 C");
+  });
+
+  it("leaves out on-chain counts that measured nothing, with no zero", async () => {
+    answer({
+      ...scfBody,
+      onchain: {
+        ...scfBody.onchain,
+        operations: null,
+        transactions: null,
+        days_missing: null,
+        counts_reason: "nothing_read",
+      },
+      onchain_series: scfBody.onchain_series.map((p) => ({
+        ...p,
+        ids_read: 0,
+        operations: null,
+        transactions: null,
+      })),
+    });
+    const host = await renderRoutes(
+      routes(<ScfReviewPage />, "scf"),
+      `/projects/${f.TENANT_ID}/scf`,
+    );
+    // a figure that holds no value is left out, never shown as 0
+    await waitFor(() => expect(host.textContent).toContain("Verified IDs"));
+    expect(host.querySelector("[data-figure=days-missing]")).toBeNull();
+    expect(host.textContent).not.toContain("Transactions");
+    expect(host.querySelector("[data-key-number=onchain_operations]")).toBeNull();
+    expect(host.textContent).not.toContain("What SCF reviewers see did not load");
   });
 
   it("says when the project is not in the scf views", async () => {

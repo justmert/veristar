@@ -33,7 +33,9 @@ const (
 	// the coverage estimate and has_data to web, lossy, infrastructure
 	// requests and has_data to api, and weekly active accounts to onchain.
 	// version 3 adds the calls per function of each verified contract to
-	// onchain (contracts). a version 1 or 2 report keeps its layout and
+	// onchain (contracts), and writes operations, transactions and
+	// days_missing of onchain as null with counts_reason when they measured
+	// nothing. a version 1 or 2 report keeps its layout and
 	// still verifies: the signature covers its bytes whatever members they
 	// hold.
 	FormatVersion = 3
@@ -190,13 +192,16 @@ type OnchainDay struct {
 }
 
 // Onchain is the project's ledger activity over the period: the numbers
-// and the series count verified ids only.
+// and the series count verified ids only. Operations, Transactions and
+// DaysMissing are null when they measured nothing, and CountsReason says
+// why (onchain.ReasonNoVerifiedID, onchain.ReasonNothingRead).
 type Onchain struct {
 	IDs          int64        `json:"ids"`
 	IDsVerified  int64        `json:"ids_verified"`
-	Operations   int64        `json:"operations"`
-	Transactions int64        `json:"transactions"`
-	DaysMissing  int64        `json:"days_missing"`
+	Operations   *int64       `json:"operations"`
+	Transactions *int64       `json:"transactions"`
+	DaysMissing  *int64       `json:"days_missing"`
+	CountsReason *string      `json:"counts_reason"`
 	TwoWayLink   bool         `json:"two_way_link"`
 	WeeklyActive WeeklyActive `json:"weekly_active_accounts"`
 	Series       []OnchainDay `json:"series"`
@@ -372,7 +377,7 @@ func Build(ctx context.Context, tx pgx.Tx, id string, tenant uuid.UUID, from, to
 	}
 	o := v.Onchain
 	r.Onchain = Onchain{IDs: o.IDs, IDsVerified: o.IDsVerified, Operations: o.Operations, Transactions: o.Transactions,
-		DaysMissing: o.DaysMissing, TwoWayLink: v.LinkTwoWay, Series: []OnchainDay{},
+		DaysMissing: o.DaysMissing, CountsReason: o.CountsReason, TwoWayLink: v.LinkTwoWay, Series: []OnchainDay{},
 		WeeklyActive: WeeklyActive{Average: decimal(o.WeeklyActive.Average), Latest: o.WeeklyActive.Latest,
 			WeeksCounted: int64(o.WeeklyActive.WeeksCounted), WeeksMissing: int64(o.WeeklyActive.WeeksMissing)}}
 	for _, p := range v.OnchainSeries {

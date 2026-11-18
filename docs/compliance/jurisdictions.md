@@ -20,7 +20,7 @@ therefore not exempt from consent by itself; it depends on each country's
 exemption.
 
 What the tracker reads and makes the browser send decides which exemption can
-apply. Tracker 1.3.2, the current release (1.3.0 and 1.3.1 read and send the same):
+apply. Tracker 1.4.0, the current release (1.3.0 to 1.3.2 read and send the same):
 
 - **Reads** the opt-out flag (`umami.disabled` in `localStorage`, the only
   browser storage key it reads), the name of the window when the page runs in
