@@ -108,7 +108,7 @@
 # a probe node in the probe group (a host outside azure with a public
 # interface only, added to the inventory by hand): the os baseline without a
 # private network, then caddy for the status page, gatus and the prober. the
-# staging and production inventories from opentofu hold no probe host; the
+# staging and production inventories from opentofu hold no probe host; a
 # separate probe host runs the prober as a container instead
 # (docs/deploy/probe.md), and this play matches no host. it needs the
 # probe tenant's values in the sops file (docs/deploy/bootstrap.md step 10),
