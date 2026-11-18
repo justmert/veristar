@@ -163,7 +163,7 @@ signals. The rules, all in `packages/tracker/src/index.ts`:
 plus `fr` when framed. It carries no `u`, `r`, `ti`, `s`, `l`, `n` or `d`; the gateway refuses a
 notice with any of them (`page_fields_on_notice`). The notice passes every check an event passes,
 including the origin and the proof, and is sent during `pagehide` with `keepalive`, so only a proof
-the page already holds can be used: a page closed within moments of loading may send none, and the
+the page already holds can be used: a page closed before its proof is solved sends none, so the
 count is a lower bound. The gateway answers 202 and never queues it; it counts the notice for the
 site only when the per-visitor volume bound and the same-network check would have put an event of
 that visitor in the primary band.
