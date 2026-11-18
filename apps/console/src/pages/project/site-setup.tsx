@@ -139,7 +139,7 @@ function SiteSetup({ site }: { site: Site }) {
 
       <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_17rem]">
         <ol aria-label="Setup steps" className="flex min-w-0 flex-col">
-          <Step n={1} step={step("install")} id="install">
+          <Step n={1} step={step("install")} id="install" settled={first.event !== null}>
             {snippet.isPending ? (
               <div role="status" aria-busy="true" className="flex flex-col gap-3">
                 <span className="sr-only">Loading the tag</span>
@@ -273,16 +273,20 @@ function StepMark({ n, state }: { n: number; state: SetupStep["state"] }) {
   );
 }
 
-// one step of the vertical list. a done step folds its body away behind a
-// "Show" toggle, so the page shows what is left to do; `keepOpen` keeps the
-// body in view when it carries the step's result.
-function Step({
+// one step of the vertical list. a step that is done when the page opens
+// folds its body away behind a "Show" toggle, so the page shows what is
+// left to do; `keepOpen` keeps the body in view when it carries the step's
+// result. a step that becomes done while the person works in it stays open:
+// only the page load or the toggle folds it. `settled` says the step's state
+// is known (the first event is still being read on load).
+export function Step({
   n,
   step,
   id,
   description,
   last,
   keepOpen,
+  settled = true,
   children,
 }: {
   n: number;
@@ -291,11 +295,15 @@ function Step({
   description?: string;
   last?: boolean;
   keepOpen?: boolean;
+  settled?: boolean;
   children: ReactNode;
 }) {
-  const folds = step.state === "done" && !keepOpen;
-  const [shown, setShown] = useState(false);
-  const open = !folds || shown;
+  const done = step.state === "done" && !keepOpen;
+  // null until the state is known; then whether the body is folded
+  const [folded, setFolded] = useState<boolean | null>(settled ? done : null);
+  if (folded === null && settled) setFolded(done);
+  // a step that is no longer done always shows what is left to do
+  const open = !(done && folded === true);
   const titleId = useId();
   const bodyId = useId();
   return (
@@ -319,23 +327,23 @@ function Step({
             <span className="sr-only">, {STATE_WORD[step.state]}</span>
           </h2>
           {step.optional ? <span className="text-caption text-fg-2">Optional</span> : null}
-          {folds ? (
+          {done ? (
             <Button
               variant="ghost"
               size="xs"
-              aria-expanded={shown}
+              aria-expanded={open}
               aria-controls={bodyId}
-              onClick={() => setShown((s) => !s)}
+              onClick={() => setFolded(open)}
               className="max-lg:h-(--vs-control-touch)"
             >
               <ChevronRight
                 aria-hidden
                 className={cn(
                   "transition-transform duration-(--vs-duration-press) ease-standard",
-                  shown && "rotate-90",
+                  open && "rotate-90",
                 )}
               />
-              {shown ? "Hide" : "Show"}
+              {open ? "Hide" : "Show"}
             </Button>
           ) : null}
         </div>
