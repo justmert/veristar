@@ -13,7 +13,7 @@ import { FormMessage } from "@/components/error-panel";
 import { FilterBar } from "@/components/filter-bar";
 import { NativeSelect, SelectField, TextField } from "@/components/form-field";
 import { PageHeader } from "@/components/page-header";
-import { ErrorState, LoadingState, Skeleton } from "@/components/states";
+import { ErrorState } from "@/components/states";
 import { Pill } from "@/components/status";
 import { toast } from "@/components/toast";
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,7 @@ import { countOf, formatDate } from "@/lib/format";
 import * as v from "@/lib/validate";
 import { useProject } from "@/pages/project-layout";
 import { queryClient } from "@/query-client";
+import { MembersSkeleton, PAGE_HEADERS } from "./page-frame";
 
 export type AddMemberValues = { login: string; role: Role };
 export type AddMemberErrors = Partial<Record<keyof AddMemberValues, string>>;
@@ -131,8 +132,6 @@ function Initial({ login, dashed }: { login: string; dashed?: boolean }) {
   );
 }
 
-const HEADER = { title: "Members", description: "The people who manage this project." };
-
 export function MembersPage() {
   const { tenant, me, isOwner, termsCurrent } = useProject();
   const list = useQuery(membersQuery(tenant.id));
@@ -142,7 +141,7 @@ export function MembersPage() {
   return (
     <div className="flex flex-col gap-8">
       <PageHeader
-        {...HEADER}
+        {...PAGE_HEADERS.members}
         primary={
           canManage ? (
             <Button onClick={() => setAdding(true)} className="max-lg:h-(--vs-control-touch)">
@@ -153,9 +152,7 @@ export function MembersPage() {
         }
       />
       {list.isPending ? (
-        <LoadingState label="Loading members">
-          <Skeleton.Table rows={4} columns={4} />
-        </LoadingState>
+        <MembersSkeleton />
       ) : list.error ? (
         <ErrorState error={list.error} onRetry={() => list.refetch()} />
       ) : (

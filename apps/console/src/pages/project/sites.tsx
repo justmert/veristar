@@ -12,7 +12,7 @@ import { FormMessage } from "@/components/error-panel";
 import { FilterBar } from "@/components/filter-bar";
 import { TextAreaField, TextField } from "@/components/form-field";
 import { PageHeader } from "@/components/page-header";
-import { EmptyState, ErrorState, LoadingState, Missing, Skeleton } from "@/components/states";
+import { EmptyState, ErrorState, Missing } from "@/components/states";
 import { StatusBadge } from "@/components/status-badge";
 import { toast } from "@/components/toast";
 import { Button } from "@/components/ui/button";
@@ -33,6 +33,7 @@ import {
 import * as v from "@/lib/validate";
 import { useProject } from "@/pages/project-layout";
 import { queryClient } from "@/query-client";
+import { PAGE_HEADERS, SitesSkeleton } from "./page-frame";
 
 export type SiteValues = { name: string; domain: string; origins: string };
 export type SiteErrors = Partial<Record<keyof SiteValues, string>>;
@@ -559,11 +560,6 @@ export function SitesTable({ sites, actions }: { sites: Site[]; actions?: ReactN
 
 // ------------------------------------------------------------ the page
 
-const HEADER = {
-  title: "Sites",
-  description: "Each website of the project and how far its setup is.",
-};
-
 export function SitesPage() {
   const { tenant, termsCurrent } = useProject();
   // a suspended project's sites cannot be created or changed (contract 5.11)
@@ -592,11 +588,9 @@ export function SitesPage() {
 
   return (
     <div className="flex flex-col gap-8">
-      <PageHeader {...HEADER} freshness={freshness} primary={add} />
+      <PageHeader {...PAGE_HEADERS.sites} freshness={freshness} primary={add} />
       {sites.isPending ? (
-        <LoadingState label="Loading sites">
-          <Skeleton.Table rows={4} columns={5} />
-        </LoadingState>
+        <SitesSkeleton />
       ) : sites.error ? (
         <ErrorState error={sites.error} onRetry={() => sites.refetch()} />
       ) : live.length === 0 ? (

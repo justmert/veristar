@@ -16,7 +16,7 @@ import { DbIpAttribution } from "@/components/dbip-attribution";
 import { PageHeader } from "@/components/page-header";
 import { RangeControl } from "@/components/range-control";
 import { Sparkline, StatCard } from "@/components/stat-card";
-import { EmptyState, ErrorState, LoadingState, Skeleton } from "@/components/states";
+import { EmptyState, ErrorState, Skeleton } from "@/components/states";
 import { StatusDot } from "@/components/status";
 import { StatusBadge } from "@/components/status-badge";
 import { Skeleton as Bone } from "@/components/ui/skeleton";
@@ -56,6 +56,7 @@ import {
 } from "@/lib/web-dashboard";
 import { AddSiteButton } from "@/pages/project/sites";
 import { useProject } from "@/pages/project-layout";
+import { OverviewSkeleton, PAGE_HEADERS } from "./page-frame";
 import { METRIC_LABEL, WebTrendChart } from "./web-chart";
 
 const NO_FILTERS: ApiFilters = { service: null, route: null, method: null };
@@ -146,7 +147,7 @@ export function OverviewPage() {
   return (
     <div className="flex flex-col gap-8">
       <PageHeader
-        title="Overview"
+        {...PAGE_HEADERS.overview}
         freshness={summary.data?.read_at ? { at: summary.data.read_at, cadence: CADENCE } : null}
       />
       {body}
@@ -154,17 +155,6 @@ export function OverviewPage() {
     </div>
   );
 }
-
-function OverviewSkeleton() {
-  return (
-    <LoadingState label="Loading the overview">
-      <Skeleton.StatRow count={3} />
-      <Skeleton.Chart />
-      <Skeleton.StatRow count={3} />
-    </LoadingState>
-  );
-}
-
 // ---- the next setup step: one line, one action
 
 const STEP_TEXT: Record<SetupNext["step"], { text: string; action: string }> = {

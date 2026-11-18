@@ -38,7 +38,7 @@ import { ContractFunctionsBlock } from "@/components/onchain-functions";
 import { PageHeader } from "@/components/page-header";
 import { type CustomRange, RangeControl } from "@/components/range-control";
 import { StatCard } from "@/components/stat-card";
-import { EmptyState, ErrorState, LoadingState, Skeleton } from "@/components/states";
+import { EmptyState, ErrorState } from "@/components/states";
 import { Pill } from "@/components/status";
 import { toast } from "@/components/toast";
 import { Button } from "@/components/ui/button";
@@ -56,6 +56,7 @@ import {
 } from "@/lib/onchain";
 import { connectWallet, signMessage, WalletError } from "@/lib/stellar-wallet";
 import { useProject } from "@/pages/project-layout";
+import { OnchainSkeleton, PAGE_HEADERS } from "./page-frame";
 
 const CADENCE = "Veristar reads the ledger once a day.";
 
@@ -117,8 +118,7 @@ export function OnchainPage() {
 
   const header = (
     <PageHeader
-      title="On-chain"
-      description="The Stellar accounts and Soroban contracts of your project, and their ledger activity."
+      {...PAGE_HEADERS.onchain}
       freshness={v ? freshnessOf(v) : null}
       secondary={
         v && v.ids.length > 0 ? (
@@ -134,14 +134,7 @@ export function OnchainPage() {
   );
 
   let body: ReactNode;
-  if (view.isPending)
-    body = (
-      <LoadingState label="Loading on-chain activity">
-        <Skeleton.StatRow count={4} />
-        <Skeleton.Chart bars={30} />
-        <Skeleton.Table rows={2} columns={3} />
-      </LoadingState>
-    );
+  if (view.isPending) body = <OnchainSkeleton />;
   else if (view.error || !v)
     body = (
       <ErrorState

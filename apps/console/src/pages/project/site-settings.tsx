@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ArrowLeft, ListChecks, Trash2 } from "lucide-react";
+import { ListChecks, Trash2 } from "lucide-react";
 import { type FormEvent, type ReactNode, useId, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { api, type SitePatch } from "@/api/endpoints";
@@ -14,11 +14,11 @@ import { StatusBadge } from "@/components/status-badge";
 import { toast } from "@/components/toast";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Skeleton } from "@/components/ui/skeleton";
 import { siteSetupPath } from "@/lib/site-setup";
 import { useProject } from "@/pages/project-layout";
 import { NotFoundPage } from "@/pages/public/not-found";
 import { queryClient } from "@/query-client";
+import { SitePageLoading, SitesBackLink } from "./page-frame";
 import {
   OriginsField,
   type SiteErrors,
@@ -27,19 +27,6 @@ import {
   sitePatch,
   validateSite,
 } from "./sites";
-
-function BackLink({ tenantId }: { tenantId: string }) {
-  return (
-    <Link
-      to={`/projects/${tenantId}/sites`}
-      className="inline-flex w-fit items-center gap-1 rounded-sm text-small text-fg-2 transition-colors duration-(--vs-duration-press) ease-standard hover:text-fg focus-ring"
-    >
-      <ArrowLeft aria-hidden className="size-4" />
-      Sites
-    </Link>
-  );
-}
-
 // one site's settings: name and allowed origins, campaign parameters and,
 // for owners, deleting the site. the domain cannot change.
 export function SiteSettingsPage() {
@@ -48,28 +35,21 @@ export function SiteSettingsPage() {
   const sites = useQuery(sitesQuery(tenant.id));
   const site = sites.data?.find((s) => s.id === siteId && s.status !== "removed");
   if (sites.data && !site) return <NotFoundPage />;
-  if (!site)
+  if (sites.error)
     return (
       <div className="flex flex-col gap-6">
-        <BackLink tenantId={tenant.id} />
+        <SitesBackLink tenantId={tenant.id} />
         <PageHeader title="Site settings" />
-        {sites.error ? (
-          <ErrorState error={sites.error} onRetry={() => sites.refetch()} />
-        ) : (
-          <div role="status" aria-busy="true" className="flex max-w-prose flex-col gap-4">
-            <span className="sr-only">Loading the site</span>
-            <Skeleton className="h-40 w-full" />
-            <Skeleton className="h-24 w-full" />
-          </div>
-        )}
+        <ErrorState error={sites.error} onRetry={() => sites.refetch()} />
       </div>
     );
+  if (!site) return <SitePageLoading tenantId={tenant.id} page="settings" />;
   // a suspended project's sites cannot be changed (contract 5.11); deleting
   // stays possible
   const canEdit = termsCurrent && tenant.status !== "suspended";
   return (
     <div className="flex flex-col gap-6">
-      <BackLink tenantId={tenant.id} />
+      <SitesBackLink tenantId={tenant.id} />
       <PageHeader
         title={`${site.name} settings`}
         meta={site.status !== "active" ? <StatusBadge kind="site" status={site.status} /> : null}

@@ -18,7 +18,7 @@ import { Notice } from "@/components/notice";
 import { PageHeader } from "@/components/page-header";
 import { DateField } from "@/components/range-control";
 import { Segmented } from "@/components/segmented";
-import { EmptyState, ErrorState, LoadingState, Skeleton } from "@/components/states";
+import { EmptyState, ErrorState } from "@/components/states";
 import { StatusDot, type Tone } from "@/components/status";
 import { toast } from "@/components/toast";
 import { Button } from "@/components/ui/button";
@@ -37,6 +37,7 @@ import { fieldMessage } from "@/lib/validate";
 import { keyLabel } from "@/lib/web-dashboard";
 import { useProject } from "@/pages/project-layout";
 import { queryClient } from "@/query-client";
+import { PAGE_HEADERS, PrivacySkeleton } from "./page-frame";
 
 // the form's values. ip and userAgent are personal data the owner types on
 // behalf of a visitor: they live only in this react state, are sent once in
@@ -145,24 +146,15 @@ export function erasureErrorText(err: unknown): string | null {
   }
 }
 
-const HEADER = {
-  title: "Privacy",
-  description:
-    "When a visitor asks you to erase their data, request it here. The audit log records each request.",
-};
-
 export function PrivacyPage() {
   const { tenant, isOwner } = useProject();
   const sites = useQuery(sitesQuery(tenant.id));
 
   return (
     <div className="flex flex-col gap-8">
-      <PageHeader {...HEADER} />
+      <PageHeader {...PAGE_HEADERS.privacy} />
       {sites.isPending ? (
-        <LoadingState label="Loading the privacy page">
-          <Bone className="h-64 w-full" />
-          <Skeleton.Table rows={3} columns={4} />
-        </LoadingState>
+        <PrivacySkeleton />
       ) : sites.error ? (
         <ErrorState error={sites.error} onRetry={() => sites.refetch()} />
       ) : (
