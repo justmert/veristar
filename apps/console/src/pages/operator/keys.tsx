@@ -268,7 +268,7 @@ export function AccessKeysPage() {
         </h2>
         {machines.isPending || assistants.isPending ? (
           <LoadingState label="Loading the keys">
-            <Skeleton.Table rows={3} columns={5} />
+            <Skeleton.Table rows={3} columns={6} />
           </LoadingState>
         ) : error ? (
           <ErrorState
