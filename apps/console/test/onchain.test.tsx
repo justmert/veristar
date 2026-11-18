@@ -393,7 +393,7 @@ describe("accounts and contracts page (contract 15.4)", () => {
     const host = await renderRoutes(routes(<OnchainPage />, "onchain"), path);
     await waitFor(() => expect(host.textContent).toContain("Prove again"));
     await click(byRole(host, "button", "Prove again"));
-    await waitFor(() => expect(host.textContent).toContain("Or publish a data entry"));
+    await waitFor(() => expect(host.textContent).toContain("Publish a data entry"));
     expect(host.textContent).toContain("00112233445566778899aabbccddeeff");
     expect(host.textContent).toContain("Veristar ownership proof");
     await click(byRole(host, "button", "Check the data entry"));
