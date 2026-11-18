@@ -141,6 +141,22 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* a stat value that always fits its card. the value keeps the metric step
+   while it fits; a longer value steps down with the card's width (its
+   characters in --metric-chars, a tabular digit is about 0.62 em), never
+   below the small step. the line height stays, so a row of cards keeps one
+   height. needs a size container (@container) around it */
+@utility metric-fit {
+  font-size: max(
+    var(--vs-text-small),
+    min(var(--vs-text-metric), calc(100cqi / var(--metric-chars, 6) * 1.6))
+  );
+  line-height: var(--vs-text-metric-line);
+  font-weight: var(--vs-text-metric-weight);
+  letter-spacing: var(--vs-text-metric-tracking);
+  white-space: nowrap;
+}
+
 /* the focus halo every control shares: accent border plus a soft ring */
 @utility focus-ring {
   &:focus-visible {
