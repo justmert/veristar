@@ -4,10 +4,10 @@ import { LoaderCircle } from "lucide-react";
 import { Slot } from "radix-ui";
 import type * as React from "react";
 
-// one accent button per page, for the page's main action (default);
-// outline for the rest; ghost in toolbars and rows. a destructive action in
-// a page, row or form is `destructive-outline`: crimson text and edge with
-// an icon, so it never looks like the terracotta primary. the solid
+// one ink button per page, for the page's main action (default): the text
+// colour as its fill; outline for the rest; ghost in toolbars and rows. a
+// destructive action in a page, row or form is `destructive-outline`:
+// critical text and edge with an icon, never a fill. the solid
 // `destructive` fill is only the confirm button of a destructive dialog.
 // navigation is a link, never a button. the press motion is a 1 px drop that confirms the
 // click registered. a disabled button of any variant draws the disabled
@@ -30,7 +30,7 @@ const buttonVariants = cva(
         destructive:
           "bg-critical-solid text-on-critical hover:bg-critical-solid-hover active:bg-critical-solid-hover",
         "destructive-outline":
-          "border-critical-line bg-transparent text-critical hover:bg-critical-soft active:bg-critical-soft aria-expanded:bg-critical-soft",
+          "border-critical-line bg-transparent text-critical hover:bg-hover active:bg-selected aria-expanded:bg-selected",
         link: "h-auto border-0 px-0 text-fg underline decoration-line-strong underline-offset-4 hover:decoration-fg disabled:bg-transparent aria-disabled:bg-transparent",
       },
       size: {

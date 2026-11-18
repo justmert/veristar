@@ -1,22 +1,22 @@
 import { cn } from "@veristar/brand/cn";
 import type { IntegrityGrade, SiteStatus, TenantStatus } from "@/api/schemas";
 
-export type Tone = "success" | "warning" | "critical" | "info" | "accent";
+export type Tone = "success" | "warning" | "critical" | "info" | "neutral";
 
 const DOT: Record<Tone, string> = {
   success: "bg-success",
   warning: "bg-warning",
   critical: "bg-critical",
-  info: "bg-fg-3",
-  accent: "bg-accent-text",
+  info: "bg-info",
+  neutral: "bg-fg-3",
 };
 
 const TEXT: Record<Tone, string> = {
   success: "text-success",
   warning: "text-warning",
   critical: "text-critical",
-  info: "text-fg-2",
-  accent: "text-accent-text",
+  info: "text-info",
+  neutral: "text-fg-2",
 };
 
 export function toneText(t: Tone) {
@@ -46,14 +46,14 @@ export function StatusDot({
   );
 }
 
-// the fill and edge of a pill per tone: a status tints its pill, a neutral
-// one stays an outline. the word is always fg, the dot carries the tone
+// the edge of a pill per tone. a pill never fills: the word stays neutral
+// (fg-2), the dot carries the tone and the thin edge repeats it
 const PILL: Record<Tone, string> = {
-  success: "border-success-line bg-success-soft",
-  warning: "border-warning-line bg-warning-soft",
-  critical: "border-critical-line bg-critical-soft",
-  info: "border-line-strong bg-transparent",
-  accent: "border-line-strong bg-transparent",
+  success: "border-success-line",
+  warning: "border-warning-line",
+  critical: "border-critical-line",
+  info: "border-info-line",
+  neutral: "border-line-strong",
 };
 
 // a pill never truncates: its word is the meaning. a narrow cell wraps the
@@ -73,7 +73,7 @@ export function Pill({
     <span
       data-tone={tone}
       className={cn(
-        "inline-flex h-6 shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-2 text-caption font-medium text-fg",
+        "inline-flex h-6 shrink-0 items-center gap-2 whitespace-nowrap rounded-full border bg-transparent px-2 text-label text-fg-2",
         PILL[tone],
         className,
       )}
@@ -104,9 +104,9 @@ export function CountBadge({
       className={cn(
         "inline-flex h-5 min-w-5 shrink-0 items-center justify-center gap-1 rounded-full border px-1 text-axis font-medium tabular",
         tone === "critical"
-          ? "border-critical-line bg-critical-soft text-critical"
+          ? "border-critical-line text-critical"
           : tone === "warning"
-            ? "border-warning-line bg-warning-soft text-warning"
+            ? "border-warning-line text-warning"
             : "border-line-strong bg-selected text-fg",
         className,
       )}
@@ -124,7 +124,8 @@ export function CountBadge({
 // the tones: success when it works (active, verified, set up), warning when
 // someone must act (suspended, a domain to verify), critical when something
 // is refused or failing (not approved, events refused, a failed check),
-// neutral (info) for a normal wait or an end (in review for members,
+// info for a check that is running or a wait on someone else (in review
+// for members), neutral for a quiet wait or an end (no events yet,
 // removed, expired). operators see a project in review as needing action,
 // its members see it as waiting.
 
@@ -135,26 +136,26 @@ const PROJECT: Record<TenantStatus, StatusEntry> = {
   pending: { tone: "info", word: "In review" },
   rejected: { tone: "critical", word: "Not approved" },
   suspended: { tone: "warning", word: "Suspended" },
-  removed: { tone: "info", word: "Removed" },
+  removed: { tone: "neutral", word: "Removed" },
 };
 
 const SITE: Record<SiteStatus, StatusEntry> = {
   active: { tone: "success", word: "Active" },
   pending: { tone: "info", word: "In review" },
   suspended: { tone: "warning", word: "Suspended" },
-  removed: { tone: "info", word: "Removed" },
+  removed: { tone: "neutral", word: "Removed" },
 };
 
 const KEY: Record<"active" | "expired" | "revoked", StatusEntry> = {
   active: { tone: "success", word: "Active" },
-  expired: { tone: "info", word: "Expired" },
-  revoked: { tone: "info", word: "Revoked" },
+  expired: { tone: "neutral", word: "Expired" },
+  revoked: { tone: "neutral", word: "Revoked" },
 };
 
 const ALERT: Record<"page" | "ticket" | "suppressed", StatusEntry> = {
   page: { tone: "critical", word: "Act now" },
   ticket: { tone: "warning", word: "Act today" },
-  suppressed: { tone: "info", word: "Silenced" },
+  suppressed: { tone: "neutral", word: "Silenced" },
 };
 
 // how far a site is set up: one word per site on the sites list and the
@@ -164,7 +165,7 @@ export type SetupStatus = "checking" | "waiting" | "refused" | "unverified" | "f
 
 const SETUP: Record<SetupStatus, StatusEntry> = {
   checking: { tone: "info", word: "Checking" },
-  waiting: { tone: "info", word: "No events yet" },
+  waiting: { tone: "neutral", word: "No events yet" },
   refused: { tone: "critical", word: "Events refused" },
   unverified: { tone: "warning", word: "Domain not verified" },
   failed: { tone: "critical", word: "Domain check failed" },
@@ -208,7 +209,7 @@ export function statusEntry(s: BadgeSubject): StatusEntry {
     case "setup":
       return SETUP[s.status];
     case "grade":
-      return s.grade === null ? { tone: "info", word: "Not graded" } : GRADE[s.grade];
+      return s.grade === null ? { tone: "neutral", word: "Not graded" } : GRADE[s.grade];
   }
 }
 
@@ -218,7 +219,7 @@ export function statusText(status: TenantStatus | SiteStatus | string): string {
 }
 
 export function statusTone(status: TenantStatus | SiteStatus | string): Tone {
-  return statusEntry({ kind: "project", status: status as TenantStatus })?.tone ?? "info";
+  return statusEntry({ kind: "project", status: status as TenantStatus })?.tone ?? "neutral";
 }
 
 export function StatusPill({

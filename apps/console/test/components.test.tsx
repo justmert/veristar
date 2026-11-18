@@ -265,7 +265,7 @@ describe("status badge", () => {
     const dots = [...host.querySelectorAll("span[aria-hidden].rounded-full")].map(
       (d) => d.className,
     );
-    expect(dots[0]).toContain("bg-fg-3");
+    expect(dots[0]).toContain("bg-info");
     expect(dots[1]).toContain("bg-warning");
     expect(host.querySelector("[data-grade=none]")).not.toBeNull();
     expect(host.textContent).not.toContain("Grade not graded");

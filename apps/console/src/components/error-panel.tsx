@@ -9,7 +9,7 @@ export function FormMessage({ error, className }: { error: unknown; className?: 
     <p
       role="alert"
       className={cn(
-        "flex animate-fade-in items-start gap-2 rounded-md border border-critical-line bg-critical-soft px-2 py-2 text-small text-fg",
+        "flex animate-fade-in items-start gap-2 rounded-md border border-critical-line bg-transparent px-2 py-2 text-small text-fg",
         className,
       )}
     >

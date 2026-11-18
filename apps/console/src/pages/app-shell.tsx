@@ -184,7 +184,7 @@ function OperatorAlertLine() {
   return (
     <div
       role="alert"
-      className="mr-auto flex h-(--vs-control-sm) min-w-0 animate-fade-in items-center gap-2 rounded-md border border-critical-line bg-critical-soft px-3 text-small text-fg"
+      className="mr-auto flex h-(--vs-control-sm) min-w-0 animate-fade-in items-center gap-2 rounded-md border border-critical-line bg-raised px-3 text-small text-fg"
     >
       <TriangleAlert aria-hidden className="size-4 shrink-0 text-critical" />
       <span className="min-w-0 truncate">
