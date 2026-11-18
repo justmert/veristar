@@ -142,7 +142,8 @@ When a project proves an on-chain id later, run `platformctl scf match` (the sam
 - the project's cohort beside the award, and its state;
 - a summary of awards, matches and measured projects by round and by category.
 
-Filter it by match state, round, category, project name or measured. The same rows download as
+Filter it by match state, round, category, project name or measured (measured shows the matched
+awards whose project has data; not measured shows every other award). The same rows download as
 CSV from `GET /api/operator/scf/awards.csv`, and the operator MCP tool `list_scf_awards` reads the
 list ([mcp.md](mcp.md)). The routes, fields and states are section 19.5 of the
 [control plane API reference](../reference/control-plane-api.md).

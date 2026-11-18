@@ -4639,8 +4639,9 @@ enrollment transaction of a new project (4.2.1) and after a site is created
 Query of the list and the CSV: `from` and `to` (8.1; default the 30 days
 ending today) set the range of the measurement; `state` (`matched`,
 `ambiguous`, `not_enrolled`), `round` and `category` (exact), `q` (1 to 100
-characters of the project name, case-insensitive) and `measured` (`true` or
-`false`) narrow `items`. The summary always counts every award. Any other
+characters of the project name, case-insensitive) and `measured` (`true`:
+matched awards whose project is measured; `false`: every other award) narrow
+`items`. The summary always counts every award. Any other
 parameter is 400 `invalid_query`.
 
 ```json
