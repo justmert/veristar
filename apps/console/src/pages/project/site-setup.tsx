@@ -471,6 +471,7 @@ function Install({ snippet, onVersion }: { snippet: Snippet; onVersion: (v: stri
       </p>
       <CodeBlock
         code={g.code}
+        copyText={g.copy}
         label={g.label}
         copyLabel={npm ? "Copy command" : "Copy tag"}
         className="min-w-0"
