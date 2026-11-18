@@ -49,6 +49,11 @@ export function AppShell() {
     document.getElementById("main")?.focus({ preventScroll: true });
   }, [pathname]);
 
+  // the tab names the page
+  useEffect(() => {
+    document.title = `${pageTitle(pathname)} · Veristar`;
+  }, [pathname]);
+
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (!isPaletteKey(e)) return;
@@ -60,7 +65,14 @@ export function AppShell() {
   }, []);
 
   if (!me.data) return null;
-  const operatorArea = me.data.user.is_operator && areaOf(pathname).kind === "operator";
+  const area = areaOf(pathname);
+  const operatorArea = me.data.user.is_operator && area.kind === "operator";
+  const contextTitle =
+    area.kind === "project"
+      ? (me.data.tenants.find((t) => t.id === area.id)?.name ?? "Veristar")
+      : area.kind === "operator"
+        ? "Operator area"
+        : "Veristar";
   const side = (
     <Sidebar me={me.data} onSignOut={() => signOut.mutate()} onNavigate={() => setDrawer(false)} />
   );
@@ -91,8 +103,10 @@ export function AppShell() {
           <Link to="/" className="rounded-md p-1 focus-ring" aria-label="Veristar, your projects">
             <Mark className="size-5" />
           </Link>
+          {/* the context (the project, the operator area), never the page: the
+              page's own title is the h1 right below */}
           <span className="min-w-0 flex-1 truncate text-title text-fg" data-testid="page-title">
-            {pageTitle(pathname)}
+            {contextTitle}
           </span>
           {operatorArea && pathname !== "/operator/alerts" ? <OperatorAlertButton /> : null}
           <Button
