@@ -27,15 +27,10 @@ import {
   relativeChange,
   toStatChange,
 } from "@/lib/api-metrics";
-import { countOf, formatCount, formatPercent } from "@/lib/format";
+import { countOf, formatCount, formatPercent, utcDay } from "@/lib/format";
 import { type DayRange, lastDays } from "@/lib/global";
 import { verifiedActivity } from "@/lib/onchain";
-import {
-  apiRangeOfDays,
-  type OverviewPreset,
-  overviewDays,
-  readOverviewPreset,
-} from "@/lib/overview";
+import { apiRangeOfDays, type OverviewPreset, readOverviewRange } from "@/lib/overview";
 import {
   combineFirstEvent,
   firstEvent,
@@ -49,6 +44,7 @@ import {
   metricValue,
   periodLabel,
   sparkOf,
+  WEB_MAX_DAYS,
   WEB_PRESETS,
   type WebMetric,
   webPath,
@@ -90,8 +86,7 @@ export function OverviewPage() {
   const canChange = termsCurrent && !stopped;
   const sites = useQuery(sitesQuery(tenant.id));
   const [params, setParams] = useSearchParams();
-  const preset = readOverviewPreset(params.get("range"));
-  const days = overviewDays(preset, new Date());
+  const { preset, days } = readOverviewRange(params, new Date());
   const live = sites.data?.filter((s) => s.status !== "removed") ?? [];
   const summary = useQuery({
     ...webSummaryQuery(tenant.id, { ...days, site: null, band: "primary" }),
@@ -132,10 +127,22 @@ export function OverviewPage() {
           presets={WEB_PRESETS}
           onPreset={(p) => {
             const next = new URLSearchParams(params);
+            next.delete("from");
+            next.delete("to");
             if (p === "30") next.delete("range");
             else next.set("range", p);
             setParams(next, { replace: true });
           }}
+          custom={preset === "custom" ? days : null}
+          onCustom={(r) => {
+            const next = new URLSearchParams(params);
+            next.set("range", "custom");
+            next.set("from", r.from);
+            next.set("to", r.to);
+            setParams(next, { replace: true });
+          }}
+          maxDay={utcDay()}
+          maxDays={WEB_MAX_DAYS}
           range={days}
         />
         <Numbers
