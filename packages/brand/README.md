@@ -99,7 +99,7 @@ blue. The previous period is `series-prev`
 `series-partial` stripes cut into it (#1C1C1A, the card surface) and has a "Partial" legend
 entry. Status colours are never series colours.
 
-**Type.** Inter (variable, with its optical size axis) for text, JetBrains Mono for numbers, keys and code only. Both SIL OFL, self-hosted from fontsource.
+**Type.** Inter (variable, with its optical size axis) for text, JetBrains Mono for code, ids, keys and routes only (numbers are Inter with tabular figures). Both SIL OFL, self-hosted from fontsource.
 
 | Step | Size / line | Weight | Use |
 |---|---|---|---|
