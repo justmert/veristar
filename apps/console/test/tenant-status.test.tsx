@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Me, Site, Tenant } from "@/api/schemas";
 import { RemovedNotices } from "@/pages/home/projects";
-import { VerifySection } from "@/pages/project/site-verify";
+import { VerifyDomain } from "@/pages/project/site-verify";
 import { RemovedNotice, StatusNotice } from "@/pages/project-layout";
 import { resubmitBody, resubmitValues } from "@/pages/resubmit";
 import * as f from "./fixtures/contract";
@@ -94,7 +94,7 @@ describe("domain verification, the third setup step (contract 5.8)", () => {
   const routes = [
     {
       path: "/projects/:tenantId/sites/:siteId",
-      element: <VerifySection site={f.siteBody as Site} />,
+      element: <VerifyDomain site={f.siteBody as Site} />,
     },
   ];
   const path = `/projects/${f.TENANT_ID}/sites/${f.SITE_ID}`;
@@ -110,7 +110,7 @@ describe("domain verification, the third setup step (contract 5.8)", () => {
     expect(host.textContent).toContain(f.verificationBody.dns.value);
     expect(host.textContent).toContain("https://example.org/.well-known/veristar.txt");
     expect(host.textContent).toContain("No TXT record was found");
-    expect(host.textContent).toContain("Domain not verified");
+    expect(host.textContent).toContain("Add the record at the name shown");
   });
 
   it("runs the chosen check and reports the result", async () => {

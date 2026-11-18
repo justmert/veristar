@@ -1,304 +1,355 @@
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@veristar/brand/cn";
 import { fade } from "@veristar/brand/motion";
-import { ArrowLeft, ArrowRight, Check, CircleAlert, ExternalLink } from "lucide-react";
+import { ArrowLeft, Check, ChevronRight, CircleAlert, ExternalLink, Settings } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { type ReactNode, useId, useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router";
-import { ingestDayQuery, ingestMonthQuery, sitesQuery, snippetQuery } from "@/api/queries";
+import { type ReactNode, useEffect, useId, useState } from "react";
+import { Link, useLocation, useParams, useSearchParams } from "react-router";
+import { sitesQuery, snippetQuery } from "@/api/queries";
 import type { Ingest, Site, Snippet } from "@/api/schemas";
 import { CodeBlock, CopyField } from "@/components/code-block";
-import { CopyButton } from "@/components/copy-button";
-import { ErrorPanel, Loading } from "@/components/error-panel";
+import { StellarTomlSummary } from "@/components/evidence";
 import { NativeSelect } from "@/components/form-field";
-import { PageHeader } from "@/components/panel";
+import { Notice } from "@/components/notice";
+import { PageHeader } from "@/components/page-header";
+import { ErrorState } from "@/components/states";
 import { StatusDot } from "@/components/status";
+import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Skeleton } from "@/components/ui/skeleton";
 import { isNotFound } from "@/lib/errors";
 import { formatBytes, formatCount, formatDate } from "@/lib/format";
 import { outcomeHint, rejectionRows } from "@/lib/outcomes";
+import {
+  type FirstEvent,
+  nextText,
+  type SetupStep,
+  type StepKey,
+  setupProgress,
+  setupStatus,
+  setupSteps,
+  siteSettingsPath,
+} from "@/lib/site-setup";
 import { CONSENT_START, readsTitleChoice, snippetGuides } from "@/lib/snippet-guides";
 import { webPath } from "@/lib/web-dashboard";
 import { useProject } from "@/pages/project-layout";
 import { NotFoundPage } from "@/pages/public/not-found";
-import { VerifySection } from "./site-verify";
-import { type FirstEvent, firstEvent, siteSettingsPath } from "./sites";
+import { VerifyDomain } from "./site-verify";
+import { useFirstEvent } from "./sites";
 
-// ------------------------------------------------------------ setup frame
+// the setup of one site as one guided task: install the tag, see the first
+// event arrive, verify the domain, and the stellar.toml the service reads.
+// one progress model (lib/site-setup.ts) drives the header, the steps and
+// the sites list.
 
-// rows are folded every few minutes, so a 30 s poll finds a first event soon
-// after it is countable without asking more often than it can change
-const FIRST_EVENT_POLL = 30_000;
-
-// the setup of one site as one page: install the tracker, see the first
-// event, verify the domain, under a header with the progress of all three
-export function SetupFrame({
-  site,
-  event,
-  children,
-}: {
-  site: Site | undefined;
-  event: FirstEvent | null;
-  children: ReactNode;
-}) {
-  const { tenant } = useProject();
-  const done = site
-    ? 1 + (event === "received" ? 1 : 0) + (site.verification === "verified" ? 1 : 0)
-    : 1;
-  const next =
-    event !== "received"
-      ? "Next: first event."
-      : site?.verification !== "verified"
-        ? "Next: verify the domain."
-        : "";
-  const status =
-    done === 3
-      ? "Setup complete."
-      : `${event === "received" ? "Tracker installed." : "Site added."} ${next}`;
+function BackLink({ tenantId }: { tenantId: string }) {
   return (
-    <div className="flex flex-col gap-5">
-      <Link
-        to={`/projects/${tenant.id}`}
-        className="inline-flex w-fit items-center gap-1 rounded-sm text-small text-fg-2 transition-colors duration-(--vs-duration-press) hover:text-fg focus-ring"
-      >
-        <ArrowLeft aria-hidden className="size-3.5" />
-        Overview
-      </Link>
+    <Link
+      to={`/projects/${tenantId}/sites`}
+      className="inline-flex w-fit items-center gap-1 rounded-sm text-small text-fg-2 transition-colors duration-(--vs-duration-press) ease-standard hover:text-fg focus-ring"
+    >
+      <ArrowLeft aria-hidden className="size-4" />
+      Sites
+    </Link>
+  );
+}
+
+export function SiteSetupPage() {
+  const { tenant } = useProject();
+  const { siteId = "" } = useParams();
+  const sites = useQuery(sitesQuery(tenant.id));
+  const site = sites.data?.find((s) => s.id === siteId && s.status !== "removed");
+
+  if (sites.data && !site) return <NotFoundPage />;
+  if (!site)
+    return (
+      <div className="flex flex-col gap-6">
+        <BackLink tenantId={tenant.id} />
+        <PageHeader title="Site setup" />
+        {sites.error ? (
+          <ErrorState error={sites.error} onRetry={() => sites.refetch()} />
+        ) : (
+          <div role="status" aria-busy="true" className="flex flex-col gap-4">
+            <span className="sr-only">Loading the site</span>
+            <Skeleton className="h-2 w-48" />
+            <Skeleton className="h-40 w-full" />
+            <Skeleton className="h-24 w-full" />
+          </div>
+        )}
+      </div>
+    );
+  return <SiteSetup site={site} />;
+}
+
+function SiteSetup({ site }: { site: Site }) {
+  const [params, setParams] = useSearchParams();
+  const version = params.get("version");
+  const snippet = useQuery(snippetQuery(site.id, version));
+  const first = useFirstEvent(site);
+  const steps = setupSteps(site, first.event);
+  const status = setupStatus(site, first.event);
+  const { done, total } = setupProgress(steps);
+  const step = (k: StepKey) => steps.find((s) => s.key === k) as SetupStep;
+  // a link to one step (#domain) scrolls to it once the page is drawn
+  const { hash } = useLocation();
+  useEffect(() => {
+    if (!hash) return;
+    // after the shell's own scroll to the top of a new page
+    const frame = requestAnimationFrame(() =>
+      document.getElementById(hash.slice(1))?.scrollIntoView?.({ block: "start" }),
+    );
+    return () => cancelAnimationFrame(frame);
+  }, [hash]);
+
+  if (isNotFound(snippet.error)) return <NotFoundPage />;
+
+  return (
+    <div className="flex flex-col gap-6">
+      <BackLink tenantId={site.tenant_id} />
       <PageHeader
-        title={`Set up ${site?.name ?? "the site"}`}
+        title={site.name}
+        meta={site.status !== "active" ? <StatusBadge kind="site" status={site.status} /> : null}
         description={
-          <span className="flex flex-wrap items-center gap-3">
-            <span
-              role="progressbar"
-              aria-label="Setup progress"
-              aria-valuemin={0}
-              aria-valuemax={3}
-              aria-valuenow={done}
-              className="flex gap-1"
-            >
-              {[0, 1, 2].map((i) => (
-                <span
-                  key={i}
-                  className={cn(
-                    "h-1.5 w-8 rounded-full transition-colors duration-(--vs-duration-change) ease-standard",
-                    i < done ? "bg-success" : "bg-selected",
-                  )}
-                />
-              ))}
-            </span>
-            <span className="text-small text-fg-2">{status}</span>
+          <span className="block truncate font-mono text-small" title={site.domain}>
+            {site.domain}
           </span>
         }
+        secondary={
+          <Button asChild variant="outline">
+            <Link to={siteSettingsPath(site)}>
+              <Settings aria-hidden />
+              Settings
+            </Link>
+          </Button>
+        }
       />
-      {site ? <SetupSteps site={site} event={event} /> : null}
-      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_17rem]">
-        <div className="flex min-w-0 animate-rise-in flex-col gap-6">{children}</div>
-        {site ? <SetupAside site={site} /> : null}
+      <Progress steps={steps} done={done} total={total} text={nextText(status)} />
+      {site.in_review ? (
+        <Notice tone="info" title="In review">
+          This domain belonged to a removed project. An operator checks it before the site receives
+          traffic.
+        </Notice>
+      ) : null}
+      {site.status_reason ? (
+        <Notice tone="info" title="Reason from an operator">
+          {site.status_reason}
+        </Notice>
+      ) : null}
+
+      <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_17rem]">
+        <ol aria-label="Setup steps" className="flex min-w-0 flex-col">
+          <Step n={1} step={step("install")} id="install">
+            {snippet.isPending ? (
+              <div role="status" aria-busy="true" className="flex flex-col gap-3">
+                <span className="sr-only">Loading the tag</span>
+                <Skeleton className="h-8 w-2/3" />
+                <Skeleton className="h-32 w-full" />
+              </div>
+            ) : snippet.error ? (
+              <ErrorState error={snippet.error} onRetry={() => snippet.refetch()} compact />
+            ) : (
+              <Install
+                snippet={snippet.data}
+                onVersion={(v) => {
+                  const next = new URLSearchParams(params);
+                  next.set("version", v);
+                  setParams(next, { replace: true });
+                }}
+              />
+            )}
+          </Step>
+          <Step n={2} step={step("event")} id="event" keepOpen>
+            <FirstEventState site={site} first={first} />
+          </Step>
+          <Step
+            n={3}
+            step={step("domain")}
+            id="domain"
+            description="Prove that the project controls the domain. Operators see the proof. Events arrive without it."
+          >
+            <VerifyDomain site={site} current={step("domain").state === "current"} />
+          </Step>
+          <Step
+            n={4}
+            step={step("toml")}
+            id="toml"
+            last
+            description="The service reads it after setup and once a day. SCF reviewers see what it lists."
+          >
+            <StellarTomlSummary
+              toml={site.stellar_toml}
+              checkedAt={site.stellar_toml_checked_at}
+              domain={site.domain}
+            />
+          </Step>
+        </ol>
+        <SiteAside site={site} />
       </div>
     </div>
   );
 }
 
-function SetupSteps({ site, event }: { site: Site; event: FirstEvent | null }) {
-  const steps = [
-    {
-      key: "install",
-      label: "Install and first event",
-      to: "#install",
-      done: event === "received",
-    },
-    {
-      key: "verify",
-      label: "Verify the domain",
-      to: "#verify",
-      done: site.verification === "verified",
-    },
-  ];
+// the one progress line of the setup: a bar of the required steps and the
+// next thing to do
+function Progress({
+  steps,
+  done,
+  total,
+  text,
+}: {
+  steps: SetupStep[];
+  done: number;
+  total: number;
+  text: string;
+}) {
   return (
-    <nav aria-label="Setup steps">
-      <ol className="flex flex-wrap gap-2">
-        {steps.map((s, i) => {
-          return (
-            <li key={s.key}>
-              <a
-                href={s.to}
-                className="flex h-9 items-center gap-2 rounded-md border border-line px-3 text-small text-fg-2 transition-colors duration-(--vs-duration-press) ease-standard hover:bg-hover hover:text-fg focus-ring max-lg:h-(--vs-control-touch)"
-              >
-                <span
-                  className={cn(
-                    "flex size-5 items-center justify-center rounded-full font-mono text-axis",
-                    s.done ? "bg-success text-sunken" : "border border-line-strong text-fg",
-                  )}
-                >
-                  {s.done ? <Check aria-hidden className="size-3" strokeWidth={3} /> : i + 1}
-                </span>
-                {s.label}
-                {s.done ? <span className="sr-only">(done)</span> : null}
-              </a>
-            </li>
-          );
-        })}
-      </ol>
-    </nav>
-  );
-}
-
-function SetupAside({ site }: { site: Site }) {
-  return (
-    <aside aria-label="This site" className="flex flex-col gap-4 lg:sticky lg:top-6">
-      <div className="flex flex-col gap-3 rounded-lg border border-line bg-raised p-4">
-        <span className="text-caption tracking-wide text-fg-3 uppercase">This site</span>
-        <dl className="flex flex-col gap-3 text-small">
-          <div className="flex flex-col gap-1">
-            <dt className="text-caption font-normal text-fg-3">Domain</dt>
-            <dd className="break-all font-mono text-fg">{site.domain}</dd>
-          </div>
-          <div className="flex flex-col gap-1">
-            <dt className="text-caption font-normal text-fg-3">Allowed origins</dt>
-            <dd className="flex flex-col gap-1">
-              {site.origins.map((o) => (
-                <span key={o} className="break-all font-mono text-fg">
-                  {o}
-                </span>
-              ))}
-              <Link
-                to={siteSettingsPath(site)}
-                className="mt-1 w-fit rounded-sm text-fg-2 underline decoration-line-strong underline-offset-4 transition-colors hover:text-fg hover:decoration-fg focus-ring"
-              >
-                Edit origins
-              </Link>
-            </dd>
-          </div>
-          <div className="flex flex-col gap-1">
-            <dt className="text-caption font-normal text-fg-3">Site id</dt>
-            <dd>
-              <CopyField value={site.id} label="site id" />
-            </dd>
-          </div>
-        </dl>
-      </div>
-      <div className="flex flex-col gap-2 rounded-lg border border-line p-4 text-small">
-        <span className="text-caption tracking-wide text-fg-3 uppercase">Why verify</span>
-        <p className="text-fg-2">
-          Operators of the service see which domains a project has proven. It is not needed to
-          collect data.
-        </p>
-      </div>
-      <Link
-        to={siteSettingsPath(site)}
-        className="w-fit rounded-sm text-small text-fg-2 transition-colors hover:text-fg focus-ring"
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+      <span
+        role="progressbar"
+        aria-label="Setup progress"
+        aria-valuemin={0}
+        aria-valuemax={total}
+        aria-valuenow={done}
+        aria-valuetext={`${done} of ${total} steps done`}
+        className="flex gap-1"
       >
-        Site settings
-      </Link>
-    </aside>
+        {steps
+          .filter((s) => !s.optional)
+          .map((s) => (
+            <span
+              key={s.key}
+              className={cn(
+                "h-1.5 w-10 rounded-full transition-colors duration-(--vs-duration-change) ease-standard",
+                s.state === "done"
+                  ? "bg-success"
+                  : s.state === "attention"
+                    ? "bg-warning"
+                    : "bg-selected",
+              )}
+            />
+          ))}
+      </span>
+      <span className="text-small text-fg-2">
+        <span className="font-mono tabular">
+          {done} of {total}
+        </span>{" "}
+        done. {text}
+      </span>
+    </div>
   );
 }
 
-// the first event state from the ingest counts the setup already reads; the
-// last 24 hours are polled while nothing has arrived
-export function useFirstEvent(siteId: string): {
-  event: FirstEvent | null;
-  day: Ingest | undefined;
-  month: Ingest | undefined;
-} {
-  const month = useQuery(ingestMonthQuery(siteId));
-  const monthReceived = month.data !== undefined && firstEvent(month.data) === "received";
-  const day = useQuery({
-    ...ingestDayQuery(siteId),
-    refetchInterval: (q) =>
-      monthReceived || (q.state.data && firstEvent(q.state.data) === "received")
-        ? false
-        : FIRST_EVENT_POLL,
-  });
-  const known = month.data !== undefined || day.data !== undefined;
-  const event = known ? firstEvent(month.data, day.data) : null;
-  return { event, day: day.data, month: month.data };
-}
+const STATE_WORD: Record<SetupStep["state"], string> = {
+  done: "done",
+  current: "to do now",
+  todo: "not done yet",
+  attention: "needs action",
+};
 
-// ------------------------------------------------------------ install
-
-export function SiteSetupPage() {
-  const { tenant } = useProject();
-  const { siteId = "" } = useParams();
-  const [params, setParams] = useSearchParams();
-  const version = params.get("version");
-  const sites = useQuery(sitesQuery(tenant.id));
-  const snippet = useQuery(snippetQuery(siteId, version));
-  const first = useFirstEvent(siteId);
-
-  const site = sites.data?.find((s) => s.id === siteId);
-  if (isNotFound(snippet.error)) return <NotFoundPage />;
-
-  return (
-    <SetupFrame site={site} event={first.event}>
-      {snippet.isPending ? <Loading label="Loading the snippet" /> : null}
-      {snippet.error ? (
-        <ErrorPanel error={snippet.error} onRetry={() => snippet.refetch()} />
-      ) : null}
-      {snippet.data ? (
-        <section id="install" aria-label="Install and first event" className="scroll-mt-6">
-          <Install
-            snippet={snippet.data}
-            site={site}
-            first={first}
-            onVersion={(v) => {
-              const next = new URLSearchParams(params);
-              next.set("version", v);
-              setParams(next, { replace: true });
-            }}
-          />
-        </section>
-      ) : null}
-      {site ? (
-        <section id="verify" aria-labelledby="verify-h" className="flex scroll-mt-6 flex-col gap-4">
-          <h2 id="verify-h" className="text-section text-fg">
-            Verify the domain
-          </h2>
-          <VerifySection site={site} />
-        </section>
-      ) : null}
-    </SetupFrame>
-  );
-}
-
-function StepNumber({ n, done }: { n: number; done?: boolean }) {
+function StepMark({ n, state }: { n: number; state: SetupStep["state"] }) {
   return (
     <span
       aria-hidden
       className={cn(
         "flex size-7 shrink-0 items-center justify-center rounded-full font-mono text-small transition-colors duration-(--vs-duration-change) ease-standard",
-        done ? "bg-success text-sunken" : "border border-line-strong bg-raised text-fg",
+        state === "done"
+          ? "bg-success text-ground"
+          : state === "attention"
+            ? "border border-warning-line text-warning"
+            : state === "current"
+              ? "border-2 border-accent-text text-accent-text"
+              : "border border-line-strong text-fg-2",
       )}
     >
-      {done ? <Check className="size-4" strokeWidth={3} /> : n}
+      {state === "done" ? (
+        <Check className="size-4" strokeWidth={3} />
+      ) : state === "attention" ? (
+        <CircleAlert className="size-4" />
+      ) : (
+        n
+      )}
     </span>
   );
 }
 
+// one step of the vertical list. a done step folds its body away behind a
+// "Show" toggle, so the page shows what is left to do; `keepOpen` keeps the
+// body in view when it carries the step's result.
 function Step({
   n,
-  done,
-  title,
-  children,
+  step,
+  id,
+  description,
   last,
+  keepOpen,
+  children,
 }: {
   n: number;
-  done?: boolean;
-  title: ReactNode;
-  children: ReactNode;
+  step: SetupStep;
+  id: string;
+  description?: string;
   last?: boolean;
+  keepOpen?: boolean;
+  children: ReactNode;
 }) {
+  const folds = step.state === "done" && !keepOpen;
+  const [shown, setShown] = useState(false);
+  const open = !folds || shown;
+  const titleId = useId();
+  const bodyId = useId();
   return (
-    <li className="grid grid-cols-[1.75rem_minmax(0,1fr)] gap-x-4">
+    <li
+      id={id}
+      className="grid scroll-mt-6 grid-cols-[1.75rem_minmax(0,1fr)] gap-x-4"
+      data-step={step.key}
+      data-state={step.state}
+    >
       <div className="flex flex-col items-center">
-        <StepNumber n={n} done={done} />
+        <StepMark n={n} state={step.state} />
         {last ? null : <span aria-hidden className="mt-2 w-px flex-1 bg-line" />}
       </div>
-      <div className={cn("flex min-w-0 flex-col gap-3", last ? "" : "pb-8")}>
-        <h3 className="pt-1 text-title text-fg">{title}</h3>
-        {children}
-      </div>
+      <section
+        aria-labelledby={titleId}
+        className={cn("flex min-w-0 flex-col gap-3", last ? "" : "pb-8")}
+      >
+        <div className="flex min-h-7 flex-wrap items-center gap-x-3 gap-y-1">
+          <h2 id={titleId} className="text-title text-fg">
+            {step.title}
+            <span className="sr-only">, {STATE_WORD[step.state]}</span>
+          </h2>
+          {step.optional ? <span className="text-caption text-fg-2">Optional</span> : null}
+          {folds ? (
+            <Button
+              variant="ghost"
+              size="xs"
+              aria-expanded={shown}
+              aria-controls={bodyId}
+              onClick={() => setShown((s) => !s)}
+              className="max-lg:h-(--vs-control-touch)"
+            >
+              <ChevronRight
+                aria-hidden
+                className={cn(
+                  "transition-transform duration-(--vs-duration-press) ease-standard",
+                  shown && "rotate-90",
+                )}
+              />
+              {shown ? "Hide" : "Show"}
+            </Button>
+          ) : null}
+        </div>
+        {description && open ? (
+          <p className="max-w-prose text-small text-fg-2">{description}</p>
+        ) : null}
+        <AnimatePresence initial={false}>
+          {open ? (
+            <motion.div key="body" id={bodyId} {...fade} className="flex min-w-0 flex-col gap-3">
+              {children}
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
+      </section>
     </li>
   );
 }
@@ -330,7 +381,7 @@ function FrameworkPicker({
     (e.currentTarget.parentElement?.children[j] as HTMLElement | undefined)?.focus();
   }
   return (
-    <div role="radiogroup" aria-label="Framework" className="flex flex-wrap gap-2">
+    <div role="radiogroup" aria-label="How the site is built" className="flex flex-wrap gap-2">
       {options.map((o, i) => {
         const on = o.id === value;
         return (
@@ -346,7 +397,7 @@ function FrameworkPicker({
             className={cn(
               "h-8 rounded-md border px-3 text-small transition-colors duration-(--vs-duration-press) ease-standard focus-ring max-lg:h-(--vs-control-touch)",
               on
-                ? "border-fg-disabled bg-selected text-fg"
+                ? "border-pressed-line bg-pressed text-fg"
                 : "border-line-strong text-fg-2 hover:bg-hover hover:text-fg",
             )}
           >
@@ -358,205 +409,172 @@ function FrameworkPicker({
   );
 }
 
-function Install({
-  snippet,
-  site,
-  first,
-  onVersion,
+// an option of the tag: a checkbox, what it changes, and an optional block
+function TagOption({
+  label,
+  checked,
+  onChange,
+  children,
 }: {
-  snippet: Snippet;
-  site: Site | undefined;
-  first: ReturnType<typeof useFirstEvent>;
-  onVersion: (v: string) => void;
+  label: string;
+  checked: boolean;
+  onChange: (on: boolean) => void;
+  children: ReactNode;
 }) {
+  const id = useId();
+  return (
+    <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1">
+      <Checkbox
+        id={id}
+        checked={checked}
+        onCheckedChange={(c) => onChange(c === true)}
+        aria-describedby={`${id}-d`}
+        className="mt-1"
+      />
+      <label htmlFor={id} className="text-body text-fg">
+        {label}
+      </label>
+      <div id={`${id}-d`} className="col-start-2 flex min-w-0 flex-col gap-2 text-small text-fg-2">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function Install({ snippet, onVersion }: { snippet: Snippet; onVersion: (v: string) => void }) {
   const [fw, setFw] = useState("html");
   const [consent, setConsent] = useState(false);
   const [title, setTitle] = useState(false);
   const pickerId = useId();
-  const consentId = useId();
-  const titleId = useId();
   const titleChoice = readsTitleChoice(snippet.version);
   const guides = snippetGuides(snippet, { consent, title });
   const g = guides.find((x) => x.id === fw) ?? guides[0];
   const v = snippet.versions.find((x) => x.version === snippet.version);
   if (!g) return null;
   const npm = g.id === "npm";
+  const code = (t: string) => <code className="font-mono text-fg">{t}</code>;
 
   return (
-    <section aria-label="Install the tracker" className="flex flex-col gap-4">
-      <h2 className="text-section text-fg">Install the tracker</h2>
-      <ol className="flex flex-col">
-        <Step n={1} title="Pick how the site is built">
-          <FrameworkPicker value={g.id} options={guides} onChange={setFw} />
-        </Step>
+    <section aria-label="Install the tag" className="flex min-w-0 flex-col gap-4">
+      <div className="flex flex-col gap-2">
+        <span className="text-small font-medium text-fg">How is the site built?</span>
+        <FrameworkPicker value={g.id} options={guides} onChange={setFw} />
+      </div>
+      <p className="text-small text-fg">
+        {g.where}
+        {v ? (
+          <span className="text-fg-2">
+            {" "}
+            Tracker {v.version}, {formatBytes(v.gzip_bytes)} compressed.
+          </span>
+        ) : null}
+      </p>
+      <CodeBlock
+        code={g.code}
+        label={g.label}
+        copyLabel={npm ? "Copy command" : "Copy tag"}
+        className="min-w-0"
+      />
+      {g.note ? <p className="max-w-prose text-small text-fg-2">{g.note}</p> : null}
 
-        <Step n={2} title={npm ? "Install the package" : "Paste the tag"}>
-          <p className="text-small text-fg-2">
-            <span className="text-fg">{g.where}</span>
-            {v ? (
-              <span className="text-fg-3">
-                {" "}
-                · tracker {v.version}, {formatBytes(v.gzip_bytes)} compressed, pinned
-              </span>
-            ) : null}
+      <div className="flex flex-col gap-3">
+        <TagOption
+          label="Wait for consent before measuring"
+          checked={consent}
+          onChange={setConsent}
+        >
+          <p>
+            {npm ? (
+              <>
+                Passes {code("autoTrack: false")} to {code("init()")}.
+              </>
+            ) : (
+              <>Adds {code('data-auto-track="false"')} to the tag.</>
+            )}{" "}
+            The tracker then sends nothing until your consent banner calls {code("umami.start()")}.
           </p>
-          <div className="overflow-hidden rounded-lg border border-line bg-sunken">
-            <div className="flex min-h-10 items-center justify-between gap-3 border-b border-line px-3 py-1">
-              <span className="truncate text-caption text-fg-3">{g.label}</span>
-              <div className="flex items-center gap-2">
-                <CopyButton
-                  text={g.copy}
-                  label={npm ? "Copy command" : "Copy tag"}
-                  size="xs"
-                  variant="ghost"
+          <AnimatePresence initial={false}>
+            {consent ? (
+              <motion.div {...fade}>
+                <CodeBlock
+                  code={CONSENT_START}
+                  label="When the visitor agrees"
+                  copyLabel="Copy call"
                 />
-              </div>
-            </div>
-            <pre className="overflow-x-auto px-3 py-3 font-mono text-small break-all whitespace-pre-wrap text-fg">
-              <code>{g.code}</code>
-            </pre>
-          </div>
-          <p className="max-w-prose text-small text-fg-2">{g.note}</p>
-          <p className="max-w-prose text-small text-fg-2">
-            The integrity hash makes the browser refuse any other file, so the code on your pages
-            changes only when you change the tag on purpose.
-          </p>
-
-          <div className="flex flex-col gap-2 rounded-lg border border-line p-3">
-            <div className="flex items-start gap-3">
-              <Checkbox
-                id={consentId}
-                checked={consent}
-                onCheckedChange={(c) => setConsent(c === true)}
-                aria-describedby={`${consentId}-d`}
-                className="mt-1"
-              />
-              <label htmlFor={consentId} className="text-body text-fg">
-                Wait for consent before measuring
-              </label>
-            </div>
-            <p id={`${consentId}-d`} className="pl-6 text-small text-fg-2">
+              </motion.div>
+            ) : null}
+          </AnimatePresence>
+        </TagOption>
+        {titleChoice ? (
+          <TagOption label="Send the page title" checked={title} onChange={setTitle}>
+            <p>
               {npm ? (
                 <>
-                  Passes <code className="font-mono text-fg">autoTrack: false</code> to{" "}
-                  <code className="font-mono text-fg">init()</code>.
+                  Passes {code("sendTitle: true")} to {code("init()")}.
                 </>
               ) : (
-                <>
-                  Adds <code className="font-mono text-fg">data-auto-track="false"</code> to the
-                  tag.
-                </>
+                <>Adds {code('data-send-title="true"')} to the tag.</>
               )}{" "}
-              The tracker then loads but sends nothing and reads no storage until your consent
-              banner calls <code className="font-mono text-fg">umami.start()</code>. Your site keeps
-              the visitor's choice and calls it again on later pages.
+              A title can name a person. Turn this on only if your titles are generic.
             </p>
-            <AnimatePresence initial={false}>
-              {consent ? (
-                <motion.div {...fade} className="pl-6">
-                  <CodeBlock
-                    code={CONSENT_START}
-                    label="When the visitor agrees"
-                    copyLabel="Copy call"
-                  />
-                </motion.div>
-              ) : null}
-            </AnimatePresence>
+          </TagOption>
+        ) : null}
+      </div>
+
+      <details className="group rounded-lg border border-line text-small">
+        <summary className="flex min-h-10 cursor-pointer list-none items-center gap-2 rounded-lg px-3 text-fg-2 transition-colors duration-(--vs-duration-press) ease-standard hover:text-fg focus-ring max-lg:min-h-(--vs-control-touch) [&::-webkit-details-marker]:hidden">
+          <ChevronRight
+            aria-hidden
+            className="size-4 transition-transform duration-(--vs-duration-press) ease-standard group-open:rotate-90"
+          />
+          Version and what the tag pins
+        </summary>
+        <div className="flex flex-col gap-3 border-t border-line p-3">
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="flex flex-col gap-1">
+              <label htmlFor={pickerId} className="text-small font-medium text-fg">
+                Tracker version
+              </label>
+              <NativeSelect
+                id={pickerId}
+                value={snippet.version}
+                onChange={(e) => onVersion(e.target.value)}
+              >
+                {snippet.versions.map((ver, i) => (
+                  <option key={ver.version} value={ver.version}>
+                    {ver.version}
+                    {i === 0 ? " (recommended)" : ""}
+                  </option>
+                ))}
+              </NativeSelect>
+            </div>
+            {v ? (
+              <p className="pb-1 text-small text-fg-2">
+                Released {formatDate(v.released)}. {formatBytes(v.gzip_bytes)} compressed,{" "}
+                {formatBytes(v.bytes)} raw.
+              </p>
+            ) : null}
           </div>
-
-          {!titleChoice ? null : (
-            <div className="flex flex-col gap-2 rounded-lg border border-line p-3">
-              <div className="flex items-start gap-3">
-                <Checkbox
-                  id={titleId}
-                  checked={title}
-                  onCheckedChange={(c) => setTitle(c === true)}
-                  aria-describedby={`${titleId}-d`}
-                  className="mt-1"
-                />
-                <label htmlFor={titleId} className="text-body text-fg">
-                  Send the page title
-                </label>
-              </div>
-              <p id={`${titleId}-d`} className="pl-6 text-small text-fg-2">
-                {npm ? (
-                  <>
-                    Passes <code className="font-mono text-fg">sendTitle: true</code> to{" "}
-                    <code className="font-mono text-fg">init()</code>.
-                  </>
-                ) : (
-                  <>
-                    Adds <code className="font-mono text-fg">data-send-title="true"</code> to the
-                    tag.
-                  </>
-                )}{" "}
-                Without it the tracker sends the page's path and referrer only. No metric needs the
-                title, and a title can name a person, so turn this on only if your titles are
-                generic.
-              </p>
-            </div>
-          )}
-
-          <details className="group rounded-lg border border-line text-small">
-            <summary className="flex min-h-10 cursor-pointer items-center gap-2 rounded-lg px-3 text-fg-2 transition-colors hover:text-fg focus-ring">
-              <ArrowRight
-                aria-hidden
-                className="size-3.5 transition-transform duration-(--vs-duration-press) group-open:rotate-90"
-              />
-              Version and what the tag pins
-            </summary>
-            <div className="flex flex-col gap-3 border-t border-line p-3">
-              <div className="flex flex-wrap items-end gap-3">
-                <div className="flex flex-col gap-1">
-                  <label htmlFor={pickerId} className="text-small font-medium text-fg">
-                    Tracker version
-                  </label>
-                  <NativeSelect
-                    id={pickerId}
-                    value={snippet.version}
-                    onChange={(e) => onVersion(e.target.value)}
-                  >
-                    {snippet.versions.map((ver, i) => (
-                      <option key={ver.version} value={ver.version}>
-                        {ver.version}
-                        {i === 0 ? " (recommended)" : ""}
-                      </option>
-                    ))}
-                  </NativeSelect>
-                </div>
-                {v ? (
-                  <p className="pb-1 text-small text-fg-2">
-                    Released {formatDate(`${v.released}T00:00:00Z`)}, {formatBytes(v.gzip_bytes)}{" "}
-                    compressed ({formatBytes(v.bytes)} raw)
-                  </p>
-                ) : null}
-              </div>
-              <dl className="grid gap-x-4 gap-y-2 sm:grid-cols-[6rem_minmax(0,1fr)] sm:items-center">
-                <dt className="text-fg-2">Script</dt>
-                <dd className="min-w-0">
-                  <CopyField value={snippet.src} label="script address" />
-                </dd>
-                <dt className="text-fg-2">Integrity</dt>
-                <dd className="min-w-0">
-                  <CopyField value={snippet.integrity} label="integrity" />
-                </dd>
-                <dt className="text-fg-2">Site id</dt>
-                <dd className="min-w-0">
-                  <CopyField value={snippet.site_id} label="site id" />
-                </dd>
-              </dl>
-              <p className="text-fg-2">
-                The browser refuses the script if a single byte differs from this hash. To move to a
-                newer tracker, pick it above and replace the tag on your pages.
-              </p>
-            </div>
-          </details>
-        </Step>
-
-        <Step n={3} title="First event" done={first.event === "received"} last>
-          <FirstEventState site={site} first={first} />
-        </Step>
-      </ol>
+          <dl className="grid gap-x-4 gap-y-2 sm:grid-cols-[6rem_minmax(0,1fr)] sm:items-center">
+            <dt className="text-fg-2">Script</dt>
+            <dd className="min-w-0">
+              <CopyField value={snippet.src} label="script address" />
+            </dd>
+            <dt className="text-fg-2">Integrity</dt>
+            <dd className="min-w-0">
+              <CopyField value={snippet.integrity} label="integrity" />
+            </dd>
+            <dt className="text-fg-2">Site id</dt>
+            <dd className="min-w-0">
+              <CopyField value={snippet.site_id} label="site id" />
+            </dd>
+          </dl>
+          <p className="text-fg-2">
+            The browser refuses the script if one byte differs from the integrity hash. To use a
+            newer tracker, choose it above and replace the tag on your pages.
+          </p>
+        </div>
+      </details>
     </section>
   );
 }
@@ -565,8 +583,8 @@ function FirstEventState({
   site,
   first,
 }: {
-  site: Site | undefined;
-  first: ReturnType<typeof useFirstEvent>;
+  site: Site;
+  first: { event: FirstEvent | null; day: Ingest | undefined; month: Ingest | undefined };
 }) {
   const state = first.event;
   // the month answer is cached longer than the polled day, so a refusal seen
@@ -579,7 +597,7 @@ function FirstEventState({
   const originRefused = reasons.some((r) => r.key === "rejected_origin");
   const counted = (first.month?.totals.accepted ?? 0) + (first.month?.totals.quarantined ?? 0);
   return (
-    <div aria-live="polite" className="min-h-24">
+    <div aria-live="polite" className="min-h-20">
       <AnimatePresence mode="wait" initial={false}>
         {state === null ? (
           <motion.p key="checking" {...fade} className="text-small text-fg-2">
@@ -589,53 +607,40 @@ function FirstEventState({
           <motion.div
             key="received"
             {...fade}
-            className="flex animate-highlight flex-col gap-3 rounded-lg border border-success-line bg-success-soft p-4"
+            data-arrived=""
+            className="flex animate-highlight flex-col gap-3 rounded-lg border border-success-line bg-raised p-4"
           >
             <span className="flex items-center gap-2 text-body font-medium text-fg">
               <Check aria-hidden className="size-4 text-success" strokeWidth={2.6} />
-              First event received
+              First event arrived
             </span>
             <span className="text-small text-fg-2">
               {counted > 0
-                ? `${formatCount(counted)} events from this site were counted in the last 30 days. `
-                : "Events from this site were counted. "}
-              The web dashboard is ready, and counts update every few minutes.
+                ? `${formatCount(counted)} events from this site were counted in the last 30 days.`
+                : "Page views from this site arrived today. Counts on the other pages follow within a few minutes."}
             </span>
-            {site ? (
-              <div className="flex flex-wrap gap-2">
-                <Button asChild size="sm" className="max-lg:h-(--vs-control-touch)">
-                  <a href="#verify">
-                    Continue to verification
-                    <ArrowRight aria-hidden />
-                  </a>
-                </Button>
-                <Button
-                  asChild
-                  variant="outline"
-                  size="sm"
-                  className="max-lg:h-(--vs-control-touch)"
-                >
-                  <Link to={webPath(site.tenant_id, site.id)}>Open web analytics</Link>
-                </Button>
-              </div>
-            ) : null}
+            <div className="flex flex-wrap gap-2">
+              <Button asChild variant="outline" size="sm" className="max-lg:h-(--vs-control-touch)">
+                <Link to={webPath(site.tenant_id, site.id)}>Open web data</Link>
+              </Button>
+            </div>
           </motion.div>
         ) : state === "refused" ? (
           <motion.div
             key="refused"
             {...fade}
-            className="flex flex-col gap-3 rounded-lg border border-warning-line bg-warning-soft p-4"
+            className="flex flex-col gap-3 rounded-lg border border-warning-line bg-raised p-4"
           >
             <span className="flex items-center gap-2 text-body font-medium text-fg">
               <CircleAlert aria-hidden className="size-4 text-warning" />
-              Events are arriving, but they are refused
+              Events arrive, but the service refuses them
             </span>
-            <ul className="flex flex-col gap-1 text-small">
+            <ul className="flex flex-col gap-2 text-small">
               {reasons.map((r) => (
                 <li key={r.key} className="flex flex-col">
                   <span className="text-fg">
-                    {r.label}: <span className="font-mono">{formatCount(r.count)}</span> in the last{" "}
-                    {period}
+                    {r.label}: <span className="font-mono tabular">{formatCount(r.count)}</span> in
+                    the last {period}
                   </span>
                   {outcomeHint(r.key) ? (
                     <span className="text-fg-2">{outcomeHint(r.key)}</span>
@@ -645,53 +650,89 @@ function FirstEventState({
             </ul>
             {originRefused ? (
               <span className="text-small text-fg-2">
-                A common cause is a www. or staging host that is not in the allowed origins.
+                Often a www. or staging host is missing from the allowed origins. Add it in the site
+                settings.
               </span>
             ) : null}
-            {site ? (
-              <div className="flex flex-wrap gap-2">
-                {originRefused ? (
-                  <Button asChild size="sm" className="max-lg:h-(--vs-control-touch)">
-                    <Link to={siteSettingsPath(site)}>Edit allowed origins</Link>
-                  </Button>
-                ) : null}
+            <div className="flex flex-wrap gap-2">
+              {originRefused ? (
                 <Button
                   asChild
                   variant="outline"
                   size="sm"
                   className="max-lg:h-(--vs-control-touch)"
                 >
-                  <Link to={`${webPath(site.tenant_id, site.id)}#outcomes`}>See every outcome</Link>
+                  <Link to={siteSettingsPath(site)}>Edit allowed origins</Link>
                 </Button>
-              </div>
-            ) : null}
+              ) : null}
+              <Button asChild variant="ghost" size="sm" className="max-lg:h-(--vs-control-touch)">
+                <Link to={`${webPath(site.tenant_id, site.id)}#outcomes`}>See every outcome</Link>
+              </Button>
+            </div>
           </motion.div>
         ) : (
           <motion.div key="waiting" {...fade} className="flex flex-col gap-2">
             <span className="flex items-center gap-2 text-body font-medium text-fg">
-              <StatusDot tone="accent" live className="size-2" />
-              Listening for the first event
+              <StatusDot tone="info" live className="size-2" />
+              Waiting for the first event
             </span>
             <span className="max-w-prose text-small text-fg-2">
-              Deploy the tag, then open{" "}
-              <span className="font-mono text-fg">{site?.domain ?? "the site"}</span> in a browser.
-              This step completes on its own once the first events are counted, usually within a few
-              minutes.
+              Install the tag, then open the site in a browser. This step completes by itself,
+              usually within a few minutes.
             </span>
-            {site ? (
-              <a
-                href={`https://${site.domain}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex w-fit items-center gap-1 rounded-sm text-small text-fg underline decoration-line-strong underline-offset-4 transition-colors hover:decoration-fg focus-ring"
-              >
-                Open {site.domain}
-                <ExternalLink aria-hidden className="size-3.5" />
-              </a>
-            ) : null}
+            <a
+              href={`https://${site.domain}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex w-fit max-w-full items-center gap-1 rounded-sm text-small text-fg underline decoration-line-strong underline-offset-4 transition-colors duration-(--vs-duration-press) ease-standard hover:decoration-fg focus-ring"
+            >
+              <span className="truncate">Open {site.domain}</span>
+              <ExternalLink aria-hidden className="size-4 shrink-0" />
+            </a>
           </motion.div>
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+function SiteAside({ site }: { site: Site }) {
+  return (
+    <aside
+      aria-label="This site"
+      className="flex min-w-0 flex-col gap-4 rounded-lg border border-line bg-raised p-4 lg:sticky lg:top-6"
+    >
+      <span className="text-caption text-fg-2">This site</span>
+      <dl className="flex min-w-0 flex-col gap-3 text-small">
+        <div className="flex min-w-0 flex-col gap-1">
+          <dt className="text-caption text-fg-2">Domain</dt>
+          <dd className="truncate font-mono text-fg" title={site.domain}>
+            {site.domain}
+          </dd>
+        </div>
+        <div className="flex min-w-0 flex-col gap-1">
+          <dt className="text-caption text-fg-2">Allowed origins</dt>
+          <dd className="flex min-w-0 flex-col gap-1">
+            {site.origins.map((o) => (
+              <span key={o} className="truncate font-mono text-fg" title={o}>
+                {o}
+              </span>
+            ))}
+            <Link
+              to={siteSettingsPath(site)}
+              className="mt-1 w-fit rounded-sm text-fg-2 underline decoration-line-strong underline-offset-4 transition-colors duration-(--vs-duration-press) ease-standard hover:text-fg hover:decoration-fg focus-ring"
+            >
+              Edit origins
+            </Link>
+          </dd>
+        </div>
+        <div className="flex min-w-0 flex-col gap-1">
+          <dt className="text-caption text-fg-2">Site id</dt>
+          <dd>
+            <CopyField value={site.id} label="site id" />
+          </dd>
+        </div>
+      </dl>
+    </aside>
   );
 }

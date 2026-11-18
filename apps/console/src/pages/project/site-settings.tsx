@@ -1,17 +1,21 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Check, Trash2 } from "lucide-react";
-import { type FormEvent, useId, useState } from "react";
+import { ArrowLeft, ListChecks, Trash2 } from "lucide-react";
+import { type FormEvent, type ReactNode, useId, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { api, type SitePatch } from "@/api/endpoints";
 import { keys, sitesQuery } from "@/api/queries";
 import type { Site } from "@/api/schemas";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { ErrorPanel, FormMessage, Loading } from "@/components/error-panel";
+import { FormMessage } from "@/components/error-panel";
 import { TextField } from "@/components/form-field";
-import { PageHeader, Panel } from "@/components/panel";
-import { StatusPill } from "@/components/status";
+import { PageHeader } from "@/components/page-header";
+import { ErrorState } from "@/components/states";
+import { StatusBadge } from "@/components/status-badge";
+import { toast } from "@/components/toast";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Skeleton } from "@/components/ui/skeleton";
+import { siteSetupPath } from "@/lib/site-setup";
 import { useProject } from "@/pages/project-layout";
 import { NotFoundPage } from "@/pages/public/not-found";
 import { queryClient } from "@/query-client";
@@ -21,9 +25,20 @@ import {
   type SiteValues,
   serverSiteErrors,
   sitePatch,
-  siteSetupPath,
   validateSite,
 } from "./sites";
+
+function BackLink({ tenantId }: { tenantId: string }) {
+  return (
+    <Link
+      to={`/projects/${tenantId}/sites`}
+      className="inline-flex w-fit items-center gap-1 rounded-sm text-small text-fg-2 transition-colors duration-(--vs-duration-press) ease-standard hover:text-fg focus-ring"
+    >
+      <ArrowLeft aria-hidden className="size-4" />
+      Sites
+    </Link>
+  );
+}
 
 // one site's settings: name and allowed origins, campaign parameters and,
 // for owners, deleting the site. the domain cannot change.
@@ -31,87 +46,103 @@ export function SiteSettingsPage() {
   const { tenant, isOwner, termsCurrent } = useProject();
   const { siteId = "" } = useParams();
   const sites = useQuery(sitesQuery(tenant.id));
-  if (sites.isPending) return <Loading label="Loading the site" />;
-  if (sites.error) return <ErrorPanel error={sites.error} onRetry={() => sites.refetch()} />;
-  const site = sites.data.find((s) => s.id === siteId && s.status !== "removed");
-  if (!site) return <NotFoundPage />;
+  const site = sites.data?.find((s) => s.id === siteId && s.status !== "removed");
+  if (sites.data && !site) return <NotFoundPage />;
+  if (!site)
+    return (
+      <div className="flex flex-col gap-6">
+        <BackLink tenantId={tenant.id} />
+        <PageHeader title="Site settings" />
+        {sites.error ? (
+          <ErrorState error={sites.error} onRetry={() => sites.refetch()} />
+        ) : (
+          <div role="status" aria-busy="true" className="flex max-w-prose flex-col gap-4">
+            <span className="sr-only">Loading the site</span>
+            <Skeleton className="h-40 w-full" />
+            <Skeleton className="h-24 w-full" />
+          </div>
+        )}
+      </div>
+    );
   // a suspended project's sites cannot be changed (contract 5.11); deleting
   // stays possible
   const canEdit = termsCurrent && tenant.status !== "suspended";
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-6">
+      <BackLink tenantId={tenant.id} />
       <PageHeader
         title={`${site.name} settings`}
-        meta={site.status !== "active" ? <StatusPill status={site.status} /> : null}
-        description={<span className="font-mono text-small">{site.domain}</span>}
-        actions={
+        meta={site.status !== "active" ? <StatusBadge kind="site" status={site.status} /> : null}
+        description={
+          <span className="block truncate font-mono text-small" title={site.domain}>
+            {site.domain}
+          </span>
+        }
+        secondary={
           <Button asChild variant="outline">
-            <Link to={siteSetupPath(site)}>Setup</Link>
+            <Link to={siteSetupPath(site)}>
+              <ListChecks aria-hidden />
+              Setup
+            </Link>
           </Button>
         }
       />
-      <SiteSettings
-        site={site}
-        canEdit={canEdit}
-        canDelete={isOwner && termsCurrent}
-        isOwner={isOwner}
-      />
+      <div className="flex max-w-prose flex-col gap-8">
+        <Section title="Name and allowed origins" description="You cannot change the domain.">
+          {canEdit ? <EditSiteForm site={site} /> : <ReadOnly site={site} />}
+        </Section>
+        <Section title="Campaign parameters">
+          <CampaignParams site={site} canEdit={canEdit} isOwner={isOwner} />
+        </Section>
+        {isOwner && termsCurrent ? <DangerZone site={site} /> : null}
+      </div>
     </div>
   );
 }
 
-function SiteSettings({
-  site,
-  canEdit,
-  canDelete,
-  isOwner,
+function Section({
+  title,
+  description,
+  children,
 }: {
-  site: Site;
-  canEdit: boolean;
-  canDelete: boolean;
-  isOwner: boolean;
+  title: string;
+  description?: string;
+  children: ReactNode;
 }) {
+  const id = useId();
   return (
-    <div className="flex max-w-content flex-col gap-4">
-      <Panel title="Name and allowed origins" description="The domain cannot be changed.">
-        {canEdit ? (
-          <EditSiteForm site={site} />
-        ) : (
-          <dl className="flex flex-col gap-3 text-small">
-            <div className="flex flex-col gap-1">
-              <dt className="text-caption text-fg-3">Name</dt>
-              <dd className="text-fg">{site.name}</dd>
-            </div>
-            <div className="flex flex-col gap-1">
-              <dt className="text-caption text-fg-3">Allowed origins</dt>
-              <dd>
-                <ul aria-label="Allowed origins" className="flex flex-wrap gap-1">
-                  {site.origins.map((o) => (
-                    <li
-                      key={o}
-                      className="rounded-sm border border-line bg-sunken px-2 py-1 font-mono text-caption font-normal text-fg"
-                    >
-                      {o}
-                    </li>
-                  ))}
-                </ul>
-              </dd>
-            </div>
-          </dl>
-        )}
-      </Panel>
-      <Panel title="Campaign parameters">
-        <CampaignParams site={site} canEdit={canEdit} isOwner={isOwner} />
-      </Panel>
-      {canDelete ? (
-        <Panel
-          title="Delete site"
-          description="Stops collection and deletes both web dashboards of this site with all their data."
-          actions={<DeleteSite site={site} />}
-          className="border-critical-line"
-        />
-      ) : null}
-    </div>
+    <section aria-labelledby={id} className="flex flex-col gap-4">
+      <div className="flex flex-col gap-1">
+        <h2 id={id} className="text-title text-fg">
+          {title}
+        </h2>
+        {description ? <p className="text-small text-fg-2">{description}</p> : null}
+      </div>
+      <div className="rounded-lg border border-line bg-raised p-5 max-sm:p-4">{children}</div>
+    </section>
+  );
+}
+
+function ReadOnly({ site }: { site: Site }) {
+  return (
+    <dl className="flex flex-col gap-3 text-small">
+      <div className="flex flex-col gap-1">
+        <dt className="text-caption text-fg-2">Name</dt>
+        <dd className="text-fg">{site.name}</dd>
+      </div>
+      <div className="flex min-w-0 flex-col gap-1">
+        <dt className="text-caption text-fg-2">Allowed origins</dt>
+        <dd>
+          <ul aria-label="Allowed origins" className="flex flex-col gap-1">
+            {site.origins.map((o) => (
+              <li key={o} className="truncate font-mono text-fg" title={o}>
+                {o}
+              </li>
+            ))}
+          </ul>
+        </dd>
+      </div>
+    </dl>
   );
 }
 
@@ -119,20 +150,16 @@ function EditSiteForm({ site }: { site: Site }) {
   const initial = { name: site.name, domain: site.domain, origins: site.origins.join("\n") };
   const [values, setValues] = useState<SiteValues>(initial);
   const [errors, setErrors] = useState<SiteErrors>({});
-  const [saved, setSaved] = useState(false);
   const save = useMutation({
     mutationFn: (patch: SitePatch) => api.updateSite(site.tenant_id, site.id, patch),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: keys.sites(site.tenant_id) });
-      setSaved(true);
+      toast.success("Changes saved. New origins apply within a minute.");
     },
     onError: (err) => setErrors(serverSiteErrors(err, values)),
   });
   const changed = Object.keys(sitePatch(site, values)).length > 0;
-  const edit = (next: Partial<SiteValues>) => {
-    setSaved(false);
-    setValues((s) => ({ ...s, ...next }));
-  };
+  const edit = (next: Partial<SiteValues>) => setValues((s) => ({ ...s, ...next }));
 
   function submit(e: FormEvent) {
     e.preventDefault();
@@ -165,9 +192,6 @@ function EditSiteForm({ site }: { site: Site }) {
         error={errors.origins}
         suggestion={null}
       />
-      <p className="text-caption font-normal text-fg-2">
-        New origins take effect at the collection endpoint within a minute.
-      </p>
       <FormMessage
         error={
           save.error && Object.keys(serverSiteErrors(save.error, values)).length === 0
@@ -176,14 +200,19 @@ function EditSiteForm({ site }: { site: Site }) {
         }
       />
       <div className="flex flex-wrap items-center gap-3">
-        <Button type="submit" size="sm" pending={save.isPending} disabled={!changed}>
+        <Button
+          type="submit"
+          pending={save.isPending}
+          disabled={!changed}
+          className="max-lg:h-(--vs-control-touch)"
+        >
           {save.isPending ? "Saving" : "Save changes"}
         </Button>
         {changed ? (
           <Button
             type="button"
             variant="ghost"
-            size="sm"
+            className="max-lg:h-(--vs-control-touch)"
             onClick={() => {
               setValues(initial);
               setErrors({});
@@ -193,14 +222,6 @@ function EditSiteForm({ site }: { site: Site }) {
             Cancel
           </Button>
         ) : null}
-        <span role="status" className="flex items-center gap-1 text-small text-fg-2">
-          {saved && !changed ? (
-            <>
-              <Check aria-hidden className="size-3.5 text-success" />
-              Saved
-            </>
-          ) : null}
-        </span>
       </div>
     </form>
   );
@@ -222,71 +243,86 @@ export function CampaignParams({
   const id = useId();
   const save = useMutation({
     mutationFn: (on: boolean) => api.updateSite(site.tenant_id, site.id, { collect_utm: on }),
-    onSuccess: async () => {
+    onSuccess: async (_, on) => {
+      toast.success(on ? "Campaign parameters are kept." : "Campaign parameters are dropped.");
       await queryClient.invalidateQueries({ queryKey: keys.sites(site.tenant_id) });
     },
   });
   const checked =
     save.isPending && save.variables !== undefined ? save.variables : site.collect_utm;
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-start gap-3">
-        <Checkbox
-          id={id}
-          checked={checked}
-          disabled={!canEdit || !isOwner || save.isPending}
-          onCheckedChange={(c) => save.mutate(c === true)}
-          aria-describedby={`${id}-d`}
-          className="mt-1"
-        />
-        <label htmlFor={id} className="text-body text-fg">
-          Keep campaign parameters (<code className="font-mono text-small">utm_*</code> and{" "}
-          <code className="font-mono text-small">ref</code>) in page addresses
-        </label>
-      </div>
-      <p id={`${id}-d`} className="pl-6 text-small text-fg-2">
-        Off by default: every query parameter is dropped before storage. Turning this on keeps the
-        campaign parameters, which France's CNIL recommends not collecting for analytics run without
-        consent. It applies to new events within a minute.
+    <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-2">
+      <Checkbox
+        id={id}
+        checked={checked}
+        disabled={!canEdit || !isOwner || save.isPending}
+        onCheckedChange={(c) => save.mutate(c === true)}
+        aria-describedby={`${id}-d`}
+        className="mt-1"
+      />
+      <label htmlFor={id} className="text-body text-fg">
+        Keep campaign parameters (<code className="font-mono text-small">utm_*</code> and{" "}
+        <code className="font-mono text-small">ref</code>) in page addresses
+      </label>
+      <p id={`${id}-d`} className="col-start-2 text-small text-fg-2">
+        Off by default: the service drops all query parameters. These parameters can identify a
+        person, so analytics without consent should not keep them. A change applies within a minute.
         {canEdit && !isOwner ? " Only an owner of the project can change it." : null}
       </p>
-      <FormMessage error={save.error} />
+      <FormMessage error={save.error} className="col-start-2" />
     </div>
   );
 }
 
-function DeleteSite({ site }: { site: Site }) {
+function DangerZone({ site }: { site: Site }) {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
   const remove = useMutation({
     mutationFn: () => api.deleteSite(site.tenant_id, site.id),
     onSuccess: async () => {
       setOpen(false);
+      toast.success(`${site.name} was deleted.`);
       await queryClient.invalidateQueries({ queryKey: keys.sites(site.tenant_id) });
       navigate(`/projects/${site.tenant_id}/sites`);
     },
   });
   return (
-    <>
-      <Button variant="destructive" size="sm" onClick={() => setOpen(true)}>
-        <Trash2 aria-hidden />
-        Delete
-      </Button>
+    <section aria-labelledby="danger-h" className="flex flex-col gap-4">
+      <h2 id="danger-h" className="text-title text-fg">
+        Danger zone
+      </h2>
+      <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-critical-line bg-raised p-5 max-sm:p-4">
+        <div className="flex min-w-0 flex-col gap-1">
+          <span className="text-body font-medium text-fg">Delete this site</span>
+          <span className="text-small text-fg-2">
+            The site stops collecting. Its web data is deleted.
+          </span>
+        </div>
+        <Button
+          variant="destructive"
+          className="max-lg:h-(--vs-control-touch)"
+          onClick={() => {
+            remove.reset();
+            setOpen(true);
+          }}
+        >
+          <Trash2 aria-hidden />
+          Delete site
+        </Button>
+      </div>
       <ConfirmDialog
         open={open}
-        onOpenChange={(o) => {
-          setOpen(o);
-          if (!o) remove.reset();
-        }}
+        onOpenChange={setOpen}
         title={`Delete ${site.name}?`}
-        description={`Events from ${site.domain} stop being accepted, and both web dashboards of this site are deleted with all their data. This cannot be undone.`}
+        description={`Events from ${site.domain} are refused, and all web data of this site is deleted. You cannot undo this.`}
         cancelLabel="Keep site"
         confirmLabel="Delete site"
         pendingLabel="Deleting"
         pending={remove.isPending}
         error={remove.error}
+        typed={{ value: site.domain, label: `Type ${site.domain} to confirm` }}
         onConfirm={() => remove.mutate()}
       />
-    </>
+    </section>
   );
 }
