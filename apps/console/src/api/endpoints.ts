@@ -43,6 +43,7 @@ import {
   passkeyChallenge,
   type Role,
   type Site,
+  scfAwardSearch,
   site,
   sitePage,
   siteVerification,
@@ -74,6 +75,8 @@ export type EnrollmentInput = {
   accepted_terms_version: string;
   // 19.1 an optional cohort proposal
   cohort?: { program?: string; round?: string; category?: string; award_date?: string };
+  // 4.2.1 the picked scf award, sent in place of cohort
+  scf_award_id?: string;
 };
 
 // 4.1.9 a webauthn.get answer, every byte field base64url. public_key is
@@ -247,6 +250,9 @@ export const api = {
   tenant: (tenantId: string, signal?: AbortSignal) =>
     request("GET", `/tenants/${enc(tenantId)}`, tenant, undefined, signal),
   createTenant: (body: EnrollmentInput) => request("POST", "/tenants", tenant, body),
+  // 4.2.7 the enrollment form's award search
+  searchScfAwards: (q: string, signal?: AbortSignal) =>
+    request("GET", `/scf/awards/search${query([["q", q]])}`, scfAwardSearch, undefined, signal),
   acceptTerms: (tenantId: string, version: string) =>
     request("POST", `/tenants/${enc(tenantId)}/terms`, tenant, { version }),
   resubmit: (tenantId: string, body: ResubmitInput) =>

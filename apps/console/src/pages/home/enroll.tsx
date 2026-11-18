@@ -5,6 +5,7 @@ import { Link, useNavigate } from "react-router";
 import { ApiError } from "@/api/client";
 import { api, type EnrollmentInput } from "@/api/endpoints";
 import { keys, meQuery } from "@/api/queries";
+import type { ScfAward } from "@/api/schemas";
 import {
   CohortFields,
   type CohortValues,
@@ -25,7 +26,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { isDraftTerms, termsVersionLabel } from "@/lib/terms";
 import * as v from "@/lib/validate";
 import { queryClient } from "@/query-client";
-import { AwardSearch, awardCohort, type ScfAward } from "./award-search";
+import { AwardSearch, awardCohort } from "./award-search";
 
 export type EnrollValues = {
   name: string;
@@ -137,7 +138,7 @@ export function withAward(
   body: EnrollmentInput,
   cohort: CohortValues,
   award: PickedAward | null,
-): EnrollmentInput & { scf_award_id?: string } {
+): EnrollmentInput {
   if (award && sameCohort(cohort, award.cohort)) return { ...body, scf_award_id: award.id };
   return withCohort(body, cohort);
 }
