@@ -49,6 +49,13 @@ describe("states", () => {
     expect(errorMessage(new ApiError({ status: 502, code: "x", message: "" }))).toBe(
       "The request failed.",
     );
+    const bare = new ApiError({
+      status: 500,
+      code: "unexpected_response",
+      message: "/operator/audit?limit=50 answered 500 without an error body",
+    });
+    expect(errorMessage(bare)).toBe("The service answered with an error. Try again.");
+    expect(errorDetails(bare)).toContain("/operator/audit?limit=50");
     const details = errorDetails(apiError, new Date("2026-11-18T01:49:00Z"));
     expect(details).toContain("Request id: req-42");
     expect(details).toContain("Error code: internal");
