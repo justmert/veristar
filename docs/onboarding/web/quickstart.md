@@ -66,6 +66,9 @@ Put the tag in the `<head>` of every page, once. Where that is depends on your f
 | SvelteKit | `src/app.html` | [sveltekit.md](sveltekit.md) |
 | React Router in framework mode | `app/root.tsx` | [react-router.md](react-router.md) |
 | Next.js with the App Router | `app/layout.js` or `app/layout.tsx` | [nextjs.md](nextjs.md) |
+| Docusaurus | `scripts` in `docusaurus.config.ts` | [docusaurus.md](docusaurus.md) |
+| VitePress | `head` in `.vitepress/config.ts` | [vitepress.md](vitepress.md) |
+| Mintlify | a `tracker.js` file in the docs repository | [mintlify.md](mintlify.md) |
 
 Client-side route changes (`history.pushState`, `replaceState`, back and forward) are counted by
 the tracker on its own. No router hook is needed.

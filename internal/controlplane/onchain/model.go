@@ -115,6 +115,9 @@ type ID struct {
 	Read         Read            `json:"read"`
 	Totals       Totals          `json:"totals"`
 	Series       []Point         `json:"series"`
+	// a contract's calls per function over the range, without daily
+	// series; null for an account and for an unverified contract
+	Functions *Functions `json:"functions"`
 }
 
 // ProjectTotals add up the ids of a project. operations and transactions
@@ -259,6 +262,10 @@ func Load(ctx context.Context, tx pgx.Tx, sites string, tenant uuid.UUID, rg Ran
 	for _, d := range dayRows {
 		byKey[d.Strkey+"/"+d.Day.Format(time.DateOnly)] = d
 	}
+	fns, err := loadFunctions(ctx, tx, tenant, ids, rg, today)
+	if err != nil {
+		return v, err
+	}
 	for _, r := range ids {
 		x := ID{
 			ID: r.ID, Strkey: r.Strkey, Kind: r.Kind, AddedBy: r.AddedBy, CreatedAt: httpx.Timestamp(r.CreatedAt),
@@ -278,6 +285,14 @@ func Load(ctx context.Context, tx pgx.Tx, sites string, tenant uuid.UUID, rg Ran
 		}
 		if r.VerifiedAt != nil {
 			x.Verification.Status = StatusVerified
+			if c, ok := fns[r.Strkey]; ok && r.Kind == "contract" {
+				f := c.Functions
+				f.Functions = slices.Clone(f.Functions)
+				for i := range f.Functions {
+					f.Functions[i].Series = nil
+				}
+				x.Functions = &f
+			}
 		}
 		if len(r.Detail) > 0 {
 			if err := json.Unmarshal(r.Detail, &x.Verification.Detail); err != nil {

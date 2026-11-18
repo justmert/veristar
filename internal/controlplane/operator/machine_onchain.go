@@ -110,6 +110,10 @@ type MachineOnchainDay struct {
 	Operations     int64     `json:"operations"`
 	Transactions   int64     `json:"transactions"`
 	Counterparties int64     `json:"counterparties"`
+	// a contract day's calls per function: read, no_call_tree, or the
+	// reason they were not read; null for an account day and for a contract
+	// day not read for them yet
+	Functions *string `json:"functions"`
 }
 
 var onchainDayKeys = keyset{cols: []string{"z.tenant_id", "z.strkey", "z.day"}, casts: []string{"uuid", "text", "date"}}
@@ -141,7 +145,7 @@ func (m *Machine) onchainDaily(w http.ResponseWriter, r *http.Request) error {
 		args := pgx.NamedArgs{"tenant": sc.arg(), "from_day": rg.From, "to_day": rg.To}
 		// only ids the project still declares
 		inner := `with ` + tenantScopeCTE + `
-			select d.tenant_id, d.strkey, d.day, d.source, d.operations, d.transactions, d.counterparties
+			select d.tenant_id, d.strkey, d.day, d.source, d.operations, d.transactions, d.counterparties, d.functions
 			from agg.chain_daily d join t on t.id = d.tenant_id
 			join cp.chain_ids c on c.tenant_id = d.tenant_id and c.strkey = d.strkey
 			where d.day between @from_day::date and @to_day::date`
@@ -152,7 +156,7 @@ func (m *Machine) onchainDaily(w http.ResponseWriter, r *http.Request) error {
 		items, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (MachineOnchainDay, error) {
 			var d MachineOnchainDay
 			var day time.Time
-			err := row.Scan(&d.TenantID, &d.Strkey, &day, &d.Source, &d.Operations, &d.Transactions, &d.Counterparties)
+			err := row.Scan(&d.TenantID, &d.Strkey, &day, &d.Source, &d.Operations, &d.Transactions, &d.Counterparties, &d.Functions)
 			d.Day = day.Format(time.DateOnly)
 			return d, err
 		})
@@ -251,6 +255,86 @@ func (m *Machine) onchainWeekly(w http.ResponseWriter, r *http.Request) error {
 	})
 	if err != nil {
 		return fmt.Errorf("operator: machine onchain weekly: %w", err)
+	}
+	httpx.WriteJSON(w, http.StatusOK, out)
+	return nil
+}
+
+// MachineOnchainFunction is one item of GET /onchain/functions: the calls
+// to one function of a verified contract by one kind of caller on one utc
+// day. failed is null for the calls of accounts; a function without a row
+// on a day whose state is read had no calls.
+type MachineOnchainFunction struct {
+	TenantID   uuid.UUID `json:"tenant_id"`
+	Strkey     string    `json:"strkey"`
+	Day        string    `json:"day"`
+	Function   string    `json:"function"`
+	Caller     string    `json:"caller"`
+	Successful int64     `json:"successful"`
+	Failed     *int64    `json:"failed"`
+	Accounts   int64     `json:"accounts"`
+}
+
+var onchainFunctionKeys = keyset{
+	cols:  []string{"z.tenant_id", "z.strkey", "z.day", "z.caller", "z.function_name"},
+	casts: []string{"uuid", "text", "date", "text", "text"},
+}
+
+func (m *Machine) onchainFunctions(w http.ResponseWriter, r *http.Request) error {
+	q := r.URL.Query()
+	if err := checkParams(q, "tenant", "from", "to", "limit", "cursor"); err != nil {
+		return err
+	}
+	key := keyFrom(r.Context())
+	p, err := parseMachinePage(q, "machine-onchain-functions", key)
+	if err != nil {
+		return err
+	}
+	if err := onchainFunctionKeys.validAfter(p); err != nil {
+		return err
+	}
+	rg, err := p.days(q, m.now())
+	if err != nil {
+		return err
+	}
+	ctx := r.Context()
+	out := MachineRangeList[MachineOnchainFunction]{From: rg.From.Format(time.DateOnly), To: rg.To.Format(time.DateOnly), Items: []MachineOnchainFunction{}}
+	err = m.db.WithOperator(ctx, func(tx pgx.Tx) error {
+		sc, err := resolveScope(ctx, tx, key, q)
+		if err != nil {
+			return err
+		}
+		args := pgx.NamedArgs{"tenant": sc.arg(), "from_day": rg.From, "to_day": rg.To}
+		// verified contracts the project still declares
+		inner := `with ` + tenantScopeCTE + `
+			select f.tenant_id, f.strkey, f.day, f.caller, f.function_name, f.successful, f.failed, f.accounts
+			from agg.chain_function_daily f join t on t.id = f.tenant_id
+			join cp.chain_ids c on c.tenant_id = f.tenant_id and c.strkey = f.strkey and c.verified_at is not null
+			where f.day between @from_day::date and @to_day::date`
+		rows, err := tx.Query(ctx, onchainFunctionKeys.wrap(inner, p, args), args)
+		if err != nil {
+			return err
+		}
+		items, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (MachineOnchainFunction, error) {
+			var x MachineOnchainFunction
+			var day time.Time
+			err := row.Scan(&x.TenantID, &x.Strkey, &day, &x.Caller, &x.Function, &x.Successful, &x.Failed, &x.Accounts)
+			x.Day = day.Format(time.DateOnly)
+			return x, err
+		})
+		if err != nil {
+			return err
+		}
+		if len(items) > p.Limit {
+			items = items[:p.Limit]
+			l := items[len(items)-1]
+			out.NextCursor = p.next([]string{l.TenantID.String(), l.Strkey, l.Day, l.Caller, l.Function}, out.From, out.To)
+		}
+		out.Items = items
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("operator: machine onchain functions: %w", err)
 	}
 	httpx.WriteJSON(w, http.StatusOK, out)
 	return nil

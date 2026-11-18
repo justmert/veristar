@@ -56,8 +56,9 @@ integration tests run against stock collectors and against the real platform col
 | Go | `net/http` | [go.md](go.md) |
 | Python | FastAPI | [python.md](python.md) |
 | Rust | actix-web | [rust.md](rust.md) |
+| Java | Spring Boot with the OpenTelemetry Java agent | [java.md](java.md) |
 
-All four use the same environment variables:
+All five use the same environment variables:
 
 | Variable | Value |
 |---|---|
@@ -69,9 +70,12 @@ All four use the same environment variables:
 The platform accepts OTLP over HTTP (`/v1/metrics`, `/v1/traces`, `/v1/logs`, protobuf or JSON,
 optionally gzip or zstd compressed) and OTLP over gRPC, both on port 443.
 
+Running the Stellar Anchor Platform? [anchor-platform.md](anchor-platform.md) attaches the Java
+agent to its SEP server and platform server without code changes.
+
 ## 4. Make sure requests carry a route
 
-Requests are grouped by `http.route`, the route template such as `/accounts/{id}`. In all four
+Requests are grouped by `http.route`, the route template such as `/accounts/{id}`. In all five
 examples the framework instrumentation sets it. [http-route.md](http-route.md) shows who sets it in
 each example, how to set it yourself and what happens without it.
 

@@ -7,7 +7,7 @@ The API dashboard groups requests by route: `GET /accounts/{id}` is one row, how
 there are. The route comes from the `http.route` attribute, the route template your framework
 matched, which OpenTelemetry's HTTP instrumentations set on the request metric and the server span.
 
-## In the four examples
+## In the examples
 
 | Example | Who sets `http.route` | Stored as |
 |---|---|---|
@@ -15,6 +15,7 @@ matched, which OpenTelemetry's HTTP instrumentations set on the request metric a
 | [Go](go.md), `net/http` | `otelhttp` on metrics from the mux pattern; the example's middleware copies it onto the span | `/accounts/{id}` |
 | [Python](python.md), FastAPI | `instrumentation-fastapi`, from the path template | `/accounts/{account_id}` |
 | [Rust](rust.md), actix-web | `RequestMetrics` and `RequestTracing`, from the route pattern | `/accounts/{id}` |
+| [Java](java.md), Spring Boot | the Java agent's Spring MVC instrumentation, from the mapping template | `/accounts/{id}` |
 
 `tests/otelapps` sends a fixed load to each example and checks that every request is counted under
 exactly these routes, with no raw path left over.

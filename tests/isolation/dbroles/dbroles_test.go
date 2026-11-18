@@ -418,6 +418,11 @@ func seed(t *testing.T, c *pgx.Conn) (side, side) {
 			  values ($1, $2, current_date, 'horizon', 3, 2, 1)`, []any{s.tenant, "G" + strings.Repeat("A", 54) + string(rune('A'+i))}},
 			{`insert into agg.chain_reads (tenant_id, strkey, covered_from, covered_to, last_attempt_at)
 			  values ($1, $2, current_date, current_date, now())`, []any{s.tenant, "G" + strings.Repeat("A", 54) + string(rune('A'+i))}},
+			// calls per contract function (00047): a contract day and one row
+			{`insert into agg.chain_daily (tenant_id, strkey, day, source, operations, transactions, counterparties, functions)
+			  values ($1, $2, current_date, 'rpc_events', 3, 2, 1, 'read')`, []any{s.tenant, "C" + strings.Repeat("A", 54) + string(rune('A'+i))}},
+			{`insert into agg.chain_function_daily (tenant_id, strkey, day, function_name, caller, successful, failed, accounts)
+			  values ($1, $2, current_date, 'swap', 'contract', 2, 1, 1)`, []any{s.tenant, "C" + strings.Repeat("A", 54) + string(rune('A'+i))}},
 			// weekly active accounts (00038): an open week and one member
 			{`insert into agg.chain_weeks (tenant_id, week, hash_key) values ($1, date_trunc('week', current_date)::date, $2)`,
 				[]any{s.tenant, make([]byte, 32)}},

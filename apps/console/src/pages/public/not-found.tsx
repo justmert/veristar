@@ -3,7 +3,6 @@ import { cn } from "@veristar/brand/cn";
 import { LockKeyhole, LogOut, RotateCcw, SearchX, TriangleAlert } from "lucide-react";
 import type { ReactNode } from "react";
 import { isRouteErrorResponse, Link, useNavigate, useRouteError } from "react-router";
-import { ApiError } from "@/api/client";
 import { api } from "@/api/endpoints";
 import { CopyButton } from "@/components/copy-button";
 import { FormMessage } from "@/components/error-panel";
@@ -19,7 +18,6 @@ export function StopPage({
   tone = "neutral",
   title,
   children,
-  reference,
   actions,
   className,
 }: {
@@ -27,14 +25,13 @@ export function StopPage({
   tone?: "neutral" | "critical";
   title: string;
   children?: ReactNode;
-  reference?: string | null;
   actions?: ReactNode;
   className?: string;
 }) {
   return (
     <section
       className={cn(
-        "flex min-h-80 max-w-prose animate-rise-in flex-col justify-center gap-4 rounded-lg border border-line px-6 py-10 sm:px-10 sm:py-12",
+        "mx-auto flex min-h-80 w-full max-w-prose animate-rise-in flex-col justify-center gap-4 rounded-lg border border-line px-6 py-10 sm:px-10 sm:py-12",
         className,
       )}
     >
@@ -49,9 +46,6 @@ export function StopPage({
       <h1 className="text-heading text-fg">{title}</h1>
       {children ? (
         <div className="flex max-w-prose flex-col gap-1 text-body text-fg-2">{children}</div>
-      ) : null}
-      {reference ? (
-        <p className="font-mono text-caption font-normal text-fg-3">{reference}</p>
       ) : null}
       {actions ? <div className="flex flex-wrap gap-2 pt-1">{actions}</div> : null}
     </section>
@@ -122,18 +116,12 @@ export function RouteErrorPage() {
       </PublicFrame>
     );
   }
-  // the sentence for a person; the status, path and request id go in the
-  // copied details
-  const text = errorMessage(error);
-  const ref = error instanceof ApiError && error.requestId ? `Reference ${error.requestId}` : null;
   return (
     <PublicFrame footer={false}>
       <StopPage
         icon={<TriangleAlert aria-hidden />}
         tone="critical"
         title="The console hit an error"
-        reference={ref}
-        className="w-full"
         actions={
           <>
             <Button
@@ -146,12 +134,17 @@ export function RouteErrorPage() {
             <Button asChild variant="outline" className="max-sm:h-(--vs-control-touch)">
               <Link to="/">Go to your projects</Link>
             </Button>
-            <CopyButton text={errorDetails(error)} label="Copy details" variant="ghost" />
+            <CopyButton
+              text={errorDetails(error)}
+              label="Copy details"
+              variant="ghost"
+              size="default"
+            />
           </>
         }
       >
-        <p role="alert">{text}</p>
-        <p>Reload the page. If it happens again, report it with the copied details.</p>
+        <p role="alert">{errorMessage(error)}</p>
+        <p>Reload the page. If the error stays, send the copied details to the operators.</p>
       </StopPage>
     </PublicFrame>
   );

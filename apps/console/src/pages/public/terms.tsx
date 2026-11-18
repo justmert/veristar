@@ -3,8 +3,8 @@ import { cn } from "@veristar/brand/cn";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
 import { termsQuery } from "@/api/queries";
-import { ErrorPanel, Loading } from "@/components/error-panel";
 import { PublicFrame } from "@/components/public-frame";
+import { ErrorState, LoadingState, Skeleton } from "@/components/states";
 import { StatusDot } from "@/components/status";
 import { Markdown, outline } from "@/lib/markdown";
 
@@ -22,7 +22,7 @@ export function TermsPage() {
           to="/"
           className="rounded-md px-2 py-1 text-body text-fg-2 transition-colors duration-(--vs-duration-press) hover:text-fg focus-ring"
         >
-          Back to the console
+          Open the console
         </Link>
       }
     >
@@ -51,8 +51,18 @@ export function TermsPage() {
           <span aria-hidden className="hidden lg:block" />
         )}
         <div className="min-w-0 max-w-prose">
-          {terms.isPending ? <Loading label="Loading the terms" rows={6} /> : null}
-          {terms.error ? <ErrorPanel error={terms.error} onRetry={() => terms.refetch()} /> : null}
+          {terms.isPending ? (
+            <LoadingState label="Loading the terms">
+              <Skeleton.Table rows={6} columns={1} />
+            </LoadingState>
+          ) : null}
+          {terms.error ? (
+            <ErrorState
+              title="The terms did not load"
+              error={terms.error}
+              onRetry={() => terms.refetch()}
+            />
+          ) : null}
           {terms.data ? (
             <article className="animate-fade-in">
               <Markdown
@@ -64,8 +74,8 @@ export function TermsPage() {
                       {terms.data.version}
                     </span>
                     {terms.data.status === "draft" ? (
-                      <span className="flex items-center gap-1 text-warning">
-                        <StatusDot tone="warning" />
+                      <span className="flex items-center gap-1 text-fg-2">
+                        <StatusDot tone="info" />
                         Draft
                       </span>
                     ) : null}

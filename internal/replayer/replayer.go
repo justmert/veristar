@@ -1,33 +1,50 @@
 // Package replayer delivers accepted web events from WEB_EVENTS to umami's
 // /api/send.
 //
-// one instance runs on each core node; only the holder of the replayer lock
-// consumes. each visitor (site id and visitor token) with held messages has
-// its own queue, delivered one message at a time in stream order, so one
-// visitor's events reach umami in stream order. a failing event is retried
-// in place and holds back only that visitor's later events, never another
-// visitor or site. REPLAYER_WORKERS bounds the sends in flight at once.
+// WEB_EVENTS is split into events.Partitions partitions by a hash of site id
+// and visitor token, so all of a visitor's events are in one partition. each
+// partition has its own durable consumer and its own lock. one instance runs
+// on each core node, and the instances share the partitions: each holds the
+// locks of the partitions assigned to it (partitions.go) and delivers their
+// events to its own node's umami processes. a partition has at most one
+// owner at a time, and a new owner first waits for its predecessor's
+// unacknowledged messages, so a visitor's events reach umami in stream order
+// across owner changes. within a partition each visitor (site id and visitor
+// token) with held messages has its own queue, delivered one message at a
+// time in stream order. a failing event is retried in place and holds back
+// only that visitor's later events, never another visitor or site.
+// REPLAYER_WORKERS bounds the sends in flight at once on the node.
 //
 // sends are spread over several umami processes by a hash of site id and
 // visitor token, so a visitor's events always go to one process.
-// the processes share one database and one APP_SECRET, and umami derives the
-// session id, the visit id and the cache token from those and the event alone
-// (docs/reference/umami-contract.md item 14), so which process stores an
-// event does not change what is stored.
+// the processes of every node share one database and one APP_SECRET, and
+// umami derives the session id, the visit id and the cache token from those
+// and the event alone (docs/reference/umami-contract.md item 14), so which
+// process and which node stores an event does not change what is stored.
 //
 // delivery is at least once with a narrow duplicate window: the replayer checks
 // sent.<event id> in visit_state before sending and writes it after umami's
 // 200, then acks. a crash, kill or lock loss between umami's 200 and that
 // write stores the event twice; at most one event per delivery slot can be in that
-// window at any moment.
+// window at any moment. a partition that moves to another node on purpose
+// (a rebalance or a shutdown) finishes the sends in progress first.
 //
-// umami's database cannot be fenced, so the lock is confirmed with the
-// server before every fetch and, at most a second apart, before sends. a
-// former leader that was paused and resumes after losing the lock can still
+// umami's database cannot be fenced, so a partition's lock is confirmed with
+// the server before every fetch and, at most a second apart, before sends. a
+// former owner that was paused and resumes after losing the lock can still
 // complete the sends it had already passed that check for: at most one per
-// delivery slot. a new leader first waits until the previous holder's unacknowledged
-// messages are redeliverable (at most natsx.AckWait), so they reach umami
-// before anything newer of the same visitor.
+// delivery slot. a new owner first waits until the previous holder's
+// unacknowledged messages are redeliverable (at most natsx.AckWait), so they
+// reach umami before anything newer of the same visitor.
+//
+// upgrade: releases before the partitions published every event of a site
+// on one subject, consumed by the single "replayer" consumer under the
+// "replayer" lock. an instance also holds that lock while the consumer exists
+// and drains it, so a replayer of the earlier release and this one never
+// consume it at once. while legacy and partitioned events are queued
+// together, an event is delivered only when no event of the other kind with
+// a lower stream sequence is left (barrier.go), which keeps every visitor's
+// order across the two.
 //
 // visits: visit_state keeps umami's session id,
 // cache token and the last acceptance time per site, visitor token and umami
@@ -50,7 +67,6 @@ import (
 	"net/http"
 	"slices"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/nats-io/nats.go"
@@ -79,7 +95,7 @@ const (
 	keepaliveEvery = natsx.AckWait / 3
 	// confirmMaxAge is how old the last lock confirmation may be when a visitor
 	// sends. together with the confirmation before every fetch it bounds what
-	// a paused former leader can still send to one in-flight send per delivery slot.
+	// a paused former owner can still send to one in-flight send per delivery slot.
 	confirmMaxAge = time.Second
 	// probeEvery is how often umami's health is checked while visitors wait
 	// because umami was unhealthy, so they resume as soon as it is back
@@ -91,29 +107,44 @@ const (
 	healthTTL = time.Second
 	// blockedBacklog caps the messages a visitor may have held while its
 	// oldest event fails on a healthy umami. a burst beyond it goes to the
-	// dlq instead of filling MaxInFlight, which would stop the fetch for
-	// every site. no browser sends that many events within the ~36 s a
-	// failing event is retried (the gateway's replay limit is 50 events per
-	// proof and node).
+	// dlq instead of filling the partition's share of MaxInFlight, which
+	// would stop the fetch for every visitor of the partition. no browser
+	// sends that many events within the ~36 s a failing event is retried
+	// (the gateway's replay limit is 50 events per proof and node).
 	blockedBacklog = 64
+	// minPartitionInFlight is the least a partition may hold, so one
+	// blocked visitor (blockedBacklog) never takes all of it.
+	minPartitionInFlight = 2 * blockedBacklog
 	// bookkeepingTimeout bounds the visit state write, the duplicate guard
 	// write, the dlq publish and the ack after umami answered. it is detached
-	// from the lead context so a lock loss right after a 200 still records the
+	// from the hold so a lock loss right after a 200 still records the
 	// send, which keeps the duplicate window as narrow as possible.
 	bookkeepingTimeout = 10 * time.Second
 	// lagEvery is how often the consumer lag gauges are refreshed.
 	lagEvery = 5 * time.Second
-	// predecessorPoll is how often a new leader checks whether the previous
+	// predecessorPoll is how often a new owner checks whether the previous
 	// holder's unacknowledged messages are back.
 	predecessorPoll = 500 * time.Millisecond
-	// acquireRetry is how often a standby tries to take the lock.
+	// acquireRetry is how often an instance tries to take a lock it wants.
 	acquireRetry = time.Second
+	// yieldTimeout bounds how long a partition that is handed over on
+	// purpose delivers what it holds before it stops and hands the rest
+	// back. the core role gives the container 30 s to stop.
+	yieldTimeout = 10 * time.Second
 )
 
 // errNotReady ends a hold because jetstream could not serve the consumer
-// yet, as while a cluster recovers from a restart. Run contends again
+// yet, as while a cluster recovers from a restart. the owner contends again
 // instead of stopping the process.
 var errNotReady = errors.New("replayer: jetstream not ready")
+
+// errYield ends a hold on purpose: the partition is handed to another
+// instance or the process shuts down. what the hold fetched is delivered
+// first, so the next owner finds nothing unacknowledged and starts at once.
+var errYield = errors.New("replayer: partition handed over")
+
+// legacyLead is the leads key of the legacy consumer's hold.
+const legacyLead = -1
 
 // Config wires a Replayer.
 type Config struct {
@@ -138,18 +169,40 @@ type Replayer struct {
 	log     *slog.Logger
 	reg     *prometheus.Registry
 	store   visitStore
-	lock    *natsx.Lock
+	locksKV jetstream.KeyValue
+	holder  string
 	buckets *natsx.BucketKeeper
 	stats   *stats
 	m       *metrics
 	maxAge  time.Duration
+	pool    *pool
+	members *membership
+	// legacyBar clears partitioned messages against the legacy subject,
+	// partBar legacy messages against the partitions
+	legacyBar *seqBarrier
+	partBar   *seqBarrier
 
-	// current is the lead in progress, nil on a standby
-	current atomic.Pointer[leadRun]
+	mu    sync.Mutex
+	leads map[int]*leadRun
+}
+
+// pool is what the holds of one instance share: the delivery slots and the
+// health and write record of each umami process, and the visitors waiting
+// for one of them.
+type pool struct {
+	// slots holds one semaphore per umami process; together they allow
+	// REPLAYER_WORKERS sends at once
+	slots []chan struct{}
+	// health caches one health check per umami process
+	health []targetHealth
+	// writes is the recent send record per umami process, which shows a
+	// write fault the health check cannot see (writefault.go)
+	writes []writeWatch
+	gate   *gate
 }
 
 // New recreates the memory buckets when a restart lost them, binds them and
-// registers the metrics. it does not take the lock.
+// registers the metrics. it takes no lock.
 func New(ctx context.Context, cfg Config) (*Replayer, error) {
 	if cfg.NC == nil || len(cfg.Umami) == 0 || slices.Contains(cfg.Umami, nil) || cfg.Log == nil || cfg.Registry == nil {
 		return nil, errors.New("replayer: Config needs NC, at least one Umami client, Log and Registry")
@@ -182,13 +235,16 @@ func New(ctx context.Context, cfg Config) (*Replayer, error) {
 	if err != nil {
 		return nil, err
 	}
-	lock, err := natsx.NewLock(locksKV, natsx.LockReplayer, holder)
-	if err != nil {
-		return nil, err
-	}
 	maxAge, err := webEventsMaxAge()
 	if err != nil {
 		return nil, err
+	}
+	n := len(cfg.Umami)
+	p := &pool{slots: make([]chan struct{}, n), health: make([]targetHealth, n), writes: make([]writeWatch, n), gate: &gate{}}
+	for i := range p.slots {
+		// the workers are shared evenly; LoadSettings keeps the process
+		// count at most the worker count, so every process gets a slot
+		p.slots[i] = make(chan struct{}, slotsPerTarget(cfg.Settings.Workers, n, i))
 	}
 	r := &Replayer{
 		set:     cfg.Settings,
@@ -198,11 +254,17 @@ func New(ctx context.Context, cfg Config) (*Replayer, error) {
 		log:     cfg.Log,
 		reg:     cfg.Registry,
 		store:   visitStore{kv: visitKV},
-		lock:    lock,
+		locksKV: locksKV,
+		holder:  holder,
 		buckets: buckets,
 		maxAge:  maxAge,
+		pool:    p,
+		leads:   map[int]*leadRun{},
 	}
-	r.m, err = newMetrics(cfg.Registry, len(cfg.Umami), r.inFlight, r.oldestAge)
+	r.members = newMembership(locksKV, cfg.Settings.NodeID, holder, cfg.Log)
+	r.legacyBar = newSeqBarrier(js, natsx.WebEventsLegacy, true)
+	r.partBar = newSeqBarrier(js, natsx.WebEventsPartitioned, false)
+	r.m, err = newMetrics(cfg.Registry, n, r.inFlight, r.oldestAge)
 	if err != nil {
 		return nil, err
 	}
@@ -250,83 +312,133 @@ func (r *Replayer) Ops() http.Handler {
 	}}, obs.Check{Name: "buckets", Fn: r.buckets.Ready})
 }
 
-// Run contends for the lock and consumes while it holds it, until ctx ends.
-// the stats flusher and the lag sampler run for the whole process, so a
-// standby reports lag too and the last counts are flushed on shutdown.
+// Run takes part in the partition assignment and consumes the partitions it
+// owns, and the legacy subject while it holds that lock, until ctx ends. on
+// the way out every hold hands back what it has not delivered and releases
+// its lock, so the other instances take over at once. the stats flusher, the
+// lag sampler and the health probe run for the whole process. an error means
+// the topology is missing something only an operator can fix.
 func (r *Replayer) Run(ctx context.Context) error {
-	var wg sync.WaitGroup
+	var bgWG sync.WaitGroup
 	bg, stopBg := context.WithCancel(context.WithoutCancel(ctx))
-	wg.Go(func() { r.stats.run(bg) })
-	wg.Go(func() { r.sampleLag(bg) })
-	wg.Go(func() { r.buckets.Run(bg) })
+	bgWG.Go(func() { r.stats.run(bg) })
+	bgWG.Go(func() { r.sampleLag(bg) })
+	bgWG.Go(func() { r.buckets.Run(bg) })
+	bgWG.Go(func() { r.probe(bg) })
 	defer func() {
 		stopBg()
-		wg.Wait()
+		bgWG.Wait()
 	}()
 
-	el := &natsx.Elector{Lock: r.lock, RenewEvery: natsx.LockRenewEvery, RetryEvery: acquireRetry, Log: r.log, Buckets: r.buckets}
-	for {
-		err := el.Run(ctx, r.lead)
-		if ctx.Err() != nil {
-			return nil
-		}
-		if errors.Is(err, natsx.ErrLockLost) {
-			// a visitor or the fetch loop could not confirm the hold; contend again
-			r.log.Warn("stopped consuming, lock not confirmed", "error", err.Error())
-			continue
-		}
-		if errors.Is(err, errNotReady) {
-			r.log.Warn("stopped consuming, jetstream not ready", "error", err.Error())
-			if !sleepCtx(ctx, acquireRetry) {
-				return nil
-			}
-			continue
-		}
-		return err
+	run, stop := context.WithCancelCause(ctx)
+	defer stop(nil)
+	// the first member list comes before any lock is contended: without it
+	// every instance would start out assigned every partition, take what it
+	// can and keep it for minHold
+	if err := r.members.refresh(run); err != nil && run.Err() == nil {
+		r.log.Warn("partition membership not read at start, contending as the only member until it is", "error", err.Error())
 	}
+	var wg sync.WaitGroup
+	wg.Go(func() { r.members.run(run, r.buckets) })
+	for p := range events.Partitions {
+		wg.Go(func() {
+			if err := r.own(run, p); err != nil {
+				stop(err)
+			}
+		})
+	}
+	wg.Go(func() {
+		if err := r.own(run, legacyLead); err != nil {
+			stop(err)
+		}
+	})
+	wg.Wait()
+	// the member key goes last, after every partition was handed back, so
+	// the others do not count this instance while it still delivers
+	r.members.leave(ctx)
+	if ctx.Err() != nil {
+		return nil
+	}
+	return context.Cause(run)
+}
+
+func (r *Replayer) activeLeads() []*leadRun {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]*leadRun, 0, len(r.leads))
+	for _, lr := range r.leads {
+		out = append(out, lr)
+	}
+	return out
 }
 
 func (r *Replayer) inFlight() float64 {
-	if lr := r.current.Load(); lr != nil {
-		return float64(lr.count())
+	n := 0
+	for _, lr := range r.activeLeads() {
+		n += lr.count()
 	}
-	return 0
+	return float64(n)
 }
 
 func (r *Replayer) oldestAge() float64 {
-	if lr := r.current.Load(); lr != nil {
-		if t := lr.oldest(); !t.IsZero() {
-			return time.Since(t).Seconds()
+	var t time.Time
+	for _, lr := range r.activeLeads() {
+		if o := lr.oldest(); !o.IsZero() && (t.IsZero() || o.Before(t)) {
+			t = o
 		}
 	}
-	return 0
+	if t.IsZero() {
+		return 0
+	}
+	return time.Since(t).Seconds()
 }
 
-// sampleLag refreshes the lag gauges from the consumer info.
+// partitionCap is how many messages one hold may have between fetch and
+// ack: an even share of REPLAYER_MAX_IN_FLIGHT over the holds of this
+// instance, at least minPartitionInFlight, at most the whole bound (which
+// stays under the server's max ack pending of a consumer).
+func (r *Replayer) partitionCap() int {
+	r.mu.Lock()
+	n := max(len(r.leads), 1)
+	r.mu.Unlock()
+	share := (r.set.MaxInFlight + n - 1) / n
+	return min(max(share, minPartitionInFlight), r.set.MaxInFlight)
+}
+
+// sampleLag refreshes the lag gauges from the info of the consumers this
+// instance holds. a partition that has no owner here reports nothing here,
+// so summing the gauges over the instances counts each consumer once.
 func (r *Replayer) sampleLag(ctx context.Context) {
 	t := time.NewTicker(lagEvery)
 	defer t.Stop()
-	var cons jetstream.Consumer
 	for {
-		if cons == nil {
-			c, err := r.js.Consumer(ctx, natsx.StreamWebEvents, natsx.ConsumerReplayer)
-			if err == nil {
-				cons = c
-			} else if ctx.Err() == nil {
-				r.log.Warn("lag sampler cannot bind the consumer", "error", err.Error())
-			}
-		}
-		if cons != nil {
+		var pending, ackPending uint64
+		ok := true
+		for _, lr := range r.activeLeads() {
 			ictx, cancel := context.WithTimeout(ctx, lagEvery)
-			info, err := cons.Info(ictx)
+			info, err := lr.cons.Info(ictx)
 			cancel()
-			if err == nil {
-				r.m.pending.Set(float64(info.NumPending))
-				r.m.ackPending.Set(float64(info.NumAckPending))
-				r.m.lagSampled.Set(float64(time.Now().Unix()))
-			} else if ctx.Err() == nil {
-				r.log.Warn("consumer info failed, lag gauges are stale", "error", err.Error())
+			if err != nil {
+				ok = false
+				if ctx.Err() == nil {
+					r.log.Warn("consumer info failed, lag gauges are stale", "consumer", lr.name, "error", err.Error())
+				}
+				continue
 			}
+			pending += info.NumPending
+			ackPending += uint64(info.NumAckPending) //nolint:gosec // a count
+			r.m.partitionPending.WithLabelValues(lr.label).Set(float64(info.NumPending))
+			r.m.partitionAckPending.WithLabelValues(lr.label).Set(float64(info.NumAckPending))
+			age := 0.0
+			if o := lr.oldest(); !o.IsZero() {
+				age = time.Since(o).Seconds()
+			}
+			r.m.partitionOldest.WithLabelValues(lr.label).Set(age)
+		}
+		if ok {
+			r.m.pending.Set(float64(pending))
+			r.m.ackPending.Set(float64(ackPending))
+			r.m.lagSampled.Set(float64(time.Now().Unix()))
 		}
 		r.sampleVisitState(ctx)
 		select {
@@ -355,65 +467,100 @@ func (r *Replayer) sampleVisitState(ctx context.Context) {
 	}
 }
 
-// lead consumes while the lock is held. it returns nil when ctx ends (the
-// elector cancels it when a renewal fails) and an error wrapping
-// natsx.ErrLockLost when a confirmation failed.
-func (r *Replayer) lead(parent context.Context) error {
-	cons, err := r.js.Consumer(parent, natsx.StreamWebEvents, natsx.ConsumerReplayer)
+// lead consumes one partition, or the legacy subject, while its lock is
+// held. it returns nil when ctx ends, errYield after a hand-over, an error
+// wrapping natsx.ErrLockLost when a confirmation failed, errNotReady when
+// jetstream could not serve the consumer, and errLegacyGone when the legacy
+// consumer no longer exists.
+func (r *Replayer) lead(parent context.Context, part int, lock *natsx.Lock, yield <-chan struct{}) error {
+	name, bar, label := natsx.ConsumerReplayer, r.partBar, "legacy"
+	if part != legacyLead {
+		name, bar, label = natsx.ConsumerPartition(part), r.legacyBar, events.PartitionToken(part)
+	}
+	cons, err := r.js.Consumer(parent, natsx.StreamWebEvents, name)
 	switch {
 	case err == nil:
 	case parent.Err() != nil:
 		return nil
+	case part == legacyLead && errors.Is(err, jetstream.ErrConsumerNotFound):
+		return errLegacyGone
 	case errors.Is(err, jetstream.ErrConsumerNotFound) || errors.Is(err, jetstream.ErrStreamNotFound):
 		// both are file-backed and survive restarts; missing means the
 		// topology was never applied, which only an operator can fix
-		return fmt.Errorf("replayer: bind consumer %s on %s (run platformctl nats apply): %w", natsx.ConsumerReplayer, natsx.StreamWebEvents, err)
+		return fmt.Errorf("replayer: bind consumer %s on %s (run platformctl nats apply): %w", name, natsx.StreamWebEvents, err)
 	default:
 		// a timeout or a leaderless consumer while a cluster recovers from a
 		// restart: give the lock back and contend again
-		return fmt.Errorf("%w: bind consumer %s on %s: %w", errNotReady, natsx.ConsumerReplayer, natsx.StreamWebEvents, err)
+		return fmt.Errorf("%w: bind consumer %s on %s: %w", errNotReady, name, natsx.StreamWebEvents, err)
 	}
-	if err := r.awaitPredecessor(parent, cons); err != nil {
-		return nil //nolint:nilerr // only a cancelled context ends the wait, which is a normal end of the hold
+	if err := r.awaitPredecessor(parent, yield, cons, name); err != nil {
+		return nil //nolint:nilerr // only a cancelled context or a hand-over ends the wait, both a normal end of the hold
 	}
 	ctx, cancel := context.WithCancelCause(parent)
 	defer cancel(nil)
 	lr := &leadRun{
 		r:        r,
+		part:     part,
+		name:     name,
+		label:    label,
 		cons:     cons,
 		cancel:   cancel,
-		guard:    &lockGuard{lock: r.lock, m: r.m},
-		slots:    make([]chan struct{}, len(r.umami)),
-		health:   make([]targetHealth, len(r.umami)),
-		writes:   make([]writeWatch, len(r.umami)),
+		guard:    &lockGuard{lock: lock, m: r.m},
+		bar:      bar,
+		yield:    yield,
 		held:     map[uint64]*held{},
 		visitors: map[string]*visitorQueue{},
 		freed:    make(chan struct{}, 1),
-		gate:     &gate{},
 	}
-	for i := range lr.slots {
-		// the workers are shared evenly; LoadSettings keeps the process
-		// count at most the worker count, so every process gets a slot
-		lr.slots[i] = make(chan struct{}, slotsPerTarget(r.set.Workers, len(r.umami), i))
-	}
-	r.current.Store(lr)
-	r.m.leader.Set(1)
+	r.mu.Lock()
+	r.leads[part] = lr
+	r.mu.Unlock()
+	r.setOwned()
 	defer func() {
-		r.current.Store(nil)
-		r.m.leader.Set(0)
+		r.mu.Lock()
+		delete(r.leads, part)
+		r.mu.Unlock()
+		r.setOwned()
+		r.m.partitionPending.DeleteLabelValues(label)
+		r.m.partitionAckPending.DeleteLabelValues(label)
+		r.m.partitionOldest.DeleteLabelValues(label)
 	}()
-	r.log.Info("consuming", "workers", r.set.Workers, "max_in_flight", r.set.MaxInFlight, "umami_processes", len(r.umami))
+	r.log.Info("consuming", "consumer", name, "workers", r.set.Workers, "max_in_flight", r.set.MaxInFlight, "umami_processes", len(r.umami))
 	return lr.run(ctx, parent)
 }
 
+// setOwned refreshes the gauges of what this instance holds.
+func (r *Replayer) setOwned() {
+	r.mu.Lock()
+	parts, legacy := 0, false
+	for k := range r.leads {
+		if k == legacyLead {
+			legacy = true
+		} else {
+			parts++
+		}
+	}
+	r.mu.Unlock()
+	r.m.owned.Set(float64(parts))
+	r.m.legacyLeader.Set(b2f(legacy))
+	r.m.leader.Set(b2f(parts > 0 || legacy))
+}
+
+func b2f(b bool) float64 {
+	if b {
+		return 1
+	}
+	return 0
+}
+
 // awaitPredecessor waits until the previous holder's unacknowledged messages
-// can be redelivered before the first fetch. without it the new leader would
+// can be redelivered before the first fetch. without it the new owner would
 // fetch newer messages first and a visitor's held-back events would reach
 // umami after later ones. a clean predecessor naks everything on the way out,
 // so the wait ends at once; a killed one leaves messages pending until their
 // ack wait runs out, at most natsx.AckWait after this point because the
 // predecessor stopped refreshing them before its lock expired.
-func (r *Replayer) awaitPredecessor(ctx context.Context, cons jetstream.Consumer) error {
+func (r *Replayer) awaitPredecessor(ctx context.Context, yield <-chan struct{}, cons jetstream.Consumer, name string) error {
 	deadline := time.Now().Add(natsx.AckWait)
 	logged := false
 	for {
@@ -422,10 +569,10 @@ func (r *Replayer) awaitPredecessor(ctx context.Context, cons jetstream.Consumer
 			return nil
 		}
 		if err != nil && ctx.Err() == nil {
-			r.log.Warn("consumer info failed while waiting for the previous holder", "error", err.Error())
+			r.log.Warn("consumer info failed while waiting for the previous holder", "consumer", name, "error", err.Error())
 		}
 		if err == nil && !logged {
-			r.log.Info("waiting for the previous holder's messages to become redeliverable", "ack_pending", info.NumAckPending)
+			r.log.Info("waiting for the previous holder's messages to become redeliverable", "consumer", name, "ack_pending", info.NumAckPending)
 			logged = true
 		}
 		if !time.Now().Before(deadline) {
@@ -436,6 +583,9 @@ func (r *Replayer) awaitPredecessor(ctx context.Context, cons jetstream.Consumer
 		case <-ctx.Done():
 			t.Stop()
 			return ctx.Err()
+		case <-yield:
+			t.Stop()
+			return errYield
 		case <-t.C:
 		}
 	}
@@ -514,21 +664,21 @@ func (h *held) replace(m jetstream.Msg) {
 	h.mu.Unlock()
 }
 
-// leadRun is the state of one hold of the lock.
+// leadRun is the state of one hold of a partition's lock, or of the legacy
+// lock.
 type leadRun struct {
-	r      *Replayer
-	cons   jetstream.Consumer
-	cancel context.CancelCauseFunc
-	guard  *lockGuard
-	gate   *gate
-	// slots holds one semaphore per umami process; together they allow
-	// REPLAYER_WORKERS sends at once
-	slots []chan struct{}
-	// health caches one health check per umami process
-	health []targetHealth
-	// writes is the recent send record per umami process, which shows a
-	// write fault the health check cannot see (writefault.go)
-	writes []writeWatch
+	r *Replayer
+	// part is the partition, or legacyLead
+	part int
+	// name is the consumer, label the partition token or "legacy"
+	name, label string
+	cons        jetstream.Consumer
+	cancel      context.CancelCauseFunc
+	guard       *lockGuard
+	// bar clears this hold's messages against the other kind of subject
+	bar *seqBarrier
+	// yield is closed when the hold is to end after the sends in progress
+	yield <-chan struct{}
 	// visitorsWG tracks the visitor goroutines, which are started by the
 	// fetch loop
 	visitorsWG sync.WaitGroup
@@ -575,38 +725,72 @@ func (lr *leadRun) oldest() time.Time {
 	return t
 }
 
+// yielding reports whether the hold is being handed over.
+func (lr *leadRun) yielding() bool {
+	select {
+	case <-lr.yield:
+		return true
+	default:
+		return false
+	}
+}
+
 func (lr *leadRun) run(ctx, parent context.Context) error {
 	var wg sync.WaitGroup
 	wg.Go(func() { lr.keepalive(ctx) })
-	wg.Go(func() { lr.probe(ctx) })
 	err := lr.fetchLoop(ctx)
+	if errors.Is(err, errYield) {
+		// a hand-over: nothing more is fetched and the visitors deliver what
+		// they hold, so every message is acked when the lock goes and the
+		// next owner's wait for its predecessor ends at once. a nak would
+		// not do: the server counts a nacked message as unacknowledged
+		// until it is delivered again.
+		done := make(chan struct{})
+		go func() {
+			lr.visitorsWG.Wait()
+			close(done)
+		}()
+		t := time.NewTimer(yieldTimeout)
+		select {
+		case <-done:
+		case <-t.C:
+			lr.r.log.Warn("messages still held at the end of the hand-over, handing them back", "consumer", lr.name)
+		case <-ctx.Done():
+		}
+		t.Stop()
+	}
 	lr.cancel(err)
 	wg.Wait()
 	// the fetch loop has returned, so no visitor goroutine starts any more
 	lr.visitorsWG.Wait()
 	lr.release()
-	if parent.Err() != nil {
-		return nil
-	}
 	if cause := context.Cause(ctx); errors.Is(cause, natsx.ErrLockLost) {
 		return cause
+	}
+	if parent.Err() != nil {
+		return nil
 	}
 	return err
 }
 
-// fetchLoop confirms the hold, fetches up to the free capacity and hands
-// each message to its visitor's queue, until ctx ends or a confirmation fails.
+// fetchLoop confirms the hold, fetches up to the hold's free share and hands
+// each message to its visitor's queue, until ctx ends, the hold yields or a
+// confirmation fails.
 func (lr *leadRun) fetchLoop(ctx context.Context) error {
-	maxInFlight := lr.r.set.MaxInFlight
 	for {
 		if ctx.Err() != nil {
 			return context.Cause(ctx)
 		}
-		free := maxInFlight - lr.count()
+		if lr.yielding() {
+			return errYield
+		}
+		free := lr.r.partitionCap() - lr.count()
 		if free <= 0 {
 			select {
 			case <-ctx.Done():
 				return context.Cause(ctx)
+			case <-lr.yield:
+				return errYield
 			case <-lr.freed:
 			}
 			continue
@@ -617,9 +801,9 @@ func (lr *leadRun) fetchLoop(ctx context.Context) error {
 		batch, err := lr.cons.Fetch(min(free, fetchBatch), jetstream.FetchMaxWait(fetchWait))
 		if err != nil {
 			if errors.Is(err, jetstream.ErrConsumerDeleted) || errors.Is(err, jetstream.ErrConsumerNotFound) {
-				return fmt.Errorf("replayer: consumer is gone, run platformctl nats apply: %w", err)
+				return lr.consumerGone(err)
 			}
-			lr.r.log.Warn("nats fetch failed", "error", err.Error())
+			lr.r.log.Warn("nats fetch failed", "consumer", lr.name, "error", err.Error())
 			t := time.NewTimer(fetchRetryWait)
 			select {
 			case <-ctx.Done():
@@ -628,16 +812,38 @@ func (lr *leadRun) fetchLoop(ctx context.Context) error {
 			}
 			continue
 		}
+		// once a message waits for the barrier and the hold ends, the rest
+		// of the batch is only held, so release hands it back in order
+		parked := false
 		for msg := range batch.Messages() {
-			lr.accept(ctx, msg)
+			h := lr.accept(ctx, msg)
+			if h == nil {
+				continue
+			}
+			if !parked && !lr.bar.wait(ctx, lr.yield, h.seq) {
+				parked = true
+			}
+			if !parked {
+				lr.enqueue(ctx, h)
+			}
 		}
 		if err := batch.Error(); err != nil && !errors.Is(err, context.Canceled) {
 			if errors.Is(err, jetstream.ErrConsumerDeleted) || errors.Is(err, jetstream.ErrConsumerNotFound) {
-				return fmt.Errorf("replayer: consumer is gone, run platformctl nats apply: %w", err)
+				return lr.consumerGone(err)
 			}
-			lr.r.log.Warn("nats fetch ended with an error", "error", err.Error())
+			lr.r.log.Warn("nats fetch ended with an error", "consumer", lr.name, "error", err.Error())
 		}
 	}
+}
+
+// consumerGone is the end of a hold whose consumer was deleted: the normal
+// end of the legacy subject after retire-legacy-web, a missing topology for
+// a partition.
+func (lr *leadRun) consumerGone(err error) error {
+	if lr.part == legacyLead {
+		return errLegacyGone
+	}
+	return fmt.Errorf("replayer: consumer %s is gone, run platformctl nats apply: %w", lr.name, err)
 }
 
 // visitorHash is fnv-1a over site id and visitor token: stable across
@@ -657,42 +863,55 @@ func targetOf(siteID, vt string, n int) int {
 	return int(visitorHash(siteID, vt) % uint64(n)) //nolint:gosec // n is a positive process count
 }
 
-func (lr *leadRun) accept(ctx context.Context, msg jetstream.Msg) {
+// accept takes a fetched message into the hold. it returns nil for a
+// message that is handled already: a second delivery of a held message, or
+// one that cannot be decoded and went to the dlq.
+func (lr *leadRun) accept(ctx context.Context, msg jetstream.Msg) *held {
 	meta, err := msg.Metadata()
 	if err != nil {
 		lr.r.log.Error("message without jetstream metadata", "subject", msg.Subject(), "error", err.Error())
-		return
+		return nil
 	}
+	lr.bar.fetched(meta.Sequence.Stream)
 	lr.mu.Lock()
 	if h, ok := lr.held[meta.Sequence.Stream]; ok {
 		lr.mu.Unlock()
 		h.replace(msg)
-		return
+		return nil
 	}
 	lr.mu.Unlock()
 
-	ev, reason := decode(msg)
+	ev, reason := decode(msg, lr.part == legacyLead)
 	if reason != "" {
 		lr.r.m.undecodable.Inc()
 		lr.deadLetterUnkeyed(ctx, msg, meta, reason)
-		return
+		return nil
 	}
 	h := &held{seq: meta.Sequence.Stream, published: meta.Timestamp, ev: ev, msg: msg,
 		target: targetOf(ev.SiteID, ev.VT, len(lr.r.umami)), key: ev.SiteID + "\x00" + ev.VT}
+	lr.mu.Lock()
+	lr.held[h.seq] = h
+	lr.mu.Unlock()
+	return h
+}
+
+// enqueue hands a held message to its visitor's queue, or to the dlq when
+// the visitor is blocked with blockedBacklog messages already.
+func (lr *leadRun) enqueue(ctx context.Context, h *held) {
 	lr.mu.Lock()
 	q := lr.visitors[h.key]
 	if q != nil && q.blocked && len(q.msgs) >= blockedBacklog {
 		lr.mu.Unlock()
 		reason := fmt.Sprintf("visitor already has %d events held behind one that fails on a healthy umami", blockedBacklog)
 		if lr.deadLetter(ctx, h, reason) {
+			lr.done(h)
 			return
 		}
-		// the dlq publish failed: hold it after all, which is what happened
+		// the dlq publish failed: queue it after all, which is what happened
 		// before the cap existed
 		lr.mu.Lock()
 		q = lr.visitors[h.key]
 	}
-	lr.held[h.seq] = h
 	fresh := q == nil
 	if fresh {
 		q = &visitorQueue{key: h.key}
@@ -706,8 +925,8 @@ func (lr *leadRun) accept(ctx context.Context, msg jetstream.Msg) {
 }
 
 // runVisitor delivers one visitor's messages in stream order until its queue
-// is empty or ctx ends. messages left held when ctx ends are naked by
-// release, in stream order.
+// is empty or ctx ends, also during a hand-over. messages left held are
+// naked by release, in stream order.
 func (lr *leadRun) runVisitor(ctx context.Context, q *visitorQueue) {
 	for {
 		lr.mu.Lock()
@@ -719,6 +938,9 @@ func (lr *leadRun) runVisitor(ctx context.Context, q *visitorQueue) {
 		h := q.msgs[0]
 		lr.mu.Unlock()
 		if !lr.deliver(ctx, q, h) {
+			lr.mu.Lock()
+			delete(lr.visitors, q.key)
+			lr.mu.Unlock()
 			return
 		}
 		lr.mu.Lock()
@@ -750,9 +972,10 @@ func slotsPerTarget(workers, n, i int) int {
 
 // acquire takes a delivery slot of an umami process; release gives it back.
 func (lr *leadRun) acquire(ctx context.Context, target int) (func(), error) {
+	slots := lr.r.pool.slots[target]
 	select {
-	case lr.slots[target] <- struct{}{}:
-		return func() { <-lr.slots[target] }, nil
+	case slots <- struct{}{}:
+		return func() { <-slots }, nil
 	case <-ctx.Done():
 		return nil, context.Cause(ctx)
 	}
@@ -761,15 +984,15 @@ func (lr *leadRun) acquire(ctx context.Context, target int) (func(), error) {
 // healthy reports whether an umami process passes its heartbeat and the
 // collection probe, which reaches its database (umami.Client.Healthy). a
 // result is reused for healthTTL.
-func (lr *leadRun) healthy(ctx context.Context, target int) bool {
-	th := &lr.health[target]
+func (r *Replayer) healthy(ctx context.Context, target int) bool {
+	th := &r.pool.health[target]
 	th.mu.Lock()
 	defer th.mu.Unlock()
 	if time.Since(th.at) < healthTTL {
 		return th.ok
 	}
 	pctx, cancel := context.WithTimeout(ctx, probeEvery)
-	err := lr.r.umami[target].Healthy(pctx)
+	err := r.umami[target].Healthy(pctx)
 	cancel()
 	if ctx.Err() != nil {
 		// a shutdown is no verdict on umami
@@ -777,19 +1000,25 @@ func (lr *leadRun) healthy(ctx context.Context, target int) bool {
 	}
 	th.at, th.ok = time.Now(), err == nil
 	if err != nil {
-		lr.r.log.Warn("umami health check failed", "umami_process", target, "error", err.Error())
+		r.log.Warn("umami health check failed", "umami_process", target, "error", err.Error())
 	}
 	return th.ok
 }
 
-// decode returns the event or the reason it can never be delivered.
-func decode(msg jetstream.Msg) (*events.WebEvent, string) {
+// decode returns the event or the reason it can never be delivered. a
+// partitioned message must be on its event's partition subject, a legacy one
+// on its site's legacy subject.
+func decode(msg jetstream.Msg, legacy bool) (*events.WebEvent, string) {
 	ev, err := events.DecodeWebEvent(msg.Data())
 	if err != nil {
 		return nil, "not a valid web event: " + err.Error()
 	}
-	if msg.Subject() != ev.Subject() {
-		return nil, "subject does not match the event's site id"
+	want := ev.Subject()
+	if legacy {
+		want = ev.LegacySubject()
+	}
+	if msg.Subject() != want {
+		return nil, "subject does not match the event's site id and partition"
 	}
 	if ev.UA == "" {
 		// umami needs the original user agent for its bot check and device
@@ -822,12 +1051,20 @@ func (lr *leadRun) deadLetterUnkeyed(ctx context.Context, msg jetstream.Msg, met
 	}
 }
 
+// siteFromSubject is the site token of web.events.<site> and
+// web.events.<site>.<partition>.
 func siteFromSubject(subject string) string {
 	const prefix = natsx.SubjectWebEvents + "."
-	if len(subject) > len(prefix) && subject[:len(prefix)] == prefix {
-		return subject[len(prefix):]
+	if len(subject) <= len(prefix) || subject[:len(prefix)] != prefix {
+		return ""
 	}
-	return ""
+	rest := subject[len(prefix):]
+	for i := range len(rest) {
+		if rest[i] == '.' {
+			return rest[:i]
+		}
+	}
+	return rest
 }
 
 // dlqToken is the dlq subject token: the site id, or "unknown" for a
@@ -873,7 +1110,7 @@ func (lr *leadRun) keepalive(ctx context.Context) {
 			}
 		}
 		if failed > 0 {
-			lr.r.log.Warn("in-progress signals failed, those messages may be redelivered while held", "failed", failed, "held", len(hs))
+			lr.r.log.Warn("in-progress signals failed, those messages may be redelivered while held", "consumer", lr.name, "failed", failed, "held", len(hs))
 		}
 	}
 }
@@ -882,7 +1119,7 @@ func (lr *leadRun) keepalive(ctx context.Context) {
 // as soon as that process passes its health check again. each process is
 // checked on its own, so one that is back does not wake visitors of one
 // still down.
-func (lr *leadRun) probe(ctx context.Context) {
+func (r *Replayer) probe(ctx context.Context) {
 	t := time.NewTicker(probeEvery)
 	defer t.Stop()
 	for {
@@ -891,16 +1128,16 @@ func (lr *leadRun) probe(ctx context.Context) {
 			return
 		case <-t.C:
 		}
-		for _, target := range lr.gate.unreachableTargets() {
-			if lr.healthy(ctx, target) {
-				lr.gate.wakeUnreachable(target)
+		for _, target := range r.pool.gate.unreachableTargets() {
+			if r.healthy(ctx, target) {
+				r.pool.gate.wakeUnreachable(target)
 			}
 		}
 	}
 }
 
 // release naks every message still held, in stream order, so the next
-// leader gets them back in the order they were published.
+// owner gets them back in the order they were published.
 func (lr *leadRun) release() {
 	lr.mu.Lock()
 	hs := make([]*held, 0, len(lr.held))
@@ -922,7 +1159,7 @@ func (lr *leadRun) release() {
 		_ = h.current().Nak()
 	}
 	if len(hs) > 0 {
-		lr.r.log.Info("handed back held messages", "count", len(hs))
+		lr.r.log.Info("handed back held messages", "consumer", lr.name, "count", len(hs))
 	}
 }
 

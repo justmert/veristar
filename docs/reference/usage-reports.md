@@ -16,7 +16,7 @@ A report file is one JSON object with two members:
 
 ```json
 {
-  "report": { "format": "veristar-usage-report", "version": 2, "...": "..." },
+  "report": { "format": "veristar-usage-report", "version": 3, "...": "..." },
   "signature": {
     "scheme": "sep-53",
     "signer": "GDG7D3Z267FHK3JHVPXF5SHTSQFEDLWYKEI5ECMSLDGKJUXPXZOJGF7O",
@@ -54,7 +54,7 @@ share, percentile and latency is a decimal string with six digits after the poin
 
 | Member | Content |
 |---|---|
-| `format`, `version` | `veristar-usage-report`, `2` (reports created before format version 2 carry `1`; see below) |
+| `format`, `version` | `veristar-usage-report`, `3` (reports created earlier carry `1` or `2`; see below) |
 | `id` | the report's id, also the last part of its link |
 | `issuer` | `name`, `console` (the console origin), `stellar_toml` (where the keys are published), `signing_key` (the signer, which must equal `signature.signer`) |
 | `project` | `id`, `slug`, `name` |
@@ -63,26 +63,27 @@ share, percentile and latency is a decimal string with six digits after the poin
 | `methods` | the version of every definition behind the numbers: `format`, `web_metrics`, `api_metrics`, `onchain`, `cohort`, `integrity_rules` (the list of integrity rule versions that graded the period's site days, ascending, empty without a graded day), `route_normaliser`, and `platform`, the release that made the report |
 | `web` | `has_data` (false when no page view was counted, so the zeros mean no data), primary-band totals (page views, visitors, visits, bounces, total visit seconds, bounce rate, average visit seconds), the quarantine band, gateway requests and rejections, sites and verified sites, `coverage` (tracker file requests, those that sent Global Privacy Control, and the estimated share of visits not measured because of it), and a daily series |
 | `api` | `has_data`, requests, 4xx and 5xx with their rates, p50, p95 and p99 latency, the services and routes that served application requests, source, `lossy` (a metric row of the period overflowed its route limit), `infrastructure_requests` (the requests every number leaves out), and a daily series |
-| `onchain` | declared ids and verified ids; operations, transactions, days not read and a daily series of the verified ids only; the two-way stellar.toml link; `weekly_active_accounts` (`average` over the counted ISO weeks that lie whole inside the period, `latest`, `weeks_counted`, `weeks_missing`) |
+| `onchain` | declared ids and verified ids; operations, transactions, days not read and a daily series of the verified ids only; the two-way stellar.toml link; `weekly_active_accounts` (`average` over the counted ISO weeks that lie whole inside the period, `latest`, `weeks_counted`, `weeks_missing`); `contracts`, one entry per verified contract: `strkey`, `days_read`, `days_no_call_tree`, `days_missing` and `functions` (`function`, `caller` (`account` or `contract`), `successful`, `failed` (`null` for calls of accounts), `peak_daily_accounts`, `days_with_calls`), as section 15.9 of the control plane API defines them |
 | `integrity` | the grade over the period, its graded site days per grade, and every reason with its plain language text |
 | `cohort` | the confirmed program, round, category and award date, the population of the percentiles, its size, and for visitors, page views, requests, error rate and on-chain operations the value, the previous period's value, the change and the percentile |
 | `rules_met` | the operators' saved threshold rules the project met on the generation day |
 
-The numbers are the ones the operator views and "What SCF sees" show for the same period:
+The numbers are the ones the operator views and the project's **SCF review** page show for the same period:
 the report reads them with the same SQL, and it holds every figure that page shows: the coverage
 estimate, whether web and API data exist, whether API metrics were lossy, the infrastructure
-requests left out, and the weekly active accounts. A report holds aggregates only; no visitor, address,
+requests left out, the weekly active accounts, and the calls per contract function. A report holds aggregates only; no visitor, address,
 user agent or member of the project is in it.
 
 ### Format versions
 
 | Version | Layout |
 |---|---|
-| `2` | the current layout above |
+| `3` | the current layout above |
+| `2` | reports created before format version 3: `onchain.contracts` is absent, and `methods.onchain` is `1` |
 | `1` | reports created before format version 2: `methods.integrity_rules` is a single number, the rule version the jobs applied when the report was made, which is not necessarily the version that graded every day of the period; `web.has_data`, `web.coverage`, `api.has_data`, `api.lossy`, `api.infrastructure_requests` and `onchain.weekly_active_accounts` are absent |
 
-A stored report never changes, so a version 1 report keeps its layout and still verifies: the
-signature covers its own bytes, and the checks below read only members both versions share. A
+A stored report never changes, so a version 1 or 2 report keeps its layout and still verifies:
+the signature covers its own bytes, and the checks below read only members every version shares. A
 reader of the numbers reads `version` first.
 
 Method versions, version 1:
@@ -91,7 +92,7 @@ Method versions, version 1:
 |---|---|
 | `web_metrics` | [web metrics](web-metrics.md): primary band, visitors unique per UTC day and site, summed over days and sites |
 | `api_metrics` | section 8 of the control plane API: metric rows over span rows per service, percentiles from summed histogram buckets. Version 2 leaves infrastructure requests (CORS preflights, health and probe routes, known health checkers; section 7.4) out of every number |
-| `onchain` | section 15: Horizon operations of accounts, Stellar RPC events of contracts |
+| `onchain` | section 15: Horizon operations of accounts, Stellar RPC events of contracts. Version 2 adds the calls per contract function of section 15.9 |
 | `cohort` | section 19: change against the previous period of equal length, `cume_dist` percentiles in the cohort |
 | `integrity_rules` | section 9 of [bot and inflation defences](../security/bot-and-inflation.md) |
 | `route_normaliser` | the route normalisation of the collector |

@@ -13,13 +13,13 @@ import type {
   TenantRef,
 } from "@/api/schemas";
 import { CoverageNote } from "@/components/coverage";
-import { ErrorPanel, Loading } from "@/components/error-panel";
 import { Panel } from "@/components/panel";
+import { ErrorState, LoadingState, Skeleton } from "@/components/states";
 import { Pill, type Tone } from "@/components/status";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { appealUrl } from "@/lib/appeal";
-import { formatCount, formatDate, formatPercent, MISSING } from "@/lib/format";
+import { formatCount, formatDate, formatDateRange, formatPercent, MISSING } from "@/lib/format";
 import type { DayRange } from "@/lib/global";
 
 // the integrity grade (contract 17): a colour never carries the grade alone,
@@ -42,6 +42,20 @@ export function GradeBadge({
       <span data-grade={grade ?? "none"}>{gradeText(grade)}</span>
     </Pill>
   );
+}
+
+// what a range grade means, in one sentence (docs/security/bot-and-inflation.md)
+export function gradeMeaning(grade: IntegrityGrade | null): string {
+  switch (grade) {
+    case "A":
+      return "Fewer than a quarter of the graded site days were lowered to B or C.";
+    case "B":
+      return "A quarter or more of the graded site days were lowered to B or C.";
+    case "C":
+      return "A quarter or more of the graded site days were lowered to C.";
+    default:
+      return "No site day had enough traffic for a grade. A day needs 50 accepted events.";
+  }
 }
 
 // "10 graded site days: 7 A, 2 B, 1 C"; the counts behind a range grade
@@ -236,10 +250,10 @@ export function IntegrityPanel({
           {title}
         </span>
       }
-      description={`UTC days ${report.from} to ${report.to}, ${
+      description={`${formatDateRange(report.from, report.to)}, UTC. ${
         report.rule_versions.length > 1
-          ? `graded under rule sets ${report.rule_versions.join(" and ")}`
-          : `rule set ${report.rule_versions[0] ?? report.rule_version}`
+          ? `Graded with rule sets ${report.rule_versions.join(" and ")}`
+          : `Graded with rule set ${report.rule_versions[0] ?? report.rule_version}`
       }.`}
       actions={
         <span className="inline-flex flex-wrap items-center gap-3">
@@ -297,10 +311,21 @@ export function IntegrityReportView({
   className?: string;
 }) {
   const q = useQuery(integrityQuery(scope, tenantId, range));
-  if (q.isPending) return <Loading label="Loading the integrity grade" className={className} />;
-  if (q.error) {
-    return <ErrorPanel error={q.error} onRetry={() => q.refetch()} className={className} />;
-  }
+  if (q.isPending)
+    return (
+      <LoadingState label="Loading the integrity report" className={className}>
+        <Skeleton.Table rows={3} columns={3} />
+      </LoadingState>
+    );
+  if (q.error)
+    return (
+      <ErrorState
+        title="The integrity report did not load"
+        error={q.error}
+        onRetry={() => q.refetch()}
+        className={className}
+      />
+    );
   return (
     <IntegrityPanel
       report={q.data}

@@ -170,11 +170,11 @@ describe("api analytics setup page (contract section 6)", () => {
     expect(text).toContain("Your own backend keeps the full data");
   });
 
-  it("shows the four language guides as tabs, node first", async () => {
+  it("shows the five language guides as tabs, node first", async () => {
     stubFetch([{ status: 200, body: page([]) }]);
     const host = await renderRoutes(routes(), path);
     const tabs = [...host.querySelectorAll("[role=tab]")].map((t) => t.textContent);
-    expect(tabs).toEqual(["Node.js", "Go", "Python", "Rust"]);
+    expect(tabs).toEqual(["Node.js", "Go", "Python", "Rust", "Java"]);
     expect(host.textContent).toContain("src/telemetry.js");
     expect(host.textContent).toContain("new NodeSDK(");
   });

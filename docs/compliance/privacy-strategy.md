@@ -70,6 +70,7 @@ file-backed stream. "Stored" means PostgreSQL.
 | Control plane (`cp.usage_reports`) | signed usage reports: the canonical report (project aggregates, grade, cohort and percentiles), its signature, the user id of the member who created or revoked it, a view count and the time of the last view | stored | while the tenant exists; a revoked link answers no one; removal of the tenant deletes them |
 | `agg.chain_daily` | per declared id and UTC day: operations, transactions, distinct counterparties, and whether the day's initiating accounts went into its week | stored | while the id's project exists; removal follows `removal_keep_aggregates` |
 | `agg.chain_weeks` | per project and ISO week: while open, a random 32-byte key; once closed, the count of weekly active accounts or the reason it has none | stored | the key until the week closes; the count while the project exists, removal follows `removal_keep_aggregates` |
+| `agg.chain_function_daily` | per declared contract, UTC day, function name and kind of caller (account or contract): successful calls, failed calls, and the number of distinct accounts behind them, counted in memory while the day is read; no address or hash of one | stored | while the id's project exists; removal follows `removal_keep_aggregates` |
 | `agg.chain_week_members` | per project, open ISO week and declared id: HMAC-SHA256 of each account that initiated an operation involving the id, under the week's key | stored | until the week closes, when the job stores the count and deletes the hashes and the key (`internal/jobs/chainactivity`) |
 | Control plane (`cp.wallet_challenges_used`) | SHA-256 of the nonce of each used wallet sign-in challenge and of each used passkey challenge, with its expiry; no address, no credential and no account | stored | until the challenge expires (at most five minutes); the next wallet or passkey verification after that deletes it |
 
@@ -132,7 +133,7 @@ day replaces the day's secrets, so visitors seen before it count again.
 | `cp.web_networks_daily` | four days | `jobs` task `integrity`; removal purge |
 | `cp.web_signals_daily` | while the site exists | removal purge (`lifecycle.WebIngestPurger`) |
 | `agg.web_coverage_daily` | while the site exists | removal purge (`agg.purge_tenant`) |
-| `agg.chain_daily`, closed `agg.chain_weeks` rows | while the project exists | removal purge (`agg.purge_chain`), unless the removal keeps aggregates |
+| `agg.chain_daily`, `agg.chain_function_daily`, closed `agg.chain_weeks` rows | while the project exists | removal purge (`agg.purge_chain`), unless the removal keeps aggregates |
 | `agg.chain_weeks` key, `agg.chain_week_members` | until the week closes: once every verified id has its seven days read, and at the latest 14 days after the week's Monday | `jobs` task `chain-activity` deletes the hashes and the key; every removal purge deletes them (`agg.purge_chain`) |
 | `api.metrics_minute` | `API_MINUTE_RETENTION_DAYS` | `jobs` task `api-retention` |
 | `api.metrics_hourly` | `API_HOURLY_RETENTION_MONTHS`, at least 24 | `jobs` task `api-retention` |
@@ -293,7 +294,7 @@ platform reads from Umami is in `docs/reference/umami-contract.md`.
     stays an estimate shown beside the numbers, never an input of the
     integrity grade.
 
-  The estimate is on the project's overview, in "What SCF sees", in the
+  The estimate is in the integrity report of the project's SCF review page, in the
   operators' global web view as a column, in the CSV exports, in the
   machine API and in the MCP tools ([../reference/control-plane-api.md](../reference/control-plane-api.md),
   section 17.5).
@@ -431,6 +432,12 @@ client reads the same records. Veristar stores:
 - per id, the account's home domain and the read state of the daily job;
 - per id and UTC day, three counts: operations, transactions and distinct
   counterparties;
+- per contract, UTC day, function and kind of caller, the counts of
+  successful and failed calls and of the distinct accounts that initiated
+  them. The job reads a day's transactions in one run and counts the distinct
+  accounts in memory; it stores only the count, never an address or a hash of
+  one, so no store says who called which function
+  (`internal/chain/functions.go`);
 - per ISO week (UTC), the project's count of weekly active accounts: the
   distinct accounts that initiated at least one operation involving one of
   its verified ids. While a week is open, `agg.chain_weeks` holds a random
@@ -443,15 +450,15 @@ client reads the same records. Veristar stores:
   The key is readable by the jobs role only; tenants and operators read the
   count.
 
-No counterparty address, transaction, amount or memo is stored, so no store
-holds an address of who interacted with a project. During an open week only
+No counterparty or caller address, transaction, amount, memo or call argument
+is stored, so no store holds an address of who interacted with a project. During an open week only
 keyed hashes exist, and they are deleted with their key at the close. While
 the key exists, a holder of the jobs role's access can test whether a given
 address was active in that week; after the close nobody can. An id can belong to a person
 (a wallet); it is declared by the project's own members, it is public on the
 ledger already, and it is shown to the project's members and to operators only.
 Removing an id hides its rows; removing the project deletes its read state and,
-unless `removal_keep_aggregates`, its daily counts.
+unless `removal_keep_aggregates`, its daily counts and calls per function.
 
 Requests to the ledger APIs carry public ids only, never data about an end
 user of a project, so the API providers receive no personal data and are not
@@ -461,7 +468,8 @@ sub-processors.
 
 A member of a project can create a signed usage report of the project
 (contract section 20) and share it by link. A report holds aggregates only:
-project totals and daily sums of web, API and on-chain activity, the integrity
+project totals and daily sums of web, API and on-chain activity, the calls
+per function of its verified contracts, the integrity
 grade and its reasons, the project's cohort and its percentiles in it, and the
 method versions. No visitor token, address, user agent, session, event, route
 of a single request, counterparty or member of the project is in a report;

@@ -25,6 +25,12 @@ type Day struct {
 	// InitiatorsMissing is the code of why Initiators could not be read
 	// whole for the day ("" when they were); the day's counts still hold
 	InitiatorsMissing string
+	// Functions are a contract day's calls per function and caller, after
+	// the MaxFunctions cap. FunctionsState says how much of them was read:
+	// FunctionsRead, CodeNoCallTree (the calls of accounts only) or
+	// CodeDayTooLarge (none). it is "" for an account day.
+	Functions      []FunctionDay
+	FunctionsState string
 }
 
 // sources of agg.chain_daily
@@ -283,7 +289,14 @@ func cursorLedger(c string) (uint32, bool) {
 // the initiators of a contract day are the source accounts of the
 // operations that emitted its events, read from each transaction's
 // envelope through getTransaction while the transaction is still in the
-// server's window.
+// server's window. the same answers give the day's function calls: those
+// the envelope's operation makes into the contract (CallerAccount) and
+// those other contracts make during the invocation, from its diagnostic
+// events (CallerContract). every transaction read is one with an event of
+// the contract in a successful call, so it succeeded: a call of an account
+// never failed among them, and a failed transaction, which keeps no
+// contract events, is not found through this source. a call of a contract
+// can fail inside a transaction that goes on, and is counted as failed.
 func (r *Reader) ContractDays(ctx context.Context, contract string, from, through time.Time, h Health) ([]Day, error) {
 	if through.Before(from) {
 		return nil, nil
@@ -299,16 +312,16 @@ func (r *Reader) ContractDays(ctx context.Context, contract string, from, throug
 	for range MaxEventPages {
 		p, err := r.RPC.ContractEvents(ctx, contract, start, cursor)
 		if err != nil {
-			return r.partialWithInitiators(ctx, partial(from, last, by), by, err)
+			return r.partialWithInitiators(ctx, contract, partial(from, last, by), by, err)
 		}
 		for _, e := range p.Events {
 			at, err := time.Parse(time.RFC3339, e.LedgerClosedAt)
 			if err != nil {
-				return r.partialWithInitiators(ctx, partial(from, last, by), by, fail(CodeBadResponse, "event without ledgerClosedAt"))
+				return r.partialWithInitiators(ctx, contract, partial(from, last, by), by, fail(CodeBadResponse, "event without ledgerClosedAt"))
 			}
 			d := utcDay(at)
 			if d.After(through) {
-				return r.withInitiators(ctx, days(from, through, by), by)
+				return r.withInitiators(ctx, contract, days(from, through, by), by)
 			}
 			if d.Before(from) || (e.Successful != nil && !*e.Successful) {
 				continue
@@ -338,13 +351,13 @@ func (r *Reader) ContractDays(ctx context.Context, contract string, from, throug
 		cl, ok := cursorLedger(p.Cursor)
 		if !ok || p.Cursor == "" || cl >= p.LatestLedger {
 			if close, ok := p.LatestClose(); ok && !close.Before(through.AddDate(0, 0, 1)) {
-				return r.withInitiators(ctx, days(from, through, by), by)
+				return r.withInitiators(ctx, contract, days(from, through, by), by)
 			}
-			return r.partialWithInitiators(ctx, partial(from, last, by), by, fail(CodeUnavailable, "the rpc server's latest ledger is older than the end of %s", through.Format(time.DateOnly)))
+			return r.partialWithInitiators(ctx, contract, partial(from, last, by), by, fail(CodeUnavailable, "the rpc server's latest ledger is older than the end of %s", through.Format(time.DateOnly)))
 		}
 		cursor = p.Cursor
 	}
-	return r.partialWithInitiators(ctx, partial(from, last, by), by, fail(CodeDayTooLarge, "%s has more than %d events to read in one run", contract, MaxEventPages*EventLimit))
+	return r.partialWithInitiators(ctx, contract, partial(from, last, by), by, fail(CodeDayTooLarge, "%s has more than %d events to read in one run", contract, MaxEventPages*EventLimit))
 }
 
 func sortedKeys(m map[string]struct{}) []string {
@@ -369,16 +382,19 @@ const MaxInitiatorTransactions = 10000
 // order. a lookup that fails returns the days before the failing one and
 // the error, so a day is never stored without the initiators it could
 // have had; the next run reads it again.
-func (r *Reader) withInitiators(ctx context.Context, ds []Day, by map[int64]*tally) ([]Day, error) {
+func (r *Reader) withInitiators(ctx context.Context, contract string, ds []Day, by map[int64]*tally) ([]Day, error) {
 	for i := range ds {
 		d := &ds[i]
 		t, ok := by[d.Day.Unix()]
 		if !ok {
+			// no event, so no transaction to read and no call found
+			d.FunctionsState = FunctionsRead
 			continue
 		}
 		if len(t.txOps) > MaxInitiatorTransactions {
 			d.Initiators = nil
 			d.InitiatorsMissing = CodeDayTooLarge
+			d.FunctionsState = CodeDayTooLarge
 			continue
 		}
 		hashes := make([]string, 0, len(t.txOps))
@@ -386,29 +402,75 @@ func (r *Reader) withInitiators(ctx context.Context, ds []Day, by map[int64]*tal
 			hashes = append(hashes, h)
 		}
 		slices.Sort(hashes)
-		envs, err := r.RPC.Envelopes(ctx, hashes)
+		txs, err := r.RPC.Transactions(ctx, hashes)
 		if err != nil {
 			return ds[:i], err
 		}
 		set := map[string]struct{}{}
+		calls := map[functionKey]*functionTally{}
+		tree := true
 		for _, h := range hashes {
+			rec := txs[h]
 			for op := range t.txOps[h] {
-				src, err := OperationSource(envs[h], op)
+				src, err := OperationSource(rec.EnvelopeXDR, op)
 				if err != nil {
 					return ds[:i], err
 				}
 				set[src] = struct{}{}
 			}
+			whole, err := transactionCalls(rec, contract, calls)
+			if err != nil {
+				return ds[:i], err
+			}
+			tree = tree && whole
 		}
 		d.Initiators = sortedKeys(set)
+		d.Functions = capFunctions(calls, tree)
+		d.FunctionsState = FunctionsRead
+		if !tree {
+			d.FunctionsState = CodeNoCallTree
+		}
 	}
 	return ds, nil
+}
+
+// transactionCalls adds the calls of one transaction into contract to
+// calls, each under the account that initiated the invocation. whole is
+// false when the transaction invokes a contract and its call tree could
+// not be read: the server sent no diagnostic events, or events that do
+// not form a call tree.
+func transactionCalls(rec TxRecord, contract string, calls map[functionKey]*functionTally) (whole bool, err error) {
+	if rec.Status != "SUCCESS" {
+		return true, nil
+	}
+	_, src, ok, err := InvokeSource(rec.EnvelopeXDR)
+	if err != nil || !ok {
+		return true, err
+	}
+	top, err := TopLevelCalls(rec.EnvelopeXDR, contract)
+	if err != nil {
+		return false, err
+	}
+	for _, c := range top {
+		addCall(calls, c, src)
+	}
+	if len(rec.Diagnostics) == 0 {
+		return false, nil
+	}
+	sub, err := ContractCalls(rec.Diagnostics, contract)
+	if err != nil {
+		return false, nil
+	}
+	for _, c := range sub {
+		addCall(calls, c, src)
+	}
+	return true, nil
 }
 
 // partialWithInitiators is withInitiators for the whole days of a read
 // that stopped early. a failed lookup only shortens the days; the read's
 // own error is the one the id records.
-func (r *Reader) partialWithInitiators(ctx context.Context, ds []Day, by map[int64]*tally, readErr error) ([]Day, error) {
-	ds, _ = r.withInitiators(ctx, ds, by)
+func (r *Reader) partialWithInitiators(ctx context.Context, contract string, ds []Day, by map[int64]*tally, readErr error) ([]Day, error) {
+	ds, _ = r.withInitiators(ctx, contract, ds, by)
 	return ds, readErr
 }

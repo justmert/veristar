@@ -26,10 +26,13 @@ var exampleSites = []struct{ id, origin string }{
 	{"0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e06", "https://vue.sa-tenant.example"},
 	{"0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e07", "https://svelte.sa-tenant.example"},
 	{"0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e08", "https://next.sa-tenant.example"},
+	{"0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e09", "https://docusaurus.sa-tenant.example"},
+	{"0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e10", "https://vitepress.sa-tenant.example"},
+	{"0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e11", "https://mintlify.sa-tenant.example"},
 }
 
 // TestBrowserMatrix runs the whole browser matrix (chromium, firefox,
-// webkit, firefox with gpc; seven example sites) against the real gateway
+// webkit, firefox with gpc; ten example sites) against the real gateway
 // image behind the edge caddy and real nats, then checks that every event
 // the gateway answered with 202 is exactly one WebEvent on WEB_EVENTS with
 // the fields the browser sent, and that none was refused, rate limited or

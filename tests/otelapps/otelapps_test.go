@@ -32,13 +32,21 @@ type app struct {
 	name  string
 	port  int
 	route func(canonical string) string
+	// probe is the route under which the app's instrumentation records the
+	// /healthz checks the tests poll, empty when the app keeps them out of
+	// its telemetry. the java agent records every request tomcat serves; the
+	// platform marks such routes as infrastructure traffic instead
+	// (docs/onboarding/api/what-gets-dropped.md), so the cases leave them out
+	// of the request counts and check that they were recorded.
+	probe string
 }
 
 var apps = []app{
-	{"otel-node-express", 47201, func(r string) string { return strings.ReplaceAll(r, "{id}", ":id") }},
-	{"otel-go-nethttp", 47202, func(r string) string { return r }},
-	{"otel-python-fastapi", 47203, func(r string) string { return strings.ReplaceAll(r, "{id}", "{account_id}") }},
-	{"otel-rust-actix", 47204, func(r string) string { return r }},
+	{"otel-node-express", 47201, func(r string) string { return strings.ReplaceAll(r, "{id}", ":id") }, ""},
+	{"otel-go-nethttp", 47202, func(r string) string { return r }, ""},
+	{"otel-python-fastapi", 47203, func(r string) string { return strings.ReplaceAll(r, "{id}", "{account_id}") }, ""},
+	{"otel-rust-actix", 47204, func(r string) string { return r }, ""},
+	{"otel-java-spring", 47205, func(r string) string { return r }, "/healthz"},
 }
 
 type mode struct {
@@ -63,6 +71,7 @@ var modes = []mode{
 const (
 	token          = "sa_otlp_otelapps_test_token"
 	exportInterval = 2 * time.Second
+	healthWait     = 2 * time.Minute
 )
 
 func repoRoot(t *testing.T) string {
@@ -103,9 +112,11 @@ func selectedApps() []app {
 	return out
 }
 
+// waitHealthy allows two minutes: a jvm with the java agent attached takes the
+// longest to start, and on a loaded host that runs past one minute
 func waitHealthy(t *testing.T, url string) {
 	t.Helper()
-	deadline := time.Now().Add(60 * time.Second)
+	deadline := time.Now().Add(healthWait)
 	for time.Now().Before(deadline) {
 		res, err := http.Get(url)
 		if err == nil {
@@ -116,30 +127,48 @@ func waitHealthy(t *testing.T, url string) {
 		}
 		time.Sleep(300 * time.Millisecond)
 	}
-	t.Fatalf("%s not healthy within 60s", url)
+	t.Fatalf("%s not healthy within %s", url, healthWait)
 }
 
 type received struct {
 	metrics durationSummary
 	traces  traceSummary
+	// requests recorded under the app's probe route, taken out of the
+	// summaries above
+	probeMetrics, probeSpans int64
+}
+
+// withoutProbe moves the requests recorded under route out of counts and
+// returns how many there were. an empty route moves nothing.
+func withoutProbe(counts map[requestKey]int64, route string) int64 {
+	var n int64
+	for k, v := range counts {
+		if route != "" && k.Route == route {
+			n += v
+			delete(counts, k)
+		}
+	}
+	return n
 }
 
 // waitForCounts polls the collector files until the server span total (and
 // for metric modes the request count) reaches total, or 30 seconds pass. the
 // file exporter flushes on an interval, so the last batch can trail the
 // app's exit by a moment.
-func waitForCounts(t *testing.T, dir, service string, m mode, total int64) received {
+func waitForCounts(t *testing.T, dir string, a app, m mode, total int64) received {
 	t.Helper()
 	var r received
 	deadline := time.Now().Add(30 * time.Second)
 	for {
 		var err error
-		if r.metrics, err = summarizeMetrics(filepath.Join(dir, "metrics.jsonl"), service); err != nil {
+		if r.metrics, err = summarizeMetrics(filepath.Join(dir, "metrics.jsonl"), a.name); err != nil {
 			t.Fatal(err)
 		}
-		if r.traces, err = summarizeTraces(filepath.Join(dir, "traces.jsonl"), service); err != nil {
+		if r.traces, err = summarizeTraces(filepath.Join(dir, "traces.jsonl"), a.name); err != nil {
 			t.Fatal(err)
 		}
+		r.probeMetrics = withoutProbe(r.metrics.Counts, a.probe)
+		r.probeSpans = withoutProbe(r.traces.Server, a.probe)
 		done := sum(r.traces.Server) >= total && (!m.metrics || sum(r.metrics.Counts) >= total)
 		if done || time.Now().After(deadline) {
 			return r
@@ -222,4 +251,17 @@ func checkTraces(t *testing.T, backend string, s traceSummary, want map[requestK
 		t.Errorf("%s: %d marker spans and %d marker events, want %d each", backend, s.MarkerSpans, s.MarkerEvents, lookups)
 	}
 	t.Logf("%s: %d server spans, %d internal marker spans, %d marker events", backend, sum(s.Server), s.MarkerSpans, s.MarkerEvents)
+}
+
+// checkProbe proves an app with a probe route recorded the health checks the
+// test sent, so leaving that route out of the counts hid nothing else.
+func checkProbe(t *testing.T, backend string, a app, m mode, r received) {
+	t.Helper()
+	if a.probe == "" {
+		return
+	}
+	if r.probeSpans == 0 || (m.metrics && r.probeMetrics == 0) {
+		t.Errorf("%s: %d server spans and %d metric requests under the probe route %s, want the health checks", backend, r.probeSpans, r.probeMetrics, a.probe)
+	}
+	t.Logf("%s: %d health checks recorded under %s (spans), %d (metrics), left out of the counts", backend, r.probeSpans, a.probe, r.probeMetrics)
 }

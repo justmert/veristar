@@ -6,7 +6,6 @@ import { AppShell } from "@/pages/app-shell";
 import { AccountPage } from "@/pages/home/account";
 import { EnrollPage } from "@/pages/home/enroll";
 import { ProjectsPage, projectsLoader } from "@/pages/home/projects";
-import { OnchainPage } from "@/pages/onchain";
 import { AlertsPage } from "@/pages/operator/alerts";
 import { AuditPage } from "@/pages/operator/audit";
 import { ComparePage } from "@/pages/operator/compare";
@@ -22,6 +21,7 @@ import { AiPage } from "@/pages/project/ai";
 import { ApiPage } from "@/pages/project/api";
 import { ConnectApiPage } from "@/pages/project/connect-api";
 import { MembersPage } from "@/pages/project/members";
+import { OnchainPage } from "@/pages/project/onchain";
 import { OverviewPage } from "@/pages/project/overview";
 import { PrivacyPage } from "@/pages/project/privacy";
 import { ScfReviewPage } from "@/pages/project/scf";
@@ -32,10 +32,10 @@ import { WebPage } from "@/pages/project/web";
 import { ProjectLayout } from "@/pages/project-layout";
 import { AiConsentPage } from "@/pages/public/ai-consent";
 import { NotFoundPage, RouteErrorPage } from "@/pages/public/not-found";
+import { PublicReportPage } from "@/pages/public/report";
 import { SignInPage } from "@/pages/public/sign-in";
 import { SsoErrorPage } from "@/pages/public/sso-error";
 import { TermsPage } from "@/pages/public/terms";
-import { PublicReportPage } from "@/pages/public-report";
 import { queryClient } from "@/query-client";
 
 // the first paint while the session check runs: the mark breathing in the

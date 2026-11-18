@@ -138,7 +138,7 @@ func TestPermissions(t *testing.T) {
 		require.NoError(t, err)
 
 		// producers publish to their streams
-		_, err = natsx.PublishDedup(ctx, gateway.js, natsx.StreamWebEvents, natsx.Subject(natsx.SubjectWebEvents, "site-1"), "e1", []byte("e"), nil)
+		_, err = natsx.PublishDedup(ctx, gateway.js, natsx.StreamWebEvents, natsx.Subject(natsx.SubjectWebEvents, "site-1")+".03", "e1", []byte("e"), nil)
 		require.NoError(t, err)
 		_, err = natsx.PublishDedup(ctx, gateway.js, natsx.StreamEdgeStats, natsx.Subject(natsx.SubjectEdgeStats, "node-1"), "node-1.1", []byte("s"), nil)
 		require.NoError(t, err)
@@ -160,7 +160,12 @@ func TestPermissions(t *testing.T) {
 			require.NoError(t, b.Error())
 			require.Equal(t, 1, n, consumer)
 		}
-		drain(replayer, natsx.StreamWebEvents, natsx.ConsumerReplayer, "e")
+		// the replayer finds the oldest event of a kind with a stream read
+		events, err := replayer.js.Stream(ctx, natsx.StreamWebEvents)
+		require.NoError(t, err)
+		_, err = events.GetMsg(ctx, 1, jetstream.WithGetMsgSubject(natsx.WebEventsPartitioned))
+		require.NoError(t, err)
+		drain(replayer, natsx.StreamWebEvents, natsx.ConsumerPartition(3), "e")
 		drain(metricswriter, natsx.StreamAPIMetrics, natsx.ConsumerMetricsWriter, "m")
 		drain(jobs, natsx.StreamEdgeStats, natsx.ConsumerJobs, "s")
 

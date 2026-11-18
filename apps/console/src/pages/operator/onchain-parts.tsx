@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { type CompareOnchain, operatorOnchainQuery } from "@/api/onchain";
 import type { TenantRef } from "@/api/schemas";
 import { DayStrip, IdRows, LinkStatus, WeeklyActiveList } from "@/components/onchain";
+import { ContractFunctionsBlock } from "@/components/onchain-functions";
 import { ErrorState, LoadingState, Skeleton } from "@/components/states";
 import { countOf, formatCount, formatDateRange } from "@/lib/format";
 import { weeklyActiveText } from "@/lib/onchain";
@@ -103,7 +104,12 @@ export function TenantOnchainSection({ tenantId }: { tenantId: string }) {
         <span className="text-small text-fg-2">{formatDateRange(q.data.from, q.data.to)}, UTC</span>
       </div>
       <WeeklyActiveList weeks={q.data.weeks} label="Weekly active accounts per ISO week" />
-      <IdRows view={q.data} />
+      <IdRows
+        view={q.data}
+        extra={(id) => (
+          <ContractFunctionsBlock id={id} source={{ tenantId, operator: true, range: {} }} />
+        )}
+      />
     </div>
   );
 }

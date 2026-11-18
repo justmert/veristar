@@ -49,7 +49,7 @@ func Diff(ctx context.Context, js jetstream.JetStream, spec Spec) ([]Change, err
 func reconcile(ctx context.Context, js jetstream.JetStream, spec Spec, write bool) ([]Change, error) {
 	var out []Change
 	for _, want := range spec.Streams {
-		c, err := reconcileStream(ctx, js, want, write)
+		c, err := reconcileStream(ctx, js, want, spec.Legacy.Subjects[want.Name], write)
 		if err != nil {
 			return out, err
 		}
@@ -62,6 +62,15 @@ func reconcile(ctx context.Context, js jetstream.JetStream, spec Spec, write boo
 		}
 		out = append(out, c)
 	}
+	for _, want := range spec.Legacy.Consumers {
+		c, err := reconcileLegacyConsumer(ctx, js, want, write)
+		if err != nil {
+			return out, err
+		}
+		if c.Action != "" {
+			out = append(out, c)
+		}
+	}
 	for _, want := range spec.Consumers {
 		c, err := reconcileConsumer(ctx, js, want, write)
 		if err != nil {
@@ -72,7 +81,49 @@ func reconcile(ctx context.Context, js jetstream.JetStream, spec Spec, write boo
 	return out, nil
 }
 
-func reconcileStream(ctx context.Context, js jetstream.JetStream, want jetstream.StreamConfig, write bool) (Change, error) {
+// withLegacy returns want with every legacy subject the live stream still
+// has put in front of its own subjects, so an apply during an upgrade does
+// not cut off the subject the earlier release's events wait on.
+func withLegacy(want jetstream.StreamConfig, have []string, legacy []string) jetstream.StreamConfig {
+	var keep []string
+	for _, l := range legacy {
+		if slices.Contains(have, l) {
+			keep = append(keep, l)
+		}
+	}
+	if len(keep) == 0 {
+		return want
+	}
+	want.Subjects = append(keep, want.Subjects...)
+	return want
+}
+
+// reconcileLegacyConsumer updates a legacy consumer that still exists and
+// leaves a missing one missing. an empty Action means there is none.
+func reconcileLegacyConsumer(ctx context.Context, js jetstream.JetStream, want ConsumerSpec, write bool) (Change, error) {
+	c := Change{Kind: "consumer", Name: want.Stream + "/" + want.Config.Durable}
+	cons, err := js.Consumer(ctx, want.Stream, want.Config.Durable)
+	switch {
+	case errors.Is(err, jetstream.ErrConsumerNotFound) || errors.Is(err, jetstream.ErrStreamNotFound):
+		return Change{}, nil
+	case err != nil:
+		return c, fmt.Errorf("natsx: read consumer %s: %w", c.Name, err)
+	}
+	c.Fields = ConsumerDiff(want.Config, cons.CachedInfo().Config)
+	if len(c.Fields) == 0 {
+		c.Action = ActionUnchanged
+		return c, nil
+	}
+	c.Action = ActionUpdate
+	if write {
+		if _, err := js.UpdateConsumer(ctx, want.Stream, want.Config); err != nil {
+			return c, fmt.Errorf("natsx: update consumer %s %v: %w", c.Name, c.Fields, err)
+		}
+	}
+	return c, nil
+}
+
+func reconcileStream(ctx context.Context, js jetstream.JetStream, want jetstream.StreamConfig, legacy []string, write bool) (Change, error) {
 	c := Change{Kind: "stream", Name: want.Name}
 	s, err := js.Stream(ctx, want.Name)
 	switch {
@@ -87,7 +138,9 @@ func reconcileStream(ctx context.Context, js jetstream.JetStream, want jetstream
 	case err != nil:
 		return c, fmt.Errorf("natsx: read stream %s: %w", want.Name, err)
 	}
-	c.Fields = StreamDiff(want, s.CachedInfo().Config)
+	have := s.CachedInfo().Config
+	want = withLegacy(want, have.Subjects, legacy)
+	c.Fields = StreamDiff(want, have)
 	if len(c.Fields) == 0 {
 		c.Action = ActionUnchanged
 		return c, nil

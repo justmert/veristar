@@ -38,6 +38,12 @@ const Every = time.Hour
 // requests and covers the periods scf reviews.
 const AccountBackfillDays = 90
 
+// FunctionsRereadDays is how far back a contract day stored without its
+// function calls is read again: public rpc servers keep about seven days.
+// an older day without them is marked before_source_history once a read
+// starts after it.
+const FunctionsRereadDays = 7
+
 // batch caps the ids of one run; the ones read longest ago go first.
 const batch = 200
 
@@ -120,22 +126,29 @@ func (t *Task) Run(ctx context.Context, tx TxFunc) (Result, error) {
 	}
 	var list []due
 	err := tx(ctx, func(x pgx.Tx) error {
-		// an id is due when its last completed day is not read, or when a
-		// day of an open week was stored before its initiators were read
+		// an id is due when its last completed day is not read, when a day
+		// of an open week was stored before its initiators were read, or
+		// when a contract day the rpc window may still hold was stored
+		// before its function calls were read
 		rows, err := x.Query(ctx, `
 			select c.tenant_id, c.strkey, c.kind, r.covered_to,
-			       (select min(d.day) from agg.chain_daily d
-			        where d.tenant_id = c.tenant_id and d.strkey = c.strkey
-			          and d.day >= @open_from::date and d.initiators is null
-			          and not exists (select 1 from agg.chain_weeks w
-			                          where w.tenant_id = d.tenant_id and w.week = date_trunc('week', d.day)::date
-			                            and w.closed_at is not null)) as reread_from
+			       least(
+			         (select min(d.day) from agg.chain_daily d
+			          where d.tenant_id = c.tenant_id and d.strkey = c.strkey
+			            and d.day >= @open_from::date and d.initiators is null
+			            and not exists (select 1 from agg.chain_weeks w
+			                            where w.tenant_id = d.tenant_id and w.week = date_trunc('week', d.day)::date
+			                              and w.closed_at is not null)),
+			         (select min(d.day) from agg.chain_daily d
+			          where c.kind = 'contract' and d.tenant_id = c.tenant_id and d.strkey = c.strkey
+			            and d.day >= @functions_from::date and d.functions is null)) as reread_from
 			from cp.chain_ids c
 			join cp.tenants t on t.id = c.tenant_id and t.status <> 'removed'
 			left join agg.chain_reads r on r.tenant_id = c.tenant_id and r.strkey = c.strkey
 			where (r.last_error_at is null or r.last_error_at < @retry_before::timestamptz)
 			order by r.last_attempt_at nulls first, c.created_at`,
-			pgx.NamedArgs{"open_from": open, "retry_before": now.Add(-retryAfter)})
+			pgx.NamedArgs{"open_from": open, "functions_from": today.AddDate(0, 0, -FunctionsRereadDays),
+				"retry_before": now.Add(-retryAfter)})
 		if err != nil {
 			return err
 		}
@@ -305,15 +318,26 @@ func (t *Task) store(ctx context.Context, tx TxFunc, d due, r read, from, open, 
 				}
 				initiators = v
 			}
+			var functions *string
+			if day.FunctionsState != "" {
+				v := day.FunctionsState
+				functions = &v
+			}
 			if _, err := x.Exec(ctx, `
-				insert into agg.chain_daily (tenant_id, strkey, day, source, operations, transactions, counterparties, read_at, initiators)
-				values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+				insert into agg.chain_daily (tenant_id, strkey, day, source, operations, transactions, counterparties, read_at, initiators, functions)
+				values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 				on conflict (tenant_id, strkey, day) do update
 				set source = excluded.source, operations = excluded.operations, transactions = excluded.transactions,
 				    counterparties = excluded.counterparties, read_at = excluded.read_at,
-				    initiators = coalesce(excluded.initiators, agg.chain_daily.initiators)`,
-				d.tenant, d.strkey, day.Day, source, day.Operations, day.Transactions, day.Counterparties, now, initiators); err != nil {
+				    initiators = coalesce(excluded.initiators, agg.chain_daily.initiators),
+				    functions = coalesce(excluded.functions, agg.chain_daily.functions)`,
+				d.tenant, d.strkey, day.Day, source, day.Operations, day.Transactions, day.Counterparties, now, initiators, functions); err != nil {
 				return fmt.Errorf("upsert day: %w", err)
+			}
+			if functions != nil {
+				if err := storeFunctions(ctx, x, d, day); err != nil {
+					return err
+				}
 			}
 			if first == nil {
 				v := day.Day
@@ -329,6 +353,16 @@ func (t *Task) store(ctx context.Context, tx TxFunc, d due, r read, from, open, 
 			where tenant_id = $1 and strkey = $2 and day >= $3 and day < $4 and initiators is null`,
 			d.tenant, d.strkey, open, from); err != nil {
 			return fmt.Errorf("mark days without initiators: %w", err)
+		}
+		// contract days before the read's first day that never had their
+		// function calls read are outside what the source holds now
+		if d.kind == "contract" && !from.IsZero() {
+			if _, err := x.Exec(ctx, `
+				update agg.chain_daily set functions = 'before_source_history'
+				where tenant_id = $1 and strkey = $2 and day < $3 and functions is null`,
+				d.tenant, d.strkey, from); err != nil {
+				return fmt.Errorf("mark days without function calls: %w", err)
+			}
 		}
 		var code *string
 		var success *time.Time
@@ -361,4 +395,21 @@ func (t *Task) store(ctx context.Context, tx TxFunc, d due, r read, from, open, 
 		}
 		return nil
 	})
+}
+
+// storeFunctions replaces the function rows of a stored contract day.
+func storeFunctions(ctx context.Context, x pgx.Tx, d due, day chain.Day) error {
+	if _, err := x.Exec(ctx, `delete from agg.chain_function_daily where tenant_id = $1 and strkey = $2 and day = $3`,
+		d.tenant, d.strkey, day.Day); err != nil {
+		return fmt.Errorf("clear function calls: %w", err)
+	}
+	for _, f := range day.Functions {
+		if _, err := x.Exec(ctx, `
+			insert into agg.chain_function_daily (tenant_id, strkey, day, function_name, caller, successful, failed, accounts)
+			values ($1, $2, $3, $4, $5, $6, $7, $8)`,
+			d.tenant, d.strkey, day.Day, f.Function, f.Caller, f.Successful, f.Failed, f.Accounts); err != nil {
+			return fmt.Errorf("insert function calls: %w", err)
+		}
+	}
+	return nil
 }

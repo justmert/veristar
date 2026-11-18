@@ -1,16 +1,27 @@
 import { Outlet } from "react-router";
 import { describe, expect, it } from "vitest";
-import { exportPaths, onchainView } from "@/api/onchain";
+import { contractFunctions, exportPaths, onchainView } from "@/api/onchain";
 import { webProject } from "@/api/schemas";
-import { OnchainPanel } from "@/components/onchain";
+import { WeeklyActiveList } from "@/components/onchain";
+import { ContractFunctionsBlock, FunctionsDaily } from "@/components/onchain-functions";
 import { EMPTY_FILTERS } from "@/lib/global";
 import { listExportHref } from "@/lib/operator-projects";
-import { OnchainPage } from "@/pages/onchain";
 import { OnchainValue } from "@/pages/operator/shared";
+import { OnchainPage } from "@/pages/project/onchain";
+import { ScfReviewPage } from "@/pages/project/scf";
 import type { ProjectContext } from "@/pages/project-layout";
-import { IntegritySlot, SCFViewPage } from "@/pages/scf-view";
 import * as f from "./fixtures/contract";
-import { byLabel, byRole, click, render, renderRoutes, stubFetch, type, waitFor } from "./helpers";
+import {
+  byLabel,
+  byRole,
+  click,
+  render,
+  renderRoutes,
+  routeFetch,
+  stubFetch,
+  type,
+  waitFor,
+} from "./helpers";
 
 const ACCOUNT_ID = "0193a6f8-6666-7a88-9b99-caadbbeccddd";
 const CONTRACT_ID = "0193a6f8-7777-7b99-acaa-dbbeccddeeff";
@@ -92,6 +103,7 @@ const viewBody = {
           missing: "day_not_complete",
         },
       ],
+      functions: null,
     },
     {
       id: CONTRACT_ID,
@@ -128,6 +140,7 @@ const viewBody = {
         counterparties: null,
         missing: i === 3 ? "day_not_complete" : "rate_limited",
       })),
+      functions: null,
     },
   ],
   weeks: [
@@ -184,12 +197,23 @@ function routes(page: React.ReactNode, path: string) {
   ];
 }
 
-describe("on-chain panel (contract 15.3)", () => {
-  it("parses the view and shows totals, proofs and why days are missing", async () => {
-    const view = onchainView.parse(viewBody);
-    const host = await render(<OnchainPanel view={view} />);
-    expect(host.textContent).toContain("On-chain");
-    expect(host.textContent).toContain("1 of 2");
+describe("on-chain page activity (contract 15.3)", () => {
+  const path = `/projects/${f.TENANT_ID}/onchain`;
+
+  it("counts verified ids only and shows why days are missing", async () => {
+    const calls = stubFetch([{ status: 200, body: viewBody }]);
+    const host = await renderRoutes(routes(<OnchainPage />, "onchain"), path);
+    await waitFor(() => expect(host.textContent).toContain("Activity"));
+    // the default range is the control plane's own
+    expect(calls[0]?.url).toBe(`/api/tenants/${f.TENANT_ID}/onchain`);
+    expect(host.querySelector("[data-testid=activity-scope]")?.textContent).toContain(
+      "1 of 2 accounts and contracts verified",
+    );
+    // the unverified contract's failed reads are not part of the totals
+    expect(host.querySelector("[data-stat=operations]")?.textContent).toContain("12");
+    // one verified day before today has no row: the same definition as the
+    // scf review
+    expect(host.querySelector("[data-stat=days-missing]")?.textContent).toContain("1");
     expect(host.textContent).toContain("Verified");
     expect(host.textContent).toContain("Unverified");
     expect(host.textContent).toContain("stellar.toml linked both ways");
@@ -202,11 +226,26 @@ describe("on-chain panel (contract 15.3)", () => {
     const strip = host.querySelector(`[aria-label="Daily operations of ${f.G_KEY}"]`);
     expect(strip?.querySelectorAll(".bg-series-1")).toHaveLength(2);
     expect(strip?.querySelectorAll(".border-dashed")).toHaveLength(2);
+    const link = [...host.querySelectorAll("a")].find((a) => a.textContent?.includes("Export CSV"));
+    expect(link?.getAttribute("href")).toBe(
+      `/api/tenants/${f.TENANT_ID}/overview.csv?from=${days[0]}&to=${days[3]}`,
+    );
+  });
+
+  it("reads a chosen range from the address", async () => {
+    const calls = stubFetch([{ status: 200, body: viewBody }]);
+    await renderRoutes(
+      routes(<OnchainPage />, "onchain"),
+      `${path}?range=custom&from=2026-10-01&to=2026-10-31`,
+    );
+    await waitFor(() => expect(calls).toHaveLength(1));
+    expect(calls[0]?.url).toBe(`/api/tenants/${f.TENANT_ID}/onchain?from=2026-10-01&to=2026-10-31`);
   });
 
   it("shows weekly active accounts per iso week, a missing week with its reason", async () => {
-    const view = onchainView.parse(viewBody);
-    const host = await render(<OnchainPanel view={view} />);
+    stubFetch([{ status: 200, body: viewBody }]);
+    const host = await renderRoutes(routes(<OnchainPage />, "onchain"), path);
+    await waitFor(() => expect(host.querySelector("[data-testid=waa-summary]")).not.toBeNull());
     expect(host.querySelector("[data-testid=waa-summary]")?.textContent).toBe(
       "42 a week on average over 2 weeks, 1 missing",
     );
@@ -215,20 +254,73 @@ describe("on-chain panel (contract 15.3)", () => {
     expect(weeks[0]?.textContent).toContain("44");
     // a week that could not be counted whole is never shown as zero
     const missing = host.querySelector('[data-week="2026-W45"]');
-    expect(missing?.textContent).toContain("No count.");
+    expect(missing?.querySelector("[data-missing]")).not.toBeNull();
     expect(missing?.textContent).toContain("More activity than one run reads");
     expect(missing?.textContent).not.toMatch(/\b0\b/);
   });
 
-  it("says what to do when nothing is declared", async () => {
-    const view = onchainView.parse({
+  it("checks the stellar.toml link line by line, with one action per open line", async () => {
+    const body = {
       ...viewBody,
-      ids: [],
-      totals: { ...viewBody.totals, ids: 0, ids_verified: 0, accounts: 0, contracts: 0 },
-      link: { two_way: false, sites: [] },
-    });
-    const host = await render(<OnchainPanel view={view} />);
-    expect(host.textContent).toContain("No accounts or contracts declared yet");
+      link: {
+        two_way: false,
+        sites: [
+          {
+            ...viewBody.link.sites[0],
+            org_url: "https://other.org",
+            org_url_matches: false,
+            two_way: false,
+            accounts: [
+              {
+                strkey: f.G_KEY,
+                listed_in_toml: false,
+                home_domain: null,
+                home_domain_matches: false,
+                two_way: false,
+              },
+            ],
+          },
+        ],
+      },
+    };
+    stubFetch([{ status: 200, body }]);
+    const host = await renderRoutes(routes(<OnchainPage />, "onchain"), path);
+    await waitFor(() => expect(host.textContent).toContain("stellar.toml link not complete"));
+    const card = host.querySelector('[aria-label="stellar.toml link of example.org"]');
+    expect(card?.querySelectorAll('[data-check="done"]')).toHaveLength(2);
+    const open = [...(card?.querySelectorAll('[data-check="open"]') ?? [])];
+    expect(open).toHaveLength(3);
+    // the main text is plain words; the file's keys are only in what to copy
+    expect(open[0]?.textContent).toContain("names this domain as your organisation website");
+    expect(open[0]?.textContent).toContain("It names https://other.org now.");
+    expect(open[0]?.textContent).not.toContain("ORG_URL");
+    for (const line of open) expect(line.querySelectorAll("button")).toHaveLength(1);
+  });
+
+  it("says what to do when nothing is declared", async () => {
+    stubFetch([
+      {
+        status: 200,
+        body: {
+          ...viewBody,
+          ids: [],
+          totals: { ...viewBody.totals, ids: 0, ids_verified: 0, accounts: 0, contracts: 0 },
+          link: { two_way: false, sites: [] },
+        },
+      },
+    ]);
+    const host = await renderRoutes(routes(<OnchainPage />, "onchain"), path);
+    await waitFor(() => expect(host.textContent).toContain("No accounts or contracts"));
+    expect(host.textContent).toContain("Add an account (G…) or a contract (C…).");
+    expect(host.textContent).toContain("No site to link");
+    expect(host.textContent).not.toContain("Activity");
+  });
+});
+
+describe("weekly active accounts list", () => {
+  it("lists no week when the range holds none", async () => {
+    const host = await render(<WeeklyActiveList weeks={[]} label="Weeks" />);
+    expect(host.textContent).toBe("No complete ISO week in this range.");
   });
 });
 
@@ -331,8 +423,8 @@ describe("accounts and contracts page (contract 15.4)", () => {
     expect(host.textContent).toContain(
       "Last check: The contract stores no Admin or Owner entry that can be read.",
     );
-    // the two-way link legs of the verified domain
-    expect(host.textContent).toContain("Its [DOCUMENTATION] ORG_URL is on example.org");
+    // the two-way link of the verified domain holds on every line
+    expect(host.querySelectorAll('[data-check="open"]')).toHaveLength(0);
     await click(byRole(host, "button", "Check the admin"));
     await waitFor(() => expect(calls).toHaveLength(3));
     expect(calls[1]?.body).toEqual({ method: "contract_admin" });
@@ -407,6 +499,26 @@ const scfBody = {
   })),
   api_series: days.map((d) => ({ day: d, requests: 0 })),
   onchain_series: days.map((d) => ({ day: d, ids_read: 1, operations: 3, transactions: 1 })),
+  contract_functions: [
+    {
+      strkey: f.C_KEY,
+      functions: {
+        days_read: 2,
+        days_no_call_tree: 1,
+        days_missing: 0,
+        functions: [
+          {
+            function: "swap",
+            caller: "account",
+            successful: 17,
+            failed: null,
+            peak_daily_accounts: 6,
+            days_with_calls: 3,
+          },
+        ],
+      },
+    },
+  ],
   cohort: {
     tenant_id: f.TENANT_ID,
     confirmed: null,
@@ -429,31 +541,73 @@ const scfBody = {
   rules_met: [],
 };
 
-describe("what scf sees (contract 16.3)", () => {
-  it("shows the operator rows and no grade the control plane did not send", async () => {
-    stubFetch([{ status: 200, body: scfBody }]);
+describe("scf review figures (contract 16.3)", () => {
+  function answer(scf: unknown) {
+    return routeFetch((_method, url) => {
+      if (url.includes("/scf-view")) return { status: 200, body: scf };
+      if (url.includes("/reports")) return { status: 200, body: { items: [] } };
+      if (url.includes("/sites")) return { status: 200, body: { items: [], next_cursor: null } };
+      return { status: 404, body: f.errorBody("not_found") };
+    });
+  }
+
+  it("shows the operator rows, one definition per label and the contract calls", async () => {
+    answer(scfBody);
     const host = await renderRoutes(
-      routes(<SCFViewPage />, "scf-view"),
-      `/projects/${f.TENANT_ID}/scf-view`,
+      routes(<ScfReviewPage />, "scf"),
+      `/projects/${f.TENANT_ID}/scf`,
     );
     await waitFor(() => expect(host.textContent).toContain("1,234"));
     expect(host.textContent).toContain("1 of 2");
     expect(host.textContent).toContain("stellar.toml linked both ways");
-    expect(host.querySelector("[data-testid=integrity-grade]")).toBeNull();
+    // the control plane sent no grade, so none is drawn
+    expect(host.querySelector("[data-testid=standing-grade] [data-grade]")).toBeNull();
     const link = [...host.querySelectorAll("a")].find((a) => a.textContent?.includes("Export CSV"));
     expect(link?.getAttribute("href")).toBe(
       `/api/tenants/${f.TENANT_ID}/overview.csv?from=${days[0]}&to=${days[3]}`,
     );
+    // "Days without data" reads as the on-chain page counts it, and the api
+    // count of routes is named for what it counts
+    expect(host.querySelector("[data-figure=days-missing]")?.textContent).toContain(
+      "before today without a ledger read",
+    );
+    expect(host.querySelector("[data-figure=routes]")?.textContent).toContain("Distinct routes");
+    // a value the view does not have is the missing glyph, never n/a
+    expect(host.textContent).not.toContain("n/a");
+    // each verified contract's calls per function, failed missing for accounts
+    const table = host.querySelector(`[aria-label="Calls per function of ${f.C_KEY}"]`);
+    const row = table?.querySelector('[data-function="swap"][data-caller="account"]');
+    expect(row?.textContent).toContain("17");
+    expect(row?.querySelector("[data-missing]")).not.toBeNull();
+    expect(host.textContent).toContain("2 days read, 1 with calls of accounts only");
   });
 
-  it("renders the integrity grade when the field arrives", async () => {
-    const host = await render(
-      <IntegritySlot value={{ grade: "B", graded_days: 8, days_a: 5, days_b: 3, days_c: 0 }} />,
+  it("draws the grade with its word, colour and meaning when the field arrives", async () => {
+    answer({
+      ...scfBody,
+      integrity: { grade: "B", graded_days: 8, days_a: 5, days_b: 3, days_c: 0 },
+    });
+    const host = await renderRoutes(
+      routes(<ScfReviewPage />, "scf"),
+      `/projects/${f.TENANT_ID}/scf`,
     );
-    expect(host.querySelector("[data-testid=integrity-grade]")?.textContent).toBe("B");
-    expect(host.textContent).toContain("8 graded site days: 5 A, 3 B, 0 C");
-    const empty = await render(<IntegritySlot value={undefined} />);
-    expect(empty.textContent).toBe("");
+    await waitFor(() => expect(host.querySelector("[data-testid=standing-grade]")).not.toBeNull());
+    const card = host.querySelector("[data-testid=standing-grade]");
+    expect(card?.querySelector("[data-grade]")?.getAttribute("data-grade")).toBe("B");
+    expect(card?.textContent).toContain("Grade B");
+    expect(card?.textContent).toContain("A quarter or more of the graded site days");
+    expect(card?.textContent).toContain("8 graded site days: 5 A, 3 B, 0 C.");
+  });
+
+  it("says when the project is not in the scf views", async () => {
+    answer({ ...scfBody, in_operator_views: false });
+    const host = await renderRoutes(
+      routes(<ScfReviewPage />, "scf"),
+      `/projects/${f.TENANT_ID}/scf`,
+    );
+    await waitFor(() => expect(host.textContent).toContain("Not in the SCF views"));
+    expect(host.textContent).not.toContain("Figures");
+    expect(host.textContent).toContain("Signed reports");
   });
 });
 
@@ -527,5 +681,141 @@ describe("operator on-chain column and exports (contract 15.7 and 16.1)", () => 
     expect(
       exportPaths.compare("api", [f.TENANT_ID], { from: "2026-11-01", to: "2026-11-16" }),
     ).toBe(`/api/operator/api/compare.csv?from=2026-11-01&to=2026-11-16&tenants=${f.TENANT_ID}`);
+  });
+});
+
+// a verified contract with calls on three days: one read whole, one with
+// the calls of accounts only, one not read (contract 15.8)
+const FN_CONTRACT_ID = "0193a6f8-9999-7caa-bdbb-eccddeeff002";
+const functionsSummaryBody = {
+  days_read: 1,
+  days_no_call_tree: 1,
+  days_missing: 1,
+  functions: [
+    {
+      function: "swap",
+      caller: "account",
+      successful: 9,
+      failed: null,
+      peak_daily_accounts: 4,
+      days_with_calls: 2,
+    },
+    {
+      function: "{other}",
+      caller: "contract",
+      successful: 2,
+      failed: 1,
+      peak_daily_accounts: 1,
+      days_with_calls: 1,
+    },
+  ],
+};
+const functionsBody = {
+  ...functionsSummaryBody,
+  id: FN_CONTRACT_ID,
+  strkey: f.C_KEY,
+  kind: "contract",
+  verified: true,
+  from: days[0],
+  to: days[3],
+  days: [
+    { day: days[0], state: "read", missing: null },
+    { day: days[1], state: "no_call_tree", missing: null },
+    { day: days[2], state: null, missing: "day_over_read_cap" },
+    { day: days[3], state: null, missing: "day_not_complete" },
+  ],
+  functions: [
+    {
+      ...functionsSummaryBody.functions[0],
+      series: [
+        { day: days[0], successful: 5, failed: null, accounts: 3 },
+        { day: days[1], successful: 4, failed: null, accounts: 4 },
+        { day: days[2], successful: null, failed: null, accounts: null },
+        { day: days[3], successful: null, failed: null, accounts: null },
+      ],
+    },
+    {
+      ...functionsSummaryBody.functions[1],
+      series: [
+        { day: days[0], successful: 2, failed: 1, accounts: 1 },
+        { day: days[1], successful: null, failed: null, accounts: null },
+        { day: days[2], successful: null, failed: null, accounts: null },
+        { day: days[3], successful: null, failed: null, accounts: null },
+      ],
+    },
+  ],
+};
+
+describe("calls per contract function (contract 15.8)", () => {
+  const verifiedContract = onchainView.parse({
+    ...viewBody,
+    ids: [
+      {
+        ...viewBody.ids[1],
+        id: FN_CONTRACT_ID,
+        verification: { ...none, status: "verified", method: "contract_admin" },
+        functions: functionsSummaryBody,
+      },
+    ],
+  }).ids[0];
+
+  it("shows the totals per function and caller, failed missing for accounts", async () => {
+    if (!verifiedContract) throw new Error("no id");
+    const host = await render(<ContractFunctionsBlock id={verifiedContract} />);
+    expect(host.querySelector("[data-testid=functions-days]")?.textContent).toBe(
+      "1 day read, 1 with calls of accounts only, 1 without data",
+    );
+    const swap = host.querySelector('[data-function="swap"]');
+    expect(swap?.textContent).toContain("Accounts");
+    expect(swap?.querySelector("[data-missing]")).not.toBeNull();
+    const other = host.querySelector('[data-function="{other}"]');
+    expect(other?.textContent).toContain("Other functions");
+    expect(other?.textContent).toContain("Contracts");
+    // without a source there is nothing to open or export
+    expect(host.textContent).not.toContain("Daily calls");
+  });
+
+  it("says an unverified contract's calls do not count", async () => {
+    const id = onchainView.parse(viewBody).ids[1];
+    if (!id) throw new Error("no id");
+    const host = await render(<ContractFunctionsBlock id={id} />);
+    expect(host.textContent).toContain("Calls per function show when the contract is verified");
+    expect(host.querySelector("table")).toBeNull();
+  });
+
+  it("loads the daily calls from the tenant route and links the export", async () => {
+    if (!verifiedContract) throw new Error("no id");
+    const calls = stubFetch([{ status: 200, body: functionsBody }]);
+    const src = { tenantId: f.TENANT_ID, range: { from: days[0], to: days[3] } };
+    const host = await render(<ContractFunctionsBlock id={verifiedContract} source={src} />);
+    const link = [...host.querySelectorAll("a")].find((a) => a.textContent?.includes("Export CSV"));
+    expect(link?.getAttribute("href")).toBe(
+      `/api/tenants/${f.TENANT_ID}/onchain/ids/${FN_CONTRACT_ID}/functions.csv?from=${days[0]}&to=${days[3]}`,
+    );
+    await click(byRole(host, "button", "Daily calls"));
+    await waitFor(() => expect(host.textContent).toContain("successful calls per day"));
+    expect(calls[0]?.url).toBe(
+      `/api/tenants/${f.TENANT_ID}/onchain/ids/${FN_CONTRACT_ID}/functions?from=${days[0]}&to=${days[3]}`,
+    );
+  });
+
+  it("draws a day not read as missing with its reason, never as zero", async () => {
+    const data = contractFunctions.parse(functionsBody);
+    const host = await render(<FunctionsDaily data={data} />);
+    expect(host.textContent).toContain("1 day without data: More activity than one run reads");
+    expect(host.textContent).toContain("1 day with the calls of accounts only");
+    const strip = host.querySelector('[aria-label="Daily calls of Other functions by contracts"]');
+    expect(strip?.querySelectorAll(".bg-series-1")).toHaveLength(1);
+    expect(strip?.querySelectorAll(".border-dashed")).toHaveLength(3);
+    const titles = [...(strip?.querySelectorAll("[title]") ?? [])].map((e) =>
+      e.getAttribute("title"),
+    );
+    expect(titles[1]).toContain("only the calls of accounts are counted");
+  });
+
+  it("reads the operator route for an operator source", () => {
+    expect(
+      exportPaths.functions({ tenantId: f.TENANT_ID, operator: true, range: {} }, FN_CONTRACT_ID),
+    ).toBe(`/api/operator/tenants/${f.TENANT_ID}/onchain/ids/${FN_CONTRACT_ID}/functions.csv`);
   });
 });

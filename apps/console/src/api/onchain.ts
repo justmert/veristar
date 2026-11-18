@@ -73,6 +73,56 @@ export const chainPoint = z.object({
 });
 export type ChainPoint = z.infer<typeof chainPoint>;
 
+// calls into a verified contract per function and caller (contract 15.8).
+// failed is null for the calls of accounts: every transaction read
+// succeeded. a day whose calls by a caller were not read is null, never 0
+export const functionCaller = z.enum(["account", "contract"]);
+export type FunctionCaller = z.infer<typeof functionCaller>;
+
+export const functionPoint = z.object({
+  day,
+  successful: count.nullable(),
+  failed: count.nullable(),
+  accounts: count.nullable(),
+});
+export type FunctionPoint = z.infer<typeof functionPoint>;
+
+export const functionUsage = z.object({
+  function: z.string(),
+  caller: functionCaller,
+  successful: count,
+  failed: count.nullable(),
+  peak_daily_accounts: count,
+  days_with_calls: count,
+  series: z.array(functionPoint).optional(),
+});
+export type FunctionUsage = z.infer<typeof functionUsage>;
+
+export const functionsSummary = z.object({
+  days_read: count,
+  days_no_call_tree: count,
+  days_missing: count,
+  functions: z.array(functionUsage),
+});
+export type FunctionsSummary = z.infer<typeof functionsSummary>;
+
+export const contractFunctions = functionsSummary.extend({
+  id: z.string(),
+  strkey: z.string(),
+  kind: z.enum(["account", "contract"]),
+  verified: z.boolean(),
+  from: day,
+  to: day,
+  days: z.array(
+    z.object({
+      day,
+      state: z.enum(["read", "no_call_tree"]).nullable(),
+      missing: z.string().nullable(),
+    }),
+  ),
+});
+export type ContractFunctions = z.infer<typeof contractFunctions>;
+
 export const chainId = z.object({
   id: z.string(),
   strkey: z.string(),
@@ -89,6 +139,9 @@ export const chainId = z.object({
     days_missing: count,
   }),
   series: z.array(chainPoint),
+  // a verified contract's calls per function over the range; null for an
+  // account and an unverified contract
+  functions: functionsSummary.nullable(),
 });
 export type ChainId = z.infer<typeof chainId>;
 
@@ -236,6 +289,8 @@ export const scfView = z.object({
   ),
   api_series: z.array(z.object({ day, requests: count })),
   onchain_series: z.array(onchainDayTotal),
+  // each verified contract's calls per function over the range
+  contract_functions: z.array(z.object({ strkey: z.string(), functions: functionsSummary })),
   // 17.3 the integrity grade of the project's row
   integrity: z
     .object({
@@ -302,6 +357,22 @@ export const onchainApi = {
       undefined,
       signal,
     ),
+  functions: (tenantId: string, chainId: string, r: RangeParams, signal?: AbortSignal) =>
+    request(
+      "GET",
+      `/tenants/${enc(tenantId)}/onchain/ids/${enc(chainId)}/functions${rangeQuery(r)}`,
+      contractFunctions,
+      undefined,
+      signal,
+    ),
+  operatorFunctions: (tenantId: string, chainId: string, r: RangeParams, signal?: AbortSignal) =>
+    request(
+      "GET",
+      `/operator/tenants/${enc(tenantId)}/onchain/ids/${enc(chainId)}/functions${rangeQuery(r)}`,
+      contractFunctions,
+      undefined,
+      signal,
+    ),
   operatorView: (tenantId: string, r: RangeParams, signal?: AbortSignal) =>
     request(
       "GET",
@@ -318,7 +389,26 @@ export const onchainKeys = {
   all: (tenantId: string) => ["tenant", tenantId, "onchain"] as const,
   scf: (tenantId: string, r: RangeParams) => ["tenant", tenantId, "scf-view", r] as const,
   operator: (tenantId: string, r: RangeParams) => ["operator", "onchain", tenantId, r] as const,
+  functions: (tenantId: string, chainId: string, r: RangeParams) =>
+    ["tenant", tenantId, "onchain", "functions", chainId, r] as const,
+  operatorFunctions: (tenantId: string, chainId: string, r: RangeParams) =>
+    ["operator", "onchain", tenantId, "functions", chainId, r] as const,
 };
+
+// where a contract's calls per function are read from: the project's own
+// routes, or the operator's
+export type FunctionsSource = { tenantId: string; operator?: boolean; range: RangeParams };
+
+export const functionsQuery = (src: FunctionsSource, chainId: string) =>
+  queryOptions({
+    queryKey: src.operator
+      ? onchainKeys.operatorFunctions(src.tenantId, chainId, src.range)
+      : onchainKeys.functions(src.tenantId, chainId, src.range),
+    queryFn: ({ signal }) =>
+      src.operator
+        ? onchainApi.operatorFunctions(src.tenantId, chainId, src.range, signal)
+        : onchainApi.functions(src.tenantId, chainId, src.range, signal),
+  });
 
 export const onchainQuery = (tenantId: string, r: RangeParams) =>
   queryOptions({
@@ -343,6 +433,8 @@ export const operatorOnchainQuery = (tenantId: string, r: RangeParams) =>
 export const exportPaths = {
   overview: (tenantId: string, r: RangeParams) =>
     `/api/tenants/${enc(tenantId)}/overview.csv${rangeQuery(r)}`,
+  functions: (src: FunctionsSource, chainId: string) =>
+    `/api${src.operator ? "/operator" : ""}/tenants/${enc(src.tenantId)}/onchain/ids/${enc(chainId)}/functions.csv${rangeQuery(src.range)}`,
   // query is the list's own query string, without cursor and limit
   list: (view: "web" | "api", query: URLSearchParams, rows: number) => {
     const q = new URLSearchParams(query);

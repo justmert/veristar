@@ -88,7 +88,7 @@ come from the daily aggregates in SQL, in one snapshot with the rest of the tabl
 SCF decides by program, round, category and award date, so every project carries those four
 values. SCF publishes no machine-readable directory of its awards, so they come from two sides:
 
-1. A project proposes them, at enrollment or later on its "What SCF sees" page.
+1. A project proposes them, at enrollment or later on its **SCF review** page.
 2. You confirm the proposal on the project's detail page, edit it before confirming, set the
    values yourself, or dismiss the proposal. Only confirmed values count.
 
@@ -144,7 +144,7 @@ computed from their minutes, so API answers do not wait for the rollup.
 
 Every table and comparison exports as CSV with the columns on screen, including the cohort, the
 previous values, the changes and the percentiles. The project sees its own row, cohort,
-percentiles and the rules it meets on its "What SCF sees" page, so nothing here is hidden scoring.
+percentiles and the rules it meets on its **SCF review** page, so nothing here is hidden scoring.
 
 ## The same numbers for machines
 

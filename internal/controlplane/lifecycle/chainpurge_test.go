@@ -26,6 +26,7 @@ func TestChainPurger(t *testing.T) {
 	t.Cleanup(sys.Close)
 
 	const account = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB"
+	const contract = "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB"
 	newTenant := func(slug, status string) uuid.UUID {
 		var id uuid.UUID
 		require.NoError(t, sys.WithSystem(t.Context(), func(tx pgx.Tx) error {
@@ -38,6 +39,15 @@ func TestChainPurger(t *testing.T) {
 			}
 			if _, err := tx.Exec(t.Context(), `insert into agg.chain_reads (tenant_id, strkey, covered_from, covered_to, last_attempt_at)
 				values ($1, $2, current_date, current_date, now())`, id, account); err != nil {
+				return err
+			}
+			// a contract day with its calls per function
+			if _, err := tx.Exec(t.Context(), `insert into agg.chain_daily (tenant_id, strkey, day, source, operations, transactions, counterparties, functions)
+				values ($1, $2, current_date, 'rpc_events', 2, 2, 0, 'read')`, id, contract); err != nil {
+				return err
+			}
+			if _, err := tx.Exec(t.Context(), `insert into agg.chain_function_daily (tenant_id, strkey, day, function_name, caller, successful, failed, accounts)
+				values ($1, $2, current_date, 'swap', 'account', 2, null, 1), ($1, $2, current_date, 'swap', 'contract', 0, 1, 1)`, id, contract); err != nil {
 				return err
 			}
 			// a closed week with its count, and the open week with its key
@@ -56,15 +66,16 @@ func TestChainPurger(t *testing.T) {
 		}))
 		return id
 	}
-	// daily rows, read states, weeks and week members
-	counts := func(id uuid.UUID) [4]int {
-		var out [4]int
+	// daily rows, read states, weeks, week members and function rows
+	counts := func(id uuid.UUID) [5]int {
+		var out [5]int
 		require.NoError(t, jobs.WithRole(t.Context(), pdb.RoleJobs, func(tx pgx.Tx) error {
 			return tx.QueryRow(t.Context(), `select
 				(select count(*) from agg.chain_daily where tenant_id = $1),
 				(select count(*) from agg.chain_reads where tenant_id = $1),
 				(select count(*) from agg.chain_weeks where tenant_id = $1),
-				(select count(*) from agg.chain_week_members where tenant_id = $1)`, id).Scan(&out[0], &out[1], &out[2], &out[3])
+				(select count(*) from agg.chain_week_members where tenant_id = $1),
+				(select count(*) from agg.chain_function_daily where tenant_id = $1)`, id).Scan(&out[0], &out[1], &out[2], &out[3], &out[4])
 		}))
 		return out
 	}
@@ -81,16 +92,18 @@ func TestChainPurger(t *testing.T) {
 	gone, kept, live := newTenant("gone", "removed"), newTenant("kept", "removed"), newTenant("live", "active")
 	detail, err := purge(gone, false)
 	require.NoError(t, err)
-	require.Equal(t, map[string]int64{"chain_daily": 1, "chain_reads": 1, "chain_weeks": 2, "chain_week_members": 1}, detail["rows_deleted"])
-	require.Equal(t, [4]int{0, 0, 0, 0}, counts(gone))
+	require.Equal(t, map[string]int64{"chain_daily": 2, "chain_reads": 1, "chain_weeks": 2, "chain_week_members": 1,
+		"chain_function_daily": 2}, detail["rows_deleted"])
+	require.Equal(t, [5]int{0, 0, 0, 0, 0}, counts(gone))
 
-	// keep_aggregates keeps the daily counts and the closed week's count;
+	// keep_aggregates keeps the daily counts, their function rows and the
+	// closed week's count;
 	// the open week, its key and its hashes always go
 	_, err = purge(kept, true)
 	require.NoError(t, err)
-	require.Equal(t, [4]int{1, 0, 1, 0}, counts(kept))
+	require.Equal(t, [5]int{2, 0, 1, 0, 2}, counts(kept))
 
 	_, err = purge(live, false)
 	require.ErrorContains(t, err, "is not removed")
-	require.Equal(t, [4]int{1, 1, 2, 1}, counts(live))
+	require.Equal(t, [5]int{2, 1, 2, 1, 2}, counts(live))
 }

@@ -103,7 +103,7 @@ node's loopback over SSH ([ADR 0005](adr/0005-umami-as-engine-only.md),
 |---|---|---|
 | gateway | checks and accepts web events, serves pinned tracker files, holds the only copy of client addresses (in memory, per request) | `cmd/gateway`, `internal/gateway` |
 | collector | authenticates OTLP tokens, drops traces, spans and logs after deriving request histograms, normalizes routes, rate limits per tenant | `collector/` (three custom components) |
-| replayer | delivers queued web events to Umami in order per visitor, at least once | `cmd/replayer`, `internal/replayer` |
+| replayer | delivers queued web events to the Umami processes of its own node, in order per visitor, at least once; every core node's replayer owns a share of the 32 web event partitions | `cmd/replayer`, `internal/replayer` |
 | metricswriter | turns OTLP metric batches into one-minute PostgreSQL rows | `cmd/metricswriter`, `internal/metricswriter` |
 | jobs | rollups, partitions, retention, web aggregates, gateway outcome counts, reconcile, daily Umami password rotation, domain checks, erasure follow-up | `cmd/jobs`, `internal/jobs/*` |
 | controlplane | sign-in, tenants, sites, members, tokens, operator governance, operator views, metrics API, erasure | `cmd/controlplane`, `internal/controlplane` |
@@ -152,6 +152,36 @@ sequenceDiagram
   [reference/browser-proof.md](reference/browser-proof.md)).
 - Wire format: [reference/wire-v1.md](reference/wire-v1.md). Metric definitions:
   [reference/web-metrics.md](reference/web-metrics.md).
+
+### Web event partitions
+
+The gateway queues each event on `web.events.<site id>.<partition>`. The partition, `00` to
+`31`, is a hash of the site id and the visitor token (`events.Partition`), so all of a
+visitor's events are in one partition. Each partition has its own durable consumer
+(`replayer-p00` to `replayer-p31`) and its own lock in the `locks` bucket.
+
+- **Ownership.** Each replayer announces itself with a member key in `locks`. From the member
+  list every replayer computes the same assignment, 11, 11 and 10 partitions on three nodes, and
+  contends only for its own. The lock decides who consumes, so a partition never has two owners,
+  even while two replayers briefly see different member lists. A partition whose lock stays
+  free for 10 s is taken by any replayer.
+- **Hand-over.** A replayer that stops, or whose partition is assigned to a node that joined,
+  stops fetching, delivers what it holds and releases the lock; the next owner starts at once.
+  A killed replayer's partitions are free when their locks expire (15 s), and the next owner
+  waits until the killed one's unacknowledged messages can be redelivered (at most the 30 s ack
+  wait), so a visitor's events reach Umami in order through node loss and rolling deploys.
+- **Delivery.** Each replayer sends to the Umami processes of its own node. Every process shares
+  the one database and `APP_SECRET`, so which node stores an event does not change what is
+  stored ([reference/umami-contract.md](reference/umami-contract.md) item 14). Visit continuity
+  (`visit_state`) and the duplicate guard (`sent.<event id>`) stay correct because one owner
+  handles a visitor at a time.
+- **Why 32.** It splits three nodes 11, 11 and 10, divides evenly over 1, 2, 4 and 8 nodes, and
+  keeps the per-partition cost small: each partition is a replicated consumer and a lock renewed
+  every 5 s.
+- **Upgrade from the single subject.** Earlier releases queued on `web.events.<site id>`; the
+  replayer drains that subject under the `replayer` lock until `platformctl nats
+  retire-legacy-web` removes it ([deploy/upgrade.md](deploy/upgrade.md), "Upgrading to
+  partitioned web events").
 
 ## API metrics flow
 
@@ -243,14 +273,14 @@ flowchart TB
 
 | Object | Kind | Holds | Retention |
 |---|---|---|---|
-| `WEB_EVENTS` | stream, file, 3 replicas | accepted web events | until delivered, at most 72 h |
+| `WEB_EVENTS` | stream, file, 3 replicas | accepted web events, in 32 partitions by visitor | until delivered, at most 72 h |
 | `API_METRICS` | stream, file, 3 replicas | filtered OTLP metrics | until written, at most 7 days |
 | `EDGE_STATS` | stream, file, 3 replicas | per-site outcome counters from gateways and the replayer | until counted, at most 7 days |
 | `WEB_DLQ`, `API_DLQ` | stream | messages refused permanently downstream | 7 and 30 days |
 | `registry_sites`, `registry_otlp` | KV, file | site and token state for the edge | rebuilt by reconcile |
 | `edge_secrets` | KV, memory | daily visitor, network and proof secrets | until the next UTC midnight |
 | `visit_state` | KV, memory | visit continuity and duplicate guard for the replayer | 24 h |
-| `locks` | KV, memory | leader locks for replayer, metricswriter and jobs | 15 s |
+| `locks` | KV, memory | leader locks for metricswriter and jobs, partition locks and member keys of the replayer | 15 s |
 | PostgreSQL `umami` | database | Umami's events and sessions | raw retention job `retain-web` |
 | PostgreSQL `platform` | database | `cp`, `api`, `agg` schemas | API aggregates at least 24 months |
 
@@ -283,8 +313,9 @@ flowchart LR
 - One NATS cluster and one etcd cluster have one member on each node. Patroni (three members:
   leader, synchronous standby, replica) uses etcd for its leader key; HAProxy on each node
   routes to the current leader.
-- `replayer`, `metricswriter` and `jobs` run on every node with one active instance each,
-  chosen by leader locks in NATS. `metricswriter` and `jobs` write the lock revision into every
+- `replayer` runs on every node, and every instance delivers the web event partitions it owns
+  ("Web event partitions" above). `metricswriter` and `jobs` run on every node with one active
+  instance each, chosen by leader locks in NATS. `metricswriter` and `jobs` write the lock revision into every
   transaction and abort if a newer leader wrote, so a paused former leader cannot write. A
   rolling deploy stops `jobs` on every node before the migrations, so no daemon of the earlier
   release writes under a schema it does not know.

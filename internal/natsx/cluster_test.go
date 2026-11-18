@@ -259,12 +259,12 @@ func testKeyTTL(t *testing.T, cluster *natsctr.Cluster, js jetstream.JetStream) 
 
 func testDedup(t *testing.T, js jetstream.JetStream) {
 	ctx := t.Context()
-	for _, c := range []struct{ stream, prefix string }{
-		{natsx.StreamWebEvents, natsx.SubjectWebEvents},
-		{natsx.StreamAPIMetrics, natsx.SubjectAPIMetrics},
-		{natsx.StreamEdgeStats, natsx.SubjectEdgeStats},
+	for _, c := range []struct{ stream, subject string }{
+		{natsx.StreamWebEvents, natsx.Subject(natsx.SubjectWebEvents, "dedup-test.00")},
+		{natsx.StreamAPIMetrics, natsx.Subject(natsx.SubjectAPIMetrics, "dedup-test")},
+		{natsx.StreamEdgeStats, natsx.Subject(natsx.SubjectEdgeStats, "dedup-test")},
 	} {
-		subject := natsx.Subject(c.prefix, "dedup-test")
+		subject := c.subject
 		id := fmt.Sprintf("dedup-%d", time.Now().UnixNano())
 		a1, err := natsx.PublishDedup(ctx, js, c.stream, subject, id, []byte("one"), nil)
 		require.NoError(t, err, c.stream)
@@ -293,12 +293,12 @@ func testPullLoop(t *testing.T, js jetstream.JetStream) {
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 	site := fmt.Sprintf("pull-%d", time.Now().UnixNano())
-	subject := natsx.Subject(natsx.SubjectWebEvents, site)
+	subject := natsx.Subject(natsx.SubjectWebEvents, site) + ".05"
 	for _, body := range []string{"ok", "flaky", "bad"} {
 		_, err := natsx.PublishDedup(ctx, js, natsx.StreamWebEvents, subject, site+body, []byte(body), nil)
 		require.NoError(t, err)
 	}
-	cons, err := js.Consumer(ctx, natsx.StreamWebEvents, natsx.ConsumerReplayer)
+	cons, err := js.Consumer(ctx, natsx.StreamWebEvents, natsx.ConsumerPartition(5))
 	require.NoError(t, err)
 
 	var mu sync.Mutex
