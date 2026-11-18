@@ -13,7 +13,7 @@ RUN --mount=type=cache,target=/root/.m2 mvn --batch-mode --no-transfer-progress 
 FROM eclipse-temurin:25.0.5_8-jre-resolute@sha256:480ef64e4540d45b0301e8afb7873bd3fa61ce93c5f66273eb569420718f38e2
 # created up front: a directory ADD creates would take the jar's mode
 WORKDIR /app
-# docs:start agent (shown on the console's api analytics setup page)
+# docs:start agent (shown on the console's api connect page)
 # the agent jar from maven central, pinned by version and its sha256
 ADD --chmod=444 --checksum=sha256:e43a270df53c6f423e0ab157be9c27ccc01d5dc3232e162fe54777573db2f149 \
     https://repo1.maven.org/maven2/io/opentelemetry/javaagent/opentelemetry-javaagent/2.33.1/opentelemetry-javaagent-2.33.1.jar \
