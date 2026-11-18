@@ -188,6 +188,11 @@ export function formatDateTimeShort(value: string | Date, now: Date = new Date()
   return `${monthDayFmt.format(d)}, ${clockFmt.format(d)} UTC`;
 }
 
+// an iso week by its first day, "Week of Oct 27", as the console names weeks
+export function formatWeekOf(from: string | Date): string {
+  return `Week of ${monthDayFmt.format(at(from))}`;
+}
+
 // two instants: "Nov 18, 2026, 14:00 to 15:00 UTC" on one day,
 // "Nov 17, 2026, 14:00 to Nov 18, 2026, 15:00 UTC" across days
 export function formatTimeRange(from: string | Date, to: string | Date): string {

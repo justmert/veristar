@@ -592,7 +592,7 @@ function Figures({ v }: { v: SCFView }) {
               <Figure label="Transactions">
                 {chainMissing ? <Missing reason={chainMissing} /> : formatCount(chain.transactions)}
               </Figure>
-              <Figure label="Verified ids">
+              <Figure label="Verified IDs">
                 {formatCount(chain.ids_verified)} of {formatCount(chain.ids)}
               </Figure>
               <Figure label="Days without data" definition={DAYS_WITHOUT_DATA} name="days-missing">

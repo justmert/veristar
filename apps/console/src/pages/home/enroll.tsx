@@ -71,7 +71,7 @@ export function validateEnrollment(values: EnrollValues): EnrollErrors {
   put("stellarUsage", v.stellarUsage(values.stellarUsage));
   put("scfRoundUrl", v.httpsUrl(values.scfRoundUrl.trim(), false));
   const ids = splitIds(values.stellarIds);
-  if (ids.length > 20) errors.stellarIds = "At most 20 ids.";
+  if (ids.length > 20) errors.stellarIds = "At most 20 IDs.";
   else {
     const bad = ids.findIndex((id) => v.strkey(id) !== null);
     if (bad >= 0) errors.stellarIds = `${ids[bad]}: ${v.fieldMessage("invalid_strkey")}`;
@@ -379,11 +379,11 @@ export function EnrollForm({ termsVersion }: { termsVersion: string }) {
                 required
               />
               <TextAreaField
-                label="Account or contract ids"
+                label="Account or contract IDs"
                 name="stellar_ids"
                 optional
                 rows={3}
-                hint="Up to 20 ids that start with G, M or C. Put one id on each line."
+                hint="Up to 20 IDs that start with G, M or C. Put one ID on each line."
                 className="font-mono text-small"
                 autoCapitalize="characters"
                 spellCheck={false}

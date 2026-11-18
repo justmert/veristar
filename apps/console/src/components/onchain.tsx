@@ -5,7 +5,7 @@ import type { ChainId, OnchainView, OnchainWeek } from "@/api/onchain";
 import { Missing } from "@/components/states";
 import { Pill } from "@/components/status";
 import { Tooltip } from "@/components/ui/tooltip";
-import { countOf, formatCount, formatDateRange } from "@/lib/format";
+import { countOf, formatCount, formatDateRange, formatWeekOf } from "@/lib/format";
 import { METHOD_TEXT, missingReasons, missingText, shortKey } from "@/lib/onchain";
 
 // the parts of the on-chain witness that the on-chain page and the operator
@@ -126,8 +126,8 @@ export function WeeklyActiveList({ weeks, label }: { weeks: OnchainWeek[]; label
               data-week={w.week}
               className="flex min-w-0 flex-col gap-1 rounded-md border border-line bg-sunken px-3 py-2"
             >
-              <span className="text-caption text-fg-2">
-                {w.week}
+              <span className="text-caption text-fg-2" title={w.week}>
+                {formatWeekOf(w.from)}
                 <span className="sr-only">, {formatDateRange(w.from, w.to)}, UTC</span>
               </span>
               {w.active_accounts === null ? (
@@ -152,7 +152,8 @@ export function WeeklyActiveList({ weeks, label }: { weeks: OnchainWeek[]; label
       </ol>
       {shared ? (
         <p className="text-caption text-fg-2" data-missing={shared}>
-          {missingText(shared)}.
+          {/* said once for every week, so it names them all */}
+          {missingText(shared).replace(/for this week$/, "for any week in this range")}.
         </p>
       ) : null}
     </div>

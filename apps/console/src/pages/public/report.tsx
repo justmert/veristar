@@ -473,7 +473,7 @@ function ReportBody({ doc, signature }: { doc: ReportDocument; signature: ReactN
               formatCount(doc.onchain.transactions)
             )}
           </Figure>
-          <Figure label="Verified ids">
+          <Figure label="Verified IDs">
             {formatCount(doc.onchain.ids_verified)} of {formatCount(doc.onchain.ids)}
           </Figure>
           <Figure label="Days without data" title={DAYS_WITHOUT_DATA}>

@@ -33,10 +33,10 @@ describe("enrollment form", () => {
   it("names the account id that is not a valid strkey", async () => {
     stubFetch([]);
     const host = await render(<EnrollForm termsVersion={f.TERMS_VERSION} />);
-    await type(byLabel(host, "Account or contract ids"), `${f.G_KEY}\n${f.G_BAD_CHECKSUM}`);
+    await type(byLabel(host, "Account or contract IDs"), `${f.G_KEY}\n${f.G_BAD_CHECKSUM}`);
     await type(byLabel(host, "Website"), "http://example.org");
     await click(byRole(host, "button", "Enroll project"));
-    expect(errorOf(host, "Account or contract ids")).toContain(f.G_BAD_CHECKSUM);
+    expect(errorOf(host, "Account or contract IDs")).toContain(f.G_BAD_CHECKSUM);
     expect(errorOf(host, "Website")).toBe("Enter a full https:// address.");
   });
 
@@ -46,7 +46,7 @@ describe("enrollment form", () => {
     await type(byLabel(host, "Project name"), "  Stellar DEX ");
     await type(byLabel(host, "Website"), "https://example.org");
     await type(byLabel(host, "How does the project use Stellar?"), "Soroban AMM on mainnet");
-    await type(byLabel(host, "Account or contract ids"), `${f.G_KEY}, ${f.C_KEY}`);
+    await type(byLabel(host, "Account or contract IDs"), `${f.G_KEY}, ${f.C_KEY}`);
     await click(byLabel(host, "I accept the") as unknown as HTMLElement);
     await click(byRole(host, "button", "Enroll project"));
     await waitFor(() => expect(host.textContent).toContain("sites page"));
@@ -81,10 +81,10 @@ describe("enrollment form", () => {
     await type(byLabel(host, "Short name"), "stellar-dex");
     await type(byLabel(host, "Website"), "https://example.org");
     await type(byLabel(host, "How does the project use Stellar?"), "AMM");
-    await type(byLabel(host, "Account or contract ids"), `${f.G_KEY}\n${f.C_KEY}`);
+    await type(byLabel(host, "Account or contract IDs"), `${f.G_KEY}\n${f.C_KEY}`);
     await click(byLabel(host, "I accept the") as unknown as HTMLElement);
     await click(byRole(host, "button", "Enroll project"));
-    await waitFor(() => expect(errorOf(host, "Account or contract ids")).toContain(f.C_KEY));
+    await waitFor(() => expect(errorOf(host, "Account or contract IDs")).toContain(f.C_KEY));
     expect(errorOf(host, "Website")).toBe("Enter a full https:// address.");
 
     await click(byRole(host, "button", "Enroll project"));
