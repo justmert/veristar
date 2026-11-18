@@ -86,19 +86,20 @@ A stored report never changes, so a version 1 or 2 report keeps its layout and s
 the signature covers its own bytes, and the checks below read only members every version shares. A
 reader of the numbers reads `version` first.
 
-Method versions, version 1:
+### Method versions
 
-| Member | Definition |
-|---|---|
-| `web_metrics` | [web metrics](web-metrics.md): primary band, visitors unique per UTC day and site, summed over days and sites |
-| `api_metrics` | section 8 of the control plane API: metric rows over span rows per service, percentiles from summed histogram buckets. Version 2 leaves infrastructure requests (CORS preflights, health and probe routes, known health checkers; section 7.4) out of every number |
-| `onchain` | section 15: Horizon operations of accounts, Stellar RPC events of contracts. Version 2 adds the calls per contract function of section 15.9 |
-| `cohort` | section 19: change against the previous period of equal length, `cume_dist` percentiles in the cohort |
-| `integrity_rules` | section 9 of [bot and inflation defences](../security/bot-and-inflation.md) |
-| `route_normaliser` | the route normalisation of the collector |
+`methods` records the version of each definition below. A change of any definition raises its
+version, so a reader always knows which rules produced a report. A new report carries the
+current version of each:
 
-A change of any definition raises its version, so a reader always knows which rules produced a
-report.
+| Member | Current version | Definition |
+|---|---|---|
+| `web_metrics` | `1` | [web metrics](web-metrics.md): primary band, visitors unique per UTC day and site, summed over days and sites |
+| `api_metrics` | `2` | section 8 of the control plane API: metric rows over span rows per service, percentiles from summed histogram buckets. Version 2 leaves infrastructure requests (CORS preflights, health and probe routes, known health checkers; section 7.4) out of every number; version 1 counted them |
+| `onchain` | `2` | section 15: Horizon operations of accounts, Stellar RPC events of contracts. Version 2 adds the calls per contract function of section 15.9 |
+| `cohort` | `1` | section 19: change against the previous period of equal length, `cume_dist` percentiles in the cohort |
+| `integrity_rules` | `2` | section 9 of [bot and inflation defences](../security/bot-and-inflation.md). Version 2 adds the page signals of tracker 1.3.0 (framed share and never-visible share) to version 1. The member lists the versions that graded the period's days, so a period graded across the change holds `[1, 2]` |
+| `route_normaliser` | `2` | the route normalisation of the collector |
 
 ## The signing key
 
