@@ -2,6 +2,7 @@ package metricswriter
 
 import (
 	"errors"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -439,6 +440,25 @@ func TestStreamIDContinuesLegacyState(t *testing.T) {
 	}
 	if p.Key() == legacy.Key() {
 		t.Fatal("the stream id is not part of the key")
+	}
+}
+
+// the request sums the platform keeps in 64-bit integers must not reach
+// the limit within a month of a tenant sending the largest points at its
+// full rate. the bound was a billion, with which a single day of such
+// points overflowed a daily row and every read of that tenant's day.
+func TestPointRequestBoundKeepsSumsInRange(t *testing.T) {
+	const month = 31 * 24 * 60 * 60
+	perSecond := uint64(MaxTenantPointsPerSecond) * MaxPointRequests
+	if perSecond > math.MaxInt64/month {
+		t.Fatalf("a month at the full rate adds %d per second, more than the 64-bit limit allows (%d)", perSecond, math.MaxInt64/month)
+	}
+	// twenty million requests in one point: within the old bound, refused now
+	s := newState()
+	now := int64(1_700_000_000) * sec
+	p := Point{Tenant: "t1", ResourceHash: "r1", Temporality: Delta, Start: now, Time: now + sec, Count: 20_000_000, Counts: bk(20_000_000)}
+	if _, _, err := s.Apply(&p); !errors.Is(err, ErrInvalidPoint) {
+		t.Fatalf("a point of twenty million requests: %v", err)
 	}
 }
 

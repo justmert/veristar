@@ -107,6 +107,10 @@ here, before they take effect, as the processing terms require
 - The collector drops a histogram point whose count is not the total of its
   buckets, counted as `count` in `tenantguard_invalid_items`, as OTLP
   requires; the metrics writer refused each one alone with a log line.
+- The metrics writer refuses a point that adds more than ten million
+  requests (it refused above a billion). At the full rate limit a tenant
+  with such points brought a day's request total past the 64-bit limit,
+  which parked the daily rollup and failed every read of that day.
 
 ### Fixed
 
