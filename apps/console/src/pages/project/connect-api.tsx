@@ -1,7 +1,7 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { cn } from "@veristar/brand/cn";
 import { fade } from "@veristar/brand/motion";
-import { ArrowRight, Ban, Check, ChevronRight, ExternalLink, KeyRound } from "lucide-react";
+import { ArrowRight, Ban, Check, ExternalLink, KeyRound } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { type FormEvent, type ReactNode, useId, useState } from "react";
 import { Link } from "react-router";
@@ -12,6 +12,7 @@ import type { OtlpToken, OtlpTokenCreated, Tenant } from "@/api/schemas";
 import { CodeBlock, CopyField } from "@/components/code-block";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { type Column, DataTable } from "@/components/data-table";
+import { Disclosure } from "@/components/disclosure";
 import { FormMessage } from "@/components/error-panel";
 import { TextField } from "@/components/form-field";
 import { Notice } from "@/components/notice";
@@ -256,16 +257,14 @@ function Exporter({ endpoint }: { endpoint: string | null }) {
 // a closed section of extra detail
 function More({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <details className="group min-w-0 rounded-lg border border-line text-small">
-      <summary className="flex min-h-10 cursor-pointer list-none items-center gap-2 rounded-lg px-3 text-fg-2 transition-colors duration-(--vs-duration-press) ease-standard hover:text-fg focus-ring max-lg:min-h-(--vs-control-touch) [&::-webkit-details-marker]:hidden">
-        <ChevronRight
-          aria-hidden
-          className="size-4 transition-transform duration-(--vs-duration-press) ease-standard group-open:rotate-90"
-        />
-        {title}
-      </summary>
-      <div className="flex min-w-0 flex-col gap-3 border-t border-line p-3">{children}</div>
-    </details>
+    <Disclosure
+      summary={title}
+      className="min-w-0 bg-transparent text-small"
+      summaryClassName="px-3 text-small font-normal text-fg-2 hover:bg-transparent hover:text-fg"
+      bodyClassName="flex min-w-0 flex-col gap-3 p-3"
+    >
+      {children}
+    </Disclosure>
   );
 }
 

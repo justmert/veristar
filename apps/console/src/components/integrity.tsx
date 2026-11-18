@@ -13,6 +13,7 @@ import type {
   TenantRef,
 } from "@/api/schemas";
 import { CoverageNote } from "@/components/coverage";
+import { Disclosure } from "@/components/disclosure";
 import { Panel } from "@/components/panel";
 import { ErrorState, LoadingState, Missing, Skeleton } from "@/components/states";
 import { Pill, type Tone } from "@/components/status";
@@ -127,17 +128,20 @@ function SiteDays({ site, name }: { site: IntegritySite; name: string }) {
   // newest day first: the day in progress is what a reader checks first
   const days = [...site.days].reverse();
   return (
-    <details
-      className="group rounded-md border border-line bg-sunken"
+    <Disclosure
       data-site={site.site_id}
-      open={false}
+      className="rounded-md bg-sunken"
+      summaryClassName="flex-wrap gap-x-3 gap-y-1 rounded-md px-3 text-small font-normal"
+      bodyClassName="p-0"
+      summary={
+        <>
+          <span className="min-w-0 truncate text-small font-medium text-fg">{name}</span>
+          <GradeBadge grade={site.grade} />
+          <span className="text-caption text-fg-3">{dayCountsText(site)}</span>
+        </>
+      }
     >
-      <summary className="flex cursor-pointer flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 focus-ring">
-        <span className="min-w-0 truncate text-small font-medium text-fg">{name}</span>
-        <GradeBadge grade={site.grade} />
-        <span className="text-caption text-fg-3">{dayCountsText(site)}</span>
-      </summary>
-      <ol className="flex flex-col divide-y divide-line border-t border-line">
+      <ol className="flex flex-col divide-y divide-line">
         {days.map((d) => (
           <li key={d.day} className="flex flex-col gap-2 px-3 py-2" data-day={d.day}>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -175,7 +179,7 @@ function SiteDays({ site, name }: { site: IntegritySite; name: string }) {
           </li>
         ))}
       </ol>
-    </details>
+    </Disclosure>
   );
 }
 

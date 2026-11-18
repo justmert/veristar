@@ -180,6 +180,14 @@ export function formatDateTimeUtc(value: string | Date): string {
   return `${formatDate(d)}, ${clockFmt.format(d)} UTC`;
 }
 
+// a date and time where the width is tight (a table cell, a phone card):
+// "Nov 18, 08:23 UTC" in the current utc year, the full form otherwise
+export function formatDateTimeShort(value: string | Date, now: Date = new Date()): string {
+  const d = at(value);
+  if (d.getUTCFullYear() !== now.getUTCFullYear()) return formatDateTimeUtc(d);
+  return `${monthDayFmt.format(d)}, ${clockFmt.format(d)} UTC`;
+}
+
 // two instants: "Nov 18, 2026, 14:00 to 15:00 UTC" on one day,
 // "Nov 17, 2026, 14:00 to Nov 18, 2026, 15:00 UTC" across days
 export function formatTimeRange(from: string | Date, to: string | Date): string {
@@ -223,6 +231,17 @@ export function formatTick(value: string | Date, unit: TickUnit): string {
 // the utc day of an instant, as the api names days: "2026-11-18"
 export function utcDay(value: Date = new Date()): string {
   return value.toISOString().slice(0, 10);
+}
+
+// ------------------------------------------------------------------ text
+
+// a long name or slug cut in the middle, so its start and its end (where
+// stress-project-01 and stress-project-12 differ) both stay: "stress-pr…t-12"
+export function truncateMiddle(text: string, max: number): string {
+  if (text.length <= max) return text;
+  const keep = max - 1;
+  const head = Math.ceil(keep / 2);
+  return `${text.slice(0, head)}…${text.slice(text.length - (keep - head))}`;
 }
 
 // ---------------------------------------------------------------- places

@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ArrowLeft, ChevronRight } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { type FormEvent, type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { ApiError } from "@/api/client";
@@ -13,6 +13,7 @@ import {
   isEmptyCohort,
   validateCohort,
 } from "@/components/cohort";
+import { Disclosure } from "@/components/disclosure";
 import { FormMessage } from "@/components/error-panel";
 import { TextAreaField, TextField } from "@/components/form-field";
 import { PageHeader } from "@/components/page-header";
@@ -230,21 +231,21 @@ function Optional({
   children: ReactNode;
 }) {
   return (
-    <details
+    <Disclosure
       open={open}
-      onToggle={(e) => onToggle(e.currentTarget.open)}
-      className="group rounded-lg border border-line"
+      onToggle={onToggle}
+      className="bg-transparent"
+      summaryClassName="min-h-(--vs-control-touch) font-normal"
+      bodyClassName="flex flex-col gap-4"
+      summary={
+        <>
+          <span className="font-medium">{title}</span>
+          <span className="text-small text-fg-2">{hint}</span>
+        </>
+      }
     >
-      <summary className="flex min-h-(--vs-control-touch) cursor-pointer list-none items-center gap-2 rounded-lg px-4 py-2 text-body text-fg transition-colors duration-(--vs-duration-press) ease-standard hover:bg-hover focus-ring [&::-webkit-details-marker]:hidden">
-        <ChevronRight
-          aria-hidden
-          className="size-4 shrink-0 text-fg-2 transition-transform duration-(--vs-duration-press) ease-standard group-open:rotate-90"
-        />
-        <span className="font-medium">{title}</span>
-        <span className="text-small text-fg-2">{hint}</span>
-      </summary>
-      <div className="flex flex-col gap-4 border-t border-line p-4">{children}</div>
-    </details>
+      {children}
+    </Disclosure>
   );
 }
 
