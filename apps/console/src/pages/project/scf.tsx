@@ -736,7 +736,7 @@ export function SignedReports() {
                 value={to}
                 onChange={setTo}
                 error={errors.to}
-                hint={`UTC day, ${lastFinalDay(new Date())} or earlier`}
+                hint={`UTC day, ${formatDate(lastFinalDay(new Date()))} or earlier`}
               />
             </div>
             <p className="text-caption text-fg-2">
