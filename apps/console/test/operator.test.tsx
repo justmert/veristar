@@ -380,6 +380,36 @@ describe("audit log", () => {
     expect(auditSentence(system).object).toBeNull();
     expect(actorName({ ...system, actor: "mcp_credential:x" })).toBe("An AI assistant");
     expect(actorName({ ...system, actor: `user:${f.TENANT_ID}` })).toBe("A person");
+    // an unnamed report or on-chain id reads once, with its kind
+    const view = auditSentence({
+      ...f.auditEntryBody,
+      action: "report.view",
+      target: "report:r1",
+      detail: {},
+    });
+    expect(`${view.verb} ${view.object}`).toBe("opened a report");
+    const check = auditSentence({
+      ...f.auditEntryBody,
+      action: "onchain.challenge",
+      target: "chain_id:c1",
+      detail: {},
+    });
+    expect(check.object).toBe("an on-chain id");
+    const own = auditSentence({
+      ...f.auditEntryBody,
+      action: "user.sign_in",
+      actor: "user:u1",
+      target: "user:u1",
+      detail: {},
+    });
+    expect([own.verb, own.object]).toEqual(["signed in", null]);
+    const mode = auditSentence({
+      ...f.auditEntryBody,
+      action: "settings.enrollment_mode",
+      target: "settings:enrollment_mode",
+      detail: {},
+    });
+    expect([mode.verb, mode.object]).toEqual(["changed the enrollment mode", null]);
   });
 
   it("folds a run of the same system event, never the actions of people", () => {
