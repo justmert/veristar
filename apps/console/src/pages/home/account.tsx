@@ -69,11 +69,7 @@ const METHOD_NAME: Record<Method, string> = {
   passkey: "Your passkey",
 };
 
-const HEADER = {
-  title: "Account",
-  description:
-    "How you sign in to the console and the theme of this browser. Operators also manage their passkeys here.",
-};
+const HEADER = { title: "Account" };
 
 // the signed-in person's own account: the sign-in methods linked to it
 // (contract 4.1.8), an operator's passkeys (5.15), and the deletion of the
@@ -104,12 +100,16 @@ export function AccountPage() {
       </div>
     );
   return (
-    <div className="flex max-w-prose flex-col gap-8">
+    <div className="flex flex-col gap-8">
       <PageHeader {...HEADER} />
-      <SignInMethods me={me.data} />
-      {me.data.user.is_operator ? <OperatorPasskeys userName={me.data.user.display_name} /> : null}
-      <Appearance />
-      <DeleteAccount me={me.data} />
+      <div className="flex max-w-prose flex-col gap-8">
+        <SignInMethods me={me.data} />
+        {me.data.user.is_operator ? (
+          <OperatorPasskeys userName={me.data.user.display_name} />
+        ) : null}
+        <Appearance />
+        <DeleteAccount me={me.data} />
+      </div>
     </div>
   );
 }
@@ -255,15 +255,9 @@ function SignInMethods({ me }: { me: Me }) {
 
   return (
     <section aria-labelledby="methods-h" className="flex flex-col gap-4">
-      <div className="flex flex-col gap-1">
-        <h2 id="methods-h" className="text-title text-fg">
-          Sign-in methods
-        </h2>
-        <p className="max-w-prose text-small text-fg-2">
-          Each method signs in to this account. Link a second method, so you keep access if you lose
-          one.
-        </p>
-      </div>
+      <h2 id="methods-h" className="text-title text-fg">
+        Sign-in methods
+      </h2>
       {linkError ? (
         <Notice tone="critical" role="alert" title="GitHub was not linked">
           {LINK_ERRORS[linkError] ?? LINK_ERROR_OTHER}
@@ -504,26 +498,13 @@ function DeleteAccount({ me }: { me: Me }) {
 
   return (
     <section aria-labelledby="danger-h" className="flex flex-col gap-4">
-      <h2 id="danger-h" className="text-title text-fg">
-        Danger zone
-      </h2>
-      <div className="flex flex-col gap-4 rounded-lg border border-critical-line bg-raised p-5 max-sm:p-4">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="flex min-w-0 max-w-prose flex-col gap-2">
-            <span className="text-body font-medium text-fg">Delete account</span>
-            <ul className="flex list-disc flex-col gap-1 pl-5 text-small text-fg-2">
-              <li>You leave all your projects and lose access to their dashboards.</li>
-              <li>Your sessions, AI access keys and AI connections end.</li>
-              <li>Open invites to your GitHub account, wallet or passkey are deleted.</li>
-              <li>
-                Your GitHub id, Stellar address and passkey are removed. The audit log keeps its
-                entries, which name only your account id.
-              </li>
-              <li>A later sign-in with any method makes a new, empty account.</li>
-            </ul>
-          </div>
+      <div className="flex flex-col gap-4 border-t border-line pt-6">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <h2 id="danger-h" className="text-title text-fg">
+            Delete account
+          </h2>
           <Button
-            variant="destructive-outline"
+            variant="outline"
             className="max-lg:h-(--vs-control-touch)"
             onClick={() => {
               del.reset();
@@ -563,7 +544,20 @@ function DeleteAccount({ me }: { me: Me }) {
         open={open}
         onOpenChange={setOpen}
         title="Delete your account?"
-        description={`The account ${me.user.display_name} is deleted and you are signed out everywhere. You cannot undo this.`}
+        description={
+          <div className="flex flex-col gap-2">
+            <p>
+              The account {me.user.display_name} is deleted and you are signed out everywhere. You
+              cannot undo this.
+            </p>
+            <ul className="flex list-disc flex-col gap-1 pl-5 text-small">
+              <li>You leave all your projects.</li>
+              <li>Your sessions, AI keys, AI connections and open invites end.</li>
+              <li>Your GitHub id, Stellar address and passkey are removed.</li>
+              <li>A later sign-in makes a new, empty account.</li>
+            </ul>
+          </div>
+        }
         cancelLabel="Keep my account"
         confirmLabel="Delete account"
         pendingLabel="Deleting"
@@ -588,14 +582,9 @@ function Appearance() {
   const theme = useTheme();
   return (
     <section aria-labelledby="theme-h" className="flex flex-col gap-4">
-      <div className="flex flex-col gap-1">
-        <h2 id="theme-h" className="text-title text-fg">
-          Theme
-        </h2>
-        <p className="max-w-prose text-small text-fg-2">
-          This browser keeps the choice. System follows your device.
-        </p>
-      </div>
+      <h2 id="theme-h" className="text-title text-fg">
+        Theme
+      </h2>
       <Segmented<ThemeChoice>
         label="Theme"
         value={theme.choice}
