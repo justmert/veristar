@@ -269,7 +269,8 @@ function ProjectCard({
             {/* a long slug keeps its start and its end, which tell similar
                 slugs apart */}
             <span className="truncate font-mono" title={t.slug}>
-              {truncateMiddle(t.slug, 24)}
+              <span className="sm:hidden">{truncateMiddle(t.slug, 14)}</span>
+              <span className="max-sm:hidden">{truncateMiddle(t.slug, 24)}</span>
             </span>
             <span aria-hidden>·</span>
             <span className="shrink-0">{ROLE[t.role]}</span>
