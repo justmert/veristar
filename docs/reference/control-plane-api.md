@@ -2906,7 +2906,10 @@ tenant.
 2. The control plane records the last sequence of `WEB_EVENTS`, inserts the row
    (`running`, `heartbeat_at`), writes `erasure.request` and answers 202.
 3. The run renews `heartbeat_at` every 10 seconds and waits until `WEB_EVENTS`
-   holds no message on `web.events.<site>` at or below the recorded sequence. If
+   holds no message of the site at or below the recorded sequence. The replayer
+   partitions a site's events by visitor, so the run checks every subject of
+   the site: `web.events.<site>.<partition>` (two digits) and the subject
+   without a partition, `web.events.<site>`, that an older gateway writes. If
    that takes longer than `ERASURE_QUEUE_WAIT`, it fails with nothing deleted.
 4. `visitor_today`: reads `visit.<site>.<vt>` in `visit_state`, purges it, and
    deletes each Umami session it names (both bands); deletes `WEB_DLQ` messages
@@ -3117,8 +3120,9 @@ tenant status and the operator flag again. Token errors follow RFC 6749 5.2:
 `invalid_request`, `invalid_client` (401), `invalid_grant`,
 `unsupported_grant_type`, `invalid_target`.
 
-Consent: the console page `/ai/consent` signs the person in with GitHub if
-needed (the sealed request waits in the tab's session storage), shows the
+Consent: the console page `/ai/consent` sends a person without a session to
+the sign-in page (GitHub, Stellar wallet or passkey, 4.1) and back, while the
+sealed request waits in the tab's session storage. It then shows the
 client name, where the browser returns and what is granted, and lists the
 person's projects with status `active` or `pending`; operators also see "the
 operator view". Approve writes the code and answers `{redirect_to}`, which the
@@ -3203,6 +3207,11 @@ filters (the cohort filters of 19.1 included), sorts and pages,
 and `get_threshold_rule_matches` (19.4).
 
 **12.4.5 Integrity** for a project: `get_web_integrity` (17.2).
+
+**12.4.6 On-chain activity and "What SCF sees"**: the project tools
+`get_onchain_activity` (15.3), `get_contract_functions` (15.9) and
+`get_scf_view` (16.3), and the operator tools `get_tenant_onchain` and
+`get_tenant_contract_functions` (15.7).
 
 No MCP resources or prompts are offered; the server's instructions tell a
 model the order to call tools in.
@@ -3756,7 +3765,7 @@ charset=utf-8` as an attachment, streamed, one header row:
   formula (starting with `=`, `+`, `-`, `@`, tab or carriage return) gets a
   leading apostrophe.
 - The API exports end their numbers with an `infrastructure_requests` column
-  (7.4).
+  (7.4). The web exports carry the coverage columns of 17.5.
 - Every export writes one `export.csv` audit row (3.3) with the query it
   answered.
 
@@ -3769,13 +3778,14 @@ security keys every table on the caller's tenant:
 `day, web_pageviews, web_visitors, web_visits, web_bounces,
 web_totaltime_seconds, web_quarantine_pageviews, api_requests,
 api_errors_4xx, api_errors_5xx, api_infrastructure_requests, onchain_ids_read, onchain_operations,
-onchain_transactions, integrity_grade`
+onchain_transactions, integrity_grade, script_requests, gpc_requests, unmeasured_share`
 
 The web columns are the project's `agg.web_daily` rows, summed over its sites
 (empty on a day not aggregated yet); the API columns are the daily series of
 7.6 (0 on a day without requests, as on the API traffic page); the on-chain
-columns are as in 16.1, and `integrity_grade` is the day's grade of 17. It
-writes one `export.csv` audit row. A contract's calls per function export
+columns are as in 16.1, `integrity_grade` is the day's grade of 17, and the
+last three columns are the day's coverage (17.5). It writes one `export.csv`
+audit row. A contract's calls per function export
 under `GET /api/tenants/{tenant_id}/onchain/ids/{chain_id}/functions.csv`
 (15.9).
 
