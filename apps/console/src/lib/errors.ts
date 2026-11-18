@@ -155,12 +155,16 @@ export function isNotFound(err: unknown): boolean {
 }
 
 const UUID = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi;
-const PATH = /(^|\s)\/[\w./{}:%-]+/g;
+const PATH = /(^|\s)\/[\w./{}:%?&=,+-]+/g;
 
 // the error as one sentence for a person: errorText without the transport
 // detail (reference, code, status, ids and paths). the detail goes in
 // errorDetails, which "Copy details" puts on the clipboard.
 export function errorMessage(err: unknown): string {
+  // an answer without the error envelope (a proxy, a crash) has no sentence
+  // for a person; its status and path go only in the copied details
+  if (err instanceof ApiError && err.code === "unexpected_response")
+    return "The service answered with an error. Try again.";
   const text = errorText(err)
     .replace(/\s*Reference \S+?\.(?=\s|$)/g, "")
     .replace(/\s*\([a-z_]+, HTTP \d+\)/g, "")

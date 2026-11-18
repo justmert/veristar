@@ -5,10 +5,11 @@ import type { ReactNode } from "react";
 import { isRouteErrorResponse, Link, useNavigate, useRouteError } from "react-router";
 import { ApiError } from "@/api/client";
 import { api } from "@/api/endpoints";
+import { CopyButton } from "@/components/copy-button";
 import { FormMessage } from "@/components/error-panel";
 import { PublicFrame } from "@/components/public-frame";
 import { Button } from "@/components/ui/button";
-import { errorText } from "@/lib/errors";
+import { errorDetails, errorMessage } from "@/lib/errors";
 import { queryClient } from "@/query-client";
 
 // a whole page that stands in for the one asked for (not found, removed,
@@ -121,12 +122,10 @@ export function RouteErrorPage() {
       </PublicFrame>
     );
   }
-  const text = errorText(error);
-  // some error texts already carry the request id; it is shown once
-  const ref =
-    error instanceof ApiError && error.requestId && !text.includes(error.requestId)
-      ? `Reference ${error.requestId}`
-      : null;
+  // the sentence for a person; the status, path and request id go in the
+  // copied details
+  const text = errorMessage(error);
+  const ref = error instanceof ApiError && error.requestId ? `Reference ${error.requestId}` : null;
   return (
     <PublicFrame footer={false}>
       <StopPage
@@ -147,11 +146,12 @@ export function RouteErrorPage() {
             <Button asChild variant="outline" className="max-sm:h-(--vs-control-touch)">
               <Link to="/">Go to your projects</Link>
             </Button>
+            <CopyButton text={errorDetails(error)} label="Copy details" variant="ghost" />
           </>
         }
       >
         <p role="alert">{text}</p>
-        <p>Reload the page. If it happens again, report it with the text above.</p>
+        <p>Reload the page. If it happens again, report it with the copied details.</p>
       </StopPage>
     </PublicFrame>
   );
