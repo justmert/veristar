@@ -1,27 +1,24 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ArrowRight, Ban, ExternalLink, KeyRound, MoreHorizontal } from "lucide-react";
-import { type FormEvent, type ReactNode, useId, useState } from "react";
+import { ArrowRight, Ban, ExternalLink, KeyRound } from "lucide-react";
+import { type ReactNode, useId, useState } from "react";
 import { Link } from "react-router";
 import { ApiError } from "@/api/client";
 import { api } from "@/api/endpoints";
 import { keys, otlpTokensQuery } from "@/api/queries";
 import type { OtlpToken, OtlpTokenCreated, Tenant } from "@/api/schemas";
 import { CodeBlock } from "@/components/code-block";
-import { ConfirmDialog } from "@/components/confirm-dialog";
+import { CreateDialog } from "@/components/create-dialog";
 import { type Column, DataTable } from "@/components/data-table";
-import { FormMessage } from "@/components/error-panel";
 import { TextField } from "@/components/form-field";
 import { Notice } from "@/components/notice";
 import { PageHeader } from "@/components/page-header";
-import { SecretPanel } from "@/components/secret-panel";
+import { Section } from "@/components/panel";
 import { Missing } from "@/components/states";
 import { StatusDot } from "@/components/status";
 import { StatusBadge } from "@/components/status-badge";
 import { toast } from "@/components/toast";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Dialog } from "@/components/ui/dialog";
-import { Menu, MenuContent, MenuItem, MenuTrigger } from "@/components/ui/menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatDateTimeUtc } from "@/lib/format";
 import { siblingUrl } from "@/lib/hosts";
@@ -255,15 +252,6 @@ function TokensSection({
   onShowRevoked: (on: boolean) => void;
 }) {
   const revokedId = useId();
-  const [revoking, setRevoking] = useState<OtlpToken | null>(null);
-  const revoke = useMutation({
-    mutationFn: (t: OtlpToken) => api.revokeOtlpToken(tenantId, t.id),
-    onSuccess: async (_, t) => {
-      setRevoking(null);
-      toast.success(`${t.name} is revoked.`);
-      await queryClient.invalidateQueries({ queryKey: keys.otlpTokensAll(tenantId) });
-    },
-  });
   const columns: Column<OtlpToken>[] = [
     {
       key: "name",
@@ -308,47 +296,13 @@ function TokensSection({
           <Missing reason={NOT_USED} />
         ),
     },
-    {
-      key: "action",
-      mobile: true,
-      header: "Actions",
-      align: "right",
-      cell: (t) =>
-        t.status === "active" ? (
-          <Menu>
-            <MenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label={`Actions for ${t.name}`}
-                className="max-lg:size-(--vs-control-touch)"
-              >
-                <MoreHorizontal aria-hidden />
-              </Button>
-            </MenuTrigger>
-            <MenuContent align="end">
-              <MenuItem
-                tone="critical"
-                onSelect={() => {
-                  revoke.reset();
-                  setRevoking(t);
-                }}
-              >
-                <Ban aria-hidden />
-                Revoke
-              </MenuItem>
-            </MenuContent>
-          </Menu>
-        ) : null,
-    },
   ];
 
   return (
-    <section aria-labelledby="tokens-h" className="flex min-w-0 flex-col gap-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <h2 id="tokens-h" className="text-title text-fg">
-          Tokens
-        </h2>
+    <Section
+      title="Tokens"
+      count={list.data?.length ?? null}
+      actions={
         <span className="flex items-center gap-2">
           <Checkbox
             id={revokedId}
@@ -359,7 +313,8 @@ function TokensSection({
             Show revoked tokens
           </label>
         </span>
-      </div>
+      }
+    >
       {list.data && list.data.length === 0 ? (
         // nothing to list: one line, not an empty table
         <p className="text-small text-fg-2" data-tokens="none">
@@ -378,22 +333,28 @@ function TokensSection({
           onRetry={() => list.refetch()}
           loadingRows={2}
           empty={{ title: showRevoked ? "No tokens yet" : "No active tokens" }}
+          rowActions={(t) => [
+            t.status === "active" && {
+              label: "Revoke",
+              icon: <Ban aria-hidden />,
+              destructive: true,
+              confirm: {
+                title: `Revoke the token “${t.name}”?`,
+                description:
+                  "The collector refuses this token within seconds. Apps that still send with it get 401. You cannot undo this.",
+                confirmLabel: "Revoke token",
+                pendingLabel: "Revoking",
+                run: async () => {
+                  await api.revokeOtlpToken(tenantId, t.id);
+                  toast.success(`${t.name} is revoked.`);
+                  await queryClient.invalidateQueries({ queryKey: keys.otlpTokensAll(tenantId) });
+                },
+              },
+            },
+          ]}
         />
       )}
-      <ConfirmDialog
-        open={revoking !== null}
-        onOpenChange={(o) => {
-          if (!o) setRevoking(null);
-        }}
-        title={revoking ? `Revoke the token “${revoking.name}”?` : "Revoke the token?"}
-        description="The collector refuses this token within seconds. Apps that still send with it get 401. You cannot undo this."
-        confirmLabel="Revoke token"
-        pendingLabel="Revoking"
-        pending={revoke.isPending}
-        error={revoke.error}
-        onConfirm={() => revoking && revoke.mutate(revoking)}
-      />
-    </section>
+    </Section>
   );
 }
 
@@ -421,7 +382,8 @@ function createBlocked(tenant: Tenant, canCreate: boolean): ReactNode | null {
 }
 
 // the form, then the token once with the exporter written for it, in one
-// dialog
+// dialog. the plaintext lives only in this component's state and is gone
+// once the dialog closes (contract 6.2: shown once)
 function CreateTokenDialog({
   tenantId,
   open,
@@ -437,62 +399,20 @@ function CreateTokenDialog({
   docs: string | null;
   takenNames: string[];
 }) {
-  const [created, setCreated] = useState<OtlpTokenCreated | null>(null);
-  // the plaintext lives only here and is gone once the dialog closes
-  // (contract 6.2: shown once)
-  function close() {
-    setCreated(null);
-    onOpenChange(false);
-  }
-  return (
-    <Dialog
-      open={open}
-      onOpenChange={(o) => (o ? onOpenChange(true) : created ? undefined : close())}
-      title={created ? "Token created" : "Create a token"}
-    >
-      {created ? (
-        <SecretPanel
-          value={created.token}
-          noun="token"
-          name={created.name}
-          description="It is shown only this once."
-          onDone={close}
-        >
-          <Snippets endpoint={endpoint} docs={docs} token={created.token} />
-        </SecretPanel>
-      ) : open ? (
-        <CreateTokenForm tenantId={tenantId} onCreated={setCreated} takenNames={takenNames} />
-      ) : null}
-    </Dialog>
-  );
-}
-
-export function CreateTokenForm({
-  tenantId,
-  onCreated,
-  takenNames = [],
-}: {
-  tenantId: string;
-  onCreated: (t: OtlpTokenCreated) => void;
-  // the names of the live tokens, to warn on a second token with one name
-  takenNames?: string[];
-}) {
   const [values, setValues] = useState<TokenValues>({ name: "", environment: "" });
   const [errors, setErrors] = useState<TokenErrors>({});
   const taken = nameTaken(takenNames, values.name);
   const create = useMutation({
     mutationFn: (body: { name: string; environment?: string }) =>
       api.createOtlpToken(tenantId, body),
-    onSuccess: async (t) => {
-      setValues({ name: "", environment: "" });
-      onCreated(t);
+    onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: keys.otlpTokensAll(tenantId) });
     },
     onError: (err) => setErrors(serverTokenErrors(err)),
   });
+  const created: OtlpTokenCreated | undefined = create.data;
 
-  function submit(e: FormEvent) {
-    e.preventDefault();
+  function submit() {
     const found = validateToken(values);
     setErrors(found);
     if (Object.keys(found).length > 0) return;
@@ -501,11 +421,35 @@ export function CreateTokenForm({
   }
 
   return (
-    <form
-      noValidate
+    <CreateDialog
+      label="Create token"
+      title="Create a token"
+      trigger={false}
+      open={open}
+      onOpenChange={onOpenChange}
+      pending={create.isPending}
+      pendingLabel="Creating"
+      error={
+        create.error && Object.keys(serverTokenErrors(create.error)).length === 0
+          ? create.error
+          : null
+      }
       onSubmit={submit}
-      aria-label="Create a token"
-      className="max-w-prose flex flex-col gap-3"
+      onClosed={() => {
+        create.reset();
+        setValues({ name: "", environment: "" });
+        setErrors({});
+      }}
+      secret={
+        created
+          ? {
+              value: created.token,
+              noun: "token",
+              name: created.name,
+              children: <Snippets endpoint={endpoint} docs={docs} token={created.token} />,
+            }
+          : null
+      }
     >
       <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_12rem]">
         <TextField
@@ -541,21 +485,6 @@ export function CreateTokenForm({
           className="max-lg:h-(--vs-control-touch)"
         />
       </div>
-      <Button
-        type="submit"
-        className="w-fit max-lg:h-(--vs-control-touch)"
-        pending={create.isPending}
-      >
-        {create.isPending ? null : <KeyRound aria-hidden />}
-        {create.isPending ? "Creating" : "Create token"}
-      </Button>
-      <FormMessage
-        error={
-          create.error && Object.keys(serverTokenErrors(create.error)).length === 0
-            ? create.error
-            : null
-        }
-      />
-    </form>
+    </CreateDialog>
   );
 }

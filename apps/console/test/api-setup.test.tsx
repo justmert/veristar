@@ -25,7 +25,18 @@ const page = (items: unknown[]) => ({ items, next_cursor: null });
 
 // the create dialog opens from the first step, or the header once a token exists
 async function openCreate(host: HTMLElement) {
-  await click(byRole(host, "button", "Create token"));
+  const b = opener(host);
+  if (!b) throw new Error("no Create token button");
+  await click(b);
+}
+
+// a Create token button outside the (closed) dialog
+function opener(host: HTMLElement): HTMLElement | null {
+  return (
+    [...host.querySelectorAll("button")].find(
+      (b) => b.textContent?.trim() === "Create token" && !b.closest("dialog"),
+    ) ?? null
+  );
 }
 
 function submit(host: HTMLElement): HTMLElement {
@@ -92,7 +103,6 @@ describe("api analytics setup page (contract section 6)", () => {
     expect(calls[1]?.url).toBe(`/api/tenants/${f.TENANT_ID}/otlp-tokens`);
     expect(calls[1]?.headers.get("X-Requested-With")).toBe("sa-console");
     expect(calls[1]?.body).toEqual({ name: "Production API", environment: "production" });
-    expect(host.textContent).toContain("It is shown only this once");
     // the exporter of each stack is written for the new token: the copy
     // holds it, the code on screen only its start
     expect(host.querySelector("dialog [data-snippet=node]")?.textContent).toContain(
@@ -167,7 +177,7 @@ describe("api analytics setup page (contract section 6)", () => {
     const host = await renderRoutes(routes({ ...base, status: "suspended" }), path);
     await waitFor(() => expect(host.textContent).toContain("Production API"));
     expect(host.textContent).toContain("cannot be created while the project is suspended");
-    expect(() => byRole(host, "button", "Create token")).toThrow();
+    expect(opener(host)).toBeNull();
     expect(host.querySelector('button[aria-label="Actions for Production API"]')).not.toBeNull();
 
     stubFetch([{ status: 200, body: page([]) }]);
@@ -179,7 +189,7 @@ describe("api analytics setup page (contract section 6)", () => {
     stubFetch([{ status: 200, body: page([]) }]);
     const host = await renderRoutes(routes(base, false), path);
     await waitFor(() => expect(host.textContent).toContain("accepts the current terms"));
-    expect(() => byRole(host, "button", "Create token")).toThrow();
+    expect(opener(host)).toBeNull();
   });
 
   it("shows one short exporter per stack, node first, and no example files", async () => {

@@ -67,8 +67,7 @@ test("the api analytics page shows the steps and one short exporter per stack", 
 
 test("a token is created through the control plane and shown once", async () => {
   await page.getByRole("button", { name: "Create token" }).click();
-  const dialog = page.getByRole("dialog", { name: "Create a token" });
-  const form = dialog.getByRole("form", { name: "Create a token" });
+  const form = page.getByRole("dialog", { name: "Create a token" });
   await form.getByLabel("Token name").fill("Payments API");
   await form.getByLabel("Environment").fill("production");
   const created = page.waitForResponse(
@@ -85,9 +84,10 @@ test("a token is created through the control plane and shown once", async () => 
   expect(body.prefix).toBe(plain.slice(0, 12));
 
   // the one-time secret is masked until it is shown on purpose
-  const panel = page.getByRole("region", { name: "New secret" });
-  await expect(panel).toContainText("Copy your new token");
-  await expect(panel).toContainText("Payments API");
+  // the same dialog now holds the token, titled for it
+  const dialog = page.getByRole("dialog", { name: "Copy your new token" });
+  await expect(dialog).toContainText("Payments API");
+  const panel = dialog.getByRole("region", { name: "New secret" });
   await expect(panel).not.toContainText(plain);
   // the exporter of each stack is written for this token and the endpoint;
   // the code on screen shows only the token's start
@@ -100,14 +100,14 @@ test("a token is created through the control plane and shown once", async () => 
   await panel.getByRole("tab", { name: "Java" }).click();
   await expect(panel.locator("[data-snippet=java]")).toContainText("otlp_http:");
   await panel.getByRole("button", { name: "Show the secret" }).click();
-  await expect(panel.locator("code")).toHaveText(plain);
+  await expect(panel.locator("code").first()).toHaveText(plain);
   await panel.getByRole("button", { name: "Copy", exact: true }).click();
   await expect(panel.getByRole("button", { name: "Copied" })).toBeVisible();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(plain);
   await page.screenshot({ path: join(shots, "created.png"), fullPage: true });
 
   // done stays disabled until the person confirms they stored it
-  const done = panel.getByRole("button", { name: "Done" });
+  const done = dialog.getByRole("button", { name: "Done" });
   await expect(done).toBeDisabled();
   await panel.getByRole("checkbox").click();
   await done.click();
