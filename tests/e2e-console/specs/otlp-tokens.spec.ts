@@ -76,7 +76,7 @@ test("the api analytics page shows the endpoint, the guides and what is kept", a
   await expect(page.getByText("fn setup_telemetry(", { exact: false })).toBeVisible();
   await page.getByRole("tab", { name: "Java" }).click();
   await expect(
-    page.getByText("-javaagent:/app/opentelemetry-javaagent.jar", { exact: false }),
+    page.getByText("exec java -javaagent:/app/opentelemetry-javaagent.jar", { exact: false }),
   ).toBeVisible();
   await page.screenshot({ path: join(shots, "page.png"), fullPage: true });
 });

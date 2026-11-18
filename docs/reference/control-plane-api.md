@@ -1091,6 +1091,10 @@ working. These mutating routes are the exceptions, each for the reason given:
 | `POST /api/tenants/{tenant_id}/erasure` (10.2) | an erasure answers a data subject's request |
 | `POST /api/tenants/{tenant_id}/mcp-credentials` (12.8) | an MCP access key reads only, and reads need no current terms |
 
+The isolation gate (`make isolation`) checks every mutating tenant route
+against this table: a route not listed must answer 403 `terms_not_accepted`
+while the accepted version is not current, and a listed one must not.
+
 A tenant accepts a new terms version through this route.
 
 ### 4.3 Sites
