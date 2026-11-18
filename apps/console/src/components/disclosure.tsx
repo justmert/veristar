@@ -6,6 +6,8 @@ import type { ReactNode } from "react";
 // find in page and print work without script) whose summary carries a
 // chevron that turns when open, never the browser's own triangle.
 //   card:   a bordered block with the summary as its title row
+//   row:    one row of a list inside a card: no border of its own, the
+//           list's dividers separate it from the next (no box in a box)
 //   inline: a quiet text toggle inside a block of text
 // the summary text stays at the body size: a disclosure never outranks the
 // section title above it.
@@ -24,7 +26,7 @@ export function Disclosure({
   id?: string;
   summary: ReactNode;
   children: ReactNode;
-  variant?: "card" | "inline";
+  variant?: "card" | "row" | "inline";
   // controlled: the caller keeps the open state
   open?: boolean;
   onToggle?: (open: boolean) => void;
@@ -50,6 +52,8 @@ export function Disclosure({
           "flex cursor-pointer list-none items-center gap-2 transition-colors duration-(--vs-duration-press) ease-standard focus-ring [&::-webkit-details-marker]:hidden",
           variant === "card" &&
             "min-h-10 rounded-lg px-4 py-2 text-body font-medium text-fg hover:bg-hover max-lg:min-h-(--vs-control-touch)",
+          variant === "row" &&
+            "min-h-10 rounded-sm py-2 text-small text-fg hover:text-fg max-lg:min-h-(--vs-control-touch)",
           variant === "inline" &&
             "w-fit rounded-sm text-small text-fg-2 hover:text-fg max-lg:min-h-(--vs-control-touch)",
           summaryClassName,
@@ -64,6 +68,7 @@ export function Disclosure({
       <div
         className={cn(
           variant === "card" && "border-t border-line p-4",
+          variant === "row" && "pb-3 pl-6",
           variant === "inline" && "pt-2",
           bodyClassName,
         )}
