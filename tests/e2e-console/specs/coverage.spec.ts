@@ -120,9 +120,15 @@ test("the edge counted every load of the tracker file and the gpc one", async ()
 test("the snippet offers the title opt-in from 1.3.0", async () => {
   const page = owner.page;
   await page.goto(`${APP}/projects/${tenant.id}/sites/${site.id}`);
-  // the edge counted the site's events, so the install step is done and
-  // folds once the page has read them
-  await expect(page.getByText(/^2 of 3 done/)).toBeVisible();
+  // the site's events arrived, so its install step is done and folds away;
+  // the counts fold in every few minutes, so the page is read again until
+  // the first event shows
+  await expect(async () => {
+    await page.reload();
+    await expect(page.getByRole("region", { name: /^First event\W+done$/ })).toBeVisible({
+      timeout: 5_000,
+    });
+  }).toPass({ timeout: 120_000 });
   await page
     .getByRole("region", { name: /^Install the tag\W+done$/ })
     .getByRole("button", { name: "Show" })

@@ -50,13 +50,13 @@ test("an owner declares an account and gets a challenge to prove it", async () =
   await page.goto(`${APP}/projects/${tenant.id}/onchain`);
   await expect(page.getByRole("heading", { name: "On-chain", level: 1 })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Accounts and contracts" })).toBeVisible();
-  await page.getByLabel("Account or contract").fill("not-a-key");
+  await page.getByRole("textbox", { name: "Account or contract" }).fill("not-a-key");
   await page.getByRole("button", { name: "Add", exact: true }).click();
   await expect(
     page.getByText("Enter a Stellar account (G…) or a Soroban contract (C…)"),
   ).toBeVisible();
 
-  await page.getByLabel("Account or contract").fill(ACCOUNT);
+  await page.getByRole("textbox", { name: "Account or contract" }).fill(ACCOUNT);
   await page.getByRole("button", { name: "Add", exact: true }).click();
   // the id shows in its short form, the whole id in its tooltip
   await expect(page.locator(`[data-strkey="${ACCOUNT}"]`)).toBeVisible();
