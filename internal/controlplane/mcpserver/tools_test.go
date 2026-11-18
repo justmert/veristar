@@ -72,3 +72,20 @@ func TestToolSets(t *testing.T) {
 		require.Equal(t, false, sch["additionalProperties"], "%s accepts unknown arguments", tl.Name)
 	}
 }
+
+// the gateway sends umami a constant address and a country header only
+// (docs/compliance/privacy-strategy.md), so no session or breakdown ever
+// holds a region or a city; no tool may promise one
+func TestToolsPromiseNoRegionOrCity(t *testing.T) {
+	for _, tl := range listTools(t, (*Server).addTenantTools) {
+		switch tl.Name {
+		case "get_sessions":
+			require.NotContains(t, tl.Description, "country, region, city", tl.Name)
+			b, err := json.Marshal(tl.InputSchema)
+			require.NoError(t, err)
+			require.NotContains(t, string(b), "device or city", "the search hint offers a city")
+		case "get_web_metrics":
+			require.NotContains(t, tl.Description, "regions, cities", tl.Name)
+		}
+	}
+}

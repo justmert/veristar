@@ -66,7 +66,7 @@ for tool in "$@"; do
 		install -m 0755 "$work/actionlint" "$dest/actionlint"
 		;;
 	shellcheck)
-		# shellcheck publishes no checksum file; this is the sha256 digest
+		# the shellcheck project publishes no checksum file; this is the sha256 digest
 		# github records for the release asset (read 2026-11-13), so a
 		# replaced asset still fails the check
 		v=0.11.0
@@ -89,7 +89,7 @@ for tool in "$@"; do
 		;;
 	uv)
 		# make ansible-venv builds the controller venv with uv
-		v=0.13.7
+		v=0.13.9
 		a=uv-x86_64-unknown-linux-gnu.tar.gz
 		fetch "https://github.com/astral-sh/uv/releases/download/$v/$a" "https://github.com/astral-sh/uv/releases/download/$v/$a.sha256" "$a"
 		tar -xzf "$work/$a" -C "$work"

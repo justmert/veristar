@@ -1,12 +1,13 @@
 # Contributing
 
 This page covers the toolchain, the checks a change must pass, and the
-conventions of the repository. Security problems are not reported here: use private
-vulnerability reporting ([docs/security/SECURITY.md](docs/security/SECURITY.md)).
+conventions of the repository. Report security problems privately, as described in
+[docs/security/SECURITY.md](docs/security/SECURITY.md).
 
 ## Before you start
 
-- For anything larger than a small fix, open an issue first so the approach can be agreed.
+- For anything larger than a small fix, open an issue first and agree on the approach with the
+  maintainers.
 - Read [docs/architecture.md](docs/architecture.md). Umami runs as its official image,
   unmodified ([ADR 0002](docs/adr/0002-overlay-not-fork.md)); a change that needs Umami's own
   code changed is a change to the design, not a patch.
@@ -38,7 +39,32 @@ Compose (`deploy/compose/dev.yml`). The Makefile wraps it:
 | `make db-migrate`, `make db-roles` | migrates the platform database and gives the roles their passwords |
 | `make dev-ps`, `make dev-logs`, `make dev-down`, `make dev-reset` | status, logs, stop, and start again with empty volumes |
 
-The console runs with `pnpm --filter ./apps/console dev`.
+From a fresh clone, the whole stack with the console comes up in this order:
+
+```sh
+pnpm install --frozen-lockfile
+make dev-up                   # postgresql, nats and umami
+make umami-bootstrap
+make db-migrate db-roles
+set -a && . deploy/compose/.env.dev && set +a && dist/bin/platformctl nats apply
+```
+
+The control plane signs users in with GitHub. Create a GitHub OAuth App with the callback URL
+`http://localhost:5173/api/auth/github/callback`, then add `GITHUB_CLIENT_ID`,
+`GITHUB_CLIENT_SECRET` and `OPERATOR_GITHUB_IDS` (your numeric GitHub id) to
+`deploy/compose/.env.dev`. Start the platform services and the console:
+
+```sh
+docker compose --env-file deploy/compose/.env.dev -f deploy/compose/dev.yml \
+  --profile core up -d --build controlplane replayer metricswriter
+make gateway-up               # the collect gateway, profile edge
+CONTROLPLANE_URL=http://localhost:8085 pnpm --filter ./apps/console dev
+```
+
+Open the console at `http://localhost:5173`. The Vite dev server proxies `/api` to the control
+plane, so the console, the session cookie and the OAuth callback share that one origin, which is
+the `CONSOLE_ORIGIN` of the dev stack. Run the console on another port and the control plane
+refuses its requests with `origin_mismatch`.
 
 ## Checks
 
@@ -51,7 +77,8 @@ make test                     # unit tests only, starts no container
 make test-containers          # the packages whose tests start postgresql, nats, umami or caddy
 pnpm install --frozen-lockfile
 pnpm check                    # biome and type checks
-pnpm test                     # vitest suites
+pnpm test                     # vitest and node test suites
+make e2e-matrix               # the browser matrix of tests/e2e, browsers in a container
 ```
 
 `make test` runs every package whose tests do not pull in testcontainers; `make
@@ -80,7 +107,7 @@ Suites that start real services, run when the change touches their area:
 | `make handover-it` | the data migration and transfer rehearsal |
 | `make promtool` | the alert and recording rule tests |
 
-`make webpath`, `make console-e2e` and the browser matrix of `make gateway-it` run their
+`make e2e-matrix`, `make webpath`, `make console-e2e`, `make handover-it` and the browser matrix of `make gateway-it` run their
 browsers in the official Playwright image, pinned in `tests/fixtures/browserbox` to the
 workspace's `@playwright/test` version, while the test runner stays on the host. Chromium aborts
 navigations in flight whenever the host's network interfaces change, and in a container of its
@@ -89,7 +116,8 @@ ports as before. `SA_E2E_BROWSERS=host` runs the browsers on the host instead, f
 debugging; that mode needs the Playwright browsers installed (`pnpm exec playwright install`).
 
 `.github/workflows/ci.yml` runs `test`, `test-containers`, `isolation`, `supplychain-it`,
-`test-integration` and `promtool` on every change. `.github/workflows/e2e.yml` runs every other
+`test-integration`, `promtool` and `docs-check`, plus the lint, licence, secret scan, OpenTofu
+and Ansible checks, on every change. `.github/workflows/e2e.yml` runs every other
 suite above, plus `db-it`, `local-converge` and `rotate-local`, each night and on demand, one
 matrix job per suite.
 

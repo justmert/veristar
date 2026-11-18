@@ -256,8 +256,9 @@ func (s *Server) addWebTools(srv *mcp.Server) {
 		Name:  "get_web_metrics",
 		Title: "Ranked web breakdown",
 		Description: "Ranks one dimension of a site's traffic over a range: top pages (path), entry and exit " +
-			"pages, titles, referrers, channels, countries, regions, cities, browsers, operating systems, devices, " +
-			"screens, languages, custom events and UTM values. For page dimensions (path, entry, exit, title, " +
+			"pages, titles, referrers, channels, countries, browsers, operating systems, devices, " +
+			"screens, languages, custom events and UTM values. The platform records no region or city, so the " +
+			"region and city types always answer an empty list. For page dimensions (path, entry, exit, title, " +
 			"query, hostname, event, tag) the value counts views or events; for visitor dimensions (browser, os, " +
 			"device, country, referrer, channel, utm*) it counts unique visitors. UTM values exist only for sites " +
 			"that collect UTM parameters. Paginate with offset. Needs a site_id from list_sites.",
@@ -517,7 +518,7 @@ func (s *Server) addWebTools(srv *mcp.Server) {
 	type sessionsIn struct {
 		siteIn
 		rangeIn
-		Search   string      `json:"search,omitempty" jsonschema:"text to find in browser, os, device or city"`
+		Search   string      `json:"search,omitempty" jsonschema:"text to find in browser, os or device"`
 		Page     int         `json:"page,omitempty" jsonschema:"page, from 1"`
 		PageSize int         `json:"page_size,omitempty" jsonschema:"sessions per page, 1 to 100, default 20"`
 		Filters  *webFilters `json:"filters,omitempty"`
@@ -526,8 +527,9 @@ func (s *Server) addWebTools(srv *mcp.Server) {
 		Name:  "get_sessions",
 		Title: "Visitor sessions",
 		Description: "Lists a site's visitor sessions in a range, newest first, a page at a time: browser, " +
-			"operating system, device, country, region, city, visits, views, events and first and last activity. " +
-			"Sessions hold no names, emails, IP addresses or user ids; the session id is a daily rotating value. " +
+			"operating system, device, country, visits, views, events and first and last activity. " +
+			"Sessions hold no names, emails, IP addresses, regions, cities or user ids; the session id is a daily " +
+			"rotating value. " +
 			"Use get_session_stats when counts are enough. Needs a site_id from list_sites.",
 	}, func(props map[string]*jsonschema.Schema) {
 		sitePatch(props)

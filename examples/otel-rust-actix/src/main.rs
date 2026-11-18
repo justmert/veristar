@@ -94,7 +94,7 @@ fn load_config() -> Result<Config, String> {
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
-// the console's api analytics setup page shows the lines between each
+// the console's api connect page shows the lines between each
 // docs:start and docs:end marker pair (apps/console/src/lib/otel-guides.ts),
 // so the instructions are this code and cannot drift from it.
 

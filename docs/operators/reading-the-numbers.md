@@ -41,15 +41,15 @@ Every site has two bands, each an Umami website of its own: the **primary band**
   sliding hour. From the event that brings that count to the threshold onward, events from that
   range go to the quarantine band for the rest of the window. The threshold follows the
   network's class and the site's size: 20 for an access network of a new site, more for a
-  popular site whose audience shares carrier addresses, and a quarter of that for hosting
-  networks and Tor exits. Every gateway shares these counts through NATS, so the threshold holds
+  popular site whose audience shares carrier addresses, and lower for hosting networks and
+  anonymisers such as Tor exits (5 on a new site). Every gateway shares these counts through NATS, so the threshold holds
   across nodes.
 - Quarantine is a separate band, never a deletion. It is shown next to the primary numbers in
-  the global views (quarantined page views, visitors and share) and the project sees it in its
-  own quarantine dashboard.
+  the global views (quarantined page views, visitors and share), and the project sees it on its
+  own web dashboard by switching to the quarantined band.
 - Shared networks can trip it too: VPN exits, offices, campuses and conference Wi-Fi, and
-  carrier-grade NAT on a site that has no baseline yet. A high quarantined share can be real people on such networks,
-  or one source producing many visitor identities to inflate the numbers.
+  carrier-grade NAT on a site that has no baseline yet. A high quarantined share can be real
+  people on such networks, or one source producing many visitor identities to inflate the numbers.
 - How to read it: compare projects on the primary band, and look at a project's quarantined
   share next to it. A project whose quarantined share is far above others' deserves a look at
   its gateway outcomes and dates before its primary numbers are trusted.
@@ -118,8 +118,8 @@ comparable with a project that exports metrics. Ask such a project to add metric
 API numbers leave infrastructure requests out: CORS preflights, health and probe routes, and
 requests from known health checkers. Each row shows them apart as `infrastructure_requests`, so a
 project whose load balancer checks it every few seconds compares on its users' traffic alone
-([collector reference](../reference/collector.md), "Traffic classes"). Data from before the
-upgrade that introduced the split counts every request.
+([traffic classes](../reference/collector.md#traffic-classes)). Rows stored before the
+platform classified requests count every request as application traffic.
 
 Two more flags in the API numbers:
 

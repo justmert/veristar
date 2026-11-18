@@ -7,7 +7,7 @@ description: "The data protection impact assessment for cookieless web analytics
 The service, as processor, prepares this assessment to help tenants
 (controllers) with their own assessment under GDPR Art. 35. Each tenant decides
 with its counsel whether a DPIA is mandatory for it. This page is not legal
-advice. Last updated 2026-11-17.
+advice. Last updated 2026-11-18.
 
 ## 1. Description
 
@@ -34,7 +34,7 @@ inventory are in `privacy-strategy.md` section 2; residency in
 | Personal data in URLs, titles or event data | medium | medium | redaction of strkeys, emails, secret seeds; query allowlist; terms forbid personal data there | medium: free-form identifiers pass redaction (`privacy-strategy.md` section 7) |
 | Cross-site tracking | low | medium | token includes the site id and a daily secret; no cookies; no identify | low |
 | Cross-tenant data access | low | high | row-level security on every tenant table; Umami users limited to their team with view-only roles; isolation tests | low |
-| Operator reuse of data | low | medium | operators read aggregates only, through the `cp_operator` role | low if the aggregates are anonymous under the CNIL criterion (S2, `privacy-strategy.md` section 1) |
+| Operator reuse of data | low | medium | operators read visitor and API client data only as aggregates, through the `cp_operator` role; beyond them they see only project metadata, members and the audit log, to review projects | low if the aggregates are anonymous under the CNIL criterion (S2, `privacy-strategy.md` section 1) |
 | Breach of the database | low | medium | private network, no public database port, one role per service, signed images, SSH open only to the operator's admin address ranges (`../security/threat-model.md`) | stored rows hold no IP address and no visitor identifier that lasts beyond one UTC day |
 | Retention beyond need | low | low | `jobs retain-web` on a daily systemd timer, expiring queues | low |
 

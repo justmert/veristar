@@ -7,14 +7,14 @@ description: "Give an AI client the global view: search projects, rank them and 
 The MCP server at `https://app.<BASE_DOMAIN>/mcp` (production: `https://app.veristar.app/mcp`)
 also serves the operator view. An operator credential gives an AI client the same daily
 aggregates as the **Global web**, **Global API** and **Compare** pages, and the project list and
-detail of the review pages. It reads and never acts: no tool approves, suspends or removes
+detail of the review pages, including each project's enrollment answers and members. It reads and never acts: no tool approves, suspends or removes
 anything. Projects connect with the [project guide](../onboarding/mcp.md); the protocol details
 are section 12 of the [control plane API reference](../reference/control-plane-api.md).
 
 ## Getting a credential
 
-- **Operator key.** Open **Operator**, then **Admin**, **AI / MCP**, and create a key. It acts as you, is shown
-  once, and expires after 90 days by default (at most 365). Any operator can revoke any operator
+- **Operator key.** Open **Operator**, then **Admin**, **AI / MCP**, and create a key. It acts as
+  you, is shown once, and expires after 90 days by default (at most 365). Any operator can revoke any operator
   key on that page.
 - **Connector.** Add the server URL to claude.ai, Claude Desktop, ChatGPT or Cursor as for a
   project. On the consent page, operators see an extra choice, **The operator view of every
@@ -23,8 +23,8 @@ are section 12 of the [control plane API reference](../reference/control-plane-a
 Either stops working when you lose operator rights: when an operator admin suspends you or removes
 you from the roster ([roster.md](roster.md)). Your operator credentials are then revoked for good.
 Approving the operator view on the consent page needs your passkey confirmation, like the operator
-area; the credential it issues then works without one. A project credential
-of an operator reads that one project only and never the operator tools.
+area; the credential it issues then works without one. A project credential of an operator reads
+that one project only and never the operator tools.
 
 ## Tools
 
@@ -36,6 +36,8 @@ of an operator reads that one project only and never the operator tools.
 | `get_global_api_overview` | Global API: requests, 4xx and 5xx rates, p50, p95 and p99, services and routes per project |
 | `compare_tenants_web`, `compare_tenants_api` | Compare: up to five projects side by side with a point per UTC day |
 | `get_tenant_integrity` | the Integrity panel: one project's integrity grade over the range, with its reasons per site and day; `get_global_web_overview` carries each project's grade and sorts by it |
+| `get_tenant_onchain` | a project's **On-chain** section: declared accounts and contracts with their proofs, daily operations with the reason for any missing day, weekly active accounts and each verified contract's calls per function ([onchain-and-exports.md](onchain-and-exports.md)) |
+| `get_tenant_contract_functions` | **Calls per function** of one verified contract, per function, caller and UTC day |
 | `list_cohorts` | the cohort filters: the confirmed programs, rounds and categories with their project counts, and the proposals waiting for you; both overviews filter by cohort and carry each project's change against the previous period and percentile in the cohort |
 | `list_threshold_rules`, `get_threshold_rule_matches` | Rules: the saved traction rules, and the projects that meet one with their qualifying days and integrity grade |
 

@@ -63,9 +63,14 @@ SCF, so that SCF can follow the projects it funds and the ecosystem as a whole.
     and failed calls and of the distinct accounts that made them; and per
     ISO week the project's count of weekly active accounts.
 - What SCF does not receive: raw events, sessions, visitor tokens, page-level
-  event data, network keys, the keyed hashes of active accounts, the project's
-  web dashboard, or the console accounts of the tenant's members. No row SCF
-  receives describes one visitor, one API client or one active account.
+  event data, network keys, the keyed hashes of active accounts or the
+  project's web dashboard. No row SCF receives describes one visitor, one API
+  client or one active account.
+- To review projects (section 5), SCF's operators also see each project's
+  enrollment answers, its members (GitHub id and login, Stellar address or
+  passkey account address, role) and the audit log of changes. That data is
+  about console accounts, for which the hosting operator is the controller
+  (section 3).
 - The instruction lasts as long as the project is enrolled. It ends when the
   project is removed; the aggregates then follow section 6.
 
@@ -78,12 +83,15 @@ There is no billing, no paid tier, no advertising and no sale or resale of data.
 
 - **Websites**: page views and custom events sent by the tracker script. The
   tracker sets no cookies and writes no browser storage. It reads one storage
-  key, the visitor's opt-out flag, and honours Global Privacy Control. On a
+  key, the visitor's opt-out flag (inside a frame, also the frame's window
+  name, which the parent page can set to the same flag), and honours Global
+  Privacy Control. On a
   site that turns on Wallets Kit capture with the script tag, it also reads
   the names of the site's local storage keys and the kit's selected wallet id
   (`privacy-strategy.md` section 6). From tracker 1.3.0 the tracker no
-  longer reads the screen size or the browser language, and it sends the page
-  title only when the site turns that on with the script tag.
+  longer reads the screen size or the browser language, and it reads the page
+  title only when the site turns that on with the script tag. A site's own
+  before-send hook or `track()` call can still supply these three fields.
 - **Tracker file requests**: when a browser loads the tracker file, the
   gateway reads the request's `Referer` and `Sec-GPC` headers in memory to
   attribute the request to one site, and keeps only two per-site, per-day
@@ -122,7 +130,9 @@ There is no billing, no paid tier, no advertising and no sale or resale of data.
   sign-in, the Stellar account address (public key) of a wallet sign-in, and
   the credential id, public key and smart account address of a passkey
   sign-in. No email address, no password, no private key and no biometric
-  data, which never leaves the person's device.
+  data, which never leaves the person's device. When a member or an operator
+  is added by GitHub login, the console asks GitHub for that login's numeric
+  id.
 - Operators: the roster row of each operator identity (GitHub id and login,
   or Stellar address), its role, status, status reason and enrollment window;
   the passkeys an operator adds for the operator area (credential id, public
@@ -146,10 +156,10 @@ Tenants may use the service only:
 
 ## 5. Hosting operator rights
 
-The hosting operator may review projects, and may suspend or remove a project
-that is not part of the Stellar ecosystem or that breaks these terms, stating a
-reason. The hosting operator may switch enrollment from open to
-approval-required.
+The hosting operator, through the operators on the service's operator roster,
+may review projects, and may suspend or remove a project that is not part of
+the Stellar ecosystem or that breaks these terms, stating a reason. It may
+switch enrollment from open to approval-required.
 
 ## 6. Retention and deletion
 
@@ -159,8 +169,10 @@ approval-required.
 - A project owner can erase one visitor's visit of the current UTC day, one
   session at any time, or all web data of a site (`docs/compliance/erasure.md`).
   A visit on an earlier day cannot be linked to a person, by design.
-- When a project is removed, its raw web data and per-minute API data are
-  deleted; aggregates are deleted unless the hosting operator keeps them under the
+- When a project is removed, its raw web data, per-minute API data, network
+  keys, open weeks of active accounts and signed usage reports are deleted.
+  Its aggregates (web, hourly and daily API, on-chain counts and calls per
+  function) are deleted too, unless the hosting operator keeps them under the
   published `removal_keep_aggregates` setting (`docs/runbooks/tenant-removal.md`).
 
 ## 7. Availability

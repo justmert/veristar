@@ -106,7 +106,7 @@ func single(q url.Values, key string) (*string, error) {
 	if !ok {
 		return nil, nil
 	}
-	if len(v) != 1 || v[0] == "" || utf8.RuneCountInString(v[0]) > auditMaxFilter || !utf8.ValidString(v[0]) {
+	if len(v) != 1 || v[0] == "" || utf8.RuneCountInString(v[0]) > auditMaxFilter || !sqlText(v[0]) {
 		return nil, httpx.BadQuery(key + " must be given once, 1 to 200 characters")
 	}
 	return &v[0], nil

@@ -22,10 +22,17 @@ for (const site of SITES) {
     // that navigation (NS_BINDING_ABORTED in firefox), so wait for the url
     await page.waitForURL((u) => u.pathname !== "/");
     await page.waitForLoadState("load");
-    await page.goto(`${site.origin}/`);
-    await page.waitForFunction(() => typeof window.umami?.track === "function");
-    await page.click("#signup");
-    await page.click("#manual");
+    // mintlify's router is still rendering the new route after the url
+    // changed (its dev server keeps a socket.io poll open, so there is no
+    // network idle to wait for), and a goto on that page would be aborted
+    // again: the home page opens in a new page of the same context, with the
+    // same gpc preference, while the first one closes
+    const home = await page.context().newPage();
+    await page.close();
+    await home.goto(`${site.origin}/`);
+    await home.waitForFunction(() => typeof window.umami?.track === "function");
+    await home.click("#signup");
+    await home.click("#manual");
     await new Promise((r) => setTimeout(r, SETTLE_MS));
 
     const all = await recorded();

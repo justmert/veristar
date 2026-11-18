@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/nats-io/nats.go/jetstream"
 )
@@ -66,32 +67,60 @@ var errBadVisitRecord = errors.New("replayer: visit state record is not readable
 
 type visitStore struct{ kv jetstream.KeyValue }
 
-func (v visitStore) load(ctx context.Context, siteID, vt string) (*VisitRecord, error) {
-	e, err := v.kv.Get(ctx, VisitKey(siteID, vt))
+const (
+	// staleReads and stalePause bound how long load reads a record again
+	// that is older than the revision this instance wrote last: about a
+	// second, far longer than a replica takes to catch up.
+	staleReads = 40
+	stalePause = 25 * time.Millisecond
+)
+
+// load reads the visitor's record and its revision. the bucket allows
+// direct gets, which any replica answers, and a replica that has not
+// applied the last write yet answers with the record before it or none.
+// minRev is the revision this instance wrote last for the visitor, 0 when
+// none: an older answer is read again for up to a second, after which the
+// answer counts as it is (an erasure removed the record in between). a
+// visitor's events delivered back to back would otherwise go out with the
+// visit state of an earlier event.
+func (v visitStore) load(ctx context.Context, siteID, vt string, minRev uint64) (*VisitRecord, uint64, error) {
+	var (
+		e   jetstream.KeyValueEntry
+		err error
+	)
+	for i := range staleReads {
+		e, err = v.kv.Get(ctx, VisitKey(siteID, vt))
+		stale := minRev > 0 && ((err == nil && e.Revision() < minRev) || errors.Is(err, jetstream.ErrKeyNotFound))
+		if !stale || i == staleReads-1 || !sleepCtx(ctx, stalePause) {
+			break
+		}
+	}
 	if errors.Is(err, jetstream.ErrKeyNotFound) {
-		return nil, nil
+		return nil, 0, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("replayer: read visit state: %w", err)
+		return nil, 0, fmt.Errorf("replayer: read visit state: %w", err)
 	}
 	var r VisitRecord
 	if err := json.Unmarshal(e.Value(), &r); err != nil {
-		return nil, fmt.Errorf("%w: %w", errBadVisitRecord, err)
+		return nil, e.Revision(), fmt.Errorf("%w: %w", errBadVisitRecord, err)
 	}
-	return &r, nil
+	return &r, e.Revision(), nil
 }
 
-// save writes the visitor's record. one visitor's events are handled by one
-// goroutine at a time, so a plain put cannot lose a concurrent update.
-func (v visitStore) save(ctx context.Context, siteID, vt string, r *VisitRecord) error {
+// save writes the visitor's record and returns its revision. one visitor's
+// events are handled by one goroutine at a time, so a plain put cannot lose
+// a concurrent update.
+func (v visitStore) save(ctx context.Context, siteID, vt string, r *VisitRecord) (uint64, error) {
 	b, err := json.Marshal(r)
 	if err != nil {
-		return err
+		return 0, err
 	}
-	if _, err := v.kv.Put(ctx, VisitKey(siteID, vt), b); err != nil {
-		return fmt.Errorf("replayer: write visit state: %w", err)
+	rev, err := v.kv.Put(ctx, VisitKey(siteID, vt), b)
+	if err != nil {
+		return 0, fmt.Errorf("replayer: write visit state: %w", err)
 	}
-	return nil
+	return rev, nil
 }
 
 // bucketFull reports whether a visit_state write was refused because the

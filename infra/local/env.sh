@@ -2,9 +2,12 @@
 # every name carries the sa-lc prefix so cleanup can find what was created.
 LC_PREFIX=sa-lc
 LC_STATE="$root/.scratch/local-converge"
+# the public side sits outside docker's default address pools
+# (172.17.0.0/16 to 172.31.0.0/16, 192.168.0.0/16): any compose project on
+# the host may hold a /16 of those, and docker refuses an overlapping network
 LC_PUBLIC_NET=sa-lc-public
-LC_PUBLIC_SUBNET=172.31.99.0/24
-LC_PUBLIC_GATEWAY=172.31.99.1
+LC_PUBLIC_SUBNET=10.98.99.0/24
+LC_PUBLIC_GATEWAY=10.98.99.1
 # the private network spans three locations (docs/deploy/opentofu.md section
 # 2). each location is its own docker network, and one router container
 # joins them, so traffic between locations crosses the router, where tc
@@ -24,22 +27,25 @@ LC_DELAY_nbg1=1.5
 LC_DELAY_hel1=11.5
 LC_JITTER_MS=0.3
 LC_REGISTRY=sa-lc-registry
-LC_REGISTRY_IP=172.31.99.5
+LC_REGISTRY_IP=10.98.99.5
 LC_REGISTRY_HOST_PORT=5099
 LC_REGISTRY_IMAGE=registry:3.1.2@sha256:82f6ff4a7f982960c8aa51617fea3aabc485df6e55cce80d22deb1de36f1bc3c
 LC_NODE_IMAGE=veristar/local-node:trixie
-LC_IMAGE_TAG=lc
+# the image tag build-images.sh pushes; another value builds a second release
+# next to the first, for a rolling deploy.yml from one to the other
+# (docs/deploy/local-converge.md section 2)
+LC_IMAGE_TAG="${LC_IMAGE_TAG:-lc}"
 LC_ADMIN_USER=ops
 # name location public-address private-address, mirroring
 # docs/deploy/opentofu.md section 2 (edge .11+index, core .21+index in the
 # location's subnet). the backup node holds the pgbackrest repository in a
 # location without a database node, standing in for object storage.
-LC_NODES="sa-lc-edge-1 fsn1 172.31.99.12 10.99.1.12
-sa-lc-edge-2 nbg1 172.31.99.13 10.99.2.13
-sa-lc-edge-3 hel1 172.31.99.14 10.99.3.14
-sa-lc-core-1 fsn1 172.31.99.22 10.99.1.22
-sa-lc-core-2 nbg1 172.31.99.23 10.99.2.23
-sa-lc-backup-1 hel1 172.31.99.31 10.99.3.31"
+LC_NODES="sa-lc-edge-1 fsn1 10.98.99.12 10.99.1.12
+sa-lc-edge-2 nbg1 10.98.99.13 10.99.2.13
+sa-lc-edge-3 hel1 10.98.99.14 10.99.3.14
+sa-lc-core-1 fsn1 10.98.99.22 10.99.1.22
+sa-lc-core-2 nbg1 10.98.99.23 10.99.2.23
+sa-lc-backup-1 hel1 10.98.99.31 10.99.3.31"
 # LC_TOPOLOGY=minimal leaves out the second core node: the smallest set the
 # roles converge (nats runs three replicas, backups need the backup node),
 # used by the credential rotation run (tests/handover/rotate-local.sh)
@@ -50,10 +56,10 @@ fi
 # three converged nodes, one per location, each running the edge and the
 # core roles, plus the backup node
 if [ "${LC_TOPOLOGY:-}" = node ]; then
-	LC_NODES="sa-lc-node-1 fsn1 172.31.99.12 10.99.1.12
-sa-lc-node-2 nbg1 172.31.99.13 10.99.2.13
-sa-lc-node-3 hel1 172.31.99.14 10.99.3.14
-sa-lc-backup-1 hel1 172.31.99.31 10.99.3.31"
+	LC_NODES="sa-lc-node-1 fsn1 10.98.99.12 10.99.1.12
+sa-lc-node-2 nbg1 10.98.99.13 10.99.2.13
+sa-lc-node-3 hel1 10.98.99.14 10.99.3.14
+sa-lc-backup-1 hel1 10.98.99.31 10.99.3.31"
 fi
 # LC_BACKUP=s3 replaces the backup node with an s3 object storage stand-in
 # (seaweedfs, private ca, host-style addressing) in hel1, so the object
@@ -75,10 +81,10 @@ if [ "$LC_BACKUP" = s3 ]; then
 fi
 # LC_PROBE=1 adds the probe node: public network only, like a probe host
 # outside the platform's private network
-LC_PROBE_NODE="sa-lc-probe-1 none 172.31.99.51 none"
+LC_PROBE_NODE="sa-lc-probe-1 none 10.98.99.51 none"
 if [ "${LC_PROBE:-}" = 1 ]; then
 	LC_NODES="$(printf '%s\n%s' "$LC_NODES" "$LC_PROBE_NODE")"
 fi
 # the fresh node a point-in-time restore goes to; created by the restore
 # drill only (tests/drills/pitr.sh) and removed after it
-LC_RESTORE_NODE="sa-lc-restore-1 fsn1 172.31.99.41 10.99.1.41"
+LC_RESTORE_NODE="sa-lc-restore-1 fsn1 10.98.99.41 10.99.1.41"

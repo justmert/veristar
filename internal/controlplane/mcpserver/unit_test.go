@@ -230,3 +230,15 @@ func TestRedirectOriginAndCallback(t *testing.T) {
 	require.Equal(t, "st", u.Query().Get("state"))
 	require.Equal(t, "https://app.example.org", u.Query().Get("iss"))
 }
+
+// a client that left redirect_uri out of the authorization request (it
+// registered one uri) leaves it out of the token request too; a value that
+// is given must be the code's exactly
+func TestRedirectMatches(t *testing.T) {
+	const issued = "http://127.0.0.1:9/cb"
+	require.True(t, redirectMatches(url.Values{}, issued))
+	require.True(t, redirectMatches(url.Values{"redirect_uri": {issued}}, issued))
+	require.False(t, redirectMatches(url.Values{"redirect_uri": {""}}, issued))
+	require.False(t, redirectMatches(url.Values{"redirect_uri": {"http://127.0.0.1:9/other"}}, issued))
+	require.False(t, redirectMatches(url.Values{"redirect_uri": {issued, issued}}, issued))
+}

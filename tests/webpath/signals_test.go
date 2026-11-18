@@ -14,7 +14,8 @@ import (
 	"github.com/justmert/veristar/internal/registry"
 )
 
-// TestPageSignals is the browser check of tracker 1.3.0: the counting rules
+// TestPageSignals is the browser check, on the current tracker release, of
+// what 1.3.0 introduced: the counting rules
 // (background tab, back/forward cache, history navigation, prerendering),
 // the frame flag and the never-visible notice in chromium, firefox and
 // webkit through caddy, the gateway, nats, the replayer and umami. it checks
@@ -42,8 +43,8 @@ func TestPageSignals(t *testing.T) {
 		waitChallenge(t, s.FwdAddr, x)
 	}
 	b := startBrowsersWith(t, s.FwdAddr, []siteRun{
-		{Site: siteStatic, Version: "1.3.0", Build: "build"},
-		{Site: siteSPA, Version: "1.3.0", Build: "build"},
+		{Site: siteStatic, Version: currentTracker(t), Build: "build"},
+		{Site: siteSPA, Version: currentTracker(t), Build: "build"},
 	})
 	// whatever the warm-up counted is not part of the run
 	s.edgeStats(t)
@@ -96,7 +97,7 @@ func TestPageSignals(t *testing.T) {
 		}
 	})
 
-	t.Run("every page view of 1.3.0 is a signal view", func(t *testing.T) {
+	t.Run("every page view is a signal view", func(t *testing.T) {
 		for _, x := range sites {
 			// the sites send only page views: accepted equals signal views
 			if count(x, integrity.SignalViews) != count(x, "accepted") {
@@ -129,7 +130,7 @@ func TestPageSignals(t *testing.T) {
 	s.Drained(t, 5*time.Minute)
 
 	t.Run("umami derives browser, os and device without screen and language", func(t *testing.T) {
-		evs := s.Events(t, siteStatic.ID, today())
+		evs := s.Events(t, siteStatic.ID, runRange())
 		if len(evs) == 0 {
 			t.Fatal("no static events in umami")
 		}
@@ -159,7 +160,8 @@ func TestPageSignals(t *testing.T) {
 	})
 }
 
-// TestConsentGatedTrack is the browser check of tracker 1.3.1 in chromium,
+// TestConsentGatedTrack is the browser check, on the current tracker release,
+// of the consent mode 1.3.1 introduced in chromium,
 // firefox and webkit through caddy, the gateway, nats, the replayer and
 // umami: with data-auto-track="false", umami.track() before umami.start()
 // sends nothing and fetches no challenge, and after the consent click the
@@ -179,7 +181,7 @@ func TestConsentGatedTrack(t *testing.T) {
 	s.AddCountry(t, "DE", countrySubnets(t, "DE")["DE"])
 	s.StartForwarder(t, fwdBin, "DE")
 	waitChallenge(t, s.FwdAddr, siteStatic)
-	b := startBrowsersWith(t, s.FwdAddr, []siteRun{{Site: siteStatic, Version: "1.3.1", Build: "build"}})
+	b := startBrowsersWith(t, s.FwdAddr, []siteRun{{Site: siteStatic, Version: currentTracker(t), Build: "build"}})
 	b.MustRun(t, []string{"signals-chromium", "signals-firefox", "signals-webkit"}, "@consent")
 	logged := b.NewEvents(t)
 	all202(t, logged)

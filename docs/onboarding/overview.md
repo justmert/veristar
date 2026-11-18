@@ -7,8 +7,10 @@ description: "Guides for adding web analytics to a site and API analytics to a b
 These guides show you how to add web analytics to a site, API analytics to a backend, or both.
 Start with the quickstart for your kind of project, then open the guide for your framework.
 
-Every code block in these guides is copied from a working example under [`examples/`](https://github.com/justmert/veristar/tree/main/examples)
-by a test (`make docs-check`), so the guides show exactly the code the test suites run. Examples use
+Every code block in these guides comes from tested code, checked by `make docs-check`: example
+code is copied from a working example under [`examples/`](https://github.com/justmert/veristar/tree/main/examples),
+and each script tag is built by the console's own snippet code for the example site. The guides
+show exactly the code the test suites run. Examples use
 the reserved domain `analytics.example`: the gateway is `https://in.analytics.example`, the OTLP
 endpoint `https://otlp.analytics.example` and the console `https://app.analytics.example`. The
 console shows the real values of the service you use.
@@ -68,8 +70,11 @@ Each guide is backed by an example that runs in the test suites:
 - The static HTML, Vite and React, Vue, Astro, SvelteKit, React Router, Next.js, Docusaurus,
   VitePress and Mintlify guides, and the consent, self-hosting, content security policy and custom
   event guides, are backed by example sites that run in the browser test matrix (`tests/e2e`:
-  Chromium, Firefox and WebKit) against a test gateway. The Mintlify example runs in Mintlify's
-  local preview, `mint dev`.
+  Chromium, Firefox and WebKit) against a test gateway, with the current tracker release. The Mintlify
+  example runs in Mintlify's local preview, `mint dev`.
+- The tracker's own tests (`packages/tracker/test`) cover the behaviour each newer release adds,
+  such as consent mode, visibility and long single-page sessions, and check that every released
+  file rebuilds byte for byte from source.
 - The Wallets Kit guide is backed by `TestWalletsKit` in `tests/webpath`, which runs the full chain
   into Umami.
 - The API guides are backed by `tests/otelapps`, which runs the five example apps, the Stellar
@@ -81,6 +86,6 @@ Each guide is backed by an example that runs in the test suites:
 Ask questions and report problems on the public issue tracker. [Support](../support.md) describes
 the forms and the response times.
 
-To delete your console account, open the account menu at the bottom of the sidebar, choose
+To delete your console account, open the account menu (your name in the sidebar), choose
 **Account** and use **Delete account**. Hand over ownership of any project you own alone first.
 What the deletion removes is in [Erasure workflow](../compliance/erasure.md#7-deleting-your-console-account).

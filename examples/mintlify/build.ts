@@ -15,8 +15,8 @@ function required(name: string): string {
 
 // the values site/tracker.js carries, those of the console's example tag
 export const EXAMPLE = {
-  src: "https://in.analytics.example/v/1.3.0/sdk.js",
-  integrity: "sha384-3E+vbTmGHWaU8kaLAWT6ttw70odRH565/3vRal5558SgSitqFlIbsFHlfzWnSUtT",
+  src: "https://in.analytics.example/v/1.3.2/sdk.js",
+  integrity: "sha384-Q2xIA5ztfj7VBlpI/+6kehWQVUC2jZPr89aAooy7Uinc/V2C0VF7Ti66L3gj6D/v",
   siteId: "3f6a0c2e-9b1d-4e7a-8c5f-1d2e3f4a5b6c",
 };
 

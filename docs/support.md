@@ -10,8 +10,8 @@ targets for availability and security patching are on [Service targets](sla.md).
 ## The channel: the public issue tracker
 
 Support runs on the issue tracker at
-[github.com/justmert/veristar/issues](https://github.com/justmert/veristar/issues). It is the only
-support channel: there is no chat, email address or phone line.
+[github.com/justmert/veristar/issues](https://github.com/justmert/veristar/issues). It is the one
+support channel for every question.
 
 Security vulnerabilities are the one exception. Report them privately through GitHub private
 vulnerability reporting, never in a public issue ([security policy](security/SECURITY.md)).

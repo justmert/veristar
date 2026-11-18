@@ -24,28 +24,29 @@ Enterprise Cloud and GitHub Enterprise Server
 ## Checks on every change
 
 GitHub names a check run after the job's `name:`, or after the job id when the job has no
-`name:`. None of the jobs below sets `name:`, so the check names are the job ids.
+`name:`. Only the `e2e.yml` job sets `name:` (the suite of each matrix entry); every other check
+name is the job id.
 
 The jobs in `.github/workflows/*.yml`:
 
 | Workflow file | Job (check name) | Runs on |
 |---|---|---|
-| `ci.yml` | `go` | every push to `main` and every pull request. `make test`: unit tests, no containers |
-| `ci.yml` | `containers` | every push and pull request. `make test-containers`: the packages whose tests start PostgreSQL, NATS, Umami or Caddy |
-| `ci.yml` | `js` | every push and pull request |
-| `ci.yml` | `integration` | every push and pull request |
-| `ci.yml` | `image` | every push and pull request |
-| `ci.yml` | `gitleaks` | every push and pull request |
-| `ci.yml` | `licences` | every push and pull request |
-| `ci.yml` | `isolation` | every push and pull request. The tenant isolation gate (`make isolation`) |
-| `ci.yml` | `supplychain` | every push and pull request |
-| `ci.yml` | `actionlint` | every push and pull request. The workflows themselves, with shellcheck on every `run:` block |
-| `ci.yml` | `tofu` | every push and pull request. `make tofu-check`: OpenTofu format, validate and the mocked inventory tests |
-| `ci.yml` | `ansible` | every push and pull request. `make ansible-lint`: yamllint and ansible-lint (production profile) |
-| `ci.yml` | `promtool` | every push and pull request. `make promtool`: alert rule syntax and the promtool rule tests |
-| `tracker.yml` | `releases` | every push and pull request |
-| `tracker.yml` | `filter-lists` | every push and pull request, and daily. It downloads the current filter lists, so a list change can fail it without a code change. That is intended: the endpoint names must stay unblocked by ad blockers. |
-| `release-images.yml` | `caddy`, `images`, `manifest` | tags `v*` |
+| `ci.yml` | `go` | every push to `main` and every pull request. `make vet`, `make lint`, `make docs-check` and `make test`: unit tests, no containers |
+| `ci.yml` | `containers` | every push to `main` and every pull request. `make test-containers`: the packages whose tests start PostgreSQL, NATS, Umami or Caddy |
+| `ci.yml` | `js` | every push to `main` and every pull request |
+| `ci.yml` | `integration` | every push to `main` and every pull request |
+| `ci.yml` | `image` | every push to `main` and every pull request |
+| `ci.yml` | `gitleaks` | every push to `main` and every pull request |
+| `ci.yml` | `licences` | every push to `main` and every pull request |
+| `ci.yml` | `isolation` | every push to `main` and every pull request. The tenant isolation gate (`make isolation`) |
+| `ci.yml` | `supplychain` | every push to `main` and every pull request. `make supplychain-it` |
+| `ci.yml` | `actionlint` | every push to `main` and every pull request. The workflows themselves, with shellcheck on every `run:` block |
+| `ci.yml` | `tofu` | every push to `main` and every pull request. `make tofu-check`: OpenTofu format, validate and the mocked inventory tests |
+| `ci.yml` | `ansible` | every push to `main` and every pull request. `make ansible-lint`: yamllint and ansible-lint (production profile) |
+| `ci.yml` | `promtool` | every push to `main` and every pull request. `make promtool`: alert rule syntax and the promtool rule tests |
+| `tracker.yml` | `releases` | every push to `main` and every pull request |
+| `tracker.yml` | `filter-lists` | every push to `main` and every pull request, and daily. It downloads the current filter lists, so a list change can fail it without a code change. That is intended: the endpoint names must stay unblocked by ad blockers. |
+| `release-images.yml` | `caddy`, `images`, `licences`, `manifest` | tags `v*` |
 | `release-tracker.yml` | `prove`, `publish` | tags `tracker-v*` |
 | `security.yml` | `advisories`, `images`, `go`, `npm`, `report` | hourly schedule and on demand |
 | `slo-report.yml` | `collect` | schedule and on demand |

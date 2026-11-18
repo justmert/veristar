@@ -56,9 +56,9 @@ export function trackerTag() {
 In your app, write the values from the console's tag directly into the element: `src`,
 `integrity` and `data-website-id` of
 
-{/* snippet version=1.3.0 */}
+{/* snippet version=1.3.2 */}
 ```html
-<script defer src="https://in.analytics.example/v/1.3.0/sdk.js" integrity="sha384-3E+vbTmGHWaU8kaLAWT6ttw70odRH565/3vRal5558SgSitqFlIbsFHlfzWnSUtT" crossorigin="anonymous" data-website-id="3f6a0c2e-9b1d-4e7a-8c5f-1d2e3f4a5b6c"></script>
+<script defer src="https://in.analytics.example/v/1.3.2/sdk.js" integrity="sha384-Q2xIA5ztfj7VBlpI/+6kehWQVUC2jZPr89aAooy7Uinc/V2C0VF7Ti66L3gj6D/v" crossorigin="anonymous" data-website-id="3f6a0c2e-9b1d-4e7a-8c5f-1d2e3f4a5b6c"></script>
 ```
 
 Write `crossOrigin` in JSX; React renders it as `crossorigin`. The example is plain JavaScript only
@@ -77,8 +77,8 @@ current URL. Tracker 1.2.0 and newer ignore a call that does not change the URL,
 keeps the previous page as its referrer. With 1.0.0 and 1.1.0 the referrer of that pageview becomes
 the page itself. The dashboards show the same numbers either way, because the gateway drops
 referrers inside your own site (they arrive as paths); only a `data-before-send` hook that reads the
-referrer sees the difference. The example pins 1.1.0, so its browser test checks the referrer on
-forward navigations.
+referrer sees the difference. The browser test matrix runs the current tracker release and checks
+the referrer on forward navigations; the tracker's own tests check the back and forward case.
 
 ## Custom events
 

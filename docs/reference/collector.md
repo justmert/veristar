@@ -339,9 +339,14 @@ requests, so it is not one of the kept metrics (see "tenantguard" below).
   temporality other than delta or cumulative, the whole metric
   (`temporality`); explicit bounds that are not finite and strictly
   increasing, or bucket counts that are not one more than the bounds,
-  including a point without buckets (`buckets`); a count or a bucket count
-  above 10^12 (`count`); a sum that is NaN or infinite (`sum`). A stale
-  marker (no recorded value) is checked for its times only.
+  including a point without buckets, and an exponential histogram point the
+  conversion cannot map: a scale outside -10 to 20, a zero threshold that is
+  not a finite non-negative number, or buckets beyond the floating point
+  range (`buckets`); a count or a bucket count
+  above 10^12, or a count that is not the total of the buckets (for an
+  exponential histogram, the zero count plus every bucket) (`count`); a sum that is NaN, infinite or above 10^18 seconds
+  in magnitude (`sum`). A stale marker (no recorded value) is checked for
+  its times only.
 - Spans kept: kind SERVER with an HTTP method, a start time, and an end
   time that is not before the start, after the first minute of the epoch
   and before 2262 (others are dropped and counted as `time`, since they have
@@ -400,7 +405,7 @@ requests, so it is not one of the kept metrics (see "tenantguard" below).
 
 Load balancer health checks, Kubernetes probes, uptime monitors and CORS preflights reach a service
 as ordinary HTTP requests, so a service that answers its own load balancer every few seconds would
-look busier, and usually faster, than its users make it. `tenantguard` classifies every data point
+look busier, and faster, than its users make it. `tenantguard` classifies every data point
 and every server span with `internal/trafficclass` while it still holds the original attributes,
 then drops the user agent with everything else that is not published. Infrastructure traffic gets
 the point attribute `scf.traffic.class`; application traffic gets none, so its streams keep the
@@ -425,13 +430,15 @@ upper-cased method, the route after `internal/routenorm` and the user agent:
      `system`, `sys`, `ops`, `monitoring`, `monitor`, `.well-known`.
    - Check segments: `live`, `liveness`, `ready`, `readiness`, `started`, `startup`, `ping`,
      `check`, `all`.
-3. **`probe`**: a user agent of a health checker or uptime monitor, or a
-   `user_agent.synthetic.type` of `test`.
+3. **`probe`**: a user agent (`user_agent.original`, or the legacy `http.user_agent` when it is
+   absent) of a health checker or uptime monitor, or a `user_agent.synthetic.type` of `test`.
+   Matching ignores case and leading or trailing spaces.
    - Matched at the start of the user agent: `ELB-HealthChecker/`, `kube-probe/`, `GoogleHC`,
      `Envoy/HC`, `Consul Health Check`, `Nomad/`, `GoogleStackdriverMonitoring-UptimeChecks`,
      `Edge Health Probe`, `Uptime-Kuma/`, `Datadog/Synthetics`, `Better Stack Better Uptime Bot`,
      `Better Uptime Bot`.
-   - Matched as a token inside a browser-like user agent: `UptimeRobot/`,
+   - Matched as a token anywhere in the user agent, at its start or after a space, `;`, `(` or
+     `+`: `UptimeRobot/`,
      `Cloudflare-Healthchecks/`, `Cloudflare-Traffic-Manager/`, `(StatusCake)`,
      `DatadogSynthetics`.
    - The exact user agent `AlwaysOn`, Azure App Service's warm-up request.
@@ -467,7 +474,7 @@ The conventions behind the lists:
 What the instrumentation records decides which rules can apply:
 
 - **Routes and methods** are on every point, so rules 1 and 2 classify metrics and spans alike.
-- **The user agent** (`user_agent.original`) is a recommended attribute of HTTP server spans in the
+- **The user agent** (`user_agent.original`, legacy `http.user_agent`) is a recommended attribute of HTTP server spans in the
   semantic conventions and the Go, Node.js, Python and Java instrumentations record it there. The
   `http.server.request.duration` metric does not carry it
   ([HTTP metrics](https://github.com/open-telemetry/semantic-conventions/blob/v1.45.0/docs/http/http-metrics.md)),

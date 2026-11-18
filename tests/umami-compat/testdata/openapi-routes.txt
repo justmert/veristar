@@ -1,5 +1,5 @@
 # operations in /openapi.json of ghcr.io/umami-software/umami:3.5.0, sorted.
-# reviewed against the deny list in docs/reference/umami-contract.md.
+# reviewed against the reads in docs/reference/umami-contract.md; no public host serves umami (docs/adr/0005-umami-as-engine-only.md).
 # version 3.5.0
 DELETE /api/admin/users/{userId}/2fa
 DELETE /api/boards/{boardId}

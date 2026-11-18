@@ -8,7 +8,11 @@ declare module "jsdom" {
     resources?: "usable";
     pretendToBeVisual?: boolean;
     beforeParse?: (window: Window & typeof globalThis) => void;
+    virtualConsole?: VirtualConsole;
   };
+  export class VirtualConsole {
+    on(event: "jsdomError", listener: (err: Error) => void): this;
+  }
   export class JSDOM {
     constructor(html?: string, options?: JSDOMOptions);
     readonly window: Window & typeof globalThis;

@@ -20,9 +20,9 @@ id); on your site the tag itself stands there:
 
 With the example values from the [quickstart](quickstart.md), the line becomes:
 
-{/* snippet version=1.3.0 */}
+{/* snippet version=1.3.2 */}
 ```html
-<script defer src="https://in.analytics.example/v/1.3.0/sdk.js" integrity="sha384-3E+vbTmGHWaU8kaLAWT6ttw70odRH565/3vRal5558SgSitqFlIbsFHlfzWnSUtT" crossorigin="anonymous" data-website-id="3f6a0c2e-9b1d-4e7a-8c5f-1d2e3f4a5b6c"></script>
+<script defer src="https://in.analytics.example/v/1.3.2/sdk.js" integrity="sha384-Q2xIA5ztfj7VBlpI/+6kehWQVUC2jZPr89aAooy7Uinc/V2C0VF7Ti66L3gj6D/v" crossorigin="anonymous" data-website-id="3f6a0c2e-9b1d-4e7a-8c5f-1d2e3f4a5b6c"></script>
 ```
 
 If your static site generator has a head template or base layout that every page uses, put the
@@ -59,8 +59,9 @@ document.getElementById("manual").addEventListener("click", () => {
 
 ## What the browser tests check
 
-In Chromium, Firefox and WebKit: one pageview per full load, no pageview for an anchor jump, the
-page title and a same-site referrer as a path, both kinds of custom event, no request at all with
+In Chromium, Firefox and WebKit, with the current tracker release: one pageview per full load, no
+pageview for an anchor jump, no page title (this site does not set `data-send-title="true"`), a
+same-site referrer as a path, both kinds of custom event, no request at all with
 Global Privacy Control, the tracker refused when its file was tampered with, and every page
 served with the content security policy from [content-security-policy.md](content-security-policy.md)
 (`tests/e2e/specs`).

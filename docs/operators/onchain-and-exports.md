@@ -72,9 +72,9 @@ Each verified contract in a project's detail carries **Calls per function**: for
 and kind of caller, the successful calls, the failed calls, the most distinct accounts behind the
 calls on one day, and the days with calls over the range.
 
-- **Called by accounts** counts the operations that invoke the contract directly. **Called by
-  contracts** counts calls other contracts make into it during an invocation, read from the
-  transaction's call tree.
+- The **Called by** column splits each function by caller. **Accounts** counts the operations
+  that invoke the contract directly. **Contracts** counts the calls other contracts make into it
+  during an invocation, read from the transaction's call tree.
 - **Failed** counts calls by contracts that ended in an error the calling contract handled. For
   calls by accounts it shows `n/a`: the transactions read all succeeded, because a failed
   transaction keeps no contract events, and no public source lists failed transactions per

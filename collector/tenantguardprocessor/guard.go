@@ -17,6 +17,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/metric/noop"
 
+	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/expohisto/conversion"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/plog"
 	"go.opentelemetry.io/collector/pdata/pmetric"
@@ -93,6 +94,20 @@ func (g *guard) dropped(ctx context.Context, signal, reason string, n int) {
 // overflow the sums the platform stores.
 const MaxPointCount = 1_000_000_000_000
 
+// MaxPointSum bounds the magnitude of a point's sum of durations in
+// seconds: MaxPointCount requests of a million seconds (11.5 days) each.
+// postgresql refuses a double precision addition that overflows, so an
+// unbounded sum (1e308 twice in one minute or one hour) would fail the
+// writer's or the rollup's transaction; with the bound no sum the
+// platform keeps can come near the limit. the writer refuses a larger
+// point too.
+const MaxPointSum = 1e18
+
+// validSum reports whether a point's sum can be stored and added up.
+func validSum(sum float64) bool {
+	return !math.IsNaN(sum) && !math.IsInf(sum, 0) && math.Abs(sum) <= MaxPointSum
+}
+
 // validTimes reports whether a point's or span's times can be stored: a
 // time after the epoch that fits a signed 64-bit nanosecond count, and a
 // start not after it. a zero start is a point without one.
@@ -113,7 +128,7 @@ func checkHistogram(dp pmetric.HistogramDataPoint) string {
 	if dp.Count() > MaxPointCount {
 		return invalidCount
 	}
-	if dp.HasSum() && (math.IsNaN(dp.Sum()) || math.IsInf(dp.Sum(), 0)) {
+	if dp.HasSum() && !validSum(dp.Sum()) {
 		return invalidSum
 	}
 	bounds, counts := dp.ExplicitBounds(), dp.BucketCounts()
@@ -126,10 +141,19 @@ func checkHistogram(dp pmetric.HistogramDataPoint) string {
 			return invalidBuckets
 		}
 	}
+	var total uint64
 	for i := 0; i < counts.Len(); i++ {
 		if counts.At(i) > MaxPointCount {
 			return invalidCount
 		}
+		// each count is at most 10^12 and a 4 MiB export holds far fewer
+		// than 10^7 of them, so the total cannot overflow
+		total += counts.At(i)
+	}
+	if total != dp.Count() {
+		// otlp requires the count to equal the sum of the buckets; the
+		// writer cannot tell which of the two is right
+		return invalidCount
 	}
 	return ""
 }
@@ -146,8 +170,42 @@ func checkExponential(dp pmetric.ExponentialHistogramDataPoint) string {
 	if dp.Count() > MaxPointCount {
 		return invalidCount
 	}
-	if dp.HasSum() && (math.IsNaN(dp.Sum()) || math.IsInf(dp.Sum(), 0)) {
+	if dp.HasSum() && !validSum(dp.Sum()) {
 		return invalidSum
+	}
+	// otlp requires the count to equal the zero count plus every positive
+	// and negative bucket; the conversion keeps the buckets' total, so a
+	// point that breaks it would reach the writer with a count its
+	// buckets do not add up to
+	total := dp.ZeroCount()
+	if total > MaxPointCount {
+		return invalidCount
+	}
+	for _, b := range []pmetric.ExponentialHistogramDataPointBuckets{dp.Positive(), dp.Negative()} {
+		counts := b.BucketCounts()
+		for i := 0; i < counts.Len(); i++ {
+			if counts.At(i) > MaxPointCount {
+				return invalidCount
+			}
+			total += counts.At(i)
+		}
+	}
+	if total != dp.Count() {
+		return invalidCount
+	}
+	// the transform processor converts every exponential point of a metric
+	// or none: one point it cannot convert (a scale outside -10 to 20, a
+	// zero threshold that is not a finite non-negative number, buckets
+	// past the float range) leaves the whole metric exponential, and the
+	// exporter drops it with the valid points of the same metric. the
+	// conversion the processor runs is tried here, so only that point is
+	// dropped. its errors do not depend on the bounds.
+	if _, err := conversion.ToExplicit(conversion.ExponentialHistogram{
+		Count: dp.Count(), Scale: dp.Scale(), ZeroThreshold: dp.ZeroThreshold(), ZeroCount: dp.ZeroCount(),
+		Positive: conversion.Buckets{Offset: dp.Positive().Offset(), Counts: dp.Positive().BucketCounts()},
+		Negative: conversion.Buckets{Offset: dp.Negative().Offset(), Counts: dp.Negative().BucketCounts()},
+	}, schema.Bounds, "uniform"); err != nil {
+		return invalidBuckets
 	}
 	return ""
 }

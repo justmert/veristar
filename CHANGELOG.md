@@ -18,13 +18,22 @@ here, before they take effect, as the processing terms require
 
 ### Added
 
+- `platformctl verify-migration --no-stats` compares two environments without
+  the Umami `/stats` sample, for a restore node that runs no Umami. The env
+  files then need no `UMAMI_URL` or `UMAMI_ADMIN_PASSWORD`, and the report
+  names the comparison it left out.
+- The snippet route answers the npm install of the tracker when
+  `TRACKER_NPM_PACKAGE` names the scoped package you publish the releases
+  under: package, version, a pinned `npm install` line and the `init` import,
+  which the console shows on its npm tab. Unset, `npm` stays `null`. Before,
+  the control plane refused to start with the key set.
 - API onboarding for Java: the guide
   [docs/onboarding/api/java.md](docs/onboarding/api/java.md) and the example
   `examples/otel-java-spring`, Spring Boot 4.1.2 on Java 25 with the
   OpenTelemetry Java agent 2.33.1, which dual-exports through a declarative
   configuration file. `tests/otelapps` runs it in every export mode and the
-  `apipath` suite against the platform collector; the console's API analytics
-  setup page has a Java tab.
+  `apipath` suite against the platform collector; the console's API connect
+  page has a Java tab.
 - API onboarding for the Stellar Anchor Platform:
   [docs/onboarding/api/anchor-platform.md](docs/onboarding/api/anchor-platform.md)
   and `examples/otel-anchor-platform` attach the Java agent to the Anchor
@@ -63,7 +72,7 @@ here, before they take effect, as the processing terms require
   ([docs/reference/onchain-sources.md](docs/reference/onchain-sources.md#calls-per-contract-function),
   [control-plane-api.md](docs/reference/control-plane-api.md#159-calls-per-contract-function)).
 - Web event delivery from every core node: `WEB_EVENTS` is split into 32
-  partitions by a hash of the visitor token, each with its own consumer
+  partitions by a hash of the site id and the visitor token, each with its own consumer
   (`replayer-p00` to `replayer-p31`) and lock. The replayer on every core node
   owns a share of the partitions (11, 11 and 10 on three nodes) and delivers
   them to its own node's Umami processes, so delivery grows with the node
@@ -83,12 +92,28 @@ here, before they take effect, as the processing terms require
 
 ### Changed
 
+- Development stack: the control plane's `CONSOLE_ORIGIN` and GitHub callback are now the
+  Vite dev server, `http://localhost:5173`, which proxies `/api`, so a console started with
+  `pnpm --filter ./apps/console dev` signs in. CONTRIBUTING.md lists every step from a
+  fresh clone, including `CONTROLPLANE_URL`, which the console dev server requires.
+- Tracker 1.3.2 is the release the console recommends: it counts a redirecting
+  route once, counts the current page when consent is given after
+  single-page navigation, keeps tracked links of client-side routers
+  client-side and never holds a link for more than a second. Pin it in your
+  snippet to get these fixes ([Tracker releases](#tracker-releases)).
 - Terms of use `2026-11-18-draft.6`: SCF also receives, per verified
   contract, UTC day, function and kind of caller, the counts of successful
   and failed calls and of the distinct accounts that made them; the accounts
   behind a function's daily count are held in memory while the day is read
-  and never stored. The data processing terms and the records of processing
-  list the same. Every project accepts it at its next sign-in.
+  and never stored. The terms also state that SCF's operators see each
+  project's enrollment answers, members and audit log for review, that the
+  hosting operator acts through the operators on the roster, that adding a
+  member or an operator by GitHub login asks GitHub for its numeric id, every
+  store a removal deletes, the frame opt-out the tracker reads, and that a
+  site's own before-send hook or `track()` call can still supply the screen,
+  language and title. The data processing terms (clauses 3 and 9) and the
+  records of processing list the same. Every project accepts it at its next
+  sign-in.
 - Gateways queue web events on `web.events.<site id>.<partition>` instead of
   `web.events.<site id>`. Erasure waits for every partition of a site, and
   `platformctl dlq replay` and `platformctl queue forward` send a web event
@@ -99,6 +124,122 @@ here, before they take effect, as the processing terms require
   `WebEventsBacklogGrowing` read the sum of every replayer consumer.
 - `deploy.yml` installs the NATS permissions of the new release on every
   NATS server before the core tier. The replayer container gets 30 s to stop.
+- `packages/tracker/scripts/pack.mjs` packs only the version of the
+  checkout's `package.json`; it refused only versions missing from the
+  manifest, and packed the current source under any released version.
+- The MCP tools `get_sessions` and `get_web_metrics` no longer describe
+  region and city, which the platform never records.
+- The browser test matrix, the web path suite and the Wallets Kit check run
+  the current tracker release (1.0.0 before), with `data-send-title="true"`
+  on the Astro site, and `make e2e-matrix` runs the matrix with its browsers
+  in the browser container instead of `pnpm test`.
+- Every fixed port of the test suites and example compose files is in the
+  27xxx range, outside the Linux ephemeral port range, and `tests/ci` refuses
+  a fixed port that returns to it.
+- The onboarding guides and the Mintlify example pin tracker 1.3.2.
+- `ghcr.io/astral-sh/uv` 0.13.8 to 0.13.9 in the Python example, and the
+  controller's uv (`scripts/supply-chain/install-tools.sh`) 0.13.7 to 0.13.9.
+- The metrics writer refuses a point that adds more than ten million
+  requests (it refused above a billion). At the full rate limit a tenant
+  with such points brought a day's request total past the 64-bit limit,
+  which parked the daily rollup and failed every read of that day.
+
+### Fixed
+
+- The domain check (`POST /api/sites/{site_id}/verify`) needs the current terms
+  like every other change to a project, and answers 403 `terms_not_accepted`
+  without them. The control plane API reference lists the exceptions
+  (accepting the terms, removing a member, revocations, erasure and MCP access
+  keys) with the reason for each.
+- The collector and the metrics writer drop a histogram point whose sum
+  exceeds 10^18 seconds in magnitude, counted as `sum` in
+  `tenantguard_invalid_items`. Two sums near the floating point limit in one
+  minute or one hour no longer fail the writer's message or the hourly
+  rollup.
+- The collector drops a histogram point whose count is not the total of its
+  buckets, counted as `count` in `tenantguard_invalid_items`, as OTLP
+  requires; the metrics writer refused each one alone with a log line.
+- The collector drops an exponential histogram point it cannot convert to
+  the canonical buckets (a scale outside -10 to 20, a zero threshold that is
+  not a finite non-negative number, buckets beyond the floating point
+  range), counted as `buckets`. One such point kept the whole metric
+  unconverted, and the export lost every valid point of that metric.
+- API analytics, the operator project lists and compares, "What SCF sees" and
+  the machine metrics API answer for any range when a project's request counts
+  over the range pass the 64-bit limit: request totals stop at the largest
+  64-bit value and percentiles come from an overflow-safe histogram sum
+  (`api.sum_buckets_read`, migration 00049). Before, such a range answered 500,
+  for every project in an operator list.
+- A `visitor_today` erasure reads the visitor's state from the stream leader, so
+  a replica that has not yet applied the visitor's newest session cannot hide
+  that session from the erasure.
+- A project that resubmits its enrollment keeps at most 20 declared accounts and
+  contracts: the ids of the new answers are added in the order they are listed
+  until the project holds 20, the cap the console holds every project to
+  (migration 00048).
+- `PUT /api/tenants/{tenant_id}/cohort/proposal` answers 403
+  `terms_not_accepted` until the project accepts the current terms, as every
+  other mutating tenant route does.
+- An operator's cohort confirm copies exactly the proposal its audit row
+  names, also when the project changes its proposal at the same moment.
+- Operator routes and the machine metrics API answer 400 `invalid_query` or
+  `invalid_cursor` for a query value or cursor key that holds a nul
+  character, invalid UTF-8, a uuid in another form or a year 0 date; they
+  answered 500.
+- A page whose path starts with two slashes (`https://example.com//docs/a`)
+  is stored under its own path. Umami read such a path as a host and stored
+  `/a`, and a path such as `//search%20term` made Umami refuse the event,
+  which went to the dead letter queue. The gateway also drops a referrer
+  host that the browser URL parser refuses (`a<b`, `1.2.3.256`, a zone),
+  which Umami refused the same way, and refuses a site origin whose last
+  label is a number but not an IPv4 address.
+- The disaster recovery runbook stops every Umami process before the import
+  (`umami` and `umami-2` and up). Stopping process 1 alone left a connection
+  to the `umami` database open, so `scripts/migrate.sh` could not drop it. The
+  import now follows the tunnelled sequence of the handover guide and compares
+  with `verify-migration` before the reconcile writes to the new cluster. The
+  security patch and incident runbooks stop every Umami process too, and
+  `tests/docs` refuses a runbook command that stops `umami` without `umami-2`.
+- A contract proven through an account that the project removes while the
+  proof reads the ledger stays unverified (`admin_not_verified` or
+  `deployer_not_verified`); before, it could be stored as verified through
+  the removed account.
+- Usage report creation (20 per project and day) and link revocation (60 per
+  project and hour) keep their limits under concurrent requests.
+- The domain check (6 per site and hour) and the on-chain proof (10 per id
+  and hour) count the checks still running, so a burst of requests no longer
+  passes the limit together.
+- An erasure request for a site that is pending (a pending or rejected
+  project, or a site in review) answers 503 `provisioning_pending`, as the
+  contract says, instead of starting a run against Umami websites that do
+  not exist.
+- `make local-converge-up` no longer fails with `Pool overlaps with other one
+  on this address space` on a host where a Compose project holds
+  172.31.0.0/16: the local converge's public network moved from
+  172.31.99.0/24 to 10.98.99.0/24, outside Docker's default address pools.
+  `LC_IMAGE_TAG` names a second set of local images, so a rolling
+  `deploy.yml` from one release to another runs locally, and
+  `make local-converge-e2e` runs on the `LC_TOPOLOGY=node` layout too.
+- The replayer reads a visitor's visit record again when a NATS replica
+  that has not caught up answers with an older one, so events of a visitor
+  delivered back to back keep their visit.
+- The MCP token endpoint accepts an authorization code without `redirect_uri`
+  when the authorization request left it out, as a client with one
+  registered redirect URI may. A `redirect_uri` that is given must still
+  match exactly.
+- The operator roster counts a passkey account's sign-in passkey in
+  `account.passkeys` when the row names that account's address, as the
+  step-up status does, so such an operator no longer shows 0 passkeys.
+
+### Security
+
+- Deleting an operator account (`DELETE /api/me`) needs a fresh passkey
+  step-up, as changing its sign-in methods does, so a session alone cannot
+  remove an operator from the roster. Without one the answer is 401
+  `step_up_required` and nothing changes.
+- A sign-in drops every value the browser's previous session held, so an
+  operator step-up or a passkey ceremony of another sign-in never carries
+  over into the new session.
 
 ### Upgrade notes
 
@@ -112,6 +253,16 @@ here, before they take effect, as the processing terms require
   expected log lines and the rollback are in
   [docs/deploy/upgrade.md](docs/deploy/upgrade.md), "Upgrading to
   partitioned web events".
+- The deploy applies migrations 00047 (calls per contract function), 00048
+  (the 20-id cap of the enrollment copy) and 00049 (`api.sum_buckets_read`)
+  with the new release's bootstrap, before the core tier restarts.
+- Every project accepts terms of use `2026-11-18-draft.6` at its next
+  sign-in; until it does, changes to the project are blocked (403
+  `terms_not_accepted`, contract 4.2.6).
+- Tracker 1.3.2 is served next to every earlier release; sites move to it
+  by replacing their tag ([docs/onboarding/web/upgrading.md](docs/onboarding/web/upgrading.md)).
+- Development stack: point the dev GitHub OAuth App's callback at
+  `http://localhost:5173/api/auth/github/callback`.
 
 ## [0.4.0] - 2026-11-18
 
@@ -1013,6 +1164,28 @@ and pinned by its SRI hash, listed in
 [packages/tracker/releases/manifest.json](packages/tracker/releases/manifest.json).
 How to check a file against its release:
 [docs/security/verify-tracker.md](docs/security/verify-tracker.md).
+
+### Tracker 1.3.2 - 2026-11-18
+
+- A route that redirects at once (a navigation followed by another within
+  300 ms) counts as one pageview of the page the visitor lands on, with the
+  referrer of the first. 1.3.1 and earlier counted the landing page twice and
+  the intermediate route never.
+- `umami.start()` counts the page the visitor is on when consent is given,
+  also after single-page navigation before consent, and keeps the visit's
+  original referrer. In manual mode (`start({ automatic: false })`) every
+  `umami.track()` call names the current page. 1.3.1 and earlier reported the
+  page the tracker loaded on.
+- A tracked link (`<a data-umami-event>`) that a client-side router handles
+  stays a client-side navigation; 1.3.1 and earlier turned it into a full page
+  load. A plain same-tab link is held for its event only while no proof is
+  ready, and for at most one second, so a slow gateway never freezes links.
+  Download links and links into another window are left to the browser.
+- Nul characters in the page title or referrer are dropped instead of making
+  the gateway refuse the event.
+- Wire format version 1 is unchanged; the gateway needs no update beyond
+  serving the new file.
+- 10,202 bytes, 4,626 gzip (1.3.1: 9,694 and 4,385, +5.5% gzip).
 
 ### Tracker 1.3.1 - 2026-11-17
 

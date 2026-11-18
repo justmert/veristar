@@ -101,7 +101,9 @@ func (m *Manager) Load(next http.Handler) http.Handler {
 }
 
 // SignIn starts a signed-in session for userID. the token is renewed first,
-// so a session id planted before sign-in is useless afterwards.
+// so a session id planted before sign-in is useless afterwards, and every
+// value the browser's previous session held is dropped: a step-up or a
+// ceremony of another sign-in never carries over into this one.
 func (m *Manager) SignIn(ctx context.Context, userID uuid.UUID) error {
 	// a sign-in starts a new session: the token it makes is inserted
 	// whatever happened to the one the request arrived with
@@ -110,6 +112,9 @@ func (m *Manager) SignIn(ctx context.Context, userID uuid.UUID) error {
 	}
 	if err := m.scs.RenewToken(ctx); err != nil {
 		return fmt.Errorf("session: renew token: %w", err)
+	}
+	if err := m.scs.Clear(ctx); err != nil {
+		return fmt.Errorf("session: clear: %w", err)
 	}
 	m.scs.Put(ctx, userIDKey, userID.String())
 	m.scs.Put(ctx, signedInAtKey, strconv.FormatInt(time.Now().Unix(), 10))

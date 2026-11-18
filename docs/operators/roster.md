@@ -35,8 +35,9 @@ that are your path back in (see "Lockout recovery" below).
 1. On the Operators page, under **Add an operator**, pick **GitHub** or **Stellar wallet or
    passkey**.
 2. Enter the GitHub login, or the Stellar address: a wallet's `G...` address, or the `C...` address
-   of a passkey account, which the person finds on their **Account** page. A GitHub login is resolved to the account's
-   numeric id at once, so a later rename of the login does not move the access.
+   of a passkey account, which the person finds on their **Account** page. A GitHub login is
+   resolved to the account's numeric id at once, so a later rename of the login does not move the
+   access.
 3. Pick the role, enter a reason, and select **Add operator**.
 
 The new operator signs in, opens the operator area and registers a passkey. The first passkey needs
@@ -55,8 +56,7 @@ operator writes `operator.add`, and a passkey reset writes `operator.passkeys_re
   stay, so a resumption needs only a sign-in and a confirmation.
 - **Remove** takes the row off the roster and the person's sessions end. Their operator passkeys are
   deleted unless another active row still makes them an operator (a second identity of the same
-  person).
-  They keep their ordinary console account and their project memberships.
+  person). They keep their ordinary console account and their project memberships.
 - **Make admin** and **Make operator** change the role.
 
 The roster always keeps at least one active operator admin. A suspension, removal or demotion of the

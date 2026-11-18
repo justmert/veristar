@@ -13,5 +13,8 @@ export function trackerTag(): string {
     siteId: required("SA_SITE_ID"),
     version: required("SA_TRACKER_VERSION"),
     origin: required("SA_GATEWAY_ORIGIN"),
+    // SA_SEND_TITLE=true adds data-send-title="true", the console's
+    // "send the page title" option
+    sendTitle: process.env.SA_SEND_TITLE === "true",
   });
 }

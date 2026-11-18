@@ -71,7 +71,7 @@ put API_MINUTE_RETENTION_DAYS 30
 put API_HOURLY_RETENTION_MONTHS 36
 
 # GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET (the dev github oauth app with
-# callback http://localhost:8085/api/auth/github/callback) and
+# callback http://localhost:5173/api/auth/github/callback) and
 # OPERATOR_GITHUB_IDS (numeric github ids of the operators) are not
 # generated: add them to this file by hand. the controlplane service
 # refuses to start without them.

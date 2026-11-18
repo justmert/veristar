@@ -127,8 +127,8 @@ Umami processes per node (bursts queue and drain after), three database members,
 50 alert rules (plus 6 recording rules) with promtool tests, the prober, the status page and the
 SLO report make up the monitoring baseline. In the alert fire-drills 16 alerts fired and resolved,
 and 3 more fired for real without a drill ([runbooks/alerts.md](runbooks/alerts.md),
-"Fire-drills"). On production the observability role runs on every node, and Prometheus has 43
-active targets, all `up`. Firing alerts are listed on the console's operator Alerts page
+"Fire-drills"). On production the observability role runs on every node; at the first converge Prometheus had
+43 active targets, all `up`. Firing alerts are listed on the console's operator Alerts page
 ([operators/alerts.md](operators/alerts.md)), the alert channel; a push receiver can be added
 ([runbooks/alerts.md](runbooks/alerts.md), "Adding a receiver"). The prober and the status page
 run on the probe host in Azure East US ([deploy/probe.md](deploy/probe.md)).

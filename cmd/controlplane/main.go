@@ -441,7 +441,7 @@ func serve(ctx context.Context, env *config.Env, log *slog.Logger) error {
 
 	// a person deletes their own account (contract 4.1.6)
 	accountRoutes, err := account.NewRoutes(account.Config{
-		DB: d, Sessions: sessions, Umami: admin, Reconcile: scope.Reconcile,
+		DB: d, Sessions: sessions, Umami: admin, Reconcile: scope.Reconcile, StepUp: stepUp,
 	})
 	if err != nil {
 		return err

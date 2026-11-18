@@ -16,7 +16,8 @@ func TestMetricsV1Validates(t *testing.T) {
 	require.True(t, doc.IsOpenAPI31OrLater(), "the document is openapi 3.1")
 	require.NoError(t, doc.Validate(loader.Context))
 	for _, p := range []string{"/tenants", "/web/daily", "/web/dimensions", "/web/hourly", "/web/integrity",
-		"/api/daily", "/api/routes/daily", "/api/hourly", "/openapi.yaml"} {
+		"/api/daily", "/api/routes/daily", "/api/hourly", "/onchain/ids", "/onchain/daily", "/onchain/weekly",
+		"/onchain/functions", "/rules", "/rules/{rule_id}/matches", "/openapi.yaml"} {
 		item := doc.Paths.Value(p)
 		require.NotNil(t, item, p)
 		require.NotNil(t, item.Get, p)

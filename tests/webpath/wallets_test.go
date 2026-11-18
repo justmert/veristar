@@ -28,7 +28,7 @@ import (
 )
 
 // the wallets kit example of tests/e2e/sites.ts (WALLET_SITE)
-var siteWallets = exampleSite{"wallets-kit-spa", "wk.sa-tenant.example", "0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e05", "@veristar/example-wallets-kit-spa", 47105}
+var siteWallets = exampleSite{"wallets-kit-spa", "wk.sa-tenant.example", "0b6f2a5e-3c1d-4f7a-9e2b-5d8c1a4f6e05", "@veristar/example-wallets-kit-spa", 27105}
 
 // TEST_WALLET_ADDRESS of tests/fixtures/wallets-kit-module, the account the
 // test wallet hands the kit. it must reach no request body, no queued message
@@ -53,7 +53,7 @@ func TestWalletsKit(t *testing.T) {
 	s.AddCountry(t, "DE", countrySubnets(t, "DE")["DE"])
 	s.StartForwarder(t, fwdBin, "DE")
 	waitChallenge(t, s.FwdAddr, siteWallets)
-	b := startBrowsersWith(t, s.FwdAddr, []siteRun{{Site: siteWallets, Version: "1.1.0", Build: "build:test"}})
+	b := startBrowsersWith(t, s.FwdAddr, []siteRun{{Site: siteWallets, Version: currentTracker(t), Build: "build:test"}})
 
 	// a fresh secret seed per run, so a hit can only come from this run
 	kp, err := keypair.Random()
@@ -115,7 +115,7 @@ func TestWalletsKit(t *testing.T) {
 	s.WaitStored(t, siteWallets.ID, 17)
 
 	t.Run("stored in umami", func(t *testing.T) {
-		evs := s.Events(t, siteWallets.ID, today())
+		evs := s.Events(t, siteWallets.ID, runRange())
 		names := countBy(evs, func(e UmamiEvent) string {
 			if e.EventType == umamiPageview {
 				return "pageview"
@@ -124,7 +124,7 @@ func TestWalletsKit(t *testing.T) {
 		})
 		t.Logf("umami events of the site: %s", joinKeys(names))
 		expectCounts(t, "umami", names, want)
-		if q := s.Events(t, quarantine, today()); len(q) != 0 {
+		if q := s.Events(t, quarantine, runRange()); len(q) != 0 {
 			t.Errorf("%d events in the quarantine website", len(q))
 		}
 
@@ -189,7 +189,7 @@ func TestWalletsKit(t *testing.T) {
 			X string `json:"x"`
 		}
 		q := url.Values{}
-		r := today()
+		r := runRange()
 		q.Set("startAt", strconv.FormatInt(r.Start.UnixMilli(), 10))
 		q.Set("endAt", strconv.FormatInt(r.End.UnixMilli(), 10))
 		q.Set("type", "event")

@@ -40,6 +40,8 @@ type Routes struct {
 	now     func() time.Time
 	log     *slog.Logger
 	running sync.WaitGroup
+	// checks running in this process, counted by the rate limit
+	inflight tenants.Inflight
 }
 
 // NewRoutes checks its inputs.
@@ -139,6 +141,12 @@ func (h *Routes) verify(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
+	// a check marks the domain verified, which counts toward the project's
+	// standing, so it needs the current terms like every other change
+	// (contract 4.2.6)
+	if err := a.RequireTerms(); err != nil {
+		return err
+	}
 	var b verifyBody
 	if err := httpx.DecodeJSON(r, &b); err != nil {
 		return err
@@ -153,9 +161,11 @@ func (h *Routes) verify(w http.ResponseWriter, r *http.Request) error {
 	if s.Status == "removed" {
 		return httpx.Conflict(httpx.CodeSiteRemoved, "the site is removed")
 	}
-	if err := h.limit(ctx, s.ID); err != nil {
+	release, err := h.limit(ctx, s.ID)
+	if err != nil {
 		return err
 	}
+	defer release()
 	// the network checks run outside any transaction
 	o, err := h.checker.Verify(ctx, s.Domain, s.VerifyToken, method)
 	if err != nil {
@@ -202,27 +212,32 @@ func (h *Routes) verify(w http.ResponseWriter, r *http.Request) error {
 // window. the count comes from the audit rows the route writes, so every
 // control plane instance sees the same number; two requests that race may
 // both pass at the limit, which costs at most a few extra checks.
-func (h *Routes) limit(ctx context.Context, siteID uuid.UUID) error {
+func (h *Routes) limit(ctx context.Context, siteID uuid.UUID) (func(), error) {
 	now := h.now()
 	var row systemq.RecentUserVerifiesRow
-	err := h.scope.DB().WithSystem(ctx, func(tx pgx.Tx) error {
-		var qerr error
-		row, qerr = systemq.New(tx).RecentUserVerifies(ctx, systemq.RecentUserVerifiesParams{
-			Target: audit.SiteTarget(siteID), Since: now.Add(-verifyWindow),
+	// checks of this site still running in this process count too, so a
+	// burst of requests cannot all pass before the first records itself
+	ok, release, err := h.inflight.Reserve(siteID, verifyLimit, func() (int, error) {
+		err := h.scope.DB().WithSystem(ctx, func(tx pgx.Tx) error {
+			var qerr error
+			row, qerr = systemq.New(tx).RecentUserVerifies(ctx, systemq.RecentUserVerifiesParams{
+				Target: audit.SiteTarget(siteID), Since: now.Add(-verifyWindow),
+			})
+			return qerr
 		})
-		return qerr
+		return int(row.Checks), err
 	})
 	if err != nil {
-		return fmt.Errorf("domaincheck: rate count: %w", err)
+		return nil, fmt.Errorf("domaincheck: rate count: %w", err)
 	}
-	if row.Checks < verifyLimit {
-		return nil
+	if ok {
+		return release, nil
 	}
-	wait := row.Oldest.Add(verifyWindow).Sub(now)
-	if wait < time.Second {
-		wait = time.Second
+	wait := time.Second
+	if row.Checks >= verifyLimit {
+		wait = max(row.Oldest.Add(verifyWindow).Sub(now), time.Second)
 	}
-	return httpx.RateLimited(wait)
+	return nil, httpx.RateLimited(wait)
 }
 
 // AfterSiteCreate fetches the new site's stellar.toml in the background

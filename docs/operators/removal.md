@@ -33,9 +33,11 @@ Then the purge runs store by store, ingestion first and data after:
 | `registry` | the gateway refuses new events for every site of the project |
 | `otlp_tokens` | every OTLP token is revoked; the collector refuses them |
 | `umami` | both Umami websites (primary and quarantine) of every site are deleted with all their raw events and sessions, then the project's Umami team, then the Umami users of members who belong to no other project |
-| `web_ingest` | gateway outcome counts of the project, unless aggregates are kept |
+| `web_ingest` | the network keys always; gateway outcome, evidence and page signal counts of the project unless aggregates are kept |
 | `api` | per-minute API data always; hourly and daily API data unless aggregates are kept |
-| `agg` | daily web aggregates, unless aggregates are kept |
+| `agg` | daily web aggregates, integrity grades and coverage counts, unless aggregates are kept |
+| `chain` | the ledger read state, week members and open weeks always; daily ledger counts, daily calls per contract function and closed weeks unless aggregates are kept |
+| `reports` | every signed usage report of the project, whatever the aggregates setting says |
 
 Each finished step is audited as `purge.step`, the end as `purge.complete`. The project page
 in the operator area shows the steps and whether data is still being deleted. A step that
@@ -49,7 +51,7 @@ their console sign-in; they lose access to the project only.
 The **Settings** tab has **Aggregates of removed projects**. When set to keep, a project
 removed from then on keeps its anonymous daily counts (web aggregates and grades, gateway
 outcome, evidence and signal counts, hourly and daily API data, daily ledger counts and
-closed ledger weeks) in the tables the global views and the metrics API read. Raw web data,
+closed ledger weeks, daily calls per contract function) in the tables the global views and the metrics API read. Raw web data,
 the Umami websites, per-minute API data, the network keys, the ledger read state, week
 members and open weeks, and the signed usage reports are deleted either way.
 

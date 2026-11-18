@@ -39,7 +39,8 @@ type Gateway struct {
 	// ClientIPHeader is the one header the local caddy sets to the client
 	// address.
 	ClientIPHeader string
-	// DBIPPath is the db-ip country lite mmdb file.
+	// DBIPPath is the db-ip country lite mmdb file; its directory also holds the
+	// asn, network class and tor exit files.
 	DBIPPath string
 	// ReleaseDir holds manifest.json, revoked.json and <version>/sdk.js.
 	ReleaseDir string

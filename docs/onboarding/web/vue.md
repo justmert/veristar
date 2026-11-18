@@ -5,7 +5,7 @@ description: "Add the tracker to a Vue app built with Vite and Vue Router."
 
 For a Vue app built with Vite, with Vue Router. Tested by the example
 [`examples/vue-spa`](https://github.com/justmert/veristar/tree/main/examples/vue-spa) (Vue 3.5.45, Vue Router 5.4.0,
-`@vitejs/plugin-vue` 6.0.10, Vite 8), which runs in the browser test matrix.
+`@vitejs/plugin-vue` 6.0.11, Vite 8), which runs in the browser test matrix.
 
 ## Where the tag goes
 
@@ -20,9 +20,9 @@ Put the tag in `index.html` at the root of the project, not in a component:
 The example replaces the comment with the tag at build time so that tests can use their own site
 id. In your app the tag from the console stands there:
 
-{/* snippet version=1.3.0 */}
+{/* snippet version=1.3.2 */}
 ```html
-<script defer src="https://in.analytics.example/v/1.3.0/sdk.js" integrity="sha384-3E+vbTmGHWaU8kaLAWT6ttw70odRH565/3vRal5558SgSitqFlIbsFHlfzWnSUtT" crossorigin="anonymous" data-website-id="3f6a0c2e-9b1d-4e7a-8c5f-1d2e3f4a5b6c"></script>
+<script defer src="https://in.analytics.example/v/1.3.2/sdk.js" integrity="sha384-Q2xIA5ztfj7VBlpI/+6kehWQVUC2jZPr89aAooy7Uinc/V2C0VF7Ti66L3gj6D/v" crossorigin="anonymous" data-website-id="3f6a0c2e-9b1d-4e7a-8c5f-1d2e3f4a5b6c"></script>
 ```
 
 ## Route changes

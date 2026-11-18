@@ -7,7 +7,7 @@
 # probe host is a separate, manual step.
 #
 #   ansible-playbook -i inventories/<env>/ playbooks/probe-bundle.yml \
-#     -e sa_release_manifest=<release-images.json>
+#     -e sa_image_tag=<release> -e sa_release_manifest=<release-images.json>
 #
 # the bundle holds the probe tenant's token and machine api key, so it is
 # written with mode 0700/0600 under .scratch/ (gitignored) by default.

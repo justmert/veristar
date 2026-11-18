@@ -61,8 +61,7 @@ One row per project.
 
 Requests, error rates and latency count application requests only; infrastructure requests are
 shown apart and never mix into them. Sorting by requests in each direction finds the highest and
-lowest usage projects. Percentiles
-are never averaged across services or days; they are computed from bucket counts summed over
+lowest usage projects. Percentiles are never averaged across services or days; they are computed from bucket counts summed over
 exactly what the row covers.
 
 ## Growth and percentiles
@@ -123,9 +122,9 @@ page shows, for the same range:
   table, and the largest referrers, countries, devices, browsers and operating systems of each
   project;
 - API: daily charts of requests, p95 latency and the 4xx and 5xx rates, a totals table
-  (requests, rates, p50, p95, p99, services, routes), and every
-  service of each project ordered by requests, so the first and last are the most and least
-  used services.
+  (requests, rates, p50, p95, p99, services, routes), and every service of each project ordered
+  by requests, so the first and last are the most and least used services. As on Global API,
+  these count application requests only, with the infrastructure requests shown apart.
 
 A day that the aggregation has not read yet (for example before a backfill) is a gap in the
 web charts and shows as not read in the tables. A day read without traffic shows 0. Compare

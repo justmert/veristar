@@ -269,6 +269,13 @@ func (h *Cohorts) change(w http.ResponseWriter, r *http.Request, fn func(tx pgx.
 		if _, err := tx.Exec(ctx, `select pg_advisory_xact_lock(hashtextextended('cp.cohort:' || $1::text, 0))`, id); err != nil {
 			return err
 		}
+		// the project writes its proposal without that lock, so the row is
+		// locked too: a proposal changed after the read below would
+		// otherwise be the one a confirm copies, while the audit row names
+		// the one read
+		if _, err := tx.Exec(ctx, `select 1 from cp.tenant_cohorts where tenant_id = $1 for update`, id); err != nil {
+			return err
+		}
 		before, err := readCohort(ctx, tx, id)
 		if err != nil {
 			return err
@@ -432,6 +439,11 @@ func (h *TenantCohort) propose(w http.ResponseWriter, r *http.Request) error {
 	if err := a.RequireOwner(); err != nil {
 		return err
 	}
+	// a mutating tenant route: refused until the current terms are
+	// accepted (contract 4.2.6)
+	if err := a.RequireTerms(); err != nil {
+		return err
+	}
 	var b tenants.CohortInput
 	if err := httpx.DecodeJSON(r, &b); err != nil {
 		return err
@@ -444,6 +456,11 @@ func (h *TenantCohort) propose(w http.ResponseWriter, r *http.Request) error {
 	c := r.Context()
 	var out CohortRecord
 	err = h.scope.InTenant(c, a, func(tx pgx.Tx) error {
+		// the row lock an operator's cohort change takes too, so the audit's
+		// old proposal is the one this write replaces
+		if _, err := tx.Exec(c, `select 1 from cp.tenant_cohorts where tenant_id = $1 for update`, a.TenantID); err != nil {
+			return err
+		}
 		before, err := readCohort(c, tx, a.TenantID)
 		if err != nil {
 			return err

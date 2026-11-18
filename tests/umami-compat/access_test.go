@@ -225,7 +225,7 @@ func TestOpenAPIRouteListUnchanged(t *testing.T) {
 		t.Errorf("openapi version %s, reviewed list is for %s", doc.Info.Version, version)
 	}
 	if a, b := strings.Join(got, "\n"), strings.Join(want, "\n"); a != b {
-		t.Fatalf("route list differs from testdata/openapi-routes.txt; review the deny list.\n%s", diff(want, got))
+		t.Fatalf("route list differs from testdata/openapi-routes.txt; review the reads in docs/reference/umami-contract.md.\n%s", diff(want, got))
 	}
 }
 

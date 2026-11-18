@@ -28,11 +28,9 @@ test("static-html: each full page load is one pageview", async ({ page }) => {
   await page.waitForURL(`${site.origin}/`);
   const pvs = await expectPageviews(site, 3);
   expect(pvs.map((e) => e.u)).toEqual(["/", "/about.html", "/"]);
-  expect(pvs.map((e) => e.ti)).toEqual([
-    "Static example: home",
-    "Static example: about",
-    "Static example: home",
-  ]);
+  // no data-send-title on this site: no title goes out (astro checks the
+  // opt-in)
+  expect(pvs.map((e) => e.ti)).toEqual([undefined, undefined, undefined]);
   // same-origin referrers are sent as a path
   expect(pvs[1]?.r).toBe("/");
   await expectContract(site);

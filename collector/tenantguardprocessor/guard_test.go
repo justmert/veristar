@@ -683,6 +683,17 @@ func storableValues(md pmetric.Metrics) pmetric.Metrics {
 							dp.ExplicitBounds().FromRaw(nil)
 							dp.BucketCounts().FromRaw([]uint64{dp.Count()})
 						}
+						// the count must be the buckets' total: the rest goes
+						// to the open bucket
+						counts := dp.BucketCounts().AsRaw()
+						var total uint64
+						for _, c := range counts {
+							total += c
+						}
+						if total < dp.Count() {
+							counts[len(counts)-1] += dp.Count() - total
+							dp.BucketCounts().FromRaw(counts)
+						}
 					}
 				case pmetric.MetricTypeExponentialHistogram:
 					h := m.ExponentialHistogram()
@@ -690,8 +701,20 @@ func storableValues(md pmetric.Metrics) pmetric.Metrics {
 						h.SetAggregationTemporality(pmetric.AggregationTemporalityDelta)
 					}
 					for d := 0; d < h.DataPoints().Len(); d++ {
-						if dp := h.DataPoints().At(d); dp.Timestamp() == 0 {
+						dp := h.DataPoints().At(d)
+						if dp.Timestamp() == 0 {
 							dp.SetTimestamp(at)
+						}
+						// the count must be the zero count plus the buckets
+						var total uint64
+						for _, c := range dp.Positive().BucketCounts().AsRaw() {
+							total += c
+						}
+						for _, c := range dp.Negative().BucketCounts().AsRaw() {
+							total += c
+						}
+						if total+dp.ZeroCount() < dp.Count() {
+							dp.SetZeroCount(dp.Count() - total)
 						}
 					}
 				}
@@ -742,7 +765,11 @@ func TestInvalidValuesDroppedAlone(t *testing.T) {
 	add("/buckets-short", func(dp pmetric.HistogramDataPoint) { dp.BucketCounts().FromRaw([]uint64{2}) })
 	add("/count-huge", func(dp pmetric.HistogramDataPoint) { dp.SetCount(MaxPointCount + 1) })
 	add("/bucket-huge", func(dp pmetric.HistogramDataPoint) { dp.BucketCounts().FromRaw([]uint64{1, MaxPointCount + 1, 0}) })
+	add("/count-not-bucket-total", func(dp pmetric.HistogramDataPoint) { dp.SetCount(5) })
 	add("/sum-nan", func(dp pmetric.HistogramDataPoint) { dp.SetSum(math.NaN()) })
+	add("/sum-huge", func(dp pmetric.HistogramDataPoint) { dp.SetSum(1e308) })
+	add("/sum-huge-negative", func(dp pmetric.HistogramDataPoint) { dp.SetSum(-MaxPointSum * 2) })
+	add("/sum-at-limit", func(dp pmetric.HistogramDataPoint) { dp.SetSum(MaxPointSum) })
 	// a stale marker carries no values, only its times are checked
 	add("/stale", func(dp pmetric.HistogramDataPoint) {
 		dp.SetFlags(pmetric.DefaultDataPointFlags.WithNoRecordedValue(true))
@@ -761,6 +788,30 @@ func TestInvalidValuesDroppedAlone(t *testing.T) {
 	eh.SetAggregationTemporality(pmetric.AggregationTemporalityDelta)
 	eh.DataPoints().AppendEmpty().SetTimestamp(at)
 	eh.DataPoints().AppendEmpty().SetCount(1) // time zero
+	emismatch := eh.DataPoints().AppendEmpty()
+	emismatch.SetTimestamp(at)
+	emismatch.SetCount(3)
+	emismatch.SetZeroCount(1)
+	emismatch.Positive().BucketCounts().FromRaw([]uint64{1})
+	// points the transform processor cannot convert, which would keep the
+	// whole metric exponential and lose its valid point at the exporter
+	for _, spoil := range []func(pmetric.ExponentialHistogramDataPoint){
+		func(dp pmetric.ExponentialHistogramDataPoint) { dp.SetScale(21) },
+		func(dp pmetric.ExponentialHistogramDataPoint) { dp.SetScale(-11) },
+		func(dp pmetric.ExponentialHistogramDataPoint) { dp.SetZeroThreshold(math.NaN()) },
+		func(dp pmetric.ExponentialHistogramDataPoint) { dp.SetZeroThreshold(-1) },
+		func(dp pmetric.ExponentialHistogramDataPoint) { dp.Positive().SetOffset(math.MaxInt32 - 1) },
+	} {
+		bad := eh.DataPoints().AppendEmpty()
+		bad.SetTimestamp(at)
+		bad.SetCount(2)
+		bad.SetZeroCount(1)
+		bad.Positive().BucketCounts().FromRaw([]uint64{1})
+		spoil(bad)
+	}
+	esum := eh.DataPoints().AppendEmpty()
+	esum.SetTimestamp(at)
+	esum.SetSum(1e308)
 
 	out, err := g.processMetrics(authed(uuid.NewString(), uuid.NewString()), md)
 	if err != nil {
@@ -776,8 +827,8 @@ func TestInvalidValuesDroppedAlone(t *testing.T) {
 		r, _ := dps.At(i).Attributes().Get("http.route")
 		routes = append(routes, r.Str())
 	}
-	if strings.Join(routes, " ") != "/good /stale" {
-		t.Errorf("kept %v, want /good and /stale", routes)
+	if strings.Join(routes, " ") != "/good /sum-at-limit /stale" {
+		t.Errorf("kept %v, want /good, /sum-at-limit and /stale", routes)
 	}
 	if n := kept.At(1).ExponentialHistogram().DataPoints().Len(); n != 1 {
 		t.Errorf("%d exponential points kept, want 1", n)
@@ -833,7 +884,7 @@ func TestInvalidValuesDroppedAlone(t *testing.T) {
 		}
 	}
 	want := map[string]int64{
-		"metrics/time": 5, "metrics/buckets": 6, "metrics/count": 2, "metrics/sum": 1,
+		"metrics/time": 5, "metrics/buckets": 11, "metrics/count": 4, "metrics/sum": 4,
 		"metrics/temporality": 1, "traces/time": 5,
 	}
 	for k, v := range want {

@@ -22,7 +22,7 @@ test("server rendered html carries the snippet once", async () => {
       env: { ...process.env, ...env },
     },
   );
-  const port = 47194;
+  const port = 27194;
   const server = spawn(process.execPath, ["./dist/server/entry.mjs"], {
     cwd: root,
     env: { ...process.env, ...env, PORT: String(port), HOST: "127.0.0.1" },
@@ -34,6 +34,30 @@ test("server rendered html carries the snippet once", async () => {
       version: env.SA_TRACKER_VERSION,
       origin: env.SA_GATEWAY_ORIGIN,
     });
+    assert.equal(html.split(tag).length, 2);
+  } finally {
+    server.kill();
+  }
+});
+
+// the snippet is read at request time, so the built server serves the title
+// opt-in as soon as SA_SEND_TITLE is set
+test("SA_SEND_TITLE=true adds the title opt-in", async () => {
+  const titled = { ...env, SA_TRACKER_VERSION: "1.3.0", SA_SEND_TITLE: "true" };
+  const port = 27197;
+  const server = spawn(process.execPath, ["./dist/server/entry.mjs"], {
+    cwd: root,
+    env: { ...process.env, ...titled, PORT: String(port), HOST: "127.0.0.1" },
+  });
+  try {
+    const html = await fetchWhenUp(`http://127.0.0.1:${port}/docs/intro`);
+    const tag = snippet({
+      siteId: titled.SA_SITE_ID,
+      version: titled.SA_TRACKER_VERSION,
+      origin: titled.SA_GATEWAY_ORIGIN,
+      sendTitle: true,
+    });
+    assert.match(tag, / data-send-title="true"><\/script>$/);
     assert.equal(html.split(tag).length, 2);
   } finally {
     server.kill();

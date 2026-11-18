@@ -49,6 +49,8 @@ type ledger struct {
 	thresholds map[string]map[string]int
 	// onAccount runs before an account record is served
 	onAccount func(id string)
+	// onRPC runs before an rpc request is answered
+	onRPC func()
 }
 
 func (l *ledger) horizon(w http.ResponseWriter, r *http.Request) {
@@ -92,6 +94,9 @@ func (l *ledger) horizon(w http.ResponseWriter, r *http.Request) {
 }
 
 func (l *ledger) rpc(w http.ResponseWriter, r *http.Request) {
+	if l.onRPC != nil {
+		l.onRPC()
+	}
 	var req struct {
 		ID     int64          `json:"id"`
 		Method string         `json:"method"`
@@ -654,4 +659,87 @@ func TestSEP53NeedsMasterWeight(t *testing.T) {
 	ver = r.body["verification"].(map[string]any)
 	require.Equal(t, "verified", ver["status"], string(r.raw))
 	require.Nil(t, ver["last_error"])
+}
+
+// TestContractProofRacesOwnerRemoval: an owner removed while a contract
+// proof through it reads the ledger leaves the contract unverified, never
+// verified through an id the project no longer declares.
+func TestContractProofRacesOwnerRemoval(t *testing.T) {
+	e := start(t)
+	owner := e.user(t)
+	kp := keypair.MustRandom()
+	account := kp.Address()
+	contract, _, _ := contractID(t, account, 7)
+	tenant := e.tenant(t, owner, []string{account, contract})
+	c := e.client(t, owner)
+	base := "/api/tenants/" + tenant.String() + "/onchain"
+	view := c.call(t, http.MethodGet, base, nil)
+	accountID := idOf(t, view, account)["id"].(string)
+	contractRow := idOf(t, view, contract)["id"].(string)
+	e.sys(t, func(tx pgx.Tx) error {
+		_, err := tx.Exec(t.Context(), `update cp.chain_ids set verify_method = 'sep53', verified_at = now() where strkey = $1`, account)
+		return err
+	})
+	e.l.mu.Lock()
+	e.l.instances[contract] = instanceWithAdmin(t, contract, account)
+	e.l.mu.Unlock()
+
+	// the owner account is removed while the proof reads the instance
+	e.l.onRPC = func() {
+		e.l.onRPC = nil
+		r := c.call(t, http.MethodDelete, base+"/ids/"+accountID, nil)
+		require.Equal(t, http.StatusNoContent, r.status, string(r.raw))
+	}
+	r := c.call(t, http.MethodPost, base+"/ids/"+contractRow+"/verify", map[string]any{"method": "contract_admin"})
+	require.Equal(t, http.StatusOK, r.status, string(r.raw))
+	ver := r.body["verification"].(map[string]any)
+	require.Equal(t, "unverified", ver["status"], string(r.raw))
+	require.Equal(t, onchain.ErrAdminNotVerified, ver["last_error"])
+	require.Zero(t, e.count(t, `select count(*) from cp.chain_ids where strkey = $1 and verified_at is not null`, contract))
+}
+
+func (e *env) count(t *testing.T, q string, args ...any) int {
+	t.Helper()
+	var n int
+	e.sys(t, func(tx pgx.Tx) error { return tx.QueryRow(t.Context(), q, args...).Scan(&n) })
+	return n
+}
+
+// TestVerifyLimitConcurrent: a burst of proofs of one id keeps the limit of
+// ten attempts per hour; proofs still reading the ledger count against it.
+func TestVerifyLimitConcurrent(t *testing.T) {
+	e := start(t)
+	owner := e.user(t)
+	account := keypair.MustRandom().Address()
+	tenant := e.tenant(t, owner, []string{account})
+	c := e.client(t, owner)
+	base := "/api/tenants/" + tenant.String() + "/onchain"
+	id := idOf(t, c.call(t, http.MethodGet, base, nil), account)["id"].(string)
+	e.l.mu.Lock()
+	e.l.data[account] = map[string]string{}
+	e.l.mu.Unlock()
+	r := c.call(t, http.MethodPost, base+"/ids/"+id+"/challenge", nil)
+	require.Equal(t, http.StatusOK, r.status, string(r.raw))
+
+	const n = 25
+	codes := make(chan int, n)
+	var wg sync.WaitGroup
+	for range n {
+		wg.Go(func() {
+			codes <- c.call(t, http.MethodPost, base+"/ids/"+id+"/verify", map[string]any{"method": "manage_data"}).status
+		})
+	}
+	wg.Wait()
+	close(codes)
+	ok := 0
+	for code := range codes {
+		if code == http.StatusOK {
+			ok++
+		} else {
+			require.Equal(t, http.StatusTooManyRequests, code)
+		}
+	}
+	require.LessOrEqual(t, ok, 10)
+	require.LessOrEqual(t, e.count(t, `select count(*) from cp.audit_log where target = $1 and action = $2`,
+		onchain.AuditTarget(uuid.MustParse(id)), onchain.ActionVerify), 10)
 }

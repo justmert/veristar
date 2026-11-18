@@ -252,6 +252,10 @@ func (w *Writer) applyTx(ctx context.Context, tx pgx.Tx, items []*item) (*result
 				"tenant", it.tenant.String(), "points", n, "first_reason", it.decoded.Reason)
 		}
 		recv := it.meta.Timestamp
+		// a tenant's clock or sdk that is wrong is wrong for every point
+		// of every export, so each kind of refusal is logged once per
+		// message with its count and first example, not once per point
+		var late, capped, refused refusal
 		for i := range it.decoded.Points {
 			d := &it.decoded.Points[i]
 			if t := recv; t.After(tokens[d.TokenID]) {
@@ -260,16 +264,14 @@ func (w *Writer) applyTx(ctx context.Context, tx pgx.Tx, items []*item) (*result
 			at := time.Unix(0, d.Time)
 			if at.After(recv.Add(futureSkew)) || at.Before(recv.Add(-w.maxAge)) {
 				res.rejected++
-				w.log.Warn("point outside the accepted time range, not stored",
-					"tenant", it.tenant.String(), "point_time", at.UTC().Format(time.RFC3339Nano),
-					"received", recv.UTC().Format(time.RFC3339Nano))
+				late.add(at.UTC().Format(time.RFC3339Nano))
 				continue
 			}
 			c, out, err := state.Apply(&d.Point)
 			if errors.Is(err, ErrSeriesCap) {
 				res.rejected++
 				warns[warnKey{it.tenant, utcDay(d.Time), warnOverflow}]++
-				w.log.Warn("new stream refused, the tenant reached the stream cap", "tenant", it.tenant.String(), "error", err.Error())
+				capped.add(err.Error())
 				continue
 			}
 			if errors.Is(err, errSeriesCountNotLoaded) {
@@ -277,7 +279,7 @@ func (w *Writer) applyTx(ctx context.Context, tx pgx.Tx, items []*item) (*result
 			}
 			if err != nil {
 				res.rejected++
-				w.log.Warn("point refused", "tenant", it.tenant.String(), "error", err.Error())
+				refused.add(err.Error())
 				continue
 			}
 			res.outcomes[out]++
@@ -317,6 +319,17 @@ func (w *Writer) applyTx(ctx context.Context, tx pgx.Tx, items []*item) (*result
 				warns[warnKey{it.tenant, pday, warnSecret}] += n
 			}
 		}
+		if late.n > 0 {
+			w.log.Warn("points outside the accepted time range, not stored", "tenant", it.tenant.String(),
+				"points", late.n, "first_point_time", late.first, "received", recv.UTC().Format(time.RFC3339Nano))
+		}
+		if capped.n > 0 {
+			w.log.Warn("new streams refused, the tenant reached the stream cap", "tenant", it.tenant.String(),
+				"points", capped.n, "error", capped.first)
+		}
+		if refused.n > 0 {
+			w.log.Warn("points refused", "tenant", it.tenant.String(), "points", refused.n, "first_error", refused.first)
+		}
 	}
 
 	// 5. caps: relabel rows of routes and services beyond the daily caps
@@ -353,6 +366,20 @@ func (w *Writer) applyTx(ctx context.Context, tx pgx.Tx, items []*item) (*result
 		}
 	}
 	return res, nil
+}
+
+// refusal counts the points of one message refused for one reason, with
+// the first one's detail for the log.
+type refusal struct {
+	n     int
+	first string
+}
+
+func (r *refusal) add(detail string) {
+	if r.n == 0 {
+		r.first = detail
+	}
+	r.n++
 }
 
 func utcDay(ns int64) int64 {

@@ -22,6 +22,14 @@ The service is free. No fees are charged to projects or to anyone else.
     Request volume, status codes and latency percentiles per service, method and route, sent by
     your backend with OpenTelemetry next to the tools you already use.
   </Card>
+  <Card title="On-chain activity" icon="link" href="/onboarding/onchain">
+    Daily operations, transactions and counterparties of your Stellar accounts and Soroban
+    contracts, weekly active accounts, and calls per contract function.
+  </Card>
+  <Card title="Signed reports" icon="file-signature" href="/onboarding/signed-reports">
+    A usage report for any period, signed with the service's published Stellar key, that anyone
+    can verify without an account.
+  </Card>
   <Card title="Privacy by design" icon="shield-check" href="/compliance/privacy-strategy">
     No cookies, no stored IP addresses, and visitor counts based on a daily secret that is
     destroyed at midnight UTC.
@@ -45,8 +53,9 @@ The service is free. No fees are charged to projects or to anyone else.
 
 <Steps>
   <Step title="Sign in and enroll your project">
-    Sign in to the console with GitHub, a Stellar wallet or a passkey, and enroll your project. The console shows the addresses
-    of the service you use; the guides use the example domain `analytics.example`.
+    Sign in to the console with GitHub, a Stellar wallet or a passkey, and enroll your project.
+    The console shows the addresses of the service you use; the guides use the example domain
+    `analytics.example`.
   </Step>
   <Step title="Add web analytics">
     Register a site, copy its script tag into your pages and open your dashboard. The
@@ -56,7 +65,11 @@ The service is free. No fees are charged to projects or to anyone else.
   <Step title="Add API analytics">
     Create an OTLP token and add a second exporter to your application. The
     [API quickstart](/onboarding/api/quickstart) explains the setup, and there are guides for
-    Node.js, Python, Go and Rust.
+    Node.js, Python, Go, Rust, Java and the Stellar Anchor Platform.
+  </Step>
+  <Step title="Add on-chain activity">
+    Declare your Stellar accounts and Soroban contracts and prove that your project controls
+    them, as described in [on-chain activity](/onboarding/onchain).
   </Step>
   <Step title="Get help">
     Questions and problems go to the public issue tracker, as described in [support](/support).

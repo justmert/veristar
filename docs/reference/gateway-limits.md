@@ -13,8 +13,8 @@ reason in the table below.
 | Key | Value | Meaning |
 |---|---|---|
 | `PROOF_BITS` | 12 | difficulty of the challenge; the highest tested value with a median solve under 150 ms at 6x CPU slowdown in all three engines ([browser-proof.md](browser-proof.md)) |
-| `PROOF_REPLAY_LIMIT` | 50 | events one proof (one page load) may carry on one node. only queued events count: an event refused after the proof check (fetch metadata, rate limit, user agent, queue) gives its use back. tracker 1.2.0 fetches a new challenge after 40 events and after a 403 `rejected_replay`, `rejected_challenge_expired` or `rejected_challenge_tag`, and sends that event once more |
-| `IPCLUSTER_THRESHOLD` | 20 | the floor of the same-network threshold: distinct visitor tokens per site and truncated prefix per hour. access, organisation and unknown networks use `max(20, scale / 100)`, hosting networks and Tor exits `max(5, scale / 1000)`, where `scale` is the site's typical daily visitors from its registry entry; every threshold is capped at 2000. the event that reaches the threshold and every later one in the window go to the quarantine band ([../security/bot-and-inflation.md](../security/bot-and-inflation.md) section 8) |
+| `PROOF_REPLAY_LIMIT` | 50 | events one proof (one page load) may carry on one node. only queued events count: an event refused after the proof check (fetch metadata, rate limit, user agent, queue) gives its use back. the tracker (from release 1.2.0) fetches a new challenge after 40 events and after a 403 `rejected_replay`, `rejected_challenge_expired` or `rejected_challenge_tag`, and sends that event once more |
+| `IPCLUSTER_THRESHOLD` | 20 | the floor of the same-network threshold: distinct visitor tokens per site and truncated prefix per hour. access, organisation and unknown networks use `max(20, scale / 100)`, hosting networks and Tor exits `max(5, scale / 1000)`, where `scale` is the site's typical daily visitors from its registry entry, rounded down to a power of two; every threshold is capped at 2000. the event that reaches the threshold and every later one in the window go to the quarantine band ([../security/bot-and-inflation.md](../security/bot-and-inflation.md) section 8) |
 | `VISITOR_EVENTS_PER_HOUR` | 600 | queued events per site and visitor token in an hour from the visitor's first event, per node; later events of that visitor in the window go to the quarantine band ([../security/bot-and-inflation.md](../security/bot-and-inflation.md) section 6) |
 | `RATE_SITE_PER_SECOND` / `RATE_SITE_BURST` | 200 / 400 | token bucket per site, per node |
 | `RATE_PREFIX_PER_SECOND` / `RATE_PREFIX_BURST` | 20 / 60 | token bucket per site and keyed hash of the /24 or /48, per node |
@@ -24,12 +24,15 @@ reason in the table below.
 | `GATEWAY_SECURE_TRANSPORT` | `true` | browsers reach the gateway over https and send fetch metadata |
 
 Other settings: `GATEWAY_NODE_ID` (unique per instance), `GATEWAY_ADDR` (for caddy),
-`GATEWAY_OPS_ADDR` (`/healthz`, `/readyz`, `/metrics`, private), `DBIP_MMDB` and
+`GATEWAY_OPS_ADDR` (`/healthz`, `/readyz`, `/metrics` and the edge node's composite `/edgez`, private), `DBIP_MMDB` and
 `TRACKER_RELEASE_DIR` (both baked into the image), and the `NATS_*` keys. The
 network data (`dbip-asn-lite.mmdb`, `asn-classes.csv`, `tor-exits.txt`) is read
 from the directory of `DBIP_MMDB` ([geo.md](geo.md)).
 
-Fixed in code: publish acknowledgement wait 2 s (`PublishAckWait`), readiness canary
+Fixed in code: a budget of 5 s for the work of one request, including a key or secret read from
+NATS (`requestBudget`); HTTP server timeouts of 5 s to read the headers, 10 s to read the request,
+30 s to write the answer and 60 s for an idle connection (`obs.NewServer`, on both the public and the
+ops port); publish acknowledgement wait 2 s (`PublishAckWait`), readiness canary
 every 1 s with a maximum age of 7 s (`CanaryMaxAge`, so `/readyz` fails within 10 s
 of a queue outage), 200,000 entries each for the replay table, the ip-cluster sets,
 the visitor volume table and each rate limit table. Coverage counting of `GET /v/*/sdk.js`:
@@ -123,7 +126,7 @@ cap it.
 Target for one gateway instance on its own: at least 2,000 req/s with p99 under 50 ms. Met by both.
 
 `make gateway-load` is a manual target and not part of `make gateway-it` or the nightly e2e
-workflow. On GitHub's standard runner for private repositories (2 vCPUs, 7 GB) k6, the gateway and
+workflow. On a GitHub-hosted runner with 2 vCPUs and 7 GB, k6, the gateway and
 NATS share two cores; two runs there sent 2,400 and 2,221 req/s with p99 174 ms and 222 ms
 (e2e runs 43437576423 and 43454017432), which measures the runner, not the gateway. Run it on a host
 with cores to spare for k6 before a release that touches the event path.
@@ -144,7 +147,7 @@ event partitions to its own node's Umami processes, so an accepted rate above th
 delivery rate builds a backlog that the queue keeps for at most 72 hours
 ([capacity.md](capacity.md), "Web events end to end", has the measured rates).
 
-The expected peak of the availability statement is 50 events a second, so the cluster accepts
+The expected peak of the availability statement ([availability.md](availability.md)) is 50 events a second, so the cluster accepts
 about 40 times that, and one node alone accepts the 10x burst (500 a second) at p99 under 50 ms. The cluster figure is three times the per-node
 measurement: Traffic Manager spreads `in.veristar.app` over the three nodes, and each node's
 gateway queues on its own NATS server. Each `WEB_EVENTS` message is also stored on the two other
@@ -189,8 +192,8 @@ What changed between the two columns:
 None of them changes what is checked, logged elsewhere or stored: 202 still follows the
 JetStream acknowledgement of the R3 stream, and every other route keeps its filtered log.
 
-The after runs were made with the replayer's leadership on another node. In a first pass the
-replayer on the measured node was delivering the backlog of earlier runs to Umami (one test
+In release `v0.2.1` one replayer at a time delivered every web event, and during the after runs it
+ran on another node. In a first pass the replayer on the measured node was delivering the backlog of earlier runs to Umami (one test
 visitor, so one event at a time, about 70 a second), which took about a third of a vCPU in NATS,
 Umami, the replayer and PostgreSQL and gave p99 74 ms at 500, 87 at 800, 234 at 1,200 and
 1,037/s achieved at 2,500. A real node also hosts its share of that delivery work, so the

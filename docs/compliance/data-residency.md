@@ -4,7 +4,7 @@ description: "Where each kind of data is processed and stored in the production 
 ---
 
 This page declares where the production deployment processes and stores each
-kind of data. It is not legal advice. Last updated 2026-11-14.
+kind of data. It is not legal advice. Last updated 2026-11-18.
 
 ## Declaration
 
@@ -20,14 +20,15 @@ so every service has one member in each zone.
 
 | What | Where | Provider |
 |---|---|---|
-| Ingestion edge: Caddy, gateway, OTLP collector, NATS (queues and memory buckets) | Denmark (Azure Denmark East, availability zones 1, 2 and 3, one node each) | Microsoft Azure |
-| Core: PostgreSQL under Patroni (both databases, three members: leader, synchronous standby, replica), Umami, control plane, replayer, metrics writer, jobs, console | Denmark (Azure Denmark East, availability zones 1, 2 and 3, on the same three nodes) | Microsoft Azure |
+| Ingestion edge: Caddy, gateway, OTLP collector, NATS (queues and memory buckets), etcd (the coordination store of Patroni) | Denmark (Azure Denmark East, availability zones 1, 2 and 3, one node each) | Microsoft Azure |
+| Core: PostgreSQL under Patroni (both databases, three members: leader, synchronous standby, replica), Umami (no public host; the console shows its data), control plane with the MCP server, replayer, metrics writer, jobs, console | Denmark (Azure Denmark East, availability zones 1, 2 and 3, on the same three nodes) | Microsoft Azure |
+| Monitoring: Prometheus, Alertmanager, Grafana. Operational metrics of the services; never raw analytics data | Denmark (Azure Denmark East, on the same three nodes) | Microsoft Azure |
 | Backups of PostgreSQL, encrypted by pgBackRest before upload | Denmark (Azure Denmark East, zone-redundant Blob Storage, account `veristarprodbackups`) | Microsoft Azure |
 | OpenTofu state of the infrastructure, encrypted with the state passphrase. Holds resource settings and addresses; never analytics data | Sweden (Azure Sweden Central, storage account `veristarprodstate`) | Microsoft Azure |
 | Health-checked DNS failover | Azure Traffic Manager, a global DNS service. Sees DNS queries for the service's hostnames and checks the nodes' health endpoint; never analytics data | Microsoft Azure |
 | Authoritative DNS and domain registration | Cloudflare's DNS network, DNS only (no proxy: traffic goes straight to Azure). Sees DNS queries for the service's hostnames; never analytics data | Cloudflare |
 | External prober and public status page | a separate Azure VM in East US (United States), outside the production deployment and its region ([../deploy/probe.md](../deploy/probe.md)). Holds no analytics data: it probes the public endpoints with its own synthetic traffic for the internal probe tenant and keeps the check results and the daily SLO result files | Microsoft Azure |
-| Console sign-in | GitHub OAuth for a GitHub sign-in; a wallet or passkey sign-in is verified by the control plane in Azure Denmark East | GitHub, Inc. (United States) for a GitHub sign-in only. Receives only the sign-in of console users; never visitor or API client data |
+| Console sign-in | GitHub OAuth for a GitHub sign-in; a wallet or passkey sign-in is verified by the control plane in Azure Denmark East | GitHub, Inc. (United States) for a GitHub sign-in, and for the lookup of the GitHub login of a member or operator being added. Receives only console users' sign-ins and those logins; never visitor or API client data |
 
 ## What leaves the EU
 
@@ -44,9 +45,16 @@ so every service has one member in each zone.
   service, and the control plane stores the numeric GitHub id and login. A
   wallet or passkey sign-in passes through no third party: the wallet or the
   passkey answers in the person's own browser and the control plane checks the
-  signature. This concerns tenant staff and operators, not end users.
-- **Operator access.** Operators read aggregates through the console and the
-  machine API. Aggregates are counts per site and day. An operator outside
+  signature. When a project member or an operator is added by GitHub login,
+  the control plane asks GitHub for that login's numeric id. This concerns
+  tenant staff and operators, not end users.
+- **Ledger reads.** The control plane and the jobs read public ledger records
+  from SDF's Horizon (`horizon.stellar.org`) and a public Stellar RPC
+  (`mainnet.sorobanrpc.com`). The requests carry only the public account and
+  contract ids a project declared, never data about a project's end users
+  (`privacy-strategy.md` section 11).
+- **Operator access.** Operators read aggregates through the console, the
+  machine API and the MCP server. Aggregates are counts per site and day. An operator outside
   the EU reading them transfers personal data only if the aggregates are
   personal data (`privacy-strategy.md` section 1). Production access to raw
   data (shell, database) is limited to the people whose age keys are
@@ -64,5 +72,6 @@ so every service has one member in each zone.
 
 ## Tracker script
 
-Tenants load `sdk.js` from `in.<BASE_DOMAIN>` (the EU edge) or self-host the
-same file. Events always go from the browser to `in.<BASE_DOMAIN>`. No CDN outside the edge serves the tracker.
+Your site loads `sdk.js` from `in.<BASE_DOMAIN>` (the EU edge), or you
+self-host the same file. Events always go from the browser to
+`in.<BASE_DOMAIN>`. No CDN outside the edge serves the tracker.

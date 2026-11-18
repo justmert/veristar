@@ -27,7 +27,7 @@ state_storage_account = "examplestagstate"
 # storage account of the pgbackrest repository, unique across azure
 backup_storage_account = "examplestagbackups"
 
-# exact ubuntu image version of the nodes, never latest
+# exact debian 13 marketplace image version of the nodes, never latest
 server_image_version = "0.20261111.2659"
 
 # an azure region that offers the node size in zones 1, 2 and 3

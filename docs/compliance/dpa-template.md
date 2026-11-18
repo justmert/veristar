@@ -9,7 +9,7 @@ follow GDPR Art. 28(3) clause by clause (S10) and are part of the terms of use
 terms "the operator" is the hosting operator of `terms.md` section 1: the party
 that runs the service and hosts its data, Mert Köklü (kklumert@gmail.com). SCF is not a party to them; it
 receives the project statistics that clause 3 describes. This page is not legal
-advice. Last updated 2026-11-17.
+advice. Last updated 2026-11-18.
 
 ## 1. Subject matter, duration, nature and purpose
 
@@ -81,11 +81,14 @@ information Art. 33(3) requires as far as it is available.
 
 When a tenant is removed (a tenant that wants to leave asks the operator to
 remove it), the operator deletes the tenant's raw web
-data (Umami websites with their events and sessions), revokes its OTLP tokens
-and deletes its per-minute API rows (`docs/runbooks/tenant-removal.md`).
-Hourly and daily API rows, web ingest counters and web aggregates are deleted
-too, unless the operator setting `removal_keep_aggregates` is on, in which
-case those aggregate rows are kept. The data is not returned in
+data (Umami websites with their events and sessions), revokes its OTLP tokens,
+and deletes its per-minute API rows, the network keys of its sites, the open
+weeks of its weekly active accounts (the keyed hashes and their key), the
+read state of its on-chain ids and its signed usage reports
+(`docs/runbooks/tenant-removal.md`). Hourly and daily API rows, web ingest
+counters, web aggregates, on-chain daily counts, calls per contract function
+and closed weekly counts are deleted too, unless the operator setting
+`removal_keep_aggregates` is on, in which case those aggregate rows are kept. The data is not returned in
 another format: the tenant can read its own dashboards before it leaves.
 
 ## 10. Information and audits (Art. 28(3)(h))

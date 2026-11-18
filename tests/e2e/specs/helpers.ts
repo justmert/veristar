@@ -93,6 +93,14 @@ export async function expectContract(site: SiteDef): Promise<void> {
     const e = wire(r);
     expect(e.w).toBe(site.siteId);
     expect(e.h).toBe(site.host);
+    // the title goes out only on the site's opt-in (data-send-title, 1.3.0
+    // and later); screen and language never do
+    if (e.t !== "nv") {
+      if (site.sendTitle) expect(typeof e.ti, `title on ${r.body}`).toBe("string");
+      else expect(e.ti, `no title on ${r.body}`).toBeUndefined();
+    }
+    expect(e.s).toBeUndefined();
+    expect(e.l).toBeUndefined();
     // independent check of the work, apart from the fixture's own verification
     const digest = createHash("sha256")
       .update(`${e.w}|${e.p.iat}|${e.p.salt}|${e.p.nonce}`)

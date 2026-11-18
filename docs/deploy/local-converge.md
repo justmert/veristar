@@ -33,8 +33,8 @@ make local-converge-down               # removes containers, volumes, networks, 
 Alertmanager would push, run the test receiver on the controller and pass its address:
 
 ```sh
-go run ./tests/observability/receiver -listen 172.31.99.1:8099 &
-make local-converge ANSIBLE_EXTRA='-e observability_test_webhook_base=http://172.31.99.1:8099'
+go run ./tests/observability/receiver -listen 10.98.99.1:8099 &
+make local-converge ANSIBLE_EXTRA='-e observability_test_webhook_base=http://10.98.99.1:8099'
 ```
 
 The play accepts `observability_test_webhook_base` in the local environment only.
@@ -43,6 +43,34 @@ Everything generated stays under `.scratch/local-converge/` (SSH key, known host
 logs), `infra/secrets/local/` and `infra/ansible/inventories/local/hosts.json`, all gitignored.
 The local secrets are random values from `infra/secrets/new-secrets.py`, encrypted with SOPS to
 a throwaway age identity, and `local-converge-down` deletes them.
+
+### Rolling deploy rehearsal
+
+Rehearse an upgrade with `deploy.yml` from one release to the next before it reaches a cloud
+environment. Converge the earlier release from its own checkout, then deploy the later one from
+yours under a second image tag while traffic flows:
+
+```sh
+# in a checkout of the earlier release (git worktree add <dir> <tag>), the production layout
+LC_TOPOLOGY=node make local-converge-up local-converge-images
+LC_TOPOLOGY=node make local-converge ANSIBLE_EXTRA='-e core_umami_processes=1'
+# in your checkout: the same state, and the later release's images under another tag
+cp -a <dir>/.scratch/local-converge .scratch/
+cp -a <dir>/infra/secrets/local infra/secrets/
+cp <dir>/infra/ansible/inventories/local/hosts.json infra/ansible/inventories/local/
+LC_IMAGE_TAG=lc2 infra/local/build-images.sh
+# traffic through every edge node until the stop file exists, from a second shell
+SA_LC_STOP=/tmp/sa-lc-stop SA_LC_INVENTORY=$PWD/infra/ansible/inventories/local/hosts.json \
+  go test -tags localconverge -count=1 -timeout 4h -run TestRollingTraffic -v ./tests/localconverge/
+cd infra/ansible && $HOME/.local/share/veristar/ansible-venv/bin/ansible-playbook -i inventories/local/ \
+  playbooks/deploy.yml -e sa_image_tag=lc2 -e core_umami_processes=1
+```
+
+When the deploy has finished, run the release's own post-deploy steps from
+[upgrade.md](upgrade.md), then `touch /tmp/sa-lc-stop`. `TestRollingTraffic` passes when Umami
+holds every accepted event exactly once. Requests to a node while it is drained fail, because the
+test addresses each node directly where DNS would have dropped it, and they are not counted as
+accepted.
 
 ## 3. Topologies and switches
 
@@ -90,7 +118,7 @@ over SSH, so SSH hardening, `AllowUsers` and the firewall's SSH rule all run as 
 - **Privileges.** The node containers run with `--privileged`, which gives them the
   capabilities Docker, nftables and systemd need. `/var/lib/docker` and `/var/lib/containerd`
   are volumes per node, because overlayfs cannot be stacked on the container's own overlay root.
-- **Networks.** `sa-lc-public` (172.31.99.0/24, default route) stands in for the internet side.
+- **Networks.** `sa-lc-public` (10.98.99.0/24, default route) stands in for the internet side.
   The private network 10.99.0.0/16 is split into one Docker network per location (`sa-lc-fsn1`,
   `sa-lc-nbg1`, `sa-lc-hel1`), joined by a router container (`sa-lc-router`,
   `infra/local/lib.sh`). Each node gets the route `10.99.0.0/16 via 10.99.<loc>.254` at every
@@ -108,7 +136,7 @@ over SSH, so SSH hardening, `AllowUsers` and the firewall's SSH rule all run as 
   rebuild under the same tag is not pulled again (`pull: missing`); releases use immutable tags.
 - **Inventory.** `up.sh` writes an inventory with exactly the shape of the OpenTofu output, with
   `sa_environment: local`, `sa_provider: local` and the base domain `sa-local.test` (the reserved
-  `.test` TLD). The controller's address (172.31.99.1) is the only admin CIDR. Local-only
+  `.test` TLD). The controller's address (10.98.99.1) is the only admin CIDR. Local-only
   settings are in `infra/ansible/inventories/local/group_vars/all.yml`, each with its reason.
 - **TLS.** Caddy uses its local CA (`sa_tls: internal`). `deploy/caddy/assemble_test.go`
   validates the assembled node configs with `SA_TLS` set to `cloudflare`,
@@ -180,3 +208,16 @@ run (`docker stats`): 1,012 MiB on node 1 and 941 MiB on node 2, 21 containers e
 with tcpdump sidecars while the end-to-end suite runs, checks that no flow carries readable
 protocol data or any secret of the environment, and tries every private endpoint from a host
 without a certificate. It ran on `LC_TOPOLOGY=minimal` with `-e core_umami_processes=1`.
+
+**Rolling upgrade from `v0.4.0` to partitioned web events (`LC_TOPOLOGY=node`), 2026-11-18.**
+`v0.4.0` converged with `failed=0`. `deploy.yml` from `main` then ran for 23 minutes with
+`failed=0` on every node, in the order the playbook names: the NATS permissions on every
+server, the jobs daemons stopped, the bootstrap, the core nodes with the Patroni leader last
+(one switchover), the edge nodes and the observability. Afterwards `nats retire-legacy-web
+--wait 10m`, run as [upgrade.md](upgrade.md) step 5 writes it, logged `legacy web subject
+retired` with `left 0`. `TestRollingTraffic` ran through all of it: 5,850 events accepted and
+5,850 stored in Umami, each path once. `WEB_DLQ` stayed empty, and every partition consumer
+ended with nothing pending. 53 requests to drained nodes were refused. The single test visitor
+crossed the per-visitor volume check after about 1,500 events, so 2,574 of the events are in
+the site's quarantine band. A second `site.yml` run changed only the known `volume-owners`
+start on each node. `TestConvergedStack` then passed on the upgraded nodes.
